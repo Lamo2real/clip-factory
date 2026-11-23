@@ -60,6 +60,7 @@ const HAS_FILE: ReferenceVideo["status"][] = ["ready", "analyzing", "analyzed", 
 export const LINK_SENTENCES = {
   full: "You have 100 reference videos already. Delete one first.",
   twice: "That video is in your list already.",
+  missed: "That one didn't arrive. Tap it in your list, then Try again.",
   three: "Three videos are on their way already. Wait for one to arrive.",
   fetching: "It is getting the video now.",
   here: "This video is here already.",
@@ -505,7 +506,8 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       }
       const mine = store.references.filter((r) => (s.owner.get(r.refId) ?? "stories") === ws);
       if (mine.length >= 100) throw new ApiError(409, "conflict", LINK_SENTENCES.full);
-      if (mine.some((r) => r.link === got.url)) throw new ApiError(409, "conflict", LINK_SENTENCES.twice);
+      const same = mine.filter((r) => r.link === got.url);
+      if (same.length) throw new ApiError(409, "conflict", same.every((r) => r.status === "fetch_failed") ? LINK_SENTENCES.missed : LINK_SENTENCES.twice);
       if (mine.filter((r) => r.status === "fetching").length >= 3) throw new ApiError(409, "conflict", LINK_SENTENCES.three);
       const now = Date.now();
       const ref: ReferenceVideo = { refId: newId(now), title, status: "fetching", durationSec: null, bytes: 0, link: got.url, currentJobId: null, ai: { model: null, effort: null }, analyzedWith: null, createdAt: iso(now), updatedAt: iso(now) };

@@ -2436,7 +2436,7 @@ during a drag.
   | Box holds | Line |
   |---|---|
   | a supported link | "{Site} video found." with the site's mark in the box |
-  | a link to another site | "We can't get videos from that site. Save the video, then drop it here." |
+  | a link to another site | "We can't get videos from that site. Save the video, then upload it." |
   | a supported site but not one video (a profile, a folder) | "That link isn't one video. Open the video, tap Share, then Copy link." |
   | text that is no link (also `http://` and other schemes) | "That isn't a link. Copy the video's link, then paste it here." |
   | after Add, a refusal from the API | the API's sentence (the duplicate, three at once, the 100 limit) |
@@ -2608,18 +2608,18 @@ upload: uploading ──▶ ready ...   (unchanged)
 
 | Case | Sentence |
 |---|---|
-| private | "That video is private. Pick a public one, or save it and drop it here." |
-| bot check, login required, 403/429, rate limit | "{Site} didn't let us get it. Save the video, then drop it here." |
+| private | "That video is private. Pick a public one, or save it and upload it." |
+| bot check, login required, 403/429, rate limit | "{Site} didn't let us get it. Save the video, then upload it." |
 | removed, 404, unavailable | "That video is gone. Check the link." |
 | live or upcoming | "That's a live video. Pick one that has finished." |
 | over 10 minutes | "This video is longer than 10 minutes. Pick a shorter one." |
 | over the cap, `g.over`, `--max-filesize` | "That video is bigger than 2 GB. Pick a shorter one." |
-| unsupported, no formats, not a video, an address the guard refused | "That link has no video we can get. Save the video, then drop it here." |
-| Drive not shared | "That file isn't shared. In Google Drive tap Share, then Anyone with the link, then paste it again." |
+| unsupported, no formats, not a video, an address the guard refused | "That link has no video we can get. Save the video, then upload it." |
+| Drive not shared | "That file isn't shared. In Google Drive tap Share, then Anyone with the link, then Try again." |
 | Dropbox not shared | "That file isn't shared. In Dropbox tap Share, then Copy link, then paste it again." |
 | timeout, DNS, reset | "We couldn't reach {Site}. Tap Try again." |
 | no disk | "Clips Funded is busy right now. Tap Try again in a few minutes." |
-| anything else | "We couldn't get that video. Tap Try again, or save it and drop it here." |
+| anything else | "We couldn't get that video. Tap Try again, or save it and upload it." |
 
 Every failure keeps **Upload a video** and the page drop as the way forward. Many platforms block downloads from cloud
 addresses (YouTube's bot check, Instagram's login wall), so some links will fail; the sentence says so plainly.
@@ -2636,7 +2636,7 @@ addresses (YouTube's bot check, Instagram's login wall), so some links will fail
   {Site}…" shows `fetchJob`'s one step with the busy bar; the page checks every 2 s and cheers when the video arrives,
   then shows the usual Analyze card. Only Delete stays in the lower actions.
 * **While `fetch_failed`:** "It didn't arrive", then `fetchJob`'s step message or error, else "We couldn't get that
-  video. Tap Try again, or save it and drop it here."; main **Try again** (`fetchReferenceAgain`); quiet **Upload a
+  video. Tap Try again, or save it and upload it."; main **Try again** (`fetchReferenceAgain`); quiet **Upload a
   video** (a hidden file input): picking or dropping a video deletes this link reference, starts `startUpload(ws,
   file)` and goes to the list; Delete. The page drop zone is on only in this state. `removedState()`'s fallback is
   `!["uploading", "fetching", "fetch_failed"].includes(status) && !url`.

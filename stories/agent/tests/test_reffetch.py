@@ -45,8 +45,13 @@ def test_every_platform_shape_has_an_allowed_extractor() -> None:
     classes = [ie for ie in gen_extractor_classes() if str(ie.IE_NAME).lower() in allowed]
     platform = [c for c in FIXTURE["cases"] if c.get("site") in reflinks.PLATFORMS]
     assert {c["site"] for c in platform} == set(reflinks.PLATFORMS)
+    shares = [c for c in platform if reflinks.is_share_link(c["url"])]
+    assert len(shares) == 3  # Facebook's /share/r/, /share/v/ and fb.watch
     for case in platform:
         takers = [str(ie.IE_NAME).lower() for ie in classes if ie.suitable(case["url"])]
+        if case in shares:
+            assert takers == [], case["url"]  # only generic would take one: the agent opens it first (open_share)
+            continue
         assert takers, case["url"]
         assert "generic" not in takers
     every = [ie for ie in gen_extractor_classes() if ie.suitable("https://example.com/video.mp4")]
@@ -76,6 +81,34 @@ def test_the_yt_dlp_arguments_are_pinned() -> None:
     env = reffetch.proxy_env(proxy)
     assert {env[k] for k in ("HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY", "https_proxy")} == {proxy}
     assert env["NO_PROXY"] == ""
+    assert "--extractor-args" not in info + get  # the YouTube clients and PO token are for YouTube only
+
+
+def test_youtube_gets_clips_funded_s_own_po_token_and_clients(monkeypatch: pytest.MonkeyPatch) -> None:
+    yt = "https://www.youtube.com/watch?v=dQw4w9WgXcQ"
+    monkeypatch.setenv("CF_STORIES_POT_HOME", "/opt/bgutil/server")
+    for args in (reffetch.info_args(yt, "http://127.0.0.1:1", "youtube"),
+                 reffetch.download_args(yt, "http://127.0.0.1:1", 1, Path("/tmp/x"), "youtube")):  # fmt: skip
+        given = [args[i + 1] for i, a in enumerate(args) if a == "--extractor-args"]
+        assert given == ["youtube:player_client=default,mweb", "youtubepot-bgutilscript:server_home=/opt/bgutil/server"]
+        assert args[-2:] == ["--", yt] and not [a for a in args if a.startswith("--cookies")]
+    monkeypatch.delenv("CF_STORIES_POT_HOME")
+    args = reffetch.info_args(yt, "http://127.0.0.1:1", "youtube")
+    assert [args[i + 1] for i, a in enumerate(args) if a == "--extractor-args"] == [
+        "youtube:player_client=default,mweb"
+    ]
+
+
+def test_yt_dlps_words_reach_the_log_without_the_link_or_the_post_id() -> None:
+    said = ("ERROR: [youtube] dQw4w9WgXcQ: Sign in to confirm you're not a bot. "
+            "[youtube] Extracting URL: https://www.youtube.com/watch?v=dQw4w9WgXcQ "
+            "ERROR: [twitter] 1859000000000000000: No video could be found in this tweet "
+            "ERROR: Unsupported URL: www.tiktok.com/@pip.the.cat")  # fmt: skip
+    out = reffetch.quiet(said)
+    for secret in ("dQw4w9WgXcQ", "1859000000000000000", "youtube.com/watch", "pip.the.cat"):
+        assert secret not in out
+    assert "[youtube] Sign in to confirm you're not a bot." in out and "[twitter] No video could be found" in out
+    assert reffetch.quiet("[download] Destination: /tmp/x/source.mp4") == "[download] Destination: /tmp/x/source.mp4"
 
 
 @pytest.mark.parametrize(
@@ -84,17 +117,17 @@ def test_the_yt_dlp_arguments_are_pinned() -> None:
         ("ERROR: [youtube] abc: Private video. Sign in if you've been granted access to this video", reffetch.PRIVATE),
         (
             "ERROR: [youtube] abc: Sign in to confirm you're not a bot.",
-            "TikTok didn't let us get it. Save the video, then drop it here.",
+            "TikTok didn't let us get it. Save the video, then upload it.",
         ),
         (
             "ERROR: [Instagram] C1: Requested content is not available, rate-limit reached or login required",
-            "TikTok didn't let us get it. Save the video, then drop it here.",
+            "TikTok didn't let us get it. Save the video, then upload it.",
         ),
         (
             "ERROR: unable to download video data: HTTP Error 403: Forbidden",
-            "TikTok didn't let us get it. Save the video, then drop it here.",
+            "TikTok didn't let us get it. Save the video, then upload it.",
         ),
-        ("ERROR: HTTP Error 429: Too Many Requests", "TikTok didn't let us get it. Save the video, then drop it here."),
+        ("ERROR: HTTP Error 429: Too Many Requests", "TikTok didn't let us get it. Save the video, then upload it."),
         ("ERROR: [youtube] abc: Video unavailable. This video has been removed by the uploader", reffetch.GONE),
         ("ERROR: [TikTok] 1: HTTP Error 404: Not Found", reffetch.GONE),
         ("ERROR: [youtube] abc: This live event will begin in 3 hours.", reffetch.LIVE),
@@ -255,6 +288,58 @@ def test_dropbox_sign_in_and_a_long_video_stopped_early(tmp_path: Path) -> None:
         fetch({get: Answer(200, {"Content-Type": "video/mp4"}, big)}, tmp_path, url, "dropbox", cap=2 * len(big),
               probe=probe)  # fmt: skip
     assert str(e.value) == reffetch.TOO_LONG and seen == [tmp_path / "f"]
+
+
+# --- Facebook share links ----------------------------------------------------------------------------------------
+
+SHARE = "https://www.facebook.com/share/r/1AbCdEfGh/"
+REEL = "https://www.facebook.com/reel/1234567890123456"
+
+
+def open_share(answers: dict[str, Answer], url: str = SHARE) -> str:
+    return reffetch.open_share(url, proxy="http://127.0.0.1:9", opener=opener(answers))
+
+
+def test_a_facebook_share_link_leads_to_its_video_checked_again() -> None:
+    answers = {SHARE: Answer(302, {"Location": REEL + "/?mibextid=wwXIfr&rdid=abc"})}
+    assert open_share(answers) == REEL + "/"
+    assert all(a.closed for a in answers.values())
+    watch = "https://fb.watch/abc123/"
+    hop = "https://www.facebook.com/watch/?v=1234567890&ref=sharing"
+    assert open_share({watch: Answer(301, {"Location": hop})}, watch) == "https://www.facebook.com/watch/?v=1234567890"
+    page = (
+        b'<html><head><meta property="og:url" content="https://www.facebook.com/reel/1234567890123456/?s=1&amp;x=2" />'
+    )
+    assert open_share({SHARE: Answer(200, {"Content-Type": "text/html; charset=utf-8"}, page)}) == REEL + "/"
+    # an http answer is written as https, like a pasted one: only https is ever fetched
+    assert open_share({SHARE: Answer(302, {"Location": "http://www.facebook.com/reel/1234567890123456"})}) == REEL
+
+
+@pytest.mark.parametrize(
+    ("answers", "sentence"),
+    [
+        ({SHARE: Answer(302, {"Location": "https://www.facebook.com/login/?next=x"})},
+         "Facebook didn't let us get it. Save the video, then upload it."),
+        ({SHARE: Answer(200, {"Content-Type": "text/html"}, b"<html>Log in to Facebook</html>")},
+         "Facebook didn't let us get it. Save the video, then upload it."),
+        ({SHARE: Answer(302, {"Location": "https://evil.example/reel/1"})}, reffetch.NO_VIDEO),
+        ({SHARE: Answer(302, {"Location": "https://www.facebook.com:8443/reel/1"})}, reffetch.NO_VIDEO),
+        ({SHARE: Answer(302, {"Location": "https://169.254.169.254/latest/"})}, reffetch.NO_VIDEO),
+        ({SHARE: Answer(404)}, reffetch.GONE),
+        ({SHARE: Answer(503)}, "We couldn't reach Facebook. Tap Try again."),
+    ],
+)  # fmt: skip
+def test_a_share_link_that_leads_nowhere_good_says_why(answers: dict[str, Answer], sentence: str) -> None:
+    with pytest.raises(FetchFailed) as e:
+        open_share(answers)
+    assert str(e.value) == sentence
+
+
+def test_a_share_link_never_leads_to_another_share_link_forever() -> None:
+    hops = [SHARE] + [f"https://www.facebook.com/share/r/hop{i}/" for i in range(4)]
+    with pytest.raises(FetchFailed) as e:
+        open_share({hops[i]: Answer(302, {"Location": hops[i + 1]}) for i in range(4)})
+    assert str(e.value) == reffetch.NO_VIDEO
 
 
 # --- the job -----------------------------------------------------------------------------------------------------
@@ -451,7 +536,7 @@ def test_yt_dlps_refusal_is_the_owners_sentence(tmp_path: Path) -> None:
     svc, _store, table = world(tmp_path)
     ytdlp = FakeYtDlp(fail="ERROR: [TikTok] 1: Sign in to confirm you're not a bot")
     assert asyncio.run(job_for(svc, ytdlp).run()) == "failed"
-    assert table.item("PJOB#J1")["error"] == "TikTok didn't let us get it. Save the video, then drop it here."  # type: ignore[index]
+    assert table.item("PJOB#J1")["error"] == "TikTok didn't let us get it. Save the video, then upload it."  # type: ignore[index]
 
 
 def test_a_refused_address_or_too_many_bytes_say_so(tmp_path: Path) -> None:
@@ -503,6 +588,27 @@ def test_a_drive_link_comes_through_the_opener(tmp_path: Path) -> None:
     ref = table.item("REFVID#R1")
     assert ref is not None and (ref["status"], ref["title"]) == ("ready", "Pip skates")
     assert KEY in store.objects
+
+
+@needs_ffmpeg
+def test_a_facebook_share_link_is_opened_first_and_only_its_video_goes_to_yt_dlp(tmp_path: Path) -> None:
+    svc, _store, table = world(tmp_path, link=SHARE)
+    asked: list[str] = []
+    ytdlp = FakeYtDlp()
+    job = job_for(svc, ytdlp)
+    job.opener = opener({SHARE: Answer(302, {"Location": REEL + "?mibextid=x"})}, asked)
+    assert asyncio.run(job.run()) == "ready"
+    assert asked == [SHARE]
+    assert [c["args"][-1] for c in ytdlp.calls] == [REEL, REEL]
+    assert table.item("REFVID#R1")["link"] == SHARE  # type: ignore[index]  # the owner's own link stays
+
+
+def test_the_log_of_a_refused_fetch_holds_no_link(tmp_path: Path, capsys: pytest.CaptureFixture[str]) -> None:
+    svc, _store, _table = world(tmp_path)
+    said = "ERROR: [TikTok] 7301234567890123456: Unsupported URL: https://www.tiktok.com/@pip.the.cat/video/7301234567890123456"
+    assert asyncio.run(job_for(svc, FakeYtDlp(fail=said)).run()) == "failed"
+    out = capsys.readouterr().out
+    assert "stories.fetch_info_failed" in out and "7301234567890123456" not in out and "pip.the.cat" not in out
 
 
 # --- the rest of the agent ---------------------------------------------------------------------------------------

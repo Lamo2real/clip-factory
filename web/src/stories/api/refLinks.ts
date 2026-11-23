@@ -4,11 +4,13 @@
 // every suite reads that file (web/test/storiesRefLinkApi.test.ts here).
 //
 // refLink(text) takes what the owner pasted (share text too: the first link in it) and gives the cleaned link and its
-// site: only https (or no scheme, then https:// is put in front), no user name or password, port 443 or none, at most
+// site: only https (http or no scheme: https:// is put in front), no user name or password, port 443 or none, at most
 // 2048 characters, the host lower-cased (TikTok's tiktok.com and m.tiktok.com become www.tiktok.com, the host yt-dlp's
 // TikTok extractor takes), the path as given, only the kept query keys, no fragment. Anything else says why: empty,
 // not_a_link, other_site, or not_one_video (a profile, a folder, a page). The text is parsed by hand, the same way in
-// every copy, so the three never differ on an odd link (the browser's URL parser would re-encode it).
+// every copy, so the three never differ on an odd link (the browser's URL parser would re-encode it). Facebook's own
+// Share › Copy link (facebook.com/share/r/…, /share/v/…) and fb.watch/… are taken too: the agent opens them first and
+// checks where they lead again.
 
 export type RefSite = "youtube" | "tiktok" | "instagram" | "facebook" | "x" | "drive" | "dropbox";
 export type RefLinkWhy = "empty" | "not_a_link" | "other_site" | "not_one_video";
@@ -28,7 +30,7 @@ export const SITE_NAME: Record<RefSite, string> = {
 export const REF_LINK_REFUSED: Record<RefLinkWhy, string> = {
   empty: "Paste a video link.",
   not_a_link: "That isn't a link. Copy the video's link, then paste it here.",
-  other_site: "We can't get videos from that site. Save the video, then drop it here.",
+  other_site: "We can't get videos from that site. Save the video, then upload it.",
   not_one_video: "That link isn't one video. Open the video, tap Share, then Copy link.",
 };
 
@@ -50,6 +52,7 @@ const HOSTS: Record<string, RefSite> = {
   "facebook.com": "facebook",
   "www.facebook.com": "facebook",
   "m.facebook.com": "facebook",
+  "fb.watch": "facebook",
   "x.com": "x",
   "www.x.com": "x",
   "mobile.x.com": "x",
@@ -83,6 +86,8 @@ const DIGITS = "[0-9]{1,30}";
 const DRIVE_ID = "[A-Za-z0-9_-]{10,200}";
 const YOUTUBE = ["youtube.com", "www.youtube.com", "m.youtube.com"];
 const TIKTOK_SHORT = ["vm.tiktok.com", "vt.tiktok.com"];
+const FACEBOOK = ["facebook.com", "www.facebook.com", "m.facebook.com"];
+const SHARE_CODE = "[A-Za-z0-9_-]{1,64}";
 
 interface Shape {
   site: RefSite;
@@ -104,9 +109,11 @@ const SHAPES: Shape[] = [
   { site: "tiktok", hosts: ["www.tiktok.com"], path: whole("/t/[A-Za-z0-9_]{1,64}/?") },
   { site: "tiktok", hosts: TIKTOK_SHORT, path: whole("/[A-Za-z0-9_]{1,64}/?") },
   { site: "instagram", hosts: null, path: whole(`/(reel|reels|p|tv)/${CODE}/?`) },
-  { site: "facebook", hosts: null, path: whole(`/reel/${DIGITS}/?`) },
-  { site: "facebook", hosts: null, path: whole("/watch/?"), key: "v", value: whole(DIGITS) },
-  { site: "facebook", hosts: null, path: whole(`/[A-Za-z0-9._-]{1,100}/videos/${DIGITS}/?`) },
+  { site: "facebook", hosts: FACEBOOK, path: whole(`/reel/${DIGITS}/?`) },
+  { site: "facebook", hosts: FACEBOOK, path: whole("/watch/?"), key: "v", value: whole(DIGITS) },
+  { site: "facebook", hosts: FACEBOOK, path: whole(`/[A-Za-z0-9._-]{1,100}/videos/${DIGITS}/?`) },
+  { site: "facebook", hosts: FACEBOOK, path: whole(`/share/(r|v)/${SHARE_CODE}/?`) },
+  { site: "facebook", hosts: ["fb.watch"], path: whole(`/${SHARE_CODE}/?`) },
   { site: "x", hosts: null, path: whole("/[A-Za-z0-9_]{1,15}/status/[0-9]{1,25}(/video/[0-9])?/?") },
   { site: "drive", hosts: null, path: whole(`/file/d/${DRIVE_ID}(/[^?#]*)?`) },
   { site: "drive", hosts: null, path: whole("/(open|uc)/?"), key: "id", value: whole(DRIVE_ID) },
@@ -147,7 +154,8 @@ export function refLink(text: string): RefLinkCheck {
   if (!link) return refused("empty");
   if (link.length > MAX_LINK || HAS_WS.test(link) || CONTROL.test(link)) return refused("not_a_link");
   const scheme = SCHEME.exec(link);
-  if (scheme && scheme[1]!.toLowerCase() !== "https") return refused("not_a_link");
+  // http is written as https: only https is ever fetched.
+  if (scheme && !["https", "http"].includes(scheme[1]!.toLowerCase())) return refused("not_a_link");
   let rest = scheme ? link.slice(scheme[0].length) : link;
   const cuts = [rest.indexOf("/"), rest.indexOf("?"), rest.indexOf("#")].filter((i) => i >= 0);
   const cut = cuts.length ? Math.min(...cuts) : rest.length;

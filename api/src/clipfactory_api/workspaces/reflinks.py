@@ -5,11 +5,15 @@ and the web its own (``web/src/stories/api/refLinks.ts``). All three give the an
 ``stories/agent/tests/fixtures/reference_links.json``, and every suite reads that file.
 
 ``clean_link(text)`` takes what the owner pasted (share text too: the first link in it) and gives ``(url, site)``: only
-``https`` (or no scheme, then ``https://`` is put in front), no user name or password, port 443 or none, at most 2048
+``https`` (``http`` or no scheme: ``https://`` is put in front), no user name or password, port 443 or none, at most 2048
 characters, the host lower-cased (TikTok's ``tiktok.com`` and ``m.tiktok.com`` become ``www.tiktok.com``, the host
 yt-dlp's TikTok extractor takes), the path as given, only the kept query keys, no fragment. Anything else raises
 ``LinkRefused(why)``: ``empty``, ``not_a_link``, ``other_site`` or ``not_one_video`` (a profile, a folder, a page).
-The text is parsed by hand, the same way in every copy, so the three never differ on an odd link."""
+The text is parsed by hand, the same way in every copy, so the three never differ on an odd link.
+
+Facebook's own Share › Copy link (``facebook.com/share/r/…``, ``/share/v/…``) and ``fb.watch/…`` only point at a video:
+``is_share_link`` names them, and the agent opens one through its egress guard first and checks where it leads with
+``clean_link`` again (never handing the share link itself to yt-dlp)."""
 
 from __future__ import annotations
 
@@ -33,7 +37,7 @@ WHYS: Final = ("empty", "not_a_link", "other_site", "not_one_video")
 SENTENCES: Final = {
     "empty": "Paste a video link.",
     "not_a_link": "That isn't a link. Copy the video's link, then paste it here.",
-    "other_site": "We can't get videos from that site. Save the video, then drop it here.",
+    "other_site": "We can't get videos from that site. Save the video, then upload it.",
     "not_one_video": "That link isn't one video. Open the video, tap Share, then Copy link.",
 }
 
@@ -52,6 +56,7 @@ HOSTS: Final = {
     "facebook.com": "facebook",
     "www.facebook.com": "facebook",
     "m.facebook.com": "facebook",
+    "fb.watch": "facebook",
     "x.com": "x",
     "www.x.com": "x",
     "mobile.x.com": "x",
@@ -83,6 +88,8 @@ _DIGITS: Final = r"[0-9]{1,30}"
 _DRIVE_ID: Final = r"[A-Za-z0-9_-]{10,200}"
 _YOUTUBE: Final = frozenset({"youtube.com", "www.youtube.com", "m.youtube.com"})
 _TIKTOK_SHORT: Final = frozenset({"vm.tiktok.com", "vt.tiktok.com"})
+_FACEBOOK: Final = frozenset({"facebook.com", "www.facebook.com", "m.facebook.com"})
+_SHARE_CODE: Final = r"[A-Za-z0-9_-]{1,64}"
 Shape = tuple[str, frozenset[str] | None, re.Pattern[str], str | None, str | None]
 # (site, its hosts this shape is for or None for all, the path, the query key the path needs and its value's pattern)
 _SHAPES: Final[tuple[Shape, ...]] = (
@@ -93,9 +100,11 @@ _SHAPES: Final[tuple[Shape, ...]] = (
     ("tiktok", frozenset({"www.tiktok.com"}), re.compile(r"/t/[A-Za-z0-9_]{1,64}/?"), None, None),
     ("tiktok", _TIKTOK_SHORT, re.compile(r"/[A-Za-z0-9_]{1,64}/?"), None, None),
     ("instagram", None, re.compile(f"/(reel|reels|p|tv)/{_CODE}/?"), None, None),
-    ("facebook", None, re.compile(f"/reel/{_DIGITS}/?"), None, None),
-    ("facebook", None, re.compile(r"/watch/?"), "v", _DIGITS),
-    ("facebook", None, re.compile(rf"/[A-Za-z0-9._-]{{1,100}}/videos/{_DIGITS}/?"), None, None),
+    ("facebook", _FACEBOOK, re.compile(f"/reel/{_DIGITS}/?"), None, None),
+    ("facebook", _FACEBOOK, re.compile(r"/watch/?"), "v", _DIGITS),
+    ("facebook", _FACEBOOK, re.compile(rf"/[A-Za-z0-9._-]{{1,100}}/videos/{_DIGITS}/?"), None, None),
+    ("facebook", _FACEBOOK, re.compile(f"/share/(r|v)/{_SHARE_CODE}/?"), None, None),
+    ("facebook", frozenset({"fb.watch"}), re.compile(f"/{_SHARE_CODE}/?"), None, None),
     ("x", None, re.compile(r"/[A-Za-z0-9_]{1,15}/status/[0-9]{1,25}(/video/[0-9])?/?"), None, None),
     ("drive", None, re.compile(f"/file/d/{_DRIVE_ID}(/[^?#]*)?"), None, None),
     ("drive", None, re.compile(r"/(open|uc)/?"), "id", _DRIVE_ID),
@@ -103,6 +112,8 @@ _SHAPES: Final[tuple[Shape, ...]] = (
 )
 # A query key kept beside the path's own (Dropbox's rlkey opens a shared file).
 _EXTRA_KEYS: Final = {"dropbox": ("rlkey", r"[A-Za-z0-9]{1,100}")}
+# Facebook's share links, as clean_link gives them: opened first (where they lead is checked again).
+_SHARE: Final = re.compile(rf"https://((www\.|m\.)?facebook\.com/share/(r|v)|fb\.watch)/{_SHARE_CODE}/?")
 
 
 class LinkRefused(ValueError):
@@ -150,7 +161,7 @@ def clean_link(text: str) -> tuple[str, str]:
         raise LinkRefused("not_a_link")
     scheme = _SCHEME.match(link)
     if scheme:
-        if scheme.group(1).lower() != "https":
+        if scheme.group(1).lower() not in ("https", "http"):  # http is written as https: only https is ever fetched
             raise LinkRefused("not_a_link")
         rest = link[scheme.end() :]
     else:
@@ -190,6 +201,11 @@ def clean_link(text: str) -> tuple[str, str]:
             raise LinkRefused("not_a_link")
         return url, site
     raise LinkRefused("not_one_video")
+
+
+def is_share_link(url: str) -> bool:
+    """A cleaned Facebook share link (``/share/r/…``, ``/share/v/…``, ``fb.watch/…``): it only points at the video."""
+    return bool(_SHARE.fullmatch(url))
 
 
 def site_of(url: str) -> str | None:

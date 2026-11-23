@@ -8,7 +8,11 @@ through this fetch's own egress guard (``netguard.Guard``):
 * YouTube, TikTok, Instagram, Facebook and X: Clips Funded's own pinned yt-dlp, argument lists only (no shell), the
   allowed extractors only (never ``generic``), no config, no cookies, no playlist; first the facts (``-J``: a live
   video, one over 10 minutes or one bigger than the cap is refused before anything is downloaded), then the download
-  (720p at most, H.264 and AAC first, merged into MP4).
+  (720p at most, H.264 and AAC first, merged into MP4). YouTube gets Clips Funded's own PO token sidecar (``pot.py``,
+  the ADR-52 way: ``player_client=default,mweb``), never Clip Factory's.
+* A Facebook share link (``/share/r/…``, ``/share/v/…``, ``fb.watch/…``) is opened first through the guard (at most 3
+  redirects on Facebook's own hosts, else the page's own ``og:url``); where it leads must be a Facebook video link
+  ``reflinks.clean_link`` takes, and only that one goes to yt-dlp.
 * Google Drive and Dropbox: one plain HTTPS download through the guard (the direct-download address, at most 3
   redirects, each on the Drive or Dropbox hosts, a sign-in page or an HTML answer means "not shared"), streamed to disk
   with the size capped while reading; the first bytes must be an MP4 or QuickTime ``ftyp``, and after 16 MiB ffprobe
@@ -23,13 +27,14 @@ the job ``failed`` with a sentence that names the fix (§45.40.8: every one keep
 
 Copied from Clip Factory, never imported (ADR-76): the shape of its yt-dlp options and format string, the kinds of
 yt-dlp errors and the progress line (``clipfactory_agent/sources.py``), and the Drive and Dropbox handling
-(``contentrewards/fetch.py`` and ``logo.py``). Nothing of Clip Factory's cookies, proxy, PO tokens, Mac fetch or social
-tokens is used."""
+(``contentrewards/fetch.py`` and ``logo.py``), and the PO token sidecar (``pot.py``). Nothing of Clip Factory's cookies,
+proxy, PO tokens, Mac fetch or social tokens is used, and yt-dlp's own words reach the log without links or post ids."""
 
 from __future__ import annotations
 
 import asyncio
 import contextlib
+import html
 import http.client
 import json
 import re
@@ -43,7 +48,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, ClassVar, Final, Protocol
 
-from . import keys, media, netguard, proc, reflinks
+from . import keys, media, netguard, pot, proc, reflinks
 from .pipeline import Job
 from .util import JobSuperseded, UserFacingError, log, now_iso
 
@@ -86,20 +91,20 @@ DIRECT_HOSTS: Final = frozenset(
 HOP_SUFFIXES: Final = (".dl.dropboxusercontent.com", ".googleusercontent.com")
 
 # What the owner reads (§45.40.8): each one names the fix, and "Upload a video" always stays.
-PRIVATE: Final = "That video is private. Pick a public one, or save it and drop it here."
-BLOCKED: Final = "{site} didn't let us get it. Save the video, then drop it here."
+PRIVATE: Final = "That video is private. Pick a public one, or save it and upload it."
+BLOCKED: Final = "{site} didn't let us get it. Save the video, then upload it."
 GONE: Final = "That video is gone. Check the link."
 LIVE: Final = "That's a live video. Pick one that has finished."
 TOO_LONG: Final = "This video is longer than 10 minutes. Pick a shorter one."
 TOO_BIG: Final = "That video is bigger than 2 GB. Pick a shorter one."
-NO_VIDEO: Final = "That link has no video we can get. Save the video, then drop it here."
+NO_VIDEO: Final = "That link has no video we can get. Save the video, then upload it."
 DRIVE_NOT_SHARED: Final = (
-    "That file isn't shared. In Google Drive tap Share, then Anyone with the link, then paste it again."
+    "That file isn't shared. In Google Drive tap Share, then Anyone with the link, then Try again."
 )
 DROPBOX_NOT_SHARED: Final = "That file isn't shared. In Dropbox tap Share, then Copy link, then paste it again."
 UNREACHABLE: Final = "We couldn't reach {site}. Tap Try again."
 NO_ROOM: Final = "Clips Funded is busy right now. Tap Try again in a few minutes."
-FAILED: Final = "We couldn't get that video. Tap Try again, or save it and drop it here."
+FAILED: Final = "We couldn't get that video. Tap Try again, or save it and upload it."
 REF_GONE: Final = "This reference video no longer exists."
 
 
@@ -110,20 +115,22 @@ class FetchFailed(UserFacingError):
 # --- yt-dlp ----------------------------------------------------------------------------------------------------------
 
 
-def ytdlp_base(proxy: str) -> list[str]:
-    """What every yt-dlp call starts with: no config file, one video, no cache, the allowed extractors, the guard."""
+def ytdlp_base(proxy: str, site: str = "") -> list[str]:
+    """What every yt-dlp call starts with: no config file, one video, no cache, the allowed extractors, the guard;
+    for YouTube also the clients and the PO token's script mode (``pot.ytdlp_args``, ADR-52)."""
     return ["yt-dlp", "--ignore-config", "--no-playlist", "--playlist-items", "1", "--no-cache-dir",
-            "--use-extractors", ",".join(EXTRACTORS), "--proxy", proxy, "--socket-timeout", "30"]  # fmt: skip
+            "--use-extractors", ",".join(EXTRACTORS), "--proxy", proxy, "--socket-timeout", "30",
+            *(pot.ytdlp_args() if site == "youtube" else [])]  # fmt: skip
 
 
-def info_args(url: str, proxy: str) -> list[str]:
+def info_args(url: str, proxy: str, site: str = "") -> list[str]:
     """The facts first (``-J``), with the same format choice as the download so its size can be told."""
-    return [*ytdlp_base(proxy), "-f", FORMAT, "-J", "--", url]
+    return [*ytdlp_base(proxy, site), "-f", FORMAT, "-J", "--", url]
 
 
-def download_args(url: str, proxy: str, cap: int, out: Path) -> list[str]:
+def download_args(url: str, proxy: str, cap: int, out: Path, site: str = "") -> list[str]:
     template = str(out / "source.%(ext)s").replace("%", "%%").replace("%%(ext)s", "%(ext)s")
-    return [*ytdlp_base(proxy), "--no-mtime", "--retries", "3", "--fragment-retries", "3",
+    return [*ytdlp_base(proxy, site), "--no-mtime", "--retries", "3", "--fragment-retries", "3",
             "--match-filter", MATCH_FILTER, "--max-filesize", str(cap), "-f", FORMAT,
             "--merge-output-format", "mp4", "--remux-video", "mp4", "--newline", "-o", template, "--", url]  # fmt: skip
 
@@ -133,6 +140,15 @@ def proxy_env(proxy: str) -> dict[str, str]:
     out = {name: proxy for name in ("HTTPS_PROXY", "HTTP_PROXY", "ALL_PROXY")}
     out |= {name.lower(): proxy for name in out}
     return out | {"NO_PROXY": "", "no_proxy": ""}
+
+
+_LINK: Final = re.compile(r"(?:https?:)?//\S+|\b(?:www\.)?[a-z0-9-]+(?:\.[a-z0-9-]+)*\.[a-z]{2,}/\S*", re.IGNORECASE)
+_EXTRACTOR_ID: Final = re.compile(r"(\[[\w:.-]+\])\s*[^\s:\]]*[\d_-][^\s:\]]*:")  # an id has a digit, _ or -
+
+
+def quiet(text: str) -> str:
+    """yt-dlp's words for the log, without the post's link or its id (``[youtube] abc123: …`` → ``[youtube] …``)."""
+    return _EXTRACTOR_ID.sub(r"\1", _LINK.sub("<link>", text))
 
 
 def extractors_ok() -> list[str]:
@@ -419,6 +435,75 @@ def _stream(
         raise FetchFailed(NO_VIDEO)
 
 
+# --- Facebook share links --------------------------------------------------------------------------------------------
+
+FACEBOOK_HOSTS: Final = frozenset(
+    {"facebook.com", "www.facebook.com", "m.facebook.com", "web.facebook.com", "fb.watch"}
+)
+SHARE_PAGE_MAX: Final = 1024 * 1024
+_PAGE_LINK: Final = re.compile(
+    rb"""<meta[^>]+property=["']og:url["'][^>]+content=["']([^"']+)["']"""
+    rb"""|<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']""",
+    re.IGNORECASE,
+)
+
+
+def _facebook_video(candidate: str) -> str | None:
+    """A Facebook video link ``clean_link`` takes (never a share link again), cleaned; else None."""
+    try:
+        url, site = reflinks.clean_link(candidate)
+    except reflinks.LinkRefused:
+        return None
+    return url if site == "facebook" and not reflinks.is_share_link(url) else None
+
+
+def open_share(url: str, *, proxy: str, opener: Opener = https_open) -> str:
+    """Where a Facebook share link leads (in a worker thread, every byte through the guard): at most 3 redirects, each
+    on Facebook's own hosts, or the page's own ``og:url`` (or canonical) address. That one must be a Facebook video link
+    ``clean_link`` takes; ``FetchFailed`` otherwise (a sign-in wall is "Facebook didn't let us get it")."""
+    blocked = BLOCKED.format(site="Facebook")
+    current = url
+    for _ in range(MAX_REDIRECTS + 1):
+        parts = urllib.parse.urlsplit(current)
+        try:
+            port = parts.port
+        except ValueError:
+            port = -1
+        if parts.scheme != "https" or port not in (None, 443) or parts.username or parts.password:
+            raise FetchFailed(NO_VIDEO)
+        if (parts.hostname or "").lower() not in FACEBOOK_HOSTS:
+            log("warn", "stories.fetch_hop_refused", host=parts.hostname or "")
+            raise FetchFailed(NO_VIDEO)
+        if "login" in parts.path.lower() or parts.path.startswith("/checkpoint"):
+            raise FetchFailed(blocked)
+        answer = opener(proxy, current, READ_SECONDS)
+        try:
+            if answer.status in (301, 302, 303, 307, 308):
+                current = urllib.parse.urljoin(current, answer.header("location"))
+                found = _facebook_video(current)
+                if found:
+                    return found
+                continue
+            if answer.status in (404, 410):
+                raise FetchFailed(GONE)
+            if answer.status == 429 or answer.status >= 500:
+                raise FetchFailed(UNREACHABLE.format(site="Facebook"))
+            if answer.status != 200 or "html" not in answer.header("content-type").lower():
+                raise FetchFailed(blocked)
+            page = b""
+            while len(page) < SHARE_PAGE_MAX and (chunk := answer.read(64 * 1024)):
+                page += chunk
+            for m in _PAGE_LINK.finditer(page[:SHARE_PAGE_MAX]):
+                raw = (m.group(1) or m.group(2) or b"").decode("utf-8", "replace")
+                found = _facebook_video(html.unescape(raw))
+                if found:
+                    return found
+            raise FetchFailed(blocked)
+        finally:
+            answer.close()
+    raise FetchFailed(NO_VIDEO)  # a fourth redirect
+
+
 # --- the job ---------------------------------------------------------------------------------------------------------
 
 
@@ -492,6 +577,8 @@ class FetchJob(Job):
         cap = room(self.free(work))
         async with self.guard(cap) as g:
             try:
+                if reflinks.is_share_link(url):  # Facebook's Copy link: where it leads, checked again
+                    url = await asyncio.to_thread(open_share, url, proxy=g.url, opener=self.opener)
                 if site in reflinks.PLATFORMS:
                     path, title = await self._platform(url, site, g, cap, work)
                 else:
@@ -532,10 +619,13 @@ class FetchJob(Job):
 
     async def _platform(self, url: str, site: str, g: netguard.Guard, cap: int, work: Path) -> tuple[Path, str | None]:
         env = proxy_env(g.url)
+        if site == "youtube":
+            await pot.ready()  # Clips Funded's own sidecar, started the first time a YouTube link asks
+            env |= pot.deno_env()  # the script mode's own read-only Deno cache
         try:
-            answer = await self.run_cmd(info_args(url, g.url), time_limit=INFO_SECONDS, env=env)
+            answer = await self.run_cmd(info_args(url, g.url, site), time_limit=INFO_SECONDS, env=env)
         except proc.CommandError as e:
-            log("warn", "stories.fetch_info_failed", site=site, detail=e.tail[:500])
+            log("warn", "stories.fetch_info_failed", site=site, detail=quiet(e.tail)[:500])
             raise FetchFailed(self._why(e.tail, site, g)) from e
         found = facts(answer.stdout, cap)
         said: deque[str] = deque(maxlen=40)
@@ -547,15 +637,15 @@ class FetchJob(Job):
                 self.report(min(100, round(float(m.group(1)))), 100)
 
         try:
-            done = await self.run_cmd(download_args(url, g.url, cap, work), time_limit=TOTAL_SECONDS,
+            done = await self.run_cmd(download_args(url, g.url, cap, work, site), time_limit=TOTAL_SECONDS,
                                       stall_limit=STALL_SECONDS, on_out_line=line, env=env)  # fmt: skip
         except proc.CommandError as e:
-            log("warn", "stories.fetch_failed", site=site, detail=e.tail[:500])
+            log("warn", "stories.fetch_failed", site=site, detail=quiet(e.tail)[:500])
             raise FetchFailed(self._why(f"{e.tail} {' '.join(said)}", site, g)) from e
         path = found_video(work)
         if path is None:
             words = f"{' '.join(said)} {done.stderr}"
-            log("warn", "stories.fetch_no_file", site=site, detail=words[-500:])
+            log("warn", "stories.fetch_no_file", site=site, detail=quiet(words)[-500:])
             sentence = explain(words, site)
             raise FetchFailed(sentence if sentence in (TOO_BIG, TOO_LONG, LIVE) else NO_VIDEO)
         return path, found.title
@@ -638,7 +728,7 @@ class FetchJob(Job):
     async def _fail(self, sentence: str, error: BaseException | None = None) -> str:
         if error is not None:
             log("warn", "stories.fetch_failed_job", job=self.fence.job_id, error=type(error).__name__,
-                detail=str(error)[:600])  # fmt: skip
+                detail=quiet(str(error))[:600])  # fmt: skip
         if not any(s.get("key") == "get" for s in self.steps):
             self.steps.append({"key": "get", "label": LABELS["get"], "status": "pending"})
         self._step("get").update({"status": "failed", "message": sentence, "finishedAt": now_iso()})

@@ -66,6 +66,7 @@ STOPPED: Final = "Studying the video stopped. Tap Try again."
 FILE_REMOVED: Final = "The video was removed to save space. Its study stays."
 FULL: Final = f"You have {MAX_REFERENCES} reference videos already. Delete one first."
 ALREADY: Final = "That video is in your list already."
+DID_NOT_ARRIVE: Final = "That one didn't arrive. Tap it in your list, then Try again."
 THREE: Final = "Three videos are on their way already. Wait for one to arrive."
 FETCHING_NOW: Final = "It is getting the video now."
 HERE_ALREADY: Final = "This video is here already."
@@ -355,8 +356,10 @@ def _create_from_link(
     items = _settled(app, user_id, workspace_id, now)
     if len(items) >= MAX_REFERENCES:
         raise conflict(FULL)
-    if any(i.get("link") == url for i in items):
-        raise conflict(ALREADY)
+    same = [i for i in items if i.get("link") == url]
+    if same:
+        # One that never arrived is no video in the list: say where its Try again is (never "already").
+        raise conflict(DID_NOT_ARRIVE if all(i.get("status") == "fetch_failed" for i in same) else ALREADY)
     if _on_their_way(items) >= MAX_FETCHING:
         raise conflict(THREE)
     ref_id, job_id = ulid(), ulid()

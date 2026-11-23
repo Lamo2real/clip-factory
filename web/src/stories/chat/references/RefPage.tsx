@@ -17,7 +17,9 @@
 // A reference made from a link (§45.40) is `fetching` while Clips Funded's own runtime gets the video: "Getting it from
 // {Site}…" with its one step (GET answers `fetchJob`, the newest reference_fetch job), checked every 2 s, and a cheer
 // when it is here (then the usual Analyze card). One that did not arrive (`fetch_failed`) says the job's own reason,
-// with Try again (POST …/fetch) and "Upload a video" (a picked or dropped video takes this reference's place).
+// with Try again (POST …/fetch) and "Upload a video" (a picked or dropped video takes this reference's place). Try
+// again is the main button only when asking again can work (the reason says "Try again"); for a private, gone, live,
+// too long or blocked video, "Upload a video" is.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { DropOverlay } from "../../../components/DropOverlay.tsx";
 import { A } from "../../../components/ui.tsx";
@@ -53,7 +55,13 @@ export const REF_STEP_LABELS = REF_STEP_ORDER.map((k) => REF_STEP_LABEL[k]);
 type RefData = { reference: ReferenceVideo; analysis: ReferenceAnalysis | null; job?: ProductionJob | null; fetchJob?: ProductionJob | null };
 
 /** A link reference whose video did not arrive, when its job says no reason of its own (§45.40.8, "anything else"). */
-export const FETCH_FAILED = "We couldn't get that video. Tap Try again, or save it and drop it here.";
+export const FETCH_FAILED = "We couldn't get that video. Tap Try again, or save it and upload it.";
+
+/** True when asking again can work: every such reason (reached no one, no room, stopped, did not start, not shared
+ * yet, anything else) names Try again; a private, gone, live, too long, too big or blocked video never does. */
+export function canTryAgain(reason: string): boolean {
+  return /\bTry again\b/.test(reason);
+}
 
 /** Not a file yet: an upload on its way, or a link being fetched (or that did not arrive). */
 const NO_FILE_YET: ReferenceVideo["status"][] = ["uploading", "fetching", "fetch_failed"];
@@ -392,6 +400,7 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
   const fetchSteps: StoryStep[] = fetchJob?.steps.length ? fetchJob.steps : [{ key: "get", label: "Get the video", status: ref.status === "fetching" ? "running" : "failed" }];
   const fetchProblem = fetchJob?.steps.find((st) => st.status === "failed" && st.message)?.message ?? fetchJob?.error ?? FETCH_FAILED;
   const linkRef = ref.status === "fetching" || ref.status === "fetch_failed";
+  const retry = canTryAgain(fetchProblem);
 
   async function fetchAgain() {
     if (busy) return;
@@ -466,7 +475,7 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
           ) : (
             <div className="st-ref-player__none">
               <Icon name="film" size={40} />
-              <span>{ref.status === "uploading" ? "The video is still on its way." : ref.status === "fetching" ? "The video is on its way." : removed ? cleared.line : "The video plays here."}</span>
+              <span>{ref.status === "uploading" ? "The video is still on its way." : ref.status === "fetching" ? "The video is on its way." : ref.status === "fetch_failed" ? "The video didn't arrive." : removed ? cleared.line : "The video plays here."}</span>
             </div>
           )}
         </div>
@@ -500,10 +509,11 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
                 {fetchProblem}
               </p>
               <div className="st-ref-actions">
-                <Btn main icon="retry" off={busy || replacing} onClick={() => void fetchAgain()}>
+                {/* One main button: Try again when asking again can work, else Upload a video. */}
+                <Btn main={retry} quiet={!retry} icon="retry" off={busy || replacing} onClick={() => void fetchAgain()}>
                   {busy ? "Starting…" : "Try again"}
                 </Btn>
-                <Btn quiet icon="upload" off={replacing} onClick={() => fileInput.current?.click()}>
+                <Btn main={!retry} quiet={retry} icon="upload" off={replacing} onClick={() => fileInput.current?.click()}>
                   {replacing ? "Uploading…" : "Upload a video"}
                 </Btn>
                 <input

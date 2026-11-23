@@ -3,7 +3,8 @@
 // See-through (the desktop through the window; Glass strength Clear or Frosted), Picture (one of yours, shrunk to fit
 // this device), Colours (the warm Ember preset is the default of the whole Look). Every choice shows what you get: a
 // little picture of it beside its name. The pick-one bars are Settings' own (SetPick: the sliding highlight, arrows,
-// never disabled). In Picture a picture dropped anywhere on the page is the one chosen (docs/CONTRACTS.md §45.40).
+// never disabled). A picture dropped anywhere on the page becomes the background, with Picture chosen
+// (docs/CONTRACTS.md §45.40).
 import { useRef, useState, type ChangeEvent, type CSSProperties } from "react";
 import { DropOverlay } from "../../components/DropOverlay.tsx";
 import { useFileDrop } from "../../lib/useFileDrop.ts";
@@ -134,14 +135,13 @@ export function LookSection() {
     e.target.value = "";
     if (f) take(f);
   };
-  // A picture dropped anywhere on the page, only while Picture is chosen.
+  // A picture dropped anywhere on the page: it becomes the background and Picture is chosen (whatever was on).
   const drop = useFileDrop({
     scope: "page",
     checkFile: lookPictureProblem,
     onFiles: ([f]) => {
       if (f) take(f);
     },
-    enabled: look.mode === "picture",
     busy: busy ? "Getting the picture ready…" : null,
   });
 

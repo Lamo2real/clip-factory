@@ -15609,7 +15609,10 @@ The same rules for both scopes:
   too, so the count stays in step.
 * **Whose drag it is.** Ours when the zone takes files and the drag carries `Files`, or when it takes links and
   `dragKind` is `link` or `either` or `dragMayHoldText` is true. A drag with no `Files` over an editable field (input,
-  textarea, contenteditable) is let through without `preventDefault`, so dragged text still lands in text boxes.
+  textarea, contenteditable) is let through without `preventDefault`, so dragged text still lands in text boxes. A
+  drag that started inside the page itself (a `dragstart` on the document, cleared by its `dragend`, the window's
+  `drop` or the next pointer press) is no zone's unless it carries `Files`: a list row or selected words dragged and
+  dropped never fill the link box.
 * **dragover** calls `preventDefault()` and sets `dropEffect` to `"copy"` (`"none"` while busy).
 * **drop** calls `preventDefault()` and clears the highlight. Busy: refused with the busy line. Otherwise the files
   that pass `checkFile`, up to `maxFiles` (more: `tooMany` as well); else a link calls `onLink(url)` (a thumbnail
@@ -15656,10 +15659,10 @@ stray link never navigates or opens the system browser. HelpLauncher's own guard
 | Clips Funded References list (`RefList.tsx`) | **page** | up to 5 videos (`videoProblem`; more: "Up to 5 videos at once. Drop the rest after.") and links (fill the box). The card's own handlers are gone; the file input stays inside `.st-ref-drop`. |
 | Clips Funded reference page (`RefPage.tsx`), only while `fetch_failed` | **page** | one video: it replaces the link reference (§45.40.9) |
 | Clips Funded director chat (`ConversationView.tsx`) | **page** | PNG, JPG or WebP ≤ 5 MB (`pictureProblem`), as many as the message has room for (4); more: "You can add up to 4 pictures to one message." On once the chat has loaded; the composer still takes dragged text. |
-| Clips Funded Settings › Look (`LookSection.tsx`) | **page**, only while the mode is Picture | one picture (`lookPictureProblem`: "Pick a picture.", else the too-big line; the picker says the same) |
-| Clips Funded Skills (`settings/SkillsSection.tsx`) | **element**, each FilePick label | its skill file (`checkSkillFile`); off while an upload runs |
+| Clips Funded Settings › Look (`LookSection.tsx`) | **page**, whatever the mode | one picture (`lookPictureProblem`: "Pick a picture.", else the too-big line; the picker says the same); it becomes the background and Picture is chosen with it |
+| Clips Funded Skills (`settings/SkillsSection.tsx`) | **element**, each FilePick label | its skill file (`checkSkillFile`); busy with its own `off` line ("Uploading…") while an upload runs; the input carries its own `aria-label`, so the status line never joins its name |
 | Clips Funded Design with AI (`studio/Design.tsx`) | **element**, the open panel | one picture (`fileProblem`); busy "Sending the picture…" |
-| Clips Funded studio "Pictures to aim for" (`studio/References.tsx`) | **element**, `section.st-s-refs` | one picture (`fileProblem`); off when full (8) or while sending; no link box |
+| Clips Funded studio "Pictures to aim for" (`studio/References.tsx`) | **element**, `section.st-s-refs` | one picture (`fileProblem`); busy when full ("You have 8 pictures. Delete one first.") or while sending ("Wait a moment."); no link box |
 | Clip Factory Settings › Skills, add a skill (`screens/settings/SkillsSection.tsx`) | **element**, the add-skill panel | a SKILL.md or .zip (`skillDropCheck`); busy "Still uploading. Wait a moment." |
 | Clip Factory skill "Replace the whole file" (`SkillPages.tsx`) | **element**, that section | the same; the page's text editors keep their text drops |
 | Clip Factory YouTube cookies.txt (`branches.tsx`) | **element**, its panel | `.txt` or `text/plain` ≤ 1 MB (`cookiesDropCheck`), then checked like the picker's. Clip Factory's account only; Clips Funded never reads it. |
@@ -15678,19 +15681,25 @@ during a drag.
 * `RefLinkBox`: `<input type="url" inputMode="url" enterKeyHint="go" autoComplete="off">`, placeholder "Paste a video
   link", sr-only label "Video link", the site's mark at its start (the shared `PlatformMark` for the five platforms,
   simple drawn marks for Drive and Dropbox). One button at its end: **Paste** (quiet) while it is empty, hidden when
-  the browser has no clipboard API, and "Press and hold in the box, then choose Paste." when reading the clipboard
-  fails; **Add** (main) when it holds a supported link, and Enter does the same; no button otherwise.
+  the browser has no clipboard API; **Add** (main) when it holds a supported link, and Enter does the same; no button
+  otherwise. Tapping **Paste** is the owner's own ask: a supported link it reads is added at once (no Add tap); any
+  other text only fills the box. When reading the clipboard fails, the line says how to paste by hand on this device
+  (`pasteHelp()`): "Press and hold in the box, then choose Paste." on a touch screen (`(pointer: coarse)`, iOS,
+  Android), "Click the box, then press ⌘V." on a Mac, "Click the box, then press Ctrl+V." elsewhere.
 * One main button at a time: **Upload a video** is main, except while Add is shown; then Upload is quiet.
-* Under them one status line (`role="status"`, `aria-live="polite"`):
+* Under them one status line (`role="status"`, `aria-live="polite"`). A link that can't come in says why only once it
+  is checked (pasted, dropped, Enter, or the box left), never letter by letter while it is typed; a good one shows its
+  line at once:
 
   | Box holds | Line |
   |---|---|
   | a supported link | "{Site} video found." with the site's mark in the box |
-  | a link to another site | "We can't get videos from that site. Save the video, then drop it here." |
+  | a link to another site | "We can't get videos from that site. Save the video, then upload it." |
   | a supported site but not one video (a profile, a folder) | "That link isn't one video. Open the video, tap Share, then Copy link." |
-  | text that is no link (also `http://` and other schemes) | "That isn't a link. Copy the video's link, then paste it here." |
+  | text that is no link (also schemes other than https and http) | "That isn't a link. Copy the video's link, then paste it here." |
+  | after Add | "Getting it…"; when the start failed, the job's own sentence |
   | after Add, a refusal from the API | the API's sentence (the duplicate, three at once, the 100 limit) |
-  | a picked or pasted file that is no video | `videoProblem`'s line ("Pick an MP4 or MOV video.", "That video is too big. Pick one under 2 GB.") |
+  | a picked, pasted or dropped file that is no video | `videoProblem`'s line ("Pick an MP4 or MOV video.", "That video is too big. Pick one under 2 GB."); a refused drop's line stays here after its pill has gone, until the box changes |
 
 * Share text is cleaned with `extractLink` (`lib/links.ts`), then checked by `refLink()` (§45.40.4). After a good Add
   the box clears and the new reference goes to the top of the list with the chip "Getting it…".
@@ -15709,9 +15718,10 @@ during a drag.
 The copies: `api/src/clipfactory_api/workspaces/reflinks.py`, `stories/agent/src/lamostories_agent/reflinks.py` (a
 copy, never an import: the isolation test forbids `clipfactory_*`; an agent test checks it matches the API's copy line
 for line, reading the file as text) and `web/src/stories/api/refLinks.ts`. All three give the answers in
-`stories/agent/tests/fixtures/reference_links.json` (34 links taken, 34 refused), and all three suites read it. The
+`stories/agent/tests/fixtures/reference_links.json` (38 links taken, 34 refused), and all three suites read it. The
 text is parsed by hand the same way in each, never with a URL parser that would re-encode it: share text is cleaned
-to its first link; only `https` or no scheme (`https://` is put in front); no user name or password; port 443 or none;
+to its first link; only `https`, `http` or no scheme (`https://` is put in front: only https is ever fetched); no user
+name or password; port 443 or none;
 at most 2048 characters; the host lower-cased (`tiktok.com` and `m.tiktok.com` become `www.tiktok.com`, the host
 yt-dlp's TikTok extractor takes); the path as given; only the kept query keys; no fragment.
 
@@ -15720,15 +15730,17 @@ yt-dlp's TikTok extractor takes); the path as given; only the kept query keys; n
 | `youtube` | YouTube | youtube.com, www.youtube.com, m.youtube.com, youtu.be | `/watch?v={11}`, `/shorts/{11}`, youtu.be `/{11}` | `v` |
 | `tiktok` | TikTok | tiktok.com, www.tiktok.com, m.tiktok.com, vm.tiktok.com, vt.tiktok.com | `/@{handle}/video/{digits}`, `/t/{code}`, vm/vt `/{code}` | none |
 | `instagram` | Instagram | instagram.com, www.instagram.com | `/reel/{code}`, `/reels/{code}`, `/p/{code}`, `/tv/{code}` | none |
-| `facebook` | Facebook | facebook.com, www.facebook.com, m.facebook.com | `/reel/{id}`, `/watch?v={id}` (also `/watch/?v=`), `/{page}/videos/{id}` | `v` |
+| `facebook` | Facebook | facebook.com, www.facebook.com, m.facebook.com; fb.watch | `/reel/{id}`, `/watch?v={id}` (also `/watch/?v=`), `/{page}/videos/{id}`; Share › Copy link: `/share/r/{code}`, `/share/v/{code}`, fb.watch `/{code}` | `v` |
 | `x` | X | x.com, www.x.com, mobile.x.com, twitter.com, www.twitter.com, mobile.twitter.com | `/{user}/status/{digits}` (an optional `/video/1` is kept) | none |
 | `drive` | Google Drive | drive.google.com | `/file/d/{id}/…`, `/open?id={id}`, `/uc?id={id}` (folders: not one video) | `id` |
 | `dropbox` | Dropbox | dropbox.com, www.dropbox.com | `/s/{code}/{name}`, `/scl/fi/{code}/{name}` (`/sh/` and `/scl/fo/` are folders) | `rlkey` |
 
-Facebook's `/share/r/`, `/share/v/` and `fb.watch` links match only yt-dlp's generic extractor, so they are out of
-the table (`fb.watch` is another site, `/share/…` is not one video). Every platform shape in the fixture is matched by
-an allowed yt-dlp extractor (checked offline, §45.40.6); a shape no allowed extractor takes comes out of the table and
-never goes to `generic`. Not in v1: Vimeo, Snapchat, and plain https links to an `.mp4` on any host (each would be one
+Facebook's own Share › Copy link (`/share/r/`, `/share/v/`) and `fb.watch` links match only yt-dlp's generic
+extractor, so they never go to yt-dlp: `is_share_link(url)` (in both Python copies) names them, and the agent opens
+one first through the guard (§45.40.6) and hands yt-dlp only the Facebook video link it leads to, checked again with
+`clean_link`. Every other platform shape in the fixture is matched by an allowed yt-dlp extractor (checked offline,
+§45.40.6); a shape no allowed extractor takes and no opening step leads from comes out of the table and never goes to
+`generic`. Not in v1: Vimeo, Snapchat, and plain https links to an `.mp4` on any host (each would be one
 row in the table, the fixture and the extractor list).
 
 Shapes: web `refLink(text): { ok: true; url; site: RefSite } | { ok: false; why: "empty" | "not_a_link" |
@@ -15750,8 +15762,20 @@ answers as a 400 with `field: "url"`.
 * **Never used:** Clip Factory's cookies (`private/{userId}/youtube-cookies.txt`), its proxy secret, its PO-token
   server, its Mac fetch, the TikTok helper or any social OAuth token. IAM already keeps the stories role out of
   `private/` and Clip Factory's secrets.
+* **Clips Funded's own PO-token sidecar for YouTube** (ADR-52's way, ADR-88): `lamostories_agent/pot.py`, a copy of
+  Clip Factory's `pot.py` (never imported), runs bgutil-ytdlp-pot-provider's server with the image's Deno on
+  `127.0.0.1:4416` in this runtime only (`--allow-env --allow-net`, read and FFI on its `node_modules` only, no write).
+  The image builds it from upstream's tag tarball pinned by sha256 (`BGUTIL_VERSION=2.0.2`, the plugin
+  `bgutil-ytdlp-pot-provider==2.0.2` in `pyproject.toml`; bump both together), with its own read-only Deno cache
+  (`CF_STORIES_POT_HOME=/opt/bgutil/server`, `CF_STORIES_POT_DENO_DIR=/opt/bgutil/deno-cache`). The app only
+  remembers it at start; the first YouTube link starts it (`pot.ready()`, ≤ 10 s), a supervisor restarts it with a
+  growing pause, and `CF_STORIES_POT=off` turns it off. YouTube calls add `--extractor-args
+  youtube:player_client=default,mweb` and the script mode's `server_home` (the backup while the server is down). The
+  plugin hands the server the fetch's own guard as its proxy, so its calls to YouTube go through the guard too. The
+  build runs `python -m lamostories_agent.pot` (both providers usable, `/ping` answers). No cookies.
 * `stories/agent/pyproject.toml` pins `yt-dlp[default]==2026.10.26` (Clip Factory's pin); `uv.lock` is refreshed with
-  a local `uv lock`. The Dockerfile's build check runs `yt-dlp --version`, and `selfcheck.py` runs
+  a local `uv lock`. The Dockerfile's build check runs `yt-dlp --version` and imports both PO-token providers, and
+  `selfcheck.py` runs
   `reffetch.extractors_ok()` (the extractor list resolves, without `generic`). `proc.run` takes an optional `env`
   (added to the process's own environment) for the proxy variables.
 * No Terraform change (§45.15).
@@ -15765,12 +15789,15 @@ after it (`async with Guard(cap=…) as g`: `g.url`, `g.over`, `g.refused`).
   connection closes, so every fetch is https.
 * The host must pass `config.safe_host`; it is resolved off the event loop within 10 s, and every address must pass
   `config.public_ip`: no loopback, private, link-local (169.254.0.0/16: 169.254.169.254 and 169.254.170.2),
-  `fd00:ec2::/32`, multicast, reserved or unspecified address. The tunnel connects to the checked address itself, so
-  DNS rebinding cannot reach a private one. Every redirect and CDN hop is a new CONNECT, checked again.
+  `fd00:ec2::/32`, the old site-local `fec0::/10`, multicast, reserved or unspecified address. The tunnel connects to
+  the checked address itself, so DNS rebinding cannot reach a private one. Every redirect and CDN hop is a new
+  CONNECT, checked again.
 * All bytes coming in, across all tunnels, are counted; past `cap` every tunnel closes and `over` is set, so the size
   limit holds while streaming even when Content-Length is wrong or missing.
-* Each tunnel has a 60 s idle timeout, at most 16 at once. Logs hold host names and counts only, never paths or
-  queries.
+* A tunnel closes when neither way has moved for 60 s (one timestamp both ways share: the request side of a
+  download stays silent while its answer streams in, so a long download is never cut). At most 16 connections at
+  once, each counted from the moment it is accepted, so CONNECTs arriving together never pass the limit. Logs hold
+  host names and counts only, never paths or queries.
 
 **Platform links (yt-dlp).** Argument lists through `proc.run`, no shell; the env sets `HTTPS_PROXY`, `HTTP_PROXY` and
 `ALL_PROXY` to `g.url` as well.
@@ -15784,7 +15811,17 @@ after it (`async with Guard(cap=…) as g`: `g.url`, `g.over`, `g.refused`).
   a 20 min limit and a 120 s stall check kept alive by the progress lines (which also drive the job's progress).
 * `EXTRACTORS` = `youtube`, `tiktok`, `vm\.tiktok`, `instagram`, `facebook`, `facebook:reel`, `twitter`: never
   `generic`, so redirects and embeds cannot reach arbitrary pages. Never `--cookies`, `--cookies-from-browser`,
-  `--exec`, `--load-info-json` or a user-supplied `-o`.
+  `--exec`, `--load-info-json` or a user-supplied `-o`. YouTube also gets the PO-token arguments of §45.40.5.
+* yt-dlp's own words reach the log only through `reffetch.quiet()`: every link becomes `<link>` and the post id after
+  `[extractor]` is dropped, so no post link or id is logged.
+
+**Facebook share links (`open_share`, before yt-dlp).** One GET at a time through the guard (`set_tunnel`, as for
+Drive), at most 3 redirects, each on Facebook's own hosts (facebook.com, www., m., web., fb.watch), https and port 443
+only. The first `Location` (or, on a 200 HTML answer, the page's own `og:url` or canonical address, from at most its
+first 1 MiB) that `clean_link` takes as a Facebook video link, never a share link again, is the one yt-dlp gets. A
+sign-in page or any other answer is "Facebook didn't let us get it. Save the video, then upload it."; 404 or 410 is
+GONE; 429 or 5xx is "We couldn't reach Facebook. Tap Try again."; another host or a fourth redirect is NO_VIDEO. The
+reference keeps the owner's own share link.
 
 **Drive and Dropbox (no yt-dlp).** `http.client.HTTPSConnection` through the guard (`set_tunnel(host, 443)`) in a
 worker thread; at most 3 redirects, each hop on the Drive or Dropbox hosts or their hop suffixes. A redirect to
@@ -15829,14 +15866,16 @@ upload: uploading ──▶ ready ...   (unchanged)
 
 | Route (**S**, in `routes/ai.py` and `api/tests/ws_routes_ai.py`) | Body | Answer | Refusals |
 |---|---|---|---|
-| `POST /v1/workspaces/{ws}/references/link` | `{ "url": string (≤ 2048; share text is cleaned), "title"?: string (≤ 80) }`, `only_keys` | **202** `{ reference, job }` (`fetching`, `reference_fetch`) | 400 `url` (§45.40.3's sentences; empty: "Paste a video link."); 400 `title`; 409 "You have 100 reference videos already. Delete one first."; 409 "That video is in your list already." (the same cleaned `link`); 409 "Three videos are on their way already. Wait for one to arrive." (≥ 3 `fetching` after `settle`) |
+| `POST /v1/workspaces/{ws}/references/link` | `{ "url": string (≤ 2048; share text is cleaned), "title"?: string (≤ 80) }`, `only_keys` | **202** `{ reference, job }` (`fetching`, `reference_fetch`) | 400 `url` (§45.40.3's sentences; empty: "Paste a video link."); 400 `title`; 409 "You have 100 reference videos already. Delete one first."; 409 "That video is in your list already." (the same cleaned `link`), or "That one didn't arrive. Tap it in your list, then Try again." when every reference with that link is `fetch_failed`; 409 "Three videos are on their way already. Wait for one to arrive." (≥ 3 `fetching` after `settle`) |
 | `POST /v1/workspaces/{ws}/references/{refId}/fetch` | `{}` | **202** `{ reference, job }` | 404; 409 "It is getting the video now." (`fetching`); 409 "This video is here already." (any status but `fetch_failed`); the three-at-once limit |
 | `GET /v1/workspaces/{ws}/references/{refId}` | | adds `fetchJob: ProductionJob \| null` (the newest `reference_fetch` job); `job` is the analysis job only (`reference_analysis`, or no `jobType` on old items) | |
 | `POST …/{refId}/analyze` | | | 409 "Wait until the video is here." (`fetching`); 409 "Get the video first. Tap Try again." (`fetch_failed`) |
 
 * The create and the fetch-again work like `analyze`: one `store.transact` puts the PJOB and the REFVID (the
   fetch-again's update is conditioned on `status = fetch_failed` and no `currentJobId`), then
-  `runtime.start_reference_fetch` starts it inside `cfg.stops_last(app)`. A start that fails gives `fetch_failed` with
+  `runtime.start_reference_fetch` starts it inside `cfg.stops_last(app)`. The three-at-once and the same-link checks
+  read the list first and are soft limits: two adds at the very same moment may both pass (only the workspace's owner
+  can do that, behind the API's throttle). A start that fails gives `fetch_failed` with
   "Getting the video did not start. Tap Try again."; with no runtime, the NOT_ON sentence.
 * `settle()` also fences `fetching` (the same 3 and 6 minute rules: "Getting the video stopped. Tap Try again.");
   `after_failure(ref, job)` gives `fetch_failed` for a `reference_fetch` job; `_orphan()` sends `fetching` to
@@ -15858,21 +15897,23 @@ upload: uploading ──▶ ready ...   (unchanged)
 
 | Case | Sentence |
 |---|---|
-| private | "That video is private. Pick a public one, or save it and drop it here." |
-| bot check, login required, 403/429, rate limit | "{Site} didn't let us get it. Save the video, then drop it here." |
+| private | "That video is private. Pick a public one, or save it and upload it." |
+| bot check, login required, 403/429, rate limit | "{Site} didn't let us get it. Save the video, then upload it." |
 | removed, 404, unavailable | "That video is gone. Check the link." |
 | live or upcoming | "That's a live video. Pick one that has finished." |
 | over 10 minutes | "This video is longer than 10 minutes. Pick a shorter one." |
 | over the cap, `g.over`, `--max-filesize` | "That video is bigger than 2 GB. Pick a shorter one." |
-| unsupported, no formats, not a video, an address the guard refused | "That link has no video we can get. Save the video, then drop it here." |
-| Drive not shared | "That file isn't shared. In Google Drive tap Share, then Anyone with the link, then paste it again." |
+| unsupported, no formats, not a video, an address the guard refused | "That link has no video we can get. Save the video, then upload it." |
+| Drive not shared | "That file isn't shared. In Google Drive tap Share, then Anyone with the link, then Try again." |
 | Dropbox not shared | "That file isn't shared. In Dropbox tap Share, then Copy link, then paste it again." |
 | timeout, DNS, reset | "We couldn't reach {Site}. Tap Try again." |
 | no disk | "Clips Funded is busy right now. Tap Try again in a few minutes." |
-| anything else | "We couldn't get that video. Tap Try again, or save it and drop it here." |
+| anything else | "We couldn't get that video. Tap Try again, or save it and upload it." |
 
-Every failure keeps **Upload a video** and the page drop as the way forward. Many platforms block downloads from cloud
-addresses (YouTube's bot check, Instagram's login wall), so some links will fail; the sentence says so plainly.
+Every failure keeps **Upload a video** and the page drop as the way forward; the words are the same on a phone and
+a computer ("upload it", never "drop it here"). A Facebook share link that leads nowhere good: §45.40.6. Many
+platforms block downloads from cloud addresses (YouTube's bot check, Instagram's login wall), so some links will
+fail; the sentence says so plainly.
 
 #### 45.40.9 How the states show
 
@@ -15881,13 +15922,17 @@ addresses (YouTube's bot check, Instagram's login wall), so some links will fail
   never crashes.
 * **List rows:** a link row's meta is "From {Site}" plus the usual length and size once known. The list checks every
   3 s while any row is `fetching`. A row that turns `ready` cheers, calls `referencesChanged()` and opens its page
-  through `storiesGoLater`, the same as a finished upload; one that turns `fetch_failed` stays with its coral chip.
+  through `storiesGoLater`, the same as a finished upload; one added here that turns `fetch_failed` opens its page
+  the same way, with no cheer (the reason and the one thing to do are there, never a coral chip alone).
 * **Reference page while `fetching`:** the player says "The video is on its way."; the side block "Getting it from
   {Site}…" shows `fetchJob`'s one step with the busy bar; the page checks every 2 s and cheers when the video arrives,
   then shows the usual Analyze card. Only Delete stays in the lower actions.
-* **While `fetch_failed`:** "It didn't arrive", then `fetchJob`'s step message or error, else "We couldn't get that
-  video. Tap Try again, or save it and drop it here."; main **Try again** (`fetchReferenceAgain`); quiet **Upload a
-  video** (a hidden file input): picking or dropping a video deletes this link reference, starts `startUpload(ws,
+* **While `fetch_failed`:** the player says "The video didn't arrive."; "It didn't arrive", then `fetchJob`'s step
+  message or error, else "We couldn't get that video. Tap Try again, or save it and upload it."; **Try again**
+  (`fetchReferenceAgain`) and **Upload a video** (a hidden file input), one of them main: Try again when asking again
+  can work (`canTryAgain(reason)`: the reason names Try again: reached no one, no room, stopped, did not start, Drive
+  not shared yet, anything else), else Upload a video (private, gone, live, too long, too big, blocked, no video,
+  Dropbox not shared); picking or dropping a video deletes this link reference, starts `startUpload(ws,
   file)` and goes to the list; Delete. The page drop zone is on only in this state. `removedState()`'s fallback is
   `!["uploading", "fetching", "fetch_failed"].includes(status) && !url`.
 * Production's `RefPicker` shows "On its way" and "Didn't arrive" (only `analyzed` can be picked);
@@ -15898,11 +15943,12 @@ addresses (YouTube's bot check, Instagram's login wall), so some links will fail
 Tests: §45.19 ("Drop and link"). For the owner (in the PR): YouTube's, TikTok's, Meta's and X's terms forbid
 downloading or automated collection; the fetch uses no login, is for study only, and the files stay private under
 `ws/` with the keep settings applying. The host list (Vimeo or other sites?). Reliability from the cloud without a PO
-token is unknown. Follow-ups: F1, Clips Funded's own PO-token sidecar for YouTube (additive to the image only) if
-YouTube links mostly fail in production; F2, "Get it again" for a link reference whose file a keep setting cleared;
-F3, Facebook share links (`/share/r/`, `/share/v/`, `fb.watch`): the agent would resolve the redirect through the
-guard and check the result against the allowlist again. After the merge and deploy, one link per site is tried in
-production with the owner's go-ahead.
+token was unknown, so YouTube gets Clips Funded's own PO-token sidecar from the start (§45.40.5; F1 done), and
+Facebook's share links are opened through the guard (§45.40.6; F3 done). Instagram may still ask for a login from
+the cloud; no cookies are ever used. Follow-up: F2, "Get it again" for a link reference whose file a keep setting
+cleared. After the merge and deploy, one public link per site (YouTube, a Short, TikTok, an Instagram reel, a Facebook
+reel and its share link, X, Drive, Dropbox) is tried on the live app with the owner's go-ahead, and the owner is told
+which sites arrive.
 
 ## 46. Auto-posting: the oldest clips in Review go up by themselves, every X hours (owner request, 2026-11-22)
 

@@ -1,7 +1,7 @@
 // Clips Funded › References: the list and the ways in (docs/CONTRACTS.md §45.16.7, §45.28, §45.40). Videos the owner
 // likes: uploaded, dropped anywhere on the page, or pasted as a link that Clips Funded's own runtime fetches; each
 // opens its own page. A link row says "Getting it…" until the video is here (the list checks every 3 s), then it
-// cheers and opens, like a finished upload.
+// cheers and opens, like a finished upload; one that did not arrive opens too, where its page says why and what to do.
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { DropOverlay } from "../../../components/DropOverlay.tsx";
 import { A } from "../../../components/ui.tsx";
@@ -96,18 +96,24 @@ export function RefList({ ws }: { ws: string }) {
   );
 
   // A link's video arriving while this list is open: a cheer, and its own page opens (as a finished upload does). One
-  // that did not arrive stays in the list with its coral chip.
+  // that did not arrive opens its page too, with no cheer: the reason and the one thing to do are there (never a coral
+  // chip alone).
   useEffect(() => {
     if (!list) return;
     let arrived: ReferenceVideo | null = null;
+    let missed: ReferenceVideo | null = null;
     for (const r of list) {
       if (r.status === "fetching") onTheWay.current.add(r.refId);
-      else if (onTheWay.current.delete(r.refId) && r.status === "ready") arrived ??= r;
+      else if (onTheWay.current.delete(r.refId)) {
+        if (r.status === "ready") arrived ??= r;
+        else if (r.status === "fetch_failed") missed ??= r;
+      }
     }
-    if (!arrived) return;
+    const open = arrived ?? missed;
+    if (!open) return;
     referencesChanged();
-    cheer(undefined);
-    storiesGoLater(storiesHref({ name: "reference", refId: arrived.refId }));
+    if (arrived) cheer(undefined);
+    storiesGoLater(storiesHref({ name: "reference", refId: open.refId }));
   }, [list]);
 
   // An upload finishing while this list is open (also one started before the owner left and came back): it joins
@@ -142,6 +148,11 @@ export function RefList({ ws }: { ws: string }) {
 
   // Drop a video, or a link, anywhere on the page (§45.40): a video starts its upload, a link fills the box.
   const drop = useFileDrop({ scope: "page", checkFile: videoProblem, maxFiles: DROP_MAX, tooMany: DROP_TOO_MANY, links: true, onFiles: send, onLink: link.fill });
+  // A refused drop's line stays in the card's line until the box changes (the pill only shows it for a moment).
+  const say = link.say;
+  useEffect(() => {
+    if (drop.refusals && drop.refused) say(drop.refused);
+  }, [drop.refusals, drop.refused, say]);
   // A paste anywhere on the page does the same (never into another field, never into Ask).
   usePagePaste({ enabled: true, box: link.box, checkFile: videoProblem, maxFiles: DROP_MAX, onFiles: send, onLink: link.fill, onRefused: link.say });
 

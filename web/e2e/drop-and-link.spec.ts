@@ -202,31 +202,34 @@ test("a blocked link says why in kid words and can't be added", async ({ page })
   await openReferences(page);
   const before = (await references(page)).length;
   const blocked: [string, string][] = [
-    ["http://169.254.169.254/latest/meta-data/", "That isn't a link. Copy the video's link, then paste it here."],
-    ["https://169.254.169.254/latest/meta-data/", "We can't get videos from that site. Save the video, then drop it here."],
-    ["https://vimeo.com/123456789", "We can't get videos from that site. Save the video, then drop it here."],
-    ["https://www.youtube.com.evil.example/watch?v=dQw4w9WgXcQ", "We can't get videos from that site. Save the video, then drop it here."],
+    ["ftp://169.254.169.254/latest/meta-data/", "That isn't a link. Copy the video's link, then paste it here."],
+    ["http://169.254.169.254/latest/meta-data/", "We can't get videos from that site. Save the video, then upload it."],
+    ["https://169.254.169.254/latest/meta-data/", "We can't get videos from that site. Save the video, then upload it."],
+    ["https://vimeo.com/123456789", "We can't get videos from that site. Save the video, then upload it."],
+    ["https://www.youtube.com.evil.example/watch?v=dQw4w9WgXcQ", "We can't get videos from that site. Save the video, then upload it."],
     ["https://www.tiktok.com/@lamo", "That link isn't one video. Open the video, tap Share, then Copy link."],
   ];
   for (const [link, why] of blocked) {
     await box(page).fill(link);
+    // Never judged letter by letter: the reason shows once Enter is pressed (or the box is left).
+    await expect(line(page)).toHaveText("");
+    await box(page).press("Enter");
     await expect(line(page)).toHaveText(why);
     await expect(add(page)).toHaveCount(0);
-    await box(page).press("Enter");
   }
   // A pasted one fills the box the same way, and is refused the same way.
   await box(page).fill("");
   expect(await paste(page, ".st-chat-head", "http://169.254.169.254/latest/meta-data/")).toBe(true);
-  await expect(line(page)).toHaveText("That isn't a link. Copy the video's link, then paste it here.");
+  await expect(line(page)).toHaveText("We can't get videos from that site. Save the video, then upload it.");
   await expect(add(page)).toHaveCount(0);
   // Enter on each of them sent nothing either (the API refuses the same links: api/tests/test_ws_ref_links.py).
   await page.waitForTimeout(300);
   expect((await references(page)).length).toBe(before);
 });
 
-test("a link whose video did not arrive says why, and Try again gets it (desktop)", async ({ page }) => {
+test("a link whose video did not arrive opens its page, which says why, and Try again gets it (desktop)", async ({ page }) => {
   test.setTimeout(60_000);
-  const sorry = "YouTube didn't let us get it. Save the video, then drop it here.";
+  const sorry = "YouTube didn't let us get it. Save the video, then upload it.";
   await openReferences(page);
   await knobs(page, { refFetchSeconds: 0.5, refFetchFail: sorry });
   await box(page).fill("https://www.youtube.com/shorts/dQw4w9WgXcQ");
@@ -234,13 +237,12 @@ test("a link whose video did not arrive says why, and Try again gets it (desktop
   await add(page).click();
   const row = page.locator(".st-ref-card", { hasText: "YouTube video" });
   await expect(row).toContainText("Getting it…");
-  // It stays in the list, coral, and nothing opens by itself.
-  await expect(row).toContainText("Didn't arrive", { timeout: 15_000 });
-  await expect(page).toHaveURL(/\/stories\/references$/);
-  await row.click();
-  await expect(page).toHaveURL(REF_PAGE);
+  // Its own page opens by itself (never a coral chip alone), with the reason and one main button.
+  await expect(page).toHaveURL(REF_PAGE, { timeout: 15_000 });
   await expect(page.getByRole("heading", { name: "It didn't arrive" })).toBeVisible();
   await expect(page.locator(".st-ref-fetch .st-ref-failed")).toHaveText(sorry);
+  // Blocked: asking again may not help, so Upload a video is the main button and Try again stays beside it.
+  await expect(page.locator(".st-ref-fetch .st-chat-btn--main")).toHaveText("Upload a video");
   await page.getByRole("button", { name: "Try again" }).click();
   await expect(page.getByRole("heading", { name: "Getting it from YouTube…" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Analyze it" })).toBeVisible({ timeout: 20_000 });

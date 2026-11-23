@@ -69,7 +69,8 @@ function useSkillUpload(ws: string, done: (s: Skill) => void) {
 
 /**
  * The file picker. While an upload runs it stays clickable (the deny sound) but opens nothing: never `disabled`. A
- * skill file dropped on it goes up the same way; while it is off it takes no drop.
+ * skill file dropped on it goes up the same way; while it is off a drop says why (its `off` line). The input has its
+ * own name, so the drop's status line never joins it.
  */
 function FilePick({ label, onFile, off }: { label: string; onFile: (f: File, el: HTMLElement) => void; off?: string }) {
   const ref = useRef<HTMLLabelElement>(null);
@@ -79,16 +80,17 @@ function FilePick({ label, onFile, off }: { label: string; onFile: (f: File, el:
     onFiles: ([f]) => {
       if (f && ref.current) onFile(f, ref.current);
     },
-    enabled: !off,
+    busy: off ?? null,
   });
   return (
     <label ref={ref} className="st-btn st-stg-btn st-stg-file st-drop-host" aria-disabled={off ? true : undefined} title={off} {...drop.bind}>
-      <DropOverlay drop={drop} scope="element" look="stories" words={{ file: "Drop it here" }} />
+      <DropOverlay drop={drop} scope="element" look="stories" words={{ file: "Drop it here", busy: off }} />
       <SIcon name="upload" size={20} />
       {label}
       <input
         className="sr-only"
         type="file"
+        aria-label={label}
         accept=".md,.zip,text/markdown,application/zip"
         aria-disabled={off ? true : undefined}
         onClick={(e) => {

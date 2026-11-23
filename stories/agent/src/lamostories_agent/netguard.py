@@ -11,7 +11,9 @@ after it.
 * Every redirect and every CDN hop is a new CONNECT, so each one is checked again.
 * All bytes coming in, across all tunnels, are counted; past ``cap`` every tunnel is closed and ``over`` is set, so the
   size limit holds while streaming even when Content-Length is wrong or missing.
-* A tunnel idle for 60 s is closed; at most 16 are open at once. Logs hold host names and counts only, never paths.
+* A tunnel where neither way has moved for 60 s is closed (a download that only streams in is never idle); at most 16
+  connections are open at once, each counted from the moment it is accepted. Logs hold host names and counts only,
+  never paths.
 
 ``async with Guard(cap=bytes) as g``: ``g.url`` (``http://127.0.0.1:{port}``) is the proxy for yt-dlp and for
 ``http.client``'s ``set_tunnel``; ``g.over`` and ``g.refused`` (how many CONNECTs were refused) say what happened."""
@@ -150,9 +152,17 @@ class Guard:
         if self.over:
             self._refuse(writer, 403, "Forbidden")
             return
+        # The slot is taken as the connection is accepted, so CONNECTs arriving together never pass the limit.
         if self.tunnels >= self._max_tunnels:
             self._refuse(writer, 503, "Busy")
             return
+        self.tunnels += 1
+        try:
+            await self._tunnel(reader, writer)
+        finally:
+            self.tunnels -= 1
+
+    async def _tunnel(self, reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
         try:
             head = await asyncio.wait_for(reader.readuntil(b"\r\n\r\n"), HEAD_SECONDS)
         except asyncio.LimitOverrunError:
@@ -182,24 +192,35 @@ class Guard:
         except (OSError, TimeoutError):
             self._refuse(writer, 502, "Bad Gateway", host)
             return
-        self.tunnels += 1
         self._writers.update((writer, up_writer))
         try:
             writer.write(b"HTTP/1.1 200 Connection established\r\n\r\n")
             await writer.drain()
-            await asyncio.gather(self._pipe(reader, up_writer, None), self._pipe(up_reader, writer, host))
+            moved = [asyncio.get_running_loop().time()]  # the tunnel's last byte, either way
+            await asyncio.gather(self._pipe(reader, up_writer, None, moved), self._pipe(up_reader, writer, host, moved))
         finally:
-            self.tunnels -= 1
             for w in (writer, up_writer):
                 self._writers.discard(w)
                 with contextlib.suppress(Exception):
                     w.close()
 
-    async def _pipe(self, source: asyncio.StreamReader, sink: asyncio.StreamWriter, inbound: str | None) -> None:
-        """Copies one way until either side ends or stays idle; ``inbound`` (the host) counts what comes in."""
+    async def _pipe(
+        self, source: asyncio.StreamReader, sink: asyncio.StreamWriter, inbound: str | None, moved: list[float]
+    ) -> None:
+        """Copies one way until either side ends, or until the tunnel has been idle both ways for ``idle_timeout``
+        (``moved``, shared by both ways: the request side of a download stays silent while its answer streams in);
+        ``inbound`` (the host) counts what comes in."""
+        loop = asyncio.get_running_loop()
         try:
             while True:
-                chunk = await asyncio.wait_for(source.read(CHUNK), self._idle_timeout)
+                left = self._idle_timeout - (loop.time() - moved[0])
+                if left <= 0:
+                    break
+                try:
+                    chunk = await asyncio.wait_for(source.read(CHUNK), left)
+                except TimeoutError:
+                    continue  # the other way may have moved meanwhile: looked at again above
+                moved[0] = loop.time()
                 if not chunk:
                     break
                 if inbound is not None:

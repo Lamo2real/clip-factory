@@ -111,6 +111,7 @@ async def test_a_public_host_on_443_is_tunnelled_to_the_checked_address(far: Far
         ("CONNECT 169.254.169.254:443 HTTP/1.1", "403"),
         ("CONNECT meta.example:443 HTTP/1.1", "403"),
         ("CONNECT [fd00:ec2::254]:443 HTTP/1.1", "403"),
+        ("CONNECT [fec0::1]:443 HTTP/1.1", "403"),  # the old IPv6 site-local range: never public
         ("CONNECT [::1]:443 HTTP/1.1", "403"),
         ("CONNECT rebind.example:443 HTTP/1.1", "403"),  # one answer private: refused, not tried in turn
         ("CONNECT video.example:80 HTTP/1.1", "405"),
@@ -156,6 +157,47 @@ async def test_at_most_max_tunnels_and_an_idle_one_is_closed(far: Far) -> None:
         await rest(r1)  # idle: closed by the guard
         w1.close()
         w2.close()
+
+
+async def test_a_download_that_streams_longer_than_the_idle_time_arrives_whole() -> None:
+    """The request side says nothing while the answer streams in: the tunnel is idle only when neither way moves."""
+    sent = 0
+
+    async def slow(reader: asyncio.StreamReader, writer: asyncio.StreamWriter) -> None:
+        nonlocal sent
+        for _ in range(10):  # 1 KiB every 0.1 s for 1 s, against an idle time of 0.3 s
+            writer.write(b"x" * 1024)
+            await writer.drain()
+            sent += 1024
+            await asyncio.sleep(0.1)
+        writer.close()
+
+    server = await asyncio.start_server(slow, "127.0.0.1", 0)
+    port = int(server.sockets[0].getsockname()[1])
+
+    async def opener(address: str, _port: int, seconds: float) -> tuple[asyncio.StreamReader, asyncio.StreamWriter]:
+        return await asyncio.open_connection("127.0.0.1", port)
+
+    try:
+        async with netguard.Guard(cap=100_000, resolve=resolver(ANSWERS), opener=opener, idle_timeout=0.3) as g:
+            status, reader, writer = await ask(g, "CONNECT video.example:443 HTTP/1.1")
+            assert status == "HTTP/1.1 200 Connection established"
+            await asyncio.wait_for(reader.readexactly(2), 5)
+            got = await rest(reader)  # the client stays silent the whole time
+            writer.close()
+        assert len(got) == sent == 10 * 1024
+    finally:
+        server.close()
+
+
+async def test_connects_arriving_together_never_pass_the_tunnel_limit(far: Far) -> None:
+    async with netguard.Guard(cap=10_000, resolve=resolver(ANSWERS), opener=far.opener, max_tunnels=2) as g:
+        asked = await asyncio.gather(*(ask(g, "CONNECT video.example:443 HTTP/1.1") for _ in range(6)))
+        codes = sorted(status.split(" ")[1] for status, _, _ in asked)
+        for _, _, writer in asked:
+            writer.close()
+    assert codes == ["200", "200", "503", "503", "503", "503"]
+    assert len(far.opened) == 2
 
 
 async def test_the_log_names_hosts_and_counts_never_paths(far: Far, capsys: pytest.CaptureFixture[str]) -> None:

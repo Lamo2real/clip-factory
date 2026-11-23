@@ -190,19 +190,21 @@ describe("the director chat takes pictures dropped anywhere on its page", () => 
 
 // ---------- Settings › Look ----------
 
-describe("Settings › Look takes a dropped picture only in Picture", () => {
+describe("Settings › Look takes a dropped picture anywhere on its page", () => {
   beforeEach(() => {
     // jsdom draws no pictures: the picture is kept as read (shrinkPicture's own fallback without Image).
     vi.stubGlobal("Image", undefined);
   });
 
-  it("takes nothing while Colours is chosen", async () => {
+  it("while Colours is chosen, a dropped picture becomes the background and Picture is chosen with it", async () => {
     setStoriesPicture(null);
     setStoriesLook({ mode: "colours" });
     await render(<LookSection />);
-    await dropOn($(".st-look")!, [png()]);
-    expect(storiesLook().mode).toBe("colours");
-    expect(storiesLook().picture).toBeNull();
+    const drop = await dropOn($(".st-look")!, [png("park.png")]);
+    expect(drop.defaultPrevented).toBe(true);
+    await until(() => !!storiesLook().picture);
+    expect(storiesLook().mode).toBe("picture");
+    expect(storiesLook().picture).toMatch(/^data:image[/]png;base64,/);
   });
 
   it("in Picture a dropped picture is the background, and a PDF is refused with its line", async () => {
@@ -234,7 +236,7 @@ describe("a skill's upload button takes a dropped skill file", () => {
     return up;
   }
 
-  it("uploads a .md dropped on it, refuses a PDF, and takes nothing while it is off", async () => {
+  it("uploads a .md dropped on it, refuses a PDF, and while it is off says why and takes nothing", async () => {
     const up = skillsApi();
     await render(
       <ToastProvider>
@@ -253,10 +255,14 @@ describe("a skill's upload button takes a dropped skill file", () => {
     await until(() => up.mock.calls.length === 1);
     expect(up.mock.calls[0]![1]).toEqual({ filename: "falls.md" });
 
-    // It is uploading now: the button is off and takes no drop (never `disabled`).
+    // It is uploading now: the button is off and takes no drop (never `disabled`); the drop says why.
     await until(() => $(".st-stg-file")?.getAttribute("aria-disabled") === "true");
-    await dropOn($(".st-stg-file")!, [md()]);
+    const busy = await dropOn($(".st-stg-file")!, [md()]);
+    expect(busy.defaultPrevented).toBe(true);
+    expect(said("Uploading…")).toBe(true);
     expect(up).toHaveBeenCalledTimes(1);
+    // The file input keeps its own name: the drop's status line never joins it.
+    expect($(".st-stg-file input[type=file]")?.getAttribute("aria-label")).toBe("Upload a file");
     expect($$("[disabled]")).toEqual([]);
   });
 });

@@ -29,7 +29,9 @@ HTMLCanvasElement.prototype.getContext = (() => null) as never;
 
 const { ReferencesScreen } = await import("../src/stories/screens/References.tsx");
 const { REF_STATUS, statusOf } = await import("../src/stories/chat/references/RefList.tsx");
-const { PASTE_HELP } = await import("../src/stories/chat/references/RefLinkBox.tsx");
+const { PASTE_HELP, PASTE_HELP_KEYS, PASTE_HELP_MAC, pasteHelp } = await import("../src/stories/chat/references/RefLinkBox.tsx");
+const { canTryAgain } = await import("../src/stories/chat/references/RefPage.tsx");
+const { forgetPageDrag } = await import("../src/lib/useFileDrop.ts");
 const { References } = await import("../src/stories/studio/References.tsx");
 
 const TIKTOK = "https://www.tiktok.com/@lamo/video/7300000000000000001";
@@ -84,6 +86,7 @@ afterEach(() => {
   setStoriesApi(null);
   vi.restoreAllMocks();
   vi.unstubAllGlobals();
+  forgetPageDrag();
 });
 
 async function render(el: ReactElement) {
@@ -120,6 +123,13 @@ async function type(el: HTMLInputElement, value: string) {
   await act(async () => {
     Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")!.set!.call(el, value);
     el.dispatchEvent(new Event("input", { bubbles: true }));
+  });
+}
+
+/** The box is left (React's onBlur listens to focusout). */
+async function leave(el: HTMLElement) {
+  await act(async () => {
+    el.dispatchEvent(new FocusEvent("focusout", { bubbles: true }));
   });
 }
 
@@ -219,16 +229,27 @@ describe("paste a link (§45.40)", () => {
       ["funny cat", REF_LINK_REFUSED.not_a_link],
     ] as const) {
       await type(box(), text);
+      expect(line()).toBe(""); // never while it is being typed
+      await leave(box());
       expect(line()).toBe(why);
       expect($(".st-ref-link__add")).toBeNull();
       expect($(".st-ref-link__paste")).toBeNull();
       expect(byText(".st-ref-drop .st-chat-btn", "Upload a video")?.classList.contains("st-chat-btn--main")).toBe(true);
     }
-    // Enter does nothing with it.
+    // Enter says why too, and sends nothing.
+    await type(box(), "https://vimeo.com/42");
+    expect(line()).toBe("");
     await act(async () => {
       box().dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
     });
+    expect(line()).toBe(REF_LINK_REFUSED.other_site);
     expect(store.references).toHaveLength(2);
+    // A good link shows its line while it is typed; http:// is taken as https://.
+    await type(box(), "http://www.youtube.com/watch?v=dQw4w9WgXcQ");
+    expect(line()).toBe("YouTube video found.");
+    // Facebook's own Copy link is a Facebook video too.
+    await type(box(), "https://www.facebook.com/share/r/1AbCdEfGh/");
+    expect(line()).toBe("Facebook video found.");
   });
 
   it("the API's own refusal shows in the line (the same link twice)", async () => {
@@ -246,14 +267,58 @@ describe("paste a link (§45.40)", () => {
       Reflect.deleteProperty(navigator, "clipboard");
     });
     await openList();
+    // The tap on Paste is the ask: a video link it reads goes in at once, no Add needed.
     await click(byText(".st-ref-link__paste", "Paste"));
-    await until(() => box().value === TIKTOK);
-    expect(line()).toBe("TikTok video found.");
+    await until(() => $$(".st-ref-card").length === 3);
+    expect($$(".st-ref-card")[0]!.textContent).toContain("Getting it…");
+    expect(store.references.find((r) => r.link === TIKTOK)?.status).toBe("fetching");
+    expect(box().value).toBe("");
+    expect(line()).toBe("Getting it…");
+
+    // Something that is no video link only fills the box, and says why.
+    answer = () => Promise.resolve("https://vimeo.com/123456");
+    await click(byText(".st-ref-link__paste", "Paste"));
+    await until(() => box().value === "https://vimeo.com/123456");
+    expect(line()).toBe(REF_LINK_REFUSED.other_site);
+    expect(store.references).toHaveLength(3);
 
     await type(box(), "");
     answer = () => Promise.reject(new Error("NotAllowedError"));
     await click(byText(".st-ref-link__paste", "Paste"));
-    await until(() => line() === PASTE_HELP);
+    await until(() => line() === pasteHelp());
+  });
+
+  it("the paste-by-hand line fits the device: press and hold on touch, ⌘V on a Mac, Ctrl+V elsewhere", () => {
+    const ua = (value: string) => vi.spyOn(navigator, "userAgent", "get").mockReturnValue(value);
+    vi.stubGlobal("matchMedia", (q: string) => ({ matches: q === "(pointer: coarse)" }));
+    expect(pasteHelp()).toBe(PASTE_HELP);
+    vi.stubGlobal("matchMedia", () => ({ matches: false }));
+    ua("Mozilla/5.0 (Macintosh; Intel Mac OS X 15_1) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/19.0 Safari/605.1.15");
+    expect(pasteHelp()).toBe(PASTE_HELP_MAC);
+    ua("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/141.0 Safari/537.36");
+    expect(pasteHelp()).toBe(PASTE_HELP_KEYS);
+    ua("Mozilla/5.0 (iPhone; CPU iPhone OS 19_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/19.0 Mobile/15E148 Safari/604.1");
+    expect(pasteHelp()).toBe(PASTE_HELP);
+  });
+
+  it("a link added whose video did not arrive opens its page, where it says why", async () => {
+    store.knobs.refFetchFail = "That video is private. Pick a public one, or save it and upload it.";
+    await openList();
+    await type(box(), "https://youtu.be/dQw4w9WgXcQ");
+    await click($(".st-ref-link__add"));
+    const made = () => store.references.find((r) => r.link === "https://youtu.be/dQw4w9WgXcQ");
+    await until(() => made()?.status === "fetch_failed", 8000);
+    await until(() => location.pathname === `/stories/references/${made()!.refId}`, 9000);
+  }, 20_000);
+
+  it("the same link again after it did not arrive says where its Try again is", async () => {
+    store.knobs.refFetchFail = "That video is gone. Check the link.";
+    await api.createReferenceFromLink("stories", { url: TIKTOK });
+    await new Promise((r) => setTimeout(r, 400));
+    await openList(3);
+    await type(box(), TIKTOK);
+    await click($(".st-ref-link__add"));
+    await until(() => line() === "That one didn't arrive. Tap it in your list, then Try again.");
   });
 
   it("a link pasted with nothing focused fills the box, and so does a link dropped on the page", async () => {
@@ -316,8 +381,32 @@ describe("drop anywhere on References (§45.40)", () => {
     expect(drop.defaultPrevented).toBe(true);
     expect($(".drop-layer.is-refused")?.textContent).toBe("Pick an MP4 or MOV video.");
     expect($$('[role="status"]').some((el) => el.textContent === "Pick an MP4 or MOV video.")).toBe(true);
+    // The reason stays in the card's line after the pill has gone, until the box changes.
+    expect(line()).toBe("Pick an MP4 or MOV video.");
     expect($(".st-ref-upload")).toBeNull();
     expect(store.references).toHaveLength(2);
+  });
+
+  it("a row of the list (or words on the page) dragged and dropped is no link to take", async () => {
+    await openList();
+    const row = $$(".st-ref-card")[0]!;
+    const own = `${location.origin}${row.getAttribute("href")}`;
+    await act(async () => {
+      row.dispatchEvent(new Event("dragstart", { bubbles: true }));
+    });
+    await act(async () => {
+      document.body.dispatchEvent(dragEvent("dragenter", { uri: own }));
+    });
+    expect($(".drop-layer")).toBeNull();
+    await dropOn(document.body, { uri: own });
+    expect(box().value).toBe("");
+    expect(line()).toBe("");
+    await act(async () => {
+      row.dispatchEvent(new Event("dragend", { bubbles: true }));
+    });
+    // A link dragged in from outside still fills the box.
+    await dropOn(document.body, { uri: "https://www.instagram.com/reel/Cabc123/" });
+    expect(box().value).toBe("https://www.instagram.com/reel/Cabc123/");
   });
 
   it("the file picker still works, and its refusal is the card's line (no failed upload row)", async () => {
@@ -352,7 +441,7 @@ describe("a reference from a link, on its own page (§45.40)", () => {
     await until(() => !!byText("button", "Analyze it"), 8000);
 
     // The next one does not arrive.
-    const sorry = "That video is private. Pick a public one, or save it and drop it here.";
+    const sorry = "That video is private. Pick a public one, or save it and upload it.";
     store.knobs.refFetchFail = sorry;
     store.knobs.refFetchSeconds = 0.2;
     const other = await api.createReferenceFromLink("stories", { url: "https://www.youtube.com/shorts/abcdefghijk" });
@@ -363,9 +452,11 @@ describe("a reference from a link, on its own page (§45.40)", () => {
     await until(() => !!byText(".st-ref-block__title", "It didn't arrive"));
     expect($(".st-ref-fetch .st-ref-failed")?.textContent).toBe(sorry);
     expect($(".st-ref__meta")?.textContent).toContain("Didn't arrive");
+    expect($(".st-ref-player__none")?.textContent).toBe("The video didn't arrive.");
+    // Asking again can't help a private video: Upload a video is the main button, Try again stays (quiet).
     const again = byText("button", "Try again")!;
-    expect(again.classList.contains("st-chat-btn--main")).toBe(true);
-    expect(byText("button", "Upload a video")?.classList.contains("st-chat-btn--quiet")).toBe(true);
+    expect(again.classList.contains("st-chat-btn--quiet")).toBe(true);
+    expect(byText("button", "Upload a video")?.classList.contains("st-chat-btn--main")).toBe(true);
     await click(again);
     await until(() => !!byText(".st-ref-block__title", "Getting it from YouTube…"));
     await until(() => !!byText("button", "Analyze it"), 8000);
@@ -401,6 +492,13 @@ describe("a reference from a link, on its own page (§45.40)", () => {
     const drop = await dropOn(document.body, { files: [video()] });
     expect(drop.defaultPrevented).toBe(false);
     expect($(".drop-layer")).toBeNull();
+  });
+});
+
+describe("canTryAgain", () => {
+  it("is true only when asking again can work", () => {
+    for (const yes of ["We couldn't reach YouTube. Tap Try again.", "Clips Funded is busy right now. Tap Try again in a few minutes.", "Getting the video stopped. Tap Try again.", "Getting the video did not start. Tap Try again.", "We couldn't get that video. Tap Try again, or save it and upload it.", "That file isn't shared. In Google Drive tap Share, then Anyone with the link, then Try again."]) expect(canTryAgain(yes)).toBe(true);
+    for (const no of ["That video is private. Pick a public one, or save it and upload it.", "YouTube didn't let us get it. Save the video, then upload it.", "That video is gone. Check the link.", "That's a live video. Pick one that has finished.", "This video is longer than 10 minutes. Pick a shorter one.", "That video is bigger than 2 GB. Pick a shorter one.", "That link has no video we can get. Save the video, then upload it."]) expect(canTryAgain(no)).toBe(false);
   });
 });
 
@@ -445,13 +543,17 @@ describe("the studio's 'Pictures to aim for' (§45.40)", () => {
     expect(sent).toEqual(["look.png"]);
   });
 
-  it("is off when it already has 8 pictures", async () => {
+  it("with 8 pictures already, a drop says why and sends nothing", async () => {
     const upload = vi.fn();
     setStoriesApi({ referenceUpload: upload } as unknown as StoriesApi);
     await render(<References ws="stories" character={character(8)} onChange={() => undefined} />);
+    await act(async () => {
+      $("section.st-s-refs")!.dispatchEvent(dragEvent("dragenter", { files: [png()] }));
+    });
+    expect($(".st-s-refs .drop-layer.is-busy")?.textContent).toBe("You have 8 pictures. Delete one first.");
     const drop = await dropOn($("section.st-s-refs")!, { files: [png()] });
-    expect(drop.defaultPrevented).toBe(false);
-    expect($(".drop-layer")).toBeNull();
+    expect(drop.defaultPrevented).toBe(true);
+    expect($(".st-s-refs .drop-layer.is-refused")?.textContent).toBe("You have 8 pictures. Delete one first.");
     expect(upload).not.toHaveBeenCalled();
   });
 });

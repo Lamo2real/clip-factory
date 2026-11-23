@@ -204,6 +204,17 @@ def test_a_start_that_fails_leaves_fetch_failed_and_try_again_starts_it(
     assert wcall("POST", f"{BASE}/references/{got['reference']['refId']}/fetch", {"x": 1})[0] == 400
 
 
+def test_the_same_link_again_after_it_did_not_arrive_says_where_try_again_is(app: App) -> None:
+    runtime = FakeRuntime()
+    runtime.fail = True
+    install(app, runtime)
+    wcall = ws_call(app)
+    assert _link(wcall)["reference"]["status"] == "fetch_failed"
+    status, got = wcall("POST", f"{BASE}/references/link", {"url": TIKTOK})
+    assert (status, got["error"]["message"]) == (409, "That one didn't arrive. Tap it in your list, then Try again.")
+    assert [c["action"] for c in runtime.calls] == ["fetch_reference"]  # nothing new started
+
+
 def test_no_runtime_is_the_not_switched_on_sentence(app: App) -> None:
     install(app, None)
     got = _link(ws_call(app))

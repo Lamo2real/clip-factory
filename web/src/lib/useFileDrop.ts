@@ -9,7 +9,8 @@
 //
 // Page zones never take what an element zone or Ask already took (`defaultPrevented`, or a target inside
 // OWN_DROP_SELECTOR), and are off while a dialog is open or their app is hidden. Their listeners are on `document`, so
-// React's own handlers (on #root) run first, and the window guard (lib/dropGuard.ts) after them.
+// React's own handlers (on #root) run first, and the window guard (lib/dropGuard.ts) after them. A drag that started
+// inside the page itself (a list row, selected words) is no zone's: only what comes from outside is taken.
 import { useEffect, useMemo, useRef, useState, type DOMAttributes, type DragEvent as ReactDragEvent } from "react";
 import { useAppActive } from "../app/shell.ts";
 import { filesFrom } from "../features/help/pictures.ts";
@@ -62,8 +63,30 @@ const DRAG_TYPES = ["dragenter", "dragover", "dragleave", "drop"] as const;
  * or undefined (not this zone's drag at all). */
 type Verdict = Exclude<DropOver, null> | "pass" | undefined;
 
+/** A drag that started on this page (a link row, selected words): set by its dragstart, cleared when it ends. */
+let fromPage = false;
+let watching = false;
+
+/** Notes, once, when a drag starts inside the page and when it ends (a pointer press clears a lost end, too). */
+function watchPageDrags(): void {
+  if (watching || typeof document === "undefined") return;
+  watching = true;
+  document.addEventListener("dragstart", () => (fromPage = true), true);
+  const over = () => (fromPage = false);
+  document.addEventListener("dragend", over, true);
+  window.addEventListener("drop", over); // after every zone has seen the drop
+  document.addEventListener("pointerdown", over, true);
+}
+
+/** Forget the page's own drag (tests). */
+export function forgetPageDrag(): void {
+  fromPage = false;
+}
+
 function verdict(data: DataTransfer | null, target: EventTarget | null, o: FileDropOptions): Verdict {
   const files = Array.from(data?.types ?? []).includes("Files");
+  // The page's own row or words being dragged: never a link or text to take (files always come from outside).
+  if (fromPage && !files) return undefined;
   const kind = dragKind(data);
   const linky = kind === "link" || kind === "either" || dragMayHoldText(data);
   const takesFiles = !!o.checkFile && files;
@@ -106,6 +129,7 @@ export function useFileDrop(opts: FileDropOptions): FileDrop {
   const { scope } = opts;
   const active = useAppActive();
   const on = opts.enabled !== false && (scope === "element" || active);
+  useEffect(watchPageDrags, []);
 
   // One set of handlers for the hook's whole life: they read the options of the last render.
   const core = useMemo(() => {

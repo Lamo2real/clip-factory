@@ -159,6 +159,15 @@ describe("the mock: a reference from a link", () => {
     expect([full.status, full.message]).toEqual([409, "You have 100 reference videos already. Delete one first."]);
   });
 
+  it("the same link again after it did not arrive says where Try again is", async () => {
+    setup({ refFetchFail: "That video is gone. Check the link." });
+    await call(api.createReferenceFromLink("stories", { url: TIKTOK }));
+    await vi.advanceTimersByTimeAsync(2500);
+    await call(api.listReferences("stories"));
+    const again = await refused(api.createReferenceFromLink("stories", { url: TIKTOK }));
+    expect([again.status, again.message]).toEqual([409, "That one didn't arrive. Tap it in your list, then Try again."]);
+  });
+
   it("refFetchFail: fetch_failed with the sentence on the job and its step, then Try again gets it", async () => {
     setup({ refFetchFail: "That video is gone. Check the link." });
     const made = await call(api.createReferenceFromLink("stories", { url: TIKTOK }));
