@@ -11,8 +11,9 @@
                                      the desktop
    The glass (every one keeps the owner's rules: light, never a border; no cursor; no transform or filter change on
    a glass surface):
-     .st-glass               a smoky warm translucent panel: the card veil, the inner top highlight, the outer glow,
-                             the thin light edge (::after), radius surface
+     .st-glass               a smoky warm translucent panel: the card veil over what its filter shows (blurred,
+                             dimmed, saturated: glass-tokens.css 5), the inner top highlight, the outer glow, the thin
+                             light edge (::after), radius surface
      .st-glass--hero         a hero surface: its own veil, a brighter edge and sheen; with .st-lens its rim can bend
      .st-glass--bar          a bar something scrolls under (top bar, tab bar): heavy blur in every look
      .st-glass--float        sheets, menus and toasts: the float veil and the heaviest blur
@@ -181,6 +182,23 @@
 .stories-app:is([data-look="window"], [data-look="picture"]) .st-plate::after {
   opacity: 1;
 }
+/* Glass inside glass (a card in a card, a control, a plate in a card) is painted over its parent and has no filter of
+   its own: the parent's filter has already dimmed and blurred what is behind both (glass-tokens.css 5), and a second
+   one would dim the parent's own light under it (or, where an engine lets it see through, the page twice). So what is
+   drawn is what look.ts and test/storiesLight.test.ts work out, and WebView2 pays for one filter, not two. Bars and
+   sheets keep theirs; a liquid hero keeps its rim. A plate is a parent only where it has a filter of its own (a
+   picture or the desktop): over the colours it is the page. */
+:is(.st-glass, .stories-app:is([data-look="window"], [data-look="picture"]) .st-plate) :is(.st-glass, .st-plate):not(.st-glass--bar, .st-glass--float) {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+/* The same for a surface a screen writes out with the glass filter (a note, a tinted box, a loose control: their
+   backdrop-filter is var(--st-filter-glass)): inside glass, or inside a plate where the plate has its own filter (a
+   picture or the desktop), it is painted over its parent with none (GLASS-CONTRACT.md 7). Bars and sheets keep
+   theirs (--st-filter-bar, --st-filter-float); over the colours a plate is the page, so what is in it keeps its own. */
+:is(.st-glass, .stories-app:is([data-look="window"], [data-look="picture"]) .st-plate) > * {
+  --st-filter-glass: none;
+}
 
 /* ---------- The liquid rim (a hero with .st-lens; .is-liquid and --st-lens-url come from its own lens code) ----------
    Chromium only (html.refract), Glass "liquid" only, never animated. Everywhere else the hero keeps the plain CSS
@@ -189,8 +207,9 @@
   /* The filter frosts the middle and lays the rest of the hero's veil under the words itself (glass/lens.ts), so the
      tint here is only the rim's: the band at the edge (inside the padding, no words) shows the bend. */
   background: var(--st-tint-lens);
-  -webkit-backdrop-filter: blur(1px) var(--st-lens-url) saturate(var(--st-saturate-lens));
-  backdrop-filter: blur(1px) var(--st-lens-url) saturate(var(--st-saturate-lens));
+  /* dimmed first, as every glass (--st-dim), so the hero's thin veil keeps its words over the same backdrop */
+  -webkit-backdrop-filter: blur(1px) brightness(var(--st-dim)) var(--st-lens-url) saturate(var(--st-saturate-lens));
+  backdrop-filter: blur(1px) brightness(var(--st-dim)) var(--st-lens-url) saturate(var(--st-saturate-lens));
 }
 /* A liquid hero that says something (a card that needs the owner, .st-lens--tinted with --st-tone-rgb on it): its
    colour from the top left, cut to --st-tint-cut, over the rim's tint. The filter still lays the hero's veil under the

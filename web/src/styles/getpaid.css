@@ -61,10 +61,11 @@
   font-size: 1.05rem;
   font-weight: 650;
 }
-/* Words that sit straight on the window or a picture get a plate behind them, as every loose line does (glass.css). */
+/* Words that sit straight on the window or a picture get a plate behind them, as every loose line does (glass.css):
+   no filter of its own, so the plate veil (--glass-tint-plate), what the backdrop needs undimmed. */
 html:is(.see-through, [data-backdrop]) .gp-summary {
   border-radius: var(--r-md);
-  background: var(--glass-light-panel), var(--glass-tint-panel);
+  background: var(--glass-light-panel), var(--glass-tint-plate);
   box-shadow: var(--glass-shadow-panel);
   padding-block: 8px;
 }

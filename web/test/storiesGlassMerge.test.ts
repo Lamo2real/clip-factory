@@ -11,7 +11,7 @@ import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { FONTS_ATTR, addStoriesFonts } from "../src/stories/fonts.ts";
-import { CONTROL_TARGET, FROSTED, MEASURED, PRESETS, WHITE, contrast, controlSpots, hexToRgb, luminance, mix, stageSpots, type Rgb } from "../src/stories/look.ts";
+import { CONTROL_LIFT, CONTROL_TARGET, DIM, ELEVATION, FROSTED, MEASURED, PRESETS, WHITE, contrast, controlSpots, filtered, hexToRgb, lit, luminance, mix, stageSpots, type Rgb } from "../src/stories/look.ts";
 
 const DIR = join(import.meta.dirname, "..", "src", "stories", "styles");
 const read = (f: string) => readFileSync(join(DIR, f), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
@@ -60,12 +60,17 @@ describe("a glass control loose on the colours", () => {
       }
     });
 
-  it("still shows the hover on a dark glass card, where the card's veil is under it: the cream lift", () => {
+  it("still shows the hover on a glass card, where the card's veil and its filter's dim are under it: the cream lift", () => {
     expect(TOKENS).toMatch(/\.stories-app:not\(\[data-look="window"\]\):not\(\[data-look="picture"\]\) \.st-glass:not\(\.st-glass--control\) \{\s*--st-fill-control-hover: var\(--st-fill-control-lift\);/);
-    const card = mix(channels("--st-veil-rgb"), lightest(stageSpots(PRESETS[0]!.colours)), Number(token("--st-veil-card")));
-    expect(luminance(mix(lift.rgb, card, lift.a))).toBeGreaterThan(luminance(mix(rest.rgb, card, rest.a)) * 1.2);
-    // Loose on the page the hover changes the fill too (it deepens over a bright light, lifts over a dark one).
-    expect(mix(hover.rgb, card, hover.a)).not.toEqual(mix(rest.rgb, card, rest.a));
+    // (look.ts works the glass over the colours out with this lift: its words keep 4.5:1 on it, test/storiesLight.test.ts)
+    expect(lift.a).toBe(CONTROL_LIFT);
+    // the card as drawn (glass.css .st-glass): its filter dims the stage, then its thin veil and its own light
+    for (const under of [lightest(stageSpots(PRESETS[0]!.colours)), hexToRgb(token("--st-base"))]) {
+      const card = lit(filtered(under, DIM.colours.glass), Number(token("--st-veil-card")), ELEVATION[2]!);
+      expect(luminance(mix(lift.rgb, card, lift.a)), `over ${under}`).toBeGreaterThan(luminance(mix(rest.rgb, card, rest.a)) * 1.15);
+      // Loose on the page the hover changes the fill too (it deepens over a bright light, lifts over a dark one).
+      expect(mix(hover.rgb, card, hover.a)).not.toEqual(mix(rest.rgb, card, rest.a));
+    }
   });
 });
 

@@ -481,6 +481,7 @@
 /* An overlay (SHEET_VEIL and up), lit from above; two classes, so it wins over a look's own glass tint. */
 .mk .mk__dialog {
   --glass-tint: var(--glass-tint-overlay);
+  --glass-brightness: 1; /* planned for white as it is: its filter dims nothing (SHEET_VEIL) */
   --glass-light: var(--glass-light-overlay);
 }
 /* The tools come before the picture in the page (Tab order: tools, picture, Undo, Clear, Cancel, Save); the grid
@@ -499,6 +500,7 @@
   padding: 14px;
   border-radius: var(--r-lg);
   --glass-tint: var(--glass-tint-overlay);
+  --glass-brightness: 1; /* planned for white as it is: its filter dims nothing (SHEET_VEIL) */
   --glass-light: var(--glass-light-overlay);
   box-shadow: var(--glass-shadow-overlay);
   animation: mk-pop 260ms var(--ease-spring) both;

@@ -110,23 +110,28 @@
   --st-ember-rgb: 255 138 61; /* old name of --st-accent-rgb */
 
   /* ========== 4. Veils: the least smoky tint that keeps every word at 4.5:1 over the lightest pixel behind ==========
-     These are Ember's (worked out from the stage). stories/look.ts sets every look's own numbers inline on
-     .stories-app. Over a white or busy desktop or photo (See-through in the app, Picture) the measured veils hold
-     (revise-notes, worst contrast in brackets): tiles 0.74 (5.34:1), colour-tinted tiles 0.80 with the colour cut to
-     0.12 (5.12:1), hero glass 0.76 (5.14:1, glare only in a top band with no words), the rail 0.78 (6.47:1); Frosted
-     a 0.30 window frost with panels at 0.89 (9.91:1). Bars and sheets never cover less than the rail: a sheet's veil is
-     lower (0.68, 0.74 over a picture) because its level-5 light covers the rest (5a: the light takes its share). */
+     These are Ember's (worked out from the stage as drawn: over the colours no glass dims, 5). stories/look.ts sets
+     every look's own numbers inline on .stories-app. 23 Nov (the owner: "more see through in a liquid glassy style"):
+     over the colours the tint is as thin as the words allow, so 0.59 of the stage shows through the rail and 0.54
+     through a card (0.38 and 0.42 before). Over a white or busy desktop (See-through in the app) no web filter reaches
+     the desktop, so the measured veils hold (revise-notes, worst contrast in brackets): tiles 0.74 (5.34:1),
+     colour-tinted tiles 0.80 with the colour cut to 0.12 (5.12:1), hero glass 0.76 (5.14:1, glare only in a top band
+     with no words), the rail 0.78 (6.47:1); Frosted a 0.30 window frost with panels at 0.89 (9.91:1). Over a picture
+     each glass's filter dims it (--st-dim), so the drawn veils there are thinner and never lighter, dimmed, than those
+     floors. A sheet's veil is lower than the rail's because its level-5 light covers the rest (5a: the light takes its
+     share). */
   --st-veil-page: 0; /* over the whole backdrop, between the panels */
-  --st-veil-card: 0.58; /* .st-glass */
-  --st-veil-tinted: 0.66; /* .st-glass--tinted, under its 0.12 colour */
-  --st-veil-hero: 0.6; /* .st-glass--hero */
-  --st-veil-rail: 0.62; /* the rail */
-  --st-veil-bar: 0.72; /* .st-glass--bar: the top bar, the phone tab bar */
-  --st-veil-float: 0.72; /* .st-glass--float: sheets, menus, toasts (with its level-5 light it covers 0.9 or more) */
+  --st-veil-card: 0.46; /* .st-glass */
+  --st-veil-tinted: 0.63; /* .st-glass--tinted, under its 0.12 colour */
+  --st-veil-hero: 0.53; /* .st-glass--hero */
+  --st-veil-rail: 0.41; /* the rail */
+  --st-veil-bar: 0.66; /* .st-glass--bar: the top bar, the phone tab bar */
+  --st-veil-float: 0.7; /* .st-glass--float: sheets, menus, toasts (with its level-5 light it covers 0.9 or more) */
   --st-veil-plate: 0; /* .st-plate: behind loose words (0 over Ember, measured over a desktop or picture) */
   --st-veil-solid: 0.96; /* reduced transparency */
-  --st-veil-lens-rim: 0.4; /* a liquid hero's own tint: its filter lays the rest of --st-veil-hero under the words, so
-                              only the rim band (inside the padding, no words) is this thin and shows the bend */
+  --st-veil-lens-rim: 0.12; /* a liquid hero's own tint: its filter lays the rest of --st-veil-hero under the words, so
+                               only the rim band (inside the padding, no words) is this thin and shows the bend (never
+                               thicker than the thinnest hero over the colours, look.ts COLOUR_FLOORS; 0.4 in Picture) */
   --st-tint-cut: 0.12;
 
   /* ========== 5a. Elevation: the logic of light (the owner, 22 Nov: "the top layer is always brighter than the bottom,
@@ -194,9 +199,12 @@
   --st-shade-card: linear-gradient(180deg, rgb(var(--st-veil-rgb) / calc(var(--st-veil-card) / (1 - var(--st-elev-2) - var(--st-elev-grad-2)))), rgb(var(--st-veil-rgb) / calc(var(--st-veil-card) / (1 - var(--st-elev-2)))) var(--st-elev-settle));
   --st-shade-tinted: linear-gradient(180deg, rgb(var(--st-veil-rgb) / calc(var(--st-veil-tinted) / (1 - var(--st-elev-3) - var(--st-elev-grad-3)))), rgb(var(--st-veil-rgb) / calc(var(--st-veil-tinted) / (1 - var(--st-elev-3)))) var(--st-elev-settle));
   --st-shade-hero: linear-gradient(180deg, rgb(var(--st-veil-rgb) / calc(var(--st-veil-hero) / (1 - var(--st-elev-3) - var(--st-elev-grad-3)))), rgb(var(--st-veil-rgb) / calc(var(--st-veil-hero) / (1 - var(--st-elev-3)))) var(--st-elev-settle));
-  /* (a card inside a card is a raised surface laid over its card: over the colours the hero's veil, so its words keep
-     4.5:1 over the owner's brightest colours; over a picture or the desktop its own fill is below) */
-  --st-shade-raised: linear-gradient(180deg, rgb(var(--st-veil-rgb) / calc(var(--st-veil-hero) / (1 - var(--st-elev-3) - var(--st-elev-grad-3)))), rgb(var(--st-veil-rgb) / calc(var(--st-veil-hero) / (1 - var(--st-elev-3)))) var(--st-elev-settle));
+  /* (a card inside a card is a raised surface laid over its card: over the colours the hero's veil and a little more,
+     --st-raised-cover of what the hero lets through, so its words keep 4.5:1 over the owner's brightest colours and the
+     card's light under it does not stack past a sheet's, which is always the top (5a; look.ts RAISED_COVER); over a
+     picture or the desktop its own fill is below) */
+  --st-raised-cover: 0.6;
+  --st-shade-raised: linear-gradient(180deg, rgb(var(--st-veil-rgb) / calc((1 - (1 - var(--st-veil-hero)) * (1 - var(--st-raised-cover))) / (1 - var(--st-elev-3) - var(--st-elev-grad-3)))), rgb(var(--st-veil-rgb) / calc((1 - (1 - var(--st-veil-hero)) * (1 - var(--st-raised-cover))) / (1 - var(--st-elev-3)))) var(--st-elev-settle));
   --st-shade-rail: linear-gradient(180deg, rgb(var(--st-veil-rgb) / calc(var(--st-veil-rail) / (1 - var(--st-elev-1) - var(--st-elev-grad-1)))), rgb(var(--st-veil-rgb) / calc(var(--st-veil-rail) / (1 - var(--st-elev-1)))) var(--st-elev-settle));
   --st-shade-plate: linear-gradient(180deg, rgb(var(--st-veil-rgb) / calc(var(--st-veil-plate) / (1 - var(--st-elev-1) - var(--st-elev-grad-1)))), rgb(var(--st-veil-rgb) / calc(var(--st-veil-plate) / (1 - var(--st-elev-1)))) var(--st-elev-settle));
   --st-shade-bar: linear-gradient(180deg, rgb(var(--st-veil-rgb) / calc(var(--st-veil-bar) / (1 - var(--st-elev-3) - var(--st-elev-grad-3)))), rgb(var(--st-veil-rgb) / calc(var(--st-veil-bar) / (1 - var(--st-elev-3)))) var(--st-elev-settle));
@@ -239,7 +247,7 @@
      its words keep 5:1 over Ember's, Rose's and Lagoon's brightest spot (cream 0.2 alone gave 3.85:1). On a glass
      card it is the cream lift (--st-fill-control-lift, set on .st-glass below). */
   --st-fill-control-hover: rgb(139 128 118 / 0.33);
-  --st-fill-control-lift: rgb(var(--st-cream-rgb) / 0.2);
+  --st-fill-control-lift: rgb(var(--st-cream-rgb) / 0.16); /* look.ts CONTROL_LIFT: over the thin glass of the colours its words keep 4.5:1 */
   --st-fill-well: rgb(var(--st-well-rgb) / 0.52); /* fields, tracks, the dial's groove */
   --st-fill-well-hover: rgb(var(--st-well-rgb) / 0.64);
   --st-track: rgb(var(--st-cream-rgb) / 0.2); /* a progress bar's empty part */
@@ -251,12 +259,22 @@
   --st-s-fill-2: rgb(255 243 228 / 0.13);
   --st-s-fill-3: rgb(255 243 228 / 0.2);
 
-  --st-blur: 28px; /* every glass in Picture and See-through, bars and floats always */
-  --st-blur-float: 36px;
-  --st-saturate: 1.35;
-  --st-filter-glass: none; /* cards and plates over Ember (nothing to blur, and WebView2 pays per filter); Picture turns it on */
-  --st-filter-bar: blur(var(--st-blur)) saturate(var(--st-saturate));
-  --st-filter-float: blur(var(--st-blur-float)) saturate(var(--st-saturate));
+  /* Each glass's own backdrop-filter: a heavy blur, then brightness() where dimming shows more than a veil alone (a
+     picture: --st-dim for cards, heroes, tinted tiles and the rail, --st-dim-over for bars, plates and sheets; look.ts
+     DIM), then saturate() for liquid colour. Dimmed first, so no channel clips before it is dimmed (look.ts filtered).
+     Over the colours nothing dims (1: the stage is dark, so a thinner veil alone shows as much) and the cards, heroes,
+     tinted tiles and the rail draw no filter at all (nothing to blur, and WebView2 pays per filter); a picture and the
+     desktop turn it on (below). Over the desktop (data-look="window") no web filter reaches it: 1, and the measured
+     veils hold. The top level of glass only: glass inside glass is painted over its parent with no filter of its own
+     (glass.css). Never animated, never changed on hover (the WebView2 budget). */
+  --st-blur: 32px;
+  --st-blur-float: 40px;
+  --st-saturate: 1.5;
+  --st-dim: 1; /* look.ts DIM.colours.glass */
+  --st-dim-over: 1; /* look.ts DIM.colours.over */
+  --st-filter-glass: none; /* cards and plates over the colours (nothing to blur, and WebView2 pays per filter) */
+  --st-filter-bar: blur(var(--st-blur)) brightness(var(--st-dim-over)) saturate(var(--st-saturate));
+  --st-filter-float: blur(var(--st-blur-float)) brightness(var(--st-dim-over)) saturate(var(--st-saturate));
 
   --st-edge-width: 1.25px;
   --st-edge: linear-gradient(160deg, rgb(255 246 234 / 0.56), rgb(255 246 234 / 0.14) 20%, rgb(255 246 234 / 0) 40%, rgb(255 246 234 / 0) 68%, rgb(255 196 130 / 0.28));
@@ -438,7 +456,8 @@
 }
 .stories-app[data-look="window"],
 .stories-app[data-look="picture"] {
-  /* A busy or white picture under anything: a glass control or pill on the page carries a card's veil itself. */
+  /* A busy or white picture or desktop under anything: a glass control or pill on the page carries a veil itself (a
+     card's over the desktop; over a picture the measured card floor, in the picture's own rule below). */
   --st-panel-strong: rgb(var(--st-veil-rgb) / var(--st-veil-card));
   --st-panel-hover: rgb(var(--st-well-rgb) / calc(var(--st-veil-card) + 0.12));
   --st-fill-control: rgb(var(--st-veil-rgb) / var(--st-veil-card));
@@ -449,7 +468,7 @@
   --st-s-fill: rgb(var(--st-veil-rgb) / var(--st-veil-card));
   --st-s-fill-2: rgb(var(--st-veil-rgb) / calc(var(--st-veil-card) + 0.06));
   --st-s-fill-3: rgb(var(--st-well-rgb) / calc(var(--st-veil-card) + 0.12));
-  --st-filter-glass: blur(var(--st-blur)) saturate(var(--st-saturate));
+  --st-filter-glass: blur(var(--st-blur)) brightness(var(--st-dim)) saturate(var(--st-saturate));
   /* A card inside a card (glass.css .st-glass .st-glass) is painted over its card, which already lays the measured veil
      and its own light, lighter at the top: it lays only a lift of light (--st-elev-raised-lift), the same top to bottom,
      and no veil of its own. A second smoky veil over the card made it darker than the card under it over a white
@@ -457,6 +476,27 @@
      lighter than a raised surface's own veil (0.79) over white, and a sheet stays a step above it
      (test/storiesLight.test.ts, e2e/stories-light.spec.ts). */
   --st-tint-raised: linear-gradient(rgb(var(--st-cream-rgb) / var(--st-elev-raised-lift)), rgb(var(--st-cream-rgb) / var(--st-elev-raised-lift)));
+}
+/* See-through in the app: the desktop is behind the window's own glass, never part of the page, so no web filter can dim
+   it (look.ts DIM.window): the drawn veils alone keep the words (look.ts WINDOW_CLEAR, WINDOW_FROSTED). */
+.stories-app[data-look="window"] {
+  --st-dim: 1;
+  --st-dim-over: 1;
+}
+/* A picture: main's veils (look.ts PICTURE, DIM.picture 1: a dim showed less of the photo, not more) and main's blur,
+   so the photo's shapes still read through the glass. A glass control or pill loose on the page has no filter of its
+   own and keeps the measured card floor (look.ts MEASURED.card, 0.74): its words hold at 5.0:1 over a white photo. */
+.stories-app[data-look="picture"] {
+  --st-blur: 28px;
+  --st-blur-float: 36px;
+  --st-veil-lens-rim: 0.4;
+  --st-panel-strong: rgb(var(--st-veil-rgb) / 0.74);
+  --st-panel-hover: rgb(var(--st-well-rgb) / 0.86);
+  --st-fill-control: rgb(var(--st-veil-rgb) / 0.74);
+  --st-fill-control-hover: rgb(var(--st-well-rgb) / 0.86);
+  --st-s-fill: rgb(var(--st-veil-rgb) / 0.74);
+  --st-s-fill-2: rgb(var(--st-veil-rgb) / 0.8);
+  --st-s-fill-3: rgb(var(--st-well-rgb) / 0.86);
 }
 
 /* Inside a glass surface or a plate over a picture or the desktop the surface already carries the measured veil, so a

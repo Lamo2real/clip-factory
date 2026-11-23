@@ -1,10 +1,13 @@
 import { expect, test, type Page } from "@playwright/test";
 import {
+  BRAND_BRIGHTNESS,
   BRAND_PANEL_VEIL,
+  BRAND_PLATE_VEIL,
   LIGHT_PAY_OWN,
   LIGHT_PAY_WHITE,
   coloursVeils,
   contrast,
+  dimRgb,
   PICTURE_PANEL_VEIL,
   hexToRgb,
   mix,
@@ -101,25 +104,27 @@ test.describe("background modes", () => {
     await expect(page.locator(".bg-modes")).toHaveClass(/has-glide/);
   });
 
-  test("see-through glass over the app's own backdrop: panels 0.30, no page veil; colours and picture follow (ADR-45)", async ({ page }) => {
+  test("see-through glass over the app's own backdrop: panels 0.20 over their own slight dimming, no page veil; colours and picture follow (ADR-45)", async ({ page }) => {
     await open(page);
     expect(await panelVeil(page)).toBeCloseTo(BRAND_PANEL_VEIL, 5);
-    expect(BRAND_PANEL_VEIL).toBe(0.33);
+    expect(BRAND_PANEL_VEIL).toBe(0.2);
+    expect(BRAND_PLATE_VEIL).toBe(0.33);
+    expect(Number(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--glass-brightness")))).toBeCloseTo(BRAND_BRIGHTNESS, 5);
     expect(await veil(page)).toBe(0);
     expect(await surfaceAlpha(page, ".apple-panel")).toBeCloseTo(BRAND_PANEL_VEIL + LIGHT_PAY_OWN, 2);
     await expect(page.locator(".backdrop .blob--e")).toHaveCount(1);
-    // The default colours: no page veil, panels 0.30.
+    // The default colours: no page veil, panels 0.20.
     await page.getByRole("radio", { name: "Colours" }).check();
     await expect.poll(() => backdrop(page)).toBe("colours");
     expect(await veil(page)).toBe(0);
-    expect(await panelVeil(page)).toBeCloseTo(0.3, 5);
-    // A picture: no page veil, panels 0.73.
+    expect(await panelVeil(page)).toBeCloseTo(0.2, 5);
+    // A picture: no page veil, panels 0.29 (and the pay) over a photo their glass dims to half.
     await page.getByRole("radio", { name: "Picture" }).check();
     await page.locator('input[type="file"][accept="image/*"]').setInputFiles({ name: "bg.png", mimeType: "image/png", buffer: PNG });
     await expect.poll(() => backdrop(page)).toBe("picture");
     expect(await veil(page)).toBe(0);
     expect(await panelVeil(page)).toBeCloseTo(PICTURE_PANEL_VEIL, 5);
-    expect(PICTURE_PANEL_VEIL).toBe(0.73);
+    expect(PICTURE_PANEL_VEIL).toBe(0.29);
   });
 
   test("switching modes changes what is behind the glass, and it stays after a reload", async ({ page }) => {
@@ -206,18 +211,20 @@ test.describe("background modes", () => {
     expect(await backdrop(page)).toBe("picture");
   });
 
-  test("a light colour looks as soft in its previews as it will behind the glass, and says why", async ({ page }) => {
+  test("a light colour shows at full strength between the panels: the glass dims it, so no page veil and no soft note", async ({ page }) => {
     await open(page);
     await page.getByRole("radio", { name: "Colours" }).check();
     for (const name of ["Bottle green", "Vermilion"]) await page.getByRole("button", { name }).click();
     await expect(page.locator(".backdrop--colours")).toHaveAttribute("data-colours", "#efe7da");
-    // Bone alone needs more than a panel may carry, so the page takes the rest: the previews show that page veil.
-    const want = coloursVeils(["#efe7da"]).pageVeil;
-    expect(want).toBeGreaterThan(0);
-    expect(await veil(page)).toBeCloseTo(want, 5);
-    expect(await surfaceAlpha(page, ".bg-colours__mix", "::after")).toBeCloseTo(want, 2);
-    expect(await surfaceAlpha(page, ".bg-tile--colours", "::after")).toBeCloseTo(want, 2);
-    await expect(page.getByText("Light colours show soft, so words stay easy to read.")).toBeVisible();
+    // Bone alone: each pane dims it (brightness() under 1) and carries what is left, so the page needs no veil (it
+    // took 0.2 or more before the glass dimmed); the previews show the colour as it is.
+    const want = coloursVeils(["#efe7da"]);
+    expect(want.pageVeil).toBe(0);
+    expect(want.brightness).toBeLessThan(1);
+    expect(await veil(page)).toBeCloseTo(0, 5);
+    expect(await surfaceAlpha(page, ".bg-colours__mix", "::after")).toBeCloseTo(0, 2);
+    expect(await surfaceAlpha(page, ".bg-tile--colours", "::after")).toBeCloseTo(0, 2);
+    await expect(page.getByText("Light colours show soft, so words stay easy to read.")).toHaveCount(0);
   });
 
   test("Ask Clip Factory's words and the search find the new settings", async ({ page }) => {
@@ -259,12 +266,12 @@ test.describe("see-through in the desktop app (simulated)", () => {
     const behind = seeThroughWorstBackground("liquid", "light", "clear");
     for (const c of await textColours(page)) expect(contrast(rgbOf(c), behind), c).toBeGreaterThanOrEqual(4.5);
 
-    // Frosted: a green frost over the gaps too, and heavier panels, so it shows less.
+    // Frosted: a green frost over the gaps too, and panels that keep AA over it, so it shows less.
     await page.getByRole("radio", { name: "Frosted" }).check();
     const frosted = seeThroughVeils("liquid", "light", "frosted");
     await expect.poll(() => veil(page)).toBeCloseTo(frosted.page, 5);
     expect(await panelVeil(page)).toBeCloseTo(frosted.panel, 5);
-    expect(frosted.panel).toBeGreaterThan(clear.panel);
+    expect((1 - frosted.page) * (1 - frosted.panel)).toBeLessThan(1 - clear.panel);
     expect(await surfaceAlpha(page, ".backdrop__veil")).toBeCloseTo(frosted.page, 2);
     for (const c of await textColours(page)) expect(contrast(rgbOf(c), seeThroughWorstBackground("liquid", "light", "frosted")), c).toBeGreaterThanOrEqual(4.5);
 
@@ -481,7 +488,8 @@ for (const scheme of ["light", "dark"] as const) {
       expect(v).toBeCloseTo(coloursVeils(colours).pageVeil, 5);
       expect(p).toBeCloseTo(coloursVeils(colours).panelVeil, 5);
       for (const hex of colours) {
-        const behind = mix(VEIL, mix(VEIL, hexToRgb(hex), v), p);
+        // As a pane's glass sees it: dimmed by the look's own brightness().
+        const behind = mix(VEIL, dimRgb(mix(VEIL, hexToRgb(hex), v), coloursVeils(colours).brightness), p);
         for (const c of await textColours(page)) expect(contrast(rgbOf(c), behind), `${c} on ${hex}`).toBeGreaterThanOrEqual(4.5);
       }
     });
