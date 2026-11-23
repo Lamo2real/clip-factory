@@ -93,8 +93,7 @@ there once you are connected ("Back to FaZe Clips").
 - Each one should say **Connected**.
 - The card lists the accounts Clip Factory posts to, for example "Clip Factory posts to: YouTube @faze · Instagram
   @faze · X @faze · Facebook FaZe Page." Add those same accounts.
-- TikTok can wait. TikTok posts from Clip Factory stay private until TikTok checks the app, and private posts can't
-  earn.
+- TikTok can wait. Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet.
 - Then come back to Clip Factory. Tap "I added them". The step also ticks itself once Content Rewards takes a clip
   from one of your accounts.
 - If Content Rewards ever says it doesn't know an account, this step opens again with the line "Content Rewards
@@ -317,7 +316,7 @@ the red button is "Make clips anyway".
 | "The brand paused this campaign. I'll tell you when it opens again." | Wait, or pick another campaign. |
 | "This campaign has ended. Pick another one." / "This campaign stopped taking clips on 23 Nov. Pick another one." | Pick another campaign. |
 | "The money is almost gone, so new clips won't get paid. Pick another one." | Pick another campaign. |
-| "This campaign only pays for TikTok. …" | Pick a campaign that pays for YouTube, Instagram, X or Facebook. |
+| "This campaign only pays for TikTok. Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet. …" | Pick a campaign that pays for YouTube, Instagram, X or Facebook. |
 | "Set up YouTube first. This campaign pays for YouTube and Instagram." | Set up one of the places it pays for. |
 | "Content Rewards wants the brand to check your other clips first. I'll tell you when you can post again." | Wait. |
 | "You reached the most you can earn on this campaign. Pick another one." | Pick another campaign. |
@@ -344,8 +343,7 @@ the red button is "Make clips anyway".
 - A strip at the top: "For **FaZe Clips** · Content Rewards" with ticks for "Paid partnership", "#Ad at the start"
   and "Logo on".
 - "Upload to" shows only the places this campaign pays for: "Only places this campaign pays for."
-- TikTok is left out for now: "Until TikTok checks Clip Factory, TikTok posts are private, and private posts can't
-  earn."
+- TikTok is left out for now: "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet."
 - A place Content Rewards doesn't know yet: "Add YouTube in Content Rewards first." Tap "Open Content Rewards
   settings", add it, then tap "I added it". "Then tap I added it. The next clip will go."
 - Tap "Use my settings". Campaign clips are public, never made for kids, and marked as paid. On YouTube that is Who can

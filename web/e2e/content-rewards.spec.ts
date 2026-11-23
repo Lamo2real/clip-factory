@@ -140,6 +140,7 @@ for (const [name, use] of [
       await expect(socials.locator(".gstep__lead")).toHaveText(/^Already added .+ there\? Tap I added them\.$/);
       await expect(socials).toContainText("Add Instagram, X and Facebook the same way, if you post there.");
       await expect(socials).toContainText("Then come back to Clip Factory. Tap I added them.");
+      await expect(socials).toContainText("TikTok can wait. Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet.");
       await expect(page.locator("[data-cr='shortcut']")).toHaveCount(0);
       await socials.getByRole("button", { name: "I added them" }).click();
       await expect(page.locator(".setup-head")).toContainText("2/3");
@@ -1020,7 +1021,7 @@ test.describe("a phone's campaign card (§39.1)", () => {
 test.describe("campaign clips after Upload", () => {
   test.use(DESKTOP);
 
-  test("Review: a campaign that pays for TikTok leaves TikTok out until its audit, and says so", async ({ page }) => {
+  test("Review: a campaign that pays for TikTok skips TikTok for now (the Mac can't mark Branded content), and says so", async ({ page }) => {
     await start(page, { review: "tiktok" });
     await page.goto("/");
     await mock(page);
@@ -1028,7 +1029,8 @@ test.describe("campaign clips after Upload", () => {
     await page.goto("/review");
     await settle(page);
     const card = page.locator(".review-card").filter({ has: page.locator("[data-help~='cr-review-strip']") });
-    await expect(card.locator(".upload-to")).toContainText("TikTok is left out for now. Until TikTok checks Clip Factory, TikTok posts are private, and private posts can't earn.");
+    await expect(card.locator(".upload-to")).toContainText("Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet.");
+    await expect(card.locator(".upload-to")).not.toContainText(/posts are private|left out for now/);
     await expect(card.locator(".upload-chip", { hasText: "TikTok" })).toHaveCount(0);
     await expect(card.locator(".upload-chip")).toHaveCount(2);
   });

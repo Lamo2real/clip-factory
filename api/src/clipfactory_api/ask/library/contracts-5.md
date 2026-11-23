@@ -35,17 +35,18 @@ try again in a minute, §17.4), `internal`.
 | POST `/v1/clips/{clipId}/confirm` | `{ "captions"?: Partial<Captions> }` | `{ "clip": Clip, "posts": Post[] }` (writes the posts, starts the durable `cf-prod-clip-flow`, §14.5) |
 | POST `/v1/clips/{clipId}/decline` | – | `{ "clip": Clip }` (video files and the clip's vector deleted) |
 | GET `/v1/clips/{clipId}/file` | – | `{ "url", "filename" }` (a 1-hour link that saves the video, §42; kept, the web no longer calls it, ADR-86) |
-| POST `/v1/clips/{clipId}/tiktok/posted` | `{ "link"?: string, "since"?: ISO time }` | `{ "clip", "posts", "note"? }` (posted on TikTok by the owner himself, §42; the web calls it only from the inline Add link, ADR-86) |
+| POST `/v1/clips/{clipId}/tiktok/posted` | `{ "link"?: string, "since"?: ISO time, "noLink"?: boolean }` | `{ "clip", "posts", "note"? }` (It's on TikTok, §42; the web calls it only from the inline Add link, ADR-86. Neither `link` nor `noLink` is Find it for me: 409 and nothing saved when nothing is found or TikTok is not connected; `noLink: true` saves it without a link, §42.2) |
 | DELETE `/v1/clips/{clipId}/tiktok/posted` | – | `{ "clip", "posts" }` (Undo of the above, §42; a post the owner's Mac made → 409, §47; kept, the web no longer calls it, ADR-86) |
 | GET `/v1/tiktok/mac` | – | `{ "on", "helper": MacHelper \| null, "queue": MacJob[] }` (the Mac helper's queue, §47) |
-| POST `/v1/tiktok/mac/ping` | `{ "state", "reason"?, "version"?, "device", "login"?, "loginDone"? }` | `{ "on" }` (the Mac helper checks in, §47; `login` and `loginDone` §47.8) |
+| POST `/v1/tiktok/mac/ping` | `{ "state", "reason"?, "version"?, "device", "login"?, "loginDone"?, "backlogAt"?, "holdBefore"?, "backfill"?, "resumeDone"?, "letGoDone"? }` | `{ "on" }` (the Mac helper checks in, §47; `login` and `loginDone` §47.8; its plan and the owner's requests §47.3) |
 | POST `/v1/tiktok/mac/send` | `{ "clipIds": string[] (1–25), "now"?: boolean }` | `{ "results": [{ "clipId", "sent", "reason"? }] }` (Send these to my Mac, §47; in order, each id once; `now: true` is a row's Post with my Mac, `macSource: "upload"`, §47.2) |
 | POST `/v1/tiktok/mac/login` | `{ "action": "change" \| "forget" }` | `{ "helper": MacHelper }` (Change or Forget the TikTok login kept on the Mac; the Mac does it when it next checks in, §47.8) |
+| POST `/v1/tiktok/mac/request` | `{ "action": "resume" \| "let_go" }` | `{ "helper": MacHelper }` (Start my Mac again, Let them go; the Mac does it when it next checks in, §47.3) |
 | POST `/v1/clips/{clipId}/tiktok/mac/claim` | `{ "device" }` | `{ "job": MacJob }` (§47) |
-| POST `/v1/clips/{clipId}/tiktok/mac/step` | `{ "device", "step" }` | `{ "job": MacJob }` (§47) |
+| POST `/v1/clips/{clipId}/tiktok/mac/step` | `{ "device", "step", "attempt"? }` | `{ "job": MacJob }` (§47; the same step sent again is the job's beat) |
 | POST `/v1/clips/{clipId}/tiktok/mac/done` | `{ "device", "link"? }` | `{ "clip", "posts", "note"? }` (the Mac posted it, §47) |
 | POST `/v1/clips/{clipId}/tiktok/mac/stopped` | `{ "device", "reason", "needsYou"? }` | `{ "job": MacJob }` (§47) |
-| POST `/v1/clips/{clipId}/tiktok/mac/retry` | `{ "notOnTikTok"?: true, "now"?: boolean }` | `{ "clip", "posts" }` (the owner's Try again, §47; `now: true` makes it `macSource: "upload"`, §47.3) |
+| POST `/v1/clips/{clipId}/tiktok/mac/retry` | `{ "notOnTikTok"?: true, "now"?: boolean }` | `{ "clip", "posts" }` (the owner's Try again, §47; `now: true` makes it `macSource: "upload"`; after Post was pressed only once the 30-minute find window is over, §47.3) |
 | DELETE `/v1/clips/{clipId}/tiktok/mac` | – | `{ "clip", "posts" }` (Take it back, §47; kept, the web no longer calls it, ADR-86) |
 | GET `/v1/skills` | – | `{ "skills": Skill[] }` (§18.3: built-ins first, then the owner's by name; no `enabled`) |
 | GET `/v1/skills/{skillId}` | – | `SkillDetail` (§18.3) |

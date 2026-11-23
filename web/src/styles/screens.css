@@ -1473,6 +1473,75 @@
 .post__choices .btn {
   white-space: nowrap;
 }
+/* Try again beside It's on TikTok is the second, quieter choice: no fill and no lift, its words underlined, so it never
+   reads as the same button (§47.4). On the window look it keeps only a panel's tint behind its words (glass.css's
+   --fill-control is the filled buttons'), so they stay readable. Its question's Not now looks the same. */
+.btn.post__again {
+  color: var(--ink-2);
+  background: transparent;
+  box-shadow: none;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  text-decoration: underline;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 4px;
+}
+html:where(.see-through, [data-backdrop]) .btn.post__again {
+  background: rgb(var(--green-rgb) / var(--panel-veil));
+}
+.btn.post__again:hover:not([aria-disabled="true"]) {
+  color: var(--ink);
+  background: var(--fill);
+  box-shadow: none;
+}
+/* Try again's question (§47.4): "Post it again? Only if it's not on your TikTok.", then Yes and Not now on the right, on a
+   line of its own under the row's words. On a narrow row the buttons go under the question. */
+.post__confirm {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px 10px;
+  min-width: 0;
+}
+/* In a Library row the question starts where the row's words start (after the mark), so it reads as theirs (D7). */
+.post > .post__confirm {
+  grid-column: 2 / -1;
+}
+.post__confirm-text {
+  flex: 1 1 200px;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--fs-small);
+  font-weight: 650;
+  color: var(--ink);
+}
+.post__confirm-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 6px 8px;
+}
+.post__confirm-buttons .btn {
+  white-space: nowrap;
+}
+/* A narrow card (a phone, or three cards side by side): the row's button goes under its words, on the right of the
+   row's full width, instead of squeezing the words into a thin column; the Open icon stays beside the words. */
+.posts {
+  container: posts / inline-size;
+}
+@container posts (max-width: 439.98px) {
+  .post > .post__retry {
+    grid-column: 1 / -1;
+    grid-row: auto;
+    justify-self: end;
+    max-width: 100%;
+  }
+  .post > .post__retry ~ .post__open {
+    grid-row: 1 / span 2;
+  }
+}
 .post--group {
   grid-template-columns: minmax(0, 1fr);
   padding: 8px 10px;
@@ -1521,8 +1590,16 @@
   width: 100%;
   min-width: 0;
 }
+/* The box with Find it for me right beside it, on one line (a phone too); Paste and Save the link follow. */
+.post-link__box {
+  flex: 1 1 340px;
+  display: flex;
+  align-items: center;
+  gap: 6px 8px;
+  min-width: 0;
+}
 .post-link__input {
-  flex: 1 1 180px;
+  flex: 1 1 0;
   min-width: 0;
   min-height: 44px;
   padding: 8px 12px;
@@ -1539,10 +1616,9 @@
   color: var(--ink);
 }
 
-/* Review › Uploaded just now (§47.4): the TikTok line with its Open icon, and the Add link box under it. */
+/* Review › Uploaded just now (§47.4): the TikTok line with its Open icon under the hook; the Add link box (and Try
+   again's question) on a line of its own after the buttons. */
 .kept-now__tiktok {
-  flex: 1 1 100%;
-  order: 1;
   display: flex;
   align-items: center;
   gap: 4px 8px;
@@ -1550,14 +1626,13 @@
 }
 .kept-now__tiktok > .kept-now__mac {
   flex: 0 1 auto;
-  order: 0;
 }
 .kept-now__open {
   width: 40px;
   height: 40px;
 }
-.kept-now__item > .post-link {
-  order: 2;
+.kept-now__item > :is(.post-link, .post__confirm) {
+  flex: 1 1 100%;
 }
 /* Review: the hint while Your Mac posts TikTok is off, with Turn on right beside it. */
 .tt-yourself-hint-row {

@@ -24,8 +24,7 @@ import { TikTokSheet } from "../review/TikTokSheet.tsx";
 import { ClipStatusPill } from "../jobs/JobDetail.tsx";
 import { useSetup } from "../settings/setup/useSetup.ts";
 import { failedForPublicAccount, postError, tiktokAudited } from "../../lib/tiktokYourself.ts";
-import { rowNeedsMac, rowNeedsRuns, tiktokFacts, tiktokRow, type TikTokRow, type TikTokRowContext } from "../../lib/tiktokMac.ts";
-import { useSession } from "../../app/session.tsx";
+import { rowNeedsMac, tiktokFacts, tiktokRow, type TikTokRow, type TikTokRowContext } from "../../lib/tiktokMac.ts";
 import { TikTokRowAction, useTikTokRowContext } from "./MacButtons.tsx";
 
 interface LibraryData {
@@ -109,15 +108,12 @@ function AllClips() {
   const setup = useSetup();
   const ready: Platform[] = setup.data ? setup.data.platforms.filter((p) => p.ready).map((p) => p.platform) : [];
   // Your Mac posts TikTok (§47.4): each TikTok row says what the Mac is doing. The Mac's check-in is read while a row
-  // may need it (a Mac post, or a clip the Mac could take); auto-posting's runs while a backlog clip waits.
-  const { me } = useSession();
+  // may need it (a Mac post, or a clip the Mac could take).
   const tiktokFor = (c: Clip) => tiktokFacts(c, data?.posts.filter((p) => p.clipId === c.clipId) ?? []);
   const facts = data?.clips.map(tiktokFor) ?? [];
-  const autoPostOn = me ? me.settings.autoPost?.on === true : undefined;
   const macCtx = useTikTokRowContext({
     audited: tiktokAudited(setup.data?.platforms),
     needsMac: facts.some(rowNeedsMac),
-    needsRuns: facts.some((f) => rowNeedsRuns(f, autoPostOn)),
   });
 
   // Live: kept clips arrive, posts change state and get their numbers, new learnings appear.
@@ -330,12 +326,14 @@ function LibraryCard({
   };
   // TikTok's own row (§47.4): its one button replaces Try again and Post now, which would go through TikTok's API.
   const mine = (p: Post) => p.platform === "tiktok" && !!tiktok;
-  // Its look follows the row: only Didn't work reads as an error (a refused upload is just not on TikTok yet), and
-  // only a post everyone can see lights up green (a private upload, Clip Factory's or the Mac's, is not out yet).
+  // Its look follows the row: only Didn't work reads as an error (a refused upload is just not on TikTok yet, and "Not
+  // sure it posted" may well be on TikTok), and only a post everyone can see lights up green (a private upload, Clip
+  // Factory's or the Mac's, is not out yet).
   const look = (p: Post) => {
     if (!mine(p)) return p.status;
     const kind = tiktok!.kind;
-    if (kind === "stopped") return "failed";
+    if (kind === "campaign") return "none";
+    if (kind === "stopped") return tiktok!.button === "on_tiktok" ? "none" : "failed";
     if ((kind === "posted" || kind === "posted_you") && p.privacy !== "private") return "posted";
     return p.status === "failed" || p.status === "posted" ? "none" : p.status;
   };

@@ -10,17 +10,21 @@ claim, steps, stop and done, and the owner's Send these to my Mac, Try again and
   (``"sent"``, here; ``"upload"`` when the owner tapped Post with my Mac on one row, ``now: true``): a clip with no
   TikTok post gets a new one, a Clip Factory TikTok post that failed, waits for setup or went up privately is handed
   over in place (its fields kept in ``beforeMac``). A row's tap (``now: true``) on a Mac post that already waits makes
-  it an Upload tap's in place.
+  it an Upload tap's in place. A campaign clip never gets one (``CAMPAIGN_SKIPS``, ADR-86 round 3): the helper can't
+  mark a post as Branded content yet, and Content Rewards never receives what the Mac posts.
 * ``waiting`` → the helper's claim (a conditional write: one Mac, one try at a time) → ``working`` with its steps
-  (``pressing`` sets ``macPressedAt``: from then on it is never claimed again by itself) → done, through
-  ``tiktok_self.mark_posted`` (the post becomes ``posted``, ``by: "you"``, ``via: "mac"``), or ``stopped`` with a
-  reason, which the owner's Try again turns back into ``waiting``.
+  (``pressing`` sets ``macPressedAt``: from then on it is never claimed again by itself; a re-sent step is the job's
+  beat, ``macBeatAt``) → done, through ``tiktok_self.mark_posted`` (the post becomes ``posted``, ``by: "you"``,
+  ``via: "mac"``), or ``stopped`` with a reason, which the owner's Try again turns back into ``waiting`` (also a job
+  that is stuck, ``mac_stuck``; after Post was pressed only once the find window is over, ``window_over``).
 * Every write is conditional on the state it was read in, so a race answers 409 and never posts twice.
 
 Items: the post's internal ``mac*`` fields (``tiktok_self.MAC_FIELDS``; public as ``Post.mac``), the clip's
 ``tiktokForMac`` mark (a send made its post, ``tiktok_self.MAC_MARK``), and the helper item ``USER#{id}`` /
-``MACHELPER`` (``seenAt``, ``state``, ``reason``, ``version``, ``device``), written by its ping. No table, index or
-infrastructure change: every route is under ``ANY /v1/{proxy+}``.
+``MACHELPER`` (``seenAt``, ``state``, ``reason``, ``version``, ``device``, ``login``, ``backlogAt``, ``holdBefore``,
+``backfill``), written by its ping, plus what the server writes on it: ``needsYouClipId`` (the stop that needs the
+owner) and the owner's requests (``loginRequest*``, ``resumeRequestAt``, ``letGoRequestAt``), each removed when the
+helper says it did that one. No table, index or infrastructure change: every route is under ``ANY /v1/{proxy+}``.
 """
 
 from __future__ import annotations
@@ -36,7 +40,19 @@ from . import db, mojibake, post_preset, tiktok_self
 from .clock import iso, parse
 from .ids import ulid
 from .posts import MAC_STATUS, new_mac_fields, posts_for_clip, public_mac
-from .tiktok_self import MAC_FIELDS, MAC_MARK, MAC_NOT_POSTING, MAC_TAKEN, MAC_WORKING, MADE_MARK, Refused
+from .tiktok_self import (
+    HELPER_SK,
+    MAC_FIELDS,
+    MAC_MARK,
+    MAC_NOT_POSTING,
+    MAC_TAKEN,
+    MAC_WORKING,
+    MADE_MARK,
+    Refused,
+    clear_needs_you,
+    window_over,
+    working_stuck,
+)
 
 Item = dict[str, Any]
 
@@ -44,13 +60,18 @@ STATES = ("waiting", "working", "stopped")
 STEPS = ("video", "opening", "uploading", "settings", "pressing", "finding")
 SOURCES = ("upload", "auto", "sent")
 HELPER_STATES = ("ok", "needs_you", "paused")
-HELPER_SK = "MACHELPER"
 # A claim whose helper sent no step for this long, and that never pressed Post, belongs to a helper that crashed.
 STALE_CLAIM = timedelta(minutes=15)
 # §47.8: the TikTok login the helper keeps in the Mac's Keychain, and what the owner can ask it to do with it.
 LOGIN_STATES = ("saved", "none")
 LOGIN_ACTIONS = ("change", "forget")
 NO_HELPER = "Set up your Mac first. Then it can keep your TikTok login."
+# The owner's Start my Mac again and Let them go (``POST /v1/tiktok/mac/request``): the helper does it on its next tick.
+REQUESTS = {"resume": "resumeRequestAt", "let_go": "letGoRequestAt"}
+PICK_REQUEST = "Pick resume or let_go."
+NOT_SEEN = "Your Mac hasn't checked in yet. Set it up on your Mac."
+NOT_PAUSED = "Your Mac isn't paused."
+NOT_HOLDING = "Your Mac isn't holding any clips."
 QUEUE_MAX = 50
 SEND_MAX = 25
 REASON_MAX = 200
@@ -58,13 +79,18 @@ REASON_MAX = 200
 FIND_EARLY = timedelta(minutes=1)
 
 MAY_HAVE_POSTED = "Your Mac may have posted it already. Check your TikTok first."
-PRESSED = "Your Mac pressed Post but couldn't confirm it. Check your TikTok: if it's there, tap I posted it."
+PRESSED = "Your Mac pressed Post but couldn't confirm it. Look on your TikTok: if it's there, tap It's on TikTok."
+# Try again after Post was pressed waits for the end of the find window (``tiktok_self.MAC_FIND_WINDOW``).
+MAC_STILL_LOOKING = "Your Mac pressed Post less than 30 minutes ago. Look on your TikTok first, then try again later."
+# A campaign clip never gets a Mac post (D1): the helper can't set TikTok's Branded content disclosure yet, and the
+# Mac's done never reaches Content Rewards. The one source of these words (Upload, Try again, send, Content Rewards).
+CAMPAIGN_SKIPS = "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet."
 MAC_OFF = "Your Mac posting is off. Turn it on in Settings › Posting › Your Mac posts TikTok."
 AUTO_OFF = "Auto-posting is off, so this one waits."
 # Send these to my Mac: why a clip did not go.
 NOT_FOUND = "We could not find that clip."
 SEND_NOT_UPLOADED = "Upload this clip first."
-SEND_CAMPAIGN = "Campaign clips go on TikTok by hand. Post it in the TikTok app, then add the link."
+SEND_CAMPAIGN = CAMPAIGN_SKIPS
 SEND_TEST = "This was a Private test, so it stays off TikTok."
 SEND_HAS_IT = "Your Mac already has this clip."
 SEND_YOURS = "You already posted this one on TikTok."
@@ -91,7 +117,7 @@ def auto_on(settings: Mapping[str, Any]) -> bool:
 
 def preset_options(settings: Mapping[str, Any]) -> Item:
     """My settings' TikTok choices (§36: Everyone, Comment, Duet and Stitch on) in the TikTok sheet's shape (§17.8):
-    what an auto-posted or sent Mac post asks the Mac to set."""
+    what every Mac post asks the Mac to set. Never Branded content: no campaign clip gets a Mac post."""
     raw = settings.get("postPreset")
     preset = raw.get("tiktok") if isinstance(raw, Mapping) else None
     tiktok = {**post_preset.DEFAULTS["tiktok"], **(preset if isinstance(preset, Mapping) else {})}
@@ -105,14 +131,18 @@ def preset_options(settings: Mapping[str, Any]) -> Item:
     }
 
 
+def setup_audited(setup: Mapping[str, Any]) -> bool:
+    """TikTok's ``PlatformSetup`` (§17.4) says TikTok approved Clip Factory's public uploads: its ``app_review`` and
+    ``posting_audit`` gates both ``ok``. Unknown counts as no."""
+    states = {g.get("key"): g.get("state") for g in setup.get("gates") or [] if isinstance(g, Mapping)}
+    return states.get("app_review") == "ok" and states.get("posting_audit") == "ok"
+
+
 def tiktok_audited(store: db.Store, user_id: str) -> bool:
-    """The server twin of the web's ``tiktokAudited``: TikTok approved Clip Factory's public uploads (its
-    ``app_review`` and ``posting_audit`` gates both ``ok``). Unknown counts as no."""
+    """The server twin of the web's ``tiktokAudited`` (``setup_audited`` of his TikTok setup)."""
     from .oauth import setup as platform_setup
 
-    setup = platform_setup.one_setup(store, user_id, "tiktok")
-    states = {g.get("key"): g.get("state") for g in setup.get("gates") or []}
-    return states.get("app_review") == "ok" and states.get("posting_audit") == "ok"
+    return setup_audited(platform_setup.one_setup(store, user_id, "tiktok"))
 
 
 # --- reading -----------------------------------------------------------------------------------------------------
@@ -135,7 +165,8 @@ def caption(clip: Mapping[str, Any]) -> str:
 
 
 def job(post: Mapping[str, Any], clip: Mapping[str, Any]) -> Item:
-    """The ``MacJob`` the helper works from (§47.3)."""
+    """The ``MacJob`` the helper works from (§47.3), with its beat and, after a re-wait that followed a press, when
+    Post was pressed before and when the owner tried again (the helper's never-twice guard)."""
     options = post.get("postOptions")
     choices: Mapping[str, Any] = options if isinstance(options, Mapping) else {}
     mac = public_mac(post) or {}
@@ -154,9 +185,12 @@ def job(post: Mapping[str, Any], clip: Mapping[str, Any]) -> Item:
         "state": str(mac.get("state") or "waiting"),
         "attempt": _attempt(post),
     }
-    for key in ("step", "claimedAt", "pressedAt"):
+    for key in ("step", "claimedAt", "pressedAt", "beatAt"):
         if mac.get(key):
             out[key] = mac[key]
+    for field, key in (("macPressedBefore", "pressedBefore"), ("macAgainAt", "againAt")):
+        if post.get(field):
+            out[key] = str(post[field])
     return out
 
 
@@ -167,17 +201,24 @@ def _attempt(post: Mapping[str, Any]) -> int:
 
 
 def public_helper(item: Mapping[str, Any] | None) -> Item | None:
-    """``MacHelper``: when the helper last checked in and how it is (never its device id)."""
+    """``MacHelper``: when the helper last checked in and how it is (never its device id), the clip a needs-you stop
+    is on, what its plan says (``backlogAt``, ``holdBefore``, ``backfill``) and the owner's pending requests."""
     if not item or not item.get("seenAt"):
         return None
     out: Item = {"seenAt": str(item["seenAt"]), "state": str(item.get("state") or "ok")}
-    for key in ("reason", "version"):
+    for key in ("reason", "version", "needsYouClipId", "backlogAt", "holdBefore"):
         if item.get(key):
             out[key] = str(item[key])
+    if item.get("backfill") is True:
+        out["backfill"] = True
     if item.get("login") in LOGIN_STATES:
         out["login"] = str(item["login"])
     if item.get("loginRequestAction") in LOGIN_ACTIONS and item.get("loginRequestAt"):
         out["loginRequest"] = {"action": str(item["loginRequestAction"]), "at": str(item["loginRequestAt"])}
+    if item.get("resumeRequestAt"):
+        out["resumeRequest"] = {"at": str(item["resumeRequestAt"])}
+    if item.get("letGoRequestAt"):
+        out["letGoRequest"] = {"at": str(item["letGoRequestAt"])}
     return out
 
 
@@ -279,11 +320,19 @@ def ping(
     now: datetime,
     login: str | None = None,
     login_done: str | None = None,
+    backlog_at: str | None = None,
+    hold_before: str | None = None,
+    backfill: bool = False,
+    resume_done: str | None = None,
+    let_go_done: str | None = None,
 ) -> None:
     """The helper checks in: the ``MACHELPER`` item says when, how it is (``ok``, ``needs_you``, ``paused``) and why,
-    and whether a TikTok login is kept in the Mac's Keychain (``login``: ``saved`` | ``none``, §47.8). The owner's
-    pending request (``loginRequestAction``/``loginRequestAt``) stays until the helper says it handled that one
-    (``login_done`` = its ``at``)."""
+    whether a TikTok login is kept in the Mac's Keychain (``login``: ``saved`` | ``none``, §47.8), and what its plan
+    says (§47.3): when the first backlog clip goes (``backlog_at``), the auto-posting clips it holds (made before
+    ``hold_before``) and a backfill (``backfill``). Each of those three is removed by a ping without it, and
+    ``needsYouClipId`` by a ping whose state is not ``needs_you``. The owner's pending requests (login, resume, let go)
+    stay until the helper says it handled that one (``login_done``, ``resume_done``, ``let_go_done`` = its ``at``): a
+    newer request meanwhile stays."""
     current = helper_item(store, user_id)
     fields: Item = {"type": "machelper", "userId": user_id, "seenAt": iso(now), "state": state, "device": device}
     if reason:
@@ -292,22 +341,38 @@ def ping(
         fields["version"] = version
     if login in LOGIN_STATES:
         fields["login"] = login
+    plan: Item = {"backlogAt": backlog_at, "holdBefore": hold_before, "backfill": True if backfill else None}
+    fields.update({k: v for k, v in plan.items() if v is not None})
     if current is None:
         store.put({"pk": db.user_pk(user_id), "sk": HELPER_SK, **fields})
     else:
-        store.update(
-            db.user_pk(user_id), HELPER_SK, fields, remove=["reason"] if not reason and "reason" in current else []
+        gone = [k for k, v in plan.items() if v is None]
+        if not reason:
+            gone.append("reason")
+        if state != "needs_you":
+            gone.append("needsYouClipId")
+        store.update(db.user_pk(user_id), HELPER_SK, fields, remove=[k for k in gone if k in current])
+    for done, names in (
+        (login_done, ("loginRequestAt", "loginRequestAction")),
+        (resume_done, ("resumeRequestAt",)),
+        (let_go_done, ("letGoRequestAt",)),
+    ):
+        if done:
+            _request_done(store, user_id, done, names)
+
+
+def _request_done(store: db.Store, user_id: str, done: str, names: tuple[str, ...]) -> None:
+    """Removes the owner's request (its ``at`` is ``names[0]``) only while it is still the one the helper did."""
+    placeholders = {f"#r{i}": name for i, name in enumerate(names)}
+    with contextlib.suppress(db.ConditionFailed):  # a newer request came meanwhile: it stays
+        store.update_expr(
+            db.user_pk(user_id),
+            HELPER_SK,
+            "REMOVE " + ", ".join(placeholders),
+            condition="#r0 = :done",
+            names=placeholders,
+            values={":done": done},
         )
-    if login_done:
-        with contextlib.suppress(db.ConditionFailed):  # a newer request came meanwhile: it stays
-            store.update_expr(
-                db.user_pk(user_id),
-                HELPER_SK,
-                "REMOVE #la, #lt",
-                condition="#lt = :done",
-                names={"#la": "loginRequestAction", "#lt": "loginRequestAt"},
-                values={":done": login_done},
-            )
 
 
 def login_request(store: db.Store, user_id: str, action: str, now: datetime) -> Item:
@@ -318,17 +383,47 @@ def login_request(store: db.Store, user_id: str, action: str, now: datetime) -> 
     return store.update(db.user_pk(user_id), HELPER_SK, {"loginRequestAction": action, "loginRequestAt": iso(now)})
 
 
+def request(store: db.Store, user_id: str, action: str, now: datetime) -> Item:
+    """The owner's Start my Mac again (``resume``) or Let them go (``let_go``, §47.3): the helper does it on its next
+    tick and says so in its ping (``resumeDone`` / ``letGoDone``). One conditional write, so a Mac that is no longer
+    paused, or no longer holds clips, is refused (``Refused``). Returns the helper item."""
+    if action not in REQUESTS:
+        raise Refused(PICK_REQUEST, 400)
+    item = helper_item(store, user_id)
+    if item is None:
+        raise Refused(NOT_SEEN)
+    if action == "resume":
+        condition, values, refusal = "#st = :paused", {":paused": "paused"}, NOT_PAUSED
+        names = {"#st": "state", "#at": REQUESTS[action]}
+    else:
+        condition, values, refusal = "attribute_exists(#hb)", {}, NOT_HOLDING
+        names = {"#hb": "holdBefore", "#at": REQUESTS[action]}
+    try:
+        return store.update_expr(
+            db.user_pk(user_id),
+            HELPER_SK,
+            "SET #at = :at",
+            condition=condition,
+            names=names,
+            values={**values, ":at": iso(now)},
+        )
+    except db.ConditionFailed:
+        raise Refused(refusal) from None
+
+
 def claim(store: db.Store, clip: Mapping[str, Any], device: str, now: datetime, settings: Mapping[str, Any]) -> Item:
-    """The helper takes a Mac post: one conditional write, so one Mac and one try at a time. It takes a waiting post,
-    or a working one whose helper crashed (no step for 15 minutes) and that never pressed Post. A post whose helper
-    pressed Post is never claimed again by itself: it waits for the owner (never twice)."""
+    """The helper takes a Mac post: one conditional write, so one Mac and one try at a time. It takes a waiting post
+    that has no ``macPressedAt``, or a working one whose helper crashed (no beat for ``STALE_CLAIM``) and that never
+    pressed Post. A post whose helper pressed Post is never claimed again by itself, whatever its state: it waits for
+    the owner (never twice). A claim keeps ``macPressedBefore`` and ``macAgainAt`` for the helper's own guard."""
     row, _rows = mac_row(store, clip)
     if not is_on(settings):
         raise Refused(MAC_OFF)
     if row.get("macSource") == "auto" and not auto_on(settings):
         raise Refused(AUTO_OFF)
     condition = db.Condition(
-        "#mState = :mWaiting OR (#mState = :mWorking AND attribute_not_exists(#mPressed) AND #mBeat < :mStale)",
+        "(#mState = :mWaiting AND attribute_not_exists(#mPressed))"
+        " OR (#mState = :mWorking AND attribute_not_exists(#mPressed) AND #mBeat < :mStale)",
         {"#mState": "macState", "#mPressed": "macPressedAt", "#mBeat": "macBeatAt"},
         {":mWaiting": "waiting", ":mWorking": "working", ":mStale": iso(now - STALE_CLAIM)},
     )
@@ -376,10 +471,12 @@ def step(
     *,
     settings: Mapping[str, Any],
     attempt: int | None = None,
-) -> Item:
-    """The helper's progress: only from the device that claimed it, while it works on it. ``pressing`` also sets
-    ``macPressedAt``, the point of no return. While the switch is off, nothing before Post goes on (the owner's "Your
-    Mac stops at once"); after Post the helper may still look for the link."""
+) -> tuple[Item, bool]:
+    """The helper's progress: only from the device that claimed it, while it works on it. Every step sets
+    ``macBeatAt``, so the same step sent again is the job's beat (§47.3: the helper re-sends it every minute while it
+    works on the job). ``pressing`` also sets ``macPressedAt`` the first time, the point of no return. While the
+    switch is off, nothing before Post goes on (the owner's "Your Mac stops at once"); after Post the helper may still
+    look for the link. Returns the post as written and whether this step pressed Post for the first time."""
     row, _rows = mac_row(store, clip)
     _own(row, device, ("working",), attempt)
     if not is_on(settings) and not row.get("macPressedAt"):
@@ -401,16 +498,17 @@ def step(
             raise Refused(MAC_TAKEN) from None
         raise Refused(AUTO_OFF)
     fields: Item = {"macStep": name, "macBeatAt": iso(now)}
-    if name == "pressing" and not row.get("macPressedAt"):
+    pressed = name == "pressing" and not row.get("macPressedAt")
+    if pressed:
         fields["macPressedAt"] = iso(now)
-    request = db.update_request(
+    update = db.update_request(
         str(row["pk"]),
         str(row["sk"]),
         fields,
         expect_in=_claim_of(device, ["working"], attempt),
     )
     try:
-        return _write(store, row, request)
+        return _write(store, row, update), pressed
     except db.ConditionFailed:
         raise Refused(MAC_TAKEN) from None
 
@@ -427,7 +525,7 @@ def stopped(
 ) -> Item:
     """The helper stopped instead of guessing. The post says why (at most 200 characters); once it pressed Post the
     reason is always ``PRESSED`` (only the owner knows whether it is on TikTok). ``needs_you`` also puts the helper
-    item in ``needs_you`` with that reason."""
+    item in ``needs_you`` with that reason and this clip (``needsYouClipId``: Settings and the rows link to it)."""
     row, _rows = mac_row(store, clip)
     _own(row, device, ("working", "stopped"), attempt)
     said = _reason(reason)
@@ -450,7 +548,7 @@ def stopped(
         store.update_expr(
             db.user_pk(str(clip["userId"])),
             HELPER_SK,
-            "SET #st = :st, #re = :re, #se = :se, #de = :de, #ty = :ty, #us = :us",
+            "SET #st = :st, #re = :re, #se = :se, #de = :de, #ty = :ty, #us = :us, #nc = :nc",
             names={
                 "#st": "state",
                 "#re": "reason",
@@ -458,6 +556,7 @@ def stopped(
                 "#de": "device",
                 "#ty": "type",
                 "#us": "userId",
+                "#nc": "needsYouClipId",
             },
             values={
                 ":st": "needs_you",
@@ -466,6 +565,7 @@ def stopped(
                 ":de": device,
                 ":ty": "machelper",
                 ":us": str(clip["userId"]),
+                ":nc": str(clip["clipId"]),
             },
         )
     return written
@@ -474,10 +574,15 @@ def stopped(
 # --- the owner's routes (§47.2) -----------------------------------------------------------------------------------
 
 
-def retry(store: db.Store, clip: Mapping[str, Any], *, not_on_tiktok: bool, now: bool = False) -> None:
-    """The owner's Try again on a stopped Mac post: it waits for the Mac again, keeping its place (``since``). After
-    the Mac pressed Post, only when he says it is not on TikTok (``not_on_tiktok``, which clears ``macPressedAt``).
-    Without ``now`` a post already waiting is left as it is. The helper item goes back to ``ok`` when it needed him.
+def retry(store: db.Store, clip: Mapping[str, Any], *, not_on_tiktok: bool, at: datetime, now: bool = False) -> None:
+    """The owner's Try again (§47.3, at ``at``): a stopped Mac post, or a stuck one (``working_stuck``), waits for the
+    Mac again, keeping its place (``since``). A post the Mac still works on is refused (``MAC_WORKING``). After the Mac
+    pressed Post, only when he says it is not on TikTok (``not_on_tiktok``) and only once the find window is over
+    (``window_over``, else ``MAC_STILL_LOOKING``): the press moves to ``macPressedBefore`` and ``macAgainAt`` says when
+    he tried again, so the helper's never-twice guard can tell this re-wait from a lost press. Without ``now`` a post
+    already waiting is left as it is. One write, conditional on the post as read (a stopped one still stopped, a stuck
+    one the same claim, beat and press: a new claim or beat meanwhile answers ``CHANGED``); then the helper item goes
+    back to ``ok`` when it needed him.
 
     ``now`` (a row's Try again or Post with my Mac) also makes it an Upload tap's (``macSource: "upload"``), so the Mac
     posts it at once and first instead of waiting for the next auto-posting run (``sent``). That holds for a post that
@@ -486,51 +591,56 @@ def retry(store: db.Store, clip: Mapping[str, Any], *, not_on_tiktok: bool, now:
     auto-posting picked) no longer applies to it."""
     row, _rows = mac_row(store, clip)
     state = row.get("macState")
-    if state == "working":
+    stuck = working_stuck(store, str(clip["userId"]), row, at)
+    if state == "working" and not stuck:
         raise Refused(MAC_WORKING)
-    if state != "stopped":
+    if state not in ("stopped", "working"):
         if now and state == "waiting":
             try:
                 _go_now(store, row)
             except db.ConditionFailed:
                 raise Refused(CHANGED) from None
         return
-    if row.get("macPressedAt") and not not_on_tiktok:
+    pressed = row.get("macPressedAt")
+    if pressed and not not_on_tiktok:
         raise Refused(MAY_HAVE_POSTED)
+    if pressed and not window_over(row, at):
+        raise Refused(MAC_STILL_LOOKING)
+    fields: Item = {"macState": "waiting", "macAgainAt": iso(at)}
     cleared = ["macStep", "macClaimedAt", "macStoppedAt", "macReason"]
-    if not_on_tiktok:
+    if pressed:
+        fields["macPressedBefore"] = str(pressed)
         cleared.append("macPressedAt")
-    fields: Item = {"macState": "waiting"}
+    if stuck:
+        cleared += ["macDevice", "macBeatAt"]  # the stuck claim is gone: the Mac claims it afresh
     if now:
         fields["macSource"] = "upload"
-    request = db.update_request(
+    expect: dict[str, list[Any]] = {"status": [MAC_STATUS], "macState": [str(state)]}
+    same = ("macPressedAt", "macClaimedAt", "macBeatAt") if stuck else ("macPressedAt",)
+    for key in same:
+        if row.get(key):
+            expect[key] = [str(row[key])]
+    update = db.update_request(
         str(row["pk"]),
         str(row["sk"]),
         fields,
         remove=[k for k in cleared if k in row],
-        expect_in={"status": [MAC_STATUS], "macState": ["stopped"]},
+        expect_in=expect,
     )
     try:
-        _write(store, row, request)
+        _write(store, row, update)
     except db.ConditionFailed:
         raise Refused(CHANGED) from None
-    with contextlib.suppress(db.ConditionFailed):  # it did not need him
-        store.update_expr(
-            db.user_pk(str(clip["userId"])),
-            HELPER_SK,
-            "SET #st = :ok REMOVE #re",
-            condition="#st = :nu",
-            names={"#st": "state", "#re": "reason"},
-            values={":ok": "ok", ":nu": "needs_you"},
-        )
+    clear_needs_you(store, str(clip["userId"]))
 
 
 def take_back(store: db.Store, clip: Mapping[str, Any]) -> None:
-    """Take it back (Post it yourself instead): only while the Mac post waits or stopped, and never once the Mac
-    pressed Post (it may be on TikTok: the owner's ways out are I posted it, or It's not on TikTok, try again). A post
-    made for the Mac is deleted and leaves ``postIds`` (and ``tiktokForMac``); a Clip Factory post that was handed over
-    gets its fields back (``beforeMac``). The post and the clip (its settle rule, §14.5) are one transaction,
-    conditional on the post as read; a clip that changed meanwhile (a flow settled it) is read again, at most 3 times."""
+    """Take it back (kept for older apps; the web no longer offers it): only while the Mac post waits or stopped, and
+    never once the Mac pressed Post (it may be on TikTok: the owner's ways out are his It's on TikTok, or Try again
+    once it's not on TikTok). A post made for the Mac is deleted and leaves ``postIds`` (and ``tiktokForMac``); a Clip
+    Factory post that was handed over gets its fields back (``beforeMac``). The post and the clip (its settle rule,
+    §14.5) are one transaction, conditional on the post as read; a clip that changed meanwhile (a flow settled it) is
+    read again, at most 3 times."""
     for _ in range(3):
         row, rows = mac_row(store, clip)
         _can_take_back(row)
@@ -600,11 +710,12 @@ def send(
 ) -> str | None:
     """Send this clip to the Mac (Send these to my Mac): None when it went, else why not. It goes when it is not on
     TikTok yet (§42.1): uploaded, its TikTok not out for everyone, not by him, not uploading (``queued``) and not a
-    Mac post already; never a campaign clip or a Private test. A clip without a TikTok post gets a new Mac post
-    (``madeForMac``, its id in ``postIds`` and in the clip's ``tiktokForMac``, written only while neither that mark nor
-    ``tiktokByYou`` is there: two sends, or a send and I posted it, never make two posts). A Clip Factory TikTok post
-    that waits for setup, failed or went up privately is handed over in place, its fields kept in ``beforeMac``. Its
-    options are My settings' (Everyone, Comment, Duet and Stitch on).
+    Mac post already; never a campaign clip (``is_campaign``: ``SEND_CAMPAIGN``, nothing written) or a Private test. A
+    clip without a TikTok post gets a new Mac post (``madeForMac``, its id in ``postIds`` and in the clip's
+    ``tiktokForMac``, written only while neither that mark nor ``tiktokByYou`` is there: two sends, or a send and his
+    It's on TikTok, never make two posts). A Clip Factory TikTok post that waits for setup, failed or went up
+    privately is handed over in place, its fields kept in ``beforeMac``. Its options are My settings' (Everyone,
+    Comment, Duet and Stitch on: ``preset_options``).
 
     ``source`` is the post's ``macSource``: ``sent`` (the backlog, one after each auto-posting run) or ``upload``
     (the owner's Post with my Mac on one row, ``now: true``: at once and first, as an Upload tap). With ``upload`` a

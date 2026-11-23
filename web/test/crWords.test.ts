@@ -15,6 +15,7 @@ import {
   afterUploadLine,
   amountText,
   budgetChip,
+  campaignPlaces,
   crAvailability,
   crCardLine,
   crSetupCount,
@@ -27,6 +28,7 @@ import {
   sendGroups,
   stopText,
   subLineFor,
+  TIKTOK_NOT_YET,
   unlinkedPlaces,
   usd,
   usdShort,
@@ -238,12 +240,22 @@ describe("send by hand: one line for one clip's posts to one campaign", () => {
 });
 
 describe("places, connection and money", () => {
-  it("Upload to's lines: only paid places, and TikTok left out until its audit", () => {
-    expect(placesLines({ platformsPaid: ["youtube", "instagram"], uploadPlaces: ["youtube"] })).toEqual(["Only places this campaign pays for."]);
-    expect(placesLines({ platformsPaid: ["youtube", "tiktok"], uploadPlaces: ["youtube"] })[1]).toBe(
-      "TikTok is left out for now. Until TikTok checks Clip Factory, TikTok posts are private, and private posts can't earn.",
+  it("Upload to's lines: only paid places, and campaign clips skip TikTok until TikTok approved the app (D1)", () => {
+    const SKIPS = "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet.";
+    expect(placesLines({ platformsPaid: ["youtube", "instagram"], uploadPlaces: ["youtube"] }, false)).toEqual(["Only places this campaign pays for."]);
+    expect(placesLines({ platformsPaid: ["youtube", "tiktok"], uploadPlaces: ["youtube"] }, false)[1]).toBe(SKIPS);
+    // Content Rewards may list TikTok once only its posting audit reads ok: still skipped until the app is approved.
+    expect(placesLines({ platformsPaid: ["youtube", "tiktok"], uploadPlaces: ["youtube", "tiktok"] }, false)).toEqual(["Only places this campaign pays for.", SKIPS]);
+    expect(placesLines({ platformsPaid: ["youtube", "tiktok"], uploadPlaces: ["youtube", "tiktok"] }, true)).toHaveLength(1);
+    expect(placesLines({ platformsPaid: ["youtube", "tiktok"], uploadPlaces: ["youtube"] }, true)[1]).toBe(SKIPS);
+    for (const line of placesLines({ platformsPaid: ["tiktok"], uploadPlaces: [] }, false)) expect(line).not.toMatch(/private/i);
+    // The one helper Review reads every campaign place list through.
+    expect(campaignPlaces(["youtube", "tiktok", "x"], false)).toEqual(["youtube", "x"]);
+    expect(campaignPlaces(["youtube", "tiktok"], true)).toEqual(["youtube", "tiktok"]);
+    expect(TIKTOK_NOT_YET).toBe(`TikTok: not yet. ${SKIPS}`);
+    expect(stopText("tiktok_only")).toBe(
+      `This campaign only pays for TikTok. ${SKIPS} Pick a campaign that pays for YouTube, Instagram, X or Facebook.`,
     );
-    expect(placesLines({ platformsPaid: ["youtube", "tiktok"], uploadPlaces: ["youtube", "tiktok"] })).toHaveLength(1);
     expect(unlinkedPlaces({ platformsPaid: ["youtube", "instagram"] }, conn({ crLinked: { youtube: false, instagram: true } }))).toEqual(["youtube"]);
     expect(unlinkedPlaces({ platformsPaid: ["instagram"] }, conn({ crLinked: { youtube: false } }))).toEqual([]);
   });

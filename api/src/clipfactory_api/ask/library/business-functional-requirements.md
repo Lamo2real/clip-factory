@@ -375,7 +375,7 @@ how to navigate it". ([the steps](SETUP_POSTING.md#content-rewards),
   way (BR-28). Upload to offers only the places the campaign pays
   for that are set up and linked inside Content Rewards; campaign clips are public, never made for kids, and marked
   as paid (YouTube Paid promotion, X Paid partnership, TikTok Branded content by the owner's own tap). TikTok is left
-  out until TikTok's audit, because private posts can't earn.
+  out until TikTok approves the app (round 3: his Mac can't mark a post as Branded content yet, BR-32 AC5).
 - AC8: After each post, Clip Factory sends the clip to Content Rewards by itself within 30 minutes (0 steps), and its
   line shows Sending → Sent → Waiting for the brand → Approved or Not approved (with the brand's reason), the views
   and the money Content Rewards reports for it.
@@ -630,11 +630,33 @@ taps, and records "Posted by your Mac · Everyone" with the link.
 - AC1: **The sheet is gone.** No **Post it yourself**, **Post it yourself instead**, **I posted it**, **Save the
   video**, **Open TikTok** or **AirDrop** control on Library, the clip page, Review or Auto-posting, and nothing opens
   by itself after Upload. Auto-posting has no **Post these on TikTok yourself** list.
-- AC2: **Each TikTok row says what his Mac is doing**, with at most one button: "Waiting for your Mac · next at
-  14:05"; "Posting…"; "Posted by your Mac · Everyone" with **Open**; "Didn't work: {short reason}" with **Try
-  again** (it goes back to his Mac at once); "Not on TikTok yet" with **Post with my Mac** (to his Mac at once, like
-  an Upload tap). Switch off, or his Mac not seen for 30 minutes or more: the row says so, with **Turn on** (to
-  Settings › Posting › Your Mac posts TikTok).
+- AC2: **Each TikTok row says what his Mac is doing**, with at most one button: "Waiting for your Mac · next" or "… ·
+  in line (2 before it)" (its place in his Mac's queue, counted the way his Mac picks: Upload taps first, then
+  auto-posting's clips, then the backlog), "… · goes at about 20:30" (the first backlog clip, at the time his Mac
+  says), "… · in line" during a backfill, never a time that may be wrong; "Held on your Mac: made before {time}" with
+  **Post with my Mac**; "Posting…" (while his Mac works on it: never "Not sure it posted" or Try again then);
+  "Posted by your Mac · Everyone" with **Open**; "Didn't work: {short reason}" with **Try again** (it goes back to his
+  Mac at once); "Not sure it posted · look on your TikTok" (his Mac pressed Post but couldn't tell, or it stopped
+  working on the clip: no sign of it for 5 minutes, or 50 minutes since it took the clip) with **It's on TikTok** (the
+  link box with **Find it for me**, and **It's on TikTok, no link** behind its own question) and, only once 30
+  minutes have passed since his Mac pressed Post, a quieter **Try again** that asks "Post it again? Only if it's not on
+  your TikTok." first; "Not on TikTok yet" with **Post with my Mac** (to his Mac at once, like an Upload tap). Switch
+  off: **Turn on**; his Mac not seen for 30 minutes or more: **Open Your Mac posts TikTok** (a post it was working on
+  offers It's on TikTok and Try again once it hasn't checked in for 10 minutes). Paused: **Start my Mac again**. Needs
+  him: **Open the stopped clip**, where Try again and It's on TikTok are.
+- AC5: **He never posts by hand** (23 Nov 2026: "its always the automation that covers it weather its invoked by be
+  clicking upload or if its the schedule"). Every clip that can go to TikTok goes through his Mac, Upload or the
+  schedule. **Campaign clips skip TikTok for now** (round 3, ADR-86): his Mac can't mark a post as Branded content
+  yet, and Content Rewards never receives what his Mac posts, so a campaign clip's TikTok is unticked in Review and
+  its row says "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet." Answering a
+  stopped post (**It's on TikTok** or **Try again**) lets a Mac that needed him go on.
+- AC6: **Find it for me never saves without a link** (round 3): nothing found → "Not found yet. Try again in a
+  minute, or paste the link." and nothing changes. Saving it without a link is only **It's on TikTok, no link**, after
+  its question.
+- AC7: **No dead ends** (round 3): Settings › Posting › Your Mac posts TikTok has **Start my Mac again** while paused,
+  **Open the stopped clip** while it needs him, and "Your Mac holds auto-posting clips made before {time}." with
+  **Let them go** while it holds clips; each takes effect the next time his Mac checks in, within a minute. No server
+  or helper sentence names "post it yourself" or "I posted it".
 - AC3: **Nothing stored breaks.** A clip he posted himself before keeps "Posted by you · Everyone"; with no link yet it
   gets only an inline link box with **Save the link**, no sheet. Every API route stays, and the only API change is an
   optional `now: true` on two routes, so older apps work as before.

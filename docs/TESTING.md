@@ -1229,7 +1229,19 @@ fakes only; Playwright runs headless (no window on screen).
 - **API** (pytest, `api/tests/test_tiktok_mac.py`, `test_http.py`, `test_tiktok_yourself.py`): every §47.5 case, plus
   `now`: a send with `now: true` makes `macSource: "upload"` and the queue puts it first, one without stays `sent`; a
   retry with `now` turns `sent` and `auto` into `upload`; `now` must be a boolean (400), unknown keys still 400, the
-  switch off still 409 `MAC_OFF`. The `…/tiktok/posted` and `…/file` routes are unchanged.
+  switch off still 409 `MAC_OFF`. The `…/file` route is unchanged. **Round 3 (2026-11-23, D1 to D6)**: the stuck rule
+  at its edges (beat 4:59 / 5:00, claim 49:59 / 50:00 with fresh beats, `macBeatAt` or else `macClaimedAt`), the find
+  window (Try again after Post refused with `MAC_STILL_LOOKING` inside it, then `macPressedBefore` and `macAgainAt`),
+  the claim's pressed guard, a re-sent step as the beat, a stuck re-wait or It's on TikTok losing to a beat or a new
+  claim, `…/tiktok/posted` D3 (Find it for me saves nothing when nothing is found, TikTok is down or not connected;
+  `noLink` saves without the finder and is refused while the Mac beats a job it never pressed Post for; a link with
+  `noLink` → 400), the ping's plan keys and their 400s, `POST /v1/tiktok/mac/request` (each refusal and write),
+  `needsYouClipId`, campaign clips never a Mac post (Upload, Try again, a run, `send` with and without `now`; Upload
+  with TikTok refused until both TikTok gates are `ok`, then `queued` through TikTok's API), the words (one source for
+  the campaign sentence; no string constant in `tiktok_self.py`, `tiktok_mac.py`, `routes/tiktok_mac.py` or
+  `platforms/errors.py` says "post it yourself" or "I posted it"; the three shared constants one line each).
+  `test_campaign_posting.py`, `test_autopost_run.py`, `test_autopost_routes.py`, `test_publishers.py` and
+  `fixtures/cr_fit_cases.json` (rewritten by `uv run python tests/cr_fit_cases.py`) carry the new words.
 - **Web units** (Vitest): `web/test/tiktokMac.test.ts` (`tiktokRow`'s states and words in their order, Turn on when the
   switch is off, the Mac never checked in or was not seen for 30 minutes, the next-at times for `upload`, `auto` and
   `sent`, the pressed words chosen by `pressedAt`, and the mock's rules); `web/test/tiktokMacNow.test.ts` (the mock's
@@ -1243,6 +1255,13 @@ fakes only; Playwright runs headless (no window on screen).
   yourself**, **I posted it**, **AirDrop** or **Open TikTok** control on Library, the clip page or Review);
   `web/e2e/autopost.spec.ts` (Where they go with the switch off and on). `web/test/postYourselfCaption.test.tsx` went
   with the sheet.
+- **Round 3 web and helper** (CONTRACTS §47.5): the web pin test reads `api/src/clipfactory_api/tiktok_self.py` and
+  asserts `MAC_BEAT_STALE`, `MAC_CLAIM_MAX` and `MAC_FIND_WINDOW` equal `MAC_BEAT_STALE_MS`, `MAC_CLAIM_MAX_MS` and
+  `MAC_FIND_WINDOW_MS`; the helper's `test/constants.test.js` asserts `FIND_FOR_MS` equals `MAC_FIND_WINDOW` and three
+  beats fit in `MAC_BEAT_STALE`; `plan.test.js` covers `backlogAt` and never twice (`pressedAt`, `pressedBefore` with
+  and without a late `againAt`); the e2e specs cover Find it for me saving nothing, the no-link confirm, Try again only
+  after the window, Start my Mac again, Let them go, Open the stopped clip and Review's campaign clip without TikTok,
+  with real hover and stuck screenshots (byte-identical pairs fail).
 - **Help**: the guides `autopost-turn-on` and `tiktok-mac` in `web/src/features/help/helpKb.json` say the row states
   (Waiting for your Mac · next at, Posting…, Posted by your Mac, Didn't work with Try again, Not on TikTok yet with Post
   with my Mac, Turn on) and never Post it yourself. After the web parts merge, in `web/`, `node

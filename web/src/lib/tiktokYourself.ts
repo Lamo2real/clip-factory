@@ -42,22 +42,27 @@ export function tiktokAudited(setups: readonly PlatformSetup[] | undefined): boo
 }
 
 /**
- * TikTok refused Clip Factory's upload because the account is public (§42); also the sentence posts kept from before.
- * Stored on failed posts and matched word for word: never change it. What the owner reads is postError's.
+ * The sentence posts refused for the public account kept from before 23 Nov (§42; a legacy, never shown): matched word
+ * for word, never change it. What the owner reads is postError's.
  */
 export const TIKTOK_PRIVATE_ONLY = "TikTok only takes Clip Factory's uploads on a private account until it approves the app. Tap Post it yourself to post it for everyone.";
 const TIKTOK_PRIVATE_BEFORE = "Make your TikTok account private (Setup step 3), then press Try again.";
-/** What a post refused for the public account says (postError). */
+/**
+ * What a post refused for the public account says (postError), and since 23 Nov the sentence the server stores on
+ * one (platforms/errors.TIKTOK_PRIVATE_ONLY), word for word.
+ */
 export const TIKTOK_PUBLIC_REFUSED = "TikTok only takes Clip Factory's own uploads on a private account for now, so your Mac posts it for everyone.";
+/** Every sentence a post refused for the public account may hold: the two from before, and today's. */
+const PUBLIC_REFUSED: readonly string[] = [TIKTOK_PRIVATE_ONLY, TIKTOK_PRIVATE_BEFORE, TIKTOK_PUBLIC_REFUSED];
 
 /** A TikTok post that failed only because the account is public: his Mac posts it, Try again would fail again. */
 export function failedForPublicAccount(post: Pick<Post, "platform" | "status" | "error">): boolean {
-  return post.platform === "tiktok" && post.status === "failed" && (post.error === TIKTOK_PRIVATE_ONLY || post.error === TIKTOK_PRIVATE_BEFORE);
+  return post.platform === "tiktok" && post.status === "failed" && PUBLIC_REFUSED.includes(post.error ?? "");
 }
 
-/** The words to show for a post's error: both public-account sentences read as today's. */
+/** The words to show for a post's error: every public-account sentence reads as today's. */
 export function postError(error: string): string {
-  return error === TIKTOK_PRIVATE_BEFORE || error === TIKTOK_PRIVATE_ONLY ? TIKTOK_PUBLIC_REFUSED : error;
+  return PUBLIC_REFUSED.includes(error) ? TIKTOK_PUBLIC_REFUSED : error;
 }
 
 /** Review, TikTok ticked before TikTok approved the app while Your Mac posts TikTok is off: one line that points to it. */

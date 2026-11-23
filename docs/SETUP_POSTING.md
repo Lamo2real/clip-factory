@@ -240,16 +240,21 @@ to TikTok, but only you can see those posts, and TikTok gives no numbers for the
 **Want everyone to see it now? Your Mac posts it** (docs/CONTRACTS.md §47). Turn on **Settings › Posting › Your Mac
 posts TikTok** and set up the helper on your Mac ([mac/tiktok-helper](../mac/tiktok-helper/README.md)). Then **Upload**
 and auto-posting give TikTok to your Mac, and it posts each clip for **Everyone**, out of sight. Each clip's TikTok row
-in Library says what your Mac is doing: **Waiting for your Mac**, **Posting…**, then **Posted by your Mac · Everyone**
-with **Open**. **Didn't work**? Tap **Try again**. Your Mac couldn't tell if it posted? Look on your TikTok: it's there?
-Tap **It's on TikTok**; it isn't? Tap **Try again**. **Not on TikTok yet**? Tap **Post with my Mac**. The row says your
-Mac is off or hasn't checked in? Tap **Turn on**. Your Mac needs you, or it is paused? Tap **Open Your Mac posts
-TikTok**. **Everyone** needs a public TikTok account. While your
+in Library says what your Mac is doing: **Waiting for your Mac · next** (or **in line (2 before it)**, or **goes at
+about 20:30** for the first clip you sent), **Posting…**, then **Posted by your Mac · Everyone** with **Open**.
+**Didn't work**? Tap **Try again**. **Not sure it posted**? Look on your TikTok: it's there? Tap **It's on TikTok**,
+then **Find it for me** (or paste its link; Find it for me saves nothing until it finds it, and **It's on TikTok, no
+link** saves it without one); it isn't? Once 30 minutes have passed since your Mac pressed Post, tap **Try again**,
+then **Yes, post it again**. **Not on TikTok yet**? Tap **Post with my Mac**. **Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet.** (that is the row of a campaign
+clip: nothing to do; Review leaves TikTok unticked for it). The row says your Mac is off? Tap **Turn on**. It hasn't
+checked in? Tap **Open Your Mac posts TikTok**. It is paused? Tap **Start my Mac again**. It needs you? Tap **Open the
+stopped clip**: Try again and It's on TikTok are there. **Held on your Mac**? Tap **Post with my Mac**, or **Let them
+go** in Settings › Posting › Your Mac posts TikTok. **Everyone** needs a public TikTok account. While your
 account is public, TikTok will not let Clip Factory upload there for you (its rule for apps it has not approved), so
 your Mac does it. Keep your account public. There is no "Post it yourself" any more (it went on 22 Nov 2026,
 [ADR-86](DECISIONS.md#adr-86-no-manual-tiktok-sheet-the-mac-is-the-only-way-to-tiktok-until-tiktok-approves-the-app)). A
 clip you posted in TikTok yourself earlier keeps **Posted by you · Everyone**; with no link yet, type or paste it in the
-row and tap **Save the link** (an empty box makes Clip Factory look for it on your TikTok).
+row and tap **Save the link**, or tap **Find it for me** to let Clip Factory look for it on your TikTok.
 
 | # | Step | Part |
 |---|---|---|
@@ -512,6 +517,11 @@ The answers, word for word. They are all true today: do not change them to sound
 | "The return address does not match. Copy it again in step 10." | Do step 10 again with the **Copy** button. |
 | "A permission box was not ticked. Connect again and tick every box." | Do step 12, then connect again and leave every switch on. |
 | "TikTok only takes Clip Factory's own uploads on a private account for now, so your Mac posts it for everyone." | Tap **Post with my Mac** on the clip's TikTok row (it says **Turn on** first while **Your Mac posts TikTok** is off). Keep your account public. |
+| "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet." | Nothing to do: a campaign clip goes to YouTube, Instagram, X and Facebook. On Upload, turn TikTok off, then tap **Upload**. |
+| "Your Mac pressed Post less than 30 minutes ago. Look on your TikTok first, then try again later." | Look on your TikTok. It's there? Tap **It's on TikTok**. It isn't? Tap **Try again** once 30 minutes have passed. |
+| "Not found yet. Try again in a minute, or paste the link." | Tap **Find it for me** again in a minute, or paste the post's link and tap **Save the link**. Nothing was saved. |
+| "Clip Factory can't look on your TikTok until TikTok is connected. Paste the link instead." | Paste the post's link and tap **Save the link**. |
+| "Your Mac isn't paused." / "Your Mac isn't holding any clips." | Nothing to do: your Mac is already going. |
 | "TikTok did not answer. Try again in a few minutes." | Wait, then press **Connect TikTok**. |
 | "Finish the TikTok review steps to post outside the Sandbox." | Do steps 21 to 23. |
 
@@ -1028,8 +1038,7 @@ there once you are connected ("Back to FaZe Clips").
 - Each one should say **Connected**.
 - The card lists the accounts Clip Factory posts to, for example "Clip Factory posts to: YouTube @faze · Instagram
   @faze · X @faze · Facebook FaZe Page." Add those same accounts.
-- TikTok can wait. TikTok posts from Clip Factory stay private until TikTok checks the app, and private posts can't
-  earn.
+- TikTok can wait. Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet.
 - Then come back to Clip Factory. Tap "I added them". The step also ticks itself once Content Rewards takes a clip
   from one of your accounts.
 - If Content Rewards ever says it doesn't know an account, this step opens again with the line "Content Rewards
@@ -1252,7 +1261,7 @@ the red button is "Make clips anyway".
 | "The brand paused this campaign. I'll tell you when it opens again." | Wait, or pick another campaign. |
 | "This campaign has ended. Pick another one." / "This campaign stopped taking clips on 23 Nov. Pick another one." | Pick another campaign. |
 | "The money is almost gone, so new clips won't get paid. Pick another one." | Pick another campaign. |
-| "This campaign only pays for TikTok. …" | Pick a campaign that pays for YouTube, Instagram, X or Facebook. |
+| "This campaign only pays for TikTok. Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet. …" | Pick a campaign that pays for YouTube, Instagram, X or Facebook. |
 | "Set up YouTube first. This campaign pays for YouTube and Instagram." | Set up one of the places it pays for. |
 | "Content Rewards wants the brand to check your other clips first. I'll tell you when you can post again." | Wait. |
 | "You reached the most you can earn on this campaign. Pick another one." | Pick another campaign. |
@@ -1279,8 +1288,7 @@ the red button is "Make clips anyway".
 - A strip at the top: "For **FaZe Clips** · Content Rewards" with ticks for "Paid partnership", "#Ad at the start"
   and "Logo on".
 - "Upload to" shows only the places this campaign pays for: "Only places this campaign pays for."
-- TikTok is left out for now: "Until TikTok checks Clip Factory, TikTok posts are private, and private posts can't
-  earn."
+- TikTok is left out for now: "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet."
 - A place Content Rewards doesn't know yet: "Add YouTube in Content Rewards first." Tap "Open Content Rewards
   settings", add it, then tap "I added it". "Then tap I added it. The next clip will go."
 - Tap "Use my settings". Campaign clips are public, never made for kids, and marked as paid. On YouTube that is Who can

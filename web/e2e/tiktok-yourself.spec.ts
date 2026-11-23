@@ -1,6 +1,7 @@
 // Posted on TikTok without its link (docs/CONTRACTS.md §42.2): the inline Add link in the TikTok row, which saves a
-// pasted link or, with an empty box, lets Clip Factory find the post. The manual "Post it yourself" sheet is gone
-// (ADR-86): no control of it shows on the Library, the clip page, Review or Settings › Auto-posting.
+// pasted link or, with Find it for me, lets Clip Factory find the post (nothing is saved when it finds nothing). The
+// manual "Post it yourself" sheet is gone (ADR-86): no control of it shows on the Library, the clip page, Review or
+// Settings › Auto-posting.
 import { expect, test, type Page } from "@playwright/test";
 import { settle } from "./helpers.ts";
 
@@ -79,9 +80,16 @@ test("library: Add link in the row saves a pasted TikTok link", async ({ page })
   await expect(row.getByRole("textbox")).toHaveCount(0);
 });
 
-test("library: Add link with an empty box lets Clip Factory find the post", async ({ page }) => {
+test("library: Add link with an empty box sends nothing; Find it for me looks, and saves only what it found", async ({ page }) => {
   const row = await postedWithoutLink(page);
   await row.getByRole("button", { name: "Save the link" }).click();
+  await expect(row.getByRole("alert")).toHaveText("Paste the link first, or tap Find it for me.");
+  await expect(row.locator(".post__status")).toHaveText("Posted by your Mac · Everyone · add the link");
+  // Nothing found yet: said in the row, nothing saved.
+  await row.getByRole("button", { name: "Find it for me" }).click();
+  await expect(row.getByRole("alert")).toHaveText("Not found yet. Try again in a minute, or paste the link.");
+  await expect(row.locator(".post__status")).toHaveText("Posted by your Mac · Everyone · add the link");
+  await row.getByRole("button", { name: "Find it for me" }).click();
   await expect(page.getByText("Found it on your TikTok! Clip Factory will count its views.")).toBeVisible();
   await expect(row.getByRole("link", { name: "Open the TikTok post" })).toBeVisible();
   await expect(row.getByRole("textbox")).toHaveCount(0);

@@ -41,6 +41,7 @@ MAC_PUBLIC = {
     "macPressedAt": "pressedAt",
     "macStoppedAt": "stoppedAt",
     "macReason": "reason",
+    "macBeatAt": "beatAt",
 }
 COMMON_METRICS = ("views", "likes", "comments", "shares")
 REFRESH_CLAIM = timedelta(minutes=5)  # a manual refresh counts as running for this long (§16.2)
@@ -80,8 +81,9 @@ def is_private_test(item: Mapping[str, Any]) -> bool:
 
 def public_mac(item: Mapping[str, Any]) -> Item | None:
     """``Post.mac`` (§47): where a Mac post stands (``state``, ``step``, ``since``, ``source``, ``claimedAt``,
-    ``pressedAt``, ``stoppedAt``, ``reason``); None for every other post. ``macDevice``, ``macBeatAt``,
-    ``macAttempt``, ``beforeMac`` and ``madeForMac`` stay internal."""
+    ``pressedAt``, ``stoppedAt``, ``reason``, and ``beatAt``: when the Mac last beat the job, for the stuck rule);
+    None for every other post. ``macDevice``, ``macAttempt``, ``macPressedBefore``, ``macAgainAt``, ``beforeMac`` and
+    ``madeForMac`` stay internal."""
     if item.get("status") != MAC_STATUS:
         return None
     return {public: item[field] for field, public in MAC_PUBLIC.items() if item.get(field) not in (None, "")}

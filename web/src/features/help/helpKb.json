@@ -497,9 +497,14 @@
         "send these to my mac",
         "set up your mac",
         "mac helper",
-        "stop the mac"
+        "stop the mac",
+        "start my mac again",
+        "mac paused",
+        "open the stopped clip",
+        "let them go",
+        "held on your mac"
       ],
-      "answer": "With **Your Mac posts TikTok** on, your Mac posts each TikTok clip for everyone. Each TikTok row in **Library** says what it is doing: **Waiting for your Mac**, **Posting…**, then **Posted by your Mac**. **Didn't work**? Tap **Try again**. Not sure it posted? Look on your TikTok, then tap **It's on TikTok** or **Try again**. **Not on TikTok yet**? Tap **Post with my Mac**. Off? Tap **Turn on**.",
+      "answer": "With **Your Mac posts TikTok** on, your Mac posts each TikTok clip for everyone. Each TikTok row in **Library** says what it does. **Didn't work**? Tap **Try again**. Not sure it posted? Look on your TikTok, then tap **It's on TikTok**. Paused? Tap **Start my Mac again**. Needs you? Tap **Open the stopped clip**. Holding clips? Tap **Let them go**. **Not on TikTok yet**? Tap **Post with my Mac**.",
       "steps": [
         "Tap **Settings**.",
         "Tap **Posting**, then **Your Mac posts TikTok**.",
@@ -3365,7 +3370,7 @@
         "tiktok audit",
         "tiktok not paid"
       ],
-      "answer": "Until TikTok checks Clip Factory, TikTok keeps its posts private, and private posts can't earn. So campaign clips go to YouTube, Instagram, X and Facebook for now. TikTok comes back by itself once TikTok says yes.",
+      "answer": "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet. So campaign clips go to YouTube, Instagram, X and Facebook for now.",
       "steps": [
         "Set up YouTube, Instagram, X or Facebook.",
         "Pick campaigns that pay for those places."
