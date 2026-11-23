@@ -1,47 +1,51 @@
-# webkit shard 2 of 5: about 21.5 core, 21.5 style, 21.5 full worker-minutes (45 lines).
+# webkit shard 2 of 5: about 22.2 core, 22.2 style, 22.2 full worker-minutes (49 lines).
 # Written by: node scripts/e2e-shards.mjs build (from timings.tsv). The last shard runs every test in no list.
 [webkit-phone] › ask-assistant.spec.ts › Ask as a full assistant › a general question: a code block with Copy, and a table
-[webkit-phone] › ask-assistant.spec.ts › Ask as a full assistant › the setup question uses his setup and a web source; links go live only when done
+[webkit-phone] › ask-assistant.spec.ts › Ask as a full assistant › files by drop: a picture thumbnail, PDF and DOCX tiles, a refused ZIP
 [webkit-phone] › ask-assistant.spec.ts › Ask as a full assistant › web search not set up: says so once and offers Turn on web search, which lights the setting
-[webkit-phone] › ask-assistant.spec.ts › Ask assistant at phone-390 › thumb zone, no overflow, no edges
 [webkit-phone] › ask-assistant.spec.ts › Ask assistant at tablet-768 › screenshots in dark
+[webkit-phone] › ask-assistant.spec.ts › Ask assistant at tablet-768 › thumb zone, no overflow, no edges
 [webkit-phone] › getpaid.spec.ts › axe AA contrast, dark, hold: phone 375x812
-[webkit-phone] › getpaid.spec.ts › axe AA contrast, light, hold: phone 375x812
-[webkit-phone] › getpaid.spec.ts › axe AA contrast, light, owner: phone 375x812
+[webkit-phone] › getpaid.spec.ts › kid-proof Get paid › Do you see Finance: after the answer and after Change my answer, the focus stays on the question
 [webkit-phone] › getpaid.spec.ts › no sideways scroll at 320 px on every Get paid screen (hold)
 [webkit-phone] › getpaid.spec.ts › no sideways scroll at 320 px on every Get paid screen (owner)
-[webkit-phone] › getpaid.spec.ts › no sideways scroll at 320 px on every Get paid screen (unread)
-[webkit-phone] › getpaid.spec.ts › no sideways scroll at 390 px on every Get paid screen (unread)
 [webkit-phone] › getpaid.spec.ts › no sideways scroll at 768 px on every Get paid screen (owner)
-[webkit-phone] › help-pictures.spec.ts › Ask pictures at 390x844 › Start over empties the tray and the chat
-[webkit-phone] › help-pictures.spec.ts › Ask pictures at 390x844 › a question that could not go gives its pictures and words back
+[webkit-phone] › getpaid.spec.ts › reduced motion: nothing on a Get paid page keeps moving
+[webkit-phone] › help-pictures.spec.ts › Ask pictures at 1440x900 › a note floats: the field and the tray do not move when it comes and goes
+[webkit-phone] › help-pictures.spec.ts › Ask pictures at 1440x900 › attach, paste and drop each add a picture; the drop layer comes and goes
+[webkit-phone] › help-pictures.spec.ts › Ask pictures at 1440x900 › reduced motion: pictures only fade
+[webkit-phone] › help-pictures.spec.ts › Ask pictures at 390x844 › Tab stays inside the picture view
 [webkit-phone] › help-pictures.spec.ts › Ask pictures at 390x844 › pictures off: no picture button, and a pasted picture gets a note
-[webkit-phone] › help-pictures.spec.ts › Ask pictures at 390x844 › the take-away button's focus glow is not cut off
+[webkit-phone] › help-pictures.spec.ts › Ask pictures at 390x844 › send with no words: small clean JPEGs reach the API, the bubble shows them, the follow-up carries seen
 [webkit-phone] › help-pictures.spec.ts › screenshots for the owner, phone
-[webkit] › ask-assistant.spec.ts › Ask as a full assistant › falls back to the plain answer when the assistant is off
+[webkit] › ask-assistant.spec.ts › Ask as a full assistant › files by drop: a picture thumbnail, PDF and DOCX tiles, a refused ZIP
+[webkit] › ask-assistant.spec.ts › Ask as a full assistant › paste: a picture, long text as a TXT file, short text as words
 [webkit] › ask-assistant.spec.ts › Ask assistant at desktop-1440 › screenshots in dark
-[webkit] › ask-assistant.spec.ts › Ask assistant at desktop-1920 › thumb zone, no overflow, no edges
+[webkit] › ask-assistant.spec.ts › Ask assistant at desktop-1440 › thumb zone, no overflow, no edges
 [webkit] › ask-assistant.spec.ts › Ask assistant at phone-375 › screenshots in light
+[webkit] › ask-assistant.spec.ts › Ask with less motion › nothing moves while an answer streams
+[webkit] › ask-markup.spec.ts › the markup editor at phone-390 › fits, and Save and Undo sit in the thumb zone on phones and tablets
+[webkit] › ask-markup.spec.ts › the markup editor at tablet-768 › fits, and Save and Undo sit in the thumb zone on phones and tablets
+[webkit] › ask-markup.spec.ts › the markup editor on a desktop › Escape with new marks asks first; Keep marking stays, Throw away leaves
 [webkit] › drop-video.spec.ts › a thumbnail dragged off a video page is taken as its link
 [webkit] › drop-video.spec.ts › a video dropped on the file box is picked like the file picker
-[webkit] › drop-video.spec.ts › drop highlight 1024x768 dark › screenshot drop highlight 1024x768 dark
-[webkit] › drop-video.spec.ts › drop highlight 390x844 light › screenshot drop highlight 390x844 light
+[webkit] › drop-video.spec.ts › dragging files over the card shows one soft highlight that goes on leave, without flicker
+[webkit] › drop-video.spec.ts › drop highlight 1440x900 dark › screenshot drop highlight 1440x900 dark
+[webkit] › drop-video.spec.ts › drop highlight 768x1024 light › screenshot drop highlight 768x1024 light
 [webkit] › getpaid.spec.ts › axe AA contrast, dark, owner: desktop 1440x900
 [webkit] › getpaid.spec.ts › desktop › YouTube: Clip Factory's taps are 15 (Partner Program, the reading step, five payout steps)
-[webkit] › getpaid.spec.ts › desktop › computer, first visit: the first step not done is brought into view, so the one vermilion is on screen
 [webkit] › getpaid.spec.ts › desktop › the list, the place pages and Money's card: no sideways scroll, no edges, big targets, arrow cursor, one vermilion at most
+[webkit] › getpaid.spec.ts › no sideways scroll at 1024 px on every Get paid screen (hold) desktop
+[webkit] › getpaid.spec.ts › no sideways scroll at 1024 px on every Get paid screen (owner) desktop
 [webkit] › getpaid.spec.ts › no sideways scroll at 1920 px on every Get paid screen (owner) desktop
-[webkit] › getpaid.spec.ts › no sideways scroll at 390 px on every Get paid screen (owner)
-[webkit] › getpaid.spec.ts › no sideways scroll at 390 px on every Get paid screen (unread)
+[webkit] › getpaid.spec.ts › no sideways scroll at 320 px on every Get paid screen (owner)
+[webkit] › getpaid.spec.ts › no sideways scroll at 768 px on every Get paid screen (owner)
+[webkit] › getpaid.spec.ts › phone › Facebook: 4 taps, then 2 after Instagram (one Meta tick); X: 5 taps, Premium never the vermilion
 [webkit] › getpaid.spec.ts › phone › phone: the next step's main button sits at the bottom right from page open, and Ask is never over it
-[webkit] › help-pictures.spec.ts › Ask pictures at 1440x900 › Tab stays inside the picture view
-[webkit] › help-pictures.spec.ts › Ask pictures at 1440x900 › a note floats: the field and the tray do not move when it comes and goes
-[webkit] › help-pictures.spec.ts › Ask pictures at 1440x900 › attach, paste and drop each add a picture; the drop layer comes and goes
+[webkit] › help-pictures.spec.ts › Ask pictures at 1440x900 › send with no words: small clean JPEGs reach the API, the bubble shows them, the follow-up carries seen
 [webkit] › help-pictures.spec.ts › Ask pictures at 390x844 › a note floats: the field and the tray do not move when it comes and goes
-[webkit] › help-pictures.spec.ts › Ask pictures at 390x844 › take away leaves 3 and moves the focus on
-[webkit] › help-pictures.spec.ts › Ask pictures at 390x844 › the take-away button's focus glow is not cut off
+[webkit] › help-pictures.spec.ts › Ask pictures at 390x844 › five pictures: four tiles and a note; a text file is not a picture
+[webkit] › home-fan.spec.ts
 [webkit] › job-head.spec.ts
-[webkit] › top-line.spec.ts › a Windows or Linux desktop window keeps its own frame: no band
-[webkit] › top-line.spec.ts › a browser at 1000 x 650: one top line
-[webkit] › top-line.spec.ts › the macOS desktop window at 1200 x 820: one top line below the traffic lights
+[webkit] › top-line.spec.ts › the macOS desktop window at 1000 x 650: one top line below the traffic lights
 [webkit] › top-line.spec.ts › the macOS desktop window: a control scrolled up just under the title bar still takes its click
