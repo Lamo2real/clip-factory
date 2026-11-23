@@ -43,10 +43,10 @@
 }
 .st-conn--needs_reconnect,
 .st-conn--same_as_clips {
-  background: linear-gradient(165deg, rgb(var(--st-coral-rgb) / var(--st-tint-cut)), rgb(var(--st-coral-rgb) / 0) 60%), rgb(var(--st-veil-rgb) / var(--st-veil-tinted));
+  background: var(--st-light-3), linear-gradient(165deg, rgb(var(--st-coral-rgb) / var(--st-tint-cut)), rgb(var(--st-coral-rgb) / 0) 60%), linear-gradient(180deg, rgb(var(--st-veil-rgb) / calc(var(--st-veil-tinted) / (1 - var(--st-elev-3) - var(--st-elev-grad-3)))), rgb(var(--st-veil-rgb) / calc(var(--st-veil-tinted) / (1 - var(--st-elev-3)))) var(--st-elev-settle));
 }
 .st-conn--choose_account {
-  background: linear-gradient(165deg, rgb(var(--st-amber-rgb) / var(--st-tint-cut)), rgb(var(--st-amber-rgb) / 0) 60%), rgb(var(--st-veil-rgb) / var(--st-veil-tinted));
+  background: var(--st-light-3), linear-gradient(165deg, rgb(var(--st-amber-rgb) / var(--st-tint-cut)), rgb(var(--st-amber-rgb) / 0) 60%), linear-gradient(180deg, rgb(var(--st-veil-rgb) / calc(var(--st-veil-tinted) / (1 - var(--st-elev-3) - var(--st-elev-grad-3)))), rgb(var(--st-veil-rgb) / calc(var(--st-veil-tinted) / (1 - var(--st-elev-3)))) var(--st-elev-settle));
 }
 .st-conn__head {
   display: flex;
@@ -137,15 +137,15 @@
 }
 .st-note--coral {
   color: var(--st-coral-ink);
-  background: linear-gradient(rgb(var(--st-coral-rgb) / var(--st-tint-cut)), rgb(var(--st-coral-rgb) / var(--st-tint-cut))), rgb(var(--st-veil-rgb) / var(--st-veil-tinted));
+  background: var(--st-light-3), linear-gradient(rgb(var(--st-coral-rgb) / var(--st-tint-cut)), rgb(var(--st-coral-rgb) / var(--st-tint-cut))), linear-gradient(180deg, rgb(var(--st-veil-rgb) / calc(var(--st-veil-tinted) / (1 - var(--st-elev-3) - var(--st-elev-grad-3)))), rgb(var(--st-veil-rgb) / calc(var(--st-veil-tinted) / (1 - var(--st-elev-3)))) var(--st-elev-settle));
 }
 .st-note--sun {
   color: var(--st-text-amber);
-  background: linear-gradient(rgb(var(--st-amber-rgb) / var(--st-tint-cut)), rgb(var(--st-amber-rgb) / var(--st-tint-cut))), rgb(var(--st-veil-rgb) / var(--st-veil-tinted));
+  background: var(--st-light-3), linear-gradient(rgb(var(--st-amber-rgb) / var(--st-tint-cut)), rgb(var(--st-amber-rgb) / var(--st-tint-cut))), linear-gradient(180deg, rgb(var(--st-veil-rgb) / calc(var(--st-veil-tinted) / (1 - var(--st-elev-3) - var(--st-elev-grad-3)))), rgb(var(--st-veil-rgb) / calc(var(--st-veil-tinted) / (1 - var(--st-elev-3)))) var(--st-elev-settle));
 }
 .st-note--sky {
   color: var(--st-sky-ink);
-  background: linear-gradient(rgb(var(--st-sky-rgb) / var(--st-tint-cut)), rgb(var(--st-sky-rgb) / var(--st-tint-cut))), rgb(var(--st-veil-rgb) / var(--st-veil-tinted));
+  background: var(--st-light-3), linear-gradient(rgb(var(--st-sky-rgb) / var(--st-tint-cut)), rgb(var(--st-sky-rgb) / var(--st-tint-cut))), linear-gradient(180deg, rgb(var(--st-veil-rgb) / calc(var(--st-veil-tinted) / (1 - var(--st-elev-3) - var(--st-elev-grad-3)))), rgb(var(--st-veil-rgb) / calc(var(--st-veil-tinted) / (1 - var(--st-elev-3)))) var(--st-elev-settle));
 }
 .st-note--wide {
   align-items: center;
@@ -369,7 +369,7 @@
   gap: var(--st-space-3);
   padding: var(--st-space-3) var(--st-space-4);
   border-radius: var(--st-r-control);
-  background: linear-gradient(rgb(var(--st-amber-rgb) / var(--st-tint-cut)), rgb(var(--st-amber-rgb) / var(--st-tint-cut))), rgb(var(--st-veil-rgb) / var(--st-veil-tinted));
+  background: var(--st-light-3), linear-gradient(rgb(var(--st-amber-rgb) / var(--st-tint-cut)), rgb(var(--st-amber-rgb) / var(--st-tint-cut))), linear-gradient(180deg, rgb(var(--st-veil-rgb) / calc(var(--st-veil-tinted) / (1 - var(--st-elev-3) - var(--st-elev-grad-3)))), rgb(var(--st-veil-rgb) / calc(var(--st-veil-tinted) / (1 - var(--st-elev-3)))) var(--st-elev-settle));
   box-shadow: var(--st-sheen-control);
   animation: st-rise 220ms var(--st-ease-out) both;
 }

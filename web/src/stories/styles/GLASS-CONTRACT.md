@@ -51,8 +51,10 @@ Eight screen builders start on these names now while the foundation keeps refini
    (controls may). Kid-proof: never `disabled` (use `aria-disabled` and the deny sound).
 9. **Hands off.** The workspace switch with the Live chip (the shell's `web/src/app/WorkspaceDock.tsx`, drawn
    outside `.stories-app`): leave its box free through `--ws-dock-room`, exactly as today. Nothing in
-   `web/src/app/**`, `web/src/components/Nav.tsx` or `web/src/styles/glide.css` is restyled. The Stories logo
-   markup and visible name live on `feat/stories-rename-logo`; this contract only defines its four tokens. No new
+   `web/src/app/**`, `web/src/components/Nav.tsx` or `web/src/styles/glide.css` is restyled. The logo is a shell
+   element now (the rename branch: `components/WorkspaceMark.tsx`, `styles/ws-mark.css`, in Clip Factory's main
+   bundle, where no `--st-` name may appear); this contract only sets its four shell tokens (`--ws-mark-*`,
+   `--ws-wordmark`) on `.stories-app`. No new
    import from `web/src/lib`, `web/src/screens` or `web/src/components` into `web/src/stories` (copy a small
    helper into Stories instead; `web/src/app/shell.ts` is fine). Do not change user-visible words.
 
@@ -161,7 +163,7 @@ glass classes; if a screen needs a look-specific rule, select `.stories-app[data
 | `--st-veil-hero` | 0.60 | 0.76 (5.14:1), glare only in a top band with no words |
 | `--st-veil-rail` | 0.62 | 0.78 (6.47:1) |
 | `--st-veil-bar` | 0.72 | 0.78 |
-| `--st-veil-float` | 0.76 | 0.80 |
+| `--st-veil-float` | 0.68 | 0.74 (with its level-5 light it covers 0.88 over the colours, 0.94 over a picture or the desktop: never thinner than the rail) |
 | `--st-veil-plate` | 0 | 0.78 |
 | `--st-veil-solid` | 0.96 | reduced transparency (look.ts puts it inline on every glass, page 0.9 over a desktop or picture) |
 | `--st-veil-lens-rim` | 0.4 | a liquid hero's own tint: its filter lays the rest of `--st-veil-hero` under the words, so only the rim band (inside the padding, no words) is this thin |
@@ -169,8 +171,9 @@ glass classes; if a screen needs a look-specific rule, select `.stories-app[data
 ### 5. The glass recipe
 | token | meaning |
 |---|---|
-| `--st-tint-card`, `--st-tint-hero`, `--st-tint-rail`, `--st-tint-bar`, `--st-tint-float`, `--st-tint-plate`, `--st-tint-tinted`, `--st-tint-cream` | the fills of each kind of surface |
-| `--st-tint-lens` | a liquid hero's fill (the rim's veil; glass.css only) |
+| `--st-tint-card`, `--st-tint-hero`, `--st-tint-rail`, `--st-tint-bar`, `--st-tint-float`, `--st-tint-plate`, `--st-tint-tinted`, `--st-tint-raised`, `--st-tint-cream` | the fills of each kind of surface: each is its level's light (`--st-light-N`) over its veil (`--st-shade-*`), lighter at the top (5a below) |
+| `--st-tint-lens` | a liquid hero's fill (its light over the rim's veil; glass.css only) |
+| `--st-shade-card`, `-tinted`, `-hero`, `-raised`, `-rail`, `-plate`, `-bar`, `-float`, `-lens` | each surface's veil, giving its level's light the share it takes: `v / (1 - light)`, top and bottom |
 | `--st-fill-control`, `--st-fill-control-hover` | a glass control or inactive pill (a card's veil loose in Picture/See-through; on the colours the hover deepens loose on the page and is the cream lift `--st-fill-control-lift` inside a `.st-glass`) |
 | `--st-fill-figure`, `--st-fill-figure-hover` | set only inside a `.st-glass` or `.st-plate` over a picture or the desktop: a GlassPill or RoundGlassButton there is the light cream glass (0.08, hover 0.12), never a second veil; unset on the cream card |
 | `--st-fill-well`, `--st-fill-well-hover` | fields, tracks, the toggle's off track |
@@ -178,12 +181,59 @@ glass classes; if a screen needs a look-specific rule, select `.stories-app[data
 | `--st-blur` 28px, `--st-blur-float` 36px, `--st-saturate` 1.35 | heavy blur |
 | `--st-filter-glass` (none over Ember, blur in Picture/See-through), `--st-filter-bar`, `--st-filter-float` | the backdrop filters |
 | `--st-edge-width` 1.25px, `--st-edge`, `--st-edge-hero`, `--st-edge-cream` | the thin light edge (a masked gradient ring, never a border) |
-| `--st-sheen`, `--st-sheen-hero`, `--st-sheen-control`, `--st-sheen-cream` | the soft inner top highlight |
+| `--st-sheen-soft` | the soft inner top highlight alone |
+| `--st-sheen-panel` (1), `--st-sheen` (2), `--st-sheen-hero`, `--st-sheen-raised` (3), `--st-sheen-control` (4), `--st-sheen-float` (5), `--st-sheen-cream` | each level's bright top rim (`--st-rim-N`) in front of the soft inner top highlight |
 | `--st-rim-light` | a hero's thick edge catching light, painted (all a WebKit hero has; under a liquid rim it softens it) |
-| `--st-glow-behind`, `--st-glow-action`, `--st-glow-action-hover`, `--st-glow-accent` | the gentle warm outer glow |
+| `--st-glow-1` … `--st-glow-5`, `--st-glow-behind` (= a card's, `--st-glow-2`), `--st-glow-action`, `--st-glow-action-hover`, `--st-glow-accent` | the gentle warm outer glow, by level |
 | `--st-depth-1`, `--st-depth-2`, `--st-depth-3` | soft dark depth |
 | `--st-focus-ring` | the focus ring (a box-shadow: cream then orange; on the cream card `--st-on-cream-orange` then orange) |
 | old: `--st-panel`, `--st-panel-strong`, `--st-panel-hover`, `--st-s-fill`, `--st-s-fill-2`, `--st-s-fill-3`, `--st-shadow`, `--st-shadow-soft`, `--st-s-soft`, `--st-s-lift`, `--st-glow-sun`, `--st-glow-sun-hover` | |
+
+### 5a. Elevation: the logic of light
+The owner, 22 Nov: "the top layer is always brighter than the bottom, growing gradually in between", and more liquid
+glass. One scale, defined once in glass-tokens.css (5a) and held to look.ts (`ELEVATION`, `ELEVATION_TOP`,
+`KIND_LEVEL`) by test/storiesLight.test.ts.
+
+| level | what sits there | fill (light / top extra) | rim | glow | classes and tokens |
+|---|---|---|---|---|---|
+| 0 | the backdrop: the stage, the page veil; a plate over the colours (it is the page) | 0 | — | — | `.stories-app::before` |
+| 1 | page panels: the rail; a plate over a picture or the desktop (the page heads, the phone top bar, the studio's title and tab bar) | 0.025 / +0.03 | 0.14 | 0.26 | `--st-tint-rail`, `--st-tint-plate`, `--st-sheen-panel`, `--st-glow-1` |
+| 2 | cards: `.st-glass`, an empty state | 0.045 / +0.04 | 0.20 | 0.42 | `--st-tint-card`, `--st-sheen`, `--st-glow-2` |
+| 3 | raised: the hero (and a liquid hero), a tinted tile (needs you, done, a note: its colour asks for the owner), a card inside a card, the bars (`.st-glass--bar`: the phone tab bar, the composer) | 0.07 / +0.05 | 0.28 | 0.50 | `--st-tint-hero`, `--st-tint-lens`, `--st-tint-tinted`, `--st-tint-raised`, `--st-tint-bar`, `--st-sheen-hero`, `--st-sheen-raised`, `--st-glow-3` |
+| 4 | controls: `.st-btn`, `.st-pill`, `.st-round-btn`, `.st-glass--control`, rows and tiles | its fill is its light, over the surface it sits on (`--st-fill-control`, the cream lift inside glass); top extra +0.015 (`--st-light-4`) | 0.32 | 0.52 | `--st-light-4`, `--st-sheen-control`, `--st-glow-4` |
+| 5 | menus, popovers, sheets, toasts: `.st-glass--float` (the More sheet, the studio's and the chat's sheets, Undo) | 0.20 / +0.03 | 0.40 | 0.58 | `--st-tint-float`, `--st-sheen-float`, `--st-glow-5` |
+
+- Solids (the cream card, the active pill, the steppers, the action, the status fills) are light itself, outside the
+  scale. Wells (fields, tracks, the toggle's off track) are carved in: a step down from the surface they are in.
+- Numbers: `--st-elev-0` … `--st-elev-5` (the light), `--st-elev-grad-0` … `-5` (the extra at the top, settled into
+  the fill by `--st-elev-settle` 58%), `--st-elev-rim-0` … `-5`, `--st-elev-glow-0` … `-5`; built into `--st-light-N`
+  (a background layer), `--st-shade-*` (each veil), `--st-rim-N` (`inset 0 2px 0 0`, a thin inner line just inside
+  the light edge) and `--st-glow-N`. Over a picture or the desktop a control loose on the page carries a card's veil
+  with `--st-elev-4-loose` (0.05) of light; inside glass it is the cream lift.
+- **The light takes its share from the backdrop, never from the veil.** A surface of veil v and light e lays v of the
+  smoky tint, e of cream, and lets 1 − v − e of what is behind through (its veil layer is v / (1 − e) under the light;
+  clamped at 1, so solid glass still steps up). Over a white desktop or photo (where cream and white are alike) every
+  surface keeps exactly its measured veil's contrast; over anything darker the light shows. Over the colours look.ts
+  works the veils out with the light in (`lit`, `minVeilLit`). A liquid hero's rim tint is
+  1 − (1 − v − e)(1 − rim) / ((1 − e)(1 − v)), so under its words it keeps exactly the hero's share.
+- **Where it holds.** Over the espresso (the stage's own colour and the glass tint) and over black, each level is
+  brighter than the one under it, at its top and at its bottom, in every look: the colours (Ember, Rose, Lagoon, the
+  owner's own), a picture, See-through Clear and Frosted, and solid glass. A control is brighter than the surface it
+  sits on; a control on a card is brighter than every raised surface but a tinted tile (whose tone is colour too), and
+  a sheet brighter than it. Over a bright glow, a white or a busy picture or desktop, smoky glass is darker than what is
+  behind it (that is what keeps its words readable): there each surface stays at its measured veil, and every word
+  keeps 4.5:1 at its brightest part (its top), checked over every look's lightest pixels and, for bars and sheets, over
+  a cream card or the action under them.
+- **For builders.** A new surface uses its level's tint (`background: var(--st-tint-card)` …) and sheen; a surface
+  that writes its fill out lays `var(--st-light-N)` in front and divides its veil by `(1 - var(--st-elev-N))` (the
+  test reads every screen file for it). Gradients and inset shadows only, never another blur layer (the WebView2
+  budget); nothing animates `filter` or `backdrop-filter`.
+- Known exceptions, kept on purpose: over a picture or the desktop, Settings' rows inside a card
+  (`.st-stg-active`, `.st-stg-assign__row`, …) keep a card's veil, a step deeper (pinned by
+  test/storiesSettingsStyles.test.tsx and test/storiesSocialGlass.test.ts for their words over a white desktop); a
+  tinted tile is brighter than a plain card by its colour as well as its light.
+- Proofs: test/storiesLight.test.ts (from the style sheets alone, no browser), e2e/stories-light.spec.ts (the pages:
+  one surface per level as the browser computed it, in every look).
 
 ### 6. Liquid
 `--st-lens-url` (none; glass/lens.ts sets it on each liquid hero), `--st-lens-band` 26px (how wide the bending rim is;
@@ -235,9 +285,13 @@ motion); `--st-ease-out`, `--st-ease-glide`, `--st-ease-progress` (slow start, f
 ### 12. Layers
 `--st-z-stage` -1, `--st-z-nav` 40 (the shell's dock is 41), `--st-z-float` 60, `--st-z-burst` 70.
 
-### 13. The logo (defined here only; the rename branch draws the markup)
-`--st-mark-tile` (cream tile gradient), `--st-mark-letter` (espresso "C", 14.6:1), `--st-mark-dot` (#ff8a3d),
-`--st-wordmark` (#fff6ea). Also the shell's `--focus` and `--mark-cut` in Stories' colours.
+### 13. The logo (the shell draws it; Stories only sets its colours here, on `.stories-app`)
+The mark is a shell element (the rename branch: `web/src/components/WorkspaceMark.tsx` and `web/src/styles/ws-mark.css`,
+in Clip Factory's main bundle, where ci.yml forbids any `--st-` or `.st-`), coloured by the shell's four names with
+today's colours as fallbacks: `--ws-mark-tile` (cream tile gradient), `--ws-mark-letter` (espresso "C", 14.6:1),
+`--ws-mark-dot` (#ff8a3d), `--ws-wordmark` (#fff6ea; the rail's and the phone top bar's `.st-brand` words use it
+too). The old `--st-mark-tile`, `--st-mark-letter`, `--st-mark-dot`, `--st-wordmark` are gone. Also the shell's
+`--focus` and `--mark-cut` in Stories' colours.
 
 ## Classes
 
@@ -248,7 +302,9 @@ glass.css:
 - `.st-glass--hero`: brighter edge and sheen, its own veil; add `.st-lens` for a rim that may bend.
 - `.st-glass--bar`: a bar something scrolls under (top bar, phone tab bar): heavy blur in every look.
 - `.st-glass--float`: sheets, menus, toasts: the float veil and the heaviest blur.
-- `.st-glass--tinted`: a colour-tinted tile; set `--st-tone-rgb` (for example `var(--st-mint-rgb)`).
+- `.st-glass--tinted`: a colour-tinted tile (level 3: its colour asks for the owner); set `--st-tone-rgb` (for
+  example `var(--st-mint-rgb)`).
+- `.st-glass .st-glass` (a plain card inside a card): one level up (`--st-tint-raised`, `--st-sheen-raised`).
 - `.st-glass--control`: a glass control or inactive pill (radius control, control fill, hover deepens).
 - `.st-cream`: the solid cream surface with espresso words (the one highlighted card).
 - `.st-plate`: the backing plate for loose words (rule 6).
@@ -316,6 +372,10 @@ over a desktop or a picture). glass-tokens.css's `@media` only covers the first 
 setting live.
 
 ## Measured (22 Nov, the foundation's figures and glass classes in the mock app, e2e/stories-glass.spec.ts)
+
+23 Nov, with the logic of light (5a): the same spec still finds every word at 4.5:1 or more over all seven
+backgrounds at 375 and 1440 px (the light takes its share from the backdrop, so over white nothing gets lighter);
+test/storiesLight.test.ts works every surface out at its top and bottom over every look's lightest pixels.
 
 Every word against the lightest and the darkest pixel behind its own glyphs, at 375 and 1440 px, Chromium (liquid):
 

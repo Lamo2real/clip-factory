@@ -15,7 +15,9 @@
   border-radius: var(--st-r-round);
   /* --st-fill-figure: the light cream glass inside a glass surface over a picture or the desktop (glass-tokens.css) */
   background: var(--st-fill-figure, var(--st-fill-control));
-  box-shadow: var(--st-sheen-control);
+  /* level 4: its light over the surface it sits on, lighter at the top, a bright top rim (glass-tokens.css 5a) */
+  background-image: var(--st-light-4);
+  box-shadow: var(--st-sheen-control), var(--st-glow-4);
   color: var(--st-text);
   font-family: var(--st-font);
   font-size: var(--st-fs-chip);
@@ -34,6 +36,7 @@
 button.st-pill:hover,
 a.st-pill:hover {
   background: var(--st-fill-figure-hover, var(--st-fill-control-hover));
+  background-image: var(--st-light-4);
 }
 .st-pill.is-on {
   background: var(--st-cream);
@@ -58,7 +61,8 @@ a.st-pill.is-on:hover {
   height: var(--st-tap);
   border-radius: var(--st-r-round);
   background: var(--st-fill-figure, var(--st-fill-control));
-  box-shadow: var(--st-sheen-control), var(--st-depth-1);
+  background-image: var(--st-light-4); /* level 4 (glass-tokens.css 5a) */
+  box-shadow: var(--st-sheen-control), var(--st-depth-1), var(--st-glow-4);
   color: var(--st-text);
   transition:
     background-color var(--st-dur-hover) var(--st-ease-out),
@@ -70,6 +74,7 @@ a.st-pill.is-on:hover {
 }
 .st-round-btn:hover {
   background: var(--st-fill-figure-hover, var(--st-fill-control-hover));
+  background-image: var(--st-light-4);
 }
 .st-round-btn--cream,
 .st-round-btn.is-on {

@@ -120,7 +120,7 @@
   gap: 10px;
   min-height: 48px;
   min-width: 0;
-  color: var(--st-wordmark);
+  color: var(--ws-wordmark);
   text-decoration: none;
   border-radius: var(--st-r-control);
   transition: background-color var(--st-dur-hover) var(--st-ease-out);
@@ -195,7 +195,7 @@
   margin-inline: auto;
   padding: var(--st-gap-surface);
   border-radius: var(--st-r-surface);
-  box-shadow: var(--st-sheen), var(--st-depth-3), var(--st-glow-behind);
+  box-shadow: var(--st-sheen-raised), var(--st-depth-3), var(--st-glow-3); /* level 3, as .st-glass--bar */
 }
 @media (max-width: 359px) {
   .st-tabbar {
@@ -376,8 +376,8 @@
        (§45.36 E16), so going to Clip Factory is one click at every height. */
     overflow: hidden;
     border-radius: var(--st-r-surface);
-    background: var(--st-tint-rail);
-    box-shadow: var(--st-sheen), var(--st-depth-2), var(--st-glow-behind);
+    background: var(--st-tint-rail); /* level 1: a page panel (glass-tokens.css 5a) */
+    box-shadow: var(--st-sheen-panel), var(--st-depth-2), var(--st-glow-1);
   }
   .st-rail .st-brand {
     flex: none;

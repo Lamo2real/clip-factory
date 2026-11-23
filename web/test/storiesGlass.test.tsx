@@ -3,7 +3,7 @@
 // (cf.stories.prefs, never Clip Factory's cf.prefs), Colours › Ember by default; every look's veils keep every word
 // at 4.5:1 over the lightest pixel it can show, the measured ones over a white desktop or photo; the radius scale
 // is one scale, concentric, about 30 % less round.
-import { readFileSync } from "node:fs";
+import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { act, useRef } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -327,8 +327,11 @@ describe("the tokens", () => {
     expect(css).toMatch(/--st-weight-num: 300/);
   });
 
-  it("define the four logo tokens and the warm palette", () => {
-    for (const name of ["--st-mark-tile", "--st-mark-letter", "--st-mark-dot", "--st-wordmark", "--st-accent", "--st-cream", "--st-on-cream-orange", "--st-base"]) expect(css, name).toMatch(new RegExp(`${name}:`));
+  it("define the shell's four logo tokens (the mark is a shell element: --ws-mark-*, --ws-wordmark) and the warm palette", () => {
+    for (const name of ["--ws-mark-tile", "--ws-mark-letter", "--ws-mark-dot", "--ws-wordmark", "--st-accent", "--st-cream", "--st-on-cream-orange", "--st-base"]) expect(css, name).toMatch(new RegExp(`${name}:`));
+    // the old Stories-only names are gone everywhere in Stories (the shell's main bundle may not carry an --st- name)
+    const dir = join(import.meta.dirname, "..", "src", "stories", "styles");
+    for (const f of readdirSync(dir).filter((n) => n.endsWith(".css"))) expect(readFileSync(join(dir, f), "utf8"), f).not.toMatch(/--st-(mark-tile|mark-letter|mark-dot|wordmark)\b/);
   });
 
   it("are the only place --st-* design tokens are defined (screens keep one-offs under their own prefix)", () => {

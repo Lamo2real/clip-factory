@@ -23,7 +23,7 @@
   gap: var(--st-space-3);
   padding: var(--st-space-3) var(--st-space-4);
   border-radius: var(--st-r-control);
-  background: linear-gradient(rgb(var(--st-mint-rgb) / var(--st-tint-cut)), rgb(var(--st-mint-rgb) / var(--st-tint-cut))), rgb(var(--st-veil-rgb) / var(--st-veil-tinted));
+  background: var(--st-light-3), linear-gradient(rgb(var(--st-mint-rgb) / var(--st-tint-cut)), rgb(var(--st-mint-rgb) / var(--st-tint-cut))), linear-gradient(180deg, rgb(var(--st-veil-rgb) / calc(var(--st-veil-tinted) / (1 - var(--st-elev-3) - var(--st-elev-grad-3)))), rgb(var(--st-veil-rgb) / calc(var(--st-veil-tinted) / (1 - var(--st-elev-3)))) var(--st-elev-settle));
   box-shadow: var(--st-sheen-control);
   animation: st-rise 220ms var(--st-ease-out) both;
 }

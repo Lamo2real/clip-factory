@@ -126,6 +126,35 @@ export function minVeil(under: Rgb, inks: readonly Rgb[] = INK_RGB, target = AA)
   return 1;
 }
 
+// ---------- The logic of light (glass-tokens.css 5a; test/storiesLight.test.ts holds the two together) ----------
+
+/** The cream light each level adds: 0 the backdrop, 1 page panels, 2 cards, 3 raised cards and bars, 4 controls (over
+ *  the surface they sit on), 5 menus, popovers, sheets and toasts. */
+export const ELEVATION: readonly number[] = [0, 0.025, 0.045, 0.07, 0.12, 0.2];
+/** The extra light at the very top of each level (it settles into the fill by --st-elev-settle). */
+export const ELEVATION_TOP: readonly number[] = [0, 0.03, 0.04, 0.05, 0.015, 0.03];
+/** The cream of the light (--st-cream-rgb). */
+export const CREAM: Rgb = [255, 243, 228];
+/** The level each kind of glass sits on. */
+export const KIND_LEVEL: Readonly<Record<keyof Veils, number>> = { page: 0, rail: 1, plate: 1, card: 2, tinted: 3, hero: 3, bar: 3, float: 5 };
+/**
+ * A surface of veil `veil` and light `light` over `under`, as glass.css draws it: the light takes its share from what
+ * is behind, never from the veil (its veil layer is veil / (1 - light) under the light, clamped at 1), so over white
+ * it keeps the veil's own contrast and over anything darker the light shows.
+ */
+export function lit(under: Rgb, veil: number, light: number): Rgb {
+  const v = Math.min(1, veil / (1 - light));
+  return mix(CREAM, mix(VEIL, under, v), light);
+}
+/** The least veil at which every word keeps `target` on a surface with this light over `under`, at its top. */
+export function minVeilLit(under: Rgb, light: number, inks: readonly Rgb[] = INK_RGB, target = AA): number {
+  for (let v = 0; v <= 1.0001; v += 0.01) {
+    const bg = lit(under, v, light);
+    if (inks.every((t) => contrast(t, bg) >= target)) return Math.round(v * 100) / 100;
+  }
+  return 1;
+}
+
 /** How strong the stage's two main lights are (glass-tokens.css --st-stage-a2 copper, --st-stage-a3 amber). */
 export const GLOW_ALPHA = { second: 0.46, third: 0.3 } as const;
 /** What a bar's backdrop-filter can do to the colours under it (none, and the bar's saturate). */
@@ -258,12 +287,16 @@ export interface Veils {
   plate: number;
 }
 
-/** Measured over a white desktop or photo (revise-notes, 22 Nov): the floor of See-through in the app and Picture. */
-export const MEASURED: Veils = { page: 0, card: 0.74, tinted: 0.8, hero: 0.76, rail: 0.78, bar: 0.78, float: 0.8, plate: 0.78 };
+/** Measured over a white desktop or photo (revise-notes, 22 Nov): the floor of See-through in the app and Picture. A
+ *  sheet's (float) is the card's: its level-5 light (ELEVATION[5]) covers the rest, 0.94 in all, never thinner than the
+ *  rail, and over white the light keeps the veil's own contrast (lit). */
+export const MEASURED: Veils = { page: 0, card: 0.74, tinted: 0.8, hero: 0.76, rail: 0.78, bar: 0.78, float: 0.74, plate: 0.78 };
 /** Frosted in the app: a 0.30 frost over the desktop and the panels at 0.89. */
 export const FROSTED: Veils = { page: 0.3, card: 0.89, tinted: 0.89, hero: 0.89, rail: 0.89, bar: 0.89, float: 0.89, plate: 0.89 };
-/** The least each glass gets over the colours, whatever they are (the look of glass, not only the maths). */
-export const COLOUR_FLOORS: Veils = { page: 0, card: 0.58, tinted: 0.66, hero: 0.6, rail: 0.62, bar: 0.72, float: 0.76, plate: 0 };
+/** The least each glass gets over the colours, whatever they are (the look of glass, not only the maths). A sheet's
+ *  (float) is lower than a bar's because its light is the most (ELEVATION[5]): with its light it covers 0.88 of what
+ *  is behind (a bar 0.79), and over a cream card or the action under it its words keep 5:1. */
+export const COLOUR_FLOORS: Veils = { page: 0, card: 0.58, tinted: 0.66, hero: 0.6, rail: 0.62, bar: 0.72, float: 0.68, plate: 0 };
 /** Frosted outside the app: the colours under a 0.30 frost. */
 export const FROST_PAGE = 0.3;
 /** Solid glass (reduced transparency, or the device's choice): every glass at --st-veil-solid; a desktop or a picture
@@ -301,9 +334,13 @@ export function veilsFor(look: StoriesLook, glass: string = nativeGlass(), tier:
   const page = Math.max(loose, look.mode === "see-through" && look.strength === "frosted" ? FROST_PAGE : 0);
   // Under the glass: the page veil, then each glass over the lightest spot a bar's saturate can make of it.
   const under = lightest(spots.flatMap((s) => SATURATIONS.map((k) => saturateRgb(mix(VEIL, s, page), k))));
-  const need = minVeil(under);
+  // Each glass with its own level's light at its top (the brightest part of it), the light taking its share from
+  // what is behind (lit).
   const out = { ...COLOUR_FLOORS, page };
-  for (const k of ["card", "tinted", "hero", "rail", "bar", "float"] as const) out[k] = Math.max(COLOUR_FLOORS[k], need);
+  for (const k of ["card", "tinted", "hero", "rail", "bar", "float"] as const) {
+    const lv = KIND_LEVEL[k];
+    out[k] = Math.max(COLOUR_FLOORS[k], minVeilLit(under, ELEVATION[lv]! + ELEVATION_TOP[lv]!));
+  }
   return out;
 }
 

@@ -66,46 +66,62 @@
 :where(.st-glass, .st-cream, .st-plate, .st-edge) {
   position: relative;
 }
+/* Each kind sits on its level of light (glass-tokens.css 5a): its level's light over its veil, lighter at the top, a
+   bright top rim (in its sheen), a glow; a higher level is never darker than a lower one over the same backdrop. */
 .st-glass {
   border-radius: var(--st-r-surface);
-  background: var(--st-tint-card);
+  background: var(--st-tint-card); /* level 2 */
   color: var(--st-text);
   -webkit-backdrop-filter: var(--st-filter-glass);
   backdrop-filter: var(--st-filter-glass);
-  box-shadow: var(--st-sheen), var(--st-depth-1), var(--st-glow-behind);
+  box-shadow: var(--st-sheen), var(--st-depth-1), var(--st-glow-2);
 }
 .st-glass--hero {
-  background: var(--st-tint-hero);
-  box-shadow: var(--st-sheen-hero), var(--st-rim-light), var(--st-depth-2), var(--st-glow-behind);
+  background: var(--st-tint-hero); /* level 3 */
+  box-shadow: var(--st-sheen-hero), var(--st-rim-light), var(--st-depth-2), var(--st-glow-3);
 }
 .st-glass--bar {
-  background: var(--st-tint-bar);
+  background: var(--st-tint-bar); /* level 3: things scroll under it */
   -webkit-backdrop-filter: var(--st-filter-bar);
   backdrop-filter: var(--st-filter-bar);
+  box-shadow: var(--st-sheen-raised), var(--st-depth-1), var(--st-glow-3);
 }
 .st-glass--float {
-  background: var(--st-tint-float);
+  background: var(--st-tint-float); /* level 5: the top */
   -webkit-backdrop-filter: var(--st-filter-float);
   backdrop-filter: var(--st-filter-float);
-  box-shadow: var(--st-sheen), var(--st-depth-3);
+  box-shadow: var(--st-sheen-float), var(--st-depth-3), var(--st-glow-5);
+}
+/* A card inside a card (or inside the hero) is one level up from it. */
+.st-glass .st-glass:not(.st-glass--hero, .st-glass--bar, .st-glass--float, .st-glass--control, .st-glass--tinted) {
+  background: var(--st-tint-raised);
+  box-shadow: var(--st-sheen-raised), var(--st-depth-1), var(--st-glow-3);
 }
 /* Written out rather than var(--st-tint-tinted): that token is worked out on .stories-app, where no tone is set, so it
    would always be the orange. Here the tile's own --st-tone-rgb (Glass tone, or a screen's rule) is the colour. */
 .st-glass--tinted {
+  /* level 3 (it asks for the owner: needs you, done, a note): its light, the tone cut, the veil giving the light its
+     share */
   background:
+    var(--st-light-3),
     linear-gradient(rgb(var(--st-tone-rgb, var(--st-action-rgb)) / var(--st-tint-cut)), rgb(var(--st-tone-rgb, var(--st-action-rgb)) / var(--st-tint-cut))),
-    rgb(var(--st-veil-rgb) / var(--st-veil-tinted));
+    linear-gradient(180deg, rgb(var(--st-veil-rgb) / calc(var(--st-veil-tinted) / (1 - var(--st-elev-3) - var(--st-elev-grad-3)))), rgb(var(--st-veil-rgb) / calc(var(--st-veil-tinted) / (1 - var(--st-elev-3)))) var(--st-elev-settle));
+}
+.st-glass--tinted:where(:not(.st-glass--hero)) {
+  box-shadow: var(--st-sheen-raised), var(--st-depth-1), var(--st-glow-3);
 }
 .st-glass--control {
   border-radius: var(--st-r-control);
-  background: var(--st-fill-control);
-  box-shadow: var(--st-sheen-control);
+  background: var(--st-fill-control); /* level 4: its light over the surface it sits on */
+  background-image: var(--st-light-4);
+  box-shadow: var(--st-sheen-control), var(--st-glow-4);
   transition:
     background-color var(--st-dur-hover) var(--st-ease-out),
     box-shadow var(--st-dur-hover) var(--st-ease-out);
 }
 .st-glass--control:hover {
   background: var(--st-fill-control-hover);
+  background-image: var(--st-light-4);
 }
 
 /* The solid cream: the one highlighted card among the glass, the active pill, the steppers. Espresso words. */
@@ -154,10 +170,10 @@
 }
 .stories-app:is([data-look="window"], [data-look="picture"]) .st-plate {
   padding: var(--st-space-3) var(--st-space-4);
-  background: var(--st-tint-plate);
+  background: var(--st-tint-plate); /* level 1: a page panel (over the colours a plate is the page itself: level 0) */
   -webkit-backdrop-filter: var(--st-filter-bar);
   backdrop-filter: var(--st-filter-bar);
-  box-shadow: var(--st-sheen), var(--st-depth-1);
+  box-shadow: var(--st-sheen-panel), var(--st-depth-1), var(--st-glow-1);
 }
 .stories-app:is([data-look="window"], [data-look="picture"]) .st-plate::after {
   opacity: 1;

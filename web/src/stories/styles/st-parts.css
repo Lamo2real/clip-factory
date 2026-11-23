@@ -72,7 +72,9 @@
   font: var(--st-weight-ui) 1rem/1.1 var(--st-font);
   color: var(--st-text);
   background-color: var(--st-fill-control);
-  box-shadow: var(--st-sheen-control);
+  /* level 4 (glass-tokens.css 5a): its light over the surface it sits on, lighter at the top, a bright top rim */
+  background-image: var(--st-light-4);
+  box-shadow: var(--st-sheen-control), var(--st-glow-4);
   text-decoration: none;
   text-align: center;
   transition:
@@ -105,16 +107,19 @@
 }
 .st-btn--quiet {
   background-color: transparent;
+  background-image: none;
   box-shadow: none;
   color: var(--st-text-soft);
 }
 .st-btn--quiet:hover {
   color: var(--st-text);
   background-color: var(--st-fill-control);
+  background-image: var(--st-light-4);
 }
 /* Over a picture or the desktop a quiet button can sit straight on anything: it carries a card's veil there. */
 .stories-app:is([data-look="window"], [data-look="picture"]) .st-btn--quiet {
   background-color: var(--st-fill-control);
+  background-image: var(--st-light-4);
   color: var(--st-text);
 }
 .stories-app:is([data-look="window"], [data-look="picture"]) .st-btn--quiet:hover {
