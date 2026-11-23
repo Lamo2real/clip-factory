@@ -380,6 +380,24 @@ function contrastKit() {
     return [0, 0.25, 0.5, 0.75, 1].map((q) => seen[Math.round(q * (seen.length - 1))]!);
   }
 
+  /**
+   * Clip Factory's sidebar with its ancestors, from <html> down, when `el` is in the Live chip of the shell's dock
+   * (app/WorkspaceDock.tsx, while Funded Clips is switched on) and its words `r` lie over the sidebar on screen. The
+   * dock is not inside the sidebar but drawn over it, the chip in the place of the sidebar's own, so what is under its
+   * words is the sidebar first (like a <Glide> under its item, below). Otherwise null: over Funded Clips, or beside the
+   * sidebar, the chip is read on its own, as before; the switch is always read on its own.
+   */
+  function underDock(el: Element, r: DOMRect): Element[] | null {
+    if (!el.closest(".ws-dock > .ws-dock__live")) return null;
+    const side = document.querySelector("nav.sidebar");
+    if (!side || !side.checkVisibility()) return null;
+    const b = side.getBoundingClientRect();
+    if (r.left < b.left || r.right > b.right || r.top < b.top || r.bottom > b.bottom) return null;
+    const chain: Element[] = [];
+    for (let a: Element | null = side; a; a = a.parentElement) chain.unshift(a);
+    return chain;
+  }
+
   const describe = (el: Element) => {
     const cls = typeof el.className === "string" ? el.className.trim().split(/\s+/).slice(0, 2).join(".") : "";
     return `${el.tagName.toLowerCase()}${cls ? "." + cls : ""}`;
@@ -463,6 +481,9 @@ function contrastKit() {
         }
       const chain: Element[] = [];
       for (let a: Element | null = el; a; a = a.parentElement) chain.unshift(a);
+      // The shell's Live chip is drawn over Clip Factory's sidebar: the sidebar's own chain is painted under it.
+      const side = underDock(el, rect);
+      if (side) chain.splice(0, chain.indexOf(document.body) + 1, ...side);
       // (A picture on <html> or <body> is in the backdrop photo already, like their colours below.)
       if (chain.some((a) => !(hasBackdrop && (a === document.documentElement || a === document.body)) && getComputedStyle(a).backgroundImage.includes("url("))) pictured = true;
       if (pictured) {
@@ -696,6 +717,15 @@ export async function looseText(page: Page, minAlpha?: number): Promise<string[]
         // The chosen choice of a glide bar sits on the glide, a sibling drawn under it.
         if (n.matches(".has-glide > .is-on")) return true;
         if (alphaOf(s.backgroundColor) >= min || alphaOf(s.backgroundImage) >= min) return true;
+        // The shell's Live chip (app/WorkspaceDock.tsx) is drawn over Clip Factory's sidebar, in the place of the
+        // sidebar's own: its words, where they lie over the sidebar on screen, sit on the sidebar too.
+        if (n.matches(".ws-dock > .ws-dock__live")) {
+          const side = document.querySelector("nav.sidebar");
+          if (!side || !side.checkVisibility()) return false;
+          const r = el.getBoundingClientRect();
+          const b = side.getBoundingClientRect();
+          return r.left >= b.left && r.right <= b.right && r.top >= b.top && r.bottom <= b.bottom && tinted(side);
+        }
       }
       return false;
     };
