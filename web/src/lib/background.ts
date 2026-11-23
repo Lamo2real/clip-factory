@@ -532,7 +532,7 @@ export const PAGE_HOVER_LIFT = 0.09;
  * green than `FLOAT_VEIL` (or the panel, if heavier). It plans for a white thumbnail under it, a light backdrop: the
  * least that keeps its words (mid-height, `FLOAT_WORDS_LIGHT` of its top light) at AA there, within `MAX_LIGHT_PAY`.
  */
-export const FLOAT_EXTRA_VEIL = 0;
+export const FLOAT_EXTRA_VEIL = 0.05;
 /**
  * The update bar is the one floating layer that darkens more, only by the least the AA cap over a white thumbnail
  * needs: its Reload face reads 0.08 OKLab L over Later and Later 0.03 over the bar, with bone words at AA at rest and

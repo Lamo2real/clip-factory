@@ -488,7 +488,7 @@ test("the tab bar, the setup pill and the Ask sheet hold their words over a whit
         body *:not(.cf-white-under) { visibility: hidden !important; transition: none !important; animation: none !important; }
         html body ${selector} { visibility: visible !important; }
         html body ${selector} * { visibility: visible !important; color: transparent !important; -webkit-text-fill-color: transparent !important; text-shadow: none !important; caret-color: transparent !important; }
-        html body ${selector} :is(svg, img, video, canvas) { visibility: hidden !important; }`,
+        html body ${selector} :is(svg, svg *, img, video, canvas) { visibility: hidden !important; }`,
     });
     await page.evaluate(() => {
       const white = document.createElement("div");

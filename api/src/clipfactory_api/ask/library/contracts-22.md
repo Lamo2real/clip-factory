@@ -220,7 +220,7 @@ everywhere.
   | Nested `.glass`, rows, cards and controls inside a surface | the relative raise: green 0.34 over the parent (`RAISE_VEIL`) | flat 0.13 (`RAISE_LIFT`); hover 0.37 / 0.145 | 4.55 on hover at the brightest corner (4.62 in Colours) |
   | Pick-one tracks and every control straight on the page (`--fill` at `:root`, such as the Library tabs) | panel + 0.22 (`TRACK_EXTRA_VEIL`) | flat 0.08 (`TRACK_LIFT`); hover 0.09 | 4.98 on hover (4.90 in Colours); an option's hover over it 4.80 |
   | Fields (`--fill-field`) | deep green 0.45 over the panel: a well, one step below | none | 7.35 |
-  | Floating layers: toasts, the setup pill, list and sheet, the Ask launcher, the Ask panel and phone sheet (`--glass-tint-float`) | `max(FLOAT_VEIL 0.73, --panel-veil)` + 0 (`FLOAT_EXTRA_VEIL`, main's), blur 28 px | 0.08 at the top edge → 0 at 14 px (`FLOAT_LIGHT`); hover 0.09 there plus a flat 0.01 (`FLOAT_HOVER_LIFT`) | 4.61 over white; hover 4.52 |
+  | Floating layers: toasts, the setup pill, list and sheet, the Ask launcher, the Ask panel and phone sheet (`--glass-tint-float`) | `max(FLOAT_VEIL 0.73, --panel-veil)` + 0.05 (`FLOAT_EXTRA_VEIL`, the light looks' most: a float plans for a white thumbnail, and its rim glows reach the words of the 48 px setup pill), blur 28 px | 0.08 at the top edge → 0 at 14 px (`FLOAT_LIGHT`); hover 0.09 there plus a flat 0.01 (`FLOAT_HOVER_LIFT`) | 5.39 over white (the rim glows not counted); hover 5.28 |
   | The update bar | `max(FLOAT_VEIL, --panel-veil)` + 0.22 (`UPDATE_EXTRA_VEIL`, the one float that darkens more: over a white thumbnail the AA cap leaves Reload no room for +0.08 over Later otherwise) | as a float | Later 7.15, Reload 4.93 (hover 4.59) over white |
   | Reload on the update bar (`.btn--lens`) | none: clear glass, white light alone | white 0.18 where its words are (0.24 at its top edge); hover 0.205 | 4.93; hover 4.59 (over white) |
   | The tab bar (icons only, `--glass-tint-tabbar`) | `TABBAR_VEIL` 0.59 + 0.04, blur 28 px | 0.04 → 0.01 at 65 % | 3.22:1 over white; the chosen icon on bone 9.88 |
@@ -276,7 +276,7 @@ light ladder may not be paid for by darkening panes; a light look may add at mos
 | Picture (white or busy photo) | 27 % (0.73) | 11 % (0.89) | **22 %** (0.78) |
 | Colours, default trio | 70 % (0.30) | 36 % (0.64) | **65 %** (0.35) |
 | Colours, Cream (`#f7f5ef`, page veil 0.28) | 40 % (0.60) | 16 % (0.84) | **35 %** (0.65) |
-| Floating layers (toasts, setup pill, Ask) | 27 % (0.73) | 11 % (0.89) | **27 %** (0.73) |
+| Floating layers (toasts, setup pill, Ask) | 27 % (0.73) | 11 % (0.89) | **22 %** (0.78) |
 | The update bar | 27 % (0.73) | 11 % (0.89) | 5 % (0.95, `UPDATE_EXTRA_VEIL`: Reload +0.08 over Later with AA over white) |
 
 
@@ -426,7 +426,9 @@ re-declares the raise inside every lit surface. Brightness is OKLab L.
 * **See-through first; every step is earned with light** (coordinator, 2026-11-23, after review of 7bb0fe0a, which
   reached the ladder by darkening every pane: 28 % of the backdrop showed through). Bone words cap whatever they sit on
   at luminance 0.140 (4.5:1, about OKLab L 0.52). Panes keep main's veils over the app's own backdrop, Clear and
-  Frosted (`LIGHT_PAY_OWN` 0) and floating layers keep main's float veil (`FLOAT_EXTRA_VEIL` 0). A light look (the
+  Frosted (`LIGHT_PAY_OWN` 0). Floating layers plan for a white thumbnail, a light backdrop, so they take the light
+  looks' most (`FLOAT_EXTRA_VEIL` 0.05: the setup pill read 3.98:1 over white at main's 0.73, its rim glows reaching
+  its words). A light look (the
   window's Clear and Picture, where white can be behind, and Colours) adds at most 0.05 green (`MAX_LIGHT_PAY`), never
   0.82 or more in all (`SEE_THROUGH_LIMIT`): `lightPay` takes the least at which every level climbs a whole step with
   no exemption (`ladderPay(..., strict)`), capped there, so the window's Clear and Picture are 0.78 (`LIGHT_PAY_WHITE`
@@ -497,7 +499,7 @@ too), every press takes it away, never below the level under it.
 | E1 lead | The hero, the sign-in card, Library's learnings, the week's quote | `v + pay` (`LEAD_EXTRA_VEIL` 0, at most 0.97) | 0.075 at the top edge → 0 at 14 px, plus the catch light: brighter than E1 at its top | `--light-rim-1` | `--light-shade-1` | `--light-shadow-1` |
 | E2 | Raised on a panel: rows, inner cards, nested glass, controls, tracks, callouts | relative: 0.34 over the parent (on the page `v + 0.22`) | flat 0.13 (on the page 0.08); hover 0.37 / 0.145 | `--light-rim-2` (small things `--light-rim-sm`) | `--light-shade-2` | `--light-shadow-2` (rows inside a card: `--glass-shadow-row`, the faintest drop) |
 | E3 | Raised on E2: post marks, chips in rows, buttons in rows, a track's options | the same step again (a chip: its tint over a bone lift over green 0.35) | flat 0.13 | `--light-rim-sm` | `--light-shade-2` | `--light-shadow-2` |
-| E3 float | Toasts, the setup pill, rail and list, the Ask launcher and panel, the money dock: a pane of its own, its rows and marks climb the ladder on it where a white thumbnail is not right under them | `max(float-veil, v)` (main's; the update bar + 0.22) | 0.08 at the top edge → 0 at 14 px, plus the small catch light; hover 0.09 there and a flat 0.01 | `--light-rim-3` | `--light-shade-1` | `--light-shadow-3` |
+| E3 float | Toasts, the setup pill, rail and list, the Ask launcher and panel, the money dock: a pane of its own, its rows and marks climb the ladder on it where a white thumbnail is not right under them | `max(float-veil, v) + 0.05` (the update bar + 0.22 instead) | 0.08 at the top edge → 0 at 14 px, plus the small catch light; hover 0.09 there and a flat 0.01 | `--light-rim-3` | `--light-shade-1` | `--light-shadow-3` |
 | E3 Reload | Reload on the update bar, the main choice | none: clear glass, white light alone | white 0.24 at its top edge → 0.18 from 32 % down (its words); hover 0.205 | `--light-rim-lens` | `--light-shade-2` | `--light-shadow-2` |
 | L5 overlay | The question sheet, the TikTok sheet, the picture viewer, the markup editor | `max(0.86, v)` (viewer 0.90) | 0.12 → 0.072 at 30 % → 0.04 at 65 %, plus the catch light | `--light-rim-3` | `--light-shade-1` | `--light-shadow-4` |
 | L5 menu | The dropdown list (solid), the workspace menu (0.94) | solid or 0.94 | 0.10 → 0.06 at 40 % → 0.04 at 70 % | `--light-rim-3` | none | `--light-shadow-4` |
@@ -520,7 +522,7 @@ halo never counts):
 | E4 on E3 / hover | 4.61 / 4.56 | 4.74 / 4.68 | 5.14 / 5.04 | 4.68 / 4.62 | 5.28 / 5.17 |
 | E2–E4 on the lead, hover | 4.55 | 4.68 | 5.04 | 4.62 | 5.17 |
 | A quiet fill / a ghost inside glass, rest / hover | 4.62 / 4.55 | 5.07 / 4.95 | 6.53 / 6.25 | 4.85 / 4.76 | 7.09 / 6.74 |
-| Float over a white thumbnail / hover | 4.61 / 4.52 | 4.61 / 4.52 | 7.41 / 7.23 | 4.61 / 4.52 | 8.41 / 8.20 |
+| Float over a white thumbnail / hover | 5.39 / 5.28 | 5.39 / 5.28 | 7.41 / 7.23 | 5.39 / 5.28 | 8.41 / 8.20 |
 | Later on the update bar / hover (white under the bar) | 7.15 / 6.88 | 7.15 / 6.88 | 8.25 / 7.92 | 7.15 / 6.88 | 8.25 / 7.92 |
 | **Reload: rest / hover** (white under the bar) | **4.93 / 4.59** | 4.93 / 4.59 | 5.58 / 5.17 | 4.93 / 4.59 | 5.58 / 5.17 |
 
@@ -560,7 +562,7 @@ two whole steps above a pane, the lead panel's step and a hover on top. So:
 
 **The see-through cost**: none over the app's own backdrop and in Frosted (67 % shows through a panel, as on main);
 22 % of a white desktop or photo in the window's Clear and Picture (27 % on main, 11 % in 7bb0fe0a); 65 % of the
-default Colours (70 %, 36 %); floating layers 27 % as on main; only the update bar 5 % (§22.4 has every look). The
+default Colours (70 %, 36 %); floating layers 22 % (27 %, 11 %); only the update bar 5 % (§22.4 has every look). The
 owner judges the real see-through window; a browser cannot show it (§22.4), so it is checked with these maths and the
 stand-ins of `e2e/glass.ts`, headless.
 

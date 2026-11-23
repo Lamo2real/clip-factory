@@ -260,7 +260,7 @@ every lit surface, so one name is right on the page and inside a pane):
 | `--light-lead-pay` | `0` | The lead panel's extra green (`LEAD_EXTRA_VEIL`) |
 | `--light-float` | `0.08` | A floating layer's light (`FLOAT_LIGHT`) |
 | `--light-float-hover` | `0.09` | Its hover (`FLOAT_HOVER_LIGHT`) |
-| `--light-float-pay` | `0` | Its extra green over the floating veil (`FLOAT_EXTRA_VEIL`): none, main's float veil; its light lies in its top padding, never under its words |
+| `--light-float-pay` | `0.05` | Its extra green over the floating veil (`FLOAT_EXTRA_VEIL`): the light looks' most (a float plans for a white thumbnail, and its rim glows reach the words of a 48 px pill) |
 | `--light-update-pay` | `0.22` | The update bar's extra green (`UPDATE_EXTRA_VEIL`): the one float that darkens more, so Reload reads 0.08 over Later with bone words at AA over a white thumbnail |
 | `--light-overlay` | `0.12` | Sheets, the picture viewer, the markup editor (`OVERLAY_LIGHT`) |
 | `--light-menu` | `0.1` | The dropdown list and the workspace menu (`MENU_LIGHT`) |
