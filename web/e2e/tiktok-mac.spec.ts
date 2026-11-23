@@ -8,7 +8,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { settle } from "./helpers.ts";
 
-type Job = { clipId: string; postId: string; hook: string; state: string; source: string };
+type Job = { clipId: string; postId: string; hook: string; state: string; source: string; privacy: string; comment: boolean; duet: boolean; stitch: boolean };
 type MockWindow = Window & {
   __cfMock?: {
     setup: { finish(p: string): void; setAudit(passed: boolean): void };
@@ -483,7 +483,7 @@ test("clip page: TikTok's stack says what the Mac does, and its one button sits 
   await expect(actions.getByRole("link", { name: "Turn on" })).toHaveAttribute("href", "/settings/posting/tiktok-mac");
 });
 
-test("review: the hint, and Uploaded just now follows the Mac", async ({ page }) => {
+test("review: the hint, TikTok on My settings with no tap, and Uploaded just now follows the Mac", async ({ page }) => {
   await page.goto("/");
   await settle(page);
   await page.evaluate(() => {
@@ -497,6 +497,9 @@ test("review: the hint, and Uploaded just now follows the Mac", async ({ page })
   const off = page.locator(".review-card").first();
   await expect(off.locator(".tt-yourself-hint")).toHaveText("TikTok: turn on Your Mac posts TikTok so it posts for everyone.");
   await expect(off.locator(".tt-yourself-hint-row").getByRole("link", { name: "Turn on" })).toHaveAttribute("href", "/settings/posting/tiktok-mac");
+  // Off, TikTok's API rule (§17.8): nothing picked for TikTok, and Upload waits for his tap.
+  await expect(off.locator('[data-place="tiktok"] summary')).toContainText("Who can see it: not picked yet");
+  await expect(off.locator(".upload-going")).toHaveText("Tap Use my settings first. TikTok needs your tap.");
 
   await turnOn(page);
   await go(page, "/review");
@@ -505,8 +508,17 @@ test("review: the hint, and Uploaded just now follows the Mac", async ({ page })
   const hook = await card.locator(".review-card__hook").innerText();
   await expect(card.locator(".tt-yourself-hint")).toHaveText("TikTok: your Mac posts it for everyone.");
   await expect(card.getByRole("link", { name: "Turn on" })).toHaveCount(0);
-  await card.getByRole("button", { name: "Use my settings" }).click();
-  await card.getByRole("button", { name: /^Upload( to .+)?$/ }).click();
+  // On: TikTok starts on My settings like every other place (Everyone, all three on), with no tap before Upload.
+  await expect(card.getByRole("button", { name: "Your settings are on" })).toBeVisible();
+  await expect(card.getByRole("button", { name: "Use my settings" })).toHaveCount(0);
+  await expect(card.locator(".my-settings__note")).toHaveText("Every place uses your settings. Tap a place below to change it for this clip.");
+  const tiktokNow = card.locator('[data-place="tiktok"] .place-row__now');
+  await expect(tiktokNow).toContainText("Who can see it: Everyone · Comments on · Duet on · Stitch on");
+  await expect(tiktokNow).not.toContainText("not picked yet");
+  await expect(card.locator(".upload-going")).toHaveText("Going to: YouTube · TikTok");
+  const upload = card.getByRole("button", { name: /^Upload( to .+)?$/ });
+  await expect(upload).not.toHaveAttribute("aria-disabled", "true");
+  await upload.click();
   const item = page.locator(".kept-now__item", { hasText: hook.slice(0, 20) });
   const line = item.locator(".kept-now__mac");
   // The Mac never checked in: said, with Turn on.
@@ -517,6 +529,8 @@ test("review: the hint, and Uploaded just now follows the Mac", async ({ page })
   const posts = await page.evaluate((id) => (window as MockWindow).__cfMock!.posting.posts(id), clipId);
   expect(posts.find((p) => p.platform === "tiktok")?.status).toBe("mac");
   expect(posts.find((p) => p.platform === "youtube")?.status).toBe("queued");
+  // The Mac's job: Everyone, with Comment, Duet and Stitch on.
+  expect((await mac.queue(page)).find((j) => j.clipId === clipId)).toMatchObject({ privacy: "PUBLIC_TO_EVERYONE", comment: true, duet: true, stitch: true });
 
   // It checks in, then posts it, live.
   await mac.ping(page);

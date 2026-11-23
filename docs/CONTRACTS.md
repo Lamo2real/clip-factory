@@ -2164,7 +2164,7 @@ Connect:
 Go public (`gate: app_review`, `posting_audit`):
 | id | title | essentials |
 |---|---|---|
-| `public-demo` | Record the real demo video | On a computer, connected in the Sandbox with the TikTok account still private, address bar in sight. Copy chip **Shot list** (`TIKTOK_DEMO_SHOTS` in `tiktok.ts`, 18 numbered shots in order): About page with Privacy and Terms › **Connect TikTok** › TikTok's screen with every scope, **Continue** › connected › the clip's source › Review card preview (no watermark) › the **TikTok** row: "Asking TikTok…", "Posting as" + picture › edit the TikTok caption › Upload held ("Pick who can see it on TikTok first.") and **Who can see it** with nothing picked › Comments, Duet, Stitch all off (grey "Turned off in your TikTok settings." when the creator turned one off) › **Commercial content** on ("Pick Your brand, Branded content, or both." under it; pick **Only me**, Upload still held: "Pick Your brand or Branded content on TikTok first.") › **Your brand** (its "Promotional content" tag) › **Branded content** ("Paid partnership", Branded Content Policy line above Upload, Who can see it now says "Branded content can't be Only me. Turn off Branded content.") › untick it, pick **Only me** by hand, Commercial content off › Music Usage Confirmation line above **Upload** › **Upload** and "TikTok can take a few minutes to process your clip." › **Library**: on its way, then Posted › the private post on TikTok as picked › **Money** (video.list, user.info.stats) › last, on another clip with nothing on, **Use my settings** (the owner's own tap) and the TikTok row with every option. About 1 min, MP4, under 50 MB (up to 5 videos). Hints: a shot-list line you can't find → tap the **TikTok** row (every line is in there or right above **Upload**); a secret or code on screen → cut it out. The same video goes to App review and the audit form. |
+| `public-demo` | Record the real demo video | On a computer, connected in the Sandbox with the TikTok account still private and **Your Mac posts TikTok** off (§47.9 item 2), address bar in sight. Copy chip **Shot list** (`TIKTOK_DEMO_SHOTS` in `tiktok.ts`, 18 numbered shots in order): About page with Privacy and Terms › **Connect TikTok** › TikTok's screen with every scope, **Continue** › connected › the clip's source › Review card preview (no watermark) › the **TikTok** row: "Asking TikTok…", "Posting as" + picture › edit the TikTok caption › Upload held ("Pick who can see it on TikTok first.") and **Who can see it** with nothing picked › Comments, Duet, Stitch all off (grey "Turned off in your TikTok settings." when the creator turned one off) › **Commercial content** on ("Pick Your brand, Branded content, or both." under it; pick **Only me**, Upload still held: "Pick Your brand or Branded content on TikTok first.") › **Your brand** (its "Promotional content" tag) › **Branded content** ("Paid partnership", Branded Content Policy line above Upload, Who can see it now says "Branded content can't be Only me. Turn off Branded content.") › untick it, pick **Only me** by hand, Commercial content off › Music Usage Confirmation line above **Upload** › **Upload** and "TikTok can take a few minutes to process your clip." › **Library**: on its way, then Posted › the private post on TikTok as picked › **Money** (video.list, user.info.stats) › last, on another clip with nothing on, **Use my settings** (the owner's own tap) and the TikTok row with every option. About 1 min, MP4, under 50 MB (up to 5 videos). Hints: a shot-list line you can't find → tap the **TikTok** row (every line is in there or right above **Upload**); a secret or code on screen → cut it out. The same video goes to App review and the audit form. |
 | `public-review` | Ask TikTok to check the app | Switch to **Production**. **App review**: check `tiktokReviewText` is there (one line per scope), swap in the real demo video, **Save**, **Submit for review**. Then pick the status here: Draft / In review / Live / Not approved (`PATCH gate app_review`). Not approved: read **Review comments**, fix, submit again. |
 | `public-live-keys` | When it says Live | If the Production keys differ from the Sandbox ones, paste them and press **Connect again**. |
 | `public-audit` | Ask to post publicly | Only after **App review** says **Live**: **Production** › **Content Posting API** › **Apply** next to **Direct Post** (Open button: developers.tiktok.com/application/content-posting-api). The form has 4 pages (General Information, API client information, Supporting documents, Review) and does not save: paste each answer into the box with the same name. Copy chips: Organization name `appName`, Organization website `websiteUrl`, Organization description `TIKTOK_AUDIT_DESCRIPTION`, How you use Direct Post `TIKTOK_AUDIT_DIRECT_POST`, How you got the number `TIKTOK_AUDIT_USAGE` (pick the smallest users choice), Data you store `TIKTOK_AUDIT_DATA` (all literal strings in `tiktok.ts`; every one literally true today: one creator's own clipping tool, invite-only, one user, other creators' streams and paid clipping campaigns said plainly, "There is no company. Clip Factory is the name of my tool, and I am one person.", no wide audience; Data you store lists only what the api keeps: follower count, and from recent videos only a views total and a count of long videos). Upload the demo video, read and tick the 3 boxes, **Next**. "TikTok's rules ask for apps that many people can use. Clip Factory is only for you. If it says no, posts stay private but still post." Hints: **Your full name** → type your own; app ID → the number after /app/ in the app page's address bar; no **Apply** → wait for Live; spinner after **Next** → the video is uploading (up to 2 min); **Under review** → done for now, often 1 to 3 weeks; a no with empty **Review comments** → ask TikTok support first. Until it passes, every post is "Only me". |
@@ -7075,7 +7075,8 @@ Decision record: ADR-60 (which corrects ADR-57).
    "Every place uses your settings. Tap a place below to change it for this clip." (after, or with TikTok unticked),
    "You changed some for this clip. Tap to put yours back." (after a change in a row). YouTube, Instagram, Facebook
    and X use My settings from the start (nothing in their rules asks for a tap); TikTok's choices go on only with this
-   tap (or picks in its row), because TikTok wants the creator's own action and no default. Ticking Commercial content
+   tap (or picks in its row), because TikTok wants the creator's own action and no default. While his Mac posts TikTok,
+   TikTok starts on My settings too, with no tap (§47.9). Ticking Commercial content
    (Your brand / Branded content) is about one clip and keeps "Your settings are on".
 4. **One closed row per ticked place** (`screens/review/PlaceRows.tsx`, a `<details>` with a soft fill and no edges):
    "YouTube · title, description and settings", "TikTok · caption and settings", "Instagram · caption and
@@ -7102,7 +7103,8 @@ Decision record: ADR-60 (which corrects ADR-57).
    TikTok first.", "You need to indicate if your content promotes yourself, a third party, or both. Pick Your brand
    or Branded content on TikTok first." (that first sentence is also Upload's hover text), "Branded content can't be
    Only me. Pick Everyone or Friends first.", "This clip is too long for TikTok. Untick
-   TikTok to upload it to the rest.", "TikTok did not answer. Tap Ask TikTok again, or untick TikTok."
+   TikTok to upload it to the rest.", "TikTok did not answer. Tap Ask TikTok again, or untick TikTok." While his Mac
+   posts TikTok, only TikTok's too-long line and its Commercial content lines can hold Upload (§47.9).
 
 A standard upload is two taps: **Use my settings**, then **Upload to 4**. The TikTok sheet no longer opens from the
 card when places are set up: TikTok's controls are in its row and its legal line is beside Upload.
@@ -7160,8 +7162,9 @@ one more attribute on the settings item, written only when the owner saves).
 `myTikTokChoices(preset.tiktok, creator)`: TikTok's privacy is the saved one when TikTok offers it, else Everyone, else
 TikTok's first choice (Only me before the audit); Comments, Duet and Stitch as saved and off where the creator turned
 them off; Commercial content off. TikTok's creator info is asked for when the owner taps Use my settings or opens the
-TikTok row, never before. `uploadClip(..., platforms, options)`; `confirmClip(clipId, captions, tiktok, platforms,
-options)`. Nothing about My settings is kept in localStorage.
+TikTok row, never before (while his Mac posts TikTok: in the background as soon as TikTok is ticked, §47.9).
+`uploadClip(..., platforms, options)`; `confirmClip(clipId, captions, tiktok, platforms, options)`. Nothing about My
+settings is kept in localStorage.
 
 ### 34.5 TikTok's "Who can see it"
 
@@ -15870,7 +15873,8 @@ there is no manual TikTok sheet, so every TikTok row says only what the Mac is d
   posts it for everyone.", and while the switch is off `TIKTOK_PUBLIC_HINT`, "TikTok: turn on Your Mac posts TikTok so
   it posts for everyone." (§42.1). "Uploaded just now" shows "TikTok: {the row's words}" and its one button (Try again
   or Post with my Mac) for each kept clip. Nothing opens by itself after Upload. Upload's own rules and buttons are
-  unchanged: with the switch on it writes the Mac post as `source: "upload"`, which the helper posts at once.
+  unchanged: with the switch on it writes the Mac post as `source: "upload"`, which the helper posts at once. With the
+  switch on, the card starts TikTok on My settings with no tap (§47.9).
 * **Settings › Posting › Your Mac posts TikTok** (`/settings/posting/tiktok-mac`, `TikTokMacBranch.tsx`, in the tree
   after Auto-posting): the switch **My Mac posts my TikTok clips** (off: "Off. Your Mac doesn't post your TikTok
   clips."; on: "On. Upload and auto-posting hand TikTok to your Mac."); the status line "Your Mac checked in {Sun
@@ -15990,6 +15994,61 @@ then log into tiktok and upload them then delete the video you downloaded after 
   `web/e2e/tiktok-mac.spec.ts` (the lines, the buttons, Forget's question); `mac/tiktok-helper/test/login.test.js` (at most
   twice a day, never after a refusal, a code or a puzzle is the owner's turn, never in a log, an event or a request),
   `files.test.js` (only its own videos), `frame.test.js` (a normal run never touches the frame).
+
+### 47.9 Review starts on My settings while the Mac posts TikTok (owner request, 2026-11-23)
+
+The owner (2026-11-23, verbatim): "the auto upload feature uploads publicly to all social media platforms except X,
+but when that happens it invokes a tiktok automation for uploading there. the same process happens when i manually
+click upload, and also the default settings should be that it publishes publicly to all platforms". Auto-posting
+already posts with My settings (§46.6) and every Mac post already stores My settings' TikTok choices (§47.1); this
+makes the Review card (§36) match, so Upload and auto-posting both post TikTok through his Mac on his settings. It
+amends §36's TikTok tap (items 3 and 5 of the card, and "never before" in its web part) only while the Mac posts
+TikTok. No API, table or infrastructure change.
+
+1. **Your Mac posts TikTok on** (`macOn(settings)`, `settings.tiktokMac.on === true`) and TikTok has not approved the
+   app (`tiktokAudited`, as §47.2 item 1): a Review card with TikTok ticked starts on My settings exactly like the
+   other places. TikTok's row starts with Who can see it from the preset's `privacy` (Everyone by default), Comments,
+   Duet and Stitch as saved (on by default), and Commercial content off. A campaign clip keeps its own path (Everyone
+   with Branded content, §17.8; the Mac never takes one, §47.2).
+   * No tap before Upload: the button reads **Your settings are on** from the start (`settingsOn` true), the line under
+     it reads "Every place uses your settings. Tap a place below to change it for this clip.", and TikTok's row line
+     says "Who can see it: Everyone · …", never "not picked yet". Upload is never held with "Tap Use my settings
+     first. TikTok needs your tap." He can still change TikTok for one clip in its row ("You changed some for this
+     clip. Tap to put yours back."), and **Use my settings** puts his settings back.
+   * TikTok's row works from TikTok Studio's choices, which the Mac sets on TikTok's website whatever TikTok's API
+     offers the app (only Only me before the approval): `macTikTokChoices` is `myTikTokChoices` (§36.4) over the four
+     privacy levels (`MAC_PRIVACY_OPTIONS`, Everyone first) with every switch allowed. TikTok's creator info (`GET
+     /v1/accounts/tiktok/creator-info`, TikTok API data) is still asked, in the background as soon as TikTok is ticked,
+     only for the account's name and the longest video it takes (`macCreator`). Upload never waits for it: while it is
+     slow or after it failed, the card uploads with the preset's choices and no creator (opening the TikTok row asks
+     again), and the too-long check uses the creator's longest video once known.
+   * The confirm body still carries `tiktok` with the card's choices, as the server requires ("Pick who can see it on
+     TikTok.", §47.2 item 1). The Mac post stores My settings' choices whatever it says (§47.1,
+     `tiktok_mac.preset_options`), so the Mac job gets `privacy: "PUBLIC_TO_EVERYONE"` (the saved privacy) with the
+     saved Comment, Duet and Stitch. A change in TikTok's row for one clip therefore shows on the card and goes in the
+     confirm body, but the Mac still posts My settings (`test_an_upload_that_picked_only_me_still_asks_the_mac_for_
+     everyone…` pins it); having the Mac take one clip's own choices is an open decision for the owner.
+2. **Your Mac posts TikTok off, or TikTok approved the app** (TikTok's API path; the app is still in review), and every
+   campaign clip: exactly as §36. Who can see it starts unpicked, Comments, Duet and Stitch start off, creator info is
+   asked only on Use my settings or when the TikTok row opens, and Upload waits for his tap ("Tap Use my settings
+   first. TikTok needs your tap."). That is TikTok's rule for API apps (§17.8): no default, the creator's own action.
+   TikTok's demo video for its app review (`TIKTOK_DEMO_SHOTS`, §17) shows this path, so it is recorded with Your Mac
+   posts TikTok off.
+3. **Words elsewhere:** Settings › Posting › My settings (`MySettingsBranch.tsx`) reads "Every clip on Review starts
+   on these, TikTok too." at the top, and under TikTok only "Commercial content is off. For a paid partnership, tick
+   Branded content in the TikTok row of that clip." in item 1's mode; otherwise both keep today's words
+   ("Tap Use my settings on a clip to put these on.", "… TikTok wants your own tap on each clip, so tap Use my
+   settings there."). The TikTok part's leaf (`settingsTree.ts`, `my-settings-tiktok`) reads "Everyone can see it;
+   comments, Duet and Stitch on. Every clip starts on these while your Mac posts TikTok." in both modes. Ask's "Use my
+   settings" guide (`helpKb.json`, `review-use-my-settings`) says every ticked place, TikTok included, starts on his
+   settings while his Mac posts TikTok, so he just taps Upload; `review-upload-to` says to tap Use my settings only
+   when the card does not already say Your settings are on. docs/SETUP_POSTING.md says the same, and its demo step
+   (`public-demo`, also in `tiktok.ts`) says to record with Your Mac posts TikTok off.
+4. **Tests:** the Review tests (`web/test/review*`) pin both modes: with the Mac on, TikTok starts on My settings and
+   Upload is not held, also while creator info is slow or failed, and the confirm body carries TikTok choices the
+   server takes; with it off, today's unpicked start and held Upload. `web/test/mySettingsTikTok.test.tsx` pins My
+   settings' words in both modes; `helpEvals.json` has "Does TikTok need my tap each time?" →
+   `review-use-my-settings`.
 
 ### 47.7 Not verified live
 

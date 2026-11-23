@@ -97,7 +97,10 @@ export interface PlaceRowsHandle {
 }
 
 export interface TikTokRow {
-  /** TikTok's answer about this creator (null: not asked yet, or still asking). */
+  /**
+   * TikTok's answer about this creator (null: not asked yet, or still asking). While the Mac posts TikTok (§47), TikTok
+   * Studio's choices (macCreator), with no name until TikTok's API answered.
+   */
   creator: TikTokCreator | null;
   /** Asking TikTok did not work: a plain sentence. */
   error: string | null;
@@ -390,12 +393,15 @@ function TikTokFields({ row, field, campaign = false }: { row: TikTokRow; field:
   const tooLong = tooLongForTikTok(row.durationSec, creator.maxDurationSec);
   return (
     <>
-      <div className="tt-sheet__who">
-        {creator.avatarUrl ? <img className="tt-sheet__avatar" src={creator.avatarUrl} alt="" /> : null}
-        <span>
-          Posting as <strong className="user-text">{creator.nickname}</strong>
-        </span>
-      </div>
+      {/* While the Mac posts TikTok and TikTok's API has not answered (or could not), the account's name is not known. */}
+      {creator.nickname ? (
+        <div className="tt-sheet__who">
+          {creator.avatarUrl ? <img className="tt-sheet__avatar" src={creator.avatarUrl} alt="" /> : null}
+          <span>
+            Posting as <strong className="user-text">{creator.nickname}</strong>
+          </span>
+        </div>
+      ) : null}
       {field}
       <TikTokPrivacy creator={creator} value={privacy} branded={branded && commercial} onChange={(v) => onChoices({ privacy: v })} />
       {campaign && campaignTikTokProblem(choices) ? (

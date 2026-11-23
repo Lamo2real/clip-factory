@@ -235,7 +235,8 @@ there is no manual TikTok sheet, so every TikTok row says only what the Mac is d
   posts it for everyone.", and while the switch is off `TIKTOK_PUBLIC_HINT`, "TikTok: turn on Your Mac posts TikTok so
   it posts for everyone." (§42.1). "Uploaded just now" shows "TikTok: {the row's words}" and its one button (Try again
   or Post with my Mac) for each kept clip. Nothing opens by itself after Upload. Upload's own rules and buttons are
-  unchanged: with the switch on it writes the Mac post as `source: "upload"`, which the helper posts at once.
+  unchanged: with the switch on it writes the Mac post as `source: "upload"`, which the helper posts at once. With the
+  switch on, the card starts TikTok on My settings with no tap (§47.9).
 * **Settings › Posting › Your Mac posts TikTok** (`/settings/posting/tiktok-mac`, `TikTokMacBranch.tsx`, in the tree
   after Auto-posting): the switch **My Mac posts my TikTok clips** (off: "Off. Your Mac doesn't post your TikTok
   clips."; on: "On. Upload and auto-posting hand TikTok to your Mac."); the status line "Your Mac checked in {Sun
@@ -355,6 +356,61 @@ then log into tiktok and upload them then delete the video you downloaded after 
   `web/e2e/tiktok-mac.spec.ts` (the lines, the buttons, Forget's question); `mac/tiktok-helper/test/login.test.js` (at most
   twice a day, never after a refusal, a code or a puzzle is the owner's turn, never in a log, an event or a request),
   `files.test.js` (only its own videos), `frame.test.js` (a normal run never touches the frame).
+
+### 47.9 Review starts on My settings while the Mac posts TikTok (owner request, 2026-11-23)
+
+The owner (2026-11-23, verbatim): "the auto upload feature uploads publicly to all social media platforms except X,
+but when that happens it invokes a tiktok automation for uploading there. the same process happens when i manually
+click upload, and also the default settings should be that it publishes publicly to all platforms". Auto-posting
+already posts with My settings (§46.6) and every Mac post already stores My settings' TikTok choices (§47.1); this
+makes the Review card (§36) match, so Upload and auto-posting both post TikTok through his Mac on his settings. It
+amends §36's TikTok tap (items 3 and 5 of the card, and "never before" in its web part) only while the Mac posts
+TikTok. No API, table or infrastructure change.
+
+1. **Your Mac posts TikTok on** (`macOn(settings)`, `settings.tiktokMac.on === true`) and TikTok has not approved the
+   app (`tiktokAudited`, as §47.2 item 1): a Review card with TikTok ticked starts on My settings exactly like the
+   other places. TikTok's row starts with Who can see it from the preset's `privacy` (Everyone by default), Comments,
+   Duet and Stitch as saved (on by default), and Commercial content off. A campaign clip keeps its own path (Everyone
+   with Branded content, §17.8; the Mac never takes one, §47.2).
+   * No tap before Upload: the button reads **Your settings are on** from the start (`settingsOn` true), the line under
+     it reads "Every place uses your settings. Tap a place below to change it for this clip.", and TikTok's row line
+     says "Who can see it: Everyone · …", never "not picked yet". Upload is never held with "Tap Use my settings
+     first. TikTok needs your tap." He can still change TikTok for one clip in its row ("You changed some for this
+     clip. Tap to put yours back."), and **Use my settings** puts his settings back.
+   * TikTok's row works from TikTok Studio's choices, which the Mac sets on TikTok's website whatever TikTok's API
+     offers the app (only Only me before the approval): `macTikTokChoices` is `myTikTokChoices` (§36.4) over the four
+     privacy levels (`MAC_PRIVACY_OPTIONS`, Everyone first) with every switch allowed. TikTok's creator info (`GET
+     /v1/accounts/tiktok/creator-info`, TikTok API data) is still asked, in the background as soon as TikTok is ticked,
+     only for the account's name and the longest video it takes (`macCreator`). Upload never waits for it: while it is
+     slow or after it failed, the card uploads with the preset's choices and no creator (opening the TikTok row asks
+     again), and the too-long check uses the creator's longest video once known.
+   * The confirm body still carries `tiktok` with the card's choices, as the server requires ("Pick who can see it on
+     TikTok.", §47.2 item 1). The Mac post stores My settings' choices whatever it says (§47.1,
+     `tiktok_mac.preset_options`), so the Mac job gets `privacy: "PUBLIC_TO_EVERYONE"` (the saved privacy) with the
+     saved Comment, Duet and Stitch. A change in TikTok's row for one clip therefore shows on the card and goes in the
+     confirm body, but the Mac still posts My settings (`test_an_upload_that_picked_only_me_still_asks_the_mac_for_
+     everyone…` pins it); having the Mac take one clip's own choices is an open decision for the owner.
+2. **Your Mac posts TikTok off, or TikTok approved the app** (TikTok's API path; the app is still in review), and every
+   campaign clip: exactly as §36. Who can see it starts unpicked, Comments, Duet and Stitch start off, creator info is
+   asked only on Use my settings or when the TikTok row opens, and Upload waits for his tap ("Tap Use my settings
+   first. TikTok needs your tap."). That is TikTok's rule for API apps (§17.8): no default, the creator's own action.
+   TikTok's demo video for its app review (`TIKTOK_DEMO_SHOTS`, §17) shows this path, so it is recorded with Your Mac
+   posts TikTok off.
+3. **Words elsewhere:** Settings › Posting › My settings (`MySettingsBranch.tsx`) reads "Every clip on Review starts
+   on these, TikTok too." at the top, and under TikTok only "Commercial content is off. For a paid partnership, tick
+   Branded content in the TikTok row of that clip." in item 1's mode; otherwise both keep today's words
+   ("Tap Use my settings on a clip to put these on.", "… TikTok wants your own tap on each clip, so tap Use my
+   settings there."). The TikTok part's leaf (`settingsTree.ts`, `my-settings-tiktok`) reads "Everyone can see it;
+   comments, Duet and Stitch on. Every clip starts on these while your Mac posts TikTok." in both modes. Ask's "Use my
+   settings" guide (`helpKb.json`, `review-use-my-settings`) says every ticked place, TikTok included, starts on his
+   settings while his Mac posts TikTok, so he just taps Upload; `review-upload-to` says to tap Use my settings only
+   when the card does not already say Your settings are on. docs/SETUP_POSTING.md says the same, and its demo step
+   (`public-demo`, also in `tiktok.ts`) says to record with Your Mac posts TikTok off.
+4. **Tests:** the Review tests (`web/test/review*`) pin both modes: with the Mac on, TikTok starts on My settings and
+   Upload is not held, also while creator info is slow or failed, and the confirm body carries TikTok choices the
+   server takes; with it off, today's unpicked start and held Upload. `web/test/mySettingsTikTok.test.tsx` pins My
+   settings' words in both modes; `helpEvals.json` has "Does TikTok need my tap each time?" →
+   `review-use-my-settings`.
 
 ### 47.7 Not verified live
 

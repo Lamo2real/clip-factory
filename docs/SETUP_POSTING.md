@@ -391,8 +391,8 @@ stay private until TikTok approves the app.
 ### Part 4: Go public
 
 #### 21. Record the real demo video
-- Use a computer. Connect in the Sandbox, with your TikTok still private. Record your screen with the address bar in
-  sight.
+- Use a computer. Connect in the Sandbox, your TikTok still private, **Your Mac posts TikTok** off. Record your screen
+  with the address bar in sight.
 - Follow the shot list below, in order. It starts on the About page, then **Connect TikTok** and TikTok's
   screen with **Continue**.
 - Then **Upload** one clip, choosing everything by hand in the **TikTok** row. Show each line TikTok wants to see.
@@ -515,11 +515,14 @@ The answers, word for word. They are all true today: do not change them to sound
 | "TikTok did not answer. Try again in a few minutes." | Wait, then press **Connect TikTok**. |
 | "Finish the TikTok review steps to post outside the Sandbox." | Do steps 21 to 23. |
 
-**Every clip with TikTok ticked** waits for your tap: press **Use my settings** (it puts your saved TikTok choices on),
-or open the **TikTok** row and pick who can see it there (there is no default, TikTok's rule). The row also has the
-Comments, Duet and Stitch switches and Commercial content (tick **Branded content** for a paid partnership). Then press
-**Upload**. TikTok can take a few minutes to process your clip. Your saved choices live in Settings › Posting › My
-settings.
+**While your Mac posts TikTok**, a clip with TikTok ticked starts on your saved choices like every other place
+(Everyone, with Comments, Duet and Stitch on, unless you changed them): just press **Upload**. Open the **TikTok** row
+to change it for that clip; **Use my settings** puts yours back. **While Your Mac posts TikTok is off**, every clip with
+TikTok ticked waits for your tap: press **Use my settings** (it puts your saved TikTok choices on), or open the
+**TikTok** row and pick who can see it there (there is no default, TikTok's rule for apps that post through its API).
+The row also has the Comments, Duet and Stitch switches and Commercial content (tick **Branded content** for a paid
+partnership). Then press **Upload**. TikTok can take a few minutes to process your clip. Your saved choices live in
+Settings › Posting › My settings.
 
 If a clip says "Pick who can see it on TikTok again, then press Try again.", press **Try again** on the clip. The
 **Post to TikTok** sheet opens first. Pick again, then press the vermilion-red button on the sheet.

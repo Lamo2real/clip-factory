@@ -282,11 +282,11 @@
         "difference",
         "tabs"
       ],
-      "answer": "On each clip, **Upload to** shows every place that is set up, all ticked to start. Tap **Use my settings**, then **Upload**. That is the only place picker: each ticked place gets its own row below for its words and options. A place that is not set up yet does not show; set it up in **Set up posting**.",
+      "answer": "On each clip, **Upload to** shows every place that is set up, all ticked to start. It says **Your settings are on** (if not, tap **Use my settings**); then tap **Upload**. That is the only place picker: each ticked place gets its own row below for its words and options. A place that is not set up yet does not show; set it up in **Set up posting**.",
       "steps": [
         "Tap **Review**.",
         "Under **Upload to**, tap a place to untick it if it should not go there.",
-        "Tap **Use my settings**, then **Upload**."
+        "If it does not say **Your settings are on**, tap **Use my settings**. Then tap **Upload**."
       ],
       "actions": [
         {
@@ -303,7 +303,7 @@
       "id": "review-use-my-settings",
       "route": "/review",
       "where": "Review › a clip › Use my settings",
-      "title": "Use my settings: upload in two taps",
+      "title": "Use my settings: upload in one tap",
       "keywords": [
         "use my settings",
         "my settings",
@@ -314,12 +314,14 @@
         "quick upload",
         "fast upload",
         "same settings",
-        "every time"
+        "every time",
+        "tiktok tap",
+        "tap each time"
       ],
-      "answer": "**Use my settings** puts your saved choices on every ticked place: who can see it, comments, duets and stitches, never made for kids. TikTok needs your own tap each time, so tap it, then tap **Upload**. Change a place for one clip in its row.",
+      "answer": "Every ticked place starts on your saved choices, TikTok too while your Mac posts TikTok: who can see it, comments, duets and stitches, never made for kids. So just tap **Upload**. Change a place for one clip in its row; **Use my settings** puts yours back. With **Your Mac posts TikTok** off, TikTok waits for your tap on **Use my settings**.",
       "steps": [
         "Tap **Review**.",
-        "Tap **Use my settings**. It says **Your settings are on**.",
+        "It says **Your settings are on**. If not, tap **Use my settings**.",
         "Tap **Upload**."
       ],
       "actions": [

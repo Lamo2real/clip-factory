@@ -262,7 +262,7 @@ export const TREES: Tree[] = [
           {
             id: "my-settings-tiktok",
             name: "TikTok",
-            leaf: "Everyone can see it; comments, Duet and Stitch on. You still tap Use my settings on each clip.",
+            leaf: "Everyone can see it; comments, Duet and Stitch on. Every clip starts on these while your Mac posts TikTok.",
             words: ["TikTok", "preset", "use my settings", "privacy", "everyone", "duet", "stitch", "comments"],
           },
           {

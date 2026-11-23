@@ -1,5 +1,7 @@
 // The Post to TikTok sheet's choices (docs/CONTRACTS.md §17.8). Nothing starts picked: TikTok wants the creator to
-// choose who can see the post every time, and Comments, Duet and Stitch start off.
+// choose who can see the post every time, and Comments, Duet and Stitch start off. That is TikTok's rule for apps that
+// post through its API; while the owner's Mac posts TikTok (§47) a Review card starts on My settings instead
+// (macCreator, macTikTokChoices).
 import type { TikTokCreator, TikTokPostOptions, TikTokPreset } from "../api/types.ts";
 
 export interface TikTokChoices {
@@ -146,4 +148,39 @@ export function campaignTikTokProblem(c: TikTokChoices): string | null {
   if (c.privacy && c.privacy !== "PUBLIC_TO_EVERYONE") return CAMPAIGN_PUBLIC;
   if (c.privacy && !(c.commercial && c.branded)) return CAMPAIGN_BRANDED;
   return null;
+}
+
+// ---- Your Mac posts TikTok (docs/CONTRACTS.md §47) ----
+
+/**
+ * Who can see it while the owner's Mac posts TikTok: TikTok Studio's own choices, which the Mac sets on TikTok's
+ * website (§47.1), whatever TikTok's API offers the app (only Only me until TikTok approves it).
+ */
+export const MAC_PRIVACY_OPTIONS: readonly string[] = ["PUBLIC_TO_EVERYONE", "FOLLOWER_OF_CREATOR", "MUTUAL_FOLLOW_FRIENDS", "SELF_ONLY"];
+
+/**
+ * What a Review card's TikTok row works from while the Mac posts TikTok: TikTok Studio's privacy choices and switches,
+ * with TikTok's API answer (creator info) only for the account's name and the longest clip it takes. Without an answer
+ * (not asked yet, slow, or failed) the card still has all it needs to upload: the Mac posts through TikTok's website.
+ */
+export function macCreator(creator: TikTokCreator | null): TikTokCreator {
+  return {
+    nickname: creator?.nickname ?? "",
+    username: creator?.username ?? "",
+    ...(creator?.avatarUrl ? { avatarUrl: creator.avatarUrl } : {}),
+    privacyOptions: [...MAC_PRIVACY_OPTIONS],
+    commentDisabled: false,
+    duetDisabled: false,
+    stitchDisabled: false,
+    maxDurationSec: creator?.maxDurationSec ?? 0,
+  };
+}
+
+/**
+ * The TikTok choices a Review card starts on while the Mac posts TikTok, like every other place: My settings (Everyone
+ * with Comments, Duet and Stitch on, by default), no tap needed. Commercial content is about this one clip: as ticked
+ * on it (off until he ticks it; a paid partnership is never dropped).
+ */
+export function macTikTokChoices(saved: TikTokPreset, now: TikTokChoices = NO_TIKTOK_CHOICES): TikTokChoices {
+  return myTikTokChoices(saved, macCreator(null), now);
 }
