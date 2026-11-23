@@ -667,3 +667,8 @@ h1.getapp__title {
   --ghost-hover-veil: 0;
   --ghost-hover-lift: 0.075;
 }
+/* Its hover, restated: the rest rule above is as heavy as .btn--ghost:hover and comes later. */
+.update-bar .btn--ghost.update-bar__later:hover:not([aria-disabled="true"]) {
+  --btn-veil: 0;
+  --btn-lift: 0.075;
+}
