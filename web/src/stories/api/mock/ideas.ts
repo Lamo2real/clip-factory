@@ -201,7 +201,7 @@ export function effectiveFor(
 ): { model: string; effort: Effort | null; effortApplied: boolean; agentId: AgentId; problem: string | null; off: string | null; denied: boolean } {
   const agentId = TASK_AGENT[kind];
   const agent = store.agents.find((a) => a.agentId === agentId);
-  const off = agent && !agent.active ? `${agent.name} is switched off. Switch it on in Lamo Stories › Settings › Agents.` : null;
+  const off = agent && !agent.active ? `${agent.name} is switched off. Switch it on in Clip Factory Stories › Settings › Agents.` : null;
   const ai = store.ai;
   const levels: Level[] = [o.request, o.project, ai?.tasks?.[kind], agent ? { model: agent.model, effort: agent.effort } : null, { model: ai?.defaultModel ?? DEFAULT_MODEL, effort: ai?.defaultEffort ?? DEFAULT_EFFORT }];
   const model = levels.find((l) => l?.model)?.model ?? DEFAULT_MODEL;
@@ -209,12 +209,12 @@ export function effectiveFor(
   const m = knownModels(store).find((x) => x.key === model);
   const applied = !!m && m.efforts.length > 0;
   let problem: string | null = null;
-  if (!m) problem = `We don't know the model "${model}". Pick another model in Lamo Stories › Settings › AI.`;
+  if (!m) problem = `We don't know the model "${model}". Pick another model in Clip Factory Stories › Settings › AI.`;
   else if (applied && !m.efforts.includes(effort)) problem = `${m.label} does not offer ${EFFORT_WORD[effort]}. Pick another level.`;
   const denied = Array.isArray(store.knobs.deniedModels) ? (store.knobs.deniedModels as string[]) : [];
   // Bedrock refusing the call itself (`denied`): the call was made, so the job records what it asked (§45.34).
   const refused = !problem && denied.includes(model);
-  if (refused) problem = `${m?.label ?? modelLabel(model)} isn't available right now: Bedrock says this account can't use it yet. Pick another model in Lamo Stories › Settings › AI, or try again.`;
+  if (refused) problem = `${m?.label ?? modelLabel(model)} isn't available right now: Bedrock says this account can't use it yet. Pick another model in Clip Factory Stories › Settings › AI, or try again.`;
   return { model, effort: applied ? effort : null, effortApplied: applied, agentId, problem, off, denied: refused };
 }
 
@@ -524,7 +524,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       const durationSec = body?.durationSec ?? 45;
       if (durationSec < 15 || durationSec > 90) fail(400, "bad_request", "Pick a length from 15 to 90 seconds.");
       if (idea.needsGuidance)
-        fail(409, "conflict", "Lamo Stories only makes driving-safety videos from checked advice, and this one isn't in the list yet.");
+        fail(409, "conflict", "Clip Factory Stories only makes driving-safety videos from checked advice, and this one isn't in the list yet.");
       checkOverride(body?.override, store);
       await delay(160);
       // The finished task writes `concept` on the idea (keeping its title) and returns the idea.

@@ -93,8 +93,8 @@
   "infra/modules/auth": "Sign in",
   "infra": "Speed",
   "desktop": "Desktop app",
-  "web/src/stories": "Lamo Stories",
-  "api/src/clipfactory_api/workspaces": "Lamo Stories",
-  "api/src/clipfactory_api/flows/story_flow.py": "Lamo Stories",
-  "stories": "Lamo Stories"
+  "web/src/stories": "Clip Factory Stories",
+  "api/src/clipfactory_api/workspaces": "Clip Factory Stories",
+  "api/src/clipfactory_api/flows/story_flow.py": "Clip Factory Stories",
+  "stories": "Clip Factory Stories"
 }

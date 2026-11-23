@@ -169,13 +169,15 @@ def specs() -> list[dict[str, Any]]:
         _spec("read_reference", "Read the analysis of one reference video.", {"refId": _STR}, ["refId"]),
         _spec(
             "create_idea",
-            "Save a new idea now (not for driving_safety: those get a Save button so the app can match them to checked advice).",
+            "Save a new idea now (not for driving_safety: those get a Save button so the app can match them to checked "
+            "advice).",
             _IDEA_PROPS,
             ["title", "logline", "category"],
         ),
         _spec(
             "update_idea",
-            "Change a saved idea's title, logline, characters or concept now (driving_safety ideas get a Save button instead).",
+            "Change a saved idea's title, logline, characters or concept now (driving_safety ideas get a Save button "
+            "instead).",
             {"ideaId": _STR, **{k: v for k, v in _IDEA_PROPS.items() if k != "category"}},
             ["ideaId"],
         ),
@@ -229,7 +231,7 @@ def specs() -> list[dict[str, Any]]:
         _spec("offer_analyze_reference", "Offer an Analyze this reference video button.", {"refId": _STR}, ["refId"]),
         _spec(
             "offer_open",
-            "Offer a button that opens a Lamo Stories page.",
+            "Offer a button that opens a Clip Factory Stories page.",
             {
                 "page": {"type": "string", "enum": list(PAGES)},
                 "id": {"type": "string", "description": "the item id for one-item pages"},
@@ -277,7 +279,7 @@ class Toolbox:
 
     def offer(self, kind: str, label: str, payload: dict[str, Any]) -> dict[str, Any]:
         if kind not in ACTION_KINDS:
-            raise ToolError("That button is not one Lamo Stories has.")
+            raise ToolError("That button is not one Clip Factory Stories has.")
         action = {"kind": kind, "label": clip(label, 40), "payload": payload}
         if any(a["kind"] == kind and a["payload"] == payload for a in self.actions):
             return {"ok": True, "button": action["label"], "note": "That button is already in your answer."}
@@ -627,7 +629,8 @@ class Toolbox:
                 and guidance.keyword_match([fields["title"], fields["logline"]]) is None
             ):
                 raise ToolError(
-                    "Lamo Stories only makes driving-safety videos from checked advice, and this one isn't in the list."
+                    "Clip Factory Stories only makes driving-safety videos from checked advice, and this one isn't in "
+                    "the list."
                 )
             story["brief"] = fields
         if args.get("durationSec") is not None:
@@ -646,7 +649,7 @@ class Toolbox:
     def offer_open(self, args: dict[str, Any]) -> dict[str, Any]:
         page = args.get("page")
         if page not in PAGES:
-            raise ToolError("That is not a Lamo Stories page.")
+            raise ToolError("That is not a Clip Factory Stories page.")
         href = PAGES[str(page)]
         if "{id}" in href:
             item_id = str(args.get("id") or "")

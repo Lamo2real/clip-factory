@@ -47,7 +47,7 @@ export const modelTech = (m: { label: string; host: string; modelId: string; reg
  * `model` is its plain name; `tech` its exact Bedrock ID, folded away (§45.36 E14).
  */
 export const MAKERS: Record<string, { label: string; model: string; line: string; short?: string; tech?: string }> = {
-  "builtin-2d": { label: "Built-in animator", model: "Lamo Stories' own 2D animator", line: "Draws and moves every character the same way in every video." },
+  "builtin-2d": { label: "Built-in animator", model: "Clip Factory Stories' own 2D animator", line: "Draws and moves every character the same way in every video." },
   "luma-ray": {
     label: "Luma AI Ray2",
     short: "Luma AI Ray2",
@@ -57,7 +57,7 @@ export const MAKERS: Record<string, { label: string; model: string; line: string
   },
   "own-video": { label: "Your own video model", model: "A video model you added", line: "AI footage for cut-aways from a video model you add below." },
   "nova-reel": { label: "Amazon Nova Reel", model: "Amazon Nova Reel 1.1", line: "Ended by Amazon on 30 Sep 2026. It made AI footage for cut-aways (scenes with no character)." },
-  "builtin-rig": { label: "Built-in drawings", model: "Lamo Stories' own character drawings", line: "Every character looks the same in every video." },
+  "builtin-rig": { label: "Built-in drawings", model: "Clip Factory Stories' own character drawings", line: "Every character looks the same in every video." },
   stability: {
     label: "Also AI portraits (Stability AI)",
     short: "Stability AI pictures",
@@ -66,7 +66,7 @@ export const MAKERS: Record<string, { label: string; model: string; line: string
   },
   "own-images": { label: "Also AI portraits (your own picture model)", model: "A picture model you added", line: "Portraits from a picture model you add below. Videos still use the drawings." },
   "nova-canvas": { label: "Amazon Nova Canvas", model: "Amazon Nova Canvas", line: "Ended by Amazon on 30 Sep 2026. It made AI portraits." },
-  "builtin-synth": { label: "Built-in sounds and music", short: "Built-in sounds and music", model: "Lamo Stories' own sound maker", line: "Every sound effect, noise and tune, made fresh for each video." },
+  "builtin-synth": { label: "Built-in sounds and music", short: "Built-in sounds and music", model: "Clip Factory Stories' own sound maker", line: "Every sound effect, noise and tune, made fresh for each video." },
   elevenlabs: {
     label: "ElevenLabs sound effects and music",
     model: "ElevenLabs",

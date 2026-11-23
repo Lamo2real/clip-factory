@@ -138,7 +138,7 @@ def test_driving_safety_drafts_must_name_a_checked_topic(tmp_path: Path) -> None
 def test_a_model_the_owner_picked_that_is_not_available_fails_with_its_sentence_and_no_other_model(
     tmp_path: Path,
 ) -> None:
-    sentence = "Claude Fable 5.2 isn't available right now: access denied. Pick another model in Lamo Stories › Settings › AI, or try again."
+    sentence = "Claude Fable 5.2 isn't available right now: access denied. Pick another model in Clip Factory Stories › Settings › AI, or try again."
     model = FakeModel(models.ModelUnavailable(sentence))
     svc, db, _ = services(tmp_path, model)
     db.seed(task_item("T1", "brainstorm", override={"model": "fable-5-2"}))
@@ -273,7 +273,7 @@ def test_a_switched_off_agent_stops_its_tasks(tmp_path: Path) -> None:
     assert run(svc) == "failed"
     assert (
         db.get(PK, "TASK#T1")["error"]
-        == "Creative director is switched off. Switch it on in Lamo Stories › Settings › Agents."
+        == "Creative director is switched off. Switch it on in Clip Factory Stories › Settings › Agents."
     )
     assert model.calls == []
 
@@ -347,7 +347,7 @@ def test_an_unknown_kind_fails_plainly(tmp_path: Path) -> None:
     svc, db, _ = services(tmp_path, FakeModel())
     db.seed(task_item("T1", "storyboard"))
     assert run(svc) == "failed"
-    assert db.get(PK, "TASK#T1")["error"] == "Lamo Stories' agent does not know that kind of AI work yet."
+    assert db.get(PK, "TASK#T1")["error"] == "Clip Factory Stories' agent does not know that kind of AI work yet."
 
 
 class ModelRefused(Exception):

@@ -215,7 +215,7 @@ describe("step 4 and the connect steps", () => {
     await start({});
     await click(button("Connect X"));
     expect(stepTitle()).toBe("Connect X");
-    expect(document.body.textContent).toContain("This is Clip Factory's own account, so this step stays to do.");
+    expect(document.body.textContent).toContain("This is Clip Factory's own account. Clip Factory Stories needs its own separate account: sign in with a different one.");
     expect(stepState("Connect X")).not.toContain("is-done");
   });
 
@@ -223,7 +223,7 @@ describe("step 4 and the connect steps", () => {
     await start({});
     await click(button("Connect X"));
     // A different account made for Clip Factory Stories; nothing to share it with.
-    expect(document.body.textContent).toContain("Tap Pick another account below and sign in with a different one made for Clip Factory Stories.");
+    expect(document.body.textContent).toContain("Use a new account made for Clip Factory Stories, not lamo.clips.");
     expect(document.body.textContent).toContain("This is Clip Factory's own account. Clip Factory Stories needs its own separate account: sign in with a different one.");
     expect(document.body.textContent).not.toMatch(/for both|both apps/i);
     for (const b of $$("button, [role=radio]")) expect(b.textContent ?? "").not.toMatch(/for both|share it/i);

@@ -417,7 +417,7 @@ describe("an account problem always has Open Social accounts (§45.36 E9)", () =
     const story = store.stories.find((s) => s.storyId === S.published)!;
     const jobs = store.publishing.filter((j) => j.contentId === S.published);
     await show(<PublishSheet ws="stories" story={story} config={{}} jobs={jobs} onSent={() => undefined} onRetry={() => undefined} onClose={() => undefined} />);
-    vi.spyOn(api, "publish").mockRejectedValueOnce(new ApiError(409, "conflict", "Lamo Stories' YouTube is not connected. Connect it in Lamo Stories › Social accounts, then tap Try again."));
+    vi.spyOn(api, "publish").mockRejectedValueOnce(new ApiError(409, "conflict", "Clip Factory Stories' YouTube is not connected. Connect it in Clip Factory Stories › Social accounts, then tap Try again."));
     await click(control(/Lamo Stories Channel/, lastDialog()), 50);
     await click(control(/^Upload/, lastDialog()));
     const notice = lastDialog().querySelector<HTMLElement>(".st-s-notice")!;
@@ -426,10 +426,10 @@ describe("an account problem always has Open Social accounts (§45.36 E9)", () =
   });
 
   it("says which sentences are account problems, as the API's Fix it does", () => {
-    expect(accountProblem({ publishingStatus: "needs_attention", error: "This TikTok account (Lamo Stories) needs connecting again. Open Lamo Stories › Social accounts, then tap Try again." })).toBe(true);
+    expect(accountProblem({ publishingStatus: "needs_attention", error: "This TikTok account (Lamo Stories) needs connecting again. Open Clip Factory Stories › Social accounts, then tap Try again." })).toBe(true);
     expect(accountProblem({ publishingStatus: "failed", error: "Facebook did not answer. Tap Try again in a few minutes." })).toBe(false);
-    expect(accountProblem({ publishingStatus: "posted", error: "Open Lamo Stories › Social accounts" })).toBe(false);
-    expect(accountProblem("Lamo Stories' TikTok needs connecting again. Fix it in Social accounts, or leave TikTok out.")).toBe(true);
+    expect(accountProblem({ publishingStatus: "posted", error: "Open Clip Factory Stories › Social accounts" })).toBe(false);
+    expect(accountProblem("Clip Factory Stories' TikTok needs connecting again. Fix it in Social accounts, or leave TikTok out.")).toBe(true);
   });
 
   it("the mock's Needs you › Fix it goes to Social accounts for an account problem, like the API", () => {
@@ -438,7 +438,7 @@ describe("an account problem always has Open Social accounts (§45.36 E9)", () =
     const facebook = needs.find((n) => n.platform === "facebook")!;
     expect(tiktok.href).toBe("/stories/connections");
     expect(facebook.href).toBe(`/stories/review/${S.published}`);
-    expect(dashboard.postHref("Pick another in Lamo Stories › Social accounts, then tap Try again.", S.approved)).toBe("/stories/connections");
+    expect(dashboard.postHref("Pick another in Clip Factory Stories › Social accounts, then tap Try again.", S.approved)).toBe("/stories/connections");
   });
 });
 
@@ -682,7 +682,7 @@ describe("one name on screen: Clip Factory, and accounts by their place (§45.36
     expect(postToTitle("tiktok", { externalAccountId: "ext", accountName: "Lamo Stories", handle: "@lamo.stories" })).toBe("Post to this TikTok account (Lamo Stories)?");
     expect(POST_YES).toBe("Yes, post to this account");
     expect(checkProblem(account("tiktok", "connected", "Old"), account("tiktok", "connected", "Lamo Stories", { externalAccountId: "ext-other", handle: "@lamo.stories" }))).toBe(
-      "Lamo Stories' TikTok is now a different account: this TikTok account (Lamo Stories, @lamo.stories). Look at it below, then tap Upload again.",
+      "Clip Factory Stories' TikTok is now a different account: this TikTok account (Lamo Stories, @lamo.stories). Look at it below, then tap Upload again.",
     );
   });
 
@@ -705,10 +705,10 @@ describe("one name on screen: Clip Factory, and accounts by their place (§45.36
     const youtube = store.social.find((a) => a.platform === "youtube")!;
     Object.assign(youtube, { accountName: null, handle: "@stories.channel", externalAccountId: "UCx9raw-channel-id" });
     e = await asked(api.publish("stories", S.approved, [{ platform: "youtube", socialAccountId: "stories.youtube", confirmAccount: "UC-old" }]));
-    expect(e.message).toBe("Lamo Stories' YouTube is a different account now: this YouTube account (@stories.channel). Tap Yes if that is right.");
+    expect(e.message).toBe("Clip Factory Stories' YouTube is a different account now: this YouTube account (@stories.channel). Tap Yes if that is right.");
     Object.assign(youtube, { handle: null });
     e = await asked(api.publish("stories", S.approved, [{ platform: "youtube", socialAccountId: "stories.youtube", confirmAccount: "UC-old" }]));
-    expect(e.message).toBe("Lamo Stories' YouTube is a different account now: this YouTube account. Tap Yes if that is right.");
+    expect(e.message).toBe("Clip Factory Stories' YouTube is a different account now: this YouTube account. Tap Yes if that is right.");
   });
 
   it("the TikTok question reads right for an account called Lamo Stories, and its button matches", async () => {
@@ -720,7 +720,7 @@ describe("one name on screen: Clip Factory, and accounts by their place (§45.36
     await click(control(/^Upload/, lastDialog()));
     const ask = lastDialog();
     expect(ask.querySelector(".st-s-sheet__title")?.textContent).toBe("Post to this TikTok account (Lamo Stories)?");
-    expect(ask.textContent).toContain("Lamo Stories cannot tell if this TikTok account (Lamo Stories) is the one Clip Factory posts to. Tap Yes if it is your Lamo Stories TikTok.");
+    expect(ask.textContent).toContain("Clip Factory Stories cannot tell if this TikTok account (Lamo Stories) is the one Clip Factory posts to. Tap Yes if it is your Clip Factory Stories TikTok.");
     expect(ask.textContent).not.toContain("Lamo Clips");
     expect(ask.textContent).not.toContain("gives each app its own id");
     expect(control(POST_YES, ask)).toBeTruthy();
@@ -736,8 +736,8 @@ describe("one name on screen: Clip Factory, and accounts by their place (§45.36
       ]),
     );
     expect(made.map((j) => j.error)).toEqual([
-      "This TikTok account (Lamo Stories) is the one Clip Factory posts to. Pick another in Lamo Stories › Social accounts, then tap Try again.",
-      "This YouTube account (Lamo Stories Channel) needs connecting again. Open Lamo Stories › Social accounts, then tap Try again.",
+      "This TikTok account (Lamo Stories) is the one Clip Factory posts to. Pick another in Clip Factory Stories › Social accounts, then tap Try again.",
+      "This YouTube account (Lamo Stories Channel) needs connecting again. Open Clip Factory Stories › Social accounts, then tap Try again.",
     ]);
     expect(JSON.stringify(store.publishing)).not.toContain("Lamo Clips");
   });
@@ -949,8 +949,8 @@ describe("one name on screen, second pass (§45.36 E13, E14)", () => {
   });
 
   it("the yes button matches the sentence the API sends", () => {
-    expect(postYes("Lamo Stories' TikTok is a different account now: this TikTok account (Lamo Stories). Tap Yes if that is right.")).toBe(POST_YES);
-    expect(postYes("Lamo Stories' TikTok is a different account now: Lamo Stories. Tap Post to Lamo Stories if that is right.")).toBe("Post to Lamo Stories");
+    expect(postYes("Clip Factory Stories' TikTok is a different account now: this TikTok account (Lamo Stories). Tap Yes if that is right.")).toBe(POST_YES);
+    expect(postYes("Clip Factory Stories' TikTok is a different account now: Lamo Stories. Tap Post to Lamo Stories if that is right.")).toBe("Post to Lamo Stories");
     expect(postYes(null)).toBe(POST_YES);
   });
 

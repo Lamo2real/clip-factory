@@ -18,6 +18,7 @@ import { ToastProvider, ToastScope } from "../components/Toasts.tsx";
 import { UpdateBar } from "../components/UpdateBar.tsx";
 import { GetAppPanel } from "../components/GetApp.tsx";
 import { LiveDot } from "../components/LiveDot.tsx";
+import { ClipMark } from "../components/ClipMark.tsx";
 import { A, Button, Empty, LinkButton } from "../components/ui.tsx";
 import { Home } from "../screens/home/Home.tsx";
 import { JobDetail } from "../screens/jobs/JobDetail.tsx";
@@ -51,6 +52,7 @@ import { chooseClips, redirectAtStart, restoreScroll, storiesTitle, takeClipsScr
 import { storiesEnabled } from "../stories/flag.ts";
 import type { StoriesPage } from "../stories/routes.ts";
 import { AppPanes, loadStoriesApp, storiesModule, StoriesPaneBoundary } from "../stories/pane.tsx";
+import { StoriesMark } from "../stories/brand/StoriesMark.tsx";
 import { calmPage, followStoriesMotion, storiesDeniedSound } from "../stories/prefs.ts";
 import { KeptSearchProvider, storiesOnScreen, takeParkedClipsGo, useAppActive, useShellHosted } from "./shell.ts";
 import { TopBarSwitch, WorkspaceDock } from "./WorkspaceDock.tsx";
@@ -86,7 +88,7 @@ const TITLES: Record<Route["name"], string> = {
   campaigns_find: "Find campaigns",
   campaign: "Campaign",
   motion_gallery: "Motion gallery",
-  stories: "Lamo Stories",
+  stories: "Clip Factory Stories",
   not_found: "Not found",
 };
 
@@ -170,9 +172,7 @@ export function App() {
         <BankDone boot={boot.state} />
       ) : boot.state === "loading" ? (
         <div className="boot" role="status" aria-label="Loading Clip Factory">
-          <span className="brand__mark brand__mark--boot" aria-hidden="true">
-            C<span className="brand__dot" />
-          </span>
+          <ClipMark className="brand__mark--boot" />
         </div>
       ) : boot.state === "broken" ? (
         <main className="boot" id="main">
@@ -260,7 +260,13 @@ const clipsDenied = () => sounds.play("deny");
 function StoriesHost({ page }: { page: StoriesPage }) {
   const [Stories] = useState<ComponentType<{ page: StoriesPage }>>(() => storiesModule()?.StoriesApp ?? lazy(() => loadStoriesApp().then((m) => ({ default: m.StoriesApp }))));
   return (
-    <Suspense fallback={<div className="boot" role="status" aria-label="Loading Lamo Stories" />}>
+    <Suspense
+      fallback={
+        <div className="boot" role="status" aria-label="Loading Clip Factory Stories">
+          <StoriesMark boot />
+        </div>
+      }
+    >
       <Stories page={page} />
     </Suspense>
   );
@@ -332,9 +338,7 @@ function Shell() {
       <div className="shell">
         <header className="topbar">
           <A href="/" className="brand" aria-label="Clip Factory home">
-            <span className="brand__mark" aria-hidden="true">
-              C<span className="brand__dot" />
-            </span>
+            <ClipMark />
             <span className="brand__name">
               Clip <em>Factory</em>
             </span>

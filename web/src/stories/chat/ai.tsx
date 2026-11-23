@@ -147,7 +147,7 @@ export function AiSheet({
   saved: string | null;
   onClose: () => void;
 }) {
-  const withDefault = scope === "chat" || scope === "keep" ? "Uses the model and effort from Lamo Stories › Settings › AI." : null;
+  const withDefault = scope === "chat" || scope === "keep" ? "Uses the model and effort from Clip Factory Stories › Settings › AI." : null;
   const effortBad = values.effort && values.effort !== DEFAULT ? effortProblem(effortModel, values.effort as Effort) : null;
   return (
     <Sheet

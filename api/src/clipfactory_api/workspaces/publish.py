@@ -85,7 +85,7 @@ ALLOWED: Final[dict[str, frozenset[str]]] = {
     "x": frozenset(),
 }
 NEVER: Final = frozenset({"campaign", "madeForKids"})
-NOT_ON: Final = "Posting is not switched on for Lamo Stories yet."
+NOT_ON: Final = "Posting is not switched on for Clip Factory Stories yet."
 PUBLIC: Final = (
     "publishingJobId",
     "workspaceId",
@@ -177,9 +177,9 @@ def clean_options(platform: str, raw: Any, config: Mapping[str, Any] | None = No
     options = validate.obj(raw, "options")
     for key in sorted(options):
         if key == "madeForKids":
-            raise bad_request("Lamo Stories videos are never marked as made for kids.", "options")
+            raise bad_request("Clip Factory Stories videos are never marked as made for kids.", "options")
         if key == "campaign":
-            raise bad_request("Lamo Stories posts are not campaign posts.", "options")
+            raise bad_request("Clip Factory Stories posts are not campaign posts.", "options")
     validate.only_keys(options, ALLOWED[platform])
     cfg = config or {}
     out: Item = {}
@@ -400,7 +400,8 @@ def _changed_account(platform: str, destination: Destination) -> ApiError:
     return ApiError(
         409,
         "conflict",
-        f"Lamo Stories' {label(platform)} is a different account now: {this_account(platform, name)}. Tap Yes if "
+        f"Clip Factory Stories' {label(platform)} is a different account now: {this_account(platform, name)}. Tap Yes "
+        f"if "
         "that is right.",
         extra={
             "account": {
@@ -433,8 +434,8 @@ def _unsure_account(platform: str, problem: DestinationProblem) -> ApiError:
     return ApiError(
         409,
         "conflict",
-        f"Lamo Stories cannot tell if {this_account(platform, name)} is Clip Factory's {label(platform)}. Tap Yes if "
-        f"it is your Lamo Stories {label(platform)}.",
+        f"Clip Factory Stories cannot tell if {this_account(platform, name)} is Clip Factory's {label(platform)}. Tap "
+        f"Yes if it is your Clip Factory Stories {label(platform)}.",
         extra={"account": dict(account)},
     )
 

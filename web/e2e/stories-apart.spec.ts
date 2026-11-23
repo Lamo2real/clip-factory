@@ -45,7 +45,7 @@ test("Add campaign that answers while Lamo Stories is on screen: the owner stays
   await slow(page, 2500);
   await add.click();
   // While it is still asking, over to Lamo Stories.
-  await page.locator(".ws-dock").getByRole("link", { name: "Lamo Stories" }).click();
+  await page.locator(".ws-dock").getByRole("link", { name: "Clip Factory Stories" }).click();
   await expect(page).toHaveURL(/\/stories$/);
   await storiesReady(page);
   const entries = await page.evaluate((): number => window.history.length);
@@ -60,7 +60,7 @@ test("Add campaign that answers while Lamo Stories is on screen: the owner stays
   await expect(page.locator('[data-app-pane="clips"]')).toBeHidden();
   // Back to Clip Factory: the campaign it added opens now.
   await slow(page, undefined);
-  await page.locator(".ws-dock").getByRole("link", { name: "Clip Factory" }).click();
+  await page.locator(".ws-dock").getByRole("link", { name: "Clip Factory", exact: true }).click();
   await expect(page).toHaveURL(new RegExp(`/campaigns/${FAZE}$`));
   await expect(page.locator(".cr-head")).toContainText("FaZe Clips");
   expect((await choice(page)).workspaceId).toBe("clips");
@@ -83,7 +83,7 @@ test("a skill saved while Lamo Stories is on screen: no jump, no toast or sound 
   });
   await slow(page, 2500);
   await page.getByRole("button", { name: "Save skill" }).click();
-  await page.locator(".ws-dock").getByRole("link", { name: "Lamo Stories" }).click();
+  await page.locator(".ws-dock").getByRole("link", { name: "Clip Factory Stories" }).click();
   await expect(page).toHaveURL(/\/stories$/);
   await storiesReady(page);
   const stored = await choice(page);
@@ -99,7 +99,7 @@ test("a skill saved while Lamo Stories is on screen: no jump, no toast or sound 
   await expect(page.locator(".confetti")).toHaveCount(0);
   // Back: the skill's own page, in place of the editor.
   await slow(page, undefined);
-  await page.locator(".ws-dock").getByRole("link", { name: "Clip Factory" }).click();
+  await page.locator(".ws-dock").getByRole("link", { name: "Clip Factory", exact: true }).click();
   await expect(page).toHaveURL(/\/settings\/clip-making\/skills\/[0-9A-HJKMNP-TV-Z]{26}$/);
   await expect(page.getByRole("heading", { level: 1, name: "Kept apart" })).toBeVisible();
 });

@@ -477,7 +477,7 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
                   ) : (
                     <p className="st-chat-ai__note">
                       {skipped ? `${unusableWords(skipped)}, so this analysis uses ${modelName(aiInfo, usable.model)}. ` : ""}
-                      {ref.ai.model || ref.ai.effort ? "Kept with this video (its own setting)." : "From Lamo Stories › Settings › AI."}
+                      {ref.ai.model || ref.ai.effort ? "Kept with this video (its own setting)." : "From Clip Factory Stories › Settings › AI."}
                     </p>
                   )
                 }

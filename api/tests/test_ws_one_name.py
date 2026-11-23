@@ -71,7 +71,7 @@ def test_every_posting_sentence_says_clip_factory(name: str | None, shared: bool
             if name:
                 # the account's name only ever follows "{Platform} account"
                 assert f"({name})" not in text or f"{LABEL[platform]} account ({name})" in text, (platform, kind)
-                assert f"Lamo Stories' {LABEL[platform]} ({name})" not in text
+                assert f"Clip Factory Stories' {LABEL[platform]} ({name})" not in text
 
 
 def test_the_other_screens_lines_say_clip_factory() -> None:
@@ -92,7 +92,7 @@ def test_the_other_screens_lines_say_clip_factory() -> None:
         "Clip Factory has no TikTok app keys yet. Set up TikTok in Clip Factory first (Settings › Posting › Set up "
         "posting, up to the keys step)."
     )
-    assert social.TIKTOK_UNSURE.startswith("Lamo Stories cannot tell if this is Clip Factory's TikTok")
+    assert social.TIKTOK_UNSURE.startswith("Clip Factory Stories cannot tell if this is Clip Factory's TikTok")
     assert "Clip Factory's posts always go first. Stories uses what's left." in social.limits("x", apps.CLIPS)
     assert not any("quicker" in line or "Use it for both" in line for line in lines)  # §45.37 G6 d, G8
 
@@ -102,23 +102,23 @@ def test_an_account_named_lamo_stories_reads_plainly() -> None:
         return sentences.story_sentence(platform, kind, "Lamo Stories")
 
     assert say("reconnect") == (
-        "This TikTok account (Lamo Stories) needs connecting again. Open Lamo Stories › Social accounts, then tap "
+        "This TikTok account (Lamo Stories) needs connecting again. Open Clip Factory Stories › Social accounts, then tap "
         "Try again."
     )
     assert say("not_connected", "youtube") == (
-        "This YouTube account (Lamo Stories) is not connected. Open Lamo Stories › Social accounts, connect it, then "
+        "This YouTube account (Lamo Stories) is not connected. Open Clip Factory Stories › Social accounts, connect it, then "
         "tap Try again."
     )
     assert say("same_as_clips", "instagram") == (
         "This Instagram account (Lamo Stories) is Clip Factory's own account. Clip Factory Stories needs its own "
-        "separate account: connect a different one in Lamo Stories › Social accounts, then tap Try again."
+        "separate account: connect a different one in Clip Factory Stories › Social accounts, then tap Try again."
     )
     assert say("clips_unknown") == (
-        "Lamo Stories cannot tell if this TikTok account (Lamo Stories) is Clip Factory's TikTok. Tap Try again to "
+        "Clip Factory Stories cannot tell if this TikTok account (Lamo Stories) is Clip Factory's TikTok. Tap Try again to "
         "check the account first."
     )
     assert say("changed", "facebook") == (
-        "Lamo Stories' Facebook is a different account now: this Facebook account (Lamo Stories). Tap Try again to "
+        "Clip Factory Stories' Facebook is a different account now: this Facebook account (Lamo Stories). Tap Try again to "
         "check where it goes."
     )
     assert (
@@ -128,10 +128,10 @@ def test_an_account_named_lamo_stories_reads_plainly() -> None:
     assert say("banned", "x") == "X is not letting this X account (Lamo Stories) post right now. Try again tomorrow."
     # with no name the sentence is about Lamo Stories' own account on that platform
     assert sentences.story_sentence("tiktok", "reconnect") == (
-        "Lamo Stories' TikTok needs connecting again. Open Lamo Stories › Social accounts, then tap Try again."
+        "Clip Factory Stories' TikTok needs connecting again. Open Clip Factory Stories › Social accounts, then tap Try again."
     )
     assert sentences.story_sentence("youtube", "changed") == (
-        "Lamo Stories' YouTube is a different account now. Tap Try again to check where it goes."
+        "Clip Factory Stories' YouTube is a different account now. Tap Try again to check where it goes."
     )
     # the dashboard's own account line
     line = dashboard._account_sentence(

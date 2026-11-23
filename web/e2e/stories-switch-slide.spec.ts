@@ -220,8 +220,8 @@ function frames(r: Recorded, rest: { median: number; worst: number }) {
 // the Linux CI runners is the GTK/WPE port, which never started the glide's Web Animation there.
 test.skip(({ browserName }) => browserName === "webkit" && process.platform !== "darwin", "WebKit's slide is measured on macOS (the Mac app's engine)");
 
-async function tapChoice(page: Page, name: "Lamo Stories" | "Clip Factory") {
-  const opt = page.locator(".ws-dock .ws-switch__opt", { hasText: name });
+async function tapChoice(page: Page, name: "Clip Factory Stories" | "Clip Factory") {
+  const opt = page.locator(".ws-dock .ws-switch__opt", { hasText: new RegExp(`^${name}$`) });
   const box = (await opt.boundingBox())!;
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
   // The pointer came to it: Lamo Stories' code is asked for now (it is here already: the idle fetch brought it).
@@ -246,7 +246,7 @@ for (const [label, glass] of [
     await warm(page);
     const chromium = browserName === "chromium";
     for (const [to, url] of [
-      ["Lamo Stories", /\/stories$/],
+      ["Clip Factory Stories", /\/stories$/],
       ["Clip Factory", /\/library$/],
     ] as const) {
       const rest = await restFrame(page);
@@ -254,7 +254,7 @@ for (const [label, glass] of [
       const tasks = chromium
         ? await trace(page, () => tapChoice(page, to).then(() => page.waitForURL(url)))
         : (await tapChoice(page, to), await page.waitForURL(url), null);
-      if (to === "Lamo Stories") await storiesReady(page);
+      if (to === "Clip Factory Stories") await storiesReady(page);
       else await settle(page);
       const r = await page.evaluate(() => (window as unknown as { __slide: Recorded }).__slide);
       const slides = r.slides.filter((s) => s.id === "glide-slide");
@@ -344,10 +344,10 @@ test.describe("the slide in pictures", () => {
       await warm(page);
       // The slide is held at six moments (the page changes only once it ends, which this test lets it do last).
       for (const [to, from, url] of [
-        ["Lamo Stories", "clip-factory", /\/stories$/],
-        ["Clip Factory", "lamo-stories", /\/library$/],
+        ["Clip Factory Stories", "clip-factory", /\/stories$/],
+        ["Clip Factory", "clip-factory-stories", /\/library$/],
       ] as const) {
-        const opt = page.locator(".ws-dock .ws-switch__opt", { hasText: to });
+        const opt = page.locator(".ws-dock .ws-switch__opt", { hasText: new RegExp(`^${to}$`) });
         await opt.click();
         // Everything that moves in the bar at once, held together: the highlight's slide and its words' colour change.
         await page.evaluate(() => {
@@ -371,18 +371,18 @@ test.describe("the slide in pictures", () => {
           }, t);
           shots.push(
             await page.screenshot({
-              path: join(SHOTS, `${label}-${from}-to-${to.toLowerCase().replace(" ", "-")}-${i + 1}-${t}ms.png`),
+              path: join(SHOTS, `${label}-${from}-to-${to.toLowerCase().replaceAll(" ", "-")}-${i + 1}-${t}ms.png`),
               clip: area,
             }),
           );
         }
-        writeFileSync(join(SHOTS, `${label}-${from}-to-${to.toLowerCase().replace(" ", "-")}-strip.png`), await strip(page, shots));
+        writeFileSync(join(SHOTS, `${label}-${from}-to-${to.toLowerCase().replaceAll(" ", "-")}-strip.png`), await strip(page, shots));
         // Let it land: the page changes now.
         await page.evaluate(() => {
           for (const a of document.querySelector(".ws-dock .ws-switch")!.getAnimations({ subtree: true })) a.finish();
         });
         await page.waitForURL(url);
-        if (to === "Lamo Stories") await page.locator(".stories-app[data-ws]").waitFor();
+        if (to === "Clip Factory Stories") await page.locator(".stories-app[data-ws]").waitFor();
         await page.waitForTimeout(1500);
       }
     });

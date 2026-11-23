@@ -33,7 +33,7 @@ export function skillBody(md: string): string {
 }
 
 export function sourceWords(s: Skill): string {
-  if (s.builtin) return "Comes with Lamo Stories";
+  if (s.builtin) return "Comes with Clip Factory Stories";
   if (s.source === "written") return "Written by you";
   return s.format === "zip" ? "Uploaded .zip" : "Uploaded file";
 }
@@ -256,7 +256,7 @@ function SkillDetail({ ws, skill, agents, onSaved, onAssign, onDelete }: { ws: s
       ) : null}
 
       {skill.builtin ? (
-        <Note tone="sky">This skill comes with Lamo Stories, so its words can't be changed. You can switch it off, or take it off an agent.</Note>
+        <Note tone="sky">This skill comes with Clip Factory Stories, so its words can't be changed. You can switch it off, or take it off an agent.</Note>
       ) : (
         <>
           <div className="st-stg-actions">

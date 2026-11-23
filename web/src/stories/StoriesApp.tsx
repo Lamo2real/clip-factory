@@ -16,6 +16,7 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react
 import { ApiError } from "../api/errors.ts";
 import { setStoriesWorkspaceShown } from "../app/shell.ts";
 import { TopBarSwitch } from "../app/WorkspaceDock.tsx";
+import { STORIES_BRAND, StoriesMark, StoriesWordmark } from "./brand/StoriesMark.tsx";
 import { useToast } from "../components/Toasts.tsx";
 import { Glide } from "../components/Glide.tsx";
 import { A } from "../components/ui.tsx";
@@ -237,28 +238,12 @@ function Screen(props: StoriesScreenProps) {
   }
 }
 
-/** The Lamo Stories mark: a little sunny face on the night stage. */
-function StoriesMark({ size = 40 }: { size?: number }) {
-  return (
-    <svg className="st-brand__mark" width={size} height={size} viewBox="0 0 40 40" aria-hidden="true" focusable="false">
-      <rect x="1" y="1" width="38" height="38" rx="13" fill="#FFC94A" />
-      <circle cx="14.5" cy="17" r="3" fill="#1C1842" />
-      <circle cx="25.5" cy="17" r="3" fill="#1C1842" />
-      <circle cx="15.4" cy="16" r="1" fill="#FFF6E5" />
-      <circle cx="26.4" cy="16" r="1" fill="#FFF6E5" />
-      <path d="M13 24.5c3.8 4 10.2 4 14 0" fill="none" stroke="#1C1842" strokeWidth="3" strokeLinecap="round" />
-      <circle cx="31.5" cy="8.5" r="3" fill="#FF6F61" />
-    </svg>
-  );
-}
-
+/** The brand in the rail and the phone top bar: Clip Factory's mark in Stories' colours and "Clip Factory Stories". */
 function Brand() {
   return (
-    <A href="/stories" className="st-brand" aria-label="Lamo Stories dashboard">
-      <StoriesMark />
-      <span className="st-brand__name">
-        Lamo <em>Stories</em>
-      </span>
+    <A href="/stories" className="st-brand" aria-label={`${STORIES_BRAND} dashboard`}>
+      <StoriesMark className="st-brand__mark" />
+      <StoriesWordmark className="st-brand__name" />
     </A>
   );
 }
@@ -394,9 +379,9 @@ function StoriesShell({ page }: { page: StoriesPage }) {
           if (id) {
             setWs(id);
             setProblem(null);
-          } else setProblem("Lamo Stories is not ready yet. Try again in a minute.");
+          } else setProblem("Clip Factory Stories is not ready yet. Try again in a minute.");
         })
-        .catch(() => live && !quick && setProblem("Lamo Stories could not load. Check that you are online, then try again."));
+        .catch(() => live && !quick && setProblem("Clip Factory Stories could not load. Check that you are online, then try again."));
     };
     run();
     // The switcher picked another Lamo Stories workspace: check again.
@@ -423,7 +408,7 @@ function StoriesShell({ page }: { page: StoriesPage }) {
           if (id) setWs(id);
           else setProblem("We could not find that workspace. Reload the page to try again.");
         })
-        .catch(() => live && setProblem("Lamo Stories could not load. Check that you are online, then try again."));
+        .catch(() => live && setProblem("Clip Factory Stories could not load. Check that you are online, then try again."));
     };
     return () => {
       live = false;
@@ -527,7 +512,7 @@ function StoriesShell({ page }: { page: StoriesPage }) {
         Skip to content
       </a>
       {solo ? null : (
-        <nav className="st-rail" aria-label="Lamo Stories">
+        <nav className="st-rail" aria-label="Clip Factory Stories">
           <Brand />
           <ul className="st-rail__list">
             <Glide active=".st-rail__item.is-active" className="glide--st-rail" as="li" />
@@ -555,7 +540,7 @@ function StoriesShell({ page }: { page: StoriesPage }) {
           {ws && !solo ? <NeedsYouBar ws={ws} here={storiesHref(page)} /> : null}
           {problem ? (
             <section className="st-page">
-              <h1 className="sr-only">Lamo Stories</h1>
+              <h1 className="sr-only">Clip Factory Stories</h1>
               <StError message={problem} onRetry={() => location.reload()} />
             </section>
           ) : ws ? (
@@ -564,14 +549,14 @@ function StoriesShell({ page }: { page: StoriesPage }) {
             </StBoundary>
           ) : (
             <section className="st-page">
-              <h1 className="sr-only">Lamo Stories</h1>
+              <h1 className="sr-only">Clip Factory Stories</h1>
               <StLoading label="Opening the studio…" />
             </section>
           )}
         </main>
       </div>
       {solo ? null : (
-        <nav className="st-tabbar" aria-label="Lamo Stories">
+        <nav className="st-tabbar" aria-label="Clip Factory Stories">
           <ul className="st-tabbar__list">
             <Glide active=".st-tabbar__item.is-active" className="glide--st-tab" as="li" />
             {TABS.map((item) => (

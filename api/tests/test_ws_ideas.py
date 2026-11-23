@@ -337,7 +337,7 @@ def test_a_switched_off_agent_refuses_its_tasks(call: Call, store: db.Store, age
     status, body = call("POST", f"{BASE}/ideas/generate", {})
     assert status == 409
     assert body["error"]["message"] == (
-        "Creative director is switched off. Switch it on in Lamo Stories › Settings › Agents."
+        "Creative director is switched off. Switch it on in Clip Factory Stories › Settings › Agents."
     )
     assert agentcore.calls == []
 

@@ -248,9 +248,21 @@ export function wantedStoriesWorkspace(): string | null {
   return pendingStories ?? currentChoice().lastStoriesWorkspaceId;
 }
 
+/** The first Stories workspace's default name until 22 Nov 2026, and today's. */
+export const OLD_STORIES_NAME = "Lamo Stories";
+export const STORIES_NAME = "Clip Factory Stories";
+
+/**
+ * The name a person sees for a stored Stories workspace name: a workspace still stored with the old default name
+ * reads as today's. Only what is shown changes; the stored record is never rewritten.
+ */
+export function shownWorkspaceName(name: string): string {
+  return name === OLD_STORIES_NAME ? STORIES_NAME : name;
+}
+
 /** The name a workspace goes by in the switcher: Lamo Clips is the app itself, "Clip Factory" (§45.16.1). */
 export function switcherName(w: Pick<Workspace, "workspaceType" | "workspaceName">): string {
-  return w.workspaceType === "clips" ? "Clip Factory" : w.workspaceName;
+  return w.workspaceType === "clips" ? "Clip Factory" : shownWorkspaceName(w.workspaceName);
 }
 
 // ---------- Clip Factory's scroll position across a switch (sessionStorage, this tab only) ----------
@@ -488,7 +500,7 @@ export function redirectAtStart(): void {
 /** What the switcher shows before the server answers: Lamo Clips and the first Lamo Stories workspace. */
 export const DEFAULT_WORKSPACES: Workspace[] = [
   { workspaceId: CLIPS_WORKSPACE_ID, workspaceName: "Clip Factory", workspaceType: "clips", builtin: true, configuration: {}, version: 0 },
-  { workspaceId: FIRST_STORIES_WORKSPACE_ID, workspaceName: "Lamo Stories", workspaceType: "stories", builtin: false, configuration: {}, version: 0 },
+  { workspaceId: FIRST_STORIES_WORKSPACE_ID, workspaceName: STORIES_NAME, workspaceType: "stories", builtin: false, configuration: {}, version: 0 },
 ];
 
 let known: Workspace[] | null = null;
@@ -554,7 +566,7 @@ const TITLES: Record<StoriesPage["name"], string> = {
 
 /** The tab title of a Lamo Stories page ("Ideas · Lamo Stories"). */
 export function storiesTitle(page: StoriesPage): string {
-  return `${TITLES[page.name]} · Lamo Stories`;
+  return `${TITLES[page.name]} · ${STORIES_NAME}`;
 }
 
 /** Test hook: forget what this module remembered (each test starts from localStorage). */

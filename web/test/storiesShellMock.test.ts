@@ -32,7 +32,7 @@ describe("workspaces", () => {
 
   it("answers the API's 404 and 409 for a workspace that is not one, or not a Lamo Stories one", async () => {
     await expect(api.dashboard("01JZ0000000000000000000000")).rejects.toMatchObject({ status: 404, message: "We could not find that workspace." });
-    await expect(api.social("clips")).rejects.toMatchObject({ status: 409, message: "That is a Lamo Stories page. Switch to Lamo Stories first." });
+    await expect(api.social("clips")).rejects.toMatchObject({ status: 409, message: "That is a Clip Factory Stories page. Switch to Clip Factory Stories first." });
   });
 
   it("saves settings on top of the version it was given, and refuses a stale one or a bad value", async () => {
@@ -159,9 +159,9 @@ describe("developer apps (§45.30)", () => {
 
   it("never connects without a choice, and own keys must be saved first (no fallback)", async () => {
     store.social = store.social.map((a) => (a.platform === "x" ? { ...a, app: { choice: null, saved: false }, connectionStatus: "not_connected" } : a));
-    await expect(api.connectSocial("stories", "x")).rejects.toMatchObject({ status: 409, message: "Pick which X app Lamo Stories uses first." });
+    await expect(api.connectSocial("stories", "x")).rejects.toMatchObject({ status: 409, message: "Pick which X app Clip Factory Stories uses first." });
     store.social = store.social.map((a) => (a.platform === "x" ? { ...a, app: { choice: "own", saved: false } } : a));
-    await expect(api.connectSocial("stories", "x")).rejects.toMatchObject({ status: 409, message: "Paste your Lamo Stories X app keys first." });
+    await expect(api.connectSocial("stories", "x")).rejects.toMatchObject({ status: 409, message: "Paste your Clip Factory Stories X app keys first." });
   });
 
   it("checks the key formats, keeps only masked hints, and a new app disconnects the account first", async () => {

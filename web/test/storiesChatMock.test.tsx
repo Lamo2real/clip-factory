@@ -154,7 +154,7 @@ describe("chat", () => {
     const m = (await api.getConversation("stories", conv.convId)).messages.find((x) => x.msgId === sent.assistant.msgId)!;
     expect(m.status).toBe("failed");
     expect(m.model).toBe("fable-5-2");
-    expect(m.error).toBe("Claude Fable 5.2 isn't available right now: this account cannot use it yet. Pick another model in Lamo Stories › Settings › AI, or try again.");
+    expect(m.error).toBe("Claude Fable 5.2 isn't available right now: this account cannot use it yet. Pick another model in Clip Factory Stories › Settings › AI, or try again.");
   });
 
   it("says so when the creative director is switched off", async () => {
@@ -162,7 +162,7 @@ describe("chat", () => {
     const conv = await api.createConversation("stories", {});
     await api.sendMessage("stories", conv.convId, { text: "Hello" });
     finish();
-    expect((await api.getConversation("stories", conv.convId)).messages.at(-1)!.error).toBe("Creative director is switched off. Switch it on in Lamo Stories › Settings › Agents.");
+    expect((await api.getConversation("stories", conv.convId)).messages.at(-1)!.error).toBe("Creative director is switched off. Switch it on in Clip Factory Stories › Settings › Agents.");
   });
 
   it("takes pictures up to 5 MB, only the ones uploaded to this chat", async () => {
@@ -268,7 +268,7 @@ describe("references", () => {
     const id = references.SEED_IDS.analyzed;
     const old = (await api.getReference("stories", id)).analysis;
     expect(old).not.toBeNull();
-    store.knobs.refFail = "Claude Fable 5.2 isn't available right now: no access. Pick another model in Lamo Stories › Settings › AI, or try again.";
+    store.knobs.refFail = "Claude Fable 5.2 isn't available right now: no access. Pick another model in Clip Factory Stories › Settings › AI, or try again.";
     await api.analyzeReference("stories", id, { model: "fable-5-2" });
     // While it runs, the last analysis is still answered (the API reads analysis.json whatever the status).
     expect((await api.getReference("stories", id)).analysis).toEqual(old);

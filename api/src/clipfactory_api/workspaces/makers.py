@@ -115,25 +115,26 @@ REGION_WORDS: Final = {
     "eu-north-1": "Runs in Europe (Stockholm)",
 }
 
-NOT_FOUND: Final = "Lamo Stories has no picture, video or sound model you added with that name."
+NOT_FOUND: Final = "Clip Factory Stories has no picture, video or sound model you added with that name."
 BAD_KIND: Final = "Say what the model makes: image (pictures), video or audio (sound effects and music)."
-BUNDLED: Final = "That model comes with Lamo Stories, so it can't be changed or removed."
+BUNDLED: Final = "That model comes with Clip Factory Stories, so it can't be changed or removed."
 REASONING_TAKEN: Final = "You already added an AI model with that name in Settings › AI. Pick another name."
 KIND_FIXED: Final = "A model you added keeps what it makes. Remove it and add it again as another kind."
 BAD_PICTURE_MODEL: Final = (
-    "Lamo Stories can make pictures on Amazon Bedrock with Stability AI's or Amazon Titan Image's models. Paste a "
-    "model id like stability.stable-image-core-v1:1."
+    "Clip Factory Stories can make pictures on Amazon Bedrock with Stability AI's or Amazon Titan Image's models. "
+    "Paste a model id like stability.stable-image-core-v1:1."
 )
 BAD_VIDEO_MODEL: Final = (
-    "Lamo Stories can make video on Amazon Bedrock with Luma AI's models only. Paste a model id like luma.ray-v2:0."
+    "Clip Factory Stories can make video on Amazon Bedrock with Luma AI's models only. Paste a model id like "
+    "luma.ray-v2:0."
 )
 ENDED_MODEL: Final = (
     "Amazon ended that model on 30 Sep 2026, so it can't be added. Pick another model, like "
     "stability.stable-image-core-v1:1 for pictures or luma.ray-v2:0 for video."
 )
 NO_BEDROCK_SOUND: Final = (
-    "Amazon Bedrock has no sound-effect or music model yet, so Lamo Stories can't add one there. Add an ElevenLabs "
-    "model instead, like eleven_text_to_sound_v2."
+    "Amazon Bedrock has no sound-effect or music model yet, so Clip Factory Stories can't add one there. Add an "
+    "ElevenLabs model instead, like eleven_text_to_sound_v2."
 )
 ELEVENLABS_ONLY_SOUND: Final = (
     "ElevenLabs is used for sound effects and music only, never a voice. Paste a model like eleven_text_to_sound_v2 "
@@ -249,7 +250,7 @@ def ended_sentence(m: Mapping[str, Any]) -> str:
     word = KIND_WORD.get(str(m.get("kind")), "picture")
     return (
         f"{m.get('label')} was ended by {m.get('provider') or 'its maker'} on {ended_day(m.get('ended'))}. "
-        f"Pick another {word} maker in Lamo Stories › Settings › Video."
+        f"Pick another {word} maker in Clip Factory Stories › Settings › Video."
     )
 
 
@@ -472,7 +473,7 @@ def clean_check(raw: Any, models: Iterable[Mapping[str, Any]]) -> list[str]:
     for key in raw:
         found = find(key, listed)
         if found is None:
-            raise bad_request(f"Lamo Stories has no picture, video or sound model called '{key}'.", "makers")
+            raise bad_request(f"Clip Factory Stories has no picture, video or sound model called '{key}'.", "makers")
         if found.get("ended"):
             raise bad_request(ended_sentence(found), "makers")
         if key not in keys:

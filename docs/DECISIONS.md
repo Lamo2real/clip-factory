@@ -28,8 +28,8 @@ from the owner's "learn from its own results" request
 whose plan the owner approved on 2026-11-18; the statistics and the lesson life were decided by the build. ADR-42
 comes from the owner's request to pick the AI model for clip jobs in Settings
 ([CONTRACTS.md §23](CONTRACTS.md#23-ai-model-choice-for-clip-jobs-owner-request-2026-11-18)); the list of five was the
-owner's, the fallback and the IAM shape were decided by the build. ADR-70 to ADR-80 come from the owner's Lamo Stories requests
-([CONTRACTS.md §45](CONTRACTS.md#45-lamo-stories-a-second-separate-workspace-owner-request-2026-11-21)), whose spec the
+owner's, the fallback and the IAM shape were decided by the build. ADR-70 to ADR-80 come from the owner's Clip Factory Stories requests
+([CONTRACTS.md §45](CONTRACTS.md#45-clip-factory-stories-a-second-separate-workspace-owner-request-2026-11-21)), whose spec the
 owner wrote; the mechanisms were decided by the build. ADR-82 comes from the owner's choice of option A for "Reached
 your bank" on 2026-11-22 ([CONTRACTS.md §40.5](CONTRACTS.md#405-your-bank-what-really-reached-it-read-through-enable-banking-owners-choice-a-2026-11-22));
 the choice of bank source was the owner's, the mechanisms were decided by the build.
@@ -1830,13 +1830,13 @@ button there. Numbers come from the post found on the connected account (`video/
 
 ## ADR-70 Workspaces: Lamo Clips is the built-in workspace, new workspaces live in partitions of their own
 
-- **Context.** The owner asked (2026-11-21) for a second studio, Lamo Stories, inside the same app and sign-in, with
+- **Context.** The owner asked (2026-11-21) for a second studio, Clip Factory Stories, inside the same app and sign-in, with
   its own screens, content, jobs, settings and social accounts, and made protecting the existing app the highest
   priority: no renamed tables, attributes or resources, no change to how Lamo Clips looks or works. Every Lamo Clips
   item sits under `USER#{userId}`; the live-update and notification streams forward items by sort-key prefix; the
   stats poller follows `gsi2`; `posts.account_items` reads every `ACCOUNT#` under the user.
 - **Options.** (1) Add a `workspaceId` attribute to every existing item and back-fill Lamo Clips' data (a migration of
-  owner data, and every existing query would need a filter); (2) store Lamo Stories items under `USER#{userId}` with new
+  owner data, and every existing query would need a filter); (2) store Clip Factory Stories items under `USER#{userId}` with new
   sort-key prefixes (no migration, but every existing whole-partition read and the `ACCOUNT#` readers would see them,
   and an unlucky prefix would reach the streams); (3) Lamo Clips is the built-in workspace `clips`, never written, its
   data where it is; each other workspace gets a registry item in `USER#{userId}#WSREG` and its own partition
@@ -1844,16 +1844,16 @@ button there. Numbers come from the post found on the connected account (`video/
   the owner asked not to add without need).
 - **Decision.** (CONTRACTS §45.3) Option 3. Ownership is in the key (built from the JWT's `sub`), checked again on
   every item's `userId` and `workspaceId`. The workspace registry holds `workspaceType` (`clips` built in, `stories`),
-  so a later brand is a new workspace or one new type. In the web, `/stories/…` is Lamo Stories and every other path is
+  so a later brand is a new workspace or one new type. In the web, `/stories/…` is Clip Factory Stories and every other path is
   today's shell; the choice persists on the device and in the URL. A web switch, `STORIES_ON`, kept it hidden until
   all of it had merged and the final check passed; it was turned on on 2026-11-22 (CONTRACTS §45.36).
-- **Consequences.** No Lamo Clips item, query, stream, index or screen changes; nothing is migrated. Lamo Stories
+- **Consequences.** No Lamo Clips item, query, stream, index or screen changes; nothing is migrated. Clip Factory Stories
   screens poll instead of using the WebSocket (no stream filter change). A user's data now spans more than one
   partition, so a future "delete everything" must walk the registry too (none exists today).
 
 ## ADR-71 One animation engine in TypeScript, drawn by the browser and by the agent
 
-- **Context.** Lamo Stories needs 30–60 s vertical cartoons without voice-over, with recurring characters that must
+- **Context.** Clip Factory Stories needs 30–60 s vertical cartoons without voice-over, with recurring characters that must
   look and move the same in every video, previews in the app, and a pipeline that works today. No image or video
   generation model is set up in the account; Amazon Nova Canvas and Nova Reel are not offered in eu-north-1 (Ireland,
   N. Virginia and Tokyo only), Reel writes to a bucket in its own Region, and generated frames or clips do not keep a
@@ -1872,27 +1872,27 @@ button there. Numbers come from the post found on the connected account (`video/
   and no licences. AI images (Nova Canvas) can be added later behind the rigs (ADR-75).
 - **Consequences.** Previews and videos use the same draw lists (shared code; the rasterizer is tested on fixed draw
   lists). The look is clean flat-shaded 2D, not painted or realistic; new actions, props or sets are code in one
-  folder. The engine folder is copied into Lamo Stories' own agent image (ADR-76), so that image's tag hash includes
-  it, and an engine change rebuilds only that image; Clip Factory's agent image never changes because of Lamo
+  folder. The engine folder is copied into Clip Factory Stories' own agent image (ADR-76), so that image's tag hash includes
+  it, and an engine change rebuilds only that image; Clip Factory's agent image never changes because of Clip Factory
   Stories. Rendering 45 s
   takes a few minutes on the agent.
 
 ## ADR-72 Separate social connections: own tokens, one callback, the owner's choice of developer app
 
-- **Context.** The owner wants different accounts for Lamo Stories on every platform and no accidental posting to
+- **Context.** The owner wants different accounts for Clip Factory Stories on every platform and no accidental posting to
   Lamo Clips' destinations. He set up one developer app per platform (13 manual steps for YouTube) and asked never to
   have to redo it. Each app has one registered redirect URI, `…/oauth/{platform}/callback`. Lamo Clips' tokens are
   `cf-prod/platforms/{platform}/token`, one per platform, read by the clip flow, stats and money functions.
-- **Options.** (1) A second developer app per platform for Lamo Stories (hours of manual setup and platform reviews
+- **Options.** (1) A second developer app per platform for Clip Factory Stories (hours of manual setup and platform reviews
   again); (2) the same apps and the same callback, with the stored OAuth state telling the callback which workspace it
-  serves, tokens under a second Secrets Manager prefix; (3) nest Lamo Stories tokens under `cf-prod/platforms/` (no IAM
+  serves, tokens under a second Secrets Manager prefix; (3) nest Clip Factory Stories tokens under `cf-prod/platforms/` (no IAM
   change, but every Lamo Clips function could read them).
 - **Decision.** (CONTRACTS §45.13) Option 2 for the callback and the tokens; which developer app each platform uses is
-  the owner's explicit choice, his own or Clip Factory's (ADR-79). A Lamo Stories connect uses its own state format
+  the owner's explicit choice, his own or Clip Factory's (ADR-79). A Clip Factory Stories connect uses its own state format
   (`w1.` with the workspace id inside the signature) and its own state items (`OAUTH#ws.{nonce}`). Clip Factory's
-  callback only forwards a `w1.` state to Lamo Stories' own callback route on `cf-prod-stories-api` (Clip Factory's
+  callback only forwards a `w1.` state to Clip Factory Stories' own callback route on `cf-prod-stories-api` (Clip Factory's
   registered apps are not edited, so their redirect URI stays the hooks one); `v1.` states run today's code
-  unchanged. Only Lamo Stories' Lambda writes `cf-prod/workspaces/{workspaceId}/{platform}/token` and `SOCIAL#`. One account per platform per
+  unchanged. Only Clip Factory Stories' Lambda writes `cf-prod/workspaces/{workspaceId}/{platform}/token` and `SOCIAL#`. One account per platform per
   workspace. YouTube connects the one channel picked in Google's picker (`prompt=select_account consent`): a token
   posts to exactly one channel, so there is no channel list to choose from; Meta lists Pages. An identity equal to
   Lamo Clips' own is held as `same_as_clips` until the owner says "Use it for both". Disconnect never calls a
@@ -1900,7 +1900,7 @@ button there. Numbers come from the post found on the connected account (`video/
   Lamo Clips' too, as §40 found for AdSense).
 - **Consequences.** With Clip Factory's app (YouTube, TikTok, X), quotas, credits and the owner's monthly X limit are
   shared (and counted together), and TikTok's Sandbox, private-account and review limits apply to both; a later key
-  change asks Lamo Stories to connect again. Meta always needs Lamo Stories' own app, so Clip Factory's Meta grant is
+  change asks Clip Factory Stories to connect again. Meta always needs Clip Factory Stories' own app, so Clip Factory's Meta grant is
   never touched.
   A Disconnect leaves the grant at the platform; the page says where to remove it by hand. `hooks.py` gains one
   forward, proven not to change the old path, and no IAM.
@@ -1909,12 +1909,12 @@ button there. Numbers come from the post found on the connected account (`video/
 
 ## ADR-73 Publishing isolation: checked before every call, no default account, IAM as the last wall
 
-- **Context.** "A video created in Lamo Stories must only be published to Lamo Stories-connected accounts", every
+- **Context.** "A video created in Clip Factory Stories must only be published to Clip Factory Stories-connected accounts", every
   publishing job must reference workspace, content, social account, platform and status, the relationships must be
   validated before every operation, and a missing or ambiguous destination must stop and ask. The platform publishers
   (§17.6) take their credentials and video in a `PublishJob` and touch no store.
 - **Options.** (1) Teach the clip flow about workspaces (changes Lamo Clips' most delicate code); (2) a new durable
-  function for Lamo Stories that reuses the publishers unchanged, with one validation function run by the API at the
+  function for Clip Factory Stories that reuses the publishers unchanged, with one validation function run by the API at the
   tap and by the flow before each platform call, and its own IAM role.
 - **Decision.** (CONTRACTS §45.14, §45.15) Option 2: `cf-prod-story-flow`. A publishing job records the account's
   identity at the tap; the flow re-checks the workspace, the story, the account (same partition, same platform,
@@ -1924,7 +1924,7 @@ button there. Numbers come from the post found on the connected account (`video/
   the Lamo Clips roles cannot read `cf-prod/workspaces/*`.
 - **Consequences.** A code mistake in either flow cannot reach the other workspace's tokens or Lamo Clips' items
   (Terraform tests hold the policies). A reconnect to a different account stops queued jobs instead of sending them
-  somewhere new. Lamo Stories numbers are read by the flow at 1 h, 24 h, 72 h and 7 days, through the same rate
+  somewhere new. Clip Factory Stories numbers are read by the flow at 1 h, 24 h, 72 h and 7 days, through the same rate
   budgets as Lamo Clips, not by the 15-minute stats poller; the flow runs up to 9 days.
 
 ## ADR-74 Safety videos only from checked guidance
@@ -1938,7 +1938,7 @@ button there. Numbers come from the post found on the connected account (`video/
   writer allowed only its uncontradicted steps, then a separate checker (the quality agent), and stories with problems
   held for the owner.
 - **Decision.** (CONTRACTS §45.11.5) Option 3, and a safety topic with no guidance cannot be produced. (This ADR first
-  also kept Clip Factory's skills block on Lamo Stories' calls; the owner's second request settled that the other way:
+  also kept Clip Factory's skills block on Clip Factory Stories' calls; the owner's second request settled that the other way:
   ADR-78.)
 - **Consequences.** Only 12 driving situations can be taught at first; adding one means adding checked sources. Some
   advice differs by country, so contradicted steps are left out and the video points to local rules.
@@ -1957,31 +1957,31 @@ button there. Numbers come from the post found on the connected account (`video/
 - **Consequences.** The videos are fully built-in. Switching on Nova Canvas adds AI portraits; AI backgrounds in videos
   and Nova Reel stay out until the posting labels are added (and, for Reel, a US bucket).
 
-## ADR-76 Lamo Stories is its own application: its own API Lambda, AgentCore runtime and IAM roles
+## ADR-76 Clip Factory Stories is its own application: its own API Lambda, AgentCore runtime and IAM roles
 
-- **Context.** The owner's second request (2026-11-21): "Lamo Stories must be treated as an independent application
+- **Context.** The owner's second request (2026-11-21): "Clip Factory Stories must be treated as an independent application
   within the existing Clip Factory application shell … The only shared element should be the application shell",
   with its own AgentCore environment, agents, skills, models, chat, memory, settings, OAuth credentials and data, "two
   separate applications accessible through one desktop application", while shared AWS infrastructure is fine "where
-  appropriate" with "strict authorization and data boundaries". The first plan ran Lamo Stories' routes in
+  appropriate" with "strict authorization and data boundaries". The first plan ran Clip Factory Stories' routes in
   `cf-prod-api` and its videos as new actions of Clip Factory's agent runtime.
 - **Options.** (1) Keep the first plan (one API Lambda and one agent runtime, separated in code only); (2) separate
-  route modules in `cf-prod-api` but Lamo Stories' own runtime; (3) Lamo Stories' own Lambda (`cf-prod-stories-api`,
+  route modules in `cf-prod-api` but Clip Factory Stories' own runtime; (3) Clip Factory Stories' own Lambda (`cf-prod-stories-api`,
   the same zip and HTTP API, its own routes and role) and its own AgentCore runtime (`cf_prod_story_agent`, its own
-  image from `stories/agent/`, role and sessions), each role allowed only Lamo Stories' keys, prefix and secrets;
+  image from `stories/agent/`, role and sessions), each role allowed only Clip Factory Stories' keys, prefix and secrets;
   (4) a second AWS account or a second app (duplicated sign-in and infrastructure, which the first request ruled out).
 - **Decision.** (CONTRACTS §45.24, §45.15) Option 3. Shared on purpose: the shell and Cognito sign-in, the HTTP API
   (separate routes), the table, bucket and Secrets Manager (separate namespaces, enforced by IAM leading keys and
   prefixes), Clip Factory's OAuth callback only as a forward of `w1.` states (its registered apps are not edited),
   and the platform publisher library code.
 - **Consequences.** Clip Factory's API Lambda, its route table, its agent runtime, image and roles do not change at
-  all, and a Lamo Stories change never redeploys or drains them. Lamo Stories has its own image to build and its own
+  all, and a Clip Factory Stories change never redeploys or drains them. Clip Factory Stories has its own image to build and its own
   CI job. Code shared as a library (the publishers, `db`, `http.dispatch`) is used read-only; a change there is a
   Clip Factory change and is reviewed as one.
 
 ## ADR-77 Models and reasoning effort are the owner's, per workspace, agent, task and request, never substituted
 
-- **Context.** The owner wants complete control over which model powers Lamo Stories (examples "Sable 5.2, Sable 5.1,
+- **Context.** The owner wants complete control over which model powers Clip Factory Stories (examples "Sable 5.2, Sable 5.1,
   Opus 5.5": the account's Claude Fable 5.2 / 5.1 and Opus 5.5), with a default, per-agent and per-task choices, a
   per-request override from the chat, the active model visible, no silent substitution, and the reasoning effort set
   separately and really sent where the model supports it. Fable 5.x, Opus 5.5, Sonnet 5.5 and Haiku 5.5 take
@@ -2003,37 +2003,37 @@ button there. Numbers come from the post found on the connected account (`video/
   and inference profiles, so an added model works after Check models with no deploy. A maker outside Bedrock still
   needs code (a new client), which the `host` field on every model makes visible.
 
-## ADR-78 Lamo Stories' own agents, skills, chat and memory live in its runtime; actions wait for the owner's tap
+## ADR-78 Clip Factory Stories' own agents, skills, chat and memory live in its runtime; actions wait for the owner's tap
 
 - **Context.** The second request asks for its own agents and agent configuration, skills (upload, versions,
   enable/disable, assign to agents), a creative chat with history and memory, and reference-video analysis; Clip
   Factory's standing rule that every AI call gets all its skills belongs to Clip Factory.
 - **Options.** Memory: AgentCore Memory (a managed service resource) or items in the workspace partition the owner
   can see and edit. Chat: an agent that acts on its own, or one that proposes and the owner taps. Skills: shared with
-  Clip Factory, or Lamo Stories' own.
+  Clip Factory, or Clip Factory Stories' own.
 - **Decision.** (CONTRACTS §45.26–§45.28) Five built-in agents with editable instructions, models, efforts and
-  skills; Lamo Stories' own skills only (Clip Factory's are never read); memory as `MEM#` items; the creative
+  skills; Clip Factory Stories' own skills only (Clip Factory's are never read); memory as `MEM#` items; the creative
   director's tools read and draft, and anything that costs a render or changes a video is a button the owner taps;
   reference videos are uploaded files analyzed from frames and sound.
 - **Consequences.** The owner sees and edits everything the agents remember; nothing is published or rendered
   without his tap; Clip Factory's skills rule is untouched. Reference links to other people's videos are not
   downloaded (upload the file).
 
-## ADR-79 Developer apps: the owner picks Lamo Stories' own or Clip Factory's, per platform, never silently
+## ADR-79 Developer apps: the owner picks Clip Factory Stories' own or Clip Factory's, per platform, never silently
 
-- **Context.** The second request: Lamo Stories' "own OAuth credentials", "Do not reuse Clip Factory OAuth tokens. Do
+- **Context.** The second request: Clip Factory Stories' "own OAuth credentials", "Do not reuse Clip Factory OAuth tokens. Do
   not modify existing OAuth authorizations." The tokens are already separate (ADR-72). A separate developer app means
   new setup and, for TikTok and Meta, a new app review that takes days to weeks; Meta's page picker is per login and
   per app, so re-authorizing Clip Factory's Meta app for a second Page can change Clip Factory's grant.
 - **Options.** (1) Always Clip Factory's apps; (2) always new apps; (3) the owner's explicit choice per platform,
   shown on the card, with the trade-offs in plain words, and a recommendation of a separate app for Meta.
-- **Decision.** (CONTRACTS §45.30) Option 3 for YouTube, TikTok and X; **Facebook and Instagram always use Lamo
+- **Decision.** (CONTRACTS §45.30) Option 3 for YouTube, TikTok and X; **Facebook and Instagram always use Clip Factory
   Stories' own Meta app** (re-authorizing Clip Factory's Meta app would change its existing grant). No default, no
   fallback; own keys in `cf-prod/workspaces/{ws}/{p}/app`; one helper picks the keys everywhere; quotas, credits and
   limits follow the app chosen.
 - **Consequences.** Fully separate apps keep every Clip Factory authorization untouched and cost the owner the
   platforms' setup and reviews once; the quick choice shares quotas and review state and carries the Meta warning.
-- **Amended by ADR-84 (2026-11-22).** The shared choice reads "Share Clip Factory's app" and is protected: Lamo
+- **Amended by ADR-84 (2026-11-22).** The shared choice reads "Share Clip Factory's app" and is protected: Clip Factory
   Stories counts in its own counter and uses only what Clip Factory's reserve leaves; a post with no room waits
   (§45.37 G6). It never means sharing an account (G8).
 
@@ -2044,7 +2044,7 @@ button there. Numbers come from the post found on the connected account (`video/
   realistic footage, which the platforms want labelled.
 - **Options.** (1) The built-in 2D animator only; (2) add Nova Reel now, its US bucket always on; (3) a provider
   registry per kind, the built-in animator on, Nova Reel built behind a Terraform switch for its US bucket (off until
-  the owner allows US storage), AI labels set by Lamo Stories' own publisher wrappers, and a generic key store for
+  the owner allows US storage), AI labels set by Clip Factory Stories' own publisher wrappers, and a generic key store for
   providers added later.
 - **Decision.** (CONTRACTS §45.31) Option 3.
 - **Consequences.** Videos are made today with the built-in animator; AI footage arrives when the owner allows the US
@@ -2217,7 +2217,7 @@ button there. Numbers come from the post found on the connected account (`video/
 - **Context.** The owner asked to pick picture, video and sound models independently and to add models and providers
   without a rebuild, gave suggested efforts for small text edits (Low) and animation planning (High), kept the shared
   developer app on condition that Clip Factory is protected ("Keep it, protect CF"), and then made a hard rule that
-  Lamo Stories never posts to Clip Factory's accounts. Research on AWS's own model cards found Nova Canvas and Nova
+  Clip Factory Stories never posts to Clip Factory's accounts. Research on AWS's own model cards found Nova Canvas and Nova
   Reel ended on 2026-09-30, Stability AI's pictures and Luma AI Ray2 only in us-west-2, and no Bedrock sound or music
   model.
 - **Options.** (1) One model per maker in the release file, as before; (2) lists of checked models per maker in
@@ -2225,13 +2225,13 @@ button there. Numbers come from the post found on the connected account (`video/
   the owner's key; (3) the same, plus a generic "any URL, any key" bridge for every kind. For sound: (a) Bedrock (none
   exists), (b) ElevenLabs on the owner's key for effects and instrumental music, with Amazon Polly as an opt-in spoken
   voice, (c) a text-to-speech narrator by default. For the shared app: (i) drop it, (ii) keep it with counters shared
-  with Clip Factory, (iii) keep it with Lamo Stories' own counters inside what Clip Factory's reserve leaves.
+  with Clip Factory, (iii) keep it with Clip Factory Stories' own counters inside what Clip Factory's reserve leaves.
 - **Decision.** (CONTRACTS §45.37) Option 2 with (b) and (iii). Ended models read ended with a one-tap replacement and
   are never called; Stability AI and Luma AI Ray2 are makers that are never the default (Luma behind the off-by-default
   `stories_video_west_bucket`); an added model is saved only when the agent can call it, and the access check costs
   nothing. Keys live in the existing provider-keys store; an OpenAI-compatible key is bound to one origin and the agent
   never sends it elsewhere. `text_edit` and `animation_plan` are tasks with Low and High. One shared-app counter for
-  all of Lamo Stories reserves Clip Factory's schedule plus headroom; a post with no room waits and goes out by itself.
+  all of Clip Factory Stories reserves Clip Factory's schedule plus headroom; a post with no room waits and goes out by itself.
   "Use it for both" is removed: an account that matches Clip Factory's by any stable identity is refused at connect
   and before every upload, and the match is remembered.
 - **Consequences.** Every maker starts on the built-ins, with no voice; a real sound maker needs only the owner's
@@ -2239,4 +2239,4 @@ button there. Numbers come from the post found on the connected account (`video/
   changes are additive and in place (the agent's model checks, Polly, the Oregon bucket's grants; the story flow's
   Denys on provider keys and on Clip Factory's rate counters; one more attribute in each `ACCOUNT#` read). Clip
   Factory's own posting path and items are unchanged. If Clip Factory posts far more on X than its schedule, the
-  month can pass the X limit by what Lamo Stories spent; the card says so.
+  month can pass the X limit by what Clip Factory Stories spent; the card says so.

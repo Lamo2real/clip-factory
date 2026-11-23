@@ -152,9 +152,9 @@ for (const size of SIZES) {
     // On a computer the bar lists both apps and its highlight is on the app on screen; on a phone the toggle names the
     // other one.
     if (size.w >= 768) {
-      if (!size.folded) for (const { at } of seen) expect(at.names).toEqual(["Clip Factory", "Lamo Stories"]);
+      if (!size.folded) for (const { at } of seen) expect(at.names).toEqual(["Clip Factory", "Clip Factory Stories"]);
       for (const { path, at } of seen) expect(at.sw!.x, `${path}: in the left column`).toBeLessThan((size.folded ? 80 : 252) + 14 + 0.5);
-    } else for (const { path, at } of seen) expect(at.names, path).toEqual([path.startsWith("/stories") ? "Clip Factory" : "Lamo Stories"]);
+    } else for (const { path, at } of seen) expect(at.names, path).toEqual([path.startsWith("/stories") ? "Clip Factory" : "Clip Factory Stories"]);
     // Where it has always been in Clip Factory: the sidebar's foot, the switch right above the Live chip.
     if (size.w >= 768 && !size.folded) expect(first!.at.live!.y - (first!.at.sw!.y + first!.at.sw!.height)).toBeCloseTo(4, 0);
     await page.context().close();
@@ -188,7 +188,7 @@ test("a longer name (the rename to Clip Factory Stories) stands the choices one 
     const store = (window as unknown as { __cfStoriesMock?: { store?: { workspaces: { workspaceName: string }[] } } }).__cfStoriesMock?.store;
     store!.workspaces[1]!.workspaceName = "Clip Factory Stories";
   });
-  await page.locator(".ws-dock .ws-switch__opt", { hasText: "Lamo Stories" }).click();
+  await page.locator(".ws-dock .ws-switch__opt", { hasText: "Clip Factory Stories" }).click();
   await page.locator(".stories-app[data-ws]").waitFor();
   const bar = page.locator(".ws-dock .ws-switch");
   await expect(bar).toHaveClass(/ws-switch--stack/);

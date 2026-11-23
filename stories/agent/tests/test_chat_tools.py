@@ -350,7 +350,7 @@ def test_offer_analyze_reference_and_open(box: Any) -> None:
     call(box, "offer_open", page="story", id="S1")
     assert box.actions[-1]["payload"] == {"href": "/stories/production/S1"}
     assert "needs the item's id" in error(box, "offer_open", page="story", id="../x")
-    assert "not a Lamo Stories page" in error(box, "offer_open", page="clips")
+    assert "not a Clip Factory Stories page" in error(box, "offer_open", page="clips")
 
 
 def test_buttons_are_not_repeated_and_capped(box: Any) -> None:

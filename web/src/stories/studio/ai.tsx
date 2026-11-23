@@ -329,7 +329,7 @@ export function UnusableSheet({ info, ask, onUse, onKeep, onClose }: { info: AiI
       }
     >
       <p>{ask.bad.statusLine || `${ask.bad.label} said no on its last call.`}</p>
-      <p className="st-s-field__hint">Lamo Stories never swaps in another model by itself. You choose.</p>
+      <p className="st-s-field__hint">Clip Factory Stories never swaps in another model by itself. You choose.</p>
     </StSheet>
   );
 }
@@ -389,7 +389,7 @@ export function ModelMenu({
   onChange,
   title = "Model and effort for this one",
   note = "Just for this one. Your settings stay the same.",
-  usualWords = "From your Lamo Stories settings",
+  usualWords = "From your Clip Factory Stories settings",
   className = "",
   compact = false,
 }: {
@@ -496,12 +496,12 @@ export function ModelMenu({
                     label: `Usual: ${modelName(info, usual.model)}`,
                     line: skipped ? `${unusableWords(skipped)}, so the usual is this one.` : usual.from === "project" && usual.modelKnown ? "Kept with this video" : usualWords,
                   }
-                : { value: USUAL, label: "Your usual model", line: "Your Lamo Stories settings could not be read just now, so its name is not shown." },
+                : { value: USUAL, label: "Your usual model", line: "Your Clip Factory Stories settings could not be read just now, so its name is not shown." },
               ...info.models.map((m) => ({ value: m.key, label: m.label, line: modelStatusWords(m, info.live) })),
             ]}
             className="st-s-ai-models"
           />
-          {status ? <Notice tone="bad">{status} You can still try it: Lamo Stories never swaps in another model.</Notice> : null}
+          {status ? <Notice tone="bad">{status} You can still try it: Clip Factory Stories never swaps in another model.</Notice> : null}
           {chosen && efforts.length === 0 ? (
             <p className="st-s-field__hint">This model has no effort setting; it runs at its own level.</p>
           ) : (

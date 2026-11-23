@@ -103,9 +103,9 @@ describe("one toast per pick (§45.35 D21)", () => {
     await click(button(card("instagram"), /lamo\.stories/));
     expect(toasts()).toEqual([]);
     const ask = card("instagram").querySelector<HTMLElement>(".st-intended")!;
-    expect(ask.textContent).toContain("Is this your Lamo Stories account?");
+    expect(ask.textContent).toContain("Is this your Clip Factory Stories account?");
     await click(button(ask, "Yes, that's it"));
-    expect(toasts()).toEqual(["Great! Lamo Stories posts to this Instagram account (lamo.stories)."]);
+    expect(toasts()).toEqual(["Great! Clip Factory Stories posts to this Instagram account (lamo.stories)."]);
   });
 
   it("tapping Clip Factory's own place says why once, sends nothing and asks nothing (§45.37 G8)", async () => {

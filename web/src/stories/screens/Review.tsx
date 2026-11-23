@@ -666,7 +666,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
               <button type="button" className="st-btn st-btn--main st-s-big st-postit" onClick={() => setPosting(true)}>
                 Post it
               </button>
-              <p className="st-s-field__hint">Only to Lamo Stories&apos; own accounts. You pick each one.</p>
+              <p className="st-s-field__hint">Only to Clip Factory Stories&apos; own accounts. You pick each one.</p>
             </section>
           ) : null}
           {done ? <PostsPanel jobs={pubs.data} onRetry={(j) => void retry(j)} busyId={retrying} /> : null}
@@ -806,7 +806,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
             </>
           }
         >
-          <p>Lamo Stories writes a new storyboard with your characters as they look now, then makes every step again. This one is kept in the Library.</p>
+          <p>Clip Factory Stories writes a new storyboard with your characters as they look now, then makes every step again. This one is kept in the Library.</p>
           <div className="st-s-decide__ai">
             <span className="st-s-field__hint">This remake uses</span>
             {menuFor("storyboard")}

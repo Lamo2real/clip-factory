@@ -286,7 +286,7 @@ describe("workspace boundaries", () => {
       ["storageCleanup", (ws) => api.storageCleanup(ws)],
     ];
     for (const [name, call] of calls) {
-      await expect(call("clips"), name).rejects.toMatchObject({ status: 409, message: "That is a Lamo Stories page. Switch to Lamo Stories first." });
+      await expect(call("clips"), name).rejects.toMatchObject({ status: 409, message: "That is a Clip Factory Stories page. Switch to Clip Factory Stories first." });
       await expect(call("01JZ0000000000000000000000"), name).rejects.toMatchObject({ status: 404, message: "We could not find that workspace." });
     }
   });

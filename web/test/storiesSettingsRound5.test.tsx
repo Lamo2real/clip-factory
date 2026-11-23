@@ -259,7 +259,7 @@ describe("Video and Storage in plain words (§45.36 E14)", () => {
     start();
     await open("storage");
     const used = card("Space used");
-    expect(shown(used)).toContain("Lamo Stories' own folder in Clip Factory's media storage in Europe (Stockholm).");
+    expect(shown(used)).toContain("Clip Factory Stories' own folder in Clip Factory's media storage in Europe (Stockholm).");
     expect(shown(used)).not.toContain("ws/{you}/stories/");
     expect(used.querySelector("details.st-tech-fold")?.textContent).toContain("ws/{you}/stories/");
     const file = card("The finished file");
@@ -323,16 +323,16 @@ describe("never sent to the page he is on (§45.36 E17)", () => {
     expect(onThisPage(reel, "Video", "Video maker")).toBe("Amazon Nova Reel is not ready yet: its storage place in the USA (N. Virginia) is not switched on. Pick Built-in animation above, or finish its setup.");
     expect(onThisPage(reel, "AI", "Default model")).toBe(reel);
     expect(onThisPage(reel, null)).toBe(reel);
-    expect(onThisPage("type Bedrock's price in Lamo Stories › Settings › AI to replace it.", "AI", "Prices", "here")).toBe("type Bedrock's price here to replace it.");
-    expect(onThisPage("Switch it on in Lamo Stories › Settings › Agents.", "AI", "Default model")).toBe("Switch it on in Lamo Stories › Settings › Agents.");
+    expect(onThisPage("type Bedrock's price in Clip Factory Stories › Settings › AI to replace it.", "AI", "Prices", "here")).toBe("type Bedrock's price here to replace it.");
+    expect(onThisPage("Switch it on in Clip Factory Stories › Settings › Agents.", "AI", "Default model")).toBe("Switch it on in Clip Factory Stories › Settings › Agents.");
     // Not knowing where it shows: never a wrong way, only this page.
-    expect(onThisPage("Pick another model in Lamo Stories › Settings › AI, or try again.", "AI")).toBe("Pick another model on this page, or try again.");
-    expect(onThisPage("Turn them on in Lamo Stories › Settings › Video › Picture maker.", "Video")).toBe("Turn them on in Picture maker.");
+    expect(onThisPage("Pick another model in Clip Factory Stories › Settings › AI, or try again.", "AI")).toBe("Pick another model on this page, or try again.");
+    expect(onThisPage("Turn them on in Clip Factory Stories › Settings › Video › Picture maker.", "Video")).toBe("Turn them on in Picture maker.");
   });
 
   it("points above or below from the card it shows in (the cards' order on the page)", () => {
     // The agent's tool refusal (§45.36 E6), said in Default model (first card), in the model's own row, and in a task row.
-    const tools = 'Claude X does not accept tool use here (Amazon Bedrock refused it). Tap Edit on its row in Lamo Stories › Settings › AI and turn off "It can use tools", then tap Check models.';
+    const tools = 'Claude X does not accept tool use here (Amazon Bedrock refused it). Tap Edit on its row in Clip Factory Stories › Settings › AI and turn off "It can use tools", then tap Check models.';
     expect(onThisPage(tools, "AI", "Default model")).toBe('Claude X does not accept tool use here (Amazon Bedrock refused it). Tap Edit on its row below and turn off "It can use tools", then tap Check models.');
     expect(onThisPage(tools, "AI", ITS_ROW)).toBe('Claude X does not accept tool use here (Amazon Bedrock refused it). Tap Edit on this row and turn off "It can use tools", then tap Check models.');
     expect(onThisPage(tools, "AI", "Each agent and each task")).toContain("Tap Edit on its row above and turn off");
@@ -345,22 +345,22 @@ describe("never sent to the page he is on (§45.36 E17)", () => {
     );
     expect(onThisPage("Mistral is still used by the default model in Settings › AI.", "AI", "Add a model")).toBe("Mistral is still used by the default model above.");
     // Check models is in Default model's top: above from everywhere on the page.
-    const why = "No model has answered yet. Tap Check models in Lamo Stories › Settings › AI to see why.";
+    const why = "No model has answered yet. Tap Check models in Clip Factory Stories › Settings › AI to see why.";
     expect(onThisPage(why, "AI", "Default model")).toBe("No model has answered yet. Tap Check models above to see why.");
     expect(onThisPage(why, "AI", "Providers")).toBe("No model has answered yet. Tap Check models above to see why.");
   });
 
   it("takes only a card's own name after the page, never the rest of the sentence (the API's Off and pictures-off lines)", () => {
     // providers.py OFF_LINE and the API's pictures-off sentence, word for word.
-    const off = "Off. Pick it in Lamo Stories › Settings › Video › Picture maker to use it.";
+    const off = "Off. Pick it in Clip Factory Stories › Settings › Video › Picture maker to use it.";
     expect(onThisPage(off, "Video", "Picture maker")).toBe("Off. Pick it here to use it.");
     expect(onThisPage(off, "Video", "Prices and keys")).toBe("Off. Pick it in Picture maker above to use it.");
     expect(onThisPage(off, "Video", "Video maker")).toBe("Off. Pick it in Picture maker below to use it.");
-    const imagesOff = "AI pictures are off. Turn them on in Lamo Stories › Settings › Video › Picture maker, or make one AI portrait to finish its setup.";
+    const imagesOff = "AI pictures are off. Turn them on in Clip Factory Stories › Settings › Video › Picture maker, or make one AI portrait to finish its setup.";
     expect(onThisPage(imagesOff, "Video", "Picture maker")).toBe("AI pictures are off. Turn them on here, or make one AI portrait to finish its setup.");
     expect(onThisPage(imagesOff, "Video", "Video maker")).toBe("AI pictures are off. Turn them on in Picture maker below, or make one AI portrait to finish its setup.");
     // Storage and production is one page name.
-    expect(onThisPage("Pick it in Lamo Stories › Settings › Storage and production.", "Storage")).toBe("Pick it on this page.");
+    expect(onThisPage("Pick it in Clip Factory Stories › Settings › Storage and production.", "Storage")).toBe("Pick it on this page.");
   });
 
   it("Settings › AI's list prices say type it here, never Lamo Stories › Settings › AI", async () => {

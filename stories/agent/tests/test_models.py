@@ -149,7 +149,7 @@ def test_a_refused_model_stops_with_the_owner_s_sentence_and_no_other_model_is_c
     with pytest.raises(ModelUnavailable) as e:
         m.complete(CTX, task="chat", messages=HELLO)
     assert str(e.value) == (
-        f"Claude Fable 5.2 isn't available right now: {reason}. Pick another model in Lamo Stories › Settings › AI, "
+        f"Claude Fable 5.2 isn't available right now: {reason}. Pick another model in Clip Factory Stories › Settings › AI, "
         "or try again."
     )
     assert runtime.requests and {r["modelId"] for r in runtime.requests} == {"global.anthropic.claude-fable-5-2"}
@@ -195,8 +195,8 @@ def test_an_effort_bedrock_refuses_is_said_as_the_effort_and_never_sent_without_
     with pytest.raises(EffortUnavailable) as e:
         m.complete(CTX, task="chat", messages=HELLO)
     sentence = (
-        "Claude Opus 5.5 does not accept High effort here (Amazon Bedrock refused it). Pick another level in Lamo "
-        "Stories › Settings › AI."
+        "Claude Opus 5.5 does not accept High effort here (Amazon Bedrock refused it). Pick another level in Clip "
+        "Factory Stories › Settings › AI."
     )
     assert str(e.value) == sentence
     assert (e.value.model, e.value.effort, e.value.sent) == ("opus-5-5", "high", True)
@@ -408,7 +408,7 @@ def test_an_agent_switched_off_stops_its_tasks_unless_the_safety_check_must_run(
     ctx = CallContext(USER, WS, "quality_assurance", "S1", job_id="J1")
     with pytest.raises(AgentOff) as e:
         m.complete(ctx, task="final_review", messages=HELLO)
-    assert str(e.value) == "Quality check is switched off. Switch it on in Lamo Stories › Settings › Agents."
+    assert str(e.value) == "Quality check is switched off. Switch it on in Clip Factory Stories › Settings › Agents."
     assert runtime.requests == []
     m.complete(ctx, task="fact_check", messages=HELLO, allow_inactive=True)  # a driving-safety story's check
     assert len(runtime.requests) == 1
@@ -498,7 +498,7 @@ def test_the_owner_s_models_are_never_shared_with_another_workspace_or_shadow_a_
                 "defaultModel": "custom-llama"})  # fmt: skip
     with pytest.raises(ModelUnavailable) as e:  # the other workspace has no such model
         m.complete(other, task="chat", messages=HELLO)
-    assert "is not in Lamo Stories' list" in str(e.value) and runtime.requests == []
+    assert "is not in Clip Factory Stories' list" in str(e.value) and runtime.requests == []
     shadow = config.merged_models([modeldef("opus-5-5", modelId="x"), modeldef("custom-ok"), modeldef("bad key")])
     assert [x["key"] for x in shadow["models"]][-1] == "custom-ok"
     assert next(x for x in shadow["models"] if x["key"] == "opus-5-5") == config.model("opus-5-5")

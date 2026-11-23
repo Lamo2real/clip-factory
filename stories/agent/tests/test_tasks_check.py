@@ -23,7 +23,7 @@ def run(svc) -> str:
 
 def _denied() -> Exception:
     e = models.ModelUnavailable(
-        "Claude Fable 5.2 isn't available right now: Bedrock says this account has no access. Pick another model in Lamo Stories › Settings › AI, or try again."
+        "Claude Fable 5.2 isn't available right now: Bedrock says this account has no access. Pick another model in Clip Factory Stories › Settings › AI, or try again."
     )
     e.__cause__ = ClientError({"Error": {"Code": "AccessDeniedException", "Message": "no access"}}, "Converse")
     return e
@@ -67,7 +67,7 @@ class ModelRefused(Exception):
 
 
 def test_a_failure_that_sent_nothing_fails_the_check_and_leaves_every_status(tmp_path: Path) -> None:
-    off = AgentOff("Creative director is switched off. Switch it on in Lamo Stories › Settings › Agents.")
+    off = AgentOff("Creative director is switched off. Switch it on in Clip Factory Stories › Settings › Agents.")
     svc, db, _ = services(tmp_path, FakeModel(off))
     db.seed(task_item("T1", "check_models"))
     db.seed({"pk": PK, "sk": "MODELSTATUS#fable-5-2", "type": "ws_modelstatus", "status": "ok", "line": "old"})
@@ -263,8 +263,8 @@ def test_one_status_item_per_model_with_the_model_attribute_and_the_owner_s_mode
 
 def test_an_effort_bedrock_refused_is_a_real_answer_of_the_check(tmp_path: Path) -> None:
     refused = models.EffortUnavailable(
-        "Claude Fable 5.2 does not accept Low effort here (Amazon Bedrock refused it). Pick another level in Lamo "
-        "Stories › Settings › AI.",
+        "Claude Fable 5.2 does not accept Low effort here (Amazon Bedrock refused it). Pick another level in Clip "
+        "Factory Stories › Settings › AI.",
         model="fable-5-2",
         effort="low",
         sent=True,
@@ -280,7 +280,7 @@ def test_an_effort_bedrock_refused_is_a_real_answer_of_the_check(tmp_path: Path)
 
 def test_a_task_that_failed_on_its_model_keeps_the_model_and_effort_it_was_sent_with(tmp_path: Path) -> None:
     """§45.34: TASK# records what was asked even when no answer came (effortApplied false)."""
-    sentence = "Claude Fable 5.2 isn't available right now: no access. Pick another model in Lamo Stories › Settings › AI, or try again."
+    sentence = "Claude Fable 5.2 isn't available right now: no access. Pick another model in Clip Factory Stories › Settings › AI, or try again."
     model = FakeModel(models.ModelUnavailable(sentence, model="fable-5-2", effort="max", status="denied"))
     svc, db, _ = services(tmp_path, model)
     db.seed(task_item("T1", "brainstorm", input={"topic": "ice"}, override={"model": "fable-5-2", "effort": "max"}))

@@ -512,7 +512,8 @@ export function onThisPage(text: string, page: SettingsPageName | null, from: st
   const names = Object.keys(named).map(escape).join("|");
   // Only a part's own name is taken after the page, never the rest of the sentence ("› Picture maker to use it").
   const part = names ? `(?:\\s*›\\s*(${names})(?![A-Za-z]))?` : "()";
-  const re = new RegExp(`(\\bits row)?\\s+(?:in|on)\\s+(?:Lamo Stories\\s*›\\s*)?Settings\\s*›\\s*${PAGE_WORDS[page]}(?![A-Za-z])${part}`, "g");
+  // The app's name before Settings is today's, or "Lamo Stories" in a sentence saved before the rename (22 Nov 2026).
+  const re = new RegExp(`(\\bits row)?\\s+(?:in|on)\\s+(?:(?:Clip Factory|Lamo) Stories\\s*›\\s*)?Settings\\s*›\\s*${PAGE_WORDS[page]}(?![A-Za-z])${part}`, "g");
   const order = CARDS[page] ?? [];
   const place = (card: string | null) => (card === ITS_ROW ? order.indexOf("Add a model") : card ? order.indexOf(card) : -1);
   const at = place(from);

@@ -43,8 +43,8 @@ async def check(work: Path) -> None:
         raise SystemExit("the sound was not made")
     if not await media.has_filter("ass"):
         raise SystemExit("ffmpeg has no libass (the ass filter)")
-    events = [{"kind": "caption", "text": "Lamo Stories ♥", "start": 0, "end": 1, "x": 540, "y": 1300, "size": 64,
-               "color": "#fff6e5"}]  # fmt: skip
+    events = [{"kind": "caption", "text": "Clip Factory Stories ♥", "start": 0, "end": 1, "x": 540, "y": 1300,
+               "size": 64, "color": "#fff6e5"}]  # fmt: skip
     (work / "captions.ass").write_text(ass.build(events), "utf-8")
     burned = work / "burned.jpg"
     await proc.run(
@@ -55,9 +55,9 @@ async def check(work: Path) -> None:
     if not burned.is_file() or burned.stat().st_size < 1000:
         raise SystemExit("the captions were not burned in")
     if not config.models().get("models") or not config.agents().get("agents") or not config.guidance().get("topics"):
-        raise SystemExit("Lamo Stories' config files are missing")
+        raise SystemExit("Clip Factory Stories' config files are missing")
     if len(agents.builtin_ids()) < 3:
-        raise SystemExit("Lamo Stories' built-in skills are missing")
+        raise SystemExit("Clip Factory Stories' built-in skills are missing")
 
 
 def main() -> int:

@@ -86,12 +86,12 @@ export function checkProblem(before: SocialAccount, after: SocialAccount): strin
           : after.connectionStatus === "same_as_clips"
             ? "is Clip Factory's own account right now"
             : "is not connected any more";
-    return `Lamo Stories' ${place} ${state}. Fix it in Social accounts, or leave ${place} out.`;
+    return `Clip Factory Stories' ${place} ${state}. Fix it in Social accounts, or leave ${place} out.`;
   }
   if (before.externalAccountId && after.externalAccountId !== before.externalAccountId) {
     // By its place first, so it reads right when the account is itself called Lamo Stories (§45.36 E13).
     const who = [after.accountName, after.handle].filter(Boolean).join(", ");
-    return `Lamo Stories' ${place} is now a different account: ${thisAccount(after.platform, who)}. Look at it below, then tap Upload again.`;
+    return `Clip Factory Stories' ${place} is now a different account: ${thisAccount(after.platform, who)}. Look at it below, then tap Upload again.`;
   }
   return null;
 }
@@ -382,10 +382,10 @@ export function PublishSheet({
       {loadProblem ? (
         <Notice tone="bad">{loadProblem}</Notice>
       ) : !accounts ? (
-        <Busy>Getting your Lamo Stories accounts…</Busy>
+        <Busy>Getting your Clip Factory Stories accounts…</Busy>
       ) : (
         <>
-          <p className="st-s-field__hint">Only Lamo Stories&apos; own accounts are here. Tap each place to post “{story.title}” to.</p>
+          <p className="st-s-field__hint">Only Clip Factory Stories&apos; own accounts are here. Tap each place to post “{story.title}” to.</p>
           {connected.length ? (
             <ul className="st-s-places" aria-label="Where to post">
               {connected.map((a) => {
@@ -425,7 +425,7 @@ export function PublishSheet({
             </ul>
           ) : (
             <Notice tone="info" action={<SocialAccountsLink className="st-btn" />}>
-              No Lamo Stories account is connected yet. Connect one in Social accounts first.
+              No Clip Factory Stories account is connected yet. Connect one in Social accounts first.
             </Notice>
           )}
           {others.length ? (
@@ -546,7 +546,7 @@ export function PublishSheet({
                     <Dropdown labelledBy={`${id}-yt-cat`} value={yt.category} placeholder="Pick a category" options={YOUTUBE_CATEGORIES.map((c) => ({ value: c.id, label: c.label }))} onChange={(category) => setYt((y) => ({ ...y, category }))} />
                   </div>
                   <Switch label="Tell my subscribers" checked={yt.notifySubscribers} onChange={(notifySubscribers) => setYt((y) => ({ ...y, notifySubscribers }))} />
-                  <p className="st-s-field__hint">Made for kids: No. Lamo Stories never marks a video as made for kids.</p>
+                  <p className="st-s-field__hint">Made for kids: No. Clip Factory Stories never marks a video as made for kids.</p>
                 </fieldset>
               ) : null}
               {chosen.includes("instagram") || !chosen.length ? (

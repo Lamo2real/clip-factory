@@ -394,7 +394,7 @@ function SetupCard({ ws }: { ws: string }) {
       <StRing done={data.done} total={data.total} size={88} />
       <div className="st-setupcard__text">
         <h2 className="st-setupcard__title" id="st-setupcard-title">
-          Set up Lamo Stories: {data.done} of {data.total} done
+          Set up Clip Factory Stories: {data.done} of {data.total} done
         </h2>
         {left.length ? (
           <p className="st-setupcard__left">
@@ -442,7 +442,7 @@ export function DashboardScreen({ ws }: StoriesScreenProps) {
       ) : data.counts.made === 0 && data.producing.length === 0 && data.needsYou.length === 0 && data.activity.length === 0 ? (
         <>
           <StEmpty title="Your studio is ready" action={<StLinkButton href="/stories/production/new" main>Make your first video</StLinkButton>}>
-            Pick an idea and a character, and Lamo Stories makes the cartoon.
+            Pick an idea and a character, and Clip Factory Stories makes the cartoon.
           </StEmpty>
           <div className="st-tiles">
             <Accounts items={data.accounts} />

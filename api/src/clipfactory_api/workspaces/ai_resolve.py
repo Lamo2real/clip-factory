@@ -215,7 +215,9 @@ def model_label(key: str) -> str:
 
 
 def unknown_model(key: str) -> str:
-    return f"Lamo Stories has no model called '{key}'. Pick another one in Lamo Stories › Settings › AI."
+    return (
+        f"Clip Factory Stories has no model called '{key}'. Pick another one in Clip Factory Stories › Settings › AI."
+    )
 
 
 def unknown_effort(effort: str) -> str:

@@ -233,9 +233,9 @@ export function designFromWords(words: string, withPicture: boolean, salt: numbe
 }
 
 /** The sentence for a portrait while AI pictures are off (CONTRACTS §45.34: it names Settings › Video › Picture maker). */
-export const PICTURES_OFF = "AI pictures are off. Turn them on in Lamo Stories › Settings › Video › Picture maker.";
+export const PICTURES_OFF = "AI pictures are off. Turn them on in Clip Factory Stories › Settings › Video › Picture maker.";
 /** An older pick of Amazon Nova Canvas, which Amazon ended (the API's sentence, §45.37). */
-export const NOVA_CANVAS_ENDED = "Amazon Nova Canvas was ended by Amazon on 30 Sep 2026. Pick another picture maker in Lamo Stories › Settings › Video.";
+export const NOVA_CANVAS_ENDED = "Amazon Nova Canvas was ended by Amazon on 30 Sep 2026. Pick another picture maker in Clip Factory Stories › Settings › Video.";
 
 /**
  * The practice character agent redesigning a saved character (§45.34): it starts from the character as it is (CURRENT),

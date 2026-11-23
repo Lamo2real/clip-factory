@@ -34,7 +34,7 @@ test("after Check models in step 1, step 2 starts from the models' fresh states"
   await expect(page.locator(".st-setup__head .st-ring")).toHaveAttribute("aria-label", "1 of 11 done");
   await page.getByRole("button", { name: "Next" }).click();
   await expect(page.locator("#st-setup-step")).toHaveText("Pick your default model");
-  const radio = page.getByRole("radiogroup", { name: "Lamo Stories' default model" }).getByRole("radio", { name: /Claude Sonnet 5.5/ });
+  const radio = page.getByRole("radiogroup", { name: "Clip Factory Stories' default model" }).getByRole("radio", { name: /Claude Sonnet 5.5/ });
   await expect(radio).toContainText("Works: it answered.");
   await expect(radio).not.toContainText("Not checked yet");
   const o = await findOverflow(page);

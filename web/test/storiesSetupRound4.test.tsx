@@ -109,7 +109,7 @@ describe("Lamo Clips' own account (§45.35 D11)", () => {
     expect(why.textContent).toContain(sameAsClipsLine("x"));
     // Its step says it too (the card reads the account as the page shows it: Clip Factory's own).
     await click(button("Connect X"));
-    expect(host.textContent).toContain("This is Clip Factory's own account, so this step stays to do.");
+    expect(host.textContent).toContain("This is Clip Factory's own account. Clip Factory Stories needs its own separate account: sign in with a different one.");
     expect(store.social.find((a) => a.platform === "x")?.connectionStatus).toBe("same_as_clips");
   });
 

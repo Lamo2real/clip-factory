@@ -282,7 +282,7 @@ describe("opening the app", () => {
 describe("the workspace list", () => {
   it("shows Clip Factory and Lamo Stories until the server answers", () => {
     expect(knownWorkspaces()).toEqual(DEFAULT_WORKSPACES);
-    expect(knownWorkspaces().map(switcherName)).toEqual(["Clip Factory", "Lamo Stories"]);
+    expect(knownWorkspaces().map(switcherName)).toEqual(["Clip Factory", "Clip Factory Stories"]);
   });
 
   it("labels Lamo Clips with the app's own name, whatever the server calls it, and other workspaces by theirs", () => {
@@ -324,8 +324,8 @@ it("keeps Lamo Stories' own scroll position for one way back, only for a Lamo St
 });
 
 it("names each Lamo Stories page in the tab title", () => {
-  expect(storiesTitle({ name: "dashboard" })).toBe("Dashboard · Lamo Stories");
-  expect(storiesTitle({ name: "connections", platform: null, result: null, ws: null })).toBe("Social accounts · Lamo Stories");
-  expect(storiesTitle({ name: "setup" })).toBe("Set up · Lamo Stories");
-  expect(storiesTitle({ name: "chat_conv", convId: "c" })).toBe("Chat · Lamo Stories");
+  expect(storiesTitle({ name: "dashboard" })).toBe("Dashboard · Clip Factory Stories");
+  expect(storiesTitle({ name: "connections", platform: null, result: null, ws: null })).toBe("Social accounts · Clip Factory Stories");
+  expect(storiesTitle({ name: "setup" })).toBe("Set up · Clip Factory Stories");
+  expect(storiesTitle({ name: "chat_conv", convId: "c" })).toBe("Chat · Clip Factory Stories");
 });

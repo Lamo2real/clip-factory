@@ -295,7 +295,7 @@ def x_next_room(
 def _item(scope: Scope, platform: str, key: str) -> dict[str, Any]:
     found = scope.store.get(scope.pk(platform), share_sk(platform, key))
     if found and (found.get("type") != TYPE or found.get("platform") != platform):
-        raise ValueError("not a Lamo Stories shared-app counter")
+        raise ValueError("not a Clip Factory Stories shared-app counter")
     return found or {}
 
 

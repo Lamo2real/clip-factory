@@ -260,13 +260,15 @@ test.describe("with Lamo Stories switched on", () => {
           expect(box.height).toBeGreaterThanOrEqual(28);
         } else expect(box.height).toBeGreaterThanOrEqual(44);
       }
-      // Where there is room it is there in its largest form: the bar from about 650 px tall with the sidebar open, a
-      // round toggle beside the live dot below that; folded, a round toggle, and in a short folded window (600 px
+      // Where there is room it is there in its largest form: the bar from about 700 px tall with the sidebar open (its
+      // two names, "Clip Factory" and "Clip Factory Stories", do not fit side by side, so they stand one above the other
+      // in a 98 px bar, WorkspaceDock's barHeight), a round toggle beside the live dot below that; folded, a round
+      // toggle, and in a short folded window (600 px
       // tall, 36 px between the menu and the foot) a slim one over that gap. On phones the icon over the short name
       // from 360 px (a pill with the name where it is roomy); at 340 px a slim icon-only toggle of 48 px fills the gap
       // with 4 px of air on each side; at 320 px the brand and the live dot leave about 38 px, so the brand drops its
       // name and the toggle is the round 48 px one (§45.36 E16).
-      if (!phone && !size.folded) expect(here.mode, "sidebar open").toBe(size.h >= 650 ? "bar" : "corner");
+      if (!phone && !size.folded) expect(here.mode, "sidebar open").toBe(size.h >= 700 ? "bar" : "corner");
       if (!phone && size.folded && !short) expect(here.mode, "sidebar folded").toBe(size.h >= 650 ? "round" : "slim");
       // On a phone it is the round toggle in both apps (the same box: 48 px, 44 by 48 below 360 px); the brand drops its
       // name only below 340 px.
@@ -291,7 +293,7 @@ test.describe("with Lamo Stories switched on", () => {
     const bar = page.locator(".ws-dock .ws-switch");
     await expect(bar).toBeVisible();
     // One choice per workspace the server lists; Lamo Clips goes by the app's own name.
-    await expect(bar.locator(".ws-switch__opt")).toHaveText(["Clip Factory", "Lamo Stories"]);
+    await expect(bar.locator(".ws-switch__opt")).toHaveText(["Clip Factory", "Clip Factory Stories"]);
     await expect(bar.locator(".glide")).toHaveCount(1);
     await expect(bar.locator(".ws-switch__opt.is-on")).toHaveText("Clip Factory");
     await expect(page.locator(".sidebar__item.ws-switch__opt, .ws-switch .sidebar__item")).toHaveCount(0);

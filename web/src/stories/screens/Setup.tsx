@@ -40,7 +40,7 @@ import {
   useOnboarding,
   type StIconName,
 } from "../ui.tsx";
-import { DisconnectedNote, PLACE, PlatformCard, useSocial } from "./Connections.tsx";
+import { DisconnectedNote, NEW_ACCOUNT_LINE, PlatformCard, SAME_AS_CLIPS_LINE, useSocial } from "./Connections.tsx";
 import type { StoriesScreenProps } from "./types.ts";
 
 export const SETUP_ORDER: OnboardStep[] = ["ai", "model", "effort", "video", "agents", "instagram", "tiktok", "youtube", "facebook", "x", "done"];
@@ -154,7 +154,7 @@ function EnvironmentStep({ ws, ai, onSaved, onChecked, busy, setBusy }: { ws: st
   return (
     <>
       <p className="st-setup__text">
-        Lamo Stories is its own studio inside Clip Factory, with its own AI helpers, its own settings and its own social accounts. Nothing you set here
+        Clip Factory Stories is its own studio inside Clip Factory, with its own AI helpers, its own settings and its own social accounts. Nothing you set here
         changes Clip Factory.
       </p>
       <ul className="st-setup__facts">
@@ -170,7 +170,7 @@ function EnvironmentStep({ ws, ai, onSaved, onChecked, busy, setBusy }: { ws: st
           You pick the model and how hard it thinks. Nothing is swapped behind your back.
         </li>
       </ul>
-      <h3 className="st-setup__sub">The AI models Lamo Stories can use</h3>
+      <h3 className="st-setup__sub">The AI models Clip Factory Stories can use</h3>
       <ul className="st-setup__models" aria-label="The AI models and their state">
         {models.map((m) => (
           <li key={m.key} className="st-setup__model" data-status={m.status}>
@@ -189,7 +189,7 @@ function EnvironmentStep({ ws, ai, onSaved, onChecked, busy, setBusy }: { ws: st
           try {
             const next = await storiesApi().putAi(ws, aiBody(ai.ai, ai.ai.version, ["environment"]));
             celebrate(centerOf(el));
-            toast.success("Great! Next, pick the model Lamo Stories uses most.");
+            toast.success("Great! Next, pick the model Clip Factory Stories uses most.");
             onSaved(next);
           } catch (e) {
             toast.error(friendlyMessage(e));
@@ -238,7 +238,7 @@ function ModelStep({
     try {
       const next = await storiesApi().putAi(ws, aiBody({ ...ai.ai, defaultModel: chosen.key }, ai.ai.version, ["model"]));
       celebrate(centerOf(el));
-      toast.success(`${chosen.label} is Lamo Stories' default model now.`);
+      toast.success(`${chosen.label} is Clip Factory Stories' default model now.`);
       onSaved(next);
     } catch (e) {
       toast.error(friendlyMessage(e));
@@ -251,10 +251,10 @@ function ModelStep({
     <>
       <p className="st-setup__text">
         This model writes the stories, gives ideas and checks the facts, unless you pick another one for a task or an agent later. It is only for
-        Lamo Stories: Clip Factory keeps its own.
+        Clip Factory Stories: Clip Factory keeps its own.
       </p>
       <StPick<string>
-        label="Lamo Stories' default model"
+        label="Clip Factory Stories' default model"
         stack
         value={pick}
         options={models.map((m) => ({ value: m.key, label: m.label, line: modelLine(m) }))}
@@ -323,7 +323,7 @@ function EffortStep({ ws, ai, held, onSaved, busy, setBusy }: { ws: string; ai: 
         You can pick a different level per task later.
       </p>
       <StPick<Effort>
-        label="Lamo Stories' default effort"
+        label="Clip Factory Stories' default effort"
         value={(pick ?? "") as Effort}
         options={offers.map((e) => ({ value: e, label: EFFORT_LABEL[e], line: e === model?.defaultEffort ? "The model's own" : undefined }))}
         onChange={setPick}
@@ -446,7 +446,7 @@ function VideoStep({ ws, onSaved, busy, setBusy }: { ws: string; onSaved: () => 
         onSave={async (el) => {
           // An ended maker is never saved again: the API would keep an older pick, and nothing could make a video.
           if (ended) {
-            toast.error("Amazon Nova Reel was ended by Amazon on 30 Sep 2026. Pick another video maker in Lamo Stories › Settings › Video.");
+            toast.error("Amazon Nova Reel was ended by Amazon on 30 Sep 2026. Pick another video maker in Clip Factory Stories › Settings › Video.");
             return;
           }
           setBusy(true);
@@ -517,16 +517,20 @@ function ConnectStep({ ws, platform, line }: { ws: string; platform: Platform; l
   if (!a) return <StError message="We could not find that account. Open Social accounts." />;
   return (
     <>
+      {/* Before each Connect step (§45.37 G8, the owner's hard rule): a new account, never Clip Factory's. */}
+      <p className="st-note st-note--sky st-setup__new" role="note">
+        <StIcon name="user" size={18} />
+        {NEW_ACCOUNT_LINE}
+      </p>
       <p className="st-setup__text">
-        Connect the {PLATFORM_NAME[platform]} account that gets Lamo Stories' videos. It stays separate from Clip Factory's. You can skip this and
+        Connect the {PLATFORM_NAME[platform]} account that gets Clip Factory Stories' videos. It stays separate from Clip Factory's. You can skip this and
         connect it later.
       </p>
       {gone ? <DisconnectedNote choice={gone.choice} onClose={() => setGone(null)} /> : null}
       {a.connectionStatus === "same_as_clips" ? (
         <p className="st-note st-note--coral" role="note">
           <StIcon name="alert" size={18} />
-          This is Clip Factory's own {PLACE[platform]}, so this step stays to do. Tap Pick another {PLACE[platform]} below and sign in with a different one made
-          for Clip Factory Stories.
+          {SAME_AS_CLIPS_LINE}
         </p>
       ) : line ? (
         <p className="st-note st-note--coral" role="note">
@@ -549,16 +553,16 @@ function ConnectStep({ ws, platform, line }: { ws: string; platform: Platform; l
 }
 
 const WORDS: Record<OnboardStep, { title: string; lede: string }> = {
-  ai: { title: "Set up the AI", lede: "What Lamo Stories uses, and why." },
-  model: { title: "Pick your default model", lede: "The AI model Lamo Stories uses unless you say otherwise." },
+  ai: { title: "Set up the AI", lede: "What Clip Factory Stories uses, and why." },
+  model: { title: "Pick your default model", lede: "The AI model Clip Factory Stories uses unless you say otherwise." },
   effort: { title: "Pick your default effort", lede: "How hard the model thinks." },
   video: { title: "Pick how videos are made", lede: "The video maker, apart from the AI models." },
   agents: { title: "Meet your agents and skills", lede: "The five helpers of your studio." },
-  instagram: { title: "Connect Instagram", lede: "Lamo Stories' own Instagram account." },
-  tiktok: { title: "Connect TikTok", lede: "Lamo Stories' own TikTok account." },
-  youtube: { title: "Connect YouTube", lede: "Lamo Stories' own YouTube channel." },
-  facebook: { title: "Connect Facebook", lede: "Lamo Stories' own Facebook Page." },
-  x: { title: "Connect X", lede: "Lamo Stories' own X account." },
+  instagram: { title: "Connect Instagram", lede: "Clip Factory Stories' own Instagram account." },
+  tiktok: { title: "Connect TikTok", lede: "Clip Factory Stories' own TikTok account." },
+  youtube: { title: "Connect YouTube", lede: "Clip Factory Stories' own YouTube channel." },
+  facebook: { title: "Connect Facebook", lede: "Clip Factory Stories' own Facebook Page." },
+  x: { title: "Connect X", lede: "Clip Factory Stories' own X account." },
   done: { title: "Done", lede: "Your studio is ready." },
 };
 
@@ -630,14 +634,14 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
   if (ob.error && !data)
     return (
       <section className="st-page st-setup">
-        <h1 className="st-head__title">Set up Lamo Stories</h1>
+        <h1 className="st-head__title">Set up Clip Factory Stories</h1>
         <StError message={ob.error} onRetry={() => void ob.reload()} />
       </section>
     );
   if (!data)
     return (
       <section className="st-page st-setup">
-        <h1 className="sr-only">Set up Lamo Stories</h1>
+        <h1 className="sr-only">Set up Clip Factory Stories</h1>
         <StLoading label="Getting the setup ready…" />
       </section>
     );
@@ -713,7 +717,7 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
       body = data.finishedAt ? (
         <div className="st-setup__done">
           <StMascot mood="cheer" size={120} />
-          <p className="st-setup__text">Lamo Stories is set up. Have fun making videos!</p>
+          <p className="st-setup__text">Clip Factory Stories is set up. Have fun making videos!</p>
         </div>
       ) : (
         <div className="st-setup__done">
@@ -741,7 +745,7 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
               await patch({ finish: true });
               starBurst(centerOf(el), 140);
               storiesSound("success");
-              toast.success("Lamo Stories is set up!");
+              toast.success("Clip Factory Stories is set up!");
               void refreshDashboard(ws).catch(() => undefined);
               setTimeout(() => storiesGoLater("/stories"), 1400);
             } catch (err) {
@@ -766,7 +770,7 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
       <header className="st-setup__head">
         <StRing done={data.done} total={data.total} size={96} />
         <div className="st-setup__intro">
-          <h1 className="st-head__title">Set up Lamo Stories</h1>
+          <h1 className="st-head__title">Set up Clip Factory Stories</h1>
           <p className="st-head__lede">
             {data.done} of {data.total} done. Skip anything you do not need yet: making videos never waits for it.
           </p>

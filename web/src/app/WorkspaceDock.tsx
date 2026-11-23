@@ -27,6 +27,7 @@ import { leaveGuarded, navigate, useHash, useRoute } from "../lib/router.ts";
 import type { Workspace } from "../stories/api/types.ts";
 import { CLIPS_WORKSPACE_ID, FIRST_STORIES_WORKSPACE_ID } from "../stories/api/types.ts";
 import { prefetchStoriesApp, preloadStoriesApp } from "../stories/pane.tsx";
+import { StoriesMark } from "../stories/brand/StoriesMark.tsx";
 import { storiesReduceMotion } from "../stories/prefs.ts";
 import {
   currentChoice,
@@ -273,7 +274,10 @@ function dockCalm(): boolean {
 /** The Lamo Stories chunk, fetched the moment the pointer or the keyboard comes to a way there. */
 const warm = (w: Workspace | null) => (w && w.workspaceType === "stories" ? preloadStoriesApp : undefined);
 
-/** The little picture of a workspace on its round toggle: Lamo Stories' sunny face, Clip Factory's "C". */
+/**
+ * The little picture of a workspace on its round toggle: Clip Factory's "C", and for Clip Factory Stories the same
+ * mark in Stories' colours (its logo, stories/brand/StoriesMark.tsx).
+ */
 export function WorkspaceMark({ type, size = 24 }: { type: Workspace["workspaceType"]; size?: number }) {
   if (type === "clips")
     return (
@@ -283,15 +287,7 @@ export function WorkspaceMark({ type, size = 24 }: { type: Workspace["workspaceT
         <circle cx="17.4" cy="6.2" r="1.6" fill="#E8392B" />
       </svg>
     );
-  return (
-    <svg className="ws-mark" width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-      <rect x="1.5" y="1.5" width="21" height="21" rx="8" fill="#1C1842" />
-      <circle cx="8.6" cy="10.4" r="1.7" fill="#FFF6E5" />
-      <circle cx="15.4" cy="10.4" r="1.7" fill="#FFF6E5" />
-      <path d="M7.8 14.6c2.3 2.4 6.1 2.4 8.4 0" fill="none" stroke="#FFC94A" strokeWidth="2" strokeLinecap="round" />
-      <circle cx="18.6" cy="5.4" r="1.6" fill="#FFC94A" />
-    </svg>
-  );
+  return <StoriesMark size={Math.round(size * 0.875)} className="ws-mark" />;
 }
 
 /**

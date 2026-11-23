@@ -25,7 +25,7 @@ from .models import BedrockModels
 from .pipeline import Services
 from .store import Store
 
-NOT_CONFIGURED = "Lamo Stories' agent is missing its table or bucket setting."
+NOT_CONFIGURED = "Clip Factory Stories' agent is missing its table or bucket setting."
 PROVIDER_KEYS_PREFIX = "cf-prod/workspaces/"  # when the runtime's environment does not say (Terraform does)
 _lock = threading.Lock()
 _held: dict[str, Services] = {}

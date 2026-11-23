@@ -51,12 +51,12 @@ PICK_MODEL = {"kind": "open", "label": "Pick another model", "payload": {"href":
 # A model that takes no tools (ModelDef ``tools`` false, §45.35 D1): the chat runs without its tool actions and says
 # so once per conversation (``toolsNotice`` on the answer that said it, internal).
 NO_TOOLS = (
-    "This model can only talk here. It can't use Lamo Stories' tools, so it can't look at your ideas or characters "
-    "or give you buttons. To get those, pick a Claude model in Lamo Stories › Settings › AI."
+    "This model can only talk here. It can't use Clip Factory Stories' tools, so it can't look at your ideas or "
+    "characters or give you buttons. To get those, pick a Claude model in Clip Factory Stories › Settings › AI."
 )
 STOPS_THE_TURN = frozenset({"ModelUnavailable", "EffortUnavailable", "AgentOff"})
 
-CHAT_BRIEF = """Lamo Stories studio notes for the creative chat (from the app, not the owner):
+CHAT_BRIEF = """Clip Factory Stories studio notes for the creative chat (from the app, not the owner):
 - You can look things up and draft with your tools: ideas, characters, stories and their storyboards, reference video analyses. You may create or update ideas and remember short facts the owner wants kept.
 - Anything that makes or remakes a video, analyzes a reference video or saves a character is a button for the owner: use the offer_ and propose_ tools. Never say you made, remade, saved or posted something the owner still has to tap.
 - Make the video (offer_make_video) can carry up to 3 analyzed reference videos (referenceIds): the writer then follows their study of structure and timing. A reference that is not analyzed yet needs the Analyze button first.

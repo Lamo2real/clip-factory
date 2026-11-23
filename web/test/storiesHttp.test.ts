@@ -268,14 +268,14 @@ describe("sign-in and errors", () => {
   });
 
   it("passes the server's own sentence on (the contract's error envelope)", async () => {
-    const { api } = fake(() => ({ status: 409, body: { error: { code: "conflict", message: "That is a Lamo Stories page. Switch to Lamo Stories first." } } }));
+    const { api } = fake(() => ({ status: 409, body: { error: { code: "conflict", message: "That is a Clip Factory Stories page. Switch to Clip Factory Stories first." } } }));
     const e = await api.dashboard("clips").catch((x: unknown) => x);
     expect(e).toBeInstanceOf(ApiError);
-    expect(e).toMatchObject({ status: 409, code: "conflict", message: "That is a Lamo Stories page. Switch to Lamo Stories first." });
+    expect(e).toMatchObject({ status: 409, code: "conflict", message: "That is a Clip Factory Stories page. Switch to Clip Factory Stories first." });
   });
 
   it("keeps the account a publishing 409 names (error.account, §45.34) on its ApiError; a 409 without one has none", async () => {
-    const sentence = "Lamo Stories cannot tell if Lamo Stories is Lamo Clips' TikTok, because TikTok gives each app its own id. Tap Post to Lamo Stories if it is your Lamo Stories TikTok.";
+    const sentence = "Clip Factory Stories cannot tell if Lamo Stories is Lamo Clips' TikTok, because TikTok gives each app its own id. Tap Post to Lamo Stories if it is your Clip Factory Stories TikTok.";
     const named = fake(() => ({ status: 409, body: { error: { code: "conflict", message: sentence, account: { externalAccountId: "-000open-id", accountName: "Lamo Stories", handle: "@lamo.stories" } } } }));
     const e = await named.api.publish("stories", "s1", [{ platform: "tiktok", socialAccountId: "stories.tiktok" }]).catch((x: unknown) => x);
     expect(e).toBeInstanceOf(ApiError);

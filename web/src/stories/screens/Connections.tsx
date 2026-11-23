@@ -62,15 +62,15 @@ export const PLACE: Record<Platform, string> = { youtube: "channel", tiktok: "ac
 export function beforeConnect(p: Platform, choice: SocialAccount["app"]["choice"]): string {
   switch (p) {
     case "youtube":
-      return "Google will ask which channel. Pick your Lamo Stories channel.";
+      return "Google will ask which channel. Pick your Clip Factory Stories channel.";
     case "tiktok":
-      return "Sign in to your Lamo Stories account on tiktok.com in this browser first. TikTok connects the account that is signed in.";
+      return "Sign in to your Clip Factory Stories account on tiktok.com in this browser first. TikTok connects the account that is signed in.";
     case "x":
-      return "First sign in to your Lamo Stories account on x.com in this browser. X connects the account that is signed in.";
+      return "First sign in to your Clip Factory Stories account on x.com in this browser. X connects the account that is signed in.";
     default:
       // Facebook and Instagram always go through Lamo Stories' own Meta app (§45.30), whatever `choice` says.
       void choice;
-      return "Facebook will ask which Pages this app may use. Tick only your Lamo Stories Page.";
+      return "Facebook will ask which Pages this app may use. Tick only your Clip Factory Stories Page.";
   }
 }
 
@@ -98,7 +98,7 @@ export const AFTER_DISCONNECT =
   "To remove Clip Factory from this account completely, remove the app in the account's own settings. Only do that if Clip Factory does not use the same account.";
 /** After a Disconnect with Lamo Stories' own developer app (always for Facebook and Instagram, §45.34). */
 export const AFTER_DISCONNECT_OWN =
-  "To remove Lamo Stories completely, remove your Lamo Stories app in the account's own settings. Clip Factory is not affected.";
+  "To remove Clip Factory Stories completely, remove your Clip Factory Stories app in the account's own settings. Clip Factory is not affected.";
 
 /** The after-disconnect line for the app the account used (§45.34). */
 export function afterDisconnect(choice: SocialAccount["app"]["choice"]): string {
@@ -121,8 +121,8 @@ export function connectedAsSentence(a: Pick<SocialAccount, "accountName" | "hand
 }
 
 const STATUS: Record<SocialAccount["connectionStatus"], { label: string; tone: StTone; auth: string }> = {
-  connected: { label: "Connected", tone: "mint", auth: "Allowed: Lamo Stories may post here." },
-  choose_account: { label: "Pick one", tone: "sun", auth: "Allowed, but pick where Lamo Stories posts first." },
+  connected: { label: "Connected", tone: "mint", auth: "Allowed: Clip Factory Stories may post here." },
+  choose_account: { label: "Pick one", tone: "sun", auth: "Allowed, but pick where Clip Factory Stories posts first." },
   needs_reconnect: { label: "Connect again", tone: "coral", auth: "Stopped: the sign-in needs renewing. Tap Reconnect." },
   same_as_clips: { label: "Clip Factory's own", tone: "coral", auth: "Stopped: Clip Factory Stories never posts to Clip Factory's own account." },
   not_connected: { label: "Not connected", tone: "sky", auth: "Not allowed yet: nothing is connected." },
@@ -133,9 +133,9 @@ export function resultSentence(code: string, p: Platform): { text: string; good:
   const name = PLATFORM_NAME[p];
   switch (code) {
     case "connected":
-      return { text: `${name} is connected to Lamo Stories!`, good: true };
+      return { text: `${name} is connected to Clip Factory Stories!`, good: true };
     case "choose":
-      return { text: `Now pick the ${name} ${PLACE[p]} Lamo Stories posts to.`, good: true };
+      return { text: `Now pick the ${name} ${PLACE[p]} Clip Factory Stories posts to.`, good: true };
     case "same_as_clips":
       return { text: SAME_AS_CLIPS_LINE, good: false };
     case "clips_meta_check":
@@ -151,12 +151,12 @@ export function resultSentence(code: string, p: Platform): { text: string; good:
     case "missing_permissions":
       return { text: "A permission box was not ticked. Connect again and tick every box.", good: false };
     case "no_channel":
-      return { text: "This Google account has no YouTube channel. Make the Lamo Stories channel first, then connect again.", good: false };
+      return { text: "This Google account has no YouTube channel. Make the Clip Factory Stories channel first, then connect again.", good: false };
     case "no_accounts":
     case "wrong_account_type":
       return { text: "Instagram did not show a professional account. Make one, link it to a Facebook Page, then connect again.", good: false };
     case "no_pages":
-      return { text: "Facebook did not show a Page you run. Make the Lamo Stories Page first, then connect again.", good: false };
+      return { text: "Facebook did not show a Page you run. Make the Clip Factory Stories Page first, then connect again.", good: false };
     case "platform_down":
       return { text: `${name} did not answer. Try again in a few minutes.`, good: false };
     default:
@@ -174,21 +174,21 @@ export function reasonSentence(code: string | null, p: Platform): string {
     case "keys_changed":
       return `The ${name} app keys changed. Connect again.`;
     case "token_dead":
-      return `Lamo Stories' ${name} sign-in stopped working. Connect again.`;
+      return `Clip Factory Stories' ${name} sign-in stopped working. Connect again.`;
     case "expires_soon":
-      return `Lamo Stories' ${name} sign-in ends soon.`;
+      return `Clip Factory Stories' ${name} sign-in ends soon.`;
     case "signed_out_90_days":
-      return `${name} signs Lamo Stories out after 90 days. Connect again.`;
+      return `${name} signs Clip Factory Stories out after 90 days. Connect again.`;
     case "missing_permissions":
       return "A permission box was not ticked. Connect again and tick every box.";
     case "expired":
       return `That took too long. Tap Connect ${name} again.`;
     case "clips_unknown":
-      return `Lamo Stories cannot tell this ${name} account apart from Clip Factory's own. Check which account is signed in.`;
+      return `Clip Factory Stories cannot tell this ${name} account apart from Clip Factory's own. Check which account is signed in.`;
     case "clips_now":
       return CLIPS_LATER_LINE;
     default:
-      return `Lamo Stories' ${name} needs connecting again.`;
+      return `Clip Factory Stories' ${name} needs connecting again.`;
   }
 }
 
@@ -217,31 +217,31 @@ const PASTE_HERE = "Paste its keys in the boxes below, never in Clip Factory.";
 /** What a separate developer app means on each platform, in plain words (the differences from Clip Factory's guide). */
 const OWN_APP_NOTES: Record<Platform, string[]> = {
   youtube: [
-    "Make a new project in Google Cloud and give its app its own name, for example Lamo Stories.",
+    "Make a new project in Google Cloud and give its app its own name, for example Clip Factory Stories.",
     "Copy the address below into your app's settings (not Clip Factory's).",
     "Its uploads per day are its own.",
     PASTE_HERE,
   ],
   tiktok: [
-    "Make a new app on TikTok for Developers, named for example Lamo Stories.",
+    "Make a new app on TikTok for Developers, named for example Clip Factory Stories.",
     "Copy the address below into your app's settings (not Clip Factory's).",
     "TikTok checks every new app before posts can be public. That can take days to weeks.",
     PASTE_HERE,
   ],
   instagram: [
-    "Make one new Meta app for Lamo Stories. It serves Instagram and Facebook: its keys are entered once.",
+    "Make one new Meta app for Clip Factory Stories. It serves Instagram and Facebook: its keys are entered once.",
     "Copy both addresses below into your Meta app's settings, and make a sign-in setup there. Its number goes in the last box.",
     "At first only you can connect. Meta checks the app before anyone else can.",
     PASTE_HERE,
   ],
   facebook: [
-    "Make one new Meta app for Lamo Stories. It serves Instagram and Facebook: its keys are entered once.",
+    "Make one new Meta app for Clip Factory Stories. It serves Instagram and Facebook: its keys are entered once.",
     "Copy both addresses below into your Meta app's settings, and make a sign-in setup there. Its number goes in the last box.",
     "At first only you can connect. Meta checks the app before anyone else can.",
     PASTE_HERE,
   ],
   x: [
-    "Make a new app in the X Developer Portal, named for example Lamo Stories.",
+    "Make a new app in the X Developer Portal, named for example Clip Factory Stories.",
     "Copy the address below into your app's settings (not Clip Factory's).",
     "It needs its own X credits.",
     PASTE_HERE,
@@ -342,7 +342,7 @@ function CheckLine({ check }: { check: KeyCheck | undefined }) {
     <p className={`st-note ${check.ok ? "st-note--mint" : "st-note--coral"}`} role="status">
       <StIcon name={check.ok ? "check" : "alert"} size={18} />
       {check.message}
-      {check.ok && check.account === "dead" ? " But Lamo Stories' sign-in to the account stopped working: tap Reconnect." : ""}
+      {check.ok && check.account === "dead" ? " But Clip Factory Stories' sign-in to the account stopped working: tap Reconnect." : ""}
       <span className="st-note__when"> Checked {relative(check.at)}.</span>
     </p>
   );
@@ -367,7 +367,7 @@ function KeysForm({ p, saving, onSave, onCancel }: { p: Platform; saving: boolea
         onSave(Object.fromEntries(names.map((n) => [n, normaliseKey(n, values[n] ?? "")])));
       }}
     >
-      <p className="st-keys__ask">Paste the keys of your Lamo Stories {appName} app:</p>
+      <p className="st-keys__ask">Paste the keys of your Clip Factory Stories {appName} app:</p>
       {names.map((n) => {
         const id = `st-key-${p}-${n}`;
         const problem = problems[n] ?? (tried && empty.includes(n) ? `Paste the ${KEY_LABEL[p][n]} here.` : null);
@@ -406,7 +406,7 @@ function KeysForm({ p, saving, onSave, onCancel }: { p: Platform; saving: boolea
           {saving ? "Saving…" : "Save the keys"}
         </StButton>
       </div>
-      <p className="st-keys__safe">The keys go straight to Lamo Stories' own safe store. They never show here again.</p>
+      <p className="st-keys__safe">The keys go straight to Clip Factory Stories' own safe store. They never show here again.</p>
     </form>
   );
 }
@@ -458,28 +458,28 @@ function AppPart({
   const otherConnected = !!meta && meta.connectionStatus !== "not_connected";
   const disconnects = isMeta(p)
     ? connected && otherConnected
-      ? "Lamo Stories' Instagram and Facebook"
+      ? "Clip Factory Stories' Instagram and Facebook"
       : connected
-        ? `Lamo Stories' ${name}`
+        ? `Clip Factory Stories' ${name}`
         : otherConnected
-          ? `Lamo Stories' ${PLATFORM_NAME[meta!.platform]}`
+          ? `Clip Factory Stories' ${PLATFORM_NAME[meta!.platform]}`
           : null
     : connected
-      ? `Lamo Stories' ${name}`
+      ? `Clip Factory Stories' ${name}`
       : null;
 
   return (
     <div className="st-app" data-app={choice ?? "none"}>
       <h3 className="st-app__title">
         <StIcon name="key" size={18} />
-        {isMeta(p) ? "Developer app: Lamo Stories' own Meta app" : `Developer app for ${name}`}
+        {isMeta(p) ? "Developer app: Clip Factory Stories' own Meta app" : `Developer app for ${name}`}
       </h3>
       {!showChoice ? (
         <>
           <p className="st-app__now">
             {choice === "clips" ? (
               <>
-                Shares <strong>Clip Factory's {name} app</strong>, on purpose. {SHARED_APP_LINE} Lamo Stories still gets its own
+                Shares <strong>Clip Factory's {name} app</strong>, on purpose. {SHARED_APP_LINE} Clip Factory Stories still gets its own
                 sign-in and its own keys to the account, never Clip Factory's. {SHARED_APP_ACCOUNT_LINE}
               </>
             ) : (
@@ -533,7 +533,7 @@ function AppPart({
                   disabled={busy !== null}
                   onClick={() =>
                     void run("remove", () => storiesApi().deleteSocialApp(ws, p), {
-                      text: isMeta(p) ? "The Meta app keys are removed from Lamo Stories, for Instagram and Facebook." : `The ${name} app keys are removed from Lamo Stories.`,
+                      text: isMeta(p) ? "The Meta app keys are removed from Clip Factory Stories, for Instagram and Facebook." : `The ${name} app keys are removed from Clip Factory Stories.`,
                     }).then((ok) => ok && setSure(null))
                   }
                 >
@@ -575,13 +575,13 @@ function AppPart({
         <>
           {shared ? (
             <>
-              <p className="st-app__ask">Which {name} app should Lamo Stories use? You pick once; you can change it later.</p>
+              <p className="st-app__ask">Which {name} app should Clip Factory Stories use? You pick once; you can change it later.</p>
               <StPick<"own" | "clips">
-                label={`Which ${name} app Lamo Stories uses`}
+                label={`Which ${name} app Clip Factory Stories uses`}
                 stack
                 value={(want ?? "none") as "own" | "clips"}
                 options={[
-                  { value: "own", label: "A separate app for Lamo Stories", line: "Fully separate. You make a second app and paste its keys here." },
+                  { value: "own", label: "A separate app for Clip Factory Stories", line: "Fully separate. You make a second app and paste its keys here." },
                   { value: "clips", label: "Share Clip Factory's app", line: `${SHARED_APP_LINE} ${SHARED_APP_ACCOUNT_LINE}` },
                 ]}
                 onChange={(v) => setPicking(v)}
@@ -589,12 +589,12 @@ function AppPart({
             </>
           ) : (
             <p className="st-app__ask">
-              {name} always uses Lamo Stories' own Meta app, so Clip Factory's Meta connection is never touched.
+              {name} always uses Clip Factory Stories' own Meta app, so Clip Factory's Meta connection is never touched.
             </p>
           )}
           {want === "clips" ? (
             <div className="st-app__go">
-              {connected && choice !== "clips" ? <p className="st-app__warn">Switching apps disconnects Lamo Stories' {name} first. Clip Factory is not touched.</p> : null}
+              {connected && choice !== "clips" ? <p className="st-app__warn">Switching apps disconnects Clip Factory Stories' {name} first. Clip Factory is not touched.</p> : null}
               <div className="st-app__actions">
                 {changing ? (
                   <StButton quiet onClick={() => (setChanging(false), setPicking(null))}>
@@ -613,7 +613,7 @@ function AppPart({
                         setPicking(null);
                         setChanging(false);
                       },
-                      { text: `Lamo Stories shares Clip Factory's ${name} app. Now tap Connect ${name} and sign in with the Clip Factory Stories account.`, cheer: el },
+                      { text: `Clip Factory Stories shares Clip Factory's ${name} app. Now tap Connect ${name} and sign in with the Clip Factory Stories account.`, cheer: el },
                     );
                   }}
                 >
@@ -670,13 +670,13 @@ type Ask = { kind: "disconnect" } | null;
 function IntendedAsk({ a, busy, onYes, onAnother }: { a: SocialAccount; busy: boolean; onYes: (el: HTMLElement) => void; onAnother: () => void }) {
   const place = PLACE[a.platform];
   return (
-    <div className="st-intended" role="group" aria-label={`Is this your Lamo Stories ${place}?`}>
+    <div className="st-intended" role="group" aria-label={`Is this your Clip Factory Stories ${place}?`}>
       <p className="st-intended__said" role="status">
         <StIcon name="check" size={18} />
         {connectedAsSentence(a)}.
       </p>
       <p className="st-intended__ask">
-        <strong>Is this your Lamo Stories {place}?</strong> Lamo Stories posts only here, never to Clip Factory's.
+        <strong>Is this your Clip Factory Stories {place}?</strong> Clip Factory Stories posts only here, never to Clip Factory's.
       </p>
       <div className="st-sure__buttons">
         <StButton main disabled={busy} onClick={(e) => onYes(e.currentTarget)}>
@@ -859,7 +859,7 @@ export function PlatformCard({
       {a.connectionStatus === "choose_account" && a.choices?.length ? (
         <div className="st-choose">
           <p className="st-choose__ask">
-            Pick the {name} {PLACE[p]} Lamo Stories posts to:
+            Pick the {name} {PLACE[p]} Clip Factory Stories posts to:
           </p>
           <ul className="st-choose__list">
             {a.choices.map((c) => (
@@ -911,7 +911,7 @@ export function PlatformCard({
           busy={busy !== null}
           onYes={(el) => {
             celebrate(centerOf(el));
-            toast.success(`Great! Lamo Stories posts to ${thisPlace(a)}.`);
+            toast.success(`Great! Clip Factory Stories posts to ${thisPlace(a)}.`);
             setPicked(false);
             onAnswered?.();
           }}
@@ -924,7 +924,7 @@ export function PlatformCard({
       ) : ask ? (
         <div className="st-sure" role="group" aria-label="Are you sure?">
           <p className="st-sure__ask">
-            <strong>Are you sure?</strong> Lamo Stories stops posting to {thisPlace(a)}. Clip Factory is not touched.
+            <strong>Are you sure?</strong> Clip Factory Stories stops posting to {thisPlace(a)}. Clip Factory is not touched.
           </p>
           <div className="st-sure__buttons">
             <StButton onClick={() => setAsk(null)}>No, keep it as it is</StButton>
@@ -939,7 +939,7 @@ export function PlatformCard({
                     await storiesApi().disconnectSocial(ws, p);
                     onDisconnected(p, a.app.choice);
                   },
-                  { text: `${name} is disconnected from Lamo Stories.` },
+                  { text: `${name} is disconnected from Clip Factory Stories.` },
                 )
               }
             >
@@ -983,7 +983,7 @@ export function PlatformCard({
               if (!appReady) {
                 // The deny sound comes from the global click handler (aria-disabled); the toast says what is first.
                 toast.error(
-                  a.app.choice === null && SHARED_APP_PLATFORMS.includes(p) ? `Pick which ${name} app Lamo Stories uses first.` : `Paste your Lamo Stories ${isMeta(p) ? "Meta" : name} app keys first.`,
+                  a.app.choice === null && SHARED_APP_PLATFORMS.includes(p) ? `Pick which ${name} app Clip Factory Stories uses first.` : `Paste your Clip Factory Stories ${isMeta(p) ? "Meta" : name} app keys first.`,
                 );
                 return;
               }
@@ -1035,10 +1035,10 @@ function SetupBack({ ws }: { ws: string }) {
   const { data } = useOnboarding(ws);
   if (!data || data.finishedAt) return null;
   return (
-    <aside className="st-setupback" aria-label="Setting up Lamo Stories">
+    <aside className="st-setupback" aria-label="Setting up Clip Factory Stories">
       <StRing done={data.done} total={data.total} size={52} />
       <p className="st-setupback__text">
-        <strong>Setting up Lamo Stories:</strong> {data.done} of {data.total} done.
+        <strong>Setting up Clip Factory Stories:</strong> {data.done} of {data.total} done.
       </p>
       <StLinkButton href="/stories/setup" className="st-setupback__go">
         Back to setup
@@ -1289,7 +1289,7 @@ export function ConnectionsScreen({ ws, page }: StoriesScreenProps) {
     <section className="st-page st-connections">
       <StPageHead
         title="Social accounts"
-        lede="Lamo Stories posts only to the accounts you connect here. They are separate from Clip Factory's accounts, which stay as they are."
+        lede="Clip Factory Stories posts only to the accounts you connect here. They are separate from Clip Factory's accounts, which stay as they are."
       />
       <SetupBack ws={ws} />
       {gone ? <DisconnectedNote choice={gone.choice} onClose={() => setGone(null)} /> : null}

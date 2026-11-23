@@ -568,7 +568,7 @@ def test_the_state_formats_never_cross() -> None:
     with pytest.raises(state.StateError):
         social.verify_state(key, "youtube", forged, 1_800_000_000)  # the workspace id is signed
     assert social.verify_state(key, "youtube", w1, 1_800_000_000) == ("stories", nonce)
-    with pytest.raises(ValueError, match="Lamo Stories"):
+    with pytest.raises(ValueError, match="Clip Factory Stories"):
         social.sign_state(key, "youtube", "clips", nonce, 1_900_000_000)
 
 

@@ -512,8 +512,11 @@ export function forgetDashboards(): void {
   dashFlight.clear();
 }
 
-/** The Social accounts page as Needs you sentences name it ("Lamo Stories › Social accounts", or just "Social accounts"). */
-const SOCIAL_PAGE = String.raw`(?:Lamo Stories\s*›\s*)?Social accounts`;
+/**
+ * The Social accounts page as Needs you sentences name it ("Clip Factory Stories › Social accounts", or just "Social
+ * accounts"). A sentence stored before the rename still says "Lamo Stories › Social accounts" and reads the same way.
+ */
+const SOCIAL_PAGE = String.raw`(?:(?:Clip Factory|Lamo) Stories\s*›\s*)?Social accounts`;
 
 /**
  * A Needs you sentence shown on the Social accounts page it sends the owner to, without the trip (§45.36 E17): "Open

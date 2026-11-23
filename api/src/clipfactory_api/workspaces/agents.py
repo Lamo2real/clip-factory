@@ -80,6 +80,20 @@ def ensure(store: db.Store, user_id: str, workspace_id: str, now: datetime) -> d
     return {a: found[a] for a in res.AGENT_IDS if a in found}
 
 
+def _words(text: Any) -> str:
+    return " ".join(str(text or "").split())
+
+
+def shown_instructions(stored: Any, default: Mapping[str, Any]) -> str:
+    """The stored instructions, or the file's when they are an earlier default never edited (``formerInstructions``,
+    as the agent reads them, §45.36 E5), such as the one that still said Lamo Stories. Nothing stored is rewritten."""
+    text = str(stored or "")
+    former = default.get("formerInstructions")
+    if isinstance(former, list) and _words(text) in {_words(f) for f in former if isinstance(f, str)}:
+        return str(default.get("instructions") or "")
+    return text
+
+
 def public(item: Mapping[str, Any]) -> dict[str, Any]:
     """``Agent`` (§45.6)."""
     agent_id = str(item.get("agentId"))
@@ -88,7 +102,7 @@ def public(item: Mapping[str, Any]) -> dict[str, Any]:
         "agentId": agent_id,
         "name": str(default.get("name") or item.get("name") or agent_id),
         "tasks": [str(t) for t in default.get("tasks") or item.get("tasks") or []],
-        "instructions": str(item.get("instructions") or ""),
+        "instructions": shown_instructions(item.get("instructions"), default),
         "defaultInstructions": str(default.get("instructions") or ""),
         "active": item.get("active") is not False,
         "model": item.get("model") or None,
@@ -104,7 +118,7 @@ def switched_off(agent: Mapping[str, Any] | None) -> str | None:
     if agent is None or agent.get("active") is not False:
         return None
     name = public(agent)["name"]
-    return f"{name} is switched off. Switch it on in Lamo Stories › Settings › Agents."
+    return f"{name} is switched off. Switch it on in Clip Factory Stories › Settings › Agents."
 
 
 def get(store: db.Store, user_id: str, workspace_id: str, agent_id: str, now: datetime) -> dict[str, Any]:

@@ -129,11 +129,11 @@ def test_connect_uses_the_chosen_app_and_its_redirect_with_a_workspace_state(
 @pytest.mark.parametrize(
     ("platform", "setup", "sentence"),
     [
-        ("youtube", None, "Pick which app Lamo Stories uses for YouTube first."),
-        ("x", None, "Pick which app Lamo Stories uses for X first."),
-        ("instagram", None, "Paste your Lamo Stories Instagram app keys first."),
-        ("tiktok", "own", "Paste your Lamo Stories TikTok app keys first."),
-        ("facebook", "own", "Paste your Lamo Stories Facebook app keys first."),
+        ("youtube", None, "Pick which app Clip Factory Stories uses for YouTube first."),
+        ("x", None, "Pick which app Clip Factory Stories uses for X first."),
+        ("instagram", None, "Paste your Clip Factory Stories Instagram app keys first."),
+        ("tiktok", "own", "Paste your Clip Factory Stories TikTok app keys first."),
+        ("facebook", "own", "Paste your Clip Factory Stories Facebook app keys first."),
         (
             "tiktok",
             "clips_without_keys",
@@ -171,7 +171,7 @@ def test_a_meta_app_without_its_login_configuration_cannot_connect(
     sup.choose_app(store, "facebook", "own")
     status, body = call("POST", f"{ROOT}/facebook/connect")
     assert status == 409
-    assert body["error"]["message"] == "Paste your Lamo Stories Facebook app keys first."
+    assert body["error"]["message"] == "Paste your Clip Factory Stories Facebook app keys first."
 
 
 def test_a_stored_clips_choice_on_meta_is_no_choice(
@@ -181,7 +181,7 @@ def test_a_stored_clips_choice_on_meta_is_no_choice(
     sup.choose_app(store, "instagram", "clips")  # never offered; if it were ever stored it means nothing
     status, body = call("POST", f"{ROOT}/instagram/connect")
     assert status == 409
-    assert body["error"]["message"] == "Paste your Lamo Stories Instagram app keys first."
+    assert body["error"]["message"] == "Paste your Clip Factory Stories Instagram app keys first."
     assert not [c for c in secrets_client.calls if c[1].startswith("cf-prod/platforms/instagram")]
 
 
@@ -211,7 +211,7 @@ def test_reconnect_is_connect_again_and_keeps_the_account(
 def test_routes_need_a_stories_workspace_of_this_owner(call: Call) -> None:
     status, body = call("GET", "/v1/workspaces/clips/social")
     assert status == 409
-    assert body["error"]["message"] == "That is a Lamo Stories page. Switch to Lamo Stories first."
+    assert body["error"]["message"] == "That is a Clip Factory Stories page. Switch to Clip Factory Stories first."
     assert call("GET", "/v1/workspaces/01JZ0000000000000000000000/social")[0] == 404
     assert call("PUT", "/v1/workspaces/clips/social/youtube/app", {"choice": "clips"})[0] == 409
     assert call("GET", ROOT, sub=OTHER)[0] == 200  # OTHER gets their own first workspace, empty
@@ -462,7 +462,7 @@ def test_creator_info_uses_the_workspace_token_and_writes_no_setup_gate(
     status, body = call("GET", f"{ROOT}/tiktok/creator-info")
     assert status == 409
     assert body["error"]["message"] == (
-        "Lamo Stories' TikTok is not connected. Connect it in Lamo Stories › Social accounts."
+        "Clip Factory Stories' TikTok is not connected. Connect it in Clip Factory Stories › Social accounts."
     )
     sup.clips_account(store, secrets_client, "tiktok")
     sup.social(store, secrets_client, "tiktok", choice=choice)
@@ -493,7 +493,7 @@ def test_meta_never_uses_clip_factorys_app(call: Call, store: db.Store, secrets_
         status, body = call("PUT", f"{ROOT}/{platform}/app", {"choice": "clips"})
         assert status == 400
         assert body["error"]["message"] == (
-            "Facebook and Instagram always use Lamo Stories' own Meta app. Paste its keys."
+            "Facebook and Instagram always use Clip Factory Stories' own Meta app. Paste its keys."
         )
     assert store.get(sup.PK, "SOCIAL#instagram") is None
     assert call("PUT", f"{ROOT}/youtube/app", {"choice": "mine"})[0] == 400
@@ -664,7 +664,7 @@ def test_check_it_uses_the_own_app_and_lamo_stories_redirect(
     call: Call, store: db.Store, secrets_client: FakeSecretsManager, http: FakeHttp
 ) -> None:
     status, body = call("POST", f"{ROOT}/youtube/app/check")
-    assert (status, body["error"]["message"]) == (409, "Paste your Lamo Stories YouTube app keys first.")
+    assert (status, body["error"]["message"]) == (409, "Paste your Clip Factory Stories YouTube app keys first.")
     assert call("PUT", f"{ROOT}/youtube/app", {"choice": "own", **GOOD["youtube"]})[0] == 200
     http.answers.append((400, {"error": "invalid_grant"}))
     status, body = call("POST", f"{ROOT}/youtube/app/check")
@@ -697,7 +697,7 @@ GRANT_OK = (400, {"error": "invalid_grant"})  # Google's answer to a made-up cod
                 "ok": True,
                 "code": "ok",
                 "account": "ok",
-                "message": "Everything works. Lamo Stories can post to YouTube.",
+                "message": "Everything works. Clip Factory Stories can post to YouTube.",
             },
             "connected",
         ),
@@ -1134,4 +1134,4 @@ def test_no_sentence_names_the_old_connections_page() -> None:
             assert "Connections" not in sentences.story_sentence(platform, kind, "Lamo"), (platform, kind)
     assert "Connections" not in social.TIKTOK_NOT_CONNECTED
     line = dashboard._account_sentence({"platform": "youtube", "connectionStatus": "needs_reconnect"})
-    assert line == "Lamo Stories' YouTube needs connecting again. Open Social accounts and tap Connect."
+    assert line == "Clip Factory Stories' YouTube needs connecting again. Open Social accounts and tap Connect."

@@ -197,7 +197,7 @@ describe("ideas", () => {
     store.knobs.deniedModels = ["fable-5-2"];
     const denied = await settled(api.generateIdeas("stories", { override: { model: "fable-5-2" } }));
     expect(denied).toMatchObject({ status: "failed", model: "fable-5-2", result: null });
-    expect(denied.error).toMatch(/^Claude Fable 5.2 isn't available right now: .* Pick another model in Lamo Stories › Settings › AI, or try again\.$/);
+    expect(denied.error).toMatch(/^Claude Fable 5.2 isn't available right now: .* Pick another model in Clip Factory Stories › Settings › AI, or try again\.$/);
     store.knobs.taskFail = true;
     const failed = await settled(api.generateIdeas("stories", {}));
     expect(failed).toMatchObject({ status: "failed", error: "The idea helper could not finish. Tap Try again." });
@@ -240,7 +240,7 @@ describe("characters", () => {
     expect((await refused(api.makePortrait("stories", C.bolt))).message).toMatch(/AI pictures are off/);
     // Amazon ended Nova Canvas (§45.37): an older pick of it is refused with the API's sentence, never called.
     (store.workspaces[0]!.configuration as { providers: { images: string } }).providers.images = "nova-canvas";
-    expect((await refused(api.makePortrait("stories", C.bolt))).message).toBe("Amazon Nova Canvas was ended by Amazon on 30 Sep 2026. Pick another picture maker in Lamo Stories › Settings › Video.");
+    expect((await refused(api.makePortrait("stories", C.bolt))).message).toBe("Amazon Nova Canvas was ended by Amazon on 30 Sep 2026. Pick another picture maker in Clip Factory Stories › Settings › Video.");
     // The picked picture maker makes the portrait: Stability AI on Amazon Bedrock.
     (store.workspaces[0]!.configuration as { providers: { images: string } }).providers.images = "stability";
     const job = await call(api.makePortrait("stories", C.bolt));
