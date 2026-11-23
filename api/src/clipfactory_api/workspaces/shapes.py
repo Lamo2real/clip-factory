@@ -104,7 +104,7 @@ def public_workspace(item: Mapping[str, Any]) -> dict[str, Any]:
                 config[key] = value
     out: dict[str, Any] = {
         "workspaceId": str(item["workspaceId"]),
-        "workspaceName": str(item.get("workspaceName") or ""),
+        "workspaceName": ws.shown_workspace_name(item.get("workspaceName")),
         "workspaceType": str(item.get("workspaceType") or ws.STORIES),
         "builtin": False,
         "configuration": config,

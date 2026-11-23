@@ -18,6 +18,8 @@ export interface ToastOptions {
   group?: string;
   /** How long it stays (default 4.2 s, or 7 s for an error). */
   ms?: number;
+  /** No error sound from the provider (a ToastScope plays its own app's). */
+  quiet?: boolean;
 }
 
 export interface UndoOptions {
@@ -142,7 +144,7 @@ export function ToastProvider({ children, onError }: { children: ReactNode; onEr
   }, [commit]);
 
   const push = useCallback(
-    (tone: ToastTone, text: string, ms?: number, group?: string, icon?: IconName): number => {
+    (tone: ToastTone, text: string, ms?: number, group?: string, icon?: IconName, quiet = false): number => {
       const id = next.current++;
       const life = ms ?? (tone === "error" ? 7000 : 4200);
       setItems((all) => {
@@ -153,7 +155,7 @@ export function ToastProvider({ children, onError }: { children: ReactNode; onEr
         const item: ToastItem = { id, tone, text, ms: life, ...(group ? { group } : {}), ...(icon ? { icon } : {}) };
         return [...undos, ...old, item].sort((a, b) => a.id - b.id);
       });
-      if (tone === "error") onErrorRef.current?.();
+      if (tone === "error" && !quiet) onErrorRef.current?.();
       if (tone !== "undo") setTimeout(() => dismiss(id), life);
       return id;
     },
@@ -162,9 +164,9 @@ export function ToastProvider({ children, onError }: { children: ReactNode; onEr
 
   const api = useMemo<Toaster>(
     () => ({
-      success: (t, o) => void push("success", t, o?.ms, o?.group),
-      error: (t, o) => void push("error", t, o?.ms, o?.group),
-      info: (t, o) => void push("info", t, o?.ms, o?.group),
+      success: (t, o) => void push("success", t, o?.ms, o?.group, undefined, o?.quiet),
+      error: (t, o) => void push("error", t, o?.ms, o?.group, undefined, o?.quiet),
+      info: (t, o) => void push("info", t, o?.ms, o?.group, undefined, o?.quiet),
       undo: (t, options) => {
         const ms = options.ms ?? UNDO_MS;
         const id = push("undo", t, ms, undefined, options.icon);
@@ -251,4 +253,43 @@ export function ToastProvider({ children, onError }: { children: ReactNode; onEr
       </div>
     </Ctx.Provider>
   );
+}
+
+type Said = { tone: "success" | "error" | "info"; text: string; options: ToastOptions | undefined; at: number };
+
+/**
+ * One app's toasts while the shell hosts two (Clip Factory and Lamo Stories, docs/CONTRACTS.md §45.38): a toast its
+ * app raises while it is hidden (a request that finished behind the other app) waits until that app is on screen
+ * again, and is dropped when it is older by then than its own time on screen; the app's own error sound plays instead
+ * of the shell's. Undo toasts go through at once: they come from the owner's own tap and hold a decision. Toasts the
+ * shell itself raises (outside both apps) stay with the ToastProvider, global.
+ */
+export function ToastScope({ active, onScreen, onError, children }: { active: boolean; onScreen: () => boolean; onError: () => void; children: ReactNode }) {
+  const parent = useToast();
+  const held = useRef<Said[]>([]);
+  const live = useRef({ onScreen, onError });
+  live.current = { onScreen, onError };
+  const api = useMemo<Toaster>(() => {
+    const say =
+      (tone: Said["tone"]) =>
+      (text: string, options?: ToastOptions): void => {
+        if (!live.current.onScreen()) {
+          held.current.push({ tone, text, options, at: Date.now() });
+          return;
+        }
+        parent[tone](text, { ...options, quiet: true });
+        if (tone === "error") live.current.onError();
+      };
+    return { success: say("success"), error: say("error"), info: say("info"), undo: (text, options) => parent.undo(text, options) };
+  }, [parent]);
+  // Back on screen: what waited shows now, unless it would already have gone.
+  useEffect(() => {
+    if (!active) return;
+    const now = Date.now();
+    for (const h of held.current.splice(0)) {
+      const life = h.options?.ms ?? (h.tone === "error" ? 7000 : 4200);
+      if (now - h.at < life) api[h.tone](h.text, h.options);
+    }
+  }, [active, api]);
+  return <Ctx.Provider value={api}>{children}</Ctx.Provider>;
 }

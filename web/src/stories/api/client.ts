@@ -30,6 +30,6 @@ export async function loadStoriesApi(): Promise<StoriesApi> {
 
 /** The client once loaded (StoriesApp loads it before the first screen renders). */
 export function storiesApi(): StoriesApi {
-  if (!current) throw new Error("Lamo Stories API is not loaded yet");
+  if (!current) throw new Error("Funded Clips API is not loaded yet");
   return current;
 }

@@ -199,12 +199,12 @@ def test_a_key_that_cannot_be_read_stops_with_a_plain_sentence_and_proves_nothin
         sound.value.sentence
         == providers.KEY_UNREADABLE.format(words="ElevenLabs")
         == (
-            "Lamo Stories could not read the key you saved for ElevenLabs. Tap Try again. If it keeps happening, paste "
-            "the key again in Lamo Stories › Settings › AI › Provider keys."
+            "Funded Clips could not read the key you saved for ElevenLabs. Tap Try again. If it keeps happening, paste "
+            "the key again in Funded Clips › Settings › AI › Provider keys."
         )
     )
     assert sound.value.state is None  # a read that never reached ElevenLabs proves nothing about it
-    assert sound.value.last_error == "Lamo Stories could not read the saved key for ElevenLabs."
+    assert sound.value.last_error == "Funded Clips could not read the saved key for ElevenLabs."
     ctx = ProviderContext(engine=Engine(ENGINE_DIR, Path("/tmp")), workdir=tmp_path, image_model=OC_PIC,
                           provider_key=reader, http=http)  # fmt: skip
     with pytest.raises(ProviderFailed) as picture:
@@ -278,7 +278,7 @@ def test_a_jpeg_answer_is_kept_as_a_png(tmp_path: Path) -> None:
         (Answer(400, b'{"error": {"message": "Your request was rejected by our safety system."}}'), "on",
          PICTURE_REFUSED.format(label="GPT image")),
         (Answer(401, b'{"error": {"message": "Incorrect API key provided: oc-owner-key-123"}}'), "needs_setup",
-         PICTURE_SETUP.format(why="the OpenAI-compatible API refused the saved key (paste it again in Lamo Stories "
+         PICTURE_SETUP.format(why="the OpenAI-compatible API refused the saved key (paste it again in Funded Clips "
                                   "› Settings › AI › Provider keys)")),
         (Answer(403, b'{"error": {"message": "not allowed"}}'), "needs_setup",
          PICTURE_SETUP.format(why="the OpenAI-compatible API says this key may not use it")),
@@ -315,8 +315,8 @@ def test_the_openai_compatible_picture_maker_never_sends_a_key_saved_for_another
     with pytest.raises(ProviderFailed) as e:
         asyncio.run(OwnImages(ctx).image("a cartoon", 1024, 1024, 1, []))
     assert e.value.sentence.startswith(
-        "Lamo Stories did not make this picture: your OpenAI-compatible key is for api.other.com, not "
-        "api.example-images.com, so Lamo Stories did not send it"
+        "Funded Clips did not make this picture: your OpenAI-compatible key is for api.other.com, not "
+        "api.example-images.com, so Funded Clips did not send it"
     )
     assert e.value.state is None and http.calls == []  # nothing sent, nothing proven
     assert "oc-owner-key-123" not in e.value.sentence + (e.value.last_error or "")

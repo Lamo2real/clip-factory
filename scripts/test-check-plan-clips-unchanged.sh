@@ -50,6 +50,9 @@ commit "${work}/stories" "feat: Lamo Stories' routes and its own API Lambda" inf
 # Clip Factory's own pull request (an "off until its switch" env flag on cf-prod-api, as Get paid's WHOP_CONNECT).
 new_repo clips
 commit "${work}/clips" "feat: Get paid collector (WHOP_CONNECT off until its switch)" infra/modules/api/main.tf api/src/clipfactory_api/getpaid.py
+# The same Clip Factory change, its message holding the words "funded clips" only inside other words.
+new_repo clips-words
+commit "${work}/clips-words" "fix: skip unfunded clipsets in Get paid (WHOP_CONNECT off)" infra/modules/api/main.tf api/src/clipfactory_api/getpaid.py
 # A Lamo Stories pull request merged with a merge commit; its own commits never name Lamo Stories.
 new_repo merge
 g "${work}/merge" checkout -q -b feat/stories-api-core
@@ -61,6 +64,13 @@ g "${work}/merge" merge -q --no-ff -m "Merge pull request #115 from example/feat
 # A Lamo Stories fix that edits only a shared module, named in its message.
 new_repo message
 commit "${work}/message" "fix: the Lamo Stories callback throttle" infra/modules/api/main.tf
+# The same, named with today's name "Funded Clips", and with the names between, "Clip Factory Stories" and "Clip Stories".
+new_repo message-clip
+commit "${work}/message-clip" "fix: the Funded Clips callback throttle" infra/modules/api/main.tf
+new_repo message-cfs
+commit "${work}/message-cfs" "fix: the Clip Factory Stories callback throttle" infra/modules/api/main.tf
+new_repo message-cs
+commit "${work}/message-cs" "fix: the Clip Stories callback throttle" infra/modules/api/main.tf
 # A Lamo Stories web-only change (nothing that feeds the plan) deployed together with a Clip Factory env flag.
 new_repo web
 commit "${work}/web" "feat: Lamo Stories dashboard" web/src/stories/screens/Dashboard.tsx
@@ -74,8 +84,12 @@ new_repo rerun
 live_of() { g "${work}/$1" rev-parse "${2:-HEAD~1}"; }
 LIVE_STORIES="$(live_of stories)"
 LIVE_CLIPS="$(live_of clips)"
+LIVE_CLIPS_WORDS="$(live_of clips-words)"
 LIVE_MERGE="$(g "${work}/merge" rev-list --max-parents=0 HEAD)"
 LIVE_MESSAGE="$(live_of message)"
+LIVE_MESSAGE_CLIP="$(live_of message-clip)"
+LIVE_MESSAGE_CFS="$(live_of message-cfs)"
+LIVE_MESSAGE_CS="$(live_of message-cs)"
 LIVE_WEB="$(live_of web HEAD~2)"
 LIVE_AGENT="$(live_of agent)"
 LIVE_RERUN="$(live_of rerun HEAD)"
@@ -325,6 +339,9 @@ whop="$(set_change 'module.api.aws_lambda_function.fn["api"]' '.change.after.env
 variant "${work}/clips-env.json" "$whop" "$LIVE_CLIPS"
 REPO="${work}/clips" expect "Clip Factory's own new env flag on cf-prod-api (Get paid's WHOP_CONNECT) goes through as a notice" 0 "${work}/clips-env.json" \
   "::notice title=Clip Factory's own change::module.api.aws_lambda_function.fn[\"api\"]: cf-prod-api would change its environment key(s) WHOP_CONNECT."
+variant "${work}/clips-words-env.json" "$whop" "$LIVE_CLIPS_WORDS"
+REPO="${work}/clips-words" expect "a Clip Factory message with \"unfunded clipsets\" is not Funded Clips work: the env flag goes through as a notice" 0 \
+  "${work}/clips-words-env.json" "::notice title=Clip Factory's own change::"
 variant "${work}/clips-agent.json" "$(set_change 'module.agent.aws_bedrockagentcore_agent_runtime.agent' '.change.actions = ["update"]') | $(set_change 'module.agent.aws_iam_role_policy.agent' '.change.actions = ["update"]')" "$LIVE_CLIPS"
 REPO="${work}/clips" expect "Clip Factory's own agent switch or grant (no new tag) goes through as a notice" 0 "${work}/clips-agent.json" \
   "no Lamo Stories work"
@@ -346,6 +363,15 @@ REPO="${work}/merge" expect "a Lamo Stories pull request merged with a merge com
 variant "${work}/message-env.json" "$whop" "$LIVE_MESSAGE"
 REPO="${work}/message" expect "a commit that names Lamo Stories and edits a shared module counts as Lamo Stories work" 1 "${work}/message-env.json" \
   "fix: the Lamo Stories callback throttle"
+variant "${work}/message-clip-env.json" "$whop" "$LIVE_MESSAGE_CLIP"
+REPO="${work}/message-clip" expect "a commit that names Funded Clips and edits a shared module counts as Funded Clips work" 1 \
+  "${work}/message-clip-env.json" "fix: the Funded Clips callback throttle"
+variant "${work}/message-cfs-env.json" "$whop" "$LIVE_MESSAGE_CFS"
+REPO="${work}/message-cfs" expect "a commit that names Clip Factory Stories and edits a shared module counts as Funded Clips work" 1 \
+  "${work}/message-cfs-env.json" "fix: the Clip Factory Stories callback throttle"
+variant "${work}/message-cs-env.json" "$whop" "$LIVE_MESSAGE_CS"
+REPO="${work}/message-cs" expect "a commit that names Clip Stories and edits a shared module counts as Funded Clips work" 1 \
+  "${work}/message-cs-env.json" "fix: the Clip Stories callback throttle"
 variant "${work}/unknown-env.json" "$whop" "89abcdef0123456789abcdef0123456789abcdef"
 expect "a live release that is not in the history stops a Clip Factory change (it cannot tell whose it is)" 1 "${work}/unknown-env.json" \
   "is not in this checkout's history"

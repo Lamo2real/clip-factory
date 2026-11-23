@@ -30,6 +30,19 @@
   color: var(--st-ink-soft);
   font-size: 1.02rem;
 }
+/* The first-time setup, always one tap away (§45.36 E15). */
+.st-stg-head__setup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+  margin: 4px 0 0;
+}
+.st-stg-head__setup-left {
+  color: var(--st-sun-ink, #ffe3a1);
+  font-size: 0.92rem;
+  font-weight: 700;
+}
 
 /* The section bar: links on <Glide>, three to a row on phones, one row from 768 px. */
 .st-stg-nav {
@@ -470,6 +483,18 @@
   align-items: center;
   gap: 4px 10px;
   max-width: 100%;
+}
+/* In a list of rows each row's marks sit at its right edge, together (§45.36 E17). */
+.st-stg-pick--stack .st-stg-pick__top {
+  width: 100%;
+}
+.st-stg-pick__chip {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.st-stg-pick--stack .st-stg-pick__chip {
+  margin-left: auto;
 }
 .st-stg-pick__label {
   font-weight: 800;
@@ -1645,6 +1670,18 @@
   font-weight: 800;
   overflow-wrap: anywhere;
 }
+/* A row's marks ("Added by you", its status): the usual gap between them, at the row's right edge (§45.36 E17). */
+.st-stg-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-left: auto;
+}
+.st-stg-tech {
+  margin-top: 2px;
+}
 .st-stg-code {
   color: var(--st-sky-ink, #c9ebff);
   font-size: 0.88rem;
@@ -1666,6 +1703,9 @@
   margin: 0 0 8px;
   color: var(--st-ink);
   overflow-wrap: anywhere;
+}
+.st-stg-where__tech {
+  flex: 1 1 100%;
 }
 .st-stg-cleanup {
   display: grid;

@@ -42,7 +42,7 @@ DRIVING_ACTIONS = frozenset({"drive", "steer_left", "steer_right", "brake", "bra
 VEHICLE_ACTIONS = frozenset({"move", "skid", "spin", "stop", "bump", "tyre_burst"})
 VEHICLES = frozenset({"car", "truck"})
 
-SYSTEM = """You write the storyboard of one short animated video for Lamo Stories, a cartoon channel.
+SYSTEM = """You write the storyboard of one short animated video for Funded Clips, a cartoon channel.
 
 House rules (always):
 - No voice-over and no spoken words. The story is told through movement, faces, body language, sound effects, the
@@ -75,7 +75,7 @@ House rules (always):
 - Reference videos, when given, are other people's videos the owner liked: borrow only structure, timing and staging
   ideas from their analyses; never copy their characters, logos, footage, music or catchphrases."""
 
-CAPTIONS_TEMPLATE = """You write the six post captions of one finished Lamo Stories video (a short {shape} animated
+CAPTIONS_TEMPLATE = """You write the six post captions of one finished Funded Clips video (a short {shape} animated
 story with no voice-over), from its script.
 
 - youtubeTitle: at most 100 characters, no hashtags, makes people curious.

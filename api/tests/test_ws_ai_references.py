@@ -170,7 +170,7 @@ def test_analyze_needs_a_finished_upload_and_a_usable_model(wcall: WsCall, s3_cl
     status, body = wcall("POST", f"{BASE}/references/{ref['refId']}/analyze", {})
     assert (status, body["error"]["message"]) == (
         409,
-        "Video analysis is switched off. Switch it on in Lamo Stories › Settings › Agents.",
+        "Video analysis is switched off. Switch it on in Funded Clips › Settings › Agents.",
     )
 
 

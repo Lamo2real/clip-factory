@@ -1,5 +1,5 @@
 {
- "version": "ec9ad4b368cb",
+ "version": "ddc200088c13",
  "parts": [
   {
    "id": "app-map",
@@ -295,9 +295,9 @@
   },
   {
    "id": "contracts-45",
-   "title": "CONTRACTS: 45. Lamo Stories: a second, separate workspace (owner request, 2026-11-21)",
-   "line": "Planned: not in the app until the switch pull request turns it on (§45.21). Until then nothing of Lamo Stories",
-   "chars": 224359
+   "title": "CONTRACTS: 45. Funded Clips: a second, separate workspace (owner request, 2026-11-21)",
+   "line": "Planned: not in the app until the switch pull request turns it on (§45.21). Until then nothing of Funded Clips",
+   "chars": 233509
   },
   {
    "id": "contracts-46",
@@ -716,25 +716,25 @@
   {
    "id": "adr-70",
    "title": "DECISIONS: ADR-70 Workspaces: Lamo Clips is the built-in workspace, new workspaces live in partitions of their own",
-   "line": "Context. The owner asked (2026-11-21) for a second studio, Lamo Stories, inside the same app and sign-in, with",
+   "line": "Context. The owner asked (2026-11-21) for a second studio, Funded Clips, inside the same app and sign-in, with",
    "chars": 2299
   },
   {
    "id": "adr-71",
    "title": "DECISIONS: ADR-71 One animation engine in TypeScript, drawn by the browser and by the agent",
-   "line": "Context. Lamo Stories needs 30–60 s vertical cartoons without voice-over, with recurring characters that must",
+   "line": "Context. Funded Clips needs 30–60 s vertical cartoons without voice-over, with recurring characters that must",
    "chars": 2382
   },
   {
    "id": "adr-72",
    "title": "DECISIONS: ADR-72 Separate social connections: own tokens, one callback, the owner's choice of developer app",
-   "line": "Context. The owner wants different accounts for Lamo Stories on every platform and no accidental posting to",
+   "line": "Context. The owner wants different accounts for Funded Clips on every platform and no accidental posting to",
    "chars": 2952
   },
   {
    "id": "adr-73",
    "title": "DECISIONS: ADR-73 Publishing isolation: checked before every call, no default account, IAM as the last wall",
-   "line": "Context. \"A video created in Lamo Stories must only be published to Lamo Stories-connected accounts\", every",
+   "line": "Context. \"A video created in Funded Clips must only be published to Funded Clips-connected accounts\", every",
    "chars": 1898
   },
   {
@@ -751,26 +751,26 @@
   },
   {
    "id": "adr-76",
-   "title": "DECISIONS: ADR-76 Lamo Stories is its own application: its own API Lambda, AgentCore runtime and IAM roles",
+   "title": "DECISIONS: ADR-76 Funded Clips is its own application: its own API Lambda, AgentCore runtime and IAM roles",
    "line": "Context. The owner's second request (2026-11-21): \"Lamo Stories must be treated as an independent application",
    "chars": 2113
   },
   {
    "id": "adr-77",
    "title": "DECISIONS: ADR-77 Models and reasoning effort are the owner's, per workspace, agent, task and request, never substituted",
-   "line": "Context. The owner wants complete control over which model powers Lamo Stories (examples \"Sable 5.2, Sable 5.1,",
+   "line": "Context. The owner wants complete control over which model powers Funded Clips (examples \"Sable 5.2, Sable 5.1,",
    "chars": 2300
   },
   {
    "id": "adr-78",
-   "title": "DECISIONS: ADR-78 Lamo Stories' own agents, skills, chat and memory live in its runtime; actions wait for the owner's tap",
+   "title": "DECISIONS: ADR-78 Funded Clips' own agents, skills, chat and memory live in its runtime; actions wait for the owner's tap",
    "line": "Context. The second request asks for its own agents and agent configuration, skills (upload, versions,",
    "chars": 1355
   },
   {
    "id": "adr-79",
-   "title": "DECISIONS: ADR-79 Developer apps: the owner picks Lamo Stories' own or Clip Factory's, per platform, never silently",
-   "line": "Context. The second request: Lamo Stories' \"own OAuth credentials\", \"Do not reuse Clip Factory OAuth tokens. Do",
+   "title": "DECISIONS: ADR-79 Developer apps: the owner picks Funded Clips' own or Clip Factory's, per platform, never silently",
+   "line": "Context. The second request: Funded Clips' \"own OAuth credentials\", \"Do not reuse Clip Factory OAuth tokens. Do",
    "chars": 1667
   },
   {
@@ -802,6 +802,12 @@
    "title": "DECISIONS: ADR-84 Stories makers are lists of checked models, keyed hosts carry the owner's own keys, Clip Factory's app is shared only behind its reserve, and ",
    "line": "Context. The owner asked to pick picture, video and sound models independently and to add models and providers",
    "chars": 2995
+  },
+  {
+   "id": "adr-85",
+   "title": "DECISIONS: ADR-85 The second app is called Funded Clips on screen; every internal name stays",
+   "line": "Context. The second app was built as Lamo Stories and renamed Clip Factory Stories on 2026-11-22. The same day",
+   "chars": 2433
   },
   {
    "id": "architecture-overview",
@@ -849,7 +855,7 @@
    "id": "deployment-what-a-deploy-does",
    "title": "DEPLOYMENT: What a deploy does",
    "line": "Triggered by a push to main ([deploy.yml](../.github/workflows/deploy.yml)) or by hand (Actions → deploy → Run workflow).",
-   "chars": 7974
+   "chars": 8415
   },
   {
    "id": "deployment-desktop-downloads",
@@ -1026,8 +1032,8 @@
    "chars": 119355
   },
   {
-   "id": "testing-lamo-stories-contracts-45",
-   "title": "TESTING: Lamo Stories (CONTRACTS §45)",
+   "id": "testing-funded-clips-contracts-45",
+   "title": "TESTING: Funded Clips (CONTRACTS §45)",
    "line": "The list is CONTRACTS §45.19. Three checks matter most, because the owner put protecting Lamo Clips first:",
    "chars": 1620
   },

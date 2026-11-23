@@ -223,7 +223,7 @@ export function AgentsSection({ ws }: { ws: string }) {
   const agent = agents.find((a) => a.agentId === picked) ?? agents[0];
 
   if (!ai.data) return ai.error ? <Failed message={ai.error} onRetry={() => void ai.reload()} /> : <Loading label="Opening the agents…" />;
-  if (!agent) return <Empty title="No agents yet">They are made the first time Lamo Stories opens. Reload the page.</Empty>;
+  if (!agent) return <Empty title="No agents yet">They are made the first time Funded Clips opens. Reload the page.</Empty>;
   const data = ai.data;
   const save = async (patch: Parameters<typeof ai.saveAgent>[1], el?: HTMLElement | null) => {
     const out = await ai.saveAgent(agent.agentId, patch);
@@ -239,7 +239,7 @@ export function AgentsSection({ ws }: { ws: string }) {
   return (
     <div className="st-stg-cards">
       <div className="st-stg-bar">
-        <p className="st-stg-small">Lamo Stories' own agents. Clip Factory's agent is separate and stays as it is.</p>
+        <p className="st-stg-small">Funded Clips' own agents. Clip Factory's agent is separate and stays as it is.</p>
         <SavedMark saved={saved} busy={ai.busy} />
       </div>
       <SetPick
@@ -280,7 +280,7 @@ export function AgentsSection({ ws }: { ws: string }) {
       <SetCard title="Instructions" icon="pencil" lede="The words this agent reads first, every time. Reset puts back the original.">
         <Instructions agent={agent} onSave={(text, el) => void save({ instructions: text.trim() }, el)} onReset={() => void save({ reset: true })} />
       </SetCard>
-      <SetCard title="Skills" icon="book" lede="Know-how this agent reads. Only Lamo Stories skills, never Clip Factory's.">
+      <SetCard title="Skills" icon="book" lede="Know-how this agent reads. Only Funded Clips skills, never Clip Factory's.">
         {skills.data ? (
           <SkillList agent={agent} skills={skills.data} onSave={(ids) => void save({ skillIds: ids })} />
         ) : skills.error ? (

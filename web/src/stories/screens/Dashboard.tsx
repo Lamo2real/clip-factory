@@ -355,17 +355,46 @@ function ContinueCard({ ws }: { ws: string }) {
   );
 }
 
-/** The setup's card (§45.29): shown until the setup is finished, with the ring and the first things left. */
+/** The steps still left after Finish (skipped ones), as a short list with a way back to them (§45.36 E15). */
+function SetupLeft({ left }: { left: { step: string; label: string }[] }) {
+  return (
+    <section className="st-setupcard st-setupcard--left" aria-labelledby="st-setupleft-title">
+      <span className="st-setupcard__mark" aria-hidden="true">
+        <StIcon name="bulb" size={24} />
+      </span>
+      <div className="st-setupcard__text">
+        <h2 className="st-setupcard__title" id="st-setupleft-title">
+          Finish setting up: {left.length} left
+        </h2>
+        <ul className="st-setupcard__list" aria-label="Still to do">
+          {left.map((s) => (
+            <li key={s.step}>{s.label}</li>
+          ))}
+        </ul>
+      </div>
+      <StLinkButton href="/stories/setup" className="st-setupcard__go">
+        Open setup
+        <StIcon name="chevron" size={18} />
+      </StLinkButton>
+    </section>
+  );
+}
+
+/**
+ * The setup's card (§45.29): shown until the setup is finished, with the ring and the first things left. After Finish
+ * with steps skipped, a small card keeps listing them (§45.36 E15).
+ */
 function SetupCard({ ws }: { ws: string }) {
   const { data } = useOnboarding(ws);
-  if (!data || data.finishedAt) return null;
+  if (!data) return null;
   const left = data.steps.filter((s) => s.state !== "done" && s.step !== "done");
+  if (data.finishedAt) return left.length ? <SetupLeft left={left} /> : null;
   return (
     <section className="st-setupcard" aria-labelledby="st-setupcard-title">
       <StRing done={data.done} total={data.total} size={88} />
       <div className="st-setupcard__text">
         <h2 className="st-setupcard__title" id="st-setupcard-title">
-          Set up Lamo Stories: {data.done} of {data.total} done
+          Set up Funded Clips: {data.done} of {data.total} done
         </h2>
         {left.length ? (
           <p className="st-setupcard__left">
@@ -413,7 +442,7 @@ export function DashboardScreen({ ws }: StoriesScreenProps) {
       ) : data.counts.made === 0 && data.producing.length === 0 && data.needsYou.length === 0 && data.activity.length === 0 ? (
         <>
           <StEmpty title="Your studio is ready" action={<StLinkButton href="/stories/production/new" main>Make your first video</StLinkButton>}>
-            Pick an idea and a character, and Lamo Stories makes the cartoon.
+            Pick an idea and a character, and Funded Clips makes the cartoon.
           </StEmpty>
           <div className="st-tiles">
             <Accounts items={data.accounts} />

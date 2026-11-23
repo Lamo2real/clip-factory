@@ -11,14 +11,14 @@ import { useEffect, useState } from "react";
 import { friendlyMessage } from "../../api/errors.ts";
 import { useToast } from "../../components/Toasts.tsx";
 import { useLoad } from "../../lib/hooks.ts";
-import { usePrefs } from "../../lib/prefs.ts";
 import { SoundEngine } from "../../lib/sound.ts";
-import { CLICK_SOUNDS } from "../../lib/soundCatalog.ts";
+import { CLICK_SOUNDS, ERROR_SOUNDS } from "../../lib/soundCatalog.ts";
 import { storiesApi } from "../api/client.ts";
 import type { ExtraFormat, KeepChatPictures, KeepReferences, StorageSummary, StoriesConfig } from "../api/types.ts";
-import { setStoriesDevicePref, storiesClickSound, storiesDeviceOwn, storiesMotionSetting, storiesReduceMotion, storiesSoundOn, useStoriesDevicePrefs } from "../prefs.ts";
+import { setStoriesDevicePref, storiesClickSound, storiesDeviceOwn, storiesErrorSound, storiesMotionSetting, storiesReduceMotion, storiesSoundOn, useStoriesDevicePrefs } from "../prefs.ts";
 import { Btn, cheer, Empty, Failed, Loading, Note, SavedMark, SetCard, SetPick, SetSelect, SetSwitch, SIcon, sizeText, useSaved } from "./bits.tsx";
 import { useWorkspaceConfig } from "./data.ts";
+import { StTech } from "../ui.tsx";
 import { sizeWords } from "./VideoSection.tsx";
 
 export const STORAGE_KINDS: { key: keyof StorageSummary["bytes"]; label: string; sw: string }[] = [
@@ -38,7 +38,7 @@ const PLACES: Record<string, string> = {
   "us-east-1": "US East (N. Virginia)",
 };
 
-export const LOCATION_WORDS = "Lamo Stories' own folder in Clip Factory's media storage";
+export const LOCATION_WORDS = "Funded Clips' own folder in Clip Factory's media storage";
 
 const CATEGORIES: { value: StoriesConfig["youtubeCategory"]; label: string }[] = [
   { value: "27", label: "Education" },
@@ -72,8 +72,8 @@ export const KEEP_CHAT_PICTURES: { value: KeepChatPictures; label: string; line:
 
 /** The files made besides the MP4, in plain words (§45.34). */
 export const EXTRA_FORMATS: { value: ExtraFormat; label: string; description: string }[] = [
-  { value: "webm", label: "Also make a WebM file", description: "A small file for web pages (VP9 picture, Opus sound)." },
-  { value: "mov", label: "Also make a MOV file", description: "A big file for editing apps like Final Cut or Premiere (ProRes 422 Proxy picture, PCM sound)." },
+  { value: "webm", label: "Also make a WebM file", description: "A small file that plays on web pages." },
+  { value: "mov", label: "Also make a MOV file", description: "A big file for editing apps like Final Cut or Premiere." },
 ];
 
 /** The burned-in captions switch's words (§45.34: only the caption words are left out). */
@@ -114,20 +114,21 @@ function Used({ storage }: { storage: StorageSummary }) {
 function Where({ storage }: { storage: StorageSummary | null }) {
   const loc = storage?.location;
   return (
-    <p className="st-stg-where">
+    <div className="st-stg-where">
       <span className="st-stg-active__word">Where</span>
       <span>
         {LOCATION_WORDS}
-        {loc ? (
-          <>
-            {" "}
-            in {PLACES[loc.region] ?? loc.region}: <code className="st-stg-code">{loc.folder}</code>
-          </>
-        ) : (
-          ", apart from Clip Factory's files."
-        )}
+        {loc ? ` in ${PLACES[loc.region] ?? loc.region}.` : ", apart from Clip Factory's files."}
       </span>
-    </p>
+      {/* The exact folder, one tap away (§45.35 D21, §45.36 E14). */}
+      {loc ? (
+        <StTech className="st-stg-tech st-stg-where__tech">
+          <span>
+            Folder <code className="st-stg-code">{loc.folder}</code> in {loc.region}
+          </span>
+        </StTech>
+      ) : null}
+    </div>
   );
 }
 
@@ -192,33 +193,32 @@ function Cleanup({ ws, onDone }: { ws: string; onDone: () => Promise<void> }) {
   );
 }
 
-/** Plays a click sound by its number, for the picker (its own engine: the usual click sound is kept out of the way). */
+/** Plays a click or error sound by its number, for the pickers (its own engine: the usual click sound is kept out of the way). */
 let preview: SoundEngine | null = null;
-function hearClick(id: number, target: EventTarget | null): void {
-  (preview ??= new SoundEngine(storiesSoundOn)).play("tap", target, id);
+function hear(kind: "tap" | "deny", id: number, target: EventTarget | null): void {
+  (preview ??= new SoundEngine(storiesSoundOn)).play(kind, target, id);
 }
 
-const FOLLOWS = " Follows Clip Factory's setting until you change it.";
-
 /**
- * Settings › Storage and production › Sounds and motion (§45.34): this device's own choices for Lamo Stories, read
- * with the same readers Lamo Stories' sounds and motion use (stories/prefs.ts), so the card shows what really applies.
+ * Settings › Storage and production › Sounds and motion (§45.34, §45.38): this device's own choices for Lamo Stories,
+ * read with the same readers Lamo Stories' sounds and motion use (stories/prefs.ts), so the card shows what really
+ * applies. Unset, each is Lamo Stories' own usual choice; Clip Factory's settings never change them.
  */
 function SoundsAndMotion() {
-  usePrefs(); // Clip Factory's choices apply while Lamo Stories' own are unset: follow them too.
   useStoriesDevicePrefs();
   const mine = storiesDeviceOwn();
   const soundOn = storiesSoundOn();
   const click = storiesClickSound();
+  const deny = storiesErrorSound();
   const calm = storiesMotionSetting();
   const systemCalm = !calm && storiesReduceMotion();
-  const anySet = mine.sound !== undefined || mine.click !== undefined || mine.motion !== undefined;
+  const anySet = mine.sound !== undefined || mine.click !== undefined || mine.deny !== undefined || mine.motion !== undefined;
   const offWhy = soundOn ? undefined : "Turn Sounds on first";
   return (
-    <SetCard title="Sounds and motion" icon="sound" id="sounds-and-motion" lede="For Lamo Stories on this device. Clip Factory's sounds and motion stay as they are.">
+    <SetCard title="Sounds and motion" icon="sound" id="sounds-and-motion" lede="For Funded Clips on this device. Clip Factory's sounds and motion stay as they are.">
       <SetSwitch
         label="Sounds"
-        description={`Click sounds on every button, and cheers when something works.${mine.sound === undefined ? FOLLOWS : ""}`}
+        description="Click sounds on every button, and cheers when something works."
         checked={soundOn}
         onChange={(v) => setStoriesDevicePref("sound.enabled", v)}
       />
@@ -231,7 +231,7 @@ function SoundsAndMotion() {
           onChange={(v) => {
             const id = Number(v);
             setStoriesDevicePref("sound.click", id);
-            hearClick(id, null);
+            hear("tap", id, null);
           }}
         />
         {/* It plays the picked sound itself (data-sound="off" keeps the usual click sound out of the way); with Sounds off it is switched off. */}
@@ -242,31 +242,43 @@ function SoundsAndMotion() {
           aria-disabled={soundOn ? undefined : true}
           title={offWhy}
           onClick={(e) => {
-            if (soundOn) hearClick(click, e.currentTarget);
+            if (soundOn) hear("tap", click, e.currentTarget);
           }}
         >
           <SIcon name="sound" size={20} />
           Hear it
         </button>
       </div>
-      <p className="st-stg-small">{mine.click === undefined ? "Clip Factory's click sound until you pick one." : "Lamo Stories' own click sound."}</p>
+      <p className="st-stg-small">Funded Clips' own click sound.</p>
+      <SetSelect
+        label="Error sound"
+        value={String(deny)}
+        off={offWhy}
+        options={ERROR_SOUNDS.map((x) => ({ value: String(x.id), label: `${x.name}: ${x.feel.toLowerCase()}` }))}
+        onChange={(v) => {
+          const id = Number(v);
+          setStoriesDevicePref("sound.deny", id);
+          hear("deny", id, null);
+        }}
+      />
       <SetSwitch
         label="Less motion"
-        description={`Fewer things slide, bounce and burst on the screen.${mine.motion === undefined ? FOLLOWS : ""}`}
+        description="Fewer things slide, bounce and burst on the screen."
         checked={calm}
         onChange={(v) => setStoriesDevicePref("motion.reduce", v)}
       />
-      {systemCalm ? <p className="st-stg-small">This device asks for less motion too, so Lamo Stories keeps it calm anyway.</p> : null}
+      {systemCalm ? <p className="st-stg-small">This device asks for less motion too, so Funded Clips keeps it calm anyway.</p> : null}
       {anySet ? (
         <Btn
           quiet
           onClick={() => {
             setStoriesDevicePref("sound.enabled", null);
             setStoriesDevicePref("sound.click", null);
+            setStoriesDevicePref("sound.deny", null);
             setStoriesDevicePref("motion.reduce", null);
           }}
         >
-          Use Clip Factory's settings again
+          Use the usual settings again
         </Btn>
       ) : null}
     </SetCard>
@@ -290,10 +302,10 @@ export function StorageSection({ ws }: { ws: string }) {
   return (
     <div className="st-stg-cards">
       <div className="st-stg-bar">
-        <p className="st-stg-small">Lamo Stories keeps its files in its own folder, apart from Clip Factory's.</p>
+        <p className="st-stg-small">Funded Clips keeps its files in its own folder, apart from Clip Factory's.</p>
         <SavedMark saved={saved} busy={busy} />
       </div>
-      <SetCard title="Space used" icon="box" lede="Everything Lamo Stories has made and kept.">
+      <SetCard title="Space used" icon="box" lede="Everything Funded Clips has made and kept.">
         <Where storage={storage.data} />
         {storage.data ? <Used storage={storage.data} /> : storage.error ? <Failed message={storage.error} onRetry={() => void storage.reload()} /> : <Loading label="Adding it up…" />}
       </SetCard>
@@ -302,7 +314,12 @@ export function StorageSection({ ws }: { ws: string }) {
         <dl className="st-stg-facts">
           <div>
             <dt>Format</dt>
-            <dd>MP4: H.264 picture and AAC sound, made to start playing fast (+faststart)</dd>
+            <dd>
+              An MP4, which every platform and phone plays, made to start playing fast.
+              <StTech className="st-stg-tech">
+                <span>MP4: H.264 picture and AAC sound (+faststart).</span>
+              </StTech>
+            </dd>
           </div>
           <div>
             <dt>Size</dt>
@@ -327,6 +344,9 @@ export function StorageSection({ ws }: { ws: string }) {
             onChange={(v) => save({ production: { ...prod, extraFormats: (["webm", "mov"] as const).filter((x) => (x === f.value ? v : extra.includes(x))) } })}
           />
         ))}
+        <StTech className="st-stg-tech">
+          <span>WebM: VP9 picture and Opus sound. MOV: ProRes 422 Proxy picture and PCM sound.</span>
+        </StTech>
       </SetCard>
 
       <SetCard title="Making the scenes" icon="clock" lede="More at a time is quicker; fewer is gentler when lots is going on.">
@@ -371,14 +391,14 @@ export function StorageSection({ ws }: { ws: string }) {
       <SetCard title="Keeping other files" icon="clock" id="keeping" lede="Reference videos and chat pictures can be cleared after a while to save space.">
         <p className="st-stg-label">Reference videos</p>
         <SetPick<KeepReferences> label="Keep reference videos" stack value={prod.keepReferences ?? "all"} options={KEEP_REFERENCES} onChange={(v) => save({ production: { ...prod, keepReferences: v } })} />
-        {(prod.keepReferences ?? "all") === "study_only" ? <p className="st-stg-small">Lamo Stories still learns from each study after its video is gone.</p> : null}
+        {(prod.keepReferences ?? "all") === "study_only" ? <p className="st-stg-small">Funded Clips still learns from each study after its video is gone.</p> : null}
         <p className="st-stg-label">Pictures added in the chat</p>
         <SetPick<KeepChatPictures> label="Keep chat pictures" value={prod.keepChatPictures ?? "all"} options={KEEP_CHAT_PICTURES} onChange={(v) => save({ production: { ...prod, keepChatPictures: v } })} />
         <p className="st-stg-small">These choices and Old versions are applied after each video. Clean up now applies them at once.</p>
         <Cleanup ws={ws} onDone={() => storage.reload()} />
       </SetCard>
 
-      <SetCard title="YouTube posts" icon="film" lede="Lamo Stories' own YouTube choices, never made for kids. Clip Factory's YouTube settings are not used here.">
+      <SetCard title="YouTube posts" icon="film" lede="Funded Clips' own YouTube choices, never made for kids. Clip Factory's YouTube settings are not used here.">
         <p className="st-stg-label">Which shelf on YouTube</p>
         <SetPick label="YouTube category" value={c.youtubeCategory} options={CATEGORIES} onChange={(v) => save({ youtubeCategory: v })} />
         <p className="st-stg-label">Who can see the videos</p>

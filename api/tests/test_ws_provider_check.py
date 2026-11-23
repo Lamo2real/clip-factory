@@ -247,7 +247,7 @@ def test_try_it_belongs_to_a_lamo_stories_workspace(call: Call, store: db.Store,
     for ended, word in (("nova-reel", "video"), ("nova-canvas", "picture")):
         status, body = call("POST", f"{BASE}/providers/{ended}/check")
         assert status == 409
-        assert body["error"]["message"].endswith(f"Pick another {word} maker in Lamo Stories › Settings › Video.")
+        assert body["error"]["message"].endswith(f"Pick another {word} maker in Funded Clips › Settings › Video.")
         assert "was ended by Amazon on 30 Sep 2026" in body["error"]["message"]
     assert call("POST", CHECK, {"everything": True})[0] == 400
     assert agentcore.calls == []

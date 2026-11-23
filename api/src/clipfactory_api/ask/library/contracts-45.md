@@ -1,13 +1,18 @@
-## 45. Lamo Stories: a second, separate workspace (owner request, 2026-11-21)
+## 45. Funded Clips: a second, separate workspace (owner request, 2026-11-21)
 
-**Planned: not in the app until the switch pull request turns it on (§45.21).** Until then nothing of Lamo Stories
+**Planned: not in the app until the switch pull request turns it on (§45.21).** Until then nothing of Funded Clips
 shows in Clip Factory, and Ask should say it is being built.
 
-The owner asked for **Lamo Stories**, a second content studio inside Clip Factory that makes short animated story
+It was called Lamo Stories until 22 Nov 2026, then Clip Factory Stories and Clip Stories until 23 Nov 2026.
+A stored workspace whose name is still an old default ("Lamo Stories", "Clip Factory Stories" or "Clip Stories") shows
+as "Funded Clips" (the API's public workspace shape maps them, and the web does as a fallback; the stored record is
+never rewritten), and a new workspace gets "Funded Clips" as its default name.
+
+The owner asked for **Funded Clips**, a second content studio inside Clip Factory that makes short animated story
 videos (no voice-over: characters, faces, body language, sound effects, music, optional captions) and posts them to
 **different** social accounts. One app, one sign-in, one owner; two workspaces with their own screens, libraries,
 production jobs, settings and social connections. The existing app is the **Lamo Clips** workspace and must stay
-exactly as it is. The same evening the owner added a second request: Lamo Stories is **its own application** inside
+exactly as it is. The same evening the owner added a second request: Funded Clips is **its own application** inside
 the Clip Factory shell, with its own AgentCore runtime, agents, skills, models and reasoning effort he controls, a
 creative chat with memory, reference-video analysis, its own setup and onboarding, and its own OAuth credentials
 (§45.24–§45.32; where they differ from the subsections before them, they win). "Clip Factory" in the second request
@@ -19,25 +24,25 @@ met; §45.23 and §45.32 list the evidence for each acceptance criterion.
 
 * No existing table, index, item, attribute, S3 prefix, secret, Lambda, route, prompt, screen, style or test is
   renamed, moved, replaced or re-shaped. Lamo Clips' data is never migrated: it **is** the built-in workspace.
-* Everything new is **additive** and lives in Lamo Stories' own pieces (§45.24): new partitions (§45.3), a new S3
+* Everything new is **additive** and lives in Funded Clips' own pieces (§45.24): new partitions (§45.3), a new S3
   prefix (§45.4), a new Secrets Manager prefix (§45.13), its own API Lambda behind new routes under `/v1/workspaces`
   (§45.5), its own AgentCore runtime and image (§45.11), one new durable Lambda (§45.15), new IAM roles, new web
   routes under `/stories` (§45.16). Clip Factory's `cf-prod-api`, its route table, its agent runtime and image, and
-  their roles do not change. Lamo Stories never revokes, rewrites or deletes a Lamo
+  their roles do not change. Funded Clips never revokes, rewrites or deletes a Lamo
   Clips token, key, account or setup item, on any path (§45.13.6).
 * Existing code is touched only where a new thing must be plugged in; §45.17 lists every such touch with the test that
   proves the old path is unchanged. Nothing new is shown in the Lamo Clips screens except the workspace switcher
   (§45.16.1), which sits in space that is empty today and moves no existing control.
 * Every deploy: the Delete gate line reads exactly "Delete gate: the plan deletes or replaces nothing that holds the
   owner's data." and the only resources the plan may replace are the image build triggers
-  `module.agent.terraform_data.image` (only if Clip Factory's agent image changes, which Lamo Stories never causes) and
-  `module.stories_agent.terraform_data.image` (whenever Lamo Stories' agent image changes); they hold no data (it was
-  so before Lamo Stories, for example in PR #84). Everything else is add or update in place (§45.18).
-* Lamo Stories was hidden behind one web switch, `STORIES_ON` in `web/src/stories/flag.ts`, until every piece had
+  `module.agent.terraform_data.image` (only if Clip Factory's agent image changes, which Funded Clips never causes) and
+  `module.stories_agent.terraform_data.image` (whenever Funded Clips' agent image changes); they hold no data (it was
+  so before Funded Clips, for example in PR #84). Everything else is add or update in place (§45.18).
+* Funded Clips was hidden behind one web switch, `STORIES_ON` in `web/src/stories/flag.ts`, until every piece had
   merged and the final check passed; the switch pull request (2026-11-22, §45.36) turned it on for everyone and renamed
-  the update bar's Lamo Stories folders from "Behind the scenes" to "Lamo Stories" (`web/areas.json`). A device can
-  still choose with `localStorage` `cf.storiesPreview`: `"0"` shows Clip Factory exactly as before Lamo Stories, `"1"`
-  shows Lamo Stories (the tests use both).
+  the update bar's Funded Clips folders from "Behind the scenes" to "Funded Clips" (`web/areas.json`). A device can
+  still choose with `localStorage` `cf.storiesPreview`: `"0"` shows Clip Factory exactly as before Funded Clips, `"1"`
+  shows Funded Clips (the tests use both).
 
 ### 45.2 Words
 
@@ -45,15 +50,15 @@ met; §45.23 and §45.32 list the evidence for each acceptance criterion.
 |---|---|
 | workspace | One content studio of the owner: its own content, jobs, library, settings and social connections. |
 | Lamo Clips | The built-in workspace `workspaceId = "clips"`, `workspaceType = "clips"`: today's whole app and all its data, unchanged. It is never written as an item. |
-| Lamo Stories | A workspace of type `stories`. The first one has `workspaceId = "stories"` and the name "Lamo Stories"; later ones (for example "Lamo Cars") get a ULID. |
+| Funded Clips | A workspace of type `stories`. The first one has `workspaceId = "stories"` and the name "Funded Clips"; later ones (for example "Lamo Cars") get a ULID. |
 | story | One animated video project (the spec's *Content*, `contentType = "animation"`). |
 | production job | One run that makes or remakes (part of) a story's video, or a character's portrait (the spec's *ProductionJob*). |
 | social account | One authorized account, channel or Page connected **to one workspace** (the spec's *SocialAccount*). |
 | publishing job | Sending one approved story to one social account (the spec's *PublishingJob*). |
 | cast | The characters of one story, copied (looks and all) into its script when it is written, so a later edit to a character never changes a finished video (§45.8). |
-| agent | One of Lamo Stories' five AI roles (creative director, video analysis, storyboard, character, quality assurance), each with its own instructions, model, effort and skills (§45.26). |
+| agent | One of Funded Clips' five AI roles (creative director, video analysis, storyboard, character, quality assurance), each with its own instructions, model, effort and skills (§45.26). |
 | task | One kind of AI work (chat, brainstorm, storyboard, …) that an agent does; models and effort can be set per task (§45.25). |
-| skill | A Lamo Stories `SKILL.md` assigned to agents (§45.26); Clip Factory's skills are separate and never used. |
+| skill | A Funded Clips `SKILL.md` assigned to agents (§45.26); Clip Factory's skills are separate and never used. |
 | reference video | A video the owner uploads so the video analysis agent can study its structure and timing (§45.28). |
 
 Workspace types live in one registry, `WORKSPACE_TYPES` (`api/src/clipfactory_api/workspaces/types.py`, mirrored in
@@ -91,20 +96,20 @@ Lamo Clips' partition `USER#{userId}` gets **no new items**. Two new kinds of pa
 | AI configuration | same | `AICONFIG` | `type="ws_aiconfig"`, `defaultModel`, `defaultEffort`, `tasks`, `prices`, `version`, `updatedAt` (§45.25; made on the first PUT with a conditional put; updates conditional on `version`) |
 | Added model | same | `MODELDEF#{key}` | `type="ws_modeldef"`, the `ModelDef` fields of §45.34/§45.35 D1, `version`, `createdAt`, `updatedAt` (key `custom-…`; at most 20; merged over `stories/config/models.json` per call by the API and the agent) |
 | Provider key | same | `PROVCRED#{providerId}` | `type="ws_provcred"`, `savedAt`, `hint` (the key itself only in Secrets Manager, §45.31) |
-| Own rate counters | `RATE#WS#{workspaceId}#{platform}` | `BUDGET` | only with Lamo Stories' own developer app (§45.30) |
+| Own rate counters | `RATE#WS#{workspaceId}#{platform}` | `BUDGET` | only with Funded Clips' own developer app (§45.30) |
 | OAuth state | `OAUTH#{nonce}` | `STATE` | the existing item (§17.4) plus `workspaceId` and `socialAccountId`, written only for a `w1.` state (§45.13.2) |
 
 * **Ownership is in the key.** The API builds every key from the JWT's `sub` and the path's workspace id; it never
   reads a user id from a body. A workspace that is not in `USER#{userId}#WSREG` answers `404 not_found` ("We could
-  not find that workspace."), whatever its id; the one exception is the first Lamo Stories workspace, `stories`,
+  not find that workspace."), whatever its id; the one exception is the first Funded Clips workspace, `stories`,
   which `require_workspace` creates on first use with a conditional put (two calls at once make one). Every item also
   carries `userId` and `workspaceId`, and every read checks both against the request (a second, independent check:
   `workspaces.guard.owned(item, user_id, ws_id)`).
 * **Why these prefixes.** The live-update and notification streams forward only the sort-key prefixes `JOB#`,
   `CLIP#`, `POST#`, `LEARNING#`, `WEEK#`, `ACCOUNT#`, `SETUP#`, `FOLLOW#`, `JOBLIVE#`, `CAMPAIGN#`, `CRCONN`, `CRSUB#`,
   `CRMONEY` (`infra/modules/realtime/main.tf`, `notify/main.tf`). No new sort key starts with any of them
-  (`api/tests/test_ws_keys.py` reads them from Terraform), so no Lamo Stories item can ever reach a Lamo Clips screen,
-  notification or the stats poller (`gsi1` and `gsi2` are never set on a new item). Lamo Stories screens poll
+  (`api/tests/test_ws_keys.py` reads them from Terraform), so no Funded Clips item can ever reach a Lamo Clips screen,
+  notification or the stats poller (`gsi1` and `gsi2` are never set on a new item). Funded Clips screens poll
   (§45.16.4). Item `type` values never reuse a Lamo Clips one.
 * `SOCIAL#{platform}`: one social account per platform per workspace (the owner's table: one separate account per
   platform). `socialAccountId` = `{workspaceId}.{platform}` (stable, so a reconnect keeps the id; §45.14 stops a
@@ -129,25 +134,27 @@ Lamo Clips' partition `USER#{userId}` gets **no new items**. Two new kinds of pa
 | `ws/{userId}/{workspaceId}/stories/{storyId}/captions/v{n}.ass` | the on-screen captions and bubble text | kept |
 | `ws/{userId}/{workspaceId}/stories/{storyId}/final/v{n}.mp4`, `cover-v{n}.jpg` | the finished 1080×1920 video and its cover | kept (old versions per the retention setting, §45.29) |
 | `ws/{userId}/{workspaceId}/references/{refId}/source.{mp4\|mov}`, `analysis.json`, `frames/` | reference videos and their analysis (§45.28) | kept until deleted |
-| `ws/{userId}/{workspaceId}/skills/{skillId}/{revisionId}/` | Lamo Stories skills (§45.26) | the last 10 revisions kept |
+| `ws/{userId}/{workspaceId}/skills/{skillId}/{revisionId}/` | Funded Clips skills (§45.26) | the last 10 revisions kept |
 | `ws/{userId}/{workspaceId}/chat/{convId}/{fileId}.{ext}` | pictures attached in the chat | kept with the conversation |
 
-No Lamo Clips prefix (`uploads/`, `jobs/`, `skills/`, `private/`, `ask/`, `campaigns/`) is read or written by Lamo
-Stories code, and no Lamo Clips code reads `ws/`. The media bucket's lifecycle rules name Lamo Clips prefixes only, so
+No Lamo Clips prefix (`uploads/`, `jobs/`, `skills/`, `private/`, `ask/`, `campaigns/`) is read or written by Funded
+Clips code, and no Lamo Clips code reads `ws/`. The media bucket's lifecycle rules name Lamo Clips prefixes only, so
 `ws/` files are kept. The Library lists only `ASSET#` items of its workspace (§45.12), never S3 listings. Presigned
-GETs last 1 hour; a download adds `ResponseContentDisposition: attachment; filename="{slug}.mp4"`.
+GETs last 1 hour; a download adds `ResponseContentDisposition: attachment; filename="{slug}.mp4"`. `{slug}` is the
+title in lowercase ASCII letters and digits joined by dashes, at most 60 characters, or `funded-clip` when nothing is
+left (`workspaces/media.py` `slug`; the mock does the same).
 
 ### 45.5 HTTP API (`cf-prod-stories-api`, JWT on every route, §5 errors)
 
-All under `/v1/workspaces`, served by Lamo Stories' own Lambda `cf-prod-stories-api` (§45.24; API Gateway routes
+All under `/v1/workspaces`, served by Funded Clips' own Lambda `cf-prod-stories-api` (§45.24; API Gateway routes
 `ANY /v1/workspaces` and `ANY /v1/workspaces/{proxy+}` to it; every other path still goes to `cf-prod-api`, unchanged).
 `{ws}` is a workspace id (`^(clips|stories|[0-9A-HJKMNP-TV-Z]{26})$`, else 404). Routes
-marked **S** need a `stories` workspace: on `clips` they answer `409 conflict` "That is a Lamo Stories page. Switch to
-Lamo Stories first." Bodies are validated with `validate.py`; unknown keys are `400`.
+marked **S** need a `stories` workspace: on `clips` they answer `409 conflict` "That is a Funded Clips page. Switch to
+Funded Clips first." Bodies are validated with `validate.py`; unknown keys are `400`.
 
 | Method & path | Body | 2xx |
 |---|---|---|
-| GET `/v1/workspaces` | – | `{ "workspaces": Workspace[] }`: Lamo Clips first, then the owner's workspaces by `createdAt`; creates `stories` ("Lamo Stories") on first use |
+| GET `/v1/workspaces` | – | `{ "workspaces": Workspace[] }`: Lamo Clips first, then the owner's workspaces by `createdAt`; creates `stories` ("Funded Clips") on first use |
 | POST `/v1/workspaces` | `{ "workspaceType": "stories", "workspaceName" }` (1–40 chars, unique per owner, at most 10 workspaces) | `201 { "workspace" }` (API only; no screen in this section) |
 | GET `/v1/workspaces/{ws}` | – | `{ "workspace" }` |
 | PATCH `/v1/workspaces/{ws}` **S** | `{ "workspaceName"?, "configuration"?: Partial<StoriesConfig>, "version" }` | `{ "workspace" }`; `409` on a stale `version` |
@@ -170,7 +177,7 @@ Lamo Stories first." Bodies are validated with `validate.py`; unknown keys are `
 | DELETE `/v1/workspaces/{ws}/characters/{characterId}/references/{assetId}` **S** | – | `{ "character" }` |
 | POST `/v1/workspaces/{ws}/characters/design/uploads` **S** | `{ "filename", "contentType": "image/png" \| "image/jpeg" \| "image/webp", "size" ≤ 10 MB }` | `{ "assetId", "uploadUrl", "headers" }` (`ws/{u}/{ws}/design/{assetId}.{ext}`, an `ASSET#` of kind `design_ref`) |
 | POST `/v1/workspaces/{ws}/characters/design` **S** | `{ "description"?: string (≤ 600), "referenceAssetId"?: string (a `design_ref` or `character_ref` asset of this workspace, else 404), "override"?: ModelOverride }` | `202 { "task" }`: the character agent's suggested `CharacterInput` in `result.character` (a draft; nothing saved) |
-| POST `/v1/workspaces/{ws}/characters/{characterId}/portrait` **S** | – | `202 { "job" }` (a portrait job, §45.11.6); `409` "AI pictures are off. Turn them on in Lamo Stories › Settings." while `providers.images` is `builtin-rig` |
+| POST `/v1/workspaces/{ws}/characters/{characterId}/portrait` **S** | – | `202 { "job" }` (a portrait job, §45.11.6); `409` "AI pictures are off. Turn them on in Funded Clips › Settings." while `providers.images` is `builtin-rig` |
 | GET `/v1/workspaces/{ws}/stories` **S** | query `status?` (a StoryStatus or `all`), `limit` ≤ 50, `cursor` | `{ "stories": Story[], "nextCursor" }` newest first |
 | POST `/v1/workspaces/{ws}/stories` **S** | `StoryInput` (may carry `override`: ModelOverride for this video's jobs, and `referenceIds`) | `201 { "story", "job" }` (starts production) |
 | GET `/v1/workspaces/{ws}/stories/{storyId}` **S** | – | `{ "story", "job": ProductionJob \| null, "script": StoryScript \| null }` (URLs presigned) |
@@ -196,11 +203,11 @@ Lamo Stories first." Bodies are validated with `validate.py`; unknown keys are `
 | POST `/v1/workspaces/{ws}/social/{platform}/choose` **S** | `{ "choiceId" }` (instagram and facebook only; other platforms `400`) | `{ "account" }` |
 | ~~POST `/v1/workspaces/{ws}/social/{platform}/share`~~ | removed by §45.37 G8 | no account is ever shared with Clip Factory (404) |
 | POST `/v1/workspaces/{ws}/social/{platform}/check` **S** | – | `{ "account" }` (a live profile call; `token_dead` → `needs_reconnect`) |
-| GET `/v1/workspaces/{ws}/social/tiktok/creator-info` **S** | – | `{ "creator": TikTokCreator }` (the §17.4 shape, with the workspace token only); `409` "Lamo Stories' TikTok is not connected. Connect it in Lamo Stories › Connections." |
+| GET `/v1/workspaces/{ws}/social/tiktok/creator-info` **S** | – | `{ "creator": TikTokCreator }` (the §17.4 shape, with the workspace token only); `409` "Funded Clips' TikTok is not connected. Connect it in Funded Clips › Connections." |
 | DELETE `/v1/workspaces/{ws}/social/{platform}` **S** | – | `204`: deletes only this workspace's token and pending secrets and sets the account `not_connected`; **no platform revoke call** (§45.13.6) |
 | PUT `/v1/workspaces/{ws}/social/{platform}/app` **S** | `{ "choice": "own", "clientId", "clientSecret", "configId"? }` or `{ "choice": "clips" }` | `{ "account" }` (§45.30; keys masked like §17.4; a change of app disconnects the account first) |
-| POST `/v1/workspaces/{ws}/social/{platform}/app/check` **S** | – | `{ "check": KeyCheck }` (Lamo Stories' own app keys, §17.4's checks) |
-| DELETE `/v1/workspaces/{ws}/social/{platform}/app` **S** | – | `204` (only Lamo Stories' own app keys; disconnects first) |
+| POST `/v1/workspaces/{ws}/social/{platform}/app/check` **S** | – | `{ "check": KeyCheck }` (Funded Clips' own app keys, §17.4's checks) |
+| DELETE `/v1/workspaces/{ws}/social/{platform}/app` **S** | – | `204` (only Funded Clips' own app keys; disconnects first) |
 | GET `/v1/workspaces/{ws}/ai` **S** | – | `{ "ai": StoriesAiConfig, "models": ModelInfo[], "agents": Agent[], "tasks": TaskInfo[] }` |
 | PUT `/v1/workspaces/{ws}/ai` **S** | `StoriesAiConfig & { "version" }` | `{ "ai" }` (unknown model keys, efforts a model does not offer, unknown tasks → 400 with the sentence) |
 | POST `/v1/workspaces/{ws}/ai/check-models` **S** | `{ "models"?: string[] }` | `202 { "task" }` (one tiny real call per model, §45.25) |
@@ -237,23 +244,23 @@ Lamo Stories first." Bodies are validated with `validate.py`; unknown keys are `
 | POST `/v1/workspaces/{ws}/publishing/{publishingJobId}/retry` **S** | `{ "options"?: PublishOptions, "confirmAccount"?: string /* the new externalAccountId the owner saw */ }` | `202 { "publishingJob" }` (only `failed` or `needs_attention`; `409` naming the new account when the destination changed and `confirmAccount` does not match it) |
 
 `/v1/accounts*`, `/v1/setup*`, `/v1/clips*`, `/v1/jobs*` and every other existing route are unchanged, served by
-`cf-prod-api` as before, and never see Lamo Stories data. Lamo Stories' route modules live **outside** Clip Factory's `routes` package:
+`cf-prod-api` as before, and never see Funded Clips data. Funded Clips' route modules live **outside** Clip Factory's `routes` package:
 `workspaces/routes/core.py` (workspaces, dashboard, ideas, characters, stories, library, providers, guidance, tasks),
 `workspaces/routes/ai.py` (AI configuration, agents, skills, chat, memory, references, onboarding, usage, provider
-keys, storage) and `workspaces/routes/social.py` (social, developer apps, creator info, the Lamo Stories OAuth
+keys, storage) and `workspaces/routes/social.py` (social, developer apps, creator info, the Funded Clips OAuth
 callback, publish, publishing), assembled in `workspaces/routes/__init__.py`; `workspaces/http.py` is the Lambda
 handler that dispatches only these (the shared `http.dispatch` and JWT claims code, imported read-only); a test
 imports it in a fresh interpreter and checks `clipfactory_api.routes` is not loaded; `routes/__init__.py` (Clip
 Factory's table) does not include them.
 
 Dependencies reach the routes through `workspaces/deps.py` (`deps.of(app)`: built once per `App` from the
-environment on first use: `STORIES_AGENT_RUNTIME_ARN` (Lamo Stories' own runtime), `STORY_FLOW_ARN`,
+environment on first use: `STORIES_AGENT_RUNTIME_ARN` (Funded Clips' own runtime), `STORY_FLOW_ARN`,
 `WS_SECRET_PREFIX`, the media bucket; tests install fakes with `deps.install(app, …)`); `app.py` does not change.
-Story-only AWS calls live in new files: `workspaces/agent.py` (invokes **Lamo Stories' runtime** only:
+Story-only AWS calls live in new files: `workspaces/agent.py` (invokes **Funded Clips' runtime** only:
 `start_story`, `start_portrait`, `start_task`, `start_chat_turn`, `start_reference`, `cancel`, `stop_session`;
 sessions `"cfstory-" + id + "-" + 8 random chars`, at least 33 characters; two attempts on a retryable error, 20 s
 read timeout) and `workspaces/flow.py` (the story flow start). `agent_client.py` and `flow_client.py` stay
-byte-identical; neither Lamo Stories file ever invokes `cf_prod_clip_agent`.
+byte-identical; neither Funded Clips file ever invokes `cf_prod_clip_agent`.
 
 ### 45.6 Shapes (TypeScript notation; `web/src/stories/api/types.ts` and `web/src/stories/engine/types.ts` are the copies the web compiles, changed only through this section)
 
@@ -272,7 +279,7 @@ interface StoriesConfig { defaultDurationSec: number /* 15..90, default 45; 30..
   youtubeCategory: "1" | "2" | "23" | "24" | "27" /* Film & Animation, Autos & Vehicles, Comedy, Entertainment,
      Education; default "27"; Lamo Clips' own category list and default are not used */;
   youtubePrivacy: "public" | "unlisted" | "private" /* default "public" */;
-  xMonthlyLimitUsd: number | null /* only with Lamo Stories' own X app (§45.30) */ }
+  xMonthlyLimitUsd: number | null /* only with Funded Clips' own X app (§45.30) */ }
 // The AI configuration lives beside it (GET/PUT …/ai), not in StoriesConfig:
 type Effort = "low" | "medium" | "high" | "xhigh" | "max";
 type TaskKind = "chat" | "brainstorm" | "expand_idea" | "variations" | "storyboard" | "scene_rewrite"
@@ -446,12 +453,12 @@ interface StoriesDashboard { counts: { made: number; review: number; published: 
 ### 45.7 Ideas
 
 * **Manual**: the owner types a title, a line and a category (four big buttons).
-* **AI ideas, Expand and Variations** are tasks of the `creative_director` agent in **Lamo Stories' own runtime**
+* **AI ideas, Expand and Variations** are tasks of the `creative_director` agent in **Funded Clips' own runtime**
   (§45.24): the API writes a `TASK#` and invokes the agent (`start_task`), the web polls `GET …/tasks/{taskId}` and
   shows the drafts when it is `done` (usually 10–60 s, longer on the bigger models). The model and effort are the
   owner's (§45.25: the task's or the agent's or the workspace default, or the per-request override from the button's
-  menu). The prompt is the agent's instructions, its enabled Lamo Stories skills, the workspace memory, then the
-  Lamo Stories house brief: no voice-over, told through movement, faces, body language, sound and music, 9:16, 30–60 s
+  menu). The prompt is the agent's instructions, its enabled Funded Clips skills, the workspace memory, then the
+  Funded Clips house brief: no voice-over, told through movement, faces, body language, sound and music, 9:16, 30–60 s
   suggested (15–90 allowed), recurring characters (the saved characters' names and personalities), never made for
   children, nothing dangerous for fun, and for `driving_safety` only topics in the checked guidance list (§45.11.5).
   Structured output (a JSON schema), validated by code; a bad answer is asked once more, then the task fails with
@@ -561,7 +568,7 @@ agent write is refused. A second message while the conversation's last answer is
 
 `web/src/stories/engine/`: TypeScript with only relative `./*.ts` imports inside the folder (no npm, DOM, network,
 `Date`, `performance`, `Math.random`; `Deno` only in `cli.ts`; a vitest scan holds this), so the **browser** draws it
-for live previews and **Lamo Stories' agent** runs the very same files with Deno (from its PyPI wheel, in its own image) for the final
+for live previews and **Funded Clips' agent** runs the very same files with Deno (from its PyPI wheel, in its own image) for the final
 frames. One source of truth for how a character moves; the preview and the video use the same draw lists.
 
 ```ts
@@ -640,7 +647,7 @@ version                           → {"engine": n}
 `web/src/stories/engine/fixtures/sample-script.json` is part of the contract: it always validates, the agent's
 pipeline test and the image self-check use it.
 
-### 45.11 Lamo Stories' agent (its own AgentCore runtime `cf_prod_story_agent`)
+### 45.11 Funded Clips' agent (its own AgentCore runtime `cf_prod_story_agent`)
 
 #### 45.11.1 The runtime, its actions, fencing, shutdown
 
@@ -662,8 +669,8 @@ pipeline test and the image self-check use it.
   ConditionCheck on the job's `sessionId`. A refused write ends the run. Tasks and chat turns are fenced the same way
   on their own item. Failure sentences name the button ("Tap Try again"), never raw tool output; presigned URLs are
   redacted in logs.
-* The deploy drain (`scripts/wait-for-jobs.sh`) waits for running Lamo Stories jobs (`PJOB#` with a fresh
-  `heartbeatAt`) when Lamo Stories' runtime changes, and for clip jobs only when Clip Factory's does, as today.
+* The deploy drain (`scripts/wait-for-jobs.sh`) waits for running Funded Clips jobs (`PJOB#` with a fresh
+  `heartbeatAt`) when Funded Clips' runtime changes, and for clip jobs only when Clip Factory's does, as today.
 
 #### 45.11.2 The writer (`storyboard` step)
 
@@ -713,7 +720,7 @@ runaway guard: at most 3 writer calls and 2 checker calls per job.
 region: "us-east-1" }`), never prefixed with a profile. `stories/config/agents.json` holds the five agents' default
 instructions, tasks and skills. Terraform builds the runtime's model grants from these files and passes
 `CF_STORIES_TABLE`, `CF_MEDIA_BUCKET`, `CF_REGION`, `CF_IMAGE_MODEL_ID`, `CF_IMAGE_REGION`, `CF_VIDEO_BUCKET` (empty
-while the us-east-1 bucket is off) to the runtime. Clip Factory's `config/models.json` is not read by Lamo Stories.
+while the us-east-1 bucket is off) to the runtime. Clip Factory's `config/models.json` is not read by Funded Clips.
 
 #### 45.11.5 Safety stories only from checked guidance
 
@@ -724,7 +731,7 @@ while the us-east-1 bucket is off) to the runtime. Clip Factory's `config/models
   New York and California DMV driver manuals, the Ontario Ministry of Transportation, Transport Canada, Transport for
   NSW, Trafikverket and the Swedish National Wildlife Accident Council, each with its URL, section and a verbatim
   quote, fetched and checked on 2026-11-21. NHTSA, FMCSA, the National Safety Council and VicRoads refused the
-  download and are not cited. A new source needs a fetched, quote-checked page. Bundled into Lamo Stories' agent image
+  download and are not cited. A new source needs a fetched, quote-checked page. Bundled into Funded Clips' agent image
   and into the API zip (it is not under `config/`, so Clip Factory's agent image never changes because of it).
 * Each step and dont carries its sources and `shown`: a step is shown in a video only when a road authority states
   it **and** no other cited source contradicts it (the research found real disagreements: stay in the car or get out
@@ -733,7 +740,7 @@ while the us-east-1 bucket is off) to the runtime. Clip Factory's `config/models
 * `GET …/guidance` returns every topic with every step and dont and its `shown` flag, the caveats, and the citations
   resolved from `sources`.
 * A `driving_safety` story must have a `safetyTopicId` (the API's match, §45.7); with none it **cannot be produced**:
-  "Lamo Stories only makes driving-safety videos from checked advice, and this one isn't in the list yet." plus the
+  "Funded Clips only makes driving-safety videos from checked advice, and this one isn't in the list yet." plus the
   list. A story of another category that the writer flags `teachesSafety` is held in `needs_check` until the owner
   picks a topic or removes the advice.
 * The writer gets only the topic's shown steps and donts and must take every on-screen instruction from them
@@ -764,7 +771,7 @@ one registry line:
 | animation | `builtin-2d` (the engine + rasterizer) | on |
 | audio | `builtin-synth` (numpy synthesis) | on |
 | images | `builtin-rig` (the character drawn by the engine) | on |
-| images | `nova-canvas` (Amazon Nova Canvas, Bedrock in `eu-west-1`, `imageModel` in `stories/config/models.json`) | off until the owner picks it in Lamo Stories › Settings; then `needs_setup` until the first portrait job's real call answers (`on`, with `checkedAt`) or fails (`needs_setup` with `lastError`, e.g. "Bedrock says Nova Canvas is not enabled for this account in Europe (Ireland)."). Used for character portraits shown in the app and the Library only, never inside a posted video (the shared publishers mark posts as not AI-generated, §45.14). |
+| images | `nova-canvas` (Amazon Nova Canvas, Bedrock in `eu-west-1`, `imageModel` in `stories/config/models.json`) | off until the owner picks it in Funded Clips › Settings; then `needs_setup` until the first portrait job's real call answers (`on`, with `checkedAt`) or fails (`needs_setup` with `lastError`, e.g. "Bedrock says Nova Canvas is not enabled for this account in Europe (Ireland)."). Used for character portraits shown in the app and the Library only, never inside a posted video (the shared publishers mark posts as not AI-generated, §45.14). |
 | animation | `nova-reel` (Amazon Nova Reel) | built but `needs_setup` until the us-east-1 bucket is switched on (§45.31); a story using it is posted only with AI labels |
 
 Video, image and audio providers, their settings and credentials: §45.31. `GET …/providers` is served by the API
@@ -781,21 +788,21 @@ stories themselves (`GET …/stories?status=all`): cover, title, status, cast, l
 opens its files grouped by kind and a Details panel with its **production metadata** (`GET …/stories/{id}/jobs`:
 each job's steps with times, writer model, engine version, seed, target and actual length, safety topic, providers).
 A remake keeps older versions as assets (`meta.current = 0`); deleting a story deletes its assets and files; deleting
-a character deletes its references and portrait. Nothing of a Lamo Stories workspace can appear in Lamo Clips'
+a character deletes its references and portrait. Nothing of a Funded Clips workspace can appear in Lamo Clips'
 Library: that Library reads `CLIP#` items of `USER#{userId}` only.
 
 ### 45.13 Separate social connections
 
 #### 45.13.1 What is shared and what is not
 
-* **The developer app, per platform, by the owner's choice** (§45.30): Lamo Stories' **own** app (keys in
+* **The developer app, per platform, by the owner's choice** (§45.30): Funded Clips' **own** app (keys in
   `cf-prod/workspaces/{ws}/{platform}/app`; always for Facebook and Instagram), or, on purpose and only for YouTube,
-  TikTok and X, Clip Factory's (`cf-prod/platforms/{platform}/app`, read only: Lamo Stories never writes, rotates or
+  TikTok and X, Clip Factory's (`cf-prod/platforms/{platform}/app`, read only: Funded Clips never writes, rotates or
   deletes them). Nothing of Clip Factory's registered apps or setup changes. The client id used at connect is stored on the account (`appClientId`); when the chosen app's keys change
-  later (for example TikTok's Production keys replacing the Sandbox ones in Clip Factory, or new own keys), the Lamo
-  Stories account shows `needs_reconnect` ("The {Platform} app keys changed. Connect again.") instead of failing on
+  later (for example TikTok's Production keys replacing the Sandbox ones in Clip Factory, or new own keys), the Funded
+  Clips account shows `needs_reconnect` ("The {Platform} app keys changed. Connect again.") instead of failing on
   upload.
-* **Separate:** every user token. Lamo Stories tokens live only at `cf-prod/workspaces/{workspaceId}/{platform}/token`
+* **Separate:** every user token. Funded Clips tokens live only at `cf-prod/workspaces/{workspaceId}/{platform}/token`
   (and `…/pending` for Meta's list of Pages, 30 minutes), JSON in Secrets Manager (encrypted with the account's
   Secrets Manager key), created by `workspaces/secrets.py` with tags `app=cf-prod`, `workspace={workspaceId}`,
   `platform` (values through `oauth.secrets.Secrets` with the workspace prefix). Never in DynamoDB, logs, responses,
@@ -811,7 +818,7 @@ Library: that Library reads `CLIP#` items of `USER#{userId}` only.
 `POST …/social/{platform}/connect` makes a **workspace state**, `w1.{workspaceId}.{nonce}.{exp}.{sig}` with `sig =
 b64url(HMAC_SHA256(stateKey, "w1|" + platform + "|" + workspaceId + "|" + nonce + "|" + exp))` (the same key and
 10 minutes as §17.4; well under the 200-character state limit; PKCE derives from the nonce as today), and the state
-item `OAUTH#ws.{nonce}`/`STATE` (its own key prefix, so Lamo Stories' roles never reach Clip Factory's `OAUTH#{nonce}`
+item `OAUTH#ws.{nonce}`/`STATE` (its own key prefix, so Funded Clips' roles never reach Clip Factory's `OAUTH#{nonce}`
 items) with `userId`, `workspaceId`, `socialAccountId`, `appChoice` and `redirectUri`. Today's `v1.` format and
 `state.verify` are unchanged and reject `w1.` states. It returns the platform's authorize URL, built in
 `workspaces/social.py` from the keys `app_keys` picks and the redirect URI of that choice (a test compares it with
@@ -819,16 +826,16 @@ items) with `userId`, `workspaceId`, `socialAccountId`, `appChoice` and `redirec
 * youtube: `prompt=select_account consent` (Google always shows its account and channel picker, Brand Accounts
   included);
 * tiktok: `disable_auto_auth=1` (as today: TikTok always shows its consent page, for the account signed in on
-  tiktok.com); the page says first "Sign in to your Lamo Stories account on tiktok.com in this browser. TikTok
+  tiktok.com); the page says first "Sign in to your Funded Clips account on tiktok.com in this browser. TikTok
   connects the account that is signed in.";
-* instagram, facebook: Lamo Stories' own Meta app and its Login configuration; the page says before the tap "Facebook
-  will ask which Pages this app may use. Tick only your Lamo Stories Page.";
-* x: as today; the page says "First sign in to your Lamo Stories account on x.com in this browser. X connects the
+* instagram, facebook: Funded Clips' own Meta app and its Login configuration; the page says before the tap "Facebook
+  will ask which Pages this app may use. Tick only your Funded Clips Page.";
+* x: as today; the page says "First sign in to your Funded Clips account on x.com in this browser. X connects the
   account that is signed in."
 
-#### 45.13.3 The callback: Clip Factory's callback only forwards; Lamo Stories' own Lambda does the rest
+#### 45.13.3 The callback: Clip Factory's callback only forwards; Funded Clips' own Lambda does the rest
 
-* **Lamo Stories' own callback route** on `cf-prod-stories-api`: public `GET /v1/stories-oauth/{platform}/callback`
+* **Funded Clips' own callback route** on `cf-prod-stories-api`: public `GET /v1/stories-oauth/{platform}/callback`
   (authorization NONE, its own low route throttle), `storiesCallbackBase` = `{apiUrl}/v1/stories-oauth`. Own developer
   apps register this URI. It checks the `w1.` HMAC (constant time) and expiry before anything else, consumes the state
   item `OAUTH#ws.{nonce}` once, and exchanges the code with the `redirectUri` stored on the state (the authorize
@@ -838,7 +845,7 @@ items) with `userId`, `workspaceId`, `socialAccountId`, `appChoice` and `redirec
   `{STORIES_OAUTH_CALLBACK}/{platform}/callback` with the query passed byte for byte (`Cache-Control: no-store`,
   `Referrer-Policy: no-referrer`; the target comes from configuration, never from the request); every other state runs
   today's code unchanged, including refusing a consumed `v1.` item that carries `workspaceId`. Hooks gains no workspace
-  code, no Lamo Stories secret access and no new IAM.
+  code, no Funded Clips secret access and no new IAM.
 * Every outcome lands on `{APP_URL}/stories/connections?platform={p}&result={code}` (`&ws={id}` only after the
   signature checks out), codes from a fixed `WS_RESULTS` list (§17.5's codes plus `same_as_clips`); nothing else from
   the request is reflected; an unreadable or expired state lands there too ("That took too long. Tap Connect again.").
@@ -860,7 +867,7 @@ It never writes `ACCOUNT#`, `SETUP#` or any `cf-prod/platforms/*` secret, and ne
 **Superseded by §45.37 G8 (the owner's hard rule, 22 Nov):** there is no "Use it for both" and no share route any
 more; an account that is Clip Factory's own is never posted to. The text below is the earlier rule, kept for history.
 
-A Lamo Stories account whose identity is Lamo Clips' own (same channel id, Page id, Instagram id, TikTok open id or X
+A Funded Clips account whose identity is Lamo Clips' own (same channel id, Page id, Instagram id, TikTok open id or X
 user id) is `same_as_clips` and cannot be posted to. The Connections page says "This is the same {place} Lamo Clips
 posts to." with **Pick another** (connect again) and **Use it for both** (the share route, after a second "Are you
 sure?" step), which sets `sharedWithClips: true`, `sharedExternalAccountId` = that identity and `connected`. Every
@@ -870,19 +877,19 @@ current identity (§45.14).
 #### 45.13.5 What each platform allows (shown on the Connections page in plain words, `limits`)
 
 * **YouTube:** one Google sign-in can hold several channels (Brand Accounts). A connection posts to exactly one
-  channel: the one picked in Google's picker. Lamo Stories shows its name and id after connecting; **Pick another
-  channel** connects again ("Google will ask which channel. Pick your Lamo Stories channel."). Both channels share the
+  channel: the one picked in Google's picker. Funded Clips shows its name and id after connecting; **Pick another
+  channel** connects again ("Google will ask which channel. Pick your Funded Clips channel."). Both channels share the
   same Google project's daily units (about 6 uploads a day in all, counted together, §45.14).
-* **Instagram:** a separate professional (Business or Creator) account, linked to a Facebook Page, through Lamo
-  Stories' own Meta app (§45.30), so Clip Factory's Meta grant is never touched. Tick only the Lamo Stories Page.
+* **Instagram:** a separate professional (Business or Creator) account, linked to a Facebook Page, through Funded
+  Clips' own Meta app (§45.30), so Clip Factory's Meta grant is never touched. Tick only the Funded Clips Page.
 * **Facebook:** a separate Page managed by the same Facebook login, through the same own Meta app.
 * **TikTok:** while the TikTok app is in Sandbox (review pending since 2026-11-21) only accounts added as Sandbox
   target users can connect, and until TikTok approves the app the account must be **private** and posts stay "Only
-  me" (as for Lamo Clips, §17). So the Lamo Stories account has to be a Sandbox target user and private. When the
-  app goes live with new keys, Lamo Stories asks to connect again.
+  me" (as for Lamo Clips, §17). So the Funded Clips account has to be a Sandbox target user and private. When the
+  app goes live with new keys, Funded Clips asks to connect again.
 * **X:** a separate X account; X connects the account signed in on x.com, and posts use the same X app's credits and
   the owner's one monthly X limit (shared with Lamo Clips, §45.14).
-Lamo Stories never creates an account anywhere, and never assumes an email address means an account.
+Funded Clips never creates an account anywhere, and never assumes an email address means an account.
 
 #### 45.13.6 Disconnect never revokes
 
@@ -927,17 +934,17 @@ own code, never `routes/setup.py`'s.
   checked identity }`, `creds` from `WorkspaceTokenProvider`, `video` = `S3Video` on the story's `final/v{n}.mp4`,
   `options` = the target's flat options (allow-listed per platform; `campaign` and any unknown key refused;
   `madeForKids` never accepted, always false), YouTube `category` and `privacy` defaulting to `StoriesConfig`,
-  `settings` = `{}` (Lamo Clips' settings and preset never apply to Lamo Stories posts).
+  `settings` = `{}` (Lamo Clips' settings and preset never apply to Funded Clips posts).
 * **WorkspaceTokenProvider** (`workspaces/tokens.py`, its own class, not a subclass of `SecretsTokenProvider`): app
   keys read-only from `cf-prod/platforms/{p}/app`; the token from the workspace secret only; refresh and rotation with
   `providers.refresh`, the lease on `SOCIAL#{p}` (`take_lease`/`clear_lease`), the new token written put-only
   (`create=False`; a missing secret is "not connected"); a dead token sets `SOCIAL#{p}` `needs_reconnect`; the TikTok
   watch sets `reason: expires_soon` and `reconnectBy` on `SOCIAL#tiktok`. It never imports `oauth.tokens.
   SecretsTokenProvider`, `oauth.setup.mark_account` or `stats.refresh`, and never writes `ACCOUNT#` or `SETUP#`.
-* **Shared limits** (only with Clip Factory's developer app, §45.30: one X bill, one Google project; with Lamo
-  Stories' own app the same rules use its own counters `RATE#WS#{ws}#{platform}` and `xMonthlyLimitUsd`): before the first X start (no handle yet) the flow calls
-  `stats.budget.charge_post` exactly as the clip flow does; when it says no, the job is `needs_attention` with "Lamo
-  Stories stopped X: this month's X limit is used up (it is shared with Lamo Clips)." and nothing goes to X (Lamo
+* **Shared limits** (only with Clip Factory's developer app, §45.30: one X bill, one Google project; with Funded
+  Clips' own app the same rules use its own counters `RATE#WS#{ws}#{platform}` and `xMonthlyLimitUsd`): before the first X start (no handle yet) the flow calls
+  `stats.budget.charge_post` exactly as the clip flow does; when it says no, the job is `needs_attention` with "Funded
+  Clips stopped X: this month's X limit is used up (it is shared with Lamo Clips)." and nothing goes to X (Lamo
   Clips' setup gates are not written). Every numbers read checks `budget.blocked_until`, reserves with
   `budget.reserve` (the cost as `stats.refresh` computes it; X ids so its per-read price is counted) and records with
   `budget.record`; a blocked read waits for the next checkpoint. YouTube uploads use the same daily units as Lamo Clips.
@@ -948,19 +955,19 @@ own code, never `routes/setup.py`'s.
   publish loop (§45.15).
 * **Sentences** (`workspaces/sentences.py`, `story_sentence(platform, kind, account_name)`): the flow never stores a
   publisher's or token helper's sentence that names Lamo Clips' Settings; every `Problem.kind` (reconnect, credits,
-  rate, daily, file, banned, private, down, duplicate, other, not_connected, token_dead) maps to a Lamo Stories
-  sentence, for example "Lamo Stories' YouTube (Lamo Stories Channel) needs connecting again. Open Lamo Stories ›
-  Connections, then tap Try again." and "Make the Lamo Stories TikTok account private until TikTok approves the app,
+  rate, daily, file, banned, private, down, duplicate, other, not_connected, token_dead) maps to a Funded Clips
+  sentence, for example "Funded Clips' YouTube (Funded Clips Channel) needs connecting again. Open Funded Clips ›
+  Connections, then tap Try again." and "Make the Funded Clips TikTok account private until TikTok approves the app,
   then tap Try again.".
 * Posting settings follow the owner's posting preferences: public, comments, duets and stitches on, never "made for
   kids" (the TikTok sheet's rules: privacy picked from the dropdown with no default, Comments/Duet/Stitch shown and
   starting off, "Use my settings" as the owner's tap; the TikTok sheet reads `GET …/social/tiktok/creator-info`).
-  Lamo Stories' built-in videos are cartoons, so the publishers' existing "not AI-realistic" flags are correct. A story
-  whose job used a realistic generator (`nova-reel`) is posted only through Lamo Stories' own thin publisher wrappers
+  Funded Clips' built-in videos are cartoons, so the publishers' existing "not AI-realistic" flags are correct. A story
+  whose job used a realistic generator (`nova-reel`) is posted only through Funded Clips' own thin publisher wrappers
   that set YouTube's `containsSyntheticMedia: true` and TikTok's `is_aigc: true` (subclasses in `workspaces/`, the
   shared publisher code unchanged); a platform where no label can be set refuses it with a plain sentence.
 * Lamo Clips' `POST /v1/clips/{clipId}/confirm`, its posts, the clip flow and the release keep reading only
-  `ACCOUNT#` and `cf-prod/platforms/*`: they cannot reach a Lamo Stories account.
+  `ACCOUNT#` and `cf-prod/platforms/*`: they cannot reach a Funded Clips account.
 
 ### 45.15 Infra (Terraform, additive only)
 
@@ -999,15 +1006,15 @@ own code, never `routes/setup.py`'s.
   `ws/*`; Secrets Get on `cf-prod/workspaces/*` and `cf-prod/platforms/{youtube,tiktok,x}/app*`, Put on
   `cf-prod/workspaces/*/token*`; no Bedrock). `RATE#{platform}` (Clip Factory's shared counters) is written only for
   the shared-app choice, on purpose (§45.14).
-* `infra/modules/hooks`: one env var, `STORIES_OAUTH_CALLBACK` (Lamo Stories' callback base), and nothing else: no new
+* `infra/modules/hooks`: one env var, `STORIES_OAUTH_CALLBACK` (Funded Clips' callback base), and nothing else: no new
   IAM, no workspace secrets (the `w1.` forward of §45.13.3). The first round's hooks IAM additions are removed.
 * Not changed: `infra/modules/agent` (Clip Factory's runtime, role, image), `infra/modules/api`'s Lambda and role.
 * `scripts/wait-for-jobs.sh`: also counts `PJOB#` items when `module.stories_agent.` changes. `deploy.yml`: a second
   image tag `stories-agent-` + 16 characters of `hashFiles('stories/**', 'web/src/stories/engine/**')`, passed as
   `stories_agent_image_tag`; Clip Factory's agent tag hash stays `agent/**`, `skills/**`, `config/**` (unchanged).
 * The Terraform tests that list exact sets gain the new members and new asserts, written as glob matches against
-  sample ARNs: no Lamo Stories role matches `…:secret:cf-prod/platforms/youtube/token-AbC123` or `…/pending-AbC123`;
-  no Clip Factory role matches `…:secret:cf-prod/workspaces/stories/youtube/token-AbC123`; the Lamo Stories roles
+  sample ARNs: no Funded Clips role matches `…:secret:cf-prod/platforms/youtube/token-AbC123` or `…/pending-AbC123`;
+  no Clip Factory role matches `…:secret:cf-prod/workspaces/stories/youtube/token-AbC123`; the Funded Clips roles
   write DynamoDB only under their leading keys and touch S3 only under `ws/`.
 * **A scripted plan check** after `check-plan-deletes.sh` (`scripts/check-plan-clips-unchanged.sh`, jq over
   `plan.json`): nothing under `module.agent.` changes unless Clip Factory's agent tag changed; `cf-prod-api`'s role
@@ -1024,29 +1031,34 @@ own code, never `routes/setup.py`'s.
 #### 45.16.1 The workspace switcher
 
 * A pick bar (`<Glide>`, the owner's sliding highlight) with one choice per workspace that `GET /v1/workspaces`
-  returns (today **Clip Factory | Lamo Stories**: Lamo Clips' choice is labelled with the app's own name, as the owner's
+  returns (today **Clip Factory | Funded Clips**: Lamo Clips' choice is labelled with the app's own name, as the owner's
 second request names it), shown only when `storiesEnabled()`; one click switches. In Lamo Clips: on screens from
   768 px as the first child of the sidebar foot, so the bottom-anchored foot grows into empty space and the live dot,
-  Get the app and the jobs status stay where they are; when the window is too short for it (the free space is
-  measured, about 640 px tall and up), a compact round toggle in a place that moves nothing; folded sidebar: one round
-  toggle with its aria-label; on phones a compact control in the top bar between the brand and the live dot, icon
-  only below 360 px. It never uses `.sidebar__item` (tests pin the six items), never adds a tab, never overlaps or
-  pushes anything (e2e at 320, 390, 1000×600, 1000×650, 1000×720 and 1440×900, sidebar open and folded). In Lamo
-  Stories the same switcher sits in its own navigation.
-* Lamo Stories lives under `/stories/…`; everything else is Lamo Clips, rendered by today's `Shell` unchanged.
-  Switching to Lamo Stories goes to the last Lamo Stories page (else `/stories`); switching back goes to the last
+  Get the app and the jobs status stay where they are. The bar shows when the free space above the foot holds it
+  (measured, `WorkspaceDock.tsx` `dockLayout`): "Clip Factory" and "Funded Clips" fit side by side in a 52 px bar
+  (`barHeight`), so from about 650 px tall (the e2e checks the bar at 1000×650 and 1000×720, the round toggle beside
+  the Live chip at 1000×600); only a longer workspace name that does not fit beside the other stands them one above
+  the other (a 98 px bar, which needs about 700 px). When the window is too short for the bar, a compact round toggle
+  in a place that moves
+  nothing; folded sidebar: one round toggle with its aria-label from about 650 px tall (below that a slim one between
+  the menu and the foot, and below about 570 px one beside the fold button, §45.35 D19); on phones a compact control
+  in the top bar between the brand and the live dot, icon only below 360 px. It never uses `.sidebar__item` (tests pin the six items), never adds a tab, never overlaps or
+  pushes anything (e2e at 320, 390, 1000×600, 1000×650, 1000×720 and 1440×900, sidebar open and folded). In Funded
+  Clips the same switcher sits in its own navigation.
+* Funded Clips lives under `/stories/…`; everything else is Lamo Clips, rendered by today's `Shell` unchanged.
+  Switching to Funded Clips goes to the last Funded Clips page (else `/stories`); switching back goes to the last
   Clip Factory page (else `/`) at its scroll position (kept in sessionStorage), with Ask's open conversation, its
   answer still streaming in, and the panel open or closed as it was: Ask's conversation state moves into an
-  `AskMemoryProvider` mounted once above the Clip Factory / Lamo Stories branch (its look and behaviour unchanged;
+  `AskMemoryProvider` mounted once above the Clip Factory / Funded Clips branch (its look and behaviour unchanged;
   sign-out still forgets it and revokes its object URLs). Not kept across a switch: unsaved form drafts and open
   sheets on the Clip Factory page (they are not kept across any page change today either).
 * The choice persists on the device (`localStorage` `cf.workspace`: `{ workspaceId, lastStoriesWorkspaceId,
-  lastClipsPath, lastStoriesPath, lastConversationId, lastProject }`; Lamo Stories' own device preferences in
-  `cf.stories.prefs`, never in Clip Factory's `cf.prefs`) and the URL carries it: a reload of a `/stories` page stays in Lamo Stories;
-  opening the app at `/` when the last choice was Lamo Stories goes to the last Lamo Stories page. One sign-in: the
+  lastClipsPath, lastStoriesPath, lastConversationId, lastProject }`; Funded Clips' own device preferences in
+  `cf.stories.prefs`, never in Clip Factory's `cf.prefs`) and the URL carries it: a reload of a `/stories` page stays in Funded Clips;
+  opening the app at `/` when the last choice was Funded Clips goes to the last Funded Clips page. One sign-in: the
   same Cognito session, the same API.
 
-#### 45.16.2 The Lamo Stories shell
+#### 45.16.2 The Funded Clips shell
 
 `web/src/stories/StoriesApp.tsx`, its own navigation and look ("an animation studio"): Dashboard `/stories`, Ideas
 `/stories/ideas`, Characters `/stories/characters` (`/stories/characters/new`, `/stories/characters/{id}`),
@@ -1060,20 +1072,20 @@ accounts `/stories/connections`, Settings `/stories/settings/{section}` (`ai`, `
   `stories` on first use). The current workspace is `lastStoriesWorkspaceId` if it is in the list with type
   `stories`, else the first stories workspace. The callback's `?ws=` is used only when it is one of those ids. Screens
   get only that checked id; a `404` "We could not find that workspace." reloads the list once and falls back.
-* Lamo Clips' Ask and setup to-do are not shown in Lamo Stories. The Mac app's "send this now" banner (`CrSendNow`,
-  §38.6) is also rendered at the top of Lamo Stories' main area, unchanged, because it is the Mac app's only reminder
+* Lamo Clips' Ask and setup to-do are not shown in Funded Clips. The Mac app's "send this now" banner (`CrSendNow`,
+  §38.6) is also rendered at the top of Funded Clips' main area, unchanged, because it is the Mac app's only reminder
   for a time-limited Content Rewards send; the Mac download host, the app badge, the update bar, toasts and sounds
-  stay global. A **Needs you** bar on every Lamo Stories page shows the first item of the dashboard's `needsYou`.
+  stay global. A **Needs you** bar on every Funded Clips page shows the first item of the dashboard's `needsYou`.
 * Look: its own tokens (`--st-*`, in `web/src/stories/styles/`, outside `web/src/styles` whose tests police Lamo
   Clips' palette; `test/storiesStyles.test.ts` holds the owner's rules there): a deep night-indigo stage (`#1C1842`)
   with soft spotlight glows, warm cream words (`#FFF6E5`), sunshine (`#FFC94A`) for every main action, coral
   (`#FF6F61`), mint (`#47D6A0`) and sky (`#62C6FF`) for status and characters, rounded type (`ui-rounded`, then the
-  system font), frosted panels, character-shaped empty states, storyboard filmstrips. Every Lamo Stories selector sits
-  under `.stories-app` (or starts `st-`); no `:root`, `html` or `body` rule; StoriesApp restores the page title and
-  theme colour when it unmounts. The owner's rules that hold everywhere still hold: arrow cursor only (no `cursor:`
-  CSS), hover states, click and deny sounds, `<Glide>` for every pick-one bar, eased progress, celebrations on
-  success, no visible borders (shadows and fills instead), AA contrast, no overflow from 320 px, kid-proof words,
-  controls bottom right on phones.
+  system font), frosted panels, character-shaped empty states, storyboard filmstrips. Every Funded Clips selector sits
+  under `.stories-app` (or starts `st-`); no `:root`, `html` or `body` rule (the logo is the shell's `ws-mark`,
+  §45.38); StoriesApp restores the page title and theme colour when it unmounts. The owner's rules that hold
+  everywhere still hold: arrow cursor only (no `cursor:` CSS), hover states, click and deny sounds, `<Glide>` for
+  every pick-one bar, eased progress, celebrations on success, no visible borders (shadows and fills instead), AA
+  contrast, no overflow from 320 px, kid-proof words, controls bottom right on phones.
 
 #### 45.16.3 Dashboard
 
@@ -1086,7 +1098,7 @@ post"), and recent activity (the last 10 `ACT#` items). The shape is `StoriesDas
 
 #### 45.16.4 Live updates
 
-Lamo Stories screens poll (`usePoll`): a running job every 2 s, the dashboard and the Needs you bar every 15 s,
+Funded Clips screens poll (`usePoll`): a running job every 2 s, the dashboard and the Needs you bar every 15 s,
 publishing every 10 s while one is in flight. No WebSocket filter changes (§45.3).
 
 #### 45.16.5 Ideas, Characters, Production
@@ -1141,24 +1153,25 @@ every screen runs under `npm run dev:mock` and in Playwright.
 
 | File | Change | Owner | Proof that Clip Factory is unchanged |
 |---|---|---|---|
-| `api/.../routes/__init__.py`, `api/tests/test_http.py` | **none** (Lamo Stories' routes live in their own Lambda; the Phase 1 scaffold's edits are reverted) | – | both byte-identical to main |
+| `api/.../routes/__init__.py`, `api/tests/test_http.py` | **none** (Funded Clips' routes live in their own Lambda; the Phase 1 scaffold's edits are reverted) | – | both byte-identical to main |
 | `api/.../routes/help.py` | `"stories"` in `PAGES` (the web router has a `stories` route name; Ask is never shown there) | Phase 1 | `test_help_pages.py` |
 | `api/.../oauth/callback.py` | refuses a consumed `v1.` item that carries `workspaceId` (writes nothing) | B | `test_oauth_callback.py` unchanged; every old case replayed writes the same items, secrets and redirect |
 | `api/.../hooks.py` | `_oauth_callback`: a `w1.` state is forwarded (`302` to `STORIES_OAUTH_CALLBACK`, query byte for byte) before its `try`; nothing else | B | `test_hooks.py` unchanged |
-| `web/src/features/help/*` (Ask) | its conversation state moves into an `AskMemoryProvider` mounted above the Clip Factory / Lamo Stories branch; look and behaviour unchanged | F | the Ask and help e2e and unit tests unchanged; a new e2e: ask, switch to Lamo Stories while it streams, switch back, the answer is there |
+| `web/src/features/help/*` (Ask) | its conversation state moves into an `AskMemoryProvider` mounted above the Clip Factory / Funded Clips branch; look and behaviour unchanged | F | the Ask and help e2e and unit tests unchanged; a new e2e: ask, switch to Funded Clips while it streams, switch back, the answer is there |
 | `api/scripts/build_lambda.py` | the story-flow and stories-API handlers in `HANDLERS`; `stories/config/` and `stories/skills/` into the zip | Phase 1, A | its build test |
-| `infra/modules/api` | the `/v1/workspaces` routes, the public Lamo Stories callback route, their integration and permission only | C | `api.tftest.hcl`; the deploy's scripted plan check (§45.15) |
+| `infra/modules/api` | the `/v1/workspaces` routes, the public Funded Clips callback route, their integration and permission only | C | `api.tftest.hcl`; the deploy's scripted plan check (§45.15) |
 | `infra/modules/hooks`, `infra/modules/flows`, `infra/envs/prod` | §45.15 | C | `terraform test`; the deploy's Plan and Delete gate lines |
-| `.github/workflows/deploy.yml`, `ci.yml`, `scripts/wait-for-jobs.sh` | the Lamo Stories agent image tag and push, the scripted plan check, a deeper preflight in the smoke job; a `stories-agent` CI job (lint, types, tests, image build) and a web bundle check; the drain for `PJOB#`, running `TASK#` and streaming `MSG#` | C (deploy, drain), E (stories-agent job), F (bundle check) | `scripts/test-deploy-workflow.sh`, the drain's test; Clip Factory's agent tag and its CI job unchanged |
+| `.github/workflows/deploy.yml`, `ci.yml`, `scripts/wait-for-jobs.sh` | the Funded Clips agent image tag and push, the scripted plan check, a deeper preflight in the smoke job; a `stories-agent` CI job (lint, types, tests, image build) and a web bundle check; the drain for `PJOB#`, running `TASK#` and streaming `MSG#` | C (deploy, drain), E (stories-agent job), F (bundle check) | `scripts/test-deploy-workflow.sh`, the drain's test; Clip Factory's agent tag and its CI job unchanged |
 | `web/src/lib/router.ts` | one route name `stories` (page from `web/src/stories/routes.ts`) for `/stories…`, only when `storiesEnabled()` | Phase 1, then F | every old path parses to the same route |
 | `web/src/app/App.tsx` | the lazy `StoriesApp` for the `stories` route; its TITLES entry; the `AskMemoryProvider` mount; round 3–4: `BothApps`/`AppPanes` (each app stays mounted once shown, the hidden one `hidden` + `inert`, its own error boundary), `redirectAtStart()`, `<WorkspaceSwitch place="topbar" />` in the phone top bar, the calm-motion and error-sound hooks; the main chunk gains `flag.ts`, `routes.ts`, `pane.tsx`, `prefs.ts`, `workspace.ts` and the lazy stub, each inert while `STORIES_ON` is false | Phase 1, then F, W3b, W4b | every old route renders the same `Shell`; `stories-clips-unchanged.spec.ts` (the page tree, the shell boxes at 12 sizes); the before/after pixel check (§45.19) |
 | `web/src/components/Nav.tsx` | the switcher in the sidebar foot, the phone top bar and (round 4) a slim toggle beside the fold button in short folded windows; the idle prefetch of `StoriesApp` (all hidden while off) | F, W3b, W4b | the nav specs unchanged; the before/after pixel check (§45.19) |
-| `web/src/components/Glide.tsx` | an additive `GlideCalm` context; its default is Clip Factory's `prefersReducedMotion`, so every Clip Factory `<Glide>` behaves as before; only `StoriesApp` provides Lamo Stories' own motion setting | W3b | `storiesShellQuiet.test.tsx` ("Clip Factory's Glide unchanged"); the flag-off pixel check |
-| `web/src/lib/confetti.ts` | one guard: no burst while Lamo Stories is on screen (a no-op while `STORIES_ON` is false) | W4b | the confetti tests unchanged; the flag-off pixel check |
-| `web/src/screens/home/NewJobForm.tsx` | reads its search through `useKeptSearch()`, which returns `window.location.search` exactly as before outside a Lamo Stories pane wrapper (so campaign Home survives a round trip) | W4b | the Home and campaign specs unchanged; the flag-off pixel check |
+| `web/src/components/Glide.tsx` | an additive `GlideCalm` context; its default is Clip Factory's `prefersReducedMotion`, so every Clip Factory `<Glide>` behaves as before; only `StoriesApp` provides Funded Clips' own motion setting | W3b | `storiesShellQuiet.test.tsx` ("Clip Factory's Glide unchanged"); the flag-off pixel check |
+| `web/src/lib/confetti.ts` | one guard: no burst while Funded Clips is on screen (a no-op while `STORIES_ON` is false) | W4b | the confetti tests unchanged; the flag-off pixel check |
+| `web/src/screens/home/NewJobForm.tsx` | reads its search through `useKeptSearch()`, which returns `window.location.search` exactly as before outside a Funded Clips pane wrapper (so campaign Home survives a round trip) | W4b | the Home and campaign specs unchanged; the flag-off pixel check |
 | `web/vite.config.ts` | the dev server may read `stories/config` (dev mode only; builds unchanged) | lead | the build is byte-identical |
 | `web/src/styles/glide.css` | the switcher's container in the Glide list and its own `.ws-*` styles | F | the flag-off pixel check |
-| `web/areas.json` | Lamo Stories folders → "Behind the scenes" (Phase 1), "Lamo Stories" by the switch PR | Phase 1 | `update.test.ts` |
+| `web/src/components/ClipMark.tsx`, new `WorkspaceMark.tsx` and `web/src/styles/ws-mark.css` | Clip Factory's mark markup in one file, which Funded Clips' logo reuses; the logo itself is the shell's (§45.38, "The mark"): `.ws-mark*` and `.ws-wordmark*`, coloured by `--ws-mark-*` and `--ws-wordmark` | shell | Clip Factory's own mark never carries `ws-mark` (same classes, same colours); `test/workspaceMark.test.tsx`, `test/background.test.ts` |
+| `web/areas.json` | Funded Clips folders → "Behind the scenes" (Phase 1), "Funded Clips" by the switch PR | Phase 1 | `update.test.ts` |
 | generated files | help corpus, the HELP_ASSISTANT routes table, Ask knowledge | every PR that changes docs, the router, Nav or App | their `--check` steps |
 
 Not touched at all: `agent/**` (Clip Factory's agent: code, Dockerfile, dockerignore, tests, scan allow-list),
@@ -1173,9 +1186,9 @@ web/scripts/ask-knowledge.mjs`): #98 (CONTRACTS, DECISIONS, the generated files)
 
 ### 45.18 Deploys
 
-Every Lamo Stories pull request that changes `infra/` is read before merging: `terraform plan` may only add resources,
-change IAM policies and Lambda settings in place, and replace `module.stories_agent.terraform_data.image` (Lamo
-Stories' image build trigger, whenever its image changes); `module.agent.` (Clip Factory's agent) must show no change
+Every Funded Clips pull request that changes `infra/` is read before merging: `terraform plan` may only add resources,
+change IAM policies and Lambda settings in place, and replace `module.stories_agent.terraform_data.image` (Funded
+Clips' image build trigger, whenever its image changes); `module.agent.` (Clip Factory's agent) must show no change
 at all. After each deploy the Plan line and the Delete gate line
 are read and reported, and `terraform show -json` is checked: every resource whose actions include `delete` must be
 an image build trigger (`module.stories_agent.terraform_data.image`, or `module.agent.terraform_data.image` only when
@@ -1185,7 +1198,7 @@ nothing is renamed, the table, user pool, buckets, vectors and secrets are untou
 ### 45.19 Tests
 
 * **api** (pytest, fakes only): workspace isolation (`test_ws_isolation.py`): another user's workspace id, a
-  `clips` id on a **S** route, an item whose `workspaceId` attribute disagrees with its key, and a Lamo Stories item
+  `clips` id on a **S** route, an item whose `workspaceId` attribute disagrees with its key, and a Funded Clips item
   in Lamo Clips' lists (`GET /v1/clips`, `/v1/jobs`, `/v1/posts`, `/v1/accounts`, `/v1/setup`, `/v1/me`) all fail
   closed; every new item's `sk` matches none of the stream prefixes; the status table, the stale rules and the approve
   rule of §45.9 (a caption edit on a story re-runs `safety`; approve with `stale` not empty is `409`; a PATCH in
@@ -1210,7 +1223,7 @@ nothing is renamed, the table, user pool, buckets, vectors and secrets are untou
   for animation and audio are the only ones called; the fence (a superseded session writes nothing).
 * **web**: vitest for the engine (determinism, validation, every catalog id draws, `normalizeScript`, `fitDuration`
   bounds, the import scan), the switcher store (persistence, last paths), the web workspace check, the styles test;
-  Playwright (mock): switching both ways and after reload, every Lamo Stories screen (no overflow 320–1920, arrow
+  Playwright (mock): switching both ways and after reload, every Funded Clips screen (no overflow 320–1920, arrow
   cursor, AA contrast, no edges, targets ≥ 44 px, 48 on phones), the switcher's placement at every size of §45.16.1,
   and the whole flow idea → character → production → review → approve → publish sheet (`e2e/stories-flow.spec.ts`,
   in the final check).
@@ -1224,7 +1237,7 @@ nothing is renamed, the table, user pool, buckets, vectors and secrets are untou
   not offer, precedence), agents (edit, reset, switch off), skills (versions, restore, enable, assign), chat (send,
   poll, stop, override never saved), memory, references (multipart, analyze), onboarding, provider keys never
   returned, developer-app choice (own keys stored only under the workspace prefix; a missing choice blocks Connect),
-  and a **separation test** that runs every Lamo Stories route and records every DynamoDB key, S3 key and secret name
+  and a **separation test** that runs every Funded Clips route and records every DynamoDB key, S3 key and secret name
   it touches: none outside `USER#{u}#WS#…`, `USER#{u}#WSREG`, `OAUTH#…`, `ws/{u}/…`, `cf-prod/workspaces/…`, and no
   Clip Factory item or secret written. stories agent (`stories/agent/tests`): the effective model and effort of each
   task and agent, the request body really carrying `output_config.effort` (and not when the model has none), no
@@ -1267,7 +1280,7 @@ the encrypted credentials in Secrets Manager (never on the item), `connectionSta
 
 Phase 1 (this section, ADR-70 to ADR-80, and the scaffold: `workspaces/types.py`, `guard.py`, `deps.py`, `http.py`,
 empty route modules, the story-flow stub, `stories/config/` (models, agents, guidance), `stories/skills/` (built-in
-Lamo Stories skills), the `stories/agent/` project skeleton (pyproject, package, the model-client and registry
+Funded Clips skills), the `stories/agent/` project skeleton (pyproject, package, the model-client and registry
 interfaces, a server with an empty action table), the web types and client interface, the split mock folder with
 rejecting stubs, the engine's types, catalog, stub engine and command line, the preview components, a thin
 `StoriesApp` behind `storiesEnabled()` with the router and App branch, placeholder screens, the flag and the
@@ -1276,10 +1289,10 @@ continuing from its own branch where it has one (the first round's work stays):
 
 | Builder | Branch | Owns |
 |---|---|---|
-| A api core | `feat/stories-api-core` | **removes** the first round's model path (`learn.converse_text`, the skills block, `help.model`/`app.help` use, `FakeModel`/`HelpDeps` in `tests/ws_support.py`, the skills-block idea tests); moves its routes to `workspaces/routes/core.py`; then the core routes and their modules (workspaces, dashboard, ideas (now tasks), characters (+ design task), stories, library, providers, guidance, tasks), `workspaces/agent.py` (Lamo Stories' runtime only), `workspaces/jobs.py`, `tests/ws_routes_core.py`, `tests/ws_support.py`, its tests, the guidance and skills copy in `build_lambda.py` |
+| A api core | `feat/stories-api-core` | **removes** the first round's model path (`learn.converse_text`, the skills block, `help.model`/`app.help` use, `FakeModel`/`HelpDeps` in `tests/ws_support.py`, the skills-block idea tests); moves its routes to `workspaces/routes/core.py`; then the core routes and their modules (workspaces, dashboard, ideas (now tasks), characters (+ design task), stories, library, providers, guidance, tasks), `workspaces/agent.py` (Funded Clips' runtime only), `workspaces/jobs.py`, `tests/ws_routes_core.py`, `tests/ws_support.py`, its tests, the guidance and skills copy in `build_lambda.py` |
 | A2 api AI | `feat/stories-api-ai` | `routes/workspaces/ai.py` and its modules (AI configuration, models and prices, agents, skills, chat, memory, references, onboarding, usage, provider keys, storage), `tests/ws_routes_ai.py`, its tests |
-| B social and publishing | `feat/stories-social` | moves its routes to `workspaces/routes/social.py`; **removes** its first-round workspace path from `oauth/callback.py` and `hooks.py` (only the forward and the `v1.` refusal stay) and the hooks IAM it needed; adds the Lamo Stories callback route; as before otherwise, plus `workspaces/apps.py`, the developer-app choice and own keys (§45.30), own rate counters and X limit, `lastCheckedAt`, Reconnect, AI-label wrappers (§45.14) |
-| C infra | `infra/stories` | §45.15: the new `stories_agent` and `stories_api` modules, the API routes, the story flow, hooks, `deploy.yml`'s Lamo Stories tag, the drain, their tests; **removes** the first round's changes to `infra/modules/agent`, `infra/modules/api`'s role and environment, and `config/models.json` |
+| B social and publishing | `feat/stories-social` | moves its routes to `workspaces/routes/social.py`; **removes** its first-round workspace path from `oauth/callback.py` and `hooks.py` (only the forward and the `v1.` refusal stay) and the hooks IAM it needed; adds the Funded Clips callback route; as before otherwise, plus `workspaces/apps.py`, the developer-app choice and own keys (§45.30), own rate counters and X limit, `lastCheckedAt`, Reconnect, AI-label wrappers (§45.14) |
+| C infra | `infra/stories` | §45.15: the new `stories_agent` and `stories_api` modules, the API routes, the story flow, hooks, `deploy.yml`'s Funded Clips tag, the drain, their tests; **removes** the first round's changes to `infra/modules/agent`, `infra/modules/api`'s role and environment, and `config/models.json` |
 | D engine | `feat/stories-engine` | `web/src/stories/engine/` (not `types.ts`), `web/src/stories/preview/`, its tests |
 | E agent core | `feat/stories-agent` | **resets** `agent/**`, `.github/workflows/deploy.yml`'s agent tag line, the agent job's ffmpeg step in `ci.yml` and its check in `scripts/test-deploy-workflow.sh` to main (`git checkout origin/main -- agent …`) before adding the `stories-agent` job; then `stories/agent/` (the runtime: server, runner, fencing, `models.py` (model and effort resolution, the Bedrock client, refusals, usage), agents and skills plumbing, the production pipeline moved here from the first round's `agent/src/clipfactory_agent/stories/`, rasterizer, audio, assembly, providers incl. Nova Canvas and Nova Reel), its `Dockerfile`, the `stories-agent` CI job, `stories/agent/tests`; **removes** the first round's changes to `agent/**` |
 | E2 agent creative | `feat/stories-agent-creative` | `stories/agent/src/lamostories_agent/{chat,memory,reference,tasks}/` (each with a `register(actions, runner)` the scaffold's `build_app` already calls: the chat turn and its tools, memory, reference analysis, idea, expand, variations, captions-again, character design and check-models tasks), their tests |
@@ -1295,34 +1308,34 @@ E before E2's final rebase; F before G, F2 and H; A before A2. Then one check of
 
 ### 45.22 What only the owner can do (none of it blocks building)
 
-* TikTok: add the Lamo Stories TikTok account as a Sandbox target user (TikTok developer portal › Sandbox › Target
+* TikTok: add the Funded Clips TikTok account as a Sandbox target user (TikTok developer portal › Sandbox › Target
   users) and make it private (TikTok app › Profile › Settings and privacy › Privacy › Private account) until TikTok
   approves the app; until then TikTok posts are "Only me".
-* Have the separate accounts ready: a Lamo Stories YouTube channel (a Brand Account under the same Google login is
-  fine), a Facebook Page, an Instagram professional account linked to it, an X account. Lamo Stories never creates
+* Have the separate accounts ready: a Funded Clips YouTube channel (a Brand Account under the same Google login is
+  fine), a Facebook Page, an Instagram professional account linked to it, an X account. Funded Clips never creates
   them. When Facebook asks which Pages, keep Lamo Clips' Page ticked too.
-* To use AI portraits: pick Nova Canvas in Lamo Stories › Settings and make one portrait; if Bedrock says the model is
+* To use AI portraits: pick Nova Canvas in Funded Clips › Settings and make one portrait; if Bedrock says the model is
   not enabled, enable Amazon Nova Canvas in the Bedrock console, Region Europe (Ireland).
 * Run **Check models** once (Settings › AI): a model Bedrock refuses shows why (for example the Fable models'
   data-retention opt-in, a one-time account step in docs/DEPLOYMENT.md).
 * For fully separate apps (§45.30): make the second developer app per platform and paste its keys; TikTok and Meta
   then review the new app, which can take days to weeks.
-* Nova Reel: say if Lamo Stories may keep its generated shots in a US (N. Virginia) bucket; until then it stays off.
+* Nova Reel: say if Funded Clips may keep its generated shots in a US (N. Virginia) bucket; until then it stays off.
 
 ### 45.23 Acceptance evidence, and what is only verified live
 
 | # | Criterion | In CI | Live, after the switch PR |
 |---|---|---|---|
 | 1 | Clip Factory opens and works as before | every old test; the pixel check | sign in on the live app and open `/`, `/jobs`, `/review`, `/library`, `/money`, `/settings` |
-| 2 | Existing jobs and uploaded videos stay reachable | the isolation tests | `GET /v1/jobs`, `/v1/clips`, `/v1/posts` saved before the first Lamo Stories deploy and after (ids and statuses only) are equal; one old job opens and one clip plays |
-| 3 | Clipping is unaffected | Clip Factory's agent tests unchanged; Clip Factory's `agent-` image tag computed on every Lamo Stories branch equals main's | the deploy summary shows the same `agent-…` tag; one real clip job afterwards |
+| 2 | Existing jobs and uploaded videos stay reachable | the isolation tests | `GET /v1/jobs`, `/v1/clips`, `/v1/posts` saved before the first Funded Clips deploy and after (ids and statuses only) are equal; one old job opens and one clip plays |
+| 3 | Clipping is unaffected | Clip Factory's agent tests unchanged; Clip Factory's `agent-` image tag computed on every Funded Clips branch equals main's | the deploy summary shows the same `agent-…` tag; one real clip job afterwards |
 | 4 | Publishing destinations unchanged | the callback and Disconnect tests | `GET /v1/accounts` (platform, account id, name, status) before and after, and after each Meta connect |
 | 5 | Workspace switching works | the switcher e2e | switch both ways, reload, open the Mac app |
 | 6 | Its own interface | the shell e2e | the screens |
 | 7 | Its own production workflow | the pipeline tests | one real story made end to end on the live agent |
 | 8 | Assets isolated | the isolation and key tests | the Lamo Clips Library unchanged after a story is made |
 | 9 | Accounts connect independently | the callback tests | each platform the owner connects (his taps) |
-| 10 | The right YouTube channel | the one-channel rule and its tests | the owner connects the Lamo Stories channel and sees its name and id |
+| 10 | The right YouTube channel | the one-channel rule and its tests | the owner connects the Funded Clips channel and sees its name and id |
 | 11 | No cross-workspace credentials | the destination, token and IAM tests | – |
 | 12 | Credentials stored securely | `leaked()`, the secrets tests, IAM | – |
 | 13 | Isolation enforced on the backend | the isolation tests | – |
@@ -1332,7 +1345,7 @@ Not verified live until the owner connects: each platform's real consent screens
 channel picker with his Brand Accounts, Meta's Page picker keeping both Pages, TikTok's Sandbox target-user rule for
 a second account, Nova Canvas in eu-west-1 for his account.
 
-### 45.24 Lamo Stories is its own application (the owner's second request, 2026-11-21 evening)
+### 45.24 Funded Clips is its own application (the owner's second request, 2026-11-21 evening)
 
 The owner's words: "Lamo Stories must be treated as an independent application within the existing Clip Factory
 application shell … The only shared element should be the application shell responsible for navigating between them."
@@ -1340,15 +1353,15 @@ Everything earlier in §45 stays; this subsection and §45.25–§45.32 add to i
 
 **What each application owns.** Clip Factory (Lamo Clips) keeps everything it has: its interface, AgentCore runtime
 `cf_prod_clip_agent`, agents, uploaded skills, models (`config/models.json`), conversations (Ask), pipeline, social
-integrations, accounts, credentials, data and settings, byte for byte. Lamo Stories has its own:
+integrations, accounts, credentials, data and settings, byte for byte. Funded Clips has its own:
 
-| Part | Lamo Stories' own | Never shared with Clip Factory |
+| Part | Funded Clips' own | Never shared with Clip Factory |
 |---|---|---|
 | Frontend and navigation | `web/src/stories/**`, lazy-loaded, `/stories/…` | Clip Factory's screens, nav, Ask, setup to-do |
 | HTTP API | Lambda **`cf-prod-stories-api`** (same zip, handler `clipfactory_api.workspaces.http.handler`) behind `ANY /v1/workspaces` and `ANY /v1/workspaces/{proxy+}` on the same HTTP API and JWT authorizer | `cf-prod-api`, its route table, role and environment stay unchanged |
 | AgentCore environment | runtime **`cf_prod_story_agent`**, its own image (`stories/agent/`), ECR repository, role, log group and sessions (`cfstory-…`) | `cf_prod_clip_agent`, its image, role and sessions |
-| AI agents | five built-in Lamo Stories agents (§45.26), owner-editable | Clip Factory's clip agent and Ask |
-| Skills | Lamo Stories skills (`SKILL#` in the workspace partition, built-ins in `stories/skills/`) | Clip Factory's skills: never read, never sent |
+| AI agents | five built-in Funded Clips agents (§45.26), owner-editable | Clip Factory's clip agent and Ask |
+| Skills | Funded Clips skills (`SKILL#` in the workspace partition, built-ins in `stories/skills/`) | Clip Factory's skills: never read, never sent |
 | Models and effort | `stories/config/models.json` plus the workspace's AI configuration (§45.25) | `config/models.json` and Clip Factory's `clipModel` setting |
 | Chat, history, memory | `CONV#`, `MSG#`, `MEM#` (§45.27) | Ask's conversations |
 | Production | `STORY#`, `PJOB#`, the engine, reference-video analysis (§45.28) | clip jobs |
@@ -1361,10 +1374,10 @@ integrations, accounts, credentials, data and settings, byte for byte. Lamo Stor
 **What is shared, and why** (the owner allows shared infrastructure "where appropriate" with "strict authorization and
 data boundaries"): the app shell and the one sign-in (Cognito); the AWS account, the HTTP API (a separate route and
 Lambda), the DynamoDB table (separate partitions and leading-key IAM), the media bucket (a separate prefix) and Secrets
-Manager (a separate name prefix); Clip Factory's OAuth callback only to **forward** a `w1.` state to Lamo Stories'
+Manager (a separate name prefix); Clip Factory's OAuth callback only to **forward** a `w1.` state to Funded Clips'
 own callback (Clip Factory's registered apps are not edited, so their redirect URI stays the hooks one; §45.13.3);
-the platform publisher library code (read-only, called with Lamo Stories' own credentials); and, only when the owner
-picks it for YouTube, TikTok or X, Clip Factory's developer app (§45.30). Nothing of Lamo Stories runs inside a Clip Factory Lambda or runtime, and no Lamo Stories
+the platform publisher library code (read-only, called with Funded Clips' own credentials); and, only when the owner
+picks it for YouTube, TikTok or X, Clip Factory's developer app (§45.30). Nothing of Funded Clips runs inside a Clip Factory Lambda or runtime, and no Funded Clips
 setting is read by Clip Factory code.
 
 **The boundaries, in IAM** (§45.15): `cf-prod-stories-api` and the `cf_prod_story_agent` role can write DynamoDB
@@ -1377,7 +1390,7 @@ nothing.
 
 ### 45.25 AI models and reasoning effort (owner-controlled)
 
-* **Which models.** `stories/config/models.json` lists the reasoning models Lamo Stories may use (separate from
+* **Which models.** `stories/config/models.json` lists the reasoning models Funded Clips may use (separate from
   `config/models.json`): Claude Fable 5.2, Claude Fable 5.1, Claude Opus 5.5, Claude Sonnet 5.5, Claude Haiku 5.5 on
   Amazon Bedrock (the owner's "Sable 5.2 / Sable 5.1" are Fable 5.2 / 5.1, the models of that name in this account).
   Each entry: `key`, `label`, `provider` ("Amazon Bedrock"), `modelId`, `profile` (the inference profile used, e.g.
@@ -1421,7 +1434,7 @@ nothing.
   scene rewrite high, captions low, fact check and final review high.
 * **No silent substitution.** The effective model is the one the levels above name. If its call is refused for
   access, Region, model id or quota, the task or job stops with "Claude Fable 5.2 isn't available right
-  now: {reason}. Pick another model in Lamo Stories › Settings › AI, or try again." and an action that opens that
+  now: {reason}. Pick another model in Funded Clips › Settings › AI, or try again." and an action that opens that
   setting; it never runs on another model. (Ask's refusal fallback model is Clip Factory's and is not used here.)
 * **Recorded on every job and message.** Each `PJOB#` (`meta.models`: per step, the model key, effort, `effortApplied`)
   and each assistant `MSG#` stores the effective model and effort, so a job can be reproduced and audited.
@@ -1431,11 +1444,11 @@ nothing.
   model and per day for 30 days; a model with no known price shows tokens only ("No price set.").
 * **Calls.** One client in the agent (`lamostories_agent/models.py`), `complete(task, messages, tools?, schema?,
   override?)`, resolves the effective model and effort, adds the agent's instructions, the workspace memory (§45.27)
-  and **the agent's enabled skills** (Lamo Stories skills only, §45.26) as the first system blocks, sends the request,
+  and **the agent's enabled skills** (Funded Clips skills only, §45.26) as the first system blocks, sends the request,
   handles `refusal` stop reasons plainly (no automatic fallback model: that would be a silent substitution; the owner
   is told and picks), and writes the usage item.
 
-### 45.26 Agents and skills (Lamo Stories' own)
+### 45.26 Agents and skills (Funded Clips' own)
 
 * **Agents** (`AGENT#{agentId}`; built-ins from `stories/config/agents.json`, created on first use, never deleted):
 
@@ -1448,13 +1461,13 @@ nothing.
 | `quality_assurance` | fact_check, final_review | the safety check (§45.11.5) and a last look at every finished video |
 
   Each has: `name`, `instructions` (the default from the file, editable; **Reset** restores it), `active` (an inactive
-  agent's tasks stop with "{Agent} is switched off. Switch it on in Lamo Stories › Settings › Agents."; the quality
+  agent's tasks stop with "{Agent} is switched off. Switch it on in Funded Clips › Settings › Agents."; the quality
   agent's fact check cannot be switched off for driving-safety stories), `model` and `effort` (or "Workspace
   default"), `skillIds` (its skills, in order), `version`.
 * **Skills** (`SKILL#{skillId}`, files in `ws/{u}/{ws}/skills/{skillId}/{revisionId}/SKILL.md|skill.zip`): upload a
   `SKILL.md` (≤ 1 MB) or `.zip` (≤ 20 MB), or write one in the app (title, when to use it, instructions); every save is
   a new **version** (the last 10 kept, any can be restored); **enable / disable**; **assign** to agents. Built-in
-  Lamo Stories skills ship in `stories/skills/` (`nonverbal-storytelling`, `driving-safety-teaching`,
+  Funded Clips skills ship in `stories/skills/` (`nonverbal-storytelling`, `driving-safety-teaching`,
   `vertical-short-hooks`), read-only but can be disabled or unassigned. An agent's prompt gets exactly its enabled,
   assigned skills, in its order; Clip Factory's skills never.
 
@@ -1468,9 +1481,9 @@ nothing.
   effective values); tapping either changes the conversation's setting; **Just for this message** sends an override
   that is not saved.
 * **Sending** (`POST …/chat/{convId}/messages`) writes the user message and an assistant message `pending`, then asks
-  the Lamo Stories agent (`chat_turn`) to answer; the agent writes the text into the assistant message as it streams
+  the Funded Clips agent (`chat_turn`) to answer; the agent writes the text into the assistant message as it streams
   (at most every 0.5 s) and the web polls every second while one is `streaming`. The creative director runs a tool
-  loop with Lamo Stories tools only: list and read ideas, characters, stories and reference analyses; create or update
+  loop with Funded Clips tools only: list and read ideas, characters, stories and reference analyses; create or update
   an idea; propose a character (a draft the owner saves); propose a storyboard change; `remember` (§ memory); and
   **actions** it cannot do itself, returned as buttons the owner taps (Make the video, Remake this scene, Analyze this
   reference video, Save this character): each button calls the normal route, so nothing happens without the owner's
@@ -1479,7 +1492,7 @@ nothing.
   kept as a system note) and the full messages stay readable.
 * **Memory** (`MEM#{memId}`: text ≤ 300 chars, source `chat | owner`, `createdAt`): facts and preferences the creative
   director saves with `remember` ("Lamo likes slapstick endings") and the owner adds, edits or deletes in Settings ›
-  Memory; every Lamo Stories agent gets the memory list (≤ 50 items, newest first) after its skills. Clip Factory has
+  Memory; every Funded Clips agent gets the memory list (≤ 50 items, newest first) after its skills. Clip Factory has
   no access to it.
 
 ### 45.28 Reference videos
@@ -1492,14 +1505,14 @@ happens shot by shot, the hook and its timing, pacing (cuts per 10 s), the gags 
 words, sound design (effects, music, silence), caption style, what to borrow and what not to copy (no characters,
 logos or footage are copied; only ideas of structure and timing). Stored in S3 (`analysis.json`) and shown on the
 reference's page; an idea or story can **use** references (`referenceIds`, ≤ 3), whose analyses the storyboard agent
-reads. Links to other people's videos are not downloaded in this section (Lamo Stories' agent has no downloader);
+reads. Links to other people's videos are not downloaded in this section (Funded Clips' agent has no downloader);
 the page says "Upload the video file."
 
-### 45.29 Setup, onboarding and settings (Lamo Stories' own)
+### 45.29 Setup, onboarding and settings (Funded Clips' own)
 
-* **Onboarding** (`ONBOARD` item: `stepsDone`, `skipped`, `finishedAt`): shown the first time Lamo Stories opens,
+* **Onboarding** (`ONBOARD` item: `stepsDone`, `skipped`, `finishedAt`): shown the first time Funded Clips opens,
   and from the dashboard until finished; every step can be skipped and done later; a ring shows "4 of 11 done" and the
-  list of what is left. Steps: 1 Set up the AI (what Lamo Stories uses and why), 2 Pick your default model (with
+  list of what is left. Steps: 1 Set up the AI (what Funded Clips uses and why), 2 Pick your default model (with
   **Check models**), 3 Pick your default effort, 4 Pick how videos are made (the video provider, §45.31), 5 Meet your
   agents and skills, 6 Connect Instagram, 7 TikTok, 8 YouTube, 9 Facebook, 10 X (each through Social Accounts, §45.13
   and §45.30), 11 Done (confetti). Making videos never waits for the social steps.
@@ -1519,38 +1532,38 @@ the page says "Upload the video file."
     `REFVID#` sizes), output format (MP4, H.264 and AAC, `+faststart`), captions burned in or not, scenes rendered at
     a time (1–3), keep old versions (all, or the last 1–10 per story: older files are deleted when a new version is
     made).
-* Everything above belongs to the Lamo Stories workspace; none of it is read by Clip Factory.
+* Everything above belongs to the Funded Clips workspace; none of it is read by Clip Factory.
 
-### 45.30 Developer apps: Lamo Stories' own, or Clip Factory's on purpose
+### 45.30 Developer apps: Funded Clips' own, or Clip Factory's on purpose
 
 For each platform the Social Accounts page asks once, **before the first Connect**, which developer app (OAuth client)
-Lamo Stories uses, and shows the choice on the card:
+Funded Clips uses, and shows the choice on the card:
 
-* **Use a separate app for Lamo Stories (fully separate)**: the owner makes a second developer app on the platform
-  (the same steps as Clip Factory's guide, linked, with the differences listed: its own name and Lamo Stories' own
-  redirect URI `{storiesCallbackBase}/{platform}/callback`, shown with a Copy button), pastes its keys in Lamo Stories (`PUT …/social/{platform}/app`, stored
+* **Use a separate app for Funded Clips (fully separate)**: the owner makes a second developer app on the platform
+  (the same steps as Clip Factory's guide, linked, with the differences listed: its own name and Funded Clips' own
+  redirect URI `{storiesCallbackBase}/{platform}/callback`, shown with a Copy button), pastes its keys in Funded Clips (`PUT …/social/{platform}/app`, stored
   in `cf-prod/workspaces/{ws}/{platform}/app`, the same formats and **Check it** as §17.4). Quotas, credits and app
   reviews are then separate too (TikTok's and Meta's reviews take days to weeks for a new app; X needs its own
   credits).
-* **Use Clip Factory's app (quicker)**, offered for **YouTube, TikTok and X only**: no new app; Lamo Stories still
+* **Use Clip Factory's app (quicker)**, offered for **YouTube, TikTok and X only**: no new app; Funded Clips still
   gets its **own authorization and tokens** (never Clip Factory's), for a different platform identity, so Clip
   Factory's grant is not touched; it shares that app's quotas, credits and review state. **Facebook and Instagram
-  always use Lamo Stories' own Meta app**: Meta's page picker belongs to one login and one app, so authorizing Clip
+  always use Funded Clips' own Meta app**: Meta's page picker belongs to one login and one app, so authorizing Clip
   Factory's Meta app again would change Clip Factory's existing grant (the second request forbids that). `PUT
   …/social/{instagram|facebook}/app {choice:"clips"}` is `400`; one own Meta app's keys serve both Instagram and
   Facebook (entered once). A new Meta app in Development mode lets its admin (the owner) connect his own Pages and
   Instagram account; going Live needs Meta's App Review.
 * Never a silent default and never a fallback: with neither chosen, Connect asks; a chosen app whose keys are missing
-  stops with "Paste your Lamo Stories {Platform} app keys first." **One helper picks the keys**:
+  stops with "Paste your Funded Clips {Platform} app keys first." **One helper picks the keys**:
   `workspaces/apps.py: app_keys(store, secrets, user_id, ws, platform)` reads `SOCIAL#{platform}.app.choice`: `own` →
   `cf-prod/workspaces/{ws}/{platform}/app`; `clips` → `cf-prod/platforms/{platform}/app` (read only; not for Meta);
   none or a missing secret → "not set up", never a fallback. Connect, the callback's exchange, the token refresh,
   Check, creator info and `validate_destination` use only this helper (`appClientId` on `SOCIAL#` records the client
   id used at connect). The redirect URI follows the choice: Clip Factory's app keeps its registered
-  `{oauthCallbackBase}/{platform}/callback`; Lamo Stories' own app registers Lamo Stories' own callback
+  `{oauthCallbackBase}/{platform}/callback`; Funded Clips' own app registers Funded Clips' own callback
   `{storiesCallbackBase}/{platform}/callback` (§45.13.3). The `limits` sentences are built per choice.
 * The shared limits of §45.14 (the X monthly limit, YouTube units) apply only with Clip Factory's app; with its own
-  app Lamo Stories keeps its own counters (`RATE#WS#{ws}#{platform}`) and its own X limit setting.
+  app Funded Clips keeps its own counters (`RATE#WS#{ws}#{platform}`) and its own X limit setting.
 
 ### 45.31 Video generation (separate from the reasoning models)
 
@@ -1572,7 +1585,7 @@ pixels. Each job records which providers made it (`PJOB#.meta.providers`).
 | Request | Met by |
 |---|---|
 | 1 independent application, own everything | §45.24 (table), §45.15 (separate Lambda, runtime, IAM) |
-| 2 one-click switching, each app remembers its state | §45.16.1 (Clip Factory and Lamo Stories keep their last page; Lamo Stories also its open conversation and project), the server keeps jobs and conversations |
+| 2 one-click switching, each app remembers its state | §45.16.1 (Clip Factory and Funded Clips keep their last page; Funded Clips also its open conversation and project), the server keeps jobs and conversations |
 | 3 model selection (view, select, switch, default, per agent, per task, active shown, provider, status) | §45.25, §45.29 AI, the chat header |
 | 4 reasoning effort (default, agent, task, chat), only where supported, really sent | §45.25 |
 | 5 model and effort in the chat, per-request override, stored with jobs | §45.27, §45.25 "Recorded" |
@@ -1584,7 +1597,7 @@ pixels. Each job records which providers made it (`PJOB#.meta.providers`).
 | # | Criterion | In CI | Live |
 |---|---|---|---|
 | 1 | Clip Factory unchanged | every old test, the pixel check, `cf-prod-api` and `cf_prod_clip_agent` untouched in the plan | §45.23 #1–#4 |
-| 2 | Lamo Stories independent | IAM tests (§45.15), import scans (the stories agent imports nothing of `clipfactory_agent`; the stories API modules import no Clip Factory route module) | – |
+| 2 | Funded Clips independent | IAM tests (§45.15), import scans (the stories agent imports nothing of `clipfactory_agent`; the stories API modules import no Clip Factory route module) | – |
 | 3 | One-click navigation | switcher e2e | the Mac app |
 | 4–7 | AI configuration, model choice, default, per agent | API and web tests of the config; the agent test that the effective model is the one sent | Check models on the live account |
 | 8–10 | Effort, really sent, per request | the agent test reads the request body (`output_config.effort`), `effortApplied` false where not sent | one live call per model (usage item shows the effort) |
@@ -1593,7 +1606,7 @@ pixels. Each job records which providers made it (`PJOB#.meta.providers`).
 | 13–17 | Connect each platform independently | callback tests per platform | the owner's taps |
 | 18 | The right accounts shown | callback tests (name, handle, id) | the owner sees @lamo.stories etc. |
 | 19 | Publishing isolated | destination tests, IAM | – |
-| 20 | No Lamo Stories setting changes Clip Factory | the IAM tests; a test that runs every Lamo Stories route and job and compares every Clip Factory item and secret before and after | – |
+| 20 | No Funded Clips setting changes Clip Factory | the IAM tests; a test that runs every Funded Clips route and job and compares every Clip Factory item and secret before and after | – |
 | 21 | Regression | every required check | – |
 
 ### 45.33 Details settled by the second review (they win over anything above)
@@ -1672,7 +1685,7 @@ is already built and only written down here.
   `inputPer1M` and `outputPer1M` 0 and `perUnit` set. `UsageSummary` gains `days[].renderMinutes` and
   `days[].byProvider` and `totalsByProvider`, each `{ provider: string; units: number; unit: "image" | "second";
   cost: number | null; currency: string | null }[]` (built-in render seconds count as `builtin-rig`, priced 0 with
-  `currency: null` and the line "Free: it runs on Lamo Stories' own computer"). Model rows never carry provider ids.
+  `currency: null` and the line "Free: it runs on Funded Clips' own computer"). Model rows never carry provider ids.
   The agent writes `USAGE#` items with `kind: "provider"`, `provider`, `units`, `unit`; `usage.summary` sums them.
   Settings › Video shows render minutes per day and each provider's units and cost (or "No price yet: add one").
 * **`ProviderStatus.key`** (api, web): `key?: { saved: boolean; hint: string | null; savedAt: string | null } | null`,
@@ -1695,10 +1708,10 @@ is already built and only written down here.
   app's keys for both Instagram and Facebook.
 * **The receiving account before a post** (api built, web): `PublishTarget` gains `confirmAccount?: string` (an
   `externalAccountId` the owner saw); `PublishingJob` gains `handle: string | null` and `externalAccountId: string |
-  null`. A `409` for an account that changed, or for a TikTok that Lamo Stories cannot tell from Lamo Clips' own
+  null`. A `409` for an account that changed, or for a TikTok that Funded Clips cannot tell from Lamo Clips' own
   (TikTok gives each app its own id), carries `error.account: { externalAccountId, accountName, handle }`. The web's
   `ApiError` keeps the error's `account`; the publish sheet and Posts' retry then ask "Post to {name}?" with the
-  account shown and send the same request again with `confirmAccount`. Lamo Stories asks once per TikTok identity
+  account shown and send the same request again with `confirmAccount`. Funded Clips asks once per TikTok identity
   (`SOCIAL#tiktok.notClipsConfirmed`).
 * **Reference videos** (api, web): `GET …/references/{refId}` answers `{ reference, analysis, job: ProductionJob |
   null }` (the analysis job of `currentJobId`, else the latest one), so the page shows each step and the failure's own
@@ -1710,7 +1723,7 @@ is already built and only written down here.
   carries `ideaId`, `refIds`, `castIds`, `durationSec`. "Use in a video" on a reference opens it with `?ref=`.
 * **`ChatAction.payload` per kind** (built): `make_video { story: StoryInput }` or `{ ideaId }`; `remake_scene { storyId,
   sceneIds, note? }` (a note or scene ids at least); `analyze_reference { refId }`; `save_character { character }`;
-  `save_idea { idea }` or `{ ideaId, patch }`; `open { href }` (a Lamo Stories address only).
+  `save_idea { idea }` or `{ ideaId, patch }`; `open { href }` (a Funded Clips address only).
 * **Chat pictures on Try again** (built): a retry uploads the pictures again; an `assetId` is used by one message only.
 * **The dashboard's account sentence** (api) says "Open Social accounts and tap Connect".
 * **Approving a driving-safety story** (api): approve refuses a `safety.status` of `skipped` whenever the story has a
@@ -1729,7 +1742,7 @@ behaviours an earlier step narrowed or left out)
   Stored as `MODELDEF#{key}` in the workspace partition. `ModelInfo` gains `custom: boolean`. The API's resolver and
   the agent (per call, never cached across workspaces) merge them over `stories/config/models.json`. Effort is sent
   only for the efforts the owner listed. "Check models" checks them like any other; a model Bedrock refuses shows
-  Bedrock's sentence, nothing is swapped. Lamo Stories' runtime role may invoke any Bedrock foundation model and any
+  Bedrock's sentence, nothing is swapped. Funded Clips' runtime role may invoke any Bedrock foundation model and any
   inference profile of the account (`infra/modules/stories_agent`), so a new model works after Check models with no
   deploy.
 * **Video size and shape** (request 2 §6E: "Default resolution. Default aspect ratio."; engine, agent, api, web):
@@ -1749,7 +1762,7 @@ behaviours an earlier step narrowed or left out)
   (`study_only` deletes a reference video's file and frames once its study is written and keeps the study) and
   `keepChatPictures: "all" | "days_30" | "days_90"` (defaults `all`). The agent applies them after each job; `POST
   /v1/workspaces/{ws}/storage/cleanup` → `{ removed: { files, bytes } }` applies them (and `keepVersions`) now.
-  `StorageSummary` gains `location: { region: string; folder: string }` ("Lamo Stories' own folder in Clip Factory's
+  `StorageSummary` gains `location: { region: string; folder: string }` ("Funded Clips' own folder in Clip Factory's
   media storage"), and storyboards and captions count under `scenes`. A reference video whose file was cleared shows
   "The video was removed to save space. Its study stays."
 * **Each character keeps its own faces and noises** (request 1 §5.C "Facial expressions", "look and behave
@@ -1772,7 +1785,7 @@ behaviours an earlier step narrowed or left out)
   the model and effort it was sent with; a job step that fails on its model adds `{ step, agentId, model, effort,
   effortApplied: false, failed: true }` to `meta.models`; Try again reuses the same override.
 * **An effort Bedrock refuses** (agent): a `ValidationException` about the effort field raises `EffortUnavailable`
-  ("{Model} does not accept {effort} effort here (Amazon Bedrock refused it). Pick another level in Lamo Stories ›
+  ("{Model} does not accept {effort} effort here (Amazon Bedrock refused it). Pick another level in Funded Clips ›
   Settings › AI."), written to `MODELSTATUS#`; nothing is retried without the effort.
 * **Model choice for what the chat starts** (web): the chat's "Remake these scenes" and "Analyze this reference
   video" cards carry a model menu (the usual choice for `scene_rewrite` or `reference_analysis`, prefilled with the
@@ -1785,12 +1798,12 @@ behaviours an earlier step narrowed or left out)
   existing application exactly as I left it"; web): once each app has been shown, both stay mounted; the one not shown
   is `hidden` and `inert`, its title and key handlers stay quiet, and switching shows the other at once (the
   StoriesApp chunk is fetched while idle once the switcher is on, and the workspace list the switcher already read is
-  used without waiting). While Lamo Stories is off nothing of this runs.
-* **"Open projects"** (web): Lamo Stories' dashboard shows "Continue: {name}" for the last opened idea, story,
+  used without waiting). While Funded Clips is off nothing of this runs.
+* **"Open projects"** (web): Funded Clips' dashboard shows "Continue: {name}" for the last opened idea, story,
   character or reference (hidden when it is gone).
-* **Lamo Stories' own device preferences** (request 2 §9; web): Settings › Storage and production has "Sounds and
-  motion" (click sounds on or off, reduced motion), kept in `cf.stories.prefs`; Lamo Stories' screens read them
-  first and fall back to Clip Factory's only while unset. Clip Factory's preferences never change Lamo Stories' once set.
+* **Funded Clips' own device preferences** (request 2 §9; web): Settings › Storage and production has "Sounds and
+  motion" (click sounds on or off, reduced motion), kept in `cf.stories.prefs`; Funded Clips' screens read them
+  first and fall back to Clip Factory's only while unset. Clip Factory's preferences never change Funded Clips' once set.
 * **Setup steps 1–3** (api, web): `PUT …/ai` takes `picked?: ("environment" | "model" | "effort")[]`, stamped on
   `AICONFIG.pickedAt`; step 1 ticks after "Check models" ran or the owner tapped "These look right" on step 1 (which
   shows the models and their state), step 2 when the default model was picked, step 3 when the default effort was
@@ -1802,15 +1815,15 @@ behaviours an earlier step narrowed or left out)
 * **Sound effects list** (web): the place's own sounds are in the list from each scene's start and can be moved or
   removed; they are labelled "(whole scene)".
 * **Social accounts wording** (api, web): every sentence names the page "Social accounts", never "Connections".
-* **Lamo Clips' account found later** (api): when Lamo Clips connects the same account after Lamo Stories did,
+* **Lamo Clips' account found later** (api): when Lamo Clips connects the same account after Funded Clips did,
   `public_of` and Check it show `same_as_clips` on every platform, so the card offers Pick another and Use it for
   both; onboarding ticks a platform only when it is `connected`.
 * **Meta redirect addresses** (web): both Meta cards show both redirect URIs (Instagram's and Facebook's) to add in
   Facebook Login; also in the saved state.
 * **The intended account** (web): after a connect the page says "Connected as {name} ({handle})" and asks "Is this
-  your Lamo Stories {place}?" with Yes and "Pick another".
-* **Disconnect** (web): for an own developer app the after-disconnect line says "To remove Lamo Stories completely,
-  remove your Lamo Stories app in the account's own settings. Lamo Clips is not affected."; the shared-app line stays.
+  your Funded Clips {place}?" with Yes and "Pick another".
+* **Disconnect** (web): for an own developer app the after-disconnect line says "To remove Funded Clips completely,
+  remove your Funded Clips app in the account's own settings. Lamo Clips is not affected."; the shared-app line stays.
 * **AI pictures off** (api, web): the line and its link point to Settings › Video › Picture maker.
 
 **Agent**
@@ -1846,13 +1859,14 @@ writer sidecar `script/v{n}.writer.json` `{ by, jobId, texts, postCaptions, teac
 with `REMOVE` on `STORY#` and `REFVID#`; conditions accept a missing value or `null`.
 
 **Deploys and the Clip Factory check** (built; written into docs/DEPLOYMENT.md): the deploy's "Clip Factory check"
-step reads the plan when Lamo Stories work that feeds it is in the deploy (first-parent commits since the live release,
-cf-prod-api's `VERSION`): it fails when anything of Clip Factory's agent, `cf-prod-api`, `cf-prod-hooks` (other than
-`STORIES_OAUTH_CALLBACK`), the HTTP API's settings, authorizer, Lambda permission or stage (other than Lamo Stories' own
-`route_settings`) changes, or a Clip Factory route is not a no-op. Lamo Stories' image is built before the plan once its
+step reads the plan when Funded Clips work that feeds it is in the deploy (first-parent commits since the live release,
+cf-prod-api's `VERSION`; a commit is Funded Clips work when it touches Funded Clips' folders or its message names
+"Funded Clips", "Clip Stories", "Clip Factory Stories" or "Lamo Stories", in any case): it fails when anything of Clip Factory's agent, `cf-prod-api`, `cf-prod-hooks` (other than
+`STORIES_OAUTH_CALLBACK`), the HTTP API's settings, authorizer, Lambda permission or stage (other than Funded Clips' own
+`route_settings`) changes, or a Clip Factory route is not a no-op. Funded Clips' image is built before the plan once its
 runtime is live; a failed build keeps the live tag and still ships Clip Factory. The `workflow_dispatch` input
 `allow_clip_factory_change` ("Clip Factory changes on purpose") reruns a deploy whose findings are another PR's Clip
-Factory change landing in the same unapplied range; it never lets a Lamo Stories route take a Clip Factory path.
+Factory change landing in the same unapplied range; it never lets a Funded Clips route take a Clip Factory path.
 
 **Web layout notes** (built): the switcher's phone toggle is 29 × 48 px at 320 px wide (48 × 48 from about 340 px) and
 44 × 28 in the folded sidebar; below about 570 px tall the folded sidebar has no switcher (unfolding shows it). §45.17's
@@ -1880,12 +1894,12 @@ and 43 minor, none blocking. Round 4 closes them as follows.
 * **D13.** Post captions follow the video's shape: the brief says vertical, square or wide from story.format; #shorts is added only for 9:16.
 * **D14.** The ASS writer uses the engine's safe boxes (cli.ts catalog formats[].safe) for every shape, so burned-in text sits where the preview shows it.
 * **D15.** Writer rule: each cast member acts like its personality and traits, and its own sound moments use its favouriteEffects where they fit (writer SYSTEM and the storyboard agent's instructions in stories/config/agents.json).
-* **D16.** The two apps stay apart when something breaks: each pane (Clip Factory and Lamo Stories) has its own error boundary; Lamo Stories' card says "Lamo Stories had a problem." with Try again (re-creates the lazy app) and Go to Clip Factory (writes workspace clips, goes to the last Clip Factory page). Clip Factory's own boundary and fallback stay as they are.
-* **D17.** The hidden app is quiet: when a pane is hidden, every playing video and audio inside it is paused; Lamo Stories' previews stop painting while hidden; Clip Factory's confetti burst does not draw while Lamo Stories is on screen (an additive guard in web/src/lib/confetti.ts that is a no-op while Lamo Stories is off); every Lamo Stories page change after an await goes through storiesGoLater (Characters create/delete, RefPage talk/delete, Chat New chat, chat action cards, Connections' connect redirect is skipped while Lamo Stories is behind and resumes when it is back).
-* **D18.** Campaign Home is kept on a round trip: NewJobForm reads its search through a tiny hook (useKeptSearch) that returns window.location.search exactly as today when no Lamo Stories pane wrapper is around it (so Clip Factory with Lamo Stories off is byte-for-byte the same), and the kept route's search inside the Clip Factory pane; App.tsx then drops the campaign case from "fresh" (the skill editor stays fresh only while it has unsaved typing, or stays fresh as today if that cannot be done without changing it).
+* **D16.** The two apps stay apart when something breaks: each pane (Clip Factory and Funded Clips) has its own error boundary; Funded Clips' card says "Funded Clips had a problem." with Try again (re-creates the lazy app) and Go to Clip Factory (writes workspace clips, goes to the last Clip Factory page). Clip Factory's own boundary and fallback stay as they are.
+* **D17.** The hidden app is quiet: when a pane is hidden, every playing video and audio inside it is paused; Funded Clips' previews stop painting while hidden; Clip Factory's confetti burst does not draw while Funded Clips is on screen (an additive guard in web/src/lib/confetti.ts that is a no-op while Funded Clips is off); every Funded Clips page change after an await goes through storiesGoLater (Characters create/delete, RefPage talk/delete, Chat New chat, chat action cards, Connections' connect redirect is skipped while Funded Clips is behind and resumes when it is back).
+* **D18.** Campaign Home is kept on a round trip: NewJobForm reads its search through a tiny hook (useKeptSearch) that returns window.location.search exactly as today when no Funded Clips pane wrapper is around it (so Clip Factory with Funded Clips off is byte-for-byte the same), and the kept route's search inside the Clip Factory pane; App.tsx then drops the campaign case from "fresh" (the skill editor stays fresh only while it has unsaved typing, or stays fresh as today if that cannot be done without changing it).
 * **D19.** One click everywhere: with the sidebar folded in short windows (under about 570 px tall), a slim switcher toggle sits in .sidebar__top beside the fold button without moving it; the flag-off app is unchanged.
 * **D20.** The pixel check ignores antialiasing only (pixelmatch includeAA false, threshold about 0.1) and still fails on any layout or colour change; the lead runs it on the switch PR.
-* **D21.** Words and layout: provider ids are never shown raw (Built-in animator, Built-in drawing, Built-in sounds, Claude on Amazon Bedrock, Amazon Nova Canvas/Reel); one "Made with" heading (the other "Helpers used"); no raw s3:// paths (say "Lamo Stories' own folder in Clip Factory's media storage", the path behind a "Technical details" fold); the safety topic's title, not its id; previews show a character's own face (happy if it has it, else its first non-neutral face); Setup step 4 says "On. Cartoons drawn right here, tall, square or wide, 30 frames a second."; Ideas' "Write it again" keeps the full idea's own length; Check now is hidden on a choose_account card; one toast per pick on Social accounts (drop the duplicate), and toasts sit above an open sheet's action bar on phones; text never cut off at 320 px (dashboard accounts wrap, the timeline chip shows the short name, idea tiles clamp at 5 lines); the Post it sheet's "Not ready to post" rows stay readable at 320-390 px (min-width 0, the link on its own row on phones).
+* **D21.** Words and layout: provider ids are never shown raw (Built-in animator, Built-in drawing, Built-in sounds, Claude on Amazon Bedrock, Amazon Nova Canvas/Reel); one "Made with" heading (the other "Helpers used"); no raw s3:// paths (say "Funded Clips' own folder in Clip Factory's media storage", the path behind a "Technical details" fold); the safety topic's title, not its id; previews show a character's own face (happy if it has it, else its first non-neutral face); Setup step 4 says "On. Cartoons drawn right here, tall, square or wide, 30 frames a second."; Ideas' "Write it again" keeps the full idea's own length; Check now is hidden on a choose_account card; one toast per pick on Social accounts (drop the duplicate), and toasts sit above an open sheet's action bar on phones; text never cut off at 320 px (dashboard accounts wrap, the timeline chip shows the short name, idea tiles clamp at 5 lines); the Post it sheet's "Not ready to post" rows stay readable at 320-390 px (min-width 0, the link on its own row on phones).
 
 **Written down from round 3** (built; the shapes the API, the agent and the web share):
 
@@ -1903,7 +1917,7 @@ and 43 minor, none blocking. Round 4 closes them as follows.
   `sourceRemovedAt` is still read) and `note`; `MSG#` `picturesRemovedAt` (attachments emptied by keepChatPictures,
   the same in the API's cleanup and the agent's sweep); `AICONFIG.pickedAt`; `MODELSTATUS#.by` (`"check"` when Check
   models wrote it).
-* Web: Lamo Stories' celebrations use its own star burst (`ui.tsx` `starBurst`), never Clip Factory's confetti; its
+* Web: Funded Clips' celebrations use its own star burst (`ui.tsx` `starBurst`), never Clip Factory's confetti; its
   sounds go through `stories/prefs.ts` (`storiesSound`, `storiesReduceMotion`, `setStoriesDevicePref`; keys
   `sound.enabled`, `sound.click`, `motion.reduce` in `cf.stories.prefs`); page changes after a request go through
   `storiesGoLater` (`stories/pane.tsx`), which waits while Clip Factory is on screen. Plain toasts stay global
@@ -1914,11 +1928,11 @@ and 43 minor, none blocking. Round 4 closes them as follows.
 **Switched on.** The final check on main `696e8b3b` (before the switch) found every acceptance criterion of both
 requests met (request 1: 12 of 14 met, 2 built and waiting only on the owner's own accounts; request 2: 15 of 21 met,
 6 waiting only on his accounts; none partial or missing) and Clip Factory pixel-identical (`web/scripts/clips-unchanged.sh`:
-66 of 66 shots equal with Lamo Stories off against main without Lamo Stories' hooks; 66 of 66 equal outside the
-switcher's own box with it on; the shots that differ from the commit before Lamo Stories began are other sessions'
+66 of 66 shots equal with Funded Clips off against main without Funded Clips' hooks; 66 of 66 equal outside the
+switcher's own box with it on; the shots that differ from the commit before Funded Clips began are other sessions'
 Clip Factory work). The switch pull request sets `STORIES_ON = true`; `cf.storiesPreview` `"0"` / `"1"` still choose
 on one device (tests). What waits on the owner: his own Meta developer app for Instagram and Facebook, picking the
-Lamo Stories YouTube channel, signing in to the Lamo Stories TikTok and X accounts (TikTok posting through the API
+Funded Clips YouTube channel, signing in to the Funded Clips TikTok and X accounts (TikTok posting through the API
 still waits on TikTok's app approval), confirming each shown account, Bedrock model access for the models he uses,
 and, for Amazon Nova Reel, `stories_video_us_bucket = true` plus model access in us-east-1 (DEPLOYMENT.md).
 
@@ -1942,16 +1956,16 @@ its own `task`. The dashboard checks app keys only while its request has time (i
 * **E8.** Every model record has its details: chat answers and AI tasks show the same "Model ID … in {Region}" details line production jobs show (behind the same fold).
 * **E9.** An account problem always has a way to fix it: the Posts panel and the Post it sheet show "Open Social accounts" (a link) next to Try again whenever the post stopped on an account problem; the mock's Needs you Fix it goes to Social accounts like the API.
 * **E10.** Post words only need a fact check, not a remake: when only the post captions changed, Review says "Your new post words need a quick check. Tap Check again." with that button (produce from "safety"), and Approve says the same; never "Tap Remake". The captions box stays on the tab the owner was on after Use these or Save (keep the tab outside the keyed editor).
-* **E11.** Celebrate a post: the Post it sheet's "Posted!" gets Lamo Stories' star burst and success sound (the same as Approve).
+* **E11.** Celebrate a post: the Post it sheet's "Posted!" gets Funded Clips' star burst and success sound (the same as Approve).
 * **E12.** A model the studio already knows is unusable (status denied, not_found or error) is never pre-picked: the pickers and chips show it with its status line, the usual choice skips it, and Make the video with it selected asks first ("{Model} has no access right now. Use {usual} instead?").
-* **E13.** One name on screen: Lamo Stories' screens and the API's Lamo Stories sentences call the other app "Clip Factory" everywhere (never "Lamo Clips"); sentences never read oddly when an account is itself named "Lamo Stories" (say "this {Platform} account ({name})").
+* **E13.** One name on screen: Funded Clips' screens and the API's Funded Clips sentences call the other app "Clip Factory" everywhere (never "Lamo Clips"); sentences never read oddly when an account is itself named "Funded Clips" (say "this {Platform} account ({name})").
 * **E14.** Kid-proof first lines: developer-app terms (Valid OAuth Redirect URIs, Login configuration, App Review, Sandbox, inference profile, ARN) and raw ids (account ids, model ids, channel ids) sit behind a "Technical details" fold, with a plain first line ("Copy this address into your app's settings"); the facts stay one tap away.
 * **E15.** After Finish with skipped steps, the dashboard keeps a small "Finish setting up: {n} left" card listing them, and Settings always has "Open setup again".
-* **E16.** Lamo Stories' own switcher is always in view: in short desktop windows the rail's switcher is pinned (sticky at the bottom of the rail, or in the rail's top when the foot would scroll off); at 320 px Clip Factory's top-bar switch is at least 44 px in both directions (shrink or drop the brand text before the switch shrinks), with the flag-off app unchanged.
+* **E16.** Funded Clips' own switcher is always in view: in short desktop windows the rail's switcher is pinned (sticky at the bottom of the rail, or in the rail's top when the foot would scroll off); at 320 px Clip Factory's top-bar switch is at least 44 px in both directions (shrink or drop the brand text before the switch shrinks), with the flag-off app unchanged.
 * **E17.** Settings polish: Add a model starts with the maker's usual effort levels ticked when effort levels are on (Anthropic: all five, default its usual); the Added by you and status chips have the normal gap and the status sits at the right edge like other rows; status words are one set everywhere ("Works", "Not checked yet", "No access", "Not found", "Problem"); "More effort thinks longer" is hidden for a model with no effort setting; a sentence never tells the owner to go to the page he is on (say "Pick Built-in animation above").
 * **E18.** Small studio fixes: a cleared reference never plays a local copy (the page shows the D9 sentence); the mock's canned study fits the uploaded video's length; the play badge on square and wide scene thumbnails sits where it does not cover the caption; Social accounts' grid does not leave big empty areas at 1440 (cards flow by their own height); after reconnecting, the mock clears the old warning like the API.
 
-Not in round 5 (they would change Clip Factory's own code): Clip Factory's toast component (Lamo Stories uses it: 36 px close button, one glass for all toasts) and Clip Factory page changes after a request while Lamo Stories is on screen (NewJobForm addCampaign, CampaignPaste, SkillPages). The lead reports them as known limits.
+Not in round 5 (it would change Clip Factory's own code): Clip Factory's toast component (Funded Clips uses it: 36 px close button, one glass for all toasts). Clip Factory page changes after a request while Funded Clips is on screen are ruled in §45.38 A1.
 
 ### 45.37 Stories AI makers and providers (2026-11-22; wins over anything above)
 
@@ -2047,7 +2061,7 @@ documents one.
   nothing, and a newer failed access check of the model in use wins over an older `on`.
 * **Try it for your own video model.** Its shots go to the same off-by-default us-west-2 bucket as Luma AI Ray2, so it
   is `on` only after its own Try it: `POST …/providers/own-video/check` → 202 with a one-step `provider_check` job
-  (`meta.providers {animation: "own-video"}`), or 409 "Add a video model first: tap Add a model in Lamo Stories ›
+  (`meta.providers {animation: "own-video"}`), or 409 "Add a video model first: tap Add a model in Funded Clips ›
   Settings › Video." (busy: "Your own video model is being tried. Wait until it is done."). The agent makes one test
   shot of the picked own video model (or its first) into its Region's bucket, proves `PROVIDER#animation#own-video`
   with its `model`, records its usage and deletes the file; a switched-off bucket calls nothing
@@ -2119,10 +2133,10 @@ re-staging pass after the engine refused the first staging; there is no two-call
 #### G6 Sharing Clip Factory's developer app, protected
 
 * The choice stays for YouTube, TikTok and X and reads **"Share Clip Factory's app"** with "Clip Factory's posts
-  always go first. Stories uses what's left." ("quicker" is gone). It is about the developer app (OAuth client and
-  quotas), never the account (G8): "Even with Clip Factory's app, sign in with a different account made for Clip
-  Factory Stories." Anything already connected through it keeps working with no reconnect.
-* **Own counters (a).** One counter for all of Lamo Stories, every owner and workspace together:
+  always go first. Funded Clips uses what's left." ("quicker" is gone). It is about the developer app (OAuth client and
+  quotas), never the account (G8): "Even with Clip Factory's app, sign in with a different account made for Funded
+  Clips." Anything already connected through it keeps working with no reconnect.
+* **Own counters (a).** One counter for all of Funded Clips, every owner and workspace together:
   `RATE#WS#~shared#{platform}` / `SHAREUSE#{platform}#{window}` (type `ws_shareuse`; `posts`, `units`, `usd`,
   `minuteKey`/`requestsThisMinute`, `dayKey`/`dayPostIds`, `blockedUntil`, `byWorkspace` per `{userId}#{workspaceId}`,
   `cfAuto` (every owner's auto-posting schedule seen this window), `version`, `ttl`; "~" is in no workspace id). It
@@ -2131,23 +2145,23 @@ re-staging pass after the engine refused the first staging; there is no two-call
   read only (an attribute-limited GetItem; the separation test's allowed set grows by exactly that).
 * **Clip Factory's share is reserved (b):** its auto-posting schedule (`ceil(perRun × 24 / everyHours)` posts a day
   while on; today 1 clip every 6 hours on every platform) plus headroom for its manual posts (10 YouTube uploads and 2
-  X posts a day). YouTube, per Google quota day: Lamo Stories may upload `100 − (auto + 10)` a day (`videos.insert`'s
+  X posts a day). YouTube, per Google quota day: Funded Clips may upload `100 − (auto + 10)` a day (`videos.insert`'s
   own bucket), and of the 10,000-unit pool it may use `10,000 − 500 − max(5,000, Clip Factory's units today +
   1,000)`. X, per UTC month: the owner's monthly X limit minus what Clip Factory spent minus its reserve for the days
   left (the larger of its daily average and `(auto + 2) × (usdPerPost + 4 × usdPerPostRead)`); its 15-minute window
-  at most 1,000 requests. TikTok: of the app's 600 calls a minute Clip Factory keeps 300 plus 100, so Lamo Stories
-  makes at most 200; TikTok's daily post caps are per creator account and Lamo Stories' accounts are never Clip
-  Factory's, and when TikTok says the app's own daily limit is reached Lamo Stories stops there until the next UTC
-  day. While Clip Factory's own counter is blocked, Lamo Stories waits too. Clip Factory's own X charge counts only its
-  own spend, so if it posts far more than planned the month can go over the X limit by what Lamo Stories spent: the
-  card says so ("Clip Factory does not count Stories' X posts, …").
+  at most 1,000 requests. TikTok: of the app's 600 calls a minute Clip Factory keeps 300 plus 100, so Funded Clips
+  makes at most 200; TikTok's daily post caps are per creator account and Funded Clips' accounts are never Clip
+  Factory's, and when TikTok says the app's own daily limit is reached Funded Clips stops there until the next UTC
+  day. While Clip Factory's own counter is blocked, Funded Clips waits too. Clip Factory's own X charge counts only its
+  own spend, so if it posts far more than planned the month can go over the X limit by what Funded Clips spent: the
+  card says so ("Clip Factory does not count Funded Clips' X posts, …").
 * **No room: the post waits (c).** The story flow writes `waitUntil` and the line "Waiting: Clip Factory's posts go
   first. Posts at <time>." on the publishing job; the public job shows `waitingUntil` and `waiting` while it is queued
   or publishing (the post rows and the publish sheet); it waits with no compute and goes out by itself after the
   reset, never failing silently and never taking Clip Factory's share. A slow-down from the shared app on the first
   call (a retryable `rate` problem) waits for the window the same way. The story flow's execution timeout is raised in
   place to 40 days (a month's wait on X).
-* **Tests (f):** a Lamo Stories post can never use up Clip Factory's reserved share on YouTube, X and TikTok, also
+* **Tests (f):** a Funded Clips post can never use up Clip Factory's reserved share on YouTube, X and TikTok, also
   across three workspaces and owners; a waiting post goes out after the reset; Clip Factory's own posting path stays
   byte-identical (the callback and separation tests). Copying Clip Factory's publishers is out.
 
@@ -2156,7 +2170,7 @@ re-staging pass after the engine refused the first staging; there is no two-call
 * Nothing offers or calls Nova Canvas or Nova Reel as live: Setup step 4, Settings › Video's rows, the portraits' AI
   path and Try it read **ended** ("Ended by Amazon on 30 Sep 2026") with a one-tap replacement (Stability AI pictures,
   Luma AI Ray2), never the default and never swapped by themselves; a pick of one is refused with no call: "Amazon
-  Nova Canvas was ended by Amazon on 30 Sep 2026. Pick another picture maker in Lamo Stories › Settings › Video."
+  Nova Canvas was ended by Amazon on 30 Sep 2026. Pick another picture maker in Funded Clips › Settings › Video."
   ("Amazon Nova Reel 1.1 … video maker"). A stored ended pick never ticks Setup step 4 (it is a step to do again,
   also after `providersPickedAt`). Nova Reel's old Try it answers 409 with that sentence.
 * Stability AI makes the portraits when picked (the portraits use the picked picture maker), Luma AI Ray2 the
@@ -2170,26 +2184,40 @@ re-staging pass after the engine refused the first staging; there is no two-call
   Video, or finish its setup." **Stability AI needs** its models turned on for the account in us-west-2 (Bedrock
   console); its first portrait proves it.
 
-#### G8 Clip Factory Stories never posts to Clip Factory's accounts
+#### G8 Funded Clips never posts to Clip Factory's accounts
 
 * **No account is shared.** "Use it for both" is gone: `destinations.py` rule 5 is absolute (never Clip Factory's
   place, no exception); the share path (`social.share`, the share route and its `ws_routes_social` entry) is removed;
-  a stored `sharedWithClips` is ignored and cleared (Lamo Stories' own `SOCIAL#` only). No route or screen offers
+  a stored `sharedWithClips` is ignored and cleared (Funded Clips' own `SOCIAL#` only). No route or screen offers
   sharing an account (tested).
 * **Same account = any stable identity matches** Clip Factory's `ACCOUNT#{platform}`: YouTube the channel id;
   Facebook the Page id; Instagram the IG user id and the username; TikTok the open id (equal only on the shared app)
   and the username (Clip Factory stores no `union_id`, so it is not compared); X the user id and the handle. It runs at
   connect and before every upload. When it matches at connect the account is `same_as_clips` and no token is kept
-  (the old one is deleted too); when Clip Factory connects it later, Lamo Stories' connection is blocked from posting
+  (the old one is deleted too); when Clip Factory connects it later, Funded Clips' connection is blocked from posting
   (`clips_now`). Both are sticky: the identities found to be Clip Factory's are kept as `clipsMatched` `{ids,
-  usernames}` (at most 20 of each, never returned) on Lamo Stories' own `SOCIAL#`, across connects and disconnects,
+  usernames}` (at most 20 of each, never returned) on Funded Clips' own `SOCIAL#`, across connects and disconnects,
   and refused from then on, also once Clip Factory lets go of the account; only a connect of a different account
   clears the status. Clip Factory's `ACCOUNT#` is read read-only, widened in place to `handle` (the API and the story
   flow) and `autoPost` (the story flow, its settings item), with the separation tests' allowed sets to match; Clip
   Factory's items and code are unchanged.
-* **Words.** Each Connect step and card: "Use a new account made for Clip Factory Stories, not lamo.clips."; the
-  same-as-Clips state: "This is Clip Factory's own account. Clip Factory Stories needs its own separate account: sign
+* **Words.** Each Connect step and card: "Use a new account made for Funded Clips, not Clip Factory's." (the same
+  on every platform; it once said "not lamo.clips", which is not Clip Factory's name on X); the
+  same-as-Clips state: "This is Clip Factory's own account. Funded Clips needs its own separate account: sign
   in with a different one."; Clip Factory took it later: "This is Clip Factory's account now. Connect a different
-  account made for Clip Factory Stories."; the publish sheet: "This is Clip Factory's own account. Connect a different
-  account made for Clip Factory Stories in Social accounts." Every same-as-Clips account carries its `warning`, said
+  account made for Funded Clips."; the publish sheet: "This is Clip Factory's own account. Connect a different
+  account made for Funded Clips in Social accounts." Every same-as-Clips account carries its `warning`, said
   once on the card.
+
+### 45.38 One shell switch, the two apps kept apart (2026-11-22; wins over anything above)
+
+The owner (22 Nov, 18:01, with screenshots): "just like you have in the top or in the bottom left, I need to keep that... keep that for both when I switch to Lamo Stories and back to Clip Factory... make sure that the place where we have setup, you know, Clip Factory and then Funded Clips. I want that to be exactly, I want that to be fixed. That should be in the same place no matter what. Even if we're in Funded Clips or if we're in Clip Factory." Request 2: "The only shared element should be the application shell"; "These two applications must not depend on each other's internal functionality". And on the switch: "make the click animation between the two buttons smooth".
+
+* **S1. One element.** The workspace switch and the Live chip under it are one element of the application shell (`web/src/app/WorkspaceDock.tsx`), only while Funded Clips is switched on, with the same place, size and look (the shell's own fills and words, never one app's style) in both apps, on every page: every Funded Clips page (Setup the first time included, which keeps the left column free on a computer), Clip Factory with its sidebar open or folded (the folded form shows in both apps), every Look, and the Mac and Windows windows. Funded Clips' rail and top bar no longer draw a switch of their own; the round toggle at the top right of Funded Clips' Setup is gone on a computer.
+* **S2. Where.** On a computer the shell draws it outside both panes, fixed over the left column where Clip Factory's sidebar foot has always had it: the bar right above the Live chip, with Get the app and the jobs line under them (in a short window: a round toggle beside or above the chip, a slim one between the menu and the foot, a slim one beside the fold button of a folded sidebar, or one in the strip between an open sidebar and the page). Its place is worked out once from the window and Clip Factory's sidebar (`dockLayout`), never from the app on screen, so both apps always agree; Clip Factory's foot keeps the chip's row (`.sidebar__live-room`) so nothing in it moves, and Funded Clips' rail stops its list of pages above the dock (`--ws-dock-room`). On a phone it is the round toggle (48 px; 44 by 48 below 360 px) with the Live chip 4 px after it at the right end of each app's own top bar (one component, `TopBarSwitch`, in both); an app's brand drops its name only when it would come closer than 4 px (320 px). Known limit: on a phone, while Clip Factory's own "Set up posting" pill sits above Clip Factory's page, Clip Factory's whole top bar (its toggle with it) is that much lower than Funded Clips'; side, size and its place in the bar stay the same.
+* **S3. The slide.** The bar's highlight slides from one choice to the other on the tap's own frame (Glide, 360 ms, the same curve as every pick-one bar, transform only); the switch stays mounted across the change, and the page changes once the slide has landed, so no page is built or laid out during it. Funded Clips' code is fetched while the browser is idle and again the moment the pointer or the keyboard comes to a way there. Calm motion (the app on screen's own setting) moves it at once and switches at once. A page asking "Leave without saving?" asks first; the highlight moves only if the page really changes. `e2e/stories-switch-slide.spec.ts` checks the slide's animation runs to its end both ways in Chromium and WebKit, with no main-thread task over 50 ms and no frame later than the machine's own at rest.
+* **A1. Clip Factory waits behind Funded Clips.** A Clip Factory page change that comes after a wait (a campaign added, a skill saved) goes through `clipsGoLater` (`web/src/app/shell.ts`), the mirror of Funded Clips' `storiesGoLater`: while a Funded Clips page is on screen it is held, and it happens the moment Clip Factory's pane is on screen again (replacing the entry it asked to replace, past its own "Leave without saving?" only where it asked to). The owner is never moved out of Funded Clips by it, Funded Clips' history entry and its own guard are never touched, and `cf.workspace` keeps saying Funded Clips. While Funded Clips is off it is exactly `navigate`. Clip Factory's own sounds (`lib/sounds.ts`) and confetti are quiet while a Funded Clips page is on screen.
+* **A2. Nothing of one app inside the other.** Funded Clips draws nothing of Clip Factory's own: no Content Rewards "Send … now" banner, no app badge or Mac download host (the shell draws those once, for both). Each pane has its own toasts (`ToastScope`): a toast its app raises while hidden waits until that app is on screen again, or is dropped once older than its own time on screen; each app's error toast plays its own error sound; the shell's own toasts stay global. Funded Clips' sounds and motion (`cf.stories.prefs`: `sound.enabled`, `sound.click`, `sound.deny`, `motion.reduce`) have Funded Clips' own defaults (sounds on, its usual click and error sounds, motion as the device asks) and never fall back to Clip Factory's `cf.prefs`; its Settings card has its own Error sound.
+* **A3. No imports across.** No Clip Factory file imports `web/src/stories/`: what both need (which app is on screen, the pane, the kept search, `clipsGoLater`) is the shell's (`web/src/app/shell.ts`), which both import. The shell's own files (`web/src/app/`) and the one router both apps go through (`web/src/lib/router.ts`, which hands /stories addresses to Funded Clips' route table) are the only ones that read Funded Clips' code; `test/shellApart.test.tsx` scans for it.
+* **The mark, an element of the shell.** Funded Clips' logo (the owner, 22 Nov: "the same logo as clip factory but with the colors in clip factory stories") is Clip Factory's own mark, the same markup (`web/src/components/ClipMark.tsx`: the italic "C" on its tile with its dot), beside the wordmark "Funded *Clips*" in Clip Factory's wordmark type. It lives with the shell, not in `web/src/stories/`: `web/src/components/WorkspaceMark.tsx` (`WorkspaceMark`, `WorkspaceWordmark`, `STORIES_BRAND`) and `web/src/styles/ws-mark.css` in the main stylesheet, classes `.ws-mark*` and `.ws-wordmark*`, because the shell shows it outside Funded Clips' own code too: the start-up card while that code loads (`App.tsx`) and the round toggle that goes to Funded Clips (`WorkspaceDock.tsx`). Four tokens colour it, `--ws-mark-tile`, `--ws-mark-letter`, `--ws-mark-dot` and `--ws-wordmark`; Funded Clips' own stylesheet sets them under `.stories-app`, and until it does each falls back to today's Funded Clips colours (sunshine tile `#FFC94A`, night-indigo "C" `#1C1842`, coral dot `#FF6F61`, cream words `#FFF6E5`). So no Clip Factory file imports `web/src/stories/` for it (A3), and none of Funded Clips' own look (`--st-*`, `st-` classes) goes into Clip Factory's main bundle. Clip Factory's own mark never carries `ws-mark` and is unchanged; the round toggle that goes back to Clip Factory shows it. `test/workspaceMark.test.tsx` holds this.
+* **E18, again.** Social accounts deals its cards into the number of columns (two up to as many as fit) that leaves the least empty area, each count measured with the cards' own heights at its width, every way of dealing them tried; a card that grows still only pushes the cards under it.

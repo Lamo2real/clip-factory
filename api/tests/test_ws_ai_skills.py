@@ -219,7 +219,7 @@ def test_built_ins_cannot_be_changed_or_deleted(wcall: WsCall) -> None:
     for body in ({"version": 0, "title": "Mine now"}, {"version": 0, "instructions": "x"}):
         status, got = wcall("PUT", f"{BASE}/skills/nonverbal-storytelling", body)
         assert status == 409
-        assert got["error"]["message"].startswith("Built-in skills are part of Lamo Stories.")
+        assert got["error"]["message"].startswith("Built-in skills are part of Funded Clips.")
     assert wcall("DELETE", f"{BASE}/skills/nonverbal-storytelling")[0] == 409
     assert wcall("POST", f"{BASE}/skills/nonverbal-storytelling/restore", {"revisionId": "x"})[0] == 409
     assert (

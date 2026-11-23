@@ -30,7 +30,7 @@
         "longContext": null,
         "currency": "USD",
         "source": "anthropic_list",
-        "note": "Anthropic's own list price. Amazon Bedrock bills its own price, which can differ; type Bedrock's price in Lamo Stories › Settings › AI to replace it."
+        "note": "Anthropic's own list price. Amazon Bedrock bills its own price, which can differ; type Bedrock's price in Funded Clips › Settings › AI to replace it."
       },
       "line": "The most capable. Best for storyboards and hard reasoning."
     },
@@ -61,7 +61,7 @@
         "longContext": null,
         "currency": "USD",
         "source": "anthropic_list",
-        "note": "Anthropic's own list price. Amazon Bedrock bills its own price, which can differ; type Bedrock's price in Lamo Stories › Settings › AI to replace it."
+        "note": "Anthropic's own list price. Amazon Bedrock bills its own price, which can differ; type Bedrock's price in Funded Clips › Settings › AI to replace it."
       },
       "line": "Very capable. The model Clip Factory uses by default (a separate setting)."
     },
@@ -92,7 +92,7 @@
         "longContext": null,
         "currency": "USD",
         "source": "anthropic_list",
-        "note": "Anthropic's own list price. Amazon Bedrock bills its own price, which can differ; type Bedrock's price in Lamo Stories › Settings › AI to replace it."
+        "note": "Anthropic's own list price. Amazon Bedrock bills its own price, which can differ; type Bedrock's price in Funded Clips › Settings › AI to replace it."
       },
       "line": "Smart and quicker. A good default for creative work."
     },
@@ -123,7 +123,7 @@
         "longContext": null,
         "currency": "USD",
         "source": "anthropic_list",
-        "note": "Anthropic's own list price. Amazon Bedrock bills its own price, which can differ; type Bedrock's price in Lamo Stories › Settings › AI to replace it."
+        "note": "Anthropic's own list price. Amazon Bedrock bills its own price, which can differ; type Bedrock's price in Funded Clips › Settings › AI to replace it."
       },
       "line": "Good and fast. Costs less."
     },
@@ -163,7 +163,7 @@
         },
         "currency": "USD",
         "source": "anthropic_list",
-        "note": "Anthropic's own list price. Amazon Bedrock bills its own price, which can differ; type Bedrock's price in Lamo Stories › Settings › AI to replace it."
+        "note": "Anthropic's own list price. Amazon Bedrock bills its own price, which can differ; type Bedrock's price in Funded Clips › Settings › AI to replace it."
       },
       "line": "Cheapest and fastest. For quick edits."
     }

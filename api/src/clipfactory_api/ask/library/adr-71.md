@@ -1,6 +1,6 @@
 ## ADR-71 One animation engine in TypeScript, drawn by the browser and by the agent
 
-- **Context.** Lamo Stories needs 30–60 s vertical cartoons without voice-over, with recurring characters that must
+- **Context.** Funded Clips needs 30–60 s vertical cartoons without voice-over, with recurring characters that must
   look and move the same in every video, previews in the app, and a pipeline that works today. No image or video
   generation model is set up in the account; Amazon Nova Canvas and Nova Reel are not offered in eu-north-1 (Ireland,
   N. Virginia and Tokyo only), Reel writes to a bucket in its own Region, and generated frames or clips do not keep a
@@ -19,7 +19,7 @@
   and no licences. AI images (Nova Canvas) can be added later behind the rigs (ADR-75).
 - **Consequences.** Previews and videos use the same draw lists (shared code; the rasterizer is tested on fixed draw
   lists). The look is clean flat-shaded 2D, not painted or realistic; new actions, props or sets are code in one
-  folder. The engine folder is copied into Lamo Stories' own agent image (ADR-76), so that image's tag hash includes
-  it, and an engine change rebuilds only that image; Clip Factory's agent image never changes because of Lamo
-  Stories. Rendering 45 s
+  folder. The engine folder is copied into Funded Clips' own agent image (ADR-76), so that image's tag hash includes
+  it, and an engine change rebuilds only that image; Clip Factory's agent image never changes because of Funded
+  Clips. Rendering 45 s
   takes a few minutes on the agent.

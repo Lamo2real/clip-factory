@@ -29,27 +29,35 @@ import {
   type VideoAspect,
   type VideoResolution,
 } from "../api/types.ts";
-import { Btn, Chip, Failed, Loading, makerWho, MODEL_STATUS, money, Note, PROVIDER_STATE, SavedMark, SetCard, SetPick, SetSwitch, useSaved, whenText, type SIconName } from "./bits.tsx";
+import { Btn, Chip, Failed, hostName, Loading, makerWho, MODEL_STATUS, money, Note, PROVIDER_STATE, SavedMark, SetCard, SetPick, SetSwitch, useOnThisPage, useSaved, whenText, type SIconName } from "./bits.tsx";
 import { useAi, useWorkspaceConfig } from "./data.ts";
 import { bundledMakerModels, endedWords, regionWords } from "./makerFile.ts";
 import { MakerModels } from "./MakerModels.tsx";
 import { keepName, ProviderKeys } from "./ProviderKeys.tsx";
 import { MakerPrices } from "./ProviderPrices.tsx";
 import { ReelTry } from "./ReelTry.tsx";
+import { StTech } from "../ui.tsx";
 import { VideoUsage } from "./VideoUsage.tsx";
 
-/** Each maker's name, what it uses and one line (§45.37's ids; an id the API adds later is named by its own label). */
-export const MAKERS: Record<string, { label: string; model: string; line: string; short?: string }> = {
-  "builtin-2d": { label: "Built-in animator", model: "Lamo Stories' own 2D animator", line: "Draws and moves every character the same way in every video." },
+/** A model's exact ID (and its Region on Amazon Bedrock), said only behind "Technical details" (§45.36 E14). */
+export const modelTech = (m: { label: string; host: string; modelId: string; region?: string | null }) => `On ${m.host}: ${m.label} (${m.modelId})${m.region ? ` in ${m.region}` : ""}.`;
+
+/**
+ * Each maker's name, what it uses and one line (§45.37's ids; an id the API adds later is named by its own label).
+ * `model` is its plain name; `tech` its exact Bedrock ID, folded away (§45.36 E14).
+ */
+export const MAKERS: Record<string, { label: string; model: string; line: string; short?: string; tech?: string }> = {
+  "builtin-2d": { label: "Built-in animator", model: "Funded Clips' own 2D animator", line: "Draws and moves every character the same way in every video." },
   "luma-ray": {
     label: "Luma AI Ray2",
     short: "Luma AI Ray2",
-    model: "Luma AI Ray2 (luma.ray-v2:0)",
+    model: "Luma AI Ray2",
+    tech: modelTech({ label: "Luma AI Ray2", host: "Amazon Bedrock", modelId: "luma.ray-v2:0", region: "us-west-2" }),
     line: "AI footage for cut-aways (scenes with no character), 5 seconds a shot. Runs in the US (Oregon). Posts that use it carry the platforms' AI label.",
   },
   "own-video": { label: "Your own video model", model: "A video model you added", line: "AI footage for cut-aways from a video model you add below." },
   "nova-reel": { label: "Amazon Nova Reel", model: "Amazon Nova Reel 1.1", line: "Ended by Amazon on 30 Sep 2026. It made AI footage for cut-aways (scenes with no character)." },
-  "builtin-rig": { label: "Built-in drawings", model: "Lamo Stories' own character drawings", line: "Every character looks the same in every video." },
+  "builtin-rig": { label: "Built-in drawings", model: "Funded Clips' own character drawings", line: "Every character looks the same in every video." },
   stability: {
     label: "Also AI portraits (Stability AI)",
     short: "Stability AI pictures",
@@ -58,7 +66,7 @@ export const MAKERS: Record<string, { label: string; model: string; line: string
   },
   "own-images": { label: "Also AI portraits (your own picture model)", model: "A picture model you added", line: "Portraits from a picture model you add below. Videos still use the drawings." },
   "nova-canvas": { label: "Amazon Nova Canvas", model: "Amazon Nova Canvas", line: "Ended by Amazon on 30 Sep 2026. It made AI portraits." },
-  "builtin-synth": { label: "Built-in sounds and music", short: "Built-in sounds and music", model: "Lamo Stories' own sound maker", line: "Every sound effect, noise and tune, made fresh for each video." },
+  "builtin-synth": { label: "Built-in sounds and music", short: "Built-in sounds and music", model: "Funded Clips' own sound maker", line: "Every sound effect, noise and tune, made fresh for each video." },
   elevenlabs: {
     label: "ElevenLabs sound effects and music",
     model: "ElevenLabs",
@@ -114,9 +122,9 @@ export function shownMakerModels(providers: readonly ProviderStatus[] | null | u
 }
 
 const QUALITY: { value: StoriesConfig["video"]["quality"]; label: string; line: string }[] = [
-  { value: "standard", label: "Good", line: "Smaller files (CRF 23)" },
-  { value: "high", label: "Better", line: "The usual (CRF 20)" },
-  { value: "best", label: "Best", line: "Bigger files (CRF 17)" },
+  { value: "standard", label: "Good", line: "Smaller files" },
+  { value: "high", label: "Better", line: "The usual" },
+  { value: "best", label: "Best", line: "Sharpest, bigger files" },
 ];
 
 /** The three shapes, the one Shorts, Reels and TikTok want first (§45.34). */
@@ -141,8 +149,11 @@ function stateOf(providers: ProviderStatus[] | null, id: string): ProviderStatus
   return providers?.find((p) => p.id === id);
 }
 
-/** A maker an option can show: ended, or the owner's own maker with no model of its kind yet, cannot be picked. */
-function makerOption(providers: ProviderStatus[] | null, id: string, ownModels: number, noun: string) {
+/**
+ * A maker an option can show: ended, or the owner's own maker with no model of its kind yet, cannot be picked. `here`
+ * says the API's line on the page it names (§45.36 E17).
+ */
+function makerOption(providers: ProviderStatus[] | null, id: string, ownModels: number, noun: string, here: (text: string) => string = (t) => t) {
   const p = stateOf(providers, id);
   const s = p ? PROVIDER_STATE[p.state] : null;
   const isEnded = p?.state === "ended" || id === "nova-canvas" || id === "nova-reel";
@@ -150,14 +161,14 @@ function makerOption(providers: ProviderStatus[] | null, id: string, ownModels: 
   return {
     value: id,
     label: MAKERS[id]?.label ?? p?.label ?? "Another maker",
-    line: isEnded ? undefined : (MAKERS[id]?.line ?? p?.line),
+    line: isEnded ? undefined : (MAKERS[id]?.line ?? (p?.line ? here(p.line) : undefined)),
     chip: isEnded ? <Chip tone="coral">Ended</Chip> : s ? <Chip tone={s.tone}>{s.label}</Chip> : undefined,
     off: isEnded
       ? `${endedWords("2026-09-30")}.`
       : isOwn && !ownModels
         ? `Add your own ${noun} model below first.`
         : p?.state === "unavailable"
-          ? p.line || "Not available yet."
+          ? here(p.line) || "Not available yet."
           : undefined,
   };
 }
@@ -167,14 +178,15 @@ export function notReadyLine(p: Pick<ProviderStatus, "label" | "line">): string 
   return /\bis not ready yet\b/.test(p.line) ? p.line : `${p.label} is not ready yet. ${p.line}`;
 }
 
-/** The maker's state under its pick: what it needs while it is not ready, in the API's own words. */
+/** The maker's state under its pick: what it needs while it is not ready, in the API's own words, said on this page. */
 function MakerState({ p }: { p: ProviderStatus | undefined }) {
+  const here = useOnThisPage();
   if (!p || (p.state !== "needs_setup" && p.state !== "unavailable")) return null;
   return (
     <Note tone="sun" role="status">
       {/* The API's line may already say it is not ready (§45.34's sentence, with the maker's short name): then it is said once. */}
-      {notReadyLine(p)}
-      {p.lastError && p.lastError !== p.line ? ` Last problem: ${p.lastError}` : ""}
+      {here(notReadyLine(p))}
+      {p.lastError && p.lastError !== p.line ? ` Last problem: ${here(p.lastError)}` : ""}
     </Note>
   );
 }
@@ -193,8 +205,12 @@ function modelOption(m: MakerModelInfo) {
   };
 }
 
-/** The picked model's details: its line, price, last check and, when it was refused, the provider's own sentence. */
+/**
+ * The picked model's details: its plain name first, its exact ID one tap away (§45.36 E14), its line, price, last check
+ * and, when it was refused, the provider's own sentence, said on this page (§45.36 E17).
+ */
 function ModelDetails({ m }: { m: MakerModelInfo }) {
+  const here = useOnThisPage();
   const refused = m.status === "denied" || m.status === "not_found" || m.status === "error";
   return (
     <div className="st-stg-makermodel" data-maker-model={m.key}>
@@ -203,6 +219,11 @@ function ModelDetails({ m }: { m: MakerModelInfo }) {
         <strong>{m.label}</strong>
         <Chip tone={MODEL_STATUS[m.status].tone}>{MODEL_STATUS[m.status].label}</Chip>
       </p>
+      {m.modelId ? (
+        <StTech className="st-stg-tech">
+          <span>{modelTech({ label: m.label, host: hostName(m.host, m.baseUrl, m.hostId), modelId: m.modelId, region: m.region })}</span>
+        </StTech>
+      ) : null}
       <p className="st-stg-small">
         {makerWho(m)}
         {regionWords(m.region) ? ` · ${regionWords(m.region)}` : ""}
@@ -211,11 +232,11 @@ function ModelDetails({ m }: { m: MakerModelInfo }) {
       <p className="st-stg-small">{priceWords(m.price) ? `Price: ${priceWords(m.price)}.` : "No price known. Type yours under Prices and keys."}</p>
       {refused ? (
         <Note tone="coral" role="status">
-          {m.statusLine}
+          {here(m.statusLine)}
         </Note>
       ) : (
         <p className="st-stg-small">
-          {m.statusLine}
+          {here(m.statusLine)}
           {m.checkedAt ? ` (${whenText(m.checkedAt)})` : ""}
         </p>
       )}
@@ -243,6 +264,8 @@ function MakerCard({
   children?: ReactNode;
 }) {
   const card = MAKER_CARDS[kind];
+  // The makers' lines are said in this card (§45.36 E17); the options are made here, outside the card's own words.
+  const here = useOnThisPage(card.title);
   const { maker: makerKey, model: modelKey } = MAKER_FIELD_OF[kind];
   const maker = c.providers[makerKey];
   const picked = c.providers[modelKey] ?? null;
@@ -260,7 +283,7 @@ function MakerCard({
   const usesAll = kind === "audio" && maker === "elevenlabs" && mine.length > 1;
   return (
     <SetCard title={card.title} icon={card.icon} id={card.id} lede={card.lede}>
-      <SetPick<string> label={card.title} stack value={maker} options={card.list.map((id) => makerOption(providers, id, own, card.noun))} onChange={pickMaker} />
+      <SetPick<string> label={card.title} stack value={maker} options={card.list.map((id) => makerOption(providers, id, own, card.noun, here))} onChange={pickMaker} />
       {ended ? (
         <div className="st-stg-ended" role="status">
           <Note tone="coral" icon="alert">
@@ -301,11 +324,19 @@ function MakerCard({
       ) : used ? (
         <ModelDetails m={used} />
       ) : (
-        <p className="st-stg-active">
-          <span className="st-stg-active__word">Model</span>
-          <strong>{MAKERS[maker]?.model ?? p?.label ?? "Its own"}</strong>
-          {p ? <Chip tone={PROVIDER_STATE[p.state].tone}>{PROVIDER_STATE[p.state].label}</Chip> : null}
-        </p>
+        <>
+          <p className="st-stg-active">
+            <span className="st-stg-active__word">Model</span>
+            <strong>{MAKERS[maker]?.model ?? p?.label ?? "Its own"}</strong>
+            {p ? <Chip tone={PROVIDER_STATE[p.state].tone}>{PROVIDER_STATE[p.state].label}</Chip> : null}
+          </p>
+          {/* Its exact Bedrock model ID, one tap away (§45.36 E14). */}
+          {MAKERS[maker]?.tech ? (
+            <StTech className="st-stg-tech">
+              <span>{MAKERS[maker].tech}</span>
+            </StTech>
+          ) : null}
+        </>
       )}
       {ended ? null : <MakerState p={p} />}
       {kind === "audio" && maker === "polly" ? (
@@ -449,6 +480,9 @@ export function VideoSection({ ws }: { ws: string }) {
 
       <SetCard title="Quality" icon="film" lede="Better quality makes bigger files that take a little longer to upload.">
         <SetPick label="Video quality" value={c.video.quality} options={QUALITY} onChange={(v) => save({ video: { ...c.video, quality: v } })} />
+        <StTech className="st-stg-tech">
+          <span>The H.264 quality number (CRF): Good 23, Better 20, Best 17. Lower is sharper.</span>
+        </StTech>
       </SetCard>
 
       <SetCard title="Words and music" icon="sound" lede="What new videos start with. You can still change it for one video.">
@@ -471,9 +505,11 @@ export function VideoSection({ ws }: { ws: string }) {
         <MakerPrices
           ai={ai}
           open={priceOpen}
-          setOpen={(id) => {
-            setPriceOpen(id);
-            if (id === null) void usage.reload();
+          setOpen={(id, from) => {
+            if (id !== null) return setPriceOpen(id);
+            // Only that maker's own form closes: its save may end after the owner opened another one.
+            setPriceOpen((now) => (now === from ? null : now));
+            void usage.reload();
           }}
         />
         <h4 className="st-stg-subhead">Keys</h4>

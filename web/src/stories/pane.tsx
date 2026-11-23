@@ -7,9 +7,10 @@
 // An app is not kept when it is hidden with one of its dialogs open, or on a page that asks "Leave without saving?"
 // (the contract never keeps open sheets or unsaved drafts across a switch): it opens fresh the next time.
 //
-// Lamo Clips' main bundle imports this file (App.tsx, Nav.tsx): it carries no Lamo Stories screen, style or
-// engine code. StoriesApp itself loads in its own chunk (loadStoriesApp), fetched while the browser is idle once the
-// switcher is on screen (prefetchStoriesApp), so the first switch does not wait for it either.
+// Lamo Clips' main bundle imports this file (the shell: App.tsx and its workspace switch, app/WorkspaceDock.tsx): it
+// carries no Lamo Stories screen, style or engine code. StoriesApp itself loads in its own chunk (loadStoriesApp),
+// fetched while the browser is idle once the switch is on screen, and at once when the pointer or the keyboard comes
+// to its Lamo Stories choice (prefetchStoriesApp, preloadStoriesApp), so the first switch does not wait for it.
 //
 // Round 4 (§45.35 D16, D17, D18): each pane has its own error boundary, so one app breaking never takes the other
 // with it (Lamo Stories' own card is StoriesPaneBoundary below; Clip Factory's pane keeps Clip Factory's own
@@ -17,37 +18,16 @@
 // Factory's pane carries the search of its kept route (useKeptSearch), so Home opened for a campaign is kept across a
 // round trip; and a Lamo Stories redirect to another site that comes after a wait (Connect) waits while Clip Factory
 // is on screen.
-import { Component, createContext, Fragment, useContext, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ErrorInfo, type ReactNode } from "react";
+import { Component, Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ErrorInfo, type ReactNode } from "react";
 import { Button, Empty } from "../components/ui.tsx";
 import { navigate } from "../lib/router.ts";
+import { PaneContext, useAppActive, type AppName } from "../app/shell.ts";
 import { storiesEnabled } from "./flag.ts";
 import { isStoriesPath } from "./routes.ts";
 
-export type AppName = "clips" | "stories";
-
-export interface AppPane {
-  /** This app is the one on screen (always true while Lamo Stories is switched off). */
-  active: boolean;
-  /** Clip Factory's shell is mounted too (it then runs the Mac download host and the app badge for both). */
-  clipsMounted: boolean;
-}
-
-const OFF: AppPane = { active: true, clipsMounted: false };
-const PaneContext = createContext<AppPane>(OFF);
-
-export function useAppPane(): AppPane {
-  return useContext(PaneContext);
-}
-
-/** Whether the app this component belongs to is on screen. True whenever Lamo Stories is switched off. */
-export function useAppActive(): boolean {
-  return useContext(PaneContext).active;
-}
-
-/** A Lamo Stories page is on screen (never while Lamo Stories is switched off). */
-export function storiesOnScreen(): boolean {
-  return typeof location !== "undefined" && isStoriesPath(location.pathname) && storiesEnabled();
-}
+// The pane's context, which app is on screen and Clip Factory's kept search are the shell's own (app/shell.ts, which
+// both apps import); they are named here too for Lamo Stories' screens and the tests that read them from this file.
+export { KeptSearchProvider, PaneContext, storiesOnScreen, useAppActive, useAppPane, useKeptSearch, type AppName, type AppPane } from "../app/shell.ts";
 
 /**
  * Lamo Stories is switched on and Clip Factory is on screen. Lamo Stories' pages kept behind it stay quiet then: no
@@ -104,25 +84,6 @@ export function takeParkedStoriesAway(now: number = Date.now()): { url: string; 
 /** What Lamo Stories says when a held sign-in page ran out before it was back on screen. */
 export const AWAY_RAN_OUT = "That sign-in link ran out. Tap Connect again.";
 
-// ---------- Clip Factory's search, kept while it is hidden (§45.35 D18) ----------
-
-/** The search of Clip Factory's kept route, given by BothApps around Clip Factory's pane (null: no pane around). */
-const KeptSearch = createContext<string | null>(null);
-
-/** Gives Clip Factory's pane the search of the page it keeps (App.tsx, only while Lamo Stories is switched on). */
-export const KeptSearchProvider = KeptSearch.Provider;
-
-/**
- * The address's search for a Clip Factory screen: exactly `window.location.search` when no pane is around it (always,
- * while Lamo Stories is switched off), and the search of Clip Factory's own kept page inside its pane, so a page kept
- * behind Lamo Stories still reads its own address, not Lamo Stories'.
- */
-export function useKeptSearch(): string {
-  const kept = useContext(KeptSearch);
-  if (kept !== null) return kept;
-  return typeof location === "undefined" ? "" : location.search;
-}
-
 // ---------- StoriesApp's own chunk ----------
 
 type StoriesModule = typeof import("./StoriesApp.tsx");
@@ -160,6 +121,16 @@ export function prefetchStoriesApp(): void {
   const idle = (window as Window & { requestIdleCallback?: (fn: () => void, o?: { timeout: number }) => number }).requestIdleCallback;
   if (idle) idle(go, { timeout: 4000 });
   else setTimeout(go, 1200);
+}
+
+/**
+ * Fetches StoriesApp's chunk now: the pointer or the keyboard came to the switch's Lamo Stories choice, so the tap that
+ * follows finds it here (nothing is parsed during the switch's slide). Quiet when it cannot load (offline: the switch
+ * itself loads it again).
+ */
+export function preloadStoriesApp(): void {
+  if (loaded || !storiesEnabled()) return;
+  void loadStoriesApp().catch(() => undefined);
 }
 
 /** Test hook: forget the chunk and the prefetch. */
@@ -234,7 +205,7 @@ export function AppPanes({ on, clips, stories, fresh = null }: { on: AppName; cl
     if (!shown[app]) return null;
     const active = on === app;
     return (
-      <PaneContext.Provider value={{ active, clipsMounted: shown.clips }}>
+      <PaneContext.Provider value={{ active, clipsMounted: shown.clips, hosted: true }}>
         <div ref={app === "clips" ? clipsBox : storiesBox} data-app-pane={app} hidden={!active} inert={!active} style={active ? SHOWN : undefined}>
           {node}
         </div>
@@ -288,10 +259,10 @@ function StoriesProblem({ onRetry, onClips }: { onRetry: () => void; onClips: ()
   const active = useAppActive();
   return (
     <main style={PROBLEM_BOX} id={active ? "main" : undefined} data-stories-problem="">
-      <h1 className="sr-only">Lamo Stories had a problem</h1>
+      <h1 className="sr-only">Funded Clips had a problem</h1>
       <Empty
         icon="alert"
-        title="Lamo Stories had a problem."
+        title="Funded Clips had a problem."
         heading="h2"
         action={
           <>

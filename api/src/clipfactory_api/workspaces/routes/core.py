@@ -63,7 +63,7 @@ NO_TASK = "We could not find that helper task."
 NO_REFERENCE_VIDEO = "We could not find one of those reference videos. Pick them again."
 SETTINGS_CHANGED = "These settings changed on another screen. Reload and try again."
 CHARACTER_CHANGED = "This character changed on another screen. Reload it and try again."
-IMAGES_OFF = "AI pictures are off. Turn them on in Lamo Stories › Settings › Video › Picture maker."
+IMAGES_OFF = "AI pictures are off. Turn them on in Funded Clips › Settings › Video › Picture maker."
 SCRIPT_UNREADABLE = "We could not open the storyboard just now. Try again in a minute."
 CANCEL_ATTEMPTS = 3
 CHECK_JOBS_READ = 50  # the newest jobs looked at for a "Try it" still running (one takes a minute or two)
@@ -224,7 +224,11 @@ def list_workspaces(app: App, req: Request) -> Response:
 def _name_taken(items: list[Item], name: str, *, except_id: str | None = None) -> bool:
     if characters.same_name(name, ws.WORKSPACE_TYPES[ws.CLIPS].label):
         return True
-    return any(characters.same_name(i.get("workspaceName"), name) and i["workspaceId"] != except_id for i in items)
+    shown = ws.shown_workspace_name(name)  # compared as people see them, so two never show the same name
+    return any(
+        characters.same_name(ws.shown_workspace_name(i.get("workspaceName")), shown) and i["workspaceId"] != except_id
+        for i in items
+    )
 
 
 def create_workspace(app: App, req: Request) -> Response:

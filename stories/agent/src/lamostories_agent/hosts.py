@@ -42,7 +42,7 @@ from .util import log
 
 READ_TIMEOUT = 15 * 60  # a long structured answer with adaptive thinking can take minutes
 CHECK_TIMEOUT = 30.0
-KEY_PAGE = "Lamo Stories › Settings › AI › Provider keys"
+KEY_PAGE = "Funded Clips › Settings › AI › Provider keys"
 ELEVENLABS_BASE = "https://api.elevenlabs.io"
 ELEVENLABS_FORMAT = "mp3_44100_128"  # every ElevenLabs plan may ask for it
 MAX_ANSWER_BYTES = 64 * 1024 * 1024  # no host's answer is read past this
@@ -145,7 +145,7 @@ class ProviderKeys:
 
     def name(self, workspace_id: str, host: str) -> str:
         if workspace_id == keys.CLIPS or not keys.WORKSPACE_ID.match(workspace_id):
-            raise ValueError("not a Lamo Stories workspace id")
+            raise ValueError("not a Funded Clips workspace id")
         if host not in config.KEYED_HOSTS:
             raise ValueError("not a keyed host")
         return f"{self.prefix}{workspace_id}/providers/{host}"
@@ -162,7 +162,7 @@ class ProviderKeys:
             if code == "ResourceNotFoundException":
                 return None
             log("warn", "stories.provider_key_unreadable", host=host, code=code, error=type(e).__name__)
-            reason = f"Lamo Stories could not read the saved key for {host_words(host)}"
+            reason = f"Funded Clips could not read the saved key for {host_words(host)}"
             raise HostError(reason, code="KeyUnreadable", kind="key", found=("error", reason), host=host,
                             sent=False) from e  # fmt: skip
         raw = str(got.get("SecretString") or "").strip()
@@ -202,8 +202,8 @@ def key_for_other(saved: str, url: str | None) -> HostError:
     there = (origin_of(saved) or ("", "", 0))[1] or "another address"
     here = (origin_of(url) or ("", "", 0))[1] or "this model's address"
     reason = (
-        f"your OpenAI-compatible key is for {there}, not {here}, so Lamo Stories did not send it (use {there} for "
-        f"this model, or remove the key in {KEY_PAGE} and paste the key for {here})"
+        f"your OpenAI-compatible key is for {there}, not {here}, so Funded Clips did not send it (use {there} "
+        f"for this model, or remove the key in {KEY_PAGE} and paste the key for {here})"
     )
     return HostError(reason, code="KeyForOtherAddress", kind="key", found=("denied", reason),
                      host="openai_compatible", sent=False)  # fmt: skip

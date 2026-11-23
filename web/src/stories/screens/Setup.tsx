@@ -20,7 +20,7 @@ import { useLoad } from "../../lib/hooks.ts";
 import { storiesSound } from "../prefs.ts";
 import { storiesApi } from "../api/client.ts";
 import { EFFORT_LABEL, type Effort, type ModelInfo, type Onboarding, type OnboardStep, type Platform, type SocialAccount, type StoriesAiConfig, type StoriesConfig } from "../api/types.ts";
-import { madeBy } from "../settings/bits.tsx";
+import { madeBy, MODEL_STATUS } from "../settings/bits.tsx";
 import { aiBody } from "../settings/data.ts";
 import {
   celebrate,
@@ -40,7 +40,7 @@ import {
   useOnboarding,
   type StIconName,
 } from "../ui.tsx";
-import { DisconnectedNote, PLACE, PlatformCard, useSocial } from "./Connections.tsx";
+import { DisconnectedNote, PlatformCard, useSocial } from "./Connections.tsx";
 import type { StoriesScreenProps } from "./types.ts";
 
 export const SETUP_ORDER: OnboardStep[] = ["ai", "model", "effort", "video", "agents", "instagram", "tiktok", "youtube", "facebook", "x", "done"];
@@ -144,13 +144,8 @@ function CheckRow({ checking, busy, onCheck }: { checking: boolean; busy: boolea
   );
 }
 
-const STATE_CHIP: Record<ModelInfo["status"], { label: string; tone: string }> = {
-  ok: { label: "Works", tone: "mint" },
-  not_checked: { label: "Not checked yet", tone: "sky" },
-  denied: { label: "No access", tone: "coral" },
-  not_found: { label: "Not found", tone: "coral" },
-  error: { label: "Had a problem", tone: "sun" },
-};
+/** The same words as Settings › AI (§45.36 E17: one set everywhere). */
+const STATE_CHIP: Record<ModelInfo["status"], { label: string; tone: string }> = MODEL_STATUS;
 
 /** Step 1: what Lamo Stories uses, the models and their state, Check models, and "These look right" (§45.34). */
 function EnvironmentStep({ ws, ai, onSaved, onChecked, busy, setBusy }: { ws: string; ai: Ai; onSaved: (next: StoriesAiConfig) => void; onChecked: (models: ModelInfo[]) => void; busy: boolean; setBusy: (b: boolean) => void }) {
@@ -159,7 +154,7 @@ function EnvironmentStep({ ws, ai, onSaved, onChecked, busy, setBusy }: { ws: st
   return (
     <>
       <p className="st-setup__text">
-        Lamo Stories is its own studio inside Clip Factory, with its own AI helpers, its own settings and its own social accounts. Nothing you set here
+        Funded Clips is its own studio next to Clip Factory, with its own AI helpers, its own settings and its own social accounts. Nothing you set here
         changes Clip Factory.
       </p>
       <ul className="st-setup__facts">
@@ -175,7 +170,7 @@ function EnvironmentStep({ ws, ai, onSaved, onChecked, busy, setBusy }: { ws: st
           You pick the model and how hard it thinks. Nothing is swapped behind your back.
         </li>
       </ul>
-      <h3 className="st-setup__sub">The AI models Lamo Stories can use</h3>
+      <h3 className="st-setup__sub">The AI models Funded Clips can use</h3>
       <ul className="st-setup__models" aria-label="The AI models and their state">
         {models.map((m) => (
           <li key={m.key} className="st-setup__model" data-status={m.status}>
@@ -194,7 +189,7 @@ function EnvironmentStep({ ws, ai, onSaved, onChecked, busy, setBusy }: { ws: st
           try {
             const next = await storiesApi().putAi(ws, aiBody(ai.ai, ai.ai.version, ["environment"]));
             celebrate(centerOf(el));
-            toast.success("Great! Next, pick the model Lamo Stories uses most.");
+            toast.success("Great! Next, pick the model Funded Clips uses most.");
             onSaved(next);
           } catch (e) {
             toast.error(friendlyMessage(e));
@@ -243,7 +238,7 @@ function ModelStep({
     try {
       const next = await storiesApi().putAi(ws, aiBody({ ...ai.ai, defaultModel: chosen.key }, ai.ai.version, ["model"]));
       celebrate(centerOf(el));
-      toast.success(`${chosen.label} is Lamo Stories' default model now.`);
+      toast.success(`${chosen.label} is Funded Clips' default model now.`);
       onSaved(next);
     } catch (e) {
       toast.error(friendlyMessage(e));
@@ -256,10 +251,10 @@ function ModelStep({
     <>
       <p className="st-setup__text">
         This model writes the stories, gives ideas and checks the facts, unless you pick another one for a task or an agent later. It is only for
-        Lamo Stories: Clip Factory keeps its own.
+        Funded Clips: Clip Factory keeps its own.
       </p>
       <StPick<string>
-        label="Lamo Stories' default model"
+        label="Funded Clips' default model"
         stack
         value={pick}
         options={models.map((m) => ({ value: m.key, label: m.label, line: modelLine(m) }))}
@@ -328,7 +323,7 @@ function EffortStep({ ws, ai, held, onSaved, busy, setBusy }: { ws: string; ai: 
         You can pick a different level per task later.
       </p>
       <StPick<Effort>
-        label="Lamo Stories' default effort"
+        label="Funded Clips' default effort"
         value={(pick ?? "") as Effort}
         options={offers.map((e) => ({ value: e, label: EFFORT_LABEL[e], line: e === model?.defaultEffort ? "The model's own" : undefined }))}
         onChange={setPick}
@@ -415,7 +410,7 @@ function VideoStep({ ws, onSaved, busy, setBusy }: { ws: string; onSaved: () => 
         <p className="st-note st-note--sun" role="note">
           <StIcon name="alert" size={18} />
           Nova Reel is not ready yet. Until it is, new videos, remakes and changes stop and say what is missing: nothing switches to the built-in
-          animation by itself. Pick Built-in animation to keep making videos. To make it ready, tap Try it in Settings › Video: it makes one 6-second
+          animation by itself. Pick Built-in animation above to keep making videos. To make it ready, tap Try it in Settings › Video: it makes one 6-second
           test shot. Posts made with Nova Reel get the platforms' AI labels.
         </p>
       ) : null}
@@ -451,7 +446,7 @@ function VideoStep({ ws, onSaved, busy, setBusy }: { ws: string; onSaved: () => 
         onSave={async (el) => {
           // An ended maker is never saved again: the API would keep an older pick, and nothing could make a video.
           if (ended) {
-            toast.error("Amazon Nova Reel was ended by Amazon on 30 Sep 2026. Pick another video maker in Lamo Stories › Settings › Video.");
+            toast.error("Amazon Nova Reel was ended by Amazon on 30 Sep 2026. Pick another video maker in Funded Clips › Settings › Video.");
             return;
           }
           setBusy(true);
@@ -509,8 +504,8 @@ function AgentsStep({ ws }: { ws: string }) {
 
 /**
  * Steps 6 to 10: the platform's card, the same as on Social accounts (its app choice, keys and Connect). `line`: the
- * onboarding's own reason the step stays to do (the account is Lamo Clips' own, §45.35 D11), said instead of the
- * page's own sentence for it.
+ * onboarding's own reason the step stays to do (the account is Clip Factory's own, §45.35 D11), said only where the
+ * card does not say it already (the card says why for an account that reads same_as_clips).
  */
 function ConnectStep({ ws, platform, line }: { ws: string; platform: Platform; line?: string | undefined }) {
   const social = useSocial(ws);
@@ -522,18 +517,14 @@ function ConnectStep({ ws, platform, line }: { ws: string; platform: Platform; l
   if (!a) return <StError message="We could not find that account. Open Social accounts." />;
   return (
     <>
+      {/* The card below says up front to use a new account, never Clip Factory's (§45.37 G8), and why an account that
+          is Clip Factory's own is stopped: each once, so the step does not say them again. */}
       <p className="st-setup__text">
-        Connect the {PLATFORM_NAME[platform]} account that gets Lamo Stories' videos. It stays separate from Clip Factory's. You can skip this and
+        Connect the {PLATFORM_NAME[platform]} account that gets Funded Clips' videos. It stays separate from Clip Factory's. You can skip this and
         connect it later.
       </p>
       {gone ? <DisconnectedNote choice={gone.choice} onClose={() => setGone(null)} /> : null}
-      {a.connectionStatus === "same_as_clips" ? (
-        <p className="st-note st-note--coral" role="note">
-          <StIcon name="alert" size={18} />
-          This is Clip Factory's own {PLACE[platform]}, so this step stays to do. Tap Pick another {PLACE[platform]} below and sign in with a different one made
-          for Clip Factory Stories.
-        </p>
-      ) : line ? (
+      {line && a.connectionStatus !== "same_as_clips" ? (
         <p className="st-note st-note--coral" role="note">
           <StIcon name="alert" size={18} />
           {line}
@@ -554,16 +545,16 @@ function ConnectStep({ ws, platform, line }: { ws: string; platform: Platform; l
 }
 
 const WORDS: Record<OnboardStep, { title: string; lede: string }> = {
-  ai: { title: "Set up the AI", lede: "What Lamo Stories uses, and why." },
-  model: { title: "Pick your default model", lede: "The AI model Lamo Stories uses unless you say otherwise." },
+  ai: { title: "Set up the AI", lede: "What Funded Clips uses, and why." },
+  model: { title: "Pick your default model", lede: "The AI model Funded Clips uses unless you say otherwise." },
   effort: { title: "Pick your default effort", lede: "How hard the model thinks." },
   video: { title: "Pick how videos are made", lede: "The video maker, apart from the AI models." },
   agents: { title: "Meet your agents and skills", lede: "The five helpers of your studio." },
-  instagram: { title: "Connect Instagram", lede: "Lamo Stories' own Instagram account." },
-  tiktok: { title: "Connect TikTok", lede: "Lamo Stories' own TikTok account." },
-  youtube: { title: "Connect YouTube", lede: "Lamo Stories' own YouTube channel." },
-  facebook: { title: "Connect Facebook", lede: "Lamo Stories' own Facebook Page." },
-  x: { title: "Connect X", lede: "Lamo Stories' own X account." },
+  instagram: { title: "Connect Instagram", lede: "Funded Clips' own Instagram account." },
+  tiktok: { title: "Connect TikTok", lede: "Funded Clips' own TikTok account." },
+  youtube: { title: "Connect YouTube", lede: "Funded Clips' own YouTube channel." },
+  facebook: { title: "Connect Facebook", lede: "Funded Clips' own Facebook Page." },
+  x: { title: "Connect X", lede: "Funded Clips' own X account." },
   done: { title: "Done", lede: "Your studio is ready." },
 };
 
@@ -635,14 +626,14 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
   if (ob.error && !data)
     return (
       <section className="st-page st-setup">
-        <h1 className="st-head__title">Set up Lamo Stories</h1>
+        <h1 className="st-head__title">Set up Funded Clips</h1>
         <StError message={ob.error} onRetry={() => void ob.reload()} />
       </section>
     );
   if (!data)
     return (
       <section className="st-page st-setup">
-        <h1 className="sr-only">Set up Lamo Stories</h1>
+        <h1 className="sr-only">Set up Funded Clips</h1>
         <StLoading label="Getting the setup ready…" />
       </section>
     );
@@ -718,14 +709,14 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
       body = data.finishedAt ? (
         <div className="st-setup__done">
           <StMascot mood="cheer" size={120} />
-          <p className="st-setup__text">Lamo Stories is set up. Have fun making videos!</p>
+          <p className="st-setup__text">Funded Clips is set up. Have fun making videos!</p>
         </div>
       ) : (
         <div className="st-setup__done">
           <StMascot mood="cheer" size={120} tone="mint" />
           <p className="st-setup__text">
             {left.length
-              ? `You can start making videos now. ${left.length === 1 ? "One thing is" : `${left.length} things are`} still on the list; the dashboard keeps it until you finish.`
+              ? `You can start making videos now. ${left.length === 1 ? "One thing is" : `${left.length} things are`} still on the list; the dashboard keeps it for you, also after you finish.`
               : "Everything is set up. Tap Finish!"}
           </p>
         </div>
@@ -746,7 +737,7 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
               await patch({ finish: true });
               starBurst(centerOf(el), 140);
               storiesSound("success");
-              toast.success("Lamo Stories is set up!");
+              toast.success("Funded Clips is set up!");
               void refreshDashboard(ws).catch(() => undefined);
               setTimeout(() => storiesGoLater("/stories"), 1400);
             } catch (err) {
@@ -771,7 +762,7 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
       <header className="st-setup__head">
         <StRing done={data.done} total={data.total} size={96} />
         <div className="st-setup__intro">
-          <h1 className="st-head__title">Set up Lamo Stories</h1>
+          <h1 className="st-head__title">Set up Funded Clips</h1>
           <p className="st-head__lede">
             {data.done} of {data.total} done. Skip anything you do not need yet: making videos never waits for it.
           </p>

@@ -119,7 +119,7 @@ def resolve(
         effort = str(ai.get("defaultEffort") or listed["defaultEffort"])
     if info is None:
         raise ModelUnavailable(
-            f"The model '{model_key}' is not in Lamo Stories' list. Pick another in Settings › AI.",
+            f"The model '{model_key}' is not in Funded Clips' list. Pick another in Settings › AI.",
             model=model_key,
             effort=effort,
         )
@@ -212,24 +212,24 @@ JSON_AGAIN = "Answer again with only the whole JSON object, fixed."
 NO_TOOLS_NUDGE = "You have no tools in this conversation: answer in words only and never pretend to use a tool."
 NO_EFFORT_LINE = "This model has no effort setting; it runs at its own level."
 UNAVAILABLE = (
-    "{label} isn't available right now: {reason}. Pick another model in Lamo Stories › Settings › AI, or try again."
+    "{label} isn't available right now: {reason}. Pick another model in Funded Clips › Settings › AI, or try again."
 )
 REFUSED = (
     "{label} said no to this request. Change the wording a little and try again, or pick another model in "
-    "Lamo Stories › Settings › AI."
+    "Funded Clips › Settings › AI."
 )
-AGENT_OFF = "{name} is switched off. Switch it on in Lamo Stories › Settings › Agents."
+AGENT_OFF = "{name} is switched off. Switch it on in Funded Clips › Settings › Agents."
 EFFORT_REFUSED = (
-    "{label} does not accept {effort} effort here (Amazon Bedrock refused it). Pick another level in Lamo Stories › "
-    "Settings › AI."
+    "{label} does not accept {effort} effort here (Amazon Bedrock refused it). Pick another level in "
+    "Funded Clips › Settings › AI."
 )
 # The same, for a model on a keyed host (§45.37 G4): the host that refused it is named.
 EFFORT_REFUSED_HOST = (
-    "{label} does not accept {effort} effort here ({host} refused it). Pick another level in Lamo Stories › "
+    "{label} does not accept {effort} effort here ({host} refused it). Pick another level in Funded Clips › "
     "Settings › AI."
 )
 TOOLS_REFUSED_HOST = (
-    "{label} does not accept tool use here ({host} refused it). Tap Edit on its row in Lamo Stories › "
+    "{label} does not accept tool use here ({host} refused it). Tap Edit on its row in Funded Clips › "
     'Settings › AI and turn off "It can use tools", then tap Check models.'
 )
 # Bedrock refused the request's tools for this model (§45.36 E6): an added model's "It can use tools" switch (in the
@@ -237,11 +237,11 @@ TOOLS_REFUSED_HOST = (
 # not clear the model's last status (the API clears it only for a new model id or Region, §45.35 D6), so the sentence
 # ends with the step that does: Check models, which then shows "Works".
 TOOLS_REFUSED = (
-    "{label} does not accept tool use here (Amazon Bedrock refused it). Tap Edit on its row in Lamo Stories › "
+    "{label} does not accept tool use here (Amazon Bedrock refused it). Tap Edit on its row in Funded Clips › "
     'Settings › AI and turn off "It can use tools", then tap Check models.'
 )
 TOOLS_REFUSED_BUNDLED = (
-    "{label} does not accept tool use here (Amazon Bedrock refused it). Pick another model in Lamo Stories › "
+    "{label} does not accept tool use here (Amazon Bedrock refused it). Pick another model in Funded Clips › "
     "Settings › AI."
 )
 CHECK_TASK = "check_models"  # Check models: one bare request per model (§45.25, §45.34)

@@ -17,7 +17,8 @@ import { forgetVisit } from "../src/stories/chat/device.ts";
 import { fileModels, forgetModels } from "../src/stories/chat/models.ts";
 import { forgetProjectNames } from "../src/stories/chat/project.ts";
 import { forgetUploads } from "../src/stories/chat/references/uploads.ts";
-import { sounds } from "../src/lib/sounds.ts";
+// Lamo Stories plays its own sound engine (§45.38 A2): every engine's play is watched.
+import { SoundEngine } from "../src/lib/sound.ts";
 import type { StoriesPage } from "../src/stories/routes.ts";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -246,7 +247,7 @@ describe("the chat", () => {
     conv.effort = "max";
     await openChat(CONV.winter);
     expect(line()).toBe("Model: Claude Opus 5.5 · Effort: Maximum");
-    expect($(".st-chat-ai__from")?.textContent).toBe("Effort saved for this chat. The model comes from Lamo Stories › Settings › AI.");
+    expect($(".st-chat-ai__from")?.textContent).toBe("Effort saved for this chat. The model comes from Funded Clips › Settings › AI.");
   });
 
   it("Try again on a failed answer sends its picture again (uploaded once more), and Edit it keeps the pictures", async () => {
@@ -361,7 +362,7 @@ describe("references", () => {
   }, 20_000);
 
   it("with the contract's answer (no job): the moving bar while it runs, and a cheer only for a real result", async () => {
-    const play = vi.spyOn(sounds, "play");
+    const play = vi.spyOn(SoundEngine.prototype, "play");
     store.knobs.refSeconds = 1.5;
     await render(<ReferencesScreen ws="stories" page={page({ name: "reference", refId: REF.ready })} />);
     await until(() => !!byText("button", "Analyze it"));
@@ -378,10 +379,10 @@ describe("references", () => {
   }, 20_000);
 
   it("a failed re-run is not cheered: it says so, keeps the last analysis and offers another model", async () => {
-    const play = vi.spyOn(sounds, "play");
+    const play = vi.spyOn(SoundEngine.prototype, "play");
     await render(<ReferencesScreen ws="stories" page={page({ name: "reference", refId: REF.analyzed })} />);
     await until(() => !!$(".st-ref-analysis"));
-    store.knobs.refFail = "Claude Fable 5.2 isn't available right now: no access. Pick another model in Lamo Stories › Settings › AI, or try again.";
+    store.knobs.refFail = "Claude Fable 5.2 isn't available right now: no access. Pick another model in Funded Clips › Settings › AI, or try again.";
     store.knobs.refNoJob = true; // an answer without the job (the API before §45.34)
     await click(byText("button", "Analyze again"));
     await until(() => !!$(".st-ref-busybar"));
@@ -406,7 +407,7 @@ describe("references", () => {
 
     store.knobs.refJobInGet = true;
     store.knobs.refSeconds = 9;
-    store.knobs.refFail = "Claude Fable 5.2 isn't available right now: no access. Pick another model in Lamo Stories › Settings › AI, or try again.";
+    store.knobs.refFail = "Claude Fable 5.2 isn't available right now: no access. Pick another model in Funded Clips › Settings › AI, or try again.";
     await click(byText("button", "Try again"));
     await until(() => !!$(".st-ref-card2 .st-chat-progress"));
     await until(() => ($(".st-ref-failed")?.textContent ?? "").includes("no access"), 8000);

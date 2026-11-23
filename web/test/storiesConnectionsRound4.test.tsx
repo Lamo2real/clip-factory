@@ -100,18 +100,18 @@ describe("Check now (§45.35 D21)", () => {
 describe("one toast per pick (§45.35 D21)", () => {
   it("picking Lamo Stories' own account asks the question with no toast of its own; Yes says it once", async () => {
     await render();
-    await click(button(card("instagram"), /lamo\.stories/));
+    await click(button(card("instagram"), /funded\.clips/));
     expect(toasts()).toEqual([]);
     const ask = card("instagram").querySelector<HTMLElement>(".st-intended")!;
-    expect(ask.textContent).toContain("Is this your Lamo Stories account?");
+    expect(ask.textContent).toContain("Is this your Funded Clips account?");
     await click(button(ask, "Yes, that's it"));
-    expect(toasts()).toEqual(["Great! Lamo Stories posts to lamo.stories on Instagram."]);
+    expect(toasts()).toEqual(["Great! Funded Clips posts to this Instagram account (funded.clips)."]);
   });
 
   it("tapping Clip Factory's own place says why once, sends nothing and asks nothing (§45.37 G8)", async () => {
     await render();
     await click(button(card("instagram"), /clipfactory\.gg/));
-    expect(toasts()).toEqual(["This is Clip Factory's own account. Clip Factory Stories needs its own separate account: sign in with a different one."]);
+    expect(toasts()).toEqual(["This is Clip Factory's own account. Funded Clips needs its own separate account: sign in with a different one."]);
     expect(card("instagram").querySelector(".st-intended")).toBeNull();
     expect((await api.social("stories")).accounts.find((a) => a.platform === "instagram")?.connectionStatus).toBe("choose_account");
   });
@@ -151,10 +151,10 @@ describe("Lamo Clips' account found later (§45.35 D11)", () => {
     const o = await api.getOnboarding("stories");
     expect(o.steps.find((s) => s.step === "x")).toEqual({ step: "x", label: "Connect X", state: "todo", line: sameAsClipsLine("x") });
     // §45.37 G8: never "use it for both"; a separate account.
-    expect(sameAsClipsLine("x")).toBe("This is Clip Factory's own account. Clip Factory Stories needs its own separate account: sign in with a different one.");
+    expect(sameAsClipsLine("x")).toBe("This is Clip Factory's own account. Funded Clips needs its own separate account: sign in with a different one.");
     const fresh = await api.social("stories");
-    expect(fresh.accounts.find((a) => a.platform === "x")).toMatchObject({ connectionStatus: "same_as_clips", reason: "clips_now", warning: "This is Clip Factory's account now. Connect a different account made for Clip Factory Stories." });
-    // A separate account made for Clip Factory Stories: connected, and the step ticks.
+    expect(fresh.accounts.find((a) => a.platform === "x")).toMatchObject({ connectionStatus: "same_as_clips", reason: "clips_now", warning: "This is Clip Factory's account now. Connect a different account made for Funded Clips." });
+    // A separate account made for Funded Clips: connected, and the step ticks.
     await api.connectSocial("stories", "x");
     const after = await api.getOnboarding("stories");
     expect(after.steps.find((s) => s.step === "x")).toEqual({ step: "x", label: "Connect X", state: "done" });
