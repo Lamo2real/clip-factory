@@ -1,5 +1,6 @@
 import { expect, test, type Page } from "@playwright/test";
 import { settle } from "./helpers.ts";
+import { watchFor } from "./motionHelpers.ts";
 
 // Home, Jobs, the job page and the app shell: fixes from the UI audit (web/screenshots/AUDIT-REPORT.md, group
 // "shell"). Each test names its finding.
@@ -89,8 +90,10 @@ test.describe("jobs list", () => {
     const older = page.getByRole("button", { name: "Show older jobs" });
     await expect(rows).toHaveCount(3);
 
+    // The shake is short (ACT_FAIL_MS): watch for it from before the tap, so a busy machine cannot hide it.
+    const shook = await watchFor(older, ".act.is-fail");
     await older.click();
-    await expect(older.locator(".act")).toHaveClass(/is-fail/);
+    await expect.poll(shook).toBe(true);
     await expect(page.locator(".toast--error")).toBeVisible();
     await expect(rows).toHaveCount(3);
 
@@ -135,8 +138,10 @@ test.describe("Home", () => {
     const link = page.getByLabel("YouTube, Twitch or Kick link");
     await link.fill("https://youtu.be/dQw4w9WgXcQ");
     const make = page.getByRole("button", { name: "Make clips" });
+    // The shake is short (ACT_FAIL_MS): watch for it from before the tap, so a busy machine cannot hide it.
+    const shook = await watchFor(make, ".act.is-fail");
     await make.click();
-    await expect(make.locator(".act")).toHaveClass(/is-fail/);
+    await expect.poll(shook).toBe(true);
     await expect(page.locator(".toast--error")).toContainText("Try again");
     await expect(page).toHaveURL(/\/$/);
     await expect(link).toHaveValue("https://youtu.be/dQw4w9WgXcQ");

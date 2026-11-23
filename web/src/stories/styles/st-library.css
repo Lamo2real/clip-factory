@@ -1,0 +1,753 @@
+/* ---------- Library (screens/Library.tsx) · the owner's warm glass of 22 Nov ----------
+   The kinds are pills (the chosen one solid cream with espresso words, sliding on <Glide>; the rest glass). Every
+   file and every project is a media row on its own smoky glass (MediaRow: the thumbnail on the warm glow, the words,
+   a bar for how far a project has come, Download as the control). A project opens on a lit hero (its cover, title
+   and state) beside "How it was made", whose production runs are wells inside the card. Nothing empty is ever a
+   blank box: a character on lit glass and the one tap that fixes it.
+   Only the contract's tokens (styles/GLASS-CONTRACT.md); radii by kind and concentric: a media row keeps one even
+   inset, --st-bezel-pad, on every side, and its thumbnail hugs the row's corners at that gap (20 - 10 = 10); the runs
+   hug "How it was made" at the surface gap (20 - 6 = 14). */
+
+.st-library__panel {
+  display: grid;
+  gap: var(--st-gap);
+  min-width: 0;
+}
+
+/* ---------- The kinds: pills ---------- */
+
+.st-library__kinds {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--st-space-2);
+  min-width: 0;
+}
+/* On a phone the seven pills are one row that scrolls sideways (they took three rows and pushed the projects under
+   the fold). The row keeps room around the pills for the focus ring and the glide's glow, inside the page's own
+   padding; the chosen pill is scrolled into view (Library.tsx). */
+@media (max-width: 767.98px) {
+  .st-library__kinds {
+    flex-wrap: nowrap;
+    margin: calc(-1 * var(--st-space-2));
+    padding: var(--st-space-2);
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-padding-inline: var(--st-space-2);
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+  }
+  .st-library__kinds::-webkit-scrollbar {
+    display: none;
+  }
+  .st-library__kinds > .st-tabs__tab {
+    flex: none;
+    scroll-snap-align: start;
+  }
+}
+/* The shell's older tab rules (st-controls.css .st-tabs__tab, kept on these pills for their tests) step aside: each
+   pill keeps the figure's own look (glass-figures.css .st-pill). */
+.st-library__kinds > .st-tabs__tab {
+  flex-direction: row;
+  align-items: center;
+  gap: var(--st-space-2);
+  padding: 0 var(--st-space-4);
+  border-radius: var(--st-r-round);
+  background: var(--st-fill-control);
+  color: var(--st-text);
+  font-weight: var(--st-weight-ui);
+  transition:
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    color var(--st-dur-hover) var(--st-ease-out),
+    box-shadow var(--st-dur-hover) var(--st-ease-out),
+    transform var(--st-dur-tap) var(--st-ease-out);
+}
+.st-library__kinds > .st-tabs__tab:not(.is-on):hover {
+  background: var(--st-fill-control-hover);
+  color: var(--st-text-strong);
+}
+.st-library__kinds > .st-tabs__tab.is-on {
+  background: var(--st-cream);
+  color: var(--st-on-cream);
+  box-shadow: var(--st-depth-1);
+}
+.st-library__kinds > .st-tabs__tab.is-on:hover {
+  background: var(--st-cream-hover);
+}
+/* Once the glide has measured, it is the cream; the chosen pill lets it show through (and the glide lights up on hover). */
+.st-library__kinds.has-glide > .st-tabs__tab.is-on {
+  background: transparent;
+  box-shadow: none;
+}
+.stories-app .st-library__glide {
+  border-radius: var(--st-r-round);
+  background: var(--st-selected);
+  box-shadow: var(--st-depth-1), var(--st-glow-behind);
+}
+.stories-app .st-library__kinds:has(> .st-tabs__tab.is-on:hover) > .st-library__glide {
+  background: var(--st-cream-hover);
+}
+/* The focus ring on every pill, the chosen one too (the rules above take its shadow away for the glide). */
+.st-library__kinds > .st-tabs__tab:focus-visible,
+.st-library__kinds.has-glide > .st-tabs__tab.is-on:focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
+}
+
+/* ---------- "Only files of …" with the pill that shows every video again ---------- */
+
+.st-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--st-space-2) var(--st-space-3);
+  margin: 0;
+  padding: var(--st-space-2) var(--st-space-2) var(--st-space-2) var(--st-inset);
+  color: var(--st-text-soft);
+}
+.st-filter__words {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.st-filter strong {
+  color: var(--st-text-strong);
+  font-weight: var(--st-weight-ui);
+}
+
+/* ---------- The media rows: files and projects ---------- */
+
+.st-files,
+.st-projects {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 22rem), 1fr));
+  gap: var(--st-gap);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* A file row carries Download at its right from 560 px: wider columns keep its words from being squeezed. */
+.st-files {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 26rem), 1fr));
+}
+/* Each row is a media row on its own glass with one even inset on every side (--st-bezel-pad 10). The thumbnail fills
+   the row's height at that inset, so it hugs the row's corners (20 - 10 = 10, like the reference's media row); the
+   words get a little air of their own above and below. On a phone a file's Download keeps the same inset on both
+   sides and at the bottom. */
+.st-file.st-media,
+.st-project .st-media {
+  padding: var(--st-bezel-pad);
+}
+.st-file > .st-media__thumb,
+.st-project .st-media__thumb {
+  align-self: stretch;
+  height: auto;
+  min-height: var(--st-thumb);
+  aspect-ratio: auto;
+  /* 20 - 10 = 10: the contract's bezel step */
+  border-radius: var(--st-r-inner);
+}
+.st-file > .st-media__text,
+.st-project .st-media__text {
+  padding-block: var(--st-space-1);
+}
+.st-file {
+  min-width: 0;
+}
+
+/* The thumbnail: the picture itself, or the kind's icon on the warm out-of-focus glow. */
+.st-file__thumb,
+.st-project__cover,
+.st-projectview__cover {
+  position: relative;
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  color: var(--st-text-strong);
+  background:
+    radial-gradient(90% 80% at 22% 14%, rgb(var(--st-amber-rgb) / 0.55), transparent 66%),
+    radial-gradient(80% 80% at 92% 100%, rgb(var(--st-copper-rgb) / 0.5), transparent 70%),
+    var(--st-base-2);
+}
+.st-file__thumb,
+.st-project__cover {
+  width: 100%;
+  height: 100%;
+}
+.st-file__thumb img,
+.st-project__cover img,
+.st-projectview__cover img {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.st-file__badge {
+  position: relative;
+  display: grid;
+  place-items: center;
+}
+
+/* The words: the kind as a caps caption, the story it belongs to (a link), its version, size and date. */
+.st-file__kind {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--st-text-amber);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.st-file__title {
+  display: block;
+  color: var(--st-text-strong);
+  font-family: var(--st-font);
+  font-size: var(--st-fs-body);
+  font-weight: var(--st-weight-ui);
+  line-height: 1.3;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+}
+a.st-file__title {
+  display: flex;
+  align-items: center;
+  width: fit-content;
+  max-width: 100%;
+  min-height: var(--st-tap);
+  min-width: var(--st-tap);
+  border-radius: var(--st-r-tiny);
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  text-decoration-thickness: 2px;
+  text-underline-offset: 4px;
+  transition:
+    color var(--st-dur-hover) var(--st-ease-out),
+    text-decoration-color var(--st-dur-hover) var(--st-ease-out);
+}
+a.st-file__title:hover {
+  color: var(--st-text-amber);
+  text-decoration-color: var(--st-accent);
+}
+.st-file__meta {
+  display: block;
+  overflow-wrap: anywhere;
+}
+/* Download fills its row on a phone (one big target), and sits at the right from 560 px. */
+.st-file .st-file__download {
+  flex: 1 1 auto;
+}
+@media (min-width: 560px) {
+  .st-file .st-file__download {
+    flex: none;
+  }
+}
+
+/* A project: the whole row is the link, with a round glass arrow at its end (part of the link, at the right on every
+   width). Hover lights it like a hero (a deeper veil, a brighter edge, more glow) and turns the arrow cream; the row
+   never moves and its filter never changes. */
+.st-project {
+  display: grid;
+  min-width: 0;
+}
+.st-project .st-media {
+  grid-template-columns: var(--st-thumb) minmax(0, 1fr) auto;
+  grid-template-areas: "thumb text controls";
+}
+.st-project .st-media__controls {
+  padding-inline-end: var(--st-space-1);
+}
+.st-project__go {
+  display: grid;
+  place-items: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--st-r-round);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control), var(--st-depth-1);
+  color: var(--st-text);
+  transition:
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    color var(--st-dur-hover) var(--st-ease-out);
+}
+.st-project__link:hover .st-project__go {
+  background: var(--st-cream);
+  color: var(--st-on-cream);
+}
+/* On the narrowest phones the words need the room more than the arrow does (the whole row is still the link). */
+@media (max-width: 399.98px) {
+  .st-project .st-media {
+    grid-template-columns: var(--st-thumb) minmax(0, 1fr);
+    grid-template-areas: "thumb text";
+  }
+  .st-project .st-media__controls {
+    display: none;
+  }
+}
+.st-project__link {
+  display: grid;
+  align-content: center;
+  min-width: 0;
+  color: var(--st-text);
+  text-decoration: none;
+  transition: box-shadow var(--st-dur-hover) var(--st-ease-out);
+}
+.st-project__link:hover {
+  background: var(--st-tint-hero);
+  box-shadow: var(--st-sheen-hero), var(--st-depth-2), var(--st-glow-behind);
+}
+.st-project__link.st-glass--hero:hover {
+  box-shadow: var(--st-sheen-hero), var(--st-depth-3), var(--st-glow-behind);
+}
+.st-project__link:hover::after {
+  background: var(--st-edge-hero);
+}
+.st-project__link:focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring), var(--st-depth-1);
+}
+.st-project__title {
+  display: block;
+  color: var(--st-text-strong);
+  line-height: 1.3;
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+.st-project__meta {
+  display: block;
+  overflow-wrap: anywhere;
+}
+.st-project__state {
+  display: block;
+  margin-top: var(--st-space-1);
+}
+/* How far it has come: the media row's hairline bar (orange, a shape) with the state's words beside it. The bar is
+   for the eyes only (Library.tsx): the words say the same. */
+.st-project__bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--st-space-1) var(--st-space-3);
+  margin-top: var(--st-space-2);
+  min-width: 0;
+}
+.st-project__track {
+  position: relative;
+  flex: 1 1 6rem;
+  height: 6px;
+  overflow: hidden;
+  border-radius: var(--st-r-round);
+  background: var(--st-track);
+}
+.st-project__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: var(--st-accent);
+  transition: width var(--st-dur-progress) var(--st-ease-progress);
+}
+
+/* The newest project leads the list: a lit hero row across the whole grid, a bigger cover and a display title. */
+.st-project--featured {
+  grid-column: 1 / -1;
+}
+.st-project--featured .st-media {
+  grid-template-columns: clamp(72px, 14vw, 120px) minmax(0, 1fr) auto;
+  column-gap: var(--st-space-4);
+}
+@media (max-width: 399.98px) {
+  .st-project--featured .st-media {
+    grid-template-columns: 72px minmax(0, 1fr);
+  }
+}
+.st-project--featured .st-media__thumb {
+  width: 100%;
+  min-height: 0;
+  aspect-ratio: 4 / 5;
+  align-self: start;
+}
+.st-project--featured .st-project__title {
+  font-size: var(--st-fs-h3);
+  font-weight: var(--st-weight-display);
+  line-height: var(--st-lh-head);
+}
+.st-project--featured .st-project__bar {
+  max-width: 32rem;
+}
+
+/* A story's state: its words in their own ink with a small dot of its colour (the colour is only a mark). */
+.st-state {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 24px;
+  color: var(--st-text);
+  font-family: var(--st-font);
+  font-size: var(--st-fs-chip);
+  font-weight: var(--st-weight-ui);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.st-state__dot {
+  flex: none;
+  width: 9px;
+  height: 9px;
+  border-radius: var(--st-r-round);
+  background: var(--st-accent);
+  box-shadow: var(--st-glow-accent);
+}
+.st-state--sun {
+  color: var(--st-text-amber);
+}
+/* On its way (starting, being made): warm words and a half-filled orange dot, full once it is ready to watch. */
+.st-state--sky {
+  color: var(--st-text-amber);
+}
+.st-state--sky .st-state__dot {
+  background: linear-gradient(to right, var(--st-accent) 50%, rgb(var(--st-accent-rgb) / 0.3) 50%);
+  box-shadow: none;
+}
+.st-state--mint {
+  color: var(--st-mint-ink);
+}
+.st-state--mint .st-state__dot {
+  background: var(--st-mint);
+  box-shadow: none;
+}
+.st-state--coral {
+  color: var(--st-coral-ink);
+}
+.st-state--coral .st-state__dot {
+  background: var(--st-coral);
+  box-shadow: none;
+}
+
+.st-more-row {
+  display: flex;
+  justify-content: center;
+}
+
+/* ---------- The empty Library: a character on lit glass ---------- */
+
+.st-shelf {
+  display: grid;
+  justify-items: center;
+  gap: var(--st-space-3);
+  isolation: isolate;
+  overflow: hidden;
+  padding: clamp(28px, 5vw, 56px) var(--st-inset);
+  text-align: center;
+}
+/* The warm light behind the character only: no words sit on it. */
+.st-shelf__glow {
+  position: absolute;
+  inset: 0 0 auto;
+  z-index: -1;
+  height: clamp(120px, 14vw, 160px);
+  background: radial-gradient(34% 90% at 50% 0%, rgb(var(--st-amber-rgb) / 0.34), transparent 72%);
+  pointer-events: none;
+}
+.st-shelf__title {
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-h2);
+  overflow-wrap: anywhere;
+}
+.st-shelf__text {
+  max-width: 46ch;
+  color: var(--st-text-soft);
+}
+.st-shelf__action {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: var(--st-space-3);
+  margin-top: var(--st-space-2);
+}
+
+/* ---------- One project: the hero, its files by group, how it was made ---------- */
+
+.st-projectview {
+  display: grid;
+  gap: var(--st-gap);
+  min-width: 0;
+}
+/* From 1100 px "How it was made" stands beside the hero and the files, so the hero is as wide as the files under it
+   (it was a wide slab with its right half empty). Any height the card adds goes to the files, never to the hero. */
+@media (min-width: 1100px) {
+  .st-projectview {
+    grid-template-columns: minmax(0, 1fr) 340px;
+    grid-template-rows: auto 1fr;
+    grid-template-areas: "head details" "files details";
+  }
+  .st-projectview__head {
+    grid-area: head;
+  }
+  .st-projectview__files {
+    grid-area: files;
+  }
+  .st-projectview > .st-details {
+    grid-area: details;
+    align-self: start;
+  }
+}
+.st-projectview__head {
+  display: grid;
+  justify-items: start;
+  gap: var(--st-space-3);
+  min-width: 0;
+  /* Never thinner than the band a liquid rim may bend, so it never reaches the words. */
+  padding: max(var(--st-inset), var(--st-lens-band) - var(--st-space-2)) max(var(--st-inset), var(--st-lens-band));
+}
+/* The way back: a round glass button with "All projects" beside it, one link (44 px, 48 on a phone). Hover lights
+   the button; the words brighten. */
+.st-projectview__head > .st-projectview__back {
+  gap: var(--st-space-3);
+  min-height: var(--st-tap);
+  margin-inline-start: calc(-1 * var(--st-space-1));
+  padding: 0 var(--st-space-3) 0 0;
+  border-radius: var(--st-r-round);
+  color: var(--st-text-soft);
+  font-weight: var(--st-weight-ui);
+}
+.st-projectview__head > .st-projectview__back:hover {
+  background: transparent;
+  color: var(--st-text-strong);
+}
+.st-projectview__puck {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: var(--st-tap);
+  height: var(--st-tap);
+  border-radius: var(--st-r-round);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control), var(--st-depth-1);
+  color: var(--st-text);
+  transition: background-color var(--st-dur-hover) var(--st-ease-out);
+}
+.st-projectview__back:hover .st-projectview__puck {
+  background: var(--st-fill-control-hover);
+}
+@media (max-width: 767.98px) {
+  .st-projectview__head > .st-projectview__back {
+    min-height: var(--st-tap-phone);
+  }
+  .st-projectview__puck {
+    width: var(--st-tap-phone);
+    height: var(--st-tap-phone);
+  }
+}
+.st-projectview__hero {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--st-space-4) var(--st-space-5);
+  width: 100%;
+  min-width: 0;
+}
+.st-projectview__cover {
+  width: clamp(72px, 12vw, 112px);
+  aspect-ratio: 9 / 16;
+  border-radius: var(--st-r-control);
+  box-shadow: var(--st-depth-2), var(--st-glow-behind);
+}
+.st-projectview__text {
+  display: grid;
+  gap: var(--st-space-3);
+  min-width: 0;
+}
+.st-projectview__title {
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-h2);
+  overflow-wrap: anywhere;
+}
+.st-projectview__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--st-space-1) var(--st-space-3);
+  margin: 0;
+  color: var(--st-text-soft);
+}
+.st-projectview__meta > .st-textlink {
+  margin-inline-start: calc(-1 * var(--st-space-1));
+}
+/* How far it has come: a hairline bar, orange (a shape) on the track. */
+.st-projectview__bar {
+  position: relative;
+  display: block;
+  width: 100%;
+  max-width: 32rem;
+  height: 8px;
+  overflow: hidden;
+  border-radius: var(--st-r-round);
+  background: var(--st-track);
+}
+.st-projectview__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: var(--st-accent);
+  box-shadow: var(--st-glow-accent);
+  transition: width var(--st-dur-progress) var(--st-ease-progress);
+}
+@media (max-width: 359.98px) {
+  .st-projectview__hero {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
+.st-projectview__files {
+  display: grid;
+  align-content: start;
+  gap: var(--st-space-6);
+  min-width: 0;
+}
+.st-group {
+  display: grid;
+  gap: var(--st-space-3);
+  min-width: 0;
+}
+/* A group's name is loose on the page: a plate holds it in Picture and See-through. */
+.st-group__title {
+  justify-self: start;
+  max-width: 100%;
+  color: var(--st-text-amber);
+  font-size: var(--st-fs-h3);
+  overflow-wrap: anywhere;
+}
+
+/* "How it was made": a card whose runs are wells hugging it at the surface gap (20 - 6 = 14). */
+.st-details {
+  display: grid;
+  align-content: start;
+  gap: var(--st-space-3);
+  min-width: 0;
+  padding: var(--st-gap-surface);
+}
+.st-details > :not(.st-runs) {
+  margin-inline: calc(var(--st-inset) - var(--st-gap-surface));
+}
+.st-details > :first-child {
+  margin-top: calc(var(--st-inset) - var(--st-gap-surface));
+}
+.st-details > :last-child:not(.st-runs) {
+  margin-bottom: calc(var(--st-inset) - var(--st-gap-surface));
+}
+.st-details__title {
+  display: flex;
+  align-items: center;
+  gap: var(--st-space-3);
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-h3);
+}
+/* A round glass puck for the clock (decoration: the reference's round icons). */
+.st-details__icon {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--st-r-round);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  color: var(--st-text-amber);
+}
+.st-facts {
+  display: grid;
+  gap: var(--st-space-3) var(--st-space-4);
+  margin: 0;
+}
+/* A label stays with its answer: a pair sits at the top of its row, however tall its neighbour is. */
+.st-facts > div {
+  display: grid;
+  align-content: start;
+  gap: 2px;
+  min-width: 0;
+}
+.st-facts dt {
+  color: var(--st-text-muted);
+  font-family: var(--st-font-caps);
+  font-size: var(--st-fs-caps);
+  font-weight: 500;
+  letter-spacing: var(--st-track-caps);
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+.st-facts dd {
+  margin: 0;
+  color: var(--st-text);
+  overflow-wrap: anywhere;
+}
+.st-facts__code {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: var(--st-fs-min);
+  overflow-wrap: anywhere;
+}
+.st-facts--small {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 130px), 1fr));
+}
+.st-runs {
+  display: grid;
+  gap: var(--st-gap-control);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.st-run {
+  display: grid;
+  gap: var(--st-space-3);
+  min-width: 0;
+  padding: var(--st-space-4);
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-well);
+}
+.st-run__head {
+  margin: 0;
+  color: var(--st-text-soft);
+}
+.st-run__head strong {
+  color: var(--st-text-strong);
+  font-weight: var(--st-weight-ui);
+}
+.st-run__steps {
+  display: grid;
+  gap: var(--st-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.st-run__step {
+  display: grid;
+  grid-template-columns: 12px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--st-space-3);
+  min-height: 28px;
+  color: var(--st-text);
+  font-size: var(--st-fs-small);
+}
+/* Each step's dot: waiting a faint ring of cream, done mint, now the orange accent, stopped coral. */
+.st-run__dot {
+  width: 10px;
+  height: 10px;
+  border-radius: var(--st-r-round);
+  background: rgb(var(--st-cream-rgb) / 0.24);
+}
+.st-run__step.is-done .st-run__dot {
+  background: var(--st-mint);
+}
+.st-run__step.is-running .st-run__dot {
+  background: var(--st-accent);
+  box-shadow: var(--st-glow-accent);
+}
+.st-run__step.is-failed .st-run__dot {
+  background: var(--st-coral);
+}
+.st-run__step.is-skipped .st-run__dot {
+  background: var(--st-track);
+}
+.st-run__time {
+  color: var(--st-text-muted);
+  font-size: var(--st-fs-chip);
+  font-variant-numeric: lining-nums tabular-nums;
+}

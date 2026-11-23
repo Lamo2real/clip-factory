@@ -309,6 +309,80 @@ export function callingFor(provider: string, host: ModelHost = "bedrock"): Model
 export const CUSTOM_MODEL_KEY = /^custom-[a-z0-9-]{1,40}$/;
 export const MAX_CUSTOM_MODELS = 20;
 
+/** One set of words for a model's state, on every screen (§45.36 E17, builder W5b). */
+export const MODEL_STATUS_WORDS: Record<ModelInfo["status"], string> = {
+  ok: "Works",
+  not_checked: "Not checked yet",
+  denied: "No access",
+  not_found: "Not found",
+  error: "Problem",
+};
+
+// ---- An added model's Region and its ID (§45.36 E4, builder W5b) ----
+
+// The same rule and sentences as the API's (workspaces/model_defs.py region_problem): the form checks before it sends,
+// the mock refuses as the API does.
+
+/** The Region an ARN names (`arn:aws:bedrock:eu-west-1:…`), else null. */
+export function regionOfArn(modelId: string): string | null {
+  const m = /^arn:aws(?:-[a-z]+)*:bedrock:([a-z0-9-]+):/.exec(modelId.trim());
+  return m ? m[1]! : null;
+}
+
+/**
+ * The area each cross-Region inference profile's first part runs in. `global.` runs from any Region; a first part or
+ * a Region outside these areas is not checked, so a Region AWS adds to an area later is never refused by mistake.
+ */
+const PROFILE_AREAS: Record<string, string> = { us: "us", "us-gov": "us-gov", eu: "eu", apac: "ap", jp: "ap", au: "ap" };
+const REGION_AREAS: [string, string][] = [
+  ["us-gov-", "us-gov"],
+  ["us-", "us"],
+  ["eu-", "eu"],
+  ["ap-", "ap"],
+];
+/** Each area in words, one of its Regions, and the first part of its own profile ids. */
+const AREA_WORDS: Record<string, [string, string, string]> = {
+  us: ["a US Region", "us-east-1", "us"],
+  "us-gov": ["an AWS GovCloud Region", "us-gov-west-1", "us-gov"],
+  eu: ["a Europe Region", "eu-north-1", "eu"],
+  ap: ["an Asia Pacific Region", "ap-southeast-2", "apac"],
+};
+
+/** The first part of a cross-Region inference profile id ("eu" for eu.amazon.nova-premier-v1:0, also inside an ARN), else null. */
+function profileArea(modelId: string): string | null {
+  const id = modelId.trim();
+  let profile = id;
+  if (regionOfArn(id) !== null) {
+    const inside = /:inference-profile\/([^/]+)$/.exec(id);
+    if (!inside) return null;
+    profile = inside[1]!;
+  }
+  const parts = profile.split(".");
+  // A profile id is {area}.{maker}.{model}; a model id is {maker}.{model}.
+  return parts.length < 3 ? null : parts[0]!;
+}
+
+const regionArea = (region: string): string | null => REGION_AREAS.find(([start]) => region.startsWith(start))?.[1] ?? null;
+
+/**
+ * Why an added model's Region does not fit its ID, naming both, else null (§45.36 E4): an ARN's own Region must be the
+ * Region picked, and a us., eu., apac. (jp., au., us-gov.) inference profile must run in that part of the world.
+ */
+export function modelRegionProblem(modelId: string, region: string): string | null {
+  const id = modelId.trim();
+  const r = region.trim();
+  const inArn = regionOfArn(id);
+  if (inArn !== null && inArn !== r) return `This ARN is in ${inArn}, but the Region says ${r}. Type ${inArn} as the Region.`;
+  const first = profileArea(id);
+  const wanted = first === null ? undefined : PROFILE_AREAS[first];
+  const here = regionArea(r);
+  if (wanted === undefined || here === null || wanted === here) return null;
+  const [words, example] = AREA_WORDS[wanted]!;
+  const own = AREA_WORDS[here]![2];
+  if (inArn !== null) return `This ARN's inference profile starts with ${first}., so it runs in ${words} (like ${example}), not in ${r}. Paste the ARN of the ${own}. profile instead.`;
+  return `This inference profile id starts with ${first}., so it runs in ${words} (like ${example}), not in ${r}. Type ${words} as the Region, or paste the ${own}. profile id instead.`;
+}
+
 export interface StoriesAiConfig {
   defaultModel: string;
   defaultEffort: Effort;
@@ -929,7 +1003,7 @@ export interface SocialAccount {
   handle: string | null;
   avatarUrl: string | null;
   /**
-   * Gone (§45.37 G8): Clip Factory Stories never posts to Clip Factory's own account, so nothing is shared; an older API
+   * Gone (§45.37 G8): Funded Clips never posts to Clip Factory's own account, so nothing is shared; an older API
    * may still send false. Never read by the screens.
    */
   sharedWithClips?: boolean;
@@ -954,7 +1028,7 @@ export type SocialReason =
   | "missing_permissions"
   | "clips_unknown"
   /**
-   * §45.37 G8: with connectionStatus same_as_clips, Clip Factory connected this very account after Clip Factory Stories
+   * §45.37 G8: with connectionStatus same_as_clips, Clip Factory connected this very account after Funded Clips
    * did (any stable identity matches: the channel, Page or user id, or the username or handle), so it is blocked from
    * posting. Without it, same_as_clips is the account the owner just signed in with.
    */

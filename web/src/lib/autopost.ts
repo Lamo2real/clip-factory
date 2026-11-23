@@ -103,7 +103,13 @@ export function switchLine(a: Pick<AutoPostSettings, "on" | "practice">, next: s
 // ---------- Where they go (§46.2 item 3) ----------
 
 export const NOTHING_SET_UP = "Nothing is set up to post to. Set up a place first.";
-export const TIKTOK_YOURSELF_LINE = "TikTok: you post it yourself (TikTok's rule). Each clip gets Post it yourself.";
+/**
+ * TikTok left out (`leftOut` reason `tiktok_yourself`): Your Mac posts TikTok is off, so a run gives TikTok to no one.
+ * TikTok goes only through his Mac until TikTok approves the app (ADR-86); the page adds Turn on beside it.
+ */
+export const TIKTOK_YOURSELF_LINE = "TikTok: turn on Your Mac posts TikTok to post there.";
+/** The same reason while the switch is on: with no other place set up a run sends nothing, so his Mac gets nothing (§46.6). */
+export const TIKTOK_MAC_NEEDS_PLACE = "TikTok: your Mac posts it once another place is set up.";
 
 /** "YouTube, Instagram and Facebook" in the one platform order. */
 export function placeNames(places: readonly Platform[]): string {
@@ -116,9 +122,10 @@ export function placesLine(places: readonly Platform[]): string {
   return places.length ? `Goes to ${placeNames(places)}.` : NOTHING_SET_UP;
 }
 
-/** One line per place a run leaves out. */
-export function leftOutLine(platform: Platform, reason: "tiktok_yourself" | "not_set_up"): string {
-  return reason === "tiktok_yourself" ? TIKTOK_YOURSELF_LINE : `${PLATFORM_LABEL[platform]}: not set up yet.`;
+/** One line per place a run leaves out. `macIsOn`: Your Mac posts TikTok is on (§47), so TikTok waits only for a place. */
+export function leftOutLine(platform: Platform, reason: "tiktok_yourself" | "not_set_up", macIsOn = false): string {
+  if (reason === "tiktok_yourself") return macIsOn ? TIKTOK_MAC_NEEDS_PLACE : TIKTOK_YOURSELF_LINE;
+  return `${PLATFORM_LABEL[platform]}: not set up yet.`;
 }
 
 // ---------- Next up, Recent (§46.2 items 4 and 8) ----------

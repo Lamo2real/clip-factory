@@ -1322,28 +1322,28 @@ the watermark) fills it and never touches the paid total.
 
 No sort key, index, table, bucket, secret or Lambda is added, and nothing that holds the owner's data is replaced.
 
-### 21. Lamo Stories: a second application inside Clip Factory (CONTRACTS §45, ADR-70 to ADR-80)
+### 21. Funded Clips: a second application inside Clip Factory (CONTRACTS §45, ADR-70 to ADR-80)
 
 The owner's second studio: short animated story videos with recurring characters, no voice-over, posted to its own
 social accounts, run as **its own application** inside the Clip Factory shell
-([CONTRACTS.md §45](CONTRACTS.md#45-lamo-stories-a-second-separate-workspace-owner-request-2026-11-21)). Clip Factory
+([CONTRACTS.md §45](CONTRACTS.md#45-funded-clips-a-second-separate-workspace-owner-request-2026-11-21)). Clip Factory
 (everything above) does not change: its API Lambda, route table, agent runtime and roles are untouched.
 
 * **Its own pieces.** Lambda `cf-prod-stories-api` behind `/v1/workspaces` on the same HTTP API; AgentCore runtime
   `cf_prod_story_agent` built from `stories/agent/` (its own image, role and sessions); the durable `cf-prod-story-flow`
-  for posting. Each role may write only Lamo Stories' keys (`USER#*#WS#*`, `USER#*#WSREG`), the `ws/` prefix and
+  for posting. Each role may write only Funded Clips' keys (`USER#*#WS#*`, `USER#*#WSREG`), the `ws/` prefix and
   `cf-prod/workspaces/*` secrets.
 * **Data.** One registry partition `USER#{userId}#WSREG` and one partition per workspace `USER#{userId}#WS#{id}` in
-  the same table, with sort-key prefixes no stream forwards; files under `ws/{userId}/{id}/`. Lamo Stories screens poll.
+  the same table, with sort-key prefixes no stream forwards; files under `ws/{userId}/{id}/`. Funded Clips screens poll.
 * **AI.** Five agents (creative director, video analysis, storyboard, character, quality) with the owner's models and
   reasoning effort per workspace, agent, task and request (`stories/config/models.json`; effort sent as
-  `output_config.effort` where the model takes it; never a silent substitute), Lamo Stories' own skills and memory,
+  `output_config.effort` where the model takes it; never a silent substitute), Funded Clips' own skills and memory,
   a creative chat, and reference-video analysis. Safety topics only from `stories/config/guidance.json`.
-* **Making the video.** The API invokes Lamo Stories' runtime. It runs the TypeScript engine (`web/src/stories/engine`,
+* **Making the video.** The API invokes Funded Clips' runtime. It runs the TypeScript engine (`web/src/stories/engine`,
   copied into its image) with Deno for draw lists, rasterizes them with numpy, synthesizes effects, noises and music,
   and joins it all with ffmpeg into a 1080×1920 MP4. The browser runs the same engine for live previews.
-* **Connections.** The same callback URL; a Lamo Stories connect uses its own state format (`w1.`) and writes only
-  `cf-prod/workspaces/{id}/{platform}/token` and a `SOCIAL#` item. Per platform the owner picks Lamo Stories' own
+* **Connections.** The same callback URL; a Funded Clips connect uses its own state format (`w1.`) and writes only
+  `cf-prod/workspaces/{id}/{platform}/token` and a `SOCIAL#` item. Per platform the owner picks Funded Clips' own
   developer app or Clip Factory's; tokens are always separate. YouTube posts to the one channel picked in Google's
   picker. Disconnect never calls a platform's revoke.
 * **Posting.** `cf-prod-story-flow` checks the destination inside every platform step, including the identity inside
@@ -1554,7 +1554,8 @@ yourself and the campaign rules work as before.
   or it is a campaign clip Content Rewards can't take from Clip Factory by itself yet. A clip another run planned in
   the last 15 minutes is skipped.
 * **Places and options.** Every place whose setup is ready except TikTok (TikTok's rules want the creator's own pick
-  for each post; each auto-posted clip keeps Post it yourself), in STATS_ORDER, with My settings
+  for each post; while Your Mac posts TikTok is on, a live run's normal clip also gets a TikTok post his Mac posts,
+  CONTRACTS §47, and since ADR-86 there is no Post it yourself), in STATS_ORDER, with My settings
   (`post_preset.upload_options`: never made for kids); a campaign clip gets the campaign versions, exactly as Upload
   builds them.
 * **Never twice.** The claim is one `TransactWriteItems`: Put `AUTORUN#{runId}` (`state: "planned"`, its clips) on
@@ -2107,9 +2108,11 @@ only switch is `CF_DEEP=off` (Terraform `deep_analysis_enabled = false`), which 
   and Google deletes OAuth clients unused for 6 months; X charges per post.
 - **Clips kept before a platform was connected** are not posted automatically after Connect
   ([roadmap](ROADMAP.md#phase-2-social-integrations)).
-- **Auto-posting never posts to TikTok** (TikTok's rules want the creator's own pick of who can see each post; he
-  uses **Post it yourself**), and campaign clips wait for his Upload while Content Rewards can't take clips from Clip
-  Factory by itself. A run fires on whole hours only, so a save counts from the next full hour. YouTube takes at most
+- **Auto-posting never posts to TikTok through TikTok's API** (TikTok's rules want the creator's own pick of who can
+  see each post): while **Your Mac posts TikTok** is on, his own Mac posts each clip's TikTok (CONTRACTS §47). The
+  manual **Post it yourself** sheet is gone (ADR-86), so with the switch off nothing goes to TikTok until he taps
+  **Turn on**. Campaign clips never go to the Mac, and they wait for his Upload while Content Rewards can't take clips
+  from Clip Factory by itself. A run fires on whole hours only, so a save counts from the next full hour. YouTube takes at most
   100 uploads a day (its `videos.insert` bucket); the page warns past 100 clips a day. That a Facebook draft Reel stays
   hidden from everyone but the Page's admins, and that the hourly rule fires within the first minute, are checked at
   the first private test run and the first hours of practice

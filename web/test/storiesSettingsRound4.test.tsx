@@ -128,7 +128,7 @@ describe("how an added model is called (§45.35 D1)", () => {
     expect([switchOf(form, /It has effort levels/), switchOf(form, /It can use tools/), switchOf(form, /It can reuse its instructions/)].map(checked)).toEqual(["false", "false", "false"]);
     // No effort levels: the levels are not even shown, and the words say none is ever sent.
     expect($$("button", form).some((b) => b.textContent === "Low")).toBe(false);
-    expect(byText(".st-stg-switchrow", /It has effort levels/, form).textContent).toContain("It runs at its own level. Lamo Stories never sends it one.");
+    expect(byText(".st-stg-switchrow", /It has effort levels/, form).textContent).toContain("It runs at its own level. Funded Clips never sends it one.");
     expect(byText(".st-stg-switchrow", /It can use tools/, form).textContent).toContain("It only talks: in the chat it cannot start things");
     // The owner's own choice stays when the maker changes again.
     await click(switchOf(form, /It can reuse its instructions/));
@@ -136,7 +136,7 @@ describe("how an added model is called (§45.35 D1)", () => {
     expect([switchOf(form, /It has effort levels/), switchOf(form, /It can use tools/), switchOf(form, /It can reuse its instructions/)].map(checked)).toEqual(["false", "false", "true"]);
     fill(form, "Name", "Llama 4");
     await click(byText("[role=radio]", "Meta", form));
-    fill(form, "Bedrock model ID or inference profile", "eu.meta.llama4-maverick-17b-instruct-v1:0");
+    fill(form, "Model ID", "eu.meta.llama4-maverick-17b-instruct-v1:0");
     await act(async () => form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true })));
     await settle();
     expect(calls.filter((c) => c.name === "putAiModel").at(-1)?.args[2]).toMatchObject({
@@ -275,8 +275,12 @@ describe("Try it on Luma AI Ray2 (§45.35 D2, moved from Nova Reel by §45.37)",
     expect(calls.filter((c) => c.name === "tryMaker").map((c) => c.args)).toEqual([["stories", "luma-ray"]]);
     expect(calls.filter((c) => c.name === "tryNovaReel")).toHaveLength(0);
     expect(row.textContent).toContain("It did not work");
-    expect(row.textContent).toContain(LUMA_NOT_READY);
-    expect(document.body.textContent).toContain(LUMA_NOT_READY);
+    // The API's own sentence, said on the page it names without sending the owner there again (§45.36 E17).
+    const here = LUMA_NOT_READY.replace(" in Settings › Video", " above");
+    expect(here).toContain("Pick Built-in animation above, or finish its setup.");
+    expect(row.textContent).toContain(here);
+    expect(document.body.textContent).toContain(here);
+    expect(document.body.textContent).not.toContain("in Settings › Video");
     // The video maker is still the built-in animator.
     expect((await api.getWorkspace("stories")).configuration).toMatchObject({ providers: { video: "builtin-2d" } });
     expect(byText("button", "Try it again", row)).toBeTruthy();
@@ -307,7 +311,7 @@ describe("Try it on Luma AI Ray2 (§45.35 D2, moved from Nova Reel by §45.37)",
     expect(luma.check).toMatchObject({ jobId: job.jobId, status: "failed" });
     expect(tryProblem(luma.check ?? null, luma)).toBe(LUMA_DENIED);
     await expect(api.tryNovaReel("stories")).rejects.toMatchObject({ status: 409, message: REEL_ENDED });
-    expect(REEL_ENDED).toBe("Amazon Nova Reel was ended by Amazon on 30 Sep 2026. Pick another video maker in Lamo Stories › Settings › Video.");
+    expect(REEL_ENDED).toBe("Amazon Nova Reel was ended by Amazon on 30 Sep 2026. Pick another video maker in Funded Clips › Settings › Video.");
   });
 
   it("shows the try just started until the list knows it, then the list's newest", () => {

@@ -1,5 +1,6 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
+import { asMacWindow } from "./desktopWindow.ts";
 import { visibleEdges } from "./edges.ts";
 import { findOverflow, settle, WIDTHS } from "./helpers.ts";
 
@@ -41,19 +42,19 @@ test.describe("switching", () => {
     await page.goto("/library?view=week");
     await settle(page);
     // One choice per workspace, Lamo Clips by the app's own name.
-    await expect(page.locator(".sidebar__foot .ws-switch__opt")).toHaveText(["Clip Factory", "Lamo Stories"]);
-    await expect(page.locator(".sidebar__foot .ws-switch__opt.is-on")).toHaveText("Clip Factory");
-    await page.locator(".sidebar__foot .ws-switch__opt", { hasText: "Lamo Stories" }).click();
+    await expect(page.locator(".ws-dock .ws-switch__opt")).toHaveText(["Clip Factory", "Funded Clips"]);
+    await expect(page.locator(".ws-dock .ws-switch__opt.is-on")).toHaveText("Clip Factory");
+    await page.locator(".ws-dock .ws-switch__opt", { hasText: "Funded Clips" }).click();
     await expect(page).toHaveURL(/\/stories$/);
     await storiesReady(page);
-    await expect(page.locator(".st-rail .ws-switch__opt")).toHaveText(["Clip Factory", "Lamo Stories"]);
-    await expect(page.locator(".st-rail .ws-switch__opt.is-on")).toHaveText("Lamo Stories");
+    await expect(page.locator(".ws-dock .ws-switch__opt")).toHaveText(["Clip Factory", "Funded Clips"]);
+    await expect(page.locator(".ws-dock .ws-switch__opt.is-on")).toHaveText("Funded Clips");
     await expect(page.locator(".st-rail .st-rail__label")).toHaveText(["Dashboard", "Ideas", "Characters", "Production", "Review", "Chat", "References", "Library", "Social accounts", "Settings"]);
     await page.locator(".st-rail").getByRole("link", { name: "Social accounts" }).click();
     await expect(page).toHaveURL(/\/stories\/connections$/);
     await storiesReady(page);
 
-    await page.locator(".st-rail .ws-switch__opt", { hasText: "Clip Factory" }).click();
+    await page.locator(".ws-dock .ws-switch__opt", { hasText: /^Clip Factory$/ }).click();
     await expect(page).toHaveURL(/\/library\?view=week$/);
     await settle(page);
     // Lamo Stories stays mounted behind Clip Factory (§45.34): hidden and inert, nothing of it on screen.
@@ -63,21 +64,76 @@ test.describe("switching", () => {
     await expect(page.locator('[data-app-pane="clips"]')).not.toHaveAttribute("inert");
     await expect(page.locator("nav.sidebar .sidebar__item.is-active")).toHaveAttribute("data-help", "nav-library");
 
-    await page.locator(".sidebar__foot .ws-switch__opt", { hasText: "Lamo Stories" }).click();
+    await page.locator(".ws-dock .ws-switch__opt", { hasText: "Funded Clips" }).click();
     await expect(page).toHaveURL(/\/stories\/connections$/);
     await storiesReady(page);
     await expect(page.getByRole("heading", { level: 1, name: "Social accounts" })).toBeVisible();
   });
 
-  test("on the smallest phone (320 px) a slim toggle in the top bar still switches in one tap", async ({ page }) => {
+  test("on the smallest phone (320 px) the top bar's toggle is a full 48 px one (the brand keeps its mark, drops its name) and switches in one tap", async ({ page }) => {
     await on(page);
     await page.setViewportSize({ width: 320, height: 700 });
     await page.goto("/review");
     await settle(page);
-    await expect(page.locator(".topbar .ws-switch-host")).toHaveAttribute("data-ws-switch", "slim");
-    await page.locator(".topbar").getByRole("link", { name: "Go to Lamo Stories" }).click();
+    const host = page.locator(".topbar .ws-switch-host");
+    await expect(host).toHaveAttribute("data-ws-switch", "round");
+    await expect(host).toHaveAttribute("data-ws-squeeze", "");
+    const toggle = (await page.locator(".topbar").getByRole("link", { name: "Go to Funded Clips" }).boundingBox())!;
+    expect(toggle.width).toBeGreaterThanOrEqual(44);
+    expect(toggle.height).toBeGreaterThanOrEqual(44);
+    await expect(page.locator(".topbar .brand__name")).toBeHidden();
+    await expect(page.locator(".topbar .brand__mark")).toBeVisible();
+    await expect(page.locator(".topbar").getByRole("link", { name: "Clip Factory home" })).toBeVisible();
+    await page.locator(".topbar").getByRole("link", { name: "Go to Funded Clips" }).click();
     await expect(page).toHaveURL(/\/stories$/);
     await storiesReady(page);
+  });
+
+  test("E16: from 340 px up the brand keeps its name, and every phone width has a toggle of 44 px or more both ways", async ({ page }) => {
+    await on(page);
+    for (const width of [320, 340, 360, 390, 430]) {
+      await page.setViewportSize({ width, height: 760 });
+      await page.goto("/review");
+      await settle(page);
+      await page.waitForTimeout(150);
+      const toggle = (await page.locator(".topbar").getByRole("link", { name: "Go to Funded Clips" }).boundingBox())!;
+      expect(toggle.width, `${width} px wide`).toBeGreaterThanOrEqual(44);
+      expect(toggle.height, `${width} px wide`).toBeGreaterThanOrEqual(44);
+      if (width >= 340) await expect(page.locator(".topbar .brand__name"), `${width} px wide`).toBeVisible();
+      const overflow = await page.evaluate(() => document.documentElement.scrollWidth - innerWidth);
+      expect(overflow, `${width} px wide`).toBeLessThanOrEqual(0);
+    }
+  });
+
+  test("Funded Clips keeps its whole name: side by side with Clip Factory in the switch, and in its own top bar on a phone", async ({ page }) => {
+    await on(page);
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await page.goto("/stories");
+    await storiesReady(page);
+    const opts = page.locator(".ws-dock .ws-switch__opt");
+    await expect(opts).toHaveCount(2);
+    for (const name of ["Clip Factory", "Funded Clips"]) {
+      const opt = page.locator(".ws-dock .ws-switch__opt", { hasText: new RegExp(`^${name}$`) });
+      await expect(opt).toBeVisible();
+      expect(await opt.evaluate((o) => o.scrollWidth <= o.clientWidth), `${name} is not cut short`).toBe(true);
+    }
+    const tops = await opts.evaluateAll((els) => els.map((e) => e.getBoundingClientRect().top));
+    expect(Math.abs((tops[0] ?? 0) - (tops[1] ?? -99)), "the two names sit side by side").toBeLessThan(2);
+    for (const width of [340, 375]) {
+      await page.setViewportSize({ width, height: 812 });
+      await page.goto("/stories");
+      await storiesReady(page);
+      const brand = page.locator(".st-top .st-brand__name");
+      await expect(brand, `${width} px wide`).toBeVisible();
+      await expect(brand, `${width} px wide`).toHaveText("Funded Clips");
+      const cut = await brand.evaluate((n) => {
+        const r = n.getBoundingClientRect();
+        const bar = n.closest(".st-top")!.getBoundingClientRect();
+        return n.scrollWidth > n.clientWidth || r.left < bar.left || r.right > bar.right;
+      });
+      expect(cut, `${width} px wide: the name is whole, inside the top bar`).toBe(false);
+      expect(await page.evaluate(() => document.documentElement.scrollWidth - innerWidth), `${width} px wide`).toBeLessThanOrEqual(0);
+    }
   });
 
   test("a switch held by Leave without saving: Keep editing stays and the device still says Clip Factory; Leave switches", async ({ page }) => {
@@ -87,13 +143,13 @@ test.describe("switching", () => {
     await settle(page);
     await page.getByLabel("What is the skill called?").fill("Half written");
     const choice = () => page.evaluate(() => JSON.parse(localStorage.getItem("cf.workspace") ?? "{}").workspaceId as string | undefined);
-    await page.locator(".sidebar__foot .ws-switch__opt", { hasText: "Lamo Stories" }).click();
+    await page.locator(".ws-dock .ws-switch__opt", { hasText: "Funded Clips" }).click();
     const leave = page.getByRole("dialog", { name: "Leave without saving?" });
     await expect(leave).toBeVisible();
     await leave.getByRole("button", { name: "Keep editing" }).click();
     await expect(page).toHaveURL(/\/skills\/new$/);
     expect(await choice()).toBe("clips");
-    await page.locator(".sidebar__foot .ws-switch__opt", { hasText: "Lamo Stories" }).click();
+    await page.locator(".ws-dock .ws-switch__opt", { hasText: "Funded Clips" }).click();
     await expect(leave).toBeVisible();
     await leave.getByRole("button", { name: "Leave" }).click();
     await expect(page).toHaveURL(/\/stories$/);
@@ -106,7 +162,7 @@ test.describe("switching", () => {
     await page.setViewportSize({ width: 390, height: 844 });
     await page.goto("/review");
     await settle(page);
-    await page.locator(".topbar").getByRole("link", { name: "Go to Lamo Stories" }).click();
+    await page.locator(".topbar").getByRole("link", { name: "Go to Funded Clips" }).click();
     await expect(page).toHaveURL(/\/stories$/);
     await storiesReady(page);
     await page.locator(".st-tabbar").getByRole("button", { name: "More pages" }).click();
@@ -117,7 +173,7 @@ test.describe("switching", () => {
     await page.locator(".st-top").getByRole("link", { name: "Go to Clip Factory" }).click();
     await expect(page).toHaveURL(/\/review$/);
     await settle(page);
-    await page.locator(".topbar").getByRole("link", { name: "Go to Lamo Stories" }).click();
+    await page.locator(".topbar").getByRole("link", { name: "Go to Funded Clips" }).click();
     await expect(page).toHaveURL(/\/stories\/connections$/);
   });
 
@@ -163,11 +219,88 @@ test.describe("switching", () => {
     await page.evaluate((to) => window.scrollTo(0, to), y);
     await page.waitForTimeout(200);
     const kept = await page.evaluate(() => Math.round(scrollY));
-    await page.locator(".sidebar__foot .ws-switch__opt", { hasText: "Lamo Stories" }).click();
+    await page.locator(".ws-dock .ws-switch__opt", { hasText: "Funded Clips" }).click();
     await storiesReady(page);
-    await page.locator(".st-rail .ws-switch__opt", { hasText: "Clip Factory" }).click();
+    await page.locator(".ws-dock .ws-switch__opt", { hasText: /^Clip Factory$/ }).click();
     await expect(page).toHaveURL(/\/library$/);
     await expect.poll(() => page.evaluate(() => Math.round(scrollY)), { timeout: 6000 }).toBe(kept);
+  });
+
+  test("E1: on a phone (390x844) too, coming back to Clip Factory opens its Library where it was scrolled to", async ({ page }) => {
+    await on(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/library");
+    await settle(page);
+    const room = await page.evaluate(() => document.documentElement.scrollHeight - innerHeight);
+    expect(room, "the Library is taller than the phone's window").toBeGreaterThan(300);
+    await page.evaluate((to) => window.scrollTo(0, to), Math.min(874, Math.round(room * 0.6)));
+    // He reads there a moment; the tap below first scrolls the page up to the top bar, as his thumb does.
+    await page.waitForTimeout(1800);
+    const kept = await page.evaluate(() => Math.round(scrollY));
+    expect(kept).toBeGreaterThan(200);
+    await page.locator(".topbar").getByRole("link", { name: "Go to Funded Clips" }).click();
+    await expect(page).toHaveURL(/\/stories$/);
+    await storiesReady(page);
+    await page.locator(".st-top").getByRole("link", { name: "Go to Clip Factory" }).click();
+    await expect(page).toHaveURL(/\/library$/);
+    await expect.poll(() => page.evaluate(() => Math.round(scrollY)), { timeout: 6000 }).toBe(kept);
+    // A second round trip keeps it as well.
+    await page.waitForTimeout(1800);
+    await page.locator(".topbar").getByRole("link", { name: "Go to Funded Clips" }).click();
+    await storiesReady(page);
+    await page.locator(".st-top").getByRole("link", { name: "Go to Clip Factory" }).click();
+    await expect.poll(() => page.evaluate(() => Math.round(scrollY)), { timeout: 6000 }).toBe(kept);
+    // A slow way up in short flicks (over four seconds), then the switch at once: still where he was reading.
+    await page.waitForTimeout(1800);
+    for (let i = 1; i <= 10; i++) {
+      await page.evaluate((to) => window.scrollTo(0, to), Math.round(kept * (1 - i / 10)));
+      await page.waitForTimeout(500);
+    }
+    expect(await page.evaluate(() => Math.round(scrollY))).toBe(0);
+    await page.locator(".topbar").getByRole("link", { name: "Go to Funded Clips" }).click();
+    await storiesReady(page);
+    await page.locator(".st-top").getByRole("link", { name: "Go to Clip Factory" }).click();
+    await expect(page).toHaveURL(/\/library$/);
+    await expect.poll(() => page.evaluate(() => Math.round(scrollY)), { timeout: 6000 }).toBe(kept);
+    // A jump to the top (a status-bar tap) and two seconds to find the switch: still where he was reading.
+    await page.waitForTimeout(1800);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(2000);
+    await page.locator(".topbar").getByRole("link", { name: "Go to Funded Clips" }).click();
+    await storiesReady(page);
+    await page.locator(".st-top").getByRole("link", { name: "Go to Clip Factory" }).click();
+    await expect(page).toHaveURL(/\/library$/);
+    await expect.poll(() => page.evaluate(() => Math.round(scrollY)), { timeout: 6000 }).toBe(kept);
+  });
+
+  test("E1: on a phone, reading at the top of Clip Factory's Library for a while keeps the top on the way back", async ({ page }) => {
+    await on(page);
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto("/library");
+    await settle(page);
+    const room = await page.evaluate(() => document.documentElement.scrollHeight - innerHeight);
+    expect(room, "the Library is taller than the phone's window").toBeGreaterThan(300);
+    await page.evaluate((to) => window.scrollTo(0, to), Math.min(874, Math.round(room * 0.6)));
+    await page.waitForTimeout(1800);
+    // Up to the top, and reading there longer than it takes to find the switch: the top is where he left it.
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.waitForTimeout(10_500);
+    await page.locator(".topbar").getByRole("link", { name: "Go to Funded Clips" }).click();
+    await storiesReady(page);
+    await page.locator(".st-top").getByRole("link", { name: "Go to Clip Factory" }).click();
+    await expect(page).toHaveURL(/\/library$/);
+    await page.waitForTimeout(600);
+    expect(await page.evaluate(() => Math.round(scrollY))).toBe(0);
+    // Resting part way up (below the top bar) is a reading place of its own.
+    await page.evaluate((to) => window.scrollTo(0, to), Math.min(874, Math.round(room * 0.6)));
+    await page.waitForTimeout(1800);
+    await page.evaluate(() => window.scrollTo(0, 400));
+    await page.waitForTimeout(1800);
+    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.locator(".topbar").getByRole("link", { name: "Go to Funded Clips" }).click();
+    await storiesReady(page);
+    await page.locator(".st-top").getByRole("link", { name: "Go to Clip Factory" }).click();
+    await expect.poll(() => page.evaluate(() => Math.round(scrollY)), { timeout: 6000 }).toBe(400);
   });
 
   test("ask, switch to Lamo Stories while the answer streams, switch back: the answer is there", async ({ page }) => {
@@ -185,13 +318,13 @@ test.describe("switching", () => {
     await expect(answer).toHaveAttribute("aria-busy", "true");
     const early = (await answer.locator(".ask-answer").innerText()).length;
 
-    await page.locator(".sidebar__foot .ws-switch__opt", { hasText: "Lamo Stories" }).click();
+    await page.locator(".ws-dock .ws-switch__opt", { hasText: "Funded Clips" }).click();
     await storiesReady(page);
     // Lamo Clips' Ask is not part of Lamo Stories: it waits behind it, hidden and inert, with the rest of Clip Factory.
     await expect(page.locator(".help-launcher:visible, #help-panel:visible")).toHaveCount(0);
     await expect(page.locator('[data-app-pane="clips"]')).toHaveAttribute("inert", "");
     await page.waitForTimeout(1200);
-    await page.locator(".st-rail .ws-switch__opt", { hasText: "Clip Factory" }).click();
+    await page.locator(".ws-dock .ws-switch__opt", { hasText: /^Clip Factory$/ }).click();
     await settle(page);
 
     // The panel is open again, with the question and the answer that kept streaming meanwhile, then finished.
@@ -214,9 +347,9 @@ test.describe("switching", () => {
     await expect(panel.locator(".ask-msg").last().getByRole("button", { name: "Copy answer" })).toBeVisible({ timeout: 20_000 });
     await page.getByRole("button", { name: "Ask Clip Factory" }).click();
     await expect(panel).toHaveCount(0);
-    await page.locator(".sidebar__foot .ws-switch__opt", { hasText: "Lamo Stories" }).click();
+    await page.locator(".ws-dock .ws-switch__opt", { hasText: "Funded Clips" }).click();
     await storiesReady(page);
-    await page.locator(".st-rail .ws-switch__opt", { hasText: "Clip Factory" }).click();
+    await page.locator(".ws-dock .ws-switch__opt", { hasText: /^Clip Factory$/ }).click();
     await settle(page);
     await expect(panel).toHaveCount(0);
     await page.getByRole("button", { name: "Ask Clip Factory" }).click();
@@ -226,9 +359,10 @@ test.describe("switching", () => {
 
 type FaultWindow = Window & { __cfMockFaults?: { jobsPageSize?: number } };
 
-/** Clip Factory's switcher (sidebar foot on a computer) and Lamo Stories' (its rail). */
-const toStories = (page: Page) => page.locator("nav.sidebar").getByRole("link", { name: /^(Go to )?Lamo Stories$/ }).click();
-const toClips = (page: Page) => page.locator(".st-rail .ws-switch__opt", { hasText: "Clip Factory" }).click();
+/** The shell's switch (§45.38), the same in both apps: to Lamo Stories, and to Clip Factory. */
+const toStories = (page: Page) => page.locator(".ws-dock").getByRole("link", { name: /^(Go to )?Funded Clips$/ }).click();
+/** The shell's switch to Clip Factory (§45.38): the bar's choice, or the toggle that goes there in a short window. */
+const toClips = (page: Page) => page.locator(".ws-dock").getByRole("link", { name: /^(Go to )?Clip Factory$/ }).click();
 
 test.describe("each app stays exactly as it was left (§45.34)", () => {
   test("Clip Factory's Library keeps its filter and its scroll across a round trip", async ({ page }) => {
@@ -301,9 +435,9 @@ test.describe("each app stays exactly as it was left (§45.34)", () => {
     await page.getByRole("button", { name: "New idea" }).click();
     const form = page.getByRole("form", { name: "New idea" });
     await form.getByLabel("Title").fill("Pip and the icy hill");
-    expect(await page.title()).toBe("Ideas · Lamo Stories · Clip Factory");
+    expect(await page.title()).toBe("Ideas · Funded Clips · Clip Factory");
 
-    await page.locator(".st-rail .ws-switch__opt", { hasText: "Clip Factory" }).click();
+    await page.locator(".ws-dock .ws-switch__opt", { hasText: /^Clip Factory$/ }).click();
     await expect(page).toHaveURL(/\/$/);
     await settle(page);
     expect(await page.title()).toBe("Home · Clip Factory");
@@ -315,7 +449,7 @@ test.describe("each app stays exactly as it was left (§45.34)", () => {
     await toStories(page);
     await expect(page).toHaveURL(/\/stories\/ideas$/);
     await expect(form.getByLabel("Title")).toHaveValue("Pip and the icy hill");
-    expect(await page.title()).toBe("Ideas · Lamo Stories · Clip Factory");
+    expect(await page.title()).toBe("Ideas · Funded Clips · Clip Factory");
     // Only one page landmark answers to #main: the one on screen.
     await expect(page.locator("#main")).toHaveCount(1);
     await expect(page.locator("#main")).toHaveClass(/st-main/);
@@ -336,7 +470,7 @@ test.describe("each app stays exactly as it was left (§45.34)", () => {
       const w = window as unknown as { __waited?: string[] };
       w.__waited = [];
       new MutationObserver(() => {
-        for (const el of Array.from(document.querySelectorAll('.boot[aria-label="Loading Lamo Stories"], .st-loading'))) w.__waited!.push(el.classList.contains("boot") ? "boot" : (el.textContent ?? ""));
+        for (const el of Array.from(document.querySelectorAll('.boot[aria-label="Loading Funded Clips"], .st-loading'))) w.__waited!.push(el.classList.contains("boot") ? "boot" : (el.textContent ?? ""));
       }).observe(document.body, { childList: true, subtree: true });
     });
     await toStories(page);
@@ -607,19 +741,26 @@ test.describe("Lamo Stories' own sounds and motion (cf.stories.prefs, §45.34)",
   const log = (page: Page) => page.evaluate(() => (window as unknown as { __cfSoundLog?: Log }).__cfSoundLog ?? []);
   const clear = (page: Page) => page.evaluate(() => ((window as unknown as { __cfSoundLog?: Log }).__cfSoundLog = []));
 
-  test("unset, Lamo Stories follows Clip Factory's; set, its own wins and Clip Factory's choice never changes it", async ({ page }) => {
+  test("unset, Lamo Stories plays its own usual sounds (never Clip Factory's choice); set, its own wins and Clip Factory's choice never changes it", async ({ page }) => {
     await on(page);
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto("/stories/library");
+    // Clip Factory's own choice (its Settings › Look and feel › Sounds): a click sound of his own, 12, not the usual 6.
+    await page.goto("/settings/look-and-feel/sounds");
+    await settle(page);
+    await page.getByRole("button", { name: /^Click sound 12:/ }).click();
+    await expect.poll(() => page.evaluate(() => JSON.parse(localStorage.getItem("cf.prefs") ?? "{}").clickSound)).toBe(12);
+    // Over to Lamo Stories without a reload (the mock server keeps its settings only for this visit).
+    await toStories(page);
     await storiesReady(page);
-    // Clip Factory's own device copy (from the owner's Settings): sounds on, its click sound, motion not calm.
-    const clips = (await page.evaluate(() => JSON.parse(localStorage.getItem("cf.prefs") ?? "{}"))) as { soundEnabled: boolean; clickSound: number; reduceMotion: boolean };
-    expect(clips).toMatchObject({ soundEnabled: true, reduceMotion: false });
-    const mine = clips.clickSound === 9 ? 8 : 9;
+    await page.locator(".st-rail").getByRole("link", { name: "Library", exact: true }).click();
+    await storiesReady(page);
+    expect(await page.evaluate(() => JSON.parse(localStorage.getItem("cf.prefs") ?? "{}"))).toMatchObject({ soundEnabled: true, clickSound: 12, reduceMotion: false });
+    const mine = 9;
     await expect(page.locator("html")).not.toHaveClass(/(^|\s)reduce-motion(\s|$)/);
     await clear(page);
     await page.getByRole("tab", { name: "Videos" }).click();
-    expect((await log(page)).filter((e) => e.kind === "tap")).toEqual([expect.objectContaining({ sound: clips.clickSound, muted: false })]);
+    // Lamo Stories' own usual click sound (6, Water drop), one sound only: Clip Factory's 12 is never heard here (§45.38 A2).
+    expect((await log(page)).filter((e) => e.kind === "tap")).toEqual([expect.objectContaining({ sound: 6, muted: false })]);
 
     // Lamo Stories' own: sounds off, another click sound, calm motion (what its Settings card writes).
     await page.evaluate((click) => localStorage.setItem("cf.stories.prefs", JSON.stringify({ setupShown: ["stories"], more: { "sound.enabled": false, "sound.click": click, "motion.reduce": true } })), mine);
@@ -630,7 +771,8 @@ test.describe("Lamo Stories' own sounds and motion (cf.stories.prefs, §45.34)",
     await page.getByRole("tab", { name: "Pictures" }).click();
     expect((await log(page)).filter((e) => e.kind === "tap")).toEqual([expect.objectContaining({ sound: mine, muted: true })]);
 
-    // Clip Factory keeps its own: sounds on, click 4, motion as it was.
+    // Clip Factory keeps its own: sounds on, its click sound (the reload gave the mock back its usual one), motion as it was.
+    const clips = (await page.evaluate(() => JSON.parse(localStorage.getItem("cf.prefs") ?? "{}"))) as { soundEnabled: boolean; clickSound: number; reduceMotion: boolean };
     await toClips(page);
     await settle(page);
     await expect(page.locator("html")).not.toHaveClass(/(^|\s)reduce-motion(\s|$)/);
@@ -671,30 +813,30 @@ test.describe("the pages", () => {
     await expect(cards).toHaveCount(5);
     for (const name of ["YouTube", "TikTok", "Instagram", "Facebook", "X"]) await expect(cards.filter({ has: page.getByRole("heading", { name, exact: true }) }).locator(".st-conn__mark svg")).toBeVisible();
     const yt = cards.filter({ has: page.getByRole("heading", { name: "YouTube" }) });
-    await expect(yt).toContainText("Lamo Stories");
+    await expect(yt.locator(".st-who")).toContainText("Funded Clips");
     await expect(yt.locator(".st-who__id code")).toHaveText(/^UC/);
-    await expect(yt.locator(".st-auth")).toContainText("Allowed: Lamo Stories may post here.");
+    await expect(yt.locator(".st-auth")).toContainText("Allowed: Funded Clips may post here.");
     await expect(yt.locator(".st-auth")).toContainText("Last checked");
     await expect(yt).toContainText("Clip Factory posts to: Clip Factory Gaming");
-    await expect(yt.locator(".st-app")).toContainText("Shares Clip Factory's YouTube app, on purpose. Clip Factory's posts always go first. Stories uses what's left.");
-    await expect(yt.locator(".st-app")).toContainText("Even with Clip Factory's app, sign in with a different account made for Clip Factory Stories.");
+    await expect(yt.locator(".st-app")).toContainText("Shares Clip Factory's YouTube app, on purpose. Clip Factory's posts always go first. Funded Clips uses what's left.");
+    await expect(yt.locator(".st-app")).toContainText("Even with Clip Factory's app, sign in with a different account made for Funded Clips.");
     // Check now: a live check, and when it was last checked.
     await yt.getByRole("button", { name: "Check now" }).click();
     await expect(page.locator(".toast").filter({ hasText: "YouTube answered. All good." })).toBeVisible();
     await expect(yt.locator(".st-auth")).toContainText(/Last checked\s*(just now|now|\d+ s ago|seconds? ago|a moment ago)/i);
     const tiktok = cards.filter({ has: page.getByRole("heading", { name: "TikTok" }) });
-    await expect(tiktok).toContainText("Sign in to your Lamo Stories account on tiktok.com in this browser first.");
+    await expect(tiktok).toContainText("Sign in to your Funded Clips account on tiktok.com in this browser first.");
     await expect(tiktok.getByRole("button", { name: "Reconnect" })).toBeVisible();
     const fb = cards.filter({ has: page.getByRole("heading", { name: "Facebook" }) });
-    await expect(fb).toContainText("Facebook will ask which Pages this app may use. Tick only your Lamo Stories Page.");
+    await expect(fb).toContainText("Facebook will ask which Pages this app may use. Tick only your Funded Clips Page.");
     await expect(fb.locator(".st-app")).toContainText("Uses its own Meta app");
 
     // Connect Facebook: the pretend platform sends the owner back with a list of Pages to pick from.
     await fb.getByRole("button", { name: "Connect Facebook" }).click();
     await expect(page).toHaveURL(/\/stories\/connections$/);
-    await expect(page.locator(".toast").filter({ hasText: "Now pick the Facebook Page Lamo Stories posts to." })).toBeVisible();
+    await expect(page.locator(".toast").filter({ hasText: "Now pick the Facebook Page Funded Clips posts to." })).toBeVisible();
     await expect(fb.getByRole("button", { name: /Clip Factory's own/ })).toHaveAttribute("aria-disabled", "true");
-    await fb.getByRole("button", { name: /^Lamo Stories/ }).click();
+    await fb.getByRole("button", { name: /^Funded Clips/ }).click();
     await expect(fb.locator(".st-chip").first()).toHaveText("Connected");
     await expect(fb.locator(".st-who__id code")).toHaveText("109876543210987");
   });
@@ -704,10 +846,10 @@ test.describe("the pages", () => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto("/stories/connections");
     await storiesReady(page);
-    // Up front on every card: a new account made for Clip Factory Stories.
-    await expect(page.locator(".st-conn .st-conn__new")).toHaveText(Array(5).fill("Use a new account made for Clip Factory Stories, not lamo.clips."));
+    // Up front on every card: a new account made for Funded Clips.
+    await expect(page.locator(".st-conn .st-conn__new")).toHaveText(Array(5).fill("Use a new account made for Funded Clips, not Clip Factory's."));
     const x = page.locator(".st-conn").filter({ has: page.getByRole("heading", { name: "X" }) });
-    await expect(x).toContainText("This is Clip Factory's own account. Clip Factory Stories needs its own separate account: sign in with a different one.");
+    await expect(x).toContainText("This is Clip Factory's own account. Funded Clips needs its own separate account: sign in with a different one.");
     await expect(x.locator(".st-chip").first()).toHaveText("Clip Factory's own");
     // No way to use it for both, anywhere on the page.
     await expect(page.getByRole("button", { name: /for both/i })).toHaveCount(0);
@@ -739,23 +881,23 @@ test.describe("the pages", () => {
 
     // X: the choice comes first; Connect stays put until an app is picked.
     const x = card("X");
-    await expect(x.getByRole("radiogroup", { name: "Which X app Lamo Stories uses" }).getByRole("radio")).toHaveText([
-      /A separate app for Lamo Stories/,
-      /Share Clip Factory's app.*Clip Factory's posts always go first\. Stories uses what's left\. Even with Clip Factory's app, sign in with a different account made for Clip Factory Stories\./,
+    await expect(x.getByRole("radiogroup", { name: "Which X app Funded Clips uses" }).getByRole("radio")).toHaveText([
+      /A separate app for Funded Clips/,
+      /Share Clip Factory's app.*Clip Factory's posts always go first\. Funded Clips uses what's left\. Even with Clip Factory's app, sign in with a different account made for Funded Clips\./,
     ]);
     await expect(x).not.toContainText("quicker");
     await expect(x.getByRole("button", { name: "Connect X" })).toHaveAttribute("aria-disabled", "true");
     await x.getByRole("button", { name: "Connect X" }).click({ force: true });
-    await expect(page.locator(".toast").filter({ hasText: "Pick which X app Lamo Stories uses first." })).toBeVisible();
+    await expect(page.locator(".toast").filter({ hasText: "Pick which X app Funded Clips uses first." })).toBeVisible();
     await x.getByRole("radio", { name: /Share Clip Factory's app/ }).click();
     await x.getByRole("button", { name: "Share Clip Factory's app" }).click();
-    await expect(x.locator(".st-app")).toContainText("Shares Clip Factory's X app, on purpose. Clip Factory's posts always go first. Stories uses what's left.");
+    await expect(x.locator(".st-app")).toContainText("Shares Clip Factory's X app, on purpose. Clip Factory's posts always go first. Funded Clips uses what's left.");
     await x.getByRole("button", { name: "Connect X" }).click();
     await expect(x.locator(".st-chip").first()).toHaveText("Connected");
 
     // YouTube's own app: the redirect URI to copy (Lamo Stories' own callback), the keys form, Check it.
     const yt = card("YouTube");
-    await yt.getByRole("radio", { name: /A separate app for Lamo Stories/ }).click();
+    await yt.getByRole("radio", { name: /A separate app for Funded Clips/ }).click();
     await expect(yt.locator(".st-copy__value")).toHaveText(/\/v1\/stories-oauth\/youtube\/callback$/);
     await expect(yt.getByRole("button", { name: "Copy the redirect uri" })).toBeVisible();
     await yt.getByLabel("Client ID").fill("not-a-client-id");
@@ -772,7 +914,7 @@ test.describe("the pages", () => {
     // Meta: no Clip Factory choice at all; one Meta app's keys, entered once, serve Instagram and Facebook.
     const fb = card("Facebook");
     await expect(fb.getByRole("radio")).toHaveCount(0);
-    await expect(fb).toContainText("Facebook always uses Lamo Stories' own Meta app");
+    await expect(fb).toContainText("Facebook always uses Funded Clips' own Meta app");
     await fb.getByLabel("App ID").fill("1234567890123456");
     await fb.getByLabel("App secret").fill("0123456789abcdef0123456789abcdef");
     await fb.getByLabel("Configuration ID").fill("https://www.facebook.com/v27.0/dialog/oauth?config_id=9876543210987654&x=1");
@@ -788,10 +930,12 @@ test.describe("the pages", () => {
     await page.goto("/stories");
     await expect(page).toHaveURL(/\/stories\/setup$/);
     await storiesReady(page);
-    // On its own: no navigation, the brand and the switcher stay; the ring says 0 of 11.
+    // On its own: no navigation, the brand stays, and the shell's switch is where it is on every page (bottom left,
+    // §45.38), never a round toggle at the top right instead; the ring says 0 of 11.
     await expect(page.locator(".stories-app.is-alone")).toHaveCount(1);
     await expect(page.locator(".st-rail, .st-tabbar")).toHaveCount(0);
-    await expect(page.locator(".st-top .ws-switch-host")).toBeVisible();
+    await expect(page.locator(".ws-dock .ws-switch__opt.is-on")).toHaveText("Funded Clips");
+    await expect(page.locator(".st-top .ws-switch-host")).toBeHidden();
     await expect(page.locator(".st-setup__head .st-ring")).toHaveAttribute("aria-label", "0 of 11 done");
     await expect(page.locator(".st-steps__item")).toHaveCount(11);
     await expect(page.locator(".st-left__item")).toHaveCount(10);
@@ -802,7 +946,7 @@ test.describe("the pages", () => {
     await expect(page.locator(".st-setup__head .st-ring")).toHaveAttribute("aria-label", "1 of 11 done");
     // 2: pick the default model; Check models really runs; saving ticks step 2 only (the effort is picked in 3).
     await expect(page.locator("#st-setup-step")).toHaveText("Pick your default model");
-    await expect(page.getByRole("radiogroup", { name: "Lamo Stories' default model" }).getByRole("radio")).toHaveText([/Claude Fable 5.2/, /Claude Fable 5.1/, /Claude Opus 5.5/, /Claude Sonnet 5.5/, /Claude Haiku 5.5/, /Amazon Nova Pro/]);
+    await expect(page.getByRole("radiogroup", { name: "Funded Clips' default model" }).getByRole("radio")).toHaveText([/Claude Fable 5.2/, /Claude Fable 5.1/, /Claude Opus 5.5/, /Claude Sonnet 5.5/, /Claude Haiku 5.5/, /Amazon Nova Pro/]);
     // Builder F2's mock: a sixth, mock-only model (no effort, no price), and this account cannot use Fable 5.1.
     await page.getByRole("button", { name: "Check models" }).click();
     await expect(page.locator(".toast").filter({ hasText: "5 of 6 models answered." })).toBeVisible({ timeout: 10_000 });
@@ -833,25 +977,28 @@ test.describe("the pages", () => {
     await storiesReady(page);
     await expect(page.locator(".st-rail")).toBeVisible();
     const card = page.locator(".st-setupcard");
-    await expect(card).toContainText("Set up Lamo Stories: 5 of 11 done");
+    await expect(card).toContainText("Set up Funded Clips: 5 of 11 done");
     await expect(card).toContainText("Still to do: Connect Instagram, Connect TikTok, Connect YouTube and 2 more.");
     // Only once per studio on this device: after a reload (the pretend server starts over at 0 of 11) the
     // dashboard stays, with the card.
     await page.reload();
     await storiesReady(page);
     await expect(page).toHaveURL(/\/stories$/);
-    await expect(card).toContainText("Set up Lamo Stories: 0 of 11 done");
+    await expect(card).toContainText("Set up Funded Clips: 0 of 11 done");
     await card.getByRole("link", { name: "Start the setup" }).click();
     await expect(page).toHaveURL(/\/stories\/setup$/);
     await storiesReady(page);
     await expect(page.locator(".st-rail")).toBeVisible();
-    // Step 11: finish with steps left (none of them blocks making videos): confetti, then the card is gone.
+    // Step 11: finish with steps left (none of them blocks making videos): confetti, then the big card is gone and
+    // a small one keeps what is left, with a way back to it (§45.36 E15).
     await page.locator(".st-steps__item").filter({ hasText: "Done" }).click();
     await page.getByRole("button", { name: "Finish" }).click();
     await expect(page.locator("canvas.confetti").first()).toBeAttached();
     await expect(page).toHaveURL(/\/stories$/, { timeout: 8000 });
     await storiesReady(page);
-    await expect(page.locator(".st-setupcard")).toHaveCount(0);
+    await expect(page.locator(".st-setupcard:not(.st-setupcard--left)")).toHaveCount(0);
+    await expect(page.locator(".st-setupcard--left h2")).toHaveText(/^Finish setting up: \d+ left$/);
+    await expect(page.locator(".st-setupcard--left").getByRole("link", { name: "Open setup" })).toHaveAttribute("href", "/stories/setup");
   });
 
   test("Library: files by kind with their story, Download, and a project with how it was made", async ({ page }) => {
@@ -935,9 +1082,8 @@ test.describe("every page keeps the owner's rules", () => {
       const el = page.locator(sel).first();
       const before = await el.evaluate((e) => getComputedStyle(e).backgroundColor);
       await el.hover();
-      await page.waitForTimeout(300);
-      const after = await el.evaluate((e) => getComputedStyle(e).backgroundColor);
-      expect(after, sel).not.toBe(before);
+      // The hover's colour eases in; a slow frame (a busy machine) must not read it before its first step.
+      await expect.poll(() => el.evaluate((e) => getComputedStyle(e).backgroundColor), { message: sel, timeout: 3000 }).not.toBe(before);
       await page.mouse.move(0, 0);
     }
   });
@@ -955,7 +1101,7 @@ test.describe("round 4: the two apps stay apart and quiet (§45.35)", () => {
     await toStories(page);
     const card = page.locator('[data-app-pane="stories"] [data-stories-problem]');
     await expect(card).toBeVisible();
-    await expect(card.getByRole("heading", { name: "Lamo Stories had a problem." })).toBeVisible();
+    await expect(card.getByRole("heading", { name: "Funded Clips had a problem." })).toBeVisible();
     // Clip Factory is untouched behind it: kept, hidden and inert, never its own "Something went wrong".
     await expect(page.locator('[data-app-pane="clips"]')).toHaveAttribute("inert", "");
     await expect(page.getByText("Tap Reload to start Clip Factory again.")).toHaveCount(0);
@@ -974,20 +1120,72 @@ test.describe("round 4: the two apps stay apart and quiet (§45.35)", () => {
     await expect(page.locator(".stories-app")).toBeVisible();
   });
 
+  for (const [width, height, mac] of [
+    [1280, 600, false],
+    [1280, 650, false],
+    [1280, 520, false],
+    [1280, 650, true],
+    [1000, 600, true],
+  ] as const)
+    test(`E16: at ${width}x${height}${mac ? " in the Mac window" : ""} Lamo Stories' own switcher is in view and takes one click, with no scrolling`, async ({ page }) => {
+      if (mac) await asMacWindow(page);
+      await on(page);
+      await page.setViewportSize({ width, height });
+      await page.goto("/stories/library");
+      await storiesReady(page);
+      // The shell's switch (§45.38): the bar's Clip Factory choice, or in a short window the toggle that goes there.
+      const opt = page.locator(".ws-dock").getByRole("link", { name: /^(Go to )?Clip Factory$/ });
+      const hit = await opt.evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        const at = document.elementFromPoint(r.left + r.width / 2, r.top + r.height / 2);
+        const list = document.querySelector(".st-rail .st-rail__list")!.getBoundingClientRect();
+        // Over the rail it is never over the list of pages (the rail's foot keeps its box free).
+        const overList = r.left < list.right && r.right > list.left && r.top < list.bottom - 0.5 && r.bottom > list.top;
+        return { same: !!at && (at === el || el.contains(at)), bottom: r.bottom, top: r.top, inner: innerHeight, overList };
+      });
+      expect(hit.same, "the switcher's Clip Factory choice is what is under its own centre").toBe(true);
+      expect(hit.overList, "the switch covers none of the rail's pages").toBe(false);
+      expect(hit.top).toBeGreaterThanOrEqual(0);
+      expect(hit.bottom).toBeLessThanOrEqual(hit.inner);
+      // The brand stays at the top too; only the list of pages scrolls, inside the rail.
+      await expect(page.locator(".st-rail .st-brand")).toBeInViewport();
+      expect(await page.locator(".st-rail").evaluate((el) => el.scrollTop)).toBe(0);
+      // A real click at that spot, with nothing scrolled first: Clip Factory.
+      const box = (await opt.boundingBox())!;
+      await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+      await expect(page).not.toHaveURL(/\/stories/);
+      await settle(page);
+    });
+
+  test("E16: in a short window every page of the rail can still be reached (the list scrolls inside the rail)", async ({ page }) => {
+    await on(page);
+    await page.setViewportSize({ width: 1280, height: 520 });
+    await page.goto("/stories");
+    await storiesReady(page);
+    const last = page.locator(".st-rail .st-rail__item").last();
+    await last.scrollIntoViewIfNeeded();
+    await expect(last).toBeInViewport();
+    await last.click();
+    await expect(page).toHaveURL(/\/stories\/settings/);
+    await expect(page.locator(".ws-dock").getByRole("link", { name: /^(Go to )?Clip Factory$/ })).toBeInViewport();
+  });
+
   test("D19: in a short window with the sidebar folded, the slim toggle beside the fold button switches in one click", async ({ page }) => {
     await on(page, () => localStorage.setItem("cf.prefs", JSON.stringify({ sidebarCollapsed: true })));
     await page.setViewportSize({ width: 1000, height: 560 });
     await page.goto("/jobs");
     await settle(page);
-    const beside = page.locator(".sidebar__top .ws-switch-host");
+    // The shell's switch (§45.38), beside the fold button in this window.
+    const dock = page.locator(".ws-dock");
+    await expect(dock).toHaveAttribute("data-ws-dock", "top");
+    const beside = dock.locator(".ws-switch-host");
     await expect(beside).toHaveAttribute("data-ws-switch", "slim");
-    await expect(page.locator(".sidebar__foot .ws-switch-host")).toHaveAttribute("data-ws-switch", "none");
     const fold = (await page.locator(".sidebar__toggle").boundingBox())!;
     const slim = (await beside.boundingBox())!;
     expect(slim.x).toBeGreaterThanOrEqual(fold.x + fold.width + 3.5);
     expect(slim.width).toBeGreaterThanOrEqual(28);
     expect(slim.height).toBeGreaterThanOrEqual(28);
-    const go = beside.getByRole("link", { name: "Go to Lamo Stories" });
+    const go = beside.getByRole("link", { name: "Go to Funded Clips" });
     // It answers a hover, as every control does.
     const rest = await go.evaluate((el) => getComputedStyle(el).backgroundColor);
     await go.hover();
@@ -999,8 +1197,8 @@ test.describe("round 4: the two apps stay apart and quiet (§45.35)", () => {
     await expect(page).toHaveURL(/\/jobs$/);
     // Unfolded, the foot has room again and the toggle beside the fold button is gone.
     await page.locator(".sidebar__toggle").click();
-    await expect(beside).toHaveAttribute("data-ws-switch", "none");
-    await expect(page.locator(".sidebar__foot .ws-switch-host")).not.toHaveAttribute("data-ws-switch", "none");
+    await expect(dock).not.toHaveAttribute("data-ws-dock", "top");
+    await expect(dock).not.toHaveAttribute("data-ws-dock", "none");
   });
 
   test("D19: with more than two workspaces, the toggle beside the fold button opens its list below it, inside the window", async ({ page }) => {
@@ -1011,7 +1209,8 @@ test.describe("round 4: the two apps stay apart and quiet (§45.35)", () => {
     await page.setViewportSize({ width: 1000, height: 560 });
     await page.goto("/jobs");
     await settle(page);
-    const beside = page.locator(".sidebar__top .ws-switch-host");
+    await expect(page.locator(".ws-dock")).toHaveAttribute("data-ws-dock", "top");
+    const beside = page.locator(".ws-dock .ws-switch-host");
     await expect(beside).toHaveAttribute("data-ws-switch", "slim");
     const toggle = beside.getByRole("button", { name: "Pick a workspace (now Clip Factory)" });
     await toggle.click();
@@ -1049,7 +1248,7 @@ test.describe("round 4: the two apps stay apart and quiet (§45.35)", () => {
     await expect(page).toHaveURL(/\/library$/);
     await expect(page.locator('[data-app-pane="clips"]')).toBeVisible();
     await toStories(page);
-    await expect(page.locator(".toast__text").filter({ hasText: "Connected as Lamo Stories" })).toBeVisible({ timeout: 8000 });
+    await expect(page.locator(".toast__text").filter({ hasText: "Connected as Funded Clips" })).toBeVisible({ timeout: 8000 });
     await expect(page).toHaveURL(/\/stories\/connections$/);
   });
 

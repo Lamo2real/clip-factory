@@ -117,8 +117,9 @@ your picks" to the seven questions asked before building):
   set up (X once it is), with My settings; a failed place keeps Upload's retries and its own **Try again**.
 - **Never twice**: one EventBridge rule every hour on the hour, a due check, one claim per run and Upload's own code
   for each clip (`cf-prod-autopost`).
-- **What waits**: TikTok is never part of a run (each clip keeps **Post it yourself**); campaign clips wait for his
-  Upload until Content Rewards can take clips from Clip Factory by itself; a clip with a failed important check waits.
+- **What waits**: TikTok is never one of a run's places (while **Your Mac posts TikTok** is on, his Mac posts it,
+  CONTRACTS §47; **Post it yourself** went on 22 Nov 2026, ADR-86); campaign clips wait for his Upload until Content
+  Rewards can take clips from Clip Factory by itself; a clip with a failed important check waits.
 - **Testing with nothing public**: **Practice**, **Practice run now** and **Private test run**.
 
 Still open for auto-posting: campaign clips by themselves, once Content Rewards can take a clip from Clip Factory

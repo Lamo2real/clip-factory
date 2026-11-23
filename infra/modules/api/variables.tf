@@ -289,16 +289,16 @@ variable "permissions_boundary_arn" {
 variable "stories_routes_enabled" {
   type        = bool
   default     = false
-  description = "Add Lamo Stories' five routes (ANY and public OPTIONS for /v1/workspaces and /v1/workspaces/{proxy+}, and the public GET /v1/stories-oauth/{platform}/callback), integrated with cf-prod-stories-api."
+  description = "Add Funded Clips' five routes (ANY and public OPTIONS for /v1/workspaces and /v1/workspaces/{proxy+}, and the public GET /v1/stories-oauth/{platform}/callback), integrated with cf-prod-stories-api."
 }
 
 variable "stories_api_function_name" {
   type        = string
   default     = ""
-  description = "cf-prod-stories-api (modules/stories_api): API Gateway may invoke it for the Lamo Stories routes."
+  description = "cf-prod-stories-api (modules/stories_api): API Gateway may invoke it for the Funded Clips routes."
   validation {
     condition     = var.stories_api_function_name == "" || endswith(var.stories_api_function_name, "-stories-api")
-    error_message = "stories_api_function_name must be empty or Lamo Stories' own <name>-stories-api (never cf-prod-api)."
+    error_message = "stories_api_function_name must be empty or Funded Clips' own <name>-stories-api (never cf-prod-api)."
   }
 }
 

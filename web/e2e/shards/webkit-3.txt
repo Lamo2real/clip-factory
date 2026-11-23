@@ -1,0 +1,41 @@
+# webkit shard 3 of 5: about 19.7 core, 19.7 style, 19.7 full worker-minutes (39 lines).
+# Written by: node scripts/e2e-shards.mjs build (from timings.tsv). The last shard runs every test in no list.
+[webkit-phone] › ask-assistant.spec.ts › Ask as a full assistant › files by drop: a picture thumbnail, PDF and DOCX tiles, a refused ZIP
+[webkit-phone] › ask-assistant.spec.ts › Ask as a full assistant › files dropped on the launcher open Ask with them in the tray
+[webkit-phone] › ask-assistant.spec.ts › Ask assistant at phone-375 › screenshots in light
+[webkit-phone] › ask-assistant.spec.ts › Ask with less motion › nothing moves while an answer streams
+[webkit-phone] › ask-markup.spec.ts
+[webkit-phone] › getpaid.spec.ts › axe AA contrast, dark, hold: phone 375x812
+[webkit-phone] › getpaid.spec.ts › axe AA contrast, light, owner: phone 375x812
+[webkit-phone] › getpaid.spec.ts › phone › Connect Whop: Coming soon while off; on, 6 taps with the Whop key
+[webkit-phone] › getpaid.spec.ts › phone › never Live on a Get paid screen: the app's realtime chip steps aside there, and only there
+[webkit-phone] › getpaid.spec.ts › phone › the list, the place pages and Money's card: no sideways scroll, no edges, big targets, arrow cursor, one vermilion at most
+[webkit-phone] › help-pictures.spec.ts › Ask pictures at 390x844 › a note floats: the field and the tray do not move when it comes and goes
+[webkit-phone] › help-pictures.spec.ts › Ask pictures at 390x844 › a picture that was not read says so
+[webkit] › ask-assistant.spec.ts › Ask as a full assistant › an open question with no way to reach Ask gets no canned topic
+[webkit] › ask-assistant.spec.ts › Ask as a full assistant › files by drop: a picture thumbnail, PDF and DOCX tiles, a refused ZIP
+[webkit] › ask-assistant.spec.ts › Ask as a full assistant › streams an app answer: status, words before done, sources, then Open buttons with the spotlight
+[webkit] › ask-assistant.spec.ts › Ask as a full assistant › the search key card saves and takes away a key without showing it again
+[webkit] › ask-assistant.spec.ts › Ask assistant at phone-375 › screenshots in light
+[webkit] › ask-assistant.spec.ts › Ask assistant at phone-390 › thumb zone, no overflow, no edges
+[webkit] › ask-assistant.spec.ts › Ask assistant at tablet-768 › screenshots in light
+[webkit] › ask-markup.spec.ts › the markup editor at phone-375 › fits, and Save and Undo sit in the thumb zone on phones and tablets
+[webkit] › getpaid.spec.ts › axe AA contrast, light, hold: desktop 1440x900
+[webkit] › getpaid.spec.ts › axe AA contrast, light, owner: phone 375x812
+[webkit] › getpaid.spec.ts › desktop › Allow payment reading's results say their sentences, word for word
+[webkit] › getpaid.spec.ts › no sideways scroll at 1024 px on every Get paid screen (owner) desktop
+[webkit] › getpaid.spec.ts › no sideways scroll at 1024 px on every Get paid screen (unread) desktop
+[webkit] › getpaid.spec.ts › no sideways scroll at 1920 px on every Get paid screen (hold) desktop
+[webkit] › getpaid.spec.ts › phone › Allow payment reading's results say their sentences, word for word
+[webkit] › getpaid.spec.ts › phone › Facebook: 4 taps, then 2 after Instagram (one Meta tick); X: 5 taps, Premium never the vermilion
+[webkit] › getpaid.spec.ts › phone › TikTok and Instagram: 4 taps each, the Opens open the apps
+[webkit] › getpaid.spec.ts › the server's Finance link brings the question into view at 390x844
+[webkit] › help-pictures.spec.ts › Ask pictures at 1440x900 › five pictures: four tiles and a note; a text file is not a picture
+[webkit] › help-pictures.spec.ts › Ask pictures at 1440x900 › pictures off: no picture button, and a pasted picture gets a note
+[webkit] › help-pictures.spec.ts › Ask pictures at 1440x900 › take away leaves 3 and moves the focus on
+[webkit] › page-still.spec.ts › a page change keeps the window still › a phone (390 x 844)
+[webkit] › top-line.spec.ts › a Windows or Linux desktop window keeps its own frame: no band
+[webkit] › top-line.spec.ts › a browser at 1280 x 800: one top line
+[webkit] › top-line.spec.ts › a browser at 820 x 1180: one top line
+[webkit] › top-line.spec.ts › a web page that claims a title bar is not the desktop app: no band
+[webkit] › top-line.spec.ts › the macOS desktop window at 1440 x 900: one top line below the traffic lights

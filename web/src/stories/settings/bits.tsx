@@ -4,11 +4,12 @@
 // words and number formats the sections share. Builder F2 owns this folder. Click and deny sounds come from the app's
 // global click handler (web/src/lib/sound.ts): a control that cannot be used is aria-disabled (it plays the deny
 // sound), never `disabled` (that would swallow the click and its sound).
-import { useCallback, useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useId, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 import { Glide } from "../../components/Glide.tsx";
 import { storiesBehind, storiesReduceMotion, storiesSound } from "../prefs.ts";
 import type { Effort, ModelInfo, ProviderStatus } from "../api/types.ts";
-import { EFFORT_LABEL, HOST_LABEL, hostIdOf } from "../api/types.ts";
+import { EFFORT_LABEL, HOST_LABEL, MODEL_STATUS_WORDS, hostIdOf } from "../api/types.ts";
 
 // ---------- Icons: Lamo Stories' chunky round strokes (no generic AI sparkle anywhere) ----------
 
@@ -49,26 +50,26 @@ export function SIcon({ name, size = 22 }: { name: SIconName; size?: number }) {
   );
 }
 
-// ---------- A card for one setting ----------
+// ---------- A card for one setting: a smoky glass pane (.st-glass, the liquid-glass contract) ----------
 
 export function SetCard({ title, icon, lede, actions, children, id, tone }: { title: string; icon: SIconName; lede?: ReactNode; actions?: ReactNode; children?: ReactNode; id?: string; tone?: Tone }) {
   const auto = useId();
   const head = `${id ?? auto}-h`;
   return (
-    <section className={`st-stg-card${tone ? ` st-stg-card--${tone}` : ""}`} aria-labelledby={head} id={id}>
+    <section className={`st-glass st-stg-card${tone ? ` st-stg-card--${tone}` : ""}`} aria-labelledby={head} id={id}>
       <div className="st-stg-card__head">
         <span className={`st-stg-card__mark st-stg-card__mark--${tone ?? "sun"}`} aria-hidden="true">
           <SIcon name={icon} size={22} />
         </span>
         <div className="st-stg-card__titles">
-          <h3 className="st-stg-card__title" id={head}>
+          <h3 className="st-stg-card__title st-display" id={head}>
             {title}
           </h3>
           {lede ? <p className="st-stg-card__lede">{lede}</p> : null}
         </div>
         {actions ? <div className="st-stg-card__actions">{actions}</div> : null}
       </div>
-      {children}
+      <SettingsCardProvider value={title}>{children}</SettingsCardProvider>
     </section>
   );
 }
@@ -230,10 +231,12 @@ export function SetSwitch({ checked, onChange, label, description, off, name }: 
           </span>
         ) : null}
       </div>
+      {/* The shared orange toggle (.st-toggle from the figures: a 48 × 28 track, the white knob), with its On or Off
+          word beside it inside the same target. */}
       <button
         type="button"
         role="switch"
-        className="st-stg-switch"
+        className="st-toggle st-stg-switch"
         aria-checked={checked}
         aria-label={name}
         aria-labelledby={name ? undefined : `${id}-l`}
@@ -244,9 +247,11 @@ export function SetSwitch({ checked, onChange, label, description, off, name }: 
           if (!off) onChange(!checked);
         }}
       >
-        <span className="st-stg-switch__thumb" />
         <span className="st-stg-switch__word" aria-hidden="true">
           {checked ? "On" : "Off"}
+        </span>
+        <span className="st-toggle__track" aria-hidden="true">
+          <span className="st-toggle__knob" />
         </span>
       </button>
     </div>
@@ -305,6 +310,18 @@ export function SetSelect({
   );
 }
 
+// ---------- The bar under a section's head: its one-line note and the Saved mark ----------
+
+/** Where the bar is drawn: inside the section head's plate (screens/Settings.tsx), so the words above the first card
+ *  are one plate. Without one (a section on its own) the bar keeps its own plate where it stands. */
+const SectionBarAt = createContext<HTMLElement | null>(null);
+export const SectionBarSlot = SectionBarAt.Provider;
+
+export function SectionBar({ children }: { children: ReactNode }) {
+  const slot = useContext(SectionBarAt);
+  return slot ? createPortal(<div className="st-stg-bar">{children}</div>, slot) : <div className="st-stg-bar st-plate">{children}</div>;
+}
+
 // ---------- A short "Saved" mark ----------
 
 export function useSaved(): { saved: boolean; flash: () => void } {
@@ -344,7 +361,8 @@ export function Progress({ value, label }: { value: number | null; label: string
 
 // ---------- A success: a burst of stars and the cheer ----------
 
-const STAR_COLOURS = ["#FFC94A", "#FF6F61", "#47D6A0", "#62C6FF", "#FFF6E5"];
+/** The warm palette's (glass-tokens.css): the orange accent, amber, coral, mint, sky and cream. */
+const STAR_COLOURS = ["#FF8A3D", "#FFB766", "#FF7F6A", "#6FD9A4", "#7CC6E6", "#FFF3E4"];
 
 /** A short star burst from the element that was tapped (or the middle of the page), with the success cheer. */
 export function cheer(from?: Element | null): void {
@@ -401,25 +419,30 @@ export function cheer(from?: Element | null): void {
 // ---------- Empty states: a little character, never a blank box ----------
 
 export function Buddy({ mood = "wave", size = 96 }: { mood?: "wave" | "think" | "sleepy"; size?: number }) {
+  // Its colours come from settings.css (.st-stg-buddy__*), in the warm palette's tokens.
   return (
     <svg className={`st-stg-buddy st-stg-buddy--${mood}`} width={size} height={size} viewBox="0 0 120 120" aria-hidden="true" focusable="false">
-      <ellipse cx="60" cy="110" rx="28" ry="5" fill="#0D0B26" opacity="0.45" />
-      <path d="M60 20c19 0 30 17 30 42s-11 42-30 42-30-17-30-42 11-42 30-42z" fill="#62C6FF" />
+      <ellipse className="st-stg-buddy__shadow" cx="60" cy="110" rx="28" ry="5" opacity="0.45" />
+      <path className="st-stg-buddy__body" d="M60 20c19 0 30 17 30 42s-11 42-30 42-30-17-30-42 11-42 30-42z" />
       {mood === "sleepy" ? (
-        <path d="M45 56q5 4 10 0M65 56q5 4 10 0" stroke="#1C1842" strokeWidth="3.2" strokeLinecap="round" fill="none" />
+        <path className="st-stg-buddy__line" d="M45 56q5 4 10 0M65 56q5 4 10 0" strokeWidth="3.2" strokeLinecap="round" fill="none" />
       ) : (
         <>
-          <ellipse cx="50" cy="55" rx="5" ry="6.5" fill="#1C1842" />
-          <ellipse cx="70" cy="55" rx="5" ry="6.5" fill="#1C1842" />
-          <circle cx="52" cy="52.5" r="1.7" fill="#FFF6E5" />
-          <circle cx="72" cy="52.5" r="1.7" fill="#FFF6E5" />
+          <ellipse className="st-stg-buddy__eye" cx="50" cy="55" rx="5" ry="6.5" />
+          <ellipse className="st-stg-buddy__eye" cx="70" cy="55" rx="5" ry="6.5" />
+          <circle className="st-stg-buddy__shine" cx="52" cy="52.5" r="1.7" />
+          <circle className="st-stg-buddy__shine" cx="72" cy="52.5" r="1.7" />
         </>
       )}
-      <circle cx="42" cy="67" r="4.5" fill="#FF6F61" opacity="0.5" />
-      <circle cx="78" cy="67" r="4.5" fill="#FF6F61" opacity="0.5" />
-      {mood === "think" ? <path d="M53 73h14" stroke="#1C1842" strokeWidth="3.4" strokeLinecap="round" /> : <path d="M50 69q10 10 20 0" stroke="#1C1842" strokeWidth="3.4" strokeLinecap="round" fill="none" />}
-      <path className={mood === "wave" ? "st-stg-buddy__arm" : undefined} d="M88 66 102 50" stroke="#62C6FF" strokeWidth="9" strokeLinecap="round" />
-      <path d="M32 70 22 84" stroke="#62C6FF" strokeWidth="9" strokeLinecap="round" />
+      <circle className="st-stg-buddy__cheek" cx="42" cy="67" r="4.5" opacity="0.5" />
+      <circle className="st-stg-buddy__cheek" cx="78" cy="67" r="4.5" opacity="0.5" />
+      {mood === "think" ? (
+        <path className="st-stg-buddy__line" d="M53 73h14" strokeWidth="3.4" strokeLinecap="round" />
+      ) : (
+        <path className="st-stg-buddy__line" d="M50 69q10 10 20 0" strokeWidth="3.4" strokeLinecap="round" fill="none" />
+      )}
+      <path className={`st-stg-buddy__limb${mood === "wave" ? " st-stg-buddy__arm" : ""}`} d="M88 66 102 50" strokeWidth="9" strokeLinecap="round" />
+      <path className="st-stg-buddy__limb" d="M32 70 22 84" strokeWidth="9" strokeLinecap="round" />
     </svg>
   );
 }
@@ -460,12 +483,94 @@ export function Failed({ message, onRetry }: { message: string; onRetry?: () => 
 
 // ---------- Words ----------
 
+/** The Settings page on screen, by the name sentences use for it ("AI", "Video", …); null outside Settings. */
+export type SettingsPageName = "AI" | "Agents" | "Skills" | "Memory" | "Video" | "Storage" | "Look";
+const SettingsPage = createContext<SettingsPageName | null>(null);
+export const SettingsPageProvider = SettingsPage.Provider;
+/** The card (its title) a sentence shows in, for onThisPage's "above" and "below"; SetCard gives it. */
+const SettingsCard = createContext<string | null>(null);
+export const SettingsCardProvider = SettingsCard.Provider;
+
+const escape = (t: string) => t.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+/** Each Settings page's cards from top to bottom (their titles), so a sentence can say "above" or "below". */
+const CARDS: Partial<Record<SettingsPageName, readonly string[]>> = {
+  AI: ["Default model", "Default effort", "Add a model", "Each agent and each task", "Usage and cost, last 30 days", "Prices", "Providers"],
+  Video: ["Video maker", "Picture maker", "Sound maker", "Add a picture, video or sound model", "Shape and size", "Usual length", "Quality", "Words and music", "Use and costs, last 30 days", "Prices and keys"],
+};
+/** A model's own row (inside Add a model), as the place a sentence shows in. */
+export const ITS_ROW = "its row";
+/** The parts a sentence may name after the page ("Settings › Video › Picture maker"), and the card each is in. */
+const NAMED: Partial<Record<SettingsPageName, Record<string, string>>> = {
+  AI: { [ITS_ROW]: "Add a model", "Add a model": "Add a model", "Check models": "Default model" },
+  Video: { "Picture maker": "Picture maker", "Video maker": "Video maker", "Nova Reel": "Video maker", "Sound maker": "Sound maker" },
+};
+/** What a sentence points at when it names no part, by the words just before the page ("the task … in Settings › AI"). */
+const POINTED: Partial<Record<SettingsPageName, [RegExp, string][]>> = {
+  AI: [
+    [/\bthe task\b[^.!?]*$/, "Each agent and each task"],
+    [/\bthe default model$/, "Default model"],
+    [/\bCheck models$/, "Default model"],
+  ],
+  Video: [
+    [/\bBuilt-in animation$/, "Video maker"],
+    // The owner's own picture, video and sound models are added in their own card (§45.37 G2).
+    [/\bAdd a model$/, "Add a picture, video or sound model"],
+  ],
+};
+const PAGE_WORDS: Record<SettingsPageName, string> = { AI: "AI", Agents: "Agents", Skills: "Skills", Memory: "Memory", Video: "Video", Storage: "Storage(?: and production)?", Look: "Look" };
+
+/**
+ * A sentence shown on the page it sends the owner to, without the trip (§45.36 E17). `from` is the card the sentence
+ * shows in (ITS_ROW: a model's own row). The place it points at is said "above" or "below" from there, "this row"
+ * inside the row it means, "here" inside the card it names; when either is not known, the part's name alone, or
+ * `word` ("on this page"). On Settings › Video, "Pick Built-in animation in Settings › Video, or finish its setup." in
+ * the Video maker card reads "Pick Built-in animation above, or finish its setup."; on Settings › AI, "Tap Edit on its
+ * row in Lamo Stories › Settings › AI and turn off …" reads "Tap Edit on its row below and turn off …" in Default
+ * model and "Tap Edit on this row and turn off …" in the row itself. Any other page's name stays as it is.
+ */
+export function onThisPage(text: string, page: SettingsPageName | null, from: string | null = null, word = "on this page"): string {
+  if (!page || !text) return text;
+  const named = NAMED[page] ?? {};
+  const names = Object.keys(named).map(escape).join("|");
+  // Only a part's own name is taken after the page, never the rest of the sentence ("› Picture maker to use it").
+  const part = names ? `(?:\\s*›\\s*(${names})(?![A-Za-z]))?` : "()";
+  // The app's name before Settings is today's "Funded Clips", or "Clip Factory Stories" or "Lamo Stories" in a sentence
+  // saved before a rename (22 Nov 2026).
+  const re = new RegExp(`(\\bits row)?\\s+(?:in|on)\\s+(?:(?:(?:Clip(?: Factory)?|Lamo) Stories|Funded Clips)\\s*›\\s*)?Settings\\s*›\\s*${PAGE_WORDS[page]}(?![A-Za-z])${part}`, "g");
+  const order = CARDS[page] ?? [];
+  const place = (card: string | null) => (card === ITS_ROW ? order.indexOf("Add a model") : card ? order.indexOf(card) : -1);
+  const at = place(from);
+  return text.replace(re, (_all: string, row: string | undefined, name: string | undefined, offset: number) => {
+    // "on its row in Settings › AI" said in that row: "on this row".
+    if (row && from === ITS_ROW) return "this row";
+    const target = row ? ITS_ROW : (name ?? POINTED[page]?.find(([pattern]) => pattern.test(text.slice(0, offset)))?.[1] ?? null);
+    if (name === ITS_ROW && from === ITS_ROW) return " in this row";
+    // Said in the very card it names: "Pick it here".
+    if (name && name === from) return " here";
+    const to = place(target && target !== ITS_ROW ? (named[target] ?? target) : target);
+    const way = at < 0 || to < 0 ? null : to > at ? "below" : "above";
+    if (row) return way ? `${row} ${way}` : row;
+    if (name) return way ? ` in ${name} ${way}` : ` in ${name}`;
+    return ` ${way ?? word}`;
+  });
+}
+
+/** onThisPage for the Settings page on screen, said from the card it shows in (`from`, else the card around it). */
+export function useOnThisPage(from?: string): (text: string, word?: string) => string {
+  const page = useContext(SettingsPage);
+  const card = useContext(SettingsCard);
+  const at = from ?? card;
+  return useCallback((text: string, word?: string) => onThisPage(text, page, at, word), [page, at]);
+}
+
+/** A model's state: the one set of words every screen uses (MODEL_STATUS_WORDS, §45.36 E17), with its tone. */
 export const MODEL_STATUS: Record<ModelInfo["status"], { label: string; tone: Tone }> = {
-  ok: { label: "Works", tone: "mint" },
-  not_checked: { label: "Not checked yet", tone: "sky" },
-  denied: { label: "No access", tone: "coral" },
-  not_found: { label: "Not found", tone: "coral" },
-  error: { label: "Had a problem", tone: "sun" },
+  ok: { label: MODEL_STATUS_WORDS.ok, tone: "mint" },
+  not_checked: { label: MODEL_STATUS_WORDS.not_checked, tone: "sky" },
+  denied: { label: MODEL_STATUS_WORDS.denied, tone: "coral" },
+  not_found: { label: MODEL_STATUS_WORDS.not_found, tone: "coral" },
+  error: { label: MODEL_STATUS_WORDS.error, tone: "sun" },
 };
 
 export const PROVIDER_STATE: Record<ProviderStatus["state"], { label: string; tone: Tone }> = {

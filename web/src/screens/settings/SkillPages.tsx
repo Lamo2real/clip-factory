@@ -11,6 +11,7 @@ import { burst, centerOf } from "../../lib/confetti.ts";
 import { useLoad } from "../../lib/hooks.ts";
 import { useAction } from "../../lib/motion.ts";
 import { drawBlocks, inlineText, parseMarkdown } from "../../lib/markdown.ts";
+import { clipsGoLater } from "../../app/shell.ts";
 import { navigate, setLeaveGuard, skillPath, SKILLS_PATH } from "../../lib/router.ts";
 import type { Branch, Tree } from "../../lib/settingsTree.ts";
 import { checkForm, cleanForm, DESCRIPTION_MAX, INSTRUCTIONS_MAX, nameTaken, slug, TITLE_MAX, type FormProblems, type SkillField } from "../../lib/skillName.ts";
@@ -259,7 +260,7 @@ function WritePage({ tree, branch }: Place) {
     burst(centerOf(button), 110);
     toast.success("Your skill is ready. Clip Factory will use it every time.");
     markNewSkill(skill.skillId);
-    navigate(skillPath(skill.skillId), { replace: true, force: true });
+    clipsGoLater(skillPath(skill.skillId), { replace: true, force: true });
   }
 
   return (
@@ -290,7 +291,7 @@ function EditPage({ tree, branch, skillId }: Place & { skillId: string }) {
   useEffect(() => {
     if (!builtin) return;
     toast.info("Built-in skills can be read, but not changed.");
-    navigate(skillPath(skillId), { replace: true, force: true });
+    clipsGoLater(skillPath(skillId), { replace: true, force: true });
   }, [builtin, skillId, toast]);
 
   if (missing || hidden.has(skillId)) return <Gone tree={tree} branch={branch} skillId={skillId} missing={missing} />;
@@ -311,7 +312,7 @@ function EditPage({ tree, branch, skillId }: Place & { skillId: string }) {
     // Celebrations are for a new skill; a change just says it is saved.
     sounds.play("tap", button);
     toast.success(`Saved ${skill.title}. Clip Factory uses it from your next clips.`);
-    navigate(skillPath(skill.skillId), { replace: true, force: true });
+    clipsGoLater(skillPath(skill.skillId), { replace: true, force: true });
   }
 
   /** A 409 that is not about the name: someone changed the skill on another screen. */

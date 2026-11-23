@@ -152,7 +152,7 @@ def test_a_model_every_job_would_refuse_is_never_checked_as_working() -> None:
     video = _own("custom-pika", "video", "amazon.nova-pro-v1:0", label="Nova Pro")
     assert MakerChecker(bedrock=bedrock).check(WS, video) == (
         "not_found",
-        "Lamo Stories can't ask Nova Pro for video. Pick another video maker in Settings › Video.",
+        "Funded Clips can't ask Nova Pro for video. Pick another video maker in Settings › Video.",
     )
     assert bedrock.asked == []
 
@@ -179,7 +179,7 @@ def test_elevenlabs_polly_and_an_openai_compatible_picture_model_are_checked_for
                "kind": "audio", "modelId": mistyped, "role": "effects"}  # fmt: skip
         assert checker.check(WS, own) == (
             "not_found",
-            f"ElevenLabs accepted your key, but Lamo Stories cannot confirm a sound model called {mistyped}. "
+            f"ElevenLabs accepted your key, but Funded Clips cannot confirm a sound model called {mistyped}. "
             "ElevenLabs' sound models are eleven_text_to_sound_v2 and music_v1.",
         )
     # one ElevenLabs itself lists is confirmed
@@ -188,7 +188,7 @@ def test_elevenlabs_polly_and_an_openai_compatible_picture_model_are_checked_for
     assert checker.check(WS, listed) == ("ok", "ElevenLabs accepted your key for Listed.")
     assert MakerChecker(keys=FakeKeys({}), http=http).check(WS, EFFECTS) == (  # type: ignore[arg-type]
         "denied",
-        "There is no key for ElevenLabs saved yet (paste one in Lamo Stories › Settings › AI › Provider keys).",
+        "There is no key for ElevenLabs saved yet (paste one in Funded Clips › Settings › AI › Provider keys).",
     )
     refused = MakerChecker(keys=keys_, http=FakeHttp(Answer(401, b'{"detail": {"message": "invalid"}}')))
     assert refused.check(WS, EFFECTS)[0] == "denied"  # type: ignore[arg-type]

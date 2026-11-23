@@ -33,7 +33,7 @@ changes_under() { # changes_under <address prefix>: how many resources under it 
 clip_changes="$(changes_under "module.agent.")"
 story_changes="$(changes_under "module.stories_agent.")"
 if [ "$clip_changes" -eq 0 ] && [ "$story_changes" -eq 0 ]; then
-  echo "Drain: neither Clip Factory's agent nor Lamo Stories' agent changes in this deploy; not waiting for jobs."
+  echo "Drain: neither Clip Factory's agent nor Funded Clips' agent changes in this deploy; not waiting for jobs."
   exit 0
 fi
 
@@ -94,7 +94,7 @@ if [ "$clip_changes" -gt 0 ]; then
   echo "Drain: the agent changes in this deploy (${clip_changes} resource(s)); waiting for running jobs to finish."
 fi
 if [ "$story_changes" -gt 0 ]; then
-  echo "Drain: Lamo Stories' agent changes in this deploy (${story_changes} resource(s)); waiting for its running jobs, tasks and chat answers to finish."
+  echo "Drain: Funded Clips' agent changes in this deploy (${story_changes} resource(s)); waiting for its running jobs, tasks and chat answers to finish."
 fi
 waited=0
 while true; do

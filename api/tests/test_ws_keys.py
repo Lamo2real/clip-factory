@@ -68,11 +68,11 @@ def test_secret_names_stay_in_the_workspace_prefix() -> None:
         with pytest.raises(ValueError, match="not a provider id"):
             ws.provider_secret_name(ws.WS_SECRET_PREFIX, "stories", bad_provider)
     for bad in (("clips", "youtube", "token"), ("stories", "myspace", "token"), ("stories", "youtube", "secret")):
-        with pytest.raises(ValueError, match=r"unknown|not a Lamo Stories"):
+        with pytest.raises(ValueError, match=r"unknown|not a Funded Clips"):
             ws.secret_name(ws.WS_SECRET_PREFIX, *bad)
     with pytest.raises(ValueError, match="never live under"):
         ws.secret_name("cf-prod/platforms/", "stories", "youtube", "token")
-    with pytest.raises(ValueError, match="not a Lamo Stories"):
+    with pytest.raises(ValueError, match="not a Funded Clips"):
         ws.secret_name(ws.WS_SECRET_PREFIX, "../platforms", "youtube", "token")
 
 

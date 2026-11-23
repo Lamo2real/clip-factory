@@ -1,0 +1,498 @@
+/* Clip Factory Stories · the shared figures (stories/glass/*.tsx), first versions. Every name here is in
+   styles/GLASS-CONTRACT.md. Screens place and size them; they do not restyle their inside (add a modifier here if a
+   screen needs another look). The owner's rules: no cursor, hover on every control, light never a border, radii
+   from --st-r-* only, targets 44 px (48 on phones), nothing under the text floor, no animated filter. */
+
+/* ---------- GlassPill: the chosen one solid cream with espresso words, the rest glass ---------- */
+.st-pill {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--st-space-2);
+  min-height: var(--st-tap);
+  padding: 0 var(--st-space-4);
+  border-radius: var(--st-r-round);
+  /* --st-fill-figure: the light cream glass inside a glass surface over a picture or the desktop (glass-tokens.css) */
+  background: var(--st-fill-figure, var(--st-fill-control));
+  /* level 4: its light over the surface it sits on, lighter at the top, a bright top rim (glass-tokens.css 5a) */
+  background-image: var(--st-light-4);
+  box-shadow: var(--st-sheen-control), var(--st-glow-4);
+  color: var(--st-text);
+  font-family: var(--st-font);
+  font-size: var(--st-fs-chip);
+  font-weight: var(--st-weight-ui);
+  line-height: 1.2;
+  white-space: nowrap;
+  transition:
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    color var(--st-dur-hover) var(--st-ease-out),
+    box-shadow var(--st-dur-hover) var(--st-ease-out);
+}
+.st-pill--small {
+  min-height: 36px;
+  padding: 0 var(--st-space-3);
+}
+button.st-pill:hover,
+a.st-pill:hover {
+  background: var(--st-fill-figure-hover, var(--st-fill-control-hover));
+  background-image: var(--st-light-4);
+}
+.st-pill.is-on {
+  background: var(--st-cream);
+  color: var(--st-on-cream);
+  box-shadow: var(--st-depth-1);
+}
+button.st-pill.is-on:hover,
+a.st-pill.is-on:hover {
+  background: var(--st-cream-hover);
+}
+.st-pill__icon {
+  display: inline-flex;
+}
+
+/* ---------- RoundGlassButton: back, menu, notifications, avatar, play ---------- */
+.st-round-btn {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: var(--st-tap);
+  height: var(--st-tap);
+  border-radius: var(--st-r-round);
+  background: var(--st-fill-figure, var(--st-fill-control));
+  background-image: var(--st-light-4); /* level 4 (glass-tokens.css 5a) */
+  box-shadow: var(--st-sheen-control), var(--st-depth-1), var(--st-glow-4);
+  color: var(--st-text);
+  transition:
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    box-shadow var(--st-dur-hover) var(--st-ease-out);
+}
+.st-round-btn--lg {
+  width: var(--st-tap-main);
+  height: var(--st-tap-main);
+}
+.st-round-btn:hover {
+  background: var(--st-fill-figure-hover, var(--st-fill-control-hover));
+  background-image: var(--st-light-4);
+}
+.st-round-btn--cream,
+.st-round-btn.is-on {
+  background: var(--st-cream);
+  color: var(--st-on-cream);
+}
+.st-round-btn--cream:hover,
+.st-round-btn.is-on:hover {
+  background: var(--st-cream-hover);
+}
+.st-round-btn--accent {
+  background: var(--st-accent);
+  color: var(--st-on-accent);
+  box-shadow: var(--st-glow-accent), var(--st-depth-1);
+}
+.st-round-btn--accent:hover {
+  background: var(--st-accent-hover);
+}
+.st-round-btn__dot {
+  position: absolute;
+  top: 9px;
+  right: 9px;
+  width: 9px;
+  height: 9px;
+  border-radius: var(--st-r-round);
+  background: var(--st-accent);
+  box-shadow: var(--st-glow-accent);
+}
+
+/* ---------- StatNumeral: a big light numeral with a small unit ---------- */
+.st-stat {
+  display: grid;
+  gap: var(--st-space-1);
+  min-width: 0;
+}
+.st-stat__value {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.08em;
+  color: var(--st-text-strong);
+  font-family: var(--st-font);
+  font-size: var(--st-fs-num);
+  font-weight: var(--st-weight-num);
+  font-variation-settings: "opsz" var(--st-opsz-num);
+  font-stretch: var(--st-wdth-display);
+  font-variant-numeric: lining-nums tabular-nums;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+/* The unit is small text: never under the floor (a screen may set a smaller numeral), and its own optical size, not
+   the numeral's display one (thin hairlines at 13-17 px). */
+.st-stat__unit {
+  font-size: max(var(--st-fs-caps), var(--st-fs-unit));
+  font-weight: var(--st-weight-body);
+  font-variation-settings: normal;
+  letter-spacing: 0;
+}
+.st-stat__label {
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
+}
+.st-stat__hint {
+  color: var(--st-text-amber);
+  font-size: var(--st-fs-chip);
+}
+
+/* ---------- ArcDial: an arc with a white knob (the Setup ring, the studio's render progress) ---------- */
+.st-dial {
+  position: relative;
+  display: inline-grid;
+  place-items: center;
+  width: var(--st-dial-size, var(--st-dial));
+  aspect-ratio: 1;
+  flex: none;
+}
+.st-dial__svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+.st-dial__groove,
+.st-dial__arc {
+  fill: none;
+  stroke-linecap: round;
+  stroke-width: var(--st-dial-track);
+}
+.st-dial__groove {
+  stroke: rgb(var(--st-well-rgb) / 0.55);
+}
+.st-dial__arc {
+  stroke: var(--st-accent); /* the gradient below where SVG paints it (stroke="url(#…)") */
+  transition: stroke-dasharray var(--st-dur-progress) var(--st-ease-progress);
+}
+.st-dial__stop-a {
+  stop-color: var(--st-action-top);
+}
+.st-dial__stop-b {
+  stop-color: var(--st-accent);
+}
+/* The white knob: a soft shade under it, and the accent ring (3:1 or more on the groove and on any glass) */
+.st-dial__knob,
+.st-dial__knob-shade {
+  transition:
+    cx var(--st-dur-progress) var(--st-ease-progress),
+    cy var(--st-dur-progress) var(--st-ease-progress);
+}
+.st-dial__knob {
+  fill: var(--st-knob);
+  stroke: var(--st-accent);
+  stroke-width: 2.5;
+}
+.st-dial__knob-shade {
+  fill: rgb(var(--st-shadow-rgb) / 0.4);
+}
+.st-dial__centre {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 2px;
+  max-width: 70%;
+  text-align: center;
+}
+.st-dial__value {
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-h2);
+  font-weight: var(--st-weight-num);
+  font-variant-numeric: lining-nums tabular-nums;
+  line-height: 1;
+}
+
+/* ---------- Stepper: white rounded-square − and + ---------- */
+.st-stepper {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--st-space-3);
+}
+.st-stepper__btn {
+  display: inline-grid;
+  place-items: center;
+  width: var(--st-tap);
+  height: var(--st-tap);
+  border-radius: var(--st-r-control);
+  background: var(--st-cream);
+  color: var(--st-on-cream);
+  box-shadow: var(--st-sheen-cream), var(--st-depth-1);
+  font-size: var(--st-fs-h3);
+  font-weight: var(--st-weight-ui);
+  line-height: 1;
+  transition:
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    box-shadow var(--st-dur-hover) var(--st-ease-out);
+}
+.st-stepper__btn:hover {
+  background: var(--st-cream-hover);
+  box-shadow: var(--st-sheen-cream), var(--st-depth-2);
+}
+.st-stepper__sign {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2.6;
+  stroke-linecap: round;
+}
+.st-stepper__btn[aria-disabled="true"] {
+  background: var(--st-cream-2);
+}
+.st-stepper__value {
+  min-width: 3ch;
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-h3);
+  font-variant-numeric: lining-nums tabular-nums;
+  text-align: center;
+}
+
+/* ---------- GlassToggle: the orange switch ---------- */
+.st-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  flex: none;
+  width: var(--st-toggle-w);
+  height: var(--st-tap);
+  padding: 0;
+  background: none;
+}
+.st-toggle__track {
+  position: relative;
+  width: 100%;
+  height: var(--st-toggle-h);
+  border-radius: var(--st-r-round);
+  background: var(--st-fill-well);
+  box-shadow: inset 0 2px 6px -2px rgb(var(--st-shadow-rgb) / 0.6);
+  transition: background-color var(--st-dur-hover) var(--st-ease-out);
+}
+.st-toggle:hover .st-toggle__track {
+  background: var(--st-fill-well-hover);
+}
+.st-toggle__knob {
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: var(--st-knob-size);
+  height: var(--st-knob-size);
+  border-radius: var(--st-r-round);
+  background: var(--st-knob);
+  box-shadow: var(--st-depth-1);
+  transition:
+    transform var(--st-dur-hover) var(--st-ease-out),
+    width var(--st-dur-tap) var(--st-ease-out);
+}
+.st-toggle[aria-checked="true"] .st-toggle__track {
+  background: var(--st-accent);
+  box-shadow: var(--st-glow-accent);
+}
+.st-toggle[aria-checked="true"]:hover .st-toggle__track {
+  background: var(--st-accent-hover);
+}
+.st-toggle[aria-checked="true"] .st-toggle__knob {
+  transform: translateX(calc(var(--st-toggle-w) - var(--st-knob-size) - 6px));
+}
+.st-cream .st-toggle__track {
+  background: rgb(var(--st-copper-rgb) / 0.28);
+}
+
+/* ---------- CreamCard: the one solid cream card among the glass (an orange toggle slot) ---------- */
+.st-cream-card {
+  display: grid;
+  gap: var(--st-space-2);
+  padding: var(--st-inset);
+}
+.st-cream-card__head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--st-space-3);
+}
+.st-cream-card__eyebrow {
+  color: var(--st-on-cream-orange);
+}
+.st-cream-card__title {
+  margin: 0;
+  color: var(--st-on-cream);
+  font-size: var(--st-fs-h3);
+  font-weight: var(--st-weight-display);
+  line-height: var(--st-lh-head);
+}
+.st-cream-card__body {
+  color: var(--st-on-cream-soft);
+  font-size: var(--st-fs-small);
+}
+.st-cream-card__toggle {
+  flex: none;
+}
+
+/* ---------- MediaRow: a thumbnail, a progress bar and controls ---------- */
+.st-media {
+  display: grid;
+  grid-template-columns: var(--st-thumb) minmax(0, 1fr);
+  grid-template-areas: "thumb text" "thumb bar" "controls controls";
+  align-items: center;
+  column-gap: var(--st-space-3);
+  row-gap: var(--st-space-2);
+  min-width: 0;
+  padding: var(--st-gap-surface);
+}
+.st-media__thumb {
+  grid-area: thumb;
+  width: var(--st-thumb);
+  aspect-ratio: 1;
+  overflow: hidden;
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-well);
+}
+.st-media__thumb > img,
+.st-media__thumb > video {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.st-media__text {
+  grid-area: text;
+  display: grid;
+  min-width: 0;
+}
+.st-media__title {
+  overflow: hidden;
+  color: var(--st-text);
+  font-size: var(--st-fs-body);
+  font-weight: var(--st-weight-ui);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.st-media__meta {
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
+}
+.st-media__bar {
+  grid-area: bar;
+  display: flex;
+  align-items: center;
+  gap: var(--st-space-2);
+  min-width: 0;
+}
+.st-media__track {
+  position: relative;
+  flex: 1;
+  height: 6px;
+  overflow: hidden;
+  border-radius: var(--st-r-round);
+  background: var(--st-track);
+}
+.st-media__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: var(--st-accent);
+  transition: width var(--st-dur-progress) var(--st-ease-progress);
+}
+.st-media__time {
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-chip);
+  font-variant-numeric: lining-nums tabular-nums;
+}
+.st-media__controls {
+  grid-area: controls;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: var(--st-space-2);
+}
+.st-media__controls:empty {
+  display: none;
+}
+@media (min-width: 560px) {
+  .st-media {
+    grid-template-columns: var(--st-thumb) minmax(0, 1fr) auto;
+    grid-template-areas: "thumb text controls" "thumb bar controls";
+  }
+}
+
+/* ---------- PhoneTabHighlight: the round active highlight of the phone tab bar ---------- */
+.st-tab-orb {
+  display: block;
+  width: var(--st-tap-phone);
+  height: var(--st-tap-phone);
+  border-radius: var(--st-r-round);
+  background: rgb(var(--st-cream-rgb) / 0.16);
+  box-shadow: var(--st-sheen-control), var(--st-glow-behind);
+}
+/* On the bar's sliding <Glide> (className "… st-tab-orb"): Glide sizes its box to the tab, so the box itself stays
+   clear and the orb is drawn round in its middle, sliding with it. */
+.glide.st-tab-orb {
+  border-radius: var(--st-r-control);
+  background: none;
+  box-shadow: none;
+}
+.glide.st-tab-orb::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  width: var(--st-tap-phone);
+  height: var(--st-tap-phone);
+  margin: auto;
+  border-radius: var(--st-r-round);
+  background: rgb(var(--st-cream-rgb) / 0.16);
+  box-shadow: var(--st-sheen-control), var(--st-glow-behind);
+}
+
+/* ---------- A press you can feel: controls give a little under the finger (a surface never moves) ---------- */
+:is(.st-pill, .st-round-btn, .st-stepper__btn) {
+  transition-property: background-color, color, box-shadow, transform;
+  transition-duration: var(--st-dur-hover), var(--st-dur-hover), var(--st-dur-hover), var(--st-dur-tap);
+  transition-timing-function: var(--st-ease-out), var(--st-ease-out), var(--st-ease-out), var(--st-ease-spring);
+}
+:is(button.st-pill, a.st-pill, .st-round-btn, .st-stepper__btn):active {
+  transform: scale(0.95);
+}
+.st-toggle:active .st-toggle__knob {
+  width: calc(var(--st-knob-size) + 4px);
+}
+.st-toggle[aria-checked="true"]:active .st-toggle__knob {
+  transform: translateX(calc(var(--st-toggle-w) - var(--st-knob-size) - 10px));
+}
+
+/* Less motion: the knob jumps, a press does not give (things change, they do not travel) */
+@media (prefers-reduced-motion: reduce) {
+  .st-toggle__knob,
+  :is(.st-pill, .st-round-btn, .st-stepper__btn) {
+    transition-duration: 0ms;
+  }
+  :is(button.st-pill, a.st-pill, .st-round-btn, .st-stepper__btn):active {
+    transform: none;
+  }
+}
+
+/* ---------- Focus: a cream and orange ring (light, never an outline) ---------- */
+:is(.st-pill, .st-round-btn, .st-stepper__btn, .st-toggle):focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
+}
+
+/* ---------- Phones: every target 48 px ---------- */
+@media (max-width: 767.98px) {
+  .st-pill,
+  .st-round-btn,
+  .st-stepper__btn,
+  .st-toggle {
+    min-height: var(--st-tap-phone);
+  }
+  .st-round-btn,
+  .st-stepper__btn {
+    width: var(--st-tap-phone);
+    height: var(--st-tap-phone);
+  }
+  .st-toggle {
+    height: var(--st-tap-phone);
+  }
+}

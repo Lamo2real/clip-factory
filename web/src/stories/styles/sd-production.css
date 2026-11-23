@@ -1,0 +1,601 @@
+/* ---------- Production: the list of videos (glass rows), a new video (glass panels), one video's page (the preview as
+   hero glass: the ArcDial for the render progress beside the video's MediaRow, then the steps, the filmstrip on glass
+   and the details). ---------- */
+.st-s-runs,
+.st-s-queue,
+.st-s-jobs {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A video in the list: a glass row (.st-glass in the markup). The cover hugs the row's corner, so its radius is the
+   row's less the gap (surface 20 − 6 = control 14). */
+.st-s-run {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 12px 16px;
+  align-items: start;
+  padding: var(--st-gap-surface) var(--st-space-4) var(--st-gap-surface) var(--st-gap-surface);
+  border-radius: var(--st-r-surface);
+}
+
+.st-s-run:not(.st-glass) {
+  background: var(--st-tint-card);
+  box-shadow: var(--st-sheen), var(--st-depth-1);
+}
+
+@media (min-width: 720px) {
+  .st-s-run {
+    grid-template-columns: auto 1fr auto;
+  }
+}
+
+.st-s-run__cover {
+  display: block;
+  border-radius: var(--st-r-control);
+  overflow: hidden;
+  box-shadow: var(--st-depth-1);
+  transition: transform var(--st-dur-hover) var(--st-ease-out);
+}
+
+.st-s-run__cover:hover {
+  transform: scale(1.03);
+}
+
+.st-s-run__cover:focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
+}
+
+.st-s-run__cover img,
+.st-s-run__blank {
+  display: block;
+  width: 54px;
+  height: 96px;
+  object-fit: cover;
+  background:
+    radial-gradient(70% 50% at 70% 20%, rgb(var(--st-amber-rgb) / 0.4), transparent 70%),
+    linear-gradient(160deg, var(--st-base-2), var(--st-base-3));
+}
+
+.st-s-run__body {
+  display: grid;
+  gap: 8px;
+  padding-block: 8px;
+}
+
+.st-s-run__top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+
+.st-s-run__title {
+  display: inline-flex;
+  align-items: center;
+  min-height: 44px;
+  color: var(--st-text-strong);
+  font-family: var(--st-font);
+  font-size: 1.1875rem;
+  font-weight: var(--st-weight-display);
+  font-optical-sizing: auto;
+  line-height: 1.25;
+  text-decoration: none;
+  overflow-wrap: anywhere;
+  transition: color var(--st-dur-hover) var(--st-ease-out);
+}
+
+.st-s-run__title:hover {
+  color: var(--st-text-amber);
+}
+
+.st-s-run__title:focus-visible {
+  outline: none;
+  border-radius: var(--st-r-tiny);
+  box-shadow: var(--st-focus-ring);
+}
+
+.st-s-run__meta {
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
+}
+
+.st-s-run__go {
+  grid-column: 1 / -1;
+  justify-self: end;
+}
+
+@media (min-width: 720px) {
+  .st-s-run__go {
+    grid-column: auto;
+    align-self: center;
+  }
+}
+
+/* ---------- Make a new video ---------- */
+.st-s-newvideo {
+  display: grid;
+  gap: var(--st-s-gap);
+}
+
+/* Words and music: Captions is the page's one small solid cream card among the glass (the reference's highlighted
+   card), espresso words and the orange toggle; off, its track is a soft copper well on the cream. */
+.st-s-words .st-s-switch-row {
+  padding: var(--st-space-3) var(--st-space-3) var(--st-space-3) var(--st-space-4);
+  border-radius: var(--st-r-control);
+  background: var(--st-tint-cream);
+  box-shadow: var(--st-sheen-cream), var(--st-depth-1);
+  color: var(--st-on-cream);
+}
+
+.st-s-words .st-s-switch-row__label {
+  color: var(--st-on-cream);
+}
+
+.st-s-words .st-s-switch-row__line {
+  color: var(--st-on-cream-soft);
+}
+
+.st-s-words .st-s-switch-row .st-toggle:not([aria-checked="true"]) .st-toggle__track {
+  background: rgb(var(--st-copper-rgb) / 0.28);
+}
+
+.st-s-words .st-s-switch-row .st-toggle:not([aria-checked="true"]):hover .st-toggle__track {
+  background: rgb(var(--st-copper-rgb) / 0.4);
+}
+
+/* On the cream the cream part of the focus ring would vanish: the ring is the darker orange (6.3:1 on cream). */
+.st-s-words .st-s-switch-row .st-toggle:focus-visible {
+  outline: none;
+  box-shadow: 0 0 0 3px var(--st-on-cream-orange);
+}
+
+.st-s-castpick {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 132px), 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A character to cast: a glass tile (radius control); a picked one solid cream with the orange tick. */
+.st-s-casttile {
+  position: relative;
+  display: grid;
+  justify-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 44px;
+  padding: 12px 8px;
+  border: 0;
+  border-radius: var(--st-r-control);
+  color: var(--st-text);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  font: var(--st-weight-ui) var(--st-fs-body) / 1.2 var(--st-font);
+  transition:
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    color var(--st-dur-hover) var(--st-ease-out),
+    transform var(--st-dur-hover) var(--st-ease-out);
+}
+
+.st-s-casttile:hover {
+  background: var(--st-fill-control-hover);
+  transform: translateY(-2px);
+}
+
+.st-s-casttile:focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
+}
+
+.st-s-casttile.is-on {
+  color: var(--st-on-cream);
+  background: var(--st-tint-cream);
+  box-shadow: var(--st-sheen-cream), var(--st-depth-1), var(--st-glow-behind);
+}
+
+.st-s-casttile.is-on:hover {
+  background: var(--st-cream-hover);
+}
+
+.st-s-casttile[aria-disabled="true"]:hover {
+  transform: none;
+}
+
+.st-s-casttile__tick {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--st-r-round);
+  color: var(--st-text);
+  background: rgb(var(--st-cream-rgb) / 0.16);
+  font-weight: var(--st-weight-ui);
+}
+
+.st-s-casttile.is-on .st-s-casttile__tick {
+  color: var(--st-on-accent);
+  background: var(--st-accent);
+  box-shadow: var(--st-glow-accent);
+}
+
+/* ---------- One video's page: the preview (hero glass: the render progress dial and the video's media row) ---------- */
+.st-s-preview {
+  display: grid;
+  justify-items: center;
+  gap: var(--st-space-4);
+  padding: var(--st-inset);
+}
+
+.st-s-preview:not(.st-glass) {
+  background: var(--st-tint-hero);
+  box-shadow: var(--st-sheen-hero), var(--st-depth-2), var(--st-glow-behind);
+}
+
+/* The dial is sized here (the figure's own size hook); its numeral fits inside it at every width. */
+.st-s-preview__dial {
+  --st-dial-size: clamp(144px, 34vw, 184px);
+}
+
+/* The StatNumeral inside the dial: everything it needs is set here, on this page's own selectors, so no other
+   screen's .st-stat rules (the Dashboard's tiles) reach it: a big light numeral, a sturdy small unit, a 15 px label. */
+.st-s-preview__dial .st-stat {
+  grid-column: auto;
+  justify-items: center;
+  gap: var(--st-space-1);
+  padding: 0;
+  color: var(--st-text-strong);
+}
+
+.st-s-preview__dial .st-stat__value {
+  font-size: clamp(2.25rem, 1.9rem + 1vw, 2.875rem);
+  font-weight: var(--st-weight-num);
+  line-height: 1;
+  animation: none;
+}
+
+/* The % in Jost at body size (Playfair's is a small high-set glyph that reads as a smudge at this size). */
+.st-s-preview__dial .st-stat__unit {
+  font-family: var(--st-font-caps);
+  font-size: var(--st-fs-body);
+  font-weight: var(--st-weight-body);
+  font-variation-settings: normal;
+  letter-spacing: 0;
+}
+
+.st-s-preview__dial .st-stat__label {
+  max-width: 11ch;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
+  font-weight: var(--st-weight-ui);
+  text-align: center;
+  line-height: 1.25;
+}
+
+/* The row and anything said about its actions, in one column beside the dial. */
+.st-s-preview__main {
+  display: grid;
+  gap: var(--st-space-3);
+  justify-self: stretch;
+  min-width: 0;
+}
+
+/* The video's own row: a deeper inner surface (radius control) with the cover (the row's radius less its 6 px gap),
+   what is happening now, the video's kind and length, its bar and percent, and the page's actions under them. */
+.st-s-preview__row.st-media {
+  grid-template-columns: var(--st-thumb) minmax(0, 1fr);
+  grid-template-areas: "thumb text" "thumb bar" "controls controls";
+  border-radius: var(--st-r-control);
+  background: rgb(var(--st-well-rgb) / 0.3);
+  box-shadow: var(--st-sheen-control);
+}
+
+.st-s-preview__row .st-media__title {
+  color: var(--st-text-strong);
+  font-family: var(--st-font);
+  font-weight: var(--st-weight-display);
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.st-s-preview.is-bad .st-s-preview__row .st-media__title {
+  color: var(--st-coral-ink);
+}
+
+.st-s-preview__row .st-media__meta {
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.st-s-preview__row .st-media__thumb {
+  align-self: start;
+  border-radius: var(--st-r-inner); /* on the scale (10), as every media thumbnail */
+  box-shadow: var(--st-depth-1);
+}
+
+.st-s-preview__row .st-media__time {
+  min-width: 4ch;
+  text-align: end;
+}
+
+/* The actions ride under the bar, at the row's right (where the thumb is). */
+.st-s-preview__row .st-media__controls {
+  justify-content: flex-end;
+  padding-top: var(--st-space-1);
+}
+
+.st-s-preview__row .st-s-actionbar {
+  flex: 1 1 auto;
+}
+
+.st-s-preview__blank {
+  display: block;
+  width: 100%;
+  height: 100%;
+  background:
+    radial-gradient(70% 55% at 70% 25%, rgb(var(--st-amber-rgb) / 0.45), transparent 70%),
+    linear-gradient(160deg, var(--st-base-2), var(--st-base-3));
+}
+
+@media (min-width: 600px) {
+  .st-s-preview {
+    grid-template-columns: auto minmax(0, 1fr);
+    align-items: center;
+    justify-items: stretch;
+    gap: var(--st-space-6);
+  }
+}
+
+/* ---------- Production details (a glass card; the markup adds .st-glass) ---------- */
+.st-s-details {
+  padding: 4px var(--st-inset) 14px;
+  border-radius: var(--st-r-surface);
+}
+
+.st-s-details:not(.st-glass) {
+  background: var(--st-tint-card);
+  box-shadow: var(--st-sheen), var(--st-depth-1);
+}
+
+.st-s-details__sum {
+  display: flex;
+  align-items: center;
+  min-height: 48px;
+  color: var(--st-text-strong);
+  font-family: var(--st-font);
+  font-size: 1.125rem;
+  font-weight: var(--st-weight-display);
+  border-radius: var(--st-r-inner);
+  transition: color var(--st-dur-hover) var(--st-ease-out);
+}
+
+.st-s-details__sum:hover {
+  color: var(--st-text-amber);
+}
+
+.st-s-details__sum:focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
+}
+
+.st-s-details__title {
+  margin: 14px 0 8px;
+  color: var(--st-text-strong);
+  font-family: var(--st-font);
+  font-size: var(--st-fs-body);
+  font-weight: var(--st-weight-display);
+  line-height: 1.2;
+}
+
+.st-s-facts {
+  display: grid;
+  grid-template-columns: minmax(0, auto) minmax(0, 1fr);
+  gap: 6px 16px;
+  margin: 0;
+}
+
+.st-s-facts dt {
+  max-width: 15em;
+  color: var(--st-text);
+  font-weight: var(--st-weight-ui);
+}
+
+/* A narrow screen or the Review side column: each name above its value. */
+.st-s-made .st-s-facts {
+  grid-template-columns: minmax(0, 1fr);
+  gap: 4px;
+}
+
+@media (max-width: 560px) {
+  .st-s-facts {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 2px;
+  }
+
+  .st-s-facts dd {
+    margin-bottom: 8px;
+  }
+}
+
+.st-s-facts dd {
+  margin: 0;
+  color: var(--st-text-soft);
+  overflow-wrap: anywhere;
+}
+
+.st-s-facts__mono {
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: var(--st-fs-chip);
+}
+
+.st-s-jobs li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  color: var(--st-text-soft);
+}
+
+/* ---------- Filmstrip: scene tiles (radius control) on the glass panel; the picture inside at inner 10 ---------- */
+.st-s-film {
+  display: flex;
+  gap: 12px;
+  margin: 0;
+  padding: 4px 2px 12px;
+  list-style: none;
+  overflow-x: auto;
+  scroll-snap-type: x proximity;
+  overscroll-behavior-x: contain;
+}
+
+.st-s-film__card {
+  display: grid;
+  align-content: start;
+  gap: 8px;
+  flex: 0 0 auto;
+  width: 164px;
+  padding: 16px 16px 14px;
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  scroll-snap-align: start;
+  transition:
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    box-shadow var(--st-dur-hover) var(--st-ease-out);
+}
+
+.st-s-film__card:hover,
+.st-s-film__card.is-live {
+  background: var(--st-fill-control-hover);
+  box-shadow: var(--st-sheen-control), var(--st-glow-behind);
+}
+
+.st-s-film__frame {
+  position: relative;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--st-r-inner);
+  overflow: hidden;
+  background: var(--st-base-3);
+  box-shadow: var(--st-depth-1);
+}
+
+.st-s-film__frame:focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
+}
+
+.st-s-film__frame canvas,
+.st-s-film__blank {
+  display: block;
+}
+
+.st-s-film__blank {
+  background:
+    radial-gradient(70% 45% at 70% 20%, rgb(var(--st-amber-rgb) / 0.35), transparent 70%),
+    linear-gradient(160deg, var(--st-base-2), var(--st-base-3));
+}
+
+/* Play: a white knob with an espresso glyph; orange while it plays. */
+.st-s-film__play {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--st-r-round);
+  color: var(--st-on-cream);
+  background: var(--st-knob);
+  box-shadow: var(--st-depth-1);
+  font-size: var(--st-fs-min);
+  font-weight: var(--st-weight-ui);
+  transition:
+    transform var(--st-dur-hover) var(--st-ease-out),
+    background-color var(--st-dur-hover) var(--st-ease-out);
+}
+
+.st-s-film__frame:hover .st-s-film__play {
+  transform: scale(1.1);
+}
+
+.st-s-film__frame[aria-pressed="true"] .st-s-film__play {
+  color: var(--st-on-accent);
+  background: var(--st-accent);
+  box-shadow: var(--st-glow-accent), var(--st-depth-1);
+}
+
+.st-s-film__text {
+  display: grid;
+  gap: 2px;
+}
+
+/* "Scene 1": a short wide-tracked caps caption (Jost), warm. */
+.st-s-film__num {
+  color: var(--st-text-amber);
+  font-family: var(--st-font-caps);
+  font-size: var(--st-fs-caps);
+  font-weight: 500;
+  letter-spacing: var(--st-track-caps);
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.st-s-film__title {
+  color: var(--st-text-strong);
+  font-weight: var(--st-weight-ui);
+  overflow-wrap: anywhere;
+}
+
+.st-s-film__len {
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-chip);
+}
+
+.st-s-film__words {
+  display: grid;
+  gap: 2px;
+  font-size: var(--st-fs-chip);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.st-s-film__words.is-none {
+  color: var(--st-text-soft);
+}
+
+.st-s-film__still {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-chip);
+  font-weight: var(--st-weight-ui);
+}
+
+.st-s-film__still img {
+  width: 44px;
+  height: 78px;
+  object-fit: cover;
+  border-radius: var(--st-r-tiny);
+}
+
+.st-s-film__actions {
+  display: flex;
+}
+
+.st-s-film__actions .st-btn {
+  width: 100%;
+}

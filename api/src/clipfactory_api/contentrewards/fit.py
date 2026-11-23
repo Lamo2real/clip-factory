@@ -97,10 +97,9 @@ HAND_SEND = "After it posts, send its link to Content Rewards within 30 minutes.
 UNJUDGED = "Claude couldn't check the campaign's rules. Check it yourself."
 # The agent's ``logo`` row that passes only because the job's rules didn't ask for a logo.
 LOGO_NOT_ASKED = "This campaign does not ask for a logo."
-TIKTOK_WAITS = (
-    "TikTok is left out for now. Until TikTok checks Clip Factory, TikTok posts are private, and private posts can't "
-    "earn."
-)
+# A campaign clip's TikTok waits until TikTok approves the app (tiktok_mac.CAMPAIGN_SKIPS, the same words: a test pins
+# them): before that only the owner's Mac posts TikTok, and it can't mark a post as Branded content yet.
+TIKTOK_WAITS = "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet."
 _NOT_WORD = re.compile(r"[\W_]+")
 _CHANNEL_PATHS = ("c", "user", "channel")
 COUNTS = {3: "all three", 4: "all four", 5: "all five"}

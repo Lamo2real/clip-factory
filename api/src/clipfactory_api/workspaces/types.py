@@ -13,8 +13,20 @@ from typing import Final
 CLIPS: Final = "clips"  # the built-in workspace id and type: today's app, never written as an item
 STORIES: Final = "stories"  # the workspace type of Lamo Stories; also the id of the first Lamo Stories workspace
 FIRST_STORIES_ID: Final = "stories"
-FIRST_STORIES_NAME: Final = "Lamo Stories"
+FIRST_STORIES_NAME: Final = "Funded Clips"
+# The first workspace's earlier default names: "Lamo Stories" until 22 Nov 2026, then "Clip Factory Stories" and "Clip
+# Stories" until 23 Nov 2026.
+# A stored workspace still named one of them is shown with today's name (``shown_workspace_name``); the stored item
+# itself is never rewritten.
+OLD_STORIES_NAME: Final = "Lamo Stories"
+OLD_STORIES_NAMES: Final = (OLD_STORIES_NAME, "Clip Factory Stories", "Clip Stories")
 MAX_WORKSPACES: Final = 10
+
+
+def shown_workspace_name(stored: object) -> str:
+    """The name a person sees for a stored ``workspaceName``: an old default reads as today's default."""
+    name = str(stored or "")
+    return FIRST_STORIES_NAME if name in OLD_STORIES_NAMES else name
 
 
 @dataclass(frozen=True)
@@ -27,7 +39,7 @@ class WorkspaceType:
 # The registry (CONTRACTS §45.2). A future brand is a new `stories` workspace (no code) or one new entry here.
 WORKSPACE_TYPES: Final[dict[str, WorkspaceType]] = {
     CLIPS: WorkspaceType(CLIPS, "Lamo Clips", builtin=True),
-    STORIES: WorkspaceType(STORIES, "Lamo Stories", builtin=False),
+    STORIES: WorkspaceType(STORIES, "Funded Clips", builtin=False),
 }
 
 WORKSPACE_ID: Final = re.compile(r"^(clips|stories|[0-9A-HJKMNP-TV-Z]{26})$")
@@ -170,7 +182,7 @@ def oauth_pk(nonce: str) -> str:
 def rate_pk(workspace_id: str, platform: str) -> str:
     """Lamo Stories' own rate counters, used only with its own developer app (§45.30)."""
     if workspace_id == CLIPS or not WORKSPACE_ID.match(workspace_id):
-        raise ValueError("not a Lamo Stories workspace id")
+        raise ValueError("not a Funded Clips workspace id")
     if platform not in PLATFORMS:
         raise ValueError(f"unknown platform: {platform}")
     return f"RATE#WS#{workspace_id}#{platform}"
@@ -199,7 +211,7 @@ def provider_secret_name(prefix: str, workspace_id: str, provider_id: str) -> st
 
 def _workspace_base(prefix: str, workspace_id: str) -> str:
     if workspace_id == CLIPS or not WORKSPACE_ID.match(workspace_id):
-        raise ValueError("not a Lamo Stories workspace id")
+        raise ValueError("not a Funded Clips workspace id")
     base = prefix if prefix.endswith("/") else prefix + "/"
     if "/platforms/" in base:
         raise ValueError("workspace secrets never live under cf-prod/platforms/")

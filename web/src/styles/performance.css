@@ -242,6 +242,18 @@
   color: var(--ink-2);
   font-size: var(--fs-small);
 }
+/* TikTok's two choices (It's on TikTok, Try again) and Try again's question line up with the other actions: centred
+   while the actions are centred (a phone), from the left once the actions start there (§47.4). */
+.perf__actions > :is(.post__choices, .post__confirm, .post-link),
+.perf__actions .post__confirm-buttons {
+  justify-content: center;
+}
+.perf__actions > .post__confirm {
+  text-align: center;
+}
+.perf__actions .post__confirm-text {
+  flex-basis: 100%;
+}
 .perf__preview {
   grid-area: preview;
   position: relative;
@@ -594,8 +606,13 @@
   .perf__winner-dot {
     display: inline;
   }
-  .perf__actions {
+  .perf__actions,
+  .perf__actions > :is(.post__choices, .post__confirm, .post-link),
+  .perf__actions .post__confirm-buttons {
     justify-content: flex-start;
+  }
+  .perf__actions > .post__confirm {
+    text-align: left;
   }
   .perf__updated {
     text-align: left;
@@ -980,15 +997,22 @@
   display: grid;
   gap: 8px;
 }
+/* The words (the hook, and what the Mac does with TikTok) come first, the buttons after them, on the right of the words
+   when they fit and under them when not (a phone): the same order on screen as for reading (§47.4). */
 .kept-now__item {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  justify-content: space-between;
+  justify-content: flex-end;
   gap: 8px 12px;
 }
+.kept-now__text {
+  flex: 1 1 260px;
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
 .kept-now__hook {
-  flex: 1 1 200px;
   min-width: 0;
   font-family: var(--font-display);
   font-style: italic;
@@ -996,8 +1020,6 @@
 }
 /* What the owner's Mac is doing with the clip's TikTok post (§47.4), under its hook. */
 .kept-now__mac {
-  flex: 1 1 100%;
-  order: 1;
   color: var(--ink-2);
   overflow-wrap: anywhere;
 }

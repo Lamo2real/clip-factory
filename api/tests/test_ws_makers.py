@@ -205,7 +205,7 @@ def test_an_ended_maker_or_model_is_never_newly_picked(wcall: WsCall) -> None:
     for chosen, word in (({"images": "nova-canvas"}, "picture"), ({"video": "nova-reel"}, "video")):
         status, body = _pick(wcall, chosen)
         assert status == 400
-        assert body["error"]["message"].endswith(f"Pick another {word} maker in Lamo Stories › Settings › Video.")
+        assert body["error"]["message"].endswith(f"Pick another {word} maker in Funded Clips › Settings › Video.")
         assert "was ended by Amazon on 30 Sep 2026" in body["error"]["message"]
     rows = _rows(wcall)
     assert (rows["nova-canvas"]["state"], rows["nova-canvas"]["replacement"]) == ("ended", "stability")
@@ -264,7 +264,10 @@ def test_an_added_picture_model_is_listed_under_its_own_maker_and_not_checked_ye
         ({"kind": "voice"}, "Say what the model makes"),
         ({"host": "anthropic"}, "A picture model runs on Amazon Bedrock (bedrock) or an OpenAI-compatible API"),
         ({"host": "elevenlabs"}, "A picture model runs on"),
-        ({"modelId": "amazon.nova-pro-v1:0"}, "Lamo Stories can make pictures on Amazon Bedrock with Stability AI"),
+        (
+            {"modelId": "amazon.nova-pro-v1:0"},
+            "Funded Clips can make pictures on Amazon Bedrock with Stability AI",
+        ),
         ({"modelId": "not a model"}, "That is not a Bedrock model id."),
         ({"region": "mars-1"}, "Type the AWS Region code"),
         ({"region": "eu-west-1", "modelId": "us.stability.stable-image-core-v1:1"}, "This inference profile id"),
@@ -510,7 +513,7 @@ def test_your_own_video_model_is_on_only_after_its_try_it(wcall: WsCall, store: 
     story = {"characterIds": [hero], "brief": {"title": "Ice", "logline": "A skid.", "category": "comedy"}}
     assert _pick(wcall, {"video": "own-video"})[0] == 200
     status, body = wcall("POST", f"{BASE}/stories", story)
-    assert (status, body["error"]["message"]) == (409, "Add a video model first: tap Add a model in Lamo Stories › "
+    assert (status, body["error"]["message"]) == (409, "Add a video model first: tap Add a model in Funded Clips › "
                                                        "Settings › Video.")  # fmt: skip
     assert wcall("POST", f"{BASE}/providers/own-video/check")[1]["error"]["message"].startswith("Add a video model")
     assert wcall("PUT", f"{BASE}/makers/models/custom-ray", VIDEO)[0] == 200

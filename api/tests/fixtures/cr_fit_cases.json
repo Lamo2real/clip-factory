@@ -1565,7 +1565,7 @@
     "canUpload": false,
     "canRemake": false,
     "items": [
-     {"rule": "places", "state": "no", "text": "This campaign only pays for TikTok. TikTok keeps Clip Factory's posts private until it checks the app, and private posts can't earn. Pick a campaign that pays for YouTube, Instagram, X or Facebook.", "fix": {"kind": "open", "label": "Find another campaign", "href": "https://contentrewards.com/c/discover", "external": true}},
+     {"rule": "places", "state": "no", "text": "This campaign only pays for TikTok. Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet. Pick a campaign that pays for YouTube, Instagram, X or Facebook.", "fix": {"kind": "open", "label": "Find another campaign", "href": "https://contentrewards.com/c/discover", "external": true}},
      {"rule": "send", "state": "note", "text": "After it posts, Clip Factory sends it to Content Rewards by itself.", "fix": null},
      {"rule": "length", "state": "ok", "text": "42 seconds. FaZe Clips takes 15 to 60.", "fix": null},
      {"rule": "on_screen", "state": "ok", "text": "“Paid partnership” shows for the first 3 seconds.", "fix": null},
@@ -1641,7 +1641,7 @@
     "canUpload": true,
     "canRemake": true,
     "items": [
-     {"rule": "places", "state": "note", "text": "TikTok is left out for now. Until TikTok checks Clip Factory, TikTok posts are private, and private posts can't earn.", "fix": null, "platform": "tiktok"},
+     {"rule": "places", "state": "note", "text": "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet.", "fix": null, "platform": "tiktok"},
      {"rule": "send", "state": "note", "text": "After it posts, Clip Factory sends it to Content Rewards by itself.", "fix": null},
      {"rule": "length", "state": "ok", "text": "42 seconds. FaZe Clips takes 15 to 60.", "fix": null},
      {"rule": "places", "state": "ok", "text": "Goes to YouTube. FaZe Clips pays for it.", "fix": null},

@@ -1,128 +1,127 @@
-// Post it on TikTok yourself (docs/CONTRACTS.md §42): the Library's button, the sheet, I posted it, Add link and Undo.
-import { devices, expect, test } from "@playwright/test";
+// Posted on TikTok without its link (docs/CONTRACTS.md §42.2): the inline Add link in the TikTok row, which saves a
+// pasted link or, with Find it for me, lets Clip Factory find the post (nothing is saved when it finds nothing). The
+// manual "Post it yourself" sheet is gone (ADR-86): no control of it shows on the Library, the clip page, Review or
+// Settings › Auto-posting.
+import { expect, test, type Page } from "@playwright/test";
 import { settle } from "./helpers.ts";
-import type { Page } from "@playwright/test";
 
-/** The first card whose TikTok was uploaded privately, found again by its hook (its words change once marked). */
-async function privateCard(page: Page) {
-  const first = page.locator(".lib-card", { has: page.locator(".post", { hasText: "Uploaded privately" }) }).first();
-  const hook = await first.locator(".lib-card__hook").innerText();
-  const card = page.locator(".lib-card", { has: page.locator(".lib-card__hook", { hasText: hook }) });
-  return { card, row: card.locator(".post", { hasText: "TikTok" }) };
+type MockWindow = Window & {
+  __cfMock?: {
+    mac: {
+      ping(): unknown;
+      claim(clipId: string): unknown;
+      done(clipId: string, link?: string): unknown;
+    };
+  };
+};
+
+const LINK = "https://www.tiktok.com/@lamo.clips/video/7710644811602169121";
+/** Every control the manual sheet had, by its name. */
+const MANUAL = /Post it (on TikTok )?yourself|I posted it|AirDrop|^Open TikTok$|Save the video|Save to my phone/;
+
+test.use({ viewport: { width: 1440, height: 900 } });
+
+async function go(page: Page, path: string) {
+  await page.evaluate((p) => {
+    history.pushState({}, "", p);
+    dispatchEvent(new PopStateEvent("popstate"));
+  }, path);
+  await settle(page);
 }
 
-test("library: post a private TikTok clip yourself, add its link, and undo", async ({ page }) => {
-  await page.goto("/library");
-  await settle(page);
-  const { row } = await privateCard(page);
-  await row.getByRole("button", { name: "Post it on TikTok yourself" }).click();
+const tiktokRow = (page: Page, clipId: string) =>
+  page.locator(".lib-card", { has: page.locator(`[id="lib-${clipId}"]`) }).locator(".post", { has: page.locator(".post__name", { hasText: /^TikTok$/ }) });
 
-  const sheet = page.getByRole("dialog", { name: "Post it on TikTok yourself" });
-  await expect(sheet).toBeVisible();
-  // A computer: the file and TikTok's own upload page, the steps in TikTok's words, the caption to paste.
-  await expect(sheet.getByRole("button", { name: "Save the video" })).toBeVisible();
-  await expect(sheet.getByRole("button", { name: "Open TikTok" })).toBeVisible();
-  await expect(sheet.getByText("Everyone", { exact: true })).toBeVisible();
-  await expect(sheet.getByText("Clip Factory’s own TikTok upload stays Only me")).toBeVisible();
+/**
+ * A clip the owner's Mac posted on TikTok without finding its link (its done came with an empty link), on the
+ * Library: Your Mac posts TikTok on, Post with my Mac, then the Mac's done.
+ */
+async function postedWithoutLink(page: Page) {
+  await page.goto("/");
+  await settle(page);
+  await go(page, "/settings/posting/tiktok-mac");
+  await page.getByRole("switch", { name: "My Mac posts my TikTok clips" }).click();
+  await expect(page.getByRole("switch", { name: "My Mac posts my TikTok clips" })).toHaveAttribute("aria-checked", "true");
+  await page.evaluate(() => (window as MockWindow).__cfMock!.mac.ping());
+  await go(page, "/library");
+  const card = page.locator(".lib-card", { has: page.locator(".post__status", { hasText: /^Not on TikTok yet$/ }) }).first();
+  const clipId = (await card.getAttribute("aria-labelledby"))!.replace("lib-", "");
+  const row = tiktokRow(page, clipId);
+  await row.getByRole("button", { name: "Post with my Mac" }).click();
+  await expect(row.locator(".post__status")).toHaveText(/^Waiting for your Mac/);
+  await page.evaluate((id) => {
+    const m = (window as MockWindow).__cfMock!.mac;
+    m.claim(id);
+    m.done(id, "");
+  }, clipId);
+  await expect(row.locator(".post__status")).toHaveText("Posted by your Mac · Everyone · add the link");
+  return row;
+}
+
+test("library: Add link in the row saves a pasted TikTok link", async ({ page }) => {
+  const row = await postedWithoutLink(page);
+  // The field is in the row itself: no dialog.
+  const box = row.getByRole("textbox", { name: "TikTok link" });
+  await expect(box).toBeVisible();
+  await expect(page.getByRole("dialog")).toHaveCount(0);
+  await expect(row.getByRole("button", { name: "Paste the TikTok link" })).toBeVisible();
 
   // Not a TikTok link: a plain sentence, nothing saved.
-  await sheet.getByRole("textbox", { name: /TikTok link/ }).fill("hello");
-  await sheet.getByRole("button", { name: "I posted it" }).click();
-  await expect(sheet.getByRole("alert")).toHaveText("That is not a TikTok link. In TikTok, tap Share, then Copy link, and paste it here.");
+  await box.fill("hello");
+  await row.getByRole("button", { name: "Save the link" }).click();
+  await expect(row.getByRole("alert")).toHaveText("That is not a TikTok link. In TikTok, tap Share, then Copy link, and paste it here.");
+  await expect(row.locator(".post__status")).toHaveText("Posted by your Mac · Everyone · add the link");
 
-  // No link: posted by you, and Add link asks for it.
-  await sheet.getByRole("textbox", { name: /TikTok link/ }).fill("");
-  await sheet.getByRole("button", { name: "I posted it" }).click();
-  await expect(sheet).toHaveCount(0);
-  // No link: the mock's first look for the post on TikTok finds nothing yet.
-  await expect(page.getByText("On TikTok for everyone! Clip Factory could not find it on your TikTok yet. Tap Add link in a minute.")).toBeVisible();
-  await expect(row).toContainText("Posted by you · Everyone · add the link to count views");
-  await expect(row.getByRole("button", { name: "Post it on TikTok yourself" })).toHaveCount(0);
-
-  await row.getByRole("button", { name: "Add the TikTok link" }).click();
-  const linkSheet = page.getByRole("dialog", { name: "Add the TikTok link" });
-  await linkSheet.getByRole("textbox", { name: /TikTok link/ }).fill("https://www.tiktok.com/@lamo.clips/video/7710644811602169121");
-  await linkSheet.getByRole("button", { name: "Save the link" }).click();
+  await box.fill(LINK);
+  await row.getByRole("button", { name: "Save the link" }).click();
   await expect(page.getByText("Link saved! Clip Factory will count its views.")).toBeVisible();
-  await expect(row).toContainText("Posted by you · Everyone");
-  await expect(row.getByRole("link", { name: "Open the TikTok post" })).toHaveAttribute("href", "https://www.tiktok.com/@lamo.clips/video/7710644811602169121");
+  await expect(row.locator(".post__status")).toHaveText(/^Posted by your Mac · Everyone( · numbers .+)?$/);
+  await expect(row.getByRole("link", { name: "Open the TikTok post" })).toHaveAttribute("href", LINK);
+  await expect(row.getByRole("textbox")).toHaveCount(0);
 });
 
-test("library: Undo takes I posted it back", async ({ page }) => {
-  await page.goto("/library");
-  await settle(page);
-  const { row } = await privateCard(page);
-  await row.getByRole("button", { name: "Post it on TikTok yourself" }).click();
-  await page.getByRole("dialog", { name: "Post it on TikTok yourself" }).getByRole("button", { name: "I posted it" }).click();
-  await expect(row).toContainText("Posted by you");
-  await page.getByRole("button", { name: "Undo" }).click();
-  await expect(row).toContainText("Uploaded privately");
-  await expect(row.getByRole("button", { name: "Post it on TikTok yourself" })).toBeVisible();
-});
-
-test("library: Add link's Find it on my TikTok finds the post", async ({ page }) => {
-  await page.goto("/library");
-  await settle(page);
-  const { row } = await privateCard(page);
-  await row.getByRole("button", { name: "Post it on TikTok yourself" }).click();
-  await page.getByRole("dialog", { name: "Post it on TikTok yourself" }).getByRole("button", { name: "I posted it" }).click();
-  await row.getByRole("button", { name: "Add the TikTok link" }).click();
-  await page.getByRole("dialog", { name: "Add the TikTok link" }).getByRole("button", { name: "Find it on my TikTok" }).click();
+test("library: Add link with an empty box sends nothing; Find it for me looks, and saves only what it found", async ({ page }) => {
+  const row = await postedWithoutLink(page);
+  await row.getByRole("button", { name: "Save the link" }).click();
+  await expect(row.getByRole("alert")).toHaveText("Paste the link first, or tap Find it for me.");
+  await expect(row.locator(".post__status")).toHaveText("Posted by your Mac · Everyone · add the link");
+  // Nothing found yet: said in the row, nothing saved.
+  await row.getByRole("button", { name: "Find it for me" }).click();
+  await expect(row.getByRole("alert")).toHaveText("Not found yet. Try again in a minute, or paste the link.");
+  await expect(row.locator(".post__status")).toHaveText("Posted by your Mac · Everyone · add the link");
+  await row.getByRole("button", { name: "Find it for me" }).click();
   await expect(page.getByText("Found it on your TikTok! Clip Factory will count its views.")).toBeVisible();
   await expect(row.getByRole("link", { name: "Open the TikTok post" })).toBeVisible();
-  await expect(row.getByRole("button", { name: "Add the TikTok link" })).toHaveCount(0);
+  await expect(row.getByRole("textbox")).toHaveCount(0);
 });
 
-test("review: right after Upload without TikTok, Uploaded just now offers Post it yourself", async ({ page }) => {
-  await page.goto("/review");
+test("no Post it yourself, I posted it, AirDrop or Open TikTok anywhere: Library, the clip page, Review and Auto-posting", async ({ page }) => {
+  await page.goto("/library");
   await settle(page);
-  const card = page.locator(".review-card").first();
-  const hook = await card.locator(".review-card__hook").innerText();
-  await card.getByRole("button", { name: /^Upload( to .+)?$/ }).click();
-  const box = page.locator(".kept-now");
-  await expect(box).toBeVisible();
-  const item = box.locator(".kept-now__item", { hasText: hook.slice(0, 20) });
-  await item.getByRole("button", { name: "Post it on TikTok yourself" }).click();
-  const sheet = page.getByRole("dialog", { name: "Post it on TikTok yourself" });
-  await sheet.getByRole("button", { name: "I posted it" }).click();
-  await expect(sheet).toHaveCount(0);
-  await expect(item.getByRole("button", { name: "Post it on TikTok yourself" })).toHaveCount(0);
-});
+  const none = async () => {
+    await expect(page.getByRole("button", { name: MANUAL })).toHaveCount(0);
+    await expect(page.getByRole("link", { name: MANUAL })).toHaveCount(0);
+    await expect(page.getByText(/Post it yourself|I posted it|on TikTok yourself/)).toHaveCount(0);
+    await expect(page.getByRole("dialog")).toHaveCount(0);
+  };
+  await none();
+  // Each TikTok row has the Mac's own button instead (the switch is off here: Turn on).
+  const card = page.locator(".lib-card", { has: page.locator(".post__status", { hasText: /^Your Mac posts TikTok is off$/ }) }).first();
+  await expect(card.getByRole("link", { name: "Turn on" })).toBeVisible();
+  const clipId = (await card.getAttribute("aria-labelledby"))!.replace("lib-", "");
 
-// A phone (§42.1): the share menu holds the file; when it fails, Save the video is the way out.
-// The iPhone's size, touch and user agent, in this project's own browser (a describe group cannot pick another one).
-const { defaultBrowserType: _browser, ...IPHONE } = devices["iPhone 15"]!;
+  await go(page, `/clips/${clipId}`);
+  await none();
+  await expect(page.locator(".perf__actions").getByRole("link", { name: "Turn on" })).toBeVisible();
 
-test.describe("on a phone", () => {
-  test.use(IPHONE);
+  await go(page, "/review");
+  const first = page.locator(".review-card").first();
+  await first.getByRole("button", { name: /^Upload( to .+)?$/ }).click();
+  await expect(page.locator(".kept-now")).toBeVisible();
+  await expect(page.locator(".kept-now__mac").first()).toHaveText("TikTok: Your Mac posts TikTok is off");
+  await none();
 
-  async function phoneSheet(page: Page, share: "reject" | "abort") {
-    await page.addInitScript((how) => {
-      Object.defineProperty(navigator, "canShare", { configurable: true, value: () => true });
-      Object.defineProperty(navigator, "share", {
-        configurable: true,
-        value: () => Promise.reject(new DOMException("no", how === "abort" ? "AbortError" : "NotAllowedError")),
-      });
-    }, share);
-    await page.goto("/library");
-    await settle(page);
-    const { row } = await privateCard(page);
-    await row.getByRole("button", { name: "Post it on TikTok yourself" }).click();
-    const sheet = page.getByRole("dialog", { name: "Post it on TikTok yourself" });
-    await sheet.getByRole("button", { name: "Save to my phone" }).click();
-    return sheet;
-  }
-
-  test("a share menu that does not open offers Save the video", async ({ page }) => {
-    const sheet = await phoneSheet(page, "reject");
-    await expect(sheet.getByRole("alert")).toContainText("The share menu did not open. Tap Save the video below.");
-    await expect(sheet.getByRole("button", { name: "Save the video" })).toBeVisible();
-  });
-
-  test("closing the share menu is not an error", async ({ page }) => {
-    const sheet = await phoneSheet(page, "abort");
-    await expect(sheet.getByRole("button", { name: "I posted it" })).toBeVisible();
-    await expect(sheet.getByRole("alert")).toHaveCount(0);
-    await expect(sheet.getByRole("button", { name: "Save the video" })).toHaveCount(0);
-  });
+  // Settings › Auto-posting: no "Post these on TikTok yourself" there either.
+  await go(page, "/settings/posting/auto");
+  await none();
 });

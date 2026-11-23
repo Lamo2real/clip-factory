@@ -1,0 +1,179 @@
+/* Clip Factory Stories · pick one, tabs and switches (the shell builder's file).
+   Pick one (StPick): a deep track at the control radius, options at the inner radius inside it (14 - 4 = 10), and the
+   cream highlight with espresso words that slides between them on <Glide>. Tabs (.st-tabs): a row of round glass pills,
+   the chosen one solid cream with espresso words. Switches (StToggle): the orange toggle with its white knob (the
+   figure .st-toggle). */
+
+/* ---------- Pick one: a deep track, the cream highlight ---------- */
+
+.st-pick,
+.st-tabs {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--st-gap-control);
+}
+.st-pick {
+  padding: var(--st-gap-control);
+  border-radius: var(--st-r-control);
+  background-color: var(--st-fill-well);
+  box-shadow: inset 0 2px 8px -3px rgb(var(--st-shadow-rgb) / 0.55);
+}
+/* Over a picture or the desktop the track can sit straight on anything: it is as deep as a card there. */
+.stories-app:is([data-look="window"], [data-look="picture"]) .st-pick {
+  background-color: var(--st-fill-control-hover);
+}
+.st-pick--stack {
+  display: grid;
+}
+.st-pick__opt,
+.st-tabs__tab {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 2px;
+  min-height: var(--st-tap);
+  padding: 6px 16px;
+  border-radius: var(--st-r-inner);
+  color: var(--st-text-soft);
+  font-weight: var(--st-weight-ui);
+  text-align: left;
+  transition:
+    color var(--st-dur-glide) var(--st-ease-out),
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    transform var(--st-dur-tap) var(--st-ease-spring);
+}
+.st-pick__opt:not(.is-on):hover {
+  color: var(--st-text);
+  background-color: var(--st-fill-control);
+}
+/* Over a picture or the desktop the track is already deep: the hover is a light glass over it, never darker still. */
+.stories-app:is([data-look="window"], [data-look="picture"]) .st-pick__opt:not(.is-on):hover {
+  background-color: rgb(var(--st-cream-rgb) / 0.12);
+}
+.st-pick__opt:active,
+.st-tabs__tab:active {
+  transform: scale(0.97);
+}
+.st-pick__opt.is-on {
+  color: var(--st-on-cream);
+  background-color: var(--st-selected);
+}
+.has-glide > .st-pick__opt.is-on {
+  background-color: transparent;
+}
+.st-pick__line {
+  color: var(--st-text-muted);
+  font-size: var(--st-fs-min);
+  font-weight: var(--st-weight-body);
+  transition: color var(--st-dur-glide) var(--st-ease-out);
+}
+.st-pick__opt.is-on .st-pick__line {
+  color: var(--st-on-cream-soft);
+}
+.stories-app .glide--st {
+  border-radius: var(--st-r-inner);
+  background: var(--st-selected);
+  box-shadow: var(--st-sheen-cream), var(--st-depth-1);
+}
+
+/* ---------- Tabs: glass pills, the chosen one solid cream ---------- */
+
+.st-tabs {
+  gap: var(--st-space-2);
+}
+.st-tabs__tab {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 0 var(--st-space-4);
+  border-radius: var(--st-r-round);
+  color: var(--st-text);
+  background-color: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+}
+.st-tabs__tab:not(.is-on):hover {
+  color: var(--st-text-strong);
+  background-color: var(--st-fill-control-hover);
+}
+/* Inside a glass surface or a plate over a picture or the desktop: light glass pills (the surface carries the veil). */
+.stories-app:is([data-look="window"], [data-look="picture"]) :is(.st-glass, .st-plate) .st-tabs__tab:not(.is-on) {
+  background-color: rgb(var(--st-cream-rgb) / 0.12);
+}
+.stories-app:is([data-look="window"], [data-look="picture"]) :is(.st-glass, .st-plate) .st-tabs__tab:not(.is-on):hover {
+  background-color: rgb(var(--st-cream-rgb) / 0.16);
+}
+.st-tabs__tab.is-on {
+  color: var(--st-on-cream);
+  background-color: var(--st-cream);
+  box-shadow: var(--st-depth-1);
+}
+.has-glide > .st-tabs__tab.is-on {
+  background-color: transparent;
+  box-shadow: none;
+}
+.stories-app .st-tabs > .glide--st {
+  border-radius: var(--st-r-round);
+  background: var(--st-cream);
+  box-shadow: var(--st-depth-1), var(--st-glow-behind);
+}
+
+:is(.st-pick__opt, .st-tabs__tab):focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
+}
+
+@media (max-width: 767px) {
+  .st-pick__opt,
+  .st-tabs__tab {
+    min-height: var(--st-tap-phone);
+  }
+}
+
+/* ---------- A switch row: its words, and the orange toggle (StToggle draws the figure .st-toggle) ---------- */
+
+.st-toggle-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--st-space-4);
+  padding: 10px 0;
+}
+.st-toggle-row__text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
+}
+.st-toggle-row__label {
+  font-weight: var(--st-weight-ui);
+}
+.st-toggle-row__desc {
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
+}
+/* On the cream card: espresso words (the glass words would vanish on cream). */
+.st-cream .st-toggle-row__desc {
+  color: var(--st-on-cream-soft);
+}
+/* Not now (aria-disabled, never disabled): the track and knob go quiet, a tap still plays the deny sound. */
+.st-switch[aria-disabled="true"] .st-toggle__track {
+  background-color: var(--st-fill-well);
+  box-shadow: none;
+}
+.st-switch[aria-disabled="true"]:hover .st-toggle__track {
+  background-color: var(--st-fill-well-hover);
+}
+.st-switch[aria-disabled="true"] .st-toggle__knob {
+  background: var(--st-cream-2);
+}
+/* On the cream card: a light copper track (a dark well would be a hole in the cream). */
+.st-cream .st-switch[aria-disabled="true"] .st-toggle__track {
+  background-color: rgb(var(--st-copper-rgb) / 0.16);
+}
+.st-cream .st-switch[aria-disabled="true"]:hover .st-toggle__track {
+  background-color: rgb(var(--st-copper-rgb) / 0.26);
+}

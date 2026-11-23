@@ -1,216 +1,293 @@
-/* Lamo Stories › Settings (docs/CONTRACTS.md §45.29), builder F2. Lamo Stories' own look with its own tokens (--st-*,
-   set on .stories-app by stories.css); every selector starts st-stg (or sits under .stories-app), so nothing here
-   reaches a Clip Factory screen. The owner's rules hold: the cursor never changes, every control has a hover state,
-   no visible borders (fills and soft shadows instead), radii from --r-*, no type under 0.78rem, AA contrast, nothing
-   overflows from 320 px, phone controls sit bottom right and are at least 48 px (44 px from 768 px). Tones are only
-   ever fills and marks; words use the cream inks. The tone inks have fallbacks so this file stands on its own. */
+/* Clip Factory Stories › Settings (docs/CONTRACTS.md §45.29), builder F2, on the liquid-glass contract
+   (styles/GLASS-CONTRACT.md): the owner's warm reference of 22 Nov. The page head and the section pills sit on the
+   page's one hero surface (.st-glass--hero with .st-lens: the brighter edge and sheen, a rim that may bend), the
+   pills being the shared .st-pill (glass, the chosen one solid cream with espresso words, the glide sliding the cream
+   between them). Every card is a smoky glass pane (.st-glass); what is read inside a card (rows, facts, the active
+   line, usage, the chart, the Try row) sits one lighter glass step up (--st-fill-control), and the deep well is kept
+   for what is typed in or tracked (fields, the pick-one tracks, the progress and length tracks). Switches are the
+   shared orange toggle, numbers are set with the white rounded-square − and + steppers. Words loose on the page (the
+   section head with its note and Saved mark) sit in one .st-plate, which turns into a glass plate in Picture and
+   See-through.
+
+   Every number comes from glass-tokens.css (this file sets no --st-* design token and no veil; its one local value
+   is --st-stg-lilac, the sixth series colour of the charts, set on .st-stg). Every selector starts st-stg (or sits
+   under .stories-app), so nothing reaches a Clip Factory screen. The owner's rules hold: the cursor never changes,
+   every control has a hover state, no visible borders (fills, light and soft shadows instead), radii from the
+   --st-r-* scale only (one scale by kind, concentric), no type under the 13 px floor, every word at 4.5:1 over all
+   three backgrounds (a white or busy desktop or photo too), nothing overflows from 320 px, targets 48 px on phones
+   and 44 px from 768 px, never `disabled`, no filter that animates or changes on hover, and calm motion makes
+   nothing travel (presses only scale). Tones are fills and marks only; their words use the tone inks. The bright
+   orange is for shapes only. */
 
 /* ---------- The page ---------- */
 
 .st-stg {
+  --st-stg-lilac: #b9a8ff; /* the sixth series colour of the usage charts and the storage meter */
   display: grid;
-  gap: clamp(16px, 2.2vw, 24px);
+  gap: var(--st-gap);
   min-width: 0;
+}
+/* The hero: the page head over the section pills. Its padding keeps words clear of the rim that may bend. */
+.st-stg-top {
+  display: grid;
+  gap: var(--st-space-5);
+  min-width: 0;
+  padding: var(--st-inset);
+}
+@media (min-width: 768px) {
+  .st-stg-top {
+    padding: max(var(--st-inset), var(--st-lens-band));
+  }
 }
 .st-stg-head {
   display: grid;
-  gap: 6px;
-  padding-top: 6px;
+  gap: var(--st-space-2);
+  min-width: 0;
 }
 .st-stg-head__title {
   margin: 0;
-  font-size: clamp(1.9rem, 1.4rem + 2vw, 2.8rem);
-  font-weight: 800;
-  line-height: 1.1;
-  color: var(--st-ink);
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-h1);
+  overflow-wrap: anywhere;
 }
 .st-stg-head__lede {
   margin: 0;
   max-width: 62ch;
-  color: var(--st-ink-soft);
-  font-size: 1.02rem;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-body);
+  line-height: var(--st-lh-body);
+}
+/* The first-time setup, always one tap away (§45.36 E15): the shared glass pill with the rocket in amber. */
+.st-stg-head__setup {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--st-space-2) var(--st-space-3);
+  margin: var(--st-space-1) 0 0;
+}
+.st-stg-head__setup-go {
+  text-decoration: none;
+}
+.st-stg-head__setup-go .st-icon {
+  color: var(--st-text-amber);
+  transition: color var(--st-dur-hover) var(--st-ease-out);
+}
+.st-stg-head__setup-go:hover .st-icon {
+  color: var(--st-text-strong);
+}
+.st-stg-head__setup-left {
+  color: var(--st-text-amber);
+  font-size: var(--st-fs-small);
+  font-weight: var(--st-weight-ui);
 }
 
-/* The section bar: links on <Glide>, three to a row on phones, one row from 768 px. */
+/* The section bar: links on <Glide>, each the shared .st-pill (glass, the chosen one solid cream with espresso words;
+   the glide slides a cream pill between them). On a phone they are one row that scrolls sideways (the chosen one is
+   kept in view), running out to the hero's edges; from 768 px they wrap. */
 .st-stg-nav {
   min-width: 0;
 }
 .st-stg-tabs {
   position: relative;
   isolation: isolate;
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 4px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--st-space-2);
   margin: 0;
-  padding: 4px;
+  padding: 0;
   list-style: none;
-  border-radius: var(--r-md);
-  background: rgba(13, 11, 38, 0.42);
 }
-@media (min-width: 360px) {
-  .st-stg-tabs {
-    grid-template-columns: repeat(3, minmax(0, 1fr));
+@media (max-width: 767px) {
+  /* (.st-stg-nav > so it outranks the shell's .stories-app ul reset) */
+  .st-stg-nav > .st-stg-tabs {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    overscroll-behavior-x: contain;
+    scroll-snap-type: x proximity;
+    scroll-padding-inline: var(--st-inset);
+    scrollbar-width: none;
+    /* Out to the hero's edges, with room for the focus ring and the chosen pill's shadow inside the scroller. */
+    margin: calc(-1 * var(--st-space-2)) calc(-1 * var(--st-inset));
+    padding: var(--st-space-2) var(--st-inset);
+    /* A pill scrolled toward an edge fades out within the hero's padding, so no word is ever drawn over the hero's
+       bending rim or its lit edge (glass/lens.ts keeps the rim inside that padding); at rest at either end every pill
+       is whole, inside the scroller's own padding. */
+    -webkit-mask-image: linear-gradient(to right, transparent, #000 var(--st-inset), #000 calc(100% - var(--st-inset)), transparent);
+    mask-image: linear-gradient(to right, transparent, #000 var(--st-inset), #000 calc(100% - var(--st-inset)), transparent);
   }
 }
-@media (min-width: 768px) {
+/* A mouse on a narrow window: a thin scrollbar, so the last pills can be reached without a touch screen. */
+@media (max-width: 767px) and (hover: hover) and (pointer: fine) {
   .st-stg-tabs {
-    display: flex;
-    flex-wrap: wrap;
+    scrollbar-width: thin;
+    scrollbar-color: rgb(var(--st-cream-rgb) / 0.32) transparent;
   }
 }
 .st-stg-tabs > .glide {
-  border-radius: calc(var(--r-md) - 4px);
-  background: var(--st-sun);
-  box-shadow: 0 8px 18px -10px rgba(255, 201, 74, 0.7);
+  border-radius: var(--st-r-round);
+  background: var(--st-selected);
+  box-shadow: var(--st-depth-1), var(--st-glow-behind);
 }
 .st-stg-tabs__cell {
   position: relative;
   z-index: 1;
   display: flex;
+  flex: none;
   min-width: 0;
+  scroll-snap-align: start;
 }
 .st-stg-tab {
-  display: flex;
-  flex: 1;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  min-width: 0;
   min-height: 48px;
-  padding: 6px 12px;
-  border-radius: calc(var(--r-md) - 4px);
-  color: var(--st-ink-soft);
-  font-weight: 800;
-  font-size: 0.95rem;
-  line-height: 1.15;
-  text-align: center;
   text-decoration: none;
-  transition:
-    color 300ms ease,
-    background-color 200ms ease,
-    transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-@media (max-width: 767px) {
-  .st-stg-tab {
-    flex-direction: column;
-    gap: 2px;
-    min-height: 56px;
-    padding: 6px 8px;
-    font-size: 0.9rem;
-  }
 }
 @media (min-width: 768px) {
   .st-stg-tab {
     min-height: 44px;
-    padding: 6px 16px;
   }
-}
-.st-stg-tab:not(.is-on):hover {
-  color: var(--st-ink);
-  background: var(--st-panel-strong);
 }
 .st-stg-tab:active {
   transform: scale(0.97);
 }
-.st-stg-tab.is-on {
-  color: var(--st-on-sun);
-  background: var(--st-sun);
-}
 .has-glide .st-stg-tab.is-on {
   background: transparent;
+  box-shadow: none;
 }
 .st-stg-tab .st-stg-icon {
   flex: none;
+  transition: color var(--st-dur-hover) var(--st-ease-out);
+}
+.st-stg-tab:not(.is-on) .st-stg-icon {
+  color: var(--st-text-amber);
+}
+.st-stg-tab:not(.is-on):hover .st-stg-icon {
+  color: var(--st-text-strong);
 }
 
 .st-stg-section {
   display: grid;
-  gap: 14px;
+  gap: var(--st-space-4);
   min-width: 0;
+}
+/* The section head: one plate with the title, the lede, and the section's bar (its note and the Saved mark), the bar's
+   two parts laid straight on the head's grid: the Saved mark beside the title (its place kept, so the title never
+   reflows when it shows), the note under the lede at the full width. */
+.st-stg-section__head {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--st-space-1) var(--st-space-3);
+  min-width: 0;
+}
+.st-stg-section__head > :not(.st-stg-section__title, .st-stg-section__bar) {
+  grid-column: 1 / -1;
+}
+.st-stg-section__bar,
+.st-stg-section__bar > .st-stg-bar {
+  display: contents;
+}
+.st-stg-section__bar .st-stg-small {
+  grid-column: 1 / -1;
+  margin-top: var(--st-space-2);
+}
+.st-stg-section__bar .st-stg-saved {
+  grid-row: 1;
+  grid-column: 2;
 }
 .st-stg-section__title {
   margin: 0;
-  font-size: clamp(1.4rem, 1.2rem + 1vw, 1.8rem);
-  font-weight: 800;
-  color: var(--st-ink);
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-h2);
+  overflow-wrap: anywhere;
 }
 .st-stg-section__lede {
-  margin: -6px 0 0;
-  color: var(--st-ink-soft);
+  margin: 0;
+  max-width: 70ch;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-body);
 }
 .st-stg-cards {
   display: grid;
-  gap: clamp(14px, 2vw, 20px);
+  gap: var(--st-gap);
   min-width: 0;
 }
+/* A section's bar on its own (no head to sit in): the note and the Saved mark side by side. The mark keeps its place
+   (empty until a save), so nothing jumps when "Saved" shows. */
 .st-stg-bar {
-  display: flex;
-  flex-wrap: wrap;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
   align-items: center;
-  justify-content: space-between;
-  gap: 8px 16px;
+  gap: var(--st-space-2) var(--st-space-4);
   min-height: 32px;
 }
+.st-stg-bar > .st-stg-saved {
+  justify-content: center;
+  min-width: 6em;
+}
 
-/* ---------- Cards ---------- */
+/* ---------- Cards: a smoky glass pane each (.st-glass draws the veil, the edge, the sheen and the glow) ---------- */
 
 .st-stg-card {
   display: grid;
-  gap: 14px;
+  gap: var(--st-space-4);
   min-width: 0;
-  padding: clamp(16px, 2.4vw, 22px);
-  border-radius: var(--r-lg);
-  background: var(--st-panel);
-  box-shadow: var(--st-shadow);
+  padding: var(--st-inset);
 }
 .st-stg-card__head {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
-  gap: 12px 14px;
+  gap: var(--st-space-3) var(--st-space-4);
 }
+/* The card's mark: a round glass puck with the icon in amber, or in a tone's ink on that tone. */
 .st-stg-card__mark {
   display: grid;
   place-items: center;
   flex: none;
-  width: 42px;
-  height: 42px;
-  border-radius: var(--r-sm);
-  color: var(--st-on-sun);
-  background: var(--st-sun);
+  width: 44px;
+  height: 44px;
+  border-radius: var(--st-r-round);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control), var(--st-depth-1);
+  color: var(--st-text-amber);
+}
+.st-stg-card__mark--sun {
+  background: rgb(var(--st-action-rgb) / 0.18);
 }
 .st-stg-card__mark--coral {
-  background: var(--st-coral);
+  color: var(--st-coral-ink);
+  background: rgb(var(--st-coral-rgb) / 0.2);
 }
 .st-stg-card__mark--mint {
-  background: var(--st-mint);
+  color: var(--st-mint-ink);
+  background: rgb(var(--st-mint-rgb) / 0.18);
 }
 .st-stg-card__mark--sky {
-  background: var(--st-sky);
+  color: var(--st-sky-ink);
+  background: rgb(var(--st-sky-rgb) / 0.18);
 }
 .st-stg-card__titles {
   display: grid;
-  gap: 4px;
+  gap: var(--st-space-1);
   flex: 1 1 220px;
   min-width: 0;
 }
 .st-stg-card__title {
   margin: 0;
-  font-size: 1.2rem;
-  font-weight: 800;
-  line-height: 1.2;
-  color: var(--st-ink);
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-h3);
+  overflow-wrap: anywhere;
 }
 .st-stg-card__lede {
   margin: 0;
-  color: var(--st-ink-soft);
-  font-size: 0.95rem;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
+  line-height: 1.45;
 }
 .st-stg-card__actions {
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--st-space-2);
   flex: 1 1 100%;
   min-width: 0;
 }
@@ -222,101 +299,115 @@
 }
 .st-stg-subhead {
   margin: 6px 0 0;
-  font-size: 1rem;
-  font-weight: 800;
-  color: var(--st-ink);
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-body);
+  font-weight: var(--st-weight-display);
 }
 .st-stg-small {
-  color: var(--st-ink-soft);
-  font-size: 0.86rem;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
   overflow-wrap: anywhere;
 }
 .st-stg-label {
   display: block;
-  color: var(--st-ink);
-  font-size: 0.95rem;
-  font-weight: 800;
+  color: var(--st-text);
+  font-size: var(--st-fs-small);
+  font-weight: var(--st-weight-ui);
 }
 .st-stg-over {
-  color: var(--st-coral-ink, #ffc9c2);
+  color: var(--st-coral-ink);
 }
 
-/* ---------- Chips and notes ---------- */
+/* ---------- Chips and notes: tone words on the tone, cut low so the words keep 4.5:1 over a white desktop ---------- */
 
 .st-stg-chip {
   display: inline-flex;
   align-items: center;
   gap: 6px;
   min-height: 28px;
-  padding: 0 12px;
-  border-radius: var(--r-pill);
-  font: 700 0.85rem/1.1 var(--st-font);
-  color: var(--st-ink);
-  background: var(--st-panel-strong);
+  padding: 0 var(--st-space-3);
+  border-radius: var(--st-r-round);
+  color: var(--st-text);
+  background: var(--st-fill-control);
+  font-family: var(--st-font);
+  font-size: var(--st-fs-chip);
+  font-weight: var(--st-weight-ui);
+  line-height: 1.1;
   white-space: nowrap;
 }
 .st-stg-chip--sun {
-  color: var(--st-sun-ink, #ffe3a1);
-  background: rgba(255, 201, 74, 0.2);
+  color: var(--st-text-amber);
+  background: rgb(var(--st-action-rgb) / 0.14);
 }
 .st-stg-chip--coral {
-  color: var(--st-coral-ink, #ffc9c2);
-  background: rgba(255, 111, 97, 0.22);
+  color: var(--st-coral-ink);
+  background: rgb(var(--st-coral-rgb) / 0.16);
 }
 .st-stg-chip--mint {
-  color: var(--st-mint-ink, #b8f3dd);
-  background: rgba(71, 214, 160, 0.2);
+  color: var(--st-mint-ink);
+  background: rgb(var(--st-mint-rgb) / 0.16);
 }
 .st-stg-chip--sky {
-  color: var(--st-sky-ink, #c9ebff);
-  background: rgba(98, 198, 255, 0.2);
+  color: var(--st-sky-ink);
+  background: rgb(var(--st-sky-rgb) / 0.16);
 }
 .st-stg-note {
   display: flex;
   align-items: flex-start;
-  gap: 8px;
+  gap: var(--st-space-2);
   margin: 0;
-  padding: 10px 12px;
-  border-radius: var(--r-md);
-  font-size: 0.94rem;
+  padding: 10px var(--st-space-3);
+  border-radius: var(--st-r-control);
+  font-size: var(--st-fs-small);
   overflow-wrap: anywhere;
 }
 .st-stg-note .st-stg-icon {
   margin-top: 1px;
 }
 .st-stg-note--coral {
-  color: var(--st-coral-ink, #ffc9c2);
-  background: rgba(255, 111, 97, 0.16);
+  color: var(--st-coral-ink);
+  background: rgb(var(--st-coral-rgb) / 0.14);
 }
 .st-stg-note--sun {
-  color: var(--st-sun-ink, #ffe3a1);
-  background: rgba(255, 201, 74, 0.14);
+  color: var(--st-text-amber);
+  background: rgb(var(--st-action-rgb) / 0.12);
 }
 .st-stg-note--sky {
-  color: var(--st-sky-ink, #c9ebff);
-  background: rgba(98, 198, 255, 0.14);
+  color: var(--st-sky-ink);
+  background: rgb(var(--st-sky-rgb) / 0.12);
 }
 .st-stg-note--mint {
-  color: var(--st-mint-ink, #b8f3dd);
-  background: rgba(71, 214, 160, 0.14);
+  color: var(--st-mint-ink);
+  background: rgb(var(--st-mint-rgb) / 0.12);
 }
 .st-stg-icon {
   display: block;
   flex: none;
 }
 
-/* ---------- Buttons ---------- */
+/* ---------- Buttons (on top of the shell's .st-btn): glass controls, the main one in the warm action ---------- */
 
 .st-stg-btn {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
+  gap: var(--st-space-2);
   min-height: 48px;
   max-width: 100%;
+  border-radius: var(--st-r-control);
+  color: var(--st-text);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  font-family: var(--st-font);
+  font-weight: var(--st-weight-ui);
   text-align: center;
   text-decoration: none;
   white-space: normal;
+  transition:
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    color var(--st-dur-hover) var(--st-ease-out),
+    box-shadow var(--st-dur-hover) var(--st-ease-out),
+    transform var(--st-dur-tap) var(--st-ease-out);
 }
 @media (min-width: 768px) {
   .st-stg-btn {
@@ -324,46 +415,65 @@
   }
 }
 .st-stg-btn:hover {
-  background: rgba(255, 246, 229, 0.22);
+  background: var(--st-fill-control-hover);
+}
+.st-stg-btn--main {
+  color: var(--st-on-accent);
+  background: linear-gradient(180deg, var(--st-action-top), var(--st-action-bottom));
+  box-shadow: var(--st-sheen-control), var(--st-glow-action);
 }
 .st-stg-btn--main:hover {
-  background: var(--st-sun-hover, #ffd56e);
+  background: var(--st-action-hover);
+  box-shadow: var(--st-sheen-control), var(--st-glow-action-hover);
+}
+.st-stg-btn--main:active {
+  background: var(--st-action-pressed);
 }
 .st-stg-btn--quiet {
-  color: var(--st-ink-soft);
+  color: var(--st-text-soft);
   background: transparent;
+  box-shadow: none;
 }
 .st-stg-btn--quiet:hover {
-  color: var(--st-ink);
-  background: var(--st-panel);
+  color: var(--st-text);
+  background: var(--st-fill-control);
 }
 .st-stg-btn--danger {
-  color: var(--st-coral-ink, #ffc9c2);
+  color: var(--st-coral-ink);
 }
 .st-stg-btn--danger:hover {
-  color: var(--st-ink);
-  background: rgba(255, 111, 97, 0.24);
+  color: var(--st-text);
+  background: rgb(var(--st-coral-rgb) / 0.24);
 }
 .st-stg-btn--small {
   min-width: 48px;
   padding: 0 14px;
-  font-size: 0.92rem;
+  font-size: var(--st-fs-small);
 }
 @media (min-width: 768px) {
   .st-stg-btn--small {
     min-width: 44px;
   }
 }
+/* Not usable now: still readable (no fading), flatter, and the tap plays the deny sound. */
 .st-stg-btn[aria-disabled="true"] {
-  opacity: 0.6;
+  opacity: 1;
   transform: none;
+  color: var(--st-text-soft);
+  background: var(--st-fill-well);
+  box-shadow: none;
 }
 .st-stg-btn[aria-disabled="true"]:hover {
-  background: var(--st-panel-strong);
+  background: var(--st-fill-well-hover);
+}
+.st-stg-btn--main[aria-disabled="true"] {
+  color: var(--st-text);
+  background: rgb(var(--st-action-rgb) / 0.22);
 }
 .st-stg-btn--main[aria-disabled="true"]:hover {
-  background: var(--st-sun);
+  background: rgb(var(--st-action-rgb) / 0.28);
 }
+.st-stg-btn--quiet[aria-disabled="true"],
 .st-stg-btn--quiet[aria-disabled="true"]:hover {
   background: transparent;
 }
@@ -374,7 +484,7 @@
   display: flex;
   flex-wrap: wrap;
   justify-content: flex-end;
-  gap: 8px;
+  gap: var(--st-space-2);
 }
 @media (min-width: 768px) {
   .st-stg-actions {
@@ -384,24 +494,26 @@
 .st-stg-confirm {
   display: grid;
   gap: 10px;
-  padding: 12px 14px;
-  border-radius: var(--r-md);
-  background: rgba(255, 111, 97, 0.14);
-  color: var(--st-ink);
+  padding: var(--st-space-3) 14px;
+  border-radius: var(--st-r-control);
+  background: rgb(var(--st-coral-rgb) / 0.14);
+  color: var(--st-text);
 }
 
-/* ---------- Pick one (on <Glide>) ---------- */
+/* ---------- Pick one (on <Glide>): a deep track (control 14, padding 4) with options (inner 10); the cream
+   highlight slides to the chosen one, which takes espresso words ---------- */
 
 .st-stg-pick {
   position: relative;
   isolation: isolate;
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--st-gap-control);
   min-width: 0;
-  padding: 4px;
-  border-radius: var(--r-md);
-  background: rgba(13, 11, 38, 0.42);
+  padding: var(--st-gap-control);
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-well);
+  box-shadow: inset 0 2px 8px -4px rgb(var(--st-shadow-rgb) / 0.55);
 }
 @media (max-width: 767px) {
   .st-stg-pick {
@@ -414,9 +526,9 @@
   grid-template-columns: minmax(0, 1fr);
 }
 .st-stg-pick > .glide {
-  border-radius: calc(var(--r-md) - 4px);
-  background: var(--st-sun);
-  box-shadow: 0 8px 18px -10px rgba(255, 201, 74, 0.7);
+  border-radius: var(--st-r-inner);
+  background: var(--st-selected);
+  box-shadow: var(--st-depth-1);
 }
 .st-stg-pick__opt {
   position: relative;
@@ -429,15 +541,15 @@
   gap: 2px;
   min-width: 0;
   min-height: 48px;
-  padding: 8px 14px;
-  border-radius: calc(var(--r-md) - 4px);
-  color: var(--st-ink-soft);
-  font-weight: 700;
+  padding: var(--st-space-2) 14px;
+  border-radius: var(--st-r-inner);
+  color: var(--st-text-soft);
+  font-weight: var(--st-weight-ui);
   text-align: left;
   transition:
-    color 300ms ease,
-    background-color 200ms ease,
-    transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    color var(--st-dur-glide) var(--st-ease-out),
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    transform var(--st-dur-tap) var(--st-ease-out);
 }
 @media (min-width: 768px) {
   .st-stg-pick__opt {
@@ -445,57 +557,86 @@
   }
 }
 .st-stg-pick__opt:not(.is-on):hover {
-  color: var(--st-ink);
-  background: var(--st-panel-strong);
+  color: var(--st-text);
+  background: var(--st-fill-control-hover);
 }
 .st-stg-pick__opt:active {
   transform: scale(0.98);
 }
 .st-stg-pick__opt.is-on {
-  color: var(--st-on-sun);
-  background: var(--st-sun);
+  color: var(--st-on-cream);
+  background: var(--st-selected);
 }
 .has-glide > .st-stg-pick__opt.is-on {
   background: transparent;
 }
 .st-stg-pick__opt.is-off {
-  color: var(--st-ink-soft);
+  color: var(--st-text-soft);
 }
 .st-stg-pick__opt.is-off:hover {
-  background: rgba(255, 111, 97, 0.12);
+  background: rgb(var(--st-coral-rgb) / 0.14);
 }
 .st-stg-pick__top {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 10px;
+  gap: var(--st-space-1) 10px;
   max-width: 100%;
 }
+/* In a list of rows each row's marks sit at its right edge, together (§45.36 E17). */
+.st-stg-pick--stack .st-stg-pick__top {
+  width: 100%;
+}
+.st-stg-pick__chip {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.st-stg-pick--stack .st-stg-pick__chip {
+  margin-left: auto;
+}
 .st-stg-pick__label {
-  font-weight: 800;
+  font-weight: var(--st-weight-ui);
   overflow-wrap: anywhere;
 }
 .st-stg-pick__line {
   max-width: 100%;
-  font-size: 0.86rem;
-  font-weight: 600;
+  font-size: var(--st-fs-small);
+  font-weight: var(--st-weight-body);
   overflow-wrap: anywhere;
 }
+.st-stg-pick__opt.is-on .st-stg-pick__line {
+  color: var(--st-on-cream-soft);
+}
 .st-stg-pick__opt.is-on .st-stg-chip {
-  color: var(--st-on-sun);
-  background: rgba(28, 24, 66, 0.12);
+  color: var(--st-on-cream);
+  background: rgb(var(--st-copper-rgb) / 0.16);
 }
 .st-stg-agentpick .st-stg-pick__opt {
   flex: 1 1 180px;
 }
+/* A pick-one bar loose on the page (Agents' "Pick an agent") is a glass pane itself: radius surface, and its options
+   hug it 6 px in, so they are control 14 (20 − 6). */
+.st-stg-pick.st-glass {
+  padding: var(--st-gap-surface);
+  gap: var(--st-gap-surface);
+  border-radius: var(--st-r-surface);
+  background: var(--st-tint-card);
+  box-shadow: var(--st-sheen), var(--st-depth-1), var(--st-glow-behind);
+}
+.st-stg-pick.st-glass > .glide,
+.st-stg-pick.st-glass > .st-stg-pick__opt {
+  border-radius: var(--st-r-control);
+}
 
-/* ---------- Switches ---------- */
+/* ---------- Switches: the shared orange toggle (.st-toggle: a 48 × 28 track, the white knob; a deep well when off),
+   with its On or Off word beside the track inside the same target ---------- */
 
 .st-stg-switchrow {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  gap: var(--st-space-4);
   min-width: 0;
   padding: 6px 0;
 }
@@ -505,76 +646,51 @@
   min-width: 0;
 }
 .st-stg-switchrow__label {
-  color: var(--st-ink);
-  font-weight: 800;
+  color: var(--st-text);
+  font-weight: var(--st-weight-ui);
   overflow-wrap: anywhere;
 }
 .st-stg-switchrow__desc {
-  color: var(--st-ink-soft);
-  font-size: 0.92rem;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
   overflow-wrap: anywhere;
 }
 .st-stg-switch {
-  position: relative;
   flex: none;
-  width: 76px;
-  height: 48px;
-  border-radius: var(--r-pill);
-  background: rgba(13, 11, 38, 0.6);
-  transition: background-color 220ms ease;
+  gap: var(--st-space-2);
+  width: auto;
+  min-width: 48px;
+  min-height: 48px;
+  padding: 0 2px 0 var(--st-space-1);
+  border-radius: var(--st-r-round);
+  color: var(--st-text-soft);
+  transition: color var(--st-dur-hover) var(--st-ease-out);
 }
 @media (min-width: 768px) {
   .st-stg-switch {
-    width: 72px;
-    height: 44px;
+    min-width: 44px;
+    min-height: 44px;
   }
-}
-.st-stg-switch:hover {
-  background: rgba(13, 11, 38, 0.82);
 }
 .st-stg-switch[aria-checked="true"] {
-  background: var(--st-mint);
+  color: var(--st-text);
 }
-.st-stg-switch[aria-checked="true"]:hover {
-  background: #5fe0b0;
+.st-stg-switch:hover {
+  color: var(--st-text-strong);
 }
-.st-stg-switch__thumb {
-  position: absolute;
-  top: 5px;
-  left: 5px;
-  width: 38px;
-  height: 38px;
-  border-radius: 50%;
-  background: var(--st-ink);
-  box-shadow: 0 3px 8px rgba(8, 6, 30, 0.45);
-  transition: transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
-}
-@media (min-width: 768px) {
-  .st-stg-switch__thumb {
-    width: 34px;
-    height: 34px;
-  }
-}
-.st-stg-switch[aria-checked="true"] .st-stg-switch__thumb {
-  transform: translateX(28px);
+.st-stg-switch .st-toggle__track {
+  flex: none;
+  width: var(--st-toggle-w);
 }
 .st-stg-switch__word {
-  position: absolute;
-  top: 50%;
-  right: 10px;
-  transform: translateY(-50%);
-  color: var(--st-ink);
-  font-size: 0.8rem;
-  font-weight: 800;
+  min-width: 3ch;
+  font-size: var(--st-fs-caps);
+  font-weight: var(--st-weight-ui);
   line-height: 1;
-}
-.st-stg-switch[aria-checked="true"] .st-stg-switch__word {
-  right: auto;
-  left: 10px;
-  color: var(--st-on-sun);
+  text-align: right;
 }
 
-/* ---------- Fields ---------- */
+/* ---------- Fields: deep wells on the glass ---------- */
 
 .st-stg-field,
 .st-stg-selectbox {
@@ -595,11 +711,18 @@
   margin: 0;
   padding: 10px 14px;
   border: 0;
-  border-radius: var(--r-sm);
-  color: var(--st-ink);
-  background-color: rgba(13, 11, 38, 0.5);
-  font: 600 1rem/1.35 var(--st-font);
-  transition: background-color 160ms ease;
+  border-radius: var(--st-r-control);
+  color: var(--st-text);
+  background-color: var(--st-fill-well);
+  box-shadow: inset 0 2px 8px -4px rgb(var(--st-shadow-rgb) / 0.55);
+  caret-color: var(--st-accent);
+  font-family: var(--st-font);
+  font-size: var(--st-fs-body);
+  font-weight: var(--st-weight-body);
+  line-height: 1.35;
+  transition:
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    box-shadow var(--st-dur-hover) var(--st-ease-out);
 }
 @media (min-width: 768px) {
   .st-stg-select,
@@ -611,25 +734,25 @@
   appearance: none;
   -webkit-appearance: none;
   padding-right: 40px;
-  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%23FFF6E5' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='20' height='20' viewBox='0 0 24 24' fill='none' stroke='%23FFD9A8' stroke-width='2.4' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
   background-repeat: no-repeat;
   background-position: right 12px center;
   text-overflow: ellipsis;
 }
 .st-stg-select option {
-  color: #1c1842;
-  background: #fff6e5;
+  color: var(--st-on-cream);
+  background: var(--st-cream);
 }
 .st-stg-select:hover,
 .st-stg-input:hover,
 .st-stg-textarea:hover {
-  background-color: rgba(13, 11, 38, 0.72);
+  background-color: var(--st-fill-well-hover);
 }
 .st-stg-select.is-invalid {
-  background-color: rgba(255, 111, 97, 0.3);
+  background-color: rgb(var(--st-coral-rgb) / 0.26);
 }
 .st-stg-select[aria-disabled="true"] {
-  opacity: 0.6;
+  color: var(--st-text-soft);
 }
 .st-stg-textarea {
   resize: vertical;
@@ -637,12 +760,24 @@
 }
 .st-stg-input::placeholder,
 .st-stg-textarea::placeholder {
-  color: rgba(255, 246, 229, 0.62);
+  color: var(--st-text-muted);
+}
+.st-stg-input::selection,
+.st-stg-textarea::selection {
+  color: var(--st-on-cream);
+  background: var(--st-cream);
 }
 .st-stg-form {
   display: grid;
-  gap: 12px;
+  gap: var(--st-space-3);
   min-width: 0;
+}
+
+/* ---------- Focus: the cream and orange ring (light, never an outline) on every control here ---------- */
+
+:is(.st-stg-tab, .st-stg-pick__opt, .st-stg-switch, .st-stg-select, .st-stg-input, .st-stg-textarea, .st-stg-btn, .st-stg-round):focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
 }
 
 /* ---------- Active line, saved mark, progress ---------- */
@@ -654,16 +789,18 @@
   gap: 6px 14px;
   margin: 0;
   padding: 10px 14px;
-  border-radius: var(--r-md);
-  background: rgba(13, 11, 38, 0.32);
-  color: var(--st-ink);
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  color: var(--st-text);
   overflow-wrap: anywhere;
 }
 .st-stg-active__word {
-  color: var(--st-ink-soft);
-  font-size: 0.86rem;
-  font-weight: 800;
-  letter-spacing: 0.02em;
+  color: var(--st-text-amber);
+  font-family: var(--st-font-caps);
+  font-size: var(--st-fs-caps);
+  font-weight: 500;
+  letter-spacing: var(--st-track-caps);
   text-transform: uppercase;
 }
 .st-stg-saved {
@@ -671,44 +808,46 @@
   align-items: center;
   gap: 6px;
   min-height: 32px;
-  padding: 0 12px;
-  border-radius: var(--r-pill);
-  color: var(--st-mint-ink, #b8f3dd);
-  font-weight: 800;
-  font-size: 0.9rem;
+  padding: 0 var(--st-space-3);
+  border-radius: var(--st-r-round);
+  color: var(--st-mint-ink);
+  font-size: var(--st-fs-small);
+  font-weight: var(--st-weight-ui);
   opacity: 0;
   transform: translateY(4px);
   transition:
-    opacity 220ms ease,
-    transform 260ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    opacity var(--st-dur-hover) var(--st-ease-out),
+    transform var(--st-dur-enter) var(--st-ease-spring);
 }
+/* It sits in the section head's plate (loose over Ember): the mint over a well, so it reads over the brightest stage. */
 .st-stg-saved.is-on,
 .st-stg-saved.is-busy {
   opacity: 1;
   transform: none;
-  background: rgba(71, 214, 160, 0.16);
+  background: linear-gradient(rgb(var(--st-mint-rgb) / 0.16), rgb(var(--st-mint-rgb) / 0.16)), rgb(var(--st-well-rgb) / 0.5);
 }
 .st-stg-saved.is-busy {
-  color: var(--st-ink-soft);
-  background: var(--st-panel);
+  color: var(--st-text-soft);
+  background: var(--st-fill-well);
 }
 .st-stg-progress {
   position: relative;
   overflow: hidden;
   height: 10px;
-  border-radius: var(--r-pill);
-  background: rgba(13, 11, 38, 0.55);
+  border-radius: var(--st-r-round);
+  background: var(--st-fill-well);
 }
 .st-stg-progress__fill {
   display: block;
   height: 100%;
-  border-radius: var(--r-pill);
-  background: var(--st-sun);
-  transition: width 320ms cubic-bezier(0.22, 1, 0.36, 1);
+  border-radius: var(--st-r-round);
+  background: var(--st-accent);
+  box-shadow: var(--st-glow-accent);
+  transition: width var(--st-dur-progress) var(--st-ease-progress);
 }
 .st-stg-progress__fill.is-waiting {
   width: 40%;
-  animation: st-stg-sweep 1.4s cubic-bezier(0.45, 0, 0.55, 1) infinite;
+  animation: st-stg-sweep 1.4s var(--st-ease-progress) infinite;
 }
 @keyframes st-stg-sweep {
   from {
@@ -720,7 +859,7 @@
 }
 .st-stg-check {
   display: grid;
-  gap: 8px;
+  gap: var(--st-space-2);
   justify-items: end;
   min-width: min(100%, 220px);
 }
@@ -728,7 +867,7 @@
   width: 100%;
 }
 
-/* ---------- Each agent and task ---------- */
+/* ---------- Each agent and task: rows one glass step up, a table from 1100 px ---------- */
 
 .st-stg-assign {
   display: grid;
@@ -744,27 +883,33 @@
   display: grid;
   gap: 10px;
   min-width: 0;
-  padding: 12px;
-  border-radius: var(--r-md);
-  background: rgba(13, 11, 38, 0.26);
+  padding: var(--st-space-3);
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  transition: box-shadow var(--st-dur-hover) var(--st-ease-out);
 }
+/* A row is read, not pressed: under the mouse it only gains the soft lift (its fill, and so its words, stay). */
 .st-stg-assign__row:hover {
-  background: rgba(13, 11, 38, 0.38);
+  box-shadow: var(--st-sheen-control), var(--st-depth-1);
 }
 @media (min-width: 1100px) {
   .st-stg-assign__cols {
     display: grid;
     grid-template-columns: minmax(150px, 1.1fr) minmax(170px, 1fr) minmax(150px, 0.8fr) minmax(170px, 1fr);
-    gap: 12px;
-    padding: 0 12px;
-    color: var(--st-ink-soft);
-    font-size: 0.86rem;
-    font-weight: 800;
+    gap: var(--st-space-3);
+    padding: 0 var(--st-space-3);
+    color: var(--st-text-amber);
+    font-family: var(--st-font-caps);
+    font-size: var(--st-fs-caps);
+    font-weight: 500;
+    letter-spacing: var(--st-track-caps);
+    text-transform: uppercase;
   }
   .st-stg-assign__row {
     grid-template-columns: minmax(150px, 1.1fr) minmax(170px, 1fr) minmax(150px, 0.8fr) minmax(170px, 1fr);
     align-items: center;
-    gap: 12px;
+    gap: var(--st-space-3);
   }
   .st-stg-assign__row > .st-stg-note {
     grid-column: 1 / -1;
@@ -772,13 +917,13 @@
 }
 .st-stg-assign__pick {
   display: grid;
-  gap: 4px;
+  gap: var(--st-space-1);
   min-width: 0;
 }
 .st-stg-assign__lab {
-  color: var(--st-ink-soft);
-  font-size: 0.86rem;
-  font-weight: 800;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
+  font-weight: var(--st-weight-ui);
 }
 @media (min-width: 1100px) {
   .st-stg-assign__lab {
@@ -793,8 +938,8 @@
 }
 .st-stg-assign__title,
 .st-stg-assign__uses {
-  color: var(--st-ink);
-  font-weight: 800;
+  color: var(--st-text);
+  font-weight: var(--st-weight-ui);
   overflow-wrap: anywhere;
 }
 .st-stg-assign__none {
@@ -802,31 +947,39 @@
   align-items: center;
   min-height: 44px;
   margin: 0;
-  color: var(--st-ink-soft);
-  font-size: 0.92rem;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
 }
 .st-stg-assign__hint {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 4px 8px;
-  color: var(--st-ink-soft);
-  font-size: 0.86rem;
+  gap: var(--st-space-1) var(--st-space-2);
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
 }
 
-/* ---------- Usage, prices and providers ---------- */
+/* ---------- Usage, prices and providers: rows one glass step up, big light numerals for the totals ---------- */
 
 .st-stg-total {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--st-space-1) var(--st-space-2);
   margin: 0;
-  color: var(--st-ink);
-  font-size: 1.6rem;
-  font-weight: 800;
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-h1);
+  font-weight: var(--st-weight-num);
+  font-variant-numeric: lining-nums tabular-nums;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
   overflow-wrap: anywhere;
 }
 .st-stg-total__note {
-  color: var(--st-ink-soft);
-  font-size: 0.92rem;
-  font-weight: 600;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
+  font-weight: var(--st-weight-body);
+  letter-spacing: 0;
 }
 .st-stg-usage {
   container-type: inline-size;
@@ -843,21 +996,22 @@
   display: grid;
   grid-template-columns: 14px minmax(0, 1fr) fit-content(45%);
   align-items: center;
-  gap: 4px 10px;
-  padding: 8px 12px;
-  border-radius: var(--r-sm);
-  background: rgba(13, 11, 38, 0.24);
+  gap: var(--st-space-1) 10px;
+  padding: 10px var(--st-space-3);
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-control);
 }
 .st-stg-usage__name {
-  color: var(--st-ink);
-  font-weight: 800;
+  color: var(--st-text);
+  font-weight: var(--st-weight-ui);
   overflow-wrap: anywhere;
 }
 .st-stg-usage__tokens {
   grid-row: 2;
   grid-column: 2 / -1;
-  color: var(--st-ink-soft);
-  font-size: 0.88rem;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
+  font-variant-numeric: lining-nums tabular-nums;
 }
 .st-stg-usage__cost {
   grid-row: 1;
@@ -867,8 +1021,9 @@
   flex-wrap: wrap;
   justify-content: flex-end;
   gap: 6px;
-  color: var(--st-ink);
-  font-weight: 700;
+  color: var(--st-text-strong);
+  font-weight: var(--st-weight-ui);
+  font-variant-numeric: lining-nums tabular-nums;
   text-align: right;
 }
 /* A list wide enough (a laptop; not a tablet beside the settings menu): the units and the cost on the maker's line. */
@@ -888,10 +1043,10 @@
   display: inline-block;
   width: 14px;
   height: 14px;
-  border-radius: 50%;
+  border-radius: var(--st-r-round);
 }
 .st-stg-sw--sun {
-  background: var(--st-sun);
+  background: var(--st-action);
 }
 .st-stg-sw--sky {
   background: var(--st-sky);
@@ -903,19 +1058,20 @@
   background: var(--st-coral);
 }
 .st-stg-sw--cream {
-  background: var(--st-ink);
+  background: var(--st-cream);
 }
 .st-stg-sw--lilac {
-  background: #b9a8ff;
+  background: var(--st-stg-lilac);
 }
 .st-stg-chart {
   display: flex;
   align-items: flex-end;
   gap: 2px;
   height: 130px;
-  padding: 10px 8px 0;
-  border-radius: var(--r-md);
-  background: rgba(13, 11, 38, 0.3);
+  padding: 10px var(--st-space-2) 0;
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
 }
 .st-stg-chart__day {
   display: flex;
@@ -923,6 +1079,12 @@
   align-items: flex-end;
   min-width: 0;
   height: 100%;
+  border-radius: var(--st-r-tiny) var(--st-r-tiny) 0 0;
+  transition: background-color var(--st-dur-hover) var(--st-ease-out);
+}
+/* The day under the mouse lights up behind its bar (a fill, never a filter). */
+.st-stg-chart__day:hover {
+  background: rgb(var(--st-cream-rgb) / 0.1);
 }
 .st-stg-chart__stack {
   display: flex;
@@ -930,10 +1092,7 @@
   width: 100%;
   min-height: 0;
   overflow: hidden;
-  border-radius: 4px 4px 0 0;
-}
-.st-stg-chart__day:hover .st-stg-chart__stack {
-  filter: brightness(1.15);
+  border-radius: var(--st-r-tiny) var(--st-r-tiny) 0 0;
 }
 .st-stg-chart__part {
   display: block;
@@ -945,9 +1104,9 @@
 .st-stg-chart__axis {
   display: flex;
   justify-content: space-between;
-  margin: -6px 4px 0;
-  color: var(--st-ink-soft);
-  font-size: 0.82rem;
+  margin: -6px var(--st-space-1) 0;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-caps);
 }
 .st-stg-days {
   display: grid;
@@ -959,27 +1118,27 @@
 .st-stg-days__day {
   display: grid;
   gap: 2px;
-  padding: 8px 12px;
-  border-radius: var(--r-sm);
-  background: rgba(13, 11, 38, 0.22);
+  padding: var(--st-space-2) var(--st-space-3);
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-control);
 }
 .st-stg-days__date {
-  color: var(--st-ink);
-  font-weight: 800;
+  color: var(--st-text);
+  font-weight: var(--st-weight-ui);
 }
 .st-stg-days__models {
   margin: 0;
   padding: 0;
   list-style: none;
-  color: var(--st-ink-soft);
-  font-size: 0.88rem;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
   overflow-wrap: anywhere;
 }
 .st-stg-prices,
 .st-stg-providers,
 .st-stg-keys {
   display: grid;
-  gap: 8px;
+  gap: var(--st-space-2);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -990,9 +1149,9 @@
   display: grid;
   gap: 6px;
   min-width: 0;
-  padding: 12px;
-  border-radius: var(--r-md);
-  background: rgba(13, 11, 38, 0.26);
+  padding: var(--st-space-3);
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-control);
 }
 .st-stg-price__head,
 .st-stg-provider__head,
@@ -1008,22 +1167,23 @@
 .st-stg-keyrow__name {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--st-space-2);
   min-width: 0;
-  color: var(--st-ink);
-  font-weight: 800;
+  color: var(--st-text);
+  font-weight: var(--st-weight-ui);
   overflow-wrap: anywhere;
 }
 .st-stg-price__text,
 .st-stg-provider__line {
   margin: 0;
-  color: var(--st-ink);
-  font-size: 0.94rem;
+  color: var(--st-text);
+  font-size: var(--st-fs-small);
+  font-variant-numeric: lining-nums tabular-nums;
   overflow-wrap: anywhere;
 }
 .st-stg-provider__error {
-  color: var(--st-coral-ink, #ffc9c2);
-  font-size: 0.9rem;
+  color: var(--st-coral-ink);
+  font-size: var(--st-fs-small);
   overflow-wrap: anywhere;
 }
 .st-stg-price__form,
@@ -1046,12 +1206,12 @@
 
 .st-stg-me {
   display: grid;
-  gap: 12px;
+  gap: var(--st-space-3);
   min-width: 0;
 }
 .st-stg-me__pickers {
   display: grid;
-  gap: 12px;
+  gap: var(--st-space-3);
 }
 @media (min-width: 700px) {
   .st-stg-me__pickers {
@@ -1061,7 +1221,7 @@
 }
 .st-stg-instr {
   display: grid;
-  gap: 8px;
+  gap: var(--st-space-2);
   min-width: 0;
 }
 .st-stg-instr__head {
@@ -1073,12 +1233,12 @@
 }
 .st-stg-skills {
   display: grid;
-  gap: 12px;
+  gap: var(--st-space-3);
   min-width: 0;
 }
 .st-stg-skilllist {
   display: grid;
-  gap: 8px;
+  gap: var(--st-space-2);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1087,23 +1247,27 @@
   display: grid;
   grid-template-columns: 32px minmax(0, 1fr);
   align-items: center;
-  gap: 8px 12px;
-  padding: 10px 12px;
-  border-radius: var(--r-md);
-  background: rgba(13, 11, 38, 0.26);
+  gap: var(--st-space-2) var(--st-space-3);
+  padding: 10px var(--st-space-3);
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  transition: box-shadow var(--st-dur-hover) var(--st-ease-out);
 }
 .st-stg-skilllist__row:hover {
-  background: rgba(13, 11, 38, 0.38);
+  box-shadow: var(--st-sheen-control), var(--st-depth-1);
 }
 .st-stg-skilllist__n {
   display: grid;
   place-items: center;
   width: 32px;
   height: 32px;
-  border-radius: 50%;
-  color: var(--st-on-sun);
-  background: var(--st-sky);
-  font-weight: 800;
+  border-radius: var(--st-r-round);
+  color: var(--st-on-cream);
+  background: var(--st-cream);
+  box-shadow: var(--st-depth-1);
+  font-weight: var(--st-weight-ui);
+  font-variant-numeric: lining-nums tabular-nums;
 }
 .st-stg-skilllist__text {
   display: grid;
@@ -1111,8 +1275,8 @@
   min-width: 0;
 }
 .st-stg-skilllist__title {
-  color: var(--st-ink);
-  font-weight: 800;
+  color: var(--st-text);
+  font-weight: var(--st-weight-ui);
   overflow-wrap: anywhere;
 }
 .st-stg-skilllist__row > .st-stg-chip {
@@ -1123,7 +1287,7 @@
   display: flex;
   grid-column: 1 / -1;
   justify-content: flex-end;
-  gap: 4px;
+  gap: var(--st-space-1);
 }
 @media (min-width: 700px) {
   .st-stg-skilllist__row {
@@ -1158,31 +1322,31 @@
 }
 .st-stg-skill {
   display: grid;
-  gap: 8px;
+  gap: var(--st-space-2);
   min-width: 0;
   padding: 14px;
-  border-radius: var(--r-md);
-  background: rgba(13, 11, 38, 0.26);
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  transition: box-shadow var(--st-dur-hover) var(--st-ease-out);
 }
-.st-stg-skill:hover {
-  background: rgba(13, 11, 38, 0.36);
-}
+.st-stg-skill:hover,
 .st-stg-skill.is-open {
-  background: rgba(13, 11, 38, 0.4);
+  box-shadow: var(--st-sheen-control), var(--st-depth-1);
 }
 .st-stg-skill__foot {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 4px 12px;
+  gap: var(--st-space-1) var(--st-space-3);
 }
 .st-stg-skill__head {
   display: flex;
   flex-wrap: wrap;
   align-items: flex-start;
   justify-content: space-between;
-  gap: 8px 12px;
+  gap: var(--st-space-2) var(--st-space-3);
 }
 .st-stg-skill__text {
   display: grid;
@@ -1191,9 +1355,9 @@
   min-width: 0;
 }
 .st-stg-skill__title {
-  color: var(--st-ink);
-  font-size: 1.05rem;
-  font-weight: 800;
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-body);
+  font-weight: var(--st-weight-ui);
   overflow-wrap: anywhere;
 }
 .st-stg-skill__chips {
@@ -1203,8 +1367,8 @@
 }
 .st-stg-skill__users {
   margin: 0;
-  color: var(--st-ink);
-  font-size: 0.92rem;
+  color: var(--st-text);
+  font-size: var(--st-fs-small);
   overflow-wrap: anywhere;
 }
 .st-stg-skill__detail {
@@ -1224,10 +1388,11 @@
   overflow: auto;
   max-height: 320px;
   margin: 0;
-  padding: 12px 14px;
-  border-radius: var(--r-sm);
-  color: var(--st-ink);
-  background: rgba(13, 11, 38, 0.5);
+  padding: var(--st-space-3) 14px;
+  border-radius: var(--st-r-control);
+  color: var(--st-text);
+  background: var(--st-fill-well);
+  box-shadow: inset 0 2px 8px -4px rgb(var(--st-shadow-rgb) / 0.55);
   font: 500 0.9rem/1.5 ui-monospace, "SF Mono", Menlo, monospace;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -1239,55 +1404,61 @@
   padding: 0;
   list-style: none;
 }
+/* Each version: a row (control 14) whose "Bring back" button hugs its right end 4 px in, so it is inner 10. */
 .st-stg-versions__row {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 6px 10px;
-  padding: 6px 6px 6px 12px;
-  border-radius: var(--r-sm);
-  background: rgba(13, 11, 38, 0.22);
-  color: var(--st-ink);
-  font-size: 0.92rem;
+  gap: var(--st-gap-control) 10px;
+  padding: var(--st-gap-control) var(--st-gap-control) var(--st-gap-control) var(--st-space-3);
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-control);
+  color: var(--st-text);
+  font-size: var(--st-fs-small);
   overflow-wrap: anywhere;
+}
+.st-stg-versions__row .st-stg-btn {
+  border-radius: var(--st-r-inner);
 }
 
 /* ---------- Memory ---------- */
 
 .st-stg-mem__add {
   display: grid;
-  gap: 8px;
+  gap: var(--st-space-2);
 }
 .st-stg-mem__addfoot {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: var(--st-space-2);
 }
 .st-stg-mems {
   display: grid;
-  gap: 8px;
+  gap: var(--st-space-2);
   margin: 0;
   padding: 0;
   list-style: none;
 }
 .st-stg-mem {
   display: grid;
-  gap: 8px;
+  gap: var(--st-space-2);
   min-width: 0;
-  padding: 12px 14px;
-  border-radius: var(--r-md);
-  background: rgba(13, 11, 38, 0.26);
+  padding: var(--st-space-3) 14px;
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  transition: box-shadow var(--st-dur-hover) var(--st-ease-out);
 }
 .st-stg-mem:hover {
-  background: rgba(13, 11, 38, 0.36);
+  box-shadow: var(--st-sheen-control), var(--st-depth-1);
 }
 .st-stg-mem__text {
   margin: 0;
-  color: var(--st-ink);
-  font-size: 1.02rem;
+  color: var(--st-text);
+  font-size: var(--st-fs-body);
   overflow-wrap: anywhere;
 }
 .st-stg-mem__foot {
@@ -1299,82 +1470,89 @@
 .st-stg-mem__btns {
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: var(--st-space-1);
   margin-left: auto;
 }
 .st-stg-mem__form {
   display: grid;
-  gap: 8px;
+  gap: var(--st-space-2);
 }
 
 /* ---------- Video and storage ---------- */
 
 .st-stg-facts {
   display: grid;
-  gap: 8px;
+  gap: var(--st-space-2);
   margin: 0;
 }
 .st-stg-facts > div {
   display: grid;
   gap: 2px;
-  padding: 8px 12px;
-  border-radius: var(--r-sm);
-  background: rgba(13, 11, 38, 0.24);
+  padding: var(--st-space-2) var(--st-space-3);
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-control);
 }
 .st-stg-facts dt {
-  color: var(--st-ink-soft);
-  font-size: 0.86rem;
-  font-weight: 800;
+  color: var(--st-text-amber);
+  font-family: var(--st-font-caps);
+  font-size: var(--st-fs-caps);
+  font-weight: 500;
+  letter-spacing: var(--st-track-caps);
+  text-transform: uppercase;
 }
 .st-stg-facts dd {
   margin: 0;
-  color: var(--st-ink);
+  color: var(--st-text);
   overflow-wrap: anywhere;
 }
+/* The usual length: a big light numeral with its small unit, white − and + steppers around an orange track. */
 .st-stg-length {
   display: grid;
-  gap: 8px;
+  gap: var(--st-space-2);
 }
 .st-stg-length__value {
   display: flex;
   flex-wrap: wrap;
-  align-items: center;
-  gap: 8px 12px;
+  align-items: baseline;
+  gap: var(--st-space-2) var(--st-space-3);
   margin: 0;
-  color: var(--st-ink);
-  font-size: 1.1rem;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-body);
 }
 .st-stg-length__value strong {
-  font-size: 2rem;
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-num);
+  font-weight: var(--st-weight-num);
+  font-variation-settings: "opsz" var(--st-opsz-num);
+  font-variant-numeric: lining-nums tabular-nums;
+  letter-spacing: -0.02em;
   line-height: 1;
+}
+.st-stg-length__value .st-stg-chip {
+  align-self: center;
 }
 .st-stg-length__row {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: var(--st-space-3);
 }
+/* − and +: the white rounded-square steppers (.st-stepper__btn from the figures, whose hover is the brighter cream
+   and a deeper shadow); a press only scales, so nothing travels with calm motion. */
 .st-stg-round {
-  display: grid;
-  place-items: center;
   flex: none;
-  width: 48px;
-  height: 48px;
-  border-radius: 50%;
-  color: var(--st-ink);
-  background: var(--st-panel-strong);
-  font-size: 1.5rem;
-  font-weight: 800;
-  line-height: 1;
   transition:
-    background-color 160ms ease,
-    transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    box-shadow var(--st-dur-hover) var(--st-ease-out),
+    transform var(--st-dur-tap) var(--st-ease-out);
 }
 .st-stg-round:hover {
-  background: rgba(255, 246, 229, 0.24);
-  transform: scale(1.06);
+  box-shadow: var(--st-sheen-cream), var(--st-depth-2);
 }
-.st-stg-round[aria-disabled="true"] {
-  opacity: 0.5;
+.st-stg-round:active {
+  transform: scale(0.96);
+}
+.st-stg-round[aria-disabled="true"],
+.st-stg-round[aria-disabled="true"]:hover {
   transform: none;
 }
 .st-stg-range {
@@ -1391,16 +1569,18 @@
   top: 50%;
   height: 12px;
   margin-top: -6px;
-  border-radius: var(--r-pill);
-  background: linear-gradient(90deg, var(--st-sun) 0 var(--st-stg-range, 40%), rgba(13, 11, 38, 0.55) var(--st-stg-range, 40%) 100%);
+  border-radius: var(--st-r-round);
+  background: linear-gradient(90deg, var(--st-accent) 0 var(--st-stg-range, 40%), rgb(var(--st-well-rgb) / 0.55) var(--st-stg-range, 40%) 100%);
+  box-shadow: inset 0 2px 6px -2px rgb(var(--st-shadow-rgb) / 0.5);
 }
+/* 30 to 60 s, the suggested band, as a soft mint line under the track. */
 .st-stg-range__best {
   position: absolute;
   left: 20%;
   width: 40%;
   top: calc(50% + 10px);
   height: 5px;
-  border-radius: var(--r-pill);
+  border-radius: var(--st-r-round);
   background: var(--st-mint);
   opacity: 0.85;
   pointer-events: none;
@@ -1425,10 +1605,10 @@
   height: 34px;
   margin-top: 7px;
   border: 0;
-  border-radius: 50%;
-  background: var(--st-ink);
-  box-shadow: 0 4px 12px rgba(8, 6, 30, 0.55);
-  transition: transform 160ms ease;
+  border-radius: var(--st-r-round);
+  background: var(--st-knob);
+  box-shadow: var(--st-depth-1), var(--st-glow-accent);
+  transition: transform var(--st-dur-hover) var(--st-ease-out);
 }
 .st-stg-range input::-moz-range-track {
   height: 48px;
@@ -1438,22 +1618,31 @@
   width: 34px;
   height: 34px;
   border: 0;
-  border-radius: 50%;
-  background: var(--st-ink);
-  box-shadow: 0 4px 12px rgba(8, 6, 30, 0.55);
+  border-radius: var(--st-r-round);
+  background: var(--st-knob);
+  box-shadow: var(--st-depth-1), var(--st-glow-accent);
 }
 .st-stg-range:hover input::-webkit-slider-thumb {
   transform: scale(1.08);
+}
+.st-stg-range input:focus-visible {
+  outline: none;
+}
+.st-stg-range input:focus-visible::-webkit-slider-thumb {
+  box-shadow: var(--st-focus-ring);
+}
+.st-stg-range input:focus-visible::-moz-range-thumb {
+  box-shadow: var(--st-focus-ring);
 }
 .st-stg-length__scale {
   display: flex;
   flex-wrap: wrap;
   justify-content: space-between;
-  gap: 4px 8px;
+  gap: var(--st-space-1) var(--st-space-2);
   margin: 0;
   padding: 0 58px;
-  color: var(--st-ink-soft);
-  font-size: 0.82rem;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-caps);
 }
 @media (max-width: 399px) {
   .st-stg-length__scale {
@@ -1465,8 +1654,8 @@
   gap: 3px;
   height: 16px;
   overflow: hidden;
-  border-radius: var(--r-pill);
-  background: rgba(13, 11, 38, 0.5);
+  border-radius: var(--st-r-round);
+  background: var(--st-fill-well);
 }
 .st-stg-meter__part {
   display: block;
@@ -1475,24 +1664,22 @@
   height: 100%;
   border-radius: 0;
 }
+/* Old versions: the white − and + steppers around "The last 4 versions", the number big and light. */
 .st-stg-stepper {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 10px;
-}
-.st-stg-stepper .st-stg-btn {
-  width: 48px;
-  padding: 0;
-  font-size: 1.4rem;
-}
-@media (min-width: 768px) {
-  .st-stg-stepper .st-stg-btn {
-    width: 44px;
-  }
+  gap: 10px var(--st-space-3);
 }
 .st-stg-stepper__value {
-  color: var(--st-ink);
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-body);
+}
+.st-stg-stepper__value strong {
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-h2);
+  font-weight: var(--st-weight-num);
+  font-variant-numeric: lining-nums tabular-nums;
 }
 
 /* ---------- Empty, loading, failed ---------- */
@@ -1502,28 +1689,58 @@
 .st-stg-failed {
   display: grid;
   justify-items: center;
-  gap: 8px;
-  padding: 18px 12px;
+  gap: var(--st-space-2);
+  padding: 18px var(--st-space-3);
   text-align: center;
+}
+/* Loose on the page (a whole section waiting or failed): a glass plate in Picture and See-through, like .st-plate. */
+.stories-app:is([data-look="window"], [data-look="picture"]) :is(.st-stg-section, .st-stg-cards) > :is(.st-stg-empty, .st-stg-loading, .st-stg-failed) {
+  border-radius: var(--st-r-surface);
+  background: var(--st-tint-plate);
+  -webkit-backdrop-filter: var(--st-filter-bar);
+  backdrop-filter: var(--st-filter-bar);
+  box-shadow: var(--st-sheen), var(--st-depth-1);
 }
 .st-stg-empty__title {
   margin: 0;
-  color: var(--st-ink);
-  font-size: 1.1rem;
-  font-weight: 800;
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-h3);
+  font-weight: var(--st-weight-display);
 }
 .st-stg-empty__text,
 .st-stg-loading,
 .st-stg-failed p {
   margin: 0;
   max-width: 46ch;
-  color: var(--st-ink-soft);
+  color: var(--st-text-soft);
 }
 .st-stg-failed p {
-  color: var(--st-ink);
+  color: var(--st-text);
 }
+/* The little character of the empty states, in the warm colours (a picture, never words). */
 .st-stg-buddy {
   display: block;
+}
+.st-stg-buddy__shadow {
+  fill: var(--st-base-3);
+}
+.st-stg-buddy__body {
+  fill: var(--st-sky);
+}
+.st-stg-buddy__limb {
+  stroke: var(--st-sky);
+}
+.st-stg-buddy__eye {
+  fill: var(--st-on-cream);
+}
+.st-stg-buddy__line {
+  stroke: var(--st-on-cream);
+}
+.st-stg-buddy__shine {
+  fill: var(--st-cream);
+}
+.st-stg-buddy__cheek {
+  fill: var(--st-coral);
 }
 .st-stg-buddy__arm {
   transform-box: fill-box;
@@ -1565,29 +1782,23 @@
 
 /* ---------- Round 3 (builder W3c): Add a model, makers' use, storage, sounds and motion ---------- */
 
-/* Effort levels a model accepts: toggles (more than one can be on), never a pick-one bar. */
+/* Effort levels a model accepts: pills (.st-pill from the figures: glass, the chosen ones solid cream), more than one
+   can be on, never a pick-one bar. */
 .st-stg-toggles {
   display: flex;
   flex-wrap: wrap;
-  gap: 6px;
+  gap: var(--st-space-2);
 }
 .st-stg-toggle {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 6px;
   min-width: 48px;
   min-height: 48px;
-  padding: 6px 16px;
-  border: 0;
-  border-radius: var(--r-pill);
-  color: var(--st-ink-soft);
-  background: rgba(13, 11, 38, 0.42);
-  font: 800 0.95rem/1.2 var(--st-font);
+  padding: 6px var(--st-space-4);
+  font-size: var(--st-fs-small);
   transition:
-    background-color 180ms ease,
-    color 180ms ease,
-    transform 220ms cubic-bezier(0.34, 1.56, 0.64, 1);
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    color var(--st-dur-hover) var(--st-ease-out),
+    box-shadow var(--st-dur-hover) var(--st-ease-out),
+    transform var(--st-dur-tap) var(--st-ease-out);
 }
 @media (min-width: 768px) {
   .st-stg-toggle {
@@ -1595,28 +1806,20 @@
     min-width: 44px;
   }
 }
-.st-stg-toggle:hover {
-  color: var(--st-ink);
-  background: var(--st-panel-strong);
+.st-stg-toggle:not(.is-on):hover {
+  color: var(--st-text);
 }
 .st-stg-toggle:active {
   transform: scale(0.96);
 }
-.st-stg-toggle.is-on {
-  color: var(--st-on-sun);
-  background: var(--st-sun);
-}
-.st-stg-toggle.is-on:hover {
-  background: var(--st-sun-hover, #ffd56e);
-}
 .st-stg-modelform {
   padding: 14px;
-  border-radius: var(--r-md);
-  background: rgba(13, 11, 38, 0.26);
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-control);
 }
 .st-stg-owns {
   display: grid;
-  gap: 8px;
+  gap: var(--st-space-2);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -1625,9 +1828,9 @@
   display: grid;
   gap: 6px;
   min-width: 0;
-  padding: 12px;
-  border-radius: var(--r-md);
-  background: rgba(13, 11, 38, 0.26);
+  padding: var(--st-space-3);
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-control);
 }
 .st-stg-own .st-stg-modelform {
   padding: 0;
@@ -1641,12 +1844,42 @@
 }
 .st-stg-own__name {
   min-width: 0;
-  color: var(--st-ink);
-  font-weight: 800;
+  color: var(--st-text);
+  font-weight: var(--st-weight-ui);
   overflow-wrap: anywhere;
 }
+/* A row's marks ("Added by you", its status): the usual gap between them, at the row's right edge (§45.36 E17). */
+.st-stg-chips {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px;
+  margin-left: auto;
+}
+/* "Technical details" (the shared StTech fold): on Stories' radius scale and the glass step of a row. On a card it is
+   a row of its own (control 14); inside a row (a fact, a model's row, the add-a-model form) it adds no fill and
+   lines up with the row's words. Its summary lights to the strong cream under the mouse (never orange words). */
+.st-stg-tech {
+  margin-top: 2px;
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-control);
+}
+:is(.st-stg-facts > div, .st-stg-own, .st-stg-modelform) .st-stg-tech {
+  padding: 0;
+  border-radius: var(--st-r-inner);
+  background: transparent;
+}
+.st-stg-tech > .st-tech-fold__sum {
+  border-radius: var(--st-r-inner);
+  color: var(--st-text-soft);
+}
+.st-stg-tech > .st-tech-fold__sum:hover,
+.st-stg-tech[open] > .st-tech-fold__sum {
+  color: var(--st-text-strong);
+}
 .st-stg-code {
-  color: var(--st-sky-ink, #c9ebff);
+  color: var(--st-sky-ink);
   font-size: 0.88rem;
   overflow-wrap: anywhere;
 }
@@ -1662,10 +1895,13 @@
   display: flex;
   flex-wrap: wrap;
   align-items: baseline;
-  gap: 4px 12px;
-  margin: 0 0 8px;
-  color: var(--st-ink);
+  gap: var(--st-space-1) var(--st-space-3);
+  margin: 0 0 var(--st-space-2);
+  color: var(--st-text);
   overflow-wrap: anywhere;
+}
+.st-stg-where__tech {
+  flex: 1 1 100%;
 }
 .st-stg-cleanup {
   display: grid;
@@ -1674,8 +1910,8 @@
 }
 .st-stg-usage__free {
   min-width: 0;
-  color: var(--st-mint-ink, #b8f3dd);
-  font-weight: 700;
+  color: var(--st-mint-ink);
+  font-weight: var(--st-weight-ui);
   text-align: right;
   overflow-wrap: break-word;
 }
@@ -1685,7 +1921,7 @@
   align-items: center;
   justify-content: flex-end;
   gap: 2px 6px;
-  color: var(--st-sun-ink, #ffe3a1);
+  color: var(--st-text-amber);
 }
 .st-stg-chart--render .st-stg-chart__part {
   min-height: 2px;

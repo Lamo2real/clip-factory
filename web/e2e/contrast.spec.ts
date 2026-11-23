@@ -20,9 +20,17 @@ import { animationsDone, CLIPS, looseText, MIXED_SETUP, mixedSetup, openClip, re
 // The window look (see-through in the desktop app, docs/CONTRACTS.md §22.3) is held to the same bar: the page is
 // transparent there, so each stand-in for the real window glass (e2e/glass.ts) is painted behind it and the same
 // scan runs again, for every glass that has its own tints.
+//
+// Which part runs when (B3, docs/TESTING.md "Which browser tests run when"): every pull request runs the
+// @contrast-core part, one width per breakpoint group (375 px for a phone, 1440 px for a wide screen) in one
+// background mode (the browser's own look, light). The rest, @contrast-full (320 px, dark, the window look over every
+// glass, a picture behind the page), runs on a pull request that changes a style, token, glass or theme file, and
+// every night. Every test here carries exactly one of the two tags (scripts/e2e-shards.mjs check fails otherwise).
 
 const WIDTHS = [320, 375, 1440] as const;
 const SCHEMES = ["light", "dark"] as const;
+const CORE = { tag: "@contrast-core" };
+const FULL = { tag: "@contrast-full" };
 
 /**
  * Decorative text left out on purpose, as one CSS selector. It is empty today: every visible text run passes.
@@ -65,22 +73,37 @@ async function readable(page: Page, at: string, failures: string[]): Promise<num
 /** Content Rewards' own pages (§38.20): its setup, the campaigns list, a campaign card and the Money part. */
 const CR_ROUTES = ["/settings/posting/setup/contentrewards", "/campaigns", "/campaigns/200ea21b-be80-4db8-b552-8e32b148604e", "/campaigns/a1cefc3b-4533-438f-8e70-a7299550f1cf"];
 
+/** Reads `route` at each of `looks` (a scheme and a width), in that order. */
+async function routeReadable(page: Page, route: string, looks: readonly (readonly [(typeof SCHEMES)[number], (typeof WIDTHS)[number]])[]) {
+  test.setTimeout(180_000);
+  const path = await resolveRoute(page, route);
+  const failures: string[] = [];
+  for (const [scheme, width] of looks) {
+    await page.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
+    await page.setViewportSize({ width, height: width < 768 ? 812 : 900 });
+    await page.goto(path);
+    await settle(page);
+    await animationsDone(page);
+    await readable(page, `${path} @${width} ${scheme}`, failures);
+  }
+  expect(failures).toEqual([]);
+}
+
+// Each route at every width (WIDTHS) in both schemes (SCHEMES), as two tests: the pull request part and the rest.
 for (const route of [...ROUTES, ...CR_ROUTES]) {
-  test(`text on ${route} is readable at 320, 375 and 1440 px, light and dark`, async ({ page }) => {
-    test.setTimeout(180_000);
-    const path = await resolveRoute(page, route);
-    const failures: string[] = [];
-    for (const scheme of SCHEMES) {
-      await page.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
-      for (const width of WIDTHS) {
-        await page.setViewportSize({ width, height: width < 768 ? 812 : 900 });
-        await page.goto(path);
-        await settle(page);
-        await animationsDone(page);
-        await readable(page, `${path} @${width} ${scheme}`, failures);
-      }
-    }
-    expect(failures).toEqual([]);
+  test(`text on ${route} is readable at 375 and 1440 px, light`, CORE, async ({ page }) => {
+    await routeReadable(page, route, [
+      ["light", 375],
+      ["light", 1440],
+    ]);
+  });
+  test(`text on ${route} is readable at 320 px light, and at 320, 375 and 1440 px dark`, FULL, async ({ page }) => {
+    await routeReadable(page, route, [
+      ["light", 320],
+      ["dark", 320],
+      ["dark", 375],
+      ["dark", 1440],
+    ]);
   });
 }
 
@@ -154,7 +177,7 @@ async function allSet(page: Page, width: number) {
 }
 
 for (const scheme of SCHEMES) {
-  test(`the setup list is readable as the open column, folded and under the skip question at 1440 px (${scheme})`, async ({ page }) => {
+  test(`the setup list is readable as the open column, folded and under the skip question at 1440 px (${scheme})`, scheme === "light" ? CORE : FULL, async ({ page }) => {
     await page.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
     await page.setViewportSize({ width: 1440, height: 900 });
     await withEveryRow(page, "/library");
@@ -196,7 +219,7 @@ for (const scheme of SCHEMES) {
   });
 
   for (const width of [320, 375] as const) {
-    test(`the setup list is readable as the pill, the sheet and under the skip question at ${width} px (${scheme})`, async ({ page }) => {
+    test(`the setup list is readable as the pill, the sheet and under the skip question at ${width} px (${scheme})`, scheme === "light" && width === 375 ? CORE : FULL, async ({ page }) => {
       await page.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
       await page.setViewportSize({ width, height: 812 });
       await withEveryRow(page, "/library");
@@ -231,7 +254,7 @@ for (const scheme of SCHEMES) {
     });
   }
 
-  test(`"All set!" is readable where the column was and in the pill's strip (${scheme})`, async ({ page }) => {
+  test(`"All set!" is readable where the column was and in the pill's strip (${scheme})`, scheme === "light" ? CORE : FULL, async ({ page }) => {
     await page.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
     await keepAllSet(page);
     const failures: string[] = [];
@@ -263,7 +286,7 @@ const WINDOW_ROUTES = [...ROUTES.filter((r) => !r.endsWith(".html")), ...WINDOW_
 
 for (const { glass, paints } of WINDOW_LOOKS) {
   for (const route of WINDOW_ROUTES) {
-    test(`window look (${glass}): text on ${route} is readable over every stand-in for the glass, at 320, 375 and 1440 px`, async ({ page }) => {
+    test(`window look (${glass}): text on ${route} is readable over every stand-in for the glass, at 320, 375 and 1440 px`, FULL, async ({ page }) => {
       test.setTimeout(180_000);
       await asDesktop(page, glass);
       const path = await resolveRoute(page, route);
@@ -281,7 +304,7 @@ for (const { glass, paints } of WINDOW_LOOKS) {
   }
 
   // The floating setup to-do list (§17.13) in every face: the routes above only carry five "Not started" rows.
-  test(`window look (${glass}): the setup list is readable and on a tint as the pill, the sheet, the column, under the skip question and as "All set!"`, async ({ page }) => {
+  test(`window look (${glass}): the setup list is readable and on a tint as the pill, the sheet, the column, under the skip question and as "All set!"`, FULL, async ({ page }) => {
     test.setTimeout(240_000);
     await asDesktop(page, glass);
     await keepAllSet(page);
@@ -346,7 +369,7 @@ for (const { glass, paints } of WINDOW_LOOKS) {
 
   // What ROUTES cannot reach by address, or shows only after a tap: surfaces that float over the page (the Ask
   // panel, a sheet, a toast) keep their own denser tint in the window look, and a starred star keeps its the vermilion CTA fill.
-  test(`window look (${glass}): the screens behind a tap are readable too (Frosted, sign-in, a clip, This week, Ask, a sheet, a toast)`, async ({ page, browser }) => {
+  test(`window look (${glass}): the screens behind a tap are readable too (Frosted, sign-in, a clip, This week, Ask, a sheet, a toast)`, FULL, async ({ page, browser }) => {
     test.setTimeout(240_000);
     await asDesktop(page, glass);
     const failures: string[] = [];
@@ -433,7 +456,7 @@ for (const { glass, paints } of WINDOW_LOOKS) {
 // Their tints plan for white (FLOAT_VEIL, TABBAR_VEIL): here the Library is scrolled so clip thumbnails are under the
 // tab bar, the real computed tints are read in the browser, and every text colour inside each layer (icons in the tab
 // bar, 3:1) is held to its bar over white under that tint.
-test("the tab bar, the setup pill and the Ask sheet hold their words over a white thumbnail, at 390 px", async ({ page }) => {
+test("the tab bar, the setup pill and the Ask sheet hold their words over a white thumbnail, at 390 px", CORE, async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/library");
   await settle(page);
@@ -477,7 +500,7 @@ test("the tab bar, the setup pill and the Ask sheet hold their words over a whit
 // ---------- Controls outside a panel, over a white picture (ADR-45) ----------
 // The picture look has no page veil, so a control that sits straight on the page (the Library's tabs) carries its own
 // fill. Over a white picture, every word on it is held to AA, worked out from the fill the browser really draws.
-test("the Library tabs stay readable over a white picture, at 390 and 1440 px", async ({ page }) => {
+test("the Library tabs stay readable over a white picture, at 390 and 1440 px", FULL, async ({ page }) => {
   for (const width of [390, 1440]) {
     await page.setViewportSize({ width, height: width < 768 ? 844 : 900 });
     await page.goto("/settings/look-and-feel/background");
@@ -529,7 +552,7 @@ test("the Library tabs stay readable over a white picture, at 390 and 1440 px", 
 // answer thinks, and the sources list under an answer, at 375 and 1440 px in both schemes.
 const ASK_PDF_B64 = Buffer.from("%PDF-1.4\n1 0 obj << /Type /Page >> endobj\ntrailer << >>\n%%EOF\n").toString("base64");
 for (const scheme of SCHEMES) {
-  test(`Ask's file tiles, status line and sources are readable at 375 and 1440 px (${scheme})`, async ({ page }) => {
+  test(`Ask's file tiles, status line and sources are readable at 375 and 1440 px (${scheme})`, scheme === "light" ? CORE : FULL, async ({ page }) => {
     test.setTimeout(180_000);
     await page.emulateMedia({ colorScheme: scheme, reducedMotion: "reduce" });
     const failures: string[] = [];

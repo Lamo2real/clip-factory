@@ -8,6 +8,9 @@ export default defineConfig({
   testDir: "e2e",
   timeout: 120_000,
   fullyParallel: true,
+  // A test.only left in a spec fails the CI run instead of quietly running that one test (and, with a shard's
+  // --test-list, skipping the rest of the shard).
+  forbidOnly: !!process.env.CI,
   // One retry on CI only, so a test that is slow under load once does not block a merge; local runs never retry.
   retries: process.env.CI ? 1 : 0,
   reporter: [["list"]],
@@ -32,7 +35,7 @@ export default defineConfig({
     {
       name: "webkit",
       use: { ...devices["Desktop Safari"] },
-      testMatch: /(help-pictures|ask-assistant|ask-markup|nav-smooth|page-still|top-line|job-head|drop-video|home-fit|home-fan|getpaid)\.spec\.ts/,
+      testMatch: /(help-pictures|ask-assistant|ask-markup|nav-smooth|page-still|top-line|job-head|drop-video|home-fit|home-fan|getpaid|stories-switch-slide)\.spec\.ts/,
     },
     {
       name: "webkit-phone",

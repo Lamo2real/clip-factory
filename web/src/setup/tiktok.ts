@@ -317,7 +317,7 @@ export const tiktok: SetupGuide = {
           icon: "video",
           title: "Record the real demo video",
           say: [
-            "Use a computer. Connect in the Sandbox, with your TikTok still private. Record your screen with the address bar in sight.",
+            "Use a computer. Connect in the Sandbox, your TikTok still private, **Your Mac posts TikTok** off. Record your screen with the address bar in sight.",
             "Follow the shot list below, in order. It starts on the About page, then **Connect TikTok** and TikTok's screen with **Continue**.",
             "Then **Upload** one clip, choosing everything by hand in the **TikTok** row. Show each line TikTok wants to see.",
             "End with the post arriving on your TikTok. Keep it short, about 1 minute. Save it as MP4, under 50 MB.",

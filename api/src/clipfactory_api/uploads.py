@@ -51,12 +51,14 @@ def upload_review_clip(
     ``postOptions`` also says ``test: "private"`` (§46.8). No request body can set these. With ``auto`` the clip's
     write also needs no live Throw away hold (``holdUntil`` absent or past, §46.7); Upload by hand ignores the hold.
 
-    Your Mac posts it on TikTok (§47), only while ``settings.tiktokMac.on`` and never for a campaign clip: Upload by
-    hand with TikTok among ``platforms``, while TikTok has not approved Clip Factory's public uploads, writes the TikTok
-    post as a Mac post (``source: "upload"``) instead of ``queued`` (the sheet's choices are still required and
-    checked); an auto-posting run's live clip (``tiktok_mac=True``, never a Private test) also gets one (``source:
-    "auto"``), though TikTok is never one of its places. Every Mac post's options are My settings' TikTok choices. Both go through ``create_for_clip``'s explicit
-    ``tiktok_mac`` path, in the same transaction as the other posts. Otherwise TikTok's rule is exactly as before."""
+    Your Mac posts it on TikTok (§47), only while ``settings.tiktokMac.on`` and never for a campaign clip (its
+    TikTok goes through TikTok's API once TikTok approved the app, else Upload refuses it: the Mac can't mark it as
+    Branded content yet): Upload by hand with TikTok among ``platforms``, while TikTok has not approved Clip Factory's
+    public uploads, writes the TikTok post as a Mac post (``source: "upload"``) instead of ``queued`` (the sheet's
+    choices are still required and checked); an auto-posting run's live clip (``tiktok_mac=True``, never a Private
+    test) also gets one (``source: "auto"``), though TikTok is never one of its places. Every Mac post's options are My
+    settings' TikTok choices. Both go through ``create_for_clip``'s explicit ``tiktok_mac`` path, in the same
+    transaction as the other posts. Otherwise TikTok's rule is exactly as before."""
     from .routes import clips as checks  # Upload's and Try again's shared checks (§33, §38.14)
 
     patch = dict(captions_patch or {})
@@ -168,7 +170,8 @@ def _mac_source(
     auto: Mapping[str, Any] | None,
     asked: bool,
 ) -> str | None:
-    """Whether this Upload hands TikTok to the owner's Mac (§47), and from where: ``"upload"``, ``"auto"`` or None."""
+    """Whether this Upload hands TikTok to the owner's Mac (§47), and from where: ``"upload"``, ``"auto"`` or None.
+    Never for a campaign clip, by hand or from an auto-posting run (``tiktok_mac.CAMPAIGN_SKIPS``)."""
     if is_campaign or not mac_posts.is_on(current_settings):
         return None
     if auto is None:

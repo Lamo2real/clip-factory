@@ -235,7 +235,7 @@ def test_stop_refuses_the_next_write_and_nothing_more_is_written(tmp_path: Path)
 
 
 def test_a_model_that_is_not_available_fails_the_answer_with_its_sentence_and_a_settings_button(tmp_path: Path) -> None:
-    sentence = "Claude Fable 5.2 isn't available right now: no access. Pick another model in Lamo Stories › Settings › AI, or try again."
+    sentence = "Claude Fable 5.2 isn't available right now: no access. Pick another model in Funded Clips › Settings › AI, or try again."
     model = FakeModel(models.ModelUnavailable(sentence))
     svc, db, _ = services(tmp_path, model)
     seed(db, conversation=conv(model="fable-5-2"))
@@ -388,7 +388,7 @@ def test_a_question_that_sorts_after_its_answer_is_still_answered(tmp_path: Path
 def test_an_answer_that_failed_before_any_reply_keeps_the_model_and_effort_it_was_sent_with(tmp_path: Path) -> None:
     """§45.34: the API wrote the effective model and effort on the pending answer; a failure before any reply keeps
     them (a refusal names them itself), so the failed message still shows what was asked."""
-    sentence = "Claude Fable 5.2 does not accept Maximum effort here (Amazon Bedrock refused it). Pick another level in Lamo Stories › Settings › AI."
+    sentence = "Claude Fable 5.2 does not accept Maximum effort here (Amazon Bedrock refused it). Pick another level in Funded Clips › Settings › AI."
     model = FakeModel(models.EffortUnavailable(sentence, model="fable-5-2", effort="max", sent=True, status="error"))
     svc, db, _ = services(tmp_path, model)
     seed(db, answer=pending(model="fable-5-2", effort="max", effortApplied=True))

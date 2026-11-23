@@ -1,0 +1,659 @@
+// Clip Factory Stories' own background (Stories › Settings › Look): the same three choices as Clip Factory's
+// (BackgroundBranch, CONTRACTS §22.5) with Stories' own colours, numbers and prefs. Never Clip Factory's: the choice
+// lives in Stories' own cf.stories.prefs (`look.*` under `more`) and the picture in its own localStorage entry
+// (cf.stories.picture), and nothing here writes Clip Factory's settings.
+//
+//   See-through  the Mac or Windows app: the page is transparent and the window's own glass shows the desktop, Clear
+//                or Frosted (a 0.30 frost). Browsers and phones cannot look behind themselves: they show the Stories
+//                colours (Ember), frosted when Frosted is picked.
+//   Picture      the owner's picture at full strength between the panels (Ember until one is picked).
+//   Colours      1 to 3 colours drawn as a base and two soft lights. Ember (the owner's warm reference) is the default
+//                choice of the whole Look.
+//
+// The veils: the least smoky tint that keeps every word at 4.5:1 over the lightest pixel each look can show. Over a
+// desktop or a picture that is white (the worst case of any photo or busy desktop), so the measured numbers hold
+// (tiles 0.74, tinted tiles 0.80 with the colour cut to 0.12, hero 0.76, rail 0.78, Frosted 0.30 + 0.89). Over the
+// colours they are worked out here from exactly what the stage draws (stageAt over STAGE_WINDOWS), the way Clip Factory's
+// lib/background.ts does for its own. StoriesApp calls useStoriesBackground(root, active) once: it puts the result on
+// .stories-app (data-look, data-strength, data-glass, the --st-veil-* numbers and the stage colours), and
+// glass.css paints .stories-app::before from them. Stories depends on nothing of Clip Factory's here: the two small
+// readers below are Stories' own copies.
+import { useEffect, useLayoutEffect, useSyncExternalStore, type RefObject } from "react";
+import { LENS_BUDGET, watchLenses } from "./glass/lens.ts";
+import { onStoriesPrefs, setStoriesPref, storiesPrefs } from "./workspace.ts";
+
+/** The desktop app's real window glass (its wrapper says which in window.__CF_GLASS__); "none" anywhere else. */
+export type NativeGlass = "liquid" | "vibrancy" | "mica" | "acrylic" | "blur" | "none";
+const REAL_GLASSES: readonly string[] = ["liquid", "vibrancy", "mica", "acrylic", "blur"];
+
+/** Stories' own copy of the shell's reader (lib/background.ts readNativeGlass): only the desktop wrapper can say so. */
+export function readNativeGlass(w: { __CF_DESKTOP__?: unknown; __CF_GLASS__?: unknown } | undefined): NativeGlass {
+  if (!w || w.__CF_DESKTOP__ !== true) return "none";
+  const g = w.__CF_GLASS__;
+  return typeof g === "string" && REAL_GLASSES.includes(g) ? (g as NativeGlass) : "none";
+}
+export function nativeGlass(): NativeGlass {
+  return typeof window === "undefined" ? "none" : readNativeGlass(window as unknown as { __CF_DESKTOP__?: unknown; __CF_GLASS__?: unknown });
+}
+
+export type LookMode = "see-through" | "picture" | "colours";
+export type GlassStrength = "clear" | "frosted";
+/** What is drawn behind the glass (data-look on .stories-app). */
+export type LookKind = "window" | "picture" | "colours";
+/** How the glass is drawn on this device (data-glass): the liquid rim, plain CSS light, or solid. */
+export type GlassTier = "liquid" | "simple" | "solid";
+export type Rgb = readonly [number, number, number];
+
+export const LOOK_MODES: readonly LookMode[] = ["see-through", "picture", "colours"];
+export const GLASS_STRENGTHS: readonly GlassStrength[] = ["clear", "frosted"];
+const TIERS: readonly GlassTier[] = ["liquid", "simple", "solid"];
+
+/** The keys in cf.stories.prefs (`more`). `look.glass` is a device override, for checks only (no switch shows it). */
+export const LOOK_KEYS = { mode: "look.mode", strength: "look.strength", colours: "look.colours", glass: "look.glass" } as const;
+/** The picture's own entry: too big for cf.stories.prefs, and never Clip Factory's cf.background. */
+export const PICTURE_KEY = "cf.stories.picture";
+
+/** Ember: the owner's warm reference (espresso, copper light, amber light). The default of the whole Look. */
+export const EMBER: readonly string[] = ["#1c130e", "#e2621f", "#ff9a45"];
+export const PRESETS: readonly { id: string; name: string; colours: readonly string[] }[] = [
+  { id: "ember", name: "Ember", colours: EMBER },
+  { id: "rose", name: "Rose", colours: ["#21121a", "#c8546a", "#f59a7a"] },
+  { id: "lagoon", name: "Lagoon", colours: ["#0d1a1b", "#2c8a86", "#e8a65a"] },
+];
+export const DEFAULT_MODE: LookMode = "colours";
+export const DEFAULT_STRENGTH: GlassStrength = "clear";
+export const MAX_COLOURS = 3;
+
+export interface StoriesLook {
+  mode: LookMode;
+  strength: GlassStrength;
+  colours: string[];
+  picture: string | null;
+}
+
+// ---------- Colour maths (WCAG 2.x) ----------
+
+export function hexToRgb(hex: string): Rgb {
+  const h = hex.replace("#", "");
+  return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16)) as unknown as Rgb;
+}
+const channel = (c: number) => {
+  const v = c / 255;
+  return v <= 0.03928 ? v / 12.92 : ((v + 0.055) / 1.055) ** 2.4;
+};
+export function luminance([r, g, b]: Rgb): number {
+  return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
+}
+export function contrast(a: Rgb, b: Rgb): number {
+  const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p) as [number, number];
+  return (x + 0.05) / (y + 0.05);
+}
+/** `top` at `alpha` over `under`. */
+export function mix(top: Rgb, under: Rgb, alpha: number): Rgb {
+  return top.map((c, i) => c * alpha + under[i]! * (1 - alpha)) as unknown as Rgb;
+}
+/** CSS saturate(s) on one colour (the filter matrix, clamped), as backdrop-filter does to what is behind a bar. */
+export function saturateRgb([r, g, b]: Rgb, s: number): Rgb {
+  const clamp = (v: number) => Math.max(0, Math.min(255, v));
+  return [
+    clamp((0.2126 + 0.7874 * s) * r + (0.7152 - 0.7152 * s) * g + (0.0722 - 0.0722 * s) * b),
+    clamp((0.2126 - 0.2126 * s) * r + (0.7152 + 0.2848 * s) * g + (0.0722 - 0.0722 * s) * b),
+    clamp((0.2126 - 0.2126 * s) * r + (0.7152 - 0.7152 * s) * g + (0.0722 + 0.9278 * s) * b),
+  ];
+}
+
+/** The smoky glass tint (--st-veil-rgb, #1C130E). */
+export const VEIL: Rgb = [28, 19, 14];
+export const WHITE: Rgb = [255, 255, 255];
+/** Every word colour that sits on glass or loose on the page (glass-tokens.css: ink, ink-soft and the tone inks). */
+export const INKS: Readonly<Record<string, string>> = {
+  ink: "#fff6ea",
+  "ink-soft": "#f2e5d4",
+  "sun-ink": "#ffd9a8",
+  "coral-ink": "#ffd6cc",
+  "mint-ink": "#c9f2dc",
+  "sky-ink": "#d3ecf5",
+};
+const INK_RGB: readonly Rgb[] = Object.values(INKS).map(hexToRgb);
+export const AA = 4.5;
+
+/** The least veil of VEIL over `under` at which every word reaches `target` (in steps of 0.01). */
+export function minVeil(under: Rgb, inks: readonly Rgb[] = INK_RGB, target = AA): number {
+  for (let v = 0; v <= 1.0001; v += 0.01) {
+    const bg = mix(VEIL, under, v);
+    if (inks.every((t) => contrast(t, bg) >= target)) return Math.round(v * 100) / 100;
+  }
+  return 1;
+}
+
+// ---------- The logic of light (glass-tokens.css 5a; test/storiesLight.test.ts holds the two together) ----------
+
+/** The cream light each level adds: 0 the backdrop, 1 page panels, 2 cards, 3 raised cards and bars, 4 controls (over
+ *  the surface they sit on), 5 menus, popovers, sheets and toasts. */
+export const ELEVATION: readonly number[] = [0, 0.025, 0.045, 0.07, 0.12, 0.2];
+/** The extra light at the very top of each level (it settles into the fill by --st-elev-settle). */
+export const ELEVATION_TOP: readonly number[] = [0, 0.03, 0.04, 0.05, 0.015, 0.06];
+/** The cream of the light (--st-cream-rgb). */
+export const CREAM: Rgb = [255, 243, 228];
+/** The level each kind of glass sits on. */
+export const KIND_LEVEL: Readonly<Record<keyof Veils, number>> = { page: 0, rail: 1, plate: 1, card: 2, tinted: 3, hero: 3, bar: 3, float: 5 };
+/**
+ * A surface of veil `veil` and light `light` over `under`, as glass.css draws it: the light takes its share from what
+ * is behind, never from the veil (its veil layer is veil / (1 - light) under the light, clamped at 1), so over white
+ * it keeps the veil's own contrast and over anything darker the light shows.
+ */
+export function lit(under: Rgb, veil: number, light: number): Rgb {
+  const v = Math.min(1, veil / (1 - light));
+  return mix(CREAM, mix(VEIL, under, v), light);
+}
+/** The least veil at which every word keeps `target` on a surface with this light over `under`, at its top. */
+export function minVeilLit(under: Rgb, light: number, inks: readonly Rgb[] = INK_RGB, target = AA): number {
+  for (let v = 0; v <= 1.0001; v += 0.01) {
+    const bg = lit(under, v, light);
+    if (inks.every((t) => contrast(t, bg) >= target)) return Math.round(v * 100) / 100;
+  }
+  return 1;
+}
+
+/** How strong the stage's two main lights are (glass-tokens.css --st-stage-a2 copper, --st-stage-a3 amber). */
+export const GLOW_ALPHA = { second: 0.46, third: 0.3 } as const;
+/** What a bar's backdrop-filter can do to the colours under it (none, and the bar's saturate). */
+export const SATURATIONS: readonly number[] = [1, 1.35];
+
+export type ViewUnit = "vmax" | "vmin" | "vw" | "vh";
+/**
+ * One soft light of the stage: `radial-gradient(rx ry at x% y%, rgb(tone / alpha), transparent stop)`. glass.css
+ * .stories-app::before draws exactly these, in this order (the first on top), over the first colour; the test
+ * (storiesGlass.test.tsx) holds the two together. `tone` 2 and 3 are the owner's second and third colours.
+ */
+export interface StageLight {
+  tone: 2 | 3 | "shadow";
+  alpha: number;
+  rx: number;
+  ry: number;
+  ux?: ViewUnit;
+  uy?: ViewUnit;
+  /** where its middle is, in % of the window */
+  x: number;
+  y: number;
+  /** where it has faded to nothing, 0..1 of its size (0.7 when left out) */
+  stop?: number;
+}
+/** The warm room of the owner's reference: a lamp's light strip at the right edge, amber high on the right, copper
+ *  low on the left, a darker corner behind the page heads, and a warm haze over everything. */
+export const STAGE_LIGHTS: readonly StageLight[] = [
+  { tone: 3, alpha: 0.34, rx: 7, ux: "vw", ry: 34, uy: "vh", x: 100, y: 48 },
+  { tone: 3, alpha: GLOW_ALPHA.third, rx: 46, ry: 36, x: 92, y: 2 },
+  { tone: 2, alpha: GLOW_ALPHA.second, rx: 50, ry: 40, x: 0, y: 104 },
+  { tone: "shadow", alpha: 0.5, rx: 56, ry: 40, x: 10, y: 8 },
+  { tone: 2, alpha: 0.24, rx: 90, ry: 64, x: 56, y: 46, stop: 1 },
+];
+const SHADOW: Rgb = [10, 6, 3];
+/** The windows the stage is worked out over: phones (short and tall), tablets, laptops, desktops, ultrawide, square. */
+export const STAGE_WINDOWS: readonly (readonly [number, number])[] = [
+  [320, 568],
+  [375, 812],
+  [320, 900],
+  [768, 1024],
+  [1024, 768],
+  [1440, 900],
+  [1920, 1080],
+  [2560, 1440],
+  [3440, 900],
+  [900, 900],
+];
+
+/** The stage of these colours as a function: the colour it draws at (x, y) of a w × h window (CSS's gradients,
+ *  composited in sRGB, exactly). */
+function stageOf(colours: readonly string[], lights: readonly StageLight[] = STAGE_LIGHTS): (x: number, y: number, w: number, h: number) => Rgb {
+  const [c1, c2 = c1, c3 = c2] = colours.map(hexToRgb) as Rgb[];
+  const tones = { 2: c2!, 3: c3!, shadow: SHADOW };
+  const ls = [...lights].reverse().map((l) => ({ ...l, rgb: tones[l.tone], stop: l.stop ?? 0.7, ux: l.ux ?? "vmax", uy: l.uy ?? "vmax" }));
+  return (x, y, w, h) => {
+    const unit = { vmax: Math.max(w, h) / 100, vmin: Math.min(w, h) / 100, vw: w / 100, vh: h / 100 };
+    let r = c1![0],
+      g = c1![1],
+      b = c1![2];
+    for (const l of ls) {
+      const dx = (x - (l.x / 100) * w) / (l.rx * unit[l.ux]);
+      const dy = (y - (l.y / 100) * h) / (l.ry * unit[l.uy]);
+      const a = l.alpha * (1 - Math.sqrt(dx * dx + dy * dy) / l.stop);
+      if (a <= 0) continue;
+      r = l.rgb[0] * a + r * (1 - a);
+      g = l.rgb[1] * a + g * (1 - a);
+      b = l.rgb[2] * a + b * (1 - a);
+    }
+    return [r, g, b];
+  };
+}
+/** The colour the stage draws at (x, y) of a w × h window. */
+export function stageAt(colours: readonly string[], x: number, y: number, w: number, h: number, lights: readonly StageLight[] = STAGE_LIGHTS): Rgb {
+  return stageOf(colours, lights)(x, y, w, h);
+}
+
+const spotCache = new Map<string, Rgb[]>();
+/** 0..w in steps, always ending on the edge itself (where the lights at the edge are brightest). */
+const steps = (from: number, to: number, by: number) => {
+  const out: number[] = [];
+  for (let v = from; v < to; v += by) out.push(v);
+  out.push(to);
+  return out;
+};
+/**
+ * The lightest colours the stage can show, worked out from exactly what it draws over every window in
+ * STAGE_WINDOWS: per window and saturation, the lightest pixel (a 32 px grid, then 4 px around the best).
+ */
+export function stageSpots(colours: readonly string[], saturations: readonly number[] = SATURATIONS): Rgb[] {
+  const key = `${colours.join()}|${saturations.join()}`;
+  const hit = spotCache.get(key);
+  if (hit) return hit;
+  const out: Rgb[] = [];
+  const at = stageOf(colours);
+  for (const [w, h] of STAGE_WINDOWS) {
+    for (const s of saturations) {
+      let best = { l: -1, x: 0, y: 0, c: [0, 0, 0] as Rgb };
+      const look = (x: number, y: number) => {
+        const c = at(x, y, w, h);
+        const l = luminance(s === 1 ? c : saturateRgb(c, s));
+        if (l > best.l) best = { l, x, y, c };
+      };
+      for (const y of steps(0, h, 32)) for (const x of steps(0, w, 32)) look(x, y);
+      const { x: bx, y: by } = best;
+      for (const y of steps(Math.max(0, by - 32), Math.min(h, by + 32), 4)) for (const x of steps(Math.max(0, bx - 32), Math.min(w, bx + 32), 4)) look(x, y);
+      out.push(best.c);
+    }
+  }
+  if (spotCache.size > 32) spotCache.clear();
+  spotCache.set(key, out);
+  return out;
+}
+
+/** Every colour the stage can show at its lightest, through each saturation (kept for the old name's readers). */
+export function meshSpots(colours: readonly string[], saturations: readonly number[] = [1]): Rgb[] {
+  return stageSpots(colours).flatMap((s) => saturations.map((k) => saturateRgb(s, k)));
+}
+const lightest = (spots: readonly Rgb[]): Rgb => spots.reduce((a, b) => (luminance(b) > luminance(a) ? b : a));
+
+/** The veils of every kind of glass (and the page itself), 0..1 of VEIL. */
+export interface Veils {
+  page: number;
+  card: number;
+  tinted: number;
+  hero: number;
+  rail: number;
+  bar: number;
+  float: number;
+  /** behind words loose on the page; 0 where the page itself keeps them readable */
+  plate: number;
+}
+
+/** Measured over a white desktop or photo (revise-notes, 22 Nov): the floor of See-through in the app and Picture. A
+ *  sheet's (float) is the card's: its level-5 light (ELEVATION[5]) covers the rest, 0.94 in all, never thinner than the
+ *  rail, and over white the light keeps the veil's own contrast (lit). */
+export const MEASURED: Veils = { page: 0, card: 0.74, tinted: 0.8, hero: 0.76, rail: 0.78, bar: 0.78, float: 0.74, plate: 0.78 };
+/** Frosted in the app: a 0.30 frost over the desktop and the panels at 0.89. */
+export const FROSTED: Veils = { page: 0.3, card: 0.89, tinted: 0.89, hero: 0.89, rail: 0.89, bar: 0.89, float: 0.89, plate: 0.89 };
+/** The light's order over a light backdrop (the owner's rule, Clip Factory's own): from the page panel upward every
+ *  level is at least LIGHT_STEP brighter in relative luminance than the one under it, gradually; only the page-to-panel
+ *  step may go darker, where AA needs the veil. Over a white desktop or photo the light takes its share from what is
+ *  behind (lit), so there the order is the veils' alone: each level's veil is thinner than the one under it. */
+export const LIGHT_STEP = 0.015;
+/** Clear over a picture or the desktop, as drawn: each glass at or above its measured floor (MEASURED), in the light's
+ *  order over white: panels 0.90, cards 0.84, raised surfaces 0.79 (a hero, a bar, a card inside a card), sheets 0.74
+ *  (a tinted tile's tone lights it on its own): about +0.017 L a step over white (test/storiesLight.test.ts). */
+export const WINDOW_CLEAR: Veils = { page: 0, card: 0.84, tinted: 0.8, hero: 0.79, rail: 0.9, bar: 0.79, float: 0.74, plate: 0.9 };
+/** Frosted in the app, as drawn: the 0.30 frost, then the panels in the same order over the frosted desktop. */
+export const WINDOW_FROSTED: Veils = { page: 0.3, card: 0.84, tinted: 0.82, hero: 0.77, rail: 0.96, bar: 0.77, float: 0.72, plate: 0.96 };
+/** The least each glass gets over the colours, whatever they are (the look of glass, not only the maths). A sheet
+ *  (float) is the top layer: its top (ELEVATION[5] + ELEVATION_TOP[5]) is brighter than any control under it, so its
+ *  veil is the bar's, which keeps its own controls' second lines at 4.5:1 under that light; with it it covers 0.9 or
+ *  more of what is behind, and over a cream card or the action under it its words keep 5:1. */
+export const COLOUR_FLOORS: Veils = { page: 0, card: 0.58, tinted: 0.66, hero: 0.6, rail: 0.62, bar: 0.72, float: 0.72, plate: 0 };
+/** Frosted outside the app: the colours under a 0.30 frost. */
+export const FROST_PAGE = 0.3;
+/** Solid glass (reduced transparency, or the device's choice): every glass at --st-veil-solid; a desktop or a picture
+ *  behind is all but covered too (the colours stay: they are the page, not something seen through it). */
+export const SOLID = 0.96;
+export const SOLID_PAGE = 0.9;
+export function solidVeils(page: number): Veils {
+  return { page, card: SOLID, tinted: SOLID, hero: SOLID, rail: SOLID, bar: SOLID, float: SOLID, plate: SOLID };
+}
+/** How much of a tone a colour-tinted tile shows (--st-tint-cut). */
+export const TINT_CUT = 0.12;
+
+/** What is drawn for this choice on this device. */
+export function lookKind(look: Pick<StoriesLook, "mode" | "picture">, glass: string = nativeGlass()): LookKind {
+  if (look.mode === "see-through") return glass !== "none" ? "window" : "colours";
+  if (look.mode === "picture") return look.picture ? "picture" : "colours";
+  return "colours";
+}
+
+/** The colours the stage shows: the owner's own for Colours, Ember for everything else drawn by the page. */
+export function stageColours(look: Pick<StoriesLook, "mode" | "colours">): readonly string[] {
+  return look.mode === "colours" ? normaliseColours(look.colours) : EMBER;
+}
+
+/** A glass control loose on the page over the colours (glass-tokens.css): --st-fill-control, cream at 0.12, with its
+ *  level-4 light at its top (--st-light-4, ELEVATION_TOP[4]); hovered, --st-fill-control-hover (CONTROL_HOVER). */
+export const LOOSE_CONTROL_FILL = 0.12;
+export const CONTROL_HOVER: { rgb: Rgb; alpha: number } = { rgb: [139, 128, 118], alpha: 0.33 };
+/** The words on a loose control (--st-text) keep a little more than AA over the owner's own colours. */
+export const CONTROL_TARGET = 4.6;
+const CONTROL_INKS: readonly Rgb[] = [hexToRgb(INKS.ink!)];
+/** A loose control at rest (its brightest part, the top) and hovered, over `page` of what the page shows there. */
+export function looseControl(page: Rgb): { rest: Rgb; hover: Rgb } {
+  const fill = 1 - (1 - LOOSE_CONTROL_FILL) * (1 - ELEVATION_TOP[4]!);
+  return { rest: mix(CREAM, page, fill), hover: mix(CREAM, mix(CONTROL_HOVER.rgb, page, CONTROL_HOVER.alpha), ELEVATION_TOP[4]!) };
+}
+/** The least page veil at which a loose control's words keep CONTROL_TARGET over every spot of the stage. */
+export function minPageForControls(spots: readonly Rgb[]): number {
+  for (let v = 0; v <= 1.0001; v += 0.01) {
+    const ok = spots.every((s) => {
+      const { rest, hover } = looseControl(mix(VEIL, s, v));
+      return CONTROL_INKS.every((t) => contrast(t, rest) >= CONTROL_TARGET && contrast(t, hover) >= CONTROL_TARGET);
+    });
+    if (ok) return Math.round(v * 100) / 100;
+  }
+  return 1;
+}
+
+/** The veils for this look, worked out so every word stays at 4.5:1 over the lightest pixel it can sit on. */
+export function veilsFor(look: StoriesLook, glass: string = nativeGlass(), tier: GlassTier = "simple"): Veils {
+  const kind = lookKind(look, glass);
+  if (tier === "solid") return solidVeils(kind === "colours" ? veilsFor(look, glass).page : SOLID_PAGE);
+  if (kind === "window") return look.strength === "frosted" ? { ...WINDOW_FROSTED } : { ...WINDOW_CLEAR };
+  if (kind === "picture") return { ...WINDOW_CLEAR };
+  const colours = stageColours(look);
+  const spots = stageSpots(colours);
+  // Loose words on the page: the page veil keeps them readable over the lightest spot (Frosted adds its frost). Once
+  // the colours need a veil (the owner's own bright ones), it also keeps a glass control's words loose on the page
+  // at CONTROL_TARGET (its cream fill and level-4 light lie over the veil: they measured 4.47:1 with the words' veil
+  // alone). Ember, Rose and Lagoon need none: their loose controls measure 4.9:1 or more on every page.
+  const words = minVeil(lightest(spots));
+  const loose = words > 0 ? Math.max(words, minPageForControls(spots)) : 0;
+  const page = Math.max(loose, look.mode === "see-through" && look.strength === "frosted" ? FROST_PAGE : 0);
+  // Under the glass: the page veil, then each glass over the lightest spot a bar's saturate can make of it.
+  const under = lightest(spots.flatMap((s) => SATURATIONS.map((k) => saturateRgb(mix(VEIL, s, page), k))));
+  // Each glass with its own level's light at its top (the brightest part of it), the light taking its share from
+  // what is behind (lit).
+  const out = { ...COLOUR_FLOORS, page };
+  for (const k of ["card", "tinted", "hero", "rail", "bar", "float"] as const) {
+    const lv = KIND_LEVEL[k];
+    out[k] = Math.max(COLOUR_FLOORS[k], minVeilLit(under, ELEVATION[lv]! + ELEVATION_TOP[lv]!));
+  }
+  return out;
+}
+
+// ---------- The choice (Stories' own prefs) ----------
+
+const HEX = /^#[0-9a-f]{6}$/;
+const isMode = (v: unknown): v is LookMode => typeof v === "string" && (LOOK_MODES as readonly string[]).includes(v);
+const isStrength = (v: unknown): v is GlassStrength => typeof v === "string" && (GLASS_STRENGTHS as readonly string[]).includes(v);
+const isTier = (v: unknown): v is GlassTier => typeof v === "string" && (TIERS as readonly string[]).includes(v);
+
+/** 1 to 3 distinct lower-case #rrggbb colours; anything unusable is Ember. */
+export function normaliseColours(v: unknown): string[] {
+  const out: string[] = [];
+  if (Array.isArray(v))
+    for (const c of v) {
+      if (typeof c !== "string" || !HEX.test(c.toLowerCase())) continue;
+      const hex = c.toLowerCase();
+      if (!out.includes(hex)) out.push(hex);
+      if (out.length === MAX_COLOURS) break;
+    }
+  return out.length ? out : [...EMBER];
+}
+
+/** The preset these colours are, or null for the owner's own. */
+export function presetOf(colours: readonly string[]): string | null {
+  return PRESETS.find((p) => p.colours.length === colours.length && p.colours.every((c, i) => c === colours[i]))?.id ?? null;
+}
+
+function readPicture(): string | null {
+  try {
+    const v = typeof localStorage === "undefined" ? null : localStorage.getItem(PICTURE_KEY);
+    return v && v.startsWith("data:image/") ? v : null;
+  } catch {
+    return null;
+  }
+}
+
+let picture: string | null | undefined;
+const pictureListeners = new Set<() => void>();
+
+/** Stories' own look on this device (each part unset is its default: Colours › Ember, Clear). */
+export function storiesLook(): StoriesLook {
+  const more = storiesPrefs().more;
+  if (picture === undefined) picture = readPicture();
+  const mode = more[LOOK_KEYS.mode];
+  const strength = more[LOOK_KEYS.strength];
+  return {
+    mode: isMode(mode) ? mode : DEFAULT_MODE,
+    strength: isStrength(strength) ? strength : DEFAULT_STRENGTH,
+    colours: normaliseColours(more[LOOK_KEYS.colours]),
+    picture,
+  };
+}
+
+/** Keeps part of the choice. Picking a strength picks See-through, colours pick Colours, a picture picks Picture. */
+export function setStoriesLook(patch: Partial<Pick<StoriesLook, "mode" | "strength" | "colours">>): void {
+  if (patch.strength !== undefined && isStrength(patch.strength)) setStoriesPref(LOOK_KEYS.strength, patch.strength);
+  if (patch.colours !== undefined) setStoriesPref(LOOK_KEYS.colours, normaliseColours(patch.colours));
+  if (patch.mode !== undefined && isMode(patch.mode)) setStoriesPref(LOOK_KEYS.mode, patch.mode);
+}
+
+/** Keeps (or with null forgets) the picture; false when it does not fit in this device's storage. */
+export function setStoriesPicture(url: string | null): boolean {
+  let stored = true;
+  try {
+    if (url) localStorage.setItem(PICTURE_KEY, url);
+    else localStorage.removeItem(PICTURE_KEY);
+  } catch {
+    stored = false;
+  }
+  if (stored) {
+    picture = url;
+    look = null;
+    for (const fn of pictureListeners) fn();
+  }
+  return stored;
+}
+
+let look: { more: unknown; picture: string | null | undefined; value: StoriesLook } | null = null;
+function snapshot(): StoriesLook {
+  const more = storiesPrefs().more;
+  if (look && look.more === more && look.picture === picture) return look.value;
+  const value = storiesLook();
+  look = { more, picture, value };
+  return value;
+}
+const SERVER_LOOK: StoriesLook = { mode: DEFAULT_MODE, strength: DEFAULT_STRENGTH, colours: [...EMBER], picture: null };
+
+/** Re-renders when the look changes, here or on another screen. */
+export function useStoriesLook(): StoriesLook {
+  return useSyncExternalStore(
+    (fn) => {
+      const off = onStoriesPrefs(fn);
+      pictureListeners.add(fn);
+      return () => {
+        off();
+        pictureListeners.delete(fn);
+      };
+    },
+    snapshot,
+    () => SERVER_LOOK,
+  );
+}
+
+// ---------- The glass on this device ----------
+
+export interface GlassEnv {
+  /** Chromium (main.tsx puts html.refract): backdrop-filter can bend with url() */
+  refract: boolean;
+  reducedTransparency: boolean;
+  /** backdrop-filter works at all */
+  backdrop: boolean;
+  /** 4 cores or fewer, 4 GB or less, or Save-Data: the liquid rim stays off */
+  lowPower: boolean;
+}
+
+/** Solid glass: the device asks for less transparency, or for more contrast (as glass-tokens.css's @media does). */
+const REDUCED_TRANSPARENCY = "(prefers-reduced-transparency: reduce), (prefers-contrast: more)";
+export function readGlassEnv(): GlassEnv {
+  if (typeof window === "undefined" || typeof document === "undefined") return { refract: false, reducedTransparency: false, backdrop: true, lowPower: true };
+  const nav = navigator as Navigator & { deviceMemory?: number; connection?: { saveData?: boolean } };
+  const supports = typeof CSS !== "undefined" && typeof CSS.supports === "function";
+  return {
+    refract: document.documentElement.classList.contains("refract"),
+    // (more contrast too: the style sheet's solid glass, glass-tokens.css, asks for both)
+    reducedTransparency: typeof matchMedia === "function" && matchMedia(REDUCED_TRANSPARENCY).matches,
+    backdrop: supports ? CSS.supports("backdrop-filter", "blur(1px)") || CSS.supports("-webkit-backdrop-filter", "blur(1px)") : true,
+    lowPower: (nav.deviceMemory !== undefined && nav.deviceMemory <= 4) || (nav.hardwareConcurrency !== undefined && nav.hardwareConcurrency <= 4) || nav.connection?.saveData === true,
+  };
+}
+
+/** Liquid only in Chromium on a capable device; WebKit gets plain CSS light; reduced transparency gets solid glass. */
+export function glassTier(env: GlassEnv, chosen: unknown = storiesPrefs().more[LOOK_KEYS.glass]): GlassTier {
+  if (env.reducedTransparency || !env.backdrop) return "solid";
+  if (isTier(chosen)) return chosen === "liquid" && !env.refract ? "simple" : chosen;
+  return env.refract && !env.lowPower ? "liquid" : "simple";
+}
+
+/** At most this many liquid rims on one screen (WebView2's budget); the rest keep the plain CSS light (glass/lens.ts). */
+export { LENS_BUDGET };
+
+// ---------- Putting it on the page ----------
+
+const rgbOf = (hex: string) => hexToRgb(hex).join(" ");
+
+/** The attributes and custom properties for .stories-app. */
+export function lookProps(value: StoriesLook, glass: string = nativeGlass(), tier: GlassTier = "simple"): { attrs: Record<string, string>; style: Record<string, string> } {
+  const kind = lookKind(value, glass);
+  // Inline, so it beats every rule: solid glass must come from here (glass-tokens.css's @media is only the first paint).
+  const v = veilsFor(value, glass, tier);
+  const style: Record<string, string> = {};
+  for (const k of Object.keys(v) as (keyof Veils)[]) style[`--st-veil-${k}`] = String(v[k]);
+  const [c1, c2 = c1, c3 = c2] = stageColours(value);
+  style["--st-stage-c1"] = c1!;
+  style["--st-stage-c2-rgb"] = rgbOf(c2!);
+  style["--st-stage-c3-rgb"] = rgbOf(c3!);
+  return { attrs: { "data-look": kind, "data-strength": value.strength, "data-glass": tier }, style };
+}
+
+/**
+ * See-through in the app: the page must be transparent while Stories is on screen (html.see-through, the class Clip
+ * Factory's own see-through uses). Stories adds it only when it was not there and takes away only what it added, so
+ * Clip Factory's own look is exactly as Clip Factory's settings left it when Stories goes off screen.
+ * Stories' own Look decides, never Clip Factory's: while it holds the window glass, <html> carries data-st-window and
+ * nothing of Clip Factory's own backdrop (components/Backdrop.tsx: its colours, its picture, its Frosted frost) is
+ * drawn under Stories, so Stories' Clear is clear and its Frosted is only its own frost (--st-veil-page); the class
+ * and the hiding come back if Clip Factory's look redraws meanwhile (keepWindowGlass). Clip Factory on screen: both
+ * are exactly as Clip Factory left them.
+ */
+const HELD = "stSeeThrough";
+const WINDOW = "stWindow";
+const HID = "stHidden";
+/** Clip Factory's own backdrop (`.backdrop`, never inside .stories-app), hidden or shown again by Stories. */
+function clipsBackdrops(root: HTMLElement): HTMLElement[] {
+  return [...root.querySelectorAll<HTMLElement>(".backdrop")].filter((el) => !el.closest(".stories-app"));
+}
+function hideClipsBackdrop(hide: boolean, root: HTMLElement): void {
+  for (const el of clipsBackdrops(root)) {
+    if (hide && el.dataset[HID] !== "1") {
+      el.dataset[HID] = "1";
+      el.style.setProperty("display", "none");
+    } else if (!hide && el.dataset[HID] === "1") {
+      delete el.dataset[HID];
+      el.style.removeProperty("display");
+    }
+  }
+}
+export function holdWindowGlass(on: boolean, root: HTMLElement = document.documentElement): void {
+  if (on) {
+    root.dataset[WINDOW] = "1";
+    hideClipsBackdrop(true, root);
+    if (!root.classList.contains("see-through")) {
+      root.classList.add("see-through");
+      root.dataset[HELD] = "1";
+    }
+    return;
+  }
+  if (root.dataset[WINDOW] === "1") hideClipsBackdrop(false, root);
+  delete root.dataset[WINDOW];
+  if (root.dataset[HELD] !== "1") return;
+  delete root.dataset[HELD];
+  root.classList.remove("see-through");
+}
+/** While Stories holds the window glass: html.see-through comes back whenever something else takes it away, and a
+ *  backdrop Clip Factory draws anew is hidden too. */
+export function keepWindowGlass(root: HTMLElement = document.documentElement): () => void {
+  if (typeof MutationObserver !== "function") return () => undefined;
+  const again = () => {
+    if (root.dataset[WINDOW] === "1" && (!root.classList.contains("see-through") || clipsBackdrops(root).some((el) => el.dataset[HID] !== "1"))) holdWindowGlass(true, root);
+  };
+  const watch = new MutationObserver(again);
+  watch.observe(root, { attributes: true, attributeFilter: ["class"] });
+  // Clip Factory's Backdrop is redrawn in its place when its look changes kind: watch only its own parent.
+  const parent = clipsBackdrops(root)[0]?.parentElement;
+  if (parent) watch.observe(parent, { childList: true });
+  return () => watch.disconnect();
+}
+
+/** The theme colour of the window while Stories is on screen. */
+export const THEME_COLOUR = "#1C130E";
+
+const STYLE_KEYS = ["--st-veil-page", "--st-veil-card", "--st-veil-tinted", "--st-veil-hero", "--st-veil-rail", "--st-veil-bar", "--st-veil-float", "--st-veil-plate", "--st-stage-c1", "--st-stage-c2-rgb", "--st-stage-c3-rgb", "--st-picture"];
+
+/** Writes the look onto .stories-app (attributes and custom properties only: React draws neither). */
+export function applyStoriesLook(el: HTMLElement, value: StoriesLook, glass: NativeGlass = nativeGlass(), tier: GlassTier = glassTier(readGlassEnv())): LookKind {
+  const { attrs, style } = lookProps(value, glass, tier);
+  for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
+  for (const k of STYLE_KEYS) el.style.removeProperty(k);
+  for (const [k, v] of Object.entries(style)) el.style.setProperty(k, v);
+  if (attrs["data-look"] === "picture" && value.picture) el.style.setProperty("--st-picture", `url("${value.picture}")`);
+  return attrs["data-look"] as LookKind;
+}
+
+/**
+ * The background hook: StoriesApp's one call. Follows Stories' own Look (here or from Settings › Look on another
+ * screen) and puts it on `root`; while Stories is on screen (`active`) in See-through in the app, the page itself is
+ * transparent so the window's glass shows the desktop.
+ */
+
+/** True while the device asks for less transparency (it can change while Stories is open). */
+export function useReducedTransparency(): boolean {
+  return useSyncExternalStore(
+    (fn) => {
+      if (typeof matchMedia !== "function") return () => undefined;
+      const q = matchMedia(REDUCED_TRANSPARENCY);
+      q.addEventListener?.("change", fn);
+      return () => q.removeEventListener?.("change", fn);
+    },
+    () => typeof matchMedia === "function" && matchMedia(REDUCED_TRANSPARENCY).matches,
+    () => false,
+  );
+}
+
+export function useStoriesBackground(root: RefObject<HTMLElement | null>, active: boolean): StoriesLook {
+  const value = useStoriesLook();
+  const lessTransparency = useReducedTransparency();
+  useLayoutEffect(() => {
+    const el = root.current;
+    if (!el) return;
+    const kind = applyStoriesLook(el, value);
+    const hold = active && kind === "window";
+    holdWindowGlass(hold);
+    return hold ? keepWindowGlass() : undefined;
+  }, [root, value, active, lessTransparency]);
+  useLayoutEffect(() => () => holdWindowGlass(false), []);
+  // The liquid rim (glass/lens.ts): only while Stories is on screen, only where the glass is "liquid" (Chromium on a
+  // capable device; the layout effect above has just put data-glass on the root), and never over the window's own
+  // glass (See-through in the app: the desktop is not part of the page, so there is nothing to bend, and the hero's
+  // veil must not depend on a filter drawing over a see-through page).
+  useEffect(() => {
+    const el = root.current;
+    if (!el || !active || el.dataset.glass !== "liquid" || el.dataset.look === "window") return;
+    return watchLenses(el);
+  }, [root, value, active, lessTransparency]);
+  return value;
+}

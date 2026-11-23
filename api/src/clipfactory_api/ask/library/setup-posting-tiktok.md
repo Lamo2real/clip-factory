@@ -6,12 +6,24 @@ About 40 minutes, plus the time TikTok takes to check your app · Free · Steps 
 post is **"Only me"**. TikTok often says no to apps that only one person uses. If it says no, Clip Factory still posts
 to TikTok, but only you can see those posts, and TikTok gives no numbers for them.
 
-**Want everyone to see it now? Post it yourself** (docs/CONTRACTS.md §42). On any uploaded clip in Library, or on its
-page, tap **Post it yourself**. Clip Factory copies the caption and saves the video to your phone (or your computer).
-You post it in TikTok and pick **Everyone**, then tap **I posted it**, and Clip Factory finds the post and counts its
-views. **Everyone** needs a public TikTok account. While your account is public, TikTok will not let Clip Factory upload
-there for you (its rule for apps it has not approved). That upload then says to tap **Post it yourself**, and the
-button is right there. Keep your account public.
+**Want everyone to see it now? Your Mac posts it** (docs/CONTRACTS.md §47). Turn on **Settings › Posting › Your Mac
+posts TikTok** and set up the helper on your Mac ([mac/tiktok-helper](../mac/tiktok-helper/README.md)). Then **Upload**
+and auto-posting give TikTok to your Mac, and it posts each clip for **Everyone**, out of sight. Each clip's TikTok row
+in Library says what your Mac is doing: **Waiting for your Mac · next** (or **in line (2 before it)**, or **goes at
+about 20:30** for the first clip you sent), **Posting…**, then **Posted by your Mac · Everyone** with **Open**.
+**Didn't work**? Tap **Try again**. **Not sure it posted**? Look on your TikTok: it's there? Tap **It's on TikTok**,
+then **Find it for me** (or paste its link; Find it for me saves nothing until it finds it, and **It's on TikTok, no
+link** saves it without one); it isn't? Once 30 minutes have passed since your Mac pressed Post, tap **Try again**,
+then **Yes, post it again**. **Not on TikTok yet**? Tap **Post with my Mac**. **Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet.** (that is the row of a campaign
+clip: nothing to do; Review leaves TikTok unticked for it). The row says your Mac is off? Tap **Turn on**. It hasn't
+checked in? Tap **Open Your Mac posts TikTok**. It is paused? Tap **Start my Mac again**. It needs you? Tap **Open the
+stopped clip**: Try again and It's on TikTok are there. **Held on your Mac**? Tap **Post with my Mac**, or **Let them
+go** in Settings › Posting › Your Mac posts TikTok. **Everyone** needs a public TikTok account. While your
+account is public, TikTok will not let Clip Factory upload there for you (its rule for apps it has not approved), so
+your Mac does it. Keep your account public. There is no manual TikTok sheet any more (it went on 22 Nov 2026,
+[ADR-86](DECISIONS.md#adr-86-no-manual-tiktok-sheet-the-mac-is-the-only-way-to-tiktok-until-tiktok-approves-the-app)). A
+clip you posted in the TikTok app earlier keeps **Posted by you · Everyone**; with no link yet, type or paste it in the
+row and tap **Save the link**, or tap **Find it for me** to let Clip Factory look for it on your TikTok.
 
 | # | Step | Part |
 |---|---|---|
@@ -153,8 +165,8 @@ stay private until TikTok approves the app.
 ### Part 4: Go public
 
 #### 21. Record the real demo video
-- Use a computer. Connect in the Sandbox, with your TikTok still private. Record your screen with the address bar in
-  sight.
+- Use a computer. Connect in the Sandbox, your TikTok still private, **Your Mac posts TikTok** off. Record your screen
+  with the address bar in sight.
 - Follow the shot list below, in order. It starts on the About page, then **Connect TikTok** and TikTok's
   screen with **Continue**.
 - Then **Upload** one clip, choosing everything by hand in the **TikTok** row. Show each line TikTok wants to see.
@@ -273,15 +285,27 @@ The answers, word for word. They are all true today: do not change them to sound
 | "The key does not work. Copy the Client key and secret again (step 15)." | Do step 15 again (in the Sandbox: step 19). |
 | "The return address does not match. Copy it again in step 10." | Do step 10 again with the **Copy** button. |
 | "A permission box was not ticked. Connect again and tick every box." | Do step 12, then connect again and leave every switch on. |
-| "TikTok only takes Clip Factory's uploads on a private account until it approves the app. Tap Post it yourself to post it for everyone." | Tap **Post it yourself** on the clip and post it in TikTok, picking **Everyone**. Keep your account public. |
+| "TikTok only takes Clip Factory's own uploads on a private account for now, so your Mac posts it for everyone." | Tap **Post with my Mac** on the clip's TikTok row (it says **Turn on** first while **Your Mac posts TikTok** is off). Keep your account public. |
+| "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet." | Nothing to do: a campaign clip goes to YouTube, Instagram, X and Facebook. On Upload, turn TikTok off, then tap **Upload**. |
+| "Your Mac pressed Post less than 30 minutes ago. Look on your TikTok first, then try again later." | Look on your TikTok. It's there? Tap **It's on TikTok**. It isn't? Tap **Try again** once 30 minutes have passed. |
+| "Not found yet. Try again in a minute, or paste the link." | Tap **Find it for me** again in a minute, or paste the post's link and tap **Save the link**. Nothing was saved. |
+| "Clip Factory can't look on your TikTok until TikTok is connected. Paste the link instead." | Paste the post's link and tap **Save the link**. |
+| "Your Mac isn't paused." / "Your Mac isn't holding any clips." | Nothing to do: your Mac is already going. |
 | "TikTok did not answer. Try again in a few minutes." | Wait, then press **Connect TikTok**. |
 | "Finish the TikTok review steps to post outside the Sandbox." | Do steps 21 to 23. |
 
-**Every clip with TikTok ticked** waits for your tap: press **Use my settings** (it puts your saved TikTok choices on),
-or open the **TikTok** row and pick who can see it there (there is no default, TikTok's rule). The row also has the
-Comments, Duet and Stitch switches and Commercial content (tick **Branded content** for a paid partnership). Then press
-**Upload**. TikTok can take a few minutes to process your clip. Your saved choices live in Settings › Posting › My
-settings.
+**While your Mac posts TikTok**, a clip with TikTok ticked starts on your saved choices like every other place
+(Everyone, with Comments, Duet and Stitch on, unless you changed them): just press **Upload**. Your Mac always posts
+TikTok with your saved choices: the **TikTok** row says so ("Your Mac posts it with My settings: …") and **Change My
+settings** takes you there. Paid partnerships can't go through your Mac yet: with **Your brand** or **Branded
+content** ticked, Upload waits; untick it, or untick TikTok for that clip, then post it in the TikTok app with its
+label. Don't use **Post with my Mac** or **Send these to my Mac** for that clip: your Mac would post it without the
+label. **While Your Mac posts TikTok is off**,
+every clip with TikTok ticked waits for your tap: press **Use my settings** (it puts your saved TikTok choices on), or
+open the **TikTok** row and pick who can see it there (there is no default, TikTok's rule for apps that post through
+its API). The row also has the Comments, Duet and Stitch switches and Commercial content (tick **Branded content** for
+a paid partnership). Then press **Upload**. TikTok can take a few minutes to process your clip. Your saved choices
+live in Settings › Posting › My settings.
 
 If a clip says "Pick who can see it on TikTok again, then press Try again.", press **Try again** on the clip. The
 **Post to TikTok** sheet opens first. Pick again, then press the vermilion-red button on the sheet.

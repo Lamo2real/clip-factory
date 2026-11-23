@@ -15,10 +15,9 @@ from ..log import log
 from .base import HttpResponse, PublishError, ReconnectNeededError, RetryablePublishError
 from .stub import LABELS
 
-# TikTok refused an unaudited upload to a public account (§42: he posts it on TikTok himself).
+# TikTok refused an unaudited upload to a public account (§47: the owner's Mac posts it on TikTok for everyone).
 TIKTOK_PRIVATE_ONLY = (
-    "TikTok only takes Clip Factory's uploads on a private account until it approves the app. "
-    "Tap Post it yourself to post it for everyone."
+    "TikTok only takes Clip Factory's own uploads on a private account for now, so your Mac posts it for everyone."
 )
 
 META_RATE_CODES = frozenset({"4", "17", "32", "613", "80001", "80002"})

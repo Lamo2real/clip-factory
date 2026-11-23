@@ -1,0 +1,233 @@
+/* ---------- Social accounts: authorization, the developer app (an inner glass sheet), its keys ----------
+   The developer-app sheet and the authorization rows are warm translucent tiles with a soft top highlight
+   (--st-fill-control: a light cream lift over the colours, a card's veil over a picture or the desktop, so there they
+   are a step deeper); what is copied or typed (the redirect URIs, the key boxes) sits in a well, deeper than both.
+   Every word keeps 4.5:1 or more over every background. Tokens only (styles/GLASS-CONTRACT.md); radii from --st-r-*; light, never a border; no cursor. */
+
+.st-auth {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 150px), 1fr));
+  gap: 6px var(--st-space-4);
+  padding: var(--st-space-3) var(--st-space-4);
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  font-size: var(--st-fs-small);
+}
+.st-auth dt {
+  color: var(--st-text-soft);
+  font-weight: var(--st-weight-ui);
+}
+.st-auth dd {
+  margin: 0;
+  color: var(--st-text);
+  overflow-wrap: anywhere;
+}
+/* The developer app: an inner glass tile in the card. */
+.st-app {
+  display: grid;
+  gap: var(--st-space-3);
+  padding: var(--st-space-4);
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+}
+.st-conn .st-app__title {
+  display: flex;
+  align-items: center;
+  gap: var(--st-space-2);
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-body);
+  font-weight: var(--st-weight-ui);
+}
+.st-app__title .st-icon {
+  flex: none;
+  color: var(--st-text-amber);
+}
+.st-app__now,
+.st-app__ask,
+.st-app__guide {
+  color: var(--st-text);
+  font-size: var(--st-fs-small);
+  overflow-wrap: anywhere;
+}
+.st-app__now strong {
+  color: var(--st-text-strong);
+}
+.st-app__guide {
+  display: grid;
+  justify-items: start;
+  gap: var(--st-space-2);
+  color: var(--st-text-soft);
+}
+.st-app__now code,
+.st-app code {
+  color: var(--st-text-amber);
+  overflow-wrap: anywhere;
+}
+.st-app__ask {
+  font-weight: var(--st-weight-ui);
+}
+.st-app__go {
+  display: grid;
+  gap: var(--st-space-3);
+}
+.st-app__notes {
+  display: grid;
+  gap: var(--st-space-1);
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
+}
+.st-app__notes li {
+  position: relative;
+  padding-left: var(--st-space-4);
+}
+.st-app__notes li::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 0.6em;
+  width: 6px;
+  height: 6px;
+  border-radius: var(--st-r-round);
+  background: var(--st-accent);
+}
+.st-app__warn {
+  color: var(--st-coral-ink);
+  font-size: var(--st-fs-small);
+  font-weight: var(--st-weight-ui);
+}
+.st-app__actions,
+.st-keys__buttons {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: var(--st-space-2);
+}
+.st-note--mint {
+  color: var(--st-mint-ink);
+  background: var(--st-light-3), linear-gradient(rgb(var(--st-mint-rgb) / var(--st-tint-cut)), rgb(var(--st-mint-rgb) / var(--st-tint-cut))), linear-gradient(180deg, rgb(var(--st-veil-rgb) / calc(var(--st-veil-tinted) / (1 - var(--st-elev-3) - var(--st-elev-grad-3)))), rgb(var(--st-veil-rgb) / calc(var(--st-veil-tinted) / (1 - var(--st-elev-3)))) var(--st-elev-settle));
+}
+.st-note__when {
+  color: var(--st-text-soft);
+}
+/* A redirect URI to copy: a well, the address in amber, its Copy button beside it. */
+.st-copy {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--st-space-1) var(--st-space-3);
+  padding: var(--st-space-2) var(--st-space-2) var(--st-space-2) var(--st-space-4);
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-well);
+}
+.st-copy__label {
+  grid-column: 1 / -1;
+  padding-top: var(--st-space-1);
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-chip);
+  font-weight: var(--st-weight-ui);
+}
+.st-copy__value {
+  min-width: 0;
+  color: var(--st-text-amber);
+  font-size: var(--st-fs-chip);
+  overflow-wrap: anywhere;
+  user-select: all;
+}
+.st-keys {
+  display: grid;
+  gap: var(--st-space-3);
+}
+.st-keys__ask {
+  color: var(--st-text-strong);
+  font-weight: var(--st-weight-ui);
+}
+.st-keys__safe {
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-chip);
+}
+.st-field {
+  display: grid;
+  gap: var(--st-space-1);
+}
+.st-field__label {
+  color: var(--st-text);
+  font-size: var(--st-fs-small);
+  font-weight: var(--st-weight-ui);
+}
+/* A key box: a well (control 14), deeper on hover, the cream and orange ring on focus. */
+.st-input {
+  width: 100%;
+  min-height: var(--st-tap-phone);
+  padding: 0 var(--st-space-4);
+  border: 0;
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-well);
+  box-shadow: inset 0 2px 8px -3px rgb(var(--st-shadow-rgb) / 0.6);
+  color: var(--st-text-strong);
+  font: inherit;
+  font-family: ui-monospace, "SF Mono", Menlo, monospace;
+  font-size: var(--st-fs-small);
+  caret-color: var(--st-accent);
+  transition:
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    box-shadow var(--st-dur-hover) var(--st-ease-out);
+}
+.st-input:hover {
+  background: var(--st-fill-well-hover);
+}
+.st-input:focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
+}
+.st-input[aria-invalid="true"] {
+  background: linear-gradient(rgb(var(--st-coral-rgb) / var(--st-tint-cut)), rgb(var(--st-coral-rgb) / var(--st-tint-cut))), var(--st-fill-well-hover);
+}
+.st-field__problem {
+  color: var(--st-coral-ink);
+  font-size: var(--st-fs-small);
+}
+/* The way back to the setup while it is not finished: Social accounts' hero glass (its rim may bend) with the setup's
+   dial, big enough for its white knob to read as a knob, and "N of 11" in it like the setup's own. The padding is never
+   thinner than the liquid rim's band, so a bending rim never reaches the dial or the words. */
+.st-setupback {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--st-space-3) var(--st-space-4);
+  padding: max(var(--st-space-4), var(--st-lens-band));
+}
+.st-setupback__dial.st-dial {
+  width: 84px;
+}
+.st-setupback__num {
+  color: var(--st-text-strong);
+  font-family: var(--st-font);
+  font-size: 1.625rem;
+  font-weight: var(--st-weight-num);
+  font-variation-settings: "opsz" var(--st-opsz-num);
+  line-height: 1;
+}
+.st-setupback__of {
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-min);
+  font-weight: var(--st-weight-ui);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.st-setupback__text {
+  flex: 1 1 180px;
+  min-width: 0;
+  color: var(--st-text);
+}
+.st-setupback__text strong {
+  color: var(--st-text-strong);
+  font-weight: var(--st-weight-ui);
+}
+.st-setupback__go {
+  margin-left: auto;
+}
+.st-conns--one {
+  grid-template-columns: minmax(0, 1fr);
+}

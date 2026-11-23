@@ -43,7 +43,7 @@ from .util import JobSuperseded, log, now_iso
 
 PROVIDERS = ("luma-ray", "own-video")  # the makers Try it can check (a start without providerId tries the first)
 MAKERS: dict[str, type[AiVideo]] = {"luma-ray": LumaRay, "own-video": OwnVideo}
-UNKNOWN = "Lamo Stories can only try Luma AI Ray2 and your own video model here."
+UNKNOWN = "Funded Clips can only try Luma AI Ray2 and your own video model here."
 TRIED = "It made a 5-second test shot. Luma AI Ray2 is ready."
 TRIED_OWN = "It made a {seconds}-second test shot. {label} is ready."
 FAILED = "Trying Luma AI Ray2 did not finish. Tap Try it again."
@@ -55,7 +55,10 @@ SHOT_FAILED = (  # Bedrock took the test shot but could not make it: a setup pro
 SHOT_FAILED_OWN = (
     "{label} could not make its test shot. Tap Try it again in Settings › Video, or pick the Built-in animator there."
 )
-PROMPT = "Slow cinematic shot of a quiet country road on a sunny day, at eye level, no people, no text, no logos, calm camera, natural light"
+PROMPT = (
+    "Slow cinematic shot of a quiet country road on a sunny day, at eye level, no people, no text, no logos, calm "
+    "camera, natural light"
+)
 SIZE = (1280, 720)  # a wide test shot (16:9)
 SEED = 7
 

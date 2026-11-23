@@ -267,7 +267,7 @@ def _copy_stories_skills(dest: Path) -> list[str]:
             names.append(f"{STORIES_SKILLS_IN_ZIP}/{folder.name}/{path.relative_to(folder).as_posix()}")
         print(f"  stories skill: {name}")
     if not names:
-        raise SystemExit(f"no Lamo Stories skills in {STORIES_SKILLS.relative_to(ROOT)} (docs/CONTRACTS.md §45.26)")
+        raise SystemExit(f"no Funded Clips skills in {STORIES_SKILLS.relative_to(ROOT)} (docs/CONTRACTS.md §45.26)")
     return names
 
 

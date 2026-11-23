@@ -7,6 +7,7 @@
 // call said, and only the efforts it offers.
 import type { ReactNode } from "react";
 import { EFFORT_LABEL, type Effort, type ModelOverride } from "../api/types.ts";
+import { GlassPill } from "../glass/index.ts";
 import { Btn, Chip, Pick, Sheet, type PickOption } from "./kit.tsx";
 import { EFFORT_LINE, effortLabel, effortProblem, fileModels, findModel, modelLabel, NO_EFFORT_LINE, providerWords, statusWords, type ModelView } from "./models.ts";
 
@@ -44,20 +45,20 @@ export function AiLine({
       <div className="st-chat-ai__row">
         {once ? <Chip tone="sun">{onceLabel}</Chip> : null}
         <p className="st-chat-ai__line">
-          <button
-            type="button"
+          <GlassPill
+            active={once}
             className="st-chat-ai__part"
             onClick={() => onPick("model", once)}
             aria-label={`Model: ${modelLabel(models, current.model)}${provider ? `, ${provider}` : ""}. Change the model`}
           >
             Model: <b>{modelLabel(models, current.model)}</b>
-          </button>
+          </GlassPill>
           <span className="st-chat-ai__dot" aria-hidden="true">
             {" · "}
           </span>
-          <button type="button" className="st-chat-ai__part" onClick={() => onPick("effort", once)} aria-label={`Effort: ${noEffort ? "its own level" : effortLabel(current.effort)}. Change the effort`}>
+          <GlassPill active={once} className="st-chat-ai__part" onClick={() => onPick("effort", once)} aria-label={`Effort: ${noEffort ? "its own level" : effortLabel(current.effort)}. Change the effort`}>
             Effort: <b>{noEffort ? "Its own level" : effortLabel(current.effort)}</b>
-          </button>
+          </GlassPill>
         </p>
         {provider ? <span className="st-chat-ai__provider">{provider}</span> : null}
         <span className={`st-chat-ai__status st-chat-ai__status--${status.tone}`}>{status.text}</span>
@@ -147,7 +148,7 @@ export function AiSheet({
   saved: string | null;
   onClose: () => void;
 }) {
-  const withDefault = scope === "chat" || scope === "keep" ? "Uses the model and effort from Lamo Stories › Settings › AI." : null;
+  const withDefault = scope === "chat" || scope === "keep" ? "Uses the model and effort from Funded Clips › Settings › AI." : null;
   const effortBad = values.effort && values.effort !== DEFAULT ? effortProblem(effortModel, values.effort as Effort) : null;
   return (
     <Sheet

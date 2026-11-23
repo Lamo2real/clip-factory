@@ -308,6 +308,7 @@ def test_practice_and_a_private_test_never_make_a_mac_post(
 def test_a_campaign_clip_never_gets_a_mac_post_from_a_run(
     app: App, store: db.Store, table: FakeTable, at_slot: Clock, cr_on: Any
 ) -> None:
+    # D1: the Mac can't mark a campaign clip as Branded content yet, and Content Rewards never receives what it posts.
     ready(store, "youtube", "instagram", "facebook")
     put_campaign(store)
     put_crconn(store)

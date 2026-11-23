@@ -38,7 +38,7 @@ REEL_NOT_READY = (
     "and Luma AI Ray2 turned on for your account. Pick Built-in animation in Settings › Video, or finish its setup."
 )
 REEL_ENDED = (
-    "Amazon Nova Reel 1.1 was ended by Amazon on 30 Sep 2026. Pick another video maker in Lamo Stories › Settings › "
+    "Amazon Nova Reel 1.1 was ended by Amazon on 30 Sep 2026. Pick another video maker in Funded Clips › Settings › "
     "Video."
 )
 

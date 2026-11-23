@@ -248,9 +248,24 @@ export function wantedStoriesWorkspace(): string | null {
   return pendingStories ?? currentChoice().lastStoriesWorkspaceId;
 }
 
+/** The first Stories workspace's first default name (until 22 Nov 2026). */
+export const OLD_STORIES_NAME = "Lamo Stories";
+/** Every earlier default name of the first Stories workspace: "Lamo Stories", then "Clip Factory Stories" and "Clip Stories" (22-23 Nov 2026). */
+export const OLD_STORIES_NAMES: readonly string[] = [OLD_STORIES_NAME, "Clip Factory Stories", "Clip Stories"];
+/** Today's: the app's name, "Funded Clips". */
+export const STORIES_NAME = "Funded Clips";
+
+/**
+ * The name a person sees for a stored Stories workspace name: a workspace still stored with an old default name
+ * reads as today's. Only what is shown changes; the stored record is never rewritten.
+ */
+export function shownWorkspaceName(name: string): string {
+  return OLD_STORIES_NAMES.includes(name) ? STORIES_NAME : name;
+}
+
 /** The name a workspace goes by in the switcher: Lamo Clips is the app itself, "Clip Factory" (§45.16.1). */
 export function switcherName(w: Pick<Workspace, "workspaceType" | "workspaceName">): string {
-  return w.workspaceType === "clips" ? "Clip Factory" : w.workspaceName;
+  return w.workspaceType === "clips" ? "Clip Factory" : shownWorkspaceName(w.workspaceName);
 }
 
 // ---------- Clip Factory's scroll position across a switch (sessionStorage, this tab only) ----------
@@ -279,6 +294,66 @@ export function takeClipsScroll(path: string): number | null {
   const r = raw && typeof raw === "object" ? (raw as { path?: unknown; y?: unknown }) : null;
   if (!r || r.path !== cleanPath(path) || typeof r.y !== "number" || !Number.isFinite(r.y) || r.y < 0) return null;
   return r.y;
+}
+
+// ---------- Where the owner was reading on a phone (§45.36 E1) ----------
+// On a phone Clip Factory's switch is in the top bar, which scrolls away with the page: to tap it the owner first
+// scrolls (or taps the status bar) up to the top. The place to come back to is where he was reading before that, not
+// the top he only passed through to reach the switch.
+
+/** How long the page rests at one place below the top bar before that place counts as where the owner is reading. */
+export const READ_REST_MS = 1500;
+/**
+ * At the top, where the top bar's switch is in view, the page counts as read only after this long: until then he is
+ * only finding the switch (a slow scroll up in several flicks, a status-bar tap and a look for the switch).
+ */
+export const TOP_REST_MS = 10_000;
+
+let reading: { path: string; y: number } | null = null;
+
+/**
+ * The page `path` has rested at `y` for `restedMs`; `topZone` is how far down the top bar's switch still shows. A rest
+ * below the top bar is a reading place after READ_REST_MS, a rest where the switch shows only after TOP_REST_MS. The
+ * first rest on a page is its place whatever it is.
+ */
+export function noteReading(path: string, y: number, restedMs: number, topZone: number): void {
+  const p = cleanPath(path);
+  const at = Math.max(0, Math.round(y));
+  if (reading && reading.path === p && restedMs < (at <= topZone ? TOP_REST_MS : READ_REST_MS)) return;
+  reading = { path: p, y: at };
+}
+
+/** The scroll position to keep for a switch from the phone top bar at `y`: the reading place when he scrolled up to reach it. */
+export function readingPlace(path: string, y: number): number {
+  const r = reading;
+  return r && r.path === cleanPath(path) && r.y > y ? r.y : y;
+}
+
+/**
+ * Follows the window's scroll on the Clip Factory page `path()` while the phone top bar's switch is shown; `topZone()`
+ * is how far down the switch still shows (the bottom of the top bar on the page).
+ */
+export function followReading(path: () => string, topZone: () => number = () => 0): () => void {
+  if (typeof window === "undefined") return () => undefined;
+  const timers: ReturnType<typeof setTimeout>[] = [];
+  const clear = () => {
+    for (const t of timers.splice(0)) clearTimeout(t);
+  };
+  // Each scroll starts the count again: a rest is counted from the last move. A page he only just opened (no rest
+  // on it yet) is where he is.
+  const moved = () => {
+    noteReading(path(), window.scrollY, 0, topZone());
+    clear();
+    for (const ms of [READ_REST_MS, TOP_REST_MS]) timers.push(setTimeout(() => noteReading(path(), window.scrollY, ms, topZone()), ms));
+  };
+  // A page seen for the first time is where it is; back on the same page (its place being put back) the place it was
+  // read at stays until the page rests somewhere else.
+  noteReading(path(), window.scrollY, 0, topZone());
+  window.addEventListener("scroll", moved, { passive: true });
+  return () => {
+    clear();
+    window.removeEventListener("scroll", moved);
+  };
 }
 
 // ---------- Lamo Stories' scroll position across a switch (this visit only) ----------
@@ -428,7 +503,7 @@ export function redirectAtStart(): void {
 /** What the switcher shows before the server answers: Lamo Clips and the first Lamo Stories workspace. */
 export const DEFAULT_WORKSPACES: Workspace[] = [
   { workspaceId: CLIPS_WORKSPACE_ID, workspaceName: "Clip Factory", workspaceType: "clips", builtin: true, configuration: {}, version: 0 },
-  { workspaceId: FIRST_STORIES_WORKSPACE_ID, workspaceName: "Lamo Stories", workspaceType: "stories", builtin: false, configuration: {}, version: 0 },
+  { workspaceId: FIRST_STORIES_WORKSPACE_ID, workspaceName: STORIES_NAME, workspaceType: "stories", builtin: false, configuration: {}, version: 0 },
 ];
 
 let known: Workspace[] | null = null;
@@ -494,7 +569,7 @@ const TITLES: Record<StoriesPage["name"], string> = {
 
 /** The tab title of a Lamo Stories page ("Ideas · Lamo Stories"). */
 export function storiesTitle(page: StoriesPage): string {
-  return `${TITLES[page.name]} · Lamo Stories`;
+  return `${TITLES[page.name]} · ${STORIES_NAME}`;
 }
 
 /** Test hook: forget what this module remembered (each test starts from localStorage). */
@@ -506,4 +581,5 @@ export function resetWorkspaceMemory(): void {
   prefsCache = null;
   pendingStories = null;
   storiesScroll = null;
+  reading = null;
 }

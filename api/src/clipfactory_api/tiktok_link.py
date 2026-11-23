@@ -22,7 +22,7 @@ NOT_A_LINK = "That is not a TikTok link. In TikTok, tap Share, then Copy link, a
 NOT_A_VIDEO = "That link does not open a TikTok video. In TikTok, open your post, tap Share, then Copy link."
 NO_ANSWER = "TikTok did not open that link. Try again in a minute, or paste the long link from tiktok.com."
 # TikTok often sends a short link to its home page when a server opens it (checked 2026-11-21).
-SHORT_UNREAD = "Clip Factory could not open that short link. Clear the box and tap I posted it: Clip Factory looks for the post on your TikTok."
+SHORT_UNREAD = "Clip Factory could not open that short link. Clear the box and tap Save the link: Clip Factory looks for the post on your TikTok."
 
 # Where a pasted link may point: TikTok's own web hosts only.
 FULL_HOSTS = frozenset({"tiktok.com", "www.tiktok.com", "m.tiktok.com"})

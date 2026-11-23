@@ -18,4 +18,4 @@ export const CHROME_APP = process.env.CF_TT_CHROME_APP || "/Applications/Google 
 export const APP_URL = process.env.CF_TT_APP_URL || "https://dglrbjmf28m6c.cloudfront.net";
 export const CDP_PORT = Number(process.env.CF_TT_PORT || 9339);
 export const KEYCHAIN_SERVICE = "Clip Factory TikTok helper";
-export const VERSION = "1.0.0";
+export const VERSION = "1.1.0";

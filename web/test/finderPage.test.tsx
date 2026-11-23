@@ -625,7 +625,8 @@ describe("what you want and the rest of the page", () => {
     const chip = (name: string) => [...host.querySelectorAll<HTMLElement>(".finder-chip")].find((c) => c.textContent?.includes(name))!;
     expect(chip("TikTok").getAttribute("aria-disabled")).toBe("true");
     expect(chip("TikTok").getAttribute("aria-pressed")).toBe("false");
-    expect(text()).toContain("TikTok: not yet. TikTok keeps Clip Factory's posts private until it checks the app, and private posts can't earn.");
+    expect(text()).toContain("TikTok: not yet. Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet.");
+    expect(text()).not.toMatch(/posts private|private posts can't earn/);
     expect(chip("Facebook").getAttribute("aria-disabled")).toBe("true");
     // Said once under the row, and each place not set up points to it.
     expect(text().split("Set it up first.")).toHaveLength(2);

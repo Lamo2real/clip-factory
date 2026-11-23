@@ -140,6 +140,62 @@ describe("status and calm copy", () => {
     });
   });
 
+  it("TikTok while the Mac posts it (§47.4): what the Mac does, never Post it yourself, no Go to Library for a stop", () => {
+    const tt = { platform: "tiktok" as const, metrics: null };
+    const mac = (state: "waiting" | "working" | "stopped", extra = {}) => ({ state, since: at, source: "upload" as const, ...extra });
+    expect(calmCopy({ ...tt, status: "mac", mac: mac("waiting") })).toEqual({ text: "Waiting for your Mac" });
+    expect(calmCopy({ ...tt, status: "mac", mac: mac("working", { step: "uploading" }) })).toEqual({ text: "Posting…", spinner: true });
+    // Try again is on the clip page itself: no link away.
+    expect(calmCopy({ ...tt, status: "mac", mac: mac("stopped", { reason: "TikTok wants you to log in again. Then tap Try again." }) })).toEqual({
+      text: "Didn't work: TikTok wants you to log in again",
+    });
+    // Not sure it posted (D7): the chip says that, so the line only says where to look, with or without its row.
+    const pressed = mac("stopped", { pressedAt: at, reason: "Your Mac pressed Post but couldn't confirm it. Look on your TikTok: if it's there, tap It's on TikTok." });
+    const notSure = { kind: "stopped" as const, words: "Not sure it posted · look on your TikTok", button: "on_tiktok" as const, again: true, noLink: true };
+    expect(calmCopy({ ...tt, status: "mac", mac: pressed })).toEqual({ text: "Look on your TikTok" });
+    expect(calmCopy({ ...tt, status: "mac", mac: pressed }, notSure)).toEqual({ text: "Look on your TikTok" });
+    // A stuck post's row (on_tiktok) whose Mac went quiet keeps its own words (D5, review round 3, item 6); inside the
+    // find window the line says from when Try again comes.
+    const stuck = { ...notSure, words: "Your Mac hasn't checked in since 14:05" };
+    expect(calmCopy({ ...tt, status: "mac", mac: mac("working") }, stuck)).toEqual({ text: "Your Mac hasn't checked in since 14:05" });
+    const soon = { ...notSure, words: "Not sure it posted · look on your TikTok · Try again from 14:35", again: false };
+    expect(calmCopy({ ...tt, status: "mac", mac: mac("working") }, soon)).toEqual({ text: "Look on your TikTok · Try again from 14:35" });
+    // The page's row: its words, and its one button on the page.
+    const row = { kind: "waiting" as const, words: "Waiting for your Mac · next at 14:31", button: null };
+    expect(calmCopy({ ...tt, status: "mac", mac: mac("waiting") }, row)).toEqual({ text: "Waiting for your Mac · next at 14:31" });
+    expect(calmCopy({ ...tt, status: "mac", mac: mac("working") }, { kind: "working", words: "Posting…", button: null, spinner: true })).toEqual({
+      text: "Posting…",
+      spinner: true,
+    });
+    const off = { kind: "not_ready" as const, words: "Your Mac posts TikTok is off", button: "turn_on" as const, href: "/settings/posting/tiktok-mac" };
+    expect(calmCopy({ ...tt, status: "not_posted" }, off)).toEqual({ text: "Your Mac posts TikTok is off" });
+    // A private upload keeps saying so, and why the Mac can't post it yet.
+    expect(calmCopy({ ...tt, status: "posted_private" }, off)?.text).toBe(
+      "Uploaded privately. TikTok shows numbers after the app is approved. Your Mac posts TikTok is off.",
+    );
+    // Posted by his Mac without its link: the Add link box is on the page.
+    const link = { kind: "posted" as const, words: "Posted by your Mac · Everyone · add the link", button: "add_link" as const };
+    expect(calmCopy({ ...tt, status: "posted", by: "you", via: "mac" }, link)).toEqual({ text: "Posted by your Mac. Add its TikTok link to count views." });
+  });
+
+  it("a TikTok post refused for the public account says the Mac posts it, never Post it yourself", () => {
+    const tt = { platform: "tiktok" as const, metrics: null, status: "failed" as const };
+    const STORED = "TikTok only takes Clip Factory's uploads on a private account until it approves the app. Tap Post it yourself to post it for everyone.";
+    const OLD = "Make your TikTok account private (Setup step 3), then press Try again.";
+    // The server's own sentence since 23 Nov (platforms/errors.TIKTOK_PRIVATE_ONLY) reads the same.
+    const NOW_STORED = "TikTok only takes Clip Factory's own uploads on a private account for now, so your Mac posts it for everyone.";
+    for (const error of [STORED, OLD, NOW_STORED]) {
+      const calm = calmCopy({ ...tt, error });
+      expect(calm).toEqual({ text: "TikTok only takes Clip Factory's own uploads on a private account for now, so your Mac posts it for everyone." });
+      expect(calm?.text).not.toMatch(/yourself|Go to Library/);
+    }
+    // Any other TikTok failure, once TikTok approved the app (no row): Try again in Library, as before.
+    expect(calmCopy({ ...tt, error: "TikTok did not answer." })).toEqual({
+      text: "TikTok did not answer. Go to Library and tap Try again.",
+      link: { href: "/library", label: "Go to Library" },
+    });
+  });
+
   it("crowns the most views, ties going to the earlier platform", () => {
     const posts = STATS_ORDER.map((platform) => ({ platform, metrics: null as PostMetrics | null }));
     expect(pickBest(posts)).toBeNull();

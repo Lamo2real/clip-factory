@@ -140,7 +140,7 @@ async function settle(times = 6) {
   for (let i = 0; i < times; i++) await act(async () => await new Promise((r) => setTimeout(r, 0)));
 }
 
-async function open(section: "ai" | "agents" | "skills" | "memory" | "video" | "storage") {
+async function open(section: "ai" | "agents" | "skills" | "memory" | "video" | "storage" | "look") {
   act(() =>
     root.render(
       <ToastProvider>
@@ -185,14 +185,49 @@ describe("the page", () => {
   it("has a bar of every section on <Glide>, Social accounts going to the Connections page", async () => {
     await open("ai");
     const links = $$<HTMLAnchorElement>(".st-stg-tab");
-    expect(links.map((a) => a.textContent)).toEqual(["AI", "Agents", "Skills", "Memory", "Social accounts", "Video", "Storage"]);
-    expect(links.map((a) => a.getAttribute("href"))).toEqual(["/stories/settings/ai", "/stories/settings/agents", "/stories/settings/skills", "/stories/settings/memory", "/stories/connections", "/stories/settings/video", "/stories/settings/storage"]);
+    expect(links.map((a) => a.textContent)).toEqual(["AI", "Agents", "Skills", "Memory", "Social accounts", "Video", "Storage", "Look"]);
+    expect(links.map((a) => a.getAttribute("href"))).toEqual(["/stories/settings/ai", "/stories/settings/agents", "/stories/settings/skills", "/stories/settings/memory", "/stories/connections", "/stories/settings/video", "/stories/settings/storage", "/stories/settings/look"]);
     expect($(".st-stg-tabs > .glide")).not.toBeNull();
     expect($(".st-stg-tab.is-on")?.getAttribute("aria-current")).toBe("page");
     expect($("h1")?.textContent).toBe("Settings");
   });
 
-  for (const section of ["ai", "agents", "skills", "memory", "video", "storage"] as const)
+  it("puts the page head and the section pills on one hero, and each section's note and Saved mark in its head's one plate", async () => {
+    await open("storage");
+    const hero = $(".st-stg-top.st-glass--hero")!;
+    expect(hero.querySelector("h1")?.textContent).toBe("Settings");
+    expect(hero.querySelectorAll(".st-stg-tab.st-pill")).toHaveLength(8);
+    expect(hero.querySelector("a.st-pill.st-stg-head__setup-go")?.getAttribute("href")).toBe("/stories/setup");
+    const head = $(".st-stg-section__head.st-plate")!;
+    expect(head.querySelector("h2")?.textContent).toBe("Storage and production");
+    expect(head.querySelector(".st-stg-bar")?.textContent).toContain("Funded Clips keeps its files in its own folder, apart from Clip Factory's.");
+    expect(head.querySelector(".st-stg-saved")).not.toBeNull();
+    // One plate above the first card: the bar has none of its own there.
+    expect($$(".st-stg-section .st-plate")).toEqual([head]);
+    await open("skills");
+    expect($(".st-stg-section__head .st-stg-bar")).toBeNull();
+  });
+
+  it("gives Look its own page: the three backgrounds under their own pill and head, no longer at the end of Storage", async () => {
+    await open("storage");
+    expect($("#look")).toBeNull();
+    expect(host.textContent).not.toContain("See-through");
+    await open("look");
+    expect($(".st-stg-tab.is-on")?.textContent).toBe("Look");
+    expect($(".st-stg-tab.is-on")?.getAttribute("href")).toBe("/stories/settings/look");
+    const head = $(".st-stg-section__head.st-plate")!;
+    expect(head.querySelector("h2")?.textContent).toBe("Look");
+    expect(head.querySelector(".st-stg-section__lede")?.textContent).toBe("What is behind the glass: See-through, a picture of yours, or colours.");
+    // The redesign's section bar: the note in the head's one plate, none of its own.
+    expect(head.querySelector(".st-stg-bar")?.textContent).toBe("Kept on this device. Clip Factory's own background stays as it is.");
+    expect($$(".st-stg-section .st-plate")).toEqual([head]);
+    const look = $("#look")!;
+    expect(look.querySelector("h3")?.textContent).toBe("Background");
+    const modes = $$<HTMLButtonElement>('[aria-label="Background"] [role=radio]', look);
+    expect(modes.map((o) => o.querySelector(".st-stg-pick__label")?.textContent)).toEqual(["See-through", "Picture", "Colours"]);
+  });
+
+  for (const section of ["ai", "agents", "skills", "memory", "video", "storage", "look"] as const)
     it(`${section}: every pick-one bar is on <Glide>, and nothing is disabled (the deny sound needs the click)`, async () => {
       await open(section);
       for (const bar of $$("[role=radiogroup]")) expect(bar.querySelector(":scope > .glide"), bar.getAttribute("aria-label") ?? "").not.toBeNull();
@@ -271,7 +306,7 @@ describe("AI", () => {
 
   it("Check models gives up after a few failed asks in a row and says the server's sentence", async () => {
     await open("ai");
-    failures.set("getTask", new ApiError(503, "platform_down", "Lamo Stories' helper is not answering. Try again in a minute."));
+    failures.set("getTask", new ApiError(503, "platform_down", "Funded Clips' helper is not answering. Try again in a minute."));
     vi.useFakeTimers({ toFake: ["setTimeout", "clearTimeout"] });
     const button = byText("button", "Check models");
     await act(async () => {
@@ -286,7 +321,7 @@ describe("AI", () => {
     vi.useRealTimers();
     await settle(4);
     expect(called("getTask")).toHaveLength(3);
-    expect(document.body.textContent).toContain("Lamo Stories' helper is not answering. Try again in a minute.");
+    expect(document.body.textContent).toContain("Funded Clips' helper is not answering. Try again in a minute.");
     expect(byText("button", "Check models")).toBeTruthy();
   });
 
@@ -426,7 +461,7 @@ describe("Agents", () => {
   it("edits the instructions, saves them, and Reset puts the original back after Are you sure", async () => {
     await open("agents");
     const box = $<HTMLTextAreaElement>("textarea")!;
-    expect(box.value).toContain("You are the creative director of Lamo Stories");
+    expect(box.value).toContain("You are the creative director of Funded Clips");
     expect(byText("button", "Save the words").getAttribute("aria-disabled")).toBe("true");
     setValue(box, "Make every idea about Pip.");
     await click(byText("button", "Save the words"));
@@ -436,7 +471,7 @@ describe("Agents", () => {
     expect($('[role="group"][aria-label="Are you sure?"]')).not.toBeNull();
     await click(byText("button", "Yes, reset"));
     expect(called("patchAgent").at(-1)?.args).toEqual(["stories", "creative_director", { reset: true }]);
-    expect($<HTMLTextAreaElement>("textarea")!.value).toContain("You are the creative director of Lamo Stories");
+    expect($<HTMLTextAreaElement>("textarea")!.value).toContain("You are the creative director of Funded Clips");
     expect(host.textContent).toContain("The original");
   });
 
@@ -471,7 +506,7 @@ describe("Skills", () => {
   it("lists built-ins first, read-only, and shows which agents use each", async () => {
     await open("skills");
     const cards = $$(".st-stg-skill");
-    expect(cards.slice(0, 3).every((c) => c.textContent?.includes("Comes with Lamo Stories"))).toBe(true);
+    expect(cards.slice(0, 3).every((c) => c.textContent?.includes("Comes with Funded Clips"))).toBe(true);
     expect(cards[0]!.textContent).toMatch(/Used by: Creative director, Video analysis, Storyboard, Character/);
     await click(byText("button", "Open", cards[0]!));
     await settle();
@@ -589,12 +624,14 @@ describe("Video", () => {
     // Only this card's two fields (§45.37 G1): the API checks only what the body names.
     expect(called("patchWorkspace").at(-1)?.args[1]).toEqual({ configuration: { providers: { video: "luma-ray", videoModel: null } }, version: 3 });
     expect(byText("[role=radio]", /Luma AI Ray2/, group("Video maker")).textContent).toContain("Not ready yet");
-    // Its one model, with who makes it, where it runs and that no price is known; and the API's not-ready sentence once.
+    // Its one model, with who makes it, where it runs and that no price is known; and the API's not-ready sentence once,
+    // said from this page (§45.36 E17): "Pick Built-in animation above", never "in Settings › Video".
     const details = $<HTMLElement>('[data-maker-model="luma-ray2"]', card("Video maker"))!;
     expect(details.textContent).toContain("Luma AI Ray2");
     expect(details.textContent).toContain("Luma AI on Amazon Bedrock · Runs in the US (Oregon)");
     expect(details.textContent).toContain("No price known.");
-    expect($$("[role=status]", card("Video maker")).map((n) => n.textContent)).toContain(LUMA_NOT_READY);
+    expect($$("[role=status]", card("Video maker")).map((n) => n.textContent)).toContain(LUMA_NOT_READY.replace(" in Settings › Video", " above"));
+    expect(card("Video maker").textContent).not.toContain("in Settings › Video");
     await click(byText("[role=radio]", /Built-in animator/));
     await settle();
     expect($$(".st-stg-note[role=status]", card("Video maker")).filter((n) => n.textContent?.includes("not ready"))).toHaveLength(0);
@@ -744,7 +781,7 @@ describe("Video", () => {
     expect(use.querySelector(".st-stg-active")?.textContent).toMatch(/Rendering, last 30 days[\d.]+ minutes/);
     const builtin = byText(".st-stg-usage__row", /Built-in animator/, use);
     expect(builtin.textContent).toMatch(/minutes of rendering|seconds of rendering/);
-    expect(builtin.textContent).toContain("Free: it runs on Lamo Stories' own computer");
+    expect(builtin.textContent).toContain("Free: it runs on Funded Clips' own computer");
     const canvas = byText(".st-stg-usage__row", /Amazon Nova Canvas/, use);
     expect(canvas.textContent).toMatch(/\d+ pictures?/);
     expect(canvas.textContent).toContain("No price yet:");
@@ -841,11 +878,11 @@ describe("AI: models the owner adds (§45.34)", () => {
     expect(form.querySelector("[role=alert]")?.textContent).toBe("Give the model a name, like Nova Premier.");
     fill(form, "Name", "Nova Premier");
     await click(byText("[role=radio]", "Amazon", form));
-    fill(form, "Bedrock model ID or inference profile", "eu.amazon.nova premier");
+    fill(form, "Model ID", "eu.amazon.nova premier");
     await submit(form);
     expect(called("putAiModel")).toHaveLength(0);
     expect(form.querySelector("[role=alert]")?.textContent).toContain("does not look like a Bedrock model ID");
-    fill(form, "Bedrock model ID or inference profile", "eu.amazon.nova-premier-v1:0");
+    fill(form, "Model ID", "eu.amazon.nova-premier-v1:0");
     fill(form, "AWS Region", "eu-west-1");
     // How it is called (§45.35 D1): an Amazon model starts with no effort levels, no tools and the prompt cache on;
     // the levels show once the owner says it has them.
@@ -937,14 +974,14 @@ describe("AI: models the owner adds (§45.34)", () => {
     await click(byText("button", "Remove", byText(".st-stg-own", /Mistral Large 2/)));
     await click(byText("button", "Yes, remove it"));
     expect(called("deleteAiModel").at(-1)?.args).toEqual(["stories", "custom-mistral"]);
-    expect(byText(".st-stg-own", /Mistral Large 2/).querySelector("[role=alert]")?.textContent).toBe("Mistral Large 2 is still used by the task Write the story in Settings › AI. Pick another model there first.");
+    expect(byText(".st-stg-own", /Mistral Large 2/).querySelector("[role=alert]")?.textContent).toBe("Mistral Large 2 is still used by the task Write the story below. Pick another model there first.");
     // Once nothing uses it, it goes.
     setValue($$(".st-stg-assign__row").find((r) => r.querySelector(".st-stg-assign__title")?.textContent === "Write the story")!.querySelectorAll<HTMLSelectElement>("select")[0]!, "");
     await settle();
     await click(byText("button", "Remove", byText(".st-stg-own", /Mistral Large 2/)));
     await click(byText("button", "Yes, remove it"));
     expect($$(".st-stg-own").some((r) => r.textContent?.includes("Mistral Large 2"))).toBe(false);
-    expect(document.body.textContent).toContain("Mistral Large 2 is removed from Lamo Stories.");
+    expect(document.body.textContent).toContain("Mistral Large 2 is removed from Funded Clips.");
   });
 
   it("an Edit that moves a model asks for a new check even after Works; Another Region takes any code; up to 500,000 tokens; every select marks it", async () => {
@@ -1053,7 +1090,9 @@ describe("Storage and production (§45.34)", () => {
   it("says where the files are, keeps reference videos and chat pictures as picked, and Clean up now says what it cleared", async () => {
     await open("storage");
     await settle(4);
-    expect(card("Space used").textContent).toContain("Lamo Stories' own folder in Clip Factory's media storage in Europe (Stockholm): ws/{you}/stories/");
+    // The place in words; the exact folder one tap away (§45.36 E14).
+    expect(card("Space used").textContent).toContain("Funded Clips' own folder in Clip Factory's media storage in Europe (Stockholm).");
+    expect(card("Space used").querySelector("details.st-tech-fold")?.textContent).toContain("ws/{you}/stories/");
     const refs = group("Keep reference videos");
     expect($$("[role=radio]", refs).map((r) => r.querySelector(".st-stg-pick__label")?.textContent)).toEqual(["Keep them all", "Keep only the study", "30 days", "90 days"]);
     // By age only the video goes: its study stays, as the API and the agent keep it (retention.py, fileRemovedAt).
@@ -1064,7 +1103,7 @@ describe("Storage and production (§45.34)", () => {
     expect(byText("[role=radio]", /Keep them all/, refs).getAttribute("aria-checked")).toBe("true");
     await click(byText("[role=radio]", /Keep only the study/, refs));
     expect(called("patchWorkspace").at(-1)?.args[1]).toMatchObject({ configuration: { production: { keepReferences: "study_only", burnCaptions: true, scenesAtOnce: 2, keepVersions: "all" } } });
-    expect(card("Keeping other files").textContent).toContain("Lamo Stories still learns from each study after its video is gone.");
+    expect(card("Keeping other files").textContent).toContain("Funded Clips still learns from each study after its video is gone.");
     await click(byText("[role=radio]", /30 days/, group("Keep chat pictures")));
     expect(called("patchWorkspace").at(-1)?.args[1]).toMatchObject({ configuration: { production: { keepReferences: "study_only", keepChatPictures: "days_30" } } });
 
@@ -1109,42 +1148,50 @@ describe("Storage and production (§45.34)", () => {
     const clipsBefore = localStorage.getItem("cf.prefs");
     await open("storage");
     const sm = card("Sounds and motion");
-    expect(sm.textContent).toContain("Follows Clip Factory's setting until you change it.");
-    expect(sm.textContent).toContain("Clip Factory's click sound until you pick one.");
+    // Its own choices from the start (§45.38 A2): nothing on the card follows Clip Factory's settings.
+    expect(sm.textContent).not.toContain("Follows Clip Factory");
     const sw = (label: RegExp) => byText(".st-stg-switchrow", label, sm).querySelector<HTMLElement>("[role=switch]")!;
     const picker = () => byText(".st-stg-selectbox", /^Click sound/, sm).querySelector<HTMLSelectElement>("select")!;
+    const errors = () => byText(".st-stg-selectbox", /^Error sound/, sm).querySelector<HTMLSelectElement>("select")!;
     const kept = () => (JSON.parse(localStorage.getItem("cf.stories.prefs") ?? "{}") as { more?: Record<string, unknown> }).more ?? {};
-    const { getPrefs } = await import("../src/lib/prefs.ts");
-    // Unset, the card shows what Lamo Stories really uses: Clip Factory's choices.
-    expect(sw(/^Sounds/).getAttribute("aria-checked")).toBe(String(getPrefs().soundEnabled));
-    expect(picker().value).toBe(String(getPrefs().clickSound));
+    // Unset, the card shows what Lamo Stories really uses: its own usual choices (sounds on, Water drop, Nope nope nope).
+    expect(sw(/^Sounds/).getAttribute("aria-checked")).toBe("true");
+    expect(picker().value).toBe("6");
+    expect(errors().value).toBe("5");
     expect(picker().options).toHaveLength(30);
+    expect(errors().options).toHaveLength(30);
     expect(picker().options[2]?.textContent).toBe("Bubble: rises a little");
     // The click sound is kept as its number (the shape Lamo Stories' sounds read), and it plays once picked.
     const log = () => (window as unknown as { __cfSoundLog?: { kind: string; sound: number }[] }).__cfSoundLog ?? [];
-    if (sw(/^Sounds/).getAttribute("aria-checked") === "false") await click(sw(/^Sounds/));
     setValue(picker(), "3");
     await settle();
     expect(kept()["sound.click"]).toBe(3);
     expect(log().at(-1)).toMatchObject({ kind: "tap", sound: 3 });
-    expect(card("Sounds and motion").textContent).toContain("Lamo Stories' own click sound.");
     await click(byText("button", "Hear it", sm));
     expect(log().at(-1)).toMatchObject({ kind: "tap", sound: 3 });
+    // Its own error sound too, kept as its number, and heard once picked.
+    setValue(errors(), "8");
+    await settle();
+    expect(kept()["sound.deny"]).toBe(8);
+    expect(log().at(-1)).toMatchObject({ kind: "deny", sound: 8 });
     await click(sw(/^Less motion/));
-    expect(kept()).toMatchObject({ "sound.click": 3, "motion.reduce": true });
-    // Sounds off turns every click sound off; the picker and Hear it wait until it is on again.
+    expect(kept()).toMatchObject({ "sound.click": 3, "sound.deny": 8, "motion.reduce": true });
+    // Sounds off turns every click sound off; the pickers and Hear it wait until it is on again.
     await click(sw(/^Sounds/));
     expect(kept()["sound.enabled"]).toBe(false);
     expect(picker().getAttribute("aria-disabled")).toBe("true");
+    expect(errors().getAttribute("aria-disabled")).toBe("true");
     expect(byText("button", "Hear it", sm).getAttribute("aria-disabled")).toBe("true");
     setValue(picker(), "9");
     expect(kept()["sound.click"]).toBe(3);
     expect(localStorage.getItem("cf.prefs")).toBe(clipsBefore);
-    await click(byText("button", "Use Clip Factory's settings again", sm));
+    await click(byText("button", "Use the usual settings again", sm));
     expect(kept()).not.toHaveProperty("sound.enabled");
     expect(kept()).not.toHaveProperty("sound.click");
+    expect(kept()).not.toHaveProperty("sound.deny");
     expect(kept()).not.toHaveProperty("motion.reduce");
-    expect(card("Sounds and motion").textContent).toContain("Follows Clip Factory's setting until you change it.");
+    expect(picker().value).toBe("6");
+    expect(localStorage.getItem("cf.prefs")).toBe(clipsBefore);
   });
 });
 

@@ -72,8 +72,7 @@ export const CR_SAID_CANT = "Content Rewards hasn't let your account connect app
 export const CR_LOGIN_ASK = "Which email do you sign in to Content Rewards with?";
 
 /** Step 2's line after "Clip Factory posts to: …" (§38.3, unchanged), and its last line (§39.1). */
-const CR_TIKTOK_WAITS_LINE =
-  "TikTok can wait. TikTok posts from Clip Factory stay private until TikTok checks the app, and private posts can't earn.";
+const CR_TIKTOK_WAITS_LINE = "TikTok can wait. Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet.";
 const CR_SOCIALS_LAST_LINE = "Then come back to Clip Factory. Tap I added them.";
 
 /** Whop's screens were not seen (§38.1): every Whop step says so. */

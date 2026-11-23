@@ -114,14 +114,14 @@ export function PostRow({ job, onRetry, busy = false }: { job: PublishingJob; on
 
 export function PostsPanel({ jobs, onRetry, busyId }: { jobs: PublishingJob[] | null; onRetry: (j: PublishingJob) => void; busyId: string | null }) {
   return (
-    <section className="st-s-panel st-s-postspanel" aria-labelledby="st-posts-title">
+    <section className="st-s-panel st-s-postspanel st-glass" aria-labelledby="st-posts-title">
       <h2 className="st-s-panel__title" id="st-posts-title">
         Posts
       </h2>
       {jobs === null ? (
         <p className="st-s-field__hint">Getting the posts…</p>
       ) : jobs.length === 0 ? (
-        <p className="st-s-field__hint">Not posted anywhere yet. Tap Post it to send it to your Lamo Stories accounts.</p>
+        <p className="st-s-field__hint">Not posted anywhere yet. Tap Post it to send it to your Funded Clips accounts.</p>
       ) : (
         <ul className="st-s-posts">
           {jobs.map((j) => (

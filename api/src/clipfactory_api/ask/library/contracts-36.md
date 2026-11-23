@@ -18,7 +18,8 @@ Decision record: ADR-60 (which corrects ADR-57).
    "Every place uses your settings. Tap a place below to change it for this clip." (after, or with TikTok unticked),
    "You changed some for this clip. Tap to put yours back." (after a change in a row). YouTube, Instagram, Facebook
    and X use My settings from the start (nothing in their rules asks for a tap); TikTok's choices go on only with this
-   tap (or picks in its row), because TikTok wants the creator's own action and no default. Ticking Commercial content
+   tap (or picks in its row), because TikTok wants the creator's own action and no default. While his Mac posts TikTok,
+   TikTok starts on My settings too, with no tap (§47.9). Ticking Commercial content
    (Your brand / Branded content) is about one clip and keeps "Your settings are on".
 4. **One closed row per ticked place** (`screens/review/PlaceRows.tsx`, a `<details>` with a soft fill and no edges):
    "YouTube · title, description and settings", "TikTok · caption and settings", "Instagram · caption and
@@ -31,7 +32,8 @@ Decision record: ADR-60 (which corrects ADR-57).
      `settings.youtubePrivacy`), Category (the app's own dropdown, Gaming first), **Made for kids** switch (off = No),
      Tell my subscribers.
    * TikTok: Posting as, Caption, **Who can see it** (§36.5), Comments, Duet, Stitch, Commercial content with Your
-     brand (Promotional content) / Branded content (Paid partnership).
+     brand (Promotional content) / Branded content (Paid partnership). While his Mac posts TikTok, Who can see it and
+     the three switches are one read-only line of what the Mac posts with, and a ticked label holds Upload (§47.9).
    * Instagram: Caption, Also show it in my feed (Reel).
    * Facebook: Caption, "Goes up as a Reel on your Page. Everyone can see it." (Page Reels are public; nothing to pick).
    * X: Caption, Who can reply (the app's own dropdown: Everyone, People you follow, Only people you mention, Verified
@@ -45,7 +47,8 @@ Decision record: ADR-60 (which corrects ADR-57).
    TikTok first.", "You need to indicate if your content promotes yourself, a third party, or both. Pick Your brand
    or Branded content on TikTok first." (that first sentence is also Upload's hover text), "Branded content can't be
    Only me. Pick Everyone or Friends first.", "This clip is too long for TikTok. Untick
-   TikTok to upload it to the rest.", "TikTok did not answer. Tap Ask TikTok again, or untick TikTok."
+   TikTok to upload it to the rest.", "TikTok did not answer. Tap Ask TikTok again, or untick TikTok." While his Mac
+   posts TikTok, only TikTok's too-long line and its Commercial content lines can hold Upload (§47.9).
 
 A standard upload is two taps: **Use my settings**, then **Upload to 4**. The TikTok sheet no longer opens from the
 card when places are set up: TikTok's controls are in its row and its legal line is beside Upload.
@@ -103,8 +106,9 @@ one more attribute on the settings item, written only when the owner saves).
 `myTikTokChoices(preset.tiktok, creator)`: TikTok's privacy is the saved one when TikTok offers it, else Everyone, else
 TikTok's first choice (Only me before the audit); Comments, Duet and Stitch as saved and off where the creator turned
 them off; Commercial content off. TikTok's creator info is asked for when the owner taps Use my settings or opens the
-TikTok row, never before. `uploadClip(..., platforms, options)`; `confirmClip(clipId, captions, tiktok, platforms,
-options)`. Nothing about My settings is kept in localStorage.
+TikTok row, never before (while his Mac posts TikTok: in the background as soon as TikTok is ticked, §47.9).
+`uploadClip(..., platforms, options)`; `confirmClip(clipId, captions, tiktok, platforms, options)`. Nothing about My
+settings is kept in localStorage.
 
 ### 34.5 TikTok's "Who can see it"
 

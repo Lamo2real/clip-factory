@@ -282,11 +282,11 @@
         "difference",
         "tabs"
       ],
-      "answer": "On each clip, **Upload to** shows every place that is set up, all ticked to start. Tap **Use my settings**, then **Upload**. That is the only place picker: each ticked place gets its own row below for its words and options. A place that is not set up yet does not show; set it up in **Set up posting**.",
+      "answer": "On each clip, **Upload to** shows every place that is set up, all ticked to start. It says **Your settings are on** (if not, tap **Use my settings**); then tap **Upload**. That is the only place picker: each ticked place gets its own row below for its words and options. A place that is not set up yet does not show; set it up in **Set up posting**.",
       "steps": [
         "Tap **Review**.",
         "Under **Upload to**, tap a place to untick it if it should not go there.",
-        "Tap **Use my settings**, then **Upload**."
+        "If it does not say **Your settings are on**, tap **Use my settings**. Then tap **Upload**."
       ],
       "actions": [
         {
@@ -303,7 +303,7 @@
       "id": "review-use-my-settings",
       "route": "/review",
       "where": "Review › a clip › Use my settings",
-      "title": "Use my settings: upload in two taps",
+      "title": "Use my settings: your saved choices on every place",
       "keywords": [
         "use my settings",
         "my settings",
@@ -314,12 +314,16 @@
         "quick upload",
         "fast upload",
         "same settings",
-        "every time"
+        "every time",
+        "tiktok tap",
+        "tap each time",
+        "upload in one tap",
+        "upload with my settings"
       ],
-      "answer": "**Use my settings** puts your saved choices on every ticked place: who can see it, comments, duets and stitches, never made for kids. TikTok needs your own tap each time, so tap it, then tap **Upload**. Change a place for one clip in its row.",
+      "answer": "Every ticked place starts on your saved choices (never made for kids), TikTok too while your Mac posts TikTok, and your Mac posts with them. Just tap **Upload**. A paid partnership can't go through your Mac yet: untick TikTok, then post it in the TikTok app with its label, never with **Post with my Mac** or **Send these to my Mac**. With **Your Mac posts TikTok** off, tap **Use my settings**.",
       "steps": [
         "Tap **Review**.",
-        "Tap **Use my settings**. It says **Your settings are on**.",
+        "It says **Your settings are on**. If not, tap **Use my settings**.",
         "Tap **Upload**."
       ],
       "actions": [
@@ -355,7 +359,7 @@
         "mark as paid partnership",
         "promotional"
       ],
-      "answer": "Each ticked place has its own row under **Use my settings**. Tap the row to open its words and options. For a paid partnership, open **TikTok**, turn on **Commercial content** and tick **Branded content**.",
+      "answer": "Each ticked place has a row under **Use my settings**: tap it to change it for this clip. For a paid partnership, open **TikTok**, turn on **Commercial content**, tick **Branded content**. While your Mac posts TikTok, the row shows what it uses. It can't add that label yet: untick TikTok, then post it in the TikTok app with its label, not with **Post with my Mac** or **Send these to my Mac**.",
       "steps": [
         "Tap **Review**.",
         "Tap a place's row, like **TikTok · caption and settings**.",
@@ -449,7 +453,7 @@
         "auto-posting campaign clips",
         "auto-posting tiktok mac"
       ],
-      "answer": "**Auto-posting** posts your oldest clips in **Review** by themselves, every few hours, to each place that is set up. TikTok: you post it yourself (TikTok's rule), or your Mac does with **Your Mac posts TikTok** on. Campaign clips wait for your **Upload**: Content Rewards can't take clips from Clip Factory by itself yet. Test it first with **Practice**: it picks the clips, but sends nothing.",
+      "answer": "**Auto-posting** posts your oldest clips in **Review** by themselves, every few hours, to each place that is set up. TikTok goes through your Mac: turn on **Your Mac posts TikTok**. Campaign clips wait for your **Upload**: Content Rewards can't take clips from Clip Factory by itself yet. Test it first with **Practice**: it picks the clips, but sends nothing.",
       "steps": [
         "Tap **Settings**.",
         "Tap **Posting**, then **Auto-posting**.",
@@ -480,21 +484,34 @@
         "tiktok by itself",
         "post on tiktok automatically",
         "waiting for your mac",
-        "your mac is posting it",
-        "your mac stopped",
+        "next at",
         "posted by your mac",
+        "didn't work tiktok",
+        "try again tiktok",
+        "not on tiktok yet",
+        "post with my mac",
+        "put it on tiktok",
+        "turn on your mac",
+        "your mac hasn't checked in",
+        "add the link",
         "send these to my mac",
-        "post it yourself instead",
         "set up your mac",
         "mac helper",
-        "stop the mac"
+        "stop the mac",
+        "start my mac again",
+        "mac paused",
+        "open the stopped clip",
+        "let them go",
+        "held on your mac"
       ],
-      "answer": "With **Your Mac posts TikTok** on, **Upload** and auto-posting give TikTok to your Mac. It posts each clip for everyone, one at a time. **Library** shows **Waiting for your Mac**, then **Your Mac is posting it**, then **Posted by your Mac**. Stopped? Tap **Try again** or **Post it yourself instead**. To stop it, turn the switch off.",
+      "answer": "With **Your Mac posts TikTok** on, your Mac posts each TikTok clip for everyone. Each TikTok row in **Library** says what it does. **Didn't work**? Tap **Try again**. Not sure it posted? Look on your TikTok, then tap **It's on TikTok**. Paused? Tap **Start my Mac again**. Needs you? Tap **Open the stopped clip**. Holding clips? Tap **Let them go**. **Not on TikTok yet**? Tap **Post with my Mac**.",
       "steps": [
         "Tap **Settings**.",
         "Tap **Posting**, then **Your Mac posts TikTok**.",
         "Turn on **My Mac posts my TikTok clips**.",
-        "Clips that show **Post it yourself**? Tap **Send these to my Mac**. They go one at a time, oldest first."
+        "In **Library**, a clip says **Not on TikTok yet**? Tap **Post with my Mac**. Your Mac posts it right away.",
+        "Many clips not on TikTok yet? Tap **Send these to my Mac** here. They go one at a time, oldest first, one after each auto-posting run.",
+        "To stop it, turn the switch off. Your Mac stops at once."
       ],
       "actions": [
         {
@@ -3353,7 +3370,7 @@
         "tiktok audit",
         "tiktok not paid"
       ],
-      "answer": "Until TikTok checks Clip Factory, TikTok keeps its posts private, and private posts can't earn. So campaign clips go to YouTube, Instagram, X and Facebook for now. TikTok comes back by itself once TikTok says yes.",
+      "answer": "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet. So campaign clips go to YouTube, Instagram, X and Facebook for now.",
       "steps": [
         "Set up YouTube, Instagram, X or Facebook.",
         "Pick campaigns that pay for those places."

@@ -246,9 +246,13 @@ describe("mock stats", () => {
   });
 
   it("saves the week's picks once, learns, and rejects clips from another week", () => {
+    // A fixed mid-week moment (Wednesday 18 November 2026, local noon): on the real clock this failed just after
+    // Monday 00:00, when the week had only just begun.
     vi.useFakeTimers();
+    vi.setSystemTime(new Date(2026, 10, 18, 12, 0, 0));
     const { s, events } = setup();
     const week = isoWeek(new Date());
+    expect(week).toBe("2026-W47");
     const r = weekRange(week);
     const v = s.getWeek(week, r.from, r.to);
     expect(v.clips.length).toBeGreaterThan(0);
@@ -267,5 +271,17 @@ describe("mock stats", () => {
     const last = s.getWeek(shiftWeek(week, -1), weekRange(shiftWeek(week, -1)).from, weekRange(shiftWeek(week, -1)).to);
     expect(() => s.saveBest(week, { ...r, clipIds: [last.clips[0]!.clip.clipId] })).toThrow("Pick clips from this week only.");
     expect(() => s.getWeek(week, r.from, new Date(Date.parse(r.to) + 5 * 3_600_000).toISOString())).toThrow(/does not look right/);
+  });
+
+  it("dates this week's posted clips inside this week, even in its first minute or its last", () => {
+    vi.useFakeTimers();
+    // Local Monday 00:00:30 (the seed once put these clips before Monday 00:00 there) and Sunday 23:59:30.
+    for (const at of [new Date(2026, 10, 23, 0, 0, 30), new Date(2026, 10, 29, 23, 59, 30)]) {
+      vi.setSystemTime(at);
+      const { s } = setup();
+      const week = isoWeek(at);
+      const r = weekRange(week);
+      expect(s.getWeek(week, r.from, r.to).clips.filter((c) => c.posted).map((c) => c.clip.hook)).toHaveLength(3);
+    }
   });
 });

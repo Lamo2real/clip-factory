@@ -17,6 +17,7 @@ import {
   SCROLL_KEY,
   setStoriesPref,
   setStoriesPrefs,
+  shownWorkspaceName,
   STORIES_PREFS_KEY,
   storiesPref,
   storiesPrefs,
@@ -282,12 +283,24 @@ describe("opening the app", () => {
 describe("the workspace list", () => {
   it("shows Clip Factory and Lamo Stories until the server answers", () => {
     expect(knownWorkspaces()).toEqual(DEFAULT_WORKSPACES);
-    expect(knownWorkspaces().map(switcherName)).toEqual(["Clip Factory", "Lamo Stories"]);
+    expect(knownWorkspaces().map(switcherName)).toEqual(["Clip Factory", "Funded Clips"]);
   });
 
   it("labels Lamo Clips with the app's own name, whatever the server calls it, and other workspaces by theirs", () => {
     expect(switcherName(CLIPS)).toBe("Clip Factory");
     expect(switcherName(CARS)).toBe("Lamo Cars");
+  });
+
+  it("shows a workspace stored with either old default name as Funded Clips, and every other name as it is", () => {
+    for (const old of ["Lamo Stories", "Clip Factory Stories", "Clip Stories"]) {
+      const stored = ws("stories", "stories", old);
+      expect(shownWorkspaceName(old)).toBe("Funded Clips");
+      expect(switcherName(stored)).toBe("Funded Clips");
+      // Only what is shown: the stored record keeps its name.
+      expect(stored.workspaceName).toBe(old);
+    }
+    expect(shownWorkspaceName("Funded Clips")).toBe("Funded Clips");
+    for (const own of ["Clip Factory", "Lamo Cars", "Clip Factory Stories 2", "clip factory stories", "Clip Stories 2", "Stories", "Clips"]) expect(shownWorkspaceName(own)).toBe(own);
   });
 
   it("then every workspace the server lists, Lamo Clips first, never two Lamo Clips", () => {
@@ -324,8 +337,8 @@ it("keeps Lamo Stories' own scroll position for one way back, only for a Lamo St
 });
 
 it("names each Lamo Stories page in the tab title", () => {
-  expect(storiesTitle({ name: "dashboard" })).toBe("Dashboard · Lamo Stories");
-  expect(storiesTitle({ name: "connections", platform: null, result: null, ws: null })).toBe("Social accounts · Lamo Stories");
-  expect(storiesTitle({ name: "setup" })).toBe("Set up · Lamo Stories");
-  expect(storiesTitle({ name: "chat_conv", convId: "c" })).toBe("Chat · Lamo Stories");
+  expect(storiesTitle({ name: "dashboard" })).toBe("Dashboard · Funded Clips");
+  expect(storiesTitle({ name: "connections", platform: null, result: null, ws: null })).toBe("Social accounts · Funded Clips");
+  expect(storiesTitle({ name: "setup" })).toBe("Set up · Funded Clips");
+  expect(storiesTitle({ name: "chat_conv", convId: "c" })).toBe("Chat · Funded Clips");
 });

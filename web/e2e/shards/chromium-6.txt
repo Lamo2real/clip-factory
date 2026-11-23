@@ -1,0 +1,135 @@
+# chromium shard 6 of 7: about 32.4 core, 40.9 style, 44.0 full worker-minutes (133 lines).
+# Written by: node scripts/e2e-shards.mjs build (from timings.tsv). The last shard runs every test in no list.
+[chromium] › audit-performance.spec.ts
+[chromium] › audit-setup.spec.ts › Set up posting at 414 px (touch) › the list, every step of every platform, a finished one, the picker and a failed Connect fit
+[chromium] › audit-setup.spec.ts › a failed Connect at 320 px › denied: the card takes you to the Connect step
+[chromium] › audit-setup.spec.ts › setup layout details › the 0/5 ring on Set up posting sits at the card's right edge at every width
+[chromium] › autopost.spec.ts
+[chromium] › background.spec.ts › background page at 1440px dark: no overflow, readable text
+[chromium] › background.spec.ts › see-through in the desktop app (simulated) › a desktop app with no glass keeps an ordinary page and says so
+[chromium] › background.spec.ts › see-through in the desktop app (simulated) › over the measured glass every word on the Background page is readable, Clear and Frosted, at 1440px
+[chromium] › bank.spec.ts › axe AA contrast, light: phone 375x812
+[chromium] › bank.spec.ts › desktop screens › no sideways scroll, no edges, big targets, the arrow cursor, one vermilion at most
+[chromium] › bank.spec.ts › no sideways scroll at 320 px on Your bank's screens
+[chromium] › bank.spec.ts › phone › Clip Factory's taps: 18 without the email, then the first read; Connect comes back through /bank-done
+[chromium] › bank.spec.ts › phone › the pretend YouTube page: Google's payment says when it reached the bank
+[chromium] › content-rewards.spec.ts › campaign clips after Upload › Review: a campaign that pays for TikTok leaves TikTok out until its audit, and says so
+[chromium] › content-rewards.spec.ts › desktop journeys › Connect before ticking step 2: the answer is on screen, and step 2's Open is the one vermilion (no Add a campaign yet)
+[chromium] › content-rewards.spec.ts › desktop journeys › a platform's setup page reads ?back= too: once connected, Back to Money is the vermilion
+[chromium] › content-rewards.spec.ts › desktop journeys › each clip on Content Rewards: approved, not approved with Ask again, send by hand with one line for two posts, proof
+[chromium] › content-rewards.spec.ts › desktop › Home: a campaign link is recognised; a group asks which one; an invite link says what to do
+[chromium] › content-rewards.spec.ts › every Content Rewards page, desktop, light › fits, one vermilion at most, no edges, big targets, the arrow cursor, AA contrast; the phone's main button bottom right
+[chromium] › content-rewards.spec.ts › phone › Home: a campaign link is recognised; a group asks which one; an invite link says what to do
+[chromium] › content-rewards.spec.ts › phone: the main button stays pinned › the setup page: the current step's Open is pinned bottom right
+[chromium] › contrast.spec.ts › "All set!" is readable where the column was and in the pill's strip (dark)
+[chromium] › contrast.spec.ts › text on /jobs is readable at 320 px light, and at 320, 375 and 1440 px dark
+[chromium] › contrast.spec.ts › text on /jobs is readable at 375 and 1440 px, light
+[chromium] › contrast.spec.ts › text on /jobs/:failed is readable at 375 and 1440 px, light
+[chromium] › contrast.spec.ts › text on /jobs/:running is readable at 375 and 1440 px, light
+[chromium] › contrast.spec.ts › text on /legal/terms.html is readable at 320 px light, and at 320, 375 and 1440 px dark
+[chromium] › contrast.spec.ts › text on /legal/terms.html is readable at 375 and 1440 px, light
+[chromium] › contrast.spec.ts › text on /settings/app/account is readable at 320 px light, and at 320, 375 and 1440 px dark
+[chromium] › contrast.spec.ts › text on /settings/clip-making is readable at 320 px light, and at 320, 375 and 1440 px dark
+[chromium] › contrast.spec.ts › text on /settings/clip-making/streamers is readable at 375 and 1440 px, light
+[chromium] › contrast.spec.ts › text on /settings/look-and-feel/background is readable at 375 and 1440 px, light
+[chromium] › contrast.spec.ts › text on /settings/posting is readable at 320 px light, and at 320, 375 and 1440 px dark
+[chromium] › contrast.spec.ts › text on /settings/posting/setup/contentrewards is readable at 320 px light, and at 320, 375 and 1440 px dark
+[chromium] › contrast.spec.ts › text on /settings/posting/setup/tiktok is readable at 375 and 1440 px, light
+[chromium] › contrast.spec.ts › text on /settings/posting/setup/youtube is readable at 320 px light, and at 320, 375 and 1440 px dark
+[chromium] › contrast.spec.ts › window look (blur): text on /settings/app is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (blur): text on /settings/app/updates is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (blur): text on /settings/clip-making/learned is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (blur): text on /settings/posting/getpaid is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (blur): text on /settings/posting/my-settings is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (blur): text on /settings/posting/setup/instagram is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (blur): text on /settings/posting/setup/youtube is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (liquid): text on /settings/app is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (liquid): text on /settings/look-and-feel is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (liquid): text on /settings/look-and-feel/motion is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (liquid): text on /settings/posting/getpaid is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (liquid): the screens behind a tap are readable too (Frosted, sign-in, a clip, This week, Ask, a sheet, a toast)
+[chromium] › contrast.spec.ts › window look (vibrancy): text on /library is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (vibrancy): text on /money is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (vibrancy): text on /nope is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (vibrancy): text on /settings is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (vibrancy): text on /settings/app/notifications is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (vibrancy): text on /settings/app/updates is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (vibrancy): text on /settings/look-and-feel/motion is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › finder.spec.ts › desktop journeys › Set up another place opens a place's own setup, which leads back to Find campaigns
+[chromium] › finder.spec.ts › desktop journeys › not signed in: the rules box, then I joined: add it reads the pasted rules
+[chromium] › finder.spec.ts › desktop journeys › not_allowed: its sentence, the stored matches "As of", the open match keeps the vermilion
+[chromium] › finder.spec.ts › desktop journeys › signed in, half the money used: the row says so and Make clips anyway goes straight to Make clips
+[chromium] › finder.spec.ts › desktop journeys › signed in: joined on Content Rewards, back to the window (visibilitychange) → You're in! → Reading the rules… → Make clips
+[chromium] › finder.spec.ts › desktop journeys › unreadable: its sentence, the stored matches "As of", the open match keeps the vermilion
+[chromium] › finder.spec.ts › switched off and older APIs › 503 (switched off): every entry hides and the page says coming soon
+[chromium] › finder.spec.ts › switched off and older APIs › the finder alone switched off (setState unavailable): every entry hides, Find another campaign opens Discover
+[chromium] › follow.spec.ts
+[chromium] › getpaid.spec.ts › desktop › YouTube: Clip Factory's taps are 15 (Partner Program, the reading step, five payout steps)
+[chromium] › getpaid.spec.ts › no sideways scroll at 1024 px on every Get paid screen (hold) desktop
+[chromium] › getpaid.spec.ts › no sideways scroll at 320 px on every Get paid screen (hold)
+[chromium] › help.spec.ts › Ask Clip Factory at 1440x900 › #429 shows a calm countdown and Ask stays off
+[chromium] › help.spec.ts › Ask Clip Factory at 1440x900 › opens with three suggestions and takes you to the click sound
+[chromium] › help.spec.ts › Ask Clip Factory at 375x812 › #429 shows a calm countdown and Ask stays off
+[chromium] › help.spec.ts › Ask Clip Factory at 375x812 › after its panel closes from a tap it still keeps clear of a control under its spot
+[chromium] › help.spec.ts › Ask Clip Factory at 375x812 › fills the best clip's views from the owner's own data
+[chromium] › help.spec.ts › Ask Clip Factory launcher at 430 px › covers no control on any page with the update bar and other fonts
+[chromium] › help.spec.ts › Ask Clip Factory launcher at 768 px › covers no control on any page with the update bar
+[chromium] › money-dashboard.spec.ts › fits, no edges, readable, big targets, arrow cursor: 1200x820
+[chromium] › money-dashboard.spec.ts › fits, no edges, readable, big targets, arrow cursor: 1280x800
+[chromium] › money-dashboard.spec.ts › fits, no edges, readable, big targets, arrow cursor: 320x568 touch
+[chromium] › money-dashboard.spec.ts › fits, no edges, readable, big targets, arrow cursor: 380x600
+[chromium] › money-dashboard.spec.ts › fits, no edges, readable, big targets, arrow cursor: 390x844 touch
+[chromium] › money-dashboard.spec.ts › flows › All your money comes right after the title, then Get paid, then the filters, in reading and tab order (§39.2, §40.8 change 6)
+[chromium] › money-dashboard.spec.ts › flows › two currencies get a picker and are never added
+[chromium] › money-dashboard.spec.ts › no words under Ask, at rest anywhere on the page: 390x844 touch dark
+[chromium] › money-dashboard.spec.ts › toolbar top right, stays in view after scrolling: 1024x768
+[chromium] › motion-home-jobs-review.spec.ts
+[chromium] › nav-smooth.spec.ts
+[chromium] › overflow.spec.ts › clip pages and This week fit at 375px
+[chromium] › overflow.spec.ts › no overflow on any screen at 430px
+[chromium] › overflow.spec.ts › the Ask Clip Factory panel fits at 375px
+[chromium] › overflow.spec.ts › the posting setup and the Review place rows fit at 1024px
+[chromium] › overflow.spec.ts › the posting setup and the Review place rows fit at 1280px
+[chromium] › overflow.spec.ts › the posting setup and the Review place rows fit at 360px
+[chromium] › overflow.spec.ts › the sign-in screen fits at 320px and 1440px
+[chromium] › page-still.spec.ts
+[chromium] › review-card.spec.ts
+[chromium] › setup-todo.spec.ts › a reload keeps the list's room from the first paint at 375 px
+[chromium] › setup-todo.spec.ts › never covers a control and nothing overflows at 320 px (dark)
+[chromium] › setup-todo.spec.ts › never covers a control and nothing overflows at 768 px (dark)
+[chromium] › setup-todo.spec.ts › the floating setup list at 1440 px › shows on every main page, and not on the setup pages
+[chromium] › setup-todo.spec.ts › the floating setup list on a phone › skip with the confirm on a phone, and it lasts after a reload
+[chromium] › setup-todo.spec.ts › the floating setup list on a phone › the last skip from the panel keeps the keyboard on the page
+[chromium] › setup.spec.ts › a Connect that comes back with a problem says what to do, and where
+[chromium] › setup.spec.ts › setup at 375x812 › Instagram: every step, keys, Check it, Connect, reconnect and Disconnect
+[chromium] › setup.spec.ts › setup at 375x812 › all five ready: the floating setup list leaves and the list says 5 of 5
+[chromium] › skill-section-offer.spec.ts
+[chromium] › stories-connections.spec.ts
+[chromium] › stories-settings.spec.ts
+[chromium] › use-file.spec.ts
+[chromium] › week.spec.ts
+[screenshots] › screenshots.spec.ts › background phone 390x844 dark › screenshot settings-background dark
+[screenshots] › screenshots.spec.ts › campaign finder phone 375x812 › screenshot campaign finder
+[screenshots] › screenshots.spec.ts › content rewards fit and all money desktop 1440x900 › screenshot review-fit and money-all
+[screenshots] › screenshots.spec.ts › content rewards loose ends desktop 1440x900 › screenshot money dock with the cards
+[screenshots] › screenshots.spec.ts › content rewards loose ends phone 375x812 › screenshot your money is on whop
+[screenshots] › screenshots.spec.ts › desktop 1440x900 light › screenshot this week light
+[screenshots] › screenshots.spec.ts › desktop 1440x900 › screenshot home
+[screenshots] › screenshots.spec.ts › get paid phone 375x812 › screenshot your bank
+[screenshots] › screenshots.spec.ts › money desktop 1440x900 › screenshot money unsupported
+[screenshots] › screenshots.spec.ts › money phone 390x844 › screenshot home money tile not_yet
+[screenshots] › screenshots.spec.ts › money phone 390x844 › screenshot money facebook_verified
+[screenshots] › screenshots.spec.ts › screenshot money dashboard dash_many 1024x768 dark
+[screenshots] › screenshots.spec.ts › screenshot money dashboard dash_many 375x812 dark
+[screenshots] › screenshots.spec.ts › screenshot money dashboard dash_many 375x812 light
+[screenshots] › screenshots.spec.ts › screenshot money dashboard dash_many 430x932 light
+[screenshots] › screenshots.spec.ts › screenshot money dashboard dash_many 768x1024 dark
+[screenshots] › screenshots.spec.ts › screenshot money dashboard dash_nothing 375x812 light
+[screenshots] › screenshots.spec.ts › screenshot money dashboard dash_two_currencies 1440x900 dark
+[screenshots] › screenshots.spec.ts › see-through phone 390x844 › screenshot see-through frosted
+[screenshots] › screenshots.spec.ts › setup todo phone 375x812 dark › screenshot setup todo dark
+[screenshots] › screenshots.spec.ts › setup todo tablet 1024x768 light › screenshot setup todo light
+[screenshots] › screenshots.spec.ts › skills desktop 1440x900 light › screenshot settings-skill-edit light
+[screenshots] › screenshots.spec.ts › skills phone 375x812 dark › screenshot settings-skill dark
+[screenshots] › screenshots.spec.ts › skills phone 375x812 dark › screenshot settings-skill-edit-zip dark
+[screenshots] › screenshots.spec.ts › skills phone 375x812 light › screenshot settings-skill-new light
