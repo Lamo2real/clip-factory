@@ -1,0 +1,44 @@
+# webkit shard 2 of 5: about 19.6 worker-minutes (42 lines).
+# Written by: node scripts/e2e-shards.mjs build (from timings.tsv). The last shard runs every test in no list.
+[webkit-phone] › ask-assistant.spec.ts › Ask as a full assistant › the search key card saves and takes away a key without showing it again
+[webkit-phone] › getpaid.spec.ts › axe AA contrast, dark, owner: phone 375x812
+[webkit-phone] › getpaid.spec.ts › no sideways scroll at 390 px on every Get paid screen (owner)
+[webkit-phone] › getpaid.spec.ts › no sideways scroll at 768 px on every Get paid screen (owner)
+[webkit-phone] › getpaid.spec.ts › phone › the ways in: 4 taps from Settings, 2 from Money, 1 from a setup page
+[webkit-phone] › getpaid.spec.ts › the server's Finance link brings the question into view at 390x844
+[webkit-phone] › help-pictures.spec.ts › Ask pictures at 1440x900 › a note floats: the field and the tray do not move when it comes and goes
+[webkit-phone] › help-pictures.spec.ts › Ask pictures at 1440x900 › attach, paste and drop each add a picture; the drop layer comes and goes
+[webkit-phone] › help-pictures.spec.ts › Ask pictures at 1440x900 › pictures off: no picture button, and a pasted picture gets a note
+[webkit-phone] › help-pictures.spec.ts › Ask pictures at 1440x900 › take away leaves 3 and moves the focus on
+[webkit-phone] › help-pictures.spec.ts › Ask pictures at 390x844 › no edges, no side scroll, and every picture control is 44 px or more
+[webkit-phone] › help-pictures.spec.ts › Ask pictures at 390x844 › pictures off: no picture button, and a pasted picture gets a note
+[webkit-phone] › help-pictures.spec.ts › screenshots for the owner, phone
+[webkit] › ask-assistant.spec.ts › Ask as a full assistant › the setup question uses his setup and a web source; links go live only when done
+[webkit] › ask-assistant.spec.ts › Ask assistant at desktop-1440 › screenshots in light
+[webkit] › ask-assistant.spec.ts › Ask assistant at tablet-768 › thumb zone, no overflow, no edges
+[webkit] › ask-assistant.spec.ts › Ask with less motion › nothing moves while an answer streams
+[webkit] › ask-markup.spec.ts › the markup editor at desktop-1920 › fits, and Save and Undo sit in the thumb zone on phones and tablets
+[webkit] › ask-markup.spec.ts › the markup editor at tablet-768 › fits, and Save and Undo sit in the thumb zone on phones and tablets
+[webkit] › ask-markup.spec.ts › the markup editor on a desktop › keyboard only: arrow keys and Enter draw, Cmd/Ctrl+Enter saves
+[webkit] › drop-video.spec.ts
+[webkit] › getpaid.spec.ts › axe AA contrast, dark, owner: phone 375x812
+[webkit] › getpaid.spec.ts › desktop › Connect Whop: Coming soon while off; on, 6 taps with the Whop key
+[webkit] › getpaid.spec.ts › desktop › Facebook: 4 taps, then 2 after Instagram (one Meta tick); X: 5 taps, Premium never the vermilion
+[webkit] › getpaid.spec.ts › desktop › YouTube: Clip Factory's taps are 15 (Partner Program, the reading step, five payout steps)
+[webkit] › getpaid.spec.ts › no sideways scroll at 320 px on every Get paid screen (hold)
+[webkit] › getpaid.spec.ts › no sideways scroll at 320 px on every Get paid screen (owner)
+[webkit] › getpaid.spec.ts › no sideways scroll at 768 px on every Get paid screen (unread)
+[webkit] › getpaid.spec.ts › phone › Content Rewards: 5 taps without Finance, 3 with it; §38.7's words and ticks
+[webkit] › getpaid.spec.ts › phone › never Live on a Get paid screen: the app's realtime chip steps aside there, and only there
+[webkit] › getpaid.spec.ts › phone › the list, the place pages and Money's card: no sideways scroll, no edges, big targets, arrow cursor, one vermilion at most
+[webkit] › help-pictures.spec.ts › Ask pictures at 1440x900 › a note floats: the field and the tray do not move when it comes and goes
+[webkit] › help-pictures.spec.ts › Ask pictures at 1440x900 › a picture that was not read says so
+[webkit] › help-pictures.spec.ts › Ask pictures at 1440x900 › send with no words: small clean JPEGs reach the API, the bubble shows them, the follow-up carries seen
+[webkit] › help-pictures.spec.ts › Ask pictures at 390x844 › Start over empties the tray and the chat
+[webkit] › help-pictures.spec.ts › Ask pictures at 390x844 › a question that could not go gives its pictures and words back
+[webkit] › help-pictures.spec.ts › Ask pictures at 390x844 › pictures off: no picture button, and a pasted picture gets a note
+[webkit] › page-still.spec.ts › a page change keeps the window still › the macOS desktop window over light glass (1000 x 650)
+[webkit] › top-line.spec.ts › a browser at 1000 x 650: one top line
+[webkit] › top-line.spec.ts › a browser at 1440 x 900: one top line
+[webkit] › top-line.spec.ts › a browser at 390 x 844: one top line
+[webkit] › top-line.spec.ts › the macOS desktop window at 1000 x 650: one top line below the traffic lights

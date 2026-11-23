@@ -15,12 +15,17 @@
 #     runs only after a successful deploy, builds that deploy's commit, keeps the deploy's run number as the
 #     version (its own would go down) and never cancels a started run.
 #   - desktop.yml trusts only a push or run by hand of deploy in this repository, never a fork's pull request
-#     (which can also complete as "deploy" on a branch it calls main), in its concurrency group, resolve's `if`, the
-#     run-by-hand lookup and a second look at the run through the API.
-#   - nothing in desktop.yml gets past resolve: every other job needs it and runs only when it enabled the build
-#     (never always()), no secret is read outside a job, the hand-off counts only when it is the only one made since
-#     the deploy run's latest infra job started, and before it ended, and is downloaded by id, and the run-by-hand
-#     lookup asks GitHub for pushes and runs by hand only.
+#     (which can also complete as "deploy" on a branch it calls main), in its concurrency group, desktop-plan's `if`,
+#     the run-by-hand lookup and a second look at the run through the API.
+#   - nothing in desktop.yml gets past desktop-plan's trust steps (what was the resolve job): every other job needs
+#     desktop-plan and runs only when it enabled the build (never always()), and inside desktop-plan every later step
+#     runs only then, never fails the run, and the deploy role comes after the hand-off and the tools-lock script; no
+#     secret is read outside a job, the hand-off counts only when it is the only one made since the deploy run's
+#     latest infra job started, and before it ended, and is downloaded by id, and the run-by-hand lookup asks GitHub
+#     for pushes and runs by hand only.
+#   - desktop-manifest still runs after every upload: desktop-plan skips it only when nothing is built, the tools
+#     lock is unchanged and manifest.json records the same inputs both jobs work out (run on samples); desktop-plan
+#     skips desktop-tools only with the same lock question desktop-tools asks again itself.
 #   - Lamo Stories (docs/CONTRACTS.md §45.15, §45.18): its agent image has its own tag (stories-agent- + a hash of
 #     stories/** and web/src/stories/engine/**), shown with Clip Factory's unchanged one in the summary; it is built
 #     before the plan and one that does not build keeps the live tag; the Clip Factory check
@@ -243,23 +248,31 @@ fi
 
 # 13. The desktop jobs never hold the deploy-prod lock: they live in desktop.yml, which runs after a successful deploy
 #     of main, from the values its infra job hands off, and builds exactly the deployed commit.
-resolve="$(job resolve "$desktop_wf")"
+# resolve: desktop-plan's header and its trust steps, up to the end of "read the hand-off" (what was the resolve
+# job); plan_later: every step after them.
+resolve="$(awk '/^        id: handoff$/ { h = 1 } h && /^      - / { exit } { print }' <<<"$plan")"
+plan_later="$(awk '/^        id: handoff$/ { h = 1 } h && /^      - / { on = 1 } on { print }' <<<"$plan")"
 deploy_desktop_jobs="$(job_names "$deploy" | grep '^desktop' || true)"
 checkouts="$(grep -c 'uses: actions/checkout@' "$desktop_wf" || true)"
+# Every job's checkout is desktop-plan's sha; desktop-plan's own (its one checkout) is the sha its first step found.
 # shellcheck disable=SC2016  # literal workflow expressions
-deployed_refs="$(grep -cF 'ref: ${{ needs.resolve.outputs.sha }}' "$desktop_wf" || true)"
+deployed_refs="$(grep -cF 'ref: ${{ needs.desktop-plan.outputs.sha }}' "$desktop_wf" || true)"
 # shellcheck disable=SC2016
-if [ -z "$deploy_desktop_jobs" ] \
+own_ref="$(grep -cF 'ref: ${{ steps.run.outputs.sha }}' "$desktop_wf" || true)"
+# shellcheck disable=SC2016
+if [ -z "$deploy_desktop_jobs" ] && [ "$own_ref" = 1 ] \
+  && [ "$(grep -c 'uses: actions/checkout@' <<<"$plan")" = 1 ] \
+  && grep -qF 'ref: ${{ steps.run.outputs.sha }}' <<<"$plan_later" \
   && grep -Eq '^    workflows: \[deploy\]$' "$desktop_wf" && grep -Eq '^    branches: \[main\]$' "$desktop_wf" \
   && grep -qF "github.event.workflow_run.conclusion == 'success'" <<<"$resolve" \
   && grep -qF 'SHA: ${{ github.event.workflow_run.head_sha }}' <<<"$resolve" \
-  && [ "$checkouts" -gt 0 ] && [ "$checkouts" = "$deployed_refs" ] \
+  && [ "$checkouts" -gt 1 ] && [ "$checkouts" = "$((deployed_refs + own_ref))" ] \
   && job infra | grep -q 'name: desktop-handoff' \
   && grep -qF 'artifact-ids: ${{ steps.run.outputs.artifact_id }}' <<<"$resolve" && grep -qF 'merge-multiple: true' <<<"$resolve" \
   && grep -qF 'run-id: ${{ steps.run.outputs.run_id }}' <<<"$resolve"; then
   ok "the desktop jobs run in desktop.yml after a successful deploy, on the deployed commit, from infra's hand-off"
 else
-  not_ok "desktop.yml must hold every desktop job (deploy.yml: ${deploy_desktop_jobs:-none}), run on deploy's success, check out workflow_run.head_sha in every job (${deployed_refs}/${checkouts}) and download infra's desktop-handoff by the id resolve checked"
+  not_ok "desktop.yml must hold every desktop job (deploy.yml: ${deploy_desktop_jobs:-none}), run on deploy's success, check out workflow_run.head_sha in every job ($((deployed_refs + own_ref))/${checkouts}, desktop-plan's own ${own_ref}) and download infra's desktop-handoff by the id desktop-plan checked"
 fi
 
 # 13b. Only this repository's push or run-by-hand deploys get desktop.yml's secrets and the deploy role: a fork's pull
@@ -276,16 +289,16 @@ if grep -qF "$trusted_repo" <<<"$resolve" && grep -qF "$trusted_event" <<<"$reso
   && grep -qF 'compare/${SHA}...main' <<<"$resolve"; then
   ok "desktop.yml builds and signs only for this repository's push or run-by-hand deploys of main"
 else
-  not_ok "desktop.yml must check workflow_run.event and head_repository in its concurrency group and resolve, filter the run-by-hand lookup the same way, and re-check the run and its commit through the API"
+  not_ok "desktop.yml must check workflow_run.event and head_repository in its concurrency group and desktop-plan's trust steps, filter the run-by-hand lookup the same way, and re-check the run and its commit through the API"
 fi
 
-# 13c. Nothing in desktop.yml gets past resolve. Every other job needs resolve, and its `if` requires
-#      needs.resolve.outputs.enabled == 'true' (one of its && parts, with no || to get around it, and no ${{ }} inside,
-#      which would make the `if` a string, always true); no job uses always(), which runs a job even when resolve
-#      failed or was skipped. No secret is read outside a job: the workflow's env, run-name and concurrency are worked
-#      out for every run, a fork's pull request's too. Every job key must be one these checks can read, so a job
-#      cannot hide from them.
-enabled="needs.resolve.outputs.enabled == 'true'"
+# 13c. Nothing in desktop.yml gets past desktop-plan. Every other job needs desktop-plan, and its `if` requires
+#      needs.desktop-plan.outputs.enabled == 'true' (one of its && parts, with no || to get around it, and no ${{ }}
+#      inside, which would make the `if` a string, always true); no job uses always(), which runs a job even when
+#      desktop-plan failed or was skipped. No secret is read outside a job: the workflow's env, run-name and
+#      concurrency are worked out for every run, a fork's pull request's too. Every job key must be one these checks
+#      can read, so a job cannot hide from them.
+enabled="needs.desktop-plan.outputs.enabled == 'true'"
 # shellcheck disable=SC2016  # the literal text ${{
 expr_open='${{'
 expr_close='}}'
@@ -293,10 +306,10 @@ unguarded=()
 while IFS= read -r name; do
   body="$(job "$name" "$desktop_wf")"
   if grep -qF 'always()' <<<"$body"; then unguarded+=("${name} (always())"); continue; fi
-  [ "$name" = resolve ] && continue
+  [ "$name" = desktop-plan ] && continue
   cond="$(job_if <<<"$body")"
-  if ! job_needs <<<"$body" | grep -qx resolve; then
-    unguarded+=("${name} (does not need resolve)")
+  if ! job_needs <<<"$body" | grep -qx desktop-plan; then
+    unguarded+=("${name} (does not need desktop-plan)")
   elif [[ "$cond" == *"||"* || "$cond" == *"$expr_open"* || "$cond" == *"$expr_close"* ]] \
     || ! awk -F ' *&& *' '{ for (i = 1; i <= NF; i++) print $i }' <<<"$cond" | grep -qxF "$enabled"; then
     unguarded+=("${name} (if: ${cond:-none})")
@@ -305,11 +318,45 @@ done < <(job_names "$desktop_wf")
 unreadable="$(awk '$0 == "jobs:" { on = 1; next } on && /^[^ #]/ { exit } on && /^  [^ #]/ && !/^  [A-Za-z0-9_-]+:$/' "$desktop_wf")"
 outside_secrets="$(awk '/^[^ #]/ { top = $1 } top != "jobs:" && !/^[[:space:]]*#/ { print NR ": " $0 }' "$desktop_wf" \
   | grep -w 'secrets' || true)"
-if [ "$(job_names "$desktop_wf" | head -1)" = resolve ] && [ "${#unguarded[@]}" -eq 0 ] \
+if [ "$(job_names "$desktop_wf" | head -1)" = desktop-plan ] && [ "${#unguarded[@]}" -eq 0 ] \
   && [ -z "$unreadable" ] && [ -z "$outside_secrets" ]; then
-  ok "every desktop.yml job but resolve needs it and runs only when it enabled the build; no always(), no secret outside a job"
+  ok "every desktop.yml job but desktop-plan needs it and runs only when it enabled the build; no always(), no secret outside a job"
 else
-  not_ok "desktop.yml jobs must need resolve and require ${enabled}, without always(), || or an inner \${{ }}: ${unguarded[*]:-}${unreadable:+; unreadable job keys: ${unreadable}}${outside_secrets:+; secrets outside a job: ${outside_secrets}}"
+  not_ok "desktop.yml jobs must need desktop-plan and require ${enabled}, without always(), || or an inner \${{ }}: ${unguarded[*]:-}${unreadable:+; unreadable job keys: ${unreadable}}${outside_secrets:+; secrets outside a job: ${outside_secrets}}"
+fi
+
+# 13c2. Inside desktop-plan, nothing runs before its trust steps (which deploy run, the download, read the hand-off;
+#       resolve's, which may fail the run), and every later step runs only when they enabled the build and never
+#       fails the run (the plan never did), so the job itself has no continue-on-error. Its one checkout, the tools
+#       lock's script (code from the commit) and only then the deploy role, in that order, so the script never runs
+#       with AWS keys set; and nothing here installs or builds (npm, npx, cargo, uv, pip, yarn, pnpm).
+step_gate="        if: steps.handoff.outputs.enabled == 'true'"
+# later_steps: "<steps> <steps without the gate or continue-on-error: true>" of a list of steps on stdin.
+later_steps() {
+  awk -v gate="$step_gate" '
+    /^      - / { if (n && !(g && c)) bad++; n++; g = 0; c = 0; next }
+    $0 == gate { g = 1 }
+    $0 == "        continue-on-error: true" { c = 1 }
+    END { if (n && !(g && c)) bad++; print n + 0, bad + 0 }
+  '
+}
+line_of() { grep -nF -- "$1" <<<"$plan" | head -1 | cut -d: -f1 || true; }
+handoff_at="$(line_of '        id: handoff')"
+checkout_at="$(line_of 'uses: actions/checkout@')"
+tools_at="$(line_of '        id: tools')"
+role_at="$(line_of 'uses: aws-actions/configure-aws-credentials@')"
+plan_at="$(line_of '        id: plan')"
+# shellcheck disable=SC2016
+if [ "$(grep -c '^      - ' <<<"$resolve")" = 3 ] && [ "$(later_steps <<<"$plan_later")" = "4 0" ] \
+  && [ -n "$handoff_at" ] && [ -n "$checkout_at" ] && [ -n "$tools_at" ] && [ -n "$role_at" ] && [ -n "$plan_at" ] \
+  && [ "$handoff_at" -lt "$checkout_at" ] && [ "$checkout_at" -lt "$tools_at" ] && [ "$tools_at" -lt "$role_at" ] \
+  && [ "$role_at" -lt "$plan_at" ] && [ "$(grep -c 'configure-aws-credentials' <<<"$plan")" = 1 ] \
+  && ! grep -Eq '^    continue-on-error:' <<<"$plan" \
+  && grep -Eq '^      actions: read$' <<<"$plan" && grep -Eq '^      id-token: write$' <<<"$plan" \
+  && ! grep -v '^[[:space:]]*#' <<<"$plan" | grep -Eq '(^|[^A-Za-z0-9_./-])(npm|npx|cargo|uv|uvx|pip|pip3|yarn|pnpm) '; then
+  ok "desktop-plan checks out, runs the lock script and assumes the deploy role only after its trust steps enabled the build"
+else
+  not_ok "desktop-plan must start with its 3 trust steps, then checkout, the tools step, the role and the plan, each with \"if: steps.handoff.outputs.enabled == 'true'\" and continue-on-error: true (steps without: $(later_steps <<<"$plan_later")), no job-level continue-on-error, and run no npm, cargo, uv or pip"
 fi
 
 # 13d. The hand-off counts only when it is the only one made since the deploy run's latest successful infra job started,
@@ -370,9 +417,9 @@ if [ -n "$verdict_prog" ] && [ -n "$lookup_prog" ] \
   && grep -qF 'pushes="$(gh api "${runs}&event=push")"' <<<"$resolve" \
   && grep -qF 'dispatches="$(gh api "${runs}&event=workflow_dispatch")"' <<<"$resolve" \
   && ! grep -qF 'per_page=50' <<<"$resolve"; then
-  ok "resolve takes only the hand-off made since the deploy run's latest infra job started, and asks GitHub by event for the run by hand"
+  ok "desktop-plan takes only the hand-off made since the deploy run's latest infra job started, and asks GitHub by event for the run by hand"
 else
-  not_ok "resolve must accept the one desktop-handoff made since its latest infra job's started_at (and by completed_at plus a minute), and look up the run by hand with event=push and event=workflow_dispatch, one gh call each (newest run_number)"
+  not_ok "desktop-plan must accept the one desktop-handoff made since its latest infra job's started_at (and by completed_at plus a minute), and look up the run by hand with event=push and event=workflow_dispatch, one gh call each (newest run_number)"
 fi
 
 # 14. The version stays 1.<deploy run number>.0 (desktop.yml's own number started again at 1, and the updater never
@@ -380,7 +427,7 @@ fi
 # shellcheck disable=SC2016
 if ! grep -Eq '\$\{\{[^}]*github\.run_number' "$desktop_wf" \
   && grep -qF 'RUN_NUMBER: ${{ github.event.workflow_run.run_number }}' <<<"$resolve" \
-  && grep -qF 'RUN_NUMBER: ${{ needs.resolve.outputs.run_number }}' <<<"$plan" \
+  && grep -qF 'RUN_NUMBER: ${{ steps.run.outputs.run_number }}' <<<"$plan_later" \
   && grep -qF 'version="1.${RUN_NUMBER}.0"' <<<"$plan" \
   && grep -qF "&& 'desktop-prod' ||" "$desktop_wf" \
   && awk '/^concurrency:$/ { on = 1; next } on && /^[^ ]/ { exit } on' "$desktop_wf" | grep -Eq '^  cancel-in-progress: false$' \
@@ -388,6 +435,101 @@ if ! grep -Eq '\$\{\{[^}]*github\.run_number' "$desktop_wf" \
   ok "desktop versions are 1.<deploy run number>.0, and desktop.yml never cancels a started run"
 else
   not_ok "desktop.yml must take its version from the deploy run (never github.run_number) and run in desktop-prod with cancel-in-progress: false"
+fi
+
+# conjuncts: the && parts of a job's `if` (from job_if), one per line.
+conjuncts() { awk -F ' *&& *' '{ for (i = 1; i <= NF; i++) print $i }'; }
+# step <name> <job body>: one step of a job, from its "- name:" line to the next step.
+step() { awk -v name="      - name: $1" '$0 == name { on = 1; print; next } on && /^      - / { exit } on { print }' <<<"$2"; }
+
+# 14b. A release that changes no tool never starts desktop-tools: desktop-plan asks the same question (the same lock
+#      hash, live manifest and comparison lines) before the deploy role, and desktop-tools is skipped only on its
+#      "false". desktop-tools still asks again itself, and fetches, signs and uploads only on its own answer.
+# shellcheck disable=SC2016  # literal workflow text
+lock_question() { grep -E '^          (want=|live=|if \[ "\$live" = "\$want" \]; then$)' <<<"$1" || true; }
+plan_tools_step="$(step 'are the live tools this lock' "$plan")"
+own_tools_step="$(step 'is the live manifest this lock' "$tools")"
+# shellcheck disable=SC2016  # literal workflow text
+if [ "$(lock_question "$plan_tools_step" | wc -l | tr -d ' ')" = 3 ] \
+  && [ "$(lock_question "$plan_tools_step")" = "$(lock_question "$own_tools_step")" ] \
+  && grep -A1 -F 'if [ "$live" = "$want" ]; then' <<<"$plan_tools_step" | grep -qF 'echo "changed=false" >> "$GITHUB_OUTPUT"' \
+  && [ "$(grep -c 'changed=false' <<<"$plan_tools_step")" = 1 ] \
+  && grep -Fxq '      tools: ${{ steps.tools.outputs.changed }}' <<<"$plan" \
+  && job_if <<<"$tools" | conjuncts | grep -qxF "needs.desktop-plan.outputs.tools != 'false'" \
+  && [ "$(grep -c "^        if: steps.plan.outputs.changed == 'true'$" <<<"$tools")" = 3 ]; then
+  ok "desktop-plan skips desktop-tools only when the live tool manifest has this lock (desktop-tools asks again)"
+else
+  not_ok "desktop-plan's tools step must ask desktop-tools' own question (want=, live=, the comparison) and desktop-tools must run unless its output is 'false', still gating its 3 steps on its own check"
+fi
+
+# 14c. desktop-manifest still runs after every upload: it needs desktop-upload and desktop-tools-upload, runs with
+#      !cancelled() (those are skipped when nothing is built), and desktop-plan's "false" is its only skip. That is said
+#      only when nothing is built, the tools lock is unchanged and manifest.json records (S3 metadata "inputs", read
+#      after latest.json is written) the same inputs as now; both jobs work them out with the same manifest_inputs.
+#      The decision is run on samples, with a stand-in for aws that answers head-object from "<key> <query> <value>"
+#      lines.
+manifest_job="$(job desktop-manifest "$desktop_wf")"
+inputs_fn() { awk '/^          manifest_inputs\(\) \{$/ { on = 1 } on { print } on && /^          \}$/ { exit }' <<<"$1"; }
+plan_inputs_fn="$(inputs_fn "$plan")"
+manifest_inputs_fn="$(inputs_fn "$manifest_job")"
+decision="$(awk '/^          manifest=true$/ { on = 1 } on { print } on && /^          fi$/ { exit }' <<<"$plan")"
+fake_aws() {
+  local key="" query="" line
+  while [ "$#" -gt 0 ]; do
+    case "$1" in --key) key="$2"; shift ;; --query) query="$2"; shift ;; esac
+    shift
+  done
+  line="$(grep -F -- "${key} ${query} " <<<"$FAKE_S3" | head -1 || true)"
+  [ -n "$line" ] || return 254
+  printf '%s\n' "${line#* * }"
+}
+# inputs_now <fake S3>: what desktop-manifest records; decide <stale> <tools changed> <fake S3>: desktop-plan's output.
+# The workflow's own text runs them (eval), with these variables and aws().
+# shellcheck disable=SC2329
+inputs_now() { (FAKE_S3="$1"; WEB_BUCKET=web; aws() { fake_aws "$@"; }; eval "$manifest_inputs_fn"; manifest_inputs) 2>/dev/null || echo unreadable; }
+# shellcheck disable=SC2034,SC2154,SC2329
+decide() {
+  (FAKE_S3="$3"; stale="$1"; TOOLS_CHANGED="$2"; WEB_BUCKET=web; summary=(); aws() { fake_aws "$@"; }
+    eval "$plan_inputs_fn"; eval "$decision"; printf '%s\n' "$manifest") 2>/dev/null || echo unreadable
+}
+bucket='downloads/Clip-Factory.dmg ETag "d1"
+downloads/Clip-Factory-Setup.exe ETag "w1"
+downloads/updates/mac.json ETag "m1"
+downloads/updates/windows.json ETag "p1"
+downloads/latest.json ETag "l1"'
+recorded="$(inputs_now "$bucket")"
+written="${bucket}"$'\n'"downloads/manifest.json Metadata.inputs ${recorded}"
+latest_at="$(grep -n '/downloads/latest\.json" ' <<<"$manifest_job" | head -1 | cut -d: -f1 || true)"
+# shellcheck disable=SC2016  # literal workflow text
+inputs_at="$(grep -nxF '          inputs="$(manifest_inputs)"' <<<"$manifest_job" | head -1 | cut -d: -f1 || true)"
+# shellcheck disable=SC2016
+record_at="$(grep -nF -- '--metadata "inputs=${inputs}"' <<<"$manifest_job" | head -1 | cut -d: -f1 || true)"
+manifest_needs="$(job_needs <<<"$manifest_job" | sort | tr '\n' ' ' || true)"
+# shellcheck disable=SC2016
+if [ -n "$plan_inputs_fn" ] && [ "$plan_inputs_fn" = "$manifest_inputs_fn" ] && [ -n "$decision" ] \
+  && [[ "$recorded" =~ ^[0-9a-f]{32}$ ]] \
+  && [ "$(decide false false "$written")" = false ] \
+  && [ "$(decide true false "$written")" = true ] \
+  && [ "$(decide false true "$written")" = true ] \
+  && [ "$(decide false '' "$written")" = true ] \
+  && [ "$(decide false false "${written//\"m1\"/\"m2\"}")" = true ] \
+  && [ "$(decide false false "$(grep -v Clip-Factory-Setup <<<"$written")")" = true ] \
+  && [ "$(decide false false "$bucket")" = true ] \
+  && [ "$(decide false false "${bucket}"$'\n''downloads/manifest.json Metadata.inputs None')" = true ] \
+  && [ "$(decide false false '')" = true ] \
+  && [ "$(grep -c 'manifest=false' <<<"$plan")" = 1 ] && grep -q 'manifest=false' <<<"$decision" \
+  && grep -Fxq '            echo "manifest=${manifest}"' <<<"$plan" \
+  && grep -Fxq '      manifest: ${{ steps.plan.outputs.manifest }}' <<<"$plan" \
+  && [ "$manifest_needs" = "desktop desktop-plan desktop-tools-upload desktop-upload " ] \
+  && job_if <<<"$manifest_job" | conjuncts | grep -qxF '!cancelled()' \
+  && job_if <<<"$manifest_job" | conjuncts | grep -qxF "needs.desktop-plan.outputs.manifest != 'false'" \
+  && [ -n "$latest_at" ] && [ -n "$inputs_at" ] && [ -n "$record_at" ] \
+  && [ "$latest_at" -lt "$inputs_at" ] && [ "$inputs_at" -lt "$record_at" ] \
+  && grep -F -- '--metadata "inputs=${inputs}"' <<<"$manifest_job" | grep -q '^            --cache-control "no-cache" --content-type "application/json"' \
+  && grep -B1 -F -- '--metadata "inputs=${inputs}"' <<<"$manifest_job" | grep -qF '/downloads/manifest.json" '; then
+  ok "desktop-manifest runs after every upload; desktop-plan skips it only with nothing built, no tool change and manifest.json up to date"
+else
+  not_ok "desktop-manifest must need desktop-upload and desktop-tools-upload, run on !cancelled() unless desktop-plan says manifest 'false', and record manifest_inputs (the same in both jobs) on manifest.json after latest.json; desktop-plan may say 'false' only with nothing stale, tools 'false' and the same inputs (needs: ${manifest_needs}; recorded: ${recorded})"
 fi
 
 # 15. Two agent images, two tags (docs/CONTRACTS.md §45.15, ADR-76): Clip Factory's tag hash stays agent/**, skills/**

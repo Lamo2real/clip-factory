@@ -1,14 +1,22 @@
-# Checks every push to main and every pull request. Offline only: never calls AWS or Bedrock, needs no secrets.
-# Branch pushes don't run it on their own: their pull request run does the same checks (and is what branch
-# protection reads), so running both doubled the load and left runners queued for 20+ minutes.
-# The jobs run in parallel (the browser tests as 6 shards); a newer push to the same branch cancels the older
-# run. The desktop job (Tauri, desktop/) runs only when desktop/ changed, since it needs the Linux web view
-# libraries and a Rust build.
+# Checks every pull request, every push to main, and all of main every night. Offline only: never calls AWS or Bedrock,
+# needs no secrets. Branch pushes don't run it on their own: their pull request run does the same checks (and is what
+# branch protection reads), so running both doubled the load and left runners queued for 20+ minutes.
+# Only what a change can break is checked: the changes job says which areas a change touches, and a job whose area did
+# not change is skipped. The required checks (web, api, agent, infra, scripts) still always report: web and agent fail
+# when changes did not finish, so "skipped" only ever means "nothing it tests changed".
+# A push to main skips the web checks and the browser tests: its pull request ran them (with strict=false two green pull
+# requests can still clash on main, which the nightly run finds). It still runs the cheap jobs, which also keep the
+# caches warm. The nightly run (and a run by hand) checks everything. The jobs run in parallel (the browser tests as 7
+# Chromium and 5 WebKit shards); a newer push to the same branch cancels the older run. The desktop job (Tauri, desktop/)
+# runs only when desktop/ changed, since it needs the Linux web view libraries and a Rust build.
 name: ci
 on:
   push:
     branches: [main]
   pull_request:
+  schedule:
+    - cron: "17 2 * * *"
+  workflow_dispatch:
 
 permissions:
   contents: read
@@ -22,9 +30,97 @@ env:
   TERRAFORM_VERSION: "1.15.8"
 
 jobs:
-  # The web checks are three jobs. Branch protection requires the check named `web`, which is the small gate
-  # at the end: it passes only when web-checks and every web-e2e shard passed.
+  # What a change touches. web: the web checks (anything the app, its tests or its scripts read); e2e: the browser tests
+  # (web, less the unit tests'-only files); agent and stories_agent: each agent's own inputs (the same folders as
+  # deploy.yml's image tags, plus the files their tests read from elsewhere); desktop: desktop/. A pull request is
+  # compared with its merge base, a push with the commit before it. With no usable base, on the nightly run, by hand, or
+  # when this file changed, everything runs.
+  changes:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    outputs:
+      web: ${{ steps.diff.outputs.web }}
+      e2e: ${{ steps.diff.outputs.e2e }}
+      agent: ${{ steps.diff.outputs.agent }}
+      stories_agent: ${{ steps.diff.outputs.stories_agent }}
+      desktop: ${{ steps.diff.outputs.desktop }}
+    steps:
+      # The whole history without file contents (blob:none): the diff below needs only commits and trees.
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        with:
+          fetch-depth: 0
+          filter: blob:none
+      - name: which areas changed
+        id: diff
+        env:
+          EVENT: ${{ github.event_name }}
+          BEFORE: ${{ github.event.before }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.sha }}
+        run: |
+          set -euo pipefail
+          say() { echo "$1=$2" >> "$GITHUB_OUTPUT"; echo "$1: $2"; }
+          # flag <area> <files>: true when the area has at least one changed file.
+          flag() { if [ -n "$2" ]; then say "$1" true; else say "$1" false; fi; }
+          everything() { echo "$1"; for a in web e2e agent stories_agent desktop; do say "$a" true; done; }
+          case "$EVENT" in
+            schedule | workflow_dispatch) everything "A full run (${EVENT}): every check runs."; exit 0 ;;
+          esac
+          if [ "$EVENT" = "pull_request" ]; then
+            base="$(git merge-base "$BASE_SHA" "$HEAD_SHA" 2>/dev/null || true)"
+          else
+            base="$BEFORE"
+          fi
+          # A new branch (before is all zeros) or a base this clone does not have: check everything.
+          if [ -z "$base" ] || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
+            if [ "$EVENT" = "push" ]; then
+              echo "No usable base commit; the push to main runs its usual jobs and the desktop checks."
+              say web false; say e2e false; say agent true; say stories_agent true; say desktop true
+            else
+              everything "No usable base commit: every check runs."
+            fi
+            exit 0
+          fi
+          # --no-renames lists a moved file at both paths (and needs no file contents).
+          changed="$(git diff --no-renames --name-only "$base" "$HEAD_SHA")"
+          echo "$(grep -c . <<<"$changed" || true) changed file(s) since ${base}:"
+          head -n 200 <<<"$changed"
+          ci_changed="$(grep -x '.github/workflows/ci.yml' <<<"$changed" || true)"
+          desktop="$(grep -E '^desktop/' <<<"$changed" || true)"
+          # B1: a push to main never runs the web checks or browser tests again; agent and stories-agent always run, so
+          # their image caches stay fresh (pull requests only read them).
+          if [ "$EVENT" = "push" ]; then
+            echo "Push to main: the pull request ran the web checks and browser tests; the nightly run checks main."
+            say web false; say e2e false; say agent true; say stories_agent true
+            flag desktop "${desktop}${ci_changed}"
+            exit 0
+          fi
+          if [ -n "$ci_changed" ]; then everything "ci.yml changed: every check runs."; exit 0; fi
+          # Outside the web: folders the app, its tests and its scripts never read. A web file (unit tests included) that
+          # reads a new file from one of these folders must add it to WEB_READS, or a change to it alone would skip them.
+          NOT_WEB='^(agent|api|desktop|infra|mac|scripts|stories/agent)/|^\.github/|^(index|privacy|terms)\.html$|^style\.css$'
+          # Read by the web anyway: Ask's knowledge and the routes (help-corpus.mjs, ask-knowledge.mjs), the golden
+          # cases (unit tests and getpaid.spec.ts), jobs.py and settings.py (unit tests), the desktop window's code
+          # (background.test.ts).
+          WEB_READS='^api/src/clipfactory_api/(ask|routes)/|^api/src/clipfactory_api/(jobs|settings)\.py$|^api/tests/fixtures/|^desktop/src-tauri/src/'
+          # Only the unit tests (vitest, web-checks) read these; the browser tests and the mock build never do.
+          UNIT_ONLY='^web/test/|^desktop/src-tauri/src/'
+          # The agent image's folders (deploy.yml: agent, skills, config) and what agent/tests reads from elsewhere.
+          AGENT='^(agent|skills|config)/|^api/src/clipfactory_api/(jobs|creators)\.py$|^api/tests/fixtures/|^web/src/api/(types|mock/fixtures)\.ts$|^infra/modules/storage/variables\.tf$'
+          # Lamo Stories' image (deploy.yml: stories, the engine) and the stream rules its isolation test reads.
+          STORIES='^stories/|^web/src/stories/engine/|^infra/modules/(realtime|notify)/main\.tf$'
+          web="$( { grep -vE "$NOT_WEB" <<<"$changed" || true; grep -E "$WEB_READS" <<<"$changed" || true; } | sort -u)"
+          flag web "$web"
+          flag e2e "$(grep -vE "$UNIT_ONLY" <<<"$web" || true)"
+          flag agent "$(grep -E "$AGENT" <<<"$changed" || true)"
+          flag stories_agent "$(grep -E "$STORIES" <<<"$changed" || true)"
+          flag desktop "$desktop"
+
+  # The web checks are three jobs. Branch protection requires the check named `web`, which is the small gate at the
+  # end: it passes only when web-checks and every web-e2e shard passed, or changes said they had nothing to check.
   web-checks:
+    needs: changes
+    if: needs.changes.outputs.web == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 15
     defaults:
@@ -35,9 +131,19 @@ jobs:
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: "24"
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-      - run: npm ci
+      # node_modules comes from the cache web-cache writes on main (keyed on the OS, Node and the lockfile), so npm ci
+      # runs only when this change has a lockfile main has not cached yet.
+      - name: cache keys (Node version)
+        id: keys
+        run: echo "node=$(node --version)" >> "$GITHUB_OUTPUT"
+      - name: node_modules from the cache
+        id: modules
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: web/node_modules
+          key: web-node-modules-v1-${{ runner.os }}-${{ runner.arch }}-node-${{ steps.keys.outputs.node }}-${{ hashFiles('web/package-lock.json') }}
+      - if: steps.modules.outputs.cache-hit != 'true'
+        run: npm ci
       # The committed help corpus, the docs routes table and CONTRACTS §19.6 must match the app routes.
       - name: help corpus is up to date
         run: node scripts/help-corpus.mjs --check
@@ -45,10 +151,16 @@ jobs:
       # pass the secrets filter and stay under 110k tokens.
       - name: Ask knowledge is up to date
         run: node scripts/ask-knowledge.mjs --check
+      # The browser tests' shards (web/e2e/shards): Playwright itself lists each shard's tests with the arguments the
+      # web-e2e jobs pass, and every test of every project must run in exactly one shard.
+      - name: every browser test runs in exactly one shard
+        run: node scripts/e2e-shards.mjs check
       - run: npm run typecheck
       - run: npm run lint
       - run: npm test
-      - run: npm run build
+      # Just the bundle: npm run build would run tsc (the typecheck above) and the corpus scripts (checked above) again.
+      - name: build (vite)
+        run: npx vite build
       # Lamo Stories stays out of Clip Factory's first download (CONTRACTS §45.17): the page loads one script and one
       # stylesheet (index.html), and neither carries Lamo Stories' look (.stories-app, --st-*, st- classes), its shell
       # (StoriesApp) or its animation engine; they come in their own chunks, only when a /stories page opens. The
@@ -73,18 +185,23 @@ jobs:
           done
           [ "$bad" = 0 ] && echo "Main bundle: $js $css $extra: no Lamo Stories code or styles."
 
-  # About 760 Playwright tests at many widths took 32 to 40 minutes as one job. Playwright splits them evenly
-  # over the shards below (fullyParallel, so it splits test by test); each shard builds the mock app once and
-  # runs its share with 4 workers on the 4-CPU runner. To add a shard, add a number to the list: the total is
-  # read from the matrix size.
+  # About 1,700 Chromium tests (the app at many widths, contrast, overflow, help, the screenshots), in 7 shards with 4
+  # workers each, one per 4-CPU runner; each shard builds the mock app once. Playwright's own --shard splits by count in
+  # file order, which put all 206 contrast tests in one shard (14-23 minutes while the others took 8-12), so each shard
+  # runs a list made from the tests' saved times instead (web/e2e/shards, scripts/e2e-shards.mjs): about 44
+  # worker-minutes each. The last shard runs every test in no list, so a new test always runs; web-checks fails when a
+  # test would run in no shard or in two. To change the number of shards, change the matrix and GROUPS in
+  # scripts/e2e-shards.mjs together (the shard step fails when they differ), then run its build.
   web-e2e:
     name: web-e2e (${{ matrix.shard }}/${{ strategy.job-total }})
+    needs: changes
+    if: needs.changes.outputs.e2e == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 25
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6]
+        shard: [1, 2, 3, 4, 5, 6, 7]
     defaults:
       run:
         working-directory: web
@@ -93,15 +210,40 @@ jobs:
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: "24"
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-      - run: npm ci
+      # node_modules and Chromium come from the caches web-cache writes on main; only the system packages are installed.
+      - name: cache keys (Node and Playwright versions)
+        id: keys
+        run: |
+          echo "node=$(node --version)" >> "$GITHUB_OUTPUT"
+          echo "playwright=$(jq -r '.packages["node_modules/playwright-core"].version' package-lock.json)" >> "$GITHUB_OUTPUT"
+      - name: node_modules from the cache
+        id: modules
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: web/node_modules
+          key: web-node-modules-v1-${{ runner.os }}-${{ runner.arch }}-node-${{ steps.keys.outputs.node }}-${{ hashFiles('web/package-lock.json') }}
+      - if: steps.modules.outputs.cache-hit != 'true'
+        run: npm ci
+      - name: Chromium from the cache
+        id: browser
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ms-playwright-v1-chromium-${{ runner.os }}-${{ runner.arch }}-${{ steps.keys.outputs.playwright }}
+      - name: Chromium's system packages (and Chromium, when it was not cached)
+        env:
+          CACHED: ${{ steps.browser.outputs.cache-hit }}
+        run: |
+          if [ "$CACHED" = "true" ]; then npx playwright install-deps chromium; else npx playwright install --with-deps chromium; fi
       - name: Playwright (mock mode, Chromium), shard ${{ matrix.shard }} of ${{ strategy.job-total }}
         env:
-          SHARD: ${{ matrix.shard }}/${{ strategy.job-total }}
+          SHARD: ${{ matrix.shard }}
+          TOTAL: ${{ strategy.job-total }}
         run: |
-          npx playwright install --with-deps chromium
-          npm run e2e -- --shard="$SHARD" --workers=4 --project=chromium --project=screenshots
+          list="$(node scripts/e2e-shards.mjs args chromium "$SHARD" "$TOTAL")"
+          mapfile -t args <<<"$list"
+          echo "playwright test ${args[*]} --workers=4"
+          npm run e2e -- "${args[@]}" --workers=4
       - name: upload the Playwright report
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
@@ -113,13 +255,22 @@ jobs:
           retention-days: 7
           if-no-files-found: ignore
 
-  # WebKit: the Mac app (WKWebView) and the iPhone PWA (Safari). Ask pictures (§26), and the stillness and top-line
-  # checks (§20.16, §11.1; the slide check runs in WebKit on a Mac only, nav-smooth.spec.ts). One job of its own, because
-  # installing WebKit's system packages can take over 20 minutes on a slow apt mirror; paid once here, not per shard.
+  # WebKit: the Mac app (WKWebView) and the iPhone PWA (Safari). Ask pictures (§26), Get paid, and the stillness and
+  # top-line checks (§20.16, §11.1; the slide check runs in WebKit on a Mac only, nav-smooth.spec.ts). 5 shards with 2
+  # workers each, split by time like Chromium (the last runs every WebKit test in no list): one runner with 4 WebKit
+  # browsers starved them (Get paid's setup taps timed out at 2 minutes and Home's hover transition was never sampled on
+  # #175), and Get paid and Ask alone kept that one job at 25-28 minutes. Each shard installs WebKit's system packages,
+  # which can take long on a slow apt mirror, hence the timeout.
   web-e2e-webkit:
-    name: web-e2e (WebKit)
+    name: web-e2e (WebKit ${{ matrix.shard }}/${{ strategy.job-total }})
+    needs: changes
+    if: needs.changes.outputs.e2e == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5]
     defaults:
       run:
         working-directory: web
@@ -128,18 +279,44 @@ jobs:
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: "24"
-          cache: npm
-          cache-dependency-path: web/package-lock.json
-      - run: npm ci
-      - name: Playwright (mock mode, WebKit desktop and iPhone)
+      - name: cache keys (Node and Playwright versions)
+        id: keys
         run: |
-          npx playwright install --with-deps webkit
-          npm run e2e -- --project=webkit --project=webkit-phone --workers=4
+          echo "node=$(node --version)" >> "$GITHUB_OUTPUT"
+          echo "playwright=$(jq -r '.packages["node_modules/playwright-core"].version' package-lock.json)" >> "$GITHUB_OUTPUT"
+      - name: node_modules from the cache
+        id: modules
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: web/node_modules
+          key: web-node-modules-v1-${{ runner.os }}-${{ runner.arch }}-node-${{ steps.keys.outputs.node }}-${{ hashFiles('web/package-lock.json') }}
+      - if: steps.modules.outputs.cache-hit != 'true'
+        run: npm ci
+      - name: WebKit from the cache
+        id: browser
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ms-playwright-v1-webkit-${{ runner.os }}-${{ runner.arch }}-${{ steps.keys.outputs.playwright }}
+      - name: WebKit's system packages (and WebKit, when it was not cached)
+        env:
+          CACHED: ${{ steps.browser.outputs.cache-hit }}
+        run: |
+          if [ "$CACHED" = "true" ]; then npx playwright install-deps webkit; else npx playwright install --with-deps webkit; fi
+      - name: Playwright (mock mode, WebKit desktop and iPhone), shard ${{ matrix.shard }} of ${{ strategy.job-total }}
+        env:
+          SHARD: ${{ matrix.shard }}
+          TOTAL: ${{ strategy.job-total }}
+        run: |
+          list="$(node scripts/e2e-shards.mjs args webkit "$SHARD" "$TOTAL")"
+          mapfile -t args <<<"$list"
+          echo "playwright test ${args[*]} --workers=2"
+          npm run e2e -- "${args[@]}" --workers=2
       - name: upload the Playwright report
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: playwright-report-webkit
+          name: playwright-report-webkit-${{ matrix.shard }}
           path: |
             web/playwright-report
             web/test-results
@@ -147,23 +324,110 @@ jobs:
           if-no-files-found: ignore
 
   # The required check. always() makes it report a failure (not "skipped", which branch protection would accept)
-  # when a job it needs failed or was cancelled.
+  # when a job it needs failed or was cancelled, or when changes did not finish. A job changes said was not needed must
+  # have been skipped; every other must have passed. Not on a push to main (B1): nothing it gates runs there, and
+  # branch protection reads the pull request's run.
   web:
-    needs: [web-checks, web-e2e, web-e2e-webkit]
-    if: always()
+    needs: [changes, web-checks, web-e2e, web-e2e-webkit]
+    if: always() && github.event_name != 'push'
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     steps:
-      - name: web-checks and every web-e2e shard passed
+      - name: web-checks and every web-e2e shard passed (or had nothing to check)
         env:
+          CHANGES: ${{ needs.changes.result }}
+          NEED_CHECKS: ${{ needs.changes.outputs.web }}
+          NEED_E2E: ${{ needs.changes.outputs.e2e }}
           CHECKS: ${{ needs.web-checks.result }}
           E2E: ${{ needs.web-e2e.result }}
           WEBKIT: ${{ needs.web-e2e-webkit.result }}
         run: |
+          echo "changes: ${CHANGES} (web: ${NEED_CHECKS:-none}, e2e: ${NEED_E2E:-none})"
           echo "web-checks: ${CHECKS}"
-          echo "web-e2e (all shards): ${E2E}"
-          echo "web-e2e (WebKit): ${WEBKIT}"
-          [ "$CHECKS" = "success" ] && [ "$E2E" = "success" ] && [ "$WEBKIT" = "success" ]
+          echo "web-e2e (all Chromium shards): ${E2E}"
+          echo "web-e2e (all WebKit shards): ${WEBKIT}"
+          [ "$CHANGES" = "success" ] || { echo "::error::The changes job ended ${CHANGES}, so nothing may count as skipped."; exit 1; }
+          ok=1
+          # need <job> <needed> <result>
+          need() {
+            case "$2" in
+              true) [ "$3" = "success" ] || { echo "::error::$1 was needed and ended ${3}."; ok=0; } ;;
+              false) [ "$3" = "skipped" ] || { echo "::error::$1 was not needed but ended ${3}."; ok=0; } ;;
+              *) echo "::error::changes gave no answer for $1."; ok=0 ;;
+            esac
+          }
+          need web-checks "$NEED_CHECKS" "$CHECKS"
+          need web-e2e "$NEED_E2E" "$E2E"
+          need web-e2e-webkit "$NEED_E2E" "$WEBKIT"
+          [ "$ok" = 1 ]
+
+  # A5: node_modules and the two browsers for web-checks and the web-e2e jobs, which only read them. Only main (a push,
+  # the nightly run) writes these caches, so pull requests never fill the 10 GB cache store with their own copies. A
+  # cache that is there already is only looked up, not downloaded, so this takes seconds on most pushes.
+  web-cache:
+    if: github.event_name != 'pull_request'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: web
+    steps:
+      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
+        with:
+          node-version: "24"
+      - name: cache keys (Node and Playwright versions)
+        id: keys
+        run: |
+          echo "node=$(node --version)" >> "$GITHUB_OUTPUT"
+          echo "playwright=$(jq -r '.packages["node_modules/playwright-core"].version' package-lock.json)" >> "$GITHUB_OUTPUT"
+      - name: is node_modules cached
+        id: modules
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: web/node_modules
+          key: web-node-modules-v1-${{ runner.os }}-${{ runner.arch }}-node-${{ steps.keys.outputs.node }}-${{ hashFiles('web/package-lock.json') }}
+          lookup-only: true
+      - name: is Chromium cached
+        id: chromium
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ms-playwright-v1-chromium-${{ runner.os }}-${{ runner.arch }}-${{ steps.keys.outputs.playwright }}
+          lookup-only: true
+      - name: is WebKit cached
+        id: webkit
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ms-playwright-v1-webkit-${{ runner.os }}-${{ runner.arch }}-${{ steps.keys.outputs.playwright }}
+          lookup-only: true
+      - if: steps.modules.outputs.cache-hit != 'true' || steps.chromium.outputs.cache-hit != 'true' || steps.webkit.outputs.cache-hit != 'true'
+        run: npm ci
+      - if: steps.modules.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: web/node_modules
+          key: ${{ steps.modules.outputs.cache-primary-key }}
+      - name: download Chromium
+        if: steps.chromium.outputs.cache-hit != 'true'
+        run: npx playwright install chromium
+      - if: steps.chromium.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ steps.chromium.outputs.cache-primary-key }}
+      # Alone in the folder, so each cache holds one browser and each shard downloads only its own.
+      - name: download WebKit
+        if: steps.webkit.outputs.cache-hit != 'true'
+        run: |
+          rm -rf ~/.cache/ms-playwright
+          npx playwright install webkit
+      - if: steps.webkit.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/ms-playwright
+          key: ${{ steps.webkit.outputs.cache-primary-key }}
 
   api:
     runs-on: ubuntu-24.04
@@ -190,12 +454,24 @@ jobs:
       - name: the Lambda package has the help corpus
         run: uv run pytest -q tests/test_help_corpus.py -k zip
 
+  # A required check. It runs when the agent's inputs changed, and always on main (a push, the nightly run), which
+  # writes the image's layer cache. !cancelled() (not always()) so a newer push still cancels it; when changes failed it
+  # runs and fails at once, so it is never "skipped" without changes saying the agent did not change.
   agent:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.agent == 'true') }}
     # Native ARM64 (AgentCore's architecture): the image's PO token self-check runs Deno, and Deno under QEMU's arm64
     # emulation dies at random with SIGILL (exit -4), which failed this job on main without any code change.
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 45
     steps:
+      - name: the changes job finished
+        if: needs.changes.result != 'success'
+        env:
+          RESULT: ${{ needs.changes.result }}
+        run: |
+          echo "::error::The changes job ended ${RESULT}, so this check cannot be skipped or passed."
+          exit 1
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
         with:
@@ -219,6 +495,8 @@ jobs:
           docker buildx version
       # The image is built natively for ARM64 (AgentCore) and never pushed; the layer cache lives in GitHub. Its last
       # step starts the PO token server with Deno and needs a /ping answer, the same check the deployed image passes.
+      # Pull requests only read the layer cache: their layers would push main's npm, uv and Rust layers out of the 10 GB
+      # store.
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
       - name: build the agent image (linux/arm64, not pushed)
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
@@ -229,15 +507,25 @@ jobs:
           push: false
           provenance: false
           cache-from: type=gha,scope=agent
-          cache-to: type=gha,scope=agent,mode=max
+          cache-to: ${{ github.event_name != 'pull_request' && 'type=gha,scope=agent,mode=max' || '' }}
 
   # Lamo Stories' own AgentCore runtime (stories/agent, docs/CONTRACTS.md §45.11, ADR-76): its own project, tests and
   # image, apart from Clip Factory's agent job above. Native ARM64 for the same Deno reason. ffmpeg comes from Ubuntu
-  # (with libass, like the image's Debian one), so the pipeline, captions and assembly tests run for real.
+  # (with libass, like the image's Debian one), so the pipeline, captions and assembly tests run for real. Like agent, it
+  # runs when its own inputs changed and always on main.
   stories-agent:
+    needs: changes
+    if: ${{ !cancelled() && (needs.changes.result != 'success' || needs.changes.outputs.stories_agent == 'true') }}
     runs-on: ubuntu-24.04-arm
     timeout-minutes: 45
     steps:
+      - name: the changes job finished
+        if: needs.changes.result != 'success'
+        env:
+          RESULT: ${{ needs.changes.result }}
+        run: |
+          echo "::error::The changes job ended ${RESULT}, so this check cannot be skipped or passed."
+          exit 1
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - uses: astral-sh/setup-uv@d0cc045d04ccac9d8b7881df0226f9e82c39688e # v6.8.0
         with:
@@ -258,7 +546,8 @@ jobs:
           uv run mypy
           uv run pytest -q
       # Built natively for ARM64 (AgentCore) and never pushed; its last steps run the engine under Deno and the
-      # self-check (one frame drawn, one sound mastered, one caption burned in), as the deployed image does.
+      # self-check (one frame drawn, one sound mastered, one caption burned in), as the deployed image does. Pull
+      # requests only read the layer cache, as in agent.
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
       - name: build the Lamo Stories agent image (linux/arm64, not pushed)
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
@@ -269,7 +558,7 @@ jobs:
           push: false
           provenance: false
           cache-from: type=gha,scope=stories-agent
-          cache-to: type=gha,scope=stories-agent,mode=max
+          cache-to: ${{ github.event_name != 'pull_request' && 'type=gha,scope=stories-agent,mode=max' || '' }}
 
   infra:
     runs-on: ubuntu-24.04
@@ -280,6 +569,20 @@ jobs:
         with:
           terraform_version: ${{ env.TERRAFORM_VERSION }}
           terraform_wrapper: false
+      # A7: every init below links the providers from one cache folder instead of downloading the AWS provider about 20
+      # times. init still checks each cached provider against the checksums in that root's lock file, so a copy that
+      # does not match is downloaded again, never run. Main writes the cache (after the tests pass); pull requests read
+      # it. No restore-keys: a provider bump starts a fresh cache instead of growing the old one.
+      - name: Terraform's provider cache folder
+        run: |
+          mkdir -p "${RUNNER_TEMP}/terraform-plugin-cache"
+          echo "TF_PLUGIN_CACHE_DIR=${RUNNER_TEMP}/terraform-plugin-cache" >> "$GITHUB_ENV"
+      - name: the providers from the cache
+        id: providers
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/terraform-plugin-cache
+          key: terraform-providers-ci-v1-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('infra/**/.terraform.lock.hcl') }}
       - run: terraform -chdir=infra fmt -check -recursive
       - name: init (no backend) and validate
         run: |
@@ -306,6 +609,12 @@ jobs:
             echo "::endgroup::"
           done
           echo "Tested ${#dirs[@]} Terraform roots: ${dirs[*]}"
+      - name: save the provider cache (main only)
+        if: github.event_name != 'pull_request' && steps.providers.outputs.cache-hit != 'true'
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ${{ runner.temp }}/terraform-plugin-cache
+          key: ${{ steps.providers.outputs.cache-primary-key }}
       - uses: terraform-linters/setup-tflint@90f302c255ef959cbfb4bd10581afecdb7ece3e6 # v4.1.1
       - name: tflint
         working-directory: infra
@@ -315,9 +624,10 @@ jobs:
           tflint --init "${config[@]}"
           tflint --recursive "${config[@]}"
 
+  # The repository's scripts, and (A4: folded in here, so a run takes one runner fewer) the Mac's TikTok helper.
   scripts:
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
       - name: shellcheck
@@ -336,61 +646,21 @@ jobs:
         run: bash scripts/test-wait-for-jobs.sh
       - name: read-logs.yml prints the Content Rewards lines and connection, with nothing secret (fake aws)
         run: bash scripts/test-read-logs.sh
-
-  # The Mac's TikTok helper (mac/tiktok-helper, CONTRACTS §47): its rules (never twice, pacing, the trial pause, the
-  # caption match) and its install scripts. It runs on the owner's Mac, so no browser is started here.
-  mac-helper:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    defaults:
-      run:
-        working-directory: mac/tiktok-helper
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+      # The Mac's TikTok helper (mac/tiktok-helper, CONTRACTS §47): its rules (never twice, pacing, the trial pause, the
+      # caption match) and its install scripts. It runs on the owner's Mac, so no browser is started here.
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: "24"
           cache: npm
           cache-dependency-path: mac/tiktok-helper/package-lock.json
-      - run: npm ci
-      - run: npm test
-      - name: shellcheck
-        run: shellcheck install.sh uninstall.sh
-
-  changes:
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    outputs:
-      desktop: ${{ steps.diff.outputs.desktop }}
-    steps:
-      - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
-        with:
-          fetch-depth: 0
-      - name: did desktop/ change
-        id: diff
-        env:
-          EVENT: ${{ github.event_name }}
-          BEFORE: ${{ github.event.before }}
-          BASE_SHA: ${{ github.event.pull_request.base.sha }}
-          HEAD_SHA: ${{ github.sha }}
+      - name: the Mac's TikTok helper (npm ci, npm test)
+        working-directory: mac/tiktok-helper
         run: |
-          if [ "$EVENT" = "pull_request" ]; then
-            base="$(git merge-base "$BASE_SHA" "$HEAD_SHA" 2>/dev/null || true)"
-          else
-            base="$BEFORE"
-          fi
-          # A new branch (before is all zeros) or a base this clone does not have: check everything.
-          if [ -z "$base" ] || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
-            echo "desktop=true" >> "$GITHUB_OUTPUT"
-            echo "No usable base commit; running the desktop checks."
-            exit 0
-          fi
-          if git diff --quiet "$base" "$HEAD_SHA" -- desktop; then
-            echo "desktop=false" >> "$GITHUB_OUTPUT"
-            echo "desktop/ did not change; skipping the desktop checks."
-          else
-            echo "desktop=true" >> "$GITHUB_OUTPUT"
-          fi
+          npm ci
+          npm test
+      - name: the Mac's TikTok helper install scripts (shellcheck)
+        working-directory: mac/tiktok-helper
+        run: shellcheck install.sh uninstall.sh
 
   desktop:
     needs: changes

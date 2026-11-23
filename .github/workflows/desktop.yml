@@ -15,8 +15,9 @@
 # Only a push to main or a run by hand of this repository's deploy.yml is trusted. workflow_run matches workflows by
 #   name and branches by head_branch, so a fork's pull request from a branch it calls main, with a deploy.yml of its
 #   own that runs on pull_request, also completes as "deploy" on "main"; this workflow runs with the signing keys and
-#   the deploy role, so such a run must never get past resolve (the concurrency group and resolve's `if` check the
-#   event and the repository, and resolve asks GitHub again for the run and checks its commit is on main).
+#   the deploy role, so such a run must never get past desktop-plan's first steps (the concurrency group and
+#   desktop-plan's `if` check the event and the repository, and desktop-plan asks GitHub again for the run and checks
+#   its commit is on main, before it checks out anything or assumes the role).
 # Version: every desktop build is 1.<deploy run number>.0, where the number is github.run_number of that deploy.yml
 #   run, never this workflow's own (it started again at 1, and the updater refuses a lower version). It goes up on
 #   every deploy; a re-run of either workflow, or a run by hand for the same deploy, keeps it, so a re-built leg
@@ -29,23 +30,31 @@
 #   deploy that did not succeed or is not trusted (above), or a run by hand from another branch, does nothing and
 #   gets a group of its own, so it never pushes out a waiting build.
 #
-#   resolve     - which deploy run (trusted only as above), its commit and number, and its hand-off. Fails (red)
-#               when the hand-off is broken or missing from a deploy that should have one, so installed apps never
-#               stop updating without a sign, and when it is not the only one made since the run's latest successful
-#               infra job started, and before it ended (anything earlier in the deploy could have uploaded one; an
-#               earlier attempt's is left out). It downloads that very artifact, by id. Every other job needs resolve
-#               and runs only when it enabled the build (scripts/test-deploy-workflow.sh checks).
-#   desktop-plan, desktop, desktop-upload, desktop-manifest - the Mac and Windows apps are rebuilt only when what they
-#               are built from changed or the file is missing, both together. The build job has no OIDC token (it
-#               runs npm and cargo) and is the only job given the updater signing key; desktop-upload copies the
-#               installer and the signed update bundle to the web bucket under downloads/, and desktop-manifest
-#               rewrites downloads/manifest.json and downloads/latest.json (what installed apps update from, §12.6).
+#   desktop-plan - first which deploy run (trusted only as above), its commit and number, and its hand-off. Fails
+#               (red) when the hand-off is broken or missing from a deploy that should have one, so installed apps
+#               never stop updating without a sign, and when it is not the only one made since the run's latest
+#               successful infra job started, and before it ended (anything earlier in the deploy could have
+#               uploaded one; an earlier attempt's is left out). It downloads that very artifact, by id. Only then,
+#               and only when that enabled the build, it checks out the deployed commit, asks whether the live tool
+#               manifest is this lock, assumes the deploy role and decides what to build; those later steps never
+#               fail the run. One job (it was resolve, then desktop-plan), so a release that changes nothing is one
+#               runner wait. Every other job needs desktop-plan and runs only when it enabled the build
+#               (scripts/test-deploy-workflow.sh checks).
+#   desktop, desktop-upload, desktop-manifest - the Mac and Windows apps are rebuilt only when what they are built
+#               from changed or the file is missing, both together. The build job has no OIDC token (it runs npm and
+#               cargo) and is the only job given the updater signing key; desktop-upload copies the installer and the
+#               signed update bundle to the web bucket under downloads/, and desktop-manifest rewrites
+#               downloads/manifest.json and downloads/latest.json (what installed apps update from, §12.6). It runs
+#               after every upload. With nothing built and the tools lock unchanged it is skipped, unless
+#               manifest.json was not written from what is in the bucket now (its last run failed after an upload,
+#               or a file was replaced), so a missed rewrite is still made on the next release.
 #               These jobs never fail the run: a broken desktop build leaves the previous installers in place.
 #   desktop-tools, desktop-tools-upload - the pinned yt-dlp, Deno and ffmpeg the desktop app runs to fetch a YouTube
 #               video itself (docs/CONTRACTS.md §35.4): desktop-tools downloads each pinned file, checks it against
 #               upstream's own sums and desktop/tools/tools.lock.json, and signs tools.json with CF_TOOLS_SIGNING_KEY
 #               (no OIDC token there); desktop-tools-upload copies the files and the signed manifest to the web bucket
-#               under downloads/tools/. Skipped when the live manifest already has this lock. Never fails the run.
+#               under downloads/tools/. Skipped when the live manifest already has this lock (desktop-plan asks, and
+#               desktop-tools asks again before it fetches anything). Never fails the run.
 # The same variables as deploy.yml: CF_DEPLOY_ROLE_ARN (GitHub runs workflow_run on main, so the role's trust in
 #   refs/heads/main matches) and CF_REGION.
 # Secret CF_TOOLS_SIGNING_KEY: the tool manifest's ed25519 key (PEM). Not the updater key; its public half is built
@@ -73,7 +82,19 @@ env:
   AWS_REGION: ${{ vars.CF_REGION || 'eu-north-1' }}
 
 jobs:
-  resolve:
+  # Which deploy run, then what to build. Its first three steps (which deploy run, the download, read the hand-off)
+  # trust the deploy run and its hand-off; nothing else runs before them, every later step runs only when they enabled
+  # the build, and those later steps never fail the run (continue-on-error, as the plan never did), while the trust
+  # checks still do. The deploy role is assumed only after the hand-off is checked, and after the one step that runs
+  # code from the commit (the tools lock's hash, standard-library Python). No npm, cargo or uv here.
+  #
+  # The plan: each installer in the bucket carries, as S3 metadata, a hash of what it was built from: desktop/ (docs
+  # excluded), the app icon, and the app address baked into it. A mismatch means desktop/ or the icon changed (or the
+  # address did); no file or no hash means it was never built or the last build failed. With the signing key set, a
+  # target whose update pointer (downloads/updates/<target>.json) is missing is stale too. When any target is stale,
+  # every target is rebuilt, so all of them carry the same version (latest.json has one version for every platform);
+  # otherwise none is.
+  desktop-plan:
     # Never a fork's pull request (see the top): only a successful push or run by hand of deploy in this repository.
     if: >-
       github.event_name == 'workflow_dispatch'
@@ -81,11 +102,13 @@ jobs:
           && github.event.workflow_run.head_repository.full_name == github.repository
           && (github.event.workflow_run.event == 'push' || github.event.workflow_run.event == 'workflow_dispatch'))
     runs-on: ubuntu-24.04
-    timeout-minutes: 5
+    timeout-minutes: 10
     permissions:
       contents: read
       # Reads the deploy run and downloads its hand-off; nothing else.
       actions: read
+      # The deploy role, for the plan's reads of the web bucket; assumed only after the hand-off is checked.
+      id-token: write
     outputs:
       enabled: ${{ steps.handoff.outputs.enabled || 'false' }}
       sha: ${{ steps.run.outputs.sha }}
@@ -94,6 +117,14 @@ jobs:
       web_bucket: ${{ steps.handoff.outputs.web_bucket }}
       distribution_id: ${{ steps.handoff.outputs.distribution_id }}
       media_bucket: ${{ steps.handoff.outputs.media_bucket }}
+      matrix: ${{ steps.plan.outputs.matrix }}
+      source_hash: ${{ steps.plan.outputs.source_hash }}
+      version: ${{ steps.plan.outputs.version }}
+      # "false" only when the live tool manifest has this lock (desktop-tools is then skipped).
+      tools: ${{ steps.tools.outputs.changed }}
+      # "false" only when nothing is built, the tools are unchanged and manifest.json was written from what is in the
+      # bucket now (desktop-manifest is then skipped).
+      manifest: ${{ steps.plan.outputs.manifest }}
     steps:
       - name: which deploy run
         id: run
@@ -229,47 +260,55 @@ jobs:
             echo "media_bucket=${media_bucket}"
           } >> "$GITHUB_OUTPUT"
           echo "Desktop apps for deploy run ${RUN_NUMBER}, commit ${SHA}."
-
-  # Decides whether to rebuild the desktop apps. Each installer in the bucket carries, as S3 metadata, a hash of
-  # what it was built from: desktop/ (docs excluded), the app icon, and the app address baked into it. A
-  # mismatch means desktop/ or the icon changed (or the address did); no file or no hash means it was never
-  # built or the last build failed. With the signing key set, a target whose update pointer
-  # (downloads/updates/<target>.json) is missing is stale too. When any target is stale, every target is rebuilt,
-  # so all of them carry the same version (latest.json has one version for every platform); otherwise none is.
-  desktop-plan:
-    needs: [resolve]
-    if: needs.resolve.outputs.enabled == 'true'
-    runs-on: ubuntu-24.04
-    timeout-minutes: 5
-    continue-on-error: true
-    permissions:
-      contents: read
-      id-token: write
-    outputs:
-      matrix: ${{ steps.plan.outputs.matrix }}
-      source_hash: ${{ steps.plan.outputs.source_hash }}
-      version: ${{ steps.plan.outputs.version }}
-    steps:
+      # From here on: only for a build the steps above enabled, and never failing the run.
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
+        if: steps.handoff.outputs.enabled == 'true'
+        continue-on-error: true
         with:
           # The deployed commit, not github.sha (for workflow_run, the newest commit on main).
-          ref: ${{ needs.resolve.outputs.sha }}
+          ref: ${{ steps.run.outputs.sha }}
+          # Nothing here pushes or fetches again; this job's token can also read the repository's runs.
+          persist-credentials: false
+      # The same question desktop-tools asks before it fetches anything (it asks again), here so a release that
+      # changes no tool never starts that job. Before the deploy role, so the script never runs with AWS keys set.
+      - name: are the live tools this lock
+        id: tools
+        if: steps.handoff.outputs.enabled == 'true'
+        continue-on-error: true
+        env:
+          APP_URL: ${{ steps.handoff.outputs.app_url }}
+        run: |
+          want="$(python3 -I desktop/tools/build_tools.py lock-hash --lock desktop/tools/tools.lock.json)"
+          live="$(curl -fsS --max-time 20 "${APP_URL%/}/downloads/tools/tools.json" 2>/dev/null | jq -r '.lock // empty' || true)"
+          if [ "$live" = "$want" ]; then
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+            echo "Tools are up to date (lock ${want})."
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+            echo "The live tool manifest is not lock ${want} (or could not be read): desktop-tools publishes this lock."
+          fi
       - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
+        if: steps.handoff.outputs.enabled == 'true'
+        continue-on-error: true
         with:
           role-to-assume: ${{ vars.CF_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
       - name: which installers need a build
         id: plan
+        if: steps.handoff.outputs.enabled == 'true'
+        continue-on-error: true
         env:
-          WEB_BUCKET: ${{ needs.resolve.outputs.web_bucket }}
-          APP_URL: ${{ needs.resolve.outputs.app_url }}
+          WEB_BUCKET: ${{ steps.handoff.outputs.web_bucket }}
+          APP_URL: ${{ steps.handoff.outputs.app_url }}
           # desktop/tools/ (the pinned yt-dlp, Deno and ffmpeg, §35.4) ships through desktop-tools, never a rebuild.
           SOURCES_HASH: ${{ hashFiles('desktop/**', '!desktop/**/*.md', '!desktop/tools/**', 'web/public/icons/icon-512.png') }}
           # The media bucket's host is baked into the app (Mac fetches it sends the video there, §35.3).
-          MEDIA_HOST: ${{ format('{0}.s3.{1}.amazonaws.com', needs.resolve.outputs.media_bucket, env.AWS_REGION) }}
+          MEDIA_HOST: ${{ format('{0}.s3.{1}.amazonaws.com', steps.handoff.outputs.media_bucket, env.AWS_REGION) }}
           # Only whether the key is set; the key itself never reaches this job.
           SIGNING: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY != '' }}
-          RUN_NUMBER: ${{ needs.resolve.outputs.run_number }}
+          RUN_NUMBER: ${{ steps.run.outputs.run_number }}
+          # Empty when the tools step failed: then desktop-manifest is not skipped.
+          TOOLS_CHANGED: ${{ steps.tools.outputs.changed }}
         run: |
           [ -n "$SOURCES_HASH" ] || { echo "::error::desktop/ not found."; exit 1; }
           source_hash="$(printf '%s %s %s' "$SOURCES_HASH" "${APP_URL%/}" "$MEDIA_HOST" | sha256sum | cut -c1-32)"
@@ -337,10 +376,40 @@ jobs:
             echo "::error::No updater signing key (TAURI_SIGNING_PRIVATE_KEY): installers only, installed apps are not updated."
             summary+=("" "No updater signing key (TAURI_SIGNING_PRIVATE_KEY): installers only, installed apps are not updated.")
           fi
+          # What downloads/manifest.json and downloads/latest.json are written from: the ETags of the installers, the
+          # update pointers and latest.json itself. desktop-manifest stores it on manifest.json (S3 metadata
+          # "inputs"); the same function is in both jobs (scripts/test-deploy-workflow.sh checks).
+          manifest_inputs() {
+            local key
+            for key in downloads/Clip-Factory.dmg downloads/Clip-Factory-Setup.exe downloads/updates/mac.json \
+              downloads/updates/windows.json downloads/latest.json; do
+              printf '%s %s\n' "$key" "$(aws s3api head-object --bucket "$WEB_BUCKET" --key "$key" \
+                --query ETag --output text 2>/dev/null || echo missing)"
+            done | sha256sum | cut -c1-32
+          }
+          # desktop-manifest runs after every upload, so whenever a build is planned, and when the tools lock changed
+          # (its refresh of /downloads/* then comes after the tools upload too). With neither, it is skipped only when
+          # manifest.json was written from what is in the bucket now: a manifest run that failed after an upload, or
+          # a file replaced by hand, makes the next release write both again.
+          if [ "$TOOLS_CHANGED" = "false" ]; then
+            summary+=("" "Tools are up to date: desktop-tools is skipped.")
+          fi
+          manifest=true
+          if [ "$stale" != "true" ] && [ "$TOOLS_CHANGED" = "false" ]; then
+            written_from="$(aws s3api head-object --bucket "$WEB_BUCKET" --key downloads/manifest.json \
+              --query Metadata.inputs --output text 2>/dev/null || true)"
+            if [[ "$written_from" =~ ^[0-9a-f]{32}$ ]] && [ "$written_from" = "$(manifest_inputs)" ]; then
+              manifest=false
+              summary+=("" "Downloads and latest.json are up to date: desktop-manifest is skipped.")
+            else
+              summary+=("" "downloads/manifest.json was not written from what is in the bucket now: desktop-manifest writes it again.")
+            fi
+          fi
           {
             echo "matrix=${matrix}"
             echo "source_hash=${source_hash}"
             echo "version=${version}"
+            echo "manifest=${manifest}"
           } >> "$GITHUB_OUTPUT"
           {
             echo "## Desktop apps"
@@ -351,9 +420,9 @@ jobs:
   # Unsigned builds for now (no Apple or Microsoft certificates; see docs/CONTRACTS.md §12.3).
   desktop:
     name: desktop (${{ matrix.target }})
-    needs: [resolve, desktop-plan]
+    needs: [desktop-plan]
     if: >-
-      needs.resolve.outputs.enabled == 'true'
+      needs.desktop-plan.outputs.enabled == 'true'
       && needs.desktop-plan.outputs.matrix != ''
       && needs.desktop-plan.outputs.matrix != '[]'
     continue-on-error: true
@@ -374,7 +443,7 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
-          ref: ${{ needs.resolve.outputs.sha }}
+          ref: ${{ needs.desktop-plan.outputs.sha }}
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: "24"
@@ -394,9 +463,9 @@ jobs:
       # installer is still built, just with no update bundle.
       - name: build the installer and the signed update bundle
         env:
-          CF_APP_URL: ${{ needs.resolve.outputs.app_url }}
+          CF_APP_URL: ${{ needs.desktop-plan.outputs.app_url }}
           # Where Mac fetches it sends the video's parts (§35.3); build.rs refuses a release without it.
-          CF_MEDIA_HOST: ${{ format('{0}.s3.{1}.amazonaws.com', needs.resolve.outputs.media_bucket, env.AWS_REGION) }}
+          CF_MEDIA_HOST: ${{ format('{0}.s3.{1}.amazonaws.com', needs.desktop-plan.outputs.media_bucket, env.AWS_REGION) }}
           TAURI_ARGS: ${{ matrix.args }}
           VERSION: ${{ needs.desktop-plan.outputs.version }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -455,10 +524,10 @@ jobs:
   # installer (whose source-hash marks the target as built) last.
   desktop-upload:
     name: desktop-upload (${{ matrix.target }})
-    needs: [resolve, desktop-plan, desktop]
+    needs: [desktop-plan, desktop]
     if: >-
       !cancelled()
-      && needs.resolve.outputs.enabled == 'true'
+      && needs.desktop-plan.outputs.enabled == 'true'
       && needs.desktop-plan.outputs.matrix != ''
       && needs.desktop-plan.outputs.matrix != '[]'
     continue-on-error: true
@@ -497,8 +566,8 @@ jobs:
       - name: upload the update bundle and its pointer
         env:
           DIR: ${{ runner.temp }}/build/update
-          WEB_BUCKET: ${{ needs.resolve.outputs.web_bucket }}
-          APP_URL: ${{ needs.resolve.outputs.app_url }}
+          WEB_BUCKET: ${{ needs.desktop-plan.outputs.web_bucket }}
+          APP_URL: ${{ needs.desktop-plan.outputs.app_url }}
           VERSION: ${{ needs.desktop-plan.outputs.version }}
           TARGET: ${{ matrix.target }}
           UPDATE_NAME: ${{ matrix.update_name }}
@@ -524,7 +593,7 @@ jobs:
       - name: upload the installer to the web bucket
         env:
           FILE: ${{ steps.file.outputs.path }}
-          WEB_BUCKET: ${{ needs.resolve.outputs.web_bucket }}
+          WEB_BUCKET: ${{ needs.desktop-plan.outputs.web_bucket }}
           KEY: ${{ matrix.key }}
           CONTENT_TYPE: ${{ matrix.content_type }}
           SOURCE_HASH: ${{ needs.desktop-plan.outputs.source_hash }}
@@ -540,10 +609,13 @@ jobs:
 
   # The pinned tools of Mac fetches it (docs/CONTRACTS.md §35.4). This job has no OIDC token: it downloads from
   # GitHub releases (never runs what it downloads), checks every sum, and signs the manifest; desktop-tools-upload
-  # copies the result. Nothing happens when the live manifest already carries this lock's hash.
+  # copies the result. Nothing happens when the live manifest already carries this lock's hash: desktop-plan asks
+  # first and skips this job (tools "false"); when it could not tell, this job asks again before it fetches anything.
   desktop-tools:
-    needs: [resolve]
-    if: needs.resolve.outputs.enabled == 'true'
+    needs: [desktop-plan]
+    if: >-
+      needs.desktop-plan.outputs.enabled == 'true'
+      && needs.desktop-plan.outputs.tools != 'false'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
     continue-on-error: true
@@ -554,11 +626,11 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
-          ref: ${{ needs.resolve.outputs.sha }}
+          ref: ${{ needs.desktop-plan.outputs.sha }}
       - name: is the live manifest this lock
         id: plan
         env:
-          APP_URL: ${{ needs.resolve.outputs.app_url }}
+          APP_URL: ${{ needs.desktop-plan.outputs.app_url }}
         run: |
           want="$(python3 -I desktop/tools/build_tools.py lock-hash --lock desktop/tools/tools.lock.json)"
           live="$(curl -fsS --max-time 20 "${APP_URL%/}/downloads/tools/tools.json" 2>/dev/null | jq -r '.lock // empty' || true)"
@@ -571,7 +643,7 @@ jobs:
       - name: download, check and lay out the pinned tools
         if: steps.plan.outputs.changed == 'true'
         env:
-          APP_URL: ${{ needs.resolve.outputs.app_url }}
+          APP_URL: ${{ needs.desktop-plan.outputs.app_url }}
         run: |
           python3 -I desktop/tools/build_tools.py fetch --lock desktop/tools/tools.lock.json \
             --out "$RUNNER_TEMP/tools" --base-url "${APP_URL%/}/downloads/tools"
@@ -599,10 +671,10 @@ jobs:
   # Copies the checked files first (each key never changes once written), then the signed manifest, then refreshes
   # CloudFront for the manifest only. Runs no code from the artifact.
   desktop-tools-upload:
-    needs: [resolve, desktop-tools]
+    needs: [desktop-plan, desktop-tools]
     if: >-
       !cancelled()
-      && needs.resolve.outputs.enabled == 'true'
+      && needs.desktop-plan.outputs.enabled == 'true'
       && needs.desktop-tools.outputs.changed == 'true'
     runs-on: ubuntu-24.04
     timeout-minutes: 20
@@ -622,8 +694,8 @@ jobs:
       - name: upload the tools and the signed manifest
         env:
           DIR: ${{ runner.temp }}/tools
-          WEB_BUCKET: ${{ needs.resolve.outputs.web_bucket }}
-          DISTRIBUTION_ID: ${{ needs.resolve.outputs.distribution_id }}
+          WEB_BUCKET: ${{ needs.desktop-plan.outputs.web_bucket }}
+          DISTRIBUTION_ID: ${{ needs.desktop-plan.outputs.distribution_id }}
         run: |
           [ -s "$DIR/tools.json" ] && [ -s "$DIR/tools.json.sig" ] || { echo "::error::No signed manifest in the artifact."; exit 1; }
           aws s3 cp "$DIR/files/" "s3://${WEB_BUCKET}/downloads/tools/" --recursive \
@@ -637,14 +709,18 @@ jobs:
           echo "Published $(jq -r '[.tools | to_entries[] | "\(.key) \(.value.version)"] | join(", ")' "$DIR/tools.json")." >> "$GITHUB_STEP_SUMMARY"
 
   # Lists only the installers that exist in the bucket, so the app never offers a dead link (§12.1), and writes
-  # downloads/latest.json, what installed apps update from (§12.6). It runs after every upload, so latest.json
-  # never names a bundle that is not there yet. Every run rewrites both from what is in the bucket.
+  # downloads/latest.json, what installed apps update from (§12.6). It runs after every upload (desktop's and the
+  # tools'), so latest.json never names a bundle that is not there yet. Every run rewrites both from what is in the
+  # bucket, and records on manifest.json what that was. desktop-plan skips it (manifest "false") only when nothing is
+  # built, the tools lock is unchanged and manifest.json was written from what is in the bucket now; an empty
+  # manifest output (the plan step failed) still runs it.
   desktop-manifest:
-    needs: [resolve, desktop-plan, desktop, desktop-upload]
+    needs: [desktop-plan, desktop, desktop-upload, desktop-tools-upload]
     if: >-
       !cancelled()
-      && needs.resolve.result == 'success'
-      && needs.resolve.outputs.enabled == 'true'
+      && needs.desktop-plan.result == 'success'
+      && needs.desktop-plan.outputs.enabled == 'true'
+      && needs.desktop-plan.outputs.manifest != 'false'
     runs-on: ubuntu-24.04
     timeout-minutes: 10
     continue-on-error: true
@@ -654,16 +730,27 @@ jobs:
     steps:
       - uses: actions/checkout@fbc6f3992d24b796d5a048ff273f7fcc4a7b6c09 # v5.1.0
         with:
-          ref: ${{ needs.resolve.outputs.sha }}
+          ref: ${{ needs.desktop-plan.outputs.sha }}
       - uses: aws-actions/configure-aws-credentials@61815dcd50bd041e203e49132bacad1fd04d2708 # v5.1.1
         with:
           role-to-assume: ${{ vars.CF_DEPLOY_ROLE_ARN }}
           aws-region: ${{ env.AWS_REGION }}
       - name: rewrite downloads/manifest.json and refresh CloudFront
         env:
-          WEB_BUCKET: ${{ needs.resolve.outputs.web_bucket }}
-          DISTRIBUTION_ID: ${{ needs.resolve.outputs.distribution_id }}
+          WEB_BUCKET: ${{ needs.desktop-plan.outputs.web_bucket }}
+          DISTRIBUTION_ID: ${{ needs.desktop-plan.outputs.distribution_id }}
         run: |
+          # What downloads/manifest.json and downloads/latest.json are written from: the ETags of the installers, the
+          # update pointers and latest.json itself. desktop-manifest stores it on manifest.json (S3 metadata
+          # "inputs"); the same function is in both jobs (scripts/test-deploy-workflow.sh checks).
+          manifest_inputs() {
+            local key
+            for key in downloads/Clip-Factory.dmg downloads/Clip-Factory-Setup.exe downloads/updates/mac.json \
+              downloads/updates/windows.json downloads/latest.json; do
+              printf '%s %s\n' "$key" "$(aws s3api head-object --bucket "$WEB_BUCKET" --key "$key" \
+                --query ETag --output text 2>/dev/null || echo missing)"
+            done | sha256sum | cut -c1-32
+          }
           # latest.json: the newest version any target has, with only the targets that have that version (a target
           # whose build failed this time is left out, so it is never offered another target's version).
           pointers='[]'
@@ -698,8 +785,10 @@ jobs:
                 '.files[$n] = {path: $p, size: $s}' <<<"$manifest")"
             fi
           done
+          # Read after latest.json is written, so the next desktop-plan finds the same inputs while nothing changes.
+          inputs="$(manifest_inputs)"
           printf '%s\n' "$manifest" | aws s3 cp - "s3://${WEB_BUCKET}/downloads/manifest.json" \
-            --cache-control "no-cache" --content-type "application/json" --only-show-errors
+            --cache-control "no-cache" --content-type "application/json" --metadata "inputs=${inputs}" --only-show-errors
           aws cloudfront create-invalidation --distribution-id "$DISTRIBUTION_ID" \
             --paths "/downloads/*" --query Invalidation.Id --output text
           {
