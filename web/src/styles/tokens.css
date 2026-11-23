@@ -194,6 +194,10 @@
 
   --tap: 44px;
   --ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  /* Slow in, slow out (the owner, 23 Nov: "slow in slow out effect when switching between them"): starts gently,
+     speeds up in the middle and settles gently. The switch between the two apps moves on it: both panes' slide and the
+     workspace switch's lens (§45.38 S3). */
+  --ease-in-out: cubic-bezier(0.65, 0, 0.35, 1);
   --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
   --dur-1: 140ms;
   --dur-2: 260ms;
