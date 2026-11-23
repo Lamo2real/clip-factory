@@ -11,7 +11,10 @@
 //     they wait, and happen the moment Clip Factory is back (clipsGoLater), the mirror of Lamo Stories' storiesGoLater;
 //   - the search of Clip Factory's kept page while it is hidden (useKeptSearch, §45.35 D18);
 //   - the page's own glass: which app the shell shows (AppPanes says), and html.see-through, which only the shell
-//     writes, from the wish of the app on screen (each app states its own with setPageGlass, never the other's).
+//     writes, from the wish of the app on screen (each app states its own with setPageGlass, never the other's);
+//   - the sliding window between the two apps (the owner, 23 Nov: "id like the transission between clip factory and
+//     clips funded to be like a sliding window"): the workspace switch hands its tap to AppPanes, which slides both
+//     panes side by side (startAppSlide), and the page changes once they have landed.
 //
 // Everything here is a no-op while Lamo Stories is switched off: no pane is around anything, `active` is always true,
 // `hosted` always false, Clip Factory is always on screen, clipsGoLater is exactly navigate and html.see-through is
@@ -110,6 +113,17 @@ export function useStoriesWorkspaceShown(): string | null {
   );
 }
 
+// ---------- The switch with no rail under it (Clips Funded's own Setup, on a computer) ----------
+
+/**
+ * StoriesApp says its own Setup is on screen, with no rail under the shell's switch (on a computer the switch is drawn
+ * over the rail). The shell marks the page (html[data-ws-bare]) and the switch carries a plate of its own there
+ * (glide.css): <html> is the shell's, so Clips Funded never writes or watches it itself (test/shellPageGlass).
+ */
+export function setSwitchBare(on: boolean): void {
+  if (typeof document !== "undefined") document.documentElement.toggleAttribute("data-ws-bare", on);
+}
+
 // ---------- Clip Factory's search, kept while it is hidden (§45.35 D18) ----------
 
 /** The search of Clip Factory's kept route, given by the shell around Clip Factory's pane (null: no pane around). */
@@ -176,4 +190,130 @@ export function useAppOnScreen(): AppName {
     () => onScreen,
     () => "clips" as const,
   );
+}
+
+// ---------- The sliding window between the two apps (AppPanes runs it, the workspace switch starts it) ----------
+
+/**
+ * How long the two panes slide, and the workspace switch's lens with them (its Glide is given this length), on the
+ * app's slow-in slow-out curve (appSlideEase), so the whole switch reads as one move.
+ */
+export const APP_SLIDE_MS = 450;
+/** The slow-in slow-out curve (tokens.css --ease-in-out), until the page's own has been read. */
+export const APP_SLIDE_EASE = "cubic-bezier(0.65, 0, 0.35, 1)";
+
+let slideCurve: string | null = null;
+
+/**
+ * The curve the whole switch moves on (the owner, 23 Nov: "make sure the switch between clip factory and clips funded
+ * uses slow in slow out effect when switching between them"): tokens.css --ease-in-out, which starts gently, speeds up
+ * in the middle and settles gently. Both panes' slide and the switch's lens use it (the lens through .glide--ws's
+ * --glide-ease, the same token). Read once from the page, ahead of a tap (prepareAppSlide), so a tap never styles the
+ * page to read it.
+ */
+export function appSlideEase(): string {
+  if (slideCurve) return slideCurve;
+  const own = typeof getComputedStyle === "function" && typeof document !== "undefined" ? getComputedStyle(document.documentElement).getPropertyValue("--ease-in-out").trim() : "";
+  if (!own) return APP_SLIDE_EASE;
+  return (slideCurve = own);
+}
+/** The id of the panes' Web Animations (e2e/stories-switch-slide.spec.ts finds them by it). */
+export const APP_SLIDE_ID = "app-slide";
+
+/**
+ * One slide from the app on screen to the other: Clip Factory on the left, Clips Funded on the right, both panes the
+ * size of the window and moved by transform alone. The page changes only once it has landed (the switch then calls
+ * settle, which puts the panes back at rest: the new one in place, or the old one again if the page did not change).
+ */
+export interface AppSlide {
+  /** The app it slides to. */
+  readonly to: AppName;
+  /** True once both panes have landed; false when it was sent back or cut short (nothing to do then). */
+  readonly landed: Promise<boolean>;
+  /** The switch was made (or held): the panes come to rest on the app now on screen. */
+  settle(): void;
+  /**
+   * Tapped back during the slide: both panes slide back to where they were, and nothing changes. A tap forth again
+   * while they slide back gets a fresh slide from startAppSlide, on from where they are.
+   */
+  back(): void;
+  /**
+   * The switch's lens (its Glide's slide, made for the same tap): it starts on the panes' first frame, from the same
+   * moment, so the two read as one move (each way: forth, back and forth again).
+   */
+  join(lens: Animation): void;
+}
+
+/** What AppPanes gives the shell while both apps sit in their panes. */
+export interface AppSlider {
+  /** The pointer or the keyboard came to a way to `to`: its pane is mounted now (hidden), so the tap finds it ready. */
+  prepare(to: AppName): void;
+  /** Starts the slide to `to`, whose page will be `path`; null when there is nothing to slide (the caller switches at once). */
+  start(to: AppName, path: string): AppSlide | null;
+  /** A slide is under way. */
+  busy(): boolean;
+}
+
+let slider: AppSlider | null = null;
+
+/** AppPanes says it is there (and returns the function that says it is gone). */
+export function setAppSlider(s: AppSlider): () => void {
+  slider = s;
+  return () => {
+    if (slider === s) slider = null;
+  };
+}
+
+/** Mounts `to`'s pane ahead of a tap (nothing while Lamo Stories is switched off, or for the app on screen). */
+export function prepareAppSlide(to: AppName): void {
+  appSlideEase();
+  slider?.prepare(to);
+}
+
+/**
+ * Slides the whole app to `to` (whose page will be `path`), from this tap. Null when nothing slides: Lamo Stories is
+ * switched off, `to` is on screen already, a slide is under way, the window is hidden, or the browser has no Web
+ * Animations. The caller decides calm motion and "Leave without saving?" before (neither ever slides).
+ */
+export function startAppSlide(to: AppName, path: string): AppSlide | null {
+  return slider?.start(to, path) ?? null;
+}
+
+/** A slide between the two apps is under way. */
+export function appSliding(): boolean {
+  return slider?.busy() ?? false;
+}
+
+let switched = false;
+
+/** The owner switched apps at least once this visit (AppPanes says so on every switch). */
+export function appSwitched(): boolean {
+  return switched;
+}
+
+/** AppPanes: the app on screen just changed. */
+export function noteAppSwitch(): void {
+  switched = true;
+}
+
+const slideIn = new Map<AppName, Set<() => void>>();
+
+/**
+ * Runs `fn` the moment a slide brings `app` in (its first frame on screen), once; returns how to take it back. For
+ * what an app mounted ahead of a tap, but not on screen yet, puts on the page only once it is drawn: Clips Funded's
+ * own fonts (stories/fonts.ts: a @font-face that arrives while Clip Factory is on screen repaints Clip Factory's words).
+ */
+export function whenAppSlidesIn(app: AppName, fn: () => void): () => void {
+  let fns = slideIn.get(app);
+  if (!fns) slideIn.set(app, (fns = new Set()));
+  fns.add(fn);
+  return () => void slideIn.get(app)?.delete(fn);
+}
+
+/** A slide brings `app` in now (AppPanes): what waited for it runs. */
+export function appSlidesIn(app: AppName): void {
+  const fns = slideIn.get(app);
+  if (!fns) return;
+  slideIn.delete(app);
+  for (const fn of fns) fn();
 }

@@ -5,10 +5,11 @@
 # 1000×560, 1000×600, 1000×650, 1000×720 and 1440×900 (sidebar open and folded) with a fixed clock, fixed mock data
 # and no motion. Twice: with Lamo Stories switched off every pixel must match; switched on (cf.storiesPreview = 1)
 # every pixel outside the workspace switcher's own box must match. Since §45.38 the switch and the Live chip under it
-# are one element of the shell, drawn over the sidebar; only the switch's box is left out: the Live chip is compared
-# like every other pixel, at exactly its old place, but for its 8 px light: drawn by the shell instead of inside the
-# sidebar, Chromium sometimes rounds that little dot 1 px up, so within 2 px of the light up to the light's own 64 px
-# may differ (CF_LIGHT_PX), and nothing else of the chip. The lead runs it on the switch PR and in the final check.
+# are one element of the shell, drawn over the sidebar, and since the owner's see-through glass (23 Nov, S5) the
+# chip is the switch's own glass: the switch's box and the chip's box are left out (the chip still sits at exactly its
+# old place, which stories-clips-unchanged.spec.ts holds). Before that the chip was compared but for its 8 px light
+# (drawn by the shell, Chromium sometimes rounds that little dot 1 px up: within 2 px of the light up to the light's
+# own 64 px may differ, CF_LIGHT_PX). The lead runs it on the switch PR and in the final check.
 # Pixels are compared as pixelmatch does with includeAA false and threshold 0.1 (§45.35 D20): only the
 # antialiased edge pixels of text and curves (which differ between two renders of the same page) are left out; any
 # change of layout or colour still fails. CF_EXACT=1 compares every pixel exactly, as before.
@@ -36,7 +37,7 @@ while [ $# -gt 0 ]; do
   case "$1" in
     --out) out="$2"; shift 2 ;;
     --sizes) sizes="$2"; shift 2 ;;
-    -h|--help) sed -n '2,27p' "$0"; exit 0 ;;
+    -h|--help) sed -n '2,28p' "$0"; exit 0 ;;
     *) base="$1"; shift ;;
   esac
 done
@@ -145,7 +146,7 @@ async function shot(browser, base, path, [w, h], folded, on) {
   await page.evaluate(() => document.fonts.ready);
   await page.waitForTimeout(900);
   const mask = await page.evaluate(() =>
-    Array.from(document.querySelectorAll(".ws-switch-host"))
+    Array.from(document.querySelectorAll(".ws-switch-host, .ws-dock > .ws-dock__live > .live-dot"))
       .map((el) => el.getBoundingClientRect())
       .filter((r) => r.width > 0 && r.height > 0)
       .map((r) => ({ x: Math.floor(r.left), y: Math.floor(r.top), w: Math.ceil(r.width) + 1, h: Math.ceil(r.height) + 1 })),

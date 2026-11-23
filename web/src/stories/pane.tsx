@@ -18,12 +18,26 @@
 // Factory's pane carries the search of its kept route (useKeptSearch), so Home opened for a campaign is kept across a
 // round trip; and a Lamo Stories redirect to another site that comes after a wait (Connect) waits while Clip Factory
 // is on screen.
-import { Component, Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ErrorInfo, type ReactNode } from "react";
+//
+// The sliding window (the owner, 23 Nov: "id like the transission between clip factory and clips funded to be like a
+// sliding window"): a switch to the other app slides the whole app, Clip Factory on the left and Clips Funded on the
+// right. Going to Clips Funded, Clip Factory's pane slides out to the left while Clips Funded's slides in from the right;
+// going back, the other way. Both panes move on the slow-in slow-out curve (the owner, 23 Nov: "make sure the switch
+// between clip factory and clips funded uses slow in slow out effect when switching between them"; tokens.css
+// --ease-in-out), as the switch's lens does, for the same length, from the same tap. The shell's dock (the switch and
+// the Live chip) is outside both panes and stays where it is. The pane coming in is mounted before the tap (the pointer
+// or the keyboard coming to its choice), at its kept page and its kept scroll; one that is not ready yet slides in as
+// its loading card. Only for the slide do both panes take a box, the size of the window, each showing its page where
+// it is scrolled to, moved by transform alone (no layout during it), with will-change only then; the page changes
+// once they have landed, and everything is back at rest in that same task. Calm motion never slides.
+import { Component, Fragment, useEffect, useLayoutEffect, useMemo, useRef, useState, type CSSProperties, type ErrorInfo, type ReactNode } from "react";
+import { flushSync } from "react-dom";
 import { Button, Empty } from "../components/ui.tsx";
 import { navigate } from "../lib/router.ts";
-import { PaneContext, setAppOnScreen, useAppActive, type AppName } from "../app/shell.ts";
+import { APP_SLIDE_EASE, APP_SLIDE_ID, APP_SLIDE_MS, appSlidesIn, appSlideEase, noteAppSwitch, PaneContext, setAppOnScreen, setAppSlider, useAppActive, type AppName, type AppPane, type AppSlide } from "../app/shell.ts";
 import { storiesEnabled } from "./flag.ts";
 import { isStoriesPath } from "./routes.ts";
+import { saveClipsScroll, saveStoriesScroll, takeClipsScroll, takeStoriesScroll } from "./workspace.ts";
 
 // The pane's context, which app is on screen and Clip Factory's kept search are the shell's own (app/shell.ts, which
 // both apps import); they are named here too for Lamo Stories' screens and the tests that read them from this file.
@@ -167,30 +181,296 @@ export function pauseMediaIn(box: HTMLElement | null): number {
   return n;
 }
 
+// ---------- The sliding window ----------
+
+/** Clip Factory sits on the left and Clips Funded on the right: going to Clips Funded, everything moves left. */
+const SIDE: Record<AppName, number> = { clips: 0, stories: 1 };
+
+/**
+ * Where the page coming in will be scrolled to once it is on screen: the place kept for it when the owner left it
+ * (workspace.ts). Read without using it up (it is put back at once), so the app still puts its own page back there.
+ */
+function keptScroll(app: AppName, path: string): number {
+  const y = app === "clips" ? takeClipsScroll(path) : takeStoriesScroll(path);
+  if (y === null) return 0;
+  if (app === "clips") saveClipsScroll(path, y);
+  else saveStoriesScroll(path, y);
+  return y;
+}
+
+/** A slide under way, as AppPanes keeps it: the app it goes to, and how to bring it to rest or send it on again. */
+interface Running {
+  to: AppName;
+  /** Tapped forth again while it slid back: it slides on to `to` from where the panes are (a fresh handle), else null. */
+  again(): AppSlide | null;
+  /** Everything back at rest, `app` on screen (the app it slid to, or the one it came from). */
+  rest(app: AppName): void;
+}
+
 /**
  * Both apps, each in its pane: `on` is the one on screen. An app is mounted from the first time it is shown, and then
- * stays (unless it was hidden with a dialog open, or `fresh` names it: then it opens fresh next time).
+ * stays (unless it was hidden with a dialog open, or `fresh` names it: then it opens fresh next time). An app can also
+ * be mounted a moment before it is shown (the pointer came to the switch's way there), so a slide finds it ready.
+ * `alsoSlides` names what an app draws outside its pane that slides with it (Clip Factory's own backdrop: each app
+ * slides with its own background, and it is drawn for the slide even while Clips Funded is on screen).
  */
-export function AppPanes({ on, clips, stories, fresh = null }: { on: AppName; clips: ReactNode; stories: ReactNode; fresh?: AppName | null }) {
+export function AppPanes({
+  on,
+  clips,
+  stories,
+  fresh = null,
+  alsoSlides,
+}: {
+  on: AppName;
+  clips: ReactNode;
+  stories: ReactNode;
+  fresh?: AppName | null;
+  alsoSlides?: Partial<Record<AppName, () => HTMLElement | null>>;
+}) {
   const [shown, setShown] = useState<Record<AppName, boolean>>(() => ({ clips: on === "clips", stories: on === "stories" }));
+  /** The app a slide is on its way to (mounted for it, though not on screen yet). */
+  const slidingTo = useRef<AppName | null>(null);
   if (!shown[on]) setShown((s) => ({ ...s, [on]: true }));
-  // An app that starts fresh is let go the moment it is hidden: it never draws behind the other one, even once.
-  if (fresh !== null && fresh !== on && shown[fresh]) setShown((s) => ({ ...s, [fresh]: false }));
+  // An app that starts fresh is let go the moment it is hidden: it never draws behind the other one, even once (only
+  // while it slides in is it mounted before it is on screen).
+  if (fresh !== null && fresh !== on && fresh !== slidingTo.current && shown[fresh]) setShown((s) => ({ ...s, [fresh]: false }));
   const clipsBox = useRef<HTMLDivElement>(null);
   const storiesBox = useRef<HTMLDivElement>(null);
   const was = useRef(on);
+  const running = useRef<Running | null>(null);
+  // What the slider reads when the switch calls it (outside React's render).
+  const now = useRef({ on, shown, fresh, alsoSlides });
+  now.current = { on, shown, fresh, alsoSlides };
 
   // The app on screen is the shell's to say (app/shell.ts): Clip Factory's own backdrop is drawn only while it is
   // (app/ClipsBackdrop.tsx), and html.see-through is the wish of the app on screen, before the first frame of a switch.
   useLayoutEffect(() => setAppOnScreen(on), [on]);
   useLayoutEffect(() => () => setAppOnScreen("clips"), []);
 
+  // The sliding window, for the shell's switch (app/shell.ts startAppSlide).
+  useLayoutEffect(() => {
+    const box = (app: AppName) => (app === "clips" ? clipsBox : storiesBox).current;
+    const unset = setAppSlider({
+      busy: () => running.current !== null,
+      prepare(to) {
+        // The slow-in slow-out curve is read now, while nothing in the page waits to be styled (read after the panes
+        // change, it would style the whole page coming in inside the tap's own task).
+        appSlideEase();
+        const { on: at, shown: has, fresh: anew } = now.current;
+        // An app that opens fresh is mounted only by the slide itself (it never waits behind the other one).
+        if (to === at || has[to] || to === anew) return;
+        setShown((s) => (s[to] ? s : { ...s, [to]: true }));
+      },
+      start(to, path) {
+        const from = now.current.on;
+        // Tapped forth again while the slide back from `to` was under way: it slides on from where the panes are.
+        const under = running.current;
+        if (under) return under.to === to ? under.again() : null;
+        if (to === from || typeof document === "undefined" || document.hidden) return null;
+        const out = box(from);
+        if (!out || typeof out.animate !== "function") return null;
+        if (!now.current.shown[to]) {
+          // Not mounted yet (no pointer came near the choice before): it mounts now, its loading card if its code is
+          // not here yet, and slides in as it is.
+          slidingTo.current = to;
+          flushSync(() => setShown((s) => ({ ...s, [to]: true })));
+        }
+        const inn = box(to);
+        if (!inn) {
+          slidingTo.current = null;
+          return null;
+        }
+        slidingTo.current = to;
+        const root = document.documentElement;
+        const step = SIDE[to] > SIDE[from] ? -100 : 100;
+        const parts: { el: HTMLElement; from: number; to: number }[] = [
+          { el: out, from: 0, to: step },
+          { el: inn, from: -step, to: 0 },
+        ];
+        /** The panes' animations now, one per part, and where each runs from and to (translateX, in %). */
+        let anims: Animation[] = [];
+        let legs: [number, number][] = [];
+        /** The switch's lens (its Glide's slide): started on the same frame as the panes, from the same moment. */
+        let together: Animation[] = [];
+        let easing = APP_SLIDE_EASE;
+        let state: "running" | "landed" | "back" | "done" = "running";
+        let resolve: (ok: boolean) => void = () => undefined;
+        let timer: ReturnType<typeof setTimeout> | undefined;
+        let fromY = 0;
+        let toY = 0;
+        let minHeight = "";
+
+        const rest = (app: AppName) => {
+          if (state === "done") return;
+          const began = anims.length > 0;
+          state = "done";
+          clearTimeout(timer);
+          resolve(false);
+          running.current = null;
+          slidingTo.current = null;
+          together = [];
+          if (began) {
+            for (const a of anims) a.cancel();
+            for (const p of parts) {
+              p.el.removeAttribute("data-app-slide");
+              p.el.style.removeProperty("--app-pane-y");
+            }
+            root.style.minHeight = minHeight;
+            // The app on screen is back in the page's flow, where its pane showed it: the window scrolls there now,
+            // before the next frame (the app's own scroll keeping then finds it there already).
+            const y = app === to ? toY : fromY;
+            if (Math.abs(window.scrollY - y) > 0.5) window.scrollTo({ top: y, behavior: "instant" as ScrollBehavior });
+          }
+          // Sent back from an app that opens fresh: it is let go again.
+          if (app !== to && now.current.fresh === to) setShown((s) => ({ ...s, [to]: false }));
+        };
+
+        /**
+         * Every part slides from where it is drawn now to `to`'s side (forward) or back to where it was, for the whole
+         * length on the slow-in slow-out curve, as the lens does when it is sent on or back (Glide re-aims from where it
+         * is drawn): so a tap back, and a tap forth again, keep the panes and the lens one move. `first`: the slide's
+         * own first frame also puts the page coming in at its place.
+         */
+        const play = (forward: boolean, first = false) => {
+          const at = anims.length
+            ? anims.map((a, i) => {
+                const [a0, a1] = legs[i]!;
+                const p = a.effect?.getComputedTiming().progress;
+                return a0 + (a1 - a0) * (typeof p === "number" ? p : 1);
+              })
+            : parts.map((p) => p.from);
+          for (const a of anims) a.cancel();
+          legs = parts.map((p, i) => [at[i]!, forward ? p.to : p.from]);
+          const timing: KeyframeAnimationOptions = { duration: APP_SLIDE_MS, easing, fill: "both", id: APP_SLIDE_ID };
+          const these = parts.map((p, i) => p.el.animate([{ transform: `translateX(${legs[i]![0]}%)` }, { transform: `translateX(${legs[i]![1]}%)` }], timing));
+          anims = these;
+          // The panes and the lens start together from the same moment: the frame after the first one drawn after the
+          // tap. That first frame paints the page coming in (in WebKit 67 to 161 ms on a busy Mac, 23 Nov); a slide
+          // stamped before it would come out of it that far along its curve, its slow start skipped in one jump, so it
+          // starts once that frame is drawn and shows its whole slow start (as Glide does: a slide left "pending" until
+          // the compositor reports back can lose its first frames on a busy machine).
+          requestAnimationFrame(() => {
+            if (anims !== these || state === "done") return;
+            if (first) {
+              // The page coming in goes as far down as it goes now (its kept place, unless it got shorter): its own
+              // height (its boxes sit toY higher in the pane), as the window will scroll it.
+              const wanted = toY;
+              const tall = Array.from(inn.children).reduce((h, c) => (c instanceof HTMLElement ? Math.max(h, c.offsetTop + c.offsetHeight) : h), 0) + toY;
+              const y = Math.max(0, Math.min(wanted, Math.floor(tall - inn.clientHeight)));
+              if (y !== toY) inn.style.setProperty("--app-pane-y", `${(toY = y)}px`);
+            }
+            if (document.timeline?.currentTime == null) return;
+            requestAnimationFrame(() => {
+              if (anims !== these || state === "done") return;
+              const t = performance.now();
+              for (const a of [...these, ...together]) if (a.playState === "running" && a.playbackRate > 0) a.startTime = t;
+            });
+          });
+          // A window hidden mid-way draws no frames, so its slide never ends: it is finished well after it would have.
+          clearTimeout(timer);
+          timer = setTimeout(() => {
+            for (const a of these) if (a.playState !== "finished") a.finish();
+          }, APP_SLIDE_MS + 2000);
+          void Promise.all(these.map((a) => a.finished)).then(
+            () => {
+              if (anims !== these || state === "done") return;
+              if (state === "back") return rest(from);
+              if (state !== "running") return;
+              state = "landed";
+              resolve(true);
+              // The switch changes the page now (settle). Should nobody do it, the panes come to rest anyway.
+              clearTimeout(timer);
+              timer = setTimeout(() => rest(now.current.on), 1000);
+            },
+            () => undefined,
+          );
+        };
+
+        /** A handle for the switch: one per way forth (a tap forth again while it slid back gets a fresh one). */
+        const handle = (): AppSlide => {
+          const landed = new Promise<boolean>((r) => (resolve = r));
+          return {
+            to,
+            landed,
+            settle: () => {
+              if (state === "landed") rest(now.current.on);
+            },
+            back: () => {
+              if (state !== "running") return;
+              // Not moved yet (its first frame is still to come): at rest again at once.
+              if (!anims.length || anims.every((a) => !a.effect?.getComputedTiming().progress)) return rest(from);
+              state = "back";
+              resolve(false);
+              together = [];
+              play(false);
+            },
+            join: (a) => {
+              if (state === "running" || state === "back") together.push(a);
+            },
+          };
+        };
+
+        // The panes change once the switch's highlight has measured where it goes (Glide reads the bar's layout in the
+        // microtask its class change queued, before this one) and the switch has found its lens (WorkspaceDock's Bar,
+        // also before this one), so neither read waits for two pages to be laid out; the page is laid out once, for
+        // the first frame of both slides. Nothing in the tap's task reads the page after this.
+        queueMicrotask(() => {
+          if (state !== "running") return;
+          // Everything is read, and the slides made, while the page is still styled and laid out as Glide measured it:
+          // a Web Animation made after the panes change would style the whole page coming in inside the tap's own task
+          // (it is styled once, for the first frame).
+          easing = appSlideEase();
+          fromY = window.scrollY;
+          toY = keptScroll(to, path);
+          const height = root.scrollHeight;
+          for (const app of [from, to]) {
+            const el = now.current.alsoSlides?.[app]?.();
+            if (!el || out.contains(el) || inn.contains(el)) continue;
+            parts.push(app === from ? { el, from: 0, to: step } : { el, from: -step, to: 0 });
+          }
+          play(true, true);
+          // The app coming in is drawn from this frame on: what it puts on the page only once it is seen (Clips
+          // Funded's own fonts, never while it only waits mounted behind Clip Factory) goes on now, with the panes'
+          // change.
+          appSlidesIn(to);
+          // Both panes leave the page's flow for the slide: the page keeps its height, so the window's scroll stays.
+          minHeight = root.style.minHeight;
+          root.style.minHeight = `${height}px`;
+          out.style.setProperty("--app-pane-y", `${fromY}px`);
+          inn.style.setProperty("--app-pane-y", `${toY}px`);
+          for (const p of parts) p.el.setAttribute("data-app-slide", p.el === out ? "out" : p.el === inn ? "in" : "with");
+        });
+
+        const slide = handle();
+        running.current = {
+          to,
+          again: () => {
+            if (state !== "back") return null;
+            state = "running";
+            together = [];
+            const next = handle();
+            play(true);
+            return next;
+          },
+          rest,
+        };
+        return slide;
+      },
+    });
+    return () => {
+      unset();
+      running.current?.rest(now.current.on);
+    };
+  }, []);
+
   // Just switched: the app now hidden is kept, unless it was left with a dialog open (a page that starts fresh is
-  // already let go above).
+  // already let go above). A slide under way comes to rest with it.
   useLayoutEffect(() => {
     const hidden = was.current;
     was.current = on;
     if (hidden === on) return;
+    noteAppSwitch();
+    running.current?.rest(on);
     // The app now hidden makes no sound: its playing videos and sounds pause (they stay where they were).
     pauseMediaIn((hidden === "clips" ? clipsBox : storiesBox).current);
     if (dialogOpenOutside((on === "clips" ? clipsBox : storiesBox).current)) setShown((s) => ({ ...s, [hidden]: false }));
@@ -206,11 +486,15 @@ export function AppPanes({ on, clips, stories, fresh = null }: { on: AppName; cl
     return () => document.removeEventListener("keydown", quiet);
   }, [clipsHidden]);
 
+  // The same value until it changes: an app mounted ahead of a slide never re-renders the one on screen.
+  const clipsPane = useMemo<AppPane>(() => ({ active: on === "clips", clipsMounted: shown.clips, hosted: true }), [on, shown.clips]);
+  const storiesPane = useMemo<AppPane>(() => ({ active: on === "stories", clipsMounted: shown.clips, hosted: true }), [on, shown.clips]);
+
   const pane = (app: AppName, node: ReactNode) => {
     if (!shown[app]) return null;
     const active = on === app;
     return (
-      <PaneContext.Provider value={{ active, clipsMounted: shown.clips, hosted: true }}>
+      <PaneContext.Provider value={app === "clips" ? clipsPane : storiesPane}>
         <div ref={app === "clips" ? clipsBox : storiesBox} data-app-pane={app} hidden={!active} inert={!active} style={active ? SHOWN : undefined}>
           {node}
         </div>

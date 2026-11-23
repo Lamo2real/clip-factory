@@ -194,7 +194,8 @@ describe("each app has its own error boundary (§45.35 D16)", () => {
   it("App.tsx gives each pane its boundary: Clip Factory's own (its fallback as before) and Lamo Stories' card", async () => {
     const app = source("app/App.tsx");
     // Each pane has its own toasts too (§45.38 A2): a toast of the app that is hidden waits for it.
-    expect(app).toMatch(/clips=\{\s*<KeptSearchProvider value=\{lastClipsSearch\.current\}>\s*<ToastScope active=\{!inStories\} onScreen=\{clipsOnScreen\} onError=\{clipsDenied\}>\s*<ErrorBoundary scope="app">\s*<Shell \/>/);
+    // Its Shell is given the page it keeps next to Clips Funded (held), so a slide to it opens there.
+    expect(app).toMatch(/clips=\{\s*<KeptSearchProvider value=\{lastClipsSearch\.current\}>\s*<ToastScope active=\{!inStories\} onScreen=\{clipsOnScreen\} onError=\{clipsDenied\}>\s*<ErrorBoundary scope="app">\s*<Shell held=\{held\} \/>/);
     // Clips Funded' toasts carry its st-toast class (its Fraunces in the shell's toast box); Clip Factory's carry none.
     expect(app).toMatch(/stories=\{\s*<ToastScope active=\{inStories\} onScreen=\{storiesOnScreen\} onError=\{storiesDeniedSound\} className="st-toast">\s*<StoriesPaneBoundary onClips=\{\(\) => navigate\(chooseClips\(\)\)\}>\s*<StoriesHost/);
     // Clip Factory without Lamo Stories: the same Shell, with no pane and no new boundary around it.
