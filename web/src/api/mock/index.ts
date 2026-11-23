@@ -177,6 +177,20 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
   };
   let scriptAt = 0;
   const publishPost = (p: Post) => mockLive.publish({ type: "post", op: "upsert", id: p.postId, item: clone(p) });
+  // Another device saves Clip Factory's Look (§22): the server's settings change, and this device hears it on the
+  // session's next refresh, which a job's live event brings (a test knob: e2e/stories-see-through-own.spec.ts).
+  if (typeof window !== "undefined") {
+    const w = window as unknown as { __cfMock?: Record<string, unknown> };
+    const otherDevice = {
+      saveLook(patch: Partial<Pick<Settings, "backgroundMode" | "backgroundColours" | "glassStrength">>) {
+        store.settings = { ...store.settings, ...patch };
+        saveMockLook(store.settings);
+        const job = store.jobs[0];
+        if (job) publishJob(job);
+      },
+    };
+    w.__cfMock = { ...(w.__cfMock ?? {}), otherDevice };
+  }
   // When each kept clip's posting was last started (stands in for the API's publishState: "pending" timing).
   const claimedAt = new Map<string, number>();
   // The TikTok sheet's choices stored on each TikTok post (the API's postOptions.tiktok, never returned).
