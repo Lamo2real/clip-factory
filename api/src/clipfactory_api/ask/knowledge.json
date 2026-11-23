@@ -1,5 +1,5 @@
 {
- "version": "74a7f3622942",
+ "version": "5510e0c34a71",
  "parts": [
   {
    "id": "app-map",
@@ -603,7 +603,7 @@
    "id": "adr-49",
    "title": "DECISIONS: ADR-49 Still page changes, a compositor-only glide, and one top line under an overlay title bar",
    "line": "Context. The owner (2026-11-19, the Mac app, macOS 27.2, see-through Liquid Glass): the menu highlight was smooth",
-   "chars": 4223
+   "chars": 4472
   },
   {
    "id": "adr-50",
@@ -987,7 +987,7 @@
    "id": "testing-what-runs-where",
    "title": "TESTING: What runs where",
    "line": "Suite | Folder | Tools | In CI ([ci.yml](../.github/workflows/ci.yml)) | Before deploy ([deploy.yml](../.github/workflows/deploy.yml)) |",
-   "chars": 5660
+   "chars": 10033
   },
   {
    "id": "testing-ask-clip-factory",
@@ -1005,7 +1005,7 @@
    "id": "testing-contrast-and-text-size",
    "title": "TESTING: Contrast and text size",
    "line": "web/e2e/contrast.spec.ts (Playwright, mock mode, audit F081) opens every route in ROUTES (web/e2e/helpers.ts) at",
-   "chars": 4018
+   "chars": 4209
   },
   {
    "id": "testing-action-motion",

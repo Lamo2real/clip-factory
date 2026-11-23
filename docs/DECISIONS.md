@@ -1198,8 +1198,10 @@ logs its token counts (`bedrock.usage`), and this table is to be corrected from 
     transparent `data-tauri-drag-region` strip exactly over the 28 px band, and one runtime capability for the app's own origin:
     `core:window:allow-start-dragging` and `core:window:allow-internal-toggle-maximize`.
   - *WebKit* for the three specs that hold this (`nav-smooth`, `page-still`, `top-line`): the `webkit` Playwright
-    project; CI runs it in the one `web-e2e (WebKit)` job. `nav-smooth`'s WebKit run is macOS only: on the Linux
-    runners WebKit (GTK/WPE, not the Mac's engine) never started the glide's animation at all.
+    project; CI runs it in the five `web-e2e (WebKit N/5)` shards, split by each test's saved time, on every pull
+    request that touches the web and every night (docs/TESTING.md, "Which browser tests run when"; the B3 trim leaves
+    out only the screenshots and part of the contrast matrix, never these). `nav-smooth`'s WebKit run is macOS only: on
+    the Linux runners WebKit (GTK/WPE, not the Mac's engine) never started the glide's animation at all.
 - **Alternatives.** *Keep the cross-fade but shorter*: still blends two pictures of the whole window and still ends with
   WebKit rebuilding the glass. *A transform-only page entrance*: the owner asked for the window to stay still. *Defer the
   slide until the new page has painted*: measured, it moved the late frames rather than removing them, and added a

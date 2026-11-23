@@ -1,4 +1,4 @@
-# webkit shard 1 of 5: about 19.7 worker-minutes (38 lines).
+# webkit shard 1 of 5: about 19.7 core, 19.7 style, 19.7 full worker-minutes (38 lines).
 # Written by: node scripts/e2e-shards.mjs build (from timings.tsv). The last shard runs every test in no list.
 [webkit-phone] › ask-assistant.spec.ts › Ask as a full assistant › a general question: a code block with Copy, and a table
 [webkit-phone] › ask-assistant.spec.ts › Ask as a full assistant › an open question with no way to reach Ask gets no canned topic

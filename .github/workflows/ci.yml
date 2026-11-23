@@ -6,9 +6,11 @@
 # when changes did not finish, so "skipped" only ever means "nothing it tests changed".
 # A push to main skips the web checks and the browser tests: its pull request ran them (with strict=false two green pull
 # requests can still clash on main, which the nightly run finds). It still runs the cheap jobs, which also keep the
-# caches warm. The nightly run (and a run by hand) checks everything. The jobs run in parallel (the browser tests as 7
-# Chromium and 5 WebKit shards); a newer push to the same branch cancels the older run. The desktop job (Tauri, desktop/)
-# runs only when desktop/ changed, since it needs the Linux web view libraries and a Rust build.
+# caches warm. The nightly run (and a run by hand) checks everything; when the nightly run fails, its last job opens
+# (or updates) the one "Nightly CI failed" issue. A pull request runs fewer browser tests (B3, e2e_mode in changes): no
+# screenshots, and only part of the contrast matrix unless it changes a style file. The jobs run in parallel (the
+# browser tests as 7 Chromium and 5 WebKit shards); a newer push to the same branch cancels the older run. The desktop
+# job (Tauri, desktop/) runs only when desktop/ changed, since it needs the Linux web view libraries and a Rust build.
 name: ci
 on:
   push:
@@ -35,12 +37,17 @@ jobs:
   # deploy.yml's image tags, plus the files their tests read from elsewhere); desktop: desktop/. A pull request is
   # compared with its merge base, a push with the commit before it. With no usable base, on the nightly run, by hand, or
   # when this file changed, everything runs.
+  # e2e_mode (B3, the owner on 23 Nov: "Yes, trim them"; scripts/e2e-shards.mjs MODES) is how much of the browser tests
+  # run: full (every test, with the screenshots project) only on the nightly run and a run by hand; style (the whole
+  # contrast matrix, no screenshots) on a pull request that changes a style, token, glass or theme file, or that runs
+  # everything; core (only contrast.spec.ts's @contrast-core part, no screenshots) on every other pull request.
   changes:
     runs-on: ubuntu-24.04
     timeout-minutes: 5
     outputs:
       web: ${{ steps.diff.outputs.web }}
       e2e: ${{ steps.diff.outputs.e2e }}
+      e2e_mode: ${{ steps.diff.outputs.e2e_mode }}
       agent: ${{ steps.diff.outputs.agent }}
       stories_agent: ${{ steps.diff.outputs.stories_agent }}
       desktop: ${{ steps.diff.outputs.desktop }}
@@ -59,12 +66,15 @@ jobs:
           HEAD_SHA: ${{ github.sha }}
         run: |
           set -euo pipefail
+          # A command that fails inside $(...) stops the step too, not only the last one there (bash 5, the runner's).
+          shopt -s inherit_errexit
           say() { echo "$1=$2" >> "$GITHUB_OUTPUT"; echo "$1: $2"; }
           # flag <area> <files>: true when the area has at least one changed file.
           flag() { if [ -n "$2" ]; then say "$1" true; else say "$1" false; fi; }
-          everything() { echo "$1"; for a in web e2e agent stories_agent desktop; do say "$a" true; done; }
+          # everything <why> <e2e mode>
+          everything() { echo "$1"; for a in web e2e agent stories_agent desktop; do say "$a" true; done; say e2e_mode "$2"; }
           case "$EVENT" in
-            schedule | workflow_dispatch) everything "A full run (${EVENT}): every check runs."; exit 0 ;;
+            schedule | workflow_dispatch) everything "A full run (${EVENT}): every check runs, with every browser test." full; exit 0 ;;
           esac
           if [ "$EVENT" = "pull_request" ]; then
             base="$(git merge-base "$BASE_SHA" "$HEAD_SHA" 2>/dev/null || true)"
@@ -75,27 +85,30 @@ jobs:
           if [ -z "$base" ] || ! git cat-file -e "${base}^{commit}" 2>/dev/null; then
             if [ "$EVENT" = "push" ]; then
               echo "No usable base commit; the push to main runs its usual jobs and the desktop checks."
-              say web false; say e2e false; say agent true; say stories_agent true; say desktop true
+              say web false; say e2e false; say e2e_mode core; say agent true; say stories_agent true; say desktop true
             else
-              everything "No usable base commit: every check runs."
+              everything "No usable base commit: every check runs (the screenshots wait for the nightly run)." style
             fi
             exit 0
           fi
           # --no-renames lists a moved file at both paths (and needs no file contents).
           changed="$(git diff --no-renames --name-only "$base" "$HEAD_SHA")"
-          echo "$(grep -c . <<<"$changed" || true) changed file(s) since ${base}:"
+          # The greps below may match nothing (exit 1, fine); a broken pattern (exit 2) fails the job, so it can never
+          # quietly skip a check. Each runs in an assignment, so set -e sees its status.
+          count="$(grep -c . <<<"$changed" || [ $? -eq 1 ])"
+          echo "${count} changed file(s) since ${base}:"
           head -n 200 <<<"$changed"
-          ci_changed="$(grep -x '.github/workflows/ci.yml' <<<"$changed" || true)"
-          desktop="$(grep -E '^desktop/' <<<"$changed" || true)"
+          ci_changed="$(grep -x '.github/workflows/ci.yml' <<<"$changed" || [ $? -eq 1 ])"
+          desktop="$(grep -E '^desktop/' <<<"$changed" || [ $? -eq 1 ])"
           # B1: a push to main never runs the web checks or browser tests again; agent and stories-agent always run, so
           # their image caches stay fresh (pull requests only read them).
           if [ "$EVENT" = "push" ]; then
             echo "Push to main: the pull request ran the web checks and browser tests; the nightly run checks main."
-            say web false; say e2e false; say agent true; say stories_agent true
+            say web false; say e2e false; say e2e_mode core; say agent true; say stories_agent true
             flag desktop "${desktop}${ci_changed}"
             exit 0
           fi
-          if [ -n "$ci_changed" ]; then everything "ci.yml changed: every check runs."; exit 0; fi
+          if [ -n "$ci_changed" ]; then everything "ci.yml changed: every check runs (the screenshots wait for the nightly run)." style; exit 0; fi
           # Outside the web: folders the app, its tests and its scripts never read. A web file (unit tests included) that
           # reads a new file from one of these folders must add it to WEB_READS, or a change to it alone would skip them.
           NOT_WEB='^(agent|api|desktop|infra|mac|scripts|stories/agent)/|^\.github/|^(index|privacy|terms)\.html$|^style\.css$'
@@ -109,11 +122,29 @@ jobs:
           AGENT='^(agent|skills|config)/|^api/src/clipfactory_api/(jobs|creators)\.py$|^api/tests/fixtures/|^web/src/api/(types|mock/fixtures)\.ts$|^infra/modules/storage/variables\.tf$'
           # Lamo Stories' image (deploy.yml: stories, the engine) and the stream rules its isolation test reads.
           STORIES='^stories/|^web/src/stories/engine/|^infra/modules/(realtime|notify)/main\.tf$'
-          web="$( { grep -vE "$NOT_WEB" <<<"$changed" || true; grep -E "$WEB_READS" <<<"$changed" || true; } | sort -u)"
+          # B3: what the whole contrast matrix guards. The styles (tokens.css and glass.css among them, and any other
+          # stylesheet, the legal and about pages' public/legal/site.css too), the shared controls (ui.tsx), the
+          # background, veil and look code (background.ts, look.ts), the glass stand-ins (e2e/glass.ts) and
+          # contrast.spec.ts itself.
+          STYLE='^web/src/(styles|stories/styles)/|^web/(src|public)/.+\.css$|^web/src/components/ui\.tsx$|^web/src/lib/(background|look)\.ts$|^web/e2e/(contrast\.spec|glass)\.ts$'
+          not_web="$(grep -vE "$NOT_WEB" <<<"$changed" || [ $? -eq 1 ])"
+          web_reads="$(grep -E "$WEB_READS" <<<"$changed" || [ $? -eq 1 ])"
+          web="$(printf '%s\n%s\n' "$not_web" "$web_reads" | sed '/^$/d' | sort -u)"
+          e2e="$(grep -vE "$UNIT_ONLY" <<<"$web" || [ $? -eq 1 ])"
+          agent="$(grep -E "$AGENT" <<<"$changed" || [ $? -eq 1 ])"
+          stories_agent="$(grep -E "$STORIES" <<<"$changed" || [ $? -eq 1 ])"
+          style="$(grep -E "$STYLE" <<<"$changed" || [ $? -eq 1 ])"
           flag web "$web"
-          flag e2e "$(grep -vE "$UNIT_ONLY" <<<"$web" || true)"
-          flag agent "$(grep -E "$AGENT" <<<"$changed" || true)"
-          flag stories_agent "$(grep -E "$STORIES" <<<"$changed" || true)"
+          flag e2e "$e2e"
+          if [ -n "$style" ]; then
+            echo "A style, token, glass or theme file changed, so the whole contrast matrix runs:"
+            head -n 20 <<<"$style"
+            say e2e_mode style
+          else
+            say e2e_mode core
+          fi
+          flag agent "$agent"
+          flag stories_agent "$stories_agent"
           flag desktop "$desktop"
 
   # The web checks are three jobs. Branch protection requires the check named `web`, which is the small gate at the
@@ -131,19 +162,12 @@ jobs:
       - uses: actions/setup-node@a0853c24544627f65ddf259abe73b1d18a591444 # v5.0.0
         with:
           node-version: "24"
-      # node_modules comes from the cache web-cache writes on main (keyed on the OS, Node and the lockfile), so npm ci
-      # runs only when this change has a lockfile main has not cached yet.
-      - name: cache keys (Node version)
-        id: keys
-        run: echo "node=$(node --version)" >> "$GITHUB_OUTPUT"
-      - name: node_modules from the cache
-        id: modules
-        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: web/node_modules
-          key: web-node-modules-v1-${{ runner.os }}-${{ runner.arch }}-node-${{ steps.keys.outputs.node }}-${{ hashFiles('web/package-lock.json') }}
-      - if: steps.modules.outputs.cache-hit != 'true'
-        run: npm ci
+          cache: npm
+          cache-dependency-path: web/package-lock.json
+      # Always a real npm ci (only npm's download folder is cached, not node_modules): npm ci fails when package.json and
+      # package-lock.json disagree, so a change to one without the other fails here, on every web pull request. The
+      # browser test jobs may take node_modules from web-cache's cache; this job is the one that checks the lockfile.
+      - run: npm ci
       # The committed help corpus, the docs routes table and CONTRACTS §19.6 must match the app routes.
       - name: help corpus is up to date
         run: node scripts/help-corpus.mjs --check
@@ -165,7 +189,7 @@ jobs:
       # stylesheet (index.html), and neither carries Lamo Stories' look (.stories-app, --st-*, st- classes), its shell
       # (StoriesApp) or its animation engine; they come in their own chunks, only when a /stories page opens. The
       # markers are first proven to be in the build at all, so the check can never pass by looking for nothing.
-      - name: Lamo Stories is not in the main bundle
+      - name: Clip Stories is not in the main bundle
         run: |
           set -euo pipefail
           js=$(grep -oE '<script[^>]+src="/assets/[^"]+\.js"' dist/index.html | sed -E 's/.*src="\/([^"]+)".*/\1/')
@@ -174,24 +198,26 @@ jobs:
           [ -n "$js" ] && [ -n "$css" ] || { echo "index.html names no main script or stylesheet"; exit 1; }
           markers_js='stories-app|st-rail|st-tabbar|st-frame|steer_left|tyre_burst|facepalm'
           markers_css='stories-app|--st-|\.st-[a-z]'
-          grep -lqE "$markers_js" dist/assets/*.js || { echo "no Lamo Stories chunk found: the markers are stale"; exit 1; }
-          grep -lqE "$markers_css" dist/assets/*.css || { echo "no Lamo Stories stylesheet found: the markers are stale"; exit 1; }
+          grep -lqE "$markers_js" dist/assets/*.js || { echo "no Clip Stories chunk found: the markers are stale"; exit 1; }
+          grep -lqE "$markers_css" dist/assets/*.css || { echo "no Clip Stories stylesheet found: the markers are stale"; exit 1; }
           bad=0
           for f in $js $extra; do
-            case "$f" in *.js) if grep -qE "$markers_js" "dist/$f"; then echo "::error::$f (loaded by index.html) carries Lamo Stories code: $(grep -oE "$markers_js" "dist/$f" | sort -u | tr '\n' ' ')"; bad=1; fi ;; esac
+            case "$f" in *.js) if grep -qE "$markers_js" "dist/$f"; then echo "::error::$f (loaded by index.html) carries Clip Stories code: $(grep -oE "$markers_js" "dist/$f" | sort -u | tr '\n' ' ')"; bad=1; fi ;; esac
           done
           for f in $css; do
-            if grep -qE "$markers_css" "dist/$f"; then echo "::error::$f (loaded by index.html) carries Lamo Stories styles: $(grep -oE "$markers_css" "dist/$f" | sort -u | head -5 | tr '\n' ' ')"; bad=1; fi
+            if grep -qE "$markers_css" "dist/$f"; then echo "::error::$f (loaded by index.html) carries Clip Stories styles: $(grep -oE "$markers_css" "dist/$f" | sort -u | head -5 | tr '\n' ' ')"; bad=1; fi
           done
-          [ "$bad" = 0 ] && echo "Main bundle: $js $css $extra: no Lamo Stories code or styles."
+          [ "$bad" = 0 ] && echo "Main bundle: $js $css $extra: no Clip Stories code or styles."
 
   # About 1,700 Chromium tests (the app at many widths, contrast, overflow, help, the screenshots), in 7 shards with 4
   # workers each, one per 4-CPU runner; each shard builds the mock app once. Playwright's own --shard splits by count in
   # file order, which put all 206 contrast tests in one shard (14-23 minutes while the others took 8-12), so each shard
   # runs a list made from the tests' saved times instead (web/e2e/shards, scripts/e2e-shards.mjs): about 44
-  # worker-minutes each. The last shard runs every test in no list, so a new test always runs; web-checks fails when a
-  # test would run in no shard or in two. To change the number of shards, change the matrix and GROUPS in
-  # scripts/e2e-shards.mjs together (the shard step fails when they differ), then run its build.
+  # worker-minutes each at night, 41 on a pull request that changes a style file and 32 on any other (B3: the
+  # screenshots project runs only at night and by hand; contrast.spec.ts's @contrast-full part only then and on a
+  # style change). The last shard runs every test in no list, so a new test always runs; web-checks fails when a test
+  # would run in no shard or in two, in any of the three modes. To change the number of shards, change the matrix and
+  # GROUPS in scripts/e2e-shards.mjs together (the shard step fails when they differ), then run its build.
   web-e2e:
     name: web-e2e (${{ matrix.shard }}/${{ strategy.job-total }})
     needs: changes
@@ -239,8 +265,9 @@ jobs:
         env:
           SHARD: ${{ matrix.shard }}
           TOTAL: ${{ strategy.job-total }}
+          MODE: ${{ needs.changes.outputs.e2e_mode }}
         run: |
-          list="$(node scripts/e2e-shards.mjs args chromium "$SHARD" "$TOTAL")"
+          list="$(node scripts/e2e-shards.mjs args chromium "$SHARD" "$TOTAL" "$MODE")"
           mapfile -t args <<<"$list"
           echo "playwright test ${args[*]} --workers=4"
           npm run e2e -- "${args[@]}" --workers=4
@@ -307,8 +334,9 @@ jobs:
         env:
           SHARD: ${{ matrix.shard }}
           TOTAL: ${{ strategy.job-total }}
+          MODE: ${{ needs.changes.outputs.e2e_mode }}
         run: |
-          list="$(node scripts/e2e-shards.mjs args webkit "$SHARD" "$TOTAL")"
+          list="$(node scripts/e2e-shards.mjs args webkit "$SHARD" "$TOTAL" "$MODE")"
           mapfile -t args <<<"$list"
           echo "playwright test ${args[*]} --workers=2"
           npm run e2e -- "${args[@]}" --workers=2
@@ -361,9 +389,10 @@ jobs:
           need web-e2e-webkit "$NEED_E2E" "$WEBKIT"
           [ "$ok" = 1 ]
 
-  # A5: node_modules and the two browsers for web-checks and the web-e2e jobs, which only read them. Only main (a push,
-  # the nightly run) writes these caches, so pull requests never fill the 10 GB cache store with their own copies. A
-  # cache that is there already is only looked up, not downloaded, so this takes seconds on most pushes.
+  # A5: node_modules and the two browsers for the web-e2e jobs, which only read them (web-checks always runs a real
+  # npm ci, so it is the job that checks the lockfile). Only main (a push, the nightly run) writes these caches, so pull
+  # requests never fill the 10 GB cache store with their own copies. A cache that is there already is only looked up,
+  # not downloaded, so this takes seconds on most pushes.
   web-cache:
     if: github.event_name != 'pull_request'
     runs-on: ubuntu-24.04
@@ -549,7 +578,7 @@ jobs:
       # self-check (one frame drawn, one sound mastered, one caption burned in), as the deployed image does. Pull
       # requests only read the layer cache, as in agent.
       - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
-      - name: build the Lamo Stories agent image (linux/arm64, not pushed)
+      - name: build the Clip Stories agent image (linux/arm64, not pushed)
         uses: docker/build-push-action@10e90e3645eae34f1e60eeb005ba3a3d33f178e8 # v6.19.2
         with:
           context: .
@@ -698,3 +727,41 @@ jobs:
         run: |
           python3 desktop/tools/test_build_tools.py
           jq -e . desktop/tools/tools.lock.json >/dev/null
+
+  # B1's nightly run checks all of main, so a failure there must reach someone: this opens one issue, "Nightly CI
+  # failed", with the run's link and which jobs failed, or adds the new run to the one that is still open (close it once
+  # main is green again). Only for the nightly run: a pull request shows its own checks, and a run by hand is watched by
+  # whoever started it. It posts nothing but the run, the commit and job names, and uses only the run's own token.
+  nightly-failed:
+    name: the nightly run failed (open or update its issue)
+    needs: [changes, web-checks, web-e2e, web-e2e-webkit, web, web-cache, api, agent, stories-agent, infra, scripts, desktop]
+    if: failure() && github.event_name == 'schedule'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      issues: write
+    steps:
+      - name: open or update the "Nightly CI failed" issue
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+          ATTEMPT: ${{ github.run_attempt }}
+          SHA: ${{ github.sha }}
+          NEEDS: ${{ toJSON(needs) }}
+        run: |
+          set -euo pipefail
+          title="Nightly CI failed"
+          failed="$(jq -r '[to_entries[] | select(.value.result == "failure" or .value.result == "cancelled") | .key] | join(", ")' <<<"$NEEDS")"
+          when="$(date -u '+%Y-%m-%d %H:%M UTC')"
+          body="$(printf 'The nightly ci run on main failed (%s).\n\n- Run: %s (attempt %s)\n- Commit: %s\n- Failed jobs: %s\n\nRe-run the failed jobs from the run page, or fix main. Close this issue once a nightly run is green again.\n' \
+            "$when" "$RUN_URL" "$ATTEMPT" "$SHA" "${failed:-see the run}")"
+          number="$(gh issue list --state open --limit 100 --json number,title \
+            --jq "map(select(.title == \"${title}\")) | sort_by(.number) | .[0].number // empty")"
+          if [ -n "$number" ]; then
+            gh issue edit "$number" --body "$body"
+            gh issue comment "$number" --body "Failed again on ${when}: ${RUN_URL} (${SHA:0:7}; ${failed:-see the run})."
+            echo "Updated issue #${number}."
+          else
+            gh issue create --title "$title" --body "$body"
+          fi

@@ -552,11 +552,11 @@ if grep -Fxq "          SOURCES_HASH: \${{ hashFiles('agent/**', 'skills/**', 'c
 else
   not_ok "the build job must keep SOURCES_HASH (agent/**, skills/**, config/**) and add STORIES_HASH (stories/**, web/src/stories/engine/**) as stories-agent-<16>, passed as TF_VAR_stories_agent_image_tag"
 fi
-tag_step="$(awk '/^      - name: Lamo Stories agent image tag/ { on = 1; print; next } on && /^      - / { exit } on { print }' <<<"$build")"
+tag_step="$(awk '/^      - name: Clip Stories agent image tag/ { on = 1; print; next } on && /^      - / { exit } on { print }' <<<"$build")"
 # shellcheck disable=SC2016
 if grep -Fxq '          CLIPS_TAG: ${{ steps.image.outputs.tag }}' <<<"$tag_step" \
   && grep -Fq 'echo "- Clip Factory agent image: \`${CLIPS_TAG}\`"' <<<"$tag_step" \
-  && grep -Fq 'echo "- Lamo Stories agent image: \`${tag}\`"' <<<"$tag_step" \
+  && grep -Fq 'echo "- Clip Stories agent image: \`${tag}\`"' <<<"$tag_step" \
   && grep -Fq '} >> "$GITHUB_STEP_SUMMARY"' <<<"$tag_step"; then
   ok "the deploy summary shows Clip Factory's and Lamo Stories' agent image tags"
 else
@@ -566,8 +566,8 @@ fi
 # 16. Lamo Stories' image is built before the plan once its runtime is live (read from Terraform's outputs), with
 #     Clip Factory's push-image.sh and stories/agent/Dockerfile; one that does not build keeps the live tag, so the
 #     apply never fails on it and Clip Factory still ships. It never builds Clip Factory's agent.
-push_step="$(awk '/^      - name: Lamo Stories agent image \(built before the plan/ { on = 1; print; next } on && /^      - / { exit } on { print }' <<<"$infra")"
-push_line="$(grep -n '^      - name: Lamo Stories agent image (built before the plan' <<<"$infra" | head -1 | cut -d: -f1)"
+push_step="$(awk '/^      - name: Clip Stories agent image \(built before the plan/ { on = 1; print; next } on && /^      - / { exit } on { print }' <<<"$infra")"
+push_line="$(grep -n '^      - name: Clip Stories agent image (built before the plan' <<<"$infra" | head -1 | cut -d: -f1)"
 plan_line="$(grep -n '^      - name: terraform plan$' <<<"$infra" | head -1 | cut -d: -f1)"
 init_line="$(grep -n '^      - name: terraform init$' <<<"$infra" | head -1 | cut -d: -f1)"
 # shellcheck disable=SC2016
@@ -576,7 +576,7 @@ if [ -n "$push_line" ] && [ -n "$plan_line" ] && [ -n "$init_line" ] && [ "$init
   && grep -Fq 'terraform output -raw stories_agent_image_tag' <<<"$push_step" \
   && grep -Fq 'DOCKERFILE="${GITHUB_WORKSPACE}/stories/agent/Dockerfile" bash "${GITHUB_WORKSPACE}/scripts/push-image.sh"' <<<"$push_step" \
   && grep -Fq 'echo "tag=${live}" >> "$GITHUB_OUTPUT"' <<<"$push_step" \
-  && grep -Fq '::error title=Lamo Stories agent image::' <<<"$push_step" \
+  && grep -Fq '::error title=Clip Stories agent image::' <<<"$push_step" \
   && ! grep -q 'agent/Dockerfile"' <<<"$(grep -v 'stories/agent/Dockerfile' <<<"$push_step")" \
   && ! grep -Eq 'exit 1|continue-on-error' <<<"$push_step" \
   && grep -Fq 'output "stories_agent_image_tag"' "${root}/infra/envs/prod/outputs.tf"; then
@@ -621,7 +621,7 @@ if grep -Fq 'for path in /v1/workspaces /v1/workspaces/stories/dashboard; do' <<
   && grep -A12 'for path in /v1/workspaces /v1/workspaces/stories/dashboard; do' <<<"$smoke" | grep -q -- '-X OPTIONS' \
   && grep -A20 'for path in /v1/workspaces /v1/workspaces/stories/dashboard; do' <<<"$smoke" | grep -q 'access-control-allow-origin' \
   && grep -q 'url="${API_URL%/}/v1/jobs"' <<<"$smoke" \
-  && [ "$last_smoke_step" = "      - name: the Lamo Stories routes let the app's browsers in (CORS preflight)" ]; then
+  && [ "$last_smoke_step" = "      - name: the Clip Stories routes let the app's browsers in (CORS preflight)" ]; then
   ok "the smoke job preflights /v1/workspaces and /v1/workspaces/stories/dashboard last (and still /v1/jobs)"
 else
   not_ok "the smoke job must send a CORS preflight to /v1/workspaces and /v1/workspaces/stories/dashboard as its last step (last: ${last_smoke_step})"

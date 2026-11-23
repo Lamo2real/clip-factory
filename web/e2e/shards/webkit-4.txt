@@ -1,4 +1,4 @@
-# webkit shard 4 of 5: about 19.6 worker-minutes (45 lines).
+# webkit shard 4 of 5: about 19.6 core, 19.6 style, 19.6 full worker-minutes (45 lines).
 # Written by: node scripts/e2e-shards.mjs build (from timings.tsv). The last shard runs every test in no list.
 [webkit-phone] › ask-assistant.spec.ts › Ask as a full assistant › Stop ends the answer
 [webkit-phone] › ask-assistant.spec.ts › Ask as a full assistant › falls back to the plain answer when the assistant is off

@@ -1,4 +1,4 @@
-# webkit shard 3 of 5: about 19.7 worker-minutes (39 lines).
+# webkit shard 3 of 5: about 19.7 core, 19.7 style, 19.7 full worker-minutes (39 lines).
 # Written by: node scripts/e2e-shards.mjs build (from timings.tsv). The last shard runs every test in no list.
 [webkit-phone] › ask-assistant.spec.ts › Ask as a full assistant › files by drop: a picture thumbnail, PDF and DOCX tiles, a refused ZIP
 [webkit-phone] › ask-assistant.spec.ts › Ask as a full assistant › files dropped on the launcher open Ask with them in the tray

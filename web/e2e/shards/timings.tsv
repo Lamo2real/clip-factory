@@ -286,53 +286,100 @@
 23.9	[chromium] › contrast.spec.ts › "All set!" is readable where the column was and in the pill's strip (light)
 56.7	[chromium] › contrast.spec.ts › Ask's file tiles, status line and sources are readable at 375 and 1440 px (dark)
 55.1	[chromium] › contrast.spec.ts › Ask's file tiles, status line and sources are readable at 375 and 1440 px (light)
-49.8	[chromium] › contrast.spec.ts › text on / is readable at 320, 375 and 1440 px, light and dark
-8.6	[chromium] › contrast.spec.ts › text on /about.html is readable at 320, 375 and 1440 px, light and dark
-31.8	[chromium] › contrast.spec.ts › text on /campaigns is readable at 320, 375 and 1440 px, light and dark
-34.3	[chromium] › contrast.spec.ts › text on /campaigns/200ea21b-be80-4db8-b552-8e32b148604e is readable at 320, 375 and 1440 px, light and dark
-29.9	[chromium] › contrast.spec.ts › text on /campaigns/a1cefc3b-4533-438f-8e70-a7299550f1cf is readable at 320, 375 and 1440 px, light and dark
-22.2	[chromium] › contrast.spec.ts › text on /get-app is readable at 320, 375 and 1440 px, light and dark
-30.8	[chromium] › contrast.spec.ts › text on /jobs is readable at 320, 375 and 1440 px, light and dark
-27.5	[chromium] › contrast.spec.ts › text on /jobs/:failed is readable at 320, 375 and 1440 px, light and dark
-26.3	[chromium] › contrast.spec.ts › text on /jobs/:running is readable at 320, 375 and 1440 px, light and dark
-8.9	[chromium] › contrast.spec.ts › text on /legal/privacy.html is readable at 320, 375 and 1440 px, light and dark
-8.3	[chromium] › contrast.spec.ts › text on /legal/terms.html is readable at 320, 375 and 1440 px, light and dark
-60	[chromium] › contrast.spec.ts › text on /library is readable at 320, 375 and 1440 px, light and dark
-17	[chromium] › contrast.spec.ts › text on /mock-oauth/youtube is readable at 320, 375 and 1440 px, light and dark
-66	[chromium] › contrast.spec.ts › text on /money is readable at 320, 375 and 1440 px, light and dark
-21.7	[chromium] › contrast.spec.ts › text on /nope is readable at 320, 375 and 1440 px, light and dark
-58.1	[chromium] › contrast.spec.ts › text on /review is readable at 320, 375 and 1440 px, light and dark
-25.8	[chromium] › contrast.spec.ts › text on /settings is readable at 320, 375 and 1440 px, light and dark
-26.7	[chromium] › contrast.spec.ts › text on /settings/app is readable at 320, 375 and 1440 px, light and dark
-23.4	[chromium] › contrast.spec.ts › text on /settings/app/account is readable at 320, 375 and 1440 px, light and dark
-29.1	[chromium] › contrast.spec.ts › text on /settings/app/ask is readable at 320, 375 and 1440 px, light and dark
-25.5	[chromium] › contrast.spec.ts › text on /settings/app/get-the-app is readable at 320, 375 and 1440 px, light and dark
-31.6	[chromium] › contrast.spec.ts › text on /settings/app/notifications is readable at 320, 375 and 1440 px, light and dark
-24.8	[chromium] › contrast.spec.ts › text on /settings/app/updates is readable at 320, 375 and 1440 px, light and dark
-27.3	[chromium] › contrast.spec.ts › text on /settings/clip-making is readable at 320, 375 and 1440 px, light and dark
-28.1	[chromium] › contrast.spec.ts › text on /settings/clip-making/clips is readable at 320, 375 and 1440 px, light and dark
-35.3	[chromium] › contrast.spec.ts › text on /settings/clip-making/learned is readable at 320, 375 and 1440 px, light and dark
-29.7	[chromium] › contrast.spec.ts › text on /settings/clip-making/skills is readable at 320, 375 and 1440 px, light and dark
-35.5	[chromium] › contrast.spec.ts › text on /settings/clip-making/streamers is readable at 320, 375 and 1440 px, light and dark
-27	[chromium] › contrast.spec.ts › text on /settings/clip-making/youtube is readable at 320, 375 and 1440 px, light and dark
-24.4	[chromium] › contrast.spec.ts › text on /settings/look-and-feel is readable at 320, 375 and 1440 px, light and dark
-30.2	[chromium] › contrast.spec.ts › text on /settings/look-and-feel/background is readable at 320, 375 and 1440 px, light and dark
-24.4	[chromium] › contrast.spec.ts › text on /settings/look-and-feel/motion is readable at 320, 375 and 1440 px, light and dark
-49.1	[chromium] › contrast.spec.ts › text on /settings/look-and-feel/sounds is readable at 320, 375 and 1440 px, light and dark
-29.6	[chromium] › contrast.spec.ts › text on /settings/posting is readable at 320, 375 and 1440 px, light and dark
-36.8	[chromium] › contrast.spec.ts › text on /settings/posting/auto is readable at 320, 375 and 1440 px, light and dark
-31.4	[chromium] › contrast.spec.ts › text on /settings/posting/getpaid is readable at 320, 375 and 1440 px, light and dark
-60	[chromium] › contrast.spec.ts › text on /settings/posting/money is readable at 320, 375 and 1440 px, light and dark
-31.6	[chromium] › contrast.spec.ts › text on /settings/posting/my-settings is readable at 320, 375 and 1440 px, light and dark
-30.9	[chromium] › contrast.spec.ts › text on /settings/posting/setup is readable at 320, 375 and 1440 px, light and dark
-26.2	[chromium] › contrast.spec.ts › text on /settings/posting/setup/contentrewards is readable at 320, 375 and 1440 px, light and dark
-36	[chromium] › contrast.spec.ts › text on /settings/posting/setup/facebook is readable at 320, 375 and 1440 px, light and dark
-31.1	[chromium] › contrast.spec.ts › text on /settings/posting/setup/instagram is readable at 320, 375 and 1440 px, light and dark
-35.7	[chromium] › contrast.spec.ts › text on /settings/posting/setup/tiktok is readable at 320, 375 and 1440 px, light and dark
-29.5	[chromium] › contrast.spec.ts › text on /settings/posting/setup/x is readable at 320, 375 and 1440 px, light and dark
-32.6	[chromium] › contrast.spec.ts › text on /settings/posting/setup/youtube is readable at 320, 375 and 1440 px, light and dark
-21.8	[chromium] › contrast.spec.ts › text on /settings/posting/tiktok-mac is readable at 320, 375 and 1440 px, light and dark
-24.6	[chromium] › contrast.spec.ts › text on /settings/posting/where is readable at 320, 375 and 1440 px, light and dark
+33.2	[chromium] › contrast.spec.ts › text on / is readable at 320 px light, and at 320, 375 and 1440 px dark
+16.6	[chromium] › contrast.spec.ts › text on / is readable at 375 and 1440 px, light
+5.7	[chromium] › contrast.spec.ts › text on /about.html is readable at 320 px light, and at 320, 375 and 1440 px dark
+2.9	[chromium] › contrast.spec.ts › text on /about.html is readable at 375 and 1440 px, light
+21.2	[chromium] › contrast.spec.ts › text on /campaigns is readable at 320 px light, and at 320, 375 and 1440 px dark
+10.6	[chromium] › contrast.spec.ts › text on /campaigns is readable at 375 and 1440 px, light
+22.9	[chromium] › contrast.spec.ts › text on /campaigns/200ea21b-be80-4db8-b552-8e32b148604e is readable at 320 px light, and at 320, 375 and 1440 px dark
+11.4	[chromium] › contrast.spec.ts › text on /campaigns/200ea21b-be80-4db8-b552-8e32b148604e is readable at 375 and 1440 px, light
+19.9	[chromium] › contrast.spec.ts › text on /campaigns/a1cefc3b-4533-438f-8e70-a7299550f1cf is readable at 320 px light, and at 320, 375 and 1440 px dark
+10	[chromium] › contrast.spec.ts › text on /campaigns/a1cefc3b-4533-438f-8e70-a7299550f1cf is readable at 375 and 1440 px, light
+14.8	[chromium] › contrast.spec.ts › text on /get-app is readable at 320 px light, and at 320, 375 and 1440 px dark
+7.4	[chromium] › contrast.spec.ts › text on /get-app is readable at 375 and 1440 px, light
+20.5	[chromium] › contrast.spec.ts › text on /jobs is readable at 320 px light, and at 320, 375 and 1440 px dark
+10.3	[chromium] › contrast.spec.ts › text on /jobs is readable at 375 and 1440 px, light
+18.3	[chromium] › contrast.spec.ts › text on /jobs/:failed is readable at 320 px light, and at 320, 375 and 1440 px dark
+9.2	[chromium] › contrast.spec.ts › text on /jobs/:failed is readable at 375 and 1440 px, light
+17.5	[chromium] › contrast.spec.ts › text on /jobs/:running is readable at 320 px light, and at 320, 375 and 1440 px dark
+8.8	[chromium] › contrast.spec.ts › text on /jobs/:running is readable at 375 and 1440 px, light
+5.9	[chromium] › contrast.spec.ts › text on /legal/privacy.html is readable at 320 px light, and at 320, 375 and 1440 px dark
+3	[chromium] › contrast.spec.ts › text on /legal/privacy.html is readable at 375 and 1440 px, light
+5.5	[chromium] › contrast.spec.ts › text on /legal/terms.html is readable at 320 px light, and at 320, 375 and 1440 px dark
+2.8	[chromium] › contrast.spec.ts › text on /legal/terms.html is readable at 375 and 1440 px, light
+40	[chromium] › contrast.spec.ts › text on /library is readable at 320 px light, and at 320, 375 and 1440 px dark
+20	[chromium] › contrast.spec.ts › text on /library is readable at 375 and 1440 px, light
+11.3	[chromium] › contrast.spec.ts › text on /mock-oauth/youtube is readable at 320 px light, and at 320, 375 and 1440 px dark
+5.7	[chromium] › contrast.spec.ts › text on /mock-oauth/youtube is readable at 375 and 1440 px, light
+44	[chromium] › contrast.spec.ts › text on /money is readable at 320 px light, and at 320, 375 and 1440 px dark
+22	[chromium] › contrast.spec.ts › text on /money is readable at 375 and 1440 px, light
+14.5	[chromium] › contrast.spec.ts › text on /nope is readable at 320 px light, and at 320, 375 and 1440 px dark
+7.2	[chromium] › contrast.spec.ts › text on /nope is readable at 375 and 1440 px, light
+38.7	[chromium] › contrast.spec.ts › text on /review is readable at 320 px light, and at 320, 375 and 1440 px dark
+19.4	[chromium] › contrast.spec.ts › text on /review is readable at 375 and 1440 px, light
+17.2	[chromium] › contrast.spec.ts › text on /settings is readable at 320 px light, and at 320, 375 and 1440 px dark
+8.6	[chromium] › contrast.spec.ts › text on /settings is readable at 375 and 1440 px, light
+17.8	[chromium] › contrast.spec.ts › text on /settings/app is readable at 320 px light, and at 320, 375 and 1440 px dark
+8.9	[chromium] › contrast.spec.ts › text on /settings/app is readable at 375 and 1440 px, light
+15.6	[chromium] › contrast.spec.ts › text on /settings/app/account is readable at 320 px light, and at 320, 375 and 1440 px dark
+7.8	[chromium] › contrast.spec.ts › text on /settings/app/account is readable at 375 and 1440 px, light
+19.4	[chromium] › contrast.spec.ts › text on /settings/app/ask is readable at 320 px light, and at 320, 375 and 1440 px dark
+9.7	[chromium] › contrast.spec.ts › text on /settings/app/ask is readable at 375 and 1440 px, light
+17	[chromium] › contrast.spec.ts › text on /settings/app/get-the-app is readable at 320 px light, and at 320, 375 and 1440 px dark
+8.5	[chromium] › contrast.spec.ts › text on /settings/app/get-the-app is readable at 375 and 1440 px, light
+21.1	[chromium] › contrast.spec.ts › text on /settings/app/notifications is readable at 320 px light, and at 320, 375 and 1440 px dark
+10.5	[chromium] › contrast.spec.ts › text on /settings/app/notifications is readable at 375 and 1440 px, light
+16.5	[chromium] › contrast.spec.ts › text on /settings/app/updates is readable at 320 px light, and at 320, 375 and 1440 px dark
+8.3	[chromium] › contrast.spec.ts › text on /settings/app/updates is readable at 375 and 1440 px, light
+18.2	[chromium] › contrast.spec.ts › text on /settings/clip-making is readable at 320 px light, and at 320, 375 and 1440 px dark
+9.1	[chromium] › contrast.spec.ts › text on /settings/clip-making is readable at 375 and 1440 px, light
+18.7	[chromium] › contrast.spec.ts › text on /settings/clip-making/clips is readable at 320 px light, and at 320, 375 and 1440 px dark
+9.4	[chromium] › contrast.spec.ts › text on /settings/clip-making/clips is readable at 375 and 1440 px, light
+23.5	[chromium] › contrast.spec.ts › text on /settings/clip-making/learned is readable at 320 px light, and at 320, 375 and 1440 px dark
+11.8	[chromium] › contrast.spec.ts › text on /settings/clip-making/learned is readable at 375 and 1440 px, light
+19.8	[chromium] › contrast.spec.ts › text on /settings/clip-making/skills is readable at 320 px light, and at 320, 375 and 1440 px dark
+9.9	[chromium] › contrast.spec.ts › text on /settings/clip-making/skills is readable at 375 and 1440 px, light
+23.7	[chromium] › contrast.spec.ts › text on /settings/clip-making/streamers is readable at 320 px light, and at 320, 375 and 1440 px dark
+11.8	[chromium] › contrast.spec.ts › text on /settings/clip-making/streamers is readable at 375 and 1440 px, light
+18	[chromium] › contrast.spec.ts › text on /settings/clip-making/youtube is readable at 320 px light, and at 320, 375 and 1440 px dark
+9	[chromium] › contrast.spec.ts › text on /settings/clip-making/youtube is readable at 375 and 1440 px, light
+16.3	[chromium] › contrast.spec.ts › text on /settings/look-and-feel is readable at 320 px light, and at 320, 375 and 1440 px dark
+8.1	[chromium] › contrast.spec.ts › text on /settings/look-and-feel is readable at 375 and 1440 px, light
+20.1	[chromium] › contrast.spec.ts › text on /settings/look-and-feel/background is readable at 320 px light, and at 320, 375 and 1440 px dark
+10.1	[chromium] › contrast.spec.ts › text on /settings/look-and-feel/background is readable at 375 and 1440 px, light
+16.3	[chromium] › contrast.spec.ts › text on /settings/look-and-feel/motion is readable at 320 px light, and at 320, 375 and 1440 px dark
+8.1	[chromium] › contrast.spec.ts › text on /settings/look-and-feel/motion is readable at 375 and 1440 px, light
+32.7	[chromium] › contrast.spec.ts › text on /settings/look-and-feel/sounds is readable at 320 px light, and at 320, 375 and 1440 px dark
+16.4	[chromium] › contrast.spec.ts › text on /settings/look-and-feel/sounds is readable at 375 and 1440 px, light
+19.7	[chromium] › contrast.spec.ts › text on /settings/posting is readable at 320 px light, and at 320, 375 and 1440 px dark
+9.9	[chromium] › contrast.spec.ts › text on /settings/posting is readable at 375 and 1440 px, light
+24.5	[chromium] › contrast.spec.ts › text on /settings/posting/auto is readable at 320 px light, and at 320, 375 and 1440 px dark
+12.3	[chromium] › contrast.spec.ts › text on /settings/posting/auto is readable at 375 and 1440 px, light
+20.9	[chromium] › contrast.spec.ts › text on /settings/posting/getpaid is readable at 320 px light, and at 320, 375 and 1440 px dark
+10.5	[chromium] › contrast.spec.ts › text on /settings/posting/getpaid is readable at 375 and 1440 px, light
+40	[chromium] › contrast.spec.ts › text on /settings/posting/money is readable at 320 px light, and at 320, 375 and 1440 px dark
+20	[chromium] › contrast.spec.ts › text on /settings/posting/money is readable at 375 and 1440 px, light
+21.1	[chromium] › contrast.spec.ts › text on /settings/posting/my-settings is readable at 320 px light, and at 320, 375 and 1440 px dark
+10.5	[chromium] › contrast.spec.ts › text on /settings/posting/my-settings is readable at 375 and 1440 px, light
+20.6	[chromium] › contrast.spec.ts › text on /settings/posting/setup is readable at 320 px light, and at 320, 375 and 1440 px dark
+10.3	[chromium] › contrast.spec.ts › text on /settings/posting/setup is readable at 375 and 1440 px, light
+17.5	[chromium] › contrast.spec.ts › text on /settings/posting/setup/contentrewards is readable at 320 px light, and at 320, 375 and 1440 px dark
+8.7	[chromium] › contrast.spec.ts › text on /settings/posting/setup/contentrewards is readable at 375 and 1440 px, light
+24	[chromium] › contrast.spec.ts › text on /settings/posting/setup/facebook is readable at 320 px light, and at 320, 375 and 1440 px dark
+12	[chromium] › contrast.spec.ts › text on /settings/posting/setup/facebook is readable at 375 and 1440 px, light
+20.7	[chromium] › contrast.spec.ts › text on /settings/posting/setup/instagram is readable at 320 px light, and at 320, 375 and 1440 px dark
+10.4	[chromium] › contrast.spec.ts › text on /settings/posting/setup/instagram is readable at 375 and 1440 px, light
+23.8	[chromium] › contrast.spec.ts › text on /settings/posting/setup/tiktok is readable at 320 px light, and at 320, 375 and 1440 px dark
+11.9	[chromium] › contrast.spec.ts › text on /settings/posting/setup/tiktok is readable at 375 and 1440 px, light
+19.7	[chromium] › contrast.spec.ts › text on /settings/posting/setup/x is readable at 320 px light, and at 320, 375 and 1440 px dark
+9.8	[chromium] › contrast.spec.ts › text on /settings/posting/setup/x is readable at 375 and 1440 px, light
+21.7	[chromium] › contrast.spec.ts › text on /settings/posting/setup/youtube is readable at 320 px light, and at 320, 375 and 1440 px dark
+10.9	[chromium] › contrast.spec.ts › text on /settings/posting/setup/youtube is readable at 375 and 1440 px, light
+14.5	[chromium] › contrast.spec.ts › text on /settings/posting/tiktok-mac is readable at 320 px light, and at 320, 375 and 1440 px dark
+7.3	[chromium] › contrast.spec.ts › text on /settings/posting/tiktok-mac is readable at 375 and 1440 px, light
+16.4	[chromium] › contrast.spec.ts › text on /settings/posting/where is readable at 320 px light, and at 320, 375 and 1440 px dark
+8.2	[chromium] › contrast.spec.ts › text on /settings/posting/where is readable at 375 and 1440 px, light
 6.1	[chromium] › contrast.spec.ts › the Library tabs stay readable over a white picture, at 390 and 1440 px
 66	[chromium] › contrast.spec.ts › the setup list is readable as the open column, folded and under the skip question at 1440 px (dark)
 66	[chromium] › contrast.spec.ts › the setup list is readable as the open column, folded and under the skip question at 1440 px (light)
