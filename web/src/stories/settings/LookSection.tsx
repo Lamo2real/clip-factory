@@ -3,8 +3,11 @@
 // See-through (the desktop through the window; Glass strength Clear or Frosted), Picture (one of yours, shrunk to fit
 // this device), Colours (the warm Ember preset is the default of the whole Look). Every choice shows what you get: a
 // little picture of it beside its name. The pick-one bars are Settings' own (SetPick: the sliding highlight, arrows,
-// never disabled).
+// never disabled). In Picture a picture dropped anywhere on the page is the one chosen (docs/CONTRACTS.md §45.40).
 import { useRef, useState, type ChangeEvent, type CSSProperties } from "react";
+import { DropOverlay } from "../../components/DropOverlay.tsx";
+import { useFileDrop } from "../../lib/useFileDrop.ts";
+import { Icon } from "../chat/kit.tsx";
 import { EMBER, nativeGlass, PRESETS, presetOf, setStoriesLook, setStoriesPicture, stageColours, useStoriesLook, type GlassStrength, type LookMode, type StoriesLook } from "../look.ts";
 import { Btn, SectionBar, SetCard, SetPick, type PickOption } from "./bits.tsx";
 
@@ -12,6 +15,13 @@ import { Btn, SectionBar, SetCard, SetPick, type PickOption } from "./bits.tsx";
 export const MAX_PICTURE_BYTES = 25_000_000;
 /** A picture is kept at most this wide or tall (it only ever sits behind frosted glass). */
 export const PICTURE_SIDE = 1920;
+
+/** Why this file cannot be the background, or null. */
+export function lookPictureProblem(f: { type: string; size: number }): string | null {
+  if (!f.type.startsWith("image/")) return "Pick a picture.";
+  if (f.size > MAX_PICTURE_BYTES) return "That picture is too big. Pick a smaller one.";
+  return null;
+}
 
 /** The colours as they really sit behind the glass: the base, and the two lights in their own places. */
 export function meshStyle(colours: readonly string[]): CSSProperties {
@@ -102,12 +112,10 @@ export function LookSection() {
     { value: "frosted", label: "Frosted" },
   ];
 
-  const pick = (e: ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    e.target.value = "";
-    if (!f) return;
-    if (!f.type.startsWith("image/") || f.size > MAX_PICTURE_BYTES) {
-      setProblem("That picture is too big. Pick a smaller one.");
+  const take = (f: File) => {
+    const bad = lookPictureProblem(f);
+    if (bad) {
+      setProblem(bad);
       return;
     }
     setBusy(true);
@@ -121,9 +129,25 @@ export function LookSection() {
       .catch(() => setProblem("That picture is too big. Pick a smaller one."))
       .finally(() => setBusy(false));
   };
+  const pick = (e: ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (f) take(f);
+  };
+  // A picture dropped anywhere on the page, only while Picture is chosen.
+  const drop = useFileDrop({
+    scope: "page",
+    checkFile: lookPictureProblem,
+    onFiles: ([f]) => {
+      if (f) take(f);
+    },
+    enabled: look.mode === "picture",
+    busy: busy ? "Getting the picture ready…" : null,
+  });
 
   return (
     <>
+      <DropOverlay drop={drop} scope="page" look="stories" words={{ file: "Drop your picture here", busy: "Getting the picture ready…" }} icon={<Icon name="picture" size={40} />} host={document.querySelector(".stories-app")} />
       {/* Its own page, Settings › Look (/stories/settings/look): the note in the section head's plate, like every page's. */}
       <SectionBar>
         <p className="st-stg-small">Kept on this device. Clip Factory's own background stays as it is.</p>

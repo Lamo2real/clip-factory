@@ -2,12 +2,14 @@
 // Factory's. Upload a SKILL.md (up to 1 MB) or a .zip (up to 20 MB) with its progress, or write one here (a name,
 // when to use it, what to do); every save is a new version (the last 10 kept, any can be restored); switch a skill on
 // or off; give it to agents or take it off them; built-ins (stories/skills/) can be switched off and taken off agents,
-// never changed or deleted.
+// never changed or deleted. A file dropped on an upload button goes up as if picked (docs/CONTRACTS.md §45.40).
 import { useEffect, useRef, useState } from "react";
 import { friendlyMessage } from "../../api/errors.ts";
 import { putFile } from "../../api/upload.ts";
+import { DropOverlay } from "../../components/DropOverlay.tsx";
 import { useToast } from "../../components/Toasts.tsx";
 import { useLoad } from "../../lib/hooks.ts";
+import { useFileDrop } from "../../lib/useFileDrop.ts";
 import { storiesApi } from "../api/client.ts";
 import type { Agent, AgentId, Skill } from "../api/types.ts";
 import { Btn, cheer, Chip, Empty, Failed, Loading, Note, Progress, SetCard, SetSwitch, SIcon, sizeText, whenText } from "./bits.tsx";
@@ -65,11 +67,23 @@ function useSkillUpload(ws: string, done: (s: Skill) => void) {
   return { progress, upload };
 }
 
-/** The file picker. While an upload runs it stays clickable (the deny sound) but opens nothing: never `disabled`. */
+/**
+ * The file picker. While an upload runs it stays clickable (the deny sound) but opens nothing: never `disabled`. A
+ * skill file dropped on it goes up the same way; while it is off it takes no drop.
+ */
 function FilePick({ label, onFile, off }: { label: string; onFile: (f: File, el: HTMLElement) => void; off?: string }) {
   const ref = useRef<HTMLLabelElement>(null);
+  const drop = useFileDrop({
+    scope: "element",
+    checkFile: checkSkillFile,
+    onFiles: ([f]) => {
+      if (f && ref.current) onFile(f, ref.current);
+    },
+    enabled: !off,
+  });
   return (
-    <label ref={ref} className="st-btn st-stg-btn st-stg-file" aria-disabled={off ? true : undefined} title={off}>
+    <label ref={ref} className="st-btn st-stg-btn st-stg-file st-drop-host" aria-disabled={off ? true : undefined} title={off} {...drop.bind}>
+      <DropOverlay drop={drop} scope="element" look="stories" words={{ file: "Drop it here" }} />
       <SIcon name="upload" size={20} />
       {label}
       <input

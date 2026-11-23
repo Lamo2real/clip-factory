@@ -12,4 +12,5 @@
   reference videos are uploaded files analyzed from frames and sound.
 - **Consequences.** The owner sees and edits everything the agents remember; nothing is published or rendered
   without his tap; Clip Factory's skills rule is untouched. Reference links to other people's videos are not
-  downloaded (upload the file).
+  downloaded (upload the file). *Amended by ADR-88 (2026-11-23): a pasted link to one video on seven allowed sites
+  is fetched by Clips Funded's own runtime, behind its egress guard, for study only.*

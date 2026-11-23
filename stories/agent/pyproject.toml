@@ -10,6 +10,9 @@ dependencies = [
   "numpy>=2.2",   # the rasterizer and the sound synthesis
   "deno==2.9.8",  # runs web/src/stories/engine/cli.ts (the same engine the browser draws)
   "anthropic>=2.12,<3",  # the Anthropic API host for models the owner adds (§45.37 G4); never Clip Factory's
+  # Reference videos from a link (§45.40): Clips Funded's own pinned copy, the same pin as Clip Factory's, run only
+  # through the egress guard (netguard.py) with the allowed extractors; never Clip Factory's cookies, proxy or tokens.
+  "yt-dlp[default]==2026.10.26",
 ]
 
 [dependency-groups]

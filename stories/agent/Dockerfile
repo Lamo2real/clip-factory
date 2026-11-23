@@ -1,10 +1,12 @@
 # Lamo Stories' own AgentCore runtime image (docs/CONTRACTS.md §45.11.1, ADR-76). ARM64, plain HTTP on 8080.
 # Build from the repository root:  docker build --platform linux/arm64 -f stories/agent/Dockerfile .
 # Python 3.13, ffmpeg (Debian's, with libass), Inter (plus DejaVu for the bubble symbols ♫ and ♥, which Inter lacks),
-# numpy, the Deno binary from its PyPI wheel, the engine folder (web/src/stories/engine) and Lamo Stories' own config
-# and skills. Nothing of Clip Factory's agent, skills or config is copied in. The build fails, not the first story,
-# when ffmpeg has no libass, Inter is missing, the engine does not validate its sample under Deno, or the self-check
-# (one frame drawn, one sound mastered, one caption burned in, config and skills loaded) does not pass.
+# numpy, the Deno binary from its PyPI wheel, Clips Funded's own pinned yt-dlp (reference videos from a link, §45.40;
+# never Clip Factory's cookies, proxy or tokens), the engine folder (web/src/stories/engine) and Lamo Stories' own
+# config and skills. Nothing of Clip Factory's agent, skills or config is copied in. The build fails, not the first
+# story, when ffmpeg has no libass, Inter is missing, yt-dlp does not run, the engine does not validate its sample under
+# Deno, or the self-check (one frame drawn, one sound mastered, one caption burned in, config and skills loaded,
+# yt-dlp's allowed extractors found without generic) does not pass.
 FROM --platform=linux/arm64 public.ecr.aws/docker/library/python:3.13-slim-bookworm AS build
 COPY --from=ghcr.io/astral-sh/uv:0.13.6 /uv /usr/local/bin/uv
 WORKDIR /app
@@ -41,6 +43,7 @@ RUN mkdir -p /tmp/ls-work && chown lamostories:lamostories /tmp/ls-work \
  && ffmpeg -hide_banner -filters | grep " ass " > /dev/null \
  && fc-list | grep -i "inter" > /dev/null \
  && deno --version > /dev/null \
+ && yt-dlp --version > /dev/null \
  && uvicorn --version > /dev/null
 USER lamostories
 # The engine runs under Deno exactly as it will for a job (the same files the browser draws).

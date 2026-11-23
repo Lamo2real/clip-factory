@@ -264,9 +264,13 @@ export function httpStoriesApi(deps: StoriesHttpDeps = {}): StoriesApi {
     completeReference: async (ws, refId, parts) => (await call<{ reference: ReferenceVideo }>("POST", w(ws, `/references/${id(refId)}/complete`), { parts })).reference,
     analyzeReference: (ws, refId, override) =>
       call<{ reference: ReferenceVideo; job: ProductionJob }>("POST", w(ws, `/references/${id(refId)}/analyze`), override ? { override } : {}),
+    // §45.40: a reference from a pasted link; Clips Funded's own runtime gets the video, "Try again" asks it again.
+    createReferenceFromLink: (ws, body) => call<{ reference: ReferenceVideo; job: ProductionJob }>("POST", w(ws, "/references/link"), body),
+    fetchReferenceAgain: (ws, refId) => call<{ reference: ReferenceVideo; job: ProductionJob }>("POST", w(ws, `/references/${id(refId)}/fetch`), {}),
     getReference: async (ws, refId) => {
-      const r = await call<{ reference: ReferenceVideo; analysis?: ReferenceAnalysis | null; job?: ProductionJob | null }>("GET", w(ws, `/references/${id(refId)}`));
-      return { reference: r.reference, analysis: r.analysis ?? null, job: r.job ?? null };
+      const r = await call<{ reference: ReferenceVideo; analysis?: ReferenceAnalysis | null; job?: ProductionJob | null; fetchJob?: ProductionJob | null }>("GET", w(ws, `/references/${id(refId)}`));
+      // fetchJob (§45.40) only when the API sent it: an older API has none, and the page then reads the reference alone.
+      return { reference: r.reference, analysis: r.analysis ?? null, job: r.job ?? null, ...(r.fetchJob !== undefined ? { fetchJob: r.fetchJob } : {}) };
     },
     patchReference: async (ws, refId, patch) => (await call<{ reference: ReferenceVideo }>("PATCH", w(ws, `/references/${id(refId)}`), patch)).reference,
     deleteReferenceVideo: (ws, refId) => call<void>("DELETE", w(ws, `/references/${id(refId)}`)),

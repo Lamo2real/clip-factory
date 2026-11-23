@@ -1,12 +1,15 @@
-"""Reference videos the owner uploads for the video analysis agent to study (docs/CONTRACTS.md §45.3 ``REFVID#``,
-§45.4 ``references/``, §45.5, §45.6 ``ReferenceVideo``, ``ReferenceAnalysis``, §45.28, §45.33, ADR-78).
+"""Reference videos for the video analysis agent to study: an upload or a link (docs/CONTRACTS.md §45.3 ``REFVID#``,
+§45.4 ``references/``, §45.5, §45.6 ``ReferenceVideo``, ``ReferenceAnalysis``, §45.28, §45.33, §45.40, ADR-78, ADR-88).
 
 An MP4 or MOV (≤ 2 GB) goes straight to ``ws/{userId}/{workspaceId}/references/{refId}/source.{mp4|mov}`` in a
-presigned multipart upload (100 MB parts); **Analyze** starts a ``reference_analysis`` production job (``PJOB#``,
-its own step track: Look at it, Listen, Write it up) on Lamo Stories' own runtime (``process_reference``), which
-writes ``analysis.json`` next to the video. The reference keeps its own model and effort (``ai``, §45.25 level 2) and
-an Analyze may carry a one-off override (``configuration.override`` on the job, never saved). Links to other
-people's videos are not downloaded: the owner uploads the file.
+presigned multipart upload (100 MB parts). A pasted link (§45.40: one video on YouTube, TikTok, Instagram, Facebook,
+X, Google Drive or Dropbox, checked by ``reflinks``) makes a ``fetching`` reference and a ``reference_fetch`` job (one
+step, "Get the video") on Clips Funded's own runtime (``fetch_reference``), which writes the reference's own
+``source.mp4`` and sets it ``ready``, or ``fetch_failed`` with its own sentence ("Try again" asks again; the owner can
+always upload the file instead). **Analyze** starts a ``reference_analysis`` production job (``PJOB#``, its own step
+track: Look at it, Listen, Write it up) on the same runtime (``process_reference``), which writes ``analysis.json``
+next to the video. The reference keeps its own model and effort (``ai``, §45.25 level 2) and an Analyze may carry a
+one-off override (``configuration.override`` on the job, never saved).
 """
 
 from __future__ import annotations
@@ -26,7 +29,7 @@ from ..log import log
 from . import agents as agents_mod
 from . import ai_config as cfg
 from . import ai_resolve as res
-from . import retention, shapes
+from . import reflinks, retention, shapes
 from . import types as ws
 
 MAX_BYTES: Final = 2 * 1024 * 1024 * 1024
@@ -37,7 +40,8 @@ ANALYSIS_MAX: Final = 2 * 1024 * 1024
 MAX_REFERENCES: Final = 100
 TITLE_MAX: Final = 80
 TYPES: Final = {"video/mp4": "mp4", "video/quicktime": "mov"}
-STATUSES: Final = ("uploading", "ready", "analyzing", "analyzed", "failed")
+STATUSES: Final = ("uploading", "fetching", "fetch_failed", "ready", "analyzing", "analyzed", "failed")
+FILE_STATUSES: Final = ("ready", "analyzing", "analyzed", "failed")  # the file is here: only these carry ``url``
 CAN_ANALYZE: Final = ("ready", "analyzed", "failed")
 AGENT: Final = "video_analysis"
 TASK: Final = "reference_analysis"
@@ -45,6 +49,11 @@ TASK: Final = "reference_analysis"
 STEPS: Final = (("look", "Look at it"), ("listen", "Listen"), ("write", "Write it up"))
 QUEUED_STALE: Final = timedelta(minutes=3)
 RUNNING_STALE: Final = timedelta(minutes=6)
+# Getting a video from its link (§45.40): its own job type and step.
+FETCH: Final = "reference_fetch"
+FETCH_STEPS: Final = (("get", "Get the video"),)
+JOB_TYPES: Final = (TASK, FETCH)
+MAX_FETCHING: Final = 3
 
 NOT_FOUND: Final = "We could not find that reference video."
 WRONG_TYPE: Final = "Pick an MP4 or MOV video file."
@@ -55,6 +64,15 @@ NOT_READY: Final = "Wait until the video has finished uploading."
 DID_NOT_START: Final = "Studying the video did not start. Tap Try again."
 STOPPED: Final = "Studying the video stopped. Tap Try again."
 FILE_REMOVED: Final = "The video was removed to save space. Its study stays."
+FULL: Final = f"You have {MAX_REFERENCES} reference videos already. Delete one first."
+ALREADY: Final = "That video is in your list already."
+THREE: Final = "Three videos are on their way already. Wait for one to arrive."
+FETCHING_NOW: Final = "It is getting the video now."
+HERE_ALREADY: Final = "This video is here already."
+NOT_HERE: Final = "Wait until the video is here."
+GET_FIRST: Final = "Get the video first. Tap Try again."
+FETCH_DID_NOT_START: Final = "Getting the video did not start. Tap Try again."
+FETCH_STOPPED: Final = "Getting the video stopped. Tap Try again."
 
 
 def removed_sentence(item: Mapping[str, Any]) -> str:
@@ -95,6 +113,8 @@ def public(app: Any, item: Mapping[str, Any]) -> dict[str, Any]:
         "fileRemoved": removed,
         "studyKept": retention.study_kept(item),
         "currentJobId": item.get("currentJobId") or None,
+        # §45.40: the cleaned https link it came from (null for an upload); ``titleFromLink`` stays inside
+        "link": str(item["link"]) if isinstance(item.get("link"), str) and item.get("link") else None,
         "ai": _ai(item),
         "analyzedWith": (
             {"model": str(with_.get("model") or ""), "effort": with_.get("effort") or None} if with_ else None
@@ -104,14 +124,14 @@ def public(app: Any, item: Mapping[str, Any]) -> dict[str, Any]:
     }
     key = str(item.get("key") or "")
     prefix = ws.s3_prefix(str(item.get("userId")), str(item.get("workspaceId")))
-    if status != "uploading" and key.startswith(prefix) and not removed:
+    if status in FILE_STATUSES and key.startswith(prefix) and not removed:  # never while uploading or fetching
         out["url"] = app.media.presign_get(key, GET_SECONDS)
     return out
 
 
 def public_job(item: Mapping[str, Any]) -> dict[str, Any]:
-    """``ProductionJob`` (§45.6) of a reference analysis; ``sessionId``, ``heartbeatAt`` and the override stay
-    inside."""
+    """``ProductionJob`` (§45.6) of a reference: its analysis or (§45.40) the fetch of its link, its own ``jobType``;
+    ``sessionId``, ``heartbeatAt`` and the override stay inside."""
     conf = item.get("configuration") if isinstance(item.get("configuration"), Mapping) else {}
     meta = item.get("meta") if isinstance(item.get("meta"), Mapping) else {}
     out: dict[str, Any] = {
@@ -119,7 +139,7 @@ def public_job(item: Mapping[str, Any]) -> dict[str, Any]:
         "workspaceId": item.get("workspaceId"),
         "contentType": "reference",
         "contentId": item.get("contentId"),
-        "jobType": "reference_analysis",
+        "jobType": item.get("jobType") if item.get("jobType") in JOB_TYPES else TASK,
         "status": item.get("status") or "queued",
         "steps": [dict(s) for s in item.get("steps") or [] if isinstance(s, Mapping)],
         "progress": float(item.get("progress") or 0),
@@ -190,7 +210,7 @@ def create(app: Any, user_id: str, workspace_id: str, body: Mapping[str, Any], *
     title = _title(body.get("title"))
     store = app.store
     if len(cfg.query_owned(store, user_id, workspace_id, ws.REFVID_SK)) >= MAX_REFERENCES:
-        raise conflict(f"You have {MAX_REFERENCES} reference videos already. Delete one first.")
+        raise conflict(FULL)
     ref_id = ulid()
     key = f"{ref_prefix(user_id, workspace_id, ref_id)}source.{TYPES[str(content_type)]}"
     upload_id = app.media.create_multipart(key, str(content_type))
@@ -273,6 +293,156 @@ def complete(
     return public(app, updated)
 
 
+# --- from a link (§45.40) --------------------------------------------------------------------------------------
+
+
+def _link(value: Any) -> tuple[str, str]:
+    """``(the cleaned https link, its site)`` of what was pasted (share text too); a 400 on ``url`` with the card's
+    sentence otherwise."""
+    if not isinstance(value, str):
+        raise bad_request(reflinks.SENTENCES["empty"], "url")
+    try:
+        return reflinks.clean_link(value)
+    except reflinks.LinkRefused as e:
+        raise bad_request(e.sentence, "url") from e
+
+
+def _fetch_job(user_id: str, workspace_id: str, ref_id: str, job_id: str, at: str) -> dict[str, Any]:
+    return {
+        **cfg.base_item(user_id, workspace_id, _job_sk(job_id), ws.TYPE_PJOB),
+        "jobId": job_id,
+        "contentType": "reference",
+        "contentId": ref_id,
+        "jobType": FETCH,
+        "status": "queued",
+        "steps": [{"key": k, "label": label, "status": "pending"} for k, label in FETCH_STEPS],
+        "progress": 0,
+        "configuration": {"run": [k for k, _ in FETCH_STEPS], "from": None, "sceneIds": None, "note": None,
+                          "override": None},
+        "meta": {"providers": {}, "models": []},
+        "createdAt": at,
+        "updatedAt": at,
+        "sessionId": cfg.new_session(job_id),
+        "heartbeatAt": at,
+    }  # fmt: skip
+
+
+def _settled(app: Any, user_id: str, workspace_id: str, now: datetime) -> list[dict[str, Any]]:
+    return [settle(app, i, now) for i in cfg.query_owned(app.store, user_id, workspace_id, ws.REFVID_SK)]
+
+
+def _on_their_way(items: list[dict[str, Any]]) -> int:
+    return sum(1 for i in items if i.get("status") == "fetching")
+
+
+def create_from_link(
+    app: Any, user_id: str, workspace_id: str, body: Mapping[str, Any], *, now: datetime
+) -> dict[str, Any]:
+    """``POST …/references/link``: a ``fetching`` reference and its ``reference_fetch`` job in one transaction, then
+    Clips Funded's own runtime is asked to get the video (``fetch_reference``). The stop of a stale run it fences
+    waits until the start is done."""
+    with cfg.stops_last(app):
+        return _create_from_link(app, user_id, workspace_id, body, now=now)
+
+
+def _create_from_link(
+    app: Any, user_id: str, workspace_id: str, body: Mapping[str, Any], *, now: datetime
+) -> dict[str, Any]:
+    validate.only_keys(body, ("url", "title"))
+    url, site = _link(body.get("url"))
+    named = body.get("title") is not None
+    title = _title(body.get("title")) if named else f"{reflinks.SITE_NAMES[site]} video"
+    items = _settled(app, user_id, workspace_id, now)
+    if len(items) >= MAX_REFERENCES:
+        raise conflict(FULL)
+    if any(i.get("link") == url for i in items):
+        raise conflict(ALREADY)
+    if _on_their_way(items) >= MAX_FETCHING:
+        raise conflict(THREE)
+    ref_id, job_id = ulid(), ulid()
+    at = iso(now)
+    job = _fetch_job(user_id, workspace_id, ref_id, job_id, at)
+    item = {
+        **cfg.base_item(user_id, workspace_id, ref_sk(ref_id), ws.TYPE_REFVID),
+        "refId": ref_id,
+        "title": title,
+        "status": "fetching",
+        "link": url,
+        **({} if named else {"titleFromLink": True}),
+        "bytes": 0,
+        "contentType": "video/mp4",
+        "key": f"{ref_prefix(user_id, workspace_id, ref_id)}source.mp4",
+        "ai": {"model": None, "effort": None},
+        "currentJobId": job_id,
+        "createdAt": at,
+        "updatedAt": at,
+    }
+    app.store.transact(puts=[job, item])
+    return _start_fetch(app, job, item, now)
+
+
+def fetch_again(
+    app: Any, user_id: str, workspace_id: str, ref_id: str, body: Mapping[str, Any], *, now: datetime
+) -> dict[str, Any]:
+    """``POST …/references/{refId}/fetch`` ("Try again", §45.40): only from ``fetch_failed``, a new job and the
+    reference back to ``fetching`` in one transaction, then the runtime is asked again."""
+    with cfg.stops_last(app):
+        return _fetch_again(app, user_id, workspace_id, ref_id, body, now=now)
+
+
+def _fetch_again(
+    app: Any, user_id: str, workspace_id: str, ref_id: str, body: Mapping[str, Any], *, now: datetime
+) -> dict[str, Any]:
+    validate.only_keys(body, ())
+    store = app.store
+    item = settle(app, _owned(store, user_id, workspace_id, ref_id), now)
+    if item.get("status") == "fetching":
+        raise conflict(FETCHING_NOW)
+    if item.get("status") != "fetch_failed":
+        raise conflict(HERE_ALREADY)
+    _link(item.get("link"))  # still a link we get (the allowlist may have changed since)
+    if _on_their_way(_settled(app, user_id, workspace_id, now)) >= MAX_FETCHING:
+        raise conflict(THREE)
+    job_id = ulid()
+    at = iso(now)
+    job = _fetch_job(user_id, workspace_id, ref_id, job_id, at)
+    ref_update = db.update_request(
+        str(item["pk"]),
+        str(item["sk"]),
+        {"status": "fetching", "currentJobId": job_id, "updatedAt": at},
+        # Two taps at once: the first moves the status on, so the second's condition fails (a 409, nothing started).
+        expect_in={"status": ["fetch_failed"], "userId": [user_id], "workspaceId": [workspace_id]},
+        expect_absent=["currentJobId"],
+    )
+    try:
+        store.transact(puts=[job], updates=[ref_update])
+    except db.ConditionFailed as e:
+        raise conflict(FETCHING_NOW) from e
+    return _start_fetch(app, job, item, now)
+
+
+def _start_fetch(app: Any, job: dict[str, Any], item: Mapping[str, Any], now: datetime) -> dict[str, Any]:
+    """Asks the runtime to get the video; a start that fails (or no runtime) fails the job at once, and the
+    reference is ``fetch_failed`` ("Getting the video did not start. Tap Try again.")."""
+    runtime = cfg.runtime(app)
+    problem = cfg.NOT_ON if runtime is None else None
+    user_id, workspace_id = str(job["userId"]), str(job["workspaceId"])
+    ref_id, job_id = str(job["contentId"]), str(job["jobId"])
+    if runtime is not None:
+        try:
+            runtime.start_reference_fetch(
+                user_id=user_id, workspace_id=workspace_id, ref_id=ref_id, job_id=job_id, session_id=job["sessionId"]
+            )
+        except Exception as e:
+            log("warning", "ws.reference_fetch_not_started", error=type(e).__name__, jobId=job_id)
+            problem = FETCH_DID_NOT_START
+    if problem is not None:
+        failed, ref = _fail(app, job, problem, now, queued_only=True)
+        return {"reference": public(app, ref), "job": public_job(failed)}
+    started = app.store.get(str(item["pk"]), str(item["sk"])) or item
+    return {"reference": public(app, started), "job": public_job(job)}
+
+
 # --- analyze --------------------------------------------------------------------------------------------------
 
 
@@ -297,6 +467,10 @@ def _analyze(
     override = cfg.clean_override(body.get("override"))
     store = app.store
     item = settle(app, _owned(store, user_id, workspace_id, ref_id), now)
+    if item.get("status") == "fetching":
+        raise conflict(NOT_HERE)
+    if item.get("status") == "fetch_failed":
+        raise conflict(GET_FIRST)
     if item.get("status") == "analyzing":
         raise conflict(BUSY)
     if item.get("status") not in CAN_ANALYZE:
@@ -376,8 +550,9 @@ def _fail(
     app: Any, job: Mapping[str, Any], message: str, now: datetime, *, queued_only: bool = False
 ) -> tuple[dict[str, Any], dict[str, Any]]:
     """Fails the job (a new ``sessionId``, the running or first pending step failed) and puts the reference back to
-    ``analyzed`` when an earlier analysis is kept (``analysisKey``), else to ``failed`` (the agent's own rule), in one
-    transaction conditional on what was read; a refused condition re-reads both."""
+    ``analyzed`` when an earlier analysis is kept (``analysisKey``), else to ``failed`` (the agent's own rule), or to
+    ``fetch_failed`` when the job was getting the video from its link (§45.40), in one transaction conditional on what
+    was read; a refused condition re-reads both."""
     store = app.store
     at = iso(now)
     steps = [dict(s) for s in job.get("steps") or [] if isinstance(s, Mapping)]
@@ -406,7 +581,7 @@ def _fail(
     ref_update = db.update_request(
         ref_pk,
         ref_key,
-        {"status": after_failure(store.get(ref_pk, ref_key)), "updatedAt": at},
+        {"status": after_failure(store.get(ref_pk, ref_key), job), "updatedAt": at},
         remove=["currentJobId"],
         expect_in={"currentJobId": [job["jobId"]]},
     )
@@ -419,9 +594,12 @@ def _fail(
     return (store.get(str(job["pk"]), str(job["sk"])) or dict(job), store.get(ref_pk, ref_key) or {})
 
 
-def after_failure(ref: Mapping[str, Any] | None) -> str:
-    """A failed or stopped analysis keeps an earlier one: ``analyzed`` while ``analysisKey`` is there, else
-    ``failed`` (the same rule as the agent's ``reference/study.py``, so the stories keep using the old analysis)."""
+def after_failure(ref: Mapping[str, Any] | None, job: Mapping[str, Any] | None = None) -> str:
+    """A failed or stopped fetch of a link (§45.40) leaves ``fetch_failed``. A failed or stopped analysis keeps an
+    earlier one: ``analyzed`` while ``analysisKey`` is there, else ``failed`` (the same rule as the agent's
+    ``reference/study.py``, so the stories keep using the old analysis)."""
+    if (job or {}).get("jobType") == FETCH:
+        return "fetch_failed"
     return "analyzed" if (ref or {}).get("analysisKey") else "failed"
 
 
@@ -435,10 +613,11 @@ def _stale(job: Mapping[str, Any], now: datetime) -> bool:
 
 
 def settle(app: Any, item: dict[str, Any], now: datetime) -> dict[str, Any]:
-    """The stale-heartbeat fence of §45.9.1 for a reference's analysis job: a job ``queued`` more than 3 minutes or
-    ``running`` more than 6 without a heartbeat fails ("Studying the video stopped. Tap Try again.")."""
+    """The stale-heartbeat fence of §45.9.1 for a reference's analysis job, and (§45.40) for the fetch of its link: a
+    job ``queued`` more than 3 minutes or ``running`` more than 6 without a heartbeat fails ("Studying the video
+    stopped. Tap Try again." or "Getting the video stopped. Tap Try again.")."""
     job_id = item.get("currentJobId")
-    if item.get("status") != "analyzing" or not isinstance(job_id, str):
+    if item.get("status") not in ("analyzing", "fetching") or not isinstance(job_id, str):
         return item
     job = cfg.get_owned(app.store, str(item["userId"]), str(item["workspaceId"]), _job_sk(job_id))
     if job is None:
@@ -446,18 +625,19 @@ def settle(app: Any, item: dict[str, Any], now: datetime) -> dict[str, Any]:
         return ref or item
     if not _stale(job, now):
         return item
-    _, ref = _fail(app, job, STOPPED, now)
+    _, ref = _fail(app, job, FETCH_STOPPED if job.get("jobType") == FETCH else STOPPED, now)
     return ref or item
 
 
 def _orphan(app: Any, item: Mapping[str, Any], now: datetime) -> tuple[None, dict[str, Any] | None]:
     """A reference that says it is being studied by a job that no longer exists goes back to ``analyzed`` (an earlier
-    analysis is kept) or ``failed``."""
+    analysis is kept) or ``failed``; one that says its video is on its way (§45.40) to ``fetch_failed``."""
+    status = "fetch_failed" if item.get("status") == "fetching" else after_failure(item)
     with contextlib.suppress(db.ConditionFailed):
         return None, app.store.update(
             str(item["pk"]),
             str(item["sk"]),
-            {"status": after_failure(item), "updatedAt": iso(now)},
+            {"status": status, "updatedAt": iso(now)},
             remove=["currentJobId"],
             expect_in={"currentJobId": [item.get("currentJobId")]},
         )
@@ -517,37 +697,61 @@ def _public_analysis(data: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
-def analysis_job(app: Any, item: Mapping[str, Any]) -> dict[str, Any] | None:
-    """The reference's analysis job (§45.34): the one of ``currentJobId``, else its newest one; None when it never
-    had one. The page shows each step and the failure's own sentence from it."""
+def _is_kind(job: Mapping[str, Any], kind: str) -> bool:
+    """An analysis job is ``reference_analysis`` (or has no ``jobType``: an item from before §45.40); a fetch job is
+    ``reference_fetch``."""
+    return job.get("jobType") == kind or (kind == TASK and job.get("jobType") is None)
+
+
+def _job_of(app: Any, item: Mapping[str, Any], kind: str) -> dict[str, Any] | None:
+    """The reference's job of one kind: the one of ``currentJobId``, else its newest one; None when it never had one."""
     user_id, workspace_id, ref_id = str(item["userId"]), str(item["workspaceId"]), str(item["refId"])
     current = item.get("currentJobId")
     if isinstance(current, str) and current:
         job = cfg.get_owned(app.store, user_id, workspace_id, _job_sk(current))
-        if job is not None and job.get("contentType") == "reference" and job.get("contentId") == ref_id:
+        if (
+            job is not None
+            and job.get("contentType") == "reference"
+            and job.get("contentId") == ref_id
+            and _is_kind(job, kind)
+        ):
             return job
     found = [
         j
         for j in cfg.query_owned(app.store, user_id, workspace_id, ws.PJOB_SK)
-        if j.get("contentType") == "reference" and j.get("contentId") == ref_id
+        if j.get("contentType") == "reference" and j.get("contentId") == ref_id and _is_kind(j, kind)
     ]
     return max(found, key=lambda j: (str(j.get("createdAt") or ""), str(j.get("jobId") or "")), default=None)
+
+
+def analysis_job(app: Any, item: Mapping[str, Any]) -> dict[str, Any] | None:
+    """The reference's analysis job (§45.34): the one of ``currentJobId``, else its newest one; None when it never
+    had one. The page shows each step and the failure's own sentence from it. A fetch job is never this one."""
+    return _job_of(app, item, TASK)
+
+
+def fetch_job(app: Any, item: Mapping[str, Any]) -> dict[str, Any] | None:
+    """The newest job that got (or is getting) a link reference's video (§45.40); None for an upload."""
+    return _job_of(app, item, FETCH)
 
 
 def get(app: Any, user_id: str, workspace_id: str, ref_id: str, now: datetime) -> dict[str, Any]:
     item = settle(app, _owned(app.store, user_id, workspace_id, ref_id), now)
     job = analysis_job(app, item)
+    fetched = fetch_job(app, item)
     return {
         "reference": public(app, item),
         "analysis": analysis(app, item),
         "job": public_job(job) if job is not None else None,
+        "fetchJob": public_job(fetched) if fetched is not None else None,
     }
 
 
 def patch(
     app: Any, user_id: str, workspace_id: str, ref_id: str, body: Mapping[str, Any], *, now: datetime
 ) -> dict[str, Any]:
-    """Renames the video and/or sets its own model and effort (``ai``: null for each is the default)."""
+    """Renames the video and/or sets its own model and effort (``ai``: null for each is the default). A rename takes
+    ``titleFromLink`` away, so the fetch of a link never writes over the owner's own name (§45.40)."""
     validate.only_keys(body, ("title", "ai"))
     if not body:
         raise bad_request("Change at least one thing.")
@@ -563,6 +767,7 @@ def patch(
             str(item["pk"]),
             str(item["sk"]),
             sets,
+            remove=["titleFromLink"] if "title" in body else (),
             expect_in={"userId": [user_id], "workspaceId": [workspace_id]},
         )
     except db.ConditionFailed as e:
