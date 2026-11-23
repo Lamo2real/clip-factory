@@ -1,0 +1,137 @@
+# chromium shard 5 of 7: about 32.4 core, 40.8 style, 43.9 full worker-minutes (135 lines).
+# Written by: node scripts/e2e-shards.mjs build (from timings.tsv). The last shard runs every test in no list.
+[chromium] › all-money.spec.ts
+[chromium] › audit-setup.spec.ts › Set up posting at 1024 px › the list, every step of every platform, a finished one, the picker and a failed Connect fit
+[chromium] › audit-setup.spec.ts › Set up posting at 768 px › the list, every step of every platform, a finished one, the picker and a failed Connect fit
+[chromium] › audit-setup.spec.ts › a failed Connect at 1920 px › error: the card takes you to the Connect step
+[chromium] › audit-setup.spec.ts › a failed Connect at 1920 px › missing_permissions: the card takes you to the Connect step
+[chromium] › audit-setup.spec.ts › a reload at 1920 px reopens the first step not done
+[chromium] › background.spec.ts › background modes › on a phone the note promises nothing the phone can't do, and offers no Get the app
+[chromium] › background.spec.ts › background page at 1920px dark: no overflow, readable text
+[chromium] › background.spec.ts › background page at 768px light: no overflow, readable text
+[chromium] › background.spec.ts › see-through in the desktop app (simulated) › macOS Liquid Glass: the page is transparent, the gaps stay clear, the panels carry just enough green and the softer words go to bone
+[chromium] › background.spec.ts › see-through in the desktop app (simulated) › mica keeps working: its own panel tint, the window text colours, AA over white
+[chromium] › background.spec.ts › see-through in the desktop app (simulated) › over the measured glass every word on the Background page is readable, Clear and Frosted, at 375px
+[chromium] › background.spec.ts › see-through in the desktop app (simulated) › vibrancy keeps working: its own panel tint, the window text colours, AA over white
+[chromium] › bank.spec.ts › desktop › Undo puts the same question back, with its green yes
+[chromium] › bank.spec.ts › desktop › the ways in: 4 taps from Settings, 2 from Money
+[chromium] › bank.spec.ts › no sideways scroll at 1920 px on Your bank's screens
+[chromium] › bank.spec.ts › phone › Pick my country: the way back to Your bank stays in view on Money settings, and only there
+[chromium] › content-rewards.spec.ts › desktop journeys › ?back= (§39.1): Back to FaZe Clips after Connect, glass while Content Rewards said no? waits for I sent it
+[chromium] › content-rewards.spec.ts › desktop journeys › Content Rewards said no: Check it yourself → Open campaign, then the pasted rules make I'm in the vermilion
+[chromium] › content-rewards.spec.ts › desktop journeys › Disconnect, then Undo keeps it; the sign-in-again week has one vermilion
+[chromium] › content-rewards.spec.ts › desktop journeys › an API from before Content Rewards (404): every part and link is hidden
+[chromium] › content-rewards.spec.ts › desktop journeys › switched off (503 unavailable): Coming soon, with no button
+[chromium] › content-rewards.spec.ts › every Content Rewards page, desktop, dark › fits, one vermilion at most, no edges, big targets, the arrow cursor, AA contrast; the phone's main button bottom right
+[chromium] › content-rewards.spec.ts › every Content Rewards page, phone, dark › fits, one vermilion at most, no edges, big targets, the arrow cursor, AA contrast; the phone's main button bottom right
+[chromium] › content-rewards.spec.ts › every Content Rewards page, phone, light › fits, one vermilion at most, no edges, big targets, the arrow cursor, AA contrast; the phone's main button bottom right
+[chromium] › contrast.spec.ts › text on /settings/app/updates is readable at 320 px light, and at 320, 375 and 1440 px dark
+[chromium] › contrast.spec.ts › text on /settings/clip-making/clips is readable at 375 and 1440 px, light
+[chromium] › contrast.spec.ts › text on /settings/clip-making/learned is readable at 320 px light, and at 320, 375 and 1440 px dark
+[chromium] › contrast.spec.ts › text on /settings/clip-making/skills is readable at 320 px light, and at 320, 375 and 1440 px dark
+[chromium] › contrast.spec.ts › text on /settings/look-and-feel is readable at 375 and 1440 px, light
+[chromium] › contrast.spec.ts › text on /settings/posting/money is readable at 320 px light, and at 320, 375 and 1440 px dark
+[chromium] › contrast.spec.ts › text on /settings/posting/setup/instagram is readable at 320 px light, and at 320, 375 and 1440 px dark
+[chromium] › contrast.spec.ts › text on /settings/posting/setup/x is readable at 375 and 1440 px, light
+[chromium] › contrast.spec.ts › the Library tabs stay readable over a white picture, at 390 and 1440 px
+[chromium] › contrast.spec.ts › the tab bar, the setup pill and the Ask sheet hold their words over a white thumbnail, at 390 px
+[chromium] › contrast.spec.ts › window look (blur): text on /library?view=week&week=2026-W30 is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (blur): text on /settings is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (blur): text on /settings/app/account is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (blur): text on /settings/clip-making/skills/01JZ8S00000000000000000001/edit is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (blur): text on /settings/clip-making/youtube is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (blur): text on /settings/posting/where is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (liquid): text on /jobs/:failed is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (liquid): text on /library is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (liquid): text on /library?view=week is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (liquid): text on /nope is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (liquid): text on /settings/app/ask is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (liquid): text on /settings/clip-making/skills/01JZ8S00000000000000000003 is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (liquid): text on /settings/clip-making/streamers is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (liquid): text on /settings/look-and-feel/sounds is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (liquid): text on /settings/posting is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (liquid): text on /settings/posting/setup/instagram is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (liquid): text on /settings/posting/where is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (vibrancy): text on /settings/app is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (vibrancy): text on /settings/app/get-the-app is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (vibrancy): text on /settings/clip-making/skills is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (vibrancy): text on /settings/posting/setup/tiktok is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (vibrancy): text on /settings/posting/tiktok-mac is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (vibrancy): the screens behind a tap are readable too (Frosted, sign-in, a clip, This week, Ask, a sheet, a toast)
+[chromium] › cr-fit.spec.ts
+[chromium] › finder.spec.ts › desktop journeys › Home: the '3 new campaigns match' chip, and 'Find campaigns' never started; the Campaigns card
+[chromium] › finder.spec.ts › desktop journeys › Why not more? says what was skipped, with Content Rewards' numbers only
+[chromium] › finder.spec.ts › desktop journeys › blocked: its sentence, the stored matches "As of", the open match keeps the vermilion
+[chromium] › finder.spec.ts › desktop journeys › no place set up: Set up a place to post first, and Set up YouTube is the vermilion
+[chromium] › finder.spec.ts › desktop › signed in, a match that isn't the first: back from Content Rewards, the You're in! row comes into view
+[chromium] › finder.spec.ts › every finder screen, desktop, light › fits, one vermilion at most, no edges, big targets, the arrow cursor, AA contrast, reduced motion, the phone's main button bottom right
+[chromium] › finder.spec.ts › phone 430 px: the pinned vermilion never hides a line › never started, before Open, after Open signed in, and after Open by hand with the rules pasted
+[chromium] › getpaid.spec.ts › axe AA contrast, light, hold: desktop 1440x900
+[chromium] › getpaid.spec.ts › axe AA contrast, light, owner: desktop 1440x900
+[chromium] › getpaid.spec.ts › desktop › Facebook: 4 taps, then 2 after Instagram (one Meta tick); X: 5 taps, Premium never the vermilion
+[chromium] › getpaid.spec.ts › no sideways scroll at 390 px on every Get paid screen (owner)
+[chromium] › getpaid.spec.ts › no sideways scroll at 390 px on every Get paid screen (unread)
+[chromium] › getpaid.spec.ts › phone › Allow payment reading's results say their sentences, word for word
+[chromium] › getpaid.spec.ts › phone › Facebook: 4 taps, then 2 after Instagram (one Meta tick); X: 5 taps, Premium never the vermilion
+[chromium] › getpaid.spec.ts › phone › never Live on a Get paid screen: the app's realtime chip steps aside there, and only there
+[chromium] › getpaid.spec.ts › the server's Finance link brings the question into view at 390x844
+[chromium] › help.spec.ts › Ask Clip Factory at 1440x900 › over a small control it fades out where it stands once scrolling settles, and back in when the spot is clear
+[chromium] › help.spec.ts › Ask Clip Factory at 1440x900 › the launcher never moves, and changes only once the page is still, however it scrolls
+[chromium] › help.spec.ts › Ask Clip Factory at 375x812 › #off says so, then the launcher is gone
+[chromium] › help.spec.ts › Ask Clip Factory at 375x812 › over a small control it fades out where it stands once scrolling settles, and back in when the spot is clear
+[chromium] › help.spec.ts › Ask Clip Factory launcher at 1024 px › covers no control on any page with the update bar and other fonts
+[chromium] › help.spec.ts › Ask Clip Factory launcher at 1440 px › covers no control on any page
+[chromium] › help.spec.ts › Ask Clip Factory launcher is mostly there on a phone › on /settings
+[chromium] › job-progress.spec.ts
+[chromium] › mac-fetch.spec.ts
+[chromium] › money-dashboard.spec.ts › desktop sidebar › Money sits between Library and Settings and shows as active
+[chromium] › money-dashboard.spec.ts › fits, no edges, readable, big targets, arrow cursor: 768x1024
+[chromium] › money-dashboard.spec.ts › flows › the period's highlight slides with Glide, and is instant under reduced motion
+[chromium] › money-dashboard.spec.ts › flows › with motion on, the count-up never shows a negative amount
+[chromium] › money-dashboard.spec.ts › no words under Ask, at rest anywhere on the page: 380x600 dark
+[chromium] › money-dashboard.spec.ts › no words under Ask, at rest anywhere on the page: 430x932 touch dark
+[chromium] › money-dashboard.spec.ts › thumb zone: controls bottom right, nothing tappable top left: 375x812 touch
+[chromium] › money-dashboard.spec.ts › thumb zone: controls bottom right, nothing tappable top left: 380x600
+[chromium] › motion-shell.spec.ts
+[chromium] › overflow.spec.ts › skills pages fit at 1440px
+[chromium] › overflow.spec.ts › the Ask Clip Factory panel fits at 1024px
+[chromium] › overflow.spec.ts › the Ask Clip Factory panel fits at 1440px
+[chromium] › overflow.spec.ts › the posting setup and the Review place rows fit at 430px
+[chromium] › setup-todo.spec.ts › never covers a control and nothing overflows at 1024 px (light)
+[chromium] › setup-todo.spec.ts › the floating setup list at 1440 px › a platform that needs you can be skipped too, so skipping every one always ends the list; once ready, its skip is dropped
+[chromium] › setup.spec.ts › setup at 1440x900 › Instagram: every step, keys, Check it, Connect, reconnect and Disconnect
+[chromium] › setup.spec.ts › setup at 1440x900 › TikTok: every step, keys, Check it, Connect, reconnect and Disconnect
+[chromium] › setup.spec.ts › setup at 1440x900 › YouTube: every step, keys, Check it, Connect, reconnect and Disconnect
+[chromium] › setup.spec.ts › setup at 375x812 › X: every step, keys, Check it, Connect, reconnect and Disconnect
+[chromium] › stories-chat.spec.ts
+[chromium] › stories-clips-unchanged.spec.ts
+[chromium] › stories-setup.spec.ts
+[chromium] › tiktok-sheet.spec.ts
+[chromium] › top-line.spec.ts
+[chromium] › update.spec.ts
+[chromium] › upload-to.spec.ts
+[screenshots] › screenshots.spec.ts › content rewards loose ends desktop 1440x900 › screenshot you're in toast above the main button
+[screenshots] › screenshots.spec.ts › content rewards loose ends phone 390x844 › screenshot review check one, job strip, library chip
+[screenshots] › screenshots.spec.ts › content rewards phone 375x812 › screenshot content rewards
+[screenshots] › screenshots.spec.ts › desktop 1440x900 light › screenshot clip performance light
+[screenshots] › screenshots.spec.ts › desktop 1440x900 › screenshot home-update
+[screenshots] › screenshots.spec.ts › get paid desktop 1440x900 › screenshot your bank
+[screenshots] › screenshots.spec.ts › help panel 1440x900 › screenshot help ask box 1440x900
+[screenshots] › screenshots.spec.ts › help panel 1440x900 › screenshot help spotlight on Review 1440x900
+[screenshots] › screenshots.spec.ts › money desktop 1440x900 › screenshot money earning
+[screenshots] › screenshots.spec.ts › money desktop 1440x900 › screenshot money facebook_verified
+[screenshots] › screenshots.spec.ts › money phone 390x844 › screenshot money in_program
+[screenshots] › screenshots.spec.ts › phone 390x844 dark › screenshot this week dark
+[screenshots] › screenshots.spec.ts › screenshot money dashboard dash_error 375x812 dark
+[screenshots] › screenshots.spec.ts › screenshot money dashboard dash_many 1024x768 light
+[screenshots] › screenshots.spec.ts › screenshot money dashboard dash_many 1200x820 dark
+[screenshots] › screenshots.spec.ts › screenshot money dashboard dash_many 1440x900 light
+[screenshots] › screenshots.spec.ts › screenshot money dashboard dash_many 1920x1080 dark
+[screenshots] › screenshots.spec.ts › see-through phone 390x844 › screenshot see-through clear
+[screenshots] › screenshots.spec.ts › skills desktop 1440x900 dark › screenshot settings-learned dark
+[screenshots] › screenshots.spec.ts › skills desktop 1440x900 dark › screenshot settings-skill-delete-sheet dark
+[screenshots] › screenshots.spec.ts › skills desktop 1440x900 dark › screenshot settings-skill-edit-zip dark
+[screenshots] › screenshots.spec.ts › skills desktop 1440x900 light › screenshot settings-skill-written light
+[screenshots] › screenshots.spec.ts › skills desktop 1440x900 light › screenshot settings-skills light
+[screenshots] › screenshots.spec.ts › skills phone 375x812 dark › screenshot settings-learned dark
+[screenshots] › screenshots.spec.ts › skills phone 375x812 light › screenshot settings-skill light

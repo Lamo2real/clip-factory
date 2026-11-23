@@ -1,0 +1,137 @@
+# chromium shard 1 of 7: about 32.4 core, 40.8 style, 43.9 full worker-minutes (135 lines).
+# Written by: node scripts/e2e-shards.mjs build (from timings.tsv). The last shard runs every test in no list.
+[chromium] › ask-assistant.spec.ts
+[chromium] › audit-setup.spec.ts › Set up posting at 1280 px › the list, every step of every platform, a finished one, the picker and a failed Connect fit
+[chromium] › audit-setup.spec.ts › setup layout details › the setup list that replaced Home's card never starts a line with a lone mark (320-414 px)
+[chromium] › audit-shell.spec.ts
+[chromium] › background.spec.ts › background modes › Ask Clip Factory's words and the search find the new settings
+[chromium] › background.spec.ts › see-through in the desktop app (simulated) › blur keeps working: its own panel tint, the window text colours, AA over white
+[chromium] › background.spec.ts › see-through in the desktop app (simulated) › liquid: every piece of text sits on a tint, on every screen, at 375px
+[chromium] › background.spec.ts › see-through in the desktop app (simulated) › vibrancy: every piece of text sits on a tint, on every screen, at 1440px
+[chromium] › background.spec.ts › see-through in the desktop app (simulated) › vibrancy: every piece of text sits on a tint, on every screen, at 375px
+[chromium] › bank.spec.ts › axe AA contrast, dark: phone 375x812
+[chromium] › bank.spec.ts › desktop › Clip Factory's taps: 18 without the email, then the first read; Connect comes back through /bank-done
+[chromium] › bank.spec.ts › desktop › the pretend YouTube page: Google's payment says when it reached the bank
+[chromium] › bank.spec.ts › nothing to tap under Ask at 320 px: the question cards and Money's bank block
+[chromium] › bank.spec.ts › phone › a question answered with 1 tap, and another with 2
+[chromium] › bank.spec.ts › phone › can't read the bank: Check now sits in the status block, beside the line that names it
+[chromium] › content-rewards.spec.ts › desktop journeys › Content Rewards refuses without sending the browser back: What did Content Rewards say? → the email card, from his Gmail
+[chromium] › content-rewards.spec.ts › desktop journeys › Library shows each campaign clip's Content Rewards line (read per campaign, as the API answers)
+[chromium] › content-rewards.spec.ts › phone › Set up posting: five platform cards, the Content Rewards card apart, the floating list still 0/5
+[chromium] › content-rewards.spec.ts › phone › the setup page in time order: the shortcut, each answer right under its Open, the ring counts 3, the folds open
+[chromium] › content-rewards.spec.ts › phone: the main button stays pinned › the next step's button stays bottom right while scrolling the campaign card down to the logo
+[chromium] › contrast.spec.ts › Ask's file tiles, status line and sources are readable at 375 and 1440 px (dark)
+[chromium] › contrast.spec.ts › text on /campaigns/200ea21b-be80-4db8-b552-8e32b148604e is readable at 375 and 1440 px, light
+[chromium] › contrast.spec.ts › text on /get-app is readable at 375 and 1440 px, light
+[chromium] › contrast.spec.ts › text on /mock-oauth/youtube is readable at 320 px light, and at 320, 375 and 1440 px dark
+[chromium] › contrast.spec.ts › text on /nope is readable at 320 px light, and at 320, 375 and 1440 px dark
+[chromium] › contrast.spec.ts › text on /settings is readable at 375 and 1440 px, light
+[chromium] › contrast.spec.ts › text on /settings/app/updates is readable at 375 and 1440 px, light
+[chromium] › contrast.spec.ts › text on /settings/clip-making is readable at 375 and 1440 px, light
+[chromium] › contrast.spec.ts › text on /settings/clip-making/clips is readable at 320 px light, and at 320, 375 and 1440 px dark
+[chromium] › contrast.spec.ts › text on /settings/clip-making/streamers is readable at 320 px light, and at 320, 375 and 1440 px dark
+[chromium] › contrast.spec.ts › text on /settings/posting/getpaid is readable at 320 px light, and at 320, 375 and 1440 px dark
+[chromium] › contrast.spec.ts › text on /settings/posting/my-settings is readable at 375 and 1440 px, light
+[chromium] › contrast.spec.ts › the setup list is readable as the pill, the sheet and under the skip question at 320 px (dark)
+[chromium] › contrast.spec.ts › window look (blur): text on /jobs/:running is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (blur): text on /money is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (blur): text on /settings/clip-making/skills/nope is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (blur): text on /settings/posting/auto is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (blur): text on /settings/posting/money is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (liquid): text on /review is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (liquid): text on /settings/app/updates is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (liquid): text on /settings/clip-making/skills is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (liquid): text on /settings/posting/setup is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (liquid): text on /settings/posting/setup/tiktok is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (liquid): text on /settings/posting/setup/youtube is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (vibrancy): text on /get-app is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (vibrancy): text on /jobs is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (vibrancy): text on /review is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (vibrancy): text on /settings/app/ask is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (vibrancy): text on /settings/clip-making/clips is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (vibrancy): text on /settings/clip-making/skills/nope is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (vibrancy): text on /settings/posting is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (vibrancy): text on /settings/posting/setup/instagram is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (vibrancy): text on /settings/posting/setup/youtube is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (vibrancy): text on /settings/posting/where is readable over every stand-in for the glass, at 320, 375 and 1440 px
+[chromium] › contrast.spec.ts › window look (vibrancy): the setup list is readable and on a tint as the pill, the sheet, the column, under the skip question and as "All set!"
+[chromium] › finder.spec.ts › desktop 1024 x 768: focus never lands under the pinned vermilion › never started, and the matches before Open
+[chromium] › finder.spec.ts › desktop journeys › Ask Content Rewards: only while signed in, one tap, then the date
+[chromium] › finder.spec.ts › desktop journeys › Not for me hides the open match, opens the next, and Undo brings it back
+[chromium] › finder.spec.ts › desktop journeys › down: its sentence, the stored matches "As of", the open match keeps the vermilion
+[chromium] › finder.spec.ts › desktop journeys › stopped: no match shows, Find campaigns again is the vermilion; Home and the card say so
+[chromium] › finder.spec.ts › every finder screen, phone, light › fits, one vermilion at most, no edges, big targets, the arrow cursor, AA contrast, reduced motion, the phone's main button bottom right
+[chromium] › finder.spec.ts › phone 320 px: the pinned vermilion never hides a line › never started, before Open, after Open signed in, and after Open by hand with the rules pasted
+[chromium] › followers.spec.ts
+[chromium] › getapp.spec.ts
+[chromium] › getpaid.spec.ts › no sideways scroll at 1920 px on every Get paid screen (hold) desktop
+[chromium] › getpaid.spec.ts › no sideways scroll at 320 px on every Get paid screen (owner)
+[chromium] › getpaid.spec.ts › no sideways scroll at 390 px on every Get paid screen (hold)
+[chromium] › getpaid.spec.ts › phone › Connect Whop: Coming soon while off; on, 6 taps with the Whop key
+[chromium] › getpaid.spec.ts › phone › phone: the next step's main button sits at the bottom right from page open, and Ask is never over it
+[chromium] › help.spec.ts › Ask Clip Factory at 1440x900 › #503 answers from the local notes with a help code to copy
+[chromium] › help.spec.ts › Ask Clip Factory at 1440x900 › #off says so, then the launcher is gone
+[chromium] › help.spec.ts › Ask Clip Factory at 1440x900 › after its panel closes from a tap it still keeps clear of a control under its spot
+[chromium] › help.spec.ts › Ask Clip Factory at 1440x900 › an answer button shows the control it lights up, and the chat is still there after
+[chromium] › help.spec.ts › Ask Clip Factory at 1440x900 › refuses secrets and says when it does not know
+[chromium] › help.spec.ts › Ask Clip Factory at 1440x900 › the launcher is named, sits clear of the tab bar and the update bar
+[chromium] › help.spec.ts › Ask Clip Factory at 1440x900 › the launcher never sits on Keep on Review, even before any scroll
+[chromium] › help.spec.ts › Ask Clip Factory at 375x812 › the launcher is named, sits clear of the tab bar and the update bar
+[chromium] › help.spec.ts › Ask Clip Factory guides for posting setup and skills › "#503 connect youtube" opens Set up YouTube and lights it up
+[chromium] › help.spec.ts › Ask Clip Factory launcher at 1920 px › covers no control on any page with the update bar
+[chromium] › help.spec.ts › Ask Clip Factory launcher at 320 px › covers no control on any page
+[chromium] › help.spec.ts › Ask Clip Factory launcher home spot at 1024 px › is always at its home spot
+[chromium] › help.spec.ts › Ask Clip Factory launcher is mostly there on a phone › does not blink while the owner scrolls in short steps at reading pace
+[chromium] › help.spec.ts › Ask Clip Factory launcher is mostly there on a phone › on /
+[chromium] › job-head.spec.ts
+[chromium] › learned.spec.ts
+[chromium] › money-dashboard.spec.ts › fits, no edges, readable, big targets, arrow cursor: 768x1024 touch
+[chromium] › money-dashboard.spec.ts › flows › Get paid comes right after All your money and before the filters; no vermilion; one glass button per row (§40.1)
+[chromium] › money-dashboard.spec.ts › flows › short history says it can't compare yet, and needs-permission offers the one vermilion button
+[chromium] › money-dashboard.spec.ts › no words under Ask, at rest anywhere on the page: 375x812 touch light
+[chromium] › money-dashboard.spec.ts › no words under Ask, at rest anywhere on the page: 380x600 light
+[chromium] › money-dashboard.spec.ts › toolbar top right, stays in view after scrolling: 1280x800
+[chromium] › motion.spec.ts
+[chromium] › overflow.spec.ts › clip pages and This week fit at 320px
+[chromium] › overflow.spec.ts › no overflow on any screen at 1280px
+[chromium] › overflow.spec.ts › no overflow on any screen at 390px
+[chromium] › overflow.spec.ts › the Ask Clip Factory panel fits at 768px
+[chromium] › overflow.spec.ts › the posting setup and the Review place rows fit at 390px
+[chromium] › overflow.spec.ts › the posting setup and the Review place rows fit at 414px
+[chromium] › settings-tree.spec.ts
+[chromium] › setup-todo.spec.ts › a reload keeps the list's room from the first paint at 1440 px
+[chromium] › setup-todo.spec.ts › at 320 px the pill still says what it is
+[chromium] › setup-todo.spec.ts › never covers a control and nothing overflows at 1024 px (dark)
+[chromium] › setup-todo.spec.ts › never covers a control and nothing overflows at 1440 px (dark)
+[chromium] › setup-todo.spec.ts › never covers a control and nothing overflows at 320 px (light)
+[chromium] › setup-todo.spec.ts › the floating setup list at 1440 px › asks for the setups again on every page change, so it is right even without a live update
+[chromium] › setup-todo.spec.ts › the floating setup list at 1440 px › folds to a pill and unfolds; the choice stays on this device
+[chromium] › setup-todo.spec.ts › the floating setup list at 1440 px › no confetti with reduced motion, still the success sound and the goodbye
+[chromium] › setup-todo.spec.ts › the floating setup list at 1440 px › on short screens every row and its buttons still show without scrolling; a very short one fades the bottom
+[chromium] › setup.spec.ts › setup tap targets are at least 44 px at 1440x900
+[chromium] › sound.spec.ts
+[screenshots] › screenshots.spec.ts › background desktop 1440x900 light › screenshot settings-background light
+[screenshots] › screenshots.spec.ts › content rewards loose ends phone 375x812 › screenshot review check one, job strip, library chip
+[screenshots] › screenshots.spec.ts › help panel 1440x900 › screenshot help panel 1440x900
+[screenshots] › screenshots.spec.ts › money desktop 1440x900 › screenshot money not_yet
+[screenshots] › screenshots.spec.ts › money phone 390x844 › screenshot money error
+[screenshots] › screenshots.spec.ts › phone 390x844 dark › screenshot clip performance dark
+[screenshots] › screenshots.spec.ts › phone 390x844 light › screenshot this week light
+[screenshots] › screenshots.spec.ts › screenshot get-app on an iPhone (picture steps)
+[screenshots] › screenshots.spec.ts › screenshot money dashboard dash_many 1280x800 dark
+[screenshots] › screenshots.spec.ts › screenshot money dashboard dash_many 1440x900 dark
+[screenshots] › screenshots.spec.ts › screenshot money dashboard dash_many 320x568 light
+[screenshots] › screenshots.spec.ts › screenshot money dashboard dash_nothing 1440x900 dark
+[screenshots] › screenshots.spec.ts › screenshot money dashboard dash_two_currencies 1440x900 light
+[screenshots] › screenshots.spec.ts › screenshot money dashboard dash_two_currencies 375x812 light
+[screenshots] › screenshots.spec.ts › screenshot money dashboard dash_youtube_only 1440x900 dark
+[screenshots] › screenshots.spec.ts › screenshot setup: YouTube connected and the pretend consent page
+[screenshots] › screenshots.spec.ts › setup phone 375x812 dark › screenshot setup dark
+[screenshots] › screenshots.spec.ts › skills desktop 1440x900 dark › screenshot settings-skill dark
+[screenshots] › screenshots.spec.ts › skills desktop 1440x900 light › screenshot settings-skill light
+[screenshots] › screenshots.spec.ts › skills desktop 1440x900 light › screenshot settings-skill-delete-sheet light
+[screenshots] › screenshots.spec.ts › skills desktop 1440x900 light › screenshot settings-streamers light
+[screenshots] › screenshots.spec.ts › skills phone 375x812 dark › screenshot settings-skill-edit dark
+[screenshots] › screenshots.spec.ts › skills phone 375x812 light › screenshot settings-learned light
+[screenshots] › screenshots.spec.ts › skills phone 375x812 light › screenshot settings-skill-edit-zip light
+[screenshots] › screenshots.spec.ts › skills phone 375x812 light › screenshot settings-streamers light

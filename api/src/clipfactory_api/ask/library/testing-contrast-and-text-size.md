@@ -3,7 +3,8 @@
 `web/e2e/contrast.spec.ts` (Playwright, mock mode, audit F081) opens every route in `ROUTES` (`web/e2e/helpers.ts`) at
 320, 375 and 1440 px, with the browser asking for a light and then a dark colour scheme (the app is dark-only, so light
 must render the same), with reduced motion so the backdrop's drift is parked and every run measures the same picture.
-On each it fails on:
+A pull request runs only its `@contrast-core` part unless it changes a style file; the whole matrix runs then and every
+night ([Which browser tests run when](#which-browser-tests-run-when)). On each it fails on:
 
 | Check | Rule |
 |---|---|

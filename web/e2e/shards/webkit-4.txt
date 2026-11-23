@@ -1,0 +1,47 @@
+# webkit shard 4 of 5: about 19.6 core, 19.6 style, 19.6 full worker-minutes (45 lines).
+# Written by: node scripts/e2e-shards.mjs build (from timings.tsv). The last shard runs every test in no list.
+[webkit-phone] › ask-assistant.spec.ts › Ask as a full assistant › Stop ends the answer
+[webkit-phone] › ask-assistant.spec.ts › Ask as a full assistant › falls back to the plain answer when the assistant is off
+[webkit-phone] › ask-assistant.spec.ts › Ask as a full assistant › paste: a picture, long text as a TXT file, short text as words
+[webkit-phone] › ask-assistant.spec.ts › Ask as a full assistant › the setup question uses his setup and a web source; links go live only when done
+[webkit-phone] › ask-assistant.spec.ts › Ask assistant at tablet-768 › screenshots in dark
+[webkit-phone] › ask-assistant.spec.ts › Ask assistant at tablet-768 › thumb zone, no overflow, no edges
+[webkit-phone] › getpaid.spec.ts › axe AA contrast, light, hold: phone 375x812
+[webkit-phone] › getpaid.spec.ts › no sideways scroll at 768 px on every Get paid screen (hold)
+[webkit-phone] › getpaid.spec.ts › no sideways scroll at 768 px on every Get paid screen (unread)
+[webkit-phone] › getpaid.spec.ts › phone › Allow payment reading's results say their sentences, word for word
+[webkit-phone] › getpaid.spec.ts › phone › Facebook: 4 taps, then 2 after Instagram (one Meta tick); X: 5 taps, Premium never the vermilion
+[webkit-phone] › help-pictures.spec.ts › Ask pictures at 1440x900 › Start over empties the tray and the chat
+[webkit-phone] › help-pictures.spec.ts › Ask pictures at 1440x900 › a picture that was not read says so
+[webkit-phone] › help-pictures.spec.ts › Ask pictures at 1440x900 › five pictures: four tiles and a note; a text file is not a picture
+[webkit-phone] › help-pictures.spec.ts › Ask pictures at 1440x900 › reduced motion: pictures only fade
+[webkit-phone] › help-pictures.spec.ts › Ask pictures at 1440x900 › the take-away button's focus glow is not cut off
+[webkit-phone] › help-pictures.spec.ts › Ask pictures at 390x844 › a question that could not go gives its pictures and words back
+[webkit-phone] › help-pictures.spec.ts › Ask pictures at 390x844 › five pictures: four tiles and a note; a text file is not a picture
+[webkit-phone] › help-pictures.spec.ts › Ask pictures at 390x844 › reduced motion: pictures only fade
+[webkit-phone] › help-pictures.spec.ts › Ask pictures at 390x844 › the viewer opens bigger, steps with the arrows and closes with Escape
+[webkit] › ask-assistant.spec.ts › Ask as a full assistant › a general question: a code block with Copy, and a table
+[webkit] › ask-assistant.spec.ts › Ask assistant at desktop-1920 › screenshots in dark
+[webkit] › ask-assistant.spec.ts › Ask assistant at phone-375 › thumb zone, no overflow, no edges
+[webkit] › ask-markup.spec.ts › the markup editor on a desktop › Escape with new marks asks first; Keep marking stays, Throw away leaves
+[webkit] › ask-markup.spec.ts › the markup editor on a desktop › pen, box, arrow, undo, clear, then Save: the sent picture has red where drawn
+[webkit] › ask-markup.spec.ts › the markup editor with less motion › nothing moves in the editor
+[webkit] › getpaid.spec.ts › axe AA contrast, dark, hold: desktop 1440x900
+[webkit] › getpaid.spec.ts › desktop › never Live on a Get paid screen: the app's realtime chip steps aside there, and only there
+[webkit] › getpaid.spec.ts › no sideways scroll at 1024 px on every Get paid screen (hold) desktop
+[webkit] › getpaid.spec.ts › phone › YouTube: Clip Factory's taps are 15 (Partner Program, the reading step, five payout steps)
+[webkit] › getpaid.spec.ts › phone › phone: the next step's main button sits at the bottom right from page open, and Ask is never over it
+[webkit] › getpaid.spec.ts › phone › the ways in: 4 taps from Settings, 2 from Money, 1 from a setup page
+[webkit] › getpaid.spec.ts › reduced motion: nothing on a Get paid page keeps moving
+[webkit] › help-pictures.spec.ts › Ask pictures at 1440x900 › Start over empties the tray and the chat
+[webkit] › help-pictures.spec.ts › Ask pictures at 1440x900 › Tab stays inside the picture view
+[webkit] › help-pictures.spec.ts › Ask pictures at 1440x900 › the take-away button's focus glow is not cut off
+[webkit] › help-pictures.spec.ts › Ask pictures at 1440x900 › the viewer opens bigger, steps with the arrows and closes with Escape
+[webkit] › help-pictures.spec.ts › Ask pictures at 390x844 › a picture that was not read says so
+[webkit] › help-pictures.spec.ts › Ask pictures at 390x844 › take away leaves 3 and moves the focus on
+[webkit] › help-pictures.spec.ts › Ask pictures at 390x844 › the take-away button's focus glow is not cut off
+[webkit] › help-pictures.spec.ts › screenshots for the owner, desktop
+[webkit] › home-fan.spec.ts
+[webkit] › home-fit.spec.ts
+[webkit] › job-head.spec.ts
+[webkit] › nav-smooth.spec.ts
