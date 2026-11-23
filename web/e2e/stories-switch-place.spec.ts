@@ -288,6 +288,46 @@ test("Lamo Stories' first Setup, on its own (the page the owner circled), shows 
   }
 });
 
+test("Inter arriving after the switch is drawn never leaves it stacked: the same box as on a page where Inter was in at once", async ({ browser }) => {
+  // A computer without Inter installed (the Linux CI runners, Windows, most Macs) draws the names in its own, wider
+  // font until the web font is in; measured then, the two names did not fit side by side, and the switch stayed
+  // stacked, 46 px higher, on every page where Inter came a moment late (CI run 45112115668: / side by side, /library
+  // and Lamo Stories' pages stacked). A Mac with Inter installed draws Inter even before the web font is in, so a wide
+  // font stands in for the missing one here (Verdana, else the system's sans-serif), and Inter's file is held back.
+  const page = await open(browser, SIZES[0]!, true);
+  const ctx = page.context();
+  const FAMILY = '"Inter Variable", Inter, system-ui,';
+  let swapped = false;
+  await ctx.route(/\/assets\/[^/]+\.css$/, async (route) => {
+    const r = await route.fetch();
+    const css = await r.text();
+    swapped ||= css.includes(FAMILY);
+    await route.fulfill({ response: r, body: css.replaceAll(FAMILY, '"Inter Variable", Verdana,') });
+  });
+  let release!: () => void;
+  const held = new Promise<void>((done) => (release = done));
+  await ctx.route(/\/assets\/inter-[^/]+\.woff2$/, async (route) => {
+    await held;
+    await route.continue();
+  });
+  await page.goto("/library", { waitUntil: "domcontentloaded" });
+  expect(swapped, "the app's font list, with the wide font in for the missing Inter").toBe(true);
+  const bar = page.locator(".ws-dock .ws-switch");
+  // In the wide font the names do not fit side by side (stacked is right while it is drawn).
+  await expect(bar).toHaveClass(/ws-switch--stack/, { timeout: 15_000 });
+  release();
+  await ready(page, "/library", false);
+  await expect(bar).not.toHaveClass(/ws-switch--stack/);
+  const late = await place(page);
+  await ctx.unrouteAll({ behavior: "ignoreErrors" });
+  // The next page has Inter from the cache at once: the same box.
+  await ready(page, "/settings");
+  const warm = await place(page);
+  same(late.sw, warm.sw, "Inter came late vs at once: the switch");
+  same(late.live, warm.live, "Inter came late vs at once: the Live chip");
+  await page.context().close();
+});
+
 test("Clip Factory's jobs starting or ending behind Lamo Stories never move the switch there", async ({ browser }) => {
   const page = await open(browser, SIZES[0]!, true);
   await ready(page, "/library");

@@ -659,17 +659,31 @@ export function WorkspaceDock() {
   useLayoutEffect(() => {
     const bar = barRef.current;
     if (layout.mode !== "bar" || !bar || list.length !== 2) return;
-    const opts = Array.from(bar.querySelectorAll<HTMLElement>(".ws-switch__opt"));
-    const s = getComputedStyle(bar);
-    const column = (bar.clientWidth - px(s.paddingLeft) - px(s.paddingRight) - px(s.columnGap) * (opts.length - 1)) / opts.length;
-    const words = (o: HTMLElement) => {
-      const r = document.createRange();
-      r.selectNodeContents(o);
-      const os = getComputedStyle(o);
-      return r.getBoundingClientRect().width + px(os.paddingLeft) + px(os.paddingRight);
+    let on = true;
+    const check = () => {
+      if (!on) return;
+      const opts = Array.from(bar.querySelectorAll<HTMLElement>(".ws-switch__opt"));
+      const s = getComputedStyle(bar);
+      const column = (bar.clientWidth - px(s.paddingLeft) - px(s.paddingRight) - px(s.columnGap) * (opts.length - 1)) / opts.length;
+      const words = (o: HTMLElement) => {
+        const r = document.createRange();
+        r.selectNodeContents(o);
+        const os = getComputedStyle(o);
+        return r.getBoundingClientRect().width + px(os.paddingLeft) + px(os.paddingRight);
+      };
+      setStacked(opts.some((o) => words(o) > column + 0.5));
     };
-    const need = opts.some((o) => words(o) > column + 0.5);
-    if (need !== stacked) setStacked(need);
+    check();
+    // Measured again once a web font is in: a computer without Inter installed (Linux, Windows, most Macs) draws the
+    // names in its own, wider font until Inter arrives, and that first measure must not keep the switch stacked, 46 px
+    // higher than on a page where Inter was in when it was measured (§45.38: one place in both apps).
+    const fonts = typeof document !== "undefined" ? document.fonts : undefined;
+    fonts?.addEventListener?.("loadingdone", check);
+    void fonts?.ready?.then(check);
+    return () => {
+      on = false;
+      fonts?.removeEventListener?.("loadingdone", check);
+    };
   }, [layout.mode, layout.sw?.width, stacked, names, list.length]);
 
   // Lamo Stories' rail and its pages leave the dock's box free (stories.css reads these).
