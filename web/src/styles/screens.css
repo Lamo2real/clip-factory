@@ -1049,15 +1049,14 @@
      Review page's loose words move with it (below), so they still share its text line. */
   padding: clamp(14px, 2.6vw, 24px);
   border-radius: var(--r-xl);
+  /* Fades and slides out; never a filter (a blur animated on a blurred pane redraws it every frame). */
   transition:
     opacity 400ms var(--ease-out),
-    transform 400ms var(--ease-out),
-    filter 400ms var(--ease-out);
+    transform 400ms var(--ease-out);
 }
 .review-card.is-leaving {
   opacity: 0;
   transform: translateY(-14px) scale(0.97);
-  filter: blur(6px);
 }
 /* Phones read top to bottom: what the clip is, the clip, then the decision. */
 .review-card {
@@ -1414,9 +1413,10 @@
   padding: 6px 6px 6px 8px;
   border-radius: var(--r-md);
   /* The logic of light (ADR-85): a row is one step brighter than its card, the mark one step brighter than the row
-     (the same relative raise, laid again), each lit from above and shaded at its foot. */
+     (the same relative raise, laid again), each lit from above and shaded at its foot. A row inside a card drops
+     only the faintest shadow: its light tells it apart, not a dark halo. */
   background: var(--fill);
-  box-shadow: var(--glass-shadow-raise);
+  box-shadow: var(--glass-shadow-row);
 }
 .post__mark {
   display: grid;
@@ -2188,7 +2188,7 @@
 .place-row {
   border-radius: var(--r-md);
   background: var(--fill);
-  box-shadow: var(--glass-shadow-raise);
+  box-shadow: var(--glass-shadow-row);
 }
 .place-row__summary {
   display: flex;

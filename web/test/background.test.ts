@@ -9,7 +9,9 @@ import {
   brandMeshSpots,
   brandMeshWorst,
   CHIP_DEEPEN,
+  CHIP_TINTS,
   CHIP_UNDER,
+  chipOn,
   COLOURS_BLOB_ALPHA,
   COLOURS_FIELD_END,
   coloursMeshSpots,
@@ -26,6 +28,7 @@ import {
   floatTop,
   FROSTED_EXTRA,
   GHOST_LIFT,
+  GHOST_VEIL,
   GLASS_SATURATE,
   GLASS_SATURATE_MAX,
   GLASS_TINT_ALPHA,
@@ -35,15 +38,19 @@ import {
   GREEN_DEEP,
   hexToRgb,
   isHexColour,
+  LADDER_DEPTH,
+  LADDER_STEP,
+  ladderFaults,
+  ladderPay,
   LEAD_EXTRA_VEIL,
   LEAD_LIGHT,
-  lens,
   LENS_HOVER_LIGHT,
   LENS_HOVER_VEIL,
   LENS_LIGHT,
   LENS_PRESS_LIGHT,
   LENS_VEIL,
   LIGHT_PAY_OWN,
+  LIGHT_PAY_REDUCED,
   LIGHT_PAY_WHITE,
   lightPay,
   LIQUID_ACTIVE_FLOOR,
@@ -295,29 +302,37 @@ describe("see-through veil", () => {
 
   it("words on a tinted chip reach AA: a vermilion or leaf chip lays bottle green under its tint", () => {
     const rgb = (token: TextToken) => hexToRgb(WINDOW_TEXT_TOKENS[token]);
-    const [VERMILION, LEAF] = [hexToRgb("#e8392b"), hexToRgb("#5fa585")];
-    const CHIPS: { name: string; tint: Rgb; alpha: number; texts: readonly Rgb[] }[] = [
-      { name: "the vermilion tint (pills, the error sound, callouts)", tint: VERMILION, alpha: 0.2, texts: [rgb("--vermilion-ink"), rgb("--ink")] },
-      { name: "the success tint (pills, the tap sound, guesses)", tint: LEAF, alpha: 0.22, texts: [rgb("--green-text"), rgb("--green-ink"), rgb("--ink")] },
+    const tint = (name: string) => CHIP_TINTS.find((t) => t.name === name)!;
+    const CHIPS: { name: string; tint: Rgb; alpha: number; lift: number; texts: readonly Rgb[] }[] = [
+      { name: "the vermilion tint (pills, the error sound, callouts)", tint: tint("vermilion").colour, alpha: 0.2, lift: tint("vermilion").lift, texts: [rgb("--vermilion-ink"), rgb("--ink")] },
+      { name: "the success tint (pills, the tap sound, guesses)", tint: tint("leaf").colour, alpha: 0.22, lift: tint("leaf").lift, texts: [rgb("--green-text"), rgb("--green-ink"), rgb("--ink")] },
     ];
     for (const { glass, scheme, strength, check, at } of EVERY_LOOK)
       for (const chip of CHIPS) {
-        const bg = seeThroughChipBackground(glass, scheme, strength, chip.tint, chip.alpha, check.behind);
+        const bg = seeThroughChipBackground(glass, scheme, strength, chip.tint, chip.alpha, check.behind, chip.lift);
         for (const t of chip.texts) expect(contrast(t, bg), `${chip.name}, ${at}`).toBeGreaterThanOrEqual(AA);
       }
-    // Over the app's own backdrop a chip on a row is brighter than the row (ADR-85), and its colour still reads.
-    const field = BRAND_MESH.field[1]!;
-    const row = raised(panelTop({ kind: "frosted", panelVeil: BRAND_PANEL_VEIL }, field));
-    for (const chip of [...CHIPS, { name: "the amber tint", tint: [246, 201, 69] as Rgb, alpha: 0.16 }])
-      expect(oklabL(mix(chip.tint, mix(CHIP_UNDER, row, CHIP_DEEPEN), chip.alpha)) - oklabL(row), chip.name).toBeGreaterThan(0.015);
-    // tokens.css uses the same numbers: bottle green (CHIP_UNDER) under the tint, no longer deep green.
+    expect(CHIP_TINTS.map((t) => [t.name, t.alpha])).toEqual([["leaf", 0.22], ["vermilion", 0.2], ["amber", 0.16]]);
+    // A chip on a row is a level of its own: a whole step of light over the row, in every look (its colour still reads).
+    const fails: string[] = [];
+    for (const p of LIGHT_PLACES) {
+      const e1 = panelTop(p.look, p.behind, false, p.pay);
+      for (const row of [raised(e1), raised(e1, 2), raised(panelTop(p.look, p.behind, true, p.pay))])
+        for (const t of CHIP_TINTS) {
+          const chip = chipOn(row, t);
+          if (oklabL(chip) - oklabL(row) < LADDER_STEP && fails.length < 20) fails.push(`${t.name}: ${(oklabL(chip) - oklabL(row)).toFixed(4)}, ${p.at}`);
+        }
+    }
+    expect(fails).toEqual([]);
+    // tokens.css uses the same numbers: bottle green (CHIP_UNDER) under the tint, the bone lift between them.
     const tokens = rules("tokens.css");
     expect(CHIP_UNDER).toEqual(VEIL);
     expect(GREEN_DEEP).toEqual(hexToRgb("#0a2820"));
-    expect(tokens).toContain(`--tint-leaf: linear-gradient(rgb(var(--green-leaf-rgb) / 0.22), rgb(var(--green-leaf-rgb) / 0.22)), rgb(var(--green-rgb) / ${CHIP_DEEPEN});`);
-    expect(tokens).toContain(`--tint-vermilion: linear-gradient(rgb(var(--vermilion-rgb) / 0.2), rgb(var(--vermilion-rgb) / 0.2)), rgb(var(--green-rgb) / ${CHIP_DEEPEN});`);
-    expect(tokens).toContain(`--tint-amber: linear-gradient(rgb(246 201 69 / 0.16), rgb(246 201 69 / 0.16)), rgb(var(--green-rgb) / ${CHIP_DEEPEN});`);
-  });
+    const lift = (name: string) => `linear-gradient(rgb(var(--bone-rgb) / ${tint(name).lift}), rgb(var(--bone-rgb) / ${tint(name).lift}))`;
+    expect(tokens).toContain(`--tint-leaf: linear-gradient(rgb(var(--green-leaf-rgb) / 0.22), rgb(var(--green-leaf-rgb) / 0.22)), ${lift("leaf")}, rgb(var(--green-rgb) / ${CHIP_DEEPEN});`);
+    expect(tokens).toContain(`--tint-vermilion: linear-gradient(rgb(var(--vermilion-rgb) / 0.2), rgb(var(--vermilion-rgb) / 0.2)), ${lift("vermilion")}, rgb(var(--green-rgb) / ${CHIP_DEEPEN});`);
+    expect(tokens).toContain(`--tint-amber: linear-gradient(rgb(246 201 69 / 0.16), rgb(246 201 69 / 0.16)), ${lift("amber")}, rgb(var(--green-rgb) / ${CHIP_DEEPEN});`);
+  }, 60_000);
 
   it("the picture look: no veil over the photo, and panels with enough green for every text colour over a white photo", () => {
     expect([PICTURE_PAGE_VEIL, PICTURE_PANEL_VEIL]).toEqual([0, 0.73]);
@@ -483,6 +498,17 @@ describe("the stylesheets and the text colour list stay in step", () => {
     expect(Math.min(...TEXT_COLOURS.map((t) => contrast(t, mix(VEIL, WHITE, TABBAR_VEIL))))).toBeGreaterThanOrEqual(3);
     // The tab bar's chosen icon sits on the bone glide.
     expect(contrast(ON_BONE, mix(BONE, mix(VEIL, WHITE, TABBAR_VEIL), SELECTED_ALPHA))).toBeGreaterThanOrEqual(AA);
+    // A tab's hover (layout.css) is bone alone over the bar: it adds light over a white thumbnail and over black, and
+    // the icons keep 3:1 at the bar's lit top over white.
+    const layoutCss = readFileSync(join(STYLES, "layout.css"), "utf8");
+    const tabHover = Number(/\.tabbar \.tabbar__item:not\(\.is-active\):hover \{\s*background: linear-gradient\(rgb\(var\(--bone-rgb\) \/ ([\d.]+)\)/.exec(layoutCss)?.[1]);
+    expect(tabHover).toBeGreaterThan(0);
+    for (const behind of [WHITE, [0, 0, 0]] as Rgb[]) {
+      const bar = lit(behind, TABBAR_VEIL + TABBAR_EXTRA_VEIL, TABBAR_LIGHT);
+      const hover = mix(BONE, bar, tabHover);
+      expect(oklabL(hover) - oklabL(bar), "a tab's hover adds light").toBeGreaterThanOrEqual(LADDER_STEP);
+      expect(Math.min(...TEXT_COLOURS.map((t) => contrast(t, hover))), "tab icons on hover").toBeGreaterThanOrEqual(3);
+    }
     const FLOATING: [string, string][] = [
       ["components.css", ".toast"],
       ["system.css", ".update-bar"],
@@ -673,12 +699,18 @@ describe("the living backdrop (the web and phone default): its lightest spot dec
       expect(worst(mix(BONE, mix(VEIL, spot, BRAND_PANEL_VEIL + TRACK_EXTRA_VEIL), TRACK_LIFT)), `track ${at}`).toBeGreaterThanOrEqual(AA);
       // A field is a well, one step below the panel it sits in (the bare panel and its lit top).
       for (const under of [panel, top]) expect(worst(mix(GREEN_DEEP, under, 0.45)), `field ${at}`).toBeGreaterThanOrEqual(AA);
-      // Danger (components.css): vermilion 0.14 over the raise's green, on a panel and straight on the page; hover lays
-      // bone 0.04 on top.
-      for (const under of [mix(VEIL, top, RAISE_VEIL), mix(VEIL, spot, BRAND_PANEL_VEIL + TRACK_EXTRA_VEIL)]) {
-        const danger = mix(VERMILION, under, 0.14);
-        for (const bg of [danger, mix(BONE, danger, 0.04)]) expect(contrast(hexToRgb(TEXT_TOKENS["--vermilion-ink"]), bg), `danger ${at}`).toBeGreaterThanOrEqual(AA);
+      // Danger (components.css): vermilion 0.14 over the raise's own fill (--fill, --fill-hover, --fill-press), on a
+      // panel and straight on the page. On a panel it is a whole step of light over the panel, and hover adds light.
+      const onTrack = mix(VEIL, spot, BRAND_PANEL_VEIL + TRACK_EXTRA_VEIL);
+      for (const [rest, hover, press] of [
+        [lit(top, RAISE_VEIL, RAISE_LIFT), lit(top, RAISE_HOVER_VEIL, RAISE_HOVER_LIFT), lit(top, RAISE_VEIL, RAISE_PRESS_LIFT)],
+        [mix(BONE, onTrack, TRACK_LIFT), mix(BONE, onTrack, PAGE_HOVER_LIFT), mix(BONE, onTrack, RAISE_PRESS_LIFT)],
+      ]) {
+        const [d, dh, dp] = [rest!, hover!, press!].map((under) => mix(VERMILION, under, 0.14));
+        for (const bg of [d!, dh!, dp!]) expect(contrast(hexToRgb(TEXT_TOKENS["--vermilion-ink"]), bg), `danger ${at}`).toBeGreaterThanOrEqual(AA);
+        expect(oklabL(dh!), `danger hover ${at}`).toBeGreaterThan(oklabL(d!));
       }
+      expect(oklabL(mix(VERMILION, lit(top, RAISE_VEIL, RAISE_LIFT), 0.14)) - oklabL(top), `danger over its panel ${at}`).toBeGreaterThanOrEqual(LADDER_STEP);
       for (const under of [panel, raised(top)]) expect(contrast(hexToRgb("#ffeec4"), mix([246, 201, 69], mix(CHIP_UNDER, under, CHIP_DEEPEN), 0.16)), `amber chip ${at}`).toBeGreaterThanOrEqual(AA);
     }
   });
@@ -723,8 +755,8 @@ describe("the living backdrop (the web and phone default): its lightest spot dec
     expect(plates).toContain("background: var(--glass-light-panel), var(--glass-tint-panel);");
     expect(plates).toContain("box-shadow: var(--glass-shadow-panel);");
     expect(plates).toContain("padding-block: 8px;");
-    // The title plates are panes: they blur (and, in Chromium, the page title bends) what is behind them.
-    expect(block(glass, ":is(.page-head__text, .dash-head__text)")).toContain("backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));");
+    // The title plates hold their words by their tint alone (worked out with nothing blurred): no filter of their own.
+    expect(block(glass, ":is(.page-head__text, .dash-head__text)")).toBe("");
     // No button rule here any more: the fills are context-aware, so components.css draws them in every look.
     expect(glass).not.toMatch(/\.btn--(glass|ghost|danger|lens)/);
     const root = declared(block(rules("tokens.css"), ":root"));
@@ -761,26 +793,34 @@ const SWATCH_MIXES: string[][] = (() => {
 })();
 /** The veils glass.css sets under prefers-reduced-transparency. */
 const REDUCED_VEIL = 0.92;
+/**
+ * Each place carries its look's own pay (`lightPay`, what lib/look.ts sets as `--light-pay`): the living backdrop's,
+ * each window glass × setting × strength's, a photo's, each mix of colours', and reduced transparency's.
+ */
 const LIGHT_PLACES: LightPlace[] = (() => {
   const out: LightPlace[] = [];
   const rgb = (c: Rgb) => `rgb(${c.map(Math.round).join(" ")})`;
-  for (const behind of brandMeshSpots()) out.push({ at: `the living backdrop over ${rgb(behind)}`, look: { kind: "frosted", panelVeil: BRAND_PANEL_VEIL }, behind, pay: LIGHT_PAY_OWN, floatVeil: FLOAT_VEIL });
+  const brand: LightLook = { kind: "frosted", panelVeil: BRAND_PANEL_VEIL };
+  for (const behind of brandMeshSpots()) out.push({ at: `the living backdrop over ${rgb(behind)}`, look: brand, behind, pay: lightPay(brand), floatVeil: FLOAT_VEIL });
   for (const { glass, scheme, strength, check, at } of EVERY_LOOK) {
     const v = seeThroughVeils(glass, scheme, strength);
-    out.push({ at, look: { kind: "window", panelVeil: v.panel, pageVeil: v.page }, behind: check.behind, pay: LIGHT_PAY_WHITE, floatVeil: FLOAT_VEIL });
+    const look: LightLook = { kind: "window", panelVeil: v.panel, pageVeil: v.page };
+    out.push({ at, look, behind: check.behind, pay: lightPay(look), floatVeil: FLOAT_VEIL });
   }
-  for (const behind of [WHITE, saturateRgb(WHITE, GLASS_SATURATE_MAX), BLACK])
-    out.push({ at: `a photo, ${rgb(behind)}`, look: { kind: "picture", panelVeil: PICTURE_PANEL_VEIL, pageVeil: PICTURE_PAGE_VEIL }, behind, pay: LIGHT_PAY_WHITE, floatVeil: FLOAT_VEIL });
+  const photo: LightLook = { kind: "picture", panelVeil: PICTURE_PANEL_VEIL, pageVeil: PICTURE_PAGE_VEIL };
+  for (const behind of [WHITE, saturateRgb(WHITE, GLASS_SATURATE_MAX), BLACK]) out.push({ at: `a photo, ${rgb(behind)}`, look: photo, behind, pay: lightPay(photo), floatVeil: FLOAT_VEIL });
   for (const cs of SWATCH_MIXES) {
     const v = coloursVeils(cs);
-    for (const behind of coloursMeshSpots(cs))
-      out.push({ at: `colours ${cs.join(" ")} over ${rgb(behind)}`, look: { kind: "colours", panelVeil: v.panelVeil, pageVeil: v.pageVeil }, behind, pay: LIGHT_PAY_OWN, floatVeil: FLOAT_VEIL });
+    const look: LightLook = { kind: "colours", panelVeil: v.panelVeil, pageVeil: v.pageVeil, colours: cs };
+    const pay = lightPay(look);
+    for (const behind of coloursMeshSpots(cs)) out.push({ at: `colours ${cs.join(" ")} over ${rgb(behind)}`, look, behind, pay, floatVeil: FLOAT_VEIL });
   }
   for (const behind of [WHITE, BLACK, ...brandMeshSpots()])
-    out.push({ at: `reduced transparency over ${rgb(behind)}`, look: { kind: "frosted", panelVeil: REDUCED_VEIL }, behind, pay: LIGHT_PAY_WHITE, floatVeil: REDUCED_VEIL });
+    out.push({ at: `reduced transparency over ${rgb(behind)}`, look: { kind: "frosted", panelVeil: REDUCED_VEIL }, behind, pay: LIGHT_PAY_REDUCED, floatVeil: REDUCED_VEIL });
   return out;
 })();
 
+const STATES: readonly LightState[] = ["rest", "hover", "press", "ghost"];
 /** Everything words can sit on at a place, each at its TOP (where its light is strongest), named. */
 function litSurfaces(p: LightPlace): [name: string, bg: Rgb][] {
   const { look, behind, pay } = p;
@@ -791,23 +831,20 @@ function litSurfaces(p: LightPlace): [name: string, bg: Rgb][] {
     ["E1 panel", e1],
     ["E1 lead panel", lead],
   ];
-  const states: LightState[] = ["rest", "hover", "press", "ghost"];
   for (const [parentName, parent] of [["panel", e1], ["lead panel", lead]] as const)
-    for (let depth = 1; depth <= 3; depth++) for (const state of states) out.push([`E${depth + 1} on the ${parentName}, ${state}`, raised(parent, depth, state)]);
-  for (const state of states) out.push([`a control straight on the page, ${state}`, onPage(look, behind, state)]);
-  for (const [name, tint, alpha] of [["leaf", [95, 165, 133], 0.22], ["vermilion", [232, 57, 43], 0.2], ["amber", [246, 201, 69], 0.16]] as const)
-    out.push([`the ${name} chip on a row`, mix(tint, mix(CHIP_UNDER, raised(e1), CHIP_DEEPEN), alpha)]);
+    for (let depth = 1; depth <= 3; depth++) for (const state of STATES) out.push([`E${depth + 1} on the ${parentName}, ${state}`, raised(parent, depth, state)]);
+  for (const state of STATES) out.push([`a control straight on the page, ${state}`, onPage(look, behind, state)]);
+  for (const t of CHIP_TINTS) out.push([`the ${t.name} chip on a row`, chipOn(raised(e1), t)], [`the ${t.name} chip on a mark`, chipOn(raised(e1, 2), t)]);
+  // An option laid over its own pick-one track (glass.css re-declares the raise on a track's options): hovered over a
+  // track straight on the page, and over a track on a panel.
+  out.push(["an option over a track on the page, hover", raised(onPage(look, behind), 1, "hover")], ["an option over a track on a panel, hover", raised(raised(e1), 1, "hover")]);
+  // Later and the Reload lens on the update bar are components.css's own recipes, held by test/buttonLight.test.ts.
   for (const under of [WHITE, page, e1]) {
     const bar = floatTop(under, look, "rest", p.floatVeil);
     out.push(
       ["a floating layer", bar],
       ["a floating layer, hover", floatTop(under, look, "hover", p.floatVeil)],
-      ["a row on a floating layer", raised(bar)],
-      ["a row on a floating layer, hover", raised(bar, 1, "hover")],
-      ["Later on the update bar", raised(bar, 1, "ghost")],
-      ["the Reload lens", lens(bar)],
-      ["the Reload lens, hover", lens(bar, "hover")],
-      ["the Reload lens, pressed", lens(bar, "press")],
+      ...STATES.flatMap((state) => [1, 2, 3].map((depth) => [`level ${depth + 1} on a floating layer, ${state}`, raised(bar, depth, state)] as [string, Rgb])),
       // Overlays over their scrim (deep green, 0.50 at the lightest), menus and the solid list.
       ["the question sheet", lit(mix(GREEN_DEEP, under, 0.5), Math.max(SHEET_VEIL, look.panelVeil), OVERLAY_LIGHT)],
       ["the picture viewer", lit(mix(GREEN_DEEP, under, 0.5), Math.max(0.9, look.panelVeil), OVERLAY_LIGHT)],
@@ -851,16 +888,24 @@ describe("the logic of light (ADR-85): the top layer is brighter, and every lift
       "--light-press-lift": RAISE_PRESS_LIFT,
     };
     for (const [token, value] of Object.entries(want)) expect(Number(root.get(token)), token).toBe(value);
-    expect(root.get("--light-raise-veil")).toBe(`calc(var(--panel-veil) + ${TRACK_EXTRA_VEIL})`);
-    expect(root.get("--light-raise-hover-veil")).toBe(`calc(var(--panel-veil) + ${TRACK_EXTRA_VEIL})`);
-    // Where white can be behind, the smaller pay; reduced transparency too.
+    for (const token of ["--light-raise-veil", "--light-raise-hover-veil", "--light-ghost-veil"]) expect(root.get(token), token).toBe(`calc(var(--panel-veil) + ${TRACK_EXTRA_VEIL})`);
+    // The pay is worked out for each look (lib/look.ts puts it on <html>); the CSS holds the app's own backdrop's
+    // until then, the white looks' where white can be behind, and reduced transparency's.
     expect(Number(declared(block(glass, 'html:is(.see-through, [data-backdrop="picture"])')).get("--light-pay"))).toBe(LIGHT_PAY_WHITE);
-    expect(glass).toMatch(new RegExp(`@media \\(prefers-reduced-transparency: reduce\\) \\{[\\s\\S]*--light-pay: ${LIGHT_PAY_WHITE} !important;`));
-    expect(lightPay({ kind: "window" })).toBe(LIGHT_PAY_WHITE);
-    expect(lightPay({ kind: "picture" })).toBe(LIGHT_PAY_WHITE);
-    for (const kind of ["frosted", "brand", "colours"] as const) {
-      expect(lightPay({ kind })).toBe(LIGHT_PAY_OWN);
-      expect(lightPay({ kind }, true)).toBe(LIGHT_PAY_WHITE);
+    expect(glass).toMatch(new RegExp(`@media \\(prefers-reduced-transparency: reduce\\) \\{[\\s\\S]*--light-pay: ${LIGHT_PAY_REDUCED} !important;`));
+    expect(LIGHT_PAY_OWN).toBe(ladderPay(brandMeshSpots(), BRAND_PANEL_VEIL));
+    for (const kind of ["frosted", "brand"] as const) expect(lightPay({ kind, panelVeil: BRAND_PANEL_VEIL })).toBe(LIGHT_PAY_OWN);
+    for (const glassName of GLASSES)
+      for (const scheme of SCHEMES) {
+        const v = seeThroughVeils(glassName, scheme, "clear");
+        expect(lightPay({ kind: "window", panelVeil: v.panel, pageVeil: v.page }), `${glassName} ${scheme} clear`).toBe(LIGHT_PAY_WHITE);
+      }
+    expect(lightPay({ kind: "picture", panelVeil: PICTURE_PANEL_VEIL, pageVeil: PICTURE_PAGE_VEIL })).toBe(LIGHT_PAY_WHITE);
+    expect(lightPay({ kind: "window", panelVeil: 0.73 }, true)).toBe(LIGHT_PAY_REDUCED);
+    // Colours with no colours named plan for a white mesh: never less than the colours themselves need.
+    for (const cs of [DEFAULT_COLOURS, ["#f7f5ef"], ["#8e6cc9", "#0f372b", "#e8392b"]]) {
+      const v = coloursVeils(cs);
+      expect(lightPay({ kind: "colours", ...v })).toBeGreaterThanOrEqual(lightPay({ kind: "colours", ...v, colours: cs }));
     }
     // Inside every lit surface: the relative raise, and the fills declared again from it.
     expect(litBlock, "the lit-surface block").not.toBeNull();
@@ -869,11 +914,18 @@ describe("the logic of light (ADR-85): the top layer is brighter, and every lift
     expect(Number(inside.get("--light-raise-lift"))).toBe(RAISE_LIFT);
     expect(Number(inside.get("--light-raise-hover-veil"))).toBe(RAISE_HOVER_VEIL);
     expect(Number(inside.get("--light-raise-hover-lift"))).toBe(RAISE_HOVER_LIFT);
+    expect(Number(inside.get("--light-ghost-veil"))).toBe(GHOST_VEIL);
     expect(Number(inside.get("--light-ghost-lift"))).toBe(GHOST_LIFT);
     for (const fill of ["--fill", "--fill-hover", "--fill-press", "--fill-ghost", "--fill-control"]) expect(inside.get(fill), fill).toBe(root.get(fill));
     const surfaces = litBlock![1]!.split(",").map((x) => x.trim().replace(/\s+/g, " "));
     for (const sel of [".glass", ".dropdown__list", ".ws-menu", ".money-dock", ".tt-sheet", ".help-launcher", ".help-panel", ".page-head__text", ".dash-head__text", ".crumbs__list", ".back-link", ".topbar .brand__name"])
       expect(surfaces, sel).toContain(sel);
+    // A pick-one track's options take the relative raise, so their hover is a step over their own track: the options
+    // are named (`.segmented > *`), never the track, whose own fill keeps what it sits on (the page or a panel).
+    for (const track of [".segmented", ".tabs", ".bg-modes", ".model-picks", ".stepper", ".ws-switch"]) {
+      expect(surfaces, track).toContain(`${track} > *`);
+      expect(surfaces, track).not.toContain(track);
+    }
   });
 
   it("every pane is green under a bone light that is brightest at its top and eases out by 65 %, lit from above", () => {
@@ -919,9 +971,9 @@ describe("the logic of light (ADR-85): the top layer is brighter, and every lift
         if (c < AA && fails.length < 20) fails.push(`${name}, ${p.at}: ${c.toFixed(2)}`);
       }
     expect(fails).toEqual([]);
-    // Every surface was checked; the tightest are a hair over AA, so nothing here may be rounded up by eye.
+    // Every surface was checked; the tightest are close to AA, so nothing here may be rounded up by eye.
     expect(lowest.size).toBeGreaterThan(40);
-    expect(Math.min(...lowest.values())).toBeLessThan(4.7);
+    expect(Math.min(...lowest.values())).toBeLessThan(4.9);
   }, 60_000);
 
   it("the selected pill's green words reach AA wherever it sits, and the tab bar's icons reach 3:1", () => {
@@ -946,6 +998,8 @@ describe("the logic of light (ADR-85): the top layer is brighter, and every lift
     const fixedPoint = (veil: number, lift: number) => BONE.map((b, i) => (lift * b + (1 - lift) * veil * VEIL[i]!) / (1 - (1 - lift) * (1 - veil))) as unknown as Rgb;
     const fixed = fixedPoint(RAISE_VEIL, RAISE_LIFT);
     expect(worst(fixed)).toBeGreaterThanOrEqual(AA);
+    // The quiet fill settles a touch lower, so it never outshines a raised thing at any depth.
+    expect(oklabL(fixedPoint(GHOST_VEIL, GHOST_LIFT))).toBeLessThanOrEqual(oklabL(fixed));
     // Only one step is ever hovered at a time, so hover is checked on top of resting stacks four levels deep (above).
     // A deep stack settles on it, whatever it started on.
     let x: Rgb = WHITE;
@@ -953,51 +1007,62 @@ describe("the logic of light (ADR-85): the top layer is brighter, and every lift
     expect(worst(x)).toBeCloseTo(worst(fixed), 2);
   });
 
-  it("the top layer is brighter: each level is brighter than the one under it, and hover adds light", () => {
-    /** The steps a look must climb, as [name, lower, upper]. */
-    const steps = (p: LightPlace): [string, Rgb, Rgb][] => {
-      const { look, behind, pay } = p;
-      const page = mix(VEIL, behind, look.pageVeil ?? 0);
-      const e1 = panelTop(look, behind, false, pay);
-      const e2 = raised(e1);
-      const e3 = raised(e1, 2);
-      const out: [string, Rgb, Rgb][] = [
-        ["E1 base → top", lit(page, look.panelVeil + pay, 0), e1],
-        ["E1 → the lead panel", e1, panelTop(look, behind, true, pay)],
-        ["E1 → E2", e1, e2],
-        ["E2 → E3", e2, e3],
-        ["E3 → E4", e3, raised(e1, 3)],
-        ["a control on the page → its hover", onPage(look, behind), onPage(look, behind, "hover")],
-        ["a control on the page, pressed → rest", onPage(look, behind, "press"), onPage(look, behind)],
-      ];
-      for (let depth = 1; depth <= 3; depth++)
+  /** Each rung a look climbs, as [name, lower, upper, the least it must climb]. */
+  const rungs = (p: LightPlace): [string, Rgb, Rgb, number][] => {
+    const { look, behind, pay } = p;
+    const page = mix(VEIL, behind, look.pageVeil ?? 0);
+    const e1 = panelTop(look, behind, false, pay);
+    const lead = panelTop(look, behind, true, pay);
+    /** The rest of a level `depth` above a pane must climb a whole step over its parent up to LADDER_DEPTH. */
+    const need = (depth: number) => (depth <= LADDER_DEPTH ? LADDER_STEP : 0);
+    const out: [string, Rgb, Rgb, number][] = [
+      // Inside a pane its top is brighter than its base.
+      ["E1 base → top", lit(page, look.panelVeil + pay, 0), e1, 0],
+      ["E1 → the lead panel", e1, lead, LADDER_STEP],
+      ["a control on the page → its hover", onPage(look, behind), onPage(look, behind, "hover"), Number.MIN_VALUE],
+      ["a control on the page, pressed → rest", onPage(look, behind, "press"), onPage(look, behind), 0],
+      ["a quiet control on the page → rest", onPage(look, behind, "ghost"), onPage(look, behind), 0],
+    ];
+    for (const [paneName, pane] of [["panel", e1], ["lead panel", lead]] as const)
+      for (let depth = 1; depth <= 3; depth++) {
+        const under = depth === 1 ? pane : raised(pane, depth - 1);
+        const rest = raised(under);
+        const at = `E${depth + 1} on the ${paneName}`;
         out.push(
-          [`E${depth + 1} → its hover`, raised(e1, depth), raised(e1, depth, "hover")],
-          [`E${depth + 1} pressed → rest`, raised(e1, depth, "press"), raised(e1, depth)],
-          [`E${depth + 1} ghost → rest`, raised(e1, depth, "ghost"), raised(e1, depth)],
-        );
-      for (const under of [WHITE, page, e1]) {
-        const bar = floatTop(under, look, "rest", p.floatVeil);
-        out.push(
-          ["a floating layer → its hover", bar, floatTop(under, look, "hover", p.floatVeil)],
-          ["the update bar → Reload", bar, lens(bar)],
-          ["Later → Reload", raised(bar, 1, "ghost"), lens(bar)],
-          ["Reload → its hover", lens(bar), lens(bar, "hover")],
-          ["Reload pressed → rest", lens(bar, "press"), lens(bar)],
+          [`${at}: over its parent`, under, rest, need(depth)],
+          [`${at}: quiet, over its parent`, under, raised(under, 1, "ghost"), need(depth)],
+          [`${at}: quiet → rest`, raised(under, 1, "ghost"), rest, 0],
+          [`${at}: rest → hover`, rest, raised(under, 1, "hover"), Number.MIN_VALUE],
+          [`${at}: pressed → rest`, raised(under, 1, "press"), rest, 0],
         );
       }
-      return out;
-    };
-    const lowest = new Map<string, { dl: number; at: string }>();
+    for (const under of [WHITE, page, e1]) {
+      const bar = floatTop(under, look, "rest", p.floatVeil);
+      out.push(["a floating layer → its hover", bar, floatTop(under, look, "hover", p.floatVeil), Number.MIN_VALUE]);
+      let x = bar;
+      for (let depth = 1; depth <= 3; depth++) {
+        const rest = raised(x);
+        out.push([`level ${depth + 1} on a floating layer: over its parent`, x, rest, need(depth)], [`level ${depth + 1} on a floating layer: rest → hover`, rest, raised(x, 1, "hover"), Number.MIN_VALUE]);
+        x = rest;
+      }
+    }
+    return out;
+  };
+
+  it("the top layer is brighter: from a pane up, every level climbs a whole step, nothing steps back, and hover adds light", () => {
+    const lowest = new Map<string, { dl: number; need: number; at: string }>();
     for (const p of LIGHT_PLACES)
-      for (const [name, lower, upper] of steps(p)) {
+      for (const [name, lower, upper, need] of rungs(p)) {
         const dl = oklabL(upper) - oklabL(lower);
-        if (dl < (lowest.get(name)?.dl ?? Infinity)) lowest.set(name, { dl, at: p.at });
+        if (dl - need < (lowest.has(name) ? lowest.get(name)!.dl - lowest.get(name)!.need : Infinity)) lowest.set(name, { dl, need, at: p.at });
       }
-    // At the hardest corners (a vermilion glow of the mesh, a single light colour, a white desktop) the levels
-    // converge toward the AA ceiling: never darker by more than a just noticeable difference.
-    const darker = [...lowest].filter(([, v]) => v.dl < -0.015).map(([k, v]) => `${k}: ${v.dl.toFixed(3)} at ${v.at}`);
-    expect(darker).toEqual([]);
+    // No tolerance: at the hardest corners too (a white desktop or photo, a bright spot of the mesh, a light colour),
+    // each rung climbs at least what it must, because the pane under it pays for the room (`lightPay`).
+    const short = [...lowest].filter(([, v]) => v.dl < v.need || v.dl < 0).map(([k, v]) => `${k}: ${v.dl.toFixed(4)} (needs ${v.need}) at ${v.at}`);
+    expect(short).toEqual([]);
+    expect(lowest.size).toBeGreaterThan(30);
+    expect(LADDER_STEP).toBe(0.015);
+    expect(LADDER_DEPTH).toBe(2);
     // Over the app's own backdrop (its dark field) every step is clearly brighter.
     const field = BRAND_MESH.field[1]!;
     const look: LightLook = { kind: "frosted", panelVeil: BRAND_PANEL_VEIL };
@@ -1005,26 +1070,69 @@ describe("the logic of light (ADR-85): the top layer is brighter, and every lift
     const e2 = raised(e1);
     const e3 = raised(e1, 2);
     expect(oklabL(e1) - oklabL(lit(field, BRAND_PANEL_VEIL + LIGHT_PAY_OWN, 0)), "E1 top over its base").toBeGreaterThan(0.02);
-    expect(oklabL(e2) - oklabL(e1), "E2 − E1").toBeGreaterThanOrEqual(0.03);
-    expect(oklabL(e3) - oklabL(e2), "E3 − E2").toBeGreaterThanOrEqual(0.025);
+    expect(oklabL(e2) - oklabL(e1), "E2 − E1").toBeGreaterThanOrEqual(0.04);
+    expect(oklabL(e3) - oklabL(e2), "E3 − E2").toBeGreaterThanOrEqual(0.03);
     expect(oklabL(raised(e1, 1, "hover")) - oklabL(e2), "E2 hover − E2").toBeGreaterThan(0.01);
-    expect(oklabL(panelTop(look, field, true)) - oklabL(e1), "the lead panel − E1").toBeGreaterThan(0.01);
-    const bar = floatTop(field, look);
-    expect(oklabL(lens(bar)) - oklabL(raised(bar, 1, "ghost")), "Reload − Later").toBeGreaterThanOrEqual(0.04);
+    expect(oklabL(panelTop(look, field, true)) - oklabL(e1), "the lead panel − E1").toBeGreaterThan(LADDER_STEP);
     expect(oklabL(mix(BONE, e3, SELECTED_ALPHA)) - oklabL(e3), "E4 selected − E3").toBeGreaterThan(0.4);
   }, 60_000);
+
+  it("an option laid over its own track is a step of light brighter on hover, in every look", () => {
+    // glass.css re-declares the relative raise on a pick-one track's options (`.segmented > *` and the rest), so an
+    // option's hover is `--fill-hover` laid over the track it sits in: straight on the page (the track is the page's
+    // control recipe) and inside a panel or the lead panel (the track is a raised thing). Before, an option on a track
+    // straight on the page laid the page's whole recipe again over the track, and hovering it went darker.
+    const fails: string[] = [];
+    let least = Infinity;
+    for (const p of LIGHT_PLACES) {
+      const e1 = panelTop(p.look, p.behind, false, p.pay);
+      for (const [where, track] of [["on the page", onPage(p.look, p.behind)], ["on a panel", raised(e1)], ["on the lead panel", raised(panelTop(p.look, p.behind, true, p.pay))], ["on a row", raised(e1, 2)]] as const) {
+        const hover = raised(track, 1, "hover");
+        const dl = oklabL(hover) - oklabL(track);
+        least = Math.min(least, dl);
+        if (!(dl > 0) && fails.length < 20) fails.push(`${where}: ${dl.toFixed(4)}, ${p.at}`);
+        if (worst(hover) < AA && fails.length < 20) fails.push(`${where}: ${worst(hover).toFixed(2)}:1, ${p.at}`);
+      }
+    }
+    expect(fails).toEqual([]);
+    expect(least).toBeGreaterThan(0);
+  }, 60_000);
+
+  it("each look's pay is the least that leaves the ladder room: 0.01 less breaks it somewhere", () => {
+    const looks: { name: string; spots: Rgb[]; look: LightLook }[] = [
+      { name: "the living backdrop", spots: brandMeshSpots(), look: { kind: "frosted", panelVeil: BRAND_PANEL_VEIL } },
+      { name: "Clear over white", spots: [WHITE, BLACK], look: { kind: "window", ...((v) => ({ panelVeil: v.panel, pageVeil: v.page }))(seeThroughVeils("liquid", "light", "clear")) } },
+      { name: "a white photo", spots: [WHITE], look: { kind: "picture", panelVeil: PICTURE_PANEL_VEIL, pageVeil: PICTURE_PAGE_VEIL } },
+      ...[DEFAULT_COLOURS, ["#f7f5ef"], ["#8e6cc9", "#0f372b", "#e8392b"], ["#1f2937"]].map((cs) => ({ name: `colours ${cs.join(" ")}`, spots: coloursMeshSpots(cs), look: { kind: "colours" as const, ...coloursVeils(cs), colours: cs } })),
+    ];
+    for (const { name, spots, look } of looks) {
+      const pay = lightPay(look);
+      const pages = spots.map((s) => mix(VEIL, s, look.pageVeil ?? 0));
+      expect(pages.flatMap((pg) => ladderFaults(pg, look.panelVeil, pay)), name).toEqual([]);
+      if (pay > 0) expect(pages.some((pg) => ladderFaults(pg, look.panelVeil, Math.round((pay - 0.01) * 100) / 100).length > 0), `${name} at ${pay - 0.01}`).toBe(true);
+    }
+    // What the see-through costs: the share of the backdrop a pane still shows (1 − its green), per look.
+    expect(1 - (BRAND_PANEL_VEIL + LIGHT_PAY_OWN)).toBeGreaterThan(0.25);
+    expect(1 - (seeThroughVeils("liquid", "light", "clear").panel + LIGHT_PAY_WHITE)).toBeGreaterThan(0.1);
+  });
 
   it("the light is soft and static: nothing transitions or animates backdrop-filter, and refraction blurs first", () => {
     const moving: string[] = [];
     for (const f of readdirSync(STYLES).filter((n) => n.endsWith(".css"))) {
       const text = rules(f);
-      for (const m of text.matchAll(/transition(?:-property)?:\s*([^;]+);/g)) if (/backdrop-filter|\ball\b/.test(m[1]!)) moving.push(`${f}: ${m[0]}`);
+      for (const m of text.matchAll(/transition(?:-property)?:\s*([^;]+);/g)) if (/backdrop-filter|\bfilter\b|\ball\b/.test(m[1]!)) moving.push(`${f}: ${m[0]}`);
       for (const m of text.matchAll(/@keyframes\s+[\w-]+\s*\{((?:[^{}]*\{[^{}]*\})*)[^{}]*\}/g)) if (/backdrop-filter/.test(m[1]!)) moving.push(`${f}: @keyframes with backdrop-filter`);
     }
     expect(moving).toEqual([]);
-    expect(block(glass, ".refract :is(.glass--refract, .page-head__text)")).toContain("backdrop-filter: blur(14px) url(#cf-refract) saturate(1.75);");
+    expect(block(glass, ".refract .glass--refract")).toContain("backdrop-filter: blur(14px) url(#cf-refract) saturate(1.75);");
+    // The page title plates hold their words by their tint alone: no blur and no bend of their own (at most three
+    // refracting surfaces on a screen, e2e/refract.spec.ts), and Money's band blurs without bending.
+    expect(glass).not.toMatch(/page-head__text[^{]*\{[^}]*backdrop-filter/);
+    expect(glass).not.toMatch(/dash-head__text[^{]*\{[^}]*backdrop-filter/);
+    expect(block(glass, ".refract .dash-band.glass--refract")).toContain("backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));");
+    expect(block(glass, ".refract .dash-band.glass--refract")).not.toContain("url(");
     // Reduced transparency: nothing to see through, so nothing to blur or bend.
-    expect(glass).toMatch(/\.glass,\s*\.page-head__text,\s*\.dash-head__text,\s*\.refract :is\(\.glass--refract, \.page-head__text\) \{\s*-webkit-backdrop-filter: none;\s*backdrop-filter: none;/);
+    expect(glass).toMatch(/\.glass,\s*\.refract \.glass--refract,\s*\.refract \.dash-band\.glass--refract \{\s*-webkit-backdrop-filter: none;\s*backdrop-filter: none;/);
   });
 });
 
@@ -1117,7 +1225,7 @@ describe("no visible edges (owner, 2026-11-18)", () => {
       }
     }
     // The panes' composed light and shadow name only these soft tokens.
-    for (const t of ["--glass-shadow-panel", "--glass-shadow-raise", "--glass-shadow-raise-hover", "--glass-shadow-press", "--glass-shadow-float", "--glass-shadow-overlay"])
+    for (const t of ["--glass-shadow-panel", "--glass-shadow-raise", "--glass-shadow-raise-hover", "--glass-shadow-row", "--glass-shadow-press", "--glass-shadow-float", "--glass-shadow-overlay"])
       for (const l of layers(root.get(t)!)) expect(light, `${t}: ${l}`).toContain(/^var\((--[a-z0-9-]+)\)$/.exec(l)![1]!);
     expect(rules("glass.css")).not.toMatch(/\.glass::before/);
   });
@@ -1328,6 +1436,8 @@ describe("the page follows the look", () => {
     expect(root.dataset.strength).toBe("clear");
     expect(root.style.getPropertyValue("--backdrop-veil")).toBe("0");
     expect(root.style.getPropertyValue("--panel-veil")).toBe(String(liquid.panel));
+    // And each look's own pay for the ladder of light (lightPay).
+    expect(root.style.getPropertyValue("--light-pay")).toBe(String(LIGHT_PAY_WHITE));
     const frosted = seeThroughVeils("liquid", "light", "frosted");
     applyLook({ kind: "window", glass: "liquid", strength: "frosted", pageVeil: frosted.page, panelVeil: frosted.panel }, root);
     expect(root.dataset.strength).toBe("frosted");
@@ -1341,10 +1451,12 @@ describe("the page follows the look", () => {
     expect(root.dataset.strength).toBe("frosted");
     expect(root.style.getPropertyValue("--backdrop-veil")).toBe("");
     expect(root.style.getPropertyValue("--panel-veil")).toBe("0.33");
+    expect(root.style.getPropertyValue("--light-pay")).toBe(String(LIGHT_PAY_OWN));
 
     applyLook({ kind: "colours", colours: ["#ffffff"], ...coloursVeils(["#ffffff"]) }, root);
     expect(root.style.getPropertyValue("--backdrop-veil")).toBe("0.33");
     expect(root.style.getPropertyValue("--panel-veil")).toBe("0.6");
+    expect(root.style.getPropertyValue("--light-pay")).toBe(String(lightPay({ kind: "colours", colours: ["#ffffff"], ...coloursVeils(["#ffffff"]) })));
 
     // The picture look: no veil over the photo, and its own panel tint.
     applyLook({ kind: "picture", url: "data:x", pageVeil: PICTURE_PAGE_VEIL, panelVeil: PICTURE_PANEL_VEIL }, root);

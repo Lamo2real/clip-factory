@@ -47,7 +47,7 @@ counted toward AA.
 
 | Token | Use |
 |---|---|
-| `--fill-control` | Buttons without a fill of their own (glass, ghost), drop zones, check chips, step numbers: the raise (`--fill`), one step brighter than what it sits on. Straight on the page that is the pick-one track's recipe (bone 0.08 over `--panel-veil` + 0.15); inside a pane the relative raise (green 0.14, bone 0.06) |
+| `--fill-control` | Buttons without a fill of their own (glass, ghost), drop zones, check chips, step numbers: the raise (`--fill`), one step brighter than what it sits on. Straight on the page that is the pick-one track's recipe (bone 0.08 over `--panel-veil` + 0.22); inside a pane the relative raise (green 0.22, bone 0.09) |
 | `--fill-field` | Text fields and the link box: deep green 0.45, a well deeper than the panel |
 | `--shade-field` | The field's soft inner shade (blurred, never a line) |
 | `--glow-bone`, `--glow-vermilion`, `--glow-leaf` | Soft glows (18 px blur) for a chosen, live, best or done thing, instead of a ring |
@@ -65,11 +65,11 @@ Each glass variant sets its `--glass-tint` (green) and `--glass-light` (bone, fr
 | Class | `--glass-tint` | `--glass-light` |
 |---|---|---|
 | `.glass` | `--glass-tint-panel`: green at `--panel-veil` + `--light-pay` | `--glass-light-panel`: bone 0.04 at the top, gone by 65 %, plus the catch light |
-| `.glass--green` | `--glass-tint-lead`: the panel + 0.03 (the lead panel: the hero, the sign-in card, Library's learnings) | `--glass-light-lead`: bone 0.06 at the top |
+| `.glass--green` | `--glass-tint-lead`: the panel's green (the lead panel: the hero, the sign-in card, Library's learnings) | `--glass-light-lead`: bone 0.075 at the top, a whole step over a panel |
 | `.glass--vermilion` | the panel, a breath of vermilion (0.16 → 0.08), then green 0.20 over it | the panel's |
 | `.glass--clear` | the panel tint | the panel's |
-| Nested `.glass` | the relative raise: green 0.14 over the outer panel, no blur of its own | flat bone 0.06 |
-| Floating layers | `--glass-tint-float`: the larger of `--float-veil` (0.73) and the panel, + 0.06, blur 28 px (toasts, the Ask panel and sheet, the setup list, pill and sheet, the update bar): content scrolls under them, so they plan for white | `--glass-light-float`: bone 0.08 at the top |
+| Nested `.glass` | the relative raise: green 0.22 over the outer panel, no blur of its own | flat bone 0.09 |
+| Floating layers | `--glass-tint-float`: the larger of `--float-veil` (0.73) and the panel, + 0.16, blur 28 px (toasts, the Ask panel and sheet, the setup list, pill and sheet, the update bar): content scrolls under them, so they plan for white | `--glass-light-float`: bone 0.08 at the top |
 | The tab bar | `--glass-tint-tabbar`: `--tabbar-veil` (0.59) + 0.04, blur 28 px (icons only, 3:1 over white) | `--glass-light-tabbar`: bone 0.04 at the top |
 | The question sheet | `--glass-tint-overlay`: 0.86, over its own scrim | `--glass-light-overlay`: bone 0.12 at the top |
 | No `backdrop-filter` | green 0.92, flat | unchanged |

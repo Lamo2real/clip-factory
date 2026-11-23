@@ -505,6 +505,12 @@
   transform: translateY(-2px);
   box-shadow: var(--light-rim-1), var(--light-shade-1), var(--light-shadow-1-hover);
 }
+/* Hover adds light (ADR-85): the cards sit straight on the page, so a hovered one takes the lead panel's stronger
+   light from above (the same green, a whole ladder step brighter, its words at AA: lib/background.ts ladderFaults). */
+.tree-card:hover,
+.branch-card:hover {
+  --glass-light: var(--glass-light-lead);
+}
 .tree-card:active,
 .branch-card:active {
   transform: scale(0.98);

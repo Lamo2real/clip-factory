@@ -296,12 +296,8 @@
   right: 0;
 }
 
-/* Hover shows what can be pressed (the cursor never changes, see base.css). */
-.segmented__opt:not(.is-on):hover,
-.tab:not(.is-on):hover {
-  color: var(--ink);
-  background: var(--fill-hover);
-}
+/* Hover shows what can be pressed (the cursor never changes, see base.css), and adds light. The segmented options
+   and tabs keep theirs in components.css: one relative step above their lit track, with a small top light. */
 .tabbar__item:not(.is-active):hover {
   color: var(--ink);
   background: var(--fill-hover);

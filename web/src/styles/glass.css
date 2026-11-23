@@ -237,7 +237,7 @@ html[data-strength="frosted"] .backdrop__frost {
   box-shadow: var(--glass-shadow-panel);
 }
 /* The lead panel (the hero, the sign-in card, Library's learnings, the week's quote): the brightest pane on the page,
-   a step more green paying for a stronger light (LEAD_EXTRA_VEIL, LEAD_LIGHT). */
+   a whole step of light over a plain panel (LEAD_LIGHT over the same green, LEAD_EXTRA_VEIL 0). */
 .glass--green {
   --glass-tint: var(--glass-tint-lead);
   --glass-light: var(--glass-light-lead);
@@ -247,7 +247,10 @@ html[data-strength="frosted"] .backdrop__frost {
 /* Inside every lit surface a raised thing (a row, a card, a control, a chip) is one step brighter than the surface it
    sits on, at any depth: a little green and a little bone over whatever is under it (RAISE_* in lib/background.ts).
    Straight on the page tokens.css gives it the pick-one track's recipe instead. A custom property resolves var() where
-   it is declared, so the fills built from these numbers are declared again here, on each surface. */
+   it is declared, so the fills built from these numbers are declared again here, on each surface. The options of a
+   pick-one track (and the stepper's buttons, the workspace switch's two names) are raised on their own track, so they
+   take the relative raise too: their hover is a step of light over the track, also where the track sits straight on
+   the page. (The track's own fill keeps what it sits on, so the options are named here, never the track.) */
 :where(
     .glass,
     .dropdown__list,
@@ -272,26 +275,33 @@ html[data-strength="frosted"] .backdrop__frost {
     .dash-head__link,
     .dash-grey,
     .topbar .brand__name,
-    .home-row__intro > :is(h2, p)
+    .home-row__intro > :is(h2, p),
+    .segmented > *,
+    .tabs > *,
+    .bg-modes > *,
+    .model-picks > *,
+    .stepper > *,
+    .ws-switch > *
   ) {
-  --light-raise-veil: 0.14; /* RAISE_VEIL */
-  --light-raise-lift: 0.06; /* RAISE_LIFT */
-  --light-raise-hover-veil: 0.18; /* RAISE_HOVER_VEIL */
-  --light-raise-hover-lift: 0.08; /* RAISE_HOVER_LIFT */
-  --light-ghost-lift: 0.04; /* GHOST_LIFT */
+  --light-raise-veil: 0.22; /* RAISE_VEIL */
+  --light-raise-lift: 0.09; /* RAISE_LIFT */
+  --light-raise-hover-veil: 0.26; /* RAISE_HOVER_VEIL */
+  --light-raise-hover-lift: 0.11; /* RAISE_HOVER_LIFT */
+  --light-ghost-veil: 0.21; /* GHOST_VEIL */
+  --light-ghost-lift: 0.086; /* GHOST_LIFT */
   --fill: linear-gradient(rgb(var(--bone-rgb) / var(--light-raise-lift)), rgb(var(--bone-rgb) / var(--light-raise-lift))), rgb(var(--green-rgb) / min(1, var(--light-raise-veil)));
   --fill-hover: linear-gradient(rgb(var(--bone-rgb) / var(--light-raise-hover-lift)), rgb(var(--bone-rgb) / var(--light-raise-hover-lift))), rgb(var(--green-rgb) / min(1, var(--light-raise-hover-veil)));
   --fill-press: linear-gradient(rgb(var(--bone-rgb) / var(--light-press-lift)), rgb(var(--bone-rgb) / var(--light-press-lift))), rgb(var(--green-rgb) / min(1, var(--light-raise-veil)));
-  --fill-ghost: linear-gradient(rgb(var(--bone-rgb) / var(--light-ghost-lift)), rgb(var(--bone-rgb) / var(--light-ghost-lift))), rgb(var(--green-rgb) / min(1, var(--light-raise-veil)));
+  --fill-ghost: linear-gradient(rgb(var(--bone-rgb) / var(--light-ghost-lift)), rgb(var(--bone-rgb) / var(--light-ghost-lift))), rgb(var(--green-rgb) / min(1, var(--light-ghost-veil)));
   --fill-control: var(--fill);
 }
 
 /* ---------- The window look and the picture look: tints (docs/CONTRACTS.md §22.3) ---------- */
 
-/* Where white can be behind (a white desktop, a white photo) the panels already carry 0.73 green, so a smaller step
-   pays for the same light (LIGHT_PAY_WHITE). */
+/* Where white can be behind (a white desktop, a white photo) the panels already carry 0.73 green; the ladder's pay on
+   top of it (LIGHT_PAY_WHITE, Clear and Picture over white) until lib/look.ts sets each look's own on <html>. */
 html:is(.see-through, [data-backdrop="picture"]) {
-  --light-pay: 0.04; /* LIGHT_PAY_WHITE */
+  --light-pay: 0.16; /* LIGHT_PAY_WHITE */
 }
 /* --panel-veil (lib/background.ts) is the least bottle green that keeps every text colour of this look (tokens.css)
    at WCAG AA over the lightest thing behind (a white desktop, a white photo); the panel tint adds the light's pay to
@@ -357,11 +367,6 @@ html:is(.see-through, [data-backdrop]) .dash-head__text.dash-head__text {
   padding-block: clamp(18px, 2.4vw, 28px);
   border-radius: var(--r-lg);
 }
-/* The two title plates are panes, so they blur what is behind them like one (the page title also bends it, below). */
-:is(.page-head__text, .dash-head__text) {
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-}
 /* Headings and lines between panels hug their words instead of running the full width as a bar. */
 html:is(.see-through, [data-backdrop])
   :is(
@@ -396,6 +401,13 @@ html:is(.see-through, [data-backdrop]) .perf__updated > span {
   box-shadow: var(--light-rim-2), var(--light-shade-2);
 }
 
+/* The setup bar's strip (the glass the page scrolls under, behind the setup pill) holds no words of its own: the pill
+   on it is a floating pane with its own tint and its own ladder. So the strip carries the plain panel veil without the
+   ladder's pay, and still melts into the page across its feather (e2e/edges.spec.ts). */
+.setup-todo-bar__glass.glass {
+  --glass-tint: linear-gradient(rgb(var(--green-rgb) / var(--panel-veil)), rgb(var(--green-rgb) / var(--panel-veil)));
+}
+
 /* Nested glass is raised on its panel: one relative step brighter (the outer panel gives the words most of their
    green), lit flat from the panel's light above it, with no blur of its own (the parent's blur is what it sits on).
    :where() keeps it as light as `.glass`, so a surface with a tint of its own wins. */
@@ -418,11 +430,18 @@ html:is(.see-through, [data-backdrop]) .perf__updated > span {
   text-shadow: none;
 }
 
-/* Chromium: bend the backdrop as well as blurring it (see the #cf-refract filter), on the hero surfaces and the page
-   title plate (at most three on a screen). The blur comes first: with the url() first Chromium leaves what is behind
-   sharp, so words scrolled under the tab bar would read through it (e2e/refract.spec.ts). Never animated. */
-.refract :is(.glass--refract, .page-head__text) {
+/* Chromium: bend the backdrop as well as blurring it (see the #cf-refract filter), on the hero surfaces only: at most
+   three on any screen (the sidebar or tab bar, the setup rail and one more; e2e/refract.spec.ts counts them at 1440
+   and 390). The blur comes first: with the url() first Chromium leaves what is behind sharp, so words scrolled under
+   the tab bar would read through it (e2e/refract.spec.ts). Never animated. The page title plates hold their words
+   with their tint alone (worked out without any blur), so they draw no filter at all. */
+.refract .glass--refract {
   backdrop-filter: blur(14px) url(#cf-refract) saturate(1.75);
+}
+/* Money has its dock as well as the menu and the setup rail: its band keeps the plain glass blur, without the bend. */
+.refract .dash-band.glass--refract {
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
 }
 
 /* Browsers without backdrop-filter get a denser tint so text stays readable; the light still applies. */
@@ -457,9 +476,8 @@ html:is(.see-through, [data-backdrop]) .perf__updated > span {
   }
   /* Nothing to see through, so nothing to blur or bend: the light, the glow, the shade and the shadow stay. */
   .glass,
-  .page-head__text,
-  .dash-head__text,
-  .refract :is(.glass--refract, .page-head__text) {
+  .refract .glass--refract,
+  .refract .dash-band.glass--refract {
     -webkit-backdrop-filter: none;
     backdrop-filter: none;
   }

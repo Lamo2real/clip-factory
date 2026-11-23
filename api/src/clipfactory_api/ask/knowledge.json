@@ -1,5 +1,5 @@
 {
- "version": "ec9edec56ca8",
+ "version": "75c3ae7eb3d1",
  "parts": [
   {
    "id": "app-map",
@@ -159,7 +159,7 @@
    "id": "contracts-22",
    "title": "CONTRACTS: 22. Background modes and see-through glass (owner request, 2026-11-16)",
    "line": "The owner wants the whole app to feel like liquid glass you can almost see through: \"if there's a car behind it, I",
-   "chars": 48744
+   "chars": 53416
   },
   {
    "id": "contracts-23",
@@ -807,7 +807,7 @@
    "id": "adr-85",
    "title": "DECISIONS: ADR-85 The logic of light: the top layer is brighter, every lift is paid for, Reload is a colourless lens",
    "line": "Context. The owner (2026-11-23, with a screenshot of Library): \"can you use the logic of light on the ui,",
-   "chars": 5456
+   "chars": 6906
   },
   {
    "id": "architecture-overview",
@@ -1053,7 +1053,7 @@
    "id": "ux-colour-tokens",
    "title": "UX_DESIGN_SYSTEM: Colour tokens",
    "line": "The palette is the November 2026 bottle-green look ([DECISIONS.md ADR-43](DECISIONS.md#adr-43-bottle-green-glass-bone-words-vermilion-actions)):",
-   "chars": 7522
+   "chars": 7551
   },
   {
    "id": "ux-the-liquid-glass-recipe",
@@ -1065,7 +1065,7 @@
    "id": "ux-the-logic-of-light",
    "title": "UX_DESIGN_SYSTEM: The logic of light",
    "line": "The owner (2026-11-23): \"the top layer is always brighter than the bottom, and it grows gradually in between ... make",
-   "chars": 14018
+   "chars": 15748
   },
   {
    "id": "ux-typography",

@@ -170,10 +170,13 @@ html[data-titlebar="overlay"] .titlebar-drag {
 .tabbar__item:active {
   transform: scale(0.88);
 }
-/* Hover adds light, never shade: one raised step over the bar. Heavier than glide.css's shared hover, which loads
-   later. The chosen tab keeps its bone pill. */
+/* Hover adds light, never shade: a little bone over the bar, with no green under it (a raised fill's green would read
+   darker than the bar over a white thumbnail), and a small top light. The icons keep 3:1 over white
+   (test/background.test.ts). Heavier than glide.css's shared hover, which loads later. The chosen tab keeps its bone
+   pill. */
 .tabbar .tabbar__item:not(.is-active):hover {
-  background: var(--fill-hover);
+  background: linear-gradient(rgb(var(--bone-rgb) / 0.05), rgb(var(--bone-rgb) / 0.05)); /* TABBAR_HOVER_LIFT */
+  box-shadow: var(--light-rim-sm);
 }
 .tabbar__item.is-active {
   color: var(--on-bone);

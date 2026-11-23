@@ -413,9 +413,11 @@ export const TRACK_LIFT = 0.08;
 /**
  * So a track carries this much more tint than a panel, and the labels on its lift stay at AA over every spot of every
  * look (the colours grid included). Not the lightest spot's need alone: mixed in sRGB, a darker spot of another hue
- * (a brown in the living backdrop) can need more.
+ * (a brown in the living backdrop) can need more. 0.22 since the ladder (ADR-85): with 0.15 a track over a bright
+ * chromatic spot of the Colours mesh (Grape, bottle green, vermilion) read brighter than an option's hover laid on it,
+ * so hovering an option went darker there; 0.22 keeps every option's hover a step of light above its own track.
  */
-export const TRACK_EXTRA_VEIL = 0.15;
+export const TRACK_EXTRA_VEIL = 0.22;
 /**
  * Tinted chips (the vermilion pill, the success tint, the sound tags: `--tint-vermilion`, `--tint-leaf` and
  * `--tint-amber` in tokens.css) lay this much green (`CHIP_UNDER`) under their tint, so the colour stays readable and
@@ -438,10 +440,31 @@ export const CHIP_UNDER: Rgb = VEIL;
 // unchanged; the pay goes on top of them. tokens.css and glass.css carry each number (`--light-*`), and
 // test/background.test.ts reads every one back and works the contrast and the brightness steps out for every look.
 
-/** The extra green every lit surface carries over the app's own backdrops (the living mesh, Frosted, Colours). */
-export const LIGHT_PAY_OWN = 0.08;
-/** The extra green where white can be behind (the window look, Picture, reduced transparency): the veil is 0.73 there already. */
-export const LIGHT_PAY_WHITE = 0.04;
+/**
+ * The ladder (owner, 2026-11-23: "the top layer is always brighter than the bottom, and it grows gradually in
+ * between"). From a pane up, every nested level reads at least this much brighter (OKLab L) than the level it sits
+ * on, in every look, and no level or hover ever reads darker. Page to pane is the one exception: over a light
+ * backdrop (a white desktop or photo, a bright spot of the mesh, a light colour) a pane holding bone words has to be
+ * darker than what is behind it.
+ */
+export const LADDER_STEP = 0.015;
+/**
+ * How many levels above a pane must climb a whole `LADDER_STEP`: a row on the pane (E2) and a mark, chip or button on
+ * the row (E3), the levels the app draws. A raised thing on top of those (a fourth level) still never reads darker and
+ * keeps AA; above E3 the next level of light is the bone selected pill (E4).
+ */
+export const LADDER_DEPTH = 2;
+/**
+ * The extra green (`--light-pay`) a pane carries over the app's own living backdrop: the least that leaves room under
+ * the AA ceiling for the ladder over every corner of the mesh (`lightPay`, `ladderPay`; test/background.test.ts works
+ * it out again). Bone words cap what they sit on at luminance 0.140 (about OKLab L 0.52), so a pane over a bright spot
+ * has to sit low enough for two whole steps, the lead panel's step and a hover above it.
+ */
+export const LIGHT_PAY_OWN = 0.39;
+/** The same where white can be behind: the window look's Clear (every glass) and Picture, over a white desktop or photo. */
+export const LIGHT_PAY_WHITE = 0.16;
+/** Reduced transparency: the veils are 0.92 there, so a small step pays for the light (glass.css sets it, !important). */
+export const LIGHT_PAY_REDUCED = 0.04;
 /** A panel's bone light at its very top (E1). It eases out and is gone by 65 % of the height (`--glass-light-panel`). */
 export const PANEL_LIGHT = 0.04;
 /**
@@ -450,30 +473,45 @@ export const PANEL_LIGHT = 0.04;
  */
 export const SPECULAR = 0.06;
 /**
- * The lead panel (the hero, the sign-in card, Library's learnings): a step more green than a panel ... (0.03, not the
- * 0.02 first drawn: a raised card at the lead's top, hovered two or three levels up, fell to 4.48:1 in some Colours.)
+ * The lead panel (the hero, the sign-in card, Library's learnings, the week's quote): the same green as a panel since
+ * the ladder (it was 0.03 more), so its stronger light makes it a whole step brighter than a plain panel ...
  */
-export const LEAD_EXTRA_VEIL = 0.03;
-/** ... paying for a stronger light at its top. */
-export const LEAD_LIGHT = 0.06;
-/** A raised thing inside a lit surface (a row, a card, a control, a chip, nested glass): this much green over its parent ... */
-export const RAISE_VEIL = 0.14;
-/** ... then this much bone. Its fixed point stays under the AA ceiling, so AA holds at any depth (checked to 4 levels). */
-export const RAISE_LIFT = 0.06;
+export const LEAD_EXTRA_VEIL = 0;
+/** ... its light at the top. */
+export const LEAD_LIGHT = 0.075;
+/**
+ * A raised thing inside a lit surface (a row, a card, a control, a track, nested glass): this much green over its
+ * parent ... (0.22 since the ladder, from 0.14: a stronger step climbs a whole `LADDER_STEP` per level with less room.)
+ */
+export const RAISE_VEIL = 0.22;
+/**
+ * ... then this much bone. Its fixed point (31 % bone over bottle green) stays under the AA ceiling, so a resting
+ * stack keeps AA at any depth.
+ */
+export const RAISE_LIFT = 0.09;
 /** Hover is one step up: more green ... */
-export const RAISE_HOVER_VEIL = 0.18;
-/** ... paying for more bone. No hover is darker than its rest. */
-export const RAISE_HOVER_LIFT = 0.08;
+export const RAISE_HOVER_VEIL = 0.26;
+/** ... paying for more bone. At every depth a hover reads brighter than its rest. */
+export const RAISE_HOVER_LIFT = 0.11;
 /** Press is one step down: the raise's green with less bone (and an inset shade from above). */
 export const RAISE_PRESS_LIFT = 0.03;
-/** A ghost button (Later, Skip, Not now) inside a lit surface: the raise's green with a faint lift, no top glow. */
-export const GHOST_LIFT = 0.04;
+/**
+ * A quiet fill inside a lit surface (`--fill-ghost`: a skipped row, a table's every other row, the toast's Undo):
+ * a touch less green than a raised thing ...
+ */
+export const GHOST_VEIL = 0.21;
+/** ... and a touch less bone, so it climbs the ladder too and its hover (a raised fill) still adds light. */
+export const GHOST_LIFT = 0.086;
 /** A ghost button straight on the page: the pick-one track's green (`TRACK_EXTRA_VEIL`) with this lift. */
 export const PAGE_GHOST_LIFT = 0.06;
 /** A control straight on the page, on hover: the track's green with this lift (its rest is `TRACK_LIFT`). */
 export const PAGE_HOVER_LIFT = 0.09;
-/** A floating layer (toasts, the update bar, the setup pill, rail and list, the Ask launcher and panel, the money dock): this much more green than `FLOAT_VEIL` (or the panel, if heavier) ... */
-export const FLOAT_EXTRA_VEIL = 0.06;
+/**
+ * A floating layer (toasts, the update bar, the setup pill, rail and list, the Ask launcher and panel, the money dock):
+ * this much more green than `FLOAT_VEIL` (or the panel, if heavier) ... It plans for a white thumbnail under it, so
+ * this is what leaves its rows and their marks room for the ladder there (0.16 since the ladder, from 0.06).
+ */
+export const FLOAT_EXTRA_VEIL = 0.16;
 /** ... paying for this light at its top. */
 export const FLOAT_LIGHT = 0.08;
 /** A floating layer on hover (the setup pill, the launcher): the same green, a little more light. */
@@ -545,9 +583,12 @@ export function seeThroughTrackBackground(glass: NativeGlass, scheme: Scheme, st
   return mix(BONE, tinted, TRACK_LIFT);
 }
 
-/** What words on a tinted chip sit on: the panel, the green under the tint (`CHIP_UNDER`), then the chip's own tint (`tint` at `alpha`). */
-export function seeThroughChipBackground(glass: NativeGlass, scheme: Scheme, strength: GlassStrength, tint: Rgb, alpha: number, behind: Rgb = glassCeiling(glass, scheme)): Rgb {
-  return mix(tint, mix(CHIP_UNDER, seeThroughWorstBackground(glass, scheme, strength, behind), CHIP_DEEPEN), alpha);
+/**
+ * What words on a tinted chip sit on: the panel, the green under the tint (`CHIP_UNDER`), its bone lift (`lift`, see
+ * `CHIP_TINTS`), then the chip's own tint (`tint` at `alpha`).
+ */
+export function seeThroughChipBackground(glass: NativeGlass, scheme: Scheme, strength: GlassStrength, tint: Rgb, alpha: number, behind: Rgb = glassCeiling(glass, scheme), lift = 0): Rgb {
+  return mix(tint, mix(BONE, mix(CHIP_UNDER, seeThroughWorstBackground(glass, scheme, strength, behind), CHIP_DEEPEN), lift), alpha);
 }
 
 /** A picked swatch's tick: bottle green when it reads better than white on that colour, so it is never under 3:1. */
@@ -671,15 +712,36 @@ export function oklabL(c: Rgb): number {
   return 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s;
 }
 
-/** What the light needs to know of a look: its kind, its panel veil and, if it has one, its page veil. */
-export type LightLook = { kind: Look["kind"]; panelVeil: number; pageVeil?: number };
+/**
+ * What the light needs to know of a look: its kind, its panel veil and, if it has one, its page veil; for Colours,
+ * the colours (without them the pay is planned for a white mesh, the most any colours can need).
+ */
+export type LightLook = { kind: Look["kind"]; panelVeil: number; pageVeil?: number; colours?: readonly string[] };
+
+/** Every spot the window look plans for: white (the ceiling of every glass), every floor and every measured point. */
+const WINDOW_SPOTS: readonly Rgb[] = [WHITE, BLACK, TINTED_FLOOR, LIQUID_FLOOR, LIQUID_ACTIVE_FLOOR, ...Object.values(LIQUID_MEASURED).flatMap((m) => [m.overBlack, m.overWhite])];
+/** Every spot Picture plans for: a white photo (as it is and through the strongest saturate()) and a black one. */
+const PICTURE_SPOTS: readonly Rgb[] = [WHITE, saturateRgb(WHITE, GLASS_SATURATE_MAX), BLACK];
+const PAYS = new Map<string, number>();
 
 /**
- * The green that pays for the light (`--light-pay`): `LIGHT_PAY_WHITE` where white can be behind (the window look,
- * Picture, and reduced transparency, where the veils are near solid), `LIGHT_PAY_OWN` over the app's own backdrops.
+ * The green that pays for the light (`--light-pay`, set on <html> by lib/look.ts): for each look the least that leaves
+ * room for the ladder over every spot it can show (`ladderPay`). `LIGHT_PAY_REDUCED` under reduced transparency.
  */
-export function lightPay(look: Pick<LightLook, "kind">, reducedTransparency = false): number {
-  return reducedTransparency || look.kind === "window" || look.kind === "picture" ? LIGHT_PAY_WHITE : LIGHT_PAY_OWN;
+export function lightPay(look: LightLook, reducedTransparency = false): number {
+  if (reducedTransparency) return LIGHT_PAY_REDUCED;
+  const pv = look.pageVeil ?? 0;
+  const key = `${look.kind} ${look.panelVeil} ${pv} ${look.colours?.join(" ") ?? ""}`;
+  let pay = PAYS.get(key);
+  if (pay === undefined) {
+    if ((look.kind === "frosted" || look.kind === "brand") && look.panelVeil === BRAND_PANEL_VEIL && pv === 0) pay = LIGHT_PAY_OWN;
+    else if (look.kind === "frosted" || look.kind === "brand") pay = ladderPay(brandMeshSpots(), look.panelVeil, pv);
+    else if (look.kind === "window") pay = ladderPay(WINDOW_SPOTS, look.panelVeil, pv);
+    else if (look.kind === "picture") pay = ladderPay(PICTURE_SPOTS, look.panelVeil, pv);
+    else pay = ladderPay(look.colours ? coloursMeshSpots(look.colours) : [WHITE], look.panelVeil, pv);
+    PAYS.set(key, pay);
+  }
+  return pay;
 }
 
 /** `behind` (the backdrop as drawn: the desktop, the photo, a spot of the mesh) under the look's own page veil. */
@@ -689,7 +751,7 @@ function onThePage(look: LightLook, behind: Rgb): Rgb {
 
 /**
  * What words at the TOP of a panel sit on (E1, where its light is strongest), over `behind`: the panel veil plus the
- * pay, then `PANEL_LIGHT`. `lead`: the lead panel, a step more green (at most 0.97) under `LEAD_LIGHT`.
+ * pay, then `PANEL_LIGHT`. `lead`: the lead panel, `LEAD_EXTRA_VEIL` more green (at most 0.97) under `LEAD_LIGHT`.
  */
 export function panelTop(look: LightLook, behind: Rgb, lead = false, pay = lightPay(look)): Rgb {
   const page = onThePage(look, behind);
@@ -697,13 +759,13 @@ export function panelTop(look: LightLook, behind: Rgb, lead = false, pay = light
   return lit(page, look.panelVeil + pay, PANEL_LIGHT);
 }
 
-/** The states a raised thing answers with: hover adds light, press takes it away; a ghost rests with less. */
+/** The states a raised thing answers with: hover adds light, press takes it away; a quiet (ghost) fill rests a touch lower. */
 export type LightState = "rest" | "hover" | "press" | "ghost";
 const RAISE: Record<LightState, readonly [veil: number, lift: number]> = {
   rest: [RAISE_VEIL, RAISE_LIFT],
   hover: [RAISE_HOVER_VEIL, RAISE_HOVER_LIFT],
   press: [RAISE_VEIL, RAISE_PRESS_LIFT],
-  ghost: [RAISE_VEIL, GHOST_LIFT],
+  ghost: [GHOST_VEIL, GHOST_LIFT],
 };
 
 /**
@@ -715,6 +777,92 @@ export function raised(parent: Rgb, depth = 1, state: LightState = "rest"): Rgb 
   for (let d = 1; d < depth; d++) under = lit(under, RAISE_VEIL, RAISE_LIFT);
   const [veil, lift] = RAISE[state];
   return lit(under, veil, lift);
+}
+
+/** Every text colour's luminance, worked out once: the ladder is checked over many thousand spots. */
+const TEXT_LUMINANCES = TEXT_COLOURS.map(luminance);
+/** The lowest contrast any text colour gets on `bg` (only the two luminances count). */
+function worstText(bg: Rgb): number {
+  const lb = luminance(bg);
+  let w = Infinity;
+  for (const lt of TEXT_LUMINANCES) w = Math.min(w, lt > lb ? (lt + 0.05) / (lb + 0.05) : (lb + 0.05) / (lt + 0.05));
+  return w;
+}
+const STATES: readonly LightState[] = ["rest", "hover", "press", "ghost"];
+/**
+ * The tinted chips (`--tint-*` in tokens.css): their colour at `alpha`, over a `lift` of bone, over `CHIP_DEEPEN` of
+ * `CHIP_UNDER`. The bone lift makes a chip a step of light over the row it sits on in every look (vermilion reads
+ * darker than a bluish row without it), and the green under it keeps its words at AA.
+ */
+export const CHIP_TINTS: readonly { name: string; colour: Rgb; alpha: number; lift: number }[] = [
+  { name: "leaf", colour: hexToRgb("#5fa585"), alpha: 0.22, lift: 0.04 },
+  { name: "vermilion", colour: hexToRgb("#e8392b"), alpha: 0.2, lift: 0.13 },
+  { name: "amber", colour: [246, 201, 69], alpha: 0.16, lift: 0.02 },
+];
+/** What words on a tinted chip laid over `under` sit on (`--tint-*`). */
+export function chipOn(under: Rgb, tint: { colour: Rgb; alpha: number; lift: number }): Rgb {
+  return mix(tint.colour, mix(BONE, mix(CHIP_UNDER, under, CHIP_DEEPEN), tint.lift), tint.alpha);
+}
+
+/**
+ * What breaks the ladder over one spot of the page (`page`: the backdrop under the look's page veil) at this pay:
+ * empty when every rung holds. A plain panel and the lead panel each carry three levels above them, at rest, hovered,
+ * pressed and quiet. Every word keeps AA; the lead panel reads a whole `LADDER_STEP` over a plain one; the first
+ * `LADDER_DEPTH` levels (and their quiet fills) each climb a whole step over what they sit on and the level above
+ * them never steps back; a quiet fill never outshines its rest, and every hover reads brighter than its rest.
+ */
+export function ladderFaults(page: Rgb, panelVeil: number, pay: number, first = false): string[] {
+  const faults: string[] = [];
+  const L = oklabL;
+  const e1 = lit(page, panelVeil + pay, PANEL_LIGHT);
+  const lead = lit(page, Math.min(0.97, panelVeil + pay + LEAD_EXTRA_VEIL), LEAD_LIGHT);
+  if (worstText(e1) < AA) faults.push("AA on a panel");
+  if (worstText(lead) < AA) faults.push("AA on the lead panel");
+  if (L(lead) - L(e1) < LADDER_STEP) faults.push("the lead panel a step over a panel");
+  if (first && faults.length) return faults;
+  for (const [name, pane] of [["panel", e1], ["lead panel", lead]] as const) {
+    let under = pane;
+    for (let depth = 1; depth <= 3; depth++) {
+      const at = `E${depth + 1} on the ${name}`;
+      const rest = raised(under);
+      for (const state of STATES) if (worstText(raised(under, 1, state)) < AA) faults.push(`AA, ${at}, ${state}`);
+      const need = depth <= LADDER_DEPTH ? LADDER_STEP : 0;
+      if (L(rest) - L(under) < need) faults.push(`${at} over its parent`);
+      if (L(raised(under, 1, "ghost")) - L(under) < need) faults.push(`${at}, quiet, over its parent`);
+      if (L(rest) < L(raised(under, 1, "ghost"))) faults.push(`${at}: quiet outshines rest`);
+      if (L(raised(under, 1, "hover")) <= L(rest)) faults.push(`${at}: hover adds light`);
+      // A tinted chip on a row or on a mark is a level of its own: a step of light over it, its words at AA.
+      if (depth <= 2)
+        for (const t of CHIP_TINTS) {
+          const chip = chipOn(rest, t);
+          if (worstText(chip) < AA) faults.push(`AA, the ${t.name} chip on ${at}`);
+          if (L(chip) - L(rest) < LADDER_STEP) faults.push(`the ${t.name} chip a step over ${at}`);
+        }
+      if (first && faults.length) return faults;
+      under = rest;
+    }
+  }
+  return faults;
+}
+
+/**
+ * The least pay (0.01 steps) at which the ladder holds over every spot of a look (`spots`, the backdrop as drawn),
+ * under its page veil. This is what lowers a pane over a light backdrop: page to pane goes darker there, and the
+ * ladder above the pane fits under the AA ceiling.
+ */
+export function ladderPay(spots: readonly Rgb[], panelVeil: number, pageVeil = 0): number {
+  const pages = spots.map((s) => mix(VEIL, s, pageVeil));
+  // More green lowers a pane over the light spots that bind and widens every step above it, so the least pay is found
+  // by halving (test/background.test.ts checks that 0.01 less breaks the ladder somewhere).
+  const holds = (step: number) => panelVeil + step / 100 >= 1 || pages.every((p) => ladderFaults(p, panelVeil, step / 100, true).length === 0);
+  if (holds(0)) return 0;
+  let [lo, hi] = [0, 100];
+  while (hi - lo > 1) {
+    const mid = (lo + hi) >> 1;
+    if (holds(mid)) hi = mid;
+    else lo = mid;
+  }
+  return hi / 100;
 }
 
 /** What words on a control straight on the page sit on (no lit surface under it): the pick-one track's green, the lift of its state. */

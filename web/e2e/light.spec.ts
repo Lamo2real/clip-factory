@@ -1,6 +1,6 @@
 import { writeFileSync } from "node:fs";
 import { expect, test, type Page, type TestInfo } from "@playwright/test";
-import { DEFAULT_COLOURS, hexToRgb, oklabL, type Rgb } from "../src/lib/background.ts";
+import { DEFAULT_COLOURS, hexToRgb, LADDER_STEP, oklabL, type Rgb } from "../src/lib/background.ts";
 import { launcherSettled, settle, stillBackdrop } from "./helpers.ts";
 import { decode, type Pixels } from "./pixels.ts";
 
@@ -11,9 +11,9 @@ import { decode, type Pixels } from "./pixels.ts";
 // step compares a 4 × 4 px patch of the child's top padding (no words) with its parent right beside it, at the same
 // height. The screenshots (and the measured steps) are saved in the test's output folder for a person to look at.
 //
-// Over a white desktop or photo the levels converge toward the AA ceiling (bone words cap what they sit on), so there
-// a level may read up to a just noticeable difference darker (-0.015 OKLab L); over the app's own dark backdrop every
-// step reads brighter.
+// In every look, over a white photo and a light colour too, each level reads at least a whole step (LADDER_STEP, +0.015
+// OKLab L) brighter than the one it sits on, and none reads darker: a pane over a light backdrop sits low enough under
+// the AA ceiling (its look's --light-pay, lib/background.ts lightPay) for the ladder above it to fit.
 
 test.use({ reducedMotion: "reduce" });
 test.skip(({ browserName }) => browserName !== "chromium", "measured in headless Chromium");
@@ -28,7 +28,7 @@ interface LookCase {
   picture?: string;
   /** The backdrop is one flat colour, so a pane's top and bottom can be compared without the backdrop changing. */
   uniform?: boolean;
-  /** The app's own dark backdrop: every step must read brighter, not only "not darker". */
+  /** The app's own dark backdrop (named in the report). */
   dark?: boolean;
 }
 const LOOKS: LookCase[] = [
@@ -43,13 +43,10 @@ const SIZES = [
   { width: 390, height: 844 },
 ];
 
-/** The most a level may read darker than the one under it (a just noticeable difference, OKLab L). */
-const TOLERANCE = -0.015;
-/**
- * Over the app's own dark backdrop a step is at least this much brighter, measured beside the child, where the
- * parent's own light from above has already eased off (the maths over the bare field gives +0.03 and more).
- */
-const CLEARLY = 0.01;
+/** No level may read darker than the one under it, in any look. */
+const TOLERANCE = 0;
+/** And each level reads at least a whole step brighter than its parent, in every look (the maths' least, the ladder). */
+const STEP = LADDER_STEP;
 
 async function useLook(page: Page, c: LookCase) {
   await page.addInitScript(
@@ -175,8 +172,8 @@ const slug = (s: string) =>
 
 /**
  * Finds a step, lets the page come to rest (the Ask launcher moves out of the way after a scroll), checks the step
- * still shows what it should, then measures it from a screenshot: the child must not read darker than its parent by
- * more than the tolerance, and over the app's own dark backdrop it must read brighter.
+ * still shows what it should, then measures it from a screenshot: the child must never read darker than its parent,
+ * and it must read a whole step brighter, in every look.
  */
 async function climb(page: Page, info: TestInfo, c: LookCase, shot: string, name: string, parentSel: string, childSel: string): Promise<string> {
   const picked = await findStep(page, name, parentSel, childSel, true);
@@ -186,8 +183,8 @@ async function climb(page: Page, info: TestInfo, c: LookCase, shot: string, name
   expect(step, `${name}: still in view once the page is still`).not.toBeNull();
   const pixels = await shoot(page, info, shot);
   const dl = oklabL(patch(pixels, step!.child)) - oklabL(patch(pixels, step!.parent));
-  expect(dl, `${name} (${c.name})`).toBeGreaterThanOrEqual(TOLERANCE);
-  if (c.dark) expect(dl, `${name} reads brighter over the app's own backdrop (${c.name})`).toBeGreaterThanOrEqual(CLEARLY);
+  expect(dl, `${name} never reads darker (${c.name})`).toBeGreaterThanOrEqual(TOLERANCE);
+  expect(dl, `${name} reads a whole step brighter (${c.name})`).toBeGreaterThanOrEqual(STEP);
   return `${name}: ${dl >= 0 ? "+" : ""}${dl.toFixed(3)}`;
 }
 
