@@ -88,10 +88,13 @@ test("the password is never sent anywhere: a request that would carry it is refu
 function fakeMac({ logins = [], clips = { handle: "@lamo.clips", uid: "7000000000000000001" } } = {}) {
   let clock = 0;
   let window = -1;
-  const log = { opened: [], closed: 0, cleared: 0, asks: [], shut: 0, events: [], pinned: null, quits: 0 };
+  const log = { opened: [], closed: 0, cleared: 0, asks: [], shut: 0, events: [], pinned: null, quits: 0, forgot: [], google: 0 };
   const d = {
     clips,
     closeAll: async () => {},
+    forget: async () => {
+      log.forgot.push(window + 1); // the window it comes before
+    },
     openWindow: async (url) => {
       window++;
       log.opened.push(url);
@@ -108,6 +111,9 @@ function fakeMac({ logins = [], clips = { handle: "@lamo.clips", uid: "700000000
       seen: { handles: logins[window] || [], uids: [] },
       clear: async () => {
         log.cleared++;
+      },
+      forgetGoogle: async () => {
+        log.google++;
       },
       quit: async () => {
         log.quits++;
@@ -147,6 +153,22 @@ test("the owner logs in as the workspace's TikTok: one window at the QR code, th
     ["setup", "ws:stories", "owner"],
     ["login_window", "ws:stories", "ok"],
   ]);
+});
+
+test("an old session in the profile never reads as a login: its cookies go before the first window opens", async () => {
+  const { d, log } = fakeMac({ logins: [["@clips.funded"]] });
+  const result = await loginWindow(lane(), "@clips.funded", d);
+  assert.equal(result.ok, true);
+  assert.deepEqual(log.forgot, [0]); // once, before the first window
+  // Once it reads the target, a Google sign-in he may have used leaves the profile; never on a wrong login.
+  assert.equal(log.google, 1);
+  const wrong = fakeMac({ logins: [["@someone"], ["@someone"]] });
+  await loginWindow(lane(), "@clips.funded", wrong.d);
+  assert.equal(wrong.log.google, 0);
+  // No account: nothing is cleared at all.
+  const none = fakeMac();
+  await loginWindow(lane(), null, none.d);
+  assert.deepEqual(none.log.forgot, []);
 });
 
 test("another account's login is wiped from that profile and the window opens once more", async () => {

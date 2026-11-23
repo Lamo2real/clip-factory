@@ -19,15 +19,18 @@ const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 export class Stop extends Error {
   /**
    * @param {string} reason plain words for the owner
-   * @param {{needsYou?: boolean, wrongAccount?: boolean, seen?: string}} [opts] ``wrongAccount``: TikTok is logged in
-   *   as another account (``seen``)
+   * @param {{needsYou?: boolean, wrongAccount?: boolean, seen?: string, unknown?: boolean, blank?: boolean}} [opts]
+   *   ``wrongAccount``: TikTok is logged in as another account (``seen``); ``unknown``: the account couldn't be read
+   *   (``blank``: nothing at all was readable, as when TikTok ended the session but its cookie stayed)
    */
-  constructor(reason, { needsYou = false, wrongAccount = false, seen } = {}) {
+  constructor(reason, { needsYou = false, wrongAccount = false, seen, unknown = false, blank = false } = {}) {
     super(reason);
     this.reason = reason;
     this.needsYou = needsYou;
     if (wrongAccount) this.wrongAccount = true;
     if (seen) this.seen = seen;
+    if (unknown) this.unknown = true;
+    if (blank) this.blank = true;
   }
 }
 
@@ -51,6 +54,8 @@ export const REASONS = {
   wrongAccount: (seen, target) => `Your Mac is logged in to TikTok as ${seen}, not ${target}. Nothing was posted.`,
   whoUnknown: "Your Mac couldn't see which TikTok it's logged in to. Nothing was posted. Tap Try again.",
   linkElsewhere: (seen, target) => `The post showed up on ${seen}, not ${target}. Look on your TikTok.`,
+  // Clip Factory's lane: its TikTok in Settings is a Clips Funded account (rule 1: never cross accounts).
+  otherWorkspaceClips: "That TikTok account is your other workspace's. Nothing was posted. Connect TikTok again in Settings › Posting.",
   // Clips Funded only.
   otherWorkspace: "That TikTok account is your other workspace's. Nothing was posted. Connect TikTok again in Social accounts.",
   aiLabel: "Your Mac couldn't turn on TikTok's AI label, so it didn't post. Tap Try again.",
@@ -64,6 +69,8 @@ export const REASONS = {
 export const WS_REASONS = Object.freeze({
   ...REASONS,
   login: "TikTok logged your Mac out. Tap Log in on my Mac.",
+  // Nothing readable three times (TikTok may have ended the session on its side): a new login fixes it.
+  nobody: "Your Mac couldn't see which TikTok it's logged in to. Nothing was posted. Tap Log in on my Mac.",
   noUpload: "TikTok's upload page looks different. Your Mac's helper needs a fix. Then tap Try again.",
   limit: "TikTok says it's posting too much right now. The rest wait.",
 });
@@ -79,7 +86,7 @@ export function laneWords(kind, reason) {
 
 /** Is this stop reason one the owner fixes with Log in on my Mac? (the card's button, §47.10.6) */
 export function loginReason(reason) {
-  return reason === WS_REASONS.login || /^Your Mac is logged in to TikTok as /.test(String(reason || ""));
+  return reason === WS_REASONS.login || reason === WS_REASONS.nobody || /^Your Mac is logged in to TikTok as /.test(String(reason || ""));
 }
 
 const PRIVACY_WORDS = {
@@ -259,26 +266,48 @@ export async function identify(page) {
   return { seen, moved };
 }
 
+/** The accounts this post must never go to (another lane's: rule 1), as lists: ``notHandles``/``notUids`` and the
+ * single ``notHandle``/``notUid`` the check run still passes. */
+export function never(opts = {}) {
+  const list = (many, one) => [...(Array.isArray(many) ? many : []), ...(one ? [one] : [])].filter(Boolean).map(String);
+  return { handles: list(opts.notHandles, opts.notHandle), uids: list(opts.notUids, opts.notUid) };
+}
+
 /**
- * Refuses unless the logged-in account is ``opts.target`` (and its pinned uid, and never ``opts.notUid``). Wrong:
- * a needs-you stop (nothing was posted); unreadable: a plain stop. ``opts.onWho(result)`` records what was read.
+ * Before anything is read: the stop for a target that may never be posted to here (none, or another lane's account:
+ * a Clips Funded job never to Clip Factory's, a Clip Factory clip never to Clips Funded's), or null.
+ */
+export function refusedTarget(opts = {}) {
+  const target = at(opts.target);
+  if (!target) return new Stop(REASONS.whoUnknown, { unknown: true });
+  if (never(opts).handles.some((h) => bare(h) === bare(target))) {
+    return new Stop(opts.kind === "ws" ? REASONS.otherWorkspace : REASONS.otherWorkspaceClips, { needsYou: true, wrongAccount: true, seen: target });
+  }
+  return null;
+}
+
+/**
+ * Refuses unless the logged-in account is ``opts.target`` (and its pinned uid, and never another lane's handle or
+ * uid). Wrong: a needs-you stop (nothing was posted); unreadable: a plain stop. ``opts.onWho(result)`` records what
+ * was read.
  * @returns {Promise<{moved: boolean}>}
  */
 async function checkAccount(page, opts) {
   const target = at(opts.target);
-  if (!target) throw new Stop(REASONS.whoUnknown);
-  if (opts.notHandle && bare(opts.notHandle) === bare(target)) {
-    // A Clips Funded job must never go to Clip Factory's account, whatever it says.
-    opts.onWho?.({ verdict: "wrong", seen: target });
-    throw new Stop(REASONS.otherWorkspace, { needsYou: true, wrongAccount: true, seen: target });
+  const refused = refusedTarget(opts);
+  if (refused) {
+    if (refused.wrongAccount) opts.onWho?.({ verdict: "wrong", seen: target });
+    throw refused;
   }
+  const not = never(opts);
   const { seen, moved } = await identify(page);
-  const res = sameAccount(seen, target, opts.uid || null, { notUid: opts.notUid || null });
+  const res = sameAccount(seen, target, opts.uid || null, { notUid: not.uids });
   opts.onWho?.(res);
   if (res.verdict === "wrong") throw new Stop(REASONS.wrongAccount(res.seen, target), { needsYou: true, wrongAccount: true, seen: res.seen });
   // Nobody readable and no TikTok session at all: logged out (the lane's login flow, as 1.1.0 had it at upload).
   if (res.verdict !== "same" && !(await loggedIn(page).catch(() => true))) throw new Stop(REASONS.login, { needsYou: true });
-  if (res.verdict !== "same") throw new Stop(REASONS.whoUnknown);
+  const blank = !(seen.handles || []).length && !(seen.uids || []).length;
+  if (res.verdict !== "same") throw new Stop(REASONS.whoUnknown, { unknown: true, blank });
   return { moved };
 }
 
@@ -291,7 +320,7 @@ async function recheckAccount(page, opts, session) {
   const now = await sessionHash(page);
   const info = await accountInfo(page);
   const nameOff = Boolean(info.handle) && bare(info.handle) !== bare(target);
-  const uidOff = Boolean(info.uid) && ((opts.uid && info.uid !== String(opts.uid)) || (opts.notUid && info.uid === String(opts.notUid)));
+  const uidOff = Boolean(info.uid) && ((opts.uid && info.uid !== String(opts.uid)) || never(opts).uids.includes(String(info.uid)));
   const confirmed = Boolean(info.handle) && !nameOff && !uidOff;
   if (nameOff || uidOff || (now !== session && !confirmed)) {
     const seen = nameOff ? at(info.handle) : "another account";
@@ -558,8 +587,9 @@ async function setInteractions(page, job, kind = "clips") {
 /**
  * Uploads one clip and presses Post. ``onStep(step)`` is called before each stage; it must have recorded "pressing"
  * (on disk and on the server) before it returns for that step, because pressing is the point of no return.
- * ``opts``: ``target`` (the account it may post to, "@name"), ``uid`` (its pinned uid), ``notUid`` / ``notHandle``
- * (Clip Factory's, for a Clips Funded lane), ``kind`` ("clips" | "ws"), ``onWho(result)``, ``dryRun``.
+ * ``opts``: ``target`` (the account it may post to, "@name"), ``uid`` (its pinned uid), ``notHandles`` / ``notUids``
+ * (every other lane's accounts; ``notHandle`` / ``notUid`` for one), ``kind`` ("clips" | "ws"), ``earlier`` (a Clips
+ * Funded post tried again after a press: the Studio ids from before that press), ``onWho(result)``, ``dryRun``.
  * @returns {Promise<{link: string|null, sure: boolean}>} ``sure`` = TikTok said it posted or the new row was found.
  */
 export async function post(page, job, file, onStep, opts = {}) {
@@ -575,6 +605,13 @@ export async function post(page, job, file, onStep, opts = {}) {
     // it relies on the server's never-twice rule and the baseline saved at pressing.
     const existing = findExisting(before, job.caption);
     if (existing) return { link: postLink(existing.href), sure: true, existing: true };
+  } else if (Array.isArray(opts.earlier) && opts.earlier.length) {
+    // The owner's Try again after a press ("Post it again? Only if it's not on your TikTok"): a row with this
+    // caption that is new since that first press is that first post, so it is on TikTok already and nothing is
+    // posted again. The Only me copy and older stories were there before the first press, so they never count.
+    const earlier = new Set(opts.earlier);
+    const first = findExisting(before.filter((r) => !earlier.has(r.id)), job.caption);
+    if (first) return { link: postLink(first.href), sure: true, existing: true };
   }
   const baseline = before.map((r) => r.id);
 

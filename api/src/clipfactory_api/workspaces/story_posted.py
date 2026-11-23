@@ -43,15 +43,28 @@ class StoryWrite:
         }
 
 
-def story_write(story: Mapping[str, Any], platform: str, url: str, posted_at: str, now: datetime) -> StoryWrite | None:
-    """The write that records one post on the story; None when the story has it already (a replay adds nothing)."""
+def story_write(
+    story: Mapping[str, Any], platform: str, url: str, posted_at: str, now: datetime, *, replace: str | None = None
+) -> StoryWrite | None:
+    """The write that records one post on the story; None when the story has it already (a replay adds nothing).
+    ``replace``: an earlier link of this platform that this post takes the place of (the Only me post a Mac post was
+    handed over from, §47.10), so the story keeps one link for it."""
     current = [dict(p) for p in story.get("posted") or [] if isinstance(p, Mapping)]
     entry = {"platform": platform, "url": url}
+    old = {"platform": platform, "url": replace} if replace and replace != url else None
+    posted: list[Item] = []
+    for found in current:
+        kept = entry if old is not None and found == old else found
+        if kept == entry and entry in posted:
+            continue
+        posted.append(kept)
+    if entry not in posted:
+        posted.append(entry)
     status = story.get("status")
     promote = status in ("approved", "published") and status != "published"
-    if entry in current and story.get("publishedAt") and not promote:
+    if posted == current and story.get("publishedAt") and not promote:
         return None
-    sets: Item = {"posted": current if entry in current else [*current, entry], "updatedAt": iso(now)}
+    sets: Item = {"posted": posted, "updatedAt": iso(now)}
     if not story.get("publishedAt"):
         sets["publishedAt"] = posted_at
     if status in ("approved", "published"):

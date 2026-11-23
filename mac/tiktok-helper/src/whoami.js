@@ -64,49 +64,66 @@ export function linkHandle(link) {
   return m ? `@${m[1]}` : null;
 }
 
-/** Everything one read found: every handle, every uid (two different uids is itself a mismatch). */
+const addHandle = (list, h) => {
+  if (h && !list.some((x) => bare(x) === bare(h))) list.push(h);
+};
+
+/**
+ * Everything one read found: every handle, every uid (two different uids is itself a mismatch). ``own`` are the
+ * handles of the account's own data (sources 1 and 3, the session's account); a Studio row's link is only a hint.
+ */
 export function seenFrom({ info = {}, hrefs = [], rehydration = {} } = {}) {
   const handles = [];
-  const add = (h) => {
-    if (h && !handles.some((x) => bare(x) === bare(h))) handles.push(h);
-  };
-  add(info.handle);
-  for (const h of fromHrefs(hrefs)) add(h);
-  add(rehydration.handle);
+  const own = [];
+  addHandle(handles, info.handle);
+  for (const h of fromHrefs(hrefs)) addHandle(handles, h);
+  addHandle(handles, rehydration.handle);
+  addHandle(own, info.handle);
+  addHandle(own, rehydration.handle);
   const uids = [...new Set([info.uid, rehydration.uid].filter(Boolean))];
-  return { handles, uids, ...(uids.length === 1 ? { uid: uids[0] } : {}) };
+  return { handles, own, uids, ...(uids.length === 1 ? { uid: uids[0] } : {}) };
 }
 
 /** Two reads together (the Studio page, then www.tiktok.com when the first found no handle). */
 export function mergeSeen(a, b) {
   const handles = [...(a?.handles || [])];
-  for (const h of b?.handles || []) if (!handles.some((x) => bare(x) === bare(h))) handles.push(h);
+  for (const h of b?.handles || []) addHandle(handles, h);
+  const own = [...(a?.own || [])];
+  for (const h of b?.own || []) addHandle(own, h);
   const uids = [...new Set([...(a?.uids || []), ...(b?.uids || [])])];
-  return { handles, uids, ...(uids.length === 1 ? { uid: uids[0] } : {}) };
+  return { handles, own, uids, ...(uids.length === 1 ? { uid: uids[0] } : {}) };
 }
 
 /**
  * Is the signed-in account the target? ``same`` only when every readable handle equals the target (case and "@"
- * aside) and every readable uid equals the pinned one; ``wrong`` as soon as one doesn't, or when a uid is the one
- * that must never post here (``notUid``: Clip Factory's, for a Clips Funded lane); ``unknown`` when nothing is
- * readable (then nothing is posted either).
- * @param {{handles?: string[], uids?: string[], uid?: string}} seen
+ * aside) and every readable uid equals the pinned one; ``wrong`` as soon as one doesn't, or when a uid is one that
+ * must never post here (``notUid``: another lane's, one or a list); ``unknown`` when nothing is readable (then
+ * nothing is posted either). When the account's own data (``seen.own``: the passport answer, the rehydration data)
+ * reads the target, a Studio row's link on another @name doesn't make it wrong: that row isn't the session's account.
+ * @param {{handles?: string[], own?: string[], uids?: string[], uid?: string}} seen
  * @param {string} target "@name"
  * @param {string|null} [pinnedUid]
- * @param {{notUid?: string|null}} [opts]
+ * @param {{notUid?: string|string[]|null}} [opts]
  * @returns {{verdict: "same"|"wrong"|"unknown", seen?: string, uid?: string}}
  */
 export function sameAccount(seen, target, pinnedUid = null, { notUid = null } = {}) {
   const want = bare(target);
   if (!want) return { verdict: "unknown" };
-  const names = (seen?.handles || []).map(bare).filter(Boolean);
+  const own = (seen?.own || []).map(bare).filter(Boolean);
+  const handles = (seen?.handles || []).map(bare).filter(Boolean);
+  const ownSays = own.length > 0 && own.every((n) => n === want);
+  const names = ownSays ? own : [...new Set([...handles, ...own])];
   const uids = [...new Set([...(seen?.uids || []), ...(seen?.uid ? [seen.uid] : [])].map(String))];
+  const never = (Array.isArray(notUid) ? notUid : [notUid]).filter(Boolean).map(String);
   const shown = (name) => (name ? `@${name}` : "another account");
   const other = names.find((n) => n !== want);
   if (other) return { verdict: "wrong", seen: shown(other) };
   if (uids.length > 1) return { verdict: "wrong", seen: shown(names[0]) };
-  if (notUid && uids.includes(String(notUid))) return { verdict: "wrong", seen: shown(names[0]) };
+  if (never.some((u) => uids.includes(u))) return { verdict: "wrong", seen: shown(names[0]) };
   if (pinnedUid && uids.length && uids[0] !== String(pinnedUid)) return { verdict: "wrong", seen: shown(names[0]) };
+  // The account's own data reads the target, but a Studio row's link names another @name: not sure, so nothing
+  // posts this time (and it isn't a wrong login for the owner to fix).
+  if (ownSays && handles.some((n) => n !== want)) return { verdict: "unknown" };
   if (names.length) return { verdict: "same", seen: shown(want), ...(uids[0] ? { uid: uids[0] } : {}) };
   if (pinnedUid && uids[0] === String(pinnedUid)) return { verdict: "same", seen: shown(want), uid: uids[0] };
   return { verdict: "unknown" };

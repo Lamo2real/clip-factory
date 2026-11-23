@@ -13,15 +13,27 @@ import { SignInNeeded, accessToken, appConfig } from "./auth.js";
 import * as cdp from "./cdp.js";
 import * as chrome from "./chrome.js";
 import { ask, frame, yourTurn } from "./frame.js";
-import { WS_ID, clipsLane, helperPorts, jobIds, normalizeWsJob, reasonFor, setUpFor, wsFileName, wsLane } from "./lanes.js";
+import { WS_ID, clipsLane, helperPorts, jobIds, normalizeWsJob, otherAccounts, reasonFor, setUpFor, wsFileName, wsLane } from "./lanes.js";
 import { freeName } from "./match.js";
 import { event, log } from "./notify.js";
 import { DOWNLOADS, LOCK, VERSION } from "./paths.js";
 import { startBeats, findBeat } from "./beats.js";
-import { FIND_FOR_MS, applyRequests, claimFields, nextAction, pickWork, pingExtras, wsAction, wsPingBody } from "./plan.js";
+import {
+  BEAT_EVERY_MS,
+  FIND_FOR_MS,
+  applyRequests,
+  beatTargets,
+  claimFields,
+  earlierIds,
+  nextAction,
+  pickWork,
+  pingExtras,
+  wsAction,
+  wsPingBody,
+} from "./plan.js";
 import { loadSettings, loadState, saveSettings, saveState } from "./store.js";
 import { askAndSaveLogin, countTry, forgetLogin, hasLogin, loginWindow, passwordAllowed, readLogin } from "./login.js";
-import { LOGIN_URL, REASONS, Stop, find, goto, identify, loggedIn, loginReason, passwordLogin, post } from "./tiktok.js";
+import { LOGIN_URL, REASONS, Stop, WS_REASONS, find, goto, identify, loggedIn, loginReason, passwordLogin, post } from "./tiktok.js";
 import { at, bare, linkHandle, sameAccount } from "./whoami.js";
 
 // What the notification says at each step (the red frame stays up the whole time).
@@ -40,8 +52,9 @@ const words = (e) => String(e?.message || e);
 
 const MAX_TRIES = 3; // tries before Post is pressed that end in an unexpected error; then it stops and asks
 export const THREE_TRIES = "Your Mac's helper ran into a problem three times. Tap Try again.";
-// D3: Clip Factory's lane posts only once it knows which TikTok it may post to.
-export const WAIT_TARGET = "Checking which TikTok to use.";
+// D3: Clip Factory's lane posts only once it knows which TikTok it may post to. Its ping then says paused, with this
+// reason, so Clip Factory's rows say why its TikTok posts wait (never a silent stall).
+export const WAIT_TARGET = "Your Mac can't tell which TikTok is Clip Factory's. Connect TikTok in Settings › Posting.";
 
 function takeLock() {
   try {
@@ -174,14 +187,19 @@ function postTarget(lane, job) {
   return lane.kind === "ws" ? lane.target(job) : lane.target();
 }
 
-function postOpts(lane, job) {
+export function postOpts(lane, job) {
   const target = postTarget(lane, job);
-  const clips = lane.root.clipsAccount || {};
+  // Rule 1 both ways: every other lane's account is refused (Clip Factory's for a Clips Funded job, Clips Funded's
+  // for a Clip Factory clip).
+  const others = otherAccounts(lane.root, lane.id);
+  const earlier = lane.kind === "ws" && job.pressedBefore ? lane.state.ledger[job.clipId]?.earlier : null;
   return {
     kind: lane.kind,
     target,
     uid: lane.kind === "ws" ? lane.pinnedUid(job) : lane.pinnedUid(),
-    ...(lane.kind === "ws" ? { notUid: clips.uid || null, notHandle: clips.handle || null } : {}),
+    notHandles: others.handles,
+    notUids: others.uids,
+    ...(Array.isArray(earlier) && earlier.length ? { earlier } : {}),
     onWho: (res) => lane.onWho(res, target),
   };
 }
@@ -278,7 +296,23 @@ async function relogin(lane, fr, browser, page) {
  * the Mac posts without it, so its posts must not wait for a reconnect). */
 const KNOWN_ACCOUNT = ["connected", "needs_reconnect", "choose_account"];
 
-/** Clip Factory's TikTok account (D3, the clips lane's target): GET /v1/accounts, cached in state.clipsAccount. */
+/**
+ * The account of the clips lane's own posts (state.posted's links, which 1.1.0 wrote too), when they all say one and
+ * it is no Clips Funded lane's account; else null.
+ */
+export function postedHandle(state) {
+  const names = [...new Set((state.posted || []).map((p) => bare(linkHandle(p?.link))).filter(Boolean))];
+  if (names.length !== 1) return null;
+  if (otherAccounts(state, "clips").handles.some((h) => bare(h) === names[0])) return null;
+  return at(names[0]);
+}
+
+/**
+ * Clip Factory's TikTok account (D3, the clips lane's target): GET /v1/accounts, cached in state.clipsAccount. When
+ * that has no @name (TikTok not connected through the API, or only a nickname) and nothing is cached, it is the
+ * account the helper has been posting Clip Factory's clips to (its own posted links), so a 1.1.0 Mac goes on as it
+ * did. Never a guess: null when none of these says one account.
+ */
 export async function clipsTarget(api, state) {
   try {
     const { accounts = [] } = (await api.accounts()) || {};
@@ -293,7 +327,15 @@ export async function clipsTarget(api, state) {
   } catch (e) {
     log("accounts.read_failed", { error: words(e) });
   }
-  return at(state.clipsAccount?.handle);
+  const cached = at(state.clipsAccount?.handle);
+  if (cached) return cached;
+  const posted = postedHandle(state);
+  if (posted) {
+    state.clipsAccount = { handle: posted, checkedAt: iso(), from: "posts" };
+    saveState(state);
+    log("accounts.from_posts", { handle: posted });
+  }
+  return posted;
 }
 
 /** What the owner's login window (login.js loginWindow) does on this Mac, for one Clips Funded lane. */
@@ -304,6 +346,16 @@ export function windowDeps(lane) {
       for (const port of helperPorts(lane.root)) await chrome.closePort(port);
     },
     openWindow: (url) => chrome.openPlain(lane, url),
+    // The lane's cookies go before the window opens: a session TikTok ended on its side (its cookie still in the
+    // profile) would otherwise read as a login at once, and the window would close by itself.
+    forget: async () => {
+      const { browser } = await chrome.open(lane);
+      try {
+        await cdp.clearCookies(lane.port);
+      } finally {
+        await chrome.quit(browser, lane);
+      }
+    },
     sessionSeen: () => cdp.sessionSeen(lane.port),
     closeWindow: async () => {
       await chrome.closePort(lane.port);
@@ -332,6 +384,8 @@ export async function lookHeadless(lane) {
   return {
     seen,
     clear: () => cdp.clearCookies(lane.port).catch(() => {}),
+    // A Google sign-in the owner may have used in the window: its cookies leave the profile once TikTok's login is in.
+    forgetGoogle: () => page.context().clearCookies({ domain: /(^|\.)(google|youtube)\.[a-z.]+$/i }).catch(() => {}),
     quit: () => chrome.quit(browser, lane),
   };
 }
@@ -352,7 +406,7 @@ async function doPost(lane, job, { fresh = false, fr, relogged = false, queue = 
   // A fresh claim starts counting again; a resumed try counts on. A fresh claim also forgets the last try's press,
   // baseline and step (claimFields).
   const tries = (fresh ? 0 : mine.tries || 0) + 1;
-  lane.remember(job.clipId, claimFields({ device: state.device, tries, fresh }));
+  lane.remember(job.clipId, claimFields({ device: state.device, tries, fresh, earlier: earlierIds(mine) }));
   // The job's beat, from the claim until doPost returns (a logged-out try handed on to the next doPost keeps it).
   const beat =
     beats ||
@@ -437,13 +491,20 @@ async function doPost(lane, job, { fresh = false, fr, relogged = false, queue = 
       return;
     }
     await beat.stop();
-    if (e instanceof Stop && e.reason === REASONS.whoUnknown && !pressed && tries < MAX_TRIES) {
+    if (e instanceof Stop && e.unknown && !pressed && tries < MAX_TRIES) {
       // The account couldn't be read this time (nothing was posted): try again on a later tick, then stop.
       log("post.who_unknown", { account: lane.id, ...jobIds(lane, job), tries });
     } else if (e instanceof Stop) {
       if (e.detail) log("post.stop_detail", { account: lane.id, ...jobIds(lane, job), ...e.detail });
       if (e.wrongAccount) lane.event("wrong_account", { ...jobIds(lane, job), seen: e.seen, target: postTarget(lane, job) });
-      await stopped(lane, job, e.reason, e.needsYou);
+      let reason = e.reason;
+      if (lane.kind === "ws" && e.unknown && e.blank && !pressed) {
+        // Nothing readable three times, though a TikTok cookie is there: TikTok ended the session on its side. The
+        // lane is not set up any more, so its card and rows offer Log in on my Mac (which clears that cookie first).
+        lane.loggedOut();
+        reason = WS_REASONS.nobody;
+      }
+      await stopped(lane, job, reason, e.needsYou);
     } else if (!pressed && e instanceof ApiError && e.status === 409) {
       // The server said wait (its switch or auto-posting went off, or another try has it): nothing was pressed, so
       // stop quietly; the clip waits on the server and is not counted as a failed try.
@@ -520,7 +581,7 @@ async function doFind(lane, job, { relogged = false, fr = frame(), queue = [], b
       }
       await beat.stop();
       await stopped(lane, job, e.reason, true);
-    } else if (e instanceof Stop && e.reason === REASONS.whoUnknown) {
+    } else if (e instanceof Stop && e.unknown) {
       // The account couldn't be read this time: no link is taken; it looks again next tick, within the find window.
       log("find.who_unknown", { account: lane.id, ...jobIds(lane, job) });
       const pressedAt = Date.parse(job.pressedAt || state.ledger[job.clipId]?.pressedAt || 0);
@@ -579,7 +640,8 @@ async function tidyWs({ lane, queue }) {
  * B. Each Clips Funded workspace's lane: its queue, what it would do, and its check-in. Read once per tick; a
  * failure to list the workspaces skips them all, and one lane's error skips only that lane.
  */
-async function wsLanes({ api, state, settings, config, token, now }) {
+async function wsLanes({ api, state, settings: given, config, token, now }) {
+  let settings = given;
   let list;
   try {
     list = ((await api.workspaces()) || {}).workspaces || [];
@@ -596,11 +658,27 @@ async function wsLanes({ api, state, settings, config, token, now }) {
       const queue = (Array.isArray(status.queue) ? status.queue : []).filter((j) => j && j.publishingJobId).map(normalizeWsJob);
       const target = at(status.account?.handle);
       const helper = status.helper || null;
+      // The account this workspace has connected: Clip Factory's lane never posts to it (rule 1, otherAccounts).
+      if (target && lane.store.connected !== target) {
+        lane.store.connected = target;
+        lane.save();
+      }
+      // The owner's Start my Mac again in Clips Funded: this Mac's pause (settings.paused, every lane's) ends, as
+      // Clip Factory's does; the ping says it was done, so the request is cleared.
+      let resumeDone;
+      if (helper?.resumeRequest?.at) {
+        if (settings.paused) {
+          saveSettings({ paused: false });
+          settings = loadSettings();
+        }
+        resumeDone = helper.resumeRequest.at;
+        lane.event("resumed", {});
+      }
       const setUp = setUpFor(lane.store, target);
       const args = { on: status.on === true, helper, queue, view: lane.state, settings, device: state.device, now, setUp };
       const action = wsAction(args);
       const entry = { id: lane.id, lane, status, helper, queue, target, args, action, loginRequest: helper?.loginRequest?.at || null };
-      await lane.api.ping(pingFor(entry));
+      await lane.api.ping(pingFor(entry, { resumeDone }));
       log("tick", { account: lane.id, action: action.action, publishingJobId: action.job?.clipId, waiting: queue.length, reason: action.reason, until: action.until });
       for (const skip of action.skipped || []) log("never_twice.skip", { account: lane.id, ...skip });
       out.push(entry);
@@ -613,7 +691,7 @@ async function wsLanes({ api, state, settings, config, token, now }) {
 
 /** A ws lane's check-in body. ``loginDone`` once the owner's Log in on my Mac was carried out; ``clearLogin`` when it
  * logged in as the target, which ends a needs-you that only a login could fix. */
-function pingFor(entry, { loginDone, clearLogin = false } = {}) {
+function pingFor(entry, { loginDone, resumeDone, clearLogin = false } = {}) {
   const needsYou = entry.helper?.state === "needs_you" && !(clearLogin && loginReason(entry.helper?.reason));
   const action = needsYou || entry.helper?.state !== "needs_you" ? entry.action : wsAction({ ...entry.args, helper: null, setUp: true });
   return wsPingBody({
@@ -624,6 +702,7 @@ function pingFor(entry, { loginDone, clearLogin = false } = {}) {
     setUp: setUpFor(entry.lane.store, entry.target),
     handle: at(entry.lane.store.account?.handle) || undefined,
     loginDone,
+    resumeDone,
   });
 }
 
@@ -651,6 +730,33 @@ async function wsLoginRequest(entry, api) {
     lane.event("login_window", { outcome: "no_account" });
   }
   await lane.api.ping(pingFor(entry, { loginDone: entry.loginRequest, clearLogin: ok }));
+}
+
+/**
+ * While Clip Factory's lane posts or looks, the Clips Funded posts this Mac pressed Post for get their "finding"
+ * beat too (D2), now and every minute, through their own workspace's routes: they are still this Mac's to look for,
+ * so their rows don't read "Not sure it posted" while Clip Factory's post goes first. Returns stop().
+ */
+export function wsBeats(lanes) {
+  const flying = new Set();
+  const send = () => {
+    for (const { lane, queue } of lanes) {
+      for (const t of beatTargets({ queue, state: lane.state, device: lane.state.device, current: null })) {
+        const call = Promise.resolve()
+          .then(() => lane.api.step(t.clipId, lane.state.device, t.step, t.attempt))
+          .catch((e) => log("beat.failed", { account: lane.id, publishingJobId: t.clipId, step: t.step, status: e?.status, error: words(e) }));
+        flying.add(call);
+        call.then(() => flying.delete(call));
+      }
+    }
+  };
+  send();
+  const timer = setInterval(send, BEAT_EVERY_MS);
+  timer.unref?.();
+  return async () => {
+    clearInterval(timer);
+    await Promise.all([...flying]);
+  };
 }
 
 /** C.2: a Clips Funded lane's find, resume or post (only in a tick where Clip Factory's lane has none). */
@@ -681,6 +787,33 @@ async function wsWork(entry, what, api) {
     }
   }
   await doPost(lane, claimed, { fresh: what === "post", fr, queue: entry.queue });
+}
+
+/** C.1: Clip Factory's post, resume or find, exactly as in 1.1.0. Returns the tick's answer. */
+async function clipsWork({ api, state, clips, action, queue, what }) {
+  if (what === "find") {
+    await doFind(clips, action.job, { queue });
+    return action;
+  }
+  // The red frame goes up before anything is claimed or driven; if it can't be shown, nothing happens.
+  const fr = frame();
+  if (!(await fr.on(`Getting${quoteHook(action.job)} ready for TikTok`))) {
+    log("frame.missing", { clipId: action.job.clipId });
+    return { action: "frame_missing" };
+  }
+  let job = action.job;
+  if (action.action === "post") {
+    try {
+      const claimed = await api.claim(action.job.clipId, state.device);
+      job = { ...action.job, ...(claimed?.job || {}) }; // its new attempt number
+    } catch (e) {
+      await fr.off();
+      log("claim.refused", { clipId: action.job.clipId, error: words(e) });
+      return { action: "claim_refused" };
+    }
+  }
+  await doPost(clips, job, { fresh: action.action === "post", fr, queue });
+  return action;
 }
 
 export async function tick() {
@@ -756,7 +889,7 @@ export async function tick() {
       }
       loginDone = request.at;
     }
-    const pingState = needsYou ? "needs_you" : action.action === "paused" ? "paused" : "ok";
+    const pingState = needsYou ? "needs_you" : action.action === "paused" || action.reason === WAIT_TARGET ? "paused" : "ok";
     const checkIn = {
       state: pingState,
       ...(pingState !== "ok" && action.reason ? { reason: action.reason } : {}),
@@ -790,27 +923,13 @@ export async function tick() {
     }
     // C. One thing: Clip Factory's first.
     const work = pickWork({ clips: action, lanes });
-    if (work.lane === "clips" && (work.what === "post" || work.what === "resume")) {
-      // The red frame goes up before anything is claimed or driven; if it can't be shown, nothing happens.
-      const fr = frame();
-      if (!(await fr.on(`Getting${quoteHook(action.job)} ready for TikTok`))) {
-        log("frame.missing", { clipId: action.job.clipId });
-        return { action: "frame_missing" };
+    if (work.lane === "clips" && (work.what === "post" || work.what === "resume" || work.what === "find")) {
+      const stopWsBeats = wsBeats(lanes);
+      try {
+        return await clipsWork({ api, state, clips, action, queue, what: work.what });
+      } finally {
+        await stopWsBeats();
       }
-      let job = action.job;
-      if (action.action === "post") {
-        try {
-          const claimed = await api.claim(action.job.clipId, state.device);
-          job = { ...action.job, ...(claimed?.job || {}) }; // its new attempt number
-        } catch (e) {
-          await fr.off();
-          log("claim.refused", { clipId: action.job.clipId, error: words(e) });
-          return { action: "claim_refused" };
-        }
-      }
-      await doPost(clips, job, { fresh: action.action === "post", fr, queue });
-    } else if (work.lane === "clips" && work.what === "find") {
-      await doFind(clips, action.job, { queue });
     } else if (work.what === "tidy") {
       await tidy(clips, queue);
       for (const entry of lanes) await tidyWs(entry);

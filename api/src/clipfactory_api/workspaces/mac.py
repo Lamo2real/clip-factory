@@ -60,6 +60,8 @@ MAC_OFF_WS: Final = "My Mac posts TikTok is off in Clips Funded."
 MAC_OLD: Final = "Update the helper on your Mac."
 UPDATE_FIRST: Final = "Update the helper on your Mac first."
 PICK_SIGN_IN: Final = "Pick sign_in."
+PICK_RESUME: Final = "Pick resume."
+NOT_PAUSED: Final = "Your Mac isn't paused."
 MAC_TAKEN: Final = "Another try already has this post."
 MAC_WORKING: Final = "Your Mac is posting it right now. Wait a minute."
 MAC_NOT_PRESSED: Final = "Your Mac stopped before it pressed Post, so it isn't on TikTok. Tap Try again."
@@ -124,6 +126,8 @@ def public_helper(item: Mapping[str, Any] | None) -> Item | None:
             out[key] = str(item[key])
     if item.get("loginRequestAt"):
         out["loginRequest"] = {"at": str(item["loginRequestAt"])}
+    if item.get("resumeRequestAt"):
+        out["resumeRequest"] = {"at": str(item["resumeRequestAt"])}
     return out
 
 
@@ -270,11 +274,12 @@ def ping(
     handle: str | None,
     login_done: str | None,
     now: datetime,
+    resume_done: str | None = None,
 ) -> None:
     """The helper checks in for this workspace: when, how it is and why, its version and device, and whether its
     Chrome profile is logged in to this workspace's TikTok (``setUp``, the ``handle`` it read). ``needsYouJobId``
-    and ``needsYouStoryId`` go with any ping whose state isn't ``needs_you``; the owner's Log in on my Mac stays until
-    the helper says it handled that one (``login_done``: its ``at``)."""
+    and ``needsYouStoryId`` go with any ping whose state isn't ``needs_you``; the owner's Log in on my Mac and Start my
+    Mac again stay until the helper says it handled that one (``login_done`` / ``resume_done``: its ``at``)."""
     pk = _pk(user_id, workspace_id)
     current = store.get(pk, ws.MACHELPER_SK)
     fields: Item = {
@@ -298,15 +303,17 @@ def ping(
         if state != "needs_you":
             gone += ["needsYouJobId", "needsYouStoryId"]
         store.update(pk, ws.MACHELPER_SK, fields, remove=[k for k in gone if k in current])
-    if login_done:
+    for done, key in ((login_done, "loginRequestAt"), (resume_done, "resumeRequestAt")):
+        if not done:
+            continue
         with contextlib.suppress(db.ConditionFailed):  # a newer request came meanwhile: it stays
             store.update_expr(
                 pk,
                 ws.MACHELPER_SK,
-                "REMOVE #lr",
-                condition="#lr = :done",
-                names={"#lr": "loginRequestAt"},
-                values={":done": login_done},
+                "REMOVE #rq",
+                condition="#rq = :done",
+                names={"#rq": key},
+                values={":done": done},
             )
 
 
@@ -317,6 +324,26 @@ def login_request(store: db.Store, user_id: str, workspace_id: str, now: datetim
     if item is None or not new_enough(item.get("version")):
         raise conflict(UPDATE_FIRST)
     return store.update(_pk(user_id, workspace_id), ws.MACHELPER_SK, {"loginRequestAt": iso(now)})
+
+
+def resume_request(store: db.Store, user_id: str, workspace_id: str, now: datetime) -> Item:
+    """The owner's Start my Mac again in Clips Funded: the helper ends this Mac's pause on its next tick (the same pause
+    Clip Factory's button ends) and says so in its ping (``resumeDone``). Refused until a helper of ``MAC_WS_FROM`` or
+    newer checked in for this workspace, and while it isn't paused (one conditional write). Returns the helper item."""
+    item = helper_item(store, user_id, workspace_id)
+    if item is None or not new_enough(item.get("version")):
+        raise conflict(UPDATE_FIRST)
+    try:
+        return store.update_expr(
+            _pk(user_id, workspace_id),
+            ws.MACHELPER_SK,
+            "SET #rq = :at",
+            condition="#st = :paused",
+            names={"#rq": "resumeRequestAt", "#st": "state"},
+            values={":at": iso(now), ":paused": "paused"},
+        )
+    except db.ConditionFailed:
+        raise conflict(NOT_PAUSED) from None
 
 
 def clear_needs_you(store: db.Store, user_id: str, workspace_id: str, publishing_job_id: str) -> None:
@@ -644,7 +671,10 @@ def _finish(
         story = _story_of(store, user_id, workspace_id, row)
         title = str((story or {}).get("title") or "")
         if story is not None:
-            write = story_posted.story_write(story, "tiktok", url or "", iso(now), now)
+            # A post handed over from Only me: its private link on the story makes way for this one (one TikTok link).
+            before = row.get("beforeMac")
+            private = before.get("url") if isinstance(before, Mapping) and isinstance(before.get("url"), str) else None
+            write = story_posted.story_write(story, "tiktok", url or "", iso(now), now, replace=private)
             if write is not None:
                 updates.append(write.request(pk, str(story["sk"])))
         act = story_posted.activity(

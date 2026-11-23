@@ -179,9 +179,26 @@ export function beatTargets({ queue, state, device, current }) {
   return out;
 }
 
-/** The ledger fields a claim writes. A fresh claim (a new attempt) forgets the last try's press, baseline and step. */
-export function claimFields({ device, tries, fresh }) {
-  return { device, step: "claimed", tries, ...(fresh ? { pressedAt: null, baseline: null, sentStep: null } : {}) };
+/**
+ * The ledger fields a claim writes. A fresh claim (a new attempt) forgets the last try's press, baseline and step;
+ * the Studio ids from before an earlier press stay (``earlier``), so a Clips Funded post tried again after a press
+ * can still find that first post (tiktok.js post).
+ */
+export function claimFields({ device, tries, fresh, earlier = null }) {
+  return {
+    device,
+    step: "claimed",
+    tries,
+    ...(fresh ? { pressedAt: null, baseline: null, sentStep: null } : {}),
+    ...(fresh && Array.isArray(earlier) && earlier.length ? { earlier } : {}),
+  };
+}
+
+/** The Studio ids from before every press of this job so far (its ledger entry): what ``earlier`` keeps. */
+export function earlierIds(entry) {
+  const ids = [...(Array.isArray(entry?.earlier) ? entry.earlier : [])];
+  if (entry?.pressedAt && Array.isArray(entry.baseline)) for (const id of entry.baseline) if (!ids.includes(id)) ids.push(id);
+  return ids.slice(-500);
 }
 
 const trialHolds = (settings, state) =>
@@ -293,10 +310,11 @@ export function wsAction({ on, helper, queue, view, settings, device, now, setUp
 
 /**
  * A ws lane's check-in (POST /v1/workspaces/{ws}/tiktok/mac/ping): exactly these keys (the server refuses others).
+ * ``resumeDone``: the owner's Start my Mac again (helper.resumeRequest) was carried out.
  * @returns {{state: "ok"|"needs_you"|"paused", reason?: string, version: string, device: string, setUp: boolean,
- *   handle?: string, loginDone?: string}}
+ *   handle?: string, loginDone?: string, resumeDone?: string}}
  */
-export function wsPingBody({ action, needsYou, version, device, setUp, handle, loginDone }) {
+export function wsPingBody({ action, needsYou, version, device, setUp, handle, loginDone, resumeDone }) {
   const state = needsYou ? "needs_you" : action?.action === "paused" ? "paused" : "ok";
   const reason = state !== "ok" && action?.reason ? String(action.reason).slice(0, 200) : null;
   return {
@@ -307,6 +325,7 @@ export function wsPingBody({ action, needsYou, version, device, setUp, handle, l
     setUp: setUp === true,
     ...(handle && /^@[A-Za-z0-9._]{1,30}$/.test(handle) ? { handle } : {}),
     ...(loginDone ? { loginDone: String(loginDone).slice(0, 40) } : {}),
+    ...(resumeDone ? { resumeDone: String(resumeDone).slice(0, 40) } : {}),
   };
 }
 

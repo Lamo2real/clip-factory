@@ -9,6 +9,7 @@ export const MAC_STOP_LINE = "To stop it, turn the switch off. Your Mac stops at
 export const MAC_NOT_SET_UP = "Your Mac isn't set up yet.";
 export const MAC_ASKED = "Look at your Mac. A TikTok window opens within a minute.";
 export const MAC_CARD_PAUSED = "Paused on your Mac · your posts wait until it's started again.";
+export const MAC_CARD_STARTING = "Your Mac starts again within a minute.";
 
 /** "Your Mac isn't logged in to @clips.funded yet." */
 export function notLoggedInWords(handle: string): string {
@@ -32,13 +33,14 @@ export function notSeenWords(time: string): string {
 
 /** The set-up steps, numbered; `from` 2 leaves out the update once the new helper checked in. */
 export function macSteps(handle: string, from: 1 | 2 = 1): string[] {
-  const all = ["1. Update the helper on your Mac.", "2. Tap Log in on my Mac.", `3. Scan the code with the TikTok app on ${handle}.`];
+  const all = ["1. Ask for the helper update on your Mac.", "2. Tap Log in on my Mac.", `3. In the TikTok app, switch to ${handle}, then scan the code.`];
   return all.slice(from - 1);
 }
 
 // The buttons.
 export const MAC_LOGIN_BUTTON = "Log in on my Mac";
 export const MAC_OPEN_STOPPED = "Open the stopped post";
+export const MAC_RESUME = "Start my Mac again";
 export const MAC_SET_IT_UP = "Set it up";
 export const MAC_TURN_ON = "Turn on";
 export const MAC_TRY_AGAIN = "Try again";
@@ -71,6 +73,7 @@ export const MAC_ROW_OFF = "My Mac posts TikTok is off";
 export const MAC_ROW_NOT_SET_UP = "Your Mac isn't set up yet";
 export const MAC_ROW_NEEDS_YOU = "Your Mac needs you · look at your Mac";
 export const MAC_ROW_PAUSED = "Paused on your Mac";
+export const MAC_ROW_STARTING = "Paused on your Mac · starting again within a minute";
 export const MAC_ROW_POSTING = "Posting…";
 export const MAC_ROW_STOPPED_EARLY = "Your Mac stopped before it pressed Post";
 export const MAC_ROW_PRESSED = "Not sure it posted · look on your TikTok";

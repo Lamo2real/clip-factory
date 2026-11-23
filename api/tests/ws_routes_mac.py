@@ -9,6 +9,7 @@ EXPECTED: set[tuple[str, str]] = {
     ("GET", f"{WS}/tiktok/mac"),
     ("POST", f"{WS}/tiktok/mac/ping"),
     ("POST", f"{WS}/tiktok/mac/login"),
+    ("POST", f"{WS}/tiktok/mac/request"),
     ("POST", f"{JOB}/claim"),
     ("POST", f"{JOB}/step"),
     ("POST", f"{JOB}/done"),

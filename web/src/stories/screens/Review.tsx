@@ -427,6 +427,15 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
       setPostOnly(j.platform);
       setPosting(true);
     },
+    onResume: async () => {
+      try {
+        await storiesApi().macResume(ws);
+        void macStatus.reload();
+        return null;
+      } catch (e) {
+        return say(e);
+      }
+    },
   };
 
   async function download(format?: DownloadFormat) {

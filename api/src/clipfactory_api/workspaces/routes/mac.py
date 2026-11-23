@@ -4,8 +4,8 @@ Clips Funded's own Lambda (``workspaces/http.py``), under the existing ``ANY /v1
 * Helper: ``GET …/tiktok/mac`` (``?version=``: the queue is empty for a helper older than ``MAC_WS_FROM``),
   ``POST …/tiktok/mac/ping``, and per job ``…/publishing/{id}/mac/claim``, ``step`` (a re-sent step is the job's
   beat), ``done`` and ``stopped``. It downloads the video with the existing ``…/stories/{storyId}/download``.
-* Owner: ``POST …/tiktok/mac/login`` (Log in on my Mac), ``…/publishing/{id}/mac/retry`` (Try again) and
-  ``…/publishing/{id}/mac/posted`` (It's on TikTok).
+* Owner: ``POST …/tiktok/mac/login`` (Log in on my Mac), ``POST …/tiktok/mac/request`` (Start my Mac again),
+  ``…/publishing/{id}/mac/retry`` (Try again) and ``…/publishing/{id}/mac/posted`` (It's on TikTok).
 
 Every route is **S** (a ``stories`` workspace; Clip Factory's id is a 409) and builds every key from the JWT's
 ``sub`` and the path's workspace id; unknown body keys are a 400, another owner's job a 404. Nothing here calls TikTok
@@ -75,10 +75,11 @@ def status(app: App, req: Request) -> Response:
 
 
 def ping(app: App, req: Request) -> Response:
-    """``POST …/tiktok/mac/ping`` ``{state, reason?, version, device, setUp, handle?, loginDone?}`` → ``{on}``."""
+    """``POST …/tiktok/mac/ping`` ``{state, reason?, version, device, setUp, handle?, loginDone?, resumeDone?}`` →
+    ``{on}``."""
     workspace = _workspace(app, req)
     body = req.json()
-    validate.only_keys(body, {"state", "reason", "version", "device", "setUp", "handle", "loginDone"})
+    validate.only_keys(body, {"state", "reason", "version", "device", "setUp", "handle", "loginDone", "resumeDone"})
     state = body.get("state")
     if state not in ws_mac.HELPER_STATES:
         raise bad_request("state must be ok, needs_you or paused.")
@@ -92,6 +93,7 @@ def ping(app: App, req: Request) -> Response:
     if handle is not None and (not isinstance(handle, str) or not HANDLE.match(handle)):
         raise bad_request("handle must be a TikTok @name.", "handle")
     login_done = validate.string(body, "loginDone", required=False, max_len=STAMP_MAX)
+    resume_done = validate.string(body, "resumeDone", required=False, max_len=STAMP_MAX)
     workspace_id = str(workspace["workspaceId"])
     ws_mac.ping(
         app.store,
@@ -105,6 +107,7 @@ def ping(app: App, req: Request) -> Response:
         handle=handle,
         login_done=login_done,
         now=app.clock(),
+        resume_done=resume_done,
     )
     return ok({"on": ws_mac.is_on(workspace)})
 
@@ -196,6 +199,17 @@ def login(app: App, req: Request) -> Response:
     return ok({"helper": ws_mac.public_helper(item)})
 
 
+def request(app: App, req: Request) -> Response:
+    """``POST …/tiktok/mac/request`` ``{action: "resume"}`` → ``{helper: WsMacHelper}``: Start my Mac again."""
+    workspace = _workspace(app, req)
+    body = req.json()
+    validate.only_keys(body, {"action"})
+    if body.get("action") != "resume":
+        raise bad_request(ws_mac.PICK_RESUME)
+    item = ws_mac.resume_request(app.store, req.user_id, str(workspace["workspaceId"]), app.clock())
+    return ok({"helper": ws_mac.public_helper(item)})
+
+
 def retry(app: App, req: Request) -> Response:
     """``POST …/publishing/{id}/mac/retry`` ``{notOnTikTok?, confirmAccount?}`` → ``{job: PublishingJob}``."""
     workspace = _workspace(app, req)
@@ -230,6 +244,7 @@ ROUTES = [
     route("GET", f"{WS}/tiktok/mac", status),
     route("POST", f"{WS}/tiktok/mac/ping", ping),
     route("POST", f"{WS}/tiktok/mac/login", login),
+    route("POST", f"{WS}/tiktok/mac/request", request),
     route("POST", f"{JOB}/claim", claim),
     route("POST", f"{JOB}/step", step),
     route("POST", f"{JOB}/done", done),

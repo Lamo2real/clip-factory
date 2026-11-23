@@ -160,6 +160,7 @@ const CASES: Case[] = [
   // My Mac posts TikTok (§47.10): the web's own Mac routes (the helper's ping, claim, step, done and stopped are its own).
   ["macStatus", (a) => a.macStatus("stories"), "GET", `${B}/stories/tiktok/mac`, undefined, { on: true, helper: null, account: null, queue: [] }, { on: true, helper: null, account: null, queue: [] }],
   ["macLogin", (a) => a.macLogin("stories"), "POST", `${B}/stories/tiktok/mac/login`, { action: "sign_in" }, { helper: 36 }, { helper: 36 }],
+  ["macResume", (a) => a.macResume("stories"), "POST", `${B}/stories/tiktok/mac/request`, { action: "resume" }, { helper: 39 }, { helper: 39 }],
   ["macRetry", (a) => a.macRetry("stories", "p1", { notOnTikTok: true, confirmAccount: "-000new" }), "POST", `${B}/stories/publishing/p1/mac/retry`, { notOnTikTok: true, confirmAccount: "-000new" }, { job: 37 }, 37],
   ["macPosted", (a) => a.macPosted("stories", "p1", { link: "https://www.tiktok.com/@clips.funded/video/7400000000000000001" }), "POST", `${B}/stories/publishing/p1/mac/posted`, { link: "https://www.tiktok.com/@clips.funded/video/7400000000000000001" }, { job: 38 }, 38],
 ];

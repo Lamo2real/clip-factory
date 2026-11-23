@@ -17,7 +17,7 @@ import { mockStoriesApi } from "../src/stories/api/mock/index.ts";
 import * as macMock from "../src/stories/api/mock/mac.ts";
 import { setMockLatency, type MockStore } from "../src/stories/api/mock/store.ts";
 import type { PublishingJob, PubJobMac, StoriesApi, WsMacHelper, WsMacStatus } from "../src/stories/api/types.ts";
-import { loginReason, MAC_LOGGED_OUT, MAC_TIKTOK_OPTIONS, MAC_WS_FROM, macChip, macPlace, macRow, versionAtLeast, type MacRowContext } from "../src/stories/studio/macRow.ts";
+import { loginReason, MAC_LOGGED_OUT, MAC_NOBODY, MAC_TIKTOK_OPTIONS, MAC_WS_FROM, macChip, macPlace, macRow, versionAtLeast, type MacRowContext } from "../src/stories/studio/macRow.ts";
 import * as W from "../src/stories/studio/macWords.ts";
 import { forgetDashboards, forgetOnboarding } from "../src/stories/ui.tsx";
 import { resetWorkspaceMemory } from "../src/stories/workspace.ts";
@@ -170,6 +170,9 @@ describe("the version gate and the Mac's fixed settings", () => {
     const ws = /export const WS_REASONS = Object\.freeze\(\{[\s\S]*?\n\s+login: "([^"]+)"/.exec(js)?.[1];
     expect(ws).toBe(MAC_LOGGED_OUT);
     expect(loginReason(MAC_LOGGED_OUT)).toBe(true);
+    const nobody = /export const WS_REASONS = Object\.freeze\(\{[\s\S]*?\n\s+nobody: "([^"]+)"/.exec(js)?.[1];
+    expect(nobody).toBe(MAC_NOBODY);
+    expect(loginReason(MAC_NOBODY)).toBe(true);
     expect(loginReason("Your Mac is logged in to TikTok as @lamo.clips, not @clips.funded. Nothing was posted.")).toBe(true);
     expect(loginReason("Your Mac couldn't see which TikTok it's logged in to. Nothing was posted. Tap Try again.")).toBe(false);
     expect(loginReason(undefined)).toBe(false);
@@ -251,7 +254,9 @@ describe("each post row says what the Mac is doing (§5.3)", () => {
       buttons: ["open_stopped"],
       stoppedStoryId: "S0",
     });
-    expect(macRow(w, ctx(helper({ state: "paused", reason: "Paused." })))).toMatchObject({ line: "Paused on your Mac", buttons: [] });
+    // Paused: Start my Mac again is right on the row; once asked, it says so until the Mac does it.
+    expect(macRow(w, ctx(helper({ state: "paused", reason: "Paused." })))).toMatchObject({ line: "Paused on your Mac", buttons: ["resume"] });
+    expect(macRow(w, ctx(helper({ state: "paused", resumeRequest: { at: at(0) } })))).toMatchObject({ line: "Paused on your Mac · starting again within a minute", buttons: [] });
     expect(macRow(w, ctx(helper(), [q("J1", "waiting")]))).toMatchObject({ line: "Waiting for your Mac · next" });
     const queue = [q("J0", "working", { claimedAt: at(MIN), beatAt: at(MIN) }), q("J2", "waiting", { since: at(30 * MIN) }), q("J1", "waiting"), q("J3", "waiting")];
     expect(macRow(w, ctx(helper(), queue))).toMatchObject({ line: "Waiting for your Mac · in line (2 before it)" });
@@ -277,7 +282,11 @@ describe("each post row says what the Mac is doing (§5.3)", () => {
   });
 
   it("12: stopped: Didn't work and the reason's first sentence (an account problem also has Open Social accounts)", () => {
-    expect(macRow(macJob({ state: "stopped", reason: "TikTok logged your Mac out. Tap Log in on my Mac." }), ctx())).toMatchObject({ chip: "Didn't work", line: "Didn't work: TikTok logged your Mac out", buttons: ["try_again"] });
+    // A login reason: Set it up (the TikTok card's Log in on my Mac) beside Try again.
+    expect(macRow(macJob({ state: "stopped", reason: "TikTok logged your Mac out. Tap Log in on my Mac." }), ctx())).toMatchObject({ chip: "Didn't work", line: "Didn't work: TikTok logged your Mac out", buttons: ["set_up", "try_again"] });
+    expect(macRow(macJob({ state: "stopped", reason: MAC_NOBODY }), ctx())).toMatchObject({ buttons: ["set_up", "try_again"] });
+    expect(macRow(macJob({ state: "stopped", reason: "Your Mac is logged in to TikTok as @lamo.clips, not @clips.funded. Nothing was posted." }), ctx())).toMatchObject({ buttons: ["set_up", "try_again"] });
+    expect(macRow(macJob({ state: "stopped", reason: "Your Mac couldn't turn on TikTok's AI label, so it didn't post. Tap Try again." }), ctx())).toMatchObject({ buttons: ["try_again"] });
     expect(macRow(macJob({ state: "stopped", reason: "Connect TikTok again in Social accounts. Then tap Try again." }), ctx())).toMatchObject({ buttons: ["social", "try_again"] });
   });
 
@@ -406,12 +415,12 @@ describe("a Mac post row's buttons", () => {
 describe("the TikTok card's states (§5.1)", () => {
   const h = "@clips.funded";
   it("from not set up to logged in", () => {
-    expect(cardState(null, h, NOW)).toMatchObject({ line: "Your Mac isn't set up yet.", steps: ["1. Update the helper on your Mac.", "2. Tap Log in on my Mac.", "3. Scan the code with the TikTok app on @clips.funded."] });
+    expect(cardState(null, h, NOW)).toMatchObject({ line: "Your Mac isn't set up yet.", steps: ["1. Ask for the helper update on your Mac.", "2. Tap Log in on my Mac.", "3. In the TikTok app, switch to @clips.funded, then scan the code."] });
     expect(cardState(helper({ version: "1.1.0" }), h, NOW)).toMatchObject({ line: "Your Mac isn't set up yet." });
     expect(cardState(helper({ version: "1.1.0" }), h, NOW).button).toBeUndefined();
     expect(cardState(helper({ setUp: false, handle: undefined }), h, NOW)).toMatchObject({
       line: "Your Mac isn't logged in to @clips.funded yet.",
-      steps: ["2. Tap Log in on my Mac.", "3. Scan the code with the TikTok app on @clips.funded."],
+      steps: ["2. Tap Log in on my Mac.", "3. In the TikTok app, switch to @clips.funded, then scan the code."],
       button: "login",
     });
     expect(cardState(helper({ setUp: false, loginRequest: { at: at(0) } }), h, NOW)).toMatchObject({ line: "Look at your Mac. A TikTok window opens within a minute." });
@@ -423,7 +432,9 @@ describe("the TikTok card's states (§5.1)", () => {
     expect(cardState(helper({ state: "needs_you", reason: "TikTok logged your Mac out. Tap Log in on my Mac." }), h, NOW)).toMatchObject({ line: "Your Mac needs you: TikTok logged your Mac out. Tap Log in on my Mac.", button: "login" });
     expect(cardState(helper({ state: "needs_you", reason: "Your Mac is logged in to TikTok as @lamo.clips, not @clips.funded. Nothing was posted." }), h, NOW)).toMatchObject({ button: "login" });
     expect(cardState(helper({ state: "needs_you", reason: "TikTok says it's posting too much right now. The rest wait.", needsYouStoryId: "S0" }), h, NOW)).toMatchObject({ button: "open_stopped" });
-    expect(cardState(helper({ state: "paused" }), h, NOW)).toMatchObject({ line: "Paused on your Mac · your posts wait until it's started again." });
+    expect(cardState(helper({ state: "paused" }), h, NOW)).toMatchObject({ line: "Paused on your Mac · your posts wait until it's started again.", button: "resume" });
+    expect(cardState(helper({ state: "paused", resumeRequest: { at: at(0) } }), h, NOW)).toMatchObject({ line: "Your Mac starts again within a minute." });
+    expect(cardState(helper({ state: "paused", resumeRequest: { at: at(0) } }), h, NOW).button).toBeUndefined();
     expect(cardState(helper({ seenAt: at(31 * MIN) }), h, NOW)).toMatchObject({ line: `Your Mac hasn't checked in since ${clockWords(at(31 * MIN), NOW)}.` });
   });
 });
@@ -447,7 +458,7 @@ describe("the TikTok card in Social accounts", () => {
     expect(store.workspaces.find((w) => w.workspaceId === "stories")!.configuration).toMatchObject({ tiktokMac: { on: true } });
     expect(text(c)).toContain("On. Post it hands TikTok to your Mac. It posts for everyone, with the AI label.");
     expect(text(c)).toContain("Your Mac isn't set up yet.");
-    expect(text(c)).toContain("1. Update the helper on your Mac.");
+    expect(text(c)).toContain("1. Ask for the helper update on your Mac.");
     expect(text(c)).toContain("To stop it, turn the switch off. Your Mac stops at once.");
   });
 
@@ -479,6 +490,23 @@ describe("the TikTok card in Social accounts", () => {
     await wait(10_500);
     expect(text(c)).toContain("logged in as @funded.clips.");
     expect(has("Log in on my Mac", c)).toBe(true);
+  });
+
+  it("paused: Start my Mac again asks the Mac, and the card follows it until it goes on", async () => {
+    start({ ...READY, macHelper: { state: "paused", reason: "Paused on your Mac." } });
+    const c = await card();
+    expect(text(c)).toContain("Paused on your Mac · your posts wait until it's started again.");
+    const macResume = vi.spyOn(api, "macResume");
+    await click(control("Start my Mac again", c));
+    expect(macResume).toHaveBeenCalledWith("stories");
+    expect(text(c)).toContain("Your Mac starts again within a minute.");
+    const asked = mac.helper()!.resumeRequest!.at;
+    mac.ping({ state: "ok", resumeDone: asked });
+    await wait(10_500);
+    expect(text(c)).toContain("logged in as @funded.clips.");
+    expect(mac.helper()!.resumeRequest).toBeUndefined();
+    // Not paused (any more): the server says so.
+    expect(await fails(api.macResume("stories"))).toBe("Your Mac isn't paused.");
   });
 
   it("needs you: Log in on my Mac for a login reason, else Open the stopped post", async () => {

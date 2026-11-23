@@ -55,7 +55,9 @@ test("1.2.0's new reasons, word for word, kid-proof", () => {
   assert.equal(WS_REASONS.limit, "TikTok says it's posting too much right now. The rest wait.");
   assert.equal(windowAsk("@clips.funded"), "Log in to TikTok as @clips.funded in the window. Scan the code with the TikTok app.");
   assert.equal(otherAsk("@lamo.clips", "@clips.funded"), "That's @lamo.clips. Log in as @clips.funded.");
-  for (const text of [REASONS.whoUnknown, REASONS.aiLabel, REASONS.videoGone, REASONS.otherWorkspace, WS_REASONS.login]) {
+  assert.equal(REASONS.otherWorkspaceClips, "That TikTok account is your other workspace's. Nothing was posted. Connect TikTok again in Settings › Posting.");
+  assert.equal(WS_REASONS.nobody, "Your Mac couldn't see which TikTok it's logged in to. Nothing was posted. Tap Log in on my Mac.");
+  for (const text of [REASONS.whoUnknown, REASONS.aiLabel, REASONS.videoGone, REASONS.otherWorkspace, REASONS.otherWorkspaceClips, WS_REASONS.login, WS_REASONS.nobody]) {
     assert.ok(text.length <= 120, text);
     assert.doesNotMatch(text, /\b(API|CDP|cookie|session|handle|uid|Keychain)\b/i, text);
   }
@@ -79,6 +81,8 @@ test("a Clips Funded lane's words never say Clip Factory; Clip Factory's stay as
 test("the login reasons are the ones Log in on my Mac fixes", () => {
   assert.equal(loginReason(WS_REASONS.login), true);
   assert.equal(loginReason(REASONS.wrongAccount("@lamo.clips", "@clips.funded")), true);
+  assert.equal(loginReason(WS_REASONS.nobody), true);
+  assert.equal(loginReason(REASONS.whoUnknown), false);
   assert.equal(loginReason(REASONS.aiLabel), false);
   assert.equal(loginReason(undefined), false);
 });

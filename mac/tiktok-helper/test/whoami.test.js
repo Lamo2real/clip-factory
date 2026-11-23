@@ -54,9 +54,12 @@ test("one read gathers every handle and uid; two reads merge", () => {
     hrefs: ["https://www.tiktok.com/@clips.funded/video/7710644811602169121"],
     rehydration: {},
   });
-  assert.deepEqual(seen, { handles: ["@clips.funded"], uids: ["7400000000000000001"], uid: "7400000000000000001" });
+  assert.deepEqual(seen, { handles: ["@clips.funded"], own: ["@clips.funded"], uids: ["7400000000000000001"], uid: "7400000000000000001" });
   const more = mergeSeen({ handles: [], uids: [] }, seen);
   assert.deepEqual(more.handles, ["@clips.funded"]);
+  assert.deepEqual(more.own, ["@clips.funded"]);
+  // A Studio row's link is a hint, never the account's own data.
+  assert.deepEqual(seenFrom({ hrefs: ["https://www.tiktok.com/@clips.funded/video/7710644811602169121"] }).own, []);
 });
 
 test("sameAccount: same only when every readable handle is the target and the uid is the pinned one", () => {
@@ -98,6 +101,19 @@ test("off Studio › Posts (www.tiktok.com's feed) the video links are other peo
   };
   assert.deepEqual((await whoAmI(page, { links: false })).handles, ["@clips.funded"]);
   assert.equal(sameAccount(await whoAmI(page, { links: false }), "@clips.funded").verdict, "same");
-  // On Studio › Posts the links are the account's own rows, so they count (and here they'd say another account).
-  assert.equal(sameAccount(await whoAmI(page), "@clips.funded").verdict, "wrong");
+  // On Studio › Posts the links are the account's own rows, so they count: here one says another account while the
+  // account's own data says the target, so it is not sure (nothing posts), and not a wrong login to fix.
+  assert.equal(sameAccount(await whoAmI(page), "@clips.funded").verdict, "unknown");
+  // Without the account's own data, another account's link is wrong (as before); and own data on another account
+  // is wrong whatever the links say.
+  assert.equal(sameAccount({ handles: ["@clips.funded", "@someone.else"], own: [] }, "@clips.funded").verdict, "wrong");
+  assert.equal(sameAccount({ handles: ["@lamo.clips", "@clips.funded"], own: ["@lamo.clips"] }, "@clips.funded").verdict, "wrong");
+  assert.equal(sameAccount({ handles: ["@clips.funded"], own: ["@clips.funded", "@lamo.clips"] }, "@clips.funded").verdict, "wrong");
+});
+
+test("another lane's uid is refused, one or a list", () => {
+  const seen = { handles: ["@clips.funded"], own: ["@clips.funded"], uids: ["7400000000000000001"] };
+  assert.equal(sameAccount(seen, "@clips.funded", null, { notUid: ["7000000000000000001", "7400000000000000001"] }).verdict, "wrong");
+  assert.equal(sameAccount(seen, "@clips.funded", null, { notUid: ["7000000000000000001"] }).verdict, "same");
+  assert.equal(sameAccount(seen, "@clips.funded", null, { notUid: [] }).verdict, "same");
 });

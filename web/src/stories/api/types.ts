@@ -1180,6 +1180,8 @@ export interface WsMacHelper {
   needsYouStoryId?: string;
   /** the owner's Log in on my Mac, until the Mac did it */
   loginRequest?: { at: string };
+  /** the owner's Start my Mac again, until the Mac did it */
+  resumeRequest?: { at: string };
 }
 
 /** GET …/tiktok/mac */
@@ -1376,6 +1378,8 @@ export interface StoriesApi {
   macStatus(ws: string): Promise<WsMacStatus>;
   /** Log in on my Mac: the Mac opens a TikTok window to log in to this workspace's TikTok */
   macLogin(ws: string): Promise<{ helper: WsMacHelper }>;
+  /** Start my Mac again: the paused Mac goes on within a minute */
+  macResume(ws: string): Promise<{ helper: WsMacHelper }>;
   /** Try again on a Mac post; `notOnTikTok` after the Mac pressed Post (only if it's not on TikTok) */
   macRetry(ws: string, publishingJobId: string, body?: { notOnTikTok?: true; confirmAccount?: string }): Promise<PublishingJob>;
   /** It's on TikTok: its link, or none */

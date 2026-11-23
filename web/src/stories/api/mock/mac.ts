@@ -15,7 +15,7 @@ import { sameAsClips } from "./social.ts";
 import { delay, mockId, type MockStore } from "./store.ts";
 import { storiesWorkspace } from "./workspace.ts";
 
-export const KEYS = ["macStatus", "macLogin", "macRetry", "macPosted", "publish", "retryPublishing", "dashboard"] as const;
+export const KEYS = ["macStatus", "macLogin", "macResume", "macRetry", "macPosted", "publish", "retryPublishing", "dashboard"] as const;
 
 /** The API's MAC_WS_FROM (workspaces/mac.py): an older helper never takes a Clips Funded post. */
 export const MAC_WS_FROM = "1.2.0";
@@ -36,6 +36,7 @@ export const BAD_LINK = "Paste the video's full TikTok link: tiktok.com/@name/vi
 export const NOT_PRESSED = "Your Mac stopped before it pressed Post, so it isn't on TikTok. Tap Try again.";
 export const PRESSED = "Your Mac pressed Post but couldn't confirm it. Look on your TikTok: if it's there, tap It's on TikTok.";
 export const UPDATE_FIRST = "Update the helper on your Mac first.";
+export const NOT_PAUSED = "Your Mac isn't paused.";
 
 const HANDLE = /^@[A-Za-z0-9._]{2,30}$/;
 const LINK = /^https:\/\/(www\.)?tiktok\.com\/@([A-Za-z0-9._]{2,30})\/video\/(\d{8,25})/;
@@ -242,10 +243,11 @@ export function macKnobs(store: MockStore, ws = "stories") {
     j.updatedAt = nowIso();
   };
   return {
-    /** A check-in; a ping that isn't needs_you clears the stopped post, one whose loginDone matches clears the login. */
-    ping(patch: Partial<WsMacHelper> & { loginDone?: string } = {}): WsMacHelper {
+    /** A check-in; a ping that isn't needs_you clears the stopped post, one whose loginDone (resumeDone) matches
+     * clears the login (the Start my Mac again). */
+    ping(patch: Partial<WsMacHelper> & { loginDone?: string; resumeDone?: string } = {}): WsMacHelper {
       const before = mockOf(store).helpers.get(ws);
-      const { loginDone, ...rest } = patch;
+      const { loginDone, resumeDone, ...rest } = patch;
       const h: WsMacHelper = { ...(before ?? { state: "ok", setUp: true, version: MAC_WS_FROM, handle: tiktokOf(store, ws)?.handle ?? undefined }), ...rest, seenAt: rest.seenAt ?? nowIso() };
       if (h.state !== "needs_you") {
         delete h.needsYouJobId;
@@ -253,6 +255,7 @@ export function macKnobs(store: MockStore, ws = "stories") {
         if (!rest.reason) delete h.reason;
       }
       if (loginDone && h.loginRequest?.at === loginDone) delete h.loginRequest;
+      if (resumeDone && h.resumeRequest?.at === resumeDone) delete h.resumeRequest;
       mockOf(store).helpers.set(ws, h);
       return copy(h);
     },
@@ -406,6 +409,15 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       const h = mockOf(store).helpers.get(ws);
       if (!h || !newer(h.version)) throw conflict(UPDATE_FIRST);
       h.loginRequest = { at: nowIso() };
+      return { helper: copy(h) };
+    },
+    async macResume(ws) {
+      await delay(200);
+      storiesWorkspace(store, ws);
+      const h = mockOf(store).helpers.get(ws);
+      if (!h || !newer(h.version)) throw conflict(UPDATE_FIRST);
+      if (h.state !== "paused") throw conflict(NOT_PAUSED);
+      h.resumeRequest = { at: nowIso() };
       return { helper: copy(h) };
     },
     async macRetry(ws, publishingJobId, body = {}) {

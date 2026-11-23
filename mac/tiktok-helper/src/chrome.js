@@ -203,6 +203,36 @@ export async function open(lane = CLIPS_CHROME, { visible = false } = {}) {
 }
 
 /**
+ * The owner's window never keeps a password or a Google sign-in (§47.10, D6, rule 5): before it opens, the lane's
+ * profile has Chrome's password saving, auto sign-in, autofill and browser sign-in turned off (its Preferences file,
+ * merged; Chrome is closed then). Sync is off by a flag too.
+ */
+export function hardenProfile(profile) {
+  const file = path.join(profile, "Default", "Preferences");
+  let prefs = {};
+  try {
+    const read = JSON.parse(fs.readFileSync(file, "utf8"));
+    if (read && typeof read === "object" && !Array.isArray(read)) prefs = read;
+  } catch {
+    prefs = {};
+  }
+  const part = (key) => (prefs[key] && typeof prefs[key] === "object" && !Array.isArray(prefs[key]) ? prefs[key] : {});
+  const next = {
+    ...prefs,
+    credentials_enable_service: false,
+    credentials_enable_autosignin: false,
+    profile: { ...part("profile"), password_manager_enabled: false },
+    autofill: { ...part("autofill"), enabled: false, profile_enabled: false, credit_card_enabled: false },
+    signin: { ...part("signin"), allowed: false },
+  };
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, JSON.stringify(next));
+}
+
+/** The window's own flags: the lane's, and no sync. */
+export const PLAIN_FLAGS = ["--disable-sync"];
+
+/**
  * The owner's TikTok login window for a lane (§47.10, D6): a visible Chrome on the lane's profile and port, at
  * ``url``, that Playwright never connects to (no --enable-automation, no page attached). Only the browser target
  * is used, through cdp.js.
@@ -211,7 +241,8 @@ export async function openPlain(lane, url) {
   fs.mkdirSync(lane.profile, { recursive: true });
   await closeOthers(lane);
   await closePort(lane.port);
-  await run("/usr/bin/open", ["-n", "-a", CHROME_APP, "--args", ...flags(lane), "--window-position=80,60", "--window-size=1100,860", url]);
+  hardenProfile(lane.profile);
+  await run("/usr/bin/open", ["-n", "-a", CHROME_APP, "--args", ...flags(lane), ...PLAIN_FLAGS, "--window-position=80,60", "--window-size=1100,860", url]);
   for (let i = 0; i < 60 && !(await cdpUp(lane.port)); i++) await sleep(500);
   if (!(await cdpUp(lane.port))) throw new Error("The helper's Chrome did not start.");
 }

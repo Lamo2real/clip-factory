@@ -56,11 +56,13 @@ export function macNotSeen(helper: Pick<WsMacHelper, "seenAt"> | null | undefine
 
 /** The helper's words when TikTok logged a Clips Funded lane out (its WS_REASONS.login; a test pins them). */
 export const MAC_LOGGED_OUT = "TikTok logged your Mac out. Tap Log in on my Mac.";
+/** The helper's words when it could read no account three times (its WS_REASONS.nobody; a test pins them). */
+export const MAC_NOBODY = "Your Mac couldn't see which TikTok it's logged in to. Nothing was posted. Tap Log in on my Mac.";
 
-/** A needs-you reason the owner fixes with Log in on my Mac (logged out, or logged in to another account): the
- * helper's own check (tiktok.js loginReason). */
+/** A reason the owner fixes with Log in on my Mac (logged out, no account readable, or logged in to another
+ * account): the helper's own check (tiktok.js loginReason). */
 export function loginReason(reason: string | undefined): boolean {
-  return reason === MAC_LOGGED_OUT || (reason ?? "").startsWith("Your Mac is logged in to TikTok as ");
+  return reason === MAC_LOGGED_OUT || reason === MAC_NOBODY || (reason ?? "").startsWith("Your Mac is logged in to TikTok as ");
 }
 
 /** Stuck: no beat for 5 minutes, or a claim 50 minutes old (every helper that posts Clips Funded beats). */
@@ -106,9 +108,10 @@ export type MacTone = "sun" | "coral" | "mint" | "sky" | "plain";
  * A row's buttons: open (its link), turn_on and set_up (to the TikTok card), open_stopped (the post the Mac stopped
  * on), try_again, on_tiktok (its link box, and It's on TikTok, no link), again_ask (a quiet Try again that asks first:
  * "Post it again? Only if it's not on your TikTok."), post_with_mac (Post it with only TikTok ticked), social (Open
- * Social accounts, beside Try again when the reason is an account problem: §45.36 E9).
+ * Social accounts, beside Try again when the reason is an account problem: §45.36 E9), resume (Start my Mac again, on
+ * a post that waits for a paused Mac).
  */
-export type MacButton = "open" | "turn_on" | "set_up" | "open_stopped" | "try_again" | "on_tiktok" | "again_ask" | "post_with_mac" | "social";
+export type MacButton = "open" | "turn_on" | "set_up" | "open_stopped" | "try_again" | "on_tiktok" | "again_ask" | "post_with_mac" | "social" | "resume";
 
 export interface MacRow {
   chip: string;
@@ -160,7 +163,7 @@ export function macRow(job: PublishingJob, ctx: MacRowContext | null): MacRow | 
     if (macNotSeen(helper, now)) return waiting(W.rowNotSeenWords(clockWords(helper!.seenAt, now)));
     if (helper!.state === "needs_you" && helper!.needsYouJobId !== job.publishingJobId)
       return waiting(W.MAC_ROW_NEEDS_YOU, helper!.needsYouStoryId ? ["open_stopped"] : [], helper!.needsYouStoryId ? { stoppedStoryId: helper!.needsYouStoryId } : {});
-    if (helper!.state === "paused") return waiting(W.MAC_ROW_PAUSED);
+    if (helper!.state === "paused") return helper!.resumeRequest ? waiting(W.MAC_ROW_STARTING) : waiting(W.MAC_ROW_PAUSED, ["resume"]);
     return waiting(W.rowWaitWords(macPlace(status.queue, job.publishingJobId, now)));
   }
 
@@ -173,9 +176,11 @@ export function macRow(job: PublishingJob, ctx: MacRowContext | null): MacRow | 
     return { chip, tone: "sun", line: W.MAC_ROW_PRESSED + from, buttons: over ? ["on_tiktok", "again_ask"] : ["on_tiktok"], look: "mac" };
   }
   if (stuck) return { chip, tone: "coral", line: W.MAC_ROW_STOPPED_EARLY, buttons: ["try_again"], look: "failed" };
-  // An account problem is fixed in Social accounts first (§45.36 E9).
+  // An account problem is fixed in Social accounts first (§45.36 E9); a login on the Mac at the TikTok card (Log in
+  // on my Mac), then Try again.
   const social = /Social accounts/i.test(mac.reason ?? "");
-  return { chip, tone: "coral", line: W.rowFailedWords(shortReason(mac.reason)), buttons: social ? ["social", "try_again"] : ["try_again"], look: "failed" };
+  const login = loginReason(mac.reason);
+  return { chip, tone: "coral", line: W.rowFailedWords(shortReason(mac.reason)), buttons: social ? ["social", "try_again"] : login ? ["set_up", "try_again"] : ["try_again"], look: "failed" };
 }
 
 /** A waiting or working Mac post: Review reads the posts again every 10 seconds while there is one. */

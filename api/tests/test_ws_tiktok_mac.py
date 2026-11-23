@@ -25,6 +25,7 @@ PUBLISH = f"{WSP}/stories/{sup.STORY_ID}/publish"
 STATUS = f"{WSP}/tiktok/mac"
 PING = f"{WSP}/tiktok/mac/ping"
 LOGIN = f"{WSP}/tiktok/mac/login"
+REQUEST = f"{WSP}/tiktok/mac/request"
 JOB_ID = "01JZ0000000000000000000PJ1"
 JOB_SK = f"PUBJOB#{JOB_ID}"
 STORY_SK = f"STORY#{sup.STORY_ID}"
@@ -463,6 +464,40 @@ def test_log_in_on_my_mac_needs_a_new_helper_and_its_ping_clears_it(
     clips_untouched(table)
 
 
+def test_start_my_mac_again_needs_a_paused_new_helper_and_its_ping_clears_it(
+    call: Call, table: FakeTable, starter: sup.FakeStarter
+) -> None:
+    """§47.10.4: Start my Mac again in Clips Funded (a paused Mac): the helper ends this Mac's pause on its next tick,
+    and its ping's ``resumeDone`` clears the request (an older one never does)."""
+    status, body = call("POST", REQUEST, {"action": "resume"})  # no Mac ever checked in
+    assert (status, body["error"]["message"]) == (409, "Update the helper on your Mac first.")
+    ping = {"state": "ok", "version": "1.1.9", "device": DEVICE, "setUp": True}
+    call("POST", PING, {**ping, "state": "paused", "reason": "Paused on your Mac."})
+    status, body = call("POST", REQUEST, {"action": "resume"})
+    assert (status, body["error"]["message"]) == (409, "Update the helper on your Mac first.")
+    call("POST", PING, {**ping, "version": "1.2.0"})
+    status, body = call("POST", REQUEST, {"action": "resume"})
+    assert (status, body["error"]["message"]) == (409, "Your Mac isn't paused.")
+    assert "resumeRequestAt" not in stored(table, "MACHELPER")
+    call("POST", PING, {**ping, "version": "1.2.0", "state": "paused", "reason": "Paused on your Mac."})
+    assert call("POST", REQUEST, {"action": "let_go"})[0] == 400
+    assert call("POST", REQUEST, {"action": "resume", "x": 1})[0] == 400
+    status, body = call("POST", REQUEST, {"action": "resume"})
+    assert status == 200, body
+    assert body["helper"]["resumeRequest"] == {"at": "2026-11-15T12:00:00.000Z"}
+    assert call("GET", STATUS, query={"version": "1.2.0"})[1]["helper"]["resumeRequest"] == {
+        "at": "2026-11-15T12:00:00.000Z"
+    }
+    call("POST", PING, {**ping, "version": "1.2.0", "resumeDone": "2026-11-15T11:00:00.000Z"})  # an older one
+    assert "resumeRequestAt" in stored(table, "MACHELPER")
+    assert call("POST", PING, {**ping, "version": "1.2.0", "resumeDone": "x" * 41})[0] == 400
+    call("POST", PING, {**ping, "version": "1.2.0", "resumeDone": "2026-11-15T12:00:00.000Z"})
+    item = stored(table, "MACHELPER")
+    assert "resumeRequestAt" not in item
+    assert item["state"] == "ok"
+    clips_untouched(table)
+
+
 # --- the claim ---------------------------------------------------------------------------------------------------
 
 
@@ -713,6 +748,43 @@ def test_done_posts_it_on_the_story_once(
     assert snapshot(table) == before
     assert call("POST", job_path("done"), {"device": "mac-2", "link": link})[0] == 200  # it is posted: nothing left
     clips_untouched(table)
+
+
+def test_a_post_handed_over_from_only_me_takes_the_place_of_its_private_link_on_the_story(
+    call: Call, store: db.Store, table: FakeTable, starter: sup.FakeStarter
+) -> None:
+    private = "https://www.tiktok.com/@lamostories/video/7300000000000000009"
+    youtube = {"platform": "youtube", "url": "https://youtu.be/abc"}
+    store.update(sup.PK, STORY_SK, {"posted": [{"platform": "tiktok", "url": private}, youtube]})
+    mac_job(store, beforeMac={"publishingStatus": "posted", "url": private, "privacy": "private"})
+    assert claim(call)[0] == 200
+    call("POST", job_path("step"), {"device": DEVICE, "step": "pressing"})
+    status, body = call("POST", job_path("done"), {"device": DEVICE, "link": LINK, "attempt": 1})
+    assert status == 200, body
+    # One TikTok link on the story, the public one, in the private one's place; the others stay.
+    assert stored(table, STORY_SK)["posted"] == [{"platform": "tiktok", "url": LINK}, youtube]
+    clips_untouched(table)
+
+
+def test_the_story_keeps_one_link_per_post() -> None:
+    from clipfactory_api.workspaces import story_posted
+
+    a, b = "https://www.tiktok.com/@x/video/7300000000000000001", "https://www.tiktok.com/@x/video/7300000000000000002"
+    story = {"status": "published", "publishedAt": "2026-11-15T11:00:00.000Z", "version": 3}
+    same = {**story, "posted": [{"platform": "tiktok", "url": a}]}
+    assert story_posted.story_write(same, "tiktok", a, "t", NOW) is None  # a replay adds nothing
+    assert story_posted.story_write(same, "tiktok", a, "t", NOW, replace=a) is None
+    write = story_posted.story_write(same, "tiktok", b, "t", NOW, replace=a)
+    assert write is not None
+    assert write.values[":f0"] == [{"platform": "tiktok", "url": b}]
+    both = {**story, "posted": [{"platform": "tiktok", "url": a}, {"platform": "tiktok", "url": b}]}
+    write = story_posted.story_write(both, "tiktok", b, "t", NOW, replace=a)
+    assert write is not None
+    assert write.values[":f0"] == [{"platform": "tiktok", "url": b}]
+    # Without replace an earlier link stays (the story flow's own posts, as before).
+    write = story_posted.story_write(same, "tiktok", b, "t", NOW)
+    assert write is not None
+    assert write.values[":f0"] == [{"platform": "tiktok", "url": a}, {"platform": "tiktok", "url": b}]
 
 
 def test_done_only_from_the_claim_that_has_the_job(call: Call, store: db.Store, starter: sup.FakeStarter) -> None:

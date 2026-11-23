@@ -177,17 +177,19 @@ export const windowAsk = (target) => `Log in to TikTok as ${target} in the windo
 export const otherAsk = (seen, target) => `That's ${seen}. Log in as ${target}.`;
 
 /**
- * The owner logs the lane's own Chrome profile in to TikTok as ``target``: a visible window at TikTok's QR code page
- * (Continue with Google works there too), with the yellow frame and one pop-up. The helper never attaches to the
+ * The owner logs the lane's own Chrome profile in to TikTok as ``target``: a visible window at TikTok's QR code page,
+ * scanned with the TikTok app on that account, with the yellow frame and one pop-up. The lane's old cookies go first
+ * (``forget``), so a session TikTok ended on its side never reads as a login. The helper never attaches to the
  * window's page; it only watches for TikTok's session cookie, then closes the window, opens the profile headless
  * and reads who it is. The target is pinned only when the handle reads as the target (and is never Clip Factory's
- * handle or uid). Another account's login is wiped from that profile and the window opens once more, within the
- * same 20 minutes. Nothing is typed, no password is asked, read or kept.
+ * handle or uid); any Google cookies then leave the profile (``forgetGoogle``). Another account's login is wiped
+ * from that profile and the window opens once more, within the same 20 minutes. Nothing is typed, no password is
+ * asked, read or kept, and the window's profile never saves one (chrome.js hardenProfile).
  *
  * Every Mac action comes from ``d`` (run.js builds it; tests use fakes):
- *   closeAll(), openWindow(url), sessionSeen() → true | false | null (gone), closeWindow(),
- *   headless() → {seen, clear(), quit()}, ask(text) → close(), event(kind, fields), sleep(ms), now() → ms,
- *   clips → {handle?, uid?} (Clip Factory's account, which this lane must never be), pin(account)
+ *   closeAll(), forget(), openWindow(url), sessionSeen() → true | false | null (gone), closeWindow(),
+ *   headless() → {seen, clear(), forgetGoogle(), quit()}, ask(text) → close(), event(kind, fields), sleep(ms),
+ *   now() → ms, clips → {handle?, uid?} (Clip Factory's account, which this lane must never be), pin(account)
  * @returns {Promise<{ok: boolean, outcome: "ok"|"timeout"|"closed"|"wrong"|"unknown"|"no_account"|"clips_account",
  *   handle?: string, uid?: string, seen?: string}>}
  */
@@ -210,6 +212,7 @@ export async function loginWindow(lane, target, d) {
   const until = d.now() + LOGIN_WINDOW_MS;
   let close = d.ask(windowAsk(want));
   try {
+    await d.forget?.();
     for (let opens = 0; opens < 2 && d.now() < until; opens++) {
       await d.closeAll();
       await d.openWindow(QR_URL);
@@ -237,6 +240,7 @@ export async function loginWindow(lane, target, d) {
         const isClips = clipsName && (seen.handles || []).some((h) => bare(h) === clipsName);
         const res = isClips ? { verdict: "wrong", seen: at(clips.handle) } : sameAccount(seen, want, null, { notUid: clips.uid || null });
         if (res.verdict === "same") {
+          await look.forgetGoogle?.();
           d.pin({ handle: want, ...(res.uid ? { uid: res.uid } : {}) });
           outcome = "ok";
           result = { ok: true, outcome, handle: want, ...(res.uid ? { uid: res.uid } : {}) };

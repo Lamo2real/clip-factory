@@ -7,6 +7,7 @@ import {
   backlogAt,
   beatTargets,
   claimFields,
+  earlierIds,
   neverTwice,
   nextAction,
   pickWork,
@@ -343,6 +344,16 @@ test("a fresh claim forgets the last try's press, baseline and step; a resumed t
   assert.deepEqual(claimFields({ device, tries: 2, fresh: false }), { device, step: "claimed", tries: 2 });
 });
 
+test("a fresh claim after a press keeps the Studio ids from before that press (a Try again can find the first post)", () => {
+  const ids = earlierIds({ pressedAt: "2026-11-23T20:00:00Z", baseline: ["v1", "v2"], earlier: ["v0"] });
+  assert.deepEqual(ids, ["v0", "v1", "v2"]);
+  assert.deepEqual(claimFields({ device, tries: 1, fresh: true, earlier: ids }), { device, step: "claimed", tries: 1, pressedAt: null, baseline: null, sentStep: null, earlier: ids });
+  // Never pressed: no ids; a resumed try writes none either.
+  assert.deepEqual(earlierIds({ baseline: ["v1"] }), []);
+  assert.deepEqual(earlierIds(undefined), []);
+  assert.deepEqual(claimFields({ device, tries: 2, fresh: false, earlier: ids }), { device, step: "claimed", tries: 2 });
+});
+
 // D2: the beat. The job being posted gets its last acknowledged step; this Mac's other pressed jobs get "finding".
 test("beatTargets: the current job with its last step and attempt, and this Mac's other pressed working jobs", () => {
   const state = fresh();
@@ -523,4 +534,10 @@ test("a Clips Funded check-in carries exactly the keys its server knows", () => 
   assert.equal(ny.handle, undefined);
   assert.equal(ny.loginDone, "2026-11-23T20:00:00Z");
   assert.deepEqual(Object.keys(ny).sort(), ["device", "loginDone", "reason", "setUp", "state", "version"]);
+});
+
+test("a Clips Funded check-in says when the owner's Start my Mac again was done", () => {
+  const body = wsPingBody({ version: "1.2.0", device, action: { action: "idle" }, needsYou: false, setUp: true, resumeDone: "2026-11-23T21:00:00Z" });
+  assert.equal(body.resumeDone, "2026-11-23T21:00:00Z");
+  assert.equal(wsPingBody({ version: "1.2.0", device, action: { action: "idle" }, needsYou: false, setUp: true }).resumeDone, undefined);
 });

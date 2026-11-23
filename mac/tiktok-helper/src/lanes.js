@@ -12,8 +12,11 @@ import { remember, saveState } from "./store.js";
 import { REASONS, WS_REASONS, laneWords } from "./tiktok.js";
 import { at, bare } from "./whoami.js";
 
-/** A Clips Funded workspace id the helper accepts (its profile folder and state key are made from it). */
-export const WS_ID = /^[a-z0-9][a-z0-9-]{0,39}$/;
+/**
+ * A Clips Funded workspace id the helper accepts (its profile folder and state key are made from it): a plain one
+ * ("stories") or the server's generated one (26 letters and digits, types.py's workspace id).
+ */
+export const WS_ID = /^(?:[a-z0-9][a-z0-9-]{0,39}|[0-9A-HJKMNP-TV-Z]{26})$/;
 
 const iso = () => new Date().toISOString();
 
@@ -161,6 +164,32 @@ export function wsLane(root, workspaceId, api) {
       saveState(root);
     },
   };
+}
+
+/**
+ * The TikTok accounts a lane must never post to or look in (D3, rule 1: never cross accounts): every other lane's.
+ * For Clip Factory's lane, each Clips Funded lane's account (the one its workspace has connected, and the one its
+ * profile was set up as); for a Clips Funded lane, Clip Factory's account and every other Clips Funded lane's. An
+ * account a profile was only seen logged in to (a wrong login) never counts.
+ * @returns {{handles: string[], uids: string[]}}
+ */
+export function otherAccounts(root, laneId) {
+  const handles = [];
+  const uids = [];
+  const add = (handle, uid) => {
+    const h = at(handle);
+    if (h && !handles.some((x) => bare(x) === bare(h))) handles.push(h);
+    if (/^\d{5,25}$/.test(String(uid ?? "")) && !uids.includes(String(uid))) uids.push(String(uid));
+  };
+  if (laneId !== "clips") add(root?.clipsAccount?.handle, root?.clipsAccount?.uid);
+  for (const [id, store] of Object.entries(root?.ws || {})) {
+    if (`ws:${id}` === laneId || !store || typeof store !== "object") continue;
+    const own = at(store.connected);
+    const account = store.account;
+    if (account && (account.setUpAt || (own && bare(account.handle) === bare(own)))) add(account.handle, account.uid);
+    add(own);
+  }
+  return { handles, uids };
 }
 
 /** Is this ws lane's profile logged in as the workspace's TikTok (``target``, the status's account handle)? */

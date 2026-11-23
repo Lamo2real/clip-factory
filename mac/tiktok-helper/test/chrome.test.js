@@ -9,7 +9,7 @@ import { test } from "node:test";
 const base = fs.mkdtempSync(path.join(os.tmpdir(), "cf-chrome-test-"));
 process.env.CF_TT_BASE = base;
 delete process.env.CF_TT_PORT;
-const { CLIPS_CHROME, flags, proves } = await import("../src/chrome.js");
+const { CLIPS_CHROME, PLAIN_FLAGS, flags, hardenProfile, proves } = await import("../src/chrome.js");
 const { clipsLane, wsLane } = await import("../src/lanes.js");
 
 const WS = "ws://127.0.0.1:9340/devtools/browser/4b1c6a2e-1f1e-4a3b-9b3c-2d3e4f5a6b7c";
@@ -38,4 +38,27 @@ test("each lane's flags carry its own profile and port; the rest is the same for
   // Clip Factory's default is 1.1.0's profile and port.
   assert.deepEqual(flags().slice(0, 2), clips.slice(0, 2));
   assert.equal(CLIPS_CHROME.port, 9339);
+});
+
+test("the owner's login window never saves a password or signs Chrome in to Google (its profile, merged)", () => {
+  const profile = path.join(base, "chrome-ws-harden");
+  fs.mkdirSync(path.join(profile, "Default"), { recursive: true });
+  const file = path.join(profile, "Default", "Preferences");
+  fs.writeFileSync(file, JSON.stringify({ intl: { accept_languages: "en-US" }, profile: { name: "Person 1", password_manager_enabled: true }, credentials_enable_service: true }));
+  hardenProfile(profile);
+  const prefs = JSON.parse(fs.readFileSync(file, "utf8"));
+  assert.equal(prefs.credentials_enable_service, false);
+  assert.equal(prefs.credentials_enable_autosignin, false);
+  assert.deepEqual(prefs.profile, { name: "Person 1", password_manager_enabled: false });
+  assert.equal(prefs.signin.allowed, false);
+  assert.equal(prefs.autofill.profile_enabled, false);
+  assert.deepEqual(prefs.intl, { accept_languages: "en-US" }); // the rest stays
+  // A new profile gets the same, and a broken file is replaced.
+  const fresh = path.join(base, "chrome-ws-new");
+  hardenProfile(fresh);
+  assert.equal(JSON.parse(fs.readFileSync(path.join(fresh, "Default", "Preferences"), "utf8")).credentials_enable_service, false);
+  fs.writeFileSync(file, "{not json");
+  hardenProfile(profile);
+  assert.equal(JSON.parse(fs.readFileSync(file, "utf8")).signin.allowed, false);
+  assert.deepEqual(PLAIN_FLAGS, ["--disable-sync"]);
 });

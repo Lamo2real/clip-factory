@@ -30,6 +30,8 @@ export interface PostMacProps {
   onPosted: (job: PublishingJob, body: { link: string } | { noLink: true }) => Promise<string | null>;
   /** Post with my Mac: Post it with only TikTok ticked */
   onPostWithMac?: (job: PublishingJob) => void;
+  /** Start my Mac again (a paused Mac): answers the problem to show, or null once asked */
+  onResume?: () => Promise<string | null>;
 }
 
 /** "Open Social accounts": the way to fix an account problem, next to Try again (§45.36 E9). */
@@ -160,6 +162,17 @@ function MacPostRow({ job, row, mac, onRetry, busy }: { job: PublishingJob; row:
       setSaving(false);
     }
   }
+  async function resume() {
+    if (saving || !mac?.onResume) return;
+    setSaving(true);
+    setProblem(null);
+    try {
+      const why = await mac.onResume();
+      if (why) setProblem(why);
+    } finally {
+      setSaving(false);
+    }
+  }
   function saveLink() {
     const l = link.trim();
     if (!l) return setProblem(MW.MAC_LINK_EMPTY);
@@ -264,6 +277,16 @@ function MacPostRow({ job, row, mac, onRetry, busy }: { job: PublishingJob; row:
               );
             case "social":
               return <SocialAccountsLink key={b} />;
+            case "resume":
+              return mac?.onResume ? (
+                <button key={b} type="button" className={`${small} st-btn--main`} aria-disabled={saving || undefined} onClick={() => void resume()}>
+                  {saving ? "Asking your Mac…" : MW.MAC_RESUME}
+                </button>
+              ) : (
+                <A key={b} href={MAC_CARD_HREF} className={`${small} st-btn--main`}>
+                  {MW.MAC_RESUME}
+                </A>
+              );
             case "post_with_mac":
               return mac?.onPostWithMac ? (
                 <button key={b} type="button" className={`${small} st-btn--main`} onClick={() => mac.onPostWithMac?.(job)}>

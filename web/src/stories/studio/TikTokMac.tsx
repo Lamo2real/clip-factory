@@ -37,7 +37,7 @@ type CardState = {
   line: string;
   tone: "sky" | "sun" | "coral";
   steps?: string[];
-  button?: "login" | "login_quiet" | "open_stopped";
+  button?: "login" | "login_quiet" | "open_stopped" | "resume";
 };
 
 /** What the card says while the switch is on (§47.10.6), from the Mac's last check-in. */
@@ -47,7 +47,7 @@ export function cardState(helper: WsMacHelper | null, handle: string, now: numbe
   if (helper.loginRequest) return { line: W.MAC_ASKED, tone: "sky" };
   if (helper.state === "needs_you")
     return { line: W.needsYouWords(helper.reason), tone: "coral", button: loginReason(helper.reason) ? "login" : helper.needsYouStoryId ? "open_stopped" : undefined };
-  if (helper.state === "paused") return { line: W.MAC_CARD_PAUSED, tone: "sun" };
+  if (helper.state === "paused") return helper.resumeRequest ? { line: W.MAC_CARD_STARTING, tone: "sky" } : { line: W.MAC_CARD_PAUSED, tone: "sun", button: "resume" };
   if (!helper.setUp) return { line: W.notLoggedInWords(handle), tone: "sun", steps: W.macSteps(handle, 2), button: "login" };
   return { line: W.checkedInWords(clockWords(helper.seenAt, now), helper.handle ?? handle), tone: "sky", button: "login_quiet" };
 }
@@ -60,22 +60,24 @@ export function TikTokMac({ ws, account }: { ws: string; account: SocialAccount 
   const on = config.tiktokMac?.on === true;
   const [asking, setAsking] = useState(false);
   const [waiting, setWaiting] = useState(false);
-  // While a login waits, the card looks again every 10 seconds until the Mac did it.
+  // While a login or a start waits, the card looks again every 10 seconds until the Mac did it.
   const status = useMacStatus(ws, on, waiting ? 10_000 : 60_000);
   const helper = status.data?.helper ?? null;
   const handle = status.data?.account?.handle || account.handle || "your Clips Funded TikTok";
-  if (waiting !== !!helper?.loginRequest) setWaiting(!!helper?.loginRequest);
+  const asked = !!helper?.loginRequest || !!helper?.resumeRequest;
+  if (waiting !== asked) setWaiting(asked);
 
   // The rows' Turn on and Set it up land here.
   useEffect(() => {
     if (typeof location !== "undefined" && location.hash === `#${MAC_CARD_ID}`) box.current?.scrollIntoView?.({ block: "center" });
   }, []);
 
-  async function login() {
+  /** Log in on my Mac, or Start my Mac again: the Mac does it on its next tick. */
+  async function ask(what: "login" | "resume") {
     if (asking) return;
     setAsking(true);
     try {
-      const r = await storiesApi().macLogin(ws);
+      const r = what === "login" ? await storiesApi().macLogin(ws) : await storiesApi().macResume(ws);
       status.setData((d) => (d ? { ...d, helper: r.helper } : d));
     } catch (e) {
       toast.error(friendlyMessage(e));
@@ -127,8 +129,12 @@ export function TikTokMac({ ws, account }: { ws: string; account: SocialAccount 
                 <StLinkButton href={storiesHref({ name: "review_story", storyId: helper.needsYouStoryId })} main>
                   {W.MAC_OPEN_STOPPED}
                 </StLinkButton>
+              ) : state.button === "resume" ? (
+                <StButton main aria-disabled={asking || undefined} onClick={() => void ask("resume")}>
+                  {asking ? "Asking your Mac…" : W.MAC_RESUME}
+                </StButton>
               ) : (
-                <StButton main={state.button === "login"} quiet={state.button === "login_quiet"} aria-disabled={asking || undefined} onClick={() => void login()}>
+                <StButton main={state.button === "login"} quiet={state.button === "login_quiet"} aria-disabled={asking || undefined} onClick={() => void ask("login")}>
                   {asking ? "Asking your Mac…" : W.MAC_LOGIN_BUTTON}
                 </StButton>
               )}

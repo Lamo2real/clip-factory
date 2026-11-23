@@ -15,7 +15,7 @@
 //   node src/cli.js whoami [--workspace <id>]  which TikTok the lane's Chrome is logged in to (Clip Factory's lane
 //                                 without --workspace), and the account it may post to. Prints a handle, never a cookie.
 //   node src/cli.js setup --workspace <id>  ON THE OWNER'S COMMAND ONLY: a Clips Funded workspace's one-time TikTok
-//                                 login, in a window on its own profile (the QR code with the TikTok app, or Google)
+//                                 login, in a window on its own profile (the QR code with the TikTok app)
 //   node src/cli.js probe --workspace <id> --story <storyId>  the check run for a Clips Funded story, AI label
 //                                 included; saves probe-ws-<id>.png and posts nothing
 import { client, wsClient } from "./api.js";

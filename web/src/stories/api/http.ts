@@ -291,6 +291,7 @@ export function httpStoriesApi(deps: StoriesHttpDeps = {}): StoriesApi {
     // My Mac posts TikTok (§47.10): the web's three Mac routes; the helper's own (ping, claim, step…) are its own.
     macStatus: (ws) => call<WsMacStatus>("GET", w(ws, "/tiktok/mac")),
     macLogin: (ws) => call<{ helper: WsMacHelper }>("POST", w(ws, "/tiktok/mac/login"), { action: "sign_in" }),
+    macResume: (ws) => call<{ helper: WsMacHelper }>("POST", w(ws, "/tiktok/mac/request"), { action: "resume" }),
     macRetry: async (ws, publishingJobId, body) => (await call<{ job: PublishingJob }>("POST", w(ws, `/publishing/${id(publishingJobId)}/mac/retry`), body ?? {})).job,
     macPosted: async (ws, publishingJobId, body) => (await call<{ job: PublishingJob }>("POST", w(ws, `/publishing/${id(publishingJobId)}/mac/posted`), body)).job,
   };

@@ -147,13 +147,73 @@ test("Clips Funded's own needs-you holds only its lane; its errors never stop Cl
 });
 
 test("without Clip Factory's TikTok account, its clip waits (no claim, no stop): it never posts to an unknown account", async () => {
-  fs.rmSync(path.join(base, "state.json"), { force: true }); // no cached account either
+  fs.rmSync(path.join(base, "state.json"), { force: true }); // no cached account, no posts either
   const routes = common([clipsJob], wsOn({ queue: [] }));
   routes[`GET ${API}/v1/accounts`] = { accounts: [{ platform: "tiktok", status: "not_connected" }] };
   const calls = serve(routes);
   const r = await tick();
-  assert.deepEqual([r.action, r.reason], ["wait", "Checking which TikTok to use."]);
+  assert.deepEqual([r.action, r.reason], ["wait", "Your Mac can't tell which TikTok is Clip Factory's. Connect TikTok in Settings › Posting."]);
   assert.ok(!calls.some((c) => c.url.endsWith("/claim") || c.url.endsWith("/stopped")));
+  // Never silent: Clip Factory's rows say why its TikTok posts wait.
+  const ping = calls.find((c) => c.url === `${API}/v1/tiktok/mac/ping`).body;
+  assert.deepEqual([ping.state, ping.reason], ["paused", r.reason]);
+});
+
+test("1.1.0's Mac with no @name in Settings goes on as before: the account of its own posts is Clip Factory's", async () => {
+  const file = path.join(base, "state.json");
+  fs.rmSync(file, { force: true });
+  serve(common([], wsOn({ queue: [] })));
+  await tick(); // a state.json with this Mac's device
+  const state = JSON.parse(fs.readFileSync(file, "utf8"));
+  delete state.clipsAccount;
+  state.posted = [
+    { clipId: "a", link: "https://www.tiktok.com/@lamo.clips/video/7710644811602169121", at: "2026-11-22T12:00:00Z" },
+    { clipId: "b", link: "https://www.tiktok.com/@lamo.clips/video/7710644811602169122", at: "2026-11-22T18:00:00Z" },
+  ];
+  fs.writeFileSync(file, JSON.stringify(state));
+  const routes = common([clipsJob], wsOn({ queue: [] }));
+  routes[`GET ${API}/v1/accounts`] = { accounts: [{ platform: "tiktok", status: "connected", handle: "Lamo Clips" }] };
+  const calls = serve(routes);
+  assert.equal((await tick()).action, "claim_refused"); // its clip is claimed, as in 1.1.0
+  assert.ok(calls.some((c) => c.url === `${API}/v1/clips/c1/tiktok/mac/claim`));
+  assert.equal(JSON.parse(fs.readFileSync(file, "utf8")).clipsAccount.handle, "@lamo.clips");
+  assert.equal(calls.find((c) => c.url === `${API}/v1/tiktok/mac/ping`).body.state, "ok");
+});
+
+test("posts on two accounts, or on a Clips Funded account, never become Clip Factory's account", async () => {
+  const { postedHandle } = await import("../src/run.js");
+  const link = (h, n) => ({ link: `https://www.tiktok.com/@${h}/video/77106448116021691${n}` });
+  assert.equal(postedHandle({ posted: [link("lamo.clips", 21), link("lamo.clips", 22)] }), "@lamo.clips");
+  assert.equal(postedHandle({ posted: [link("lamo.clips", 21), link("clips.funded", 22)] }), null);
+  assert.equal(postedHandle({ posted: [] }), null);
+  assert.equal(postedHandle({ posted: [link("clips.funded", 21)], ws: { stories: { connected: "@clips.funded" } } }), null);
+});
+
+test("the owner's Start my Mac again in Clips Funded ends this Mac's pause, and its ping says it was done", async () => {
+  fs.writeFileSync(path.join(base, "settings.json"), JSON.stringify({ paused: true }));
+  const at = "2026-11-23T21:00:00.000Z";
+  const calls = serve(common([], wsOn({ queue: [], helper: { seenAt: "2026-11-23T20:59:00Z", state: "paused", setUp: true, version: VERSION, resumeRequest: { at } } })));
+  await tick();
+  assert.equal(JSON.parse(fs.readFileSync(path.join(base, "settings.json"), "utf8")).paused, false);
+  const ping = calls.find((c) => c.url === `${W}/tiktok/mac/ping`).body;
+  assert.deepEqual([ping.state, ping.resumeDone], ["ok", at]);
+  // The workspace's connected account is kept: Clip Factory's lane never posts to it.
+  assert.equal(JSON.parse(fs.readFileSync(path.join(base, "state.json"), "utf8")).ws.stories.connected, "@clips.funded");
+});
+
+test("while Clip Factory's clip goes first, Clips Funded's pressed post still gets its beat", async () => {
+  const file = path.join(base, "state.json");
+  fs.writeFileSync(path.join(base, "settings.json"), JSON.stringify({}));
+  serve(common([], wsOn({ queue: [] })));
+  await tick();
+  const state = JSON.parse(fs.readFileSync(file, "utf8"));
+  state.ws.stories.ledger["pj-1"] = { device: state.device, step: "finding", pressedAt: "2026-11-23T20:10:00Z" };
+  fs.writeFileSync(file, JSON.stringify(state));
+  const pressed = { ...wsJob, state: "working", pressedAt: "2026-11-23T20:10:00Z", attempt: 1 };
+  const calls = serve({ ...common([clipsJob], wsOn({ queue: [pressed] })), [`POST ${W}/publishing/pj-1/mac/step`]: { job: {} } });
+  assert.equal((await tick()).action, "claim_refused");
+  const beat = calls.find((c) => c.url === `${W}/publishing/pj-1/mac/step`);
+  assert.deepEqual(beat.body, { device: state.device, step: "finding", attempt: 1 });
 });
 
 test("a TikTok token that needs renewing is still Clip Factory's account: its Mac posts don't wait for a reconnect", async () => {

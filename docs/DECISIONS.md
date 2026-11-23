@@ -2460,15 +2460,17 @@ Amends ADR-45.
   workspace on new routes in Clips Funded's own Lambda and partition, each lane with its own Chrome profile, port,
   ledger, needs-you and login. For the @clips.funded login (it signs in with Google): (a) a TikTok password for
   @clips.funded in the Keychain, which he would have to make and type; (b) an email-code login, which still needs his
-  inbox and his turn each time; (c) one visible sign-in in the lane's own Chrome profile with the TikTok app's QR code
-  (or Continue with Google), the helper never attached to that window.
+  inbox and his turn each time; (c) one visible sign-in in the lane's own Chrome profile with the TikTok app's QR code,
+  the helper never attached to that window (Continue with Google there would type his Google password on the Mac, so
+  the code is the documented way, and the window's profile is hardened so it can't save a password either).
 - **Decision.** (CONTRACTS §47.10, §45.14) Option 3 with login (c). Helper 1.2.0 runs Clip Factory's lane first every
   tick, exactly as 1.1.0, and a Clips Funded lane only when Clip Factory's has nothing to post, resume or find; a ws
   error never reaches Clip Factory's lane. Before Studio › Posts is read, right before Post, before every look for a
   link and on the link itself, the helper reads the signed-in handle (the passport answer, Studio's own post links,
   the page's rehydration data) and refuses unless it is the lane's target: the job's recorded `@handle` for Clips
-  Funded, `GET /v1/accounts`' TikTok handle for Clip Factory; the server's claim re-checks the open_id and the stored
-  handle, and done refuses a link on another account. Clips Funded's Mac posts are always Everyone with Comments, Duet
+  Funded, `GET /v1/accounts`' TikTok handle for Clip Factory (else the one account of the helper's own Clip Factory
+  posts, so a 1.1.0 Mac goes on as it did). Each lane also refuses every other lane's account by handle and uid, both
+  ways. The server's claim re-checks the open_id and the stored handle, and done refuses a link on another account. Clips Funded's Mac posts are always Everyone with Comments, Duet
   and Stitch on, Disclose post content off and TikTok's "AI-generated content" switch on and read back (no switch, no
   post). `MAC_WS_FROM = "1.2.0"` gates the queue and the claim. The switch is `StoriesConfig.tiktokMac`, shown as **My
   Mac posts TikTok** in Clips Funded's TikTok card, which also shows the Mac's state and **Log in on my Mac**. The web
@@ -2481,10 +2483,12 @@ Amends ADR-45.
   more place. *Reading the handle from www.tiktok.com's feed links*: those are other people's videos, so off Studio
   only the account's own data counts.
 - **Consequences.** No Clip Factory route, server file, web file or Terraform changes; Clip Factory's ping keeps its
-  keys and now says 1.2.0. A Clips Funded post can make one Clip Factory job wait one tick at most (about 20 minutes
-  at worst). A later TikTok logout of @clips.funded is the owner's turn again (no saved login): the row says so and
-  the card has Log in on my Mac. If no handle source is readable, nothing posts in either lane (`whoami` before 1.2.0
-  starts is the go-live gate, and Clip Factory's stored TikTok handle must be its @username). TikTok may link two
+  keys and now says 1.2.0 (and `paused`, with why, when it can't tell which TikTok is Clip Factory's). A Clips Funded
+  post can make one Clip Factory job wait one tick at most (about 40 minutes at worst, when it meets a logout). A later
+  TikTok logout of @clips.funded is the owner's turn again (no saved login): the row says so with **Set it up** and the
+  card has Log in on my Mac, which clears the profile's old cookies first. A paused Mac has **Start my Mac again** in
+  Clips Funded too (the same pause as Clip Factory's). If no handle source is readable, nothing posts in either lane
+  (`whoami` before 1.2.0 starts is the go-live gate). TikTok may link two
   automated accounts on one Mac and network, so an automation flag could hit both; the owner accepted the automation
-  risk for @lamo.clips on 22 Nov. Mac-posted Clips Funded videos get no view numbers yet. Only a Clips Funded
-  workspace whose id is lower case (the first one, `stories`) is a lane in 1.2.0.
+  risk for @lamo.clips on 22 Nov. Mac-posted Clips Funded videos get no view numbers yet, and It's on TikTok is
+  paste-only (no Find it for me); both are follow-ups.
