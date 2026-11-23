@@ -110,23 +110,23 @@
   --st-ember-rgb: 255 138 61; /* old name of --st-accent-rgb */
 
   /* ========== 4. Veils: the least smoky tint that keeps every word at 4.5:1 over the lightest pixel behind ==========
-     These are Ember's (worked out from the stage through each glass's own filter, which dims it first: --st-dim, 5).
-     stories/look.ts sets every look's own numbers inline on .stories-app. 23 Nov (the owner: "more see through in a
-     liquid glassy style"): over the colours the tint is thin and the filter's brightness() does the rest, so 0.84 of
-     the stage shows through the rail and 0.82 through a card (0.38 and 0.42 before); bars and sheets dim more (a cream
-     card or the action can be under them). Over a white or busy desktop (See-through in the app) no web filter reaches
+     These are Ember's (worked out from the stage as drawn: over the colours no glass dims, 5). stories/look.ts sets
+     every look's own numbers inline on .stories-app. 23 Nov (the owner: "more see through in a liquid glassy style"):
+     over the colours the tint is as thin as the words allow, so 0.59 of the stage shows through the rail and 0.54
+     through a card (0.38 and 0.42 before). Over a white or busy desktop (See-through in the app) no web filter reaches
      the desktop, so the measured veils hold (revise-notes, worst contrast in brackets): tiles 0.74 (5.34:1),
      colour-tinted tiles 0.80 with the colour cut to 0.12 (5.12:1), hero glass 0.76 (5.14:1, glare only in a top band
      with no words), the rail 0.78 (6.47:1); Frosted a 0.30 window frost with panels at 0.89 (9.91:1). Over a picture
-     the filter dims it (0.5), so the drawn veils there are thinner and never lighter, dimmed, than those floors. A
-     sheet's veil is lower than the rail's because its level-5 light covers the rest (5a: the light takes its share). */
+     each glass's filter dims it (--st-dim), so the drawn veils there are thinner and never lighter, dimmed, than those
+     floors. A sheet's veil is lower than the rail's because its level-5 light covers the rest (5a: the light takes its
+     share). */
   --st-veil-page: 0; /* over the whole backdrop, between the panels */
-  --st-veil-card: 0.18; /* .st-glass */
-  --st-veil-tinted: 0.48; /* .st-glass--tinted, under its 0.12 colour */
-  --st-veil-hero: 0.31; /* .st-glass--hero */
-  --st-veil-rail: 0.16; /* the rail */
-  --st-veil-bar: 0.38; /* .st-glass--bar: the top bar, the phone tab bar */
-  --st-veil-float: 0.62; /* .st-glass--float: sheets, menus, toasts (with its level-5 light it covers 0.82 or more) */
+  --st-veil-card: 0.46; /* .st-glass */
+  --st-veil-tinted: 0.63; /* .st-glass--tinted, under its 0.12 colour */
+  --st-veil-hero: 0.53; /* .st-glass--hero */
+  --st-veil-rail: 0.41; /* the rail */
+  --st-veil-bar: 0.66; /* .st-glass--bar: the top bar, the phone tab bar */
+  --st-veil-float: 0.7; /* .st-glass--float: sheets, menus, toasts (with its level-5 light it covers 0.9 or more) */
   --st-veil-plate: 0; /* .st-plate: behind loose words (0 over Ember, measured over a desktop or picture) */
   --st-veil-solid: 0.96; /* reduced transparency */
   --st-veil-lens-rim: 0.12; /* a liquid hero's own tint: its filter lays the rest of --st-veil-hero under the words, so
@@ -259,19 +259,20 @@
   --st-s-fill-2: rgb(255 243 228 / 0.13);
   --st-s-fill-3: rgb(255 243 228 / 0.2);
 
-  /* Each glass's own backdrop-filter does the work of a thick tint: a heavy blur, then brightness() dims what it sees
-     (--st-dim for cards, heroes, tinted tiles and the rail; --st-dim-over for bars, plates and sheets, which a cream
-     card or the action can be under), then saturate() for liquid colour. Dimmed first, so no channel clips before it
-     is dimmed (look.ts filtered, DIM). Where the page draws the backdrop (the colours, a picture) the filter dims it and
-     the tint is thin; over the desktop (data-look="window") the page is transparent and no web filter reaches the
-     desktop: 1, and the measured veils hold. The top level of glass only: glass inside glass is painted over its parent
-     with no filter of its own (glass.css). Never animated, never changed on hover (the WebView2 budget). */
+  /* Each glass's own backdrop-filter: a heavy blur, then brightness() where dimming shows more than a veil alone (a
+     picture: --st-dim for cards, heroes, tinted tiles and the rail, --st-dim-over for bars, plates and sheets; look.ts
+     DIM), then saturate() for liquid colour. Dimmed first, so no channel clips before it is dimmed (look.ts filtered).
+     Over the colours nothing dims (1: the stage is dark, so a thinner veil alone shows as much) and the cards, heroes,
+     tinted tiles and the rail draw no filter at all (nothing to blur, and WebView2 pays per filter); a picture and the
+     desktop turn it on (below). Over the desktop (data-look="window") no web filter reaches it: 1, and the measured
+     veils hold. The top level of glass only: glass inside glass is painted over its parent with no filter of its own
+     (glass.css). Never animated, never changed on hover (the WebView2 budget). */
   --st-blur: 32px;
   --st-blur-float: 40px;
   --st-saturate: 1.5;
-  --st-dim: 0.7; /* look.ts DIM.colours.glass */
-  --st-dim-over: 0.5; /* look.ts DIM.colours.over */
-  --st-filter-glass: blur(var(--st-blur)) brightness(var(--st-dim)) saturate(var(--st-saturate));
+  --st-dim: 1; /* look.ts DIM.colours.glass */
+  --st-dim-over: 1; /* look.ts DIM.colours.over */
+  --st-filter-glass: none; /* cards and plates over the colours (nothing to blur, and WebView2 pays per filter) */
   --st-filter-bar: blur(var(--st-blur)) brightness(var(--st-dim-over)) saturate(var(--st-saturate));
   --st-filter-float: blur(var(--st-blur-float)) brightness(var(--st-dim-over)) saturate(var(--st-saturate));
 
@@ -467,6 +468,7 @@
   --st-s-fill: rgb(var(--st-veil-rgb) / var(--st-veil-card));
   --st-s-fill-2: rgb(var(--st-veil-rgb) / calc(var(--st-veil-card) + 0.06));
   --st-s-fill-3: rgb(var(--st-well-rgb) / calc(var(--st-veil-card) + 0.12));
+  --st-filter-glass: blur(var(--st-blur)) brightness(var(--st-dim)) saturate(var(--st-saturate));
   /* A card inside a card (glass.css .st-glass .st-glass) is painted over its card, which already lays the measured veil
      and its own light, lighter at the top: it lays only a lift of light (--st-elev-raised-lift), the same top to bottom,
      and no veil of its own. A second smoky veil over the card made it darker than the card under it over a white
@@ -481,12 +483,12 @@
   --st-dim: 1;
   --st-dim-over: 1;
 }
-/* A picture: the page draws it, so every glass's filter dims it to half (look.ts DIM.picture) and the drawn veils are
-   thinner (look.ts PICTURE). A glass control or pill loose on the page has no filter of its own, so it keeps the
-   measured card floor (look.ts MEASURED.card, 0.74) rather than a card's thinner veil. */
+/* A picture: main's veils (look.ts PICTURE, DIM.picture 1: a dim showed less of the photo, not more) and main's blur,
+   so the photo's shapes still read through the glass. A glass control or pill loose on the page has no filter of its
+   own and keeps the measured card floor (look.ts MEASURED.card, 0.74): its words hold at 5.0:1 over a white photo. */
 .stories-app[data-look="picture"] {
-  --st-dim: 0.5;
-  --st-dim-over: 0.5;
+  --st-blur: 28px;
+  --st-blur-float: 36px;
   --st-veil-lens-rim: 0.4;
   --st-panel-strong: rgb(var(--st-veil-rgb) / 0.74);
   --st-panel-hover: rgb(var(--st-well-rgb) / 0.86);

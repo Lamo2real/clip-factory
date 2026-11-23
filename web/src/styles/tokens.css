@@ -70,14 +70,17 @@
 
   /* The see-through glass (lib/background.ts works out every number; lib/look.ts sets --panel-veil, --plate-veil,
      --glass-brightness and --backdrop-veil for each look). Here the app's own backdrop (its grain included): every
-     pane's backdrop-filter dims what it sees (brightness(), BRAND_BRIGHTNESS), so it holds bone words at AA with 0.20
-     green and shows 80 % of the backdrop (BRAND_PANEL_VEIL; 0.33 before); words where nothing dims the backdrop (the
-     title and line plates, controls straight on the page) keep 0.33 (BRAND_PLATE_VEIL). */
+     pane's backdrop-filter dims what it sees a little (brightness(), BRAND_BRIGHTNESS) under 0.20 green
+     (BRAND_PANEL_VEIL), the pair that shows the most of the backdrop with bone words at AA: 70 % ((1 - 0.20) x 0.87;
+     main's 0.33 with no dimming showed 67 %). Words where nothing dims the backdrop (the title and line plates,
+     controls straight on the page) keep 0.33 (BRAND_PLATE_VEIL). Layers planned for white as it is (the floating
+     layers, the tab bar, the overlays) set --glass-brightness: 1 on themselves. */
   --panel-veil: 0.2;
   --plate-veil: 0.33;
-  --glass-brightness: 0.73;
+  --glass-brightness: 0.87;
   --backdrop-veil: 0;
-  --glass-blur: 24px;
+  --glass-blur: 24px; /* 18px over a photo (glass.css), so its shapes still read through the glass */
+  --glass-refract-blur: 18px; /* the refracting surfaces' blur (glass.css .glass--refract); 14px over a photo */
   --glass-saturate: 1.6; /* GLASS_SATURATE */
   /* Layers content scrolls under (toasts, the update bar, the setup list and pill, the Ask panel): a thumbnail can
      sit under them, so they plan for white. FLOAT_VEIL and TABBAR_VEIL (icons only, 3:1). */
@@ -87,8 +90,8 @@
   /* The logic of light: one key light above. Every bone lift is paid for with green under it. --light-pay is the
      ladder's pay (lib/background.ts lightPay: the least green that leaves room under the AA ceiling for every level
      above a pane to read a step brighter, over everything the look can show). lib/look.ts sets it on <html> for each
-     look; this is the app's own backdrop (LIGHT_PAY_OWN) until it does, and glass.css has a photo's number. */
-  --light-pay: 0; /* LIGHT_PAY_OWN (and LIGHT_PAY_WINDOW): see-through first, a pane carries no pay */
+     look; this is the app's own backdrop (LIGHT_PAY_OWN) until it does, and glass.css has the white looks' number. */
+  --light-pay: 0; /* LIGHT_PAY_OWN: see-through first, a pane carries no pay */
   --light-panel: 0.04; /* PANEL_LIGHT: E1 top lift, gone by 65 % of the height */
   --light-lead: 0.075; /* LEAD_LIGHT: the hero, the sign-in card, learnings: a whole step over a panel */
   --light-lead-pay: 0; /* LEAD_EXTRA_VEIL */

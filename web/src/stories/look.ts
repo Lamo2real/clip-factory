@@ -10,14 +10,13 @@
 //   Colours      1 to 3 colours drawn as a base and two soft lights. Ember (the owner's warm reference) is the default
 //                choice of the whole Look.
 //
-// The veils: the least smoky tint that keeps every word at 4.5:1 over the lightest pixel each look can show. Where the
-// page draws its own backdrop (the colours, a picture), each glass's own backdrop-filter dims what is behind it first
-// (brightness() below 1, DIM), so the tint can be far thinner and the words still hold: over the colours they are worked
-// out here from exactly what the stage draws (stageAt over STAGE_WINDOWS) through that filter, the way Clip Factory's
-// lib/background.ts does for its own; over a picture the drawn veils (PICTURE) are never lighter, dimmed, than the
-// measured floors over a white photo. Over the desktop (See-through in the app) nothing of the page is behind the glass,
-// so no filter can dim it: there the measured numbers hold (tiles 0.74, tinted tiles 0.80 with the colour cut to 0.12,
-// hero 0.76, rail 0.78, Frosted 0.30 + 0.89). StoriesApp calls useStoriesBackground(root, active) once: it puts the result on
+// The veils: the least smoky tint that keeps every word at 4.5:1 over the lightest pixel each look can show. Over the
+// colours they are worked out here from exactly what the stage draws (stageAt over STAGE_WINDOWS), with floors thin
+// enough that the stage shows through (23 Nov, the owner: "more see through in a liquid glassy style"), the way Clip
+// Factory's lib/background.ts does for its own. No glass dims what it sees (DIM: in Clips Funded a dim takes away as
+// much as the thinner veil gives back). Over a picture or the desktop (See-through in the app) the measured numbers
+// hold (tiles 0.74, tinted tiles 0.80 with the colour cut to 0.12, hero 0.76, rail 0.78, Frosted 0.30 + 0.89), and
+// the light's order keeps the lower levels a step thicker. StoriesApp calls useStoriesBackground(root, active) once: it puts the result on
 // .stories-app (data-look, data-strength, data-glass, the --st-veil-* numbers and the stage colours), and
 // glass.css paints .stories-app::before from them. Stories depends on nothing of Clip Factory's here: the two small
 // readers below are Stories' own copies, and See-through's transparent page is a wish Stories states to the shell
@@ -167,20 +166,34 @@ export const SATURATIONS: readonly number[] = [1, 1.5];
 
 /**
  * How far each glass's own backdrop-filter dims what is behind it (brightness(), glass-tokens.css --st-dim for cards,
- * heroes, tinted tiles and the rail, --st-dim-over for bars, plates and sheets), per look. Where the page draws the
- * backdrop (the colours, a picture) the filter sees it, so the tint can be thinner for the same contrast; over the desktop
- * (window) the page is transparent and the window's own glass shows the desktop, which no web filter can reach: 1.
- * Bars and sheets dim more: a cream card or the action can scroll under them.
+ * heroes, tinted tiles and the rail, --st-dim-over for bars, plates and sheets), per look. Dimming is not free
+ * see-through: what shows of the backdrop through a glass is (1 - veil - its light) x dim (`showThrough`), so it is
+ * used only where it shows more than a veil alone, and in Clips Funded it never does (23 Nov, worked out with every
+ * test of the light): the espresso veil is nearly black, so a dim takes away as much as the thinner veil gives back.
+ * Over the colours a veil alone shows as much (0.57 of the stage through the rail either way), so the cards, heroes,
+ * tinted tiles and the rail draw no filter there at all (the WebView2 budget, as on main) and the bars and sheets only
+ * their blur and saturate. Over a picture the sheet is at its floor over a white photo and the light's order holds
+ * every level under it: dimmed by 0.5 they showed 4 to 13 % of the photo where main's veils show 6 to 14 %, so a
+ * picture keeps main's veils (PICTURE). Over the desktop (window) the page is transparent and the window's own glass
+ * shows the desktop, which no web filter can reach. So every dim is 1, and the model keeps the dim for the day one
+ * pays (the filters carry brightness(var(--st-dim)) at 1).
  */
 export type DimKind = "glass" | "over";
 export const DIM: Readonly<Record<LookKind, Readonly<Record<DimKind, number>>>> = {
-  colours: { glass: 0.7, over: 0.5 },
-  picture: { glass: 0.5, over: 0.5 },
+  colours: { glass: 1, over: 1 },
+  picture: { glass: 1, over: 1 },
   window: { glass: 1, over: 1 },
 };
 /** Which dim each kind of glass's filter has (the page is the backdrop itself: nothing filters it). */
 export const KIND_DIM: Readonly<Record<keyof Veils, DimKind | null>> = { page: null, card: "glass", tinted: "glass", hero: "glass", rail: "glass", bar: "over", float: "over", plate: "over" };
-/** CSS brightness(b) on one colour. */
+/** How much of what is behind shows through a glass of veil `veil` and light `light` (its level's, ELEVATION: the light
+ *  takes its share from what is behind, lit) whose filter dims it to `dim`, under the page veil `page`: a black and
+ *  white edge behind it reads this much through it (measured on main: the rail 0.075, a card 0.118, a hero 0.14 over a
+ *  white desktop). */
+export function showThrough(veil: number, light = 0, dim = 1, page = 0): number {
+  return (1 - page) * Math.max(0, 1 - veil - light) * dim;
+}
+/** CSS brightness(b) on one colour (Chromium and WebKit apply the filter shorthands in sRGB, each channel x b). */
 export function dimRgb([r, g, b]: Rgb, k: number): Rgb {
   return [r * k, g * k, b * k];
 }
@@ -372,17 +385,16 @@ export const WINDOW_CLEAR: Veils = { page: 0, card: 0.84, tinted: 0.8, hero: 0.7
  *  and glass together at or above its measured floor: sheets 0.72 (a control's words on one 4.9:1 over a white desktop),
  *  raised 0.76, tinted 0.77, cards 0.82, panels 0.90 (23 Nov: 0.72 / 0.77 / 0.82 / 0.84 / 0.96 before). */
 export const WINDOW_FROSTED: Veils = { page: 0.3, card: 0.82, tinted: 0.77, hero: 0.76, rail: 0.9, bar: 0.76, float: 0.72, plate: 0.9 };
-/** A picture, as drawn: the page draws it, so each glass's filter dims it (DIM.picture) before its veil. Dimmed, every
- *  glass is never lighter over a white photo than its measured floor over a white desktop (at its top and its bottom;
- *  so over any photo, since the dim only ever takes away, channel by channel), and the light keeps its order over a
- *  white and a mid-grey picture: raised surfaces 0.67, tinted 0.71, sheets 0.72 (their light covers the rest at the
- *  top), cards 0.75, panels 0.86. 23 Nov: the window's 0.79 / 0.80 / 0.74 / 0.84 / 0.90 before. */
-export const PICTURE: Veils = { page: 0, card: 0.75, tinted: 0.71, hero: 0.67, rail: 0.86, bar: 0.67, float: 0.72, plate: 0.86 };
+/** A picture, as drawn: main's veils, the window's (WINDOW_CLEAR). Over a white photo the sheet is at its floor and
+ *  the light's order holds every level under it a step darker, as over a white desktop; a dim (DIM.picture) took away
+ *  as much as the thinner veils gave back (23 Nov: 0.67 to 0.86 at half the light showed 4 to 13 % of the photo, main's
+ *  6 to 14 %), so the glass does not dim a picture. */
+export const PICTURE: Veils = { ...WINDOW_CLEAR };
 /** The least each glass gets over the colours, whatever they are (the look of glass, not only the maths): a thin smoky
- *  tint, so the colours show through, the filter's dim (DIM.colours) doing the rest; the rail's keeps it a step brighter
- *  than the stage over the espresso, under its dim. Everything above the floors is worked out in veilsFor (a control's
- *  words on the glass, hovered too; a cream card or the action under a bar or a sheet): over Ember the rail 0.16, a card
- *  0.18, a hero 0.31, a tinted tile 0.48, a bar 0.38, a sheet 0.62 (0.62 / 0.58 / 0.6 / 0.66 / 0.72 / 0.72 before). */
+ *  tint, so the colours show through; the rail's keeps it a step brighter than the stage over the espresso. Everything
+ *  above the floors is worked out in veilsFor (a control's words on the glass, hovered too; a cream card or the action
+ *  under a bar or a sheet): over Ember the rail 0.41, a card 0.46, a hero 0.53, a tinted tile 0.63, a bar 0.66, a sheet
+ *  0.70 (main: 0.62 / 0.58 / 0.6 / 0.66 / 0.72 / 0.72, the old floors). */
 export const COLOUR_FLOORS: Veils = { page: 0, card: 0.14, tinted: 0.16, hero: 0.13, rail: 0.16, bar: 0.2, float: 0.3, plate: 0 };
 /** The tones a tinted tile can take (glass-tokens.css: the action, amber, coral, mint and sky channels). */
 export const TINT_TONES: readonly Rgb[] = [

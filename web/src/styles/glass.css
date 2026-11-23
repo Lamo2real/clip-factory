@@ -315,11 +315,17 @@ html[data-strength="frosted"] .backdrop__frost {
 
 /* ---------- The window look and the picture look: tints (docs/CONTRACTS.md §22.3) ---------- */
 
-/* Where a white photo can be behind, the ladder's pay on top of the panel veil (LIGHT_PAY_WHITE) until lib/look.ts sets
-   each look's own on <html>. The window look carries none (LIGHT_PAY_WINDOW: its panes sit at the AA floor over a
-   white desktop, the :root 0). */
-html[data-backdrop="picture"] {
+/* Where white can be behind (a white desktop, a white photo), the ladder's pay on top of the panel veil
+   (LIGHT_PAY_WHITE, Clear and Picture over white) until lib/look.ts sets each look's own on <html>: over white a pane
+   at the AA floor leaves the levels above it no room to read brighter, so the pay lowers it a step. */
+html:is(.see-through, [data-backdrop="picture"]) {
   --light-pay: 0.05; /* LIGHT_PAY_WHITE */
+}
+/* Over the owner's photo the glass blurs as much as it did before the see-through pass (18px, and 14px where it bends),
+   so the shapes of the photo still read through it: the stronger blur only ever showed over the smooth meshes. */
+html[data-backdrop="picture"] {
+  --glass-blur: 18px;
+  --glass-refract-blur: 14px;
 }
 /* --panel-veil (lib/background.ts) is the least bottle green that keeps every text colour of this look (tokens.css)
    at WCAG AA over the lightest thing behind (a white desktop, a white photo); the panel tint adds the light's pay to
@@ -330,11 +336,12 @@ html[data-backdrop="picture"] {
 :where(html.see-through) :is(.glass, .glass--clear):where(:not(.glass--green)) {
   --glass-tint: var(--glass-tint-panel);
 }
-/* Two small surfaces whose words start inside their top light, as a plate's do, carry the plate's tint in the window
-   look (lib/background.ts PLATE_WORDS_LIGHT, windowPlateVeil): a phone's top bar (a narrow window) Live chip, beside
-   the brand's plate, its words about 6 px down; and the "All set!" card in a phone's pill strip, which keeps 8 px
-   above its words to stay inside the bar, its words about 9 px down in its lead light. */
-html.see-through :is(.topbar .live-dot, .setup-todo--done[data-mode="pill"]) {
+/* Two small surfaces whose words start inside their top light, as a plate's do, carry the plate's tint in every look
+   (lib/background.ts PLATE_WORDS_LIGHT; it covers their light, and in the looks that dim, their own filter dims under
+   it too): a phone's top bar (a narrow window) Live chip, beside the brand's plate, its words about 6 px down; and the
+   "All set!" card in a phone's pill strip, which keeps 8 px above its words to stay inside the bar, its words about
+   9 px down in its lead light. */
+html :is(.topbar .live-dot, .setup-todo--done[data-mode="pill"]) {
   --glass-tint: var(--glass-tint-plate);
 }
 /* Nothing that holds words is weaker than the panel tint: what can sit straight on the window carries at least
@@ -476,7 +483,7 @@ html:is(.see-through, [data-backdrop]) .perf__updated > span {
    animated. The page title plates hold their words with their tint alone (worked out without any blur), so they draw
    no filter at all. */
 .refract .glass--refract {
-  backdrop-filter: blur(18px) url(#cf-refract) saturate(1.75) brightness(var(--glass-brightness));
+  backdrop-filter: blur(var(--glass-refract-blur)) url(#cf-refract) saturate(1.75) brightness(var(--glass-brightness));
 }
 /* Money has its dock as well as the menu and the setup rail: its band keeps the plain glass blur, without the bend. */
 .refract .dash-band.glass--refract {

@@ -186,8 +186,9 @@
    its own: the parent's filter has already dimmed and blurred what is behind both (glass-tokens.css 5), and a second
    one would dim the parent's own light under it (or, where an engine lets it see through, the page twice). So what is
    drawn is what look.ts and test/storiesLight.test.ts work out, and WebView2 pays for one filter, not two. Bars and
-   sheets keep theirs; a liquid hero keeps its rim. */
-:is(.st-glass, .st-plate) :is(.st-glass, .st-plate):not(.st-glass--bar, .st-glass--float) {
+   sheets keep theirs; a liquid hero keeps its rim. A plate is a parent only where it has a filter of its own (a
+   picture or the desktop): over the colours it is the page. */
+:is(.st-glass, .stories-app:is([data-look="window"], [data-look="picture"]) .st-plate) :is(.st-glass, .st-plate):not(.st-glass--bar, .st-glass--float) {
   -webkit-backdrop-filter: none;
   backdrop-filter: none;
 }

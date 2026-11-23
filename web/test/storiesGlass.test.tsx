@@ -12,6 +12,7 @@ import { ArcDial, CreamCard, Glass, GlassPill, GlassToggle, MediaRow, PhoneTabHi
 import {
   AA,
   COLOUR_FLOORS,
+  ELEVATION,
   EMBER,
   FROSTED,
   INKS,
@@ -25,6 +26,7 @@ import {
   mix,
   readNativeGlass,
   setStoriesLook,
+  showThrough,
   storiesLook,
   useStoriesBackground,
   veilsFor,
@@ -340,10 +342,12 @@ describe("every word stays readable", () => {
     }
     const ember = veilsFor({ mode: "colours", strength: "clear", colours: [...EMBER], picture: null }, "none");
     expect(ember.page).toBe(0);
-    // 23 Nov, the owner: "more see through in a liquid glassy style": over the colours each glass's filter dims the stage
-    // (look.ts DIM), so at least 0.8 of it shows through the rail and a card (0.38 and 0.42 before)
-    expect(1 - ember.rail).toBeGreaterThanOrEqual(0.8);
-    expect(1 - ember.card).toBeGreaterThanOrEqual(0.8);
+    // 23 Nov, the owner: "more see through in a liquid glassy style": over the colours the veils are as thin as the words
+    // allow, so more of the stage shows through the rail and a card (look.ts showThrough: the veil and the light's
+    // share) than on main (0.355 and 0.375), with no filter of their own
+    expect(showThrough(ember.rail, ELEVATION[1]!)).toBeGreaterThanOrEqual(0.55);
+    expect(showThrough(ember.card, ELEVATION[2]!)).toBeGreaterThanOrEqual(0.49);
+    expect(showThrough(ember.rail, ELEVATION[1]!)).toBeGreaterThan(showThrough(0.62, ELEVATION[1]!) + 0.15);
   });
 });
 

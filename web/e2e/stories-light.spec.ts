@@ -7,8 +7,8 @@ import { asMacWindow } from "./desktopWindow.ts";
 // backdrop pixel (the espresso, the stage's own colour, and black): each level is brighter than the one under it,
 // at its top and at its bottom; every surface is lighter at the top than at the bottom; and every surface has a bright
 // top rim, brighter on higher levels. A card inside a card is laid over its card, as the browser paints it. Each
-// surface's own backdrop-filter dims the backdrop first (its brightness(), read as the browser computed it: below 1
-// where the page draws the backdrop, 1 over the desktop), as test/storiesLight.test.ts works it out. Over a
+// surface's own backdrop-filter dims the backdrop first (its brightness(), read as the browser computed it: 1 in every
+// look today, look.ts DIM), as test/storiesLight.test.ts works it out. Over a
 // picture or the desktop also over white and mid grey: from the page panel
 // upward each level at least 0.015 brighter over white (the owner's rule). In every look: Colours › Ember, a picture,
 // See-through Clear and Frosted in the desktop app, and solid glass (reduced transparency). test/storiesLight.test.ts

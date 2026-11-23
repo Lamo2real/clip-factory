@@ -1512,6 +1512,7 @@ ol.md__list {
 /* Glass, but nearly solid: the page behind must never show through the question. --ink-2 on it is about 11:1. */
 .sheet.glass {
   --glass-tint: var(--glass-tint-overlay);
+  --glass-brightness: 1; /* planned for white as it is: its filter dims nothing (SHEET_VEIL) */
   --glass-light: var(--glass-light-overlay);
   box-shadow: var(--glass-shadow-overlay);
 }

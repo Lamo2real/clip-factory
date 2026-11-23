@@ -1,9 +1,10 @@
 import { expect, test, type Page } from "@playwright/test";
 import {
+  BRAND_BRIGHTNESS,
   BRAND_PANEL_VEIL,
   BRAND_PLATE_VEIL,
   LIGHT_PAY_OWN,
-  LIGHT_PAY_WINDOW,
+  LIGHT_PAY_WHITE,
   coloursVeils,
   contrast,
   dimRgb,
@@ -103,11 +104,12 @@ test.describe("background modes", () => {
     await expect(page.locator(".bg-modes")).toHaveClass(/has-glide/);
   });
 
-  test("see-through glass over the app's own backdrop: panels 0.20 over their own dimming, no page veil; colours and picture follow (ADR-45)", async ({ page }) => {
+  test("see-through glass over the app's own backdrop: panels 0.20 over their own slight dimming, no page veil; colours and picture follow (ADR-45)", async ({ page }) => {
     await open(page);
     expect(await panelVeil(page)).toBeCloseTo(BRAND_PANEL_VEIL, 5);
     expect(BRAND_PANEL_VEIL).toBe(0.2);
     expect(BRAND_PLATE_VEIL).toBe(0.33);
+    expect(Number(await page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--glass-brightness")))).toBeCloseTo(BRAND_BRIGHTNESS, 5);
     expect(await veil(page)).toBe(0);
     expect(await surfaceAlpha(page, ".apple-panel")).toBeCloseTo(BRAND_PANEL_VEIL + LIGHT_PAY_OWN, 2);
     await expect(page.locator(".backdrop .blob--e")).toHaveCount(1);
@@ -116,13 +118,13 @@ test.describe("background modes", () => {
     await expect.poll(() => backdrop(page)).toBe("colours");
     expect(await veil(page)).toBe(0);
     expect(await panelVeil(page)).toBeCloseTo(0.2, 5);
-    // A picture: no page veil, panels 0.59 over a photo their glass dims to half.
+    // A picture: no page veil, panels 0.29 (and the pay) over a photo their glass dims to half.
     await page.getByRole("radio", { name: "Picture" }).check();
     await page.locator('input[type="file"][accept="image/*"]').setInputFiles({ name: "bg.png", mimeType: "image/png", buffer: PNG });
     await expect.poll(() => backdrop(page)).toBe("picture");
     expect(await veil(page)).toBe(0);
     expect(await panelVeil(page)).toBeCloseTo(PICTURE_PANEL_VEIL, 5);
-    expect(PICTURE_PANEL_VEIL).toBe(0.59);
+    expect(PICTURE_PANEL_VEIL).toBe(0.29);
   });
 
   test("switching modes changes what is behind the glass, and it stays after a reload", async ({ page }) => {
@@ -255,7 +257,7 @@ test.describe("see-through in the desktop app (simulated)", () => {
     // The panels carry the green, only as much as bone words need over a white desktop.
     expect(await panelVeil(page)).toBeCloseTo(clear.panel, 5);
     expect(clear.panel).toBeLessThanOrEqual(0.75);
-    expect(await surfaceAlpha(page, ".apple-panel")).toBeCloseTo(clear.panel + LIGHT_PAY_WINDOW, 2);
+    expect(await surfaceAlpha(page, ".apple-panel")).toBeCloseTo(clear.panel + LIGHT_PAY_WHITE, 2);
 
     // The window look's own text colours: the softer ones are bone or lighter here, the rest as everywhere.
     expect(await textTokens(page)).toEqual(WINDOW_TEXT_TOKENS);
@@ -289,7 +291,7 @@ test.describe("see-through in the desktop app (simulated)", () => {
       await expect(page.locator("html")).toHaveAttribute("data-glass", glass);
       const clear = seeThroughVeils(glass, "light", "clear");
       expect(await panelVeil(page)).toBeCloseTo(clear.panel, 5);
-      expect(await surfaceAlpha(page, ".apple-panel")).toBeCloseTo(clear.panel + LIGHT_PAY_WINDOW, 2);
+      expect(await surfaceAlpha(page, ".apple-panel")).toBeCloseTo(clear.panel + LIGHT_PAY_WHITE, 2);
       expect(await textTokens(page)).toEqual(WINDOW_TEXT_TOKENS);
       const behind = seeThroughWorstBackground(glass, "light", "clear");
       for (const c of await textColours(page)) expect(contrast(rgbOf(c), behind), c).toBeGreaterThanOrEqual(4.5);

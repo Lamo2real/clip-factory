@@ -228,8 +228,8 @@ test("the liquid rim bends at most three heroes, each with a filter of its own s
     }),
   );
   for (const l of lenses) {
-    // The rim's own map, after the glass's dim (brightness(), look.ts DIM), never animated.
-    expect(l.bf).toMatch(/^blur\(1px\) brightness\(0?\.\d+\) url\("?#st-lens-\d+"?\) saturate\(1\.5\)$/);
+    // The rim's own map, after the glass's dim (brightness(), look.ts DIM: 1 in every look), never animated.
+    expect(l.bf).toMatch(/^blur\(1px\) brightness\((?:1|0?\.\d+)\) url\("?#st-lens-\d+"?\) saturate\(1\.5\)$/);
     expect([l.fw, l.fh]).toEqual([l.w, l.h]);
     expect(l.maps).toBe(1);
     expect(l.moves).toBe(0);

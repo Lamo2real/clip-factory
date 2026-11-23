@@ -155,9 +155,11 @@ describe("every word on the social screens' boxes reaches 4.5:1 over all three b
     // Over the desktop no filter can dim it: the measured card or more.
     expect(dimOf("window")).toBe(1);
     expect(looks[2]!.v.card).toBeGreaterThanOrEqual(0.74);
-    // Over a picture the filter dims it first (to half), so the card is thinner, and a tile in it keeps the measured card.
-    expect(dimOf("picture")).toBeLessThan(1);
-    expect(looks[1]!.v.card).toBeLessThan(looks[2]!.v.card);
+    // Over a picture nothing dims it either (a dim showed less of the photo, not more: look.ts DIM), so the card is the
+    // desktop's, and a tile loose on the page keeps the measured card.
+    expect(dimOf("picture")).toBe(1);
+    expect(dimOf(null)).toBe(1);
+    expect(looks[1]!.v.card).toBe(looks[2]!.v.card);
     expect(looks[1]!.row).toBe(0.74);
     // Frosted: the 0.30 frost, then the panels in the light's order (look.ts WINDOW_FROSTED); the frost and a card
     // together still cover more than Clear's measured card.

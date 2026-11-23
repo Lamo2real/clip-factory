@@ -50,7 +50,6 @@ import {
   LIGHT_PAY_OWN,
   LIGHT_PAY_REDUCED,
   LIGHT_PAY_WHITE,
-  LIGHT_PAY_WINDOW,
   lightPay,
   LIQUID_ACTIVE_FLOOR,
   LIQUID_FLOOR,
@@ -63,6 +62,8 @@ import {
   MENU_LIGHT,
   mix,
   minVeil,
+  MAX_LIGHT_PAY,
+  veilOver,
   normaliseColours,
   oklabL,
   OLD_DEFAULT_COLOURS,
@@ -83,7 +84,8 @@ import {
   plateWords,
   cantSelfUpdate,
   dimRgb,
-  glassBrightness,
+  bestGlass,
+  showThrough,
   isOldDesktopApp,
   readDesktopVersion,
   OLD_APP_NOTE,
@@ -94,7 +96,6 @@ import {
   RAISE_VEIL,
   raised,
   readNativeGlass,
-  rowRoom,
   resolveLook,
   SATURATIONS,
   saturateRgb,
@@ -277,22 +278,40 @@ describe("see-through veil", () => {
     for (const glass of GLASSES) for (const scheme of SCHEMES) for (const strength of STRENGTHS) expect(windowGlass(glass, scheme, strength)).toMatchObject({ brightness: 1, plateVeil: windowPlateVeil(glass, scheme, strength) });
   });
 
-  it("a window plate carries the green its words need in its top light: AA there, and one step less would not hold", () => {
+  it("a window plate carries the green its words need in its top light, the pay included: AA there, and one step less would not hold", () => {
     // A plate's words start about 6 px down (a display face's glyph box, the top bar's Live chip): half the top light
-    // and a quarter of the catch light still lie there.
+    // and a quarter of the catch light still lie there. The window look's pay covers it: the plates are the panels'.
     expect(PLATE_WORDS_LIGHT).toBeCloseTo(1 - (1 - PANEL_LIGHT / 2) * (1 - SPECULAR / 4), 10);
-    expect([windowPlateVeil("liquid", "light", "clear"), windowPlateVeil("liquid", "light", "frosted")]).toEqual([0.75, 0.64]);
+    expect([windowPlateVeil("liquid", "light", "clear"), windowPlateVeil("liquid", "light", "frosted")]).toEqual([0.73, 0.62]);
     for (const glass of GLASSES)
       for (const scheme of SCHEMES)
         for (const strength of STRENGTHS) {
           const v = seeThroughVeils(glass, scheme, strength);
           const plate = windowPlateVeil(glass, scheme, strength);
+          const pay = lightPay({ kind: "window", ...windowGlass(glass, scheme, strength) });
           const under = mix(VEIL, WHITE, v.page);
           expect(plate, `${glass} ${scheme} ${strength}`).toBeGreaterThanOrEqual(v.panel);
-          expect(worstInWindow(lit(under, plate, PLATE_WORDS_LIGHT)), `${glass} ${scheme} ${strength}`).toBeGreaterThanOrEqual(AA);
-          if (plate > v.panel) expect(worstInWindow(lit(under, plate - 0.01, PLATE_WORDS_LIGHT)), `${glass} ${scheme} ${strength}`).toBeLessThan(AA);
+          expect(worstInWindow(lit(under, plate + pay, PLATE_WORDS_LIGHT)), `${glass} ${scheme} ${strength}`).toBeGreaterThanOrEqual(AA);
+          if (plate > v.panel) expect(worstInWindow(lit(under, plate - 0.01 + pay, PLATE_WORDS_LIGHT)), `${glass} ${scheme} ${strength}`).toBeLessThan(AA);
         }
   });
+
+  it("the Live chip and \"All set!\" (small words in their top light) carry the plate's tint, and keep AA in every look", () => {
+    // glass.css gives them the plate tint in every look; they are panes, so their own filter dims under it where the
+    // look dims (the app's own backdrop, the picture, the light colours).
+    expect(rules("glass.css")).toMatch(/\nhtml :is\(\.topbar \.live-dot, \.setup-todo--done\[data-mode="pill"\]\) \{\s*--glass-tint: var\(--glass-tint-plate\);/);
+    const checks: [string, LightLook, Rgb[]][] = [
+      ["the app's own backdrop", { kind: "frosted", ...BRAND_GLASS }, brandMeshSpots()],
+      ["a photo", { kind: "picture", ...PICTURE_GLASS }, [WHITE, saturateRgb(WHITE, GLASS_SATURATE_MAX)]],
+      ...SWATCH_MIXES.map((cs) => [`colours ${cs.join(" ")}`, { kind: "colours", ...coloursVeils(cs), colours: cs }, coloursMeshSpots(cs)] as [string, LightLook, Rgb[]]),
+    ];
+    const low: string[] = [];
+    for (const [name, look, spots] of checks) {
+      const pay = lightPay(look);
+      for (const spot of spots) if (worst(lit(underGlass(look, spot), look.plateVeil + pay, PLATE_WORDS_LIGHT)) < AA) low.push(`${name} over ${spot.map(Math.round)}`);
+    }
+    expect(low).toEqual([]);
+  }, 60_000);
 
   it("Frosted: a green frost everywhere, and panels the least that keeps AA over it and still shows less than Clear", () => {
     for (const glass of GLASSES)
@@ -372,8 +391,13 @@ describe("see-through veil", () => {
   }, 60_000);
 
   it("the picture look: no veil over the photo; panes dim a white photo to half and carry what is left, plates what it needs as it is", () => {
-    expect([PICTURE_PAGE_VEIL, PICTURE_PANEL_VEIL, PICTURE_PLATE_VEIL, PICTURE_BRIGHTNESS]).toEqual([0, 0.59, 0.73, MIN_GLASS_BRIGHTNESS]);
+    expect([PICTURE_PAGE_VEIL, PICTURE_PANEL_VEIL, PICTURE_PLATE_VEIL, PICTURE_BRIGHTNESS]).toEqual([0, 0.29, 0.73, MIN_GLASS_BRIGHTNESS]);
     expect(PICTURE_GLASS).toEqual({ pageVeil: PICTURE_PAGE_VEIL, panelVeil: PICTURE_PANEL_VEIL, plateVeil: PICTURE_PLATE_VEIL, brightness: PICTURE_BRIGHTNESS });
+    // The pair that shows the most of a white photo, the pay on top.
+    expect(bestGlass([WHITE, saturateRgb(WHITE, GLASS_SATURATE_MAX)], MAX_LIGHT_PAY)).toEqual({ panelVeil: PICTURE_PANEL_VEIL, brightness: PICTURE_BRIGHTNESS });
+    // 33 % of the photo shows through a pane; main's 0.73 + 0.05 with no dimming showed 22 %.
+    expect(showThrough(PICTURE_PANEL_VEIL, PICTURE_BRIGHTNESS, lightPay({ kind: "picture", ...PICTURE_GLASS }))).toBeCloseTo(0.33, 10);
+    expect(showThrough(PICTURE_PANEL_VEIL, PICTURE_BRIGHTNESS, LIGHT_PAY_WHITE)).toBeGreaterThan(showThrough(0.73, 1, LIGHT_PAY_WHITE) + 0.1);
     // A pane: a white photo as its glass sees it (dimmed), and 0.01 less is under AA there.
     const seen = dimRgb(WHITE, PICTURE_BRIGHTNESS);
     expect(PICTURE_PANEL_VEIL).toBe(minVeil(seen));
@@ -386,15 +410,16 @@ describe("see-through veil", () => {
     expect(worst(mix(VEIL, dimRgb(saturateRgb(WHITE, GLASS_SATURATE_MAX), PICTURE_BRIGHTNESS), PICTURE_PANEL_VEIL))).toBeGreaterThanOrEqual(AA);
   });
 
-  it("brightness() is modelled as browsers draw it, at its lightest: sRGB and linearRGB worked out, the lighter kept", () => {
+  it("brightness() is modelled as browsers draw it: in sRGB, each channel × b, and what shows is (1 − veil) × b", () => {
     expect(dimRgb(WHITE, 1)).toEqual(WHITE);
     for (const c of [WHITE, hexToRgb("#e8392b"), hexToRgb("#7fd8be"), BRAND_MESH.field[0]!, [0, 0, 0] as Rgb])
-      for (const b of [0.5, 0.73, 0.9]) {
-        const d = dimRgb(c, b);
-        // linearRGB scales luminance exactly; sRGB (each channel × b) is never lighter for b < 1.
-        expect(luminance(d)).toBeCloseTo(luminance(c) * b, 10);
-        expect(luminance(d)).toBeGreaterThanOrEqual(luminance(c.map((v) => v * b) as unknown as Rgb) - 1e-12);
-      }
+      for (const b of [0.5, 0.73, 0.9]) expect(dimRgb(c, b)).toEqual(c.map((v) => v * b));
+    // Measured in Chromium (23 Nov): a black and white edge behind a 0.20 pane at brightness(0.73) reads 0.584 through
+    // it, against 0.671 behind main's 0.33 with no dimming. Dimming is not free see-through.
+    expect(showThrough(0.2, 0.73)).toBeCloseTo(0.584, 10);
+    expect(showThrough(0.33)).toBeCloseTo(0.67, 10);
+    expect(showThrough(0.2, 1, 0.05, 0.3)).toBeCloseTo(0.7 * 0.75, 10);
+    expect(showThrough(0.9, 1, 0.2)).toBe(0);
   });
 });
 
@@ -599,7 +624,11 @@ describe("the stylesheets and the text colour list stay in step", () => {
       expect(tint, `${file} ${selector}`).toBeDefined();
       expect(Math.min(...tintAlphas(tint!)), `${file} ${selector}`).toBeGreaterThanOrEqual(FLOAT_VEIL - 1e-9);
       expect(declared(body).get("--glass-blur") ?? "28px", `${file} ${selector}`).toBe("28px");
+      // Planned for white as it is, so its filter dims nothing (the look's brightness() is a pane's).
+      expect(declared(body).get("--glass-brightness"), `${file} ${selector}`).toBe("1");
     }
+    expect(declared(block(rules("settings.css"), ".sheet.glass")).get("--glass-brightness")).toBe("1");
+    expect(declared(block(rules("layout.css"), ".tabbar")).get("--glass-brightness")).toBe("1");
     const sheet = declared(block(rules("settings.css"), ".sheet.glass")).get("--glass-tint")!;
     expect(Math.min(...tintAlphas(sheet))).toBeGreaterThanOrEqual(SHEET_VEIL);
     const tabbar = declared(block(rules("layout.css"), ".tabbar")).get("--glass-tint")!;
@@ -634,33 +663,35 @@ describe("colours", () => {
     expect(glass).toMatch(/\n\.blob \{[^}]*opacity: 1;/);
   });
 
-  it("the glass dims the mesh only as much as it needs, and the veils keep every text colour at AA over the lightest spot", () => {
-    // [colours, page veil, panel veil, plate veil, brightness]. Before: page 0 / 0.03 / 0.08 / 0.28 / 0.33 and
-    // panels 0.30 / 0.30 / 0.60 / 0.60 / 0.60 / 0.60: the dimming lets every light mix keep its page clear.
-    const TABLE: [string[], number, number, number, number][] = [
-      [[...DEFAULT_COLOURS], 0, 0.2, 0.2, 1],
-      [["#2b6cb0", "#8e6cc9"], 0, 0.2, 0.24, 0.94],
-      [["#9caf88", "#f7f5ef", "#e8412c"], 0, 0.39, 0.61, 0.5],
-      [["#f6c945", "#f49ac1"], 0, 0.44, 0.63, 0.5],
-      [["#f7f5ef"], 0, 0.57, 0.71, 0.5],
-      [["#ffffff"], 0, 0.59, 0.73, 0.5],
+  it("the glass takes the veil and dimming that show the most of the mesh, and the veils keep every text colour at AA over the lightest spot", () => {
+    // [colours, page veil, panel veil, plate veil, brightness, what shows through a pane with the pay]. Before: page
+    // 0 / 0.03 / 0.08 / 0.28 / 0.33 and panels 0.30 / 0.30 / 0.60 / 0.60 / 0.60 / 0.60 with no dimming (a pane
+    // showed 65 % of the default colours, 25 % of cream, 23 % of white). Dark colours take no dimming at all.
+    const TABLE: [string[], number, number, number, number, number][] = [
+      [[...DEFAULT_COLOURS], 0, 0.2, 0.24, 1, 0.75],
+      [["#2b6cb0", "#8e6cc9"], 0, 0.2, 0.25, 0.97, 0.7275],
+      [["#9caf88", "#f7f5ef", "#e8412c"], 0, 0.2, 0.61, 0.62, 0.465],
+      [["#f6c945", "#f49ac1"], 0, 0.21, 0.63, 0.58, 0.4292],
+      [["#f7f5ef"], 0, 0.24, 0.71, 0.5, 0.355],
+      [["#ffffff"], 0, 0.29, 0.73, 0.5, 0.33],
     ];
-    for (const [cs, page, panel, plate, brightness] of TABLE) {
+    for (const [cs, page, panel, plate, brightness, shows] of TABLE) {
       const at = cs.join(" ");
       expect(coloursVeils(cs), at).toEqual({ pageVeil: page, panelVeil: panel, plateVeil: plate, brightness });
-      expect(glassBrightness(coloursMeshSpots(cs)), at).toBe(brightness);
+      expect(bestGlass(coloursMeshSpots(cs), MAX_LIGHT_PAY), at).toEqual({ panelVeil: panel, brightness });
+      expect(showThrough(panel, brightness, lightPay({ kind: "colours", ...coloursVeils(cs), colours: cs }), page), at).toBeCloseTo(shows, 4);
+      // No other dimming (every 0.01) shows more with the veil it needs.
+      for (let step = 50; step <= 100; step++)
+        expect(showThrough(veilOver(coloursMeshSpots(cs).map((s) => dimRgb(s, step / 100))), step / 100, MAX_LIGHT_PAY), `${at} at ${step / 100}`).toBeLessThanOrEqual(showThrough(panel, brightness, MAX_LIGHT_PAY) + 1e-9);
       for (const spot of coloursMeshSpots(cs)) {
         expect(worst(mix(VEIL, dimRgb(mix(VEIL, spot, page), brightness), panel)), at).toBeGreaterThanOrEqual(AA);
         expect(worst(mix(VEIL, mix(VEIL, spot, page), plate)), at).toBeGreaterThanOrEqual(AA);
       }
-      // The least dimming: 0.01 less dimming and the floor alone no longer holds somewhere (AA or the first rung).
-      if (brightness < 1 && brightness > MIN_GLASS_BRIGHTNESS)
-        expect(coloursMeshSpots(cs).some((spot) => worst(mix(VEIL, dimRgb(spot, brightness + 0.01), PANEL_VEIL_FLOOR)) < AA || !rowRoom(mix(VEIL, dimRgb(spot, brightness + 0.01), PANEL_VEIL_FLOOR))), at).toBe(true);
       expect(luminance(coloursMeshWorst(cs))).toBe(Math.max(...coloursMeshSpots(cs).map(luminance)));
     }
-    expect(coloursVeils(DEFAULT_COLOURS)).toEqual({ pageVeil: 0, panelVeil: 0.2, plateVeil: 0.2, brightness: 1 });
+    expect(coloursVeils(DEFAULT_COLOURS)).toEqual({ pageVeil: 0, panelVeil: 0.2, plateVeil: 0.24, brightness: 1 });
     // The deprecated single number is the combined green.
-    expect(coloursVeil(["#ffffff"])).toBeCloseTo(0.59, 2);
+    expect(coloursVeil(["#ffffff"])).toBeCloseTo(0.29, 2);
   });
 
   it("every mix of 1 to 3 colours from a grid reaches AA, and a panel never carries more than 0.6", () => {
@@ -766,14 +797,18 @@ describe("the living backdrop (the web and phone default): its lightest spot dec
     expect(luminance(brandMeshWorst())).toBeGreaterThanOrEqual(luminance(worstSpot));
     // The stack of every blob is not the worst: a subset is lighter.
     expect(luminance(worstSpot)).toBeGreaterThan(luminance(allStacked));
-    // A pane dims the mesh (brightness(), the least the floor needs) and carries the floor: 80 % shows (it was 0.33).
-    expect([BRAND_PANEL_VEIL, BRAND_PLATE_VEIL, BRAND_BRIGHTNESS]).toEqual([0.2, 0.33, 0.73]);
+    // A pane dims the mesh a little (brightness()) and carries the floor: the pair that shows the most of it, 70 %
+    // (main's 0.33 with no dimming showed 67 %, the most a veil alone can; 0.20 at brightness(0.73) only 58 %).
+    expect([BRAND_PANEL_VEIL, BRAND_PLATE_VEIL, BRAND_BRIGHTNESS]).toEqual([0.2, 0.33, 0.87]);
     expect(BRAND_GLASS).toEqual({ panelVeil: BRAND_PANEL_VEIL, plateVeil: BRAND_PLATE_VEIL, brightness: BRAND_BRIGHTNESS });
-    expect(BRAND_BRIGHTNESS).toBe(glassBrightness(brandMeshSpots()));
+    expect(bestGlass(brandMeshSpots(), LIGHT_PAY_OWN)).toEqual({ panelVeil: BRAND_PANEL_VEIL, brightness: BRAND_BRIGHTNESS });
+    expect(showThrough(BRAND_PANEL_VEIL, BRAND_BRIGHTNESS)).toBeCloseTo(0.696, 10);
+    expect(showThrough(BRAND_PANEL_VEIL, BRAND_BRIGHTNESS)).toBeGreaterThan(showThrough(BRAND_PLATE_VEIL));
+    expect(showThrough(BRAND_PANEL_VEIL, BRAND_BRIGHTNESS)).toBeGreaterThan(showThrough(0.2, 0.73));
     const seen = (spot: Rgb) => dimRgb(spot, BRAND_BRIGHTNESS);
     expect(BRAND_PANEL_VEIL).toBe(Math.max(PANEL_VEIL_FLOOR, ...brandMeshSpots().map((spot) => minVeil(seen(spot)))));
-    // The least dimming: 0.01 less, and the floor alone breaks AA or the first rung of the ladder over some corner.
-    expect(brandMeshSpots().some((spot) => worst(mix(VEIL, dimRgb(spot, BRAND_BRIGHTNESS + 0.01), PANEL_VEIL_FLOOR)) < AA || !rowRoom(mix(VEIL, dimRgb(spot, BRAND_BRIGHTNESS + 0.01), PANEL_VEIL_FLOOR)))).toBe(true);
+    // 0.01 less dimming and the pane needs more than the floor (so it would show less).
+    expect(veilOver(brandMeshSpots().map((spot) => dimRgb(spot, BRAND_BRIGHTNESS + 0.01)))).toBeGreaterThan(PANEL_VEIL_FLOOR);
     // A plate (no filter of its own) over the mesh as it is: main's 0.33.
     expect(BRAND_PLATE_VEIL).toBe(Math.max(PANEL_VEIL_FLOOR, ...brandMeshSpots().map((spot) => minVeil(spot))));
     for (const spot of brandMeshSpots()) {
@@ -1027,17 +1062,19 @@ describe("the logic of light (ADR-87): the top layer is brighter, and every lift
     for (const token of ["--light-raise-veil", "--light-raise-hover-veil", "--light-ghost-veil"]) expect(root.get(token), token).toBe(`calc(var(--plate-veil) + ${TRACK_EXTRA_VEIL})`);
     // The pay is worked out for each look (lib/look.ts puts it on <html>); the CSS holds the app's own backdrop's
     // until then, a photo's where white can be behind, and reduced transparency's.
-    expect(Number(declared(block(glass, 'html[data-backdrop="picture"]')).get("--light-pay"))).toBe(LIGHT_PAY_WHITE);
-    expect(glass).not.toMatch(/html:is\(\.see-through, \[data-backdrop="picture"\]\)/);
+    expect(Number(declared(block(glass, 'html:is(.see-through, [data-backdrop="picture"])')).get("--light-pay"))).toBe(LIGHT_PAY_WHITE);
+    // Over a photo the glass blurs as it did before (18 px, 14 px where it bends), so the photo's shapes still read.
+    expect(declared(block(glass, 'html[data-backdrop="picture"]')).get("--glass-blur")).toBe("18px");
+    expect(declared(block(glass, 'html[data-backdrop="picture"]')).get("--glass-refract-blur")).toBe("14px");
     expect(glass).toMatch(new RegExp(`@media \\(prefers-reduced-transparency: reduce\\) \\{[\\s\\S]*--light-pay: ${LIGHT_PAY_REDUCED} !important;`));
     expect(glass).toMatch(/@media \(prefers-reduced-transparency: reduce\) \{[\s\S]*--plate-veil: 0\.92 !important;/);
     expect(LIGHT_PAY_OWN).toBe(0);
     for (const kind of ["frosted", "brand"] as const) expect(lightPay({ kind, ...BRAND_GLASS })).toBe(LIGHT_PAY_OWN);
-    // The window look's panes sit at the AA floor over a white desktop: no pay (it was LIGHT_PAY_WHITE in Clear).
-    expect(LIGHT_PAY_WINDOW).toBe(0);
+    // The window look pays as a light look does (over a white desktop its panes sit at the AA floor, and the levels
+    // above them need room to read brighter): LIGHT_PAY_WHITE, Clear and Frosted, every glass.
     for (const glassName of GLASSES)
       for (const scheme of SCHEMES)
-        for (const strength of STRENGTHS) expect(lightPay({ kind: "window", ...windowGlass(glassName, scheme, strength) }), `${glassName} ${scheme} ${strength}`).toBe(LIGHT_PAY_WINDOW);
+        for (const strength of STRENGTHS) expect(lightPay({ kind: "window", ...windowGlass(glassName, scheme, strength) }), `${glassName} ${scheme} ${strength}`).toBe(LIGHT_PAY_WHITE);
     expect(lightPay({ kind: "picture", ...PICTURE_GLASS })).toBe(LIGHT_PAY_WHITE);
     expect(lightPay({ kind: "window", panelVeil: 0.73, plateVeil: 0.73, brightness: 1 }, true)).toBe(LIGHT_PAY_REDUCED);
     // Colours with no colours named plan for a white mesh: never less than the colours themselves need.
@@ -1255,11 +1292,30 @@ describe("the logic of light (ADR-87): the top layer is brighter, and every lift
       const less = Math.round((pay - 0.01) * 100) / 100;
       if (pay > 0) expect(panes.some((pg) => ladderFaults(pg, look.panelVeil, less, false, true).length > 0) || plates.some((pg) => ladderFaults(pg, look.plateVeil, less, false, true).length > 0), `${name} at ${less}`).toBe(true);
     }
-    // What the see-through costs: the share of the backdrop a pane still shows (1 − its green), per look (§22.4).
-    expect(1 - (BRAND_PANEL_VEIL + LIGHT_PAY_OWN)).toBeGreaterThanOrEqual(0.8 - 1e-9);
-    expect(1 - (seeThroughVeils("liquid", "light", "clear").panel + LIGHT_PAY_WINDOW)).toBeCloseTo(0.27, 10);
-    expect(1 - (seeThroughVeils("liquid", "light", "frosted").panel + LIGHT_PAY_WINDOW)).toBeCloseTo(0.38, 10);
-    expect(1 - (PICTURE_PANEL_VEIL + LIGHT_PAY_WHITE)).toBeGreaterThanOrEqual(0.36 - 1e-9);
+  });
+
+  it("what shows through a pane, (1 − page)(1 − green)(b), is at least main's in every look, and more where AA leaves room (§22.4)", () => {
+    // [look, what a pane shows now, what it showed on main (6e737671)]. Main: the own backdrop 0.33, the window look
+    // 0.73 + 0.05 Clear and 0.88 Frosted over a 0.30 frost, the picture 0.73 + 0.05, the colours 0.35 (default), cream
+    // 0.65 over a 0.28 page veil, white 0.65 over 0.33, and nothing dimmed anywhere.
+    const shows = (look: LightLook & { pageVeil?: number }) => showThrough(look.panelVeil, look.brightness, lightPay(look), look.pageVeil ?? 0);
+    const colours = (cs: readonly string[]): LightLook => ({ kind: "colours", ...coloursVeils(cs), colours: cs });
+    const ROWS: [string, LightLook & { pageVeil?: number }, number, number][] = [
+      ["the app's own backdrop", { kind: "frosted", ...BRAND_GLASS }, 0.696, 0.67],
+      ["the window look, Clear", { kind: "window", ...windowGlass("liquid", "light", "clear") }, 0.22, 0.22],
+      ["the window look, Frosted", { kind: "window", ...windowGlass("liquid", "light", "frosted") }, 0.231, 0.7 * 0.12],
+      ["a picture", { kind: "picture", ...PICTURE_GLASS }, 0.33, 0.22],
+      ["the default colours", colours(DEFAULT_COLOURS), 0.75, 0.65],
+      ["cream", colours(["#f7f5ef"]), 0.355, 0.72 * 0.35],
+      ["white", colours(["#ffffff"]), 0.33, 0.67 * 0.35],
+    ];
+    for (const [name, look, now, main] of ROWS) {
+      expect(shows(look), name).toBeCloseTo(now, 3);
+      expect(shows(look) + 1e-9, name).toBeGreaterThanOrEqual(main);
+    }
+    // The window look's Clear is at its floor over a white desktop with the ladder's pay: AA and the logic of light
+    // leave no room there (the same in Clips Funded's See-through Clear).
+    expect(seeThroughVeils("liquid", "light", "clear").panel).toBe(minVeil(WHITE, TEXT_COLOURS_WINDOW));
   });
 
   it("the light is soft and static: nothing transitions or animates backdrop-filter, and refraction blurs first", () => {
@@ -1270,7 +1326,8 @@ describe("the logic of light (ADR-87): the top layer is brighter, and every lift
       for (const m of text.matchAll(/@keyframes\s+[\w-]+\s*\{((?:[^{}]*\{[^{}]*\})*)[^{}]*\}/g)) if (/backdrop-filter/.test(m[1]!)) moving.push(`${f}: @keyframes with backdrop-filter`);
     }
     expect(moving).toEqual([]);
-    expect(block(glass, ".refract .glass--refract")).toContain("backdrop-filter: blur(18px) url(#cf-refract) saturate(1.75) brightness(var(--glass-brightness));");
+    expect(block(glass, ".refract .glass--refract")).toContain("backdrop-filter: blur(var(--glass-refract-blur)) url(#cf-refract) saturate(1.75) brightness(var(--glass-brightness));");
+    expect(declared(block(rules("tokens.css"), ":root")).get("--glass-refract-blur")).toBe("18px");
     // The page title plates hold their words by their tint alone: no blur and no bend of their own (at most three
     // refracting surfaces on a screen, e2e/refract.spec.ts), and Money's band blurs without bending.
     expect(glass).not.toMatch(/page-head__text[^{]*\{[^}]*backdrop-filter/);
@@ -1585,17 +1642,17 @@ describe("the page follows the look", () => {
     expect(root.style.getPropertyValue("--backdrop-veil")).toBe("0");
     expect(root.style.getPropertyValue("--panel-veil")).toBe(String(liquid.panel));
     // Nothing dims the desktop behind the page, so the glass draws no brightness(), and a plate carries the green its
-    // words need in its top light (0.75 over the panel's 0.73).
+    // words need in its top light (the panel's 0.73 and the pay cover it).
     expect(root.style.getPropertyValue("--plate-veil")).toBe(String(windowPlateVeil("liquid", "light", "clear")));
-    expect(root.style.getPropertyValue("--plate-veil")).toBe("0.75");
+    expect(root.style.getPropertyValue("--plate-veil")).toBe("0.73");
     expect(root.style.getPropertyValue("--glass-brightness")).toBe("1");
     // And each look's own pay for the ladder of light (lightPay).
-    expect(root.style.getPropertyValue("--light-pay")).toBe(String(LIGHT_PAY_WINDOW));
+    expect(root.style.getPropertyValue("--light-pay")).toBe(String(LIGHT_PAY_WHITE));
     applyLook({ kind: "window", glass: "liquid", strength: "frosted", ...windowGlass("liquid", "light", "frosted") }, root);
     expect(root.dataset.strength).toBe("frosted");
     expect(root.style.getPropertyValue("--backdrop-veil")).toBe("0.3");
     expect(root.style.getPropertyValue("--panel-veil")).toBe("0.62");
-    expect(root.style.getPropertyValue("--plate-veil")).toBe("0.64");
+    expect(root.style.getPropertyValue("--plate-veil")).toBe("0.62");
 
     applyLook({ kind: "frosted", strength: "frosted", ...BRAND_GLASS }, root);
     expect(root.classList.contains("see-through")).toBe(false);
@@ -1611,7 +1668,7 @@ describe("the page follows the look", () => {
     // White: the glass dims it to half, so the page keeps no veil (it was 0.33 over panels at 0.60).
     applyLook({ kind: "colours", colours: ["#ffffff"], ...coloursVeils(["#ffffff"]) }, root);
     expect(root.style.getPropertyValue("--backdrop-veil")).toBe("0");
-    expect(root.style.getPropertyValue("--panel-veil")).toBe("0.59");
+    expect(root.style.getPropertyValue("--panel-veil")).toBe("0.29");
     expect(root.style.getPropertyValue("--plate-veil")).toBe("0.73");
     expect(root.style.getPropertyValue("--glass-brightness")).toBe("0.5");
     expect(root.style.getPropertyValue("--light-pay")).toBe(String(lightPay({ kind: "colours", colours: ["#ffffff"], ...coloursVeils(["#ffffff"]) })));
@@ -1619,7 +1676,7 @@ describe("the page follows the look", () => {
     // The picture look: no veil over the photo, and its own panel tint, plate tint and dimming.
     applyLook({ kind: "picture", url: "data:x", ...PICTURE_GLASS }, root);
     expect(root.style.getPropertyValue("--backdrop-veil")).toBe("0");
-    expect(root.style.getPropertyValue("--panel-veil")).toBe("0.59");
+    expect(root.style.getPropertyValue("--panel-veil")).toBe("0.29");
     expect(root.style.getPropertyValue("--plate-veil")).toBe("0.73");
     expect(root.style.getPropertyValue("--glass-brightness")).toBe("0.5");
   });

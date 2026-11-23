@@ -27,7 +27,7 @@ it more liquid glassy" ([DECISIONS.md ADR-87](DECISIONS.md#adr-87-the-logic-of-l
 | Level | What | Tint | Light (top → base) |
 |---|---|---|---|
 | L0 | The page and the backdrop | unchanged | none |
-| E1 | Panels, the sidebar, the title and line plates | panel veil + the pay (0 over the app's own backdrop and the window looks); a plate: plate veil + the pay | 0.04 → 0 at 14 px, plus the catch light |
+| E1 | Panels, the sidebar, the title and line plates | panel veil + the pay (0 over the app's own backdrop, 0.05 in the window looks and Picture); a plate: plate veil + the pay | 0.04 → 0 at 14 px, plus the catch light |
 | E1 lead | The hero, the sign-in card, Library's learnings | the panel's green | 0.075 → 0 at 14 px: brighter than E1 at its top edge |
 | E2, E3 | Rows, cards, controls, marks, chips (each over the one under it) | 0.22 over the parent (on the page: panel + 0.22) | flat 0.09 (on the page 0.08) |
 | Float | Toasts, the update bar, the setup pill and list, the Ask panel, the money dock | the floating veil + 0.16 | 0.08 → 0.02 |
