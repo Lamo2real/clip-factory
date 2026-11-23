@@ -1,7 +1,7 @@
 // The in-memory Lamo Stories API for mock mode and Playwright (docs/CONTRACTS.md §45.16.8): one shared store, one
 // part per area. Every part seeds, then the shell's stand-in seed fills in when no part seeded any story, then each
 // part that hangs things off another part's items finishes its seed (afterSeed). Builder F owns this file; F2 owns
-// ai, skills, memory; G ideas, characters, stories; H chat, references.
+// ai, skills, memory; G ideas, characters, stories; H chat, references; series (§45.43) comes after stories.
 import type { StoriesApi, StoriesConfig } from "../types.ts";
 import * as ai from "./ai.ts";
 import * as characters from "./characters.ts";
@@ -13,6 +13,7 @@ import * as memory from "./memory.ts";
 import * as onboarding from "./onboarding.ts";
 import * as publishing from "./publishing.ts";
 import * as references from "./references.ts";
+import * as series from "./series.ts";
 import * as skills from "./skills.ts";
 import * as social from "./social.ts";
 import * as stories from "./stories.ts";
@@ -25,7 +26,7 @@ interface Part {
   api(store: MockStore): Partial<StoriesApi>;
 }
 
-const PARTS: Part[] = [workspace, dashboard, library, social, publishing, onboarding, ai, skills, memory, ideas, characters, stories, chat, references];
+const PARTS: Part[] = [workspace, dashboard, library, social, publishing, onboarding, ai, skills, memory, ideas, characters, stories, series, chat, references];
 
 /**
  * Knobs a test sets before the app loads (page.addInitScript: window.__cfStoriesMock = { knobs: { fresh: true } }).

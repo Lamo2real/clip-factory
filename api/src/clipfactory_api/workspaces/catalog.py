@@ -64,3 +64,17 @@ MOUTHS: Final = ("small", "wide")
 PATTERNS: Final = ("plain", "stripes", "dots")
 ACCESSORIES: Final = ("none", "glasses", "scarf", "bowtie", "helmet", "headphones")
 VOICE_STYLES: Final = ("babble", "hum", "none")
+
+# A character's kind (engine/types.ts CharacterKind, §45.41): an older item with none is a person.
+CHARACTER_KINDS: Final = ("person", "car")
+
+# CarLook (engine/types.ts, catalog.ts ``carLooks``): a car character's choices (§45.41).
+CAR_BODIES: Final = ("hatchback", "sedan", "estate", "suv", "pickup", "van", "sports", "compact")
+CAR_PATTERNS: Final = ("plain", "two_tone", "stripe", "racing_stripes")
+CAR_WINDOWS: Final = ("clear", "tinted", "dark")
+CAR_WHEELS: Final = ("steel", "hubcap", "alloy", "sport", "offroad")
+CAR_FRONT_LIGHTS: Final = ("round", "square", "slim")
+CAR_REAR_LIGHTS: Final = ("round", "bar", "square")
+CAR_EXTRAS: Final = ("none", "roof_rack", "spoiler", "roof_box")
+CAR_EYES: Final = ("none", "windscreen", "headlights")
+CAR_MOUTHS: Final = ("none", "grille")

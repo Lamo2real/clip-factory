@@ -6,20 +6,23 @@
 // own small "Model and effort for this one" menu (never saved). A driving-safety idea shows the checked advice it is
 // based on, or "Needs checked advice" and then cannot become a video. Edit (§45.34) changes a saved idea's title, line
 // and kind, and the parts of its full idea (what it is about, the steps, the lesson, the ending, the feel, the length
-// and the words on screen), saved with PATCH …/ideas/{ideaId}.
+// and the words on screen), saved with PATCH …/ideas/{ideaId}. Series (§45.43): the head's "All ▾" switch shows one
+// series' ideas (the address holds it, `?series=`); inside a series New idea and Ask for ideas file the result there
+// with the series' cast, `?ask=1` opens Ask for ideas at once, and each card can Move to another series.
 import "../styles/studio.css";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { useToast } from "../../components/Toasts.tsx";
 import { useLoad } from "../../lib/hooks.ts";
 import { navigate } from "../../lib/router.ts";
 import { storiesApi } from "../api/client.ts";
-import type { AiTask, GuidanceTopic, Idea, IdeaCategory, IdeaInput, ModelOverride, StoriesConfig, VideoConcept } from "../api/types.ts";
+import type { AiTask, GuidanceTopic, Idea, IdeaCategory, IdeaInput, ModelOverride, Series, StoriesConfig, VideoConcept } from "../api/types.ts";
 import { cx, Glass, GlassPill, Stepper } from "../glass/index.ts";
 import { storiesReduceMotion } from "../prefs.ts";
 import { storiesHref } from "../routes.ts";
 import { merged, ModelMenu, sendPick, TaskLine, useAiInfo, useAiTask, usualFor, type AiInfo } from "../studio/ai.tsx";
 import { useWorkspace } from "../studio/hooks.ts";
 import { Busy, celebrate, Notice, Pick, Tag, TextField } from "../studio/kit.tsx";
+import { filterOf, inFilter, MoveToSeries, SeriesSwitch, seriesQuery, useSeriesList } from "../studio/SeriesSwitch.tsx";
 import { CATEGORIES, CATEGORY_LABEL, CATEGORY_LINE, NO_GUIDANCE, say, seconds, TONE_LABEL } from "../studio/words.ts";
 import type { StoriesScreenProps } from "./types.ts";
 
@@ -52,6 +55,7 @@ export function draftsOf(task: AiTask): IdeaInput[] {
       if (d.characterIds?.length) out.characterIds = [...d.characterIds];
       if (d.parentIdeaId) out.parentIdeaId = d.parentIdeaId;
       if (d.concept) out.concept = d.concept;
+      if (d.seriesId) out.seriesId = d.seriesId; // the API files a series' drafts there (§45.43)
       return out;
     });
 }
@@ -66,15 +70,24 @@ export function adviceLine(idea: Pick<Idea, "category" | "safetyTopicId" | "need
   return `Checked advice: ${topic.title}${pubs.length ? `. From ${pubs.join(" and ")}` : ""}.`;
 }
 
-export function IdeasScreen({ ws }: StoriesScreenProps) {
+/** The series a page is inside (an id the workspace has), else null: All and No series are no series. */
+export function seriesOn(filter: string, list: Series[] | null): Series | null {
+  if (filter === "all" || filter === "none") return null;
+  return list?.find((s) => s.seriesId === filter) ?? null;
+}
+
+export function IdeasScreen({ ws, page }: StoriesScreenProps) {
   const toast = useToast();
   const ideas = useLoad(() => storiesApi().listIdeas(ws, "all"), ws, "st-ideas");
+  const seriesFilter = page.name === "ideas" ? filterOf(page) : "all";
+  const { list: seriesList } = useSeriesList(ws);
+  const inSeries = seriesOn(seriesFilter, seriesList);
   const [topics, setTopics] = useState<GuidanceTopic[] | null>(null);
   const workspace = useWorkspace(ws);
   const info = useAiInfo(ws);
   const length = ((workspace?.configuration ?? {}) as Partial<StoriesConfig>).defaultDurationSec ?? 45;
   const [filter, setFilter] = useState<Filter>("all");
-  const [open, setOpen] = useState<"none" | "new" | "ask">("none");
+  const [open, setOpen] = useState<"none" | "new" | "ask">(page.name === "ideas" && page.ask ? "ask" : "none");
   const [hidden, setHidden] = useState<Set<string>>(new Set());
   const [drafts, setDrafts] = useState<DraftSet | null>(null);
   const draftsRef = useRef<HTMLElement>(null);
@@ -90,8 +103,11 @@ export function IdeasScreen({ ws }: StoriesScreenProps) {
     };
   }, [ws]);
 
-  const shown = useMemo(() => (ideas.data ?? []).filter((i) => !hidden.has(i.ideaId) && (filter === "all" || i.status === filter)), [ideas.data, hidden, filter]);
-  const all = (ideas.data ?? []).filter((i) => !hidden.has(i.ideaId));
+  const shown = useMemo(
+    () => (ideas.data ?? []).filter((i) => !hidden.has(i.ideaId) && (filter === "all" || i.status === filter) && inFilter(i, seriesFilter, seriesList)),
+    [ideas.data, hidden, filter, seriesFilter, seriesList],
+  );
+  const all = (ideas.data ?? []).filter((i) => !hidden.has(i.ideaId) && inFilter(i, seriesFilter, seriesList));
 
   const put = (idea: Idea) => ideas.setData((list) => (list ? (list.some((i) => i.ideaId === idea.ideaId) ? list.map((i) => (i.ideaId === idea.ideaId ? idea : i)) : [idea, ...list]) : [idea]));
 
@@ -148,6 +164,7 @@ export function IdeasScreen({ ws }: StoriesScreenProps) {
           <p className="st-s-head__lede">Keep ideas for videos here. Make one into a video when you are ready.</p>
         </div>
         <div className="st-s-head__actions">
+          <SeriesSwitch ws={ws} value={seriesFilter} onChange={(v) => navigate(storiesHref({ name: "ideas", ...(seriesQuery(v) ? { seriesId: seriesQuery(v) } : {}) }))} />
           <button type="button" className="st-btn" aria-expanded={open === "ask"} onClick={() => setOpen((o) => (o === "ask" ? "none" : "ask"))}>
             Ask for ideas
           </button>
@@ -159,9 +176,10 @@ export function IdeasScreen({ ws }: StoriesScreenProps) {
 
       {open === "new" ? (
         <NewIdeaForm
+          series={inSeries}
           onCancel={() => setOpen("none")}
           onSave={async (input) => {
-            const idea = await storiesApi().createIdea(ws, input);
+            const idea = await storiesApi().createIdea(ws, inSeries ? { ...input, seriesId: inSeries.seriesId, ...(inSeries.castIds.length ? { characterIds: [...inSeries.castIds] } : {}) } : input);
             put(idea);
             setOpen("none");
             setFilter("all");
@@ -170,7 +188,16 @@ export function IdeasScreen({ ws }: StoriesScreenProps) {
           }}
         />
       ) : null}
-      {open === "ask" ? <AskForIdeas ws={ws} info={info} onCancel={() => setOpen("none")} onDrafts={(list, from) => showDrafts({ from, drafts: list.map((input) => ({ input, saved: false, saving: false })) })} /> : null}
+      {open === "ask" ? (
+        <AskForIdeas
+          ws={ws}
+          info={info}
+          series={inSeries}
+          seriesId={inSeries?.seriesId ?? (seriesFilter === "all" || seriesFilter === "none" ? undefined : seriesFilter)}
+          onCancel={() => setOpen("none")}
+          onDrafts={(list, from) => showDrafts({ from, drafts: list.map((input) => ({ input, saved: false, saving: false })) })}
+        />
+      ) : null}
 
       {drafts ? (
         <section className="st-glass st-lens st-s-drafts" ref={draftsRef} aria-labelledby="st-drafts-title">
@@ -244,7 +271,7 @@ export function IdeasScreen({ ws }: StoriesScreenProps) {
   );
 }
 
-function NewIdeaForm({ onSave, onCancel }: { onSave: (i: IdeaInput) => Promise<void>; onCancel: () => void }) {
+function NewIdeaForm({ series, onSave, onCancel }: { series: Series | null; onSave: (i: IdeaInput) => Promise<void>; onCancel: () => void }) {
   const [title, setTitle] = useState("");
   const [logline, setLogline] = useState("");
   const [category, setCategory] = useState<IdeaCategory | "">("");
@@ -277,6 +304,7 @@ function NewIdeaForm({ onSave, onCancel }: { onSave: (i: IdeaInput) => Promise<v
       }}
     >
       <h2 className="st-s-panel__title">New idea</h2>
+      {series ? <p className="st-s-field__hint">For {series.name}</p> : null}
       <TextField label="Title" value={title} onChange={setTitle} max={80} placeholder="For example: Pip and the icy hill" />
       <TextField label="What happens, in one line" value={logline} onChange={setLogline} max={280} multiline rows={2} placeholder="For example: Pip's car slides on ice and Pip stays calm." />
       <Pick label="What kind of video?" big value={category} options={KIND_OPTIONS} onChange={setCategory} />
@@ -436,7 +464,8 @@ function EditIdeaForm({ idea, onSave, onCancel }: { idea: Idea; onSave: (patch: 
   );
 }
 
-function AskForIdeas({ ws, info, onDrafts, onCancel }: { ws: string; info: AiInfo; onDrafts: (d: IdeaInput[], from: string) => void; onCancel: () => void }) {
+/** `seriesId`: the page's series, sent even before the list of series is read (an `?ask=1` tapped at once). */
+function AskForIdeas({ ws, info, series, seriesId, onDrafts, onCancel }: { ws: string; info: AiInfo; series: Series | null; seriesId?: string | undefined; onDrafts: (d: IdeaInput[], from: string) => void; onCancel: () => void }) {
   const [topic, setTopic] = useState("");
   const [kind, setKind] = useState<Kind>("any");
   const [pick, setPick] = useState<ModelOverride | null>(null);
@@ -445,7 +474,7 @@ function AskForIdeas({ ws, info, onDrafts, onCancel }: { ws: string; info: AiInf
   const run = useAiTask(ws, (task) => {
     const drafts = draftsOf(task);
     if (!drafts.length) setProblem("No ideas came back. Try another topic.");
-    else onDrafts(drafts, asked.current ? `Ideas about “${asked.current}”` : "Fresh ideas");
+    else onDrafts(drafts, asked.current ? `Ideas about “${asked.current}”` : series ? `Next for ${series.name}` : "Fresh ideas");
   }, () => ask());
   const usual = usualFor(info, "brainstorm");
   const busy = run.phase === "working";
@@ -453,9 +482,10 @@ function AskForIdeas({ ws, info, onDrafts, onCancel }: { ws: string; info: AiInf
   function ask() {
     if (topic.length > 200) return setProblem("Keep the topic to 200 letters.");
     setProblem(null);
-    const body: { topic?: string; category?: IdeaCategory; count: number; override?: ModelOverride } = { count: 4 };
+    const body: { topic?: string; category?: IdeaCategory; count: number; override?: ModelOverride; seriesId?: string } = { count: 4 };
     if (topic.trim()) body.topic = topic.trim();
     if (kind !== "any") body.category = kind;
+    if (seriesId) body.seriesId = seriesId;
     const override = sendPick(info, usual, pick);
     if (override) body.override = override;
     asked.current = topic.trim();
@@ -472,6 +502,7 @@ function AskForIdeas({ ws, info, onDrafts, onCancel }: { ws: string; info: AiInf
       }}
     >
       <h2 className="st-s-panel__title">Ask for ideas</h2>
+      {series ? <p className="st-s-field__hint">For {series.name}</p> : null}
       <TextField label="What about? (you can leave this empty)" value={topic} onChange={setTopic} max={200} placeholder="For example: a snowy day" />
       <Pick label="What kind?" big value={kind} options={[{ value: "any", label: "Any kind", line: "A mix of everything" }, ...KIND_OPTIONS]} onChange={setKind} />
       {problem ? <Notice tone="bad">{problem}</Notice> : null}
@@ -600,6 +631,14 @@ function IdeaCard({
             <GlassPill icon={<MakeIcon name="delete" size={18} />} aria-label={`Delete ${idea.title}`} onClick={onDelete}>
               Delete
             </GlassPill>
+            <MoveToSeries
+              ws={ws}
+              kind="idea"
+              id={idea.ideaId}
+              title={idea.title}
+              current={idea.seriesId ?? null}
+              onMoved={(seriesId) => onChange({ ...idea, seriesId: seriesId ?? undefined })}
+            />
           </span>
         </div>
         <h2 className="st-s-idea__title">{idea.title}</h2>
@@ -618,7 +657,7 @@ function IdeaCard({
             aria-disabled={blocked || undefined}
             title={blocked ? NO_GUIDANCE : undefined}
             onClick={() => {
-              if (!blocked) navigate(storiesHref({ name: "production_new", ideaId: idea.ideaId }));
+              if (!blocked) navigate(storiesHref({ name: "production_new", ideaId: idea.ideaId, ...(idea.seriesId ? { seriesId: idea.seriesId } : {}) }));
             }}
           >
             Make the video

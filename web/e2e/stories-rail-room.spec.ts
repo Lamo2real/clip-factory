@@ -37,6 +37,10 @@ async function room(page: Page) {
   });
 }
 
+/** The rows' height in this much of the list's own room: 48 px where the twelve pages fit at 48, else the room shared
+ * by the twelve (less their eleven 4 px gaps), never under 32 px (st-frame.css). */
+const rowFor = (room: number) => (room >= 620 ? 48 : Math.max(32, (room - 11 * 4) / 12));
+
 /** Each page of the rail, scrolled into the list's view, is itself at its centre (nothing of the shell over it). */
 async function reachable(page: Page) {
   return page.evaluate(() => {
@@ -79,8 +83,10 @@ for (const [w, h] of [
       const r = await room(page);
       expect(r.bottom, `${path}: the list ends above the switch`).toBeLessThanOrEqual(r.dockTop);
       if (h >= 768) expect(r.scrolls, `${path}: all the pages fit from 768 px high`).toBe(false);
-      // 48 px rows wherever the ten fit at 48 (10 × 48 + 9 × 4 = 516 px of room), the lower 40 px only where not
-      expect(r.row, `${path}: rows of ${r.row} px in ${r.room} px of room`).toBe(r.room >= 516 ? 48 : 40);
+      // 48 px rows wherever the twelve fit at 48 (12 × 48 + 11 × 4 = 620 px of room); in less room they share it, down to
+      // 32 px (st-frame.css), and from 900 px high they are still 44 px targets
+      expect(r.row, `${path}: rows of ${r.row} px in ${r.room} px of room`).toBeCloseTo(rowFor(r.room), 1);
+      if (h >= 900) expect(r.row, `${path}: 44 px targets from 900 px high`).toBeGreaterThanOrEqual(44);
       // The pages packed under the brand, 4 px apart, never spread down the rail's room.
       expect(r.gap, `${path}: --st-gap-control`).toBe(4);
       expect(r.gaps, `${path}: the room between the pages`).toEqual(r.gaps.map(() => 4));
@@ -102,7 +108,7 @@ for (const [w, h] of [
   });
 
 // The Mac app lays its 28 px title bar over the page, so the rail starts lower: the rows follow the list's own room, not
-// the window's height, so its pages fit there too wherever 40 px rows can (from 800 px high), at 48 px where 48 fit.
+// the window's height, so its pages fit there too from 800 px high, at 48 px where 48 fit.
 for (const [w, h] of [
   [1280, 800],
   [1280, 850],
@@ -118,7 +124,7 @@ for (const [w, h] of [
       const r = await room(page);
       expect(r.bottom, `${path}: the list ends above the switch`).toBeLessThanOrEqual(r.dockTop);
       expect(r.scrolls, `${path}: all the pages fit`).toBe(false);
-      expect(r.row, `${path}: rows of ${r.row} px in ${r.room} px of room`).toBe(r.room >= 516 ? 48 : 40);
+      expect(r.row, `${path}: rows of ${r.row} px in ${r.room} px of room`).toBeCloseTo(rowFor(r.room), 1);
       expect(r.gaps, `${path}: the room between the pages`).toEqual(r.gaps.map(() => 4));
       expect(await reachable(page), `${path}: every page can be reached`).toEqual([]);
     }

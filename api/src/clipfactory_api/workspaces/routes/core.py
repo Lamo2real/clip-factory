@@ -30,6 +30,7 @@ from ...workspaces import (
     characters,
     dashboard,
     deps,
+    design,
     guard,
     guidance,
     ideas,
@@ -48,6 +49,7 @@ from ...workspaces import (
 from ...workspaces import agent as story_agent
 from ...workspaces import agents as agents_mod
 from ...workspaces import secrets as ws_secrets
+from ...workspaces import series as series_rules
 from ...workspaces import types as ws
 from ...workspaces.expr import Update
 
@@ -418,6 +420,17 @@ def _check_characters(ctx: Ctx, ids: list[str]) -> list[Item]:
     return [owned[c] for c in ids]
 
 
+def _series_item(ctx: Ctx, series_id: Any) -> Item | None:
+    """This workspace's series (§45.43), else None."""
+    if not isinstance(series_id, str) or not is_ulid(series_id):
+        return None
+    return ctx.owned(ctx.store.get(ctx.pk, series_rules.series_sk(series_id)), ws.TYPE_SERIES)
+
+
+def _series_exists(ctx: Ctx, series_id: Any) -> bool:
+    return _series_item(ctx, series_id) is not None
+
+
 def list_ideas(app: App, req: Request) -> Response:
     ctx = _ctx(app, req)
     status = req.query.get("status") or "all"
@@ -436,6 +449,8 @@ def create_idea(app: App, req: Request) -> Response:
         ctx.store.get(ctx.pk, f"{ws.IDEA_SK}{fields['parentIdeaId']}"), ws.TYPE_IDEA
     ):
         fields.pop("parentIdeaId")  # the idea it came from is gone: keep the new one anyway
+    if fields.get("seriesId") and not _series_exists(ctx, fields["seriesId"]):
+        fields.pop("seriesId")  # §45.43: the series is gone: keep the idea, under No series
     item = _idea_item(ctx, fields, guidance.load())
     ctx.store.put(item, if_absent=True)
     return ok({"idea": shapes.public_idea(item)}, 201)
@@ -446,6 +461,8 @@ def patch_idea(app: App, req: Request) -> Response:
     idea_id = _id(req, "ideaId", NO_IDEA)
     current = _get(ctx, ws.IDEA_SK, idea_id, ws.TYPE_IDEA, NO_IDEA)
     changes = ideas.idea_input(req.json(), partial=True)
+    if changes.get("seriesId") and not _series_exists(ctx, changes["seriesId"]):
+        changes.pop("seriesId")  # §45.43: the series is gone: the idea stays where it is
     if not changes:
         raise bad_request("Nothing to change.")
     _check_characters(ctx, changes.get("characterIds") or [])
@@ -509,6 +526,8 @@ def _task_reply(
 def generate_ideas(app: App, req: Request) -> Response:
     ctx = _ctx(app, req)
     task_input, override = ideas.generate_body(req.json())
+    if task_input.get("seriesId") and not _series_exists(ctx, task_input["seriesId"]):
+        raise not_found(series_rules.NO_SERIES)
     return _task_reply(ctx, "brainstorm", task_input, override)
 
 
@@ -581,9 +600,33 @@ def _task_result(ctx: Ctx, task: Item) -> Item:
             parent_id=str(parent["ideaId"]) if parent else None,
             limit=int((task_input or {}).get("count") or 6),
         )
+        series_id = (task_input or {}).get("seriesId") if kind == "brainstorm" else (parent or {}).get("seriesId")
+        series = _series_item(ctx, series_id) if series_id else None
+        if series is not None:
+            result["drafts"] = _in_series(ctx, result["drafts"], series)
     elif kind == "expand_idea":
         result = _apply_expand(ctx, task, result)
     out["result"] = result
+    return out
+
+
+def _in_series(ctx: Ctx, drafts: list[Item], series: Mapping[str, Any]) -> list[Item]:
+    """Drafts of a series' ideas (§45.43): filed in it, the series' cast when a draft has none, and the main person
+    first when a draft has only a car."""
+    kinds = {str(c["characterId"]): c.get("kind") or "person" for c in _all(ctx, ws.CHAR_SK, ws.TYPE_CHARACTER)}
+    cast = [c for c in series.get("castIds") or [] if c in kinds]
+    lead = next((c for c in cast if kinds[c] != "car"), None)
+    out = []
+    for found in drafts:
+        ids = [c for c in found.get("characterIds") or [] if c in kinds]
+        if not ids:
+            ids = list(cast)
+        elif lead and all(kinds[c] == "car" for c in ids):
+            ids = [lead, *ids]
+        draft = {**found, "seriesId": str(series["seriesId"])}
+        if ids:
+            draft["characterIds"] = list(dict.fromkeys(ids))[: ideas.MAX_CHARACTERS]
+        out.append(draft)
     return out
 
 
@@ -980,34 +1023,13 @@ def _design_picture(ctx: Ctx, asset_id: Any) -> Item:
 
 
 def design_character(app: App, req: Request) -> Response:
-    """The character agent suggests a CharacterInput from words and/or a picture: ``202 { task }`` (a draft). With
-    ``characterId`` (this workspace's character, else 404) it redesigns that character: the agent gets it as the
-    current one, keeps its name and changes only what the owner asked (§45.34)."""
+    """The character agent suggests characters from words and/or photos: ``202 { task }`` (drafts). §45.34, §45.41:
+    up to 6 photos, a kind, and up to 4 options (3 for a car)."""
     ctx = _ctx(app, req)
-    body = req.json()
-    validate.only_keys(body, {"description", "referenceAssetId", "override", "characterId"})
-    description = validate.string(body, "description", required=False, max_len=DESIGN_MAX)
-    override = overrides.model_override(body.get("override"))
-    task_input: Item = {}
-    if body.get("characterId") is not None:
-        character_id = body["characterId"]
-        if not isinstance(character_id, str) or not is_ulid(character_id):
-            raise not_found(NO_CHARACTER)
-        task_input["characterId"] = _get(ctx, ws.CHAR_SK, character_id, ws.TYPE_CHARACTER, NO_CHARACTER)["characterId"]
-    if description:
-        task_input["description"] = description
-    if body.get("referenceAssetId") is not None:
-        asset = _design_picture(ctx, body["referenceAssetId"])
-        task_input.update(
-            {
-                "referenceAssetId": asset["assetId"],
-                "referenceKey": asset["key"],
-                "referenceContentType": asset.get("contentType"),
-            }
-        )
-    if not set(task_input) - {"characterId"}:
-        raise bad_request("Describe the character, or add a picture of it.")
-    return _task_reply(ctx, "character_design", task_input, override)
+    ask = design.parse(req.json())
+    current = _get(ctx, ws.CHAR_SK, ask.character_id, ws.TYPE_CHARACTER, NO_CHARACTER) if ask.character_id else None
+    assets = [_design_picture(ctx, a) for a in ask.asset_ids]
+    return _task_reply(ctx, "character_design", design.task_input(ask, assets, current), ask.override)
 
 
 # --- stories --------------------------------------------------------------------------------------------------
@@ -1191,15 +1213,33 @@ def _launch(ctx: Ctx, story: Item, job: Item, *, note: str | None = None) -> tup
     return _start(ctx, _reread_story(ctx, story), job)
 
 
+def _series_test(ctx: Ctx, wanted: str | None) -> Callable[[Mapping[str, Any]], bool]:
+    """``?seriesId=`` (§45.43): every item (absent), the items of one series (an id), or of none ("none": no
+    ``seriesId``, or one whose series is gone)."""
+    if wanted is None:
+        return lambda _item: True
+    if wanted == "none":
+        known = {str(s["seriesId"]) for s in _all(ctx, ws.SERIES_SK, ws.TYPE_SERIES)}
+        return lambda item: series_rules.orphan(item, known)
+    if not is_ulid(wanted):
+        raise bad_request("seriesId is not valid.", "seriesId")
+    return lambda item: item.get("seriesId") == wanted
+
+
 def list_stories(app: App, req: Request) -> Response:
     ctx = _ctx(app, req)
     status = req.query.get("status") or "all"
     if status != "all" and status not in shapes.STORY_STATUSES:
         raise bad_request("status must be a story status or all.")
     limit = validate.query_int(req.query, "limit", default=20, lo=1, hi=50)
+    in_series = _series_test(ctx, req.query.get("seriesId") or None)
 
     def keep(item: Item) -> bool:
-        return ctx.owned(item, ws.TYPE_STORY) is not None and (status == "all" or item.get("status") == status)
+        return (
+            ctx.owned(item, ws.TYPE_STORY) is not None
+            and (status == "all" or item.get("status") == status)
+            and in_series(item)
+        )
 
     items, cursor = library.filtered_page(
         ctx.store, ctx.pk, ws.STORY_SK, keep, limit=limit, cursor=req.query.get("cursor")
@@ -1240,6 +1280,9 @@ def create_story(app: App, req: Request) -> Response:
     fields = stories.story_input(req.json())
     _refuse_not_ready(ctx)
     cast = _check_characters(ctx, fields["characterIds"])
+    problem = characters.cast_problem(cast)
+    if problem:
+        raise bad_request(problem, "characterIds")
     _check_references(ctx, fields["referenceIds"])
     _refuse_unusable(ctx, project=fields["ai"], field="ai")
     config = ctx.config
@@ -1256,6 +1299,9 @@ def create_story(app: App, req: Request) -> Response:
         topic = guidance.match(g, [brief["title"], brief["logline"]]) if brief["category"] == "driving_safety" else None
     if idea is not None and idea.get("category") == "driving_safety" and not topic:
         topic = guidance.match(g, ideas.idea_texts(idea))  # the concept's words count too (an Expand put them there)
+    series_id = fields.get("seriesId") or (idea or {}).get("seriesId")
+    if series_id and not _series_exists(ctx, series_id):
+        series_id = None  # §45.43: the series is gone: the video is made anyway, under No series
     category = str(brief.get("category") or "explainer")
     if category == "driving_safety" and not topic:
         raise ApiError(409, "conflict", guidance.NO_GUIDANCE, extra={"topics": guidance.topic_choices(g)})
@@ -1293,6 +1339,8 @@ def create_story(app: App, req: Request) -> Response:
         "createdAt": ctx.at(),
         "updatedAt": ctx.at(),
     }
+    if series_id:
+        story["seriesId"] = series_id
     run = list(shapes.STEP_ORDER)
     _writer_on(ctx, run)
     job = _story_job(
@@ -1536,6 +1584,10 @@ def delete_story(app: App, req: Request) -> Response:
     for asset in assets:
         ctx.store.delete(ctx.pk, asset["sk"])
     ctx.store.delete(ctx.pk, story["sk"])
+    if story.get("seriesId"):
+        from . import series as series_routes
+
+        series_routes.forget_story(ctx, story["seriesId"], str(story_id))  # never raises
     if story.get("ideaId"):
         forget = Update(ctx.pk, f"{ws.IDEA_SK}{story['ideaId']}", sets={"updatedAt": ctx.at()})
         forget.deletes["storyIds"] = {story_id}
@@ -1659,6 +1711,10 @@ def approve(app: App, req: Request) -> Response:
     except db.ConditionFailed as e:
         raise conflict(stories.CHANGED) from e
     activity.record(ctx.store, ctx.user_id, ctx.ws_id, "approved", item, now=ctx.now)
+    if item.get("seriesId"):
+        from . import series as series_routes
+
+        series_routes.after_approve(ctx, item)  # never raises: try/except Exception, then a log line
     return ok({"story": _public_story(ctx, item)})
 
 
@@ -1742,8 +1798,18 @@ def get_library(app: App, req: Request) -> Response:
         if value is not None and not is_ulid(value):
             raise bad_request(f"{name} is not valid.")
     limit = validate.query_int(req.query, "limit", default=50, lo=1, hi=100)
+    wanted = req.query.get("seriesId") or None
+    story_ids = None
+    if wanted is not None:
+        in_series = _series_test(ctx, wanted)
+        story_ids = frozenset(str(s["storyId"]) for s in _all(ctx, ws.STORY_SK, ws.TYPE_STORY) if in_series(s))
     keep = library.asset_filter(
-        ctx.user_id, ctx.ws_id, kind=None if kind == "all" else kind, story_id=story_id, character_id=character_id
+        ctx.user_id,
+        ctx.ws_id,
+        kind=None if kind == "all" else kind,
+        story_id=story_id,
+        character_id=character_id,
+        story_ids=story_ids,
     )
     items, cursor = library.filtered_page(
         ctx.store, ctx.pk, ws.ASSET_SK, keep, limit=limit, cursor=req.query.get("cursor")

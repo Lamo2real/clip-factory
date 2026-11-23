@@ -14,7 +14,12 @@ from dataclasses import dataclass, field
 from typing import Any
 
 from .guidance import Topic
-from .writer import DRIVING_ACTIONS, POST_FIELDS, VEHICLE_ACTIONS, VEHICLES
+from .writer import DRIVING_ACTIONS, POST_FIELDS, VEHICLES
+from .writer import VEHICLE_ACTIONS as WRITER_VEHICLE_ACTIONS
+
+# §45.42: a car's speed_up and stall are driving moves the checker reads too (a car of the cast, a car prop with a
+# castId, included). get_in and get_out are a character's actions, never driving ones.
+VEHICLE_ACTIONS = WRITER_VEHICLE_ACTIONS | frozenset({"speed_up", "stall"})
 
 CHECK_TOOL = "check_facts"
 CHECK_SCHEMA: dict[str, Any] = {
@@ -96,6 +101,7 @@ class Check:
 def items(script: dict[str, Any], post: dict[str, Any] | None) -> list[dict[str, Any]]:
     """Every item the checker reads, with its ref and where it is (for the owner's sentences)."""
     cast = {k: str((v or {}).get("name") or k) for k, v in (script.get("cast") or {}).items()}
+    cars = {k: str((v or {}).get("name") or k) for k, v in (script.get("cars") or {}).items()}
     out: list[dict[str, Any]] = []
     for c in script.get("captions") or []:
         out.append(
@@ -118,7 +124,8 @@ def items(script: dict[str, Any], post: dict[str, Any] | None) -> list[dict[str,
             vehicle = who in props and str(props[who].get("kind")) in VEHICLES and action in VEHICLE_ACTIONS
             if action not in DRIVING_ACTIONS and not vehicle:
                 continue
-            name = cast.get(who) or f"the {props.get(who, {}).get('kind', 'prop')}"
+            prop = props.get(who, {})
+            name = cast.get(who) or cars.get(str(prop.get("castId") or "")) or f"the {prop.get('kind', 'prop')}"
             words = f"{name} does {action.replace('_', ' ')}"
             if b.get("dir") in ("left", "right"):
                 words += f" to the {b['dir']}"  # a skid's dir: the side the rear slides to (the engine's rules)

@@ -3,7 +3,8 @@
 // progress bar. Styled by web/src/stories/styles/studio.css on the warm liquid glass (styles/GLASS-CONTRACT.md: the
 // switch is the contract's orange .st-toggle, a sheet is hero float glass, its × a round glass button). Sounds come
 // from the app's global click handler: a switched-off control carries aria-disabled (so it plays the deny sound) and
-// ignores the tap.
+// ignores the tap. A chip or a row may carry a play button (HearButton, §45.40) that plays its sound sample instead of
+// the click sound.
 import { useEffect, useId, useRef, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { Glide } from "../../components/Glide.tsx";
@@ -11,6 +12,7 @@ import { trapTab } from "../../components/Sheet.tsx";
 import { centerOf, starBurst } from "../ui.tsx";
 import { storiesSound } from "../prefs.ts";
 import { Stepper } from "../glass/index.ts";
+import type { HearState } from "./samples.ts";
 
 export interface PickOption<T extends string> {
   value: T;
@@ -230,6 +232,7 @@ export function Slider({
   words,
   marks,
   stepper = false,
+  onCommit,
 }: {
   label: string;
   value: number;
@@ -237,6 +240,11 @@ export function Slider({
   max: number;
   step: number;
   onChange: (n: number) => void;
+  /**
+   * The value the owner let go at: on pointerup and touchend, on the native change event, and after keys once 300 ms
+   * pass with no key. Never during a drag's input events (the Sounds part plays the voice at the new pitch).
+   */
+  onCommit?: (value: number) => void;
   /** The value as the owner reads it ("45 seconds"). */
   words: string;
   /** A highlighted part of the track, e.g. the best length (30 to 60 s). */
@@ -246,6 +254,53 @@ export function Slider({
 }) {
   const id = useId();
   const pct = (n: number) => ((n - min) / (max - min)) * 100;
+  const input = useRef<HTMLInputElement>(null);
+  const commitRef = useRef(onCommit);
+  commitRef.current = onCommit;
+  const commits = !!onCommit;
+  useEffect(() => {
+    const el = input.current;
+    if (!el || !commits) return;
+    let keyed = false;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    let last: { v: number; at: number } | null = null;
+    const commit = () => {
+      clearTimeout(timer);
+      timer = undefined;
+      const v = Number(el.value);
+      const at = performance.now();
+      // A release fires pointerup (or touchend) and change: one commit.
+      if (last && last.v === v && at - last.at < 250) return;
+      last = { v, at };
+      commitRef.current?.(v);
+    };
+    const onKey = () => {
+      keyed = true;
+    };
+    const onPress = () => {
+      keyed = false;
+    };
+    const onChange = () => {
+      if (!keyed) return commit();
+      clearTimeout(timer);
+      timer = setTimeout(commit, 300);
+    };
+    el.addEventListener("keydown", onKey);
+    el.addEventListener("pointerdown", onPress);
+    el.addEventListener("touchstart", onPress, { passive: true });
+    el.addEventListener("pointerup", commit);
+    el.addEventListener("touchend", commit);
+    el.addEventListener("change", onChange);
+    return () => {
+      clearTimeout(timer);
+      el.removeEventListener("keydown", onKey);
+      el.removeEventListener("pointerdown", onPress);
+      el.removeEventListener("touchstart", onPress);
+      el.removeEventListener("pointerup", commit);
+      el.removeEventListener("touchend", commit);
+      el.removeEventListener("change", onChange);
+    };
+  }, [commits]);
   return (
     <div className="st-s-field st-s-slider">
       <span className="st-s-slider__top">
@@ -265,6 +320,7 @@ export function Slider({
           <span className="st-s-slider__mark" style={{ left: `${pct(marks.from)}%`, width: `${pct(marks.to) - pct(marks.from)}%` }} aria-hidden="true" />
         ) : null}
         <input
+          ref={input}
           id={id}
           type="range"
           className="st-s-range"
@@ -287,13 +343,53 @@ export function Slider({
   );
 }
 
-/** A chip that turns on and off (several can be on: faces, noises, traits). */
+/** A play button's sound (§45.40): what it plays, in words, and whether it can play now. */
+export interface HearProp {
+  /** what it plays, in words: "Gasp" */
+  label: string;
+  playing: boolean;
+  state: HearState;
+  /** set: the button is aria-disabled with this title (Quiet: "Pick Babble or Hum first") */
+  disabledWhy?: string;
+  onHear: () => void;
+}
+
+/**
+ * A round glass play button: a triangle, a square while its sound plays (with `children`, a glass pill with the
+ * words after it). It plays the sample instead of the click sound (data-sound="off"); with Clips Funded's Sounds off,
+ * or `disabledWhy`, it is switched off (aria-disabled: the deny sound) and says why.
+ */
+export function HearButton({ label, playing, state, disabledWhy, onHear, className = "", children }: HearProp & { className?: string; children?: ReactNode }) {
+  const why = disabledWhy ?? (state === "off" ? "Turn Sounds on first" : undefined);
+  const off = state !== "ok" || !!disabledWhy;
+  return (
+    <button
+      type="button"
+      className={`st-s-hear${children ? " st-s-hear--words" : " st-round-btn"}${playing ? " is-playing" : ""}${className ? ` ${className}` : ""}`}
+      aria-label={`${playing ? "Stop" : "Play"} ${label}`}
+      aria-disabled={off || undefined}
+      title={off ? why : undefined}
+      data-sound={off ? undefined : "off"}
+      onClick={() => {
+        if (!off) onHear();
+      }}
+    >
+      <svg className="st-s-hear__icon" viewBox="0 0 24 24" width="18" height="18" aria-hidden="true" focusable="false">
+        {playing ? <rect x="6.5" y="6.5" width="11" height="11" rx="2.5" fill="currentColor" /> : <path d="M8.5 5.8v12.4a1 1 0 0 0 1.52.85l9.9-6.2a1 1 0 0 0 0-1.7l-9.9-6.2a1 1 0 0 0-1.52.85Z" fill="currentColor" />}
+      </svg>
+      {children}
+    </button>
+  );
+}
+
+/** A chip that turns on and off (several can be on: faces, noises, traits). With `hear`, a play button sits before it. */
 export function Chip({
   on,
   onToggle,
   children,
   locked = false,
   lockedWhy,
+  hear,
 }: {
   on: boolean;
   onToggle: () => void;
@@ -301,8 +397,10 @@ export function Chip({
   /** Shown on but cannot be turned off (neutral is every character's face). */
   locked?: boolean;
   lockedWhy?: string;
+  /** A play button for the chip's sound, beside it (a button inside a button would be invalid HTML). */
+  hear?: HearProp;
 }) {
-  return (
+  const chip = (
     <button
       type="button"
       className={`st-s-chipbtn${on ? " is-on" : ""}`}
@@ -318,6 +416,13 @@ export function Chip({
       </span>
       {children}
     </button>
+  );
+  if (!hear) return chip;
+  return (
+    <span className={`st-s-chipwrap${on ? " is-on" : ""}`}>
+      <HearButton {...hear} className="st-s-chipwrap__hear" />
+      {chip}
+    </span>
   );
 }
 

@@ -1,0 +1,262 @@
+/* ---------- Car characters (docs/CONTRACTS.md §45.41): the kind tiles, the photo strip, "Pick one" and the car
+   editor's moves. Liquid glass from the tokens (styles/GLASS-CONTRACT.md): no borders, --st-r-* radii, words of
+   0.78rem and up, AA contrast; headings in Fugaz One (--st-font-display), words in Fraunces (the body font). ---------- */
+
+/* What are you making? Two big glass tiles to start, a small pick-one bar once one is picked. */
+.st-s-kind {
+  margin: 0;
+}
+
+.st-s-kind--tiles .st-s-pick--big {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  max-width: 560px;
+}
+
+.st-s-kind--tiles .st-s-pick__opt {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--st-space-2);
+  min-height: 132px;
+  text-align: center;
+}
+
+.st-s-kind--tiles .st-s-pick__label {
+  font-family: var(--st-font-display);
+  font-size: var(--st-fs-h3);
+  font-weight: 400;
+  line-height: 1.15;
+}
+
+.st-s-kind__art,
+.st-s-caropts .st-s-pick__art,
+.st-s-kind--tiles .st-s-pick__art {
+  display: grid;
+  place-items: center;
+}
+
+/* A car card's picture is as big as its car, above the name (the kit's 34 px shape-picker box would squeeze it). */
+.st-s-caropts .st-s-pick__art,
+.st-s-kind--tiles .st-s-pick__art {
+  width: auto;
+  height: auto;
+  margin: 0;
+}
+
+.st-s-kind__art canvas {
+  display: block;
+}
+
+/* ---------- The photo strip (Photos.tsx): a glass well that takes dropped photos ---------- */
+.st-s-photos__zone {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--st-space-3);
+  padding: var(--st-space-4);
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-well);
+  box-shadow: var(--st-sheen-control);
+  transition:
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    box-shadow var(--st-dur-hover) var(--st-ease-out);
+}
+
+.st-s-photos__zone.is-over {
+  background-color: var(--st-fill-control-hover);
+  box-shadow: var(--st-sheen-control), 0 0 26px rgb(var(--st-amber-rgb) / 0.55);
+}
+
+.st-s-photos__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--st-space-2);
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* Each photo: its 72 px thumbnail at the bottom left, the round × in the corner, all inside the item's own box. */
+.st-s-photos__item {
+  position: relative;
+  display: grid;
+  gap: var(--st-space-1);
+  padding: 14px 14px 0 0;
+}
+
+.st-s-photos__pic,
+.st-s-photos__retry {
+  position: relative;
+  display: block;
+  width: 72px;
+  height: 72px;
+}
+
+.st-s-photos__pic img,
+.st-s-photos__retry img,
+.st-s-photos__noimg {
+  display: block;
+  width: 72px;
+  height: 72px;
+  border-radius: var(--st-r-control);
+  object-fit: cover;
+  background: var(--st-fill-control);
+  box-shadow: var(--st-depth-1);
+}
+
+.st-s-photos__item.is-sending img {
+  opacity: 0.7;
+}
+
+.st-s-photos__item .st-s-progress {
+  width: 72px;
+}
+
+.st-s-photos__retry {
+  padding: 0;
+  border: 0;
+  border-radius: var(--st-r-control);
+  background: none;
+  overflow: hidden;
+}
+
+.st-s-photos__retry:focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
+}
+
+.st-s-photos__again {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  padding: 4px;
+  border-radius: var(--st-r-control);
+  color: #fff6e5;
+  background: rgb(28 24 66 / 0.78);
+  font-size: 0.8125rem;
+  font-weight: var(--st-weight-ui);
+  line-height: 1.2;
+  text-align: center;
+}
+
+.st-s-photos__remove {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 1;
+  color: var(--st-on-cream);
+  background: var(--st-coral);
+  box-shadow: var(--st-depth-1);
+}
+
+.st-s-photos__remove:hover {
+  background:
+    linear-gradient(rgb(var(--st-cream-rgb) / 0.24), rgb(var(--st-cream-rgb) / 0.24)),
+    var(--st-coral);
+}
+
+.st-s-photos__drop {
+  flex: 1 1 10rem;
+  color: var(--st-text-soft);
+  font-weight: var(--st-weight-ui);
+  overflow-wrap: anywhere;
+}
+
+.st-s-photos__zone.is-over .st-s-photos__drop {
+  color: var(--st-text-strong);
+}
+
+.st-s-photos__add {
+  display: inline-flex;
+}
+
+.st-s-photos__zone > .st-s-field__hint {
+  flex-basis: 100%;
+}
+
+/* ---------- Pick one (CarOptions.tsx): 3 across, 2 on phones; the picked card under the sliding highlight ---------- */
+.st-s-caropts {
+  display: grid;
+  gap: var(--st-space-3);
+  container-type: inline-size;
+}
+
+.st-s-caropts__title {
+  margin: 0;
+  color: var(--st-text-strong);
+  font-family: var(--st-font-display);
+  font-size: var(--st-fs-h3);
+  font-weight: 400;
+  line-height: 1.2;
+}
+
+.st-s-caropts__grid .st-s-pick--big {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+@container (min-width: 520px) {
+  .st-s-caropts__grid .st-s-pick--big {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+.st-s-caropts__grid .st-s-pick__opt {
+  flex-direction: column;
+  align-items: center;
+  gap: var(--st-space-1);
+  padding: 10px 10px 12px;
+  text-align: center;
+}
+
+.st-s-caropts__grid .st-s-pick__text {
+  justify-items: center;
+}
+
+.st-s-caropts__grid .st-s-pick__label {
+  font-family: var(--st-font-display);
+  font-weight: 400;
+  overflow-wrap: anywhere;
+}
+
+.st-s-caropts__grid .st-s-pick > .glide {
+  box-shadow: var(--st-depth-1), 0 0 22px rgb(var(--st-amber-rgb) / 0.55);
+}
+
+.st-s-caropts__bar {
+  justify-content: flex-start;
+}
+
+/* The car's moves to try sit in their own wrapper (Honk plays its own sound). */
+.st-s-carmoves {
+  display: contents;
+}
+
+/* ---------- Cars (screens/Cars.tsx): the one big "Make a car", and Characters' way to the cars ---------- */
+.st-s-makecar {
+  min-height: 56px;
+  padding: 0 var(--st-space-6);
+  font-family: var(--st-font-display);
+  font-size: 1.15rem;
+  font-weight: 400;
+}
+
+.st-s-makecar .st-icon {
+  flex: none;
+}
+
+.st-s-tocars {
+  justify-self: start;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .st-s-photos__zone {
+    transition: none;
+  }
+}
+
+.reduce-motion .st-s-photos__zone {
+  transition: none;
+}

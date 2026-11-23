@@ -1,0 +1,468 @@
+/* ---------- Series (CONTRACTS §45.43): the folders, one folder, the "All ▾" switch, the Series: field, Move ----------
+   The warm liquid glass (styles/GLASS-CONTRACT.md): every surface is the contract's glass, every number a --st-*
+   token. Fugaz One on headings (--st-font-display), Fraunces on the words (--st-font). No borders, no cursor rules,
+   light only; every target at least 44 px. */
+
+/* ---------- The switch and the field ---------- */
+
+.st-series-switch {
+  max-width: 100%;
+  font-family: var(--st-font);
+  font-size: var(--st-fs-body);
+}
+
+.st-series-switch.is-set {
+  background: var(--st-cream);
+  background-image: none;
+  color: var(--st-on-cream);
+  box-shadow: var(--st-depth-1);
+}
+
+.st-series-switch__name {
+  overflow: hidden;
+  max-width: 22ch;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.st-series-caret {
+  flex: none;
+}
+
+.st-series-switch:focus-visible,
+.st-series-choice:focus-visible,
+.st-series-card:focus-visible {
+  box-shadow: var(--st-focus-ring);
+}
+
+.st-series-field {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--st-space-2) var(--st-space-3);
+}
+
+.st-series-field__label {
+  color: var(--st-text-strong);
+  font-family: var(--st-font);
+  font-size: var(--st-fs-body);
+  font-weight: 600;
+}
+
+/* A page head's switch sits with its other actions. */
+.st-series-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--st-space-3);
+}
+
+/* ---------- The sheet's big choices ---------- */
+
+.st-series-choices {
+  display: grid;
+  gap: var(--st-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.st-series-choice {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: var(--st-space-1);
+  width: 100%;
+  min-height: var(--st-tap-main);
+  padding: var(--st-space-3) var(--st-space-4);
+  border: 0;
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-control);
+  background-image: var(--st-light-4);
+  box-shadow: var(--st-sheen-control);
+  color: var(--st-text);
+  font: inherit;
+  text-align: start;
+}
+
+.st-series-choice:hover {
+  background: var(--st-fill-control-hover);
+  background-image: var(--st-light-4);
+}
+
+.st-series-choice.is-on {
+  background: var(--st-cream);
+  background-image: none;
+  color: var(--st-on-cream);
+  box-shadow: var(--st-depth-1);
+}
+
+.st-series-choice__name {
+  font-family: var(--st-font);
+  font-size: var(--st-fs-body);
+  font-weight: 600;
+}
+
+.st-series-choice__line {
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
+}
+
+.st-series-choice.is-on .st-series-choice__line {
+  color: var(--st-on-cream-soft);
+}
+
+.st-series-confirm {
+  margin: 0;
+  color: var(--st-text-strong);
+  font-family: var(--st-font);
+  font-size: var(--st-fs-body);
+  line-height: var(--st-lh-body);
+}
+
+.st-series-problem {
+  margin: 0;
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-small);
+}
+
+.st-series-move {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--st-space-2);
+}
+
+.st-series-more {
+  min-width: var(--st-tap-main);
+}
+
+/* ---------- The page: Series and one folder ---------- */
+
+.st-series h1,
+.st-series h2,
+.st-series h3 {
+  font-family: var(--st-font-display);
+  font-weight: 400;
+  line-height: var(--st-lh-head);
+}
+
+.st-series p,
+.st-series li,
+.st-series label {
+  font-family: var(--st-font);
+}
+
+.st-series-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+  gap: var(--st-gap);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.st-series-card {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  overflow: hidden;
+  height: 100%;
+  border-radius: var(--st-r-surface);
+  background: var(--st-tint-card);
+  box-shadow: var(--st-sheen), var(--st-depth-1), var(--st-glow-behind);
+  color: var(--st-text);
+  text-decoration: none;
+}
+
+.st-series-card:hover {
+  background: var(--st-tint-raised, var(--st-tint-card));
+}
+
+.st-series-cover {
+  display: grid;
+  place-items: center;
+  overflow: hidden;
+  aspect-ratio: 16 / 10;
+  background:
+    radial-gradient(60% 70% at 50% 30%, rgb(var(--st-amber-rgb) / 0.28), transparent 72%),
+    rgb(var(--st-cream-rgb) / 0.08);
+}
+
+.st-series-cover img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+.st-series-cover .st-icon {
+  width: 56px;
+  height: 56px;
+  color: var(--st-text-soft);
+}
+
+.st-series-card__body {
+  display: grid;
+  align-content: start;
+  gap: var(--st-space-1);
+  padding: var(--st-space-4) var(--st-inset);
+}
+
+.st-series-card__name {
+  margin: 0;
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-h3);
+  overflow-wrap: anywhere;
+}
+
+.st-series-card__line,
+.st-series-card__count {
+  margin: 0;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
+  line-height: var(--st-lh-body);
+}
+
+.st-series-empty {
+  display: grid;
+  justify-items: center;
+  gap: var(--st-space-4);
+  padding: var(--st-space-7) var(--st-inset);
+  border-radius: var(--st-r-surface);
+  background:
+    radial-gradient(42% 34% at 50% 18%, rgb(var(--st-amber-rgb) / 0.2), transparent 72%),
+    var(--st-tint-card);
+  box-shadow: var(--st-sheen), var(--st-depth-1);
+  text-align: center;
+}
+
+.st-series-empty .st-icon {
+  width: 64px;
+  height: 64px;
+  color: var(--st-text-soft);
+}
+
+.st-series-empty p {
+  margin: 0;
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-body);
+}
+
+/* One folder: its head, then Story so far, Episodes, Coming up and Cast. */
+.st-series-head {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: var(--st-space-4);
+  padding: var(--st-inset);
+  border-radius: var(--st-r-surface);
+  background: var(--st-tint-hero, var(--st-tint-card));
+  box-shadow: var(--st-sheen-hero, var(--st-sheen)), var(--st-depth-2), var(--st-glow-behind);
+}
+
+.st-series-head .st-series-cover {
+  width: 120px;
+  border-radius: var(--st-r-control);
+}
+
+.st-series-head__text {
+  display: grid;
+  gap: var(--st-space-1);
+  min-width: 0;
+}
+
+.st-series-head__name {
+  margin: 0;
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-h1);
+  overflow-wrap: anywhere;
+}
+
+.st-series-head__line {
+  margin: 0;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-body);
+}
+
+.st-series-head__actions {
+  display: flex;
+  flex-wrap: wrap;
+  grid-column: 1 / -1;
+  gap: var(--st-space-3);
+}
+
+@media (width < 560px) {
+  .st-series-head {
+    grid-template-columns: 1fr;
+  }
+
+  .st-series-head .st-series-cover {
+    width: 100%;
+  }
+
+  .st-series-head__actions > .st-btn:not(.st-series-more) {
+    flex: 1 1 100%;
+  }
+}
+
+.st-series-section {
+  display: grid;
+  gap: var(--st-space-3);
+  padding: var(--st-inset);
+  border-radius: var(--st-r-surface);
+  background: var(--st-tint-card);
+  box-shadow: var(--st-sheen), var(--st-depth-1);
+}
+
+.st-series-section__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--st-space-3);
+}
+
+.st-series-section__title {
+  margin: 0;
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-h2);
+}
+
+.st-series-sofar {
+  margin: 0;
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-body);
+  line-height: var(--st-lh-body);
+  white-space: pre-line;
+}
+
+.st-series-by,
+.st-series-quiet {
+  margin: 0;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
+}
+
+.st-series-episodes,
+.st-series-coming,
+.st-series-cast {
+  display: grid;
+  gap: var(--st-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.st-series-episodes {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+}
+
+.st-series-ep {
+  display: grid;
+  overflow: hidden;
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-control);
+  background-image: var(--st-light-4);
+  box-shadow: var(--st-sheen-control);
+  color: var(--st-text);
+  text-decoration: none;
+}
+
+.st-series-ep:hover {
+  background: var(--st-fill-control-hover);
+  background-image: var(--st-light-4);
+}
+
+.st-series-ep:focus-visible {
+  box-shadow: var(--st-focus-ring);
+}
+
+.st-series-ep .st-series-cover {
+  aspect-ratio: 16 / 9;
+}
+
+.st-series-ep__body {
+  display: grid;
+  gap: var(--st-space-1);
+  padding: var(--st-space-3) var(--st-space-4);
+}
+
+.st-series-ep__n {
+  color: var(--st-text-amber, var(--st-text-soft));
+  font-family: var(--st-font-display);
+  font-size: var(--st-fs-body);
+}
+
+.st-series-ep__title {
+  margin: 0;
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-h3);
+}
+
+.st-series-ep__summary {
+  margin: 0;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
+  line-height: var(--st-lh-body);
+}
+
+.st-series-write {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--st-space-2);
+  padding: 0 var(--st-space-4) var(--st-space-3);
+}
+
+.st-series-coming li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--st-space-2);
+  min-height: var(--st-tap);
+  padding: var(--st-space-2) var(--st-space-4);
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-control);
+}
+
+.st-series-coming a {
+  color: var(--st-text-strong);
+  font-weight: 600;
+}
+
+.st-series-cast {
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+}
+
+.st-series-cast li {
+  display: grid;
+  justify-items: center;
+  gap: var(--st-space-1);
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-small);
+  text-align: center;
+}
+
+.st-series-menu {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--st-space-3);
+}
+
+.st-series-chip {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--st-space-2);
+}
+
+/* Library › Projects: a project's Move sits under its card, at the end. */
+.st-project__move {
+  display: flex;
+  justify-content: flex-end;
+  padding-top: var(--st-space-2);
+}
+
+.st-project__move:empty {
+  display: none;
+}

@@ -26,6 +26,9 @@ from .common import TaskFailed, log
 from .store import Store
 
 PICTURE_FAILED = "I can't open that picture. Try a screenshot or a photo."
+# The picture helper's own long edge (images.LONG_EDGE): a call for it passes the path only, as the helper's first
+# contract had it, so a helper that takes nothing more still works.
+LONG_EDGE = 1568
 
 
 class ServiceMissing(TaskFailed):
@@ -38,7 +41,7 @@ class Services:
     s3: Any
     bucket: str
     model: models.ModelClient
-    to_model_image: Callable[[Path], Any]
+    to_model_image: Callable[..., Any]
     catalog: Callable[[], dict[str, Any]]
     work_dir: Path = field(default_factory=lambda: Path(os.environ.get("CF_WORK_DIR") or "/tmp/ls-work"))
     ffmpeg: str = "ffmpeg"
@@ -128,7 +131,7 @@ def accepts(client: Any, name: str) -> bool:
     return name in params or any(p.kind is inspect.Parameter.VAR_KEYWORD for p in params.values())
 
 
-def find_image_helper() -> Callable[[Path], Any]:
+def find_image_helper() -> Callable[..., Any]:
     try:
         images = importlib.import_module("lamostories_agent.images")  # builder E's picture helper (§45.33)
     except ImportError as e:
@@ -162,13 +165,13 @@ def from_env(runner: Any = None) -> Services:
     )
 
 
-def _lazy_images() -> Callable[[Path], Any]:
-    found: list[Callable[[Path], Any]] = []
+def _lazy_images() -> Callable[..., Any]:
+    found: list[Callable[..., Any]] = []
 
-    def call(path: Path) -> Any:
+    def call(path: Path, **kw: Any) -> Any:
         if not found:
             found.append(find_image_helper())
-        return found[0](path)
+        return found[0](path, **kw)
 
     return call
 
@@ -189,10 +192,12 @@ def image_block(value: Any) -> dict[str, Any]:
     raise TaskFailed(PICTURE_FAILED)
 
 
-def picture(svc: Services, path: Path) -> dict[str, Any]:
-    """One picture through the helper (long edge ≤ 1568 px, JPEG, no EXIF); one it cannot open fails the work."""
+def picture(svc: Services, path: Path, long_edge: int = LONG_EDGE) -> dict[str, Any]:
+    """One picture through the helper (long edge ≤ ``long_edge`` px, 1568 by default, JPEG, no EXIF); one it cannot
+    open fails the work. Several photos at once go smaller (a car design of 4 to 6 photos: 1024 px)."""
     try:
-        return image_block(svc.to_model_image(path))
+        made = svc.to_model_image(path) if long_edge >= LONG_EDGE else svc.to_model_image(path, long_edge=long_edge)
+        return image_block(made)
     except TaskFailed:
         raise
     except Exception as e:

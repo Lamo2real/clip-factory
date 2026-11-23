@@ -17,6 +17,7 @@ from typing import Any
 
 from . import keys
 from .guidance import Topic
+from .series_memory import car_words
 
 POST_FIELDS = ("youtubeTitle", "youtubeDescription", "instagram", "facebook", "tiktok", "x")
 POST_LIMITS = {
@@ -73,7 +74,18 @@ House rules (always):
   or "curve_right"; a tree "pine" or "snow"; a phone "ring" or "on". An arrow points up at rot 0; a car seen from
   above ("top" view) points its nose up at rot 0 and turns clockwise as rot grows.
 - Reference videos, when given, are other people's videos the owner liked: borrow only structure, timing and staging
-  ideas from their analyses; never copy their characters, logos, footage, music or catchphrases."""
+  ideas from their analyses; never copy their characters, logos, footage, music or catchphrases.
+- A cast member with kind "car" is a car, never an actor: put it in a scene's props as {kind: "car", castId}, and
+  reach it in beats by its propId. People ride in it with inCar set to that propId. Its moves are prop actions (move,
+  speed_up, stop, bounce, honk, blink, stall, skid). It makes faces only when its faces list has more than neutral.
+- To show someone getting in or out, give them inCar and a get_in or get_out beat while the car is parked; the car
+  moves only after get_in ends.
+- The driver waves only while the car is stopped; a passenger may wave any time.
+- In a story that is not a driving-safety one, a car may stall, stop or bump for fun, but no caption gives driving
+  advice and teachesSafety stays false.
+- When the request has a series, this video is its episode number `series.episode`: follow on from storySoFar and
+  lastEpisodes (the same cast, places and running jokes, and where things stand now), never retell an earlier episode,
+  and make it work on its own for someone who has not seen the others."""
 
 CAPTIONS_TEMPLATE = """You write the six post captions of one finished Clips Funded video (a short {shape} animated
 story with no voice-over), from its script.
@@ -133,9 +145,14 @@ def _num(lo: float, hi: float) -> dict[str, Any]:
 
 
 def scene_schema(
-    catalog: dict[str, Any], cast_ids: Sequence[str], scene_ids: Sequence[str] | None = None
+    catalog: dict[str, Any],
+    cast_ids: Sequence[str],
+    scene_ids: Sequence[str] | None = None,
+    car_ids: Sequence[str] = (),
 ) -> dict[str, Any]:
-    """One scene; with ``scene_ids`` (a remake of named scenes) its ``sceneId`` is one of exactly those."""
+    """One scene; with ``scene_ids`` (a remake of named scenes) its ``sceneId`` is one of exactly those. ``cast_ids``
+    are the people (the actors); ``car_ids`` the cast's cars (§45.42), reached only as a car prop's ``castId``: with
+    none, the schema is exactly what it was before cars."""
     actions = catalog_ids(catalog, "actions") + catalog_ids(catalog, "propActions")
     point = {
         "type": ["object", "null"],
@@ -172,7 +189,7 @@ def scene_schema(
             "inCar": {"type": ["string", "null"], "description": "The prop id of a car or truck it sits in."},
         },
     }
-    prop = {
+    prop: dict[str, Any] = {
         "type": "object",
         "additionalProperties": False,
         "required": ["propId", "kind", "x", "y", "scale", "rot"],
@@ -187,6 +204,12 @@ def scene_schema(
             "state": {"type": ["string", "null"], "maxLength": 40},
         },
     }
+    if car_ids:
+        prop["properties"]["castId"] = {
+            "type": ["string", "null"],
+            "enum": [*car_ids, None],
+            "description": "A car of the cast, on kind car only.",
+        }
     return {
         "type": "object",
         "additionalProperties": False,
@@ -239,8 +262,9 @@ def storyboard_schema(
     *,
     mode: str,
     scene_ids: Sequence[str] | None = None,
+    car_ids: Sequence[str] = (),
 ) -> dict[str, Any]:
-    """The ``write_storyboard`` tool's input schema. ``full``: the whole story; ``scenes``: only the named scenes
+    """The ``write_storyboard`` tool's input schema (``car_ids``: the cast's cars, §45.42). ``full``: the whole story; ``scenes``: only the named scenes
     (``scene_ids``: each answer scene's id is one of them, and there are exactly as many scenes as asked, §45.34) and,
     if they change, the whole captions list; ``fix``: the whole story again with the facts fixed."""
     asked = list(dict.fromkeys(str(s) for s in scene_ids or [])) if mode == "scenes" else []
@@ -248,7 +272,7 @@ def storyboard_schema(
         "type": "array",
         "minItems": len(asked) or 1,
         "maxItems": len(asked) or MAX_SCENES,
-        "items": scene_schema(catalog, cast_ids, asked or None),
+        "items": scene_schema(catalog, cast_ids, asked or None, car_ids),
     }
     captions = {"type": "array", "maxItems": 24, "items": CAPTION_SCHEMA}
     if mode == "scenes":
@@ -311,10 +335,18 @@ def captions_request(
     ]
 
 
-def cast_brief(cast: dict[str, dict[str, Any]], characters: dict[str, dict[str, Any]]) -> list[dict[str, Any]]:
+CAR_SEATS = 2  # the engine's car seats (engine/car.ts CAR_SEATS): the first rider drives
+
+
+def cast_brief(
+    cast: dict[str, dict[str, Any]],
+    characters: dict[str, dict[str, Any]],
+    cars: dict[str, dict[str, Any]] | None = None,
+) -> list[dict[str, Any]]:
     """What the writer may know of each cast member: never the look. Its faces and noises are the ones the script's
-    cast carries (the character's own lists), the only ones it may make."""
-    out = []
+    cast carries (the character's own lists), the only ones it may make. People come first (``kind`` person, the first
+    one ``main``), then the cast's cars (§45.42): a car is a prop only, described in words."""
+    out: list[dict[str, Any]] = []
     for cid, member in cast.items():
         ch = characters.get(str(member.get("characterId"))) or {}
         voice = member.get("voice") or {}
@@ -330,18 +362,55 @@ def cast_brief(cast: dict[str, dict[str, Any]], characters: dict[str, dict[str, 
                 "faces": list(faces or []),
                 "noises": voice.get("noises") or [],
                 "favouriteEffects": voice.get("sfx") or [],
+                "kind": "person",
+                "main": not out,
+            }
+        )
+    for cid, member in (cars or {}).items():
+        ch = characters.get(str(member.get("characterId"))) or {}
+        voice = member.get("voice") or {}
+        faces = member.get("expressions") if isinstance(member.get("expressions"), list) else ch.get("expressions")
+        out.append(
+            {
+                "castId": cid,
+                "name": member.get("name"),
+                "kind": "car",
+                "main": False,
+                "personality": ch.get("personality") or "",
+                "description": ch.get("description") or "",
+                "traits": ch.get("traits") or [],
+                "movementStyle": member.get("movementStyle"),
+                "faces": list(faces or ["neutral"]),
+                "favouriteEffects": voice.get("sfx") or [],
+                "car": car_words(member.get("car")),
+                "seats": CAR_SEATS,
+                "propOnly": True,
             }
         )
     return out
 
 
+def cast_ids_of(brief: Sequence[dict[str, Any]]) -> tuple[list[str], list[str]]:
+    """(the people's cast ids, the cars' cast ids) of a ``cast_brief``: actors are people only."""
+    people = [str(c["castId"]) for c in brief if c.get("kind") != "car"]
+    cars = [str(c["castId"]) for c in brief if c.get("kind") == "car"]
+    return people, cars
+
+
 def without_looks(script: dict[str, Any]) -> dict[str, Any]:
-    """A script as the writer may see it: the cast by id, name and movement style only, never the looks."""
+    """A script as the writer may see it: the cast (and its cars) by id, name and movement style only, never the
+    looks."""
     cast = {
         cid: {"name": (m or {}).get("name"), "movementStyle": (m or {}).get("movementStyle")}
         for cid, m in (script.get("cast") or {}).items()
     }
-    return {**script, "cast": cast}
+    out = {**script, "cast": cast}
+    if script.get("cars"):
+        out["cars"] = {
+            cid: {"name": (m or {}).get("name"), "movementStyle": (m or {}).get("movementStyle"), "kind": "car"}
+            for cid, m in (script.get("cars") or {}).items()
+        }
+    return out
 
 
 def content(brief: dict[str, Any]) -> list[dict[str, Any]]:
@@ -447,12 +516,14 @@ def script_from(
     music: dict[str, Any] | None,
     topic: Topic | None,
     size: tuple[int, int] = DEFAULT_SIZE,
+    cars: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
-    """A whole ``StoryScript`` from a ``full`` (or ``fix``) answer, at the story's own size."""
+    """A whole ``StoryScript`` from a ``full`` (or ``fix``) answer, at the story's own size; the cast's cars
+    (§45.42) are stored in ``cars`` only when there are any, so a people-only script is as before."""
     used: set[str] = set()
     scenes = [clean_scene(s, used, i) for i, s in enumerate(answer.get("scenes") or [])]
     width, height = size if size in SIZES else DEFAULT_SIZE
-    return {
+    script: dict[str, Any] = {
         "engine": engine_version,
         "fps": 30,
         "width": width,
@@ -467,6 +538,9 @@ def script_from(
         "captions": clean_captions(answer.get("captions")) if captions_on else [],
         "safety": {"topicId": topic.id, "citations": topic.citations} if topic else None,
     }
+    if cars:
+        script["cars"] = cars
+    return script
 
 
 def scene_windows(script: dict[str, Any]) -> dict[str, tuple[float, float]]:

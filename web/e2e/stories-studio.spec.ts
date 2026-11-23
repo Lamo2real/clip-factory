@@ -17,6 +17,8 @@ const I = { deer: "01JSTDE0000000000000000008", skid: "01JSTDE000000000000000000
 const C = { pip: "01JSTCH0000000000000000001", bolt: "01JSTCH0000000000000000002" };
 /** A seeded, analyzed reference video (SEED_IDS in src/stories/api/mock/references.ts). */
 const REF = { analyzed: "01JSTRF0000000000000000001" };
+const SERIES = "01JSTSR0000000000000000001"; // the mock's seeded "My first car" (§45.43)
+const CAR = "01JSTCH0000000000000000005"; // the mock's seeded car, Rosso (SEED_CAR_ID, §45.41)
 
 const PAGES: [string, string][] = [
   ["Ideas", "/stories/ideas"],
@@ -32,6 +34,12 @@ const PAGES: [string, string][] = [
   ["Review: facts to check", `/stories/review/${S.needsCheck}`],
   ["Review: ready to watch", `/stories/review/${S.review}`],
   ["Review: approved", `/stories/review/${S.approved}`],
+  ["Series", "/stories/series"],
+  ["A series", `/stories/series/${SERIES}`],
+  ["New character: a car", "/stories/characters/new?kind=car"],
+  ["Cars", "/stories/cars"],
+  ["New car", "/stories/cars/new"],
+  ["A car", `/stories/cars/${CAR}`],
 ];
 
 const SIZES: [number, number, boolean][] = [

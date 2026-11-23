@@ -4,8 +4,13 @@
 // web/src/api/upload.ts plays out with progress); a portrait only when AI pictures are on in Settings; and "Design
 // with AI": a picture for it (designUpload, a design_ref the Library never lists) and the character agent's task that
 // suggests a whole CharacterInput from the owner's words and/or that picture (a draft: nothing is saved).
-import type { Character, CharacterInput, LibraryItem, ProductionJob, StoriesApi, StoriesConfig } from "../types.ts";
-import type { CharacterLook, Expression, MovementStyle, NoiseId, SfxId } from "../../engine/types.ts";
+// A car character (§45.41): the API's car rules mirrored (no voice, no face keeps only neutral), a design from up to 6
+// photos that suggests 3 cartoon cars to pick from (result.characters; result.character is the first), and Rosso,
+// the seeded red hatchback (SEED_CAR_ID, added once every part has seeded: afterSeed, or seedCar in a test).
+import { isCar, type CarInput, type Character, type CharacterInput, type LibraryItem, type PersonInput, type ProductionJob, type StoriesApi, type StoriesConfig } from "../types.ts";
+import { DEFAULT_CAR } from "../../engine/car.ts";
+import { CATALOG } from "../../engine/catalog.ts";
+import type { CarBody, CarLook, CharacterLook, Expression, MovementStyle, NoiseId, SfxId } from "../../engine/types.ts";
 import { startMockTask } from "./ideas.ts";
 import { delay, type MockStore } from "./store.ts";
 import { clone, fail, guardWs, iso, mockId, SEED_IDS } from "./stories.ts";
@@ -42,7 +47,43 @@ function look(partial: Partial<CharacterLook> & Pick<CharacterLook, "skin">): Ch
   };
 }
 
+/** Rosso, the seeded car (a red hatchback). */
+export const SEED_CAR_ID = "01JSTCH0000000000000000005";
+
+/** A small picture of a car as a data URL, in its paint (the practice app has no files). */
+export function carPicture(bg: string, paint: string): string {
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 120 120"><rect width="120" height="120" rx="18" fill="${bg}"/><path d="M14 78 q4-20 24-22 l10-16 q4-6 12-6 h18 q8 0 13 7 l10 15 q18 2 20 22 v6 h-107 z" fill="${paint}"/><path d="M50 44 h26 l9 13 h-44 z" fill="#bfe3f2"/><circle cx="36" cy="86" r="11" fill="#1c1842"/><circle cx="36" cy="86" r="5" fill="#c9ccd2"/><circle cx="88" cy="86" r="11" fill="#1c1842"/><circle cx="88" cy="86" r="5" fill="#c9ccd2"/><circle cx="108" cy="72" r="4" fill="#ffe9a8"/></svg>`;
+  return `data:image/svg+xml;charset=utf-8,${encodeURIComponent(svg)}`;
+}
+
+/** The character's own small picture: a figure in its colours, or its car. */
+function pictureOf(c: CharacterInput, bg: string): string {
+  return isCar(c) ? carPicture(bg, c.car.paint) : picture(bg, c.look.outfit.top, c.look.skin);
+}
+
+const HEX = /^#[0-9a-f]{6}$/i;
+const ids = (list: { id: string }[]) => list.map((e) => e.id);
+
+/** Why this car look is not one the engine draws (the API's car_look), or null. */
+function carLookProblem(car: unknown): string | null {
+  const k = CATALOG.carLooks;
+  const c = car as Partial<CarLook> | null;
+  if (!c || typeof c !== "object") return "Pick how the car looks.";
+  const inRange = (n: unknown, lo: number, hi: number) => typeof n === "number" && n >= lo && n <= hi;
+  if (!ids(k.body).includes(c.body as string)) return "Pick the car's shape.";
+  if (!inRange(c.length, 0.85, 1.15) || !inRange(c.height, 0.85, 1.15)) return "Keep the car's length and height in range.";
+  if (![c.paint, c.accent, c.outline, c.wheels?.rim, c.face?.color].every((h) => typeof h === "string" && HEX.test(h))) return "Pick the car's colours.";
+  if (!ids(k.pattern).includes(c.pattern as string) || !ids(k.windows).includes(c.windows as string)) return "Pick the car's paint and windows.";
+  if (!c.wheels || !ids(k.wheels).includes(c.wheels.style) || !inRange(c.wheels.size, 0.85, 1.2)) return "Pick the car's wheels.";
+  if (!c.lights || !ids(k.frontLights).includes(c.lights.front) || !ids(k.rearLights).includes(c.lights.rear)) return "Pick the car's lights.";
+  if (!ids(k.extra).includes(c.extra as string)) return "Pick what is on top of the car.";
+  if (!c.face || !ids(k.eyes).includes(c.face.eyes) || !ids(k.mouth).includes(c.face.mouth)) return "Pick the car's face.";
+  return null;
+}
+
 function check(c: CharacterInput): void {
+  const kind = (c as { kind?: unknown }).kind;
+  if (kind !== undefined && kind !== "person" && kind !== "car") fail(400, "bad_request", "Pick a person or a car.");
   const name = (c.name ?? "").trim();
   if (!name) fail(400, "bad_request", "Give your character a name.");
   if (name.length > 30) fail(400, "bad_request", "Keep the name to 30 letters.");
@@ -50,6 +91,16 @@ function check(c: CharacterInput): void {
   if ((c.personality ?? "").length > 400) fail(400, "bad_request", "Make the personality a little shorter.");
   if (!Array.isArray(c.traits) || c.traits.length > 8 || c.traits.some((t) => !t.trim() || t.length > 30)) fail(400, "bad_request", "Use up to 8 short traits.");
   if (!MOVES.includes(c.movementStyle)) fail(400, "bad_request", "Pick a way of moving.");
+  if (isCar(c)) {
+    if (!Array.isArray(c.expressions) || c.expressions.some((e) => !EXPRESSIONS.includes(e))) fail(400, "bad_request", "Pick at least 3 faces, with Neutral.");
+    const bad = carLookProblem(c.car);
+    if (bad) fail(400, "bad_request", bad);
+    if (!c.voice || c.voice.style !== "none" || c.voice.noises.length) fail(400, "bad_request", "A car has no voice. Pick its sounds instead.");
+    if (c.voice.sfx.length > 8) fail(400, "bad_request", "Check the sounds: up to 8 noises and 8 effects.");
+    if (c.car.face.eyes === "none" ? c.expressions.length !== 1 || c.expressions[0] !== "neutral" : c.expressions.length < 3 || !c.expressions.includes("neutral"))
+      fail(400, "bad_request", c.car.face.eyes === "none" ? "A car with no face keeps only the neutral face." : "Pick at least 3 faces, with Neutral.");
+    return;
+  }
   if (!Array.isArray(c.expressions) || c.expressions.length < 3 || !c.expressions.includes("neutral") || c.expressions.some((e) => !EXPRESSIONS.includes(e)))
     fail(400, "bad_request", "Pick at least 3 faces, with Neutral.");
   if (!c.look || !/^#[0-9a-f]{6}$/i.test(c.look.skin)) fail(400, "bad_request", "Pick a skin colour.");
@@ -57,6 +108,19 @@ function check(c: CharacterInput): void {
 }
 
 function input(c: CharacterInput): CharacterInput {
+  if (isCar(c))
+    return {
+      kind: "car",
+      name: c.name.trim(),
+      description: c.description,
+      personality: c.personality,
+      traits: c.traits.map((t) => t.trim()),
+      movementStyle: c.movementStyle,
+      expressions: [...c.expressions],
+      car: clone(c.car),
+      // A car's pitch is stored as 1 (§45.41).
+      voice: { ...clone(c.voice), pitch: 1 },
+    };
   return {
     name: c.name.trim(),
     description: c.description,
@@ -114,7 +178,7 @@ function settlePortraits(store: MockStore, now = Date.now()): void {
     job.updatedAt = iso(now);
     if (!c) continue;
     const assetId = mockId();
-    const url = picture("#322a73", c.look.outfit.top, c.look.skin);
+    const url = pictureOf(c, "#322a73");
     for (const a of store.assets) if (a.kind === "portrait" && a.characterId === c.characterId) a.meta = { ...a.meta, current: 0 };
     c.portrait = { assetId, url };
     addAsset(store, c, assetId, "portrait", url, "image/png", 48_000);
@@ -167,7 +231,7 @@ function pickBy<T>(text: string, table: [RegExp, T][], fallback: T): T {
  * The practice character agent: a whole rig, faces, moves and sounds from the owner's words (and, when there is one,
  * a picture), using only the engine's own look choices, so the draft always draws and always saves.
  */
-export function designFromWords(words: string, withPicture: boolean, salt: number): CharacterInput {
+export function designFromWords(words: string, withPicture: boolean, salt: number): PersonInput {
   const t = words.trim();
   const named = /\b(?:called|named)\s+([A-Z][A-Za-z'-]{0,20}(?:\s+[A-Z][A-Za-z'-]{0,20})?)/.exec(t)?.[1];
   const name = (named ?? NAMES[salt % NAMES.length]!).slice(0, 30);
@@ -242,6 +306,8 @@ export const NOVA_CANVAS_ENDED = "Amazon Nova Canvas was ended by Amazon on 30 S
  * keeps its name, and changes only the parts the owner's words are about; words about none of them give a new outfit.
  */
 export function redesign(current: CharacterInput, fresh: CharacterInput, words: string): CharacterInput {
+  // A car is redesigned by carRedesign; a person only from a person.
+  if (isCar(current) || isCar(fresh)) return { ...structuredClone(current), name: current.name };
   const t = words.trim();
   const next = structuredClone(current);
   const said = (re: RegExp) => re.test(t);
@@ -276,6 +342,153 @@ export function redesign(current: CharacterInput, fresh: CharacterInput, words: 
   }
   if (!changed) next.look = { ...next.look, outfit: { ...fresh.look.outfit, top: fresh.look.outfit.top === current.look.outfit.top ? "#8b6cff" : fresh.look.outfit.top } };
   return { ...next, name: current.name };
+}
+
+// ---------- Design with AI for a car (the practice character agent, §45.41) ----------
+
+const CAR_COLOR_WORDS: [RegExp, string][] = [
+  [/\b(red|cherry)\b/i, "#d8352a"],
+  [/\borange\b/i, "#f08a24"],
+  [/\b(yellow|gold(en)?)\b/i, "#ffc94a"],
+  [/\bgreen\b/i, "#3f8f4e"],
+  [/\bnavy\b/i, "#1f2a44"],
+  [/\b(light blue|sky)\b/i, "#62c6ff"],
+  [/\bblue\b/i, "#2f6fb5"],
+  [/\b(purple|violet)\b/i, "#8b6cff"],
+  [/\bpink\b/i, "#ff9ec7"],
+  [/\bwhite\b/i, "#f4f1ea"],
+  [/\bsilver\b/i, "#c9ccd2"],
+  [/\b(grey|gray)\b/i, "#7a7f88"],
+  [/\bblack\b/i, "#1c1c22"],
+];
+
+const PAINT_NAME: Record<string, string> = {
+  "#d8352a": "red",
+  "#f08a24": "orange",
+  "#ffc94a": "yellow",
+  "#3f8f4e": "green",
+  "#1f2a44": "navy",
+  "#62c6ff": "light blue",
+  "#2f6fb5": "blue",
+  "#8b6cff": "purple",
+  "#ff9ec7": "pink",
+  "#f4f1ea": "white",
+  "#c9ccd2": "silver",
+  "#7a7f88": "grey",
+  "#1c1c22": "black",
+};
+
+const CAR_BODY_WORDS: [RegExp, CarBody][] = [
+  [/\bhatch(back)?\b/i, "hatchback"],
+  [/\b(saloon|sedan)\b/i, "sedan"],
+  [/\b(estate|wagon)\b/i, "estate"],
+  [/\b(suv|jeep|4x4)\b/i, "suv"],
+  [/\b(pick-?up|truck)\b/i, "pickup"],
+  [/\bvan\b/i, "van"],
+  [/\b(sports?|racer|racing)\b/i, "sports"],
+  [/\b(tiny|mini|little)\b/i, "compact"],
+];
+
+const CAR_NAMES = ["Rosso", "Zoom", "Bluey", "Rusty", "Sunny", "Biscuit", "Pebble", "Comet", "Nugget", "Scooter", "Dot", "Bumble", "Turbo", "Maple"];
+
+/** What makes each option look different (the first is the closest to the photos). */
+const CAR_VARIANTS: ((c: CarLook) => Partial<CarLook>)[] = [
+  () => ({}),
+  (c) => ({ pattern: "stripe", accent: c.paint === "#f4f1ea" ? "#1c1c22" : "#f4f1ea", wheels: { ...c.wheels, style: "sport" } }),
+  (c) => ({ face: { ...c.face, eyes: "windscreen" }, wheels: { ...c.wheels, style: "hubcap" } }),
+  (c) => ({ pattern: "two_tone", accent: "#f4f1ea", wheels: { ...c.wheels, style: "steel", rim: "#7a7f88" } }),
+  (c) => ({ pattern: "racing_stripes", accent: "#f4f1ea", extra: "spoiler", wheels: { ...c.wheels, style: "sport", size: 1.1 } }),
+  (c) => ({ face: { ...c.face, eyes: "headlights", mouth: "grille" }, windows: "tinted" }),
+];
+
+/** A shade a little lighter or darker, for options past the sixth. */
+function shade(hex: string, by: number): string {
+  const n = Number.parseInt(hex.slice(1), 16);
+  const ch = (v: number) => Math.max(0, Math.min(255, Math.round(v + by))).toString(16).padStart(2, "0");
+  return `#${ch((n >> 16) & 255)}${ch((n >> 8) & 255)}${ch(n & 255)}`;
+}
+
+/** The car the words (and the photos) describe, before any option's own change. */
+function carFromWords(t: string, base: CarLook): CarLook {
+  const body = CAR_BODY_WORDS.find(([re]) => re.test(t))?.[1] ?? base.body;
+  const paint = CAR_COLOR_WORDS.find(([re]) => re.test(t))?.[1] ?? base.paint;
+  const face = /\b(eyes|face|smile|smiling|cute)\b/i.test(t) ? { ...base.face, eyes: "windscreen" as const } : base.face;
+  return {
+    ...base,
+    body,
+    paint,
+    length: /\b(small|short)\b/i.test(t) ? 0.9 : /\blong\b/i.test(t) ? 1.1 : base.length,
+    windows: /\btinted\b/i.test(t) ? "tinted" : base.windows,
+    extra: /\broof rack\b/i.test(t) ? "roof_rack" : /\bspoiler\b/i.test(t) ? "spoiler" : /\broof box\b/i.test(t) ? "roof_box" : base.extra,
+    face,
+  };
+}
+
+/**
+ * The practice character agent's cartoon cars (§45.41): `count` options from the owner's words (and photos), each
+ * clearly different from the others and from `avoid`, the first the closest; their names are not taken. A redesign
+ * starts from the saved car (`current`) and keeps its name.
+ */
+export function designCars(words: string, photos: number, salt: number, count: number, avoid: CarLook[], taken: string[], current: CarInput | null = null): CarInput[] {
+  const t = words.trim();
+  const start = carFromWords(t, current ? current.car : { ...DEFAULT_CAR, wheels: { ...DEFAULT_CAR.wheels }, lights: { ...DEFAULT_CAR.lights }, face: { ...DEFAULT_CAR.face } });
+  const names = new Set(taken.map((n) => n.toLowerCase()));
+  const zippy = /\b(fast|quick|zippy|sport|racing)\b/i.test(t);
+  const out: CarInput[] = [];
+  for (let i = 0; i < count; i += 1) {
+    const v = avoid.length + i + (current ? 1 : 0);
+    const tweak = CAR_VARIANTS[v % CAR_VARIANTS.length]!(start);
+    const car: CarLook = { ...start, ...tweak, wheels: { ...start.wheels, ...(tweak.wheels ?? {}) }, face: { ...start.face, ...(tweak.face ?? {}) } };
+    if (v >= CAR_VARIANTS.length) car.paint = shade(car.paint, v % 2 ? 24 : -24);
+    const name = current ? current.name : (CAR_NAMES.map((_, k) => CAR_NAMES[(salt + v + k) % CAR_NAMES.length]!).find((n) => !names.has(n.toLowerCase())) ?? `Car ${salt + v}`);
+    names.add(name.toLowerCase());
+    const eyes = car.face.eyes !== "none";
+    const colour = PAINT_NAME[start.paint] ?? "bright";
+    const shape = CATALOG.carLooks.body.find((b) => b.id === car.body)?.label.toLowerCase() ?? "car";
+    out.push({
+      kind: "car",
+      name,
+      description: `A ${car.length < 0.95 ? "small " : ""}${colour} ${shape}${eyes ? " with eyes on its windscreen" : ""}.`.slice(0, 400),
+      personality: current?.personality || (photos ? "Brand new and a bit nervous, like in your photos." : "Brand new and a bit nervous.").slice(0, 400),
+      traits: current?.traits.length ? [...current.traits] : ["shiny", "new"],
+      movementStyle: current?.movementStyle ?? (zippy ? "zippy" : "calm"),
+      expressions: eyes ? ["neutral", "happy", "surprised"] : ["neutral"],
+      car,
+      voice: { style: "none", pitch: 1, noises: [], sfx: current ? [...current.voice.sfx] : ["engine", "honk"] },
+    });
+  }
+  return out;
+}
+
+/** Rosso, the seeded red hatchback (§45.41): added once, after every part has seeded. */
+export function seedCar(store: MockStore): void {
+  if (store.characters.some((c) => c.characterId === SEED_CAR_ID)) return;
+  const at = iso(Date.now() - 10 * 86_400_000);
+  const rosso: Character = {
+    kind: "car",
+    characterId: SEED_CAR_ID,
+    workspaceId: "stories",
+    name: "Rosso",
+    description: "A small red hatchback with alloy wheels and round lights.",
+    personality: "Brand new and a bit nervous. Loves a clean road and a sunny day.",
+    traits: ["new", "shiny", "a bit nervous"],
+    movementStyle: "zippy",
+    expressions: ["neutral"],
+    car: { ...DEFAULT_CAR, length: 0.95, wheels: { ...DEFAULT_CAR.wheels }, lights: { ...DEFAULT_CAR.lights }, face: { ...DEFAULT_CAR.face } },
+    voice: { style: "none", pitch: 1, noises: [], sfx: ["engine", "honk", "brake_squeal"] },
+    references: [],
+    portrait: null,
+    storyCount: 0,
+    version: 1,
+    createdAt: at,
+    updatedAt: at,
+  };
+  store.characters.push(rosso);
+}
+
+/** Rosso joins the cast once every part has seeded, so parts that count the people they seed still count four. */
+export function afterSeed(store: MockStore): void {
+  seedCar(store);
 }
 
 export function seed(store: MockStore): void {
@@ -410,7 +623,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       if (c.references.length >= 8) fail(409, "conflict", "A character can have up to 8 pictures. Remove one first.");
       await delay(140);
       uploads.delete(assetId);
-      const url = picture("#26205a", c.look.outfit.top, c.look.skin);
+      const url = pictureOf(c, "#26205a");
       c.references.push({ assetId, url, contentType: up.contentType, createdAt: iso() });
       c.updatedAt = iso();
       addAsset(store, c, assetId, "character_ref", url, up.contentType, up.size);
@@ -467,21 +680,35 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       guardWs(store, ws);
       const words = (body.description ?? "").trim();
       if (words.length > 600) fail(400, "bad_request", "Keep the description to 600 letters.");
-      const ref = body.referenceAssetId;
-      if (!words && !ref) fail(400, "bad_request", "Say what your character is like, or add a picture.");
-      if (ref) {
+      // The older single picture goes first (§45.41); up to 6, each once.
+      const refs = [...new Set([...(body.referenceAssetId ? [body.referenceAssetId] : []), ...(body.referenceAssetIds ?? [])])];
+      if (refs.length > 6) fail(400, "bad_request", "Pick up to 6 photos.");
+      if (body.count !== undefined && (!Number.isInteger(body.count) || body.count < 1 || body.count > 4)) fail(400, "bad_request", "count must be 1 to 4.");
+      if (body.kind !== undefined && body.kind !== "person" && body.kind !== "car") fail(400, "bad_request", "Pick a person or a car.");
+      if ((body.avoid ?? []).length > 8) fail(400, "bad_request", "Send up to 8 cars to stay away from.");
+      // A redesign (§45.34): that character is the agent's CURRENT; it keeps its name and only what was asked changes.
+      const current = body.characterId !== undefined ? find(store, ws, body.characterId) : null;
+      const saved = current ? (current.kind ?? "person") : null;
+      if (saved && body.kind && body.kind !== saved) fail(400, "bad_request", `Keep the same kind: this character is ${saved === "car" ? "a car" : "a person"}.`);
+      const kind = body.kind ?? saved ?? "person";
+      if (!words && !refs.length) fail(400, "bad_request", kind === "car" ? "Add a photo of your car, or say what it is like." : "Say what your character is like, or add a picture.");
+      for (const ref of refs) {
         const design = designsOf(store).get(ref);
         const charRef = store.assets.some((a) => a.assetId === ref && a.kind === "character_ref" && store.characters.some((c) => c.workspaceId === ws && c.characterId === a.characterId));
         if (!(design && design.ws === ws) && !charRef) fail(404, "not_found", "We could not find that picture. Add it again.");
       }
-      // A redesign (§45.34): that character is the agent's CURRENT; it keeps its name and only what was asked changes.
-      const current = body.characterId !== undefined ? find(store, ws, body.characterId) : null;
       await delay(160);
       const salt = store.characters.length + store.tasks.length;
-      // The character agent's suggestion; nothing is saved until the owner taps Save.
+      // The character agent's suggestions; nothing is saved until the owner taps Save.
       return startMockTask(store, ws, "character_design", body.override, () => {
-        const fresh = designFromWords(words, !!ref, salt);
-        return { character: current ? redesign(input(current), fresh, words) : fresh };
+        if (kind === "car") {
+          const taken = store.characters.filter((c) => c.workspaceId === ws).map((c) => c.name);
+          const cars = designCars(words, refs.length, salt, body.count ?? 3, body.avoid ?? [], taken, current && isCar(current) ? (input(current) as CarInput) : null);
+          return { character: cars[0], characters: cars };
+        }
+        const fresh = designFromWords(words, refs.length > 0, salt);
+        const character = current ? redesign(input(current), fresh, words) : fresh;
+        return { character, characters: [character] };
       });
     },
   };

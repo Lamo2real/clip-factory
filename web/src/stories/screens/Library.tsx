@@ -20,6 +20,7 @@ import { storiesApi } from "../api/client.ts";
 import { STEP_LABEL, type AssetKind, type Character, type DownloadFormat, type LibraryItem, type ProductionJob, type StepKey, type Story } from "../api/types.ts";
 import { modelIdLine, modelUseWords, stoppedOn } from "../studio/ai.tsx";
 import { usePaged } from "../studio/hooks.ts";
+import { filterOf, MoveToSeries, SeriesSwitch, seriesQuery, useSeriesList } from "../studio/SeriesSwitch.tsx";
 import { TechDetails } from "../studio/kit.tsx";
 import { HELPER_KIND, helperName, STORAGE_WORDS, topicTitle, type ModelLookup } from "../studio/words.ts";
 import { Glass, GlassPill, MediaRow, cx } from "../glass/index.ts";
@@ -228,7 +229,7 @@ function FileCard({ ws, item, pictures, stories }: { ws: string; item: LibraryIt
  * One page of one kind. A video's extra copies (kind `video`, §45.35 D10) are asked for too; an API that does not know
  * that kind yet answers 400, and then the tab simply has no copies (its MP4s still show), never a broken tab.
  */
-async function kindPage(ws: string, q: { kind: AssetKind; storyId?: string; limit: number; cursor?: string }): Promise<{ items: LibraryItem[]; nextCursor: string | null }> {
+async function kindPage(ws: string, q: { kind: AssetKind; storyId?: string; limit: number; cursor?: string; seriesId?: string }): Promise<{ items: LibraryItem[]; nextCursor: string | null }> {
   try {
     return await storiesApi().library(ws, q);
   } catch (e) {
@@ -238,13 +239,15 @@ async function kindPage(ws: string, q: { kind: AssetKind; storyId?: string; limi
 }
 
 /** One tab's files: each of its kinds asked for separately and shown newest first, with Show more. */
-function useFiles(ws: string, kinds: AssetKind[], storyId: string | null) {
+function useFiles(ws: string, kinds: AssetKind[], storyId: string | null, seriesId?: string) {
   const [extra, setExtra] = useState<{ items: LibraryItem[]; cursors: (string | null)[] } | null>(null);
-  const key = `${ws}|${kinds.join(",")}|${storyId ?? ""}`;
+  const key = `${ws}|${kinds.join(",")}|${storyId ?? ""}${seriesId ? `|${seriesId}` : ""}`;
+  // §45.43: one series' files only when the page shows one (the key is left out otherwise)
+  const inSeries = seriesId ? { seriesId } : {};
   const loaded = useLoad(
     async () => {
       setExtra(null);
-      const pages = await Promise.all(kinds.map((kind) => kindPage(ws, { kind, storyId: storyId ?? undefined, limit: 48 })));
+      const pages = await Promise.all(kinds.map((kind) => kindPage(ws, { kind, storyId: storyId ?? undefined, limit: 48, ...inSeries })));
       return { items: pages.flatMap((p) => p.items), cursors: pages.map((p) => p.nextCursor) };
     },
     key,
@@ -254,7 +257,7 @@ function useFiles(ws: string, kinds: AssetKind[], storyId: string | null) {
   const more = async () => {
     if (!data) return;
     const pages = await Promise.all(
-      kinds.map((kind, i) => (data.cursors[i] ? kindPage(ws, { kind, storyId: storyId ?? undefined, limit: 48, cursor: data.cursors[i]! }) : Promise.resolve({ items: [], nextCursor: null }))),
+      kinds.map((kind, i) => (data.cursors[i] ? kindPage(ws, { kind, storyId: storyId ?? undefined, limit: 48, cursor: data.cursors[i]!, ...inSeries }) : Promise.resolve({ items: [], nextCursor: null }))),
     );
     setExtra({ items: [...data.items, ...pages.flatMap((p) => p.items)], cursors: pages.map((p) => p.nextCursor) });
   };
@@ -288,8 +291,8 @@ function usePictures(ws: string, storyId: string | null, want: boolean) {
   }, [loaded.data]);
 }
 
-function Files({ ws, tab, storyId, stories, onClear }: { ws: string; tab: Exclude<LibraryTab, "projects">; storyId: string | null; stories: Story[] | null; onClear: () => void }) {
-  const files = useFiles(ws, TAB_KINDS[tab], storyId);
+function Files({ ws, tab, storyId, stories, onClear, seriesId }: { ws: string; tab: Exclude<LibraryTab, "projects">; storyId: string | null; stories: Story[] | null; onClear: () => void; seriesId?: string }) {
+  const files = useFiles(ws, TAB_KINDS[tab], storyId, seriesId);
   const pictures = usePictures(ws, storyId, tab === "videos" || tab === "scenes");
   const story = storyId ? stories?.find((s) => s.storyId === storyId) : undefined;
   return (
@@ -377,7 +380,7 @@ function LibraryEmpty({ mood, tone, title, children, action }: { mood: MascotMoo
  * name never gets a bare number. The newest project leads the list as a lit hero row (its rim may bend where the
  * device allows).
  */
-function ProjectCard({ story, cover, cast, featured = false }: { story: Story; cover?: string; cast: Character[] | null; featured?: boolean }) {
+function ProjectCard({ ws, story, cover, cast, featured = false, onMoved }: { ws: string; story: Story; cover?: string; cast: Character[] | null; featured?: boolean; onMoved?: () => void }) {
   const length = story.actualDurationSec ?? story.durationSec;
   const picture = cover ?? story.coverUrl;
   const progress = storyProgress(story.status);
@@ -413,6 +416,9 @@ function ProjectCard({ story, cover, cast, featured = false }: { story: Story; c
           }
         />
       </A>
+      <span className="st-project__move">
+        <MoveToSeries ws={ws} kind="story" id={story.storyId} title={story.title} current={story.seriesId ?? null} onMoved={() => onMoved?.()} />
+      </span>
     </li>
   );
 }
@@ -727,7 +733,7 @@ function Projects({ ws, storyId, stories, cast }: { ws: string; storyId: string 
     <>
       <ul className="st-projects">
         {stories.data.map((s, i) => (
-          <ProjectCard key={s.storyId} story={s} cover={covers.get(`cover:${s.storyId}`)} cast={cast} featured={i === 0} />
+          <ProjectCard key={s.storyId} ws={ws} story={s} cover={covers.get(`cover:${s.storyId}`)} cast={cast} featured={i === 0} onMoved={() => void stories.reload()} />
         ))}
       </ul>
       {stories.problem ? <StError message={stories.problem} onRetry={() => void stories.more()} /> : null}
@@ -745,13 +751,17 @@ function Projects({ ws, storyId, stories, cast }: { ws: string; storyId: string 
 export function LibraryScreen({ ws, page }: StoriesScreenProps) {
   const kind = page.name === "library" ? page.kind : null;
   const storyId = page.name === "library" ? page.storyId : null;
+  const series = page.name === "library" ? filterOf(page) : "all";
+  const seriesId = seriesQuery(series);
+  const { list: seriesList } = useSeriesList(ws);
   const tab = tabFor(kind);
   const stories = usePaged(
     async (cursor) => {
-      const r = await storiesApi().listStories(ws, cursor ? { status: "all", limit: 50, cursor } : { status: "all", limit: 50 });
+      const q = cursor ? { status: "all" as const, limit: 50, cursor } : { status: "all" as const, limit: 50 };
+      const r = await storiesApi().listStories(ws, seriesId ? { ...q, seriesId } : q);
       return { items: r.stories, nextCursor: r.nextCursor };
     },
-    ws,
+    seriesId ? `${ws}|${seriesId}` : ws,
     "st-library-story-pages",
     (s) => s.storyId,
   );
@@ -760,6 +770,7 @@ export function LibraryScreen({ ws, page }: StoriesScreenProps) {
     const q = new URLSearchParams();
     if (next !== "projects") q.set("kind", next);
     if (story) q.set("story", story);
+    if (seriesId) q.set("series", seriesId);
     const qs = q.toString();
     navigate(`/stories/library${qs ? `?${qs}` : ""}`, { replace: true });
   };
@@ -783,7 +794,15 @@ export function LibraryScreen({ ws, page }: StoriesScreenProps) {
   }, [tab]);
   return (
     <section className="st-page st-library">
-      <StPageHead title="Library" lede="Every file Clips Funded made or you added, kept safe. Only Clips Funded's own: Clip Factory's Library stays separate." />
+      <StPageHead
+        title="Library"
+        lede="Every file Clips Funded made or you added, kept safe. Only Clips Funded's own: Clip Factory's Library stays separate."
+        actions={
+          seriesList?.length ? (
+            <SeriesSwitch ws={ws} value={series} onChange={(v) => navigate(storiesHref({ name: "library", kind, storyId: null, ...(seriesQuery(v) ? { seriesId: seriesQuery(v) } : {}) }))} />
+          ) : undefined
+        }
+      />
       {/* The kinds as pills (the reference's chips): the chosen one solid cream with espresso words, sliding on
           <Glide>; the rest glass. Each keeps .st-tabs__tab and role="tab". One row on a phone, scrolling sideways. */}
       <div className="st-library__kinds" role="tablist" aria-label="Library" ref={kinds}>
@@ -806,7 +825,7 @@ export function LibraryScreen({ ws, page }: StoriesScreenProps) {
         {tab === "projects" ? (
           <Projects ws={ws} storyId={storyId} stories={stories} cast={cast.data} />
         ) : (
-          <Files ws={ws} tab={tab} storyId={storyId} stories={stories.data} onClear={() => go(tab, null)} />
+          <Files ws={ws} tab={tab} storyId={storyId} stories={stories.data} onClear={() => go(tab, null)} seriesId={seriesId} />
         )}
       </div>
     </section>

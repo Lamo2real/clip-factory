@@ -19,7 +19,9 @@ What the agent reads from ``input`` (an internal attribute, by kind):
   (CharacterInput, a draft);
 * ``captions``: ``{storyId, scriptVersion}`` → ``result.postCaptions`` (Captions, a draft the web saves through
   ``StoryPatch.postCaptions``) and ``result.storyId``;
-* ``check_models`` (builder A2's route): ``{models?}``.
+* ``check_models`` (builder A2's route): ``{models?}``;
+* ``series_recap`` (§45.43): ``{seriesId, storyId}`` → ``result {seriesId, storyId, episodeSummary, storySoFar}``;
+  the agent writes the SERIES# item itself, in the task's end ops, under the version it read.
 """
 
 from __future__ import annotations
@@ -51,6 +53,7 @@ KINDS: Final = (
     "final_review",
     "captions",
     "check_models",
+    "series_recap",
 )
 STATUSES: Final = ("queued", "running", "done", "failed")
 

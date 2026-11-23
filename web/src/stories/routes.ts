@@ -1,21 +1,36 @@
 // Lamo Stories pages (docs/CONTRACTS.md §45.16.2). Every path under /stories is Lamo Stories; the main router
 // (web/src/lib/router.ts) hands those paths to matchStories() and everything else stays Lamo Clips.
+import type { CharacterKind } from "./engine/types.ts";
+
+/**
+ * `?series=` (CONTRACTS §45.43): a series id, or "none" (videos in no series). Each page key below that holds it is
+ * there only when the address has it, so the address alone says which series a page shows (no hidden filter).
+ */
 export type StoriesPage =
   | { name: "dashboard" }
-  | { name: "ideas" }
+  /** `?ask=1` opens Ask for ideas at once (a series' "Ask for ideas") */
+  | { name: "ideas"; seriesId?: string; ask?: true }
   | { name: "characters" }
-  | { name: "character_new" }
+  /** `?kind=car` starts on the car tile (§45.41) */
+  | { name: "character_new"; kind?: CharacterKind }
   | { name: "character"; characterId: string }
-  | { name: "production" }
+  /** Cars (§45.41): the car characters (the same characters, kind "car"), making one, and one car's page */
+  | { name: "cars" }
+  | { name: "car_new" }
+  | { name: "car"; characterId: string }
+  | { name: "production"; seriesId?: string }
   /**
    * Make a new video, filled in from the address (CONTRACTS §45.34): `?idea=`, `?ref=` (repeatable, up to 3 reference
    * videos), `?cast=` (repeatable, up to 3 characters) and `?sec=` (15 to 90). The router always fills every key.
    */
-  | { name: "production_new"; ideaId: string | null; refIds?: string[]; castIds?: string[]; durationSec?: number | null }
+  | { name: "production_new"; ideaId: string | null; refIds?: string[]; castIds?: string[]; durationSec?: number | null; seriesId?: string }
   | { name: "production_story"; storyId: string }
-  | { name: "review" }
+  | { name: "review"; seriesId?: string }
   | { name: "review_story"; storyId: string }
-  | { name: "library"; kind: string | null; storyId: string | null }
+  | { name: "library"; kind: string | null; storyId: string | null; seriesId?: string }
+  /** Series (§45.43): the folders, and one folder */
+  | { name: "series" }
+  | { name: "series_one"; seriesId: string }
   | { name: "connections"; platform: string | null; result: string | null; ws: string | null }
   | { name: "settings"; section: SettingsSection }
   | { name: "chat" }
@@ -44,6 +59,12 @@ function lengthOf(value: string | null): number | null {
   return n >= 15 && n <= 90 ? n : null;
 }
 
+/** `?series=`: a series id or "none", else nothing (the key is left out). */
+function seriesOf(q: URLSearchParams): { seriesId?: string } {
+  const v = q.get("series");
+  return v && (v === "none" || ID.test(v)) ? { seriesId: v } : {};
+}
+
 export function isStoriesPath(pathname: string): boolean {
   return pathname === STORIES_ROOT || pathname.startsWith(STORIES_ROOT + "/");
 }
@@ -54,22 +75,41 @@ export function matchStories(pathname: string, search: string): StoriesPage {
   const [a, b, ...rest] = parts;
   if (rest.length) return { name: "not_found" };
   if (a === undefined) return { name: "dashboard" };
-  if (a === "ideas" && b === undefined) return { name: "ideas" };
+  if (a === "ideas" && b === undefined) return { name: "ideas", ...seriesOf(q), ...(q.get("ask") === "1" ? { ask: true as const } : {}) };
   if (a === "characters") {
     if (b === undefined) return { name: "characters" };
-    if (b === "new") return { name: "character_new" };
+    if (b === "new") return q.get("kind") === "car" ? { name: "character_new", kind: "car" } : { name: "character_new" };
     if (ID.test(b)) return { name: "character", characterId: b };
   }
+  if (a === "cars") {
+    if (b === undefined) return { name: "cars" };
+    if (b === "new") return { name: "car_new" };
+    if (ID.test(b)) return { name: "car", characterId: b };
+  }
   if (a === "production") {
-    if (b === undefined) return { name: "production" };
-    if (b === "new") return { name: "production_new", ideaId: q.get("idea"), refIds: idList(q.getAll("ref")), castIds: idList(q.getAll("cast")), durationSec: lengthOf(q.get("sec")) };
+    if (b === undefined) return { name: "production", ...seriesOf(q) };
+    if (b === "new") {
+      const series = seriesOf(q).seriesId;
+      return {
+        name: "production_new",
+        ideaId: q.get("idea"),
+        refIds: idList(q.getAll("ref")),
+        castIds: idList(q.getAll("cast")),
+        durationSec: lengthOf(q.get("sec")),
+        ...(series && series !== "none" ? { seriesId: series } : {}),
+      };
+    }
     if (ID.test(b)) return { name: "production_story", storyId: b };
   }
   if (a === "review") {
-    if (b === undefined) return { name: "review" };
+    if (b === undefined) return { name: "review", ...seriesOf(q) };
     if (ID.test(b)) return { name: "review_story", storyId: b };
   }
-  if (a === "library" && b === undefined) return { name: "library", kind: q.get("kind"), storyId: q.get("story") };
+  if (a === "library" && b === undefined) return { name: "library", kind: q.get("kind"), storyId: q.get("story"), ...seriesOf(q) };
+  if (a === "series") {
+    if (b === undefined) return { name: "series" };
+    if (ID.test(b) && b !== "none") return { name: "series_one", seriesId: b };
+  }
   if (a === "connections" && b === undefined)
     return { name: "connections", platform: q.get("platform"), result: q.get("result"), ws: q.get("ws") };
   if (a === "settings") {
@@ -95,13 +135,30 @@ export function storiesHref(page: StoriesPage): string {
     case "character":
       return `${STORIES_ROOT}/characters/${encodeURIComponent(page.characterId)}`;
     case "character_new":
-      return `${STORIES_ROOT}/characters/new`;
+      return `${STORIES_ROOT}/characters/new${page.kind === "car" ? "?kind=car" : ""}`;
+    case "car_new":
+      return `${STORIES_ROOT}/cars/new`;
+    case "car":
+      return `${STORIES_ROOT}/cars/${encodeURIComponent(page.characterId)}`;
+    case "ideas": {
+      const q = new URLSearchParams();
+      if (page.seriesId) q.set("series", page.seriesId);
+      if (page.ask) q.set("ask", "1");
+      const qs = q.toString();
+      return `${STORIES_ROOT}/ideas${qs ? `?${qs}` : ""}`;
+    }
+    case "production":
+    case "review":
+      return `${STORIES_ROOT}/${page.name}${page.seriesId ? `?series=${encodeURIComponent(page.seriesId)}` : ""}`;
+    case "series_one":
+      return `${STORIES_ROOT}/series/${encodeURIComponent(page.seriesId)}`;
     case "production_new": {
       const q = new URLSearchParams();
       if (page.ideaId) q.set("idea", page.ideaId);
       for (const r of (page.refIds ?? []).slice(0, 3)) q.append("ref", r);
       for (const c of (page.castIds ?? []).slice(0, 3)) q.append("cast", c);
       if (page.durationSec) q.set("sec", String(page.durationSec));
+      if (page.seriesId) q.set("series", page.seriesId);
       const qs = q.toString();
       return `${STORIES_ROOT}/production/new${qs ? `?${qs}` : ""}`;
     }
@@ -113,6 +170,7 @@ export function storiesHref(page: StoriesPage): string {
       const q = new URLSearchParams();
       if (page.kind) q.set("kind", page.kind);
       if (page.storyId) q.set("story", page.storyId);
+      if (page.seriesId) q.set("series", page.seriesId);
       const qs = q.toString();
       return `${STORIES_ROOT}/library${qs ? `?${qs}` : ""}`;
     }

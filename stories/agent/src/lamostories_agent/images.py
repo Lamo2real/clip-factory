@@ -1,7 +1,8 @@
 """Every picture sent to a model goes through here (docs/CONTRACTS.md §45.33): chat attachments, design references,
 reference-video frames, the final review's frames and portraits.
 
-The picture is scaled so its long edge is at most 1568 px, re-encoded to JPEG at about quality 85 (which also drops
+The picture is scaled so its long edge is at most 1568 px (or a smaller ``long_edge``: a car design's 4 to 6 photos go
+at 1024 px), re-encoded to JPEG at about quality 85 (which also drops
 EXIF and GPS), and stepped down until it is at most 3.5 MB. A picture ffmpeg cannot open fails with the owner's
 sentence."""
 
@@ -37,11 +38,13 @@ def _encode(path: Path, edge: int, q: int) -> bytes:
     return r.stdout
 
 
-def to_model_image(path: Path) -> bytes:
-    """The picture as a JPEG a model may take (≤ 1568 px long edge, ≤ 3.5 MB, no EXIF). Synchronous: call it from
-    a worker thread. Raises ``UserFacingError(CANNOT_OPEN)`` when it cannot be read."""
+def to_model_image(path: Path, long_edge: int = LONG_EDGE) -> bytes:
+    """The picture as a JPEG a model may take (≤ ``long_edge`` px long edge, 1568 by default, ≤ 3.5 MB, no EXIF).
+    Synchronous: call it from a worker thread. Raises ``UserFacingError(CANNOT_OPEN)`` when it cannot be read."""
     data = b""
-    for edge, q in _STEPS:
+    limit = max(64, min(LONG_EDGE, int(long_edge)))
+    steps = list(dict.fromkeys((min(edge, limit), q) for edge, q in _STEPS))
+    for edge, q in steps:
         try:
             data = _encode(path, edge, q)
         except (OSError, ValueError, subprocess.SubprocessError) as e:

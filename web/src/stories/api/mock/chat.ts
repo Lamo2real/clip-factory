@@ -17,6 +17,7 @@ import { ApiError } from "../../../api/errors.ts";
 import type {
   AgentId,
   CharacterInput,
+  CharacterLook,
   ChatAction,
   Conversation,
   Effective,
@@ -307,7 +308,7 @@ function seedLongChat(store: MockStore, n: number, now: number): void {
 
 // ---------- The pretend creative director ----------
 
-const PIP_LOOK: CharacterInput["look"] = {
+const PIP_LOOK: CharacterLook = {
   body: "round",
   skin: "#F6C7A1",
   height: 0.95,

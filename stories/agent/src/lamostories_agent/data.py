@@ -268,6 +268,17 @@ class StoryData:
         item = await self.get(keys.ws_pk(user_id, workspace_id), keys.idea_sk(idea_id))
         return self._owned(item, user_id, workspace_id)
 
+    async def series(self, user_id: str, workspace_id: str, series_id: str) -> dict[str, Any] | None:
+        """A series of the workspace (§45.43), or None."""
+        item = await self.get(keys.ws_pk(user_id, workspace_id), keys.series_sk(series_id))
+        found = self._owned(item, user_id, workspace_id)
+        return found if found is not None and found.get("type") == keys.TYPE_SERIES else None
+
+    async def listed(self, user_id: str, workspace_id: str, prefix: str) -> list[dict[str, Any]]:
+        """Every item of the workspace under ``prefix`` (``STORY#``, ``IDEA#``, ``CHAR#``) that passes the check."""
+        rows = await self.query_prefix(keys.ws_pk(user_id, workspace_id), prefix)
+        return [r for r in rows if self._owned(r, user_id, workspace_id) is not None]
+
     async def assets(
         self, user_id: str, workspace_id: str, *, story_id: str | None = None, character_id: str | None = None
     ) -> list[dict[str, Any]]:

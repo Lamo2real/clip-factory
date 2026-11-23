@@ -58,6 +58,61 @@ export const CATALOG: Catalog = {
       { id: "none", label: "No voice" },
     ],
   },
+  carLooks: {
+    body: [
+      { id: "hatchback", label: "Hatchback" },
+      { id: "sedan", label: "Saloon" },
+      { id: "estate", label: "Estate" },
+      { id: "suv", label: "SUV" },
+      { id: "pickup", label: "Pickup" },
+      { id: "van", label: "Van" },
+      { id: "sports", label: "Sports car" },
+      { id: "compact", label: "Tiny car" },
+    ],
+    pattern: [
+      { id: "plain", label: "Plain" },
+      { id: "two_tone", label: "Two colours" },
+      { id: "stripe", label: "Side stripe" },
+      { id: "racing_stripes", label: "Racing stripes" },
+    ],
+    windows: [
+      { id: "clear", label: "Clear" },
+      { id: "tinted", label: "Tinted" },
+      { id: "dark", label: "Dark" },
+    ],
+    wheels: [
+      { id: "steel", label: "Steel" },
+      { id: "hubcap", label: "Hubcaps" },
+      { id: "alloy", label: "Alloy" },
+      { id: "sport", label: "Sporty" },
+      { id: "offroad", label: "Off-road" },
+    ],
+    frontLights: [
+      { id: "round", label: "Round" },
+      { id: "square", label: "Square" },
+      { id: "slim", label: "Slim" },
+    ],
+    rearLights: [
+      { id: "round", label: "Round" },
+      { id: "bar", label: "Long bar" },
+      { id: "square", label: "Square" },
+    ],
+    extra: [
+      { id: "none", label: "Nothing" },
+      { id: "roof_rack", label: "Roof rack" },
+      { id: "spoiler", label: "Spoiler" },
+      { id: "roof_box", label: "Roof box" },
+    ],
+    eyes: [
+      { id: "none", label: "No face" },
+      { id: "windscreen", label: "Eyes on the windscreen" },
+      { id: "headlights", label: "Headlight eyes" },
+    ],
+    mouth: [
+      { id: "none", label: "No mouth" },
+      { id: "grille", label: "Grille smile" },
+    ],
+  },
   actions: [
     { id: "idle", label: "Idle" },
     { id: "walk", label: "Walk" },
@@ -87,6 +142,8 @@ export const CATALOG: Catalog = {
     { id: "think", label: "Think" },
     { id: "gesture", label: "Gesture" },
     { id: "gasp", label: "Gasp" },
+    { id: "get_in", label: "Get in" },
+    { id: "get_out", label: "Get out" },
   ],
   propActions: [
     { id: "move", label: "Move" },
@@ -99,6 +156,11 @@ export const CATALOG: Catalog = {
     { id: "vanish", label: "Vanish" },
     { id: "wobble", label: "Wobble" },
     { id: "flash", label: "Flash" },
+    { id: "speed_up", label: "Speed up" },
+    { id: "bounce", label: "Bounce" },
+    { id: "honk", label: "Honk" },
+    { id: "blink", label: "Flash its lights" },
+    { id: "stall", label: "Stall" },
   ],
   sets: [
     { id: "studio", label: "Studio" },
@@ -235,7 +297,7 @@ export const CATALOG: Catalog = {
   ],
 };
 
-type ListKey = Exclude<keyof Catalog, "looks">;
+type ListKey = Exclude<keyof Catalog, "looks" | "carLooks">;
 
 export function catalogIds<K extends ListKey>(key: K): string[] {
   return CATALOG[key].map((e) => e.id);

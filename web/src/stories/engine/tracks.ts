@@ -6,7 +6,7 @@ import { BED_ID, bedPan } from "./ambience.ts";
 import { BUBBLE_SYMBOL, symbolSpan } from "./bubbles.ts";
 import { F, inFrame } from "./frame.ts";
 import { clamp } from "./math.ts";
-import { actorPath, STYLES } from "./motion.ts";
+import { actorPath, boardingAt, boardingOf, STYLES } from "./motion.ts";
 import { prepare } from "./scene.ts";
 import { endCardFrom, endCardLayout, fitText, textBoxes } from "./text.ts";
 import type { AudioEvent, Beat, Scene, SfxId, StoryScript, TextEvent } from "./types.ts";
@@ -77,18 +77,21 @@ export type VoicedAudioEvent = AudioEvent;
 const LOOPS: Set<SfxId> = new Set(["engine", "wind", "rain"]);
 const REPEATS: Set<SfxId> = new Set(["footsteps", "heartbeat", "tick", "snow_crunch"]);
 
-/** -1 (left) .. 1 (right) from where the sound's maker stands. */
+/** -1 (left) .. 1 (right) from where the sound's maker stands: a rider from its car, one still outside it (before
+ * getting in, or after getting out, §45.42) from where it walks. */
 function panOf(s: StoryScript, scene: Scene, who: string | undefined, at: number): number {
   if (!who) return 0;
   const actor = scene.actors.find((a) => a.castId === who);
   let x = 0.5;
   if (actor) {
+    const beats = scene.beats.filter((b) => b.who === who).sort((a, b) => a.at - b.at);
     const car = actor.inCar ? scene.props.find((p) => p.propId === actor.inCar) : undefined;
-    if (car) x = car.x;
+    if (car && boardingAt(boardingOf(beats), at).seat >= 0.5) x = car.x;
     else {
       const member = s.cast[who];
       const style = STYLES[member?.movementStyle ?? "bouncy"] ?? STYLES.bouncy;
-      x = actorPath(actor, scene.beats.filter((b) => b.who === who).sort((a, b) => a.at - b.at), style, at).x;
+      const { inCar: _, ...outside } = actor;
+      x = actorPath(car ? outside : actor, beats, style, at).x;
     }
   } else {
     const prop = scene.props.find((p) => p.propId === who);

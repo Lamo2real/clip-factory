@@ -10,11 +10,16 @@
 // canvas when the browser has one.
 //
 // Also the small helpers the ideas and characters parts share (ids, errors, the workspace check, the seed ids).
+//
+// A cast may hold one car with the people who drive it (§45.42): the practice writer puts it in the script's `cars`,
+// stages it as a car prop with its castId (getting in, driving off, honking, stalling), and a video filed in a series
+// (§45.43) tells the series part when it is approved or deleted.
 import { ApiError, type ErrorCode } from "../../../api/errors.ts";
 import { CATALOG, drawFrame, ENGINE_VERSION, fitDuration, normalizeScript, sceneFrames, validateScript } from "../../engine/engine.ts";
-import type { ActionId, Beat, CameraId, CastMember, Expression, NoiseId, PropAction, PropKind, Scene, SceneActor, SceneProp, SetId, SfxId, StoryScript } from "../../engine/types.ts";
+import type { ActionId, Beat, CameraId, CarMember, CastMember, Expression, NoiseId, PropAction, PropKind, Scene, SceneActor, SceneProp, SetId, SfxId, StoryScript } from "../../engine/types.ts";
 import { drawPrims } from "../../preview/draw.ts";
 import {
+  isCar,
   STEP_LABEL,
   STEP_ORDER,
   type Captions,
@@ -36,6 +41,7 @@ import {
   type TaskKind,
 } from "../types.ts";
 import { callOf, checkOverride, citationsFor, effectiveFor, shownSteps, startMockTask, topicFor, writerOf } from "./ideas.ts";
+import { seriesApproved, seriesExists, seriesForgetStory } from "./series.ts";
 import { delay, type MockStore } from "./store.ts";
 
 export const KEYS = ["listStories", "createStory", "getStory", "storyJobs", "patchStory", "deleteStory", "produce", "cancelStory", "approve", "reject", "requestChanges", "writeCaptions", "download"] as const;
@@ -210,12 +216,26 @@ function noiseOf(c: Character | undefined, want: NoiseId): NoiseId | undefined {
   return c.voice.noises.includes(want) ? want : c.voice.noises[0];
 }
 
-function castOf(chars: Character[]): Record<string, CastMember> {
+type Person = Extract<Character, { look: object }>;
+
+/** The people in their order, then the car (§45.42): ids c1, c2, … in that order, so c1 is the main character. */
+function castOf(chars: Character[]): { cast: Record<string, CastMember>; cars: Record<string, CarMember> } {
   const cast: Record<string, CastMember> = {};
-  chars.forEach((c, i) => {
-    cast[`c${i + 1}`] = { characterId: c.characterId, name: c.name, look: clone(c.look), movementStyle: c.movementStyle, voice: clone(c.voice) };
+  const cars: Record<string, CarMember> = {};
+  [...chars.filter((c) => !isCar(c)), ...chars.filter(isCar)].forEach((c, i) => {
+    const id = `c${i + 1}`;
+    if (isCar(c)) cars[id] = { characterId: c.characterId, name: c.name, car: clone(c.car), movementStyle: c.movementStyle, voice: clone(c.voice), expressions: [...c.expressions] };
+    else cast[id] = { characterId: c.characterId, name: c.name, look: clone(c.look), movementStyle: c.movementStyle, voice: clone(c.voice) };
   });
-  return cast;
+  return { cast, cars };
+}
+
+/** The API's own rule for a cast's kinds (characters.cast_problem, §45.42), in its sentences. */
+function castRule(chars: Character[]): string | null {
+  const cars = chars.filter(isCar).length;
+  if (cars > 1) return "Pick one car.";
+  if (cars === 1 && cars === chars.length) return "Add someone to drive it.";
+  return null;
 }
 
 const TROUBLE: Record<string, { set: SetId; prop?: PropKind; carDo: PropAction; sfx: SfxId; face: Expression; top?: boolean }> = {
@@ -243,13 +263,14 @@ function actionFor(text: string): ActionId {
   return "drive";
 }
 
-function drivingDrafts(chars: Character[], topicId: string, n: number): Draft[] {
+function drivingDrafts(chars: Person[], topicId: string, n: number, carId: string | null = null): Draft[] {
   const t = TROUBLE[topicId] ?? { set: "road_day" as SetId, carDo: "wobble" as PropAction, sfx: "screech" as SfxId, face: "surprised" as Expression };
   const lead = chars[0];
   const pal = chars[1];
   const steps = shownSteps(topicId).filter((s) => s.text.length <= 60);
   const teach = Math.max(1, n - 4);
-  const car = (x: number): SceneProp => ({ propId: "car1", kind: "car", x, y: 0.72, scale: 1, rot: 0, ...(lead ? { color: lead.look.outfit.top } : {}) });
+  // the cast's own car when it has one (§45.42), else a car in the lead's colour
+  const car = (x: number): SceneProp => ({ propId: "car1", kind: "car", x, y: 0.72, scale: 1, rot: 0, ...(carId ? { castId: carId } : lead ? { color: lead.look.outfit.top } : {}) });
   const inCar = (x: number): SceneActor[] => [{ castId: "c1", x, y: 0.72, facing: "right", inCar: "car1" }];
   const out: Draft[] = [
     {
@@ -338,7 +359,7 @@ const MOMENTS: Record<Exclude<IdeaCategory, "driving_safety">, { title: string; 
   ],
 };
 
-function storyDrafts(chars: Character[], category: Exclude<IdeaCategory, "driving_safety">, n: number): Draft[] {
+function storyDrafts(chars: Person[], category: Exclude<IdeaCategory, "driving_safety">, n: number): Draft[] {
   const list = MOMENTS[category];
   const lead = chars[0];
   const pals = chars.slice(1);
@@ -360,6 +381,61 @@ function storyDrafts(chars: Character[], category: Exclude<IdeaCategory, "drivin
     ],
     ...(m.text ? { text: { text: m.text } } : {}),
   }));
+}
+
+/** A story with the cast's car (§45.42): the main character gets in, they drive off, honk and stop, then the car
+ * stalls and goes again. A longer video drives round the block in between. The lead is always the first person. */
+function carDrafts(people: Person[], carId: string, n: number): Draft[] {
+  const lead = people[0];
+  const pal = people[1];
+  const car = (x: number, state?: string): SceneProp => ({ propId: "car1", kind: "car", castId: carId, x, y: 0.74, scale: 1, rot: 0, ...(state ? { state } : {}) });
+  const riders = (x: number): SceneActor[] => [{ castId: "c1", x, y: 0.74, facing: "right", inCar: "car1" }, ...(pal ? [{ castId: "c2", x, y: 0.74, facing: "right" as const, inCar: "car1" }] : [])];
+  const getIn = (d: number) => Math.min(2.8, Math.max(0.9, d * 0.3));
+  const drive = (title: string, x: number): Draft => ({
+    title,
+    set: "road_day",
+    camera: "medium",
+    actors: riders(x),
+    props: [car(x)],
+    beats: (d) => [
+      b(0.1, d * 0.5, "c1", "drive", { face: faceOf(lead, "happy") }),
+      b(0.3, Math.max(0.3, d * 0.25), "car1", "speed_up"),
+      b(d * 0.4, 0.5, "car1", "honk", { sfx: "honk" }),
+      b(d * 0.62, Math.max(0.3, d * 0.16), "car1", "stop"),
+      b(d * 0.82, Math.max(0.3, d * 0.15), "c1", "wave", { face: faceOf(lead, "happy") }),
+    ],
+  });
+  const out: Draft[] = [
+    {
+      title: "The new car",
+      set: "parking_lot",
+      camera: "wide",
+      actors: [{ castId: "c1", x: 0.16, y: 0.76, facing: "right", inCar: "car1" }, ...(pal ? [{ castId: "c2", x: 0.9, y: 0.78, facing: "left" as const }] : [])],
+      props: [car(0.56, "parked")],
+      beats: (d) => [
+        b(0.2, d * 0.25, "c1", "wave", { face: faceOf(lead, "happy"), bubble: "heart" }),
+        b(d * 0.35, getIn(d), "c1", "get_in"),
+        b(d * 0.35 + getIn(d) + 0.1, Math.max(0.4, d * 0.2), "car1", "blink"),
+        ...(pal ? [b(0.4, d * 0.4, "c2", "thumbs_up", { face: faceOf(pal, "happy") })] : []),
+      ],
+    },
+    drive("Off we go", 0.5),
+  ];
+  for (let i = 0; i < n - 3; i += 1) out.push(drive("Round the block", 0.5));
+  out.push({
+    title: "Oops",
+    set: "road_day",
+    camera: "close",
+    actors: riders(0.5),
+    props: [car(0.5)],
+    beats: (d) => [
+      b(0.3, 0.6, "car1", "stall", { sfx: "pop" }),
+      b(0.5, d * 0.3, "c1", "facepalm", { face: faceOf(lead, "sad"), noise: noiseOf(lead, "oops") }),
+      b(d * 0.6, Math.max(0.3, d * 0.3), "car1", "speed_up"),
+      b(d * 0.6, d * 0.35, "c1", "drive", { face: faceOf(lead, "determined") }),
+    ],
+  });
+  return out;
 }
 
 /** The engine must accept every script the practice writer makes. */
@@ -406,7 +482,15 @@ function writeScript(chars: Character[], brief: Brief, o: { seed: number; topicI
 function writeSized(chars: Character[], brief: Brief, o: { seed: number; topicId: string | null; captionsOn: boolean; musicMood: MusicMood; durationSec: number; note?: string | null }, width: number, height: number): StoryScript {
   const safety = brief.category === "driving_safety" && o.topicId ? o.topicId : null;
   const n = Math.min(8, Math.max(safety ? 5 : 4, Math.round(o.durationSec / 7.5)));
-  const drafts = safety ? drivingDrafts(chars, safety, n) : storyDrafts(chars, brief.category === "driving_safety" ? "explainer" : brief.category, n);
+  const { cast, cars } = castOf(chars);
+  const people = chars.filter((c): c is Person => !isCar(c));
+  const carId = Object.keys(cars)[0] ?? null;
+  // a car story is 3 scenes (each up to 15 s): a longer one drives round the block in between
+  const drafts = safety
+    ? drivingDrafts(people, safety, n, carId)
+    : carId
+      ? carDrafts(people, carId, Math.max(3, Math.ceil(o.durationSec / 15)))
+      : storyDrafts(people, brief.category === "driving_safety" ? "explainer" : brief.category, n);
   const d = Math.min(15, Math.max(2, r1(o.durationSec / drafts.length)));
   const texts: Record<string, { text: string; ref?: string }> = {};
   const scenes: Scene[] = drafts.map((dr, i) => {
@@ -436,7 +520,8 @@ function writeSized(chars: Character[], brief: Brief, o: { seed: number; topicId
     durationSec: r1(d * scenes.length),
     title: brief.title.slice(0, 80),
     seed: o.seed,
-    cast: castOf(chars),
+    cast,
+    ...(carId ? { cars } : {}),
     scenes,
     music: o.musicMood === "none" ? null : { mood: o.musicMood, volume: 0.35 },
     captionsOn: o.captionsOn,
@@ -1174,8 +1259,10 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       settle();
       await delay(120);
       const limit = Math.min(50, Math.max(1, q.limit ?? 20));
+      // seriesId: one series, or "none": no series, or one that is gone (§45.43)
+      const inSeries = (s: Story) => !q.seriesId || (q.seriesId === "none" ? !s.seriesId || !seriesExists(store, ws, s.seriesId) : s.seriesId === q.seriesId);
       const all = store.stories
-        .filter((s) => s.workspaceId === ws && (!q.status || q.status === "all" || s.status === q.status))
+        .filter((s) => s.workspaceId === ws && (!q.status || q.status === "all" || s.status === q.status) && inSeries(s))
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
       const from = q.cursor ? Number(q.cursor) || 0 : 0;
       const page = all.slice(from, from + limit);
@@ -1188,6 +1275,8 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       if (ids.length < 1 || ids.length > 3) fail(400, "bad_request", "Pick 1 to 3 characters.");
       const chars = ids.map((id) => store.characters.find((c) => c.characterId === id && c.workspaceId === ws));
       if (chars.some((c) => !c)) fail(404, "not_found", "We could not find one of those characters.");
+      const castWrong = castRule(chars as Character[]);
+      if (castWrong) fail(400, "bad_request", castWrong);
       const idea = body.ideaId ? store.ideas.find((i) => i.ideaId === body.ideaId && i.workspaceId === ws) : undefined;
       if (body.ideaId && !idea) fail(404, "not_found", "We could not find that idea. It may have been deleted.");
       if (!idea) {
@@ -1240,6 +1329,9 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
         createdAt: iso(now),
         updatedAt: iso(now),
       };
+      // the body's series, else the idea's; one that is gone is dropped (§45.43)
+      const seriesId = body.seriesId ?? idea?.seriesId;
+      if (seriesId && seriesExists(store, ws, seriesId)) story.seriesId = seriesId;
       store.stories.push(story);
       extraOf(store, storyId).brief = brief;
       if (idea) {
@@ -1387,6 +1479,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       store.jobs = store.jobs.filter((j) => j.contentId !== storyId);
       store.assets = store.assets.filter((a) => a.storyId !== storyId);
       delete store.scripts[storyId];
+      seriesForgetStory(store, storyId);
     },
     async produce(ws, storyId, body = {}) {
       guardWs(store, ws);
@@ -1434,6 +1527,8 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       story.version += 1;
       story.updatedAt = iso();
       addActivity(store, "approved", story);
+      // an episode of a series: its summary and the story so far (§45.43)
+      if (story.seriesId) seriesApproved(store, story);
       return storyOut(store, story);
     },
     async reject(ws, storyId, reason) {

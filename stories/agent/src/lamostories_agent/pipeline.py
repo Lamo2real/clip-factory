@@ -68,6 +68,7 @@ from .providers import (
     sound_models,
     writer_id,
 )
+from .series_memory import series_context
 from .util import JobSuperseded, UserFacingError, log, now_iso, ulid
 
 HEARTBEAT_SECONDS = 30.0  # the contract asks for at most 60
@@ -170,13 +171,23 @@ def scene_hash(script: dict[str, Any], scene: dict[str, Any], engine: int | None
         for k, v in (script.get("cast") or {}).items()
         if k in names
     }
-    body = {
+    body: dict[str, Any] = {
         "engine": script.get("engine") if engine is None else engine,
         "size": [script.get("width"), script.get("height"), script.get("fps")],
         "seed": scene.get("seed", script.get("seed")),
         "scene": scene,
         "cast": cast,
     }
+    # A car of the cast (§45.42) is drawn from its own look by the car prop that names it: its look and style count
+    # too. A people-only scene hashes exactly as before.
+    drawn = {p.get("castId") for p in scene.get("props") or [] if isinstance(p, dict) and p.get("castId")}
+    cars = {
+        k: {f: x for f, x in v.items() if f in ("car", "movementStyle")} if isinstance(v, dict) else v
+        for k, v in (script.get("cars") or {}).items()
+        if k in drawn
+    }
+    if cars:
+        body["cars"] = cars
     return hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()[:24]
 
 
@@ -1199,11 +1210,27 @@ class StoryJob(Job):
 
     # --- storyboard ---------------------------------------------------------------------------------------------
 
-    def _cast_now(self) -> dict[str, dict[str, Any]]:
+    def _cast_now(self) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
+        """(the cast's people, its cars) by cast id, in ``characterIds`` order: c1 is the main person (§45.42). A car
+        is never an actor: it goes in the script's ``cars``, drawn by a car prop that names it."""
         cast: dict[str, dict[str, Any]] = {}
+        cars: dict[str, dict[str, Any]] = {}
         for i, cid in enumerate(self.story.get("characterIds") or []):
             ch = self.characters.get(str(cid))
             if not ch:
+                continue
+            if ch.get("kind") == "car":
+                car: dict[str, Any] = {
+                    "characterId": str(cid),
+                    "name": str(ch.get("name") or f"Car {i + 1}"),
+                    "car": ch.get("car") or {},
+                    "movementStyle": ch.get("movementStyle") or "calm",
+                    "voice": ch.get("voice") or {"style": "none", "pitch": 1, "noises": [], "sfx": []},
+                }
+                faces = ch.get("expressions")
+                if isinstance(faces, list) and faces:
+                    car["expressions"] = [str(f) for f in faces]
+                cars[f"c{i + 1}"] = car
                 continue
             cast[f"c{i + 1}"] = {
                 "characterId": str(cid),
@@ -1215,7 +1242,26 @@ class StoryJob(Job):
             faces = ch.get("expressions")
             if isinstance(faces, list) and faces:  # each character keeps its own faces (§45.34)
                 cast[f"c{i + 1}"]["expressions"] = [str(f) for f in faces]
-        return cast
+        return cast, cars
+
+    async def _series(self) -> dict[str, Any] | None:
+        """The story's series in DATA (§45.43): its bounded memory, so this episode follows on from the others; None
+        when the story is in no series or the series is gone. Never stops the storyboard."""
+        series_id = self.story.get("seriesId")
+        if not isinstance(series_id, str) or not series_id:
+            return None
+        try:
+            series = await self.data.series(self.fence.user_id, self.fence.workspace_id, series_id)
+            if series is None:
+                return None
+            user_id, workspace_id = self.fence.user_id, self.fence.workspace_id
+            stories = await self.data.listed(user_id, workspace_id, "STORY#")
+            ideas = await self.data.listed(user_id, workspace_id, "IDEA#")
+            chars = {str(c.get("characterId")): c for c in await self.data.listed(user_id, workspace_id, "CHAR#")}
+            return series_context(series, stories, ideas, chars, this_story_id=self.story_id)
+        except Exception as e:
+            log("warn", "stories.series_unreadable", job=self.fence.job_id, error=type(e).__name__)
+            return None
 
     async def _load_characters(self) -> None:
         for cid in self.story.get("characterIds") or []:
@@ -1287,10 +1333,12 @@ class StoryJob(Job):
             raise StoryFailed(keys.WRITER_FAILED)
         catalog, _rules = await self._engine_catalog()
         provider = self._provider("writer", self._ctx())
+        people, cars = writer.cast_ids_of(request.get("cast") or [])
         brief = {
             "mode": mode,
             "catalog": catalog,
-            "castIds": [str(c["castId"]) for c in request.get("cast") or []],
+            "castIds": people,
+            "carIds": cars,  # the cast's cars (§45.42): a car prop's castId, never an actor
             "topicIds": list(self.svc.guidance.topics),
             "request": request,
             "note": note,
@@ -1333,7 +1381,10 @@ class StoryJob(Job):
             scene_ids = [s for s in scene_ids if any(sc.get("sceneId") == s for sc in old.get("scenes") or [])]
         mode = "scenes" if scene_ids and old is not None else "full"
         keep_cast = self.job.get("jobType") == "changes" and old is not None
-        cast = dict(old.get("cast") or {}) if keep_cast and old else self._cast_now()
+        if keep_cast and old:
+            cast, cars = dict(old.get("cast") or {}), dict(old.get("cars") or {})
+        else:
+            cast, cars = self._cast_now()
         if not cast:
             raise StoryFailed("This story's characters are gone. Pick a character, then tap Try again.")
         catalog, rules = await self._engine_catalog()
@@ -1342,7 +1393,7 @@ class StoryJob(Job):
         size = (int(old.get("width") or 1080), int(old.get("height") or 1920)) if keep_size and old else self._size()
         request: dict[str, Any] = {
             "story": await self._concept(),
-            "cast": writer.cast_brief(cast, self.characters),
+            "cast": writer.cast_brief(cast, self.characters, cars),
             "catalog": self._lists(catalog),
             **rules,
             "format": writer.format_of(size),
@@ -1354,6 +1405,9 @@ class StoryJob(Job):
         references = await self._references()
         if references:
             request["referenceVideos"] = references
+        series = await self._series()
+        if series is not None:
+            request["series"] = series
         if topic is None:
             request["safetyTopics"] = [{"id": t.id, "title": t.title} for t in self.svc.guidance.topics.values()]
         if old is not None and self.job.get("jobType") == "changes":
@@ -1368,7 +1422,8 @@ class StoryJob(Job):
         engine_version = await self._engine()
         self.meta.update({"engineVersion": engine_version, "seed": seed})
         args: dict[str, Any] = {"old": old, "cast": cast, "seed": seed, "engine": engine_version, "topic": topic,
-                "scene_ids": scene_ids, "new_take": mode == "scenes" and not note, "size": size}  # fmt: skip
+                "scene_ids": scene_ids, "new_take": mode == "scenes" and not note, "size": size,
+                "cars": cars}  # fmt: skip
         # A remade scene gets its new seed after normalizing (§45.34), so it is new to normalizeScript.
         reseed = (
             {sid: keys.seed_for(self.fence.job_id, "scene", sid) for sid in scene_ids} if mode == "scenes" else None
@@ -1462,6 +1517,7 @@ class StoryJob(Job):
         scene_ids: Sequence[str],
         new_take: bool,
         size: tuple[int, int] = writer.DEFAULT_SIZE,
+        cars: dict[str, dict[str, Any]] | None = None,
     ) -> tuple[dict[str, Any], bool, list[str]]:
         """The script from the writer's answer, whether it teaches driving safety, and the asked scene ids the answer
         left out (a remake must name exactly those, §45.34)."""
@@ -1481,6 +1537,7 @@ class StoryJob(Job):
             music=self._music(answer),
             topic=topic,
             size=size,
+            cars=cars,
         )
         if old is not None:  # the same scene ids keep their seeds, so an unchanged scene is not drawn again
             seeds_old = {str(s.get("sceneId")): s.get("seed") for s in old.get("scenes") or []}
@@ -1685,10 +1742,11 @@ class StoryJob(Job):
         await self._load_characters()
         catalog, rules = await self._engine_catalog()
         cast = dict(script.get("cast") or {})
+        cars = dict(script.get("cars") or {})
         size = (int(script.get("width") or 1080), int(script.get("height") or 1920))
         request = {
             "story": await self._concept(),
-            "cast": writer.cast_brief(cast, self.characters),
+            "cast": writer.cast_brief(cast, self.characters, cars),
             "catalog": self._lists(catalog),
             **rules,
             "format": writer.format_of(size),
@@ -1715,6 +1773,7 @@ class StoryJob(Job):
             music=script.get("music"),
             topic=topic,
             size=size,
+            cars=cars,
         )
         old_scenes = {str(s.get("sceneId")): s for s in script.get("scenes") or []}
         new_ids = [str(s.get("sceneId")) for s in new.get("scenes") or []]

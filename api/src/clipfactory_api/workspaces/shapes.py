@@ -147,6 +147,8 @@ def public_idea(item: Mapping[str, Any]) -> dict[str, Any]:
         out["concept"] = concept
     if item.get("parentIdeaId"):
         out["parentIdeaId"] = item["parentIdeaId"]
+    if item.get("seriesId"):  # §45.43: left out when the idea is in no series
+        out["seriesId"] = str(item["seriesId"])
     return out
 
 
@@ -161,6 +163,8 @@ CHARACTER_FIELDS: Final = (
     "expressions",
     "look",
     "voice",
+    "kind",
+    "car",
 )
 
 
@@ -189,6 +193,11 @@ def public_character(
     out: dict[str, Any] = {"characterId": str(item["characterId"]), "workspaceId": workspace_id}
     for key in CHARACTER_FIELDS:
         out[key] = item.get(key)
+    out["kind"] = item.get("kind") or "person"  # §45.41: an older item has no kind, so it is a person
+    if out["kind"] == "car":
+        out.pop("look", None)
+    else:
+        out.pop("car", None)
     out.update(
         {
             "references": references,
@@ -282,6 +291,8 @@ def public_story(item: Mapping[str, Any], presign: Presign, user_id: str, bucket
     for key in ("approvedAt", "publishedAt"):
         if item.get(key):
             out[key] = item[key]
+    if item.get("seriesId"):  # §45.43: left out when the story is in no series
+        out["seriesId"] = str(item["seriesId"])
     return out
 
 

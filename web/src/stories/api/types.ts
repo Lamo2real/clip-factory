@@ -2,6 +2,8 @@
 // Changed only through docs/CONTRACTS.md §45.6 (builders ask the lead).
 import type {
   CaptionCue,
+  CarLook,
+  CharacterKind,
   CharacterLook,
   CharacterVoice,
   Expression,
@@ -11,7 +13,7 @@ import type {
   StoryScript,
 } from "../engine/types.ts";
 
-export type { CaptionCue, CharacterLook, CharacterVoice, Expression, MovementStyle, MusicMood, SfxCue, StoryScript };
+export type { CaptionCue, CarLook, CharacterKind, CharacterLook, CharacterVoice, Expression, MovementStyle, MusicMood, SfxCue, StoryScript };
 
 export type Platform = "youtube" | "instagram" | "facebook" | "tiktok" | "x";
 export const STORIES_PLATFORMS: Platform[] = ["youtube", "tiktok", "instagram", "facebook", "x"];
@@ -483,7 +485,7 @@ export interface Skill {
 
 export interface AiTask {
   taskId: string;
-  kind: TaskKind | "check_models";
+  kind: TaskKind | "check_models" | "series_recap";
   status: "queued" | "running" | "done" | "failed";
   model: string | null;
   effort: Effort | null;
@@ -660,9 +662,13 @@ export interface IdeaInput {
   concept?: VideoConcept;
   source?: "manual" | "ai" | "variation";
   parentIdeaId?: string;
+  /** the series it is filed in (§45.43); null only in a patch, where it means "No series" */
+  seriesId?: string | null;
 }
 
 export interface Idea extends IdeaInput {
+  /** missing: No series */
+  seriesId?: string;
   ideaId: string;
   workspaceId: string;
   status: "saved" | "used";
@@ -673,18 +679,32 @@ export interface Idea extends IdeaInput {
   updatedAt: string;
 }
 
-export interface CharacterInput {
+interface CharacterBase {
   name: string;
   description: string;
   personality: string;
   traits: string[];
   movementStyle: MovementStyle;
   expressions: Expression[];
-  look: CharacterLook;
   voice: CharacterVoice;
 }
-
-export interface Character extends CharacterInput {
+/** A person (old items have no kind: they are people). */
+export interface PersonInput extends CharacterBase {
+  kind?: "person";
+  look: CharacterLook;
+  car?: undefined;
+}
+/** A car (§45.41): no person look, no voice (style "none", noises []), favourite effects only. */
+export interface CarInput extends CharacterBase {
+  kind: "car";
+  car: CarLook;
+  look?: undefined;
+}
+export type CharacterInput = PersonInput | CarInput;
+export function isCar<T extends { kind?: CharacterKind }>(c: T): c is Extract<T, { kind: "car" }> {
+  return c.kind === "car";
+}
+export interface CharacterSaved {
   characterId: string;
   workspaceId: string;
   references: { assetId: string; url: string; contentType: string; createdAt: string }[];
@@ -693,6 +713,79 @@ export interface Character extends CharacterInput {
   version: number;
   createdAt: string;
   updatedAt: string;
+}
+export type Character = CharacterInput & CharacterSaved;
+
+/** POST …/characters/design (§45.41). */
+export interface DesignBody {
+  description?: string;
+  /** the older single picture; still accepted (it goes first) */
+  referenceAssetId?: string;
+  /** 1..6 photos (design_ref or character_ref assets of this workspace), in the owner's order */
+  referenceAssetIds?: string[];
+  /** left out: the saved character's kind (characterId), else "person" */
+  kind?: CharacterKind;
+  /** 1..4; left out: 3 for a car, 1 for a person */
+  count?: number;
+  /** car options already shown, for "Make more" (≤ 8) */
+  avoid?: CarLook[];
+  characterId?: string;
+  override?: ModelOverride;
+}
+/** A done character_design task's result. */
+export interface DesignResult {
+  character: CharacterInput;
+  characters?: CharacterInput[];
+}
+
+/** A series: a folder of story videos (§45.43). */
+export interface SeriesInput {
+  name: string;
+  line?: string | null;
+  castIds?: string[];
+}
+export interface SeriesEpisode {
+  storyId: string;
+  /** 1.. in the order of approval */
+  number: number;
+  title: string;
+  status: "approved" | "published";
+  summary: string | null;
+  by: "ai" | "owner" | null;
+  approvedAt: string;
+  coverUrl?: string;
+}
+export interface Series {
+  seriesId: string;
+  workspaceId: string;
+  /** 1..40 */
+  name: string;
+  /** ≤ 120 */
+  line: string | null;
+  /** ≤ 3, the people first, at most one car */
+  castIds: string[];
+  /** null: automatic (the newest episode's cover, else the first cast portrait) */
+  cover: { storyId: string } | { characterId: string } | null;
+  coverUrl: string | null;
+  /** ≤ 1500 */
+  storySoFar: string;
+  storySoFarBy: "ai" | "owner" | null;
+  storySoFarAt: string | null;
+  episodes: SeriesEpisode[];
+  counts: { ideas: number; making: number; review: number; done: number };
+  /** the newest recap task, while it runs or after it failed; null once it is done */
+  recap: { taskId: string; storyId: string; status: "queued" | "running" | "failed"; error?: string } | null;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+export interface SeriesPatch {
+  version: number;
+  name?: string;
+  line?: string | null;
+  castIds?: string[];
+  cover?: Series["cover"];
+  storySoFar?: string;
 }
 
 export type StoryStatus =
@@ -723,6 +816,8 @@ export interface StoryInput {
   format?: StoryFormat;
   /** the first job's model and effort only, never kept (§45.5 POST /stories; the stand-in for a usual model the studio knows cannot be used, §45.36 E12) */
   override?: ModelOverride;
+  /** the series it is filed in (§45.43); left out: the idea's, else No series */
+  seriesId?: string;
 }
 
 /** A video's shape and size (CONTRACTS §45.34 "Video size and shape"); the size matches the aspect. */
@@ -811,6 +906,8 @@ export interface Story {
   updatedAt: string;
   approvedAt?: string;
   publishedAt?: string;
+  /** the series it is filed in (§45.43); missing: No series */
+  seriesId?: string;
 }
 
 /** A reference analysis job's own steps (CONTRACTS §45.34): Look at it, Listen, Write it up. */
@@ -1154,7 +1251,7 @@ export interface StoriesApi {
   patchIdea(ws: string, ideaId: string, patch: Partial<IdeaInput>): Promise<Idea>;
   deleteIdea(ws: string, ideaId: string): Promise<void>;
   /** AI work runs in Lamo Stories' own agent as a task: poll getTask until done (result.drafts / result.idea) */
-  generateIdeas(ws: string, body: { topic?: string; category?: IdeaCategory; count?: number; override?: ModelOverride }): Promise<AiTask>;
+  generateIdeas(ws: string, body: { topic?: string; category?: IdeaCategory; count?: number; override?: ModelOverride; seriesId?: string }): Promise<AiTask>;
   expandIdea(ws: string, ideaId: string, body?: { durationSec?: number; override?: ModelOverride }): Promise<AiTask>;
   ideaVariations(ws: string, ideaId: string, body?: { count?: number; override?: ModelOverride }): Promise<AiTask>;
   getTask(ws: string, taskId: string): Promise<AiTask>;
@@ -1170,10 +1267,14 @@ export interface StoriesApi {
   makePortrait(ws: string, characterId: string): Promise<ProductionJob>;
   /** a picture for "Design with AI" (an ASSET# of kind design_ref) */
   designUpload(ws: string, file: { filename: string; contentType: string; size: number }): Promise<Upload>;
-  /** the character agent's suggested CharacterInput in result.character (a draft); with characterId it redesigns that character (CONTRACTS §45.34) */
-  designCharacter(ws: string, body: { description?: string; referenceAssetId?: string; characterId?: string; override?: ModelOverride }): Promise<AiTask>;
+  /**
+   * the character agent's suggested CharacterInput in result.character, and every option in result.characters (drafts,
+   * a DesignResult); with characterId it redesigns that character (CONTRACTS §45.34, §45.41)
+   */
+  designCharacter(ws: string, body: DesignBody): Promise<AiTask>;
 
-  listStories(ws: string, q?: { status?: StoryStatus | "all"; limit?: number; cursor?: string }): Promise<{ stories: Story[]; nextCursor: string | null }>;
+  /** seriesId: a series id, or "none" (no series, or one that is gone; §45.43) */
+  listStories(ws: string, q?: { status?: StoryStatus | "all"; limit?: number; cursor?: string; seriesId?: string }): Promise<{ stories: Story[]; nextCursor: string | null }>;
   createStory(ws: string, body: StoryInput): Promise<{ story: Story; job: ProductionJob }>;
   getStory(ws: string, storyId: string): Promise<{ story: Story; job: ProductionJob | null; script: StoryScript | null }>;
   storyJobs(ws: string, storyId: string): Promise<ProductionJob[]>;
@@ -1191,7 +1292,21 @@ export interface StoriesApi {
   /** the MP4, or one of the extra copies the video has (CONTRACTS §45.34 "Output formats") */
   download(ws: string, storyId: string, body?: { format?: DownloadFormat }): Promise<{ url: string; filename: string }>;
 
-  library(ws: string, q?: { kind?: AssetKind | "all"; storyId?: string; characterId?: string; limit?: number; cursor?: string }): Promise<{ items: LibraryItem[]; nextCursor: string | null }>;
+  /** seriesId: a series id, or "none" (§45.43); assets without a story show only under All */
+  library(ws: string, q?: { kind?: AssetKind | "all"; storyId?: string; characterId?: string; limit?: number; cursor?: string; seriesId?: string }): Promise<{ items: LibraryItem[]; nextCursor: string | null }>;
+
+  /** Series (§45.43): folders of story videos, newest first */
+  listSeries(ws: string): Promise<Series[]>;
+  createSeries(ws: string, s: SeriesInput): Promise<Series>;
+  getSeries(ws: string, seriesId: string): Promise<Series>;
+  /** 409 when the version changed */
+  patchSeries(ws: string, seriesId: string, patch: SeriesPatch): Promise<Series>;
+  /** never deletes a video: they move to No series */
+  deleteSeries(ws: string, seriesId: string): Promise<void>;
+  /** null: No series; any status (an approved or published story moved in gets a recap there) */
+  moveStoryToSeries(ws: string, storyId: string, seriesId: string | null): Promise<Story>;
+  /** "Write it" / "Write it again": the series_recap task for one episode */
+  recapEpisode(ws: string, seriesId: string, storyId: string): Promise<AiTask>;
   providers(ws: string): Promise<ProviderStatus[]>;
   /** "Try it" on Nova Reel (§45.35 D2): one 6-second test shot; the job ends with the provider's new state (GET …/providers) */
   tryNovaReel(ws: string): Promise<ProductionJob>;

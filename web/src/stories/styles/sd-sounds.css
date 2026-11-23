@@ -1,0 +1,117 @@
+/* The character editor's Sounds part (docs/CONTRACTS.md §45.40): a round glass play button before each chip, the
+   "Hear" row of the two voices, and the one-line hints. No borders: fills and shadows; radii from --st-r-*. */
+
+/* A chip with its play button: the two sit together as one item of the chip row. */
+.st-s-chipwrap {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+/* The play button: the contract's round glass button (glass-figures.css), cream while it plays. */
+.st-s-hear {
+  flex: none;
+  padding: 0;
+  border: 0;
+  font: inherit;
+}
+
+.st-s-hear__icon {
+  display: block;
+  flex: none;
+}
+
+.st-s-hear.is-playing {
+  color: var(--st-on-cream);
+  background: var(--st-cream);
+}
+
+.st-s-hear.is-playing:hover {
+  background: var(--st-cream-hover);
+}
+
+.st-s-hear[aria-disabled="true"] {
+  opacity: 0.72;
+}
+
+.st-s-hear:focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
+}
+
+/* With words ("Babble", "Hum"): a glass pill with the triangle before the word. */
+.st-s-hear--words {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-width: var(--st-tap);
+  min-height: var(--st-tap);
+  padding: 0 18px 0 14px;
+  border: 0;
+  border-radius: var(--st-r-round);
+  font: var(--st-weight-ui) var(--st-fs-small) / 1.15 var(--st-font);
+  font-optical-sizing: auto;
+  color: var(--st-text);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  transition: background-color var(--st-dur-hover) var(--st-ease-out);
+}
+
+.st-s-hear--words:hover {
+  color: var(--st-text-strong);
+  background: var(--st-fill-control-hover);
+}
+
+.st-s-hear--words.is-playing {
+  box-shadow: var(--st-depth-1);
+}
+
+.st-sd-hearrow__btns {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+/* The hints at the top of the part: Sounds are off (with "Turn on"), and another effects maker. */
+.st-sd-hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin: 0;
+  padding: 8px 8px 8px 14px;
+  border-radius: var(--st-r-control);
+  color: var(--st-text);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  line-height: var(--st-lh-body);
+}
+
+.st-sd-hint__text {
+  flex: 1 1 14rem;
+}
+
+.st-sd-more,
+.st-sd-hearrow {
+  justify-self: start;
+}
+
+/* ---------- Phones: 48 px targets ---------- */
+@media (max-width: 767px), (pointer: coarse) {
+  .st-s-hear.st-round-btn {
+    width: 48px;
+    height: 48px;
+  }
+
+  .st-s-hear--words {
+    min-width: 48px;
+    min-height: 48px;
+  }
+}
+
+/* ---------- Less motion ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .st-s-hear--words {
+    transition: none;
+  }
+}

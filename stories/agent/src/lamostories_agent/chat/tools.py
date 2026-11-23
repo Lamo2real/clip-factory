@@ -45,6 +45,7 @@ from lamostories_agent.tasks.services import Services
 from lamostories_agent.tasks.store import Expr
 
 MAX_ACTIONS = 6
+CARS_IN_CHARACTERS = "Make cars in Characters: tap New character, then A car."
 MAX_LIST = 40
 MAX_REFS = 3  # reference videos one story may use (§45.28)
 ACTION_KINDS = ("make_video", "remake_scene", "analyze_reference", "save_character", "save_idea", "open")
@@ -579,6 +580,9 @@ class Toolbox:
         return self.offer("save_idea", "Save this idea", {"idea": {**fields, "source": "ai"}})
 
     def propose_character(self, args: dict[str, Any]) -> dict[str, Any]:
+        draft = args.get("character")
+        if isinstance(draft, dict) and draft.get("kind") == "car":  # §45.41: a car is made from its photos
+            raise ToolError(CARS_IN_CHARACTERS)
         if self.catalog is None:
             raise ToolError("Characters can't be drafted right now.")
         taken = [str(c.get("name") or "") for c in self._list("CHAR#")]

@@ -20,6 +20,7 @@ TYPE_ACTIVITY: Final = "ws_activity"
 TYPE_PROVIDER: Final = "ws_provider"
 TYPE_USAGE: Final = "ws_usage"
 TYPE_MODELSTATUS: Final = "ws_modelstatus"
+TYPE_SERIES: Final = "ws_series"
 ACTIVITY_DAYS: Final = 90
 USAGE_DAYS: Final = 400
 
@@ -97,6 +98,11 @@ def idea_sk(idea_id: str) -> str:
 
 def asset_sk(asset_id: str) -> str:
     return f"ASSET#{asset_id}"
+
+
+def series_sk(series_id: str) -> str:
+    """A series (§45.43): a folder of story videos and its story so far."""
+    return f"SERIES#{series_id}"
 
 
 def activity_sk(at: str, item_id: str) -> str:

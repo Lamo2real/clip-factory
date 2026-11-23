@@ -1,5 +1,5 @@
 // Lamo Stories engine: what the script's free words and numbers mean, in plain sentences for the story writer and the
-// fact checker (CONTRACTS §45.10, §45.11.2, §45.11.5, §45.34). `cli.ts catalog` gives them next to the catalog, the
+// fact checker (CONTRACTS §45.10, §45.11.2, §45.11.5, §45.34, §45.42). `cli.ts catalog` gives them next to the catalog, the
 // limits and the formats, so a writer never has to guess which way a skid slides, which faces a character has or
 // what shape the frame is. engine/README.md says the same at more length.
 
@@ -76,6 +76,20 @@ export const RULES: { id: string; text: string }[] = [
       "and only the noises in its voice.noises. A beat's face and noise for that character must come from its own " +
       "lists; any other is refused. Leave face out to keep the face it has, and leave noise out for silence.",
   },
+  {
+    id: "car_cast",
+    text:
+      "A car of the cast is never an actor: it is a car prop with its castId. People ride in it with inCar set to " +
+      "that prop's propId.",
+  },
+  {
+    id: "get_in_out",
+    text:
+      "get_in and get_out need inCar, last 0.8 to 3 seconds, and happen while the car is parked. The car moves only " +
+      "after get_in ends.",
+  },
+  { id: "honk", text: "honk adds the honk sound by itself." },
+  { id: "driver_wave", text: "The driver waves only while the car is stopped; a passenger may wave any time." },
   {
     id: "frame_shape",
     text:

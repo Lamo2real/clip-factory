@@ -48,7 +48,7 @@ export const STYLES: Record<MovementStyle, Style> = {
 export type RestState = "stand" | "sit" | "lie";
 
 /** Actions that move the whole body and leave the character standing afterwards. */
-const STANDING: Set<ActionId> = new Set(["walk", "run", "jump", "celebrate", "dance", "slip", "cower", "get_up"]);
+const STANDING: Set<ActionId> = new Set(["walk", "run", "jump", "celebrate", "dance", "slip", "cower", "get_up", "get_out"]);
 const SELF_BLEND: Set<ActionId> = new Set(["sit", "fall", "get_up"]);
 export const DRIVING: Set<ActionId> = new Set(["drive", "steer_left", "steer_right", "brake"]);
 const TRAVELLERS: Set<ActionId> = new Set(["walk", "run"]);
@@ -227,7 +227,8 @@ export function actionPose(id: ActionId, from: Pose, c: Ctx, restAfter: () => Po
     }
     case "wave": {
       const sw = osc(c, 2.6);
-      const f = armTo(g, 1, g.headRX + 8 + 5 * sw, g.headY - g.headRY * 0.25 + 2 * Math.abs(sw), -1);
+      // in a car's seat the hand waves by the cheek, so it stays inside the window (§45.42); standing, beside the head
+      const f = c.inCar ? armTo(g, 1, g.headRX * 0.75 + 3 * sw, g.headY + g.headRY * 0.45, -1) : armTo(g, 1, g.headRX + 8 + 5 * sw, g.headY - g.headRY * 0.25 + 2 * Math.abs(sw), -1);
       return { ...q, aF: f.a, eF: f.e, lenF: f.len, handF: "open", overFace: 1, head: q.head + 5, lean: q.lean - 2, turn: 0.45 };
     }
     case "point": {
@@ -382,6 +383,29 @@ export function actionPose(id: ActionId, from: Pose, c: Ctx, restAfter: () => Po
       const k = 0.5 - 0.5 * Math.cos(TAU * 1.1 * st.sp * c.tau);
       return { ...q, aF: 40 + 55 * k, eF: 60 - 45 * k, handF: "open", aB: -18, nod: 0.25 * k, lean: q.lean + 3 * k, turn: 0.4 };
     }
+    case "get_in":
+    case "get_out": {
+      // stepping into (or out of) the car: a little squash and a lean towards the door, a knee up (§45.42)
+      const k = Math.sin(Math.PI * clamp01(p));
+      const into = id === "get_in" ? 1 : -1;
+      return {
+        ...q,
+        seat: 0,
+        dy: q.dy + 4 * k,
+        sy: q.sy * (1 - 0.1 * k * st.squash),
+        sx: q.sx * (1 + 0.05 * k * st.squash),
+        lean: q.lean + 9 * into * k,
+        hF: 26 * k,
+        kF: -52 * k,
+        hB: -6 * k,
+        aF: 46 * k,
+        eF: 34 * k,
+        aB: -24 * k,
+        handF: "open",
+        turn: 0.55,
+        head: q.head - 3 * k,
+      };
+    }
     case "gasp": {
       const k = smoothstep(0, 0.18, c.tau);
       const f = armTo(g, 1, g.headRX + 3, g.headY + g.headRY * 0.35, -1);
@@ -390,6 +414,47 @@ export function actionPose(id: ActionId, from: Pose, c: Ctx, restAfter: () => Po
     }
   }
   return q;
+}
+
+// ---- getting in and out of a car (§45.42) -------------------------------------------------------------------
+
+/** A rider's get_in and get_out in one scene (at most one of each, get_in first): when each starts and ends. A missing
+ * one is -Infinity (get_in: seated from the start) or Infinity (get_out: seated to the end). */
+export interface Boarding {
+  inAt: number;
+  inEnd: number;
+  outAt: number;
+  outEnd: number;
+  getIn: Beat | null;
+  getOut: Beat | null;
+}
+
+export function boardingOf(beats: Beat[]): Boarding | null {
+  const getIn = beats.find((b) => b.do === "get_in") ?? null;
+  const getOut = beats.find((b) => b.do === "get_out") ?? null;
+  if (!getIn && !getOut) return null;
+  return {
+    inAt: getIn ? getIn.at : -Infinity,
+    inEnd: getIn ? getIn.at + getIn.dur : -Infinity,
+    outAt: getOut ? getOut.at : Infinity,
+    outEnd: getOut ? getOut.at + getOut.dur : Infinity,
+    getIn,
+    getOut,
+  };
+}
+
+/** How much of a rider shows in its seat and outside at time t: the one outside fades out over get_in's last quarter
+ * while the seated one fades in, and the other way round over get_out's first quarter. */
+export function boardingAt(b: Boarding | null, t: number): { seat: number; out: number } {
+  if (!b) return { seat: 1, out: 0 };
+  const inD = b.inEnd - b.inAt;
+  const outD = b.outEnd - b.outAt;
+  const seatIn = b.getIn ? smoothstep(b.inAt + inD * 0.75, b.inEnd, t) : 1;
+  const seatOut = b.getOut ? 1 - smoothstep(b.outAt, b.outAt + outD * 0.25, t) : 1;
+  let out = 0;
+  if (b.getIn && t < b.inEnd) out = 1 - seatIn;
+  else if (b.getOut && t >= b.outAt) out = 1 - seatOut;
+  return { seat: Math.min(seatIn, seatOut), out };
 }
 
 // ---- the actor's timeline -----------------------------------------------------------------------------------

@@ -8,7 +8,7 @@ status, so a task the API's fence already failed, or that a newer run owns, is n
 makes to other items (an idea's concept) go in the same transaction as its end.
 
 The task's inputs are read from the item's ``input`` map (``topic``, ``category``, ``count``, ``ideaId``,
-``durationSec``, ``description``, ``referenceAssetId``, ``storyId``, ``models``, ``characterId``), and, for any of these
+``durationSec``, ``description``, ``referenceAssetId``, ``storyId``, ``models``, ``characterId``, ``seriesId``), and, for any of these
 names it does not carry, from the item's top level.
 """
 
@@ -38,6 +38,7 @@ INPUT_KEYS = (
     "models",
     "characterId",
     "makers",
+    "seriesId",
 )
 KIND_AGENT = {
     "brainstorm": "creative_director",
@@ -46,6 +47,7 @@ KIND_AGENT = {
     "character_design": "character",
     "captions": "storyboard",
     "check_models": "creative_director",
+    "series_recap": "creative_director",  # the story so far of a series (§45.43), on the task text_edit's model
 }
 FAILURE = {
     "brainstorm": "The idea helper could not finish. Tap Try again.",
@@ -54,6 +56,7 @@ FAILURE = {
     "character_design": "The character helper could not finish. Tap Try again.",
     "captions": "The caption helper could not finish. Tap Try again.",
     "check_models": "Checking the models did not finish. Tap Try again.",
+    "series_recap": "Clips Funded could not write the story so far. Tap Write it again.",
 }
 UNKNOWN_KIND = "Clips Funded's agent does not know that kind of AI work yet."
 GONE = "What this was for was changed or deleted meanwhile. Tap Try again."
@@ -134,7 +137,7 @@ def _agent_name(agent_id: str) -> str:
 
 
 def handlers() -> dict[str, Handler]:
-    from . import captions, check, design, ideas
+    from . import captions, check, design, ideas, series
 
     return {
         "brainstorm": ideas.brainstorm,
@@ -143,6 +146,7 @@ def handlers() -> dict[str, Handler]:
         "character_design": design.character_design,
         "captions": captions.captions_again,
         "check_models": check.check_models,
+        "series_recap": series.recap,
     }
 
 

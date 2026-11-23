@@ -29,8 +29,7 @@ import { storiesApi } from "../api/client.ts";
 import { storiesGoLater } from "../pane.tsx";
 import type { AiSetting, CharacterInput, ChatAction, IdeaCategory, IdeaInput, ModelOverride, ProjectRef, TaskKind } from "../api/types.ts";
 import { cleanPick, LISTED_INFO, ModelMenu, modelOf, sendPick, storyUsual, unusableModel, usableUsual, type AiInfo, type Usual } from "../studio/ai.tsx";
-import { showFace } from "../studio/looks.ts";
-import { CharacterPreview } from "../preview/CharacterPreview.tsx";
+import { CastPreview } from "../preview/CastPreview.tsx";
 import { isStoriesPath, matchStories } from "../routes.ts";
 import { CATEGORIES, productionNewHref, type ProductionPrefill } from "./handoff.ts";
 import { Btn, centerOf, cheer, Icon, sentence, type IconName } from "./kit.tsx";
@@ -161,7 +160,8 @@ export function planFor(action: ChatAction): ActionPlan {
     }
     case "save_character": {
       const c = obj(p.character);
-      if (!c || !text(c.name) || !obj(c.look)) return { kind: "broken" };
+      // A person has its look; a car (§45.41) its car look (the agent makes cars in Characters, so this is rare).
+      if (!c || !text(c.name) || !(c.kind === "car" ? obj(c.car) : obj(c.look))) return { kind: "broken" };
       const character = c as unknown as CharacterInput;
       return {
         kind: "call",
@@ -307,9 +307,9 @@ export function ActionCard({
 
   return (
     <div className={`st-chat-action st-chat-action--${action.kind}`}>
-      {character && typeof character.name === "string" && obj(character.look) ? (
+      {character && typeof character.name === "string" && (character.kind === "car" ? obj(character.car) : obj(character.look)) ? (
         <div className="st-chat-action__show">
-          <CharacterPreview look={character.look} movementStyle={character.movementStyle ?? "bouncy"} expression={showFace(character)} size={88} label={`How ${character.name} looks`} />
+          <CastPreview c={{ ...character, movementStyle: character.movementStyle ?? "bouncy" }} size={88} label={`How ${character.name} looks`} />
           <div className="st-chat-action__words">
             <strong>{character.name}</strong>
             {typeof character.description === "string" && character.description ? <span>{character.description}</span> : null}

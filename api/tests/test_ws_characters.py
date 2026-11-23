@@ -342,6 +342,37 @@ def test_the_api_vocabulary_mirrors_the_engine() -> None:
     assert list(catalog.VOICE_STYLES) == _ts_union("  style")
 
 
+def _ts_car_ids(key: str) -> list[str]:
+    """One list of ``CATALOG.carLooks`` (catalog.ts, §45.41)."""
+    text = (ENGINE / "catalog.ts").read_text()
+    block = re.search(r"\n  carLooks: \{(.*?)\n  \},", text, re.S)
+    assert block, "carLooks"
+    m = re.search(r"\n    " + key + r": \[(.*?)\n    \],", block.group(1), re.S)
+    assert m, key
+    return re.findall(r'id: "([^"]+)"', m.group(1))
+
+
+def _ts_type(name: str) -> list[str]:
+    """The strings of ``export type {name} = "a" | "b" …;`` in types.ts."""
+    text = (ENGINE / "types.ts").read_text()
+    m = re.search(r"export type " + name + r' =((?:\s*\|?\s*"[^"]+")+);', text)
+    assert m, name
+    return re.findall(r'"([^"]+)"', m.group(1))
+
+
+def test_the_api_car_vocabulary_mirrors_the_engine() -> None:
+    assert list(catalog.CAR_BODIES) == _ts_car_ids("body") == _ts_type("CarBody")
+    assert list(catalog.CAR_PATTERNS) == _ts_car_ids("pattern")
+    assert list(catalog.CAR_WINDOWS) == _ts_car_ids("windows")
+    assert list(catalog.CAR_WHEELS) == _ts_car_ids("wheels")
+    assert list(catalog.CAR_FRONT_LIGHTS) == _ts_car_ids("frontLights")
+    assert list(catalog.CAR_REAR_LIGHTS) == _ts_car_ids("rearLights")
+    assert list(catalog.CAR_EXTRAS) == _ts_car_ids("extra")
+    assert list(catalog.CAR_EYES) == _ts_car_ids("eyes")
+    assert list(catalog.CAR_MOUTHS) == _ts_car_ids("mouth")
+    assert list(catalog.CHARACTER_KINDS) == _ts_type("CharacterKind")
+
+
 # --- "Design with AI" (§45.5): a picture, then a task of the character agent ------------------------------------
 
 
@@ -374,7 +405,10 @@ def test_design_with_ai_uploads_a_hidden_picture_and_asks_the_character_agent(
     assert stored is not None
     assert stored["agentId"] == "character"
     assert stored["input"] == {
+        "kind": "person",  # §45.41: a person, one option, the picture in the photo list too
+        "count": 1,
         "description": "A tall orange cat in a raincoat",
+        "references": [{"assetId": up["assetId"], "key": key, "contentType": "image/webp"}],
         "referenceAssetId": up["assetId"],
         "referenceKey": key,
         "referenceContentType": "image/webp",
