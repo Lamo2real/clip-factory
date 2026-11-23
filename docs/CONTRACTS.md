@@ -14326,8 +14326,9 @@ accounts `/stories/connections`, Settings `/stories/settings/{section}` (`ai`, `
 * Look: its own tokens (`--st-*`, in `web/src/stories/styles/`, outside `web/src/styles` whose tests police Lamo
   Clips' palette; `test/storiesStyles.test.ts` holds the owner's rules there): a deep night-indigo stage (`#1C1842`)
   with soft spotlight glows, warm cream words (`#FFF6E5`), sunshine (`#FFC94A`) for every main action, coral
-  (`#FF6F61`), mint (`#47D6A0`) and sky (`#62C6FF`) for status and characters, rounded type (`ui-rounded`, then the
-  system font), frosted panels, character-shaped empty states, storyboard filmstrips. Every Clips Funded selector sits
+  (`#FF6F61`), mint (`#47D6A0`) and sky (`#62C6FF`) for status and characters, its own type (since 23 Nov Fugaz One
+  for the large text and Fraunces for the smaller text, §45.39), frosted panels, character-shaped empty states,
+  storyboard filmstrips. Every Clips Funded selector sits
   under `.stories-app` (or starts `st-`); no `:root`, `html` or `body` rule (the logo is the shell's `ws-mark`,
   §45.38); StoriesApp restores the page title and theme colour when it unmounts. The owner's rules that hold
   everywhere still hold: arrow cursor only (no `cursor:` CSS), hover states, click and deny sounds, `<Glide>` for
@@ -15475,6 +15476,52 @@ The owner (22 Nov, 18:01, with screenshots): "just like you have in the top or i
 * **E18, again.** Social accounts deals its cards into the number of columns (two up to as many as fit) that leaves the least empty area, each count measured with the cards' own heights at its width, every way of dealing them tried; a card that grows still only pushes the cards under it.
 * **S4. The dock behaves as part of the page under it (review fixes, 2026-11-22).** (a) While a dialog of either app is open (any `aria-modal="true"` outside the dock) the dock is inert: no tap and no key reach it. Where the dialog's dim is drawn over it already (Clip Factory's sheets and lists) nothing else changes; where the dock is drawn over the dim (the Stories app's sheets dim inside its own app's box) it dims with the page (opacity only) and a tap there lands on the dim, which closes the sheet. (b) The rows of Clip Factory's foot under the dock (Get the app, the jobs line) are read as Clip Factory last had them on screen: a Clip Factory job starting or ending, or the app being installed, while a Stories page is on screen never moves the switch there; back in Clip Factory it sits where Clip Factory's foot has it now. (c) For the keyboard the dock comes where it is drawn: right after the app's menu (each app marks its menu list `data-ws-tab-after`), before Get the app and the page; Shift+Tab goes back the same way; anywhere else Tab goes past it. (d) Unfolding Clip Factory's sidebar, the dock's parts show only as far as the sidebar's content has grown (a clip on the sidebar's own 520 ms curve, no layout), never past the glass. (e) A toast an app put up that is still on screen when the owner switches away leaves with its app and comes back, quietly, for the rest of its time if the owner is back by then; Clip Factory's session (above both apps) holds its toasts the same way while a Stories page is on screen. (f) The slide's frame check (S3) counts a frame as late only past twice the machine's own frame at rest (and its worst gap at rest, and 25 ms) and lets one such frame pass, and the slide must be there before the next frame after the tap's click (timed from the click: the test machine's own time from the pointer going down to the click is not the app's); the slide itself must still run its whole 360 ms on transform only, to its end, never cancelled, and the page changes only after it.
 * **S5. Clear, colour-free glass (the owner, 2026-11-23, with a screenshot of the dock over Clips Funded' espresso rail: "make his color freee and liquid glass style", as he asked of the Reload button: "without color and only a liquid glassy style").** The switch (the bar, its glide, the round toggle and the list the toggle opens when there are more than two workspaces; `web/src/styles/glide.css`) is clear liquid glass with no colour of its own: every fill, rim and shade is white or black at an alpha, never green, cream or bone, in both apps and every look, and nothing else repaints it (no look's rule, none of Clips Funded' styles). The track is smoked clear glass on a blur of its own (`blur(16px) grayscale(0.6)`; the round toggle `blur(14px)`, the list `blur(20px)`, both with the same grey-out): the grey-out (the matrix of `saturate(0.4)`) drains what is behind it, so Clip Factory's green sidebar and Clips Funded' espresso rail read grey through it, and never lightens it; a `saturate()` above 1, as the panes use, would bring the green and the espresso back, so the switch has none, and the worst-case maths of §22 hold under it. Its smoke is neutral black as strong as the look's own panel tint, never under 0.7 (`max(0.7, var(--panel-veil))`: 0.7 over the app's own backdrop, Colours and a white desktop or photo, 0.88 Frosted): black is darker than the panels' bottle green, so the track holds its words by itself wherever it is drawn, as every scan of the page reads it (over the backdrop alone: the dock is drawn over the sidebar, not inside it), and no word sits on less than the panel tint (§22.3). Over it a white frost lit from above, a soft top light, a soft clear rim and a foot shade, all inside its box (§45.19). The chosen name sits on a bright clear lens in near-black words (#141414), so it holds AA over anything behind it: one even white face (0.86) where the words sit, and its light above them (a catch light in its top 9 px and 0.07 more white gone by 12 px, never under the words; the glide draws that light on its `::before`, so the glide's own fill is only what is under the words), a stronger clear rim, a soft inner glow, a foot shade and a small drop inside the track's padding. The other names are bone; hover adds light (white 0.06 and a small top light, white words), well under the lens. The round toggle (a phone's top bar, a short window's dock) is the same glass as a round lens with its own neutral smoke (0.22), so it shows over a white desktop or photo too; its hover lowers the smoke, adds frost and brightens the rim, and it rises by light alone (no 1 px lift: it has a blur of its own). Its list is a plate of the same glass, nearly solid smoke (0.78, never under the panel tint) with a soft neutral shadow, no longer bottle green. Every light is soft and comes from above (ADR-45). The dock dims (S4 a) and clips (S4 d) the switch's own parts, never their host: a host with an opacity under 1 or a clip would be the Backdrop Root of the switch's glass (Filter Effects 2), whose blur and grey-out would then see nothing behind it, so the sidebar's green would show through while the sidebar unfolds and snap grey after. Every name is at AA (4.5:1) or better over every place it is drawn, and the chosen side is plainly the brighter one. `e2e/switch-glass.spec.ts` holds the floors (AA, the lens +0.06 OKLab L over the track at rest and while hovered, hover adding light, chroma 0.03 or less, the unfold), and `test/switchGlass.test.ts` the colours, the smoke, the drain, the light, the host and the boxes. Headless WebKit draws no backdrop-filter at all, so the grey-out is judged in Chromium; the words and the lift do not lean on it. Its place and box, the slide (S3), the Live chip and the slim toggle are unchanged, and nothing transitions a filter.
+
+### 45.39 Type: Fugaz One for large text, Fraunces for smaller text (owner request, 2026-11-23; wins over anything above)
+
+The owner (23 Nov): "i want to you to use Fugaz One font style in combination with Fraunces on the smaller text".
+Asked which app, they picked **Clips Funded only**: Clip Factory keeps Inter and Times, untouched. The tokens and their
+full rules are in `web/src/stories/styles/GLASS-CONTRACT.md` §10 and `glass-tokens.css` §10.
+
+* **Large text: Fugaz One** (`--st-font-display`: "Fugaz One", "Arial Black", "Helvetica Neue", system-ui,
+  sans-serif). Headings and titles (h1-h3, `.st-display` and the other display classes), the hero, the big stat
+  numerals, section names, and anything about 20 px or larger. One upright weight (400), no variable axes.
+* **Smaller text: Fraunces** (`--st-font`: "Fraunces", "Iowan Old Style", Georgia, serif). Body, labels, buttons,
+  chips, pills, captions, inputs, hints and toasts, with `font-optical-sizing: auto`, a weight of at least 400 (450 at
+  13 px and under) and `"SOFT" 0, "WONK" 0` wherever `font-variation-settings` is set. The caps captions
+  (`--st-font-caps`) are Fraunces too, with their `text-transform` and tracking kept. No size goes under today's
+  floors (13 px, `--st-fs-min`): the users are 6-8 years old.
+* **Never changed:** the logo's "C" (`--st-font-mark`, Clip Factory's Times), the "Clips Funded" wordmark (§45.38,
+  "The mark", as it is today), the shell's workspace switch, and Clip Factory's toasts and the shell's own (the
+  shell's `--font-ui`).
+* **Toasts:** the shell draws every toast in its one `.toasts` box, outside `.stories-app`. Every toast a Clips Funded
+  screen raises ("Saved.", errors, news, undo toasts: its `ToastScope` in `App.tsx`) carries the class `st-toast` and
+  is set in Fraunces at the shell's sizes and weights; Clip Factory's toasts and the shell's own carry no such class
+  and stay Inter.
+* **Numbers that tick:** neither face has tabular figures, so a number that changes while it is on screen (the
+  progress percent of a video being made, the reference player's time, the AI's seconds, Settings › Video's length)
+  gets a box as wide as its widest value, end-aligned (a min-width in `ch`: 0 is the widest digit in both faces), and
+  what sits beside it never moves.
+* **Loading:** self-hosted from `web/public/fonts/stories/` on the app's own origin (no font CDN; the Mac and Windows
+  app loads the deployed web app, so it gets them from there too) and precached by the service worker, each family's
+  OFL licence text beside its files. The faces load only through `web/src/stories/fonts.ts` (`addStoriesFonts`,
+  `fonts.css?inline`), never in the chunk Clip Factory prefetches, and the names are used only under `.stories-app`
+  and on its own toasts (`.st-toast`), both in Clips Funded' own style sheet, so ci.yml's "Clips Funded is not in the
+  main bundle" check still holds and no Clip Factory word moves.
+* **Sources and licences:**
+
+  | family | designer | source | licence |
+  |---|---|---|---|
+  | Fugaz One | LatinoType (2011) | google/fonts `ofl/fugazone`, from github.com/googlefonts/fugazone | SIL Open Font License 1.1, Reserved Font Name "Fugaz One" |
+  | Fraunces | Undercase Type: Phaedra Charles and Flavia Zimbardi (2018-2020) | google/fonts `ofl/fraunces`, from github.com/undercasetype/Fraunces | SIL Open Font License 1.1 |
+
+  Fugaz One's file has no minus sign − (U+2212) and only nine Latin Extended-A letters (Ł ł Œ œ Š š Ÿ Ž ž). Its
+  `unicode-range` is exactly the 226 code points it maps; every other character in large text comes from the next
+  font in its stack. Fraunces maps every mark the words use (å ä ö Å Ä Ö − – ’ … · ›). A unit beside a big numeral
+  ("videos", "seconds") is the smaller text of the pair, so Fraunces at every size, and so is an h3 at 15 px that only
+  labels the list under it (Social accounts' "What TikTok allows for a second account").
+* **Replaces:** Playfair (OFL; everywhere in Clips Funded, chosen as a look-alike of the owner's Womack sample) and
+  Jost (OFL; the caps captions), which Clips Funded used from 22 Nov until this change. Their files are gone.
 
 ## 46. Auto-posting: the oldest clips in Review go up by themselves, every X hours (owner request, 2026-11-22)
 

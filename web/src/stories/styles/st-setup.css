@@ -38,8 +38,9 @@
 }
 .st-ring__text strong {
   color: var(--st-text-strong);
+  font-family: var(--st-font-display);
   font-size: 1.5em;
-  font-weight: var(--st-weight-num);
+  font-weight: 400;
   font-variant-numeric: lining-nums tabular-nums;
 }
 .st-ring__text span {
@@ -75,12 +76,12 @@
 }
 .st-setup__dial-num {
   color: var(--st-text-strong);
-  font-family: var(--st-font);
+  font-family: var(--st-font-display);
   font-size: 2rem;
-  font-weight: var(--st-weight-num);
-  font-variation-settings: "opsz" var(--st-opsz-num);
+  font-weight: 400;
+  font-variation-settings: normal;
   line-height: 1;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
 }
 .st-setup__dial-of {
   color: var(--st-text-soft);
@@ -93,8 +94,9 @@
   grid-area: title;
   min-width: 0;
   color: var(--st-text-strong);
+  font-family: var(--st-font-display);
   font-size: var(--st-fs-h2);
-  font-weight: var(--st-weight-display);
+  font-weight: 400;
   line-height: var(--st-lh-head);
   overflow-wrap: anywhere;
 }
@@ -261,8 +263,9 @@
   align-items: center;
   gap: var(--st-space-3);
   color: var(--st-text-strong);
+  font-family: var(--st-font-display);
   font-size: var(--st-fs-h2);
-  font-weight: var(--st-weight-display);
+  font-weight: 400;
   line-height: var(--st-lh-head);
 }
 .st-setup__title > .st-display {
@@ -388,8 +391,9 @@
 }
 .st-setup .st-left__title {
   color: var(--st-text-strong);
+  font-family: var(--st-font-display);
   font-size: var(--st-fs-h3);
-  font-weight: var(--st-weight-display);
+  font-weight: 400;
 }
 .st-left__list {
   display: flex;

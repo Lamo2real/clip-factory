@@ -355,11 +355,26 @@ describe("the tokens", () => {
     expect(px("--st-r-control") / 18).toBeLessThan(0.8);
   });
 
-  it("set headings in Playfair's display optical size, a little condensed, and numerals light", () => {
-    const glass = readFileSync(join(import.meta.dirname, "..", "src", "stories", "styles", "glass.css"), "utf8");
-    expect(/\.st-display \{[^}]*font-variation-settings: "opsz" var\(--st-opsz-display\)/.test(glass)).toBe(true);
+  it("set headings and the big numerals in Fugaz One at its one weight (no stretch, no optical size), the unit in Fraunces, over the 13 px floor", () => {
+    const read = (f: string) => readFileSync(join(import.meta.dirname, "..", "src", "stories", "styles", f), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
+    const body = (text: string, selector: string) => new RegExp(`(?:^|\\n)${selector.replace(/[.$]/g, "\\$&")} \\{([^}]*)\\}`).exec(text)?.[1] ?? "";
+    const figures = read("glass-figures.css");
+    for (const [name, rule] of [
+      [".st-display", body(read("glass.css"), ".st-display")],
+      [".st-stat__value", body(figures, ".st-stat__value")],
+    ] as const) {
+      expect(rule, name).toMatch(/font-family: var\(--st-font-display\);/);
+      expect(rule, name).toMatch(/font-weight: 400;/);
+      expect(rule, name).not.toMatch(/font-stretch|"opsz"|--st-opsz|--st-wdth|--st-weight-num/);
+    }
+    expect(body(figures, ".st-stat__unit")).toMatch(/font-family: var\(--st-font\);/);
     expect(css).toMatch(/--st-fs-min: 0\.8125rem/);
-    expect(css).toMatch(/--st-weight-num: 300/);
+    // The axis and weight names stay (GLASS-CONTRACT.md rule 2), at values true to the two faces: Fugaz One's one
+    // weight, no width axis in either face, and never past Fraunces' largest optical size (144).
+    expect(css).toMatch(/--st-weight-display: 400;/);
+    expect(css).toMatch(/--st-weight-num: 400;/);
+    expect(css).toMatch(/--st-wdth-display: 100%;/);
+    for (const name of ["--st-opsz-display", "--st-opsz-num"]) expect(Number(new RegExp(`${name}:\\s*(\\d+);`).exec(css)?.[1]), name).toBeLessThanOrEqual(144);
   });
 
   it("define the shell's four logo tokens (the mark is a shell element: --ws-mark-*, --ws-wordmark) and the warm palette", () => {

@@ -669,7 +669,11 @@ export function TaskLine({
     return (
       <Busy>
         <span>
-          {t?.status === "queued" ? `Getting ${line} ready…` : `${what} with ${line}…`} <span className="st-s-ai-secs">{run.seconds} s</span>
+          {t?.status === "queued" ? `Getting ${line} ready…` : `${what} with ${line}…`}{" "}
+          {/* One ch a digit and the " s": the "s" stays put as the seconds tick (Fraunces has no tabular figures). */}
+          <span className="st-s-ai-secs" style={{ minWidth: `calc(${String(run.seconds).length}ch + 0.75em)` }}>
+            {run.seconds} s
+          </span>
           <span className="st-s-sr">. This usually takes 10 to 60 seconds.</span>
         </span>
       </Busy>
