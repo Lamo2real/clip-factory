@@ -52,7 +52,7 @@ const MIN = 60_000;
 const NEXT = "Waiting for your Mac · next";
 const PRESSED = "Not sure it posted · look on your TikTok";
 /** Inside the 30-minute find window after Post: from when Try again comes. */
-const PRESSED_WAIT = /^Not sure it posted · look on your TikTok · Try again from \d\d:\d\d$/;
+const PRESSED_WAIT = /^Not sure it posted · look on your TikTok · Try again from (?:\w{3} )?\d\d:\d\d$/;
 const STOPPED_EARLY = "Your Mac stopped before it pressed Post";
 const AGAIN_ASK = "Post it again? Only if it's not on your TikTok.";
 const OPEN_MAC = "Open Your Mac posts TikTok";
@@ -879,7 +879,7 @@ test("clip page: inside the find window it says from when Try again comes; a Mac
   await go(page, `/clips/${clipId}`);
   const stack = page.locator('[data-stack="tiktok"]');
   await expect(stack.locator(".pstack__chip")).toHaveText("Not sure it posted");
-  await expect(stack.locator(".pstack__calm-text")).toHaveText(/^Look on your TikTok · Try again from \d\d:\d\d$/);
+  await expect(stack.locator(".pstack__calm-text")).toHaveText(/^Look on your TikTok · Try again from (?:\w{3} )?\d\d:\d\d$/);
   const actions = page.locator(".perf__actions");
   await expect(actions.getByRole("button", { name: "It's on TikTok", exact: true })).toBeVisible();
   await expect(actions.getByRole("button", { name: "Try again, TikTok" })).toHaveCount(0);
