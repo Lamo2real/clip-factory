@@ -1,5 +1,5 @@
 {
- "version": "546c2fbf4e26",
+ "version": "4fd7c35da6de",
  "parts": [
   {
    "id": "app-map",
@@ -93,7 +93,7 @@
    "id": "contracts-11",
    "title": "CONTRACTS: 11. Design system (summary; details in docs/UX_DESIGN_SYSTEM.md)",
    "line": "Colours (owner request 2026-11-18, ADR-43): Bottle Green #0F372B (the surface), Bone #EFE7DA (the",
-   "chars": 10089
+   "chars": 11204
   },
   {
    "id": "contracts-12",
@@ -297,7 +297,7 @@
    "id": "contracts-45",
    "title": "CONTRACTS: 45. Clips Funded: a second, separate workspace (owner request, 2026-11-21)",
    "line": "Planned: not in the app until the switch pull request turns it on (§45.21). Until then nothing of Clips Funded",
-   "chars": 244360
+   "chars": 253108
   },
   {
    "id": "contracts-46",

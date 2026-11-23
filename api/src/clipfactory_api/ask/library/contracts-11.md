@@ -78,13 +78,23 @@ the traffic lights' band; nothing ever covers the traffic lights.
   no solid band at the top: each app's own backdrop (Clip Factory's `.backdrop`, Clips Funded's `.stories-app::before`,
   both `position: fixed; inset: 0`) shows under the clock, the Dynamic Island and the signal. Nothing of a page sits
   there: every column still starts on `--top-line`. `--status-bar-h` (`env(safe-area-inset-top)`, in `tokens.css`) is
-  the status bar alone; only the status-bar scrim is that tall (`.app::after`, `.stories-app::after`): black, held
-  under the clock to 75 % and gone at the bar's bottom, exactly as strong as the white clock needs for AA over the
-  look's top edge (`statusScrim` in `lib/background.ts` and `stories/look.ts`: 0 over the living backdrop, Ember,
-  Rose, Lagoon and dark colours, so nothing is drawn; about 0.5 over Cream or a picture, planned for white). The body
-  under the backdrop is the backdrop's own top edge (`#0f3d31`), and `theme-color` (Android's status bar) is its
-  average (`#13483C`). An installed app picks the new style up when it is closed and opened again (at worst, removed
-  and added to the Home Screen again). Tests: `test/edgeToEdge.test.ts`, `e2e/phone-edge-to-edge.spec.ts`.
+  the status bar alone; only the status-bar scrim and glass strip are that tall. The scrim (`.app::after`,
+  `.stories-app::after`): black, held under the clock to 75 % and easing out over the bar's last quarter
+  (`--status-bar-fade`, a mask), exactly as strong as the white clock needs for AA over the look's top edge
+  (`statusScrim` in `lib/background.ts` and `stories/look.ts`: 0 over the living backdrop, Ember, Rose, Lagoon and
+  dark colours, so nothing is drawn; about 0.5 over Cream or a picture, planned for white). Once the page has scrolled
+  (`<html data-scrolled>`, `lib/pageScrolled.ts`) cards and buttons slide up under the clock, so a strip of each app's
+  own glass lies there (`.app::before`, Clips Funded's `.st-frame::before`): its blur and saturation and its veil
+  planned for white (`--status-strip-veil` 0.66 green, `--st-status-strip-veil` 0.59 espresso: `statusStripVeil`), so
+  the white clock keeps AA over anything, even where no backdrop-filter is drawn; it masks with the same fade and
+  comes and goes on its opacity alone (never a filter transition). At the top of a page it is not drawn. Clips Funded's
+  sticky panels (the chat list, a review's player, the character stage, an idea's basics) stop below `--top-safe`
+  too, for an installed iPad app. The body under the backdrop is the backdrop's own top edge (`#0f3d31`), and
+  `theme-color` is its average (`#13483C`): Android's installed app and browsers that tint their bars keep a coloured
+  status bar (no web page can make it see-through there), now the backdrop's own top colour. An installed iPhone app
+  picks the new style up when it is closed and opened again (at worst, removed and added to the Home Screen again).
+  Tests: `test/edgeToEdge.test.ts`, `e2e/phone-edge-to-edge.spec.ts` (also scrolled: Home, Library, Clips Funded's
+  Dashboard and Ideas keep the clock's and icons' zones at AA at every scroll stop).
 * **Tests:** `e2e/top-line.spec.ts` (Chromium and WebKit): the simulated macOS window at 1000 x 650, 1200 x 820 (the
   pill) and 1440 x 900 on `/`, `/jobs`, `/review`, `/library`, `/settings` and a settings branch puts every column
   within 1 px of the line (42 px), keeps the 80 x 28 traffic-light corner clear and checks the 28 px drag strip; a tab
