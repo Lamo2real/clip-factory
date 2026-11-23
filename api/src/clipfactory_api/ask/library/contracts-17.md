@@ -540,12 +540,12 @@ and the rest wait for Post now or the next release.
 (YouTube `quotaExceeded`/`uploadLimitExceeded`, TikTok `rate_limit_exceeded`/`spam_risk_too_many_posts`, Meta 4/17/32/
 613/80001/80002, X 429) → "{Platform} says slow down. Clip Factory tries again later." (retryable except daily caps:
 "…Press Try again tomorrow."); TikTok `spam_risk_user_banned_from_posting` → "TikTok is not letting this account post
-right now."; `unaudited_client_can_only_post_to_private_accounts` → "TikTok only takes Clip Factory's uploads on a private
-account until it approves the app. Tap Post it yourself to post it for everyone." (§42; it said "Make your TikTok
-account private (Setup step 3), then press Try again." before the owner's account went public on 2026-11-21; both are
-stored and matched word for word, so they never change, and since ADR-85 the web shows its own words for them, "TikTok
-only takes Clip Factory's own uploads on a private account for now, so your Mac posts it for everyone.", web
-`postError`); `reached_active_user_cap` → "TikTok's daily limit for your app is reached. Try tomorrow.";
+right now."; `unaudited_client_can_only_post_to_private_accounts` → "TikTok only takes Clip Factory's own uploads on a
+private account for now, so your Mac posts it for everyone." (§42; round 3, 2026-11-23, D6: the web's own words since
+ADR-85, so no stored sentence names a button the owner doesn't have; it said "TikTok only takes Clip Factory's uploads
+on a private account until it approves the app. Tap Post it yourself to post it for everyone." from 2026-11-21, and
+"Make your TikTok account private (Setup step 3), then press Try again." before the owner's account went public; all
+three are stored on old posts and matched word for word by the web's `postError` and `failedForPublicAccount`); `reached_active_user_cap` → "TikTok's daily limit for your app is reached. Try tomorrow.";
 YouTube `forbidden`/`uploadLimitExceeded` channel → "YouTube did not accept the upload. Check your channel in YouTube
 Studio."; file checks (`file_format_check_failed`, `duration_check_failed`, Meta 2207026 …) → "{Platform} did not like
 this video file."; X 402 or a `CreditsDepleted`/"credits" problem → gate `credits` `action`, "Your X credits ran out.

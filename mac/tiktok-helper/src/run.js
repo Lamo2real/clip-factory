@@ -10,7 +10,8 @@ import { ask, frame, yourTurn } from "./frame.js";
 import { freeName } from "./match.js";
 import { event, log } from "./notify.js";
 import { DOWNLOADS, LOCK, VERSION } from "./paths.js";
-import { nextAction } from "./plan.js";
+import { startBeats, findBeat } from "./beats.js";
+import { FIND_FOR_MS, applyRequests, claimFields, nextAction, pingExtras } from "./plan.js";
 import { loadSettings, loadState, remember, saveSettings, saveState } from "./store.js";
 import { askAndSaveLogin, countTry, forgetLogin, hasLogin, passwordAllowed, readLogin } from "./login.js";
 import { LOGIN_URL, REASONS, Stop, find, loggedIn, passwordLogin, post } from "./tiktok.js";
@@ -27,7 +28,7 @@ const STEP_WORDS = {
 const quoteHook = (job) => (job.hook ? ` “${job.hook}”` : "");
 
 const MAX_TRIES = 3; // tries before Post is pressed that end in an unexpected error; then it stops and asks
-const FIND_FOR_MS = 30 * 60_000; // after a press with no proof, look this long before asking "Did it post?"
+export const THREE_TRIES = "Your Mac's helper ran into a problem three times. Tap Try again.";
 
 function takeLock() {
   try {
@@ -191,11 +192,14 @@ async function relogin(fr, state, browser, page) {
 
 const isLogin = (e) => e instanceof Stop && e.reason === REASONS.login;
 
-async function doPost(api, state, job, { fresh = false, fr, relogged = false } = {}) {
+async function doPost(api, state, job, { fresh = false, fr, relogged = false, queue = [], beats = null } = {}) {
   const mine = state.ledger[job.clipId] || {};
-  // A fresh claim starts counting again; a resumed try counts on.
+  // A fresh claim starts counting again; a resumed try counts on. A fresh claim also forgets the last try's press,
+  // baseline and step (claimFields).
   const tries = (fresh ? 0 : mine.tries || 0) + 1;
-  remember(state, job.clipId, { device: state.device, step: "claimed", tries });
+  remember(state, job.clipId, claimFields({ device: state.device, tries, fresh }));
+  // The job's beat, from the claim until doPost returns (a logged-out try handed on to the next doPost keeps it).
+  const beat = beats || startBeats({ api, state, job, queue, log, record: (fields) => remember(state, job.clipId, fields) });
   let browser = null;
   let page = null;
   let posted = false;
@@ -203,12 +207,14 @@ async function doPost(api, state, job, { fresh = false, fr, relogged = false } =
   const awake = stayAwake();
   try {
     await fr.step(`${STEP_WORDS.video}${quoteHook(job)}`);
-    await api.step(job.clipId, state.device, "video", job.attempt);
+    await beat.step("video");
     const file = await videoFile(api, state, job);
     const opened = await chrome.open();
     browser = opened.browser;
     page = opened.page;
     const onStep = async (step, extra = {}) => {
+      // A beat in flight finishes first; a 409 on it (Clip Factory took the post back) stops here, before anything.
+      await beat.ready();
       if (step === "pressing") {
         // On disk first, then the server: if either fails, Post is not pressed. The ids already in Studio › Posts
         // are kept, so a later look finds only the new post.
@@ -227,10 +233,11 @@ async function doPost(api, state, job, { fresh = false, fr, relogged = false } =
       } else {
         remember(state, job.clipId, { step });
       }
-      await api.step(job.clipId, state.device, step, job.attempt);
+      await beat.step(step);
       await fr.step(STEP_WORDS[step] || step);
     };
     const result = await post(opened.page, job, file, onStep);
+    await beat.stop();
     if (result.link) {
       await finished(api, state, job, result.link, { counted: !result.existing });
       posted = true;
@@ -243,16 +250,21 @@ async function doPost(api, state, job, { fresh = false, fr, relogged = false } =
   } catch (e) {
     const pressed = state.ledger[job.clipId]?.step === "pressing" || state.ledger[job.clipId]?.step === "finding";
     if (isLogin(e) && !pressed && !relogged && browser) {
-      // Logged out: hold this post, log back in (saved login, else his turn), then carry on with it.
+      // Logged out: hold this post, log back in (saved login, else his turn), then carry on with it. The beat goes
+      // on meanwhile: the post is still this Mac's.
       const back = await relogin(fr, state, browser, page);
       await chrome.quit(browser);
       browser = null;
       if (back) {
         handedOn = true;
-        return await doPost(api, state, job, { fr, relogged: true });
+        return await doPost(api, state, job, { fr, relogged: true, queue, beats: beat });
       }
+      await beat.stop();
       await stopped(api, state, job, e.reason, true);
-    } else if (e instanceof Stop) {
+      return;
+    }
+    await beat.stop();
+    if (e instanceof Stop) {
       if (e.detail) log("post.stop_detail", { clipId: job.clipId, ...e.detail });
       await stopped(api, state, job, e.reason, e.needsYou);
     } else if (!pressed && e instanceof ApiError && e.status === 409) {
@@ -266,12 +278,13 @@ async function doPost(api, state, job, { fresh = false, fr, relogged = false } =
       log("post.error_after_press", { clipId: job.clipId, error: String(e.stack || e) });
     } else if (tries >= MAX_TRIES) {
       log("post.error", { clipId: job.clipId, error: String(e.stack || e) });
-      await stopped(api, state, job, "Your Mac's helper ran into a problem three times. Post it yourself for now.", false);
+      await stopped(api, state, job, THREE_TRIES, false);
     } else {
       // Before the press: try again on a later tick (the post stays with this Mac, and so does its video).
       log("post.retry_later", { clipId: job.clipId, tries, error: String(e.message || e) });
     }
   } finally {
+    await beat.stop();
     if (browser) await chrome.quit(browser);
     awake();
     if (!handedOn) {
@@ -286,6 +299,9 @@ async function doFind(api, state, job, { relogged = false, fr = frame() } = {}) 
   let page = null;
   let found = false;
   let handedOn = false;
+  // One beat before it looks (D2): Clip Factory sees the Mac still on it. A 409 means the post is no longer this
+  // try's (the owner said it's on TikTok, or tapped Try again): then it doesn't look for it this tick.
+  if (!relogged && !(await findBeat({ api, state, job, log }))) return;
   if (!fr.shown && !(await fr.on(`Looking for${quoteHook(job)} on TikTok`))) return log("frame.missing", { clipId: job.clipId });
   try {
     const opened = await chrome.open();
@@ -321,8 +337,8 @@ async function doFind(api, state, job, { relogged = false, fr = frame() } = {}) 
   }
 }
 
-/** A video kept from a try that stopped: once that clip is on TikTok anyway (he posted it himself, or a later try),
- * the helper's own file leaves Downloads. */
+/** A video kept from a try that stopped: once that clip is on TikTok anyway (the owner's It's on TikTok, or a later
+ * try), the helper's own file leaves Downloads. */
 async function tidy(api, state, queue) {
   const busy = new Set(queue.map((j) => j.clipId));
   for (const [clipId, entry] of Object.entries(state.ledger)) {
@@ -340,7 +356,7 @@ async function tidy(api, state, queue) {
 export async function tick() {
   if (!takeLock()) return { action: "busy" };
   try {
-    const settings = loadSettings();
+    let settings = loadSettings();
     const state = loadState();
     const config = await appConfig();
     let token;
@@ -360,6 +376,15 @@ export async function tick() {
     }
     const api = client(config.apiUrl, token);
     const { on, helper, queue = [] } = await api.queue();
+    // The owner's Start my Mac again and Let them go (D5): applied before anything is decided this tick; the ping
+    // below says they are done. "Needs you" is never cleared here (only his answer on the stopped clip clears it).
+    const requests = applyRequests({ helper, settings, state });
+    if (Object.keys(requests.patch).length) {
+      saveSettings(requests.patch);
+      settings = loadSettings();
+    }
+    if (requests.resumeDone) event("resumed", {});
+    if (requests.letGoDone) event("hold_released", {});
     const needsYou = helper?.state === "needs_you";
     // Auto-posting's schedule, only needed while a backlog clip waits (it goes ~30 minutes after each run).
     let autopost = null;
@@ -402,14 +427,18 @@ export async function tick() {
       version: VERSION,
       device: state.device,
     };
+    // What the rows need to say without guessing (D4, D5): the first backlog clip's time, the hold, the backfill, and
+    // the owner's requests done.
+    const extras = pingExtras({ settings, state, autopost, resumeDone: requests.resumeDone, letGoDone: requests.letGoDone });
     try {
-      await api.ping({ ...checkIn, login: (await hasLogin()) ? "saved" : "none", ...(loginDone ? { loginDone } : {}) });
+      await api.ping({ ...checkIn, login: (await hasLogin()) ? "saved" : "none", ...(loginDone ? { loginDone } : {}), ...extras });
     } catch (e) {
-      // A Clip Factory from before §47.6 doesn't know the login fields yet: check in without them.
+      // A Clip Factory from before §47.6 doesn't know these fields yet: check in without them.
       if (!(e instanceof ApiError && e.status === 400)) throw e;
       await api.ping(checkIn);
     }
     log("tick", { action: action.action, clipId: action.job?.clipId, waiting: queue.length, reason: action.reason, until: action.until });
+    for (const skip of action.skipped || []) log("never_twice.skip", skip);
     // The one-time backfill ends by itself once no backlog clip is left (then the owner's rule again: runs and Uploads).
     // Only when the switch is on (an off switch reads as an empty queue) and the read really holds no backlog clip.
     if (settings.backfill && on === true && !queue.some((j) => j.source !== "upload" && j.source !== "auto")) {
@@ -434,7 +463,7 @@ export async function tick() {
           return { action: "claim_refused" };
         }
       }
-      await doPost(api, state, job, { fresh: action.action === "post", fr });
+      await doPost(api, state, job, { fresh: action.action === "post", fr, queue });
     } else if (action.action === "find") {
       await doFind(api, state, action.job);
     } else {

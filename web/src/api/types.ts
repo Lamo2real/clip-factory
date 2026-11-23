@@ -335,6 +335,8 @@ export interface PostMac {
   pressedAt?: string;
   stoppedAt?: string;
   reason?: string;
+  /** The Mac's last beat on this job (each step, and every minute while it works on it): the stuck rule reads it. */
+  beatAt?: string;
 }
 
 /** The Mac helper's last check-in (§47.3). */
@@ -347,10 +349,24 @@ export interface MacHelper {
   login?: "saved" | "none";
   /** §47.8: the owner's Change or Forget, until the Mac did it. */
   loginRequest?: { action: MacLoginAction; at: string };
+  /** While it needs him: the clip it stopped on (its Try again and It's on TikTok are there). */
+  needsYouClipId?: string;
+  /** The first backlog clip's time, as the Mac's plan.js picks it (absent: not known, or none). */
+  backlogAt?: string;
+  /** The Mac holds auto-posting clips made before this time (its holdAutoBefore). */
+  holdBefore?: string;
+  /** The Mac backfills the backlog at its own pace. */
+  backfill?: true;
+  /** The owner's Start my Mac again, until the Mac did it. */
+  resumeRequest?: { at: string };
+  /** The owner's Let them go, until the Mac did it. */
+  letGoRequest?: { at: string };
 }
 
 /** §47.8: what the owner can ask the Mac to do with its TikTok login. */
 export type MacLoginAction = "change" | "forget";
+/** POST /v1/tiktok/mac/request: Start my Mac again (`resume`) or Let them go (`let_go`). */
+export type MacRequestAction = "resume" | "let_go";
 
 /** One post in the Mac's queue (§47.3). */
 export interface MacJob {
@@ -371,6 +387,12 @@ export interface MacJob {
   pressedAt?: string;
   /** How many claims the post had (the server's macAttempt); the helper may send it back with step, stopped and done. */
   attempt: number;
+  /** The Mac's last beat on it (as Post.mac.beatAt). */
+  beatAt?: string;
+  /** When Post was pressed before the owner's Try again re-waited it (the old pressedAt). */
+  pressedBefore?: string;
+  /** The owner's last Try again that re-waited it. */
+  againAt?: string;
 }
 
 /** GET /v1/tiktok/mac (§47.3). */
@@ -2224,8 +2246,12 @@ export interface Api {
   unholdClip(clipId: string): Promise<void>;
   /** GET /v1/clips/{clipId}/file: a link that saves the clip's video (Save the video, §42). */
   clipFile(clipId: string): Promise<ClipFile>;
-  /** POST /v1/clips/{clipId}/tiktok/posted: the owner posted it on TikTok himself; `link` gives its views (§42). */
-  markTikTokPosted(clipId: string, link?: string, since?: string): Promise<TikTokMarked>;
+  /**
+   * POST /v1/clips/{clipId}/tiktok/posted: it's on TikTok (§42). `link` gives its views; with neither `link` nor
+   * `noLink` Clip Factory looks for it (Find it for me: 409 when nothing is found, and nothing is saved); `noLink`
+   * saves it as on TikTok without its link (after its own question).
+   */
+  markTikTokPosted(clipId: string, link?: string, since?: string, noLink?: boolean): Promise<TikTokMarked>;
   /** DELETE /v1/clips/{clipId}/tiktok/posted: undoes markTikTokPosted (§42). Kept; the web no longer calls it (ADR-85). */
   undoTikTokPosted(clipId: string): Promise<TikTokMarked>;
   /** GET /v1/skills: built-ins first, then the owner's, by name (§18.3). */
@@ -2451,6 +2477,8 @@ export interface Api {
   tiktokMacStatus(): Promise<TikTokMacStatus>;
   /** §47.8: Change TikTok login / Forget TikTok login on the owner's Mac. */
   tiktokMacLogin(action: MacLoginAction): Promise<MacHelper | null>;
+  /** POST /v1/tiktok/mac/request `{ action }`: Start my Mac again, or Let them go; the Mac does it at its next tick. */
+  tiktokMacRequest(action: MacRequestAction): Promise<MacHelper | null>;
   /**
    * POST /v1/tiktok/mac/send `{ clipIds, now? }` (1–25): one result per clip, in order. Without `now` (Settings' Send
    * these to my Mac) a clip waits as the backlog (source `sent`, one after each auto-posting run); with `now` (a row's

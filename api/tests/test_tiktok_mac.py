@@ -2,14 +2,16 @@
 
 Every rule is its own test: a Mac post is never ``queued`` (so it is never released, tried again, posted now or
 published by the clip flow), the clip settles as usual, Upload's API TikTok rule is unchanged with the switch off,
-campaign clips get one too (always for Everyone), the queue and its off switches, the claim races (a crashed helper, never twice after
-Post was pressed), done through ``tiktok_self.mark_posted`` (repeat-safe, one TikTok post per clip), I posted it vs the
-Mac, Take it back, Send these to my Mac and Try again. Offline: in-memory items and fakes only.
+campaign clips never get one (D1), the queue and its off switches, the claim races (a crashed helper, never twice after
+Post was pressed), the stuck rule (beats, the 50-minute cap, the find window), done through ``tiktok_self.mark_posted``
+(repeat-safe, one TikTok post per clip), It's on TikTok vs the Mac, Take it back, Send these to my Mac, Try again, the
+ping's plan keys and the owner's requests. Offline: in-memory items and fakes only.
 """
 
 from __future__ import annotations
 
 from datetime import timedelta
+from types import SimpleNamespace
 from typing import Any
 
 import pytest
@@ -226,21 +228,34 @@ def test_upload_without_tiktok_makes_no_mac_post(call: Call, store: db.Store, ta
     assert _raw_tiktok(table, clip["clipId"]) is None
 
 
-def test_a_campaign_clip_goes_to_the_mac_like_any_other(call: Call, store: db.Store, table: FakeTable) -> None:
-    # Posting audit ok but the app review not live: not audited, so the Mac posts it (the owner never posts by hand,
-    # ADR-85). The campaign's rules still hold: the sheet says Everyone with Branded content, and the Mac posts it for
-    # Everyone whatever My settings say.
+def test_a_campaign_clip_never_goes_to_the_mac(call: Call, store: db.Store, table: FakeTable) -> None:
+    # D1: the Mac can't mark a post as Branded content yet, and Content Rewards never receives what it posts. Posting
+    # audit ok but the app review not live is not TikTok's approval: Upload with TikTok is refused, nothing written.
     ready_with_audit(store, "tiktok", audit="ok")
     put_campaign(store, platformsPaid=["tiktok"])
     _mac_on(call)
-    assert call("PUT", "/v1/settings", {"postPreset": {"tiktok": {"privacy": "SELF_ONLY"}}})[0] == 200
     clip = campaign_clip(store)
     status, body = call(
         "POST",
         f"/v1/clips/{clip['clipId']}/confirm",
-        {"platforms": ["tiktok"], "tiktok": {**TIKTOK, "privacyLevel": "MUTUAL_FOLLOW_FRIENDS", "brandContent": True}},
+        {"platforms": ["tiktok"], "tiktok": {**TIKTOK, "brandContent": True}},
     )
-    assert (status, _message(body)) == (400, "Campaign clips must be public. Pick Everyone.")
+    assert (status, _message(body)) == (
+        400,
+        f"{tiktok_mac.CAMPAIGN_SKIPS} Turn TikTok off, then tap Upload.",
+    )
+    assert _raw_tiktok(table, clip["clipId"]) is None
+    assert call("GET", "/v1/tiktok/mac")[1]["queue"] == []
+
+
+def test_once_tiktok_approved_the_app_a_campaign_clip_goes_through_its_api(
+    call: Call, store: db.Store, table: FakeTable
+) -> None:
+    # With TikTok's approval its own API posts it, with the sheet's Branded content: still never a Mac post.
+    ready_with_audit(store, "tiktok", audit="ok", review="live")
+    put_campaign(store, platformsPaid=["tiktok"])
+    _mac_on(call)
+    clip = campaign_clip(store)
     status, body = call(
         "POST",
         f"/v1/clips/{clip['clipId']}/confirm",
@@ -249,17 +264,14 @@ def test_a_campaign_clip_goes_to_the_mac_like_any_other(call: Call, store: db.St
     assert status == 200, body
     raw = _raw_tiktok(table, clip["clipId"])
     assert raw is not None
-    assert (raw["status"], raw["macState"], raw["macSource"], raw["campaignId"]) == (
-        "mac",
-        "waiting",
-        "upload",
-        CAMPAIGN,
-    )
-    assert raw["postOptions"]["privacyLevel"] == "PUBLIC_TO_EVERYONE"
-    assert [j["clipId"] for j in call("GET", "/v1/tiktok/mac")[1]["queue"]] == [clip["clipId"]]
+    assert (raw["status"], raw["campaignId"], raw["postOptions"]["brandContent"]) == ("queued", CAMPAIGN, True)
+    assert not [k for k in raw if k.startswith("mac") or k == "madeForMac"]
+    assert call("GET", "/v1/tiktok/mac")[1]["queue"] == []
 
 
-def test_an_auto_posting_run_hands_a_campaign_clip_to_the_mac(app: App, store: db.Store, table: FakeTable) -> None:
+def test_an_auto_posting_run_never_gives_a_campaign_clip_a_mac_post(
+    app: App, store: db.Store, table: FakeTable
+) -> None:
     ready_with_audit(store, "youtube")
     put_campaign(store, platformsPaid=["youtube"])
     store.put({"pk": PK, "sk": "SETTINGS", "type": "settings", "userId": USER, "tiktokMac": {"on": True}})
@@ -267,13 +279,8 @@ def test_an_auto_posting_run_hands_a_campaign_clip_to_the_mac(app: App, store: d
     uploads.upload_review_clip(
         app, USER, clip, platforms=["youtube"], auto={"runId": "r#scheduled", "at": iso(NOW)}, tiktok_mac=True
     )
-    raw = _raw_tiktok(table, clip["clipId"])
-    assert raw is not None
-    assert (raw["status"], raw["macSource"], raw["postOptions"]["privacyLevel"]) == (
-        "mac",
-        "auto",
-        "PUBLIC_TO_EVERYONE",
-    )
+    assert _raw_tiktok(table, clip["clipId"]) is None
+    assert {p["platform"] for p in posts.posts_for_clip(store, USER, clip["clipId"], consistent=True)} == {"youtube"}
 
 
 def test_a_private_test_never_gets_a_mac_post(app: App, store: db.Store, table: FakeTable) -> None:
@@ -731,7 +738,7 @@ def test_a_stop_after_post_was_pressed_always_says_check_your_tiktok(call: Call,
     call("POST", f"/v1/clips/{clip['clipId']}/tiktok/mac/stopped", {"device": DEVICE, "reason": "Timed out."})
     mac = _tiktok({"posts": call("GET", "/v1/posts", query={"clipId": clip["clipId"]})[1]["posts"]})["mac"]
     assert mac["reason"] == (
-        "Your Mac pressed Post but couldn't confirm it. Check your TikTok: if it's there, tap I posted it."
+        "Your Mac pressed Post but couldn't confirm it. Look on your TikTok: if it's there, tap It's on TikTok."
     )
 
 
@@ -858,7 +865,7 @@ def test_i_posted_it_on_a_waiting_or_stopped_mac_post_makes_it_his_and_undo_puts
     _mac_on(call)
     extra = {"macState": "stopped", "macReason": "Timed out.", "macDevice": DEVICE} if state == "stopped" else {}
     clip = _mac_clip(store, **extra)
-    status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {})
+    status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {"noLink": True})
     assert status == 200
     tiktok = _tiktok(body)
     assert (tiktok["status"], tiktok["by"]) == ("posted", "you")
@@ -888,27 +895,92 @@ def test_try_again_puts_a_stopped_post_back_in_line(call: Call, store: db.Store,
         f"/v1/clips/{clip['clipId']}/tiktok/mac/stopped",
         {"device": DEVICE, "reason": "Login.", "needsYou": True},
     )
+    assert call("GET", "/v1/tiktok/mac")[1]["helper"]["needsYouClipId"] == clip["clipId"]
     status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/mac/retry", {})
     assert status == 200
     mac = _tiktok(body)["mac"]
-    assert mac == {"state": "waiting", "since": "2026-11-15T11:00:00.000Z", "source": "upload"}  # keeps its place
-    assert call("GET", "/v1/tiktok/mac")[1]["helper"]["state"] == "ok"
+    # Keeps its place (since); a stopped one keeps its last beat, which only counts while it works.
+    assert mac == {"state": "waiting", "since": "2026-11-15T11:00:00.000Z", "source": "upload", "beatAt": iso(NOW)}
+    assert _raw_post(store, clip["clipId"])["macAgainAt"] == iso(NOW)
+    helper = call("GET", "/v1/tiktok/mac")[1]["helper"]
+    assert helper["state"] == "ok"
+    assert "needsYouClipId" not in helper
     assert _claim(call, clip["clipId"])[0] == 200
     assert call("POST", f"/v1/clips/{clip['clipId']}/tiktok/mac/retry", {})[0] == 409  # working now
 
 
-def test_try_again_after_post_was_pressed_needs_not_on_tiktok(call: Call, store: db.Store) -> None:
+def test_try_again_after_post_was_pressed_needs_not_on_tiktok_and_the_end_of_the_find_window(
+    call: Call, store: db.Store, clock: Clock
+) -> None:
     _mac_on(call)
     clip = _mac_clip(store)
     _claim(call, clip["clipId"])
+    clock.now = NOW + timedelta(minutes=2)
     _step(call, clip["clipId"], "pressing")
+    pressed_at = iso(clock.now)
     call("POST", f"/v1/clips/{clip['clipId']}/tiktok/mac/stopped", {"device": DEVICE, "reason": "?"})
     status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/mac/retry", {})
     assert (status, _message(body)) == (409, "Your Mac may have posted it already. Check your TikTok first.")
+    # The Mac may still be looking for the link: Try again waits for the end of the 30-minute find window.
+    for minutes in (3, 31):
+        clock.now = NOW + timedelta(minutes=minutes)
+        status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/mac/retry", {"notOnTikTok": True})
+        assert (status, _message(body)) == (409, tiktok_mac.MAC_STILL_LOOKING)
+        assert _raw_post(store, clip["clipId"])["macState"] == "stopped"
+    clock.now = NOW + timedelta(minutes=32)
     status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/mac/retry", {"notOnTikTok": True})
-    assert status == 200
+    assert status == 200, body
     assert "pressedAt" not in _tiktok(body)["mac"]
-    assert _claim(call, clip["clipId"])[0] == 200
+    raw = _raw_post(store, clip["clipId"])
+    assert (raw["macPressedBefore"], raw["macAgainAt"]) == (pressed_at, iso(clock.now))
+    assert "macPressedAt" not in raw
+    status, body = _claim(call, clip["clipId"])
+    assert status == 200
+    # The helper's never-twice guard reads both: a re-wait after the window, not a press it lost.
+    job = body["job"]
+    assert (job["pressedBefore"], job["againAt"], job["beatAt"]) == (pressed_at, iso(clock.now), iso(clock.now))
+    assert "pressedAt" not in job
+
+
+def test_tiktok_self_window_and_beat_edges() -> None:
+    claimed = NOW
+    row = {"status": "mac", "macState": "working", "macClaimedAt": iso(claimed), "macBeatAt": iso(claimed)}
+    assert timedelta(minutes=5) == tiktok_self.MAC_BEAT_STALE
+    assert timedelta(minutes=50) == tiktok_self.MAC_CLAIM_MAX
+    assert timedelta(minutes=30) == tiktok_self.MAC_FIND_WINDOW
+    # The beat: 4:59 fresh, 5:00 stuck (no macBeatAt: the claim is the beat).
+    for beat in (row, {k: v for k, v in row.items() if k != "macBeatAt"}):
+        assert not tiktok_self.mac_stuck(beat, claimed + timedelta(minutes=4, seconds=59))
+        assert tiktok_self.beat_fresh(beat, claimed + timedelta(minutes=4, seconds=59))
+        assert tiktok_self.mac_stuck(beat, claimed + timedelta(minutes=5))
+        assert not tiktok_self.beat_fresh(beat, claimed + timedelta(minutes=5))
+    # The cap: beats a minute ago, claimed 49:59 ago → not stuck; 50:00 → stuck.
+    at = claimed + timedelta(minutes=49, seconds=59)
+    beating = {**row, "macBeatAt": iso(at - timedelta(minutes=1))}
+    assert not tiktok_self.mac_stuck(beating, at)
+    assert tiktok_self.mac_stuck(
+        {**beating, "macBeatAt": iso(claimed + timedelta(minutes=49))}, claimed + timedelta(minutes=50)
+    )
+    # Only a working Mac post is ever stuck.
+    for other in ({**row, "macState": "stopped"}, {**row, "macState": "waiting"}, {**row, "status": "posted"}):
+        assert not tiktok_self.mac_stuck(other, claimed + timedelta(days=1))
+    # The window: no press → over; pressed 29:59 ago → not over; 30:00 → over.
+    assert tiktok_self.window_over(row, claimed)
+    pressed = {**row, "macPressedAt": iso(claimed)}
+    assert not tiktok_self.window_over(pressed, claimed + timedelta(minutes=29, seconds=59))
+    assert tiktok_self.window_over(pressed, claimed + timedelta(minutes=30))
+
+
+def test_the_constants_stay_one_line_each_for_the_web_and_helper_pins() -> None:
+    import re
+    from pathlib import Path
+
+    text = Path(tiktok_self.__file__).read_text(encoding="utf-8")
+    found = dict(
+        re.findall(r"^(MAC_BEAT_STALE|MAC_CLAIM_MAX|MAC_FIND_WINDOW) = timedelta\(minutes=(\d+)\)$", text, re.M)
+    )
+    assert found == {"MAC_BEAT_STALE": "5", "MAC_CLAIM_MAX": "50", "MAC_FIND_WINDOW": "30"}
+    assert "MAC_STUCK" not in text
 
 
 def _stop_needing_you(call: Call, clip_id: str, *, pressed: bool = False) -> None:
@@ -952,35 +1024,105 @@ def test_its_on_tiktok_never_makes_a_helper_item(call: Call, store: db.Store) ->
     assert call("GET", "/v1/tiktok/mac")[1]["helper"] is None
 
 
-# --- a stuck claim: still working 15 minutes after it (§47.3) --------------------------------------------------------
+# --- the stuck rule: no beat for 5 minutes, or claimed 50 minutes ago (§47.3) ------------------------------------------
+
+
+def _beat(call: Call, clip_id: str, step: str, clock: Clock, at: timedelta) -> None:
+    """The helper re-sends its last step at ``NOW + at``: the job's beat."""
+    clock.now = NOW + at
+    assert _step(call, clip_id, step)[0] == 200
 
 
 @pytest.mark.parametrize("pressed", [False, True])
 def test_try_again_takes_a_stuck_claim_back(call: Call, store: db.Store, clock: Clock, pressed: bool) -> None:
-    # The helper lost its ledger (a reinstall, another Mac) or crashed after Post: the post stays working. From 15
-    # minutes after the claim the web says "Not sure it posted", and Try again puts it back in line for a new claim.
+    # The helper crashed or slept (its beat stops), or lost its ledger: the post stays working. Five minutes after its
+    # last beat the web says "Not sure it posted", and Try again puts it back in line for a new claim; after Post was
+    # pressed only once the find window is over.
     _mac_on(call)
     clip = _mac_clip(store)
     assert _claim(call, clip["clipId"])[0] == 200
     if pressed:
         assert _step(call, clip["clipId"], "pressing")[0] == 200
-    clock.now = NOW + timedelta(minutes=14)
+    clock.now = NOW + timedelta(minutes=4, seconds=59)
     status, body = _retry(call, clip["clipId"], {"notOnTikTok": True, "now": True})
     assert (status, _message(body)) == (409, tiktok_mac.MAC_WORKING)
-    clock.now = NOW + timedelta(minutes=15)
+    clock.now = NOW + timedelta(minutes=5)
     if pressed:
         status, body = _retry(call, clip["clipId"], {"now": True})
         assert (status, _message(body)) == (409, tiktok_mac.MAY_HAVE_POSTED)
+        status, body = _retry(call, clip["clipId"], {"notOnTikTok": True, "now": True})
+        assert (status, _message(body)) == (409, tiktok_mac.MAC_STILL_LOOKING)
+        clock.now = NOW + timedelta(minutes=30)
     status, body = _retry(call, clip["clipId"], {"notOnTikTok": True, "now": True})
     assert status == 200, body
     assert _tiktok(body)["mac"] == {"state": "waiting", "since": "2026-11-15T11:00:00.000Z", "source": "upload"}
     raw = _raw_post(store, clip["clipId"])
     assert not {"macDevice", "macBeatAt", "macClaimedAt", "macPressedAt"} & set(raw)
+    assert raw["macAgainAt"] == iso(clock.now)
+    assert ("macPressedBefore" in raw) is pressed
     # The old claim can't write any more; a new claim (any Mac) starts it afresh.
     assert _step(call, clip["clipId"], "settings")[0] == 409
     status, body = _claim(call, clip["clipId"], device="mac-mini-2")
     assert status == 200
     assert body["job"]["attempt"] == 2
+
+
+def test_a_job_the_mac_beats_is_never_stuck_until_its_claim_is_50_minutes_old(
+    call: Call, store: db.Store, clock: Clock
+) -> None:
+    # A healthy helper: a 12-minute upload wait, then Post, then the find window. Its re-sent steps keep it working.
+    _mac_on(call)
+    clip = _mac_clip(store)
+    assert _claim(call, clip["clipId"])[0] == 200
+    assert _step(call, clip["clipId"], "uploading")[0] == 200
+    for minute in range(4, 49, 4):
+        _beat(call, clip["clipId"], "uploading", clock, timedelta(minutes=minute))
+    assert _raw_post(store, clip["clipId"])["macStep"] == "uploading"  # a beat keeps the step
+    clock.now = NOW + timedelta(minutes=49, seconds=59)
+    for refused in (
+        _retry(call, clip["clipId"], {"notOnTikTok": True, "now": True}),
+        call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {"link": LINK}),
+    ):
+        assert (refused[0], _message(refused[1])) == (409, tiktok_mac.MAC_WORKING)
+    clock.now = NOW + timedelta(minutes=50)
+    assert tiktok_self.mac_stuck(_raw_post(store, clip["clipId"]), clock.now)
+    status, body = _retry(call, clip["clipId"], {"now": True})
+    assert status == 200, body
+    assert _tiktok(body)["mac"]["state"] == "waiting"
+
+
+def test_a_re_sent_step_is_the_beat_and_keeps_every_refusal(call: Call, store: db.Store, clock: Clock) -> None:
+    _mac_on(call)
+    clip = _mac_clip(store)
+    assert _claim(call, clip["clipId"])[0] == 200
+    _beat(call, clip["clipId"], "video", clock, timedelta(minutes=4))
+    raw = _raw_post(store, clip["clipId"])
+    assert (raw["macStep"], raw["macBeatAt"]) == ("video", iso(NOW + timedelta(minutes=4)))
+    clock.now = NOW + timedelta(minutes=8)
+    assert not tiktok_self.mac_stuck(_raw_post(store, clip["clipId"]), clock.now)
+    # Another device's beat is refused, and so is a beat after the switch went off before Post.
+    assert _step(call, clip["clipId"], "video", "another-mac")[0] == 409
+    _mac_on(call, False)
+    status, body = _step(call, clip["clipId"], "video")
+    assert (status, _message(body)) == (409, tiktok_mac.MAC_OFF)
+    assert _raw_post(store, clip["clipId"])["macBeatAt"] == iso(NOW + timedelta(minutes=4))
+
+
+def test_a_re_sent_pressing_step_never_moves_the_press(
+    call: Call, store: db.Store, clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from clipfactory_api.routes import tiktok_mac as routes
+
+    logged: list[str] = []
+    monkeypatch.setattr(routes, "log", lambda _level, event, **_k: logged.append(event))
+    _mac_on(call)
+    clip = _mac_clip(store)
+    assert _claim(call, clip["clipId"])[0] == 200
+    _beat(call, clip["clipId"], "pressing", clock, timedelta(minutes=1))
+    _beat(call, clip["clipId"], "pressing", clock, timedelta(minutes=2))
+    raw = _raw_post(store, clip["clipId"])
+    assert (raw["macPressedAt"], raw["macBeatAt"]) == (iso(NOW + timedelta(minutes=1)), iso(clock.now))
+    assert logged.count("tiktok_mac.pressing") == 1  # only when Post was newly pressed
 
 
 def test_try_again_on_a_stuck_claim_loses_to_a_new_claim(
@@ -1001,26 +1143,109 @@ def test_try_again_on_a_stuck_claim_loses_to_a_new_claim(
     assert (raw["macState"], raw["macDevice"]) == ("working", "mac-mini-2")
 
 
+def test_try_again_on_a_stuck_claim_loses_to_a_beat(
+    call: Call, store: db.Store, clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The owner read the post stuck, then the Mac woke and beat it: the write needs the same beat, so it is refused.
+    _mac_on(call)
+    clip = _mac_clip(store)
+    assert _claim(call, clip["clipId"])[0] == 200
+    clock.now = NOW + timedelta(minutes=6)
+    stale = _raw_post(store, clip["clipId"])
+    assert _step(call, clip["clipId"], "video")[0] == 200
+    monkeypatch.setattr(tiktok_mac, "mac_row", lambda _store, _clip: (stale, [stale]))
+    status, body = _retry(call, clip["clipId"], {"now": True})
+    assert (status, _message(body)) == (409, tiktok_mac.CHANGED)
+    monkeypatch.undo()
+    assert _raw_post(store, clip["clipId"])["macState"] == "working"
+
+
+def test_its_on_tiktok_on_a_stuck_claim_loses_to_a_beat(store: db.Store, monkeypatch: pytest.MonkeyPatch) -> None:
+    # He read the job stuck; the Mac beat it before his write: the write needs the same beat, so nothing changes.
+    clip = _mac_clip(store, macState="working", macDevice=DEVICE, macClaimedAt=iso(NOW), macBeatAt=iso(NOW))
+    later = NOW + timedelta(minutes=6)
+    stale = _raw_post(store, clip["clipId"])
+    store.update(str(stale["pk"]), str(stale["sk"]), {"macBeatAt": iso(later)})
+    monkeypatch.setattr(tiktok_self, "posts_for_clip", lambda *_a, **_k: [stale])
+    with pytest.raises(db.ConditionFailed):
+        tiktok_self.mark_posted(store, clip, None, later, min_interval=60)
+    monkeypatch.undo()
+    assert _raw_post(store, clip["clipId"])["status"] == "mac"
+
+
 def test_its_on_tiktok_on_a_stuck_claim(call: Call, store: db.Store, clock: Clock) -> None:
     _mac_on(call)
     clip = _mac_clip(store)
     _stop_needing_you(call, _mac_clip(store)["clipId"])
     assert _claim(call, clip["clipId"])[0] == 200
     assert _step(call, clip["clipId"], "pressing")[0] == 200
-    clock.now = NOW + timedelta(minutes=10)
+    clock.now = NOW + timedelta(minutes=4)
     status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {"link": LINK})
     assert (status, _message(body)) == (409, tiktok_mac.MAC_WORKING)
-    clock.now = NOW + timedelta(minutes=16)
+    clock.now = NOW + timedelta(minutes=5)
     status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {"link": LINK})
     assert status == 200, body
     post = _tiktok(body)
     assert (post["status"], post["by"], post["url"]) == ("posted", "you", LINK)
     assert "mac" not in post
-    assert call("GET", "/v1/tiktok/mac")[1]["helper"]["state"] == "ok"
+    helper = call("GET", "/v1/tiktok/mac")[1]["helper"]
+    assert helper["state"] == "ok"
+    assert "needsYouClipId" not in helper
     # The Mac's late done is refused: the post is his now, and stays one post.
     status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/mac/done", {"device": DEVICE, "link": LINK})
     assert status == 409
     assert _raw_post(store, clip["clipId"])["status"] == "posted"
+
+
+# --- It's on TikTok without a link (D3) ---------------------------------------------------------------------------------
+
+
+def test_no_link_is_refused_while_the_mac_beats_a_job_it_has_not_pressed_post_for(
+    call: Call, store: db.Store, clock: Clock
+) -> None:
+    # Even stuck by the 50-minute cap: the Mac is still uploading, so the clip may not be on TikTok at all.
+    _mac_on(call)
+    clip = _mac_clip(store)
+    assert _claim(call, clip["clipId"])[0] == 200
+    _beat(call, clip["clipId"], "uploading", clock, timedelta(minutes=49))
+    clock.now = NOW + timedelta(minutes=51)
+    assert tiktok_self.mac_stuck(_raw_post(store, clip["clipId"]), clock.now)
+    status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {"noLink": True})
+    assert (status, _message(body)) == (409, tiktok_mac.MAC_WORKING)
+    assert _raw_post(store, clip["clipId"])["status"] == "mac"
+    # Its beat goes stale: the Mac stopped working on it, so he may say it's on TikTok.
+    clock.now = NOW + timedelta(minutes=54)
+    status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {"noLink": True})
+    assert status == 200, body
+    assert (_tiktok(body)["by"], "url" in _tiktok(body), "note" in body) == ("you", False, False)
+
+
+def test_no_link_after_post_was_pressed_on_a_stuck_job(call: Call, store: db.Store, clock: Clock) -> None:
+    _mac_on(call)
+    clip = _mac_clip(store)
+    assert _claim(call, clip["clipId"])[0] == 200
+    _beat(call, clip["clipId"], "pressing", clock, timedelta(minutes=10))
+    _beat(call, clip["clipId"], "finding", clock, timedelta(minutes=47))
+    clock.now = NOW + timedelta(minutes=50)  # the cap, with a fresh beat: pressed, so it may be on TikTok
+    status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {"noLink": True})
+    assert status == 200, body
+    assert _tiktok(body)["by"] == "you"
+
+
+def test_find_on_a_post_the_mac_works_on_answers_before_the_finder(
+    call: Call, store: db.Store, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _connect(store, "tiktok")
+    _mac_on(call)
+    clip = _mac_clip(store)
+    assert _claim(call, clip["clipId"])[0] == 200
+
+    def never(*_a: Any, **_k: Any) -> None:
+        raise AssertionError("TikTok is never asked while the Mac works on it")
+
+    monkeypatch.setattr(tiktok_find, "find_recent", never)
+    status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {})
+    assert (status, _message(body)) == (409, tiktok_mac.MAC_WORKING)
 
 
 def test_try_again_on_a_clip_the_mac_is_not_posting(call: Call, store: db.Store) -> None:
@@ -1042,8 +1267,8 @@ def test_take_it_back_deletes_a_post_made_for_the_mac(call: Call, store: db.Stor
     assert post_id not in (table.raw(clip["pk"], clip["sk"]) or {})["postIds"]
     status, body = call("DELETE", f"/v1/clips/{clip['clipId']}/tiktok/mac")
     assert (status, _message(body)) == (409, "Your Mac isn't posting this clip.")
-    # Then Post it yourself: I posted it makes his own post as before.
-    assert call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {})[0] == 200
+    # Then his It's on TikTok, no link, makes his own post as before.
+    assert call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {"noLink": True})[0] == 200
 
 
 def test_take_it_back_while_the_mac_works_on_it_is_refused(call: Call, store: db.Store) -> None:
@@ -1110,6 +1335,7 @@ def test_a_send_and_i_posted_it_at_the_same_moment_never_make_two_posts(app: App
     [
         (
             {
+                # A row stored before round 3 keeps its old words; the web reads both (§47.7).
                 "status": "failed",
                 "error": "TikTok only takes Clip Factory's uploads on a private account until it approves the app. Tap Post it yourself to post it for everyone.",
             },
@@ -1184,20 +1410,38 @@ def test_send_refuses_with_plain_sentences(call: Call, store: db.Store, table: F
 
 
 @pytest.mark.parametrize("now", [False, True])
-def test_send_takes_a_campaign_clip_for_everyone(call: Call, store: db.Store, table: FakeTable, now: bool) -> None:
-    # The owner never posts by hand (ADR-85): a campaign clip goes to his Mac like any other, always for Everyone
-    # (the campaign's rule), and its new post says which campaign it is for.
+def test_send_refuses_a_campaign_clip(call: Call, store: db.Store, table: FakeTable, now: bool) -> None:
+    # D1: Send these to my Mac and a row's Post with my Mac never take a campaign clip; nothing is written.
     _mac_on(call)
-    assert call("PUT", "/v1/settings", {"postPreset": {"tiktok": {"privacy": "SELF_ONLY"}}})[0] == 200
     put_campaign(store, platformsPaid=["tiktok"])
     paid = campaign_clip(store, status="posted", postsCreated=True, postIds=[])
     status, body = call("POST", "/v1/tiktok/mac/send", {"clipIds": [paid["clipId"]], "now": now})
-    assert (status, body) == (200, {"results": [{"clipId": paid["clipId"], "sent": True}]})
-    raw = _raw_tiktok(table, paid["clipId"]) or {}
-    assert (raw["status"], raw["macSource"], raw["campaignId"]) == ("mac", "upload" if now else "sent", CAMPAIGN)
-    assert raw["postOptions"]["privacyLevel"] == "PUBLIC_TO_EVERYONE"
-    job = call("GET", "/v1/tiktok/mac")[1]["queue"][0]
-    assert (job["clipId"], job["privacy"]) == (paid["clipId"], "PUBLIC_TO_EVERYONE")
+    assert (status, body) == (
+        200,
+        {"results": [{"clipId": paid["clipId"], "sent": False, "reason": tiktok_mac.SEND_CAMPAIGN}]},
+    )
+    assert tiktok_mac.SEND_CAMPAIGN == (
+        "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet."
+    )
+    assert _raw_tiktok(table, paid["clipId"]) is None
+    assert "tiktokForMac" not in (table.raw(paid["pk"], paid["sk"]) or {})
+    assert call("GET", "/v1/tiktok/mac")[1]["queue"] == []
+
+
+def test_send_refuses_a_campaign_clip_whose_campaign_lives_on_its_posts(
+    call: Call, store: db.Store, table: FakeTable
+) -> None:
+    # A clip that outlived its job: its failed TikTok post still says which campaign it is for.
+    _mac_on(call)
+    put_campaign(store, platformsPaid=["youtube", "tiktok"])
+    clip = _uploaded(store, status="failed")
+    old = _post(store, clip, "tiktok", status="failed", error="x", campaignId=CAMPAIGN, postOptions=TIKTOK)
+    status, body = call("POST", "/v1/tiktok/mac/send", {"clipIds": [clip["clipId"]], "now": True})
+    assert (status, body["results"]) == (
+        200,
+        [{"clipId": clip["clipId"], "sent": False, "reason": tiktok_mac.SEND_CAMPAIGN}],
+    )
+    assert (table.raw(PK, db.post_sk(old["postId"])) or {})["status"] == "failed"
 
 
 def test_sent_clips_go_after_uploads_oldest_clip_first(call: Call, store: db.Store) -> None:
@@ -1436,7 +1680,7 @@ def test_now_on_a_waiting_post_the_mac_just_claimed_is_refused_and_changes_nothi
     tiktok_mac.claim(store, clip, DEVICE, NOW, settings)
     monkeypatch.setattr(tiktok_mac, "mac_row", lambda _store, _clip: (dict(seen), [dict(seen)]))
     with pytest.raises(tiktok_self.Refused) as refused:
-        tiktok_mac.retry(store, clip, not_on_tiktok=False, now=True)
+        tiktok_mac.retry(store, clip, not_on_tiktok=False, now=True, at=NOW)
     assert refused.value.message == tiktok_mac.CHANGED
     monkeypatch.setattr(tiktok_mac, "posts_for_clip", lambda *_a, **_k: [dict(seen)])
     assert tiktok_mac.send(store, USER, clip, settings, NOW, is_campaign=False, source="upload") == tiktok_mac.CHANGED
@@ -1444,7 +1688,7 @@ def test_now_on_a_waiting_post_the_mac_just_claimed_is_refused_and_changes_nothi
     assert (raw["macState"], raw["macSource"], raw["macDevice"]) == ("working", "sent", DEVICE)
 
 
-def test_try_again_with_now_keeps_the_working_and_pressed_refusals(call: Call, store: db.Store) -> None:
+def test_try_again_with_now_keeps_the_working_and_pressed_refusals(call: Call, store: db.Store, clock: Clock) -> None:
     _mac_on(call)
     clip = _mac_clip(store, source="sent")
     _claim(call, clip["clipId"])
@@ -1454,10 +1698,18 @@ def test_try_again_with_now_keeps_the_working_and_pressed_refusals(call: Call, s
     call("POST", f"/v1/clips/{clip['clipId']}/tiktok/mac/stopped", {"device": DEVICE, "reason": "?"})
     status, body = _retry(call, clip["clipId"], {"now": True})
     assert (status, _message(body)) == (409, tiktok_mac.MAY_HAVE_POSTED)
+    status, body = _retry(call, clip["clipId"], {"now": True, "notOnTikTok": True})
+    assert (status, _message(body)) == (409, tiktok_mac.MAC_STILL_LOOKING)
     assert _raw_post(store, clip["clipId"])["macSource"] == "sent"
+    clock.now = NOW + timedelta(minutes=30)
     status, body = _retry(call, clip["clipId"], {"now": True, "notOnTikTok": True})
     assert status == 200
-    assert _tiktok(body)["mac"] == {"state": "waiting", "since": "2026-11-15T11:00:00.000Z", "source": "upload"}
+    assert _tiktok(body)["mac"] == {
+        "state": "waiting",
+        "since": "2026-11-15T11:00:00.000Z",
+        "source": "upload",
+        "beatAt": iso(NOW),
+    }
 
 
 # --- the clip page (§16.2) ---------------------------------------------------------------------------------------------------
@@ -1548,8 +1800,11 @@ def test_take_it_back_after_the_mac_pressed_post_is_refused(
     # Nothing can send it through TikTok's API meanwhile: the release and Try again leave it alone.
     assert release.release_waiting(store, app.flows, USER, "tiktok") == 0
     assert (_raw_tiktok(table, clip["clipId"]) or {})["status"] == "mac"
-    # His ways out: I posted it (it is there), or It's not on TikTok, try again.
+    # His ways out: It's on TikTok (it is there, with or without its link), or Try again after the find window.
     status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {})
+    assert (status, _message(body)) == (409, "Not found yet. Try again in a minute, or paste the link.")
+    assert (_raw_tiktok(table, clip["clipId"]) or {})["status"] == "mac"  # Find it for me saved nothing
+    status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {"noLink": True})
     assert (status, _tiktok(body)["by"]) == (200, "you")
 
 
@@ -1622,3 +1877,201 @@ def test_the_job_carries_its_attempt_and_an_older_attempt_is_refused(call: Call,
     assert call("POST", f"{path}/step", {"device": DEVICE, "step": "finding", "attempt": "two"})[0] == 400
     status, body = call("POST", f"{path}/done", {"device": DEVICE, "attempt": 2, "link": LINK})
     assert (status, _tiktok(body)["via"]) == (200, "mac")
+
+
+# --- round 3: the claim's pressed guard, the ping's plan keys, the owner's requests, needsYouClipId ----------------------
+
+
+def test_a_waiting_post_that_still_has_its_press_is_never_claimed(call: Call, store: db.Store, clock: Clock) -> None:
+    # Never twice: only Try again after the find window moves the press away (to macPressedBefore).
+    _mac_on(call)
+    clip = _mac_clip(store, macPressedAt=iso(NOW))
+    status, body = _claim(call, clip["clipId"])
+    assert (status, _message(body)) == (409, "Another try already has this clip.")
+    raw = _raw_post(store, clip["clipId"])
+    assert (raw["macState"], raw["macAttempt"]) == ("waiting", 0)
+    # A re-waited one (its press moved to macPressedBefore) is claimed, and keeps both fields for the helper's guard.
+    again = _mac_clip(store, macPressedBefore=iso(NOW), macAgainAt=iso(NOW + timedelta(minutes=31)))
+    status, body = _claim(call, again["clipId"])
+    assert status == 200
+    assert (body["job"]["pressedBefore"], body["job"]["againAt"]) == (iso(NOW), iso(NOW + timedelta(minutes=31)))
+    assert (_raw_post(store, again["clipId"])["macPressedBefore"]) == iso(NOW)
+
+
+def test_post_mac_carries_its_beat(call: Call, store: db.Store, clock: Clock) -> None:
+    _mac_on(call)
+    clip = _mac_clip(store)
+    assert _claim(call, clip["clipId"])[0] == 200
+    _beat(call, clip["clipId"], "video", clock, timedelta(minutes=2))
+    found = call("GET", "/v1/posts", query={"clipId": clip["clipId"]})[1]["posts"]
+    assert _tiktok({"posts": found})["mac"]["beatAt"] == iso(clock.now)
+    job = call("GET", "/v1/tiktok/mac")[1]["queue"][0]
+    assert job["beatAt"] == iso(clock.now)
+    assert not {"pressedBefore", "againAt"} & set(job)
+
+
+def _ping(call: Call, **extra: Any) -> tuple[int, Any]:
+    return call("POST", "/v1/tiktok/mac/ping", {"state": "ok", "device": DEVICE, **extra})
+
+
+def test_the_ping_stores_the_helpers_plan_and_a_ping_without_it_removes_it(call: Call, table: FakeTable) -> None:
+    plan = {"backlogAt": "2026-11-15T12:30:00.000Z", "holdBefore": "2026-11-15T02:55:00Z", "backfill": True}
+    assert _ping(call, **plan)[0] == 200
+    helper = call("GET", "/v1/tiktok/mac")[1]["helper"]
+    assert {k: helper.get(k) for k in plan} == plan
+    assert _ping(call, backfill=False)[0] == 200
+    helper = call("GET", "/v1/tiktok/mac")[1]["helper"]
+    assert not {"backlogAt", "holdBefore", "backfill"} & set(helper)
+    assert not {"backlogAt", "holdBefore", "backfill"} & set(table.raw(PK, "MACHELPER") or {})
+
+
+@pytest.mark.parametrize(
+    ("extra", "sentence"),
+    [
+        ({"backlogAt": "soon"}, "backlogAt must be a time."),
+        ({"backlogAt": 1}, "backlogAt must be a time."),
+        ({"backlogAt": "2026-11-15T12:30:00.000Z" + " " * 20}, "backlogAt must be a time."),
+        ({"holdBefore": "yesterday"}, "holdBefore must be a time."),
+        ({"backfill": "yes"}, "backfill must be true or false."),
+        ({"resumeDone": "x" * 41}, "resumeDone is too long (at most 40 characters)."),
+        ({"letGoDone": 5}, "letGoDone must be text."),
+        ({"burst": True}, "Unknown field: burst."),
+    ],
+)
+def test_a_ping_with_a_bad_plan_key_is_refused(
+    call: Call, table: FakeTable, extra: dict[str, Any], sentence: str
+) -> None:
+    status, body = _ping(call, **extra)
+    assert (status, _message(body)) == (400, sentence)
+    assert table.raw(PK, "MACHELPER") is None
+
+
+def test_a_needs_you_stop_names_its_clip_until_an_ok_ping(call: Call, store: db.Store) -> None:
+    _mac_on(call)
+    clip = _mac_clip(store)
+    _stop_needing_you(call, clip["clipId"])
+    assert call("GET", "/v1/tiktok/mac")[1]["helper"]["needsYouClipId"] == clip["clipId"]
+    assert call("POST", "/v1/tiktok/mac/ping", {"state": "needs_you", "reason": "x", "device": DEVICE})[0] == 200
+    assert call("GET", "/v1/tiktok/mac")[1]["helper"]["needsYouClipId"] == clip["clipId"]  # still needs him
+    assert call("POST", "/v1/tiktok/mac/ping", {"state": "ok", "device": DEVICE})[0] == 200
+    assert "needsYouClipId" not in call("GET", "/v1/tiktok/mac")[1]["helper"]
+
+
+def _request(call: Call, action: Any) -> tuple[int, Any]:
+    return call("POST", "/v1/tiktok/mac/request", {"action": action})
+
+
+def test_start_my_mac_again_waits_for_the_helper_to_say_it_did_that_one(
+    call: Call, table: FakeTable, clock: Clock
+) -> None:
+    status, body = _request(call, "resume")
+    assert (status, _message(body)) == (409, "Your Mac hasn't checked in yet. Set it up on your Mac.")
+    assert _ping(call)[0] == 200
+    status, body = _request(call, "resume")
+    assert (status, _message(body)) == (409, "Your Mac isn't paused.")
+    assert call("POST", "/v1/tiktok/mac/ping", {"state": "paused", "reason": "Paused.", "device": DEVICE})[0] == 200
+    status, body = _request(call, "resume")
+    assert status == 200
+    assert body["helper"]["resumeRequest"] == {"at": iso(NOW)}
+    assert (table.raw(PK, "MACHELPER") or {})["resumeRequestAt"] == iso(NOW)
+    # A ping that did an older request leaves the newer one; the one it did removes it.
+    paused = {"state": "paused", "reason": "Paused.", "device": DEVICE}
+    assert call("POST", "/v1/tiktok/mac/ping", {**paused, "resumeDone": "2026-11-15T09:00:00.000Z"})[0] == 200
+    assert call("GET", "/v1/tiktok/mac")[1]["helper"]["resumeRequest"] == {"at": iso(NOW)}
+    assert _ping(call, resumeDone=iso(NOW))[0] == 200
+    helper = call("GET", "/v1/tiktok/mac")[1]["helper"]
+    assert "resumeRequest" not in helper
+    assert helper["state"] == "ok"
+
+
+def test_let_them_go_needs_a_hold_and_only_its_own_done_removes_it(call: Call, table: FakeTable, clock: Clock) -> None:
+    assert _ping(call)[0] == 200
+    status, body = _request(call, "let_go")
+    assert (status, _message(body)) == (409, "Your Mac isn't holding any clips.")
+    hold = {"holdBefore": "2026-11-23T02:55:00.000Z"}
+    assert _ping(call, **hold)[0] == 200
+    status, body = _request(call, "let_go")
+    assert status == 200
+    assert (body["helper"]["letGoRequest"], body["helper"]["holdBefore"]) == ({"at": iso(NOW)}, hold["holdBefore"])
+    assert "resumeRequest" not in body["helper"]
+    # resumeDone never removes a let-go request, and an older letGoDone neither.
+    assert _ping(call, **hold, resumeDone=iso(NOW), letGoDone="2026-11-15T09:00:00.000Z")[0] == 200
+    assert call("GET", "/v1/tiktok/mac")[1]["helper"]["letGoRequest"] == {"at": iso(NOW)}
+    assert _ping(call, letGoDone=iso(NOW))[0] == 200  # the helper cleared its hold: no holdBefore any more
+    helper = call("GET", "/v1/tiktok/mac")[1]["helper"]
+    assert not {"letGoRequest", "holdBefore"} & set(helper)
+
+
+@pytest.mark.parametrize("body", [{"action": "pause"}, {"action": None}, {}, {"action": "resume", "at": "now"}])
+def test_the_request_route_refuses_what_it_does_not_know(call: Call, body: dict[str, Any]) -> None:
+    assert call("POST", "/v1/tiktok/mac/ping", {"state": "paused", "device": DEVICE})[0] == 200
+    status, answer = call("POST", "/v1/tiktok/mac/request", body)
+    assert status == 400
+    if "at" not in body:
+        assert _message(answer) == "Pick resume or let_go."
+    assert "resumeRequest" not in call("GET", "/v1/tiktok/mac")[1]["helper"]
+
+
+# --- the words (D1, D6) ---------------------------------------------------------------------------------------------------
+
+
+def test_the_campaign_words_have_one_source() -> None:
+    from clipfactory_api.contentrewards import campaigns, fit
+    from clipfactory_api.routes import clips as clip_routes
+
+    skips = tiktok_mac.CAMPAIGN_SKIPS
+    assert skips == "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet."
+    assert skips == fit.TIKTOK_WAITS
+    assert skips == tiktok_mac.SEND_CAMPAIGN
+    assert not hasattr(tiktok_mac, "options_for")
+    assert not hasattr(clip_routes, "TIKTOK_PRIVATE")
+    assert not hasattr(tiktok_self, "MAC_STUCK")
+    view = SimpleNamespace(
+        conn={}, setups=[{"platform": "tiktok", "gates": [{"key": "posting_audit", "state": "waiting"}]}]
+    )
+    assert campaigns._places_note(view, {"platformsPaid": ["youtube", "tiktok"]}, ["youtube"]) == skips  # type: ignore[arg-type]
+    campaign = clip_routes.CampaignClip(CAMPAIGN, {}, ("tiktok",), {})
+    setups = [{"platform": "tiktok", "ready": True, "gates": [{"key": "posting_audit", "state": "ok"}]}]
+    upload = clip_routes._place_refusal("tiktok", campaign, setups, {})
+    again = clip_routes._place_refusal("tiktok", campaign, setups, {}, try_again=True)
+    assert upload == f"{skips} Turn TikTok off, then tap Upload."
+    assert again == f"{skips} Tap Try again on another place."
+    audited = [{**setups[0], "gates": [{"key": "app_review", "state": "ok"}, {"key": "posting_audit", "state": "ok"}]}]
+    assert clip_routes._place_refusal("tiktok", campaign, audited, {}) is None
+
+
+def test_the_server_words_name_only_buttons_the_owner_has() -> None:
+    import ast
+    from pathlib import Path
+
+    from clipfactory_api.platforms import errors
+    from clipfactory_api.routes import tiktok_mac as routes
+
+    assert tiktok_mac.PRESSED == (
+        "Your Mac pressed Post but couldn't confirm it. Look on your TikTok: if it's there, tap It's on TikTok."
+    )
+    assert tiktok_mac.MAC_STILL_LOOKING == (
+        "Your Mac pressed Post less than 30 minutes ago. Look on your TikTok first, then try again later."
+    )
+    assert tiktok_self.NOT_UPLOADED == "Upload this clip first. Then your Mac can post it on TikTok."
+    assert errors.TIKTOK_PRIVATE_ONLY == (
+        "TikTok only takes Clip Factory's own uploads on a private account for now, so your Mac posts it for everyone."
+    )
+    for module in (tiktok_self, tiktok_mac, routes, errors):
+        tree = ast.parse(Path(str(module.__file__)).read_text(encoding="utf-8"))
+        docs = {
+            id(n.body[0].value)
+            for n in ast.walk(tree)
+            if isinstance(n, ast.Module | ast.FunctionDef | ast.ClassDef)
+            and n.body
+            and isinstance(n.body[0], ast.Expr)
+            and isinstance(n.body[0].value, ast.Constant)
+        }
+        said = [
+            n.value
+            for n in ast.walk(tree)
+            if isinstance(n, ast.Constant) and isinstance(n.value, str) and id(n) not in docs
+        ]
+        for text in said:
+            assert "post it yourself" not in text.lower(), (module.__name__, text)
+            assert "i posted it" not in text.lower(), (module.__name__, text)

@@ -1,8 +1,10 @@
 // Settings › Posting › Your Mac posts TikTok (docs/CONTRACTS.md §47.4): the switch and its line, when the Mac last
-// checked in and how many clips wait for it, Send these to my Mac (the backlog: every clip that isn't on TikTok yet,
-// one after each auto-posting run), the TikTok login kept on the Mac with Change and Forget (§47.8), and how to stop
-// it. GET /v1/tiktok/mac on open, on focus, every 60 s while open and after a post changes (its live news). Until
-// TikTok approves the app the Mac is the only way to TikTok (ADR-85); the words are in lib/tiktokMac.ts.
+// checked in and how many clips wait for it (with Start my Mac again while it is paused, Open the stopped clip while it
+// needs him, and Let them go while it holds older auto-posting clips), Send these to my Mac (the backlog: every clip
+// that isn't on TikTok yet, campaign clips never), the TikTok login kept on the Mac with Change and Forget (§47.8), and
+// how to stop it. GET /v1/tiktok/mac on open, on focus, every 60 s while open, after a post changes (its live news) and
+// after the owner asked the Mac something (macChanged). Until TikTok approves the app the Mac is the only way to TikTok
+// (ADR-85); the words are in lib/tiktokMac.ts.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../../api/index.ts";
 import { friendlyMessage } from "../../api/errors.ts";
@@ -10,15 +12,21 @@ import type { Clip, MacHelper, MacLoginAction, Post, TikTokMacStatus } from "../
 import { useSession } from "../../app/session.tsx";
 import { useToast } from "../../components/Toasts.tsx";
 import { Button, ErrorPanel, Skeleton } from "../../components/ui.tsx";
+import { timeWords } from "../../lib/autopost.ts";
 import { usePoll } from "../../lib/hooks.ts";
 import { useLiveEvents } from "../../lib/live.ts";
 import { useAction } from "../../lib/motion.ts";
 import {
   canSendToMac,
   helperLine,
+  holdLine,
   loginLine,
   loginRequestLine,
+  MAC_LET_GO_BUTTON,
+  MAC_LET_GO_PENDING,
+  MAC_LET_GO_TOAST,
   MAC_LOGIN_FORGET_CONFIRM,
+  MAC_RESUME_PENDING,
   MAC_OFF_LINE,
   MAC_ON_LINE,
   MAC_SEND_CONFIRM,
@@ -29,10 +37,17 @@ import {
   sentLine,
   whenLine,
 } from "../../lib/tiktokMac.ts";
+import { MacStartAgain, OpenStoppedClip } from "../library/MacButtons.tsx";
 import { Apple, AppleSwitch, Panel } from "./parts.tsx";
 import "../../styles/autopost.css";
 
 export const MAC_STATUS_EVERY_MS = 60_000;
+
+/** The owner asked the Mac something (Start my Mac again, Let them go): every open view reads GET /v1/tiktok/mac again. */
+export const MAC_CHANGED_EVENT = "cf:tiktok-mac";
+export function macChanged(): void {
+  window.dispatchEvent(new Event(MAC_CHANGED_EVENT));
+}
 
 export interface TikTokMacData {
   /** null until read, and on an api from before §47 (404). */
@@ -67,7 +82,11 @@ export function useTikTokMac(active: boolean): TikTokMacData {
     if (!active) return;
     void reload();
     window.addEventListener("focus", reload);
-    return () => window.removeEventListener("focus", reload);
+    window.addEventListener(MAC_CHANGED_EVENT, reload);
+    return () => {
+      window.removeEventListener("focus", reload);
+      window.removeEventListener(MAC_CHANGED_EVENT, reload);
+    };
   }, [active, reload]);
   usePoll(load, active, MAC_STATUS_EVERY_MS);
   const soon = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -85,7 +104,7 @@ export function useTikTokMac(active: boolean): TikTokMacData {
   return { status: active ? status : null, error, reload };
 }
 
-/** The clips Send these to my Mac takes (canSendToMac: kept and not on TikTok yet), oldest first. */
+/** The clips Send these to my Mac takes (canSendToMac: kept, not on TikTok yet, never a campaign clip), oldest first. */
 async function sendable(): Promise<string[]> {
   const [clips, posts] = await Promise.all([api().listClips({ status: "all" }), api().listPosts()]);
   const by = new Map<string, Post[]>();
@@ -209,6 +228,71 @@ function MacLogin({ helper, onAsked }: { helper: MacHelper; onAsked: () => void 
   );
 }
 
+/**
+ * Under the Mac's status line (D5): Start my Mac again while it is paused, Open the stopped clip while it needs him,
+ * and its hold on older auto-posting clips with Let them go. Once asked, the line says the Mac does it at its next tick.
+ */
+function MacAsks({ helper }: { helper: MacHelper }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const act = useAction("send");
+  async function letGo() {
+    setBusy(true);
+    try {
+      await api().tiktokMacRequest("let_go");
+      toast.success(MAC_LET_GO_TOAST, { group: "tiktok-mac" });
+    } catch (e) {
+      act.fail({ sound: false });
+      toast.error(friendlyMessage(e));
+    } finally {
+      setBusy(false);
+      macChanged();
+    }
+  }
+  const paused = helper.state === "paused";
+  const stoppedOn = helper.state === "needs_you" ? helper.needsYouClipId : undefined;
+  const hold = helper.holdBefore;
+  if (!paused && !stoppedOn && !hold) return null;
+  return (
+    <>
+      {paused ? (
+        helper.resumeRequest ? (
+          <p className="autopost__line" role="status" data-mac="resume">
+            {MAC_RESUME_PENDING}
+          </p>
+        ) : (
+          <div className="mac-send__buttons" data-mac="resume">
+            <MacStartAgain size="md" />
+          </div>
+        )
+      ) : null}
+      {stoppedOn ? (
+        <div className="mac-send__buttons" data-mac="stopped">
+          <OpenStoppedClip href={`/clips/${stoppedOn}`} size="md" wide={false} />
+        </div>
+      ) : null}
+      {hold ? (
+        <>
+          <p className="autopost__line" data-mac="hold">
+            {holdLine(timeWords(hold))}
+          </p>
+          {helper.letGoRequest ? (
+            <p className="autopost__line" role="status">
+              {MAC_LET_GO_PENDING}
+            </p>
+          ) : (
+            <div className="mac-send__buttons">
+              <Button variant="glass" icon="monitor" act={act} loading={busy} onClick={() => void letGo()}>
+                {MAC_LET_GO_BUTTON}
+              </Button>
+            </div>
+          )}
+        </>
+      ) : null}
+    </>
+  );
+}
+
 export function TikTokMacBranch() {
   const { me, saveSettings, refresh } = useSession();
   const toast = useToast();
@@ -281,6 +365,7 @@ export function TikTokMacBranch() {
               <p className="autopost__line" data-mac="helper">
                 {helperLine(status.helper)}
               </p>
+              {status.helper ? <MacAsks helper={status.helper} /> : null}
               {on ? (
                 <p className="autopost__line" data-mac="when">
                   {whenLine(autoOn, nextRunAt, waiting)}

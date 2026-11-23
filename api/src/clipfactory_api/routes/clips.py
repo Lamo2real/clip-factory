@@ -18,6 +18,7 @@ from .. import (
     s3,
     tiktok_find,
     tiktok_link,
+    tiktok_mac,
     tiktok_self,
     uploads,
     validate,
@@ -155,7 +156,6 @@ CAMPAIGN_HELD = (
 CAMPAIGN_CAN_POST = ("in", "manual")
 # Try again (Library, a clip's post line) has no switch and no Upload: its sentences name the buttons it has.
 TRY_ANOTHER = "Tap Try again on another place."
-TIKTOK_PRIVATE = "TikTok keeps Clip Factory's posts private until TikTok checks the app, and private posts can't earn."
 # The stop that keeps a campaign from taking clips (§38.4): its state first, then the owner's membership.
 CAMPAIGN_STATE_STOPS = {
     "ended": "This campaign has ended. Pick another one.",
@@ -231,7 +231,9 @@ def _place_refusal(
 ) -> str | None:
     """Why a campaign clip can't go to ``platform`` (None when it can): the §38.8 ``uploadPlaces`` rule, the
     campaign's paid places ∩ places ready on Set up posting ∩ not refused by Content Rewards as unlinked, TikTok only
-    once its posting audit passed. Upload's sentences say to turn the place off; Try again's (Library, a clip's post
+    once TikTok approved the app (``app_review`` and ``posting_audit`` both ok, ``tiktok_mac.setup_audited``): before
+    that only the owner's Mac posts TikTok, and it can't mark a campaign clip as Branded content yet
+    (``tiktok_mac.CAMPAIGN_SKIPS``). Upload's sentences say to turn the place off; Try again's (Library, a clip's post
     line: no switch and no Upload there) name the buttons those screens have."""
     name = platform_label(platform)
     setup = next((s for s in setups if s.get("platform") == platform), {})
@@ -243,11 +245,9 @@ def _place_refusal(
         if try_again:
             return f"{name} is not set up yet. Set it up in Settings › Posting › Set up posting, then tap Try again."
         return f"{name} is not set up yet. Turn it off, then tap Upload."
-    if platform == "tiktok":
-        audit = [g.get("state") for g in setup.get("gates") or [] if g.get("key") == "posting_audit"]
-        if audit != ["ok"]:
-            then = TRY_ANOTHER if try_again else "Turn TikTok off, then tap Upload."
-            return f"{TIKTOK_PRIVATE} {then}"
+    if platform == "tiktok" and not tiktok_mac.setup_audited(setup):
+        then = TRY_ANOTHER if try_again else "Turn TikTok off, then tap Upload."
+        return f"{tiktok_mac.CAMPAIGN_SKIPS} {then}"
     if isinstance(linked, Mapping) and linked.get(platform) is False:
         if try_again:
             return f"Add {name} in Content Rewards first, then tap Try again."
@@ -401,10 +401,15 @@ def _try_again(
     return release.restart(app.store, app.flows, clip, [*failed, *waiting], clip_posts=rows, tiktok=tiktok)
 
 
-# --- Post it on TikTok yourself (§42) ---------------------------------------------------------------------------
+# --- It's on TikTok (§42) ----------------------------------------------------------------------------------------
 
 OTHER_ACCOUNT = "Saved. Views only show for posts on the TikTok account you connected."
+# Only the Mac's own done saves without a link when nothing is found (the Mac knows it posted).
 NOT_FOUND_YET = "Saved. Clip Factory could not find it on your TikTok yet. Tap Find it for me in a minute."
+# Find it for me never saves without a link (D3): these two 409s write nothing.
+FIND_NONE = "Not found yet. Try again in a minute, or paste the link."
+FIND_CANT = "Clip Factory can't look on your TikTok until TikTok is connected. Paste the link instead."
+BOTH = "Send a link or noLink, not both."
 SINCE_LIMIT = timedelta(hours=24)
 
 
@@ -434,40 +439,86 @@ def clip_file(app: App, req: Request) -> Response:
 
 
 def tiktok_posted(app: App, req: Request) -> Response:
-    """``POST /v1/clips/{clipId}/tiktok/posted`` ``{ "link"? }``: the owner posted this clip on TikTok himself. The
-    clip's TikTok post becomes ``posted`` with ``by: "you"``; a link (full or short, read by ``tiktok_link``) gives
-    the video's id, so its numbers are read like any public post's when it is on the connected TikTok account."""
+    """``POST /v1/clips/{clipId}/tiktok/posted`` ``{link?, since?, noLink?}``: the clip is on the owner's TikTok (his
+    It's on TikTok, §42.2). The clip's TikTok post becomes ``posted`` with ``by: "you"``.
+
+    * ``link``: read by ``tiktok_link`` (full or short); it gives the video's id, so its numbers are read like any
+      public post's when it is on the connected TikTok account.
+    * ``noLink: true`` ("It's on TikTok, no link"): saved without a link and without the finder
+      (``mark_posted(no_link=True)``: never while the Mac has not pressed Post and still beats the job).
+    * Neither (Find it for me): a post already his with a link is answered as it is. Else, after the same refusals as
+      a save (``tiktok_self.check_can_mark``, so a Mac post still at work is ``MAC_WORKING`` before TikTok is asked),
+      the finder looks on his TikTok; found → saved with its link. Nothing found (``FIND_NONE``) or TikTok not
+      connected (``FIND_CANT``) is a 409 and nothing is written."""
     body = req.json()
-    validate.only_keys(body, {"link", "since"})
+    validate.only_keys(body, {"link", "since", "noLink"})
     link = body.get("link")
     if link is not None and not isinstance(link, str):
         raise bad_request("Paste the TikTok link as text.")
+    no_link = validate.boolean(body.get("noLink", False), "noLink")
+    has_link = bool(link and link.strip())
+    if has_link and no_link:
+        raise bad_request(BOTH)
     item = _clip_or_404(app, req)
-    video, count_views, note = tiktok_video(app, req.user_id, item, link, body.get("since"))
+    note: str | None = None
+    video: tiktok_link.TikTokVideo | None = None
+    count_views = True
+    if has_link:
+        video, count_views, note = tiktok_video(app, req.user_id, item, link, None)
+    elif not no_link:
+        if _has_link(app, req.user_id, item):
+            return _with_posts(app, req)  # already his, with its link: nothing to find
+        try:
+            tiktok_self.check_can_mark(app.store, item, app.clock())
+        except tiktok_self.Refused as e:
+            raise conflict(e.message) from e
+        video = _find(app, req.user_id, item, body.get("since"))
     minutes = stats_config.load().platform("tiktok").min_interval
     try:
         try:
-            tiktok_self.mark_posted(app.store, item, video, app.clock(), min_interval=minutes, count_views=count_views)
+            tiktok_self.mark_posted(
+                app.store, item, video, app.clock(), min_interval=minutes, count_views=count_views, no_link=no_link
+            )
         except db.ConditionFailed:
             # A second tap at the same moment (or the clip just changed): read it again and write once more, which
             # only adds the link when the first one already marked it.
             fresh = _clip_or_404(app, req)
-            tiktok_self.mark_posted(app.store, fresh, video, app.clock(), min_interval=minutes, count_views=count_views)
+            tiktok_self.mark_posted(
+                app.store, fresh, video, app.clock(), min_interval=minutes, count_views=count_views, no_link=no_link
+            )
     except tiktok_self.Refused as e:
         raise conflict(e.message) from e
     except db.ConditionFailed as e:
         raise conflict("This clip just changed. Try again.") from e
-    log("info", "clip.tiktok_by_you", clipId=item["clipId"], link=video is not None, views=count_views)
+    log("info", "clip.tiktok_by_you", clipId=item["clipId"], link=video is not None, views=count_views, noLink=no_link)
     return _with_posts(app, req, note=note)
+
+
+def _find(app: App, user_id: str, item: Mapping[str, Any], since: Any) -> tiktok_link.TikTokVideo:
+    """Find it for me (§42.2): the post on his connected TikTok made since ``since``; a 409 when TikTok is not
+    connected (``FIND_CANT``) or nothing is found (``FIND_NONE``), so nothing is ever saved without its link."""
+    account = posts.connected_account(app.store, user_id, "tiktok")
+    if account is None or app.oauth is None:
+        raise conflict(FIND_CANT)
+    found = tiktok_find.find_recent(
+        app.oauth,
+        app.store,
+        account,
+        since=_since(app, since),
+        caption=mojibake.repair(str((item.get("captions") or {}).get("tiktok") or "")),
+    )
+    if found is None:
+        raise conflict(FIND_NONE)
+    return found
 
 
 def tiktok_video(
     app: App, user_id: str, item: Mapping[str, Any], link: str | None, since: Any
 ) -> tuple[tiktok_link.TikTokVideo | None, bool, str | None]:
-    """The TikTok video a clip was posted as (I posted it, §42, and the Mac's done, §47): the pasted ``link`` read by
-    ``tiktok_link`` (400 when it is not a TikTok video), else, with TikTok connected and no link stored yet, the post
-    found on his TikTok made since ``since``. Also whether its views count (the link is on the connected account) and
-    the answer's ``note``."""
+    """The TikTok video a clip was posted as (his It's on TikTok with a link, §42, and the Mac's done, §47): the pasted
+    ``link`` read by ``tiktok_link`` (400 when it is not a TikTok video), else (only the Mac's done), with TikTok
+    connected and no link stored yet, the post found on his TikTok made since ``since`` (``NOT_FOUND_YET`` when none).
+    Also whether its views count (the link is on the connected account) and the answer's ``note``."""
     account = posts.connected_account(app.store, user_id, "tiktok")
     if link and link.strip():
         try:
@@ -494,7 +545,7 @@ def tiktok_video(
 
 
 def tiktok_posted_undo(app: App, req: Request) -> Response:
-    """``DELETE /v1/clips/{clipId}/tiktok/posted``: Undo of "I posted it" (§42)."""
+    """``DELETE /v1/clips/{clipId}/tiktok/posted``: Undo of It's on TikTok (§42)."""
     item = _clip_or_404(app, req)
     try:
         tiktok_self.undo(app.store, item)

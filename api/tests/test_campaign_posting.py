@@ -109,8 +109,9 @@ def campaign_clip(store: db.Store, **fields: Any) -> dict[str, Any]:
     return seed_clip(store, job_id=job["jobId"], campaignId=CAMPAIGN, **fields)
 
 
-def ready(store: db.Store, *places: str, audit: str | None = None) -> None:
-    """Connected and ready on Set up posting (§17.4): YouTube's published app ticked, TikTok's audit as given."""
+def ready(store: db.Store, *places: str, audit: str | None = None, review: str | None = None) -> None:
+    """Connected and ready on Set up posting (§17.4): YouTube's published app ticked, TikTok's audit and app review
+    as given (both ``ok`` / ``live``: TikTok approved the app, so a campaign clip's TikTok may go through its API)."""
     for platform in places:
         store.put(
             {
@@ -125,8 +126,11 @@ def ready(store: db.Store, *places: str, audit: str | None = None) -> None:
         setup: dict[str, Any] = {"pk": PK, "sk": f"SETUP#{platform}", "type": "setup", "platform": platform}
         if platform == "youtube":
             setup["stepsDone"] = ["key-publish"]
-        if platform == "tiktok" and audit:
-            setup["gates"] = {"posting_audit": {"state": audit, "at": "2026-11-14T10:00:00.000Z"}}
+        if platform == "tiktok" and (audit or review):
+            setup["gates"] = {
+                **({"posting_audit": {"state": audit, "at": "2026-11-14T10:00:00.000Z"}} if audit else {}),
+                **({"app_review": {"value": review}} if review else {}),
+            }
         store.put(setup)
 
 
@@ -249,19 +253,36 @@ def test_a_connected_place_that_is_not_ready_is_refused(call: Call, store: db.St
     assert (status, message(body)) == (400, "YouTube is not set up yet. Turn it off, then tap Upload.")
 
 
-@pytest.mark.parametrize("audit", [None, "unknown", "waiting", "limited"])
-def test_tiktok_is_refused_before_its_audit(call: Call, store: db.Store, audit: str | None) -> None:
-    ready(store, "youtube", "tiktok", audit=audit)
+@pytest.mark.parametrize(
+    ("audit", "review"),
+    [
+        (None, None),
+        ("unknown", "live"),
+        ("waiting", "live"),
+        ("limited", "live"),
+        # The posting audit alone is not TikTok's approval: the app review must be live too (D1).
+        ("ok", None),
+        ("ok", "in_review"),
+        ("ok", "draft"),
+    ],
+)
+def test_tiktok_is_refused_until_tiktok_approved_the_app(
+    call: Call, store: db.Store, table: FakeTable, audit: str | None, review: str | None
+) -> None:
+    ready(store, "youtube", "tiktok", audit=audit, review=review)
     put_campaign(store, platformsPaid=["youtube", "tiktok"])
     clip = campaign_clip(store)
     status, body = confirm(call, clip["clipId"], {"platforms": ["youtube", "tiktok"], "tiktok": TIKTOK})
-    assert status == 400
-    assert message(body).startswith("TikTok keeps Clip Factory's posts private until TikTok checks the app")
-    assert message(body).endswith("Turn TikTok off, then tap Upload.")
+    assert (status, message(body)) == (
+        400,
+        "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet. "
+        "Turn TikTok off, then tap Upload.",
+    )
+    assert stored_posts(table) == {}
 
 
 def test_tiktok_goes_after_its_audit_branded_and_public(call: Call, store: db.Store, table: FakeTable) -> None:
-    ready(store, "tiktok", audit="ok")
+    ready(store, "tiktok", audit="ok", review="live")
     put_campaign(store, platformsPaid=["tiktok"])
     clip = campaign_clip(store)
     status, _ = confirm(call, clip["clipId"], {"platforms": ["tiktok"], "tiktok": TIKTOK})
@@ -296,7 +317,7 @@ def test_a_tiktok_only_campaign_before_the_audit_has_no_place(call: Call, store:
 def test_tiktok_choices_a_campaign_cannot_take_are_refused(
     call: Call, store: db.Store, tiktok: dict[str, Any], sentence: str
 ) -> None:
-    ready(store, "tiktok", audit="ok")
+    ready(store, "tiktok", audit="ok", review="live")
     put_campaign(store, platformsPaid=["tiktok"])
     clip = campaign_clip(store)
     status, body = confirm(call, clip["clipId"], {"platforms": ["tiktok"], "tiktok": tiktok})
@@ -305,7 +326,7 @@ def test_tiktok_choices_a_campaign_cannot_take_are_refused(
 
 def test_tiktok_still_needs_the_owners_own_choice(call: Call, store: db.Store) -> None:
     """Nothing picks who can see it for him (§17.8), not even for a campaign clip."""
-    ready(store, "tiktok", audit="ok")
+    ready(store, "tiktok", audit="ok", review="live")
     put_campaign(store, platformsPaid=["tiktok"])
     clip = campaign_clip(store)
     status, body = confirm(call, clip["clipId"], {"platforms": ["tiktok"]})
@@ -475,7 +496,13 @@ def test_try_again_runs_the_campaign_checks(
         (
             "tiktok",
             {"audit": "waiting"},
-            "TikTok keeps Clip Factory's posts private until TikTok checks the app, and private posts can't earn. "
+            "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet. "
+            "Tap Try again on another place.",
+        ),
+        (
+            "tiktok",
+            {"audit": "ok", "review": None},
+            "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet. "
             "Tap Try again on another place.",
         ),
         ("youtube", {"unlinked": True}, "Add YouTube in Content Rewards first, then tap Try again."),
@@ -486,7 +513,7 @@ def test_try_again_says_what_to_tap_on_its_own_screen(
 ) -> None:
     """Library and the post line have no switch and no Upload: the sentences name Try again (§38.1)."""
     if setup.get("ready", True):
-        ready(store, place, audit=setup.get("audit", "ok"))
+        ready(store, place, audit=setup.get("audit", "ok"), review=setup.get("review", "live"))
     put_campaign(store, platformsPaid=setup.get("paid", ["youtube", "tiktok"]))
     if setup.get("unlinked"):
         put_crconn(store, crLinked={place: False})
@@ -499,7 +526,7 @@ def test_try_again_says_what_to_tap_on_its_own_screen(
 
 
 def test_try_again_keeps_the_campaign_options(call: Call, store: db.Store, table: FakeTable) -> None:
-    ready(store, "youtube", "tiktok", audit="ok")
+    ready(store, "youtube", "tiktok", audit="ok", review="live")
     put_campaign(store, platformsPaid=["youtube", "tiktok"])
     clip = failed_campaign_clip(store, "youtube", "tiktok")
     friends = {**TIKTOK, "privacyLevel": "MUTUAL_FOLLOW_FRIENDS"}
@@ -1043,7 +1070,7 @@ def test_confirm_checks_the_merged_captions_and_the_chosen_places(
     from clipfactory_api import clips
     from clipfactory_api.contentrewards import fit
 
-    ready(store, "youtube", "tiktok", audit="ok")
+    ready(store, "youtube", "tiktok", audit="ok", review="live")
     put_campaign(store, platformsPaid=["youtube", "tiktok"])
     put_crconn(store)
     found = fitting_clip(store)

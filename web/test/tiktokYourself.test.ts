@@ -88,13 +88,17 @@ describe("an account that is public on purpose", () => {
     // What he reads is today's: his Mac posts it.
     expect(postError(OLD)).toBe(TIKTOK_PUBLIC_REFUSED);
     expect(postError(TIKTOK_PRIVATE_ONLY)).toBe(TIKTOK_PUBLIC_REFUSED);
-    expect(TIKTOK_PUBLIC_REFUSED).not.toMatch(/Make your TikTok account private|yourself/);
+    // The server stores today's sentence since 23 Nov (platforms/errors.TIKTOK_PRIVATE_ONLY): it reads as itself.
+    expect(TIKTOK_PUBLIC_REFUSED).toBe("TikTok only takes Clip Factory's own uploads on a private account for now, so your Mac posts it for everyone.");
+    expect(postError(TIKTOK_PUBLIC_REFUSED)).toBe(TIKTOK_PUBLIC_REFUSED);
+    expect(TIKTOK_PUBLIC_REFUSED).not.toMatch(/Make your TikTok account private|yourself|I posted it/i);
     expect(postError("Facebook said the video was too long for a Reel.")).toBe("Facebook said the video was too long for a Reel.");
   });
 
   it("is not offered a Try again that would fail again", () => {
     expect(failedForPublicAccount(post({ status: "failed", error: OLD }))).toBe(true);
     expect(failedForPublicAccount(post({ status: "failed", error: TIKTOK_PRIVATE_ONLY }))).toBe(true);
+    expect(failedForPublicAccount(post({ status: "failed", error: TIKTOK_PUBLIC_REFUSED }))).toBe(true);
     expect(failedForPublicAccount(post({ status: "failed", error: "TikTok did not answer." }))).toBe(false);
     expect(failedForPublicAccount(post({ platform: "youtube", status: "failed", error: OLD }))).toBe(false);
   });

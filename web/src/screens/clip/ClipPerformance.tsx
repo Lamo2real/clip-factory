@@ -25,8 +25,7 @@ import { sendGroups, useSubmissions } from "../../lib/contentRewards.ts";
 import { CampaignsFold, ClipFit, useClipPageFit, useWaitingClip, WaitingClipFit } from "./ClipFit.tsx";
 import { tiktokAudited } from "../../lib/tiktokYourself.ts";
 import { TikTokRowAction, useTikTokRowContext } from "../library/MacButtons.tsx";
-import { rowNeedsMac, rowNeedsRuns, tiktokFactsFromStacks, tiktokRow } from "../../lib/tiktokMac.ts";
-import { useSession } from "../../app/session.tsx";
+import { rowNeedsMac, tiktokFactsFromStacks, tiktokRow } from "../../lib/tiktokMac.ts";
 import { useSetup } from "../settings/setup/useSetup.ts";
 
 /** Re-renders every `ms` so "3 min ago" and "Next check in 4 min" stay true. */
@@ -121,13 +120,11 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
   const waitingClip = useWaitingClip(clipId, !!error?.missing && !perf);
   const inReview = waitingClip?.status === "review";
   // TikTok's row (§47.4): what the owner's Mac is doing, said in its stack, with its one button in the actions.
-  const { me } = useSession();
   const setup = useSetup();
   const tiktokFacts = perf ? tiktokFactsFromStacks(perf.clip, perf.posts) : null;
   const macCtx = useTikTokRowContext({
     audited: tiktokAudited(setup.data?.platforms),
     needsMac: !!tiktokFacts && rowNeedsMac(tiktokFacts),
-    needsRuns: !!tiktokFacts && rowNeedsRuns(tiktokFacts, me ? me.settings.autoPost?.on === true : undefined),
   });
   const tiktok = tiktokFacts ? tiktokRow(tiktokFacts, macCtx) : null;
 

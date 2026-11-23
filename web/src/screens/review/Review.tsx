@@ -22,7 +22,7 @@ import { captionsTooLong, PlaceRows, type PlaceRowsHandle } from "./PlaceRows.ts
 import { prefersReducedMotion } from "../../lib/prefs.ts";
 import { brandedBlocked, choicesReady, myTikTokChoices, NO_TIKTOK_CHOICES, PICK_WHOSE, tiktokOptions, tooLongForTikTok, type TikTokChoices } from "../../lib/tiktokChoices.ts";
 import { campaignCardOptions, cardOptionsFrom, optionsFor, presetOf, type CardOptions } from "../../lib/preset.ts";
-import { afterUploadLine, crAvailability, patchCr, placesLines, reloadCr, unlinkedPlaces, useCr } from "../../lib/contentRewards.ts";
+import { afterUploadLine, campaignPlaces, crAvailability, patchCr, placesLines, reloadCr, unlinkedPlaces, useCr } from "../../lib/contentRewards.ts";
 import { campaignTikTokChoices, campaignTikTokProblem } from "../../lib/tiktokChoices.ts";
 import { CampaignStrip } from "./CampaignStrip.tsx";
 import { CampaignFit, copyLine } from "./CampaignFit.tsx";
@@ -36,7 +36,7 @@ import { TIKTOK_PUBLIC_HINT, tiktokAudited } from "../../lib/tiktokYourself.ts";
 import { useAutoPost } from "../settings/AutoPostBranch.tsx";
 import { TikTokRowAction, TurnOnMac, useTikTokRowContext } from "../library/MacButtons.tsx";
 import { settingsPath } from "../../lib/settingsTree.ts";
-import { lastLiveRunAt, MAC_HINT, macOn, rowNeedsMac, rowNeedsRuns, tiktokFacts, tiktokRow } from "../../lib/tiktokMac.ts";
+import { MAC_HINT, macOn, rowNeedsMac, tiktokFacts, tiktokRow } from "../../lib/tiktokMac.ts";
 import { autoPostOf, reviewLede, reviewLine, sentFirstLine } from "../../lib/autopost.ts";
 
 /** Video and cover links are presigned for an hour (docs/CONTRACTS.md §5); fetch new ones a little before that. */
@@ -177,9 +177,6 @@ export function Review({ jobId }: { jobId: string | null }) {
   const macCtx = useTikTokRowContext({
     audited: tiktokAudited(setup.data?.platforms),
     needsMac: keptFacts.some(rowNeedsMac),
-    needsRuns: keptFacts.some((f) => rowNeedsRuns(f, auto.on)),
-    // Auto-posting's own status, read here anyway while it is on.
-    runs: autopost.status ? { nextRunAt: autopost.status.nextRunAt, lastRunAt: lastLiveRunAt(autopost.status.runs) } : null,
   });
   const kept = (clip: Clip, posts: Post[] = []) => {
     setJustKept((k) => [clip, ...k.filter((c) => c.clipId !== clip.clipId)].slice(0, 5));
@@ -289,7 +286,8 @@ export function Review({ jobId }: { jobId: string | null }) {
                     {tiktok ? (
                       <span className="kept-now__tiktok">
                         <span className="kept-now__mac small" data-mac="kept">
-                          {`TikTok: ${tiktok.words}`}
+                          {/* A campaign clip's line already says TikTok (D1). */}
+                          {tiktok.kind === "campaign" ? tiktok.words : `TikTok: ${tiktok.words}`}
                         </span>
                         {tiktok.url ? (
                           <a className="icon-btn kept-now__open" href={tiktok.url} target="_blank" rel="noreferrer noopener" aria-label="Open the TikTok post">
@@ -427,7 +425,10 @@ function ReviewCard({
   // An API from before §39 (404) or Content Rewards switched off (503): nothing shows, the card is as before.
   const fitLoad = useClipFit(clip.clipId, cr.state !== "missing" && cr.state !== "soon");
   const clipFit = fitLoad.data;
-  const ownFit = clipFit?.mode === "campaign" ? (clipFit.fits[0] ?? null) : null;
+  // A campaign clip's places never hold TikTok until TikTok approved the app (D1): the fit's, the card's and the live
+  // fit's all read them from here (campaignPlaces).
+  const servedFit = clipFit?.mode === "campaign" ? (clipFit.fits[0] ?? null) : null;
+  const ownFit = servedFit ? { ...servedFit, uploadPlaces: campaignPlaces(servedFit.uploadPlaces, tiktokApproved) } : null;
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [campaignOff, setCampaignOff] = useState(false);
   // The campaign could not be read (a network error or a 5xx): say so, with Check again, never a skeleton for good.
@@ -463,8 +464,8 @@ function ReviewCard({
   const isCampaign = !!campaign;
   const campaignWait = !!campaignId && !campaign && !campaignOff;
   // A campaign clip offers only the places its campaign pays for: the fit's (read again on setup news), else the card's.
-  const campaignPlaces = ownFit?.uploadPlaces ?? campaign?.uploadPlaces ?? null;
-  const placesReady: Platform[] | null = campaignWait ? null : ready && campaignPlaces && (campaign || ownFit) ? ready.filter((p) => campaignPlaces.includes(p)) : ready;
+  const paidPlaces = ownFit?.uploadPlaces ?? (campaign ? campaignPlaces(campaign.uploadPlaces, tiktokApproved) : null);
+  const placesReady: Platform[] | null = campaignWait ? null : ready && paidPlaces && (campaign || ownFit) ? ready.filter((p) => paidPlaces.includes(p)) : ready;
   // Where it goes (§33): the owner's taps on this card, else this device's last choice / Where clips go, minus
   // places that are not set up. A campaign clip starts with every place the campaign pays for.
   const [picked, setPicked] = useState<Platform[] | null>(null);
@@ -820,8 +821,9 @@ function ReviewCard({
     const before = captions;
     try {
       const out = await api().crFitCaptions({ clipId: clip.clipId, campaignId: live.campaignId, captions: { ...captions } });
-      const going = live.uploadPlaces.filter((p) => chosen.includes(p));
-      const words = fixedWords(live, going.length ? going : live.uploadPlaces, captions);
+      const places = campaignPlaces(live.uploadPlaces, tiktokApproved);
+      const going = places.filter((p) => chosen.includes(p));
+      const words = fixedWords(live, going.length ? going : places, captions);
       edit(out);
       toast.undo(words, { onUndo: () => edit(before), onCommit: () => undefined });
       return true;
@@ -1035,7 +1037,7 @@ function ReviewCard({
             campaign={
               campaign
                 ? {
-                    lines: placesLines(campaign),
+                    lines: placesLines(campaign, tiktokApproved),
                     unlinked: unlinkedPlaces(campaign, cr.data?.connection),
                     onRelinked: relink,
                   }

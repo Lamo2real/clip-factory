@@ -8,7 +8,7 @@ import { mockApi } from "../src/api/mock/index.ts";
 import { seed } from "../src/api/mock/fixtures.ts";
 import type { TikTokMacControls } from "../src/api/mock/tiktokMac.ts";
 import type { Post } from "../src/api/types.ts";
-import { canSendToMac, MAC_MAY_HAVE_POSTED, MAC_WORKING } from "../src/lib/tiktokMac.ts";
+import { canSendToMac, MAC_MAY_HAVE_POSTED, MAC_STILL_LOOKING, MAC_WORKING } from "../src/lib/tiktokMac.ts";
 
 beforeAll(() => {
   Object.defineProperty(navigator, "webdriver", { value: true, configurable: true });
@@ -80,7 +80,8 @@ describe("the mock's now rules", () => {
     knobs().claim(c.clipId);
     knobs().stopped(c.clipId, "TikTok did not load.");
     const back = await api.retryMac(c.clipId, false, true);
-    expect(tiktokOf(back)?.mac).toEqual({ state: "waiting", since, source: "upload" });
+    expect(tiktokOf(back)?.mac).toMatchObject({ state: "waiting", since, source: "upload" });
+    expect(Object.keys(tiktokOf(back)!.mac!).sort()).toEqual(["beatAt", "since", "source", "state"]);
   });
 
   it("Try again with now lets an auto-posting run's post go while auto-posting is off: he tapped it", async () => {
@@ -102,7 +103,7 @@ describe("the mock's now rules", () => {
   });
 
   it("Try again without now leaves a waiting post as it is, with now makes it an Upload tap's, and keeps the working and pressed refusals", async () => {
-    const { api, sendable } = await start();
+    const { store, api, sendable } = await start();
     const c = sendable[0]!;
     await api.sendToMac([c.clipId]);
     expect(tiktokOf(await api.retryMac(c.clipId))?.mac?.source).toBe("sent");
@@ -113,15 +114,20 @@ describe("the mock's now rules", () => {
     knobs().stopped(c.clipId, "Timed out.");
     await expect(api.retryMac(c.clipId, false, true)).rejects.toThrow(MAC_MAY_HAVE_POSTED);
     expect(knobs().post(c.clipId)?.mac?.state).toBe("stopped");
+    // Inside the 30-minute find window even It's not on TikTok waits (D2).
+    await expect(api.retryMac(c.clipId, true, true)).rejects.toThrow(MAC_STILL_LOOKING);
+    const p = store.posts.find((x) => x.clipId === c.clipId && x.platform === "tiktok")!;
+    p.mac = { ...p.mac!, pressedAt: new Date(Date.now() - 31 * 60_000).toISOString() };
     const back = await api.retryMac(c.clipId, true, true);
-    expect(tiktokOf(back)?.mac).toEqual({ state: "waiting", since: expect.any(String), source: "upload" });
+    expect(tiktokOf(back)?.mac).toMatchObject({ state: "waiting", since: expect.any(String), source: "upload" });
+    expect(tiktokOf(back)?.mac?.pressedAt).toBeUndefined();
   });
 });
 
 describe("the http bodies", () => {
   function client() {
     const fetcher = vi.fn(async (url: string) =>
-      new Response(JSON.stringify(url.endsWith("/send") ? { results: [] } : { clip: {}, posts: [] }), {
+      new Response(JSON.stringify(url.endsWith("/send") ? { results: [] } : url.endsWith("/request") ? { helper: { seenAt: "t", state: "paused" } } : { clip: {}, posts: [] }), {
         status: 200,
         headers: { "content-type": "application/json" },
       }),
@@ -158,6 +164,34 @@ describe("the http bodies", () => {
       { url, method: "POST", body: { notOnTikTok: true } },
       { url, method: "POST", body: { now: true } },
       { url, method: "POST", body: { notOnTikTok: true, now: true } },
+    ]);
+  });
+
+  it("It's on TikTok adds link, since and noLink only when each is set; noLink only when true", async () => {
+    const { api, sent } = client();
+    await api.markTikTokPosted("c1");
+    await api.markTikTokPosted("c1", undefined, "2026-11-22T14:00:00.000Z");
+    await api.markTikTokPosted("c1", "https://vm.tiktok.com/x/");
+    await api.markTikTokPosted("c1", undefined, undefined, false);
+    await api.markTikTokPosted("c1", undefined, "2026-11-22T14:00:00.000Z", true);
+    const url = "https://api.test/v1/clips/c1/tiktok/posted";
+    expect(sent()).toEqual([
+      { url, method: "POST", body: {} },
+      { url, method: "POST", body: { since: "2026-11-22T14:00:00.000Z" } },
+      { url, method: "POST", body: { link: "https://vm.tiktok.com/x/" } },
+      { url, method: "POST", body: {} },
+      { url, method: "POST", body: { since: "2026-11-22T14:00:00.000Z", noLink: true } },
+    ]);
+  });
+
+  it("Start my Mac again and Let them go send { action } and answer the helper", async () => {
+    const { api, sent } = client();
+    expect(await api.tiktokMacRequest("resume")).toEqual({ seenAt: "t", state: "paused" });
+    await api.tiktokMacRequest("let_go");
+    const url = "https://api.test/v1/tiktok/mac/request";
+    expect(sent()).toEqual([
+      { url, method: "POST", body: { action: "resume" } },
+      { url, method: "POST", body: { action: "let_go" } },
     ]);
   });
 });

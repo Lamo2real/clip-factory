@@ -26,14 +26,16 @@ What stays for the owner:
 * **The inline Add link**, the only owner-facing use of §42.2 left: a post by him, or by his Mac (`via: "mac"`), that
   has no link reads "Posted by you · Everyone · add the link" or "Posted by your Mac · Everyone · add the link" and
   shows a link box right in the row (no sheet, dialog or portal), **Paste** and **Save the link**. Save the link sends
-  `POST /v1/clips/{clipId}/tiktok/posted {link, since: post.postedAt}`; with the box empty it sends `{since}` only, and
-  the finder (§42.2) looks for the post on his TikTok. A toast says what happened ("Link saved! Clip Factory will
-  count its views.", "Found it on your TikTok! …", or the answer's `note`). The clip page has the same field beside Refresh numbers, and its
+  `POST /v1/clips/{clipId}/tiktok/posted {link, since: post.postedAt}`; with the box empty Save the link says "Paste
+  the link first, or tap Find it for me." (round 3, no request), and **Find it for me** sends `{since}` only: the
+  finder (§42.2) looks for the post on his TikTok and saves it only with its link (round 3, D3: nothing found → the
+  row's problem line says the server's words and nothing is saved). A toast says what happened ("Link saved! Clip
+  Factory will count its views.", "Found it on your TikTok! …", or the answer's `note`). The clip page has the same field beside Refresh numbers, and its
   TikTok stack says "Posted by you. Add its TikTok link to count views." ("Posted by your Mac. …" for the Mac's).
-* **A campaign clip** goes to his Mac like any other clip since 2026-11-23 (he never posts by hand, §47.2): its row is
-  the same "Not on TikTok yet" with **Post with my Mac**, and the Mac posts it for Everyone. The inline Add link has
-  **Find it for me** right beside its box (the empty box's finder, the same `{since}` call), then **Paste** and **Save
-  the link**.
+* **A campaign clip** never goes to his Mac (round 3, D1, §47.2): its row says "Campaign clips skip TikTok for now:
+  your Mac can't mark them as Branded content yet." with no button, and Review leaves TikTok unticked for it. The
+  inline Add link has **Find it for me** right beside its box (the `{since}` call), then **Paste** and **Save the
+  link**; from a "Not sure it posted" row also **It's on TikTok, no link** behind its own question (`{noLink: true}`).
 * **Review** (TikTok ticked, TikTok not approved: `app_review` and `posting_audit` not both `ok`): one line just above
   TikTok's Music Usage line (which stays right above Upload, §17.8). While Your Mac posts TikTok is off it is
   `TIKTOK_PUBLIC_HINT`, "TikTok: turn on Your Mac posts TikTok so it posts for everyone."; while it is on, `MAC_HINT`,
@@ -43,9 +45,10 @@ What stays for the owner:
 TikTok's rule: Everyone needs a public account, while an unaudited app may only post to a private one
 (`unaudited_client_can_only_post_to_private_accounts`). His account is public on purpose (since 2026-11-21), so Clip
 Factory's own TikTok upload fails with `TIKTOK_PRIVATE_ONLY` (§17.6), stored word for word: "TikTok only takes Clip
-Factory's uploads on a private account until it approves the app. Tap Post it yourself to post it for everyone." Posts
-that failed earlier keep the old "Make your TikTok account private (Setup step 3), then press Try again." Stored errors
-are matched against both, so neither changes. The web shows its own words for both (`postError`): "TikTok only takes
+Factory's own uploads on a private account for now, so your Mac posts it for everyone." (round 3; posts that failed
+between 2026-11-21 and round 3 keep "TikTok only takes Clip Factory's uploads on a private account until it approves
+the app. Tap Post it yourself to post it for everyone."). Posts that failed earlier keep the old "Make your TikTok
+account private (Setup step 3), then press Try again." Stored errors are matched against all three, so none changes. The web shows its own words for both (`postError`): "TikTok only takes
 Clip Factory's own uploads on a private account for now, so your Mac posts it for everyone." On that row Library shows
 no Try again (it would fail the same way) and offers **Post with my Mac** (§47.4); the clip page says the same.
 
@@ -58,10 +61,23 @@ numbered steps in TikTok's words, and I posted it (ADR-66). Its full description
 | Method & path | Body | 2xx response |
 |---|---|---|
 | GET `/v1/clips/{clipId}/file` | – | `{ "url", "filename" }`: a 1-hour GET link with `ResponseContentDisposition: attachment; filename="clip-factory-<hook>.mp4"` and `video/mp4` (404 when declined or without a video) |
-| POST `/v1/clips/{clipId}/tiktok/posted` | `{ "link"?: string, "since"?: ISO time }` | `{ "clip", "posts", "note"? }` |
+| POST `/v1/clips/{clipId}/tiktok/posted` | `{ "link"?: string, "since"?: ISO time, "noLink"?: boolean }` | `{ "clip", "posts", "note"? }` |
 | DELETE `/v1/clips/{clipId}/tiktok/posted` | – | `{ "clip", "posts" }` |
 
-Unchanged by ADR-85. "I posted it" below names this write (`tiktok_self.mark_posted`), which the sheet's button used to
+**Round 3 (2026-11-23, D3, ADR-85): Find it for me never saves without a link.** The body says which of the row's three
+answers it is (`noLink` via `validate.boolean`; a non-empty `link` with `noLink: true` → 400 "Send a link or noLink,
+not both."; unknown keys 400):
+
+| Body | What happens |
+|---|---|
+| `link` (non-empty) | the pasted link, as below |
+| `noLink: true` (**It's on TikTok, no link**, behind its own confirm in the web) | marked posted by him without a link and **without the finder** (`mark_posted(..., no_link=True)`); answer `{clip, posts}` with no `note`. On a Mac post still `working` it is refused (409 "Your Mac is posting it right now. Wait a minute.") unless the job is stuck (§47.3), and also while the Mac has not pressed Post and still beats the job (`beat_fresh`), even past the 50-minute cap: it may not be on TikTok at all |
+| neither (**Find it for me**) | a TikTok post already `by: "you"` with a `url` → 200, nothing changes. Else, before the finder, the same refusals as a save (`tiktok_self.check_can_mark`: not uploaded, still starting, `queued`, already public, a Mac post `working` and not stuck → `MAC_WORKING`), so TikTok is never asked for a clip that can't be marked. Then the finder: found → saved with its link (200, no `note`); nothing found, or TikTok did not answer → 409 **"Not found yet. Try again in a minute, or paste the link."** (`routes/clips.FIND_NONE`); TikTok not connected (or no OAuth client) → 409 **"Clip Factory can't look on your TikTok until TikTok is connected. Paste the link instead."** (`FIND_CANT`). Neither 409 writes anything |
+
+`routes/clips.NOT_FOUND_YET` ("Saved. Clip Factory could not find it on your TikTok yet. Tap Find it for me in a
+minute.") stays only for the **Mac's own done** (§47.3), which still saves without a link: the Mac knows it posted.
+
+Otherwise unchanged by ADR-85. "I posted it" below names this write (`tiktok_self.mark_posted`), which the sheet's button used to
 call: the web now calls the POST only from the inline Add link (§42.1), the Mac's done runs the same write (§47.3), and
 the file link and the DELETE (Undo) stay for older apps, unused by the web. The sentences below are the server's,
 unchanged, except the finder's note, which names **Find it for me** since 2026-11-23 (the button beside the inline
@@ -81,7 +97,7 @@ the link**.
   so his post gets its own day-7 window; a later link to another video drops them again. The clip becomes
   `posted` when it was `failed`, or `confirmed` with nothing `queued` (the clip flow's settle rule, §14.5); a
   `publishing` clip is left to its flow.
-* Refused (409, plain sentences): not uploaded ("Upload this clip first. Then you can post it on TikTok yourself."),
+* Refused (409, plain sentences): not uploaded ("Upload this clip first. Then your Mac can post it on TikTok.", round 3),
   posts not made yet (`postsCreated` absent: "This clip is still starting to upload. Try again in a minute."), TikTok
   `queued` ("This clip is still uploading to TikTok. Wait until it is done, then try again."), Clip Factory's own post
   already public ("This clip is already on TikTok for everyone."), a write that lost a race ("This clip just changed.
@@ -107,8 +123,8 @@ the link**.
   posts made at most 10 minutes before `since` (clamped to the last 24 hours; absent: an hour ago). The one whose
   description starts like the clip's TikTok caption (first 24 letters, case and marks ignored) wins; with no match,
   the only candidate does; otherwise nothing. Found: `url` and `statsId` as for a link. Not found, or TikTok did not
-  answer: the post is still marked and `note` is "Saved. Clip Factory could not find it on your TikTok yet. Tap Find
-  it for me in a minute."
+  answer: Find it for me answers 409 `FIND_NONE` and saves nothing (round 3, above); only the Mac's done still marks
+  it, with the `note` "Saved. Clip Factory could not find it on your TikTok yet. Tap Find it for me in a minute."
 * **Undo** (DELETE): a post made here is deleted, leaves `postIds` and clears `tiktokByYou`; Clip Factory's own post gets `beforeYou` back
   (status, url, privacy, error, ids and stats fields as they were). The clip's status follows the same settle rule.
   Nothing to undo: 409 "This clip was not marked as posted by you, so there is nothing to undo."

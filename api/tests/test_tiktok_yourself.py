@@ -1,4 +1,5 @@
-"""Post it on TikTok yourself (docs/CONTRACTS.md §42): reading pasted links, I posted it, Undo, and Save the video."""
+"""It's on TikTok (docs/CONTRACTS.md §42): reading pasted links, It's on TikTok with a link, without one (``noLink``)
+and Find it for me (which never saves without a link), Undo, and Save the video."""
 
 from __future__ import annotations
 
@@ -113,7 +114,7 @@ def test_the_real_opener_only_opens_tiktok() -> None:
         tiktok_link.open_once(HttpRequest("GET", "http://vm.tiktok.com/ZM1/", {}, None))
 
 
-# --- I posted it ----------------------------------------------------------------------------------------------
+# --- It's on TikTok -------------------------------------------------------------------------------------------
 
 
 def _connect_tiktok(store: db.Store, handle: str = "@lamo.clips") -> None:
@@ -172,10 +173,10 @@ def _short_links(app: App, target: str = FULL) -> list[str]:
     return seen
 
 
-def test_i_posted_it_adds_a_tiktok_post_to_a_clip_that_had_none(call: Call, store: db.Store, table: FakeTable) -> None:
+def test_no_link_adds_a_tiktok_post_to_a_clip_that_had_none(call: Call, store: db.Store, table: FakeTable) -> None:
     clip = _uploaded(store)
     _post(store, clip, "youtube", status="posted", privacy="public", url="https://youtu.be/x")
-    status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {})
+    status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {"noLink": True})
     assert status == 200
     tiktok = _tiktok(body)
     assert tiktok["status"] == "posted"
@@ -298,9 +299,9 @@ def test_a_failed_tiktok_upload_becomes_posted_and_the_clip_too(call: Call, stor
         clip,
         "tiktok",
         status="failed",
-        error="TikTok only takes Clip Factory's uploads on a private account until it approves the app. Tap Post it yourself to post it for everyone.",
+        error="TikTok only takes Clip Factory's own uploads on a private account for now, so your Mac posts it for everyone.",
     )
-    status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {})
+    status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {"noLink": True})
     assert status == 200
     assert body["clip"]["status"] == "posted"
     assert "error" not in _tiktok(body)
@@ -313,7 +314,7 @@ def test_a_failed_tiktok_upload_becomes_posted_and_the_clip_too(call: Call, stor
 def test_undo_deletes_a_post_made_here(call: Call, store: db.Store, table: FakeTable) -> None:
     clip = _uploaded(store, status="confirmed")
     _post(store, clip, "youtube", status="pending_integration")
-    status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {})
+    status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {"noLink": True})
     assert status == 200
     assert body["clip"]["status"] == "posted"
     post_id = _tiktok(body)["postId"]
@@ -330,7 +331,7 @@ def test_undo_deletes_a_post_made_here(call: Call, store: db.Store, table: FakeT
 def test_adding_the_link_later_keeps_the_first_time(call: Call, store: db.Store) -> None:
     _connect_tiktok(store)
     clip = _uploaded(store)
-    _, first = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {})
+    _, first = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {"noLink": True})
     status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {"link": FULL})
     assert status == 200
     assert _tiktok(body)["postedAt"] == _tiktok(first)["postedAt"]
@@ -342,8 +343,8 @@ def test_adding_the_link_later_keeps_the_first_time(call: Call, store: db.Store)
 @pytest.mark.parametrize(
     ("clip_status", "post_fields", "message"),
     [
-        ("review", None, "Upload this clip first. Then you can post it on TikTok yourself."),
-        ("declined", None, "Upload this clip first. Then you can post it on TikTok yourself."),
+        ("review", None, "Upload this clip first. Then your Mac can post it on TikTok."),
+        ("declined", None, "Upload this clip first. Then your Mac can post it on TikTok."),
         (
             "publishing",
             {"status": "queued"},
@@ -352,20 +353,30 @@ def test_adding_the_link_later_keeps_the_first_time(call: Call, store: db.Store)
         ("posted", {"status": "posted", "privacy": "public"}, "This clip is already on TikTok for everyone."),
     ],
 )
+@pytest.mark.parametrize("body_in", [{"noLink": True}, {}])
 def test_when_it_cannot_be_marked(
-    call: Call, store: db.Store, clip_status: str, post_fields: dict[str, Any] | None, message: str
+    call: Call,
+    store: db.Store,
+    monkeypatch: pytest.MonkeyPatch,
+    clip_status: str,
+    post_fields: dict[str, Any] | None,
+    message: str,
+    body_in: dict[str, Any],
 ) -> None:
+    # Find it for me (no link, no noLink) answers the same refusals before TikTok is asked anything.
+    _connect_tiktok(store)
+    monkeypatch.setattr(tiktok_find, "find_recent", lambda *_a, **_k: pytest.fail("TikTok is never asked"))
     clip = _uploaded(store, status=clip_status)
     if post_fields is not None:
         _post(store, clip, "tiktok", **post_fields)
-    status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {})
+    status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", body_in)
     assert status == 409
     assert body["error"]["message"] == message
 
 
 def test_a_clip_whose_posts_are_not_made_yet_waits(call: Call, store: db.Store) -> None:
     clip = seed_clip(store, status="confirmed")
-    status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {})
+    status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {"noLink": True})
     assert status == 409
     assert "Try again in a minute" in body["error"]["message"]
 
@@ -384,7 +395,7 @@ def test_unknown_fields_are_refused(call: Call, store: db.Store) -> None:
 
 def test_another_owners_clip_is_not_found(call: Call, store: db.Store) -> None:
     clip = seed_clip(store, user="someone-else", status="posted", postsCreated=True)
-    status, _ = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {})
+    status, _ = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {"noLink": True})
     assert status == 404
 
 
@@ -467,9 +478,10 @@ def test_one_new_post_without_a_caption_match_is_still_it(
     assert _tiktok(body)["url"].endswith(VIDEO_ID)
 
 
-def test_nothing_found_yet_marks_it_and_says_so(
-    call: Call, store: db.Store, secrets_client: FakeSecretsManager, http: FakeHttp
+def test_find_it_for_me_saves_nothing_when_nothing_is_found(
+    call: Call, store: db.Store, secrets_client: FakeSecretsManager, http: FakeHttp, table: FakeTable
 ) -> None:
+    # D3: a button named Find it for me never commits without a link.
     _tiktok_ready(call, store, secrets_client)
     clip = _uploaded(store)
     # Two new posts, neither with this caption: too unsure to pick one.
@@ -479,22 +491,85 @@ def test_nothing_found_yet_marks_it_and_says_so(
             _video("7710644811602169997", "2026-11-15T11:55:00Z", "and another"),
         )
     )
+    before = table.all()
+    status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {"since": "2026-11-15T11:50:00.000Z"})
+    assert (status, body["error"]["message"]) == (409, "Not found yet. Try again in a minute, or paste the link.")
+    assert table.all() == before
+    # A minute later it is there: found and saved with its link.
+    http.answers.append(_listed(_video(VIDEO_ID, "2026-11-15T11:55:00Z", "wait for it")))
     status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {"since": "2026-11-15T11:50:00.000Z"})
     assert status == 200
-    assert body["note"] == "Saved. Clip Factory could not find it on your TikTok yet. Tap Find it for me in a minute."
-    assert _tiktok(body)["by"] == "you"
-    assert "url" not in _tiktok(body)
+    assert "note" not in body
+    assert _tiktok(body)["url"].endswith(VIDEO_ID)
 
 
-def test_tiktok_down_still_marks_it(
-    call: Call, store: db.Store, secrets_client: FakeSecretsManager, http: FakeHttp
+def test_tiktok_down_saves_nothing(
+    call: Call, store: db.Store, secrets_client: FakeSecretsManager, http: FakeHttp, table: FakeTable
 ) -> None:
     _tiktok_ready(call, store, secrets_client)
     clip = _uploaded(store)
     http.answers.append(NetworkError("timeout"))
+    before = table.all()
+    status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {})
+    assert (status, body["error"]["message"]) == (409, "Not found yet. Try again in a minute, or paste the link.")
+    assert table.all() == before
+
+
+def test_find_it_for_me_without_tiktok_connected_says_paste_the_link(
+    app: App, call: Call, store: db.Store, table: FakeTable
+) -> None:
+    clip = _uploaded(store)
+    before = table.all()
+    status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {})
+    sentence = "Clip Factory can't look on your TikTok until TikTok is connected. Paste the link instead."
+    assert (status, body["error"]["message"]) == (409, sentence)
+    _connect_tiktok(store)
+    app.oauth = None  # no OAuth client configured: it can't look either
+    status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {})
+    assert (status, body["error"]["message"]) == (409, sentence)
+    assert [i for i in table.all() if i.get("type") == "post"] == [i for i in before if i.get("type") == "post"]
+
+
+def test_find_it_for_me_on_a_post_already_his_with_a_link_changes_nothing(
+    call: Call, store: db.Store, table: FakeTable, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _connect_tiktok(store)
+    clip = _uploaded(store)
+    assert call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {"link": FULL})[0] == 200
+    monkeypatch.setattr(tiktok_find, "find_recent", lambda *_a, **_k: pytest.fail("nothing to find"))
+    before = table.all()
     status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {})
     assert status == 200
-    assert body["note"].startswith("Saved.")
+    assert _tiktok(body)["url"].endswith(VIDEO_ID)
+    assert table.all() == before
+
+
+@pytest.mark.parametrize(
+    ("body_in", "sentence"),
+    [
+        ({"link": FULL, "noLink": True}, "Send a link or noLink, not both."),
+        ({"noLink": "yes"}, "noLink must be true or false."),
+        ({"noLink": None}, "noLink must be true or false."),
+    ],
+)
+def test_no_link_is_checked(
+    call: Call, store: db.Store, table: FakeTable, body_in: dict[str, Any], sentence: str
+) -> None:
+    clip = _uploaded(store)
+    before = table.all()
+    status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", body_in)
+    assert (status, body["error"]["message"]) == (400, sentence)
+    assert table.all() == before
+
+
+def test_no_link_never_asks_the_finder(call: Call, store: db.Store, monkeypatch: pytest.MonkeyPatch) -> None:
+    _connect_tiktok(store)
+    monkeypatch.setattr(tiktok_find, "find_recent", lambda *_a, **_k: pytest.fail("noLink never looks"))
+    clip = _uploaded(store)
+    status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {"noLink": True, "link": "  "})
+    assert status == 200
+    assert "note" not in body
+    assert (_tiktok(body)["by"], "url" in _tiktok(body)) == ("you", False)
 
 
 def test_a_short_link_that_lands_on_tiktoks_home_page(app: App, call: Call, store: db.Store) -> None:
@@ -543,7 +618,7 @@ def test_an_old_clip_without_post_ids_keeps_all_its_posts(call: Call, store: db.
     clip = seed_clip(store, status="failed", postsCreated=True, decidedAt="2026-11-15T10:00:00.000Z")
     youtube = _bare_post(store, clip, "youtube", status="failed", error="YouTube said no.")
     instagram = _bare_post(store, clip, "instagram", status="posted", privacy="public")
-    status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {})
+    status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {"noLink": True})
     assert status == 200
     assert sorted(p["platform"] for p in body["posts"]) == ["instagram", "tiktok", "youtube"]
     stored = table.raw(clip["pk"], clip["sk"])
@@ -575,7 +650,7 @@ def test_what_was_learned_from_the_private_video_starts_fresh_and_comes_back_on_
         day7CheckedAt="2026-11-10T10:00:00.000Z",
         lastSnapshotAt="2026-11-02T10:00:00.000Z",
     )
-    status, _ = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {})
+    status, _ = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {"noLink": True})
     assert status == 200
     raw = table.raw(db.user_pk(USER), db.post_sk(private["postId"]))
     assert raw is not None
@@ -621,7 +696,7 @@ def test_the_route_turns_a_lost_race_into_the_same_answer(
         real(*args, **kwargs)
 
     monkeypatch.setattr(tiktok_self, "mark_posted", racing)
-    status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {})
+    status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {"noLink": True})
     assert len(calls) == 2
     assert status == 200
     assert [p["platform"] for p in body["posts"]] == ["tiktok"]

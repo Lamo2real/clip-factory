@@ -150,8 +150,12 @@ export function httpApi({ baseUrl, auth, fetcher = (...a) => fetch(...a) }: Deps
       await call<void>("DELETE", `/clips/${id(clipId)}/hold`);
     },
     clipFile: (clipId) => call<ClipFile>("GET", `/clips/${id(clipId)}/file`),
-    markTikTokPosted: (clipId, link, since) =>
-      call<TikTokMarked>("POST", `/clips/${id(clipId)}/tiktok/posted`, { ...(link ? { link } : {}), ...(since ? { since } : {}) }),
+    markTikTokPosted: (clipId, link, since, noLink) =>
+      call<TikTokMarked>("POST", `/clips/${id(clipId)}/tiktok/posted`, {
+        ...(link ? { link } : {}),
+        ...(since ? { since } : {}),
+        ...(noLink === true ? { noLink: true } : {}),
+      }),
     undoTikTokPosted: (clipId) => call<TikTokMarked>("DELETE", `/clips/${id(clipId)}/tiktok/posted`),
     listSkills: async () => (await call<{ skills: Skill[] }>("GET", "/skills")).skills,
     getSkill: (skillId) => call<SkillDetail>("GET", `/skills/${id(skillId)}`),
@@ -299,6 +303,7 @@ export function httpApi({ baseUrl, auth, fetcher = (...a) => fetch(...a) }: Deps
     // §47: Your Mac posts TikTok (the owner's side; the Mac helper's own routes are not called by the app).
     tiktokMacStatus: () => call<TikTokMacStatus>("GET", "/tiktok/mac"),
     tiktokMacLogin: async (action) => (await call<{ helper: MacHelper | null }>("POST", "/tiktok/mac/login", { action })).helper,
+    tiktokMacRequest: async (action) => (await call<{ helper: MacHelper | null }>("POST", "/tiktok/mac/request", { action })).helper,
     // `now` and `notOnTikTok` are sent only when true, so every older call's body is exactly as before.
     sendToMac: async (clipIds, now) =>
       (await call<{ results: MacSendResult[] }>("POST", "/tiktok/mac/send", { clipIds, ...(now ? { now: true } : {}) })).results,

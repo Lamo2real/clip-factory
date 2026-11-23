@@ -412,7 +412,7 @@ how to navigate it". ([the steps](SETUP_POSTING.md#content-rewards),
   way (BR-28). Upload to offers only the places the campaign pays
   for that are set up and linked inside Content Rewards; campaign clips are public, never made for kids, and marked
   as paid (YouTube Paid promotion, X Paid partnership, TikTok Branded content by the owner's own tap). TikTok is left
-  out until TikTok's audit, because private posts can't earn.
+  out until TikTok approves the app (round 3: his Mac can't mark a post as Branded content yet, BR-32 AC5).
 - AC8: After each post, Clip Factory sends the clip to Content Rewards by itself within 30 minutes (0 steps), and its
   line shows Sending → Sent → Waiting for the brand → Approved or Not approved (with the brand's reason), the views
   and the money Content Rewards reports for it.
@@ -667,21 +667,33 @@ taps, and records "Posted by your Mac · Everyone" with the link.
 - AC1: **The sheet is gone.** No **Post it yourself**, **Post it yourself instead**, **I posted it**, **Save the
   video**, **Open TikTok** or **AirDrop** control on Library, the clip page, Review or Auto-posting, and nothing opens
   by itself after Upload. Auto-posting has no **Post these on TikTok yourself** list.
-- AC2: **Each TikTok row says what his Mac is doing**, with at most one button: "Waiting for your Mac · it takes it in
-  about a minute" (an Upload tap), "Waiting for your Mac · goes after the next auto-posting run (20:30)" (only the
-  first backlog clip; the rest "Waiting for your Mac · in line (2 before it)", never a time that may be wrong);
-  "Posting…"; "Posted by your Mac · Everyone" with **Open**; "Didn't work: {short reason}" with **Try again** (it goes
-  back to his Mac at once); "Not sure it posted · look on your TikTok" (his Mac pressed Post but couldn't tell, or it
-  is still posting 15 minutes after it took the clip) with **It's on TikTok** (the link box with **Find it for me**)
-  and a quieter **Try again** that asks "Post it again? Only if it's not on your TikTok." first; "Not on TikTok yet"
-  with **Post with my Mac** (to his Mac at once, like an Upload tap), a campaign clip too. Switch off, or his Mac not
-  seen for 30 minutes or more: the row says so, with **Turn on** (to Settings › Posting › Your Mac posts TikTok). His
-  Mac needs him, or is paused: what and what comes next ("Paused after the 3 trial posts · your Mac goes on once their
-  views are checked"), with **Open Your Mac posts TikTok**.
+- AC2: **Each TikTok row says what his Mac is doing**, with at most one button: "Waiting for your Mac · next" or "… ·
+  in line (2 before it)" (its place in his Mac's queue, counted the way his Mac picks: Upload taps first, then
+  auto-posting's clips, then the backlog), "… · goes at about 20:30" (the first backlog clip, at the time his Mac
+  says), "… · in line" during a backfill, never a time that may be wrong; "Held on your Mac: made before {time}" with
+  **Post with my Mac**; "Posting…" (while his Mac works on it: never "Not sure it posted" or Try again then);
+  "Posted by your Mac · Everyone" with **Open**; "Didn't work: {short reason}" with **Try again** (it goes back to his
+  Mac at once); "Not sure it posted · look on your TikTok" (his Mac pressed Post but couldn't tell, or it stopped
+  working on the clip: no sign of it for 5 minutes, or 50 minutes since it took the clip) with **It's on TikTok** (the
+  link box with **Find it for me**, and **It's on TikTok, no link** behind its own question) and, only once 30
+  minutes have passed since his Mac pressed Post, a quieter **Try again** that asks "Post it again? Only if it's not on
+  your TikTok." first; "Not on TikTok yet" with **Post with my Mac** (to his Mac at once, like an Upload tap). Switch
+  off: **Turn on**; his Mac not seen for 30 minutes or more: **Open Your Mac posts TikTok** (a post it was working on
+  offers It's on TikTok and Try again once it hasn't checked in for 10 minutes). Paused: **Start my Mac again**. Needs
+  him: **Open the stopped clip**, where Try again and It's on TikTok are.
 - AC5: **He never posts by hand** (23 Nov 2026: "its always the automation that covers it weather its invoked by be
-  clicking upload or if its the schedule"). A campaign clip goes to his Mac like any other clip, on his own TikTok and
-  always for **Everyone** (the campaign's rule). Answering a stopped post (**It's on TikTok** or **Try again**) lets a
-  Mac that needed him go on.
+  clicking upload or if its the schedule"). Every clip that can go to TikTok goes through his Mac, Upload or the
+  schedule. **Campaign clips skip TikTok for now** (round 3, ADR-85): his Mac can't mark a post as Branded content
+  yet, and Content Rewards never receives what his Mac posts, so a campaign clip's TikTok is unticked in Review and
+  its row says "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet." Answering a
+  stopped post (**It's on TikTok** or **Try again**) lets a Mac that needed him go on.
+- AC6: **Find it for me never saves without a link** (round 3): nothing found → "Not found yet. Try again in a
+  minute, or paste the link." and nothing changes. Saving it without a link is only **It's on TikTok, no link**, after
+  its question.
+- AC7: **No dead ends** (round 3): Settings › Posting › Your Mac posts TikTok has **Start my Mac again** while paused,
+  **Open the stopped clip** while it needs him, and "Your Mac holds auto-posting clips made before {time}." with
+  **Let them go** while it holds clips; each takes effect the next time his Mac checks in, within a minute. No server
+  or helper sentence names "post it yourself" or "I posted it".
 - AC3: **Nothing stored breaks.** A clip he posted himself before keeps "Posted by you · Everyone"; with no link yet it
   gets only an inline link box with **Save the link**, no sheet. Every API route stays, and the only API change is an
   optional `now: true` on two routes, so older apps work as before.
@@ -1194,7 +1206,7 @@ be able to do it." ([UX design system](UX_DESIGN_SYSTEM.md#set-up-posting))
 | I-42 | "3 steps, 5 at most" | 3 for each campaign as asked (join, copy the link, paste), at most 5 with the logo and "Yes, I applied" or "I'm in. Read these rules"; setup is 3 once; each video 3 and each clip 2 taps; checking a clip 0 (BR-25). | No. |
 | I-43 | "Checking if I am confirmed as a member of the campaign" | Clip Factory checks by itself (every 15 minutes for 7 days, then every 6 hours to day 30) and says "You're in!" with a notification; "Check now" is there but never needed. Pending applications are not visible to apps, so an application shows "Waiting for the brand" after "Yes, I applied". | No. |
 | I-44 | "Get paid for it" | The Money page shows Content Rewards' own numbers and the steps to move money to Whop and then the bank; Clip Factory never moves money itself. | No. |
-| I-45 | Campaigns that pay for TikTok | TikTok keeps Clip Factory's posts private until TikTok's audit, and private posts can't earn, so TikTok is left out of campaign uploads until then (BR-25 AC7). | Waiting for TikTok's audit. |
+| I-45 | Campaigns that pay for TikTok | Campaign clips skip TikTok for now: his Mac can't mark a post as Branded content yet, and Content Rewards never receives what his Mac posts, so TikTok is left out of campaign uploads until TikTok approves Clip Factory's app (its app review and posting audit), when TikTok's own API posts them with Branded content (BR-25 AC7, BR-32 AC5, ADR-85 round 3). | Waiting for TikTok's approval, or a helper that sets Branded content. |
 | I-46 | "Set up in a chronological and structured manner" | The three Connect steps stay in the order they happen (account, accounts added inside Content Rewards, Connect), each with its answer button right under its Open button, a "Yes" shortcut for someone already set up, and a way back to where he came from (BR-26 AC4). Steps 1 and 2 are taps only he can make: Content Rewards' tools can't tell an app that he has an account or which accounts he added there. | No. |
 | I-47 | "Using either the content rewards way of videos or normal way we have done so far" | Two ways with their own names: "Make clips" (normal clips, exactly as before) and "Make campaign clips" (always started from a campaign). The choice is never a field on the normal form, so the normal way gains nothing (BR-26). | No. |
 | I-48 | "Track how much i earn from all platforms including contentrewards" | One "All your money" card: the money each place reports for the same 30 days and one total per currency. TikTok, Instagram and X report no money to apps, so they say "Not available" with where to look; Facebook waits until its numbers are checked; what left Content Rewards for Whop and the bank is not in its tools (BR-27). | Is 30 days the right period for the total? |
@@ -1214,7 +1226,7 @@ be able to do it." ([UX design system](UX_DESIGN_SYSTEM.md#set-up-posting))
 | I-62 | "In total for each of those platforms … all of them" | One "Reached your bank" line per place and per money type, plus a total per money type, never added across money types or converted. Meta pays Instagram and Facebook in one payment, so that money is "Instagram and Facebook together" (it shows on both pages) instead of a split Clip Factory would have to guess. A payout whose bank text names no app can't be told apart from his other money, so that place says "Nothing from Instagram reached your bank yet." until a new word is added; TikTok, Instagram, Facebook and X tell apps nothing, so only the bank's text and his taps can name them (BR-31 AC2, AC3). | Checked at his first payments ([CONTRACTS.md §40.5.14](CONTRACTS.md#40514-not-verified-live-each-is-checked-at-his-first-connect-a-failure-becomes-a-plain-sentence-never-a-number)). |
 | I-63 | His rule that the bank's private key lives only in Secrets Manager, never in the browser, and a paste or upload box like the TikTok file box (asked for in the build task) | The main way makes the bank key inside Clip Factory, so the private key never touches his browser. If he already let Enable Banking make the key, step 5 has a folded box that takes its .pem file once, straight into Secrets Manager, and then asks him to delete the file: the one place the private key passes through his browser ([SECURITY.md](SECURITY.md#your-bank-contracts-405)). | **Yes: keep the .pem box, or remove it?** (a one-file change) |
 | I-64 | "A: bank connection", offered with the risk that Enable Banking's free terms say "personal use of private individuals" and no "commercial purpose" | Creator income on his own personal account, read once a day, is a grey area. It was built switched off, with an optional ready email that asks Enable Banking, as little reading as possible, and a way back: "Stop reading" on each bank, then the switch. The switch PR #172 turned it on (22 Nov 2026). The switch, `bank_reading_enabled`, sets `BANK_READING` on both `cf-prod-api` and `cf-prod-money`, so setting it back to `false` (one line in `infra/envs/prod/variables.tf`, applied by `deploy.yml`) hides the screens and routes and stops every bank read, the daily one and Check now; stored deposits, payers, links and secrets stay. Only `cf-prod-hooks`' callback doesn't read it, so a connect already on its way back from BankID can still save its link, which nothing reads while the switch is off (BR-31 AC5, NFR-21 AC5). | Enable Banking's answer, if he sends the email. The spec's question ([CONTRACTS.md §40.5.11](CONTRACTS.md#40511-data-secrets-live-notifications-infra-the-switch-and-mock-mode)), whether the switch should also reach `cf-prod-money`, is settled: the reader (#158) set it there from the same variable. |
-| I-65 | "i dont think these options are necessary becasue they are not gonna be used, the automation will cover it, so might wannna remove this popup" | The **Post it yourself** sheet and every button that opens it are gone; each TikTok row says what his Mac is doing, with one button at most (BR-32). Campaign clips go to his Mac too, always for Everyone (23 Nov: he never posts by hand, BR-32 AC5). After his Mac pressed Post but could not confirm it, Try again could make a second copy, so the row says "Not sure it posted · look on your TikTok" and Try again asks first. | No. |
+| I-65 | "i dont think these options are necessary becasue they are not gonna be used, the automation will cover it, so might wannna remove this popup" | The **Post it yourself** sheet and every button that opens it are gone; each TikTok row says what his Mac is doing, with one button at most (BR-32). Campaign clips skip TikTok for now (round 3: his Mac can't mark them as Branded content yet, BR-32 AC5). After his Mac pressed Post but could not confirm it, Try again could make a second copy, so the row says "Not sure it posted · look on your TikTok", Try again waits for the end of the 30-minute find window and asks first. | No. |
 
 ## Out of scope for this phase
 

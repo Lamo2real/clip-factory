@@ -1,39 +1,48 @@
 // Your Mac posts it on TikTok (docs/CONTRACTS.md §47) in mock mode: Settings › Posting › Your Mac posts TikTok (the
-// switch, the Mac's check-in, Send these to my Mac), and the TikTok row on the Library, the clip page and Review's
-// Uploaded just now, which says only what the Mac is doing, with at most one button (§47.4, ADR-85): Waiting for your
-// Mac (an Upload tap's in about a minute; the backlog's first after the next auto-posting run, the rest in line),
-// Posting…, Didn't work with Try again, Not sure it posted (the Mac pressed Post but couldn't tell, or its claim is
-// stuck) with It's on TikTok and a quieter Try again that asks first, Posted by your Mac, Not on TikTok yet with Post
-// with my Mac (a campaign clip too), Turn on while the Mac can't post, and Open Your Mac posts TikTok while it needs
-// him or is paused. On a narrow card the button goes under the words. The Mac is moved by the helper's knobs (window.__cfMock.mac). The pretend
-// app keeps its settings and posts in this page only, so every step after the first page is an in-app navigation.
+// switch, the Mac's check-in with Start my Mac again, Open the stopped clip and Let them go, Send these to my Mac), and
+// the TikTok row on the Library, the clip page and Review's Uploaded just now, which says only what the Mac is doing,
+// with at most one button (§47.4, ADR-85): Waiting for your Mac (its place in the Mac's queue, or the backlog's own
+// time), Posting… (never Not sure it posted while the Mac works on it), Didn't work with Try again, Not sure it posted
+// (pressed and stopped, or stuck) with It's on TikTok and, once the Mac stopped looking, a quieter Try again that asks
+// first, Posted by your Mac, Not on TikTok yet with Post with my Mac, a campaign clip that skips TikTok for now, Turn on
+// while the Mac can't post, Open the stopped clip while it needs him, and Start my Mac again while it is paused. On a
+// narrow card the button goes under the words. The Mac is moved by the helper's knobs (window.__cfMock.mac). The
+// pretend app keeps its settings and posts in this page only, so every step after the first page is an in-app
+// navigation.
 import { expect, test, type Page } from "@playwright/test";
 import { settle } from "./helpers.ts";
 
-type Job = { clipId: string; postId: string; hook: string; state: string; source: string };
+type Job = { clipId: string; postId: string; hook: string; state: string; source: string; pressedBefore?: string; againAt?: string };
+type Extra = { backlogAt?: string; backfill?: boolean; holdBefore?: string; resumeDone?: string; letGoDone?: string };
 type MockWindow = Window & {
   __cfMock?: {
     setup: { finish(p: string): void; setAudit(passed: boolean): void };
     posting: { posts(clipId: string): { postId: string; platform: string; status: string }[]; campaignClip(): string };
     mac: {
-      ping(state?: string, reason?: string): { on: boolean };
+      ping(state?: string, reason?: string, device?: string, extra?: Extra): { on: boolean };
       seen(at: string | null): void;
       login(login: "saved" | "none", done?: boolean): void;
       claim(clipId: string, device?: string, agoMs?: number): Job;
-      step(clipId: string, step: string): Job;
+      step(clipId: string, step: string, device?: string, agoMs?: number): Job;
+      beat(clipId: string, agoMs?: number): Job;
       done(clipId: string, link?: string): unknown;
       stopped(clipId: string, reason: string, needsYou?: boolean): Job;
       queue(): Job[];
+      source(clipId: string, source: string, sinceAgoMs?: number): unknown;
     };
   };
 };
 
 const LINK = "https://www.tiktok.com/@lamo.clips/video/7710644811602169121";
-/** An Upload tap's clip (and Post with my Mac, and Try again): the Mac takes it at its next check-in. */
-const CHECK_IN = "Waiting for your Mac · it takes it in about a minute";
+const MIN = 60_000;
+/** First in the Mac's queue (an Upload tap's, Post with my Mac, Try again): the Mac takes it next. */
+const NEXT = "Waiting for your Mac · next";
 const PRESSED = "Not sure it posted · look on your TikTok";
 const AGAIN_ASK = "Post it again? Only if it's not on your TikTok.";
 const OPEN_MAC = "Open Your Mac posts TikTok";
+const CAMPAIGN = "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet.";
+/** Post was pressed this long ago: the Mac's 30-minute find window is over, so Try again shows. */
+const WINDOW_OVER = 31 * MIN;
 
 test.use({ viewport: { width: 1440, height: 900 } });
 
@@ -52,21 +61,31 @@ async function refocus(page: Page) {
 
 /** The Mac helper's routes, through the mock's knobs (window.__cfMock.mac). */
 const mac = {
-  ping: (page: Page, state?: string, reason?: string) =>
-    page.evaluate(([s, r]) => (window as MockWindow).__cfMock!.mac.ping(s, r), [state, reason] as const),
+  ping: (page: Page, state?: string, reason?: string, extra?: Extra) =>
+    page.evaluate(([s, r, x]) => (window as MockWindow).__cfMock!.mac.ping(s, r, undefined, x), [state, reason, extra] as const),
   seen: (page: Page, at: string | null) => page.evaluate((t) => (window as MockWindow).__cfMock!.mac.seen(t), at),
-  /** `agoMs`: the claim was made that long ago (a helper that lost track of it: the stuck rule, 15 minutes). */
+  /** `agoMs`: the claim (and its beat) was made that long ago (a helper that lost track of it: stuck after 5 minutes). */
   claim: (page: Page, clipId: string, agoMs = 0) =>
     page.evaluate(([id, ago]) => (window as MockWindow).__cfMock!.mac.claim(id, undefined, ago), [clipId, agoMs] as const),
-  step: (page: Page, clipId: string, step: string) =>
-    page.evaluate(([id, st]) => (window as MockWindow).__cfMock!.mac.step(id, st), [clipId, step] as const),
-  stopped: (page: Page, clipId: string, reason: string) =>
-    page.evaluate(([id, r]) => (window as MockWindow).__cfMock!.mac.stopped(id, r), [clipId, reason] as const),
+  /** `agoMs`: the step (and Post's press) was that long ago. */
+  step: (page: Page, clipId: string, step: string, agoMs = 0) =>
+    page.evaluate(([id, st, ago]) => (window as MockWindow).__cfMock!.mac.step(id, st, undefined, ago), [clipId, step, agoMs] as const),
+  beat: (page: Page, clipId: string, agoMs = 0) => page.evaluate(([id, ago]) => (window as MockWindow).__cfMock!.mac.beat(id, ago), [clipId, agoMs] as const),
+  stopped: (page: Page, clipId: string, reason: string, needsYou = false) =>
+    page.evaluate(([id, r, n]) => (window as MockWindow).__cfMock!.mac.stopped(id, r, n), [clipId, reason, needsYou] as const),
   done: (page: Page, clipId: string, link?: string) =>
     page.evaluate(([id, l]) => void (window as MockWindow).__cfMock!.mac.done(id, l), [clipId, link] as const),
   queue: (page: Page) => page.evaluate(() => (window as MockWindow).__cfMock!.mac.queue()),
   login: (page: Page, login: "saved" | "none", done?: boolean) =>
     page.evaluate(([l, d]) => (window as MockWindow).__cfMock!.mac.login(l, d), [login, done] as const),
+  source: (page: Page, clipId: string, source: string, sinceAgoMs?: number) =>
+    page.evaluate(([id, s, ago]) => void (window as MockWindow).__cfMock!.mac.source(id, s, ago), [clipId, source, sinceAgoMs] as const),
+};
+
+/** "14:05", the owner's own clock time, as the rows say it for today. */
+const hm = (t: number) => {
+  const d = new Date(t);
+  return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 };
 
 const SWITCH = "My Mac posts my TikTok clips";
@@ -180,6 +199,50 @@ test("settings: the TikTok login on the Mac, Change and Forget (§47.8)", async 
   await expect(page.getByRole("button", { name: "Change TikTok login" })).toBeVisible();
 });
 
+test("settings: the Mac's hold with Let them go, Start my Mac again, and Open the stopped clip (D5)", async ({ page }) => {
+  await page.goto("/");
+  await settle(page);
+  await turnOn(page);
+  // It holds auto-posting clips made before a time: said, with Let them go.
+  const hold = Date.now() - 60 * MIN;
+  await mac.ping(page, "ok", undefined, { holdBefore: new Date(hold).toISOString() });
+  await refocus(page);
+  await expect(page.locator("[data-mac='hold']")).toHaveText(new RegExp(`^Your Mac holds auto-posting clips made before \\w{3} ${hm(hold)}\\.$`));
+  await page.getByRole("button", { name: "Let them go" }).click();
+  await expect(page.getByText("Your Mac lets them go within a minute.")).toBeVisible();
+  await expect(page.getByText("Your Mac lets them go the next time it checks in, within a minute.")).toBeVisible();
+  await expect(page.getByRole("button", { name: "Let them go" })).toHaveCount(0);
+  // The Mac let them go: its ping holds nothing.
+  await mac.ping(page);
+  await refocus(page);
+  await expect(page.locator("[data-mac='hold']")).toHaveCount(0);
+  await expect(page.getByText(/lets them go the next time/)).toHaveCount(0);
+
+  // Paused: Start my Mac again, right under its line.
+  await mac.ping(page, "paused");
+  await refocus(page);
+  await expect(page.getByText("Paused on your Mac. Your clips wait until it's started again.")).toBeVisible();
+  await page.getByRole("button", { name: "Start my Mac again" }).click();
+  await expect(page.getByText("Your Mac starts again within a minute.")).toBeVisible();
+  await expect(page.getByText("Your Mac starts again the next time it checks in, within a minute.")).toBeVisible();
+
+  // It needs him on one clip: Open the stopped clip goes straight to it.
+  await mac.ping(page);
+  await go(page, "/library");
+  const target = await clipWhoseRowSays(page, "Not on TikTok yet");
+  await tiktokRow(page, target).getByRole("button", { name: "Post with my Mac" }).click();
+  await expect(tiktokRow(page, target).locator(".post__status")).toHaveText(NEXT);
+  await go(page, "/settings/posting/tiktok-mac");
+  await mac.claim(page, target);
+  await mac.stopped(page, target, "TikTok wants a code. Type it on your Mac.", true);
+  await refocus(page);
+  await expect(page.getByText("Your Mac needs you: TikTok wants a code. Type it on your Mac.")).toBeVisible();
+  const open = page.getByRole("link", { name: "Open the stopped clip" });
+  await expect(open).toHaveAttribute("href", `/clips/${target}`);
+  await open.click();
+  await expect(page).toHaveURL(new RegExp(`/clips/${target}$`));
+});
+
 test("library: off, not set up, Post with my Mac, Posting…, Didn't work with Try again, and posted by your Mac", async ({ page }) => {
   await page.goto("/");
   await settle(page);
@@ -209,8 +272,8 @@ test("library: off, not set up, Post with my Mac, Posting…, Didn't work with T
   await expect(row.getByRole("link")).toHaveCount(0);
   await row.getByRole("button", { name: "Post with my Mac" }).click();
   await expect(page.getByText("Sent to your Mac! It posts it in a minute.")).toBeVisible();
-  // It goes at once and first, as an Upload tap's: its next check-in, within a minute.
-  await expect(status).toHaveText(CHECK_IN);
+  // It goes at once and first, as an Upload tap's: next in the Mac's queue.
+  await expect(status).toHaveText(NEXT);
   await expect(row.getByRole("button")).toHaveCount(0);
   expect((await mac.queue(page))[0]).toMatchObject({ clipId, source: "upload", state: "waiting" });
 
@@ -226,22 +289,24 @@ test("library: off, not set up, Post with my Mac, Posting…, Didn't work with T
   await expect(status).toHaveText("Didn't work: TikTok wants you to log in again");
   await expect(row.getByRole("button")).toHaveCount(1);
   await row.getByRole("button", { name: "Try again, TikTok" }).click();
-  await expect(status).toHaveText(CHECK_IN);
+  await expect(status).toHaveText(NEXT);
 
-  // It pressed Post but couldn't tell if it posted: look on TikTok first. It's on TikTok, or Try again (second), which
-  // asks first, then says it is not there.
+  // It pressed Post (over 30 minutes ago) but couldn't tell if it posted: look on TikTok first. It's on TikTok, or Try
+  // again (second), which asks first, then says it is not there.
   await mac.claim(page, clipId);
-  await mac.step(page, clipId, "pressing");
+  await mac.step(page, clipId, "pressing", WINDOW_OVER);
   await mac.stopped(page, clipId, "Timed out.");
   await expect(status).toHaveText(PRESSED);
   await expect(row.getByRole("button")).toHaveCount(2);
-  await expect(row.getByRole("button", { name: "It's on TikTok" })).toBeVisible();
+  await expect(row.getByRole("button", { name: "It's on TikTok", exact: true })).toBeVisible();
   await row.getByRole("button", { name: "Try again, TikTok" }).click();
   await expect(row.getByText(AGAIN_ASK)).toBeVisible();
   await row.getByRole("button", { name: "Yes, post it again" }).click();
   await expect(page.getByText("Sent to your Mac again.")).toBeVisible();
-  await expect(status).toHaveText(CHECK_IN);
+  await expect(status).toHaveText(NEXT);
   await expect(row.getByText(AGAIN_ASK)).toHaveCount(0);
+  // The Mac's never-twice guard sees the press it had, and when he tapped Try again.
+  expect((await mac.queue(page)).find((j) => j.clipId === clipId)).toMatchObject({ pressedBefore: expect.any(String), againAt: expect.any(String) });
 
   // Posted by the Mac: Everyone, with Open and its numbers, and no button.
   await mac.claim(page, clipId);
@@ -263,18 +328,23 @@ async function sentWithMyMac(page: Page) {
   const clipId = await clipWhoseRowSays(page, "Not on TikTok yet");
   const row = tiktokRow(page, clipId);
   await row.getByRole("button", { name: "Post with my Mac" }).click();
-  await expect(row.locator(".post__status")).toHaveText(CHECK_IN);
+  await expect(row.locator(".post__status")).toHaveText(NEXT);
   return { clipId, row, status: row.locator(".post__status") };
+}
+
+/** The Mac claimed it, pressed Post `pressedAgoMs` ago and stopped: not sure it posted. */
+async function pressedAndStopped(page: Page, clipId: string, pressedAgoMs: number, needsYou = false) {
+  await mac.claim(page, clipId);
+  await mac.step(page, clipId, "pressing", pressedAgoMs);
+  await mac.stopped(page, clipId, needsYou ? "TikTok logged your Mac out." : "Timed out.", needsYou);
 }
 
 test("library: not sure it posted: It's on TikTok saves its link, a quieter Try again comes second and asks first", async ({ page }) => {
   const { clipId, row, status } = await sentWithMyMac(page);
-  await mac.claim(page, clipId);
-  await mac.step(page, clipId, "pressing");
-  await mac.stopped(page, clipId, "Timed out.");
+  await pressedAndStopped(page, clipId, WINDOW_OVER);
   await expect(status).toHaveText(PRESSED);
   // Two choices, It's on TikTok first; the link box opens only on a tap.
-  const onTikTok = row.getByRole("button", { name: "It's on TikTok" });
+  const onTikTok = row.getByRole("button", { name: "It's on TikTok", exact: true });
   const again = row.getByRole("button", { name: "Try again, TikTok" });
   await expect(row.getByRole("button")).toHaveCount(2);
   const [a, b] = [await onTikTok.boundingBox(), await again.boundingBox()];
@@ -302,9 +372,11 @@ test("library: not sure it posted: It's on TikTok saves its link, a quieter Try 
   await expect.poll(() => again.evaluate((el) => getComputedStyle(el).backgroundColor)).not.toBe(ghost);
   for (const b of [onTikTok, again]) expect(await b.evaluate((el) => getComputedStyle(el).cursor)).toBe("default");
 
-  // Try again asks first; Not now leaves it as it was, and nothing goes to the Mac.
+  // Try again asks first, the question starting where the row's words start; Not now leaves it, and nothing goes.
   await again.click();
   await expect(row.getByText(AGAIN_ASK)).toBeVisible();
+  const [ask, words] = [await row.getByText(AGAIN_ASK).boundingBox(), await row.locator(".post__text").boundingBox()];
+  expect(Math.abs(ask!.x - words!.x)).toBeLessThan(2);
   await expect(row.getByRole("button", { name: "Yes, post it again" })).toBeFocused();
   await row.getByRole("button", { name: "Not now" }).click();
   await expect(row.getByText(AGAIN_ASK)).toHaveCount(0);
@@ -321,6 +393,10 @@ test("library: not sure it posted: It's on TikTok saves its link, a quieter Try 
   await expect(find).toBeVisible();
   const [bx, f] = [await box.boundingBox(), await find.boundingBox()];
   expect(Math.abs(f!.y + f!.height / 2 - (bx!.y + bx!.height / 2)) < 4 || f!.y >= bx!.y + bx!.height - 1).toBe(true);
+  // An empty box sends nothing: it says to paste the link or find it.
+  await row.getByRole("button", { name: "Save the link" }).click();
+  await expect(row.getByRole("alert")).toHaveText("Paste the link first, or tap Find it for me.");
+  await expect(status).toHaveText(PRESSED);
   await box.fill(LINK);
   await row.getByRole("button", { name: "Save the link" }).click();
   await expect(page.getByText("Link saved! Clip Factory will count its views.")).toBeVisible();
@@ -331,43 +407,103 @@ test("library: not sure it posted: It's on TikTok saves its link, a quieter Try 
   expect((await mac.queue(page)).some((j) => j.clipId === clipId)).toBe(false);
 });
 
-test("library: It's on TikTok with Find it for me, and the Mac that needed him goes on", async ({ page }) => {
+test("library: inside the Mac's 30-minute find window after Post there is no Try again, only It's on TikTok", async ({ page }) => {
   const { clipId, row, status } = await sentWithMyMac(page);
-  await mac.claim(page, clipId);
-  await mac.step(page, clipId, "pressing");
-  await page.evaluate((id) => (window as MockWindow).__cfMock!.mac.stopped(id, "TikTok logged your Mac out.", true), clipId);
+  await pressedAndStopped(page, clipId, 10 * MIN);
   await expect(status).toHaveText(PRESSED);
-  await row.getByRole("button", { name: "It's on TikTok" }).click();
+  await expect(row.getByRole("button")).toHaveCount(1);
+  await expect(row.getByRole("button", { name: "It's on TikTok", exact: true })).toBeVisible();
+  await expect(row.getByRole("button", { name: "Try again, TikTok" })).toHaveCount(0);
+});
+
+test("library: Find it for me that finds nothing saves nothing; the next look finds it, and the Mac that needed him goes on", async ({ page }) => {
+  const { clipId, row, status } = await sentWithMyMac(page);
+  await pressedAndStopped(page, clipId, 10 * MIN, true);
+  await expect(status).toHaveText(PRESSED);
+  await row.getByRole("button", { name: "It's on TikTok", exact: true }).click();
   await row.getByRole("button", { name: "Find it for me" }).click();
-  // The finder looks on his TikTok (from a minute before the claim); not found yet, it says to tap it again soon.
-  await expect(page.getByText("Saved. Clip Factory could not find it on your TikTok yet. Tap Find it for me in a minute.")).toBeVisible();
-  await expect(status).toHaveText("Posted by you · Everyone · add the link");
-  await expect(row.getByRole("button", { name: "Find it for me" })).toBeVisible();
+  // Not found yet: said in the row, and nothing was saved.
+  await expect(row.getByRole("alert")).toHaveText("Not found yet. Try again in a minute, or paste the link.");
+  await expect(status).toHaveText(PRESSED);
+  await expect(page.getByText(/^Saved\./)).toHaveCount(0);
+  await row.getByRole("button", { name: "Find it for me" }).click();
+  await expect(page.getByText("Found it on your TikTok! Clip Factory will count its views.")).toBeVisible();
+  await expect(status).toHaveText(/^Posted by you · Everyone( · numbers .+)?$/);
+  await expect(row.getByRole("link", { name: "Open the TikTok post" })).toBeVisible();
   // It answered the stopped post: the Mac is fine again (as after Try again).
   await go(page, "/settings/posting/tiktok-mac");
   await expect(page.getByText(/^Your Mac checked in /)).toBeVisible();
   await expect(page.getByText(/^Your Mac needs you/)).toHaveCount(0);
+  await expect(page.getByRole("link", { name: "Open the stopped clip" })).toHaveCount(0);
 });
 
-test("library: a post still Posting… 15 minutes after its claim says not sure it posted, and Try again takes it back", async ({ page }) => {
+test("library: It's on TikTok, no link asks first, then saves it without its link", async ({ page }) => {
   const { clipId, row, status } = await sentWithMyMac(page);
-  // The Mac took it 16 minutes ago and never said more (it crashed after Post, or lost track of it), yet checks in.
-  await mac.claim(page, clipId, 16 * 60_000);
+  await pressedAndStopped(page, clipId, 10 * MIN);
+  await row.getByRole("button", { name: "It's on TikTok", exact: true }).click();
+  const noLink = row.getByRole("button", { name: "It's on TikTok, no link" });
+  await expect(noLink).toBeVisible();
+  await noLink.click();
+  const ask = "Save it as on TikTok without its link? Its views show once you add the link.";
+  await expect(row.getByText(ask)).toBeVisible();
+  await expect(row.getByRole("button", { name: "Yes, it's on TikTok" })).toBeFocused();
+  // Not now: back to the link box, nothing saved.
+  await row.getByRole("button", { name: "Not now" }).click();
+  await expect(row.getByText(ask)).toHaveCount(0);
+  await expect(row.getByRole("textbox", { name: "TikTok link" })).toBeVisible();
+  await expect(status).toHaveText(PRESSED);
+  await row.getByRole("button", { name: "It's on TikTok, no link" }).click();
+  await row.getByRole("button", { name: "Yes, it's on TikTok" }).click();
+  await expect(page.getByText("Saved. Add its link later to see its views.")).toBeVisible();
+  await expect(status).toHaveText("Posted by you · Everyone · add the link");
+  // Its Add link has no no-link button: it is saved already.
+  await expect(row.getByRole("button", { name: "It's on TikTok, no link" })).toHaveCount(0);
+  expect((await mac.queue(page)).some((j) => j.clipId === clipId)).toBe(false);
+});
+
+test("library: Posting… while the Mac beats, even long after its claim; stuck once its beat is 5 minutes old", async ({ page }) => {
+  const { clipId, row, status } = await sentWithMyMac(page);
+  // Claimed 40 minutes ago (upload wait, Post, the find window), its beat a minute ago: still the Mac's.
+  await mac.claim(page, clipId, 40 * MIN);
+  await mac.beat(page, clipId, MIN);
+  await expect(status).toHaveText("Posting…");
+  await expect(row.locator(".spinner")).toHaveCount(1);
+  await expect(row.getByRole("button")).toHaveCount(0);
+  await expect(page.getByText(PRESSED)).toHaveCount(0);
+  // Its beat 6 minutes old (the helper crashed or lost track of it), while the Mac checks in.
+  await mac.beat(page, clipId, 6 * MIN);
   await mac.ping(page);
   await refocus(page);
   await expect(status).toHaveText(PRESSED);
   await expect(row.locator(".spinner")).toHaveCount(0);
-  await expect(row.getByRole("button", { name: "It's on TikTok" })).toBeVisible();
+  await expect(row.getByRole("button", { name: "It's on TikTok", exact: true })).toBeVisible();
+  // Post was never pressed: Try again is safe at once, after its question.
   await row.getByRole("button", { name: "Try again, TikTok" }).click();
   await row.getByRole("button", { name: "Yes, post it again" }).click();
-  await expect(status).toHaveText(CHECK_IN);
+  await expect(status).toHaveText(NEXT);
   // Back in line, so the Mac claims it afresh.
   expect((await mac.queue(page)).find((j) => j.clipId === clipId)).toMatchObject({ state: "waiting", source: "upload" });
   await mac.claim(page, clipId);
   await expect(status).toHaveText("Posting…");
 });
 
-test("library: the backlog's first clip goes after the next auto-posting run; the rest say their place in line", async ({ page }) => {
+test("library: Upload taps say their place in the Mac's queue, one at a time", async ({ page }) => {
+  const { clipId: first, status } = await sentWithMyMac(page);
+  const second = await clipWhoseRowSays(page, "(Not on TikTok yet|Only you can see it on TikTok)");
+  await tiktokRow(page, second).getByRole("button", { name: "Post with my Mac" }).click();
+  await expect(tiktokRow(page, second).locator(".post__status")).toHaveText("Waiting for your Mac · in line (1 before it)");
+  await expect(status).toHaveText(NEXT);
+  // The first one is on the Mac now: the second still waits behind it.
+  await mac.claim(page, first);
+  await expect(status).toHaveText("Posting…");
+  await refocus(page);
+  await expect(tiktokRow(page, second).locator(".post__status")).toHaveText("Waiting for your Mac · in line (1 before it)");
+  await mac.done(page, first, LINK);
+  await refocus(page);
+  await expect(tiktokRow(page, second).locator(".post__status")).toHaveText(NEXT);
+});
+
+test("library: the backlog's first clip says the Mac's own time; the rest their place; a backfill says in line", async ({ page }) => {
   await page.goto("/");
   await settle(page);
   await go(page, "/settings/posting/auto");
@@ -375,50 +511,61 @@ test("library: the backlog's first clip goes after the next auto-posting run; th
   await auto.click();
   await expect(auto).toHaveAttribute("aria-checked", "true");
   await sendAll(page);
-  await mac.ping(page);
+  const at = Date.now() + 45 * MIN;
+  await mac.ping(page, "ok", undefined, { backlogAt: new Date(at).toISOString() });
   const queue = await mac.queue(page);
   expect(queue.length).toBeGreaterThan(1);
   await go(page, "/library");
   const first = tiktokRow(page, queue[0]!.clipId).locator(".post__status");
-  await expect(first).toHaveText(/^Waiting for your Mac · goes after the next auto-posting run \((\w{3} )?\d\d:\d\d\)$/);
+  await expect(first).toHaveText(`Waiting for your Mac · goes at about ${hm(at)}`);
   // Never the same time on a later one: its place in the Mac's queue.
   await expect(tiktokRow(page, queue[1]!.clipId).locator(".post__status")).toHaveText("Waiting for your Mac · in line (1 before it)");
-  const runWords = page.locator(".post__status", { hasText: "goes after the next auto-posting run" });
-  await expect(runWords).toHaveCount(1);
+  await expect(page.locator(".post__status", { hasText: "goes at about" })).toHaveCount(1);
+  // Its time passed: next.
+  await mac.ping(page, "ok", undefined, { backlogAt: new Date(Date.now() - MIN).toISOString() });
+  await refocus(page);
+  await expect(first).toHaveText(NEXT);
+  // A backfill goes at the Mac's own pace: in line, no time.
+  await mac.ping(page, "ok", undefined, { backfill: true });
+  await refocus(page);
+  await expect(first).toHaveText("Waiting for your Mac · in line");
+  // The Mac doesn't say (an older helper): no time at all.
+  await mac.ping(page);
+  await refocus(page);
+  await expect(first).toHaveText("Waiting for your Mac");
 });
 
-test("library: a campaign clip goes with the Mac like any other, for Everyone", async ({ page }) => {
+test("library: a campaign clip skips TikTok for now, in plain words with no button, and Send these leaves it out", async ({ page }) => {
   await page.goto("/");
   await settle(page);
   await turnOn(page);
+  const before = Number((await page.getByText(/^\d+ clips? (isn't|aren't) on TikTok yet\.$/).innerText()).split(" ")[0]);
   await mac.ping(page);
   const clipId = await page.evaluate(() => (window as MockWindow).__cfMock!.posting.campaignClip());
   await go(page, "/library");
   const row = tiktokRow(page, clipId);
   await expect(cardOf(page, clipId).locator("[data-cr='campaign-chip']")).toHaveText("Campaign");
-  await expect(row.locator(".post__status")).toHaveText("Not on TikTok yet");
+  await expect(row.locator(".post__status")).toHaveText(CAMPAIGN);
+  await expect(row.getByRole("button")).toHaveCount(0);
+  await expect(row.getByRole("link", { name: /Turn on|Open/ })).toHaveCount(0);
+  await expect(row).not.toHaveClass(/is-failed/);
   await expect(page.getByText("Campaign clip: post it in the TikTok app")).toHaveCount(0);
-  await row.getByRole("button", { name: "Post with my Mac" }).click();
-  await expect(page.getByText("Sent to your Mac! It posts it in a minute.")).toBeVisible();
-  await expect(row.locator(".post__status")).toHaveText(CHECK_IN);
-  const job = (await mac.queue(page)).find((j) => j.clipId === clipId) as (Job & { privacy?: string }) | undefined;
-  expect(job).toMatchObject({ source: "upload", state: "waiting", privacy: "PUBLIC_TO_EVERYONE" });
+  // Settings' Send these to my Mac counts it no more.
+  await go(page, "/settings/posting/tiktok-mac");
+  await expect(page.getByText(new RegExp(`^${before - 1} clips? (isn't|aren't) on TikTok yet\\.$`))).toBeVisible();
+  await page.getByRole("button", { name: "Send these to my Mac" }).click();
+  await page.getByRole("button", { name: "Yes, send them" }).click();
+  await expect(page.getByText(/^Sent \d+ clips? to your Mac\.$/)).toBeVisible();
+  expect((await mac.queue(page)).some((j) => j.clipId === clipId)).toBe(false);
 });
 
-test("library: a post left Posting… says so once the Mac can't post (asleep, or the switch off), never a spinner for good", async ({ page }) => {
+test("library: a post left Posting… once the switch went off says so; a Mac gone quiet says since when, with It's on TikTok and Try again", async ({ page }) => {
   const { clipId, row, status } = await sentWithMyMac(page);
   await mac.claim(page, clipId);
   await expect(status).toHaveText("Posting…");
   await expect(row.locator(".spinner")).toHaveCount(1);
-  // The Mac fell asleep mid-post: not seen for 30 minutes.
-  await mac.seen(page, new Date(Date.now() - 31 * 60_000).toISOString());
-  await refocus(page);
-  await expect(status).toHaveText(/^Your Mac hasn't checked in since (\w{3} )?\d\d:\d\d$/);
-  await expect(row.locator(".spinner")).toHaveCount(0);
-  await expect(row.getByRole("link", { name: "Turn on" })).toHaveAttribute("href", "/settings/posting/tiktok-mac");
 
-  // The switch turned off while it was working.
-  await mac.ping(page);
+  // The switch turned off while it was working: said, with Turn on.
   await go(page, "/settings/posting/tiktok-mac");
   await page.getByRole("switch", { name: SWITCH }).click();
   await expect(page.getByRole("switch", { name: SWITCH })).toHaveAttribute("aria-checked", "false");
@@ -426,36 +573,92 @@ test("library: a post left Posting… says so once the Mac can't post (asleep, o
   await expect(status).toHaveText("Your Mac posts TikTok is off");
   await expect(row.locator(".spinner")).toHaveCount(0);
   await expect(row.getByRole("link", { name: "Turn on" })).toHaveAttribute("href", "/settings/posting/tiktok-mac");
+  await go(page, "/settings/posting/tiktok-mac");
+  await page.getByRole("switch", { name: SWITCH }).click();
+  await expect(page.getByRole("switch", { name: SWITCH })).toHaveAttribute("aria-checked", "true");
+
+  // The Mac fell asleep mid-post: neither it nor the job beat for 12 minutes.
+  const quiet = Date.now() - 12 * MIN;
+  await mac.beat(page, clipId, 12 * MIN);
+  await mac.seen(page, new Date(quiet).toISOString());
+  await go(page, "/library");
+  await refocus(page);
+  await expect(status).toHaveText(`Your Mac hasn't checked in since ${hm(quiet)}`);
+  await expect(row.locator(".spinner")).toHaveCount(0);
+  await expect(row.getByRole("button", { name: "It's on TikTok", exact: true })).toBeVisible();
+  await row.getByRole("button", { name: "Try again, TikTok" }).click();
+  await expect(row.getByText(AGAIN_ASK)).toBeVisible();
+  await row.getByRole("button", { name: "Yes, post it again" }).click();
+  await expect(page.getByText("Sent to your Mac again.")).toBeVisible();
+  expect((await mac.queue(page)).find((j) => j.clipId === clipId)).toMatchObject({ state: "waiting" });
 });
 
-test("library: the Mac needs him, or is paused: what to do, and Open Your Mac posts TikTok under the words", async ({ page }) => {
-  await page.goto("/");
-  await settle(page);
-  await turnOn(page);
-  await mac.ping(page, "needs_you", "TikTok wants you to log in again.");
-  await go(page, "/library");
-  const clipId = await clipWhoseRowSays(page, "Your Mac needs you: TikTok wants you to log in again · look at your Mac");
-  const row = tiktokRow(page, clipId);
-  const open = row.getByRole("link", { name: OPEN_MAC });
-  await expect(open).toHaveAttribute("href", "/settings/posting/tiktok-mac");
+test("library: the Mac needs him: Open the stopped clip, where its Try again is", async ({ page }) => {
+  const { clipId: stopped, status: stoppedStatus } = await sentWithMyMac(page);
+  await mac.claim(page, stopped);
+  await mac.stopped(page, stopped, "TikTok wants a code. Type it on your Mac.", true);
+  await expect(stoppedStatus).toHaveText("Didn't work: TikTok wants a code · look at your Mac first");
+  await refocus(page);
+  const other = await clipWhoseRowSays(page, "Your Mac needs you: TikTok wants a code · look at your Mac");
+  const row = tiktokRow(page, other);
+  const open = row.getByRole("link", { name: "Open the stopped clip" });
+  await expect(open).toHaveAttribute("href", `/clips/${stopped}`);
   await expect(row.getByRole("button")).toHaveCount(0);
   // Its own line, under the words, on the right of the row.
   const [words, link, li] = [await row.locator(".post__status").boundingBox(), await open.boundingBox(), await row.boundingBox()];
   expect(link!.y).toBeGreaterThanOrEqual(words!.y + words!.height - 1);
   expect(li!.x + li!.width - (link!.x + link!.width)).toBeLessThan(16);
+  await open.click();
+  await expect(page).toHaveURL(new RegExp(`/clips/${stopped}$`));
+  await settle(page);
+  await page.locator(".perf__actions").getByRole("button", { name: "Try again, TikTok" }).click();
+  await expect(page.locator('[data-stack="tiktok"] .pstack__calm-text')).toHaveText(NEXT);
+});
 
-  // Paused: the reason's first sentence and what goes on next (nothing in Clip Factory starts it again, so it says when).
+test("library: paused on the Mac: Start my Mac again, then it says it starts again within a minute", async ({ page }) => {
+  await page.goto("/");
+  await settle(page);
+  await turnOn(page);
   await mac.ping(page, "paused");
-  await refocus(page);
-  await expect(row.locator(".post__status")).toHaveText("Paused on your Mac · your clips wait until it's started again");
+  await go(page, "/library");
+  const clipId = await clipWhoseRowSays(page, "Paused on your Mac · your clips wait until it's started again");
+  const row = tiktokRow(page, clipId);
+  const start = row.getByRole("button", { name: "Start my Mac again" });
+  await expect(start).toBeVisible();
+  await expect(row.getByRole("link")).toHaveCount(0);
+  // The trial pause: its own words, the same button.
   await mac.ping(page, "paused", "Paused after the 3 trial posts. Clip Factory checks their views first.");
   await refocus(page);
   await expect(row.locator(".post__status")).toHaveText("Paused after the 3 trial posts · your Mac goes on once their views are checked");
-  await expect(open).toHaveAttribute("href", "/settings/posting/tiktok-mac");
-  await open.click();
-  await expect(page).toHaveURL(/\/settings\/posting\/tiktok-mac$/);
-  await settle(page);
-  await expect(page.getByText("Paused after the 3 trial posts. Your Mac goes on once their views are checked.")).toBeVisible();
+  await start.click();
+  await expect(page.getByText("Your Mac starts again within a minute.")).toBeVisible();
+  // Every row says so within a second, with no second button.
+  await expect(row.locator(".post__status")).toHaveText("Paused after the 3 trial posts · starting again within a minute", { timeout: 1500 });
+  await expect(page.getByRole("button", { name: "Start my Mac again" })).toHaveCount(0);
+  await go(page, "/settings/posting/tiktok-mac");
+  await expect(page.getByText("Your Mac starts again the next time it checks in, within a minute.")).toBeVisible();
+  // The Mac did it: it checks in fine.
+  await mac.ping(page);
+  await refocus(page);
+  await expect(page.getByText(/^Your Mac checked in /)).toBeVisible();
+  await expect(page.getByText(/starts again the next time/)).toHaveCount(0);
+});
+
+test("library: an auto-posting clip the Mac holds says so, with Post with my Mac", async ({ page }) => {
+  const { clipId, row, status } = await sentWithMyMac(page);
+  await go(page, "/settings/posting/auto");
+  const auto = page.getByRole("switch", { name: "Post my clips by themselves" });
+  await auto.click();
+  await expect(auto).toHaveAttribute("aria-checked", "true");
+  await mac.source(page, clipId, "auto", 3 * 60 * MIN);
+  const hold = Date.now() - 60 * MIN;
+  await mac.ping(page, "ok", undefined, { holdBefore: new Date(hold).toISOString() });
+  await go(page, "/library");
+  await refocus(page);
+  await expect(status).toHaveText(`Held on your Mac: made before ${hm(hold)}`);
+  await row.getByRole("button", { name: "Post with my Mac" }).click();
+  await expect(page.getByText("Sent to your Mac! It posts it in a minute.")).toBeVisible();
+  await expect(status).toHaveText(NEXT);
 });
 
 test("library: auto-posting off, a backlog clip goes now with Post with my Mac", async ({ page }) => {
@@ -469,7 +672,7 @@ test("library: auto-posting off, a backlog clip goes now with Post with my Mac",
   await expect(status).toHaveText("Waiting for your Mac · auto-posting is off");
   await row.getByRole("button", { name: "Post with my Mac" }).click();
   await expect(page.getByText("Sent to your Mac! It posts it in a minute.")).toBeVisible();
-  await expect(status).toHaveText(CHECK_IN);
+  await expect(status).toHaveText(NEXT);
   await expect(row.getByRole("button")).toHaveCount(0);
   // It goes first, as an Upload tap's; the rest of the backlog still waits for auto-posting.
   const queue = await mac.queue(page);
@@ -549,11 +752,12 @@ test("library: a backlog clip waits for auto-posting, a quiet Mac says since whe
   await expect(row.getByRole("link")).toHaveCount(0);
   await expect(row.getByRole("button", { name: "Post with my Mac" })).toBeVisible();
 
-  // Not seen for 30 minutes: since when, with Turn on to the switch.
+  // Not seen for 30 minutes: since when, with Open Your Mac posts TikTok (its switch is already on).
   await mac.seen(page, new Date(Date.now() - 31 * 60_000).toISOString());
   await refocus(page);
   await expect(status).toHaveText(/^Your Mac hasn't checked in since (\w{3} )?\d\d:\d\d$/);
-  await expect(row.getByRole("link", { name: "Turn on" })).toHaveAttribute("href", "/settings/posting/tiktok-mac");
+  await expect(row.getByRole("link", { name: OPEN_MAC })).toHaveAttribute("href", "/settings/posting/tiktok-mac");
+  await expect(row.getByRole("link", { name: "Turn on" })).toHaveCount(0);
 
   // The switch off: said, with Turn on.
   await go(page, "/settings/posting/tiktok-mac");
@@ -579,7 +783,7 @@ test("clip page: TikTok's stack says what the Mac does, and its one button sits 
   await expect(calm).toHaveText("Not on TikTok yet");
   await expect(stack.getByRole("link", { name: "Go to Library" })).toHaveCount(0);
   await actions.getByRole("button", { name: "Post with my Mac" }).click();
-  await expect(calm).toHaveText(CHECK_IN);
+  await expect(calm).toHaveText(NEXT);
   await expect(actions.getByRole("button", { name: /Post with my Mac|Try again/ })).toHaveCount(0);
 
   await mac.claim(page, clipId);
@@ -591,7 +795,7 @@ test("clip page: TikTok's stack says what the Mac does, and its one button sits 
   // Try again is right here: no Go to Library.
   await expect(stack.getByRole("link", { name: "Go to Library" })).toHaveCount(0);
   await actions.getByRole("button", { name: "Try again, TikTok" }).click();
-  await expect(calm).toHaveText(CHECK_IN);
+  await expect(calm).toHaveText(NEXT);
 
   // The switch off: said, with Turn on in the actions.
   await mac.claim(page, clipId);
@@ -607,16 +811,16 @@ for (const width of [1440, 375]) {
   test(`clip page at ${width}: not sure it posted, its chip, and the two choices lined up with the actions`, async ({ page }) => {
     await page.setViewportSize({ width, height: 900 });
     const { clipId } = await sentWithMyMac(page);
-    await mac.claim(page, clipId);
-    await mac.step(page, clipId, "pressing");
-    await mac.stopped(page, clipId, "Timed out.");
+    await pressedAndStopped(page, clipId, WINDOW_OVER);
     await go(page, `/clips/${clipId}`);
     const stack = page.locator('[data-stack="tiktok"]');
-    await expect(stack.locator(".pstack__calm-text")).toHaveText(PRESSED);
+    // "Not sure it posted" once, on the chip; the line says where to look (D7).
     await expect(stack.locator(".pstack__chip")).toHaveText("Not sure it posted");
+    await expect(stack.locator(".pstack__calm-text")).toHaveText("Look on your TikTok");
+    await expect(stack.getByText(/Not sure it posted/)).toHaveCount(1);
     const actions = page.locator(".perf__actions");
     const choices = actions.locator(".post__choices");
-    await expect(choices.getByRole("button", { name: "It's on TikTok" })).toBeVisible();
+    await expect(choices.getByRole("button", { name: "It's on TikTok", exact: true })).toBeVisible();
     const [a, c] = [(await actions.boundingBox())!, (await choices.boundingBox())!];
     const refresh = (await actions.locator(".perf__refresh").boundingBox())!;
     const mid = (r: { x: number; width: number }) => r.x + r.width / 2;
@@ -693,7 +897,7 @@ test("review: the hint, and Uploaded just now follows the Mac", async ({ page })
   // It checks in, then posts it, live.
   await mac.ping(page);
   await refocus(page);
-  await expect(line).toHaveText(`TikTok: ${CHECK_IN}`);
+  await expect(line).toHaveText(`TikTok: ${NEXT}`);
   await mac.claim(page, clipId);
   await mac.step(page, clipId, "uploading");
   await expect(line).toHaveText("TikTok: Posting…");
@@ -715,6 +919,6 @@ test("review: uploaded without TikTok, Uploaded just now offers Post with my Mac
   const item = page.locator(".kept-now__item", { hasText: hook.slice(0, 20) });
   await expect(item.locator(".kept-now__mac")).toHaveText("TikTok: Not on TikTok yet");
   await item.getByRole("button", { name: "Post with my Mac" }).click();
-  await expect(item.locator(".kept-now__mac")).toHaveText(`TikTok: ${CHECK_IN}`);
+  await expect(item.locator(".kept-now__mac")).toHaveText(`TikTok: ${NEXT}`);
   await expect(item.getByRole("button", { name: "Post with my Mac" })).toHaveCount(0);
 });

@@ -149,6 +149,14 @@ describe("status and calm copy", () => {
     expect(calmCopy({ ...tt, status: "mac", mac: mac("stopped", { reason: "TikTok wants you to log in again. Then tap Try again." }) })).toEqual({
       text: "Didn't work: TikTok wants you to log in again",
     });
+    // Not sure it posted (D7): the chip says that, so the line only says where to look, with or without its row.
+    const pressed = mac("stopped", { pressedAt: at, reason: "Your Mac pressed Post but couldn't confirm it. Look on your TikTok: if it's there, tap It's on TikTok." });
+    const notSure = { kind: "stopped" as const, words: "Not sure it posted · look on your TikTok", button: "on_tiktok" as const, again: true, noLink: true };
+    expect(calmCopy({ ...tt, status: "mac", mac: pressed })).toEqual({ text: "Look on your TikTok" });
+    expect(calmCopy({ ...tt, status: "mac", mac: pressed }, notSure)).toEqual({ text: "Look on your TikTok" });
+    // A stuck post's row (on_tiktok) too, whatever its words.
+    const stuck = { ...notSure, words: "Your Mac hasn't checked in since 14:05" };
+    expect(calmCopy({ ...tt, status: "mac", mac: mac("working") }, stuck)).toEqual({ text: "Look on your TikTok" });
     // The page's row: its words, and its one button on the page.
     const row = { kind: "waiting" as const, words: "Waiting for your Mac · next at 14:31", button: null };
     expect(calmCopy({ ...tt, status: "mac", mac: mac("waiting") }, row)).toEqual({ text: "Waiting for your Mac · next at 14:31" });
@@ -171,7 +179,9 @@ describe("status and calm copy", () => {
     const tt = { platform: "tiktok" as const, metrics: null, status: "failed" as const };
     const STORED = "TikTok only takes Clip Factory's uploads on a private account until it approves the app. Tap Post it yourself to post it for everyone.";
     const OLD = "Make your TikTok account private (Setup step 3), then press Try again.";
-    for (const error of [STORED, OLD]) {
+    // The server's own sentence since 23 Nov (platforms/errors.TIKTOK_PRIVATE_ONLY) reads the same.
+    const NOW_STORED = "TikTok only takes Clip Factory's own uploads on a private account for now, so your Mac posts it for everyone.";
+    for (const error of [STORED, OLD, NOW_STORED]) {
       const calm = calmCopy({ ...tt, error });
       expect(calm).toEqual({ text: "TikTok only takes Clip Factory's own uploads on a private account for now, so your Mac posts it for everyone." });
       expect(calm?.text).not.toMatch(/yourself|Go to Library/);

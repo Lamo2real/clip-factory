@@ -1,60 +1,43 @@
 // The TikTok row's one button (docs/CONTRACTS.md §47.4) on Library cards, the clip page and Review's Uploaded just
 // now. Until TikTok approves the app the owner's Mac is the only way to TikTok (ADR-85), so there is no sheet: Try
 // again on a stopped Mac post and Post with my Mac on a clip that isn't on TikTok yet (both go to the Mac at once,
-// `now`), Turn on while the Mac can't post (Open Your Mac posts TikTok while it needs him or is paused), the inline
-// Add link (with Find it for me) on a post made without its link, and It's on TikTok (with a quieter Try again second,
-// which asks first) when it is not sure it posted: the Mac pressed Post but couldn't tell, or its claim is stuck.
-import { useCallback, useEffect, useId, useRef, useState, type FormEvent } from "react";
+// `now`), Turn on while the Mac can't post, Open Your Mac posts TikTok while it is quiet, Open the stopped clip while it
+// needs him, Start my Mac again while it is paused, the inline Add link (with Find it for me) on a post made without
+// its link, and It's on TikTok (with a quieter Try again once the Mac stopped looking, which asks first) when it is not
+// sure it posted: the Mac pressed Post but couldn't tell, or its post is stuck.
+import { useEffect, useId, useRef, useState, type FormEvent } from "react";
 import { api } from "../../api/index.ts";
 import { friendlyMessage } from "../../api/errors.ts";
 import type { Clip, Post, PostMac } from "../../api/types.ts";
 import { useSession } from "../../app/session.tsx";
 import { useToast } from "../../components/Toasts.tsx";
 import { Button, LinkButton } from "../../components/ui.tsx";
-import { usePoll } from "../../lib/hooks.ts";
 import { useAction } from "../../lib/motion.ts";
 import {
-  lastLiveRunAt,
   MAC_AGAIN_CONFIRM,
   MAC_FIND_BUTTON,
+  MAC_LINK_EMPTY,
+  MAC_NO_LINK_BUTTON,
+  MAC_NO_LINK_CONFIRM,
+  MAC_NO_LINK_SAVED,
+  MAC_NO_LINK_YES,
   MAC_ON_TIKTOK_BUTTON,
   MAC_OPEN_BUTTON,
+  MAC_OPEN_STOPPED_BUTTON,
+  MAC_RESUME_BUTTON,
+  MAC_RESUMED_TOAST,
   macOn,
   type TikTokRow,
   type TikTokRowContext,
 } from "../../lib/tiktokMac.ts";
 import { looksLikeTikTokLink } from "../../lib/tiktokYourself.ts";
 import { readClipboard } from "../settings/setup/bits.tsx";
-import { useTikTokMac } from "../settings/TikTokMacBranch.tsx";
+import { macChanged, useTikTokMac } from "../settings/TikTokMacBranch.tsx";
 
 type Kept = (clip: Clip, posts: Post[]) => void;
 type Size = "sm" | "md";
 
-/** Auto-posting's next run and its last scheduled live run, read while a backlog clip waits (it goes ~30 min after one). */
-export interface RunTimes {
-  nextRunAt: string | null;
-  lastRunAt: string | null;
-}
-
-/** GET /v1/autopost while `active`: at once, on focus and every 5 minutes. Null until read (or when it fails). */
-export function useRunTimes(active: boolean): RunTimes | null {
-  const [times, setTimes] = useState<RunTimes | null>(null);
-  const load = useCallback(async () => {
-    const a = await api().autoPostStatus();
-    setTimes({ nextRunAt: a.nextRunAt, lastRunAt: lastLiveRunAt(a.runs) });
-  }, []);
-  const reload = useCallback(() => void load().catch(() => undefined), [load]);
-  useEffect(() => {
-    if (!active) return;
-    reload();
-    window.addEventListener("focus", reload);
-    return () => window.removeEventListener("focus", reload);
-  }, [active, reload]);
-  usePoll(load, active, 5 * 60_000);
-  return active ? times : null;
-}
-
-/** A clock for the rows' "next at" and "since" times, ticking only while a row reads the Mac (a page full of rows). */
+/** A clock for the rows' "since" and "goes at about" times, ticking only while a row reads the Mac (a page full of rows). */
 function useClock(active: boolean, ms = 30_000): number {
   const [now, setNow] = useState(() => Date.now());
   useEffect(() => {
@@ -70,32 +53,18 @@ function useClock(active: boolean, ms = 30_000): number {
 }
 
 /**
- * What every TikTok row reads (§47.4): the two switches (the session's settings), the Mac's check-in and queue while
- * `needsMac` (GET /v1/tiktok/mac), and auto-posting's runs while `needsRuns`. `runs`: a page that reads GET /v1/autopost anyway
- * (Review) passes its own, and this reads nothing more.
+ * What every TikTok row reads (§47.4): the two switches (the session's settings), and the Mac's check-in and queue
+ * while `needsMac` (GET /v1/tiktok/mac, which also says the Mac's own backlog time and hold). Nothing reads GET
+ * /v1/autopost: the Mac paces its backlog itself and says when (D4).
  */
-export function useTikTokRowContext({
-  audited,
-  needsMac,
-  needsRuns,
-  runs,
-}: {
-  audited: boolean;
-  needsMac: boolean;
-  needsRuns: boolean;
-  runs?: RunTimes | null;
-}): TikTokRowContext {
+export function useTikTokRowContext({ audited, needsMac }: { audited: boolean; needsMac: boolean }): TikTokRowContext {
   const { me } = useSession();
   const mac = useTikTokMac(needsMac);
-  const own = useRunTimes(needsRuns && runs === undefined);
-  const times = runs === undefined ? own : runs;
-  const now = useClock(needsMac || needsRuns);
+  const now = useClock(needsMac);
   return {
     audited,
     ...(me ? { macOn: macOn(me.settings), autoPostOn: me.settings.autoPost?.on === true } : {}),
     ...(mac.status ? { helper: mac.status.helper, queue: mac.status.queue } : {}),
-    nextRunAt: times?.nextRunAt ?? null,
-    lastRunAt: times?.lastRunAt ?? null,
     now,
   };
 }
@@ -174,18 +143,60 @@ export function TurnOnMac({ href, size = "sm", open = false }: { href: string; s
   );
 }
 
+/** Open the stopped clip (D5): the clip the Mac stopped on while it needs him, on a line of its own under the words. */
+export function OpenStoppedClip({ href, size = "sm", wide = true }: { href: string; size?: Size; wide?: boolean }) {
+  const link = (
+    <LinkButton href={href} size={size} variant="glass" icon="monitor" iconAfter="chevronRight">
+      {MAC_OPEN_STOPPED_BUTTON}
+    </LinkButton>
+  );
+  return wide ? <span className="post__retry post__retry--wide">{link}</span> : link;
+}
+
+/**
+ * Start my Mac again (D5): the paused Mac goes on at its next tick (POST /v1/tiktok/mac/request resume). Every open
+ * view reads the Mac again at once (macChanged), so its rows and Settings say "starting again" within a second.
+ */
+export function MacStartAgain({ size = "sm" }: { size?: Size }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const act = useAction("send");
+  async function press() {
+    setBusy(true);
+    try {
+      await api().tiktokMacRequest("resume");
+      toast.success(MAC_RESUMED_TOAST, { group: "tiktok-mac" });
+      macChanged();
+    } catch (e) {
+      act.fail({ sound: false });
+      toast.error(friendlyMessage(e));
+      macChanged();
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <Button size={size} variant="glass" icon="monitor" act={act} loading={busy} onClick={() => void press()}>
+      {MAC_RESUME_BUTTON}
+    </Button>
+  );
+}
+
 const NOT_A_LINK = "That is not a TikTok link. In TikTok, tap Share, then Copy link, and paste it here.";
 
 /**
  * Add link, in the row itself (no dialog): the box with Find it for me next to it, Paste and Save the link (POST
- * /v1/clips/{id}/tiktok/posted, §42.2). Find it for me (or Save with an empty box) lets Clip Factory look for the post
- * on his TikTok, from `since` (when it was posted; absent, the API looks back an hour).
+ * /v1/clips/{id}/tiktok/posted, §42.2). Find it for me lets Clip Factory look for the post on his TikTok, from `since`
+ * (when it was posted; absent, the API looks back an hour); not found, it says so and saves nothing (D3). With
+ * `noLink` (a post the Mac is not working on before Post) a quiet "It's on TikTok, no link" saves it without its
+ * link, after its own question.
  */
 export function AddTikTokLink({
   clip,
   since,
   onKept,
   focus = false,
+  noLink = false,
   id: formId,
 }: {
   clip: Pick<Clip, "clipId">;
@@ -193,6 +204,8 @@ export function AddTikTokLink({
   onKept: Kept;
   /** Opened by a tap (It's on TikTok): the box takes the focus. */
   focus?: boolean;
+  /** "It's on TikTok, no link" is offered (TikTokRow.noLink). */
+  noLink?: boolean;
   id?: string;
 }) {
   const id = useId();
@@ -204,6 +217,7 @@ export function AddTikTokLink({
   const [link, setLink] = useState("");
   const [busy, setBusy] = useState(false);
   const [problem, setProblem] = useState("");
+  const [asking, setAsking] = useState(false);
   const done = useAction("check");
   const paste = useAction("paste");
   const find = useAction("check");
@@ -220,7 +234,13 @@ export function AddTikTokLink({
   async function save(e: FormEvent) {
     e.preventDefault();
     const typed = link.trim();
-    if (typed && !looksLikeTikTokLink(typed)) {
+    // An empty box sends nothing: Find it for me is the way to look for it.
+    if (!typed) {
+      done.fail({ sound: false });
+      setProblem(MAC_LINK_EMPTY);
+      return;
+    }
+    if (!looksLikeTikTokLink(typed)) {
       done.fail();
       setProblem(NOT_A_LINK);
       return;
@@ -244,12 +264,15 @@ export function AddTikTokLink({
       if (out.note || !linked) toast.info(out.note ?? "Clip Factory could not find it yet. Paste its link instead.");
       else toast.success(typed ? "Link saved! Clip Factory will count its views." : "Found it on your TikTok! Clip Factory will count its views.");
     } catch (err) {
+      // Not found (or TikTok not connected): the server's words, in the row; nothing was saved.
       act.fail({ sound: false });
       setProblem(friendlyMessage(err));
     } finally {
       setLoading(false);
     }
   }
+
+  if (asking) return <NoLinkConfirm clip={clip} since={since} onKept={onKept} id={formId} onClose={() => setAsking(false)} />;
 
   return (
     <form className="post-link" id={formId} onSubmit={(e) => void save(e)} aria-label="Add the TikTok link">
@@ -280,6 +303,11 @@ export function AddTikTokLink({
       <Button type="submit" size="sm" variant="glass" icon="check" act={done} loading={busy} disabled={finding}>
         Save the link
       </Button>
+      {noLink ? (
+        <Button size="sm" variant="ghost" className="post__again" disabled={busy || finding} onClick={() => setAsking(true)}>
+          {MAC_NO_LINK_BUTTON}
+        </Button>
+      ) : null}
       {problem ? (
         <p className="post-link__problem" id={`${id}-problem`} role="alert">
           {problem}
@@ -289,17 +317,72 @@ export function AddTikTokLink({
   );
 }
 
+/** "Save it as on TikTok without its link? …": Yes saves it with no link (`noLink`), Not now goes back to the box. */
+function NoLinkConfirm({ clip, since, onKept, id: groupId, onClose }: { clip: Pick<Clip, "clipId">; since?: string; onKept: Kept; id?: string; onClose: () => void }) {
+  const toast = useToast();
+  const [busy, setBusy] = useState(false);
+  const act = useAction("check");
+  const yes = useRef<HTMLButtonElement>(null);
+  const id = useId();
+  // The tapped button is gone: the focus goes to the question's Yes, so a keyboard keeps its place.
+  useEffect(() => yes.current?.focus(), []);
+  async function save() {
+    setBusy(true);
+    try {
+      const out = await api().markTikTokPosted(clip.clipId, undefined, since, true);
+      onKept(out.clip, out.posts);
+      toast.success(MAC_NO_LINK_SAVED, { group: "tiktok-mac" });
+    } catch (e) {
+      act.fail({ sound: false });
+      toast.error(friendlyMessage(e));
+      onClose();
+    } finally {
+      setBusy(false);
+    }
+  }
+  return (
+    <div className="post__confirm" id={groupId} role="group" aria-labelledby={`${id}-ask`}>
+      <p className="post__confirm-text" id={`${id}-ask`}>
+        {MAC_NO_LINK_CONFIRM}
+      </p>
+      <span className="post__confirm-buttons">
+        <Button ref={yes} size="sm" variant="glass" icon="check" act={act} loading={busy} onClick={() => void save()}>
+          {MAC_NO_LINK_YES}
+        </Button>
+        <Button size="sm" variant="ghost" className="post__again" disabled={busy} onClick={onClose}>
+          Not now
+        </Button>
+      </span>
+    </div>
+  );
+}
+
 /**
- * Not sure it posted (§47.3): the Mac pressed Post but couldn't tell, or its claim is stuck. It may be on TikTok, so he
- * looks there first. It's on TikTok opens the Add link in the row (its link, or Find it for me, from `since`); Try
- * again, the second and quieter choice, asks first ("Post it again? Only if it's not on your TikTok."), then says it
- * is not there and sends it to the Mac again at once.
+ * Not sure it posted (§47.3): the Mac pressed Post but couldn't tell, or its post is stuck. It may be on TikTok, so he
+ * looks there first. It's on TikTok opens the Add link in the row (its link, or Find it for me, from `since`; with
+ * `noLink` also "It's on TikTok, no link"). Try again, the second and quieter choice, shows only with `again` (the
+ * Mac stopped looking for it, D2); it asks first ("Post it again? Only if it's not on your TikTok."), then says it is
+ * not there and sends it to the Mac again at once.
  */
-export function MacOnTikTok({ clip, since, onKept, size = "sm" }: { clip: Pick<Clip, "clipId">; since?: string; onKept: Kept; size?: Size }) {
+export function MacOnTikTok({
+  clip,
+  since,
+  again = false,
+  noLink = false,
+  onKept,
+  size = "sm",
+}: {
+  clip: Pick<Clip, "clipId">;
+  since?: string;
+  again?: boolean;
+  noLink?: boolean;
+  onKept: Kept;
+  size?: Size;
+}) {
   const [open, setOpen] = useState(false);
   const [asking, setAsking] = useState(false);
   const formId = useId();
-  if (asking) return <MacAgainConfirm clip={clip} onKept={onKept} size={size} onClose={() => setAsking(false)} />;
+  if (asking && again) return <MacAgainConfirm clip={clip} onKept={onKept} size={size} onClose={() => setAsking(false)} />;
   return (
     <>
       <span className="post__choices">
@@ -313,21 +396,23 @@ export function MacOnTikTok({ clip, since, onKept, size = "sm" }: { clip: Pick<C
         >
           {MAC_ON_TIKTOK_BUTTON}
         </Button>
-        <Button
-          size={size}
-          variant="ghost"
-          icon="retry"
-          className="post__again"
-          aria-label="Try again, TikTok"
-          onClick={() => {
-            setOpen(false);
-            setAsking(true);
-          }}
-        >
-          Try again
-        </Button>
+        {again ? (
+          <Button
+            size={size}
+            variant="ghost"
+            icon="retry"
+            className="post__again"
+            aria-label="Try again, TikTok"
+            onClick={() => {
+              setOpen(false);
+              setAsking(true);
+            }}
+          >
+            Try again
+          </Button>
+        ) : null}
       </span>
-      {open ? <AddTikTokLink clip={clip} since={since} onKept={onKept} focus id={formId} /> : null}
+      {open ? <AddTikTokLink clip={clip} since={since} onKept={onKept} focus noLink={noLink} id={formId} /> : null}
     </>
   );
 }
@@ -373,8 +458,9 @@ function MacAgainConfirm({ clip, onKept, size, onClose }: { clip: Pick<Clip, "cl
 }
 
 /**
- * The row's one button, from tiktokRow: Try again, Post with my Mac, Turn on, Open Your Mac posts TikTok, Add link,
- * or It's on TikTok with Try again (none for the rest). `mac`: the Mac post's own fields, for Try again.
+ * The row's one button, from tiktokRow: Try again, Post with my Mac, Turn on, Open Your Mac posts TikTok, Open the
+ * stopped clip, Start my Mac again, Add link, or It's on TikTok (with Try again once `row.again`); none for the rest.
+ * `mac`: the Mac post's own fields, for Try again.
  */
 export function TikTokRowAction({
   clip,
@@ -394,13 +480,21 @@ export function TikTokRowAction({
     case "try_again":
       return <MacTryAgain clip={clip} mac={mac ?? {}} onKept={onKept} size={size} />;
     case "on_tiktok":
-      return <MacOnTikTok clip={clip} since={row.since ?? mac?.pressedAt} onKept={onKept} size={size} />;
+      return <MacOnTikTok clip={clip} since={row.since ?? mac?.pressedAt} again={!!row.again} noLink={!!row.noLink} onKept={onKept} size={size} />;
     case "post_with_mac":
       return <PostWithMyMac clip={clip} onKept={onKept} size={size} />;
     case "turn_on":
       return row.href ? <TurnOnMac href={row.href} size={size} /> : null;
     case "open_mac":
       return row.href ? <TurnOnMac href={row.href} size={size} open /> : null;
+    case "open_stopped":
+      return row.href ? <OpenStoppedClip href={row.href} size={size} /> : null;
+    case "resume":
+      return (
+        <span className="post__retry post__retry--wide">
+          <MacStartAgain size={size} />
+        </span>
+      );
     case "add_link":
       return <AddTikTokLink clip={clip} since={row.since} onKept={onKept} />;
   }

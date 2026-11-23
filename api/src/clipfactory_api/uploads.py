@@ -51,12 +51,14 @@ def upload_review_clip(
     ``postOptions`` also says ``test: "private"`` (§46.8). No request body can set these. With ``auto`` the clip's
     write also needs no live Throw away hold (``holdUntil`` absent or past, §46.7); Upload by hand ignores the hold.
 
-    Your Mac posts it on TikTok (§47), only while ``settings.tiktokMac.on`` (a campaign clip too, always for Everyone,
-    since the owner never posts by hand: ADR-85): Upload by hand with TikTok among ``platforms``, while TikTok has not approved Clip Factory's public uploads, writes the TikTok
-    post as a Mac post (``source: "upload"``) instead of ``queued`` (the sheet's choices are still required and
-    checked); an auto-posting run's live clip (``tiktok_mac=True``, never a Private test) also gets one (``source:
-    "auto"``), though TikTok is never one of its places. Every Mac post's options are My settings' TikTok choices. Both go through ``create_for_clip``'s explicit
-    ``tiktok_mac`` path, in the same transaction as the other posts. Otherwise TikTok's rule is exactly as before."""
+    Your Mac posts it on TikTok (§47), only while ``settings.tiktokMac.on`` and never for a campaign clip (its
+    TikTok goes through TikTok's API once TikTok approved the app, else Upload refuses it: the Mac can't mark it as
+    Branded content yet): Upload by hand with TikTok among ``platforms``, while TikTok has not approved Clip Factory's
+    public uploads, writes the TikTok post as a Mac post (``source: "upload"``) instead of ``queued`` (the sheet's
+    choices are still required and checked); an auto-posting run's live clip (``tiktok_mac=True``, never a Private
+    test) also gets one (``source: "auto"``), though TikTok is never one of its places. Every Mac post's options are My
+    settings' TikTok choices. Both go through ``create_for_clip``'s explicit ``tiktok_mac`` path, in the same
+    transaction as the other posts. Otherwise TikTok's rule is exactly as before."""
     from .routes import clips as checks  # Upload's and Try again's shared checks (§33, §38.14)
 
     patch = dict(captions_patch or {})
@@ -107,6 +109,7 @@ def upload_review_clip(
         app,
         user_id,
         current_settings=current_settings,
+        is_campaign=campaign is not None,
         chosen=chosen,
         auto=auto,
         asked=tiktok_mac,
@@ -114,7 +117,7 @@ def upload_review_clip(
     if mac_source:
         # Every Mac post asks the Mac for My settings' choices (Everyone, Comment, Duet and Stitch on), whatever the
         # TikTok sheet said: before TikTok approves the app the sheet only offers Only me, and his Mac posts for everyone.
-        post_options["tiktok"] = mac_posts.options_for(current_settings, is_campaign=campaign is not None)
+        post_options["tiktok"] = mac_posts.preset_options(current_settings)
     post_fields: Item | None = None
     not_held: db.Condition | None = None
     if auto is not None:
@@ -162,13 +165,14 @@ def _mac_source(
     user_id: str,
     *,
     current_settings: Mapping[str, Any],
+    is_campaign: bool,
     chosen: list[str] | None,
     auto: Mapping[str, Any] | None,
     asked: bool,
 ) -> str | None:
-    """Whether this Upload hands TikTok to the owner's Mac (§47), and from where: ``"upload"``, ``"auto"`` or None. A
-    campaign clip is handed over like any other (its TikTok sheet's rules, Everyone and Branded content, still hold)."""
-    if not mac_posts.is_on(current_settings):
+    """Whether this Upload hands TikTok to the owner's Mac (§47), and from where: ``"upload"``, ``"auto"`` or None.
+    Never for a campaign clip, by hand or from an auto-posting run (``tiktok_mac.CAMPAIGN_SKIPS``)."""
+    if is_campaign or not mac_posts.is_on(current_settings):
         return None
     if auto is None:
         if chosen and "tiktok" in chosen and not mac_posts.tiktok_audited(app.store, user_id):

@@ -29,8 +29,8 @@ import { currentClipModel, isClipModel } from "../../lib/models.ts";
 import { autoPostMock, NOTE_NO_PLACES, CR_BY_HAND, CR_CANT_TAKE, type AutoPostControls } from "./autopost.ts";
 import { AUTO_ALREADY_SENT } from "../../lib/autopost.ts";
 import { tiktokMacMock, presetChoices, type TikTokMacControls } from "./tiktokMac.ts";
-import { canSendToMac, MAC_UNDO_REFUSED, MAC_UNKNOWN_SETTING, macOn } from "../../lib/tiktokMac.ts";
-import { tiktokAudited } from "../../lib/tiktokYourself.ts";
+import { MAC_FIND_NONE, MAC_ROW_CAMPAIGN, MAC_UNDO_REFUSED, MAC_UNKNOWN_SETTING, macOn } from "../../lib/tiktokMac.ts";
+import { canPostYourself, tiktokAudited } from "../../lib/tiktokYourself.ts";
 
 const STEP_MS = 3500;
 /** api settings.MAX_USD_PER_1000: the retired `earningsRates` (§21) are still validated, never read (§25.6). */
@@ -181,7 +181,9 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
   const claimedAt = new Map<string, number>();
   // The TikTok sheet's choices stored on each TikTok post (the API's postOptions.tiktok, never returned).
   const postOptions = new Map<string, TikTokPostOptions>();
-  // Posted on TikTok by the owner (§42): what the TikTok post was before (null: made by I posted it), for Undo.
+  // Find it for me (D3): the clips Clip Factory looked for once already (the next look finds it).
+  const lookedFor = new Set<string>();
+  // Posted on TikTok by the owner (§42): what the TikTok post was before (null: made by It's on TikTok), for Undo.
   const byYou = new Map<string, Post | null>();
   // Each place's own choices sent with Upload (§36.3), by post (the API's postOptions, never returned).
   const clipOptions = new Map<string, object>();
@@ -199,6 +201,9 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     const missing = PLATFORM_ORDER.find((p) => waiting.some((w) => w.platform === p) && !connected.includes(p));
     if (missing) throw bad(`${PLATFORM_LABEL[missing]} is not set up yet. Turn it off, then tap Upload.`);
     if (!tiktok && waiting.some((p) => p.platform === "tiktok" && !postOptions.get(p.postId)?.privacyLevel)) throw bad("Pick who can see it on TikTok.");
+    // D1: a campaign clip's TikTok waits until TikTok approved the app (Try again's own words).
+    if (c.campaignId && [...failed, ...waiting].some((p) => p.platform === "tiktok") && !tiktokAudited(setup.overview().platforms))
+      throw bad(`${MAC_ROW_CAMPAIGN} Tap Try again on another place.`);
     // Naming nothing to send changes nothing (§33), except a start that did not go through earlier: it starts now.
     if (!failed.length && !waiting.length) {
       if (c.startPending) started(c);
@@ -292,11 +297,13 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       publishClip(c);
     },
     /**
-     * A kept clip that isn't on TikTok yet becomes a campaign clip (§38), for the TikTok row (§47.4): the Mac takes it
-     * like any other, always for Everyone. Answers its id.
+     * A kept clip that isn't on TikTok yet becomes a campaign clip (§38), for the TikTok row (§47.4): it skips TikTok
+     * for now (D1), so the Mac never takes it. Answers its id.
      */
     campaignClip(campaignId = "200ea21b-be80-4db8-b552-8e32b148604e"): string {
-      const c = store.clips.find((x) => !x.campaignId && !x.startPending && canSendToMac(x, store.posts.filter((p) => p.clipId === x.clipId)));
+      const c = store.clips.find(
+        (x) => !x.campaignId && !x.startPending && x.auto?.test !== "private" && canPostYourself(x, store.posts.filter((p) => p.clipId === x.clipId)),
+      );
       if (!c) throw new Error("no kept clip that isn't on TikTok yet");
       c.campaignId = campaignId;
       publishClip(c);
@@ -722,6 +729,8 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     if (c.status === "review" && chosen) {
       const missing = chosen.find((p) => !connected.includes(p));
       if (missing) throw bad(`${PLATFORM_LABEL[missing]} is not set up yet. Turn it off, then tap Upload.`);
+      // D1 (routes/clips._place_refusal): a campaign clip's TikTok waits until TikTok approved the app.
+      if (c.campaignId && chosen.includes("tiktok") && !tiktokAudited(setup.overview().platforms)) throw bad(`${MAC_ROW_CAMPAIGN} Turn TikTok off, then tap Upload.`);
     }
     // A campaign clip (§38.14): only the campaign's places, public, never made for kids, TikTok Branded content.
     if (c.status === "review") await cr.confirmCheck(c, chosen, options, tiktok);
@@ -736,10 +745,10 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     const tiktokGoing = chosen ? chosen.includes("tiktok") : store.settings.platforms.includes("tiktok") && connected.includes("tiktok");
     if (c.status === "review" && tiktokGoing && !tiktok?.privacyLevel) throw bad("Pick who can see it on TikTok.");
     // Your Mac posts TikTok (§47.2): Upload's TikTok goes to the Mac while TikTok has not approved the app, and a live
-    // auto-posting run gives a clip a Mac post too (never a Private test run). A campaign clip goes the same way (the
-    // owner never posts by hand), always for Everyone.
-    const macUpload = !auto && !!chosen?.includes("tiktok") && macOn(store.settings) && !tiktokAudited(setup.overview().platforms);
-    const macAuto = !!auto && !auto.test && macOn(store.settings);
+    // auto-posting run gives a clip a Mac post too (never a Private test run). Never a campaign clip (D1): the Mac
+    // can't mark it as Branded content yet (once TikTok approved the app, its TikTok goes through TikTok's API).
+    const macUpload = !auto && !!chosen?.includes("tiktok") && macOn(store.settings) && !tiktokAudited(setup.overview().platforms) && !c.campaignId;
+    const macAuto = !!auto && !auto.test && macOn(store.settings) && !c.campaignId;
     const startPosting = () => {
       const have = new Set(store.posts.filter((p) => p.clipId === clipId).map((p) => p.platform));
       const targets = c.uploadTo ?? store.settings.platforms;
@@ -754,13 +763,13 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       if (auto) for (const p of created) privateTest(Object.assign(p, { auto: true as const }), auto.test);
       if (macAuto && !have.has("tiktok") && !targets.includes("tiktok")) {
         const made: Post = { postId: ulid(), clipId, platform: "tiktok", ...mac.macFields("auto"), auto: true };
-        postOptions.set(made.postId, presetChoices(store.settings, !!c.campaignId));
+        postOptions.set(made.postId, presetChoices(store.settings));
         created.splice(PLATFORM_ORDER.filter((p) => p === "youtube" && created.some((x) => x.platform === p)).length, 0, made);
       }
       store.posts.push(...created);
       for (const p of created) if (p.platform === "tiktok" && p.status === "queued" && tiktok) postOptions.set(p.postId, clone(tiktok));
       // Every Mac post asks the Mac for My settings' choices (Everyone, all three on), whatever the sheet said (§47.1).
-      for (const p of created) if (p.platform === "tiktok" && p.status === "mac") postOptions.set(p.postId, presetChoices(store.settings, !!c.campaignId));
+      for (const p of created) if (p.platform === "tiktok" && p.status === "mac") postOptions.set(p.postId, presetChoices(store.settings));
       for (const p of created) {
         const own = options?.[p.platform as keyof ClipPostOptions];
         if (own) clipOptions.set(p.postId, clone(own));
@@ -1213,10 +1222,12 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       // Mock clips carry no real video: a tiny stand-in file keeps Save the video and the share menu working.
       return { url: c.videoUrl ?? "data:video/mp4;base64,AAAAGGZ0eXBpc29tAAACAGlzb21tcDQx", filename: videoFileName(c.hook) };
     },
-    async markTikTokPosted(clipId, link, _since) {
+    async markTikTokPosted(clipId, link, _since, noLink) {
       await delay();
       const c = clip(clipId);
-      if (!["confirmed", "publishing", "posted", "failed"].includes(c.status)) throw conflict("Upload this clip first. Then you can post it on TikTok yourself.");
+      if (noLink !== undefined && typeof noLink !== "boolean") throw bad("noLink must be true or false.");
+      if (link?.trim() && noLink) throw bad("Send a link or noLink, not both.");
+      if (!["confirmed", "publishing", "posted", "failed"].includes(c.status)) throw conflict("Upload this clip first. Then your Mac can post it on TikTok.");
       const mine = store.posts.filter((p) => p.clipId === clipId);
       if (!mine.length) throw conflict("This clip is still starting to upload. Try again in a minute.");
       let video: { id: string; handle: string } | null = null;
@@ -1228,15 +1239,20 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
         else throw bad("That is not a TikTok link. In TikTok, tap Share, then Copy link, and paste it here.");
       }
       let p = mine.find((x) => x.platform === "tiktok");
-      // No link: the API looks for the post on his TikTok. Here the first look finds nothing yet, a later one finds it.
-      let note: string | undefined;
-      if (!video) {
-        if (p?.by === "you") video = { id: "7710644811602169121", handle: "lamo.clips" };
-        else note = "Saved. Clip Factory could not find it on your TikTok yet. Tap Find it for me in a minute.";
-      }
+      // Find it for me (neither a link nor noLink, D3): already his with its link, nothing changes. Else the Mac's own
+      // check first, then the finder: here the first look on a clip finds nothing (409, nothing saved), the next finds it.
+      const finding = !video && !noLink;
+      if (finding && p?.by === "you" && p.url) return { clip: clone(c), posts: clone(mine) };
       if (p?.status === "queued") throw conflict("This clip is still uploading to TikTok. Wait until it is done, then try again.");
       // A Mac post (§47.3): his own post while it waits or stopped, never while the Mac is posting it.
-      mac.beforeMarked(p);
+      mac.beforeMarked(p, noLink === true);
+      if (finding) {
+        if (!lookedFor.has(clipId)) {
+          lookedFor.add(clipId);
+          throw conflict(MAC_FIND_NONE);
+        }
+        video = { id: "7710644811602169121", handle: "lamo.clips" };
+      }
       if (p && p.by !== "you" && p.status === "posted" && p.privacy === "public") throw conflict("This clip is already on TikTok for everyone.");
       if (!p) {
         p = { postId: ulid(), clipId, platform: "tiktok", status: "posted" };
@@ -1256,7 +1272,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       if (c.status === "failed" || (c.status === "confirmed" && !mine.some((x) => x.status === "queued"))) c.status = "posted";
       publishClip(c);
       publishPost(p);
-      return { clip: clone(c), posts: clone(store.posts.filter((x) => x.clipId === clipId)), ...(note ? { note } : {}) };
+      return { clip: clone(c), posts: clone(store.posts.filter((x) => x.clipId === clipId)) };
     },
     async undoTikTokPosted(clipId) {
       await delay();
@@ -1515,6 +1531,10 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     async tiktokMacLogin(action) {
       await delay();
       return mac.loginRequest(action);
+    },
+    async tiktokMacRequest(action) {
+      await delay();
+      return mac.request(action);
     },
     async sendToMac(clipIds, now) {
       await delay();

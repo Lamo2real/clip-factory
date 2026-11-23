@@ -725,10 +725,7 @@ def _places_note(view: View, item: Mapping[str, Any], places: list[str]) -> str 
     if refused:
         return f"Add {gates.LABELS.get(refused[0], refused[0])} in Content Rewards first."
     if gates.tiktok_waits(paid, view.setups):
-        return (
-            "TikTok is left out for now. Until TikTok checks Clip Factory, TikTok posts are private, and private posts "
-            "can't earn."
-        )
+        return "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet."  # tiktok_mac.CAMPAIGN_SKIPS
     return None
 
 

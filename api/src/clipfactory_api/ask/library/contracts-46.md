@@ -26,7 +26,8 @@ Asked before building, he answered "Yes, all your picks" (2026-11-22). They are 
    risks; ADR-83):** TikTok is still never one of a run's places and never goes through TikTok's API, but while
    **Your Mac posts TikTok** is on (`settings.tiktokMac.on`, §47) a live run's normal clip also gets a TikTok post
    for his Mac (`source: "auto"`, My settings' Everyone with Comment, Duet and Stitch on), written in the same
-   transaction as its other posts. Practice, Private test runs and campaign clips never get one. Clips already
+   transaction as its other posts. Practice, Private test runs and campaign clips never get one (round 3,
+   2026-11-23: no path makes a campaign Mac post, §47.2). Clips already
    waiting go too when he sends them ("Send them too": oldest first, one every 30 minutes, after the trial).
    **Amended again 2026-11-22 (ADR-85):** there is no Post it yourself any more. While Your Mac posts TikTok is off, a
    run still leaves TikTok out, and Where they go (§46.2 item 3) says how to turn the Mac on.

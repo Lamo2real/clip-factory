@@ -305,10 +305,10 @@ def test_practice_and_a_private_test_never_make_a_mac_post(
     assert all(p["status"] != "mac" for p in found.values())
 
 
-def test_a_campaign_clip_gets_a_mac_post_from_a_run_for_everyone(
+def test_a_campaign_clip_never_gets_a_mac_post_from_a_run(
     app: App, store: db.Store, table: FakeTable, at_slot: Clock, cr_on: Any
 ) -> None:
-    # The owner never posts by hand (ADR-85): his Mac posts a campaign clip on his own TikTok too, always for Everyone.
+    # D1: the Mac can't mark a campaign clip as Branded content yet, and Content Rewards never receives what it posts.
     ready(store, "youtube", "instagram", "facebook")
     put_campaign(store)
     put_crconn(store)
@@ -316,10 +316,7 @@ def test_a_campaign_clip_gets_a_mac_post_from_a_run_for_everyone(
     clip = campaign_clip(store, checklist=FITS)
     assert tick(app).result == "ran"
     assert outcomes(store) == [(clip["clipId"], "sent", None)]
-    found = posts_of(table, clip["clipId"])
-    assert set(found) == {"youtube", "instagram", "tiktok"}
-    assert (found["tiktok"]["status"], found["tiktok"]["macSource"]) == ("mac", "auto")
-    assert found["tiktok"]["postOptions"]["privacyLevel"] == "PUBLIC_TO_EVERYONE"
+    assert set(posts_of(table, clip["clipId"])) == {"youtube", "instagram"}
 
 
 def test_x_only_when_it_is_set_up(app: App, store: db.Store, table: FakeTable, at_slot: Clock) -> None:
