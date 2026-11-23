@@ -697,6 +697,9 @@ jobs:
       # every workflow's syntax, expressions, job needs and action inputs, and shellcheck over each run step. Seconds.
       - name: actionlint (every workflow, with shellcheck on their run steps)
         env:
+          # Run steps are checked for warnings and errors only: the runner's shellcheck (older than a Mac's) adds
+          # info notes such as SC2015 that newer versions drop. Script files keep the full check in the step above.
+          SHELLCHECK_OPTS: --severity=warning
           ACTIONLINT_VERSION: "1.7.12"
           ACTIONLINT_SHA256: 8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
         run: |

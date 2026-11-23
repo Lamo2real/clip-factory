@@ -485,9 +485,10 @@ fake_aws() {
 }
 # inputs_now <fake S3>: what desktop-manifest records; decide <stale> <tools changed> <fake S3>: desktop-plan's output.
 # The workflow's own text runs them (eval), with these variables and aws().
-# shellcheck disable=SC2329
+# SC2317 is the older shellcheck name (the CI runner's) for SC2329: aws() is called through eval.
+# shellcheck disable=SC2317,SC2329
 inputs_now() { (FAKE_S3="$1"; WEB_BUCKET=web; aws() { fake_aws "$@"; }; eval "$manifest_inputs_fn"; manifest_inputs) 2>/dev/null || echo unreadable; }
-# shellcheck disable=SC2034,SC2154,SC2329
+# shellcheck disable=SC2034,SC2154,SC2317,SC2329
 decide() {
   (FAKE_S3="$3"; stale="$1"; TOOLS_CHANGED="$2"; WEB_BUCKET=web; summary=(); aws() { fake_aws "$@"; }
     eval "$plan_inputs_fn"; eval "$decision"; printf '%s\n' "$manifest") 2>/dev/null || echo unreadable
