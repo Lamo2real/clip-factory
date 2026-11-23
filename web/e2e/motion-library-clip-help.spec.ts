@@ -1,6 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
+import { ACT_MS } from "../src/lib/motion.ts";
 import { CLIPS, openClip, settle } from "./helpers.ts";
-import { actTransforms, actWidths, MOTION_WIDTHS, noSideScroll, pauseActs, tapAct } from "./motionHelpers.ts";
+import { actTransforms, actWidths, holdClock, MOTION_WIDTHS, noSideScroll, pauseActs, tapAct, tapHeld, tapUntilPhase, watchFor } from "./motionHelpers.ts";
 
 // Action motion (docs/CONTRACTS.md §20.11 (b)): Library, This week, the clip's numbers and Ask Clip Factory.
 
@@ -31,6 +32,8 @@ test.describe("motion: library, clip and help (APPLY b)", () => {
   });
 
   test("This week: the arrows slide, the newest week only nudges, the star spins on and settles off", async ({ page }) => {
+    // Before the page loads, so the page's clock can be held (holdClock); until then time runs as usual.
+    await page.clock.install();
     await page.goto("/library?view=week");
     await settle(page);
     const later = page.getByRole("button", { name: "Later week" });
@@ -47,10 +50,14 @@ test.describe("motion: library, clip and help (APPLY b)", () => {
 
     const star = page.locator(".week-card").first().getByRole("button", { name: "Best this week" });
     const was = await star.getAttribute("aria-pressed");
-    const on = await tapAct(star);
-    expect(on.cls.split(" ")).toEqual(expect.arrayContaining(["act--star", "is-play"]));
+    // Held from the tap: the spin is still in its play phase when checked, and it settles on the page's own clock.
+    await holdClock(page);
+    await tapHeld(star);
+    await expect(star.locator(".act")).toContainClass("act--star is-play");
     await expect(star).not.toHaveAttribute("aria-pressed", was ?? "");
-    await expect(star.locator(".act")).toHaveClass(/is-idle/, { timeout: 900 });
+    await page.clock.runFor(ACT_MS.star);
+    await expect(star.locator(".act")).toHaveClass(/is-idle/);
+    await page.clock.resume();
     await tapAct(star);
     await expect(star).toHaveAttribute("aria-pressed", was ?? "");
 
@@ -85,9 +92,10 @@ test.describe("motion: library, clip and help (APPLY b)", () => {
     await context.grantPermissions(["clipboard-read", "clipboard-write"]);
     await openHelp(page);
     const send = panel(page).locator(".help-panel__ask");
+    // The flight lasts ACT_MS.send: watch for it, trail and all, from before the tap: a busy machine cannot hide it.
+    const flew = await watchFor(send, ".fly.is-flying > .fly__trail");
     await panel(page).locator(".help-chip").first().click();
-    await expect(send.locator(".fly")).toHaveClass(/is-flying/);
-    await expect(send.locator(".fly__trail")).toHaveCount(1);
+    await expect.poll(flew).toBe(true);
     await expect(panel(page).locator(".help-msg--bot").last()).toBeVisible();
 
     const restart = panel(page).getByRole("button", { name: "Start over" });
@@ -109,8 +117,8 @@ test.describe("motion: library, clip and help (APPLY b)", () => {
       navigator.clipboard.writeText = () => Promise.reject(new Error("no"));
     });
     await page.waitForTimeout(400);
-    await tapAct(copy);
-    await expect(copy.locator(".act")).toHaveClass(/is-fail/);
+    // The shake is short (ACT_FAIL_MS), so wait for it inside the page: a polling check can miss it when busy.
+    expect(await tapUntilPhase(copy, "is-fail")).toBe(true);
   });
 
   test("reduced motion: Refresh numbers and the star only fade", async ({ page }) => {

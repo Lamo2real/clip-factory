@@ -112,7 +112,7 @@ class MakerChecker:
         where = region_words(region)
         model_id = config.bare_model_id(entry.get("modelId"))  # both checks take a foundation model id
         if self.bedrock is None:
-            return "error", "Lamo Stories cannot reach Amazon Bedrock right now. Try again later."
+            return "error", "Funded Clips cannot reach Amazon Bedrock right now. Try again later."
         client = self.bedrock(region)
         try:
             got = client.get_foundation_model_availability(modelId=model_id)
@@ -177,7 +177,7 @@ class MakerChecker:
             return "ok", f"ElevenLabs accepted your key for {label}."
         known = " and ".join(sorted(elevenlabs_sound_models()))
         return "not_found", (
-            f"ElevenLabs accepted your key, but Lamo Stories cannot confirm a sound model called {model_id}. "
+            f"ElevenLabs accepted your key, but Funded Clips cannot confirm a sound model called {model_id}. "
             f"ElevenLabs' sound models are {known}."
         )
 
@@ -194,7 +194,7 @@ class MakerChecker:
         region = str(entry.get("region") or "eu-west-1")
         voice = str(entry.get("voice") or "Joanna")
         if self.polly is None:
-            return "error", "Lamo Stories cannot reach Amazon Polly right now. Try again later."
+            return "error", "Funded Clips cannot reach Amazon Polly right now. Try again later."
         try:
             got = self.polly(region).describe_voices(Engine=str(entry.get("modelId") or "neural"))
         except Exception as e:

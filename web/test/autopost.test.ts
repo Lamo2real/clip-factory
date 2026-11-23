@@ -41,6 +41,8 @@ import {
   sentFirstLine,
   switchLine,
   timeWords,
+  TIKTOK_MAC_NEEDS_PLACE,
+  TIKTOK_YOURSELF_LINE,
   YOUTUBE_LIMIT,
 } from "../src/lib/autopost.ts";
 
@@ -175,9 +177,19 @@ describe("where they go (§46.2 item 3)", () => {
     expect(placesLine(["facebook", "youtube", "instagram"])).toBe("Goes to YouTube, Instagram and Facebook.");
     expect(placesLine(["youtube"])).toBe("Goes to YouTube.");
     expect(placesLine([])).toBe("Nothing is set up to post to. Set up a place first.");
-    expect(leftOutLine("tiktok", "tiktok_yourself")).toBe("TikTok: you post it yourself (TikTok's rule). Each clip gets Post it yourself.");
     expect(leftOutLine("x", "not_set_up")).toBe("X: not set up yet.");
+    expect(leftOutLine("x", "not_set_up", true)).toBe("X: not set up yet.");
     expect(NEXT_EMPTY).toBe("Nothing in Review. New clips join the line when they are made.");
+  });
+
+  it("TikTok left out: turn on Your Mac posts TikTok, never Post it yourself (ADR-86)", () => {
+    // Your Mac posts TikTok is off: TikTok goes only through his Mac, so the line says how to turn it on.
+    expect(leftOutLine("tiktok", "tiktok_yourself")).toBe("TikTok: turn on Your Mac posts TikTok to post there.");
+    expect(leftOutLine("tiktok", "tiktok_yourself", false)).toBe(TIKTOK_YOURSELF_LINE);
+    // On, but nothing else set up: a run sends nothing (§46.6), so his Mac waits for a place, and no Turn on.
+    expect(leftOutLine("tiktok", "tiktok_yourself", true)).toBe("TikTok: your Mac posts it once another place is set up.");
+    expect(leftOutLine("tiktok", "tiktok_yourself", true)).toBe(TIKTOK_MAC_NEEDS_PLACE);
+    for (const line of [TIKTOK_YOURSELF_LINE, TIKTOK_MAC_NEEDS_PLACE]) expect(line).not.toMatch(/yourself|I posted it|AirDrop/i);
   });
 });
 

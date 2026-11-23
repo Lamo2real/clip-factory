@@ -6,12 +6,18 @@ import { brandedBlocked, tiktokLabel } from "../../lib/tiktokChoices.ts";
 
 export function TikTokCommercial({
   privacy,
+  hint = true,
   yourBrand,
   branded,
   onYourBrand,
   onBranded,
 }: {
   privacy: string;
+  /**
+   * The line under the choices ("Your video will be labeled as …", or "Pick Your brand, Branded content, or both.").
+   * Off while the owner's Mac posts TikTok (§47.9): nothing would add the label, and the row's alert says what to do.
+   */
+  hint?: boolean;
   yourBrand: boolean;
   branded: boolean;
   onYourBrand: (on: boolean) => void;
@@ -39,7 +45,11 @@ export function TikTokCommercial({
         <span>Branded content</span>
         <span className="tt-sheet__tag">Paid partnership</span>
       </label>
-      {label ? <p className="field__hint">Your video will be labeled as &apos;{label}&apos;.</p> : <p className="field__hint">Pick Your brand, Branded content, or both.</p>}
+      {!hint ? null : label ? (
+        <p className="field__hint">Your video will be labeled as &apos;{label}&apos;.</p>
+      ) : (
+        <p className="field__hint">Pick Your brand, Branded content, or both.</p>
+      )}
       {blocked ? (
         <p className="field__hint" id={`${id}-blocked`}>
           {blocked}

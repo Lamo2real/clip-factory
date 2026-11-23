@@ -198,8 +198,8 @@ def stops(  # noqa: PLR0915 (every stop of §38.4, in the table's order)
         out.append(
             _stop(
                 "tiktok_only",
-                "This campaign only pays for TikTok. TikTok keeps Clip Factory's posts private until it checks the "
-                "app, and private posts can't earn. Pick a campaign that pays for YouTube, Instagram, X or Facebook.",
+                "This campaign only pays for TikTok. Campaign clips skip TikTok for now: your Mac can't mark them as "
+                "Branded content yet. Pick a campaign that pays for YouTube, Instagram, X or Facebook.",
             )
         )
     elif not paid and membership in CAN_MAKE:

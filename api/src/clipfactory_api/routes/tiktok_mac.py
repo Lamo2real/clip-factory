@@ -3,12 +3,15 @@
 The owner's Mac helper signs in as the owner (the same JWT) and uses the helper routes; the app uses the owner's.
 
 * Helper: ``GET /v1/tiktok/mac`` (on, the helper item, the queue), ``POST /v1/tiktok/mac/ping``, and per clip
-  ``claim``, ``step``, ``done`` and ``stopped``.
-* Owner: ``POST /v1/tiktok/mac/send`` (Send these to my Mac), ``POST …/tiktok/mac/retry`` (Try again) and
-  ``DELETE …/tiktok/mac`` (Take it back, before Post it yourself instead).
+  ``claim``, ``step`` (a re-sent step is the job's beat), ``done`` and ``stopped``.
+* Owner: ``POST /v1/tiktok/mac/send`` (Send these to my Mac, or with ``now: true`` a row's Post with my Mac),
+  ``POST /v1/tiktok/mac/login`` (Change or Forget TikTok login), ``POST /v1/tiktok/mac/request`` (Start my Mac
+  again, Let them go), ``POST …/tiktok/mac/retry`` (Try again; ``now: true`` from a row) and ``DELETE …/tiktok/mac``
+  (Take it back, kept for older apps). ``now`` is an optional, additive body key: the Mac posts that clip at once, as
+  an Upload tap (``macSource: "upload"``); without it every call is answered exactly as before.
 
 Nothing here calls TikTok's API. The logic and every conditional write live in ``tiktok_mac.py``; the Mac's done goes
-through ``tiktok_self.mark_posted``, the same write as I posted it (one TikTok post per clip).
+through ``tiktok_self.mark_posted``, the same write as the owner's It's on TikTok (one TikTok post per clip).
 """
 
 from __future__ import annotations
@@ -17,6 +20,7 @@ from typing import Any
 
 from .. import db, posts, settings, tiktok_mac, tiktok_self, validate
 from ..app import App
+from ..clock import parse
 from ..errors import bad_request, conflict
 from ..http import Request, Response, ok
 from ..ids import is_ulid
@@ -26,6 +30,7 @@ from . import clips as clip_routes
 
 DEVICE_MAX = 100
 VERSION_MAX = 40
+STAMP_MAX = 40  # an ISO time the helper sends back (``loginDone``, ``resumeDone``, ``letGoDone``, ``backlogAt``)
 
 
 def _refused(e: tiktok_self.Refused) -> Exception:
@@ -63,10 +68,36 @@ def status(app: App, req: Request) -> Response:
     )
 
 
+def _time(body: dict[str, Any], key: str) -> str | None:
+    """An optional time from the helper's plan: text of at most 40 characters that ``clock.parse`` reads."""
+    raw = body.get(key)
+    if raw is None:
+        return None
+    if not isinstance(raw, str) or len(raw) > STAMP_MAX or parse(raw) is None:
+        raise bad_request(f"{key} must be a time.")
+    return raw
+
+
 def ping(app: App, req: Request) -> Response:
-    """``POST /v1/tiktok/mac/ping`` ``{state, reason?, version?, device}`` → ``{on}``."""
+    """``POST /v1/tiktok/mac/ping`` ``{state, reason?, version?, device, login?, loginDone?, backlogAt?, holdBefore?,
+    backfill?, resumeDone?, letGoDone?}`` → ``{on}``. A plan key left out removes what the last ping said."""
     body = req.json()
-    validate.only_keys(body, {"state", "reason", "version", "device", "login", "loginDone"})
+    validate.only_keys(
+        body,
+        {
+            "state",
+            "reason",
+            "version",
+            "device",
+            "login",
+            "loginDone",
+            "backlogAt",
+            "holdBefore",
+            "backfill",
+            "resumeDone",
+            "letGoDone",
+        },
+    )
     state = body.get("state")
     if state not in tiktok_mac.HELPER_STATES:
         raise bad_request("state must be ok, needs_you or paused.")
@@ -78,7 +109,12 @@ def ping(app: App, req: Request) -> Response:
     login = body.get("login")
     if login is not None and login not in tiktok_mac.LOGIN_STATES:
         raise bad_request("login must be saved or none.")
-    login_done = validate.string(body, "loginDone", required=False, max_len=40)
+    login_done = validate.string(body, "loginDone", required=False, max_len=STAMP_MAX)
+    backlog_at = _time(body, "backlogAt")
+    hold_before = _time(body, "holdBefore")
+    backfill = validate.boolean(body.get("backfill", False), "backfill")
+    resume_done = validate.string(body, "resumeDone", required=False, max_len=STAMP_MAX)
+    let_go_done = validate.string(body, "letGoDone", required=False, max_len=STAMP_MAX)
     tiktok_mac.ping(
         app.store,
         req.user_id,
@@ -89,6 +125,11 @@ def ping(app: App, req: Request) -> Response:
         now=app.clock(),
         login=login,
         login_done=login_done,
+        backlog_at=backlog_at,
+        hold_before=hold_before,
+        backfill=backfill,
+        resume_done=resume_done,
+        let_go_done=let_go_done,
     )
     return ok({"on": tiktok_mac.is_on(settings.load(app.store, req.user_id))})
 
@@ -108,15 +149,40 @@ def login(app: App, req: Request) -> Response:
     return ok({"helper": tiktok_mac.public_helper(item)})
 
 
-def send(app: App, req: Request) -> Response:
-    """``POST /v1/tiktok/mac/send`` ``{clipIds}`` → ``{results}``: each clip once, in order (§47.2)."""
+def request(app: App, req: Request) -> Response:
+    """``POST /v1/tiktok/mac/request`` ``{action: "resume" | "let_go"}`` → ``{helper}`` (§47.3): Start my Mac again
+    (only while it is paused) or Let them go (only while it holds auto-posting clips); the helper does it on its next
+    tick."""
     body = req.json()
-    validate.only_keys(body, {"clipIds"})
+    validate.only_keys(body, {"action"})
+    action = body.get("action")
+    if action not in tiktok_mac.REQUESTS:
+        raise bad_request(tiktok_mac.PICK_REQUEST)
+    try:
+        item = tiktok_mac.request(app.store, req.user_id, str(action), app.clock())
+    except tiktok_self.Refused as e:
+        raise _refused(e) from None
+    log("info", "tiktok_mac.request", action=action)
+    return ok({"helper": tiktok_mac.public_helper(item)})
+
+
+def send(app: App, req: Request) -> Response:
+    """``POST /v1/tiktok/mac/send`` ``{clipIds, now?}`` → ``{results}``: each clip once, in order (§47.2).
+
+    Without ``now`` (Settings' Send these to my Mac) a clip waits as the backlog (``macSource: "sent"``): one after
+    each auto-posting run. With ``now: true`` (a row's Post with my Mac) it goes at once and first, as an Upload tap
+    (``"upload"``), and so does a Mac post that already waits (``sent`` or ``auto``: it becomes ``upload`` in place
+    and counts as sent). A campaign clip never goes (``SEND_CAMPAIGN``). Every other refusal is the same either
+    way."""
+    body = req.json()
+    validate.only_keys(body, {"clipIds", "now"})
     ids = body.get("clipIds")
     if not isinstance(ids, list) or not ids or len(ids) > tiktok_mac.SEND_MAX:
         raise bad_request(f"clipIds must list 1 to {tiktok_mac.SEND_MAX} clips.")
     if not all(isinstance(i, str) for i in ids):
         raise bad_request("clipIds must hold clip ids.")
+    now_tap = validate.boolean(body.get("now", False), "now")
+    source = "upload" if now_tap else "sent"
     current = settings.load(app.store, req.user_id)
     if not tiktok_mac.is_on(current):
         raise conflict(tiktok_mac.MAC_OFF)
@@ -130,9 +196,9 @@ def send(app: App, req: Request) -> Response:
         if clip is not None:
             rows = posts.posts_for_clip(app.store, req.user_id, clip_id, consistent=True)
             is_campaign = clip_routes.campaign_clip(app, req.user_id, clip, rows) is not None
-        reason = tiktok_mac.send(app.store, req.user_id, clip, current, now, is_campaign=is_campaign)
+        reason = tiktok_mac.send(app.store, req.user_id, clip, current, now, is_campaign=is_campaign, source=source)
         results.append({"clipId": clip_id, "sent": reason is None, **({"reason": reason} if reason else {})})
-    log("info", "tiktok_mac.sent", sent=sum(1 for r in results if r["sent"]), asked=len(results))
+    log("info", "tiktok_mac.sent", sent=sum(1 for r in results if r["sent"]), asked=len(results), source=source)
     return ok({"results": results})
 
 
@@ -157,7 +223,8 @@ def claim(app: App, req: Request) -> Response:
 
 
 def step(app: App, req: Request) -> Response:
-    """``POST /v1/clips/{clipId}/tiktok/mac/step`` ``{device, step}`` → ``{job}``."""
+    """``POST /v1/clips/{clipId}/tiktok/mac/step`` ``{device, step, attempt?}`` → ``{job}``. The same step sent again
+    is the job's beat (``macBeatAt``)."""
     body = req.json()
     validate.only_keys(body, {"device", "step", "attempt"})
     device = _device(body)
@@ -167,12 +234,12 @@ def step(app: App, req: Request) -> Response:
         raise bad_request("step must be video, opening, uploading, settings, pressing or finding.")
     item = clip_routes._clip_or_404(app, req)
     try:
-        row = tiktok_mac.step(
+        row, pressed = tiktok_mac.step(
             app.store, item, device, name, app.clock(), settings=settings.load(app.store, req.user_id), attempt=attempt
         )
     except tiktok_self.Refused as e:
         raise _refused(e) from e
-    if name == "pressing":
+    if pressed:
         log("info", "tiktok_mac.pressing", clipId=item["clipId"])
     return _job(app, req, row)
 
@@ -196,8 +263,10 @@ def stopped(app: App, req: Request) -> Response:
 
 def done(app: App, req: Request) -> Response:
     """``POST /v1/clips/{clipId}/tiktok/mac/done`` ``{device, link?}`` → ``{clip, posts, note?}``: the Mac posted it.
-    Through ``tiktok_self.mark_posted`` (one TikTok post per clip). The link is read as I posted it reads one; without
-    one, the §42 finder looks from a minute before the claim. A repeat is answered as the first (adding the link)."""
+    Through ``tiktok_self.mark_posted`` (one TikTok post per clip). The link is read as the owner's It's on TikTok
+    reads one; without one, the §42 finder looks from a minute before the claim, and it is saved without its link when
+    nothing is found (``NOT_FOUND_YET``: the Mac knows it posted). A repeat is answered as the first (adding the
+    link)."""
     body = req.json()
     validate.only_keys(body, {"device", "link", "attempt"})
     device = _device(body)
@@ -237,21 +306,26 @@ def done(app: App, req: Request) -> Response:
 
 
 def retry(app: App, req: Request) -> Response:
-    """``POST /v1/clips/{clipId}/tiktok/mac/retry`` ``{notOnTikTok?}`` → ``{clip, posts}``: the owner's Try again."""
+    """``POST /v1/clips/{clipId}/tiktok/mac/retry`` ``{notOnTikTok?, now?}`` → ``{clip, posts}``: the owner's Try
+    again. With ``now: true`` the stopped post, or one that already waits, goes at once, as an Upload tap
+    (``macSource: "upload"``). A stuck post (``tiktok_self.mac_stuck``: no beat for 5 minutes, or claimed 50 minutes
+    ago) is taken back from that claim the same way, so the Mac claims it afresh. After Post was pressed only with
+    ``notOnTikTok`` and once the find window is over (``MAC_STILL_LOOKING``)."""
     body = req.json()
-    validate.only_keys(body, {"notOnTikTok"})
+    validate.only_keys(body, {"notOnTikTok", "now"})
     not_on_tiktok = validate.boolean(body.get("notOnTikTok", False), "notOnTikTok")
+    now_tap = validate.boolean(body.get("now", False), "now")
     item = clip_routes._clip_or_404(app, req)
     try:
-        tiktok_mac.retry(app.store, item, not_on_tiktok=not_on_tiktok)
+        tiktok_mac.retry(app.store, item, not_on_tiktok=not_on_tiktok, at=app.clock(), now=now_tap)
     except tiktok_self.Refused as e:
         raise _refused(e) from e
-    log("info", "tiktok_mac.retry", clipId=item["clipId"], notOnTikTok=not_on_tiktok)
+    log("info", "tiktok_mac.retry", clipId=item["clipId"], notOnTikTok=not_on_tiktok, now=now_tap)
     return clip_routes._with_posts(app, req)
 
 
 def take_back(app: App, req: Request) -> Response:
-    """``DELETE /v1/clips/{clipId}/tiktok/mac`` → ``{clip, posts}``: Take it back (then Post it yourself instead)."""
+    """``DELETE /v1/clips/{clipId}/tiktok/mac`` → ``{clip, posts}``: Take it back (kept; the web no longer calls it)."""
     item = clip_routes._clip_or_404(app, req)
     try:
         tiktok_mac.take_back(app.store, item)

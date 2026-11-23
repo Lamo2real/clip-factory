@@ -2,10 +2,11 @@
 // workspace check, the Needs you bar, then the page. Only reached while Lamo Stories is switched on
 // (web/src/stories/flag.ts); Lamo Clips keeps its own Shell, untouched. The first time a studio opens, its setup
 // (/stories/setup, §45.29) opens by itself, on its own without the navigation; after that it is one page among the
-// others, reached from the dashboard's card until it is finished. Lamo Clips' Ask and setup to-do are not shown
-// here; the Mac app's "send this now" banner (CrSendNow), the Mac download host and the app badge are, unchanged, and
-// the update bar, toasts and sounds stay global (App.tsx). The page title and the theme colour go back to Lamo
-// Clips' when this is hidden or unmounts. With Clip Factory on screen it stays mounted behind it, hidden and inert
+// others, reached from the dashboard's card until it is finished. Nothing of Clip Factory's own is shown here (its
+// Ask, its setup to-do, its Content Rewards banner, its toasts and sounds); the shell draws what both apps share
+// outside both panes (the workspace switch with the Live chip, the app badge, the Mac download host and the update
+// bar), and this rail, top bar and every page leave the switch's box free (§45.38). The page title and the theme
+// colour go back to Lamo Clips' when this is hidden or unmounts. With Clip Factory on screen it stays mounted behind it, hidden and inert
 // (stories/pane.tsx, §45.34), so coming back shows the page exactly as it was; meanwhile it is quiet (no title, no
 // focus move, no workspace check, no dashboard poll). Its workspace is picked at once from the list the switcher
 // already read, and checked again in the background. Clicks and sounds follow Lamo Stories' own sound setting
@@ -13,17 +14,19 @@
 import "./styles/stories.css";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ApiError } from "../api/errors.ts";
-import { MacFetchHost } from "../app/MacFetchHost.tsx";
-import { CrSendNow } from "../components/CrSendNow.tsx";
+import { setStoriesWorkspaceShown } from "../app/shell.ts";
+import { TopBarSwitch } from "../app/WorkspaceDock.tsx";
 import { useToast } from "../components/Toasts.tsx";
 import { Glide } from "../components/Glide.tsx";
-import { WorkspaceSwitch } from "../components/Nav.tsx";
 import { A } from "../components/ui.tsx";
-import { AppBadge } from "../lib/badge.ts";
+import { STORIES_BRAND, WorkspaceMark, WorkspaceWordmark } from "../components/WorkspaceMark.tsx";
 import { navigate, useHash } from "../lib/router.ts";
 import { loadStoriesApi, setStoriesApi } from "./api/client.ts";
 import { GlideCalm } from "../components/Glide.tsx";
 import { AWAY_RAN_OUT, takeParkedStoriesAway, takeParkedStoriesGo, useAppPane } from "./pane.tsx";
+import { THEME_COLOUR, useStoriesBackground } from "./look.ts";
+import { addStoriesFonts } from "./fonts.ts";
+import { TAB_ORB } from "./glass/index.ts";
 import { followStoriesClicks, storiesReduceMotion } from "./prefs.ts";
 import type { StoriesApi, Workspace } from "./api/types.ts";
 import { storiesHref, type StoriesPage } from "./routes.ts";
@@ -141,7 +144,6 @@ export function opensSetup(
 const TABS = NAV.slice(0, 5);
 const MORE = NAV.slice(5);
 
-const STAGE = "#1C1842";
 
 /** Picks the workspace to show: a checked id from the server's own list, never one taken from the address alone. */
 export function pickWorkspace(list: Workspace[], wanted: string | null): string | null {
@@ -238,28 +240,12 @@ function Screen(props: StoriesScreenProps) {
   }
 }
 
-/** The Lamo Stories mark: a little sunny face on the night stage. */
-function StoriesMark({ size = 40 }: { size?: number }) {
-  return (
-    <svg className="st-brand__mark" width={size} height={size} viewBox="0 0 40 40" aria-hidden="true" focusable="false">
-      <rect x="1" y="1" width="38" height="38" rx="13" fill="#FFC94A" />
-      <circle cx="14.5" cy="17" r="3" fill="#1C1842" />
-      <circle cx="25.5" cy="17" r="3" fill="#1C1842" />
-      <circle cx="15.4" cy="16" r="1" fill="#FFF6E5" />
-      <circle cx="26.4" cy="16" r="1" fill="#FFF6E5" />
-      <path d="M13 24.5c3.8 4 10.2 4 14 0" fill="none" stroke="#1C1842" strokeWidth="3" strokeLinecap="round" />
-      <circle cx="31.5" cy="8.5" r="3" fill="#FF6F61" />
-    </svg>
-  );
-}
-
+/** The brand in the rail and the phone top bar: Clip Factory's mark in Stories' colours and "Funded Clips". */
 function Brand() {
   return (
-    <A href="/stories" className="st-brand" aria-label="Lamo Stories dashboard">
-      <StoriesMark />
-      <span className="st-brand__name">
-        Lamo <em>Stories</em>
-      </span>
+    <A href="/stories" className="st-brand" aria-label={`${STORIES_BRAND} dashboard`}>
+      <WorkspaceMark className="st-brand__mark" />
+      <WorkspaceWordmark className="st-brand__name" />
     </A>
   );
 }
@@ -341,6 +327,8 @@ function quickWorkspace(fromAddress: string | null): string | null {
 }
 
 export function StoriesApp({ page }: { page: StoriesPage }) {
+  // Its own fonts, put on the page by the first Stories screen (never by the prefetched chunk: stories/fonts.ts).
+  useLayoutEffect(() => addStoriesFonts(), []);
   // Its sliding highlights follow Lamo Stories' own calm-motion switch, never Clip Factory's once it has its own.
   return (
     <GlideCalm.Provider value={storiesReduceMotion}>
@@ -351,7 +339,7 @@ export function StoriesApp({ page }: { page: StoriesPage }) {
 
 function StoriesShell({ page }: { page: StoriesPage }) {
   // On screen (Clip Factory's shell may stay mounted behind it, and this one behind Clip Factory: stories/pane.tsx).
-  const { active, clipsMounted } = useAppPane();
+  const { active } = useAppPane();
   const fromAddress = page.name === "connections" ? page.ws : null;
   const [ws, setWs] = useState<string | null>(() => quickWorkspace(fromAddress));
   const [problem, setProblem] = useState<string | null>(null);
@@ -365,6 +353,8 @@ function StoriesShell({ page }: { page: StoriesPage }) {
   const hash = useHash();
   const toast = useToast();
   const pageKey = JSON.stringify(page);
+  // The background behind the glass (Stories › Settings › Look, the glass contract): data-look and the veils on the root.
+  useStoriesBackground(root, active);
 
   const check = useCallback(
     async (skip: string[] = []) => {
@@ -395,9 +385,9 @@ function StoriesShell({ page }: { page: StoriesPage }) {
           if (id) {
             setWs(id);
             setProblem(null);
-          } else setProblem("Lamo Stories is not ready yet. Try again in a minute.");
+          } else setProblem("Funded Clips is not ready yet. Try again in a minute.");
         })
-        .catch(() => live && !quick && setProblem("Lamo Stories could not load. Check that you are online, then try again."));
+        .catch(() => live && !quick && setProblem("Funded Clips could not load. Check that you are online, then try again."));
     };
     run();
     // The switcher picked another Lamo Stories workspace: check again.
@@ -424,7 +414,7 @@ function StoriesShell({ page }: { page: StoriesPage }) {
           if (id) setWs(id);
           else setProblem("We could not find that workspace. Reload the page to try again.");
         })
-        .catch(() => live && setProblem("Lamo Stories could not load. Check that you are online, then try again."));
+        .catch(() => live && setProblem("Funded Clips could not load. Check that you are online, then try again."));
     };
     return () => {
       live = false;
@@ -432,10 +422,13 @@ function StoriesShell({ page }: { page: StoriesPage }) {
     };
   }, [check]);
 
-  // Every Lamo Stories page is where switching back lands.
+  // Every Lamo Stories page is where switching back lands, and the shell's switch marks the workspace shown.
   useEffect(() => {
     if (active && ws) rememberStoriesPath(location.pathname + location.search + location.hash, ws);
   }, [ws, pageKey, hash, active]);
+  useEffect(() => {
+    if (active) setStoriesWorkspaceShown(ws);
+  }, [ws, active]);
 
   // The first time this studio opens, its setup opens by itself (once per studio on this device).
   const pageName = page.name;
@@ -462,7 +455,7 @@ function StoriesShell({ page }: { page: StoriesPage }) {
     const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
     const colour = meta?.getAttribute("content") ?? null;
     const title = document.title;
-    meta?.setAttribute("content", STAGE);
+    meta?.setAttribute("content", THEME_COLOUR);
     return () => {
       if (meta && colour !== null) meta.setAttribute("content", colour);
       document.title = title;
@@ -519,15 +512,41 @@ function StoriesShell({ page }: { page: StoriesPage }) {
   const moreOn = MORE.some(on);
   const solo = alone && page.name === "setup";
 
+  // A short window: the rail's list of pages stops above the shell's switch and scrolls; the chosen page is always
+  // scrolled into its view (the switch never covers a page, and the chosen one is never cut off at the list's end).
+  const railList = useRef<HTMLUListElement>(null);
+  useLayoutEffect(() => {
+    const list = railList.current;
+    if (!list) return;
+    const show = () => {
+      const item = list.querySelector<HTMLElement>(".st-rail__item.is-active");
+      if (!item || list.scrollHeight <= list.clientHeight) return;
+      const box = list.getBoundingClientRect();
+      const at = item.getBoundingClientRect();
+      const top = at.top - box.top + list.scrollTop;
+      const bottom = at.bottom - box.top + list.scrollTop;
+      if (top >= list.scrollTop && bottom <= list.scrollTop + list.clientHeight) return;
+      list.scrollTop = Math.max(0, bottom - list.clientHeight + 6);
+    };
+    show();
+    // The list's room changes after the first paint (the shell lays out its switch, the fonts arrive, the window
+    // is resized): the chosen page stays in view.
+    if (typeof ResizeObserver !== "function") return;
+    const watch = new ResizeObserver(show);
+    watch.observe(list);
+    return () => watch.disconnect();
+  }, [page.name, solo]);
+
   return (
     <div ref={root} className={`stories-app${solo ? " is-alone" : ""}`} data-ws={ws ?? undefined}>
       <a className="st-skip" href="#main">
         Skip to content
       </a>
       {solo ? null : (
-        <nav className="st-rail" aria-label="Lamo Stories">
+        <nav className="st-rail st-glass" aria-label="Funded Clips">
           <Brand />
-          <ul className="st-rail__list">
+          {/* For the keyboard the shell's switch comes right after this list, where it is drawn (data-ws-tab-after). */}
+          <ul className="st-rail__list" data-ws-tab-after="" ref={railList}>
             <Glide active=".st-rail__item.is-active" className="glide--st-rail" as="li" />
             {NAV.map((item) => (
               <li key={item.label}>
@@ -539,22 +558,22 @@ function StoriesShell({ page }: { page: StoriesPage }) {
               </li>
             ))}
           </ul>
-          <div className="st-rail__foot">
-            <WorkspaceSwitch place="stories-rail" current={ws ?? "stories"} />
-          </div>
+          {/* The shell's workspace switch and Live chip sit here, over the rail (app/WorkspaceDock.tsx): the list of
+              pages stops above them. */}
+          <div className="st-rail__foot" aria-hidden="true" />
         </nav>
       )}
       <div className="st-frame">
-        <header className="st-top">
+        {/* The phone top bar is a backing plate for its words (nothing over Ember, glass over a picture or the desktop). */}
+        <header className="st-top st-plate">
           <Brand />
-          <WorkspaceSwitch place="stories-top" current={ws ?? "stories"} />
+          <TopBarSwitch />
         </header>
         <main className="st-main" id={active ? "main" : undefined} ref={main} tabIndex={-1}>
-          <CrSendNow route={{ name: "stories", page }} />
-          {ws && !solo ? <NeedsYouBar ws={ws} /> : null}
+          {ws && !solo ? <NeedsYouBar ws={ws} here={storiesHref(page)} /> : null}
           {problem ? (
             <section className="st-page">
-              <h1 className="sr-only">Lamo Stories</h1>
+              <h1 className="sr-only">Funded Clips</h1>
               <StError message={problem} onRetry={() => location.reload()} />
             </section>
           ) : ws ? (
@@ -563,16 +582,17 @@ function StoriesShell({ page }: { page: StoriesPage }) {
             </StBoundary>
           ) : (
             <section className="st-page">
-              <h1 className="sr-only">Lamo Stories</h1>
+              <h1 className="sr-only">Funded Clips</h1>
               <StLoading label="Opening the studio…" />
             </section>
           )}
         </main>
       </div>
       {solo ? null : (
-        <nav className="st-tabbar" aria-label="Lamo Stories">
+        <nav className="st-tabbar st-glass st-glass--bar" aria-label="Funded Clips">
           <ul className="st-tabbar__list">
-            <Glide active=".st-tabbar__item.is-active" className="glide--st-tab" as="li" />
+            {/* The round active highlight (the figure's orb) slides between the tabs. */}
+            <Glide active=".st-tabbar__item.is-active" className={`glide--st-tab ${TAB_ORB}`} as="li" />
             {TABS.map((item) => (
               <li key={item.label} className="st-tabbar__cell">
                 <A href={storiesHref(item.page)} className={`st-tabbar__item${on(item) ? " is-active" : ""}`} aria-current={on(item) ? "page" : undefined} aria-label={item.label} title={item.label}>
@@ -600,7 +620,7 @@ function StoriesShell({ page }: { page: StoriesPage }) {
       {more ? (
         <div className="st-more" id="st-more" role="dialog" aria-label="More pages">
           <button type="button" className="st-more__shade" aria-label="Close" onClick={() => setMore(false)} />
-          <div className="st-more__sheet">
+          <div className="st-more__sheet st-glass st-glass--float">
             {MORE.map((item) => (
               <A key={item.label} href={storiesHref(item.page)} className={`st-more__item${on(item) ? " is-active" : ""}`} aria-current={on(item) ? "page" : undefined}>
                 <StIcon name={item.icon} size={24} />
@@ -610,13 +630,6 @@ function StoriesShell({ page }: { page: StoriesPage }) {
           </div>
         </div>
       ) : null}
-      {/* Clip Factory's shell runs these for both while it is mounted (behind this one or on screen). */}
-      {clipsMounted ? null : (
-        <>
-          <AppBadge />
-          <MacFetchHost />
-        </>
-      )}
     </div>
   );
 }

@@ -37,7 +37,7 @@ import {
 } from "../../lib/finder.ts";
 import { PLATFORM_LABEL } from "../../lib/format.ts";
 import { useLiveEvents, useLivePoll } from "../../lib/live.ts";
-import { navigate } from "../../lib/router.ts";
+import { clipsGoLater } from "../../app/shell.ts";
 import { CR_DISCOVER } from "../../setup/contentrewards.ts";
 import { Rich } from "../settings/setup/bits.tsx";
 import { useSetup } from "../settings/setup/useSetup.ts";
@@ -267,7 +267,7 @@ export function FindPage() {
       const next = await api().crPatchCampaign(campaignId, { anyway: anywayCodes(full) });
       void reloadCr();
       if (next.nextStep.kind === "make_clips") {
-        navigate(makeClipsPath(campaignId));
+        clipsGoLater(makeClipsPath(campaignId));
         return true;
       }
       setAdded((rows) => rows.map((r) => (r.campaignId === campaignId ? fromCampaign(r, next) : r)));
@@ -427,7 +427,7 @@ export function FindPage() {
       if (!data!.signedIn && m.access === "open" && rules.trim()) await api().crReadCampaign(m.campaignId, rules.slice(0, RULES_MAX));
       void reloadCr();
       void reloadFinder();
-      navigate(campaignPath(m.campaignId));
+      clipsGoLater(campaignPath(m.campaignId));
       return true;
     } catch (e) {
       setAddError((all) => ({ ...all, [m.campaignId]: friendlyMessage(e) }));

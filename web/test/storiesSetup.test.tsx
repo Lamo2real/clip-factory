@@ -215,16 +215,24 @@ describe("step 4 and the connect steps", () => {
     await start({});
     await click(button("Connect X"));
     expect(stepTitle()).toBe("Connect X");
-    expect(document.body.textContent).toContain("This is Clip Factory's own account, so this step stays to do.");
+    expect(document.body.textContent).toContain("This is Clip Factory's own account. Funded Clips needs its own separate account: sign in with a different one.");
     expect(stepState("Connect X")).not.toContain("is-done");
   });
 
-  it("the connect step of Clip Factory's own account never offers sharing it (§45.37 G8 (c), (d))", async () => {
+  it("the connect step of Clip Factory's own account never offers sharing it, and says each account line once (§45.37 G8 (c), (d))", async () => {
     await start({});
     await click(button("Connect X"));
-    // A different account made for Clip Factory Stories; nothing to share it with.
-    expect(document.body.textContent).toContain("Tap Pick another account below and sign in with a different one made for Clip Factory Stories.");
-    expect(document.body.textContent).toContain("This is Clip Factory's own account. Clip Factory Stories needs its own separate account: sign in with a different one.");
+    // A different account made for Funded Clips; nothing to share it with. The card says both lines, and the step
+    // around it does not say them again.
+    const NEW = "Use a new account made for Funded Clips, not Clip Factory's.";
+    const SAME = "This is Clip Factory's own account. Funded Clips needs its own separate account: sign in with a different one.";
+    const step = $(".st-setup__body")!;
+    const times = (text: string, line: string) => text.split(line).length - 1;
+    expect(times(step.textContent!, NEW)).toBe(1);
+    expect(times(document.body.textContent!, NEW)).toBe(1);
+    expect(step.querySelector(".st-conn .st-conn__new")?.textContent).toBe(NEW);
+    expect(times(step.textContent!, SAME)).toBe(1);
+    expect(step.querySelector(".st-conn")?.textContent).toContain(SAME);
     expect(document.body.textContent).not.toMatch(/for both|both apps/i);
     for (const b of $$("button, [role=radio]")) expect(b.textContent ?? "").not.toMatch(/for both|share it/i);
   });

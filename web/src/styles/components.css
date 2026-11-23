@@ -54,7 +54,7 @@
   color: #fff;
   background: var(--cta);
   text-shadow: 0 1px 0 rgb(90 14 6 / 0.35);
-  /* Lit from above (ADR-85): a soft top light, the shade at the bottom, the glow below. No blur of its own: the fill
+  /* Lit from above (ADR-87): a soft top light, the shade at the bottom, the glow below. No blur of its own: the fill
      is 0.97 solid, so a backdrop blur only cost a compositing layer. */
   box-shadow:
     inset 0 4px 6px -4px rgb(var(--bone-rgb) / 0.22),
@@ -86,7 +86,7 @@
   background-position: -30% 0;
 }
 
-/* The secondary button: one step brighter than what it sits on (ADR-85, the logic of light). --fill is a bone lift
+/* The secondary button: one step brighter than what it sits on (ADR-87, the logic of light). --fill is a bone lift
    paid for with green, relative to the surface around it (glass.css re-declares it inside every lit surface). Bone
    words, a soft top light, a shade at the bottom and a shadow below; no ring (ADR-45). Hover adds light, press takes
    it away. */
@@ -107,7 +107,7 @@
   backdrop-filter: none;
 }
 /* The colourless lens: Reload on the update bar, the bar's main choice told by light alone (owner, 2026-11-23:
-   "without color and only a liquid glassy style"; ADR-85). Clear glass with no tint at all: a near-transparent white
+   "without color and only a liquid glassy style"; ADR-87). Clear glass with no tint at all: a near-transparent white
    face over the bar's own blurred glass, a bright catch light on its top edge, a clear rim, a soft glow inside and the
    drop of a raised thing. Bone words. Its face reads at least 0.03 OKLab L over Later's from top to bottom in every
    look, white under the bar included (the bar's own pay, --light-update-pay, leaves the room); the words keep 4.5:1
@@ -226,7 +226,7 @@
   background: var(--bone-deep);
 }
 /* Danger: a vermilion tint over the raise's own fill (its green and its bone lift), so it reads as "careful" without a
-   red ring and, like every raised thing, a step of light over the surface it sits on (ADR-85). Hover lays it over the
+   red ring and, like every raised thing, a step of light over the surface it sits on (ADR-87). Hover lays it over the
    hover fill, press over the press fill (vermilion words 5.4:1 at worst). */
 .btn--danger {
   color: var(--vermilion-ink);
@@ -1114,7 +1114,7 @@
   gap: 10px;
   padding: 12px 8px 12px 16px;
   border-radius: var(--r-md);
-  /* A float (ADR-85): planned for a white thumbnail under it, lit from above, the largest shadow below. */
+  /* A float (ADR-87): planned for a white thumbnail under it, lit from above, the largest shadow below. */
   --glass-tint: var(--glass-tint-float);
   --glass-light: var(--glass-light-float);
   --glass-blur: 28px;
@@ -1590,7 +1590,7 @@
   aspect-ratio: 9 / 16;
   overflow: hidden;
   border-radius: var(--r-xs);
-  /* Lit from above (ADR-85): the lighter green at the top. */
+  /* Lit from above (ADR-87): the lighter green at the top. */
   background: linear-gradient(180deg, var(--green-3), var(--green-2));
 }
 .similar__cover img {

@@ -194,7 +194,7 @@ def test_nova_canvas_is_ended_and_never_called() -> None:
     with pytest.raises(ProviderUnavailable) as e:
         asyncio.run(NovaCanvas(ctx(client)).image("a cartoon", 1024, 1024, 1, []))
     assert str(e.value) == (
-        "Amazon Nova Canvas was ended by Amazon on 30 Sep 2026. Pick another picture maker in Lamo Stories › "
+        "Amazon Nova Canvas was ended by Amazon on 30 Sep 2026. Pick another picture maker in Funded Clips › "
         "Settings › Video."
     )
     assert client.calls == [] and NovaCanvas(ctx(None)).check().state == "ended"
@@ -354,7 +354,7 @@ def test_a_portrait_with_nova_canvas_picked_stops_with_the_ended_line_and_calls_
     assert run_portrait(svc) == "failed"
     job = table.item("PJOB#P1")
     assert job is not None and job["error"] == (
-        "Amazon Nova Canvas was ended by Amazon on 30 Sep 2026. Pick another picture maker in Lamo Stories › "
+        "Amazon Nova Canvas was ended by Amazon on 30 Sep 2026. Pick another picture maker in Funded Clips › "
         "Settings › Video."
     )
     assert client.calls == [] and table.prefix("PROVIDER#") == [] and table.prefix("ASSET#") == []
@@ -527,7 +527,7 @@ def test_nova_reel_is_ended_and_never_called(tmp_path: Path) -> None:
     reel = NovaReel(ProviderContext(engine=Engine(ENGINE_DIR, tmp_path), workdir=tmp_path,
                                     video_bucket="cf-prod-stories-video-1-us", reel_client=lambda: fake,
                                     us_s3=lambda: fake))  # fmt: skip
-    sentence = "Amazon Nova Reel 1.1 was ended by Amazon on 30 Sep 2026. Pick another video maker in Lamo Stories › Settings › Video."
+    sentence = "Amazon Nova Reel 1.1 was ended by Amazon on 30 Sep 2026. Pick another video maker in Funded Clips › Settings › Video."
     with pytest.raises(ProviderUnavailable) as e:
         asyncio.run(reel.render_scene(CUTAWAY, "s9", {}, tmp_path / "x.mp4"))
     assert str(e.value) == sentence

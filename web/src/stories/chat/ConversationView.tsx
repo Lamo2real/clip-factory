@@ -6,7 +6,7 @@
 // since). The director's "Remake these scenes" and "Analyze this reference video" buttons start from the choice that
 // message was sent with. Each answer's exact model id and Region sit behind "Technical details" under its model line,
 // as production steps and AI tasks have them (§45.36 E8).
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { A } from "../../components/ui.tsx";
 import { usePoll } from "../../lib/hooks.ts";
 import { storiesApi } from "../api/client.ts";
@@ -14,6 +14,7 @@ import type { Conversation, Message, ModelOverride, ProjectRef } from "../api/ty
 import { storiesHref } from "../routes.ts";
 import { modelIdLine, modelName, modelOf, sendPick, unusableWords, usableUsual, type AiInfo, type Usual } from "../studio/ai.tsx";
 import { TechDetails } from "../studio/kit.tsx";
+import { cx, GlassPill } from "../glass/index.ts";
 import { ActionCard } from "./actions.tsx";
 import { AiLine, AiSheet, DEFAULT } from "./ai.tsx";
 import { rememberConversation } from "./device.ts";
@@ -27,6 +28,9 @@ import { ChatText } from "./text.tsx";
 import { pictureProblem, PICTURES_PER_MESSAGE, putPicture } from "./upload.ts";
 
 export const MAX_TEXT = 8000;
+
+/** A failed answer's bubble: glass tinted coral (the contract's .st-glass--tinted). */
+const FAILED_TONE = { "--st-tone-rgb": "var(--st-coral-rgb)" } as CSSProperties;
 
 export const SUGGESTIONS = ["Give me three funny ideas about ice", "Help me make a new character", "How do I start a video so people keep watching?"];
 
@@ -215,6 +219,7 @@ export function ConversationView({
   if (loadProblem)
     return (
       <Empty
+        card
         mood="oops"
         title={loadProblem.missing ? "That chat is gone" : "The chat did not load"}
         action={
@@ -232,7 +237,7 @@ export function ConversationView({
         {loadProblem.text}
       </Empty>
     );
-  if (!conv) return <Waiting label="Opening the chat…" />;
+  if (!conv) return <Waiting plate label="Opening the chat…" />;
 
   const title = listTitle ?? conv.title;
   // The studio's model menu on the director's buttons reads the same list (it is known once the server answered).
@@ -472,21 +477,21 @@ export function ConversationView({
       : { model: conv.model ?? DEFAULT, effort: conv.effort ?? DEFAULT };
   const sheetModel = findModel(models.models, sheet?.scope === "once" ? current.model : (conv.model ?? conv.effective.model));
   // Model and effort are chosen separately (§45.25), so each part says where it comes from.
-  const elsewhere = conv.effective.from === "agent" ? "Lamo Stories › Settings › Agents" : "Lamo Stories › Settings › AI";
+  const elsewhere = conv.effective.from === "agent" ? "Funded Clips › Settings › Agents" : "Funded Clips › Settings › AI";
   const fromLine =
     override && (override.model || override.effort)
       ? "Only the next message uses this. Your chat's setting stays."
       : conv.model !== null && conv.effort !== null
         ? "Saved for this chat."
         : conv.model !== null
-          ? "Model saved for this chat. The effort comes from Lamo Stories › Settings."
+          ? "Model saved for this chat. The effort comes from Funded Clips › Settings."
           : conv.effort !== null
             ? `Effort saved for this chat. The model comes from ${elsewhere}.`
             : `From ${elsewhere}.`;
 
   return (
     <div className="st-chat-conv">
-      <header className="st-chat-conv__head">
+      <header className="st-chat-conv__head st-plate">
         <A href={`${storiesHref({ name: "chat" })}?all=1`} className="st-chat-back">
           <Icon name="back" size={20} />
           All chats
@@ -531,21 +536,21 @@ export function ConversationView({
       </header>
 
       {messages.length === 0 ? (
-        <div className="st-chat-start">
+        <div className="st-chat-start st-glass">
           <Director size={72} mood="cheer" />
           <p className="st-chat-start__hello">Hi! I'm your creative director. What shall we make?</p>
           <div className="st-chat-start__ideas">
             {SUGGESTIONS.map((s) => (
-              <button key={s} type="button" className="st-chat-suggest" onClick={() => void send(s, [], override)}>
+              <GlassPill key={s} className="st-chat-suggest" onClick={() => void send(s, [], override)}>
                 {s}
-              </button>
+              </GlassPill>
             ))}
           </div>
         </div>
       ) : (
         <>
           {older || earlier.problem ? (
-            <div className="st-chat-earlier">
+            <div className="st-chat-earlier st-plate">
               {older ? (
                 <Btn className="st-chat-earlier__btn" off={earlier.busy} onClick={() => void showEarlier()}>
                   {earlier.busy ? "Getting earlier messages…" : "Show earlier messages"}
@@ -582,7 +587,7 @@ export function ConversationView({
         {writing ? (writing.status === "pending" ? "The director is thinking." : "The director is writing.") : ""}
       </p>
 
-      <div className="st-chat-compose">
+      <div className="st-chat-compose st-glass st-glass--bar">
         {pictures.length ? (
           <ul className="st-chat-pics" aria-label="Pictures to send">
             {pictures.map((p) => (
@@ -740,7 +745,7 @@ function MessageItem({
   if (m.role === "user")
     return (
       <li className={`st-chat-msg st-chat-msg--user${m.msgId.startsWith(LOCAL) ? " is-local" : ""}`}>
-        <div className="st-chat-bubble">
+        <div className="st-chat-bubble st-cream">
           {pics.length ? (
             <div className="st-chat-bubble__pics">
               {pics.map((p) =>
@@ -764,7 +769,7 @@ function MessageItem({
   return (
     <li className={`st-chat-msg st-chat-msg--assistant is-${m.status}`} aria-busy={inFlight(m) || undefined}>
       <Director size={40} mood={m.status === "failed" ? "oops" : m.status === "pending" ? "think" : "smile"} />
-      <div className="st-chat-bubble">
+      <div className={cx("st-chat-bubble st-glass", m.status === "failed" && "st-glass--tinted")} style={m.status === "failed" ? FAILED_TONE : undefined}>
         {m.status === "pending" ? (
           <p className="st-chat-thinking">
             Thinking

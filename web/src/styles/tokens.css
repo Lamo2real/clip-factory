@@ -1,4 +1,4 @@
-/* Design tokens. Palette (docs/CONTRACTS.md §11, docs/DECISIONS.md ADR-43, ADR-45, ADR-85): Bottle Green is the
+/* Design tokens. Palette (docs/CONTRACTS.md §11, docs/DECISIONS.md ADR-43, ADR-45, ADR-87): Bottle Green is the
    surface, Bone is the words, Vermilion is every call to action. The glass is see-through bottle-green glass with bone
    text and no drawn edges: a pane shows by its blur, tint, soft light from above and shadow, a control by its fill. */
 :root {
@@ -36,7 +36,7 @@
   --green-text: #e4f2da; /* words on the success tint */
   --on-bone: #0f372b; /* words on a bone fill (10.68:1 on solid bone) */
 
-  /* Fills under words (ADR-85, the logic of light). A raised thing is one step BRIGHTER than what it sits on: a lift
+  /* Fills under words (ADR-87, the logic of light). A raised thing is one step BRIGHTER than what it sits on: a lift
      of bone paid for with a step of green under it (lib/background.ts works out every number; test/background.test.ts
      reads them back). Straight on the page a raised thing carries the pick-one track's recipe (TRACK_EXTRA_VEIL,
      TRACK_LIFT); inside any lit surface glass.css re-declares the --light-raise-* numbers (RAISE_VEIL, RAISE_LIFT)
@@ -196,7 +196,7 @@
   --top-safe: max(env(safe-area-inset-top), var(--titlebar-h));
   --top-line: calc(var(--top-safe) + 12px);
 
-  /* The older names: a panel's drop and a floating layer's drop, from the light above (ADR-85). */
+  /* The older names: a panel's drop and a floating layer's drop, from the light above (ADR-87). */
   --shadow-1: var(--light-shadow-1);
   --shadow-2: var(--light-shadow-3);
   --focus: 0 0 0 3px rgb(var(--bone-rgb) / 0.95), 0 0 0 5.5px var(--vermilion-deep);

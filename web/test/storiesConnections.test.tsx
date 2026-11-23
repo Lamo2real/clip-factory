@@ -34,9 +34,9 @@ describe("the account's reason", () => {
       expect(text).toMatch(/\.$/);
     }
     expect(reasonSentence("keys_changed", "tiktok")).toBe("The TikTok app keys changed. Connect again.");
-    expect(reasonSentence("token_dead", "youtube")).toBe("Lamo Stories' YouTube sign-in stopped working. Connect again.");
-    expect(reasonSentence("something_new", "x")).toBe("Lamo Stories' X needs connecting again.");
-    expect(reasonSentence(null, "facebook")).toBe("Lamo Stories' Facebook needs connecting again.");
+    expect(reasonSentence("token_dead", "youtube")).toBe("Funded Clips' YouTube sign-in stopped working. Connect again.");
+    expect(reasonSentence("something_new", "x")).toBe("Funded Clips' X needs connecting again.");
+    expect(reasonSentence(null, "facebook")).toBe("Funded Clips' Facebook needs connecting again.");
   });
 });
 
@@ -190,7 +190,10 @@ describe("round 3 on the Social accounts page (§45.34)", () => {
     // The keys form shows them too (the saved state's lines make way for it).
     expect(card("facebook").querySelector(".st-keys")).not.toBeNull();
     expect(uris(card("facebook"))).toEqual(BOTH);
-    expect(card("facebook").querySelector(".st-app__notes")?.textContent).toContain("Add both redirect URIs below in Facebook Login › Valid OAuth Redirect URIs");
+    // The first lines are plain words; the developer site's own words are one tap away (§45.36 E14).
+    expect(card("facebook").querySelector(".st-app__notes")?.textContent).toContain("Copy both addresses below into your Meta app's settings");
+    expect(card("facebook").querySelector(".st-app__notes")?.textContent).not.toContain("Valid OAuth Redirect URIs");
+    expect(card("facebook").querySelector(".st-app__go .st-tech-fold")?.textContent).toContain("Facebook Login › Settings › Valid OAuth Redirect URIs");
     // A platform with one app of its own shows its own one.
     expect(uris(card("youtube"))).toEqual([]);
   });
@@ -198,24 +201,24 @@ describe("round 3 on the Social accounts page (§45.34)", () => {
   it("after a connect says Connected as {name} ({handle}) and asks whether this is the Lamo Stories account: Yes", async () => {
     await render({ platform: "tiktok", result: "connected" }, (s) => {
       const t = s.social.find((a) => a.platform === "tiktok")!;
-      Object.assign(t, { connectionStatus: "connected", reason: null, warning: null, accountName: "Lamo Stories", handle: "@lamo.stories" });
+      Object.assign(t, { connectionStatus: "connected", reason: null, warning: null, accountName: "Funded Clips", handle: "@funded.clips" });
     });
-    expect(document.body.textContent).toContain("Connected as Lamo Stories (@lamo.stories).");
-    const ask = card("tiktok").querySelector<HTMLElement>('[aria-label="Is this your Lamo Stories account?"]')!;
-    expect(ask.textContent).toContain("Is this your Lamo Stories account?");
+    expect(document.body.textContent).toContain("Connected as Funded Clips (@funded.clips).");
+    const ask = card("tiktok").querySelector<HTMLElement>('[aria-label="Is this your Funded Clips account?"]')!;
+    expect(ask.textContent).toContain("Is this your Funded Clips account?");
     expect(button(ask, "Pick another account")).toBeTruthy();
     // Only the platform that was just connected asks.
     expect(card("youtube").querySelector(".st-intended")).toBeNull();
     await click(button(ask, "Yes, that's it"));
     expect(card("tiktok").querySelector(".st-intended")).toBeNull();
-    expect(document.body.textContent).toContain("Great! Lamo Stories posts to Lamo Stories on TikTok.");
+    expect(document.body.textContent).toContain("Great! Funded Clips posts to this TikTok account (Funded Clips).");
   });
 
   it("Pick another connects again, to pick the intended account", async () => {
     await render({ platform: "youtube", result: "connected" });
     const ask = card("youtube").querySelector<HTMLElement>(".st-intended")!;
-    expect(ask.textContent).toContain("Connected as Lamo Stories (@lamostories).");
-    expect(ask.textContent).toContain("Is this your Lamo Stories channel?");
+    expect(ask.textContent).toContain("Connected as Funded Clips (@fundedclips).");
+    expect(ask.textContent).toContain("Is this your Funded Clips channel?");
     await click(button(ask, "Pick another channel"));
     expect(calls).toContain("connectSocial");
   });
@@ -224,16 +227,16 @@ describe("round 3 on the Social accounts page (§45.34)", () => {
     await render({ platform: null, result: null });
     const list = () => card("instagram").querySelector<HTMLElement>(".st-choose")!;
     expect(card("instagram").querySelector(".st-intended")).toBeNull();
-    await click(button(list(), /lamo\.stories/));
+    await click(button(list(), /funded\.clips/));
     expect(calls).toContain("chooseSocial");
     const ask = card("instagram").querySelector<HTMLElement>(".st-intended")!;
-    expect(ask.getAttribute("aria-label")).toBe("Is this your Lamo Stories account?");
-    expect(ask.textContent).toContain("Connected as lamo.stories.");
+    expect(ask.getAttribute("aria-label")).toBe("Is this your Funded Clips account?");
+    expect(ask.textContent).toContain("Connected as funded.clips.");
     expect(button(ask, "Pick another account")).toBeTruthy();
     expect(card("facebook").querySelector(".st-intended")).toBeNull();
     await click(button(ask, "Yes, that's it"));
     expect(card("instagram").querySelector(".st-intended")).toBeNull();
-    expect(document.body.textContent).toContain("Great! Lamo Stories posts to lamo.stories on Instagram.");
+    expect(document.body.textContent).toContain("Great! Funded Clips posts to this Instagram account (funded.clips).");
   });
 
   it("Clip Factory's own account in the list is never picked: the tap says why and sends nothing (§45.37 G8)", async () => {
@@ -243,29 +246,29 @@ describe("round 3 on the Social accounts page (§45.34)", () => {
     await click(own);
     expect(calls).not.toContain("chooseSocial");
     expect(card("instagram").querySelector(".st-intended")).toBeNull();
-    expect(document.body.textContent).toContain("This is Clip Factory's own account. Clip Factory Stories needs its own separate account: sign in with a different one.");
+    expect(document.body.textContent).toContain("This is Clip Factory's own account. Funded Clips needs its own separate account: sign in with a different one.");
   });
 
   it("a connect that also warns about Lamo Clips' Meta connection (clips_meta_check) asks too", async () => {
     await render({ platform: "facebook", result: "clips_meta_check" }, (s) => {
       const fb = s.social.find((a) => a.platform === "facebook")!;
-      Object.assign(fb, { connectionStatus: "connected", externalAccountId: "109876543210987", accountName: "Lamo Stories", handle: "Lamo Stories" });
+      Object.assign(fb, { connectionStatus: "connected", externalAccountId: "109876543210987", accountName: "Funded Clips", handle: "Funded Clips" });
     });
-    expect(document.body.textContent).toContain("But Lamo Clips may have lost Facebook");
+    expect(document.body.textContent).toContain("But Clip Factory may have lost Facebook");
     const ask = card("facebook").querySelector<HTMLElement>(".st-intended")!;
-    expect(ask.getAttribute("aria-label")).toBe("Is this your Lamo Stories Page?");
-    expect(ask.textContent).toContain("Connected as Lamo Stories.");
+    expect(ask.getAttribute("aria-label")).toBe("Is this your Funded Clips Page?");
+    expect(ask.textContent).toContain("Connected as Funded Clips.");
   });
 
   it("after Disconnect, the line follows the app the account used: its own app, or Clip Factory's", async () => {
     await render({ platform: null, result: null }, (s) => {
       const fb = s.social.find((a) => a.platform === "facebook")!;
-      Object.assign(fb, { connectionStatus: "connected", externalAccountId: "109876543210987", accountName: "Lamo Stories", handle: "Lamo Stories" });
+      Object.assign(fb, { connectionStatus: "connected", externalAccountId: "109876543210987", accountName: "Funded Clips", handle: "Funded Clips" });
     });
     await click(button(card("facebook"), "Disconnect"));
     await click(button(card("facebook"), "Yes, disconnect"));
     const note = () => host.querySelector(".st-note--wide")?.textContent ?? "";
-    expect(note()).toContain("To remove Lamo Stories completely, remove your Lamo Stories app in the account's own settings. Lamo Clips is not affected.");
+    expect(note()).toContain("To remove Funded Clips completely, remove your Funded Clips app in the account's own settings. Clip Factory is not affected.");
     await click(host.querySelector<HTMLElement>(".st-note__close")!);
     await click(button(card("youtube"), "Disconnect"));
     await click(button(card("youtube"), "Yes, disconnect"));
@@ -277,7 +280,7 @@ describe("round 3 on the Social accounts page (§45.34)", () => {
       const t = s.social.find((a) => a.platform === "tiktok")!;
       Object.assign(t, { connectionStatus: "connected", reason: "clips_unknown", warning: null });
     });
-    expect(card("tiktok").textContent).toContain("Lamo Stories cannot tell this TikTok account apart from Lamo Clips' own. Check which account is signed in.");
+    expect(card("tiktok").textContent).toContain("Funded Clips cannot tell this TikTok account apart from Clip Factory's own. Check which account is signed in.");
     expect(card("tiktok").textContent).not.toContain("clips_unknown");
   });
 

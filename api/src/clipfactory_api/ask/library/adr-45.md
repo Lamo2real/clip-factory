@@ -1,7 +1,7 @@
 ## ADR-45 See-through glass over an app-owned backdrop
 
 *Amended by
-[ADR-85](#adr-85-the-logic-of-light-the-top-layer-is-brighter-every-lift-is-paid-for-reload-is-a-colourless-lens):
+[ADR-87](#adr-87-the-logic-of-light-the-top-layer-is-brighter-every-lift-is-paid-for-reload-is-a-colourless-lens):
 "no bone sheen" became "bone lifts paid for with green", and nested glass carries the relative raise. The no-edges rule
 stands.*
 

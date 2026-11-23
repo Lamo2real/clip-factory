@@ -1,8 +1,8 @@
 ## The logic of light
 
 The owner (2026-11-23): "the top layer is always brighter than the bottom, and it grows gradually in between ... make
-it more liquid glassy" ([DECISIONS.md ADR-85](DECISIONS.md#adr-85-the-logic-of-light-the-top-layer-is-brighter-every-lift-is-paid-for-reload-is-a-colourless-lens),
-[CONTRACTS.md §22.7](CONTRACTS.md#227-the-logic-of-light-owner-request-2026-11-23-adr-85)). One key light above:
+it more liquid glassy" ([DECISIONS.md ADR-87](DECISIONS.md#adr-87-the-logic-of-light-the-top-layer-is-brighter-every-lift-is-paid-for-reload-is-a-colourless-lens),
+[CONTRACTS.md §22.7](CONTRACTS.md#227-the-logic-of-light-owner-request-2026-11-23-adr-87)). One key light above:
 
 * **Every level is brighter than the one under it**, nested levels too: a panel over the page, a row over its card, a
   mark over its row, the selected pill over all of them. Only wells (fields, the link box, progress tracks) sit lower.

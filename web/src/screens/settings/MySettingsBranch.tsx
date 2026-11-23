@@ -1,6 +1,9 @@
 // Settings › Posting › My settings (docs/CONTRACTS.md §36): the owner's own choices for each place, put on a clip by
 // "Use my settings" on Review. One section per platform, X included. Saved on the server, so every device has them.
-// My settings never mark a clip as made for kids, and TikTok's Commercial content is picked per clip only.
+// My settings never mark a clip as made for kids, and TikTok's Commercial content is picked per clip only. While his
+// Mac posts TikTok, every Review card but a campaign clip starts on these, TikTok too, with no tap, and his Mac posts
+// TikTok with them (§47.9); a paid partnership can't go through the Mac yet (he posts that clip in the TikTok app
+// himself). While it is off, TikTok's API rule still wants his own tap on each clip.
 import type { PostPreset, XReplies, YoutubePrivacy } from "../../api/types.ts";
 import { useSession } from "../../app/session.tsx";
 import { Dropdown } from "../../components/Dropdown.tsx";
@@ -8,6 +11,8 @@ import { Icon } from "../../components/Icon.tsx";
 import { Segmented, Skeleton, Toggle } from "../../components/ui.tsx";
 import { presetOf, X_REPLIES_LABEL, YOUTUBE_CATEGORIES, YT_WHO } from "../../lib/preset.ts";
 import { PRIVACY_LABEL } from "../../lib/tiktokChoices.ts";
+import { macOn } from "../../lib/tiktokMac.ts";
+import { tiktokAudited } from "../../lib/tiktokYourself.ts";
 import { useSetup } from "./setup/useSetup.ts";
 import { Apple, Panel } from "./parts.tsx";
 
@@ -28,13 +33,22 @@ export function MySettingsBranch() {
     void saveSettings({ postPreset: { ...preset, [platform]: { ...preset[platform], ...patch } } });
   const yt = preset.youtube;
   const tt = preset.tiktok;
+  // §47.9: while his Mac posts TikTok (and TikTok has not approved the app), Review starts every ticked place on
+  // these, TikTok included, as Review decides it.
+  const macPosts = macOn(me.settings) && !tiktokAudited(setup.data?.platforms);
   return (
     <Panel>
       <p className="callout preset-page__note">
         <Icon name="sparkle" size={18} />
         <span>
-          Tap <strong>Use my settings</strong> on a clip to put these on. Whether a clip earns money is up to each app (like YouTube&apos;s Partner Program or
-          TikTok&apos;s Creator Rewards), not these switches.
+          {macPosts ? (
+            <>Every clip on Review starts on these, TikTok too, except campaign clips.</>
+          ) : (
+            <>
+              Tap <strong>Use my settings</strong> on a clip to put these on.
+            </>
+          )}{" "}
+          Whether a clip earns money is up to each app (like YouTube&apos;s Partner Program or TikTok&apos;s Creator Rewards), not these switches.
         </span>
       </p>
       <Apple id="my-settings-youtube" wide>
@@ -80,8 +94,9 @@ export function MySettingsBranch() {
           <Toggle label="Duet" checked={tt.duet} onChange={(v) => save("tiktok", { duet: v })} />
           <Toggle label="Stitch" checked={tt.stitch} onChange={(v) => save("tiktok", { stitch: v })} />
           <p className="field__hint">
-            Commercial content is off. For a paid partnership, tick Branded content in the TikTok row of that clip. TikTok wants your own tap on each clip,
-            so tap Use my settings there.
+            {macPosts
+              ? "Commercial content is off. Your Mac posts TikTok with these. Paid partnerships can't go through your Mac yet: untick TikTok for that clip, then post it in the TikTok app with its label, not with Post with my Mac or Send these to my Mac."
+              : "Commercial content is off. For a paid partnership, tick Branded content in the TikTok row of that clip. TikTok wants your own tap on each clip, so tap Use my settings there."}
           </p>
         </div>
       </Apple>

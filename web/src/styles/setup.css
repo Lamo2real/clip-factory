@@ -1063,6 +1063,13 @@
   font-weight: 600;
   color: var(--ink-3);
 }
+/* On a ticked chip's bone fill the tag takes the chip's own ink, softened (about 4.9:1), never the glass's light ink.
+   The opacity lifts the tag above the chip's see-through checkbox, so taps pass through it to the checkbox. */
+.check-chip.is-on .tt-sheet__tag {
+  color: inherit;
+  opacity: 0.72;
+  pointer-events: none;
+}
 .tt-sheet__legal {
   font-size: var(--fs-small);
   color: var(--ink-2);
@@ -1083,76 +1090,7 @@
   text-align: right;
 }
 
-/* ---------- Post it on TikTok yourself (§42) ---------- */
-/* The same floating sheet as Post to TikTok; the steps sit beside the video on wide screens and under it on phones. */
-.ty-sheet__title {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.ty-sheet__lede {
-  color: var(--ink-2);
-}
-.ty-sheet__top {
-  display: grid;
-  gap: 14px;
-  align-items: start;
-}
-@media (min-width: 560px) {
-  .ty-sheet__top {
-    grid-template-columns: 160px 1fr;
-  }
-}
-.ty-steps {
-  display: grid;
-  gap: 8px;
-  margin: 0;
-  padding-left: 1.4em;
-  counter-reset: none;
-}
-.ty-steps li::marker {
-  font-weight: 700;
-  color: var(--ink);
-}
-.ty-sheet__caption {
-  max-height: 7.5em;
-  overflow-y: auto;
-  padding: 10px 12px;
-  border-radius: var(--r-md);
-  background: var(--fill);
-  white-space: pre-wrap;
-  overflow-wrap: anywhere;
-}
-.ty-sheet__copied {
-  font-weight: 600;
-  color: var(--ink-2);
-}
-.ty-sheet__send {
-  display: grid;
-  gap: 10px;
-}
-.ty-sheet__done {
-  display: grid;
-  gap: 10px;
-}
-.ty-sheet__link {
-  display: flex;
-  gap: 8px;
-}
-.ty-sheet__link .input {
-  flex: 1 1 auto;
-  min-width: 0;
-}
-.ty-sheet__link .btn {
-  flex: none;
-  white-space: nowrap;
-}
-.ty-sheet__problem {
-  font-size: var(--fs-small);
-  color: var(--ink);
-  font-weight: 600;
-}
-/* Review, TikTok ticked before TikTok approved the app (§42): one plain line pointing to Post it yourself. */
+/* Review, TikTok ticked before TikTok approved the app (§42, §47.4): one plain line about who posts it for everyone. */
 .tt-yourself-hint {
   margin: 0;
   font-size: var(--fs-small);

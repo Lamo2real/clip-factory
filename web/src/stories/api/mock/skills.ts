@@ -68,7 +68,7 @@ export const BUILTIN_SKILLS: { skillId: string; md: string }[] = [
     skillId: "nonverbal-storytelling",
     md: `---
 name: nonverbal-storytelling
-description: How Lamo Stories tells a whole story with no voice-over, only action, faces, sound and a few words on screen.
+description: How Funded Clips tells a whole story with no voice-over, only action, faces, sound and a few words on screen.
 ---
 
 # Telling a story without words
@@ -84,7 +84,7 @@ description: How Lamo Stories tells a whole story with no voice-over, only actio
     skillId: "driving-safety-teaching",
     md: `---
 name: driving-safety-teaching
-description: How Lamo Stories teaches driving safety honestly, only from the checked guidance list, without scaring or showing anything to copy.
+description: How Funded Clips teaches driving safety honestly, only from the checked guidance list, without scaring or showing anything to copy.
 ---
 
 # Teaching driving safety

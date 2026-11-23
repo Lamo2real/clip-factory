@@ -406,7 +406,7 @@ an old desktop app, told apart from a real `none` by a missing `__CF_GLASS__`, Â
 * desktop: `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test` (CI, Linux; the macOS
   path is compiled and tested on a Mac).
 
-### 22.7 The logic of light (owner request, 2026-11-23, ADR-85)
+### 22.7 The logic of light (owner request, 2026-11-23, ADR-87)
 
 The owner (with a screenshot of Library): "can you use the logic of light on the ui, meaning the top layer is always
 brighter than the bottom, and it grows gradually in between ... and make it more liquid glassy while you are at it";

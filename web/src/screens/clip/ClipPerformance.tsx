@@ -23,10 +23,10 @@ import { ClipFollowers } from "./ClipFollowers.tsx";
 import { CrPostLines } from "../../components/CrPostLine.tsx";
 import { sendGroups, useSubmissions } from "../../lib/contentRewards.ts";
 import { CampaignsFold, ClipFit, useClipPageFit, useWaitingClip, WaitingClipFit } from "./ClipFit.tsx";
-import { canPostYourselfHere } from "../../lib/tiktokYourself.ts";
-import { PostYourself, PostYourselfButton } from "../library/PostYourself.tsx";
-import { MacPostedIt, PostYourselfInstead } from "../library/MacButtons.tsx";
-import { macInsteadOk, macMayBeOnTikTok } from "../../lib/tiktokMac.ts";
+import { tiktokAudited } from "../../lib/tiktokYourself.ts";
+import { TikTokRowAction, useTikTokRowContext } from "../library/MacButtons.tsx";
+import { rowNeedsMac, tiktokFactsFromStacks, tiktokRow } from "../../lib/tiktokMac.ts";
+import { useSetup } from "../settings/setup/useSetup.ts";
 
 /** Re-renders every `ms` so "3 min ago" and "Next check in 4 min" stay true. */
 export function useNow(ms = 15_000): number {
@@ -99,8 +99,6 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
   const [error, setError] = useState<{ message: string; missing: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
   const [starBusy, setStarBusy] = useState(false);
-  // Post it yourself instead (§47.4): taken back from the Mac, the sheet opens here, outside the stack that changes.
-  const [handOff, setHandOff] = useState(false);
   // §20: Refresh numbers turns, the star spins; both shake (without a second deny) when the toast says it failed.
   const refreshAct = useAction("refresh");
   const starAct = useAction("star");
@@ -121,6 +119,14 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
   // No numbers because it still waits in Review: the empty page sends him there (where it can be uploaded).
   const waitingClip = useWaitingClip(clipId, !!error?.missing && !perf);
   const inReview = waitingClip?.status === "review";
+  // TikTok's row (§47.4): what the owner's Mac is doing, said in its stack, with its one button in the actions.
+  const setup = useSetup();
+  const tiktokFacts = perf ? tiktokFactsFromStacks(perf.clip, perf.posts) : null;
+  const macCtx = useTikTokRowContext({
+    audited: tiktokAudited(setup.data?.platforms),
+    needsMac: !!tiktokFacts && rowNeedsMac(tiktokFacts),
+  });
+  const tiktok = tiktokFacts ? tiktokRow(tiktokFacts, macCtx) : null;
 
   const stage = useRef<HTMLDivElement | null>(null);
   const stageObserver = useRef<ResizeObserver | null>(null);
@@ -429,27 +435,15 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
             >
               {label}
             </Button>
-            {/* TikTok keeps Clip Factory's own uploads Only me for now: he can post it there himself (§42). */}
-            {canPostYourselfHere(perf.clip, perf.posts.find((p) => p.platform === "tiktok")) ? (
-              <PostYourselfButton clip={perf.clip} onMarked={() => void load()} size="md" />
-            ) : null}
-            {/* His Mac posts it (§47.4): while it waits or stopped he can post it himself instead; not while it works. */}
-            {perf.posts.some((p) => p.platform === "tiktok" && p.status === "mac" && p.mac && macInsteadOk(p.mac)) ? (
-              <PostYourselfInstead
-                clip={perf.clip}
-                size="md"
-                onTaken={() => {
-                  setHandOff(true);
-                  void load().catch(() => undefined);
-                }}
-              />
-            ) : null}
-            {/* The Mac pressed Post but could not confirm it: I posted it, never taken back (§47.3). */}
-            {(() => {
-              const mac = perf.posts.find((p) => p.platform === "tiktok" && p.status === "mac")?.mac;
-              return mac && macMayBeOnTikTok(mac) ? <MacPostedIt clip={perf.clip} mac={mac} size="md" onMarked={() => void load().catch(() => undefined)} /> : null;
-            })()}
-            {handOff ? <PostYourself clip={perf.clip} onMarked={() => void load().catch(() => undefined)} onClose={() => setHandOff(false)} /> : null}
+            {/* TikTok's one button (§47.4): Try again, Post with my Mac, Turn on, Open Your Mac posts TikTok, the Add link
+                box, or It's on TikTok with Try again second. Its stack says why. */}
+            <TikTokRowAction
+              clip={perf.clip}
+              row={tiktok}
+              mac={perf.posts.find((p) => p.platform === "tiktok")?.mac}
+              size="md"
+              onKept={() => void load().catch(() => undefined)}
+            />
             {/* Not a live region: the clock re-renders it every minute. New numbers are announced by the toast. */}
             {/* The span is what the window look tints (see-through, glass.css), so the tint hugs the words. */}
             <p className="perf__updated">
@@ -473,6 +467,7 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
                 index={i}
                 now={now}
                 auto={perf.clip.auto}
+                row={platform === "tiktok" ? tiktok : null}
               />
             );
           })}

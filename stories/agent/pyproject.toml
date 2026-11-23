@@ -1,7 +1,7 @@
 [project]
 name = "lamostories-agent"
 version = "0.1.0"
-description = "Lamo Stories: its own AgentCore runtime (docs/CONTRACTS.md §45.11, §45.24-§45.31). Imports nothing from Clip Factory's agent."
+description = "Funded Clips: its own AgentCore runtime (docs/CONTRACTS.md §45.11, §45.24-§45.31). Imports nothing from Clip Factory's agent."
 requires-python = ">=3.13"
 dependencies = [
   "boto3>=1.43",

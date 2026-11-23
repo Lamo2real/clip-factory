@@ -1,23 +1,21 @@
-// Post it on TikTok yourself (docs/CONTRACTS.md §42): the pure helpers and the mock's rules.
+// Posted on TikTok by the owner himself (docs/CONTRACTS.md §42): the pure helpers that stay after the manual sheet
+// went (ADR-86) and the mock's rules for the routes that stay (I posted it with its link or the finder, Undo, the file).
 import { beforeAll, describe, expect, it } from "vitest";
 import { ApiError } from "../src/api/errors.ts";
 import { mockApi, type MockFaults } from "../src/api/mock/index.ts";
 import { seed } from "../src/api/mock/fixtures.ts";
-import type { Clip, PlatformPerformance, PlatformSetup, Post } from "../src/api/types.ts";
+import type { Clip, PlatformSetup, Post } from "../src/api/types.ts";
 import { calmCopy } from "../src/lib/metrics.ts";
 import {
   canPostYourself,
-  canPostYourselfHere,
   failedForPublicAccount,
-  handOffFor,
-  offerAfterUpload,
   postError,
   TIKTOK_PRIVATE_ONLY,
+  TIKTOK_PUBLIC_HINT,
+  TIKTOK_PUBLIC_REFUSED,
   tiktokAudited,
   looksLikeTikTokLink,
-  steps,
   tiktokState,
-  TIKTOK_UPLOAD_URL,
   videoFileName,
 } from "../src/lib/tiktokYourself.ts";
 
@@ -28,29 +26,15 @@ beforeAll(() => {
 const clip = (status: Clip["status"], extra: Partial<Clip> = {}) => ({ clipId: "c1", status, hook: "He lost it", ...extra }) as Clip;
 const post = (extra: Partial<Post>) => ({ postId: "p1", clipId: "c1", platform: "tiktok", status: "posted", ...extra }) as Post;
 
-describe("which way it goes", () => {
-  it("phones that can share a file use the share menu, everything else saves the file", () => {
-    expect(handOffFor("ios", true)).toBe("share");
-    expect(handOffFor("android", true)).toBe("share");
-    expect(handOffFor("ios", false)).toBe("save");
-    expect(handOffFor("mac", true)).toBe("save");
-    expect(handOffFor("windows", false)).toBe("save");
-  });
-
-  it("opens TikTok Studio's uploader on a computer", () => {
-    expect(TIKTOK_UPLOAD_URL).toBe("https://www.tiktok.com/tiktokstudio/upload");
-  });
-});
-
-describe("when Post it yourself shows", () => {
-  it("shows for no TikTok post, a waiting, failed or private one", () => {
+describe("which clips are not on TikTok yet (the Mac can take them, §47.2)", () => {
+  it("no TikTok post, a waiting, failed or private one", () => {
     expect(tiktokState([])).toBe("offer");
     expect(tiktokState([post({ status: "pending_integration" })])).toBe("offer");
     expect(tiktokState([post({ status: "failed" })])).toBe("offer");
     expect(tiktokState([post({ privacy: "private" })])).toBe("offer");
   });
 
-  it("hides while uploading, when public already, and once he posted it", () => {
+  it("not while uploading, when public already, and once he posted it", () => {
     expect(tiktokState([post({ status: "queued" })])).toBe("uploading");
     expect(tiktokState([post({ privacy: "public" })])).toBe("public");
     expect(tiktokState([post({ by: "you", privacy: "public" })])).toBe("yours");
@@ -65,95 +49,63 @@ describe("when Post it yourself shows", () => {
     expect(canPostYourself(clip("review"), [])).toBe(false);
     expect(canPostYourself(clip("declined"), [])).toBe(false);
   });
-
-  it("on the clip page, from its TikTok row", () => {
-    const row = (status: PlatformPerformance["status"], by?: "you") => ({ status, ...(by ? { by } : {}) });
-    expect(canPostYourselfHere(clip("posted"), row("posted_private"))).toBe(true);
-    expect(canPostYourselfHere(clip("posted"), row("not_posted"))).toBe(true);
-    expect(canPostYourselfHere(clip("posted"), row("failed"))).toBe(true);
-    expect(canPostYourselfHere(clip("posted"), row("posting"))).toBe(false);
-    expect(canPostYourselfHere(clip("posted"), row("posted"))).toBe(false);
-    expect(canPostYourselfHere(clip("posted"), row("posted", "you"))).toBe(false);
-    expect(canPostYourselfHere(clip("review"), row("not_posted"))).toBe(false);
-  });
 });
 
-describe("right after Upload on Review", () => {
-  const tiktok = (ready: boolean, audit: "ok" | "limited" | "unknown", review: "ok" | "waiting" = audit === "ok" ? "ok" : "waiting") =>
+describe("TikTok's approval", () => {
+  const tiktok = (audit: "ok" | "limited" | "unknown", review: "ok" | "waiting" = audit === "ok" ? "ok" : "waiting") =>
     [
       {
         platform: "tiktok",
-        ready,
+        ready: true,
         gates: [
           { key: "app_review", state: review },
           { key: "posting_audit", state: audit },
         ],
       },
     ] as unknown as PlatformSetup[];
-  const yt = post({ platform: "youtube", status: "queued" });
-
-  it("offers it when TikTok was not ticked and TikTok has not approved public uploads", () => {
-    expect(offerAfterUpload([yt], tiktok(true, "limited"))).toEqual({ offer: true, open: true });
-    expect(offerAfterUpload([yt], tiktok(false, "unknown"))).toEqual({ offer: true, open: false });
-    expect(offerAfterUpload([yt], undefined)).toEqual({ offer: true, open: false });
-    // TikTok not set up yet: its post waits, and he can post it himself meanwhile (the sheet does not open by itself).
-    expect(offerAfterUpload([yt, post({ status: "pending_integration" })], tiktok(false, "unknown"))).toEqual({ offer: true, open: false });
-  });
-
-  it("not when TikTok is one of the places, nor once TikTok approved, nor with no posts", () => {
-    expect(offerAfterUpload([yt, post({ status: "queued" })], tiktok(true, "limited")).offer).toBe(false);
-    expect(offerAfterUpload([yt], tiktok(true, "ok")).offer).toBe(false);
-    expect(offerAfterUpload([], tiktok(true, "limited")).offer).toBe(false);
-  });
 
   it("an audit gate that says ok while the app is still in review is not an approval", () => {
-    expect(tiktokAudited(tiktok(true, "ok", "waiting"))).toBe(false);
-    expect(tiktokAudited(tiktok(true, "ok", "ok"))).toBe(true);
+    expect(tiktokAudited(tiktok("ok", "waiting"))).toBe(false);
+    expect(tiktokAudited(tiktok("ok", "ok"))).toBe(true);
+    expect(tiktokAudited(tiktok("limited"))).toBe(false);
     expect(tiktokAudited(undefined)).toBe(false);
   });
-});
 
-describe("the steps", () => {
-  it("name TikTok's own buttons, Everyone and the three switches", () => {
-    const phone = steps("share", false).join(" ");
-    expect(phone).toContain("**Save to my phone**");
-    expect(phone).toContain("**Save Video**");
-    expect(phone).toContain("**+**");
-    expect(phone).toContain("**Paste**");
-    expect(phone).toContain("**Everyone**");
-    expect(phone).toMatch(/\*\*Comments\*\*, \*\*Duet\*\* and \*\*Stitch\*\*/);
-    expect(phone).not.toContain("Branded content");
-    const computer = steps("save", false).join(" ");
-    expect(computer).toContain("**Save the video**");
-    expect(computer).toMatch(/\*\*Comment\*\*, \*\*Duet\*\* and \*\*Stitch\*\*/);
-  });
-
-  it("a campaign clip turns on Branded content (under Show more on the web)", () => {
-    expect(steps("share", true).join(" ")).toContain("**Disclose post content**, then **Branded content**");
-    expect(steps("save", true).join(" ")).toContain("**Show more**");
+  it("Review's hint points to Your Mac posts TikTok, never to posting it yourself", () => {
+    expect(TIKTOK_PUBLIC_HINT).toBe("TikTok: turn on Your Mac posts TikTok so it posts for everyone.");
+    expect(TIKTOK_PUBLIC_HINT).not.toMatch(/yourself|untick/i);
   });
 });
 
 describe("an account that is public on purpose", () => {
   const OLD = "Make your TikTok account private (Setup step 3), then press Try again.";
 
-  it("never tells him to make it private, also on posts that failed before", () => {
-    expect(TIKTOK_PRIVATE_ONLY).not.toMatch(/Make your TikTok account private/);
-    expect(TIKTOK_PRIVATE_ONLY).toContain("Post it yourself");
-    expect(postError(OLD)).toBe(TIKTOK_PRIVATE_ONLY);
+  it("never tells him to make it private or to post it himself, also on posts that failed before", () => {
+    // The sentence stored on failed posts stays word for word: they are matched against it.
+    expect(TIKTOK_PRIVATE_ONLY).toBe(
+      "TikTok only takes Clip Factory's uploads on a private account until it approves the app. Tap Post it yourself to post it for everyone.",
+    );
+    // What he reads is today's: his Mac posts it.
+    expect(postError(OLD)).toBe(TIKTOK_PUBLIC_REFUSED);
+    expect(postError(TIKTOK_PRIVATE_ONLY)).toBe(TIKTOK_PUBLIC_REFUSED);
+    // The server stores today's sentence since 23 Nov (platforms/errors.TIKTOK_PRIVATE_ONLY): it reads as itself.
+    expect(TIKTOK_PUBLIC_REFUSED).toBe("TikTok only takes Clip Factory's own uploads on a private account for now, so your Mac posts it for everyone.");
+    expect(postError(TIKTOK_PUBLIC_REFUSED)).toBe(TIKTOK_PUBLIC_REFUSED);
+    expect(TIKTOK_PUBLIC_REFUSED).not.toMatch(/Make your TikTok account private|yourself|I posted it/i);
     expect(postError("Facebook said the video was too long for a Reel.")).toBe("Facebook said the video was too long for a Reel.");
   });
 
-  it("offers Post it yourself instead of a Try again that would fail again", () => {
+  it("is not offered a Try again that would fail again", () => {
     expect(failedForPublicAccount(post({ status: "failed", error: OLD }))).toBe(true);
     expect(failedForPublicAccount(post({ status: "failed", error: TIKTOK_PRIVATE_ONLY }))).toBe(true);
+    expect(failedForPublicAccount(post({ status: "failed", error: TIKTOK_PUBLIC_REFUSED }))).toBe(true);
     expect(failedForPublicAccount(post({ status: "failed", error: "TikTok did not answer." }))).toBe(false);
     expect(failedForPublicAccount(post({ platform: "youtube", status: "failed", error: OLD }))).toBe(false);
   });
 
   it("the clip page says the same", () => {
     const row = { platform: "tiktok", status: "failed", metrics: null, error: OLD } as const;
-    expect(calmCopy(row)?.text).toBe("TikTok only takes Clip Factory's uploads on a private account until it approves the app. Go to Library and tap Post it yourself.");
+    expect(calmCopy(row)?.text).toBe(TIKTOK_PUBLIC_REFUSED);
   });
 });
 

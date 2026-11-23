@@ -125,19 +125,20 @@ try again in a minute, §17.4), `internal`.
 | GET `/v1/clips/{clipId}/similar` | – | `{ "clips": SimilarClip[] }` (≤ 5 of the owner's measured clips most like this one, §14.6; `[]` when none) |
 | POST `/v1/clips/{clipId}/confirm` | `{ "captions"?: Partial<Captions> }` | `{ "clip": Clip, "posts": Post[] }` (writes the posts, starts the durable `cf-prod-clip-flow`, §14.5) |
 | POST `/v1/clips/{clipId}/decline` | – | `{ "clip": Clip }` (video files and the clip's vector deleted) |
-| GET `/v1/clips/{clipId}/file` | – | `{ "url", "filename" }` (a 1-hour link that saves the video, §42) |
-| POST `/v1/clips/{clipId}/tiktok/posted` | `{ "link"?: string }` | `{ "clip", "posts", "note"? }` (posted on TikTok by the owner himself, §42) |
-| DELETE `/v1/clips/{clipId}/tiktok/posted` | – | `{ "clip", "posts" }` (Undo of the above, §42; a post the owner's Mac made → 409, §47) |
+| GET `/v1/clips/{clipId}/file` | – | `{ "url", "filename" }` (a 1-hour link that saves the video, §42; kept, the web no longer calls it, ADR-86) |
+| POST `/v1/clips/{clipId}/tiktok/posted` | `{ "link"?: string, "since"?: ISO time, "noLink"?: boolean }` | `{ "clip", "posts", "note"? }` (It's on TikTok, §42; the web calls it only from the inline Add link, ADR-86. Neither `link` nor `noLink` is Find it for me: 409 and nothing saved when nothing is found or TikTok is not connected; `noLink: true` saves it without a link, §42.2) |
+| DELETE `/v1/clips/{clipId}/tiktok/posted` | – | `{ "clip", "posts" }` (Undo of the above, §42; a post the owner's Mac made → 409, §47; kept, the web no longer calls it, ADR-86) |
 | GET `/v1/tiktok/mac` | – | `{ "on", "helper": MacHelper \| null, "queue": MacJob[] }` (the Mac helper's queue, §47) |
-| POST `/v1/tiktok/mac/ping` | `{ "state", "reason"?, "version"?, "device", "login"?, "loginDone"? }` | `{ "on" }` (the Mac helper checks in, §47; `login` and `loginDone` §47.8) |
-| POST `/v1/tiktok/mac/send` | `{ "clipIds": string[] (1–25) }` | `{ "results": [{ "clipId", "sent", "reason"? }] }` (Send these to my Mac, §47; in order, each id once) |
+| POST `/v1/tiktok/mac/ping` | `{ "state", "reason"?, "version"?, "device", "login"?, "loginDone"?, "backlogAt"?, "holdBefore"?, "backfill"?, "resumeDone"?, "letGoDone"? }` | `{ "on" }` (the Mac helper checks in, §47; `login` and `loginDone` §47.8; its plan and the owner's requests §47.3) |
+| POST `/v1/tiktok/mac/send` | `{ "clipIds": string[] (1–25), "now"?: boolean }` | `{ "results": [{ "clipId", "sent", "reason"? }] }` (Send these to my Mac, §47; in order, each id once; `now: true` is a row's Post with my Mac, `macSource: "upload"`, §47.2) |
 | POST `/v1/tiktok/mac/login` | `{ "action": "change" \| "forget" }` | `{ "helper": MacHelper }` (Change or Forget the TikTok login kept on the Mac; the Mac does it when it next checks in, §47.8) |
+| POST `/v1/tiktok/mac/request` | `{ "action": "resume" \| "let_go" }` | `{ "helper": MacHelper }` (Start my Mac again, Let them go; the Mac does it when it next checks in, §47.3) |
 | POST `/v1/clips/{clipId}/tiktok/mac/claim` | `{ "device" }` | `{ "job": MacJob }` (§47) |
-| POST `/v1/clips/{clipId}/tiktok/mac/step` | `{ "device", "step" }` | `{ "job": MacJob }` (§47) |
+| POST `/v1/clips/{clipId}/tiktok/mac/step` | `{ "device", "step", "attempt"? }` | `{ "job": MacJob }` (§47; the same step sent again is the job's beat) |
 | POST `/v1/clips/{clipId}/tiktok/mac/done` | `{ "device", "link"? }` | `{ "clip", "posts", "note"? }` (the Mac posted it, §47) |
 | POST `/v1/clips/{clipId}/tiktok/mac/stopped` | `{ "device", "reason", "needsYou"? }` | `{ "job": MacJob }` (§47) |
-| POST `/v1/clips/{clipId}/tiktok/mac/retry` | `{ "notOnTikTok"?: true }` | `{ "clip", "posts" }` (the owner's Try again, §47) |
-| DELETE `/v1/clips/{clipId}/tiktok/mac` | – | `{ "clip", "posts" }` (Take it back, before Post it yourself instead, §47) |
+| POST `/v1/clips/{clipId}/tiktok/mac/retry` | `{ "notOnTikTok"?: true, "now"?: boolean }` | `{ "clip", "posts" }` (the owner's Try again, §47; `now: true` makes it `macSource: "upload"`; after Post was pressed only once the 30-minute find window is over, §47.3) |
+| DELETE `/v1/clips/{clipId}/tiktok/mac` | – | `{ "clip", "posts" }` (Take it back, §47; kept, the web no longer calls it, ADR-86) |
 | GET `/v1/skills` | – | `{ "skills": Skill[] }` (§18.3: built-ins first, then the owner's by name; no `enabled`) |
 | GET `/v1/skills/{skillId}` | – | `SkillDetail` (§18.3) |
 | POST `/v1/skills/uploads` | `{ "filename", "skillId"? }` (`.md` ≤ 1 MB or `.zip` ≤ 20 MB; `skillId` = replace that skill's file, §18.4) | `{ "skillId", "key", "uploadUrl", "headers" }` (key per revision, §18.1) |
@@ -510,9 +511,9 @@ AgentCore runtime's `/aws/bedrock-agentcore/runtimes/<runtime id>-DEFAULT`, whic
 * Colours (owner request 2026-11-18, ADR-43): **Bottle Green `#0F372B`** (the surface), **Bone `#EFE7DA`** (the
   words and the lines), **Vermilion `#E8392B` (every call to action)**. Every surface is **liquid glass**: bottle-green
   tints with bone words over a soft animated deep-green mesh with a vermilion glow (or the owner's own background),
-  `backdrop-filter: blur() saturate()`, a soft light from above (the logic of light, §22.7, ADR-85: every layer is
+  `backdrop-filter: blur() saturate()`, a soft light from above (the logic of light, §22.7, ADR-87: every layer is
   brighter than the one under it, and every pane is brighter at its top) and refraction on the hero surfaces. Every
-  action button wears the vermilion CTA, **except the update bar's Reload, a colourless liquid-glass lens (ADR-85)**;
+  action button wears the vermilion CTA, **except the update bar's Reload, a colourless liquid-glass lens (ADR-87)**;
   secondary buttons are glass one step brighter than what they sit on (no outline, ADR-45); selected items in a
   pick-one bar are bone with green words.
 * Type: **Times New Roman** (fallback Tinos, then serif) for display headlines, often italic with a vermilion underline
@@ -624,7 +625,7 @@ the traffic lights' band; nothing ever covers the traffic lights.
   worker finds a waiting worker. If `version` differs from its own: a glass bar slides up at the bottom (above the phone
   tab bar), showing a sparkle icon, the area labels as small pills (e.g. `Settings · Profile picture`), and a
   colourless liquid-glass **Reload** button (bone words, no vermilion, no white label, no shine or glow; it reads as
-  the primary choice beside "Later" by light alone: brighter at rest, brighter still on hover, ADR-85). Visible in the browser and in installed apps. Dismissable ("Later") until the next check.
+  the primary choice beside "Later" by light alone: brighter at rest, brighter still on hover, ADR-87). Visible in the browser and in installed apps. Dismissable ("Later") until the next check.
 * Reload: a progress bar inside the bar animates with an ease-in-out curve: quick to ~75 % in ~0.8 s (slow start,
   fast middle, slow end), holds/creeps while the new service worker installs and activates (`skipWaiting` via
   postMessage) and fresh assets are fetched, then eases to 100 %, a small sparkle/confetti, then `location.reload()`.
@@ -2168,7 +2169,7 @@ Connect:
 Go public (`gate: app_review`, `posting_audit`):
 | id | title | essentials |
 |---|---|---|
-| `public-demo` | Record the real demo video | On a computer, connected in the Sandbox with the TikTok account still private, address bar in sight. Copy chip **Shot list** (`TIKTOK_DEMO_SHOTS` in `tiktok.ts`, 18 numbered shots in order): About page with Privacy and Terms › **Connect TikTok** › TikTok's screen with every scope, **Continue** › connected › the clip's source › Review card preview (no watermark) › the **TikTok** row: "Asking TikTok…", "Posting as" + picture › edit the TikTok caption › Upload held ("Pick who can see it on TikTok first.") and **Who can see it** with nothing picked › Comments, Duet, Stitch all off (grey "Turned off in your TikTok settings." when the creator turned one off) › **Commercial content** on ("Pick Your brand, Branded content, or both." under it; pick **Only me**, Upload still held: "Pick Your brand or Branded content on TikTok first.") › **Your brand** (its "Promotional content" tag) › **Branded content** ("Paid partnership", Branded Content Policy line above Upload, Who can see it now says "Branded content can't be Only me. Turn off Branded content.") › untick it, pick **Only me** by hand, Commercial content off › Music Usage Confirmation line above **Upload** › **Upload** and "TikTok can take a few minutes to process your clip." › **Library**: on its way, then Posted › the private post on TikTok as picked › **Money** (video.list, user.info.stats) › last, on another clip with nothing on, **Use my settings** (the owner's own tap) and the TikTok row with every option. About 1 min, MP4, under 50 MB (up to 5 videos). Hints: a shot-list line you can't find → tap the **TikTok** row (every line is in there or right above **Upload**); a secret or code on screen → cut it out. The same video goes to App review and the audit form. |
+| `public-demo` | Record the real demo video | On a computer, connected in the Sandbox with the TikTok account still private and **Your Mac posts TikTok** off (§47.9 item 2), address bar in sight. Copy chip **Shot list** (`TIKTOK_DEMO_SHOTS` in `tiktok.ts`, 18 numbered shots in order): About page with Privacy and Terms › **Connect TikTok** › TikTok's screen with every scope, **Continue** › connected › the clip's source › Review card preview (no watermark) › the **TikTok** row: "Asking TikTok…", "Posting as" + picture › edit the TikTok caption › Upload held ("Pick who can see it on TikTok first.") and **Who can see it** with nothing picked › Comments, Duet, Stitch all off (grey "Turned off in your TikTok settings." when the creator turned one off) › **Commercial content** on ("Pick Your brand, Branded content, or both." under it; pick **Only me**, Upload still held: "Pick Your brand or Branded content on TikTok first.") › **Your brand** (its "Promotional content" tag) › **Branded content** ("Paid partnership", Branded Content Policy line above Upload, Who can see it now says "Branded content can't be Only me. Turn off Branded content.") › untick it, pick **Only me** by hand, Commercial content off › Music Usage Confirmation line above **Upload** › **Upload** and "TikTok can take a few minutes to process your clip." › **Library**: on its way, then Posted › the private post on TikTok as picked › **Money** (video.list, user.info.stats) › last, on another clip with nothing on, **Use my settings** (the owner's own tap) and the TikTok row with every option. About 1 min, MP4, under 50 MB (up to 5 videos). Hints: a shot-list line you can't find → tap the **TikTok** row (every line is in there or right above **Upload**); a secret or code on screen → cut it out. The same video goes to App review and the audit form. |
 | `public-review` | Ask TikTok to check the app | Switch to **Production**. **App review**: check `tiktokReviewText` is there (one line per scope), swap in the real demo video, **Save**, **Submit for review**. Then pick the status here: Draft / In review / Live / Not approved (`PATCH gate app_review`). Not approved: read **Review comments**, fix, submit again. |
 | `public-live-keys` | When it says Live | If the Production keys differ from the Sandbox ones, paste them and press **Connect again**. |
 | `public-audit` | Ask to post publicly | Only after **App review** says **Live**: **Production** › **Content Posting API** › **Apply** next to **Direct Post** (Open button: developers.tiktok.com/application/content-posting-api). The form has 4 pages (General Information, API client information, Supporting documents, Review) and does not save: paste each answer into the box with the same name. Copy chips: Organization name `appName`, Organization website `websiteUrl`, Organization description `TIKTOK_AUDIT_DESCRIPTION`, How you use Direct Post `TIKTOK_AUDIT_DIRECT_POST`, How you got the number `TIKTOK_AUDIT_USAGE` (pick the smallest users choice), Data you store `TIKTOK_AUDIT_DATA` (all literal strings in `tiktok.ts`; every one literally true today: one creator's own clipping tool, invite-only, one user, other creators' streams and paid clipping campaigns said plainly, "There is no company. Clip Factory is the name of my tool, and I am one person.", no wide audience; Data you store lists only what the api keeps: follower count, and from recent videos only a views total and a count of long videos). Upload the demo video, read and tick the 3 boxes, **Next**. "TikTok's rules ask for apps that many people can use. Clip Factory is only for you. If it says no, posts stay private but still post." Hints: **Your full name** → type your own; app ID → the number after /app/ in the app page's address bar; no **Apply** → wait for Live; spinner after **Next** → the video is uploading (up to 2 min); **Under review** → done for now, often 1 to 3 weeks; a no with empty **Review comments** → ask TikTok support first. Until it passes, every post is "Only me". |
@@ -2548,9 +2549,12 @@ and the rest wait for Post now or the next release.
 (YouTube `quotaExceeded`/`uploadLimitExceeded`, TikTok `rate_limit_exceeded`/`spam_risk_too_many_posts`, Meta 4/17/32/
 613/80001/80002, X 429) → "{Platform} says slow down. Clip Factory tries again later." (retryable except daily caps:
 "…Press Try again tomorrow."); TikTok `spam_risk_user_banned_from_posting` → "TikTok is not letting this account post
-right now."; `unaudited_client_can_only_post_to_private_accounts` → "TikTok only takes Clip Factory's uploads on a private
-account until it approves the app. Tap Post it yourself to post it for everyone." (§42; it said "Make your TikTok
-account private (Setup step 3), then press Try again." before the owner's account went public on 2026-11-21); `reached_active_user_cap` → "TikTok's daily limit for your app is reached. Try tomorrow.";
+right now."; `unaudited_client_can_only_post_to_private_accounts` → "TikTok only takes Clip Factory's own uploads on a
+private account for now, so your Mac posts it for everyone." (§42; round 3, 2026-11-23, D6: the web's own words since
+ADR-86, so no stored sentence names a button the owner doesn't have; it said "TikTok only takes Clip Factory's uploads
+on a private account until it approves the app. Tap Post it yourself to post it for everyone." from 2026-11-21, and
+"Make your TikTok account private (Setup step 3), then press Try again." before the owner's account went public; all
+three are stored on old posts and matched word for word by the web's `postError` and `failedForPublicAccount`); `reached_active_user_cap` → "TikTok's daily limit for your app is reached. Try tomorrow.";
 YouTube `forbidden`/`uploadLimitExceeded` channel → "YouTube did not accept the upload. Check your channel in YouTube
 Studio."; file checks (`file_format_check_failed`, `duration_check_failed`, Meta 2207026 …) → "{Platform} did not like
 this video file."; X 402 or a `CreditsDepleted`/"credits" problem → gate `credits` `action`, "Your X credits ran out.
@@ -4300,7 +4304,7 @@ line moved, the label decides. Durations come from §20.3 unless stated.
 | GetApp.tsx:162 Download for Mac/Windows/Linux, :176 install from this browser, :204 Install app | `download` | |
 | GetApp.tsx:268 Copy the link | `copy` | then the existing check swap |
 | UpdateBar.tsx:66 Later | press | |
-| UpdateBar.tsx:69 **Reload** (the colourless lens since ADR-85; it was vermilion) | existing | the spark spin / pop / confetti stays as the `refresh` motion; its icon gets `act="refresh"` for the tap; nothing new waits |
+| UpdateBar.tsx:69 **Reload** (the colourless lens since ADR-87; it was vermilion) | existing | the spark spin / pop / confetti stays as the `refresh` motion; its icon gets `act="refresh"` for the tap; nothing new waits |
 | Toasts.tsx:134 Undo | press | the rewind plays on the source control (§20.7) |
 | Toasts.tsx:141 Close message; Sheet.tsx:50 scrim / Escape | press / none | |
 | SetupTodo.tsx the pill, **–** (make it small), × (close), Set up \<Platform\>, Skip \<Platform\> (opens the question) | press | navigation, opening and closing stay quiet (§17.13) |
@@ -4428,7 +4432,7 @@ content in place and nothing else moves: no cross-fade, no fade-in, no lift, in 
   change calls `startViewTransition`; `web/test/stillNav.test.ts` fails on any `::view-transition` rule or an
   animation on the page's own blocks.
 
-### 20.17 Light is static (owner request, 2026-11-23, ADR-85)
+### 20.17 Light is static (owner request, 2026-11-23, ADR-87)
 
 The logic of light (§22.7) never moves: every light, top glow, shade and shadow is a gradient or a box-shadow that is
 drawn once. No specular sweep, no moving highlight, no animated refraction.
@@ -5020,7 +5024,7 @@ an old desktop app, told apart from a real `none` by a missing `__CF_GLASS__`, �
 * desktop: `cargo fmt --check`, `cargo clippy --all-targets -- -D warnings`, `cargo test` (CI, Linux; the macOS
   path is compiled and tested on a Mac).
 
-### 22.7 The logic of light (owner request, 2026-11-23, ADR-85)
+### 22.7 The logic of light (owner request, 2026-11-23, ADR-87)
 
 The owner (with a screenshot of Library): "can you use the logic of light on the ui, meaning the top layer is always
 brighter than the bottom, and it grows gradually in between ... and make it more liquid glassy while you are at it";
@@ -7324,7 +7328,8 @@ Decision record: ADR-60 (which corrects ADR-57).
    "Every place uses your settings. Tap a place below to change it for this clip." (after, or with TikTok unticked),
    "You changed some for this clip. Tap to put yours back." (after a change in a row). YouTube, Instagram, Facebook
    and X use My settings from the start (nothing in their rules asks for a tap); TikTok's choices go on only with this
-   tap (or picks in its row), because TikTok wants the creator's own action and no default. Ticking Commercial content
+   tap (or picks in its row), because TikTok wants the creator's own action and no default. While his Mac posts TikTok,
+   TikTok starts on My settings too, with no tap (§47.9). Ticking Commercial content
    (Your brand / Branded content) is about one clip and keeps "Your settings are on".
 4. **One closed row per ticked place** (`screens/review/PlaceRows.tsx`, a `<details>` with a soft fill and no edges):
    "YouTube · title, description and settings", "TikTok · caption and settings", "Instagram · caption and
@@ -7337,7 +7342,8 @@ Decision record: ADR-60 (which corrects ADR-57).
      `settings.youtubePrivacy`), Category (the app's own dropdown, Gaming first), **Made for kids** switch (off = No),
      Tell my subscribers.
    * TikTok: Posting as, Caption, **Who can see it** (§36.5), Comments, Duet, Stitch, Commercial content with Your
-     brand (Promotional content) / Branded content (Paid partnership).
+     brand (Promotional content) / Branded content (Paid partnership). While his Mac posts TikTok, Who can see it and
+     the three switches are one read-only line of what the Mac posts with, and a ticked label holds Upload (§47.9).
    * Instagram: Caption, Also show it in my feed (Reel).
    * Facebook: Caption, "Goes up as a Reel on your Page. Everyone can see it." (Page Reels are public; nothing to pick).
    * X: Caption, Who can reply (the app's own dropdown: Everyone, People you follow, Only people you mention, Verified
@@ -7351,7 +7357,8 @@ Decision record: ADR-60 (which corrects ADR-57).
    TikTok first.", "You need to indicate if your content promotes yourself, a third party, or both. Pick Your brand
    or Branded content on TikTok first." (that first sentence is also Upload's hover text), "Branded content can't be
    Only me. Pick Everyone or Friends first.", "This clip is too long for TikTok. Untick
-   TikTok to upload it to the rest.", "TikTok did not answer. Tap Ask TikTok again, or untick TikTok."
+   TikTok to upload it to the rest.", "TikTok did not answer. Tap Ask TikTok again, or untick TikTok." While his Mac
+   posts TikTok, only TikTok's too-long line and its Commercial content lines can hold Upload (§47.9).
 
 A standard upload is two taps: **Use my settings**, then **Upload to 4**. The TikTok sheet no longer opens from the
 card when places are set up: TikTok's controls are in its row and its legal line is beside Upload.
@@ -7409,8 +7416,9 @@ one more attribute on the settings item, written only when the owner saves).
 `myTikTokChoices(preset.tiktok, creator)`: TikTok's privacy is the saved one when TikTok offers it, else Everyone, else
 TikTok's first choice (Only me before the audit); Comments, Duet and Stitch as saved and off where the creator turned
 them off; Commercial content off. TikTok's creator info is asked for when the owner taps Use my settings or opens the
-TikTok row, never before. `uploadClip(..., platforms, options)`; `confirmClip(clipId, captions, tiktok, platforms,
-options)`. Nothing about My settings is kept in localStorage.
+TikTok row, never before (while his Mac posts TikTok: in the background as soon as TikTok is ticked, §47.9).
+`uploadClip(..., platforms, options)`; `confirmClip(clipId, captions, tiktok, platforms, options)`. Nothing about My
+settings is kept in localStorage.
 
 ### 34.5 TikTok's "Who can see it"
 
@@ -7695,7 +7703,7 @@ export interface CrGuide { name: "Content Rewards"; checkedOn: "2026-11-21"; min
 | # | id | title | essentials |
 |---|---|---|---|
 | 1 | `ready-account` | Make a Content Rewards account | Open "Open Content Rewards" → `https://contentrewards.com/login?intent=signup`. "You'll see **Create your account**. Type your email in **Email**. Tap **Send code**." "Type the 6 numbers from the email. Tap **Verify**." "Or tap **Continue with Google**." "You must be 18 or older. One account per person." "I did this"; `auto: connected` (a finished Connect also ticks it, and so does Content Rewards saying the account can't connect apps; both are in `stepsDone`, and so is a sent pilot email, §38.8, §39.1). If you see: "That code is incorrect or has expired" → "Tap **Resend code** and use the newest email."; "We already sent a code" → "Look in Spam or Promotions."; the wrong email → "Tap **Change it**."; a few questions after signing in → "Answer them. Any answer is fine."; a cookie bar → "Tap **Accept** or **Decline**. Both are fine." |
-| 2 | `ready-socials` | Connect your accounts there | Open "Open Content Rewards settings" → `https://contentrewards.com/c/settings`. "Tap **Accounts**." "Tap **Connect account**. Tap YouTube." "On the next screen, leave every box ticked and tap Allow or Continue." "Do the same for Instagram, X and Facebook." "Each one should say **Connected**." Then one line made from `GET /v1/setup` (connected places only, never TikTok): "Clip Factory posts to: YouTube @faze · Instagram @faze · X @faze · Facebook FaZe Page." Line: "TikTok can wait. TikTok posts from Clip Factory stay private until TikTok checks the app, and private posts can't earn." "I did this" (sets every `crLinked` that is `false` back to unknown, §38.11); `auto: linked` (ticks when any `crLinked` is `true`); a finished Connect also ticks it (`stepsDone`). A `crLinked: false` re-opens the step with the line "Content Rewards doesn't know your YouTube account. Connect it here, then tap I did this." If you see: "No **Accounts** tab?" → "Look for **Connected accounts**."; **Verify** in red → "Tap it and allow again."; **Sign in again** → "Tap it."; **In review** → "Nothing to do. Content Rewards links it for you."; "already connected to another creator" → "That account is on another Content Rewards account. Unlink it there, or ask Content Rewards support."; "access wasn't granted" → "Tap **Connect account** again and leave every box ticked."; "No YouTube channel found" → "Pick the Google account that owns your channel." Folds: `fold-instagram`, `fold-facebook` (below). |
+| 2 | `ready-socials` | Connect your accounts there | Open "Open Content Rewards settings" → `https://contentrewards.com/c/settings`. "Tap **Accounts**." "Tap **Connect account**. Tap YouTube." "On the next screen, leave every box ticked and tap Allow or Continue." "Do the same for Instagram, X and Facebook." "Each one should say **Connected**." Then one line made from `GET /v1/setup` (connected places only, never TikTok): "Clip Factory posts to: YouTube @faze · Instagram @faze · X @faze · Facebook FaZe Page." Line: "TikTok can wait. Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet." "I did this" (sets every `crLinked` that is `false` back to unknown, §38.11); `auto: linked` (ticks when any `crLinked` is `true`); a finished Connect also ticks it (`stepsDone`). A `crLinked: false` re-opens the step with the line "Content Rewards doesn't know your YouTube account. Connect it here, then tap I did this." If you see: "No **Accounts** tab?" → "Look for **Connected accounts**."; **Verify** in red → "Tap it and allow again."; **Sign in again** → "Tap it."; **In review** → "Nothing to do. Content Rewards links it for you."; "already connected to another creator" → "That account is on another Content Rewards account. Unlink it there, or ask Content Rewards support."; "access wasn't granted" → "Tap **Connect account** again and leave every box ticked."; "No YouTube channel found" → "Pick the Google account that owns your channel." Folds: `fold-instagram`, `fold-facebook` (below). |
 | 3 | `connect` | Connect Content Rewards | `auto: connected` (ticks on `connected` **or** `read_only`), `manual: false`. Words by where the page runs (below). If you see: **Sign-in failed** → "Close that tab and tap Connect Content Rewards again."; "your account can't connect apps" (or anything about connecting apps) → "Look at the card Content Rewards said no? below. It has an email for you."; nothing happens → "Look for a new browser tab. Still nothing? Tap Connect Content Rewards again." |
 
 Fold-outs inside step 2 (closed unless the question applies):
@@ -7864,8 +7872,9 @@ top to bottom:
    countries: $0.20", "Unknown country: …"). These are CR's published rates, never a guess of what a clip will earn.
    Then "Money left: $7,890 of $8,500 · as of 2:10 pm" over a soft bar with a chip "Plenty left" (< 50% used) / "Half
    used" / "Almost gone" (≥ 95%), "Open to everyone" or "The brand picks creators (you apply)", and "Pays for:
-   YouTube, Instagram". When the campaign pays for TikTok: "TikTok: not yet. TikTok keeps Clip Factory's posts private
-   until it checks the app, and private posts can't earn."
+   YouTube, Instagram". When the campaign pays for TikTok: "TikTok: not yet. Campaign clips skip TikTok for now: your Mac
+   can't mark them as Branded content yet." (round 3, ADR-86: the one source is the server's
+   `tiktok_mac.CAMPAIGN_SKIPS`)
 4. **Rules I'll follow** (`data-help="cr-rules"`): `plainRules` with a tick each (code-made, §38.10: "Clips are 15 to
    60 seconds long.", "Every caption has #FaZe and @FaZeClan.", "#Ad goes at the start of each caption.", "'Paid
    partnership' shows on the video for the first 3 seconds.", "The FaZe logo stays on screen the whole clip, away
@@ -7960,7 +7969,7 @@ that is never "accepted": it just shows.
 | `budget_half` | no | spent > 50% (`MAX_SPENT_FRACTION = 0.5`) | "Half the money is used. $3,880 is left. Post soon, before it runs out." |
 | `low_rate` | no | every paid CPM rate under $1.00 per 1,000 views (`MIN_RATE_CENTS = 100`) | "It pays only $0.50 per 1,000 views. Most campaigns pay $1 or more. You can still make clips, or pick another one." |
 | `logo_missing` | yes | `logo.needed` and no ready logo | "This campaign needs its logo on every clip. Add it below." (next step `logo`, vermilion "Add the logo") |
-| `tiktok_only` | yes | the campaign pays only for TikTok | "This campaign only pays for TikTok. TikTok keeps Clip Factory's posts private until it checks the app, and private posts can't earn. Pick a campaign that pays for YouTube, Instagram, X or Facebook." |
+| `tiktok_only` | yes | the campaign pays only for TikTok | "This campaign only pays for TikTok. Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet. Pick a campaign that pays for YouTube, Instagram, X or Facebook." |
 | `no_place` | yes | no paid platform is set up in Clip Factory (TikTok counted only after its audit) | "Set up YouTube first. This campaign pays for YouTube and Instagram." (→ the first paid place's setup page) |
 | `held` | yes | CR said too many clips wait for approval (§38.12) | "Content Rewards wants the brand to check your other clips first. I'll tell you when you can post again." |
 | `cap_reached` | yes | CR said `creator_cap_reached` | "You reached the most you can earn on this campaign. Pick another one." |
@@ -7993,10 +8002,10 @@ that is never "accepted": it just shows.
   * A strip at the top (`data-help="cr-review-strip"`): "For **FaZe Clips** · Content Rewards" with three ticks
     "Paid partnership", "#Ad at the start", "Logo on" (the last only when the campaign needs it).
   * **Upload to** shows only `campaign.uploadPlaces` (§38.8: places the campaign pays for, set up in Clip Factory,
-    not refused as unlinked by CR, and TikTok only after its audit, §17.4 gate `posting_audit: ok`). One line under
-    the chips: "Only places this campaign pays for." and, when the campaign pays for TikTok and the audit has not
-    passed: "TikTok is left out for now. Until TikTok checks Clip Factory, TikTok posts are private, and private posts
-    can't earn." A place CR refused as not linked (`crLinked: false`): the line "Link YouTube inside Content Rewards
+    not refused as unlinked by CR, and TikTok only after its audit, §17.4 gate `posting_audit: ok`; Review also takes
+    TikTok out of a campaign clip's places until TikTok approved the app, `tiktokAudited`, round 3). One line under the
+    chips: "Only places this campaign pays for." and, when the campaign pays for TikTok and TikTok is not offered:
+    "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet." (the server's `fit.TIKTOK_WAITS`, the same words as `tiktok_mac.CAMPAIGN_SKIPS`). A place CR refused as not linked (`crLinked: false`): the line "Link YouTube inside Content Rewards
     first." with the glass Open "Open Content Rewards settings" (→ `https://contentrewards.com/c/settings`), the green
     "I linked it" (`PATCH /v1/contentrewards/connection {"relinked": "youtube"}`: back to unknown, so YouTube returns
     to the chips) and the second line "Then tap I linked it. The next clip will go."
@@ -8793,8 +8802,9 @@ Check now (`POST …/campaigns/{id}/read`) runs step 3 for one campaign synchron
     again."
   * Every chosen place is one of the clip's places (the §38.8 `uploadPlaces` rule), else 400 with the first refusal:
     not paid → "This campaign doesn't pay for {Platform}. Turn it off, then tap Upload."; not `ready` on Set up
-    posting → "{Platform} is not set up yet. Turn it off, then tap Upload."; TikTok before its `posting_audit` gate is
-    `ok` → "TikTok keeps Clip Factory's posts private until TikTok checks the app, and private posts can't earn. Turn
+    posting → "{Platform} is not set up yet. Turn it off, then tap Upload."; TikTok before TikTok approved the app
+    (its `app_review` and `posting_audit` gates not both `ok`, `tiktok_mac.setup_audited`; round 3, ADR-86: before
+    that only the owner's Mac posts TikTok, and it can't mark a campaign clip as Branded content yet) → "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet. Turn
     TikTok off, then tap Upload."; `CRCONN.crLinked[place]` is `false` → "Add {Platform} in Content Rewards first.
     Then tap I added it, or turn {Platform} off and tap Upload."
   * YouTube: `options.youtube.privacy` other than `public` → 400 "Campaign clips must be public. Pick Everyone.";
@@ -8815,8 +8825,7 @@ Check now (`POST …/campaigns/{id}/read`) runs step 3 for one campaign synchron
   the same 409s, place rule and fit gate on the posts they send (the failed and the waiting ones), with sentences that
   name the buttons those screens have (no switch, no Upload): "This campaign doesn't pay for {Platform} any more. Tap
   Try again on another place.", "{Platform} is not set up yet. Set it up in Settings › Posting › Set up posting, then
-  tap Try again.", "TikTok keeps Clip Factory's posts private until TikTok checks the app, and private posts can't
-  earn. Tap Try again on another place." and "Add {Platform} in Content Rewards first, then tap Try again." TikTok's
+  tap Try again.", "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet. Tap Try again on another place." and "Add {Platform} in Content Rewards first, then tap Try again." TikTok's
   public and Branded content rule runs when new TikTok choices come with it; they replace the TikTok post's
   `postOptions` but its `campaign` part goes along unchanged. A waiting campaign post is never released by itself when
   its account comes back (`release.release_waiting`): it waits for Post now (§39.3).
@@ -12106,8 +12115,8 @@ brands, CR's category names) is plain escaped text, at most 300 characters, neve
 
    Under the controls, fixed (not a control): "I skip campaigns Clip Factory can't make clips for, like ones that need
    their own sound or picture on the video." The TikTok chip, until TikTok's posting audit passes (§17.4 gate
-   `posting_audit: ok`): shown off and not tappable (`aria-disabled`), with the §38.4 line "TikTok: not yet. TikTok keeps
-   Clip Factory's posts private until it checks the app, and private posts can't earn." A place not set up yet (not
+   `posting_audit: ok`): shown off and not tappable (`aria-disabled`), with the §38.4 line "TikTok: not yet. Campaign clips skip
+   TikTok for now: your Mac can't mark them as Branded content yet." A place not set up yet (not
    `ready` in `GET /v1/setup`) is shown off and not tappable, with "Set it up first." under it (matching only ever uses
    ready places, §41.3); while any place but TikTok isn't ready, a quiet "Set up another place" sits under the chips
    (→ `/settings/posting/setup?back=/campaigns/find`). S sends `places: null` whenever the picked chips equal every
@@ -12911,74 +12920,84 @@ unaudited app "Only me" on a private account (developers.tiktok.com/doc/content-
 review rules ("Apps must not be for private or personal use"; Direct Post "Not acceptable: A utility tool to help
 upload contents to the account(s) you or your team manages") make approval unlikely for a one-person tool. So Clip
 Factory hands the clip to TikTok and the owner taps Post there himself, picking Everyone. Nothing here uses TikTok's
-posting API. Decision record: ADR-66.
+posting API. Decision record: ADR-66. Since 2026-11-22 his Mac posts instead (§47) and the web's hand-over sheet is gone;
+the routes and stored fields stay (ADR-86).
 
 ### 42.1 What the owner sees
 
-* **Library** (each card) and **the clip page** (beside Refresh numbers): **Post it yourself** (TikTok mark; accessible
-  name "Post it on TikTok yourself") on every uploaded clip (`confirmed` with posts, `publishing`, `posted`,
-  `failed`) whose TikTok is not out for everyone: no TikTok post, or one that is waiting for setup, failed, or
-  uploaded privately. Not while Clip Factory is uploading it (`queued`), not when its own upload is public, and not once
-  he marked it. On a Library card TikTok then always has its own row ("Not on TikTok yet" when the clip has no TikTok
-  post; a TikTok post waiting for setup leaves the "Waiting for setup" group), after YouTube in the usual order.
-* **The sheet** (`screens/library/PostYourself.tsx`, the Post to TikTok sheet's look and modal rules, §17.8): title
-  "Post it on TikTok yourself", one line ("Everyone can see it, because you post it in TikTok. Clip Factory's own
-  TikTok upload stays Only me until TikTok approves the app."), the video, numbered steps in TikTok's words, the TikTok
-  caption (read-only, "· copied" once copied), then one way to hand it over:
-  * **A phone that can share a video file** (`navigator.canShare({files})` on iOS or Android): the video is fetched
-    when the sheet opens ("Getting the video ready…"; `cache: "no-store"`; a `.mp4` file name, since iOS reads the
-    type from it), so **Save to my phone** (vermilion) opens the share menu on the same tap that copies the caption
-    (copying first: it does not use up the tap, `share()` does; the share holds the file only, no text or title,
-    which makes some apps drop the file; its answer is not waited for). TikTok is rarely in that menu for a web app,
-    so the steps say: pick Save Video (TikTok in the list? pick it instead); open TikTok, +, Upload, the clip, Next;
-    paste the caption; check it says Everyone (TikTok starts a new post with the last post's privacy, Only you after
-    Clip Factory's uploads) and turn on Comments, Duet and Stitch; a campaign clip also turns on Disclose post content
-    › Branded content; Post; come back and tap I posted it. Closing the share menu is not an error; a share that fails
-    for any other reason (or a video that did not load) shows **Save the video** (the file link below) with "The share
-    menu did not open. Tap Save the video below. It goes to Files: open it there, tap Share, then Save Video. Then open
-    TikTok and tap +." The link and the video load apart: Save the video never waits for the whole video, which only
-    the share menu and AirDrop need.
-  * **A computer** (and a phone that cannot share files): **Save the video** (vermilion; the file link below, so the
-    browser saves it to Downloads; the Mac app opens it in the system browser, which does the same) and **Open TikTok**
-    (`https://www.tiktok.com/tiktokstudio/upload` in a new tab, the system browser in the Mac app). Both copy the
-    caption. On a Mac (Safari and the Mac app's WKWebView both share files) a quiet **Send to my iPhone (AirDrop)**
-    opens the share menu with the file. The computer steps use TikTok Studio's words: "Who can watch this video",
-    Comment, Duet and Stitch, and for a campaign clip Show more › Disclose post content › Branded content.
-  * **TikTok link** (optional: "Clip Factory looks for the post on your TikTok"), with **Paste**, and **I posted it**
-    (vermilion once the video was handed over; it sends `since`, a minute before the sheet opened). Confetti, the sheet
-    closes, and one Undo toast: "On TikTok for everyone!" plus " Clip Factory will count its views." when it has the
-    post, or the answer's `note` without its "Saved." ("… Clip Factory could not find it on your TikTok yet. Tap Add
-    link in a minute."). Undo takes it back (§42.2).
-* **After**: the TikTok row says "Posted by you · Everyone", with Open and its numbers once read; without a link
-  "Posted by you · Everyone · add the link to count views" and **Add link** (the same sheet with only the link box,
-  **Find it on my TikTok**, which asks again from when he marked it, and **Save the link**). The clip page's TikTok stack says "Posted by you. Add its TikTok link in Library to count views."
-  until it has one.
-* **Right after Upload on Review** (`offerAfterUpload`): when nothing of Clip Factory's is on its way to TikTok (no
-  TikTok post, or one waiting for setup) and TikTok's `posting_audit` gate is not `ok`, the clip's line in "Uploaded
-  just now" gets **Post it yourself** too (its Undo brings the button back), and when TikTok is set up (he posts
-  there) but was left unticked, the sheet opens by itself (Not now closes it), except on a campaign clip. Nothing
-  else on Review changes: Upload to, Use my settings, each place's row with TikTok's dropdown and switches, and Upload
-  to several places all stay. TikTok ticked there is still Clip Factory's own upload, "Only me" until TikTok approves.
+**Since 2026-11-22 the web has no manual TikTok sheet** ([ADR-86](DECISIONS.md#adr-86-no-manual-tiktok-sheet-the-mac-is-the-only-way-to-tiktok-until-tiktok-approves-the-app)).
+Shown the "Post it yourself" sheet (Save the video, Open TikTok, Send to my iPhone (AirDrop), the caption, the TikTok
+link, Not now, I posted it), the owner said (verbatim): "i dont think these options are necessary becasue they are not
+gonna be used, the automation will cover it, so might wannna remove this popup". Until TikTok approves the app, his
+Mac is the only way to TikTok (§47): every TikTok row says what the Mac is doing, with at most one button (§47.4).
+Gone from the web: `screens/library/PostYourself.tsx` (the sheet and `PostYourselfButton`); **Post it yourself** on
+Library cards, the clip page and Review's "Uploaded just now"; the sheet that opened by itself after Upload; **Post it
+yourself instead** and **I posted it** on Mac posts; Auto-posting's **Post these on TikTok yourself** (§46.2 item 7).
+Every route of §42.2 stays, so nothing stored breaks.
+
+What stays for the owner:
+* **Posted by you.** A clip he marked himself before (`by: "you"`, no `via`) keeps its row "Posted by you · Everyone",
+  with **Open** and its numbers once read.
+* **The inline Add link**, the only owner-facing use of §42.2 left: a post by him, or by his Mac (`via: "mac"`), that
+  has no link reads "Posted by you · Everyone · add the link" or "Posted by your Mac · Everyone · add the link" and
+  shows a link box right in the row (no sheet, dialog or portal), **Paste** and **Save the link**. Save the link sends
+  `POST /v1/clips/{clipId}/tiktok/posted {link, since: post.postedAt}`; with the box empty Save the link says "Paste
+  the link first, or tap Find it for me." (round 3, no request), and **Find it for me** sends `{since}` only: the
+  finder (§42.2) looks for the post on his TikTok and saves it only with its link (round 3, D3: nothing found → the
+  row's problem line says the server's words and nothing is saved). A toast says what happened ("Link saved! Clip
+  Factory will count its views.", "Found it on your TikTok! …", or the answer's `note`). The clip page has the same field beside Refresh numbers, and its
+  TikTok stack says "Posted by you. Add its TikTok link to count views." ("Posted by your Mac. …" for the Mac's).
+* **A campaign clip** never goes to his Mac (round 3, D1, §47.2): its row says "Campaign clips skip TikTok for now:
+  your Mac can't mark them as Branded content yet." with no button, and Review leaves TikTok unticked for it. The
+  inline Add link has **Find it for me** right beside its box (the `{since}` call), then **Paste** and **Save the
+  link**; from a "Not sure it posted" row also **It's on TikTok, no link** behind its own question (`{noLink: true}`).
+* **Review** (TikTok ticked, TikTok not approved: `app_review` and `posting_audit` not both `ok`): one line just above
+  TikTok's Music Usage line (which stays right above Upload, §17.8). While Your Mac posts TikTok is off it is
+  `TIKTOK_PUBLIC_HINT`, "TikTok: turn on Your Mac posts TikTok so it posts for everyone."; while it is on, `MAC_HINT`,
+  "TikTok: your Mac posts it for everyone." Nothing opens by itself after Upload. Upload to, Use my settings, each
+  place's row with TikTok's dropdown and switches, and Upload to several places all stay.
 
 TikTok's rule: Everyone needs a public account, while an unaudited app may only post to a private one
 (`unaudited_client_can_only_post_to_private_accounts`). His account is public on purpose (since 2026-11-21), so Clip
-Factory's own TikTok upload fails with "TikTok only takes Clip Factory's uploads on a private account until it approves
-the app. Tap Post it yourself to post it for everyone." (`TIKTOK_PRIVATE_ONLY`, §17.6). On that row Library shows that
-sentence, also for posts that failed earlier with the old one ("Make your TikTok account private (Setup step 3), then
-press Try again."), with **Post it yourself** and no Try again (it would fail the same way); the clip page says the
-same. On Review, while TikTok is ticked and TikTok has not approved the app (`app_review` and `posting_audit` both
-`ok`), one line just above TikTok's Music Usage line (which stays right above Upload, §17.8) says: "Until TikTok approves the app, Clip Factory can only upload to a private TikTok
-account. Yours is public? Untick TikTok, tap Upload, then post it yourself." TikTok stays ticked as it was (every set-up
-place starts ticked, §36.1); once he unticks it and uploads, Upload to remembers that (§33.2) and the sheet opens by
-itself after Upload (below).
+Factory's own TikTok upload fails with `TIKTOK_PRIVATE_ONLY` (§17.6), stored word for word: "TikTok only takes Clip
+Factory's own uploads on a private account for now, so your Mac posts it for everyone." (round 3; posts that failed
+between 2026-11-21 and round 3 keep "TikTok only takes Clip Factory's uploads on a private account until it approves
+the app. Tap Post it yourself to post it for everyone."). Posts that failed earlier keep the old "Make your TikTok
+account private (Setup step 3), then press Try again." Stored errors are matched against all three, so none changes. The web shows its own words for both (`postError`): "TikTok only takes
+Clip Factory's own uploads on a private account for now, so your Mac posts it for everyone." On that row Library shows
+no Try again (it would fail the same way) and offers **Post with my Mac** (§47.4); the clip page says the same.
+
+Before ADR-86 (2026-11-21 to 2026-11-22) the sheet handed the clip over by hand: the share menu on a phone, Save the
+video and Open TikTok (TikTok Studio's upload page) on a computer, AirDrop on a Mac, the caption copied on the same tap,
+numbered steps in TikTok's words, and I posted it (ADR-66). Its full description is in git history.
 
 ### 42.2 API (additive, under `ANY /v1/{proxy+}`; `routes/clips.py`, `tiktok_self.py`, `tiktok_link.py`)
 
 | Method & path | Body | 2xx response |
 |---|---|---|
 | GET `/v1/clips/{clipId}/file` | – | `{ "url", "filename" }`: a 1-hour GET link with `ResponseContentDisposition: attachment; filename="clip-factory-<hook>.mp4"` and `video/mp4` (404 when declined or without a video) |
-| POST `/v1/clips/{clipId}/tiktok/posted` | `{ "link"?: string, "since"?: ISO time }` | `{ "clip", "posts", "note"? }` |
+| POST `/v1/clips/{clipId}/tiktok/posted` | `{ "link"?: string, "since"?: ISO time, "noLink"?: boolean }` | `{ "clip", "posts", "note"? }` |
 | DELETE `/v1/clips/{clipId}/tiktok/posted` | – | `{ "clip", "posts" }` |
+
+**Round 3 (2026-11-23, D3, ADR-86): Find it for me never saves without a link.** The body says which of the row's three
+answers it is (`noLink` via `validate.boolean`; a non-empty `link` with `noLink: true` → 400 "Send a link or noLink,
+not both."; unknown keys 400):
+
+| Body | What happens |
+|---|---|
+| `link` (non-empty) | the pasted link, as below |
+| `noLink: true` (**It's on TikTok, no link**, behind its own confirm in the web) | marked posted by him without a link and **without the finder** (`mark_posted(..., no_link=True)`); answer `{clip, posts}` with no `note`. On a Mac post still `working` it is refused (409 "Your Mac is posting it right now. Wait a minute.") unless the job is stuck (§47.3), and on a `working` job the Mac never pressed Post for: with that `MAC_WORKING` while it still beats the job (`beat_fresh`, even past the 50-minute cap), else 409 "Your Mac stopped before it pressed Post, so it isn't on TikTok. Tap Try again." (`MAC_NOT_PRESSED`, review round 3) |
+| neither (**Find it for me**) | a TikTok post already `by: "you"` with a `url` → 200, nothing changes. Else, before the finder, the same refusals as a save (`tiktok_self.check_can_mark`: not uploaded, still starting, `queued`, already public, a Mac post `working` and not stuck → `MAC_WORKING`), so TikTok is never asked for a clip that can't be marked. Then the finder: found → saved with its link (200, no `note`); nothing found, or TikTok did not answer → 409 **"Not found yet. Try again in a minute, or paste the link."** (`routes/clips.FIND_NONE`); TikTok not connected (or no OAuth client) → 409 **"Clip Factory can't look on your TikTok until TikTok is connected. Paste the link instead."** (`FIND_CANT`). Neither 409 writes anything |
+
+`routes/clips.NOT_FOUND_YET` ("Saved. Clip Factory could not find it on your TikTok yet. Tap Find it for me in a
+minute.") stays only for the **Mac's own done** (§47.3), which still saves without a link: the Mac knows it posted.
+
+Otherwise unchanged by ADR-86. "I posted it" below names this write (`tiktok_self.mark_posted`), which the sheet's button used to
+call: the web now calls the POST only from the inline Add link (§42.1), the Mac's done runs the same write (§47.3), and
+the file link and the DELETE (Undo) stay for older apps, unused by the web. The sentences below are the server's,
+unchanged, except the finder's note, which names **Find it for me** since 2026-11-23 (the button beside the inline
+box); the one that still names I posted it ("… Clear the box and tap I posted it …") means the inline field's **Save
+the link**.
 
 * **I posted it** writes the clip's one TikTok post (one per clip, as everywhere) as `status: "posted"`, `privacy:
   "public"`, public `by: "you"`, `postedAt` now (kept when marked again), `perfCheckAt` +48 h. A post Clip Factory made
@@ -12993,7 +13012,7 @@ itself after Upload (below).
   so his post gets its own day-7 window; a later link to another video drops them again. The clip becomes
   `posted` when it was `failed`, or `confirmed` with nothing `queued` (the clip flow's settle rule, §14.5); a
   `publishing` clip is left to its flow.
-* Refused (409, plain sentences): not uploaded ("Upload this clip first. Then you can post it on TikTok yourself."),
+* Refused (409, plain sentences): not uploaded ("Upload this clip first. Then your Mac can post it on TikTok.", round 3),
   posts not made yet (`postsCreated` absent: "This clip is still starting to upload. Try again in a minute."), TikTok
   `queued` ("This clip is still uploading to TikTok. Wait until it is done, then try again."), Clip Factory's own post
   already public ("This clip is already on TikTok for everyone."), a write that lost a race ("This clip just changed.
@@ -13011,7 +13030,7 @@ itself after Upload (below).
   not open a TikTok video. In TikTok, open your post, tap Share, then Copy link.", "TikTok did not open that link. Try
   again in a minute, or paste the long link from tiktok.com.", and, when a short link lands on TikTok's home page (what
   TikTok answered a server in every test on 2026-11-21), "Clip Factory could not open that short link. Clear the box
-  and tap I posted it: Clip Factory looks for the post on your TikTok." Marking again with a link only adds or changes
+  and tap Save the link: Clip Factory looks for the post on your TikTok." Marking again with a link only adds or changes
   the link.
 * **No link: finding it** (`tiktok_find.py`): with TikTok connected and no link stored yet, the API asks TikTok's
   Display API `POST /v2/video/list/` (`fields=id,share_url,create_time,video_description,title`, `max_count` 20;
@@ -13019,8 +13038,8 @@ itself after Upload (below).
   posts made at most 10 minutes before `since` (clamped to the last 24 hours; absent: an hour ago). The one whose
   description starts like the clip's TikTok caption (first 24 letters, case and marks ignored) wins; with no match,
   the only candidate does; otherwise nothing. Found: `url` and `statsId` as for a link. Not found, or TikTok did not
-  answer: the post is still marked and `note` is "Saved. Clip Factory could not find it on your TikTok yet. Tap Add
-  link in a minute."
+  answer: Find it for me answers 409 `FIND_NONE` and saves nothing (round 3, above); only the Mac's done still marks
+  it, with the `note` "Saved. Clip Factory could not find it on your TikTok yet. Tap Find it for me in a minute."
 * **Undo** (DELETE): a post made here is deleted, leaves `postIds` and clears `tiktokByYou`; Clip Factory's own post gets `beforeYou` back
   (status, url, privacy, error, ids and stats fields as they were). The clip's status follows the same settle rule.
   Nothing to undo: 409 "This clip was not marked as posted by you, so there is nothing to undo."
@@ -13029,30 +13048,32 @@ itself after Upload (below).
 
 ### 42.3 Web
 
-`lib/tiktokYourself.ts` (`handOffFor`, `canShareVideo`, `tiktokState`, `canPostYourself`, `canPostYourselfHere`,
-`tiktokAudited`, `offerAfterUpload`, `steps`, `videoFileName`, `looksLikeTikTokLink`, `TIKTOK_UPLOAD_URL`),
-`screens/library/PostYourself.tsx` (`PostYourself`, `PostYourselfButton`), `Library.tsx`, `ClipPerformance.tsx`,
-`Review.tsx` (Uploaded just now), `lib/metrics.ts` `calmCopy`; `Api.clipFile`,
-`markTikTokPosted(clipId, link?)`, `undoTikTokPosted`; the mock follows the API's rules (a short link reads as the
-sample video; mock clips without a video get a tiny stand-in file).
+`lib/tiktokYourself.ts` (`tiktokState`, `canPostYourself`, `tiktokAudited`, `videoFileName`, `failedForPublicAccount`,
+`postError`, `looksLikeTikTokLink`, `TIKTOK_PRIVATE_ONLY`, `TIKTOK_PUBLIC_HINT`); the inline Add link in
+`screens/library/MacButtons.tsx`, shown by `Library.tsx` and `ClipPerformance.tsx` when `tiktokRow` (§47.4) asks for
+`add_link`; `lib/metrics.ts` `calmCopy`. `Api.markTikTokPosted(clipId, link?, since?)`; `Api.clipFile` and
+`Api.undoTikTokPosted` stay in the Api and the mock, unused by the screens. Removed (ADR-86): `PostYourself.tsx`
+(`PostYourself`, `PostYourselfButton`), `handOffFor`, `canShareVideo`, `steps`, `TIKTOK_UPLOAD_URL`,
+`canPostYourselfHere` and `offerAfterUpload`. The mock follows the API's rules (a short link reads as the sample video;
+mock clips without a video get a tiny stand-in file).
 
 ### 42.4 Tests
 
-`api/tests/test_tiktok_yourself.py` (links: full, short, away from TikTok, three hops, home page, not a video, TikTok
-down, the real opener's hosts; I posted it: new post, link and poller, short link, another account, replace and Undo,
-failed clip, Undo of a made post, link later, every refusal, another owner; finding it: by caption, the only new post,
-too unsure, TikTok down; the file link); `web/test/tiktokYourself.test.ts` (the pure helpers and the mock's rules);
-`web/e2e/tiktok-yourself.spec.ts` (Library: button, sheet, I posted it, Add link, Find it, Undo; Review: Uploaded just
-now). The mock's first
-look finds nothing and a later one finds the sample post.
+`api/tests/test_tiktok_yourself.py`, unchanged (links: full, short, away from TikTok, three hops, home page, not a
+video, TikTok down, the real opener's hosts; I posted it: new post, link and poller, short link, another account,
+replace and Undo, failed clip, Undo of a made post, link later, every refusal, another owner; finding it: by caption,
+the only new post, too unsure, TikTok down; the file link); `web/test/tiktokYourself.test.ts` (the pure helpers left
+and the mock's markTikTokPosted, Undo and file rules); `web/e2e/tiktok-yourself.spec.ts` (the inline Add link: a link
+saved, and an empty box that runs the finder; no **Post it yourself**, **I posted it**, **AirDrop** or **Open TikTok**
+control on Library, the clip page or Review). `web/test/postYourselfCaption.test.tsx` went with the sheet. The mock's
+first look finds nothing and a later one finds the sample post.
 
 ### 42.5 Not verified live
 
-Whether iOS 26 offers Save Video for a file shared from the Home Screen app (reported working on iOS 16; WebKit bug
-255641 fixed the Save actions in 2023), and whether TikTok appears in that menu at all (reports say only from Photos);
-whether TikTok's short links ever reach the video from an AWS address (from this Mac they went to the home page);
-that `video/list` and `video/query` with the Sandbox keys see a public video posted by hand on @lamo.clips. Research
-with quotes: the side-session note `tiktok-manual-handoff-research.md` (2026-11-21).
+Whether TikTok's short links ever reach the video from an AWS address (from this Mac they went to the home page); that
+`video/list` and `video/query` with the Sandbox keys see a public video posted by hand or by the Mac on @lamo.clips.
+The share-menu questions (Save Video on iOS 26, TikTok in that menu) went with the sheet (ADR-86). Research with quotes:
+the side-session note `tiktok-manual-handoff-research.md` (2026-11-21).
 
 ## 43. Followers and subscribers: per clip and in total (owner request, 2026-11-20)
 
@@ -13223,16 +13244,21 @@ lands before Skip these, insert then undo gives his text back exactly, undo refu
 and not_now through the API incl. a zip, the note), `agent/tests/test_skill_sections.py` (a job's block has the note
 after his copy and matches the API's golden, none once added), web `e2e/skill-section-offer.spec.ts` (375 and 1440 px).
 
-## 45. Lamo Stories: a second, separate workspace (owner request, 2026-11-21)
+## 45. Funded Clips: a second, separate workspace (owner request, 2026-11-21)
 
-**Planned: not in the app until the switch pull request turns it on (§45.21).** Until then nothing of Lamo Stories
+**Planned: not in the app until the switch pull request turns it on (§45.21).** Until then nothing of Funded Clips
 shows in Clip Factory, and Ask should say it is being built.
 
-The owner asked for **Lamo Stories**, a second content studio inside Clip Factory that makes short animated story
+It was called Lamo Stories until 22 Nov 2026, then Clip Factory Stories and Clip Stories until 23 Nov 2026.
+A stored workspace whose name is still an old default ("Lamo Stories", "Clip Factory Stories" or "Clip Stories") shows
+as "Funded Clips" (the API's public workspace shape maps them, and the web does as a fallback; the stored record is
+never rewritten), and a new workspace gets "Funded Clips" as its default name.
+
+The owner asked for **Funded Clips**, a second content studio inside Clip Factory that makes short animated story
 videos (no voice-over: characters, faces, body language, sound effects, music, optional captions) and posts them to
 **different** social accounts. One app, one sign-in, one owner; two workspaces with their own screens, libraries,
 production jobs, settings and social connections. The existing app is the **Lamo Clips** workspace and must stay
-exactly as it is. The same evening the owner added a second request: Lamo Stories is **its own application** inside
+exactly as it is. The same evening the owner added a second request: Funded Clips is **its own application** inside
 the Clip Factory shell, with its own AgentCore runtime, agents, skills, models and reasoning effort he controls, a
 creative chat with memory, reference-video analysis, its own setup and onboarding, and its own OAuth credentials
 (§45.24–§45.32; where they differ from the subsections before them, they win). "Clip Factory" in the second request
@@ -13244,25 +13270,25 @@ met; §45.23 and §45.32 list the evidence for each acceptance criterion.
 
 * No existing table, index, item, attribute, S3 prefix, secret, Lambda, route, prompt, screen, style or test is
   renamed, moved, replaced or re-shaped. Lamo Clips' data is never migrated: it **is** the built-in workspace.
-* Everything new is **additive** and lives in Lamo Stories' own pieces (§45.24): new partitions (§45.3), a new S3
+* Everything new is **additive** and lives in Funded Clips' own pieces (§45.24): new partitions (§45.3), a new S3
   prefix (§45.4), a new Secrets Manager prefix (§45.13), its own API Lambda behind new routes under `/v1/workspaces`
   (§45.5), its own AgentCore runtime and image (§45.11), one new durable Lambda (§45.15), new IAM roles, new web
   routes under `/stories` (§45.16). Clip Factory's `cf-prod-api`, its route table, its agent runtime and image, and
-  their roles do not change. Lamo Stories never revokes, rewrites or deletes a Lamo
+  their roles do not change. Funded Clips never revokes, rewrites or deletes a Lamo
   Clips token, key, account or setup item, on any path (§45.13.6).
 * Existing code is touched only where a new thing must be plugged in; §45.17 lists every such touch with the test that
   proves the old path is unchanged. Nothing new is shown in the Lamo Clips screens except the workspace switcher
   (§45.16.1), which sits in space that is empty today and moves no existing control.
 * Every deploy: the Delete gate line reads exactly "Delete gate: the plan deletes or replaces nothing that holds the
   owner's data." and the only resources the plan may replace are the image build triggers
-  `module.agent.terraform_data.image` (only if Clip Factory's agent image changes, which Lamo Stories never causes) and
-  `module.stories_agent.terraform_data.image` (whenever Lamo Stories' agent image changes); they hold no data (it was
-  so before Lamo Stories, for example in PR #84). Everything else is add or update in place (§45.18).
-* Lamo Stories was hidden behind one web switch, `STORIES_ON` in `web/src/stories/flag.ts`, until every piece had
+  `module.agent.terraform_data.image` (only if Clip Factory's agent image changes, which Funded Clips never causes) and
+  `module.stories_agent.terraform_data.image` (whenever Funded Clips' agent image changes); they hold no data (it was
+  so before Funded Clips, for example in PR #84). Everything else is add or update in place (§45.18).
+* Funded Clips was hidden behind one web switch, `STORIES_ON` in `web/src/stories/flag.ts`, until every piece had
   merged and the final check passed; the switch pull request (2026-11-22, §45.36) turned it on for everyone and renamed
-  the update bar's Lamo Stories folders from "Behind the scenes" to "Lamo Stories" (`web/areas.json`). A device can
-  still choose with `localStorage` `cf.storiesPreview`: `"0"` shows Clip Factory exactly as before Lamo Stories, `"1"`
-  shows Lamo Stories (the tests use both).
+  the update bar's Funded Clips folders from "Behind the scenes" to "Funded Clips" (`web/areas.json`). A device can
+  still choose with `localStorage` `cf.storiesPreview`: `"0"` shows Clip Factory exactly as before Funded Clips, `"1"`
+  shows Funded Clips (the tests use both).
 
 ### 45.2 Words
 
@@ -13270,15 +13296,15 @@ met; §45.23 and §45.32 list the evidence for each acceptance criterion.
 |---|---|
 | workspace | One content studio of the owner: its own content, jobs, library, settings and social connections. |
 | Lamo Clips | The built-in workspace `workspaceId = "clips"`, `workspaceType = "clips"`: today's whole app and all its data, unchanged. It is never written as an item. |
-| Lamo Stories | A workspace of type `stories`. The first one has `workspaceId = "stories"` and the name "Lamo Stories"; later ones (for example "Lamo Cars") get a ULID. |
+| Funded Clips | A workspace of type `stories`. The first one has `workspaceId = "stories"` and the name "Funded Clips"; later ones (for example "Lamo Cars") get a ULID. |
 | story | One animated video project (the spec's *Content*, `contentType = "animation"`). |
 | production job | One run that makes or remakes (part of) a story's video, or a character's portrait (the spec's *ProductionJob*). |
 | social account | One authorized account, channel or Page connected **to one workspace** (the spec's *SocialAccount*). |
 | publishing job | Sending one approved story to one social account (the spec's *PublishingJob*). |
 | cast | The characters of one story, copied (looks and all) into its script when it is written, so a later edit to a character never changes a finished video (§45.8). |
-| agent | One of Lamo Stories' five AI roles (creative director, video analysis, storyboard, character, quality assurance), each with its own instructions, model, effort and skills (§45.26). |
+| agent | One of Funded Clips' five AI roles (creative director, video analysis, storyboard, character, quality assurance), each with its own instructions, model, effort and skills (§45.26). |
 | task | One kind of AI work (chat, brainstorm, storyboard, …) that an agent does; models and effort can be set per task (§45.25). |
-| skill | A Lamo Stories `SKILL.md` assigned to agents (§45.26); Clip Factory's skills are separate and never used. |
+| skill | A Funded Clips `SKILL.md` assigned to agents (§45.26); Clip Factory's skills are separate and never used. |
 | reference video | A video the owner uploads so the video analysis agent can study its structure and timing (§45.28). |
 
 Workspace types live in one registry, `WORKSPACE_TYPES` (`api/src/clipfactory_api/workspaces/types.py`, mirrored in
@@ -13316,20 +13342,20 @@ Lamo Clips' partition `USER#{userId}` gets **no new items**. Two new kinds of pa
 | AI configuration | same | `AICONFIG` | `type="ws_aiconfig"`, `defaultModel`, `defaultEffort`, `tasks`, `prices`, `version`, `updatedAt` (§45.25; made on the first PUT with a conditional put; updates conditional on `version`) |
 | Added model | same | `MODELDEF#{key}` | `type="ws_modeldef"`, the `ModelDef` fields of §45.34/§45.35 D1, `version`, `createdAt`, `updatedAt` (key `custom-…`; at most 20; merged over `stories/config/models.json` per call by the API and the agent) |
 | Provider key | same | `PROVCRED#{providerId}` | `type="ws_provcred"`, `savedAt`, `hint` (the key itself only in Secrets Manager, §45.31) |
-| Own rate counters | `RATE#WS#{workspaceId}#{platform}` | `BUDGET` | only with Lamo Stories' own developer app (§45.30) |
+| Own rate counters | `RATE#WS#{workspaceId}#{platform}` | `BUDGET` | only with Funded Clips' own developer app (§45.30) |
 | OAuth state | `OAUTH#{nonce}` | `STATE` | the existing item (§17.4) plus `workspaceId` and `socialAccountId`, written only for a `w1.` state (§45.13.2) |
 
 * **Ownership is in the key.** The API builds every key from the JWT's `sub` and the path's workspace id; it never
   reads a user id from a body. A workspace that is not in `USER#{userId}#WSREG` answers `404 not_found` ("We could
-  not find that workspace."), whatever its id; the one exception is the first Lamo Stories workspace, `stories`,
+  not find that workspace."), whatever its id; the one exception is the first Funded Clips workspace, `stories`,
   which `require_workspace` creates on first use with a conditional put (two calls at once make one). Every item also
   carries `userId` and `workspaceId`, and every read checks both against the request (a second, independent check:
   `workspaces.guard.owned(item, user_id, ws_id)`).
 * **Why these prefixes.** The live-update and notification streams forward only the sort-key prefixes `JOB#`,
   `CLIP#`, `POST#`, `LEARNING#`, `WEEK#`, `ACCOUNT#`, `SETUP#`, `FOLLOW#`, `JOBLIVE#`, `CAMPAIGN#`, `CRCONN`, `CRSUB#`,
   `CRMONEY` (`infra/modules/realtime/main.tf`, `notify/main.tf`). No new sort key starts with any of them
-  (`api/tests/test_ws_keys.py` reads them from Terraform), so no Lamo Stories item can ever reach a Lamo Clips screen,
-  notification or the stats poller (`gsi1` and `gsi2` are never set on a new item). Lamo Stories screens poll
+  (`api/tests/test_ws_keys.py` reads them from Terraform), so no Funded Clips item can ever reach a Lamo Clips screen,
+  notification or the stats poller (`gsi1` and `gsi2` are never set on a new item). Funded Clips screens poll
   (§45.16.4). Item `type` values never reuse a Lamo Clips one.
 * `SOCIAL#{platform}`: one social account per platform per workspace (the owner's table: one separate account per
   platform). `socialAccountId` = `{workspaceId}.{platform}` (stable, so a reconnect keeps the id; §45.14 stops a
@@ -13354,25 +13380,27 @@ Lamo Clips' partition `USER#{userId}` gets **no new items**. Two new kinds of pa
 | `ws/{userId}/{workspaceId}/stories/{storyId}/captions/v{n}.ass` | the on-screen captions and bubble text | kept |
 | `ws/{userId}/{workspaceId}/stories/{storyId}/final/v{n}.mp4`, `cover-v{n}.jpg` | the finished 1080×1920 video and its cover | kept (old versions per the retention setting, §45.29) |
 | `ws/{userId}/{workspaceId}/references/{refId}/source.{mp4\|mov}`, `analysis.json`, `frames/` | reference videos and their analysis (§45.28) | kept until deleted |
-| `ws/{userId}/{workspaceId}/skills/{skillId}/{revisionId}/` | Lamo Stories skills (§45.26) | the last 10 revisions kept |
+| `ws/{userId}/{workspaceId}/skills/{skillId}/{revisionId}/` | Funded Clips skills (§45.26) | the last 10 revisions kept |
 | `ws/{userId}/{workspaceId}/chat/{convId}/{fileId}.{ext}` | pictures attached in the chat | kept with the conversation |
 
-No Lamo Clips prefix (`uploads/`, `jobs/`, `skills/`, `private/`, `ask/`, `campaigns/`) is read or written by Lamo
-Stories code, and no Lamo Clips code reads `ws/`. The media bucket's lifecycle rules name Lamo Clips prefixes only, so
+No Lamo Clips prefix (`uploads/`, `jobs/`, `skills/`, `private/`, `ask/`, `campaigns/`) is read or written by Funded
+Clips code, and no Lamo Clips code reads `ws/`. The media bucket's lifecycle rules name Lamo Clips prefixes only, so
 `ws/` files are kept. The Library lists only `ASSET#` items of its workspace (§45.12), never S3 listings. Presigned
-GETs last 1 hour; a download adds `ResponseContentDisposition: attachment; filename="{slug}.mp4"`.
+GETs last 1 hour; a download adds `ResponseContentDisposition: attachment; filename="{slug}.mp4"`. `{slug}` is the
+title in lowercase ASCII letters and digits joined by dashes, at most 60 characters, or `funded-clip` when nothing is
+left (`workspaces/media.py` `slug`; the mock does the same).
 
 ### 45.5 HTTP API (`cf-prod-stories-api`, JWT on every route, §5 errors)
 
-All under `/v1/workspaces`, served by Lamo Stories' own Lambda `cf-prod-stories-api` (§45.24; API Gateway routes
+All under `/v1/workspaces`, served by Funded Clips' own Lambda `cf-prod-stories-api` (§45.24; API Gateway routes
 `ANY /v1/workspaces` and `ANY /v1/workspaces/{proxy+}` to it; every other path still goes to `cf-prod-api`, unchanged).
 `{ws}` is a workspace id (`^(clips|stories|[0-9A-HJKMNP-TV-Z]{26})$`, else 404). Routes
-marked **S** need a `stories` workspace: on `clips` they answer `409 conflict` "That is a Lamo Stories page. Switch to
-Lamo Stories first." Bodies are validated with `validate.py`; unknown keys are `400`.
+marked **S** need a `stories` workspace: on `clips` they answer `409 conflict` "That is a Funded Clips page. Switch to
+Funded Clips first." Bodies are validated with `validate.py`; unknown keys are `400`.
 
 | Method & path | Body | 2xx |
 |---|---|---|
-| GET `/v1/workspaces` | – | `{ "workspaces": Workspace[] }`: Lamo Clips first, then the owner's workspaces by `createdAt`; creates `stories` ("Lamo Stories") on first use |
+| GET `/v1/workspaces` | – | `{ "workspaces": Workspace[] }`: Lamo Clips first, then the owner's workspaces by `createdAt`; creates `stories` ("Funded Clips") on first use |
 | POST `/v1/workspaces` | `{ "workspaceType": "stories", "workspaceName" }` (1–40 chars, unique per owner, at most 10 workspaces) | `201 { "workspace" }` (API only; no screen in this section) |
 | GET `/v1/workspaces/{ws}` | – | `{ "workspace" }` |
 | PATCH `/v1/workspaces/{ws}` **S** | `{ "workspaceName"?, "configuration"?: Partial<StoriesConfig>, "version" }` | `{ "workspace" }`; `409` on a stale `version` |
@@ -13395,7 +13423,7 @@ Lamo Stories first." Bodies are validated with `validate.py`; unknown keys are `
 | DELETE `/v1/workspaces/{ws}/characters/{characterId}/references/{assetId}` **S** | – | `{ "character" }` |
 | POST `/v1/workspaces/{ws}/characters/design/uploads` **S** | `{ "filename", "contentType": "image/png" \| "image/jpeg" \| "image/webp", "size" ≤ 10 MB }` | `{ "assetId", "uploadUrl", "headers" }` (`ws/{u}/{ws}/design/{assetId}.{ext}`, an `ASSET#` of kind `design_ref`) |
 | POST `/v1/workspaces/{ws}/characters/design` **S** | `{ "description"?: string (≤ 600), "referenceAssetId"?: string (a `design_ref` or `character_ref` asset of this workspace, else 404), "override"?: ModelOverride }` | `202 { "task" }`: the character agent's suggested `CharacterInput` in `result.character` (a draft; nothing saved) |
-| POST `/v1/workspaces/{ws}/characters/{characterId}/portrait` **S** | – | `202 { "job" }` (a portrait job, §45.11.6); `409` "AI pictures are off. Turn them on in Lamo Stories › Settings." while `providers.images` is `builtin-rig` |
+| POST `/v1/workspaces/{ws}/characters/{characterId}/portrait` **S** | – | `202 { "job" }` (a portrait job, §45.11.6); `409` "AI pictures are off. Turn them on in Funded Clips › Settings." while `providers.images` is `builtin-rig` |
 | GET `/v1/workspaces/{ws}/stories` **S** | query `status?` (a StoryStatus or `all`), `limit` ≤ 50, `cursor` | `{ "stories": Story[], "nextCursor" }` newest first |
 | POST `/v1/workspaces/{ws}/stories` **S** | `StoryInput` (may carry `override`: ModelOverride for this video's jobs, and `referenceIds`) | `201 { "story", "job" }` (starts production) |
 | GET `/v1/workspaces/{ws}/stories/{storyId}` **S** | – | `{ "story", "job": ProductionJob \| null, "script": StoryScript \| null }` (URLs presigned) |
@@ -13421,11 +13449,11 @@ Lamo Stories first." Bodies are validated with `validate.py`; unknown keys are `
 | POST `/v1/workspaces/{ws}/social/{platform}/choose` **S** | `{ "choiceId" }` (instagram and facebook only; other platforms `400`) | `{ "account" }` |
 | ~~POST `/v1/workspaces/{ws}/social/{platform}/share`~~ | removed by §45.37 G8 | no account is ever shared with Clip Factory (404) |
 | POST `/v1/workspaces/{ws}/social/{platform}/check` **S** | – | `{ "account" }` (a live profile call; `token_dead` → `needs_reconnect`) |
-| GET `/v1/workspaces/{ws}/social/tiktok/creator-info` **S** | – | `{ "creator": TikTokCreator }` (the §17.4 shape, with the workspace token only); `409` "Lamo Stories' TikTok is not connected. Connect it in Lamo Stories › Connections." |
+| GET `/v1/workspaces/{ws}/social/tiktok/creator-info` **S** | – | `{ "creator": TikTokCreator }` (the §17.4 shape, with the workspace token only); `409` "Funded Clips' TikTok is not connected. Connect it in Funded Clips › Connections." |
 | DELETE `/v1/workspaces/{ws}/social/{platform}` **S** | – | `204`: deletes only this workspace's token and pending secrets and sets the account `not_connected`; **no platform revoke call** (§45.13.6) |
 | PUT `/v1/workspaces/{ws}/social/{platform}/app` **S** | `{ "choice": "own", "clientId", "clientSecret", "configId"? }` or `{ "choice": "clips" }` | `{ "account" }` (§45.30; keys masked like §17.4; a change of app disconnects the account first) |
-| POST `/v1/workspaces/{ws}/social/{platform}/app/check` **S** | – | `{ "check": KeyCheck }` (Lamo Stories' own app keys, §17.4's checks) |
-| DELETE `/v1/workspaces/{ws}/social/{platform}/app` **S** | – | `204` (only Lamo Stories' own app keys; disconnects first) |
+| POST `/v1/workspaces/{ws}/social/{platform}/app/check` **S** | – | `{ "check": KeyCheck }` (Funded Clips' own app keys, §17.4's checks) |
+| DELETE `/v1/workspaces/{ws}/social/{platform}/app` **S** | – | `204` (only Funded Clips' own app keys; disconnects first) |
 | GET `/v1/workspaces/{ws}/ai` **S** | – | `{ "ai": StoriesAiConfig, "models": ModelInfo[], "agents": Agent[], "tasks": TaskInfo[] }` |
 | PUT `/v1/workspaces/{ws}/ai` **S** | `StoriesAiConfig & { "version" }` | `{ "ai" }` (unknown model keys, efforts a model does not offer, unknown tasks → 400 with the sentence) |
 | POST `/v1/workspaces/{ws}/ai/check-models` **S** | `{ "models"?: string[] }` | `202 { "task" }` (one tiny real call per model, §45.25) |
@@ -13462,23 +13490,23 @@ Lamo Stories first." Bodies are validated with `validate.py`; unknown keys are `
 | POST `/v1/workspaces/{ws}/publishing/{publishingJobId}/retry` **S** | `{ "options"?: PublishOptions, "confirmAccount"?: string /* the new externalAccountId the owner saw */ }` | `202 { "publishingJob" }` (only `failed` or `needs_attention`; `409` naming the new account when the destination changed and `confirmAccount` does not match it) |
 
 `/v1/accounts*`, `/v1/setup*`, `/v1/clips*`, `/v1/jobs*` and every other existing route are unchanged, served by
-`cf-prod-api` as before, and never see Lamo Stories data. Lamo Stories' route modules live **outside** Clip Factory's `routes` package:
+`cf-prod-api` as before, and never see Funded Clips data. Funded Clips' route modules live **outside** Clip Factory's `routes` package:
 `workspaces/routes/core.py` (workspaces, dashboard, ideas, characters, stories, library, providers, guidance, tasks),
 `workspaces/routes/ai.py` (AI configuration, agents, skills, chat, memory, references, onboarding, usage, provider
-keys, storage) and `workspaces/routes/social.py` (social, developer apps, creator info, the Lamo Stories OAuth
+keys, storage) and `workspaces/routes/social.py` (social, developer apps, creator info, the Funded Clips OAuth
 callback, publish, publishing), assembled in `workspaces/routes/__init__.py`; `workspaces/http.py` is the Lambda
 handler that dispatches only these (the shared `http.dispatch` and JWT claims code, imported read-only); a test
 imports it in a fresh interpreter and checks `clipfactory_api.routes` is not loaded; `routes/__init__.py` (Clip
 Factory's table) does not include them.
 
 Dependencies reach the routes through `workspaces/deps.py` (`deps.of(app)`: built once per `App` from the
-environment on first use: `STORIES_AGENT_RUNTIME_ARN` (Lamo Stories' own runtime), `STORY_FLOW_ARN`,
+environment on first use: `STORIES_AGENT_RUNTIME_ARN` (Funded Clips' own runtime), `STORY_FLOW_ARN`,
 `WS_SECRET_PREFIX`, the media bucket; tests install fakes with `deps.install(app, …)`); `app.py` does not change.
-Story-only AWS calls live in new files: `workspaces/agent.py` (invokes **Lamo Stories' runtime** only:
+Story-only AWS calls live in new files: `workspaces/agent.py` (invokes **Funded Clips' runtime** only:
 `start_story`, `start_portrait`, `start_task`, `start_chat_turn`, `start_reference`, `cancel`, `stop_session`;
 sessions `"cfstory-" + id + "-" + 8 random chars`, at least 33 characters; two attempts on a retryable error, 20 s
 read timeout) and `workspaces/flow.py` (the story flow start). `agent_client.py` and `flow_client.py` stay
-byte-identical; neither Lamo Stories file ever invokes `cf_prod_clip_agent`.
+byte-identical; neither Funded Clips file ever invokes `cf_prod_clip_agent`.
 
 ### 45.6 Shapes (TypeScript notation; `web/src/stories/api/types.ts` and `web/src/stories/engine/types.ts` are the copies the web compiles, changed only through this section)
 
@@ -13497,7 +13525,7 @@ interface StoriesConfig { defaultDurationSec: number /* 15..90, default 45; 30..
   youtubeCategory: "1" | "2" | "23" | "24" | "27" /* Film & Animation, Autos & Vehicles, Comedy, Entertainment,
      Education; default "27"; Lamo Clips' own category list and default are not used */;
   youtubePrivacy: "public" | "unlisted" | "private" /* default "public" */;
-  xMonthlyLimitUsd: number | null /* only with Lamo Stories' own X app (§45.30) */ }
+  xMonthlyLimitUsd: number | null /* only with Funded Clips' own X app (§45.30) */ }
 // The AI configuration lives beside it (GET/PUT …/ai), not in StoriesConfig:
 type Effort = "low" | "medium" | "high" | "xhigh" | "max";
 type TaskKind = "chat" | "brainstorm" | "expand_idea" | "variations" | "storyboard" | "scene_rewrite"
@@ -13671,12 +13699,12 @@ interface StoriesDashboard { counts: { made: number; review: number; published: 
 ### 45.7 Ideas
 
 * **Manual**: the owner types a title, a line and a category (four big buttons).
-* **AI ideas, Expand and Variations** are tasks of the `creative_director` agent in **Lamo Stories' own runtime**
+* **AI ideas, Expand and Variations** are tasks of the `creative_director` agent in **Funded Clips' own runtime**
   (§45.24): the API writes a `TASK#` and invokes the agent (`start_task`), the web polls `GET …/tasks/{taskId}` and
   shows the drafts when it is `done` (usually 10–60 s, longer on the bigger models). The model and effort are the
   owner's (§45.25: the task's or the agent's or the workspace default, or the per-request override from the button's
-  menu). The prompt is the agent's instructions, its enabled Lamo Stories skills, the workspace memory, then the
-  Lamo Stories house brief: no voice-over, told through movement, faces, body language, sound and music, 9:16, 30–60 s
+  menu). The prompt is the agent's instructions, its enabled Funded Clips skills, the workspace memory, then the
+  Funded Clips house brief: no voice-over, told through movement, faces, body language, sound and music, 9:16, 30–60 s
   suggested (15–90 allowed), recurring characters (the saved characters' names and personalities), never made for
   children, nothing dangerous for fun, and for `driving_safety` only topics in the checked guidance list (§45.11.5).
   Structured output (a JSON schema), validated by code; a bad answer is asked once more, then the task fails with
@@ -13786,7 +13814,7 @@ agent write is refused. A second message while the conversation's last answer is
 
 `web/src/stories/engine/`: TypeScript with only relative `./*.ts` imports inside the folder (no npm, DOM, network,
 `Date`, `performance`, `Math.random`; `Deno` only in `cli.ts`; a vitest scan holds this), so the **browser** draws it
-for live previews and **Lamo Stories' agent** runs the very same files with Deno (from its PyPI wheel, in its own image) for the final
+for live previews and **Funded Clips' agent** runs the very same files with Deno (from its PyPI wheel, in its own image) for the final
 frames. One source of truth for how a character moves; the preview and the video use the same draw lists.
 
 ```ts
@@ -13865,7 +13893,7 @@ version                           → {"engine": n}
 `web/src/stories/engine/fixtures/sample-script.json` is part of the contract: it always validates, the agent's
 pipeline test and the image self-check use it.
 
-### 45.11 Lamo Stories' agent (its own AgentCore runtime `cf_prod_story_agent`)
+### 45.11 Funded Clips' agent (its own AgentCore runtime `cf_prod_story_agent`)
 
 #### 45.11.1 The runtime, its actions, fencing, shutdown
 
@@ -13887,8 +13915,8 @@ pipeline test and the image self-check use it.
   ConditionCheck on the job's `sessionId`. A refused write ends the run. Tasks and chat turns are fenced the same way
   on their own item. Failure sentences name the button ("Tap Try again"), never raw tool output; presigned URLs are
   redacted in logs.
-* The deploy drain (`scripts/wait-for-jobs.sh`) waits for running Lamo Stories jobs (`PJOB#` with a fresh
-  `heartbeatAt`) when Lamo Stories' runtime changes, and for clip jobs only when Clip Factory's does, as today.
+* The deploy drain (`scripts/wait-for-jobs.sh`) waits for running Funded Clips jobs (`PJOB#` with a fresh
+  `heartbeatAt`) when Funded Clips' runtime changes, and for clip jobs only when Clip Factory's does, as today.
 
 #### 45.11.2 The writer (`storyboard` step)
 
@@ -13938,7 +13966,7 @@ runaway guard: at most 3 writer calls and 2 checker calls per job.
 region: "us-east-1" }`), never prefixed with a profile. `stories/config/agents.json` holds the five agents' default
 instructions, tasks and skills. Terraform builds the runtime's model grants from these files and passes
 `CF_STORIES_TABLE`, `CF_MEDIA_BUCKET`, `CF_REGION`, `CF_IMAGE_MODEL_ID`, `CF_IMAGE_REGION`, `CF_VIDEO_BUCKET` (empty
-while the us-east-1 bucket is off) to the runtime. Clip Factory's `config/models.json` is not read by Lamo Stories.
+while the us-east-1 bucket is off) to the runtime. Clip Factory's `config/models.json` is not read by Funded Clips.
 
 #### 45.11.5 Safety stories only from checked guidance
 
@@ -13949,7 +13977,7 @@ while the us-east-1 bucket is off) to the runtime. Clip Factory's `config/models
   New York and California DMV driver manuals, the Ontario Ministry of Transportation, Transport Canada, Transport for
   NSW, Trafikverket and the Swedish National Wildlife Accident Council, each with its URL, section and a verbatim
   quote, fetched and checked on 2026-11-21. NHTSA, FMCSA, the National Safety Council and VicRoads refused the
-  download and are not cited. A new source needs a fetched, quote-checked page. Bundled into Lamo Stories' agent image
+  download and are not cited. A new source needs a fetched, quote-checked page. Bundled into Funded Clips' agent image
   and into the API zip (it is not under `config/`, so Clip Factory's agent image never changes because of it).
 * Each step and dont carries its sources and `shown`: a step is shown in a video only when a road authority states
   it **and** no other cited source contradicts it (the research found real disagreements: stay in the car or get out
@@ -13958,7 +13986,7 @@ while the us-east-1 bucket is off) to the runtime. Clip Factory's `config/models
 * `GET …/guidance` returns every topic with every step and dont and its `shown` flag, the caveats, and the citations
   resolved from `sources`.
 * A `driving_safety` story must have a `safetyTopicId` (the API's match, §45.7); with none it **cannot be produced**:
-  "Lamo Stories only makes driving-safety videos from checked advice, and this one isn't in the list yet." plus the
+  "Funded Clips only makes driving-safety videos from checked advice, and this one isn't in the list yet." plus the
   list. A story of another category that the writer flags `teachesSafety` is held in `needs_check` until the owner
   picks a topic or removes the advice.
 * The writer gets only the topic's shown steps and donts and must take every on-screen instruction from them
@@ -13989,7 +14017,7 @@ one registry line:
 | animation | `builtin-2d` (the engine + rasterizer) | on |
 | audio | `builtin-synth` (numpy synthesis) | on |
 | images | `builtin-rig` (the character drawn by the engine) | on |
-| images | `nova-canvas` (Amazon Nova Canvas, Bedrock in `eu-west-1`, `imageModel` in `stories/config/models.json`) | off until the owner picks it in Lamo Stories › Settings; then `needs_setup` until the first portrait job's real call answers (`on`, with `checkedAt`) or fails (`needs_setup` with `lastError`, e.g. "Bedrock says Nova Canvas is not enabled for this account in Europe (Ireland)."). Used for character portraits shown in the app and the Library only, never inside a posted video (the shared publishers mark posts as not AI-generated, §45.14). |
+| images | `nova-canvas` (Amazon Nova Canvas, Bedrock in `eu-west-1`, `imageModel` in `stories/config/models.json`) | off until the owner picks it in Funded Clips › Settings; then `needs_setup` until the first portrait job's real call answers (`on`, with `checkedAt`) or fails (`needs_setup` with `lastError`, e.g. "Bedrock says Nova Canvas is not enabled for this account in Europe (Ireland)."). Used for character portraits shown in the app and the Library only, never inside a posted video (the shared publishers mark posts as not AI-generated, §45.14). |
 | animation | `nova-reel` (Amazon Nova Reel) | built but `needs_setup` until the us-east-1 bucket is switched on (§45.31); a story using it is posted only with AI labels |
 
 Video, image and audio providers, their settings and credentials: §45.31. `GET …/providers` is served by the API
@@ -14006,21 +14034,21 @@ stories themselves (`GET …/stories?status=all`): cover, title, status, cast, l
 opens its files grouped by kind and a Details panel with its **production metadata** (`GET …/stories/{id}/jobs`:
 each job's steps with times, writer model, engine version, seed, target and actual length, safety topic, providers).
 A remake keeps older versions as assets (`meta.current = 0`); deleting a story deletes its assets and files; deleting
-a character deletes its references and portrait. Nothing of a Lamo Stories workspace can appear in Lamo Clips'
+a character deletes its references and portrait. Nothing of a Funded Clips workspace can appear in Lamo Clips'
 Library: that Library reads `CLIP#` items of `USER#{userId}` only.
 
 ### 45.13 Separate social connections
 
 #### 45.13.1 What is shared and what is not
 
-* **The developer app, per platform, by the owner's choice** (§45.30): Lamo Stories' **own** app (keys in
+* **The developer app, per platform, by the owner's choice** (§45.30): Funded Clips' **own** app (keys in
   `cf-prod/workspaces/{ws}/{platform}/app`; always for Facebook and Instagram), or, on purpose and only for YouTube,
-  TikTok and X, Clip Factory's (`cf-prod/platforms/{platform}/app`, read only: Lamo Stories never writes, rotates or
+  TikTok and X, Clip Factory's (`cf-prod/platforms/{platform}/app`, read only: Funded Clips never writes, rotates or
   deletes them). Nothing of Clip Factory's registered apps or setup changes. The client id used at connect is stored on the account (`appClientId`); when the chosen app's keys change
-  later (for example TikTok's Production keys replacing the Sandbox ones in Clip Factory, or new own keys), the Lamo
-  Stories account shows `needs_reconnect` ("The {Platform} app keys changed. Connect again.") instead of failing on
+  later (for example TikTok's Production keys replacing the Sandbox ones in Clip Factory, or new own keys), the Funded
+  Clips account shows `needs_reconnect` ("The {Platform} app keys changed. Connect again.") instead of failing on
   upload.
-* **Separate:** every user token. Lamo Stories tokens live only at `cf-prod/workspaces/{workspaceId}/{platform}/token`
+* **Separate:** every user token. Funded Clips tokens live only at `cf-prod/workspaces/{workspaceId}/{platform}/token`
   (and `…/pending` for Meta's list of Pages, 30 minutes), JSON in Secrets Manager (encrypted with the account's
   Secrets Manager key), created by `workspaces/secrets.py` with tags `app=cf-prod`, `workspace={workspaceId}`,
   `platform` (values through `oauth.secrets.Secrets` with the workspace prefix). Never in DynamoDB, logs, responses,
@@ -14036,7 +14064,7 @@ Library: that Library reads `CLIP#` items of `USER#{userId}` only.
 `POST …/social/{platform}/connect` makes a **workspace state**, `w1.{workspaceId}.{nonce}.{exp}.{sig}` with `sig =
 b64url(HMAC_SHA256(stateKey, "w1|" + platform + "|" + workspaceId + "|" + nonce + "|" + exp))` (the same key and
 10 minutes as §17.4; well under the 200-character state limit; PKCE derives from the nonce as today), and the state
-item `OAUTH#ws.{nonce}`/`STATE` (its own key prefix, so Lamo Stories' roles never reach Clip Factory's `OAUTH#{nonce}`
+item `OAUTH#ws.{nonce}`/`STATE` (its own key prefix, so Funded Clips' roles never reach Clip Factory's `OAUTH#{nonce}`
 items) with `userId`, `workspaceId`, `socialAccountId`, `appChoice` and `redirectUri`. Today's `v1.` format and
 `state.verify` are unchanged and reject `w1.` states. It returns the platform's authorize URL, built in
 `workspaces/social.py` from the keys `app_keys` picks and the redirect URI of that choice (a test compares it with
@@ -14044,16 +14072,16 @@ items) with `userId`, `workspaceId`, `socialAccountId`, `appChoice` and `redirec
 * youtube: `prompt=select_account consent` (Google always shows its account and channel picker, Brand Accounts
   included);
 * tiktok: `disable_auto_auth=1` (as today: TikTok always shows its consent page, for the account signed in on
-  tiktok.com); the page says first "Sign in to your Lamo Stories account on tiktok.com in this browser. TikTok
+  tiktok.com); the page says first "Sign in to your Funded Clips account on tiktok.com in this browser. TikTok
   connects the account that is signed in.";
-* instagram, facebook: Lamo Stories' own Meta app and its Login configuration; the page says before the tap "Facebook
-  will ask which Pages this app may use. Tick only your Lamo Stories Page.";
-* x: as today; the page says "First sign in to your Lamo Stories account on x.com in this browser. X connects the
+* instagram, facebook: Funded Clips' own Meta app and its Login configuration; the page says before the tap "Facebook
+  will ask which Pages this app may use. Tick only your Funded Clips Page.";
+* x: as today; the page says "First sign in to your Funded Clips account on x.com in this browser. X connects the
   account that is signed in."
 
-#### 45.13.3 The callback: Clip Factory's callback only forwards; Lamo Stories' own Lambda does the rest
+#### 45.13.3 The callback: Clip Factory's callback only forwards; Funded Clips' own Lambda does the rest
 
-* **Lamo Stories' own callback route** on `cf-prod-stories-api`: public `GET /v1/stories-oauth/{platform}/callback`
+* **Funded Clips' own callback route** on `cf-prod-stories-api`: public `GET /v1/stories-oauth/{platform}/callback`
   (authorization NONE, its own low route throttle), `storiesCallbackBase` = `{apiUrl}/v1/stories-oauth`. Own developer
   apps register this URI. It checks the `w1.` HMAC (constant time) and expiry before anything else, consumes the state
   item `OAUTH#ws.{nonce}` once, and exchanges the code with the `redirectUri` stored on the state (the authorize
@@ -14063,7 +14091,7 @@ items) with `userId`, `workspaceId`, `socialAccountId`, `appChoice` and `redirec
   `{STORIES_OAUTH_CALLBACK}/{platform}/callback` with the query passed byte for byte (`Cache-Control: no-store`,
   `Referrer-Policy: no-referrer`; the target comes from configuration, never from the request); every other state runs
   today's code unchanged, including refusing a consumed `v1.` item that carries `workspaceId`. Hooks gains no workspace
-  code, no Lamo Stories secret access and no new IAM.
+  code, no Funded Clips secret access and no new IAM.
 * Every outcome lands on `{APP_URL}/stories/connections?platform={p}&result={code}` (`&ws={id}` only after the
   signature checks out), codes from a fixed `WS_RESULTS` list (§17.5's codes plus `same_as_clips`); nothing else from
   the request is reflected; an unreadable or expired state lands there too ("That took too long. Tap Connect again.").
@@ -14085,7 +14113,7 @@ It never writes `ACCOUNT#`, `SETUP#` or any `cf-prod/platforms/*` secret, and ne
 **Superseded by §45.37 G8 (the owner's hard rule, 22 Nov):** there is no "Use it for both" and no share route any
 more; an account that is Clip Factory's own is never posted to. The text below is the earlier rule, kept for history.
 
-A Lamo Stories account whose identity is Lamo Clips' own (same channel id, Page id, Instagram id, TikTok open id or X
+A Funded Clips account whose identity is Lamo Clips' own (same channel id, Page id, Instagram id, TikTok open id or X
 user id) is `same_as_clips` and cannot be posted to. The Connections page says "This is the same {place} Lamo Clips
 posts to." with **Pick another** (connect again) and **Use it for both** (the share route, after a second "Are you
 sure?" step), which sets `sharedWithClips: true`, `sharedExternalAccountId` = that identity and `connected`. Every
@@ -14095,19 +14123,19 @@ current identity (§45.14).
 #### 45.13.5 What each platform allows (shown on the Connections page in plain words, `limits`)
 
 * **YouTube:** one Google sign-in can hold several channels (Brand Accounts). A connection posts to exactly one
-  channel: the one picked in Google's picker. Lamo Stories shows its name and id after connecting; **Pick another
-  channel** connects again ("Google will ask which channel. Pick your Lamo Stories channel."). Both channels share the
+  channel: the one picked in Google's picker. Funded Clips shows its name and id after connecting; **Pick another
+  channel** connects again ("Google will ask which channel. Pick your Funded Clips channel."). Both channels share the
   same Google project's daily units (about 6 uploads a day in all, counted together, §45.14).
-* **Instagram:** a separate professional (Business or Creator) account, linked to a Facebook Page, through Lamo
-  Stories' own Meta app (§45.30), so Clip Factory's Meta grant is never touched. Tick only the Lamo Stories Page.
+* **Instagram:** a separate professional (Business or Creator) account, linked to a Facebook Page, through Funded
+  Clips' own Meta app (§45.30), so Clip Factory's Meta grant is never touched. Tick only the Funded Clips Page.
 * **Facebook:** a separate Page managed by the same Facebook login, through the same own Meta app.
 * **TikTok:** while the TikTok app is in Sandbox (review pending since 2026-11-21) only accounts added as Sandbox
   target users can connect, and until TikTok approves the app the account must be **private** and posts stay "Only
-  me" (as for Lamo Clips, §17). So the Lamo Stories account has to be a Sandbox target user and private. When the
-  app goes live with new keys, Lamo Stories asks to connect again.
+  me" (as for Lamo Clips, §17). So the Funded Clips account has to be a Sandbox target user and private. When the
+  app goes live with new keys, Funded Clips asks to connect again.
 * **X:** a separate X account; X connects the account signed in on x.com, and posts use the same X app's credits and
   the owner's one monthly X limit (shared with Lamo Clips, §45.14).
-Lamo Stories never creates an account anywhere, and never assumes an email address means an account.
+Funded Clips never creates an account anywhere, and never assumes an email address means an account.
 
 #### 45.13.6 Disconnect never revokes
 
@@ -14152,17 +14180,17 @@ own code, never `routes/setup.py`'s.
   checked identity }`, `creds` from `WorkspaceTokenProvider`, `video` = `S3Video` on the story's `final/v{n}.mp4`,
   `options` = the target's flat options (allow-listed per platform; `campaign` and any unknown key refused;
   `madeForKids` never accepted, always false), YouTube `category` and `privacy` defaulting to `StoriesConfig`,
-  `settings` = `{}` (Lamo Clips' settings and preset never apply to Lamo Stories posts).
+  `settings` = `{}` (Lamo Clips' settings and preset never apply to Funded Clips posts).
 * **WorkspaceTokenProvider** (`workspaces/tokens.py`, its own class, not a subclass of `SecretsTokenProvider`): app
   keys read-only from `cf-prod/platforms/{p}/app`; the token from the workspace secret only; refresh and rotation with
   `providers.refresh`, the lease on `SOCIAL#{p}` (`take_lease`/`clear_lease`), the new token written put-only
   (`create=False`; a missing secret is "not connected"); a dead token sets `SOCIAL#{p}` `needs_reconnect`; the TikTok
   watch sets `reason: expires_soon` and `reconnectBy` on `SOCIAL#tiktok`. It never imports `oauth.tokens.
   SecretsTokenProvider`, `oauth.setup.mark_account` or `stats.refresh`, and never writes `ACCOUNT#` or `SETUP#`.
-* **Shared limits** (only with Clip Factory's developer app, §45.30: one X bill, one Google project; with Lamo
-  Stories' own app the same rules use its own counters `RATE#WS#{ws}#{platform}` and `xMonthlyLimitUsd`): before the first X start (no handle yet) the flow calls
-  `stats.budget.charge_post` exactly as the clip flow does; when it says no, the job is `needs_attention` with "Lamo
-  Stories stopped X: this month's X limit is used up (it is shared with Lamo Clips)." and nothing goes to X (Lamo
+* **Shared limits** (only with Clip Factory's developer app, §45.30: one X bill, one Google project; with Funded
+  Clips' own app the same rules use its own counters `RATE#WS#{ws}#{platform}` and `xMonthlyLimitUsd`): before the first X start (no handle yet) the flow calls
+  `stats.budget.charge_post` exactly as the clip flow does; when it says no, the job is `needs_attention` with "Funded
+  Clips stopped X: this month's X limit is used up (it is shared with Lamo Clips)." and nothing goes to X (Lamo
   Clips' setup gates are not written). Every numbers read checks `budget.blocked_until`, reserves with
   `budget.reserve` (the cost as `stats.refresh` computes it; X ids so its per-read price is counted) and records with
   `budget.record`; a blocked read waits for the next checkpoint. YouTube uploads use the same daily units as Lamo Clips.
@@ -14173,19 +14201,19 @@ own code, never `routes/setup.py`'s.
   publish loop (§45.15).
 * **Sentences** (`workspaces/sentences.py`, `story_sentence(platform, kind, account_name)`): the flow never stores a
   publisher's or token helper's sentence that names Lamo Clips' Settings; every `Problem.kind` (reconnect, credits,
-  rate, daily, file, banned, private, down, duplicate, other, not_connected, token_dead) maps to a Lamo Stories
-  sentence, for example "Lamo Stories' YouTube (Lamo Stories Channel) needs connecting again. Open Lamo Stories ›
-  Connections, then tap Try again." and "Make the Lamo Stories TikTok account private until TikTok approves the app,
+  rate, daily, file, banned, private, down, duplicate, other, not_connected, token_dead) maps to a Funded Clips
+  sentence, for example "Funded Clips' YouTube (Funded Clips Channel) needs connecting again. Open Funded Clips ›
+  Connections, then tap Try again." and "Make the Funded Clips TikTok account private until TikTok approves the app,
   then tap Try again.".
 * Posting settings follow the owner's posting preferences: public, comments, duets and stitches on, never "made for
   kids" (the TikTok sheet's rules: privacy picked from the dropdown with no default, Comments/Duet/Stitch shown and
   starting off, "Use my settings" as the owner's tap; the TikTok sheet reads `GET …/social/tiktok/creator-info`).
-  Lamo Stories' built-in videos are cartoons, so the publishers' existing "not AI-realistic" flags are correct. A story
-  whose job used a realistic generator (`nova-reel`) is posted only through Lamo Stories' own thin publisher wrappers
+  Funded Clips' built-in videos are cartoons, so the publishers' existing "not AI-realistic" flags are correct. A story
+  whose job used a realistic generator (`nova-reel`) is posted only through Funded Clips' own thin publisher wrappers
   that set YouTube's `containsSyntheticMedia: true` and TikTok's `is_aigc: true` (subclasses in `workspaces/`, the
   shared publisher code unchanged); a platform where no label can be set refuses it with a plain sentence.
 * Lamo Clips' `POST /v1/clips/{clipId}/confirm`, its posts, the clip flow and the release keep reading only
-  `ACCOUNT#` and `cf-prod/platforms/*`: they cannot reach a Lamo Stories account.
+  `ACCOUNT#` and `cf-prod/platforms/*`: they cannot reach a Funded Clips account.
 
 ### 45.15 Infra (Terraform, additive only)
 
@@ -14224,15 +14252,15 @@ own code, never `routes/setup.py`'s.
   `ws/*`; Secrets Get on `cf-prod/workspaces/*` and `cf-prod/platforms/{youtube,tiktok,x}/app*`, Put on
   `cf-prod/workspaces/*/token*`; no Bedrock). `RATE#{platform}` (Clip Factory's shared counters) is written only for
   the shared-app choice, on purpose (§45.14).
-* `infra/modules/hooks`: one env var, `STORIES_OAUTH_CALLBACK` (Lamo Stories' callback base), and nothing else: no new
+* `infra/modules/hooks`: one env var, `STORIES_OAUTH_CALLBACK` (Funded Clips' callback base), and nothing else: no new
   IAM, no workspace secrets (the `w1.` forward of §45.13.3). The first round's hooks IAM additions are removed.
 * Not changed: `infra/modules/agent` (Clip Factory's runtime, role, image), `infra/modules/api`'s Lambda and role.
 * `scripts/wait-for-jobs.sh`: also counts `PJOB#` items when `module.stories_agent.` changes. `deploy.yml`: a second
   image tag `stories-agent-` + 16 characters of `hashFiles('stories/**', 'web/src/stories/engine/**')`, passed as
   `stories_agent_image_tag`; Clip Factory's agent tag hash stays `agent/**`, `skills/**`, `config/**` (unchanged).
 * The Terraform tests that list exact sets gain the new members and new asserts, written as glob matches against
-  sample ARNs: no Lamo Stories role matches `…:secret:cf-prod/platforms/youtube/token-AbC123` or `…/pending-AbC123`;
-  no Clip Factory role matches `…:secret:cf-prod/workspaces/stories/youtube/token-AbC123`; the Lamo Stories roles
+  sample ARNs: no Funded Clips role matches `…:secret:cf-prod/platforms/youtube/token-AbC123` or `…/pending-AbC123`;
+  no Clip Factory role matches `…:secret:cf-prod/workspaces/stories/youtube/token-AbC123`; the Funded Clips roles
   write DynamoDB only under their leading keys and touch S3 only under `ws/`.
 * **A scripted plan check** after `check-plan-deletes.sh` (`scripts/check-plan-clips-unchanged.sh`, jq over
   `plan.json`): nothing under `module.agent.` changes unless Clip Factory's agent tag changed; `cf-prod-api`'s role
@@ -14249,29 +14277,34 @@ own code, never `routes/setup.py`'s.
 #### 45.16.1 The workspace switcher
 
 * A pick bar (`<Glide>`, the owner's sliding highlight) with one choice per workspace that `GET /v1/workspaces`
-  returns (today **Clip Factory | Lamo Stories**: Lamo Clips' choice is labelled with the app's own name, as the owner's
+  returns (today **Clip Factory | Funded Clips**: Lamo Clips' choice is labelled with the app's own name, as the owner's
 second request names it), shown only when `storiesEnabled()`; one click switches. In Lamo Clips: on screens from
   768 px as the first child of the sidebar foot, so the bottom-anchored foot grows into empty space and the live dot,
-  Get the app and the jobs status stay where they are; when the window is too short for it (the free space is
-  measured, about 640 px tall and up), a compact round toggle in a place that moves nothing; folded sidebar: one round
-  toggle with its aria-label; on phones a compact control in the top bar between the brand and the live dot, icon
-  only below 360 px. It never uses `.sidebar__item` (tests pin the six items), never adds a tab, never overlaps or
-  pushes anything (e2e at 320, 390, 1000×600, 1000×650, 1000×720 and 1440×900, sidebar open and folded). In Lamo
-  Stories the same switcher sits in its own navigation.
-* Lamo Stories lives under `/stories/…`; everything else is Lamo Clips, rendered by today's `Shell` unchanged.
-  Switching to Lamo Stories goes to the last Lamo Stories page (else `/stories`); switching back goes to the last
+  Get the app and the jobs status stay where they are. The bar shows when the free space above the foot holds it
+  (measured, `WorkspaceDock.tsx` `dockLayout`): "Clip Factory" and "Funded Clips" fit side by side in a 52 px bar
+  (`barHeight`), so from about 650 px tall (the e2e checks the bar at 1000×650 and 1000×720, the round toggle beside
+  the Live chip at 1000×600); only a longer workspace name that does not fit beside the other stands them one above
+  the other (a 98 px bar, which needs about 700 px). When the window is too short for the bar, a compact round toggle
+  in a place that moves
+  nothing; folded sidebar: one round toggle with its aria-label from about 650 px tall (below that a slim one between
+  the menu and the foot, and below about 570 px one beside the fold button, §45.35 D19); on phones a compact control
+  in the top bar between the brand and the live dot, icon only below 360 px. It never uses `.sidebar__item` (tests pin the six items), never adds a tab, never overlaps or
+  pushes anything (e2e at 320, 390, 1000×600, 1000×650, 1000×720 and 1440×900, sidebar open and folded). In Funded
+  Clips the same switcher sits in its own navigation.
+* Funded Clips lives under `/stories/…`; everything else is Lamo Clips, rendered by today's `Shell` unchanged.
+  Switching to Funded Clips goes to the last Funded Clips page (else `/stories`); switching back goes to the last
   Clip Factory page (else `/`) at its scroll position (kept in sessionStorage), with Ask's open conversation, its
   answer still streaming in, and the panel open or closed as it was: Ask's conversation state moves into an
-  `AskMemoryProvider` mounted once above the Clip Factory / Lamo Stories branch (its look and behaviour unchanged;
+  `AskMemoryProvider` mounted once above the Clip Factory / Funded Clips branch (its look and behaviour unchanged;
   sign-out still forgets it and revokes its object URLs). Not kept across a switch: unsaved form drafts and open
   sheets on the Clip Factory page (they are not kept across any page change today either).
 * The choice persists on the device (`localStorage` `cf.workspace`: `{ workspaceId, lastStoriesWorkspaceId,
-  lastClipsPath, lastStoriesPath, lastConversationId, lastProject }`; Lamo Stories' own device preferences in
-  `cf.stories.prefs`, never in Clip Factory's `cf.prefs`) and the URL carries it: a reload of a `/stories` page stays in Lamo Stories;
-  opening the app at `/` when the last choice was Lamo Stories goes to the last Lamo Stories page. One sign-in: the
+  lastClipsPath, lastStoriesPath, lastConversationId, lastProject }`; Funded Clips' own device preferences in
+  `cf.stories.prefs`, never in Clip Factory's `cf.prefs`) and the URL carries it: a reload of a `/stories` page stays in Funded Clips;
+  opening the app at `/` when the last choice was Funded Clips goes to the last Funded Clips page. One sign-in: the
   same Cognito session, the same API.
 
-#### 45.16.2 The Lamo Stories shell
+#### 45.16.2 The Funded Clips shell
 
 `web/src/stories/StoriesApp.tsx`, its own navigation and look ("an animation studio"): Dashboard `/stories`, Ideas
 `/stories/ideas`, Characters `/stories/characters` (`/stories/characters/new`, `/stories/characters/{id}`),
@@ -14279,26 +14312,26 @@ Production `/stories/production` (`/stories/production/new`, `/stories/productio
 `/stories/review` (`/stories/review/{storyId}`), Chat `/stories/chat` (`/stories/chat/{convId}`), References
 `/stories/references` (`/stories/references/{refId}`), Library `/stories/library` (`?kind=`, `?story=`), Social
 accounts `/stories/connections`, Settings `/stories/settings/{section}` (`ai`, `agents`, `skills`, `memory`,
-`video`, `storage`), and the onboarding `/stories/setup` (shown by itself the first time).
+`video`, `storage`, `look`), and the onboarding `/stories/setup` (shown by itself the first time).
 
 * **Workspace check in the web.** Before the first screen, StoriesApp calls `listWorkspaces()` (which also creates
   `stories` on first use). The current workspace is `lastStoriesWorkspaceId` if it is in the list with type
   `stories`, else the first stories workspace. The callback's `?ws=` is used only when it is one of those ids. Screens
   get only that checked id; a `404` "We could not find that workspace." reloads the list once and falls back.
-* Lamo Clips' Ask and setup to-do are not shown in Lamo Stories. The Mac app's "send this now" banner (`CrSendNow`,
-  §38.6) is also rendered at the top of Lamo Stories' main area, unchanged, because it is the Mac app's only reminder
+* Lamo Clips' Ask and setup to-do are not shown in Funded Clips. The Mac app's "send this now" banner (`CrSendNow`,
+  §38.6) is also rendered at the top of Funded Clips' main area, unchanged, because it is the Mac app's only reminder
   for a time-limited Content Rewards send; the Mac download host, the app badge, the update bar, toasts and sounds
-  stay global. A **Needs you** bar on every Lamo Stories page shows the first item of the dashboard's `needsYou`.
+  stay global. A **Needs you** bar on every Funded Clips page shows the first item of the dashboard's `needsYou`.
 * Look: its own tokens (`--st-*`, in `web/src/stories/styles/`, outside `web/src/styles` whose tests police Lamo
   Clips' palette; `test/storiesStyles.test.ts` holds the owner's rules there): a deep night-indigo stage (`#1C1842`)
   with soft spotlight glows, warm cream words (`#FFF6E5`), sunshine (`#FFC94A`) for every main action, coral
   (`#FF6F61`), mint (`#47D6A0`) and sky (`#62C6FF`) for status and characters, rounded type (`ui-rounded`, then the
-  system font), frosted panels, character-shaped empty states, storyboard filmstrips. Every Lamo Stories selector sits
-  under `.stories-app` (or starts `st-`); no `:root`, `html` or `body` rule; StoriesApp restores the page title and
-  theme colour when it unmounts. The owner's rules that hold everywhere still hold: arrow cursor only (no `cursor:`
-  CSS), hover states, click and deny sounds, `<Glide>` for every pick-one bar, eased progress, celebrations on
-  success, no visible borders (shadows and fills instead), AA contrast, no overflow from 320 px, kid-proof words,
-  controls bottom right on phones.
+  system font), frosted panels, character-shaped empty states, storyboard filmstrips. Every Funded Clips selector sits
+  under `.stories-app` (or starts `st-`); no `:root`, `html` or `body` rule (the logo is the shell's `ws-mark`,
+  §45.38); StoriesApp restores the page title and theme colour when it unmounts. The owner's rules that hold
+  everywhere still hold: arrow cursor only (no `cursor:` CSS), hover states, click and deny sounds, `<Glide>` for
+  every pick-one bar, eased progress, celebrations on success, no visible borders (shadows and fills instead), AA
+  contrast, no overflow from 320 px, kid-proof words, controls bottom right on phones.
 
 #### 45.16.3 Dashboard
 
@@ -14311,7 +14344,7 @@ post"), and recent activity (the last 10 `ACT#` items). The shape is `StoriesDas
 
 #### 45.16.4 Live updates
 
-Lamo Stories screens poll (`usePoll`): a running job every 2 s, the dashboard and the Needs you bar every 15 s,
+Funded Clips screens poll (`usePoll`): a running job every 2 s, the dashboard and the Needs you bar every 15 s,
 publishing every 10 s while one is in flight. No WebSocket filter changes (§45.3).
 
 #### 45.16.5 Ideas, Characters, Production
@@ -14350,7 +14383,7 @@ each publishing job's status, account, link, numbers, its sentence and **Try aga
   form and **Check it**, the authorization status, **last checked** (`lastCheckedAt`, with **Check now**), Connect,
   Reconnect and Disconnect; the publish sheet shows the exact account each video goes to, with **Check now**, before
   **Upload**.
-* Settings: §45.29's sections (AI, Agents, Skills, Memory, Social accounts, Video, Storage and production), plus
+* Settings: §45.29's sections (AI, Agents, Skills, Memory, Social accounts, Video, Storage and production, Look), plus
   YouTube category and privacy and captions and music defaults.
 * Chat: §45.27 (conversation list, messages, the model and effort line above the box, "Just for this message",
   attachments, action buttons, Stop); References: §45.28 (upload with progress, Analyze with the model and effort
@@ -14366,24 +14399,25 @@ every screen runs under `npm run dev:mock` and in Playwright.
 
 | File | Change | Owner | Proof that Clip Factory is unchanged |
 |---|---|---|---|
-| `api/.../routes/__init__.py`, `api/tests/test_http.py` | **none** (Lamo Stories' routes live in their own Lambda; the Phase 1 scaffold's edits are reverted) | – | both byte-identical to main |
+| `api/.../routes/__init__.py`, `api/tests/test_http.py` | **none** (Funded Clips' routes live in their own Lambda; the Phase 1 scaffold's edits are reverted) | – | both byte-identical to main |
 | `api/.../routes/help.py` | `"stories"` in `PAGES` (the web router has a `stories` route name; Ask is never shown there) | Phase 1 | `test_help_pages.py` |
 | `api/.../oauth/callback.py` | refuses a consumed `v1.` item that carries `workspaceId` (writes nothing) | B | `test_oauth_callback.py` unchanged; every old case replayed writes the same items, secrets and redirect |
 | `api/.../hooks.py` | `_oauth_callback`: a `w1.` state is forwarded (`302` to `STORIES_OAUTH_CALLBACK`, query byte for byte) before its `try`; nothing else | B | `test_hooks.py` unchanged |
-| `web/src/features/help/*` (Ask) | its conversation state moves into an `AskMemoryProvider` mounted above the Clip Factory / Lamo Stories branch; look and behaviour unchanged | F | the Ask and help e2e and unit tests unchanged; a new e2e: ask, switch to Lamo Stories while it streams, switch back, the answer is there |
+| `web/src/features/help/*` (Ask) | its conversation state moves into an `AskMemoryProvider` mounted above the Clip Factory / Funded Clips branch; look and behaviour unchanged | F | the Ask and help e2e and unit tests unchanged; a new e2e: ask, switch to Funded Clips while it streams, switch back, the answer is there |
 | `api/scripts/build_lambda.py` | the story-flow and stories-API handlers in `HANDLERS`; `stories/config/` and `stories/skills/` into the zip | Phase 1, A | its build test |
-| `infra/modules/api` | the `/v1/workspaces` routes, the public Lamo Stories callback route, their integration and permission only | C | `api.tftest.hcl`; the deploy's scripted plan check (§45.15) |
+| `infra/modules/api` | the `/v1/workspaces` routes, the public Funded Clips callback route, their integration and permission only | C | `api.tftest.hcl`; the deploy's scripted plan check (§45.15) |
 | `infra/modules/hooks`, `infra/modules/flows`, `infra/envs/prod` | §45.15 | C | `terraform test`; the deploy's Plan and Delete gate lines |
-| `.github/workflows/deploy.yml`, `ci.yml`, `scripts/wait-for-jobs.sh` | the Lamo Stories agent image tag and push, the scripted plan check, a deeper preflight in the smoke job; a `stories-agent` CI job (lint, types, tests, image build) and a web bundle check; the drain for `PJOB#`, running `TASK#` and streaming `MSG#` | C (deploy, drain), E (stories-agent job), F (bundle check) | `scripts/test-deploy-workflow.sh`, the drain's test; Clip Factory's agent tag and its CI job unchanged |
+| `.github/workflows/deploy.yml`, `ci.yml`, `scripts/wait-for-jobs.sh` | the Funded Clips agent image tag and push, the scripted plan check, a deeper preflight in the smoke job; a `stories-agent` CI job (lint, types, tests, image build) and a web bundle check; the drain for `PJOB#`, running `TASK#` and streaming `MSG#` | C (deploy, drain), E (stories-agent job), F (bundle check) | `scripts/test-deploy-workflow.sh`, the drain's test; Clip Factory's agent tag and its CI job unchanged |
 | `web/src/lib/router.ts` | one route name `stories` (page from `web/src/stories/routes.ts`) for `/stories…`, only when `storiesEnabled()` | Phase 1, then F | every old path parses to the same route |
 | `web/src/app/App.tsx` | the lazy `StoriesApp` for the `stories` route; its TITLES entry; the `AskMemoryProvider` mount; round 3–4: `BothApps`/`AppPanes` (each app stays mounted once shown, the hidden one `hidden` + `inert`, its own error boundary), `redirectAtStart()`, `<WorkspaceSwitch place="topbar" />` in the phone top bar, the calm-motion and error-sound hooks; the main chunk gains `flag.ts`, `routes.ts`, `pane.tsx`, `prefs.ts`, `workspace.ts` and the lazy stub, each inert while `STORIES_ON` is false | Phase 1, then F, W3b, W4b | every old route renders the same `Shell`; `stories-clips-unchanged.spec.ts` (the page tree, the shell boxes at 12 sizes); the before/after pixel check (§45.19) |
 | `web/src/components/Nav.tsx` | the switcher in the sidebar foot, the phone top bar and (round 4) a slim toggle beside the fold button in short folded windows; the idle prefetch of `StoriesApp` (all hidden while off) | F, W3b, W4b | the nav specs unchanged; the before/after pixel check (§45.19) |
-| `web/src/components/Glide.tsx` | an additive `GlideCalm` context; its default is Clip Factory's `prefersReducedMotion`, so every Clip Factory `<Glide>` behaves as before; only `StoriesApp` provides Lamo Stories' own motion setting | W3b | `storiesShellQuiet.test.tsx` ("Clip Factory's Glide unchanged"); the flag-off pixel check |
-| `web/src/lib/confetti.ts` | one guard: no burst while Lamo Stories is on screen (a no-op while `STORIES_ON` is false) | W4b | the confetti tests unchanged; the flag-off pixel check |
-| `web/src/screens/home/NewJobForm.tsx` | reads its search through `useKeptSearch()`, which returns `window.location.search` exactly as before outside a Lamo Stories pane wrapper (so campaign Home survives a round trip) | W4b | the Home and campaign specs unchanged; the flag-off pixel check |
+| `web/src/components/Glide.tsx` | an additive `GlideCalm` context; its default is Clip Factory's `prefersReducedMotion`, so every Clip Factory `<Glide>` behaves as before; only `StoriesApp` provides Funded Clips' own motion setting | W3b | `storiesShellQuiet.test.tsx` ("Clip Factory's Glide unchanged"); the flag-off pixel check |
+| `web/src/lib/confetti.ts` | one guard: no burst while Funded Clips is on screen (a no-op while `STORIES_ON` is false) | W4b | the confetti tests unchanged; the flag-off pixel check |
+| `web/src/screens/home/NewJobForm.tsx` | reads its search through `useKeptSearch()`, which returns `window.location.search` exactly as before outside a Funded Clips pane wrapper (so campaign Home survives a round trip) | W4b | the Home and campaign specs unchanged; the flag-off pixel check |
 | `web/vite.config.ts` | the dev server may read `stories/config` (dev mode only; builds unchanged) | lead | the build is byte-identical |
 | `web/src/styles/glide.css` | the switcher's container in the Glide list and its own `.ws-*` styles | F | the flag-off pixel check |
-| `web/areas.json` | Lamo Stories folders → "Behind the scenes" (Phase 1), "Lamo Stories" by the switch PR | Phase 1 | `update.test.ts` |
+| `web/src/components/ClipMark.tsx`, new `WorkspaceMark.tsx` and `web/src/styles/ws-mark.css` | Clip Factory's mark markup in one file, which Funded Clips' logo reuses; the logo itself is the shell's (§45.38, "The mark"): `.ws-mark*` and `.ws-wordmark*`, coloured by `--ws-mark-*` and `--ws-wordmark` | shell | Clip Factory's own mark never carries `ws-mark` (same classes, same colours); `test/workspaceMark.test.tsx`, `test/background.test.ts` |
+| `web/areas.json` | Funded Clips folders → "Behind the scenes" (Phase 1), "Funded Clips" by the switch PR | Phase 1 | `update.test.ts` |
 | generated files | help corpus, the HELP_ASSISTANT routes table, Ask knowledge | every PR that changes docs, the router, Nav or App | their `--check` steps |
 
 Not touched at all: `agent/**` (Clip Factory's agent: code, Dockerfile, dockerignore, tests, scan allow-list),
@@ -14398,9 +14432,9 @@ web/scripts/ask-knowledge.mjs`): #98 (CONTRACTS, DECISIONS, the generated files)
 
 ### 45.18 Deploys
 
-Every Lamo Stories pull request that changes `infra/` is read before merging: `terraform plan` may only add resources,
-change IAM policies and Lambda settings in place, and replace `module.stories_agent.terraform_data.image` (Lamo
-Stories' image build trigger, whenever its image changes); `module.agent.` (Clip Factory's agent) must show no change
+Every Funded Clips pull request that changes `infra/` is read before merging: `terraform plan` may only add resources,
+change IAM policies and Lambda settings in place, and replace `module.stories_agent.terraform_data.image` (Funded
+Clips' image build trigger, whenever its image changes); `module.agent.` (Clip Factory's agent) must show no change
 at all. After each deploy the Plan line and the Delete gate line
 are read and reported, and `terraform show -json` is checked: every resource whose actions include `delete` must be
 an image build trigger (`module.stories_agent.terraform_data.image`, or `module.agent.terraform_data.image` only when
@@ -14410,7 +14444,7 @@ nothing is renamed, the table, user pool, buckets, vectors and secrets are untou
 ### 45.19 Tests
 
 * **api** (pytest, fakes only): workspace isolation (`test_ws_isolation.py`): another user's workspace id, a
-  `clips` id on a **S** route, an item whose `workspaceId` attribute disagrees with its key, and a Lamo Stories item
+  `clips` id on a **S** route, an item whose `workspaceId` attribute disagrees with its key, and a Funded Clips item
   in Lamo Clips' lists (`GET /v1/clips`, `/v1/jobs`, `/v1/posts`, `/v1/accounts`, `/v1/setup`, `/v1/me`) all fail
   closed; every new item's `sk` matches none of the stream prefixes; the status table, the stale rules and the approve
   rule of §45.9 (a caption edit on a story re-runs `safety`; approve with `stale` not empty is `409`; a PATCH in
@@ -14435,7 +14469,7 @@ nothing is renamed, the table, user pool, buckets, vectors and secrets are untou
   for animation and audio are the only ones called; the fence (a superseded session writes nothing).
 * **web**: vitest for the engine (determinism, validation, every catalog id draws, `normalizeScript`, `fitDuration`
   bounds, the import scan), the switcher store (persistence, last paths), the web workspace check, the styles test;
-  Playwright (mock): switching both ways and after reload, every Lamo Stories screen (no overflow 320–1920, arrow
+  Playwright (mock): switching both ways and after reload, every Funded Clips screen (no overflow 320–1920, arrow
   cursor, AA contrast, no edges, targets ≥ 44 px, 48 on phones), the switcher's placement at every size of §45.16.1,
   and the whole flow idea → character → production → review → approve → publish sheet (`e2e/stories-flow.spec.ts`,
   in the final check).
@@ -14449,7 +14483,7 @@ nothing is renamed, the table, user pool, buckets, vectors and secrets are untou
   not offer, precedence), agents (edit, reset, switch off), skills (versions, restore, enable, assign), chat (send,
   poll, stop, override never saved), memory, references (multipart, analyze), onboarding, provider keys never
   returned, developer-app choice (own keys stored only under the workspace prefix; a missing choice blocks Connect),
-  and a **separation test** that runs every Lamo Stories route and records every DynamoDB key, S3 key and secret name
+  and a **separation test** that runs every Funded Clips route and records every DynamoDB key, S3 key and secret name
   it touches: none outside `USER#{u}#WS#…`, `USER#{u}#WSREG`, `OAUTH#…`, `ws/{u}/…`, `cf-prod/workspaces/…`, and no
   Clip Factory item or secret written. stories agent (`stories/agent/tests`): the effective model and effort of each
   task and agent, the request body really carrying `output_config.effort` (and not when the model has none), no
@@ -14492,7 +14526,7 @@ the encrypted credentials in Secrets Manager (never on the item), `connectionSta
 
 Phase 1 (this section, ADR-70 to ADR-80, and the scaffold: `workspaces/types.py`, `guard.py`, `deps.py`, `http.py`,
 empty route modules, the story-flow stub, `stories/config/` (models, agents, guidance), `stories/skills/` (built-in
-Lamo Stories skills), the `stories/agent/` project skeleton (pyproject, package, the model-client and registry
+Funded Clips skills), the `stories/agent/` project skeleton (pyproject, package, the model-client and registry
 interfaces, a server with an empty action table), the web types and client interface, the split mock folder with
 rejecting stubs, the engine's types, catalog, stub engine and command line, the preview components, a thin
 `StoriesApp` behind `storiesEnabled()` with the router and App branch, placeholder screens, the flag and the
@@ -14501,10 +14535,10 @@ continuing from its own branch where it has one (the first round's work stays):
 
 | Builder | Branch | Owns |
 |---|---|---|
-| A api core | `feat/stories-api-core` | **removes** the first round's model path (`learn.converse_text`, the skills block, `help.model`/`app.help` use, `FakeModel`/`HelpDeps` in `tests/ws_support.py`, the skills-block idea tests); moves its routes to `workspaces/routes/core.py`; then the core routes and their modules (workspaces, dashboard, ideas (now tasks), characters (+ design task), stories, library, providers, guidance, tasks), `workspaces/agent.py` (Lamo Stories' runtime only), `workspaces/jobs.py`, `tests/ws_routes_core.py`, `tests/ws_support.py`, its tests, the guidance and skills copy in `build_lambda.py` |
+| A api core | `feat/stories-api-core` | **removes** the first round's model path (`learn.converse_text`, the skills block, `help.model`/`app.help` use, `FakeModel`/`HelpDeps` in `tests/ws_support.py`, the skills-block idea tests); moves its routes to `workspaces/routes/core.py`; then the core routes and their modules (workspaces, dashboard, ideas (now tasks), characters (+ design task), stories, library, providers, guidance, tasks), `workspaces/agent.py` (Funded Clips' runtime only), `workspaces/jobs.py`, `tests/ws_routes_core.py`, `tests/ws_support.py`, its tests, the guidance and skills copy in `build_lambda.py` |
 | A2 api AI | `feat/stories-api-ai` | `routes/workspaces/ai.py` and its modules (AI configuration, models and prices, agents, skills, chat, memory, references, onboarding, usage, provider keys, storage), `tests/ws_routes_ai.py`, its tests |
-| B social and publishing | `feat/stories-social` | moves its routes to `workspaces/routes/social.py`; **removes** its first-round workspace path from `oauth/callback.py` and `hooks.py` (only the forward and the `v1.` refusal stay) and the hooks IAM it needed; adds the Lamo Stories callback route; as before otherwise, plus `workspaces/apps.py`, the developer-app choice and own keys (§45.30), own rate counters and X limit, `lastCheckedAt`, Reconnect, AI-label wrappers (§45.14) |
-| C infra | `infra/stories` | §45.15: the new `stories_agent` and `stories_api` modules, the API routes, the story flow, hooks, `deploy.yml`'s Lamo Stories tag, the drain, their tests; **removes** the first round's changes to `infra/modules/agent`, `infra/modules/api`'s role and environment, and `config/models.json` |
+| B social and publishing | `feat/stories-social` | moves its routes to `workspaces/routes/social.py`; **removes** its first-round workspace path from `oauth/callback.py` and `hooks.py` (only the forward and the `v1.` refusal stay) and the hooks IAM it needed; adds the Funded Clips callback route; as before otherwise, plus `workspaces/apps.py`, the developer-app choice and own keys (§45.30), own rate counters and X limit, `lastCheckedAt`, Reconnect, AI-label wrappers (§45.14) |
+| C infra | `infra/stories` | §45.15: the new `stories_agent` and `stories_api` modules, the API routes, the story flow, hooks, `deploy.yml`'s Funded Clips tag, the drain, their tests; **removes** the first round's changes to `infra/modules/agent`, `infra/modules/api`'s role and environment, and `config/models.json` |
 | D engine | `feat/stories-engine` | `web/src/stories/engine/` (not `types.ts`), `web/src/stories/preview/`, its tests |
 | E agent core | `feat/stories-agent` | **resets** `agent/**`, `.github/workflows/deploy.yml`'s agent tag line, the agent job's ffmpeg step in `ci.yml` and its check in `scripts/test-deploy-workflow.sh` to main (`git checkout origin/main -- agent …`) before adding the `stories-agent` job; then `stories/agent/` (the runtime: server, runner, fencing, `models.py` (model and effort resolution, the Bedrock client, refusals, usage), agents and skills plumbing, the production pipeline moved here from the first round's `agent/src/clipfactory_agent/stories/`, rasterizer, audio, assembly, providers incl. Nova Canvas and Nova Reel), its `Dockerfile`, the `stories-agent` CI job, `stories/agent/tests`; **removes** the first round's changes to `agent/**` |
 | E2 agent creative | `feat/stories-agent-creative` | `stories/agent/src/lamostories_agent/{chat,memory,reference,tasks}/` (each with a `register(actions, runner)` the scaffold's `build_app` already calls: the chat turn and its tools, memory, reference analysis, idea, expand, variations, captions-again, character design and check-models tasks), their tests |
@@ -14520,34 +14554,34 @@ E before E2's final rebase; F before G, F2 and H; A before A2. Then one check of
 
 ### 45.22 What only the owner can do (none of it blocks building)
 
-* TikTok: add the Lamo Stories TikTok account as a Sandbox target user (TikTok developer portal › Sandbox › Target
+* TikTok: add the Funded Clips TikTok account as a Sandbox target user (TikTok developer portal › Sandbox › Target
   users) and make it private (TikTok app › Profile › Settings and privacy › Privacy › Private account) until TikTok
   approves the app; until then TikTok posts are "Only me".
-* Have the separate accounts ready: a Lamo Stories YouTube channel (a Brand Account under the same Google login is
-  fine), a Facebook Page, an Instagram professional account linked to it, an X account. Lamo Stories never creates
+* Have the separate accounts ready: a Funded Clips YouTube channel (a Brand Account under the same Google login is
+  fine), a Facebook Page, an Instagram professional account linked to it, an X account. Funded Clips never creates
   them. When Facebook asks which Pages, keep Lamo Clips' Page ticked too.
-* To use AI portraits: pick Nova Canvas in Lamo Stories › Settings and make one portrait; if Bedrock says the model is
+* To use AI portraits: pick Nova Canvas in Funded Clips › Settings and make one portrait; if Bedrock says the model is
   not enabled, enable Amazon Nova Canvas in the Bedrock console, Region Europe (Ireland).
 * Run **Check models** once (Settings › AI): a model Bedrock refuses shows why (for example the Fable models'
   data-retention opt-in, a one-time account step in docs/DEPLOYMENT.md).
 * For fully separate apps (§45.30): make the second developer app per platform and paste its keys; TikTok and Meta
   then review the new app, which can take days to weeks.
-* Nova Reel: say if Lamo Stories may keep its generated shots in a US (N. Virginia) bucket; until then it stays off.
+* Nova Reel: say if Funded Clips may keep its generated shots in a US (N. Virginia) bucket; until then it stays off.
 
 ### 45.23 Acceptance evidence, and what is only verified live
 
 | # | Criterion | In CI | Live, after the switch PR |
 |---|---|---|---|
 | 1 | Clip Factory opens and works as before | every old test; the pixel check | sign in on the live app and open `/`, `/jobs`, `/review`, `/library`, `/money`, `/settings` |
-| 2 | Existing jobs and uploaded videos stay reachable | the isolation tests | `GET /v1/jobs`, `/v1/clips`, `/v1/posts` saved before the first Lamo Stories deploy and after (ids and statuses only) are equal; one old job opens and one clip plays |
-| 3 | Clipping is unaffected | Clip Factory's agent tests unchanged; Clip Factory's `agent-` image tag computed on every Lamo Stories branch equals main's | the deploy summary shows the same `agent-…` tag; one real clip job afterwards |
+| 2 | Existing jobs and uploaded videos stay reachable | the isolation tests | `GET /v1/jobs`, `/v1/clips`, `/v1/posts` saved before the first Funded Clips deploy and after (ids and statuses only) are equal; one old job opens and one clip plays |
+| 3 | Clipping is unaffected | Clip Factory's agent tests unchanged; Clip Factory's `agent-` image tag computed on every Funded Clips branch equals main's | the deploy summary shows the same `agent-…` tag; one real clip job afterwards |
 | 4 | Publishing destinations unchanged | the callback and Disconnect tests | `GET /v1/accounts` (platform, account id, name, status) before and after, and after each Meta connect |
 | 5 | Workspace switching works | the switcher e2e | switch both ways, reload, open the Mac app |
 | 6 | Its own interface | the shell e2e | the screens |
 | 7 | Its own production workflow | the pipeline tests | one real story made end to end on the live agent |
 | 8 | Assets isolated | the isolation and key tests | the Lamo Clips Library unchanged after a story is made |
 | 9 | Accounts connect independently | the callback tests | each platform the owner connects (his taps) |
-| 10 | The right YouTube channel | the one-channel rule and its tests | the owner connects the Lamo Stories channel and sees its name and id |
+| 10 | The right YouTube channel | the one-channel rule and its tests | the owner connects the Funded Clips channel and sees its name and id |
 | 11 | No cross-workspace credentials | the destination, token and IAM tests | – |
 | 12 | Credentials stored securely | `leaked()`, the secrets tests, IAM | – |
 | 13 | Isolation enforced on the backend | the isolation tests | – |
@@ -14557,7 +14591,7 @@ Not verified live until the owner connects: each platform's real consent screens
 channel picker with his Brand Accounts, Meta's Page picker keeping both Pages, TikTok's Sandbox target-user rule for
 a second account, Nova Canvas in eu-west-1 for his account.
 
-### 45.24 Lamo Stories is its own application (the owner's second request, 2026-11-21 evening)
+### 45.24 Funded Clips is its own application (the owner's second request, 2026-11-21 evening)
 
 The owner's words: "Lamo Stories must be treated as an independent application within the existing Clip Factory
 application shell … The only shared element should be the application shell responsible for navigating between them."
@@ -14565,15 +14599,15 @@ Everything earlier in §45 stays; this subsection and §45.25–§45.32 add to i
 
 **What each application owns.** Clip Factory (Lamo Clips) keeps everything it has: its interface, AgentCore runtime
 `cf_prod_clip_agent`, agents, uploaded skills, models (`config/models.json`), conversations (Ask), pipeline, social
-integrations, accounts, credentials, data and settings, byte for byte. Lamo Stories has its own:
+integrations, accounts, credentials, data and settings, byte for byte. Funded Clips has its own:
 
-| Part | Lamo Stories' own | Never shared with Clip Factory |
+| Part | Funded Clips' own | Never shared with Clip Factory |
 |---|---|---|
 | Frontend and navigation | `web/src/stories/**`, lazy-loaded, `/stories/…` | Clip Factory's screens, nav, Ask, setup to-do |
 | HTTP API | Lambda **`cf-prod-stories-api`** (same zip, handler `clipfactory_api.workspaces.http.handler`) behind `ANY /v1/workspaces` and `ANY /v1/workspaces/{proxy+}` on the same HTTP API and JWT authorizer | `cf-prod-api`, its route table, role and environment stay unchanged |
 | AgentCore environment | runtime **`cf_prod_story_agent`**, its own image (`stories/agent/`), ECR repository, role, log group and sessions (`cfstory-…`) | `cf_prod_clip_agent`, its image, role and sessions |
-| AI agents | five built-in Lamo Stories agents (§45.26), owner-editable | Clip Factory's clip agent and Ask |
-| Skills | Lamo Stories skills (`SKILL#` in the workspace partition, built-ins in `stories/skills/`) | Clip Factory's skills: never read, never sent |
+| AI agents | five built-in Funded Clips agents (§45.26), owner-editable | Clip Factory's clip agent and Ask |
+| Skills | Funded Clips skills (`SKILL#` in the workspace partition, built-ins in `stories/skills/`) | Clip Factory's skills: never read, never sent |
 | Models and effort | `stories/config/models.json` plus the workspace's AI configuration (§45.25) | `config/models.json` and Clip Factory's `clipModel` setting |
 | Chat, history, memory | `CONV#`, `MSG#`, `MEM#` (§45.27) | Ask's conversations |
 | Production | `STORY#`, `PJOB#`, the engine, reference-video analysis (§45.28) | clip jobs |
@@ -14586,10 +14620,10 @@ integrations, accounts, credentials, data and settings, byte for byte. Lamo Stor
 **What is shared, and why** (the owner allows shared infrastructure "where appropriate" with "strict authorization and
 data boundaries"): the app shell and the one sign-in (Cognito); the AWS account, the HTTP API (a separate route and
 Lambda), the DynamoDB table (separate partitions and leading-key IAM), the media bucket (a separate prefix) and Secrets
-Manager (a separate name prefix); Clip Factory's OAuth callback only to **forward** a `w1.` state to Lamo Stories'
+Manager (a separate name prefix); Clip Factory's OAuth callback only to **forward** a `w1.` state to Funded Clips'
 own callback (Clip Factory's registered apps are not edited, so their redirect URI stays the hooks one; §45.13.3);
-the platform publisher library code (read-only, called with Lamo Stories' own credentials); and, only when the owner
-picks it for YouTube, TikTok or X, Clip Factory's developer app (§45.30). Nothing of Lamo Stories runs inside a Clip Factory Lambda or runtime, and no Lamo Stories
+the platform publisher library code (read-only, called with Funded Clips' own credentials); and, only when the owner
+picks it for YouTube, TikTok or X, Clip Factory's developer app (§45.30). Nothing of Funded Clips runs inside a Clip Factory Lambda or runtime, and no Funded Clips
 setting is read by Clip Factory code.
 
 **The boundaries, in IAM** (§45.15): `cf-prod-stories-api` and the `cf_prod_story_agent` role can write DynamoDB
@@ -14602,7 +14636,7 @@ nothing.
 
 ### 45.25 AI models and reasoning effort (owner-controlled)
 
-* **Which models.** `stories/config/models.json` lists the reasoning models Lamo Stories may use (separate from
+* **Which models.** `stories/config/models.json` lists the reasoning models Funded Clips may use (separate from
   `config/models.json`): Claude Fable 5.2, Claude Fable 5.1, Claude Opus 5.5, Claude Sonnet 5.5, Claude Haiku 5.5 on
   Amazon Bedrock (the owner's "Sable 5.2 / Sable 5.1" are Fable 5.2 / 5.1, the models of that name in this account).
   Each entry: `key`, `label`, `provider` ("Amazon Bedrock"), `modelId`, `profile` (the inference profile used, e.g.
@@ -14646,7 +14680,7 @@ nothing.
   scene rewrite high, captions low, fact check and final review high.
 * **No silent substitution.** The effective model is the one the levels above name. If its call is refused for
   access, Region, model id or quota, the task or job stops with "Claude Fable 5.2 isn't available right
-  now: {reason}. Pick another model in Lamo Stories › Settings › AI, or try again." and an action that opens that
+  now: {reason}. Pick another model in Funded Clips › Settings › AI, or try again." and an action that opens that
   setting; it never runs on another model. (Ask's refusal fallback model is Clip Factory's and is not used here.)
 * **Recorded on every job and message.** Each `PJOB#` (`meta.models`: per step, the model key, effort, `effortApplied`)
   and each assistant `MSG#` stores the effective model and effort, so a job can be reproduced and audited.
@@ -14656,11 +14690,11 @@ nothing.
   model and per day for 30 days; a model with no known price shows tokens only ("No price set.").
 * **Calls.** One client in the agent (`lamostories_agent/models.py`), `complete(task, messages, tools?, schema?,
   override?)`, resolves the effective model and effort, adds the agent's instructions, the workspace memory (§45.27)
-  and **the agent's enabled skills** (Lamo Stories skills only, §45.26) as the first system blocks, sends the request,
+  and **the agent's enabled skills** (Funded Clips skills only, §45.26) as the first system blocks, sends the request,
   handles `refusal` stop reasons plainly (no automatic fallback model: that would be a silent substitution; the owner
   is told and picks), and writes the usage item.
 
-### 45.26 Agents and skills (Lamo Stories' own)
+### 45.26 Agents and skills (Funded Clips' own)
 
 * **Agents** (`AGENT#{agentId}`; built-ins from `stories/config/agents.json`, created on first use, never deleted):
 
@@ -14673,13 +14707,13 @@ nothing.
 | `quality_assurance` | fact_check, final_review | the safety check (§45.11.5) and a last look at every finished video |
 
   Each has: `name`, `instructions` (the default from the file, editable; **Reset** restores it), `active` (an inactive
-  agent's tasks stop with "{Agent} is switched off. Switch it on in Lamo Stories › Settings › Agents."; the quality
+  agent's tasks stop with "{Agent} is switched off. Switch it on in Funded Clips › Settings › Agents."; the quality
   agent's fact check cannot be switched off for driving-safety stories), `model` and `effort` (or "Workspace
   default"), `skillIds` (its skills, in order), `version`.
 * **Skills** (`SKILL#{skillId}`, files in `ws/{u}/{ws}/skills/{skillId}/{revisionId}/SKILL.md|skill.zip`): upload a
   `SKILL.md` (≤ 1 MB) or `.zip` (≤ 20 MB), or write one in the app (title, when to use it, instructions); every save is
   a new **version** (the last 10 kept, any can be restored); **enable / disable**; **assign** to agents. Built-in
-  Lamo Stories skills ship in `stories/skills/` (`nonverbal-storytelling`, `driving-safety-teaching`,
+  Funded Clips skills ship in `stories/skills/` (`nonverbal-storytelling`, `driving-safety-teaching`,
   `vertical-short-hooks`), read-only but can be disabled or unassigned. An agent's prompt gets exactly its enabled,
   assigned skills, in its order; Clip Factory's skills never.
 
@@ -14693,9 +14727,9 @@ nothing.
   effective values); tapping either changes the conversation's setting; **Just for this message** sends an override
   that is not saved.
 * **Sending** (`POST …/chat/{convId}/messages`) writes the user message and an assistant message `pending`, then asks
-  the Lamo Stories agent (`chat_turn`) to answer; the agent writes the text into the assistant message as it streams
+  the Funded Clips agent (`chat_turn`) to answer; the agent writes the text into the assistant message as it streams
   (at most every 0.5 s) and the web polls every second while one is `streaming`. The creative director runs a tool
-  loop with Lamo Stories tools only: list and read ideas, characters, stories and reference analyses; create or update
+  loop with Funded Clips tools only: list and read ideas, characters, stories and reference analyses; create or update
   an idea; propose a character (a draft the owner saves); propose a storyboard change; `remember` (§ memory); and
   **actions** it cannot do itself, returned as buttons the owner taps (Make the video, Remake this scene, Analyze this
   reference video, Save this character): each button calls the normal route, so nothing happens without the owner's
@@ -14704,7 +14738,7 @@ nothing.
   kept as a system note) and the full messages stay readable.
 * **Memory** (`MEM#{memId}`: text ≤ 300 chars, source `chat | owner`, `createdAt`): facts and preferences the creative
   director saves with `remember` ("Lamo likes slapstick endings") and the owner adds, edits or deletes in Settings ›
-  Memory; every Lamo Stories agent gets the memory list (≤ 50 items, newest first) after its skills. Clip Factory has
+  Memory; every Funded Clips agent gets the memory list (≤ 50 items, newest first) after its skills. Clip Factory has
   no access to it.
 
 ### 45.28 Reference videos
@@ -14717,14 +14751,14 @@ happens shot by shot, the hook and its timing, pacing (cuts per 10 s), the gags 
 words, sound design (effects, music, silence), caption style, what to borrow and what not to copy (no characters,
 logos or footage are copied; only ideas of structure and timing). Stored in S3 (`analysis.json`) and shown on the
 reference's page; an idea or story can **use** references (`referenceIds`, ≤ 3), whose analyses the storyboard agent
-reads. Links to other people's videos are not downloaded in this section (Lamo Stories' agent has no downloader);
+reads. Links to other people's videos are not downloaded in this section (Funded Clips' agent has no downloader);
 the page says "Upload the video file."
 
-### 45.29 Setup, onboarding and settings (Lamo Stories' own)
+### 45.29 Setup, onboarding and settings (Funded Clips' own)
 
-* **Onboarding** (`ONBOARD` item: `stepsDone`, `skipped`, `finishedAt`): shown the first time Lamo Stories opens,
+* **Onboarding** (`ONBOARD` item: `stepsDone`, `skipped`, `finishedAt`): shown the first time Funded Clips opens,
   and from the dashboard until finished; every step can be skipped and done later; a ring shows "4 of 11 done" and the
-  list of what is left. Steps: 1 Set up the AI (what Lamo Stories uses and why), 2 Pick your default model (with
+  list of what is left. Steps: 1 Set up the AI (what Funded Clips uses and why), 2 Pick your default model (with
   **Check models**), 3 Pick your default effort, 4 Pick how videos are made (the video provider, §45.31), 5 Meet your
   agents and skills, 6 Connect Instagram, 7 TikTok, 8 YouTube, 9 Facebook, 10 X (each through Social Accounts, §45.13
   and §45.30), 11 Done (confetti). Making videos never waits for the social steps.
@@ -14744,38 +14778,42 @@ the page says "Upload the video file."
     `REFVID#` sizes), output format (MP4, H.264 and AAC, `+faststart`), captions burned in or not, scenes rendered at
     a time (1–3), keep old versions (all, or the last 1–10 per story: older files are deleted when a new version is
     made).
-* Everything above belongs to the Lamo Stories workspace; none of it is read by Clip Factory.
+  * **Look** (`/stories/settings/look`, its own section pill since 23 Nov 2026; before, the last card of Storage):
+    the background behind the glass, Clip Factory's three choices as Funded Clips' own on this device (See-through
+    with Glass strength Clear or Frosted, Picture, Colours with Ember, Rose and Lagoon; `stories/look.ts`,
+    `settings/LookSection.tsx`, the glass contract), never Clip Factory's `cf.prefs` or `cf.background`.
+* Everything above belongs to the Funded Clips workspace; none of it is read by Clip Factory.
 
-### 45.30 Developer apps: Lamo Stories' own, or Clip Factory's on purpose
+### 45.30 Developer apps: Funded Clips' own, or Clip Factory's on purpose
 
 For each platform the Social Accounts page asks once, **before the first Connect**, which developer app (OAuth client)
-Lamo Stories uses, and shows the choice on the card:
+Funded Clips uses, and shows the choice on the card:
 
-* **Use a separate app for Lamo Stories (fully separate)**: the owner makes a second developer app on the platform
-  (the same steps as Clip Factory's guide, linked, with the differences listed: its own name and Lamo Stories' own
-  redirect URI `{storiesCallbackBase}/{platform}/callback`, shown with a Copy button), pastes its keys in Lamo Stories (`PUT …/social/{platform}/app`, stored
+* **Use a separate app for Funded Clips (fully separate)**: the owner makes a second developer app on the platform
+  (the same steps as Clip Factory's guide, linked, with the differences listed: its own name and Funded Clips' own
+  redirect URI `{storiesCallbackBase}/{platform}/callback`, shown with a Copy button), pastes its keys in Funded Clips (`PUT …/social/{platform}/app`, stored
   in `cf-prod/workspaces/{ws}/{platform}/app`, the same formats and **Check it** as §17.4). Quotas, credits and app
   reviews are then separate too (TikTok's and Meta's reviews take days to weeks for a new app; X needs its own
   credits).
-* **Use Clip Factory's app (quicker)**, offered for **YouTube, TikTok and X only**: no new app; Lamo Stories still
+* **Use Clip Factory's app (quicker)**, offered for **YouTube, TikTok and X only**: no new app; Funded Clips still
   gets its **own authorization and tokens** (never Clip Factory's), for a different platform identity, so Clip
   Factory's grant is not touched; it shares that app's quotas, credits and review state. **Facebook and Instagram
-  always use Lamo Stories' own Meta app**: Meta's page picker belongs to one login and one app, so authorizing Clip
+  always use Funded Clips' own Meta app**: Meta's page picker belongs to one login and one app, so authorizing Clip
   Factory's Meta app again would change Clip Factory's existing grant (the second request forbids that). `PUT
   …/social/{instagram|facebook}/app {choice:"clips"}` is `400`; one own Meta app's keys serve both Instagram and
   Facebook (entered once). A new Meta app in Development mode lets its admin (the owner) connect his own Pages and
   Instagram account; going Live needs Meta's App Review.
 * Never a silent default and never a fallback: with neither chosen, Connect asks; a chosen app whose keys are missing
-  stops with "Paste your Lamo Stories {Platform} app keys first." **One helper picks the keys**:
+  stops with "Paste your Funded Clips {Platform} app keys first." **One helper picks the keys**:
   `workspaces/apps.py: app_keys(store, secrets, user_id, ws, platform)` reads `SOCIAL#{platform}.app.choice`: `own` →
   `cf-prod/workspaces/{ws}/{platform}/app`; `clips` → `cf-prod/platforms/{platform}/app` (read only; not for Meta);
   none or a missing secret → "not set up", never a fallback. Connect, the callback's exchange, the token refresh,
   Check, creator info and `validate_destination` use only this helper (`appClientId` on `SOCIAL#` records the client
   id used at connect). The redirect URI follows the choice: Clip Factory's app keeps its registered
-  `{oauthCallbackBase}/{platform}/callback`; Lamo Stories' own app registers Lamo Stories' own callback
+  `{oauthCallbackBase}/{platform}/callback`; Funded Clips' own app registers Funded Clips' own callback
   `{storiesCallbackBase}/{platform}/callback` (§45.13.3). The `limits` sentences are built per choice.
 * The shared limits of §45.14 (the X monthly limit, YouTube units) apply only with Clip Factory's app; with its own
-  app Lamo Stories keeps its own counters (`RATE#WS#{ws}#{platform}`) and its own X limit setting.
+  app Funded Clips keeps its own counters (`RATE#WS#{ws}#{platform}`) and its own X limit setting.
 
 ### 45.31 Video generation (separate from the reasoning models)
 
@@ -14797,7 +14835,7 @@ pixels. Each job records which providers made it (`PJOB#.meta.providers`).
 | Request | Met by |
 |---|---|
 | 1 independent application, own everything | §45.24 (table), §45.15 (separate Lambda, runtime, IAM) |
-| 2 one-click switching, each app remembers its state | §45.16.1 (Clip Factory and Lamo Stories keep their last page; Lamo Stories also its open conversation and project), the server keeps jobs and conversations |
+| 2 one-click switching, each app remembers its state | §45.16.1 (Clip Factory and Funded Clips keep their last page; Funded Clips also its open conversation and project), the server keeps jobs and conversations |
 | 3 model selection (view, select, switch, default, per agent, per task, active shown, provider, status) | §45.25, §45.29 AI, the chat header |
 | 4 reasoning effort (default, agent, task, chat), only where supported, really sent | §45.25 |
 | 5 model and effort in the chat, per-request override, stored with jobs | §45.27, §45.25 "Recorded" |
@@ -14809,7 +14847,7 @@ pixels. Each job records which providers made it (`PJOB#.meta.providers`).
 | # | Criterion | In CI | Live |
 |---|---|---|---|
 | 1 | Clip Factory unchanged | every old test, the pixel check, `cf-prod-api` and `cf_prod_clip_agent` untouched in the plan | §45.23 #1–#4 |
-| 2 | Lamo Stories independent | IAM tests (§45.15), import scans (the stories agent imports nothing of `clipfactory_agent`; the stories API modules import no Clip Factory route module) | – |
+| 2 | Funded Clips independent | IAM tests (§45.15), import scans (the stories agent imports nothing of `clipfactory_agent`; the stories API modules import no Clip Factory route module) | – |
 | 3 | One-click navigation | switcher e2e | the Mac app |
 | 4–7 | AI configuration, model choice, default, per agent | API and web tests of the config; the agent test that the effective model is the one sent | Check models on the live account |
 | 8–10 | Effort, really sent, per request | the agent test reads the request body (`output_config.effort`), `effortApplied` false where not sent | one live call per model (usage item shows the effort) |
@@ -14818,7 +14856,7 @@ pixels. Each job records which providers made it (`PJOB#.meta.providers`).
 | 13–17 | Connect each platform independently | callback tests per platform | the owner's taps |
 | 18 | The right accounts shown | callback tests (name, handle, id) | the owner sees @lamo.stories etc. |
 | 19 | Publishing isolated | destination tests, IAM | – |
-| 20 | No Lamo Stories setting changes Clip Factory | the IAM tests; a test that runs every Lamo Stories route and job and compares every Clip Factory item and secret before and after | – |
+| 20 | No Funded Clips setting changes Clip Factory | the IAM tests; a test that runs every Funded Clips route and job and compares every Clip Factory item and secret before and after | – |
 | 21 | Regression | every required check | – |
 
 ### 45.33 Details settled by the second review (they win over anything above)
@@ -14897,7 +14935,7 @@ is already built and only written down here.
   `inputPer1M` and `outputPer1M` 0 and `perUnit` set. `UsageSummary` gains `days[].renderMinutes` and
   `days[].byProvider` and `totalsByProvider`, each `{ provider: string; units: number; unit: "image" | "second";
   cost: number | null; currency: string | null }[]` (built-in render seconds count as `builtin-rig`, priced 0 with
-  `currency: null` and the line "Free: it runs on Lamo Stories' own computer"). Model rows never carry provider ids.
+  `currency: null` and the line "Free: it runs on Funded Clips' own computer"). Model rows never carry provider ids.
   The agent writes `USAGE#` items with `kind: "provider"`, `provider`, `units`, `unit`; `usage.summary` sums them.
   Settings › Video shows render minutes per day and each provider's units and cost (or "No price yet: add one").
 * **`ProviderStatus.key`** (api, web): `key?: { saved: boolean; hint: string | null; savedAt: string | null } | null`,
@@ -14920,10 +14958,10 @@ is already built and only written down here.
   app's keys for both Instagram and Facebook.
 * **The receiving account before a post** (api built, web): `PublishTarget` gains `confirmAccount?: string` (an
   `externalAccountId` the owner saw); `PublishingJob` gains `handle: string | null` and `externalAccountId: string |
-  null`. A `409` for an account that changed, or for a TikTok that Lamo Stories cannot tell from Lamo Clips' own
+  null`. A `409` for an account that changed, or for a TikTok that Funded Clips cannot tell from Lamo Clips' own
   (TikTok gives each app its own id), carries `error.account: { externalAccountId, accountName, handle }`. The web's
   `ApiError` keeps the error's `account`; the publish sheet and Posts' retry then ask "Post to {name}?" with the
-  account shown and send the same request again with `confirmAccount`. Lamo Stories asks once per TikTok identity
+  account shown and send the same request again with `confirmAccount`. Funded Clips asks once per TikTok identity
   (`SOCIAL#tiktok.notClipsConfirmed`).
 * **Reference videos** (api, web): `GET …/references/{refId}` answers `{ reference, analysis, job: ProductionJob |
   null }` (the analysis job of `currentJobId`, else the latest one), so the page shows each step and the failure's own
@@ -14935,7 +14973,7 @@ is already built and only written down here.
   carries `ideaId`, `refIds`, `castIds`, `durationSec`. "Use in a video" on a reference opens it with `?ref=`.
 * **`ChatAction.payload` per kind** (built): `make_video { story: StoryInput }` or `{ ideaId }`; `remake_scene { storyId,
   sceneIds, note? }` (a note or scene ids at least); `analyze_reference { refId }`; `save_character { character }`;
-  `save_idea { idea }` or `{ ideaId, patch }`; `open { href }` (a Lamo Stories address only).
+  `save_idea { idea }` or `{ ideaId, patch }`; `open { href }` (a Funded Clips address only).
 * **Chat pictures on Try again** (built): a retry uploads the pictures again; an `assetId` is used by one message only.
 * **The dashboard's account sentence** (api) says "Open Social accounts and tap Connect".
 * **Approving a driving-safety story** (api): approve refuses a `safety.status` of `skipped` whenever the story has a
@@ -14954,7 +14992,7 @@ behaviours an earlier step narrowed or left out)
   Stored as `MODELDEF#{key}` in the workspace partition. `ModelInfo` gains `custom: boolean`. The API's resolver and
   the agent (per call, never cached across workspaces) merge them over `stories/config/models.json`. Effort is sent
   only for the efforts the owner listed. "Check models" checks them like any other; a model Bedrock refuses shows
-  Bedrock's sentence, nothing is swapped. Lamo Stories' runtime role may invoke any Bedrock foundation model and any
+  Bedrock's sentence, nothing is swapped. Funded Clips' runtime role may invoke any Bedrock foundation model and any
   inference profile of the account (`infra/modules/stories_agent`), so a new model works after Check models with no
   deploy.
 * **Video size and shape** (request 2 §6E: "Default resolution. Default aspect ratio."; engine, agent, api, web):
@@ -14974,7 +15012,7 @@ behaviours an earlier step narrowed or left out)
   (`study_only` deletes a reference video's file and frames once its study is written and keeps the study) and
   `keepChatPictures: "all" | "days_30" | "days_90"` (defaults `all`). The agent applies them after each job; `POST
   /v1/workspaces/{ws}/storage/cleanup` → `{ removed: { files, bytes } }` applies them (and `keepVersions`) now.
-  `StorageSummary` gains `location: { region: string; folder: string }` ("Lamo Stories' own folder in Clip Factory's
+  `StorageSummary` gains `location: { region: string; folder: string }` ("Funded Clips' own folder in Clip Factory's
   media storage"), and storyboards and captions count under `scenes`. A reference video whose file was cleared shows
   "The video was removed to save space. Its study stays."
 * **Each character keeps its own faces and noises** (request 1 §5.C "Facial expressions", "look and behave
@@ -14997,7 +15035,7 @@ behaviours an earlier step narrowed or left out)
   the model and effort it was sent with; a job step that fails on its model adds `{ step, agentId, model, effort,
   effortApplied: false, failed: true }` to `meta.models`; Try again reuses the same override.
 * **An effort Bedrock refuses** (agent): a `ValidationException` about the effort field raises `EffortUnavailable`
-  ("{Model} does not accept {effort} effort here (Amazon Bedrock refused it). Pick another level in Lamo Stories ›
+  ("{Model} does not accept {effort} effort here (Amazon Bedrock refused it). Pick another level in Funded Clips ›
   Settings › AI."), written to `MODELSTATUS#`; nothing is retried without the effort.
 * **Model choice for what the chat starts** (web): the chat's "Remake these scenes" and "Analyze this reference
   video" cards carry a model menu (the usual choice for `scene_rewrite` or `reference_analysis`, prefilled with the
@@ -15010,12 +15048,12 @@ behaviours an earlier step narrowed or left out)
   existing application exactly as I left it"; web): once each app has been shown, both stay mounted; the one not shown
   is `hidden` and `inert`, its title and key handlers stay quiet, and switching shows the other at once (the
   StoriesApp chunk is fetched while idle once the switcher is on, and the workspace list the switcher already read is
-  used without waiting). While Lamo Stories is off nothing of this runs.
-* **"Open projects"** (web): Lamo Stories' dashboard shows "Continue: {name}" for the last opened idea, story,
+  used without waiting). While Funded Clips is off nothing of this runs.
+* **"Open projects"** (web): Funded Clips' dashboard shows "Continue: {name}" for the last opened idea, story,
   character or reference (hidden when it is gone).
-* **Lamo Stories' own device preferences** (request 2 §9; web): Settings › Storage and production has "Sounds and
-  motion" (click sounds on or off, reduced motion), kept in `cf.stories.prefs`; Lamo Stories' screens read them
-  first and fall back to Clip Factory's only while unset. Clip Factory's preferences never change Lamo Stories' once set.
+* **Funded Clips' own device preferences** (request 2 §9; web): Settings › Storage and production has "Sounds and
+  motion" (click sounds on or off, reduced motion), kept in `cf.stories.prefs`; Funded Clips' screens read them
+  first and fall back to Clip Factory's only while unset. Clip Factory's preferences never change Funded Clips' once set.
 * **Setup steps 1–3** (api, web): `PUT …/ai` takes `picked?: ("environment" | "model" | "effort")[]`, stamped on
   `AICONFIG.pickedAt`; step 1 ticks after "Check models" ran or the owner tapped "These look right" on step 1 (which
   shows the models and their state), step 2 when the default model was picked, step 3 when the default effort was
@@ -15027,15 +15065,15 @@ behaviours an earlier step narrowed or left out)
 * **Sound effects list** (web): the place's own sounds are in the list from each scene's start and can be moved or
   removed; they are labelled "(whole scene)".
 * **Social accounts wording** (api, web): every sentence names the page "Social accounts", never "Connections".
-* **Lamo Clips' account found later** (api): when Lamo Clips connects the same account after Lamo Stories did,
+* **Lamo Clips' account found later** (api): when Lamo Clips connects the same account after Funded Clips did,
   `public_of` and Check it show `same_as_clips` on every platform, so the card offers Pick another and Use it for
   both; onboarding ticks a platform only when it is `connected`.
 * **Meta redirect addresses** (web): both Meta cards show both redirect URIs (Instagram's and Facebook's) to add in
   Facebook Login; also in the saved state.
 * **The intended account** (web): after a connect the page says "Connected as {name} ({handle})" and asks "Is this
-  your Lamo Stories {place}?" with Yes and "Pick another".
-* **Disconnect** (web): for an own developer app the after-disconnect line says "To remove Lamo Stories completely,
-  remove your Lamo Stories app in the account's own settings. Lamo Clips is not affected."; the shared-app line stays.
+  your Funded Clips {place}?" with Yes and "Pick another".
+* **Disconnect** (web): for an own developer app the after-disconnect line says "To remove Funded Clips completely,
+  remove your Funded Clips app in the account's own settings. Lamo Clips is not affected."; the shared-app line stays.
 * **AI pictures off** (api, web): the line and its link point to Settings › Video › Picture maker.
 
 **Agent**
@@ -15071,13 +15109,14 @@ writer sidecar `script/v{n}.writer.json` `{ by, jobId, texts, postCaptions, teac
 with `REMOVE` on `STORY#` and `REFVID#`; conditions accept a missing value or `null`.
 
 **Deploys and the Clip Factory check** (built; written into docs/DEPLOYMENT.md): the deploy's "Clip Factory check"
-step reads the plan when Lamo Stories work that feeds it is in the deploy (first-parent commits since the live release,
-cf-prod-api's `VERSION`): it fails when anything of Clip Factory's agent, `cf-prod-api`, `cf-prod-hooks` (other than
-`STORIES_OAUTH_CALLBACK`), the HTTP API's settings, authorizer, Lambda permission or stage (other than Lamo Stories' own
-`route_settings`) changes, or a Clip Factory route is not a no-op. Lamo Stories' image is built before the plan once its
+step reads the plan when Funded Clips work that feeds it is in the deploy (first-parent commits since the live release,
+cf-prod-api's `VERSION`; a commit is Funded Clips work when it touches Funded Clips' folders or its message names
+"Funded Clips", "Clip Stories", "Clip Factory Stories" or "Lamo Stories", in any case): it fails when anything of Clip Factory's agent, `cf-prod-api`, `cf-prod-hooks` (other than
+`STORIES_OAUTH_CALLBACK`), the HTTP API's settings, authorizer, Lambda permission or stage (other than Funded Clips' own
+`route_settings`) changes, or a Clip Factory route is not a no-op. Funded Clips' image is built before the plan once its
 runtime is live; a failed build keeps the live tag and still ships Clip Factory. The `workflow_dispatch` input
 `allow_clip_factory_change` ("Clip Factory changes on purpose") reruns a deploy whose findings are another PR's Clip
-Factory change landing in the same unapplied range; it never lets a Lamo Stories route take a Clip Factory path.
+Factory change landing in the same unapplied range; it never lets a Funded Clips route take a Clip Factory path.
 
 **Web layout notes** (built): the switcher's phone toggle is 29 × 48 px at 320 px wide (48 × 48 from about 340 px) and
 44 × 28 in the folded sidebar; below about 570 px tall the folded sidebar has no switcher (unfolding shows it). §45.17's
@@ -15105,12 +15144,12 @@ and 43 minor, none blocking. Round 4 closes them as follows.
 * **D13.** Post captions follow the video's shape: the brief says vertical, square or wide from story.format; #shorts is added only for 9:16.
 * **D14.** The ASS writer uses the engine's safe boxes (cli.ts catalog formats[].safe) for every shape, so burned-in text sits where the preview shows it.
 * **D15.** Writer rule: each cast member acts like its personality and traits, and its own sound moments use its favouriteEffects where they fit (writer SYSTEM and the storyboard agent's instructions in stories/config/agents.json).
-* **D16.** The two apps stay apart when something breaks: each pane (Clip Factory and Lamo Stories) has its own error boundary; Lamo Stories' card says "Lamo Stories had a problem." with Try again (re-creates the lazy app) and Go to Clip Factory (writes workspace clips, goes to the last Clip Factory page). Clip Factory's own boundary and fallback stay as they are.
-* **D17.** The hidden app is quiet: when a pane is hidden, every playing video and audio inside it is paused; Lamo Stories' previews stop painting while hidden; Clip Factory's confetti burst does not draw while Lamo Stories is on screen (an additive guard in web/src/lib/confetti.ts that is a no-op while Lamo Stories is off); every Lamo Stories page change after an await goes through storiesGoLater (Characters create/delete, RefPage talk/delete, Chat New chat, chat action cards, Connections' connect redirect is skipped while Lamo Stories is behind and resumes when it is back).
-* **D18.** Campaign Home is kept on a round trip: NewJobForm reads its search through a tiny hook (useKeptSearch) that returns window.location.search exactly as today when no Lamo Stories pane wrapper is around it (so Clip Factory with Lamo Stories off is byte-for-byte the same), and the kept route's search inside the Clip Factory pane; App.tsx then drops the campaign case from "fresh" (the skill editor stays fresh only while it has unsaved typing, or stays fresh as today if that cannot be done without changing it).
+* **D16.** The two apps stay apart when something breaks: each pane (Clip Factory and Funded Clips) has its own error boundary; Funded Clips' card says "Funded Clips had a problem." with Try again (re-creates the lazy app) and Go to Clip Factory (writes workspace clips, goes to the last Clip Factory page). Clip Factory's own boundary and fallback stay as they are.
+* **D17.** The hidden app is quiet: when a pane is hidden, every playing video and audio inside it is paused; Funded Clips' previews stop painting while hidden; Clip Factory's confetti burst does not draw while Funded Clips is on screen (an additive guard in web/src/lib/confetti.ts that is a no-op while Funded Clips is off); every Funded Clips page change after an await goes through storiesGoLater (Characters create/delete, RefPage talk/delete, Chat New chat, chat action cards, Connections' connect redirect is skipped while Funded Clips is behind and resumes when it is back).
+* **D18.** Campaign Home is kept on a round trip: NewJobForm reads its search through a tiny hook (useKeptSearch) that returns window.location.search exactly as today when no Funded Clips pane wrapper is around it (so Clip Factory with Funded Clips off is byte-for-byte the same), and the kept route's search inside the Clip Factory pane; App.tsx then drops the campaign case from "fresh" (the skill editor stays fresh only while it has unsaved typing, or stays fresh as today if that cannot be done without changing it).
 * **D19.** One click everywhere: with the sidebar folded in short windows (under about 570 px tall), a slim switcher toggle sits in .sidebar__top beside the fold button without moving it; the flag-off app is unchanged.
 * **D20.** The pixel check ignores antialiasing only (pixelmatch includeAA false, threshold about 0.1) and still fails on any layout or colour change; the lead runs it on the switch PR.
-* **D21.** Words and layout: provider ids are never shown raw (Built-in animator, Built-in drawing, Built-in sounds, Claude on Amazon Bedrock, Amazon Nova Canvas/Reel); one "Made with" heading (the other "Helpers used"); no raw s3:// paths (say "Lamo Stories' own folder in Clip Factory's media storage", the path behind a "Technical details" fold); the safety topic's title, not its id; previews show a character's own face (happy if it has it, else its first non-neutral face); Setup step 4 says "On. Cartoons drawn right here, tall, square or wide, 30 frames a second."; Ideas' "Write it again" keeps the full idea's own length; Check now is hidden on a choose_account card; one toast per pick on Social accounts (drop the duplicate), and toasts sit above an open sheet's action bar on phones; text never cut off at 320 px (dashboard accounts wrap, the timeline chip shows the short name, idea tiles clamp at 5 lines); the Post it sheet's "Not ready to post" rows stay readable at 320-390 px (min-width 0, the link on its own row on phones).
+* **D21.** Words and layout: provider ids are never shown raw (Built-in animator, Built-in drawing, Built-in sounds, Claude on Amazon Bedrock, Amazon Nova Canvas/Reel); one "Made with" heading (the other "Helpers used"); no raw s3:// paths (say "Funded Clips' own folder in Clip Factory's media storage", the path behind a "Technical details" fold); the safety topic's title, not its id; previews show a character's own face (happy if it has it, else its first non-neutral face); Setup step 4 says "On. Cartoons drawn right here, tall, square or wide, 30 frames a second."; Ideas' "Write it again" keeps the full idea's own length; Check now is hidden on a choose_account card; one toast per pick on Social accounts (drop the duplicate), and toasts sit above an open sheet's action bar on phones; text never cut off at 320 px (dashboard accounts wrap, the timeline chip shows the short name, idea tiles clamp at 5 lines); the Post it sheet's "Not ready to post" rows stay readable at 320-390 px (min-width 0, the link on its own row on phones).
 
 **Written down from round 3** (built; the shapes the API, the agent and the web share):
 
@@ -15128,7 +15167,7 @@ and 43 minor, none blocking. Round 4 closes them as follows.
   `sourceRemovedAt` is still read) and `note`; `MSG#` `picturesRemovedAt` (attachments emptied by keepChatPictures,
   the same in the API's cleanup and the agent's sweep); `AICONFIG.pickedAt`; `MODELSTATUS#.by` (`"check"` when Check
   models wrote it).
-* Web: Lamo Stories' celebrations use its own star burst (`ui.tsx` `starBurst`), never Clip Factory's confetti; its
+* Web: Funded Clips' celebrations use its own star burst (`ui.tsx` `starBurst`), never Clip Factory's confetti; its
   sounds go through `stories/prefs.ts` (`storiesSound`, `storiesReduceMotion`, `setStoriesDevicePref`; keys
   `sound.enabled`, `sound.click`, `motion.reduce` in `cf.stories.prefs`); page changes after a request go through
   `storiesGoLater` (`stories/pane.tsx`), which waits while Clip Factory is on screen. Plain toasts stay global
@@ -15139,11 +15178,11 @@ and 43 minor, none blocking. Round 4 closes them as follows.
 **Switched on.** The final check on main `696e8b3b` (before the switch) found every acceptance criterion of both
 requests met (request 1: 12 of 14 met, 2 built and waiting only on the owner's own accounts; request 2: 15 of 21 met,
 6 waiting only on his accounts; none partial or missing) and Clip Factory pixel-identical (`web/scripts/clips-unchanged.sh`:
-66 of 66 shots equal with Lamo Stories off against main without Lamo Stories' hooks; 66 of 66 equal outside the
-switcher's own box with it on; the shots that differ from the commit before Lamo Stories began are other sessions'
+66 of 66 shots equal with Funded Clips off against main without Funded Clips' hooks; 66 of 66 equal outside the
+switcher's own box with it on; the shots that differ from the commit before Funded Clips began are other sessions'
 Clip Factory work). The switch pull request sets `STORIES_ON = true`; `cf.storiesPreview` `"0"` / `"1"` still choose
 on one device (tests). What waits on the owner: his own Meta developer app for Instagram and Facebook, picking the
-Lamo Stories YouTube channel, signing in to the Lamo Stories TikTok and X accounts (TikTok posting through the API
+Funded Clips YouTube channel, signing in to the Funded Clips TikTok and X accounts (TikTok posting through the API
 still waits on TikTok's app approval), confirming each shown account, Bedrock model access for the models he uses,
 and, for Amazon Nova Reel, `stories_video_us_bucket = true` plus model access in us-east-1 (DEPLOYMENT.md).
 
@@ -15167,16 +15206,16 @@ its own `task`. The dashboard checks app keys only while its request has time (i
 * **E8.** Every model record has its details: chat answers and AI tasks show the same "Model ID … in {Region}" details line production jobs show (behind the same fold).
 * **E9.** An account problem always has a way to fix it: the Posts panel and the Post it sheet show "Open Social accounts" (a link) next to Try again whenever the post stopped on an account problem; the mock's Needs you Fix it goes to Social accounts like the API.
 * **E10.** Post words only need a fact check, not a remake: when only the post captions changed, Review says "Your new post words need a quick check. Tap Check again." with that button (produce from "safety"), and Approve says the same; never "Tap Remake". The captions box stays on the tab the owner was on after Use these or Save (keep the tab outside the keyed editor).
-* **E11.** Celebrate a post: the Post it sheet's "Posted!" gets Lamo Stories' star burst and success sound (the same as Approve).
+* **E11.** Celebrate a post: the Post it sheet's "Posted!" gets Funded Clips' star burst and success sound (the same as Approve).
 * **E12.** A model the studio already knows is unusable (status denied, not_found or error) is never pre-picked: the pickers and chips show it with its status line, the usual choice skips it, and Make the video with it selected asks first ("{Model} has no access right now. Use {usual} instead?").
-* **E13.** One name on screen: Lamo Stories' screens and the API's Lamo Stories sentences call the other app "Clip Factory" everywhere (never "Lamo Clips"); sentences never read oddly when an account is itself named "Lamo Stories" (say "this {Platform} account ({name})").
+* **E13.** One name on screen: Funded Clips' screens and the API's Funded Clips sentences call the other app "Clip Factory" everywhere (never "Lamo Clips"); sentences never read oddly when an account is itself named "Funded Clips" (say "this {Platform} account ({name})").
 * **E14.** Kid-proof first lines: developer-app terms (Valid OAuth Redirect URIs, Login configuration, App Review, Sandbox, inference profile, ARN) and raw ids (account ids, model ids, channel ids) sit behind a "Technical details" fold, with a plain first line ("Copy this address into your app's settings"); the facts stay one tap away.
 * **E15.** After Finish with skipped steps, the dashboard keeps a small "Finish setting up: {n} left" card listing them, and Settings always has "Open setup again".
-* **E16.** Lamo Stories' own switcher is always in view: in short desktop windows the rail's switcher is pinned (sticky at the bottom of the rail, or in the rail's top when the foot would scroll off); at 320 px Clip Factory's top-bar switch is at least 44 px in both directions (shrink or drop the brand text before the switch shrinks), with the flag-off app unchanged.
+* **E16.** Funded Clips' own switcher is always in view: in short desktop windows the rail's switcher is pinned (sticky at the bottom of the rail, or in the rail's top when the foot would scroll off); at 320 px Clip Factory's top-bar switch is at least 44 px in both directions (shrink or drop the brand text before the switch shrinks), with the flag-off app unchanged.
 * **E17.** Settings polish: Add a model starts with the maker's usual effort levels ticked when effort levels are on (Anthropic: all five, default its usual); the Added by you and status chips have the normal gap and the status sits at the right edge like other rows; status words are one set everywhere ("Works", "Not checked yet", "No access", "Not found", "Problem"); "More effort thinks longer" is hidden for a model with no effort setting; a sentence never tells the owner to go to the page he is on (say "Pick Built-in animation above").
 * **E18.** Small studio fixes: a cleared reference never plays a local copy (the page shows the D9 sentence); the mock's canned study fits the uploaded video's length; the play badge on square and wide scene thumbnails sits where it does not cover the caption; Social accounts' grid does not leave big empty areas at 1440 (cards flow by their own height); after reconnecting, the mock clears the old warning like the API.
 
-Not in round 5 (they would change Clip Factory's own code): Clip Factory's toast component (Lamo Stories uses it: 36 px close button, one glass for all toasts) and Clip Factory page changes after a request while Lamo Stories is on screen (NewJobForm addCampaign, CampaignPaste, SkillPages). The lead reports them as known limits.
+Not in round 5 (it would change Clip Factory's own code): Clip Factory's toast component (Funded Clips uses it: 36 px close button, one glass for all toasts). Clip Factory page changes after a request while Funded Clips is on screen are ruled in §45.38 A1.
 
 ### 45.37 Stories AI makers and providers (2026-11-22; wins over anything above)
 
@@ -15272,7 +15311,7 @@ documents one.
   nothing, and a newer failed access check of the model in use wins over an older `on`.
 * **Try it for your own video model.** Its shots go to the same off-by-default us-west-2 bucket as Luma AI Ray2, so it
   is `on` only after its own Try it: `POST …/providers/own-video/check` → 202 with a one-step `provider_check` job
-  (`meta.providers {animation: "own-video"}`), or 409 "Add a video model first: tap Add a model in Lamo Stories ›
+  (`meta.providers {animation: "own-video"}`), or 409 "Add a video model first: tap Add a model in Funded Clips ›
   Settings › Video." (busy: "Your own video model is being tried. Wait until it is done."). The agent makes one test
   shot of the picked own video model (or its first) into its Region's bucket, proves `PROVIDER#animation#own-video`
   with its `model`, records its usage and deletes the file; a switched-off bucket calls nothing
@@ -15344,10 +15383,10 @@ re-staging pass after the engine refused the first staging; there is no two-call
 #### G6 Sharing Clip Factory's developer app, protected
 
 * The choice stays for YouTube, TikTok and X and reads **"Share Clip Factory's app"** with "Clip Factory's posts
-  always go first. Stories uses what's left." ("quicker" is gone). It is about the developer app (OAuth client and
-  quotas), never the account (G8): "Even with Clip Factory's app, sign in with a different account made for Clip
-  Factory Stories." Anything already connected through it keeps working with no reconnect.
-* **Own counters (a).** One counter for all of Lamo Stories, every owner and workspace together:
+  always go first. Funded Clips uses what's left." ("quicker" is gone). It is about the developer app (OAuth client and
+  quotas), never the account (G8): "Even with Clip Factory's app, sign in with a different account made for Funded
+  Clips." Anything already connected through it keeps working with no reconnect.
+* **Own counters (a).** One counter for all of Funded Clips, every owner and workspace together:
   `RATE#WS#~shared#{platform}` / `SHAREUSE#{platform}#{window}` (type `ws_shareuse`; `posts`, `units`, `usd`,
   `minuteKey`/`requestsThisMinute`, `dayKey`/`dayPostIds`, `blockedUntil`, `byWorkspace` per `{userId}#{workspaceId}`,
   `cfAuto` (every owner's auto-posting schedule seen this window), `version`, `ttl`; "~" is in no workspace id). It
@@ -15356,23 +15395,23 @@ re-staging pass after the engine refused the first staging; there is no two-call
   read only (an attribute-limited GetItem; the separation test's allowed set grows by exactly that).
 * **Clip Factory's share is reserved (b):** its auto-posting schedule (`ceil(perRun × 24 / everyHours)` posts a day
   while on; today 1 clip every 6 hours on every platform) plus headroom for its manual posts (10 YouTube uploads and 2
-  X posts a day). YouTube, per Google quota day: Lamo Stories may upload `100 − (auto + 10)` a day (`videos.insert`'s
+  X posts a day). YouTube, per Google quota day: Funded Clips may upload `100 − (auto + 10)` a day (`videos.insert`'s
   own bucket), and of the 10,000-unit pool it may use `10,000 − 500 − max(5,000, Clip Factory's units today +
   1,000)`. X, per UTC month: the owner's monthly X limit minus what Clip Factory spent minus its reserve for the days
   left (the larger of its daily average and `(auto + 2) × (usdPerPost + 4 × usdPerPostRead)`); its 15-minute window
-  at most 1,000 requests. TikTok: of the app's 600 calls a minute Clip Factory keeps 300 plus 100, so Lamo Stories
-  makes at most 200; TikTok's daily post caps are per creator account and Lamo Stories' accounts are never Clip
-  Factory's, and when TikTok says the app's own daily limit is reached Lamo Stories stops there until the next UTC
-  day. While Clip Factory's own counter is blocked, Lamo Stories waits too. Clip Factory's own X charge counts only its
-  own spend, so if it posts far more than planned the month can go over the X limit by what Lamo Stories spent: the
-  card says so ("Clip Factory does not count Stories' X posts, …").
+  at most 1,000 requests. TikTok: of the app's 600 calls a minute Clip Factory keeps 300 plus 100, so Funded Clips
+  makes at most 200; TikTok's daily post caps are per creator account and Funded Clips' accounts are never Clip
+  Factory's, and when TikTok says the app's own daily limit is reached Funded Clips stops there until the next UTC
+  day. While Clip Factory's own counter is blocked, Funded Clips waits too. Clip Factory's own X charge counts only its
+  own spend, so if it posts far more than planned the month can go over the X limit by what Funded Clips spent: the
+  card says so ("Clip Factory does not count Funded Clips' X posts, …").
 * **No room: the post waits (c).** The story flow writes `waitUntil` and the line "Waiting: Clip Factory's posts go
   first. Posts at <time>." on the publishing job; the public job shows `waitingUntil` and `waiting` while it is queued
   or publishing (the post rows and the publish sheet); it waits with no compute and goes out by itself after the
   reset, never failing silently and never taking Clip Factory's share. A slow-down from the shared app on the first
   call (a retryable `rate` problem) waits for the window the same way. The story flow's execution timeout is raised in
   place to 40 days (a month's wait on X).
-* **Tests (f):** a Lamo Stories post can never use up Clip Factory's reserved share on YouTube, X and TikTok, also
+* **Tests (f):** a Funded Clips post can never use up Clip Factory's reserved share on YouTube, X and TikTok, also
   across three workspaces and owners; a waiting post goes out after the reset; Clip Factory's own posting path stays
   byte-identical (the callback and separation tests). Copying Clip Factory's publishers is out.
 
@@ -15381,7 +15420,7 @@ re-staging pass after the engine refused the first staging; there is no two-call
 * Nothing offers or calls Nova Canvas or Nova Reel as live: Setup step 4, Settings › Video's rows, the portraits' AI
   path and Try it read **ended** ("Ended by Amazon on 30 Sep 2026") with a one-tap replacement (Stability AI pictures,
   Luma AI Ray2), never the default and never swapped by themselves; a pick of one is refused with no call: "Amazon
-  Nova Canvas was ended by Amazon on 30 Sep 2026. Pick another picture maker in Lamo Stories › Settings › Video."
+  Nova Canvas was ended by Amazon on 30 Sep 2026. Pick another picture maker in Funded Clips › Settings › Video."
   ("Amazon Nova Reel 1.1 … video maker"). A stored ended pick never ticks Setup step 4 (it is a step to do again,
   also after `providersPickedAt`). Nova Reel's old Try it answers 409 with that sentence.
 * Stability AI makes the portraits when picked (the portraits use the picked picture maker), Luma AI Ray2 the
@@ -15395,29 +15434,44 @@ re-staging pass after the engine refused the first staging; there is no two-call
   Video, or finish its setup." **Stability AI needs** its models turned on for the account in us-west-2 (Bedrock
   console); its first portrait proves it.
 
-#### G8 Clip Factory Stories never posts to Clip Factory's accounts
+#### G8 Funded Clips never posts to Clip Factory's accounts
 
 * **No account is shared.** "Use it for both" is gone: `destinations.py` rule 5 is absolute (never Clip Factory's
   place, no exception); the share path (`social.share`, the share route and its `ws_routes_social` entry) is removed;
-  a stored `sharedWithClips` is ignored and cleared (Lamo Stories' own `SOCIAL#` only). No route or screen offers
+  a stored `sharedWithClips` is ignored and cleared (Funded Clips' own `SOCIAL#` only). No route or screen offers
   sharing an account (tested).
 * **Same account = any stable identity matches** Clip Factory's `ACCOUNT#{platform}`: YouTube the channel id;
   Facebook the Page id; Instagram the IG user id and the username; TikTok the open id (equal only on the shared app)
   and the username (Clip Factory stores no `union_id`, so it is not compared); X the user id and the handle. It runs at
   connect and before every upload. When it matches at connect the account is `same_as_clips` and no token is kept
-  (the old one is deleted too); when Clip Factory connects it later, Lamo Stories' connection is blocked from posting
+  (the old one is deleted too); when Clip Factory connects it later, Funded Clips' connection is blocked from posting
   (`clips_now`). Both are sticky: the identities found to be Clip Factory's are kept as `clipsMatched` `{ids,
-  usernames}` (at most 20 of each, never returned) on Lamo Stories' own `SOCIAL#`, across connects and disconnects,
+  usernames}` (at most 20 of each, never returned) on Funded Clips' own `SOCIAL#`, across connects and disconnects,
   and refused from then on, also once Clip Factory lets go of the account; only a connect of a different account
   clears the status. Clip Factory's `ACCOUNT#` is read read-only, widened in place to `handle` (the API and the story
   flow) and `autoPost` (the story flow, its settings item), with the separation tests' allowed sets to match; Clip
   Factory's items and code are unchanged.
-* **Words.** Each Connect step and card: "Use a new account made for Clip Factory Stories, not lamo.clips."; the
-  same-as-Clips state: "This is Clip Factory's own account. Clip Factory Stories needs its own separate account: sign
+* **Words.** Each Connect step and card: "Use a new account made for Funded Clips, not Clip Factory's." (the same
+  on every platform; it once said "not lamo.clips", which is not Clip Factory's name on X); the
+  same-as-Clips state: "This is Clip Factory's own account. Funded Clips needs its own separate account: sign
   in with a different one."; Clip Factory took it later: "This is Clip Factory's account now. Connect a different
-  account made for Clip Factory Stories."; the publish sheet: "This is Clip Factory's own account. Connect a different
-  account made for Clip Factory Stories in Social accounts." Every same-as-Clips account carries its `warning`, said
+  account made for Funded Clips."; the publish sheet: "This is Clip Factory's own account. Connect a different
+  account made for Funded Clips in Social accounts." Every same-as-Clips account carries its `warning`, said
   once on the card.
+
+### 45.38 One shell switch, the two apps kept apart (2026-11-22; wins over anything above)
+
+The owner (22 Nov, 18:01, with screenshots): "just like you have in the top or in the bottom left, I need to keep that... keep that for both when I switch to Lamo Stories and back to Clip Factory... make sure that the place where we have setup, you know, Clip Factory and then Funded Clips. I want that to be exactly, I want that to be fixed. That should be in the same place no matter what. Even if we're in Funded Clips or if we're in Clip Factory." Request 2: "The only shared element should be the application shell"; "These two applications must not depend on each other's internal functionality". And on the switch: "make the click animation between the two buttons smooth".
+
+* **S1. One element.** The workspace switch and the Live chip under it are one element of the application shell (`web/src/app/WorkspaceDock.tsx`), only while Funded Clips is switched on, with the same place, size and look (the shell's own fills and words, never one app's style) in both apps, on every page: every Funded Clips page (Setup the first time included, which keeps the left column free on a computer), Clip Factory with its sidebar open or folded (the folded form shows in both apps), every Look, and the Mac and Windows windows. Funded Clips' rail and top bar no longer draw a switch of their own; the round toggle at the top right of Funded Clips' Setup is gone on a computer.
+* **S2. Where.** On a computer the shell draws it outside both panes, fixed over the left column where Clip Factory's sidebar foot has always had it: the bar right above the Live chip, with Get the app and the jobs line under them (in a short window: a round toggle beside or above the chip, a slim one between the menu and the foot, a slim one beside the fold button of a folded sidebar, or one in the strip between an open sidebar and the page). Its place is worked out once from the window and Clip Factory's sidebar (`dockLayout`), never from the app on screen, so both apps always agree; Clip Factory's foot keeps the chip's row (`.sidebar__live-room`) so nothing in it moves, and Funded Clips' rail stops its list of pages above the dock (`--ws-dock-room`). On a phone it is the round toggle (48 px; 44 by 48 below 360 px) with the Live chip 4 px after it at the right end of each app's own top bar (one component, `TopBarSwitch`, in both); an app's brand drops its name only when it would come closer than 4 px (320 px). Known limit: on a phone, while Clip Factory's own "Set up posting" pill sits above Clip Factory's page, Clip Factory's whole top bar (its toggle with it) is that much lower than Funded Clips'; side, size and its place in the bar stay the same.
+* **S3. The slide.** The bar's highlight slides from one choice to the other on the tap's own frame (Glide, 360 ms, the same curve as every pick-one bar, transform only); the switch stays mounted across the change, and the page changes once the slide has landed, so no page is built or laid out during it. Funded Clips' code is fetched while the browser is idle and again the moment the pointer or the keyboard comes to a way there. Calm motion (the app on screen's own setting) moves it at once and switches at once. A page asking "Leave without saving?" asks first; the highlight moves only if the page really changes. `e2e/stories-switch-slide.spec.ts` checks the slide's animation runs to its end both ways in Chromium and WebKit, with no main-thread task over 50 ms and no frame later than the machine's own at rest.
+* **A1. Clip Factory waits behind Funded Clips.** A Clip Factory page change that comes after a wait (a campaign added, a skill saved) goes through `clipsGoLater` (`web/src/app/shell.ts`), the mirror of Funded Clips' `storiesGoLater`: while a Funded Clips page is on screen it is held, and it happens the moment Clip Factory's pane is on screen again (replacing the entry it asked to replace, past its own "Leave without saving?" only where it asked to). The owner is never moved out of Funded Clips by it, Funded Clips' history entry and its own guard are never touched, and `cf.workspace` keeps saying Funded Clips. While Funded Clips is off it is exactly `navigate`. Clip Factory's own sounds (`lib/sounds.ts`) and confetti are quiet while a Funded Clips page is on screen.
+* **A2. Nothing of one app inside the other.** Funded Clips draws nothing of Clip Factory's own: no Content Rewards "Send … now" banner, no app badge or Mac download host (the shell draws those once, for both). Each pane has its own toasts (`ToastScope`): a toast its app raises while hidden waits until that app is on screen again, or is dropped once older than its own time on screen; each app's error toast plays its own error sound; the shell's own toasts stay global. Funded Clips' sounds and motion (`cf.stories.prefs`: `sound.enabled`, `sound.click`, `sound.deny`, `motion.reduce`) have Funded Clips' own defaults (sounds on, its usual click and error sounds, motion as the device asks) and never fall back to Clip Factory's `cf.prefs`; its Settings card has its own Error sound.
+* **A3. No imports across.** No Clip Factory file imports `web/src/stories/`: what both need (which app is on screen, the pane, the kept search, `clipsGoLater`) is the shell's (`web/src/app/shell.ts`), which both import. The shell's own files (`web/src/app/`) and the one router both apps go through (`web/src/lib/router.ts`, which hands /stories addresses to Funded Clips' route table) are the only ones that read Funded Clips' code; `test/shellApart.test.tsx` scans for it.
+* **The mark, an element of the shell.** Funded Clips' logo (the owner, 22 Nov: "the same logo as clip factory but with the colors in clip factory stories") is Clip Factory's own mark, the same markup (`web/src/components/ClipMark.tsx`: the italic "C" on its tile with its dot), beside the wordmark "Funded *Clips*" in Clip Factory's wordmark type. It lives with the shell, not in `web/src/stories/`: `web/src/components/WorkspaceMark.tsx` (`WorkspaceMark`, `WorkspaceWordmark`, `STORIES_BRAND`) and `web/src/styles/ws-mark.css` in the main stylesheet, classes `.ws-mark*` and `.ws-wordmark*`, because the shell shows it outside Funded Clips' own code too: the start-up card while that code loads (`App.tsx`) and the round toggle that goes to Funded Clips (`WorkspaceDock.tsx`). Four tokens colour it, `--ws-mark-tile`, `--ws-mark-letter`, `--ws-mark-dot` and `--ws-wordmark`; Funded Clips' own stylesheet sets them under `.stories-app`, and until it does each falls back to today's Funded Clips colours (sunshine tile `#FFC94A`, night-indigo "C" `#1C1842`, coral dot `#FF6F61`, cream words `#FFF6E5`). So no Clip Factory file imports `web/src/stories/` for it (A3), and none of Funded Clips' own look (`--st-*`, `st-` classes) goes into Clip Factory's main bundle. Clip Factory's own mark never carries `ws-mark` and is unchanged; the round toggle that goes back to Clip Factory shows it. `test/workspaceMark.test.tsx` holds this.
+* **E18, again.** Social accounts deals its cards into the number of columns (two up to as many as fit) that leaves the least empty area, each count measured with the cards' own heights at its width, every way of dealing them tried; a card that grows still only pushes the cards under it.
+* **S4. The dock behaves as part of the page under it (review fixes, 2026-11-22).** (a) While a dialog of either app is open (any `aria-modal="true"` outside the dock) the dock is inert: no tap and no key reach it. Where the dialog's dim is drawn over it already (Clip Factory's sheets and lists) nothing else changes; where the dock is drawn over the dim (the Stories app's sheets dim inside its own app's box) it dims with the page (opacity only) and a tap there lands on the dim, which closes the sheet. (b) The rows of Clip Factory's foot under the dock (Get the app, the jobs line) are read as Clip Factory last had them on screen: a Clip Factory job starting or ending, or the app being installed, while a Stories page is on screen never moves the switch there; back in Clip Factory it sits where Clip Factory's foot has it now. (c) For the keyboard the dock comes where it is drawn: right after the app's menu (each app marks its menu list `data-ws-tab-after`), before Get the app and the page; Shift+Tab goes back the same way; anywhere else Tab goes past it. (d) Unfolding Clip Factory's sidebar, the dock's parts show only as far as the sidebar's content has grown (a clip on the sidebar's own 520 ms curve, no layout), never past the glass. (e) A toast an app put up that is still on screen when the owner switches away leaves with its app and comes back, quietly, for the rest of its time if the owner is back by then; Clip Factory's session (above both apps) holds its toasts the same way while a Stories page is on screen. (f) The slide's frame check (S3) counts a frame as late only past twice the machine's own frame at rest (and its worst gap at rest, and 25 ms) and lets one such frame pass, and the slide must be there before the next frame after the tap's click (timed from the click: the test machine's own time from the pointer going down to the click is not the app's); the slide itself must still run its whole 360 ms on transform only, to its end, never cancelled, and the page changes only after it.
 
 ## 46. Auto-posting: the oldest clips in Review go up by themselves, every X hours (owner request, 2026-11-22)
 
@@ -15447,8 +15501,11 @@ Asked before building, he answered "Yes, all your picks" (2026-11-22). They are 
    risks; ADR-83):** TikTok is still never one of a run's places and never goes through TikTok's API, but while
    **Your Mac posts TikTok** is on (`settings.tiktokMac.on`, §47) a live run's normal clip also gets a TikTok post
    for his Mac (`source: "auto"`, My settings' Everyone with Comment, Duet and Stitch on), written in the same
-   transaction as its other posts. Practice, Private test runs and campaign clips never get one. Clips already
+   transaction as its other posts. Practice, Private test runs and campaign clips never get one (round 3,
+   2026-11-23: no path makes a campaign Mac post, §47.2). Clips already
    waiting go too when he sends them ("Send them too": oldest first, one every 30 minutes, after the trial).
+   **Amended again 2026-11-22 (ADR-86):** there is no Post it yourself any more. While Your Mac posts TikTok is off, a
+   run still leaves TikTok out, and Where they go (§46.2 item 3) says how to turn the Mac on.
 3. **Campaign clips wait for his Upload** while Content Rewards can't take them from Clip Factory by itself (it only
    takes a clip in its first 30 minutes, §38.6; his account can't connect apps yet). Once it can (§46.5 rule 4) they go
    too, the campaign way (§38.14).
@@ -15480,10 +15537,12 @@ toast "Saved.":
    day on each platform." and when `d > 100` also "YouTube takes at most 100 uploads a day, so some would wait until
    the next day." (videos.insert has its own bucket of 100 a day, checked 2026-11-22).
 3. **Where they go**: "Goes to YouTube, Instagram and Facebook." (the run's places, §46.6, in STATS_ORDER), then one
-   line per place left out: "TikTok: you post it yourself (TikTok's rule). Each clip gets Post it yourself."; "X: not
-   set up yet." (with "Set up X" → `/settings/posting/setup/x`). With nothing set up: "Nothing is set up to post to.
-   Set up a place first." and runs post nothing. While Your Mac posts TikTok is on (§47) the TikTok line is
-   "TikTok: your Mac posts it." instead (`macPlaces`, and `leftOut` leaves TikTok out).
+   line per place left out: "TikTok: turn on Your Mac posts TikTok to post there." (`leftOut` reason
+   `tiktok_yourself`, with **Turn on** → `/settings/posting/tiktok-mac`, ADR-86); "X: not set up yet." (with "Set up
+   X" → `/settings/posting/setup/x`). With nothing set up: "Nothing is set up to post to. Set up a place first." and
+   runs post nothing. While Your Mac posts TikTok is on (§47) the TikTok line is "TikTok: your Mac posts it." instead
+   (`macPlaces`, and `leftOut` leaves TikTok out); on, but with no other place set up (TikTok back in `leftOut`, a run
+   sends nothing, §46.6), it is "TikTok: your Mac posts it once another place is set up." with no Turn on.
 4. **Next up** (`autopost.nextUp`, at most 10): cover, hook, and its time ("Sun 15:00"; with it off, no times and the
    title "Would go first"; a clip with no `runAt` shows no time), each with **Throw away** (the Review card's own
    decline with its Undo, §20.7, accessible name "Throw away, {hook}"). Empty: "Nothing in Review. New clips join the
@@ -15499,9 +15558,11 @@ toast "Saved.":
 6. **Didn't work** (`autopost.failed`): one row per failed auto-posted post: place mark and name, hook, the saved
    friendly error (§17.6), **Try again** (the Library's per-place Try again: `confirm` with `platforms: [p]`, accessible
    name "Try again, {place}"). Hidden when empty.
-7. **Post these on TikTok yourself** (`autopost.tiktokYourself`): auto-posted clips not on TikTok yet, each with **Post
-   it yourself** (§42's `PostYourselfButton`). Hidden when empty. While Your Mac posts TikTok is on, also **Send these
-   to my Mac** (§47.4); clips the Mac has (any state) or posted are not listed.
+7. *Removed 2026-11-22 (ADR-86).* **Post these on TikTok yourself** listed auto-posted clips not on TikTok yet, each
+   with Post it yourself (and Send these to my Mac while the Mac was on). The page no longer has the list
+   (`#auto-post-tiktok` and its settings-tree apple are gone): each clip's TikTok row in Library says what his Mac is
+   doing (§47.4), and Settings › Posting › Your Mac posts TikTok keeps **Send these to my Mac**.
+   `autopost.tiktokYourself` stays in the API (§46.9), unused by the web. Items 8 and 9 keep their numbers.
 8. **Recent** (`autopost.runs`, newest first, 10): "Sun 10:00 · “hook”: YouTube ✓ Instagram ✓ Facebook ✗", each
    posted place with **Open** (its live `url`); a run with nothing: "Sun 05:00 · Nothing in Review, so nothing posted.";
    practice: "Sun 05:00 · Practice: would post “hook” to YouTube, Instagram and Facebook."; private test: "Private test
@@ -15714,7 +15775,8 @@ interface AutoRun {
 ```
 * `failed`: the owner's posts with `autoRun` and `status: "failed"`, newest first; `at` is the post's `createdAt`
   (the run's time: a post stores no failure time). `tiktokYourself`: clips with `auto`
-  (not `test`) whose TikTok is not out for everyone (`tiktok_self` rules, §42.1). `runs[].clips[].posts`: read by the
+  (not `test`) whose TikTok is not out for everyone (`tiktok_self` rules, §42.1); still served and still in the types
+  and the mock, but the web no longer shows it (ADR-86, §46.2 item 7). `runs[].clips[].posts`: read by the
   clip's `postIds` (strongly consistent BatchGet).
 * POST: unknown keys 400; `kind` missing or other → 400 "Pick practice or private.". A second run-now within 60 s →
   409 "A test run just started. Wait a minute." `private` with no taken clip → 200 with the run's note "Nothing in
@@ -15789,7 +15851,8 @@ back on. `onAt` and the `AUTOPOSTOWNERS` registry work as in §46.3.
 ### 46.12 Words
 
 As written in §46.2 and §46.5 to §46.9. "Auto-posting" (one word, hyphenated) everywhere; "Throw away", "Upload", "Try
-again", "Post it yourself" keep their meaning. Ask (§19, §28) learns it from this section and the help guide
+again" keep their meaning; TikTok's line has **Turn on** (ADR-86: no Post it yourself). Ask (§19, §28) learns it
+from this section and the help guide
 "Turn on auto-posting" (`helpKb.json`): where the page is, what each control does, why TikTok and campaign clips wait,
 how to test with Practice and the Private test run.
 
@@ -15856,9 +15919,11 @@ run and the first hours of practice.
 * Upload's existing tests (`test_upload_to.py`, `test_campaign_posting.py`, `test_clips.py`, `test_release.py`) pass
   unchanged after the refactor.
 * Web: `web/test/autopost.test.ts` (the result line for every pair 1..5 × 1..24, the warnings, time words, the
-  mock's rules), `web/e2e/autopost.spec.ts` (switch, both controls save, result line and warning, Next up with Throw
-  away and Undo, Didn't work Try again, Recent, Practice run now, Private test run, the Review line and the Home hint;
-  at 390×844 and 1440×900).
+  left-out lines with TikTok's "turn on Your Mac posts TikTok" words, the mock's rules), `web/e2e/autopost.spec.ts`
+  (switch, both controls save, result line and warning, Where they go with TikTok's **Turn on**, Next up with Throw
+  away and Undo, Didn't work Try again, no `#auto-post-tiktok`, Recent, Practice run now, Private test run, the Review
+  line and the Home hint; at 390×844 and 1440×900; and, at 1440×900, Where they go saying "TikTok: your Mac posts it."
+  once the switch is on through **Turn on**).
 * Infra: `autopost.tftest.hcl` (§46.11); `scripts/test-check-plan-deletes.sh` unchanged.
 
 ### 46.16 Who builds what (parallel builders; each stays inside its files)
@@ -15901,18 +15966,35 @@ exactly as before. Nothing here calls TikTok's posting API.
   keys → 400 "tiktokMac has a setting Clip Factory does not know." A stored value that no longer validates reads the
   default.
 * **Helper item** `pk USER#{userId}`, `sk MACHELPER`, `type="machelper"`: `seenAt`, `state` (`ok` | `needs_you` |
-  `paused`), `reason?` (a plain sentence, at most 200 characters), `version?`, `device`. Written by the ping (a whole
-  put) and by a stop with `needsYou`; the owner's Try again turns `needs_you` back into `ok`.
+  `paused`), `reason?` (a plain sentence, at most 200 characters), `version?`, `device`, `login?` (§47.8). Written by
+  the ping and by a stop with `needsYou`; the owner's Try again and It's on TikTok on the stopped post turn
+  `needs_you` back into `ok` (`tiktok_self.clear_needs_you`: `SET state = ok REMOVE reason, needsYouClipId`).
+  Round 3 (2026-11-23) adds, every one additive:
+
+  | Field | Type | Who writes it | Public in `MacHelper` |
+  |---|---|---|---|
+  | `needsYouClipId` | clip id | `tiktok_mac.stopped(..., needs_you=True)` (the same write that sets `needs_you`) | `needsYouClipId?` |
+  | `backlogAt` | ISO | ping (`backlogAt`, the helper's `plan.backlogAt`: when the first backlog clip goes); a ping without it removes it | `backlogAt?` |
+  | `holdBefore` | ISO | ping (`holdBefore`, the helper's `holdAutoBefore`); a ping without it removes it | `holdBefore?` |
+  | `backfill` | `true` | ping (`backfill: true`); a ping without it (or `false`) removes it | `backfill?: true` |
+  | `resumeRequestAt` | ISO | the owner's `POST /v1/tiktok/mac/request {action: "resume"}`; removed by a ping whose `resumeDone` equals it | `resumeRequest?: {at}` |
+  | `letGoRequestAt` | ISO | the owner's `POST /v1/tiktok/mac/request {action: "let_go"}`; removed by a ping whose `letGoDone` equals it | `letGoRequest?: {at}` |
+
+  `needsYouClipId` is also removed by any ping whose `state` is not `needs_you`.
 * **Mac post**: the clip's one TikTok post (one per clip, as everywhere) with the new **`status: "mac"`** (added to
   `Post.status`). It is never `queued` or `pending_integration`, so no path that sends posts through TikTok's API ever
   touches it (§47.6). Internal attributes: `macState`, `macStep`, `macSince`, `macSource`, `macClaimedAt`,
-  `macPressedAt`, `macStoppedAt`, `macReason` (public as `mac`), and `macDevice`, `macBeatAt` (the heartbeat),
-  `macAttempt` (claims so far), `beforeMac` (a Clip Factory TikTok post's fields before it was handed over, for Take it
+  `macPressedAt`, `macStoppedAt`, `macReason`, `macBeatAt` (the job's own beat: the claim, every step and every
+  re-sent step; public as `mac`, `beatAt` since round 3), and `macDevice`, `macAttempt` (claims so far),
+  `macPressedBefore` (round 3: Try again re-waited a post whose Post was pressed, and its `macPressedAt` moved here),
+  `macAgainAt` (round 3: when the owner's Try again re-waited a stopped or stuck post; both reach the helper only in
+  `MacJob`, for its never-twice guard, §47.6), `beforeMac` (a Clip Factory TikTok post's fields before it was handed over, for Take it
   back), `madeForMac: true` (the post was created for the Mac, so Take it back deletes it). Its `postOptions` hold the
   TikTok sheet's shape (§17.8: `privacyLevel`, `disableComment`, `disableDuet`, `disableStitch`, …): what the Mac
   sets. **Every Mac post (upload, auto and sent) stores My settings' TikTok choices** (`tiktok_mac.preset_options`:
-  `PUBLIC_TO_EVERYONE` with Comment, Duet and Stitch on), whatever Upload's TikTok sheet sent: before TikTok approves
-  the app the sheet offers only Only me, and his Mac posts for everyone.
+  `PUBLIC_TO_EVERYONE` with Comment, Duet and Stitch on, never Branded content), whatever Upload's TikTok sheet sent:
+  before TikTok approves the app the sheet offers only Only me, and his Mac posts for everyone. A Mac post never
+  carries `campaignId`: **no campaign clip ever gets one** (round 3, D1, §47.2).
 * **Clip** `tiktokForMac` (internal): the id of a TikTok post Send these to my Mac created, next to §42's `tiktokByYou`.
 * **After the Mac posts it**: the post becomes `posted`, `by: "you"`, with the public **`via: "mac"`**, through
   `tiktok_self.mark_posted`'s conditional write, and loses every `mac*` field and `beforeMac`/`madeForMac`. Its
@@ -15924,17 +16006,24 @@ exactly as before. Nothing here calls TikTok's posting API.
 type MacStep = "video" | "opening" | "uploading" | "settings" | "pressing" | "finding";
 interface PostMac { state: "waiting" | "working" | "stopped"; step?: MacStep; since: string;
                     source: "upload" | "auto" | "sent"; claimedAt?: string; pressedAt?: string; stoppedAt?: string;
-                    reason?: string }
+                    reason?: string; beatAt?: string /* round 3: macBeatAt, for the stuck rule */ }
 // Post.status adds "mac"; Post.mac?: PostMac (only while status is "mac"); Post.via?: "mac".
 // PerfStatus adds "mac"; PlatformPerformance.mac?: PostMac and .via?: "mac" (§16.2). Settings.tiktokMac (above).
 // AutoPostStatus.macPlaces: Platform[] (§46.9).
-interface MacHelper { seenAt: string; state: "ok" | "needs_you" | "paused"; reason?: string; version?: string }
+interface MacHelper { seenAt: string; state: "ok" | "needs_you" | "paused"; reason?: string; version?: string;
+                      login?: "saved" | "none"; loginRequest?: { action: "change" | "forget"; at: string };
+                      // round 3:
+                      needsYouClipId?: string; backlogAt?: string; holdBefore?: string; backfill?: true;
+                      resumeRequest?: { at: string }; letGoRequest?: { at: string } }
 interface MacJob { clipId: string; postId: string; hook: string; caption: string /* captions.tiktok */;
                    fileName: string /* videoFileName(hook) */; privacy: string; comment: boolean; duet: boolean;
                    stitch: boolean; source: "upload" | "auto" | "sent"; since: string;
                    state: "waiting" | "working" | "stopped"; step?: MacStep; claimedAt?: string; pressedAt?: string;
-                   attempt: number /* macAttempt: the claims so far */ }
-// AutoPostStatus.tiktokYourself[].mac?: true (his Mac's post, listed while the switch is off, §47.2).
+                   attempt: number /* macAttempt: the claims so far */;
+                   beatAt?: string; pressedBefore?: string; againAt?: string /* round 3 */ }
+type MacRequestAction = "resume" | "let_go";
+// AutoPostStatus.tiktokYourself[].mac?: true (his Mac's post, listed while the switch is off, §47.2; still served,
+// unused by the web since ADR-86).
 ```
 
 ### 47.2 Where Mac posts come from
@@ -15945,41 +16034,54 @@ Upload and auto-posting write the Mac post in the same transaction as the clip's
 1. **Upload** (`routes/clips.confirm` → `uploads.upload_review_clip`): the TikTok post is written as a Mac post
    (`source: "upload"`, `madeForMac`) instead of `queued` when all hold: `"tiktok"` is among the chosen places;
    `settings.tiktokMac.on`; TikTok has not approved the app (`tiktok_mac.tiktok_audited`, the server twin of the web's
-   `tiktokAudited`: `app_review` and `posting_audit` not both `ok`); the clip is not a campaign clip (they keep
-   today's path). The `tiktok` body stays required ("Pick who can see it on TikTok.") and is checked as before, but
+   `tiktokAudited`: `app_review` and `posting_audit` not both `ok`); the clip is not a campaign clip. **A campaign
+   clip never gets a Mac post** (round 3, D1, ADR-86; `uploads._mac_source` returns None for it): the helper can't set
+   TikTok's Branded content disclosure yet, and the Mac's done never reaches Content Rewards, so the post could not
+   earn and would break TikTok's rules. Before TikTok approved the app Upload with TikTok refuses a campaign clip (400
+   "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet. Turn TikTok off, then tap
+   Upload.", §38.14 `_place_refusal`); once approved its TikTok goes through TikTok's API as before (`queued`, the
+   sheet's Branded content). All other campaign checks stay. The `tiktok` body stays required ("Pick who can see it on TikTok.") and is checked as before, but
    the post's `postOptions` are My settings' choices (§47.1); `uploadTo` names TikTok (he chose it). Upload's API TikTok rule (`queued`, the refusals) is
    otherwise unchanged, and exactly as before with the switch off or once TikTok approved the app.
-2. **Auto-posting runs** (`autopost/run.py`, live mode only): with `tiktokMac.on`, a normal (non-campaign) clip also
-   gets a TikTok Mac post (`source: "auto"`) through `upload_review_clip(..., tiktok_mac=True)`; its options are My
-   settings' (§36: Everyone, Comment, Duet and Stitch on). TikTok is **not** added to the run's places (`uploadTo`
-   never names it). Practice and Private test runs never make one ("Nothing gets sent"). `GET /v1/autopost`:
-   `leftOut` drops TikTok while on, `macPlaces: ["tiktok"]` (else `[]`; also `[]`, with TikTok back in `leftOut`, when
-   no other place is set up: such a run sends nothing, §46.6), and `tiktokYourself` drops clips whose TikTok
-   post is a Mac post (any state) or was posted `via: "mac"`, except while **Your Mac posts TikTok is off**: then a
-   clip whose Mac post waits or stopped (not working, Post never pressed) is listed again with `mac: true`, and the
-   page offers **Post it yourself instead** on it. **Off switch** ("While it is off, nothing posts"): while
+2. **Auto-posting runs** (`autopost/run.py`, live mode only): with `tiktokMac.on`, a clip (never a campaign clip,
+   round 3) also gets a TikTok Mac post (`source: "auto"`) through `upload_review_clip(..., tiktok_mac=True)`; its options are My
+   settings' (§36: Everyone, Comment, Duet and Stitch on). TikTok is **not** added to the run's places (`uploadTo` never
+   names it). Practice and Private test runs never make one ("Nothing gets sent"). `GET /v1/autopost`: `leftOut` drops
+   TikTok while on, `macPlaces: ["tiktok"]` (else `[]`; also `[]`, with TikTok back in `leftOut`, when no other place is
+   set up: such a run sends nothing, §46.6), and `tiktokYourself` drops clips whose TikTok post is a Mac post (any
+   state) or was posted `via: "mac"`, except while **Your Mac posts TikTok is off**: then a clip whose Mac post waits or
+   stopped (not working, Post never pressed) is listed again with `mac: true` (the web offered Post it yourself instead
+   on it until ADR-86; it no longer shows the list). **Off switch** ("While it is off, nothing posts"): while
    `autoPost.on` is false, no Mac post with `source: "auto"` goes on before Post is pressed. It is left out of the queue
    (waiting, or working with no `macPressedAt`) and every claim of it is refused ("Auto-posting is off, so this one
    waits."). A step from a Mac that claimed it before auto-posting went off is refused the same way and puts it back to
-   `waiting` (claim, device, step and heartbeat removed), so a sleeping or crashed Mac can never carry it on to Post. One
-   whose Post was already pressed stays in the queue, so its Mac can still find the link. The app shows "Waiting for
-   your Mac · auto-posting is off". In Recent (§46.2 item 8) a run's Mac post reads "TikTok (your Mac)" while it waits
-   or works and "TikTok (your Mac stopped)" when stopped (`runs[].clips[].posts[].mac`: its `macState`).
-3. **Send these to my Mac** (`POST /v1/tiktok/mac/send {clipIds: string[] 1–25}` → `{results: [{clipId, sent,
-   reason?}]}`, in order, each id once; 409 `MAC_OFF` while the switch is off). A clip goes when Post it yourself would
-   show (§42.1): uploaded, its TikTok not out for everyone, not `by: "you"`, not `queued`, not a Mac post already; never
-   a campaign clip or a Private test. A clip with no TikTok post gets a new Mac post (`madeForMac`, appended to
+   `waiting` (claim, device, step and heartbeat removed), so a sleeping or crashed Mac can never carry it on to Post.
+   One whose Post was already pressed stays in the queue, so its Mac can still find the link. The app shows "Waiting for
+   your Mac · auto-posting is off" with Turn on (§47.4); a stopped one's Try again (`now: true`) makes it `upload`, so
+   it goes even then. In Recent (§46.2 item 8) a run's Mac post reads "TikTok (your Mac)" while it waits or works and
+   "TikTok (your Mac stopped)" when stopped (`runs[].clips[].posts[].mac`: its `macState`).
+3. **Send these to my Mac** and a row's **Post with my Mac** (`POST /v1/tiktok/mac/send {clipIds: string[] 1–25,
+   now?: boolean}` → `{results: [{clipId, sent, reason?}]}`, in order, each id once; 409 `MAC_OFF` while the switch is
+   off; `now` must be a boolean, else 400). A clip goes when it is not on TikTok yet (the web's `canSendToMac`):
+   uploaded, its TikTok not out for everyone, not `by: "you"`, not `queued`, not a Mac post already; never a Private
+   test and **never a campaign clip** (`routes/clips.campaign_clip(...)` is not None → `{sent: false, reason:
+   "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet."}`, `tiktok_mac.SEND_CAMPAIGN
+   = CAMPAIGN_SKIPS`, checked right after "still starting", with and without `now`; nothing written). **`now`** (additive, ADR-86): Settings' bulk Send these to my Mac sends no `now`, so its
+   posts are `source: "sent"`, the backlog (one after each auto-posting run, §47.8); a row's Post with my Mac sends
+   `{clipIds: [clipId], now: true}`, so its post is `source: "upload"` and the Mac posts it at once and first, as after
+   an Upload tap. The refusals and race guards are the same either way. A clip with no TikTok post gets a new Mac post (`madeForMac`, appended to
    `postIds`, its id in the clip's `tiktokForMac`), written only while the clip has neither `tiktokForMac` nor
-   `tiktokByYou`: two sends, or a send and I posted it, never make two posts (I posted it's new-post write now also
+   `tiktokByYou`: two sends, or a send and It's on TikTok, never make two posts (It's on TikTok's new-post write also
    needs `tiktokForMac` absent). A Clip Factory TikTok post that waits for setup, failed or went up privately is handed
    over in place: its fields (status, link, ids, stats and `gsi2` fields, what was learned, `postOptions`,
-   `publishHandle`) go into `beforeMac`, so it also leaves the stats poller. `source: "sent"`, My settings' options. The
-   clip's status follows the clip flow's settle rule (a failed clip whose only failed post was TikTok's becomes
+   `publishHandle`) go into `beforeMac`, so it also leaves the stats poller. `source: "sent"` (`"upload"` with `now`),
+   My settings' options. The clip's status follows the clip flow's settle rule (a failed clip whose only failed post was TikTok's becomes
    `confirmed`). Reasons: "Upload this clip first.", "This clip is still starting to upload. Try again in a minute.",
-   "Campaign clips go on TikTok by hand. Tap Post it yourself.", "This was a Private test, so it stays off TikTok.",
+   "This was a Private test, so it stays off TikTok.",
    "This clip is still uploading to TikTok. Wait until it is done, then try again.", "You already posted this one on
    TikTok.", "This clip is already on TikTok for everyone.", "Your Mac already has this clip.", "We could not find
-   that clip.", "This clip just changed. Try again."
+   that clip.", "This clip just changed. Try again.", "Campaign clips skip TikTok for now: your Mac can't mark them as
+   Branded content yet." (the server's words).
 4. **Take it back** (`DELETE /v1/clips/{clipId}/tiktok/mac` → `{clip, posts}`): only while `mac.state` is `waiting` or
    `stopped` and the Mac never pressed Post. A `madeForMac` post is deleted and leaves `postIds` (and
    `tiktokForMac`); a handed-over post gets `beforeMac` back. The post and the clip (its settle rule) are **one
@@ -15987,22 +16089,24 @@ Upload and auto-posting write the Mac post in the same transaction as the clip's
    `macPressedAt` absent; a clip that changed meanwhile is read again, at most 3 times. Working → 409 "Your Mac is
    posting it right now. Wait a minute."; `macPressedAt` set → 409 "Your Mac may have posted it already. Check your
    TikTok first." (the restored post could otherwise go out through TikTok's API and make two copies; his ways out
-   are I posted it, allowed while stopped, and Try again with `notOnTikTok`); not a Mac post → 409 "Your Mac isn't
-   posting this clip." The app calls it from **Post it yourself instead**, then opens the §42 sheet.
+   are It's on TikTok, allowed while stopped, and Try again with `notOnTikTok` after the find window); not a Mac post → 409 "Your Mac isn't
+   posting this clip." The route stays; the web called it from Post it yourself instead until ADR-86 and no longer
+   calls it.
 
 ### 47.3 The helper's routes (JWT: the helper signs in as the owner)
 
 | Method & path | Body | 2xx |
 |---|---|---|
 | GET `/v1/tiktok/mac` | – | `{ on, helper: MacHelper \| null, queue: MacJob[] }` |
-| POST `/v1/tiktok/mac/ping` | `{ state: "ok" \| "needs_you" \| "paused", reason?, version?, device, login?: "saved" \| "none", loginDone? }` | `{ on }` |
-| POST `/v1/tiktok/mac/send` | `{ clipIds }` | `{ results }` |
+| POST `/v1/tiktok/mac/ping` | `{ state: "ok" \| "needs_you" \| "paused", reason?, version?, device, login?: "saved" \| "none", loginDone?, backlogAt?, holdBefore?, backfill?, resumeDone?, letGoDone? }` | `{ on }` |
+| POST `/v1/tiktok/mac/send` | `{ clipIds, now?: boolean }` | `{ results }` |
 | POST `/v1/tiktok/mac/login` | `{ action: "change" \| "forget" }` | `{ helper }` (§47.8) |
+| POST `/v1/tiktok/mac/request` | `{ action: "resume" \| "let_go" }` | `{ helper }` (the owner's Start my Mac again and Let them go, round 3) |
 | POST `/v1/clips/{clipId}/tiktok/mac/claim` | `{ device }` | `{ job: MacJob }` |
-| POST `/v1/clips/{clipId}/tiktok/mac/step` | `{ device, step }` | `{ job: MacJob }` |
+| POST `/v1/clips/{clipId}/tiktok/mac/step` | `{ device, step, attempt? }` | `{ job: MacJob }` (a re-sent step is the beat) |
 | POST `/v1/clips/{clipId}/tiktok/mac/done` | `{ device, link? }` | `{ clip, posts, note? }` |
 | POST `/v1/clips/{clipId}/tiktok/mac/stopped` | `{ device, reason, needsYou?: boolean }` | `{ job: MacJob }` |
-| POST `/v1/clips/{clipId}/tiktok/mac/retry` | `{ notOnTikTok?: true }` | `{ clip, posts }` (the owner's Try again) |
+| POST `/v1/clips/{clipId}/tiktok/mac/retry` | `{ notOnTikTok?: true, now?: boolean }` | `{ clip, posts }` (the owner's Try again) |
 | DELETE `/v1/clips/{clipId}/tiktok/mac` | – | `{ clip, posts }` (Take it back) |
 
 Unknown body keys → 400 everywhere; `device` is required text (at most 100 characters); a clip that is not the
@@ -16014,109 +16118,354 @@ Your Mac posts TikTok."
   then the rest; oldest `since` first, then the oldest clip (`decidedAt`); at most 50. `caption` is the clip's stored
   TikTok caption, repaired as §5 says and in NFC; `fileName` is the web's `videoFileName(hook)`; `privacy` and the
   three switches come from the post's options.
-* **Ping:** puts the helper item (`seenAt` now) and answers `on`. State other than the three → 400.
-* **Claim:** one conditional write. It succeeds when `status = mac` and either `macState = waiting`, or `working` with
-  no `macPressedAt` and `macBeatAt` older than 15 minutes (a crashed helper). It sets `working`, `macClaimedAt`,
+* **Ping:** writes the helper item (`seenAt` now) and answers `on`. State other than the three → 400. Round 3 adds
+  `backlogAt?` and `holdBefore?` (text of at most 40 characters that `clock.parse` reads, else 400 "backlogAt must be
+  a time." / "holdBefore must be a time."), `backfill?` (`validate.boolean`, 400 "backfill must be true or false."),
+  `resumeDone?` and `letGoDone?` (text, at most 40 characters, like `loginDone`). They are stored as §47.1 says: a key
+  left out of the ping removes the stored value, a `state` other than `needs_you` removes `needsYouClipId`, and each
+  `…Done` removes its own request only while it still equals the stored `at` (a conditional `REMOVE`: a newer request
+  stays, and `resumeDone` never removes a let-go request). Unknown keys still 400. The helper sends them only on the
+  first ping of a tick and falls back to the bare check-in on a 400 (an older server).
+* **Request** (`POST /v1/tiktok/mac/request {action}` → `{helper}`, round 3, D5): the owner's **Start my Mac again**
+  and **Let them go**; the helper reads `resumeRequest` / `letGoRequest` on its next tick (right after its `GET`),
+  unpauses (and ends the trial pause) or clears its hold, and says so with `resumeDone` / `letGoDone`. One
+  conditional write: unknown key → 400 (`validate.only_keys`); `action` not one of the two → 400 "Pick resume or
+  let_go."; no helper item → 409 "Your Mac hasn't checked in yet. Set it up on your Mac."; `resume` while `state` is
+  not `paused` → 409 "Your Mac isn't paused."; `let_go` while there is no `holdBefore` → 409 "Your Mac isn't holding
+  any clips."; ok → `SET resumeRequestAt = now` or `SET letGoRequestAt = now`, logged `tiktok_mac.request` with the
+  action. It never touches `needs_you` (only the owner's answer on the stopped clip clears that).
+* **Claim:** one conditional write. It succeeds when `status = mac` and either `macState = waiting` with **no
+  `macPressedAt`** (round 3), or `working` with no `macPressedAt` and `macBeatAt` older than 15 minutes
+  (`STALE_CLAIM`: a crashed helper). It sets `working`, `macClaimedAt`,
   `macDevice`, `macBeatAt`, `macStep: "video"` and `macAttempt + 1` (the job's `attempt`). Anything else → 409 "Another try already has this
   clip."; not a Mac post → 409 "Your Mac isn't posting this clip."; switch off → 409 `MAC_OFF`. A post with
-  `macPressedAt` is **never** claimed again by itself: never twice.
+  `macPressedAt` is **never** claimed again by itself, whatever its state: never twice. A claim keeps
+  `macPressedBefore` and `macAgainAt`; the job carries `beatAt`, `pressedBefore` and `againAt` when set.
 * **The attempt:** `step`, `done` and `stopped` take an optional `attempt` (a whole number from 1). When sent it must
   equal `macAttempt`, else 409 "Another try already has this clip.", so an older attempt of the same device (which
   took back its own stale claim) is never taken for the new one; the writes are conditional on it too.
 * **Step:** only from `macDevice` while `working` (409 "Another try already has this clip." otherwise; an unknown step
   → 400). It sets `macStep` and `macBeatAt`; `pressing` also sets `macPressedAt` (the first press is kept), the point
-  of no return. While the switch is off a step before Post → 409 `MAC_OFF` (the owner's "Your Mac stops at once");
+  of no return, and only that first press logs `tiktok_mac.pressing`. **The same step sent again is the job's beat**
+  (round 3, D2): the helper re-sends the last step the server acknowledged every minute (`BEAT_EVERY_MS`) while it
+  works on the job, and `finding` for each of its pressed jobs still in the find window (also while it looks for one
+  of them, doFind, which beats only once its frame is up: review round 3); every refusal still holds
+  (another device, the switch off before Post, auto-posting off before Post puts it back to waiting). While the switch is off a step before Post → 409 `MAC_OFF` (the owner's "Your Mac stops at once");
   after Post the helper may still look for the link. Each step reaches the web live: post item changes stream as post
   events (§14.2, `POST#` is in the broadcast filter) with the public `mac`.
 * **Done:** from `macDevice`, while `working` or `stopped` (409 otherwise). It runs `tiktok_self.mark_posted` on the
   row (`mac=MacDone(device, attempt)`), so the one-post-per-clip rule and the `tiktokByYou` race guard stay as they are: the same write
   sets `via: "mac"` and removes the Mac fields, conditional on `macDevice` and the state. `link`: read by
-  `tiktok_link.resolve`, as in I posted it (§42.2, the same `note` for another account). No link: the §42 finder, with
-  `since = macClaimedAt − 1 minute`. A repeat call is answered as the first, adding the link when it brings one. The
+  `tiktok_link.resolve`, as in It's on TikTok (§42.2, the same `note` for another account). No link: the §42 finder, with
+  `since = macClaimedAt − 1 minute`; nothing found still saves it without its link with `NOT_FOUND_YET` (the Mac
+  knows it posted; only the owner's Find it for me never saves without a link). A repeat call is answered as the first, adding the link when it brings one. The
   clip becomes `posted` by the settle rule (a `publishing` clip is left to its flow).
 * **Stopped:** from `macDevice` (while `working` or `stopped`). Sets `stopped`, `macStoppedAt` and `macReason` (spaces
-  collapsed, at most 200 characters). With `needsYou` the helper item also becomes `needs_you` with that reason. Once
-  `macPressedAt` is set, the stored reason is "Your Mac pressed Post but couldn't confirm it. Check your TikTok: if
-  it's there, tap I posted it." whatever was sent.
-* **Retry** (the owner's Try again): `stopped` → `waiting`, keeping `since` (its place in line) and clearing `macStep`,
-  `macClaimedAt`, `macStoppedAt`, `macReason`. With `macPressedAt` it needs `notOnTikTok: true`, which clears it;
-  without → 409 "Your Mac may have posted it already. Check your TikTok first." Working → 409 "Your Mac is posting it
-  right now. Wait a minute." A post already waiting is answered as it is. It also turns the helper item back to `ok`
-  when it was `needs_you`.
-* **I posted it** (§42) on a Mac post: allowed while `waiting` or `stopped` (it becomes his own post; its Mac fields go
-  into `beforeYou`, so his Undo puts the Mac post back as it was), refused while `working` with "Your Mac is posting it
-  right now. Wait a minute."
+  collapsed, at most 200 characters). With `needsYou` the helper item also becomes `needs_you` with that reason and
+  `needsYouClipId` = this clip (Settings and every row link to it, §47.4). Once `macPressedAt` is set, the stored reason
+  is "Your Mac pressed Post but couldn't confirm it. Look on your TikTok: if it's there, tap It's on TikTok."
+  (`tiktok_mac.PRESSED`, round 3) whatever was sent. Older rows keep their old sentence; the web never shows it after
+  a press, and picks its own words by `pressedAt` (§47.4), never by matching the text.
+* **The shared constants** (round 3, D2; one definition each, one line each in `tiktok_self.py`, read by the web's and
+  the helper's pin tests with `^NAME = timedelta\(minutes=(\d+)\)$`): `MAC_BEAT_STALE = timedelta(minutes=5)` (web
+  `MAC_BEAT_STALE_MS`), `MAC_CLAIM_MAX = timedelta(minutes=50)` (web `MAC_CLAIM_MAX_MS`: 12 minutes of upload wait, the
+  post wait and the 30-minute find window), `MAC_FIND_WINDOW = timedelta(minutes=30)` (web `MAC_FIND_WINDOW_MS`, the
+  helper's `FIND_FOR_MS`). The old 15-minute `MAC_STUCK` (and the web's `MAC_STUCK_MS`) are gone; `STALE_CLAIM` (15
+  minutes, another device may take a crashed unpressed claim) and the web's 30-minute `MAC_STALE_MS` stay.
+* **Stuck** (`tiktok_self.mac_stuck(row, now, *, beats)`, the web's `macStuck`, the same rule): `status = mac`,
+  `macState = working`, and either `now − (macBeatAt ?? macClaimedAt) ≥ MAC_BEAT_STALE` (the Mac stopped beating the
+  job: it crashed, slept or lost its ledger) or `now − macClaimedAt ≥ MAC_CLAIM_MAX`, whichever comes first. While the
+  Mac beats the job it is never stuck before the cap, so no Try again or "Not sure it posted" is offered while it is
+  still posting or looking. **The beat counts only for a helper that beats** (`beats`, `tiktok_self.helper_beats(item)`,
+  the web's `macHelperBeats(helper)`, review round 3): yes unless the helper item says a `version` older than
+  `MAC_BEATS_FROM = "1.1.0"` (web `MAC_BEATS_FROM`; the helper's `VERSION`, pinned by web and helper tests). A helper
+  before 1.1.0 sends no beat during its 12-minute upload wait, its link checks after Post or its finding, so for its
+  jobs only the 50-minute claim counts (`tiktok_self.working_stuck` reads the helper item for Retry and It's on TikTok).
+  **Window over** (`window_over`): no `macPressedAt`, or `now − macPressedAt ≥ MAC_FIND_WINDOW`. **Beat fresh**
+  (`beat_fresh`): `now − (macBeatAt ?? macClaimedAt) < MAC_BEAT_STALE`.
+* **Retry** (the owner's Try again, `tiktok_mac.retry(store, clip, *, not_on_tiktok, at, now)`, `at` required, the
+  route passes `app.clock()`), in order: (1) `working` and not stuck → 409 "Your Mac is posting it right now. Wait a
+  minute." (2) `waiting` → answered as it is (`now` makes it `upload` in place). (3) `stopped`, or `working` and stuck,
+  with `macPressedAt`: without `notOnTikTok` → 409 "Your Mac may have posted it already. Check your TikTok first.";
+  inside the find window → 409 "Your Mac pressed Post less than 30 minutes ago. Look on your TikTok first, then try
+  again later." (`tiktok_mac.MAC_STILL_LOOKING`). (4) The re-wait: `macState = waiting`, `macAgainAt = at`, keeping
+  `since` (its place in line); with `macPressedAt` it moves to `macPressedBefore` (and `macPressedAt` is removed);
+  `macStep`, `macClaimedAt`, `macStoppedAt`, `macReason` go, and a stuck one's `macDevice` and `macBeatAt` too, so the
+  Mac claims it afresh. One conditional write: a stopped one needs `macState = stopped` (and the same `macPressedAt`
+  when it had one); a stuck one `macState = working`, the same `macClaimedAt`, and the same `macBeatAt` and
+  `macPressedAt` when present (a new claim or a beat meanwhile → 409 "This clip just changed. Try again."). Then the
+  helper item goes back to `ok` when it was `needs_you` (`clear_needs_you`, which also removes `needsYouClipId`). **`now: true`** (additive, ADR-86; the web's row Try again always sends it) also sets
+  `macSource: "upload"` in the same conditional write, so the Mac posts it at once and first. That holds for an
+  auto-posting run's post (`auto`) too, also while auto-posting is off: he tapped it himself, so §47.2's off switch
+  (which holds back what auto-posting picked) no longer applies to it. `now` must be a boolean (400 otherwise);
+  without it a retry is exactly as before.
+* **It's on TikTok** (§42.2, `tiktok_self.mark_posted`) on a Mac post: allowed while `waiting` or `stopped`, or
+  `working` once stuck (the write then needs that same `macClaimedAt`, and the same `macBeatAt` and `macPressedAt`
+  when present); it becomes his own post; its Mac fields go into `beforeYou`, so his Undo puts the Mac post back as it
+  was. Refused while `working` and not stuck with "Your Mac is posting it right now. Wait a minute.", and **without a
+  link** (`noLink`, D3) on any `working` job the Mac has not pressed Post for: while the Mac still beats it
+  (`beat_fresh`, even past `MAC_CLAIM_MAX`) with that same `MAC_WORKING`, else (review round 3) 409 "Your Mac stopped
+  before it pressed Post, so it isn't on TikTok. Tap Try again." (`tiktok_self.MAC_NOT_PRESSED`): saved as posted it
+  would never reach TikTok (the Mac's next step gets a 409, and Send these refuses it from then on). Find it for me answers the same `MAC_WORKING` before the finder asks
+  TikTok anything. Marking a stopped or stuck Mac post also turns the helper item back to `ok` when it was
+  `needs_you` (`tiktok_self.clear_needs_you`, as Retry does): the helper echoes `needs_you` for as long as the server
+  says it, so nothing else would let the Mac go on. The Mac's late done on it is refused (409).
 
 ### 47.4 What the owner sees (web)
 
+Rewritten 2026-11-22 for [ADR-86](DECISIONS.md#adr-86-no-manual-tiktok-sheet-the-mac-is-the-only-way-to-tiktok-until-tiktok-approves-the-app):
+there is no manual TikTok sheet, so every TikTok row says only what the Mac is doing, with at most one button.
+
 * Every place that reads `Post.status` handles `"mac"`: the types, `metrics.calmCopy`, Library's TikTok row, the clip
-  page's stack (`PlatformPerformance` carries the same `mac` and `via`), Review's "Uploaded just now" and the
-  auto-posting lists. The helpers are in `web/src/lib/tiktokMac.ts`.
-* **The TikTok row:** Waiting: "Waiting for your Mac", plus " · it's switched off" (Your Mac posts TikTok is off), else
-  " · auto-posting is off" (`source: "auto"` while it is off), else " · set up your Mac first" (the helper never checked in), else " · your Mac was last seen {Sun 14:03}"
-  (not seen for 10 minutes). Working: "Your Mac is posting it · {step}" with the step words "Getting the video",
-  "Opening TikTok", "Uploading", "Setting Everyone and the switches", "Posting" and "Finding the link". Stopped: "Your
-  Mac stopped: {reason}", with **Try again** (retry; once `pressedAt` is set it says "It's not on TikTok, try again" and
-  sends `notOnTikTok`) and **Post it yourself instead**, except once `pressedAt` is set: then **I posted it** (the §42
-  sheet's link box, Find it looking from a minute before the press) instead of Post it yourself instead. Posted
-  `via: "mac"`: "Posted by your Mac · Everyone", with
-  Open and the numbers as for "Posted by you".
-* **Post it yourself** stays as it is for clips without a Mac post. On a waiting or stopped Mac post it reads **Post it
-  yourself instead**: Take it back (DELETE), then the §42 sheet. Hidden while the Mac works on it and once it pressed
-  Post. While the switch is off the row says "Waiting for your Mac · it's switched off" and keeps Post it yourself
-  instead.
-* **Review:** with `tiktokMac.on` and TikTok not approved, the hint above Upload reads "TikTok: your Mac posts it for
-  everyone." instead of §42's `TIKTOK_PUBLIC_HINT`, and §42's sheet does not open by itself after Upload. Upload's own
-  rules and buttons are unchanged.
+  page's stack (`PlatformPerformance` carries the same `mac` and `via`) and Review's "Uploaded just now". The helpers
+  are in `web/src/lib/tiktokMac.ts`.
+* **The TikTok row** (`tiktokRow(facts, ctx)`), the same on Library's card, the clip page (its TikTok stack, and the one
+  button in `perf__actions`) and Review's "Uploaded just now" line ("TikTok: {words}"). `facts`: the clip's TikTok post
+  (`status`, `by`, `via`, `url`, `privacy`, `mac`, `postedAt`), the clip's id (its place in the Mac's queue), whether
+  it is not on TikTok yet (`canPostYourself`), whether it is a Private test, and (round 3) whether it is a campaign
+  clip (`campaign: !!clip.campaignId`). `ctx`: the switch (`settings.tiktokMac.on`), the Mac's check-in, its plan and
+  queue (`GET /v1/tiktok/mac` through `useTikTokMac`: on open, on focus, every 60 s, after post news and within a second
+  of the owner's Start my Mac again or Let them go; read whenever a row may need it, a Mac post or a clip the Mac
+  could take) and auto-posting's switch. No row reads `GET /v1/autopost` any more (round 3: the helper's ping says
+  `backlogAt`, so the web never guesses). Round 3 (D2, D4, D5) order, `tiktokRow(facts, ctx)` in
+  `web/src/lib/tiktokMac.ts`:
+
+  1. Posted `via: "mac"` → unchanged (row 1 below). 2. `by: "you"` → unchanged (row 2). 3. A Mac post → `macRow`
+  (below). 4. TikTok approved the app, or nothing to offer → no Mac row. 5. A Private test → unchanged. 6. **A campaign
+  clip** → "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet." (`MAC_ROW_CAMPAIGN`,
+  no button: nothing to do, and no dead end). 7. Otherwise the not-yet rows (`notReady`) or "Not on TikTok yet" /
+  "Only you can see it on TikTok" with **Post with my Mac**.
+
+  `macRow` (round 3):
+  * **stopped with `pressedAt`**: "Not sure it posted · look on your TikTok" with **It's on TikTok**, **Try again**
+    beside it only once the find window is over (`macWindowOver`), and **It's on TikTok, no link** offered. Inside the
+    window the words end with " · Try again from {pressedAt + 30 minutes}" (`againFromWords`, review round 3), so a
+    post that isn't there never waits without a time (a needs-you stop there holds the Mac until he answers it).
+  * **stopped**: the not-yet rows first (switch off, never seen, not seen for 30 minutes); else "Didn't work: {short
+    reason}" (+ " · look at your Mac first" while `needs_you`) with **Try again**.
+  * **working, not stuck** (`macStuck`, the API's rule): switch off → the Turn on row; else "Posting…" with the
+    spinner. Never "Not sure it posted" and never Try again here (D2).
+  * **working, stuck, with `pressedAt`**: **It's on TikTok** with **It's on TikTok, no link** (Try again beside it once
+    the window is over, " · Try again from {time}" until then); words "Your Mac hasn't checked in since {time}" when
+    the Mac has not checked in for 10 minutes or more (`MAC_OFFLINE_MS`, D5), else "Not sure it posted · look on your
+    TikTok".
+  * **working, stuck, no `pressedAt`** (review round 3): it can't be on TikTok, so **Try again** only (no question:
+    nothing was posted); words "Your Mac hasn't checked in since {time}" (10 minutes, as above), "Your Mac isn't set up
+    yet" (never checked in), else "Your Mac stopped before it pressed Post" (`MAC_ROW_STOPPED_EARLY`). The chip says
+    "Didn't work".
+  * **waiting**: the not-yet rows; else auto-posting off with `source` `sent`/`auto` → "Waiting for your Mac ·
+    auto-posting is off" with **Post with my Mac**; else **held** (`source: "auto"`, made before the helper's
+    `holdBefore`) → "Held on your Mac: made before {time}" with **Post with my Mac**; else the queue words below.
+
+  The not-yet rows (`notReady`): switch off → "Your Mac posts TikTok is off" with **Turn on**; never checked in →
+  "Your Mac isn't set up yet" with **Turn on**; not seen for 30 minutes → "Your Mac hasn't checked in since {time}"
+  with **Open Your Mac posts TikTok** (the switch is already on); (not a stopped row) `needs_you` → "Your Mac needs
+  you: {short reason} · look at your Mac" with **Open the stopped clip** (→ `/clips/{needsYouClipId}`; Open Your Mac
+  posts TikTok when there is none or it is this clip); paused → the paused words with **Start my Mac again** (a
+  helper before 1.1.0, `macHelperBeats` false, never reads it: **Open Your Mac posts TikTok** instead, and Settings
+  shows no Start my Mac again)
+  (`POST /v1/tiktok/mac/request {action: "resume"}`), or, once asked, "{why} · starting again within a minute".
+
+  **The Mac's queue** (`macPlace`, D4): the jobs before this one the way the helper picks (one per tick, Upload first,
+  then auto, then the backlog): every `working` job that is not stuck, plus every other `waiting` job that is not held
+  whose rank (`upload` 0, `auto` 1, `sent` 2) is lower, or equal and earlier in the server's order. After "Waiting for
+  your Mac · ": `upload`/`auto` → "next" or "in line (N before it)"; `sent` → "in line (N before it)", "in line" during
+  a backfill, else from the helper's `backlogAt`: "next" once it has passed, "goes at about {time}" before; unknown
+  (no queue, not in it, no `backlogAt`): "Waiting for your Mac" alone.
+
+  The same rows as a table (round 3):
+
+  | # | When | The row says | Its one button |
+  |---|---|---|---|
+  | 1 | Posted `via: "mac"` | "Posted by your Mac · Everyone" ("Posted by your Mac · Only you" when private), with **Open** and its numbers | none; with no link it adds " · add the link" and the inline **Add link** (§42.1) |
+  | 2 | `by: "you"`, no `via` (§42) | "Posted by you · Everyone", with **Open** | none; with no link " · add the link" and **Add link** |
+  | 3 | `mac.state` `working` | "Posting…", with a spinner (the steps arrive as live post events), while the Mac beats it; once stuck (`macStuck`: no beat for 5 minutes, or claimed 50 minutes ago; a helper before 1.1.0 only the claim): after Post "Not sure it posted · look on your TikTok" (" · Try again from {time}" inside the find window), before Post "Your Mac stopped before it pressed Post", or "Your Mac hasn't checked in since {time}" when the Mac has not checked in for 10 minutes | none; stuck after Post: **It's on TikTok**, and **Try again** once the find window is over; stuck before Post: **Try again** |
+  | 4 | The Mac can't post (waiting, stopped and not-yet rows) | "Your Mac posts TikTok is off" (the switch); "Your Mac isn't set up yet" (it never checked in); "Your Mac hasn't checked in since 14:03" (not seen for 30 minutes or more, `MAC_STALE_MS`) | **Turn on** → `/settings/posting/tiktok-mac`; not seen: **Open Your Mac posts TikTok** |
+  | 5 | It needs him, or is paused (waiting and not-yet rows) | "Your Mac needs you: {the reason's first sentence} · look at your Mac"; paused: "Paused after the 3 trial posts · your Mac goes on once their views are checked" (the trial pause) or "Paused on your Mac · your clips wait until it's started again" (any other); once Start my Mac again was tapped: "{why} · starting again within a minute" | needs you: **Open the stopped clip**; paused: **Start my Mac again** |
+  | 6 | `mac.state` `waiting` | "Waiting for your Mac · next", "… · in line (2 before it)", "… · in line" (a backfill) or "… · goes at about 20:30" (the helper's `backlogAt`), counted the way the helper picks; held: "Held on your Mac: made before {time}"; not known: "Waiting for your Mac" alone | none; held: **Post with my Mac** |
+  | 7 | Waiting, `source` `sent` or `auto`, auto-posting off | "Waiting for your Mac · auto-posting is off" | **Turn on** → `/settings/posting/auto` |
+  | 8 | `mac.state` `stopped` | "Didn't work: {the reason's first sentence, without its full stop}"; once `pressedAt` is set, "Not sure it posted · look on your TikTok" (chosen by `pressedAt`, never by the stored sentence; shown even while the Mac can't post), with " · Try again from {time}" inside the find window | **Try again**; pressed: **It's on TikTok** (the inline Add link with **Find it for me**, and **It's on TikTok, no link**) and, once the 30-minute find window is over, a quieter **Try again** (no fill, its words underlined) that asks "Post it again? Only if it's not on your TikTok." with **Yes, post it again** and **Not now** |
+  | 9 | Not on TikTok yet (`canSendToMac`: no TikTok post, or one waiting for setup, failed, failed for the public account, or private; never a campaign clip) | "Not on TikTok yet"; a campaign clip: "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet." | **Post with my Mac**; a campaign clip: none |
+  | 10 | A Private test's clip | "Private test · stays off TikTok" | none |
+
+  Rows 9 and 10 are only shown while TikTok has not approved the app (`tiktokAudited`); afterwards a clip without a Mac
+  post keeps the API rows of §17 and §33 as before. Clip Factory's own TikTok posts (uploading, public) keep their rows.
+  A row refused for the public account (§42.1) never shows the big Try again.
+* **When it goes** (round 3, D4): only from the Mac's own queue and plan (`macPlace`, `backlogAt`, `backfill`,
+  `holdBefore`, above); "it takes it in about a minute" and "goes after the next auto-posting run" are gone. The
+  helper's `backlogAt` follows its `plan.js`: 30 minutes after the last live run when that run's backlog slot is
+  unused, otherwise 30 minutes after the next run; at once when that time has passed; none during a backfill.
+* **The buttons**, each the app's own `Button` or `LinkButton` (their hover state; the arrow is the only cursor):
+  * **Try again**: `POST /v1/clips/{clipId}/tiktok/mac/retry {now: true}`. Beside **It's on TikTok** (not sure it
+    posted: pressed, or stuck) only once the find window is over (`row.again`, round 3), as the second choice: quieter (`.post__again`: no fill or lift of its own, only a
+    panel's tint on the window look, its words underlined), and it asks first, in the row, "Post it again? Only if it's
+    not on your TikTok." (`MAC_AGAIN_CONFIRM`) with **Yes, post it again** (the focus goes there) and **Not now**; Yes
+    sends `{notOnTikTok: true, now: true}`. 409 while the Mac works on it: a toast. The question starts at the same
+    left edge as the row's words (D7).
+  * **It's on TikTok**: opens the inline Add link in the row (`aria-expanded`), the box taking the focus.
+  * **Post with my Mac**: `POST /v1/tiktok/mac/send {clipIds: [clipId], now: true}` (`source: "upload"`, so the Mac
+    posts it at once), then the clip's posts and the clip are read again (or the live post event comes first).
+    `sent: false`: a toast with its reason. `MAC_OFF` can't happen: with the switch off the row shows Turn on.
+  * **Turn on**: a link; the switch there saves `PUT /v1/settings {tiktokMac: {on: true}}`.
+  * **Add link**: the inline field of §42.1: the link box with **Find it for me** right beside it on one line (no link:
+    `POST …/tiktok/posted {since}`, Clip Factory's finder), then **Paste** and **Save the link**. Round 3 (D3): a 409
+    from Find it for me shows the server's words in the row's problem line ("Not found yet. Try again in a minute, or
+    paste the link." or "Clip Factory can't look on your TikTok until TikTok is connected. Paste the link instead.")
+    and saves nothing; found → toast "Found it on your TikTok! Clip Factory will count its views."; Save the link with
+    an empty box → "Paste the link first, or tap Find it for me." (no request). From a not-sure row (`row.noLink`) a
+    quiet **It's on TikTok, no link** asks "Save it as on TikTok without its link? Its views show once you add the
+    link." with **Yes, it's on TikTok** / **Not now** → `{noLink: true}` → toast "Saved. Add its link later to see its
+    views."
+  * **Start my Mac again** (`Button variant="glass" icon="monitor"`, round 3): `POST /v1/tiktok/mac/request {action:
+    "resume"}` → toast "Your Mac starts again within a minute."; a 409 → a toast with the server's words.
+  * **Open the stopped clip** (round 3): a `LinkButton` to `/clips/{needsYouClipId}`, where Try again and It's on
+    TikTok are.
+* **Layout:** on a narrow card (Library's `.posts` container under 440 px: a phone, or three cards side by side at
+  1440) the row's button goes under its words, on the right of the row's full width, and the Open icon stays beside
+  the words; a wider card keeps it right of the words. It's on TikTok with Try again, Try again's question and the
+  Add link are always on a line of their own under the words, on the right. On the clip page they line up with the
+  other actions: centred while those are centred (a phone), from the left once they start there.
+* **The clip page:** `calmCopy` says the row's words in the TikTok stack with no link, because the button is on the
+  page (no "Go to Library and tap Post it yourself", and a stopped Mac post has no Go to Library link). The chip says
+  "Waiting for your Mac", "Posting…", "Didn't work" (also a job stuck before Post), or "Not sure it posted" (pressed,
+  or its row says so: stuck after Post); then the stack's line says "Look on your TikTok" (`MAC_CLIP_PAGE_LOOK`, round
+  3), with the row's " · Try again from {time}" inside the find window, so the page never says "Not sure it posted"
+  twice. Any other words of that row ("Your Mac hasn't checked in since {time}") stay as the row says them (review
+  round 3).
+* **Review:** with `tiktokMac.on` and TikTok not approved, the hint above Upload reads `MAC_HINT`, "TikTok: your Mac
+  posts it for everyone." (`MAC_WHERE_LINE` when My settings isn't Everyone, and none on a campaign clip, §47.9), and
+  while the switch is off `TIKTOK_PUBLIC_HINT`, "TikTok: turn on Your Mac posts TikTok so
+  it posts for everyone." (§42.1). "Uploaded just now" shows, for each kept clip, the words first (its hook, then
+  "TikTok: {the row's words}"), then See how it does and the row's one button, in that order on screen and for
+  reading; on a phone the buttons go under the words, on the right. A campaign clip's row shows its words alone (no
+  "TikTok: " prefix), and Review never ticks or offers TikTok for a campaign clip while TikTok has not approved the app
+  (round 3, D1: `campaignPlaces`, with the line "Campaign clips skip TikTok for now: your Mac can't mark them as
+  Branded content yet."). Nothing opens by itself after Upload. Upload's own rules and buttons are
+  unchanged: with the switch on it writes the Mac post as `source: "upload"`, which the helper posts at once. With the
+  switch on, the card starts TikTok on My settings with no tap (§47.9).
 * **Settings › Posting › Your Mac posts TikTok** (`/settings/posting/tiktok-mac`, `TikTokMacBranch.tsx`, in the tree
-  after Auto-posting): the switch **My Mac posts my TikTok clips** (off: "Off. TikTok works as before: Post it
-  yourself."; on: "On. Upload and auto-posting hand TikTok to your Mac."); the status line "Your Mac checked in {Sun
-  14:03}.", "Your Mac hasn't checked in yet. Set it up on your Mac.", "Your Mac needs you: {reason}" or "Paused on your
-  Mac."; while on, "{n} waiting for your Mac" and **Send these to my Mac** for the clips that show Post it yourself
-  (its confirm line: "They go one at a time, oldest first."); and one quiet line: "To stop it, turn the switch off.
-  Your Mac stops at once."
-* **Auto-posting page** (§46.2): "Where they go" says "TikTok: your Mac posts it." while on, and "Post these on TikTok
-  yourself" gets the same **Send these to my Mac**; while off, its `mac: true` clips get **Post it yourself instead**.
-* Mock mode (`web/src/api/mock/tiktokMac.ts`) follows these rules; the helper's routes are test knobs
-  (`window.__cfMock.mac`: ping, seen, claim, step, done, stopped, queue, post).
+  after Auto-posting): the switch **My Mac posts my TikTok clips** (off: "Off. Your Mac doesn't post your TikTok
+  clips."; on: "On. Upload and auto-posting hand TikTok to your Mac."); the status line "Your Mac checked in {Sun
+  14:03}.", "Your Mac hasn't checked in yet. Set it up on your Mac.", "Your Mac needs you: {reason}", or paused with
+  what comes next ("Paused after the 3 trial posts. Your Mac goes on once their views are checked.", else "Paused on
+  your Mac. Your clips wait until it's started again."); while on, "{n} waiting for your Mac" and **Send these to my Mac** for the clips that aren't on TikTok yet
+  ("3 clips aren't on TikTok yet."; its confirm line: "They go one at a time, oldest first."), sent without `now`, so
+  one goes after each auto-posting run (§47.8), never a campaign clip (`canSendToMac`); and one quiet line: "To stop
+  it, turn the switch off. Your Mac stops at once." Round 3 (D5), inside the status panel under the status line:
+  paused → **Start my Mac again** (once asked: "Your Mac starts again the next time it checks in, within a minute.");
+  `needs_you` with `needsYouClipId` → **Open the stopped clip**; `holdBefore` → "Your Mac holds auto-posting clips made
+  before {time}." with **Let them go** (`POST /v1/tiktok/mac/request {action: "let_go"}` → toast "Your Mac lets them go
+  within a minute."; once asked: "Your Mac lets them go the next time it checks in, within a minute.").
+* **Auto-posting page** (§46.2): "Where they go" says "TikTok: your Mac posts it." while on, and "TikTok: turn on Your
+  Mac posts TikTok to post there." with **Turn on** while off. It has no TikTok list of its own any more (§46.2 item 7).
+* **Gone from the web (ADR-86):** Post it yourself, Post it yourself instead (Take it back, then the §42 sheet), I
+  posted it, "It's not on TikTok, try again", the step words while the Mac works ("Getting the video" … "Finding the
+  link"), and Auto-posting's Post these on TikTok yourself. Their routes stay (§42.2, §47.2 item 4).
+* Mock mode (`web/src/api/mock/tiktokMac.ts`) follows these rules, `now`, stuck claims and `needs_you` included, and
+  since round 3 the stuck rule from `beatAt`/`claimedAt`, the window, the re-wait's `pressedBefore`/`againAt`, the
+  claim's pressed guard, the campaign refusals, Find it for me (the first Find on a clip → 409 `FIND_NONE`, the next
+  one finds it), `noLink`, the request route and the ping's plan keys, with the lib's own constants; the helper's
+  routes are test knobs (`window.__cfMock.mac`: ping (with `backlogAt`, `backfill`, `holdBefore`, `resumeDone`,
+  `letGoDone`), seen, claim (with how long ago), beat, step, done, stopped, queue, post), and
+  `window.__cfMock.posting.campaignClip()` makes a kept clip a campaign clip.
 
 ### 47.5 Tests (offline, fakes only)
 
 * `api/tests/test_tiktok_mac.py`: the setting; Upload with the switch on (a Mac post in the same transaction), off,
-  once TikTok approved the app, without the TikTok choices, without TikTok, and a campaign clip (today's path); a run
-  never hands a campaign clip or a Private test to the Mac; never TikTok's API: the clip flow's publish loop and
+  once TikTok approved the app, without the TikTok choices, without TikTok; **a campaign clip never goes to the Mac**
+  (round 3: Upload with TikTok refused with `CAMPAIGN_SKIPS` while not approved, nothing written; once approved it goes
+  through TikTok's API, `queued` with Branded content, never a Mac post); a run never gives a campaign clip a Mac post
+  and never a Private test; It's on TikTok on a stopped post turns `needs_you` back to `ok` (pressed or not; not for a
+  post that only waits; never makes a helper item); **the stuck rule** (beat 4:59 not stuck, 5:00 stuck; a claim
+  49:59 old with fresh beats not stuck, 50:00 stuck; Try again and It's on TikTok refused while not stuck; a stuck
+  claim taken back, a new claim or a beat meanwhile wins, the Mac's late done refused); **the find window** (Try
+  again after Post needs `notOnTikTok`, is refused inside the window with `MAC_STILL_LOOKING`, and after it moves
+  `macPressedAt` to `macPressedBefore` and sets `macAgainAt`; the job shows `beatAt`, `pressedBefore`, `againAt`);
+  the claim refuses a waiting post that still has `macPressedAt`; a re-sent step is the beat (the step kept, every
+  refusal kept, the first press never moved and logged once); It's on TikTok without a link (refused while the Mac
+  beats a job it never pressed Post for, even past 50 minutes; allowed once the beat is stale, or after Post); Find it
+  for me on a working post answers `MAC_WORKING` before the finder; the ping's plan keys stored and removed, their
+  400s, `resumeDone`/`letGoDone` removing only their own request; the request route (each refusal, each write);
+  `needsYouClipId` set by a needs-you stop and cleared by Try again, It's on TikTok and an ok ping; Send these to my
+  Mac and Post with my Mac refuse a campaign clip with `SEND_CAMPAIGN` (with and without `now`, also one whose campaign
+  lives on its posts); the words (one source for `CAMPAIGN_SKIPS`: `fit.TIKTOK_WAITS`, `_places_note` and the start of
+  both `_place_refusal` sentences; `PRESSED`, `MAC_STILL_LOOKING`, `NOT_UPLOADED`, `TIKTOK_PRIVATE_ONLY`; no string
+  constant in `tiktok_self.py`, `tiktok_mac.py`, `routes/tiktok_mac.py` or `platforms/errors.py` says "post it
+  yourself" or "I posted it"; the three constants one line each); never TikTok's API: the clip flow's publish loop and
   `ensure-posts`, `release.release_waiting`, Try again and Post now (`_try_again`, `release.restart`, a failed clip's
   Try again), settle-clip (posted with the other posts done; a TikTok-only Upload stays `confirmed` until the Mac is
   done) and `tiktok_self._clip_status`; the queue (off, order and jobs, the auto-posting off switch, at most 50); ping;
   claim races, a stale claim, `pressedAt` never claimed again, the switch off; steps from the claiming Mac only, live,
   the switch off before Post; stops and needs you, the pressed reason; done through `mark_posted` with a link, with the
-  finder's `since`, repeat-safe, only from the claiming Mac, after a stop, never undone, never a second post with I
-  posted it; I posted it vs the Mac (refused while working; waiting or stopped, and its Undo); Try again with and
+  finder's `since`, repeat-safe, only from the claiming Mac, after a stop, never undone, never a second post with It's
+  on TikTok; It's on TikTok vs the Mac (refused while working; waiting or stopped, and its Undo); Try again with and
   without `notOnTikTok`; Take it back (deleted, restored, refused while working,
   refused after Post was pressed with nothing then sent through the API, one transaction that rolls back whole, a clip
   that just settled); an Upload that picked Only me still asks for Everyone and done marks it public; done's privacy
   follows the stored choice; the switch off lists waiting and stopped Mac posts in `tiktokYourself`; the job's
   `attempt` and an older attempt refused; Send these to my Mac (the switch, 1–25
   ids, a new post once, the race guard both ways, each hand-over and its Take it back, every refusal, the queue order);
-  the clip page; another owner.
+  `now` (ADR-86): a send with `now` makes `macSource: "upload"` and the queue puts it first, one without stays `sent`,
+  a retry with `now` turns `sent` and `auto` into `upload`, `now` must be a boolean (400), unknown keys still 400, and
+  the switch off still 409 `MAC_OFF`; the clip page; another owner.
+* `api/tests/test_tiktok_yourself.py` (§42.4, round 3): Find it for me saves nothing when nothing is found (then finds
+  it a minute later), when TikTok is down, or when TikTok is not connected (`FIND_CANT`, also without an OAuth
+  client); a post already his with a link is answered unchanged; `noLink` saves without the finder; a link with
+  `noLink` → 400; `noLink` must be a boolean; every refusal is the same for `noLink` and Find it for me, before TikTok
+  is asked. `api/tests/test_campaign_posting.py`: TikTok refused until both gates are `ok` (the posting audit alone is
+  not enough), its Upload and Try again sentences; campaign tests that send TikTok set `app_review` live.
 * `test_autopost_run.py`: `test_tiktok_is_never_a_place_even_when_ready` (unchanged, the switch off) and beside it the
   switch-on case (five posts in one transaction, TikTok's for the Mac, `uploadTo` without TikTok); Practice and a
-  Private test never make one; a campaign clip from a run never. `test_autopost_routes.py`: `leftOut`/`macPlaces`, the
-  `tiktokYourself` filter. `test_http.py`: the nine routes.
-* Web: `web/test/tiktokMac.test.ts` (the row words, step words, labels, who may be sent, the lines and the mock's
-  rules) and `web/e2e/tiktok-mac.spec.ts` (Library row states, I posted it after Post was pressed, the switch off,
-  the Settings branch switch, Send these, the Review hint).
+  Private test never make one; a campaign clip from a run never gets one (round 3). `test_autopost_routes.py`:
+  `leftOut`/`macPlaces`, the `tiktokYourself` filter. `test_http.py`: every §47 route (round 3 adds
+  `POST /v1/tiktok/mac/request`).
+* Web: `web/test/tiktokMac.test.ts` (`tiktokRow`'s states and words in order, the 30-minute stale rule, the waiting
+  words for `upload`, `auto` and `sent` (only the first backlog clip in the queue with the run's time, the rest in
+  line, never a time without the queue), the short reason, the pressed and stuck words (Not sure it posted), the
+  paused words, a campaign clip like any other, who may be sent, the chip, the Settings lines and the mock's rules:
+  It's on TikTok clears `needs_you`, a stuck claim taken back, a campaign clip sent for Everyone); `web/test/tiktokMacNow.test.ts` (the mock's `now` rules and the HTTP
+  bodies: `{clipIds, now: true}`, `{notOnTikTok?: true, now?: true}`, each key only when true);
+  `web/test/metrics.test.ts` (`calmCopy` for a waiting, working and stopped Mac post and the public-account failure);
+  `web/e2e/tiktok-mac.spec.ts` (Library's row through waiting, Posting…, Didn't work with Try again, not sure it
+  posted with It's on TikTok, the quieter Try again and its question, Find it for me beside the box, a stuck claim,
+  the backlog's first and later rows, a campaign clip, paused and trial words, posted, Not on TikTok yet with Post
+  with my Mac, the switch off with Turn on, a Mac not seen for 30 minutes with Turn on, the button under the words on
+  a narrow card at 1440 and 375; the clip page's chip and its choices lined up with the actions at both sizes; Review's
+  lines, word order and hint; the Settings branch switch and Send these);
+  `web/e2e/tiktok-yourself.spec.ts` (§42.4); `web/e2e/autopost.spec.ts` (Where they go with the switch off, its Turn
+  on, and on). The tests of Post it yourself instead, I posted it after Post was pressed and the sheet are gone
+  with them. Round 3 adds: `tiktokMac.test.ts` (every row of the round-3 order, `macPlace`, `macStuck`,
+  `macWindowOver`, the pin test that reads `tiktok_self.py` and asserts its three minutes equal the web's constants,
+  the campaign row, held, paused and its pending line, the needs-you link, a working post whose Mac is offline, Open
+  Your Mac posts TikTok when stale); `tiktokMacNow.test.ts` (`{noLink: true}` only when true, `{action}`);
+  `metrics.test.ts` (the clip page's line); the words tests; e2e for Find it for me saving nothing, the no-link
+  confirm, Try again only after the window, Start my Mac again, Let them go, Open the stopped clip and Review's
+  campaign clip without TikTok, with the D7 screenshots (real hover and stuck shots).
+* Helper (`mac/tiktok-helper/test`, round 3): `plan.test.js` (`backlogAt` each branch and that `nextAction`'s backlog
+  `until` equals it; never twice: `pressedAt` never posted, `pressedBefore` without or with an early `againAt`
+  skipped, with a late `againAt` posted); `constants.test.js` (`FIND_FOR_MS` equals `MAC_FIND_WINDOW`, `3 ×
+  BEAT_EVERY_MS ≤ MAC_BEAT_STALE`, read from `tiktok_self.py`, and `VERSION` at least `MAC_BEATS_FROM`); the beat
+  targets, also doFind's (every pressed job of this Mac, review round 3); `applyRequests` (resume, let go); a grep
+  that no `src/` string says "post it yourself" or "I posted it".
 
 ### 47.6 Never twice, never TikTok's API
 
 * A Mac post is never `queued` or `pending_integration`: the clip flow publishes only `queued` posts, the release only
   `pending_integration` ones, Try again only failed and waiting ones, and Post now's carried posts are `queued` ones.
 * One TikTok post per clip: Upload writes it with the clip's `postsCreated` condition; a send needs neither
-  `tiktokForMac` nor `tiktokByYou`, I posted it's new post neither; the Mac's done and I posted it are the same
+  `tiktokForMac` nor `tiktokByYou`, It's on TikTok's new post neither; the Mac's done and It's on TikTok are the same
   conditional write on the one row.
 * One Mac, one try at a time: the claim is conditional; a post whose helper pressed Post is never claimed again by
-  itself, and never taken back (it could then go out through TikTok's API as well); only the owner's "It's not on
-  TikTok, try again" clears that, or his I posted it makes it his.
+  itself, whatever its state (round 3: also a `waiting` one), and never taken back (it could then go out through
+  TikTok's API as well); only the owner's Try again on that row (`notOnTikTok`, once the row told him to look on his
+  TikTok first, and only once the 30-minute find window is over) moves the press to `macPressedBefore` and sets
+  `macAgainAt`. The helper's own guard (`plan.js nextAction`) never posts or resumes a job with `pressedAt`, and posts
+  a job with `pressedBefore` only when `againAt ≥ pressedBefore + FIND_FOR_MS` (else it skips it, `never_twice.skip`),
+  so a lost press can never turn into a second copy. While the Mac beats a job (every minute) no row offers Try again
+  or "Not sure it posted" (§47.3 stuck rule). The server lets It's on TikTok make such a post his (§47.3).
+* **Never a campaign clip** (round 3, D1): no path (Upload, an auto-posting run, Send these to my Mac, Post with my
+  Mac) makes a campaign Mac post, so a paid promotion never goes up without TikTok's Branded content disclosure, and
+  nothing posted outside Content Rewards' reach is counted as a campaign post.
 
 ### 47.8 The TikTok login on the Mac (owner request, 2026-11-22)
 
@@ -16148,10 +16497,13 @@ then log into tiktok and upload them then delete the video you downloaded after 
   shows the yellow frame and one pop-up, with a visible login window. All input is CDP (no OS mouse or keyboard).
 * **When the Mac posts** (the owner: "if auto posting is set to every 6 hours then it should also run the tiktok upload
   every time thats run so its dependent on that automation" and "or if i hit upload on a video it should be invoked as
-  well"): a clip he uploads (`source: "upload"`) goes at once, ahead of everything; an auto-posting run's own clips
+  well"): a clip he uploads (`source: "upload"`, also a row's Post with my Mac or Try again, which send `now: true`,
+  §47.2) goes at once, ahead of everything; an auto-posting run's own clips
   (`source: "auto"`, its "Clips each time") go at once, a minute apart; and at most one backlog clip (`source:
   "sent"`, Send these to my Mac, oldest first) goes about 30 minutes after each live scheduled run, read from `GET
-  /v1/autopost` (`runs`, `nextRunAt`), until the backlog is empty. With auto-posting off the backlog waits. Settings ›
+  /v1/autopost` (`runs`, `nextRunAt`), until the backlog is empty. Round 3: its ping says when the first one goes
+  (`backlogAt`, the same `plan.backlogAt` its `nextAction` uses), whether a backfill runs (`backfill`) and its hold
+  (`holdBefore`), so the rows show the Mac's own times (§47.4). With auto-posting off the backlog waits. Settings ›
   Posting › Your Mac posts TikTok says it: "Posts with auto-posting · next Sun 22:00 · 14 waiting", or "Posts when you
   tap Upload · 14 waiting" while auto-posting is off.
 * **API (additive, the `MACHELPER` item):** ping takes `login?: "saved" | "none"` and `loginDone?: ISO` (the `at` of the
@@ -16171,6 +16523,111 @@ then log into tiktok and upload them then delete the video you downloaded after 
   `web/e2e/tiktok-mac.spec.ts` (the lines, the buttons, Forget's question); `mac/tiktok-helper/test/login.test.js` (at most
   twice a day, never after a refusal, a code or a puzzle is the owner's turn, never in a log, an event or a request),
   `files.test.js` (only its own videos), `frame.test.js` (a normal run never touches the frame).
+
+### 47.9 Review starts on My settings while the Mac posts TikTok (owner request, 2026-11-23)
+
+The owner (2026-11-23, verbatim): "the auto upload feature uploads publicly to all social media platforms except X,
+but when that happens it invokes a tiktok automation for uploading there. the same process happens when i manually
+click upload, and also the default settings should be that it publishes publicly to all platforms". Auto-posting
+already posts with My settings (§46.6) and every Mac post already stores My settings' TikTok choices (§47.1); this
+makes the Review card (§36) match, so Upload and auto-posting both post TikTok through his Mac on his settings. It
+amends §36's TikTok tap (items 3 and 5 of the card, and "never before" in its web part) only while the Mac posts
+TikTok. No API, table or infrastructure change.
+
+1. **Your Mac posts TikTok on** (`macOn(settings)`, `settings.tiktokMac.on === true`) and TikTok has not approved the
+   app (`tiktokAudited`, as §47.2 item 1): a Review card with TikTok ticked starts on My settings exactly like the
+   other places. TikTok's row starts with Who can see it from the preset's `privacy` (Everyone by default), Comments,
+   Duet and Stitch as saved (on by default), and Commercial content off. A campaign clip keeps its own path (Everyone
+   with Branded content, §17.8; the Mac never takes one, §47.2).
+   * No tap before Upload: the button reads **Your settings are on** from the start (`settingsOn` true), the line under
+     it reads "Every place uses your settings. Tap a place below to change it for this clip.", and TikTok's row line
+     says "Who can see it: Everyone · …", never "not picked yet". Upload is never held with "Tap Use my settings
+     first. TikTok needs your tap."
+   * **TikTok's row is read-only for what the Mac uses** (decided for this release, 2026-11-23). The server asks the
+     Mac for My settings whatever the card sends (§47.1, `uploads.py` sets every Mac post's `tiktok` to
+     `tiktok_mac.preset_options`, `brandContent` always false), and the helper has no Branded content step. So the open
+     row shows, in place of Who can see it and the Comments, Duet and Stitch switches, one fixed line built from the
+     preset's real values (`macPostsLine`): "Your Mac posts it with My settings: Everyone · Comments on · Duet on ·
+     Stitch on", and a small **Change My settings** button to Settings › Posting › My settings
+     (`/settings/posting/my-settings`). There is no per-clip privacy or switch change in this mode, so the card never
+     says "Only me" while the Mac posts for Everyone. "Posting as {name}" shows once TikTok's API named the account;
+     with no name yet (not asked, slow, failed) the line is left out in this mode only.
+   * **Commercial content stays visible and is this clip's own.** Ticking **Your brand** or **Branded content** (with
+     Commercial content on) holds Upload for TikTok (`macTikTokHeld`): Upload's line and an alert in the row say
+     `MAC_LABEL_HELD`, "Your Mac can't add TikTok's Branded content label yet. Untick it, or untick TikTok, then post
+     this clip in the TikTok app with its label, not with your Mac." With Commercial content on and nothing
+     ticked it is held too, with `MAC_COMMERCIAL_HELD`, "Your Mac can't add TikTok's Branded content label yet. Turn
+     off Commercial content, or untick TikTok, then post this clip in the TikTok app with its label, not with
+     your Mac." (TikTok's own
+     `PICK_WHOSE` line would send him round in a circle: either pick holds the Mac too; Upload's hover text is left
+     empty). TikTokCommercial leaves out its hint line in this mode ("Your video will be labeled as …" would be untrue;
+     "Pick Your brand, Branded content, or both." is the circle again). With TikTok unticked the other places upload as
+     usual. So Upload never hands a clip with a label ticked to the Mac. But nothing on the clip records Commercial
+     content (it lives only in the card's state), so once that clip is uploaded without TikTok it is like any other
+     kept clip: Post with my Mac (Library, the clip page) and Settings › Your Mac posts TikTok › Send these to my Mac
+     would hand it to the Mac, which posts it with `preset_options` (`brandContent` false), without the label TikTok's
+     Branded Content Policy requires. So the hold's words above, My settings (item 3) and Ask tell him to post that clip
+     himself in the TikTok app with the label, never with Post with my Mac or Send these to my Mac; and Review's
+     "Uploaded just now" row of a clip uploaded from a card with Commercial content on (`commercialRow`, this visit
+     only) reads "TikTok: Commercial content: post it in the TikTok app, with its label" (`MAC_ROW_COMMERCIAL`)
+     with the inline Add link, never Post with my Mac. A flag on the clip that keeps every Mac path off it is the later
+     step's (below).
+   * **The line above Upload** (§47.4) is built for this clip: `MAC_HINT`, "TikTok: your Mac posts it for everyone.",
+     only while the Mac posts this clip's TikTok and My settings' Who can see it is Everyone; with Followers, Friends or
+     Only me it is `MAC_WHERE_LINE`, "TikTok: your Mac posts it." (the row says who). A campaign clip with the switch on
+     has no line there, as the Mac never takes one.
+   * TikTok's creator info (`GET /v1/accounts/tiktok/creator-info`, TikTok API data) is still asked, in the background
+     as soon as TikTok is ticked, only for the account's name and the longest video it takes (`macCreator`). In this
+     mode only, one ask serves every card for 60 seconds (`macCreatorInfo` in `Review.tsx`; a failed ask is not kept).
+     Upload never waits for it: while it is slow or after it failed, the card uploads with the preset's choices and no
+     creator (opening the TikTok row asks again), and the too-long check uses the creator's longest video once known.
+   * The confirm body still carries `tiktok`, as the server requires ("Pick who can see it on TikTok.", §47.2 item 1),
+     and it is always valid: `macTikTokChoices` is the preset's privacy (Everyone when unset) with the preset's
+     Comments, Duet and Stitch, and Commercial content as ticked (Upload is held while a label is ticked, so
+     `brandContent` and `brandOrganic` go false). The Mac job gets the same (`privacy: "PUBLIC_TO_EVERYONE"`, the
+     saved privacy, with the saved Comment, Duet and Stitch).
+   * **Later step, not in this release:** per-clip TikTok choices and Branded content through the Mac. Both need the
+     helper's Branded content step (TikTok Studio's content disclosure) and the server honouring the card's own
+     `tiktok` choices for a Mac post instead of `preset_options`, and a flag on the clip (its label) that Post with my
+     Mac and Send these to my Mac honour. Until they ship, the row stays read-only, a ticked label holds
+     Upload for TikTok, and the words tell him to post a paid partnership in the TikTok app himself.
+2. **Your Mac posts TikTok off, or TikTok approved the app** (TikTok's API path; the app is still in review), and every
+   campaign clip: exactly as §36. Who can see it starts unpicked, Comments, Duet and Stitch start off, creator info is
+   asked only on Use my settings or when the TikTok row opens, and Upload waits for his tap ("Tap Use my settings
+   first. TikTok needs your tap."). That is TikTok's rule for API apps (§17.8): no default, the creator's own action.
+   Every creator-info ask on this path is the card's own (never the Mac mode's shared 60-second answer), and "Posting
+   as" always shows. A card that moves from item 1's mode to this path while open drops the Mac mode's answer, so Use
+   my settings (or the open row) asks TikTok again.
+   TikTok's demo video for its app review (`TIKTOK_DEMO_SHOTS`, §17) shows this path, so it is recorded with Your Mac
+   posts TikTok off.
+3. **Words elsewhere:** Settings › Posting › My settings (`MySettingsBranch.tsx`) reads "Every clip on Review starts
+   on these, TikTok too, except campaign clips." at the top, and under TikTok "Commercial content is off. Your Mac
+   posts TikTok with these. Paid partnerships can't go through your Mac yet: untick TikTok for that clip, then post it
+   in the TikTok app with its label, not with Post with my Mac or Send these to my Mac." in item
+   1's mode; otherwise both keep today's words ("Tap Use my settings on a clip to put these on.", "Commercial content
+   is off. For a paid partnership, tick Branded content in the TikTok row of that clip. TikTok wants your own tap on
+   each clip, so tap Use my settings there."). The TikTok part's leaf (`settingsTree.ts`, `my-settings-tiktok`) reads
+   "Everyone can see it; comments, Duet and Stitch on. Every clip starts on these while your Mac posts TikTok." in
+   both modes. Ask's "Use my settings" guide (`helpKb.json`, `review-use-my-settings`, titled "Use my settings: your
+   saved choices on every place", true in both modes) says every ticked place, TikTok included, starts on his settings
+   while his Mac posts TikTok, so he just taps Upload, that the Mac always posts with them (change them in My
+   settings), and that paid partnerships can't go through the Mac yet, so he unticks TikTok for that clip and posts it
+   himself in the TikTok app with the label, never with Post with my Mac or Send these to my Mac;
+   `review-place-rows` says the same after its Branded content step; `review-upload-to` says to tap Use my settings
+   only when the card does not already say Your settings are on. None of them tells him to tick Branded content for
+   the Mac. docs/SETUP_POSTING.md says the same, and its demo step (`public-demo`, also in `tiktok.ts`) says to record
+   with Your Mac posts TikTok off.
+4. **Tests:** the Review tests (`web/test/reviewMac.test.tsx`) pin both modes: with the Mac on, TikTok starts on My
+   settings and Upload is not held, also while creator info is slow or failed; the row is read-only (the Mac line,
+   Change My settings, no Who can see it, no Comments, Duet or Stitch switch) and the Mac job gets the preset's privacy;
+   Your brand or Branded content holds Upload for TikTok with `MAC_LABEL_HELD` (Commercial content alone with
+   `MAC_COMMERCIAL_HELD`) and unticking TikTok lets the rest go, and that clip's "Uploaded just now" row says
+   `MAC_ROW_COMMERCIAL` with Add link and no Post with my Mac; the line above Upload says `MAC_WHERE_LINE` with
+   Followers saved; the shared creator-info answer is used in Mac mode
+   only, and a card that switches to the API path asks again on Use my settings. With it off: today's unpicked start and
+   held Upload, a fresh ask per card, and "Posting as" shown even with an empty nickname.
+   `web/test/mySettingsTikTok.test.tsx` pins My settings' words in both modes; `helpEvals.json` has "Does TikTok need my
+   tap each time?" → `review-use-my-settings`.
 
 ### 47.7 Not verified live
 

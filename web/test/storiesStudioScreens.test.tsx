@@ -73,8 +73,8 @@ const account = (platform: SocialAccount["platform"], connectionStatus: SocialAc
 });
 
 const CREATOR: TikTokCreator = {
-  nickname: "Lamo Stories",
-  username: "lamo.stories",
+  nickname: "Funded Clips",
+  username: "funded.clips",
   avatarUrl: null,
   privacyOptions: ["PUBLIC_TO_EVERYONE", "FOLLOWER_OF_CREATOR", "SELF_ONLY"],
   commentDisabled: false,
@@ -392,7 +392,7 @@ describe("Ideas", () => {
     const dialog = () => document.querySelector('[role="dialog"]')!;
     expect(dialog().textContent).toContain("Your usual model");
     expect(dialog().textContent).not.toContain("Usual: Claude");
-    expect(dialog().textContent).not.toContain("From your Lamo Stories settings");
+    expect(dialog().textContent).not.toContain("From your Funded Clips settings");
     await click(control("Use the usual", dialog()), 50);
     // Until the task answers (here it never does), the line says only what is known.
     vi.spyOn(api, "generateIdeas").mockImplementation(() => new Promise(() => undefined));
@@ -602,6 +602,25 @@ describe("Production", () => {
     expect(location.pathname).toMatch(/^\/stories\/production\/[0-9A-Z]{26}$/);
   });
 
+  it("New: the length's white − and + step it 5 seconds a tap, and past 90 seconds the + says no", async () => {
+    const create = vi.spyOn(api, "createStory");
+    await show(<ProductionScreen {...page({ name: "production_new", ideaId: I.sandwich })} />);
+    const length = () => document.querySelector<HTMLInputElement>('input[type="range"]')!;
+    expect(length().value).toBe("50");
+    await click(control("More: Length"), 50);
+    expect(length().value).toBe("55");
+    expect(document.querySelector(".st-s-slider__stepper output")?.textContent).toBe("55 seconds");
+    await click(control("Less: Length"), 50);
+    await click(control("Less: Length"), 50);
+    expect(length().value).toBe("45");
+    for (let i = 0; i < 12; i++) await click(control("More: Length"), 20);
+    expect(length().value).toBe("90");
+    expect(control("More: Length").getAttribute("aria-disabled")).toBe("true");
+    expect(control("Less: Length").getAttribute("aria-disabled")).toBeNull();
+    await click(control("Make the video"));
+    expect(create).toHaveBeenCalledWith("stories", expect.objectContaining({ durationSec: 90 }));
+  });
+
   it("New: up to 3 studied reference videos and this video's own model and effort go with the story", async () => {
     const create = vi.spyOn(api, "createStory");
     await show(<ProductionScreen {...page({ name: "production_new", ideaId: I.sandwich })} />);
@@ -684,6 +703,20 @@ describe("Production", () => {
     await wait(10_000);
     expect(document.querySelectorAll(".st-s-track__step.is-done")).toHaveLength(8);
     expect(control("Watch it in Review").getAttribute("href")).toBe(`/stories/review/${S.producing}`);
+  });
+
+  it("a video's preview row has its kind and length, a bar with its percent, and the page's actions (Cancel, Try again)", async () => {
+    await show(<ProductionScreen {...page({ name: "production_story", storyId: S.producing })} />);
+    const row = () => document.querySelector<HTMLElement>(".st-s-preview__row")!;
+    expect(row().querySelector(".st-media__meta")?.textContent).toMatch(/ · \d+ seconds?$/);
+    expect(row().querySelector('[role="progressbar"]')).not.toBeNull();
+    expect(row().querySelector(".st-media__time")?.textContent).toMatch(/^\d+%$/);
+    expect(control("Cancel", row())).not.toBeNull();
+    await act(async () => root.render(<ToastProvider><ProductionScreen {...page({ name: "production_story", storyId: S.failed })} /></ToastProvider>));
+    await wait();
+    expect(control("Try again from “Animate”", row()).className).toContain("st-btn--main");
+    // The steps panel below shows the steps only.
+    expect(document.querySelector('[aria-label="The steps"] button')).toBeNull();
   });
 
   it("Cancel stops a run; Try again on a stopped one runs only what is left", async () => {
@@ -823,7 +856,7 @@ describe("Review", () => {
     await click(control("Remake it"));
     await wait(12_000);
     const notice = () => Array.from(document.querySelectorAll(".st-s-notice")).find((n) => n.textContent?.includes("isn't available right now"))!;
-    expect(notice().textContent).toContain("Claude Fable 5.2 isn't available right now: Bedrock says this account can't use it yet. Pick another model in Lamo Stories › Settings › AI, or try again.");
+    expect(notice().textContent).toContain("Claude Fable 5.2 isn't available right now: Bedrock says this account can't use it yet. Pick another model in Funded Clips › Settings › AI, or try again.");
     expect(control("Open Settings › AI", notice()).getAttribute("href")).toBe("/stories/settings/ai");
     expect(Array.from(document.querySelectorAll(".toast--bad .toast__text, .toast--error .toast__text, .toast__text")).some((t) => t.textContent?.includes("isn't available right now"))).toBe(true);
     await click(control(/^Model and effort for this one/, notice()), 50);
@@ -1001,11 +1034,11 @@ describe("Post it", () => {
       platform: "youtube",
       publishingStatus: "needs_attention",
       accountName: "Old Channel",
-      error: "Lamo Stories' YouTube (Old Channel) needs connecting again. Open Lamo Stories › Connections, then tap Try again.",
+      error: "Funded Clips' YouTube (Old Channel) needs connecting again. Open Funded Clips › Connections, then tap Try again.",
       createdAt: "2026-11-21T11:00:00.000Z",
       updatedAt: "2026-11-21T11:00:00.000Z",
     });
-    retry.mockRejectedValueOnce(new ApiError(409, "conflict", "Lamo Stories' YouTube is now Lamo Stories Channel. Check it, then tap Try again."));
+    retry.mockRejectedValueOnce(new ApiError(409, "conflict", "Funded Clips' YouTube is now Lamo Stories Channel. Check it, then tap Try again."));
     await show(<ReviewScreen {...page({ name: "review_story", storyId: S.approved })} />);
     expect(document.querySelector(".st-s-post__why")?.textContent).toContain("needs connecting again");
     await click(control("Try again", document.querySelector(".st-s-postspanel")!));
@@ -1043,7 +1076,7 @@ describe("Post it", () => {
     const story = store.stories.find((s) => s.storyId === S.approved)!;
     await show(<PublishSheet ws="stories" story={story} config={{}} jobs={[]} onSent={() => undefined} onRetry={() => undefined} onClose={() => undefined} />);
     expect(document.querySelectorAll("button.st-s-place")).toHaveLength(0);
-    expect(text()).toContain("No Lamo Stories account is connected yet.");
+    expect(text()).toContain("No Funded Clips account is connected yet.");
     expect(control("Upload").getAttribute("aria-disabled")).toBe("true");
   });
 
@@ -1108,8 +1141,8 @@ describe("Post it", () => {
     await click(control("Upload to 2 places", dialog()));
     expect(publish).not.toHaveBeenCalled();
     // By its place first, so it reads right when the account is itself called Lamo Stories (§45.36 E13).
-    expect(dialog().textContent).toContain("Lamo Stories' YouTube is now a different account: this YouTube account (Someone Else, @someone). Look at it below, then tap Upload again.");
-    expect(dialog().textContent).toContain("Lamo Stories' TikTok needs connecting again. Fix it in Social accounts, or leave TikTok out.");
+    expect(dialog().textContent).toContain("Funded Clips' YouTube is now a different account: this YouTube account (Someone Else, @someone). Look at it below, then tap Upload again.");
+    expect(dialog().textContent).toContain("Funded Clips' TikTok needs connecting again. Fix it in Social accounts, or leave TikTok out.");
     expect(dialog().querySelector(".st-s-dest")?.textContent).toContain("Goes to this YouTube account: Someone Else (@someone)");
     // TikTok left the list of chosen places; the owner has seen the new YouTube account, so the next tap sends.
     await click(control("Upload", dialog()));

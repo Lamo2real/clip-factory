@@ -287,8 +287,7 @@ def test_lamo_clips_own_account_is_held_as_same_as_clips(
     assert account["sharedWithClips"] is False
     # §45.37 G8: it can never post, and the card says why up front
     assert account["warning"] == (
-        "This is Clip Factory's own account. Clip Factory Stories needs its own separate account: sign in with a "
-        "different one."
+        "This is Clip Factory's own account. Funded Clips needs its own separate account: sign in with a different one."
     )
 
 
@@ -568,7 +567,7 @@ def test_the_state_formats_never_cross() -> None:
     with pytest.raises(state.StateError):
         social.verify_state(key, "youtube", forged, 1_800_000_000)  # the workspace id is signed
     assert social.verify_state(key, "youtube", w1, 1_800_000_000) == ("stories", nonce)
-    with pytest.raises(ValueError, match="Lamo Stories"):
+    with pytest.raises(ValueError, match="Funded Clips"):
         social.sign_state(key, "youtube", "clips", nonce, 1_900_000_000)
 
 

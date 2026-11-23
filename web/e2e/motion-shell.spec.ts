@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { ACT_MS } from "../src/lib/motion.ts";
 import { settle } from "./helpers.ts";
-import { actWidths, MOTION_WIDTHS, noSideScroll, pauseActs, recordAct, soundKinds, tapAct } from "./motionHelpers.ts";
+import { actWidths, holdClock, MOTION_WIDTHS, noSideScroll, pauseActs, recordAct, soundKinds, tapAct, tapHeld, watchFor } from "./motionHelpers.ts";
 
 // Action motion on the app shell (docs/CONTRACTS.md §20.11 (d)): the sidebar collapse turn, Get the app (device
 // chips, Download, Copy the link) and the update bar's Reload.
@@ -50,6 +50,8 @@ test.describe("motion: shell (APPLY d)", () => {
 
     test.beforeEach(async ({ page }) => {
       await page.route("**/downloads/**", (r) => r.fulfill({ status: 204, body: "" }));
+      // Before the page loads, so a test can hold the page's clock (holdClock); until then time runs as usual.
+      await page.clock.install();
       await page.goto("/get-app");
       await settle(page);
     });
@@ -67,12 +69,18 @@ test.describe("motion: shell (APPLY d)", () => {
       const download = page.getByRole("link", { name: "Download for Mac" });
       await expect(download).toHaveAttribute("data-act", "download");
       const width = await download.evaluate((el) => (el as HTMLElement).offsetWidth);
-      const { cls } = await tapAct(download);
-      expect(cls.split(" ")).toEqual(expect.arrayContaining(["act", "act--download", "is-play"]));
+      // The page's clock is held from the tap: the glyph stays in its play phase until the test moves the clock on, so
+      // the checks cannot race its end timer on a busy machine, and its return to rest is timed on the page.s clock.
+      await holdClock(page);
+      await tapHeld(download);
+      await expect(download.locator(".act")).toContainClass("act act--download is-play");
       // The handler ran in the same click: the hint is already there while the arrow is still moving.
       await expect(page.getByRole("status").filter({ hasText: "Downloading." })).toBeVisible();
+      await expect(download.locator(".act")).toContainClass("is-play");
       expect(await download.evaluate((el) => (el as HTMLElement).offsetWidth)).toBe(width);
-      await expect(download.locator(".act")).toHaveClass(/is-idle/, { timeout: ACT_MS.download + 200 });
+      await page.clock.runFor(ACT_MS.download);
+      await expect(download.locator(".act")).toHaveClass(/is-idle/);
+      await page.clock.resume();
       // The glyph never takes the button's name.
       await expect(download.locator(".act")).toHaveAttribute("aria-hidden", "true");
     });
@@ -132,8 +140,10 @@ test.describe("motion: shell (APPLY d)", () => {
       await settle(page);
       await page.evaluate(() => (window.__cfSoundLog = []));
       const copy = page.getByRole("button", { name: "Copy the link" });
+      // The shake is short (ACT_FAIL_MS): watch for it from before the tap, so a busy machine cannot hide it.
+      const shook = await watchFor(copy, ".act.is-fail");
       await copy.click();
-      await expect(copy.locator(".act")).toHaveClass(/is-fail/);
+      await expect.poll(shook).toBe(true);
       await expect(page.getByText("Copy the address at the top of the screen instead.")).toBeVisible();
       await expect(page.getByRole("button", { name: "Link copied" })).toHaveCount(0);
       await expect.poll(() => soundKinds(page)).toContain("deny");
@@ -162,6 +172,8 @@ test.describe("motion: sign in (APPLY d)", () => {
 
   test.beforeEach(async ({ page }) => {
     await page.addInitScript(() => sessionStorage.setItem("cf.mockSignedOut", "1"));
+    // Before the page loads, so a test can hold the page's clock (holdClock); until then time runs as usual.
+    await page.clock.install();
     await page.goto("/");
     await page.getByLabel("Email").waitFor();
   });
@@ -182,11 +194,16 @@ test.describe("motion: sign in (APPLY d)", () => {
 
     const eye = page.getByRole("button", { name: "Show" });
     await expect(eye).toHaveAttribute("data-act", "blink");
-    const blink = await tapAct(eye);
-    expect(blink.cls.split(" ")).toEqual(expect.arrayContaining(["act--blink", "is-play"]));
-    await expect(page.getByLabel("Password")).toHaveAttribute("type", "text");
+    // Held from the tap, so the 180 ms blink is still in its play phase when checked and rests on the page.s clock.
+    await holdClock(page);
+    await tapHeld(eye);
     // Now named Hide (same button).
-    await expect(page.locator(".password__toggle .act")).toHaveClass(/is-idle/, { timeout: ACT_MS.blink + 300 });
+    const glyph = page.locator(".password__toggle .act");
+    await expect(glyph).toContainClass("act--blink is-play");
+    await expect(page.getByLabel("Password")).toHaveAttribute("type", "text");
+    await page.clock.runFor(ACT_MS.blink);
+    await expect(glyph).toHaveClass(/is-idle/);
+    await page.clock.resume();
   });
 
   test("Start again turns its arrow and goes back to the first step", async ({ page }) => {

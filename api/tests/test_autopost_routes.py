@@ -343,7 +343,7 @@ def test_a_clip_posted_on_tiktok_by_hand_leaves_tiktok_yourself(
     clock.now = SLOT + timedelta(seconds=5)
     run.run_once(deps(app), USER, "scheduled", SLOT)
     assert len(call("GET", "/v1/autopost")[1]["tiktokYourself"]) == 1
-    assert call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {})[0] == 200
+    assert call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {"noLink": True})[0] == 200
     assert call("GET", "/v1/autopost")[1]["tiktokYourself"] == []
 
 
@@ -412,8 +412,8 @@ def test_recent_lists_only_the_posts_its_run_made(
     clip = review_clip(store, s3_client)
     clock.now = SLOT + timedelta(seconds=5)
     run.run_once(deps(app), USER, "scheduled", SLOT)
-    # Post it yourself (§42) adds the owner's own TikTok post to the clip: it was never part of the run.
-    assert call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {})[0] == 200
+    # It's on TikTok (§42) adds the owner's own TikTok post to the clip: it was never part of the run.
+    assert call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {"noLink": True})[0] == 200
     assert "tiktok" in {p["platform"] for p in call("GET", "/v1/posts")[1]["posts"]}
     (recent,) = call("GET", "/v1/autopost")[1]["runs"]
     assert recent["clips"][0]["places"] == ["youtube"]

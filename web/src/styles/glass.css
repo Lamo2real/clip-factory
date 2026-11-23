@@ -220,7 +220,7 @@ html[data-strength="frosted"] .backdrop__frost {
   pointer-events: none;
 }
 
-/* The logic of light (ADR-85, docs/CONTRACTS.md §22.7): one key light above. A pane is bottle green with a soft bone
+/* The logic of light (ADR-87, docs/CONTRACTS.md §22.7): one key light above. A pane is bottle green with a soft bone
    light that is brightest at its top and gone by 65 % of its height, a catch light at the top centre (inside the top
    padding, never under words), a blurred top glow, a soft shade at the bottom and a drop below. Every bone lift is
    paid for with a step more green (--light-pay), so the words keep AA (lib/background.ts works out every number). */

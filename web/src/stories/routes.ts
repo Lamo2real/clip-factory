@@ -25,7 +25,7 @@ export type StoriesPage =
   | { name: "setup" }
   | { name: "not_found" };
 
-export const SETTINGS_SECTIONS = ["ai", "agents", "skills", "memory", "video", "storage"] as const;
+export const SETTINGS_SECTIONS = ["ai", "agents", "skills", "memory", "video", "storage", "look"] as const;
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 
 export const STORIES_ROOT = "/stories";

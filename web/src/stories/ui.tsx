@@ -1,7 +1,8 @@
-// Lamo Stories building blocks (docs/CONTRACTS.md §45.16.2), styled by web/src/stories/styles/stories.css: buttons,
-// cards, chips, a pick-one bar on <Glide>, a switch, the Lamo Stories icons, the character-shaped empty states, the
-// star burst for a success, and the shared dashboard poll behind the Needs you bar. Builder F owns this file; builder
-// G uses these pieces and adds screen-level ones in its own files. Click and deny sounds come from the app's global
+// Lamo Stories building blocks (docs/CONTRACTS.md §45.16.2), styled by web/src/stories/styles/st-parts.css and
+// st-controls.css on the liquid-glass recipe (styles/GLASS-CONTRACT.md): buttons, glass cards, chips, a pick-one bar on
+// <Glide>, the orange switch, the Lamo Stories icons, the character-shaped empty states, the star burst for a success,
+// and the shared dashboard poll behind the Needs you bar. The shell builder owns this file; the screens use these
+// pieces and add screen-level ones in their own files. Click and deny sounds come from the app's global
 // click handler (web/src/lib/sound.ts): nothing here plays a tap sound itself. Every sound and calm-motion check here
 // follows Lamo Stories' own device preferences (stories/prefs.ts: storiesSound, storiesReduceMotion).
 import { Component, useEffect, useId, useState, useSyncExternalStore, type AnchorHTMLAttributes, type ButtonHTMLAttributes, type ErrorInfo, type ReactNode } from "react";
@@ -10,6 +11,7 @@ import { A } from "../components/ui.tsx";
 import { Glide } from "../components/Glide.tsx";
 import { usePoll } from "../lib/hooks.ts";
 import { storiesApi } from "./api/client.ts";
+import { RoundGlassButton } from "./glass/index.ts";
 import { storiesBehind, useAppActive } from "./pane.tsx";
 import { storiesReduceMotion, storiesSound } from "./prefs.ts";
 import type { Onboarding, Platform, StoriesDashboard, StoryStatus } from "./api/types.ts";
@@ -42,7 +44,7 @@ export function StLinkButton({ href, main = false, className = "", children, ...
 }
 
 export function StCard({ className = "", children }: { className?: string; children: ReactNode }) {
-  return <div className={`st-card${className ? ` ${className}` : ""}`}>{children}</div>;
+  return <div className={`st-card st-glass${className ? ` ${className}` : ""}`}>{children}</div>;
 }
 
 export type StTone = "sun" | "coral" | "mint" | "sky";
@@ -51,12 +53,43 @@ export function StChip({ children, tone }: { children: ReactNode; tone?: StTone 
   return <span className={`st-chip${tone ? ` st-chip--${tone}` : ""}`}>{children}</span>;
 }
 
-/** A page's heading row: the title, one plain line under it, and its main actions. */
+/**
+ * "Technical details" (§45.36 E14): developer-app words (redirect URIs, Login configuration, App Review, Sandbox,
+ * inference profiles, ARNs) and raw ids (account ids, model ids, app ids) folded away under a plain first line, one
+ * tap away. Closed to start.
+ */
+export function StTech({ children, className = "", label = "Technical details" }: { children: ReactNode; className?: string; label?: string }) {
+  return (
+    <details className={`st-tech-fold${className ? ` ${className}` : ""}`}>
+      <summary className="st-tech-fold__sum">
+        <StIcon name="chevron" size={16} className="st-tech-fold__mark" />
+        {label}
+      </summary>
+      <div className="st-tech-fold__body">{children}</div>
+    </details>
+  );
+}
+
+/** Developer-app words a 6-8 year old would not follow: a line that has one goes behind "Technical details". */
+export const TECH_WORDS = /\b(sandbox|app review|development mode|oauth|login configuration|redirect uri|inference profile|arn|client id|config(uration)? id)\b/i;
+
+/** A list of sentences split into the plain ones (shown) and the technical ones (folded away, §45.36 E14). */
+export function plainFirst(lines: readonly string[]): { plain: string[]; tech: string[] } {
+  const plain: string[] = [];
+  const tech: string[] = [];
+  for (const l of lines) (TECH_WORDS.test(l) ? tech : plain).push(l);
+  return { plain, tech };
+}
+
+/**
+ * A page's heading row: the title, one plain line under it, and its main actions. It is a backing plate (.st-plate):
+ * nothing over Ember, a glass plate in Picture and See-through, where anything can be behind its words.
+ */
 export function StPageHead({ title, lede, actions }: { title: ReactNode; lede?: ReactNode; actions?: ReactNode }) {
   return (
-    <header className="st-head">
+    <header className="st-head st-plate">
       <div className="st-head__text">
-        <h1 className="st-head__title">{title}</h1>
+        <h1 className="st-head__title st-display">{title}</h1>
         {lede ? <p className="st-head__lede">{lede}</p> : null}
       </div>
       {actions ? <div className="st-head__actions">{actions}</div> : null}
@@ -169,6 +202,7 @@ export function StPick<T extends string>({
   );
 }
 
+/** A switch row: its words, and the orange toggle with its white knob (the figure .st-toggle, never disabled). */
 export function StToggle({ checked, onChange, label, description, disabled = false }: { checked: boolean; onChange: (next: boolean) => void; label: string; description?: string; disabled?: boolean }) {
   const id = useId();
   return (
@@ -186,7 +220,7 @@ export function StToggle({ checked, onChange, label, description, disabled = fal
       <button
         type="button"
         role="switch"
-        className="st-switch"
+        className="st-switch st-toggle"
         aria-checked={checked}
         aria-labelledby={`${id}-l`}
         aria-describedby={description ? `${id}-d` : undefined}
@@ -195,7 +229,9 @@ export function StToggle({ checked, onChange, label, description, disabled = fal
           if (!disabled) onChange(!checked);
         }}
       >
-        <span className="st-switch__thumb" />
+        <span className="st-toggle__track" aria-hidden="true">
+          <span className="st-toggle__knob" />
+        </span>
       </button>
     </div>
   );
@@ -205,36 +241,39 @@ export function StToggle({ checked, onChange, label, description, disabled = fal
 
 export type MascotMood = "wave" | "sleepy" | "oops" | "cheer" | "think";
 
+/** Pip's colours on the warm stage: an amber, coral, mint or sky body, espresso eyes, cream light. */
+const PIP = { body: { sun: "#FFB766", coral: "#FF7F6A", mint: "#6FD9A4", sky: "#7CC6E6" }, ink: "#2A160B", light: "#FFF6EA", cheek: "#FF7F6A", floor: "#0F0A07" } as const;
+
 /** Pip, the little bean who stands in for "nothing here yet": a character, never a blank box. */
 export function StMascot({ mood = "wave", size = 120, tone = "sun" }: { mood?: MascotMood; size?: number; tone?: StTone }) {
-  const body = { sun: "#FFC94A", coral: "#FF6F61", mint: "#47D6A0", sky: "#62C6FF" }[tone];
+  const body = PIP.body[tone];
   const eyesOpen = mood !== "sleepy";
   return (
     <svg className={`st-mascot st-mascot--${mood}`} width={size} height={size} viewBox="0 0 120 120" aria-hidden="true" focusable="false">
-      <ellipse cx="60" cy="110" rx="30" ry="5" fill="#0D0B26" opacity="0.45" />
+      <ellipse cx="60" cy="110" rx="30" ry="5" fill={PIP.floor} opacity="0.45" />
       <g className="st-mascot__body">
         <path d="M60 18c20 0 32 18 32 44s-12 44-32 44-32-18-32-44 12-44 32-44z" fill={body} />
-        <path d="M44 30c5-6 11-8 16-8" stroke="#FFF6E5" strokeWidth="5" strokeLinecap="round" fill="none" opacity="0.55" />
+        <path d="M44 30c5-6 11-8 16-8" stroke={PIP.light} strokeWidth="5" strokeLinecap="round" fill="none" opacity="0.55" />
         {eyesOpen ? (
           <>
-            <ellipse cx="50" cy="54" rx="5.5" ry={mood === "oops" ? 7.5 : 6.5} fill="#1C1842" />
-            <ellipse cx="70" cy="54" rx="5.5" ry={mood === "oops" ? 7.5 : 6.5} fill="#1C1842" />
-            <circle cx="52" cy="51.5" r="1.8" fill="#FFF6E5" />
-            <circle cx="72" cy="51.5" r="1.8" fill="#FFF6E5" />
+            <ellipse cx="50" cy="54" rx="5.5" ry={mood === "oops" ? 7.5 : 6.5} fill={PIP.ink} />
+            <ellipse cx="70" cy="54" rx="5.5" ry={mood === "oops" ? 7.5 : 6.5} fill={PIP.ink} />
+            <circle cx="52" cy="51.5" r="1.8" fill={PIP.light} />
+            <circle cx="72" cy="51.5" r="1.8" fill={PIP.light} />
           </>
         ) : (
           <>
-            <path d="M44.5 55q5.5 4 11 0M64.5 55q5.5 4 11 0" stroke="#1C1842" strokeWidth="3.2" strokeLinecap="round" fill="none" />
+            <path d="M44.5 55q5.5 4 11 0M64.5 55q5.5 4 11 0" stroke={PIP.ink} strokeWidth="3.2" strokeLinecap="round" fill="none" />
           </>
         )}
-        <circle cx="42" cy="66" r="4.5" fill="#FF6F61" opacity="0.5" />
-        <circle cx="78" cy="66" r="4.5" fill="#FF6F61" opacity="0.5" />
+        <circle cx="42" cy="66" r="4.5" fill={PIP.cheek} opacity="0.5" />
+        <circle cx="78" cy="66" r="4.5" fill={PIP.cheek} opacity="0.5" />
         {mood === "oops" ? (
-          <ellipse cx="60" cy="72" rx="5" ry="6" fill="#1C1842" />
+          <ellipse cx="60" cy="72" rx="5" ry="6" fill={PIP.ink} />
         ) : mood === "think" ? (
-          <path d="M53 72h14" stroke="#1C1842" strokeWidth="3.4" strokeLinecap="round" />
+          <path d="M53 72h14" stroke={PIP.ink} strokeWidth="3.4" strokeLinecap="round" />
         ) : (
-          <path d="M50 68q10 10 20 0" stroke="#1C1842" strokeWidth="3.4" strokeLinecap="round" fill="none" />
+          <path d="M50 68q10 10 20 0" stroke={PIP.ink} strokeWidth="3.4" strokeLinecap="round" fill="none" />
         )}
       </g>
       {mood === "cheer" ? (
@@ -249,20 +288,20 @@ export function StMascot({ mood = "wave", size = 120, tone = "sun" }: { mood?: M
         </>
       )}
       {mood === "sleepy" ? (
-        <g className="st-mascot__zzz" fill="#FFF6E5">
+        <g className="st-mascot__zzz" fill={PIP.light}>
           <text x="92" y="30" fontSize="14" fontWeight="800" fontFamily="ui-rounded, system-ui, sans-serif">z</text>
           <text x="102" y="18" fontSize="10" fontWeight="800" fontFamily="ui-rounded, system-ui, sans-serif">z</text>
         </g>
       ) : null}
-      {mood === "think" ? <circle className="st-mascot__dot" cx="98" cy="30" r="5" fill="#FFF6E5" opacity="0.85" /> : null}
+      {mood === "think" ? <circle className="st-mascot__dot" cx="98" cy="30" r="5" fill={PIP.light} opacity="0.85" /> : null}
     </svg>
   );
 }
 
-/** An empty state with a character in it: what is missing and the one tap that fixes it. */
+/** An empty state with a character in it, on a glass card: what is missing and the one tap that fixes it. */
 export function StEmpty({ mood = "wave", tone = "sun", title, children, action }: { mood?: MascotMood; tone?: StTone; title: string; children?: ReactNode; action?: ReactNode }) {
   return (
-    <div className="st-empty">
+    <div className="st-empty st-glass">
       <StMascot mood={mood} tone={tone} size={112} />
       <h2 className="st-empty__title">{title}</h2>
       {children ? <p className="st-empty__text">{children}</p> : null}
@@ -271,20 +310,20 @@ export function StEmpty({ mood = "wave", tone = "sun", title, children, action }
   );
 }
 
-/** A short wait: the mascot bobs while the page gets its words (never a bare spinner). */
+/** A short wait: the mascot bobs while the page gets its words (never a bare spinner), on a backing plate. */
 export function StLoading({ label = "Getting it ready…" }: { label?: string }) {
   return (
-    <div className="st-loading" role="status">
+    <div className="st-loading st-plate" role="status">
       <StMascot mood="think" tone="sky" size={72} />
       <span>{label}</span>
     </div>
   );
 }
 
-/** Something did not load: the sentence the server gave, and Try again. */
+/** Something did not load: the sentence the server gave, and Try again, on a coral-tinted glass card. */
 export function StError({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
-    <div className="st-error" role="alert">
+    <div className="st-error st-glass st-glass--tinted" role="alert">
       <StMascot mood="oops" tone="coral" size={84} />
       <p>{message}</p>
       {onRetry ? (
@@ -337,7 +376,8 @@ export class StBoundary extends Component<{ resetKey: string; children: ReactNod
 
 // ---------- A success: a burst of stars, and the cheer ----------
 
-const STAR_COLOURS = ["#FFC94A", "#FF6F61", "#47D6A0", "#62C6FF", "#FFF6E5"];
+/** The burst in the warm palette: amber, the orange accent, cream, coral and mint. */
+const STAR_COLOURS = ["#FFB766", "#FF8A3D", "#FFF3E4", "#FF7F6A", "#FFD9A8", "#6FD9A4"];
 
 /** A short star burst from a point (a Connect that worked, a saved setting), with the success cheer on a tap. */
 export function celebrate(origin?: { x: number; y: number }, cheer = true): void {
@@ -484,8 +524,41 @@ export function forgetDashboards(): void {
   dashFlight.clear();
 }
 
-/** On every Lamo Stories page: the first thing that needs the owner, with its sentence and the way there. */
-export function NeedsYouBar({ ws }: { ws: string }) {
+/**
+ * The Social accounts page as Needs you sentences name it ("Funded Clips › Social accounts", or just "Social
+ * accounts"). A sentence stored before a rename still says "Clip Factory Stories › Social accounts" or "Lamo Stories ›
+ * Social accounts" and reads the same way.
+ */
+const SOCIAL_PAGE = String.raw`(?:(?:(?:Clip(?: Factory)?|Lamo) Stories|Funded Clips)\s*›\s*)?Social accounts`;
+
+/**
+ * A Needs you sentence shown on the Social accounts page it sends the owner to, without the trip (§45.36 E17): "Open
+ * Lamo Stories › Social accounts, then tap Try again." reads "Fix it below, then tap Try again."; "Pick another in Lamo
+ * Stories › Social accounts" reads "Pick another below". Anything else stays as the server said it.
+ */
+export function socialHere(sentence: string): string {
+  return sentence
+    .replace(new RegExp(String.raw`\bOpen ${SOCIAL_PAGE},? (?:and|then) tap (Connect|Reconnect)\b`, "g"), "Tap $1 below")
+    .replace(new RegExp(String.raw`\bOpen ${SOCIAL_PAGE}, connect it, then\b`, "g"), "Connect it below, then")
+    .replace(new RegExp(String.raw`\bOpen ${SOCIAL_PAGE}, then\b`, "g"), "Fix it below, then")
+    .replace(new RegExp(String.raw`\s+(?:in|on) ${SOCIAL_PAGE}(?![A-Za-z])`, "g"), " below");
+}
+
+/** The address's page, without its query or hash. */
+const pathOf = (href: string) => href.replace(/[?#].*$/, "").replace(/\/+$/, "") || "/";
+
+/** On the page a Needs you item points to: where on it to look (the platform's card on Social accounts), else null. */
+function targetOn(item: StoriesDashboard["needsYou"][number]): HTMLElement | null {
+  if (!item.platform || typeof document === "undefined") return null;
+  return document.querySelector<HTMLElement>(`.st-conn[data-platform="${item.platform}"]`);
+}
+
+/**
+ * On every Lamo Stories page: the first thing that needs the owner, with its sentence and the way there. `here` is the
+ * page on screen: on the page the item points to, the sentence does not send him there again, and Show me brings the
+ * card to fix into view instead of opening the same page (§45.36 E17).
+ */
+export function NeedsYouBar({ ws, here }: { ws: string; here?: string }) {
   const { data } = useDashboard(ws);
   const [gone, setGone] = useState<string | null>(null);
   const first = data?.needsYou[0];
@@ -493,24 +566,42 @@ export function NeedsYouBar({ ws }: { ws: string }) {
   const key = `${first.href}|${first.sentence}`;
   if (gone === key) return null;
   const more = (data?.needsYou.length ?? 1) - 1;
+  const onIt = here !== undefined && pathOf(first.href) === pathOf(here);
+  const onSocial = onIt && pathOf(first.href) === "/stories/connections";
+  const sentence = onSocial ? socialHere(first.sentence) : first.sentence;
+  const show = () => {
+    const card = targetOn(first);
+    if (!card) return;
+    card.scrollIntoView({ block: "start", behavior: storiesReduceMotion() ? "auto" : "smooth" });
+    if (!card.hasAttribute("tabindex")) card.setAttribute("tabindex", "-1");
+    card.focus({ preventScroll: true });
+  };
   return (
-    <aside className="st-needs" aria-label="Needs you">
+    <aside className="st-needs st-glass st-glass--tinted" aria-label="Needs you">
       <span className="st-needs__mark" aria-hidden="true">
         <StIcon name="alert" size={22} />
       </span>
       <p className="st-needs__text">
         <strong>Needs you: </strong>
-        {first.sentence}
+        {sentence}
         {more > 0 ? <span className="st-needs__more"> And {more} more on the dashboard.</span> : null}
       </p>
       <div className="st-needs__actions">
-        <StLinkButton href={first.href} main className="st-needs__go">
-          Fix it
-          <StIcon name="chevron" size={18} />
-        </StLinkButton>
-        <button type="button" className="st-needs__hide" aria-label="Hide this for now" onClick={() => setGone(key)}>
+        {!onIt ? (
+          <StLinkButton href={first.href} className="st-needs__go st-btn--cream">
+            Fix it
+            <StIcon name="chevron" size={18} />
+          </StLinkButton>
+        ) : onSocial && first.platform ? (
+          // Already on Social accounts: the card to fix comes into view, instead of the same page opening again.
+          <StButton className="st-needs__go st-btn--cream" onClick={show}>
+            Show me
+            <StIcon name="chevron" size={18} />
+          </StButton>
+        ) : null}
+        <RoundGlassButton label="Hide this for now" className="st-needs__hide" onClick={() => setGone(key)}>
           <StIcon name="close" size={20} />
-        </button>
+        </RoundGlassButton>
       </div>
     </aside>
   );

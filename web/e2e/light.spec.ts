@@ -4,7 +4,7 @@ import { DEFAULT_COLOURS, hexToRgb, LADDER_STEP, oklabL, type Rgb } from "../src
 import { launcherSettled, settle, stillBackdrop } from "./helpers.ts";
 import { decode, type Pixels } from "./pixels.ts";
 
-// The logic of light (docs/CONTRACTS.md §22.7, docs/DECISIONS.md ADR-85): the top layer is always brighter than the
+// The logic of light (docs/CONTRACTS.md §22.7, docs/DECISIONS.md ADR-87): the top layer is always brighter than the
 // one under it, and inside a pane the top is brighter than the bottom. lib/background.ts works the numbers out and
 // test/background.test.ts holds them for every look; this measures the real render, from screenshot pixels, in
 // headless Chromium: a Library card → its post row → the row's mark, and the Home hero → its new-clip card. Each

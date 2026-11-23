@@ -236,6 +236,6 @@ run "lamo_stories_agent_alarm_off_by_default" {
 
   assert {
     condition     = length(aws_cloudwatch_metric_alarm.stories_agent_errors) == 0 && length(aws_cloudwatch_log_metric_filter.stories_agent_errors) == 0 && output.stories_agent_alarm_name == null
-    error_message = "Without the switch, no Lamo Stories alarm is added."
+    error_message = "Without the switch, no Funded Clips alarm is added."
   }
 }

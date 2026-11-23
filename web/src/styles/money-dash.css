@@ -717,7 +717,7 @@ a.dash-shared:hover {
   text-decoration: none;
   transition: background-color var(--dur-2) var(--ease-out);
 }
-/* Every other row a faint step up, each one paid for with green, so its words keep AA in every look (ADR-85). */
+/* Every other row a faint step up, each one paid for with green, so its words keep AA in every look (ADR-87). */
 .mclip-item:nth-child(odd) .mclip {
   background: var(--fill-ghost);
 }

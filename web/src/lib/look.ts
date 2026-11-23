@@ -75,7 +75,7 @@ export function useLook(): Look {
  * `data-backdrop` names what is drawn; `--backdrop-veil` is the tint over the whole backdrop (between the panels);
  * `--panel-veil` is the bottle-green tint every panel gets (and every piece of loose text, on its scrim), enough for
  * AA over the lightest thing this look can show; `--light-pay` is the green a pane carries on top of it so the ladder
- * of light fits under the AA ceiling over everything this look can show (`lightPay`, ADR-85: over a light backdrop a
+ * of light fits under the AA ceiling over everything this look can show (`lightPay`, ADR-87: over a light backdrop a
  * pane sits darker than the page, and every level above it is brighter). All are worked out here at read time from
  * what is saved, which is never rewritten. Reduced transparency overrides the pay in glass.css (!important).
  */

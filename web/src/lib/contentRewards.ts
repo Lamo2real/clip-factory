@@ -42,8 +42,20 @@ export const crSetupFor = (campaignId: string) => withBack(CR_SETUP_PATH, campai
 export const COMING_SOON = "Content Rewards is coming soon to Clip Factory.";
 /** What Home says for a pasted CR link when the API is from before §38 (404). */
 export const NOT_YET = "Clip Factory can't use Content Rewards links yet.";
-export const TIKTOK_NOT_YET =
-  "TikTok: not yet. TikTok keeps Clip Factory's posts private until it checks the app, and private posts can't earn.";
+/**
+ * Campaign clips skip TikTok for now (D1): the owner's Mac can't set TikTok's Branded content disclosure yet, and a
+ * paid promotion without it breaks TikTok's rules. The API's tiktok_mac.CAMPAIGN_SKIPS, word for word.
+ */
+export const CAMPAIGN_TIKTOK_SKIPS = "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet.";
+export const TIKTOK_NOT_YET = `TikTok: not yet. ${CAMPAIGN_TIKTOK_SKIPS}`;
+
+/**
+ * A campaign clip's places on Review (D1): without TikTok until TikTok approved the app (tiktokAudited: App review and
+ * the posting audit), so TikTok is never ticked or offered for one; Content Rewards' own list may name it before.
+ */
+export function campaignPlaces(places: readonly Platform[], audited: boolean): Platform[] {
+  return audited ? [...places] : places.filter((p) => p !== "tiktok");
+}
 
 // ---------- Money: formatted only ----------
 
@@ -444,7 +456,7 @@ export function stopText(code: StopCode, ctx: StopContext = {}): string {
     case "logo_missing":
       return "This campaign needs its logo on every clip. Add it below.";
     case "tiktok_only":
-      return "This campaign only pays for TikTok. TikTok keeps Clip Factory's posts private until it checks the app, and private posts can't earn. Pick a campaign that pays for YouTube, Instagram, X or Facebook.";
+      return `This campaign only pays for TikTok. ${CAMPAIGN_TIKTOK_SKIPS} Pick a campaign that pays for YouTube, Instagram, X or Facebook.`;
     case "no_place": {
       const paid: Platform[] = (ctx.platformsPaid ?? []).filter((p) => p !== "tiktok");
       const first = PLATFORM_ORDER.find((p) => paid.includes(p));
@@ -763,11 +775,10 @@ export function budgetChip(usedPct: number | null): string | null {
   return "Half used";
 }
 
-/** The lines under Upload to for a campaign clip (§38.5). */
-export function placesLines(c: Pick<Campaign, "platformsPaid" | "uploadPlaces">): string[] {
+/** The lines under Upload to for a campaign clip (§38.5): TikTok skipped while it pays for TikTok but can't go (D1). */
+export function placesLines(c: Pick<Campaign, "platformsPaid" | "uploadPlaces">, audited: boolean): string[] {
   const out = ["Only places this campaign pays for."];
-  if (c.platformsPaid.includes("tiktok") && !c.uploadPlaces.includes("tiktok"))
-    out.push("TikTok is left out for now. Until TikTok checks Clip Factory, TikTok posts are private, and private posts can't earn.");
+  if (c.platformsPaid.includes("tiktok") && !campaignPlaces(c.uploadPlaces, audited).includes("tiktok")) out.push(CAMPAIGN_TIKTOK_SKIPS);
   return out;
 }
 

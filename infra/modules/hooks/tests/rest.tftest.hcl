@@ -421,7 +421,7 @@ run "lamo_stories_forward_only" {
       CLIP_FLOW_ARN          = "arn:aws:lambda:eu-north-1:123456789012:function:cf-test-clip-flow:live"
       STORIES_OAUTH_CALLBACK = "https://http123.execute-api.eu-north-1.amazonaws.com/v1/stories-oauth"
     })
-    error_message = "cf-prod-hooks gains exactly STORIES_OAUTH_CALLBACK (Lamo Stories' callback base) and keeps every other env var."
+    error_message = "cf-prod-hooks gains exactly STORIES_OAUTH_CALLBACK (Funded Clips' callback base) and keeps every other env var."
   }
 
   assert {
@@ -450,7 +450,7 @@ run "lamo_stories_forward_only" {
         ] if anytrue([for a in flatten([s.Action]) : startswith(a, "secretsmanager:") || a == "*"])
       ]
     ]))
-    error_message = "…:secret:<name>/workspaces/stories/youtube/token-AbC123 (and every Lamo Stories secret) matches no cf-prod-hooks resource."
+    error_message = "…:secret:<name>/workspaces/stories/youtube/token-AbC123 (and every Funded Clips secret) matches no cf-prod-hooks resource."
   }
 }
 

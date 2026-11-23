@@ -124,7 +124,8 @@ export function CharacterEditor({
   return (
     <div className="st-s-editor">
       <div className="st-s-editor__stage" ref={box}>
-        <div className="st-s-editor__preview">
+        {/* The editor's hero: its rim may bend (glass/lens.ts decides). */}
+        <div className="st-s-editor__preview st-lens">
           <CharacterPreview look={c.look} movementStyle={c.movementStyle} expression={face} action={move} size={size} label={`${name}, ${faceLabel} face, ${moveLabel}`} />
           <p className="st-s-editor__now">
             <strong>{name}</strong>
@@ -219,7 +220,7 @@ export function CharacterEditor({
 
         {part === "sounds" ? (
           <div className="st-s-editor__part" aria-label="Sounds">
-            <p className="st-s-editor__lede">Lamo Stories videos have no talking. {name} makes little noises instead. You will hear them in the video.</p>
+            <p className="st-s-editor__lede">Funded Clips videos have no talking. {name} makes little noises instead. You will hear them in the video.</p>
             <Pick label="Voice" value={c.voice.style} options={VOICE_STYLE} onChange={(style) => set({ voice: { ...c.voice, style } })} />
             <Slider
               label="Voice pitch"

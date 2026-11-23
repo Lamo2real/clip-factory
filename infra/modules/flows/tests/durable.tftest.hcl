@@ -552,7 +552,7 @@ run "story_flow_is_kept_apart" {
         ] if anytrue([for a in flatten([s.Action]) : startswith(a, "secretsmanager:") || a == "*"])
       ]
     ]))
-    error_message = "No clip-flow or job-flow Secrets Manager resource may match a Lamo Stories workspace token."
+    error_message = "No clip-flow or job-flow Secrets Manager resource may match a Funded Clips workspace token."
   }
 }
 
@@ -605,7 +605,7 @@ run "story_flow_never_reads_provider_keys_or_writes_clip_factorys_counters" {
         contains(try(s.Condition["ForAnyValue:StringEquals"]["dynamodb:LeadingKeys"], []), key) if s.Effect == "Deny"
       ])
     ])
-    error_message = "Lamo Stories' own counters (RATE#WS#…, the shared-app one too) stay writable."
+    error_message = "Funded Clips' own counters (RATE#WS#…, the shared-app one too) stay writable."
   }
 
   assert {

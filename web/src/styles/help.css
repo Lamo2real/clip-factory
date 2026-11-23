@@ -69,7 +69,7 @@
   scale: 0.9;
   pointer-events: none;
 }
-/* Open: pressed in, its top light off (ADR-85: press removes light). */
+/* Open: pressed in, its top light off (ADR-87: press removes light). */
 .help-launcher.is-open {
   background: var(--glass-spec-sm), var(--glass-tint);
   box-shadow: var(--glass-shadow-press);

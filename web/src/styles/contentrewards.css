@@ -7,7 +7,7 @@
   background: var(--tint-leaf);
 }
 .btn.btn--leaf:hover:not([aria-disabled="true"]) {
-  /* More leaf over bottle green (never deep green): brighter, not darker (ADR-85). */
+  /* More leaf over bottle green (never deep green): brighter, not darker (ADR-87). */
   background:
     linear-gradient(rgb(var(--green-leaf-rgb) / 0.32), rgb(var(--green-leaf-rgb) / 0.32)),
     rgb(var(--green-rgb) / 0.4);

@@ -1,0 +1,365 @@
+/* ---------- The make screens (Ideas and Characters): shared parts ----------
+   The warm liquid glass (styles/GLASS-CONTRACT.md): every surface is the contract's glass, every number a --st-*
+   token. No cursor rules, light never a border, hover on every control, a glass surface never moves. */
+
+/* The studio title and its line sit on a backing plate (.st-plate): nothing over Ember, a glass plate in Picture and
+   See-through, where a white desktop or a busy photo can be behind them. */
+.st-s-make .st-s-head__text {
+  min-width: 0;
+  max-width: 100%;
+}
+
+/* The kit's panels, empty states and drafts carry the glass on the make screens (the kit keeps its own look
+   elsewhere): the card veil, the soft inner top highlight, depth and the warm glow behind. */
+.st-s-make :is(.st-s-make-panel, .st-s-drafts, .st-s-make-empty).st-glass {
+  border-radius: var(--st-r-surface);
+  background: var(--st-tint-card);
+  box-shadow: var(--st-sheen), var(--st-depth-1), var(--st-glow-behind);
+}
+
+.st-s-make .st-s-make-panel,
+.st-s-make .st-s-drafts {
+  gap: var(--st-space-4);
+  padding: var(--st-inset);
+}
+
+/* An empty board or cast: a warm light high in the card, never behind the words. */
+.st-s-make .st-s-make-empty.st-glass {
+  gap: var(--st-space-3);
+  padding: var(--st-space-7) var(--st-inset);
+  background:
+    radial-gradient(42% 34% at 50% 18%, rgb(var(--st-amber-rgb) / 0.2), transparent 72%),
+    var(--st-tint-card);
+}
+
+.st-s-make .st-s-make-empty .st-s-empty__title {
+  color: var(--st-text-strong);
+  font-family: var(--st-font);
+  font-size: var(--st-fs-h3);
+  font-weight: var(--st-weight-display);
+  font-stretch: var(--st-wdth-display);
+  line-height: var(--st-lh-head);
+}
+
+.st-s-make .st-s-make-empty .st-s-empty__text {
+  color: var(--st-text-soft);
+  line-height: var(--st-lh-body);
+}
+
+/* ---------- Ideas ---------- */
+
+/* Show: All, Saved, Made into videos. The studio kit's Pick draws the pills (the chosen one solid cream with
+   espresso words, the others glass, the same as every pick-one in the studio); here only its place. */
+.st-s-filter {
+  justify-self: start;
+  max-width: 100%;
+}
+
+/* The board: glass idea cards; the chosen one (its full idea open, or being edited) is the hero across the row. The
+   cards after it fill the gap it leaves in its old row (dense), so no row is left half empty. */
+.st-s-board {
+  container-type: inline-size;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+  grid-auto-flow: row dense;
+  gap: var(--st-gap);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.st-s-idea {
+  display: flex;
+  flex-direction: column;
+  gap: var(--st-space-4);
+  padding: var(--st-inset);
+  /* Brought into view when it becomes the hero: clear of the page's edge and the phone's tab bar. */
+  scroll-margin-block: var(--st-space-6) calc(var(--st-tab-h) + var(--st-space-6));
+}
+
+.st-s-idea__main {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: var(--st-space-3);
+}
+
+.st-s-idea__top {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--st-space-2);
+}
+
+.st-s-idea__tags,
+.st-s-cast__tags,
+.st-s-concept__meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--st-space-1) var(--st-space-2);
+}
+
+.st-s-idea__tags {
+  flex: 1 1 12rem;
+  align-items: center;
+  min-width: 0;
+  min-height: var(--st-tap);
+}
+
+/* Edit and Delete: glass pills with their words and a small icon at the card's top right (under the tags when the
+   card is narrow). */
+.st-s-idea__tools {
+  display: flex;
+  flex: none;
+  flex-wrap: wrap;
+  gap: var(--st-space-2);
+  margin-inline-start: auto;
+}
+
+.st-s-idea__title,
+.st-s-draft__title {
+  margin: 0;
+  color: var(--st-text-strong);
+  font-family: var(--st-font);
+  font-size: var(--st-fs-h3);
+  font-weight: var(--st-weight-display);
+  font-stretch: var(--st-wdth-display);
+  font-optical-sizing: auto;
+  line-height: var(--st-lh-head);
+  letter-spacing: -0.005em;
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+.st-s-idea__line,
+.st-s-draft__line {
+  margin: 0;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-body);
+  line-height: var(--st-lh-body);
+  overflow-wrap: anywhere;
+}
+
+/* The checked advice: a piece of lighter glass inside the card with a little of its tone. --st-fill-control is light
+   smoky glass over Ember and a card's own veil in Picture and See-through, so over a white desktop or photo the
+   piece darkens and the words keep their contrast. */
+.st-s-idea__advice {
+  margin: 0;
+  padding: var(--st-space-3) var(--st-space-4);
+  border-radius: var(--st-r-control);
+  color: var(--st-mint-ink);
+  background:
+    linear-gradient(rgb(var(--st-mint-rgb) / var(--st-tint-cut)), rgb(var(--st-mint-rgb) / var(--st-tint-cut))),
+    var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  font-size: var(--st-fs-small);
+  line-height: 1.45;
+}
+
+.st-s-idea__advice.is-bad {
+  color: var(--st-coral-ink);
+  background:
+    linear-gradient(rgb(var(--st-coral-rgb) / var(--st-tint-cut)), rgb(var(--st-coral-rgb) / var(--st-tint-cut))),
+    var(--st-fill-control);
+}
+
+/* The actions sit at the foot of every card, so a row of cards lines them up. */
+.st-s-idea__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--st-space-2);
+  margin-top: auto;
+  padding-top: var(--st-space-1);
+}
+
+/* The full idea: a reading panel of lighter glass inside the hero (the same --st-fill-control as the advice: light
+   over Ember, the card's veil again over a white desktop or photo). */
+.st-s-concept {
+  display: grid;
+  align-content: start;
+  gap: var(--st-space-3);
+  padding: var(--st-space-4) var(--st-space-5);
+  border-radius: var(--st-r-control);
+  color: var(--st-text);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  font-size: var(--st-fs-body);
+  line-height: var(--st-lh-body);
+}
+
+.st-s-concept p {
+  margin: 0;
+}
+
+.st-s-concept strong {
+  color: var(--st-text-amber);
+  font-weight: var(--st-weight-ui);
+}
+
+.st-s-concept__premise {
+  color: var(--st-text-strong);
+  font-family: var(--st-font);
+  font-size: calc(var(--st-fs-body) * 1.12);
+  font-weight: var(--st-weight-display);
+  line-height: 1.4;
+}
+
+/* The steps, each with its number in a small round count. */
+.st-s-make .st-s-concept__beats {
+  display: grid;
+  gap: var(--st-space-2);
+  margin: 0;
+  padding: 0;
+  counter-reset: st-beat;
+}
+
+.st-s-concept__beats > li {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  align-items: start;
+  gap: var(--st-space-3);
+  counter-increment: st-beat;
+}
+
+.st-s-concept__beats > li::before {
+  content: counter(st-beat);
+  display: grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-top: 0.1em;
+  border-radius: var(--st-r-round);
+  color: var(--st-text-amber);
+  background: var(--st-fill-control-hover);
+  box-shadow: var(--st-sheen-control);
+  font-size: var(--st-fs-chip);
+  font-variant-numeric: lining-nums tabular-nums;
+  font-weight: var(--st-weight-ui);
+  line-height: 1;
+}
+
+.st-s-concept__words {
+  color: var(--st-text-soft);
+  overflow-wrap: anywhere;
+}
+
+/* The hero across the row, from two columns up: the idea on the left, its full idea on the right. */
+@container (min-width: 700px) {
+  .st-s-idea.is-hero {
+    grid-column: 1 / -1;
+  }
+
+  .st-s-idea.is-hero:not(.is-editing) {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1.25fr);
+    align-items: start;
+    column-gap: var(--st-space-6);
+  }
+}
+
+/* The drafts the AI wrote: glass tiles in the drafts panel; a saved one turns mint. */
+.st-s-drafts__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--st-space-2);
+}
+
+.st-s-drafts__title {
+  margin: 0;
+  color: var(--st-text-strong);
+  font-family: var(--st-font);
+  font-size: var(--st-fs-h2);
+  font-weight: var(--st-weight-display);
+  font-stretch: var(--st-wdth-display);
+  line-height: var(--st-lh-head);
+  overflow-wrap: anywhere;
+  text-wrap: balance;
+}
+
+.st-s-drafts__lede {
+  margin: 0;
+  color: var(--st-text-soft);
+}
+
+.st-s-drafts__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 260px), 1fr));
+  gap: var(--st-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.st-s-draft {
+  display: grid;
+  align-content: start;
+  justify-items: start;
+  gap: var(--st-space-2);
+  padding: var(--st-space-4);
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  transition: background-color var(--st-dur-hover) var(--st-ease-out);
+}
+
+.st-s-draft:hover {
+  background: var(--st-fill-control-hover);
+}
+
+.st-s-draft .st-btn {
+  justify-self: end;
+  margin-top: auto;
+}
+
+.st-s-draft.is-saved {
+  background:
+    linear-gradient(rgb(var(--st-mint-rgb) / var(--st-tint-cut)), rgb(var(--st-mint-rgb) / var(--st-tint-cut))),
+    var(--st-fill-control);
+}
+
+/* Edit an idea: the idea's basics, then its full idea beside them once the hero is wide enough. */
+@container (min-width: 760px) {
+  .st-s-ideaedit:has(> .st-s-ideaedit__full) {
+    grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+    align-items: start;
+    column-gap: var(--st-space-6);
+  }
+
+  .st-s-ideaedit > :not(.st-s-ideaedit__basics, .st-s-ideaedit__full) {
+    grid-column: 1 / -1;
+  }
+}
+
+.st-s-ideaedit__basics {
+  display: grid;
+  gap: var(--st-space-4);
+}
+
+/* Beside a long full idea, the basics stay in view while the steps scroll by. */
+@container (min-width: 760px) {
+  .st-s-ideaedit:has(> .st-s-ideaedit__full) > .st-s-ideaedit__basics {
+    position: sticky;
+    top: var(--st-space-4);
+  }
+}
+
+/* The length of a full idea: white rounded-square − and + around the seconds. */
+.st-s-length .st-stepper {
+  justify-self: start;
+  max-width: 100%;
+}
+
+/* The make screens' small icons. */
+.st-s-makeicon {
+  display: block;
+}
+
+/* ---------- Phones: every target 48 px ---------- */
+@media (max-width: 767px), (pointer: coarse) {
+  .st-s-filter .st-s-pick__opt {
+    min-height: var(--st-tap-phone);
+  }
+}

@@ -859,6 +859,8 @@ def test_download_only_when_approved_as_an_attachment(call: Call, store: db.Stor
     assert (op, params["Key"], seconds) == ("get_object", approved["videoKey"], 3600)
     assert params["ResponseContentDisposition"] == 'attachment; filename="ice-what-to-do.mp4"'
     assert unquote(body["url"]).startswith("https://")
+    untitled = seed_story(store, s3_client, status="approved", title="¡¿!")  # nothing left for a name: the fallback
+    assert call("GET", f"{BASE}/stories/{untitled['storyId']}/download")[1]["filename"] == "funded-clip.mp4"
 
 
 # --- delete ---------------------------------------------------------------------------------------------------
@@ -1197,7 +1199,7 @@ def test_a_switched_off_storyboard_agent_refuses_runs_that_write_the_story(
             "active": False,
         }
     )
-    sentence = "Storyboard is switched off. Switch it on in Lamo Stories › Settings › Agents."
+    sentence = "Storyboard is switched off. Switch it on in Funded Clips › Settings › Agents."
     body = {"brief": {"title": "T", "logline": "L", "category": "comedy"}, "characterIds": [hero["characterId"]]}
     status, out = call("POST", f"{BASE}/stories", body)
     assert (status, out["error"]["message"]) == (409, sentence)

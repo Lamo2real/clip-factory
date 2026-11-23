@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
 import { ACT_MS } from "../src/lib/motion.ts";
 import { animationsDone, settle } from "./helpers.ts";
-import { actTransforms, actWidths, MOTION_WIDTHS, noSideScroll, pauseActs, tapAct, tapUntilPhase } from "./motionHelpers.ts";
+import { actTransforms, actWidths, holdClock, MOTION_WIDTHS, noSideScroll, pauseActs, tapAct, tapHeld, tapUntilPhase, watchFor } from "./motionHelpers.ts";
 
 // Action motion in Settings (docs/CONTRACTS.md §20.11 (c)): search, branches, sounds, skills and Set up posting.
 // Mock mode. Each check taps from inside the page (tapAct) so the motion's first frame can be read.
@@ -22,28 +22,41 @@ test.describe("motion in Settings (APPLY c)", () => {
   test.use({ viewport: { width: 1280, height: 900 }, permissions: ["clipboard-read", "clipboard-write"] });
 
   test("Find a setting: Ask flies its sparkle at the tap; Clear is a clear", async ({ page }) => {
+    // Before the page loads, so the page's clock can be held (holdClock); until then time runs as usual.
+    await page.clock.install();
     await open(page, "/settings");
     await page.getByLabel("Find a setting").first().fill("zzqqxx");
     await expect(page.getByRole("button", { name: "Clear the search" })).toHaveAttribute("data-act", "clear");
     const ask = page.locator(".find__ask");
     await expect(ask).toHaveAttribute("data-act", "send");
-    const { cls } = await tapAct(ask);
-    expect(cls.split(" ")).toEqual(expect.arrayContaining(["act", "act--send", "is-play"]));
-    await expect(ask.locator(".act")).toHaveClass(/is-idle/, { timeout: ACT_MS.send + 300 });
+    // Held from the tap: the flight is still in its play phase when checked, and it rests on the page's own clock.
+    await holdClock(page);
+    await tapHeld(ask);
+    await expect(ask.locator(".act")).toContainClass("act act--send is-play");
+    await page.clock.runFor(ACT_MS.send);
+    await expect(ask.locator(".act")).toHaveClass(/is-idle/);
+    await page.clock.resume();
     await page.keyboard.press("Escape");
     await page.getByRole("button", { name: "Clear the search" }).click();
     await expect(page.getByLabel("Find a setting").first()).toHaveValue("");
   });
 
   test("Check for updates turns its arrow, and the answer does not wait for it", async ({ page }) => {
+    // Before the page loads, so the page's clock can be held (holdClock); until then time runs as usual.
+    await page.clock.install();
     await open(page, "/settings/app/updates");
     const button = page.getByRole("button", { name: "Check for updates" });
     await expect(button).toHaveAttribute("data-act", "refresh");
-    const { cls } = await tapAct(button);
-    expect(cls).toContain("is-play");
-    // The toast arrives while the arrow is still turning or just after: nothing is held back for the motion.
-    await expect(page.getByText(/You have the newest version|A new version is ready/)).toBeVisible({ timeout: ACT_MS.refresh + 400 });
-    await expect(button.locator(".act")).toHaveClass(/is-idle/, { timeout: ACT_MS.refresh + 300 });
+    // The page's clock is held from the tap, so the arrow's play phase cannot end until the clock is moved on.
+    await holdClock(page);
+    await tapHeld(button);
+    await expect(button.locator(".act")).toContainClass("is-play");
+    // The answer arrives while the arrow is still turning: nothing is held back for the motion.
+    await expect(page.getByText(/You have the newest version|A new version is ready/)).toBeVisible();
+    await expect(button.locator(".act")).toContainClass("is-play");
+    await page.clock.runFor(ACT_MS.refresh);
+    await expect(button.locator(".act")).toHaveClass(/is-idle/);
+    await page.clock.resume();
   });
 
   test("Sign out is a disconnect; the steppers add and remove", async ({ page }) => {
@@ -83,9 +96,12 @@ test.describe("motion in Settings (APPLY c)", () => {
 
     const remove = page.getByRole("button", { name: "Remove picture" });
     await expect(remove).toHaveAttribute("data-act", "undo");
+    // The rewind lasts ACT_REWIND_MS: watch for it from before the tap (not between it and the 8 s Undo), so a busy
+    // machine cannot hide it.
+    const rewound = await watchFor(page.locator("body"), "button:has(> .act.is-rewind)", { hasText: "Remove picture" });
     await remove.click();
     await page.getByRole("button", { name: "Undo" }).click();
-    await expect(page.getByRole("button", { name: "Remove picture" }).locator(".act")).toHaveClass(/is-rewind/);
+    await expect.poll(rewound).toBe(true);
   });
 
   // A made-up sign-in row that passes the check before upload (§29.6); no real cookie.
@@ -94,16 +110,20 @@ test.describe("motion in Settings (APPLY c)", () => {
   test("YouTube cookies: a bad file fails, a good one uploads, Remove rewinds on Undo", async ({ page }) => {
     await open(page, "/settings/clip-making/youtube");
     const input = page.locator('input[type="file"][accept=".txt,text/plain"]');
+    // The shake and the rewind are short (ACT_FAIL_MS, ACT_REWIND_MS): each is watched for from before the action that
+    // brings it, so a busy machine cannot hide it between two polls.
+    const shook = await watchFor(page.locator("body"), '[data-act="upload"] .act.is-fail');
     await input.setInputFiles({ name: "cookies.txt", mimeType: "text/plain", buffer: Buffer.alloc(1024 ** 2 + 10, "a") });
-    await expect(page.locator('[data-act="upload"] .act')).toHaveClass(/is-fail/);
+    await expect.poll(shook).toBe(true);
     await page.waitForTimeout(400);
     await input.setInputFiles({ name: "cookies.txt", mimeType: "text/plain", buffer: GOOD_COOKIES });
     const remove = page.getByRole("button", { name: "Remove" });
     await expect(remove).toHaveAttribute("data-act", "delete");
+    const rewound = await watchFor(page.locator("body"), 'button[data-act="delete"]:has(> .act.is-rewind)', { hasText: "Remove" });
     await remove.click();
     await expect(remove).toHaveCount(0);
     await page.getByRole("button", { name: "Undo" }).click();
-    await expect(page.getByRole("button", { name: "Remove" }).locator(".act")).toHaveClass(/is-rewind/);
+    await expect.poll(rewound).toBe(true);
   });
 
   test("Post to: turning a place on ticks its mark", async ({ page }) => {
@@ -128,8 +148,10 @@ test.describe("motion in Settings (APPLY c)", () => {
   test("Skills: Write is an add, a wrong file fails, and Undo brings the row back returning", async ({ page }) => {
     await open(page, "/settings/clip-making/skills");
     await expect(page.getByRole("link", { name: "Write a skill" })).toHaveAttribute("data-act", "add");
+    // The shake is short (ACT_FAIL_MS): watch for it from before the file arrives, so a busy machine cannot hide it.
+    const shook = await watchFor(page.getByRole("button", { name: "Upload a file" }), ".act.is-fail");
     await page.getByLabel("Skill file").setInputFiles({ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("hi") });
-    await expect(page.getByRole("button", { name: "Upload a file" }).locator(".act")).toHaveClass(/is-fail/);
+    await expect.poll(shook).toBe(true);
 
     await open(page, `/settings/clip-making/skills/${WRITTEN}`);
     await page.getByRole("button", { name: "Delete" }).click();

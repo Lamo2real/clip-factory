@@ -169,7 +169,7 @@ html:has(.setup-todo[data-mode="pill"]) {
   padding: 6px 16px 6px 8px;
   border-radius: var(--r-pill);
   /* Pages scroll under the pill: a floating layer's tint and light (FLOAT_VEIL, planned for a white thumbnail under
-     it; FLOAT_EXTRA_VEIL, the least the AA cap over white needs, ADR-85). */
+     it; FLOAT_EXTRA_VEIL, the least the AA cap over white needs, ADR-87). */
   --glass-tint: var(--glass-tint-float);
   --glass-light: var(--glass-light-float);
   --glass-blur: 28px;

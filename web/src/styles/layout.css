@@ -129,7 +129,7 @@ html[data-titlebar="overlay"] .titlebar-drag {
   height: var(--tabbar-h);
   padding: 6px;
   border-radius: var(--r-lg);
-  /* A floating shell piece (ADR-85): flat green planned for white under it (TABBAR_VEIL + TABBAR_EXTRA_VEIL), a soft
+  /* A floating shell piece (ADR-87): flat green planned for white under it (TABBAR_VEIL + TABBAR_EXTRA_VEIL), a soft
      light from above, the float's top glow, bottom shade and drop. */
   --glass-tint: var(--glass-tint-tabbar);
   --glass-light: var(--glass-light-tabbar);
@@ -279,7 +279,7 @@ html[data-titlebar="overlay"] .titlebar-drag {
     color var(--dur-2),
     transform var(--dur-2) var(--ease-spring);
 }
-/* Hover adds light (ADR-85): one raised step over the sidebar with light catching its top. */
+/* Hover adds light (ADR-87): one raised step over the sidebar with light catching its top. */
 .sidebar__item:hover {
   color: var(--ink);
   background: var(--fill);

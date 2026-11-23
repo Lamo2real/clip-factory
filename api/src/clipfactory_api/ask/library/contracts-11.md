@@ -3,9 +3,9 @@
 * Colours (owner request 2026-11-18, ADR-43): **Bottle Green `#0F372B`** (the surface), **Bone `#EFE7DA`** (the
   words and the lines), **Vermilion `#E8392B` (every call to action)**. Every surface is **liquid glass**: bottle-green
   tints with bone words over a soft animated deep-green mesh with a vermilion glow (or the owner's own background),
-  `backdrop-filter: blur() saturate()`, a soft light from above (the logic of light, §22.7, ADR-85: every layer is
+  `backdrop-filter: blur() saturate()`, a soft light from above (the logic of light, §22.7, ADR-87: every layer is
   brighter than the one under it, and every pane is brighter at its top) and refraction on the hero surfaces. Every
-  action button wears the vermilion CTA, **except the update bar's Reload, a colourless liquid-glass lens (ADR-85)**;
+  action button wears the vermilion CTA, **except the update bar's Reload, a colourless liquid-glass lens (ADR-87)**;
   secondary buttons are glass one step brighter than what they sit on (no outline, ADR-45); selected items in a
   pick-one bar are bone with green words.
 * Type: **Times New Roman** (fallback Tinos, then serif) for display headlines, often italic with a vermilion underline

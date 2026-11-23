@@ -10,7 +10,7 @@ import { friendlyMessage } from "../../api/errors.ts";
 import { useToast } from "../../components/Toasts.tsx";
 import { storiesApi } from "../api/client.ts";
 import type { ProviderStatus } from "../api/types.ts";
-import { Btn, cheer, Chip, Note, PROVIDER_STATE, SIcon, whenText } from "./bits.tsx";
+import { Btn, cheer, Chip, Note, PROVIDER_STATE, SIcon, useOnThisPage, whenText } from "./bits.tsx";
 
 /** The providers that use Lamo Stories' own AWS access, so a key is never asked for (§45.11.6, §45.31). */
 export const NO_KEY: ReadonlySet<string> = new Set([
@@ -51,7 +51,7 @@ export function keepName(old: ProviderStatus, next: ProviderStatus): ProviderSta
 
 /** An OpenAI-compatible key is for one address only (§45.37 G4): the one its models use, never sent anywhere else. */
 export const ONE_ADDRESS_LINE =
-  "This key is for one address only: the one your OpenAI-compatible models use. Lamo Stories never sends it anywhere else. Add the model first, or type its address here.";
+  "This key is for one address only: the one your OpenAI-compatible models use. Funded Clips never sends it anywhere else. Add the model first, or type its address here.";
 
 function KeyForm({ ws, provider, onSaved }: { ws: string; provider: ProviderStatus; onSaved: (p: ProviderStatus) => void }) {
   const toast = useToast();
@@ -61,6 +61,7 @@ function KeyForm({ ws, provider, onSaved }: { ws: string; provider: ProviderStat
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const s = PROVIDER_STATE[provider.state];
+  const here = useOnThisPage();
   const save = async (el: HTMLElement | null) => {
     if (busy) return;
     if (!text.trim()) {
@@ -105,7 +106,7 @@ function KeyForm({ ws, provider, onSaved }: { ws: string; provider: ProviderStat
         </span>
         <Chip tone={s.tone}>{s.label}</Chip>
       </div>
-      <p className="st-stg-small">{provider.line}</p>
+      <p className="st-stg-small">{here(provider.line)}</p>
       {provider.key?.saved && !provider.line.includes("Key saved") ? (
         <p className="st-stg-small">
           Key saved{provider.key.hint ? ` · ends ${provider.key.hint}` : ""}
@@ -198,7 +199,7 @@ export function ProviderKeys({
   if (!list.length)
     return (
       <Note tone="sky" icon="key">
-        None of these providers needs a key: they run in Lamo Stories' own AWS account. A provider that needs one shows its key form here.
+        None of these providers needs a key: they run in Funded Clips' own AWS account. A provider that needs one shows its key form here.
       </Note>
     );
   return (
@@ -213,6 +214,7 @@ export function ProviderKeys({
 /** One provider and its real state (a provider is shown as working only after a real call, §45.11.6). */
 export function ProviderRow({ p, what }: { p: ProviderStatus; what?: string }) {
   const s = PROVIDER_STATE[p.state];
+  const here = useOnThisPage();
   return (
     <li className="st-stg-provider">
       <div className="st-stg-provider__head">
@@ -220,8 +222,8 @@ export function ProviderRow({ p, what }: { p: ProviderStatus; what?: string }) {
         <Chip tone={s.tone}>{s.label}</Chip>
       </div>
       {what ? <span className="st-stg-small">{what}</span> : null}
-      <span className="st-stg-provider__line">{p.line}</span>
-      {p.lastError && p.lastError !== p.line ? <span className="st-stg-provider__error">Last problem: {p.lastError}</span> : null}
+      <span className="st-stg-provider__line">{here(p.line)}</span>
+      {p.lastError && p.lastError !== p.line ? <span className="st-stg-provider__error">Last problem: {here(p.lastError)}</span> : null}
       {p.checkedAt ? <span className="st-stg-small">Last checked {whenText(p.checkedAt)}.</span> : null}
     </li>
   );

@@ -8,7 +8,8 @@ import { startLive, stopLive, useLiveEvents, useLivePoll, type SocketLike } from
 import { getPrefs, setPrefs, type Prefs } from "../lib/prefs.ts";
 import { isBackgroundMode, isGlassStrength, normaliseColours } from "../lib/background.ts";
 import { DEFAULT_CLICK_SOUND, DEFAULT_ERROR_SOUND, isSoundId } from "../lib/soundCatalog.ts";
-import { useToast } from "../components/Toasts.tsx";
+import { useToastWhen } from "../components/Toasts.tsx";
+import { clipsHidden } from "./shell.ts";
 
 /**
  * What to save: the changed fields, or a function that builds them from the newest settings on screen (including
@@ -72,9 +73,14 @@ function before<T extends object>(now: T, patch: Partial<T>): Partial<T> {
   return out;
 }
 
+/** Clip Factory is on screen (always, while Lamo Stories is switched off). */
+const clipsShown = () => !clipsHidden();
+
 export function SessionProvider({ children, onSignOut }: { children: ReactNode; onSignOut: () => void }) {
   const [me, setMe] = useState<Me | null>(null);
-  const toast = useToast();
+  // Clip Factory's session sits above both apps: its toasts (a /me that failed, a settings save that did not go
+  // through) wait while Lamo Stories is on screen and show once Clip Factory is back (§45.38).
+  const toast = useToastWhen(clipsShown);
   // The settings on screen right now, kept in step synchronously so two quick saves each see the one before.
   const shown = useRef<Settings | null>(null);
   useEffect(() => {

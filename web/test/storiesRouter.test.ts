@@ -45,10 +45,13 @@ describe("the stories route", () => {
   });
 
   it("round-trips its own addresses", () => {
-    for (const path of ["/stories", "/stories/ideas", "/stories/characters/new", "/stories/production/new?idea=ab1", "/stories/library?kind=final_video&story=s1", "/stories/settings/agents", "/stories/chat/c1", "/stories/references/r1", "/stories/setup"]) {
+    for (const path of ["/stories", "/stories/ideas", "/stories/characters/new", "/stories/production/new?idea=ab1", "/stories/library?kind=final_video&story=s1", "/stories/settings/agents", "/stories/settings/look", "/stories/chat/c1", "/stories/references/r1", "/stories/setup"]) {
       const [p, q = ""] = path.split("?");
       expect(storiesHref(matchStories(p!, q ? `?${q}` : ""))).toBe(path);
     }
     expect(matchStories("/stories/nope", "").name).toBe("not_found");
+    // Settings › Look is its own page, deep links and the phone pills alike.
+    expect(matchStories("/stories/settings/look", "")).toEqual({ name: "settings", section: "look" });
+    expect(matchStories("/stories/settings/look/", "")).toEqual({ name: "settings", section: "look" });
   });
 });

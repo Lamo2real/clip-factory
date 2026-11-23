@@ -6,17 +6,28 @@ with `validate` without a backend and `terraform test` against a mock AWS provid
 
 ## What runs where
 
-| Suite | Folder | Tools | In CI ([ci.yml](../.github/workflows/ci.yml)) | Before deploy ([deploy.yml](../.github/workflows/deploy.yml)) |
+| Suite | Folder | Tools | In CI ([ci.yml](../.github/workflows/ci.yml)) | In the deploy ([deploy.yml](../.github/workflows/deploy.yml)) |
 |---|---|---|---|---|
-| Web unit and component tests | `web/` | Vitest, Testing Library | yes | yes |
-| Web type check and lint | `web/` | TypeScript, ESLint | yes | yes |
-| Web end-to-end and layout tests | `web/` | Playwright in mock mode | yes | yes |
-| API Lambdas | `api/` | pytest, ruff, mypy (uv) | yes | yes |
-| Agent runtime | `agent/` | pytest, ruff, mypy (uv) | yes | yes |
-| Infrastructure | `infra/` | `terraform fmt -check`, `terraform validate`, `terraform test` (mock provider), tflint | yes | plan and apply |
-| Help corpus drift | `web/` | `node scripts/help-corpus.mjs --check` (corpus, routes table in [HELP_ASSISTANT.md](HELP_ASSISTANT.md), `/v1/help` rows of CONTRACTS §19); the CI `web-checks` job runs it right after `npm ci`, before type check, lint and tests | yes | – (the build regenerates the corpus) |
-| Documentation | `docs/`, `README.md` | relative-link and anchor check, draw.io XML parse and PNG export (below); `docs/SETUP_POSTING.md` is also checked by the web test `setup-docs.test.ts` (the five platforms, and the Content Rewards steps once `## Content Rewards` is there) | by hand (the setup page: yes, through the web tests) | – |
-| Workflows and scripts | `.github/`, `scripts/` | actionlint, shellcheck where available | yes | – |
+| Web unit and component tests | `web/` | Vitest, Testing Library | yes | no |
+| Web type check and lint | `web/` | TypeScript, ESLint | yes | no |
+| Web end-to-end and layout tests | `web/` | Playwright in mock mode | yes | no |
+| API Lambdas | `api/` | pytest, ruff, mypy (uv) | yes | no |
+| Agent runtime | `agent/` | pytest, ruff, mypy (uv), the image build and its self-check | yes | no tests, but the apply builds and pushes a new image, and that build runs the Dockerfile's self-check (`agent/Dockerfile`: the PO token check, `python -m clipfactory_agent.pot`) |
+| Funded Clips agent | `stories/agent/` | pytest, ruff, mypy (uv), ffmpeg, the image build and its self-check | yes (job `stories-agent`; the `web` gate waits for it) | no tests, but it builds and pushes a new image, and that build runs the Dockerfile's self-checks (`stories/agent/Dockerfile`: the engine's `validate` under Deno and `python -m lamostories_agent.selfcheck`) |
+| Desktop app | `desktop/` | `cargo fmt --check`, clippy, `cargo test`, the tools lock and its signing | yes, when `desktop/` changes (the `web` gate waits for it) | no ([desktop.yml](../.github/workflows/desktop.yml) builds it after a deploy) |
+| Infrastructure | `infra/` | `terraform fmt -check`, `terraform validate`, `terraform test` (mock provider), tflint | yes | no tests: plan, the delete gate, the Clip Factory check and apply |
+| Help corpus drift | `web/` | `node scripts/help-corpus.mjs --check` (corpus, routes table in [HELP_ASSISTANT.md](HELP_ASSISTANT.md), `/v1/help` rows of CONTRACTS §19); the CI `web-checks` job runs it right after `npm ci`, before type check, lint and tests | yes | no (the build regenerates the corpus) |
+| Documentation | `docs/`, `README.md` | relative-link and anchor check, draw.io XML parse and PNG export (below); `docs/SETUP_POSTING.md` is also checked by the web test `setup-docs.test.ts` (the five platforms, and the Content Rewards steps once `## Content Rewards` is there) | by hand (the setup page: yes, through the web tests) | no |
+| Workflows and scripts | `.github/`, `scripts/`, `mac/tiktok-helper/` | actionlint 1.7.12 (every workflow, with shellcheck on their `run:` steps), shellcheck (`scripts/*.sh`, `desktop/scripts/*.sh`, the TikTok helper's install scripts), each `scripts/test-*.sh`, the TikTok helper's `npm test` | yes (job `scripts`) | no |
+
+`deploy.yml` runs none of these test suites. The only checks it repeats are the self-checks in the two agent
+Dockerfiles, which run whenever its image build builds a new agent image (a build that fails them stops that image). It
+deploys each push to `main` (and a run by hand). The required checks in `ci.yml` (`web`, `api`, `agent`, `infra`,
+`scripts`; `web` also waits for `stories-agent` and `desktop`) gate a pull request's merge and its auto-merge. They are
+not a lock on `main`: branch protection does not hold admins to them (`enforce_admins` is off), so an admin can still
+merge past them. The push's own `ci` run goes on beside the deploy and does not hold it back. What `deploy.yml` checks
+is the release itself: the delete gate and the Clip Factory check on the saved plan, then the smoke test against the
+live app after the upload.
 
 The exact commands are in each folder's `package.json` or `pyproject.toml` and in `ci.yml`, which are the source of
 truth. The common ones:
@@ -35,34 +46,83 @@ npx playwright install webkit           # once, for the WebKit projects (Ask pic
 CF_E2E_PORT=4233 npx playwright test e2e/help-pictures.spec.ts --project=chromium --project=webkit --project=webkit-phone
 ```
 
-The `webkit` (Desktop Safari) and `webkit-phone` (iPhone 15) projects run only `e2e/help-pictures.spec.ts`, headless:
-the Mac app (WKWebView) and the iPhone PWA are WebKit, so picking, pasting and dropping pictures is checked there too.
-CI runs them in a job of its own, `web-e2e (WebKit)`, so only that job installs WebKit and its system packages.
+The `webkit` (Desktop Safari) and `webkit-phone` (iPhone 15) projects run the specs that hold the Mac app (WKWebView)
+and the iPhone PWA, headless: Ask's pictures and files, the motion, stillness and top-line checks, Home's boxes and
+covers, Get paid, and the Funded Clips switch's slide (`webkit` only; `testMatch` in `web/playwright.config.ts`). CI
+runs them in jobs of their own, the `web-e2e (WebKit N/5)` shards, so only those jobs install WebKit and its system
+packages.
 
 Playwright serves the mock app on port 4179 and reuses a server already on that port. If another checkout's preview
-server holds 4179, set `CF_E2E_PORT` to a free port, or the tests run against the other checkout's build.
+server holds 4179, set `CF_E2E_PORT` to a free port, or the tests run against the other checkout's build. On CI
+(`CI` set) a `test.only` left in a spec fails the run (`forbidOnly`), instead of quietly running that one test.
 
-**In CI the web checks are three jobs.** The Playwright suite (762 tests on 16 Nov 2026) took 32 to 40 minutes as one
-job, so [ci.yml](../.github/workflows/ci.yml) splits it:
+**In CI the web checks are a few jobs.** The Playwright suite (about 1,990 tests on 23 Nov 2026) took 32 to 40 minutes
+as one job, so [ci.yml](../.github/workflows/ci.yml) splits it:
 
 | Job | What it runs |
 |---|---|
-| `web-checks` | help corpus check, type check, lint, Vitest, the production build |
-| `web-e2e (1/6)` … `web-e2e (6/6)` | one sixth of the Playwright tests each: `npm run e2e -- --shard=N/6 --workers=4`. Each shard builds the mock app once. Playwright splits test by test (`fullyParallel`), so every test runs in exactly one shard and the shards add up to the whole suite. |
-| `web` | the gate: passes only when `web-checks` and all six shards passed. This is the check branch protection requires, so keep a job with this exact name. |
+| `changes` | which areas a change touches (web, e2e, the two agents, desktop) and how much of the browser tests run (`e2e_mode`, below). A job whose area did not change is skipped. |
+| `web-checks` | a real `npm ci` (never node_modules from a cache, so a `package.json` that disagrees with `package-lock.json` fails here), the help corpus and Ask knowledge checks, the shard check (`node scripts/e2e-shards.mjs check`), type check, lint, Vitest, the bundle (`vite build`) and the Funded Clips bundle check (none of its code or styles in the main bundle). npm's download folder comes from a cache that only the nightly run and a run by hand save; a pull request only reads it |
+| `web-e2e (1/7)` … `web-e2e (7/7)` | Chromium (the `chromium` and, at night, `screenshots` projects), 4 workers each. Each shard builds the mock app once. |
+| `web-e2e (WebKit 1/5)` … `web-e2e (WebKit 5/5)` | `webkit` and `webkit-phone`, 2 workers each |
+| `web` | the gate: passes only when `web-checks`, every shard, `stories-agent` and `desktop` passed, or `changes` said they had nothing to check (then each must be skipped). `stories-agent` and `desktop` are not required checks of their own, so this is what holds back the merge and auto-merge of a pull request whose Funded Clips agent tests or desktop tests fail (an admin can still merge past it). It fails when `changes` did not finish, so "skipped" only ever means "nothing it tests changed". This is the check branch protection requires, so keep a job with this exact name. |
+
+**Shards are split by time, not by count.** Playwright's own `--shard` splits in file order, which put all of
+`contrast.spec.ts` in one shard (14 to 23 minutes while the others took 8 to 12). So every shard but the last runs a
+list made from each test's saved time (`web/e2e/shards/<group>-<n>.txt`, built from `web/e2e/shards/timings.tsv`), and
+the last shard runs every test in no list (`--test-list-invert`), so a new or renamed test always runs.
+`node scripts/e2e-shards.mjs check` (in `web-checks`) has Playwright list each shard with the arguments CI passes, in
+each of the three modes below, and fails when a test would run in no shard or in two, when a B3 tag is wrong, when
+a mode leaves out more or less than B3 chose (all three are pinned in the check, which catches an accidental edit
+to a mode; a pull request that changes a mode and its pin together still passes, so that is for review to catch), or
+when `ci.yml` names a mode the script does not know or does not run the full mode at night. To refresh the times:
+`gh run view <id> --log > run.log`, then `node scripts/e2e-shards.mjs timings run.log` and
+`node scripts/e2e-shards.mjs build`. To change the number of shards, change the matrix in `ci.yml` and `GROUPS` in
+`scripts/e2e-shards.mjs` together, then run `build`.
 
 **WebKit too.** The macOS desktop app draws with WebKit, so `nav-smooth.spec.ts` (the menu highlight sampled every
 frame), `page-still.spec.ts` (no blink or twitch on a page change) and `top-line.spec.ts` (one top line, the
-traffic-light band) also run in the `webkit` Playwright project (CI: the `web-e2e (WebKit)` job). The
+traffic-light band) also run in the `webkit` Playwright project (CI: the `web-e2e (WebKit N/5)` shards). The
 WebKit slide check (`nav-smooth`) runs on macOS only: Playwright's WebKit on the Linux runners is the GTK/WPE port,
 whose headless run never started the glide's Web Animation at all, which says nothing about the Mac app's WKWebView;
 `page-still` and `top-line` pass there and run in CI. On a Mac: `npx playwright install webkit`, then `CF_E2E_PORT=4471 npx playwright test nav-smooth page-still top-line
 --project=chromium --project=webkit`.
 
-A failed shard uploads `playwright-report-N` (its `test-results`); the other shards still finish. To run one shard on
-your machine: `npx playwright test --shard=3/6`. To add a shard, add a number to the `shard` list in `ci.yml`; the
-total is read from the list's length. `deploy.yml` does not run the browser tests: a deploy starts from a push to
+A failed shard uploads `playwright-report-N` (or `playwright-report-webkit-N`, with its `test-results`); the other
+shards still finish. To run one CI shard on your machine, print its arguments and pass them on:
+`node scripts/e2e-shards.mjs args chromium 3 7 core` (the group, the shard, the total and the mode), then
+`npx playwright test <those arguments>`. `deploy.yml` does not run the browser tests: a deploy starts from a push to
 `main`, and `main` only takes pull requests whose `web` check passed.
+
+### Which browser tests run when
+
+The owner chose this (B3, 23 Nov 2026: "Yes, trim them"), so a pull request's run stays short. The `changes` job
+picks the mode (`e2e_mode`), and `scripts/e2e-shards.mjs` (`MODES`) turns it into Playwright arguments:
+
+| Mode | When | What it leaves out |
+|---|---|---|
+| `full` | the nightly run (02:17 UTC) and a run by hand (Actions, ci, Run workflow) | nothing: every test of every project |
+| `style` | a pull request that changes a style, token, glass or theme file: `web/src/styles/**`, `web/src/stories/styles/**` and any other stylesheet (the legal pages' `web/public/legal/site.css` too), `web/src/components/ui.tsx`, `web/src/lib/background.ts` and `look.ts`, `web/e2e/glass.ts`, `web/e2e/helpers.ts` (the helpers `contrast.spec.ts` uses), `web/e2e/contrast.spec.ts` or `web/scripts/e2e-shards.mjs` (the script that picks each mode's tests); also a pull request that changes `ci.yml` or has no usable base, which runs every check | the `screenshots` project (174 tests that only take pictures; CI never keeps them) |
+| `core` | every other pull request that touches the web | the `screenshots` project, and the `@contrast-full` part of `contrast.spec.ts` |
+
+Every test in `contrast.spec.ts` carries exactly one of two tags. `@contrast-core` runs on every pull request: one
+width per breakpoint group (375 px for a phone, 1440 px for a wide screen) in one background mode (the browser's own
+look, light), on every route, plus the setup list, "All set!", Ask's files and the tab bar over a white thumbnail.
+`@contrast-full` is the rest: 320 px, dark, the window look over every glass stand-in and a picture behind the page.
+A contrast slip from a change outside those style files shows up in the nightly run at the latest.
+
+**Affected only.** A pull request that touches only folders the web never reads (`agent/`, `api/` outside Ask, the routes
+and the few files the web's unit tests read, `infra/`, `mac/`, `scripts/`, `stories/agent/`, `desktop/` outside the
+window code, `.github/`) skips `web-checks` and the browser tests; `web` still reports. The agent jobs run only when
+their own inputs change.
+
+**Main and the nightly run.** A push to `main` does not run the web checks and browser tests again: its pull request
+ran them. Branch protection is not strict, so two green pull requests can still break `main` together, which the
+nightly full run finds. When a job of the nightly run fails, is cancelled or times out, its last job (`nightly
+alert (runs only at night)`, shown as skipped on every other run) opens one issue, "Nightly CI failed", assigned to
+the owner (`Lamo2real`, so GitHub notifies them even without watching the repository), with the run's link and the
+jobs that did not pass, or adds the new run to the one still open in a comment that mentions `@Lamo2real`; close it
+once a nightly run is green.
 
 ### API and agent
 
@@ -171,7 +231,8 @@ cd api && uv run pytest -q tests/test_help*.py
 `web/e2e/contrast.spec.ts` (Playwright, mock mode, audit F081) opens every route in `ROUTES` (`web/e2e/helpers.ts`) at
 320, 375 and 1440 px, with the browser asking for a light and then a dark colour scheme (the app is dark-only, so light
 must render the same), with reduced motion so the backdrop's drift is parked and every run measures the same picture.
-On each it fails on:
+A pull request runs only its `@contrast-core` part unless it changes a style file; the whole matrix runs then and every
+night ([Which browser tests run when](#which-browser-tests-run-when)). On each it fails on:
 
 | Check | Rule |
 |---|---|
@@ -1132,11 +1193,15 @@ store, a fake Lambda client for the clip flow's start and fake publishers. No AW
 - **Web units** (Vitest, `web/test/autopost.test.ts`): the result line for every pair of 1 to 5 clips × 1 to 24 hours
   ("1 clip every 24 hours = 1 clip a day per platform.", "1 clip every 5 hours = about 5 clips a day per platform.",
   "2 clips every 7 hours = about 7 clips a day per platform."), the warning over 5 a day and YouTube's line over 100,
-  the time words (weekday and 24-hour time, never "Today" or "Tomorrow"), and the mock's rules
-  (`web/src/api/mock/autopost.ts`, with a fake clock the e2e tests move).
+  the time words (weekday and 24-hour time, never "Today" or "Tomorrow"), the left-out lines (TikTok's "TikTok: turn
+  on Your Mac posts TikTok to post there.", and "TikTok: your Mac posts it once another place is set up." while the
+  switch is on with nothing else set up), and the mock's rules (`web/src/api/mock/autopost.ts`, with a fake clock the
+  e2e tests move).
 - **Playwright** (mock mode, `web/e2e/autopost.spec.ts`, at 390×844 and 1440×900): the switch and its line, both
-  controls saving ("Saved."), the result line and the warning, Next up with **Throw away** and **Undo**, Didn't work
-  with **Try again**, Recent, **Practice run now**, **Private test run**, the Review card's line and the Home hint.
+  controls saving ("Saved."), the result line and the warning, Where they go with TikTok's **Turn on**, Next up with
+  **Throw away** and **Undo**, Didn't work with **Try again**, no `#auto-post-tiktok`, Recent, **Practice run now**,
+  **Private test run**, the Review card's line and the Home hint; at 1440×900, Where they go says "TikTok: your Mac
+  posts it." once **Turn on** led to the switch and it was turned on.
   Run it on a port of its own: `CF_E2E_PORT=4730 npx playwright test e2e/autopost.spec.ts`.
 - **Infrastructure** (`infra/modules/autopost/tests/autopost.tftest.hcl`, mock provider): the names, the cron
   `cron(0 * * * ? *)`, the rule ENABLED, retries 2 and event age 3,300 s, the target is the function, the permission's
@@ -1144,8 +1209,8 @@ store, a fake Lambda client for the clip flow's start and fake publishers. No AW
   Manager action (the campaign fit check reads only the table), and the only invoke grant is the clip flow.
   `scripts/test-check-plan-deletes.sh` is unchanged and still passes.
 - **Help**: the guides `autopost-turn-on` and `autopost-waits-failed` in `web/src/features/help/helpKb.json` (where the
-  page is, each control, why TikTok and campaign clips wait, Practice and the Private test run; Didn't work with Try
-  again, Waits for you with Open in Review). Their page `/settings/posting/auto` exists only with the web part's
+  page is, each control, how TikTok goes through the Mac and why campaign clips wait, Practice and the Private test
+  run; Didn't work with Try again, Waits for you with Open in Review). Their page `/settings/posting/auto` exists only with the web part's
   `auto` branch in `web/src/lib/settingsTree.ts`, so on the docs branch alone `test/helpCorpus.test.ts` and both
   `--check` runs fail; the docs part merges after the server, infrastructure and web parts. Then, in `web/`,
   `node scripts/help-corpus.mjs --write-docs` (it also rewrites the routes table in
@@ -1156,6 +1221,52 @@ store, a fake Lambda client for the clip flow's start and fake publishers. No AW
   `node scripts/ask-knowledge.mjs --check` pass (every route a real page, every highlight a real `data-help` anchor).
 - **Live checks, not done here** ([§46.14](CONTRACTS.md#4614-not-verified-live)): see step 17 of
   [Manual checks after the first deploy](#manual-checks-after-the-first-deploy).
+
+### Your Mac posts TikTok, with no manual sheet (CONTRACTS §42, §47, ADR-86)
+From [CONTRACTS.md §42.4](CONTRACTS.md#424-tests) and [§47.5](CONTRACTS.md#475-tests-offline-fakes-only). Offline,
+fakes only; Playwright runs headless (no window on screen).
+
+- **API** (pytest, `api/tests/test_tiktok_mac.py`, `test_http.py`, `test_tiktok_yourself.py`): every §47.5 case, plus
+  `now`: a send with `now: true` makes `macSource: "upload"` and the queue puts it first, one without stays `sent`; a
+  retry with `now` turns `sent` and `auto` into `upload`; `now` must be a boolean (400), unknown keys still 400, the
+  switch off still 409 `MAC_OFF`. The `…/file` route is unchanged. **Round 3 (2026-11-23, D1 to D6)**: the stuck rule
+  at its edges (beat 4:59 / 5:00, claim 49:59 / 50:00 with fresh beats, `macBeatAt` or else `macClaimedAt`), the find
+  window (Try again after Post refused with `MAC_STILL_LOOKING` inside it, then `macPressedBefore` and `macAgainAt`),
+  the claim's pressed guard, a re-sent step as the beat, a stuck re-wait or It's on TikTok losing to a beat or a new
+  claim, `…/tiktok/posted` D3 (Find it for me saves nothing when nothing is found, TikTok is down or not connected;
+  `noLink` saves without the finder and is refused while the Mac beats a job it never pressed Post for; a link with
+  `noLink` → 400), the ping's plan keys and their 400s, `POST /v1/tiktok/mac/request` (each refusal and write),
+  `needsYouClipId`, campaign clips never a Mac post (Upload, Try again, a run, `send` with and without `now`; Upload
+  with TikTok refused until both TikTok gates are `ok`, then `queued` through TikTok's API), the words (one source for
+  the campaign sentence; no string constant in `tiktok_self.py`, `tiktok_mac.py`, `routes/tiktok_mac.py` or
+  `platforms/errors.py` says "post it yourself" or "I posted it"; the three shared constants one line each).
+  `test_campaign_posting.py`, `test_autopost_run.py`, `test_autopost_routes.py`, `test_publishers.py` and
+  `fixtures/cr_fit_cases.json` (rewritten by `uv run python tests/cr_fit_cases.py`) carry the new words.
+- **Web units** (Vitest): `web/test/tiktokMac.test.ts` (`tiktokRow`'s states and words in their order, Turn on when the
+  switch is off, the Mac never checked in or was not seen for 30 minutes, the next-at times for `upload`, `auto` and
+  `sent`, the pressed words chosen by `pressedAt`, and the mock's rules); `web/test/tiktokMacNow.test.ts` (the mock's
+  `now` rules, the HTTP bodies with each key only when true); `web/test/tiktokYourself.test.ts` (the helpers left and
+  the mock's posted, Undo and file rules); `web/test/metrics.test.ts` (`calmCopy` for Mac posts and the public-account
+  refusal); `web/test/autopost.test.ts` (TikTok's left-out lines).
+- **Playwright** (mock mode): `web/e2e/tiktok-mac.spec.ts` (Library's row: waiting with its next-at time, Posting…,
+  Didn't work with **Try again**, posted, Not on TikTok yet with **Post with my Mac**, the switch off and a Mac not
+  seen for 30 minutes with **Turn on**; the clip page and Review's lines; the Settings branch);
+  `web/e2e/tiktok-yourself.spec.ts` (the inline Add link with a link and with an empty box, and no **Post it
+  yourself**, **I posted it**, **AirDrop** or **Open TikTok** control on Library, the clip page or Review);
+  `web/e2e/autopost.spec.ts` (Where they go with the switch off and on). `web/test/postYourselfCaption.test.tsx` went
+  with the sheet.
+- **Round 3 web and helper** (CONTRACTS §47.5): the web pin test reads `api/src/clipfactory_api/tiktok_self.py` and
+  asserts `MAC_BEAT_STALE`, `MAC_CLAIM_MAX` and `MAC_FIND_WINDOW` equal `MAC_BEAT_STALE_MS`, `MAC_CLAIM_MAX_MS` and
+  `MAC_FIND_WINDOW_MS`; the helper's `test/constants.test.js` asserts `FIND_FOR_MS` equals `MAC_FIND_WINDOW` and three
+  beats fit in `MAC_BEAT_STALE`; `plan.test.js` covers `backlogAt` and never twice (`pressedAt`, `pressedBefore` with
+  and without a late `againAt`); the e2e specs cover Find it for me saving nothing, the no-link confirm, Try again only
+  after the window, Start my Mac again, Let them go, Open the stopped clip and Review's campaign clip without TikTok,
+  with real hover and stuck screenshots (byte-identical pairs fail).
+- **Help**: the guides `autopost-turn-on` and `tiktok-mac` in `web/src/features/help/helpKb.json` say the row states
+  (Waiting for your Mac · next at, Posting…, Posted by your Mac, Didn't work with Try again, Not on TikTok yet with Post
+  with my Mac, Turn on) and never Post it yourself. After the web parts merge, in `web/`, `node
+  scripts/help-corpus.mjs --write-docs` and `node scripts/ask-knowledge.mjs` regenerate the corpus and the Ask
+  knowledge, then `npm run help-corpus:check` passes.
 
 ### Get paid (CONTRACTS §40)
 From [CONTRACTS.md §40.8](CONTRACTS.md#408-changes-to-earlier-sections-who-builds-what-tests-not-verified-live).
@@ -1480,7 +1591,7 @@ cd web && CF_E2E_PORT=4804 npx playwright test e2e/bank.spec.ts
   including `ws_url`, `hooks_url`, `vector_bucket`, `vector_index`, `job_flow_alias_arn`, `clip_flow_alias_arn`,
   `stats_function_name`, `learn_function_name`, `stats_rule_name`, `stats_tick_minutes`.
 
-## Lamo Stories (CONTRACTS §45)
+## Funded Clips (CONTRACTS §45)
 
 The list is CONTRACTS §45.19. Three checks matter most, because the owner put protecting Lamo Clips first:
 
@@ -1492,7 +1603,7 @@ The list is CONTRACTS §45.19. Three checks matter most, because the owner put p
 * **Lamo Clips unchanged.** Every existing test passes untouched (the old route list in `test_http.py`, the OAuth
   callback cases, the agent server tests, the nav and Glide specs). `web/scripts/clips-unchanged.sh` builds the mock
   of the merge base and of the branch on one machine and compares screenshots of `/`, `/jobs`, `/review`, `/library`,
-  `/money` and `/settings` at 390×844, 1000×600, 1000×720 and 1440×900: pixel-identical with Lamo Stories off
+  `/money` and `/settings` at 390×844, 1000×600, 1000×720 and 1440×900: pixel-identical with Funded Clips off
   (`cf.storiesPreview` = `"0"`), and different only inside the switcher's box with it on (`"1"`; the default since the
   switch, §45.36). The lead runs it on the switch pull request and in the
   final check (Mac and CI fonts differ, so both shots come from one machine). §45.23 lists the live evidence for each
@@ -1649,7 +1760,8 @@ The list is CONTRACTS §45.19. Three checks matter most, because the owner put p
      gate passes and `scripts/check-plan-clips-unchanged.sh` has nothing to report.
    - With auto-posting still off, open Settings › Posting › Auto-posting: "Off. Nothing posts by itself.", Next up
      lists the clips in Review oldest first under "Would go first", and Where they go names the ready places with
-     "TikTok: you post it yourself (TikTok's rule). Each clip gets Post it yourself."
+     "TikTok: turn on Your Mac posts TikTok to post there." and **Turn on** (or "TikTok: your Mac posts it." while
+     the switch is on)
    - Open **Test it first** and tap **Practice run now**: within 30 seconds Recent shows "Practice: would post “hook”
      to YouTube, Instagram and Facebook."; the clip stays in Review and nothing reaches any platform. Tap it again at
      once: "A test run just started. Wait a minute."
@@ -1662,7 +1774,9 @@ The list is CONTRACTS §45.19. Three checks matter most, because the owner put p
      you see: this is the unverified part); on Instagram nothing is published. Library says "Private test · only
      you", "Private test · draft on your Page" and "Private test · checked, not published", with no numbers.
    - Only then turn **Practice** off. The first live run posts the oldest clip at the time the page showed; its posts
-     say "· by auto-posting" with **Open** links, and the clip is under **Post these on TikTok yourself**.
+     say "· by auto-posting" with **Open** links. With **Your Mac posts TikTok** on, its TikTok row in Library goes
+     "Waiting for your Mac · next at …", "Posting…", then "Posted by your Mac · Everyone" with **Open**; the page has
+     no TikTok list of its own (ADR-86).
 
 19. **Get paid** ([CONTRACTS §40.8](CONTRACTS.md#408-changes-to-earlier-sections-who-builds-what-tests-not-verified-live),
    "Not verified live"): not checked live when built. Do them at the owner's first use; each failure becomes "not

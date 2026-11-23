@@ -57,9 +57,11 @@
   and Google deletes OAuth clients unused for 6 months; X charges per post.
 - **Clips kept before a platform was connected** are not posted automatically after Connect
   ([roadmap](ROADMAP.md#phase-2-social-integrations)).
-- **Auto-posting never posts to TikTok** (TikTok's rules want the creator's own pick of who can see each post; he
-  uses **Post it yourself**), and campaign clips wait for his Upload while Content Rewards can't take clips from Clip
-  Factory by itself. A run fires on whole hours only, so a save counts from the next full hour. YouTube takes at most
+- **Auto-posting never posts to TikTok through TikTok's API** (TikTok's rules want the creator's own pick of who can
+  see each post): while **Your Mac posts TikTok** is on, his own Mac posts each clip's TikTok (CONTRACTS §47). The
+  manual **Post it yourself** sheet is gone (ADR-86), so with the switch off nothing goes to TikTok until he taps
+  **Turn on**. Campaign clips never go to the Mac, and they wait for his Upload while Content Rewards can't take clips
+  from Clip Factory by itself. A run fires on whole hours only, so a save counts from the next full hour. YouTube takes at most
   100 uploads a day (its `videos.insert` bucket); the page warns past 100 clips a day. That a Facebook draft Reel stays
   hidden from everyone but the Page's admins, and that the hourly rule fires within the first minute, are checked at
   the first private test run and the first hours of practice

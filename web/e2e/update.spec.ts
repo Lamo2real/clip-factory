@@ -117,7 +117,7 @@ test("with reduced motion the bar simply fills, with no confetti", async ({ page
 });
 
 // Reload is a colourless liquid-glass lens (owner, 2026-11-23: "without color and only a liquid glassy style";
-// ADR-85): bone words, no vermilion and no green on it, and it reads as the main choice beside Later by light alone,
+// ADR-87): bone words, no vermilion and no green on it, and it reads as the main choice beside Later by light alone,
 // over its whole face (top, middle and bottom), in the app's own look, in Picture with a white photo and with a white
 // thumbnail right under the bar. Later is the quiet choice but still a button: a step of light above the bar. Both keep
 // their bone words at 4.5:1, and hover adds light. Measured from screenshot pixels in headless Chromium.

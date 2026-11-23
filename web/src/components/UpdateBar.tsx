@@ -107,7 +107,7 @@ function Offer({ info, onReload }: { info: VersionInfo; onReload: () => void }) 
         <Button variant="ghost" size="sm" icon="clock" className="update-bar__later" onClick={dismissUpdate}>
           Later
         </Button>
-        {/* A colourless liquid-glass lens (ADR-85): the primary choice told by light, not colour. */}
+        {/* A colourless liquid-glass lens (ADR-87): the primary choice told by light, not colour. */}
         <Button variant="glass" size="sm" icon="retry" act="refresh" className="update-bar__reload btn--lens" onClick={onReload}>
           Reload
         </Button>

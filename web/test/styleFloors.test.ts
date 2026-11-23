@@ -89,7 +89,7 @@ describe("vermilion and green words stay AA on tinted glass", () => {
   it("--vermilion-ink and --green-text are at least 4.5:1 on their tints over the lightest panel any look allows", () => {
     const value = (token: string) => new RegExp(`${token}:\\s*(#[0-9a-f]{6})`, "i").exec(css("tokens.css"))![1]!;
     // The lightest panel any look allows: 0.73 green over a white photo or desktop (no page veil since ADR-45). A chip
-    // lays bottle green under its tint (CHIP_UNDER, ADR-85; it was deep green).
+    // lays bottle green under its tint (CHIP_UNDER, ADR-87; it was deep green).
     const green = [15, 55, 43];
     const over = (top: number[], under: number[], a: number) => top.map((c, i) => c * a + under[i]! * (1 - a));
     const hex = (rgb: number[]) => `#${rgb.map((c) => Math.round(c).toString(16).padStart(2, "0")).join("")}`;

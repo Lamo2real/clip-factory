@@ -22,9 +22,10 @@
 # the findings stop the deploy only when Lamo Stories' work is in it. The commits on the first-parent line from the
 # live release (cf-prod-api's VERSION before this plan, the git sha of the last applied deploy) to this one are read,
 # one pull request (or pushed commit) each. A commit is Lamo Stories' when it touches its folders (stories/,
-# web/src/stories/, infra/modules/stories_*, api/.../workspaces/, the story flow, its tests) or names Lamo Stories in
-# its message; it matters here when it also touches what feeds this plan (infra/, deploy.yml, or Clip Factory's
-# agent sources agent/, skills/, config/). With none, the findings are Clip Factory's own and are printed as notices.
+# web/src/stories/, infra/modules/stories_*, api/.../workspaces/, the story flow, its tests) or names it in its message
+# ("Funded Clips", or an old name "Clip Stories", "Clip Factory Stories" or "Lamo Stories", any case); it matters here when it also
+# touches what feeds this plan (infra/, deploy.yml, or Clip Factory's agent sources agent/, skills/, config/). With
+# none, the findings are Clip Factory's own and are printed as notices.
 # When the history cannot be read (no live release in the plan, a commit that is not here), they stop the deploy. A
 # Lamo Stories commit that touches Clip Factory's agent sources is a finding of its own (§45.17: not touched at all),
 # because it would also change Clip Factory's agent tag and so pass the module.agent rule.
@@ -137,7 +138,7 @@ out="$(jq -r '
       ($rc[] | select(.address == "module.api.aws_apigatewayv2_stage.http") | select((quiet or created) | not)
         | if acts != ["update"] then ["clips", .address, "the HTTP API'"'"'s stage would \(what)"]
           else stage_findings as $f | select(($f | length) > 0)
-            | ["clips", .address, "the HTTP API'"'"'s stage would change its " + ($f | join(", ")) + " (only Lamo Stories'"'"' own route settings may change)"] end),
+            | ["clips", .address, "the HTTP API'"'"'s stage would change its " + ($f | join(", ")) + " (only Funded Clips'"'"' own route settings may change)"] end),
       ($rc[] | select(.address | test("^module\\.api\\.aws_apigatewayv2_(route|integration)\\."))
         | select(.address | test("^module\\.api\\.aws_apigatewayv2_(route|integration)\\.stories\\[") | not)
         | select((quiet or created) | not)
@@ -145,7 +146,7 @@ out="$(jq -r '
       ($rc[] | select(.address | startswith("module.api.aws_apigatewayv2_route.stories["))
         | select((quiet or (acts == ["delete"])) | not)
         | select((.change.after.route_key // "") | stories_route_ok | not)
-        | ["guard", .address, "a Lamo Stories route would take a path that is not its own (\(.change.after.route_key // "unknown"))"])
+        | ["guard", .address, "a Funded Clips route would take a path that is not its own (\(.change.after.route_key // "unknown"))"])
     ) | @tsv),
     "tag\t\($tag)",
     "api\t\([$rc[] | select(.address == "module.api.aws_lambda_function.fn[\"api\"]") | acts | join("+")] | first // "none")",
@@ -174,13 +175,16 @@ fi
 
 # ---------- Whose work is in this deploy (the commits since the live release) ----------
 stories_paths='^(stories/|web/src/stories/|web/test/stories|web/e2e/stories|infra/modules/stories_|api/src/clipfactory_api/workspaces/|api/src/clipfactory_api/flows/story_flow\.py$|api/tests/ws_|api/tests/workspaces/)'
+# The app's name in a commit message, any case, as whole words (so "unfunded clips" is not it): today's "Funded
+# Clips" and its three old names (§45.18).
+stories_names='lamo stories|clip factory stories|clip stories|funded clips'
 plan_paths='^(infra/|\.github/workflows/deploy\.yml$|agent/|skills/|config/)'
 agent_paths='^(agent/|skills/|config/)'
 empty_tree="4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 git_dir="${CLIPS_CHECK_GIT_DIR:-.}"
 g() { git -C "$git_dir" "$@"; }
 
-scope="unknown" # clips: no Lamo Stories commit feeds this plan; stories: at least one does; unknown: history unreadable
+scope="unknown" # clips: no Funded Clips commit feeds this plan; stories: at least one does; unknown: history unreadable
 why_unknown=""
 stories_commits=()
 agent_commits=()
@@ -198,7 +202,7 @@ else
     files="$(g diff --name-only "$parent" "$c")"
     subject="$(g log -1 --format='%h %s' "$c")"
     message="$(g log -1 --format=%B "$c")"
-    if grep -Eq "$stories_paths" <<<"$files" || grep -qi 'lamo stories' <<<"$message"; then
+    if grep -Eq "$stories_paths" <<<"$files" || grep -qiE "(^|[^a-z])(${stories_names})([^a-z]|$)" <<<"$message"; then
       if grep -Eq "$plan_paths" <<<"$files"; then
         scope="stories"
         stories_commits+=("$subject")
@@ -211,13 +215,13 @@ else
 fi
 
 for subject in ${agent_commits[@]+"${agent_commits[@]}"}; do
-  clips+="${clips:+$'\n'}commit ${subject%% *}"$'\t'"this Lamo Stories commit changes Clip Factory's agent sources (agent/, skills/ or config/), which Lamo Stories never touches"
+  clips+="${clips:+$'\n'}commit ${subject%% *}"$'\t'"this Funded Clips commit changes Clip Factory's agent sources (agent/, skills/ or config/), which Funded Clips never touches"
 done
 
 case "$scope" in
-  clips) echo "Whose change: no commit since the live release ${live:0:7} is Lamo Stories work that feeds this plan." ;;
+  clips) echo "Whose change: no commit since the live release ${live:0:7} is Funded Clips work that feeds this plan." ;;
   stories)
-    echo "Whose change: Lamo Stories work since the live release ${live:0:7} feeds this plan:"
+    echo "Whose change: Funded Clips work since the live release ${live:0:7} feeds this plan:"
     printf '  - %s\n' ${stories_commits[@]+"${stories_commits[@]}"}
     ;;
   *) echo "Whose change: unknown (${why_unknown}), so any change to Clip Factory stops the deploy." ;;
@@ -225,12 +229,12 @@ esac
 
 # ---------- The route rule: always stops the deploy ----------
 if [ -n "$guard" ]; then
-  echo "Clip Factory check: this deploy is stopped. A Lamo Stories route would take a path of Clip Factory's:" >&2
+  echo "Clip Factory check: this deploy is stopped. A Funded Clips route would take a path of Clip Factory's:" >&2
   while IFS=$'\t' read -r address why; do
     echo "  - ${address}: ${why}." >&2
     summary "- \`${address}\`: ${why}."
   done <<<"$guard"
-  echo "Nothing was changed. Lamo Stories' routes are only /v1/workspaces, /v1/workspaces/{proxy+} and its OAuth" >&2
+  echo "Nothing was changed. Funded Clips' routes are only /v1/workspaces, /v1/workspaces/{proxy+} and its OAuth" >&2
   echo "callback; fix infra/modules/api and push again. \"Clip Factory changes on purpose\" does not let this through." >&2
   exit 1
 fi
@@ -249,12 +253,12 @@ if [ -z "$clips" ]; then
 fi
 
 if [ "$scope" = "clips" ]; then
-  echo "Clip Factory check: these changes to Clip Factory come from Clip Factory's own commits (no Lamo Stories work"
+  echo "Clip Factory check: these changes to Clip Factory come from Clip Factory's own commits (no Funded Clips work"
   echo "  since the live release ${live:0:7} feeds this plan), so the deploy goes on:"
   while IFS=$'\t' read -r address why; do
     echo "::notice title=Clip Factory's own change::${address}: ${why}."
   done <<<"$clips"
-  summary "Clip Factory check: Clip Factory's own changes only (no Lamo Stories work in this deploy changes it)."
+  summary "Clip Factory check: Clip Factory's own changes only (no Funded Clips work in this deploy changes it)."
   exit 0
 fi
 
@@ -267,13 +271,13 @@ if [ "${ALLOW_CLIPS_CHANGE:-}" = "true" ]; then
   exit 0
 fi
 
-echo "Clip Factory check: this deploy is stopped. Lamo Stories work is in it, and the plan would change Clip Factory," >&2
-echo "which Lamo Stories must never do:" >&2
+echo "Clip Factory check: this deploy is stopped. Funded Clips work is in it, and the plan would change Clip Factory," >&2
+echo "which Funded Clips must never do:" >&2
 while IFS=$'\t' read -r address why; do
   echo "  - ${address}: ${why}." >&2
   summary "- \`${address}\`: ${why}."
 done <<<"$clips"
-echo "Nothing was changed. If a Lamo Stories change caused this, keep it inside Lamo Stories' own modules and push" >&2
-echo "again. If the change comes from a Clip Factory pull request deployed together with Lamo Stories work, check" >&2
+echo "Nothing was changed. If a Funded Clips change caused this, keep it inside Funded Clips' own modules and push" >&2
+echo "again. If the change comes from a Clip Factory pull request deployed together with Funded Clips work, check" >&2
 echo "that, then run the deploy again from Actions › deploy › Run workflow with \"Clip Factory changes on purpose\" ticked." >&2
 exit 1

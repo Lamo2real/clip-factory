@@ -1,0 +1,505 @@
+/* =====================================================================================================================
+   Funded Clips · "Ember Glass" · the design tokens (imported first, before stories.css)
+   ---------------------------------------------------------------------------------------------------------------------
+   The owner's warm reference of 22 Nov (a warm dark espresso room, amber and copper light out of focus behind smoky
+   glass, cream solids, an orange accent) on direction B's technical base (one radius scale, a liquid rim on a few
+   hero surfaces, the three backgrounds). Its colours, feel and kinds of shapes only: every screen stays Stories' own.
+
+     Clip Factory   Bottle Green #0F372B glass · Bone #EFE7DA words  · Vermilion #E8392B action · Times + Inter
+     Stories        Espresso #1C130E glass     · Cream #FFF6EA words · Ember #FF9A45 action    · Playfair + Jost
+
+   Scope: every rule sits on .stories-app (no :root, html or body rule), so nothing reaches a Clip Factory screen or
+   the shell's workspace switch, which keeps the shell's own tokens (--fill, --selected, --r-md, --font-ui) in both
+   workspaces. That is why Stories' radii are --st-r-* and never Clip Factory's --r-*. The arrow never changes: there
+   is no pointer-shape value anywhere, and every control shows it can be pressed by hover.
+
+   Tests: test/storiesStyles.test.ts (the owner's rules, AA on the stage) and test/storiesGlass.test.tsx (the
+   radius scale, the warm palette, every look's veils over a white desktop or photo) read the numbers below.
+   The contract (every name, what it means, who owns which file): styles/GLASS-CONTRACT.md. Only this file defines
+   --st-* design tokens; screens use them and never set them.
+   ===================================================================================================================== */
+
+/* The fonts (Playfair and Jost, self-hosted with their OFL licences) are fonts.css, which StoriesApp puts on the page
+   with the first Stories screen (stories/fonts.ts), not this style sheet. */
+
+.stories-app {
+  /* ========== 1. The base: warm dark espresso and smoky brown (Colours › Ember is the default background) ==========
+     The stage's base stops. Its lights (copper and amber, out of focus: a light strip, two glows, a warm haze) come
+     from the colours the owner picked (stories/look.ts EMBER and STAGE_LIGHTS, drawn by glass.css exactly), so the
+     veils are worked out from what is really drawn (stageSpots: the lightest pixel from phones to ultrawide). */
+  --st-base: #1c130e; /* espresso: the page and the glass tint */
+  --st-base-2: #2a1c14; /* smoky brown: the lightest base stop */
+  --st-base-3: #0f0a07; /* roast: the far corner */
+  --st-glow-copper: #e2621f; /* Ember's second colour: the copper light low on the left (and the warm haze) */
+  --st-glow-amber: #ff9a45; /* Ember's third colour: the amber light high on the right and the light strip */
+  /* What the stage draws (look.ts sets the owner's colours here, inline on .stories-app). */
+  --st-stage-c1: #1c130e;
+  --st-stage-c2-rgb: 226 98 31;
+  --st-stage-c3-rgb: 255 154 69;
+  --st-stage-a2: 0.46; /* how strong the copper light is (stories/look.ts GLOW_ALPHA, STAGE_LIGHTS) */
+  --st-stage-a3: 0.3; /* how strong the amber light is */
+  --st-picture: none; /* Picture: url(the owner's picture), set by look.ts */
+  /* Old names (screens read them until they move over; never add new uses) */
+  --st-stage: #2a1c14;
+  --st-stage-2: #1c130e;
+  --st-stage-3: #0f0a07;
+  --st-stage-copper: #e2621f;
+  --st-stage-amber: #ff9a45;
+
+  /* ========== 2. Words: light on glass, dark only on cream, the action and the status fills ========== */
+  --st-text-strong: #fffaf2; /* headings and the big numerals */
+  --st-text: #fff6ea; /* body text: cream */
+  --st-text-soft: #f2e5d4; /* second lines */
+  --st-text-muted: #dccab4; /* hints: only on a card veil or deeper (wells, fields), never loose on the page */
+  --st-text-amber: #ffd9a8; /* warm words on glass: chips, notes, "new" */
+  --st-on-cream: #2a160b; /* espresso words on cream, the action and every status fill (15.8:1 on cream, 8.2:1 on the action) */
+  --st-on-cream-soft: #5b3a24; /* second lines on cream (8.6:1) */
+  --st-on-cream-orange: #9a3e0e; /* orange WORDS on cream (6.3:1): the bright accent is for shapes only */
+  --st-on-accent: #2a160b; /* glyphs on the orange accent (a check in a toggle) */
+  --st-coral-ink: #ffd6cc; /* "needs you" words, always with an icon */
+  --st-mint-ink: #c9f2dc; /* done words */
+  --st-sky-ink: #d3ecf5; /* tips and notes */
+  /* Old names */
+  --st-ink: #fff6ea;
+  --st-ink-soft: #f2e5d4;
+  --st-ink-hint: #dccab4;
+  --st-sun-ink: #ffd9a8;
+  --st-on-sun: #2a160b;
+  --st-on-cream-ember: #9a3e0e;
+  --st-s-ink-2: rgb(242 229 212);
+
+  /* ========== 3. The accent, the action and the cream solid ========== */
+  --st-accent: #ff8a3d; /* orange SHAPES only: toggles on, knobs' rings, the active dot, progress fills, the dial's arc */
+  --st-accent-hover: #ffa25c;
+  --st-accent-pressed: #ef7a2c;
+  --st-action: #ff9a45; /* the one main action of a screen (espresso words on it) */
+  --st-action-top: #ffb766;
+  --st-action-bottom: #ff8a3d;
+  --st-action-hover: #ffc27a;
+  --st-action-pressed: #ef7a2c;
+  --st-cream: #fff3e4; /* solid cream: the active pill, the one highlighted card, the steppers */
+  --st-cream-2: #f6e6d2; /* the cream card's lower stop */
+  --st-cream-hover: #fffaf3;
+  --st-knob: #fffaf3; /* the white knob on a dial and a toggle */
+  --st-selected: rgb(255 243 228 / 0.96); /* the sliding highlight: cream with espresso words */
+  --st-coral: #ff7f6a; /* status fills and marks, never words */
+  --st-mint: #6fd9a4;
+  --st-sky: #7cc6e6;
+  /* Old names */
+  --st-sun: #ff9a45;
+  --st-sun-top: #ffb766;
+  --st-sun-bottom: #ff8a3d;
+  --st-sun-hover: #ffc27a;
+  --st-sun-deep: #ef7a2c;
+  --st-ember: #ff8a3d;
+
+  /* Channels, for rgb(var(--x-rgb) / alpha) */
+  --st-veil-rgb: 28 19 14; /* #1C130E: the smoky glass tint, the same in every look */
+  --st-well-rgb: 16 10 7; /* #100A07: deeper fills under words (fields, tracks) */
+  --st-ink-rgb: 255 246 234;
+  --st-cream-rgb: 255 243 228;
+  --st-shadow-rgb: 10 6 3;
+  --st-accent-rgb: 255 138 61;
+  --st-action-rgb: 255 154 69;
+  --st-amber-rgb: 255 176 84;
+  --st-copper-rgb: 226 98 31;
+  --st-coral-rgb: 255 127 106;
+  --st-mint-rgb: 111 217 164;
+  --st-sky-rgb: 124 198 230;
+  --st-sun-rgb: 255 154 69; /* old name of --st-action-rgb */
+  --st-ember-rgb: 255 138 61; /* old name of --st-accent-rgb */
+
+  /* ========== 4. Veils: the least smoky tint that keeps every word at 4.5:1 over the lightest pixel behind ==========
+     These are Ember's (worked out from the stage). stories/look.ts sets every look's own numbers inline on
+     .stories-app. Over a white or busy desktop or photo (See-through in the app, Picture) the measured veils hold
+     (revise-notes, worst contrast in brackets): tiles 0.74 (5.34:1), colour-tinted tiles 0.80 with the colour cut to
+     0.12 (5.12:1), hero glass 0.76 (5.14:1, glare only in a top band with no words), the rail 0.78 (6.47:1); Frosted
+     a 0.30 window frost with panels at 0.89 (9.91:1). Bars and sheets never cover less than the rail: a sheet's veil is
+     lower (0.68, 0.74 over a picture) because its level-5 light covers the rest (5a: the light takes its share). */
+  --st-veil-page: 0; /* over the whole backdrop, between the panels */
+  --st-veil-card: 0.58; /* .st-glass */
+  --st-veil-tinted: 0.66; /* .st-glass--tinted, under its 0.12 colour */
+  --st-veil-hero: 0.6; /* .st-glass--hero */
+  --st-veil-rail: 0.62; /* the rail */
+  --st-veil-bar: 0.72; /* .st-glass--bar: the top bar, the phone tab bar */
+  --st-veil-float: 0.72; /* .st-glass--float: sheets, menus, toasts (with its level-5 light it covers 0.9 or more) */
+  --st-veil-plate: 0; /* .st-plate: behind loose words (0 over Ember, measured over a desktop or picture) */
+  --st-veil-solid: 0.96; /* reduced transparency */
+  --st-veil-lens-rim: 0.4; /* a liquid hero's own tint: its filter lays the rest of --st-veil-hero under the words, so
+                              only the rim band (inside the padding, no words) is this thin and shows the bend */
+  --st-tint-cut: 0.12;
+
+  /* ========== 5a. Elevation: the logic of light (the owner, 22 Nov: "the top layer is always brighter than the bottom,
+     growing gradually in between") ==========
+     Six levels, from the backdrop (darkest) to the menus and sheets (brightest). Each level adds a little more light
+     of its own (cream) than the one under it, gradually, never a jump:
+       0  the backdrop: the stage, the page veil, a plate over the colours (it is the page)
+       1  page panels: the rail, a plate over a picture or the desktop
+       2  cards: .st-glass, an empty state
+       3  raised cards and bars: the hero, a tinted tile (its colour asks for the owner: needs you, done, a note; the
+          tone is light too, so it sits a level up), a card inside a card, the phone tab bar, the composer
+       4  controls: buttons, pills, round buttons, rows, tiles, option cards; a control's light (--st-fill-control on the
+          colours, the cream lift inside glass) is added to the surface it sits on, so it is always a step up from it
+       5  menus, popovers, sheets and toasts (.st-glass--float): the top
+     Solids (the cream card, the active pill, the steppers, the action) are light itself, outside the scale; wells
+     (fields, tracks) are carved in, a step down from the surface they are in.
+     THE LIGHT TAKES ITS SHARE FROM THE BACKDROP, NEVER FROM THE VEIL: a surface of veil v and light e lays v of the
+     smoky tint, e of cream and lets 1 - v - e of the backdrop through (its veil layer is v / (1 - e) under the light).
+     So over a white desktop or photo (the worst case, where cream and white are alike) every surface keeps exactly its
+     measured veil's contrast, and over anything darker the light shows: over the espresso (the stage's own colour)
+     each level is brighter than the one under it in every look and in reduced transparency (solid veils clamp to 1,
+     the light still steps up). Over the colours look.ts works the veils out with this light in (veilsFor). The top of
+     each surface is lighter still (--st-elev-grad-N more light, its veil again giving the light its share) and has a
+     bright top rim; gradients and inset shadows only, never another blur layer (the WebView2 budget).
+     test/storiesLight.test.ts reads these numbers and the classes; e2e/stories-light.spec.ts measures the pages. */
+  --st-elev-0: 0;
+  --st-elev-1: 0.025;
+  --st-elev-2: 0.045;
+  --st-elev-3: 0.07;
+  --st-elev-4: 0.12;
+  --st-elev-5: 0.2;
+  /* the extra light at the very top of each level, settling into its fill by --st-elev-settle */
+  --st-elev-grad-0: 0;
+  --st-elev-grad-1: 0.03;
+  --st-elev-grad-2: 0.04;
+  --st-elev-grad-3: 0.05;
+  --st-elev-grad-4: 0.015; /* a control is small and sits on lit glass: a touch only (its sheen does the rest) */
+  --st-elev-grad-5: 0.06; /* a sheet is the top layer: its top is brighter than any control under it (on a hero too), and its controls keep their second lines at 4.5:1 */
+  --st-elev-settle: 58%;
+  --st-elev-4-loose: 0.05; /* a control loose on a picture or the desktop: the light over its card's veil */
+  /* the bright top rim (a thin soft inner highlight along the top edge, just inside the light edge: softened 3 px, so it
+     is light, never a drawn line; the "no visible edges" scan, e2e/edges.ts, agrees) */
+  --st-elev-rim-0: 0;
+  --st-elev-rim-1: 0.22;
+  --st-elev-rim-2: 0.3;
+  --st-elev-rim-3: 0.4;
+  --st-elev-rim-4: 0.46;
+  --st-elev-rim-5: 0.56;
+  /* the gentle warm outer glow where light sits behind */
+  --st-elev-glow-0: 0;
+  --st-elev-glow-1: 0.26;
+  --st-elev-glow-2: 0.42;
+  --st-elev-glow-3: 0.5;
+  --st-elev-glow-4: 0.52;
+  --st-elev-glow-5: 0.58;
+  /* Each level's light, top to bottom (a background layer, laid over the surface's veil) */
+  --st-light-1: linear-gradient(180deg, rgb(var(--st-cream-rgb) / calc(var(--st-elev-1) + var(--st-elev-grad-1))), rgb(var(--st-cream-rgb) / var(--st-elev-1)) var(--st-elev-settle));
+  --st-light-2: linear-gradient(180deg, rgb(var(--st-cream-rgb) / calc(var(--st-elev-2) + var(--st-elev-grad-2))), rgb(var(--st-cream-rgb) / var(--st-elev-2)) var(--st-elev-settle));
+  --st-light-3: linear-gradient(180deg, rgb(var(--st-cream-rgb) / calc(var(--st-elev-3) + var(--st-elev-grad-3))), rgb(var(--st-cream-rgb) / var(--st-elev-3)) var(--st-elev-settle));
+  --st-light-5: linear-gradient(180deg, rgb(var(--st-cream-rgb) / calc(var(--st-elev-5) + var(--st-elev-grad-5))), rgb(var(--st-cream-rgb) / var(--st-elev-5)) var(--st-elev-settle));
+  /* A control's light is its fill (it sits on a surface): only the top light, over the fill colour */
+  --st-light-4: linear-gradient(180deg, rgb(var(--st-cream-rgb) / var(--st-elev-grad-4)), rgb(var(--st-cream-rgb) / 0) var(--st-elev-settle));
+  /* Each surface's veil, giving its level's light the share it takes (v / (1 - light), top and bottom) */
+  --st-shade-card: linear-gradient(180deg, rgb(var(--st-veil-rgb) / calc(var(--st-veil-card) / (1 - var(--st-elev-2) - var(--st-elev-grad-2)))), rgb(var(--st-veil-rgb) / calc(var(--st-veil-card) / (1 - var(--st-elev-2)))) var(--st-elev-settle));
+  --st-shade-tinted: linear-gradient(180deg, rgb(var(--st-veil-rgb) / calc(var(--st-veil-tinted) / (1 - var(--st-elev-3) - var(--st-elev-grad-3)))), rgb(var(--st-veil-rgb) / calc(var(--st-veil-tinted) / (1 - var(--st-elev-3)))) var(--st-elev-settle));
+  --st-shade-hero: linear-gradient(180deg, rgb(var(--st-veil-rgb) / calc(var(--st-veil-hero) / (1 - var(--st-elev-3) - var(--st-elev-grad-3)))), rgb(var(--st-veil-rgb) / calc(var(--st-veil-hero) / (1 - var(--st-elev-3)))) var(--st-elev-settle));
+  /* (a card inside a card is a raised surface: the hero's veil, so over a white picture it is a step up from its card) */
+  --st-shade-raised: linear-gradient(180deg, rgb(var(--st-veil-rgb) / calc(var(--st-veil-hero) / (1 - var(--st-elev-3) - var(--st-elev-grad-3)))), rgb(var(--st-veil-rgb) / calc(var(--st-veil-hero) / (1 - var(--st-elev-3)))) var(--st-elev-settle));
+  --st-shade-rail: linear-gradient(180deg, rgb(var(--st-veil-rgb) / calc(var(--st-veil-rail) / (1 - var(--st-elev-1) - var(--st-elev-grad-1)))), rgb(var(--st-veil-rgb) / calc(var(--st-veil-rail) / (1 - var(--st-elev-1)))) var(--st-elev-settle));
+  --st-shade-plate: linear-gradient(180deg, rgb(var(--st-veil-rgb) / calc(var(--st-veil-plate) / (1 - var(--st-elev-1) - var(--st-elev-grad-1)))), rgb(var(--st-veil-rgb) / calc(var(--st-veil-plate) / (1 - var(--st-elev-1)))) var(--st-elev-settle));
+  --st-shade-bar: linear-gradient(180deg, rgb(var(--st-veil-rgb) / calc(var(--st-veil-bar) / (1 - var(--st-elev-3) - var(--st-elev-grad-3)))), rgb(var(--st-veil-rgb) / calc(var(--st-veil-bar) / (1 - var(--st-elev-3)))) var(--st-elev-settle));
+  --st-shade-float: linear-gradient(180deg, rgb(var(--st-veil-rgb) / calc(var(--st-veil-float) / (1 - var(--st-elev-5) - var(--st-elev-grad-5)))), rgb(var(--st-veil-rgb) / calc(var(--st-veil-float) / (1 - var(--st-elev-5)))) var(--st-elev-settle));
+  /* A liquid hero's rim tint: its filter lays middleVeil(hero, lens-rim) under the words (glass/lens.ts), so with the
+     light on top the tint is 1 - (1 - v - e)(1 - rim) / ((1 - e)(1 - v)): the words keep exactly the hero's veil
+     share, and the rim band (no words) shows the bend under a little more tint than before. */
+  --st-shade-lens: linear-gradient(180deg, rgb(var(--st-veil-rgb) / calc(1 - (1 - var(--st-veil-hero) - var(--st-elev-3) - var(--st-elev-grad-3)) * (1 - var(--st-veil-lens-rim)) / ((1 - var(--st-elev-3) - var(--st-elev-grad-3)) * (1 - var(--st-veil-hero))))), rgb(var(--st-veil-rgb) / calc(1 - (1 - var(--st-veil-hero) - var(--st-elev-3)) * (1 - var(--st-veil-lens-rim)) / ((1 - var(--st-elev-3)) * (1 - var(--st-veil-hero))))) var(--st-elev-settle));
+  /* The bright top rim and the warm glow of each level, as box-shadows */
+  --st-rim-1: inset 0 3px 3px -2px rgb(255 250 240 / var(--st-elev-rim-1));
+  --st-rim-2: inset 0 3px 3px -2px rgb(255 250 240 / var(--st-elev-rim-2));
+  --st-rim-3: inset 0 3px 3px -2px rgb(255 250 240 / var(--st-elev-rim-3));
+  --st-rim-4: inset 0 3px 3px -2px rgb(255 250 240 / var(--st-elev-rim-4));
+  --st-rim-5: inset 0 3px 3px -2px rgb(255 250 240 / var(--st-elev-rim-5));
+  --st-glow-1: 0 24px 60px -44px rgb(var(--st-amber-rgb) / var(--st-elev-glow-1));
+  --st-glow-2: 0 30px 70px -44px rgb(var(--st-amber-rgb) / var(--st-elev-glow-2));
+  --st-glow-3: 0 32px 74px -42px rgb(var(--st-amber-rgb) / var(--st-elev-glow-3));
+  --st-glow-4: 0 10px 22px -16px rgb(var(--st-amber-rgb) / var(--st-elev-glow-4));
+  --st-glow-5: 0 36px 84px -44px rgb(var(--st-amber-rgb) / var(--st-elev-glow-5));
+
+  /* ========== 5. The glass recipe ==========
+     Fills (each level's light over its veil, lighter at the top: 5a), heavy blur where something busy can sit under,
+     light never a border: a thin light edge (a 1.25 px masked ring, .st-glass::after), a bright top rim and a soft
+     inner top highlight (the sheen), a gentle warm outer glow where light sits behind, and a soft dark depth. */
+  --st-tint-card: var(--st-light-2), var(--st-shade-card);
+  /* A tinted tile (level 3: it asks for the owner): its level's light, then the tone cut, then the veil (a screen writes
+     the tone out, since this one is worked out on .stories-app, where no tone is set: the action's orange) */
+  --st-tint-tinted: var(--st-light-3), linear-gradient(rgb(var(--st-tone-rgb, var(--st-action-rgb)) / var(--st-tint-cut)), rgb(var(--st-tone-rgb, var(--st-action-rgb)) / var(--st-tint-cut))), var(--st-shade-tinted);
+  --st-tint-hero: var(--st-light-3), var(--st-shade-hero);
+  --st-tint-raised: var(--st-light-3), var(--st-shade-raised); /* a card inside a card: one level up */
+  --st-tint-lens: var(--st-light-3), var(--st-shade-lens);
+  --st-tint-rail: var(--st-light-1), var(--st-shade-rail);
+  --st-tint-bar: var(--st-light-3), var(--st-shade-bar);
+  --st-tint-float: var(--st-light-5), var(--st-shade-float);
+  --st-tint-plate: var(--st-light-1), var(--st-shade-plate);
+  --st-tint-cream: linear-gradient(170deg, var(--st-cream), var(--st-cream-2));
+  /* Glass controls and inactive pills: on a card a light lift, loose on the page a card's veil (look.ts) */
+  --st-fill-control: rgb(var(--st-cream-rgb) / 0.12);
+  /* Hovered loose on the colours: cream light over a thin veil, folded into one layer (veil 0.2, then cream 0.16), so
+     its words keep 5:1 over Ember's, Rose's and Lagoon's brightest spot (cream 0.2 alone gave 3.85:1). On a glass
+     card it is the cream lift (--st-fill-control-lift, set on .st-glass below). */
+  --st-fill-control-hover: rgb(139 128 118 / 0.33);
+  --st-fill-control-lift: rgb(var(--st-cream-rgb) / 0.2);
+  --st-fill-well: rgb(var(--st-well-rgb) / 0.52); /* fields, tracks, the dial's groove */
+  --st-fill-well-hover: rgb(var(--st-well-rgb) / 0.64);
+  --st-track: rgb(var(--st-cream-rgb) / 0.2); /* a progress bar's empty part */
+  /* Old names: a glass card, a glass control or pill, the same hovered (it deepens, so words only gain contrast) */
+  --st-panel: rgba(28, 19, 14, 0.58);
+  --st-panel-strong: rgba(255, 243, 228, 0.12);
+  --st-panel-hover: rgba(255, 243, 228, 0.2);
+  --st-s-fill: rgb(255 243 228 / 0.08);
+  --st-s-fill-2: rgb(255 243 228 / 0.13);
+  --st-s-fill-3: rgb(255 243 228 / 0.2);
+
+  --st-blur: 28px; /* every glass in Picture and See-through, bars and floats always */
+  --st-blur-float: 36px;
+  --st-saturate: 1.35;
+  --st-filter-glass: none; /* cards and plates over Ember (nothing to blur, and WebView2 pays per filter); Picture turns it on */
+  --st-filter-bar: blur(var(--st-blur)) saturate(var(--st-saturate));
+  --st-filter-float: blur(var(--st-blur-float)) saturate(var(--st-saturate));
+
+  --st-edge-width: 1.25px;
+  --st-edge: linear-gradient(160deg, rgb(255 246 234 / 0.56), rgb(255 246 234 / 0.14) 20%, rgb(255 246 234 / 0) 40%, rgb(255 246 234 / 0) 68%, rgb(255 196 130 / 0.28));
+  --st-edge-hero: linear-gradient(160deg, rgb(255 250 240 / 0.92), rgb(255 246 234 / 0.26) 20%, rgb(255 246 234 / 0.03) 44%, rgb(255 246 234 / 0.06) 66%, rgb(255 186 110 / 0.75));
+  --st-edge-cream: linear-gradient(160deg, rgb(255 255 255 / 0.9), rgb(255 255 255 / 0) 40%, rgb(255 210 160 / 0.5));
+  /* the soft inner top highlight, with each level's bright top rim in front (5a) */
+  --st-sheen-soft: inset 0 14px 22px -18px rgb(255 240 220 / 0.36), inset 0 -18px 26px -22px rgb(var(--st-amber-rgb) / 0.2);
+  --st-sheen-panel: var(--st-rim-1), var(--st-sheen-soft); /* level 1: the rail, a plate */
+  --st-sheen: var(--st-rim-2), var(--st-sheen-soft); /* level 2: a card */
+  --st-sheen-hero: var(--st-rim-3), inset 0 18px 28px -20px rgb(255 240 220 / 0.5), inset 0 -26px 34px -26px rgb(var(--st-amber-rgb) / 0.45); /* level 3 */
+  --st-sheen-raised: var(--st-rim-3), var(--st-sheen-soft); /* level 3: a bar, a card inside a card */
+  --st-sheen-control: var(--st-rim-4), inset 0 10px 14px -12px rgb(255 240 220 / 0.32); /* level 4 */
+  --st-sheen-float: var(--st-rim-5), inset 0 16px 24px -18px rgb(255 240 220 / 0.42), inset 0 -18px 26px -22px rgb(var(--st-amber-rgb) / 0.2); /* level 5 */
+  --st-rim-light: inset 0 0 26px -12px rgb(255 238 214 / 0.3); /* a hero's thick edge catching light, painted (all a
+                                                                  WebKit hero has; under a liquid rim it softens it) */
+  --st-sheen-cream: inset 0 -10px 18px -14px rgb(var(--st-copper-rgb) / 0.35);
+  --st-glow-behind: var(--st-glow-2); /* a card's (5a: --st-glow-1 .. -5 by level) */
+  --st-glow-action: 0 14px 30px -14px rgb(var(--st-action-rgb) / 0.6);
+  --st-glow-action-hover: 0 18px 38px -14px rgb(var(--st-action-rgb) / 0.8);
+  --st-glow-accent: 0 0 14px -2px rgb(var(--st-accent-rgb) / 0.7); /* a toggle on, the knob's ring */
+  --st-depth-1: 0 2px 4px -1px rgb(var(--st-shadow-rgb) / 0.35), 0 12px 28px -14px rgb(var(--st-shadow-rgb) / 0.7);
+  --st-depth-2: 0 3px 6px -2px rgb(var(--st-shadow-rgb) / 0.4), 0 24px 48px -20px rgb(var(--st-shadow-rgb) / 0.75);
+  --st-depth-3: 0 8px 14px -4px rgb(var(--st-shadow-rgb) / 0.45), 0 34px 64px -24px rgb(var(--st-shadow-rgb) / 0.8);
+  --st-focus-ring: 0 0 0 3px rgb(var(--st-cream-rgb) / 0.9), 0 0 0 6px rgb(var(--st-accent-rgb) / 0.55);
+  /* Old names */
+  --st-shadow: 0 3px 6px -2px rgb(var(--st-shadow-rgb) / 0.4), 0 22px 44px -18px rgb(var(--st-shadow-rgb) / 0.7);
+  --st-shadow-soft: 0 2px 4px -1px rgb(var(--st-shadow-rgb) / 0.35), 0 12px 28px -14px rgb(var(--st-shadow-rgb) / 0.6);
+  --st-s-soft: var(--st-depth-1);
+  --st-s-lift: var(--st-depth-2);
+  --st-glow-sun: var(--st-glow-action);
+  --st-glow-sun-hover: var(--st-glow-action-hover);
+
+  /* ========== 6. Liquid: the rim of a few hero surfaces (.st-lens.is-liquid) ==========
+     Chromium: backdrop-filter: blur(1px) url(#its own filter) saturate(): an feImage displacement map made at the
+     hero's exact pixel size (ResizeObserver), bending inwards at the rim, still in the middle so nothing under the
+     words moves. At most three per screen (look.ts LENS_BUDGET), none over 1 MP or half the window, never animated.
+     WebKit (the Mac app, Safari, iPhone) ignores url() there: it gets the plain CSS light (edge-hero, sheen-hero). */
+  --st-lens-url: none;
+  --st-lens-band: 26px; /* how wide the bending rim is: inside the hero's padding, so it never reaches words */
+  --st-lens-depth: 12px; /* how far light moves at the very rim (at most 0.48 of the band, so it never folds) */
+  --st-saturate-lens: 1.5;
+
+  /* ========== 7. Radius: ONE scale, by kind (never by size), about 30 % less round, concentric ==========
+       surface 20  every glass surface: cards, the hero, the cream card, the rail, top bar, tab bar, toasts, sheets,
+                   plates, the preview bezel (was 26 for cards and 34 for the rail and the empty states)
+       control 14  buttons (the main action too), fields, rows, tiles, option cards, pick-one tracks, steppers, the
+                   thumbnail of a media row (was 18 for rows and fully round for buttons)
+       inner   10  inside a control: segment options and their highlight, thumbs in a tile, icon pucks (was 12)
+       tiny     6  inside an inner: the caption box on a player, a hairline progress bar's ends (was 10)
+       round       only where round is the shape: pills and chips, counts, knobs and toggles, round icon buttons,
+                   avatars, dots, the dial, the tab bar's active highlight
+     THE CONCENTRIC RULE: a child that hugs its parent's corner gets the parent's radius minus the gap between them,
+     and the gaps are picked so the scale lines up:
+       surface 20 − 6 (--st-gap-surface) = control 14 · control 14 − 4 (--st-gap-control) = inner 10
+       inner 10 − 4 = tiny 6 · a surface around a player (--st-bezel-pad 10) = inner 10
+     Any other gap: calc(var(--st-r-…) - the gap), never a new number. The shell's switch is not Stories': it keeps
+     the shell's own --r-md, identical in both workspaces. */
+  --st-r-surface: 20px;
+  --st-r-control: 14px;
+  --st-r-inner: 10px;
+  --st-r-tiny: 6px;
+  --st-r-round: 999px;
+  --st-gap-surface: 6px;
+  --st-gap-control: 4px;
+  --st-bezel-pad: 10px;
+
+  /* ========== 8. Space ========== */
+  --st-space-1: 4px;
+  --st-space-2: 8px;
+  --st-space-3: 12px;
+  --st-space-4: 16px;
+  --st-space-5: 20px;
+  --st-space-6: 24px;
+  --st-space-7: 32px;
+  --st-space-8: 48px;
+  --st-gap: clamp(12px, 1.2vw, 28px); /* between surfaces */
+  --st-inset: clamp(16px, 1.6vw, 28px); /* inside a surface */
+
+  /* ========== 9. Sizes ========== */
+  --st-tap: 44px; /* every target */
+  --st-tap-phone: 48px; /* every target under 768 px */
+  --st-tap-main: 52px; /* the main action */
+  --st-rail-w: var(--sidebar-w, 252px); /* as wide as Clip Factory's sidebar: the shell's switch sits over both */
+  --st-tab-h: 66px;
+  --st-knob-size: 22px;
+  --st-toggle-w: 48px;
+  --st-toggle-h: 28px;
+  --st-thumb: 64px; /* a media row's thumbnail */
+  --st-dial: 168px; /* the arc dial's default size */
+  --st-dial-track: 10px;
+
+  /* ========== 10. Type ==========
+     Playfair everywhere in Stories (the owner: "rewrite the entire font of the application in Clip Factory
+     Stories"): OFL, opsz 5-1200, wdth 87.5-112.5, wght 300-900, self-hosted with its licence. Optical sizes on: high
+     contrast at display sizes, sturdy shapes at reading sizes. Jost (OFL) only for short wide-tracked caps captions.
+     THE TEXT FLOOR: nothing below 0.8125rem (13 px; the test's hard floor is 0.78rem). */
+  --st-font: "Playfair", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
+  --st-font-caps: "Jost", "Futura", "Avenir Next", "Century Gothic", system-ui, sans-serif;
+  --st-font-mark: "Times New Roman", "Times New Roman MT", Tinos, Times, serif; /* the "C" stays Clip Factory's */
+  --st-fs-hero: clamp(2.125rem, 1.4rem + 2.6vw, 4.5rem); /* the dashboard question: 34 → 72 px */
+  --st-fs-h1: clamp(2rem, 1.5rem + 1.5vw, 3.5rem); /* 32 → 56 px */
+  --st-fs-h2: clamp(1.5rem, 1.3rem + 0.7vw, 2.25rem); /* 24 → 36 px */
+  --st-fs-h3: clamp(1.25rem, 1.15rem + 0.35vw, 1.625rem); /* 20 → 26 px */
+  --st-fs-body: 1.0625rem; /* 17 px */
+  --st-fs-small: 0.9375rem; /* 15 px: second lines */
+  --st-fs-chip: 0.875rem; /* 14 px: chips, counts, tab labels */
+  --st-fs-caps: 0.8125rem; /* 13 px Jost caps, tracked: THE FLOOR */
+  --st-fs-min: 0.8125rem;
+  --st-fs-num: clamp(2.5rem, 2rem + 2.4vw, 4.25rem); /* the big light numerals: 40 → 68 px */
+  --st-fs-unit: 0.42em; /* the small unit beside a numeral (relative to it, never under the floor at 40 px) */
+  --st-opsz-display: 600;
+  --st-opsz-num: 900;
+  --st-wdth-display: 92%; /* headings a little condensed, like the owner's sample */
+  --st-weight-display: 500; /* Womack is a regular weight: high contrast, not bold */
+  --st-weight-num: 300;
+  --st-weight-body: 450;
+  --st-weight-ui: 650; /* buttons, labels, rail rows */
+  --st-lh-head: 1.08;
+  --st-lh-body: 1.5;
+  --st-track-caps: 0.14em;
+
+  /* ========== 11. Motion (fills, colours, shadows and transforms only: never an animated filter) ========== */
+  --st-dur-tap: 110ms;
+  --st-dur-hover: 160ms;
+  --st-dur-glide: 340ms;
+  --st-dur-enter: 420ms;
+  --st-dur-progress: 900ms;
+  --st-dur-look: 480ms;
+  --st-dur-celebrate: 1400ms;
+  --st-dur-wiggle: 240ms; /* the friendly no */
+  --st-ease-out: cubic-bezier(0.16, 1, 0.3, 1);
+  --st-ease-glide: cubic-bezier(0.32, 0.72, 0, 1); /* fast away, soft landing, no overshoot */
+  --st-ease-progress: cubic-bezier(0.65, 0, 0.35, 1); /* slow start, fast middle, slow end */
+  --st-ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1); /* a press release and the done tick only */
+
+  /* ========== 12. Layers ========== */
+  --st-z-stage: -1;
+  --st-z-nav: 40; /* the shell's dock is 41, above the rail */
+  --st-z-float: 60;
+  --st-z-burst: 70;
+
+  /* ========== 13. The logo: Clip Factory's own "C" mark with its dot, in the Stories colours ==========
+     The mark is a shell element (the rename branch: components/WorkspaceMark.tsx and styles/ws-mark.css, in Clip
+     Factory's main bundle, where no --st- name may appear), coloured by the shell's four names with today's colours
+     as fallbacks. Stories only sets them here, on .stories-app, with the warm palette. */
+  --ws-mark-tile: linear-gradient(150deg, #fff3e4, #f2dcc2); /* the cream tile */
+  --ws-mark-letter: rgb(42 22 11); /* the espresso "C" on the cream tile (14.6:1) */
+  --ws-mark-dot: #ff8a3d; /* the orange dot */
+  --ws-wordmark: #fff6ea; /* the wordmark in cream */
+
+  /* The app's focus ring and the platform marks' cut-outs, in the Stories colours (the shell's names). */
+  --focus: 0 0 0 4px rgb(var(--st-cream-rgb) / 0.42);
+  --mark-cut: var(--st-base);
+}
+
+/* ---------- The looks (stories/look.ts puts data-look, data-strength, data-glass and the --st-veil-* numbers on
+   .stories-app from Stories' own Look setting) ----------
+   window   See-through in the Mac or Windows app: the page is transparent and the window's glass shows the desktop
+   picture  the owner's picture at full strength between the panels
+   colours  the colours (Ember by default), and See-through in a browser or on a phone, which cannot look behind
+            itself: Ember */
+.stories-app[data-look] {
+  --st-panel: rgb(var(--st-veil-rgb) / var(--st-veil-card));
+}
+.stories-app[data-look="window"],
+.stories-app[data-look="picture"] {
+  /* A busy or white picture under anything: a glass control or pill on the page carries a card's veil itself. */
+  --st-panel-strong: rgb(var(--st-veil-rgb) / var(--st-veil-card));
+  --st-panel-hover: rgb(var(--st-well-rgb) / calc(var(--st-veil-card) + 0.12));
+  --st-fill-control: rgb(var(--st-veil-rgb) / var(--st-veil-card));
+  --st-fill-control-hover: rgb(var(--st-well-rgb) / calc(var(--st-veil-card) + 0.12));
+  /* ... and a control's light over that veil (level 4, glass-tokens 5a): a step up from the page, its words still at
+     4.9:1 over a white desktop (test/storiesLight.test.ts). Inside glass (below) a control is the cream lift instead. */
+  --st-light-4: linear-gradient(180deg, rgb(var(--st-cream-rgb) / calc(var(--st-elev-4-loose) + var(--st-elev-grad-4))), rgb(var(--st-cream-rgb) / var(--st-elev-4-loose)) var(--st-elev-settle));
+  --st-s-fill: rgb(var(--st-veil-rgb) / var(--st-veil-card));
+  --st-s-fill-2: rgb(var(--st-veil-rgb) / calc(var(--st-veil-card) + 0.06));
+  --st-s-fill-3: rgb(var(--st-well-rgb) / calc(var(--st-veil-card) + 0.12));
+  --st-filter-glass: blur(var(--st-blur)) saturate(var(--st-saturate));
+}
+
+/* Inside a glass surface or a plate over a picture or the desktop the surface already carries the measured veil, so a
+   glass pill or round button there (glass-figures.css) is the light cream glass, as the shell's .st-btn is: a second
+   veil would make it a dark hole. A touch lighter than the button's, so a pill's amber icon keeps 4.5:1 too. Over a
+   white picture on the thinnest veil (a card's 0.74): --st-text 6.0:1 at rest, 5.4:1 on hover; on the hero the amber
+   4.6:1 hovered (test/storiesGlassMerge.test.ts, test/storiesSettingsStyles.test.tsx). The cream card decides its own. */
+.stories-app:is([data-look="window"], [data-look="picture"]) :is(.st-glass:not(.st-glass--control), .st-plate) {
+  --st-fill-figure: rgb(var(--st-cream-rgb) / 0.085);
+  --st-fill-figure-hover: rgb(var(--st-cream-rgb) / 0.12);
+  --st-light-4: linear-gradient(180deg, rgb(var(--st-cream-rgb) / var(--st-elev-grad-4)), rgb(var(--st-cream-rgb) / 0) var(--st-elev-settle));
+}
+.stories-app .st-cream {
+  --st-fill-figure: initial;
+  --st-fill-figure-hover: initial;
+}
+
+/* On the cream card the focus ring's cream part would vanish: the orange for words inside (6.3:1), the bright one out. */
+.stories-app .st-cream {
+  --st-focus-ring: 0 0 0 3px var(--st-on-cream-orange), 0 0 0 6px rgb(var(--st-accent-rgb) / 0.55);
+}
+
+/* On the colours a control inside a glass card hovers with the cream lift: the card's veil is under it. */
+.stories-app:not([data-look="window"]):not([data-look="picture"]) .st-glass:not(.st-glass--control) {
+  --st-fill-control-hover: var(--st-fill-control-lift);
+}
+
+/* ---------- Reduced transparency (and more contrast) or Glass "solid": solid glass, no backdrop filters ---------- */
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .stories-app.stories-app {
+    --st-veil-card: var(--st-veil-solid);
+    --st-veil-tinted: var(--st-veil-solid);
+    --st-veil-hero: var(--st-veil-solid);
+    --st-veil-rail: var(--st-veil-solid);
+    --st-veil-bar: var(--st-veil-solid);
+    --st-veil-float: var(--st-veil-solid);
+    --st-veil-plate: var(--st-veil-solid);
+    --st-veil-lens-rim: var(--st-veil-solid);
+    --st-panel: rgb(var(--st-veil-rgb) / var(--st-veil-solid));
+    --st-filter-glass: none;
+    --st-filter-bar: none;
+    --st-filter-float: none;
+  }
+}
+.stories-app.stories-app[data-glass="solid"] {
+  --st-veil-card: var(--st-veil-solid);
+  --st-veil-tinted: var(--st-veil-solid);
+  --st-veil-hero: var(--st-veil-solid);
+  --st-veil-rail: var(--st-veil-solid);
+  --st-veil-bar: var(--st-veil-solid);
+  --st-veil-float: var(--st-veil-solid);
+  --st-veil-plate: var(--st-veil-solid);
+  --st-veil-lens-rim: var(--st-veil-solid);
+  --st-panel: rgb(var(--st-veil-rgb) / var(--st-veil-solid));
+  --st-filter-glass: none;
+  --st-filter-bar: none;
+  --st-filter-float: none;
+}
+
+/* ---------- Reduced motion: things still change, they just do not travel ---------- */
+@media (prefers-reduced-motion: reduce) {
+  .stories-app {
+    --st-dur-glide: 0ms;
+    --st-dur-enter: 0ms;
+    --st-dur-progress: 0ms;
+    --st-dur-look: 0ms;
+    --st-dur-celebrate: 0ms;
+    --st-dur-wiggle: 0ms;
+  }
+}

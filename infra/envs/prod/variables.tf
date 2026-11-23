@@ -24,7 +24,7 @@ variable "agent_image_tag" {
 
 variable "stories_agent_image_tag" {
   type        = string
-  description = "Tag of Lamo Stories' agent image (docs/CONTRACTS.md §45.15). The deploy workflow sets it to stories-agent- plus a hash of stories/** and web/src/stories/engine/**, so it only changes when Lamo Stories' agent changes; Clip Factory's agent_image_tag never changes because of it. terraform apply builds and pushes it before the runtime."
+  description = "Tag of Funded Clips' agent image (docs/CONTRACTS.md §45.15). The deploy workflow sets it to stories-agent- plus a hash of stories/** and web/src/stories/engine/**, so it only changes when Funded Clips' agent changes; Clip Factory's agent_image_tag never changes because of it. terraform apply builds and pushes it before the runtime."
   validation {
     condition     = can(regex("^[A-Za-z0-9_][A-Za-z0-9_.-]{0,127}$", var.stories_agent_image_tag))
     error_message = "stories_agent_image_tag must be a valid Docker tag (letters, digits, _ . -, at most 128 characters)."
@@ -34,13 +34,13 @@ variable "stories_agent_image_tag" {
 variable "stories_video_us_bucket" {
   type        = bool
   default     = false
-  description = "Amazon Nova Reel for Lamo Stories (docs/CONTRACTS.md §45.31): true makes the bucket cf-prod-stories-video-<account>-us in us-east-1 (private, TLS only, shots kept 14 days) and lets cf_prod_story_agent start Nova Reel jobs there. Off until the owner allows Lamo Stories to keep generated shots in the US (N. Virginia)."
+  description = "Amazon Nova Reel for Funded Clips (docs/CONTRACTS.md §45.31): true makes the bucket cf-prod-stories-video-<account>-us in us-east-1 (private, TLS only, shots kept 14 days) and lets cf_prod_story_agent start Nova Reel jobs there. Off until the owner allows Funded Clips to keep generated shots in the US (N. Virginia)."
 }
 
 variable "stories_video_west_bucket" {
   type        = bool
   default     = false
-  description = "Luma AI Ray2 for Lamo Stories (docs/CONTRACTS.md §45.37 G7): true makes the bucket cf-prod-stories-video-<account>-usw2 in us-west-2 (private, TLS only, shots kept 14 days) and lets cf_prod_story_agent start Luma AI Ray2 jobs there. Off until the owner allows Lamo Stories to keep generated shots in the US (Oregon)."
+  description = "Luma AI Ray2 for Funded Clips (docs/CONTRACTS.md §45.37 G7): true makes the bucket cf-prod-stories-video-<account>-usw2 in us-west-2 (private, TLS only, shots kept 14 days) and lets cf_prod_story_agent start Luma AI Ray2 jobs there. Off until the owner allows Funded Clips to keep generated shots in the US (Oregon)."
 }
 
 variable "app_version" {

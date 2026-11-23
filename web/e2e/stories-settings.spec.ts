@@ -11,7 +11,7 @@ import { findOverflow, WIDTHS } from "./helpers.ts";
 // makers, the video's shape, quality, length and the makers' prices, and storage. Lamo Stories is switched on with
 // cf.storiesPreview = 1. It needs the shell and the workspace mock (builder F) and getTask (builder G) merged first.
 
-const SECTIONS = ["ai", "agents", "skills", "memory", "video", "storage"] as const;
+const SECTIONS = ["ai", "agents", "skills", "memory", "video", "storage", "look"] as const;
 
 async function on(page: Page) {
   await page.addInitScript(() => localStorage.setItem("cf.storiesPreview", "1"));
@@ -90,6 +90,24 @@ test.describe("every section keeps the owner's rules", () => {
       }
     });
 
+  test("on a phone the section pills are one row that scrolls sideways, with the chosen one in view", async ({ page }) => {
+    await on(page);
+    for (const width of [320, 375]) {
+      await page.setViewportSize({ width, height: 812 });
+      for (const section of ["ai", "storage", "look"] as const) {
+        await openSection(page, section);
+        const row = await page.evaluate(() => {
+          const ul = document.querySelector<HTMLElement>(".st-stg-top .st-stg-tabs")!;
+          const tops = Array.from(ul.querySelectorAll<HTMLElement>(".st-stg-tabs__cell")).map((c) => Math.round(c.getBoundingClientRect().top));
+          const box = ul.getBoundingClientRect();
+          const on = document.querySelector<HTMLElement>(".st-stg-tab.is-on")!.getBoundingClientRect();
+          return { rows: new Set(tops).size, scrolls: ul.scrollWidth > ul.clientWidth, inView: on.left >= box.left - 1 && on.right <= box.right + 1, height: Math.round(on.height) };
+        });
+        expect(row, `${section} @${width}`).toEqual({ rows: 1, scrolls: true, inView: true, height: 48 });
+      }
+    }
+  });
+
   test("every control shows itself on hover", async ({ page }) => {
     await on(page);
     await page.setViewportSize({ width: 1440, height: 900 });
@@ -111,7 +129,11 @@ test.describe("every section keeps the owner's rules", () => {
       await el.scrollIntoViewIfNeeded();
       const before = await el.evaluate((e) => `${getComputedStyle(e).backgroundColor}|${getComputedStyle(e).color}|${getComputedStyle(e).transform}`);
       await el.hover();
+      // Read once the mouse really is over it and its own hover transitions have run: under load a transition can wait
+      // pending (no frame yet) past a fixed wait, which read the old style although the hover rule works.
+      await expect.poll(() => el.evaluate((e) => e.matches(":hover")), { message: `${section} ${sel}: under the mouse` }).toBe(true);
       await page.waitForTimeout(350);
+      await el.evaluate((e) => Promise.all(e.getAnimations().map((a) => a.finished.catch(() => undefined))));
       const after = await el.evaluate((e) => `${getComputedStyle(e).backgroundColor}|${getComputedStyle(e).color}|${getComputedStyle(e).transform}`);
       expect(after, `${section} ${sel}`).not.toBe(before);
       await page.mouse.move(0, 0);
@@ -214,7 +236,7 @@ test.describe("AI: add a model (§45.34)", () => {
     const form = page.getByRole("form", { name: "Add a model" });
     await form.getByLabel("Name").fill("Nova Premier");
     await form.getByRole("radiogroup", { name: "Who makes it" }).getByRole("radio", { name: "Amazon" }).click();
-    await form.getByLabel("Bedrock model ID or inference profile").fill("eu.amazon.nova-premier-v1:0");
+    await form.getByLabel("Model ID", { exact: true }).fill("eu.amazon.nova-premier-v1:0");
     await form.getByLabel("AWS Region").selectOption("eu-west-1");
     // How it is called (§45.35 D1): an Amazon model starts with no effort levels and no tools, the prompt cache on.
     await expect(form.getByRole("switch", { name: "It has effort levels" })).toHaveAttribute("aria-checked", "false");
@@ -322,7 +344,7 @@ test.describe("Agents, skills and memory", () => {
     await page.getByRole("button", { name: "Reset" }).click();
     await page.getByRole("button", { name: "Yes, reset" }).click();
     await expect(page.locator(".st-stg-instr")).toContainText("The original");
-    await expect(box).toHaveValue(/You check Lamo Stories videos/);
+    await expect(box).toHaveValue(/You check Funded Clips videos/);
   });
 
   test("skills: write one, upload one with progress, bring back a version; built-ins stay read-only", async ({ page }) => {
@@ -330,7 +352,7 @@ test.describe("Agents, skills and memory", () => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await openSection(page, "skills");
     const builtin = page.locator(".st-stg-skill").first();
-    await expect(builtin).toContainText("Comes with Lamo Stories");
+    await expect(builtin).toContainText("Comes with Funded Clips");
     await builtin.getByRole("button", { name: /^Open / }).click();
     await expect(builtin.locator(".st-stg-pre")).toContainText("name: nonverbal-storytelling");
     await expect(builtin.getByRole("button", { name: /Change it|Delete/ })).toHaveCount(0);
@@ -396,7 +418,9 @@ test.describe("Video and storage", () => {
     await expect(reel).toHaveAttribute("aria-checked", "true");
     // The API's own sentence (§45.34): it says what to do, and nothing switches to the built-in animation by itself.
     await expect(card(page, "Video maker").getByRole("status")).toContainText("Luma AI Ray2 is not ready yet: ");
-    await expect(card(page, "Video maker").getByRole("status")).toContainText("Pick Built-in animation in Settings › Video, or finish its setup.");
+    // Said on Settings › Video itself, it never sends the owner here again (§45.36 E17).
+    await expect(card(page, "Video maker").getByRole("status")).toContainText("Pick Built-in animation above, or finish its setup.");
+    await expect(card(page, "Video maker")).not.toContainText("in Settings › Video");
     // Said once, though the API's label (Luma AI Ray2 (AI video)) is not the name its sentence uses.
     await expect(card(page, "Video maker").getByRole("status")).toHaveText(/^Luma AI Ray2 is not ready yet: /);
     await expect(card(page, "Video maker").getByRole("status")).not.toContainText("(AI video) is not ready yet");
@@ -437,13 +461,19 @@ test.describe("Video and storage", () => {
     // Use and costs: render minutes per day, each maker by name with its units and cost (§45.34).
     const use = card(page, "Use and costs, last 30 days");
     await expect(use.locator(".st-stg-chart__day")).toHaveCount(30);
-    await expect(use.locator(".st-stg-usage__row").filter({ hasText: "Built-in animator" })).toContainText("Free: it runs on Lamo Stories' own computer");
+    await expect(use.locator(".st-stg-usage__row").filter({ hasText: "Built-in animator" })).toContainText("Free: it runs on Funded Clips' own computer");
     const canvas = use.locator(".st-stg-usage__row").filter({ hasText: "Amazon Nova Canvas" });
     await expect(canvas).toContainText("No price yet:");
     await expect(use).not.toContainText("builtin-rig");
     await canvas.getByRole("button", { name: "Add a price for Amazon Nova Canvas" }).click();
     const canvasPrice = page.locator(".st-stg-price").filter({ hasText: "Amazon Nova Canvas" });
+    // The first price's save may land after this form opened (under load it does): it closes its own form only, never
+    // this one. Its row's Remove button is switched off until that save is answered.
+    await expect(price.getByRole("button", { name: /^Remove your price for Luma AI Ray2/ })).not.toHaveAttribute("aria-disabled", "true");
+    await expect(price.getByRole("button", { name: "Save the price" })).toHaveCount(0);
+    await expect(canvasPrice.getByRole("button", { name: "Save the price" })).toBeVisible();
     await canvasPrice.getByLabel("Price for one picture").fill("0.04");
+    await expect(canvasPrice.getByLabel("Price for one picture")).toHaveValue("0.04");
     await canvasPrice.getByRole("button", { name: "Save the price" }).click();
     await expect(canvasPrice).toContainText("0.04 for a picture");
     await expect(canvas).not.toContainText("No price yet");
@@ -466,7 +496,7 @@ test.describe("Video and storage", () => {
     await on(page);
     await page.setViewportSize({ width: 390, height: 844 });
     await openSection(page, "storage");
-    await expect(card(page, "Space used")).toContainText("Lamo Stories' own folder in Clip Factory's media storage in Europe (Stockholm)");
+    await expect(card(page, "Space used")).toContainText("Funded Clips' own folder in Clip Factory's media storage in Europe (Stockholm)");
     const file = card(page, "The finished file");
     await file.getByRole("switch", { name: "Also make a WebM file" }).click();
     await expect(file.getByRole("switch", { name: "Also make a WebM file" })).toHaveAttribute("aria-checked", "true");
@@ -474,7 +504,7 @@ test.describe("Video and storage", () => {
     await expect(file).toContainText("Only the caption words are left out of the picture. The speech bubbles and the safety end card always stay in.");
     const keeping = card(page, "Keeping other files");
     await keeping.getByRole("radiogroup", { name: "Keep reference videos" }).getByRole("radio", { name: /Keep only the study/ }).click();
-    await expect(keeping).toContainText("Lamo Stories still learns from each study after its video is gone.");
+    await expect(keeping).toContainText("Funded Clips still learns from each study after its video is gone.");
     await keeping.getByRole("radiogroup", { name: "Keep chat pictures" }).getByRole("radio", { name: /90 days/ }).click();
     await expect(page.locator(".st-stg-saved")).toHaveText("Saved");
     await keeping.getByRole("button", { name: "Clean up now" }).click();
@@ -491,7 +521,7 @@ test.describe("Video and storage", () => {
     await sm.getByLabel("Click sound").selectOption({ label: "Bubble: rises a little" });
     const kept = await page.evaluate(() => (JSON.parse(localStorage.getItem("cf.stories.prefs") ?? "{}") as { more?: Record<string, unknown> }).more);
     expect(kept).toMatchObject({ "motion.reduce": true, "sound.click": 3 });
-    await expect(sm).toContainText("Lamo Stories' own click sound.");
+    await expect(sm).toContainText("Funded Clips' own click sound.");
     // Hear it plays the pick once, never the usual click sound on top of it.
     // (The log keeps the last 200 sounds: it starts empty here, so only this click's sounds are in it. A tap within
     // 60 ms of the last one is one sound, so the pick's own sound is let go first.)
@@ -570,7 +600,7 @@ test.describe("round 4 (§45.35)", () => {
     const form = page.getByRole("form", { name: "Add a model" });
     await form.getByLabel("Name").fill("Mistral Large");
     await form.getByRole("radiogroup", { name: "Who makes it" }).getByRole("radio", { name: "Mistral" }).click();
-    await form.getByLabel("Bedrock model ID or inference profile").fill("mistral.mistral-large-2407-v1:0");
+    await form.getByLabel("Model ID", { exact: true }).fill("mistral.mistral-large-2407-v1:0");
     await form.getByLabel("AWS Region").selectOption("eu-west-3");
     await form.getByRole("button", { name: "Add the model" }).click();
     const row = add.locator(".st-stg-own").filter({ hasText: "Mistral Large" });
@@ -661,5 +691,78 @@ test.describe("the makers' models (§45.37)", () => {
       const box = await b.boundingBox();
       if (box) expect(box.height).toBeGreaterThanOrEqual(43.5);
     }
+  });
+});
+
+test.describe("round 5: Add a model and the status words (§45.36 E4, E14, E17)", () => {
+  test("Anthropic's levels start ticked; a pasted ARN fills the Region; a Region that does not fit is refused naming both", async ({ page }) => {
+    await on(page);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await openSection(page, "ai");
+    const add = card(page, "Add a model");
+    await add.getByRole("button", { name: "Add a model" }).click();
+    const form = page.getByRole("form", { name: "Add a model" });
+    // E17: an Anthropic model starts with its five levels ticked and its usual own level, so the first Add works.
+    for (const level of ["Low", "Medium", "High", "Extra high", "Maximum"]) await expect(form.getByRole("button", { name: level, exact: true })).toHaveAttribute("aria-pressed", "true");
+    await expect(form.getByRole("radiogroup", { name: "Its own level" }).getByRole("radio", { name: "High", exact: true })).toHaveAttribute("aria-checked", "true");
+    // E14: the first line is plain; inference profiles and ARNs are one tap away.
+    await expect(form.getByText("inference profile", { exact: false })).toBeHidden();
+    await form.getByText("Technical details").click();
+    await expect(form.getByText("inference profile", { exact: false })).toBeVisible();
+    // E4: a pasted ARN fills the Region in.
+    await form.getByLabel("Name").fill("My Claude");
+    await form.getByLabel("Model ID", { exact: true }).fill("arn:aws:bedrock:eu-west-3:123456789012:inference-profile/eu.anthropic.claude-x-v1:0");
+    await expect(form.getByLabel("AWS Region")).toHaveValue("eu-west-3");
+    // An eu. profile with a US Region: refused before sending, naming both.
+    await form.getByLabel("Model ID", { exact: true }).fill("eu.anthropic.claude-x-v1:0");
+    await form.getByLabel("AWS Region").selectOption("us-east-1");
+    await form.getByRole("button", { name: "Add the model" }).click();
+    await expect(form.getByRole("alert")).toHaveText(
+      "This inference profile id starts with eu., so it runs in a Europe Region (like eu-north-1), not in us-east-1. Type a Europe Region as the Region, or paste the us. profile id instead.",
+    );
+    await form.getByLabel("AWS Region").selectOption("eu-north-1");
+    await form.getByRole("button", { name: "Add the model" }).click();
+    await expect(page.locator(".toast").filter({ hasText: "My Claude is added!" })).toBeVisible();
+    // E17: its marks sit together at the row's right edge with the usual gap, in its row and in the Default model list.
+    const row = add.locator(".st-stg-own").filter({ hasText: "My Claude" });
+    const marks = await row.locator(".st-stg-own__head").evaluate((head) => {
+      const chips = Array.from(head.querySelectorAll(".st-stg-chip")).map((c) => c.getBoundingClientRect());
+      const h = head.getBoundingClientRect();
+      return { gap: chips[1]!.left - chips[0]!.right, right: h.right - chips[chips.length - 1]!.right };
+    });
+    expect(marks.gap).toBeGreaterThanOrEqual(5);
+    expect(marks.right).toBeLessThanOrEqual(1);
+    const option = page.getByRole("radiogroup", { name: "Default model" }).getByRole("radio", { name: /My Claude/ });
+    const inList = await option.evaluate((opt) => {
+      const chips = Array.from(opt.querySelectorAll(".st-stg-chip")).map((c) => c.getBoundingClientRect());
+      const top = opt.querySelector(".st-stg-pick__top")!.getBoundingClientRect();
+      return { gap: chips[1]!.left - chips[0]!.right, right: top.right - chips[chips.length - 1]!.right };
+    });
+    expect(inList.gap).toBeGreaterThanOrEqual(5);
+    expect(inList.right).toBeLessThanOrEqual(1);
+    // E14: its exact ID is folded under Technical details.
+    await expect(row.locator(".st-tech-fold code")).toBeHidden();
+    await row.getByText("Technical details").click();
+    await expect(row.locator(".st-tech-fold code")).toHaveText("eu.anthropic.claude-x-v1:0");
+  });
+
+  test("Settings › Video never sends the owner to Settings › Video; Settings has Open setup again", async ({ page }) => {
+    await on(page);
+    await page.setViewportSize({ width: 1280, height: 900 });
+    await openSection(page, "video");
+    const maker = page.getByRole("radiogroup", { name: "Video maker" });
+    // Amazon ended Nova Reel (§45.37): Luma AI Ray2 is the AI video maker that can still be picked.
+    await maker.getByRole("radio", { name: /Luma AI Ray2/ }).click();
+    await expect(card(page, "Video maker").getByRole("status")).toContainText("Pick Built-in animation above");
+    expect(await page.locator(".st-stg-section").evaluate((el) => (el as HTMLElement).innerText)).not.toContain("in Settings › Video");
+    // E14: the maker's plain name first; its exact Bedrock model ID one tap away.
+    const reelCard = card(page, "Video maker");
+    await expect(reelCard.locator(".st-stg-active strong")).toHaveText("Luma AI Ray2");
+    await expect(reelCard.getByText("luma.ray-v2:0", { exact: false })).toBeHidden();
+    await reelCard.getByText("Technical details").click();
+    await expect(reelCard.getByText("luma.ray-v2:0", { exact: false })).toBeVisible();
+    await expect(page.getByRole("link", { name: "Open setup again" })).toHaveAttribute("href", "/stories/setup");
+    await openSection(page, "ai");
+    expect(await card(page, "Prices").evaluate((el) => (el as HTMLElement).innerText)).not.toContain("Settings › AI");
   });
 });

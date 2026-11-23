@@ -209,7 +209,7 @@ describe("the maker models and the keys come from GET …/providers (§45.37 G1,
     const ai = $<HTMLElement>('form[aria-label="Add a model"]')!;
     fill(ai, "Name", "Flux 2");
     await click(byText("[role=radio]", "Amazon", ai));
-    fill(ai, "Bedrock model ID or inference profile", "eu.amazon.nova-lite-v1:0");
+    fill(ai, "Model ID", "eu.amazon.nova-lite-v1:0");
     await submit(ai);
     expect(calls.filter((c) => c.name === "putAiModel").at(-1)?.args[1]).toBe("custom-flux-2-2");
   });
@@ -280,7 +280,7 @@ describe("the mock's base URL guard is the API's (hosts.private_host)", () => {
 describe("the publish sheet's line for Clip Factory's own account (§45.37 G8)", () => {
   it("asks for a different account, never to decide", () => {
     const a = { connectionStatus: "same_as_clips" } as SocialAccount;
-    expect(accountState(a)).toBe("This is Clip Factory's own account. Connect a different account made for Clip Factory Stories in Social accounts.");
+    expect(accountState(a)).toBe("This is Clip Factory's own account. Connect a different account made for Funded Clips in Social accounts.");
     expect(accountState(a)).not.toMatch(/decide|both/i);
   });
 });

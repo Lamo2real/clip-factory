@@ -23,18 +23,19 @@ export class Stop extends Error {
 export const REASONS = {
   login: "TikTok logged your Mac out. Log in to TikTok again on your Mac.",
   captcha: "TikTok wants a check (a puzzle or a code). Do it on your Mac, then tap Try again.",
-  wrong: "TikTok said \"Something went wrong\". Try again later, or post it yourself.",
-  restricted: "TikTok said this video may be restricted. Check it, then post it yourself.",
+  wrong: "TikTok said \"Something went wrong\". Tap Try again in a few minutes.",
+  restricted: "TikTok said this video may be restricted. Check the clip, then tap Try again.",
   popup: (text) => `TikTok showed something new: "${text}". Check it on your Mac, then tap Try again.`,
-  noUpload: "TikTok's upload page looks different. Clip Factory will fix your Mac's helper; post it yourself for now.",
-  uploadFailed: "TikTok couldn't take the video. Try again, or post it yourself.",
+  noUpload: "TikTok's upload page looks different. Clip Factory will fix your Mac's helper; then tap Try again.",
+  uploadFailed: "TikTok couldn't take the video. Tap Try again.",
   slow: "TikTok took too long with the video. Try again later.",
-  caption: "The caption didn't go in right on TikTok. Post it yourself for now.",
-  privacy: (want) => `TikTok didn't keep "${want}" for who can watch. Post it yourself for now.`,
-  toggle: (name) => `TikTok didn't keep ${name} the way it should be. Post it yourself for now.`,
+  caption: "The caption didn't go in right on TikTok. Tap Try again.",
+  privacy: (want) => `TikTok didn't keep "${want}" for who can watch. Tap Try again.`,
+  toggle: (name) => `TikTok didn't keep ${name} the way it should be. Tap Try again.`,
   toggleOff: (name) => `TikTok has ${name} turned off for your account. Turn it on in TikTok's settings, then tap Try again.`,
-  noPost: "TikTok's Post button didn't work. Post it yourself for now.",
+  noPost: "TikTok's Post button didn't work. Tap Try again.",
   noLoginPage: "TikTok's login page looks different. Log in on your Mac.",
+  limit: "TikTok says it's posting too much right now. The rest wait; Clip Factory tells you.",
 };
 
 const PRIVACY_WORDS = {
@@ -75,6 +76,9 @@ export async function blocker(page) {
   }
   if (/log in to tiktok|log in to continue/i.test(text) && !/upload|posts/i.test(url)) {
     return new Stop(REASONS.login, { needsYou: true });
+  }
+  if (/posting too (fast|often|frequently|much)|too many (posts|uploads|videos|requests)|(daily|upload|posting) limit|limit (reached|exceeded)|reached (the|your) limit|slow down/i.test(text)) {
+    return new Stop(REASONS.limit, { needsYou: true });
   }
   if (/something went wrong/i.test(text)) return new Stop(REASONS.wrong);
   if (/content may be restricted/i.test(text)) return new Stop(REASONS.restricted);
@@ -184,6 +188,27 @@ export async function listPosts(page) {
 // ---------------------------------------------------------------------------------------------------------------
 // Uploading
 
+/**
+ * Puts the video in TikTok's upload box. Chrome runs on this Mac, so it is given the file's path and reads the file
+ * itself (CDP DOM.setFileInputFiles): instant at any size. Playwright's setInputFiles over a CDP connection sends
+ * the whole file through the connection instead, which timed out at 30 s for a 38 MB clip (22 Nov); it stays as the
+ * fallback with a longer limit.
+ */
+async function giveFile(page, file) {
+  try {
+    const session = await page.context().newCDPSession(page);
+    const { root } = await session.send("DOM.getDocument", { depth: -1, pierce: true });
+    const { nodeId } = await session.send("DOM.querySelector", { nodeId: root.nodeId, selector: 'input[type="file"]' });
+    if (!nodeId) throw new Error("no file input");
+    await session.send("DOM.setFileInputFiles", { files: [file], nodeId });
+    await session.detach().catch(() => {});
+    return;
+  } catch {
+    // fall back below
+  }
+  await page.locator('input[type="file"]').first().setInputFiles(file, { timeout: 240_000 });
+}
+
 async function waitForUpload(page) {
   const started = Date.now();
   while (Date.now() - started < 12 * 60_000) {
@@ -205,25 +230,48 @@ function postButton(page) {
   return page.locator('[data-e2e="post_video_button"], button:has-text("Post"):not(:has-text("Posts"))').first();
 }
 
+/** Types the caption, line by line; a hashtag or mention list that opens is closed before each new line. */
+async function typeCaption(page, editor, caption, delay) {
+  await editor.click();
+  await page.keyboard.press("Meta+A");
+  await page.keyboard.press("Backspace");
+  await sleep(300);
+  const lines = String(caption).split("\n");
+  for (let i = 0; i < lines.length; i++) {
+    if (i > 0) {
+      // Enter with a suggestion list open would pick a suggestion instead of starting a line: close it first.
+      await page.keyboard.press("Escape").catch(() => {});
+      await sleep(150);
+      await page.keyboard.press("Enter");
+    }
+    await page.keyboard.type(lines[i], { delay });
+    await sleep(250);
+  }
+  await page.keyboard.press("Escape").catch(() => {});
+  await sleep(400);
+  // Close a hashtag or mention list by clicking the section's own heading.
+  await page.getByText("Description", { exact: true }).first().click({ timeout: 2000 }).catch(() => {});
+  await sleep(400);
+}
+
 async function setCaption(page, caption) {
   const editor = page.locator('[contenteditable="true"]').first();
   await editor.waitFor({ timeout: 20_000 }).catch(() => {
     throw new Stop(REASONS.noUpload);
   });
-  await editor.click();
-  await page.keyboard.press("Meta+A");
-  await page.keyboard.press("Backspace");
-  await sleep(300);
-  await page.keyboard.type(caption, { delay: 12 });
-  await sleep(600);
-  // Close a hashtag or mention list by clicking the section's own heading.
-  await page.getByText("Description", { exact: true }).first().click({ timeout: 2000 }).catch(() => {});
-  await sleep(400);
-  const typed = normalize(await editor.innerText().catch(() => ""));
   const want = normalize(caption);
   // Studio turns hashtags into tags, so compare without the # marks and spaces.
   const squash = (s) => s.replace(/[#\s]/g, "");
-  if (!squash(typed).startsWith(squash(want).slice(0, 60))) throw new Stop(REASONS.caption);
+  let typed = "";
+  // Twice, the second time slower: a suggestion list that opened at the wrong moment can spoil one try (22 Nov).
+  for (const delay of [12, 40]) {
+    await typeCaption(page, editor, caption, delay);
+    typed = normalize(await editor.innerText().catch(() => ""));
+    if (squash(typed).startsWith(squash(want).slice(0, 60))) return;
+  }
+  const stop = new Stop(REASONS.caption);
+  stop.detail = { typed, want }; // what TikTok's box held vs the clip's caption (both normalized), for the log
+  throw stop;
 }
 
 async function sectionOf(page, heading) {
@@ -334,7 +382,7 @@ export async function post(page, job, file, onStep, { dryRun = false } = {}) {
     throw new Stop(REASONS.noUpload);
   });
   await onStep("uploading");
-  await input.setInputFiles(file);
+  await giveFile(page, file);
   await sleep(3000);
   await waitForUpload(page);
   await dismissHarmless(page); // TikTok's first-run questions come up once the video is in

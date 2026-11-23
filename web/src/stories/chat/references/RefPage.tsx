@@ -18,6 +18,7 @@ import { A } from "../../../components/ui.tsx";
 import { usePoll } from "../../../lib/hooks.ts";
 import { navigate } from "../../../lib/router.ts";
 import { storiesApi } from "../../api/client.ts";
+import { cx } from "../../glass/index.ts";
 import { storiesGoLater } from "../../pane.tsx";
 import { REF_STEP_LABEL, REF_STEP_ORDER, type AiSetting, type ModelOverride, type ProductionJob, type ReferenceAnalysis, type ReferenceVideo, type StoryStep } from "../../api/types.ts";
 import { storiesHref } from "../../routes.ts";
@@ -33,6 +34,7 @@ import { referencesChanged } from "../../studio/hooks.ts";
 import { TechDetails } from "../../studio/kit.tsx";
 import { scheduleDelete } from "../undo.ts";
 import { AnalysisView } from "./Analysis.tsx";
+import { RefPlayer } from "./Player.tsx";
 import { REF_STATUS } from "./RefList.tsx";
 import { localVideo } from "./uploads.ts";
 
@@ -157,6 +159,7 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
         </A>
         <h1 className="sr-only">Reference video</h1>
         <Empty
+          card
           mood="oops"
           title={problem.missing ? "That video is gone" : "It did not load"}
           action={
@@ -175,7 +178,7 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
     return (
       <section className="st-page st-refs">
         <h1 className="sr-only">Reference video</h1>
-        <Waiting label="Opening the video…" />
+        <Waiting plate label="Opening the video…" />
       </section>
     );
 
@@ -340,10 +343,10 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
         <Icon name="back" size={20} />
         All reference videos
       </A>
-      <header className="st-ref__head">
+      <header className="st-ref__head st-plate">
         {renaming === null ? (
           <div className="st-chat-conv__title-row">
-            <h1 className="st-ref__title">{ref.title}</h1>
+            <h1 className="st-ref__title st-display">{ref.title}</h1>
             <Btn quiet icon="pencil" label={`Rename ${ref.title}`} onClick={() => setRenaming(ref.title)} />
           </div>
         ) : (
@@ -385,9 +388,9 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
       </header>
 
       <div className="st-ref-layout">
-        <div className={`st-ref-player${src ? "" : " st-ref-player--empty"}`}>
+        <div className={cx("st-ref-player st-glass st-glass--hero st-lens", !src && "st-ref-player--empty")}>
           {src ? (
-            <video ref={player} className="st-ref-player__video" src={src} controls playsInline preload="metadata" aria-label={`Play ${ref.title}`} />
+            <RefPlayer videoRef={player} src={src} title={ref.title} />
           ) : (
             <div className="st-ref-player__none">
               <Icon name="film" size={40} />
@@ -398,27 +401,32 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
 
         <div className="st-ref-side" ref={analyzeBtn}>
           {ref.status === "uploading" ? (
-            <div className="st-ref-card2">
+            <div className="st-ref-card2 st-glass">
               <h2 className="st-ref-block__title">Still uploading</h2>
               <p>This video did not finish uploading. If it was stopped, delete it and upload it again.</p>
             </div>
           ) : ref.status === "analyzing" ? (
-            <div className="st-ref-card2" aria-live="polite">
+            <div className="st-ref-card2 st-glass" aria-live="polite">
               <h2 className="st-ref-block__title">Analyzing…</h2>
               <p>The video analysis agent is looking at every shot. It takes a few minutes for a long video. You can look at other pages meanwhile.</p>
-              <ol className="st-ref-track" aria-label="Steps">
-                {steps.map((s, i) => (
-                  <li key={`${s.label}-${i}`} className={`st-ref-track__step is-${s.status}`}>
-                    <span className="st-ref-track__mark" aria-hidden="true">
-                      {s.status === "done" ? <Icon name="check" size={18} /> : i + 1}
-                    </span>
-                    <span className="st-ref-track__label">{s.label}</span>
-                    <span className="sr-only">{s.status === "done" ? "done" : s.status === "running" ? "working on it" : "next"}</span>
-                    {s.message ? <span className="st-ref-track__msg">{s.message}</span> : null}
-                  </li>
-                ))}
-              </ol>
-              {job ? <Progress value={job.progress} label="How far the analysis is" /> : <div className="st-ref-busybar" aria-hidden="true" />}
+              <div className={cx("st-ref-run", job && "st-ref-run--dial")}>
+                <ol className="st-ref-track" aria-label="Steps">
+                  {steps.map((s, i) => (
+                    <li key={`${s.label}-${i}`} className={`st-ref-track__step is-${s.status}`}>
+                      <span className="st-ref-track__mark" aria-hidden="true">
+                        {s.status === "done" ? <Icon name="check" size={18} /> : i + 1}
+                      </span>
+                      <span className="st-ref-track__label">{s.label}</span>
+                      <span className="sr-only">{s.status === "done" ? "done" : s.status === "running" ? "working on it" : "next"}</span>
+                      {s.message ? <span className="st-ref-track__msg">{s.message}</span> : null}
+                    </li>
+                  ))}
+                </ol>
+                {/* The job's own progress: the arc with the white knob beside the steps. */}
+                {job ? <Progress dial value={job.progress} label="How far the analysis is" /> : null}
+              </div>
+              {/* The short gap before the job answers: the moving bar, never a dial stuck at 0. */}
+              {job ? null : <div className="st-ref-busybar" aria-hidden="true" />}
               {(job ?? started)?.meta.models[0] ? (
                 <>
                   <p className="st-chat-ai__note">
@@ -430,7 +438,7 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
               ) : null}
             </div>
           ) : (
-            <div className="st-ref-card2">
+            <div className="st-ref-card2 st-glass">
               {failedLine ? (
                 <div className="st-chat-note st-chat-note--bad st-chat-note--row st-ref-failed" role="alert">
                   <span>{failedLine}</span>
@@ -477,13 +485,14 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
                   ) : (
                     <p className="st-chat-ai__note">
                       {skipped ? `${unusableWords(skipped)}, so this analysis uses ${modelName(aiInfo, usable.model)}. ` : ""}
-                      {ref.ai.model || ref.ai.effort ? "Kept with this video (its own setting)." : "From Lamo Stories › Settings › AI."}
+                      {ref.ai.model || ref.ai.effort ? "Kept with this video (its own setting)." : "From Funded Clips › Settings › AI."}
                     </p>
                   )
                 }
               />
               <div className="st-ref-actions">
-                <button type="button" className="st-chat-btn st-chat-btn--main" aria-disabled={busy || !analyzable || !!effortBad || undefined} onClick={() => void analyze()}>
+                {/* One main action at a time: Analyze until the video is analyzed, then "Use in a video". */}
+                <button type="button" className={cx("st-chat-btn", ref.status !== "analyzed" && "st-chat-btn--main")} aria-disabled={busy || !analyzable || !!effortBad || undefined} onClick={() => void analyze()}>
                   <Icon name="eye" size={20} />
                   {busy ? "Starting…" : ref.status === "analyzed" ? "Analyze again" : ref.status === "failed" ? "Try again" : "Analyze it"}
                 </button>
@@ -491,12 +500,12 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
             </div>
           )}
           {whyNot ? (
-            <p className="st-chat-note" role="status">
+            <p className="st-chat-note st-plate" role="status">
               {whyNot}
             </p>
           ) : null}
           {actionProblem ? (
-            <div className="st-chat-note st-chat-note--bad st-chat-note--row" role="alert">
+            <div className="st-chat-note st-chat-note--bad st-chat-note--row st-plate" role="alert">
               <span>{actionProblem}</span>
               <FixIt text={actionProblem} onPickModel={openSheet} />
             </div>
@@ -504,7 +513,7 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
           <div className="st-ref-actions st-ref-actions--more">
             <button
               type="button"
-              className="st-chat-btn st-chat-btn--main"
+              className={cx("st-chat-btn", ref.status === "analyzed" && "st-chat-btn--main")}
               aria-disabled={ref.status !== "analyzed" || undefined}
               onClick={() => {
                 if (ref.status !== "analyzed") return setWhyNot("Analyze it first, then use it in a video.");
@@ -527,13 +536,13 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
       {ref.status === "analyzed" && data.analysis ? (
         <>
           {ref.analyzedWith ? (
-            <>
+            <div className="st-ref-withbox st-plate">
               <p className="st-ref-with">
                 Analyzed with {modelLabel(models.models, ref.analyzedWith.model)}
                 {ref.analyzedWith.effort ? ` · ${effortLabel(ref.analyzedWith.effort)}` : ""}
               </p>
               <ModelIdFold record={(job ?? data.job ?? started)?.meta.models.find((m) => m.model === ref.analyzedWith!.model && !m.failed) ?? null} />
-            </>
+            </div>
           ) : null}
           <AnalysisView
             analysis={data.analysis}

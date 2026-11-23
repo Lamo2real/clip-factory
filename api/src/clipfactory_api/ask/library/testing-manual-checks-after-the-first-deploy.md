@@ -147,7 +147,8 @@
      gate passes and `scripts/check-plan-clips-unchanged.sh` has nothing to report.
    - With auto-posting still off, open Settings › Posting › Auto-posting: "Off. Nothing posts by itself.", Next up
      lists the clips in Review oldest first under "Would go first", and Where they go names the ready places with
-     "TikTok: you post it yourself (TikTok's rule). Each clip gets Post it yourself."
+     "TikTok: turn on Your Mac posts TikTok to post there." and **Turn on** (or "TikTok: your Mac posts it." while
+     the switch is on)
    - Open **Test it first** and tap **Practice run now**: within 30 seconds Recent shows "Practice: would post “hook”
      to YouTube, Instagram and Facebook."; the clip stays in Review and nothing reaches any platform. Tap it again at
      once: "A test run just started. Wait a minute."
@@ -160,7 +161,9 @@
      you see: this is the unverified part); on Instagram nothing is published. Library says "Private test · only
      you", "Private test · draft on your Page" and "Private test · checked, not published", with no numbers.
    - Only then turn **Practice** off. The first live run posts the oldest clip at the time the page showed; its posts
-     say "· by auto-posting" with **Open** links, and the clip is under **Post these on TikTok yourself**.
+     say "· by auto-posting" with **Open** links. With **Your Mac posts TikTok** on, its TikTok row in Library goes
+     "Waiting for your Mac · next at …", "Posting…", then "Posted by your Mac · Everyone" with **Open**; the page has
+     no TikTok list of its own (ADR-86).
 
 19. **Get paid** ([CONTRACTS §40.8](CONTRACTS.md#408-changes-to-earlier-sections-who-builds-what-tests-not-verified-live),
    "Not verified live"): not checked live when built. Do them at the owner's first use; each failure becomes "not

@@ -1,6 +1,7 @@
 // One platform's numbers for a clip (docs/CONTRACTS.md §16.8): its mark and name, a status chip, the big number,
 // only the fields that platform really gives, a sparkline, how fresh the numbers are, and a link to the post.
-// A platform with nothing to show gets one calm line and one link instead of a wall of dashes.
+// A platform with nothing to show gets one calm line and one link instead of a wall of dashes. TikTok's stack says what
+// the owner's Mac is doing (§47.4) when the page passes its row: its one button sits in the page's actions.
 import type { Ref } from "react";
 import type { PlatformPerformance, SeriesPoint } from "../api/types.ts";
 import { PLATFORM_LABEL } from "../lib/format.ts";
@@ -12,7 +13,7 @@ import { Sparkline } from "./Sparkline.tsx";
 import { LinkButton, Pill, type Tone } from "./ui.tsx";
 import { formatMoney } from "../lib/money.ts";
 import { autoPerfLabel, isPrivateTest } from "../lib/autopost.ts";
-import { macChip } from "../lib/tiktokMac.ts";
+import { macChip, type TikTokRow } from "../lib/tiktokMac.ts";
 import type { Clip } from "../api/types.ts";
 
 const CHIP_TONE: Record<PlatformPerformance["status"], Tone> = {
@@ -56,6 +57,7 @@ export function PlatformStack({
   now,
   ref,
   auto,
+  row,
 }: {
   perf: PlatformPerformance;
   series?: SeriesPoint[];
@@ -65,11 +67,13 @@ export function PlatformStack({
   ref?: Ref<HTMLElement>;
   /** The clip's `auto` (§46.9): its posts say "· by auto-posting"; a Private test one has no numbers (§46.8). */
   auto?: Clip["auto"];
+  /** TikTok's row (lib/tiktokMac.ts tiktokRow): the calm line says its words; its button is on the page. */
+  row?: TikTokRow | null;
 }) {
   const name = PLATFORM_LABEL[perf.platform];
   const id = `stack-${perf.platform}`;
   const privateTest = isPrivateTest(perf.status, auto, perf.by);
-  const calm = privateTest ? null : calmCopy(perf);
+  const calm = privateTest ? null : calmCopy(perf, perf.platform === "tiktok" ? row : null);
   const groups = !privateTest && !calm && perf.metrics ? metricGroups(perf.platform, perf.metrics) : null;
   const reactions = (perf.metrics?.extra as FacebookExtra | undefined)?.reactions;
   const wait = until(perf.nextAllowedAt, now);
@@ -99,7 +103,7 @@ export function PlatformStack({
         <div className="pstack__chip">
           <Pill tone={CHIP_TONE[perf.status]} icon={perf.status === "failed" ? "alert" : perf.status === "posted" ? "checkCircle" : undefined}>
             {perf.status === "mac" && perf.mac
-              ? macChip(perf.mac)
+              ? macChip(perf.mac, perf.platform === "tiktok" ? row : null)
               : perf.via === "mac"
                 ? "Posted by your Mac"
                 : autoPerfLabel(perf.status, perf.platform, auto, perf.by, STATUS_LABEL[perf.status])}

@@ -413,7 +413,7 @@ export const TRACK_LIFT = 0.08;
 /**
  * So a track carries this much more tint than a panel, and the labels on its lift stay at AA over every spot of every
  * look (the colours grid included). Not the lightest spot's need alone: mixed in sRGB, a darker spot of another hue
- * (a brown in the living backdrop) can need more. 0.22 since the ladder (ADR-85): with 0.15 a track over a bright
+ * (a brown in the living backdrop) can need more. 0.22 since the ladder (ADR-87): with 0.15 a track over a bright
  * chromatic spot of the Colours mesh (Grape, bottle green, vermilion) read brighter than an option's hover laid on it,
  * so hovering an option went darker there; 0.22 keeps every option's hover a step of light above its own track.
  */
@@ -427,12 +427,12 @@ export const CHIP_DEEPEN = 0.35;
 /** Deep green (`--green-deep`): wells under words (fields, `--fill-sunk`) and sheet scrims. */
 export const GREEN_DEEP: Rgb = hexToRgb("#0a2820");
 /**
- * The green under a tinted chip: bottle green since ADR-85 (it was `GREEN_DEEP`), so a chip on a row is brighter than
+ * The green under a tinted chip: bottle green since ADR-87 (it was `GREEN_DEEP`), so a chip on a row is brighter than
  * the row, like every other raised thing, and its colour still reads (leaf 4.95, vermilion 6.00, amber 4.69 at worst).
  */
 export const CHIP_UNDER: Rgb = VEIL;
 
-// ---------- The logic of light (ADR-85, docs/CONTRACTS.md §22.7) ----------
+// ---------- The logic of light (ADR-87, docs/CONTRACTS.md §22.7) ----------
 //
 // One key light above. Every level is brighter than the level under it, and inside every surface the top is brighter
 // than the bottom. Brightness is bone laid over green, and every bone lift is paid for with a step more green under
@@ -724,7 +724,7 @@ export function resolveLook(i: LookInput): Look {
   }
 }
 
-// ---------- The logic of light: what words sit on at each level (ADR-85) ----------
+// ---------- The logic of light: what words sit on at each level (ADR-87) ----------
 
 /** `veil` of bottle green (at most solid) over `under`, then `lift` of bone over that: how every lit surface composites. */
 export function lit(under: Rgb, veil: number, lift: number): Rgb {

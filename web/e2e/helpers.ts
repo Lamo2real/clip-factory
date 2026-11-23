@@ -484,7 +484,7 @@ function contrastKit() {
         const fill = colours(cs.backgroundColor)[0];
         if (fill && fill[3] > 0) states = states.map((st) => ({ ...st, bg: over(fill, st.bg) }));
         // The background-image layers paint over its colour, the last listed lowest (a pane is its light over its
-        // tint, ADR-85): each layer in turn, and in each one any colour that can be under the words.
+        // tint, ADR-87): each layer in turn, and in each one any colour that can be under the words.
         const box = a.getBoundingClientRect();
         for (const layer of imageLayers(cs.backgroundImage).reverse()) {
           const stops = underWords(layer, box, rect).filter((c) => c[3] > 0);

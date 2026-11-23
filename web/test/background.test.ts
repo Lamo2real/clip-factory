@@ -373,6 +373,8 @@ describe("the stylesheets and the text colour list stay in step", () => {
     "var(--green-leaf)": "a button's glyph, for a blink of its action",
     "var(--vermilion-light)": "the error toast's icon, a mark rather than words",
     "rgb(255 255 255 / 0.7)": "a CTA that is off: on its own thin vermilion over deep green (checked below)",
+    "var(--ws-mark-letter, #1c1842)": "the Funded Clips mark's C, on the sunshine tile of its own (checked below)",
+    "var(--ws-wordmark, #fff6e5)": "the Funded Clips wordmark, only in Funded Clips' own rail and top bar, on its night-indigo stage (checked below)",
   };
 
   it("a CTA that is off keeps its label above 3:1 on any panel, and is not brown", () => {
@@ -385,6 +387,14 @@ describe("the stylesheets and the text colour list stay in step", () => {
     for (const sheet of ["components.css", "setup.css"]) {
       expect(rules(sheet)).toContain("linear-gradient(rgb(var(--vermilion-rgb) / 0.35), rgb(var(--vermilion-rgb) / 0.35)),\n    rgb(var(--green-deep-rgb) / 0.6)");
     }
+  });
+
+  it("the Funded Clips mark's C and wordmark pass AA on their own tile, stage and rail", () => {
+    const mark = rules("ws-mark.css");
+    expect(mark).toContain("background: var(--ws-mark-tile, #ffc94a)");
+    expect(contrast(hexToRgb("#1c1842"), hexToRgb("#ffc94a"))).toBeGreaterThanOrEqual(AA);
+    // Funded Clips' night-indigo stage (its top bar) and the lightest of its rail's fill.
+    for (const under of [hexToRgb("#1c1842"), [50, 42, 115] as Rgb]) expect(contrast(hexToRgb("#fff6e5"), under)).toBeGreaterThanOrEqual(AA);
   });
 
   it("every text colour in every stylesheet is a token of the list, or a named exception", () => {
@@ -596,7 +606,7 @@ describe("colours", () => {
             if (worst(mix(VEIL, page, v.panelVeil)) < AA) fails.push(`${cs.join(" ")} over rgb(${spot.map(Math.round).join(" ")})`);
             // A pick-one track or a control fill straight on the page.
             if (worst(mix(BONE, mix(VEIL, page, Math.min(1, v.panelVeil + TRACK_EXTRA_VEIL)), TRACK_LIFT)) < AA) fails.push(`track: ${cs.join(" ")} over rgb(${spot.map(Math.round).join(" ")})`);
-            // The lit levels (ADR-85): the top of a panel and of the lead panel, a row on it on hover, the deepest
+            // The lit levels (ADR-87): the top of a panel and of the lead panel, a row on it on hover, the deepest
             // raise on hover, and a control on the page on hover (the tightest of each kind).
             const look: LightLook = { kind: "colours", panelVeil: v.panelVeil, pageVeil: v.pageVeil };
             const e1 = panelWords(look, spot);
@@ -851,7 +861,7 @@ function litSurfaces(p: LightPlace): [name: string, bg: Rgb][] {
   return out;
 }
 
-describe("the logic of light (ADR-85): the top layer is brighter, and every lift is paid for", () => {
+describe("the logic of light (ADR-87): the top layer is brighter, and every lift is paid for", () => {
   const tokens = rules("tokens.css");
   const glass = rules("glass.css");
   const root = declared(block(tokens, ":root"));
@@ -1202,7 +1212,7 @@ describe("no visible edges (owner, 2026-11-18)", () => {
 
   it("the shared shadows, glows and the light are soft (blurred, never a drawn line), and the glass has no lit rim", () => {
     const root = declared(block(rules("tokens.css"), ":root"));
-    // Every soft light and shade of the logic of light (ADR-85): the top glows, the bottom shades and the drops.
+    // Every soft light and shade of the logic of light (ADR-87): the top glows, the bottom shades and the drops.
     const light = [...root.keys()].filter((t) => /^--light-(rim|shade|shadow)(-|$)/.test(t) || t === "--light-press");
     expect(light.length).toBeGreaterThanOrEqual(17);
     for (const t of ["--shadow-1", "--shadow-2", "--glow-bone", "--glow-vermilion", "--glow-leaf", "--shade-field", ...light]) {

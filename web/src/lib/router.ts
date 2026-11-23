@@ -164,6 +164,14 @@ export function setLeaveGuard(g: LeaveGuard): () => void {
   };
 }
 
+/**
+ * A page with unsaved typing is holding every page change right now (it asks "Leave without saving?" first). The
+ * shell's workspace switch then lets the page ask before its highlight moves.
+ */
+export function leaveGuarded(): boolean {
+  return guard !== null;
+}
+
 const samePage = (a: string, b: string) => a.split("#")[0] === b.split("#")[0];
 
 /** Set while a held browser Back (or Forward) finishes after Leave, so the guard does not ask a second time. */

@@ -33,7 +33,7 @@ import {
   VEIL,
 } from "../src/lib/background.ts";
 
-// The quiet button (Later, Skip, Not now) and the colourless Reload lens on the update bar (ADR-85, the logic of
+// The quiet button (Later, Skip, Not now) and the colourless Reload lens on the update bar (ADR-87, the logic of
 // light), worked out with lib/background.ts over every look: each must read as a button, a step of light above the
 // surface it sits on (the lens a step above Later), and their bone words keep WCAG AA at rest and on hover.
 
@@ -90,7 +90,7 @@ const PLACES: Place[] = (() => {
   return out;
 })();
 
-describe("the update bar's two buttons (ADR-85)", () => {
+describe("the update bar's two buttons (ADR-87)", () => {
   const lift = num(LENS, "--btn-lift");
   const hoverLift = num(LENS_HOVER, "--btn-lift");
   // Later on the bar: bone alone over the bar's heavier green (UPDATE_EXTRA_VEIL), quieter than Reload.
@@ -161,7 +161,7 @@ describe("the update bar's two buttons (ADR-85)", () => {
   });
 });
 
-describe("the quiet button looks like a button (ADR-85)", () => {
+describe("the quiet button looks like a button (ADR-87)", () => {
   const lift = num(GHOST_INSIDE, "--btn-lift");
   const veil = num(GHOST_INSIDE, "--btn-veil");
   const hoverLift = num(GHOST_INSIDE, "--ghost-hover-lift");
