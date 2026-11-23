@@ -96,11 +96,14 @@ async function useLook(page: Page, look: Look, studios = 0, solo = false) {
       if (studios || solo) (window as unknown as { __cfStoriesMock?: unknown }).__cfStoriesMock = { knobs: { ...(studios ? { moreStudios: studios } : {}), ...(solo ? { fresh: true } : {}) } };
       // Every platform skipped: no setup list floating over the sidebar's foot.
       if (!sessionStorage.getItem("cf-mock-setup-skipped")) sessionStorage.setItem("cf-mock-setup-skipped", JSON.stringify(["youtube", "tiktok", "instagram", "facebook", "x"]));
-      // A white desktop behind the see-through window (html.see-through leaves the page's own canvas showing).
+      // A white desktop behind the see-through window (html.see-through leaves the page's own canvas showing). On
+      // <html> only, as e2e/glass.ts paintGlass paints every stand-in: the page itself stays transparent, so the
+      // window's own Frosted frost (.backdrop, drawn under the body) lies over the desktop as it does in the app. White
+      // on the body too covered it, and the switch was read over a bare white desktop no window shows.
       if (win)
         document.addEventListener("DOMContentLoaded", () => {
           const st = document.createElement("style");
-          st.textContent = "html.see-through, html.see-through body { background: #fff !important; }";
+          st.textContent = "html.see-through { background: #fff !important; }";
           document.head.append(st);
         });
     },

@@ -411,8 +411,9 @@ export function AppPanes({
         };
 
         // The panes change once the switch's highlight has measured where it goes (Glide reads the bar's layout in the
-        // microtask its class change queued, before this one), so that read never waits for two pages to be laid
-        // out; the page is laid out once, for the first frame of both slides.
+        // microtask its class change queued, before this one) and the switch has found its lens (WorkspaceDock's Bar,
+        // also before this one), so neither read waits for two pages to be laid out; the page is laid out once, for
+        // the first frame of both slides. Nothing in the tap's task reads the page after this.
         queueMicrotask(() => {
           if (state !== "running") return;
           // Everything is read, and the slides made, while the page is still styled and laid out as Glide measured it:

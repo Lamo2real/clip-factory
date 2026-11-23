@@ -466,12 +466,8 @@ function Bar({ list, current, stacked, barRef }: { list: Workspace[]; current: s
     }
     // The class moves in this task, so Glide (its MutationObserver) starts the slide before the next frame.
     flushSync(() => setPending(w.workspaceId));
-    // The whole app slides with it from this same tap (another workspace of the same app does not slide).
-    if (panes.current && panes.current.to !== appOf(w)) {
-      panes.current.back();
-      panes.current = null;
-    }
-    const slide = (panes.current ??= slidePanes(w));
+    /** The whole app's slide for this tap (set just below, before any microtask runs), if it slides. */
+    let slide: AppSlide | null = null;
     let gone = false;
     const land = () => {
       if (gone || run !== token.current) return;
@@ -481,7 +477,10 @@ function Bar({ list, current, stacked, barRef }: { list: Workspace[]; current: s
       // Held by "Leave without saving?" (the page did not change): the highlight goes back to where he still is.
       if (here() === at.from) setPending(null);
     };
-    // After Glide's own observer has run (a microtask queued before this one): its slide exists now.
+    // The lens is read after Glide's own observer has run (a microtask the class change above queued: its slide exists
+    // now) and before the panes change (AppPanes' microtask, which slidePanes below queues after this one). Read once
+    // they have changed, getAnimations would bring the whole page coming in up to date, its styles and its layout, in
+    // the tap's own task, and the slide would start only after it (on CI's runners 137 ms after the click, 23 Nov).
     queueMicrotask(() => {
       const highlight = slide ? joinLens(slide) : lens();
       const glided = new Promise<void>((done) => {
@@ -494,6 +493,12 @@ function Bar({ list, current, stacked, barRef }: { list: Workspace[]; current: s
         if (ok) land();
       });
     });
+    // The whole app slides with it from this same tap (another workspace of the same app does not slide).
+    if (panes.current && panes.current.to !== appOf(w)) {
+      panes.current.back();
+      panes.current = null;
+    }
+    slide = panes.current ??= slidePanes(w);
   };
 
   return (

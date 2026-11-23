@@ -345,6 +345,15 @@ function StoriesShell({ page }: { page: StoriesPage }) {
   const { active } = useAppPane();
   const fromAddress = page.name === "connections" ? page.ws : null;
   const [ws, setWs] = useState<string | null>(() => quickWorkspace(fromAddress));
+  // Mounted ahead of a slide, hidden behind Clip Factory (stories/pane.tsx), its workspace was chosen then. Coming on
+  // screen it opens the one the switcher picked since (§45.35 D19: Studio 3 from a list of four), chosen in this same
+  // render, so nothing on screen remembers the old one first (the remembering below would write it back as the choice).
+  const [wasActive, setWasActive] = useState(active);
+  if (wasActive !== active) {
+    setWasActive(active);
+    const quick = active ? quickWorkspace(fromAddress) : null;
+    if (quick && quick !== ws) setWs(quick);
+  }
   const [problem, setProblem] = useState<string | null>(null);
   const [more, setMore] = useState(false);
   /** The setup opened by itself: it shows on its own until the owner leaves it. */

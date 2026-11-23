@@ -10,13 +10,12 @@ import {
   glassChecks,
   oklabL,
   panelWords,
-  PICTURE_PAGE_VEIL,
-  PICTURE_PANEL_VEIL,
+  PICTURE_GLASS,
   SATURATIONS,
   saturateRgb,
-  seeThroughVeils,
   SWATCHES,
   mix,
+  windowGlass,
   type NativeGlass,
   type Rgb,
 } from "../src/lib/background.ts";
@@ -128,8 +127,15 @@ const trackAt = (y: number) => {
   }
   return stops.at(-1)!.alpha;
 };
-/** The hover's light: none under the words (no fill of its own), only box-shadows in its top few px and a rim. */
+/** The hover's light: box-shadows in its top few px and a rim, above the words. */
 const hoverShadows = () => layers(resolve(decls(body(".ws-switch__opt:not(.is-on):hover")).get("box-shadow")!));
+/** The hover's own lift under the words: one even clear white, `rgb(255 255 255 / a)`: its alpha. */
+const hoverLift = () => {
+  const v = decls(body(".ws-switch__opt:not(.is-on):hover")).get("background-color") ?? "";
+  const m = /^rgb\(255 255 255 \/ ([\d.]+)\)$/.exec(v);
+  expect(m, `hover's lift ${v}: one clear white`).not.toBeNull();
+  return Number(m![1]);
+};
 
 /** The Live chip under the switch, in the dock and at a phone's top bar: the shell's own (glide.css). */
 const LIVE = ".ws-dock > .ws-dock__live > .live-dot, .ws-switch-host--topbar > .live-dot";
@@ -302,44 +308,58 @@ describe("the workspace switch is see-through, colour-free glass (§45.38 S5)", 
     // where the words sit, then the hover's or the lens's white. The app's own living backdrop is measured in pixels
     // where the dock is drawn (e2e/switch-glass.spec.ts, contrast.spec.ts): under the sidebar's foot it is the deep
     // field under the deep vermilion glow, never the mesh's lightest corner, which no part of the dock reaches.
+    // In the window looks the desktop itself shows through the window, under the page: a web backdrop-filter sees only
+    // the page, so brightness() takes light only from the panel's own tint (what it lays over the window, `web`: the
+    // panel over black), never from the desktop under it. A white and a black desktop are behind it too (the window
+    // look's stand-ins, e2e/glass.ts WHITE), as well as the glass's own lightest and darkest.
     const k = Number(/brightness\(([\d.]+)\)/.exec(decls(body(".ws-switch")).get("backdrop-filter")!)![1]);
     const track = trackAt(WORDS_TOP);
     const lens = flatWhite(resolve(own.get("--wsg-lens-face")!));
     const W: Rgb = [255, 255, 255];
-    const panels: { at: string; under: Rgb }[] = [];
+    const B: Rgb = [0, 0, 0];
+    /** What the panel lays over the window (premultiplied: the panel over black), or null where all of it is the page's. */
+    const panels: { at: string; under: Rgb; web: Rgb | null }[] = [];
     const GLASSES: NativeGlass[] = ["liquid", "vibrancy", "mica", "acrylic", "blur"];
     for (const glass of GLASSES)
       for (const scheme of ["light", "dark"] as const)
         for (const strength of ["clear", "frosted"] as const) {
-          const v = seeThroughVeils(glass, scheme, strength);
-          for (const { name, behind } of glassChecks(glass, scheme))
-            for (const sat of SATURATIONS) panels.push({ at: `window ${glass} ${scheme} ${strength} over ${name}`, under: panelWords({ kind: "window", panelVeil: v.panel, pageVeil: v.page }, saturateRgb(behind, sat)) });
+          const look = { kind: "window" as const, ...windowGlass(glass, scheme, strength) };
+          const web = panelWords(look, B);
+          for (const { name, behind } of [...glassChecks(glass, scheme), { name: "a white desktop", behind: W }, { name: "a black desktop", behind: B }])
+            for (const sat of SATURATIONS) panels.push({ at: `window ${glass} ${scheme} ${strength} over ${name}`, under: panelWords(look, saturateRgb(behind, sat)), web });
         }
-    for (const behind of [W, [0, 0, 0] as Rgb]) panels.push({ at: `picture over ${behind.join(" ")}`, under: panelWords({ kind: "picture", panelVeil: PICTURE_PANEL_VEIL, pageVeil: PICTURE_PAGE_VEIL }, behind) });
+    for (const behind of [W, B]) panels.push({ at: `picture over ${behind.join(" ")}`, under: panelWords({ kind: "picture", ...PICTURE_GLASS }, behind), web: null });
     // The colours: the default, every swatch alone and every pair, over every corner of their mesh.
     const sets: string[][] = [[...DEFAULT_COLOURS], ...SWATCHES.map((s) => [s.hex])];
     for (const a of SWATCHES) for (const b of SWATCHES) if (a !== b) sets.push([a.hex, b.hex]);
     for (const colours of sets) {
       const look = { kind: "colours" as const, ...coloursVeils(colours), colours };
-      for (const spot of coloursMeshSpots(colours)) panels.push({ at: `colours ${colours.join(" ")}`, under: panelWords(look, spot) });
+      for (const spot of coloursMeshSpots(colours)) panels.push({ at: `colours ${colours.join(" ")}`, under: panelWords(look, spot), web: null });
     }
     // Clips Funded's rail over a white or a black picture or desktop, at the foot (its level-1 light, settled).
     for (const [name, v] of [["picture", MEASURED], ["window clear", WINDOW_CLEAR], ["window frosted", WINDOW_FROSTED]] as const)
-      for (const behind of [W, [0, 0, 0] as Rgb]) panels.push({ at: `Clips Funded's rail, ${name}`, under: stLit(mix(ESPRESSO, behind, v.page), v.rail, ELEVATION[1]!) });
+      for (const behind of [W, B])
+        panels.push({ at: `Clips Funded's rail, ${name}`, under: stLit(mix(ESPRESSO, behind, v.page), v.rail, ELEVATION[1]!), web: name === "picture" ? null : stLit(mix(ESPRESSO, B, v.page), v.rail, ELEVATION[1]!) });
     expect(panels.length).toBeGreaterThan(4000);
+    /** What is under the switch's glass once its brightness(kk) has taken its light: all of it, or only the panel's own. */
+    const seen = ({ under, web }: { under: Rgb; web: Rgb | null }, kk: number) => under.map((c, i) => c - (1 - kk) * (web ? web[i]! : c)) as unknown as Rgb;
 
     // The Live chip under the switch: the same glass, its word white on its own frost where the word starts.
     const liveK = Number(/brightness\(([\d.]+)\)/.exec(decls(body(LIVE)).get("backdrop-filter")!)![1]);
     const liveFrost = frostAt(decls(body(LIVE)).get("background")!, LIVE_WORDS_TOP);
+    const hover = hoverLift();
     const fails: string[] = [];
     let least = { aa: Infinity, lift: Infinity, live: Infinity };
-    for (const { at, under } of panels) {
-      // A hovered name's words sit on the track too (the hover's light lies above them): only the lens is under words.
-      const rest = mix(W, under.map((c) => c * k) as unknown as Rgb, track);
+    for (const panel of panels) {
+      const { at } = panel;
+      // A hovered name's words sit on the track and its faint clear lift (its light lies above them).
+      const rest = mix(W, seen(panel, k), track);
+      const hovered = mix(W, rest, hover);
       const lensOn = mix(W, rest, lens);
-      const aa = Math.min(contrast(W, rest), contrast(W, lensOn));
-      const lift = oklabL(lensOn) - oklabL(rest);
-      const live = contrast(W, mix(W, under.map((c) => c * liveK) as unknown as Rgb, liveFrost));
+      const aa = Math.min(contrast(W, rest), contrast(W, hovered), contrast(W, lensOn));
+      // The lens over the other name at rest and hovered: the hovered one is the lighter, so its lift is the least.
+      const lift = Math.min(oklabL(lensOn) - oklabL(rest), oklabL(lensOn) - oklabL(hovered));
+      const live = contrast(W, mix(W, seen(panel, liveK), liveFrost));
       least = { aa: Math.min(least.aa, aa), lift: Math.min(least.lift, lift), live: Math.min(least.live, live) };
       if (aa < AA) fails.push(`${at}: white words ${aa.toFixed(2)}:1`);
       // Plainly the chosen side for a child (S5), at rest and while the other name is hovered (the same lift).
@@ -348,36 +368,42 @@ describe("the workspace switch is see-through, colour-free glass (§45.38 S5)", 
     }
     expect([...new Set(fails)].slice(0, 12), JSON.stringify(least)).toEqual([]);
     // Over no panel (a phone's top bar, Clips Funded's first Setup on a computer) the chip's tint holds its word by
-    // itself over a white, a black, a cream or a copper photo, page or desktop.
-    const liveTint = Number(/^rgb\(0 0 0 \/ ([\d.]+)\)$/.exec(layers(decls(body(LIVE_BARE)).get("background")!).at(-1)!)![1]);
+    // itself over a white, a black, a cream or a copper photo, page or desktop, at its floor (the look's panel tint
+    // only ever adds to it). Read as a desktop: its brightness() takes no light from it (it dims only the page).
+    const liveTint = Number(/^rgb\(0 0 0 \/ max\(([\d.]+), var\(--panel-veil\)\)\)$/.exec(layers(decls(body(LIVE_BARE)).get("background")!).at(-1)!)![1]);
     const bareFrost = frostAt(layers(decls(body(LIVE_BARE)).get("background")!)[0]!, LIVE_WORDS_TOP);
     for (const behind of [W, [0, 0, 0] as Rgb, [0xe2, 0x62, 0x1f] as Rgb, [0xf7, 0xf5, 0xef] as Rgb]) {
-      const tinted = mix([0, 0, 0], behind.map((c) => c * liveK) as unknown as Rgb, liveTint);
+      const tinted = mix(B, behind, liveTint);
       expect(contrast(W, mix(W, tinted, bareFrost)), `the Live chip over no panel, ${behind.join(" ")}`).toBeGreaterThanOrEqual(AA);
     }
-    // The menu's plate holds the stacked switch's words by itself, over a white or a black page.
+    // The menu's plate holds the stacked switch's words by itself, over a white or a black page or desktop (read as
+    // a desktop, which its brightness() never dims), on the lens it carries there (the stacked switch inside it has no
+    // glass of its own, so nothing takes light back under its words).
     const plate = Number(/max\(([\d.]+), var\(--panel-veil\)\)/.exec(decls(body(".ws-menu")).get("background")!)![1]);
     const plateLight = Math.max(...[...decls(body(".ws-menu")).get("background")!.matchAll(/rgb\(255 255 255 \/ ([\d.]+)\)/g)].map((m) => Number(m[1])));
-    for (const behind of [W, [0, 0, 0] as Rgb]) {
-      const menuK = Number(/brightness\(([\d.]+)\)/.exec(decls(body(".ws-menu")).get("backdrop-filter")!)![1]);
-      const onPlate = mix(W, mix([0, 0, 0], behind.map((c) => c * menuK) as unknown as Rgb, plate), plateLight);
-      const rest = mix(W, onPlate.map((c) => c * k) as unknown as Rgb, track);
-      expect(contrast(W, mix(W, rest, lens)), `the menu over ${behind.join(" ")}`).toBeGreaterThanOrEqual(AA);
+    const menuLens = flatWhite(decls(body(".ws-menu .ws-switch")).get("--wsg-lens-face")!);
+    for (const behind of [W, B]) {
+      const onPlate = mix(W, mix(B, behind, plate), plateLight);
+      const rest = mix(W, onPlate, track);
+      expect(contrast(W, mix(W, rest, menuLens)), `the menu over ${behind.join(" ")}`).toBeGreaterThanOrEqual(AA);
     }
     // Clips Funded's phone top bar in its Picture and See-through looks is the list's Backdrop Root (its blur sees
     // only the bar): there the plate is denser, so the page under it shows as a faint shade, never readable words.
-    const sharp = body('.stories-app:is([data-look="window"], [data-look="picture"]) .ws-menu');
+    // The shell finds Clips Funded by its own pane, never by Clips Funded's classes (glide.css is in the main bundle,
+    // which carries none of its styles: ci.yml "Clips Funded is not in the main bundle").
+    const sharp = body('[data-app-pane="stories"] :is([data-look="window"], [data-look="picture"]) .ws-menu');
     expect(layers(decls(sharp).get("background")!).at(-1)).toBe("rgb(0 0 0 / max(0.92, var(--panel-veil)))");
+    expect(glide, "no Clips Funded marker in the shell's sheet").not.toMatch(/stories-app|--st-|\.st-[a-z]/);
     // Over no panel (Clips Funded's first-time Setup on a computer, no rail under the dock): the track's own plate
     // holds white words at AA on the track and the lens over a white or a black photo or desktop, and over the default
-    // look's copper glow, the lens still plainly the chosen side.
+    // look's copper glow, the lens still plainly the chosen side (read as a desktop, which brightness() never dims).
     const bare = body("html[data-ws-bare] .ws-dock > .ws-switch-host > .ws-switch");
     const bareTrack = layers(resolve(decls(bare).get("--wsg-track")!));
     expect(bareTrack).toHaveLength(2);
     expect(bareTrack[0], "the same frost").toBe(resolve(own.get("--wsg-track")!));
     const bareSmoke = Number(/^rgb\(0 0 0 \/ max\(([\d.]+), var\(--panel-veil\)\)\)$/.exec(bareTrack[1]!)![1]);
     for (const behind of [W, [0, 0, 0] as Rgb, [0xe2, 0x62, 0x1f] as Rgb, [0xf7, 0xf5, 0xef] as Rgb]) {
-      const plated = mix([0, 0, 0], behind.map((c) => c * k) as unknown as Rgb, bareSmoke);
+      const plated = mix(B, behind, bareSmoke);
       const rest = mix(W, plated, track);
       const lensOn = mix(W, rest, lens);
       expect(Math.min(contrast(W, rest), contrast(W, lensOn)), `over no panel, ${behind.join(" ")}`).toBeGreaterThanOrEqual(AA);
@@ -411,12 +437,21 @@ describe("the workspace switch is see-through, colour-free glass (§45.38 S5)", 
     expect(found).toEqual([]);
   });
 
-  it("the chosen side is the brightest: the lens is the only white under any words, and hover's light lies above them", () => {
+  it("the chosen side is the brightest: hover lays only a faint clear lift under the words, and its light lies above them", () => {
     // The white the words sit on: the lens's even face (worked out above over every panel, and measured in pixels by
-    // e2e/switch-glass.spec.ts). Hover lays none under the words, so the lens keeps its whole lift over a hovered name.
-    expect(flatWhite(resolve(own.get("--wsg-lens-face")!))).toBeGreaterThan(0);
+    // e2e/switch-glass.spec.ts). Hover lays a faint clear lift of its own under them, so the control shows itself on
+    // hover (the owner's rule, e2e/stories-shell.spec.ts reads its background), far under the lens, so the lens keeps
+    // its lift over a hovered name (worked out above). One even white, no image: nothing of the lens's light.
+    const lensFace = flatWhite(resolve(own.get("--wsg-lens-face")!));
+    expect(lensFace).toBeGreaterThan(0);
     expect(decls(body(".ws-switch__opt:not(.is-on):hover")).has("background")).toBe(false);
-    expect(decls(body(".ws-switch__opt:not(.is-on):hover")).has("background-color")).toBe(false);
+    expect(decls(body(".ws-switch__opt:not(.is-on):hover")).has("background-image")).toBe(false);
+    const lift = hoverLift();
+    expect(lift, "a lift that shows").toBeGreaterThan(0);
+    expect(lift, "faint and clear, never a fill").toBeLessThanOrEqual(0.04);
+    expect(lift, "far under the lens").toBeLessThanOrEqual(lensFace / 4);
+    // It fades in on the option's own transition.
+    expect(decls(body(".ws-switch__opt")).get("transition")).toMatch(/background-color/);
     // Its light: a white top light that ends above the words (offset + blur + spread inside 13 px, where they start
     // in a 44 px option), and a faint white rim of a few px.
     const shadows = hoverShadows();
@@ -536,9 +571,14 @@ describe("the Live chip under the switch is the same see-through glass (§45.38 
     const bg = layers(decls(body(LIVE_BARE)).get("background")!);
     expect(bg).toHaveLength(2);
     expect(bg[0], "the same frost").toBe(chip.get("background"));
-    const tint = Number(/^rgb\(0 0 0 \/ ([\d.]+)\)$/.exec(bg[1]!)![1]);
+    // Its word sits straight on the window there, so its tint is never under the look's own panel tint (§22.3: the
+    // window look's 0.73 or 0.88; e2e/helpers.ts looseText holds every word on the window to it), and never under a
+    // floor of its own where that tint is lighter.
+    const m = /^rgb\(0 0 0 \/ max\(([\d.]+), var\(--panel-veil\)\)\)$/.exec(bg[1]!);
+    expect(m, `${bg[1]}: never under the panel tint`).not.toBeNull();
+    const tint = Number(m![1]);
     expect(tint, "enough for white words over a white photo or desktop (worked out above)").toBeGreaterThanOrEqual(0.5);
-    expect(tint, "never a solid plate").toBeLessThanOrEqual(0.66);
+    expect(tint, "never a solid plate of its own").toBeLessThanOrEqual(0.66);
     expect([...decls(body(LIVE_BARE)).keys()], "only its tint changes").toEqual(["background"]);
   });
 

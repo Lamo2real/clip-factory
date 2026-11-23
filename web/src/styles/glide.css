@@ -283,14 +283,16 @@
    Factory's sidebar, Clips Funded's rail, the page) shows through, blurred, in its own colours. On a computer the dock
    is drawn over the sidebar or the rail, which hold bone words at AA by themselves (e2e/helpers.ts scanText and
    looseText read the switch over them); its words are white, more light than bone, and the room that leaves is what
-   the lens spends: brightness(0.9) takes back a little light from behind, the track lays 0.04 white where the words
+   the lens spends: brightness(0.9) takes back a little light from behind, the track lays 0.03 white where the words
    sit, and the lens 0.14 more, so white words keep AA on the lens over the lightest panel any look can show while the
-   lens reads +0.06 OKLab L or more over the track (test/switchGlass.test.ts works it out for every look). No
+   lens reads +0.06 OKLab L or more over the track (test/switchGlass.test.ts works it out for every look: the window's
+   Frosted panels over a white desktop, which no web filter dims, and the thinnest Colours panels leave no room for
+   0.04 since the see-through pass of 23 Nov). No
    saturate(): over a vermilion or grape panel it would lift the light past that room and flatten the lens's lift.
    A frost lights the track from above, in px so a stacked track lights its first row like a two-option bar, and is gone
    above the words; a soft top light, a clear rim and a foot shade, all inside its box (§45.19). No look repaints it. */
 .ws-switch {
-  --wsg-track: linear-gradient(180deg, rgb(255 255 255 / 0.16) 0, rgb(255 255 255 / 0.08) 7px, rgb(255 255 255 / 0.04) 14px, rgb(255 255 255 / 0.04) 100%);
+  --wsg-track: linear-gradient(180deg, rgb(255 255 255 / 0.16) 0, rgb(255 255 255 / 0.08) 7px, rgb(255 255 255 / 0.03) 14px, rgb(255 255 255 / 0.03) 100%);
   /* The lens (the chosen side): brighter clear glass, still see-through. Its face is one even white where the words
      sit (--wsg-lens-face); its light lies above the words (--wsg-lens-top: a bright catch light in its top 9 px and
      0.1 more white fading out by 12 px, never under the words; the glide draws it on its ::before, so the glide's own
@@ -330,7 +332,7 @@
    desktop (5.2:1), while what is under it still shows through, blurred, in its own colours (test/switchGlass.test.ts). */
 html[data-ws-bare] .ws-dock > .ws-switch-host > .ws-switch {
   --wsg-track:
-    linear-gradient(180deg, rgb(255 255 255 / 0.16) 0, rgb(255 255 255 / 0.08) 7px, rgb(255 255 255 / 0.04) 14px, rgb(255 255 255 / 0.04) 100%),
+    linear-gradient(180deg, rgb(255 255 255 / 0.16) 0, rgb(255 255 255 / 0.08) 7px, rgb(255 255 255 / 0.03) 14px, rgb(255 255 255 / 0.03) 100%),
     rgb(0 0 0 / max(0.66, var(--panel-veil)));
 }
 /* The names: white on both sides, with a soft neutral halo. The panel under the dock holds bone at AA, and white is
@@ -358,11 +360,14 @@ html[data-ws-bare] .ws-dock > .ws-switch-host > .ws-switch {
     box-shadow var(--dur-2) var(--ease-out),
     transform var(--dur-2) var(--ease-spring);
 }
-/* Hover adds light where it shows, and none under the words: a top light (in its top 7 px, above the words, as the
-   lens's own top light) and a faint clear rim on the other name. So the chosen side keeps its whole lift over a hovered
-   name (+0.06 OKLab L or more, the same floor as at rest: the lens is the only white under any words), and the light
-   fades in on the box-shadow's own transition. */
+/* Hover adds light where it shows: a top light (in its top 7 px, above the words, as the lens's own top light), a faint
+   clear rim, and a hair of clear lift of its own under the words (white 0.01, even, see-through: every control shows
+   itself on hover, e2e/stories-shell.spec.ts, read as its background). The lift stays a hair, as the chosen side keeps
+   its lift over a hovered name (+0.06 OKLab L or more, the same floor as at rest: a vermilion Colours mesh leaves no
+   room for more; test/switchGlass.test.ts works it out over every panel), and both fade in on the option's own
+   transitions. */
 .ws-switch__opt:not(.is-on):hover {
+  background-color: rgb(255 255 255 / 0.01);
   box-shadow:
     inset 0 7px 7px -6px rgb(255 255 255 / 0.42),
     inset 0 0 3px rgb(255 255 255 / 0.18);
@@ -469,7 +474,7 @@ html[data-ws-bare] .ws-dock > .ws-switch-host > .ws-switch {
 /* The Live chip under the switch (the owner, 23 Nov, with a screenshot of the dock: "this should be see through but
    liquid glassy like" and "the live indicator should be one glasssy liquyid theme as well"; §45.38 S5): the shell's
    chip, in the dock and at a phone's top bar, is the switch track's own see-through glass, one family with it. A faint
-   white frost from above (0.16 at its top, 0.04 by 6 px, where its word starts) and no fill of its own, on the track's
+   white frost from above (0.16 at its top, 0.03 by 6 px, where its word starts, as the track) and no fill of its own, on the track's
    own blur (blur(14px) brightness(0.9), no saturate: the colours behind show as they are, blurred), a soft top light,
    a clear rim and a foot shade inside its box. Its word is white with the switch's soft neutral halo; its light keeps
    its own green, which says "live". On a computer the dock is drawn over Clip Factory's sidebar or Clips Funded's
@@ -478,7 +483,7 @@ html[data-ws-bare] .ws-dock > .ws-switch-host > .ws-switch {
 .ws-dock > .ws-dock__live > .live-dot,
 .ws-switch-host--topbar > .live-dot {
   color: #fff;
-  background: linear-gradient(180deg, rgb(255 255 255 / 0.16) 0, rgb(255 255 255 / 0.04) 6px, rgb(255 255 255 / 0.04) 100%);
+  background: linear-gradient(180deg, rgb(255 255 255 / 0.16) 0, rgb(255 255 255 / 0.03) 6px, rgb(255 255 255 / 0.03) 100%);
   -webkit-backdrop-filter: blur(14px) brightness(0.9);
   backdrop-filter: blur(14px) brightness(0.9);
   border-color: transparent;
@@ -493,13 +498,15 @@ html[data-ws-bare] .ws-dock > .ws-switch-host > .ws-switch {
   transition: opacity 200ms ease;
 }
 /* Over no panel (a phone's top bar has no plate; Clips Funded's first-time Setup shows no rail under a computer's
-   dock): the tint its word needs, as the round toggle beside it carries one. Neutral black 0.6 under the same frost,
-   so white words keep AA over a white photo or desktop (5.6:1), and what is under it still shows, blurred. */
+   dock): the tint its word needs, as the round toggle beside it carries one. Neutral black under the same frost, 0.6
+   or the look's own panel tint where that is more (a word on the window never sits on less, §22.3: the window look's
+   0.73 and 0.88, Reduce transparency's 0.92), so white words keep AA over a white photo or desktop (5.6:1 at 0.6),
+   and what is under it still shows, blurred. */
 .ws-switch-host--topbar > .live-dot,
 html[data-ws-bare] .ws-dock > .ws-dock__live > .live-dot {
   background:
-    linear-gradient(180deg, rgb(255 255 255 / 0.16) 0, rgb(255 255 255 / 0.04) 6px, rgb(255 255 255 / 0.04) 100%),
-    rgb(0 0 0 / 0.6);
+    linear-gradient(180deg, rgb(255 255 255 / 0.16) 0, rgb(255 255 255 / 0.03) 6px, rgb(255 255 255 / 0.03) 100%),
+    rgb(0 0 0 / max(0.6, var(--panel-veil)));
 }
 /* The list a round toggle opens when there are more than two workspaces (a phone's top bar, a short window's dock):
    it is not over a panel, so it stays a readable plate under the see-through switch: neutral, nearly solid (black
@@ -546,8 +553,10 @@ html[data-ws-bare] .ws-dock > .ws-dock__live > .live-dot {
 /* In Clips Funded's Picture and See-through looks its phone top bar is a glass plate with a blur of its own, so the bar
    is the list's Backdrop Root (Filter Effects 2): the list's blur sees only the bar, and the page under the list would
    show through its plate sharp. There the plate is denser (0.92, as Frosted's panel tint), so what shows through is a
-   faint shade, never readable words. */
-.stories-app:is([data-look="window"], [data-look="picture"]) .ws-menu {
+   faint shade, never readable words. The shell finds Clips Funded by its own pane (stories/pane.tsx data-app-pane),
+   never by Clips Funded's classes: this sheet is in the main bundle, which carries none of Clips Funded's styles (ci.yml
+   "Clips Funded is not in the main bundle"). The look is the one Clips Funded marks on its root (data-look). */
+[data-app-pane="stories"] :is([data-look="window"], [data-look="picture"]) .ws-menu {
   background:
     linear-gradient(180deg, rgb(255 255 255 / 0.1) 0, rgb(255 255 255 / 0.05) 40%, rgb(255 255 255 / 0.03) 70%),
     rgb(0 0 0 / max(0.92, var(--panel-veil)));

@@ -620,10 +620,14 @@ async function recordPanes(page: Page) {
         );
       }
     };
-    new MutationObserver((list) => {
+    // One recorder at a time: the one before it (the way there, when this one records the way back) stops looking, or
+    // its getAnimations() would style the page coming in before this one reads the clock, its work timed as the app's.
+    const marks = new MutationObserver((list) => {
+      if (w.__panes !== r) return marks.disconnect();
       for (const m of list) if ((m.target as Element).hasAttribute("data-app-slide") && m.oldValue === null) r.slideMarks++;
       look();
-    }).observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ["data-app-slide", "class"], attributeOldValue: true });
+    });
+    marks.observe(document.documentElement, { subtree: true, attributes: true, attributeFilter: ["data-app-slide", "class"], attributeOldValue: true });
     const box = (el: Element | null | undefined) => {
       const b = el?.getBoundingClientRect();
       return b ? [b.x, b.y, b.width, b.height].map((n) => n.toFixed(1)).join(",") : "none";
@@ -691,12 +695,31 @@ test("the whole app slides like a sliding window, both ways: transform only, to 
   // Clip Factory on screen is never painted again by it: none of Clips Funded's own fonts comes onto the page.
   const fontsIn = () => page.evaluate(() => document.head.querySelectorAll("style[data-st-fonts]").length);
   expect(await fontsIn(), "no Clips Funded fonts before").toBe(0);
+  // And it stays quiet while it waits there, as an app kept behind the other does (§45.34): nothing of it shows (no
+  // toast, no confetti), it takes no tap, key or focus, and the address and the title stay Clip Factory's.
+  await page.evaluate(() => {
+    const w = window as unknown as { __warmShows: string[] };
+    w.__warmShows = [];
+    new MutationObserver((list) => {
+      for (const m of list)
+        for (const n of Array.from(m.addedNodes))
+          if (n instanceof HTMLElement && (n.matches(".st-toast, canvas.confetti") || n.querySelector(".st-toast, canvas.confetti"))) w.__warmShows.push(n.textContent?.trim() || n.className);
+    }).observe(document.body, { childList: true, subtree: true });
+  });
+  const title = await page.title();
   const near = (await choice(page, "Clips Funded").boundingBox())!;
   await page.mouse.move(near.x + near.width / 2, near.y + near.height / 2);
   await expect(page.locator('[data-app-pane="stories"]')).toHaveCount(1);
   await expect(page.locator('[data-app-pane="stories"]')).toBeHidden();
+  await expect(page.locator('[data-app-pane="stories"]')).toHaveAttribute("inert", "");
   await page.waitForTimeout(800);
   expect(await fontsIn(), "the pointer on the choice: still no Clips Funded fonts on Clip Factory's screen").toBe(0);
+  expect(await page.evaluate(() => (window as unknown as { __warmShows: string[] }).__warmShows), "nothing of Clips Funded shows while it waits behind").toEqual([]);
+  expect(await page.evaluate(() => !!document.activeElement?.closest('[data-app-pane="stories"]')), "focus stays on Clip Factory").toBe(false);
+  await expect(page, "the address stays Clip Factory's").toHaveURL(/\/library$/);
+  expect(await page.title(), "the title stays Clip Factory's").toBe(title);
+  expect(title).toMatch(/· Clip Factory$/);
+  expect(title).not.toMatch(/Clips Funded/);
   await page.mouse.move(1, 1);
 
   for (const [to, url] of [

@@ -245,7 +245,13 @@ export function Glide({
     for (const child of Array.from(box.children)) if (child !== glide) ro.observe(child);
     // Ignore our own writes (the bar's has-glide class, the glide's classes and style), or this would feed itself.
     const mo = new MutationObserver((records) => {
-      if (records.every((m) => m.type === "attributes" && (m.target === box || m.target === glide))) return;
+      if (records.every((m) => m.type === "attributes" && (m.target === box || m.target === glide))) {
+        // React wrote the bar's class again (its className changed, as the workspace switch stacks and unstacks while
+        // a web font comes in), which takes has-glide with it: while the glide is shown, the chosen item must not
+        // paint its own highlight under it too (a second lens, 3.7:1 for white words over a white desktop on CI).
+        if (lastOn && !box.classList.contains("has-glide")) box.classList.add("has-glide");
+        return;
+      }
       for (const child of Array.from(box.children)) if (child !== glide) ro.observe(child);
       place();
     });

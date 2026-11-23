@@ -127,7 +127,8 @@ else
   not_ok "no query for:${missing}"
 fi
 
-# 3. Every Lambda query keeps cr.* and campaigns.* events (also when Lambda wraps the line) and no unrelated info line.
+# 3. Every Lambda query keeps cr.* and campaigns.* events (also when Lambda wraps the line), a stats read that failed
+# (stats.read_failed: its "error" field, even when Meta sent no message) and no unrelated info line.
 matches() { perl -e 'exit(($ARGV[1] =~ /$ARGV[0]/) ? 0 : 1)' "$1" "$2"; }
 bad=""
 for q in "${work}"/queries/q-cf-prod-*; do
@@ -139,6 +140,7 @@ for q in "${work}"/queries/q-cf-prod-*; do
     || ! matches "$re" '{"level": "info", "event": "campaigns.read", "rules": 3}' \
     || ! matches "$re" '{"level": "info", "event": "autopost.planned", "runId": "x#scheduled"}' \
     || ! matches "$re" '{"message": "{\"level\": \"info\", \"event\": \"autopost.tick\"}"}' \
+    || ! matches "$re" '{"level": "warning", "event": "stats.read_failed", "platform": "facebook", "status": 400, "code": "100", "error": ""}' \
     || matches "$re" '{"level": "info", "event": "stats.polled", "note": "ocr.done", "descr.": 1}'; then
     bad="${bad} $(basename "$q")"
   fi
