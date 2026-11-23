@@ -1,5 +1,5 @@
 {
- "version": "71ec2acf0012",
+ "version": "c09c49d260e3",
  "parts": [
   {
    "id": "app-map",
@@ -93,13 +93,13 @@
    "id": "contracts-11",
    "title": "CONTRACTS: 11. Design system (summary; details in docs/UX_DESIGN_SYSTEM.md)",
    "line": "Colours (owner request 2026-11-18, ADR-43): Bottle Green #0F372B (the surface), Bone #EFE7DA (the",
-   "chars": 8341
+   "chars": 8621
   },
   {
    "id": "contracts-12",
    "title": "CONTRACTS: 12. Get the app, updates, and kid-proof UX (added by the owner after the first build)",
    "line": "12.1 \"Get the app\" (sidebar item; on phones a card in Settings plus a one-time banner on Home)",
-   "chars": 19029
+   "chars": 19219
   },
   {
    "id": "contracts-13",
@@ -147,7 +147,7 @@
    "id": "contracts-20",
    "title": "CONTRACTS: 20. Action animations (owner request, 2026-11-16)",
    "line": "The owner's words: \"Most buttons in the application should have that: the animation of sending a paper plane or",
-   "chars": 46220
+   "chars": 47610
   },
   {
    "id": "contracts-21",
@@ -159,7 +159,7 @@
    "id": "contracts-22",
    "title": "CONTRACTS: 22. Background modes and see-through glass (owner request, 2026-11-16)",
    "line": "The owner wants the whole app to feel like liquid glass you can almost see through: \"if there's a car behind it, I",
-   "chars": 32497
+   "chars": 58453
   },
   {
    "id": "contracts-23",
@@ -578,8 +578,8 @@
   {
    "id": "adr-45",
    "title": "DECISIONS: ADR-45 See-through glass over an app-owned backdrop",
-   "line": "Context. The owner (2026-11-18): the app read as flat green, with no liquid, see-through glass: \"make the",
-   "chars": 4400
+   "line": "[ADR-87](#adr-87-the-logic-of-light-the-top-layer-is-brighter-every-lift-is-paid-for-reload-is-a-colourless-lens):",
+   "chars": 4657
   },
   {
    "id": "adr-46",
@@ -814,6 +814,12 @@
    "title": "DECISIONS: ADR-86 No manual TikTok sheet: the Mac is the only way to TikTok until TikTok approves the app",
    "line": "Context. Since ADR-83 his Mac posts each TikTok clip for everyone, out of sight, at auto-posting runs and on",
    "chars": 8565
+  },
+  {
+   "id": "adr-87",
+   "title": "DECISIONS: ADR-87 The logic of light: the top layer is brighter, every lift is paid for, Reload is a colourless lens",
+   "line": "Context. The owner (2026-11-23, with a screenshot of Library): \"can you use the logic of light on the ui,",
+   "chars": 6906
   },
   {
    "id": "architecture-overview",
@@ -1059,13 +1065,19 @@
    "id": "ux-colour-tokens",
    "title": "UX_DESIGN_SYSTEM: Colour tokens",
    "line": "The palette is the November 2026 bottle-green look ([DECISIONS.md ADR-43](DECISIONS.md#adr-43-bottle-green-glass-bone-words-vermilion-actions)):",
-   "chars": 6450
+   "chars": 7598
   },
   {
    "id": "ux-the-liquid-glass-recipe",
    "title": "UX_DESIGN_SYSTEM: The liquid glass recipe",
-   "line": "glass-tint: linear-gradient(140deg, rgb(var(--green-rgb) / calc(var(--panel-veil) + 0.04)), rgb(var(--green-rgb) / var(--panel-veil)));",
-   "chars": 5722
+   "line": "glass-tint: var(--glass-tint-panel); / flat green: --panel-veil + --light-pay /",
+   "chars": 6748
+  },
+  {
+   "id": "ux-the-logic-of-light",
+   "title": "UX_DESIGN_SYSTEM: The logic of light",
+   "line": "The owner (2026-11-23): \"the top layer is always brighter than the bottom, and it grows gradually in between ... make",
+   "chars": 16052
   },
   {
    "id": "ux-typography",
@@ -1094,8 +1106,8 @@
   {
    "id": "ux-components",
    "title": "UX_DESIGN_SYSTEM: Components",
-   "line": "Button (primary) | Vermilion glass pill, icon + white text, 48 px tall minimum. One per screen (the update bar's Reload is the only extra). |",
-   "chars": 4855
+   "line": "Button (primary) | Vermilion glass pill, icon + white text, 48 px tall minimum. One per screen. (The update bar's Reload is the app's own primary choice and is ",
+   "chars": 4916
   },
   {
    "id": "ux-sounds",
@@ -1155,7 +1167,7 @@
    "id": "ux-update-bar",
    "title": "UX_DESIGN_SYSTEM: Update bar",
    "line": "Shown when /version.json reports a version other than the running one ([CONTRACTS.md §12.2](CONTRACTS.md#122-update-banner-whats-new--reload)).",
-   "chars": 3280
+   "chars": 3837
   },
   {
    "id": "ux-ask-clip-factory",

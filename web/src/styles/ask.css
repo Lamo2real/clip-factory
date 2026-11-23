@@ -19,7 +19,9 @@
   transform: scale(1.08);
   box-shadow:
     0 0 28px 8px rgb(var(--green-leaf-rgb) / 0.45),
-    0 14px 30px -12px rgb(var(--shadow-rgb) / 0.8);
+    var(--light-rim-3),
+    var(--light-shade-1),
+    var(--light-shadow-3);
   transition: transform 160ms var(--ease-out), box-shadow 160ms var(--ease-out);
 }
 @media (prefers-reduced-motion: reduce) {
@@ -94,7 +96,7 @@
   border-radius: 50%;
   color: var(--ink);
   background: var(--ask-ink);
-  box-shadow: 0 2px 6px rgb(var(--shadow-rgb) / 0.55);
+  box-shadow: var(--light-shadow-2);
   pointer-events: none;
 }
 /* Before marking: a soft bone pen that says "tap to mark"; after Save it turns red. */
@@ -359,10 +361,10 @@
 }
 .md__table th {
   font-weight: 700;
-  background: rgb(var(--bone-rgb) / 0.08);
+  background: var(--fill);
 }
 .md__table tbody tr:nth-child(even) {
-  background: rgb(var(--bone-rgb) / 0.04);
+  background: var(--fill-ghost);
 }
 
 /* "Thinking…", "Searching the web…" with the Ask mark. */
@@ -476,8 +478,10 @@
   background: rgb(var(--shadow-rgb) / 0.62);
   animation: mk-in 220ms var(--ease-out) both;
 }
+/* An overlay (SHEET_VEIL and up), lit from above; two classes, so it wins over a look's own glass tint. */
 .mk .mk__dialog {
-  background: linear-gradient(150deg, rgb(var(--green-rgb) / 0.96), rgb(var(--green-deep-rgb) / 0.97));
+  --glass-tint: var(--glass-tint-overlay);
+  --glass-light: var(--glass-light-overlay);
 }
 /* The tools come before the picture in the page (Tab order: tools, picture, Undo, Clear, Cancel, Save); the grid
    draws the picture above and the tools and actions in the bottom bar. */
@@ -494,8 +498,9 @@
   height: min(820px, 100%);
   padding: 14px;
   border-radius: var(--r-lg);
-  --glass-tint: linear-gradient(150deg, rgb(var(--green-rgb) / calc(var(--float-veil) + 0.06)), rgb(var(--green-rgb) / calc(var(--float-veil) + 0.04)));
-  box-shadow: 0 30px 70px -30px rgb(var(--shadow-rgb) / 0.9);
+  --glass-tint: var(--glass-tint-overlay);
+  --glass-light: var(--glass-light-overlay);
+  box-shadow: var(--glass-shadow-overlay);
   animation: mk-pop 260ms var(--ease-spring) both;
 }
 .mk.is-tablet .mk__dialog {
@@ -554,6 +559,7 @@
   padding: 4px;
   border-radius: var(--r-pill);
   background: var(--fill);
+  box-shadow: var(--light-rim-2), var(--light-shade-2);
 }
 .mk-tool {
   position: relative;
@@ -616,7 +622,8 @@
   opacity: 0.5;
 }
 .mk-btn:hover:not([aria-disabled="true"]) {
-  background: linear-gradient(rgb(var(--green-leaf-rgb) / 0.32), rgb(var(--green-leaf-rgb) / 0.32)), rgb(var(--green-deep-rgb) / 0.35);
+  background: linear-gradient(rgb(var(--green-leaf-rgb) / 0.32), rgb(var(--green-leaf-rgb) / 0.32)), rgb(var(--green-rgb) / 0.35);
+  box-shadow: var(--light-rim-2-hover), var(--light-shade-2), var(--light-shadow-2-hover);
 }
 .mk__save {
   min-height: 48px;
@@ -632,8 +639,9 @@
   padding: 14px 16px;
   border-radius: var(--r-md);
   transform: translateX(-50%);
-  background: rgb(var(--green-deep-rgb) / 0.96);
-  box-shadow: 0 20px 40px -20px rgb(var(--shadow-rgb) / 0.9);
+  /* Over the picture, which can be white: nearly solid, lit from above like a menu. */
+  background: var(--glass-light-menu), rgb(var(--green-rgb) / 0.96);
+  box-shadow: var(--glass-shadow-float);
 }
 .mk__dialog {
   position: relative;

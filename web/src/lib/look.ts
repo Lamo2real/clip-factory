@@ -1,7 +1,7 @@
 // Puts the background choice (§22) on the page: which backdrop to draw, and the <html> class and veil strength the
 // CSS reads. Runs once before the first paint (main.tsx) and again whenever the choice or the system scheme changes.
 import { useSyncExternalStore } from "react";
-import { cantSelfUpdate, isOldDesktopApp, readDesktopVersion, readNativeGlass, resolveLook, type Look, type NativeGlass, type Scheme } from "./background.ts";
+import { cantSelfUpdate, isOldDesktopApp, lightPay, readDesktopVersion, readNativeGlass, resolveLook, type Look, type NativeGlass, type Scheme } from "./background.ts";
 import { getPrefs, usePrefs, type Prefs } from "./prefs.ts";
 
 /** The desktop wrapper sets these before the page loads (desktop/src-tauri/src/init.js). */
@@ -74,8 +74,10 @@ export function useLook(): Look {
  * `html.see-through` makes the page itself transparent so the desktop window's glass shows (§22.3);
  * `data-backdrop` names what is drawn; `--backdrop-veil` is the tint over the whole backdrop (between the panels);
  * `--panel-veil` is the bottle-green tint every panel gets (and every piece of loose text, on its scrim), enough for
- * AA over the lightest thing this look can show. Both are worked out here at read time from what is saved, which is
- * never rewritten.
+ * AA over the lightest thing this look can show; `--light-pay` is the green a pane carries on top of it so the ladder
+ * of light fits under the AA ceiling over everything this look can show (`lightPay`, ADR-87: over a light backdrop a
+ * pane sits darker than the page, and every level above it is brighter). All are worked out here at read time from
+ * what is saved, which is never rewritten. Reduced transparency overrides the pay in glass.css (!important).
  */
 export function applyLook(look: Look, root: HTMLElement = document.documentElement) {
   root.classList.toggle("see-through", look.kind === "window");
@@ -88,6 +90,7 @@ export function applyLook(look: Look, root: HTMLElement = document.documentEleme
   if (veil === null) root.style.removeProperty("--backdrop-veil");
   else root.style.setProperty("--backdrop-veil", String(veil));
   root.style.setProperty("--panel-veil", String(look.panelVeil));
+  root.style.setProperty("--light-pay", String(lightPay(look)));
 }
 
 /**

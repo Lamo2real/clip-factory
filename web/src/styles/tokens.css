@@ -1,6 +1,6 @@
-/* Design tokens. Palette (docs/CONTRACTS.md §11, docs/DECISIONS.md ADR-43, ADR-45): Bottle Green is the surface, Bone
-   is the words, Vermilion is every call to action. The glass is see-through bottle-green glass with bone text and no
-   drawn edges: a pane shows by its blur, tint and shadow, a control by its fill. */
+/* Design tokens. Palette (docs/CONTRACTS.md §11, docs/DECISIONS.md ADR-43, ADR-45, ADR-87): Bottle Green is the
+   surface, Bone is the words, Vermilion is every call to action. The glass is see-through bottle-green glass with bone
+   text and no drawn edges: a pane shows by its blur, tint, soft light from above and shadow, a control by its fill. */
 :root {
   --green: #0f372b;
   --green-rgb: 15 55 43;
@@ -36,18 +36,32 @@
   --green-text: #e4f2da; /* words on the success tint */
   --on-bone: #0f372b; /* words on a bone fill (10.68:1 on solid bone) */
 
-  /* Fills under words on a panel. None is lighter than the panel under it, so words keep their contrast. */
-  --fill: rgb(var(--green-deep-rgb) / 0.3);
-  --fill-hover: rgb(var(--green-deep-rgb) / 0.42);
-  --tint-leaf: linear-gradient(rgb(var(--green-leaf-rgb) / 0.22), rgb(var(--green-leaf-rgb) / 0.22)), rgb(var(--green-deep-rgb) / 0.35);
-  --tint-vermilion: linear-gradient(rgb(var(--vermilion-rgb) / 0.2), rgb(var(--vermilion-rgb) / 0.2)), rgb(var(--green-deep-rgb) / 0.35);
-  --tint-amber: linear-gradient(rgb(246 201 69 / 0.16), rgb(246 201 69 / 0.16)), rgb(var(--green-deep-rgb) / 0.35);
-  --selected: rgb(var(--bone-rgb) / 0.92); /* the selected pill: bone with --on-bone words */
-  /* No edges (ADR-45): a control shows by its fill. Buttons without a fill of their own get the pick-one track's
-     recipe (a bone lift over a step more green, TRACK_LIFT and TRACK_EXTRA_VEIL in lib/background.ts); text fields a
-     deeper well with a soft inner shade; a chosen or found thing a soft glow, never a ring. */
-  --fill-control: linear-gradient(rgb(var(--bone-rgb) / 0.08), rgb(var(--bone-rgb) / 0.08)), rgb(var(--green-rgb) / calc(var(--panel-veil) + 0.15));
-  --fill-field: rgb(var(--green-deep-rgb) / 0.45);
+  /* Fills under words (ADR-87, the logic of light). A raised thing is one step BRIGHTER than what it sits on: a lift
+     of bone paid for with a step of green under it (lib/background.ts works out every number; test/background.test.ts
+     reads them back). Straight on the page a raised thing carries the pick-one track's recipe (TRACK_EXTRA_VEIL,
+     TRACK_LIFT); inside any lit surface glass.css re-declares the --light-raise-* numbers (RAISE_VEIL, RAISE_LIFT)
+     and these fills with them, because a custom property resolves var() where it is declared. */
+  --light-raise-veil: calc(var(--panel-veil) + 0.22);
+  --light-raise-lift: 0.08;
+  --light-raise-hover-veil: calc(var(--panel-veil) + 0.22);
+  --light-raise-hover-lift: 0.09;
+  --light-ghost-veil: calc(var(--panel-veil) + 0.22);
+  --light-ghost-lift: 0.06;
+  --light-press-lift: 0.03;
+  --fill: linear-gradient(rgb(var(--bone-rgb) / var(--light-raise-lift)), rgb(var(--bone-rgb) / var(--light-raise-lift))), rgb(var(--green-rgb) / min(1, var(--light-raise-veil)));
+  --fill-hover: linear-gradient(rgb(var(--bone-rgb) / var(--light-raise-hover-lift)), rgb(var(--bone-rgb) / var(--light-raise-hover-lift))), rgb(var(--green-rgb) / min(1, var(--light-raise-hover-veil)));
+  --fill-press: linear-gradient(rgb(var(--bone-rgb) / var(--light-press-lift)), rgb(var(--bone-rgb) / var(--light-press-lift))), rgb(var(--green-rgb) / min(1, var(--light-raise-veil)));
+  --fill-ghost: linear-gradient(rgb(var(--bone-rgb) / var(--light-ghost-lift)), rgb(var(--bone-rgb) / var(--light-ghost-lift))), rgb(var(--green-rgb) / min(1, var(--light-ghost-veil)));
+  --fill-control: var(--fill);
+  --fill-sunk: rgb(var(--green-deep-rgb) / 0.3); /* the few true wells: progress tracks, drop targets */
+  /* Tinted chips lay bottle green (CHIP_UNDER, CHIP_DEEPEN 0.35) under their colour, and a lift of bone between the
+     two (CHIP_TINTS), so a chip is a step of light over the row it sits on in every look. */
+  --tint-leaf: linear-gradient(rgb(var(--green-leaf-rgb) / 0.22), rgb(var(--green-leaf-rgb) / 0.22)), linear-gradient(rgb(var(--bone-rgb) / 0.04), rgb(var(--bone-rgb) / 0.04)), rgb(var(--green-rgb) / 0.35);
+  --tint-vermilion: linear-gradient(rgb(var(--vermilion-rgb) / 0.2), rgb(var(--vermilion-rgb) / 0.2)), linear-gradient(rgb(var(--bone-rgb) / 0.13), rgb(var(--bone-rgb) / 0.13)), rgb(var(--green-rgb) / 0.35);
+  --tint-amber: linear-gradient(rgb(246 201 69 / 0.16), rgb(246 201 69 / 0.16)), linear-gradient(rgb(var(--bone-rgb) / 0.01), rgb(var(--bone-rgb) / 0.01)), rgb(var(--green-rgb) / 0.35);
+  --selected: rgb(var(--bone-rgb) / 0.92); /* unchanged: the brightest layer, --on-bone words */
+  /* No edges (ADR-45): text fields are a well with a soft inner shade, a chosen or found thing a soft glow, never a ring. */
+  --fill-field: rgb(var(--green-deep-rgb) / 0.45); /* unchanged: a well is one step below its parent */
   --shade-field: inset 0 3px 10px rgb(var(--shadow-rgb) / 0.35);
   --glow-bone: 0 0 18px 2px rgb(var(--bone-rgb) / 0.4);
   --glow-vermilion: 0 0 18px 2px rgb(var(--vermilion-rgb) / 0.6);
@@ -63,6 +77,72 @@
      sit under them, so they plan for white. FLOAT_VEIL and TABBAR_VEIL (icons only, 3:1). */
   --float-veil: 0.73;
   --tabbar-veil: 0.59;
+
+  /* The logic of light: one key light above. Every bone lift is paid for with green under it. --light-pay is the
+     ladder's pay (lib/background.ts lightPay: the least green that leaves room under the AA ceiling for every level
+     above a pane to read a step brighter, over everything the look can show). lib/look.ts sets it on <html> for each
+     look; this is the app's own backdrop (LIGHT_PAY_OWN) until it does, and glass.css has the white looks' number. */
+  --light-pay: 0; /* LIGHT_PAY_OWN: see-through first, a pane keeps main's veil */
+  --light-panel: 0.04; /* PANEL_LIGHT: E1 top lift, gone by 65 % of the height */
+  --light-lead: 0.075; /* LEAD_LIGHT: the hero, the sign-in card, learnings: a whole step over a panel */
+  --light-lead-pay: 0; /* LEAD_EXTRA_VEIL */
+  --light-float: 0.08; /* FLOAT_LIGHT */
+  --light-float-hover: 0.09; /* FLOAT_HOVER_LIGHT */
+  --light-float-pay: 0.02; /* FLOAT_EXTRA_VEIL: the least over main's 0.73 at which a float's words (and a chip on it) keep AA over a white thumbnail in Chromium and WebKit */
+  --light-update-pay: 0.22; /* UPDATE_EXTRA_VEIL: the update bar, so Reload reads 0.08 over Later with bone words at AA over white */
+  --light-overlay: 0.12; /* OVERLAY_LIGHT: sheets, the picture viewer, the markup editor */
+  --light-menu: 0.1; /* MENU_LIGHT: the dropdown list, the workspace menu */
+  --light-tabbar: 0.04; /* TABBAR_LIGHT */
+  --light-tabbar-pay: 0.04; /* TABBAR_EXTRA_VEIL */
+  --light-spec: 0.06; /* SPECULAR: the catch light at the top centre, inside the top padding only (8 px deep) */
+
+  /* Per-level tints (bottle green, flat, two stops) and lights (bone, 180deg, top brighter). */
+  --glass-tint-panel: linear-gradient(rgb(var(--green-rgb) / min(1, var(--panel-veil) + var(--light-pay))), rgb(var(--green-rgb) / min(1, var(--panel-veil) + var(--light-pay))));
+  --glass-tint-lead: linear-gradient(rgb(var(--green-rgb) / min(0.97, var(--panel-veil) + var(--light-pay) + var(--light-lead-pay))), rgb(var(--green-rgb) / min(0.97, var(--panel-veil) + var(--light-pay) + var(--light-lead-pay))));
+  --glass-tint-float: linear-gradient(rgb(var(--green-rgb) / min(1, max(var(--float-veil), var(--panel-veil)) + var(--light-float-pay))), rgb(var(--green-rgb) / min(1, max(var(--float-veil), var(--panel-veil)) + var(--light-float-pay))));
+  --glass-tint-overlay: linear-gradient(rgb(var(--green-rgb) / max(0.86, var(--panel-veil))), rgb(var(--green-rgb) / max(0.86, var(--panel-veil))));
+  --glass-tint-tabbar: linear-gradient(rgb(var(--green-rgb) / min(1, var(--tabbar-veil) + var(--light-tabbar-pay))), rgb(var(--green-rgb) / min(1, var(--tabbar-veil) + var(--light-tabbar-pay))));
+  /* 8 px deep: the smallest top padding above words (the line plates, compact rows), so it is never under them. */
+  --glass-spec: radial-gradient(60% 8px at 50% 0, rgb(var(--bone-rgb) / var(--light-spec)), transparent);
+  --glass-spec-sm: radial-gradient(50% 8px at 50% 0, rgb(var(--bone-rgb) / var(--light-spec)), transparent);
+  --glass-light-panel: var(--glass-spec), linear-gradient(180deg, rgb(var(--bone-rgb) / var(--light-panel)) 0, rgb(var(--bone-rgb) / calc(var(--light-panel) * 0.5)) 6px, rgb(var(--bone-rgb) / calc(var(--light-panel) * 0.15)) 11px, rgb(var(--bone-rgb) / 0) 14px);
+  --glass-light-lead: var(--glass-spec), linear-gradient(180deg, rgb(var(--bone-rgb) / var(--light-lead)) 0, rgb(var(--bone-rgb) / calc(var(--light-lead) * 0.5)) 6px, rgb(var(--bone-rgb) / calc(var(--light-lead) * 0.15)) 11px, rgb(var(--bone-rgb) / 0) 14px);
+  /* A pane-card on hover (tree and branch cards, job rows, teasers): the lead panel's light at its top, and where its
+     words are bone 0.03 over green 0.07, the raise's ratio, so it reads a step brighter and keeps AA at the cap. */
+  --glass-light-hover-face: var(--glass-light-lead), linear-gradient(rgb(var(--bone-rgb) / 0.03), rgb(var(--bone-rgb) / 0.03)), linear-gradient(rgb(var(--green-rgb) / 0.07), rgb(var(--green-rgb) / 0.07));
+  --glass-light-float: var(--glass-spec-sm), linear-gradient(180deg, rgb(var(--bone-rgb) / var(--light-float)) 0, rgb(var(--bone-rgb) / calc(var(--light-float) * 0.5)) 6px, rgb(var(--bone-rgb) / calc(var(--light-float) * 0.15)) 11px, rgb(var(--bone-rgb) / 0) 14px);
+  --glass-light-float-hover: var(--glass-spec-sm), linear-gradient(180deg, rgb(var(--bone-rgb) / var(--light-float-hover)) 0, rgb(var(--bone-rgb) / calc(var(--light-float-hover) * 0.5)) 6px, rgb(var(--bone-rgb) / calc(var(--light-float-hover) * 0.15)) 11px, rgb(var(--bone-rgb) / 0) 14px), linear-gradient(rgb(var(--bone-rgb) / 0.01), rgb(var(--bone-rgb) / 0.01));
+  --glass-light-overlay: var(--glass-spec), linear-gradient(180deg, rgb(var(--bone-rgb) / var(--light-overlay)) 0%, rgb(var(--bone-rgb) / calc(var(--light-overlay) * 0.6)) 30%, rgb(var(--bone-rgb) / calc(var(--light-overlay) * 0.33)) 65%);
+  --glass-light-menu: linear-gradient(180deg, rgb(var(--bone-rgb) / var(--light-menu)) 0%, rgb(var(--bone-rgb) / calc(var(--light-menu) * 0.6)) 40%, rgb(var(--bone-rgb) / calc(var(--light-menu) * 0.4)) 70%);
+  --glass-light-tabbar: var(--glass-spec-sm), linear-gradient(180deg, rgb(var(--bone-rgb) / var(--light-tabbar)) 0%, rgb(var(--bone-rgb) / calc(var(--light-tabbar) * 0.25)) 65%);
+
+  /* Soft light and shade (box-shadow layers). Every layer is blurred more than 2 px: light catching the top of the
+     glass, never a drawn line (ADR-45 stays: no edges). Top glow first, then the bottom shade, then the drop. */
+  --light-rim-1: inset 0 6px 8px -6px rgb(var(--bone-rgb) / 0.24);
+  --light-rim-2: inset 0 4px 6px -4px rgb(var(--bone-rgb) / 0.26);
+  --light-rim-2-hover: inset 0 4px 6px -4px rgb(var(--bone-rgb) / 0.34);
+  --light-rim-3: inset 0 6px 8px -6px rgb(var(--bone-rgb) / 0.3);
+  --light-rim-sm: inset 0 3px 4px -3px rgb(var(--bone-rgb) / 0.22);
+  --light-rim-lens: inset 0 5px 7px -5px rgb(var(--bone-rgb) / 0.4);
+  --light-rim-lens-hover: inset 0 5px 7px -5px rgb(var(--bone-rgb) / 0.5);
+  --light-shade-1: inset 0 -14px 22px -18px rgb(var(--shadow-rgb) / 0.4);
+  --light-shade-2: inset 0 -6px 10px -8px rgb(var(--shadow-rgb) / 0.4);
+  --light-press: inset 0 2px 6px rgb(var(--shadow-rgb) / 0.35);
+  --light-shadow-1: 0 1px 3px rgb(var(--shadow-rgb) / 0.16), 0 10px 28px -16px rgb(var(--shadow-rgb) / 0.55);
+  --light-shadow-1-hover: 0 2px 6px -1px rgb(var(--shadow-rgb) / 0.22), 0 16px 36px -18px rgb(var(--shadow-rgb) / 0.65);
+  --light-shadow-2: 0 2px 4px -2px rgb(var(--shadow-rgb) / 0.3), 0 6px 14px -8px rgb(var(--shadow-rgb) / 0.45);
+  --light-shadow-2-hover: 0 3px 6px -2px rgb(var(--shadow-rgb) / 0.32), 0 10px 20px -10px rgb(var(--shadow-rgb) / 0.55);
+  --light-shadow-press: 0 1px 3px rgb(var(--shadow-rgb) / 0.22);
+  --light-shadow-3: 0 4px 10px -4px rgb(var(--shadow-rgb) / 0.3), 0 22px 48px -22px rgb(var(--shadow-rgb) / 0.85);
+  --light-shadow-4: 0 8px 20px -8px rgb(var(--shadow-rgb) / 0.35), 0 30px 70px -30px rgb(var(--shadow-rgb) / 0.9);
+  --glass-shadow-panel: var(--light-rim-1), var(--light-shade-1), var(--light-shadow-1);
+  --glass-shadow-raise: var(--light-rim-2), var(--light-shade-2), var(--light-shadow-2);
+  --glass-shadow-raise-hover: var(--light-rim-2-hover), var(--light-shade-2), var(--light-shadow-2-hover);
+  /* A row laid inside a card (a post, a place): lit from above and shaded at its foot, with only the faintest drop. */
+  --glass-shadow-row: var(--light-rim-2), var(--light-shade-2), var(--light-shadow-press);
+  --glass-shadow-press: var(--light-press), var(--light-shadow-press);
+  --glass-shadow-float: var(--light-rim-3), var(--light-shade-1), var(--light-shadow-3);
+  --glass-shadow-overlay: var(--light-rim-3), var(--light-shade-1), var(--light-shadow-4);
 
   --font-display: "Times New Roman", "Times New Roman MT", Tinos, Times, serif;
   --font-ui: "Inter Variable", Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
@@ -116,8 +196,9 @@
   --top-safe: max(env(safe-area-inset-top), var(--titlebar-h));
   --top-line: calc(var(--top-safe) + 12px);
 
-  --shadow-1: 0 8px 24px -14px rgb(var(--shadow-rgb) / 0.55);
-  --shadow-2: 0 6px 18px -6px rgb(var(--shadow-rgb) / 0.22), 0 22px 48px -24px rgb(var(--shadow-rgb) / 0.65);
+  /* The older names: a panel's drop and a floating layer's drop, from the light above (ADR-87). */
+  --shadow-1: var(--light-shadow-1);
+  --shadow-2: var(--light-shadow-3);
   --focus: 0 0 0 3px rgb(var(--bone-rgb) / 0.95), 0 0 0 5.5px var(--vermilion-deep);
   /* Text fields reached with the keyboard: a bone ring (about 11:1 on green) in a soft bone glow, never the double ring
      of a button and never vermilion (that is for actions). */

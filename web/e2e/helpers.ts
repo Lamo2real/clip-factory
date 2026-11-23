@@ -253,6 +253,79 @@ function contrastKit() {
   };
   const hex = (c: C) => "#" + [c[0], c[1], c[2]].map((v) => Math.round(v).toString(16).padStart(2, "0")).join("");
 
+  /** A computed background-image split into its layers (top layer first), at the commas between them. */
+  const imageLayers = (v: string): string[] => {
+    if (!v || v === "none") return [];
+    const out: string[] = [];
+    let depth = 0;
+    let cur = "";
+    for (const ch of v) {
+      if (ch === "(") depth++;
+      if (ch === ")") depth--;
+      if (ch === "," && depth === 0) {
+        out.push(cur.trim());
+        cur = "";
+      } else cur += ch;
+    }
+    if (cur.trim()) out.push(cur.trim());
+    return out;
+  };
+  /**
+   * The colours of one gradient layer that can be under words in `text`, on a box `box`. A top-down linear gradient
+   * (the light from above, a flat tint) is read where the words are: at their top and their bottom, and every stop in
+   * between. A catch light at the top edge (`radial-gradient(… Npx at 50% 0px, …)`) only reaches N px down. Any other
+   * gradient: every stop, as before.
+   */
+  const underWords = (layer: string, box: DOMRect, text: DOMRect): C[] => {
+    const all = colours(layer);
+    // The catch light: an ellipse `rx% × ry px` at the top centre, from its colour to transparent at its edge. Read at
+    // the point of the words nearest its centre.
+    const radial = /^radial-gradient\(([\d.]+)% ([\d.]+)px at 50% 0px, (rgba?\([^)]*\)), rgba\(0, 0, 0, 0\)\)$/.exec(layer);
+    if (radial) {
+      const rx = (Number(radial[1]) / 100) * box.width;
+      const ry = Number(radial[2]);
+      const cx = box.left + box.width / 2;
+      const x = Math.max(text.left, Math.min(text.right, cx));
+      const d = Math.hypot((x - cx) / rx, (Math.max(0, text.top - box.top)) / ry);
+      if (d >= 1) return [];
+      const c = colours(radial[3]!)[0]!;
+      return [[c[0], c[1], c[2], c[3] * (1 - d)]];
+    }
+    if (!/^linear-gradient\((rgba?|color)\(/.test(layer) || box.height <= 0) return all;
+    // Stops at their positions (a stop with none sits evenly between its neighbours, as in CSS).
+    const parts = imageLayers(layer.slice("linear-gradient(".length, -1));
+    // A stop placed in px (the light that lies in a pane's top padding: 0, 6px, 11px, 14px) is read at that depth.
+    const stops = parts.map((p, i) => ({
+      c: colours(p)[0]!,
+      at: /\s([\d.]+)%$/.test(p) ? Number(/\s([\d.]+)%$/.exec(p)![1]) / 100 : /\s([\d.]+)px$/.test(p) ? Math.min(1, Number(/\s([\d.]+)px$/.exec(p)![1]) / box.height) : /\s0$/.test(p) ? 0 : i === 0 ? 0 : i === parts.length - 1 ? 1 : NaN,
+    }));
+    if (stops.some((s) => !s.c)) return all;
+    for (let i = 1; i < stops.length - 1; i++)
+      if (Number.isNaN(stops[i]!.at)) {
+        let j = i;
+        while (Number.isNaN(stops[j]!.at)) j++;
+        for (let k = i; k < j; k++) stops[k]!.at = stops[i - 1]!.at + ((stops[j]!.at - stops[i - 1]!.at) * (k - i + 1)) / (j - i + 1);
+      }
+    /** The colour at `t` (0 top, 1 bottom), mixed with premultiplied alpha as browsers do. */
+    const at = (t: number): C => {
+      if (t <= stops[0]!.at) return stops[0]!.c;
+      for (let i = 1; i < stops.length; i++) {
+        const a = stops[i - 1]!;
+        const b = stops[i]!;
+        if (t <= b.at) {
+          const f = b.at > a.at ? (t - a.at) / (b.at - a.at) : 1;
+          const alpha = a.c[3] + (b.c[3] - a.c[3]) * f;
+          const ch = (k: number) => (alpha > 0 ? (a.c[k]! * a.c[3] + (b.c[k]! * b.c[3] - a.c[k]! * a.c[3]) * f) / alpha : a.c[k]!);
+          return [ch(0), ch(1), ch(2), alpha];
+        }
+      }
+      return stops[stops.length - 1]!.c;
+    };
+    const t0 = Math.max(0, (text.top - box.top) / box.height);
+    const t1 = Math.min(1, (text.bottom - box.top) / box.height);
+    return [at(t0), at(t1), ...stops.filter((s) => s.at > t0 && s.at < t1).map((s) => s.c)];
+  };
+
   /** WCAG contrast of white on the darkest-to-lightest stops of an element's background gradient (and --glass-tint). */
   function whiteOnGradient(e: Element): number {
     const s = getComputedStyle(e);
@@ -410,9 +483,12 @@ function contrastKit() {
         if (sat) states = states.map((st) => ({ ...st, bg: saturate(st.bg, Number(sat[1])) }));
         const fill = colours(cs.backgroundColor)[0];
         if (fill && fill[3] > 0) states = states.map((st) => ({ ...st, bg: over(fill, st.bg) }));
-        const stops = colours(cs.backgroundImage).filter((c) => c[3] > 0);
-        if (stops.length) {
-          // A gradient's background-image layers paint over its colour; any stop may be under the text.
+        // The background-image layers paint over its colour, the last listed lowest (a pane is its light over its
+        // tint, ADR-87): each layer in turn, and in each one any colour that can be under the words.
+        const box = a.getBoundingClientRect();
+        for (const layer of imageLayers(cs.backgroundImage).reverse()) {
+          const stops = underWords(layer, box, rect).filter((c) => c[3] > 0);
+          if (!stops.length) continue;
           const next: State[] = [];
           for (const st of states) for (const stop of stops) next.push({ ...st, bg: over(stop, st.bg) });
           const keep = new Map<string, State>();

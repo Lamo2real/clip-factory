@@ -33,6 +33,7 @@
   padding: 10px 14px;
   border-radius: var(--r-md);
   background: var(--fill);
+  box-shadow: var(--glass-shadow-raise);
   font-size: var(--fs-small);
   font-weight: 600;
 }
@@ -179,8 +180,9 @@
   gap: 16px;
   padding: var(--inset);
   border-radius: var(--r-lg);
+  /* Raised on the hero (ADR-87): one step brighter than the lead panel, lit from above. */
   background: var(--fill);
-  box-shadow: none;
+  box-shadow: var(--glass-shadow-raise);
 }
 .newjob .segmented {
   justify-self: start;
@@ -445,7 +447,10 @@
 }
 .teaser:hover {
   transform: translateY(-3px);
-  box-shadow: var(--shadow-2);
+  box-shadow: var(--light-rim-1), var(--light-shade-1), var(--light-shadow-1-hover);
+  /* Hover adds light to the face, like a tree card: the lead panel's stronger light from above and a step of bone
+     where the words are (ADR-87). */
+  --glass-light: var(--glass-light-hover-face);
 }
 .teaser:active {
   transform: scale(0.98);
@@ -459,7 +464,7 @@
   aspect-ratio: 4 / 5;
   overflow: hidden;
   border-radius: calc(var(--r-lg) - 6px);
-  background: linear-gradient(150deg, var(--green-2), var(--green-3));
+  background: linear-gradient(180deg, var(--green-3), var(--green-2));
 }
 .teaser__media img {
   width: 100%;
@@ -623,7 +628,10 @@
 }
 .job-row:hover {
   transform: translateY(-2px);
-  box-shadow: var(--shadow-2);
+  box-shadow: var(--light-rim-1), var(--light-shade-1), var(--light-shadow-1-hover);
+  /* Hover adds light to the face, like a tree card: the lead panel's stronger light from above and a step of bone
+     where the words are (ADR-87). */
+  --glass-light: var(--glass-light-hover-face);
 }
 .job-row:active {
   transform: scale(0.99);
@@ -871,7 +879,7 @@
   aspect-ratio: 16 / 9;
   overflow: hidden;
   border-radius: var(--r-md);
-  background: linear-gradient(150deg, var(--green-2), var(--green-3));
+  background: linear-gradient(180deg, var(--green-3), var(--green-2));
 }
 .thumb img {
   width: 100%;
@@ -986,7 +994,7 @@
   aspect-ratio: 9 / 13;
   overflow: hidden;
   border-radius: calc(var(--r-lg) - 6px);
-  background: linear-gradient(150deg, var(--green-2), var(--green-3));
+  background: linear-gradient(180deg, var(--green-3), var(--green-2));
   color: var(--ink-2);
 }
 .clip-tile__media img {
@@ -1047,15 +1055,14 @@
      Review page's loose words move with it (below), so they still share its text line. */
   padding: clamp(14px, 2.6vw, 24px);
   border-radius: var(--r-xl);
+  /* Fades and slides out; never a filter (a blur animated on a blurred pane redraws it every frame). */
   transition:
     opacity 400ms var(--ease-out),
-    transform 400ms var(--ease-out),
-    filter 400ms var(--ease-out);
+    transform 400ms var(--ease-out);
 }
 .review-card.is-leaving {
   opacity: 0;
   transform: translateY(-14px) scale(0.97);
-  filter: blur(6px);
 }
 /* Phones read top to bottom: what the clip is, the clip, then the decision. */
 .review-card {
@@ -1153,7 +1160,7 @@
   padding: 4px 12px;
   border-radius: var(--r-md);
   background: var(--fill);
-  box-shadow: none;
+  box-shadow: var(--glass-shadow-raise);
   color: var(--ink-2);
   font-size: var(--fs-small);
   font-weight: 600;
@@ -1219,7 +1226,7 @@
 .checklist {
   border-radius: var(--r-md);
   background: var(--fill);
-  box-shadow: none;
+  box-shadow: var(--glass-shadow-raise);
 }
 .checklist__summary {
   display: flex;
@@ -1379,7 +1386,7 @@
   aspect-ratio: 9 / 14;
   overflow: hidden;
   border-radius: var(--r-sm);
-  background: linear-gradient(150deg, var(--green-2), var(--green-3));
+  background: linear-gradient(180deg, var(--green-3), var(--green-2));
 }
 .lib-card__cover img {
   width: 100%;
@@ -1411,7 +1418,11 @@
   min-height: 48px;
   padding: 6px 6px 6px 8px;
   border-radius: var(--r-md);
+  /* The logic of light (ADR-87): a row is one step brighter than its card, the mark one step brighter than the row
+     (the same relative raise, laid again), each lit from above and shaded at its foot. A row inside a card drops
+     only the faintest shadow: its light tells it apart, not a dark halo. */
   background: var(--fill);
+  box-shadow: var(--glass-shadow-row);
 }
 .post__mark {
   display: grid;
@@ -1420,8 +1431,11 @@
   width: 32px;
   height: 32px;
   border-radius: var(--r-xs);
-  background: var(--fill);
-  box-shadow: none;
+  /* MARK_LIFT: light only, no green under it. The mark holds a platform logo, no words, so it has no AA cap to pay
+     for: over a white photo a second layer of the raise's green would cancel its bone (+0.005 in Cream), and this
+     reads a whole step over its row in every look. */
+  background: linear-gradient(rgb(var(--bone-rgb) / 0.08), rgb(var(--bone-rgb) / 0.08));
+  box-shadow: var(--light-rim-sm), var(--light-shade-2);
 }
 .post.is-posted .post__mark {
   background: var(--tint-leaf);
@@ -1698,7 +1712,7 @@ html:where(.see-through, [data-backdrop]) .btn.post__again {
   padding: 6px 14px 6px 10px;
   border-radius: var(--r-pill);
   background: var(--fill-control);
-  box-shadow: none;
+  box-shadow: var(--glass-shadow-raise);
   font-weight: 600;
   font-size: 0.9rem;
   transition: background-color var(--dur-2), box-shadow var(--dur-2), transform var(--dur-2) var(--ease-spring);
@@ -1714,20 +1728,31 @@ html:where(.see-through, [data-backdrop]) .btn.post__again {
   color: var(--on-bone);
   text-shadow: none;
   background: var(--selected);
-  box-shadow: none;
+  box-shadow: var(--light-shade-2), var(--light-shadow-2);
   --mark-cut: #efe7da;
+}
+/* Hover adds light (one step up), press takes it away (one step down); never darker on hover (ADR-87). As light as
+   the focus rules below (:where), so a focused chip keeps its ring under the pointer. */
+.check-chip:where(:not(.is-on, :has(input:disabled))):hover {
+  background: var(--fill-hover);
+  box-shadow: var(--glass-shadow-raise-hover);
+}
+.check-chip:where(:not(.is-on, :has(input:disabled))):active {
+  background: var(--fill-press);
+  box-shadow: var(--glass-shadow-press);
 }
 .check-chip:active {
   transform: scale(0.95);
 }
 .check-chip:has(input:disabled) {
   opacity: 0.5;
+  box-shadow: none;
 }
 .check-chip:has(input:disabled):active {
   transform: none;
 }
 .check-chip:has(input:focus-visible) {
-  box-shadow: var(--focus);
+  box-shadow: var(--focus), var(--glass-shadow-raise);
 }
 
 /* ---------- Settings › Look & feel › Background (§22.5) ---------- */
@@ -1739,7 +1764,6 @@ html:where(.see-through, [data-backdrop]) .btn.post__again {
   max-width: 460px;
   padding: 6px;
   border-radius: var(--r-lg);
-  box-shadow: none;
 }
 .bg-mode {
   display: grid;
@@ -1775,7 +1799,7 @@ html:where(.see-through, [data-backdrop]) .btn.post__again {
 }
 .bg-mode:not(.is-on):hover {
   color: var(--ink);
-  background: var(--fill);
+  background: var(--fill-hover);
 }
 .bg-mode:active {
   transform: scale(0.96);
@@ -1821,7 +1845,6 @@ html:where(.see-through, [data-backdrop]) .btn.post__again {
   max-width: 460px;
   padding: 6px;
   border-radius: var(--r-lg);
-  box-shadow: none;
 }
 .model-pick {
   display: flex;
@@ -1853,7 +1876,7 @@ html:where(.see-through, [data-backdrop]) .btn.post__again {
 }
 .model-pick:not(.is-on):hover {
   color: var(--ink);
-  background: var(--fill);
+  background: var(--fill-hover);
 }
 .model-pick:active {
   transform: scale(0.98);
@@ -1917,7 +1940,7 @@ html:where(.see-through, [data-backdrop]) .btn.post__again {
 .bg-tile__frost {
   position: absolute;
   inset: 0;
-  background: linear-gradient(140deg, rgb(var(--green-rgb) / 0.4), rgb(var(--green-rgb) / 0.3));
+  background: linear-gradient(180deg, rgb(var(--green-rgb) / 0.3), rgb(var(--green-rgb) / 0.4));
   box-shadow: none;
 }
 .bg-note {
@@ -2075,7 +2098,7 @@ html:where(.see-through, [data-backdrop]) .btn.post__again {
   padding: 12px 14px;
   border-radius: var(--r-md);
   background: var(--tint-vermilion);
-  box-shadow: none;
+  box-shadow: var(--glass-shadow-raise);
 }
 .keep-again__text {
   display: flex;
@@ -2278,7 +2301,7 @@ html:where(.see-through, [data-backdrop]) .btn.post__again {
 }
 .upload-chip:focus-visible {
   outline: none;
-  box-shadow: var(--focus);
+  box-shadow: var(--focus), var(--glass-shadow-raise);
 }
 .upload-chip__check {
   display: inline-grid;
@@ -2340,11 +2363,12 @@ html:where(.see-through, [data-backdrop]) .btn.post__again {
   display: grid;
   gap: 8px;
 }
-/* Soft fill like Checks before posting: no edges, the tap target is the whole summary. */
+/* Raised like Checks before posting: one step brighter than the card, lit from above, no edges; the tap target is the
+   whole summary. */
 .place-row {
   border-radius: var(--r-md);
   background: var(--fill);
-  box-shadow: none;
+  box-shadow: var(--glass-shadow-row);
 }
 .place-row__summary {
   display: flex;
@@ -2453,19 +2477,31 @@ html:where(.see-through, [data-backdrop]) .btn.post__again {
   border: 0;
   border-radius: var(--r-md);
   background: var(--fill-control);
+  box-shadow: var(--glass-shadow-raise);
   color: inherit;
   font: inherit;
   font-weight: 650;
   text-align: left;
+  transition: box-shadow var(--dur-1) var(--ease-out);
+}
+/* As light as the focus rule below (:where), so a focused button keeps its ring under the pointer. */
+.dropdown__button:where(:not(.is-picked)):hover {
+  background: var(--fill-hover);
+  box-shadow: var(--glass-shadow-raise-hover);
+}
+.dropdown__button:where(:not(.is-picked)):active {
+  background: var(--fill-press);
+  box-shadow: var(--glass-shadow-press);
 }
 .dropdown__button.is-picked {
   background: var(--selected);
+  box-shadow: var(--light-shade-2), var(--light-shadow-2);
   color: var(--on-bone);
   text-shadow: none;
 }
 .dropdown__button:focus-visible {
   outline: none;
-  box-shadow: var(--focus);
+  box-shadow: var(--focus), var(--glass-shadow-raise);
 }
 .dropdown__value.is-empty {
   color: var(--ink-2);
@@ -2492,14 +2528,15 @@ html:where(.see-through, [data-backdrop]) .btn.post__again {
   padding: 6px;
   list-style: none;
   border-radius: var(--r-md);
-  /* Solid: a glass list inside the glass sheet cannot blur what is under it, so the switches would show through. */
-  background: rgb(var(--green-rgb));
-  box-shadow: 0 12px 32px rgb(0 0 0 / 0.45);
+  /* Solid: a glass list inside the glass sheet cannot blur what is under it, so the switches would show through. Lit
+     from above like every menu (MENU_LIGHT), with the menu's top glow and the deepest drop: it floats over the rows. */
+  background: var(--glass-light-menu), rgb(var(--green-rgb));
+  box-shadow: var(--light-rim-3), var(--light-shadow-4);
   isolation: isolate;
 }
 .dropdown__list:focus-visible {
   outline: none;
-  box-shadow: var(--focus);
+  box-shadow: var(--focus), var(--light-rim-3), var(--light-shadow-4);
 }
 .dropdown__opt {
   display: flex;
