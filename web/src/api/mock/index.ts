@@ -80,6 +80,11 @@ export interface MockFaults extends StatsFaults {
   deleteJobFails?: number;
   /** The next N Make clips (createJob) fail like a server error. */
   createJobFails?: number;
+  /**
+   * The next Uploads (confirmClip) fail in this order before the server takes anything: "network" like a connection
+   * lost on the way, "refused" like a 400 the server sends back.
+   */
+  confirmFails?: ("network" | "refused")[];
   /** The next N setup checks (getSetup) fail like a server error (Review must not guess where a clip goes). */
   setupFails?: number;
   /** Every answer takes this long (ms), like a slow connection to the cloud (a page change must not blink meanwhile). */
@@ -1230,6 +1235,9 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     },
     async confirmClip(clipId, captions, tiktok, platforms, options) {
       await delay();
+      const fail = faults.confirmFails?.shift();
+      if (fail === "network") throw networkError();
+      if (fail === "refused") throw bad("Pick who can see it on TikTok.");
       return confirmNow(clipId, captions, tiktok, platforms, options);
     },
     // Post it on TikTok yourself (§42): the same rules as the API's tiktok_self.py.

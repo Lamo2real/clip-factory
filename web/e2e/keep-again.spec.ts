@@ -4,6 +4,7 @@ import { settle } from "./helpers.ts";
 interface Faults {
   keepStopsAfterSave: number;
   resumeAfterMs: number;
+  confirmFails?: ("network" | "refused")[];
 }
 type FaultWindow = Window & { __cfMockFaults?: Faults };
 
@@ -88,6 +89,34 @@ test("review: once an Upload reached the server, Throw away goes and the card lo
   await card.locator('[data-place="instagram"] summary').click();
   await expect(card.locator('[data-place="instagram"] textarea')).toBeDisabled();
   await expect(card).not.toContainText("saved when you tap");
+  await card.getByRole("button", { name: "Try again", exact: true }).click();
+  await expect(page.getByText(/^Uploading to/)).toBeVisible();
+});
+
+test("review: a Try again the server refuses after a lost connection opens the card again", async ({ page }) => {
+  await page.goto("/");
+  await settle(page);
+  await page.evaluate(() => {
+    localStorage.removeItem("cf-upload-to");
+    const s = (window as Window & { __cfMock?: { setup: { finish(p: string): void } } }).__cfMock!.setup;
+    for (const p of ["youtube", "instagram", "facebook"]) s.finish(p);
+  });
+  await page.goto("/review");
+  await settle(page);
+  await page.evaluate(() => {
+    (window as FaultWindow).__cfMockFaults!.confirmFails = ["network", "refused"];
+  });
+  const card = page.locator(".review-card").first();
+  await card.getByRole("button", { name: /^Upload( to .+)?$/ }).click();
+  // No answer: it may have reached the server, so the card locks and Try again is the way on.
+  await expect(card.getByText("It's already sent, so you can't change it now.")).toBeVisible();
+  await expect(card.getByRole("button", { name: "Throw away" })).toHaveCount(0);
+  // The server answers 400: it never took the Upload, so the card can be changed (and thrown away) again.
+  await card.getByRole("button", { name: "Try again", exact: true }).click();
+  await expect(page.getByText("Pick who can see it on TikTok.").first()).toBeVisible();
+  await expect(card.getByText("It's already sent, so you can't change it now.")).toHaveCount(0);
+  await expect(card.getByRole("button", { name: "Throw away" })).toBeVisible();
+  await expect(card.locator(".upload-to").getByRole("button", { name: "Facebook" })).toBeEnabled();
   await card.getByRole("button", { name: "Try again", exact: true }).click();
   await expect(page.getByText(/^Uploading to/)).toBeVisible();
 });

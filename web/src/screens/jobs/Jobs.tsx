@@ -40,7 +40,7 @@ export function Jobs() {
   // the second half of a double tap, and does nothing.
   const selectButton = useRef<HTMLButtonElement>(null);
   const selectAt = useRef(-Infinity);
-  // Select ended (Cancel, Done, Escape, a delete): the focus goes back to Select when its old place is gone.
+  // Select ended (either Cancel, Escape, a delete): the focus goes back to Select when its old place is gone.
   const refocus = useRef(false);
 
   // A deleted job leaves at once (Undo brings it back), wherever the news came from.
@@ -158,13 +158,13 @@ export function Jobs() {
                 <Button
                   ref={selectButton}
                   variant="ghost"
-                  icon="check"
+                  icon="x"
                   className="jobs-select"
                   onClick={() => {
                     if (performance.now() - selectAt.current >= 400) stopSelecting();
                   }}
                 >
-                  Done
+                  Cancel
                 </Button>
               ) : (
                 <Button ref={selectButton} variant="ghost" icon="check" className="jobs-select" data-help="jobs-select" onClick={startSelecting}>

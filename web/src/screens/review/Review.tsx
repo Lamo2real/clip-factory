@@ -1005,11 +1005,14 @@ function ReviewCard({
     } catch (e) {
       onSettling(clip.clipId, false);
       setKeepFailed(true);
-      // Refused (4xx): the server did not take it, so it can still be changed or thrown away. Anything else (no
-      // connection, a server error) may have reached it: from now on Try again is the way on.
+      // Refused (4xx): the server did not take it, so it can still be changed or thrown away, even after an earlier
+      // try that lost its connection (a 409 never lands here: uploadClip handles it). Anything else (no connection,
+      // a server error) may have reached it: from now on Try again is the way on.
       const refused = e instanceof ApiError && e.status >= 400 && e.status < 500;
-      if (refused && !sent) settled.current = false;
-      else setSent(true);
+      if (refused) {
+        settled.current = false;
+        setSent(false);
+      } else setSent(true);
       // The error toast plays the deny sound.
       (sheet ? sheetAct : keepAct).fail({ sound: false });
       toast.error(friendlyMessage(e));

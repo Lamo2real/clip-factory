@@ -219,8 +219,11 @@ test("a double tap on Select stays in Select (Make clips never slides under the 
   await expect(page).toHaveURL(/\/jobs$/);
   const bar = page.getByRole("toolbar", { name: "Picked jobs" });
   await expect(bar).toBeVisible();
-  // The header keeps its buttons where they were: Done sits where Select was.
-  const done = page.getByRole("button", { name: "Done", exact: true });
+  // The header keeps its buttons where they were: a Cancel sits where Select was (never a "Done" that reads like a
+  // confirm, so a child who picked jobs is not surprised that nothing was deleted).
+  await expect(page.getByRole("button", { name: "Done", exact: true })).toHaveCount(0);
+  const done = page.locator(".jobs-select");
+  await expect(done).toHaveText("Cancel");
   const d = (await done.boundingBox())!;
   expect(Math.abs(d.x + d.width / 2 - (b.x + b.width / 2))).toBeLessThan(b.width / 2);
   await done.click();
@@ -235,7 +238,8 @@ test("with the keyboard, Select and Cancel keep the focus on the page's controls
   await page.keyboard.press("Space");
   const bar = page.getByRole("toolbar", { name: "Picked jobs" });
   await expect(bar).toBeVisible();
-  await expect(page.getByRole("button", { name: "Done", exact: true })).toBeFocused();
+  await expect(page.locator(".jobs-select")).toBeFocused();
+  await expect(page.locator(".jobs-select")).toHaveText("Cancel");
   await bar.getByRole("button", { name: "Cancel" }).focus();
   await page.keyboard.press("Enter");
   await expect(bar).toBeHidden();

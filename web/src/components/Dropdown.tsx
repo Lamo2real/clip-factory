@@ -71,9 +71,12 @@ export function Dropdown({
     if (!el || !btn) return;
     const box = btn.getBoundingClientRect();
     const height = el.getBoundingClientRect().height;
-    // The phone's tab bar (fixed, so read by its box: none on a wide screen, where it is hidden).
-    const bar = document.querySelector<HTMLElement>(".tabbar")?.getBoundingClientRect();
-    const barTop = bar && bar.height > 0 ? bar.top : window.innerHeight;
+    // The phone's tab bar of the app on screen (Clip Factory's or Clips Funded's; fixed, so read by its box: the hidden
+    // app's bar and a wide screen's have none).
+    const bar = Array.from(document.querySelectorAll<HTMLElement>(".tabbar, .st-tabbar"))
+      .map((b) => b.getBoundingClientRect())
+      .find((r) => r.height > 0);
+    const barTop = bar ? bar.top : window.innerHeight;
     const bottom = Math.min(window.innerHeight, barTop) - 8;
     const top = 8;
     if (box.bottom + 6 + height <= bottom) return;

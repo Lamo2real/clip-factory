@@ -808,8 +808,8 @@ not, so the page said "This computer can't show see-through" on macOS 27 with Li
     choices) is kept by clip id, so Undo or a failed decline brings the card back exactly as it was.
   * After an Upload the server took (held as confirmed with no posts, or a network or 5xx answer), the card is
     `sent`: Throw away is hidden, Try again is the only button, and the chips, Use my settings and the place rows are
-    locked (`<fieldset disabled>`, "It's already sent, so you can't change it now."). A 4xx answer keeps the card open
-    and the button says "Try again". Every autosave patches the lists on screen and remembered (`patchLoaded`), and
+    locked (`<fieldset disabled>`, "It's already sent, so you can't change it now."). A 4xx answer (the server never took
+    that Upload) opens the card again, even on a Try again after a lost connection, and the button says "Try again". Every autosave patches the lists on screen and remembered (`patchLoaded`), and
     Upload sends only the captions changed on the card.
   * Before Upload, a card whose TikTok goes through the Mac says what the Mac is doing (`macUploadLine`: not set up,
     needs you, paused, or not checked in since a time) with that row's one button. After Upload, a clip where every
@@ -7328,9 +7328,9 @@ cannot show one again. Why not a server-side soft delete: ADR-58.
 * **Next to the sidebar** (768–959 px) a row keeps its phone layout, so its words keep their room. **Select** (next to Make clips) turns each row into one big tick box (`role="checkbox"`,
   Space or Enter toggles it) and shows a bar at the bottom of the screen: "N jobs picked" (or "Tap the jobs to
   delete"), **Cancel**, **Pick all failed (N)** (the failed jobs on screen) and **Delete N** (danger, at the bottom
-  right). Escape leaves Select. While selecting, **Done** sits where Select was (so Make clips never moves; a second
-  tap within 400 ms of Select does nothing) and ends Select. After Done, Cancel, Escape or a delete the focus goes
-  back to Select; Stop job moves the focus to its "Stopping…" note.
+  right). Escape leaves Select. While selecting, a second **Cancel** (×) sits where Select was (so Make clips never moves; a
+  second tap within 400 ms of Select does nothing) and ends Select like the bar's Cancel, never reading like a confirm
+  that would delete. After either Cancel, Escape or a delete the focus goes back to Select; Stop job moves the focus to its "Stopping…" note.
 * **Job page:** **Delete job** (ghost, bin) first in the actions, so Try again or Check these clips keep the corner.
   After the question the page goes back to All jobs, where the Undo toast is.
 * **The question** (`DeleteJobsSheet`, a `Sheet`): "Delete this job?" / "Delete 3 jobs?", then what happens:

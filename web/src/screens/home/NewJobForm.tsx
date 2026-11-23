@@ -605,6 +605,9 @@ function JobForm() {
       // Never held by this form's own "Leave and stop the upload?" (the file is all up by now).
       if (mounted.current && location.pathname === "/") navigate(`/jobs/${job.jobId}`, { force: true });
     } catch (err) {
+      // The server lost the file ("We could not find your upload. Upload the video again."): the next Make clips sends
+      // the file again instead of the same dead key.
+      if (err instanceof ApiError && err.status === 400 && /find your upload/i.test(err.message)) sent.current = null;
       if ((err as DOMException)?.name === "AbortError")
         toast.info(mounted.current ? "Upload canceled." : "Upload stopped because you left Home. Start it again from Home.");
       else if (forCampaign && err instanceof ApiError && err.status === 409 && err.retryAfter !== undefined && resend.current !== "sent") {
