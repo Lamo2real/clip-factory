@@ -1,5 +1,5 @@
 {
- "version": "6c56d02c428d",
+ "version": "7009e8a9e81c",
  "parts": [
   {
    "id": "app-map",
@@ -159,7 +159,7 @@
    "id": "contracts-22",
    "title": "CONTRACTS: 22. Background modes and see-through glass (owner request, 2026-11-16)",
    "line": "The owner wants the whole app to feel like liquid glass you can almost see through: \"if there's a car behind it, I",
-   "chars": 58453
+   "chars": 73524
   },
   {
    "id": "contracts-23",
@@ -297,7 +297,7 @@
    "id": "contracts-45",
    "title": "CONTRACTS: 45. Clips Funded: a second, separate workspace (owner request, 2026-11-21)",
    "line": "Planned: not in the app until the switch pull request turns it on (§45.21). Until then nothing of Clips Funded",
-   "chars": 244241
+   "chars": 244360
   },
   {
    "id": "contracts-46",
@@ -1065,19 +1065,19 @@
    "id": "ux-colour-tokens",
    "title": "UX_DESIGN_SYSTEM: Colour tokens",
    "line": "The palette is the November 2026 bottle-green look ([DECISIONS.md ADR-43](DECISIONS.md#adr-43-bottle-green-glass-bone-words-vermilion-actions)):",
-   "chars": 7598
+   "chars": 7989
   },
   {
    "id": "ux-the-liquid-glass-recipe",
    "title": "UX_DESIGN_SYSTEM: The liquid glass recipe",
    "line": "glass-tint: var(--glass-tint-panel); / flat green: --panel-veil + --light-pay /",
-   "chars": 6748
+   "chars": 7542
   },
   {
    "id": "ux-the-logic-of-light",
    "title": "UX_DESIGN_SYSTEM: The logic of light",
    "line": "The owner (2026-11-23): \"the top layer is always brighter than the bottom, and it grows gradually in between ... make",
-   "chars": 16052
+   "chars": 16133
   },
   {
    "id": "ux-typography",

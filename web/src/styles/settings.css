@@ -1512,6 +1512,7 @@ ol.md__list {
 /* Glass, but nearly solid: the page behind must never show through the question. --ink-2 on it is about 11:1. */
 .sheet.glass {
   --glass-tint: var(--glass-tint-overlay);
+  --glass-brightness: 1; /* planned for white as it is: its filter dims nothing (SHEET_VEIL) */
   --glass-light: var(--glass-light-overlay);
   box-shadow: var(--glass-shadow-overlay);
 }
@@ -1565,6 +1566,11 @@ ol.md__list {
 /* ---------- Settings › Posting › Money: real earnings (docs/CONTRACTS.md §25.7) ----------
    One colour meaning each: leaf for progress and good news, bone for "goal reached", warm yellow for "needs your OK"
    and "couldn't check". Vermilion is only ever the action button. */
+/* The panel holds no rows of its own (an apple brings 18 px above and below its words), so it takes that room
+   itself: its words start below its top light, as a pane's do (lib/background.ts WORDS_LIGHT). */
+.apple-panel.money-top {
+  padding-block: 18px;
+}
 .money-top__row {
   display: flex;
   flex-wrap: wrap;

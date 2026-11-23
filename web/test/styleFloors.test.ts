@@ -3,7 +3,7 @@
 import { readdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { CHIP_DEEPEN, CHIP_UNDER } from "../src/lib/background.ts";
+import { CHIP_DEEPEN, CHIP_UNDER, dimRgb, luminance as lum, mix, PICTURE_BRIGHTNESS, PICTURE_PANEL_VEIL, seeThroughVeils, VEIL, type Rgb } from "../src/lib/background.ts";
 
 const STYLES = join(import.meta.dirname, "..", "src", "styles");
 const css = (name: string) => readFileSync(join(STYLES, name), "utf8");
@@ -27,6 +27,13 @@ const contrast = (a: string, b: string) => {
   const [x, y] = [luminance(a), luminance(b)].sort((p, q) => q - p) as [number, number];
   return (x + 0.05) / (y + 0.05);
 };
+const WHITE: Rgb = [255, 255, 255];
+/**
+ * The lightest panels any look allows, each at the AA floor: the window's Clear over a white desktop (0.73 green, no
+ * web filter dims it) and a pane over a white photo, which its own brightness() dims to half (0.59 green). The second
+ * is the lighter (luminance 0.139 against 0.136), so both are checked.
+ */
+const LIGHTEST_PANELS: readonly Rgb[] = [mix(VEIL, WHITE, seeThroughVeils("liquid", "light", "clear").panel), mix(VEIL, dimRgb(WHITE, PICTURE_BRIGHTNESS), PICTURE_PANEL_VEIL)];
 
 describe("type and target floors", () => {
   it("no text is set below the smallest token, --fs-xs (0.78rem)", () => {
@@ -88,16 +95,17 @@ describe("type and target floors", () => {
 describe("vermilion and green words stay AA on tinted glass", () => {
   it("--vermilion-ink and --green-text are at least 4.5:1 on their tints over the lightest panel any look allows", () => {
     const value = (token: string) => new RegExp(`${token}:\\s*(#[0-9a-f]{6})`, "i").exec(css("tokens.css"))![1]!;
-    // The lightest panel any look allows: 0.73 green over a white photo or desktop (no page veil since ADR-45). A chip
-    // lays bottle green under its tint (CHIP_UNDER, ADR-87; it was deep green).
-    const green = [15, 55, 43];
+    // The lightest panels any look allows (LIGHTEST_PANELS; no page veil since ADR-45). A chip lays bottle green under
+    // its tint (CHIP_UNDER, ADR-87; it was deep green).
+    expect(lum(LIGHTEST_PANELS[1]!)).toBeGreaterThan(lum(LIGHTEST_PANELS[0]!));
     const over = (top: number[], under: number[], a: number) => top.map((c, i) => c * a + under[i]! * (1 - a));
     const hex = (rgb: number[]) => `#${rgb.map((c) => Math.round(c).toString(16).padStart(2, "0")).join("")}`;
-    const panel = over(green, [255, 255, 255], 0.73);
-    const chip = (tint: number[], a: number) => hex(over(tint, over([...CHIP_UNDER], panel, CHIP_DEEPEN), a));
-    expect(contrast(value("--vermilion-ink"), chip([232, 57, 43], 0.2))).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(value("--green-text"), chip([95, 165, 133], 0.22))).toBeGreaterThanOrEqual(4.5);
-    expect(contrast(value("--ink-3"), hex(panel))).toBeGreaterThanOrEqual(4.5);
+    for (const panel of LIGHTEST_PANELS) {
+      const chip = (tint: number[], a: number) => hex(over(tint, over([...CHIP_UNDER], [...panel], CHIP_DEEPEN), a));
+      expect(contrast(value("--vermilion-ink"), chip([232, 57, 43], 0.2))).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(value("--green-text"), chip([95, 165, 133], 0.22))).toBeGreaterThanOrEqual(4.5);
+      expect(contrast(value("--ink-3"), hex([...panel]))).toBeGreaterThanOrEqual(4.5);
+    }
   });
 });
 
@@ -118,10 +126,11 @@ describe("placeholders read as hints", () => {
   it("is at least 3:1 on the lightest field any look allows, and clearly dimmer than typed text", () => {
     const over = (top: number[], under: number[], a: number) => top.map((c, i) => c * a + under[i]! * (1 - a));
     const hex = (rgb: number[]) => `#${rgb.map((c) => Math.round(c).toString(16).padStart(2, "0")).join("")}`;
-    const panel = over([15, 55, 43], [255, 255, 255], 0.73);
-    const field = hex(over([10, 40, 32], panel, 0.45));
-    expect(contrast(placeholder, field)).toBeGreaterThanOrEqual(3);
-    expect(contrast(ink, field) / contrast(placeholder, field)).toBeGreaterThanOrEqual(1.5);
+    for (const panel of LIGHTEST_PANELS) {
+      const field = hex(over([10, 40, 32], [...panel], 0.45));
+      expect(contrast(placeholder, field)).toBeGreaterThanOrEqual(3);
+      expect(contrast(ink, field) / contrast(placeholder, field)).toBeGreaterThanOrEqual(1.5);
+    }
     expect(contrast(ink, placeholder)).toBeGreaterThanOrEqual(1.8);
     expect(placeholder.toLowerCase()).not.toBe(ink.toLowerCase());
   });

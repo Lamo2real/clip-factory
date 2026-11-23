@@ -1,7 +1,7 @@
 // Puts the background choice (§22) on the page: which backdrop to draw, and the <html> class and veil strength the
 // CSS reads. Runs once before the first paint (main.tsx) and again whenever the choice or the system scheme changes.
 import { useSyncExternalStore } from "react";
-import { cantSelfUpdate, isOldDesktopApp, lightPay, readDesktopVersion, readNativeGlass, resolveLook, type Look, type NativeGlass, type Scheme } from "./background.ts";
+import { cantSelfUpdate, glassOf, isOldDesktopApp, lightPay, readDesktopVersion, readNativeGlass, resolveLook, type Look, type NativeGlass, type Scheme } from "./background.ts";
 import { getPrefs, usePrefs, type Prefs } from "./prefs.ts";
 import { setPageGlass } from "../app/shell.ts";
 
@@ -74,11 +74,14 @@ export function useLook(): Look {
 /**
  * `html.see-through` makes the page itself transparent so the desktop window's glass shows (§22.3);
  * `data-backdrop` names what is drawn; `--backdrop-veil` is the tint over the whole backdrop (between the panels);
- * `--panel-veil` is the bottle-green tint every panel gets (and every piece of loose text, on its scrim), enough for
- * AA over the lightest thing this look can show; `--light-pay` is the green a pane carries on top of it so the ladder
- * of light fits under the AA ceiling over everything this look can show (`lightPay`, ADR-87: over a light backdrop a
- * pane sits darker than the page, and every level above it is brighter). All are worked out here at read time from
- * what is saved, which is never rewritten. Reduced transparency overrides the pay in glass.css (!important).
+ * `--glass-brightness` is how much every pane's own backdrop-filter dims what it sees (`brightness()`, 1 in the
+ * window look, where the desktop is behind the page); `--panel-veil` is the bottle-green tint every pane gets, enough
+ * for AA over the lightest thing this look can show as the pane sees it, dimmed; `--plate-veil` is the tint under
+ * words where nothing dims the backdrop (the title and line plates, controls straight on the page); `--light-pay` is
+ * the green a pane carries on top of it so the ladder of light fits under the AA ceiling over everything this look
+ * can show (`lightPay`, ADR-87: over a light backdrop a pane sits darker than the page, and every level above it is
+ * brighter). All are worked out here at read time from what is saved, which is never rewritten. Reduced transparency
+ * overrides the veils and the pay in glass.css (!important).
  */
 export function applyLook(look: Look, root: HTMLElement = document.documentElement) {
   // (the class is the shell's: it is Clip Factory's wish, on the page whenever Clip Factory is, app/shell.ts)
@@ -91,8 +94,11 @@ export function applyLook(look: Look, root: HTMLElement = document.documentEleme
   const veil = look.kind === "window" || look.kind === "picture" || look.kind === "colours" ? look.pageVeil : null;
   if (veil === null) root.style.removeProperty("--backdrop-veil");
   else root.style.setProperty("--backdrop-veil", String(veil));
-  root.style.setProperty("--panel-veil", String(look.panelVeil));
-  root.style.setProperty("--light-pay", String(lightPay(look)));
+  const glass = glassOf(look);
+  root.style.setProperty("--panel-veil", String(glass.panelVeil));
+  root.style.setProperty("--plate-veil", String(glass.plateVeil));
+  root.style.setProperty("--glass-brightness", String(glass.brightness));
+  root.style.setProperty("--light-pay", String(lightPay({ ...look, ...glass })));
 }
 
 /**

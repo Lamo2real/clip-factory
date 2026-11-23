@@ -484,6 +484,7 @@ h1.getapp__title {
      Reload to read 0.08 over Later with bone words otherwise. The pay is added to the floating veil, not to a heavier
      panel's (Frosted stays 0.95, never opaque). */
   --glass-tint: linear-gradient(rgb(var(--green-rgb) / min(1, max(var(--float-veil) + var(--light-update-pay), var(--panel-veil)))), rgb(var(--green-rgb) / min(1, max(var(--float-veil) + var(--light-update-pay), var(--panel-veil)))));
+  --glass-brightness: 1; /* planned for white as it is: its filter dims nothing (FLOAT_VEIL) */
   --glass-light: var(--glass-light-float);
   --glass-blur: 28px;
   box-shadow: var(--glass-shadow-float);

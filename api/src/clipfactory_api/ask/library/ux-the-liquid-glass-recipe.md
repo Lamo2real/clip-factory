@@ -7,8 +7,10 @@
   position: relative;
   isolation: isolate;
   background: var(--glass-light), var(--glass-tint);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)); /* 18px, 1.6 */
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  /* 24px (18px over a photo), 1.6, and each look's own dimming (0.87 over the app's own backdrop, 0.5 over a photo,
+     1 in the window and on the floating layers, the overlays and the tab bar) */
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
   border: 1px solid transparent; /* keeps the box size; no edge is drawn */
   border-radius: var(--r-lg);
   box-shadow: var(--glass-shadow-panel); /* the top glow, the shade at its foot, the drop */
@@ -22,9 +24,13 @@
 }
 ```
 
-`--panel-veil` is 0.33 over the app's own living backdrop (worked out over every blob subset, both field ends, every
-`saturate()` the CSS uses and the grain at its peak, `lib/background.ts`), 0.73 over a white desktop or photo, and between the two for
-light owner colours.
+`--panel-veil` is 0.20 over the app's own living backdrop (worked out over every blob subset, both field ends, every
+`saturate()` the CSS uses and the grain at its peak, as the pane's own `brightness(0.87)` dims it, `lib/background.ts`;
+70 % of the backdrop shows through, 67 % on main), 0.29 over a white photo (dimmed to half, and 0.10 of pay: 30.5 % shows, 22 % on main),
+0.73 over a white desktop (no web filter dims the window's glass; 0.62 under Frosted's frost), and between for the
+owner's colours. Each look takes the veil and dimming that show the most (`bestGlass`): what shows is
+(1 − green) × brightness, so dimming only pays where the green itself is much of what the words have to beat.
+`--plate-veil` is what words need with nothing dimmed: 0.33 over the app's backdrop, 0.73 over a white photo.
 
 Variants: `.glass--green` (the lead panel: the hero, the sign-in card, Library's learnings), `.glass--vermilion`,
 `.glass--clear`. In Chromium, `.glass--refract` and the page title plate also bend the backdrop through the

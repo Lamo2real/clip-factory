@@ -57,6 +57,7 @@
   border-radius: var(--r-lg);
   /* The page scrolls under it: a floating layer's tint and light. */
   --glass-tint: var(--glass-tint-float);
+  --glass-brightness: 1; /* planned for white as it is: its filter dims nothing (FLOAT_VEIL) */
   --glass-light: var(--glass-light-float);
   --glass-blur: 28px;
   box-shadow: var(--glass-shadow-float);
@@ -174,6 +175,7 @@
   padding: 8px;
   border-radius: var(--r-lg);
   --glass-tint: var(--glass-tint-float);
+  --glass-brightness: 1; /* planned for white as it is: its filter dims nothing (FLOAT_VEIL) */
   --glass-light: var(--glass-light-float);
   --glass-blur: 28px;
   box-shadow: var(--glass-shadow-float);

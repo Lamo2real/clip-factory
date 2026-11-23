@@ -11,7 +11,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { FROSTED, MEASURED, PRESETS, SATURATIONS, VEIL, WHITE, contrast, hexToRgb, luminance, meshSpots, mix, veilsFor, type Rgb, type Veils } from "../src/stories/look.ts";
+import { DIM, ELEVATION, ELEVATION_TOP, FROSTED, MEASURED, PRESETS, SATURATIONS, VEIL, WHITE, contrast, filtered, hexToRgb, lit, luminance, meshSpots, mix, stageSpots, veilsFor, type Rgb, type Veils } from "../src/stories/look.ts";
 
 const STYLES = join(import.meta.dirname, "..", "src", "stories", "styles");
 const SCREEN = readFileSync(join(import.meta.dirname, "..", "src", "stories", "screens", "Settings.tsx"), "utf8");
@@ -139,8 +139,11 @@ const PLACES: Place[] = [
   ...PRESETS.map((p): Place => {
     const v = veilsFor({ mode: "colours", strength: "clear", colours: [...p.colours], picture: null }, "none");
     const stage = mix(VEIL, lightest(meshSpots(p.colours)), v.page);
-    const under = mix(VEIL, lightest(meshSpots(p.colours, SATURATIONS)), v.page);
-    return { where: `the ${p.name} colours`, card: mix(VEIL, under, v.card), hero: mix(VEIL, under, v.hero), loose: stage, bare: stage, tokens: lookTokens("colours", v) };
+    // what a glass card's and the hero's own filter shows of the stage: dimmed (look.ts DIM), then saturated
+    const under = lightest(stageSpots(p.colours).flatMap((s) => SATURATIONS.map((k) => filtered(mix(VEIL, s, v.page), DIM.colours.glass, k))));
+    // (with each one's own light at its top, its brightest part: glass-tokens.css 5a, look.ts lit)
+    const top = (n: number) => ELEVATION[n]! + ELEVATION_TOP[n]!;
+    return { where: `the ${p.name} colours`, card: lit(under, v.card, top(2)), hero: lit(under, v.hero, top(3)), loose: stage, bare: stage, tokens: lookTokens("colours", v) };
   }),
   { where: "a white desktop or photo", card: mix(VEIL, WHITE, MEASURED.card), hero: mix(VEIL, WHITE, MEASURED.hero), loose: mix(VEIL, WHITE, MEASURED.plate), bare: WHITE, tokens: lookTokens("desktop", MEASURED) },
   { where: "a white desktop, Frosted", card: mix(VEIL, frost, FROSTED.card), hero: mix(VEIL, frost, FROSTED.hero), loose: mix(VEIL, frost, FROSTED.plate), bare: frost, tokens: lookTokens("desktop", FROSTED) },
