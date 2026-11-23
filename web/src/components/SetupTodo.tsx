@@ -396,6 +396,8 @@ function TodoList({ rows, onSkip, onUnskip }: { rows: TodoRow[]; onSkip: (p: Pla
   const route = useRoute();
   const routeName = route.name;
   const quietGo = routeName === "cr_setup" || routeName === "campaigns" || routeName === "campaigns_find" || routeName === "campaign" || routeName === "getpaid" || routeName === "getpaid-bank" || (routeName === "settings" && route.branch === "getpaid");
+  // One strong Set up: the next place still to do; the others are glass, so the page's own main button stays the one.
+  const nextTodo = rows.find((r) => r.state !== "ready" && !isFinished(r))?.platform ?? null;
   return (
     <ul className="setup-todo__rows" aria-label="Places to set up">
       {rows.map((row) => {
@@ -417,7 +419,7 @@ function TodoList({ rows, onSkip, onUnskip }: { rows: TodoRow[]; onSkip: (p: Pla
             </span>
             {row.state === "ready" ? null : (
               <span className="todo-row__actions">
-                <LinkButton href={`/settings/posting/setup/${row.platform}`} size="sm" variant={quietGo ? "glass" : "action"} className="todo-row__go" aria-label={`Set up ${name}`}>
+                <LinkButton href={`/settings/posting/setup/${row.platform}`} size="sm" variant={quietGo || row.platform !== nextTodo ? "glass" : "action"} className="todo-row__go" aria-label={`Set up ${name}`}>
                   Set up
                 </LinkButton>
                 {finished ? (

@@ -379,6 +379,9 @@ describe("Social accounts (§45.36 E13, E14, E18)", () => {
       app: { choice: null, saved: false },
     }));
     await render();
+    // Each card's one main button opens its app's choice on the card.
+    for (const p of ["youtube", "facebook"])
+      await click(Array.from(card(p).querySelectorAll<HTMLButtonElement>("button")).find((b) => /^Set up the app/.test(b.textContent ?? "")));
     const yt = card("youtube");
     await click(
       Array.from(yt.querySelectorAll<HTMLButtonElement>("[role=radio]")).find(
@@ -631,17 +634,17 @@ describe("the Needs you bar on the page it points to (§45.36 E17)", () => {
   });
 
   it("says the Social accounts trip in words for this page", () => {
-    expect(socialHere(STUCK)).toBe("Clips Funded's TikTok (Clips Funded) needs connecting again. Fix it below, then tap Try again.");
-    expect(socialHere("Clips Funded's TikTok needs connecting again. Open Social accounts and tap Connect.")).toBe("Clips Funded's TikTok needs connecting again. Tap Connect below.");
-    expect(socialHere("Clips Funded's X is not connected. Open Clips Funded › Social accounts, connect it, then tap Try again.")).toBe("Clips Funded's X is not connected. Connect it below, then tap Try again.");
-    expect(socialHere("The TikTok app keys changed. Connect TikTok again in Clips Funded › Social accounts, then tap Try again.")).toBe("The TikTok app keys changed. Connect TikTok again below, then tap Try again.");
+    expect(socialHere(STUCK)).toBe("Clips Funded's TikTok (Clips Funded) needs connecting again. Tap Connect again below. Then tap Try again on the video.");
+    expect(socialHere("Clips Funded's TikTok needs connecting again. Open Social accounts and tap Connect.")).toBe("Clips Funded's TikTok needs connecting again. Tap Connect again below.");
+    expect(socialHere("Clips Funded's X is not connected. Open Clips Funded › Social accounts, connect it, then tap Try again.")).toBe("Clips Funded's X is not connected. Connect it below. Then tap Try again on the video.");
+    expect(socialHere("The TikTok app keys changed. Connect TikTok again in Clips Funded › Social accounts, then tap Try again.")).toBe("The TikTok app keys changed. Connect TikTok again below. Then tap Try again on the video.");
     expect(socialHere("“Bike lights” needs a check before you can approve it.")).toBe("“Bike lights” needs a check before you can approve it.");
   });
 
   it("reads a sentence saved before a rename the same way, and never takes Clip Factory's own Social accounts", () => {
     for (const old of ["Funded Clips", "Clip Stories", "Clip Factory Stories", "Lamo Stories"]) {
-      expect(socialHere(`${old}' X is not connected. Open ${old} › Social accounts, connect it, then tap Try again.`)).toBe(`${old}' X is not connected. Connect it below, then tap Try again.`);
-      expect(socialHere(`Pick another in ${old} › Social accounts, then tap Try again.`)).toBe("Pick another below, then tap Try again.");
+      expect(socialHere(`${old}' X is not connected. Open ${old} › Social accounts, connect it, then tap Try again.`)).toBe(`${old}' X is not connected. Connect it below. Then tap Try again on the video.`);
+      expect(socialHere(`Pick another in ${old} › Social accounts, then tap Try again.`)).toBe("Pick another below. Then tap Try again on the video.");
     }
     expect(socialHere("Open Clip Factory › Social accounts, then tap Try again.")).toBe("Open Clip Factory › Social accounts, then tap Try again.");
   });
@@ -665,7 +668,7 @@ describe("the Needs you bar on the page it points to (§45.36 E17)", () => {
     });
     const bar = host.querySelector<HTMLElement>(".st-needs")!;
     expect(bar.textContent).toContain(
-      "needs connecting again. Fix it below, then tap Try again.",
+      "needs connecting again. Tap Connect again below. Then tap Try again on the video.",
     );
     expect(bar.textContent).not.toContain("Social accounts");
     expect(bar.querySelector("a")).toBeNull();

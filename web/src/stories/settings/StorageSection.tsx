@@ -412,7 +412,7 @@ export function StorageSection({ ws }: { ws: string }) {
         {(prod.keepReferences ?? "all") === "study_only" ? <p className="st-stg-small">Clips Funded still learns from each study after its video is gone.</p> : null}
         <p className="st-stg-label">Pictures added in the chat</p>
         <SetPick<KeepChatPictures> label="Keep chat pictures" value={prod.keepChatPictures ?? "all"} options={KEEP_CHAT_PICTURES} onChange={(v) => save({ production: { ...prod, keepChatPictures: v } })} />
-        <p className="st-stg-small">Old files are cleared after each video. Clean up now does it at once.</p>
+        <p className="st-stg-small">Your choices above run after each video. Clean up now runs them at once.</p>
         <Cleanup ws={ws} onDone={() => storage.reload()} />
       </SetCard>
 

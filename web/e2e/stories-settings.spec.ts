@@ -125,7 +125,8 @@ test.describe("every section keeps the owner's rules", () => {
     ];
     for (const [section, sel] of checks) {
       await openSection(page, section);
-      const el = page.locator(sel).first();
+      // The first one on screen (the tasks' own buttons sit in their closed "Each task" fold).
+      const el = page.locator(sel).filter({ visible: true }).first();
       await el.scrollIntoViewIfNeeded();
       const before = await el.evaluate((e) => `${getComputedStyle(e).backgroundColor}|${getComputedStyle(e).color}|${getComputedStyle(e).transform}`);
       await el.hover();
@@ -207,6 +208,8 @@ test.describe("AI", () => {
     await on(page);
     await page.setViewportSize({ width: 1440, height: 900 });
     await openSection(page, "ai");
+    // The tasks are folded under the agents (less text, the owner, 23 Nov): one tap opens them.
+    await page.locator(".st-stg-tasks > summary").click();
     const row = page.locator(".st-stg-assign__row").filter({ has: page.locator(".st-stg-assign__title", { hasText: /^Write the story$/ }) });
     await expect(row).toContainText("Suggested: High");
     await row.getByRole("combobox", { name: "Model for Write the story" }).selectOption("fable-5-2");

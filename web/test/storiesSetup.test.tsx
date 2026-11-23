@@ -67,6 +67,12 @@ function button(name: string | RegExp, from: ParentNode = host): HTMLButtonEleme
   if (!b) throw new Error(`no button ${String(name)}; have: ${$$("button", from).map((x) => x.textContent?.trim()).join(" | ")}`);
   return b;
 }
+/** A step in the step list (its number, its name, and "(done)" for screen readers): the way to each step. */
+function stepItem(name: string): HTMLButtonElement {
+  const b = Array.from(host.querySelectorAll<HTMLButtonElement>(".st-steps__item")).find((x) => x.querySelector(".st-steps__label")?.textContent === name);
+  if (!b) throw new Error(`no step ${name}`);
+  return b;
+}
 async function click(el: Element) {
   await act(async () => el.dispatchEvent(new MouseEvent("click", { bubbles: true })));
   await settle(6);
@@ -152,7 +158,7 @@ describe("step 1: set up the AI", () => {
 describe("steps 2 and 3: the default model and effort", () => {
   it("saves the model alone with picked model; then the effort with picked effort", async () => {
     await start({ fresh: true });
-    await click(button("Pick your default model"));
+    await click(stepItem("Pick your default model"));
     await click($$("[role=radio]").find((r) => r.textContent?.includes("Claude Fable 5.2"))!);
     await click(button("Use Claude Fable 5.2"));
     await settle(6);
@@ -173,7 +179,7 @@ describe("steps 2 and 3: the default model and effort", () => {
     await start({ fresh: true }, async (api) => {
       await api.putAiModel("stories", "custom-quick", { label: "Quick One", provider: "Amazon", modelId: "eu.amazon.nova-lite-v1:0", region: "eu-north-1", efforts: ["low", "medium"], defaultEffort: "medium", vision: false, maxOutputTokens: 4096, price: null });
     });
-    await click(button("Pick your default model"));
+    await click(stepItem("Pick your default model"));
     await click($$("[role=radio]").find((r) => r.textContent?.includes("Quick One"))!);
     // Said once: the note says what is missing, the button says what comes next.
     expect(document.body.textContent).toContain("Quick One does not offer High.");
@@ -202,7 +208,7 @@ describe("steps 2 and 3: the default model and effort", () => {
 describe("step 4 and the connect steps", () => {
   it("Luma AI Ray2's note (Nova Reel's before Amazon ended it) says videos stop until it is ready, never that the built-in animation takes over", async () => {
     await start({ fresh: true });
-    await click(button("Pick how videos are made"));
+    await click(stepItem("Pick how videos are made"));
     // §45.37 G7: Amazon ended Nova Reel, so step 4 never offers it; Luma AI Ray2 makes the AI cut-aways.
     expect($$("[role=radio]").some((r) => r.textContent?.includes("Amazon Nova Reel"))).toBe(false);
     await click($$("[role=radio]").find((r) => r.textContent?.includes("Luma AI Ray2"))!);
@@ -215,7 +221,7 @@ describe("step 4 and the connect steps", () => {
 
   it("an account that is Lamo Clips' own keeps its step to do, and says so", async () => {
     await start({});
-    await click(button("Connect X"));
+    await click(stepItem("Connect X"));
     expect(stepTitle()).toBe("Connect X");
     expect(document.body.textContent).toContain("This is Clip Factory's own account. Clips Funded needs its own separate account: sign in with a different one.");
     expect(stepState("Connect X")).not.toContain("is-done");
@@ -223,7 +229,7 @@ describe("step 4 and the connect steps", () => {
 
   it("the connect step of Clip Factory's own account never offers sharing it, and says each account line once (§45.37 G8 (c), (d))", async () => {
     await start({});
-    await click(button("Connect X"));
+    await click(stepItem("Connect X"));
     // A different account made for Clips Funded; nothing to share it with. The card says both lines, and the step
     // around it does not say them again.
     const NEW = "Use a new account made for Clips Funded, not Clip Factory's.";
@@ -245,22 +251,32 @@ describe("step 4 and the connect steps", () => {
   /** The card's one fold in the open connect step. */
   const more = () => $<HTMLDetailsElement>(".st-setup__body .st-conn details.st-conn__more")!;
 
-  it("a connect step whose developer app still needs setting up opens the card's fold by itself", async () => {
+  it("a connect step whose developer app still needs setting up opens the app's choice on the card by itself", async () => {
     await start({ fresh: true });
-    await click(button("Connect YouTube"));
+    await click(stepItem("Connect YouTube"));
     expect(stepTitle()).toBe("Connect YouTube");
-    // The card is the step: its app choice is open, under the line that says it comes first.
-    expect(more().open).toBe(true);
-    expect(more().querySelector("summary")?.textContent).toBe("First, set up the app for YouTube");
-    expect(more().querySelector("[role=radiogroup]")?.getAttribute("aria-label")).toBe("Which YouTube app Clips Funded uses");
+    // The card is the step: its app choice is open on the card (never in a fold), and More stays closed.
+    const setup = $(".st-setup__body .st-conn .st-conn__setup")!;
+    expect(setup).not.toBeNull();
+    expect(setup.closest("details")).toBeNull();
+    expect(setup.querySelector("[role=radiogroup]")?.getAttribute("aria-label")).toBe("Which YouTube app Clips Funded uses");
+    expect(button(/^Set up the app/).getAttribute("aria-expanded")).toBe("true");
+    expect(more().open).toBe(false);
+    expect(more().querySelector("summary")?.textContent).toBe("More for YouTube");
+    // The next connect step starts fresh: a choice closed by hand on this one does not carry over.
+    await click(button(/^Set up the app/));
+    expect($(".st-setup__body .st-conn__setup")).toBeNull();
+    await click(stepItem("Connect Facebook"));
+    expect($(".st-setup__body .st-conn__setup")).not.toBeNull();
   });
 
   it("a connect step whose developer app is ready keeps the card's fold closed under More", async () => {
     // The seed's X shares Clip Factory's app.
     await start({});
-    await click(button("Connect X"));
+    await click(stepItem("Connect X"));
     expect(more().open).toBe(false);
     expect(more().querySelector("summary")?.textContent).toBe("More for X");
+    expect($(".st-setup__body .st-conn__setup")).toBeNull();
   });
 
   it("step 4 of a workspace whose older pick is Amazon Nova Reel says it ended, with a one-tap replacement, and never saves it (§45.37 G7)", async () => {

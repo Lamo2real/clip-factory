@@ -957,11 +957,14 @@ test.describe("phone: the main button stays pinned", () => {
 async function pinAtStepEnd(page: Page) {
   return page.evaluate(async () => {
     const step = document.querySelector("#step-ready-account")!;
+    // The hints sit in a shut "If you see…" fold: opened first, so they are really measured (a shut one has no box).
+    for (const fold of step.querySelectorAll<HTMLDetailsElement>("details.cr-fold:not([open])")) fold.open = true;
+    await new Promise((r) => setTimeout(r, 100));
     const rest = step.querySelector(".gstep__rest")!;
     scrollBy(0, rest.getBoundingClientRect().bottom - innerHeight * 0.4);
     await new Promise((r) => setTimeout(r, 200));
     const pin = step.querySelector(".cr-pin")!.getBoundingClientRect();
-    const hints = [...step.querySelectorAll(".gstep__hint")].map((h) => h.getBoundingClientRect());
+    const hints = [...step.querySelectorAll(".gstep__hint")].map((h) => h.getBoundingClientRect()).filter((h) => h.height > 0);
     return { hintsAbove: hints.length > 0 && hints.every((h) => h.bottom <= pin.top + 0.5), pinOnScreen: pin.top >= 0 && pin.bottom <= innerHeight };
   });
 }

@@ -55,6 +55,11 @@ import { autoPostOf, reviewLede, reviewLine, sentFirstLine } from "../../lib/aut
 /** Video and cover links are presigned for an hour (docs/CONTRACTS.md §5); fetch new ones a little before that. */
 export const MEDIA_FRESH_MS = 50 * 60 * 1000;
 
+/** Why Upload waits while TikTok's API needs his own tap (§17.8). */
+export const USE_MINE_FIRST = "Tap Use my settings first. TikTok needs your tap.";
+/** Under Use my settings until he taps it: said once, there (the line above Upload keeps it for screen readers). */
+export const MINE_NOTE = "Tap this first. TikTok needs your tap.";
+
 // While the Mac posts TikTok (§47), every card asks TikTok's creator info in the background, for the account's name
 // and the longest clip it takes only: one ask serves every card for a minute (a failed one is asked again). Only then:
 // on TikTok's API path every ask is the card's own, fresh (TikTok's rule: this creator's current options, every time).
@@ -674,6 +679,9 @@ function ReviewCard({
   // TikTok's answer only holds Upload back on its API path; the Mac never waits for it.
   const ttErrorNow = macTikTok ? null : ttError;
   const ttAskingNow = !macTikTok && ttAsking;
+  // Use my settings is the one thing to tap first (TikTok's API needs his own tap, §17.8): it is the card's main button
+  // until then, and Upload steps back to glass.
+  const mineFirst = tiktokOn && !macTikTok && !applied && !ttReady && !ttErrorNow && !ttAskingNow && !ttTooLong;
   // Stable, so the open sheet is not re-set-up on every typed letter (§17.8).
   const closeSheet = useCallback(() => setSheet(false), []);
   const timer = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -984,7 +992,7 @@ function ReviewCard({
       : ttAskingNow
         ? "Asking TikTok…"
         : !ttCreator
-          ? "Tap Use my settings first. TikTok needs your tap."
+          ? USE_MINE_FIRST
           : ttTooLong
             ? "This clip is too long for TikTok. Untick TikTok to upload it to the rest."
             : ttMacHeld
@@ -1159,7 +1167,7 @@ function ReviewCard({
         {placesReady && !noneReady && chosen.length ? (
           <div className="my-settings" data-help="use-my-settings" ref={mySettingsRef}>
             <Button
-              variant="glass"
+              variant={mineFirst && next && !blockMain ? "primary" : "glass"}
               size="lg"
               block
               icon={settingsOn ? "checkCircle" : "sliders"}
@@ -1173,12 +1181,9 @@ function ReviewCard({
               {settingsOn ? "Your settings are on" : "Use my settings"}
             </Button>
             <p className="my-settings__note" id={`mine-${clip.clipId}`}>
-              {/* The button already says "Your settings are on", and the line above Upload says what TikTok needs. */}
-              {changed
-                ? "You changed some. Tap to put yours back."
-                : tiktokOn && !applied && !macTikTok
-                  ? "Your other places already use your settings."
-                  : "Tap a place below to change it for this clip."}
+              {/* The button already says "Your settings are on". Before his tap, the line says why to tap it, once: the
+                  line above Upload keeps it for screen readers only. */}
+              {changed ? "You changed some. Tap to put yours back." : mineFirst ? MINE_NOTE : "Tap a place below to change it for this clip."}
             </p>
           </div>
         ) : null}
@@ -1239,7 +1244,7 @@ function ReviewCard({
         ) : null}
         {placesReady && !keepFailed && !noneReady ? (
           <p className={`upload-going${chosen.length && !uploadWhy ? "" : " is-none"}`} id={`going-${clip.clipId}`} aria-live="polite">
-            {uploadWhy ?? goingToLine(chosen)}
+            {mineFirst && uploadWhy === USE_MINE_FIRST ? <span className="sr-only">{uploadWhy}</span> : (uploadWhy ?? goingToLine(chosen))}
           </p>
         ) : null}
         {/* Auto-posting's quiet line (§46.2), above the actions; TikTok's lines stay right above Upload (§17.8). */}
@@ -1271,7 +1276,7 @@ function ReviewCard({
             Throw away
           </Button>
           <Button
-            variant={next && !blockMain ? "primary" : "glass"}
+            variant={next && !blockMain && !mineFirst ? "primary" : "glass"}
             size="lg"
             icon={keepFailed ? "retry" : "upload"}
             act={keepAct}

@@ -55,7 +55,7 @@ const knobs = () => (window as unknown as { __cfMock: Knobs }).__cfMock;
 const ASK = "Tap Use my settings first. TikTok needs your tap.";
 const MAC_LINE = "Your Mac posts it with My settings: Everyone · Comments on · Duet on · Stitch on";
 const EVERY = "Tap a place below to change it for this clip.";
-const OTHERS = "Your other places already use your settings.";
+const OTHERS = "Tap this first. TikTok needs your tap.";
 
 let root: Root;
 let app: HTMLElement;

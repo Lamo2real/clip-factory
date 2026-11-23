@@ -45,7 +45,10 @@ test.describe("the simple Review card", () => {
     // TikTok needs the owner's own tap: Upload waits, and says why in plain words.
     await expect(upload).toHaveAttribute("aria-disabled", "true");
     await expect(card.locator(".upload-going")).toHaveText("Tap Use my settings first. TikTok needs your tap.");
-    await expect(card.getByText("Your other places already use your settings.", { exact: true })).toBeVisible();
+    // Said once, under the button, which is the card's main (red) one until it is tapped.
+    await expect(card.getByText("Tap this first. TikTok needs your tap.", { exact: true })).toBeVisible();
+    await expect(card.getByRole("button", { name: "Use my settings" })).toHaveClass(/btn--primary/);
+    await expect(upload).not.toHaveClass(/btn--primary/);
 
     // Tap 1.
     await card.getByRole("button", { name: "Use my settings" }).click();

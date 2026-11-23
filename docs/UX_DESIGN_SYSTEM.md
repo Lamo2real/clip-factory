@@ -641,7 +641,7 @@ for screen readers. Every other screen that lists platforms (Library card rows, 
 |---|---|---|
 | 1 | Header row | Back (secondary pill, arrow + "Back"; returns where the owner came from, else Library) and the clip's hook as the title in serif italic. The title wraps; it is never cut off. |
 | 2 | Preview | `<video controls playsinline preload="metadata">` with the cover as `poster`; `aspect-ratio: 9 / 16`; a rounded `.glass` frame, centred. Never autoplays. Without a video URL: the cover image. Width: 280 px (≥ 1024), 240 px (600–1023), `min(100%, 56vh × 9/16)` (< 600). |
-| 3 | Stat block | Beside the preview from 1024 px, under it below. The **total views** in the display serif with "views across platforms" and a small "(each app counts views its own way)". The **Best this week** star toggle. The one vermilion **Refresh numbers** button. "Updated 3 min ago" under it. |
+| 3 | Stat block | Beside the preview from 1024 px, under it below. The **total views** in the display serif with "views on all apps" and a small "(each app counts views its own way)". The **Best this week** star toggle. The one vermilion **Refresh numbers** button. "Updated 3 min ago" under it. |
 | 4 | Lines + stacks | The five lines grow from the preview to the five platform stacks ([below](#the-lines)). |
 
 **Best this week star.** A green glass toggle, star icon + "Best this week", at least 48 px, `aria-pressed`. Pressed: a
@@ -674,7 +674,7 @@ One `<svg aria-hidden="true">` sits behind the stacks, sized to the page contain
 16 px), at least 96 px of space between the preview and the stacks so the fan reads clearly.
 
 ```
-                         ┌───────┐   1.2M views across platforms
+                         ┌───────┐   1.2M views on all apps
                          │ video │   (each app counts views its own way)
                          │  9:16 │   [☆ Best this week]  [↻ Refresh numbers]
                          └───┬───┘   Updated 3 min ago
@@ -887,7 +887,7 @@ words.
 | Page | Address | What is on it | Leaf |
 |---|---|---|---|
 | **Write a skill** | `…/skills/new` | Three big glass fields, one question each, with an example under each and a "Use the example" link that fills it: "What is the skill called?", "When should Clip Factory use it?", "What should it do?" (the last at least 10 lines tall and growing as you type). A live character count under each; errors (too long, same name as another skill) sit right under their field. Vermilion **Save skill**, ghost **Cancel**. | "Clip Factory reads your skill every time it makes clips." |
-| **Skill page** | `…/skills/{skillId}` | Title, badges and where it came from in words (the same words as the row), "When it is used" (the description), then the skill itself as formatted text: headings, lists, bold, code. The frontmatter is not shown (the title and "When it is used" already say it), and a first heading that only repeats the title is left out. A `.zip` lists "Other files in this skill". Owner skills: vermilion **Edit**, ghost **Delete**. Built-ins: no buttons, only reading. | owner: "Always used. Changes count from your next clips." built-in: "This skill comes with Clip Factory. It is always used. You can read it, but not change or delete it." |
+| **Skill page** | `…/skills/{skillId}` | Title, badges and where it came from in words (the same words as the row), "When it is used" (the description), then the skill itself as formatted text: headings, lists, bold, code. The frontmatter is not shown (the title and "When it is used" already say it), and a first heading that only repeats the title is left out. A `.zip` lists "Other files in this skill". Owner skills: vermilion **Edit**, ghost **Delete**. Built-ins: no buttons, only reading. | owner: "Always used. Changes count from your next clips." built-in: "Comes with Clip Factory. Always used. You can read it, but not change or delete it." |
 | **Edit** | `…/skills/{skillId}/edit` | Titled "Change this skill": the same three fields, filled in, and vermilion **Save changes** (then the toast "Saved {title}. Clip Factory uses it from your next clips."). A `.zip` skill also gets a ghost **Replace the whole file**; a skill too long to edit here shows only that option ("This skill is too long to change here. Upload a new file to replace it."). | "Change the words, then tap Save changes." |
 
 **Safe reading.** The skill text is shown with the app's own small markdown renderer, never as HTML: anything that
@@ -924,7 +924,7 @@ name inside your file, then upload it again."
 | Form, "What should it do?" empty / too long | "Say what the skill should do." / "Make this shorter: at most 50,000 letters." |
 | Upload, not a `.md` or `.zip` (toast) | "That is not a skill. Pick a SKILL.md file or a .zip with one inside." |
 | Upload, too big (toast) | "That skill file is too big. Pick one under 1 MB." / "That .zip is too big. Pick one under 20 MB." |
-| Replace the whole file (hint under the heading) | "Pick a skill file from your computer. It takes the place of this skill." |
+| Replace the whole file (hint under the heading) | "Pick a skill file. It replaces this skill." |
 | Opening a built-in's edit address (toast, then its page) | "Built-in skills can be read, but not changed." |
 
 The delete sheet is the only confirm in Settings, because a skill can hold a lot of typing. After **Delete** the app
@@ -1509,7 +1509,7 @@ Contract: [CONTRACTS.md §39.2](CONTRACTS.md#392-all-your-money-in-one-place),
   again"), never a number or $0 for a place that doesn't report one, and at most one glass button at the row's right
   end (so on phones nothing tappable sits in the top-left third). Under Content Rewards, its small lines in money's
   time order: "Right now (Content Rewards says, 2:10 pm): Still earning … · Ready to move to Whop … · On its way to
-  Whop …", "Earned so far, since you started: …", "Sent to your bank: not available from Content Rewards. Look on
+  Whop …", "Earned since you started: …", "Sent to your bank: not available from Content Rewards. Look on
   Whop: **Balances**." (since §40.4 every row's `sent` line; it was "Paid out to your bank") and a glass "See it all" (to `#content-rewards`) only while the row has no button of its own.
 - **The total**: "Total: $24.80" (the biggest number on the page; it never counts up), "YouTube + Content Rewards · 30
   days up to Sat 16 Nov", the tag line "YouTube's estimate + Content Rewards' numbers"; two currencies give one line
@@ -1568,8 +1568,7 @@ each one himself on Content Rewards. The server decides every match and writes e
   join" lay their choices out in even halves (a 2 × 2 grid with a rounded track and highlight, and two halves side by
   side), never one choice alone on a second row.
 
-  Under them, fixed: "I skip campaigns Clip Factory can't make clips for, like ones that need their own sound or
-  picture on the video." Chips are toggle buttons (`aria-pressed`), soft-filled when on, at least 44 px (48 on
+  Under them, fixed: "I skip campaigns that need their own sound or picture on the video." Chips are toggle buttons (`aria-pressed`), soft-filled when on, at least 44 px (48 on
   phones). TikTok, until TikTok's audit, and a place not set up are shown off and can't be tapped (`aria-disabled`),
   with their one line ("TikTok: not yet. …", "Set it up first."), and a quiet "Set up another place" under the chips.
 - **The match card** (`FinderMatchCard`, `data-help="cr-finder-match"`), one open at a time (the first on load;
@@ -1639,8 +1638,9 @@ never touches the "2 of 5 ready" ring or the floating setup list.
 - **A place page** (`/settings/posting/getpaid/{place}`, `data-help="getpaid-place"`), top to bottom: the hero (mark,
   name, ring, "About 15 minutes · Free", "Steps checked on 21 Nov 2026"); the **status block**
   (`data-help="getpaid-status"`: the pill, the line, what is missing, holds, the reading chip "Clip Factory can see
-  payments: on" / "off", X's warning, and the next step as words); **Can you earn here?** (the place's rules for his
-  country, one glass "Read YouTube's rules" per official page, or "Pick your country in Money settings to see its
+  payments: on" / "off" (off is left out when a line above already says payments can't be seen), X's warning, and
+  the next step as words); **Can you earn here?** (the place's first rule for his country on the card, the rest and
+  one glass "Read YouTube's rules" per official page in a closed "See all the rules", or "Pick your country to see its
   rules." with a glass "Pick my country"); the step cards; **What Clip Factory can see** (at most 6 lines);
   **Sent to your bank** (`data-help="getpaid-sent"`); **When it's done** (glass "Check now", the connection's own
   buttons, the way back with `?back=`).

@@ -7322,7 +7322,9 @@ Decision record: ADR-60 (which corrects ADR-57).
    They are the only place picker on the card.
 3. **Use my settings**: one big soft-fill button (`.my-settings__btn`, a glass button, full width). It puts My
    settings on every ticked place. Done state: bone fill, a check, **Your settings are on**. Under it one plain line:
-   "Your other places already use your settings." (before the tap, TikTok ticked; the line above Upload says "Tap Use my settings first. TikTok needs your tap."),
+   "Tap this first. TikTok needs your tap." (before the tap, TikTok ticked: then **Use my settings** is the card's
+   vermilion and Upload is glass; the line above Upload keeps "Tap Use my settings first. TikTok needs your tap." for
+   screen readers only, so it is said once),
    "Tap a place below to change it for this clip." (after, or with TikTok unticked; the button already says Your settings are on),
    "You changed some. Tap to put yours back." (after a change in a row). YouTube, Instagram, Facebook
    and X use My settings from the start (nothing in their rules asks for a tap); TikTok's choices go on only with this
@@ -9982,7 +9984,8 @@ reading" and "the AdSense website" are the exceptions). Platform labels stay bol
    `cost`, "Steps checked on 21 Nov 2026"); the **status block** (`data-help="getpaid-status"`: the pill, the line,
    `missing` and `holds` lines, the reading chip (`readingChip`, YouTube and, while `WHOP_CONNECT` is on, Content
    Rewards), X's `warning`, and `next` as below); **Can you earn here?** (the guide's facts for his country from
-   `GET /v1/money`'s `country`, each short, inside one closed fold "See the rules" with one glass "Read YouTube's
+   `GET /v1/money`'s `country`, each short: the first one (to join, or when it pays) on the card, the rest inside one
+   closed fold "See all the rules" with one glass "Read YouTube's
    rules" per different official page; with no country picked: "Pick your country to see its rules." (above the fold)
    with a glass "Pick my country"
    (→ `/settings/posting/money#money-country`) and the facts that hold everywhere); the **step cards** in time order;
@@ -14383,15 +14386,20 @@ each publishing job's status, account, link, numbers, its sentence and **Try aga
   name for that platform so the owner sees they differ.
 * Social accounts (the Connections page) also shows, per platform: the developer-app choice (§45.30) with its key
   form and **Check it**, the authorization status, **last checked** (`lastCheckedAt`, with **Check now**), Connect,
-  Reconnect and Disconnect; the publish sheet shows the exact account each video goes to, with **Check now**, before
+  Connect again and Disconnect; the publish sheet shows the exact account each video goes to, with **Check now**, before
   **Upload**. Kid-proof (the owner, 23 Nov 2026: "even an 8 year old should be able to use the app"): the card itself
-  shows only the logo and name, one status chip, the account (picture, name, handle), the new-account line, what
-  needs the owner (a warning, the list to pick from, the sign-in tip) and one main button (Connect / Reconnect / Pick
-  another). Everything else (the authorization status, labelled "Posting", last checked, the account id, Check now,
-  Disconnect, the developer app with its choice, keys and redirect URIs, Clip Factory's destination and the
-  platform's limits minus the sentences the card already says) is in one closed **More** fold per card. While the app
-  still needs setting up the fold's line reads "First, set up the app" and a Connect tap opens it; in a setup step
-  (§45.29) it opens by itself.
+  shows only the logo and name, one status chip, the account (picture, name, handle), the new-account line (while an
+  account is still to connect, pick, connect again or replace, and while the card asks "Is this your Clips Funded
+  …?"; a connected account that is fine does not repeat it), what needs the owner (a warning, the list to pick from,
+  the sign-in tip, and in short who can see the posts, "Posts stay Only me for now.", and what can cost money, "This
+  can go over your monthly X limit.", while the platform's limits say so) and one main button (Set up the app /
+  Connect / Connect again / Pick another; the button says what the chip says). While the developer app still needs
+  setting up, **Set up the app** is the card's one main button and there is no Connect yet: it opens the app's choice
+  ("Pick the {platform} app", or "Set up the Meta app") on the card itself, never in a fold; in a setup step (§45.29)
+  it is open by itself, and each connect step starts fresh. Everything else (the authorization status, labelled
+  "Posting", last checked, the account id, Check now, Disconnect and its "Are you sure?", the ready developer app
+  with its keys and redirect URIs, Clip Factory's destination and the platform's limits minus the sentences the card
+  already says) is in one closed **More** fold per card; closing it drops a Disconnect still to answer.
 * Settings: §45.29's sections (AI, Agents, Skills, Memory, Social accounts, Video, Storage and production, Look), plus
   YouTube category and privacy and captions and music defaults.
 * Chat: §45.27 (conversation list, messages, the model and effort line above the box, "Just for this message",
@@ -14984,7 +14992,7 @@ is already built and only written down here.
   sceneIds, note? }` (a note or scene ids at least); `analyze_reference { refId }`; `save_character { character }`;
   `save_idea { idea }` or `{ ideaId, patch }`; `open { href }` (a Clips Funded address only).
 * **Chat pictures on Try again** (built): a retry uploads the pictures again; an `assetId` is used by one message only.
-* **The dashboard's account sentence** (api) says "Open Social accounts and tap Connect".
+* **The dashboard's account sentence** (api) says "Open Social accounts and tap Connect again".
 * **Approving a driving-safety story** (api): approve refuses a `safety.status` of `skipped` whenever the story has a
   `safetyTopicId`, whatever its category (a second guard; the agent never skips it).
 
@@ -15011,7 +15019,7 @@ behaviours an earlier step narrowed or left out)
   one video; `PATCH` may change it until the first run finishes). `StoryScript.width` and `height` are that size; the
   engine lays out sets, characters, cameras, bubbles, captions and the end card for each shape (positions stay 0..1
   of the frame, safe areas per shape), and the rasterizer, the ASS writer and ffmpeg use the script's size. 9:16
-  stays the default; the Settings cards say Shorts, Reels and TikTok want 9:16.
+  stays the default; the 9:16 option says For Shorts, Reels and TikTok.
 * **Output formats** (request 2 §6F; agent, api, web): every video is MP4 (H.264, AAC, faststart), which posting needs.
   `StoriesConfig.production.extraFormats: ("webm" | "mov")[]` (default none) also makes `final/v{n}.webm` (VP9, Opus)
   and `final/v{n}.mov` (ProRes 422 Proxy, PCM) after assembly, each an `ASSET#` of kind `video` with
@@ -15461,7 +15469,9 @@ re-staging pass after the engine refused the first staging; there is no two-call
   clears the status. Clip Factory's `ACCOUNT#` is read read-only, widened in place to `handle` (the API and the story
   flow) and `autoPost` (the story flow, its settings item), with the separation tests' allowed sets to match; Clip
   Factory's items and code are unchanged.
-* **Words.** Each Connect step and card: "Use a new account made for Clips Funded, not Clip Factory's." (the same
+* **Words.** Each Connect step and card whose next step is an account (to connect, pick, connect again or replace,
+  and while it asks "Is this your Clips Funded …?"; since 23 Nov a connected account that is fine does not repeat it,
+  the page's own line says it at the top): "Use a new account made for Clips Funded, not Clip Factory's." (the same
   on every platform; it once said "not lamo.clips", which is not Clip Factory's name on X); the
   same-as-Clips state: "This is Clip Factory's own account. Clips Funded needs its own separate account: sign
   in with a different one."; Clip Factory took it later: "This is Clip Factory's account now. Connect a different

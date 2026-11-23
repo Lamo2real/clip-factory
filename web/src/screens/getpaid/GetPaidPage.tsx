@@ -372,6 +372,9 @@ export function GetPaidPage({ place }: { place: GetPaidPlace }) {
   const lineHasNext = !!next?.text && card.line.includes(next.text.trim());
   const facts = factsFor(guide ? guide.facts : CR_GETPAID.facts, country);
   const groups = factGroups(facts);
+  // The one rule people act on first (to join, or when it pays): on the card; the rest, and the links, in the fold.
+  const lead = groups[0]?.texts[0] ?? null;
+  const restGroups = groups.map((g, i) => (i === 0 ? { ...g, texts: g.texts.slice(1) } : g));
   const readingGone = place === "youtube" && adsense?.status === "needs_reconnect";
 
   // ---------- the step cards ----------
@@ -474,7 +477,8 @@ export function GetPaidPage({ place }: { place: GetPaidPlace }) {
         ))}
         {card.holds.length ? <Holds holds={card.holds} /> : null}
         {readingGone ? <p className="gp-status__small">{READING_GONE}</p> : null}
-        {card.readingChip ? (
+        {/* Off and a line above already says payments can't be seen: said once. */}
+        {card.readingChip && !(!card.readingChip.endsWith("on") && card.missing.some((m) => /can't see .*(payments|payouts)/i.test(m))) ? (
           <p className="gp-chip" data-chip={card.readingChip.endsWith("on") ? "on" : "off"}>
             <Icon name="eye" size={16} />
             <span>{card.readingChip}</span>
@@ -513,22 +517,25 @@ export function GetPaidPage({ place }: { place: GetPaidPlace }) {
             </LinkButton>
           </div>
         ) : null}
-        {/* The rules are long and needed only now and then: folded, one tap away. */}
+        {lead ? <p className="gp-facts__lead">{lead}</p> : null}
+        {/* The other rules are long and needed only now and then: folded, one tap away. */}
         {groups.length ? (
           <details className="cr-fold gp-facts__fold">
             <summary className="cr-fold__q">
               <Icon name="info" size={18} />
-              <span>See the rules</span>
+              <span>See all the rules</span>
               <Icon name="chevronRight" size={18} className="icon cr-fold__chev act-turn" />
             </summary>
             <div className="cr-fold__body">
-              {groups.map((g, i) => (
+              {restGroups.map((g, i) => (
                 <div key={g.source} className="gp-facts__group">
-                  <ul className="gp-facts__list">
-                    {g.texts.map((t) => (
-                      <li key={t}>{t}</li>
-                    ))}
-                  </ul>
+                  {g.texts.length ? (
+                    <ul className="gp-facts__list">
+                      {g.texts.map((t) => (
+                        <li key={t}>{t}</li>
+                      ))}
+                    </ul>
+                  ) : null}
                   <a className="btn btn--glass btn--sm cr-open" href={g.source} target="_blank" rel="noopener noreferrer">
                     <Icon name="external" size={18} />
                     <span className="btn__label">{rulesLabel(place, g.source)}</span>

@@ -26,10 +26,11 @@ import { storiesApi } from "../api/client.ts";
 import { EFFORT_LABEL, type Effort, type ModelInfo, type Onboarding, type OnboardStep, type Platform, type SocialAccount, type StoriesAiConfig, type StoriesConfig } from "../api/types.ts";
 import { madeBy, MODEL_STATUS } from "../settings/bits.tsx";
 import { aiBody } from "../settings/data.ts";
-import { ArcDial, GlassPill } from "../glass/index.ts";
+import { ArcDial } from "../glass/index.ts";
 import {
   celebrate,
   centerOf,
+  PLATFORM_NAME,
   starBurst,
   refreshDashboard,
   setOnboarding,
@@ -43,7 +44,7 @@ import {
   useOnboarding,
   type StIconName,
 } from "../ui.tsx";
-import { DisconnectedNote, PlatformCard, useSocial } from "./Connections.tsx";
+import { DisconnectedNote, isPlatform, PlatformCard, useSocial } from "./Connections.tsx";
 import type { StoriesScreenProps } from "./types.ts";
 
 export const SETUP_ORDER: OnboardStep[] = ["ai", "model", "effort", "video", "agents", "instagram", "tiktok", "youtube", "facebook", "x", "done"];
@@ -99,9 +100,11 @@ function Foot({ step, busy, onBack, onSkip, children }: { step: OnboardStep; bus
 
 type Ai = { ai: StoriesAiConfig; models: ModelInfo[] };
 
-export function modelLine(m: ModelInfo): string {
+export function modelLine(m: ModelInfo, chip = false): string {
   // Who makes it and who runs it ("Anthropic on Amazon Bedrock", §45.35 D8).
   const who = `${madeBy(m)}${m.custom ? " · Added by you" : ""}`;
+  // Beside its chip (Works, Not checked yet) the line does not say the state again; a problem keeps its words and fix.
+  if (chip && (m.status === "ok" || m.status === "not_checked")) return who;
   if (m.status === "ok") return `${who} · Works: it answered.`;
   if (m.status === "not_checked") return `${who} · Not checked yet.`;
   return `${who} · ${m.statusLine}`;
@@ -176,7 +179,7 @@ function EnvironmentStep({ ws, ai, onSaved, onChecked, busy, setBusy }: { ws: st
           <li key={m.key} className="st-setup__model" data-status={m.status}>
             <span className="st-setup__model-name">{m.label}</span>
             <span className={`st-chip st-chip--${STATE_CHIP[m.status].tone}`}>{STATE_CHIP[m.status].label}</span>
-            <span className="st-setup__model-line">{modelLine(m)}</span>
+            <span className="st-setup__model-line">{modelLine(m, true)}</span>
           </li>
         ))}
       </ul>
@@ -732,7 +735,8 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
       );
       break;
     default:
-      body = <ConnectStep ws={ws} platform={step as Platform} line={data.steps.find((s) => s.step === step)?.line} />;
+      // A key per platform: each connect step starts fresh (its folds, its questions), never carried from the last one.
+      body = <ConnectStep key={step} ws={ws} platform={step as Platform} line={data.steps.find((s) => s.step === step)?.line} />;
       foot = <NextButton onClick={() => go(nextStep(step))} main={state === "done"} />;
   }
 
@@ -802,40 +806,20 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
           </Foot>
         </div>
 
-        {/* What is left: glass pills, one tap back to each step (in the grid, under the steps). None is cream: the step
-            list already marks the open step, so one choice has one cream marker. */}
-        {left.length ? (
-          <section className="st-left st-glass" aria-labelledby="st-left-title">
-            <h2 className="st-left__title st-display" id="st-left-title">
-              What is left
-            </h2>
-            <ul className="st-left__list">
-              {left.map((s) => (
-                <li key={s.step}>
-                  <GlassPill
-                    className="st-left__item"
-                    icon={<StIcon name={ICON[s.step]} size={18} />}
-                    onClick={() => go(s.step)}
-                  >
-                    <span className="st-left__label">{s.label}</span>
-                    {s.state === "skipped" ? <span className="st-left__tag">skipped</span> : null}
-                  </GlassPill>
-                </li>
-              ))}
+        {/* What is left is the step list itself (each step says Later when skipped): only why a platform is still to do
+            when its account is Lamo Clips' own is said here, named, in the server's words (§45.35 D11). */}
+        {left.some((s) => s.line) ? (
+          <section className="st-left st-glass" aria-label="Why a step is still to do">
+            <ul className="st-left__why">
+              {left
+                .filter((s) => s.line)
+                .map((s) => (
+                  <li key={s.step} className="st-note st-note--coral">
+                    <StIcon name="alert" size={18} />
+                    {isPlatform(s.step) ? `${PLATFORM_NAME[s.step]}: ${s.line}` : s.line}
+                  </li>
+                ))}
             </ul>
-            {/* A platform held because its account is Lamo Clips' own says why, in the server's words (§45.35 D11). */}
-            {left.some((s) => s.line) ? (
-              <ul className="st-left__why">
-                {left
-                  .filter((s) => s.line)
-                  .map((s) => (
-                    <li key={s.step} className="st-note st-note--coral">
-                      <StIcon name="alert" size={18} />
-                      {s.line}
-                    </li>
-                  ))}
-              </ul>
-            ) : null}
           </section>
         ) : null}
       </div>

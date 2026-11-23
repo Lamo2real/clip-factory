@@ -58,7 +58,9 @@ test.describe("All your money", () => {
     await expect(row(page, "youtube")).toContainText("YouTube says");
     await expect(row(page, "youtube")).toContainText("YouTube's estimate");
     await expect(row(page, "tiktok")).toContainText("Not available from TikTok");
-    await expect(row(page, "tiktok")).toContainText("Look in TikTok: Profile, then Balance.");
+    // Where to look, said once on the row (its sent line's longer path, when it has one).
+    await expect(row(page, "tiktok")).toContainText(/Look in TikTok: Profile, then Balance/);
+    expect((await row(page, "tiktok").innerText()).split("Look in TikTok").length - 1).toBe(1);
     await expect(row(page, "tiktok").locator(".cr-all__amount")).toHaveCount(0);
     await expect(row(page, "x").getByRole("link", { name: /Open X/ })).toHaveAttribute("href", "https://x.com/i/jf/creators/studio");
     await expect(row(page, "contentrewards")).toContainText("Content Rewards says");
@@ -111,11 +113,12 @@ test.describe("All your money", () => {
     await open(page);
     const sent = (place: string) => row(page, place).locator(".cr-all__sent");
     await expect(sent("youtube")).toHaveText(/^Sent to your bank by Google: SEK\s2,468\.00 so far · YouTube says$/);
-    await expect(sent("tiktok")).toHaveText("Sent to your bank: Not available from TikTok. Look in TikTok: Profile, then Balance, then Transactions, then Withdrawal.");
-    await expect(sent("instagram")).toHaveText("Sent to your bank: Not available from Instagram. Look in Instagram: Professional dashboard, then Payouts. Meta also emails you each month.");
+    // The row's headline already says "Not available from TikTok": the sent line says only where to look.
+    await expect(sent("tiktok")).toHaveText("Sent to your bank: Look in TikTok: Profile, then Balance, then Transactions, then Withdrawal.");
+    await expect(sent("instagram")).toHaveText("Sent to your bank: Look in Instagram: Professional dashboard, then Payouts. Meta also emails you each month.");
     await expect(sent("facebook")).toHaveText("Sent to your bank: Not available from Meta. Look in Meta Business Suite: All tools, then Payouts. Meta also emails you each month.");
     // Its Open Stripe is on X's Get paid page (a row keeps one button, at its right end).
-    await expect(sent("x")).toHaveText("Sent to your bank: Not available from X. Look in Stripe: Payouts. More in Get paid below.");
+    await expect(sent("x")).toHaveText("Sent to your bank: Look in Stripe: Payouts. More in Get paid below.");
     await expect(sent("contentrewards")).toHaveText("Sent to your bank: not available from Content Rewards. Look on Whop: Balances.");
     for (const p of ["tiktok", "instagram", "facebook", "x"]) await expect(sent(p)).not.toContainText("$0");
     const block = page.locator(".cr-all__sentsofar");

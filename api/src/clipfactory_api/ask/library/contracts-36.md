@@ -14,7 +14,9 @@ Decision record: ADR-60 (which corrects ADR-57).
    They are the only place picker on the card.
 3. **Use my settings**: one big soft-fill button (`.my-settings__btn`, a glass button, full width). It puts My
    settings on every ticked place. Done state: bone fill, a check, **Your settings are on**. Under it one plain line:
-   "Your other places already use your settings." (before the tap, TikTok ticked; the line above Upload says "Tap Use my settings first. TikTok needs your tap."),
+   "Tap this first. TikTok needs your tap." (before the tap, TikTok ticked: then **Use my settings** is the card's
+   vermilion and Upload is glass; the line above Upload keeps "Tap Use my settings first. TikTok needs your tap." for
+   screen readers only, so it is said once),
    "Tap a place below to change it for this clip." (after, or with TikTok unticked; the button already says Your settings are on),
    "You changed some. Tap to put yours back." (after a change in a row). YouTube, Instagram, Facebook
    and X use My settings from the start (nothing in their rules asks for a tap); TikTok's choices go on only with this

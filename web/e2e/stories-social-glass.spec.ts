@@ -166,7 +166,7 @@ async function lowContrast(page: Page, scope: string): Promise<string[]> {
   );
 }
 
-test("the setup: the ArcDial in a hero glass head, the steps on glass with a cream current step, what is left as glass pills", async ({ page }) => {
+test("the setup: the ArcDial in a hero glass head, the steps on glass with a cream current step, and why a step is left on glass", async ({ page }) => {
   await page.setViewportSize({ width: 1280, height: 900 });
   await open(page, "/stories/setup", "ember");
   const dial = page.locator(".st-setup__head.st-glass--hero .st-dial.st-ring");
@@ -194,15 +194,10 @@ test("the setup: the ArcDial in a hero glass head, the steps on glass with a cre
   }
   expect(first!.y - lb!.y, "inset at the top").toBeCloseTo(6, 0);
   await expect(page.locator(".st-setup__panel.st-glass")).toBeVisible();
-  await expect(page.locator(".st-left.st-glass .st-left__item.st-pill").first()).toBeVisible();
-  // One choice, one cream marker: the step list marks the open step; What is left has no cream pill.
-  await expect(page.locator(".st-left__item.is-on")).toHaveCount(0);
-  // A pill shows itself on hover.
-  const pill = page.locator(".st-left__item").first();
-  const before = await pill.evaluate((e) => getComputedStyle(e).backgroundColor);
-  await pill.hover();
-  await page.waitForTimeout(300);
-  expect(await pill.evaluate((e) => getComputedStyle(e).backgroundColor)).not.toBe(before);
+  // What is left is the step list itself (less text, the owner, 23 Nov): under it, on glass, only why a step is
+  // still to do (the seed's X is Clip Factory's own), and no pills that say the steps again.
+  await expect(page.locator(".st-left.st-glass .st-left__why").first()).toBeVisible();
+  await expect(page.locator(".st-left__item")).toHaveCount(0);
 
   // A connect step: the platform's card is flat on the step's glass (no glass of its own inside the glass panel).
   await page.locator(".st-steps__item").filter({ hasText: "Connect Instagram" }).click();

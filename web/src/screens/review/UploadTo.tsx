@@ -62,7 +62,7 @@ export function UploadToChips({
           <span>Nothing is set up yet. Upload saves it, and it goes up once you set up a place.</span>
         </p>
         <A href="/settings/posting/setup" className="text-link">
-          Set up posting
+          Go to Set up posting
         </A>
       </div>
     );

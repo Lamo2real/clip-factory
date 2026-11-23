@@ -16,7 +16,7 @@ for screen readers. Every other screen that lists platforms (Library card rows, 
 |---|---|---|
 | 1 | Header row | Back (secondary pill, arrow + "Back"; returns where the owner came from, else Library) and the clip's hook as the title in serif italic. The title wraps; it is never cut off. |
 | 2 | Preview | `<video controls playsinline preload="metadata">` with the cover as `poster`; `aspect-ratio: 9 / 16`; a rounded `.glass` frame, centred. Never autoplays. Without a video URL: the cover image. Width: 280 px (≥ 1024), 240 px (600–1023), `min(100%, 56vh × 9/16)` (< 600). |
-| 3 | Stat block | Beside the preview from 1024 px, under it below. The **total views** in the display serif with "views across platforms" and a small "(each app counts views its own way)". The **Best this week** star toggle. The one vermilion **Refresh numbers** button. "Updated 3 min ago" under it. |
+| 3 | Stat block | Beside the preview from 1024 px, under it below. The **total views** in the display serif with "views on all apps" and a small "(each app counts views its own way)". The **Best this week** star toggle. The one vermilion **Refresh numbers** button. "Updated 3 min ago" under it. |
 | 4 | Lines + stacks | The five lines grow from the preview to the five platform stacks ([below](#the-lines)). |
 
 **Best this week star.** A green glass toggle, star icon + "Best this week", at least 48 px, `aria-pressed`. Pressed: a
@@ -49,7 +49,7 @@ One `<svg aria-hidden="true">` sits behind the stacks, sized to the page contain
 16 px), at least 96 px of space between the preview and the stacks so the fan reads clearly.
 
 ```
-                         ┌───────┐   1.2M views across platforms
+                         ┌───────┐   1.2M views on all apps
                          │ video │   (each app counts views its own way)
                          │  9:16 │   [☆ Best this week]  [↻ Refresh numbers]
                          └───┬───┘   Updated 3 min ago

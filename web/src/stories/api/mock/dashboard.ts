@@ -55,7 +55,7 @@ export function dashboardOf(store: MockStore, ws: string): StoriesDashboard {
     const name = PLATFORM_NAME[a.platform as Platform];
     const sentence =
       a.connectionStatus === "needs_reconnect"
-        ? `This ${name} account${a.accountName ? ` (${a.accountName})` : ""} needs connecting again. Open Social accounts and tap Connect.`
+        ? `This ${name} account${a.accountName ? ` (${a.accountName})` : ""} needs connecting again. Open Social accounts and tap Connect again.`
         : a.warning?.trim() || null;
     if (sentence) needsYou.push({ publishingJobId: null, storyId: null, title: name, platform: a.platform as Platform, sentence, href: "/stories/connections" });
   }

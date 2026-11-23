@@ -385,7 +385,9 @@ test("round 3, Review: Next run, Write them again beside the saved words, the pl
     await ctx.addInitScript(() => ((window as unknown as { __cfStoriesMock?: unknown }).__cfStoriesMock = { knobs: { extraFormats: ["webm"], taskSeconds: 1 } }));
     const page = await ctx.newPage();
     await open(page, `/stories/review/${S.review}`);
-    await expect(page.locator(".st-s-decide .st-s-nextrun")).toHaveText(/^Next run: Claude .+ · .+$/);
+    // Said once: "Remakes use" in the decision names the model, and Next run is in How it was made.
+    await expect(page.locator(".st-s-decide .st-s-nextrun")).toHaveCount(0);
+    await expect(page.locator(".st-s-made .st-s-nextrun")).toHaveText(/^Next run: Claude .+ · .+$/);
     // The place's own sounds, labelled, from each scene's start.
     await expect(page.locator(".st-s-sfx__row.is-place").first()).toContainText("Sound (whole scene)");
     // Write them again: the draft beside the saved words, saved only by Use these.

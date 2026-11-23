@@ -204,9 +204,10 @@ export function YoutubeBranch() {
         <details className="cr-fold">
           <summary className="cr-fold__q">
             <Icon name="info" size={18} />
-            <span className="cookie-guide__title" id={guideId}>
+            {/* Still a heading (its section is named by it), in the fold's own place for the words. */}
+            <h3 className="cookie-guide__title" id={guideId} style={{ flex: 1, minWidth: 0 }}>
               How to get cookies
-            </span>
+            </h3>
             <Icon name="chevronRight" size={18} className="icon cr-fold__chev act-turn" />
           </summary>
           <div className="cr-fold__body">

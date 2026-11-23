@@ -413,12 +413,13 @@ describe("AI", () => {
     providers.push(aiPart.keyedHostStatus(store, "anthropic"), aiPart.keyedHostStatus(store, "openai_compatible"));
     await open("ai");
     const names = () => $$(".st-stg-keyrow", card("Providers")).map((r) => r.querySelector(".st-stg-keyrow__name")?.textContent);
-    expect(names()).toEqual(["ElevenLabs", "Anthropic API", "OpenAI-compatible API"]);
+    // On the surface without the word "API" (the owner, 23 Nov: kid words).
+    expect(names()).toEqual(["ElevenLabs", "Anthropic", "OpenAI-compatible"]);
     // An OpenAI-compatible key is for one address (the API's provider_keys, §45.37 G4): with no model on it yet, its
     // address goes with the key, and the row names it.
     for (const [label, id, key, address, saved] of [
-      ["Anthropic API", "anthropic", "sk-ant-api03-0123456789abcdefWXYZ", null, "Key saved · ends WXYZ."],
-      ["OpenAI-compatible API", "openai_compatible", "sk-proj-0123456789abcdef9k2q", "https://api.example.com/v1", "Key saved for api.example.com · ends 9k2q."],
+      ["Anthropic", "anthropic", "sk-ant-api03-0123456789abcdefWXYZ", null, "Key saved · ends WXYZ."],
+      ["OpenAI-compatible", "openai_compatible", "sk-proj-0123456789abcdef9k2q", "https://api.example.com/v1", "Key saved for api.example.com · ends 9k2q."],
     ] as const) {
       const row = byText(".st-stg-keyrow", new RegExp(label), card("Providers"));
       expect(row.textContent).toContain(`Paste your ${label} key to use it.`);

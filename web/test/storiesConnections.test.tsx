@@ -5,9 +5,11 @@
 // that the new app's keys go here, never into Clip Factory's guide. Round 3 (§45.34): both Meta cards show both
 // redirect URIs, a connect is said with the account it connected and asks whether it is the intended one, the line
 // after Disconnect follows the app used, and every reason code is said in words. Less text (the owner, 23 Nov: "even
-// an 8 year old should be able to use the app"): each card keeps its safety line, its account, what needs the owner
-// and one main button; everything else is in one closed More fold (its line says "First, set up the app" while the
-// developer app still needs it, and Connect opens it); and the API's limits never say again what the card already says.
+// an 8 year old should be able to use the app"): each card keeps its account, what needs the owner, its safety line
+// while an account is still to connect or fix, and one main button; while the developer app still needs setting up
+// that button is "Set up the app" and opens the choice on the card; everything else is in one closed More fold; and the
+// API's limits never say again what the card already says, while who can see the posts and what costs money stay on
+// the card in short.
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -27,7 +29,7 @@ vi.mock("../src/lib/router.ts", async (orig) => {
   return { ...real, navigate: () => undefined };
 });
 
-const { beforeConnect, ConnectionsScreen, KEYS_HERE_ONLY, NEW_ACCOUNT_LINE, reasonSentence, SHARED_APP_ACCOUNT_LINE, SHARED_APP_LINE, unsaid } = await import(
+const { beforeConnect, ConnectionsScreen, KEYS_HERE_ONLY, limitNotes, NEW_ACCOUNT_LINE, ONLY_ME_NOTE, reasonSentence, SHARED_APP_ACCOUNT_LINE, SHARED_APP_LINE, unsaid, X_OVER_NOTE } = await import(
   "../src/stories/screens/Connections.tsx"
 );
 
@@ -94,13 +96,16 @@ describe("the Social accounts page", () => {
     expect(store.social.find((a) => a.platform === "tiktok")?.reason).toBe("keys_changed");
     expect(tiktok.textContent).not.toContain("keys_changed");
     expect(tiktok.textContent!.split("The TikTok app keys changed. Connect again.").length - 1).toBe(1);
-    expect(button(tiktok, "Reconnect")).toBeTruthy();
+    // The button says what the chip says: Connect again.
+    expect(tiktok.querySelector(".st-chip")?.textContent).toBe("Connect again");
+    expect(button(tiktok, "Connect again")).toBeTruthy();
+    expect(button(tiktok, "Reconnect")).toBeUndefined();
   });
 
   it("a connected YouTube changes channel with Pick another channel, the words its limits use", () => {
     const yt = card("youtube");
     expect(button(yt, "Pick another channel")).toBeTruthy();
-    expect(button(yt, "Reconnect")).toBeUndefined();
+    expect(button(yt, "Connect again")).toBeUndefined();
     expect(yt.textContent).toContain("Google will ask which channel.");
   });
 
@@ -133,7 +138,7 @@ describe("the Social accounts page", () => {
   };
   const names = (el: ParentNode) => Array.from(el.querySelectorAll("button")).map((b) => b.textContent?.trim());
 
-  it("keeps each card short: its safety line, one main button, and everything else in one closed More fold", () => {
+  it("keeps each card short: its safety line while an account is to fix, one main button, and the rest in one closed More fold", () => {
     for (const p of ["youtube", "tiktok", "instagram", "facebook", "x"] as const) {
       const c = card(p);
       const folds = c.querySelectorAll<HTMLDetailsElement>(":scope > details");
@@ -144,7 +149,9 @@ describe("the Social accounts page", () => {
       expect(more.open, p).toBe(false);
       expect(more.querySelector("summary")?.textContent, p).toBe(`More for ${PLATFORM_NAME[p]}`);
       const shown = surface(c);
-      expect(shown.querySelector(".st-conn__new")?.textContent, p).toBe(NEW_ACCOUNT_LINE);
+      // Said up front on every card whose next step is an account; a connected YouTube that is fine does not repeat it.
+      if (p === "youtube") expect(shown.querySelector(".st-conn__new"), p).toBeNull();
+      else expect(shown.querySelector(".st-conn__new")?.textContent, p).toBe(NEW_ACCOUNT_LINE);
       expect(shown.querySelectorAll(".st-btn--main").length, p).toBeLessThanOrEqual(1);
       expect(names(shown), p).not.toContain("Check now");
       expect(names(shown), p).not.toContain("Disconnect");
@@ -161,6 +168,14 @@ describe("the Social accounts page", () => {
     expect(names(yt)).toEqual(expect.arrayContaining(["Check now", "Disconnect"]));
     // Its picture, name and handle stay on the card.
     expect(surface(card("youtube")).querySelector(".st-who")?.textContent).toBe("Clips Funded@fundedclips");
+    // Who can see the posts, and what costs money, stay on the card in short (the whole lines are in More).
+    expect(Array.from(surface(card("tiktok")).querySelectorAll(".st-conn__limit")).map((n) => n.textContent)).toEqual([ONLY_ME_NOTE]);
+    expect(Array.from(surface(card("x")).querySelectorAll(".st-conn__limit")).map((n) => n.textContent)).toEqual([X_OVER_NOTE]);
+    expect(surface(card("youtube")).querySelector(".st-conn__limit")).toBeNull();
+    // The Instagram card's fix in Clip Factory has the way there, right under its note (glass, never the main).
+    const toClips = Array.from(surface(card("instagram")).querySelectorAll<HTMLAnchorElement>("a.st-btn")).find((l) => l.textContent?.trim() === "Open Clip Factory");
+    expect(toClips?.getAttribute("href")).toBe("/settings/posting/setup/instagram");
+    expect(toClips?.classList.contains("st-btn--main")).toBe(false);
     // Not connected: the one main button is Connect, with the sign-in tip above it; nothing to check or disconnect.
     const fb = card("facebook");
     expect(Array.from(surface(fb).querySelectorAll(".st-btn--main")).map((b) => b.textContent?.trim())).toEqual(["Connect Facebook"]);
@@ -359,33 +374,64 @@ describe("round 3 on the Social accounts page (§45.34)", () => {
     expect(card("tiktok").textContent).not.toContain("clips_unknown");
   });
 
-  it("a card whose developer app still needs setting up keeps its fold closed, says so on its line, and Connect opens it", async () => {
+  it("a card whose developer app still needs setting up has Set up the app as its one main button, opening the choice on the card", async () => {
     await render({ platform: null, result: null }, (s) => {
       s.social.find((a) => a.platform === "youtube")!.app = { choice: null, saved: false };
     });
-    const more = () => card("youtube").querySelector<HTMLDetailsElement>("details.st-conn__more")!;
-    // Five short cards on the page: closed, and its line says what to do first; the choice is in it.
-    expect(more().open).toBe(false);
-    expect(more().querySelector("summary")?.textContent).toBe("First, set up the app for YouTube");
-    expect(more().querySelector("[role=radiogroup]")?.getAttribute("aria-label")).toBe("Which YouTube app Clips Funded uses");
-    // The cards that are ready stay closed with their plain line.
+    const yt = () => card("youtube");
+    const setUp = () => button(yt(), /^Set up the app/)!;
+    // One main button, no Connect yet (it comes once the app is ready), and the fold keeps its plain line.
+    expect(setUp().classList.contains("st-btn--main")).toBe(true);
+    expect(setUp().getAttribute("aria-expanded")).toBe("false");
+    expect(button(yt(), "Pick another channel")).toBeUndefined();
+    expect(yt().querySelector("details.st-conn__more > summary")?.textContent).toBe("More for YouTube");
+    expect(yt().querySelector("[role=radiogroup]")).toBeNull();
+    // The cards that are ready keep Connect and their plain line.
     for (const p of ["tiktok", "instagram", "facebook", "x"] as const) {
-      expect(card(p).querySelector<HTMLDetailsElement>("details.st-conn__more")!.open, p).toBe(false);
+      expect(button(card(p), /^Set up the app/), p).toBeUndefined();
       expect(card(p).querySelector("details.st-conn__more > summary")?.textContent, p).toBe(`More for ${PLATFORM_NAME[p]}`);
     }
-    // Connect: it says what is first, opens the fold right under it and sends nothing.
-    const connect = button(card("youtube"), "Pick another channel")!;
-    expect(connect.getAttribute("aria-disabled")).toBe("true");
-    await click(connect);
-    expect(document.body.textContent).toContain("Pick which YouTube app Clips Funded uses first.");
-    expect(more().open).toBe(true);
+    // Set up the app: the choice opens on the card itself (not in a fold), in kid words; nothing is sent.
+    await click(setUp());
+    expect(setUp().getAttribute("aria-expanded")).toBe("true");
+    const setup = yt().querySelector<HTMLElement>(".st-conn__setup")!;
+    expect(setup.closest("details")).toBeNull();
+    expect(setup.querySelector(".st-app__title")?.textContent).toBe("Pick the YouTube app");
+    expect(setup.querySelector("[role=radiogroup]")?.getAttribute("aria-label")).toBe("Which YouTube app Clips Funded uses");
+    // What the platform allows and Clip Factory's own account stay in More.
+    expect(setup.querySelector(".st-limits, .st-conn__clips")).toBeNull();
     expect(calls).not.toContain("connectSocial");
-    // Closed by hand, it stays closed.
+    // Share Clip Factory's app: the app is ready, so Connect is back as the main button and the choice goes to More.
+    await click(button(setup, /Share Clip Factory's app/));
+    await click(button(yt(), "Share Clip Factory's app"));
+    expect(button(yt(), /^Set up the app/)).toBeUndefined();
+    // Switching apps disconnected it first (Clip Factory is not touched): Connect YouTube is the one main button.
+    expect(button(yt(), "Connect YouTube")?.classList.contains("st-btn--main")).toBe(true);
+    expect(yt().querySelector("details.st-conn__more .st-app")).not.toBeNull();
+  });
+
+  it("closing More with a Disconnect still to answer drops the question, so it never waits hidden", async () => {
+    await render({ platform: null, result: null });
+    const more = () => card("youtube").querySelector<HTMLDetailsElement>("details.st-conn__more")!;
+    await act(async () => {
+      more().open = true;
+      more().dispatchEvent(new Event("toggle"));
+    });
+    await click(button(card("youtube"), "Disconnect"));
+    expect(button(card("youtube"), "Yes, disconnect")).toBeTruthy();
     await act(async () => {
       more().open = false;
       more().dispatchEvent(new Event("toggle"));
     });
-    expect(more().open).toBe(false);
+    expect(button(card("youtube"), "Yes, disconnect")).toBeUndefined();
+    expect(button(card("youtube"), "Disconnect")).toBeTruthy();
+  });
+
+  it("the short notes follow the platform's limits: who can see the posts, and what can go over a limit", () => {
+    expect(limitNotes(["Until TikTok approves the app, the account must be private and posts stay Only me."])).toEqual([ONLY_ME_NOTE]);
+    expect(limitNotes(["A new TikTok app starts in Sandbox: only test accounts added there can connect, and they must be private."])).toEqual([ONLY_ME_NOTE]);
+    expect(limitNotes(["Clip Factory does not count Clips Funded's X posts, so if Clip Factory posts much more than planned, the month can go over your X limit by what Clips Funded spent."])).toEqual([X_OVER_NOTE]);
+    expect(limitNotes(["One Google sign-in can hold several channels."])).toEqual([]);
   });
 
   it("says each line once: the API's limits that repeat the card's own lines stay out of its fold", async () => {

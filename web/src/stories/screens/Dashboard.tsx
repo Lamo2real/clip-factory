@@ -47,9 +47,9 @@ import type { StoriesScreenProps } from "./types.ts";
 
 const ACCOUNT_WORDS: Record<StoriesDashboard["accounts"][number]["status"], { label: string; tone: StTone }> = {
   connected: { label: "Connected", tone: "mint" },
-  choose_account: { label: "Pick an account", tone: "sun" },
+  choose_account: { label: "Pick one", tone: "sun" },
   needs_reconnect: { label: "Connect again", tone: "coral" },
-  same_as_clips: { label: "Same as Clip Factory", tone: "coral" },
+  same_as_clips: { label: "Clip Factory's own", tone: "coral" },
   not_connected: { label: "Not connected", tone: "sky" },
 };
 
@@ -147,6 +147,8 @@ function NeedsYou({ ws, items }: { ws: string; items: StoriesDashboard["needsYou
                 {n.sentence}
               </p>
               <div className="st-needs-list__actions">
+                {/* An account problem is fixed on Social accounts first: its way there comes first, then Try again. */}
+                {n.href === "/stories/connections" ? <StLinkButton href={n.href}>Fix it</StLinkButton> : null}
                 {n.publishingJobId ? (
                   <StButton
                     aria-disabled={busy === n.publishingJobId || undefined}
@@ -159,7 +161,7 @@ function NeedsYou({ ws, items }: { ws: string; items: StoriesDashboard["needsYou
                     Try again
                   </StButton>
                 ) : null}
-                <StLinkButton href={n.href}>Open</StLinkButton>
+                {n.href === "/stories/connections" ? null : <StLinkButton href={n.href}>Open</StLinkButton>}
               </div>
             </li>
           ))}

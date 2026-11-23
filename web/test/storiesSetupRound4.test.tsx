@@ -48,7 +48,12 @@ async function settle(times = 4) {
   for (let i = 0; i < times; i++) await act(async () => await new Promise((r) => setTimeout(r, 0)));
 }
 const $$ = <T extends Element = HTMLElement>(sel: string, from: ParentNode = host) => Array.from(from.querySelectorAll<T>(sel));
-const button = (name: string) => $$<HTMLButtonElement>("button").find((b) => b.textContent?.trim() === name)!;
+/** A step in the step list (its number, its name, and "(done)" for screen readers): the way to each step. */
+function stepItem(name: string): HTMLButtonElement {
+  const b = Array.from(host.querySelectorAll<HTMLButtonElement>(".st-steps__item")).find((x) => x.querySelector(".st-steps__label")?.textContent === name);
+  if (!b) throw new Error(`no step ${name}`);
+  return b;
+}
 async function click(el: Element) {
   await act(async () => el.dispatchEvent(new MouseEvent("click", { bubbles: true })));
   await settle(6);
@@ -76,7 +81,7 @@ describe("step 4 (§45.35 D21)", () => {
   it("says the built-in animator draws tall, square or wide videos at 30 frames a second, never only 9:16", async () => {
     expect(BUILTIN_LINE).toBe("On. Cartoons drawn right here, tall, square or wide, 30 frames a second.");
     await start({ fresh: true });
-    await click(button("Pick how videos are made"));
+    await click(stepItem("Pick how videos are made"));
     const builtin = $$("[role=radio]").find((r) => r.textContent?.includes("Built-in animation"))!;
     expect(builtin.textContent).toContain(BUILTIN_LINE);
     expect(builtin.textContent).not.toContain("9:16");
@@ -109,7 +114,7 @@ describe("Lamo Clips' own account (§45.35 D11)", () => {
     expect(why.textContent).toContain(sameAsClipsLine("x"));
     // Its step says it too, once: the card reads the account as the page shows it (Clip Factory's own) and says why in
     // the API's words; the step around it does not say it again.
-    await click(button("Connect X"));
+    await click(stepItem("Connect X"));
     const step = host.querySelector(".st-setup__body")!;
     const card = step.querySelector(".st-conn")!;
     expect(card.textContent).toMatch(/This is Clip Factory's (own account|account now)\./);

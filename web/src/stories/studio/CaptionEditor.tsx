@@ -224,7 +224,7 @@ export function CaptionEditor({
           </fieldset>
           {problem ? <Notice tone="bad">{problem}</Notice> : null}
           <div className="st-s-actionbar">
-            <button type="button" className="st-btn st-btn--main" aria-disabled={!videoDirty || saving || undefined} onClick={() => videoDirty && !saving && saveVideo()}>
+            <button type="button" className={`st-btn${videoDirty ? " st-btn--main" : ""}`} aria-disabled={!videoDirty || saving || undefined} onClick={() => videoDirty && !saving && saveVideo()}>
               {saving ? "Saving…" : videoDirty ? "Save captions" : "No changes yet"}
             </button>
           </div>
@@ -285,7 +285,7 @@ export function CaptionEditor({
           ))}
           {problem ? <Notice tone="bad">{problem}</Notice> : null}
           <div className="st-s-actionbar">
-            <button type="button" className="st-btn st-btn--main" aria-disabled={!postChanges.length || saving || undefined} onClick={() => postChanges.length && !saving && savePosts()}>
+            <button type="button" className={`st-btn${postChanges.length ? " st-btn--main" : ""}`} aria-disabled={!postChanges.length || saving || undefined} onClick={() => postChanges.length && !saving && savePosts()}>
               {saving ? "Saving…" : postChanges.length ? "Save post words" : "No changes yet"}
             </button>
           </div>

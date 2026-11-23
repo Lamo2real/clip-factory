@@ -19,7 +19,7 @@ import { useAi, type AiData } from "./data.ts";
 import { OwnModels } from "./OwnModels.tsx";
 import { keepName, ProviderKeys, ProviderRow, takesKey } from "./ProviderKeys.tsx";
 import { UsageCard } from "./UsageCard.tsx";
-import { StTech } from "../ui.tsx";
+import { StIcon, StTech } from "../ui.tsx";
 
 const KIND_WORD: Record<ProviderStatus["kind"], string> = {
   writer: "Thinks and writes",
@@ -363,6 +363,8 @@ function Assignments({ data, saveAi, saveAgent }: { data: AiData; saveAi: (next:
     return m && !m.efforts.length ? m : null;
   };
   const { ai, models, agents, tasks } = data;
+  // The 12 tasks are needed only now and then: folded under the agents, open by itself once a task has its own pick.
+  const [tasksOpen, setTasksOpen] = useState(() => Object.keys(ai.tasks).length > 0 || tasks.some((t) => t.effective.from === "task"));
   const defText = "Workspace default";
   const defEffort = "Workspace default";
 
@@ -470,10 +472,15 @@ function Assignments({ data, saveAi, saveAgent }: { data: AiData; saveAi: (next:
       <ul className="st-stg-assign" aria-label="Each agent's model and effort">
         {agentRows}
       </ul>
-      <h4 className="st-stg-subhead">Tasks</h4>
-      <ul className="st-stg-assign" aria-label="Each task's model and effort">
-        {taskRows}
-      </ul>
+      <details className="st-tech-fold st-stg-tech st-stg-tasks" open={tasksOpen} onToggle={(e) => setTasksOpen(e.currentTarget.open)}>
+        <summary className="st-tech-fold__sum">
+          <StIcon name="chevron" size={16} className="st-tech-fold__mark" />
+          Each task
+        </summary>
+        <ul className="st-stg-assign" aria-label="Each task's model and effort">
+          {taskRows}
+        </ul>
+      </details>
     </SetCard>
   );
 }

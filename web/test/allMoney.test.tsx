@@ -171,9 +171,15 @@ describe("All your money's sent lines (§40.4)", () => {
     const line = (i: number) => row(i).querySelector(".cr-all__sent")!.textContent!.replace(/\u00a0/g, " ");
     expect(line(0)).toBe("Sent to your bank by Google: SEK 2,468.00 so far · YouTube says");
     // A line that doesn't say it is about the bank starts with "Sent to your bank:", so it never reads as earnings.
-    expect(line(1)).toBe("Sent to your bank: Not available from TikTok. Look in TikTok: Profile, then Balance, then Transactions, then Withdrawal.");
+    // The row's headline already says "Not available from TikTok", and the sent line's path says the row's where and
+    // more: each is said once.
+    expect(line(1)).toBe("Sent to your bank: Look in TikTok: Profile, then Balance, then Transactions, then Withdrawal.");
+    expect(row(1).querySelector(".cr-all__where")).toBeNull();
+    expect(row(1).textContent!.split("Not available from TikTok").length - 1).toBe(1);
     // Its own button (Open Stripe) is on the place's Get paid page: a row keeps one button, at its right end (§39.2).
-    expect(line(2)).toBe("Sent to your bank: Not available from X. Look in Stripe: Payouts. More in Get paid below.");
+    expect(line(2)).toBe("Sent to your bank: Look in Stripe: Payouts. More in Get paid below.");
+    // Its own where (a different page) stays.
+    expect(row(2).querySelector(".cr-all__where")?.textContent).toBe("Look in X, then Creator Studio (paid through Stripe).");
     expect(line(3)).toBe("Sent to your bank: not available from Content Rewards. Look on Whop: Balances.");
     // Content Rewards' "Paid to your bank" line is replaced by the row's sent line, never said twice.
     expect(row(3).textContent).not.toContain("Paid to your bank");

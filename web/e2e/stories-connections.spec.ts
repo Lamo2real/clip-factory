@@ -5,8 +5,9 @@ import { findOverflow, WIDTHS } from "./helpers.ts";
 // redirect URIs (Instagram's and Facebook's) with Copy buttons, also once the keys are saved; after a connect the
 // page says "Connected as {name} ({handle})" and the card asks "Is this your Lamo Stories {place}?" with Yes and
 // Pick another; the line after Disconnect follows the app the account used. Less text (the owner, 23 Nov): each card
-// shows its safety line, its account and one main button; the rest is in one More fold (opened here where a test needs
-// what is in it). Lamo Stories is switched on with cf.storiesPreview = 1.
+// shows its account, its safety line while an account is still to connect or fix, and one main button (Set up the app
+// while the developer app is not ready); the rest is in one More fold (opened here where a test needs what is in it).
+// Lamo Stories is switched on with cf.storiesPreview = 1.
 
 async function on(page: Page) {
   await page.addInitScript(() => localStorage.setItem("cf.storiesPreview", "1"));
@@ -23,14 +24,16 @@ const cardOf = (page: Page, name: string) => page.locator(".st-conn").filter({ h
 /** A card's one More fold (its line). */
 const moreOf = (card: ReturnType<typeof cardOf>) => card.locator(".st-conn__more > summary");
 
-test("less text: each card shows its safety line, its account and one main button; More opens with the keyboard", async ({ page }) => {
+test("less text: each card shows its account, its safety line while one is to fix, and one main button; More opens with the keyboard", async ({ page }) => {
   await on(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/stories/connections");
   await ready(page);
   for (const name of ["YouTube", "TikTok", "Instagram", "Facebook", "X"]) {
     const card = cardOf(page, name);
-    await expect(card.locator(".st-conn__new")).toHaveText("Use a new account made for Clips Funded, not Clip Factory's.");
+    // The connected YouTube is fine: it does not say the safety line again (the page's own line says it at the top).
+    if (name === "YouTube") await expect(card.locator(".st-conn__new")).toHaveCount(0);
+    else await expect(card.locator(".st-conn__new")).toHaveText("Use a new account made for Clips Funded, not Clip Factory's.");
     await expect(card.locator(":scope > details")).toHaveCount(1);
     await expect(card.locator(".st-conn__more")).not.toHaveAttribute("open", "");
     expect(await card.locator(".st-btn--main:visible").count(), name).toBeLessThanOrEqual(1);
@@ -52,7 +55,7 @@ test("less text: each card shows its safety line, its account and one main butto
   expect(o.items, "@390").toEqual([]);
 });
 
-test("less text, a brand-new studio: each fold stays closed, its line says to set up the app first, and Connect opens it", async ({ page }) => {
+test("less text, a brand-new studio: Set up the app is each card's one main button, and opens the app's choice on the card", async ({ page }) => {
   await on(page);
   await page.addInitScript(() => ((window as unknown as { __cfStoriesMock?: unknown }).__cfStoriesMock = { knobs: { fresh: true } }));
   await page.setViewportSize({ width: 390, height: 844 });
@@ -61,16 +64,24 @@ test("less text, a brand-new studio: each fold stays closed, its line says to se
   for (const name of ["YouTube", "TikTok", "Instagram", "Facebook", "X"]) {
     const card = cardOf(page, name);
     await expect(card.locator(".st-conn__more")).not.toHaveAttribute("open", "");
-    await expect(moreOf(card)).toHaveText(`First, set up the app for ${name}`);
+    await expect(moreOf(card)).toHaveText(`More for ${name}`);
+    await expect(card.locator(".st-conn__new")).toHaveText("Use a new account made for Clips Funded, not Clip Factory's.");
+    // No Connect that cannot work yet: the one main button is the first step.
+    await expect(card.getByRole("button", { name: `Connect ${name}` })).toHaveCount(0);
+    await expect(card.getByRole("button", { name: `Set up the app for ${name}` })).toHaveClass(/st-btn--main/);
+    expect(await card.locator(".st-btn--main:visible").count(), name).toBe(1);
   }
   const yt = cardOf(page, "YouTube");
-  await expect(yt.getByRole("radiogroup", { name: "Which YouTube app Clips Funded uses" })).toBeHidden();
-  // aria-disabled, so force; centred first, so the phone's tab bar is not the thing under the tap.
-  const connect = yt.getByRole("button", { name: "Connect YouTube" });
-  await connect.evaluate((el) => el.scrollIntoView({ block: "center" }));
-  await connect.click({ force: true });
-  await expect(page.locator(".toast").filter({ hasText: "Pick which YouTube app Clips Funded uses first." })).toBeVisible();
+  await expect(yt.getByRole("radiogroup", { name: "Which YouTube app Clips Funded uses" })).toHaveCount(0);
+  // Centred first, so the phone's tab bar is not the thing under the tap.
+  const setUp = yt.getByRole("button", { name: "Set up the app for YouTube" });
+  await setUp.evaluate((el) => el.scrollIntoView({ block: "center" }));
+  await setUp.click();
+  await expect(setUp).toHaveAttribute("aria-expanded", "true");
   await expect(yt.getByRole("radiogroup", { name: "Which YouTube app Clips Funded uses" })).toBeVisible();
+  // Only the choice opens: what YouTube allows and Clip Factory's own account stay in More.
+  await expect(yt.locator(".st-conn__setup")).not.toContainText("What YouTube allows");
+  await expect(yt.locator(".st-conn__setup")).not.toContainText("Clip Factory posts to");
   const o = await findOverflow(page);
   expect(o.page, "@390: the page scrolls sideways").toBeLessThanOrEqual(o.viewport);
   expect(o.items, "@390").toEqual([]);
@@ -110,7 +121,8 @@ test("after a connect: Connected as {name} ({handle}), and the card asks whether
   await expect(page.locator(".toast").filter({ hasText: "Connected as Clips Funded (@fundedclips)." })).toBeVisible();
   const ask = yt.getByRole("group", { name: "Is this your Clips Funded channel?" });
   await expect(ask).toBeVisible();
-  await expect(ask).toContainText("Is this your Clips Funded channel?");
+  // While it asks, the card says again to use a new account made for Clips Funded.
+  await expect(yt.locator(".st-conn__new")).toHaveText("Use a new account made for Clips Funded, not Clip Factory's.");
   // Pick another connects again, and asks again.
   await ask.getByRole("button", { name: "Pick another channel" }).click();
   await expect(page.locator(".toast").filter({ hasText: "Connected as Clips Funded (@fundedclips)." }).first()).toBeVisible();
@@ -303,7 +315,7 @@ test("round 5: reconnecting clears the old warning (§45.36 E18)", async ({ page
   await ready(page);
   const tiktok = cardOf(page, "TikTok");
   await expect(tiktok).toContainText("The TikTok app keys changed. Connect again.");
-  await tiktok.getByRole("button", { name: "Reconnect" }).click();
+  await tiktok.getByRole("button", { name: "Connect again" }).click();
   await expect(tiktok.locator(".st-chip").first()).toHaveText("Connected");
   await expect(tiktok).not.toContainText("app keys changed");
 });

@@ -53,7 +53,7 @@ export const MAKERS: Record<string, { label: string; model: string; line: string
     short: "Luma AI Ray2",
     model: "Luma AI Ray2",
     tech: modelTech({ label: "Luma AI Ray2", host: "Amazon Bedrock", modelId: "luma.ray-v2:0", region: "us-west-2" }),
-    line: "AI shots for scenes with no character. Runs in the US (Oregon). Posts get an AI label.",
+    line: "AI shots for scenes with no character, 5 seconds a shot. Runs in the US (Oregon). Posts get an AI label.",
   },
   "own-video": { label: "Your own video model", model: "A video model you added", line: "AI shots from a video model you add below." },
   "nova-reel": { label: "Amazon Nova Reel", model: "Amazon Nova Reel 1.1", line: "Ended by Amazon on 30 Sep 2026. It made AI footage for cut-aways (scenes with no character)." },
@@ -223,7 +223,11 @@ function ModelDetails({ m, brief = false }: { m: MakerModelInfo; /** under its o
         <Chip tone={MODEL_STATUS[m.status].tone}>{MODEL_STATUS[m.status].label}</Chip>
       </p>
       {brief ? (
-        m.note ? <p className="st-stg-small">{m.note}</p> : null
+        <>
+          {m.note ? <p className="st-stg-small">{m.note}</p> : null}
+          {/* A cost: with no price known, the one step that fixes it (its option says only "No price known"). */}
+          {priceWords(m.price) ? null : <p className="st-stg-small">Add a price in Prices and keys.</p>}
+        </>
       ) : (
         <>
           <p className="st-stg-small">

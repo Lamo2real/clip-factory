@@ -77,7 +77,7 @@ export function StepCard({
             <div className="gstep__actions">
               {step.open ? (
                 <a
-                  className={`btn btn--${primary ? "primary" : "action"} btn--lg gstep__open`}
+                  className={`btn btn--${primary ? "primary" : "glass"} btn--lg gstep__open`}
                   href={step.open.url}
                   target="_blank"
                   rel="noopener noreferrer"
@@ -106,7 +106,8 @@ export function StepCard({
           {step.copy?.length ? (
             <div className="gstep__copies">
               {step.copy.map((c) => (
-                <CopyChip key={c.label} label={c.label} value={copyValue(c.value)} />
+                // Several to copy: quiet chips, so the step keeps one strong button.
+                <CopyChip key={c.label} label={c.label} value={copyValue(c.value)} quiet={step.copy!.length > 1} />
               ))}
             </div>
           ) : null}
@@ -143,7 +144,8 @@ export function StepCard({
                   Not done yet
                 </Button>
               ) : (
-                <Button size="lg" variant="action" icon="check" act="tick" className="gstep__done" onClick={() => onDone(true)} loading={busy}>
+                // A step with its own Open has that as its strong button; I did this is the green leaf glass (as in Get paid).
+                <Button size="lg" variant={step.open ? "glass" : "action"} icon="check" act="tick" className={`${step.open ? "btn--leaf " : ""}gstep__done`} onClick={() => onDone(true)} loading={busy}>
                   I did this
                 </Button>
               )}

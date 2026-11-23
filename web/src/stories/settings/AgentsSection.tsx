@@ -262,7 +262,7 @@ export function AgentsSection({ ws }: { ws: string }) {
           description={
             quality
               ? agent.active
-                ? DRIVING_RULE
+                ? `${DRIVING_RULE} Off: other videos skip its checks.`
                 : undefined
               : agent.active
                 ? "Switch it off and its work stops."

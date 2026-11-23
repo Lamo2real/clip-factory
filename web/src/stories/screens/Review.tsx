@@ -13,7 +13,7 @@ import { useToast } from "../../components/Toasts.tsx";
 import { useAppActive } from "../pane.tsx";
 import { useLoad, usePoll } from "../../lib/hooks.ts";
 import { storiesSound } from "../prefs.ts";
-import { starBurst } from "../ui.tsx";
+import { starBurst, StTech } from "../ui.tsx";
 import { storiesApi } from "../api/client.ts";
 import type { DownloadFormat, ErrorAccount, ModelOverride, PublishingJob, SocialAccount, StepKey, StoriesConfig, Story, StoryPatch, StoryStatus, TaskKind } from "../api/types.ts";
 import { storiesHref } from "../routes.ts";
@@ -585,7 +585,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                 <span className="st-s-field__hint">Remakes use</span>
                 {remakeMenu}
               </div>
-              {!pick ? <NextRun info={info} story={story} /> : null}
+              {/* "Remakes use" above already names the model and effort: "Next run" is in How it was made. */}
               <div className="st-s-decide__more">
                 <button type="button" className="st-btn" aria-expanded={form === "changes"} onClick={() => setForm((f) => (f === "changes" ? "none" : "changes"))}>
                   Ask for changes
@@ -675,20 +675,28 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
           {citations.length ? (
             <section className="st-s-sources" aria-label="Where the advice comes from">
               <h2 className="st-s-sources__title">Based on</h2>
+              {/* The sources by name, each a link; the rules they say are one tap away (the owner, 23 Nov: less text). */}
               <ul>
-                {citations.map((c) => (
-                  <li key={c.url + (c.section ?? "")}>
-                    <a href={c.url} target="_blank" rel="noopener noreferrer">
-                      {c.publisher}
-                    </a>
-                    <span>
-                      {" "}
-                      · {c.title}
-                      {c.section ? ` (${c.section})` : ""}
-                    </span>
-                  </li>
-                ))}
+                {citations
+                  .filter((c, i) => citations.findIndex((d) => d.publisher === c.publisher) === i)
+                  .map((c) => (
+                    <li key={c.url + (c.section ?? "")}>
+                      <a href={c.url} target="_blank" rel="noopener noreferrer">
+                        {c.publisher}
+                      </a>
+                    </li>
+                  ))}
               </ul>
+              <StTech label="The rules">
+                <ul>
+                  {citations.map((c) => (
+                    <li key={c.url + (c.section ?? "")}>
+                      {c.title}
+                      {c.section ? ` (${c.section})` : ""}
+                    </li>
+                  ))}
+                </ul>
+              </StTech>
               <p className="st-s-field__hint">The video ends with “Check your local road rules.”</p>
             </section>
           ) : null}

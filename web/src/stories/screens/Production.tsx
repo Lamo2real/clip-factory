@@ -565,7 +565,7 @@ function RefPicker({
                 className={`st-s-reftile${on ? " is-on" : ""}`}
                 aria-pressed={on}
                 aria-disabled={off || undefined}
-                title={!ready ? "Study it first in References." : off ? "Pick up to 3 reference videos." : undefined}
+                title={!ready ? "Analyze it first in References." : off ? "Pick up to 3 reference videos." : undefined}
                 onClick={() => {
                   if (off) return;
                   onChange(on ? picked.filter((x) => x !== r.refId) : [...picked, r.refId]);

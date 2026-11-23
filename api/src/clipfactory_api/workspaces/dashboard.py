@@ -52,8 +52,8 @@ def _account_sentence(account: Mapping[str, Any]) -> str | None:
     if account.get("connectionStatus") == "needs_reconnect":
         if str(account.get("accountName") or "").strip():  # "this {Platform} account ({name})" (round 5 E13)
             who = sentences.this_account(str(account.get("platform")), str(account["accountName"]), start=True)
-            return f"{who} needs connecting again. Open Social accounts and tap Connect."
-        return f"Clips Funded's {name} needs connecting again. Open Social accounts and tap Connect."
+            return f"{who} needs connecting again. Open Social accounts and tap Connect again."
+        return f"Clips Funded's {name} needs connecting again. Open Social accounts and tap Connect again."
     warning = account.get("warning")
     if account.get("reason") == "clips_unknown":
         return None  # nothing to do now: the first post shows the account to check (§45.34)

@@ -106,7 +106,8 @@ reading" and "the AdSense website" are the exceptions). Platform labels stay bol
    `cost`, "Steps checked on 21 Nov 2026"); the **status block** (`data-help="getpaid-status"`: the pill, the line,
    `missing` and `holds` lines, the reading chip (`readingChip`, YouTube and, while `WHOP_CONNECT` is on, Content
    Rewards), X's `warning`, and `next` as below); **Can you earn here?** (the guide's facts for his country from
-   `GET /v1/money`'s `country`, each short, inside one closed fold "See the rules" with one glass "Read YouTube's
+   `GET /v1/money`'s `country`, each short: the first one (to join, or when it pays) on the card, the rest inside one
+   closed fold "See all the rules" with one glass "Read YouTube's
    rules" per different official page; with no country picked: "Pick your country to see its rules." (above the fold)
    with a glass "Pick my country"
    (→ `/settings/posting/money#money-country`) and the facts that hold everywhere); the **step cards** in time order;
