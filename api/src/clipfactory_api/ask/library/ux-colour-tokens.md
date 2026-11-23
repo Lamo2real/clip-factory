@@ -47,7 +47,7 @@ counted toward AA.
 
 | Token | Use |
 |---|---|
-| `--fill-control` | Buttons without a fill of their own (glass, ghost), drop zones, check chips, step numbers: the raise (`--fill`), one step brighter than what it sits on. Straight on the page that is the pick-one track's recipe (bone 0.08 over `--panel-veil` + 0.22); inside a pane the relative raise (green 0.22, bone 0.09) |
+| `--fill-control` | Buttons without a fill of their own (glass, ghost), drop zones, check chips, step numbers: the raise (`--fill`), one step brighter than what it sits on. Straight on the page that is the pick-one track's recipe (bone 0.08 over `--plate-veil` + 0.22); inside a pane the relative raise (green 0.22, bone 0.09) |
 | `--fill-field` | Text fields and the link box: deep green 0.45, a well deeper than the panel |
 | `--shade-field` | The field's soft inner shade (blurred, never a line) |
 | `--glow-bone`, `--glow-vermilion`, `--glow-leaf` | Soft glows (18 px blur) for a chosen, live, best or done thing, instead of a ring |
@@ -60,11 +60,14 @@ highlight from search and Ask's spotlight, progress bars and rings, the switch t
 
 Each glass variant sets its `--glass-tint` (green) and `--glass-light` (bone, from above) from the per-level tokens
 ([the logic of light](#the-logic-of-light)), and a component may override them. Every tint is flat bottle green;
-`--panel-veil` is how much, `--light-pay` the step more that pays for the light.
+`--panel-veil` is how much (over the backdrop as the pane's own `brightness()` dims it), `--plate-veil` how much where
+nothing dims it (the title and line plates, controls straight on the page), `--light-pay` the step more that pays for
+the light.
 
 | Class | `--glass-tint` | `--glass-light` |
 |---|---|---|
-| `.glass` | `--glass-tint-panel`: green at `--panel-veil` + `--light-pay` | `--glass-light-panel`: bone 0.04 at the top edge, gone 14 px down (inside the top padding, never under words), plus the catch light |
+| `.glass` | `--glass-tint-panel`: green at `--panel-veil` + `--light-pay`, over a backdrop its own filter blurs, saturates and dims (`--glass-brightness`) | `--glass-light-panel`: bone 0.04 at the top edge, gone 14 px down (inside the top padding, never under words), plus the catch light |
+| The title and line plates | `--glass-tint-plate`: green at `--plate-veil` + `--light-pay` (no filter of their own) | `--glass-light-panel` |
 | `.glass--green` | `--glass-tint-lead`: the panel's green (the lead panel: the hero, the sign-in card, Library's learnings) | `--glass-light-lead`: bone 0.075 at the top edge, gone 14 px down |
 | `.glass--vermilion` | the panel, a breath of vermilion (0.16 → 0.08), then green 0.20 over it | the panel's |
 | `.glass--clear` | the panel tint | the panel's |

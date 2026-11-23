@@ -21,7 +21,10 @@ Amends ADR-78 (its "Reference links to other people's videos are not downloaded"
      with one step ("Get the video"); its own pinned `yt-dlp[default]==2026.10.26` (Clip Factory's pin). Code shapes
      are copied from Clip Factory (`sources.py`, `contentrewards/fetch.py`, `logo.py`), never imported (ADR-76).
      Nothing of Clip Factory's cookies, PO tokens, proxy secret, Mac fetch, TikTok helper or social tokens is used;
-     IAM already keeps the stories role out of `private/` and Clip Factory's secrets. No Terraform change.
+     IAM already keeps the stories role out of `private/` and Clip Factory's secrets. No Terraform change. YouTube
+     gets Clips Funded's own PO-token sidecar from the start (ADR-52's way: bgutil's server built into this image
+     from upstream, pinned by sha256, `player_client=default,mweb`, its calls through the fetch's guard; `pot.py` is a
+     copy of Clip Factory's, never an import), because ADR-52 and ADR-59 found YouTube blocks AWS addresses.
   2. *One allowlist, three copies, one fixture.* Seven sites (YouTube, TikTok, Instagram, Facebook, X, Google Drive,
      Dropbox), exact hosts and URL shapes, https or no scheme only, no user info, port 443 or none, ≤ 2048
      characters, only the kept query keys, the same hand parser in the API, the agent and the web, all three tested
@@ -39,14 +42,19 @@ Amends ADR-78 (its "Reference links to other people's videos are not downloaded"
      `--playlist-items 1`, `--no-cache-dir`, `--use-extractors` with exactly the seven platform extractors and never
      `generic`, `--` before the URL, never `--cookies`, `--exec`, `--load-info-json` or a user-supplied `-o`; a test
      checks offline that every platform shape in the fixture has an allowed extractor. A link shape only `generic`
-     takes (Facebook's `/share/…` and `fb.watch`) is out of the table. Live, over 10 minutes and over the cap are
-     refused from `-J` before anything is downloaded; the download is capped again (`--max-filesize`, the guard) and
-     the file is probed (a video of ≤ 600.5 s, ≤ 2 GiB) before it is stored.
+     takes and nothing leads from is out of the table. Facebook's own Share › Copy link (`/share/r/`, `/share/v/`)
+     and `fb.watch` are opened first through the guard (at most 3 redirects on Facebook's own hosts, or the page's
+     `og:url`), and only the Facebook video link they lead to, checked again with `clean_link`, goes to yt-dlp.
+     Live, over 10 minutes and over the cap are refused from `-J` before anything is downloaded; the download is
+     capped again (`--max-filesize`, the guard) and the file is probed (a video of ≤ 600.5 s, ≤ 2 GiB) before it is
+     stored.
   5. *For study only, kept private.* The file becomes the reference's own `ws/…/references/{refId}/source.mp4`,
      analyzed like an upload; the keep settings apply; nothing is published. The final write is fenced on
      `currentJobId`, and a refused write deletes the uploaded file.
-  6. *The plain fallback.* Every failure says why in kid words and keeps "Upload a video" and the page drop; "Try
-     again" asks once more (`POST …/references/{refId}/fetch`).
+  6. *The plain fallback.* Every failure says why in kid words ("upload it", the same on a phone) and keeps "Upload a
+     video" and the page drop; "Try again" asks once more (`POST …/references/{refId}/fetch`) and is the main button
+     only when asking again can work. A link added on the list that does not arrive opens its own page, like one that
+     arrives; the same link pasted again says where its Try again is.
   7. *One drop hook.* `useFileDrop` (element or page zones, a counted highlight, text into text boxes untouched,
      Ask's own drops never taken), `DropOverlay` (one glass layer and pill in each app's own glass, a shaking coral
      refusal, an sr-only status line) and a window guard installed once in `main.tsx`; Clip Factory's new-job card
@@ -55,7 +63,7 @@ Amends ADR-78 (its "Reference links to other people's videos are not downloaded"
   The runtime image gains yt-dlp (its build check runs it, and the self-check confirms the extractors without
   `generic`). YouTube's, TikTok's, Meta's and X's terms forbid downloading or automated collection: the fetch uses no
   login, is for study only and keeps the files private; the owner decides whether to keep it on. Many platforms block
-  downloads from cloud addresses, so some links will fail and say so. Follow-ups: Clips Funded's own PO-token sidecar
-  for YouTube (additive to the image only) if YouTube links mostly fail; "Get it again" for a link reference whose
-  file a keep setting cleared; Facebook share links resolved through the guard and checked again; Vimeo or other
-  sites as rows of the table.
+  downloads from cloud addresses, so some links will still fail and say so (the PO token raises YouTube's odds but
+  does not guarantee them; Instagram may want a login, and no cookies are used). The image grows by about 175 MB for
+  the PO-token server. Follow-ups: "Get it again" for a link reference whose file a keep setting cleared; Vimeo or
+  other sites as rows of the table; one public link per site tried on the live app after the deploy.

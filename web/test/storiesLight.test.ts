@@ -12,7 +12,11 @@
 //   it over white, and brighter over mid grey; only the page-to-panel step may go darker, where AA needs the veil;
 // - every surface is lighter at its top, and has a bright top rim, brighter on higher levels;
 // - every word keeps 4.5:1 at the brightest part of each surface (its top) and at its bottom, over the lightest pixel
-//   each look can show (the stage's lights, a white or busy picture or desktop, a cream card under a bar or a sheet);
+//   each look can show (the stage's lights, a white or busy picture or desktop, a cream card under a bar or a sheet),
+//   as each glass's own backdrop-filter shows it (look.ts filtered: dimmed by brightness(), DIM, then saturated; the
+//   page draws the colours and a picture, so the filter dims them; the desktop is not part of the page, so there 1),
+//   and a control's words on it, hovered too over the colours;
+// - over a white picture every glass, dimmed, is never lighter than its measured floor over a white desktop;
 // - the glass classes and the screens' own surfaces lay their level's light.
 // e2e/stories-light.spec.ts measures the same on the pages.
 import { readdirSync, readFileSync } from "node:fs";
@@ -20,27 +24,31 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   CREAM,
+  DIM,
   ELEVATION,
   ELEVATION_TOP,
   EMBER,
   FROSTED,
   INKS,
+  KIND_DIM,
   KIND_LEVEL,
   LIGHT_STEP,
   MEASURED,
   PRESETS,
+  SATURATIONS,
   SOLID_PAGE,
   VEIL,
   WHITE,
   contrast,
+  filtered,
   hexToRgb,
   lit,
   luminance,
   mix,
-  saturateRgb,
   solidVeils,
   stageSpots,
   veilsFor,
+  type DimKind,
   type Rgb,
   type Veils,
 } from "../src/stories/look.ts";
@@ -67,6 +75,10 @@ function rule(css: string, selector: string): Map<string, string> {
 }
 const BASE = rule(TOKENS, ".stories-app");
 const OVER_PICTURES = rule(TOKENS, '.stories-app[data-look="window"],\n.stories-app[data-look="picture"]');
+const OVER_THE_DESKTOP = rule(TOKENS, '.stories-app[data-look="window"]');
+const OVER_A_PICTURE = rule(TOKENS, '.stories-app[data-look="picture"]');
+/** Inside a glass card over the colours (a control's hover there: the cream lift). */
+const INSIDE_ON_COLOURS = rule(TOKENS, '.stories-app:not([data-look="window"]):not([data-look="picture"]) .st-glass:not(.st-glass--control)');
 const FIGURE_INSIDE = rule(TOKENS, '.stories-app:is([data-look="window"], [data-look="picture"]) :is(.st-glass:not(.st-glass--control), .st-plate)');
 
 /** The matching close paren of the open paren at `open`. */
@@ -168,11 +180,15 @@ function over(ls: Layer[], under: Rgb, at: "top" | "bottom"): Rgb {
 // ---------- The looks, as look.ts puts them on .stories-app ----------
 
 type Look = { name: string; kind: "colours" | "picture" | "window"; veils: Veils; solid?: boolean; colours?: readonly string[] };
+/** What each kind of filter dims the backdrop to in this look (solid glass has no filter). */
+const dimsOf = (look: Look): Record<DimKind, number> => (look.solid ? { glass: 1, over: 1 } : DIM[look.kind]);
 const veilsOfColours = (colours: readonly string[]) => veilsFor({ mode: "colours", strength: "clear", colours: [...colours], picture: null }, "none");
 const LOOKS: Look[] = [
   ...PRESETS.map((p) => ({ name: `Colours › ${p.name}`, kind: "colours" as const, veils: veilsOfColours(p.colours), colours: p.colours })),
   { name: "Colours › the owner's own (white)", kind: "colours", veils: veilsOfColours(["#ffffff"]), colours: ["#ffffff"] },
   { name: "Colours › the owner's own (bright)", kind: "colours", veils: veilsOfColours(["#fff000", "#00ffff", "#ff00ff"]), colours: ["#fff000", "#00ffff", "#ff00ff"] },
+  // See-through Frosted in a browser or on a phone: the colours under the 0.30 frost
+  { name: "See-through, Frosted, in a browser (Ember under the frost)", kind: "colours", veils: veilsFor({ mode: "see-through", strength: "frosted", colours: [...EMBER], picture: null }, "none"), colours: EMBER },
   // (as veilsFor draws them: each glass at or above its measured floor, MEASURED and FROSTED, in the light's order)
   { name: "a picture", kind: "picture", veils: veilsFor({ mode: "picture", strength: "clear", colours: [...EMBER], picture: "data:image/png;base64," }, "none") },
   { name: "See-through, Clear", kind: "window", veils: veilsFor({ mode: "see-through", strength: "clear", colours: [...EMBER], picture: null }, "liquid") },
@@ -184,6 +200,7 @@ const LOOKS: Look[] = [
 function envOf(look: Look, tone?: string): Map<string, string> {
   const env = new Map(BASE);
   if (look.kind !== "colours") for (const [k, v] of OVER_PICTURES) env.set(k, v);
+  for (const [k, v] of look.kind === "window" ? OVER_THE_DESKTOP : look.kind === "picture" ? OVER_A_PICTURE : []) env.set(k, v);
   for (const [k, v] of Object.entries(look.veils)) env.set(`--st-veil-${k}`, String(v));
   if (look.solid) env.set("--st-veil-lens-rim", env.get("--st-veil-solid")!);
   if (tone) env.set("--st-tone-rgb", tone);
@@ -194,39 +211,47 @@ const ESPRESSO = hexToRgb("#1c130e");
 const BLACK: Rgb = [0, 0, 0];
 const TONES = ["--st-action-rgb", "--st-amber-rgb", "--st-coral-rgb", "--st-mint-rgb", "--st-sky-rgb"];
 
-type Surface = { name: string; level: number; at: (under: Rgb, at: "top" | "bottom") => Rgb; inks: string[] };
+/** A surface over the backdrop pixel `under`, at its top or bottom, the backdrop through saturate `sat` (its filter's, or
+ *  none: both are checked). */
+type Surface = { name: string; level: number; at: (under: Rgb, at: "top" | "bottom", sat?: number) => Rgb; inks: string[]; hover?: boolean };
 const GLASS_INKS = ["--st-text-strong", "--st-text", "--st-text-soft", "--st-text-amber", "--st-coral-ink", "--st-mint-ink", "--st-sky-ink"];
 
-/** Every kind of glass surface in this look, with the words that may sit on it. */
+/** Every kind of glass surface in this look, with the words that may sit on it. Each is laid over what its own
+ *  backdrop-filter shows (the page veil, then dimmed, then saturated: look.ts filtered), as the browser paints it. */
 function surfacesOf(look: Look): Surface[] {
   const env = envOf(look);
   const page = look.veils.page;
+  const dims = dimsOf(look);
   const pageOver = (b: Rgb) => (page ? mix(VEIL, b, page) : b);
-  const one = (name: string, level: number, token: string, inks = GLASS_INKS, e = env): Surface => {
+  const seen = (kind: keyof Veils, b: Rgb, sat = 1) => filtered(pageOver(b), dims[KIND_DIM[kind]!], sat);
+  const one = (name: string, level: number, token: string, kind: keyof Veils, inks = GLASS_INKS, e = env, hover = true): Surface => {
     const ls = layers(`var(${token})`, e);
-    return { name, level, at: (b, at) => over(ls, pageOver(b), at), inks };
+    return { name, level, at: (b, at, sat) => over(ls, seen(kind, b, sat), at), inks, hover };
   };
-  const card = one("a card", 2, "--st-tint-card", [...GLASS_INKS, "--st-text-muted"]);
+  const card = one("a card", 2, "--st-tint-card", "card", [...GLASS_INKS, "--st-text-muted"]);
   // A card inside a card (glass.css: .st-glass .st-glass) is painted over its card, as the browser draws it: its layers
-  // over the card's own colour over the backdrop, never straight over the backdrop.
+  // over the card's own colour over the backdrop, never straight over the backdrop, and no filter of its own.
   const raised = layers("var(--st-tint-raised)", env);
-  const nested: Surface = { name: "a card inside a card", level: 3, at: (b, at) => over(raised, card.at(b, at), at), inks: [...GLASS_INKS, "--st-text-muted"] };
+  const nested: Surface = { name: "a card inside a card", level: 3, at: (b, at, sat) => over(raised, card.at(b, at, sat), at), inks: [...GLASS_INKS, "--st-text-muted"], hover: false };
   const out: Surface[] = [
-    one("the rail", 1, "--st-tint-rail"),
+    one("the rail", 1, "--st-tint-rail", "rail"),
     card,
-    one("a hero", 3, "--st-tint-hero"),
+    one("a hero", 3, "--st-tint-hero", "hero"),
     nested,
-    one("a bar", 3, "--st-tint-bar"),
-    one("a sheet", 5, "--st-tint-float"),
+    one("a bar", 3, "--st-tint-bar", "bar"),
+    // (a control on a sheet is held at rest: its hover lift over a sheet's top is brighter than any veil carries)
+    one("a sheet", 5, "--st-tint-float", "float", GLASS_INKS, env, false),
   ];
   // A plate is a page panel over a picture or the desktop; over the colours it draws nothing (it is the page).
-  if (look.kind !== "colours") out.push(one("a plate", 1, "--st-tint-plate"));
-  for (const tone of TONES) out.push(one(`a tinted tile (${tone})`, 3, "--st-tint-tinted", GLASS_INKS, envOf(look, env.get(tone)!)));
-  // A liquid hero (Chromium, liquid glass only, never solid): its filter lays middleVeil under the words, then its tint.
+  if (look.kind !== "colours") out.push(one("a plate", 1, "--st-tint-plate", "plate"));
+  // (a tinted tile's tone is light too: a control on it is held at rest)
+  for (const tone of TONES) out.push(one(`a tinted tile (${tone})`, 3, "--st-tint-tinted", "tinted", GLASS_INKS, envOf(look, env.get(tone)!), false));
+  // A liquid hero (Chromium, liquid glass only, never solid): its filter dims the backdrop as the hero's does, lays
+  // middleVeil under the words, then its tint.
   if (!look.solid) {
     const ls = layers("var(--st-tint-lens)", env);
     const m = middleVeil(look.veils.hero, Number(env.get("--st-veil-lens-rim")));
-    out.push({ name: "a liquid hero (under its words)", level: 3, at: (b, at) => over(ls, mix(VEIL, pageOver(b), m), at), inks: GLASS_INKS });
+    out.push({ name: "a liquid hero (under its words)", level: 3, at: (b, at, sat) => over(ls, mix(VEIL, seen("hero", b, sat), m), at), inks: GLASS_INKS, hover: true });
   }
   return out;
 }
@@ -244,6 +269,14 @@ function controlLayers(look: Look, inside: boolean): { name: string; ls: Layer[]
     { name: "a pill or round button", ls: fill(FIGURE_INSIDE.get("--st-fill-figure")!) },
     { name: "a button", ls: fill(btn) },
   ];
+}
+
+/** A control hovered inside glass over the colours (its brightest: the cream lift, --st-fill-control-lift). */
+function hoveredControl(look: Look): Layer[] | null {
+  if (look.kind !== "colours") return null;
+  const env = envOf(look);
+  for (const [k, v] of INSIDE_ON_COLOURS) env.set(k, v);
+  return [...layers("var(--st-light-4)", env), ...layers("var(--st-fill-control-hover)", env)];
 }
 
 describe("the elevation tokens", () => {
@@ -338,18 +371,21 @@ describe("each level is brighter than the one under it", () => {
   });
 
   it("the light never thins a surface's measured veil over a white desktop or photo (it takes its share from the backdrop)", () => {
-    // Clear (a picture, See-through Clear): MEASURED's veils were measured over white. Frosted lays its frost first, so
-    // what is behind is never white there (its words are checked below, at 9:1 and more).
+    // Clear (See-through Clear): MEASURED's veils were measured over white, and the drawn ones are at or above them. A
+    // picture is dimmed by each glass's own filter (DIM.picture), so its drawn veils are thinner: dimmed, every glass is
+    // still never lighter over a white photo than its measured floor over a white desktop (and so over any photo: the
+    // dim only ever takes away, per channel). Frosted lays its frost first, so what is behind is never white there (its
+    // words are checked below, at 9:1 and more).
     for (const look of LOOKS.filter((l) => l.kind !== "colours" && !l.solid && l.veils.page === 0))
       for (const s of surfacesOf(look).filter((x) => !x.name.startsWith("a tinted"))) {
         const key = ({ "the rail": "rail", "a card": "card", "a hero": "hero", "a card inside a card": "hero", "a bar": "bar", "a sheet": "float", "a plate": "plate", "a liquid hero (under its words)": "hero" } as const)[s.name as "a card"];
-        const plain = mix(VEIL, look.veils.page ? mix(VEIL, WHITE, look.veils.page) : WHITE, look.veils[key]);
+        const plain = mix(VEIL, look.veils.page ? mix(VEIL, WHITE, look.veils.page) : WHITE, look.kind === "picture" ? MEASURED[key] : look.veils[key]);
         const lv = KIND_LEVEL[key];
         for (const at of ["top", "bottom"] as const) {
           // where veil and light together cover everything (Frosted's sheets) the surface is solid: its words are
           // checked below, at 4.5:1 or more
           if (look.veils[key] + ELEVATION[lv]! + (at === "top" ? ELEVATION_TOP[lv]! : 0) > 1) continue;
-          expect(luminance(s.at(WHITE, at)), `${look.name}: ${s.name} at the ${at}`).toBeLessThanOrEqual(luminance(plain) + 1e-4);
+          for (const sat of SATURATIONS) expect(luminance(s.at(WHITE, at, sat)), `${look.name}: ${s.name} at the ${at}`).toBeLessThanOrEqual(luminance(plain) + 1e-4);
         }
       }
   });
@@ -357,8 +393,8 @@ describe("each level is brighter than the one under it", () => {
 
 describe("over a light backdrop the light keeps its order (a picture or the desktop)", () => {
   const GREY: Rgb = [128, 128, 128];
-  it("the drawn veils are never thinner than the measured floors", () => {
-    for (const look of LOOKS.filter((l) => l.kind !== "colours" && !l.solid)) {
+  it("over the desktop the drawn veils are never thinner than the measured floors (no filter can dim it)", () => {
+    for (const look of LOOKS.filter((l) => l.kind === "window" && !l.solid)) {
       const floor = look.veils.page ? FROSTED : MEASURED;
       // Frosted's floor is its whole cover: the frost and the glass together (1 - (1 - page)(1 - veil)).
       const cover = (v: Veils, k: keyof Veils) => 1 - (1 - v.page) * (1 - v[k]);
@@ -403,14 +439,12 @@ describe("over a light backdrop the light keeps its order (a picture or the desk
 describe("every word stays readable at the brightest part of every surface", () => {
   const ink = (name: string) => hexToRgb(BASE.get(name)!);
   const busy: Rgb[] = [WHITE, [255, 255, 0], [0, 255, 255], [255, 0, 255], [255, 64, 64], [64, 255, 64], [80, 140, 255], [255, 200, 150], [128, 128, 128], BLACK];
-  /** The lightest pixels each look can show behind its glass. */
+  /** The lightest pixels each look can show behind its glass (each glass's filter dims and saturates them: surfacesOf,
+   *  through every saturation). */
   const behind = (look: Look): Rgb[] => {
-    if (look.kind === "colours") {
-      const spots = stageSpots(look.colours ?? EMBER);
-      return [...spots, ...spots.map((s) => saturateRgb(s, 1.35)), ESPRESSO];
-    }
+    if (look.kind === "colours") return [...stageSpots(look.colours ?? EMBER), ESPRESSO];
     // a picture or the desktop: anything, white the worst (the page veil, Frosted's frost, is laid by surfacesOf)
-    return busy.flatMap((b) => [b, saturateRgb(b, 1.35)]);
+    return busy;
   };
 
   for (const look of LOOKS)
@@ -418,31 +452,37 @@ describe("every word stays readable at the brightest part of every surface", () 
       const low: string[] = [];
       const surfaces = surfacesOf(look);
       for (const under of behind(look))
-        for (const s of surfaces)
-          for (const at of ["top", "bottom"] as const) {
-            const bg = s.at(under, at);
-            for (const i of s.inks) {
-              const r = contrast(ink(i), bg);
-              if (r < 4.5) low.push(`${s.name} at the ${at} over ${under.map(Math.round)}: ${i} ${r.toFixed(2)}`);
+        for (const sat of SATURATIONS)
+          for (const s of surfaces)
+            for (const at of ["top", "bottom"] as const) {
+              const bg = s.at(under, at, sat);
+              for (const i of s.inks) {
+                const r = contrast(ink(i), bg);
+                if (r < 4.5) low.push(`${s.name} at the ${at} over ${under.map(Math.round)} (saturate ${sat}): ${i} ${r.toFixed(2)}`);
+              }
             }
-          }
       // Bars and sheets can have a cream card or the action under them (things scroll under a bar; a sheet opens over
       // the page): their words hold there too.
       for (const under of [CREAM, hexToRgb(BASE.get("--st-action")!), hexToRgb(BASE.get("--st-cream-2")!)])
-        for (const s of surfaces.filter((x) => x.name === "a bar" || x.name === "a sheet"))
-          for (const at of ["top", "bottom"] as const)
-            for (const i of s.inks) {
-              const r = contrast(ink(i), s.at(under, at));
-              if (r < 4.5) low.push(`${s.name} over ${under}: ${i} ${r.toFixed(2)}`);
-            }
-      // A control's words on every surface it sits on (and loose on the page over a picture or the desktop).
+        for (const sat of SATURATIONS)
+          for (const s of surfaces.filter((x) => x.name === "a bar" || x.name === "a sheet"))
+            for (const at of ["top", "bottom"] as const)
+              for (const i of s.inks) {
+                const r = contrast(ink(i), s.at(under, at, sat));
+                if (r < 4.5) low.push(`${s.name} over ${under} (saturate ${sat}): ${i} ${r.toFixed(2)}`);
+              }
+      // A control's words on every surface it sits on (and loose on the page over a picture or the desktop), and over
+      // the colours hovered too (the cream lift) wherever a control is held hovered.
       const words = ["--st-text-strong", "--st-text", "--st-text-soft"];
+      const hovered = hoveredControl(look);
       for (const under of behind(look))
         for (const at of ["top", "bottom"] as const) {
-          for (const c of controlLayers(look, true))
+          for (const sat of SATURATIONS)
             for (const s of surfaces) {
-              const bg = over(c.ls, s.at(under, at), at);
-              for (const i of words) if (contrast(ink(i), bg) < 4.5) low.push(`${c.name} on ${s.name} at the ${at} over ${under.map(Math.round)}: ${i} ${contrast(ink(i), bg).toFixed(2)}`);
+              for (const c of [...controlLayers(look, true), ...(hovered && s.hover !== false ? [{ name: "a glass control hovered", ls: hovered }] : [])]) {
+                const bg = over(c.ls, s.at(under, at, sat), at);
+                for (const i of words) if (contrast(ink(i), bg) < 4.5) low.push(`${c.name} on ${s.name} at the ${at} over ${under.map(Math.round)} (saturate ${sat}): ${i} ${contrast(ink(i), bg).toFixed(2)}`);
+              }
             }
           if (look.kind !== "colours")
             for (const c of controlLayers(look, false)) {
@@ -458,7 +498,7 @@ describe("every word stays readable at the brightest part of every surface", () 
     const card = surfacesOf(look).find((s) => s.name === "a card")!;
     for (const under of [WHITE, ESPRESSO, hexToRgb("#e2621f")]) {
       const a = card.at(under, "bottom");
-      const b = lit(under, look.veils.card, ELEVATION[2]!);
+      const b = lit(filtered(under, DIM.colours.glass), look.veils.card, ELEVATION[2]!);
       for (let i = 0; i < 3; i++) expect(Math.abs(a[i]! - b[i]!)).toBeLessThan(0.75);
     }
     expect(INKS.ink).toBe(BASE.get("--st-text"));
@@ -473,20 +513,14 @@ describe("a card inside other glass (glass.css .st-glass .st-glass)", () => {
   const ink = (name: string) => hexToRgb(BASE.get(name)!);
   const INKS_ON = [...GLASS_INKS, "--st-text-muted"];
   const busy: Rgb[] = [WHITE, [255, 255, 0], [0, 255, 255], [255, 0, 255], [255, 64, 64], [64, 255, 64], [80, 140, 255], [255, 200, 150], [128, 128, 128], BLACK];
-  const behind = (look: Look): Rgb[] => {
-    if (look.kind === "colours") {
-      const spots = stageSpots(look.colours ?? EMBER);
-      return [...spots, ...spots.map((s) => saturateRgb(s, 1.35)), ESPRESSO];
-    }
-    return busy.flatMap((b) => [b, saturateRgb(b, 1.35)]);
-  };
-  type Nested = { name: string; parent: Surface; at: (under: Rgb, at: "top" | "bottom") => Rgb; raised: boolean };
+  const behind = (look: Look): Rgb[] => (look.kind === "colours" ? [...stageSpots(look.colours ?? EMBER), ESPRESSO] : busy);
+  type Nested = { name: string; parent: Surface; at: (under: Rgb, at: "top" | "bottom", sat?: number) => Rgb; raised: boolean };
   function nestedOf(look: Look): Nested[] {
     const env = envOf(look);
     const all = surfacesOf(look);
     const raised = layers("var(--st-tint-raised)", env);
     const plain = layers("var(--st-tint-card)", env);
-    const inside = (name: string, parent: Surface, ls: Layer[], up: boolean): Nested => ({ name, parent, at: (b, at) => over(ls, parent.at(b, at), at), raised: up });
+    const inside = (name: string, parent: Surface, ls: Layer[], up: boolean): Nested => ({ name, parent, at: (b, at, sat) => over(ls, parent.at(b, at, sat), at), raised: up });
     const by = (n: string) => all.find((x) => x.name === n)!;
     return [
       inside("a card inside a card", by("a card"), raised, true),
@@ -522,11 +556,12 @@ describe("a card inside other glass (glass.css .st-glass .st-glass)", () => {
       const low: string[] = [];
       for (const n of nestedOf(look)) {
         for (const under of behind(look))
-          for (const at of ["top", "bottom"] as const)
-            for (const i of INKS_ON) {
-              const r = contrast(ink(i), n.at(under, at));
-              if (r < 4.5) low.push(`${n.name} at the ${at} over ${under.map(Math.round)}: ${i} ${r.toFixed(2)}`);
-            }
+          for (const sat of SATURATIONS)
+            for (const at of ["top", "bottom"] as const)
+              for (const i of INKS_ON) {
+                const r = contrast(ink(i), n.at(under, at, sat));
+                if (r < 4.5) low.push(`${n.name} at the ${at} over ${under.map(Math.round)} (saturate ${sat}): ${i} ${r.toFixed(2)}`);
+              }
         if (!n.raised) continue;
         // a step up from the parent it is laid over: over white by LIGHT_STEP on a picture or the desktop, brighter
         // anyhow (in solid glass over the colours a card inside the hero is the hero's own solid veil: never darker)

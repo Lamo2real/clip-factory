@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { PostMetrics } from "../src/api/types.ts";
 import {
   STATS_ORDER,
+  YOUTUBE_ZERO_NOTE,
   ago,
   calmCopy,
   compact,
@@ -12,6 +13,7 @@ import {
   reactionParts,
   until,
   watchTotal,
+  zeroViewsNote,
 } from "../src/lib/metrics.ts";
 
 const at = "2026-11-16T10:00:00Z";
@@ -138,6 +140,29 @@ describe("status and calm copy", () => {
       text: "The video was too long. Go to Library and tap Try again.",
       link: { href: "/library", label: "Go to Library" },
     });
+  });
+
+  it("a posted stack whose numbers could not be read says why, not that they are on the way", () => {
+    const fb = { platform: "facebook" as const, metrics: null, status: "posted" as const };
+    expect(calmCopy({ ...fb, error: "Facebook did not answer. We will try again soon." })).toEqual({
+      text: "Facebook did not answer. We will try again soon.",
+    });
+    expect(calmCopy({ ...fb, error: "" })?.text).toBe("Numbers are on the way. Check back in a few minutes.");
+    // Numbers win over an old error: the stack shows them.
+    expect(calmCopy({ ...fb, metrics: m(), error: "Facebook did not answer. We will try again soon." })).toBeNull();
+  });
+
+  it("explains a YouTube Short that still has 0 views hours after posting: the 0 is YouTube's own count", () => {
+    const now = Date.parse(at);
+    const yt = { platform: "youtube" as const, status: "posted" as const, metrics: m({ views: 0 }) };
+    const hoursAgo = (h: number) => new Date(now - h * 3_600_000).toISOString();
+    expect(zeroViewsNote({ ...yt, postedAt: hoursAgo(7) }, now)).toBe(YOUTUBE_ZERO_NOTE);
+    expect(zeroViewsNote({ ...yt, postedAt: hoursAgo(1) }, now)).toBeNull(); // still early
+    expect(zeroViewsNote({ ...yt, postedAt: hoursAgo(7), metrics: m({ views: 3 }) }, now)).toBeNull();
+    expect(zeroViewsNote({ ...yt, postedAt: hoursAgo(7), metrics: m({ views: null }) }, now)).toBeNull();
+    expect(zeroViewsNote({ ...yt }, now)).toBeNull(); // no posting time
+    expect(zeroViewsNote({ ...yt, platform: "instagram", postedAt: hoursAgo(7) }, now)).toBeNull();
+    expect(zeroViewsNote({ ...yt, status: "posted_private", postedAt: hoursAgo(7) }, now)).toBeNull();
   });
 
   it("TikTok while the Mac posts it (§47.4): what the Mac does, never Post it yourself, no Go to Library for a stop", () => {

@@ -49,6 +49,7 @@
    (FLOAT_VEIL, which plans for white, never a panel's). Three classes, so it wins over `.glass--green` in every look. */
 .help-launcher.glass.glass--green {
   --glass-tint: var(--glass-tint-float);
+  --glass-brightness: 1; /* planned for white as it is: its filter dims nothing (FLOAT_VEIL) */
   --glass-light: var(--glass-light-float);
 }
 .has-update-bar .help-launcher {
@@ -131,6 +132,7 @@
   overflow: hidden;
   /* Strong enough to read over any page (and the owner's own background picture): a floating layer, lit from above. */
   --glass-tint: var(--glass-tint-float);
+  --glass-brightness: 1; /* planned for white as it is: its filter dims nothing (FLOAT_VEIL) */
   --glass-light: var(--glass-light-float);
   --glass-blur: 28px;
   box-shadow: var(--glass-shadow-float);
@@ -144,6 +146,7 @@
 }
 .help-panel.is-sheet {
   --glass-tint: var(--glass-tint-float);
+  --glass-brightness: 1; /* planned for white as it is: its filter dims nothing (FLOAT_VEIL) */
   --glass-light: var(--glass-light-float);
   /* The visible part of the screen (HelpPanel sets these from visualViewport), so the phone keyboard never hides
      the field and the plane. It sits above the tab bar too. */
@@ -773,6 +776,7 @@
 .help-viewer.glass {
   /* An overlay: nearly solid (0.90), lit from above. */
   --glass-tint: linear-gradient(rgb(var(--green-rgb) / 0.9), rgb(var(--green-rgb) / 0.9));
+  --glass-brightness: 1; /* an overlay planned for white as it is: its filter dims nothing */
   --glass-light: var(--glass-light-overlay);
   box-shadow: var(--glass-shadow-overlay);
 }

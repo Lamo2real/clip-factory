@@ -43,7 +43,10 @@ Eight screen builders start on these names now while the foundation keeps refini
    bar) sit in `.st-plate`: invisible over Ember, a glass plate in Picture and See-through, where anything (a white
    desktop, a busy photo) can be behind them.
 7. **Readability over all three backgrounds.** Every word at least 4.5:1, including a worst-case white or busy
-   desktop or photo. Never set a veil yourself: the glass classes use the veils `look.ts` puts on `.stories-app`.
+   desktop or photo. Never set a veil yourself: the glass classes use the veils `look.ts` puts on `.stories-app`. A
+   surface that lays a glass tint loose on the page (`--st-tint-*`, a written-out `--st-veil-*`) also lays its filter
+   (`var(--st-filter-glass)`, or the bar's or the float's), unless it is a `.st-glass` or sits inside one: over the
+   colours that filter is none, over a picture or the desktop a blur.
 8. **The owner's standing rules.** The mouse cursor never changes (no `cursor` anywhere); hover on every control;
    no visible borders (light only: the thin glass edge); nothing overflows from 320 px; targets 44 px, 48 px on
    phones; no text under the floor (`--st-fs-min`, 13 px); reduced motion and reduced transparency honoured; never
@@ -100,7 +103,7 @@ Later files win at equal specificity, so a screen can place and size a figure, b
 | attribute | values | meaning |
 |---|---|---|
 | `data-look` | `window` · `picture` · `colours` | what is drawn behind the glass: the desktop through the window (See-through in the Mac or Windows app), the owner's picture, or the colours (also See-through in a browser or on a phone, and Picture with no picture yet) |
-| `data-strength` | `clear` · `frosted` | See-through's Glass strength (Frosted: a 0.30 frost, then the panels in the light's order, 0.96 / 0.84 / 0.77 / 0.72) |
+| `data-strength` | `clear` · `frosted` | See-through's Glass strength (Frosted: a 0.30 frost, then the panels in the light's order, 0.90 / 0.82 / 0.76 / 0.72) |
 | `data-glass` | `liquid` · `simple` · `solid` | how glass is drawn on this device: the liquid rim (Chromium on a capable device), plain CSS light (WebKit, low power), or solid (reduced transparency) |
 
 Inline custom properties it sets: `--st-veil-page`, `--st-veil-card`, `--st-veil-tinted`, `--st-veil-hero`,
@@ -161,21 +164,35 @@ glass classes; if a screen needs a look-specific rule, select `.stories-app[data
 | old: `--st-sun`, `--st-sun-top`, `--st-sun-bottom`, `--st-sun-hover`, `--st-sun-deep`, `--st-ember`, `--st-sun-rgb`, `--st-ember-rgb` | | |
 
 ### 4. Veils (numbers 0..1 of the smoky tint; look.ts sets each look's)
-| token | Ember | over a white desktop or photo: the measured floor (worst contrast) · drawn Clear · drawn Frosted |
-|---|---|---|
-| `--st-veil-page` | 0 (the owner's own colours: what keeps loose words, and loose controls at 4.6:1, readable) | 0 · 0 · 0.30 frost |
-| `--st-veil-card` | 0.58 | 0.74 (5.34:1) · 0.84 · 0.84 |
-| `--st-veil-tinted` | 0.66 | 0.80 with the colour cut to `--st-tint-cut` 0.12 (5.12:1) · 0.80 · 0.82 |
-| `--st-veil-hero` | 0.60 | 0.76 (5.14:1), glare only in a top band with no words · 0.79 · 0.77 (a card inside a card uses it too) |
-| `--st-veil-rail` | 0.62 | 0.78 (6.47:1) · 0.90 · 0.96 |
-| `--st-veil-bar` | 0.72 | 0.78 · 0.79 · 0.77 |
-| `--st-veil-float` | 0.72 (its controls' second lines keep 4.5:1 under the sheet's brighter top) | 0.74 · 0.74 · 0.72 |
-| `--st-veil-plate` | 0 | 0.78 · 0.90 · 0.96 |
+No glass dims what it sees (look.ts `DIM`, 1 in every look; the filters carry `brightness(var(--st-dim))` at 1): a dim
+takes away as much of the backdrop as the thinner veil gives back, because the espresso veil is nearly black (23 Nov,
+worked out with every test of the light: dimmed, the colours showed no more, and a picture less). Over the colours the
+veils are as thin as the words allow and the cards, heroes, tinted tiles and the rail draw no filter (the WebView2
+budget, as on main); a picture and the desktop keep main's veils.
 
-Over a picture or the desktop the drawn veils (look.ts `WINDOW_CLEAR`, `WINDOW_FROSTED`) are never thinner than the
-measured floors (`MEASURED`; Frosted's frost and glass together), and keep the light's order over white (5a).
-| `--st-veil-solid` | 0.96 | reduced transparency (look.ts puts it inline on every glass, page 0.9 over a desktop or picture) |
-| `--st-veil-lens-rim` | 0.4 | a liquid hero's own tint: its filter lays the rest of `--st-veil-hero` under the words, so only the rim band (inside the padding, no words) is this thin |
+| token | Ember | a picture: drawn | the desktop: the measured floor (worst contrast) · drawn Clear · drawn Frosted |
+|---|---|---|---|
+| `--st-veil-page` | 0 (the owner's own colours: what keeps loose words, and loose controls at 4.6:1, readable) | 0 | 0 · 0 · 0.30 frost |
+| `--st-veil-card` | 0.46 | 0.84 | 0.74 (5.34:1) · 0.84 · 0.82 |
+| `--st-veil-tinted` | 0.63 | 0.80 | 0.80 with the colour cut to `--st-tint-cut` 0.12 (5.12:1) · 0.80 · 0.77 |
+| `--st-veil-hero` | 0.53 (a card inside a card: `--st-raised-cover` 0.6 more of what it lets through) | 0.79 | 0.76 (5.14:1), glare only in a top band with no words · 0.79 · 0.76 |
+| `--st-veil-rail` | 0.41 | 0.90 | 0.78 (6.47:1) · 0.90 · 0.90 |
+| `--st-veil-bar` | 0.66 | 0.79 | 0.78 · 0.79 · 0.76 |
+| `--st-veil-float` | 0.70 (a cream card or the action under it, and its controls' second lines under the sheet's brighter top) | 0.74 | 0.74 · 0.74 · 0.72 |
+| `--st-veil-plate` | 0 | 0.90 | 0.78 · 0.90 · 0.90 |
+| `--st-veil-solid` | 0.96 (reduced transparency: look.ts puts it inline on every glass, no filter) | 0.96, page 0.9 | 0.96, page 0.9 |
+| `--st-veil-lens-rim` | 0.12 (a liquid hero's own tint: its filter lays the rest of `--st-veil-hero` under the words, so only the rim band, inside the padding with no words, is this thin; never thicker than the thinnest hero, look.ts `COLOUR_FLOORS`) | 0.4 | 0.12 |
+
+Over the desktop the drawn veils (look.ts `WINDOW_CLEAR`, `WINDOW_FROSTED`) are never thinner than the measured floors
+(`MEASURED`; Frosted's frost and glass together), and keep the light's order over white (5a). Worked out again on 23 Nov
+with the light in: the AA floor itself over a white desktop (4.5:1 at a surface's top with a hovered control on it) is
+0.73 for a sheet and 0.74 for the rest (a card's words alone 0.72), under Frosted's 0.30 frost 0.65 to 0.72 (a sheet);
+drawn, the worst word over a white desktop is 6.2:1 in Clear and 5.8:1 in Frosted, a control's 5.1:1 and 4.9:1 (on a
+sheet). Above a sheet's floor it is the light's order (+0.015 a step over white), not AA, that keeps the lower levels
+thicker there. A picture (look.ts `PICTURE`) keeps those same veils (main's): over a white photo the sheet is at its
+floor and the light's order holds every level under it, as over a white desktop. Dimmed to half (the first pass of
+this work) they showed 4 to 13 % of the photo, main's show 6 to 14 %; every thinner set tried at a dim of 0.5 to 1
+broke AA on a sheet's control or the light's order over white (test/storiesLight.test.ts).
 
 ### 5. The glass recipe
 | token | meaning |
@@ -183,12 +200,14 @@ measured floors (`MEASURED`; Frosted's frost and glass together), and keep the l
 | `--st-tint-card`, `--st-tint-hero`, `--st-tint-rail`, `--st-tint-bar`, `--st-tint-float`, `--st-tint-plate`, `--st-tint-tinted`, `--st-tint-raised`, `--st-tint-cream` | the fills of each kind of surface: each is its level's light (`--st-light-N`) over its veil (`--st-shade-*`), lighter at the top (5a below); a card inside a card over a picture or the desktop is a lift of light over its card |
 | `--st-tint-lens` | a liquid hero's fill (its light over the rim's veil; glass.css only) |
 | `--st-shade-card`, `-tinted`, `-hero`, `-raised`, `-rail`, `-plate`, `-bar`, `-float`, `-lens` | each surface's veil, giving its level's light the share it takes: `v / (1 - light)`, top and bottom |
-| `--st-fill-control`, `--st-fill-control-hover` | a glass control or inactive pill (a card's veil loose in Picture/See-through; on the colours the hover deepens loose on the page and is the cream lift `--st-fill-control-lift` inside a `.st-glass`) |
+| `--st-fill-control`, `--st-fill-control-hover` | a glass control or inactive pill (loose over the desktop a card's veil, loose over a picture the measured card floor 0.74, as it has no filter of its own; on the colours the hover deepens loose on the page and is the cream lift `--st-fill-control-lift` 0.16 inside a `.st-glass`, look.ts `CONTROL_LIFT`: its words keep 4.5:1 on the thin glass there) |
 | `--st-fill-figure`, `--st-fill-figure-hover` | set only inside a `.st-glass` or `.st-plate` over a picture or the desktop: a GlassPill or RoundGlassButton there is the light cream glass (0.08, hover 0.12), never a second veil; unset on the cream card |
 | `--st-fill-well`, `--st-fill-well-hover` | fields, tracks, the toggle's off track |
 | `--st-track` | a progress bar's empty part |
-| `--st-blur` 28px, `--st-blur-float` 36px, `--st-saturate` 1.35 | heavy blur |
-| `--st-filter-glass` (none over Ember, blur in Picture/See-through), `--st-filter-bar`, `--st-filter-float` | the backdrop filters |
+| `--st-blur` 32px, `--st-blur-float` 40px (28px and 36px over a picture, as on main, so its shapes still read), `--st-saturate` 1.5 | heavy blur, liquid colour |
+| `--st-dim`, `--st-dim-over` (1 in every look) | how far a glass's filter dims what it sees (`brightness()`; look.ts `DIM`, `filtered`): `--st-dim` cards, heroes (the liquid rim too), tinted tiles, the rail; `--st-dim-over` bars, plates, sheets. A dim showed less of the backdrop, not more (4), so none dims |
+| `--st-filter-glass` (none over the colours: nothing to blur, and WebView2 pays per filter; a picture and the desktop turn it on), `--st-filter-bar`, `--st-filter-float` | the backdrop filters: `blur() brightness() saturate()`, dimmed before saturated so no channel clips first. Only the top level of glass: glass inside glass (a `.st-glass` in a `.st-glass`, or in a plate where a plate has a filter of its own, a picture or the desktop; but a bar or a sheet) has none (glass.css), so what is drawn is what look.ts works out, and WebView2 pays for one filter, not two. Never animated, never changed on hover |
+| `--st-raised-cover` 0.6 | over the colours a card inside a card covers this much more of what the hero's veil lets through (`--st-shade-raised`, look.ts `RAISED_COVER`), so the card's light under it never stacks past a sheet's |
 | `--st-edge-width` 1.25px, `--st-edge`, `--st-edge-hero`, `--st-edge-cream` | the thin light edge (a masked gradient ring, never a border) |
 | `--st-sheen-soft` | the soft inner top highlight alone |
 | `--st-sheen-panel` (1), `--st-sheen` (2), `--st-sheen-hero`, `--st-sheen-raised` (3), `--st-sheen-control` (4), `--st-sheen-float` (5), `--st-sheen-cream` | each level's bright top rim (`--st-rim-N`) in front of the soft inner top highlight |
@@ -219,6 +238,8 @@ glass. One scale, defined once in glass-tokens.css (5a) and held to look.ts (`EL
   (a background layer), `--st-shade-*` (each veil), `--st-rim-N` (`inset 0 2px 0 0`, a thin inner line just inside
   the light edge) and `--st-glow-N`. Over a picture or the desktop a control loose on the page carries a card's veil
   with `--st-elev-4-loose` (0.05) of light; inside glass it is the cream lift.
+- **The filter would dim first.** Each surface's own backdrop-filter dims the backdrop before its veil and light (5);
+  the maths below is over that backdrop as its filter shows it (look.ts `filtered`), with the dim at 1 in every look.
 - **The light takes its share from the backdrop, never from the veil.** A surface of veil v and light e lays v of the
   smoky tint, e of cream, and lets 1 − v − e of what is behind through (its veil layer is v / (1 − e) under the light;
   clamped at 1, so solid glass still steps up). Over a white desktop or photo (where cream and white are alike) every
@@ -238,7 +259,9 @@ glass. One scale, defined once in glass-tokens.css (5a) and held to look.ts (`EL
   brighter than the one under it over a white picture or desktop, and brighter over mid grey: panels 0.90, cards 0.84,
   raised surfaces 0.79, sheets 0.74 in Clear (about +0.017 a step), and a control a step up from the surface it sits
   on. Over white the light takes its share from what is behind, so there the order is the veils' alone: each level's
-  veil is thinner than the one under it (test/storiesLight.test.ts and e2e/stories-light.spec.ts hold it).
+  veil is thinner than the one under it (test/storiesLight.test.ts and e2e/stories-light.spec.ts hold it). 23 Nov:
+  Clear and a picture stay there (0.89 / 0.83 / 0.78 left a sheet 0.0150 above a raised surface as the page draws it,
+  a hair under the step; both tests lay each surface over its own filter's `brightness()`, 1).
 - **For builders.** A new surface uses its level's tint (`background: var(--st-tint-card)` …) and sheen; a surface
   that writes its fill out lays `var(--st-light-N)` in front and divides its veil by `(1 - var(--st-elev-N))` (the
   test reads every screen file for it). Gradients and inset shadows only, never another blur layer (the WebView2
@@ -251,7 +274,8 @@ glass. One scale, defined once in glass-tokens.css (5a) and held to look.ts (`EL
   one surface per level as the browser computed it, in every look).
 
 ### 6. Liquid
-`--st-lens-url` (none; glass/lens.ts sets it on each liquid hero), `--st-lens-band` 26px (how wide the bending rim is;
+`--st-lens-url` (none; glass/lens.ts sets it on each liquid hero; the filter is `blur(1px) brightness(var(--st-dim))
+url() saturate()`, dimmed first as every hero), `--st-lens-band` 26px (how wide the bending rim is;
 the lens code never makes it wider than the hero's own padding, so it never reaches words), `--st-lens-depth` 12px
 (how far light moves at the very edge; never over 0.48 of the band, so the picture never folds), `--st-saturate-lens`
 1.5. How it works (glass/lens.ts, started by `useStoriesBackground` only for `data-glass="liquid"` while Stories is on
@@ -369,7 +393,8 @@ glass.css:
 - `.st-glass--tinted`: a colour-tinted tile (level 3: its colour asks for the owner); set `--st-tone-rgb` (for
   example `var(--st-mint-rgb)`).
 - `.st-glass .st-glass` (a plain card inside a card): one level up (`--st-tint-raised`, `--st-sheen-raised`), painted
-  over its card: over the colours the hero's veil and level 3's light; over a picture or the desktop only a lift of light
+  over its card with no filter of its own: over the colours the hero's veil and `--st-raised-cover` more, and level 3's
+  light; over a picture or the desktop only a lift of light
   (`--st-elev-raised-lift`, 0.06) and no veil of its own, so over white it is a step up from its card (0.041 to 0.059).
   Inside the hero the same. Anywhere inside a sheet, a bar, a tinted tile or a control it stays a plain card (its own
   measured veil over that parent), so its words, the muted ones too, keep 4.5:1 there (a lift alone over a sheet over a
@@ -437,16 +462,54 @@ maths; `stageSpots(colours)` the lightest pixel over `STAGE_WINDOWS` (320 × 568
 0.118 luminance, so loose words need no page veil (every ink at 4.5:1 or more). Colours too bright to read on get a
 page veil instead, worked out the same way. Change a light: change both, and the test tells you if a word drops.
 
+**The dim is worked out the same way.** `DIM` is what each glass's `brightness()` makes of the backdrop (`KIND_DIM`:
+cards, heroes, tinted tiles and the rail `glass`; bars, plates and sheets `over`; 1 in every look),
+`filtered(under, dim, saturate)` what the filter shows. Over the colours `veilsFor` lays every glass over every
+lightest spot as its filter shows it, at its top: its words, a control's words on it (hovered, the cream lift
+`CONTROL_LIFT`; at rest on a sheet and a tinted tile, whose light or tone and the lift are brighter than a thin veil
+carries), a card's hints, a card inside it, and a cream card or the action under a bar or a sheet. Over a picture the
+drawn veils are `PICTURE`, main's.
+
 **Solid glass comes from here.** The veils are inline on `.stories-app`, so they beat every stylesheet rule; for
 reduced transparency (and `look.glass` solid) `veilsFor` itself returns `--st-veil-solid` for every glass (page 0.9
 over a desktop or a picture). glass-tokens.css's `@media` only covers the first paint. The hook follows the device's
 setting live.
+
+## See-through (23 Nov, the owner: "make sure everything is more see through in a liquid glassy style")
+
+How much of what is behind shows through each glass (look.ts `showThrough`): (1 − page veil)(1 − veil − its light) ×
+its dim. The light (cream, 2.5 % on the rail to 20 % on a sheet, `ELEVATION`) takes its share from what is behind
+(`lit`), so it counts; a black and white edge behind a glass reads exactly this much through it (main, over a white
+desktop: the rail 0.075, a card 0.118, a hero 0.14). The first pass of this work (ccc3cb1c) counted only 1 − veil and
+dimmed every glass: over Ember that showed about as much as a thinner veil alone (the rail 0.57 either way) but put a
+32 px filter on every card, and over a picture and on the sheets it showed less than main. Main (6e737671) → now:
+
+| look | rail | card | hero | tinted | bar | sheet | filter on the cards, heroes, tiles and rail |
+|---|---|---|---|---|---|---|---|
+| Colours › Ember | 36 → 57 % | 38 → 50 % | 33 → 40 % | 27 → 30 % | 21 → 27 % | 8 → 10 % | none (as main) |
+| Colours › Rose, Lagoon | 36 → 58 % | 38 → 50 % | 33 → 40 % | 27 → 30 % | 21 → 27 % | 8 → 10 % | none |
+| Colours › the owner's own (white: a 0.70 page veil) | 11 → 19 % | 11 → 16 % | 10 → 13 % | 8 → 10 % | 6 → 8 % | 2 → 3 % | none |
+| Frosted in a browser or on a phone (Ember under the 0.30 frost) | 25 → 56 % | 26 → 48 % | 23 → 39 % | 19 → 28 % | 15 → 19 % | 6 → 8 % | none |
+| a picture | 7.5 % | 11.5 % | 14 % | 13 % | 14 % | 6 % (unchanged) | blur, 28 px as on main |
+| See-through Clear (the desktop) | 7.5 % | 11.5 % | 14 % | 13 % | 14 % | 6 % (unchanged) | blur |
+| See-through Frosted (under the 0.30 frost) | 1 → 5 % | 8 → 9.5 % | 11 → 12 % | 8 → 11 % | 11 → 12 % | 6 % | blur |
+
+Over a white desktop or photo the top layer (a sheet) is at its AA floor and every level under it is the light's order
+(+0.015 a step) thicker, so See-through Clear and a picture keep main's veils (one step thinner left a sheet a hair
+under the step above a raised surface as the page draws it). Clip Factory's window Clear keeps main's 0.73 + 0.05 for
+the same reason, so both apps take the same trade-off. Solid glass (reduced transparency) is unchanged: 0.96, no
+filter.
 
 ## Measured (22 Nov, the foundation's figures and glass classes in the mock app, e2e/stories-glass.spec.ts)
 
 23 Nov, with the logic of light (5a): the same spec still finds every word at 4.5:1 or more over all seven
 backgrounds at 375 and 1440 px (the light takes its share from the backdrop, so over white nothing gets lighter);
 test/storiesLight.test.ts works every surface out at its top and bottom over every look's lightest pixels.
+
+23 Nov, the thinner tint (See-through above): the table below is still 22 Nov's; test/storiesLight.test.ts holds every
+word on glass at 4.5:1 or more at the top and bottom of every surface over Ember's lightest spot, a white desktop and
+a white picture, a hovered control too (over a white desktop 6.2:1 in Clear and 5.8:1 in Frosted, a control's 5.1:1
+and 4.9:1, as before). e2e/stories-glass.spec.ts measures the pages again.
 
 Every word against the lightest and the darkest pixel behind its own glyphs, at 375 and 1440 px, Chromium (liquid):
 
