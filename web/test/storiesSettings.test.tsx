@@ -140,7 +140,7 @@ async function settle(times = 6) {
   for (let i = 0; i < times; i++) await act(async () => await new Promise((r) => setTimeout(r, 0)));
 }
 
-async function open(section: "ai" | "agents" | "skills" | "memory" | "video" | "storage") {
+async function open(section: "ai" | "agents" | "skills" | "memory" | "video" | "storage" | "look") {
   act(() =>
     root.render(
       <ToastProvider>
@@ -185,8 +185,8 @@ describe("the page", () => {
   it("has a bar of every section on <Glide>, Social accounts going to the Connections page", async () => {
     await open("ai");
     const links = $$<HTMLAnchorElement>(".st-stg-tab");
-    expect(links.map((a) => a.textContent)).toEqual(["AI", "Agents", "Skills", "Memory", "Social accounts", "Video", "Storage"]);
-    expect(links.map((a) => a.getAttribute("href"))).toEqual(["/stories/settings/ai", "/stories/settings/agents", "/stories/settings/skills", "/stories/settings/memory", "/stories/connections", "/stories/settings/video", "/stories/settings/storage"]);
+    expect(links.map((a) => a.textContent)).toEqual(["AI", "Agents", "Skills", "Memory", "Social accounts", "Video", "Storage", "Look"]);
+    expect(links.map((a) => a.getAttribute("href"))).toEqual(["/stories/settings/ai", "/stories/settings/agents", "/stories/settings/skills", "/stories/settings/memory", "/stories/connections", "/stories/settings/video", "/stories/settings/storage", "/stories/settings/look"]);
     expect($(".st-stg-tabs > .glide")).not.toBeNull();
     expect($(".st-stg-tab.is-on")?.getAttribute("aria-current")).toBe("page");
     expect($("h1")?.textContent).toBe("Settings");
@@ -196,7 +196,7 @@ describe("the page", () => {
     await open("storage");
     const hero = $(".st-stg-top.st-glass--hero")!;
     expect(hero.querySelector("h1")?.textContent).toBe("Settings");
-    expect(hero.querySelectorAll(".st-stg-tab.st-pill")).toHaveLength(7);
+    expect(hero.querySelectorAll(".st-stg-tab.st-pill")).toHaveLength(8);
     expect(hero.querySelector("a.st-pill.st-stg-head__setup-go")?.getAttribute("href")).toBe("/stories/setup");
     const head = $(".st-stg-section__head.st-plate")!;
     expect(head.querySelector("h2")?.textContent).toBe("Storage and production");
@@ -208,7 +208,26 @@ describe("the page", () => {
     expect($(".st-stg-section__head .st-stg-bar")).toBeNull();
   });
 
-  for (const section of ["ai", "agents", "skills", "memory", "video", "storage"] as const)
+  it("gives Look its own page: the three backgrounds under their own pill and head, no longer at the end of Storage", async () => {
+    await open("storage");
+    expect($("#look")).toBeNull();
+    expect(host.textContent).not.toContain("See-through");
+    await open("look");
+    expect($(".st-stg-tab.is-on")?.textContent).toBe("Look");
+    expect($(".st-stg-tab.is-on")?.getAttribute("href")).toBe("/stories/settings/look");
+    const head = $(".st-stg-section__head.st-plate")!;
+    expect(head.querySelector("h2")?.textContent).toBe("Look");
+    expect(head.querySelector(".st-stg-section__lede")?.textContent).toBe("What is behind the glass: See-through, a picture of yours, or colours.");
+    // The redesign's section bar: the note in the head's one plate, none of its own.
+    expect(head.querySelector(".st-stg-bar")?.textContent).toBe("Kept on this device. Clip Factory's own background stays as it is.");
+    expect($$(".st-stg-section .st-plate")).toEqual([head]);
+    const look = $("#look")!;
+    expect(look.querySelector("h3")?.textContent).toBe("Background");
+    const modes = $$<HTMLButtonElement>('[aria-label="Background"] [role=radio]', look);
+    expect(modes.map((o) => o.querySelector(".st-stg-pick__label")?.textContent)).toEqual(["See-through", "Picture", "Colours"]);
+  });
+
+  for (const section of ["ai", "agents", "skills", "memory", "video", "storage", "look"] as const)
     it(`${section}: every pick-one bar is on <Glide>, and nothing is disabled (the deny sound needs the click)`, async () => {
       await open(section);
       for (const bar of $$("[role=radiogroup]")) expect(bar.querySelector(":scope > .glide"), bar.getAttribute("aria-label") ?? "").not.toBeNull();

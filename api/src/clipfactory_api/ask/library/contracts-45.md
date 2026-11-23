@@ -1066,7 +1066,7 @@ Production `/stories/production` (`/stories/production/new`, `/stories/productio
 `/stories/review` (`/stories/review/{storyId}`), Chat `/stories/chat` (`/stories/chat/{convId}`), References
 `/stories/references` (`/stories/references/{refId}`), Library `/stories/library` (`?kind=`, `?story=`), Social
 accounts `/stories/connections`, Settings `/stories/settings/{section}` (`ai`, `agents`, `skills`, `memory`,
-`video`, `storage`), and the onboarding `/stories/setup` (shown by itself the first time).
+`video`, `storage`, `look`), and the onboarding `/stories/setup` (shown by itself the first time).
 
 * **Workspace check in the web.** Before the first screen, StoriesApp calls `listWorkspaces()` (which also creates
   `stories` on first use). The current workspace is `lastStoriesWorkspaceId` if it is in the list with type
@@ -1137,7 +1137,7 @@ each publishing job's status, account, link, numbers, its sentence and **Try aga
   form and **Check it**, the authorization status, **last checked** (`lastCheckedAt`, with **Check now**), Connect,
   Reconnect and Disconnect; the publish sheet shows the exact account each video goes to, with **Check now**, before
   **Upload**.
-* Settings: §45.29's sections (AI, Agents, Skills, Memory, Social accounts, Video, Storage and production), plus
+* Settings: §45.29's sections (AI, Agents, Skills, Memory, Social accounts, Video, Storage and production, Look), plus
   YouTube category and privacy and captions and music defaults.
 * Chat: §45.27 (conversation list, messages, the model and effort line above the box, "Just for this message",
   attachments, action buttons, Stop); References: §45.28 (upload with progress, Analyze with the model and effort
@@ -1532,6 +1532,10 @@ the page says "Upload the video file."
     `REFVID#` sizes), output format (MP4, H.264 and AAC, `+faststart`), captions burned in or not, scenes rendered at
     a time (1–3), keep old versions (all, or the last 1–10 per story: older files are deleted when a new version is
     made).
+  * **Look** (`/stories/settings/look`, its own section pill since 23 Nov 2026; before, the last card of Storage):
+    the background behind the glass, Clip Factory's three choices as Funded Clips' own on this device (See-through
+    with Glass strength Clear or Frosted, Picture, Colours with Ember, Rose and Lagoon; `stories/look.ts`,
+    `settings/LookSection.tsx`, the glass contract), never Clip Factory's `cf.prefs` or `cf.background`.
 * Everything above belongs to the Funded Clips workspace; none of it is read by Clip Factory.
 
 ### 45.30 Developer apps: Funded Clips' own, or Clip Factory's on purpose

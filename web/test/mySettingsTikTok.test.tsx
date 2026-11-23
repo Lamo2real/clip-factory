@@ -22,7 +22,7 @@ const { MySettingsBranch } = await import("../src/screens/settings/MySettingsBra
 const OWN_TAP = "TikTok wants your own tap on each clip, so tap Use my settings there.";
 const COMMERCIAL = "Commercial content is off. For a paid partnership, tick Branded content in the TikTok row of that clip.";
 const MAC_COMMERCIAL =
-  "Commercial content is off. Your Mac posts TikTok with these. Paid partnerships can't go through your Mac yet: untick TikTok for that clip and post it yourself in the TikTok app with the label, not with Post with my Mac or Send these to my Mac.";
+  "Commercial content is off. Your Mac posts TikTok with these. Paid partnerships can't go through your Mac yet: untick TikTok for that clip, then post it in the TikTok app with its label, not with Post with my Mac or Send these to my Mac.";
 
 let host: HTMLElement;
 let root: Root;

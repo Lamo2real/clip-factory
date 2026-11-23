@@ -956,7 +956,7 @@ test("review: the hint, TikTok on My settings with no tap, and Uploaded just now
   // Branded content waits: the Mac can't add TikTok's label yet.
   await ttRow.getByRole("switch", { name: "Commercial content" }).click();
   await ttRow.getByRole("checkbox", { name: /^Branded content/ }).click();
-  const held = "Your Mac can't add TikTok's Branded content label yet. Untick it, or untick TikTok and post this clip yourself in the TikTok app with the label, not with your Mac.";
+  const held = "Your Mac can't add TikTok's Branded content label yet. Untick it, or untick TikTok, then post this clip in the TikTok app with its label, not with your Mac.";
   await expect(card.locator(".upload-going")).toHaveText(held);
   await expect(ttRow.getByRole("alert")).toHaveText(held);
   await ttRow.getByRole("checkbox", { name: /^Branded content/ }).click();

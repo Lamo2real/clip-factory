@@ -209,12 +209,12 @@ export function macPostsLine(saved: TikTokPreset): string {
 }
 
 /** Upload's line (and the row's) while Your brand or Branded content is ticked and the Mac posts TikTok (§47.9). */
-export const MAC_LABEL_HELD = "Your Mac can't add TikTok's Branded content label yet. Untick it, or untick TikTok and post this clip yourself in the TikTok app with the label, not with your Mac.";
+export const MAC_LABEL_HELD = "Your Mac can't add TikTok's Branded content label yet. Untick it, or untick TikTok, then post this clip in the TikTok app with its label, not with your Mac.";
 /**
  * The same with Commercial content on and nothing ticked under it. TikTok's own "Pick Your brand or Branded content"
  * would send him round in a circle here (either one holds the Mac too), so the way out is to turn it off.
  */
-export const MAC_COMMERCIAL_HELD = "Your Mac can't add TikTok's Branded content label yet. Turn off Commercial content, or untick TikTok and post this clip yourself in the TikTok app with the label, not with your Mac.";
+export const MAC_COMMERCIAL_HELD = "Your Mac can't add TikTok's Branded content label yet. Turn off Commercial content, or untick TikTok, then post this clip in the TikTok app with its label, not with your Mac.";
 
 /**
  * Why the Mac can't post this clip on TikTok, or null: Commercial content is on (Your brand or Branded content ticked,

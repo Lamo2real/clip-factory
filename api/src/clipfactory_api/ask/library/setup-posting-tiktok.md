@@ -20,9 +20,9 @@ checked in? Tap **Open Your Mac posts TikTok**. It is paused? Tap **Start my Mac
 stopped clip**: Try again and It's on TikTok are there. **Held on your Mac**? Tap **Post with my Mac**, or **Let them
 go** in Settings › Posting › Your Mac posts TikTok. **Everyone** needs a public TikTok account. While your
 account is public, TikTok will not let Clip Factory upload there for you (its rule for apps it has not approved), so
-your Mac does it. Keep your account public. There is no "Post it yourself" any more (it went on 22 Nov 2026,
+your Mac does it. Keep your account public. There is no manual TikTok sheet any more (it went on 22 Nov 2026,
 [ADR-86](DECISIONS.md#adr-86-no-manual-tiktok-sheet-the-mac-is-the-only-way-to-tiktok-until-tiktok-approves-the-app)). A
-clip you posted in TikTok yourself earlier keeps **Posted by you · Everyone**; with no link yet, type or paste it in the
+clip you posted in the TikTok app earlier keeps **Posted by you · Everyone**; with no link yet, type or paste it in the
 row and tap **Save the link**, or tap **Find it for me** to let Clip Factory look for it on your TikTok.
 
 | # | Step | Part |
@@ -298,8 +298,8 @@ The answers, word for word. They are all true today: do not change them to sound
 (Everyone, with Comments, Duet and Stitch on, unless you changed them): just press **Upload**. Your Mac always posts
 TikTok with your saved choices: the **TikTok** row says so ("Your Mac posts it with My settings: …") and **Change My
 settings** takes you there. Paid partnerships can't go through your Mac yet: with **Your brand** or **Branded
-content** ticked, Upload waits; untick it, or untick TikTok for that clip and post it yourself in the TikTok app with
-the label. Don't use **Post with my Mac** or **Send these to my Mac** for that clip: your Mac would post it without the
+content** ticked, Upload waits; untick it, or untick TikTok for that clip, then post it in the TikTok app with its
+label. Don't use **Post with my Mac** or **Send these to my Mac** for that clip: your Mac would post it without the
 label. **While Your Mac posts TikTok is off**,
 every clip with TikTok ticked waits for your tap: press **Use my settings** (it puts your saved TikTok choices on), or
 open the **TikTok** row and pick who can see it there (there is no default, TikTok's rule for apps that post through

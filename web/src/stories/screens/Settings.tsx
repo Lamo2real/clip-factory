@@ -1,8 +1,9 @@
 // Lamo Stories › Settings (docs/CONTRACTS.md §45.29, §45.16.7): Lamo Stories' own setup, apart from Clip Factory's
 // (which stays in Clip Factory's Settings, unchanged). One page per section, `/stories/settings/{section}`: AI (models,
 // effort, each agent and task, Check models, usage and cost, prices, providers and keys), Agents, Skills, Memory,
-// Video and Storage and production; Social accounts is the Connections page. The sections live in
-// web/src/stories/settings/ (builder F2).
+// Video, Storage and production, and Look (what is behind the glass on this device: See-through, Picture or Colours,
+// like Clip Factory's three); Social accounts is the Connections page. The sections live in web/src/stories/settings/
+// (builder F2).
 import "../styles/settings.css";
 import { useLayoutEffect, useRef, useState } from "react";
 import { Glide } from "../../components/Glide.tsx";
@@ -28,10 +29,11 @@ export const SECTIONS: { section: SettingsSection | "social"; label: string; ico
   { section: "social", label: "Social accounts", icon: "plug", lede: "" },
   { section: "video", label: "Video", icon: "film", lede: "How videos are made: the makers, size, length and quality." },
   { section: "storage", label: "Storage", icon: "box", lede: "Space used, the files made, and how videos are put together." },
+  { section: "look", label: "Look", icon: "brush", lede: "What is behind the glass: See-through, a picture of yours, or colours." },
 ];
 
 /** How sentences name each section's page ("… in Settings › Video"), so one shown on that page skips the trip (§45.36 E17). */
-const PAGE_NAME: Record<SettingsSection, SettingsPageName> = { ai: "AI", agents: "Agents", skills: "Skills", memory: "Memory", video: "Video", storage: "Storage" };
+const PAGE_NAME: Record<SettingsSection, SettingsPageName> = { ai: "AI", agents: "Agents", skills: "Skills", memory: "Memory", video: "Video", storage: "Storage", look: "Look" };
 
 function hrefOf(section: SettingsSection | "social"): string {
   return section === "social" ? storiesHref({ name: "connections", platform: null, result: null, ws: null }) : storiesHref({ name: "settings", section });
@@ -111,7 +113,7 @@ export function SettingsScreen({ ws, page }: StoriesScreenProps) {
             {section === "video" ? <VideoSection key={ws} ws={ws} /> : null}
             {section === "storage" ? <StorageSection key={ws} ws={ws} /> : null}
             {/* Look (the glass contract): what is behind the glass, this device's own like Sounds and motion. */}
-            {section === "storage" ? <LookSection /> : null}
+            {section === "look" ? <LookSection /> : null}
           </SettingsPageProvider>
         </SectionBarSlot>
       </div>

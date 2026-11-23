@@ -484,7 +484,7 @@ export function Failed({ message, onRetry }: { message: string; onRetry?: () => 
 // ---------- Words ----------
 
 /** The Settings page on screen, by the name sentences use for it ("AI", "Video", …); null outside Settings. */
-export type SettingsPageName = "AI" | "Agents" | "Skills" | "Memory" | "Video" | "Storage";
+export type SettingsPageName = "AI" | "Agents" | "Skills" | "Memory" | "Video" | "Storage" | "Look";
 const SettingsPage = createContext<SettingsPageName | null>(null);
 export const SettingsPageProvider = SettingsPage.Provider;
 /** The card (its title) a sentence shows in, for onThisPage's "above" and "below"; SetCard gives it. */
@@ -518,7 +518,7 @@ const POINTED: Partial<Record<SettingsPageName, [RegExp, string][]>> = {
     [/\bAdd a model$/, "Add a picture, video or sound model"],
   ],
 };
-const PAGE_WORDS: Record<SettingsPageName, string> = { AI: "AI", Agents: "Agents", Skills: "Skills", Memory: "Memory", Video: "Video", Storage: "Storage(?: and production)?" };
+const PAGE_WORDS: Record<SettingsPageName, string> = { AI: "AI", Agents: "Agents", Skills: "Skills", Memory: "Memory", Video: "Video", Storage: "Storage(?: and production)?", Look: "Look" };
 
 /**
  * A sentence shown on the page it sends the owner to, without the trip (§45.36 E17). `from` is the card the sentence

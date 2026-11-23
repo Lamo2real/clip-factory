@@ -1,11 +1,12 @@
-// Stories › Settings › Look: what is behind the glass. Clip Factory's three choices as Stories' own setting, kept in
-// Stories' own prefs on this device (stories/look.ts), never Clip Factory's: See-through (the desktop through the
-// window; Glass strength Clear or Frosted), Picture (one of yours, shrunk to fit this device), Colours (the warm
-// Ember preset is the default of the whole Look). Every choice shows what you get: a little picture of it beside its
-// name. The pick-one bars are Settings' own (SetPick: the sliding highlight, arrows, never disabled).
+// Stories › Settings › Look (its own page, /stories/settings/look): what is behind the glass. Clip Factory's three
+// choices as Stories' own setting, kept in Stories' own prefs on this device (stories/look.ts), never Clip Factory's:
+// See-through (the desktop through the window; Glass strength Clear or Frosted), Picture (one of yours, shrunk to fit
+// this device), Colours (the warm Ember preset is the default of the whole Look). Every choice shows what you get: a
+// little picture of it beside its name. The pick-one bars are Settings' own (SetPick: the sliding highlight, arrows,
+// never disabled).
 import { useRef, useState, type ChangeEvent, type CSSProperties } from "react";
 import { EMBER, nativeGlass, PRESETS, presetOf, setStoriesLook, setStoriesPicture, stageColours, useStoriesLook, type GlassStrength, type LookMode, type StoriesLook } from "../look.ts";
-import { Btn, SetCard, SetPick, type PickOption } from "./bits.tsx";
+import { Btn, SectionBar, SetCard, SetPick, type PickOption } from "./bits.tsx";
 
 /** Pictures bigger than this are not even opened. */
 export const MAX_PICTURE_BYTES = 25_000_000;
@@ -122,50 +123,56 @@ export function LookSection() {
   };
 
   return (
-    <SetCard title="Look" icon="brush" id="look" lede="What is behind the glass on this device. Clip Factory's own background stays as it is.">
-      <div className="st-look">
-        <SetPick label="Background" value={look.mode} options={modes} onChange={(mode) => setStoriesLook({ mode })} stack className="st-look__modes" />
-        {look.mode === "see-through" ? (
-          <>
-            <SetPick label="Glass strength" value={look.strength} options={strengths} onChange={(strength) => setStoriesLook({ strength })} />
-            {inApp ? null : <p className="st-stg-card__lede">In a browser or on a phone the window cannot show the desktop, so the Ember colours show.</p>}
-          </>
-        ) : null}
-        {look.mode === "picture" ? (
-          <div className="st-look__picture">
-            <span className="st-look__thumb" aria-hidden="true" style={look.picture ? { backgroundImage: `url("${look.picture}")` } : meshStyle(EMBER)} />
-            <div className="st-look__actions">
-              <input ref={file} className="sr-only" type="file" accept="image/*" tabIndex={-1} aria-hidden="true" onChange={pick} />
-              <Btn main off={busy} onClick={() => file.current?.click()}>
-                {look.picture ? "Choose another picture" : "Choose a picture"}
-              </Btn>
-              {look.picture ? (
-                <Btn quiet onClick={() => setStoriesPicture(null)}>
-                  Remove the picture
+    <>
+      {/* Its own page, Settings › Look (/stories/settings/look): the note in the section head's plate, like every page's. */}
+      <SectionBar>
+        <p className="st-stg-small">Kept on this device. Clip Factory's own background stays as it is.</p>
+      </SectionBar>
+      <SetCard title="Background" icon="brush" id="look" lede="Pick one. It changes at once.">
+        <div className="st-look">
+          <SetPick label="Background" value={look.mode} options={modes} onChange={(mode) => setStoriesLook({ mode })} stack className="st-look__modes" />
+          {look.mode === "see-through" ? (
+            <>
+              <SetPick label="Glass strength" value={look.strength} options={strengths} onChange={(strength) => setStoriesLook({ strength })} />
+              {inApp ? null : <p className="st-stg-card__lede">In a browser or on a phone the window cannot show the desktop, so the Ember colours show.</p>}
+            </>
+          ) : null}
+          {look.mode === "picture" ? (
+            <div className="st-look__picture">
+              <span className="st-look__thumb" aria-hidden="true" style={look.picture ? { backgroundImage: `url("${look.picture}")` } : meshStyle(EMBER)} />
+              <div className="st-look__actions">
+                <input ref={file} className="sr-only" type="file" accept="image/*" tabIndex={-1} aria-hidden="true" onChange={pick} />
+                <Btn main off={busy} onClick={() => file.current?.click()}>
+                  {look.picture ? "Choose another picture" : "Choose a picture"}
                 </Btn>
-              ) : (
-                <p className="st-stg-card__lede">Until you choose one, the Ember colours show.</p>
-              )}
+                {look.picture ? (
+                  <Btn quiet onClick={() => setStoriesPicture(null)}>
+                    Remove the picture
+                  </Btn>
+                ) : (
+                  <p className="st-stg-card__lede">Until you choose one, the Ember colours show.</p>
+                )}
+              </div>
             </div>
-          </div>
-        ) : null}
-        {look.mode === "colours" ? (
-          <SetPick
-            label="Colours"
-            value={preset}
-            options={PRESETS.map((p) => ({ value: p.id, label: p.name, chip: <Swatches colours={p.colours} /> }))}
-            onChange={(id) => {
-              const p = PRESETS.find((x) => x.id === id);
-              if (p) setStoriesLook({ colours: [...p.colours], mode: "colours" });
-            }}
-          />
-        ) : null}
-        {problem ? (
-          <p className="st-stg-card__lede" role="alert">
-            {problem}
-          </p>
-        ) : null}
-      </div>
-    </SetCard>
+          ) : null}
+          {look.mode === "colours" ? (
+            <SetPick
+              label="Colours"
+              value={preset}
+              options={PRESETS.map((p) => ({ value: p.id, label: p.name, chip: <Swatches colours={p.colours} /> }))}
+              onChange={(id) => {
+                const p = PRESETS.find((x) => x.id === id);
+                if (p) setStoriesLook({ colours: [...p.colours], mode: "colours" });
+              }}
+            />
+          ) : null}
+          {problem ? (
+            <p className="st-stg-card__lede" role="alert">
+              {problem}
+            </p>
+          ) : null}
+        </div>
+      </SetCard>
+    </>
   );
 }

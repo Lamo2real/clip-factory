@@ -11,7 +11,7 @@ import { findOverflow, WIDTHS } from "./helpers.ts";
 // makers, the video's shape, quality, length and the makers' prices, and storage. Lamo Stories is switched on with
 // cf.storiesPreview = 1. It needs the shell and the workspace mock (builder F) and getTask (builder G) merged first.
 
-const SECTIONS = ["ai", "agents", "skills", "memory", "video", "storage"] as const;
+const SECTIONS = ["ai", "agents", "skills", "memory", "video", "storage", "look"] as const;
 
 async function on(page: Page) {
   await page.addInitScript(() => localStorage.setItem("cf.storiesPreview", "1"));
@@ -94,7 +94,7 @@ test.describe("every section keeps the owner's rules", () => {
     await on(page);
     for (const width of [320, 375]) {
       await page.setViewportSize({ width, height: 812 });
-      for (const section of ["ai", "storage"] as const) {
+      for (const section of ["ai", "storage", "look"] as const) {
         await openSection(page, section);
         const row = await page.evaluate(() => {
           const ul = document.querySelector<HTMLElement>(".st-stg-top .st-stg-tabs")!;

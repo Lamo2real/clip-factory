@@ -262,7 +262,9 @@ test("reduced transparency makes every glass solid, with no backdrop filter", as
 
 test("Settings › Look keeps its choice in Stories' own prefs and never touches Clip Factory's", async ({ page }) => {
   await open(page, {});
-  await page.goto("/stories/settings/storage");
+  // Look is its own page (a deep link straight to it), no longer the last card of Storage.
+  await page.goto("/stories/settings/look");
+  await expect(page.locator(".st-stg-tab.is-on")).toHaveText("Look");
   const clipFactoryBefore = await page.evaluate(() => ({ prefs: localStorage.getItem("cf.prefs"), background: localStorage.getItem("cf.background") }));
   const look = page.locator("#look");
   await look.waitFor();

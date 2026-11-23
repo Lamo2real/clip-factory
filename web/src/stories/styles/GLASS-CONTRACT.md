@@ -370,8 +370,8 @@ override for checks); the picture in its own `cf.stories.picture` (shrunk to at 
 Factory's `cf.prefs` or `cf.background`. Readers and writers: `useStoriesLook()`, `storiesLook()`,
 `setStoriesLook(patch)`, `setStoriesPicture(url | null)`, `veilsFor(look, glass?, tier?)`, `lookKind(look)`,
 `glassTier(env)`, `useReducedTransparency()`, `LENS_BUDGET`, `THEME_COLOUR` (#1C130E, for the shell to adopt with its
-theme-colour tests). Settings › Look is `settings/LookSection.tsx`, shown for now at the end of Settings › Storage
-(this device's own choices, beside Sounds and motion); its own tab is a later step.
+theme-colour tests). Settings › Look is `settings/LookSection.tsx`, its own page `/stories/settings/look` (the
+last section pill since 23 Nov 2026; this device's own choices, like Sounds and motion on Storage).
 
 **The stage is worked out exactly.** `STAGE_LIGHTS` is what glass.css draws (a light strip at the right edge, amber
 high right, copper low left, a darker corner behind the page heads, a warm haze; test/storiesLens.test.ts holds the

@@ -609,10 +609,10 @@ TikTok. No API, table or infrastructure change.
      with no name yet (not asked, slow, failed) the line is left out in this mode only.
    * **Commercial content stays visible and is this clip's own.** Ticking **Your brand** or **Branded content** (with
      Commercial content on) holds Upload for TikTok (`macTikTokHeld`): Upload's line and an alert in the row say
-     `MAC_LABEL_HELD`, "Your Mac can't add TikTok's Branded content label yet. Untick it, or untick TikTok and post
-     this clip yourself in the TikTok app with the label, not with your Mac." With Commercial content on and nothing
+     `MAC_LABEL_HELD`, "Your Mac can't add TikTok's Branded content label yet. Untick it, or untick TikTok, then post
+     this clip in the TikTok app with its label, not with your Mac." With Commercial content on and nothing
      ticked it is held too, with `MAC_COMMERCIAL_HELD`, "Your Mac can't add TikTok's Branded content label yet. Turn
-     off Commercial content, or untick TikTok and post this clip yourself in the TikTok app with the label, not with
+     off Commercial content, or untick TikTok, then post this clip in the TikTok app with its label, not with
      your Mac." (TikTok's own
      `PICK_WHOSE` line would send him round in a circle: either pick holds the Mac too; Upload's hover text is left
      empty). TikTokCommercial leaves out its hint line in this mode ("Your video will be labeled as …" would be untrue;
@@ -657,8 +657,8 @@ TikTok. No API, table or infrastructure change.
    posts TikTok off.
 3. **Words elsewhere:** Settings › Posting › My settings (`MySettingsBranch.tsx`) reads "Every clip on Review starts
    on these, TikTok too, except campaign clips." at the top, and under TikTok "Commercial content is off. Your Mac
-   posts TikTok with these. Paid partnerships can't go through your Mac yet: untick TikTok for that clip and post it
-   yourself in the TikTok app with the label, not with Post with my Mac or Send these to my Mac." in item
+   posts TikTok with these. Paid partnerships can't go through your Mac yet: untick TikTok for that clip, then post it
+   in the TikTok app with its label, not with Post with my Mac or Send these to my Mac." in item
    1's mode; otherwise both keep today's words ("Tap Use my settings on a clip to put these on.", "Commercial content
    is off. For a paid partnership, tick Branded content in the TikTok row of that clip. TikTok wants your own tap on
    each clip, so tap Use my settings there."). The TikTok part's leaf (`settingsTree.ts`, `my-settings-tiktok`) reads
