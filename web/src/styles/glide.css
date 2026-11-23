@@ -483,6 +483,17 @@
   left: auto;
   right: 0;
 }
+/* The stacked switch inside that list is the list's glass, with no blur of its own: the list's own backdrop-filter is
+   its Backdrop Root (Filter Effects 2), so a second one would see only the list's dark plate and lay it again over
+   what shows through the plate (Clips Funded's lit stage under its phone menu read 0.076 OKLab L darker under the
+   track than with the switch hidden, e2e/switch-glass.spec.ts). What shows through the plate is not even (a lit card
+   under one row, dark page under another), so the lens on the plate is a little brighter (0.2 white, the lens's top):
+   it stays plainly the chosen row over every row, and white words keep far more than AA on the dark plate. */
+.ws-menu .ws-switch {
+  --wsg-lens-face: linear-gradient(180deg, rgb(255 255 255 / 0.2), rgb(255 255 255 / 0.2));
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
 
 /* Hover shows what can be pressed (the cursor never changes, see base.css), and adds light. The segmented options
    and tabs keep theirs in components.css: one relative step above their lit track, with a small top light. */

@@ -255,6 +255,17 @@ describe("the workspace switch is see-through, colour-free glass (§45.38 S5)", 
       expect(Number(f![2]), selector).toBeLessThanOrEqual(1);
       expect(d.get("-webkit-backdrop-filter"), selector).toBe(d.get("backdrop-filter"));
     }
+    // The stacked switch inside the list is the list's glass: the list is its Backdrop Root, so a blur of its own would
+    // see only the list's dark plate and darken what shows through it. On the plate its lens is the lens's brightest.
+    const inMenu = decls(body(".ws-menu .ws-switch"));
+    expect([...inMenu.keys()].sort()).toEqual(["--wsg-lens-face", "-webkit-backdrop-filter", "backdrop-filter"]);
+    expect([inMenu.get("backdrop-filter"), inMenu.get("-webkit-backdrop-filter")]).toEqual(["none", "none"]);
+    const menuLens = flatWhite(inMenu.get("--wsg-lens-face")!);
+    expect(menuLens).toBeGreaterThanOrEqual(flatWhite(resolve(own.get("--wsg-lens-face")!)));
+    expect(menuLens).toBeLessThanOrEqual(0.2);
+    // White words on that lens over the lightest the plate can be (black 0.78 over white, then the lens): far past AA.
+    const plate: Rgb = mix([0, 0, 0], [255, 255, 255], 0.78);
+    expect(contrast([255, 255, 255], mix([255, 255, 255], plate, menuLens))).toBeGreaterThanOrEqual(AA);
     // Nothing drains, tints or saturates what shows through: grey-out would hide the colours behind, and saturate()
     // would lift a vermilion or grape panel past the room white words have on the lens (worked out below).
     for (const selector of SWITCH_RULES) expect(body(selector), selector).not.toMatch(/grayscale\(|saturate\(|sepia\(|hue-rotate\(|invert\(|contrast\(/);
