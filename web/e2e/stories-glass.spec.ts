@@ -201,6 +201,11 @@ test("the stage is drawn exactly as look.ts works the veils out (its lightest pi
 });
 
 test("the liquid rim bends at most three heroes, each with a filter of its own size", async ({ page }) => {
+  // The rim is only for a capable device (look.ts readGlassEnv: more than 4 cores and 4 GB, no Save-Data); the Linux
+  // CI runner has 4 cores and rightly gets the plain light. The device is set here, so it is liquid on every machine.
+  await page.addInitScript(() => {
+    for (const k of ["hardwareConcurrency", "deviceMemory"]) Object.defineProperty(navigator, k, { configurable: true, get: () => 8 });
+  });
   await open(page, {});
   await expect(page.locator(".stories-app")).toHaveAttribute("data-glass", "liquid");
   await page.evaluate(() => {
