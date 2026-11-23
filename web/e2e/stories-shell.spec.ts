@@ -1186,10 +1186,12 @@ test.describe("round 4: the two apps stay apart and quiet (§45.35)", () => {
     expect(slim.width).toBeGreaterThanOrEqual(28);
     expect(slim.height).toBeGreaterThanOrEqual(28);
     const go = beside.getByRole("link", { name: "Go to Funded Clips" });
-    // It answers a hover, as every control does.
-    const rest = await go.evaluate((el) => getComputedStyle(el).backgroundColor);
+    // It answers a hover, as every control does: its fill changes (since the logic of light, ADR-87, a hover lays more
+    // bone light over the same green, so the change can be in the light layer alone).
+    const fill = () => go.evaluate((el) => `${getComputedStyle(el).backgroundColor} ${getComputedStyle(el).backgroundImage}`);
+    const rest = await fill();
     await go.hover();
-    await expect.poll(() => go.evaluate((el) => getComputedStyle(el).backgroundColor)).not.toBe(rest);
+    await expect.poll(fill).not.toBe(rest);
     await go.click();
     await expect(page).toHaveURL(/\/stories$/);
     await storiesReady(page);

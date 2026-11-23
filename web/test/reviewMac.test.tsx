@@ -86,6 +86,7 @@ const switchesIn = (el: HTMLElement) =>
   Array.from(el.querySelectorAll<HTMLElement>('[role="switch"]')).map((s) => s.closest(".toggle-row")?.querySelector(".toggle-row__label")?.textContent ?? "");
 const switchIn = (el: HTMLElement, label: string) =>
   Array.from(el.querySelectorAll<HTMLElement>('[role="switch"]')).find((s) => s.closest(".toggle-row")?.querySelector(".toggle-row__label")?.textContent === label)!;
+const hasCheck = (el: HTMLElement, label: string) => Array.from(el.querySelectorAll<HTMLLabelElement>("label.check-chip")).some((l) => l.textContent?.includes(label));
 const checkIn = (el: HTMLElement, label: string) =>
   Array.from(el.querySelectorAll<HTMLLabelElement>("label.check-chip")).find((l) => l.textContent?.includes(label))!.querySelector<HTMLInputElement>("input")!;
 /** The "Upload to" chip of a place. */
@@ -345,12 +346,15 @@ describe("Review card while the Mac posts TikTok: the row is read-only", () => {
     await mount({ mac: true });
     await click(inCard('[data-place="tiktok"] summary')!);
     const row = tiktokRowOf();
+    // The row's Commercial content switch renders once the row has opened (later on a slow CI runner).
+    await until(() => !!switchIn(row, "Commercial content"), "the Commercial content switch");
     await click(switchIn(row, "Commercial content"));
     // On with nothing ticked: held, and the way out is never "pick one" (that holds the Mac too).
     expect(inCard(".upload-going")!.textContent).toBe(MAC_COMMERCIAL_HELD);
     expect(upload().getAttribute("title")).toBeNull();
     expect(card().textContent).not.toContain(PICK_WHOSE);
     expect(row.textContent).not.toContain("Pick Your brand");
+    await until(() => hasCheck(row, "Branded content"), "the Branded content chip");
     await click(checkIn(row, "Branded content"));
     expect(inCard(".upload-going")!.textContent).toBe(MAC_LABEL_HELD);
     expect(upload().getAttribute("aria-disabled")).toBe("true");
@@ -362,6 +366,7 @@ describe("Review card while the Mac posts TikTok: the row is read-only", () => {
     await click(upload());
     expect(sent).toEqual([]);
     // Unticked: then Commercial content off, and TikTok goes again, with no label.
+    await until(() => hasCheck(row, "Branded content"), "the Branded content chip");
     await click(checkIn(row, "Branded content"));
     expect(inCard(".upload-going")!.textContent).toBe(MAC_COMMERCIAL_HELD);
     expect(upload().getAttribute("aria-disabled")).toBe("true");
@@ -377,7 +382,10 @@ describe("Review card while the Mac posts TikTok: the row is read-only", () => {
     const clipId = await mount({ mac: true });
     await click(inCard('[data-place="tiktok"] summary')!);
     const row = tiktokRowOf();
+    // The row's Commercial content switch renders once the row has opened (later on a slow CI runner).
+    await until(() => !!switchIn(row, "Commercial content"), "the Commercial content switch");
     await click(switchIn(row, "Commercial content"));
+    await until(() => hasCheck(row, "Your brand"), "the Your brand chip");
     await click(checkIn(row, "Your brand"));
     expect(inCard(".upload-going")!.textContent).toBe(MAC_LABEL_HELD);
     expect(upload().getAttribute("aria-disabled")).toBe("true");

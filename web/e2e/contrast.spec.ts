@@ -1,9 +1,10 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Page } from "@playwright/test";
-import { contrast, FLOAT_VEIL, mix, TABBAR_VEIL, VEIL, type Rgb } from "../src/lib/background.ts";
+import { contrast, FLOAT_VEIL, luminance, mix, TABBAR_VEIL, type Rgb } from "../src/lib/background.ts";
 import { DODGE_SETTLE_MS } from "../src/features/help/dodge.ts";
 import { TODO_CELEBRATE_MS } from "../src/lib/setupTodo.ts";
 import { GUIDES, SETUP_ORDER } from "../src/setup/index.ts";
+import { decode } from "./pixels.ts";
 import { asDesktop, paintGlass, WINDOW_EXTRA_ROUTES, WINDOW_LOOKS, type GlassPaint } from "./glass.ts";
 import { animationsDone, CLIPS, looseText, MIXED_SETUP, mixedSetup, openClip, resolveRoute, ROUTES, scanText, settle, whiteContrastOnGradient } from "./helpers.ts";
 
@@ -455,7 +456,9 @@ for (const { glass, paints } of WINDOW_LOOKS) {
 // The tab bar, the setup pill and the Ask sheet float over the page, so a white thumbnail can sit right under them.
 // Their tints plan for white (FLOAT_VEIL, TABBAR_VEIL): here the Library is scrolled so clip thumbnails are under the
 // tab bar, the real computed tints are read in the browser, and every text colour inside each layer (icons in the tab
-// bar, 3:1) is held to its bar over white under that tint.
+// bar, 3:1) is held to what the browser really draws behind it over white: the layer's green with its bone light from
+// above (ADR-87), the page under it made white and the layer's own words and icons hidden, measured from the pixels
+// at each word's own line boxes and each icon (the lightest pixel there, the worst for bone words).
 test("the tab bar, the setup pill and the Ask sheet hold their words over a white thumbnail, at 390 px", CORE, async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/library");
@@ -465,26 +468,101 @@ test("the tab bar, the setup pill and the Ask sheet hold their words over a whit
   const read = (selector: string) =>
     page.locator(selector).first().evaluate((layer) => {
       const s = getComputedStyle(layer);
-      const alphas = [...s.backgroundImage.matchAll(/rgba?\(([^)]*)\)/g)].map((m) => {
+      // The green of its tint (its bone light from above lies on top of it, ADR-87, and is measured from the pixels).
+      const alphas = [...s.backgroundImage.matchAll(/rgba?\((15, 55, 43[^)]*)\)/g)].map((m) => {
         const parts = m[1]!.split(/[\s,/]+/).filter(Boolean);
         return parts.length >= 4 ? Number(parts[3]) : 1;
       });
-      const colours = new Set<string>();
+      const box = layer.getBoundingClientRect();
+      const marks: { color: string; x: number; y: number; w: number; h: number; what: string }[] = [];
       for (const el of [layer, ...Array.from(layer.querySelectorAll<HTMLElement>("*"))]) {
         const cs = getComputedStyle(el);
         if (el.closest(".sr-only, .glide, .is-active, [aria-current='page'], .badge, .btn--primary, .btn--action, .help-msg--me, .setup-todo__pill-count") || cs.visibility === "hidden" || el.getClientRects().length === 0) continue;
-        if (Array.from(el.childNodes).some((n) => n.nodeType === 3 && n.textContent!.trim()) || el.tagName === "svg") colours.add(cs.color);
+        if (!(Array.from(el.childNodes).some((n) => n.nodeType === 3 && n.textContent!.trim()) || el.tagName === "svg")) continue;
+        // Green and white words sit on bone and vermilion fills of their own, read by the scans above.
+        if (["rgb(15, 55, 43)", "rgb(255, 255, 255)"].includes(cs.color)) continue;
+        // Where the words are: the line boxes of its own text (a button's rim glow sits in its padding, not behind its
+        // words), or the whole icon.
+        let r: { left: number; top: number; right: number; bottom: number } = el.getBoundingClientRect();
+        if (el.tagName !== "svg") {
+          const lines = Array.from(el.childNodes)
+            .filter((n) => n.nodeType === 3 && n.textContent!.trim())
+            .flatMap((n) => {
+              const range = document.createRange();
+              range.selectNodeContents(n);
+              return Array.from(range.getClientRects());
+            });
+          if (lines.length)
+            r = {
+              left: Math.min(...lines.map((l) => l.left)),
+              top: Math.min(...lines.map((l) => l.top)),
+              right: Math.max(...lines.map((l) => l.right)),
+              bottom: Math.max(...lines.map((l) => l.bottom)),
+            };
+        }
+        const [x0, y0] = [Math.max(r.left, box.left), Math.max(r.top, box.top)];
+        const [x1, y1] = [Math.min(r.right, box.right, innerWidth), Math.min(r.bottom, box.bottom, innerHeight)];
+        if (x1 - x0 >= 2 && y1 - y0 >= 2) marks.push({ color: cs.color, x: Math.round(x0 - box.left), y: Math.round(y0 - box.top), w: Math.floor(x1 - x0), h: Math.floor(y1 - y0), what: `${el.tagName.toLowerCase()}.${String(el.getAttribute("class") ?? "").split(" ").join(".")}` });
       }
-      return { min: Math.min(...alphas), colours: [...colours] };
+      return { min: Math.min(...alphas), box: { x: box.left, y: box.top, width: box.width, height: box.height }, marks };
     });
   const rgb = (css: string): Rgb => css.match(/[\d.]+/g)!.slice(0, 3).map(Number) as unknown as Rgb;
   const check = async (selector: string, floor: number, need: number) => {
-    const { min, colours } = await read(selector);
+    // Let the layer come to rest first: WebKit slides the setup pill in from above for a moment after the scroll.
+    const layer = page.locator(selector).first();
+    await expect
+      .poll(async () => {
+        const a = await layer.boundingBox();
+        await page.waitForTimeout(120);
+        const b = await layer.boundingBox();
+        return !!a && !!b && Math.abs(a.x - b.x) + Math.abs(a.y - b.y) < 0.5;
+      })
+      .toBe(true);
+    const { min, box, marks } = await read(selector);
     expect(min, `${selector} tint`).toBeGreaterThanOrEqual(floor - 0.005);
-    expect(colours.length, `${selector} has words or icons`).toBeGreaterThan(0);
-    // Green words (--on-bone) and white words sit on bone and vermilion fills of their own, read by the scans above.
-    for (const c of colours.filter((x) => !["rgb(15, 55, 43)", "rgb(255, 255, 255)"].includes(x)))
-      expect(contrast(rgb(c), mix(VEIL, [255, 255, 255], min)), `${selector} ${c}`).toBeGreaterThanOrEqual(need);
+    expect(marks.length, `${selector} has words or icons`).toBeGreaterThan(0);
+    // A white thumbnail right under the whole layer: everything else is hidden over a white sheet. The layer's own
+    // words and icons are made clear, but its raised children (a button, a row, a chip) keep their fills and lights,
+    // so words on a raised child are read over that child's real fill, as the browser draws it.
+    const tag = await page.addStyleTag({
+      content: `body > .cf-white-under { position: fixed; inset: 0; z-index: 0; background: #fff; visibility: visible !important; }
+        body *:not(.cf-white-under) { visibility: hidden !important; transition: none !important; animation: none !important; }
+        html body ${selector} { visibility: visible !important; }
+        html body ${selector} * { visibility: visible !important; color: transparent !important; -webkit-text-fill-color: transparent !important; text-shadow: none !important; caret-color: transparent !important; }
+        html body ${selector} :is(svg, svg *, img, video, canvas) { visibility: hidden !important; }`,
+    });
+    await page.evaluate(() => {
+      const white = document.createElement("div");
+      white.className = "cf-white-under";
+      document.body.prepend(white);
+    });
+    await page.waitForTimeout(300);
+    // Where the layer is now: with animations off WebKit puts the setup pill back where it rests, a few px from where
+    // it was read. The marks move with it (they are placed from its top left).
+    const at = (await layer.boundingBox()) ?? box;
+    const clip = { x: Math.max(0, at.x), y: Math.max(0, at.y), width: Math.min(at.width, 390 - Math.max(0, at.x)), height: Math.min(at.height, 844 - Math.max(0, at.y)) };
+    const shot = await decode(page, await page.screenshot({ clip }));
+    await page.evaluate(() => document.querySelector(".cf-white-under")?.remove());
+    await tag.evaluate((el) => (el as Element).remove());
+    // The marks are placed from the layer's top left in CSS px; the shot starts at the screen's edge if the layer runs
+    // past it, and has the device's pixels (2 per CSS px in Desktop Safari).
+    const [ox, oy] = [clip.x - at.x, clip.y - at.y];
+    const k = shot.width / clip.width;
+    for (const m of marks) {
+      // The lightest pixel behind the mark: the hardest spot for bone words and icons.
+      let lightest: Rgb = [0, 0, 0];
+      for (let y = Math.max(0, Math.round((m.y - oy) * k)); y < Math.min(Math.round((m.y - oy + m.h) * k), shot.height); y++)
+        for (let x = Math.max(0, Math.round((m.x - ox) * k)); x < Math.min(Math.round((m.x - ox + m.w) * k), shot.width); x++) {
+          const i = (y * shot.width + x) * 4;
+          const px: Rgb = [shot.data[i]!, shot.data[i + 1]!, shot.data[i + 2]!];
+          if (luminance(px) > luminance(lightest)) lightest = px;
+        }
+      // The layer really painted there (not the white sheet), and its words keep their contrast over it.
+      expect(luminance(lightest), `${selector}: its green is drawn behind its words`).toBeLessThan(0.5);
+      // Words 4.5:1 (or the layer's need); an icon is a graphic, 3:1 (WCAG 1.4.11), as on the tab bar.
+      const want = m.what.startsWith("svg") ? Math.min(need, 3) : need;
+      expect(contrast(rgb(m.color), lightest), `${selector} ${m.what} ${m.color} over the drawn ${lightest.map(Math.round).join(" ")}`).toBeGreaterThanOrEqual(want);
+    }
   };
   await check(".tabbar", TABBAR_VEIL, 3);
   await check(".setup-todo__pill", FLOAT_VEIL, 4.5);

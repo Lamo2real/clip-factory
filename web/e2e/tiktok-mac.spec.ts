@@ -368,6 +368,10 @@ test("library: not sure it posted: It's on TikTok saves its link, a quieter Try 
   await expect(row.getByRole("textbox")).toHaveCount(0);
 
   // Try again looks quieter than It's on TikTok: no fill of its own, its words underlined (never the same button).
+  // Measured at rest: the pointer still sits where Post with my Mac was tapped, and Try again is drawn right under it,
+  // so on a slow runner its hover (It's on TikTok's fill, on purpose) had landed by now; the hover is checked below.
+  await page.mouse.move(0, 0);
+  await expect.poll(() => again.evaluate((el) => el.matches(":hover"))).toBe(false);
   const look = (el: Element) => {
     const s = getComputedStyle(el);
     return { bg: s.backgroundImage === "none" ? s.backgroundColor : s.backgroundImage, line: s.textDecorationLine, shadow: s.boxShadow };

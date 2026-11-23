@@ -1,6 +1,8 @@
 import { expect, test, type Page } from "@playwright/test";
 import {
   BRAND_PANEL_VEIL,
+  LIGHT_PAY_OWN,
+  LIGHT_PAY_WHITE,
   coloursVeils,
   contrast,
   PICTURE_PANEL_VEIL,
@@ -104,7 +106,7 @@ test.describe("background modes", () => {
     expect(await panelVeil(page)).toBeCloseTo(BRAND_PANEL_VEIL, 5);
     expect(BRAND_PANEL_VEIL).toBe(0.33);
     expect(await veil(page)).toBe(0);
-    expect(await surfaceAlpha(page, ".apple-panel")).toBeCloseTo(0.37, 2);
+    expect(await surfaceAlpha(page, ".apple-panel")).toBeCloseTo(BRAND_PANEL_VEIL + LIGHT_PAY_OWN, 2);
     await expect(page.locator(".backdrop .blob--e")).toHaveCount(1);
     // The default colours: no page veil, panels 0.30.
     await page.getByRole("radio", { name: "Colours" }).check();
@@ -248,7 +250,7 @@ test.describe("see-through in the desktop app (simulated)", () => {
     // The panels carry the green, only as much as bone words need over a white desktop.
     expect(await panelVeil(page)).toBeCloseTo(clear.panel, 5);
     expect(clear.panel).toBeLessThanOrEqual(0.75);
-    expect(await surfaceAlpha(page, ".apple-panel")).toBeCloseTo(clear.panel, 2);
+    expect(await surfaceAlpha(page, ".apple-panel")).toBeCloseTo(clear.panel + LIGHT_PAY_WHITE, 2);
 
     // The window look's own text colours: the softer ones are bone or lighter here, the rest as everywhere.
     expect(await textTokens(page)).toEqual(WINDOW_TEXT_TOKENS);
@@ -282,7 +284,7 @@ test.describe("see-through in the desktop app (simulated)", () => {
       await expect(page.locator("html")).toHaveAttribute("data-glass", glass);
       const clear = seeThroughVeils(glass, "light", "clear");
       expect(await panelVeil(page)).toBeCloseTo(clear.panel, 5);
-      expect(await surfaceAlpha(page, ".apple-panel")).toBeCloseTo(clear.panel, 2);
+      expect(await surfaceAlpha(page, ".apple-panel")).toBeCloseTo(clear.panel + LIGHT_PAY_WHITE, 2);
       expect(await textTokens(page)).toEqual(WINDOW_TEXT_TOKENS);
       const behind = seeThroughWorstBackground(glass, "light", "clear");
       for (const c of await textColours(page)) expect(contrast(rgbOf(c), behind), c).toBeGreaterThanOrEqual(4.5);

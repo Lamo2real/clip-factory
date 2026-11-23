@@ -33,9 +33,10 @@ exception (white on a vermilion fill, `--on-bone` on a bone fill, Safari's blue 
 `--green-rgb`, `--green-deep-rgb`, `--green-leaf-rgb`, `--bone-rgb` and `--vermilion-rgb` hold the same colours as
 space-separated channels so CSS can add alpha: `rgb(var(--green-rgb) / 0.3)`. `--shadow-rgb` is the base of every
 drop shadow and `--line-rgb` (bone) of the few marks that are not box edges (scrollbars, link underlines, ring
-tracks). Shared fills: `--cta` (the CTA gradient), `--fill` and `--fill-hover` (deep green wells under words),
-`--tint-leaf`, `--tint-vermilion` and `--tint-amber` (tints laid over deep green, so a chip is never lighter than its
-panel), `--selected` (bone 0.92).
+tracks). Shared fills: `--cta` (the CTA gradient), `--fill`, `--fill-hover`, `--fill-press` and `--fill-ghost` (a
+raised thing under words, one step brighter than what it sits on: [the logic of light](#the-logic-of-light)),
+`--tint-leaf`, `--tint-vermilion` and `--tint-amber` (tints laid over bottle green 0.35, so the colour reads and the
+words keep AA), `--selected` (bone 0.92, the brightest layer), and the wells `--fill-field` and `--fill-sunk`.
 
 **One text set everywhere (ADR-45).** Every text colour is bone or lighter in every look (the window look used to have
 its own lighter set; now all looks use it), so the panels need the least green; the hierarchy comes from size,
@@ -46,31 +47,33 @@ counted toward AA.
 
 | Token | Use |
 |---|---|
-| `--fill-control` | Buttons without a fill of their own (glass, ghost), drop zones, check chips, step numbers: a bone lift (0.08) over a step more green than a panel (`--panel-veil` + 0.10), the pick-one track's recipe |
+| `--fill-control` | Buttons without a fill of their own (glass, ghost), drop zones, check chips, step numbers: the raise (`--fill`), one step brighter than what it sits on. Straight on the page that is the pick-one track's recipe (bone 0.08 over `--panel-veil` + 0.22); inside a pane the relative raise (green 0.22, bone 0.09) |
 | `--fill-field` | Text fields and the link box: deep green 0.45, a well deeper than the panel |
 | `--shade-field` | The field's soft inner shade (blurred, never a line) |
 | `--glow-bone`, `--glow-vermilion`, `--glow-leaf` | Soft glows (18 px blur) for a chosen, live, best or done thing, instead of a ring |
+| `--light-rim-*`, `--light-shade-*`, `--light-shadow-*` | The soft light of every pane and control: a top glow blurred 4 to 8 px, a shade at the foot, a drop below. Never a drawn line ([the logic of light](#the-logic-of-light)) |
 
 The only lines left are the allowed ones: the keyboard focus ring while `:focus-visible`, the temporary "found"
 highlight from search and Ask's spotlight, progress bars and rings, the switch track, spinners, and text underlines.
 `web/test/background.test.ts` fails on any other border, ring or hard line in a stylesheet, and
 `web/e2e/edges.spec.ts` on any visible one on any screen.
 
-Glass tints are not tokens: each glass variant sets its own `--glass-tint` gradient (in `web/src/styles/glass.css`),
-and a component may override it. Every tint is bottle green; `--panel-veil` is how much.
+Each glass variant sets its `--glass-tint` (green) and `--glass-light` (bone, from above) from the per-level tokens
+([the logic of light](#the-logic-of-light)), and a component may override them. Every tint is flat bottle green;
+`--panel-veil` is how much, `--light-pay` the step more that pays for the light.
 
-| Class | `--glass-tint` |
-|---|---|
-| `.glass` | green at `--panel-veil` + 0.04 → green at `--panel-veil`, 140° |
-| `.glass--green` | one step deeper: green + 0.10 → deep green + 0.08, 150° (the hero, the Ask launcher, the setup list's card) |
-| `.glass--vermilion` | the panel, a breath of vermilion (0.16 → 0.08), then green 0.20 over it |
-| `.glass--clear` | the panel tint |
-| Nested `.glass` | transparent: the outer panel already gives the words their green |
-| Floating layers | green `--float-veil` (0.73) + 0.02 → 0.73, blur 28 px (toasts, the Ask panel and sheet, the setup list, pill and sheet, the update bar): content scrolls under them, so they plan for white |
-| The tab bar | green `--tabbar-veil` (0.59) + 0.03 → 0.59, blur 28 px (icons only, 3:1 over white) |
-| The question sheet | green 0.88 → 0.86, over its own scrim |
-| No `backdrop-filter` | green 0.92 → 0.90 |
-| `prefers-reduced-transparency` | green 0.94 → 0.92, and the backdrop veil 0.94 |
+| Class | `--glass-tint` | `--glass-light` |
+|---|---|---|
+| `.glass` | `--glass-tint-panel`: green at `--panel-veil` + `--light-pay` | `--glass-light-panel`: bone 0.04 at the top edge, gone 14 px down (inside the top padding, never under words), plus the catch light |
+| `.glass--green` | `--glass-tint-lead`: the panel's green (the lead panel: the hero, the sign-in card, Library's learnings) | `--glass-light-lead`: bone 0.075 at the top edge, gone 14 px down |
+| `.glass--vermilion` | the panel, a breath of vermilion (0.16 → 0.08), then green 0.20 over it | the panel's |
+| `.glass--clear` | the panel tint | the panel's |
+| Nested `.glass` | the relative raise: green 0.22 over the outer panel, no blur of its own | flat bone 0.09 |
+| Floating layers | `--glass-tint-float`: the larger of `--float-veil` (0.73) and the panel, + 0.16, blur 28 px (toasts, the Ask panel and sheet, the setup list, pill and sheet, the update bar): content scrolls under them, so they plan for white | `--glass-light-float`: bone 0.08 at the top |
+| The tab bar | `--glass-tint-tabbar`: `--tabbar-veil` (0.59) + 0.04, blur 28 px (icons only, 3:1 over white) | `--glass-light-tabbar`: bone 0.04 at the top |
+| The question sheet | `--glass-tint-overlay`: 0.86, over its own scrim | `--glass-light-overlay`: bone 0.12 at the top |
+| No `backdrop-filter` | green 0.92, flat | unchanged |
+| `prefers-reduced-transparency` | green 0.92 + 0.04, flat, and the backdrop veil 0.94; nothing blurs | unchanged |
 
 Contrast: body text is `--ink` (bone) on green glass, 10.68:1 on solid green. The CTA's white label is at least
 4.5:1 because the fill is vermilion a shade deeper (`--cta`, 4.96–6.03:1). Every vermilion dot on glass carries a

@@ -53,16 +53,18 @@
 .btn:is(.btn--primary, .btn--action) {
   color: #fff;
   background: var(--cta);
-  -webkit-backdrop-filter: blur(10px) saturate(1.4);
-  backdrop-filter: blur(10px) saturate(1.4);
   text-shadow: 0 1px 0 rgb(90 14 6 / 0.35);
+  /* Lit from above (ADR-87): a soft top light, the shade at the bottom, the glow below. No blur of its own: the fill
+     is 0.97 solid, so a backdrop blur only cost a compositing layer. */
   box-shadow:
+    inset 0 4px 6px -4px rgb(var(--bone-rgb) / 0.22),
     inset 0 -2px 6px rgb(90 14 6 / 0.25),
     0 10px 24px -10px rgb(var(--vermilion-rgb) / 0.55);
 }
 .btn:is(.btn--primary, .btn--action):hover:not([aria-disabled="true"]) {
   background: linear-gradient(180deg, var(--cta-hover-top), var(--cta-bottom));
   box-shadow:
+    inset 0 4px 6px -4px rgb(var(--bone-rgb) / 0.22),
     inset 0 -2px 6px rgb(90 14 6 / 0.25),
     0 14px 30px -10px rgb(240 122 108 / 0.6);
 }
@@ -84,44 +86,174 @@
   background-position: -30% 0;
 }
 
-/* The secondary button: the soft control fill (glass.css, every look) with bone words, and no ring (ADR-45). */
+/* The secondary button: one step brighter than what it sits on (ADR-87, the logic of light). --fill is a bone lift
+   paid for with green, relative to the surface around it (glass.css re-declares it inside every lit surface). Bone
+   words, a soft top light, a shade at the bottom and a shadow below; no ring (ADR-45). Hover adds light, press takes
+   it away. */
 .btn--glass {
   color: var(--ink);
   background: var(--fill);
   -webkit-backdrop-filter: blur(14px) saturate(1.4);
   backdrop-filter: blur(14px) saturate(1.4);
-  box-shadow: 0 6px 16px -10px rgb(var(--shadow-rgb) / 0.68);
+  box-shadow: var(--glass-shadow-raise);
 }
 .btn--glass:hover:not([aria-disabled="true"]) {
   background: var(--fill-hover);
-  box-shadow: 0 8px 18px -10px rgb(var(--shadow-rgb) / 0.75);
+  box-shadow: var(--glass-shadow-raise-hover);
 }
-.btn--ghost {
+/* Inside a blurred surface the surface's blur is the backdrop: a blur of its own only adds a compositing layer. */
+:where(.glass, .page-head__text, .dash-head__text, .dropdown__list, .ws-menu) .btn--glass {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+/* The colourless lens: Reload on the update bar, the bar's main choice told by light alone (owner, 2026-11-23:
+   "without color and only a liquid glassy style"; ADR-87). Clear glass with no tint at all: a near-transparent white
+   face over the bar's own blurred glass, a bright catch light on its top edge, a clear rim, a soft glow inside and the
+   drop of a raised thing. Bone words. Its face reads at least 0.03 OKLab L over Later's from top to bottom in every
+   look, white under the bar included (the bar's own pay, --light-update-pay, leaves the room); the words keep 4.5:1
+   at rest and on hover (test/buttonLight.test.ts, e2e/update.spec.ts). It has no backdrop-filter of its own: inside
+   the blurred bar (its backdrop root) a second blur only samples the bar's translucent tint and lays it again under
+   the lens, which in Chromium and WebView2 made the lens 0.05 L darker than Later over a white thumbnail. Hover adds
+   light (and, with motion allowed, the 1 px lift of every unblurred button). */
+.btn.btn--lens {
+  --btn-lift: 0.18; /* white over the bar where the words sit (0.08 OKLab L over Later); 0.06 more at the very top */
+  --lens-spec: 0.34; /* the catch light on the top edge, inside the top padding (9 px deep), never under the words */
+  --lens-rim: 0.3; /* the clear rim: a soft inner glow all round, 5 px blur (no drawn edge, ADR-45) */
+  --lens-face:
+    radial-gradient(64% 9px at 50% 0, rgb(255 255 255 / var(--lens-spec)), transparent),
+    linear-gradient(180deg, rgb(255 255 255 / calc(var(--btn-lift) + 0.06)) 0%, rgb(255 255 255 / var(--btn-lift)) 32%);
+  --lens-light:
+    inset 0 5px 7px -5px rgb(255 255 255 / 0.55),
+    inset 0 0 5px rgb(255 255 255 / var(--lens-rim)),
+    inset 0 0 16px -6px rgb(255 255 255 / 0.14),
+    inset 0 -6px 10px -8px rgb(var(--shadow-rgb) / 0.3);
   color: var(--ink);
-  background: var(--fill-control);
-  box-shadow: none;
+  /* Comfort only, never counted toward AA. */
+  text-shadow:
+    0 0 1px rgb(var(--green-deep-rgb) / 0.45),
+    0 1px 8px rgb(var(--green-deep-rgb) / 0.3);
+  background: var(--lens-face);
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: var(--lens-light), var(--light-shadow-2);
+  transition:
+    --btn-lift var(--dur-1) var(--ease-out),
+    transform var(--dur-2) var(--ease-spring),
+    box-shadow var(--dur-1) var(--ease-out),
+    opacity var(--dur-2) var(--ease-out);
+}
+.btn.btn--lens:hover:not([aria-disabled="true"]) {
+  --btn-lift: 0.205;
+  --lens-spec: 0.42;
+  --lens-rim: 0.4;
+  /* Restated: .btn--glass's hover and press fills are heavier selectors than .btn.btn--lens. */
+  background: var(--lens-face);
+  box-shadow: var(--lens-light), var(--light-shadow-2-hover);
+}
+/* A button lifts on hover only when it has no backdrop blur of its own (inside a blurred surface, and the lens):
+   moving a blurred button redraws its backdrop on every frame of the spring, so the glass on the page rises by light
+   alone. */
+@media (prefers-reduced-motion: no-preference) {
+  .btn--danger:hover:not([aria-disabled="true"]),
+  .btn.btn--lens:hover:not([aria-disabled="true"]),
+  :where(.glass, .page-head__text, .dash-head__text, .dropdown__list, .ws-menu) .btn--glass:hover:not([aria-disabled="true"]) {
+    transform: translateY(-1px);
+  }
+}
+/* Press: one step down, after the hover lift and as heavy, so the spring press wins while the pointer is over it. */
+.btn--glass:active:not([aria-disabled="true"]) {
+  background: var(--fill-press);
+  box-shadow: var(--glass-shadow-press);
+  transform: scale(0.955);
+}
+.btn.btn--lens:active:not([aria-disabled="true"]) {
+  --btn-lift: 0.05;
+  --lens-spec: 0.2;
+  background: var(--lens-face);
+  box-shadow: var(--light-press), var(--light-shadow-press);
+  transform: scale(0.955);
+}
+/* The quiet choice (Later, Skip, Not now) still looks like a button: a pill with a thin soft rim of light, its own
+   small top light and a faint face that adds light, at least 0.03 OKLab L over the surface it sits on, so a child
+   sees something to press. No drop shadow and a fainter face than the main choice beside it, so it reads quieter.
+   Inside a lit surface the face is bone alone (the surface's green carries the words); straight on the page it is
+   the pick-one track's green under the lift, which carries the words over a white photo. Hover adds light, press
+   takes it away. */
+.btn--ghost {
+  --btn-veil: var(--light-ghost-veil, var(--light-raise-veil));
+  --btn-lift: var(--light-ghost-lift);
+  --ghost-hover-veil: var(--light-raise-hover-veil);
+  --ghost-hover-lift: var(--light-raise-hover-lift);
+  --ghost-rim: inset 0 0 4px rgb(var(--bone-rgb) / 0.32);
+  --ghost-top: inset 0 3px 4px -3px rgb(var(--bone-rgb) / 0.3);
+  color: var(--ink);
+  background:
+    linear-gradient(rgb(var(--bone-rgb) / var(--btn-lift)), rgb(var(--bone-rgb) / var(--btn-lift))),
+    rgb(var(--green-rgb) / min(1, var(--btn-veil)));
+  box-shadow: var(--ghost-top), var(--ghost-rim);
+  transition:
+    --btn-lift var(--dur-1) var(--ease-out),
+    --btn-veil var(--dur-1) var(--ease-out),
+    transform var(--dur-2) var(--ease-spring),
+    box-shadow var(--dur-1) var(--ease-out),
+    opacity var(--dur-2) var(--ease-out);
+}
+:where(.glass, .tt-sheet, .help-panel, .money-dock, .page-head__text, .dash-head__text, .dropdown__list, .ws-menu) .btn--ghost {
+  --btn-veil: 0.33; /* GHOST_VEIL: the quiet fill's green, so its bone lift keeps AA up to the cap */
+  --btn-lift: 0.125; /* GHOST_LIFT */
+  --ghost-hover-veil: 0.37; /* RAISE_HOVER_VEIL */
+  --ghost-hover-lift: 0.145; /* RAISE_HOVER_LIFT */
 }
 .btn--ghost:hover:not([aria-disabled="true"]) {
-  background: var(--fill);
-  box-shadow: none;
+  --btn-veil: var(--ghost-hover-veil);
+  --btn-lift: var(--ghost-hover-lift);
+  box-shadow:
+    inset 0 3px 5px -3px rgb(var(--bone-rgb) / 0.5),
+    inset 0 0 4px rgb(var(--bone-rgb) / 0.46);
+}
+.btn--ghost:active:not([aria-disabled="true"]) {
+  --btn-lift: var(--light-press-lift);
+  box-shadow: var(--light-press);
 }
 /* Bone: only for a non-action selection or a confirmation, never next to a CTA as a rival. */
 .btn--bone {
   color: var(--on-bone);
   text-shadow: none;
   background: var(--selected);
-  box-shadow: 0 6px 16px -10px rgb(var(--shadow-rgb) / 0.68);
+  box-shadow: var(--light-shade-2), var(--light-shadow-2);
 }
 .btn--bone:active:not([aria-disabled="true"]) {
   background: var(--bone-deep);
 }
+/* Danger: a vermilion tint over the raise's own fill (its green and its bone lift), so it reads as "careful" without a
+   red ring and, like every raised thing, a step of light over the surface it sits on (ADR-87). Hover lays it over the
+   hover fill, press over the press fill (vermilion words 5.4:1 at worst). */
 .btn--danger {
   color: var(--vermilion-ink);
-  background: var(--tint-vermilion);
-  box-shadow: none;
+  background: linear-gradient(rgb(var(--vermilion-rgb) / 0.14), rgb(var(--vermilion-rgb) / 0.14)), var(--fill);
+  box-shadow: var(--glass-shadow-raise);
 }
 .btn--danger:hover:not([aria-disabled="true"]) {
-  background: var(--tint-vermilion);
+  background: linear-gradient(rgb(var(--vermilion-rgb) / 0.14), rgb(var(--vermilion-rgb) / 0.14)), var(--fill-hover);
+  box-shadow: var(--glass-shadow-raise-hover);
+}
+.btn--danger:active:not([aria-disabled="true"]) {
+  background: linear-gradient(rgb(var(--vermilion-rgb) / 0.14), rgb(var(--vermilion-rgb) / 0.14)), var(--fill-press);
+  box-shadow: var(--glass-shadow-press);
+  transform: scale(0.955);
+}
+/* Keyboard focus: the global ring (base.css --focus) stays in front of a button's own light and shadow. */
+.btn:is(.btn--glass, .btn--danger):focus-visible {
+  box-shadow: var(--focus), var(--glass-shadow-raise);
+}
+.btn.btn--ghost:focus-visible {
+  box-shadow: var(--focus), var(--ghost-top), var(--ghost-rim);
+}
+.btn.btn--bone:focus-visible {
+  box-shadow: var(--focus), var(--light-shadow-2);
+}
+.btn.btn--lens:focus-visible {
+  box-shadow: var(--focus), var(--lens-light), var(--light-shadow-2);
 }
 
 .btn[aria-disabled="true"]:not(.is-loading) {
@@ -138,6 +270,12 @@
     linear-gradient(rgb(var(--vermilion-rgb) / 0.35), rgb(var(--vermilion-rgb) / 0.35)),
     rgb(var(--green-deep-rgb) / 0.6);
   box-shadow: none;
+}
+/* Forced colours (Windows High Contrast) drop fills and shadows: a system border keeps every button a button. */
+@media (forced-colors: active) {
+  .btn {
+    border: 1px solid ButtonText;
+  }
 }
 /* A disabled button gives a short "no" shake when pressed. */
 .btn[aria-disabled="true"]:not(.is-loading):active {
@@ -160,6 +298,18 @@
   syntax: "<percentage>";
   inherits: false;
   initial-value: 0%;
+}
+/* A button's light and veil as numbers (the lens, the ghost), so hover and press fade the light in (a gradient
+   cannot interpolate). */
+@property --btn-lift {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
+}
+@property --btn-veil {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 0;
 }
 .btn::after {
   content: "";
@@ -213,10 +363,13 @@
   color: var(--ink);
   transition:
     background-color var(--dur-1) var(--ease-out),
+    box-shadow var(--dur-1) var(--ease-out),
     transform var(--dur-2) var(--ease-spring);
 }
+/* Transparent at rest; hover lifts a raised step with a small top light. */
 .icon-btn:hover {
   background: var(--fill);
+  box-shadow: var(--light-rim-sm);
 }
 .icon-btn:active {
   transform: scale(0.9);
@@ -307,7 +460,8 @@
   border-radius: var(--r-md);
   border: 1px solid transparent;
   background: var(--fill-field);
-  box-shadow: var(--shade-field);
+  /* A well, one step below its parent: the shade inside the top wall, a faint catch light on the lower wall. */
+  box-shadow: var(--shade-field), inset 0 -4px 6px -4px rgb(var(--bone-rgb) / 0.1);
   font-size: 1rem; /* 16px: iOS does not zoom into the field */
   transition:
     border-color var(--dur-1),
@@ -404,7 +558,7 @@
   padding: 10px 14px;
   border-radius: var(--r-md);
   background: var(--tint-vermilion);
-  box-shadow: none;
+  box-shadow: var(--light-rim-sm);
   color: var(--vermilion-ink);
   font-weight: 600;
   font-size: var(--fs-small);
@@ -420,7 +574,7 @@
   border-radius: var(--r-pill);
   background: var(--fill-field);
   border: 1px solid transparent;
-  box-shadow: var(--shade-field);
+  box-shadow: var(--shade-field), inset 0 -4px 6px -4px rgb(var(--bone-rgb) / 0.1);
   transition:
     border-color var(--dur-2),
     box-shadow var(--dur-2);
@@ -448,6 +602,7 @@
   border-radius: 50%;
   color: var(--ink-2);
   background: var(--fill);
+  box-shadow: var(--light-rim-sm);
   transition: transform var(--dur-3) var(--ease-spring), background-color var(--dur-2);
 }
 .linkbox.is-ok .linkbox__mark {
@@ -496,7 +651,7 @@
   transition: background-color var(--dur-1), border-color var(--dur-1);
 }
 .dropzone:hover {
-  background: rgb(var(--green-deep-rgb) / 0.38);
+  background: var(--fill-hover);
 }
 .dropzone:focus-within {
   border-color: var(--vermilion);
@@ -569,9 +724,7 @@
   height: 28px;
   border-radius: 50%;
   background: var(--bone);
-  box-shadow:
-    0 2px 6px rgb(var(--shadow-rgb) / 0.45),
-    inset 0 -1px 0 rgb(var(--shadow-rgb) / 0.12);
+  box-shadow: var(--light-shadow-2);
   transition: transform var(--dur-3) var(--ease-spring);
 }
 .switch[aria-checked="true"] {
@@ -617,7 +770,6 @@
   max-width: 100%;
   padding: 4px;
   border-radius: var(--r-pill);
-  box-shadow: none;
 }
 .segmented__opt {
   position: relative;
@@ -642,11 +794,19 @@
   inset: 0;
   margin: 0;
 }
+/* Hover adds light: the option rises one relative step above its track (an option is in glass.css's lit list, so
+   --fill-hover is a little bone paid for with green over the track under it, never the page's heavier recipe) with a
+   small top light. The chosen one is the brightest layer, bone. */
+.segmented__opt:not(.is-on):hover {
+  color: var(--ink);
+  background: var(--fill-hover);
+  box-shadow: var(--light-rim-sm);
+}
 .segmented__opt.is-on {
   color: var(--on-bone);
   text-shadow: none;
   background: var(--selected);
-  box-shadow: 0 2px 8px -2px rgb(var(--shadow-rgb) / 0.38);
+  box-shadow: var(--light-shade-2), var(--light-shadow-2);
 }
 .segmented__opt:has(input:focus-visible) {
   box-shadow: var(--focus);
@@ -658,8 +818,8 @@
   gap: 4px;
   padding: 3px;
   border-radius: var(--r-pill);
-  background: rgb(var(--green-deep-rgb) / 0.32);
-  box-shadow: none;
+  background: var(--fill);
+  box-shadow: var(--light-rim-2), var(--light-shade-2);
 }
 .stepper__btn {
   display: grid;
@@ -745,7 +905,7 @@
 .pill--neutral {
   background: var(--fill);
   color: var(--ink-2);
-  box-shadow: none;
+  box-shadow: var(--light-rim-sm);
 }
 .pill--success {
   background: var(--tint-leaf);
@@ -821,7 +981,8 @@
   border-radius: var(--r-md);
   background:
     linear-gradient(100deg, transparent 20%, rgb(var(--bone-rgb) / 0.14) 50%, transparent 80%) no-repeat,
-    linear-gradient(rgb(var(--bone-rgb) / 0.06), rgb(var(--bone-rgb) / 0.06)),
+    /* Lit from above like every surface: brighter at the top, easing down. */
+    linear-gradient(180deg, rgb(var(--bone-rgb) / 0.08), rgb(var(--bone-rgb) / 0.04)),
     /* Never lighter than a panel: on the see-through window a bare 6% bone showed the light glass through it, a
        white flash on every first visit to a page (docs/CONTRACTS.md §20.16). */
     var(--skel-floor, rgb(var(--green-rgb) / var(--panel-veil)));
@@ -860,7 +1021,7 @@
   height: 58px;
   border-radius: 50%;
   background: var(--tint-leaf);
-  box-shadow: none;
+  box-shadow: var(--light-rim-sm), var(--light-shadow-2);
 }
 .empty__title {
   font-family: var(--font-display);
@@ -905,7 +1066,7 @@
 .callout--bad {
   background: var(--tint-vermilion);
   color: var(--vermilion-ink);
-  box-shadow: none;
+  box-shadow: var(--light-rim-sm);
 }
 
 .confirm-row {
@@ -916,7 +1077,7 @@
   padding: 10px 12px;
   border-radius: var(--r-md);
   background: var(--fill);
-  box-shadow: none;
+  box-shadow: var(--glass-shadow-raise);
   animation: rise var(--dur-2) var(--ease-out);
 }
 .confirm-row__text {
@@ -953,9 +1114,11 @@
   gap: 10px;
   padding: 12px 8px 12px 16px;
   border-radius: var(--r-md);
-  --glass-tint: linear-gradient(140deg, rgb(var(--green-rgb) / calc(var(--float-veil) + 0.02)), rgb(var(--green-rgb) / var(--float-veil)));
+  /* A float (ADR-87): planned for a white thumbnail under it, lit from above, the largest shadow below. */
+  --glass-tint: var(--glass-tint-float);
+  --glass-light: var(--glass-light-float);
   --glass-blur: 28px;
-  box-shadow: var(--shadow-2);
+  box-shadow: var(--glass-shadow-float);
   pointer-events: auto;
   animation: toast-in var(--dur-3) var(--ease-spring);
 }
@@ -986,6 +1149,7 @@
 }
 .toast__close:hover {
   background: var(--fill);
+  box-shadow: var(--light-rim-sm);
 }
 @keyframes toast-in {
   from {
@@ -1021,16 +1185,22 @@
   color: var(--ink-2);
   transition:
     background-color var(--dur-2) var(--ease-out),
-    color var(--dur-2);
+    color var(--dur-2),
+    box-shadow var(--dur-2);
 }
 .tab:hover {
   color: var(--ink);
+}
+/* Hover adds light, as on a segmented option: one relative step above the track, with a small top light. */
+.tab:not(.is-on):hover {
+  background: var(--fill-hover);
+  box-shadow: var(--light-rim-sm);
 }
 .tab.is-on {
   color: var(--on-bone);
   text-shadow: none;
   background: var(--selected);
-  box-shadow: 0 2px 8px -2px rgb(var(--shadow-rgb) / 0.38);
+  box-shadow: var(--light-shade-2), var(--light-shadow-2);
 }
 .tab:focus-visible {
   border-radius: var(--r-pill);
@@ -1203,16 +1373,25 @@
   padding: 6px 16px;
   border-radius: var(--r-pill);
   background: var(--fill);
-  box-shadow: 0 4px 12px -8px rgb(var(--shadow-rgb) / 0.75);
+  box-shadow: var(--light-rim-sm), var(--light-shadow-2);
   -webkit-backdrop-filter: blur(12px);
   backdrop-filter: blur(12px);
   font-weight: 600;
   font-size: 0.9rem;
   text-decoration: none;
-  transition: background-color var(--dur-1), transform var(--dur-2) var(--ease-spring);
+  transition:
+    background-color var(--dur-1),
+    box-shadow var(--dur-1) var(--ease-out),
+    transform var(--dur-2) var(--ease-spring);
+}
+/* Inside a blurred surface the surface's blur is the backdrop. */
+:where(.glass, .page-head__text, .dash-head__text, .dropdown__list, .ws-menu) .chip {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
 }
 .chip:hover {
   background: var(--fill-hover);
+  box-shadow: var(--light-rim-sm), var(--light-shadow-2-hover);
 }
 .chip:active {
   transform: scale(0.95);
@@ -1258,6 +1437,7 @@
   padding: 6px 12px;
   border-radius: var(--r-sm);
   background: rgb(var(--bone-rgb) / 0.96);
+  box-shadow: var(--light-shadow-3);
   color: var(--on-bone);
   text-shadow: none;
   font-size: 0.82rem;
@@ -1401,7 +1581,7 @@
   border: 1px solid transparent;
   border-radius: var(--r-sm);
   background: var(--fill);
-  box-shadow: 0 4px 14px -10px rgb(var(--shadow-rgb) / 0.6);
+  box-shadow: var(--glass-shadow-raise);
   scroll-snap-align: start;
 }
 .similar__cover {
@@ -1410,7 +1590,8 @@
   aspect-ratio: 9 / 16;
   overflow: hidden;
   border-radius: var(--r-xs);
-  background: linear-gradient(160deg, var(--green-2), var(--green-3));
+  /* Lit from above (ADR-87): the lighter green at the top. */
+  background: linear-gradient(180deg, var(--green-3), var(--green-2));
 }
 .similar__cover img {
   display: block;
@@ -1451,7 +1632,7 @@
 .callout--info {
   background: var(--fill);
   color: var(--ink);
-  box-shadow: none;
+  box-shadow: var(--glass-shadow-raise);
 }
 .callout--info .icon {
   flex: none;

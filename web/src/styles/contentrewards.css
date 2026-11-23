@@ -7,9 +7,10 @@
   background: var(--tint-leaf);
 }
 .btn.btn--leaf:hover:not([aria-disabled="true"]) {
+  /* More leaf over bottle green (never deep green): brighter, not darker (ADR-87). */
   background:
     linear-gradient(rgb(var(--green-leaf-rgb) / 0.32), rgb(var(--green-leaf-rgb) / 0.32)),
-    rgb(var(--green-deep-rgb) / 0.4);
+    rgb(var(--green-rgb) / 0.4);
 }
 .cr-more {
   margin-inline-start: 6px;
@@ -62,6 +63,7 @@
 .cr-fold {
   border-radius: var(--r-md);
   background: var(--fill);
+  box-shadow: var(--glass-shadow-raise);
 }
 .cr-fold__q {
   display: flex;
@@ -71,6 +73,11 @@
   padding: 10px 14px;
   font-weight: 650;
   list-style: none;
+  border-radius: var(--r-md);
+  transition: background-color var(--dur-1) var(--ease-out);
+}
+.cr-fold__q:hover {
+  background: var(--fill-hover);
 }
 .cr-fold__q::-webkit-details-marker {
   display: none;
@@ -270,12 +277,19 @@
   padding: 12px 14px;
   border-radius: var(--r-md);
   background: var(--fill);
+  box-shadow: var(--glass-shadow-raise);
   color: var(--ink);
   text-align: start;
   font: inherit;
+  transition: box-shadow var(--dur-1) var(--ease-out);
 }
 .cr-choice:hover {
   background: var(--fill-hover);
+  box-shadow: var(--glass-shadow-raise-hover);
+}
+.cr-choice:active {
+  background: var(--fill-press);
+  box-shadow: var(--glass-shadow-press);
 }
 .cr-choice__text {
   display: grid;
@@ -389,6 +403,7 @@
   padding: 16px;
   border-radius: var(--r-lg);
   background: var(--fill);
+  box-shadow: var(--glass-shadow-raise);
 }
 .cr-next.is-in {
   background: var(--tint-leaf);
@@ -453,7 +468,7 @@
   max-width: 100%;
 }
 .cr-pin .btn {
-  box-shadow: 0 14px 30px -14px rgb(var(--shadow-rgb) / 0.9);
+  box-shadow: var(--light-shadow-3);
 }
 /* "If you see …:" is quiet; only the other site's labels inside it are bold. */
 .gstep__hint-see {
@@ -464,13 +479,15 @@
   color: var(--ink);
   background: var(--fill);
   text-shadow: none;
-  box-shadow: 0 6px 16px -10px rgb(var(--shadow-rgb) / 0.68);
+  box-shadow: var(--glass-shadow-raise);
 }
 .cr-paste .linkbox__paste:hover {
   background: var(--fill-hover);
+  box-shadow: var(--glass-shadow-raise-hover);
 }
 .cr-paste .linkbox__paste:active {
-  background: var(--fill-hover);
+  background: var(--fill-press);
+  box-shadow: var(--glass-shadow-press);
 }
 .cr-rules-box {
   display: grid;
@@ -572,6 +589,7 @@
   padding: 10px 12px;
   border-radius: var(--r-md);
   background: var(--fill);
+  box-shadow: var(--glass-shadow-raise);
 }
 .cr-video-row__url {
   flex: 1;
@@ -593,6 +611,7 @@
   padding: 12px 14px;
   border-radius: var(--r-md);
   background: var(--fill);
+  box-shadow: var(--glass-shadow-raise);
   min-width: 0;
 }
 .cr-line.is-ok {
@@ -868,13 +887,17 @@
   padding: 8px 12px;
   border-radius: var(--r-md);
   background: var(--fill);
+  box-shadow: var(--glass-shadow-raise);
 }
 .cr-money__steps {
   display: grid;
   gap: 12px;
 }
 
+/* Less motion: the fold's question takes its hover light at once, so a pointer resting where the last tap was (a fold
+   drawn under it on arrival) starts no transition either (e2e/cr-fit.spec.ts: nothing in the fit moves). */
 @media (prefers-reduced-motion: reduce) {
+  .cr-fold__q,
   .cr-fold__chev {
     transition: none;
   }
@@ -1102,6 +1125,7 @@
   padding: 10px 12px;
   border-radius: var(--r-md);
   background: var(--fill);
+  box-shadow: var(--glass-shadow-raise);
 }
 .cr-fit__checks + .cr-fit__more {
   margin-top: 6px;
@@ -1118,6 +1142,7 @@
 .cr-fit__fold {
   border-radius: var(--r-md);
   background: var(--fill);
+  box-shadow: var(--glass-shadow-raise);
 }
 .cr-fit__fold > .cr-fit__lines {
   padding: 0 14px 12px;
@@ -1231,6 +1256,7 @@
   padding: 10px 12px;
   border-radius: var(--r-md);
   background: var(--fill);
+  box-shadow: var(--glass-shadow-raise);
 }
 .cr-all__mark {
   display: inline-grid;

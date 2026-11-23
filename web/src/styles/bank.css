@@ -64,6 +64,7 @@
   padding: 12px 14px;
   border-radius: var(--r-md);
   background: var(--fill);
+  box-shadow: var(--glass-shadow-raise);
   min-width: 0;
 }
 .bank-key__label {
@@ -373,6 +374,7 @@
   padding: 10px 12px;
   border-radius: var(--r-md);
   background: var(--fill);
+  box-shadow: var(--glass-shadow-raise);
 }
 .bank-reached__name {
   font-weight: 750;
@@ -421,6 +423,7 @@
   padding: 10px 12px;
   border-radius: var(--r-md);
   background: var(--fill);
+  box-shadow: var(--glass-shadow-raise);
   font-size: var(--fs-small);
 }
 .bank-row__money {
@@ -488,12 +491,19 @@
   border: 0;
   border-radius: var(--r-md);
   background: var(--fill);
+  box-shadow: var(--glass-shadow-raise);
   color: var(--ink);
   font: inherit;
   text-align: start;
+  transition: box-shadow var(--dur-1) var(--ease-out);
 }
 .bank-pick:hover:not([disabled]) {
-  background: var(--fill-strong, var(--fill));
+  background: var(--fill-hover);
+  box-shadow: var(--glass-shadow-raise-hover);
+}
+.bank-pick:active:not([disabled]) {
+  background: var(--fill-press);
+  box-shadow: var(--glass-shadow-press);
 }
 .bank-pick__text {
   display: grid;

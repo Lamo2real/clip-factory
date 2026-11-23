@@ -1,5 +1,10 @@
 ## ADR-45 See-through glass over an app-owned backdrop
 
+*Amended by
+[ADR-87](#adr-87-the-logic-of-light-the-top-layer-is-brighter-every-lift-is-paid-for-reload-is-a-colourless-lens):
+"no bone sheen" became "bone lifts paid for with green", and nested glass carries the relative raise. The no-edges rule
+stands.*
+
 - **Context.** The owner (2026-11-18): the app read as flat green, with no liquid, see-through glass: "make the
   entire application liquid glassy see-through, as I wanted before. You still should use these colors with the CTA and
   the green and the bone whites", and "for any edge in the application, wherever there might be, even the edge around
