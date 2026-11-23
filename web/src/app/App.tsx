@@ -56,7 +56,7 @@ import { matchStories, type StoriesPage } from "../stories/routes.ts";
 import { AppPanes, loadStoriesApp, storiesModule, StoriesPaneBoundary } from "../stories/pane.tsx";
 import { WorkspaceMark } from "../components/WorkspaceMark.tsx";
 import { calmPage, followStoriesMotion, storiesDeniedSound } from "../stories/prefs.ts";
-import { KeptSearchProvider, storiesOnScreen, takeParkedClipsGo, useAppActive, useShellHosted } from "./shell.ts";
+import { appSwitched, KeptSearchProvider, storiesOnScreen, takeParkedClipsGo, useAppActive, useShellHosted } from "./shell.ts";
 import { TopBarSwitch, WorkspaceDock } from "./WorkspaceDock.tsx";
 /**
  * The motion gallery (§20.10): mock builds only. Tested on import.meta.env directly (not isMock) so a real build
@@ -335,7 +335,9 @@ function Shell({ held }: { held?: Route }) {
     document.title = `${titleFor(JSON.parse(page) as Route)} · Clip Factory`;
     if (first.current) {
       first.current = false;
-      return;
+      // The visit's first screen keeps focus where the browser put it; Clip Factory coming on screen by a switch (kept
+      // behind Clips Funded, or mounted ahead of a slide) takes it, as every later page change does.
+      if (!appSwitched()) return;
     }
     main.current?.focus({ preventScroll: true });
   }, [page, active]);
@@ -367,7 +369,8 @@ function Shell({ held }: { held?: Route }) {
       <a className="skip-link" href="#main">
         Skip to content
       </a>
-      <Sidebar />
+      {/* Lit at the kept page: a slide back from Clips Funded brings it in with its page lit (the address changes on landing). */}
+      <Sidebar route={route} />
       <div className="shell">
         <header className="topbar">
           <A href="/" className="brand" aria-label="Clip Factory home">
@@ -387,7 +390,7 @@ function Shell({ held }: { held?: Route }) {
           </ErrorBoundary>
         </main>
       </div>
-      <TabBar />
+      <TabBar route={route} />
       <AskClipFactory />
       <SetupTodo />
       {hosted ? null : (

@@ -219,9 +219,12 @@ describe("Stories' fonts", () => {
     }
   });
 
-  it("are put on the page by StoriesApp, once, before its first paint", () => {
+  it("are put on the page by StoriesApp, once, before its first paint (on screen, or as a slide brings it in)", () => {
     expect(readFileSync(join(SRC, "fonts.ts"), "utf8")).toMatch(/import FACES from "\.\/styles\/fonts\.css\?inline";/);
-    expect(readFileSync(join(SRC, "StoriesApp.tsx"), "utf8")).toMatch(/useLayoutEffect\(\(\) => addStoriesFonts\(\), \[\]\);/);
+    // Mounted ahead of a tap behind Clip Factory it waits for the slide (app/shell.ts whenAppSlidesIn).
+    expect(readFileSync(join(SRC, "StoriesApp.tsx"), "utf8")).toMatch(
+      /useLayoutEffect\(\(\) => \(active \|\| !hosted \? addStoriesFonts\(\) : whenAppSlidesIn\("stories", \(\) => addStoriesFonts\(\)\)\), \[active, hosted\]\);/,
+    );
     document.head.querySelectorAll(`style[${FONTS_ATTR}]`).forEach((n) => n.remove());
     addStoriesFonts();
     addStoriesFonts();

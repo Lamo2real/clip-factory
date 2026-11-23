@@ -758,18 +758,13 @@ describe("the living backdrop (the web and phone default): its lightest spot dec
     expect(nested).toContain("box-shadow: var(--glass-shadow-raise);");
   });
 
-  it("the shell's Live chip, while Clip Factory is on screen, is raised on the sidebar exactly as the sidebar's own chip", () => {
-    // Clips Funded switched on: the shell draws the Live chip over Clip Factory's sidebar, where the sidebar's own was
-    // (app/WorkspaceDock.tsx). Its rule has nested glass's very declarations, as light, right after it (§45.19).
-    const nested = ":where(.glass) .glass";
-    const dock = ':where([data-app-pane="clips"]:not([hidden]) ~ .ws-dock > .ws-dock__live) > .glass';
-    expect(block(glass, dock), "the dock's chip has a rule of its own").not.toBe("");
-    expect(block(glass, dock)).toBe(block(glass, nested));
-    const at = (selector: string) => glass.indexOf(`\n${selector} {`);
-    expect(at(nested)).toBeGreaterThan(0);
-    expect(glass.slice(at(nested) + 1, at(dock)).trim(), "right after nested glass").toBe(`${nested} {${block(glass, nested)}}`);
-    // Only while Clip Factory is on screen: no other rule of glass.css reaches the dock's chip.
-    expect(glass.match(/\.ws-dock__live/g)).toHaveLength(1);
+  it("the shell's Live chip is the switch's see-through glass (glide.css), never a pane of glass.css's", () => {
+    // Clips Funded switched on: the shell draws the Live chip over Clip Factory's sidebar or Clips Funded's rail
+    // (app/WorkspaceDock.tsx). It is one family with the workspace switch (the owner, 23 Nov: "the live indicator should
+    // be one glasssy liquyid theme as well"), so glide.css draws it and no rule of glass.css reaches it
+    // (test/switchGlass.test.ts holds its glass). The sidebar's own chip, with Clips Funded off, is nested glass as before.
+    expect(glass).not.toMatch(/\.ws-dock__live/);
+    expect(block(glass, ":where(.glass) .glass"), "nested glass stays").not.toBe("");
   });
 
   it("loose words get an E1 plate in every look, and glass.css leaves buttons to components.css", () => {

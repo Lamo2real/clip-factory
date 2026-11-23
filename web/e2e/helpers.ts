@@ -386,16 +386,15 @@ function contrastKit() {
    * The panel the shell's dock (app/WorkspaceDock.tsx, while Clips Funded is switched on) is drawn over, with its
    * ancestors, from <html> down, when `el` is in the dock and its words `r` lie inside that panel's box on screen. The
    * dock is not inside the panel but drawn over it, so what is under its words is the panel first (like a <Glide>
-   * under its item, below). The Live chip, in the place of the sidebar's own: Clip Factory's sidebar only (over Clips
-   * Funded the chip is its own glass). The workspace switch (its see-through glass, glide.css): Clip Factory's sidebar
-   * or Clips Funded's rail, whichever is on screen. Otherwise null: beside the panel (a short window's slim toggle) the
-   * dock is read on its own, as before. Only what is under the words changes; the words' own colour and every layer of
-   * the dock over the panel are still read, so dimmed words still fail.
+   * under its item, below). The workspace switch and the Live chip under it (one see-through glass, glide.css): Clip
+   * Factory's sidebar or Clips Funded's rail, whichever is on screen. Otherwise null: beside the panel (a short
+   * window's slim toggle, Clips Funded's first Setup with no rail) the dock is read on its own, as before. Only what is
+   * under the words changes; the words' own colour and every layer of the dock over the panel are still read, so
+   * dimmed words still fail.
    */
   function underDock(el: Element, r: DOMRect): Element[] | null {
-    const chip = !!el.closest(".ws-dock > .ws-dock__live");
-    if (!chip && !el.closest(".ws-dock > .ws-switch-host")) return null;
-    const side = Array.from(document.querySelectorAll(chip ? "nav.sidebar" : "nav.sidebar, nav.st-rail")).find((p) => {
+    if (!el.closest(".ws-dock > .ws-dock__live, .ws-dock > .ws-switch-host")) return null;
+    const side = Array.from(document.querySelectorAll("nav.sidebar, nav.st-rail")).find((p) => {
       if (!p.checkVisibility()) return false;
       const b = p.getBoundingClientRect();
       return r.left >= b.left && r.right <= b.right && r.top >= b.top && r.bottom <= b.bottom;
@@ -731,13 +730,12 @@ export async function looseText(page: Page, minAlpha?: number): Promise<string[]
         if (n.matches(".has-glide > .is-on:not(.ws-switch__opt)")) return true;
         if (alphaOf(s.backgroundColor) >= min || alphaOf(s.backgroundImage) >= min) return true;
         // The shell's dock (app/WorkspaceDock.tsx) is drawn over a panel: its words, where they lie inside that
-        // panel's box on screen, sit on the panel too. The Live chip, in the place of the sidebar's own: Clip
-        // Factory's sidebar only. The workspace switch, see-through glass: Clip Factory's sidebar or Clips Funded's rail,
-        // whichever is on screen (underDock in contrastKit reads its contrast the same way). Beside a panel it is loose.
-        const chip: boolean = n.matches(".ws-dock > .ws-dock__live");
-        if (chip || n.matches(".ws-dock > .ws-switch-host")) {
+        // panel's box on screen, sit on the panel too. The workspace switch and the Live chip, one see-through glass:
+        // Clip Factory's sidebar or Clips Funded's rail, whichever is on screen (underDock in contrastKit reads their
+        // contrast the same way). Beside a panel they are loose.
+        if (n.matches(".ws-dock > .ws-dock__live, .ws-dock > .ws-switch-host")) {
           const r = el.getBoundingClientRect();
-          const side = Array.from(document.querySelectorAll(chip ? "nav.sidebar" : "nav.sidebar, nav.st-rail")).find((p) => {
+          const side = Array.from(document.querySelectorAll("nav.sidebar, nav.st-rail")).find((p) => {
             if (!p.checkVisibility()) return false;
             const b = p.getBoundingClientRect();
             return r.left >= b.left && r.right <= b.right && r.top >= b.top && r.bottom <= b.bottom;

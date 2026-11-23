@@ -4,7 +4,7 @@ import { expect, test, type Page } from "@playwright/test";
 import { DEFAULT_COLOURS } from "../src/lib/background.ts";
 import { asMacWindow } from "./desktopWindow.ts";
 import { looseText, scanText, settle } from "./helpers.ts";
-import { decode } from "./pixels.ts";
+import { busyness, decode, type Pixels } from "./pixels.ts";
 
 // The workspace switch is see-through, colour-free liquid glass (the owner, 2026-11-23: "make his color freee and
 // liquid glass style", then "see through liquid glassy instead of black and white so whatever is under it is visible
@@ -15,25 +15,41 @@ import { decode } from "./pixels.ts";
 // hidden, the pixels where each name's words sit are read:
 //   - every name keeps 4.5:1 against the lightest and the darkest pixel behind its words, at rest and hovered;
 //   - the chosen side is plainly the chosen one for a child: its lens is at least 0.06 OKLab L over the track where
-//     the words sit, and still 0.04 over the other name while that one is hovered; hover adds light;
+//     the words sit, at rest and while the other name is hovered (hover lays no light under the words, only in the
+//     band above them, where it adds at least 0.01);
 //   - the track is see-through: with the switch hidden, the same pixels read what is under it, and the track keeps
 //     them, no smoke (at most 0.06 OKLab L darker), only a faint tint (at most 0.05 lighter), and their colour (at
 //     least 70 % of their chroma, where they have any);
 //   - unfolding Clip Factory's sidebar, the switch keeps its glass: its blur and light never drop while the dock's
 //     clip runs (the clip is the switch's own, never its host's, which would be its glass's Backdrop Root);
 //   - scanText and looseText (e2e/helpers.ts) read its words over the panel its dock is drawn over, and still catch
-//     dimmed words.
+//     dimmed words;
+//   - the Live chip under it is the same see-through glass (the owner, 23 Nov: "the live indicator should be one
+//     glasssy liquyid theme as well"): its word at AA wherever it is drawn, and over the sidebar or the rail the same
+//     see-through floors as the track; at a phone's top bar (no panel there) it carries the tint its word needs;
+//   - over no panel (Clips Funded's first Setup on a computer: no rail under the dock) the switch and the chip carry a
+//     plate of their own, their words at AA and the lens plainly lit, in Clips Funded's Ember, picture and window looks;
+//   - in Clips Funded's picture and window looks the phone list's plate keeps the page under it a faint shade: no
+//     readable words show through behind the names (its top bar is the list's Backdrop Root, so the list's blur sees
+//     nothing of the page).
 // test/switchGlass.test.ts holds the colours of the CSS and works them out on paper; this holds what they add up to on
 // screen. Pictures under test-results/switch-glass. Clips Funded is switched on with cf.storiesPreview = 1.
 
 const SHOTS = join(import.meta.dirname, "..", "test-results", "switch-glass");
 const WHITE = `data:image/svg+xml,${encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16'><rect width='16' height='16' fill='#fff'/></svg>")}`;
 
-/** The plainly-chosen floor (S5), the lens over a hovered name, what hover adds, and AA. */
+/**
+ * The plainly-chosen floor (S5): the lens over the track, at rest and over a hovered name alike (hover lays no light
+ * under the words). What hover's light adds in the band above the words, and AA.
+ */
 const LIFT = 0.06;
-const OVER_HOVER = 0.04;
 const HOVER_UP = 0.01;
 const AA = 4.5;
+/** How busy the pixels behind a name in a phone list may be with the switch hidden: a faint shade, no sharp words. */
+const SHARP = 2.5;
+/** The shell's Live chip in the dock, and at a phone's top bar. */
+const LIVE_DOCK = ".ws-dock > .ws-dock__live > .live-dot";
+const LIVE_TOP = "[data-app-pane]:not([hidden]) .ws-switch-host--topbar > .live-dot";
 /** See-through: the track over what is under it, in OKLab L (no smoke, a faint tint) and the share of its chroma kept. */
 const NO_SMOKE = -0.06;
 const FAINT = 0.05;
@@ -61,10 +77,10 @@ const LOOKS: Look[] = [
   { name: "Clips Funded window", cf: { backgroundMode: "see-through", glassStrength: "clear" }, window: true, stories: "window" },
 ];
 
-async function useLook(page: Page, look: Look, studios = 0) {
+async function useLook(page: Page, look: Look, studios = 0, solo = false) {
   if (look.window) await asMacWindow(page);
   await page.addInitScript(
-    ({ cf, picture, stories, studios, white, window: win }) => {
+    ({ cf, picture, stories, studios, white, window: win, solo }) => {
       localStorage.setItem("cf.storiesPreview", "1");
       if (cf) {
         localStorage.setItem("cf.prefs", JSON.stringify(cf));
@@ -74,9 +90,10 @@ async function useLook(page: Page, look: Look, studios = 0) {
       const more: Record<string, string> = {};
       if (stories === "picture") more["look.mode"] = "picture";
       if (stories === "window") more["look.mode"] = "see-through";
-      localStorage.setItem("cf.stories.prefs", JSON.stringify({ setupShown: ["e2e"], more }));
+      // `solo`: a brand-new studio, whose Setup opens by itself, on its own (no rail under the dock).
+      localStorage.setItem("cf.stories.prefs", JSON.stringify({ setupShown: solo ? [] : ["e2e"], more }));
       if (stories === "picture") localStorage.setItem("cf.stories.picture", white);
-      if (studios) (window as unknown as { __cfStoriesMock?: unknown }).__cfStoriesMock = { knobs: { moreStudios: studios } };
+      if (studios || solo) (window as unknown as { __cfStoriesMock?: unknown }).__cfStoriesMock = { knobs: { ...(studios ? { moreStudios: studios } : {}), ...(solo ? { fresh: true } : {}) } };
       // Every platform skipped: no setup list floating over the sidebar's foot.
       if (!sessionStorage.getItem("cf-mock-setup-skipped")) sessionStorage.setItem("cf-mock-setup-skipped", JSON.stringify(["youtube", "tiktok", "instagram", "facebook", "x"]));
       // A white desktop behind the see-through window (html.see-through leaves the page's own canvas showing).
@@ -87,7 +104,7 @@ async function useLook(page: Page, look: Look, studios = 0) {
           document.head.append(st);
         });
     },
-    { cf: look.cf ?? null, picture: !!look.picture, stories: look.stories ?? null, studios, white: WHITE, window: !!look.window },
+    { cf: look.cf ?? null, picture: !!look.picture, stories: look.stories ?? null, studios, white: WHITE, window: !!look.window, solo },
   );
 }
 
@@ -124,6 +141,39 @@ interface Name {
   /** Mean OKLab L and chroma of those pixels. */
   L: number;
   C: number;
+  /** How busy those pixels are (pixels.ts busyness: sharp words high, a blur low). */
+  busy: number;
+  /** Mean OKLab L of the option's top band (1 to 6 px down, 4 px in from its sides): where hover's light lies. */
+  topL: number;
+}
+
+/** The pixels of `px` (a shot of `clip`) inside `box`: their worst contrast against `words`, mean OKLab L and chroma. */
+function behind(px: Pixels, clip: { x: number; y: number }, box: { x: number; y: number; w: number; h: number }, words: number) {
+  let worst = Infinity;
+  let sL = 0;
+  let sa = 0;
+  let sb = 0;
+  let count = 0;
+  const x0 = Math.max(0, Math.ceil(box.x - clip.x));
+  const x1 = Math.min(px.width, Math.floor(box.x + box.w - clip.x));
+  const y0 = Math.max(0, Math.ceil(box.y - clip.y));
+  const y1 = Math.min(px.height, Math.floor(box.y + box.h - clip.y));
+  const grid: number[] = [];
+  for (let y = y0; y < y1; y++)
+    for (let x = x0; x < x1; x++) {
+      const i = (y * px.width + x) * 4;
+      const c: Rgb = [px.data[i]!, px.data[i + 1]!, px.data[i + 2]!];
+      grid.push(c[0], c[1], c[2], 255);
+      worst = Math.min(worst, ratio(words, lum(c)));
+      const [L, a, b] = oklab(c);
+      sL += L;
+      sa += a;
+      sb += b;
+      count++;
+    }
+  const w = Math.max(0, x1 - x0);
+  const busy = w > 1 && count ? busyness({ width: w, height: count / w, data: grid }) : 0;
+  return { count, contrast: worst, L: count ? sL / count : 0, C: count ? Math.hypot(sa / count, sb / count) : 0, busy };
 }
 
 /**
@@ -145,7 +195,13 @@ async function read(page: Page, root: string, shot: string, bare = false): Promi
         // Where the words are, inside the option's own box (its 2 px edge left out).
         const x0 = Math.max(t.left, b.left + 2);
         const x1 = Math.min(t.right, b.right - 2);
-        return { text: o.textContent!.trim(), on: o.classList.contains("is-on"), color: getComputedStyle(o).color, box: { x: x0, y: t.top, w: x1 - x0, h: t.height } };
+        return {
+          text: o.textContent!.trim(),
+          on: o.classList.contains("is-on"),
+          color: getComputedStyle(o).color,
+          box: { x: x0, y: t.top, w: x1 - x0, h: t.height },
+          band: { x: b.left + 4, y: b.top + 1, w: b.width - 8, h: 5 },
+        };
       }),
     };
   });
@@ -166,36 +222,70 @@ async function read(page: Page, root: string, shot: string, bare = false): Promi
   const px = await decode(page, png);
   return info.names.map((n) => {
     const color = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)/.exec(n.color)!.slice(1, 4).map(Number) as Rgb;
-    const words = lum(color);
-    let worst = Infinity;
-    let sL = 0;
-    let sa = 0;
-    let sb = 0;
-    let count = 0;
-    for (let y = Math.ceil(n.box.y - clip.y); y < Math.floor(n.box.y + n.box.h - clip.y); y++)
-      for (let x = Math.ceil(n.box.x - clip.x); x < Math.floor(n.box.x + n.box.w - clip.x); x++) {
-        if (x < 0 || y < 0 || x >= px.width || y >= px.height) continue;
-        const i = (y * px.width + x) * 4;
-        const c: Rgb = [px.data[i]!, px.data[i + 1]!, px.data[i + 2]!];
-        worst = Math.min(worst, ratio(words, lum(c)));
-        const [L, a, b] = oklab(c);
-        sL += L;
-        sa += a;
-        sb += b;
-        count++;
-      }
-    expect(count, `${shot}: pixels behind "${n.text}"`).toBeGreaterThan(100);
-    return { text: n.text, on: n.on, color, contrast: worst, L: sL / count, C: Math.hypot(sa / count, sb / count) };
+    const at = behind(px, clip, n.box, lum(color));
+    expect(at.count, `${shot}: pixels behind "${n.text}"`).toBeGreaterThan(100);
+    const band = behind(px, clip, n.band, lum(color));
+    return { text: n.text, on: n.on, color, contrast: at.contrast, L: at.L, C: at.C, busy: at.busy, topL: band.L };
   });
 }
 
-const fmt = (ns: Name[]) => ns.map((n) => `${n.on ? "*" : ""}${n.text} ${n.contrast.toFixed(2)}:1 L ${n.L.toFixed(3)} C ${n.C.toFixed(3)}`).join(" | ");
+/**
+ * The Live chip `root` (its word "Live"): its word's colour against the pixels behind it, with the word hidden; `bare`:
+ * the whole chip hidden instead, so the same pixels read what is under it.
+ */
+async function readChip(page: Page, root: string, shot: string, bare = false) {
+  const chip = page.locator(root).first();
+  await expect(chip, root).toBeVisible({ timeout: 15_000 });
+  const info = await chip.evaluate((el) => {
+    const label = el.querySelector(".live-dot__label")!;
+    const range = document.createRange();
+    range.selectNodeContents(label);
+    const t = range.getBoundingClientRect();
+    const r = el.getBoundingClientRect();
+    return { chip: { x: r.x, y: r.y, w: r.width, h: r.height }, box: { x: t.left, y: t.top, w: t.width, h: t.height }, color: getComputedStyle(label).color };
+  });
+  mkdirSync(SHOTS, { recursive: true });
+  const clip = { x: Math.floor(info.chip.x), y: Math.floor(info.chip.y), width: Math.ceil(info.chip.w) + 1, height: Math.ceil(info.chip.h) + 1 };
+  await page.screenshot({ clip, path: join(SHOTS, `${shot} words.png`) });
+  const hide = await page.addStyleTag({
+    content: bare ? `${root} { visibility: hidden !important; }` : `${root} .live-dot__label { color: transparent !important; text-shadow: none !important; }`,
+  });
+  await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+  const png = await page.screenshot({ clip });
+  await page.screenshot({ clip, path: join(SHOTS, `${shot}.png`) });
+  await hide.evaluate((el) => (el as Element).remove());
+  const color = /rgba?\(([\d.]+),\s*([\d.]+),\s*([\d.]+)/.exec(info.color)!.slice(1, 4).map(Number) as Rgb;
+  const at = behind(await decode(page, png), clip, info.box, lum(color));
+  expect(at.count, `${shot}: pixels behind "Live"`).toBeGreaterThan(40);
+  return { ...at, color };
+}
+
+/**
+ * The Live chip `root`: its word at AA; `seeThrough` (over the sidebar or the rail): against the same pixels with the
+ * chip hidden, no smoke, only a faint tint, their colour kept, as the track's.
+ */
+async function checkChip(page: Page, root: string, at: string, fails: string[], seeThrough: boolean) {
+  await page.mouse.move(1, 1);
+  const rest = await readChip(page, root, `${at} Live`.replace(/\W+/g, "-"));
+  if (rest.contrast < AA) fails.push(`${at}: "Live" ${rest.contrast.toFixed(2)}:1 (words rgb ${rest.color.join(" ")})`);
+  let note = `"Live" ${rest.contrast.toFixed(2)}:1 L ${rest.L.toFixed(3)} C ${rest.C.toFixed(3)}`;
+  if (seeThrough) {
+    const u = await readChip(page, root, `${at} Live under`.replace(/\W+/g, "-"), true);
+    note += ` || under L ${u.L.toFixed(3)} C ${u.C.toFixed(3)}`;
+    if (rest.L - u.L < NO_SMOKE) fails.push(`${at}: the Live chip is smoked, ${(rest.L - u.L).toFixed(3)} OKLab L under what is behind it`);
+    if (rest.L - u.L > FAINT) fails.push(`${at}: the Live chip is frosted over, +${(rest.L - u.L).toFixed(3)} OKLab L`);
+    if (u.C > 0.02 && rest.C < KEEPS * u.C) fails.push(`${at}: the Live chip drains the colour behind it, chroma ${rest.C.toFixed(3)} of ${u.C.toFixed(3)}`);
+  }
+  test.info().annotations.push({ type: `${at} Live`, description: note });
+}
+
+const fmt = (ns: Name[]) => ns.map((n) => `${n.on ? "*" : ""}${n.text} ${n.contrast.toFixed(2)}:1 L ${n.L.toFixed(3)} C ${n.C.toFixed(3)} busy ${n.busy.toFixed(2)} top ${n.topL.toFixed(3)}`).join(" | ");
 
 /**
  * The switch `root` at rest and with the other name hovered: every word at AA, the lens plainly the brightest, hover
  * adding light, the track see-through. Failures go to `fails`; every reading to the test's notes.
  */
-async function check(page: Page, root: string, at: string, fails: string[]) {
+async function check(page: Page, root: string, at: string, fails: string[], opts: { plate?: boolean; sharp?: boolean } = {}) {
   await page.mouse.move(1, 1);
   await page.waitForTimeout(450);
   const rest = await read(page, root, `${at} rest`.replace(/\W+/g, "-"));
@@ -216,8 +306,14 @@ async function check(page: Page, root: string, at: string, fails: string[]) {
   for (const [state, names] of [["at rest", rest], ["hovered", hovered]] as const)
     for (const n of names) if (n.contrast < AA) fails.push(`${at} ${state}: "${n.text}" ${n.contrast.toFixed(2)}:1 (words rgb ${n.color.join(" ")})`);
   for (const o of others) if (on!.L - o.L < LIFT) fails.push(`${at}: the lens is only +${(on!.L - o.L).toFixed(3)} OKLab L over the track under "${o.text}"`);
-  if (hOn.L - h.L < OVER_HOVER) fails.push(`${at}: the lens is only +${(hOn.L - h.L).toFixed(3)} OKLab L over the hovered "${h.text}"`);
-  if (h.L - others[0]!.L < HOVER_UP) fails.push(`${at}: hover adds only +${(h.L - others[0]!.L).toFixed(3)} OKLab L`);
+  // While the other name is hovered the lens keeps its whole lift over it: hover's light lies above the words.
+  if (hOn.L - h.L < LIFT) fails.push(`${at}: the lens is only +${(hOn.L - h.L).toFixed(3)} OKLab L over the hovered "${h.text}"`);
+  const restBand = others[0]!.topL;
+  if (h.topL - restBand < HOVER_UP) fails.push(`${at}: hover adds only +${(h.topL - restBand).toFixed(3)} OKLab L in its top band`);
+  // In a phone list whose plate is the only thing between the names and the page: no sharp words show through.
+  if (opts.sharp) for (const u of under) if (u.busy > SHARP) fails.push(`${at}: the page shows through sharp behind "${u.text}" (busy ${u.busy.toFixed(2)})`);
+  // Over no panel the track carries a plate of its own: what is under it shows, but darkened, by design.
+  if (opts.plate) return;
   // See-through: the track under each other name keeps what is under it (the panel, or the menu's plate).
   for (const o of others) {
     const u = under.find((n) => n.text === o.text)!;
@@ -239,6 +335,7 @@ for (const look of LOOKS) {
       for (const path of ["/", "/stories"] as const) {
         await open(page, path);
         await check(page, ".ws-dock .ws-switch", `${look.name} ${path} 1440`, fails);
+        await checkChip(page, LIVE_DOCK, `${look.name} ${path} 1440`, fails, true);
       }
       await ctx.close();
     }
@@ -249,17 +346,41 @@ for (const look of LOOKS) {
       await useLook(page, look, 2);
       for (const path of ["/", "/stories"] as const) {
         await open(page, path);
+        // The Live chip at the top bar: no panel under it, so its own tint holds its word.
+        await checkChip(page, LIVE_TOP, `${look.name} ${path} phone`, fails, false);
         const host = page.locator("[data-app-pane]:not([hidden]) .ws-switch-host--topbar");
         await host.getByRole("button", { name: /^Pick a workspace/ }).click();
         const menu = "[data-app-pane]:not([hidden]) .ws-menu .ws-switch";
         await page.locator(menu).waitFor();
         await page.waitForTimeout(500);
-        await check(page, menu, `${look.name} ${path} phone menu`, fails);
+        // Clips Funded's own picture and window looks: its top bar is the list's Backdrop Root, so only the plate
+        // stands between the names and the page.
+        await check(page, menu, `${look.name} ${path} phone menu`, fails, { sharp: path === "/stories" && !!look.stories });
         await page.keyboard.press("Escape");
       }
       await ctx.close();
     }
     expect(fails).toEqual([]);
+  });
+}
+
+// Over no panel: Clips Funded's first Setup opens by itself, on its own, with no rail under the dock on a computer.
+for (const look of [LOOKS[0]!, LOOKS.find((l) => l.name === "Clips Funded picture white")!, LOOKS.find((l) => l.name === "Clips Funded window")!]) {
+  test(`over no panel (Clips Funded's first Setup) the switch and the Live chip carry a plate: words at AA, the lens plainly lit (${look.stories ?? "Ember"})`, async ({ browser }) => {
+    test.setTimeout(90_000);
+    const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
+    const page = await ctx.newPage();
+    await useLook(page, look, 0, true);
+    await open(page, "/stories");
+    await expect(page).toHaveURL(/\/stories\/setup$/);
+    await expect(page.locator(".stories-app.is-alone")).toHaveCount(1);
+    await expect(page.locator(".st-rail")).toHaveCount(0);
+    await expect(page.locator("html")).toHaveAttribute("data-ws-bare", "");
+    const fails: string[] = [];
+    await check(page, ".ws-dock .ws-switch", `${look.stories ?? "Ember"} first Setup 1440`, fails, { plate: true });
+    await checkChip(page, LIVE_DOCK, `${look.stories ?? "Ember"} first Setup 1440`, fails, false);
+    expect(fails).toEqual([]);
+    await ctx.close();
   });
 }
 
@@ -283,10 +404,18 @@ test("unfolding Clip Factory's sidebar, the switch keeps its blur and light (its
     }
     const host = document.querySelector<HTMLElement>(".ws-dock .ws-switch-host")!;
     const bar = host.querySelector<HTMLElement>(".ws-switch")!;
-    return { host: [getComputedStyle(host).clipPath, getComputedStyle(host).opacity], bar: getComputedStyle(bar).clipPath };
+    const row = document.querySelector<HTMLElement>(".ws-dock .ws-dock__live")!;
+    const chip = row.querySelector<HTMLElement>(".live-dot")!;
+    return {
+      host: [getComputedStyle(host).clipPath, getComputedStyle(host).opacity],
+      bar: getComputedStyle(bar).clipPath,
+      row: [getComputedStyle(row).clipPath, getComputedStyle(row).opacity],
+      chip: getComputedStyle(chip).clipPath,
+    };
   });
   await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
   const a = await read(page, ".ws-dock .ws-switch", "unfold-during");
+  const la = await readChip(page, LIVE_DOCK, "unfold-during");
   await page.evaluate(() => {
     for (const an of document.getAnimations()) {
       try {
@@ -299,7 +428,8 @@ test("unfolding Clip Factory's sidebar, the switch keeps its blur and light (its
   await expect(page.locator(".ws-dock")).not.toHaveClass(/is-unfolding/);
   await page.waitForTimeout(300);
   const b = await read(page, ".ws-dock .ws-switch", "unfold-after");
-  test.info().annotations.push({ type: "unfold", description: `during ${fmt(a)} || after ${fmt(b)}` });
+  const lb = await readChip(page, LIVE_DOCK, "unfold-after");
+  test.info().annotations.push({ type: "unfold", description: `during ${fmt(a)} || after ${fmt(b)} || Live during L ${la.L.toFixed(3)} C ${la.C.toFixed(3)}, after L ${lb.L.toFixed(3)} C ${lb.C.toFixed(3)}` });
   // The chosen name (Clip Factory, on the left: shown by then) reads the same glass during the clip as after it.
   const [x, y] = [a.find((n) => n.on)!, b.find((n) => n.on)!];
   expect(Math.abs(x.C - y.C), `chroma during ${x.C.toFixed(3)}, after ${y.C.toFixed(3)}`).toBeLessThan(0.008);
@@ -307,6 +437,11 @@ test("unfolding Clip Factory's sidebar, the switch keeps its blur and light (its
   // So the host is never the switch's Backdrop Root: no clip and no opacity of its own; the bar carries the clip.
   expect(during.host).toEqual(["none", "1"]);
   expect(during.bar).toMatch(/^inset\(/);
+  // The Live chip the same: its glass reads the same during the clip as after it, and the clip is its own, never its row's.
+  expect(Math.abs(la.C - lb.C), `the Live chip's chroma during ${la.C.toFixed(3)}, after ${lb.C.toFixed(3)}`).toBeLessThan(0.008);
+  expect(Math.abs(la.L - lb.L), `the Live chip's L during ${la.L.toFixed(3)}, after ${lb.L.toFixed(3)}`).toBeLessThan(0.015);
+  expect(during.row).toEqual(["none", "1"]);
+  expect(during.chip).toMatch(/^inset\(/);
   await ctx.close();
 });
 

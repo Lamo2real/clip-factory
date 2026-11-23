@@ -221,8 +221,16 @@ export interface AppSlide {
   readonly landed: Promise<boolean>;
   /** The switch was made (or held): the panes come to rest on the app now on screen. */
   settle(): void;
-  /** Tapped back during the slide: both panes slide back to where they were, and nothing changes. */
+  /**
+   * Tapped back during the slide: both panes slide back to where they were, and nothing changes. A tap forth again
+   * while they slide back gets a fresh slide from startAppSlide, on from where they are.
+   */
   back(): void;
+  /**
+   * The switch's lens (its Glide's slide, made for the same tap): it starts on the panes' first frame, from the same
+   * moment, so the two read as one move (each way: forth, back and forth again).
+   */
+  join(lens: Animation): void;
 }
 
 /** What AppPanes gives the shell while both apps sit in their panes. */
@@ -263,4 +271,38 @@ export function startAppSlide(to: AppName, path: string): AppSlide | null {
 /** A slide between the two apps is under way. */
 export function appSliding(): boolean {
   return slider?.busy() ?? false;
+}
+
+let switched = false;
+
+/** The owner switched apps at least once this visit (AppPanes says so on every switch). */
+export function appSwitched(): boolean {
+  return switched;
+}
+
+/** AppPanes: the app on screen just changed. */
+export function noteAppSwitch(): void {
+  switched = true;
+}
+
+const slideIn = new Map<AppName, Set<() => void>>();
+
+/**
+ * Runs `fn` the moment a slide brings `app` in (its first frame on screen), once; returns how to take it back. For
+ * what an app mounted ahead of a tap, but not on screen yet, puts on the page only once it is drawn: Clips Funded's
+ * own fonts (stories/fonts.ts: a @font-face that arrives while Clip Factory is on screen repaints Clip Factory's words).
+ */
+export function whenAppSlidesIn(app: AppName, fn: () => void): () => void {
+  let fns = slideIn.get(app);
+  if (!fns) slideIn.set(app, (fns = new Set()));
+  fns.add(fn);
+  return () => void slideIn.get(app)?.delete(fn);
+}
+
+/** A slide brings `app` in now (AppPanes): what waited for it runs. */
+export function appSlidesIn(app: AppName): void {
+  const fns = slideIn.get(app);
+  if (!fns) return;
+  slideIn.delete(app);
+  for (const fn of fns) fn();
 }

@@ -13,10 +13,12 @@ import { settle, stillBackdrop } from "./helpers.ts";
 // (a DevTools trace). A strip of six frames of each slide is saved as pictures (CF_SLIDE_SHOTS, else under
 // test-results/switch-slide). The living backdrop is held still for the frame counts (as the other motion checks do):
 // without a GPU the test browsers repaint its nine blurred, drifting blobs on every frame, which says nothing about
-// the slide. Now that the whole app slides over it, it is drawn flat for them too (flatBackdrop): a browser drawing in
-// software applies those nine 56 px blurs again on every frame anything moves above them (three to five frames of 50
-// to 100 ms in each slide, still or moving, glass or none), which is the test machine's drawing, not the slide (the
-// real backdrop drifts on every frame anyway, on a GPU). And on a Mac, Chromium draws on the Mac's own GPU (Metal), as
+// the slide. Where the browser draws in software (headless WebKit, and every browser on the Linux CI runners), it is
+// drawn flat for them too (flatBackdrop): there those nine 56 px blurs are applied again on every frame anything moves
+// above them (three to five frames of 50 to 100 ms in each slide, still or moving, glass or none; headless WebKit on a
+// Mac drew gaps of 116 to 176 ms over them, 23 Nov), which is the test machine's drawing, not the slide. Where the
+// browser draws on the GPU, Chromium on a Mac (where the frame checks count), the blurs stay, as the app draws them
+// (quietBackdrop): the panes move over the real blurred backdrop. And on a Mac, Chromium draws on the Mac's own GPU (Metal), as
 // the app's windows do: headless Chromium otherwise composites in software (SwiftShader) there too, and its frames
 // measured the CPU, not the app (on the GPU the slide, its drifting backdrop included, keeps every frame at 60 Hz). A frame counts as dropped only when it comes later than twice this machine's own frame at rest (and its
 // worst gap at rest, and 25 ms); one such late frame in a slide is let pass, as one hiccup of a busy test machine (the
@@ -86,6 +88,16 @@ async function flatBackdrop(page: Page) {
     if (document.head) add();
     else document.addEventListener("DOMContentLoaded", add, { once: true });
   });
+}
+
+/**
+ * The backdrop for the frame counts: held still, and drawn flat only where the browser draws in software (headless
+ * WebKit, and off a Mac); in Chromium on a Mac's GPU (Metal) its lights keep their 56 px blurs, as the app draws them,
+ * so the frame checks measure the real page.
+ */
+async function quietBackdrop(page: Page, browserName: string) {
+  if (process.platform === "darwin" && browserName === "chromium") await stillBackdrop(page);
+  else await flatBackdrop(page);
 }
 
 test.use({
@@ -316,7 +328,7 @@ for (const [label, glass] of [
     browserName,
   }) => {
     if (glass) await asMacWindow(page);
-    await flatBackdrop(page);
+    await quietBackdrop(page, browserName);
     await on(page);
     await page.setViewportSize({ width: 1440, height: 900 });
     await page.goto("/library");
@@ -523,6 +535,9 @@ interface PaneFrame {
   /** The top of the page going out and of the one coming in, as drawn. */
   outTop: number | null;
   inTop: number | null;
+  /** Clip Factory's sidebar: a page lit in it, and its highlight's opacity ("none" with no highlight). */
+  lit: boolean;
+  litGlide: string;
 }
 
 interface PaneRun {
@@ -631,6 +646,11 @@ async function recordPanes(page: Page) {
           layout: lay,
           outTop: mainOf(from)?.getBoundingClientRect().top ?? null,
           inTop: mainOf(to)?.getBoundingClientRect().top ?? null,
+          lit: !!pane("clips")?.querySelector("nav.sidebar .sidebar__item.is-active"),
+          litGlide: (() => {
+            const g = pane("clips")?.querySelector<HTMLElement>("nav.sidebar .glide");
+            return g ? getComputedStyle(g).opacity : "none";
+          })(),
         });
       }
       if (location.pathname !== startPath && r.changedAt === null) r.changedAt = performance.now() - r.tapAt;
@@ -652,7 +672,7 @@ async function landedPanes(page: Page): Promise<PaneRun> {
 }
 
 test("the whole app slides like a sliding window, both ways: transform only, to its end, with the highlight, the dock still, each page where it was", async ({ page, browserName }) => {
-  await flatBackdrop(page);
+  await quietBackdrop(page, browserName);
   await on(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/library");
@@ -667,6 +687,17 @@ test("the whole app slides like a sliding window, both ways: transform only, to 
     return Math.round(window.scrollY);
   });
   await page.waitForTimeout(300);
+  // The pointer comes to Clips Funded's choice and stays (no tap): its pane is mounted behind, ready for a slide, and
+  // Clip Factory on screen is never painted again by it: none of Clips Funded's own fonts comes onto the page.
+  const fontsIn = () => page.evaluate(() => document.head.querySelectorAll("style[data-st-fonts]").length);
+  expect(await fontsIn(), "no Clips Funded fonts before").toBe(0);
+  const near = (await choice(page, "Clips Funded").boundingBox())!;
+  await page.mouse.move(near.x + near.width / 2, near.y + near.height / 2);
+  await expect(page.locator('[data-app-pane="stories"]')).toHaveCount(1);
+  await expect(page.locator('[data-app-pane="stories"]')).toBeHidden();
+  await page.waitForTimeout(800);
+  expect(await fontsIn(), "the pointer on the choice: still no Clips Funded fonts on Clip Factory's screen").toBe(0);
+  await page.mouse.move(1, 1);
 
   for (const [to, url] of [
     ["Clips Funded", /\/stories$/],
@@ -731,6 +762,12 @@ test("the whole app slides like a sliding window, both ways: transform only, to 
     // Nothing is laid out again while they move (only their transforms change): every page box the same from the
     // second frame on (the first frame puts the page coming in at its place).
     expect(new Set(during.slice(1).map((f) => f.layout)).size, `${label}: no layout while it slid (${[...new Set(during.map((f) => f.layout))].join(" / ")})`).toBe(1);
+    // Coming back, Clip Factory slides in with its page already lit (its sidebar's highlight on, from the first frame
+    // it is laid out), never lighting up only once it has landed.
+    if (going === "clips") {
+      for (const f of during) expect(f.lit, `${label}: a page lit in Clip Factory's sidebar at ${f.t.toFixed(0)} ms`).toBe(true);
+      for (const f of during.slice(1)) expect(f.litGlide, `${label}: its highlight shown at ${f.t.toFixed(0)} ms`).toBe("1");
+    }
     // The dock (the switch and the Live chip) never moves.
     expect(new Set(r.frames.map((f) => f.dock)).size, `${label}: the dock stayed put (${[...new Set(r.frames.map((f) => f.dock))].join(" / ")})`).toBe(1);
     // Each page where it is scrolled to: the one going out exactly where it was, the one coming in where it then lands.
@@ -749,11 +786,12 @@ test("the whole app slides like a sliding window, both ways: transform only, to 
     expect(restNow.willChange, `${label}: will-change only while it slid`).toEqual(restNow.willChange.map(() => "auto"));
     expect(restNow.minHeight, `${label}: the page's own height`).toBe("");
     expect(restNow.left, `${label}: no slide left over`).toBe(0);
-    if (going === "clips") {
-      // Back in Clip Factory: its Library where the owner left it, and focus on its page (its heading comes first).
-      expect(restNow.scrollY, `${label}: Clip Factory's scroll kept`).toBe(y);
-      expect(restNow.focus, `${label}: focus on the page`).toBe(true);
-    } else expect(restNow.scrollY, `${label}: Clips Funded's first visit opens at its top`).toBe(0);
+    // Focus on the new page, both ways (its heading comes first), its first slide in included.
+    expect(restNow.focus, `${label}: focus on the page`).toBe(true);
+    if (going === "clips") expect(restNow.scrollY, `${label}: Clip Factory's scroll kept`).toBe(y);
+    else expect(restNow.scrollY, `${label}: Clips Funded's first visit opens at its top`).toBe(0);
+    // Clips Funded's own fonts came onto the page with its first slide in, never before.
+    if (going === "stories") expect(await fontsIn(), `${label}: Clips Funded's fonts once it is on screen`).toBe(1);
     test.info().annotations.push({
       type: `${label}: the panes' slide`,
       description: JSON.stringify({
@@ -768,6 +806,80 @@ test("the whole app slides like a sliding window, both ways: transform only, to 
     if (going === "stories") await storiesReady(page);
     else await settle(page);
   }
+});
+
+test("a quick tap forth, back and forth again: each slides on from where the panes are, and the third never cuts over", async ({ page, browserName }) => {
+  await quietBackdrop(page, browserName);
+  await on(page);
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/library");
+  await warm(page);
+  // Every pane slide made, in order, how each ended, the taps, and when the address changed.
+  await page.evaluate((id) => {
+    type Run = { at: number; what: string; to: number | null; end?: string; endAt?: number };
+    const w = window as unknown as { __runs: Run[]; __taps: number[]; __changedAt: number | null };
+    const t0 = performance.now();
+    w.__runs = [];
+    w.__taps = [];
+    w.__changedAt = null;
+    document.addEventListener("pointerdown", () => w.__taps.push(performance.now() - t0), { capture: true });
+    const seen = new Set<Animation>();
+    const start = location.pathname;
+    const tick = () => {
+      for (const a of document.getAnimations()) {
+        if (a.id !== id || seen.has(a)) continue;
+        seen.add(a);
+        const effect = a.effect as KeyframeEffect | null;
+        const target = effect?.target as HTMLElement | null;
+        const last = effect?.getKeyframes().at(-1);
+        const m = /translateX\((-?[\d.]+)%\)/.exec(String(last?.transform ?? ""));
+        const run: Run = { at: performance.now() - t0, what: target?.dataset.appPane ?? "backdrop", to: m ? Number(m[1]) + 0 : null };
+        w.__runs.push(run);
+        a.finished.then(
+          () => {
+            run.end = "finished";
+            run.endAt = performance.now() - t0;
+          },
+          () => (run.end = "cancelled"),
+        );
+      }
+      if (location.pathname !== start && w.__changedAt === null) w.__changedAt = performance.now() - t0;
+      if (performance.now() - t0 < 6000) requestAnimationFrame(tick);
+    };
+    requestAnimationFrame(tick);
+  }, APP_SLIDE);
+  const press = async (to: To) => {
+    const b = (await choice(page, to).boundingBox())!;
+    await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
+    await page.mouse.down();
+    await page.mouse.up();
+  };
+  // As a child taps: forth, back while it slides, forth again while it slides back.
+  await press("Clips Funded");
+  await page.waitForTimeout(160);
+  await press("Clip Factory");
+  await page.waitForTimeout(120);
+  await press("Clips Funded");
+  await page.waitForURL(/\/stories$/);
+  await storiesReady(page);
+  const r = await page.evaluate(() => {
+    const w = window as unknown as { __runs: { at: number; what: string; to: number | null; end?: string; endAt?: number }[]; __taps: number[]; __changedAt: number | null };
+    return { runs: w.__runs, taps: w.__taps, changedAt: w.__changedAt };
+  });
+  test.info().annotations.push({ type: "forth, back, forth", description: JSON.stringify(r) });
+  expect(r.taps.length, "three taps").toBeGreaterThanOrEqual(3);
+  // The third tap slid the panes (a slide made after it), to Clips Funded, and that slide ran to its end.
+  const third = r.runs.filter((x) => x.what === "stories" && x.at >= r.taps[2]!);
+  expect(third.length, "the third tap slid Clips Funded's pane").toBeGreaterThan(0);
+  const last = third.at(-1)!;
+  expect(last.to, "into its place").toBe(0);
+  expect(last.end, "to its end").toBe("finished");
+  // The page changed only once it had landed: never a cut over with no slide.
+  expect(r.changedAt, "the page changed").not.toBeNull();
+  expect(r.changedAt!, "after the last slide landed").toBeGreaterThanOrEqual(last.endAt! - 20);
+  // At rest after: no slide left, the lens on Clips Funded.
+  await expect(page.locator(".ws-dock .ws-switch__opt.is-on")).toHaveAttribute("data-ws-type", "stories");
+  expect(await page.evaluate(() => [document.querySelectorAll("[data-app-slide]").length, document.getAnimations().filter((a) => a.id === "app-slide").length])).toEqual([0, 0]);
 });
 
 for (const [label, how] of [

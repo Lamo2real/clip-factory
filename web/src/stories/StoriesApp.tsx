@@ -14,7 +14,7 @@
 import "./styles/stories.css";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ApiError } from "../api/errors.ts";
-import { setStoriesWorkspaceShown } from "../app/shell.ts";
+import { appSwitched, setStoriesWorkspaceShown, whenAppSlidesIn } from "../app/shell.ts";
 import { TopBarSwitch } from "../app/WorkspaceDock.tsx";
 import { useToast } from "../components/Toasts.tsx";
 import { Glide } from "../components/Glide.tsx";
@@ -327,8 +327,11 @@ function quickWorkspace(fromAddress: string | null): string | null {
 }
 
 export function StoriesApp({ page }: { page: StoriesPage }) {
-  // Its own fonts, put on the page by the first Stories screen (never by the prefetched chunk: stories/fonts.ts).
-  useLayoutEffect(() => addStoriesFonts(), []);
+  // Its own fonts, put on the page by the first Stories screen drawn (never by the prefetched chunk: stories/fonts.ts):
+  // on screen, or the moment a slide brings it in. Mounted ahead of a tap behind Clip Factory (the pointer came to the
+  // switch), it waits, so Clip Factory's words on screen are never painted again by a face arriving.
+  const { active, hosted } = useAppPane();
+  useLayoutEffect(() => (active || !hosted ? addStoriesFonts() : whenAppSlidesIn("stories", () => addStoriesFonts())), [active, hosted]);
   // Its sliding highlights follow Lamo Stories' own calm-motion switch, never Clip Factory's once it has its own.
   return (
     <GlideCalm.Provider value={storiesReduceMotion}>
@@ -473,7 +476,9 @@ function StoriesShell({ page }: { page: StoriesPage }) {
     if (!active) return;
     if (first.current) {
       first.current = false;
-      return;
+      // The visit's first screen keeps focus where the browser put it; Clips Funded coming on screen by a switch (its
+      // first slide in included) takes it, as every later page change does.
+      if (!appSwitched()) return;
     }
     main.current?.focus({ preventScroll: true });
   }, [pageKey, active]);
@@ -511,6 +516,14 @@ function StoriesShell({ page }: { page: StoriesPage }) {
   const on = (item: NavItem) => item.match.includes(page.name);
   const moreOn = MORE.some(on);
   const solo = alone && page.name === "setup";
+  // On a computer the shell's switch is drawn over the rail; on its own Setup there is none, so the page says so while
+  // it is on screen and the switch carries a plate of its own there (glide.css html[data-ws-bare]).
+  useLayoutEffect(() => {
+    if (!active || !solo) return;
+    const html = document.documentElement;
+    html.setAttribute("data-ws-bare", "");
+    return () => html.removeAttribute("data-ws-bare");
+  }, [active, solo]);
 
   // A short window: the rail's list of pages stops above the shell's switch and scrolls; the chosen page is always
   // scrolled into its view (the switch never covers a page, and the chosen one is never cut off at the list's end).

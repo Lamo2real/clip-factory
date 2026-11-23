@@ -431,19 +431,6 @@ html:is(.see-through, [data-backdrop]) .perf__updated > span {
   backdrop-filter: none;
   box-shadow: var(--glass-shadow-raise);
 }
-/* The shell's Live chip (app/WorkspaceDock.tsx, while Clips Funded is switched on) is drawn over Clip Factory's
-   sidebar, in the place of the sidebar's own chip. While Clip Factory is on screen it is that chip: raised on the
-   sidebar exactly as nested glass just above (the same declarations, as light, right after it; test/background.test.ts
-   holds them equal), so Clip Factory looks exactly as with Clips Funded off (the pixel check, §45.19). Over Clips
-   Funded it stays as it was. */
-:where([data-app-pane="clips"]:not([hidden]) ~ .ws-dock > .ws-dock__live) > .glass {
-  --glass-tint: linear-gradient(rgb(var(--green-rgb) / var(--light-raise-veil)), rgb(var(--green-rgb) / var(--light-raise-veil)));
-  --glass-light: linear-gradient(rgb(var(--bone-rgb) / var(--light-raise-lift)), rgb(var(--bone-rgb) / var(--light-raise-lift)));
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-  box-shadow: var(--glass-shadow-raise);
-}
-
 /* Comfort only, never counted toward AA: a soft green halo behind words on glass and on the page. Bone and
    vermilion fills (the CTA, the selected pill, badges) draw their words without it. */
 :where(.glass, .page-head, .crumbs, .brand__name) {

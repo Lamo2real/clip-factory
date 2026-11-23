@@ -482,11 +482,14 @@ test("unfolding Clip Factory's sidebar, the switch and the Live chip never show 
         side: side.right,
         // The switch's own part carries the clip (never its host, which would cut its glass off from what is behind).
         sw: shown(document.querySelector(".ws-dock .ws-switch-host > *")!),
-        live: shown(document.querySelector(".ws-dock .ws-dock__live")!),
+        // The Live chip's own box carries its clip too (its glass is its own, as the switch's).
+        live: shown(document.querySelector(".ws-dock .ws-dock__live > .live-dot")!),
+        row: getComputedStyle(document.querySelector(".ws-dock .ws-dock__live")!).clipPath,
       };
     }, t);
     expect(at.sw, `${t} ms: the switch`).toBeLessThanOrEqual(at.side + 0.5);
-    expect(at.live, `${t} ms: the Live chip's row`).toBeLessThanOrEqual(at.side + 0.5);
+    expect(at.live, `${t} ms: the Live chip`).toBeLessThanOrEqual(at.side + 0.5);
+    expect(at.row, `${t} ms: never the chip's row`).toBe("none");
   }
   await page.evaluate(() => {
     for (const a of document.getAnimations()) {

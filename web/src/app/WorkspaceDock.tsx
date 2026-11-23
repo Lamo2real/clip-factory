@@ -435,16 +435,28 @@ function Bar({ list, current, stacked, barRef }: { list: Workspace[]; current: s
     [],
   );
 
+  /** The lens's slide now (Glide's Web Animation), if it slides. */
+  const lens = () => barRef.current?.querySelector<HTMLElement>(":scope > .glide")?.getAnimations?.().find((a) => a.id === GLIDE_ANIMATION_ID);
+  /** The lens starts with the whole app's panes, from the same moment (one move). */
+  const joinLens = (slide: AppSlide) => {
+    const a = lens();
+    if (a) slide.join(a);
+    return a;
+  };
+
   const tap = (w: Workspace) => (e: MouseEvent) => {
     if (!plainClick(e)) return;
     e.preventDefault();
     if (w.workspaceId === shown) return;
     const run = ++token.current;
     if (w.workspaceId === current) {
-      // Tapped back during the slide: the highlight and the whole app slide back, and nothing changes.
-      panes.current?.back();
+      // Tapped back during the slide: the highlight and the whole app slide back together, and nothing changes (a tap
+      // forth again while they do slides on from where they are).
+      const going = panes.current;
       panes.current = null;
-      setPending(null);
+      going?.back();
+      flushSync(() => setPending(null));
+      if (going) queueMicrotask(() => joinLens(going));
       return;
     }
     const at = leaving(false);
@@ -471,8 +483,7 @@ function Bar({ list, current, stacked, barRef }: { list: Workspace[]; current: s
     };
     // After Glide's own observer has run (a microtask queued before this one): its slide exists now.
     queueMicrotask(() => {
-      const glide = barRef.current?.querySelector<HTMLElement>(":scope > .glide");
-      const highlight = glide?.getAnimations?.().find((a) => a.id === GLIDE_ANIMATION_ID);
+      const highlight = slide ? joinLens(slide) : lens();
       const glided = new Promise<void>((done) => {
         if (highlight) highlight.finished.then(() => done(), () => done());
         // A browser that starts no slide switches at once; one whose slide never says it ended (a window hidden
@@ -634,6 +645,8 @@ export function WorkspaceDock() {
   const barRef = useRef<HTMLDivElement>(null);
   const [layout, setLayout] = useState<DockLayout>(NO_LAYOUT);
   const [stacked, setStacked] = useState(false);
+  /** The Live chip's right edge inside its row (layout px): where its own unfold clip is measured from. */
+  const [liveRight, setLiveRight] = useState<number | null>(null);
   const page = JSON.stringify(route);
   const search = typeof location === "undefined" ? "" : location.search;
   const names = list.map((w) => switcherName(w)).join("|");
@@ -693,6 +706,10 @@ export function WorkspaceDock() {
         stacked,
       });
       setLayout((l) => (JSON.stringify(l) === JSON.stringify(next) ? l : next));
+      // The chip clips itself while the sidebar unfolds (glide.css: its row would cut its glass off), so the clip is
+      // measured from its own right edge (layout offsets: its arrival's scale is left out), not the row's.
+      const right = dot ? dot.offsetLeft + dot.offsetWidth : null;
+      setLiveRight((v) => (v === right ? v : right));
     };
     // At once (a resize, a font, a row that came) and again on the next frame: a late font or a child that just
     // arrived settles its size only after layout.
@@ -812,7 +829,11 @@ export function WorkspaceDock() {
           )}
         </div>
       ) : null}
-      <span ref={liveRow} className="sidebar__live ws-dock__live" style={{ top: live.top, left: live.left, width: live.width, "--ws-unfold": reveal(live.left + live.width) } as CSSProperties}>
+      <span
+        ref={liveRow}
+        className="sidebar__live ws-dock__live"
+        style={{ top: live.top, left: live.left, width: live.width, "--ws-unfold": reveal(live.left + (liveRight ?? live.width)) } as CSSProperties}
+      >
         <LiveDot compact={folded} />
       </span>
     </div>
