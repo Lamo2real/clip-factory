@@ -1,4 +1,4 @@
-import { mkdirSync } from "node:fs";
+import { mkdirSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { expect, test, type Browser, type Page } from "@playwright/test";
 import { asMacWindow } from "./desktopWindow.ts";
@@ -306,16 +306,24 @@ test("Inter arriving after the switch is drawn never leaves it stacked: the same
   // font until the web font is in; measured then, the two names did not fit side by side, and the switch stayed
   // stacked, 46 px higher, on every page where Inter came a moment late (CI run 45112115668: / side by side, /library
   // and Lamo Stories' pages stacked). A Mac with Inter installed draws Inter even before the web font is in, so a wide
-  // font stands in for the missing one here (Verdana, else the system's sans-serif), and Inter's file is held back.
+  // font stands in for the missing one here, and Inter's file is held back. The stand-in is the same on every
+  // computer: the repo's own Jost (web/public/fonts/stories, OFL) at 160 %, put on the page by the test before
+  // anything is drawn (a system font such as Verdana is not on the Linux runner, whose own sans-serif fits).
   const page = await open(browser, SIZES[0]!, true);
   const ctx = page.context();
+  const wide = readFileSync(join(import.meta.dirname, "..", "public", "fonts", "stories", "Jost-latin.woff2")).toString("base64");
+  await page.addInitScript((b64) => {
+    const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
+    // From bytes, so it is loaded at once: the first measure already sees it.
+    document.fonts.add(new FontFace("E2EWide", bytes, { sizeAdjust: "160%" } as FontFaceDescriptors));
+  }, wide);
   const FAMILY = '"Inter Variable", Inter, system-ui,';
   let swapped = false;
   await ctx.route(/\/assets\/[^/]+\.css$/, async (route) => {
     const r = await route.fetch();
     const css = await r.text();
     swapped ||= css.includes(FAMILY);
-    await route.fulfill({ response: r, body: css.replaceAll(FAMILY, '"Inter Variable", Verdana,') });
+    await route.fulfill({ response: r, body: css.replaceAll(FAMILY, '"Inter Variable", E2EWide,') });
   });
   let release!: () => void;
   const held = new Promise<void>((done) => (release = done));
@@ -325,6 +333,7 @@ test("Inter arriving after the switch is drawn never leaves it stacked: the same
   });
   await page.goto("/library", { waitUntil: "domcontentloaded" });
   expect(swapped, "the app's font list, with the wide font in for the missing Inter").toBe(true);
+  expect(await page.evaluate(() => Array.from(document.fonts).some((f) => f.family === "E2EWide" && f.status === "loaded")), "the wide stand-in, in before the first paint").toBe(true);
   const bar = page.locator(".ws-dock .ws-switch");
   // In the wide font the names do not fit side by side (stacked is right while it is drawn).
   await expect(bar).toHaveClass(/ws-switch--stack/, { timeout: 15_000 });
