@@ -360,7 +360,8 @@ describe("the stylesheets and the text colour list stay in step", () => {
    * not a token and not named here fails the test below.
    */
   const NOT_ON_A_PANEL_TINT: Record<string, string> = {
-    "#fff": "white words on a vermilion CTA, badge or count fill of their own",
+    "#fff": "white words on a vermilion CTA, badge or count fill of their own, and the workspace switch's hovered names on its own smoked clear glass (lighter than bone, so never less contrast; test/switchGlass.test.ts)",
+    "#141414": "the workspace switch's chosen name, near-black words on its own near-white clear lens (white 0.86 over the smoked track: AA over anything behind it; test/switchGlass.test.ts)",
     "var(--on-bone)": "green words on a bone fill of their own (the selected pill, inverted chips, the tooltip)",
     "var(--green-deep)": "deep green words on a solid leaf fill of their own",
     "#0a64d8": "Safari's blue in the Get the app drawings, on their own bone card",

@@ -479,7 +479,8 @@ test("unfolding Clip Factory's sidebar, the switch and the Live chip never show 
       };
       return {
         side: side.right,
-        sw: shown(document.querySelector(".ws-dock .ws-switch-host")!),
+        // The switch's own part carries the clip (never its host, which would cut its glass off from what is behind).
+        sw: shown(document.querySelector(".ws-dock .ws-switch-host > *")!),
         live: shown(document.querySelector(".ws-dock .ws-dock__live")!),
       };
     }, t);
