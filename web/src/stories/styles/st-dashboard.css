@@ -12,10 +12,9 @@
    st-dash), not the window's: the rail takes a different share at each size. Figures are placed and sized here, never
    restyled inside (rule 2).
 
-   The Continue and setup cards keep their names (.st-continue, .st-setupcard: tests read them). Their first rules sit
-   in st-setup.css, which loads after this file, so the Dashboard's own are scoped under .st-dash and win. Those only
-   cancel st-setup.css's fill and shadow with the hero glass's own (the rim light too, where the foundation paints
-   one); once st-setup.css drops its copy at the merge, .st-glass--hero alone can decide. */
+   The Continue and setup cards keep their names (.st-continue, .st-setupcard: tests read them). Their fill and rest
+   shadow are the glass classes' own (.st-glass--hero, .st-glass in the markup): this file only lays them out and
+   adds the hover. */
 
 .st-dash {
   container: st-dash / inline-size;
@@ -505,8 +504,6 @@
   min-height: 72px;
   padding: var(--st-inset);
   border-radius: var(--st-r-surface);
-  background: var(--st-tint-hero);
-  box-shadow: var(--st-sheen-hero), var(--st-rim-light, 0 0 #0000), var(--st-depth-2), var(--st-glow-behind);
   color: var(--st-text);
   text-decoration: none;
   transform: none;
@@ -517,7 +514,7 @@
 }
 .st-dash .st-continue:hover {
   background-color: rgb(var(--st-well-rgb) / 0.26);
-  box-shadow: var(--st-sheen-hero), var(--st-rim-light, 0 0 #0000), var(--st-depth-2), var(--st-glow-action);
+  box-shadow: var(--st-sheen-hero), var(--st-rim-light), var(--st-depth-2), var(--st-glow-action);
   transform: none;
 }
 /* Under a liquid rim too: the lens's own fill is a gradient, so the colour under it deepens on hover (the words only
@@ -570,8 +567,6 @@
   margin: 0;
   padding: var(--st-inset);
   border-radius: var(--st-r-surface);
-  background: var(--st-tint-hero);
-  box-shadow: var(--st-sheen-hero), var(--st-rim-light, 0 0 #0000), var(--st-depth-2), var(--st-glow-behind);
   color: var(--st-text);
   animation: st-rise var(--st-dur-enter) var(--st-ease-out) both;
 }
@@ -613,8 +608,6 @@
 /* After Finish with steps skipped: a plain glass card listing them as small glass pills (§45.36 E15). */
 .st-dash .st-setupcard--left {
   padding: var(--st-space-4) var(--st-inset);
-  background: var(--st-tint-card);
-  box-shadow: var(--st-sheen), var(--st-depth-1), var(--st-glow-behind);
 }
 .st-dash .st-dash-setup__mark {
   width: 48px;

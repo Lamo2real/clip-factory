@@ -49,18 +49,23 @@ for (const r of rules(CSS)) if (r.selector === ".st-stg") for (const [k, v] of d
 function lookTokens(kind: "colours" | "desktop", veils: Veils): Tokens {
   const t = new Map(TOKENS);
   for (const [k, v] of tokensOf(".stories-app[data-look]")) t.set(k, v);
-  if (kind === "desktop") for (const [k, v] of tokensOf('.stories-app[data-look="window"],\n.stories-app[data-look="picture"]')) t.set(k, v);
+  if (kind === "desktop") {
+    for (const [k, v] of tokensOf('.stories-app[data-look="window"],\n.stories-app[data-look="picture"]')) t.set(k, v);
+    // Everything here sits in a glass surface (the hero, the cards): the figures' light cream glass there.
+    for (const [k, v] of tokensOf('.stories-app:is([data-look="window"], [data-look="picture"]) :is(.st-glass:not(.st-glass--control), .st-plate)')) t.set(k, v);
+  }
   for (const [k, n] of Object.entries(veils)) t.set(`--st-veil-${k}`, String(n));
   return t;
 }
 
 type Paint = { rgb: Rgb; a: number };
-/** A colour value with Stories' tokens resolved: #hex, rgb(r g b / a), rgb(var(--st-x-rgb) / a), var(--st-x). */
+/** A colour value with Stories' tokens resolved: #hex, rgb(r g b / a), rgb(var(--st-x-rgb) / a), var(--st-x) and
+ *  var(--st-x, fallback) (the fallback where the look leaves --st-x unset). */
 function paint(v: string, t: Tokens = TOKENS, depth = 0): Paint | null {
   const s = v.trim();
   if (depth > 8) return null;
-  const ref = /^var\((--st-[a-z0-9-]+)\)$/.exec(s);
-  if (ref) return t.has(ref[1]!) ? paint(t.get(ref[1]!)!, t, depth + 1) : null;
+  const ref = /^var\((--st-[a-z0-9-]+)(?:\s*,\s*(.+))?\)$/.exec(s);
+  if (ref) return t.has(ref[1]!) ? paint(t.get(ref[1]!)!, t, depth + 1) : ref[2] ? paint(ref[2], t, depth + 1) : null;
   if (/^#[0-9a-f]{6}$/i.test(s)) return { rgb: hexToRgb(s), a: 1 };
   const m = /^rgba?\((.+)\)$/.exec(s);
   if (!m) return null;

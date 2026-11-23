@@ -14,7 +14,7 @@
 // also once the keys are saved. After a connect the page says "Connected as {name} ({handle})" and the card asks "Is
 // this your Lamo Stories {place}?" (Yes, or Pick another). An account's reason is a code (SocialReason), said in words.
 import "../styles/social.css";
-import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { friendlyMessage } from "../../api/errors.ts";
 import type { KeyName } from "../../api/types.ts";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
@@ -105,6 +105,12 @@ const STATUS: Record<SocialAccount["connectionStatus"], { label: string; tone: S
 
 /** The cards that need the owner (a warm tint): on Social accounts they are hero glass, their rim may bend. */
 const NEEDS_OWNER: ReadonlySet<SocialAccount["connectionStatus"]> = new Set(["choose_account", "needs_reconnect", "same_as_clips"]);
+/** Their tint's colour, kept under a liquid rim too (glass.css .st-lens--tinted reads the card's own --st-tone-rgb). */
+const LENS_TONE: Partial<Record<SocialAccount["connectionStatus"], CSSProperties>> = {
+  choose_account: { "--st-tone-rgb": "var(--st-amber-rgb)" } as CSSProperties,
+  needs_reconnect: { "--st-tone-rgb": "var(--st-coral-rgb)" } as CSSProperties,
+  same_as_clips: { "--st-tone-rgb": "var(--st-coral-rgb)" } as CSSProperties,
+};
 
 /** The callback's result code (§17.5's codes plus same_as_clips and clips_meta_check) in plain words. */
 export function resultSentence(code: string, p: Platform): { text: string; good: boolean } {
@@ -760,7 +766,7 @@ export function PlatformCard({
   const otherReason = a.reason && a.connectionStatus !== "needs_reconnect" && a.reason !== "expires_soon" && a.reason !== "expired" && !a.warning ? reasonSentence(a.reason, p) : null;
 
   return (
-    <li className={`st-conn st-conn--${a.connectionStatus} ${inStep ? "st-conn--in-step" : NEEDS_OWNER.has(a.connectionStatus) ? "st-glass st-glass--hero st-lens" : "st-glass"}`} data-platform={p}>
+    <li className={`st-conn st-conn--${a.connectionStatus} ${inStep ? "st-conn--in-step" : NEEDS_OWNER.has(a.connectionStatus) ? "st-glass st-glass--hero st-lens st-lens--tinted" : "st-glass"}`} style={inStep ? undefined : LENS_TONE[a.connectionStatus]} data-platform={p}>
       <header className="st-conn__head">
         <span className={`st-conn__mark st-conn__mark--${p}`}>
           <PlatformMark platform={p} size={24} title={`${name} logo`} />

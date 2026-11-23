@@ -124,7 +124,8 @@ export function CharacterEditor({
   return (
     <div className="st-s-editor">
       <div className="st-s-editor__stage" ref={box}>
-        <div className="st-s-editor__preview">
+        {/* The editor's hero: its rim may bend (glass/lens.ts decides). */}
+        <div className="st-s-editor__preview st-lens">
           <CharacterPreview look={c.look} movementStyle={c.movementStyle} expression={face} action={move} size={size} label={`${name}, ${faceLabel} face, ${moveLabel}`} />
           <p className="st-s-editor__now">
             <strong>{name}</strong>

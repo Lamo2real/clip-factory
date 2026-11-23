@@ -1,8 +1,8 @@
 // Lamo Stories' own look keeps the owner's rules (docs/CONTRACTS.md §45.16.2), over every file in
 // web/src/stories/styles: the cursor never changes, no visible borders or outlines (shadows and fills instead, and no
 // hairline inset shadow posing as one), corner
-// radii from Stories' own --st-r-* scale (or the old --r-* scale while the screens move over to the liquid-glass
-// contract, styles/GLASS-CONTRACT.md; the merge step makes it --st-r-* only), no type below 0.78rem, light only (no dark-scheme rules), nothing outside .stories-app
+// radii from Stories' own --st-r-* scale only (never Clip Factory's --r-*, styles/GLASS-CONTRACT.md), no type below
+// 0.78rem, light only (no dark-scheme rules), nothing outside .stories-app
 // (or an st- class), and AA contrast: every --st-* text colour on the stage and the panels, words on the sunshine
 // and on each tinted chip, and the status fills at 3:1 where they are icons and marks.
 import { existsSync, readdirSync, readFileSync } from "node:fs";
@@ -100,12 +100,12 @@ describe("the owner's rules hold in Lamo Stories' styles", () => {
     expect(rings).toEqual([]);
   });
 
-  it("round corners from the --st-r-* scale or, while the screens move over, the old --r-* one (8 px and up never hard-coded)", () => {
+  it("round corners from Stories' own --st-r-* scale only, never Clip Factory's --r-* (8 px and up never hard-coded)", () => {
     const loose: string[] = [];
     for (const [f, text] of files)
       for (const m of text.matchAll(/border(?:-[a-z-]+)?-radius:\s*([^;]+);/g))
-        for (const part of m[1]!.replace(/calc\(var\(--(?:st-)?r-[a-z]+\)[^)]*\)/g, "var(--r-sm)").split(/\s+/)) {
-          if (/^var\(--r-(xs|sm|md|lg|xl|pill)\)$/.test(part) || /^var\(--st-r-(surface|control|inner|tiny|round)\)$/.test(part) || /^(0|50%|inherit)$/.test(part)) continue;
+        for (const part of m[1]!.replace(/calc\(var\(--st-r-[a-z]+\)[^)]*\)/g, "var(--st-r-inner)").split(/\s+/)) {
+          if (/^var\(--st-r-(surface|control|inner|tiny|round)\)$/.test(part) || /^(0|50%|inherit)$/.test(part)) continue;
           const px = /^(\d+(?:\.\d+)?)px$/.exec(part);
           if (px && Number(px[1]) < 8) continue;
           loose.push(`${f}: ${m[0]}`);

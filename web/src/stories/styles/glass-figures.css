@@ -13,7 +13,8 @@
   min-height: var(--st-tap);
   padding: 0 var(--st-space-4);
   border-radius: var(--st-r-round);
-  background: var(--st-fill-control);
+  /* --st-fill-figure: the light cream glass inside a glass surface over a picture or the desktop (glass-tokens.css) */
+  background: var(--st-fill-figure, var(--st-fill-control));
   box-shadow: var(--st-sheen-control);
   color: var(--st-text);
   font-family: var(--st-font);
@@ -32,7 +33,7 @@
 }
 button.st-pill:hover,
 a.st-pill:hover {
-  background: var(--st-fill-control-hover);
+  background: var(--st-fill-figure-hover, var(--st-fill-control-hover));
 }
 .st-pill.is-on {
   background: var(--st-cream);
@@ -56,7 +57,7 @@ a.st-pill.is-on:hover {
   width: var(--st-tap);
   height: var(--st-tap);
   border-radius: var(--st-r-round);
-  background: var(--st-fill-control);
+  background: var(--st-fill-figure, var(--st-fill-control));
   box-shadow: var(--st-sheen-control), var(--st-depth-1);
   color: var(--st-text);
   transition:
@@ -68,7 +69,7 @@ a.st-pill.is-on:hover {
   height: var(--st-tap-main);
 }
 .st-round-btn:hover {
-  background: var(--st-fill-control-hover);
+  background: var(--st-fill-figure-hover, var(--st-fill-control-hover));
 }
 .st-round-btn--cream,
 .st-round-btn.is-on {
@@ -118,9 +119,12 @@ a.st-pill.is-on:hover {
   line-height: 1;
   letter-spacing: -0.02em;
 }
+/* The unit is small text: never under the floor (a screen may set a smaller numeral), and its own optical size, not
+   the numeral's display one (thin hairlines at 13-17 px). */
 .st-stat__unit {
-  font-size: var(--st-fs-unit);
+  font-size: max(var(--st-fs-caps), var(--st-fs-unit));
   font-weight: var(--st-weight-body);
+  font-variation-settings: normal;
   letter-spacing: 0;
 }
 .st-stat__label {

@@ -23,6 +23,7 @@
                              tab bar, the phone top bar): nothing over Ember, a glass plate in Picture and See-through
      .st-edge                the thin light edge alone, for a surface that has its own fill
      .st-lens                a hero whose rim may bend (stories/look.ts decides; .is-liquid turns it on)
+     .st-lens--tinted        a liquid hero keeps its colour (--st-tone-rgb) over the rim's tint
    Type helpers: .st-display (Playfair at display optical sizes, a little condensed), .st-caps (Jost, wide-tracked
    caps captions), .st-num (lining tabular figures). */
 
@@ -88,8 +89,12 @@
   backdrop-filter: var(--st-filter-float);
   box-shadow: var(--st-sheen), var(--st-depth-3);
 }
+/* Written out rather than var(--st-tint-tinted): that token is worked out on .stories-app, where no tone is set, so it
+   would always be the orange. Here the tile's own --st-tone-rgb (Glass tone, or a screen's rule) is the colour. */
 .st-glass--tinted {
-  background: var(--st-tint-tinted);
+  background:
+    linear-gradient(rgb(var(--st-tone-rgb, var(--st-action-rgb)) / var(--st-tint-cut)), rgb(var(--st-tone-rgb, var(--st-action-rgb)) / var(--st-tint-cut))),
+    rgb(var(--st-veil-rgb) / var(--st-veil-tinted));
 }
 .st-glass--control {
   border-radius: var(--st-r-control);
@@ -167,6 +172,14 @@
   background: var(--st-tint-lens);
   -webkit-backdrop-filter: blur(1px) var(--st-lens-url) saturate(var(--st-saturate-lens));
   backdrop-filter: blur(1px) var(--st-lens-url) saturate(var(--st-saturate-lens));
+}
+/* A liquid hero that says something (a card that needs the owner, .st-lens--tinted with --st-tone-rgb on it): its
+   colour from the top left, cut to --st-tint-cut, over the rim's tint. The filter still lays the hero's veil under the
+   words, so the colour only adds a little light there (over a white picture or desktop: 5.5:1 for --st-text-soft). */
+.refract .stories-app[data-glass="liquid"] .st-lens.st-lens--tinted.is-liquid {
+  background:
+    linear-gradient(165deg, rgb(var(--st-tone-rgb, var(--st-action-rgb)) / var(--st-tint-cut)), rgb(var(--st-tone-rgb, var(--st-action-rgb)) / 0) 60%),
+    var(--st-tint-lens);
 }
 .st-lens__defs {
   position: absolute;

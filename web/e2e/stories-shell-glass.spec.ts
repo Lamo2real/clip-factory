@@ -246,8 +246,8 @@ test("the orange toggle reads on the cream card and on glass, and shows a hover 
     for (const i of [0, 1, 2]) {
       const before = await track(i);
       await sw.nth(i).hover();
-      await page.waitForTimeout(300);
-      expect(await track(i), `${on}: hover ${i}`).not.toBe(before);
+      // The hover's colour eases in; a slow frame (a busy machine) must not read it before its first step.
+      await expect.poll(() => track(i), { message: `${on}: hover ${i}`, timeout: 3000 }).not.toBe(before);
       await page.mouse.move(0, 0);
       await page.waitForTimeout(200);
     }

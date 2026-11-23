@@ -142,7 +142,11 @@
   --st-tint-cream: linear-gradient(170deg, var(--st-cream), var(--st-cream-2));
   /* Glass controls and inactive pills: on a card a light lift, loose on the page a card's veil (look.ts) */
   --st-fill-control: rgb(var(--st-cream-rgb) / 0.12);
-  --st-fill-control-hover: rgb(var(--st-cream-rgb) / 0.2);
+  /* Hovered loose on the colours: cream light over a thin veil, folded into one layer (veil 0.2, then cream 0.16), so
+     its words keep 5:1 over Ember's, Rose's and Lagoon's brightest spot (cream 0.2 alone gave 3.85:1). On a glass
+     card it is the cream lift (--st-fill-control-lift, set on .st-glass below). */
+  --st-fill-control-hover: rgb(139 128 118 / 0.33);
+  --st-fill-control-lift: rgb(var(--st-cream-rgb) / 0.2);
   --st-fill-well: rgb(var(--st-well-rgb) / 0.52); /* fields, tracks, the dial's groove */
   --st-fill-well-hover: rgb(var(--st-well-rgb) / 0.64);
   --st-track: rgb(var(--st-cream-rgb) / 0.2); /* a progress bar's empty part */
@@ -328,6 +332,30 @@
   --st-s-fill-2: rgb(var(--st-veil-rgb) / calc(var(--st-veil-card) + 0.06));
   --st-s-fill-3: rgb(var(--st-well-rgb) / calc(var(--st-veil-card) + 0.12));
   --st-filter-glass: blur(var(--st-blur)) saturate(var(--st-saturate));
+}
+
+/* Inside a glass surface or a plate over a picture or the desktop the surface already carries the measured veil, so a
+   glass pill or round button there (glass-figures.css) is the light cream glass, as the shell's .st-btn is: a second
+   veil would make it a dark hole. A touch lighter than the button's, so a pill's amber icon keeps 4.5:1 too. Over a
+   white picture on the thinnest veil (a card's 0.74): --st-text 6.0:1 at rest, 5.4:1 on hover; on the hero the amber
+   4.6:1 hovered (test/storiesGlassMerge.test.ts, test/storiesSettingsStyles.test.tsx). The cream card decides its own. */
+.stories-app:is([data-look="window"], [data-look="picture"]) :is(.st-glass:not(.st-glass--control), .st-plate) {
+  --st-fill-figure: rgb(var(--st-cream-rgb) / 0.08);
+  --st-fill-figure-hover: rgb(var(--st-cream-rgb) / 0.12);
+}
+.stories-app .st-cream {
+  --st-fill-figure: initial;
+  --st-fill-figure-hover: initial;
+}
+
+/* On the cream card the focus ring's cream part would vanish: the orange for words inside (6.3:1), the bright one out. */
+.stories-app .st-cream {
+  --st-focus-ring: 0 0 0 3px var(--st-on-cream-orange), 0 0 0 6px rgb(var(--st-accent-rgb) / 0.55);
+}
+
+/* On the colours a control inside a glass card hovers with the cream lift: the card's veil is under it. */
+.stories-app:not([data-look="window"]):not([data-look="picture"]) .st-glass:not(.st-glass--control) {
+  --st-fill-control-hover: var(--st-fill-control-lift);
 }
 
 /* ---------- Reduced transparency (and more contrast) or Glass "solid": solid glass, no backdrop filters ---------- */

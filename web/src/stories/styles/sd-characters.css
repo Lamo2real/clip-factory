@@ -200,6 +200,13 @@
   box-shadow: var(--st-sheen-hero), var(--st-depth-2), var(--st-glow-behind);
 }
 
+/* Under a liquid rim the lens's tint replaces the fill: the warm light behind the character stays. */
+.refract .stories-app[data-glass="liquid"] .st-s-editor__preview.st-lens.is-liquid {
+  background:
+    radial-gradient(58% 44% at 50% 40%, rgb(var(--st-amber-rgb) / 0.2), transparent 72%),
+    var(--st-tint-lens);
+}
+
 .st-s-editor__preview::after {
   padding: calc(var(--st-edge-width) + 0.25px);
   background: var(--st-edge-hero);

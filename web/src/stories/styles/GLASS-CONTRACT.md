@@ -15,9 +15,9 @@ Eight screen builders start on these names now while the foundation keeps refini
    Need another look of a figure? Ask for a modifier in the foundation's files; do not restyle a figure's inside.
 3. **Old names keep working** (`--st-ink`, `--st-sun`, `--st-panel`, `--st-stage`, `--st-s-fill`, …: listed below
    as "old"). Move your screen to the new names; add no new use of an old name.
-4. **Radius: one scale, by kind, concentric.** Use `--st-r-*` only (the test accepts the old `--r-*` while screens
-   move over; the merge step makes it `--st-r-*` only). Never Clip Factory's `--r-*` for new rules: the shell's
-   switch in Stories' top bar uses `--r-md`, and it must look the same in both workspaces.
+4. **Radius: one scale, by kind, concentric.** Use `--st-r-*` only (test/storiesStyles.test.ts accepts nothing
+   else). Never Clip Factory's `--r-*`: the shell's switch in Stories' top bar uses `--r-md`, and it must look the
+   same in both workspaces.
    - surface 20: every glass surface (cards, hero, cream card, rail, top bar, tab bar, toasts, sheets, plates,
      preview bezel)
    - control 14: buttons (the main action too), fields, rows, tiles, option cards, pick-one tracks, steppers, a
@@ -168,7 +168,8 @@ glass classes; if a screen needs a look-specific rule, select `.stories-app[data
 |---|---|
 | `--st-tint-card`, `--st-tint-hero`, `--st-tint-rail`, `--st-tint-bar`, `--st-tint-float`, `--st-tint-plate`, `--st-tint-tinted`, `--st-tint-cream` | the fills of each kind of surface |
 | `--st-tint-lens` | a liquid hero's fill (the rim's veil; glass.css only) |
-| `--st-fill-control`, `--st-fill-control-hover` | a glass control or inactive pill (a card's veil loose in Picture/See-through) |
+| `--st-fill-control`, `--st-fill-control-hover` | a glass control or inactive pill (a card's veil loose in Picture/See-through; on the colours the hover deepens loose on the page and is the cream lift `--st-fill-control-lift` inside a `.st-glass`) |
+| `--st-fill-figure`, `--st-fill-figure-hover` | set only inside a `.st-glass` or `.st-plate` over a picture or the desktop: a GlassPill or RoundGlassButton there is the light cream glass (0.08, hover 0.12), never a second veil; unset on the cream card |
 | `--st-fill-well`, `--st-fill-well-hover` | fields, tracks, the toggle's off track |
 | `--st-track` | a progress bar's empty part |
 | `--st-blur` 28px, `--st-blur-float` 36px, `--st-saturate` 1.35 | heavy blur |
@@ -178,7 +179,7 @@ glass classes; if a screen needs a look-specific rule, select `.stories-app[data
 | `--st-rim-light` | a hero's thick edge catching light, painted (all a WebKit hero has; under a liquid rim it softens it) |
 | `--st-glow-behind`, `--st-glow-action`, `--st-glow-action-hover`, `--st-glow-accent` | the gentle warm outer glow |
 | `--st-depth-1`, `--st-depth-2`, `--st-depth-3` | soft dark depth |
-| `--st-focus-ring` | the focus ring (a box-shadow: cream then orange) |
+| `--st-focus-ring` | the focus ring (a box-shadow: cream then orange; on the cream card `--st-on-cream-orange` then orange) |
 | old: `--st-panel`, `--st-panel-strong`, `--st-panel-hover`, `--st-s-fill`, `--st-s-fill-2`, `--st-s-fill-3`, `--st-shadow`, `--st-shadow-soft`, `--st-s-soft`, `--st-s-lift`, `--st-glow-sun`, `--st-glow-sun-hover` | |
 
 ### 6. Liquid
@@ -250,6 +251,8 @@ glass.css:
 - `.st-plate`: the backing plate for loose words (rule 6).
 - `.st-edge`: the thin light edge alone, for a surface with its own fill.
 - `.st-lens` (+ `.is-liquid` from the lens code), `.st-lens__defs`: the liquid rim.
+- `.st-lens--tinted` (set `--st-tone-rgb` on it): a liquid hero that keeps its colour, cut to `--st-tint-cut` from the
+  top left, over the rim's tint (the cards that need the owner); without the rim it is the card's own tint.
 - `.st-display` (Playfair display), `.st-caps` (Jost caps caption), `.st-num` (lining tabular figures).
 - `.st-look`, `.st-look__picture`, `.st-look__art` (`--window`, `--picture`, `--colours`), `.st-look__pane`,
   `.st-look__swatches`, `.st-look__swatch`, `.st-look__thumb`, `.st-look__actions`, `.st-look__modes`: Settings › Look
