@@ -117,9 +117,16 @@ jobs:
   # checks (§20.16, §11.1; the slide check runs in WebKit on a Mac only, nav-smooth.spec.ts). One job of its own, because
   # installing WebKit's system packages can take over 20 minutes on a slow apt mirror; paid once here, not per shard.
   web-e2e-webkit:
-    name: web-e2e (WebKit)
+    name: web-e2e (WebKit ${{ matrix.shard }})
     runs-on: ubuntu-24.04
     timeout-minutes: 45
+    # Two shards with 2 workers each, not one runner with 4: four WebKit browsers on one small runner starved each other
+    # (Get paid's setup taps timed out at 2 minutes and Home's hover transition was never sampled on #175, both passing
+    # alone). The same tests run, with about the same wall time and half the load per runner.
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ["1/2", "2/2"]
     defaults:
       run:
         working-directory: web
@@ -134,12 +141,12 @@ jobs:
       - name: Playwright (mock mode, WebKit desktop and iPhone)
         run: |
           npx playwright install --with-deps webkit
-          npm run e2e -- --project=webkit --project=webkit-phone --workers=4
+          npm run e2e -- --project=webkit --project=webkit-phone --shard="${{ matrix.shard }}" --workers=2
       - name: upload the Playwright report
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
-          name: playwright-report-webkit
+          name: playwright-report-webkit-${{ strategy.job-index }}
           path: |
             web/playwright-report
             web/test-results

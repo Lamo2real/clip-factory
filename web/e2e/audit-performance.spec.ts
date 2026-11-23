@@ -5,6 +5,14 @@ import { animationsDone, CLIPS, openClip, settle, whiteContrastOnGradient } from
 
 const PHONE = { viewport: { width: 390, height: 844 }, hasTouch: true, isMobile: true } as const;
 
+// The mock dates its clips from the page's clock, and "This week" and the clip page's star follow the week that clock
+// is in. On the real clock these tests failed just after Monday 00:00, so the page's clock starts at a fixed mid-week
+// moment (Wednesday 18 November 2026, 12:00 UTC: mid-week in any time zone) and runs on from there.
+const MIDWEEK = new Date("2026-11-18T12:00:00.000Z");
+test.beforeEach(async ({ page }) => {
+  await page.clock.setSystemTime(MIDWEEK);
+});
+
 /** The keyboard focus ring is an outline, so a control's own box-shadow can never hide it. */
 async function expectRing(el: Locator) {
   const ring = await el.evaluate((e) => {

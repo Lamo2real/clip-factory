@@ -116,3 +116,84 @@ test("of several clips a run sent, the server's order decides which goes first",
   const r = nextAction({ on: true, queue: [job({ clipId: "a" }), job({ clipId: "b" })], state: fresh(), settings, device, now });
   assert.equal(r.job.clipId, "a");
 });
+
+// The owner's one-time backfill (22 Nov): one every 2 hours, never within an hour of a run or an Upload, at most 7
+// backfill posts and 11 posts in all in any 24 hours.
+const fill = { ...settings, trialLimit: null, backfill: { everyMinutes: 120, quietMinutes: 60, maxPer24h: 7, totalMax24h: 11 } };
+const sched = (last, next) => ({ on: true, lastRunAt: last, nextRunAt: next });
+
+test("backfill: two hours after the last backfill post, and not before", () => {
+  const state = fresh();
+  state.backfillPosts = ["2026-11-22T13:30:00Z"];
+  state.lastBacklogAt = "2026-11-22T13:30:00Z";
+  const r = nextAction({ on: true, queue: [sent()], state, settings: fill, device, now, autopost: sched("2026-11-22T09:00:00Z", "2026-11-22T21:00:00Z") });
+  assert.equal(r.action, "wait");
+  assert.equal(r.until, "2026-11-22T15:30:00.000Z");
+  state.backfillPosts = ["2026-11-22T12:59:00Z"];
+  state.lastBacklogAt = "2026-11-22T12:59:00Z";
+  const ok = nextAction({ on: true, queue: [sent()], state, settings: fill, device, now, autopost: sched("2026-11-22T09:00:00Z", "2026-11-22T21:00:00Z") });
+  assert.equal(ok.action, "post");
+});
+
+test("backfill: never within an hour after a run's post or an Upload, nor an hour before the next run", () => {
+  const after = fresh();
+  after.lastRunPressAt = "2026-11-22T14:30:00Z";
+  const r1 = nextAction({ on: true, queue: [sent()], state: after, settings: fill, device, now, autopost: sched("2026-11-22T09:00:00Z", "2026-11-22T21:00:00Z") });
+  assert.deepEqual([r1.action, r1.until], ["wait", "2026-11-22T15:30:00.000Z"]);
+  const before = nextAction({ on: true, queue: [sent()], state: fresh(), settings: fill, device, now, autopost: sched("2026-11-22T09:00:00Z", "2026-11-22T15:40:00Z") });
+  assert.deepEqual([before.action, before.until], ["wait", "2026-11-22T16:40:00.000Z"]);
+});
+
+test("backfill: at most 7 backfill posts in 24 hours", () => {
+  const state = fresh();
+  state.backfillPosts = ["2026-11-21T16:00:00Z", "2026-11-21T18:00:00Z", "2026-11-21T20:00:00Z", "2026-11-21T22:00:00Z", "2026-11-22T00:00:00Z", "2026-11-22T02:00:00Z", "2026-11-22T04:00:00Z"];
+  state.lastBacklogAt = "2026-11-22T04:00:00Z";
+  const r = nextAction({ on: true, queue: [sent()], state, settings: fill, device, now, autopost: sched("2026-11-22T03:00:00Z", "2026-11-22T21:00:00Z") });
+  assert.deepEqual([r.action, r.until], ["wait", "2026-11-22T16:00:00.000Z"]);
+});
+
+test("backfill: at most 11 TikTok posts in all in 24 hours, runs included", () => {
+  const state = fresh();
+  state.posted = Array.from({ length: 11 }, (_, i) => ({ at: new Date(Date.parse("2026-11-21T16:00:00Z") + i * 3_600_000).toISOString() }));
+  const r = nextAction({ on: true, queue: [sent()], state, settings: fill, device, now, autopost: sched("2026-11-22T03:00:00Z", "2026-11-22T21:00:00Z") });
+  assert.deepEqual([r.action, r.until], ["wait", "2026-11-22T16:00:00.000Z"]);
+});
+
+test("backfill never holds up a run's clip or his Upload", () => {
+  const state = fresh();
+  state.backfillPosts = ["2026-11-22T14:59:00Z"];
+  state.lastPressedAt = "2026-11-22T14:58:00Z";
+  for (const source of ["auto", "upload"]) {
+    const r = nextAction({ on: true, queue: [sent(), job({ clipId: "x", source })], state, settings: fill, device, now, autopost: sched("2026-11-22T15:00:00Z", "2026-11-22T21:00:00Z") });
+    assert.deepEqual([r.action, r.job.clipId], ["post", "x"]);
+  }
+});
+
+test("auto-posting clips made before the hold time wait; later runs and Uploads post as usual", () => {
+  const held = { ...settings, holdAutoBefore: "2026-11-23T02:55:00Z" };
+  const early = job({ clipId: "early", since: "2026-11-22T21:40:00Z" });
+  const r1 = nextAction({ on: true, queue: [early], state: fresh(), settings: held, device, now });
+  assert.equal(r1.action, "wait");
+  const later = job({ clipId: "run", since: "2026-11-23T03:00:05Z" });
+  assert.equal(nextAction({ on: true, queue: [early, later], state: fresh(), settings: held, device, now }).job.clipId, "run");
+  const up = job({ clipId: "up", source: "upload", since: "2026-11-22T21:41:00Z" });
+  assert.equal(nextAction({ on: true, queue: [early, up], state: fresh(), settings: held, device, now }).job.clipId, "up");
+});
+
+test("his Upload goes before a backlog clip is resumed or looked for (never twice either way)", () => {
+  const state = fresh();
+  state.ledger.b1 = { device, step: "finding", pressedAt: "2026-11-22T14:50:00Z" };
+  state.lastPressedAt = "2026-11-22T14:50:00Z";
+  const r = nextAction({ on: true, queue: [sent({ state: "working", pressedAt: "2026-11-22T14:50:00Z" }), job({ clipId: "u1", source: "upload" })], state, settings: fill, device, now });
+  assert.deepEqual([r.action, r.job.clipId], ["post", "u1"]);
+  // With nothing else waiting, it goes back to looking for its pressed post (never posts it again).
+  const alone = nextAction({ on: true, queue: [sent({ state: "working", pressedAt: "2026-11-22T14:50:00Z" })], state, settings: fill, device, now });
+  assert.equal(alone.action, "find");
+});
+
+test("paced backfill waits when auto-posting's schedule is unknown; the burst doesn't need it", () => {
+  const paced = nextAction({ on: true, queue: [sent()], state: fresh(), settings: fill, device, now, autopost: null });
+  assert.equal(paced.action, "wait");
+  const burst = { ...fill, backfill: { everyMinutes: 1, quietMinutes: 1, maxPer24h: 10000, totalMax24h: 10000, haltOnStop: true } };
+  assert.equal(nextAction({ on: true, queue: [sent()], state: fresh(), settings: burst, device, now, autopost: null }).action, "post");
+});

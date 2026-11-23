@@ -1,7 +1,7 @@
 import { expect, test, type Page } from "@playwright/test";
-import { ACT_MS, ACT_REWIND_MS } from "../src/lib/motion.ts";
+import { ACT_FAIL_MS, ACT_MS, ACT_REWIND_MS } from "../src/lib/motion.ts";
 import { animationsDone, settle } from "./helpers.ts";
-import { actTransforms, actWidths, MOTION_WIDTHS, noSideScroll, pauseActs, recordAct, tapAct, tapUntilPhase } from "./motionHelpers.ts";
+import { actTransforms, actWidths, holdClock, MOTION_WIDTHS, noSideScroll, pauseActs, recordAct, tapAct, tapUntilPhase, watchFor } from "./motionHelpers.ts";
 
 // Action motion on Home, Jobs and Review (docs/CONTRACTS.md §20.11 (a)). The handler always fires first; the motion
 // is decoration on the button's own glyph; failures shake; Undo rewinds or brings the card back.
@@ -23,6 +23,8 @@ async function openJob(page: Page, title: string) {
 test.describe("motion: Home (APPLY a)", () => {
   test.beforeEach(async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
+    // Before the page loads, so a test can hold the page's clock (holdClock); until then time runs as usual.
+    await page.clock.install();
     await page.goto("/");
     await settle(page);
   });
@@ -73,12 +75,17 @@ test.describe("motion: Home (APPLY a)", () => {
     await expect(glyph).toHaveClass(/act--upload/);
     await expect(glyph).toHaveClass(/is-idle/);
     const input = page.locator('input[type="file"][accept="video/*"]');
+    // The page's clock is held from the file arriving: the shake and the rise cannot end before they are checked, and
+    // the shake's return to rest is timed on the page's own clock, not on a busy machine's.
+    await holdClock(page);
     await input.setInputFiles({ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("hi") });
     await expect(glyph).toHaveClass(/is-fail/);
     await expect(page.getByText("That is not a video.")).toBeVisible();
-    await expect(glyph).toHaveClass(/is-idle/, { timeout: 600 });
+    await page.clock.runFor(ACT_FAIL_MS);
+    await expect(glyph).toHaveClass(/is-idle/);
     await input.setInputFiles({ name: "stream.mp4", mimeType: "video/mp4", buffer: Buffer.alloc(1024) });
     await expect(glyph).toHaveClass(/is-play/);
+    await page.clock.resume();
   });
 
   test("Exactly bumps its label and the stepper pops its plus and minus", async ({ page }) => {
@@ -98,18 +105,25 @@ test.describe("motion: Home (APPLY a)", () => {
 test.describe("motion: Jobs (APPLY a)", () => {
   test.beforeEach(async ({ page }) => {
     await page.setViewportSize({ width: 1280, height: 900 });
+    // Before the page loads, so a test can hold the page's clock (holdClock); until then time runs as usual.
+    await page.clock.install();
   });
 
   test("Stop job plays at the tap and rewinds on Undo", async ({ page }) => {
     await openJob(page, "Ranked grind");
     const stop = page.getByRole("button", { name: "Stop job" });
     await expect(stop).toHaveAttribute("data-act", "stop");
+    // The page's clock is held from the tap: the 8 s Undo cannot run out on a busy machine, the rewind cannot end before
+    // it is checked, and its return to rest is timed on the page's own clock.
+    await holdClock(page);
     await stop.click();
     await expect(page.getByText("Stopping in a few seconds.")).toBeVisible();
     await page.getByRole("button", { name: "Undo" }).click();
     await expect(stop.locator(".act")).toHaveClass(/act--stop/);
     await expect(stop.locator(".act")).toHaveClass(/is-rewind/);
-    await expect(stop.locator(".act")).toHaveClass(/is-idle/, { timeout: ACT_REWIND_MS + 300 });
+    await page.clock.runFor(ACT_REWIND_MS);
+    await expect(stop.locator(".act")).toHaveClass(/is-idle/);
+    await page.clock.resume();
   });
 
   test("Try again on a failed job turns its arrow and the job restarts at the tap", async ({ page }) => {
@@ -159,10 +173,13 @@ test.describe("motion: Review (APPLY a)", () => {
       (window as MockWindow).__cfMockFaults!.keepStopsAfterSave = 1;
     });
     const card = page.locator(".review-card").first();
+    // Try again only shakes for ACT_FAIL_MS, after the upload's answer: watch for it from before the tap, so a busy
+    // machine cannot hide it between two polls.
+    const shook = await watchFor(card, '[data-act="retry"] .act.is-fail');
     await card.getByRole("button", { name: /^Upload( to .+)?$/ }).click();
     const again = card.getByRole("button", { name: "Try again", exact: true });
     await expect(again).toHaveAttribute("data-act", "retry");
-    await expect(again.locator(".act")).toHaveClass(/is-fail/);
+    await expect.poll(shook).toBe(true);
     // No success visuals on failure.
     await expect(page.locator("canvas.confetti")).toHaveCount(0);
   });
@@ -173,12 +190,16 @@ test.describe("motion: Review (APPLY a)", () => {
     const hook = await cards.first().locator(".review-card__hook").innerText();
     const toss = cards.first().getByRole("button", { name: "Throw away" });
     await expect(toss).toHaveAttribute("data-act", "throw");
+    // The return motion lasts ACT_REWIND_MS: watch for it from before the tap (not between it and the 8 s Undo), so a
+    // busy machine cannot hide it.
+    const returned = await watchFor(page.locator("body"), ".review-card.is-returning", { hasText: hook });
     const { cls } = await tapAct(toss);
     expect(cls.split(" ")).toEqual(expect.arrayContaining(["act--throw", "is-play"]));
     await expect(cards).toHaveCount(before - 1);
     await page.getByRole("button", { name: "Undo" }).click();
     const back = page.locator(".review-card", { has: page.locator(".review-card__hook", { hasText: hook }) });
-    await expect(back).toHaveClass(/is-returning/);
+    await expect.poll(returned).toBe(true);
+    await expect(back).toBeVisible();
     // The return ends on a timer of ACT_REWIND_MS; a busy machine can run that timer late, so allow it time to end.
     await expect(back).not.toHaveClass(/is-returning/, { timeout: ACT_REWIND_MS + 2000 });
   });

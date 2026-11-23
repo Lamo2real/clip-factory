@@ -1,5 +1,6 @@
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { settle } from "./helpers.ts";
+import { watchFor } from "./motionHelpers.ts";
 
 // TikTok's choices (docs/CONTRACTS.md §17.8, §36, TikTok's Content Sharing Guidelines). On the Review card they live
 // in the TikTok row: who can see it is the app's own dropdown with nothing picked until the owner picks or taps Use my
@@ -202,11 +203,15 @@ test("review: an Upload that does not finish shakes Upload, then Try again uploa
   const card = cards.first();
   await card.getByRole("button", { name: "Use my settings" }).click();
   const upload = card.getByRole("button", { name: UPLOAD });
+  // The shake lasts ACT_FAIL_MS, after the upload's answer: watch for it from before the tap, so a busy machine cannot
+  // hide it between two polls.
+  const shook = await watchFor(card, '[data-act="retry"] .act.is-fail');
   await upload.click();
 
   // The failure shakes the card's Upload, shows the error toast and no celebration; the card stays with Try again.
   const again = card.getByRole("button", { name: "Try again", exact: true });
-  await expect(again.locator(".act")).toHaveClass(/is-fail/);
+  await expect(again).toHaveAttribute("data-act", "retry");
+  await expect.poll(shook).toBe(true);
   await expect(page.locator(".toast", { hasText: "cannot be reached" })).toBeVisible();
   await expect(page.locator("canvas.confetti")).toHaveCount(0);
   await expect(page.getByText(/^(Uploading to|Saved!)/)).toHaveCount(0);

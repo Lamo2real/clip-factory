@@ -68,6 +68,22 @@ The owner set this on 22 Nov: TikTok follows auto-posting, and his own Upload go
   until the backlog is empty. With auto-posting off, the backlog waits.
 - The trial (`settings.json` `trialLimit`) is lifted: `node src/cli.js trial none`.
 
+## One-time backfill and batches
+
+`node src/cli.js backfill on|burst|off` sets a one-time pace for the backlog ("Send these to my Mac" clips).
+It switches itself off once the backlog is empty; then the rule in "When it posts" applies again.
+- `on`: one every 2 hours, never within an hour of a run or an Upload, at most 7 backfill posts and 11 posts in all
+  in any 24 hours. The 24-hour cap only counts posts already made, so jittery run times can reach 12 (review, 22 Nov).
+- `burst`: back to back. Used on 22 Nov for the owner's "upload all videos ... right away". Any stop halts the whole
+  batch (`paused`; `cli.js on` resumes it).
+
+`settings.json` `holdAutoBefore` (ISO time) holds auto-posting clips made before that time (used on 22 Nov when a
+one-off Review run was stopped). Uploads and later runs post as usual.
+
+Captions are typed line by line, with any hashtag or mention list closed before a new line, and retyped once more
+slowly if the read-back is off. The video goes into TikTok's upload box by its path on the Mac
+(CDP DOM.setFileInputFiles), so a large file is as quick as a small one.
+
 ## Off switch
 
 - **Clip Factory › Settings › Posting › Your Mac posts TikTok**: the switch. Off = nothing is handed to the Mac, and

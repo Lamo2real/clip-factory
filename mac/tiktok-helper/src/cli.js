@@ -117,7 +117,7 @@ async function probe(clipId) {
     console.log(JSON.stringify({ ok: true, steps, ...result, baseline: undefined }, null, 2));
   } catch (e) {
     await page.screenshot({ path: path.join(BASE, "probe.png"), fullPage: true }).catch(() => {});
-    console.log(JSON.stringify({ ok: false, stop: e.reason || String(e.message || e), url: page.url() }, null, 2));
+    console.log(JSON.stringify({ ok: false, stop: e.reason || String(e.message || e), detail: e.detail, url: page.url() }, null, 2));
   } finally {
     await chrome.quit(browser);
     fs.rmSync(file, { force: true });
@@ -176,6 +176,14 @@ try {
     await forgetLogin();
     event("login_forgotten", {});
     console.log((await hasLogin()) ? "Still there?" : "Forgotten.");
+  } else if (cmd === "backfill") {
+    // node src/cli.js backfill on|burst|off: the owner's one-time backfill pace for the backlog (plan.js backfillAction).
+    // "burst": the owner's one-time batch (22 Nov: "upload all videos ... right away"), back to back, stopping the
+    // whole batch at the first limit, warning or puzzle.
+    const burst = { everyMinutes: 1, quietMinutes: 1, maxPer24h: 10_000, totalMax24h: 10_000, haltOnStop: true };
+    const paced = { everyMinutes: 120, quietMinutes: 60, maxPer24h: 7, totalMax24h: 11 };
+    saveSettings({ backfill: arg === "off" ? null : arg === "burst" ? burst : paced });
+    console.log(arg === "off" ? "Backfill off." : arg === "burst" ? "Backfill burst: back to back, stops at the first limit or warning." : "Backfill on: one every 2 hours, at most 7 a day, 11 TikTok posts a day in all.");
   } else if (cmd === "probe") {
     if (!arg) throw new Error("probe takes a clip id");
     await probe(arg);
@@ -185,7 +193,7 @@ try {
     saveSettings({ trialLimit: n });
     console.log(`Trial limit: ${n === null ? "none" : n}.`);
   } else {
-    console.log("Commands: run, setup, login, forget-login, status, off, on, trial <n|none>, probe <clipId>");
+    console.log("Commands: run, setup, login, forget-login, status, off, on, trial <n|none>, backfill on|burst|off, probe <clipId>");
     process.exitCode = 2;
   }
 } catch (e) {

@@ -31,7 +31,7 @@ CF_E2E_PORT=4233 npx playwright test e2e/help-pictures.spec.ts --project=chromiu
 
 The `webkit` (Desktop Safari) and `webkit-phone` (iPhone 15) projects run only `e2e/help-pictures.spec.ts`, headless:
 the Mac app (WKWebView) and the iPhone PWA are WebKit, so picking, pasting and dropping pictures is checked there too.
-CI runs them in a job of its own, `web-e2e (WebKit)`, so only that job installs WebKit and its system packages.
+CI runs them in jobs of their own, `web-e2e (WebKit 1/2)` and `web-e2e (WebKit 2/2)` (two shards, 2 workers each, so the browsers do not starve one small runner), so only those jobs install WebKit and its system packages.
 
 Playwright serves the mock app on port 4179 and reuses a server already on that port. If another checkout's preview
 server holds 4179, set `CF_E2E_PORT` to a free port, or the tests run against the other checkout's build.
@@ -47,7 +47,7 @@ job, so [ci.yml](../.github/workflows/ci.yml) splits it:
 
 **WebKit too.** The macOS desktop app draws with WebKit, so `nav-smooth.spec.ts` (the menu highlight sampled every
 frame), `page-still.spec.ts` (no blink or twitch on a page change) and `top-line.spec.ts` (one top line, the
-traffic-light band) also run in the `webkit` Playwright project (CI: the `web-e2e (WebKit)` job). The
+traffic-light band) also run in the `webkit` Playwright project (CI: the `web-e2e (WebKit 1/2, 2/2)` jobs). The
 WebKit slide check (`nav-smooth`) runs on macOS only: Playwright's WebKit on the Linux runners is the GTK/WPE port,
 whose headless run never started the glide's Web Animation at all, which says nothing about the Mac app's WKWebView;
 `page-still` and `top-line` pass there and run in CI. On a Mac: `npx playwright install webkit`, then `CF_E2E_PORT=4471 npx playwright test nav-smooth page-still top-line
