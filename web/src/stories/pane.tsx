@@ -20,8 +20,8 @@
 // is on screen.
 //
 // The sliding window (the owner, 23 Nov: "id like the transission between clip factory and clips funded to be like a
-// sliding window"): a switch to the other app slides the whole app, Clip Factory on the left and Funded Clips on the
-// right. Going to Funded Clips, Clip Factory's pane slides out to the left while Funded Clips' slides in from the right;
+// sliding window"): a switch to the other app slides the whole app, Clip Factory on the left and Clips Funded on the
+// right. Going to Clips Funded, Clip Factory's pane slides out to the left while Clips Funded's slides in from the right;
 // going back, the other way. Both panes move on the slow-in slow-out curve (the owner, 23 Nov: "make sure the switch
 // between clip factory and clips funded uses slow in slow out effect when switching between them"; tokens.css
 // --ease-in-out), as the switch's lens does, for the same length, from the same tap. The shell's dock (the switch and
@@ -183,7 +183,7 @@ export function pauseMediaIn(box: HTMLElement | null): number {
 
 // ---------- The sliding window ----------
 
-/** Clip Factory sits on the left and Funded Clips on the right: going to Funded Clips, everything moves left. */
+/** Clip Factory sits on the left and Clips Funded on the right: going to Clips Funded, everything moves left. */
 const SIDE: Record<AppName, number> = { clips: 0, stories: 1 };
 
 /**
@@ -210,7 +210,7 @@ interface Running {
  * stays (unless it was hidden with a dialog open, or `fresh` names it: then it opens fresh next time). An app can also
  * be mounted a moment before it is shown (the pointer came to the switch's way there), so a slide finds it ready.
  * `alsoSlides` names what an app draws outside its pane that slides with it (Clip Factory's own backdrop: each app
- * slides with its own background, and it is drawn for the slide even while Funded Clips is on screen).
+ * slides with its own background, and it is drawn for the slide even while Clips Funded is on screen).
  */
 export function AppPanes({
   on,
@@ -480,10 +480,10 @@ function StoriesProblem({ onRetry, onClips }: { onRetry: () => void; onClips: ()
   const active = useAppActive();
   return (
     <main style={PROBLEM_BOX} id={active ? "main" : undefined} data-stories-problem="">
-      <h1 className="sr-only">Funded Clips had a problem</h1>
+      <h1 className="sr-only">Clips Funded had a problem</h1>
       <Empty
         icon="alert"
-        title="Funded Clips had a problem."
+        title="Clips Funded had a problem."
         heading="h2"
         action={
           <>

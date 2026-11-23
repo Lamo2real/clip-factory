@@ -27,7 +27,7 @@ import { GLIDE_MS } from "../src/components/Glide.tsx";
 // The workspace switch is see-through, colour-free liquid glass (the owner, 2026-11-23: "make his color freee and
 // liquid glass style", then "see through liquid glassy instead of black and white so whatever is under it is visible
 // through the glassy buttons"; docs/CONTRACTS.md §45.38 S5). It is one element of the shell, drawn the same over Clip
-// Factory's green sidebar and Funded Clips' espresso rail, in both phone top bars and in every look, so none of its
+// Factory's green sidebar and Clips Funded's espresso rail, in both phone top bars and in every look, so none of its
 // fills, rims or shades may carry a colour: every one is white or black at an alpha. Its track has no smoke, only a
 // faint white tint, so what is under it shows through; its words are white, read over the panel the dock is drawn
 // over (e2e/helpers.ts). Here the stylesheets are read so no colour or smoke comes back, the tints stay faint, and the
@@ -159,7 +159,7 @@ describe("the workspace switch is see-through, colour-free glass (§45.38 S5)", 
     }
   });
 
-  it("no other rule repaints it: not a look of Clip Factory's (the window, the picture), not Funded Clips' own styles", () => {
+  it("no other rule repaints it: not a look of Clip Factory's (the window, the picture), not Clips Funded's own styles", () => {
     const sheets = [
       ...readdirSync(STYLES).filter((f) => f.endsWith(".css")).map((f) => [`styles/${f}`, sheet(STYLES, f)] as const),
       ...readdirSync(STORIES_STYLES).filter((f) => f.endsWith(".css")).map((f) => [`stories/styles/${f}`, sheet(STORIES_STYLES, f)] as const),
@@ -262,7 +262,7 @@ describe("the workspace switch is see-through, colour-free glass (§45.38 S5)", 
 
   it("white words keep AA on the track, the hover and the lens over the lightest panel any look shows, the lens plainly chosen", () => {
     // What the switch's words sit on (glide.css), worked out over every panel its dock can be drawn over: the panel at
-    // the height of its words (lib/background.ts panelWords; Funded Clips' rail as stories/look.ts lays it), through
+    // the height of its words (lib/background.ts panelWords; Clips Funded's rail as stories/look.ts lays it), through
     // the switch's brightness() in sRGB as Chromium and WebKit apply the shorthands, then the track's faint white
     // where the words sit, then the hover's or the lens's white. The app's own living backdrop is measured in pixels
     // where the dock is drawn (e2e/switch-glass.spec.ts, contrast.spec.ts): under the sidebar's foot it is the deep
@@ -289,9 +289,9 @@ describe("the workspace switch is see-through, colour-free glass (§45.38 S5)", 
       const look = { kind: "colours" as const, ...coloursVeils(colours), colours };
       for (const spot of coloursMeshSpots(colours)) panels.push({ at: `colours ${colours.join(" ")}`, under: panelWords(look, spot) });
     }
-    // Funded Clips' rail over a white or a black picture or desktop, at the foot (its level-1 light, settled).
+    // Clips Funded's rail over a white or a black picture or desktop, at the foot (its level-1 light, settled).
     for (const [name, v] of [["picture", MEASURED], ["window clear", WINDOW_CLEAR], ["window frosted", WINDOW_FROSTED]] as const)
-      for (const behind of [W, [0, 0, 0] as Rgb]) panels.push({ at: `Funded Clips' rail, ${name}`, under: stLit(mix(ESPRESSO, behind, v.page), v.rail, ELEVATION[1]!) });
+      for (const behind of [W, [0, 0, 0] as Rgb]) panels.push({ at: `Clips Funded's rail, ${name}`, under: stLit(mix(ESPRESSO, behind, v.page), v.rail, ELEVATION[1]!) });
     expect(panels.length).toBeGreaterThan(4000);
 
     const fails: string[] = [];

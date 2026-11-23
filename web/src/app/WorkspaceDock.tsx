@@ -308,7 +308,7 @@ function landSwitch(w: Workspace, at: Leaving, slide: AppSlide | null): void {
 
 /**
  * The little picture of a workspace on its round toggle: Clip Factory's real mark (its italic serif "C" on the bone
- * tile with the vermilion dot, as .brand__mark draws it), and for Funded Clips the same mark in Funded Clips' warm
+ * tile with the vermilion dot, as .brand__mark draws it), and for Clips Funded the same mark in Clips Funded's warm
  * colours (its logo). Both are components/WorkspaceMark.tsx's small mark, in either app.
  */
 export function ToggleMark({ type, size = 24 }: { type: Workspace["workspaceType"]; size?: number }) {

@@ -46,12 +46,13 @@
   color: var(--st-text-strong);
 }
 
-/* The setup's first step: the models and their state, tiles that only show (the look-aware control fill). */
+/* The setup's first step: the models and their state, tiles that only show (the look-aware control fill). Its h3 is a
+   section name, so Fugaz One (st-frame.css), at its one weight like every other Fugaz One word. */
 .st-setup .st-setup__sub {
   margin-top: var(--st-space-1);
   color: var(--st-text-strong);
   font-size: var(--st-fs-body);
-  font-weight: var(--st-weight-ui);
+  font-weight: 400;
 }
 .st-setup__models {
   display: grid;

@@ -24,8 +24,8 @@ import { settle, stillBackdrop } from "./helpers.ts";
 // runs its whole 450 ms on transform only, to its end, never cancelled, and the page changes only after it.
 //
 // And the whole app slides with it, like a sliding window (the owner, 23 Nov: "id like the transission between clip
-// factory and clips funded to be like a sliding window"; stories/pane.tsx AppPanes): going to Funded Clips, Clip
-// Factory's pane (with its own backdrop) slides out to the left while Funded Clips' slides in from the right, and back
+// factory and clips funded to be like a sliding window"; stories/pane.tsx AppPanes): going to Clips Funded, Clip
+// Factory's pane (with its own backdrop) slides out to the left while Clips Funded's slides in from the right, and back
 // the other way. Both panes' slides start with the highlight's, run their whole length on transform alone, to their end; both panes are on screen only while they slide; nothing is laid out again meanwhile;
 // each page sits where it is scrolled to (the one going out where the window was, the one coming in at its kept
 // place, with no jump when it lands); the dock does not move; the page changes once they have landed, with focus on
@@ -326,7 +326,7 @@ for (const [label, glass] of [
     // about the slide: on a Mac. The Linux CI runners have 4 cores and no GPU, so Chromium draws this glass page in
     // software at 75 to 200 ms a frame, and a tap's first frame waits behind one (LayerTreeHost::WaitForCommitCompletion):
     // long tasks of 142 to 210 ms and starved frames there (runs 45112115668 and 45134524791) that measure the runner,
-    // not the app. The same test failed 2 of 3 runs on the older head 1477c325 under a 4x CPU throttle; no Funded Clips
+    // not the app. The same test failed 2 of 3 runs on the older head 1477c325 under a 4x CPU throttle; no Clips Funded
     // code ran during the slide. Everywhere the slide still has to start on the tap's own frame, run its whole 450 ms
     // on transform only, slow in and slow out, to its end, keep the same switch and change the page only after it.
     const timing = process.platform === "darwin";
@@ -680,7 +680,7 @@ test("the whole app slides like a sliding window, both ways: transform only, to 
     const going = to === "Clips Funded" ? "stories" : "clips";
     const label = `${browserName} → ${to}`;
 
-    // Three slides, one Web Animation each, the app's own: Clip Factory's pane, its backdrop with it, and Funded Clips'.
+    // Three slides, one Web Animation each, the app's own: Clip Factory's pane, its backdrop with it, and Clips Funded's.
     expect(
       r.anims.map((a) => a.what).sort(),
       `${label}: what slides`,
@@ -693,14 +693,14 @@ test("the whole app slides like a sliding window, both ways: transform only, to 
       expect(curve(a.easing), `${label}: ${a.what} slow in, slow out (${a.easing})`).toEqual(SLOW_IN_OUT);
       expect(a.end, `${label}: ${a.what} ran to its end`).toBe("finished");
     }
-    // Clip Factory on the left, Funded Clips on the right: to Funded Clips everything moves left, back it moves right.
+    // Clip Factory on the left, Clips Funded on the right: to Clips Funded everything moves left, back it moves right.
     const by = (what: string) => r.anims.find((a) => a.what === what)!;
     const way = going === "stories" ? -100 : 100;
     const clipsWay = going === "stories" ? [0, way] : [-way, 0];
     const storiesWay = going === "stories" ? [-way, 0] : [0, way];
     expect([by("clips").from, by("clips").to], `${label}: Clip Factory's pane`).toEqual(clipsWay);
     expect([by("backdrop").from, by("backdrop").to], `${label}: Clip Factory's backdrop, with its pane`).toEqual(clipsWay);
-    expect([by("stories").from, by("stories").to], `${label}: Funded Clips' pane`).toEqual(storiesWay);
+    expect([by("stories").from, by("stories").to], `${label}: Clips Funded's pane`).toEqual(storiesWay);
 
     // It starts on the tap, with the highlight's own slide (the same frame), and the page changes once it landed.
     expect(r.clickAt, `${label}: the tap's click`).not.toBeNull();
@@ -753,7 +753,7 @@ test("the whole app slides like a sliding window, both ways: transform only, to 
       // Back in Clip Factory: its Library where the owner left it, and focus on its page (its heading comes first).
       expect(restNow.scrollY, `${label}: Clip Factory's scroll kept`).toBe(y);
       expect(restNow.focus, `${label}: focus on the page`).toBe(true);
-    } else expect(restNow.scrollY, `${label}: Funded Clips' first visit opens at its top`).toBe(0);
+    } else expect(restNow.scrollY, `${label}: Clips Funded's first visit opens at its top`).toBe(0);
     test.info().annotations.push({
       type: `${label}: the panes' slide`,
       description: JSON.stringify({
@@ -778,7 +778,7 @@ for (const [label, how] of [
     await stillBackdrop(page);
     await on(page);
     if (how === "device") await page.emulateMedia({ reducedMotion: "reduce" });
-    // Funded Clips' own switch (its Settings card writes it on the device).
+    // Clips Funded's own switch (its Settings card writes it on the device).
     else await page.addInitScript(() => localStorage.setItem("cf.stories.prefs", JSON.stringify({ setupShown: ["stories"], more: { "motion.reduce": true } })));
     await page.setViewportSize({ width: 1440, height: 900 });
     if (how === "own") {

@@ -276,7 +276,7 @@
    bone (test/switchGlass.test.ts), the same glass in both apps and every look. Its light is soft (blurred, never a
    drawn line, ADR-45) and comes from above.
    The track: clear glass on a blur of its own with a faint white tint and no smoke, so what is under it (Clip
-   Factory's sidebar, Funded Clips' rail, the page) shows through, blurred, in its own colours. On a computer the dock
+   Factory's sidebar, Clips Funded's rail, the page) shows through, blurred, in its own colours. On a computer the dock
    is drawn over the sidebar or the rail, which hold bone words at AA by themselves (e2e/helpers.ts scanText and
    looseText read the switch over them); its words are white, more light than bone, and the room that leaves is what
    the lens spends: brightness(0.9) takes back a little light from behind, the track lays 0.04 white where the words

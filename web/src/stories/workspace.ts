@@ -250,10 +250,13 @@ export function wantedStoriesWorkspace(): string | null {
 
 /** The first Stories workspace's first default name (until 22 Nov 2026). */
 export const OLD_STORIES_NAME = "Lamo Stories";
-/** Every earlier default name of the first Stories workspace: "Lamo Stories", then "Clip Factory Stories" and "Clip Stories" (22-23 Nov 2026). */
-export const OLD_STORIES_NAMES: readonly string[] = [OLD_STORIES_NAME, "Clip Factory Stories", "Clip Stories"];
-/** Today's: the app's name, "Funded Clips". */
-export const STORIES_NAME = "Funded Clips";
+/**
+ * Every earlier default name of the first Stories workspace: "Lamo Stories", then "Clip Factory Stories", "Clip
+ * Stories" and "Funded Clips" (22-23 Nov 2026).
+ */
+export const OLD_STORIES_NAMES: readonly string[] = [OLD_STORIES_NAME, "Clip Factory Stories", "Clip Stories", "Funded Clips"];
+/** Today's: the app's name, "Clips Funded" (its YouTube channel's name, 23 Nov 2026). */
+export const STORIES_NAME = "Clips Funded";
 
 /**
  * The name a person sees for a stored Stories workspace name: a workspace still stored with an old default name
@@ -567,7 +570,7 @@ const TITLES: Record<StoriesPage["name"], string> = {
   not_found: "Not found",
 };
 
-/** The tab title of a Lamo Stories page ("Ideas · Lamo Stories"). */
+/** The tab title of a Lamo Stories page ("Ideas · Clips Funded"). */
 export function storiesTitle(page: StoriesPage): string {
   return `${TITLES[page.name]} · ${STORIES_NAME}`;
 }

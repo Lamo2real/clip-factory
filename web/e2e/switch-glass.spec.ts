@@ -9,9 +9,9 @@ import { decode } from "./pixels.ts";
 // The workspace switch is see-through, colour-free liquid glass (the owner, 2026-11-23: "make his color freee and
 // liquid glass style", then "see through liquid glassy instead of black and white so whatever is under it is visible
 // through the glassy buttons"; docs/CONTRACTS.md §45.38 S5), measured in real pixels wherever it is drawn: the dock
-// over Clip Factory's sidebar and over Funded Clips' rail, the stacked switch in both phone top bars' menus, in every
+// over Clip Factory's sidebar and over Clips Funded's rail, the stacked switch in both phone top bars' menus, in every
 // look (the app's own backdrop, Colours, Colours with a Cream backdrop, Picture with a white photo, the see-through
-// window Clear and Frosted over a white desktop, and Funded Clips' own picture and window looks). With the words
+// window Clear and Frosted over a white desktop, and Clips Funded's own picture and window looks). With the words
 // hidden, the pixels where each name's words sit are read:
 //   - every name keeps 4.5:1 against the lightest and the darkest pixel behind its words, at rest and hovered;
 //   - the chosen side is plainly the chosen one for a child: its lens is at least 0.06 OKLab L over the track where
@@ -24,7 +24,7 @@ import { decode } from "./pixels.ts";
 //   - scanText and looseText (e2e/helpers.ts) read its words over the panel its dock is drawn over, and still catch
 //     dimmed words.
 // test/switchGlass.test.ts holds the colours of the CSS and works them out on paper; this holds what they add up to on
-// screen. Pictures under test-results/switch-glass. Funded Clips is switched on with cf.storiesPreview = 1.
+// screen. Pictures under test-results/switch-glass. Clips Funded is switched on with cf.storiesPreview = 1.
 
 const SHOTS = join(import.meta.dirname, "..", "test-results", "switch-glass");
 const WHITE = `data:image/svg+xml,${encodeURIComponent("<svg xmlns='http://www.w3.org/2000/svg' width='16' height='16'><rect width='16' height='16' fill='#fff'/></svg>")}`;
@@ -47,7 +47,7 @@ interface Look {
   picture?: boolean;
   /** The see-through window over a white desktop. */
   window?: boolean;
-  /** Funded Clips' own look. */
+  /** Clips Funded' own look. */
   stories?: "picture" | "window";
 }
 const LOOKS: Look[] = [
@@ -57,8 +57,8 @@ const LOOKS: Look[] = [
   { name: "Picture white", cf: { backgroundMode: "picture" }, picture: true },
   { name: "window Clear", cf: { backgroundMode: "see-through", glassStrength: "clear" }, window: true },
   { name: "window Frosted", cf: { backgroundMode: "see-through", glassStrength: "frosted" }, window: true },
-  { name: "Funded Clips picture white", cf: { backgroundMode: "picture" }, picture: true, stories: "picture" },
-  { name: "Funded Clips window", cf: { backgroundMode: "see-through", glassStrength: "clear" }, window: true, stories: "window" },
+  { name: "Clips Funded picture white", cf: { backgroundMode: "picture" }, picture: true, stories: "picture" },
+  { name: "Clips Funded window", cf: { backgroundMode: "see-through", glassStrength: "clear" }, window: true, stories: "window" },
 ];
 
 async function useLook(page: Page, look: Look, studios = 0) {
@@ -231,7 +231,7 @@ for (const look of LOOKS) {
   test(`the switch is see-through glass, its words at AA and the chosen side plainly lit (${look.name})`, async ({ browser }) => {
     test.setTimeout(150_000);
     const fails: string[] = [];
-    // A computer: the dock over Clip Factory's sidebar, then over Funded Clips' rail.
+    // A computer: the dock over Clip Factory's sidebar, then over Clips Funded' rail.
     {
       const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
       const page = await ctx.newPage();
@@ -313,7 +313,7 @@ test("unfolding Clip Factory's sidebar, the switch keeps its blur and light (its
 // scanText and looseText (e2e/helpers.ts, every contrast and see-through check) read the switch over the panel its
 // dock is drawn over, and stay strict: over a white desktop the switch's faint glass alone could never hold white
 // words, so passing there means the panel was read under them; and dimmed words must still fail.
-for (const [path, look] of [["/", LOOKS.find((l) => l.name === "window Clear")!], ["/stories", LOOKS.find((l) => l.name === "Funded Clips window")!]] as const) {
+for (const [path, look] of [["/", LOOKS.find((l) => l.name === "window Clear")!], ["/stories", LOOKS.find((l) => l.name === "Clips Funded window")!]] as const) {
   test(`scanText and looseText read the switch's words over the panel under the dock, and still catch dimmed words (${path})`, async ({ browser }) => {
     test.setTimeout(120_000);
     const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });

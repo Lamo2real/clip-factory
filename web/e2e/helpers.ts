@@ -383,12 +383,12 @@ function contrastKit() {
   }
 
   /**
-   * The panel the shell's dock (app/WorkspaceDock.tsx, while Funded Clips is switched on) is drawn over, with its
+   * The panel the shell's dock (app/WorkspaceDock.tsx, while Clips Funded is switched on) is drawn over, with its
    * ancestors, from <html> down, when `el` is in the dock and its words `r` lie inside that panel's box on screen. The
    * dock is not inside the panel but drawn over it, so what is under its words is the panel first (like a <Glide>
-   * under its item, below). The Live chip, in the place of the sidebar's own: Clip Factory's sidebar only (over Funded
-   * Clips the chip is its own glass). The workspace switch (its see-through glass, glide.css): Clip Factory's sidebar
-   * or Funded Clips' rail, whichever is on screen. Otherwise null: beside the panel (a short window's slim toggle) the
+   * under its item, below). The Live chip, in the place of the sidebar's own: Clip Factory's sidebar only (over Clips
+   * Funded the chip is its own glass). The workspace switch (its see-through glass, glide.css): Clip Factory's sidebar
+   * or Clips Funded's rail, whichever is on screen. Otherwise null: beside the panel (a short window's slim toggle) the
    * dock is read on its own, as before. Only what is under the words changes; the words' own colour and every layer of
    * the dock over the panel are still read, so dimmed words still fail.
    */
@@ -732,7 +732,7 @@ export async function looseText(page: Page, minAlpha?: number): Promise<string[]
         if (alphaOf(s.backgroundColor) >= min || alphaOf(s.backgroundImage) >= min) return true;
         // The shell's dock (app/WorkspaceDock.tsx) is drawn over a panel: its words, where they lie inside that
         // panel's box on screen, sit on the panel too. The Live chip, in the place of the sidebar's own: Clip
-        // Factory's sidebar only. The workspace switch, see-through glass: Clip Factory's sidebar or Funded Clips' rail,
+        // Factory's sidebar only. The workspace switch, see-through glass: Clip Factory's sidebar or Clips Funded's rail,
         // whichever is on screen (underDock in contrastKit reads its contrast the same way). Beside a panel it is loose.
         const chip: boolean = n.matches(".ws-dock > .ws-dock__live");
         if (chip || n.matches(".ws-dock > .ws-switch-host")) {

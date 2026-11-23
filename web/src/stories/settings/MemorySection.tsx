@@ -93,7 +93,7 @@ export function MemorySection({ ws }: { ws: string }) {
       memory.setData((l) => [item, ...(l ?? [])]);
       setText("");
       cheer(el);
-      toast.success("Remembered. Every Funded Clips agent reads it from now on.");
+      toast.success("Remembered. Every Clips Funded agent reads it from now on.");
     } catch (e) {
       toast.error(friendlyMessage(e));
     } finally {
@@ -150,7 +150,7 @@ export function MemorySection({ ws }: { ws: string }) {
           </div>
         </form>
       </SetCard>
-      <SetCard title="What Funded Clips remembers" icon="note" lede="Every Funded Clips agent reads these before it works, newest first. Clip Factory never sees them.">
+      <SetCard title="What Clips Funded remembers" icon="note" lede="Every Clips Funded agent reads these before it works, newest first. Clip Factory never sees them.">
         {memory.error && !memory.data ? <Failed message={memory.error} onRetry={() => void memory.reload()} /> : null}
         {!memory.data && !memory.error ? <Loading label="Getting the memory…" /> : null}
         {memory.data && !list.length ? (

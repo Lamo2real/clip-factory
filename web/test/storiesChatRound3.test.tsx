@@ -236,7 +236,7 @@ describe("a failed answer and Try again (§45.34)", () => {
   it("a choice picked after the failure wins over the one it was sent with", async () => {
     await openChat(CONV.winter);
     await justThisMessage(/^Claude Fable 5\.1/);
-    store.knobs.chatFail = "Claude Fable 5.1 isn't available right now. Pick another model in Funded Clips › Settings › AI, or try again.";
+    store.knobs.chatFail = "Claude Fable 5.1 isn't available right now. Pick another model in Clips Funded › Settings › AI, or try again.";
     await type($("textarea"), "Ideas about snow");
     await click($(".st-chat-send"));
     await until(() => !!$(".st-chat-msg--assistant.is-failed"), 8000);
@@ -356,7 +356,7 @@ describe("a reference video's page (§45.34)", () => {
   });
 
   it("an analysis that stopped shows each step and its own reason, after a reload too", async () => {
-    store.knobs.refFail = "Claude Fable 5.2 isn't available right now: no access. Pick another model in Funded Clips › Settings › AI, or try again.";
+    store.knobs.refFail = "Claude Fable 5.2 isn't available right now: no access. Pick another model in Clips Funded › Settings › AI, or try again.";
     await render(<ReferencesScreen ws="stories" page={page({ name: "reference", refId: REF.ready })} />);
     await until(() => !!byText("button", "Analyze it"));
     await click(byText("button", "Analyze it"));

@@ -267,7 +267,7 @@ def test_a_switched_off_creative_director_or_no_runtime(app: App, wcall: WsCall,
     assert status == 409
     assert (
         body["error"]["message"]
-        == "Creative director is switched off. Switch it on in Funded Clips › Settings › Agents."
+        == "Creative director is switched off. Switch it on in Clips Funded › Settings › Agents."
     )
     assert wcall("PATCH", f"{BASE}/agents/creative_director", {"version": 2, "active": True})[0] == 200
     install(app, None)
@@ -275,7 +275,7 @@ def test_a_switched_off_creative_director_or_no_runtime(app: App, wcall: WsCall,
     assert status == 202
     assert (body["assistant"]["status"], body["assistant"]["error"]) == (
         "failed",
-        "Funded Clips' AI helper isn't switched on yet.",
+        "Clips Funded's AI helper isn't switched on yet.",
     )
     runtime = FakeRuntime()
     runtime.fail = True

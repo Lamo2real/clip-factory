@@ -1,13 +1,13 @@
-// Funded Clips posts only to accounts of its own (docs/CONTRACTS.md §45.37 G8, the owner's hard rule of
+// Clips Funded posts only to accounts of its own (docs/CONTRACTS.md §45.37 G8, the owner's hard rule of
 // 22 Nov: "I do not want videos generated in lamo stories … uploaded to the same accounts as clip factory thats a hard
 // no"), and Clip Factory's shared developer app is protected (§45.37 G6: "Keep it, protect CF"), against the
 // in-memory API and the Social accounts page:
-// - every card says up front to use a new account made for Funded Clips; there is no "Use it for both" on
+// - every card says up front to use a new account made for Clips Funded; there is no "Use it for both" on
 //   any screen and no route for it;
 // - per platform, the same account by each stable identity (YouTube the channel id, Facebook the Page id, Instagram
 //   the user id and the username, TikTok the union id and the handle, X the user id and the handle) is refused at
 //   connect and before every post, also when Clip Factory connects it later (then the card says why);
-// - the shared app's choice reads "Share Clip Factory's app" with "Clip Factory's posts always go first. Funded Clips
+// - the shared app's choice reads "Share Clip Factory's app" with "Clip Factory's posts always go first. Clips Funded
 //   uses what's left." (never "quicker"), and a post with no room left waits with its time and goes out after the reset.
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
@@ -39,13 +39,13 @@ let root: Root;
 let store: MockStore;
 let api: StoriesApi;
 
-/** The Funded Clips accounts the pretend platforms sign in with (mock/social.ts STORIES_IDENTITY). */
+/** The Clips Funded accounts the pretend platforms sign in with (mock/social.ts STORIES_IDENTITY). */
 const STORIES: Record<Platform, { id: string; handle: string; name: string }> = {
-  youtube: { id: "UC7stories0lamo00000000a", handle: "@fundedclips", name: "Funded Clips" },
-  tiktok: { id: "-000lamostories-open-id", handle: "@funded.clips", name: "Funded Clips" },
+  youtube: { id: "UC7stories0lamo00000000a", handle: "@fundedclips", name: "Clips Funded" },
+  tiktok: { id: "-000lamostories-open-id", handle: "@funded.clips", name: "Clips Funded" },
   instagram: { id: "17841400000000001", handle: "@funded.clips", name: "funded.clips" },
-  facebook: { id: "109876543210987", handle: "Funded Clips", name: "Funded Clips" },
-  x: { id: "1600000000000000002", handle: "@fundedclips", name: "Funded Clips" },
+  facebook: { id: "109876543210987", handle: "Clips Funded", name: "Clips Funded" },
+  x: { id: "1600000000000000002", handle: "@fundedclips", name: "Clips Funded" },
 };
 
 function start(knobs: Record<string, unknown> = {}) {
@@ -137,7 +137,7 @@ describe("no route or screen offers sharing an account (§45.37 G8 (d))", () => 
     expect(host.textContent).not.toMatch(/use it for both|Are you sure\?.*both post/i);
   });
 
-  it("every card says up front to use a new account made for Funded Clips", async () => {
+  it("every card says up front to use a new account made for Clips Funded", async () => {
     await render();
     for (const p of ["youtube", "tiktok", "instagram", "facebook", "x"]) {
       const first = card(p).querySelector(".st-conn__new");
@@ -145,7 +145,7 @@ describe("no route or screen offers sharing an account (§45.37 G8 (d))", () => 
       // Before the developer app and before any Connect button.
       expect(first!.compareDocumentPosition(card(p).querySelector(".st-app")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     }
-    expect(NEW_ACCOUNT_LINE).toBe("Use a new account made for Funded Clips, not Clip Factory's.");
+    expect(NEW_ACCOUNT_LINE).toBe("Use a new account made for Clips Funded, not Clip Factory's.");
   });
 
   it("the shared developer app reads Share Clip Factory's app, Clip Factory first, still a different account; never quicker", async () => {
@@ -156,8 +156,8 @@ describe("no route or screen offers sharing an account (§45.37 G8 (d))", () => 
       expect(share!.textContent).toContain(SHARED_APP_LINE);
       expect(share!.textContent).toContain(SHARED_APP_ACCOUNT_LINE);
     }
-    expect(SHARED_APP_LINE).toBe("Clip Factory's posts always go first. Funded Clips uses what's left.");
-    expect(SHARED_APP_ACCOUNT_LINE).toBe("Even with Clip Factory's app, sign in with a different account made for Funded Clips.");
+    expect(SHARED_APP_LINE).toBe("Clip Factory's posts always go first. Clips Funded uses what's left.");
+    expect(SHARED_APP_ACCOUNT_LINE).toBe("Even with Clip Factory's app, sign in with a different account made for Clips Funded.");
     // Meta never shares Clip Factory's app.
     for (const p of ["instagram", "facebook"]) expect(card(p).textContent).not.toContain("Share Clip Factory's app");
     expect(host.textContent).not.toMatch(/quicker/i);
@@ -202,7 +202,7 @@ describe("the same account as Clip Factory's, by any identity, is refused (§45.
       await render({ publishMs: 20 });
       await appReady(p);
       expect(await connect(p)).toBe("connected");
-      // A post asked for while it was still Funded Clips' own...
+      // A post asked for while it was still Clips Funded's own...
       const job = await postTo(p);
       expect(job.publishingStatus).toBe("queued");
       // ...and Clip Factory connects the very same account before the upload starts.
@@ -247,7 +247,7 @@ describe("the same account as Clip Factory's, by any identity, is refused (§45.
     }
   });
 
-  it("the callback's same_as_clips result says Funded Clips needs its own separate account", async () => {
+  it("the callback's same_as_clips result says Clips Funded needs its own separate account", async () => {
     start({ connectResult: "same_as_clips" });
     await act(async () =>
       root.render(
@@ -257,7 +257,7 @@ describe("the same account as Clip Factory's, by any identity, is refused (§45.
       ),
     );
     await settle(6);
-    expect(document.body.textContent).toContain("This is Clip Factory's own account. Funded Clips needs its own separate account: sign in with a different one.");
+    expect(document.body.textContent).toContain("This is Clip Factory's own account. Clips Funded needs its own separate account: sign in with a different one.");
     expect(document.body.textContent).not.toMatch(/use it for both/i);
   });
 });
@@ -278,10 +278,10 @@ describe("Clip Factory's shared app: its posts always go first (§45.37 G6 (c))"
     expect(jobOf(job.publishingJobId).url).toBeTruthy();
   });
 
-  it("only on Clip Factory's app: with Funded Clips' own app nothing waits", async () => {
+  it("only on Clip Factory's app: with Clips Funded's own app nothing waits", async () => {
     start({ publishMs: 15, clipsFirst: true });
     await api.setSocialApp("stories", "youtube", { choice: "own", clientId: "123456789012-abcdefghijklmnopqrstuvwxyz012345.apps." + "googleusercontent.com", clientSecret: "GOCSPX-" + "abcdefghijklmnopqrstuvwxyz12" });
-    store.social = store.social.map((a) => (a.platform === "youtube" ? { ...a, connectionStatus: "connected", externalAccountId: STORIES.youtube.id, accountName: "Funded Clips", handle: "@fundedclips" } : a));
+    store.social = store.social.map((a) => (a.platform === "youtube" ? { ...a, connectionStatus: "connected", externalAccountId: STORIES.youtube.id, accountName: "Clips Funded", handle: "@fundedclips" } : a));
     const job = await postTo("youtube");
     await until(() => jobOf(job.publishingJobId).publishingStatus === "posted", 3000);
     expect(jobOf(job.publishingJobId).waitingUntil ?? null).toBeNull();
@@ -306,7 +306,7 @@ describe("Clip Factory's shared app: its posts always go first (§45.37 G6 (c))"
       socialAccountId: "stories.youtube",
       platform: "youtube",
       publishingStatus: "queued",
-      accountName: "Funded Clips",
+      accountName: "Clips Funded",
       handle: "@fundedclips",
       waitingUntil: new Date(Date.now() + 3 * 3_600_000).toISOString(),
       waiting: "Waiting: Clip Factory's posts go first. Posts at 23 Nov 08:00 UTC.",

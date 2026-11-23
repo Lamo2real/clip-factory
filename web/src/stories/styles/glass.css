@@ -24,8 +24,9 @@
      .st-edge                the thin light edge alone, for a surface that has its own fill
      .st-lens                a hero whose rim may bend (stories/look.ts decides; .is-liquid turns it on)
      .st-lens--tinted        a liquid hero keeps its colour (--st-tone-rgb) over the rim's tint
-   Type helpers: .st-display (Playfair at display optical sizes, a little condensed), .st-caps (Jost, wide-tracked
-   caps captions), .st-num (lining tabular figures). */
+   Type helpers: .st-display (Fugaz One for large words: headings, titles, big numerals), .st-caps (Fraunces,
+   wide-tracked caps captions), .st-num (asks for lining tabular figures, which only a fallback face has: Fugaz One
+   and Fraunces have no tnum or lnum, so a number that ticks gets a box of its own, below). */
 
 /* ---------- The background ---------- */
 
@@ -210,13 +211,13 @@
 /* ---------- Type helpers ---------- */
 
 .st-display {
-  font-family: var(--st-font);
-  /* High contrast like the owner's Womack sample: Playfair's optical size for display (its hairlines and sharp
-     wedge serifs), a little condensed. Reading sizes keep opsz auto (sturdy shapes for a 6-8-year-old). */
-  font-variation-settings: "opsz" var(--st-opsz-display);
-  font-stretch: var(--st-wdth-display);
-  font-weight: var(--st-weight-display);
-  letter-spacing: -0.01em;
+  font-family: var(--st-font-display);
+  /* Fugaz One (the owner: "Fugaz One font style in combination with Fraunces on the smaller text"): one weight, no
+     width or optical-size axis, so no stretch, its own spacing, and no variation settings for a small Fraunces word
+     inside it to inherit. */
+  font-variation-settings: normal;
+  font-weight: 400;
+  letter-spacing: 0;
   line-height: var(--st-lh-head);
   text-wrap: balance;
 }
@@ -224,10 +225,16 @@
   font-family: var(--st-font-caps);
   font-size: var(--st-fs-caps);
   font-weight: 500;
+  font-optical-sizing: auto;
+  font-variation-settings: "SOFT" 0, "WONK" 0;
   letter-spacing: var(--st-track-caps);
   line-height: 1.3;
   text-transform: uppercase;
 }
+/* Lining tabular figures where the face has them. Neither Fugaz One nor Fraunces does (no tnum, no lnum: their
+   figures are proportional), so this reaches only a fallback face. A number that changes while it is on screen gets
+   a box as wide as its widest value instead, end-aligned (0 is the widest digit in both faces, so a width in ch
+   holds): .st-media__time, .st-ref-controls__now, .st-s-ai-secs, .st-stg-length__value strong. */
 .st-num {
   font-variant-numeric: lining-nums tabular-nums;
 }

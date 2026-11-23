@@ -22,7 +22,7 @@ variable "app_url" {
 variable "stories_oauth_callback" {
   type        = string
   default     = ""
-  description = "Funded Clips' own OAuth callback base, {apiUrl}/v1/stories-oauth (STORIES_OAUTH_CALLBACK, docs/CONTRACTS.md §45.13.3): a w1. state is answered 302 to {STORIES_OAUTH_CALLBACK}/{platform}/callback. Empty: not set (w1. states are not forwarded)."
+  description = "Clips Funded's own OAuth callback base, {apiUrl}/v1/stories-oauth (STORIES_OAUTH_CALLBACK, docs/CONTRACTS.md §45.13.3): a w1. state is answered 302 to {STORIES_OAUTH_CALLBACK}/{platform}/callback. Empty: not set (w1. states are not forwarded)."
   validation {
     condition     = var.stories_oauth_callback == "" || can(regex("^https://[^/]+/v1/stories-oauth$", var.stories_oauth_callback))
     error_message = "stories_oauth_callback must be empty or https://<host>/v1/stories-oauth (no trailing slash)."

@@ -272,7 +272,7 @@ resource "aws_cloudwatch_log_metric_filter" "stories_agent_errors" {
 resource "aws_cloudwatch_metric_alarm" "stories_agent_errors" {
   count               = var.stories_agent_alarm_enabled ? 1 : 0
   alarm_name          = "${var.name}-stories-agent-errors"
-  alarm_description   = "Funded Clips' agent (cf_prod_story_agent) logged 5 or more errors in an hour. Query its error lines (level = error) in ${var.stories_agent_log_group_name}; Clip Factory is not affected."
+  alarm_description   = "Clips Funded's agent (cf_prod_story_agent) logged 5 or more errors in an hour. Query its error lines (level = error) in ${var.stories_agent_log_group_name}; Clip Factory is not affected."
   namespace           = var.name
   metric_name         = "StoriesAgentErrors"
   statistic           = "Sum"

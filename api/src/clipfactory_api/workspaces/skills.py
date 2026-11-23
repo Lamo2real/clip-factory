@@ -65,7 +65,7 @@ BUILTIN_CREATED_AT: Final = "2026-11-21T00:00:00.000Z"
 _ULID: Final = r"[0-7][0-9A-HJKMNP-TV-Z]{25}"
 
 NOT_FOUND: Final = "We could not find that skill."
-BUILTIN_LOCKED: Final = "Built-in skills are part of Funded Clips. You can switch one off, but not change or delete it."
+BUILTIN_LOCKED: Final = "Built-in skills are part of Clips Funded. You can switch one off, but not change or delete it."
 STALE: Final = "This skill was changed somewhere else. Load it again, then save."
 NO_FILE: Final = "We could not find the uploaded file. Upload it again."
 WRONG_FILE: Final = "Pick a SKILL.md file or a .zip."

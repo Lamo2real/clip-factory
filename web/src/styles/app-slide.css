@@ -7,7 +7,7 @@
    Animation, never a transition: nothing here is laid out again while they move). Each shows its page where it is
    scrolled to: the pane is the window now, so its page moves up by that much (--app-pane-y, the window's scroll for
    the one going out, the kept place for the one coming in), while everything fixed in it (Clip Factory's sidebar and
-   tab bar, Funded Clips' rail and stage) keeps its place in the pane. Neither pane takes a tap while it moves. The
+   tab bar, Clips Funded's rail and stage) keeps its place in the pane. Neither pane takes a tap while it moves. The
    shell's dock (the switch and the Live chip) is outside both panes and does not move. */
 [data-app-pane][data-app-slide] {
   display: block !important;
@@ -25,7 +25,7 @@
 }
 
 /* Clip Factory's own backdrop is drawn outside its pane (app/ClipsBackdrop.tsx): it slides with it (each app moves
-   with its own background, as one window), and is drawn for the slide even while Funded Clips is on screen (its drift
+   with its own background, as one window), and is drawn for the slide even while Clips Funded is on screen (its drift
    waits until Clip Factory is back). */
 .backdrop.backdrop--away[data-app-slide],
 .backdrop.backdrop[data-app-slide] {

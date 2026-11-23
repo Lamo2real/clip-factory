@@ -56,7 +56,7 @@ def ws_pk(user_id: str, workspace_id: str) -> str:
     if not user_id or "#" in user_id:
         raise ValueError("not a user id")
     if not WORKSPACE_ID.match(workspace_id):
-        raise ValueError("not a Funded Clips workspace id")
+        raise ValueError("not a Clips Funded workspace id")
     return f"USER#{user_id}#WS#{workspace_id}"
 
 

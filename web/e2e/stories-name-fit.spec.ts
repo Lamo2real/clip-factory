@@ -1,12 +1,12 @@
 import { expect, test, type Page } from "@playwright/test";
 
-// The app's final visible name, "Funded Clips" (the owner, 23 Nov), fits the redesign: its wordmark (the C mark and
-// "Funded Clips" on one line), the rail, the phone top bar, the shell's fixed switch ("Clip Factory | Funded Clips") and
-// the Live chip keep their words in their boxes on Dashboard, Setup, Production and Settings at 1440 x 900, 375 x 812
-// and 320 x 640: nothing scrolls sideways, every text box stays inside its parent, the wordmark stays one line, nothing
-// covers it, and the switch keeps exactly the box it had. The words are also swapped in here (page.evaluate), so the
-// test holds on the redesign alone; with the rename merged they are already Funded Clips. Stories is on with
-// cf.storiesPreview = 1.
+// The app's visible name, "Clips Funded" (the owner, 23 Nov: the name of its YouTube channel), fits the redesign: its
+// wordmark (the C mark and "Clips Funded" on one line), the rail, the phone top bar, the shell's fixed switch ("Clip
+// Factory | Clips Funded") and the Live chip keep their words in their boxes on Dashboard, Setup, Production and
+// Settings at 1440 x 900, 375 x 812 and 320 x 640: nothing scrolls sideways, every text box stays inside its parent,
+// the wordmark stays one line, nothing covers it, and the switch keeps exactly the box it had. The words are also
+// swapped in here (page.evaluate), so the test holds on the redesign alone; with the rename merged they are already
+// Clips Funded. Stories is on with cf.storiesPreview = 1.
 
 const PAGES = ["/stories", "/stories/setup", "/stories/production", "/stories/settings"];
 const SIZES = [
@@ -14,7 +14,7 @@ const SIZES = [
   [375, 812],
   [320, 640],
 ] as const;
-const NAME = "Funded Clips";
+const NAME = "Clips Funded";
 
 async function open(page: Page, path: string, [width, height]: readonly [number, number]) {
   await page.setViewportSize({ width, height });
@@ -49,7 +49,7 @@ async function swapName(page: Page) {
     const [first, second] = name.split(" ");
     for (const el of Array.from(document.querySelectorAll(words))) el.innerHTML = `${first} <em>${second}</em>`;
     for (const opt of Array.from(document.querySelectorAll(".ws-switch__opt"))) if (!/^Clip Factory$/.test(opt.textContent?.trim() ?? "")) opt.textContent = name;
-    for (const el of Array.from(document.querySelectorAll(".st-brand[aria-label], .ws-round--phone[aria-label]"))) el.setAttribute("aria-label", el.getAttribute("aria-label")!.replace(/Lamo Stories|Clip Factory Stories|Clip Stories/, name));
+    for (const el of Array.from(document.querySelectorAll(".st-brand[aria-label], .ws-round--phone[aria-label]"))) el.setAttribute("aria-label", el.getAttribute("aria-label")!.replace(/Lamo Stories|Clip Factory Stories|Clip Stories|Funded Clips/, name));
   }, [NAME, WORDS] as const);
   await page.waitForTimeout(400);
 }

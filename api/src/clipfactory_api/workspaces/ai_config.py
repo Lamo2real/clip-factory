@@ -83,7 +83,7 @@ STATUS_LINE: Final = {
 }
 OWNER_PRICE_NOTE: Final = "Your own price."
 TASK_TTL_DAYS: Final = 30
-NOT_ON: Final = "Funded Clips' AI helper isn't switched on yet."
+NOT_ON: Final = "Clips Funded's AI helper isn't switched on yet."
 TASK_DID_NOT_START: Final = "The helper did not start. Tap Try again."
 
 

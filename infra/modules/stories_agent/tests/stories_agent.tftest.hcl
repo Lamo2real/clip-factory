@@ -101,7 +101,7 @@ run "its_own_repository_image_and_runtime" {
 
   assert {
     condition     = one(one(aws_bedrockagentcore_agent_runtime.agent.agent_runtime_artifact).container_configuration).container_uri == "123456789012.dkr.ecr.eu-north-1.amazonaws.com/cf-test-stories-agent:stories-agent-0123456789abcdef"
-    error_message = "The runtime runs its own repository's image at the Funded Clips tag."
+    error_message = "The runtime runs its own repository's image at the Clips Funded tag."
   }
 
   assert {
@@ -428,7 +428,7 @@ run "models_come_from_the_stories_file" {
 
   assert {
     condition     = length(output.model_invoke_arns) > 0 && !strcontains(file("main.tf"), "../config/models.json") && !strcontains(file("main.tf"), "}/config/models.json")
-    error_message = "Clip Factory's config/models.json is never read by Funded Clips' agent (§45.11.4)."
+    error_message = "Clip Factory's config/models.json is never read by Clips Funded's agent (§45.11.4)."
   }
 }
 

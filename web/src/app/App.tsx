@@ -90,7 +90,7 @@ const TITLES: Record<Route["name"], string> = {
   campaigns_find: "Find campaigns",
   campaign: "Campaign",
   motion_gallery: "Motion gallery",
-  stories: "Funded Clips",
+  stories: "Clips Funded",
   not_found: "Not found",
 };
 
@@ -246,7 +246,7 @@ function BothApps() {
           </KeptSearchProvider>
         }
         stories={
-          <ToastScope active={inStories} onScreen={storiesOnScreen} onError={storiesDeniedSound}>
+          <ToastScope active={inStories} onScreen={storiesOnScreen} onError={storiesDeniedSound} className="st-toast">
             <StoriesPaneBoundary onClips={() => navigate(chooseClips())}>
               <StoriesHost page={lastStories.current} />
             </StoriesPaneBoundary>
@@ -291,7 +291,7 @@ function StoriesHost({ page }: { page: StoriesPage }) {
   return (
     <Suspense
       fallback={
-        <div className="boot" role="status" aria-label="Loading Funded Clips">
+        <div className="boot" role="status" aria-label="Loading Clips Funded">
           <WorkspaceMark boot />
         </div>
       }

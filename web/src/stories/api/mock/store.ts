@@ -106,7 +106,7 @@ export const NOT_BUILT = Symbol.for("cf.stories.notBuilt");
 export function notBuilt<K extends keyof StoriesApi>(keys: readonly K[]): Pick<StoriesApi, K> {
   const out: Record<string, () => Promise<never>> = {};
   for (const k of keys) {
-    const fn = () => Promise.reject(new Error("Funded Clips is not built yet."));
+    const fn = () => Promise.reject(new Error("Clips Funded is not built yet."));
     (fn as unknown as Record<symbol, boolean>)[NOT_BUILT] = true;
     out[k as string] = fn;
   }
@@ -247,7 +247,7 @@ export function seedShellDemo(store: MockStore): void {
     characterId: mockId(),
     workspaceId: ws,
     name,
-    description: `${name} is one of the Funded Clips regulars.`,
+    description: `${name} is one of the Clips Funded regulars.`,
     personality,
     traits: ["curious", "kind"],
     movementStyle: style,
@@ -284,7 +284,7 @@ export function seedShellDemo(store: MockStore): void {
       actualDurationSec: made ? 44.6 : null,
       captionsOn: true,
       musicMood: "playful",
-      postCaptions: { youtubeTitle: title, youtubeDescription: `${title}. Made with Funded Clips.`, instagram: title, facebook: title, tiktok: title, x: title },
+      postCaptions: { youtubeTitle: title, youtubeDescription: `${title}. Made with Clips Funded.`, instagram: title, facebook: title, tiktok: title, x: title },
       scenes: [
         { sceneId: "s1", title: "The road ahead", durationSec: 7 },
         { sceneId: "s2", title: "Uh oh", durationSec: 8 },

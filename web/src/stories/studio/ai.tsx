@@ -329,7 +329,7 @@ export function UnusableSheet({ info, ask, onUse, onKeep, onClose }: { info: AiI
       }
     >
       <p>{ask.bad.statusLine || `${ask.bad.label} said no on its last call.`}</p>
-      <p className="st-s-field__hint">Funded Clips never swaps in another model by itself. You choose.</p>
+      <p className="st-s-field__hint">Clips Funded never swaps in another model by itself. You choose.</p>
     </StSheet>
   );
 }
@@ -389,7 +389,7 @@ export function ModelMenu({
   onChange,
   title = "Model and effort for this one",
   note = "Just for this one. Your settings stay the same.",
-  usualWords = "From your Funded Clips settings",
+  usualWords = "From your Clips Funded settings",
   className = "",
   compact = false,
 }: {
@@ -496,12 +496,12 @@ export function ModelMenu({
                     label: `Usual: ${modelName(info, usual.model)}`,
                     line: skipped ? `${unusableWords(skipped)}, so the usual is this one.` : usual.from === "project" && usual.modelKnown ? "Kept with this video" : usualWords,
                   }
-                : { value: USUAL, label: "Your usual model", line: "Your Funded Clips settings could not be read just now, so its name is not shown." },
+                : { value: USUAL, label: "Your usual model", line: "Your Clips Funded settings could not be read just now, so its name is not shown." },
               ...info.models.map((m) => ({ value: m.key, label: m.label, line: modelStatusWords(m, info.live) })),
             ]}
             className="st-s-ai-models"
           />
-          {status ? <Notice tone="bad">{status} You can still try it: Funded Clips never swaps in another model.</Notice> : null}
+          {status ? <Notice tone="bad">{status} You can still try it: Clips Funded never swaps in another model.</Notice> : null}
           {chosen && efforts.length === 0 ? (
             <p className="st-s-field__hint">This model has no effort setting; it runs at its own level.</p>
           ) : (
@@ -669,7 +669,11 @@ export function TaskLine({
     return (
       <Busy>
         <span>
-          {t?.status === "queued" ? `Getting ${line} ready…` : `${what} with ${line}…`} <span className="st-s-ai-secs">{run.seconds} s</span>
+          {t?.status === "queued" ? `Getting ${line} ready…` : `${what} with ${line}…`}{" "}
+          {/* One ch a digit and the " s": the "s" stays put as the seconds tick (Fraunces has no tabular figures). */}
+          <span className="st-s-ai-secs" style={{ minWidth: `calc(${String(run.seconds).length}ch + 0.75em)` }}>
+            {run.seconds} s
+          </span>
           <span className="st-s-sr">. This usually takes 10 to 60 seconds.</span>
         </span>
       </Busy>

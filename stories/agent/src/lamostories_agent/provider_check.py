@@ -43,7 +43,7 @@ from .util import JobSuperseded, log, now_iso
 
 PROVIDERS = ("luma-ray", "own-video")  # the makers Try it can check (a start without providerId tries the first)
 MAKERS: dict[str, type[AiVideo]] = {"luma-ray": LumaRay, "own-video": OwnVideo}
-UNKNOWN = "Funded Clips can only try Luma AI Ray2 and your own video model here."
+UNKNOWN = "Clips Funded can only try Luma AI Ray2 and your own video model here."
 TRIED = "It made a 5-second test shot. Luma AI Ray2 is ready."
 TRIED_OWN = "It made a {seconds}-second test shot. {label} is ready."
 FAILED = "Trying Luma AI Ray2 did not finish. Tap Try it again."
