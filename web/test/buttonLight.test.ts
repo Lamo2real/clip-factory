@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import {
   AA,
-  BRAND_PANEL_VEIL,
+  BRAND_GLASS,
   brandMeshSpots,
   coloursMeshSpots,
   coloursVeils,
@@ -23,11 +23,10 @@ import {
   mix,
   oklabL,
   panelTop,
-  PICTURE_PAGE_VEIL,
-  PICTURE_PANEL_VEIL,
+  PICTURE_GLASS,
   raised,
   type Rgb,
-  seeThroughVeils,
+  windowGlass,
   SWATCHES,
   TEXT_COLOURS,
   VEIL,
@@ -74,14 +73,14 @@ interface Place {
 /** Where the app can be: the living backdrop, every window glass over its checks, a photo, a spread of Colours. */
 const PLACES: Place[] = (() => {
   const out: Place[] = [];
-  for (const behind of brandMeshSpots()) out.push({ at: `the living backdrop over ${behind.map(Math.round).join(" ")}`, look: { kind: "frosted", panelVeil: BRAND_PANEL_VEIL }, behind });
+  for (const behind of brandMeshSpots()) out.push({ at: `the living backdrop over ${behind.map(Math.round).join(" ")}`, look: { kind: "frosted", ...BRAND_GLASS }, behind });
   for (const glass of ["liquid", "vibrancy", "mica", "acrylic", "blur"] as const)
     for (const scheme of ["light", "dark"] as const)
       for (const strength of ["clear", "frosted"] as const) {
-        const v = seeThroughVeils(glass, scheme, strength);
-        for (const check of glassChecks(glass, scheme)) out.push({ at: `${glass} ${scheme} ${strength} over ${check.name}`, look: { kind: "window", panelVeil: v.panel, pageVeil: v.page }, behind: check.behind });
+        const v = windowGlass(glass, scheme, strength);
+        for (const check of glassChecks(glass, scheme)) out.push({ at: `${glass} ${scheme} ${strength} over ${check.name}`, look: { kind: "window", ...v }, behind: check.behind });
       }
-  for (const behind of [WHITE, BLACK]) out.push({ at: "a photo", look: { kind: "picture", panelVeil: PICTURE_PANEL_VEIL, pageVeil: PICTURE_PAGE_VEIL }, behind });
+  for (const behind of [WHITE, BLACK]) out.push({ at: "a photo", look: { kind: "picture", ...PICTURE_GLASS }, behind });
   for (const s of SWATCHES)
     for (const cs of [[s.hex], [s.hex, "#efe7da"], [s.hex, "#e8392b", "#0f372b"]]) {
       const v = coloursVeils(cs);

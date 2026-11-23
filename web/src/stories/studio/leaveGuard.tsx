@@ -19,14 +19,15 @@ function sync() {
   off?.();
   off = null;
   if (!holders.length) return;
+  const holds = (to: string) => isStoriesPath(to.split(/[?#]/)[0] ?? "");
   off = setLeaveGuard((to, proceed) => {
-    // The switch to Clip Factory keeps this page (and its changes) as it is (§45.34): nothing to ask.
-    if (!isStoriesPath(to.split(/[?#]/)[0] ?? "")) return false;
+    // The switch to Clip Factory keeps this page (and its changes) as it is (§45.34): nothing to ask, and it slides.
+    if (!holds(to)) return false;
     const last = holders[holders.length - 1];
     if (!last) return false;
     last.ask(proceed);
     return true;
-  });
+  }, holds);
 }
 
 /** How many boxes hold the page now (tests). */

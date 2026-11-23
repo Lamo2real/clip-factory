@@ -171,6 +171,7 @@ html:has(.setup-todo[data-mode="pill"]) {
   /* Pages scroll under the pill: a floating layer's tint and light (FLOAT_VEIL, planned for a white thumbnail under
      it; FLOAT_EXTRA_VEIL, the least the AA cap over white needs, ADR-87). */
   --glass-tint: var(--glass-tint-float);
+  --glass-brightness: 1; /* planned for white as it is: its filter dims nothing (FLOAT_VEIL) */
   --glass-light: var(--glass-light-float);
   --glass-blur: 28px;
   color: var(--ink);
@@ -188,6 +189,7 @@ html:has(.setup-todo[data-mode="pill"]) {
    deeper shadow. While the list is open the panel covers the pill, so it has no look of its own for that. */
 .setup-todo__pill:hover {
   --glass-tint: var(--glass-tint-float);
+  --glass-brightness: 1; /* planned for white as it is: its filter dims nothing (FLOAT_VEIL) */
   --glass-light: var(--glass-light-float-hover);
   box-shadow: var(--light-rim-3), var(--light-shade-1), var(--light-shadow-1-hover), var(--light-shadow-3);
 }
@@ -222,6 +224,7 @@ html:has(.setup-todo[data-mode="pill"]) {
   max-height: calc(100dvh - var(--top-line) - var(--help-bottom, 24px) - 48px - 14px);
   /* Pages scroll under the open list too: a floating layer's tint and light. */
   --glass-tint: var(--glass-tint-float);
+  --glass-brightness: 1; /* planned for white as it is: its filter dims nothing (FLOAT_VEIL) */
   --glass-light: var(--glass-light-float);
   --glass-blur: 28px;
   box-shadow: var(--glass-shadow-float);
@@ -259,6 +262,7 @@ html:has(.setup-todo[data-mode="pill"]) {
   /* Stops above the tab bar, so it is never covered and never covers it. */
   max-height: calc(100dvh - var(--top-line) - var(--tabbar-h) - env(safe-area-inset-bottom) - 24px);
   --glass-tint: var(--glass-tint-float);
+  --glass-brightness: 1; /* planned for white as it is: its filter dims nothing (FLOAT_VEIL) */
   --glass-light: var(--glass-light-float);
   --glass-blur: 28px;
   box-shadow: var(--glass-shadow-float);

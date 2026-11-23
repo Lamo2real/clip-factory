@@ -155,21 +155,31 @@ function emit() {
  */
 export type LeaveGuard = (to: string, proceed: () => void) => boolean;
 let guard: LeaveGuard | null = null;
+/** Which page changes the guard holds, when it does not hold them all (asked without showing its question). */
+let guardHolds: ((to: string) => boolean) | null = null;
 
-/** Installs a leave guard until the returned function is called. */
-export function setLeaveGuard(g: LeaveGuard): () => void {
+/**
+ * Installs a leave guard until the returned function is called. `holds` says, without asking anything, which page
+ * changes it would hold (a guard that lets the switch to the other app through says so, so the switch still slides).
+ */
+export function setLeaveGuard(g: LeaveGuard, holds?: (to: string) => boolean): () => void {
   guard = g;
+  guardHolds = holds ?? null;
   return () => {
-    if (guard === g) guard = null;
+    if (guard === g) {
+      guard = null;
+      guardHolds = null;
+    }
   };
 }
 
 /**
- * A page with unsaved typing is holding every page change right now (it asks "Leave without saving?" first). The
- * shell's workspace switch then lets the page ask before its highlight moves.
+ * A page with unsaved typing is holding page changes right now (it asks "Leave without saving?" first): every one, or
+ * the change to `to` when it is given. The shell's workspace switch then lets the page ask before its highlight moves.
  */
-export function leaveGuarded(): boolean {
-  return guard !== null;
+export function leaveGuarded(to?: string): boolean {
+  if (guard === null) return false;
+  return to === undefined || guardHolds === null || guardHolds(to);
 }
 
 const samePage = (a: string, b: string) => a.split("#")[0] === b.split("#")[0];

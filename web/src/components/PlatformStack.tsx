@@ -5,7 +5,7 @@
 import type { ReactNode, Ref } from "react";
 import type { PlatformPerformance, SeriesPoint } from "../api/types.ts";
 import { PLATFORM_LABEL } from "../lib/format.ts";
-import { STATUS_LABEL, ago, calmCopy, metricGroups, reactionParts, until, type CalmContext, type MetricRow } from "../lib/metrics.ts";
+import { STATUS_LABEL, ago, calmCopy, metricGroups, reactionParts, until, zeroViewsNote, type CalmContext, type MetricRow } from "../lib/metrics.ts";
 import type { FacebookExtra } from "../api/types.ts";
 import { Icon } from "./Icon.tsx";
 import { PlatformMark } from "./PlatformMark.tsx";
@@ -83,6 +83,7 @@ export function PlatformStack({
   const groups = !privateTest && !calm && perf.metrics ? metricGroups(perf.platform, perf.metrics) : null;
   const reactions = (perf.metrics?.extra as FacebookExtra | undefined)?.reactions;
   const wait = until(perf.nextAllowedAt, now);
+  const zero = groups ? zeroViewsNote(perf, now) : null;
 
   return (
     <section
@@ -140,6 +141,7 @@ export function PlatformStack({
               </span>
               <span className="sr-only">{groups.top.spoken}</span>
             </p>
+            {zero ? <p className="pstack__hint">{zero}</p> : null}
             {groups.fast.length ? <Rows rows={groups.fast} /> : null}
             {groups.slow ? (
               <div className="pstack__slow">

@@ -1,5 +1,5 @@
 {
-  "version": "952c7a50b8b3",
+  "version": "3781b05ab154",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -4587,10 +4587,9 @@
       "keywords": [
         "jobs list",
         "keep",
-        "done",
+        "cancel",
         "select",
         "make",
-        "cancel",
         "show",
         "older",
         "no",

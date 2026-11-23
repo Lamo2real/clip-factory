@@ -1128,6 +1128,7 @@
   border-radius: var(--r-md);
   /* A float (ADR-87): planned for a white thumbnail under it, lit from above, the largest shadow below. */
   --glass-tint: var(--glass-tint-float);
+  --glass-brightness: 1; /* planned for white as it is: its filter dims nothing (FLOAT_VEIL) */
   --glass-light: var(--glass-light-float);
   --glass-blur: 28px;
   box-shadow: var(--glass-shadow-float);

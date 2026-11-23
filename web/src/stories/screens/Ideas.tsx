@@ -137,11 +137,14 @@ export function IdeasScreen({ ws }: StoriesScreenProps) {
   useEffect(() => {
     if (!unsaved) return;
     const off = active
-      ? setLeaveGuard((to, proceed) => {
-          if (!isStoriesPath(to.split(/[?#]/)[0] ?? "")) return false;
-          setQuestion({ kind: "leave", proceed });
-          return true;
-        })
+      ? setLeaveGuard(
+          (to, proceed) => {
+            if (!isStoriesPath(to.split(/[?#]/)[0] ?? "")) return false;
+            setQuestion({ kind: "leave", proceed });
+            return true;
+          },
+          (to) => isStoriesPath(to.split(/[?#]/)[0] ?? ""),
+        )
       : null;
     const unload = (e: BeforeUnloadEvent) => {
       e.preventDefault();

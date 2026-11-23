@@ -172,7 +172,7 @@ interface XExtra         { impressions?: number; reposts?: number; quotes?: numb
 | YouTube slow | `GET [hidden] postedAt date}&endDate={today}&metrics=views,engagedViews,estimatedMinutesWatched,averageViewDuration,averageViewPercentage,likes,comments,shares,subscribersGained&dimensions=video&filters=video=={≤50 ids}` | (not used for views) | | | `shares` | `engagedViews`, `watchMinutes` = estimatedMinutesWatched, `avgViewSeconds` = averageViewDuration, `avgViewPercent` = averageViewPercentage, `subscribersGained` |
 | TikTok | `POST [hidden]` body `{"filters":{"video_ids":[≤20]}}` | `view_count` | `like_count` | `comment_count` | `share_count` | – |
 | Instagram | `GET [hidden])&limit=50` (pages until all wanted ids found or `timestamp` older than 31 days) | insights `views` | `like_count` | `comments_count` | insights `shares` | `reach`, `saved`, `reposts`, `totalInteractions`, `avgWatchSeconds` = ig_reels_avg_watch_time/1000, `totalWatchSeconds` = ig_reels_video_view_total_time/1000, `skipRatePercent` = reels_skip_rate. Never `impressions`, `plays`, `ig_reels_aggregated_all_plays_count`. A metric error (code 100) drops that metric for the run and retries once without it |
-| Facebook | `GET [hidden] video ids}&fields=video_insights.metric(blue_reels_play_count,fb_reels_total_plays,fb_reels_replay_count,post_video_avg_time_watched,post_video_view_time,post_video_followers,post_video_likes_by_reaction_type,post_video_social_actions)` (period lifetime); guarded reach: `GET /{graphApiVersion}/?ids={post ids}&fields=insights.metric(post_total_media_view_unique)` (error → `reachUnique` absent) | `fb_reels_total_plays` | sum of `post_video_likes_by_reaction_type` | null | null | `initialPlays` = blue_reels_play_count, `replays`, `reactions`, `commentsAndShares` = post_video_social_actions, `avgWatchSeconds`, `totalWatchSeconds`, `followsGained` = post_video_followers, `reachUnique`. Never `post_impressions_unique`, `total_video_impressions*`, `total_video_views_unique` |
+| Facebook | One Reel per request: `GET https://graph.facebook.com/{graphApiVersion}/{video id}?fields=video_insights.metric(blue_reels_play_count,fb_reels_total_plays,fb_reels_replay_count,post_video_avg_time_watched,post_video_view_time,post_video_followers,post_video_likes_by_reaction_type,post_video_social_actions)` (period lifetime); guarded reach: `GET /{graphApiVersion}/{post id}?fields=insights.metric(post_total_media_view_unique)` (error → `reachUnique` absent). Never the multi-id `?ids=` lookup: Graph v26.0+ refuses it (error 100, "The ids query parameter is deprecated"). A Graph error marks only its own Reel (code 100 subcode 33: "could not find this Reel") and logs `stats.read_failed` {platform, status, code, error: Meta's message with ids cut out}; a throttle code or 190 stops the rest of the chunk | `fb_reels_total_plays` | sum of `post_video_likes_by_reaction_type` | null | null | `initialPlays` = blue_reels_play_count, `replays`, `reactions`, `commentsAndShares` = post_video_social_actions, `avgWatchSeconds`, `totalWatchSeconds`, `followsGained` = post_video_followers, `reachUnique`. Never `post_impressions_unique`, `total_video_impressions*`, `total_video_views_unique` |
 | X | `GET [hidden]` (user context); posts ≥ 30 days old: same without `non_public_metrics`/`organic_metrics` (both fields) | attached video media `public_metrics.view_count` (never `impression_count`) | `like_count` | `reply_count` | `retweet_count` | `impressions` = public impression_count, `reposts` = retweet_count, `quotes`, `bookmarks`, `linkClicks` = url_link_clicks, `profileClicks` = user_profile_clicks, `engagements`, `playback0..100` = media non_public playback_{n}_count |
 
 **STAT# snapshot** (`pk USER#{userId}`, `sk STAT#{postId}#{iso}`): `type "stat"`, `postId`, `clipId`, `platform`,
@@ -247,7 +247,7 @@ min([for p in values(local.platforms.platforms) : p.minIntervalMinutes]...)` (= 
     "facebook": {
       "label": "Facebook", "viewsField": "fb_reels_total_plays",
       "minIntervalMinutes": 30, "tierIntervalsMinutes": [30, 60, 360], "manualCooldownMinutes": 30,
-      "slowNote": "Can take 2 days", "idsPerRequest": 50,
+      "slowNote": "Can take 2 days", "idsPerRequest": 10,
       "scopes": ["pages_show_list", "pages_read_engagement", "read_insights", "pages_manage_posts", "pages_manage_engagement"],
       "budget": { "kind": "meta_buc", "stopAtPercent": 75, "throttleCodes": [80001], "minBlockMinutes": 60 }
     },
@@ -292,7 +292,8 @@ class StatsAdapter(Protocol):
 # StatsBatch(results: dict[postId, PostMetrics-dict], errors: dict[postId, str], meta: ResponseMeta(status, headers,
 #            error_code, retry_after), requests: int, units: int)
 # HttpClient = Callable[[HttpRequest], HttpResponse] (urllib in production, a recorder in tests); one request per
-# idsPerRequest chunk; NotConnectedError when account is None.
+# idsPerRequest chunk (Facebook: one per Reel, §16.3, so its 10 is how many Reels are read between two budget
+# checks); NotConnectedError when account is None.
 ```
 `metrics(post, account)` of §14 stays and is implemented as `fetch_stats([post])` mapped to `Metrics`. Phase 1:
 `platforms.adapter_for(platform)` returns the real adapter class, but `posts.connected_account` is always `None`, so
@@ -426,14 +427,17 @@ for slow groups, "Insights from 2 days ago" (`insightsUpdatedAt`); "Open on {Pla
   `/settings/posting/where`.
 * Posting: "Posting now…" with a small spinner.
 * Posted privately (TikTok): "Posted privately. TikTok shows numbers after the app is approved."
-* Posted, no metrics yet: the post's `perfCheckAt` in the Library's words (`numbersComing`): "Numbers come tomorrow."
-  (Library: "· numbers tomorrow"), else "Numbers are on the way. Check back in a few minutes." (also when that time
-  has passed).
+* Posted, no metrics yet: when the last read failed, its `statsError` sentence (`error` of the stack, e.g. "Facebook
+  did not answer. We will try again soon."); else the post's `perfCheckAt` in the Library's words (`numbersComing`):
+  "Numbers come tomorrow." (Library: "· numbers tomorrow"), else "Numbers are on the way. Check back in a few
+  minutes." (also when that time has passed).
 * Not sent yet (posting never started, or the start is stuck past `START_GRACE_MS`): "Not sent yet. Tap Try again.";
   the Library's line and its **Try again** (`UploadAgain`) lead the page's actions as its one red button; "This clip
   was not sent to {Platform}." when the place is on in Where clips go (no wrong "Turn on" link).
 * Failed: "{why}. Tap Try again." with that platform's own **Try again** inside its stack (not TikTok while it has
   its Mac row, and not TikTok's public-account refusal).
+* YouTube, `views` 0 at least 6 h after `postedAt`: under the top number "That's YouTube's own count: it hasn't shown
+  this Short to viewers yet." (the 0 is what YouTube reports, not a failed read).
 
 **Live**: `post` upserts for this clip's posts replace that stack's data (metrics, refreshing, nextRefreshAt) and add
 a series point; `clip` upserts update the star; reconnect or `partial` → refetch `GET …/performance`. Polling fallback

@@ -207,8 +207,8 @@ not, so the page said "This computer can't show see-through" on macOS 27 with Li
     choices) is kept by clip id, so Undo or a failed decline brings the card back exactly as it was.
   * After an Upload the server took (held as confirmed with no posts, or a network or 5xx answer), the card is
     `sent`: Throw away is hidden, Try again is the only button, and the chips, Use my settings and the place rows are
-    locked (`<fieldset disabled>`, "It's already sent, so you can't change it now."). A 4xx answer keeps the card open
-    and the button says "Try again". Every autosave patches the lists on screen and remembered (`patchLoaded`), and
+    locked (`<fieldset disabled>`, "It's already sent, so you can't change it now."). A 4xx answer (the server never took
+    that Upload) opens the card again, even on a Try again after a lost connection, and the button says "Try again". Every autosave patches the lists on screen and remembered (`patchLoaded`), and
     Upload sends only the captions changed on the card.
   * Before Upload, a card whose TikTok goes through the Mac says what the Mac is doing (`macUploadLine`: not set up,
     needs you, paused, or not checked in since a time) with that row's one button. After Upload, a clip where every

@@ -67,6 +67,24 @@ test.describe("glide", () => {
       expect(await bar.locator(".segmented__opt.is-on").evaluate((el) => getComputedStyle(el).backgroundImage)).toBe("none");
     });
 
+    test("the bar's class written again (React, as its className changes) keeps the glide the only highlight", async ({ page }) => {
+      await page.goto("/");
+      await settle(page);
+      const bar = page.locator(".segmented").first();
+      await expect(bar).toHaveClass(/has-glide/);
+      // What React does when a bar's className changes there and back in one go (the workspace switch stacking and
+      // unstacking as a web font comes in, on CI's runners): has-glide goes with it, and the bar keeps its size, so
+      // nothing measures it again. The chosen option painted its own pill under the glide: two lenses, 3.7:1 for the
+      // switch's white words over a white desktop.
+      await bar.evaluate((el) => {
+        const own = (el.getAttribute("class") ?? "").replace(/\s*\bhas-glide\b/, "");
+        el.setAttribute("class", `${own} is-rewritten`);
+        el.setAttribute("class", own);
+      });
+      await expect(bar).toHaveClass(/has-glide/);
+      expect(await bar.locator(".segmented__opt.is-on").evaluate((el) => getComputedStyle(el).backgroundImage)).toBe("none");
+    });
+
     test("between options of different widths the pill keeps its round ends (never squashed)", async ({ page }) => {
       await page.goto("/library");
       await settle(page);

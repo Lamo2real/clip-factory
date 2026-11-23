@@ -11,6 +11,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ArcDial, CreamCard, Glass, GlassPill, GlassToggle, MediaRow, PhoneTabHighlight, RoundGlassButton, StatNumeral, Stepper, dialFraction, knobAt } from "../src/stories/glass/index.ts";
 import {
   AA,
+  COLOUR_FLOORS,
+  ELEVATION,
   EMBER,
   FROSTED,
   INKS,
@@ -24,6 +26,7 @@ import {
   mix,
   readNativeGlass,
   setStoriesLook,
+  showThrough,
   storiesLook,
   useStoriesBackground,
   veilsFor,
@@ -215,9 +218,9 @@ describe("the background is Stories' own", () => {
       expect(el.dataset.look).toBe("window");
       expect(el.dataset.strength).toBe("frosted");
       expect(el.style.getPropertyValue("--st-veil-page")).toBe("0.3");
-      // the panels in the light's order over the frost (look.ts WINDOW_FROSTED: a card 0.84, under its 0.3 frost)
-      expect(el.style.getPropertyValue("--st-veil-card")).toBe("0.84");
-      expect(el.style.getPropertyValue("--st-veil-rail")).toBe("0.96");
+      // the panels in the light's order over the frost (look.ts WINDOW_FROSTED: a card 0.82, under its 0.3 frost)
+      expect(el.style.getPropertyValue("--st-veil-card")).toBe("0.82");
+      expect(el.style.getPropertyValue("--st-veil-rail")).toBe("0.9");
       expect(document.documentElement.classList.contains("see-through")).toBe(true);
       render(shell("clips"));
       expect(document.documentElement.classList.contains("see-through")).toBe(false);
@@ -240,7 +243,7 @@ describe("the background is Stories' own", () => {
     try {
       // Clip Factory's own See-through (its applyLook says so to the shell), then Lamo Stories on screen in its own
       // See-through and on its Colours, then Clip Factory again: its see-through is there, as its Look says.
-      applyLook({ kind: "window", glass: "vibrancy", strength: "clear", pageVeil: 0, panelVeil: 0.5 });
+      applyLook({ kind: "window", glass: "vibrancy", strength: "clear", pageVeil: 0, panelVeil: 0.5, plateVeil: 0.5, brightness: 1 });
       expect(html.classList.contains("see-through")).toBe(true);
       setStoriesLook({ mode: "see-through", strength: "clear" });
       render(shell("stories"));
@@ -334,11 +337,17 @@ describe("every word stays readable", () => {
   it("every look's veils keep every word at 4.5:1 (Ember, the other presets, the owner's own colours)", () => {
     for (const colours of [[...EMBER], ["#21121a", "#c8546a", "#ffae86"], ["#ffffff"], ["#fff000", "#00ffff", "#ff00ff"]]) {
       const v = veilsFor({ mode: "colours", strength: "clear", colours, picture: null }, "none");
-      expect(v.card, colours.join()).toBeGreaterThanOrEqual(0.58);
+      expect(v.card, colours.join()).toBeGreaterThanOrEqual(COLOUR_FLOORS.card);
       expect(v.card, colours.join()).toBeLessThanOrEqual(1);
     }
     const ember = veilsFor({ mode: "colours", strength: "clear", colours: [...EMBER], picture: null }, "none");
     expect(ember.page).toBe(0);
+    // 23 Nov, the owner: "more see through in a liquid glassy style": over the colours the veils are as thin as the words
+    // allow, so more of the stage shows through the rail and a card (look.ts showThrough: the veil and the light's
+    // share) than on main (0.355 and 0.375), with no filter of their own
+    expect(showThrough(ember.rail, ELEVATION[1]!)).toBeGreaterThanOrEqual(0.55);
+    expect(showThrough(ember.card, ELEVATION[2]!)).toBeGreaterThanOrEqual(0.49);
+    expect(showThrough(ember.rail, ELEVATION[1]!)).toBeGreaterThan(showThrough(0.62, ELEVATION[1]!) + 0.15);
   });
 });
 

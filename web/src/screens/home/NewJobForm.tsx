@@ -189,11 +189,14 @@ function JobForm() {
       return;
     }
     const off = active
-      ? setLeaveGuard((to, proceed) => {
-          if (storiesAddress(to)) return false;
-          setLeaveTo(() => proceed);
-          return true;
-        })
+      ? setLeaveGuard(
+          (to, proceed) => {
+            if (storiesAddress(to)) return false;
+            setLeaveTo(() => proceed);
+            return true;
+          },
+          (to) => !storiesAddress(to),
+        )
       : null;
     const unload = (e: BeforeUnloadEvent) => {
       e.preventDefault();

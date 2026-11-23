@@ -336,8 +336,10 @@ export function calmCopy(
           : { text: `${who} Add its TikTok link in Library to count views.`, link: { href: "/library", label: "Go to Library" } };
       }
       if (p.metrics) return null;
-      // The same time the Library row says ("Uploaded · numbers tomorrow"); a time already past says "a few minutes".
-      return { text: numbersComing(ctx.perfCheckAt, ctx.now) ?? "Numbers are on the way. Check back in a few minutes." };
+      // A read that failed says why (its stored statsError, §16.5), so a platform that never answers is not hidden
+      // behind "on the way". Else the same time the Library row says ("Uploaded · numbers tomorrow"); a time already
+      // past says "a few minutes".
+      return { text: p.error || numbersComing(ctx.perfCheckAt, ctx.now) || "Numbers are on the way. Check back in a few minutes." };
   }
 }
 
@@ -346,6 +348,16 @@ export function numbersComing(perfCheckAt: string | undefined, now = Date.now())
   if (!perfCheckAt || !(Date.parse(perfCheckAt) > now)) return null;
   const when = relative(perfCheckAt, now);
   return when && when !== "just now" ? `Numbers come ${when}.` : null;
+}
+
+/** The hint under a YouTube Short whose own count still says 0 hours after posting (§16.8): the 0 is YouTube's. */
+export const YOUTUBE_ZERO_NOTE = "That's YouTube's own count: it hasn't shown this Short to viewers yet.";
+const YOUTUBE_ZERO_AFTER_MS = 6 * 60 * 60 * 1000;
+
+export function zeroViewsNote(p: Pick<PlatformPerformance, "platform" | "status" | "metrics" | "postedAt">, now: number): string | null {
+  if (p.platform !== "youtube" || p.status !== "posted" || p.metrics?.views !== 0) return null;
+  const posted = p.postedAt ? Date.parse(p.postedAt) : Number.NaN;
+  return Number.isFinite(posted) && now - posted >= YOUTUBE_ZERO_AFTER_MS ? YOUTUBE_ZERO_NOTE : null;
 }
 
 /** The Post → stack status rule of §16.2 (first match wins). */
