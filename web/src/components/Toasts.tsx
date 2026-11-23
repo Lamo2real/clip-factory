@@ -11,6 +11,8 @@ interface ToastItem {
   group?: string;
   /** An undo toast's own picture (the bin by default). */
   icon?: IconName;
+  /** The class of the app that raised it (its ToastScope's `className`): Funded Clips' st-toast gives it its type. */
+  className?: string;
 }
 
 export interface ToastOptions {
@@ -62,11 +64,15 @@ interface Held {
   onError?: () => void;
   /** Told the toast's id once it shows (its scope then takes it along if the app goes behind again). */
   shown?: (id: number, at: number) => void;
+  /** Its app's class on the toast (ToastScope's `className`). */
+  className?: string;
 }
 
 /** The provider's own handle for the apps' scopes: a toast's id, whether it is still up, and the toasts put aside. */
 interface ToastHost {
-  push(tone: SayTone, text: string, options?: ToastOptions): number;
+  push(tone: SayTone, text: string, options?: ToastOptions, className?: string): number;
+  /** An undo toast with its app's class on it. */
+  undo(text: string, options: UndoOptions, className?: string): void;
   alive(id: number): boolean;
   dismiss(id: number): void;
   hold(h: Held): void;
@@ -175,7 +181,7 @@ export function ToastProvider({ children, onError }: { children: ReactNode; onEr
   }, [commit]);
 
   const push = useCallback(
-    (tone: ToastTone, text: string, ms?: number, group?: string, icon?: IconName, quiet = false): number => {
+    (tone: ToastTone, text: string, ms?: number, group?: string, icon?: IconName, quiet = false, className?: string): number => {
       const id = next.current++;
       const life = ms ?? (tone === "error" ? 7000 : 4200);
       setItems((all) => {
@@ -183,7 +189,7 @@ export function ToastProvider({ children, onError }: { children: ReactNode; onEr
         const keep = all.filter((t) => t.tone === "undo" || (t.text !== text && (!group || t.group !== group)));
         const old = keep.filter((t) => t.tone !== "undo").slice(-2);
         const undos = keep.filter((t) => t.tone === "undo");
-        const item: ToastItem = { id, tone, text, ms: life, ...(group ? { group } : {}), ...(icon ? { icon } : {}) };
+        const item: ToastItem = { id, tone, text, ms: life, ...(group ? { group } : {}), ...(icon ? { icon } : {}), ...(className ? { className } : {}) };
         return [...undos, ...old, item].sort((a, b) => a.id - b.id);
       });
       if (tone === "error" && !quiet) onErrorRef.current?.();
@@ -193,21 +199,26 @@ export function ToastProvider({ children, onError }: { children: ReactNode; onEr
     [dismiss],
   );
 
+  const startUndo = useCallback(
+    (text: string, options: UndoOptions, className?: string) => {
+      const ms = options.ms ?? UNDO_MS;
+      const id = push("undo", text, ms, undefined, options.icon, false, className);
+      pending.current.set(id, { ...options, timer: setTimeout(() => commit(id), ms) });
+      const signal = options.signal;
+      if (signal?.aborted) drop(id);
+      else signal?.addEventListener("abort", () => drop(id), { once: true });
+    },
+    [push, commit, drop],
+  );
+
   const api = useMemo<Toaster>(
     () => ({
       success: (t, o) => void push("success", t, o?.ms, o?.group, undefined, o?.quiet),
       error: (t, o) => void push("error", t, o?.ms, o?.group, undefined, o?.quiet),
       info: (t, o) => void push("info", t, o?.ms, o?.group, undefined, o?.quiet),
-      undo: (t, options) => {
-        const ms = options.ms ?? UNDO_MS;
-        const id = push("undo", t, ms, undefined, options.icon);
-        pending.current.set(id, { ...options, timer: setTimeout(() => commit(id), ms) });
-        const signal = options.signal;
-        if (signal?.aborted) drop(id);
-        else signal?.addEventListener("abort", () => drop(id), { once: true });
-      },
+      undo: (t, options) => startUndo(t, options),
     }),
-    [push, commit, drop],
+    [push, startUndo],
   );
 
   // The toasts on screen now, for a scope asking whether one of its own is still up (an effect, after the render).
@@ -218,7 +229,8 @@ export function ToastProvider({ children, onError }: { children: ReactNode; onEr
   const held = useRef<Held[]>([]);
   const host = useMemo<ToastHost>(
     () => ({
-      push: (tone, text, o) => push(tone, text, o?.ms, o?.group, undefined, o?.quiet),
+      push: (tone, text, o, className) => push(tone, text, o?.ms, o?.group, undefined, o?.quiet, className),
+      undo: startUndo,
       alive: (id) => up.current.some((t) => t.id === id),
       dismiss,
       hold: (h) => void held.current.push(h),
@@ -228,7 +240,7 @@ export function ToastProvider({ children, onError }: { children: ReactNode; onEr
         for (const h of held.current.splice(0)) {
           if (!h.onScreen()) wait.push(h);
           else if (now - h.at < lifeOf(h.tone, h.options)) {
-            const id = push(h.tone, h.text, h.options?.ms, h.options?.group, undefined, h.options?.quiet || !!h.onError);
+            const id = push(h.tone, h.text, h.options?.ms, h.options?.group, undefined, h.options?.quiet || !!h.onError, h.className);
             h.shown?.(id, now);
             if (h.tone === "error" && !h.options?.quiet) h.onError?.();
           }
@@ -236,7 +248,7 @@ export function ToastProvider({ children, onError }: { children: ReactNode; onEr
         held.current.push(...wait);
       },
     }),
-    [push, dismiss],
+    [push, dismiss, startUndo],
   );
 
   // Phones: a toast never covers the screen's pinned main button ("You're in!" over Make clips for this campaign):
@@ -281,7 +293,7 @@ export function ToastProvider({ children, onError }: { children: ReactNode; onEr
 
   const render = (filter: (t: ToastItem) => boolean) =>
     items.filter(filter).map((t) => (
-      <div key={t.id} className={`toast toast--${t.tone} glass`}>
+      <div key={t.id} className={`toast toast--${t.tone} glass${t.className ? ` ${t.className}` : ""}`}>
         <Icon name={icon(t)} />
         <p className="toast__text">{t.text}</p>
         {t.tone === "undo" ? (
@@ -328,13 +340,26 @@ function useHost(): ToastHost {
  * of the shell's. A toast of its own still up when the app goes behind the other one leaves the screen with it, and
  * comes back for the rest of its time if the app is back by then. Undo toasts go through at once and stay: they come
  * from the owner's own tap and hold a decision. Toasts the shell itself raises (outside both apps) stay with the
- * ToastProvider, global.
+ * ToastProvider, global. `className` goes on every toast the app raises, undo ones too: the shell draws them all in
+ * its own box, outside the app, so this is how an app's own type reaches its toasts (Funded Clips' st-toast: its
+ * smaller-text font, docs/CONTRACTS.md §45.39), while every other toast keeps the shell's.
  */
-export function ToastScope({ active, onScreen, onError, children }: { active: boolean; onScreen: () => boolean; onError: () => void; children: ReactNode }) {
-  const parent = useToast();
+export function ToastScope({
+  active,
+  onScreen,
+  onError,
+  className,
+  children,
+}: {
+  active: boolean;
+  onScreen: () => boolean;
+  onError: () => void;
+  className?: string;
+  children: ReactNode;
+}) {
   const host = useHost();
-  const live = useRef({ onScreen, onError });
-  live.current = { onScreen, onError };
+  const live = useRef({ onScreen, onError, className });
+  live.current = { onScreen, onError, className };
   /** Its own toasts it put up, by id: when, and what (to put one aside if the app goes behind while it is up). */
   const mine = useRef(new Map<number, { at: number; tone: SayTone; text: string; options: ToastOptions | undefined }>());
   const api = useMemo<Toaster>(() => {
@@ -348,15 +373,16 @@ export function ToastScope({ active, onScreen, onError, children }: { active: bo
     const say =
       (tone: SayTone) =>
       (text: string, options?: ToastOptions): void => {
+        const className = live.current.className;
         if (!shown()) {
-          host.hold({ tone, text, options, at: Date.now(), onScreen: shown, onError: sound, shown: keep(tone, text, options) });
+          host.hold({ tone, text, options, at: Date.now(), onScreen: shown, onError: sound, shown: keep(tone, text, options), className });
           return;
         }
-        keep(tone, text, options)(host.push(tone, text, { ...options, quiet: true }), Date.now());
+        keep(tone, text, options)(host.push(tone, text, { ...options, quiet: true }, className), Date.now());
         if (tone === "error" && !options?.quiet) sound();
       };
-    return { success: say("success"), error: say("error"), info: say("info"), undo: (text, options) => parent.undo(text, options) };
-  }, [parent, host]);
+    return { success: say("success"), error: say("error"), info: say("info"), undo: (text, options) => host.undo(text, options, live.current.className) };
+  }, [host]);
   useEffect(() => {
     // Back on screen: what waited shows now, unless it would already have gone.
     if (active) {
@@ -378,6 +404,7 @@ export function ToastScope({ active, onScreen, onError, children }: { active: bo
         at: now,
         onScreen: () => live.current.onScreen(),
         shown: (back, at) => mine.current.set(back, { at, tone: t.tone, text: t.text, options }),
+        className: live.current.className,
       });
     }
     mine.current.clear();

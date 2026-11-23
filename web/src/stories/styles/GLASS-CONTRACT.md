@@ -299,13 +299,24 @@ only:** Clip Factory keeps Inter and Times, untouched.
 - `--st-font-caps`: the same family as `--st-font` (Fraunces). The short caps captions keep their `text-transform`
   and their `--st-track-caps` tracking.
 - **Never changed:** `--st-font-mark` (the logo's "C" stays Clip Factory's Times), the "Funded Clips" wordmark (as it
-  is today), the shell's workspace switch and the shell's own toasts (`.toasts`, outside `.stories-app`, where no
-  Funded Clips font name may be used: the shell's `--font-ui`). Funded Clips' own toasts, inside it, are Fraunces.
+  is today), the shell's workspace switch, and Clip Factory's toasts and the shell's own (the shell's `--font-ui`).
+- **Toasts:** the shell draws every toast in its one `.toasts` box, outside `.stories-app`. The toasts Funded Clips'
+  screens raise (its `ToastScope` in `App.tsx`, undo toasts too) carry the class `st-toast`, and only those are
+  Fraunces: `glass-tokens.css` gives `.toasts .st-toast` the same `--st-font` stack as `.stories-app`
+  (test/storiesStyles.test.ts keeps the two the same) and `st-end.css` sets them in it, at the shell's sizes and
+  weights. A toast drawn inside `.stories-app` (Chat's "Deleted. Undo") is Fraunces like the rest of its text.
+- **Numbers that tick:** neither face has tabular figures (no `tnum` or `lnum`), so `font-variant-numeric:
+  tabular-nums` reaches only a fallback face. A number that changes while it is on screen gets a box as wide as its
+  widest value, end-aligned, with a min-width in `ch` (0 is the widest digit in both faces): the progress percent
+  (`.st-media__time`, 4ch), the reference player's time (`.st-ref-controls__now`, the length's clock), the AI's
+  seconds (`.st-s-ai-secs`, one ch a digit and the " s") and Settings › Video's length (`.st-stg-length__value
+  strong`, 2ch). What sits beside them never moves as they tick.
 - **Loading:** both families are self-hosted from `web/public/fonts/stories/` on the app's own origin (no font CDN; the
   Mac and Windows app loads the deployed web app, so it gets them from there too) and precached by the service
   worker, each with its OFL licence text beside its files. The faces load only through `stories/fonts.ts`
   (`addStoriesFonts`, `fonts.css?inline`), never in the chunk Clip Factory prefetches, and the names are used only
-  under `.stories-app`, so ci.yml's "Funded Clips is not in the main bundle" check still holds.
+  under `.stories-app` and on its own toasts (`.st-toast`), both in Funded Clips' own style sheet, so ci.yml's "Funded
+  Clips is not in the main bundle" check still holds.
 - **Sources and licences:**
 
   | family | for | designer | source | licence |
@@ -371,7 +382,8 @@ glass.css:
 - `.st-lens--tinted` (set `--st-tone-rgb` on it): a liquid hero that keeps its colour, cut to `--st-tint-cut` from the
   top left, over the rim's tint (the cards that need the owner); without the rim it is the card's own tint.
 - `.st-display` (Fugaz One display, `--st-font-display`), `.st-caps` (Fraunces caps caption, `--st-font-caps`),
-  `.st-num` (lining tabular figures).
+  `.st-num` (asks for lining tabular figures, which only a fallback face has: a number that ticks gets its own box,
+  §10 "Numbers that tick").
 - `.st-look`, `.st-look__picture`, `.st-look__art` (`--window`, `--picture`, `--colours`), `.st-look__pane`,
   `.st-look__swatches`, `.st-look__swatch`, `.st-look__thumb`, `.st-look__actions`, `.st-look__modes`: Settings › Look
   (foundation only).

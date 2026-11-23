@@ -2243,14 +2243,22 @@ full rules are in `web/src/stories/styles/GLASS-CONTRACT.md` §10 and `glass-tok
   (`--st-font-caps`) are Fraunces too, with their `text-transform` and tracking kept. No size goes under today's
   floors (13 px, `--st-fs-min`): the users are 6-8 years old.
 * **Never changed:** the logo's "C" (`--st-font-mark`, Clip Factory's Times), the "Funded Clips" wordmark (§45.38,
-  "The mark", as it is today), the shell's workspace switch and the shell's own toasts (`.toasts`, outside
-  `.stories-app`, where no Funded Clips font name may be used: the shell's `--font-ui`). Funded Clips' own toasts,
-  inside it, are Fraunces.
+  "The mark", as it is today), the shell's workspace switch, and Clip Factory's toasts and the shell's own (the
+  shell's `--font-ui`).
+* **Toasts:** the shell draws every toast in its one `.toasts` box, outside `.stories-app`. Every toast a Funded Clips
+  screen raises ("Saved.", errors, news, undo toasts: its `ToastScope` in `App.tsx`) carries the class `st-toast` and
+  is set in Fraunces at the shell's sizes and weights; Clip Factory's toasts and the shell's own carry no such class
+  and stay Inter.
+* **Numbers that tick:** neither face has tabular figures, so a number that changes while it is on screen (the
+  progress percent of a video being made, the reference player's time, the AI's seconds, Settings › Video's length)
+  gets a box as wide as its widest value, end-aligned (a min-width in `ch`: 0 is the widest digit in both faces), and
+  what sits beside it never moves.
 * **Loading:** self-hosted from `web/public/fonts/stories/` on the app's own origin (no font CDN; the Mac and Windows
   app loads the deployed web app, so it gets them from there too) and precached by the service worker, each family's
   OFL licence text beside its files. The faces load only through `web/src/stories/fonts.ts` (`addStoriesFonts`,
-  `fonts.css?inline`), never in the chunk Clip Factory prefetches, and the names are used only under `.stories-app`,
-  so ci.yml's "Funded Clips is not in the main bundle" check still holds and no Clip Factory word moves.
+  `fonts.css?inline`), never in the chunk Clip Factory prefetches, and the names are used only under `.stories-app`
+  and on its own toasts (`.st-toast`), both in Funded Clips' own style sheet, so ci.yml's "Funded Clips is not in the
+  main bundle" check still holds and no Clip Factory word moves.
 * **Sources and licences:**
 
   | family | designer | source | licence |

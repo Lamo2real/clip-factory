@@ -1528,7 +1528,10 @@
   color: var(--st-text-soft);
   font-size: var(--st-fs-body);
 }
+/* The big number follows the slider (15 to 90): two digits wide always (Fugaz One has no tabular figures; 0 is its
+   widest digit), so "seconds" and the chip after it stay put while the owner drags. */
 .st-stg-length__value strong {
+  min-width: 2ch;
   color: var(--st-text-strong);
   font-family: var(--st-font-display);
   font-size: var(--st-fs-num);
@@ -1536,6 +1539,7 @@
   font-variant-numeric: lining-nums tabular-nums;
   letter-spacing: 0;
   line-height: 1;
+  text-align: end;
 }
 .st-stg-length__value .st-stg-chip {
   align-self: center;

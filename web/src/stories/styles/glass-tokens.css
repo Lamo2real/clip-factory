@@ -419,6 +419,14 @@
   --mark-cut: var(--st-base);
 }
 
+/* Funded Clips' toasts (docs/CONTRACTS.md §45.38): the shell draws every toast in its own .toasts box, outside
+   .stories-app, so the toasts Funded Clips' screens raise carry st-toast (App.tsx gives its ToastScope that class)
+   and get the smaller-text token here, the same stack as --st-font above (test/storiesStyles.test.ts keeps the two
+   the same). st-end.css sets them in it. Clip Factory's toasts, and the shell's own, carry no st-toast: Inter. */
+.toasts .st-toast {
+  --st-font: "Fraunces", "Iowan Old Style", Georgia, serif;
+}
+
 /* ---------- The looks (stories/look.ts puts data-look, data-strength, data-glass and the --st-veil-* numbers on
    .stories-app from Stories' own Look setting) ----------
    window   See-through in the Mac or Windows app: the page is transparent and the window's glass shows the desktop

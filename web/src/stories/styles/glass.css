@@ -25,7 +25,8 @@
      .st-lens                a hero whose rim may bend (stories/look.ts decides; .is-liquid turns it on)
      .st-lens--tinted        a liquid hero keeps its colour (--st-tone-rgb) over the rim's tint
    Type helpers: .st-display (Fugaz One for large words: headings, titles, big numerals), .st-caps (Fraunces,
-   wide-tracked caps captions), .st-num (lining tabular figures). */
+   wide-tracked caps captions), .st-num (asks for lining tabular figures, which only a fallback face has: Fugaz One
+   and Fraunces have no tnum or lnum, so a number that ticks gets a box of its own, below). */
 
 /* ---------- The background ---------- */
 
@@ -230,6 +231,10 @@
   line-height: 1.3;
   text-transform: uppercase;
 }
+/* Lining tabular figures where the face has them. Neither Fugaz One nor Fraunces does (no tnum, no lnum: their
+   figures are proportional), so this reaches only a fallback face. A number that changes while it is on screen gets
+   a box as wide as its widest value instead, end-aligned (0 is the widest digit in both faces, so a width in ch
+   holds): .st-media__time, .st-ref-controls__now, .st-s-ai-secs, .st-stg-length__value strong. */
 .st-num {
   font-variant-numeric: lining-nums tabular-nums;
 }

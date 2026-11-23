@@ -409,10 +409,14 @@ a.st-pill.is-on:hover {
   background: var(--st-accent);
   transition: width var(--st-dur-progress) var(--st-ease-progress);
 }
+/* The percent ticks while a video is being made. Neither Fugaz One nor Fraunces has tabular figures, so the box is as
+   wide as "100%" (0 is the widest digit; 4ch holds 100% with room) and the track beside it never changes length. */
 .st-media__time {
+  min-width: 4ch;
   color: var(--st-text-soft);
   font-size: var(--st-fs-chip);
   font-variant-numeric: lining-nums tabular-nums;
+  text-align: end;
 }
 .st-media__controls {
   grid-area: controls;

@@ -196,6 +196,42 @@ describe("the owner's rules hold in Lamo Stories' styles", () => {
     expect(readFileSync(join(import.meta.dirname, "..", "index.html"), "utf8")).not.toMatch(/Fugaz|Fraunces|fonts\/stories/);
   });
 
+  it("set Funded Clips' toasts in Fraunces: the shell draws them outside .stories-app, so .toasts .st-toast gets --st-font's very stack", () => {
+    const toast = files.flatMap(([, text]) => rules(text).filter((r) => r.selector === ".toasts .st-toast").flatMap((r) => decls(r.body)));
+    const d = new Map(toast);
+    expect(d.get("--st-font")).toBe(tokens().get("--st-font"));
+    expect(d.get("font-family")).toBe("var(--st-font)");
+    expect(d.get("font-optical-sizing")).toBe("auto");
+    // Only its own toasts carry the class: App.tsx gives it to Funded Clips' ToastScope, never to Clip Factory's.
+    const app = readFileSync(join(import.meta.dirname, "..", "src", "app", "App.tsx"), "utf8");
+    expect(app.match(/className="st-toast"/g)).toHaveLength(1);
+    expect(app).toMatch(/<ToastScope active=\{inStories\}[^>]*className="st-toast">/);
+    expect(app).toMatch(/<ToastScope active=\{!inStories\} onScreen=\{clipsOnScreen\} onError=\{clipsDenied\}>/);
+  });
+
+  it("give every number that ticks a box as wide as its widest value, end-aligned (neither face has tabular figures)", () => {
+    const body = (f: string, selector: string) => new Map(rules(files.find(([n]) => n === f)![1]).filter((r) => r.selector === selector).flatMap((r) => decls(r.body)));
+    for (const [f, selector, width] of [
+      ["glass-figures.css", ".st-media__time", "4ch"],
+      ["settings.css", ".st-stg-length__value strong", "2ch"],
+    ] as const) {
+      expect(body(f, selector).get("min-width"), selector).toBe(width);
+      expect(body(f, selector).get("text-align"), selector).toBe("end");
+    }
+    // The player's time and the AI's seconds: inline boxes, their min-width from the code (the length's clock; one ch
+    // a digit and the " s").
+    for (const [f, selector] of [
+      ["chat.css", ".st-ref-controls__now"],
+      ["sd-sheet.css", ".st-s-ai-secs"],
+    ] as const) {
+      expect(body(f, selector).get("display"), selector).toBe("inline-block");
+      expect(body(f, selector).get("text-align"), selector).toBe("end");
+    }
+    const src = (p: string) => readFileSync(join(import.meta.dirname, "..", "src", "stories", p), "utf8");
+    expect(src("chat/references/Player.tsx")).toMatch(/<span className="st-ref-controls__now" style=\{\{ minWidth: `\$\{clock\(length\)\.length\}ch` \}\}>\s*\{clock\(at\)\}\s*<\/span>/);
+    expect(src("studio/ai.tsx")).toMatch(/<span className="st-s-ai-secs" style=\{\{ minWidth: `calc\(\$\{String\(run\.seconds\)\.length\}ch \+ 0\.75em\)` \}\}>\s*\{run\.seconds\} s\s*<\/span>/);
+  });
+
   it("name every keyframes st-… (they share one page with Lamo Clips' own)", () => {
     for (const [f, text] of files) for (const m of text.matchAll(/@keyframes\s+([a-z0-9-]+)/g)) expect(m[1], f).toMatch(/^st-/);
   });

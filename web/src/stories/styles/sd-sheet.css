@@ -337,9 +337,13 @@ button.st-s-place.is-on:hover {
   border-bottom-left-radius: var(--st-r-tiny);
 }
 
+/* The seconds that tick while the AI works: ai.tsx gives the box a min-width of one ch a digit plus the " s", so
+   the "s" stays put from one second to the next (Fraunces has no tabular figures; 0 is its widest digit). */
 .st-s-ai-secs {
+  display: inline-block;
   white-space: nowrap;
   font-variant-numeric: lining-nums tabular-nums;
+  text-align: end;
   color: var(--st-text-amber);
 }
 

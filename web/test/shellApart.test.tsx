@@ -267,6 +267,46 @@ describe("A2: each app's toasts are its own (ToastScope)", () => {
     act(() => toaster!.undo("Thrown away.", { onUndo: vi.fn(), onCommit: vi.fn() }));
     expect(texts()).toContain("Thrown away.");
   });
+
+  it("puts the scope's class on every toast its app raises (one that waited, one that came back, an undo), never on the shell's", async () => {
+    vi.useFakeTimers();
+    let on = false;
+    let shell: Toaster | null = null;
+    function Shell() {
+      shell = useToast();
+      return null;
+    }
+    const paint = () =>
+      act(() =>
+        root.render(
+          <ToastProvider>
+            <Shell />
+            <ToastScope active={on} onScreen={() => on} onError={vi.fn()} className="st-toast">
+              <Grab />
+            </ToastScope>
+          </ToastProvider>,
+        ),
+      );
+    const classOf = (text: string) => Array.from(host.querySelectorAll(".toast")).find((t) => t.querySelector(".toast__text")?.textContent === text)?.className.split(" ");
+    await paint();
+    act(() => toaster!.success("Saved."));
+    on = true;
+    await paint();
+    act(() => toaster!.error("That did not save."));
+    act(() => toaster!.undo("Deleted.", { onUndo: vi.fn(), onCommit: vi.fn() }));
+    act(() => shell!.info("You seem to be offline."));
+    // (errors are read out in their own live region, after the rest)
+    expect(texts()).toEqual(["Saved.", "Deleted.", "You seem to be offline.", "That did not save."]);
+    for (const t of ["Saved.", "That did not save.", "Deleted."]) expect(classOf(t), t).toEqual(expect.arrayContaining(["toast", "glass", "st-toast"]));
+    expect(classOf("You seem to be offline.")).not.toContain("st-toast");
+    // Behind the other app and back: what comes back is still its app's.
+    on = false;
+    await paint();
+    on = true;
+    await paint();
+    expect(classOf("Saved."), "back").toContain("st-toast");
+    expect(classOf("That did not save."), "back").toContain("st-toast");
+  });
 });
 
 describe("the shell's one workspace switch: where it sits (dockLayout, §45.38)", () => {

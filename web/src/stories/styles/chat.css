@@ -1590,6 +1590,12 @@
   font-variant-numeric: lining-nums tabular-nums;
   white-space: nowrap;
 }
+/* The time that ticks while it plays: a box as wide as the whole length's clock (Player.tsx sets its min-width in ch;
+   0 is the widest digit in Fraunces, and neither face has tabular figures), so " / 0:45" never moves sideways. */
+.st-ref-controls__now {
+  display: inline-block;
+  text-align: end;
+}
 
 /* The scrubber: the browser's own range (arrow keys, Home and End), drawn as a thin track with the orange fill to
    where the video is and the white knob there. A 44 px target (48 on phones) round a 6 px track. */
