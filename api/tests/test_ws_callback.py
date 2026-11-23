@@ -67,6 +67,15 @@ from fakes import (
 from test_oauth_callback import IG_TWO, META_LONG, META_TOKEN, SUCCESS, YOUTUBE_TOKEN
 from test_oauth_state_formats import GOOD
 
+
+def _tamper(state: str) -> str:
+    """The same signed state with one signature character flipped in the middle (never a no-op, unlike changing its
+    last two characters, which may already be "AA" or be base64 padding bits)."""
+    head, signature = state.rsplit(".", 1)
+    middle = len(signature) // 2
+    return f"{head}.{signature[:middle]}{'B' if signature[middle] == 'A' else 'A'}{signature[middle + 1 :]}"
+
+
 ROOT = "/v1/workspaces/stories/social"
 
 
@@ -398,8 +407,13 @@ def test_expired_replayed_forged_and_mismatched_states(
     call: Call, land: Callable[[str, dict[str, str]], str], http: FakeHttp, clock: Clock
 ) -> None:
     signed = sup.ws_start(call, "x")
-    # a broken signature: no ws in the landing (it was not checked)
-    assert land("x", {"code": "C", "state": signed[:-2] + "AA"}) == sup.landing("x", "expired", ws_id=None)
+    # a broken signature: no ws in the landing (it was not checked). Flip a character in the middle of the signature:
+    # changing its last two could leave it valid (they may already be "AA", or be base64 padding bits).
+    head, signature = signed.rsplit(".", 1)
+    middle = len(signature) // 2
+    tampered = signature[:middle] + ("B" if signature[middle] == "A" else "A") + signature[middle + 1 :]
+    assert tampered != signature
+    assert land("x", {"code": "C", "state": f"{head}.{tampered}"}) == sup.landing("x", "expired", ws_id=None)
     assert land("x", {"code": "C", "state": "w1.garbage"}) == sup.landing("x", "expired", ws_id=None)
     assert land("youtube", {"code": "C", "state": signed}) == sup.landing("youtube", "expired", ws_id=None)
     # expired: the signature checks out, so ws is there
@@ -838,7 +852,7 @@ def scenarios() -> dict[str, Scenario]:
         signed = world.start("youtube")
         out = [
             world.back("youtube", {"code": "C"}),
-            world.back("youtube", {"code": "C", "state": signed[:-2] + "AA"}),
+            world.back("youtube", {"code": "C", "state": _tamper(signed)}),
             world.back("x", {"code": "C", "state": signed}),
         ]
         world.clock.now = world.clock.now.replace(minute=11)
