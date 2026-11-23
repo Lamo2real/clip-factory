@@ -12,7 +12,8 @@ import { resetCr } from "../lib/contentRewards.ts";
 import { resetGetPaid } from "../lib/getPaid.ts";
 import { resetFinder } from "../lib/finder.ts";
 import { sounds } from "../lib/sounds.ts";
-import { Backdrop, GlassFilter } from "../components/Backdrop.tsx";
+import { GlassFilter } from "../components/Backdrop.tsx";
+import { ClipsBackdrop } from "./ClipsBackdrop.tsx";
 import { Sidebar, TabBar } from "../components/Nav.tsx";
 import { ToastProvider, ToastScope } from "../components/Toasts.tsx";
 import { UpdateBar } from "../components/UpdateBar.tsx";
@@ -162,7 +163,8 @@ export function App() {
 
   return (
     <ToastProvider onError={() => (storiesOnScreen() ? storiesDeniedSound() : sounds.play("deny"))}>
-      <Backdrop />
+      {/* Clip Factory's own backdrop: only while Clip Factory is on screen (always, while Lamo Stories is off). */}
+      <ClipsBackdrop />
       <GlassFilter />
       {/* The desktop window's title bar band (macOS, §11.1): invisible, and only there when look.ts set
           data-titlebar="overlay". Pressing it moves the window, and a double click zooms it, like a title bar. */}
@@ -203,7 +205,9 @@ export function App() {
  * own (its fallback as it always was) and Lamo Stories' card, so one app breaking never takes the other with it, and
  * its own toasts (a toast its app raises while hidden waits for it to be back). The shell itself draws what both share,
  * once, outside both panes: the workspace switch with the Live chip (WorkspaceDock), the app badge and the Mac download
- * host.
+ * host. The panes tell the shell which app is on screen (app/shell.ts): Clip Factory's own backdrop is drawn only while
+ * Clip Factory is (ClipsBackdrop), and html.see-through is the wish of the app on screen, never one app's over the
+ * other's.
  */
 function BothApps() {
   const route = useRoute();

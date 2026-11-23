@@ -105,12 +105,13 @@ Later files win at equal specificity, so a screen can place and size a figure, b
 
 Inline custom properties it sets: `--st-veil-page`, `--st-veil-card`, `--st-veil-tinted`, `--st-veil-hero`,
 `--st-veil-rail`, `--st-veil-bar`, `--st-veil-float`, `--st-veil-plate`, `--st-stage-c1`, `--st-stage-c2-rgb`,
-`--st-stage-c3-rgb`, `--st-picture`. In `window` while Stories is on screen it adds `html.see-through` (only when
-Clip Factory had not, and takes away only what it added). See-through and its Glass strength are Stories' own,
-never Clip Factory's Look or Glass strength: while Stories holds the window it marks `<html data-st-window>`, hides
-Clip Factory's own `.backdrop` (its colours, picture or Frosted frost; inline, on that element only) and puts the
-class back if Clip Factory's look takes it away meanwhile; Clip Factory on screen gets both back exactly as it left
-them (look.ts `holdWindowGlass`, `keepWindowGlass`; test/storiesSeeThroughOwn.test.tsx,
+`--st-stage-c3-rgb`, `--st-picture`. In `window` it states Stories' wish for a transparent page to the shell
+(`setPageGlass("stories", …)`, app/shell.ts); only the shell writes `html.see-through`, from the wish of the app on
+screen (Clip Factory's own applyLook states Clip Factory's), so neither app reads, keeps or takes away the other's.
+See-through and its Glass strength are Stories' own, never Clip Factory's Look or Glass strength: the shell draws Clip
+Factory's own backdrop (its colours, picture or Frosted frost) only while Clip Factory is on screen
+(app/ClipsBackdrop.tsx), so nothing of Clip Factory's lies under Stories, and Stories never touches Clip Factory's DOM;
+Clip Factory on screen is exactly as its own settings say (test/storiesSeeThroughOwn.test.tsx,
 e2e/stories-see-through-own.spec.ts). Screens style by these attributes only through the
 glass classes; if a screen needs a look-specific rule, select `.stories-app[data-look="picture"] .your-class`.
 

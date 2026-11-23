@@ -21,7 +21,7 @@
 import { Component, Fragment, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type ErrorInfo, type ReactNode } from "react";
 import { Button, Empty } from "../components/ui.tsx";
 import { navigate } from "../lib/router.ts";
-import { PaneContext, useAppActive, type AppName } from "../app/shell.ts";
+import { PaneContext, setAppOnScreen, useAppActive, type AppName } from "../app/shell.ts";
 import { storiesEnabled } from "./flag.ts";
 import { isStoriesPath } from "./routes.ts";
 
@@ -179,6 +179,11 @@ export function AppPanes({ on, clips, stories, fresh = null }: { on: AppName; cl
   const clipsBox = useRef<HTMLDivElement>(null);
   const storiesBox = useRef<HTMLDivElement>(null);
   const was = useRef(on);
+
+  // The app on screen is the shell's to say (app/shell.ts): Clip Factory's own backdrop is drawn only while it is
+  // (app/ClipsBackdrop.tsx), and html.see-through is the wish of the app on screen, before the first frame of a switch.
+  useLayoutEffect(() => setAppOnScreen(on), [on]);
+  useLayoutEffect(() => () => setAppOnScreen("clips"), []);
 
   // Just switched: the app now hidden is kept, unless it was left with a dialog open (a page that starts fresh is
   // already let go above).

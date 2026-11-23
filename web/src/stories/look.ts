@@ -17,8 +17,10 @@
 // lib/background.ts does for its own. StoriesApp calls useStoriesBackground(root, active) once: it puts the result on
 // .stories-app (data-look, data-strength, data-glass, the --st-veil-* numbers and the stage colours), and
 // glass.css paints .stories-app::before from them. Stories depends on nothing of Clip Factory's here: the two small
-// readers below are Stories' own copies.
+// readers below are Stories' own copies, and See-through's transparent page is a wish Stories states to the shell
+// (app/shell.ts setPageGlass), which alone writes html.see-through, from the wish of the app on screen.
 import { useEffect, useLayoutEffect, useSyncExternalStore, type RefObject } from "react";
+import { setPageGlass } from "../app/shell.ts";
 import { LENS_BUDGET, watchLenses } from "./glass/lens.ts";
 import { onStoriesPrefs, setStoriesPref, storiesPrefs } from "./workspace.ts";
 
@@ -540,65 +542,6 @@ export function lookProps(value: StoriesLook, glass: string = nativeGlass(), tie
   return { attrs: { "data-look": kind, "data-strength": value.strength, "data-glass": tier }, style };
 }
 
-/**
- * See-through in the app: the page must be transparent while Stories is on screen (html.see-through, the class Clip
- * Factory's own see-through uses). Stories adds it only when it was not there and takes away only what it added, so
- * Clip Factory's own look is exactly as Clip Factory's settings left it when Stories goes off screen.
- * Stories' own Look decides, never Clip Factory's: while it holds the window glass, <html> carries data-st-window and
- * nothing of Clip Factory's own backdrop (components/Backdrop.tsx: its colours, its picture, its Frosted frost) is
- * drawn under Stories, so Stories' Clear is clear and its Frosted is only its own frost (--st-veil-page); the class
- * and the hiding come back if Clip Factory's look redraws meanwhile (keepWindowGlass). Clip Factory on screen: both
- * are exactly as Clip Factory left them.
- */
-const HELD = "stSeeThrough";
-const WINDOW = "stWindow";
-const HID = "stHidden";
-/** Clip Factory's own backdrop (`.backdrop`, never inside .stories-app), hidden or shown again by Stories. */
-function clipsBackdrops(root: HTMLElement): HTMLElement[] {
-  return [...root.querySelectorAll<HTMLElement>(".backdrop")].filter((el) => !el.closest(".stories-app"));
-}
-function hideClipsBackdrop(hide: boolean, root: HTMLElement): void {
-  for (const el of clipsBackdrops(root)) {
-    if (hide && el.dataset[HID] !== "1") {
-      el.dataset[HID] = "1";
-      el.style.setProperty("display", "none");
-    } else if (!hide && el.dataset[HID] === "1") {
-      delete el.dataset[HID];
-      el.style.removeProperty("display");
-    }
-  }
-}
-export function holdWindowGlass(on: boolean, root: HTMLElement = document.documentElement): void {
-  if (on) {
-    root.dataset[WINDOW] = "1";
-    hideClipsBackdrop(true, root);
-    if (!root.classList.contains("see-through")) {
-      root.classList.add("see-through");
-      root.dataset[HELD] = "1";
-    }
-    return;
-  }
-  if (root.dataset[WINDOW] === "1") hideClipsBackdrop(false, root);
-  delete root.dataset[WINDOW];
-  if (root.dataset[HELD] !== "1") return;
-  delete root.dataset[HELD];
-  root.classList.remove("see-through");
-}
-/** While Stories holds the window glass: html.see-through comes back whenever something else takes it away, and a
- *  backdrop Clip Factory draws anew is hidden too. */
-export function keepWindowGlass(root: HTMLElement = document.documentElement): () => void {
-  if (typeof MutationObserver !== "function") return () => undefined;
-  const again = () => {
-    if (root.dataset[WINDOW] === "1" && (!root.classList.contains("see-through") || clipsBackdrops(root).some((el) => el.dataset[HID] !== "1"))) holdWindowGlass(true, root);
-  };
-  const watch = new MutationObserver(again);
-  watch.observe(root, { attributes: true, attributeFilter: ["class"] });
-  // Clip Factory's Backdrop is redrawn in its place when its look changes kind: watch only its own parent.
-  const parent = clipsBackdrops(root)[0]?.parentElement;
-  if (parent) watch.observe(parent, { childList: true });
-  return () => watch.disconnect();
-}
-
 /** The theme colour of the window while Stories is on screen. */
 export const THEME_COLOUR = "#1C130E";
 
@@ -614,12 +557,6 @@ export function applyStoriesLook(el: HTMLElement, value: StoriesLook, glass: Nat
   return attrs["data-look"] as LookKind;
 }
 
-/**
- * The background hook: StoriesApp's one call. Follows Stories' own Look (here or from Settings › Look on another
- * screen) and puts it on `root`; while Stories is on screen (`active`) in See-through in the app, the page itself is
- * transparent so the window's glass shows the desktop.
- */
-
 /** True while the device asks for less transparency (it can change while Stories is open). */
 export function useReducedTransparency(): boolean {
   return useSyncExternalStore(
@@ -634,18 +571,24 @@ export function useReducedTransparency(): boolean {
   );
 }
 
+/**
+ * The background hook: StoriesApp's one call. Follows Stories' own Look (here or from Settings › Look on another
+ * screen) and puts it on `root`; in See-through in the app it asks the shell for a transparent page while Stories is on
+ * screen, so the window's glass shows the desktop. `active` (Stories is on screen) turns the liquid rim on.
+ */
 export function useStoriesBackground(root: RefObject<HTMLElement | null>, active: boolean): StoriesLook {
   const value = useStoriesLook();
   const lessTransparency = useReducedTransparency();
   useLayoutEffect(() => {
     const el = root.current;
     if (!el) return;
-    const kind = applyStoriesLook(el, value);
-    const hold = active && kind === "window";
-    holdWindowGlass(hold);
-    return hold ? keepWindowGlass() : undefined;
-  }, [root, value, active, lessTransparency]);
-  useLayoutEffect(() => () => holdWindowGlass(false), []);
+    // See-through in the app: Stories' wish is the page itself transparent (html.see-through) while it is on screen.
+    // The shell writes the class from the wish of the app it shows (app/shell.ts), so Stories never reads, keeps or
+    // takes away Clip Factory's, and nothing of Clip Factory's is drawn under Stories (the shell draws Clip Factory's
+    // backdrop only while Clip Factory is on screen, app/ClipsBackdrop.tsx).
+    setPageGlass("stories", applyStoriesLook(el, value) === "window");
+  }, [root, value, lessTransparency]);
+  useLayoutEffect(() => () => setPageGlass("stories", false), []);
   // The liquid rim (glass/lens.ts): only while Stories is on screen, only where the glass is "liquid" (Chromium on a
   // capable device; the layout effect above has just put data-glass on the root), and never over the window's own
   // glass (See-through in the app: the desktop is not part of the page, so there is nothing to bend, and the hero's
