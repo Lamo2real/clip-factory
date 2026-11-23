@@ -1,6 +1,6 @@
 // Posted on TikTok without its link (docs/CONTRACTS.md §42.2): the inline Add link in the TikTok row, which saves a
 // pasted link or, with an empty box, lets Clip Factory find the post. The manual "Post it yourself" sheet is gone
-// (ADR-85): no control of it shows on the Library, the clip page or Review.
+// (ADR-85): no control of it shows on the Library, the clip page, Review or Settings › Auto-posting.
 import { expect, test, type Page } from "@playwright/test";
 import { settle } from "./helpers.ts";
 
@@ -87,13 +87,13 @@ test("library: Add link with an empty box lets Clip Factory find the post", asyn
   await expect(row.getByRole("textbox")).toHaveCount(0);
 });
 
-test("no Post it yourself, I posted it, AirDrop or Open TikTok anywhere: Library, the clip page and Review", async ({ page }) => {
+test("no Post it yourself, I posted it, AirDrop or Open TikTok anywhere: Library, the clip page, Review and Auto-posting", async ({ page }) => {
   await page.goto("/library");
   await settle(page);
   const none = async () => {
     await expect(page.getByRole("button", { name: MANUAL })).toHaveCount(0);
     await expect(page.getByRole("link", { name: MANUAL })).toHaveCount(0);
-    await expect(page.getByText(/Post it yourself|I posted it/)).toHaveCount(0);
+    await expect(page.getByText(/Post it yourself|I posted it|on TikTok yourself/)).toHaveCount(0);
     await expect(page.getByRole("dialog")).toHaveCount(0);
   };
   await none();
@@ -111,5 +111,9 @@ test("no Post it yourself, I posted it, AirDrop or Open TikTok anywhere: Library
   await first.getByRole("button", { name: /^Upload( to .+)?$/ }).click();
   await expect(page.locator(".kept-now")).toBeVisible();
   await expect(page.locator(".kept-now__mac").first()).toHaveText("TikTok: Your Mac posts TikTok is off");
+  await none();
+
+  // Settings › Auto-posting: no "Post these on TikTok yourself" there either.
+  await go(page, "/settings/posting/auto");
   await none();
 });

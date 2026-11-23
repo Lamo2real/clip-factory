@@ -1,8 +1,8 @@
 // Mock mode's "Your Mac posts it on TikTok" (docs/CONTRACTS.md §47): the same rules as the API's tiktok_mac.py and
 // routes/tiktok_mac.py. The owner's routes (status, send, retry, Take it back) answer the app (send and retry with
-// `now` make the post an Upload tap's, source "upload", which the Mac posts at once); the Mac helper's own
-// routes (ping, claim, step, done, stopped) are test knobs (window.__cfMock.mac), so e2e can move a Mac post along
-// waiting → working → posted by your Mac, or stopped. Only bundled into mock builds.
+// `now` make the post an Upload tap's, source "upload", which the Mac posts at once, also one that already waits);
+// the Mac helper's own routes (ping, claim, step, done, stopped) are test knobs (window.__cfMock.mac), so e2e can move
+// a Mac post along waiting → working → posted by your Mac, or stopped. Only bundled into mock builds.
 import { ApiError } from "../errors.ts";
 import type { Clip, MacHelper, MacJob, MacSendResult, MacSource, MacStep, Post, PostMac, Settings, TikTokMacStatus, TikTokPostOptions } from "../types.ts";
 import { presetOf } from "../../lib/preset.ts";
@@ -290,7 +290,8 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
     },
     /**
      * POST /v1/tiktok/mac/send: each clip once, in order; one TikTok post per clip, always. Without `now` a clip is
-     * the backlog (source "sent"); with `now` (a row's Post with my Mac) it is an Upload tap's ("upload").
+     * the backlog (source "sent"); with `now` (a row's Post with my Mac) it is an Upload tap's ("upload"), and so is a
+     * Mac post that already waits: it becomes "upload" in place and counts as sent.
      */
     send(clipIds: unknown, now: unknown = false): MacSendResult[] {
       if (!Array.isArray(clipIds) || !clipIds.length || clipIds.length > MAC_SEND_MAX || !clipIds.every((x) => typeof x === "string"))
@@ -299,12 +300,18 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
       const out: MacSendResult[] = [];
       for (const clipId of [...new Set(clipIds as string[])]) {
         const c = deps.clips().find((x) => x.clipId === clipId);
-        const reason = !c ? "We could not find that clip." : refusal(c);
+        const reason = !c ? "We could not find that clip." : refusal(c, source);
         if (!c || reason) {
           out.push({ clipId, sent: false, reason: reason ?? "We could not find that clip." });
           continue;
         }
         const p = tiktokOf(clipId);
+        if (p?.status === "mac" && p.mac) {
+          // Only a waiting Mac post with now gets here (refusal lets no other through): it goes next.
+          goNow(p as Post & { mac: PostMac });
+          out.push({ clipId, sent: true });
+          continue;
+        }
         const choices = presetChoices(deps.settings());
         if (!p) {
           const made: Post = { postId: ulid(), clipId, platform: "tiktok", ...macFields(source) };
@@ -329,13 +336,14 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
     /**
      * POST /v1/clips/{clipId}/tiktok/mac/retry: a stopped Mac post waits again, keeping its place (since). With `now`
      * it becomes an Upload tap's (source "upload"), also an auto-posting run's while auto-posting is off: he tapped it.
-     * A waiting post is answered as it is.
+     * A waiting post becomes one with `now` too; without it, it is answered as it is.
      */
     retry(clipId: string, notOnTikTok: boolean, now: unknown = false): { clip: Clip; posts: Post[] } {
       const tapped = nowKey(now);
       const c = clip(clipId);
       const p = macOf(clipId);
       if (p.mac.state === "working") throw conflict(MAC_WORKING);
+      if (p.mac.state === "waiting" && tapped) goNow(p);
       if (p.mac.state === "stopped") {
         if (p.mac.pressedAt && !notOnTikTok) throw conflict(MAC_MAY_HAVE_POSTED);
         const { step: _s, claimedAt: _c, stoppedAt: _t, reason: _r, pressedAt, ...rest } = p.mac;
@@ -386,15 +394,25 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
     macFields,
   };
 
-  /** Why a clip can't go to the Mac (§47.2), or null when it can. */
-  function refusal(c: Clip): string | null {
+  /**
+   * A waiting Mac post becomes an Upload tap's (the API's _go_now): the owner tapped its row's button (`now`), so the
+   * Mac posts it at once and first. It keeps its place (since); nothing changes when it already is one.
+   */
+  function goNow(p: Post & { mac: PostMac }) {
+    if (p.mac.source === "upload") return;
+    p.mac = { ...p.mac, source: "upload" };
+    deps.publishPost(p);
+  }
+
+  /** Why a clip can't go to the Mac (§47.2), or null when it can (with `now`, also a waiting Mac post). */
+  function refusal(c: Clip, source: MacSource): string | null {
     const posts = postsOf(c.clipId);
     if (c.status === "review" || c.status === "declined") return "Upload this clip first.";
     if (!posts.length) return "This clip is still starting to upload. Try again in a minute.";
     if (c.campaignId) return "Campaign clips go on TikTok by hand. Post it in the TikTok app, then add the link.";
     if (c.auto?.test === "private") return "This was a Private test, so it stays off TikTok.";
     const state = tiktokState(posts);
-    if (state === "mac") return "Your Mac already has this clip.";
+    if (state === "mac") return source === "upload" && tiktokOf(c.clipId)?.mac?.state === "waiting" ? null : "Your Mac already has this clip.";
     if (state === "uploading") return "This clip is still uploading to TikTok. Wait until it is done, then try again.";
     if (state === "public") return "This clip is already on TikTok for everyone.";
     if (state === "yours") return "You already posted this one on TikTok.";

@@ -18,6 +18,8 @@ import {
   MAC_MAY_HAVE_POSTED,
   MAC_NOT_POSTING,
   MAC_OFF_LINE,
+  MAC_ON_TIKTOK_BUTTON,
+  MAC_OPEN_BUTTON,
   MAC_PRESSED_REASON,
   MAC_STALE_MS,
   MAC_UNDO_REFUSED,
@@ -25,8 +27,8 @@ import {
   MAC_WORKING,
   macChip,
   macInsteadOk,
-  macNextAt,
   macOn,
+  macWaitWords,
   postsFromStacks,
   rowNeedsMac,
   rowNeedsRuns,
@@ -95,48 +97,72 @@ describe("the TikTok row (§47.4)", () => {
     expect(rowOf([tiktok({ by: "you", privacy: "public", url: "https://vm.tiktok.com/x/" })], ready())?.button).toBeNull();
   });
 
-  it("Posting… while the Mac works, whatever else is true, with no button", () => {
+  it("Posting… while the Mac works and can post, with no button", () => {
     const working = { kind: "working", words: "Posting…", button: null, spinner: true };
     expect(rowOf([macPost({ state: "working", step: "uploading" })], ready())).toEqual(working);
-    expect(rowOf([macPost({ state: "working" })], ready({ macOn: false, helper: null }))).toEqual(working);
+    // Not known yet (the session or the check-in still loading): Posting… too.
+    expect(rowOf([macPost({ state: "working" })], ready({ macOn: undefined, helper: undefined }))).toEqual(working);
   });
 
-  it("waiting: next at the helper's next one-minute check-in for an Upload tap's clip", () => {
-    // Seen 30 s ago: its next check-in is in 30 s, so it says the minute after (rounded up).
-    const seen = NOW - 30_000;
-    expect(macNextAt(mac(), ready({ helper: helper(iso(seen)) }))).toBe(NOW + MIN);
-    expect(rowOf([macPost()], ready({ helper: helper(iso(seen)) }))).toEqual({
-      kind: "waiting",
-      words: `Waiting for your Mac · next at ${hm(NOW + MIN)}`,
-      button: null,
+  it("a post left working never spins for good: the switch off, a Mac asleep or crashed, or one that needs him says so", () => {
+    const working = [macPost({ state: "working", step: "uploading", claimedAt: iso(NOW - 40 * MIN) })];
+    const settings = "/settings/posting/tiktok-mac";
+    // The switch turned off mid-post: the server leaves it working until a Mac takes it again.
+    expect(rowOf(working, ready({ macOn: false }))).toEqual({ kind: "not_ready", words: "Your Mac posts TikTok is off", button: "turn_on", href: settings });
+    // The Mac asleep or crashed: not seen for 30 minutes.
+    const old = NOW - MAC_STALE_MS;
+    expect(rowOf(working, ready({ helper: helper(iso(old)) }))).toEqual({
+      kind: "not_ready",
+      words: `Your Mac hasn't checked in since ${hm(old)}`,
+      button: "turn_on",
+      href: settings,
     });
-    // Its check-in is due (seen 5 min ago): now, rounded up to the minute.
-    expect(macNextAt(mac(), ready({ helper: helper(iso(NOW - 5 * MIN)) }))).toBe(Math.ceil(NOW / MIN) * MIN);
-    // An auto-posting run's clip, while auto-posting is on: the same.
-    expect(rowOf([macPost({ source: "auto" })], ready())?.words).toBe(`Waiting for your Mac · next at ${hm(NOW)}`);
-    // The Mac's check-in not read yet: no time.
+    expect(rowOf(working, ready({ helper: null }))?.button).toBe("turn_on");
+    // It needs him, or it is paused on the Mac: what to do, and Open Your Mac posts TikTok.
+    const needs = ready({ helper: helper(iso(NOW - MIN), { state: "needs_you", reason: "TikTok wants a code. Type it." }) });
+    expect(rowOf(working, needs)).toEqual({ kind: "not_ready", words: "Your Mac needs you: TikTok wants a code · look at your Mac", button: "open_mac", href: settings });
+    expect(rowOf(working, ready({ helper: helper(iso(NOW - MIN), { state: "paused" }) }))?.button).toBe("open_mac");
+    for (const ctx of [ready({ macOn: false }), ready({ helper: helper(iso(old)) }), needs]) expect(rowOf(working, ctx)?.spinner).toBeUndefined();
+  });
+
+  it("waiting for an Upload tap: only the Mac's next check-in, never a time it doesn't know", () => {
+    const upload = { kind: "waiting", words: "Waiting for your Mac · next check-in in about a minute", button: null };
+    expect(rowOf([macPost()], ready())).toEqual(upload);
+    expect(rowOf([macPost()], ready({ helper: helper(iso(NOW - 5 * MIN)) }))).toEqual(upload);
+    // Every waiting Upload clip says the same: the Mac takes them one at a time, so none says a minute of its own.
+    expect(rowOf([macPost()], ready())?.words).not.toMatch(/\d\d:\d\d/);
+    // The Mac's check-in not read yet: no check-in words.
     expect(rowOf([macPost()], ready({ helper: undefined }))?.words).toBe("Waiting for your Mac");
+    expect(macWaitWords({ source: "upload" }, ready({ helper: undefined }))).toBe("Waiting for your Mac");
   });
 
-  it("waiting from the backlog: about 30 minutes after an auto-posting run", () => {
+  it("waiting from the backlog: after the next auto-posting run, with its time; never a guessed minute", () => {
     const sent = macPost({ source: "sent" });
-    // The last run was 10 minutes ago: 20 minutes from now.
-    const last = iso(NOW - 10 * MIN);
-    const next = iso(NOW + 5 * 3_600_000);
-    expect(macNextAt({ source: "sent" }, ready({ lastRunAt: last, nextRunAt: next }))).toBe(NOW + 20 * MIN);
-    expect(rowOf([sent], ready({ lastRunAt: last, nextRunAt: next }))?.words).toBe(`Waiting for your Mac · next at ${hm(NOW + 20 * MIN)}`);
-    // That one is past: 30 minutes after the next run.
-    expect(macNextAt({ source: "sent" }, ready({ lastRunAt: iso(NOW - 2 * 3_600_000), nextRunAt: next }))).toBe(Date.parse(next) + 30 * MIN);
-    // Runs not read: no time.
+    const next = NOW + 5 * 3_600_000;
+    const words = `Waiting for your Mac · goes after the next auto-posting run (${hm(next)})`;
+    expect(rowOf([sent], ready({ nextRunAt: iso(next) }))).toEqual({ kind: "waiting", words, button: null });
+    // The last run doesn't move it: the helper paces the backlog itself (one per run, or the backfill's pace).
+    expect(rowOf([sent], ready({ nextRunAt: iso(next), lastRunAt: iso(NOW - 10 * MIN) }))?.words).toBe(words);
+    // Another day: its weekday.
+    const later = NOW + 30 * 3_600_000;
+    expect(macWaitWords({ source: "sent" }, ready({ nextRunAt: iso(later) }))).toBe(`Waiting for your Mac · goes after the next auto-posting run (${timeWords(later, NOW)})`);
+    // Runs not read, or auto-posting not known yet: no time.
     expect(rowOf([sent], ready())?.words).toBe("Waiting for your Mac");
+    expect(rowOf([sent], ready({ nextRunAt: iso(next), autoPostOn: undefined }))?.words).toBe("Waiting for your Mac");
   });
 
-  it("waiting while auto-posting is off: a backlog or auto-posting clip says so, with Turn on to Auto-posting", () => {
-    const off = { kind: "waiting", words: "Waiting for your Mac · auto-posting is off", button: "turn_on", href: "/settings/posting/auto" };
+  it("waiting from an auto-posting run: no time (the Mac may hold it, which the web can't see)", () => {
+    expect(rowOf([macPost({ source: "auto" })], ready({ nextRunAt: iso(NOW + 3_600_000) }))).toEqual({ kind: "waiting", words: "Waiting for your Mac", button: null });
+  });
+
+  it("waiting while auto-posting is off: a backlog or auto-posting clip says so, with Post with my Mac for this one", () => {
+    const off = { kind: "waiting", words: "Waiting for your Mac · auto-posting is off", button: "post_with_mac" };
     expect(rowOf([macPost({ source: "sent" })], ready({ autoPostOn: false }))).toEqual(off);
     expect(rowOf([macPost({ source: "auto" })], ready({ autoPostOn: false }))).toEqual(off);
     // An Upload tap's clip goes anyway.
     expect(rowOf([macPost()], ready({ autoPostOn: false }))?.button).toBeNull();
+    // The Mac can't post: that comes first.
+    expect(rowOf([macPost({ source: "sent" })], ready({ autoPostOn: false, macOn: false }))?.button).toBe("turn_on");
   });
 
   it("Didn't work: the reason's first sentence, and one Try again", () => {
@@ -146,13 +172,33 @@ describe("the TikTok row (§47.4)", () => {
       button: "try_again",
     });
     expect(rowOf([macPost({ state: "stopped" })], ready())?.words).toBe("Didn't work");
-    // After the Mac pressed Post: his own words, chosen by pressedAt, never the stored reason's.
-    const pressed = rowOf([macPost({ state: "stopped", pressedAt: "2026-11-22T14:05:00.000Z", reason: MAC_PRESSED_REASON })], ready());
-    expect(pressed).toEqual({ kind: "stopped", words: "Didn't work: your Mac couldn't check it posted · look on your TikTok first", button: "try_again" });
-    expect(pressed?.words).not.toMatch(/I posted it/);
-    // A stop that needs him keeps its Try again: it is what turns "needs you" back to ok.
+    // The helper's older reasons never tell him to post it himself.
+    expect(rowOf([macPost({ state: "stopped", reason: "TikTok couldn't take the video, or post it yourself." })], ready())?.words).toBe(
+      "Didn't work: TikTok couldn't take the video",
+    );
+    // A stop that needs him keeps its Try again (it is what turns "needs you" back to ok), after he looks at his Mac.
     const needs = ready({ helper: helper(iso(NOW - MIN), { state: "needs_you", reason: "TikTok wants a code." }) });
-    expect(rowOf([macPost({ state: "stopped", reason: "TikTok wants a code." })], needs)?.button).toBe("try_again");
+    expect(rowOf([macPost({ state: "stopped", reason: "TikTok wants a code. Type it on your Mac." })], needs)).toEqual({
+      kind: "stopped",
+      words: "Didn't work: TikTok wants a code · look at your Mac first",
+      button: "try_again",
+    });
+  });
+
+  it("Didn't work after the Mac pressed Post: It's on TikTok first, Try again second, so it never posts twice", () => {
+    const claimedAt = "2026-11-22T14:02:00.000Z";
+    const pressedAt = "2026-11-22T14:05:00.000Z";
+    const pressed = { kind: "stopped", words: "Didn't work: your Mac couldn't tell if it posted · look on your TikTok first", button: "on_tiktok", since: "2026-11-22T14:01:00.000Z" };
+    // The stored reason stays word for word (posts already have it saved, and the API writes it); the row never shows it.
+    expect(MAC_PRESSED_REASON).toBe("Your Mac pressed Post but couldn't confirm it. Check your TikTok: if it's there, tap I posted it.");
+    // His own words, chosen by pressedAt, never the stored reason's; the finder looks from a minute before the claim.
+    expect(rowOf([macPost({ state: "stopped", claimedAt, pressedAt, reason: MAC_PRESSED_REASON })], ready())).toEqual(pressed);
+    expect(rowOf([macPost({ state: "stopped", claimedAt, pressedAt, reason: MAC_PRESSED_REASON })], ready())?.words).not.toMatch(/I posted it|yourself/);
+    // No claim time: from a minute before Post was pressed.
+    expect(rowOf([macPost({ state: "stopped", pressedAt })], ready())?.since).toBe("2026-11-22T14:04:00.000Z");
+    // Saying it's on TikTok needs no Mac: the same row while the Mac can't post.
+    for (const ctx of [ready({ macOn: false }), ready({ helper: null }), ready({ helper: helper(iso(NOW - MAC_STALE_MS)) })])
+      expect(rowOf([macPost({ state: "stopped", claimedAt, pressedAt })], ctx)).toEqual(pressed);
   });
 
   it("not on TikTok yet: one Post with my Mac, for every clip the Mac can take", () => {
@@ -184,7 +230,7 @@ describe("the TikTok row (§47.4)", () => {
 
   it("the Mac can't post: switch off, never set up, or not seen for 30 minutes, each with Turn on", () => {
     const turnOn = (words: string) => ({ kind: "not_ready", words, button: "turn_on", href: "/settings/posting/tiktok-mac" });
-    for (const posts of [[], [macPost()], [macPost({ state: "stopped", reason: "Timed out." })]]) {
+    for (const posts of [[], [macPost()], [macPost({ state: "working" })], [macPost({ state: "stopped", reason: "Timed out." })]]) {
       expect(rowOf(posts, ready({ macOn: false }))).toEqual(turnOn("Your Mac posts TikTok is off"));
       expect(rowOf(posts, ready({ helper: null }))).toEqual(turnOn("Your Mac isn't set up yet"));
       const old = NOW - MAC_STALE_MS;
@@ -195,13 +241,16 @@ describe("the TikTok row (§47.4)", () => {
     expect(rowOf([macPost()], ready({ helper: helper(iso(NOW - 29 * MIN)) }))?.kind).toBe("waiting");
     // Not known yet (the session or the check-in still loading): no Turn on.
     expect(rowOf([], ready({ macOn: undefined, helper: undefined }))?.kind).toBe("offer");
-    // Needs him, or paused on the Mac: said, with no button (the stopped clip's Try again is the way on).
-    expect(rowOf([macPost()], ready({ helper: helper(iso(NOW - MIN), { state: "needs_you", reason: "TikTok wants a code. Type it." }) }))).toEqual({
-      kind: "not_ready",
-      words: "Your Mac needs you: TikTok wants a code",
-      button: null,
-    });
-    expect(rowOf([], ready({ helper: helper(iso(NOW - MIN), { state: "paused" }) }))).toEqual({ kind: "not_ready", words: "Paused on your Mac", button: null });
+    // Needs him, or paused on the Mac: what to do, with Open Your Mac posts TikTok (its status line says the rest).
+    const open = (words: string) => ({ kind: "not_ready", words, button: "open_mac", href: "/settings/posting/tiktok-mac" });
+    const needs = ready({ helper: helper(iso(NOW - MIN), { state: "needs_you", reason: "TikTok wants a code. Type it." }) });
+    for (const posts of [[], [macPost()], [macPost({ source: "sent" })]])
+      expect(rowOf(posts, needs)).toEqual(open("Your Mac needs you: TikTok wants a code · look at your Mac"));
+    expect(rowOf([], ready({ helper: helper(iso(NOW - MIN), { state: "needs_you" }) }))).toEqual(open("Your Mac needs you · look at your Mac"));
+    const paused = ready({ helper: helper(iso(NOW - MIN), { state: "paused", reason: "Paused on your Mac." }) });
+    for (const posts of [[], [macPost()]]) expect(rowOf(posts, paused)).toEqual(open("Your Mac is paused · start it again on your Mac"));
+    expect(MAC_OPEN_BUTTON).toBe("Open Your Mac posts TikTok");
+    expect(MAC_ON_TIKTOK_BUTTON).toBe("It's on TikTok");
   });
 
   it("once TikTok approved the app, a clip not on TikTok keeps its old rows; a Mac post still says what the Mac does", () => {
@@ -243,6 +292,11 @@ describe("the TikTok row (§47.4)", () => {
   it("small words: the reason's first sentence, today's times without the day", () => {
     expect(shortReason("TikTok wants you to log in again.")).toBe("TikTok wants you to log in again");
     expect(shortReason("Your Mac's helper ran into a problem three times. Post it yourself for now.")).toBe("Your Mac's helper ran into a problem three times");
+    // Never "post it yourself" (ADR-85), wherever the helper put it in the first sentence.
+    expect(shortReason("TikTok's upload page looks different; post it yourself for now.")).toBe("TikTok's upload page looks different");
+    expect(shortReason("Post it yourself for now.")).toBe("");
+    expect(shortReason("Check it, then post it yourself.")).toBe("Check it");
+    expect(shortReason("TikTok said \"Something went wrong\". Try again later, or post it yourself.")).toBe('TikTok said "Something went wrong"');
     expect(shortReason(undefined)).toBe("");
     expect(clockWords(NOW + 5 * MIN, NOW)).toBe(hm(NOW + 5 * MIN));
     const tomorrow = NOW + 24 * 3_600_000;

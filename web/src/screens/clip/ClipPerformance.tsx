@@ -438,7 +438,8 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
             >
               {label}
             </Button>
-            {/* TikTok's one button (§47.4): Try again, Post with my Mac, Turn on, or the Add link box. Its stack says why. */}
+            {/* TikTok's one button (§47.4): Try again, Post with my Mac, Turn on, Open Your Mac posts TikTok, the Add link
+                box, or It's on TikTok with Try again second. Its stack says why. */}
             <TikTokRowAction
               clip={perf.clip}
               row={tiktok}

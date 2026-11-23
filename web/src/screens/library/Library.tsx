@@ -330,9 +330,15 @@ function LibraryCard({
   };
   // TikTok's own row (§47.4): its one button replaces Try again and Post now, which would go through TikTok's API.
   const mine = (p: Post) => p.platform === "tiktok" && !!tiktok;
-  // Its look follows the row: only Didn't work reads as an error (a refused upload is just not on TikTok yet).
-  const look = (p: Post) =>
-    !mine(p) ? p.status : tiktok!.kind === "stopped" ? "failed" : tiktok!.kind === "posted" || tiktok!.kind === "posted_you" ? "posted" : p.status === "failed" ? "none" : p.status;
+  // Its look follows the row: only Didn't work reads as an error (a refused upload is just not on TikTok yet), and
+  // only a post everyone can see lights up green (a private upload, Clip Factory's or the Mac's, is not out yet).
+  const look = (p: Post) => {
+    if (!mine(p)) return p.status;
+    const kind = tiktok!.kind;
+    if (kind === "stopped") return "failed";
+    if ((kind === "posted" || kind === "posted_you") && p.privacy !== "private") return "posted";
+    return p.status === "failed" || p.status === "posted" ? "none" : p.status;
+  };
   const row = (p: Post) => (
     <li key={p.postId} className={`post is-${look(p)}`}>
       <span className="post__mark" title={PLATFORM_LABEL[p.platform]}>

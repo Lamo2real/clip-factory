@@ -115,7 +115,8 @@ def send(app: App, req: Request) -> Response:
 
     Without ``now`` (Settings' Send these to my Mac) a clip waits as the backlog (``macSource: "sent"``): one after
     each auto-posting run. With ``now: true`` (a row's Post with my Mac) it goes at once and first, as an Upload tap
-    (``"upload"``). The refusals are the same either way."""
+    (``"upload"``), and so does a Mac post that already waits (``sent`` or ``auto``: it becomes ``upload`` in place
+    and counts as sent). Every other refusal is the same either way."""
     body = req.json()
     validate.only_keys(body, {"clipIds", "now"})
     ids = body.get("clipIds")
@@ -246,7 +247,8 @@ def done(app: App, req: Request) -> Response:
 
 def retry(app: App, req: Request) -> Response:
     """``POST /v1/clips/{clipId}/tiktok/mac/retry`` ``{notOnTikTok?, now?}`` → ``{clip, posts}``: the owner's Try
-    again. With ``now: true`` the stopped post goes at once, as an Upload tap (``macSource: "upload"``)."""
+    again. With ``now: true`` the stopped post, or one that already waits, goes at once, as an Upload tap
+    (``macSource: "upload"``)."""
     body = req.json()
     validate.only_keys(body, {"notOnTikTok", "now"})
     not_on_tiktok = validate.boolean(body.get("notOnTikTok", False), "notOnTikTok")

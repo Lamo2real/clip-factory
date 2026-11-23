@@ -1,5 +1,5 @@
 {
-  "version": "1eb09ff09875",
+  "version": "fb725c7ae9cc",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -750,7 +750,7 @@
         "mac helper",
         "stop the mac"
       ],
-      "answer": "With **Your Mac posts TikTok** on, your Mac posts each TikTok clip for everyone, out of sight. Each clip's TikTok row in **Library** says what it is doing: **Waiting for your Mac · next at 14:05**, **Posting…**, then **Posted by your Mac**. **Didn't work**? Tap **Try again**. **Not on TikTok yet**? Tap **Post with my Mac**. Off, or your Mac hasn't checked in? Tap **Turn on**.",
+      "answer": "With **Your Mac posts TikTok** on, your Mac posts each TikTok clip for everyone. Each TikTok row in **Library** says what it is doing: **Waiting for your Mac**, **Posting…**, then **Posted by your Mac**. **Didn't work**? Tap **Try again**. Not sure it posted? Look on your TikTok, then tap **It's on TikTok** or **Try again**. **Not on TikTok yet**? Tap **Post with my Mac**. Off? Tap **Turn on**.",
       "steps": [
         "Tap **Settings**.",
         "Tap **Posting**, then **Your Mac posts TikTok**.",
@@ -4669,7 +4669,6 @@
         "yet",
         "post",
         "mac",
-        "turn",
         "paste",
         "save",
         "link",
@@ -4692,7 +4691,8 @@
         "make",
         "check",
         "throw",
-        "away"
+        "away",
+        "close"
       ],
       "answer": "These clips all come from one job. Tap Upload to post one, or Throw away if you do not like it. Tap Show every job to see the rest.",
       "steps": [
@@ -4739,13 +4739,13 @@
         "views",
         "post",
         "mac",
-        "turn",
         "paste",
         "save",
         "tiktok",
         "add",
         "make",
-        "earlier"
+        "earlier",
+        "week"
       ],
       "answer": "Library has every clip you uploaded.",
       "steps": [
@@ -4792,13 +4792,13 @@
         "views",
         "post",
         "mac",
-        "turn",
         "paste",
         "save",
         "tiktok",
         "add",
         "fix",
-        "yes"
+        "yes",
+        "send"
       ],
       "answer": "A clip's page shows how it does on each app. Tap a clip in Library to open it.",
       "steps": [

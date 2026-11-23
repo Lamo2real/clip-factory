@@ -495,7 +495,7 @@
         "mac helper",
         "stop the mac"
       ],
-      "answer": "With **Your Mac posts TikTok** on, your Mac posts each TikTok clip for everyone, out of sight. Each clip's TikTok row in **Library** says what it is doing: **Waiting for your Mac · next at 14:05**, **Posting…**, then **Posted by your Mac**. **Didn't work**? Tap **Try again**. **Not on TikTok yet**? Tap **Post with my Mac**. Off, or your Mac hasn't checked in? Tap **Turn on**.",
+      "answer": "With **Your Mac posts TikTok** on, your Mac posts each TikTok clip for everyone. Each TikTok row in **Library** says what it is doing: **Waiting for your Mac**, **Posting…**, then **Posted by your Mac**. **Didn't work**? Tap **Try again**. Not sure it posted? Look on your TikTok, then tap **It's on TikTok** or **Try again**. **Not on TikTok yet**? Tap **Post with my Mac**. Off? Tap **Turn on**.",
       "steps": [
         "Tap **Settings**.",
         "Tap **Posting**, then **Your Mac posts TikTok**.",

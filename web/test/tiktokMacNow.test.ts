@@ -45,10 +45,19 @@ describe("the mock's now rules", () => {
     expect(knobs().post(sendable[0]!.clipId)?.mac?.source).toBe("sent");
   });
 
-  it("a send with now keeps every refusal", async () => {
+  it("a send with now makes a waiting post an Upload tap's in place; every other refusal stays", async () => {
     const { api, sendable } = await start();
     const c = sendable[0]!;
-    await api.sendToMac([c.clipId], true);
+    await api.sendToMac([c.clipId]);
+    const since = knobs().post(c.clipId)!.mac!.since;
+    // Without now a waiting post is still refused (Settings' Send these is unchanged).
+    expect((await api.sendToMac([c.clipId]))[0]).toMatchObject({ sent: false, reason: "Your Mac already has this clip." });
+    // The waiting row's own Post with my Mac (now): the same post, now an Upload tap's, first in the queue.
+    expect(await api.sendToMac([c.clipId], true)).toEqual([{ clipId: c.clipId, sent: true }]);
+    expect(knobs().post(c.clipId)?.mac).toEqual({ state: "waiting", since, source: "upload" });
+    expect((await api.tiktokMacStatus()).queue[0]).toMatchObject({ clipId: c.clipId, source: "upload" });
+    // Once the Mac has it, a send with now is refused again: Try again is its way.
+    knobs().claim(c.clipId);
     expect((await api.sendToMac([c.clipId], true))[0]).toMatchObject({ sent: false, reason: "Your Mac already has this clip." });
   });
 
@@ -92,17 +101,18 @@ describe("the mock's now rules", () => {
     expect(knobs().claim(c.clipId).state).toBe("working");
   });
 
-  it("Try again with now leaves a waiting post as it is, and keeps the working and pressed refusals", async () => {
+  it("Try again without now leaves a waiting post as it is, with now makes it an Upload tap's, and keeps the working and pressed refusals", async () => {
     const { api, sendable } = await start();
     const c = sendable[0]!;
     await api.sendToMac([c.clipId]);
-    expect(tiktokOf(await api.retryMac(c.clipId, false, true))?.mac?.source).toBe("sent");
+    expect(tiktokOf(await api.retryMac(c.clipId))?.mac?.source).toBe("sent");
+    expect(tiktokOf(await api.retryMac(c.clipId, false, true))?.mac?.source).toBe("upload");
     knobs().claim(c.clipId);
     await expect(api.retryMac(c.clipId, false, true)).rejects.toThrow(MAC_WORKING);
     knobs().step(c.clipId, "pressing");
     knobs().stopped(c.clipId, "Timed out.");
     await expect(api.retryMac(c.clipId, false, true)).rejects.toThrow(MAC_MAY_HAVE_POSTED);
-    expect(knobs().post(c.clipId)?.mac?.source).toBe("sent");
+    expect(knobs().post(c.clipId)?.mac?.state).toBe("stopped");
     const back = await api.retryMac(c.clipId, true, true);
     expect(tiktokOf(back)?.mac).toEqual({ state: "waiting", since: expect.any(String), source: "upload" });
   });

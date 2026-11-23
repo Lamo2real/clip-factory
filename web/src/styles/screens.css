@@ -1434,9 +1434,44 @@
   grid-column: 2 / 3;
   grid-row: 2;
 }
+/* The row's button (Try again, Post now, Turn on, Post with my Mac) sits right of the words, never under the mark. A
+   row with a link too keeps its Open icon in the same column, under the button, so the words keep their room. */
+.post > .post__retry {
+  grid-column: 3;
+  grid-row: 1;
+}
 .post__open {
   grid-column: 3;
   grid-row: 1 / span 2;
+}
+.post > .post__retry ~ .post__open {
+  grid-row: 2;
+  justify-self: end;
+}
+/* Open Your Mac posts TikTok is long: on a line of its own under the words, on the right (the row's full width, so
+   it stays on one line on a phone). */
+.post > .post__retry--wide {
+  grid-column: 1 / -1;
+  grid-row: auto;
+  justify-self: end;
+  max-width: 100%;
+}
+.post > .post__retry--wide ~ .post__open {
+  grid-row: 1;
+}
+/* It's on TikTok and Try again (§47.3): two choices, on a line of their own under the words, on the right (the row's
+   full width, so both fit on one line). */
+.post__choices {
+  grid-column: 1 / -1;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 6px 8px;
+  min-width: 0;
+}
+.post__choices .btn {
+  white-space: nowrap;
 }
 .post--group {
   grid-template-columns: minmax(0, 1fr);
@@ -1502,6 +1537,39 @@
   font-size: var(--fs-xs);
   font-weight: 600;
   color: var(--ink);
+}
+
+/* Review › Uploaded just now (§47.4): the TikTok line with its Open icon, and the Add link box under it. */
+.kept-now__tiktok {
+  flex: 1 1 100%;
+  order: 1;
+  display: flex;
+  align-items: center;
+  gap: 4px 8px;
+  min-width: 0;
+}
+.kept-now__tiktok > .kept-now__mac {
+  flex: 0 1 auto;
+  order: 0;
+}
+.kept-now__open {
+  width: 40px;
+  height: 40px;
+}
+.kept-now__item > .post-link {
+  order: 2;
+}
+/* Review: the hint while Your Mac posts TikTok is off, with Turn on right beside it. */
+.tt-yourself-hint-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 6px 10px;
+}
+.tt-yourself-hint-row > .tt-yourself-hint {
+  flex: 0 1 auto;
+  min-width: 0;
 }
 
 /* ---------- Settings: accounts, background (layout and skills live in settings.css) ---------- */

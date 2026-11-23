@@ -240,9 +240,11 @@ to TikTok, but only you can see those posts, and TikTok gives no numbers for the
 **Want everyone to see it now? Your Mac posts it** (docs/CONTRACTS.md §47). Turn on **Settings › Posting › Your Mac
 posts TikTok** and set up the helper on your Mac ([mac/tiktok-helper](../mac/tiktok-helper/README.md)). Then **Upload**
 and auto-posting give TikTok to your Mac, and it posts each clip for **Everyone**, out of sight. Each clip's TikTok row
-in Library says what your Mac is doing: **Waiting for your Mac · next at 14:05**, **Posting…**, then **Posted by your
-Mac · Everyone** with **Open**. **Didn't work**? Tap **Try again**. **Not on TikTok yet**? Tap **Post with my Mac**. The
-row says your Mac is off or hasn't checked in? Tap **Turn on**. **Everyone** needs a public TikTok account. While your
+in Library says what your Mac is doing: **Waiting for your Mac**, **Posting…**, then **Posted by your Mac · Everyone**
+with **Open**. **Didn't work**? Tap **Try again**. Your Mac couldn't tell if it posted? Look on your TikTok: it's there?
+Tap **It's on TikTok**; it isn't? Tap **Try again**. **Not on TikTok yet**? Tap **Post with my Mac**. The row says your
+Mac is off or hasn't checked in? Tap **Turn on**. Your Mac needs you, or it is paused? Tap **Open Your Mac posts
+TikTok**. **Everyone** needs a public TikTok account. While your
 account is public, TikTok will not let Clip Factory upload there for you (its rule for apps it has not approved), so
 your Mac does it. Keep your account public. There is no "Post it yourself" any more (it went on 22 Nov 2026,
 [ADR-85](DECISIONS.md#adr-85-no-manual-tiktok-sheet-the-mac-is-the-only-way-to-tiktok-until-tiktok-approves-the-app)). A

@@ -34,7 +34,8 @@ import { TikTokSheet } from "./TikTokSheet.tsx";
 import { useUnsaved } from "../../features/help/unsaved.ts";
 import { TIKTOK_PUBLIC_HINT, tiktokAudited } from "../../lib/tiktokYourself.ts";
 import { useAutoPost } from "../settings/AutoPostBranch.tsx";
-import { TikTokRowAction, useTikTokRowContext } from "../library/MacButtons.tsx";
+import { TikTokRowAction, TurnOnMac, useTikTokRowContext } from "../library/MacButtons.tsx";
+import { settingsPath } from "../../lib/settingsTree.ts";
 import { lastLiveRunAt, MAC_HINT, macOn, rowNeedsMac, rowNeedsRuns, tiktokFacts, tiktokRow } from "../../lib/tiktokMac.ts";
 import { autoPostOf, reviewLede, reviewLine, sentFirstLine } from "../../lib/autopost.ts";
 
@@ -283,15 +284,22 @@ export function Review({ jobId }: { jobId: string | null }) {
                 <li key={c.clipId} className="kept-now__item">
                   <span className="kept-now__hook clamp-2 user-text">{c.hook}</span>
                   {tiktok ? (
-                    <span className="kept-now__mac small" data-mac="kept">
-                      {`TikTok: ${tiktok.words}`}
+                    <span className="kept-now__tiktok">
+                      <span className="kept-now__mac small" data-mac="kept">
+                        {`TikTok: ${tiktok.words}`}
+                      </span>
+                      {tiktok.url ? (
+                        <a className="icon-btn kept-now__open" href={tiktok.url} target="_blank" rel="noreferrer noopener" aria-label="Open the TikTok post">
+                          <Icon name="external" size={16} />
+                        </a>
+                      ) : null}
                     </span>
                   ) : null}
                   <LinkButton href={`/clips/${c.clipId}`} size="sm" icon="chart" iconAfter="chevronRight">
                     See how it does
                   </LinkButton>
-                  {/* Try again, Post with my Mac or Turn on; the link box stays in Library and on the clip page. */}
-                  <TikTokRowAction clip={c} row={tiktok} mac={keptFacts[i]!.post?.mac} onKept={keptAgain} links={false} />
+                  {/* The row's own button, as on Library: Try again, Post with my Mac, Turn on, Add link or It's on TikTok. */}
+                  <TikTokRowAction clip={c} row={tiktok} mac={keptFacts[i]!.post?.mac} onKept={keptAgain} />
                 </li>
               );
             })}
@@ -1140,7 +1148,15 @@ function ReviewCard({
         {/* Above TikTok's Music Usage line, which stays right above Upload (§17.8). */}
         {/* With Your Mac posts TikTok on (§47.4) his Mac posts it for everyone; off, the line says to turn it on (ADR-85). */}
         {placesReady && !noneReady && tiktokOn && !tiktokApproved && !keepFailed ? (
-          <p className="tt-yourself-hint">{macOn(me?.settings) ? MAC_HINT : TIKTOK_PUBLIC_HINT}</p>
+          macOn(me?.settings) ? (
+            <p className="tt-yourself-hint">{MAC_HINT}</p>
+          ) : (
+            // Off: Turn on, right beside it, goes to the switch (Settings › Posting › Your Mac posts TikTok).
+            <div className="tt-yourself-hint-row">
+              <p className="tt-yourself-hint">{TIKTOK_PUBLIC_HINT}</p>
+              <TurnOnMac href={settingsPath("posting", "tiktok-mac")} />
+            </div>
+          )
         ) : null}
         {placesReady && !noneReady && tiktokOn ? (
           <TikTokLegal className="tt-legal" branded={choices.commercial && choices.branded} />
