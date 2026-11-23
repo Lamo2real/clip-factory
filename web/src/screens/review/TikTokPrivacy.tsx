@@ -1,7 +1,8 @@
 // TikTok's "Who can see it" (TikTok's Content Sharing Guidelines, CONTRACTS §17.8 and §36): the app's own dropdown
 // (never the OS list) with exactly the choices TikTok offers this creator, Everyone first, and nothing picked until
-// the owner picks one or taps Use my settings. While the owner's Mac posts TikTok (§47) the Review card's row offers
-// TikTok Studio's choices and starts on My settings. Used in the TikTok row on the Review card and on the TikTok sheet.
+// the owner picks one or taps Use my settings. While the owner's Mac posts TikTok (§47.9) the Review card's row has no
+// dropdown: it says what the Mac posts it with (My settings). Used in the TikTok row on the Review card and on the
+// TikTok sheet.
 import { useId } from "react";
 import type { TikTokCreator } from "../../api/types.ts";
 import { Dropdown } from "../../components/Dropdown.tsx";

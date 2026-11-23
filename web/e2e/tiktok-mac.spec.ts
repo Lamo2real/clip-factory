@@ -515,6 +515,21 @@ test("review: the hint, TikTok on My settings with no tap, and Uploaded just now
   const tiktokNow = card.locator('[data-place="tiktok"] .place-row__now');
   await expect(tiktokNow).toContainText("Who can see it: Everyone · Comments on · Duet on · Stitch on");
   await expect(tiktokNow).not.toContainText("not picked yet");
+  // Its row is read-only for what the Mac uses (§47.9): the Mac posts My settings, so no per-clip privacy or switches.
+  await card.locator('[data-place="tiktok"] summary').click();
+  const ttRow = card.locator('[data-place="tiktok"]');
+  await expect(ttRow.locator(".tt-mac-uses")).toContainText("Your Mac posts it with My settings: Everyone · Comments on · Duet on · Stitch on");
+  await expect(ttRow.getByRole("link", { name: "Change My settings" })).toHaveAttribute("href", "/settings/posting/my-settings");
+  await expect(ttRow.locator('[aria-haspopup="listbox"]')).toHaveCount(0);
+  await expect(ttRow.getByRole("switch")).toHaveCount(1);
+  // Branded content waits: the Mac can't add TikTok's label yet.
+  await ttRow.getByRole("switch", { name: "Commercial content" }).click();
+  await ttRow.getByRole("checkbox", { name: /^Branded content/ }).click();
+  const held = "Your Mac can't add TikTok's Branded content label yet. Untick it, or untick TikTok for this clip.";
+  await expect(card.locator(".upload-going")).toHaveText(held);
+  await expect(ttRow.getByRole("alert")).toHaveText(held);
+  await ttRow.getByRole("checkbox", { name: /^Branded content/ }).click();
+  await ttRow.getByRole("switch", { name: "Commercial content" }).click();
   await expect(card.locator(".upload-going")).toHaveText("Going to: YouTube · TikTok");
   const upload = card.getByRole("button", { name: /^Upload( to .+)?$/ });
   await expect(upload).not.toHaveAttribute("aria-disabled", "true");

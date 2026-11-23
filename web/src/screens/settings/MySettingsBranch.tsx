@@ -1,8 +1,9 @@
 // Settings › Posting › My settings (docs/CONTRACTS.md §36): the owner's own choices for each place, put on a clip by
 // "Use my settings" on Review. One section per platform, X included. Saved on the server, so every device has them.
 // My settings never mark a clip as made for kids, and TikTok's Commercial content is picked per clip only. While his
-// Mac posts TikTok, every Review card starts on these, TikTok too, with no tap (§47.9); while it is off, TikTok's API
-// rule still wants his own tap on each clip.
+// Mac posts TikTok, every Review card but a campaign clip starts on these, TikTok too, with no tap, and his Mac posts
+// TikTok with them (§47.9); a paid partnership can't go through the Mac yet. While it is off, TikTok's API rule still
+// wants his own tap on each clip.
 import type { PostPreset, XReplies, YoutubePrivacy } from "../../api/types.ts";
 import { useSession } from "../../app/session.tsx";
 import { Dropdown } from "../../components/Dropdown.tsx";
@@ -41,7 +42,7 @@ export function MySettingsBranch() {
         <Icon name="sparkle" size={18} />
         <span>
           {macPosts ? (
-            <>Every clip on Review starts on these, TikTok too.</>
+            <>Every clip on Review starts on these, TikTok too, except campaign clips.</>
           ) : (
             <>
               Tap <strong>Use my settings</strong> on a clip to put these on.
@@ -93,8 +94,9 @@ export function MySettingsBranch() {
           <Toggle label="Duet" checked={tt.duet} onChange={(v) => save("tiktok", { duet: v })} />
           <Toggle label="Stitch" checked={tt.stitch} onChange={(v) => save("tiktok", { stitch: v })} />
           <p className="field__hint">
-            Commercial content is off. For a paid partnership, tick Branded content in the TikTok row of that clip.
-            {macPosts ? null : " TikTok wants your own tap on each clip, so tap Use my settings there."}
+            {macPosts
+              ? "Commercial content is off. Your Mac posts TikTok with these. Paid partnerships can't go through your Mac yet, so untick TikTok for that clip."
+              : "Commercial content is off. For a paid partnership, tick Branded content in the TikTok row of that clip. TikTok wants your own tap on each clip, so tap Use my settings there."}
           </p>
         </div>
       </Apple>

@@ -1,5 +1,5 @@
 {
-  "version": "b5ef7c2a035b",
+  "version": "b7797478e214",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -554,7 +554,7 @@
       "kind": "guide",
       "route": "/review",
       "where": "Review › a clip › Use my settings",
-      "title": "Use my settings: upload in one tap",
+      "title": "Use my settings: your saved choices on every place",
       "keywords": [
         "use my settings",
         "my settings",
@@ -567,9 +567,11 @@
         "same settings",
         "every time",
         "tiktok tap",
-        "tap each time"
+        "tap each time",
+        "upload in one tap",
+        "upload with my settings"
       ],
-      "answer": "Every ticked place starts on your saved choices, TikTok too while your Mac posts TikTok: who can see it, comments, duets and stitches, never made for kids. So just tap **Upload**. Change a place for one clip in its row; **Use my settings** puts yours back. With **Your Mac posts TikTok** off, TikTok waits for your tap on **Use my settings**.",
+      "answer": "Every ticked place starts on your saved choices (who can see it, comments; never made for kids), TikTok too while your Mac posts TikTok. So just tap **Upload**. Change a place for one clip in its row. Your Mac always posts TikTok with your saved choices. Paid partnerships can't go through your Mac yet, so untick TikTok for that clip. With **Your Mac posts TikTok** off, tap **Use my settings**.",
       "steps": [
         "Tap **Review**.",
         "It says **Your settings are on**. If not, tap **Use my settings**.",
@@ -609,7 +611,7 @@
         "mark as paid partnership",
         "promotional"
       ],
-      "answer": "Each ticked place has its own row under **Use my settings**. Tap the row to open its words and options. For a paid partnership, open **TikTok**, turn on **Commercial content** and tick **Branded content**.",
+      "answer": "Each ticked place has its own row under **Use my settings**. Tap the row to open its words and options. For a paid partnership, open **TikTok**, turn on **Commercial content** and tick **Branded content**. While your Mac posts TikTok, its row shows the settings your Mac uses, and paid partnerships can't go through your Mac yet: untick TikTok for that clip.",
       "steps": [
         "Tap **Review**.",
         "Tap a place's row, like **TikTok · caption and settings**.",
@@ -4678,6 +4680,8 @@
         "add",
         "fix",
         "ask",
+        "change",
+        "settings",
         "made",
         "kids",
         "tell",
@@ -4692,9 +4696,7 @@
         "every",
         "make",
         "check",
-        "throw",
-        "away",
-        "close"
+        "throw"
       ],
       "answer": "These clips all come from one job. Tap Upload to post one, or Throw away if you do not like it. Tap Show every job to see the rest.",
       "steps": [

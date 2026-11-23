@@ -32,7 +32,8 @@ Decision record: ADR-60 (which corrects ADR-57).
      `settings.youtubePrivacy`), Category (the app's own dropdown, Gaming first), **Made for kids** switch (off = No),
      Tell my subscribers.
    * TikTok: Posting as, Caption, **Who can see it** (§36.5), Comments, Duet, Stitch, Commercial content with Your
-     brand (Promotional content) / Branded content (Paid partnership).
+     brand (Promotional content) / Branded content (Paid partnership). While his Mac posts TikTok, Who can see it and
+     the three switches are one read-only line of what the Mac posts with, and a ticked label holds Upload (§47.9).
    * Instagram: Caption, Also show it in my feed (Reel).
    * Facebook: Caption, "Goes up as a Reel on your Page. Everyone can see it." (Page Reels are public; nothing to pick).
    * X: Caption, Who can reply (the app's own dropdown: Everyone, People you follow, Only people you mention, Verified
