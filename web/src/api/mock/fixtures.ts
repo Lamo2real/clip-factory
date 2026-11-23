@@ -294,11 +294,12 @@ export function seed(): Store {
   }
 
   // Posted clips. This week's are spread over the days of the week so far (it may be Monday morning), last week's
-  // over last week, so "This week" always has clips and "Earlier week" goes back to real ones.
+  // over last week, so "This week" always has clips and "Earlier week" goes back to real ones. No floor on the time
+  // since Monday: in a week's first minutes one would date the clips before Monday 00:00, into last week.
   const now = Date.now();
   const thisWeek = isoWeek(new Date(now));
   const monday = weekStart(thisWeek).getTime();
-  const sinceMonday = Math.max(now - monday, 6 * MIN);
+  const sinceMonday = now - monday;
   const lastWeek = shiftWeek(thisWeek, -1);
 
   type Plan = { platform: Platform; state: "numbers" | "private" | "waiting" | "failed" | "none" | "posting" | "fresh"; views?: number; insights?: boolean };
