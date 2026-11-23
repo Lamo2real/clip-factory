@@ -131,7 +131,7 @@ describe("each app has its own error boundary (§45.35 D16)", () => {
     );
     const card = q('[data-app-pane="stories"] [data-stories-problem]')!;
     expect(card).not.toBeNull();
-    expect(card.textContent).toContain("Funded Clips had a problem.");
+    expect(card.textContent).toContain("Clips Funded had a problem.");
     expect(card.textContent).toContain("Clip Factory is fine");
     expect(
       Array.from(card.querySelectorAll("button")).map((b) =>

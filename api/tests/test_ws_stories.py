@@ -1199,7 +1199,7 @@ def test_a_switched_off_storyboard_agent_refuses_runs_that_write_the_story(
             "active": False,
         }
     )
-    sentence = "Storyboard is switched off. Switch it on in Funded Clips › Settings › Agents."
+    sentence = "Storyboard is switched off. Switch it on in Clips Funded › Settings › Agents."
     body = {"brief": {"title": "T", "logline": "L", "category": "comedy"}, "characterIds": [hero["characterId"]]}
     status, out = call("POST", f"{BASE}/stories", body)
     assert (status, out["error"]["message"]) == (409, sentence)

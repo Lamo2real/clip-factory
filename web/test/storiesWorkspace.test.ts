@@ -283,7 +283,7 @@ describe("opening the app", () => {
 describe("the workspace list", () => {
   it("shows Clip Factory and Lamo Stories until the server answers", () => {
     expect(knownWorkspaces()).toEqual(DEFAULT_WORKSPACES);
-    expect(knownWorkspaces().map(switcherName)).toEqual(["Clip Factory", "Funded Clips"]);
+    expect(knownWorkspaces().map(switcherName)).toEqual(["Clip Factory", "Clips Funded"]);
   });
 
   it("labels Lamo Clips with the app's own name, whatever the server calls it, and other workspaces by theirs", () => {
@@ -291,16 +291,16 @@ describe("the workspace list", () => {
     expect(switcherName(CARS)).toBe("Lamo Cars");
   });
 
-  it("shows a workspace stored with either old default name as Funded Clips, and every other name as it is", () => {
-    for (const old of ["Lamo Stories", "Clip Factory Stories", "Clip Stories"]) {
+  it("shows a workspace stored with any old default name as Clips Funded, and every other name as it is", () => {
+    for (const old of ["Lamo Stories", "Clip Factory Stories", "Clip Stories", "Funded Clips"]) {
       const stored = ws("stories", "stories", old);
-      expect(shownWorkspaceName(old)).toBe("Funded Clips");
-      expect(switcherName(stored)).toBe("Funded Clips");
+      expect(shownWorkspaceName(old)).toBe("Clips Funded");
+      expect(switcherName(stored)).toBe("Clips Funded");
       // Only what is shown: the stored record keeps its name.
       expect(stored.workspaceName).toBe(old);
     }
-    expect(shownWorkspaceName("Funded Clips")).toBe("Funded Clips");
-    for (const own of ["Clip Factory", "Lamo Cars", "Clip Factory Stories 2", "clip factory stories", "Clip Stories 2", "Stories", "Clips"]) expect(shownWorkspaceName(own)).toBe(own);
+    expect(shownWorkspaceName("Clips Funded")).toBe("Clips Funded");
+    for (const own of ["Clip Factory", "Lamo Cars", "Clip Factory Stories 2", "clip factory stories", "Clip Stories 2", "Funded Clips 2", "funded clips", "Stories", "Clips"]) expect(shownWorkspaceName(own)).toBe(own);
   });
 
   it("then every workspace the server lists, Lamo Clips first, never two Lamo Clips", () => {
@@ -337,8 +337,8 @@ it("keeps Lamo Stories' own scroll position for one way back, only for a Lamo St
 });
 
 it("names each Lamo Stories page in the tab title", () => {
-  expect(storiesTitle({ name: "dashboard" })).toBe("Dashboard · Funded Clips");
-  expect(storiesTitle({ name: "connections", platform: null, result: null, ws: null })).toBe("Social accounts · Funded Clips");
-  expect(storiesTitle({ name: "setup" })).toBe("Set up · Funded Clips");
-  expect(storiesTitle({ name: "chat_conv", convId: "c" })).toBe("Chat · Funded Clips");
+  expect(storiesTitle({ name: "dashboard" })).toBe("Dashboard · Clips Funded");
+  expect(storiesTitle({ name: "connections", platform: null, result: null, ws: null })).toBe("Social accounts · Clips Funded");
+  expect(storiesTitle({ name: "setup" })).toBe("Set up · Clips Funded");
+  expect(storiesTitle({ name: "chat_conv", convId: "c" })).toBe("Chat · Clips Funded");
 });

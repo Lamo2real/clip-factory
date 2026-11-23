@@ -129,7 +129,7 @@ export function keyFor(label: string, taken: readonly string[]): string {
 /** The hosts a reasoning model can run on, in the form's words (§45.37 G4). */
 type ReasoningHost = Exclude<ModelHost, "elevenlabs">;
 export const HOST_CHOICES: { value: ReasoningHost; label: string; line: string }[] = [
-  { value: "bedrock", label: "Amazon Bedrock", line: "Funded Clips' own AWS access. No key." },
+  { value: "bedrock", label: "Amazon Bedrock", line: "Clips Funded's own AWS access. No key." },
   { value: "anthropic", label: "Anthropic", line: "The Anthropic API, with your Anthropic key." },
   { value: "openai_compatible", label: "An OpenAI-compatible service", line: "Any https address that speaks the OpenAI chat API, with your key." },
 ];
@@ -470,7 +470,7 @@ function ModelForm({ start, editing, taken, onSaved, onCancel, ws }: { start: Mo
       </span> : null}
 
       <span className="st-stg-field st-stg-calling">
-        <span className="st-stg-label">How Funded Clips talks to it</span>
+        <span className="st-stg-label">How Clips Funded talks to it</span>
         <span className="st-stg-small">
           {d.ownCalling
             ? `Change these only if ${HOST_LABEL[host]} says the model does not take them.`
@@ -481,10 +481,10 @@ function ModelForm({ start, editing, taken, onSaved, onCancel, ws }: { start: Mo
         label="It has effort levels"
         description={
           d.effortField === "none"
-            ? "It runs at its own level. Funded Clips never sends it one."
+            ? "It runs at its own level. Clips Funded never sends it one."
             : d.effortField === "reasoning_effort"
-              ? "Funded Clips sends the level you pick in reasoning_effort, the way OpenAI-compatible services take it."
-              : "Funded Clips sends the level you pick, the way Claude models take it."
+              ? "Clips Funded sends the level you pick in reasoning_effort, the way OpenAI-compatible services take it."
+              : "Clips Funded sends the level you pick, the way Claude models take it."
         }
         checked={d.effortField !== "none"}
         onChange={(v) =>
@@ -521,7 +521,7 @@ function ModelForm({ start, editing, taken, onSaved, onCancel, ws }: { start: Mo
       <SetSwitch
         label="It can use tools"
         description={
-          d.tools ? "In the chat it can do things for you, like starting a video. Answers come back in a tidy shape." : "It only talks: in the chat it cannot start things, and Funded Clips asks it for tidy answers as text."
+          d.tools ? "In the chat it can do things for you, like starting a video. Answers come back in a tidy shape." : "It only talks: in the chat it cannot start things, and Clips Funded asks it for tidy answers as text."
         }
         checked={d.tools}
         onChange={(v) => set({ tools: v, ownCalling: true })}
@@ -599,7 +599,7 @@ function OwnRow({
     setBusy(true);
     try {
       await storiesApi().deleteAiModel(ws, m.key);
-      toast.info(`${m.label} is removed from Funded Clips.`);
+      toast.info(`${m.label} is removed from Clips Funded.`);
       setSure(false);
       await onChanged();
     } catch (e) {
@@ -804,7 +804,7 @@ export function OwnModels({
           )}
         </ul>
       ) : open === null ? (
-        <p className="st-stg-small">No models added yet. The ones above come with Funded Clips; add any other model here.</p>
+        <p className="st-stg-small">No models added yet. The ones above come with Clips Funded; add any other model here.</p>
       ) : null}
     </SetCard>
   );

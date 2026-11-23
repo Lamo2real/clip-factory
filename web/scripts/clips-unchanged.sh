@@ -298,8 +298,8 @@ args=()
 [ -n "$out" ] && args+=(--out "$out")
 [ -n "$sizes" ] && args+=(--sizes "$sizes")
 status=0
-echo; echo "Funded Clips switched off: every pixel must match."
+echo; echo "Clips Funded switched off: every pixel must match."
 node "$work/compare.mjs" "http://localhost:$p1" "http://localhost:$p2" "${args[@]+"${args[@]}"}" || status=1
-echo; echo "Funded Clips switched on: every pixel outside the switcher must match."
+echo; echo "Clips Funded switched on: every pixel outside the switcher must match."
 node "$work/compare.mjs" "http://localhost:$p1" "http://localhost:$p2" --stories-on "${args[@]+"${args[@]}"}" || status=1
 exit "$status"

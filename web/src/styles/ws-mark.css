@@ -1,11 +1,11 @@
-/* Funded Clips' logo (components/WorkspaceMark.tsx; the owner, 22 Nov 2026: "the same logo as clip factory but with
+/* Clips Funded's logo (components/WorkspaceMark.tsx; the owner, 22 Nov 2026: "the same logo as clip factory but with
    the colors in clip factory stories"). The mark is Clip Factory's own markup and shape (.brand__mark and .brand__dot,
    layout.css: the italic "C" on its tile, its size, type and dot), so only its colours are set here. Four tokens colour
    it: --ws-mark-tile (the tile, a colour or a gradient), --ws-mark-letter (the "C"), --ws-mark-dot (the dot) and
-   --ws-wordmark (the words "Funded Clips"). Funded Clips' own stylesheet sets them inside its app; everywhere else (Clip
-   Factory's round toggle that goes to Funded Clips, the start-up card before Funded Clips' own styles load) each falls
-   back to the very same warm colours, written out here (the owner, 23 Nov: Funded Clips' colours everywhere the mark
-   stands for Funded Clips; test/workspaceMark.test.tsx holds the two the same): the cream tile, the espresso "C", the
+   --ws-wordmark (the words "Clips Funded"). Clips Funded's own stylesheet sets them inside its app; everywhere else (Clip
+   Factory's round toggle that goes to Clips Funded, the start-up card before Clips Funded's own styles load) each falls
+   back to the very same warm colours, written out here (the owner, 23 Nov: Clips Funded's colours everywhere the mark
+   stands for Clips Funded; test/workspaceMark.test.tsx holds the two the same): the cream tile, the espresso "C", the
    orange dot and the cream words. In the main stylesheet, because the mark is an element of the shell. Clip Factory's
    own mark never carries ws-mark, so its colours stay exactly as they are. */
 
@@ -20,7 +20,7 @@
 /* A smaller mark at a given size (--ws-mark-size), on the shell's round workspace toggle: Clip Factory's mark in
    proportion (the same tile, italic "C" and dot as .brand__mark and .brand__dot), drawn with its own classes so the top
    bar it sits in keeps one brand mark, and with no shadow, so nothing paints outside the toggle's own box. The same
-   small mark in two colourings: Funded Clips' (ws-mark, the four tokens above) on the toggle that goes to Funded Clips,
+   small mark in two colourings: Clips Funded's (ws-mark, the four tokens above) on the toggle that goes to Clips Funded,
    and Clip Factory's own (ws-clipmark: .brand__mark's bone tile and green "C", .brand__dot's vermilion) on the toggle
    that goes back to Clip Factory, in either app. */
 .ws-mark.ws-mark--sized,
@@ -65,7 +65,7 @@
 }
 
 /* The wordmark: Clip Factory's wordmark type (.brand__name: "Clip Factory", its italic "Factory") in one colour.
-   "Funded Clips" is a few px wider than "Clip Factory" and still keeps its name in the rail and in a phone's top bar
+   "Clips Funded" is a few px wider than "Clip Factory" and still keeps its name in the rail and in a phone's top bar
    from 340 px (e2e/stories-shell.spec.ts checks it at 340 and 375). The doubled class outranks the one-class name style of the app it sits in (loaded
    later, in its own chunk), which still places it and hides it where the frame says. */
 .ws-wordmark.ws-wordmark {

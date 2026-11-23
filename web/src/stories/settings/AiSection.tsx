@@ -647,7 +647,7 @@ export function AiSection({ ws }: { ws: string }) {
   return (
     <div className="st-stg-cards">
       <SectionBar>
-        <p className="st-stg-small">Funded Clips' own models. Clip Factory's model setting is separate and stays as it is.</p>
+        <p className="st-stg-small">Clips Funded's own models. Clip Factory's model setting is separate and stays as it is.</p>
         <SavedMark saved={saved} busy={ai.busy} />
       </SectionBar>
       <DefaultModel data={data} pending={pending} onPick={pickModel} ws={ws} reload={ai.reload} />

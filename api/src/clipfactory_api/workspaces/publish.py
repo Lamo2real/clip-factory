@@ -85,7 +85,7 @@ ALLOWED: Final[dict[str, frozenset[str]]] = {
     "x": frozenset(),
 }
 NEVER: Final = frozenset({"campaign", "madeForKids"})
-NOT_ON: Final = "Posting is not switched on for Funded Clips yet."
+NOT_ON: Final = "Posting is not switched on for Clips Funded yet."
 PUBLIC: Final = (
     "publishingJobId",
     "workspaceId",
@@ -177,9 +177,9 @@ def clean_options(platform: str, raw: Any, config: Mapping[str, Any] | None = No
     options = validate.obj(raw, "options")
     for key in sorted(options):
         if key == "madeForKids":
-            raise bad_request("Funded Clips videos are never marked as made for kids.", "options")
+            raise bad_request("Clips Funded videos are never marked as made for kids.", "options")
         if key == "campaign":
-            raise bad_request("Funded Clips posts are not campaign posts.", "options")
+            raise bad_request("Clips Funded posts are not campaign posts.", "options")
     validate.only_keys(options, ALLOWED[platform])
     cfg = config or {}
     out: Item = {}
@@ -400,7 +400,7 @@ def _changed_account(platform: str, destination: Destination) -> ApiError:
     return ApiError(
         409,
         "conflict",
-        f"Funded Clips' {label(platform)} is a different account now: {this_account(platform, name)}. Tap Yes if "
+        f"Clips Funded's {label(platform)} is a different account now: {this_account(platform, name)}. Tap Yes if "
         "that is right.",
         extra={
             "account": {
@@ -433,8 +433,8 @@ def _unsure_account(platform: str, problem: DestinationProblem) -> ApiError:
     return ApiError(
         409,
         "conflict",
-        f"Funded Clips cannot tell if {this_account(platform, name)} is Clip Factory's {label(platform)}. Tap "
-        f"Yes if it is your Funded Clips {label(platform)}.",
+        f"Clips Funded cannot tell if {this_account(platform, name)} is Clip Factory's {label(platform)}. Tap "
+        f"Yes if it is your Clips Funded {label(platform)}.",
         extra={"account": dict(account)},
     )
 

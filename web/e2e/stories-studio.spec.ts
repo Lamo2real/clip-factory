@@ -484,7 +484,7 @@ test("round 3, Post to {name}?: the publish sheet and Posts' Try again ask about
     await sheet.locator(".st-s-sheet__actions .st-btn--main").click();
     // Named by its place first, so it reads right when the account is itself called Lamo Stories (§45.36 E13).
     const ask = await sheetRules(page, w, /^Post to this TikTok account( \(.+\))?\?$/);
-    await expect(ask).toContainText("Funded Clips cannot tell if");
+    await expect(ask).toContainText("Clips Funded cannot tell if");
     await expect(ask).not.toContainText("Lamo Clips");
     // The account id is behind Technical details (§45.36 E14).
     await expect(ask.locator(".st-s-dest--ask .st-s-tech")).toContainText("Account id");
@@ -597,7 +597,7 @@ test("round 4: Production and the Library say everything in words; the exact par
     const details = page.locator(".st-s-details").first();
     await expect(details).toContainText("Helpers used");
     await expect(details).toContainText("Claude on Amazon Bedrock");
-    await expect(details).toContainText("Funded Clips' own folder in Clip Factory's media storage");
+    await expect(details).toContainText("Clips Funded's own folder in Clip Factory's media storage");
     await expect(details.locator("dt, h3", { hasText: /^Made with$/ })).toHaveCount(1);
     await expect(details.locator(".st-s-used__id").first()).toHaveText(/^Model ID \S+ in eu-north-1$/);
     expect(await plain(page, ".st-s-details")).not.toMatch(raw);
@@ -611,7 +611,7 @@ test("round 4: Production and the Library say everything in words; the exact par
     // The Library's project page.
     await goLibrary(page, `/stories/library?story=${S.approved}`);
     const made = page.locator(".st-details");
-    await expect(made).toContainText("Funded Clips' own folder in Clip Factory's media storage");
+    await expect(made).toContainText("Clips Funded's own folder in Clip Factory's media storage");
     await expect(made).toContainText("Claude on Amazon Bedrock");
     expect(await plain(page, ".st-details")).not.toMatch(raw);
     for (const f of await made.locator(".st-s-tech summary").all()) await f.click();
@@ -837,7 +837,7 @@ test("round 5: the play badge leaves a square video's caption clear; a full idea
     history.pushState({}, "", "/stories");
     dispatchEvent(new PopStateEvent("popstate"));
   });
-  const item = page.locator(".st-needs-list__item", { hasText: "needs connecting again. Open Funded Clips › Social accounts" }).first();
+  const item = page.locator(".st-needs-list__item", { hasText: "needs connecting again. Open Clips Funded › Social accounts" }).first();
   await expect(item).toBeVisible({ timeout: 20_000 });
   await expect(item.locator("a").last()).toHaveAttribute("href", "/stories/connections");
   await ctx.close();

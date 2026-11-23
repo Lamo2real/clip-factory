@@ -107,10 +107,10 @@ def _provider(provider_id: str) -> KeyedProvider:
     if not ws.PROVIDER_ID.match(provider_id):
         raise not_found("We could not find that provider.")
     if provider_id in NO_KEY:
-        raise bad_request(f"{NO_KEY[provider_id]} uses Funded Clips' own AWS access, so it needs no key.")
+        raise bad_request(f"{NO_KEY[provider_id]} uses Clips Funded's own AWS access, so it needs no key.")
     found = KEYED.get(provider_id)
     if found is None:
-        raise not_found(f"Funded Clips has no provider called '{provider_id}' that uses a key yet.")
+        raise not_found(f"Clips Funded has no provider called '{provider_id}' that uses a key yet.")
     return found
 
 
@@ -198,8 +198,8 @@ def key_of(store: db.Store, user_id: str, workspace_id: str, host: str) -> dict[
 
 
 NEED_MODEL_FIRST: Final = (
-    "Add the model on your OpenAI-compatible API first (Funded Clips › Settings › AI › Add a model), then "
-    "paste its key, so Funded Clips knows the one address it is for."
+    "Add the model on your OpenAI-compatible API first (Clips Funded › Settings › AI › Add a model), then "
+    "paste its key, so Clips Funded knows the one address it is for."
 )
 BASE_URL_ONLY_FOR_OPENAI: Final = "Only an OpenAI-compatible key is for an address (baseUrl). Leave it out."
 

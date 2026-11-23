@@ -44,7 +44,7 @@ def prompt_block(texts: list[str]) -> str:
         return ""
     lines = "\n".join(f"- {t}" for t in texts)
     return (
-        "What Funded Clips remembers about the owner and the studio (newest first; the owner can edit these in "
+        "What Clips Funded remembers about the owner and the studio (newest first; the owner can edit these in "
         "Settings › Memory):\n" + lines
     )
 

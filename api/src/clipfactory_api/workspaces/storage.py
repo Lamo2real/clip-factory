@@ -22,7 +22,7 @@ VIDEOS: Final = ("final_video", "cover", "video")
 SCENES: Final = ("scene_clip", "scene_still", "storyboard", "captions")
 AUDIO: Final = ("audio",)
 STORED_REFS: Final = ("ready", "analyzing", "analyzed", "failed")  # an upload still going holds nothing yet
-LOCATION_LINE: Final = "Funded Clips' own folder in Clip Factory's media storage"
+LOCATION_LINE: Final = "Clips Funded's own folder in Clip Factory's media storage"
 
 
 def _bytes(value: Any) -> int:

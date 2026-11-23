@@ -27,7 +27,7 @@ export function Player({ story, script, width }: { story: Story; script: StorySc
           <span>The video isn&apos;t ready yet.</span>
         </div>
       )}
-      <p className="st-s-player__note">{story.videoUrl ? "The finished video" : script ? "Drawn live by Funded Clips" : ""}</p>
+      <p className="st-s-player__note">{story.videoUrl ? "The finished video" : script ? "Drawn live by Clips Funded" : ""}</p>
     </div>
   );
 }

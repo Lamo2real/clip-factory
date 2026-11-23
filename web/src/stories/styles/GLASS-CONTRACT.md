@@ -1,4 +1,4 @@
-# Funded Clips · the liquid-glass contract
+# Clips Funded · the liquid-glass contract
 
 The owner's warm reference of 22 Nov (a dark espresso room, amber and copper light out of focus behind smoky glass,
 cream solids, an orange accent) on direction B's technical base (one radius scale, a liquid rim on a few hero

@@ -447,7 +447,7 @@ def test_no_saved_key_stops_the_call_with_a_sentence_and_nothing_is_tried_elsewh
         m.complete(CTX, task="chat", messages=HELLO)
     assert str(e.value) == (
         "Claude Opus 5.5 (my key) isn't available right now: there is no key for the Anthropic API saved yet (paste "
-        "one in Funded Clips › Settings › AI › Provider keys). Pick another model in Funded Clips › Settings › AI, or "
+        "one in Clips Funded › Settings › AI › Provider keys). Pick another model in Clips Funded › Settings › AI, or "
         "try again."
     )
     assert fake.requests == [] and runtime.requests == []
@@ -477,7 +477,7 @@ def test_an_effort_or_tools_the_host_refuses_are_said_plainly_and_never_retried_
         m.complete(CTX, task="chat", messages=HELLO)
     assert str(e.value) == (
         "Claude Opus 5.5 (my key) does not accept Extra high effort here (the Anthropic API refused it). Pick another "
-        "level in Funded Clips › Settings › AI."
+        "level in Clips Funded › Settings › AI."
     )
     assert e.value.sent is True and len(fake.requests) == 1  # never sent again without the effort
     assert table.item("MODELSTATUS#custom-claude-api")["status"] == "error"  # type: ignore[index]

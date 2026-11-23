@@ -50,16 +50,16 @@ test("after a connect: Connected as {name} ({handle}), and the card asks whether
   const yt = cardOf(page, "YouTube");
   await yt.getByRole("button", { name: "Pick another channel" }).click();
   await expect(page).toHaveURL(/\/stories\/connections$/);
-  await expect(page.locator(".toast").filter({ hasText: "Connected as Funded Clips (@fundedclips)." })).toBeVisible();
-  const ask = yt.getByRole("group", { name: "Is this your Funded Clips channel?" });
+  await expect(page.locator(".toast").filter({ hasText: "Connected as Clips Funded (@fundedclips)." })).toBeVisible();
+  const ask = yt.getByRole("group", { name: "Is this your Clips Funded channel?" });
   await expect(ask).toBeVisible();
-  await expect(ask).toContainText("Funded Clips posts only here, never to Clip Factory's.");
+  await expect(ask).toContainText("Clips Funded posts only here, never to Clip Factory's.");
   // Pick another connects again, and asks again.
   await ask.getByRole("button", { name: "Pick another channel" }).click();
-  await expect(page.locator(".toast").filter({ hasText: "Connected as Funded Clips (@fundedclips)." }).first()).toBeVisible();
-  await expect(yt.getByRole("group", { name: "Is this your Funded Clips channel?" })).toBeVisible();
+  await expect(page.locator(".toast").filter({ hasText: "Connected as Clips Funded (@fundedclips)." }).first()).toBeVisible();
+  await expect(yt.getByRole("group", { name: "Is this your Clips Funded channel?" })).toBeVisible();
   await yt.getByRole("button", { name: "Yes, that's it" }).click();
-  await expect(page.locator(".toast").filter({ hasText: "Great! Funded Clips posts to this YouTube channel (Funded Clips)." })).toBeVisible();
+  await expect(page.locator(".toast").filter({ hasText: "Great! Clips Funded posts to this YouTube channel (Clips Funded)." })).toBeVisible();
   await expect(yt.locator(".st-intended")).toHaveCount(0);
   await expect(page.locator("canvas.confetti").first()).toBeAttached();
 });
@@ -71,14 +71,14 @@ test("a connect finished by picking the Instagram account from the list asks whe
   await ready(page);
   const ig = cardOf(page, "Instagram");
   await ig.locator(".st-choose").getByRole("button", { name: /funded\.clips/ }).click();
-  const ask = ig.getByRole("group", { name: "Is this your Funded Clips account?" });
+  const ask = ig.getByRole("group", { name: "Is this your Clips Funded account?" });
   await expect(ask).toBeVisible();
   await expect(ask).toContainText("Connected as funded.clips.");
   const o = await findOverflow(page);
   expect(o.page, "@320: the page scrolls sideways").toBeLessThanOrEqual(o.viewport);
   expect(o.items, "@320").toEqual([]);
   await ask.getByRole("button", { name: "Yes, that's it" }).click();
-  await expect(page.locator(".toast").filter({ hasText: "Great! Funded Clips posts to this Instagram account (funded.clips)." })).toBeVisible();
+  await expect(page.locator(".toast").filter({ hasText: "Great! Clips Funded posts to this Instagram account (funded.clips)." })).toBeVisible();
   await expect(ig.locator(".st-intended")).toHaveCount(0);
 });
 
@@ -90,13 +90,13 @@ test("after Disconnect, an own Meta app gets the Lamo Stories line, Clip Factory
   const fb = cardOf(page, "Facebook");
   await fb.getByRole("button", { name: "Connect Facebook" }).click();
   await expect(page).toHaveURL(/\/stories\/connections$/);
-  await fb.getByRole("button", { name: /^Funded Clips/ }).click();
+  await fb.getByRole("button", { name: /^Clips Funded/ }).click();
   await expect(fb.locator(".st-chip").first()).toHaveText("Connected");
   // Picked from the list: the card asks first whether this is the Lamo Stories Page (§45.34).
-  await fb.getByRole("group", { name: "Is this your Funded Clips Page?" }).getByRole("button", { name: "Yes, that's it" }).click();
+  await fb.getByRole("group", { name: "Is this your Clips Funded Page?" }).getByRole("button", { name: "Yes, that's it" }).click();
   await fb.getByRole("button", { name: "Disconnect" }).click();
   await fb.getByRole("button", { name: "Yes, disconnect" }).click();
-  await expect(page.getByText("To remove Funded Clips completely, remove your Funded Clips app in the account's own settings. Clip Factory is not affected.")).toBeVisible();
+  await expect(page.getByText("To remove Clips Funded completely, remove your Clips Funded app in the account's own settings. Clip Factory is not affected.")).toBeVisible();
   await page.getByRole("button", { name: "Hide this note" }).click();
   const yt = cardOf(page, "YouTube");
   await yt.getByRole("button", { name: "Disconnect" }).click();
@@ -122,11 +122,11 @@ test("round 4: no Check now while the account is still to be picked, and one toa
     }).observe(document.body, { childList: true, subtree: true });
   });
   await ig.locator(".st-choose").getByRole("button", { name: /funded\.clips/ }).click();
-  const ask = ig.getByRole("group", { name: "Is this your Funded Clips account?" });
+  const ask = ig.getByRole("group", { name: "Is this your Clips Funded account?" });
   await expect(ask).toBeVisible();
   await ask.getByRole("button", { name: "Yes, that's it" }).click();
-  await expect(page.locator(".toast").filter({ hasText: "Great! Funded Clips posts to this Instagram account (funded.clips)." })).toBeVisible();
-  expect(await page.evaluate(() => (window as unknown as { __toasts: string[] }).__toasts)).toEqual(["Great! Funded Clips posts to this Instagram account (funded.clips)."]);
+  await expect(page.locator(".toast").filter({ hasText: "Great! Clips Funded posts to this Instagram account (funded.clips)." })).toBeVisible();
+  expect(await page.evaluate(() => (window as unknown as { __toasts: string[] }).__toasts)).toEqual(["Great! Clips Funded posts to this Instagram account (funded.clips)."]);
   // Connected now: Check now is back.
   await expect(ig.getByRole("button", { name: /Check now/ })).toBeVisible();
 });
@@ -170,7 +170,7 @@ test("round 5: one name for the other app, ids and developer words one tap away,
   // Measured before E14 below opens YouTube's Technical details: that card then grows (33 px here) and keeps its column
   // by design (the next test), so the empty area grows by as much. Measured after it, this check raced the page's next
   // frame: it held only while the cards under the grown one were not laid out again yet, which a page busy with Clip
-  // Factory's hidden backdrop still drifting under Funded Clips made likely; settled, the same layout leaves 724 px.
+  // Factory's hidden backdrop still drifting under Clips Funded made likely; settled, the same layout leaves 724 px.
   // (Measured once the cards' rise-in has ended, so no card is caught on its way up.)
   await page.locator(".st-conns > .st-conn").evaluateAll((els) => Promise.all(els.flatMap((e) => e.getAnimations()).filter((a) => a.effect?.getComputedTiming().iterations !== Infinity).map((a) => a.finished.catch(() => undefined))));
   expect(await flowsByHeight("as dealt"), "less empty than the columns left before").toBeLessThan(700);

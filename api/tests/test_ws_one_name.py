@@ -61,7 +61,7 @@ def test_no_lamo_stories_api_string_names_lamo_clips() -> None:
     assert found == []
 
 
-# "Stories" alone, not as part of "Funded Clips" (nor of an old name a test or a stored value may still hold).
+# "Stories" alone, not as part of "Clips Funded" (nor of an old name a test or a stored value may still hold).
 JUST_STORIES = re.compile(r"(?<![A-Za-z])(?<!Clip )(?<!Lamo )(?<!Factory )Stories(?![A-Za-z])")
 
 
@@ -74,12 +74,12 @@ def test_no_api_string_calls_the_app_just_stories() -> None:
     ]
     assert found == []
     assert JUST_STORIES.search("Clip Factory's posts always go first. Stories uses what's left.")
-    assert not JUST_STORIES.search("Clip Factory's posts always go first. Funded Clips uses what's left.")
+    assert not JUST_STORIES.search("Clip Factory's posts always go first. Clips Funded uses what's left.")
     for old in ("Clip Stories", "Lamo Stories", "Clip Factory Stories"):  # an old name is not "Stories" alone
         assert not JUST_STORIES.search(f"Clip Factory's posts always go first. {old} uses what's left.")
 
 
-@pytest.mark.parametrize("name", [None, "Lamo Stories", "Funded Clips", "Ice Tips"])
+@pytest.mark.parametrize("name", [None, "Lamo Stories", "Clips Funded", "Ice Tips"])
 @pytest.mark.parametrize("shared", [True, False])
 def test_every_posting_sentence_says_clip_factory(name: str | None, shared: bool) -> None:
     for platform in PLATFORMS:
@@ -90,7 +90,7 @@ def test_every_posting_sentence_says_clip_factory(name: str | None, shared: bool
             if name:
                 # the account's name only ever follows "{Platform} account"
                 assert f"({name})" not in text or f"{LABEL[platform]} account ({name})" in text, (platform, kind)
-                assert f"Funded Clips' {LABEL[platform]} ({name})" not in text
+                assert f"Clips Funded's {LABEL[platform]} ({name})" not in text
 
 
 def test_the_other_screens_lines_say_clip_factory() -> None:
@@ -104,14 +104,14 @@ def test_the_other_screens_lines_say_clip_factory() -> None:
             lines.append(apps.not_ready_sentence(platform, reason))
     assert [line for line in lines if "Lamo Clips" in line] == []
     assert onboarding.same_as_clips_line("youtube") == (
-        "This is Clip Factory's own account. Funded Clips needs its own separate account: sign in with a different one."
+        "This is Clip Factory's own account. Clips Funded needs its own separate account: sign in with a different one."
     )
     assert apps.not_ready_sentence("tiktok", "clips_missing") == (
         "Clip Factory has no TikTok app keys yet. Set up TikTok in Clip Factory first (Settings › Posting › Set up "
         "posting, up to the keys step)."
     )
-    assert social.TIKTOK_UNSURE.startswith("Funded Clips cannot tell if this is Clip Factory's TikTok")
-    assert "Clip Factory's posts always go first. Funded Clips uses what's left." in social.limits("x", apps.CLIPS)
+    assert social.TIKTOK_UNSURE.startswith("Clips Funded cannot tell if this is Clip Factory's TikTok")
+    assert "Clip Factory's posts always go first. Clips Funded uses what's left." in social.limits("x", apps.CLIPS)
     assert not any("quicker" in line or "Use it for both" in line for line in lines)  # §45.37 G6 d, G8
 
 
@@ -120,23 +120,23 @@ def test_an_account_named_lamo_stories_reads_plainly() -> None:
         return sentences.story_sentence(platform, kind, "Lamo Stories")
 
     assert say("reconnect") == (
-        "This TikTok account (Lamo Stories) needs connecting again. Open Funded Clips › Social accounts, then tap "
+        "This TikTok account (Lamo Stories) needs connecting again. Open Clips Funded › Social accounts, then tap "
         "Try again."
     )
     assert say("not_connected", "youtube") == (
-        "This YouTube account (Lamo Stories) is not connected. Open Funded Clips › Social accounts, connect it, then "
+        "This YouTube account (Lamo Stories) is not connected. Open Clips Funded › Social accounts, connect it, then "
         "tap Try again."
     )
     assert say("same_as_clips", "instagram") == (
-        "This Instagram account (Lamo Stories) is Clip Factory's own account. Funded Clips needs its own "
-        "separate account: connect a different one in Funded Clips › Social accounts, then tap Try again."
+        "This Instagram account (Lamo Stories) is Clip Factory's own account. Clips Funded needs its own "
+        "separate account: connect a different one in Clips Funded › Social accounts, then tap Try again."
     )
     assert say("clips_unknown") == (
-        "Funded Clips cannot tell if this TikTok account (Lamo Stories) is Clip Factory's TikTok. Tap Try again to "
+        "Clips Funded cannot tell if this TikTok account (Lamo Stories) is Clip Factory's TikTok. Tap Try again to "
         "check the account first."
     )
     assert say("changed", "facebook") == (
-        "Funded Clips' Facebook is a different account now: this Facebook account (Lamo Stories). Tap Try again to "
+        "Clips Funded's Facebook is a different account now: this Facebook account (Lamo Stories). Tap Try again to "
         "check where it goes."
     )
     assert (
@@ -146,10 +146,10 @@ def test_an_account_named_lamo_stories_reads_plainly() -> None:
     assert say("banned", "x") == "X is not letting this X account (Lamo Stories) post right now. Try again tomorrow."
     # with no name the sentence is about Lamo Stories' own account on that platform
     assert sentences.story_sentence("tiktok", "reconnect") == (
-        "Funded Clips' TikTok needs connecting again. Open Funded Clips › Social accounts, then tap Try again."
+        "Clips Funded's TikTok needs connecting again. Open Clips Funded › Social accounts, then tap Try again."
     )
     assert sentences.story_sentence("youtube", "changed") == (
-        "Funded Clips' YouTube is a different account now. Tap Try again to check where it goes."
+        "Clips Funded's YouTube is a different account now. Tap Try again to check where it goes."
     )
     # the dashboard's own account line
     line = dashboard._account_sentence(

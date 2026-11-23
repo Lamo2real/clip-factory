@@ -15,7 +15,7 @@ variable "app_version" {
 
 variable "app_url" {
   type        = string
-  description = "The web app's origin (APP_URL): the Funded Clips OAuth callback lands on {APP_URL}/stories/connections."
+  description = "The web app's origin (APP_URL): the Clips Funded OAuth callback lands on {APP_URL}/stories/connections."
 }
 
 variable "table_name" { type = string }
@@ -25,7 +25,7 @@ variable "media_bucket_arn" { type = string }
 
 variable "stories_agent_runtime_arn" {
   type        = string
-  description = "Funded Clips' own AgentCore runtime (cf_prod_story_agent, STORIES_AGENT_RUNTIME_ARN). Never Clip Factory's cf_prod_clip_agent."
+  description = "Clips Funded's own AgentCore runtime (cf_prod_story_agent, STORIES_AGENT_RUNTIME_ARN). Never Clip Factory's cf_prod_clip_agent."
   validation {
     condition     = can(regex("^arn:aws[a-z-]*:bedrock-agentcore:[a-z0-9-]+:[0-9]{12}:runtime/[A-Za-z0-9_]*_story_agent-[A-Za-z0-9]+$", var.stories_agent_runtime_arn))
     error_message = "stories_agent_runtime_arn must be the ARN of the *_story_agent runtime (never the clip agent's)."
@@ -43,7 +43,7 @@ variable "story_flow_alias_arn" {
 
 variable "ws_secret_prefix" {
   type        = string
-  description = "Name prefix of Funded Clips' secrets (WS_SECRET_PREFIX, <name>/workspaces/, §45.13.1)."
+  description = "Name prefix of Clips Funded's secrets (WS_SECRET_PREFIX, <name>/workspaces/, §45.13.1)."
   validation {
     condition     = endswith(var.ws_secret_prefix, "/workspaces/") && !strcontains(var.ws_secret_prefix, "/platforms/")
     error_message = "ws_secret_prefix must end with /workspaces/ and never be under /platforms/."
@@ -98,7 +98,7 @@ variable "hooks_url" {
 
 variable "stories_oauth_callback" {
   type        = string
-  description = "Funded Clips' own callback base {apiUrl}/v1/stories-oauth (STORIES_OAUTH_CALLBACK, §45.13.3): the redirect URI Funded Clips' own developer apps register."
+  description = "Clips Funded's own callback base {apiUrl}/v1/stories-oauth (STORIES_OAUTH_CALLBACK, §45.13.3): the redirect URI Clips Funded's own developer apps register."
   validation {
     condition     = can(regex("^https://[^/]+/v1/stories-oauth$", var.stories_oauth_callback))
     error_message = "stories_oauth_callback must be https://<host>/v1/stories-oauth (no trailing slash)."

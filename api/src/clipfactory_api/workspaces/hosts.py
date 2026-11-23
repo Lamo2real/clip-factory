@@ -92,17 +92,17 @@ NOT_HTTPS: Final = "The address must start with https:// so the key travels safe
 NO_LOGIN_IN_URL: Final = "Leave the name and password out of the address. Save the key in Provider keys instead."
 NO_QUERY: Final = "Leave out anything after ? or # in the address."
 NOT_PUBLIC: Final = (
-    "That address is not on the public internet (a private, local or internal address). Funded Clips can only "
+    "That address is not on the public internet (a private, local or internal address). Clips Funded can only "
     "call a public https address."
 )
 BASE_URL_ONLY_OPENAI: Final = "Only a model on an OpenAI-compatible API has an address (baseUrl). Leave it out."
 REGION_ONLY_BEDROCK: Final = "Only a model on Amazon Bedrock has a Region. Leave the Region out."
 ONE_SERVICE: Final = (
-    "Funded Clips keeps one key for one OpenAI-compatible service. Your other OpenAI-compatible models use "
+    "Clips Funded keeps one key for one OpenAI-compatible service. Your other OpenAI-compatible models use "
     "{host}: use that address too, or remove those models first."
 )
 KEY_FOR_OTHER: Final = (
-    "Your OpenAI-compatible key is for {saved}. To use {host}, remove that key in Funded Clips › Settings › AI "
+    "Your OpenAI-compatible key is for {saved}. To use {host}, remove that key in Clips Funded › Settings › AI "
     "› Provider keys first, then paste the key for {host}."
 )
 BAD_KEYED_MODEL_ID: Final = (

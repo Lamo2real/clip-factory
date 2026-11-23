@@ -9,7 +9,7 @@ import { applyLook, useLook } from "../lib/look.ts";
  *
  * `away`: the application shell shows the other app (app/ClipsBackdrop.tsx). The backdrop stays the same element, is
  * not drawn and its drift waits (glass.css .backdrop--away), so back on screen it is exactly where the owner left it.
- * Without it (always, while Funded Clips is switched off) the backdrop is exactly as it always was.
+ * Without it (always, while Clips Funded is switched off) the backdrop is exactly as it always was.
  */
 export function Backdrop({ away = false }: { away?: boolean }) {
   const look = useLook();

@@ -78,8 +78,8 @@ REGISTRY: Final[tuple[Provider, ...]] = (
         "bedrock-claude",
         "Claude on Amazon Bedrock",
         False,
-        "Writes every story with the model and effort picked in Funded Clips › Settings › AI.",
-        "Not checked yet. Tap Check models in Funded Clips › Settings › AI.",
+        "Writes every story with the model and effort picked in Clips Funded › Settings › AI.",
+        "Not checked yet. Tap Check models in Clips Funded › Settings › AI.",
     ),
     Provider(
         "images",
@@ -195,16 +195,16 @@ REGISTRY: Final[tuple[Provider, ...]] = (
     ),
 )
 KIND_WORDS: Final = {"images": "Picture maker", "animation": "Video maker", "audio": "Sound maker"}
-OFF_LINE: Final = "Off. Pick it in Funded Clips › Settings › Video › Picture maker to use it."
-WRITER_FAILED: Final = "No model has answered yet. Tap Check models in Funded Clips › Settings › AI to see why."
+OFF_LINE: Final = "Off. Pick it in Clips Funded › Settings › Video › Picture maker to use it."
+WRITER_FAILED: Final = "No model has answered yet. Tap Check models in Clips Funded › Settings › AI to see why."
 PROOF_STEP: Final = {"writer": "storyboard", "images": "scenes", "animation": "animation", "audio": "sound"}
 NOTHING_MADE: Final = "Nothing changed"  # the agent's message for a step that had nothing to (re)make
 JOBS_READ: Final = 200  # the newest story jobs looked at for proof
-NEEDS_KEY: Final = {"elevenlabs": "Paste your ElevenLabs key in Funded Clips › Settings › Video to use it."}
+NEEDS_KEY: Final = {"elevenlabs": "Paste your ElevenLabs key in Clips Funded › Settings › Video to use it."}
 KEY_PLACE: Final = {
-    "elevenlabs": "Funded Clips › Settings › Video",
-    "openai_compatible": "Funded Clips › Settings › AI › Provider keys",
-    "anthropic": "Funded Clips › Settings › AI › Provider keys",
+    "elevenlabs": "Clips Funded › Settings › Video",
+    "openai_compatible": "Clips Funded › Settings › AI › Provider keys",
+    "anthropic": "Clips Funded › Settings › AI › Provider keys",
 }
 
 
@@ -228,12 +228,12 @@ def off_line(p: Provider) -> str:
     if p.id == "polly":
         return f"Off. {POLLY_LINE}"
     where = KIND_WORDS.get(p.kind, "Picture maker")
-    return f"Off. Pick it in Funded Clips › Settings › Video › {where} to use it."
+    return f"Off. Pick it in Clips Funded › Settings › Video › {where} to use it."
 
 
 def own_missing(p: Provider) -> str:
     word = makers.KIND_WORD[MAKER_KIND[p.kind]]
-    return f"Add a {word} model first: tap Add a model in Funded Clips › Settings › Video."
+    return f"Add a {word} model first: tap Add a model in Clips Funded › Settings › Video."
 
 
 # What a story's create, produce and changes say while the picked maker is not ready (§45.34, G7: Luma AI Ray2's
@@ -548,7 +548,7 @@ def not_ready(
     return None
 
 
-IMAGES_OFF: Final = "AI pictures are off. Turn them on in Funded Clips › Settings › Video › Picture maker."
+IMAGES_OFF: Final = "AI pictures are off. Turn them on in Clips Funded › Settings › Video › Picture maker."
 
 
 def portrait_problem(config: Mapping[str, Any], known: Known | None = None) -> str | None:

@@ -186,7 +186,7 @@ describe("the account a publishing 409 names (§45.34)", () => {
 
   it("a confirmAccount that is not the account it would go to now names the account", async () => {
     const e = await refused(api.publish("stories", S.approved, [{ platform: "youtube", socialAccountId: "stories.youtube", confirmAccount: "ext-old" }]));
-    expect(e.message).toContain("Funded Clips' YouTube is a different account now: this YouTube account (Lamo youtube). Tap Yes if that is right.");
+    expect(e.message).toContain("Clips Funded's YouTube is a different account now: this YouTube account (Lamo youtube). Tap Yes if that is right.");
     expect(accountOf(e)?.externalAccountId).toBe("ext-youtube");
   });
 

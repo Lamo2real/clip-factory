@@ -55,7 +55,7 @@ FAILURE = {
     "captions": "The caption helper could not finish. Tap Try again.",
     "check_models": "Checking the models did not finish. Tap Try again.",
 }
-UNKNOWN_KIND = "Funded Clips' agent does not know that kind of AI work yet."
+UNKNOWN_KIND = "Clips Funded's agent does not know that kind of AI work yet."
 GONE = "What this was for was changed or deleted meanwhile. Tap Try again."
 
 
@@ -120,7 +120,7 @@ def agent_off(svc: Services, pk: str, agent_id: str) -> str | None:
     item = svc.store.get(pk, f"AGENT#{agent_id}")
     if item is not None and item.get("active") is False:
         name = str(item.get("name") or _agent_name(agent_id))
-        return f"{name} is switched off. Switch it on in Funded Clips › Settings › Agents."
+        return f"{name} is switched off. Switch it on in Clips Funded › Settings › Agents."
     return None
 
 
