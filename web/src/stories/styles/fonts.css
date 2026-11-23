@@ -1,6 +1,8 @@
 /* Clip Factory Stories · its own fonts (the foundation; GLASS-CONTRACT.md). Only the families "Playfair" and "Jost",
    only from /fonts/stories/, only used under .stories-app through --st-font and --st-font-caps: Clip Factory keeps
-   Inter and Times. test/storiesStyles.test.ts checks every @font-face here. */
+   Inter and Times. test/storiesStyles.test.ts checks every @font-face here. Not imported by stories.css: StoriesApp
+   puts this file on the page with the first Stories screen (stories/fonts.ts, `?inline`), so the chunk the shell
+   prefetches while Clip Factory is on screen adds no font face there. */
 
 /* The font: Playfair (a free OFL look-alike of the Womack sample: high contrast, sharp wedge serifs, a
    width axis to condense it a little) and Jost (OFL) for short wide-tracked caps captions. Self-hosted from

@@ -134,7 +134,9 @@ describe("the Dashboard's glass", () => {
   it("has its head on a backing plate and one orange main action: the setup's way on while it is open", async () => {
     const o = await api.getOnboarding("stories");
     expect(o.finishedAt).toBeFalsy();
-    expect($(".st-dash > .st-dash-head.st-plate > .st-head")).not.toBeNull();
+    // One plate: the shell's page head itself, never a second plate around it or inside it.
+    expect($(".st-dash > header.st-head.st-plate")).not.toBeNull();
+    expect($$(".st-dash .st-plate .st-head, .st-dash .st-head .st-plate")).toEqual([]);
     const mains = $$(".st-dash .st-btn--main");
     expect(mains.map((m) => m.textContent?.trim())).toEqual(["Carry on"]);
     expect($(".st-setupcard .st-btn--main")).not.toBeNull();

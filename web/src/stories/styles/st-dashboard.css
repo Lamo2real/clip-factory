@@ -20,18 +20,6 @@
   container: st-dash / inline-size;
 }
 
-/* The page head's backing plate (rule 6: .st-plate, invisible over Ember). The shell's StPageHead is becoming a plate
-   itself (.st-head.st-plate); once it is, this wrapper steps back, so there is one plate, never two. */
-.stories-app .st-dash-head:has(> .st-plate) {
-  padding: 0;
-  background: none;
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-  box-shadow: none;
-}
-.stories-app .st-dash-head:has(> .st-plate)::after {
-  opacity: 0;
-}
 /* A note that the numbers could not be refreshed: loose words, on a plate too. */
 .st-dash .st-stale {
   justify-self: start;

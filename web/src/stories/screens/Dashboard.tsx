@@ -530,26 +530,24 @@ export function DashboardScreen({ ws }: StoriesScreenProps) {
   const settingUp = setupOpen(setup);
   return (
     <section className="st-page st-dash">
-      {/* Loose words on the page sit on a backing plate (rule 6): nothing over Ember, a glass plate over a picture or
-          the desktop. Once the shell's head is a plate itself, this one steps back (st-dashboard.css). */}
-      <div className="st-plate st-dash-head">
-        <StPageHead
-          title="Dashboard"
-          lede="Everything happening in your animation studio."
-          actions={
-            <>
-              <StLinkButton href="/stories/ideas">
-                <StIcon name="bulb" size={20} />
-                New idea
-              </StLinkButton>
-              <StLinkButton href="/stories/production/new" main={!settingUp && !empty}>
-                <StIcon name="clapper" size={20} />
-                Make a video
-              </StLinkButton>
-            </>
-          }
-        />
-      </div>
+      {/* The shell's page head is the backing plate for its loose words (rule 6): nothing over Ember, a glass plate over
+          a picture or the desktop. */}
+      <StPageHead
+        title="Dashboard"
+        lede="Everything happening in your animation studio."
+        actions={
+          <>
+            <StLinkButton href="/stories/ideas">
+              <StIcon name="bulb" size={20} />
+              New idea
+            </StLinkButton>
+            <StLinkButton href="/stories/production/new" main={!settingUp && !empty}>
+              <StIcon name="clapper" size={20} />
+              Make a video
+            </StLinkButton>
+          </>
+        }
+      />
       <ContinueCard ws={ws} />
       <SetupCard data={setup} />
       {!data && error ? (

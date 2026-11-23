@@ -24,6 +24,7 @@ import { loadStoriesApi, setStoriesApi } from "./api/client.ts";
 import { GlideCalm } from "../components/Glide.tsx";
 import { AWAY_RAN_OUT, takeParkedStoriesAway, takeParkedStoriesGo, useAppPane } from "./pane.tsx";
 import { THEME_COLOUR, useStoriesBackground } from "./look.ts";
+import { addStoriesFonts } from "./fonts.ts";
 import { TAB_ORB } from "./glass/index.ts";
 import { followStoriesClicks, storiesReduceMotion } from "./prefs.ts";
 import type { StoriesApi, Workspace } from "./api/types.ts";
@@ -341,6 +342,8 @@ function quickWorkspace(fromAddress: string | null): string | null {
 }
 
 export function StoriesApp({ page }: { page: StoriesPage }) {
+  // Its own fonts, put on the page by the first Stories screen (never by the prefetched chunk: stories/fonts.ts).
+  useLayoutEffect(() => addStoriesFonts(), []);
   // Its sliding highlights follow Lamo Stories' own calm-motion switch, never Clip Factory's once it has its own.
   return (
     <GlideCalm.Provider value={storiesReduceMotion}>

@@ -87,7 +87,10 @@ Eight screen builders start on these names now while the foundation keeps refini
 - chat: web/src/stories/styles/chat.css, web/src/stories/screens/Chat.tsx, web/src/stories/screens/References.tsx,
   web/src/stories/chat/**
 
-Load order (stories.css): fonts.css, glass-tokens.css, glass.css, glass-figures.css, then the screens' files.
+Load order (stories.css): glass-tokens.css, glass.css, glass-figures.css, then the screens' files. fonts.css is not in
+the index: StoriesApp adds its @font-face rules with the first Stories screen (stories/fonts.ts), because a font face
+that arrives with the chunk the shell prefetches while Clip Factory is on screen repaints Clip Factory's words a pixel
+off (web/scripts/clips-unchanged.sh with Stories on).
 Later files win at equal specificity, so a screen can place and size a figure, but must not set a token.
 
 ## The data attributes on `.stories-app` (set by `useStoriesBackground`, never by a screen)

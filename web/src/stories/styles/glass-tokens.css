@@ -19,7 +19,8 @@
    --st-* design tokens; screens use them and never set them.
    ===================================================================================================================== */
 
-/* The fonts (Playfair and Jost, self-hosted with their OFL licences) are fonts.css, imported just before this file. */
+/* The fonts (Playfair and Jost, self-hosted with their OFL licences) are fonts.css, which StoriesApp puts on the page
+   with the first Stories screen (stories/fonts.ts), not this style sheet. */
 
 .stories-app {
   /* ========== 1. The base: warm dark espresso and smoky brown (Colours › Ember is the default background) ==========

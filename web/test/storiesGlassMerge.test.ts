@@ -4,10 +4,13 @@
 // their own --st-tone-rgb (the token --st-tint-tinted is worked out on .stories-app, where no tone is set); the shell's
 // chips keep their words at 4.5:1 over a white desktop or photo on every glass they sit on; and the
 // Dashboard's Continue and setup cards are styled in st-dashboard.css only, their fill and rest shadow left to the
-// glass classes. Every number comes from the stylesheets, so a change there is checked here.
+// glass classes; and Stories' font faces come with the first Stories screen, never with the chunk the shell prefetches
+// while Clip Factory is on screen (any @font-face arriving then repaints Clip Factory's words a pixel off). Every
+// number comes from the stylesheets, so a change there is checked here.
 import { readFileSync, readdirSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { FONTS_ATTR, addStoriesFonts } from "../src/stories/fonts.ts";
 import { FROSTED, MEASURED, PRESETS, WHITE, contrast, hexToRgb, luminance, mix, stageSpots, type Rgb } from "../src/stories/look.ts";
 
 const DIR = join(import.meta.dirname, "..", "src", "stories", "styles");
@@ -187,5 +190,30 @@ describe("the Dashboard's Continue and setup cards", () => {
       expect(body, selector).not.toMatch(/\bbackground\s*:/);
       expect(body, selector).not.toMatch(/\bbox-shadow\s*:/);
     }
+  });
+});
+
+describe("Stories' fonts", () => {
+  const SRC = join(import.meta.dirname, "..", "src", "stories");
+
+  it("are not in the chunk's style sheet: only fonts.css declares a face, and no index imports it", () => {
+    for (const f of readdirSync(DIR).filter((n) => n.endsWith(".css"))) {
+      if (f === "fonts.css") {
+        expect(read(f), f).toMatch(/@font-face/);
+        continue;
+      }
+      expect(read(f), f).not.toMatch(/@font-face/);
+      expect(read(f), f).not.toMatch(/@import\s+["']\.\/fonts\.css["']/);
+    }
+  });
+
+  it("are put on the page by StoriesApp, once, before its first paint", () => {
+    expect(readFileSync(join(SRC, "fonts.ts"), "utf8")).toMatch(/import FACES from "\.\/styles\/fonts\.css\?inline";/);
+    expect(readFileSync(join(SRC, "StoriesApp.tsx"), "utf8")).toMatch(/useLayoutEffect\(\(\) => addStoriesFonts\(\), \[\]\);/);
+    document.head.querySelectorAll(`style[${FONTS_ATTR}]`).forEach((n) => n.remove());
+    addStoriesFonts();
+    addStoriesFonts();
+    expect(document.head.querySelectorAll(`style[${FONTS_ATTR}]`)).toHaveLength(1);
+    document.head.querySelectorAll(`style[${FONTS_ATTR}]`).forEach((n) => n.remove());
   });
 });
