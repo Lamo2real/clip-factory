@@ -9,6 +9,7 @@ import * as chat from "./chat.ts";
 import * as dashboard from "./dashboard.ts";
 import * as ideas from "./ideas.ts";
 import * as library from "./library.ts";
+import * as mac from "./mac.ts";
 import * as memory from "./memory.ts";
 import * as onboarding from "./onboarding.ts";
 import * as publishing from "./publishing.ts";
@@ -25,7 +26,8 @@ interface Part {
   api(store: MockStore): Partial<StoriesApi>;
 }
 
-const PARTS: Part[] = [workspace, dashboard, library, social, publishing, onboarding, ai, skills, memory, ideas, characters, stories, chat, references];
+// mac after publishing and dashboard: it hands TikTok to the owner's Mac while My Mac posts TikTok is on (§47.10).
+const PARTS: Part[] = [workspace, dashboard, library, social, publishing, onboarding, ai, skills, memory, ideas, characters, stories, chat, references, mac];
 
 /**
  * Knobs a test sets before the app loads (page.addInitScript: window.__cfStoriesMock = { knobs: { fresh: true } }).

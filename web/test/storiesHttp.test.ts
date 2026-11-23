@@ -157,6 +157,11 @@ const CASES: Case[] = [
   ["publish", (a) => a.publish("stories", "s1", [{ platform: "youtube", socialAccountId: "stories.youtube" }]), "POST", `${B}/stories/stories/s1/publish`, { targets: [{ platform: "youtube", socialAccountId: "stories.youtube" }] }, { publishingJobs: [33] }, [33]],
   ["listPublishing", (a) => a.listPublishing("stories", "s1"), "GET", `${B}/stories/publishing?storyId=s1`, undefined, { publishingJobs: [34] }, [34]],
   ["retryPublishing", (a) => a.retryPublishing("stories", "p1", { confirmAccount: "UC1" }), "POST", `${B}/stories/publishing/p1/retry`, { confirmAccount: "UC1" }, { publishingJob: 35 }, 35],
+  // My Mac posts TikTok (§47.10): the web's own Mac routes (the helper's ping, claim, step, done and stopped are its own).
+  ["macStatus", (a) => a.macStatus("stories"), "GET", `${B}/stories/tiktok/mac`, undefined, { on: true, helper: null, account: null, queue: [] }, { on: true, helper: null, account: null, queue: [] }],
+  ["macLogin", (a) => a.macLogin("stories"), "POST", `${B}/stories/tiktok/mac/login`, { action: "sign_in" }, { helper: 36 }, { helper: 36 }],
+  ["macRetry", (a) => a.macRetry("stories", "p1", { notOnTikTok: true, confirmAccount: "-000new" }), "POST", `${B}/stories/publishing/p1/mac/retry`, { notOnTikTok: true, confirmAccount: "-000new" }, { job: 37 }, 37],
+  ["macPosted", (a) => a.macPosted("stories", "p1", { link: "https://www.tiktok.com/@clips.funded/video/7400000000000000001" }), "POST", `${B}/stories/publishing/p1/mac/posted`, { link: "https://www.tiktok.com/@clips.funded/video/7400000000000000001" }, { job: 38 }, 38],
 ];
 
 describe("every Lamo Stories route", () => {

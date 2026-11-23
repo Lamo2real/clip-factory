@@ -967,6 +967,14 @@ own code, never `routes/setup.py`'s.
   whose job used a realistic generator (`nova-reel`) is posted only through Clips Funded's own thin publisher wrappers
   that set YouTube's `containsSyntheticMedia: true` and TikTok's `is_aigc: true` (subclasses in `workspaces/`, the
   shared publisher code unchanged); a platform where no label can be set refuses it with a plain sentence.
+* **My Mac posts TikTok** (§47.10, ADR-88). While `StoriesConfig.tiktokMac.on` is true, a TikTok target is checked
+  exactly as above (`clean_options`, `validate_destination`, the confirmAccount 409s, G8, `_clash`) and then written as
+  a Mac job (`publishingStatus: "mac"`) that the owner's Mac helper posts, never the story flow. This amends "TikTok has
+  no defaults" and the TikTok sheet's rules above for the Mac path only: its options are fixed (`MAC_OPTIONS`:
+  Everyone, Comments, Duet and Stitch on, never branded), `aiLabel` is always true and the helper turns on TikTok's
+  "AI-generated content" label for every such post, and the sheet shows one read-only line. A TikTok post the API made
+  Only me is handed over in place (`onlyMe`), a failed TikTok job's retry becomes a Mac job in place, and the flow
+  starts only for the other targets.
 * Lamo Clips' `POST /v1/clips/{clipId}/confirm`, its posts, the clip flow and the release keep reading only
   `ACCOUNT#` and `cf-prod/platforms/*`: they cannot reach a Clips Funded account.
 

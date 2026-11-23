@@ -40,6 +40,8 @@ import type {
   Upload,
   UsageSummary,
   Workspace,
+  WsMacHelper,
+  WsMacStatus,
 } from "./types.ts";
 import { makerModelsIn } from "./types.ts";
 
@@ -285,5 +287,11 @@ export function httpStoriesApi(deps: StoriesHttpDeps = {}): StoriesApi {
     listPublishing: async (ws, storyId) => (await call<{ publishingJobs: PublishingJob[] }>("GET", w(ws, `/publishing${q({ storyId })}`))).publishingJobs,
     retryPublishing: async (ws, publishingJobId, body) =>
       (await call<{ publishingJob: PublishingJob }>("POST", w(ws, `/publishing/${id(publishingJobId)}/retry`), body ?? {})).publishingJob,
+
+    // My Mac posts TikTok (§47.10): the web's three Mac routes; the helper's own (ping, claim, step…) are its own.
+    macStatus: (ws) => call<WsMacStatus>("GET", w(ws, "/tiktok/mac")),
+    macLogin: (ws) => call<{ helper: WsMacHelper }>("POST", w(ws, "/tiktok/mac/login"), { action: "sign_in" }),
+    macRetry: async (ws, publishingJobId, body) => (await call<{ job: PublishingJob }>("POST", w(ws, `/publishing/${id(publishingJobId)}/mac/retry`), body ?? {})).job,
+    macPosted: async (ws, publishingJobId, body) => (await call<{ job: PublishingJob }>("POST", w(ws, `/publishing/${id(publishingJobId)}/mac/posted`), body)).job,
   };
 }

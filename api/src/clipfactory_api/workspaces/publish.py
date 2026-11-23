@@ -6,7 +6,15 @@
 * Options are flat and allow-listed per platform (the keys the publishers read, §17.6, §17.8): ``campaign`` and any
   unknown key are refused, ``madeForKids`` is never accepted (Lamo Stories posts are never "made for kids"), YouTube's
   ``category`` and ``privacy`` default to the workspace's ``StoriesConfig``. TikTok has no defaults at all: its
-  privacy and all five switches (comments, Duet, Stitch and the two brand ones) are the owner's own picks.
+  privacy and all five switches (comments, Duet, Stitch and the two brand ones) are the owner's own picks. The one
+  exception is the Mac path below: its options are fixed.
+* **My Mac posts TikTok** (``StoriesConfig.tiktokMac.on``, §47.10): a TikTok target is checked exactly as above and
+  then written as a Mac job (``publishingStatus: "mac"``) that the owner's Mac helper posts, never the story flow:
+  ``MAC_OPTIONS`` (Everyone, comments, Duet and Stitch on, never branded), ``aiLabel: true``, ``macState: "waiting"``.
+  It needs the account's ``@handle`` (the Mac checks it is logged in to exactly that account). The flow starts only
+  for the other targets. ``mac`` counts as being posted (one TikTok row per story), but a TikTok post made Only me
+  through the API is handed over in place (its fields kept in ``beforeMac``). Retry of a failed TikTok job while the
+  switch is on makes it a Mac job in place; retry of a Mac job is refused (its row's Try again is ``workspaces.mac``).
 * There is no default account: a target names its account, every platform at most once. The answer names each
   target's current account (``accountName``, ``handle``, ``externalAccountId``: the identity it goes to), so the web
   shows exactly where it went; a target may carry ``confirmAccount`` (the ``externalAccountId`` the owner saw on the
@@ -58,7 +66,7 @@ from .social import Scope
 
 Item = dict[str, Any]
 
-STATUSES: Final = ("queued", "publishing", "posted", "failed", "needs_attention")
+STATUSES: Final = ("queued", "publishing", "posted", "failed", "needs_attention", "mac")
 RETRYABLE: Final = ("failed", "needs_attention")
 IN_FLIGHT: Final = ("queued", "publishing")
 MAX_TARGETS: Final = 5
@@ -86,6 +94,54 @@ ALLOWED: Final[dict[str, frozenset[str]]] = {
 }
 NEVER: Final = frozenset({"campaign", "madeForKids"})
 NOT_ON: Final = "Posting is not switched on for Clips Funded yet."
+# --- My Mac posts TikTok (§47.10) ---
+# A job the owner's Mac posts: not in IN_FLIGHT or RETRYABLE, so the story flow, ``settle_stuck`` and the API retry
+# never touch it.
+MAC_STATUS: Final = "mac"
+# What every Mac post sets, whatever the sheet sent: Everyone, comments, Duet and Stitch on, never branded.
+MAC_OPTIONS: Final = {
+    "privacyLevel": "PUBLIC_TO_EVERYONE",
+    "disableComment": False,
+    "disableDuet": False,
+    "disableStitch": False,
+    "brandContent": False,
+    "brandOrganic": False,
+}
+# The account the Mac must be logged in to: a TikTok ``@username``.
+MAC_HANDLE: Final = re.compile(r"^@[A-Za-z0-9._]{2,30}$")
+NO_HANDLE: Final = "Connect TikTok again in Social accounts, so your Mac knows the account."
+MAC_POSTS_IT: Final = "Your Mac posts this one. Tap Try again on its row."
+# The internal Mac fields and their public names (``PublishingJob.mac``, only while ``publishingStatus`` is ``mac``).
+MAC_PUBLIC: Final = {
+    "macState": "state",
+    "macStep": "step",
+    "macSince": "since",
+    "macClaimedAt": "claimedAt",
+    "macPressedAt": "pressedAt",
+    "macStoppedAt": "stoppedAt",
+    "macReason": "reason",
+    "macBeatAt": "beatAt",
+    "macPressedBefore": "pressedBefore",
+    "macAgainAt": "againAt",
+}
+# Every internal Mac field: all go when the job is posted.
+MAC_FIELDS: Final = (
+    "macState",
+    "macStep",
+    "macSince",
+    "macSource",
+    "macClaimedAt",
+    "macPressedAt",
+    "macStoppedAt",
+    "macReason",
+    "macBeatAt",
+    "macDevice",
+    "macAttempt",
+    "macPressedBefore",
+    "macAgainAt",
+)
+# What a TikTok post made Only me loses when it is handed over to the Mac (its earlier fields are kept in beforeMac).
+POSTED_ONLY: Final = ("url", "postedAt", "privacy", "platformPostId", "statsId", "metrics", "numbersAt", "error")
 PUBLIC: Final = (
     "publishingJobId",
     "workspaceId",
@@ -100,6 +156,8 @@ PUBLIC: Final = (
     "postedAt",
     "error",
     "metrics",
+    "via",
+    "by",
     "createdAt",
     "updatedAt",
 )
@@ -218,6 +276,60 @@ def flow_options(platform: str, stored: Any) -> Item:
     return {k: v for k, v in stored.items() if k in allowed and k not in NEVER}
 
 
+# --- My Mac posts TikTok (§47.10) ------------------------------------------------------------------------------
+
+
+def mac_on(config: Mapping[str, Any] | None) -> bool:
+    """``StoriesConfig.tiktokMac.on``: a missing value reads as off."""
+    raw = (config or {}).get("tiktokMac")
+    return isinstance(raw, Mapping) and raw.get("on") is True
+
+
+def public_mac(item: Mapping[str, Any]) -> Item | None:
+    """``PubJobMac``: where a Mac job stands; None for every other job. ``macDevice``, ``macAttempt``,
+    ``macSource`` and ``beforeMac`` stay internal."""
+    if item.get("publishingStatus") != MAC_STATUS:
+        return None
+    return {public: item[field] for field, public in MAC_PUBLIC.items() if item.get(field) not in (None, "")}
+
+
+def mac_fields(now: datetime) -> Item:
+    """A new Mac job's fields: waiting for the owner's Mac since ``now``, from a tap (``upload``), never claimed."""
+    return {
+        "publishingStatus": MAC_STATUS,
+        "postOptions": dict(MAC_OPTIONS),
+        "aiLabel": True,
+        "macState": "waiting",
+        "macSince": iso(now),
+        "macSource": "upload",
+        "macAttempt": 0,
+    }
+
+
+def mac_handle(destination: Destination) -> str:
+    """The account's ``@handle``, the one account the Mac may post to; ``409`` when it has none."""
+    found = _handle(destination)
+    if found is None or not MAC_HANDLE.match(found):
+        raise conflict(NO_HANDLE)
+    return found
+
+
+def only_me(job: Mapping[str, Any]) -> bool:
+    """A TikTok job the API posted Only me (``SELF_ONLY``, as TikTok's Sandbox allows): only the owner sees it, so a
+    Mac post may take it over in place (``PublishingJob.onlyMe``, the row's Post with my Mac)."""
+    options = job.get("postOptions")
+    level = options.get("privacyLevel") if isinstance(options, Mapping) else None
+    return job.get("platform") == "tiktok" and job.get("publishingStatus") == "posted" and level == "SELF_ONLY"
+
+
+def _only_me(jobs: Iterable[Mapping[str, Any]]) -> Item | None:
+    """The story's TikTok job posted Only me (the API's private post), which a Mac post may take over in place."""
+    for job in jobs:
+        if only_me(job):
+            return dict(job)
+    return None
+
+
 # --- shapes ----------------------------------------------------------------------------------------------------
 
 
@@ -232,6 +344,11 @@ def public_job(item: Mapping[str, Any]) -> Item:
         out[key] = value
     if out.get("publishingStatus") not in STATUSES:
         out["publishingStatus"] = "failed"
+    mac = public_mac(item)
+    if mac is not None:
+        out["mac"] = mac
+    if only_me(item):
+        out["onlyMe"] = True
     waiting = item.get("waiting") if out.get("publishingStatus") in IN_FLIGHT else None
     out["waitingUntil"] = str(item["waitUntil"]) if waiting and isinstance(item.get("waitUntil"), str) else None
     out["waiting"] = str(waiting) if isinstance(waiting, str) and waiting else None
@@ -317,7 +434,7 @@ def settle_stuck(store: db.Store, jobs: Iterable[Item], now: datetime) -> list[I
 def _clash(jobs: Iterable[Mapping[str, Any]], platform: str, *, skip: str | None = None) -> None:
     """One story goes to one platform once: ``409`` while another of its jobs is being posted there or is posted."""
     mine = [j for j in jobs if j.get("platform") == platform and j.get("publishingJobId") != skip]
-    if any(j.get("publishingStatus") in IN_FLIGHT for j in mine):
+    if any(j.get("publishingStatus") in (*IN_FLIGHT, MAC_STATUS) for j in mine):  # a Mac job is being posted too
         raise conflict(f"This story is already being posted to {label(platform)}.")
     if any(j.get("publishingStatus") == "posted" for j in mine):
         raise conflict(f"This story is already on {label(platform)}.")
@@ -459,24 +576,58 @@ def _check(
         raise conflict(e.sentence) from e
 
 
+def _config(workspace: Mapping[str, Any]) -> Mapping[str, Any]:
+    found = workspace.get("configuration")
+    return found if isinstance(found, Mapping) else {}
+
+
+def _handover(job: Mapping[str, Any], destination: Destination, *, run: int, now: datetime) -> dict[str, Any]:
+    """The conditional UpdateItem that makes the story's TikTok post made Only me its Mac job, in place (one TikTok
+    row per story): its earlier fields go into ``beforeMac``; only while it still is that posted job of its run."""
+    kept = ("pk", "sk", "type", "userId", "workspaceId", "publishingJobId", "contentId", "platform")
+    fields: Item = {
+        **mac_fields(now),
+        "beforeMac": {k: v for k, v in job.items() if k not in kept},
+        "socialAccountId": destination.social_account_id,
+        "accountName": destination.account_name,
+        "handle": mac_handle(destination),
+        "externalAccountId": destination.external_account_id,
+        "appChoice": destination.app.choice,
+        "flowRun": run,
+        "updatedAt": iso(now),
+    }
+    return db.update_request(
+        str(job["pk"]),
+        str(job["sk"]),
+        fields,
+        remove=[k for k in (*POSTED_ONLY, "publishHandle", "waitUntil", "waiting") if k in job],
+        expect_in={"publishingStatus": ["posted"], "flowRun": [job.get("flowRun")]},
+    )
+
+
 def publish(
     scope: Scope, starter: Any, workspace: Mapping[str, Any], story_id: str, body: Mapping[str, Any], *, now: datetime
 ) -> list[Item]:
     store, secrets, user_id, workspace_id = scope.store, scope.secrets, scope.user_id, scope.workspace_id
     targets = _targets(body)
-    if starter is None or not getattr(starter, "ready", False):
+    config = _config(workspace)
+    to_mac = mac_on(config)  # My Mac posts TikTok (§47.10): TikTok goes to the owner's Mac, never the flow
+    if any(not (to_mac and t["platform"] == "tiktok") for t in targets) and (
+        starter is None or not getattr(starter, "ready", False)
+    ):
         raise ApiError(503, "unavailable", NOT_ON)
     story = _story(store, user_id, workspace_id, story_id)
-    config = workspace.get("configuration") if isinstance(workspace.get("configuration"), Mapping) else {}
     existing = settle_stuck(store, list_jobs(store, user_id, workspace_id, story_id), now)
     ai_label = realistic_video(store, user_id, workspace_id, story_id)
-    planned: list[tuple[Item, Destination, Item]] = []
+    planned: list[tuple[Destination, Item, bool, Item | None]] = []
     for target in targets:
         platform = str(target["platform"])
         options = clean_options(platform, target.get("options"), config)
         if ai_label and platform not in LABELLED:
             raise conflict(story_sentence(platform, "ai_label"))
-        _clash(existing, platform)
+        mac = to_mac and platform == "tiktok"
+        private = _only_me(existing) if mac else None
+        _clash(existing, platform, skip=str(private["publishingJobId"]) if private else None)
         checked = {k: v for k, v in target.items() if k != "confirmAccount"}
         confirm = target.get("confirmAccount")
         destination = _check(
@@ -484,42 +635,61 @@ def publish(
         )
         if confirm is not None and confirm != destination.external_account_id:
             raise _changed_account(platform, destination)  # the owner saw another account: nothing is written
-        planned.append((target, destination, options))
+        if mac:
+            mac_handle(destination)  # the Mac must know the account: nothing is written without it
+        planned.append((destination, options, mac, private))
     run_request, run = _run_update(story, now)
     jobs: list[Item] = []
-    for _target, destination, options in planned:
+    handovers: list[dict[str, Any]] = []
+    written: list[Item] = []
+    for destination, options, mac, private in planned:
+        if private is not None:
+            handovers.append(_handover(private, destination, run=run, now=now))
+            written.append(private)
+            continue
         job_id = ulid()
-        jobs.append(
-            {
-                "pk": ws.workspace_pk(user_id, workspace_id),
-                "sk": pubjob_sk(job_id),
-                "type": ws.TYPE_PUBJOB,
-                "userId": user_id,
-                "workspaceId": workspace_id,
-                "publishingJobId": job_id,
-                "contentId": story_id,
-                "socialAccountId": destination.social_account_id,
-                "platform": destination.platform,
-                "publishingStatus": "queued",
-                "accountName": destination.account_name,
-                "handle": _handle(destination),
-                "externalAccountId": destination.external_account_id,
-                "appChoice": destination.app.choice,
-                "aiLabel": ai_label,
-                "flowRun": run,
-                "postOptions": options,
-                "createdAt": iso(now),
-                "updatedAt": iso(now),
-            }
-        )
-    confirmed = [confirm_not_clips_update(d, now) for _t, d, _o in planned if d.confirms_not_clips]
+        job: Item = {
+            "pk": ws.workspace_pk(user_id, workspace_id),
+            "sk": pubjob_sk(job_id),
+            "type": ws.TYPE_PUBJOB,
+            "userId": user_id,
+            "workspaceId": workspace_id,
+            "publishingJobId": job_id,
+            "contentId": story_id,
+            "socialAccountId": destination.social_account_id,
+            "platform": destination.platform,
+            "publishingStatus": "queued",
+            "accountName": destination.account_name,
+            "handle": _handle(destination),
+            "externalAccountId": destination.external_account_id,
+            "appChoice": destination.app.choice,
+            "aiLabel": ai_label,
+            "flowRun": run,
+            "postOptions": options,
+            "createdAt": iso(now),
+            "updatedAt": iso(now),
+        }
+        if mac:
+            job.update(mac_fields(now))
+        jobs.append(job)
+        written.append(job)
+    confirmed = [confirm_not_clips_update(d, now) for d, _o, _m, _p in planned if d.confirms_not_clips]
     try:
-        store.transact(updates=[run_request, *confirmed], puts=jobs)
+        store.transact(updates=[run_request, *handovers, *confirmed], puts=jobs)
     except db.ConditionFailed as e:
         raise conflict("This story changed a moment ago. Tap Post it again.") from e
-    _start(scope, starter, story_id, jobs, run=run, now=now)
-    log("info", "ws_publish.started", storyId=story_id, run=run, platforms=",".join(str(j["platform"]) for j in jobs))
-    return [public_job(j) for j in _fresh(store, jobs)]
+    flowing = [j for j in jobs if j.get("publishingStatus") != MAC_STATUS]
+    if flowing:
+        _start(scope, starter, story_id, flowing, run=run, now=now)
+    log(
+        "info",
+        "ws_publish.started",
+        storyId=story_id,
+        run=run,
+        platforms=",".join(str(j["platform"]) for j in written),
+        mac=len(written) - len(flowing),
+    )
+    return [public_job(j) for j in _fresh(store, written)]
 
 
 def _fresh(store: db.Store, jobs: list[Item]) -> list[Item]:
@@ -584,9 +754,13 @@ def retry(
     job = job_item(store, user_id, workspace_id, publishing_job_id)
     if job is None:
         raise not_found("We could not find that post.")
-    if starter is None or not getattr(starter, "ready", False):
-        raise ApiError(503, "unavailable", NOT_ON)
     platform = str(job.get("platform") or "")
+    if job.get("publishingStatus") == MAC_STATUS:
+        raise conflict(MAC_POSTS_IT)  # the row's Try again is the Mac's own (workspaces.mac)
+    config = _config(workspace)
+    to_mac = platform == "tiktok" and mac_on(config)
+    if not to_mac and (starter is None or not getattr(starter, "ready", False)):
+        raise ApiError(503, "unavailable", NOT_ON)
     if platform not in ws.PLATFORMS:
         raise not_found("We could not find that post.")
     story_id = str(job.get("contentId") or "")
@@ -594,7 +768,6 @@ def retry(
     confirm = body.get("confirmAccount")
     if confirm is not None and (not isinstance(confirm, str) or not confirm or len(confirm) > 200):
         raise bad_request("confirmAccount must be the account the app showed.", "confirmAccount")
-    config = workspace.get("configuration") if isinstance(workspace.get("configuration"), Mapping) else {}
     if "options" in body:
         options = clean_options(platform, body.get("options"), config)
     else:
@@ -620,6 +793,8 @@ def retry(
         handle = _handle(destination)
         if handle:
             fields["handle"] = handle
+    if to_mac:
+        return _retry_on_mac(store, job, destination, fields, now=now)
     run_request, run = _run_update(story, now)
     fields["flowRun"] = run
     update = db.update_request(
@@ -638,3 +813,28 @@ def retry(
     _start(scope, starter, story_id, [fresh], run=run, now=now)
     log("info", "ws_publish.retried", storyId=story_id, run=run, platform=platform)
     return public_job(store.get(job["pk"], job["sk"]) or fresh)
+
+
+def _retry_on_mac(store: db.Store, job: Item, destination: Destination, checked: Item, *, now: datetime) -> Item:
+    """Try again on a failed TikTok job while My Mac posts TikTok is on: the job becomes a Mac job in place (the same
+    fields as a new one), conditional on its status and run. No flow starts."""
+    fields: Item = {
+        **{k: v for k, v in checked.items() if k not in ("publishingStatus", "postOptions", "aiLabel")},
+        **mac_fields(now),
+        "accountName": destination.account_name,
+        "handle": mac_handle(destination),
+    }
+    update = db.update_request(
+        job["pk"],
+        job["sk"],
+        fields,
+        remove=[k for k in ("error", "publishHandle", "waitUntil", "waiting") if k in job],
+        expect_in={"publishingStatus": list(RETRYABLE), "flowRun": [job.get("flowRun")]},
+    )
+    confirmed = [confirm_not_clips_update(destination, now)] if destination.confirms_not_clips else []
+    try:
+        store.transact(updates=[update, *confirmed])
+    except db.ConditionFailed as e:
+        raise conflict("This post changed a moment ago. Look at it again.") from e
+    log("info", "ws_publish.retried", storyId=str(job.get("contentId") or ""), platform="tiktok", mac=True)
+    return public_job(store.get(job["pk"], job["sk"]) or {**job, **fields})

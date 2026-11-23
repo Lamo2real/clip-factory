@@ -104,10 +104,12 @@ function Stat({ value, label, tone, icon, href }: { value: number; label: string
 function NeedsYou({ ws, items }: { ws: string; items: StoriesDashboard["needsYou"] }) {
   const toast = useToast();
   const [busy, setBusy] = useState<string | null>(null);
-  const retry = async (id: string, el: HTMLElement | null) => {
+  const retry = async (id: string, el: HTMLElement | null, mac: boolean) => {
     setBusy(id);
     try {
-      await storiesApi().retryPublishing(ws, id);
+      // A Mac post (§47.10) waits for the Mac again; any other post is sent again.
+      if (mac) await storiesApi().macRetry(ws, id);
+      else await storiesApi().retryPublishing(ws, id);
       celebrate(centerOf(el));
       toast.success("Trying again now.");
       await refreshDashboard(ws).catch(() => undefined);
@@ -147,12 +149,13 @@ function NeedsYou({ ws, items }: { ws: string; items: StoriesDashboard["needsYou
                 {n.sentence}
               </p>
               <div className="st-needs-list__actions">
-                {n.publishingJobId ? (
+                {/* A Mac post that pressed Post may be on TikTok: only Open (its Review page) for it, never Try again. */}
+                {n.publishingJobId && !(n.publishingStatus === "mac" && n.mac?.pressedAt) ? (
                   <StButton
                     aria-disabled={busy === n.publishingJobId || undefined}
                     onClick={(e) => {
                       // Kid-proof: never disabled; a second tap while it is trying says no (the deny sound).
-                      if (busy !== n.publishingJobId) void retry(n.publishingJobId!, e.currentTarget);
+                      if (busy !== n.publishingJobId) void retry(n.publishingJobId!, e.currentTarget, n.publishingStatus === "mac");
                     }}
                   >
                     <StIcon name="retry" size={18} />

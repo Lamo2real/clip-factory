@@ -49,7 +49,7 @@ describe("workspaces", () => {
     const { $comment: _c, ...file } = defaults as unknown as StoriesConfig & { $comment: string };
     expect(DEFAULT_CONFIG).toEqual(file);
     // Every key of StoriesConfig, and nothing else (a key added to the type must be added to the file).
-    const keys: (keyof StoriesConfig)[] = ["defaultDurationSec", "captionsOn", "musicOn", "providers", "video", "production", "youtubeCategory", "youtubePrivacy", "xMonthlyLimitUsd"];
+    const keys: (keyof StoriesConfig)[] = ["defaultDurationSec", "captionsOn", "musicOn", "providers", "video", "production", "youtubeCategory", "youtubePrivacy", "xMonthlyLimitUsd", "tiktokMac"];
     expect(Object.keys(file).sort()).toEqual([...keys].sort());
     expect(store.workspaces.find((w) => w.workspaceId === "stories")?.configuration).toEqual(file);
   });

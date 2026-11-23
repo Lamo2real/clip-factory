@@ -291,6 +291,16 @@ def _money(value: Any, field: str) -> int | float:
     return value if isinstance(value, int) or not float(value).is_integer() else int(value)
 
 
+def _tiktok_mac(current: Mapping[str, Any], value: Any) -> Item:
+    """My Mac posts TikTok (§47.10): ``{on}``, merged onto the current one (a stored config without it reads off)."""
+    chosen = validate.obj(value, "configuration.tiktokMac")
+    if set(chosen) - {"on"}:
+        raise bad_request("tiktokMac has a setting Clips Funded does not know.", "configuration.tiktokMac")
+    was = current.get("tiktokMac")
+    on = was.get("on") is True if isinstance(was, Mapping) else False
+    return {"on": validate.boolean(chosen.get("on", on), "configuration.tiktokMac.on")}
+
+
 def _config_patch(
     current: Mapping[str, Any], value: Any, maker_models: list[Item] | Callable[[], list[Item]] | None = None
 ) -> Item:
@@ -353,6 +363,8 @@ def _config_patch(
             out[key] = merged
         elif key == "xMonthlyLimitUsd":
             out[key] = None if v is None else _money(v, "configuration.xMonthlyLimitUsd")
+        elif key == "tiktokMac":
+            out[key] = _tiktok_mac(current, v)
         elif key in CONFIG_CHOICES:
             if v not in CONFIG_CHOICES[key]:
                 raise bad_request(f"configuration.{key} must be one of: {', '.join(CONFIG_CHOICES[key])}.")

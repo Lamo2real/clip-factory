@@ -5,7 +5,9 @@ import path from "node:path";
 
 export const HOME = os.homedir();
 export const BASE = process.env.CF_TT_BASE || path.join(HOME, "Library", "Application Support", "Clip Factory TikTok");
-export const PROFILE = path.join(BASE, "chrome"); // the helper's own Chrome profile (TikTok login lives here)
+export const PROFILE = path.join(BASE, "chrome"); // Clip Factory's Chrome profile (the @lamo.clips TikTok login lives here)
+// Clips Funded's lanes (§47.10): one Chrome profile per workspace, "chrome-ws-{workspaceId}", never Clip Factory's.
+export const wsProfile = (workspaceId) => path.join(BASE, `chrome-ws-${workspaceId}`);
 export const STATE = path.join(BASE, "state.json"); // device id, the never-twice ledger, pacing, trial count
 export const SETTINGS = path.join(BASE, "settings.json"); // trial limit, spacing (edit by hand or with the CLI)
 export const LOG = path.join(BASE, "helper.log"); // one line per event
@@ -17,5 +19,11 @@ export const CHROME =
 export const CHROME_APP = process.env.CF_TT_CHROME_APP || "/Applications/Google Chrome.app";
 export const APP_URL = process.env.CF_TT_APP_URL || "https://dglrbjmf28m6c.cloudfront.net";
 export const CDP_PORT = Number(process.env.CF_TT_PORT || 9339);
+// Each Clips Funded workspace gets the lowest free port of these ten (9340–9349), kept in state.json.
+export const WS_PORT_BASE = Number(process.env.CF_TT_WS_PORT_BASE || 9340);
+export const WS_PORT_COUNT = 10;
 export const KEYCHAIN_SERVICE = "Clip Factory TikTok helper";
-export const VERSION = "1.1.0";
+// macOS's Keychain tool (a fake one in tests).
+export const SECURITY = process.env.CF_TT_SECURITY || "/usr/bin/security";
+// 1.2.0: Clips Funded's lanes, the handle check before every post, and the AI label (the server's MAC_WS_FROM).
+export const VERSION = "1.2.0";

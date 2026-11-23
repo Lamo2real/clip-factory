@@ -9,7 +9,10 @@ import {
   claimFields,
   neverTwice,
   nextAction,
+  pickWork,
   pingExtras,
+  wsAction,
+  wsPingBody,
 } from "../src/plan.js";
 
 const settings = { trialLimit: 3, autoSpacingMinutes: 1, backlogAfterRunMinutes: 30, onDemandSpacingMinutes: 1, paused: false };
@@ -425,4 +428,99 @@ test("pingExtras: the first backlog clip's time, the hold, the backfill and the 
   assert.deepEqual(pingExtras({ settings: fill, state: fresh(), autopost: run("2026-11-22T14:45:00Z") }), { backfill: true });
   // An unreadable hold is not sent (the server would refuse the whole ping).
   assert.deepEqual(pingExtras({ settings: { ...settings, holdAutoBefore: "tomorrow" }, state: fresh(), autopost: null }), {});
+});
+
+// §47.10 (D1, D2): a Clips Funded lane runs the same rules on its own view; Clip Factory's lane goes first.
+const wsJob = (over = {}) => ({ clipId: "pj-1", publishingJobId: "pj-1", state: "waiting", source: "upload", since: "2026-11-22T14:00:00Z", ...over });
+const wsView = () => ({ device, ledger: {}, posted: [], lastPressedAt: null });
+
+test("a Clips Funded lane reuses nextAction: post, find a pressed job, resume its own claim", () => {
+  const view = wsView();
+  const post = wsAction({ on: true, helper: null, queue: [wsJob()], view, settings, device, now });
+  assert.deepEqual([post.action, post.job.clipId], ["post", "pj-1"]);
+  view.ledger["pj-1"] = { device, step: "pressing" };
+  const look = wsAction({ on: true, helper: null, queue: [wsJob({ state: "working" })], view, settings, device, now });
+  assert.equal(look.action, "find");
+  view.ledger["pj-1"] = { device, step: "uploading" };
+  const again = wsAction({ on: true, helper: null, queue: [wsJob({ state: "working" })], view, settings, device, now });
+  assert.equal(again.action, "resume");
+  const pressed = wsAction({ on: true, helper: null, queue: [wsJob({ pressedAt: "2026-11-22T14:10:00Z" })], view: wsView(), settings, device, now });
+  assert.equal(pressed.action, "idle"); // never twice, as for Clip Factory
+});
+
+test("a new Clips Funded post waits until the lane is logged in to the workspace's TikTok; one under way goes on", () => {
+  const r = wsAction({ on: true, helper: null, queue: [wsJob()], view: wsView(), settings, device, now, setUp: false });
+  assert.deepEqual([r.action, r.reason, r.job.clipId], ["wait", "Not logged in to TikTok on this Mac yet.", "pj-1"]);
+  const view = wsView();
+  view.ledger["pj-1"] = { device, step: "pressing" };
+  assert.equal(wsAction({ on: true, helper: null, queue: [wsJob({ state: "working" })], view, settings, device, now, setUp: false }).action, "find");
+});
+
+test("Clip Factory's trial, backfill and hold never hold a Clips Funded post; its own last press spaces it", () => {
+  const view = wsView();
+  view.posted = [{}, {}, {}, {}];
+  const held = { ...settings, trialLimit: 3, holdAutoBefore: "2026-11-23T00:00:00Z", backfill: { everyMinutes: 120 } };
+  assert.equal(wsAction({ on: true, helper: null, queue: [wsJob()], view, settings: held, device, now }).action, "post");
+  view.lastPressedAt = "2026-11-22T14:59:30Z";
+  const r = wsAction({ on: true, helper: null, queue: [wsJob()], view, settings, device, now });
+  assert.equal(r.action, "wait");
+});
+
+test("needs you is per lane: Clips Funded's pauses only its lane; the Mac's own pause stops every lane", () => {
+  const helper = { state: "needs_you", reason: "TikTok logged your Mac out. Tap Log in on my Mac." };
+  const ws = wsAction({ on: true, helper, queue: [wsJob()], view: wsView(), settings, device, now });
+  assert.deepEqual([ws.action, ws.reason], ["paused", helper.reason]);
+  // Clip Factory's lane decides from its own helper item only, so it still posts.
+  assert.equal(nextAction({ on: true, queue: [job()], state: fresh(), settings, device, now }).action, "post");
+  // And Clip Factory's needs-you never reaches the Clips Funded lane (it has its own helper item).
+  assert.equal(wsAction({ on: true, helper: { state: "ok" }, queue: [wsJob()], view: wsView(), settings, device, now }).action, "post");
+  const paused = { ...settings, paused: true };
+  assert.equal(wsAction({ on: true, helper: null, queue: [wsJob()], view: wsView(), settings: paused, device, now }).action, "paused");
+  assert.equal(wsAction({ on: false, helper: null, queue: [wsJob()], view: wsView(), settings, device, now }).action, "idle");
+});
+
+test("one thing per tick, Clip Factory first; then a Clips Funded find, resume, post; then a login it asked for", () => {
+  const lanes = [
+    { id: "ws:a", action: { action: "post" }, loginRequest: "2026-11-23T20:00:00Z" },
+    { id: "ws:b", action: { action: "resume" } },
+    { id: "ws:c", action: { action: "find" } },
+  ];
+  for (const what of ["post", "resume", "find"]) assert.deepEqual(pickWork({ clips: { action: what }, lanes }), { lane: "clips", what });
+  for (const idle of ["idle", "wait", "paused"]) {
+    assert.deepEqual(pickWork({ clips: { action: idle }, lanes }), { lane: "ws:c", what: "find", index: 2 });
+  }
+  assert.deepEqual(pickWork({ clips: { action: "idle" }, lanes: lanes.slice(0, 2) }), { lane: "ws:b", what: "resume", index: 1 });
+  assert.deepEqual(pickWork({ clips: { action: "idle" }, lanes: lanes.slice(0, 1) }), { lane: "ws:a", what: "post", index: 0 });
+  const asked = [{ id: "ws:a", action: { action: "paused" }, loginRequest: "2026-11-23T20:00:00Z" }];
+  assert.deepEqual(pickWork({ clips: { action: "idle" }, lanes: asked }), { lane: "ws:a", what: "login", index: 0 });
+  // No request: no login window, ever (only the owner's Log in on my Mac, or a post that found TikTok logged out).
+  assert.deepEqual(pickWork({ clips: { action: "idle" }, lanes: [{ id: "ws:a", action: { action: "idle" }, loginRequest: null }] }), {
+    lane: "clips",
+    what: "tidy",
+  });
+  assert.deepEqual(pickWork({ clips: { action: "post" }, lanes: asked }), { lane: "clips", what: "post" });
+});
+
+test("a Clips Funded check-in carries exactly the keys its server knows", () => {
+  const base = { version: "1.2.0", device };
+  assert.deepEqual(wsPingBody({ ...base, action: { action: "post" }, needsYou: false, setUp: true, handle: "@clips.funded" }), {
+    state: "ok",
+    version: "1.2.0",
+    device,
+    setUp: true,
+    handle: "@clips.funded",
+  });
+  assert.deepEqual(wsPingBody({ ...base, action: { action: "paused", reason: "Paused on your Mac." }, needsYou: false, setUp: false }), {
+    state: "paused",
+    reason: "Paused on your Mac.",
+    version: "1.2.0",
+    device,
+    setUp: false,
+  });
+  const ny = wsPingBody({ ...base, action: { action: "paused", reason: "x".repeat(300) }, needsYou: true, setUp: false, handle: "bad handle", loginDone: "2026-11-23T20:00:00Z" });
+  assert.equal(ny.state, "needs_you");
+  assert.equal(ny.reason.length, 200);
+  assert.equal(ny.handle, undefined);
+  assert.equal(ny.loginDone, "2026-11-23T20:00:00Z");
+  assert.deepEqual(Object.keys(ny).sort(), ["device", "loginDone", "reason", "setUp", "state", "version"]);
 });

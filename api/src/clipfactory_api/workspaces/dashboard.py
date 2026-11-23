@@ -4,7 +4,9 @@ the numbers and recent activity, all from this workspace's partition.
 ``SOCIAL#`` and ``PUBJOB#`` items are builder B's and are only read here. The accounts are the public ones the Social
 accounts page shows (``social.accounts_shown``, settled the same way, §45.35 D11), so a key change or Clip Factory
 connecting the same account later shows here too. A post that stopped on an account problem (its sentence sends the
-owner to Social accounts) has its Fix it open Social accounts; Try again stays on the video's Review page.
+owner to Social accounts) has its Fix it open Social accounts; Try again stays on the video's Review page. A TikTok
+post the owner's Mac stopped (§47.10: ``publishingStatus`` ``mac``, ``macState`` ``stopped``) is in Needs you too, with
+its stored reason, ``publishingStatus: "mac"`` and its ``mac`` (so the web's Try again asks the Mac again).
 """
 
 from __future__ import annotations
@@ -16,6 +18,7 @@ from typing import Any, Final
 from ..clock import iso, parse
 from . import activity, sentences, shapes
 from . import types as ws
+from .publish import MAC_STATUS, public_mac
 
 PLATFORM_NAMES: Final = {
     "youtube": "YouTube",
@@ -28,6 +31,7 @@ METRICS: Final = ("views", "likes", "comments", "shares")
 NUMBERS_FOR = timedelta(days=7)
 ACTIVITY_SHOWN = 10
 CHECK_FACTS = "Check the facts in this video before you approve it."
+MAC_STOPPED = "Your Mac stopped posting it to TikTok. Open the story and tap Try again."
 SOCIAL_ACCOUNTS: Final = "/stories/connections"  # Lamo Stories › Social accounts
 
 
@@ -45,6 +49,12 @@ def _post_sentence(job: Mapping[str, Any]) -> str:
         return error
     name = PLATFORM_NAMES.get(str(job.get("platform")), "the platform")
     return f"Posting to {name} stopped. Open the story and tap Try again."
+
+
+def _mac_sentence(job: Mapping[str, Any]) -> str:
+    """Why the Mac stopped (its stored reason, the row's "Didn't work: …"), else a plain Try again."""
+    reason = str(job.get("macReason") or "").strip()
+    return reason or MAC_STOPPED
 
 
 def _account_sentence(account: Mapping[str, Any]) -> str | None:
@@ -73,22 +83,25 @@ def needs_you(
             key = (str(job.get("contentId")), str(job.get("platform")))
             latest_posted[key] = max(latest_posted.get(key, ""), str(job.get("createdAt") or ""))
     for job in sorted(pubjobs, key=lambda j: str(j.get("createdAt") or ""), reverse=True):
-        if job.get("publishingStatus") not in {"needs_attention", "failed"}:
+        mac = job.get("publishingStatus") == MAC_STATUS and job.get("macState") == "stopped"
+        if job.get("publishingStatus") not in {"needs_attention", "failed"} and not mac:
             continue
         key = (str(job.get("contentId")), str(job.get("platform")))
         if latest_posted.get(key, "") > str(job.get("createdAt") or ""):
             continue
         story_id = str(job.get("contentId") or "")
-        out.append(
-            {
-                "publishingJobId": str(job.get("publishingJobId") or "") or None,
-                "storyId": story_id or None,
-                "title": titles.get(story_id, ""),
-                "platform": job.get("platform") if job.get("platform") in ws.PLATFORMS else None,
-                "sentence": _post_sentence(job),
-                "href": _post_href(job, story_id),
-            }
-        )
+        item: dict[str, Any] = {
+            "publishingJobId": str(job.get("publishingJobId") or "") or None,
+            "storyId": story_id or None,
+            "title": titles.get(story_id, ""),
+            "platform": job.get("platform") if job.get("platform") in ws.PLATFORMS else None,
+            "sentence": _mac_sentence(job) if mac else _post_sentence(job),
+            "href": f"/stories/review/{story_id}" if mac and story_id else _post_href(job, story_id),
+        }
+        if mac:
+            item["publishingStatus"] = MAC_STATUS
+            item["mac"] = public_mac(job)
+        out.append(item)
     for account in sorted(
         socials, key=lambda a: ws.PLATFORMS.index(a["platform"]) if a.get("platform") in ws.PLATFORMS else 9
     ):

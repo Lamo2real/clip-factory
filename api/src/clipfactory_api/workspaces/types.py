@@ -79,6 +79,8 @@ MAKERDEF_SK: Final = "MAKERDEF#"
 MAKERSTATUS_SK: Final = "MAKERSTATUS#"
 # §45.37 G6: what Lamo Stories used of Clip Factory's shared developer app, per platform and window (its own counters).
 SHAREUSE_SK: Final = "SHAREUSE#"
+# §47.10: the owner's Mac helper for this workspace (an exact sort key; Clip Factory's is USER#{u} / MACHELPER).
+MACHELPER_SK: Final = "MACHELPER"
 ITEM_PREFIXES: Final = (
     IDEA_SK,
     CHAR_SK,
@@ -106,6 +108,7 @@ ITEM_PREFIXES: Final = (
     MAKERDEF_SK,
     MAKERSTATUS_SK,
     SHAREUSE_SK,
+    MACHELPER_SK,
 )
 
 # Item `type` values (never "job", "clip", "post", "account", "setup": Lamo Clips readers filter on those).
@@ -136,6 +139,7 @@ TYPE_CHECKLOCK: Final = "ws_checklock"
 TYPE_MAKERDEF: Final = "ws_makerdef"
 TYPE_MAKERSTATUS: Final = "ws_makerstatus"
 TYPE_SHAREUSE: Final = "ws_shareuse"
+TYPE_MACHELPER: Final = "ws_machelper"
 
 
 def registry_pk(user_id: str) -> str:

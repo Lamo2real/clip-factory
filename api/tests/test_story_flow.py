@@ -140,6 +140,59 @@ def test_a_replayed_publish_and_posted_step_change_nothing_twice(
     assert len([i for i in table.all() if str(i["sk"]).startswith("ACT#")]) == 1
 
 
+def test_a_mac_job_is_never_loaded_and_the_others_still_go(
+    world: None, store: db.Store, table: FakeTable, secrets_client: FakeSecretsManager, clock: Clock
+) -> None:
+    """§47.10: a TikTok job the owner's Mac posts (``publishingStatus: "mac"``) is skipped by ``load-jobs``, even when
+    a flow names it; the other platforms of the run still go."""
+    sup.pubjob(store, "youtube")
+    mac_sk = "PUBJOB#01JZ0000000000000000000PJ2"
+    sup.pubjob(store, "tiktok", "01JZ0000000000000000000PJ2", publishingStatus="mac", macState="waiting")
+    target = parse_event(sup.flow_event("01JZ0000000000000000000PJ1", "01JZ0000000000000000000PJ2"))
+    assert target is not None
+    deps = sup.flow_deps(store, secrets_client, FakeHttp(), clock)
+    assert story_flow.load_jobs(deps, target) == [
+        {"publishingJobId": "01JZ0000000000000000000PJ1", "platform": "youtube"}
+    ]
+    http = FakeHttp(*youtube_answers_with_numbers())
+    event = sup.flow_event("01JZ0000000000000000000PJ2", "01JZ0000000000000000000PJ1")
+    run_story_flow(FakeDurableContext(), event, sup.flow_deps(store, secrets_client, http, clock))
+    assert not [c for c in http.calls if "tiktok" in c.url]
+    mac_job = table.raw(sup.PK, mac_sk)
+    assert mac_job is not None
+    assert (mac_job["publishingStatus"], mac_job["macState"]) == ("mac", "waiting")
+    youtube = table.raw(sup.PK, JOB_SK)
+    assert youtube is not None
+    assert youtube["publishingStatus"] == "posted"
+
+
+def test_the_story_write_is_shared_and_adds_a_post_once() -> None:
+    """``workspaces.story_posted`` (the flow's posted step and the owner's Mac): one post once, ``publishedAt`` once,
+    ``published`` only from ``approved`` or ``published``, compare-and-swap on ``version``."""
+    from clipfactory_api.workspaces import story_posted
+
+    story = {"status": "approved", "posted": [], "version": 3}
+    write = story_posted.story_write(story, "tiktok", "https://t/1", "2026-11-15T12:00:00.000Z", NOW)
+    assert write is not None
+    assert write.condition == "attribute_exists(pk) AND #v = :ver"
+    sets = {write.names[k]: write.values[k.replace("#", ":")] for k in write.names if k.startswith("#f")}
+    assert sets == {
+        "posted": [{"platform": "tiktok", "url": "https://t/1"}],
+        "updatedAt": "2026-11-15T12:00:00.000Z",
+        "publishedAt": "2026-11-15T12:00:00.000Z",
+        "status": "published",
+    }
+    done = {**story, "status": "published", "posted": sets["posted"], "publishedAt": "2026-11-15T12:00:00.000Z"}
+    assert story_posted.story_write(done, "tiktok", "https://t/1", "2026-11-15T13:00:00.000Z", NOW) is None
+    review = story_posted.story_write({"status": "review"}, "x", "u", "t", NOW)
+    assert review is not None
+    assert "status" not in review.names.values()
+    assert review.condition == "attribute_exists(pk) AND attribute_not_exists(#v)"
+    request = write.request("PK", "SK")
+    assert request["Key"] == {"pk": "PK", "sk": "SK"}
+    assert request["ConditionExpression"] == write.condition
+
+
 def test_x_waits_for_the_next_month_when_clip_factory_used_its_credits_and_then_posts_by_itself(
     world: None, store: db.Store, table: FakeTable, secrets_client: FakeSecretsManager, clock: Clock
 ) -> None:
