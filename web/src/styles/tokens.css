@@ -88,7 +88,7 @@
   --light-lead-pay: 0; /* LEAD_EXTRA_VEIL */
   --light-float: 0.08; /* FLOAT_LIGHT */
   --light-float-hover: 0.09; /* FLOAT_HOVER_LIGHT */
-  --light-float-pay: 0.05; /* FLOAT_EXTRA_VEIL: the light looks' most, MAX_LIGHT_PAY: a float plans for a white thumbnail, and its rim glows reach its words on a 48 px pill */
+  --light-float-pay: 0.02; /* FLOAT_EXTRA_VEIL: the least over main's 0.73 at which a float's words (and a chip on it) keep AA over a white thumbnail in Chromium and WebKit */
   --light-update-pay: 0.22; /* UPDATE_EXTRA_VEIL: the update bar, so Reload reads 0.08 over Later with bone words at AA over white */
   --light-overlay: 0.12; /* OVERLAY_LIGHT: sheets, the picture viewer, the markup editor */
   --light-menu: 0.1; /* MENU_LIGHT: the dropdown list, the workspace menu */

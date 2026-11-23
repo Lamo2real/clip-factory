@@ -481,8 +481,9 @@ h1.getapp__title {
   padding: 10px 10px 10px 14px;
   border-radius: var(--r-lg);
   /* The one floating layer that darkens more (UPDATE_EXTRA_VEIL): over a white thumbnail the AA cap leaves no room for
-     Reload to read 0.08 over Later with bone words otherwise. */
-  --glass-tint: linear-gradient(rgb(var(--green-rgb) / min(1, max(var(--float-veil), var(--panel-veil)) + var(--light-update-pay))), rgb(var(--green-rgb) / min(1, max(var(--float-veil), var(--panel-veil)) + var(--light-update-pay))));
+     Reload to read 0.08 over Later with bone words otherwise. The pay is added to the floating veil, not to a heavier
+     panel's (Frosted stays 0.95, never opaque). */
+  --glass-tint: linear-gradient(rgb(var(--green-rgb) / min(1, max(var(--float-veil) + var(--light-update-pay), var(--panel-veil)))), rgb(var(--green-rgb) / min(1, max(var(--float-veil) + var(--light-update-pay), var(--panel-veil)))));
   --glass-light: var(--glass-light-float);
   --glass-blur: 28px;
   box-shadow: var(--glass-shadow-float);
@@ -665,10 +666,11 @@ h1.getapp__title {
   --btn-veil: 0;
   --btn-lift: 0.06;
   --ghost-hover-veil: 0;
-  --ghost-hover-lift: 0.075;
+  --ghost-hover-lift: 0.09;
 }
-/* Its hover, restated: the rest rule above is as heavy as .btn--ghost:hover and comes later. */
+/* Its hover, restated: the rest rule above is as heavy as .btn--ghost:hover and comes later. Bone 0.09: a plain
+   +0.01 L over its rest (0.075 was within the blur's noise on a phone), still well under Reload. */
 .update-bar .btn--ghost.update-bar__later:hover:not([aria-disabled="true"]) {
   --btn-veil: 0;
-  --btn-lift: 0.075;
+  --btn-lift: 0.09;
 }

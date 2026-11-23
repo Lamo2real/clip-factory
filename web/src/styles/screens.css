@@ -1431,7 +1431,10 @@
   width: 32px;
   height: 32px;
   border-radius: var(--r-xs);
-  background: var(--fill);
+  /* MARK_LIFT: light only, no green under it. The mark holds a platform logo, no words, so it has no AA cap to pay
+     for: over a white photo a second layer of the raise's green would cancel its bone (+0.005 in Cream), and this
+     reads a whole step over its row in every look. */
+  background: linear-gradient(rgb(var(--bone-rgb) / 0.08), rgb(var(--bone-rgb) / 0.08));
   box-shadow: var(--light-rim-sm), var(--light-shade-2);
 }
 .post.is-posted .post__mark {

@@ -1,5 +1,5 @@
 {
- "version": "de33a38d92f3",
+ "version": "098f151c69d9",
  "parts": [
   {
    "id": "app-map",
@@ -159,7 +159,7 @@
    "id": "contracts-22",
    "title": "CONTRACTS: 22. Background modes and see-through glass (owner request, 2026-11-16)",
    "line": "The owner wants the whole app to feel like liquid glass you can almost see through: \"if there's a car behind it, I",
-   "chars": 57334
+   "chars": 58453
   },
   {
    "id": "contracts-23",
@@ -1065,7 +1065,7 @@
    "id": "ux-the-logic-of-light",
    "title": "UX_DESIGN_SYSTEM: The logic of light",
    "line": "The owner (2026-11-23): \"the top layer is always brighter than the bottom, and it grows gradually in between ... make",
-   "chars": 16002
+   "chars": 16052
   },
   {
    "id": "ux-typography",
@@ -1155,7 +1155,7 @@
    "id": "ux-update-bar",
    "title": "UX_DESIGN_SYSTEM: Update bar",
    "line": "Shown when /version.json reports a version other than the running one ([CONTRACTS.md §12.2](CONTRACTS.md#122-update-banner-whats-new--reload)).",
-   "chars": 3838
+   "chars": 3837
   },
   {
    "id": "ux-ask-clip-factory",

@@ -1004,7 +1004,7 @@ describe("the logic of light (ADR-85): the top layer is brighter, and every lift
     const page = mix(VEIL, behind, look.pageVeil ?? 0);
     const e1 = panelWords(look, behind, false, pay);
     const lead = panelWords(look, behind, true, pay);
-    /** The rest of a level `depth` above a pane must climb a whole step over its parent up to LADDER_DEPTH. */
+    /** The rest of a level above a pane climbs a whole step over its parent, or (where `noRoom`) steps back at most LADDER_SLACK. */
     const need = (_depth: number, under?: Rgb) => (under && noRoom(under) ? -LADDER_SLACK : LADDER_STEP);
     const out: [string, Rgb, Rgb, number][] = [
       // Inside a pane its top is brighter than its base.

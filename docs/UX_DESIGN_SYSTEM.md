@@ -260,8 +260,8 @@ every lit surface, so one name is right on the page and inside a pane):
 | `--light-lead-pay` | `0` | The lead panel's extra green (`LEAD_EXTRA_VEIL`) |
 | `--light-float` | `0.08` | A floating layer's light (`FLOAT_LIGHT`) |
 | `--light-float-hover` | `0.09` | Its hover (`FLOAT_HOVER_LIGHT`) |
-| `--light-float-pay` | `0.05` | Its extra green over the floating veil (`FLOAT_EXTRA_VEIL`): the light looks' most (a float plans for a white thumbnail, and its rim glows reach the words of a 48 px pill) |
-| `--light-update-pay` | `0.22` | The update bar's extra green (`UPDATE_EXTRA_VEIL`): the one float that darkens more, so Reload reads 0.08 over Later with bone words at AA over a white thumbnail |
+| `--light-float-pay` | `0.02` | Its extra green over the floating veil (`FLOAT_EXTRA_VEIL`): the least over main's 0.73 at which a float's words and a chip on it keep AA over a white thumbnail |
+| `--light-update-pay` | `0.22` | The update bar's extra green over the floating veil (`UPDATE_EXTRA_VEIL`, 0.95 in every look, Frosted included): the one float that darkens more, so Reload reads 0.08 over Later with bone words at AA over a white thumbnail |
 | `--light-overlay` | `0.12` | Sheets, the picture viewer, the markup editor (`OVERLAY_LIGHT`) |
 | `--light-menu` | `0.1` | The dropdown list and the workspace menu (`MENU_LIGHT`) |
 | `--light-tabbar` | `0.04` | The tab bar's light (`TABBAR_LIGHT`) |
@@ -1147,7 +1147,7 @@ Shown when `/version.json` reports a version other than the running one ([CONTRA
 | Title | "New!" in Inter 600. Never a version number. |
 | Pills | Bone glass chips, 13 px Inter 500, `--r-pill`, single line with ellipsis; on narrow phones they wrap under the title and the bar grows taller rather than overflowing. Labels come from `version.json` `areas`. |
 | Reload | The main choice, a colourless clear-glass button (`.btn--lens`, owner 2026-11-23, ADR-85): refresh icon + "Reload" in bone (`--ink`), 48 px tall. No green and no vermilion: white light alone over the bar (0.18 where its words are, 0.06 more at its very top), a bright catch light on its top edge, a clear rim and a small drop. At the height of its words it reads at least +0.08 OKLab L over Later in every look, a white thumbnail under the bar included; its words keep 4.5:1 at rest (4.93) and on hover (white 0.205, 4.59), and hover adds light and a 1 px lift. |
-| Later | The quiet choice: a ghost button (still a pill with a soft rim of light and its own top light), bone 0.06 over the bar (+0.03 OKLab L or more, hover 0.075), no drop shadow; hides the bar until the next check (5 minutes, or when the app comes back to the screen). |
+| Later | The quiet choice: a ghost button (still a pill with a soft rim of light and its own top light), bone 0.06 over the bar (+0.03 OKLab L or more, hover 0.09), no drop shadow; hides the bar until the next check (5 minutes, or when the app comes back to the screen). |
 | While reloading | Pills and buttons fade out; the bar's fill becomes the progress bar (below) with "Updating…" and the percentage for screen readers (`role="progressbar"`, `aria-valuenow`). |
 
 ### The reload curve

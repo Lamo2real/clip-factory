@@ -126,8 +126,8 @@ describe("the update bar's two buttons (ADR-85)", () => {
     for (const p of PLACES) {
       const page = mix(VEIL, p.behind, p.look.pageVeil ?? 0);
       for (const under of [WHITE, page, panelTop(p.look, p.behind)]) {
-        // The bar's own tint: the floating veil (or the panel's, if heavier) and the bar's pay (--light-update-pay).
-        const tint = Math.min(1, Math.max(FLOAT_VEIL, p.look.panelVeil) + UPDATE_EXTRA_VEIL);
+        // The bar's own tint: the floating veil and the bar's pay (--light-update-pay), or the panel's, if heavier.
+        const tint = Math.min(1, Math.max(FLOAT_VEIL + UPDATE_EXTRA_VEIL, p.look.panelVeil));
         // The bar's light where the buttons sit: from half its top light (the buttons' top on a computer) down to a
         // quarter (the bottom row on a phone, where its light has eased off).
         for (const light of [FLOAT_LIGHT * 0.25, FLOAT_LIGHT * 0.5, FLOAT_LIGHT * 0.75]) {

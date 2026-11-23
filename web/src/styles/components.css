@@ -110,7 +110,7 @@
    "without color and only a liquid glassy style"; ADR-85). Clear glass with no tint at all: a near-transparent white
    face over the bar's own blurred glass, a bright catch light on its top edge, a clear rim, a soft glow inside and the
    drop of a raised thing. Bone words. Its face reads at least 0.03 OKLab L over Later's from top to bottom in every
-   look, white under the bar included (the bar's float pay, --light-float-pay, leaves the room); the words keep 4.5:1
+   look, white under the bar included (the bar's own pay, --light-update-pay, leaves the room); the words keep 4.5:1
    at rest and on hover (test/buttonLight.test.ts, e2e/update.spec.ts). It has no backdrop-filter of its own: inside
    the blurred bar (its backdrop root) a second blur only samples the bar's translucent tint and lays it again under
    the lens, which in Chromium and WebView2 made the lens 0.05 L darker than Later over a white thumbnail. Hover adds

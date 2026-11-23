@@ -532,7 +532,7 @@ export const PAGE_HOVER_LIFT = 0.09;
  * green than `FLOAT_VEIL` (or the panel, if heavier). It plans for a white thumbnail under it, a light backdrop: the
  * least that keeps its words (mid-height, `FLOAT_WORDS_LIGHT` of its top light) at AA there, within `MAX_LIGHT_PAY`.
  */
-export const FLOAT_EXTRA_VEIL = 0.05;
+export const FLOAT_EXTRA_VEIL = 0.02;
 /**
  * The update bar is the one floating layer that darkens more, only by the least the AA cap over a white thumbnail
  * needs: its Reload face reads 0.08 OKLab L over Later and Later 0.03 over the bar, with bone words at AA at rest and
@@ -867,9 +867,9 @@ export function chipOn(under: Rgb, tint: { colour: Rgb; alpha: number; lift: num
 /**
  * What breaks the ladder over one spot of the page (`page`: the backdrop under the look's page veil) at this pay:
  * empty when every rung holds. A plain panel and the lead panel each carry three levels above them, at rest, hovered,
- * pressed and quiet. Every word keeps AA; the lead panel reads a whole `LADDER_STEP` over a plain one; the first
- * `LADDER_DEPTH` levels (and their quiet fills) each climb a whole step over what they sit on and the level above
- * them never steps back; a quiet fill never outshines its rest, and every hover reads brighter than its rest.
+ * pressed and quiet. Every word keeps AA; the lead panel reads a whole `LADDER_STEP` over a plain one; every level
+ * (and its quiet fill) climbs a whole step over what it sits on, or, where `noRoom` (and not `strict`), steps back at
+ * most `LADDER_SLACK`; a quiet fill never outshines its rest, and every hover reads brighter than its rest.
  */
 export function ladderFaults(page: Rgb, panelVeil: number, pay: number, first = false, strict = false): string[] {
   const faults: string[] = [];

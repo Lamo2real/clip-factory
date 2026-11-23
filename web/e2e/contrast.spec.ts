@@ -435,7 +435,7 @@ for (const { glass, paints } of WINDOW_LOOKS) {
 // tab bar, the real computed tints are read in the browser, and every text colour inside each layer (icons in the tab
 // bar, 3:1) is held to what the browser really draws behind it over white: the layer's green with its bone light from
 // above (ADR-85), the page under it made white and the layer's own words and icons hidden, measured from the pixels
-// at each word and icon (the lightest pixel there, the worst for bone words).
+// at each word's own line boxes and each icon (the lightest pixel there, the worst for bone words).
 test("the tab bar, the setup pill and the Ask sheet hold their words over a white thumbnail, at 390 px", async ({ page }) => {
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/library");
@@ -451,17 +451,35 @@ test("the tab bar, the setup pill and the Ask sheet hold their words over a whit
         return parts.length >= 4 ? Number(parts[3]) : 1;
       });
       const box = layer.getBoundingClientRect();
-      const marks: { color: string; x: number; y: number; w: number; h: number }[] = [];
+      const marks: { color: string; x: number; y: number; w: number; h: number; what: string }[] = [];
       for (const el of [layer, ...Array.from(layer.querySelectorAll<HTMLElement>("*"))]) {
         const cs = getComputedStyle(el);
         if (el.closest(".sr-only, .glide, .is-active, [aria-current='page'], .badge, .btn--primary, .btn--action, .help-msg--me, .setup-todo__pill-count") || cs.visibility === "hidden" || el.getClientRects().length === 0) continue;
         if (!(Array.from(el.childNodes).some((n) => n.nodeType === 3 && n.textContent!.trim()) || el.tagName === "svg")) continue;
         // Green and white words sit on bone and vermilion fills of their own, read by the scans above.
         if (["rgb(15, 55, 43)", "rgb(255, 255, 255)"].includes(cs.color)) continue;
-        const r = el.getBoundingClientRect();
+        // Where the words are: the line boxes of its own text (a button's rim glow sits in its padding, not behind its
+        // words), or the whole icon.
+        let r: { left: number; top: number; right: number; bottom: number } = el.getBoundingClientRect();
+        if (el.tagName !== "svg") {
+          const lines = Array.from(el.childNodes)
+            .filter((n) => n.nodeType === 3 && n.textContent!.trim())
+            .flatMap((n) => {
+              const range = document.createRange();
+              range.selectNodeContents(n);
+              return Array.from(range.getClientRects());
+            });
+          if (lines.length)
+            r = {
+              left: Math.min(...lines.map((l) => l.left)),
+              top: Math.min(...lines.map((l) => l.top)),
+              right: Math.max(...lines.map((l) => l.right)),
+              bottom: Math.max(...lines.map((l) => l.bottom)),
+            };
+        }
         const [x0, y0] = [Math.max(r.left, box.left), Math.max(r.top, box.top)];
         const [x1, y1] = [Math.min(r.right, box.right, innerWidth), Math.min(r.bottom, box.bottom, innerHeight)];
-        if (x1 - x0 >= 2 && y1 - y0 >= 2) marks.push({ color: cs.color, x: Math.round(x0 - box.left), y: Math.round(y0 - box.top), w: Math.floor(x1 - x0), h: Math.floor(y1 - y0) });
+        if (x1 - x0 >= 2 && y1 - y0 >= 2) marks.push({ color: cs.color, x: Math.round(x0 - box.left), y: Math.round(y0 - box.top), w: Math.floor(x1 - x0), h: Math.floor(y1 - y0), what: `${el.tagName.toLowerCase()}.${String(el.getAttribute("class") ?? "").split(" ").join(".")}` });
       }
       return { min: Math.min(...alphas), box: { x: box.left, y: box.top, width: box.width, height: box.height }, marks };
     });
@@ -518,7 +536,9 @@ test("the tab bar, the setup pill and the Ask sheet hold their words over a whit
         }
       // The layer really painted there (not the white sheet), and its words keep their contrast over it.
       expect(luminance(lightest), `${selector}: its green is drawn behind its words`).toBeLessThan(0.5);
-      expect(contrast(rgb(m.color), lightest), `${selector} ${m.color} over the drawn ${lightest.map(Math.round).join(" ")}`).toBeGreaterThanOrEqual(need);
+      // Words 4.5:1 (or the layer's need); an icon is a graphic, 3:1 (WCAG 1.4.11), as on the tab bar.
+      const want = m.what.startsWith("svg") ? Math.min(need, 3) : need;
+      expect(contrast(rgb(m.color), lightest), `${selector} ${m.what} ${m.color} over the drawn ${lightest.map(Math.round).join(" ")}`).toBeGreaterThanOrEqual(want);
     }
   };
   await check(".tabbar", TABBAR_VEIL, 3);
