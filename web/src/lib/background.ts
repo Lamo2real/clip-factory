@@ -417,13 +417,85 @@ export const TRACK_LIFT = 0.08;
  */
 export const TRACK_EXTRA_VEIL = 0.15;
 /**
- * Tinted chips on a panel (the vermilion pill, the success tint, the sound tags: `--tint-vermilion` and `--tint-leaf`
- * in tokens.css) lay this much deep green (`--green-deep`) under their tint, so a vermilion or leaf chip is never
- * lighter than the panel it sits on and its words keep AA.
+ * Tinted chips (the vermilion pill, the success tint, the sound tags: `--tint-vermilion`, `--tint-leaf` and
+ * `--tint-amber` in tokens.css) lay this much green (`CHIP_UNDER`) under their tint, so the colour stays readable and
+ * its words keep AA wherever the chip sits.
  */
 export const CHIP_DEEPEN = 0.35;
-/** The deep green under a tinted chip. */
+/** Deep green (`--green-deep`): wells under words (fields, `--fill-sunk`) and sheet scrims. */
 export const GREEN_DEEP: Rgb = hexToRgb("#0a2820");
+/**
+ * The green under a tinted chip: bottle green since ADR-85 (it was `GREEN_DEEP`), so a chip on a row is brighter than
+ * the row, like every other raised thing, and its colour still reads (leaf 4.95, vermilion 6.00, amber 4.69 at worst).
+ */
+export const CHIP_UNDER: Rgb = VEIL;
+
+// ---------- The logic of light (ADR-85, docs/CONTRACTS.md §22.7) ----------
+//
+// One key light above. Every level is brighter than the level under it, and inside every surface the top is brighter
+// than the bottom. Brightness is bone laid over green, and every bone lift is paid for with a step more green under
+// it, so the words keep AA: bone words cap whatever they sit on at luminance 0.140. The see-through veils above are
+// unchanged; the pay goes on top of them. tokens.css and glass.css carry each number (`--light-*`), and
+// test/background.test.ts reads every one back and works the contrast and the brightness steps out for every look.
+
+/** The extra green every lit surface carries over the app's own backdrops (the living mesh, Frosted, Colours). */
+export const LIGHT_PAY_OWN = 0.08;
+/** The extra green where white can be behind (the window look, Picture, reduced transparency): the veil is 0.73 there already. */
+export const LIGHT_PAY_WHITE = 0.04;
+/** A panel's bone light at its very top (E1). It eases out and is gone by 65 % of the height (`--glass-light-panel`). */
+export const PANEL_LIGHT = 0.04;
+/**
+ * The catch light at the top centre of a pane (`--glass-spec`): 8 px deep, inside the smallest top padding above words
+ * (the line plates and compact rows start their words 8 to 12 px down), so it is never under them.
+ */
+export const SPECULAR = 0.06;
+/**
+ * The lead panel (the hero, the sign-in card, Library's learnings): a step more green than a panel ... (0.03, not the
+ * 0.02 first drawn: a raised card at the lead's top, hovered two or three levels up, fell to 4.48:1 in some Colours.)
+ */
+export const LEAD_EXTRA_VEIL = 0.03;
+/** ... paying for a stronger light at its top. */
+export const LEAD_LIGHT = 0.06;
+/** A raised thing inside a lit surface (a row, a card, a control, a chip, nested glass): this much green over its parent ... */
+export const RAISE_VEIL = 0.14;
+/** ... then this much bone. Its fixed point stays under the AA ceiling, so AA holds at any depth (checked to 4 levels). */
+export const RAISE_LIFT = 0.06;
+/** Hover is one step up: more green ... */
+export const RAISE_HOVER_VEIL = 0.18;
+/** ... paying for more bone. No hover is darker than its rest. */
+export const RAISE_HOVER_LIFT = 0.08;
+/** Press is one step down: the raise's green with less bone (and an inset shade from above). */
+export const RAISE_PRESS_LIFT = 0.03;
+/** A ghost button (Later, Skip, Not now) inside a lit surface: the raise's green with a faint lift, no top glow. */
+export const GHOST_LIFT = 0.04;
+/** A ghost button straight on the page: the pick-one track's green (`TRACK_EXTRA_VEIL`) with this lift. */
+export const PAGE_GHOST_LIFT = 0.06;
+/** A control straight on the page, on hover: the track's green with this lift (its rest is `TRACK_LIFT`). */
+export const PAGE_HOVER_LIFT = 0.09;
+/** A floating layer (toasts, the update bar, the setup pill, rail and list, the Ask launcher and panel, the money dock): this much more green than `FLOAT_VEIL` (or the panel, if heavier) ... */
+export const FLOAT_EXTRA_VEIL = 0.06;
+/** ... paying for this light at its top. */
+export const FLOAT_LIGHT = 0.08;
+/** A floating layer on hover (the setup pill, the launcher): the same green, a little more light. */
+export const FLOAT_HOVER_LIGHT = 0.09;
+/** The Reload lens on the update bar: colourless, the bar's primary choice told by light alone. This much green over the bar ... */
+export const LENS_VEIL = 0.38;
+/** ... then this much bone at its top. */
+export const LENS_LIGHT = 0.14;
+/** The lens on hover: more green ... */
+export const LENS_HOVER_VEIL = 0.42;
+/** ... and more bone. */
+export const LENS_HOVER_LIGHT = 0.16;
+/** The lens pressed: its resting green with a faint lift. */
+export const LENS_PRESS_LIGHT = 0.06;
+/** Sheets, the picture viewer and the markup editor: their light at the top, over their near-solid tint. */
+export const OVERLAY_LIGHT = 0.12;
+/** The dropdown list (solid) and the workspace menu (0.94): their light at the top. */
+export const MENU_LIGHT = 0.1;
+/** The tab bar (icons only, 3:1): this much more green than `TABBAR_VEIL` ... */
+export const TABBAR_EXTRA_VEIL = 0.04;
+/** ... paying for this light at its top. */
+export const TABBAR_LIGHT = 0.04;
 
 /**
  * The smallest veil strength (0..1, rounded up to 0.01) at which every text colour reaches `target` contrast on the
@@ -473,9 +545,9 @@ export function seeThroughTrackBackground(glass: NativeGlass, scheme: Scheme, st
   return mix(BONE, tinted, TRACK_LIFT);
 }
 
-/** What words on a tinted chip sit on: the panel, the deep green under the tint, then the chip's own tint (`tint` at `alpha`). */
+/** What words on a tinted chip sit on: the panel, the green under the tint (`CHIP_UNDER`), then the chip's own tint (`tint` at `alpha`). */
 export function seeThroughChipBackground(glass: NativeGlass, scheme: Scheme, strength: GlassStrength, tint: Rgb, alpha: number, behind: Rgb = glassCeiling(glass, scheme)): Rgb {
-  return mix(tint, mix(GREEN_DEEP, seeThroughWorstBackground(glass, scheme, strength, behind), CHIP_DEEPEN), alpha);
+  return mix(tint, mix(CHIP_UNDER, seeThroughWorstBackground(glass, scheme, strength, behind), CHIP_DEEPEN), alpha);
 }
 
 /** A picked swatch's tick: bottle green when it reads better than white on that colour, so it is never under 3:1. */
@@ -581,6 +653,88 @@ export function resolveLook(i: LookInput): Look {
       return { kind: "colours", colours, ...coloursVeils(colours) };
     }
   }
+}
+
+// ---------- The logic of light: what words sit on at each level (ADR-85) ----------
+
+/** `veil` of bottle green (at most solid) over `under`, then `lift` of bone over that: how every lit surface composites. */
+export function lit(under: Rgb, veil: number, lift: number): Rgb {
+  return mix(BONE, mix(VEIL, under, Math.min(1, veil)), lift);
+}
+
+/** How bright a colour looks: its OKLab lightness, 0 (black) to 1 (white). "The top layer is brighter" is measured in it. */
+export function oklabL(c: Rgb): number {
+  const [r, g, b] = c.map(linearChannel) as [number, number, number];
+  const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
+  const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
+  const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
+  return 0.2104542553 * l + 0.793617785 * m - 0.0040720468 * s;
+}
+
+/** What the light needs to know of a look: its kind, its panel veil and, if it has one, its page veil. */
+export type LightLook = { kind: Look["kind"]; panelVeil: number; pageVeil?: number };
+
+/**
+ * The green that pays for the light (`--light-pay`): `LIGHT_PAY_WHITE` where white can be behind (the window look,
+ * Picture, and reduced transparency, where the veils are near solid), `LIGHT_PAY_OWN` over the app's own backdrops.
+ */
+export function lightPay(look: Pick<LightLook, "kind">, reducedTransparency = false): number {
+  return reducedTransparency || look.kind === "window" || look.kind === "picture" ? LIGHT_PAY_WHITE : LIGHT_PAY_OWN;
+}
+
+/** `behind` (the backdrop as drawn: the desktop, the photo, a spot of the mesh) under the look's own page veil. */
+function onThePage(look: LightLook, behind: Rgb): Rgb {
+  return mix(VEIL, behind, look.pageVeil ?? 0);
+}
+
+/**
+ * What words at the TOP of a panel sit on (E1, where its light is strongest), over `behind`: the panel veil plus the
+ * pay, then `PANEL_LIGHT`. `lead`: the lead panel, a step more green (at most 0.97) under `LEAD_LIGHT`.
+ */
+export function panelTop(look: LightLook, behind: Rgb, lead = false, pay = lightPay(look)): Rgb {
+  const page = onThePage(look, behind);
+  if (lead) return lit(page, Math.min(0.97, look.panelVeil + pay + LEAD_EXTRA_VEIL), LEAD_LIGHT);
+  return lit(page, look.panelVeil + pay, PANEL_LIGHT);
+}
+
+/** The states a raised thing answers with: hover adds light, press takes it away; a ghost rests with less. */
+export type LightState = "rest" | "hover" | "press" | "ghost";
+const RAISE: Record<LightState, readonly [veil: number, lift: number]> = {
+  rest: [RAISE_VEIL, RAISE_LIFT],
+  hover: [RAISE_HOVER_VEIL, RAISE_HOVER_LIFT],
+  press: [RAISE_VEIL, RAISE_PRESS_LIFT],
+  ghost: [RAISE_VEIL, GHOST_LIFT],
+};
+
+/**
+ * What words on a raised thing inside a lit surface sit on, `depth` steps above `parent` (1: a row on a panel, 2: a
+ * mark on that row, 3: a chip on the mark). The steps under it rest; `state` is the top one's.
+ */
+export function raised(parent: Rgb, depth = 1, state: LightState = "rest"): Rgb {
+  let under = parent;
+  for (let d = 1; d < depth; d++) under = lit(under, RAISE_VEIL, RAISE_LIFT);
+  const [veil, lift] = RAISE[state];
+  return lit(under, veil, lift);
+}
+
+/** What words on a control straight on the page sit on (no lit surface under it): the pick-one track's green, the lift of its state. */
+export function onPage(look: LightLook, behind: Rgb, state: LightState = "rest"): Rgb {
+  const lift = { rest: TRACK_LIFT, hover: PAGE_HOVER_LIFT, press: RAISE_PRESS_LIFT, ghost: PAGE_GHOST_LIFT }[state];
+  return lit(onThePage(look, behind), look.panelVeil + TRACK_EXTRA_VEIL, lift);
+}
+
+/**
+ * The top of a floating layer over `under` (a white thumbnail, the backdrop, a panel): `floatVeil` or the panel veil,
+ * whichever is heavier, plus `FLOAT_EXTRA_VEIL`, under `FLOAT_LIGHT` (`FLOAT_HOVER_LIGHT` on hover).
+ */
+export function floatTop(under: Rgb, look: Pick<LightLook, "panelVeil">, state: "rest" | "hover" = "rest", floatVeil = FLOAT_VEIL): Rgb {
+  return lit(under, Math.max(floatVeil, look.panelVeil) + FLOAT_EXTRA_VEIL, state === "hover" ? FLOAT_HOVER_LIGHT : FLOAT_LIGHT);
+}
+
+/** What the Reload label sits on: the colourless lens over the update bar's top (`bar`, from `floatTop`). */
+export function lens(bar: Rgb, state: "rest" | "hover" | "press" = "rest"): Rgb {
+  if (state === "hover") return lit(bar, LENS_HOVER_VEIL, LENS_HOVER_LIGHT);
+  return lit(bar, LENS_VEIL, state === "press" ? LENS_PRESS_LIGHT : LENS_LIGHT);
 }
 
 /** The note under see-through in an old desktop app (`isOldDesktopApp`); its button gets the new one. */

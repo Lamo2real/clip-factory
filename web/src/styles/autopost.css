@@ -54,6 +54,7 @@
   padding: 6px 6px 6px 8px;
   border-radius: var(--r-md);
   background: var(--fill);
+  box-shadow: var(--glass-shadow-raise);
 }
 .autopost__run {
   grid-template-columns: minmax(0, 1fr) auto;

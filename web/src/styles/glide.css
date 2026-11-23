@@ -31,7 +31,7 @@
   opacity: 0;
   /* The selected pill is bone, with --on-bone words (the reference's bone button). */
   background: var(--selected);
-  box-shadow: 0 2px 8px -2px rgb(var(--shadow-rgb) / 0.5);
+  box-shadow: var(--light-shade-2), var(--light-shadow-2);
   transition: opacity var(--dur-2) var(--ease-out);
 }
 .glide.is-still {
@@ -79,7 +79,7 @@
 /* Tab rows and segmented bars: the glide matches the chosen pill. */
 .tabs > .glide {
   background: var(--selected);
-  box-shadow: 0 2px 8px -2px rgb(var(--shadow-rgb) / 0.5);
+  box-shadow: var(--light-shade-2), var(--light-shadow-2);
 }
 
 /* Background choices: a glass tile the size of the chosen choice. */
@@ -97,7 +97,7 @@
 .glide--menu {
   border-radius: var(--r-md);
   background: var(--selected);
-  box-shadow: 0 8px 18px -12px rgb(var(--shadow-rgb) / 0.85);
+  box-shadow: var(--light-shade-2), var(--light-shadow-2);
 }
 .glide--menu::before {
   content: "";
@@ -119,7 +119,7 @@
 .glide--tabbar {
   border-radius: var(--r-md);
   background: var(--selected);
-  box-shadow: 0 6px 14px -8px rgb(var(--shadow-rgb) / 0.83);
+  box-shadow: var(--light-shade-2), var(--light-shadow-2);
 }
 .glide--tabbar::after {
   content: "";
@@ -170,7 +170,9 @@
   gap: 2px;
   padding: 4px;
   border-radius: var(--r-md);
+  /* A raised groove, lit from above; its light and shade stay inside its box (§45.19). */
   background: var(--fill);
+  box-shadow: var(--light-rim-2), var(--light-shade-2);
 }
 .ws-switch--stack {
   grid-template-columns: minmax(0, 1fr);
@@ -236,16 +238,6 @@
 .ws-round:active {
   transform: scale(0.94);
 }
-/* The window look and the picture look (glass.css): nothing that holds words is weaker than the panel tint, so the
-   round switch wears the control fill there, like a glass button (its name sits straight on the window otherwise). */
-html:where(.see-through, [data-backdrop]) .ws-round {
-  background: var(--fill-control);
-}
-html:where(.see-through, [data-backdrop]) .ws-round:hover {
-  background:
-    linear-gradient(rgb(var(--bone-rgb) / 0.08), rgb(var(--bone-rgb) / 0.08)),
-    rgb(var(--green-rgb) / min(0.97, var(--panel-veil) + 0.22));
-}
 .ws-round--phone {
   width: 48px;
   height: 48px;
@@ -293,8 +285,9 @@ html:where(.see-through, [data-backdrop]) .ws-round:hover {
   width: 220px;
   padding: 6px;
   border-radius: var(--r-md);
-  background: rgb(var(--green-deep-rgb) / 0.94);
-  box-shadow: 0 18px 40px -18px rgb(var(--shadow-rgb) / 0.83);
+  /* A menu: nearly solid bottle green, lit from above (MENU_LIGHT). */
+  background: var(--glass-light-menu), rgb(var(--green-rgb) / 0.94);
+  box-shadow: var(--light-rim-3), var(--light-shadow-4);
 }
 .topbar .ws-menu {
   top: calc(100% + 8px);
@@ -307,11 +300,11 @@ html:where(.see-through, [data-backdrop]) .ws-round:hover {
 .segmented__opt:not(.is-on):hover,
 .tab:not(.is-on):hover {
   color: var(--ink);
-  background: var(--fill);
+  background: var(--fill-hover);
 }
 .tabbar__item:not(.is-active):hover {
   color: var(--ink);
-  background: var(--fill);
+  background: var(--fill-hover);
 }
 
 /* The Ask mark's vermilion dot breathes slowly. */

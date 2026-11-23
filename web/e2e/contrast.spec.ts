@@ -442,7 +442,8 @@ test("the tab bar, the setup pill and the Ask sheet hold their words over a whit
   const read = (selector: string) =>
     page.locator(selector).first().evaluate((layer) => {
       const s = getComputedStyle(layer);
-      const alphas = [...s.backgroundImage.matchAll(/rgba?\(([^)]*)\)/g)].map((m) => {
+      // The green of its tint only: the bone light from above lies on top of it (ADR-85).
+      const alphas = [...s.backgroundImage.matchAll(/rgba?\((15, 55, 43[^)]*)\)/g)].map((m) => {
         const parts = m[1]!.split(/[\s,/]+/).filter(Boolean);
         return parts.length >= 4 ? Number(parts[3]) : 1;
       });

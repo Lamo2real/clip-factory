@@ -2,8 +2,9 @@ import { expect, test } from "@playwright/test";
 import { settle } from "./helpers.ts";
 import { busyness, decode } from "./pixels.ts";
 
-// Words scrolled under the refracting glass (the tab bar, the sidebar, the hero) are blurred, not just bent: in
-// Chromium `url(#cf-refract)` before `blur()` left the backdrop sharp (glass.css .refract .glass--refract).
+// Words scrolled under the refracting glass (the tab bar, the sidebar, the hero, the page title plate) are blurred,
+// not just bent: in Chromium `url(#cf-refract)` before `blur()` left the backdrop sharp (glass.css
+// `.refract :is(.glass--refract, .page-head__text)`).
 
 test.use({ reducedMotion: "reduce" });
 
@@ -30,4 +31,19 @@ test("text under the phone tab bar is frosted by its blur", async ({ page }) => 
   const bare = busyness(await decode(page, await page.screenshot({ clip })));
   expect(bare, "the words behind are there to blur").toBeGreaterThan(4);
   expect(through, `blurred ${through.toFixed(2)} vs sharp ${bare.toFixed(2)}`).toBeLessThan(bare * 0.25);
+});
+
+test("the page title plate refracts too, and blurs before it bends", async ({ page }) => {
+  await page.setViewportSize({ width: 1440, height: 900 });
+  await page.goto("/library");
+  await settle(page);
+  expect(await page.evaluate(() => document.documentElement.classList.contains("refract"))).toBe(true);
+  const filter = await page.locator(".page-head__text").first().evaluate((el) => getComputedStyle(el).backdropFilter);
+  // blur(), then the bend, then the saturation: with url() first Chromium leaves what is behind sharp (above).
+  expect(filter).toMatch(/^blur\(14px\) url\("?#cf-refract"?\) saturate\(1\.75\)$/);
+  // The money title plate blurs like a pane but does not bend (Money already has its dock and band refracting).
+  await page.goto("/money");
+  await settle(page);
+  const money = page.locator(".dash-head__text").first();
+  if (await money.count()) expect(await money.evaluate((el) => getComputedStyle(el).backdropFilter)).not.toContain("url(");
 });

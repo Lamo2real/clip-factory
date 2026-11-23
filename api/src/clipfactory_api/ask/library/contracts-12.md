@@ -28,8 +28,9 @@
   (prev-sha read from the live `/version.json` in the web bucket; first deploy → `["First release"]`).
 * The app checks `/version.json` on load, every 5 minutes, on `visibilitychange` to visible, and when the service
   worker finds a waiting worker. If `version` differs from its own: a glass bar slides up at the bottom (above the phone
-  tab bar), showing a sparkle icon, the area labels as small pills (e.g. `Settings · Profile picture`), and a vermilion
-  **Reload** button. Visible in the browser and in installed apps. Dismissable ("Later") until the next check.
+  tab bar), showing a sparkle icon, the area labels as small pills (e.g. `Settings · Profile picture`), and a
+  colourless liquid-glass **Reload** button (bone words, no vermilion, no white label, no shine or glow; it reads as
+  the primary choice beside "Later" by light alone: brighter at rest, brighter still on hover, ADR-85). Visible in the browser and in installed apps. Dismissable ("Later") until the next check.
 * Reload: a progress bar inside the bar animates with an ease-in-out curve: quick to ~75 % in ~0.8 s (slow start,
   fast middle, slow end), holds/creeps while the new service worker installs and activates (`skipWaiting` via
   postMessage) and fresh assets are fetched, then eases to 100 %, a small sparkle/confetti, then `location.reload()`.

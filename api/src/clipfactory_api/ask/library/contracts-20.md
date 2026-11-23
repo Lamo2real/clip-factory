@@ -432,7 +432,7 @@ line moved, the label decides. Durations come from §20.3 unless stated.
 | GetApp.tsx:162 Download for Mac/Windows/Linux, :176 install from this browser, :204 Install app | `download` | |
 | GetApp.tsx:268 Copy the link | `copy` | then the existing check swap |
 | UpdateBar.tsx:66 Later | press | |
-| UpdateBar.tsx:69 **Reload** (Vermilion) | existing | the spark spin / pop / confetti stays as the `refresh` motion; its icon gets `act="refresh"` for the tap; nothing new waits |
+| UpdateBar.tsx:69 **Reload** (the colourless lens since ADR-85; it was vermilion) | existing | the spark spin / pop / confetti stays as the `refresh` motion; its icon gets `act="refresh"` for the tap; nothing new waits |
 | Toasts.tsx:134 Undo | press | the rewind plays on the source control (§20.7) |
 | Toasts.tsx:141 Close message; Sheet.tsx:50 scrim / Escape | press / none | |
 | SetupTodo.tsx the pill, **–** (make it small), × (close), Set up \<Platform\>, Skip \<Platform\> (opens the question) | press | navigation, opening and closing stay quiet (§17.13) |
@@ -559,3 +559,20 @@ content in place and nothing else moves: no cross-fade, no fade-in, no lift, in 
   the page title than either page at rest (the old skeletons: 94 % white). `e2e/navigation.spec.ts` checks that no page
   change calls `startViewTransition`; `web/test/stillNav.test.ts` fails on any `::view-transition` rule or an
   animation on the page's own blocks.
+
+### 20.17 Light is static (owner request, 2026-11-23, ADR-85)
+
+The logic of light (§22.7) never moves: every light, top glow, shade and shadow is a gradient or a box-shadow that is
+drawn once. No specular sweep, no moving highlight, no animated refraction.
+
+* **Hover adds light; press takes it away.** Hover is one step up (more bone paid for with more green, a stronger top
+  glow, a bigger shadow, and `translateY(-1px)` only under `prefers-reduced-motion: no-preference`); press is one step
+  down (less bone, an inset shade from above and the existing `scale(0.955)`). No hover anywhere is darker than its
+  rest.
+* **What may transition** on hover and press: `background-color`, `box-shadow`, `transform` and `opacity` (150 to
+  250 ms, `--ease-out`), or a registered `@property` number (the lens's `--btn-lift` and `--btn-veil`, so its light
+  fades in). A gradient layer cannot interpolate, so it swaps at once while the shadow and transform animate.
+* **Never** transition or animate `backdrop-filter`, a blur, a `saturate()`, a `url()` or any SVG filter parameter
+  (Windows WebView2 repaints every frame; PR #159). `test/background.test.ts` fails on any `transition` or
+  `@keyframes` that names `backdrop-filter` (or `transition: all`).
+* Under reduced motion the light is the same; the global 1 ms rule makes every state swap instant.

@@ -2,7 +2,7 @@
 
 | Component | Notes |
 |---|---|
-| Button (primary) | Vermilion glass pill, icon + white text, 48 px tall minimum. One per screen (the update bar's Reload is the only extra). |
+| Button (primary) | Vermilion glass pill, icon + white text, 48 px tall minimum. One per screen. (The update bar's Reload is the app's own primary choice and is colourless: a liquid-glass lens, below.) |
 | Button (secondary) | Glass pill with a bone outline and bone text (the reference's outlined circle-arrow). |
 | Button (quiet) | Text only with an underline on hover. |
 | Card | Glass, `--r-md`, padding 16–24 px, `min-width: 0` so children can shrink. |

@@ -6,7 +6,7 @@ Shown when `/version.json` reports a version other than the running one ([CONTRA
  ┌───────────────────────────────────────────────────────────────┐
  │ ✦  New!  [ Settings ] [ Profile picture ]      Later  (↻ Reload) │
  └───────────────────────────────────────────────────────────────┘
-   sparkle  area pills (1–3 words each, max 3)      quiet   vermilion CTA
+   sparkle  area pills (1–3 words each, max 3)      quiet   colourless lens
 ```
 
 | Part | Spec |
@@ -16,7 +16,7 @@ Shown when `/version.json` reports a version other than the running one ([CONTRA
 | Sparkle | 20 px vermilion four-point star icon. |
 | Title | "New!" in Inter 600. Never a version number. |
 | Pills | Bone glass chips, 13 px Inter 500, `--r-pill`, single line with ellipsis; on narrow phones they wrap under the title and the bar grows taller rather than overflowing. Labels come from `version.json` `areas`. |
-| Reload | Vermilion pill, refresh icon + "Reload", 48 px tall. It is the one allowed second vermilion button on a screen, because it belongs to the app, not to the page. |
+| Reload | A colourless liquid-glass lens (`.btn--lens`, owner 2026-11-23, ADR-85): refresh icon + "Reload" in bone (`--ink`), 48 px tall. Green 0.38 under bone 0.14 at its top, easing to half at its foot, a soft top glow and a small drop; no vermilion, no white label, no shine, no glow. It reads as the primary choice beside Later by light alone; hover brightens it (0.42 / 0.16) and lifts it 1 px, press dims it. |
 | Later | Quiet text button; hides the bar until the next check (5 minutes, or when the app comes back to the screen). |
 | While reloading | Pills and buttons fade out; the bar's fill becomes the progress bar (below) with "Updating…" and the percentage for screen readers (`role="progressbar"`, `aria-valuenow`). |
 

@@ -33,6 +33,7 @@
   padding: 10px 14px;
   border-radius: var(--r-md);
   background: var(--fill);
+  box-shadow: var(--glass-shadow-raise);
   font-size: var(--fs-small);
   font-weight: 600;
 }
@@ -179,8 +180,9 @@
   gap: 16px;
   padding: var(--inset);
   border-radius: var(--r-lg);
+  /* Raised on the hero (ADR-85): one step brighter than the lead panel, lit from above. */
   background: var(--fill);
-  box-shadow: none;
+  box-shadow: var(--glass-shadow-raise);
 }
 .newjob .segmented {
   justify-self: start;
@@ -445,7 +447,7 @@
 }
 .teaser:hover {
   transform: translateY(-3px);
-  box-shadow: var(--shadow-2);
+  box-shadow: var(--light-rim-1), var(--light-shade-1), var(--light-shadow-1-hover);
 }
 .teaser:active {
   transform: scale(0.98);
@@ -459,7 +461,7 @@
   aspect-ratio: 4 / 5;
   overflow: hidden;
   border-radius: calc(var(--r-lg) - 6px);
-  background: linear-gradient(150deg, var(--green-2), var(--green-3));
+  background: linear-gradient(180deg, var(--green-3), var(--green-2));
 }
 .teaser__media img {
   width: 100%;
@@ -623,7 +625,7 @@
 }
 .job-row:hover {
   transform: translateY(-2px);
-  box-shadow: var(--shadow-2);
+  box-shadow: var(--light-rim-1), var(--light-shade-1), var(--light-shadow-1-hover);
 }
 .job-row:active {
   transform: scale(0.99);
@@ -871,7 +873,7 @@
   aspect-ratio: 16 / 9;
   overflow: hidden;
   border-radius: var(--r-md);
-  background: linear-gradient(150deg, var(--green-2), var(--green-3));
+  background: linear-gradient(180deg, var(--green-3), var(--green-2));
 }
 .thumb img {
   width: 100%;
@@ -986,7 +988,7 @@
   aspect-ratio: 9 / 13;
   overflow: hidden;
   border-radius: calc(var(--r-lg) - 6px);
-  background: linear-gradient(150deg, var(--green-2), var(--green-3));
+  background: linear-gradient(180deg, var(--green-3), var(--green-2));
   color: var(--ink-2);
 }
 .clip-tile__media img {
@@ -1153,7 +1155,7 @@
   padding: 4px 12px;
   border-radius: var(--r-md);
   background: var(--fill);
-  box-shadow: none;
+  box-shadow: var(--glass-shadow-raise);
   color: var(--ink-2);
   font-size: var(--fs-small);
   font-weight: 600;
@@ -1219,7 +1221,7 @@
 .checklist {
   border-radius: var(--r-md);
   background: var(--fill);
-  box-shadow: none;
+  box-shadow: var(--glass-shadow-raise);
 }
 .checklist__summary {
   display: flex;
@@ -1379,7 +1381,7 @@
   aspect-ratio: 9 / 14;
   overflow: hidden;
   border-radius: var(--r-sm);
-  background: linear-gradient(150deg, var(--green-2), var(--green-3));
+  background: linear-gradient(180deg, var(--green-3), var(--green-2));
 }
 .lib-card__cover img {
   width: 100%;
@@ -1411,7 +1413,10 @@
   min-height: 48px;
   padding: 6px 6px 6px 8px;
   border-radius: var(--r-md);
+  /* The logic of light (ADR-85): a row is one step brighter than its card, the mark one step brighter than the row
+     (the same relative raise, laid again), each lit from above and shaded at its foot. */
   background: var(--fill);
+  box-shadow: var(--glass-shadow-raise);
 }
 .post__mark {
   display: grid;
@@ -1421,7 +1426,7 @@
   height: 32px;
   border-radius: var(--r-xs);
   background: var(--fill);
-  box-shadow: none;
+  box-shadow: var(--light-rim-sm), var(--light-shade-2);
 }
 .post.is-posted .post__mark {
   background: var(--tint-leaf);
@@ -1527,7 +1532,7 @@
   padding: 6px 14px 6px 10px;
   border-radius: var(--r-pill);
   background: var(--fill-control);
-  box-shadow: none;
+  box-shadow: var(--glass-shadow-raise);
   font-weight: 600;
   font-size: 0.9rem;
   transition: background-color var(--dur-2), box-shadow var(--dur-2), transform var(--dur-2) var(--ease-spring);
@@ -1543,20 +1548,31 @@
   color: var(--on-bone);
   text-shadow: none;
   background: var(--selected);
-  box-shadow: none;
+  box-shadow: var(--light-shade-2), var(--light-shadow-2);
   --mark-cut: #efe7da;
+}
+/* Hover adds light (one step up), press takes it away (one step down); never darker on hover (ADR-85). As light as
+   the focus rules below (:where), so a focused chip keeps its ring under the pointer. */
+.check-chip:where(:not(.is-on, :has(input:disabled))):hover {
+  background: var(--fill-hover);
+  box-shadow: var(--glass-shadow-raise-hover);
+}
+.check-chip:where(:not(.is-on, :has(input:disabled))):active {
+  background: var(--fill-press);
+  box-shadow: var(--glass-shadow-press);
 }
 .check-chip:active {
   transform: scale(0.95);
 }
 .check-chip:has(input:disabled) {
   opacity: 0.5;
+  box-shadow: none;
 }
 .check-chip:has(input:disabled):active {
   transform: none;
 }
 .check-chip:has(input:focus-visible) {
-  box-shadow: var(--focus);
+  box-shadow: var(--focus), var(--glass-shadow-raise);
 }
 
 /* ---------- Settings › Look & feel › Background (§22.5) ---------- */
@@ -1568,7 +1584,6 @@
   max-width: 460px;
   padding: 6px;
   border-radius: var(--r-lg);
-  box-shadow: none;
 }
 .bg-mode {
   display: grid;
@@ -1604,7 +1619,7 @@
 }
 .bg-mode:not(.is-on):hover {
   color: var(--ink);
-  background: var(--fill);
+  background: var(--fill-hover);
 }
 .bg-mode:active {
   transform: scale(0.96);
@@ -1650,7 +1665,6 @@
   max-width: 460px;
   padding: 6px;
   border-radius: var(--r-lg);
-  box-shadow: none;
 }
 .model-pick {
   display: flex;
@@ -1682,7 +1696,7 @@
 }
 .model-pick:not(.is-on):hover {
   color: var(--ink);
-  background: var(--fill);
+  background: var(--fill-hover);
 }
 .model-pick:active {
   transform: scale(0.98);
@@ -1746,7 +1760,7 @@
 .bg-tile__frost {
   position: absolute;
   inset: 0;
-  background: linear-gradient(140deg, rgb(var(--green-rgb) / 0.4), rgb(var(--green-rgb) / 0.3));
+  background: linear-gradient(180deg, rgb(var(--green-rgb) / 0.3), rgb(var(--green-rgb) / 0.4));
   box-shadow: none;
 }
 .bg-note {
@@ -1904,7 +1918,7 @@
   padding: 12px 14px;
   border-radius: var(--r-md);
   background: var(--tint-vermilion);
-  box-shadow: none;
+  box-shadow: var(--glass-shadow-raise);
 }
 .keep-again__text {
   display: flex;
@@ -2107,7 +2121,7 @@
 }
 .upload-chip:focus-visible {
   outline: none;
-  box-shadow: var(--focus);
+  box-shadow: var(--focus), var(--glass-shadow-raise);
 }
 .upload-chip__check {
   display: inline-grid;
@@ -2169,11 +2183,12 @@
   display: grid;
   gap: 8px;
 }
-/* Soft fill like Checks before posting: no edges, the tap target is the whole summary. */
+/* Raised like Checks before posting: one step brighter than the card, lit from above, no edges; the tap target is the
+   whole summary. */
 .place-row {
   border-radius: var(--r-md);
   background: var(--fill);
-  box-shadow: none;
+  box-shadow: var(--glass-shadow-raise);
 }
 .place-row__summary {
   display: flex;
@@ -2282,19 +2297,31 @@
   border: 0;
   border-radius: var(--r-md);
   background: var(--fill-control);
+  box-shadow: var(--glass-shadow-raise);
   color: inherit;
   font: inherit;
   font-weight: 650;
   text-align: left;
+  transition: box-shadow var(--dur-1) var(--ease-out);
+}
+/* As light as the focus rule below (:where), so a focused button keeps its ring under the pointer. */
+.dropdown__button:where(:not(.is-picked)):hover {
+  background: var(--fill-hover);
+  box-shadow: var(--glass-shadow-raise-hover);
+}
+.dropdown__button:where(:not(.is-picked)):active {
+  background: var(--fill-press);
+  box-shadow: var(--glass-shadow-press);
 }
 .dropdown__button.is-picked {
   background: var(--selected);
+  box-shadow: var(--light-shade-2), var(--light-shadow-2);
   color: var(--on-bone);
   text-shadow: none;
 }
 .dropdown__button:focus-visible {
   outline: none;
-  box-shadow: var(--focus);
+  box-shadow: var(--focus), var(--glass-shadow-raise);
 }
 .dropdown__value.is-empty {
   color: var(--ink-2);
@@ -2321,14 +2348,15 @@
   padding: 6px;
   list-style: none;
   border-radius: var(--r-md);
-  /* Solid: a glass list inside the glass sheet cannot blur what is under it, so the switches would show through. */
-  background: rgb(var(--green-rgb));
-  box-shadow: 0 12px 32px rgb(0 0 0 / 0.45);
+  /* Solid: a glass list inside the glass sheet cannot blur what is under it, so the switches would show through. Lit
+     from above like every menu (MENU_LIGHT), with the menu's top glow and the deepest drop: it floats over the rows. */
+  background: var(--glass-light-menu), rgb(var(--green-rgb));
+  box-shadow: var(--light-rim-3), var(--light-shadow-4);
   isolation: isolate;
 }
 .dropdown__list:focus-visible {
   outline: none;
-  box-shadow: var(--focus);
+  box-shadow: var(--focus), var(--light-rim-3), var(--light-shadow-4);
 }
 .dropdown__opt {
   display: flex;

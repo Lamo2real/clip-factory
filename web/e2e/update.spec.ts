@@ -1,5 +1,6 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type Locator, type Page } from "@playwright/test";
 import { animationsDone, settle } from "./helpers.ts";
+import { decode, grey } from "./pixels.ts";
 
 // The update bar (docs/CONTRACTS.md §12.2), driven by the mock build's fake update (?update=1 / window.__cfFakeUpdate).
 
@@ -112,4 +113,72 @@ test("with reduced motion the bar simply fills, with no confetti", async ({ page
   await page.getByRole("button", { name: "Reload" }).click();
   await expect(page.locator("canvas.confetti")).toHaveCount(0);
   await reloaded;
+});
+
+// Reload is a colourless liquid-glass lens (owner, 2026-11-23; ADR-85): bone words, no vermilion anywhere on it, and
+// it reads as the primary choice beside Later by light alone. Later stays the quiet ghost, and hover adds light.
+test.describe("Reload is a colourless glass lens", () => {
+  /** The vermilion family: the raw colour and the CTA's two stops. */
+  const VERMILION = [/\b232[,\s]+57[,\s]+43\b/, /\b206[,\s]+48[,\s]+36\b/, /\b184[,\s]+38[,\s]+28\b/];
+
+  /** What a button paints (its fill, shadow and shine) and its words' colour, beside --ink worked out the same way. */
+  const paint = (el: Locator) =>
+    el.evaluate((node) => {
+      const cs = getComputedStyle(node);
+      const probe = document.createElement("span");
+      probe.style.color = "var(--ink)";
+      document.body.append(probe);
+      const ink = getComputedStyle(probe).color;
+      probe.remove();
+      return {
+        fill: [cs.backgroundImage, cs.backgroundColor, cs.boxShadow, getComputedStyle(node, "::before").backgroundImage].join(" "),
+        color: cs.color,
+        ink,
+      };
+    });
+
+  /** The mean grey of a 6 x 3 px patch in a button's top padding, centred: light and glass only, no words. */
+  const topLight = async (page: Page, el: Locator) => {
+    const box = (await el.boundingBox())!;
+    const clip = { x: Math.round(box.x + box.width / 2 - 3), y: Math.round(box.y + 4), width: 6, height: 3 };
+    const px = await decode(page, await page.screenshot({ clip }));
+    let sum = 0;
+    for (let y = 0; y < px.height; y++) for (let x = 0; x < px.width; x++) sum += grey(px, x, y);
+    return sum / (px.width * px.height);
+  };
+
+  for (const width of [390, 1440]) {
+    test(`at ${width} px: no vermilion, bone words, brighter than Later, brighter still on hover`, async ({ page }) => {
+      // Reduced motion: every transition is 1 ms and nothing lifts, so each state is read where it lands.
+      await page.emulateMedia({ reducedMotion: "reduce" });
+      await page.setViewportSize({ width, height: width < 768 ? 844 : 900 });
+      await page.goto("/?update=1");
+      await settle(page);
+      await animationsDone(page);
+      const bar = page.getByRole("region", { name: "New version" });
+      const reload = bar.getByRole("button", { name: "Reload" });
+      const later = bar.getByRole("button", { name: "Later" });
+      await expect(reload).toHaveClass(/\bbtn--glass\b/);
+      await expect(reload).toHaveClass(/\bbtn--lens\b/);
+      await expect(reload).not.toHaveClass(/btn--primary|btn--action/);
+      await expect(later).toHaveClass(/\bbtn--ghost\b/);
+      // Its motion stays: refresh plays on the glyph.
+      await expect(reload).toHaveAttribute("data-act", "refresh");
+      await expect(reload.locator(".act.act--refresh")).toHaveCount(1);
+
+      const rest = await paint(reload);
+      for (const red of VERMILION) expect(rest.fill, `Reload paints ${red}`).not.toMatch(red);
+      expect(rest.color).toBe(rest.ink);
+      expect((await paint(later)).color).toBe(rest.ink);
+
+      // By light alone: the lens is clearly brighter than Later beside it, and hover brightens it again.
+      await page.mouse.move(0, 0);
+      const lens = await topLight(page, reload);
+      const quiet = await topLight(page, later);
+      expect(lens, `Reload ${lens.toFixed(1)} vs Later ${quiet.toFixed(1)}`).toBeGreaterThan(quiet + 4);
+      await reload.hover();
+      await expect.poll(() => topLight(page, reload)).toBeGreaterThan(lens + 0.5);
+      for (const red of VERMILION) expect((await paint(reload)).fill, `hovered Reload paints ${red}`).not.toMatch(red);
+    });
+  }
 });

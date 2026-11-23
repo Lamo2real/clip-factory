@@ -453,6 +453,7 @@
   padding: 16px var(--inset);
   border-radius: var(--r-lg);
   background: var(--fill);
+  box-shadow: var(--glass-shadow-raise);
 }
 .finder-ask > p {
   margin: 0;

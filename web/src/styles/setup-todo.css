@@ -103,9 +103,6 @@ html:has(.setup-todo[data-mode="pill"]) {
   opacity: 0;
   transition: opacity var(--dur-2) var(--ease-out);
 }
-.setup-todo-bar__glass.glass::before {
-  display: none;
-}
 .setup-todo-bar.is-scrolled .setup-todo-bar__glass {
   opacity: 1;
 }
@@ -171,25 +168,28 @@ html:has(.setup-todo[data-mode="pill"]) {
   max-width: calc(100vw - 24px);
   padding: 6px 16px 6px 8px;
   border-radius: var(--r-pill);
-  /* Pages scroll under the pill: a floating layer's tint (FLOAT_VEIL, planned for a white thumbnail under it). */
-  --glass-tint: linear-gradient(140deg, rgb(var(--green-rgb) / calc(var(--float-veil) + 0.02)), rgb(var(--green-rgb) / var(--float-veil)));
+  /* Pages scroll under the pill: a floating layer's tint and light (FLOAT_VEIL, planned for a white thumbnail under
+     it; FLOAT_EXTRA_VEIL pays for its top light, ADR-85). */
+  --glass-tint: var(--glass-tint-float);
+  --glass-light: var(--glass-light-float);
   --glass-blur: 28px;
   color: var(--ink);
   font: inherit;
   font-weight: 700;
   font-size: 0.95rem;
   white-space: nowrap;
-  box-shadow: 0 14px 30px -16px rgb(var(--shadow-rgb) / 0.85);
+  box-shadow: var(--glass-shadow-float);
   transition:
     box-shadow var(--dur-2) var(--ease-out),
     scale var(--dur-1) var(--ease-out);
 }
-/* Under the pointer the glass answers (the cursor never changes, §20.14): a step more green, never
-   lighter, so the vermilion count keeps its contrast. While the list is open the panel covers the pill, so it has no
-   look of its own for that. */
+/* Under the pointer the glass answers (the cursor never changes, §20.14): the same tint, a little more light from
+   above (FLOAT_HOVER_LIGHT, paid for by the float's own green, so the vermilion count keeps its contrast) and a
+   deeper shadow. While the list is open the panel covers the pill, so it has no look of its own for that. */
 .setup-todo__pill:hover {
-  --glass-tint: linear-gradient(140deg, rgb(var(--green-rgb) / calc(var(--float-veil) + 0.09)), rgb(var(--green-rgb) / calc(var(--float-veil) + 0.07)));
-  box-shadow: 0 18px 34px -16px rgb(var(--shadow-rgb) / 0.85);
+  --glass-tint: var(--glass-tint-float);
+  --glass-light: var(--glass-light-float-hover);
+  box-shadow: var(--light-rim-3), var(--light-shade-1), var(--light-shadow-1-hover), var(--light-shadow-3);
 }
 .setup-todo__pill:active {
   scale: 0.95;
@@ -220,10 +220,11 @@ html:has(.setup-todo[data-mode="pill"]) {
   width: var(--todo-w);
   /* Never down to the Ask pill (and the update bar under it). */
   max-height: calc(100dvh - var(--top-line) - var(--help-bottom, 24px) - 48px - 14px);
-  /* Pages scroll under the open list too: a floating layer's tint. */
-  --glass-tint: linear-gradient(140deg, rgb(var(--green-rgb) / calc(var(--float-veil) + 0.02)), rgb(var(--green-rgb) / var(--float-veil)));
+  /* Pages scroll under the open list too: a floating layer's tint and light. */
+  --glass-tint: var(--glass-tint-float);
+  --glass-light: var(--glass-light-float);
   --glass-blur: 28px;
-  box-shadow: 0 24px 48px -26px rgb(var(--shadow-rgb) / 0.83);
+  box-shadow: var(--glass-shadow-float);
 }
 /* The rows (and the line under them) scroll on their own when the screen is short; the head stays. */
 .setup-todo__scroll {
@@ -257,8 +258,10 @@ html:has(.setup-todo[data-mode="pill"]) {
   right: max(12px, env(safe-area-inset-right));
   /* Stops above the tab bar, so it is never covered and never covers it. */
   max-height: calc(100dvh - var(--top-line) - var(--tabbar-h) - env(safe-area-inset-bottom) - 24px);
-  --glass-tint: linear-gradient(140deg, rgb(var(--green-rgb) / calc(var(--float-veil) + 0.02)), rgb(var(--green-rgb) / var(--float-veil)));
+  --glass-tint: var(--glass-tint-float);
+  --glass-light: var(--glass-light-float);
   --glass-blur: 28px;
+  box-shadow: var(--glass-shadow-float);
   animation: todo-drop 360ms var(--ease-spring);
 }
 @keyframes todo-drop {
@@ -337,13 +340,14 @@ html:has(.setup-todo[data-mode="pill"]) {
 .setup-todo__fold,
 .setup-todo__close {
   color: var(--ink-2);
-  background: rgb(var(--green-deep-rgb) / 0.3);
-  box-shadow: none;
+  background: var(--fill);
+  box-shadow: var(--light-rim-sm), var(--light-shade-2), var(--light-shadow-2);
 }
 .setup-todo__fold:hover,
 .setup-todo__close:hover {
   color: var(--ink);
   background: var(--tint-leaf);
+  box-shadow: var(--light-rim-2-hover), var(--light-shade-2), var(--light-shadow-2-hover);
 }
 
 /* ---------- One row per platform ---------- */
@@ -359,20 +363,22 @@ html:has(.setup-todo[data-mode="pill"]) {
   gap: 6px 12px;
   padding: 8px 10px;
   border-radius: var(--r-md);
-  background: rgb(var(--green-deep-rgb) / 0.28);
-  box-shadow: none;
+  background: var(--fill);
+  box-shadow: var(--glass-shadow-raise);
   transition:
     background-color var(--dur-2),
+    box-shadow var(--dur-2) var(--ease-out),
     opacity var(--dur-2);
 }
 .todo-row:hover {
-  background: rgb(var(--green-deep-rgb) / 0.34);
+  background: var(--fill-hover);
+  box-shadow: var(--glass-shadow-raise-hover);
 }
 .todo-row.is-ready {
   background: var(--tint-leaf);
 }
 .todo-row.is-skipped {
-  background: rgb(var(--green-deep-rgb) / 0.23);
+  background: var(--fill-ghost);
 }
 .todo-row.is-skipped .todo-row__name {
   color: var(--ink-3);
@@ -386,7 +392,7 @@ html:has(.setup-todo[data-mode="pill"]) {
   border-radius: var(--r-sm);
   color: var(--ink);
   background: var(--fill);
-  box-shadow: none;
+  box-shadow: var(--light-rim-sm), var(--light-shade-2), var(--light-shadow-2);
   --mark-cut: #244d40;
 }
 /* The green tick of a ready row sits in the mark's corner, inside its box (nothing pokes out of the row). */

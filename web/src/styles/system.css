@@ -95,15 +95,21 @@
   border-radius: var(--r-pill);
   font-weight: 700;
   color: var(--ink);
-  background: transparent;
-  box-shadow: 0 4px 10px -6px rgb(var(--shadow-rgb) / 0.68);
-  transition: transform var(--dur-2) var(--ease-spring);
+  /* A ghost on the toast: a faint lift; it rises one step with a top light on hover (ADR-85). */
+  background: var(--fill-ghost);
+  box-shadow: none;
+  transition:
+    transform var(--dur-2) var(--ease-spring),
+    box-shadow var(--dur-1) var(--ease-out);
 }
 .toast__undo:hover {
   background: var(--fill-hover);
+  box-shadow: var(--light-rim-sm);
 }
 .toast__undo:active {
   transform: scale(0.94);
+  background: var(--fill-press);
+  box-shadow: var(--light-press);
 }
 /* The time left to undo, shrinking along the bottom edge. */
 .toast__timer {
@@ -168,7 +174,7 @@
   color: var(--on-bone);
   text-shadow: none;
   background: var(--selected);
-  box-shadow: 0 8px 18px -10px rgb(var(--shadow-rgb) / 0.83);
+  box-shadow: var(--light-shade-2), var(--light-shadow-2);
 }
 .getapp__text {
   display: grid;
@@ -220,7 +226,7 @@ h1.getapp__title {
   padding: 12px 14px;
   border-radius: var(--r-md);
   background: var(--fill);
-  box-shadow: none;
+  box-shadow: var(--glass-shadow-raise);
   font-size: var(--fs-small);
   color: var(--ink-2);
 }
@@ -239,7 +245,7 @@ h1.getapp__title {
 .getapp__safari {
   color: var(--ink);
   background: var(--fill);
-  box-shadow: none;
+  box-shadow: var(--glass-shadow-raise);
 }
 .getapp__safari .icon {
   color: var(--vermilion-ink);
@@ -268,7 +274,7 @@ h1.getapp__title {
   color: var(--on-bone);
   text-shadow: none;
   background: var(--selected);
-  box-shadow: 0 4px 12px -8px rgb(var(--shadow-rgb) / 0.75);
+  box-shadow: var(--light-shade-2), var(--light-shadow-2);
 }
 
 /* Picture steps: a little drawing of what to tap, a number, and three or four words. */
@@ -286,7 +292,7 @@ h1.getapp__title {
   padding: 12px;
   border-radius: var(--r-lg);
   background: var(--fill);
-  box-shadow: none;
+  box-shadow: var(--glass-shadow-raise);
 }
 .step__art {
   position: relative;
@@ -294,7 +300,9 @@ h1.getapp__title {
   place-items: center;
   min-height: 92px;
   border-radius: var(--r-md);
-  background: linear-gradient(160deg, rgb(var(--green-deep-rgb) / 0.3), rgb(var(--green-deep-rgb) / 0.45));
+  /* A drawing box, one step up from its card and lit from above like a panel (ADR-85). */
+  background: var(--glass-light-panel), var(--fill);
+  box-shadow: var(--light-rim-sm), var(--light-shade-2);
   overflow: hidden;
 }
 .step__n {
@@ -339,7 +347,7 @@ h1.getapp__title {
   color: var(--on-bone);
   text-shadow: none;
   background: #f7f2e8;
-  box-shadow: 0 6px 14px -8px rgb(var(--shadow-rgb) / 0.75);
+  box-shadow: var(--light-shadow-2);
 }
 .art--end {
   gap: 8px;
@@ -379,7 +387,7 @@ h1.getapp__title {
   color: var(--on-bone);
   text-shadow: none;
   background: #f7f2e8;
-  box-shadow: 0 6px 14px -8px rgb(var(--shadow-rgb) / 0.75);
+  box-shadow: var(--light-shadow-2);
 }
 .art__row {
   display: flex;
@@ -472,9 +480,10 @@ h1.getapp__title {
   bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 18px);
   padding: 10px 10px 10px 14px;
   border-radius: var(--r-lg);
-  --glass-tint: linear-gradient(140deg, rgb(var(--green-rgb) / calc(var(--float-veil) + 0.02)), rgb(var(--green-rgb) / var(--float-veil)));
+  --glass-tint: var(--glass-tint-float);
+  --glass-light: var(--glass-light-float);
   --glass-blur: 28px;
-  box-shadow: 0 22px 48px -22px rgb(var(--shadow-rgb) / 0.85);
+  box-shadow: var(--glass-shadow-float);
   animation: update-in 620ms var(--ease-spring) both;
 }
 @keyframes update-in {

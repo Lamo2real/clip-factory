@@ -2,18 +2,23 @@
 
 ```css
 .glass {
-  --glass-tint: linear-gradient(140deg, rgb(var(--green-rgb) / calc(var(--panel-veil) + 0.04)), rgb(var(--green-rgb) / var(--panel-veil)));
+  --glass-tint: var(--glass-tint-panel); /* flat green: --panel-veil + --light-pay */
+  --glass-light: var(--glass-light-panel); /* bone from above, gone by 65 %, and the catch light */
   position: relative;
   isolation: isolate;
-  background: var(--glass-tint);
+  background: var(--glass-light), var(--glass-tint);
   -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)); /* 18px, 1.6 */
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
   border: 1px solid transparent; /* keeps the box size; no edge is drawn */
   border-radius: var(--r-lg);
-  box-shadow: var(--shadow-1);
+  box-shadow: var(--glass-shadow-panel); /* the top glow, the shade at its foot, the drop */
 }
 :where(.glass) .glass {
-  --glass-tint: transparent; /* nested glass: the outer panel gives the green */
+  /* nested glass: one relative step brighter than the panel it sits on, and no blur of its own */
+  --glass-tint: linear-gradient(rgb(var(--green-rgb) / var(--light-raise-veil)), rgb(var(--green-rgb) / var(--light-raise-veil)));
+  --glass-light: linear-gradient(rgb(var(--bone-rgb) / var(--light-raise-lift)), rgb(var(--bone-rgb) / var(--light-raise-lift)));
+  backdrop-filter: none;
+  box-shadow: var(--glass-shadow-raise);
 }
 ```
 
@@ -21,13 +26,16 @@
 `saturate()` the CSS uses and the grain at its peak, `lib/background.ts`), 0.73 over a white desktop or photo, and between the two for
 light owner colours.
 
-Variants: `.glass--green` (hero, Ask launcher), `.glass--vermilion`, `.glass--clear`. In Chromium, `.glass--refract`
-also bends the backdrop through the `#cf-refract` SVG filter.
+Variants: `.glass--green` (the lead panel: the hero, the sign-in card, Library's learnings), `.glass--vermilion`,
+`.glass--clear`. In Chromium, `.glass--refract` and the page title plate also bend the backdrop through the
+`#cf-refract` SVG filter (blur first, then the bend; at most three such surfaces on a screen).
 
 **Buttons.** Every action is the vermilion CTA (`.btn--primary` for the screen's one main action, `.btn--action` for
-the rest, the same look). Secondary buttons (`.btn--glass`, `.btn--ghost`: Skip, Not now, Back) wear the soft
-control fill (`--fill-control`) with bone words and no ring; `.btn--danger` a vermilion tint over the same green with
-`--vermilion-ink` words. Selected things in a pick-one bar (the `<Glide>` pill, the menu, the tab bar) are bone
+the rest, the same look). Secondary buttons (`.btn--glass`) are one step brighter than what they sit on (`--fill`)
+with bone words, a soft top light and no ring; ghost buttons (`.btn--ghost`: Skip, Not now, Later) rest fainter
+(`--fill-ghost`) and rise to `--fill` on hover; `.btn--danger` is a vermilion tint over the raise's green with
+`--vermilion-ink` words. The update bar's **Reload** is a colourless lens (`.btn--lens`): bone words, green and bone
+only, brighter than Later by light alone. Selected things in a pick-one bar (the `<Glide>` pill, the menu, the tab bar) are bone
 with `--on-bone` words, with the vermilion bar or dot riding along on the bone.
 
 **What is behind the glass (Settings › Look & feel › Background, [CONTRACTS.md §22](CONTRACTS.md#22-background-modes-and-see-through-glass-owner-request-2026-11-16)).**
@@ -70,8 +78,9 @@ words start (`--loose-x`). The picture look uses the same plates.
 * **Floating surfaces keep their own denser tint** (toasts, sheets, the Ask panel, the update bar, a starred star).
 * **Nothing that holds words is weaker than the panel tint**: the tab bar, glass, ghost and danger buttons and the
   Library tabs carry at least that much, wherever they sit.
-* **Pick-one tracks** (segmented bars, tab rows, the Background tiles, the AI models) carry 0.10 more green than a
-  panel, with a lift of bone (0.08) so the track still shows.
-* **Fills under words are never lighter than their panel.** Wells are deep green (`--fill`); the success and
-  vermilion tints lay deep green (0.35) under their colour (`--tint-leaf`, `--tint-vermilion`). Hover answers with
-  more green (and a soft glow for a chosen thing), never with a lighter fill and never with a ring.
+* **Pick-one tracks** (segmented bars, tab rows, the Background tiles, the AI models) are a raised groove: on the
+  page 0.15 more green than a panel with a lift of bone (0.08); inside a pane the relative raise.
+* **A fill under words is one step brighter than what it sits on** ([the logic of light](#the-logic-of-light)): a
+  lift of bone paid for with a step more green, at any depth; the success, vermilion and amber tints lay bottle green
+  (0.35) under their colour. Only wells (fields, the link box, progress tracks) sit one step lower. Hover answers with
+  more light (and a soft glow for a chosen thing), never with a darker fill and never with a ring.

@@ -37,7 +37,7 @@
   border-radius: var(--r-pill);
   color: var(--ink);
   font-weight: 650;
-  box-shadow: 0 14px 32px -16px rgb(var(--shadow-rgb) / 0.85);
+  box-shadow: var(--glass-shadow-float);
   /* It never moves. Once the page is still it may fade out in place (opacity and a slight shrink) when it would make
      a control under it hard to tap, and back in when the spot is clear (dodge.ts). */
   transition:
@@ -45,16 +45,20 @@
     scale 420ms var(--ease-out),
     box-shadow var(--dur-2) var(--ease-out);
 }
-/* It floats over the page, so a white thumbnail can be right under it: the floating layers' tint (FLOAT_VEIL), which
-   plans for white, never a panel's. Three classes, so it wins over `.glass--green` in every look. */
+/* It floats over the page, so a white thumbnail can be right under it: the floating layers' tint and light
+   (FLOAT_VEIL, which plans for white, never a panel's). Three classes, so it wins over `.glass--green` in every look. */
 .help-launcher.glass.glass--green {
-  --glass-tint: linear-gradient(150deg, rgb(var(--green-rgb) / calc(var(--float-veil) + 0.02)), rgb(var(--green-rgb) / var(--float-veil)));
+  --glass-tint: var(--glass-tint-float);
+  --glass-light: var(--glass-light-float);
 }
 .has-update-bar .help-launcher {
   bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 18px + var(--update-bar-h) + 10px);
 }
 .help-launcher:hover {
-  box-shadow: 0 18px 36px -16px rgb(var(--shadow-rgb) / 0.85);
+  box-shadow: var(--light-rim-3), var(--light-shade-1), var(--light-shadow-1-hover), var(--light-shadow-3);
+}
+.help-launcher.glass.glass--green:hover {
+  --glass-light: var(--glass-light-float-hover);
 }
 .help-launcher:active {
   scale: 0.94;
@@ -65,8 +69,10 @@
   scale: 0.9;
   pointer-events: none;
 }
+/* Open: pressed in, its top light off (ADR-85: press removes light). */
 .help-launcher.is-open {
-  background: rgb(var(--green-deep-rgb) / 0.9);
+  background: var(--glass-spec-sm), var(--glass-tint);
+  box-shadow: var(--glass-shadow-press);
 }
 .help-launcher__word {
   display: none;
@@ -123,10 +129,11 @@
   max-height: min(640px, calc(100dvh - 140px), calc(100dvh - var(--help-bottom) - 84px));
   border-radius: var(--r-lg);
   overflow: hidden;
-  /* Strong enough to read over any page (and the owner's own background picture). */
-  --glass-tint: linear-gradient(150deg, rgb(var(--green-rgb) / calc(var(--float-veil) + 0.02)), rgb(var(--green-rgb) / var(--float-veil)));
+  /* Strong enough to read over any page (and the owner's own background picture): a floating layer, lit from above. */
+  --glass-tint: var(--glass-tint-float);
+  --glass-light: var(--glass-light-float);
   --glass-blur: 28px;
-  box-shadow: 0 30px 60px -28px rgb(var(--shadow-rgb) / 0.85);
+  box-shadow: var(--glass-shadow-float);
   animation: help-in 320ms var(--ease-out) both;
 }
 @keyframes help-in {
@@ -136,7 +143,8 @@
   }
 }
 .help-panel.is-sheet {
-  --glass-tint: linear-gradient(160deg, rgb(var(--green-rgb) / var(--float-veil)), rgb(var(--green-rgb) / calc(var(--float-veil) + 0.02)));
+  --glass-tint: var(--glass-tint-float);
+  --glass-light: var(--glass-light-float);
   /* The visible part of the screen (HelpPanel sets these from visualViewport), so the phone keyboard never hides
      the field and the plane. It sits above the tab bar too. */
   inset: auto 0;
@@ -220,22 +228,24 @@
   font-size: 0.92rem;
   line-height: 1.3;
   color: var(--ink);
-  /* No ring (ADR-45): the resting fill shows it is something to tap, on a phone with no hover too. */
-  background: var(--fill-control);
-  box-shadow: none;
+  /* No ring (ADR-45): the resting fill (a step brighter than the panel) shows it is something to tap, on a phone with
+     no hover too. */
+  background: var(--fill);
+  box-shadow: var(--glass-shadow-raise);
   overflow-wrap: anywhere;
   transition:
     background-color var(--dur-1),
+    box-shadow var(--dur-1) var(--ease-out),
     transform var(--dur-2) var(--ease-spring);
 }
 .help-chip:hover {
-  background:
-    linear-gradient(rgb(var(--bone-rgb) / 0.08), rgb(var(--bone-rgb) / 0.08)),
-    rgb(var(--green-rgb) / min(0.97, var(--panel-veil) + 0.22));
-  box-shadow: none;
+  background: var(--fill-hover);
+  box-shadow: var(--glass-shadow-raise-hover);
 }
 .help-chip:active {
   transform: scale(0.98);
+  background: var(--fill-press);
+  box-shadow: var(--glass-shadow-press);
 }
 .help-chip:disabled {
   opacity: 0.55;
@@ -262,8 +272,8 @@
   gap: 10px;
   padding: 12px 14px;
   border-radius: var(--r-md) var(--r-md) var(--r-md) 6px;
-  background: rgb(var(--green-rgb) / 0.5);
-  box-shadow: none;
+  background: var(--fill);
+  box-shadow: var(--glass-shadow-raise);
 }
 .help-msg--notice {
   display: flex;
@@ -271,8 +281,8 @@
   gap: 10px;
   padding: 12px 14px;
   border-radius: var(--r-md);
-  background: rgb(var(--green-rgb) / 0.6);
-  box-shadow: none;
+  background: var(--fill-hover);
+  box-shadow: var(--glass-shadow-raise);
 }
 .help-msg--notice > svg {
   flex: none;
@@ -309,8 +319,8 @@
   gap: 8px;
   padding: 10px 12px;
   border-radius: var(--r-sm);
-  background: rgb(var(--green-deep-rgb) / 0.6);
-  box-shadow: none;
+  background: var(--fill-hover);
+  box-shadow: var(--glass-shadow-raise);
   font-weight: 600;
 }
 .help-code {
@@ -489,7 +499,20 @@
   text-align: left;
   color: var(--ink);
   background: var(--fill);
-  box-shadow: none;
+  box-shadow: var(--glass-shadow-raise);
+  transition:
+    background-color var(--dur-1),
+    box-shadow var(--dur-1) var(--ease-out),
+    transform var(--dur-2) var(--ease-spring);
+}
+.find__ask:hover {
+  background: var(--fill-hover);
+  box-shadow: var(--glass-shadow-raise-hover);
+}
+.find__ask:active {
+  transform: scale(0.98);
+  background: var(--fill-press);
+  box-shadow: var(--glass-shadow-press);
 }
 .find__ask > svg {
   flex: none;
@@ -519,13 +542,12 @@
   bottom: 4px;
   z-index: 1;
   color: var(--ink);
-  background: var(--fill-control);
-  box-shadow: none;
+  background: var(--fill);
+  box-shadow: var(--light-rim-sm), var(--light-shade-2);
 }
 .help-panel__pic:hover {
-  background:
-    linear-gradient(rgb(var(--bone-rgb) / 0.14), rgb(var(--bone-rgb) / 0.14)),
-    rgb(var(--green-rgb) / min(0.97, var(--panel-veil) + 0.22));
+  background: var(--fill-hover);
+  box-shadow: var(--light-rim-2-hover), var(--light-shade-2);
 }
 .is-sheet .help-panel__pic {
   width: 48px;
@@ -749,7 +771,10 @@
   animation: help-fade-in 220ms var(--ease-out) both;
 }
 .help-viewer.glass {
-  --glass-tint: linear-gradient(150deg, rgb(var(--green-rgb) / 0.9), rgb(var(--green-rgb) / 0.88));
+  /* An overlay: nearly solid (0.90), lit from above. */
+  --glass-tint: linear-gradient(rgb(var(--green-rgb) / 0.9), rgb(var(--green-rgb) / 0.9));
+  --glass-light: var(--glass-light-overlay);
+  box-shadow: var(--glass-shadow-overlay);
 }
 .help-viewer {
   position: relative;
@@ -759,7 +784,6 @@
   max-width: min(100%, 1100px);
   padding: 56px 12px 12px;
   border-radius: var(--r-xl);
-  box-shadow: none;
   animation: help-pic-in 280ms var(--ease-spring) both;
 }
 .help-viewer__img {
