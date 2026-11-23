@@ -23,12 +23,10 @@ import { needsTikTokChoices, needsUploadAgain, START_GRACE_MS, STILL_WORKING, up
 import { TikTokSheet } from "../review/TikTokSheet.tsx";
 import { ClipStatusPill } from "../jobs/JobDetail.tsx";
 import { useSetup } from "../settings/setup/useSetup.ts";
-import { canPostYourself, failedForPublicAccount, postError } from "../../lib/tiktokYourself.ts";
-import { PostYourself, PostYourselfButton } from "./PostYourself.tsx";
-import { canPostYourselfInstead, MAC_POSTED, MAC_POSTED_PRIVATE, macMayBeOnTikTok, macOn, macRowWords, type MacRowContext } from "../../lib/tiktokMac.ts";
+import { failedForPublicAccount, postError, tiktokAudited } from "../../lib/tiktokYourself.ts";
+import { rowNeedsMac, rowNeedsRuns, tiktokFacts, tiktokRow, type TikTokRow, type TikTokRowContext } from "../../lib/tiktokMac.ts";
 import { useSession } from "../../app/session.tsx";
-import { useTikTokMac } from "../settings/TikTokMacBranch.tsx";
-import { MacPostedIt, MacTryAgain, PostYourselfInstead } from "./MacButtons.tsx";
+import { TikTokRowAction, useTikTokRowContext } from "./MacButtons.tsx";
 
 interface LibraryData {
   clips: Clip[];
@@ -110,14 +108,17 @@ function AllClips() {
   // for one of them gets its own Post now. Unknown (loading, or the check failed): every waiting post stays grouped.
   const setup = useSetup();
   const ready: Platform[] = setup.data ? setup.data.platforms.filter((p) => p.ready).map((p) => p.platform) : [];
-  // Your Mac posts TikTok (§47.4): a waiting Mac post says when the Mac was last seen, or that it never checked in.
+  // Your Mac posts TikTok (§47.4): each TikTok row says what the Mac is doing. The Mac's check-in is read while a row
+  // may need it (a Mac post, or a clip the Mac could take); auto-posting's runs while a backlog clip waits.
   const { me } = useSession();
-  const mac = useTikTokMac(!!data?.posts.some((p) => p.platform === "tiktok" && p.status === "mac"));
-  const macCtx: MacRowContext = {
-    helper: mac.status ? mac.status.helper : undefined,
-    autoPostOn: me?.settings.autoPost?.on === true,
-    macOn: me ? macOn(me.settings) : undefined,
-  };
+  const tiktokFor = (c: Clip) => tiktokFacts(c, data?.posts.filter((p) => p.clipId === c.clipId) ?? []);
+  const facts = data?.clips.map(tiktokFor) ?? [];
+  const autoPostOn = me ? me.settings.autoPost?.on === true : undefined;
+  const macCtx = useTikTokRowContext({
+    audited: tiktokAudited(setup.data?.platforms),
+    needsMac: facts.some(rowNeedsMac),
+    needsRuns: facts.some((f) => rowNeedsRuns(f, autoPostOn)),
+  });
 
   // Live: kept clips arrive, posts change state and get their numbers, new learnings appear.
   useLiveEvents(
@@ -289,15 +290,15 @@ function LibraryCard({
   clip,
   posts,
   ready = [],
-  macCtx = {},
+  macCtx = { audited: false },
   onKept,
   crSubs = [],
   onCrChange = () => undefined,
 }: {
   clip: Clip;
   posts: Post[];
-  /** What a waiting Mac post's row adds: the Mac's last check-in, and whether auto-posting is on (§47.4). */
-  macCtx?: MacRowContext;
+  /** What the TikTok row reads (§47.4): the switches, the Mac's last check-in, auto-posting's runs, TikTok's approval. */
+  macCtx?: TikTokRowContext;
   /** This clip's posts on Content Rewards (§38.6). */
   crSubs?: CrSubmission[];
   onCrChange?: (next: CrSubmission | null) => void;
@@ -310,67 +311,56 @@ function LibraryCard({
   const ordered = byPlatformOrder(posts);
   // A waiting post whose place is set up since can go now (a clip still publishing finishes its run first).
   const canPostNow = (p: Post) => p.status === "pending_integration" && ready.includes(p.platform) && clip.status !== "publishing";
-  // TikTok keeps Clip Factory's own uploads Only me until it approves the app, so the owner can post it there
-  // himself (§42): TikTok then gets its own row, even while TikTok is not set up or has no post at all.
-  const yourself = canPostYourself(clip, posts);
-  const ownRow = (p: Post) => p.status !== "pending_integration" || canPostNow(p) || (yourself && p.platform === "tiktok");
+  // TikTok's row says only what the owner's Mac is doing, with at most one button (§47.4, ADR-86): it gets its own row
+  // even while TikTok is not set up or has no post at all. Null: TikTok approved the app, and the old rows stay.
+  const tiktok = tiktokRow(tiktokFacts(clip, posts), macCtx);
+  const ownRow = (p: Post) => p.status !== "pending_integration" || canPostNow(p) || (!!tiktok && p.platform === "tiktok");
   const waiting = ordered.filter((p) => !ownRow(p));
   const totalViews = clip.totalViews ?? posts.reduce((n, p) => n + (p.metrics?.views ?? 0), 0);
   const rest = ordered.filter(ownRow);
-  const noTikTok = yourself && !posts.some((p) => p.platform === "tiktok");
-  const marked = (out: { clip: Clip; posts: Post[] }) => onKept(out.clip, out.posts);
-  // Post it yourself instead (§47.4): taken back from the Mac, the sheet opens here, so it stays open while the row changes.
-  const [handOff, setHandOff] = useState(false);
-  const instead = canPostYourselfInstead(posts);
+  const noTikTok = !!tiktok && !posts.some((p) => p.platform === "tiktok");
   const failedPosts = posts.filter((p) => p.status === "failed");
   const onlyPublicTikTok = failedPosts.length > 0 && failedPosts.every(failedForPublicAccount);
-  // A row's state words: posted by his Mac or by him (§42, §47), what his Mac is doing, or the post's own state.
+  // A row's state words: TikTok's row, or the post's own state.
   const rowWords = (p: Post): string => {
-    if (p.via === "mac") {
-      const words = p.privacy === "private" ? MAC_POSTED_PRIVATE : MAC_POSTED;
-      return p.url ? words : `${words} · add the link to count views`;
-    }
-    if (p.by === "you") return p.url ? "Posted by you · Everyone" : "Posted by you · Everyone · add the link to count views";
-    if (p.status === "mac" && p.mac) return macRowWords(p.mac, macCtx);
+    if (p.platform === "tiktok" && tiktok) return tiktok.words;
     if (canPostNow(p)) return "Ready to post";
     if (p.status === "failed" && p.error) return `${autoPostLabel(p, postStatusLabel(p))}. ${postError(p.error)}`;
     return autoPostLabel(p, postStatusLabel(p));
   };
+  // TikTok's own row (§47.4): its one button replaces Try again and Post now, which would go through TikTok's API.
+  const mine = (p: Post) => p.platform === "tiktok" && !!tiktok;
+  // Its look follows the row: only Didn't work reads as an error (a refused upload is just not on TikTok yet), and
+  // only a post everyone can see lights up green (a private upload, Clip Factory's or the Mac's, is not out yet).
+  const look = (p: Post) => {
+    if (!mine(p)) return p.status;
+    const kind = tiktok!.kind;
+    if (kind === "stopped") return "failed";
+    if ((kind === "posted" || kind === "posted_you") && p.privacy !== "private") return "posted";
+    return p.status === "failed" || p.status === "posted" ? "none" : p.status;
+  };
   const row = (p: Post) => (
-    <li key={p.postId} className={`post is-${p.status}`}>
+    <li key={p.postId} className={`post is-${look(p)}`}>
       <span className="post__mark" title={PLATFORM_LABEL[p.platform]}>
         <PlatformMark platform={p.platform} size={18} />
       </span>
       <span className="post__text">
         <span className="post__name">{PLATFORM_LABEL[p.platform]}</span>
-        <span className="post__status clamp-2">
+        {/* TikTok's row is never cut short: "look on your TikTok first" must show in full (§47.4). */}
+        <span className={mine(p) ? "post__status" : "post__status clamp-2"}>
+          {mine(p) && tiktok!.spinner ? <span className="spinner spinner--sm" aria-hidden="true" /> : null}
           {rowWords(p)}
-          {/* A Private test post has no numbers (§46.8). */}
-          {(p.by === "you" && !p.url) || p.test ? "" : postNumbersNote(p, relative)}
+          {/* A Private test post has no numbers (§46.8); TikTok's row says only what the Mac does until it is posted. */}
+          {(p.by === "you" && !p.url) || p.test || (mine(p) && tiktok!.kind !== "posted" && tiktok!.kind !== "posted_you") ? "" : postNumbersNote(p, relative)}
         </span>
       </span>
-      {/* TikTok only lets Clip Factory post Only me for now: the owner posts it there himself (§42). */}
-      {yourself && p.platform === "tiktok" ? <PostYourselfButton clip={clip} onMarked={marked} /> : null}
-      {p.by === "you" && !p.url ? <PostYourselfButton clip={clip} onMarked={marked} linkOnly postedAt={p.postedAt} /> : null}
-      {/* His Mac stopped (§47.4): Try again, or post it himself instead. Nothing while the Mac is posting it. */}
-      {p.status === "mac" && p.mac?.state === "stopped" ? <MacTryAgain clip={clip} mac={p.mac} onKept={onKept} /> : null}
-      {/* It may be on TikTok (the Mac pressed Post): never taken back; he marks it as posted instead (§47.3). */}
-      {p.status === "mac" && p.mac && macMayBeOnTikTok(p.mac) ? <MacPostedIt clip={clip} mac={p.mac} onMarked={marked} /> : null}
-      {p.platform === "tiktok" && instead ? (
-        <PostYourselfInstead
-          clip={clip}
-          onTaken={(out) => {
-            onKept(out.clip, out.posts);
-            setHandOff(true);
-          }}
-        />
-      ) : null}
+      {mine(p) ? <TikTokRowAction clip={clip} row={tiktok} mac={p.mac} onKept={onKept} /> : null}
       {/* One place did not work on an uploaded clip: Try again for that place only (§33). */}
-      {p.status === "failed" && clip.status === "posted" && !failedForPublicAccount(p) ? (
+      {p.status === "failed" && clip.status === "posted" && !failedForPublicAccount(p) && !mine(p) ? (
         <UploadAgain clip={clip} posts={posts} platform={p.platform} onKept={onKept} />
       ) : null}
       {/* Waiting for a place that is set up now: send it there (§33.6). */}
-      {canPostNow(p) ? <UploadAgain clip={clip} posts={posts} platform={p.platform} now onKept={onKept} /> : null}
+      {canPostNow(p) && !mine(p) ? <UploadAgain clip={clip} posts={posts} platform={p.platform} now onKept={onKept} /> : null}
       {p.metrics ? (
         <span className="post__metrics">
           {/* A plain span cannot carry an aria-label: the numbers are read from this text instead. */}
@@ -444,29 +434,33 @@ function LibraryCard({
             </li>
           ) : null}
           {rest.filter((p) => p.platform === "youtube").map(row)}
-          {noTikTok ? (
-            <li className="post is-none">
-              <span className="post__mark" title={PLATFORM_LABEL.tiktok}>
-                <PlatformMark platform="tiktok" size={18} />
-              </span>
-              <span className="post__text">
-                <span className="post__name">{PLATFORM_LABEL.tiktok}</span>
-                <span className="post__status clamp-2">Not on TikTok yet</span>
-              </span>
-              <PostYourselfButton clip={clip} onMarked={marked} />
-            </li>
-          ) : null}
+          {noTikTok ? <NoTikTokRow clip={clip} row={tiktok!} onKept={onKept} /> : null}
           {rest.filter((p) => p.platform !== "youtube").map(row)}
         </ul>
       ) : needsUploadAgain(clip, posts) ? null : (
         <p className="muted small">No posts yet.</p>
       )}
-      {/* A clip that failed only because TikTok refused the public account: Post it yourself in its row, not Try again. */}
+      {/* A clip that failed only because TikTok refused the public account: its row's Post with my Mac, not Try again. */}
       {needsUploadAgain(clip, posts) || stuck || (clip.status === "failed" && !onlyPublicTikTok) ? <UploadAgain clip={clip} posts={posts} onKept={onKept} /> : null}
       {crSubs.length ? <CrPostLines subs={crSubs} onChange={onCrChange} compact /> : null}
       <SimilarClips clipId={clip.clipId} />
-      {handOff ? <PostYourself clip={clip} onMarked={marked} onClose={() => setHandOff(false)} /> : null}
     </article>
+  );
+}
+
+/** TikTok's row on a kept clip with no TikTok post at all: what the Mac can do with it, and its one button (§47.4). */
+function NoTikTokRow({ clip, row, onKept }: { clip: Clip; row: TikTokRow; onKept: (clip: Clip, posts: Post[]) => void }) {
+  return (
+    <li className="post is-none">
+      <span className="post__mark" title={PLATFORM_LABEL.tiktok}>
+        <PlatformMark platform="tiktok" size={18} />
+      </span>
+      <span className="post__text">
+        <span className="post__name">{PLATFORM_LABEL.tiktok}</span>
+        <span className="post__status">{row.words}</span>
+      </span>
+      <TikTokRowAction clip={clip} row={row} onKept={onKept} />
+    </li>
   );
 }
 

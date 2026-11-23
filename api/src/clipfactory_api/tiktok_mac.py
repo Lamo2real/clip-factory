@@ -7,8 +7,10 @@ claim, steps, stop and done, and the owner's Send these to my Mac, Try again and
 
 * A Mac post comes from Upload (``source: "upload"``) or an auto-posting run (``"auto"``), both written by
   ``posts.create_for_clip`` in the clip's own Upload transaction (``tiktok_mac``), or from Send these to my Mac
-  (``"sent"``, here): a clip with no TikTok post gets a new one, a Clip Factory TikTok post that failed, waits for
-  setup or went up privately is handed over in place (its fields kept in ``beforeMac``).
+  (``"sent"``, here; ``"upload"`` when the owner tapped Post with my Mac on one row, ``now: true``): a clip with no
+  TikTok post gets a new one, a Clip Factory TikTok post that failed, waits for setup or went up privately is handed
+  over in place (its fields kept in ``beforeMac``). A row's tap (``now: true``) on a Mac post that already waits makes
+  it an Upload tap's in place.
 * ``waiting`` → the helper's claim (a conditional write: one Mac, one try at a time) → ``working`` with its steps
   (``pressing`` sets ``macPressedAt``: from then on it is never claimed again by itself) → done, through
   ``tiktok_self.mark_posted`` (the post becomes ``posted``, ``by: "you"``, ``via: "mac"``), or ``stopped`` with a
@@ -62,7 +64,7 @@ AUTO_OFF = "Auto-posting is off, so this one waits."
 # Send these to my Mac: why a clip did not go.
 NOT_FOUND = "We could not find that clip."
 SEND_NOT_UPLOADED = "Upload this clip first."
-SEND_CAMPAIGN = "Campaign clips go on TikTok by hand. Tap Post it yourself."
+SEND_CAMPAIGN = "Campaign clips go on TikTok by hand. Post it in the TikTok app, then add the link."
 SEND_TEST = "This was a Private test, so it stays off TikTok."
 SEND_HAS_IT = "Your Mac already has this clip."
 SEND_YOURS = "You already posted this one on TikTok."
@@ -244,6 +246,23 @@ def _write(store: db.Store, row: Mapping[str, Any], request: Mapping[str, Any]) 
     """One conditional write of a Mac post; returns the post as written. ``db.ConditionFailed`` when it changed."""
     store.transact(updates=[request])
     return store.get(str(row["pk"]), str(row["sk"])) or dict(row)
+
+
+def _go_now(store: db.Store, row: Mapping[str, Any]) -> None:
+    """A waiting Mac post becomes an Upload tap's (``macSource: "upload"``): the owner tapped Post with my Mac or Try
+    again on its row (``now: true``), so the Mac posts it at once and first instead of after the next auto-posting run
+    (``sent``) or with the run's own clips (``auto``, also while auto-posting is off: he tapped it). It keeps its place
+    (``since``). One conditional write, only while it still waits; ``db.ConditionFailed`` when it changed (the Mac
+    claimed it meanwhile). Nothing to write when it already is one."""
+    if row.get("macSource") == "upload":
+        return
+    request = db.update_request(
+        str(row["pk"]),
+        str(row["sk"]),
+        {"macSource": "upload"},
+        expect_in={"status": [MAC_STATUS], "macState": ["waiting"]},
+    )
+    store.transact(updates=[request])
 
 
 # --- the helper's routes (§47.3) ----------------------------------------------------------------------------------
@@ -455,25 +474,39 @@ def stopped(
 # --- the owner's routes (§47.2) -----------------------------------------------------------------------------------
 
 
-def retry(store: db.Store, clip: Mapping[str, Any], *, not_on_tiktok: bool) -> None:
+def retry(store: db.Store, clip: Mapping[str, Any], *, not_on_tiktok: bool, now: bool = False) -> None:
     """The owner's Try again on a stopped Mac post: it waits for the Mac again, keeping its place (``since``). After
     the Mac pressed Post, only when he says it is not on TikTok (``not_on_tiktok``, which clears ``macPressedAt``).
-    A post already waiting is left as it is. The helper item goes back to ``ok`` when it needed him."""
+    Without ``now`` a post already waiting is left as it is. The helper item goes back to ``ok`` when it needed him.
+
+    ``now`` (a row's Try again or Post with my Mac) also makes it an Upload tap's (``macSource: "upload"``), so the Mac
+    posts it at once and first instead of waiting for the next auto-posting run (``sent``). That holds for a post that
+    already waits too (``_go_now``: the waiting row's own button), and for an auto-posting run's post (``auto``), also
+    while auto-posting is off: the owner tapped it himself, so "while it is off, nothing posts" (which holds back what
+    auto-posting picked) no longer applies to it."""
     row, _rows = mac_row(store, clip)
     state = row.get("macState")
     if state == "working":
         raise Refused(MAC_WORKING)
     if state != "stopped":
+        if now and state == "waiting":
+            try:
+                _go_now(store, row)
+            except db.ConditionFailed:
+                raise Refused(CHANGED) from None
         return
     if row.get("macPressedAt") and not not_on_tiktok:
         raise Refused(MAY_HAVE_POSTED)
     cleared = ["macStep", "macClaimedAt", "macStoppedAt", "macReason"]
     if not_on_tiktok:
         cleared.append("macPressedAt")
+    fields: Item = {"macState": "waiting"}
+    if now:
+        fields["macSource"] = "upload"
     request = db.update_request(
         str(row["pk"]),
         str(row["sk"]),
-        {"macState": "waiting"},
+        fields,
         remove=[k for k in cleared if k in row],
         expect_in={"status": [MAC_STATUS], "macState": ["stopped"]},
     )
@@ -563,14 +596,20 @@ def send(
     now: datetime,
     *,
     is_campaign: bool,
+    source: str = "sent",
 ) -> str | None:
-    """Send this clip to the Mac (Send these to my Mac): None when it went, else why not. It goes when Post it
-    yourself would show (§42.1): uploaded, its TikTok not out for everyone, not by him, not uploading (``queued``) and
-    not a Mac post already; never a campaign clip or a Private test. A clip without a TikTok post gets a new Mac post
+    """Send this clip to the Mac (Send these to my Mac): None when it went, else why not. It goes when it is not on
+    TikTok yet (§42.1): uploaded, its TikTok not out for everyone, not by him, not uploading (``queued``) and not a
+    Mac post already; never a campaign clip or a Private test. A clip without a TikTok post gets a new Mac post
     (``madeForMac``, its id in ``postIds`` and in the clip's ``tiktokForMac``, written only while neither that mark nor
     ``tiktokByYou`` is there: two sends, or a send and I posted it, never make two posts). A Clip Factory TikTok post
     that waits for setup, failed or went up privately is handed over in place, its fields kept in ``beforeMac``. Its
-    options are My settings' (Everyone, Comment, Duet and Stitch on)."""
+    options are My settings' (Everyone, Comment, Duet and Stitch on).
+
+    ``source`` is the post's ``macSource``: ``sent`` (the backlog, one after each auto-posting run) or ``upload``
+    (the owner's Post with my Mac on one row, ``now: true``: at once and first, as an Upload tap). With ``upload`` a
+    Mac post that already waits (``sent`` or ``auto``) goes too: it becomes an Upload tap's in place (``_go_now``), and
+    it counts as sent. Every other Mac post (working, stopped) is still ``SEND_HAS_IT``: Try again is its way."""
     if clip is None or clip.get("type") != "clip":
         return NOT_FOUND
     status = clip.get("status")
@@ -601,7 +640,7 @@ def send(
             "postId": post_id,
             "clipId": clip_id,
             "platform": "tiktok",
-            **new_mac_fields("sent", at),
+            **new_mac_fields(source, at),
             "madeForMac": True,
             "postOptions": options,
         }
@@ -622,11 +661,17 @@ def send(
         except db.ConditionFailed:
             return CHANGED
         return None
+    if source == "upload" and row.get("status") == MAC_STATUS and row.get("macState") == "waiting":
+        try:
+            _go_now(store, row)
+        except db.ConditionFailed:
+            return CHANGED
+        return None
     refusal = _not_handable(row)
     if refusal:
         return refusal
     before = {k: row[k] for k in HANDED_OVER if k in row}
-    handed = {**new_mac_fields("sent", at), "beforeMac": before, "postOptions": options}
+    handed = {**new_mac_fields(source, at), "beforeMac": before, "postOptions": options}
     remove = [k for k in HANDED_OVER if k in row and k not in handed]
     updates = [
         db.update_request(

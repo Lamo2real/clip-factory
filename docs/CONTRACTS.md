@@ -125,19 +125,19 @@ try again in a minute, §17.4), `internal`.
 | GET `/v1/clips/{clipId}/similar` | – | `{ "clips": SimilarClip[] }` (≤ 5 of the owner's measured clips most like this one, §14.6; `[]` when none) |
 | POST `/v1/clips/{clipId}/confirm` | `{ "captions"?: Partial<Captions> }` | `{ "clip": Clip, "posts": Post[] }` (writes the posts, starts the durable `cf-prod-clip-flow`, §14.5) |
 | POST `/v1/clips/{clipId}/decline` | – | `{ "clip": Clip }` (video files and the clip's vector deleted) |
-| GET `/v1/clips/{clipId}/file` | – | `{ "url", "filename" }` (a 1-hour link that saves the video, §42) |
-| POST `/v1/clips/{clipId}/tiktok/posted` | `{ "link"?: string }` | `{ "clip", "posts", "note"? }` (posted on TikTok by the owner himself, §42) |
-| DELETE `/v1/clips/{clipId}/tiktok/posted` | – | `{ "clip", "posts" }` (Undo of the above, §42; a post the owner's Mac made → 409, §47) |
+| GET `/v1/clips/{clipId}/file` | – | `{ "url", "filename" }` (a 1-hour link that saves the video, §42; kept, the web no longer calls it, ADR-86) |
+| POST `/v1/clips/{clipId}/tiktok/posted` | `{ "link"?: string, "since"?: ISO time }` | `{ "clip", "posts", "note"? }` (posted on TikTok by the owner himself, §42; the web calls it only from the inline Add link, ADR-86) |
+| DELETE `/v1/clips/{clipId}/tiktok/posted` | – | `{ "clip", "posts" }` (Undo of the above, §42; a post the owner's Mac made → 409, §47; kept, the web no longer calls it, ADR-86) |
 | GET `/v1/tiktok/mac` | – | `{ "on", "helper": MacHelper \| null, "queue": MacJob[] }` (the Mac helper's queue, §47) |
 | POST `/v1/tiktok/mac/ping` | `{ "state", "reason"?, "version"?, "device", "login"?, "loginDone"? }` | `{ "on" }` (the Mac helper checks in, §47; `login` and `loginDone` §47.8) |
-| POST `/v1/tiktok/mac/send` | `{ "clipIds": string[] (1–25) }` | `{ "results": [{ "clipId", "sent", "reason"? }] }` (Send these to my Mac, §47; in order, each id once) |
+| POST `/v1/tiktok/mac/send` | `{ "clipIds": string[] (1–25), "now"?: boolean }` | `{ "results": [{ "clipId", "sent", "reason"? }] }` (Send these to my Mac, §47; in order, each id once; `now: true` is a row's Post with my Mac, `macSource: "upload"`, §47.2) |
 | POST `/v1/tiktok/mac/login` | `{ "action": "change" \| "forget" }` | `{ "helper": MacHelper }` (Change or Forget the TikTok login kept on the Mac; the Mac does it when it next checks in, §47.8) |
 | POST `/v1/clips/{clipId}/tiktok/mac/claim` | `{ "device" }` | `{ "job": MacJob }` (§47) |
 | POST `/v1/clips/{clipId}/tiktok/mac/step` | `{ "device", "step" }` | `{ "job": MacJob }` (§47) |
 | POST `/v1/clips/{clipId}/tiktok/mac/done` | `{ "device", "link"? }` | `{ "clip", "posts", "note"? }` (the Mac posted it, §47) |
 | POST `/v1/clips/{clipId}/tiktok/mac/stopped` | `{ "device", "reason", "needsYou"? }` | `{ "job": MacJob }` (§47) |
-| POST `/v1/clips/{clipId}/tiktok/mac/retry` | `{ "notOnTikTok"?: true }` | `{ "clip", "posts" }` (the owner's Try again, §47) |
-| DELETE `/v1/clips/{clipId}/tiktok/mac` | – | `{ "clip", "posts" }` (Take it back, before Post it yourself instead, §47) |
+| POST `/v1/clips/{clipId}/tiktok/mac/retry` | `{ "notOnTikTok"?: true, "now"?: boolean }` | `{ "clip", "posts" }` (the owner's Try again, §47; `now: true` makes it `macSource: "upload"`, §47.3) |
+| DELETE `/v1/clips/{clipId}/tiktok/mac` | – | `{ "clip", "posts" }` (Take it back, §47; kept, the web no longer calls it, ADR-86) |
 | GET `/v1/skills` | – | `{ "skills": Skill[] }` (§18.3: built-ins first, then the owner's by name; no `enabled`) |
 | GET `/v1/skills/{skillId}` | – | `SkillDetail` (§18.3) |
 | POST `/v1/skills/uploads` | `{ "filename", "skillId"? }` (`.md` ≤ 1 MB or `.zip` ≤ 20 MB; `skillId` = replace that skill's file, §18.4) | `{ "skillId", "key", "uploadUrl", "headers" }` (key per revision, §18.1) |
@@ -2164,7 +2164,7 @@ Connect:
 Go public (`gate: app_review`, `posting_audit`):
 | id | title | essentials |
 |---|---|---|
-| `public-demo` | Record the real demo video | On a computer, connected in the Sandbox with the TikTok account still private, address bar in sight. Copy chip **Shot list** (`TIKTOK_DEMO_SHOTS` in `tiktok.ts`, 18 numbered shots in order): About page with Privacy and Terms › **Connect TikTok** › TikTok's screen with every scope, **Continue** › connected › the clip's source › Review card preview (no watermark) › the **TikTok** row: "Asking TikTok…", "Posting as" + picture › edit the TikTok caption › Upload held ("Pick who can see it on TikTok first.") and **Who can see it** with nothing picked › Comments, Duet, Stitch all off (grey "Turned off in your TikTok settings." when the creator turned one off) › **Commercial content** on ("Pick Your brand, Branded content, or both." under it; pick **Only me**, Upload still held: "Pick Your brand or Branded content on TikTok first.") › **Your brand** (its "Promotional content" tag) › **Branded content** ("Paid partnership", Branded Content Policy line above Upload, Who can see it now says "Branded content can't be Only me. Turn off Branded content.") › untick it, pick **Only me** by hand, Commercial content off › Music Usage Confirmation line above **Upload** › **Upload** and "TikTok can take a few minutes to process your clip." › **Library**: on its way, then Posted › the private post on TikTok as picked › **Money** (video.list, user.info.stats) › last, on another clip with nothing on, **Use my settings** (the owner's own tap) and the TikTok row with every option. About 1 min, MP4, under 50 MB (up to 5 videos). Hints: a shot-list line you can't find → tap the **TikTok** row (every line is in there or right above **Upload**); a secret or code on screen → cut it out. The same video goes to App review and the audit form. |
+| `public-demo` | Record the real demo video | On a computer, connected in the Sandbox with the TikTok account still private and **Your Mac posts TikTok** off (§47.9 item 2), address bar in sight. Copy chip **Shot list** (`TIKTOK_DEMO_SHOTS` in `tiktok.ts`, 18 numbered shots in order): About page with Privacy and Terms › **Connect TikTok** › TikTok's screen with every scope, **Continue** › connected › the clip's source › Review card preview (no watermark) › the **TikTok** row: "Asking TikTok…", "Posting as" + picture › edit the TikTok caption › Upload held ("Pick who can see it on TikTok first.") and **Who can see it** with nothing picked › Comments, Duet, Stitch all off (grey "Turned off in your TikTok settings." when the creator turned one off) › **Commercial content** on ("Pick Your brand, Branded content, or both." under it; pick **Only me**, Upload still held: "Pick Your brand or Branded content on TikTok first.") › **Your brand** (its "Promotional content" tag) › **Branded content** ("Paid partnership", Branded Content Policy line above Upload, Who can see it now says "Branded content can't be Only me. Turn off Branded content.") › untick it, pick **Only me** by hand, Commercial content off › Music Usage Confirmation line above **Upload** › **Upload** and "TikTok can take a few minutes to process your clip." › **Library**: on its way, then Posted › the private post on TikTok as picked › **Money** (video.list, user.info.stats) › last, on another clip with nothing on, **Use my settings** (the owner's own tap) and the TikTok row with every option. About 1 min, MP4, under 50 MB (up to 5 videos). Hints: a shot-list line you can't find → tap the **TikTok** row (every line is in there or right above **Upload**); a secret or code on screen → cut it out. The same video goes to App review and the audit form. |
 | `public-review` | Ask TikTok to check the app | Switch to **Production**. **App review**: check `tiktokReviewText` is there (one line per scope), swap in the real demo video, **Save**, **Submit for review**. Then pick the status here: Draft / In review / Live / Not approved (`PATCH gate app_review`). Not approved: read **Review comments**, fix, submit again. |
 | `public-live-keys` | When it says Live | If the Production keys differ from the Sandbox ones, paste them and press **Connect again**. |
 | `public-audit` | Ask to post publicly | Only after **App review** says **Live**: **Production** › **Content Posting API** › **Apply** next to **Direct Post** (Open button: developers.tiktok.com/application/content-posting-api). The form has 4 pages (General Information, API client information, Supporting documents, Review) and does not save: paste each answer into the box with the same name. Copy chips: Organization name `appName`, Organization website `websiteUrl`, Organization description `TIKTOK_AUDIT_DESCRIPTION`, How you use Direct Post `TIKTOK_AUDIT_DIRECT_POST`, How you got the number `TIKTOK_AUDIT_USAGE` (pick the smallest users choice), Data you store `TIKTOK_AUDIT_DATA` (all literal strings in `tiktok.ts`; every one literally true today: one creator's own clipping tool, invite-only, one user, other creators' streams and paid clipping campaigns said plainly, "There is no company. Clip Factory is the name of my tool, and I am one person.", no wide audience; Data you store lists only what the api keeps: follower count, and from recent videos only a views total and a count of long videos). Upload the demo video, read and tick the 3 boxes, **Next**. "TikTok's rules ask for apps that many people can use. Clip Factory is only for you. If it says no, posts stay private but still post." Hints: **Your full name** → type your own; app ID → the number after /app/ in the app page's address bar; no **Apply** → wait for Live; spinner after **Next** → the video is uploading (up to 2 min); **Under review** → done for now, often 1 to 3 weeks; a no with empty **Review comments** → ask TikTok support first. Until it passes, every post is "Only me". |
@@ -2546,7 +2546,10 @@ and the rest wait for Post now or the next release.
 "…Press Try again tomorrow."); TikTok `spam_risk_user_banned_from_posting` → "TikTok is not letting this account post
 right now."; `unaudited_client_can_only_post_to_private_accounts` → "TikTok only takes Clip Factory's uploads on a private
 account until it approves the app. Tap Post it yourself to post it for everyone." (§42; it said "Make your TikTok
-account private (Setup step 3), then press Try again." before the owner's account went public on 2026-11-21); `reached_active_user_cap` → "TikTok's daily limit for your app is reached. Try tomorrow.";
+account private (Setup step 3), then press Try again." before the owner's account went public on 2026-11-21; both are
+stored and matched word for word, so they never change, and since ADR-86 the web shows its own words for them, "TikTok
+only takes Clip Factory's own uploads on a private account for now, so your Mac posts it for everyone.", web
+`postError`); `reached_active_user_cap` → "TikTok's daily limit for your app is reached. Try tomorrow.";
 YouTube `forbidden`/`uploadLimitExceeded` channel → "YouTube did not accept the upload. Check your channel in YouTube
 Studio."; file checks (`file_format_check_failed`, `duration_check_failed`, Meta 2207026 …) → "{Platform} did not like
 this video file."; X 402 or a `CreditsDepleted`/"credits" problem → gate `credits` `action`, "Your X credits ran out.
@@ -7072,7 +7075,8 @@ Decision record: ADR-60 (which corrects ADR-57).
    "Every place uses your settings. Tap a place below to change it for this clip." (after, or with TikTok unticked),
    "You changed some for this clip. Tap to put yours back." (after a change in a row). YouTube, Instagram, Facebook
    and X use My settings from the start (nothing in their rules asks for a tap); TikTok's choices go on only with this
-   tap (or picks in its row), because TikTok wants the creator's own action and no default. Ticking Commercial content
+   tap (or picks in its row), because TikTok wants the creator's own action and no default. While his Mac posts TikTok,
+   TikTok starts on My settings too, with no tap (§47.9). Ticking Commercial content
    (Your brand / Branded content) is about one clip and keeps "Your settings are on".
 4. **One closed row per ticked place** (`screens/review/PlaceRows.tsx`, a `<details>` with a soft fill and no edges):
    "YouTube · title, description and settings", "TikTok · caption and settings", "Instagram · caption and
@@ -7085,7 +7089,8 @@ Decision record: ADR-60 (which corrects ADR-57).
      `settings.youtubePrivacy`), Category (the app's own dropdown, Gaming first), **Made for kids** switch (off = No),
      Tell my subscribers.
    * TikTok: Posting as, Caption, **Who can see it** (§36.5), Comments, Duet, Stitch, Commercial content with Your
-     brand (Promotional content) / Branded content (Paid partnership).
+     brand (Promotional content) / Branded content (Paid partnership). While his Mac posts TikTok, Who can see it and
+     the three switches are one read-only line of what the Mac posts with, and a ticked label holds Upload (§47.9).
    * Instagram: Caption, Also show it in my feed (Reel).
    * Facebook: Caption, "Goes up as a Reel on your Page. Everyone can see it." (Page Reels are public; nothing to pick).
    * X: Caption, Who can reply (the app's own dropdown: Everyone, People you follow, Only people you mention, Verified
@@ -7099,7 +7104,8 @@ Decision record: ADR-60 (which corrects ADR-57).
    TikTok first.", "You need to indicate if your content promotes yourself, a third party, or both. Pick Your brand
    or Branded content on TikTok first." (that first sentence is also Upload's hover text), "Branded content can't be
    Only me. Pick Everyone or Friends first.", "This clip is too long for TikTok. Untick
-   TikTok to upload it to the rest.", "TikTok did not answer. Tap Ask TikTok again, or untick TikTok."
+   TikTok to upload it to the rest.", "TikTok did not answer. Tap Ask TikTok again, or untick TikTok." While his Mac
+   posts TikTok, only TikTok's too-long line and its Commercial content lines can hold Upload (§47.9).
 
 A standard upload is two taps: **Use my settings**, then **Upload to 4**. The TikTok sheet no longer opens from the
 card when places are set up: TikTok's controls are in its row and its legal line is beside Upload.
@@ -7157,8 +7163,9 @@ one more attribute on the settings item, written only when the owner saves).
 `myTikTokChoices(preset.tiktok, creator)`: TikTok's privacy is the saved one when TikTok offers it, else Everyone, else
 TikTok's first choice (Only me before the audit); Comments, Duet and Stitch as saved and off where the creator turned
 them off; Commercial content off. TikTok's creator info is asked for when the owner taps Use my settings or opens the
-TikTok row, never before. `uploadClip(..., platforms, options)`; `confirmClip(clipId, captions, tiktok, platforms,
-options)`. Nothing about My settings is kept in localStorage.
+TikTok row, never before (while his Mac posts TikTok: in the background as soon as TikTok is ticked, §47.9).
+`uploadClip(..., platforms, options)`; `confirmClip(clipId, captions, tiktok, platforms, options)`. Nothing about My
+settings is kept in localStorage.
 
 ### 34.5 TikTok's "Who can see it"
 
@@ -12659,66 +12666,52 @@ unaudited app "Only me" on a private account (developers.tiktok.com/doc/content-
 review rules ("Apps must not be for private or personal use"; Direct Post "Not acceptable: A utility tool to help
 upload contents to the account(s) you or your team manages") make approval unlikely for a one-person tool. So Clip
 Factory hands the clip to TikTok and the owner taps Post there himself, picking Everyone. Nothing here uses TikTok's
-posting API. Decision record: ADR-66.
+posting API. Decision record: ADR-66. Since 2026-11-22 his Mac posts instead (§47) and the web's hand-over sheet is gone;
+the routes and stored fields stay (ADR-86).
 
 ### 42.1 What the owner sees
 
-* **Library** (each card) and **the clip page** (beside Refresh numbers): **Post it yourself** (TikTok mark; accessible
-  name "Post it on TikTok yourself") on every uploaded clip (`confirmed` with posts, `publishing`, `posted`,
-  `failed`) whose TikTok is not out for everyone: no TikTok post, or one that is waiting for setup, failed, or
-  uploaded privately. Not while Clip Factory is uploading it (`queued`), not when its own upload is public, and not once
-  he marked it. On a Library card TikTok then always has its own row ("Not on TikTok yet" when the clip has no TikTok
-  post; a TikTok post waiting for setup leaves the "Waiting for setup" group), after YouTube in the usual order.
-* **The sheet** (`screens/library/PostYourself.tsx`, the Post to TikTok sheet's look and modal rules, §17.8): title
-  "Post it on TikTok yourself", one line ("Everyone can see it, because you post it in TikTok. Clip Factory's own
-  TikTok upload stays Only me until TikTok approves the app."), the video, numbered steps in TikTok's words, the TikTok
-  caption (read-only, "· copied" once copied), then one way to hand it over:
-  * **A phone that can share a video file** (`navigator.canShare({files})` on iOS or Android): the video is fetched
-    when the sheet opens ("Getting the video ready…"; `cache: "no-store"`; a `.mp4` file name, since iOS reads the
-    type from it), so **Save to my phone** (vermilion) opens the share menu on the same tap that copies the caption
-    (copying first: it does not use up the tap, `share()` does; the share holds the file only, no text or title,
-    which makes some apps drop the file; its answer is not waited for). TikTok is rarely in that menu for a web app,
-    so the steps say: pick Save Video (TikTok in the list? pick it instead); open TikTok, +, Upload, the clip, Next;
-    paste the caption; check it says Everyone (TikTok starts a new post with the last post's privacy, Only you after
-    Clip Factory's uploads) and turn on Comments, Duet and Stitch; a campaign clip also turns on Disclose post content
-    › Branded content; Post; come back and tap I posted it. Closing the share menu is not an error; a share that fails
-    for any other reason (or a video that did not load) shows **Save the video** (the file link below) with "The share
-    menu did not open. Tap Save the video below. It goes to Files: open it there, tap Share, then Save Video. Then open
-    TikTok and tap +." The link and the video load apart: Save the video never waits for the whole video, which only
-    the share menu and AirDrop need.
-  * **A computer** (and a phone that cannot share files): **Save the video** (vermilion; the file link below, so the
-    browser saves it to Downloads; the Mac app opens it in the system browser, which does the same) and **Open TikTok**
-    (`https://www.tiktok.com/tiktokstudio/upload` in a new tab, the system browser in the Mac app). Both copy the
-    caption. On a Mac (Safari and the Mac app's WKWebView both share files) a quiet **Send to my iPhone (AirDrop)**
-    opens the share menu with the file. The computer steps use TikTok Studio's words: "Who can watch this video",
-    Comment, Duet and Stitch, and for a campaign clip Show more › Disclose post content › Branded content.
-  * **TikTok link** (optional: "Clip Factory looks for the post on your TikTok"), with **Paste**, and **I posted it**
-    (vermilion once the video was handed over; it sends `since`, a minute before the sheet opened). Confetti, the sheet
-    closes, and one Undo toast: "On TikTok for everyone!" plus " Clip Factory will count its views." when it has the
-    post, or the answer's `note` without its "Saved." ("… Clip Factory could not find it on your TikTok yet. Tap Add
-    link in a minute."). Undo takes it back (§42.2).
-* **After**: the TikTok row says "Posted by you · Everyone", with Open and its numbers once read; without a link
-  "Posted by you · Everyone · add the link to count views" and **Add link** (the same sheet with only the link box,
-  **Find it on my TikTok**, which asks again from when he marked it, and **Save the link**). The clip page's TikTok stack says "Posted by you. Add its TikTok link in Library to count views."
-  until it has one.
-* **Right after Upload on Review** (`offerAfterUpload`): when nothing of Clip Factory's is on its way to TikTok (no
-  TikTok post, or one waiting for setup) and TikTok's `posting_audit` gate is not `ok`, the clip's line in "Uploaded
-  just now" gets **Post it yourself** too (its Undo brings the button back), and when TikTok is set up (he posts
-  there) but was left unticked, the sheet opens by itself (Not now closes it), except on a campaign clip. Nothing
-  else on Review changes: Upload to, Use my settings, each place's row with TikTok's dropdown and switches, and Upload
-  to several places all stay. TikTok ticked there is still Clip Factory's own upload, "Only me" until TikTok approves.
+**Since 2026-11-22 the web has no manual TikTok sheet** ([ADR-86](DECISIONS.md#adr-86-no-manual-tiktok-sheet-the-mac-is-the-only-way-to-tiktok-until-tiktok-approves-the-app)).
+Shown the "Post it yourself" sheet (Save the video, Open TikTok, Send to my iPhone (AirDrop), the caption, the TikTok
+link, Not now, I posted it), the owner said (verbatim): "i dont think these options are necessary becasue they are not
+gonna be used, the automation will cover it, so might wannna remove this popup". Until TikTok approves the app, his
+Mac is the only way to TikTok (§47): every TikTok row says what the Mac is doing, with at most one button (§47.4).
+Gone from the web: `screens/library/PostYourself.tsx` (the sheet and `PostYourselfButton`); **Post it yourself** on
+Library cards, the clip page and Review's "Uploaded just now"; the sheet that opened by itself after Upload; **Post it
+yourself instead** and **I posted it** on Mac posts; Auto-posting's **Post these on TikTok yourself** (§46.2 item 7).
+Every route of §42.2 stays, so nothing stored breaks.
+
+What stays for the owner:
+* **Posted by you.** A clip he marked himself before (`by: "you"`, no `via`) keeps its row "Posted by you · Everyone",
+  with **Open** and its numbers once read.
+* **The inline Add link**, the only owner-facing use of §42.2 left: a post by him, or by his Mac (`via: "mac"`), that
+  has no link reads "Posted by you · Everyone · add the link" or "Posted by your Mac · Everyone · add the link" and
+  shows a link box right in the row (no sheet, dialog or portal), **Paste** and **Save the link**. Save the link sends
+  `POST /v1/clips/{clipId}/tiktok/posted {link, since: post.postedAt}`; with the box empty it sends `{since}` only, and
+  the finder (§42.2) looks for the post on his TikTok. A toast says what happened ("Link saved! Clip Factory will
+  count its views.", "Found it on your TikTok! …", or the answer's `note`). The clip page has the same field beside Refresh numbers, and its
+  TikTok stack says "Posted by you. Add its TikTok link to count views." ("Posted by your Mac. …" for the Mac's).
+* **A campaign clip** (the Mac never takes one: Branded content and its first 30 minutes, §47.2): "Campaign clip:
+  post it in the TikTok app", with the same inline Add link for the link once it is up. There the box needs the link
+  (empty: "Paste the TikTok link first. In TikTok, open your post, tap Share, then Copy link.").
+* **Review** (TikTok ticked, TikTok not approved: `app_review` and `posting_audit` not both `ok`): one line just above
+  TikTok's Music Usage line (which stays right above Upload, §17.8). While Your Mac posts TikTok is off it is
+  `TIKTOK_PUBLIC_HINT`, "TikTok: turn on Your Mac posts TikTok so it posts for everyone."; while it is on, `MAC_HINT`,
+  "TikTok: your Mac posts it for everyone." Nothing opens by itself after Upload. Upload to, Use my settings, each
+  place's row with TikTok's dropdown and switches, and Upload to several places all stay.
 
 TikTok's rule: Everyone needs a public account, while an unaudited app may only post to a private one
 (`unaudited_client_can_only_post_to_private_accounts`). His account is public on purpose (since 2026-11-21), so Clip
-Factory's own TikTok upload fails with "TikTok only takes Clip Factory's uploads on a private account until it approves
-the app. Tap Post it yourself to post it for everyone." (`TIKTOK_PRIVATE_ONLY`, §17.6). On that row Library shows that
-sentence, also for posts that failed earlier with the old one ("Make your TikTok account private (Setup step 3), then
-press Try again."), with **Post it yourself** and no Try again (it would fail the same way); the clip page says the
-same. On Review, while TikTok is ticked and TikTok has not approved the app (`app_review` and `posting_audit` both
-`ok`), one line just above TikTok's Music Usage line (which stays right above Upload, §17.8) says: "Until TikTok approves the app, Clip Factory can only upload to a private TikTok
-account. Yours is public? Untick TikTok, tap Upload, then post it yourself." TikTok stays ticked as it was (every set-up
-place starts ticked, §36.1); once he unticks it and uploads, Upload to remembers that (§33.2) and the sheet opens by
-itself after Upload (below).
+Factory's own TikTok upload fails with `TIKTOK_PRIVATE_ONLY` (§17.6), stored word for word: "TikTok only takes Clip
+Factory's uploads on a private account until it approves the app. Tap Post it yourself to post it for everyone." Posts
+that failed earlier keep the old "Make your TikTok account private (Setup step 3), then press Try again." Stored errors
+are matched against both, so neither changes. The web shows its own words for both (`postError`): "TikTok only takes
+Clip Factory's own uploads on a private account for now, so your Mac posts it for everyone." On that row Library shows
+no Try again (it would fail the same way) and offers **Post with my Mac** (§47.4); the clip page says the same.
+
+Before ADR-86 (2026-11-21 to 2026-11-22) the sheet handed the clip over by hand: the share menu on a phone, Save the
+video and Open TikTok (TikTok Studio's upload page) on a computer, AirDrop on a Mac, the caption copied on the same tap,
+numbered steps in TikTok's words, and I posted it (ADR-66). Its full description is in git history.
 
 ### 42.2 API (additive, under `ANY /v1/{proxy+}`; `routes/clips.py`, `tiktok_self.py`, `tiktok_link.py`)
 
@@ -12727,6 +12720,12 @@ itself after Upload (below).
 | GET `/v1/clips/{clipId}/file` | – | `{ "url", "filename" }`: a 1-hour GET link with `ResponseContentDisposition: attachment; filename="clip-factory-<hook>.mp4"` and `video/mp4` (404 when declined or without a video) |
 | POST `/v1/clips/{clipId}/tiktok/posted` | `{ "link"?: string, "since"?: ISO time }` | `{ "clip", "posts", "note"? }` |
 | DELETE `/v1/clips/{clipId}/tiktok/posted` | – | `{ "clip", "posts" }` |
+
+Unchanged by ADR-86. "I posted it" below names this write (`tiktok_self.mark_posted`), which the sheet's button used to
+call: the web now calls the POST only from the inline Add link (§42.1), the Mac's done runs the same write (§47.3), and
+the file link and the DELETE (Undo) stay for older apps, unused by the web. The sentences below are the server's,
+unchanged; the two that still name I posted it or Add link ("… Clear the box and tap I posted it …", "… Tap Add link in
+a minute.") mean the inline field's **Save the link**.
 
 * **I posted it** writes the clip's one TikTok post (one per clip, as everywhere) as `status: "posted"`, `privacy:
   "public"`, public `by: "you"`, `postedAt` now (kept when marked again), `perfCheckAt` +48 h. A post Clip Factory made
@@ -12759,7 +12758,7 @@ itself after Upload (below).
   not open a TikTok video. In TikTok, open your post, tap Share, then Copy link.", "TikTok did not open that link. Try
   again in a minute, or paste the long link from tiktok.com.", and, when a short link lands on TikTok's home page (what
   TikTok answered a server in every test on 2026-11-21), "Clip Factory could not open that short link. Clear the box
-  and tap I posted it: Clip Factory looks for the post on your TikTok." Marking again with a link only adds or changes
+  and tap Save the link: Clip Factory looks for the post on your TikTok." Marking again with a link only adds or changes
   the link.
 * **No link: finding it** (`tiktok_find.py`): with TikTok connected and no link stored yet, the API asks TikTok's
   Display API `POST /v2/video/list/` (`fields=id,share_url,create_time,video_description,title`, `max_count` 20;
@@ -12777,30 +12776,32 @@ itself after Upload (below).
 
 ### 42.3 Web
 
-`lib/tiktokYourself.ts` (`handOffFor`, `canShareVideo`, `tiktokState`, `canPostYourself`, `canPostYourselfHere`,
-`tiktokAudited`, `offerAfterUpload`, `steps`, `videoFileName`, `looksLikeTikTokLink`, `TIKTOK_UPLOAD_URL`),
-`screens/library/PostYourself.tsx` (`PostYourself`, `PostYourselfButton`), `Library.tsx`, `ClipPerformance.tsx`,
-`Review.tsx` (Uploaded just now), `lib/metrics.ts` `calmCopy`; `Api.clipFile`,
-`markTikTokPosted(clipId, link?)`, `undoTikTokPosted`; the mock follows the API's rules (a short link reads as the
-sample video; mock clips without a video get a tiny stand-in file).
+`lib/tiktokYourself.ts` (`tiktokState`, `canPostYourself`, `tiktokAudited`, `videoFileName`, `failedForPublicAccount`,
+`postError`, `looksLikeTikTokLink`, `TIKTOK_PRIVATE_ONLY`, `TIKTOK_PUBLIC_HINT`); the inline Add link in
+`screens/library/MacButtons.tsx`, shown by `Library.tsx` and `ClipPerformance.tsx` when `tiktokRow` (§47.4) asks for
+`add_link`; `lib/metrics.ts` `calmCopy`. `Api.markTikTokPosted(clipId, link?, since?)`; `Api.clipFile` and
+`Api.undoTikTokPosted` stay in the Api and the mock, unused by the screens. Removed (ADR-86): `PostYourself.tsx`
+(`PostYourself`, `PostYourselfButton`), `handOffFor`, `canShareVideo`, `steps`, `TIKTOK_UPLOAD_URL`,
+`canPostYourselfHere` and `offerAfterUpload`. The mock follows the API's rules (a short link reads as the sample video;
+mock clips without a video get a tiny stand-in file).
 
 ### 42.4 Tests
 
-`api/tests/test_tiktok_yourself.py` (links: full, short, away from TikTok, three hops, home page, not a video, TikTok
-down, the real opener's hosts; I posted it: new post, link and poller, short link, another account, replace and Undo,
-failed clip, Undo of a made post, link later, every refusal, another owner; finding it: by caption, the only new post,
-too unsure, TikTok down; the file link); `web/test/tiktokYourself.test.ts` (the pure helpers and the mock's rules);
-`web/e2e/tiktok-yourself.spec.ts` (Library: button, sheet, I posted it, Add link, Find it, Undo; Review: Uploaded just
-now). The mock's first
-look finds nothing and a later one finds the sample post.
+`api/tests/test_tiktok_yourself.py`, unchanged (links: full, short, away from TikTok, three hops, home page, not a
+video, TikTok down, the real opener's hosts; I posted it: new post, link and poller, short link, another account,
+replace and Undo, failed clip, Undo of a made post, link later, every refusal, another owner; finding it: by caption,
+the only new post, too unsure, TikTok down; the file link); `web/test/tiktokYourself.test.ts` (the pure helpers left
+and the mock's markTikTokPosted, Undo and file rules); `web/e2e/tiktok-yourself.spec.ts` (the inline Add link: a link
+saved, and an empty box that runs the finder; no **Post it yourself**, **I posted it**, **AirDrop** or **Open TikTok**
+control on Library, the clip page or Review). `web/test/postYourselfCaption.test.tsx` went with the sheet. The mock's
+first look finds nothing and a later one finds the sample post.
 
 ### 42.5 Not verified live
 
-Whether iOS 26 offers Save Video for a file shared from the Home Screen app (reported working on iOS 16; WebKit bug
-255641 fixed the Save actions in 2023), and whether TikTok appears in that menu at all (reports say only from Photos);
-whether TikTok's short links ever reach the video from an AWS address (from this Mac they went to the home page);
-that `video/list` and `video/query` with the Sandbox keys see a public video posted by hand on @lamo.clips. Research
-with quotes: the side-session note `tiktok-manual-handoff-research.md` (2026-11-21).
+Whether TikTok's short links ever reach the video from an AWS address (from this Mac they went to the home page); that
+`video/list` and `video/query` with the Sandbox keys see a public video posted by hand or by the Mac on @lamo.clips.
+The share-menu questions (Save Video on iOS 26, TikTok in that menu) went with the sheet (ADR-86). Research with quotes:
+the side-session note `tiktok-manual-handoff-research.md` (2026-11-21).
 
 ## 43. Followers and subscribers: per clip and in total (owner request, 2026-11-20)
 
@@ -15226,6 +15227,8 @@ Asked before building, he answered "Yes, all your picks" (2026-11-22). They are 
    for his Mac (`source: "auto"`, My settings' Everyone with Comment, Duet and Stitch on), written in the same
    transaction as its other posts. Practice, Private test runs and campaign clips never get one. Clips already
    waiting go too when he sends them ("Send them too": oldest first, one every 30 minutes, after the trial).
+   **Amended again 2026-11-22 (ADR-86):** there is no Post it yourself any more. While Your Mac posts TikTok is off, a
+   run still leaves TikTok out, and Where they go (§46.2 item 3) says how to turn the Mac on.
 3. **Campaign clips wait for his Upload** while Content Rewards can't take them from Clip Factory by itself (it only
    takes a clip in its first 30 minutes, §38.6; his account can't connect apps yet). Once it can (§46.5 rule 4) they go
    too, the campaign way (§38.14).
@@ -15257,10 +15260,12 @@ toast "Saved.":
    day on each platform." and when `d > 100` also "YouTube takes at most 100 uploads a day, so some would wait until
    the next day." (videos.insert has its own bucket of 100 a day, checked 2026-11-22).
 3. **Where they go**: "Goes to YouTube, Instagram and Facebook." (the run's places, §46.6, in STATS_ORDER), then one
-   line per place left out: "TikTok: you post it yourself (TikTok's rule). Each clip gets Post it yourself."; "X: not
-   set up yet." (with "Set up X" → `/settings/posting/setup/x`). With nothing set up: "Nothing is set up to post to.
-   Set up a place first." and runs post nothing. While Your Mac posts TikTok is on (§47) the TikTok line is
-   "TikTok: your Mac posts it." instead (`macPlaces`, and `leftOut` leaves TikTok out).
+   line per place left out: "TikTok: turn on Your Mac posts TikTok to post there." (`leftOut` reason
+   `tiktok_yourself`, with **Turn on** → `/settings/posting/tiktok-mac`, ADR-86); "X: not set up yet." (with "Set up
+   X" → `/settings/posting/setup/x`). With nothing set up: "Nothing is set up to post to. Set up a place first." and
+   runs post nothing. While Your Mac posts TikTok is on (§47) the TikTok line is "TikTok: your Mac posts it." instead
+   (`macPlaces`, and `leftOut` leaves TikTok out); on, but with no other place set up (TikTok back in `leftOut`, a run
+   sends nothing, §46.6), it is "TikTok: your Mac posts it once another place is set up." with no Turn on.
 4. **Next up** (`autopost.nextUp`, at most 10): cover, hook, and its time ("Sun 15:00"; with it off, no times and the
    title "Would go first"; a clip with no `runAt` shows no time), each with **Throw away** (the Review card's own
    decline with its Undo, §20.7, accessible name "Throw away, {hook}"). Empty: "Nothing in Review. New clips join the
@@ -15276,9 +15281,11 @@ toast "Saved.":
 6. **Didn't work** (`autopost.failed`): one row per failed auto-posted post: place mark and name, hook, the saved
    friendly error (§17.6), **Try again** (the Library's per-place Try again: `confirm` with `platforms: [p]`, accessible
    name "Try again, {place}"). Hidden when empty.
-7. **Post these on TikTok yourself** (`autopost.tiktokYourself`): auto-posted clips not on TikTok yet, each with **Post
-   it yourself** (§42's `PostYourselfButton`). Hidden when empty. While Your Mac posts TikTok is on, also **Send these
-   to my Mac** (§47.4); clips the Mac has (any state) or posted are not listed.
+7. *Removed 2026-11-22 (ADR-86).* **Post these on TikTok yourself** listed auto-posted clips not on TikTok yet, each
+   with Post it yourself (and Send these to my Mac while the Mac was on). The page no longer has the list
+   (`#auto-post-tiktok` and its settings-tree apple are gone): each clip's TikTok row in Library says what his Mac is
+   doing (§47.4), and Settings › Posting › Your Mac posts TikTok keeps **Send these to my Mac**.
+   `autopost.tiktokYourself` stays in the API (§46.9), unused by the web. Items 8 and 9 keep their numbers.
 8. **Recent** (`autopost.runs`, newest first, 10): "Sun 10:00 · “hook”: YouTube ✓ Instagram ✓ Facebook ✗", each
    posted place with **Open** (its live `url`); a run with nothing: "Sun 05:00 · Nothing in Review, so nothing posted.";
    practice: "Sun 05:00 · Practice: would post “hook” to YouTube, Instagram and Facebook."; private test: "Private test
@@ -15491,7 +15498,8 @@ interface AutoRun {
 ```
 * `failed`: the owner's posts with `autoRun` and `status: "failed"`, newest first; `at` is the post's `createdAt`
   (the run's time: a post stores no failure time). `tiktokYourself`: clips with `auto`
-  (not `test`) whose TikTok is not out for everyone (`tiktok_self` rules, §42.1). `runs[].clips[].posts`: read by the
+  (not `test`) whose TikTok is not out for everyone (`tiktok_self` rules, §42.1); still served and still in the types
+  and the mock, but the web no longer shows it (ADR-86, §46.2 item 7). `runs[].clips[].posts`: read by the
   clip's `postIds` (strongly consistent BatchGet).
 * POST: unknown keys 400; `kind` missing or other → 400 "Pick practice or private.". A second run-now within 60 s →
   409 "A test run just started. Wait a minute." `private` with no taken clip → 200 with the run's note "Nothing in
@@ -15566,7 +15574,8 @@ back on. `onAt` and the `AUTOPOSTOWNERS` registry work as in §46.3.
 ### 46.12 Words
 
 As written in §46.2 and §46.5 to §46.9. "Auto-posting" (one word, hyphenated) everywhere; "Throw away", "Upload", "Try
-again", "Post it yourself" keep their meaning. Ask (§19, §28) learns it from this section and the help guide
+again" keep their meaning; TikTok's line has **Turn on** (ADR-86: no Post it yourself). Ask (§19, §28) learns it
+from this section and the help guide
 "Turn on auto-posting" (`helpKb.json`): where the page is, what each control does, why TikTok and campaign clips wait,
 how to test with Practice and the Private test run.
 
@@ -15633,9 +15642,11 @@ run and the first hours of practice.
 * Upload's existing tests (`test_upload_to.py`, `test_campaign_posting.py`, `test_clips.py`, `test_release.py`) pass
   unchanged after the refactor.
 * Web: `web/test/autopost.test.ts` (the result line for every pair 1..5 × 1..24, the warnings, time words, the
-  mock's rules), `web/e2e/autopost.spec.ts` (switch, both controls save, result line and warning, Next up with Throw
-  away and Undo, Didn't work Try again, Recent, Practice run now, Private test run, the Review line and the Home hint;
-  at 390×844 and 1440×900).
+  left-out lines with TikTok's "turn on Your Mac posts TikTok" words, the mock's rules), `web/e2e/autopost.spec.ts`
+  (switch, both controls save, result line and warning, Where they go with TikTok's **Turn on**, Next up with Throw
+  away and Undo, Didn't work Try again, no `#auto-post-tiktok`, Recent, Practice run now, Private test run, the Review
+  line and the Home hint; at 390×844 and 1440×900; and, at 1440×900, Where they go saying "TikTok: your Mac posts it."
+  once the switch is on through **Turn on**).
 * Infra: `autopost.tftest.hcl` (§46.11); `scripts/test-check-plan-deletes.sh` unchanged.
 
 ### 46.16 Who builds what (parallel builders; each stays inside its files)
@@ -15711,7 +15722,8 @@ interface MacJob { clipId: string; postId: string; hook: string; caption: string
                    stitch: boolean; source: "upload" | "auto" | "sent"; since: string;
                    state: "waiting" | "working" | "stopped"; step?: MacStep; claimedAt?: string; pressedAt?: string;
                    attempt: number /* macAttempt: the claims so far */ }
-// AutoPostStatus.tiktokYourself[].mac?: true (his Mac's post, listed while the switch is off, §47.2).
+// AutoPostStatus.tiktokYourself[].mac?: true (his Mac's post, listed while the switch is off, §47.2; still served,
+// unused by the web since ADR-86).
 ```
 
 ### 47.2 Where Mac posts come from
@@ -15728,35 +15740,41 @@ Upload and auto-posting write the Mac post in the same transaction as the clip's
    otherwise unchanged, and exactly as before with the switch off or once TikTok approved the app.
 2. **Auto-posting runs** (`autopost/run.py`, live mode only): with `tiktokMac.on`, a normal (non-campaign) clip also
    gets a TikTok Mac post (`source: "auto"`) through `upload_review_clip(..., tiktok_mac=True)`; its options are My
-   settings' (§36: Everyone, Comment, Duet and Stitch on). TikTok is **not** added to the run's places (`uploadTo`
-   never names it). Practice and Private test runs never make one ("Nothing gets sent"). `GET /v1/autopost`:
-   `leftOut` drops TikTok while on, `macPlaces: ["tiktok"]` (else `[]`; also `[]`, with TikTok back in `leftOut`, when
-   no other place is set up: such a run sends nothing, §46.6), and `tiktokYourself` drops clips whose TikTok
-   post is a Mac post (any state) or was posted `via: "mac"`, except while **Your Mac posts TikTok is off**: then a
-   clip whose Mac post waits or stopped (not working, Post never pressed) is listed again with `mac: true`, and the
-   page offers **Post it yourself instead** on it. **Off switch** ("While it is off, nothing posts"): while
+   settings' (§36: Everyone, Comment, Duet and Stitch on). TikTok is **not** added to the run's places (`uploadTo` never
+   names it). Practice and Private test runs never make one ("Nothing gets sent"). `GET /v1/autopost`: `leftOut` drops
+   TikTok while on, `macPlaces: ["tiktok"]` (else `[]`; also `[]`, with TikTok back in `leftOut`, when no other place is
+   set up: such a run sends nothing, §46.6), and `tiktokYourself` drops clips whose TikTok post is a Mac post (any
+   state) or was posted `via: "mac"`, except while **Your Mac posts TikTok is off**: then a clip whose Mac post waits or
+   stopped (not working, Post never pressed) is listed again with `mac: true` (the web offered Post it yourself instead
+   on it until ADR-86; it no longer shows the list). **Off switch** ("While it is off, nothing posts"): while
    `autoPost.on` is false, no Mac post with `source: "auto"` goes on before Post is pressed. It is left out of the queue
    (waiting, or working with no `macPressedAt`) and every claim of it is refused ("Auto-posting is off, so this one
    waits."). A step from a Mac that claimed it before auto-posting went off is refused the same way and puts it back to
-   `waiting` (claim, device, step and heartbeat removed), so a sleeping or crashed Mac can never carry it on to Post. One
-   whose Post was already pressed stays in the queue, so its Mac can still find the link. The app shows "Waiting for
-   your Mac · auto-posting is off". In Recent (§46.2 item 8) a run's Mac post reads "TikTok (your Mac)" while it waits
-   or works and "TikTok (your Mac stopped)" when stopped (`runs[].clips[].posts[].mac`: its `macState`).
-3. **Send these to my Mac** (`POST /v1/tiktok/mac/send {clipIds: string[] 1–25}` → `{results: [{clipId, sent,
-   reason?}]}`, in order, each id once; 409 `MAC_OFF` while the switch is off). A clip goes when Post it yourself would
-   show (§42.1): uploaded, its TikTok not out for everyone, not `by: "you"`, not `queued`, not a Mac post already; never
-   a campaign clip or a Private test. A clip with no TikTok post gets a new Mac post (`madeForMac`, appended to
+   `waiting` (claim, device, step and heartbeat removed), so a sleeping or crashed Mac can never carry it on to Post.
+   One whose Post was already pressed stays in the queue, so its Mac can still find the link. The app shows "Waiting for
+   your Mac · auto-posting is off" with Turn on (§47.4); a stopped one's Try again (`now: true`) makes it `upload`, so
+   it goes even then. In Recent (§46.2 item 8) a run's Mac post reads "TikTok (your Mac)" while it waits or works and
+   "TikTok (your Mac stopped)" when stopped (`runs[].clips[].posts[].mac`: its `macState`).
+3. **Send these to my Mac** and a row's **Post with my Mac** (`POST /v1/tiktok/mac/send {clipIds: string[] 1–25,
+   now?: boolean}` → `{results: [{clipId, sent, reason?}]}`, in order, each id once; 409 `MAC_OFF` while the switch is
+   off; `now` must be a boolean, else 400). A clip goes when it is not on TikTok yet (the web's `canSendToMac`):
+   uploaded, its TikTok not out for everyone, not `by: "you"`, not `queued`, not a Mac post already; never a campaign
+   clip or a Private test. **`now`** (additive, ADR-86): Settings' bulk Send these to my Mac sends no `now`, so its
+   posts are `source: "sent"`, the backlog (one after each auto-posting run, §47.8); a row's Post with my Mac sends
+   `{clipIds: [clipId], now: true}`, so its post is `source: "upload"` and the Mac posts it at once and first, as after
+   an Upload tap. The refusals and race guards are the same either way. A clip with no TikTok post gets a new Mac post (`madeForMac`, appended to
    `postIds`, its id in the clip's `tiktokForMac`), written only while the clip has neither `tiktokForMac` nor
    `tiktokByYou`: two sends, or a send and I posted it, never make two posts (I posted it's new-post write now also
    needs `tiktokForMac` absent). A Clip Factory TikTok post that waits for setup, failed or went up privately is handed
    over in place: its fields (status, link, ids, stats and `gsi2` fields, what was learned, `postOptions`,
-   `publishHandle`) go into `beforeMac`, so it also leaves the stats poller. `source: "sent"`, My settings' options. The
-   clip's status follows the clip flow's settle rule (a failed clip whose only failed post was TikTok's becomes
+   `publishHandle`) go into `beforeMac`, so it also leaves the stats poller. `source: "sent"` (`"upload"` with `now`),
+   My settings' options. The clip's status follows the clip flow's settle rule (a failed clip whose only failed post was TikTok's becomes
    `confirmed`). Reasons: "Upload this clip first.", "This clip is still starting to upload. Try again in a minute.",
-   "Campaign clips go on TikTok by hand. Tap Post it yourself.", "This was a Private test, so it stays off TikTok.",
+   "Campaign clips go on TikTok by hand. Post it in the TikTok app, then add the link.", "This was a Private test, so it stays off TikTok.",
    "This clip is still uploading to TikTok. Wait until it is done, then try again.", "You already posted this one on
    TikTok.", "This clip is already on TikTok for everyone.", "Your Mac already has this clip.", "We could not find
-   that clip.", "This clip just changed. Try again."
+   that clip.", "This clip just changed. Try again." (the server's words, unchanged; a row never offers Post with my
+   Mac on a campaign clip, so its sentence that names Post it yourself does not reach the owner there).
 4. **Take it back** (`DELETE /v1/clips/{clipId}/tiktok/mac` → `{clip, posts}`): only while `mac.state` is `waiting` or
    `stopped` and the Mac never pressed Post. A `madeForMac` post is deleted and leaves `postIds` (and
    `tiktokForMac`); a handed-over post gets `beforeMac` back. The post and the clip (its settle rule) are **one
@@ -15765,7 +15783,8 @@ Upload and auto-posting write the Mac post in the same transaction as the clip's
    posting it right now. Wait a minute."; `macPressedAt` set → 409 "Your Mac may have posted it already. Check your
    TikTok first." (the restored post could otherwise go out through TikTok's API and make two copies; his ways out
    are I posted it, allowed while stopped, and Try again with `notOnTikTok`); not a Mac post → 409 "Your Mac isn't
-   posting this clip." The app calls it from **Post it yourself instead**, then opens the §42 sheet.
+   posting this clip." The route stays; the web called it from Post it yourself instead until ADR-86 and no longer
+   calls it.
 
 ### 47.3 The helper's routes (JWT: the helper signs in as the owner)
 
@@ -15773,13 +15792,13 @@ Upload and auto-posting write the Mac post in the same transaction as the clip's
 |---|---|---|
 | GET `/v1/tiktok/mac` | – | `{ on, helper: MacHelper \| null, queue: MacJob[] }` |
 | POST `/v1/tiktok/mac/ping` | `{ state: "ok" \| "needs_you" \| "paused", reason?, version?, device, login?: "saved" \| "none", loginDone? }` | `{ on }` |
-| POST `/v1/tiktok/mac/send` | `{ clipIds }` | `{ results }` |
+| POST `/v1/tiktok/mac/send` | `{ clipIds, now?: boolean }` | `{ results }` |
 | POST `/v1/tiktok/mac/login` | `{ action: "change" \| "forget" }` | `{ helper }` (§47.8) |
 | POST `/v1/clips/{clipId}/tiktok/mac/claim` | `{ device }` | `{ job: MacJob }` |
 | POST `/v1/clips/{clipId}/tiktok/mac/step` | `{ device, step }` | `{ job: MacJob }` |
 | POST `/v1/clips/{clipId}/tiktok/mac/done` | `{ device, link? }` | `{ clip, posts, note? }` |
 | POST `/v1/clips/{clipId}/tiktok/mac/stopped` | `{ device, reason, needsYou?: boolean }` | `{ job: MacJob }` |
-| POST `/v1/clips/{clipId}/tiktok/mac/retry` | `{ notOnTikTok?: true }` | `{ clip, posts }` (the owner's Try again) |
+| POST `/v1/clips/{clipId}/tiktok/mac/retry` | `{ notOnTikTok?: true, now?: boolean }` | `{ clip, posts }` (the owner's Try again) |
 | DELETE `/v1/clips/{clipId}/tiktok/mac` | – | `{ clip, posts }` (Take it back) |
 
 Unknown body keys → 400 everywhere; `device` is required text (at most 100 characters); a clip that is not the
@@ -15814,47 +15833,93 @@ Your Mac posts TikTok."
 * **Stopped:** from `macDevice` (while `working` or `stopped`). Sets `stopped`, `macStoppedAt` and `macReason` (spaces
   collapsed, at most 200 characters). With `needsYou` the helper item also becomes `needs_you` with that reason. Once
   `macPressedAt` is set, the stored reason is "Your Mac pressed Post but couldn't confirm it. Check your TikTok: if
-  it's there, tap I posted it." whatever was sent.
+  it's there, tap I posted it." whatever was sent. That stored sentence stays as it is; the web never shows it, and
+  picks its own words by `pressedAt` (§47.4), never by matching the text.
 * **Retry** (the owner's Try again): `stopped` → `waiting`, keeping `since` (its place in line) and clearing `macStep`,
   `macClaimedAt`, `macStoppedAt`, `macReason`. With `macPressedAt` it needs `notOnTikTok: true`, which clears it;
   without → 409 "Your Mac may have posted it already. Check your TikTok first." Working → 409 "Your Mac is posting it
   right now. Wait a minute." A post already waiting is answered as it is. It also turns the helper item back to `ok`
-  when it was `needs_you`.
+  when it was `needs_you`. **`now: true`** (additive, ADR-86; the web's row Try again always sends it) also sets
+  `macSource: "upload"` in the same conditional write, so the Mac posts it at once and first. That holds for an
+  auto-posting run's post (`auto`) too, also while auto-posting is off: he tapped it himself, so §47.2's off switch
+  (which holds back what auto-posting picked) no longer applies to it. `now` must be a boolean (400 otherwise);
+  without it a retry is exactly as before.
 * **I posted it** (§42) on a Mac post: allowed while `waiting` or `stopped` (it becomes his own post; its Mac fields go
   into `beforeYou`, so his Undo puts the Mac post back as it was), refused while `working` with "Your Mac is posting it
-  right now. Wait a minute."
+  right now. Wait a minute." The rule stays; since ADR-86 the web offers that write (its inline Add link) only on
+  posts already up without a link, never on a waiting, working or stopped Mac post.
 
 ### 47.4 What the owner sees (web)
 
+Rewritten 2026-11-22 for [ADR-86](DECISIONS.md#adr-86-no-manual-tiktok-sheet-the-mac-is-the-only-way-to-tiktok-until-tiktok-approves-the-app):
+there is no manual TikTok sheet, so every TikTok row says only what the Mac is doing, with at most one button.
+
 * Every place that reads `Post.status` handles `"mac"`: the types, `metrics.calmCopy`, Library's TikTok row, the clip
-  page's stack (`PlatformPerformance` carries the same `mac` and `via`), Review's "Uploaded just now" and the
-  auto-posting lists. The helpers are in `web/src/lib/tiktokMac.ts`.
-* **The TikTok row:** Waiting: "Waiting for your Mac", plus " · it's switched off" (Your Mac posts TikTok is off), else
-  " · auto-posting is off" (`source: "auto"` while it is off), else " · set up your Mac first" (the helper never checked in), else " · your Mac was last seen {Sun 14:03}"
-  (not seen for 10 minutes). Working: "Your Mac is posting it · {step}" with the step words "Getting the video",
-  "Opening TikTok", "Uploading", "Setting Everyone and the switches", "Posting" and "Finding the link". Stopped: "Your
-  Mac stopped: {reason}", with **Try again** (retry; once `pressedAt` is set it says "It's not on TikTok, try again" and
-  sends `notOnTikTok`) and **Post it yourself instead**, except once `pressedAt` is set: then **I posted it** (the §42
-  sheet's link box, Find it looking from a minute before the press) instead of Post it yourself instead. Posted
-  `via: "mac"`: "Posted by your Mac · Everyone", with
-  Open and the numbers as for "Posted by you".
-* **Post it yourself** stays as it is for clips without a Mac post. On a waiting or stopped Mac post it reads **Post it
-  yourself instead**: Take it back (DELETE), then the §42 sheet. Hidden while the Mac works on it and once it pressed
-  Post. While the switch is off the row says "Waiting for your Mac · it's switched off" and keeps Post it yourself
-  instead.
-* **Review:** with `tiktokMac.on` and TikTok not approved, the hint above Upload reads "TikTok: your Mac posts it for
-  everyone." instead of §42's `TIKTOK_PUBLIC_HINT`, and §42's sheet does not open by itself after Upload. Upload's own
-  rules and buttons are unchanged.
+  page's stack (`PlatformPerformance` carries the same `mac` and `via`) and Review's "Uploaded just now". The helpers
+  are in `web/src/lib/tiktokMac.ts`.
+* **The TikTok row** (`tiktokRow(facts, ctx)`), the same on Library's card, the clip page (its TikTok stack, and the one
+  button in `perf__actions`) and Review's "Uploaded just now" line ("TikTok: {words}"). `facts`: the clip's TikTok post
+  (`status`, `by`, `via`, `url`, `privacy`, `mac`, `postedAt`), whether it is not on TikTok yet (`canPostYourself`), a
+  campaign clip or a Private test. `ctx`: the switch (`settings.tiktokMac.on`), the Mac's check-in (`GET
+  /v1/tiktok/mac` through `useTikTokMac`: on open, on focus, every 60 s and after post news; read whenever a row may need
+  it, a Mac post or a clip the Mac could take), auto-posting's switch, and only while a backlog clip waits with
+  auto-posting on, `GET /v1/autopost`'s `nextRunAt` and its newest scheduled live run. Checked in this order:
+
+  | # | When | The row says | Its one button |
+  |---|---|---|---|
+  | 1 | Posted `via: "mac"` | "Posted by your Mac · Everyone" ("Posted by your Mac · Only you" when private), with **Open** and its numbers | none; with no link it adds " · add the link" and the inline **Add link** (§42.1) |
+  | 2 | `by: "you"`, no `via` (§42) | "Posted by you · Everyone", with **Open** | none; with no link " · add the link" and **Add link** |
+  | 3 | `mac.state` `working` | "Posting…", with a spinner (the steps arrive as live post events) | none |
+  | 4 | The Mac can't post (waiting, stopped and not-yet rows) | "Your Mac posts TikTok is off" (the switch); "Your Mac isn't set up yet" (it never checked in); "Your Mac hasn't checked in since 14:03" (not seen for 30 minutes or more, `MAC_STALE_MS`) | **Turn on** → `/settings/posting/tiktok-mac` |
+  | 5 | It needs him, or is paused (waiting and not-yet rows only) | "Your Mac needs you: {the reason's first sentence}"; "Paused on your Mac" | none (a stopped row keeps Try again, which turns `needs_you` back to `ok`, §47.3) |
+  | 6 | `mac.state` `waiting` | "Waiting for your Mac · next at 14:05" (below) | none |
+  | 7 | Waiting, `source` `sent` or `auto`, auto-posting off | "Waiting for your Mac · auto-posting is off" | **Turn on** → `/settings/posting/auto` |
+  | 8 | `mac.state` `stopped` | "Didn't work: {the reason's first sentence, without its full stop}"; once `pressedAt` is set, "Didn't work: your Mac couldn't check it posted · look on your TikTok first" (chosen by `pressedAt`, never by the stored sentence) | **Try again** |
+  | 9 | Not on TikTok yet (`canSendToMac`: no TikTok post, or one waiting for setup, failed, failed for the public account, or private) | "Not on TikTok yet" | **Post with my Mac** |
+  | 10 | A campaign clip not on TikTok (the Mac never takes one) | "Campaign clip: post it in the TikTok app" | the inline **Add link** |
+  | 11 | A Private test's clip | "Private test · stays off TikTok" | none |
+
+  Rows 9 to 11 are only shown while TikTok has not approved the app (`tiktokAudited`); afterwards a clip without a Mac
+  post keeps the API rows of §17 and §33 as before. Clip Factory's own TikTok posts (uploading, public) keep their rows.
+  A row refused for the public account (§42.1) never shows the big Try again.
+* **Next at** (row 6): the owner's local "14:05", with the weekday when it is not today ("Mon 14:05", and the date from
+  6 days away, as §46.2's times). `source: "upload"`, or `"auto"` while auto-posting is on: the helper's next one-minute
+  check-in, `ceil(max(now, seenAt + 60 s))` to the minute (its launchd `StartInterval` is 60). `source: "sent"`: 30
+  minutes after the newest scheduled live run when that is still ahead, else 30 minutes after `nextRunAt` (§47.8; an
+  estimate: the web can't see when the helper last took a backlog clip). Not known yet: "Waiting for your Mac" alone.
+* **The buttons**, each the app's own `Button` or `LinkButton` (their hover state; the arrow is the only cursor):
+  * **Try again**: `POST /v1/clips/{clipId}/tiktok/mac/retry {now: true}`, plus `notOnTikTok: true` once `pressedAt` is
+    set (without it the server answers 409 "Your Mac may have posted it already. Check your TikTok first."); the row's
+    words told him to look on his TikTok first. 409 while the Mac works on it: a toast.
+  * **Post with my Mac**: `POST /v1/tiktok/mac/send {clipIds: [clipId], now: true}` (`source: "upload"`, so the Mac
+    posts it at once), then the clip's posts and the clip are read again (or the live post event comes first).
+    `sent: false`: a toast with its reason. `MAC_OFF` can't happen: with the switch off the row shows Turn on.
+  * **Turn on**: a link; the switch there saves `PUT /v1/settings {tiktokMac: {on: true}}`.
+  * **Add link**: the inline field of §42.1 (a link box, **Paste**, **Save the link**).
+* **The clip page:** `calmCopy` says the row's words in the TikTok stack with no link, because the button is on the
+  page (no "Go to Library and tap Post it yourself", and a stopped Mac post has no Go to Library link). The chip says
+  "Waiting for your Mac", "Posting…" or "Didn't work".
+* **Review:** with `tiktokMac.on` and TikTok not approved, the hint above Upload reads `MAC_HINT`, "TikTok: your Mac
+  posts it for everyone." (`MAC_WHERE_LINE` when My settings isn't Everyone, and none on a campaign clip, §47.9), and
+  while the switch is off `TIKTOK_PUBLIC_HINT`, "TikTok: turn on Your Mac posts TikTok so
+  it posts for everyone." (§42.1). "Uploaded just now" shows "TikTok: {the row's words}" and its one button (Try again
+  or Post with my Mac) for each kept clip. Nothing opens by itself after Upload. Upload's own rules and buttons are
+  unchanged: with the switch on it writes the Mac post as `source: "upload"`, which the helper posts at once. With the
+  switch on, the card starts TikTok on My settings with no tap (§47.9).
 * **Settings › Posting › Your Mac posts TikTok** (`/settings/posting/tiktok-mac`, `TikTokMacBranch.tsx`, in the tree
-  after Auto-posting): the switch **My Mac posts my TikTok clips** (off: "Off. TikTok works as before: Post it
-  yourself."; on: "On. Upload and auto-posting hand TikTok to your Mac."); the status line "Your Mac checked in {Sun
+  after Auto-posting): the switch **My Mac posts my TikTok clips** (off: "Off. Your Mac doesn't post your TikTok
+  clips."; on: "On. Upload and auto-posting hand TikTok to your Mac."); the status line "Your Mac checked in {Sun
   14:03}.", "Your Mac hasn't checked in yet. Set it up on your Mac.", "Your Mac needs you: {reason}" or "Paused on your
-  Mac."; while on, "{n} waiting for your Mac" and **Send these to my Mac** for the clips that show Post it yourself
-  (its confirm line: "They go one at a time, oldest first."); and one quiet line: "To stop it, turn the switch off.
-  Your Mac stops at once."
-* **Auto-posting page** (§46.2): "Where they go" says "TikTok: your Mac posts it." while on, and "Post these on TikTok
-  yourself" gets the same **Send these to my Mac**; while off, its `mac: true` clips get **Post it yourself instead**.
-* Mock mode (`web/src/api/mock/tiktokMac.ts`) follows these rules; the helper's routes are test knobs
+  Mac."; while on, "{n} waiting for your Mac" and **Send these to my Mac** for the clips that aren't on TikTok yet
+  ("3 clips aren't on TikTok yet."; its confirm line: "They go one at a time, oldest first."), sent without `now`, so
+  one goes after each auto-posting run (§47.8); and one quiet line: "To stop it, turn the switch off. Your Mac stops at
+  once."
+* **Auto-posting page** (§46.2): "Where they go" says "TikTok: your Mac posts it." while on, and "TikTok: turn on Your
+  Mac posts TikTok to post there." with **Turn on** while off. It has no TikTok list of its own any more (§46.2 item 7).
+* **Gone from the web (ADR-86):** Post it yourself, Post it yourself instead (Take it back, then the §42 sheet), I
+  posted it, "It's not on TikTok, try again", the step words while the Mac works ("Getting the video" … "Finding the
+  link"), and Auto-posting's Post these on TikTok yourself. Their routes stay (§42.2, §47.2 item 4).
+* Mock mode (`web/src/api/mock/tiktokMac.ts`) follows these rules, `now` included; the helper's routes are test knobs
   (`window.__cfMock.mac`: ping, seen, claim, step, done, stopped, queue, post).
 
 ### 47.5 Tests (offline, fakes only)
@@ -15875,14 +15940,24 @@ Your Mac posts TikTok."
   follows the stored choice; the switch off lists waiting and stopped Mac posts in `tiktokYourself`; the job's
   `attempt` and an older attempt refused; Send these to my Mac (the switch, 1–25
   ids, a new post once, the race guard both ways, each hand-over and its Take it back, every refusal, the queue order);
-  the clip page; another owner.
+  `now` (ADR-86): a send with `now` makes `macSource: "upload"` and the queue puts it first, one without stays `sent`,
+  a retry with `now` turns `sent` and `auto` into `upload`, `now` must be a boolean (400), unknown keys still 400, and
+  the switch off still 409 `MAC_OFF`; the clip page; another owner.
 * `test_autopost_run.py`: `test_tiktok_is_never_a_place_even_when_ready` (unchanged, the switch off) and beside it the
   switch-on case (five posts in one transaction, TikTok's for the Mac, `uploadTo` without TikTok); Practice and a
   Private test never make one; a campaign clip from a run never. `test_autopost_routes.py`: `leftOut`/`macPlaces`, the
   `tiktokYourself` filter. `test_http.py`: the nine routes.
-* Web: `web/test/tiktokMac.test.ts` (the row words, step words, labels, who may be sent, the lines and the mock's
-  rules) and `web/e2e/tiktok-mac.spec.ts` (Library row states, I posted it after Post was pressed, the switch off,
-  the Settings branch switch, Send these, the Review hint).
+* Web: `web/test/tiktokMac.test.ts` (`tiktokRow`'s states and words in order, the 30-minute stale rule, the next-at
+  times for `upload`, `auto` and `sent`, the short reason, the pressed words chosen by `pressedAt`, who may be sent,
+  the Settings lines and the mock's rules); `web/test/tiktokMacNow.test.ts` (the mock's `now` rules and the HTTP
+  bodies: `{clipIds, now: true}`, `{notOnTikTok?: true, now?: true}`, each key only when true);
+  `web/test/metrics.test.ts` (`calmCopy` for a waiting, working and stopped Mac post and the public-account failure);
+  `web/e2e/tiktok-mac.spec.ts` (Library's row through waiting with its next-at time, Posting…, Didn't work with Try
+  again, posted, Not on TikTok yet with Post with my Mac, the switch off with Turn on, a Mac not seen for 30 minutes
+  with Turn on; the clip page and Review's lines and hint; the Settings branch switch and Send these);
+  `web/e2e/tiktok-yourself.spec.ts` (§42.4); `web/e2e/autopost.spec.ts` (Where they go with the switch off, its Turn
+  on, and on). The tests of Post it yourself instead, I posted it after Post was pressed and the sheet are gone
+  with them.
 
 ### 47.6 Never twice, never TikTok's API
 
@@ -15892,8 +15967,9 @@ Your Mac posts TikTok."
   `tiktokForMac` nor `tiktokByYou`, I posted it's new post neither; the Mac's done and I posted it are the same
   conditional write on the one row.
 * One Mac, one try at a time: the claim is conditional; a post whose helper pressed Post is never claimed again by
-  itself, and never taken back (it could then go out through TikTok's API as well); only the owner's "It's not on
-  TikTok, try again" clears that, or his I posted it makes it his.
+  itself, and never taken back (it could then go out through TikTok's API as well); only the owner's Try again on that
+  row (`notOnTikTok`, once the row told him to look on his TikTok first) clears that. The server still lets I posted
+  it make such a post his (§47.3); the web no longer offers it there (ADR-86).
 
 ### 47.8 The TikTok login on the Mac (owner request, 2026-11-22)
 
@@ -15925,7 +16001,8 @@ then log into tiktok and upload them then delete the video you downloaded after 
   shows the yellow frame and one pop-up, with a visible login window. All input is CDP (no OS mouse or keyboard).
 * **When the Mac posts** (the owner: "if auto posting is set to every 6 hours then it should also run the tiktok upload
   every time thats run so its dependent on that automation" and "or if i hit upload on a video it should be invoked as
-  well"): a clip he uploads (`source: "upload"`) goes at once, ahead of everything; an auto-posting run's own clips
+  well"): a clip he uploads (`source: "upload"`, also a row's Post with my Mac or Try again, which send `now: true`,
+  §47.2) goes at once, ahead of everything; an auto-posting run's own clips
   (`source: "auto"`, its "Clips each time") go at once, a minute apart; and at most one backlog clip (`source:
   "sent"`, Send these to my Mac, oldest first) goes about 30 minutes after each live scheduled run, read from `GET
   /v1/autopost` (`runs`, `nextRunAt`), until the backlog is empty. With auto-posting off the backlog waits. Settings ›
@@ -15948,6 +16025,111 @@ then log into tiktok and upload them then delete the video you downloaded after 
   `web/e2e/tiktok-mac.spec.ts` (the lines, the buttons, Forget's question); `mac/tiktok-helper/test/login.test.js` (at most
   twice a day, never after a refusal, a code or a puzzle is the owner's turn, never in a log, an event or a request),
   `files.test.js` (only its own videos), `frame.test.js` (a normal run never touches the frame).
+
+### 47.9 Review starts on My settings while the Mac posts TikTok (owner request, 2026-11-23)
+
+The owner (2026-11-23, verbatim): "the auto upload feature uploads publicly to all social media platforms except X,
+but when that happens it invokes a tiktok automation for uploading there. the same process happens when i manually
+click upload, and also the default settings should be that it publishes publicly to all platforms". Auto-posting
+already posts with My settings (§46.6) and every Mac post already stores My settings' TikTok choices (§47.1); this
+makes the Review card (§36) match, so Upload and auto-posting both post TikTok through his Mac on his settings. It
+amends §36's TikTok tap (items 3 and 5 of the card, and "never before" in its web part) only while the Mac posts
+TikTok. No API, table or infrastructure change.
+
+1. **Your Mac posts TikTok on** (`macOn(settings)`, `settings.tiktokMac.on === true`) and TikTok has not approved the
+   app (`tiktokAudited`, as §47.2 item 1): a Review card with TikTok ticked starts on My settings exactly like the
+   other places. TikTok's row starts with Who can see it from the preset's `privacy` (Everyone by default), Comments,
+   Duet and Stitch as saved (on by default), and Commercial content off. A campaign clip keeps its own path (Everyone
+   with Branded content, §17.8; the Mac never takes one, §47.2).
+   * No tap before Upload: the button reads **Your settings are on** from the start (`settingsOn` true), the line under
+     it reads "Every place uses your settings. Tap a place below to change it for this clip.", and TikTok's row line
+     says "Who can see it: Everyone · …", never "not picked yet". Upload is never held with "Tap Use my settings
+     first. TikTok needs your tap."
+   * **TikTok's row is read-only for what the Mac uses** (decided for this release, 2026-11-23). The server asks the
+     Mac for My settings whatever the card sends (§47.1, `uploads.py` sets every Mac post's `tiktok` to
+     `tiktok_mac.preset_options`, `brandContent` always false), and the helper has no Branded content step. So the open
+     row shows, in place of Who can see it and the Comments, Duet and Stitch switches, one fixed line built from the
+     preset's real values (`macPostsLine`): "Your Mac posts it with My settings: Everyone · Comments on · Duet on ·
+     Stitch on", and a small **Change My settings** button to Settings › Posting › My settings
+     (`/settings/posting/my-settings`). There is no per-clip privacy or switch change in this mode, so the card never
+     says "Only me" while the Mac posts for Everyone. "Posting as {name}" shows once TikTok's API named the account;
+     with no name yet (not asked, slow, failed) the line is left out in this mode only.
+   * **Commercial content stays visible and is this clip's own.** Ticking **Your brand** or **Branded content** (with
+     Commercial content on) holds Upload for TikTok (`macTikTokHeld`): Upload's line and an alert in the row say
+     `MAC_LABEL_HELD`, "Your Mac can't add TikTok's Branded content label yet. Untick it, or untick TikTok and post
+     this clip yourself in the TikTok app with the label, not with your Mac." With Commercial content on and nothing
+     ticked it is held too, with `MAC_COMMERCIAL_HELD`, "Your Mac can't add TikTok's Branded content label yet. Turn
+     off Commercial content, or untick TikTok and post this clip yourself in the TikTok app with the label, not with
+     your Mac." (TikTok's own
+     `PICK_WHOSE` line would send him round in a circle: either pick holds the Mac too; Upload's hover text is left
+     empty). TikTokCommercial leaves out its hint line in this mode ("Your video will be labeled as …" would be untrue;
+     "Pick Your brand, Branded content, or both." is the circle again). With TikTok unticked the other places upload as
+     usual. So Upload never hands a clip with a label ticked to the Mac. But nothing on the clip records Commercial
+     content (it lives only in the card's state), so once that clip is uploaded without TikTok it is like any other
+     kept clip: Post with my Mac (Library, the clip page) and Settings › Your Mac posts TikTok › Send these to my Mac
+     would hand it to the Mac, which posts it with `preset_options` (`brandContent` false), without the label TikTok's
+     Branded Content Policy requires. So the hold's words above, My settings (item 3) and Ask tell him to post that clip
+     himself in the TikTok app with the label, never with Post with my Mac or Send these to my Mac; and Review's
+     "Uploaded just now" row of a clip uploaded from a card with Commercial content on (`commercialRow`, this visit
+     only) reads "TikTok: Commercial content: post it yourself in the TikTok app, with its label" (`MAC_ROW_COMMERCIAL`)
+     with the inline Add link, never Post with my Mac. A flag on the clip that keeps every Mac path off it is the later
+     step's (below).
+   * **The line above Upload** (§47.4) is built for this clip: `MAC_HINT`, "TikTok: your Mac posts it for everyone.",
+     only while the Mac posts this clip's TikTok and My settings' Who can see it is Everyone; with Followers, Friends or
+     Only me it is `MAC_WHERE_LINE`, "TikTok: your Mac posts it." (the row says who). A campaign clip with the switch on
+     has no line there, as the Mac never takes one.
+   * TikTok's creator info (`GET /v1/accounts/tiktok/creator-info`, TikTok API data) is still asked, in the background
+     as soon as TikTok is ticked, only for the account's name and the longest video it takes (`macCreator`). In this
+     mode only, one ask serves every card for 60 seconds (`macCreatorInfo` in `Review.tsx`; a failed ask is not kept).
+     Upload never waits for it: while it is slow or after it failed, the card uploads with the preset's choices and no
+     creator (opening the TikTok row asks again), and the too-long check uses the creator's longest video once known.
+   * The confirm body still carries `tiktok`, as the server requires ("Pick who can see it on TikTok.", §47.2 item 1),
+     and it is always valid: `macTikTokChoices` is the preset's privacy (Everyone when unset) with the preset's
+     Comments, Duet and Stitch, and Commercial content as ticked (Upload is held while a label is ticked, so
+     `brandContent` and `brandOrganic` go false). The Mac job gets the same (`privacy: "PUBLIC_TO_EVERYONE"`, the
+     saved privacy, with the saved Comment, Duet and Stitch).
+   * **Later step, not in this release:** per-clip TikTok choices and Branded content through the Mac. Both need the
+     helper's Branded content step (TikTok Studio's content disclosure) and the server honouring the card's own
+     `tiktok` choices for a Mac post instead of `preset_options`, and a flag on the clip (its label) that Post with my
+     Mac and Send these to my Mac honour. Until they ship, the row stays read-only, a ticked label holds
+     Upload for TikTok, and the words tell him to post a paid partnership in the TikTok app himself.
+2. **Your Mac posts TikTok off, or TikTok approved the app** (TikTok's API path; the app is still in review), and every
+   campaign clip: exactly as §36. Who can see it starts unpicked, Comments, Duet and Stitch start off, creator info is
+   asked only on Use my settings or when the TikTok row opens, and Upload waits for his tap ("Tap Use my settings
+   first. TikTok needs your tap."). That is TikTok's rule for API apps (§17.8): no default, the creator's own action.
+   Every creator-info ask on this path is the card's own (never the Mac mode's shared 60-second answer), and "Posting
+   as" always shows. A card that moves from item 1's mode to this path while open drops the Mac mode's answer, so Use
+   my settings (or the open row) asks TikTok again.
+   TikTok's demo video for its app review (`TIKTOK_DEMO_SHOTS`, §17) shows this path, so it is recorded with Your Mac
+   posts TikTok off.
+3. **Words elsewhere:** Settings › Posting › My settings (`MySettingsBranch.tsx`) reads "Every clip on Review starts
+   on these, TikTok too, except campaign clips." at the top, and under TikTok "Commercial content is off. Your Mac
+   posts TikTok with these. Paid partnerships can't go through your Mac yet: untick TikTok for that clip and post it
+   yourself in the TikTok app with the label, not with Post with my Mac or Send these to my Mac." in item
+   1's mode; otherwise both keep today's words ("Tap Use my settings on a clip to put these on.", "Commercial content
+   is off. For a paid partnership, tick Branded content in the TikTok row of that clip. TikTok wants your own tap on
+   each clip, so tap Use my settings there."). The TikTok part's leaf (`settingsTree.ts`, `my-settings-tiktok`) reads
+   "Everyone can see it; comments, Duet and Stitch on. Every clip starts on these while your Mac posts TikTok." in
+   both modes. Ask's "Use my settings" guide (`helpKb.json`, `review-use-my-settings`, titled "Use my settings: your
+   saved choices on every place", true in both modes) says every ticked place, TikTok included, starts on his settings
+   while his Mac posts TikTok, so he just taps Upload, that the Mac always posts with them (change them in My
+   settings), and that paid partnerships can't go through the Mac yet, so he unticks TikTok for that clip and posts it
+   himself in the TikTok app with the label, never with Post with my Mac or Send these to my Mac;
+   `review-place-rows` says the same after its Branded content step; `review-upload-to` says to tap Use my settings
+   only when the card does not already say Your settings are on. None of them tells him to tick Branded content for
+   the Mac. docs/SETUP_POSTING.md says the same, and its demo step (`public-demo`, also in `tiktok.ts`) says to record
+   with Your Mac posts TikTok off.
+4. **Tests:** the Review tests (`web/test/reviewMac.test.tsx`) pin both modes: with the Mac on, TikTok starts on My
+   settings and Upload is not held, also while creator info is slow or failed; the row is read-only (the Mac line,
+   Change My settings, no Who can see it, no Comments, Duet or Stitch switch) and the Mac job gets the preset's privacy;
+   Your brand or Branded content holds Upload for TikTok with `MAC_LABEL_HELD` (Commercial content alone with
+   `MAC_COMMERCIAL_HELD`) and unticking TikTok lets the rest go, and that clip's "Uploaded just now" row says
+   `MAC_ROW_COMMERCIAL` with Add link and no Post with my Mac; the line above Upload says `MAC_WHERE_LINE` with
+   Followers saved; the shared creator-info answer is used in Mac mode
+   only, and a card that switches to the API path asks again on Use my settings. With it off: today's unpicked start and
+   held Upload, a fresh ask per card, and "Posting as" shown even with an empty nickname.
+   `web/test/mySettingsTikTok.test.tsx` pins My settings' words in both modes; `helpEvals.json` has "Does TikTok need my
+   tap each time?" → `review-use-my-settings`.
 
 ### 47.7 Not verified live
 

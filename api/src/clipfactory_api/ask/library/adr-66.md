@@ -15,3 +15,7 @@ TikTok's own app. Everyone needs a public account, on which Clip Factory's own T
 so that row fails with a sentence that points to Post it yourself (no "make it private", no Try again) and offers the
 button there. Numbers come from the post found on the connected account (`video/list`) or a pasted link, then
 `video/query` as for any public post.
+
+- **Amended by [ADR-86](#adr-86-no-manual-tiktok-sheet-the-mac-is-the-only-way-to-tiktok-until-tiktok-approves-the-app) (2026-11-22).** The hand-off sheet is gone from the web: his Mac
+  posts TikTok (ADR-83). The routes (`…/tiktok/posted`, `…/file`) and every stored field stay; the only owner-facing
+  part left is the inline Add link on a post he or his Mac made without its link.

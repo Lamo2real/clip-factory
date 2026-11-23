@@ -3,8 +3,8 @@ import { findOverflow, settle } from "./helpers.ts";
 
 // Auto-posting (docs/CONTRACTS.md §46.2, §46.15) in mock mode, at 390 × 844 and 1440 × 900: the switch and its
 // line, both controls saving with "Saved.", the result line and its warnings, where they go, Next up with Throw away
-// and its Undo, a run on the fake clock with Recent, Didn't work and its own Try again, Post it yourself for TikTok,
-// Practice run now, the Private test run (once a minute), the Review card's line and Home's hint, Throw away's hold
+// and its Undo, a run on the fake clock with Recent, Didn't work and its own Try again, no TikTok list of its own
+// (ADR-86: TikTok goes only through the owner's Mac, and Where they go says so or offers Turn on), Practice run now, the Private test run (once a minute), the Review card's line and Home's hint, Throw away's hold
 // (§46.13: it outlasts a locked phone, and Undo's release comes before the status is read again), a Review Upload a run
 // beat, and Review's lede. The fake clock (window.__cfMock.autopost) starts on Sunday
 // 22 November 2026 at 10:20 UTC; the browser reads UTC, and its own clock starts there too, so times a week away
@@ -127,14 +127,14 @@ for (const size of SIZES) {
       await clips.getByRole("radio", { name: "2", exact: true }).click();
       await expect(page.locator(".autopost__result")).toHaveText("2 clips every 7 hours = about 7 clips a day per platform.");
 
-      // Where they go: the set-up places but TikTok, then one line per place left out.
+      // Where they go: the set-up places but TikTok, then one line per place left out. Your Mac posts TikTok is off, so
+      // TikTok's line says how to turn it on, with Turn on (ADR-86: TikTok goes only through his Mac).
       await expect(page.locator(".autopost__where .autopost__line")).toHaveText("Goes to YouTube, Instagram and Facebook.");
       const left = page.locator(".autopost__left-row");
-      await expect(left).toHaveText([
-        "TikTok: you post it yourself (TikTok's rule). Each clip gets Post it yourself.",
-        /^X: not set up yet\.\s*Set up X$/,
-      ]);
+      await expect(left).toHaveText([/^TikTok: turn on Your Mac posts TikTok to post there\.\s*Turn on$/, /^X: not set up yet\.\s*Set up X$/]);
+      await expect(left.nth(0).getByRole("link", { name: "Turn on" })).toHaveAttribute("href", "/settings/posting/tiktok-mac");
       await expect(left.nth(1).getByRole("link", { name: "Set up X" })).toHaveAttribute("href", "/settings/posting/setup/x");
+      await expect(page.locator(".autopost__where")).not.toContainText(/yourself/i);
 
       // Off again: nothing posts, and Next up has no times.
       await theSwitch(page).click();
@@ -190,7 +190,7 @@ for (const size of SIZES) {
       await expect(card.locator(".autopost-line")).toHaveText("Practice picks it Sun 11:00. Nothing gets sent.");
     });
 
-    test("a run on the clock: Recent, Didn't work with its own Try again, Post it yourself, the Library's words", async ({ page }) => {
+    test("a run on the clock: Recent, Didn't work with its own Try again, no TikTok list, the Library's words", async ({ page }) => {
       await open(page);
       await turnOn(page);
       const hook = (await page.locator("#auto-post-next .autopost__hook").first().innerText()).trim();
@@ -223,8 +223,10 @@ for (const size of SIZES) {
       await expect(failed).toContainText("Facebook");
       await expect(failed).toContainText(hook);
       await expect(failed).toContainText(reason);
-      // TikTok is never part of a run: it waits for his own tap.
-      await expect(page.locator("#auto-post-tiktok .autopost__row", { hasText: hook }).getByRole("button", { name: "Post it on TikTok yourself" })).toBeVisible();
+      // TikTok is never one of a run's places, and the page has no TikTok list of its own any more (ADR-86): the clip's
+      // TikTok row in Library says what his Mac is doing.
+      await expect(page.locator("#auto-post-tiktok")).toHaveCount(0);
+      await expect(page.locator(".branch-body").getByRole("button", { name: /yourself/i })).toHaveCount(0);
 
       await failed.getByRole("button", { name: "Try again, Facebook" }).click();
       await expect(page.getByText("Trying Facebook again!")).toBeVisible();
@@ -401,7 +403,7 @@ for (const size of SIZES) {
       await page.keyboard.press("Enter");
       await expect(rows).toHaveCount(0);
       await expect(page.locator("#auto-post-next")).toBeFocused();
-      // Waits for you and Recent stay on the page, empty or not (only Didn't work and TikTok's hide when empty).
+      // Waits for you and Recent stay on the page, empty or not (only Didn't work hides when empty).
       await expect(page.locator("#auto-post-waiting")).toBeVisible();
       await expect(page.locator("#auto-post-recent")).toBeVisible();
     });
@@ -434,3 +436,40 @@ for (const size of SIZES) {
     });
   });
 }
+
+// Moved here from tiktok-mac.spec.ts (ADR-86): Where they go names the owner's Mac for TikTok while Your Mac posts
+// TikTok is on; while it is off, the TikTok line says how to turn it on, with Turn on to the switch.
+test.describe("auto-posting with the owner's Mac", () => {
+  test.use({ viewport: { width: 1440, height: 900 }, timezoneId: "UTC" });
+
+  test("Where they go says the Mac posts TikTok while it is on, and offers Turn on while it is off", async ({ page }) => {
+    await page.goto("/");
+    await settle(page);
+    await page.evaluate(() => (window as MockWindow).__cfMock!.setup.finish("youtube"));
+    await go(page, "/settings/posting/auto");
+    const OFF = "TikTok: turn on Your Mac posts TikTok to post there.";
+    const tiktok = page.locator(".autopost__left-row", { hasText: OFF });
+    await expect(tiktok).toBeVisible();
+    await expect(page.locator('[data-mac="where"]')).toHaveCount(0);
+    const turnOnLink = tiktok.getByRole("link", { name: "Turn on" });
+    await expect(turnOnLink).toHaveAttribute("href", "/settings/posting/tiktok-mac");
+    // Only TikTok's line has Turn on; a place that is not set up keeps its own Set up button.
+    await expect(page.locator(".autopost__left-row").getByRole("link", { name: "Turn on" })).toHaveCount(1);
+    await expect(page.locator(".autopost__where")).not.toContainText(/yourself/i);
+
+    // Turn on goes to the switch, in the app (the pretend app keeps its settings in this page only).
+    await turnOnLink.click();
+    await settle(page);
+    await expect(page).toHaveURL(/\/settings\/posting\/tiktok-mac$/);
+    const sw = page.getByRole("switch", { name: "My Mac posts my TikTok clips" });
+    await expect(sw).toHaveAttribute("aria-checked", "false");
+    await sw.click();
+    await expect(sw).toHaveAttribute("aria-checked", "true");
+    await saved(page);
+
+    await go(page, "/settings/posting/auto");
+    await expect(page.locator('[data-mac="where"]')).toHaveText("TikTok: your Mac posts it.");
+    await expect(page.getByText(OFF)).toHaveCount(0);
+    await expect(page.locator(".autopost__where").getByRole("link", { name: "Turn on" })).toHaveCount(0);
+  });
+});

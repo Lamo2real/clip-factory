@@ -299,9 +299,14 @@ export function httpApi({ baseUrl, auth, fetcher = (...a) => fetch(...a) }: Deps
     // §47: Your Mac posts TikTok (the owner's side; the Mac helper's own routes are not called by the app).
     tiktokMacStatus: () => call<TikTokMacStatus>("GET", "/tiktok/mac"),
     tiktokMacLogin: async (action) => (await call<{ helper: MacHelper | null }>("POST", "/tiktok/mac/login", { action })).helper,
-    sendToMac: async (clipIds) => (await call<{ results: MacSendResult[] }>("POST", "/tiktok/mac/send", { clipIds })).results,
-    retryMac: (clipId, notOnTikTok) =>
-      call<{ clip: Clip; posts: Post[] }>("POST", `/clips/${id(clipId)}/tiktok/mac/retry`, notOnTikTok ? { notOnTikTok: true } : {}),
+    // `now` and `notOnTikTok` are sent only when true, so every older call's body is exactly as before.
+    sendToMac: async (clipIds, now) =>
+      (await call<{ results: MacSendResult[] }>("POST", "/tiktok/mac/send", { clipIds, ...(now ? { now: true } : {}) })).results,
+    retryMac: (clipId, notOnTikTok, now) =>
+      call<{ clip: Clip; posts: Post[] }>("POST", `/clips/${id(clipId)}/tiktok/mac/retry`, {
+        ...(notOnTikTok ? { notOnTikTok: true } : {}),
+        ...(now ? { now: true } : {}),
+      }),
     takeBackFromMac: (clipId) => call<{ clip: Clip; posts: Post[] }>("DELETE", `/clips/${id(clipId)}/tiktok/mac`),
   };
 }

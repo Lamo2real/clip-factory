@@ -1375,7 +1375,8 @@ yourself and the campaign rules work as before.
   or it is a campaign clip Content Rewards can't take from Clip Factory by itself yet. A clip another run planned in
   the last 15 minutes is skipped.
 * **Places and options.** Every place whose setup is ready except TikTok (TikTok's rules want the creator's own pick
-  for each post; each auto-posted clip keeps Post it yourself), in STATS_ORDER, with My settings
+  for each post; while Your Mac posts TikTok is on, a live run's normal clip also gets a TikTok post his Mac posts,
+  CONTRACTS §47, and since ADR-86 there is no Post it yourself), in STATS_ORDER, with My settings
   (`post_preset.upload_options`: never made for kids); a campaign clip gets the campaign versions, exactly as Upload
   builds them.
 * **Never twice.** The claim is one `TransactWriteItems`: Put `AUTORUN#{runId}` (`state: "planned"`, its clips) on

@@ -1,6 +1,8 @@
 // Settings › Posting › Your Mac posts TikTok (docs/CONTRACTS.md §47.4): the switch and its line, when the Mac last
-// checked in and how many clips wait for it, Send these to my Mac (the clips that show Post it yourself), the TikTok
-// login kept on the Mac with Change and Forget (§47.8), and how to stop it. GET /v1/tiktok/mac on open, on focus, every 60 s while open and after a post changes (its live news).
+// checked in and how many clips wait for it, Send these to my Mac (the backlog: every clip that isn't on TikTok yet,
+// one after each auto-posting run), the TikTok login kept on the Mac with Change and Forget (§47.8), and how to stop
+// it. GET /v1/tiktok/mac on open, on focus, every 60 s while open and after a post changes (its live news). Until
+// TikTok approves the app the Mac is the only way to TikTok (ADR-86); the words are in lib/tiktokMac.ts.
 import { useCallback, useEffect, useRef, useState } from "react";
 import { api } from "../../api/index.ts";
 import { friendlyMessage } from "../../api/errors.ts";
@@ -40,8 +42,8 @@ export interface TikTokMacData {
 }
 
 /**
- * GET /v1/tiktok/mac while `active`: at once, on focus, every 60 s, and soon after a post changes. The Library, the
- * clip page and Review read the Mac's last check-in from it; this page also its queue.
+ * GET /v1/tiktok/mac while `active`: at once, on focus, every 60 s, and soon after a post changes. The TikTok rows of
+ * the Library, the clip page and Review read the Mac's last check-in from it (MacButtons.tsx); this page also its queue.
  */
 export function useTikTokMac(active: boolean): TikTokMacData {
   const [status, setStatus] = useState<TikTokMacStatus | null>(null);
@@ -83,7 +85,7 @@ export function useTikTokMac(active: boolean): TikTokMacData {
   return { status: active ? status : null, error, reload };
 }
 
-/** The clips Send these to my Mac takes (they show Post it yourself), oldest first. */
+/** The clips Send these to my Mac takes (canSendToMac: kept and not on TikTok yet), oldest first. */
 async function sendable(): Promise<string[]> {
   const [clips, posts] = await Promise.all([api().listClips({ status: "all" }), api().listPosts()]);
   const by = new Map<string, Post[]>();
@@ -95,8 +97,8 @@ async function sendable(): Promise<string[]> {
 }
 
 /**
- * Send these to my Mac (§47.2): one tap shows the confirm line, Yes sends them (25 at a time), Not now closes it.
- * Shared with Auto-posting's "Post these on TikTok yourself". `clipIds`: the clips to send (oldest first).
+ * Send these to my Mac (§47.2): one tap shows the confirm line, Yes sends them (25 at a time, without `now`, so they
+ * wait as the backlog), Not now closes it. `clipIds`: the clips to send (oldest first).
  */
 export function SendToMac({ clipIds, onSent }: { clipIds: readonly string[]; onSent: () => void }) {
   const toast = useToast();
