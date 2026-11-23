@@ -6,7 +6,7 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { LENS_BUDGET as LOOK_LENS_BUDGET, EMBER, INKS, AA, STAGE_LIGHTS, STAGE_WINDOWS, contrast, hexToRgb, luminance, mix, stageAt, stageSpots, veilsFor, VEIL } from "../src/stories/look.ts";
+import { LENS_BUDGET as LOOK_LENS_BUDGET, COLOUR_FLOORS, EMBER, INKS, AA, PICTURE, STAGE_LIGHTS, STAGE_WINDOWS, contrast, hexToRgb, luminance, mix, stageAt, stageSpots, veilsFor, VEIL } from "../src/stories/look.ts";
 import { LENS_BAND, LENS_BUDGET, LENS_DEPTH, LENS_FOLD, lensFilterMarkup, lensPixel, lensPixels, middleVeil, pickLenses, watchLenses } from "../src/stories/glass/lens.ts";
 
 const STYLES = join(import.meta.dirname, "..", "src", "stories", "styles");
@@ -129,6 +129,11 @@ describe("the liquid rim's filter", () => {
       expect(1 - (1 - rim) * (1 - k)).toBeCloseTo(hero, 6);
     }
     expect(Number(token("--st-veil-lens-rim"))).toBeLessThan(Number(token("--st-veil-hero")));
+    // the rim's own tint is never thicker than the thinnest hero it is under: over the colours (their floor) and over a
+    // picture (its own, thicker rim), so the filter's veil under the words is never below 0
+    expect(Number(token("--st-veil-lens-rim"))).toBeLessThanOrEqual(COLOUR_FLOORS.hero);
+    const picture = [...tokensCss.matchAll(/\.stories-app\[data-look="picture"\] \{([^}]*)\}/g)].map((m) => /--st-veil-lens-rim:\s*([\d.]+)/.exec(m[1]!)).find(Boolean);
+    expect(Number(picture![1])).toBeLessThan(PICTURE.hero);
   });
 
   it("goes solid with reduced transparency (the rim's tint too)", () => {
@@ -139,7 +144,7 @@ describe("the liquid rim's filter", () => {
   });
 
   it("is Chromium's and Liquid's only, and nothing in glass.css animates a filter", () => {
-    expect(glassCss).toMatch(/\.refract \.stories-app\[data-glass="liquid"\] \.st-lens\.is-liquid \{[^}]*backdrop-filter: blur\(1px\) var\(--st-lens-url\)/);
+    expect(glassCss).toMatch(/\.refract \.stories-app\[data-glass="liquid"\] \.st-lens\.is-liquid \{[^}]*backdrop-filter: blur\(1px\) brightness\(var\(--st-dim\)\) var\(--st-lens-url\)/);
     for (const m of glassCss.matchAll(/transition[^;]*;/g)) expect(m[0]).not.toMatch(/filter/);
   });
 });

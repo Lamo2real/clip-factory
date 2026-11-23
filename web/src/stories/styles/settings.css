@@ -318,7 +318,9 @@
   color: var(--st-coral-ink);
 }
 
-/* ---------- Chips and notes: tone words on the tone, cut low so the words keep 4.5:1 over a white desktop ---------- */
+/* ---------- Chips and notes: tone words on the tone, cut low so the words keep 4.5:1 over a white desktop, over a
+   deep well (as the shell's chips, st-parts.css): the glass under them over the colours is thin now, its filter dimming
+   the stage (glass-tokens.css 5), and the well keeps the words there too ---------- */
 
 .st-stg-chip {
   display: inline-flex;
@@ -337,19 +339,19 @@
 }
 .st-stg-chip--sun {
   color: var(--st-text-amber);
-  background: rgb(var(--st-action-rgb) / 0.14);
+  background: linear-gradient(rgb(var(--st-action-rgb) / 0.14), rgb(var(--st-action-rgb) / 0.14)), rgb(var(--st-well-rgb) / 0.42);
 }
 .st-stg-chip--coral {
   color: var(--st-coral-ink);
-  background: rgb(var(--st-coral-rgb) / 0.16);
+  background: linear-gradient(rgb(var(--st-coral-rgb) / 0.16), rgb(var(--st-coral-rgb) / 0.16)), rgb(var(--st-well-rgb) / 0.42);
 }
 .st-stg-chip--mint {
   color: var(--st-mint-ink);
-  background: rgb(var(--st-mint-rgb) / 0.16);
+  background: linear-gradient(rgb(var(--st-mint-rgb) / 0.16), rgb(var(--st-mint-rgb) / 0.16)), rgb(var(--st-well-rgb) / 0.42);
 }
 .st-stg-chip--sky {
   color: var(--st-sky-ink);
-  background: rgb(var(--st-sky-rgb) / 0.16);
+  background: linear-gradient(rgb(var(--st-sky-rgb) / 0.16), rgb(var(--st-sky-rgb) / 0.16)), rgb(var(--st-well-rgb) / 0.42);
 }
 .st-stg-note {
   display: flex;
@@ -366,19 +368,19 @@
 }
 .st-stg-note--coral {
   color: var(--st-coral-ink);
-  background: rgb(var(--st-coral-rgb) / 0.14);
+  background: linear-gradient(rgb(var(--st-coral-rgb) / 0.14), rgb(var(--st-coral-rgb) / 0.14)), rgb(var(--st-well-rgb) / 0.42);
 }
 .st-stg-note--sun {
   color: var(--st-text-amber);
-  background: rgb(var(--st-action-rgb) / 0.12);
+  background: linear-gradient(rgb(var(--st-action-rgb) / 0.12), rgb(var(--st-action-rgb) / 0.12)), rgb(var(--st-well-rgb) / 0.42);
 }
 .st-stg-note--sky {
   color: var(--st-sky-ink);
-  background: rgb(var(--st-sky-rgb) / 0.12);
+  background: linear-gradient(rgb(var(--st-sky-rgb) / 0.12), rgb(var(--st-sky-rgb) / 0.12)), rgb(var(--st-well-rgb) / 0.42);
 }
 .st-stg-note--mint {
   color: var(--st-mint-ink);
-  background: rgb(var(--st-mint-rgb) / 0.12);
+  background: linear-gradient(rgb(var(--st-mint-rgb) / 0.12), rgb(var(--st-mint-rgb) / 0.12)), rgb(var(--st-well-rgb) / 0.42);
 }
 .st-stg-icon {
   display: block;

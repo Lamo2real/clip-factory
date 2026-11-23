@@ -4,8 +4,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   AA,
   BONE,
+  BRAND_BRIGHTNESS,
+  BRAND_GLASS,
   BRAND_MESH,
   BRAND_PANEL_VEIL,
+  BRAND_PLATE_VEIL,
   brandMeshSpots,
   brandMeshWorst,
   CHIP_DEEPEN,
@@ -26,7 +29,6 @@ import {
   FLOAT_LIGHT,
   FLOAT_VEIL,
   floatTop,
-  FROSTED_EXTRA,
   GHOST_LIFT,
   GHOST_VEIL,
   GLASS_SATURATE,
@@ -48,6 +50,7 @@ import {
   LIGHT_PAY_OWN,
   LIGHT_PAY_REDUCED,
   LIGHT_PAY_WHITE,
+  LIGHT_PAY_WINDOW,
   lightPay,
   LIQUID_ACTIVE_FLOOR,
   LIQUID_FLOOR,
@@ -56,7 +59,7 @@ import {
   lit,
   luminance,
   MAX_COLOURS_PANEL_VEIL,
-  MAX_FROSTED_PANEL_VEIL,
+  MIN_GLASS_BRIGHTNESS,
   MENU_LIGHT,
   mix,
   minVeil,
@@ -71,9 +74,15 @@ import {
   PANEL_LIGHT,
   PANEL_VEIL_FLOOR,
   panelTop,
+  PICTURE_BRIGHTNESS,
+  PICTURE_GLASS,
   PICTURE_PAGE_VEIL,
   PICTURE_PANEL_VEIL,
+  PICTURE_PLATE_VEIL,
+  plateWords,
   cantSelfUpdate,
+  dimRgb,
+  glassBrightness,
   isOldDesktopApp,
   readDesktopVersion,
   OLD_APP_NOTE,
@@ -84,6 +93,7 @@ import {
   RAISE_VEIL,
   raised,
   readNativeGlass,
+  rowRoom,
   resolveLook,
   SATURATIONS,
   saturateRgb,
@@ -109,8 +119,11 @@ import {
   TINTED_FLOOR,
   TRACK_EXTRA_VEIL,
   TRACK_LIFT,
+  underGlass,
   VEIL,
+  WINDOW_BRIGHTNESS,
   WINDOW_TEXT_TOKENS,
+  windowGlass,
   type GlassStrength,
   type LightLook,
   type LightState,
@@ -256,20 +269,28 @@ describe("see-through veil", () => {
         expect(worstInWindow(mix(VEIL, WHITE, least - 0.01)), `${glass} ${scheme}`).toBeLessThan(AA);
       }
     expect(seeThroughVeils("liquid", "light", "clear").panel).toBe(0.73);
-    expect(PANEL_VEIL_FLOOR).toBe(0.3);
+    expect(PANEL_VEIL_FLOOR).toBe(0.2);
+    // The window's glass is behind the page: no web brightness() dims it, so a pane is planned for white as it is.
+    expect(WINDOW_BRIGHTNESS).toBe(1);
+    for (const glass of GLASSES) for (const scheme of SCHEMES) for (const strength of STRENGTHS) expect(windowGlass(glass, scheme, strength)).toMatchObject({ brightness: 1, plateVeil: seeThroughVeils(glass, scheme, strength).panel });
   });
 
-  it("Frosted: a green frost everywhere and heavier panels, so it always shows less than Clear", () => {
-    expect(FROSTED_EXTRA).toBe(0.15);
+  it("Frosted: a green frost everywhere, and panels the least that keeps AA over it and still shows less than Clear", () => {
     for (const glass of GLASSES)
       for (const scheme of SCHEMES) {
+        const at = `${glass} ${scheme}`;
         const clear = seeThroughVeils(glass, scheme, "clear");
         const frosted = seeThroughVeils(glass, scheme, "frosted");
-        expect(frosted.page, `${glass} ${scheme}`).toBe(0.3);
-        expect(frosted.panel, `${glass} ${scheme}`).toBeCloseTo(Math.min(MAX_FROSTED_PANEL_VEIL, clear.panel + FROSTED_EXTRA), 10);
-        expect(frosted.panel).toBeLessThanOrEqual(0.95);
-        expect((1 - frosted.page) * (1 - frosted.panel), `${glass} ${scheme}`).toBeLessThan((1 - clear.page) * (1 - clear.panel));
+        const frost = mix(VEIL, glassCeiling(glass, scheme), frosted.page);
+        expect(frosted.page, at).toBe(0.3);
+        expect(worstInWindow(mix(VEIL, frost, frosted.panel)), at).toBeGreaterThanOrEqual(AA);
+        expect((1 - frosted.page) * (1 - frosted.panel), at).toBeLessThan((1 - clear.page) * (1 - clear.panel));
+        // The least: 0.01 less drops a text colour under AA over the frost, or shows as much as Clear.
+        const less = Math.round((frosted.panel - 0.01) * 100) / 100;
+        expect(worstInWindow(mix(VEIL, frost, less)) < AA || (1 - frosted.page) * (1 - less) >= 1 - clear.panel, at).toBe(true);
       }
+    // AA over the frost on white needs 0.61; showing less than a 0.73 Clear panel needs more than 0.614.
+    expect(seeThroughVeils("liquid", "light", "frosted")).toEqual({ page: 0.3, panel: 0.62 });
   });
 
   it("every text colour of the window look reaches AA on a panel: every glass, setting and strength, over white, its floor and every measured point", () => {
@@ -291,8 +312,9 @@ describe("see-through veil", () => {
     expect(track).toContain("background-color: rgb(var(--green-rgb) / min(1, var(--light-raise-veil)));");
     expect(track).toContain("background-image: linear-gradient(rgb(var(--bone-rgb) / var(--light-raise-lift)), rgb(var(--bone-rgb) / var(--light-raise-lift)));");
     expect(track).toContain("box-shadow: var(--light-rim-2), var(--light-shade-2);");
+    // Straight on the page a track draws no filter, so nothing dims the backdrop under it: the plate veil carries it.
     const root = declared(block(rules("tokens.css"), ":root"));
-    expect(root.get("--light-raise-veil")).toBe(`calc(var(--panel-veil) + ${TRACK_EXTRA_VEIL})`);
+    expect(root.get("--light-raise-veil")).toBe(`calc(var(--plate-veil) + ${TRACK_EXTRA_VEIL})`);
     expect(root.get("--light-raise-lift")).toBe(String(TRACK_LIFT));
   });
 
@@ -330,12 +352,30 @@ describe("see-through veil", () => {
     expect(tokens).toContain(`--tint-amber: linear-gradient(rgb(246 201 69 / 0.16), rgb(246 201 69 / 0.16)), ${lift("amber")}, rgb(var(--green-rgb) / ${CHIP_DEEPEN});`);
   }, 60_000);
 
-  it("the picture look: no veil over the photo, and panels with enough green for every text colour over a white photo", () => {
-    expect([PICTURE_PAGE_VEIL, PICTURE_PANEL_VEIL]).toEqual([0, 0.73]);
-    expect(PICTURE_PANEL_VEIL).toBe(minVeil(WHITE));
-    expect(worst(mix(VEIL, mix(VEIL, WHITE, PICTURE_PAGE_VEIL), PICTURE_PANEL_VEIL))).toBeGreaterThanOrEqual(AA);
+  it("the picture look: no veil over the photo; panes dim a white photo to half and carry what is left, plates what it needs as it is", () => {
+    expect([PICTURE_PAGE_VEIL, PICTURE_PANEL_VEIL, PICTURE_PLATE_VEIL, PICTURE_BRIGHTNESS]).toEqual([0, 0.59, 0.73, MIN_GLASS_BRIGHTNESS]);
+    expect(PICTURE_GLASS).toEqual({ pageVeil: PICTURE_PAGE_VEIL, panelVeil: PICTURE_PANEL_VEIL, plateVeil: PICTURE_PLATE_VEIL, brightness: PICTURE_BRIGHTNESS });
+    // A pane: a white photo as its glass sees it (dimmed), and 0.01 less is under AA there.
+    const seen = dimRgb(WHITE, PICTURE_BRIGHTNESS);
+    expect(PICTURE_PANEL_VEIL).toBe(minVeil(seen));
+    expect(worst(mix(VEIL, seen, PICTURE_PANEL_VEIL))).toBeGreaterThanOrEqual(AA);
+    expect(worst(mix(VEIL, seen, PICTURE_PANEL_VEIL - 0.01))).toBeLessThan(AA);
+    // A plate (no filter of its own): a white photo as it is.
+    expect(PICTURE_PLATE_VEIL).toBe(minVeil(WHITE));
+    expect(worst(mix(VEIL, mix(VEIL, WHITE, PICTURE_PAGE_VEIL), PICTURE_PLATE_VEIL))).toBeGreaterThanOrEqual(AA);
     // backdrop-filter saturate() cannot lighten white.
-    expect(worst(mix(VEIL, saturateRgb(WHITE, GLASS_SATURATE_MAX), PICTURE_PANEL_VEIL))).toBeGreaterThanOrEqual(AA);
+    expect(worst(mix(VEIL, dimRgb(saturateRgb(WHITE, GLASS_SATURATE_MAX), PICTURE_BRIGHTNESS), PICTURE_PANEL_VEIL))).toBeGreaterThanOrEqual(AA);
+  });
+
+  it("brightness() is modelled as browsers draw it, at its lightest: sRGB and linearRGB worked out, the lighter kept", () => {
+    expect(dimRgb(WHITE, 1)).toEqual(WHITE);
+    for (const c of [WHITE, hexToRgb("#e8392b"), hexToRgb("#7fd8be"), BRAND_MESH.field[0]!, [0, 0, 0] as Rgb])
+      for (const b of [0.5, 0.73, 0.9]) {
+        const d = dimRgb(c, b);
+        // linearRGB scales luminance exactly; sRGB (each channel × b) is never lighter for b < 1.
+        expect(luminance(d)).toBeCloseTo(luminance(c) * b, 10);
+        expect(luminance(d)).toBeGreaterThanOrEqual(luminance(c.map((v) => v * b) as unknown as Rgb) - 1e-12);
+      }
   });
 });
 
@@ -442,14 +482,15 @@ describe("the stylesheets and the text colour list stay in step", () => {
       .reduce((sum, term) => sum + term.split("*").reduce((p, f) => p * Number(f.trim()), 1), 0);
   /**
    * A tint with the tokens.css per-level tints (`var(--glass-tint-*)`) put in, every number token in, and calc(),
-   * min() and max() worked out. `--panel-veil` is read at the most a look can need and `--light-pay` where white can be
-   * behind (LIGHT_PAY_WHITE), so a tint that follows them is held where the window look holds it.
+   * min() and max() worked out. `--panel-veil` and `--plate-veil` are read at the most a look can need and
+   * `--light-pay` where white can be behind (LIGHT_PAY_WHITE), so a tint that follows them is held where the window
+   * look holds it.
    */
   const resolveTint = (tint: string) => {
     let t = tint;
     for (let i = 0; i < 4; i++) t = t.replace(/var\((--glass-tint-[a-z]+)\)/g, (_, n: string) => ROOT.get(n) ?? `var(${n})`);
     t = t.replace(/var\((--[a-z0-9-]+)\)/g, (whole, n: string) => {
-      if (n === "--panel-veil") return String(most);
+      if (n === "--panel-veil" || n === "--plate-veil") return String(most);
       if (n === "--light-pay") return String(LIGHT_PAY_WHITE);
       const v = ROOT.get(n);
       return v !== undefined && /^[\d.]+$/.test(v) ? v : whole;
@@ -467,6 +508,7 @@ describe("the stylesheets and the text colour list stay in step", () => {
   it("a tint that uses the per-level tokens is read the way the browser works it out", () => {
     expect(resolveTint("var(--glass-tint-float)")).toBe(`linear-gradient(rgb(var(--green-rgb) / ${Math.min(1, Math.max(FLOAT_VEIL, most) + FLOAT_EXTRA_VEIL)}), rgb(var(--green-rgb) / ${Math.min(1, Math.max(FLOAT_VEIL, most) + FLOAT_EXTRA_VEIL)}))`);
     expect(tintAlphas("var(--glass-tint-panel)")).toEqual([most + LIGHT_PAY_WHITE, most + LIGHT_PAY_WHITE]);
+    expect(tintAlphas("var(--glass-tint-plate)")).toEqual([most + LIGHT_PAY_WHITE, most + LIGHT_PAY_WHITE]);
     expect(tintAlphas("var(--glass-tint-tabbar)").map((a) => a.toFixed(4))).toEqual([TABBAR_VEIL + TABBAR_EXTRA_VEIL, TABBAR_VEIL + TABBAR_EXTRA_VEIL].map((a) => a.toFixed(4)));
     expect(tintAlphas("var(--glass-tint-overlay)")).toEqual([SHEET_VEIL, SHEET_VEIL]);
     expect(tintAlphas("linear-gradient(140deg, rgb(var(--green-rgb) / calc(var(--float-veil) + 0.02)), rgb(var(--green-rgb) / var(--float-veil)))").map((a) => a.toFixed(4))).toEqual(["0.7500", "0.7300"]);
@@ -573,23 +615,33 @@ describe("colours", () => {
     expect(glass).toMatch(/\n\.blob \{[^}]*opacity: 1;/);
   });
 
-  it("the veils split between page and panels and keep every text colour at AA over the lightest spot", () => {
-    const TABLE: [string[], number, number][] = [
-      [[...DEFAULT_COLOURS], 0, 0.3],
-      [["#2b6cb0", "#8e6cc9"], 0, 0.3],
-      [["#9caf88", "#f7f5ef", "#e8412c"], 0.03, 0.6],
-      [["#f6c945", "#f49ac1"], 0.08, 0.6],
-      [["#f7f5ef"], 0.28, 0.6],
-      [["#ffffff"], 0.33, 0.6],
+  it("the glass dims the mesh only as much as it needs, and the veils keep every text colour at AA over the lightest spot", () => {
+    // [colours, page veil, panel veil, plate veil, brightness]. Before: page 0 / 0.03 / 0.08 / 0.28 / 0.33 and
+    // panels 0.30 / 0.30 / 0.60 / 0.60 / 0.60 / 0.60: the dimming lets every light mix keep its page clear.
+    const TABLE: [string[], number, number, number, number][] = [
+      [[...DEFAULT_COLOURS], 0, 0.2, 0.2, 1],
+      [["#2b6cb0", "#8e6cc9"], 0, 0.2, 0.24, 0.94],
+      [["#9caf88", "#f7f5ef", "#e8412c"], 0, 0.39, 0.61, 0.5],
+      [["#f6c945", "#f49ac1"], 0, 0.44, 0.63, 0.5],
+      [["#f7f5ef"], 0, 0.57, 0.71, 0.5],
+      [["#ffffff"], 0, 0.59, 0.73, 0.5],
     ];
-    for (const [cs, page, panel] of TABLE) {
-      expect(coloursVeils(cs), cs.join(" ")).toEqual({ pageVeil: page, panelVeil: panel });
-      for (const spot of coloursMeshSpots(cs)) expect(worst(mix(VEIL, mix(VEIL, spot, page), panel)), cs.join(" ")).toBeGreaterThanOrEqual(AA);
+    for (const [cs, page, panel, plate, brightness] of TABLE) {
+      const at = cs.join(" ");
+      expect(coloursVeils(cs), at).toEqual({ pageVeil: page, panelVeil: panel, plateVeil: plate, brightness });
+      expect(glassBrightness(coloursMeshSpots(cs)), at).toBe(brightness);
+      for (const spot of coloursMeshSpots(cs)) {
+        expect(worst(mix(VEIL, dimRgb(mix(VEIL, spot, page), brightness), panel)), at).toBeGreaterThanOrEqual(AA);
+        expect(worst(mix(VEIL, mix(VEIL, spot, page), plate)), at).toBeGreaterThanOrEqual(AA);
+      }
+      // The least dimming: 0.01 less dimming and the floor alone no longer holds somewhere (AA or the first rung).
+      if (brightness < 1 && brightness > MIN_GLASS_BRIGHTNESS)
+        expect(coloursMeshSpots(cs).some((spot) => worst(mix(VEIL, dimRgb(spot, brightness + 0.01), PANEL_VEIL_FLOOR)) < AA || !rowRoom(mix(VEIL, dimRgb(spot, brightness + 0.01), PANEL_VEIL_FLOOR))), at).toBe(true);
       expect(luminance(coloursMeshWorst(cs))).toBe(Math.max(...coloursMeshSpots(cs).map(luminance)));
     }
-    expect(coloursVeils(DEFAULT_COLOURS)).toEqual({ pageVeil: 0, panelVeil: 0.3 });
+    expect(coloursVeils(DEFAULT_COLOURS)).toEqual({ pageVeil: 0, panelVeil: 0.2, plateVeil: 0.2, brightness: 1 });
     // The deprecated single number is the combined green.
-    expect(coloursVeil(["#ffffff"])).toBeCloseTo(1 - (1 - 0.33) * (1 - 0.6), 2);
+    expect(coloursVeil(["#ffffff"])).toBeCloseTo(0.59, 2);
   });
 
   it("every mix of 1 to 3 colours from a grid reaches AA, and a panel never carries more than 0.6", () => {
@@ -605,19 +657,24 @@ describe("colours", () => {
           n++;
           expect(v.panelVeil).toBeLessThanOrEqual(MAX_COLOURS_PANEL_VEIL);
           expect(v.panelVeil).toBeGreaterThanOrEqual(PANEL_VEIL_FLOOR);
-          // The worst spot as seen bare and through every saturate() the CSS uses.
+          expect(v.brightness).toBeGreaterThanOrEqual(MIN_GLASS_BRIGHTNESS);
+          expect(v.brightness).toBeLessThanOrEqual(1);
+          // The worst spot as seen bare and through every saturate() the CSS uses: dimmed under a pane, as it is under
+          // a plate.
           for (const spot of coloursMeshSpots(cs)) {
             const page = mix(VEIL, spot, v.pageVeil);
-            if (worst(mix(VEIL, page, v.panelVeil)) < AA) fails.push(`${cs.join(" ")} over rgb(${spot.map(Math.round).join(" ")})`);
-            // A pick-one track or a control fill straight on the page.
-            if (worst(mix(BONE, mix(VEIL, page, Math.min(1, v.panelVeil + TRACK_EXTRA_VEIL)), TRACK_LIFT)) < AA) fails.push(`track: ${cs.join(" ")} over rgb(${spot.map(Math.round).join(" ")})`);
+            if (worst(mix(VEIL, dimRgb(page, v.brightness), v.panelVeil)) < AA) fails.push(`${cs.join(" ")} over rgb(${spot.map(Math.round).join(" ")})`);
+            if (worst(mix(VEIL, page, v.plateVeil)) < AA) fails.push(`plate: ${cs.join(" ")} over rgb(${spot.map(Math.round).join(" ")})`);
+            // A pick-one track or a control fill straight on the page (no filter: the plate veil).
+            if (worst(mix(BONE, mix(VEIL, page, Math.min(1, v.plateVeil + TRACK_EXTRA_VEIL)), TRACK_LIFT)) < AA) fails.push(`track: ${cs.join(" ")} over rgb(${spot.map(Math.round).join(" ")})`);
             // The lit levels (ADR-87): the top of a panel and of the lead panel, a row on it on hover, the deepest
             // raise on hover, and a control on the page on hover (the tightest of each kind).
-            const look: LightLook = { kind: "colours", panelVeil: v.panelVeil, pageVeil: v.pageVeil };
+            const look: LightLook = { kind: "colours", ...v };
             const e1 = panelWords(look, spot);
             const levels: [string, Rgb][] = [
               ["E1", e1],
               ["the lead panel", panelWords(look, spot, true)],
+              ["a plate", plateWords(look, spot)],
               ["E2 hover", raised(e1, 1, "hover")],
               ["E4 hover", raised(e1, 3, "hover")],
               ["a control on the page, hover", onPage(look, spot, "hover")],
@@ -690,29 +747,42 @@ describe("the living backdrop (the web and phone default): its lightest spot dec
     expect(luminance(brandMeshWorst())).toBeGreaterThanOrEqual(luminance(worstSpot));
     // The stack of every blob is not the worst: a subset is lighter.
     expect(luminance(worstSpot)).toBeGreaterThan(luminance(allStacked));
-    expect(BRAND_PANEL_VEIL).toBe(0.33);
-    expect(BRAND_PANEL_VEIL).toBe(Math.max(PANEL_VEIL_FLOOR, ...brandMeshSpots().map((spot) => minVeil(spot))));
-    for (const spot of brandMeshSpots()) expect(worst(mix(VEIL, spot, BRAND_PANEL_VEIL))).toBeGreaterThanOrEqual(AA);
+    // A pane dims the mesh (brightness(), the least the floor needs) and carries the floor: 80 % shows (it was 0.33).
+    expect([BRAND_PANEL_VEIL, BRAND_PLATE_VEIL, BRAND_BRIGHTNESS]).toEqual([0.2, 0.33, 0.73]);
+    expect(BRAND_GLASS).toEqual({ panelVeil: BRAND_PANEL_VEIL, plateVeil: BRAND_PLATE_VEIL, brightness: BRAND_BRIGHTNESS });
+    expect(BRAND_BRIGHTNESS).toBe(glassBrightness(brandMeshSpots()));
+    const seen = (spot: Rgb) => dimRgb(spot, BRAND_BRIGHTNESS);
+    expect(BRAND_PANEL_VEIL).toBe(Math.max(PANEL_VEIL_FLOOR, ...brandMeshSpots().map((spot) => minVeil(seen(spot)))));
+    // The least dimming: 0.01 less, and the floor alone breaks AA or the first rung of the ladder over some corner.
+    expect(brandMeshSpots().some((spot) => worst(mix(VEIL, dimRgb(spot, BRAND_BRIGHTNESS + 0.01), PANEL_VEIL_FLOOR)) < AA || !rowRoom(mix(VEIL, dimRgb(spot, BRAND_BRIGHTNESS + 0.01), PANEL_VEIL_FLOOR)))).toBe(true);
+    // A plate (no filter of its own) over the mesh as it is: main's 0.33.
+    expect(BRAND_PLATE_VEIL).toBe(Math.max(PANEL_VEIL_FLOOR, ...brandMeshSpots().map((spot) => minVeil(spot))));
+    for (const spot of brandMeshSpots()) {
+      expect(worst(mix(VEIL, seen(spot), BRAND_PANEL_VEIL))).toBeGreaterThanOrEqual(AA);
+      expect(worst(mix(VEIL, spot, BRAND_PLATE_VEIL))).toBeGreaterThanOrEqual(AA);
+    }
     for (const sat of SATURATIONS) {
       const spot = brandMeshWorst(sat);
-      for (const t of TEXT_COLOURS) expect(contrast(t, mix(VEIL, spot, BRAND_PANEL_VEIL)), `saturate ${sat}`).toBeGreaterThanOrEqual(AA);
-      // Bare, that spot is under AA: the reason loose words get the scrim.
+      for (const t of TEXT_COLOURS) expect(contrast(t, mix(VEIL, seen(spot), BRAND_PANEL_VEIL)), `saturate ${sat}`).toBeGreaterThanOrEqual(AA);
+      // Bare, that spot is under AA: the reason loose words get the plate.
       expect(worst(spot)).toBeLessThan(AA);
+      // And undimmed, the thin pane would be too: the glass's own brightness() is what holds its words.
+      expect(worst(mix(VEIL, spot, BRAND_PANEL_VEIL))).toBeLessThan(AA);
     }
     // A pick-one track, the control fill, a field, the danger button and a tinted chip over every spot, not only the
     // lightest: mixed in sRGB, a darker spot of another hue can need more.
     const VERMILION = hexToRgb("#e8392b");
-    const look: LightLook = { kind: "frosted", panelVeil: BRAND_PANEL_VEIL };
+    const look: LightLook = { kind: "frosted", ...BRAND_GLASS };
     for (const spot of brandMeshSpots()) {
       const at = `over rgb(${spot.map(Math.round).join(" ")})`;
-      const panel = mix(VEIL, spot, BRAND_PANEL_VEIL);
+      const panel = mix(VEIL, seen(spot), BRAND_PANEL_VEIL);
       const top = panelWords(look, spot);
-      expect(worst(mix(BONE, mix(VEIL, spot, BRAND_PANEL_VEIL + TRACK_EXTRA_VEIL), TRACK_LIFT)), `track ${at}`).toBeGreaterThanOrEqual(AA);
+      expect(worst(mix(BONE, mix(VEIL, spot, BRAND_PLATE_VEIL + TRACK_EXTRA_VEIL), TRACK_LIFT)), `track ${at}`).toBeGreaterThanOrEqual(AA);
       // A field is a well, one step below the panel it sits in (the bare panel and its lit top).
       for (const under of [panel, top]) expect(worst(mix(GREEN_DEEP, under, 0.45)), `field ${at}`).toBeGreaterThanOrEqual(AA);
       // Danger (components.css): vermilion 0.14 over the raise's own fill (--fill, --fill-hover, --fill-press), on a
       // panel and straight on the page. On a panel it is a whole step of light over the panel, and hover adds light.
-      const onTrack = mix(VEIL, spot, BRAND_PANEL_VEIL + TRACK_EXTRA_VEIL);
+      const onTrack = mix(VEIL, spot, BRAND_PLATE_VEIL + TRACK_EXTRA_VEIL);
       for (const [rest, hover, press] of [
         [lit(top, RAISE_VEIL, RAISE_LIFT), lit(top, RAISE_HOVER_VEIL, RAISE_HOVER_LIFT), lit(top, RAISE_VEIL, RAISE_PRESS_LIFT)],
         [mix(BONE, onTrack, TRACK_LIFT), mix(BONE, onTrack, PAGE_HOVER_LIFT), mix(BONE, onTrack, RAISE_PRESS_LIFT)],
@@ -726,9 +796,14 @@ describe("the living backdrop (the web and phone default): its lightest spot dec
     }
   });
 
-  it("the see-through has range: the lightest and darkest spots stay told apart through a panel", () => {
+  it("the see-through has range: the lightest and darkest spots stay told apart through a panel (more than before)", () => {
     const darkest = BRAND_MESH.field[1]!;
-    for (const sat of [GLASS_SATURATE, GLASS_SATURATE_MAX]) expect(contrast(mix(VEIL, brandMeshWorst(sat), BRAND_PANEL_VEIL), mix(VEIL, darkest, BRAND_PANEL_VEIL))).toBeGreaterThanOrEqual(2.5);
+    const through = (spot: Rgb) => mix(VEIL, dimRgb(spot, BRAND_BRIGHTNESS), BRAND_PANEL_VEIL);
+    for (const sat of [GLASS_SATURATE, GLASS_SATURATE_MAX]) {
+      expect(contrast(through(brandMeshWorst(sat)), through(darkest))).toBeGreaterThanOrEqual(2.8);
+      // At main's 0.33 with nothing dimmed it was 2.79 and 2.63.
+      expect(contrast(through(brandMeshWorst(sat)), through(darkest))).toBeGreaterThan(contrast(mix(VEIL, brandMeshWorst(sat), BRAND_PLATE_VEIL), mix(VEIL, darkest, BRAND_PLATE_VEIL)));
+    }
   });
 
   it("every saturate() in the CSS is at most GLASS_SATURATE_MAX, and the glass uses GLASS_SATURATE", () => {
@@ -740,11 +815,28 @@ describe("the living backdrop (the web and phone default): its lightest spot dec
     // Every strength used is one the worst cases are worked out for.
     expect([...new Set(sats)].filter((x) => !SATURATIONS.includes(x))).toEqual([]);
     expect(declared(block(rules("tokens.css"), ":root")).get("--glass-saturate")).toBe(String(GLASS_SATURATE));
-    expect(block(glass, ".glass")).toContain("backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));");
+    expect(block(glass, ".glass")).toContain("-webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));");
+    expect(block(glass, ".glass")).toMatch(/(^|\s)backdrop-filter: blur\(var\(--glass-blur\)\) saturate\(var\(--glass-saturate\)\) brightness\(var\(--glass-brightness\)\);/);
   });
 
-  it("a bone sheen with no green paid under it still fails AA (4.48:1): the reason every lift is paid for", () => {
-    expect(worst(mix(BONE, mix(VEIL, brandMeshWorst(GLASS_SATURATE), BRAND_PANEL_VEIL), 0.06))).toBeLessThan(AA);
+  it("every brightness() in a backdrop-filter is the look's own, last, and the CSS starts at the app's own backdrop's", () => {
+    const dims: string[] = [];
+    for (const f of readdirSync(STYLES).filter((n) => n.endsWith(".css")))
+      for (const m of rules(f).matchAll(/backdrop-filter:\s*([^;]+);/g)) if (/brightness\(/.test(m[1]!)) dims.push(`${f}: ${m[1]!.trim()}`);
+    expect(dims.length).toBeGreaterThanOrEqual(5);
+    // The look's own number (lib/look.ts), after the blur and the saturation, so the maths' order is the browser's.
+    for (const d of dims) expect(d, d).toMatch(/saturate\([^)]*\)\)? brightness\(var\(--glass-brightness\)\)$/);
+    const root = declared(block(rules("tokens.css"), ":root"));
+    expect(Number(root.get("--glass-brightness"))).toBe(BRAND_BRIGHTNESS);
+    expect(Number(root.get("--panel-veil"))).toBe(BRAND_PANEL_VEIL);
+    expect(Number(root.get("--plate-veil"))).toBe(BRAND_PLATE_VEIL);
+    // A stronger blur than before (18 px), for the liquid look; the floats keep their 28 px.
+    expect(root.get("--glass-blur")).toBe("24px");
+    expect(BRAND_BRIGHTNESS).toBeGreaterThanOrEqual(MIN_GLASS_BRIGHTNESS);
+  });
+
+  it("a bone sheen with no green paid under it still fails AA (4.21:1): the reason every lift is paid for", () => {
+    expect(worst(mix(BONE, mix(VEIL, dimRgb(brandMeshWorst(GLASS_SATURATE), BRAND_BRIGHTNESS), BRAND_PANEL_VEIL), 0.06))).toBeLessThan(AA);
     // The panel's tint is green only; its light is a layer of its own, paid for (the logic of light, below).
     expect(declared(block(rules("tokens.css"), ":root")).get("--glass-tint-panel")).not.toMatch(/bone/);
   });
@@ -777,7 +869,9 @@ describe("the living backdrop (the web and phone default): its lightest spot dec
     expect(glass).toContain("html:is(.see-through, [data-backdrop])");
     expect(glass).not.toContain('[data-backdrop="frosted"]');
     const plates = /\nhtml:is\(\.see-through, \[data-backdrop\]\)\s*:is\(\s*\.page-head__text,[^{]*\{([^}]*)\}/.exec(glass)![1]!;
-    expect(plates).toContain("background: var(--glass-light-panel), var(--glass-tint-panel);");
+    // A plate draws no filter, so its words take the plate veil (nothing dims the backdrop under them).
+    expect(plates).toContain("background: var(--glass-light-panel), var(--glass-tint-plate);");
+    expect(plates).not.toMatch(/backdrop-filter/);
     expect(plates).toContain("box-shadow: var(--glass-shadow-panel);");
     expect(plates).toContain("padding-block: 8px;");
     // The title plates hold their words by their tint alone (worked out with nothing blurred): no filter of their own.
@@ -825,23 +919,23 @@ const REDUCED_VEIL = 0.92;
 const LIGHT_PLACES: LightPlace[] = (() => {
   const out: LightPlace[] = [];
   const rgb = (c: Rgb) => `rgb(${c.map(Math.round).join(" ")})`;
-  const brand: LightLook = { kind: "frosted", panelVeil: BRAND_PANEL_VEIL };
+  const brand: LightLook = { kind: "frosted", ...BRAND_GLASS };
   for (const behind of brandMeshSpots()) out.push({ at: `the living backdrop over ${rgb(behind)}`, look: brand, behind, pay: lightPay(brand), floatVeil: FLOAT_VEIL });
   for (const { glass, scheme, strength, check, at } of EVERY_LOOK) {
-    const v = seeThroughVeils(glass, scheme, strength);
-    const look: LightLook = { kind: "window", panelVeil: v.panel, pageVeil: v.page };
+    const look: LightLook = { kind: "window", ...windowGlass(glass, scheme, strength) };
     out.push({ at, look, behind: check.behind, pay: lightPay(look), floatVeil: FLOAT_VEIL });
   }
-  const photo: LightLook = { kind: "picture", panelVeil: PICTURE_PANEL_VEIL, pageVeil: PICTURE_PAGE_VEIL };
+  const photo: LightLook = { kind: "picture", ...PICTURE_GLASS };
   for (const behind of [WHITE, saturateRgb(WHITE, GLASS_SATURATE_MAX), BLACK]) out.push({ at: `a photo, ${rgb(behind)}`, look: photo, behind, pay: lightPay(photo), floatVeil: FLOAT_VEIL });
   for (const cs of SWATCH_MIXES) {
     const v = coloursVeils(cs);
-    const look: LightLook = { kind: "colours", panelVeil: v.panelVeil, pageVeil: v.pageVeil, colours: cs };
+    const look: LightLook = { kind: "colours", ...v, colours: cs };
     const pay = lightPay(look);
     for (const behind of coloursMeshSpots(cs)) out.push({ at: `colours ${cs.join(" ")} over ${rgb(behind)}`, look, behind, pay, floatVeil: FLOAT_VEIL });
   }
   for (const behind of [WHITE, BLACK, ...brandMeshSpots()])
-    out.push({ at: `reduced transparency over ${rgb(behind)}`, look: { kind: "frosted", panelVeil: REDUCED_VEIL }, behind, pay: LIGHT_PAY_REDUCED, floatVeil: REDUCED_VEIL });
+    // Nothing blurs or dims there (backdrop-filter: none), and the plates carry the same 0.92.
+    out.push({ at: `reduced transparency over ${rgb(behind)}`, look: { kind: "frosted", panelVeil: REDUCED_VEIL, plateVeil: REDUCED_VEIL, brightness: 1 }, behind, pay: LIGHT_PAY_REDUCED, floatVeil: REDUCED_VEIL });
   return out;
 })();
 
@@ -852,11 +946,13 @@ function litSurfaces(p: LightPlace): [name: string, bg: Rgb][] {
   const page = mix(VEIL, behind, look.pageVeil ?? 0);
   const e1 = panelWords(look, behind, false, pay);
   const lead = panelWords(look, behind, true, pay);
+  const plate = plateWords(look, behind, pay);
   const out: [string, Rgb][] = [
     ["E1 panel", e1],
     ["E1 lead panel", lead],
+    ["E1 plate", plate],
   ];
-  for (const [parentName, parent] of [["panel", e1], ["lead panel", lead]] as const)
+  for (const [parentName, parent] of [["panel", e1], ["lead panel", lead], ["plate", plate]] as const)
     for (let depth = 1; depth <= 3; depth++) for (const state of STATES) out.push([`E${depth + 1} on the ${parentName}, ${state}`, raised(parent, depth, state)]);
   for (const state of STATES) out.push([`a control straight on the page, ${state}`, onPage(look, behind, state)]);
   for (const t of CHIP_TINTS) out.push([`the ${t.name} chip on a row`, chipOn(raised(e1), t)], [`the ${t.name} chip on a mark`, chipOn(raised(e1, 2), t)]);
@@ -908,20 +1004,23 @@ describe("the logic of light (ADR-87): the top layer is brighter, and every lift
       "--light-press-lift": RAISE_PRESS_LIFT,
     };
     for (const [token, value] of Object.entries(want)) expect(Number(root.get(token)), token).toBe(value);
-    for (const token of ["--light-raise-veil", "--light-raise-hover-veil", "--light-ghost-veil"]) expect(root.get(token), token).toBe(`calc(var(--panel-veil) + ${TRACK_EXTRA_VEIL})`);
+    // Straight on the page nothing dims the backdrop under a control: the plate veil carries it.
+    for (const token of ["--light-raise-veil", "--light-raise-hover-veil", "--light-ghost-veil"]) expect(root.get(token), token).toBe(`calc(var(--plate-veil) + ${TRACK_EXTRA_VEIL})`);
     // The pay is worked out for each look (lib/look.ts puts it on <html>); the CSS holds the app's own backdrop's
-    // until then, the white looks' where white can be behind, and reduced transparency's.
-    expect(Number(declared(block(glass, 'html:is(.see-through, [data-backdrop="picture"])')).get("--light-pay"))).toBe(LIGHT_PAY_WHITE);
+    // until then, a photo's where white can be behind, and reduced transparency's.
+    expect(Number(declared(block(glass, 'html[data-backdrop="picture"]')).get("--light-pay"))).toBe(LIGHT_PAY_WHITE);
+    expect(glass).not.toMatch(/html:is\(\.see-through, \[data-backdrop="picture"\]\)/);
     expect(glass).toMatch(new RegExp(`@media \\(prefers-reduced-transparency: reduce\\) \\{[\\s\\S]*--light-pay: ${LIGHT_PAY_REDUCED} !important;`));
+    expect(glass).toMatch(/@media \(prefers-reduced-transparency: reduce\) \{[\s\S]*--plate-veil: 0\.92 !important;/);
     expect(LIGHT_PAY_OWN).toBe(0);
-    for (const kind of ["frosted", "brand"] as const) expect(lightPay({ kind, panelVeil: BRAND_PANEL_VEIL })).toBe(LIGHT_PAY_OWN);
+    for (const kind of ["frosted", "brand"] as const) expect(lightPay({ kind, ...BRAND_GLASS })).toBe(LIGHT_PAY_OWN);
+    // The window look's panes sit at the AA floor over a white desktop: no pay (it was LIGHT_PAY_WHITE in Clear).
+    expect(LIGHT_PAY_WINDOW).toBe(0);
     for (const glassName of GLASSES)
-      for (const scheme of SCHEMES) {
-        const v = seeThroughVeils(glassName, scheme, "clear");
-        expect(lightPay({ kind: "window", panelVeil: v.panel, pageVeil: v.page }), `${glassName} ${scheme} clear`).toBe(LIGHT_PAY_WHITE);
-      }
-    expect(lightPay({ kind: "picture", panelVeil: PICTURE_PANEL_VEIL, pageVeil: PICTURE_PAGE_VEIL })).toBe(LIGHT_PAY_WHITE);
-    expect(lightPay({ kind: "window", panelVeil: 0.73 }, true)).toBe(LIGHT_PAY_REDUCED);
+      for (const scheme of SCHEMES)
+        for (const strength of STRENGTHS) expect(lightPay({ kind: "window", ...windowGlass(glassName, scheme, strength) }), `${glassName} ${scheme} ${strength}`).toBe(LIGHT_PAY_WINDOW);
+    expect(lightPay({ kind: "picture", ...PICTURE_GLASS })).toBe(LIGHT_PAY_WHITE);
+    expect(lightPay({ kind: "window", panelVeil: 0.73, plateVeil: 0.73, brightness: 1 }, true)).toBe(LIGHT_PAY_REDUCED);
     // Colours with no colours named plan for a white mesh: never less than the colours themselves need.
     for (const cs of [DEFAULT_COLOURS, ["#f7f5ef"], ["#8e6cc9", "#0f372b", "#e8392b"]]) {
       const v = coloursVeils(cs);
@@ -960,6 +1059,7 @@ describe("the logic of light (ADR-87): the top layer is brighter, and every lift
     // Two flat stops of bottle green (the tests read their alphas), and the pay on the veil.
     const flat = (alpha: string) => `linear-gradient(rgb(var(--green-rgb) / ${alpha}), rgb(var(--green-rgb) / ${alpha}))`;
     expect(root.get("--glass-tint-panel")).toBe(flat("min(1, var(--panel-veil) + var(--light-pay))"));
+    expect(root.get("--glass-tint-plate")).toBe(flat("min(1, var(--plate-veil) + var(--light-pay))"));
     expect(root.get("--glass-tint-lead")).toBe(flat("min(0.97, var(--panel-veil) + var(--light-pay) + var(--light-lead-pay))"));
     expect(root.get("--glass-tint-float")).toBe(flat("min(1, max(var(--float-veil), var(--panel-veil)) + var(--light-float-pay))"));
     expect(root.get("--glass-tint-tabbar")).toBe(flat("min(1, var(--tabbar-veil) + var(--light-tabbar-pay))"));
@@ -1000,7 +1100,7 @@ describe("the logic of light (ADR-87): the top layer is brighter, and every lift
     const fails: string[] = [];
     for (const p of LIGHT_PLACES) {
       const e1 = panelWords(p.look, p.behind, false, p.pay);
-      for (const under of [e1, raised(e1), raised(e1, 2), onPage(p.look, p.behind)]) if (contrast(ON_BONE, mix(BONE, under, SELECTED_ALPHA)) < AA && fails.length < 20) fails.push(p.at);
+      for (const under of [e1, raised(e1), raised(e1, 2), onPage(p.look, p.behind), plateWords(p.look, p.behind, p.pay)]) if (contrast(ON_BONE, mix(BONE, under, SELECTED_ALPHA)) < AA && fails.length < 20) fails.push(p.at);
     }
     expect(fails).toEqual([]);
     // The tab bar holds icons only and plans for white under it (TABBAR_VEIL + its pay, under its light); in the
@@ -1033,17 +1133,18 @@ describe("the logic of light (ADR-87): the top layer is brighter, and every lift
     const page = mix(VEIL, behind, look.pageVeil ?? 0);
     const e1 = panelWords(look, behind, false, pay);
     const lead = panelWords(look, behind, true, pay);
+    const plate = plateWords(look, behind, pay);
     /** The rest of a level above a pane climbs a whole step over its parent, or (where `noRoom`) steps back at most LADDER_SLACK. */
     const need = (_depth: number, under?: Rgb) => (under && noRoom(under) ? -LADDER_SLACK : LADDER_STEP);
     const out: [string, Rgb, Rgb, number][] = [
       // Inside a pane its top is brighter than its base.
-      ["E1 base → top", lit(page, look.panelVeil + pay, 0), e1, 0],
+      ["E1 base → top", lit(underGlass(look, behind), look.panelVeil + pay, 0), e1, 0],
       ["E1 → the lead panel", e1, lead, 0],
       ["a control on the page → its hover", onPage(look, behind), onPage(look, behind, "hover"), Number.MIN_VALUE],
       ["a control on the page, pressed → rest", onPage(look, behind, "press"), onPage(look, behind), 0],
       ["a quiet control on the page → rest", onPage(look, behind, "ghost"), onPage(look, behind), 0],
     ];
-    for (const [paneName, pane] of [["panel", e1], ["lead panel", lead]] as const)
+    for (const [paneName, pane] of [["panel", e1], ["lead panel", lead], ["plate", plate]] as const)
       for (let depth = 1; depth <= 3; depth++) {
         const under = depth === 1 ? pane : raised(pane, depth - 1);
         const rest = raised(under);
@@ -1084,11 +1185,11 @@ describe("the logic of light (ADR-87): the top layer is brighter, and every lift
     expect(LADDER_STEP).toBe(0.015);
     // Over the app's own backdrop (its dark field) every step is clearly brighter.
     const field = BRAND_MESH.field[1]!;
-    const look: LightLook = { kind: "frosted", panelVeil: BRAND_PANEL_VEIL };
+    const look: LightLook = { kind: "frosted", ...BRAND_GLASS };
     const e1 = panelTop(look, field);
     const e2 = raised(e1);
     const e3 = raised(e1, 2);
-    expect(oklabL(e1) - oklabL(lit(field, BRAND_PANEL_VEIL + LIGHT_PAY_OWN, 0)), "E1 top over its base").toBeGreaterThan(0.02);
+    expect(oklabL(e1) - oklabL(lit(underGlass(look, field), BRAND_PANEL_VEIL + LIGHT_PAY_OWN, 0)), "E1 top over its base").toBeGreaterThan(0.02);
     expect(oklabL(e2) - oklabL(e1), "E2 − E1").toBeGreaterThanOrEqual(0.04);
     expect(oklabL(e3) - oklabL(e2), "E3 − E2").toBeGreaterThanOrEqual(0.03);
     expect(oklabL(raised(e1, 1, "hover")) - oklabL(e2), "E2 hover − E2").toBeGreaterThan(0.01);
@@ -1119,20 +1220,27 @@ describe("the logic of light (ADR-87): the top layer is brighter, and every lift
 
   it("each look's pay is the least that leaves the ladder room: 0.01 less breaks it somewhere", () => {
     const looks: { name: string; spots: Rgb[]; look: LightLook }[] = [
-      { name: "the living backdrop", spots: brandMeshSpots(), look: { kind: "frosted", panelVeil: BRAND_PANEL_VEIL } },
-      { name: "Clear over white", spots: [WHITE, BLACK], look: { kind: "window", ...((v) => ({ panelVeil: v.panel, pageVeil: v.page }))(seeThroughVeils("liquid", "light", "clear")) } },
-      { name: "a white photo", spots: [WHITE], look: { kind: "picture", panelVeil: PICTURE_PANEL_VEIL, pageVeil: PICTURE_PAGE_VEIL } },
+      { name: "the living backdrop", spots: brandMeshSpots(), look: { kind: "frosted", ...BRAND_GLASS } },
+      { name: "Clear over white", spots: [WHITE, BLACK], look: { kind: "window", ...windowGlass("liquid", "light", "clear") } },
+      { name: "Frosted over white", spots: [WHITE, BLACK], look: { kind: "window", ...windowGlass("liquid", "light", "frosted") } },
+      { name: "a white photo", spots: [WHITE], look: { kind: "picture", ...PICTURE_GLASS } },
       ...[DEFAULT_COLOURS, ["#f7f5ef"], ["#8e6cc9", "#0f372b", "#e8392b"], ["#1f2937"]].map((cs) => ({ name: `colours ${cs.join(" ")}`, spots: coloursMeshSpots(cs), look: { kind: "colours" as const, ...coloursVeils(cs), colours: cs } })),
     ];
     for (const { name, spots, look } of looks) {
       const pay = lightPay(look);
-      const pages = spots.map((s) => mix(VEIL, s, look.pageVeil ?? 0));
-      expect(pages.flatMap((pg) => ladderFaults(pg, look.panelVeil, pay)), name).toEqual([]);
-      if (pay > 0) expect(pages.some((pg) => ladderFaults(pg, look.panelVeil, Math.round((pay - 0.01) * 100) / 100, false, true).length > 0), `${name} at ${pay - 0.01}`).toBe(true);
+      // A pane over the backdrop as its glass sees it, and a plate over it as it is.
+      const panes = spots.map((s) => underGlass(look, s));
+      const plates = spots.map((s) => mix(VEIL, s, look.pageVeil ?? 0));
+      expect(panes.flatMap((pg) => ladderFaults(pg, look.panelVeil, pay)), name).toEqual([]);
+      expect(plates.flatMap((pg) => ladderFaults(pg, look.plateVeil, pay)), `${name}, a plate`).toEqual([]);
+      const less = Math.round((pay - 0.01) * 100) / 100;
+      if (pay > 0) expect(panes.some((pg) => ladderFaults(pg, look.panelVeil, less, false, true).length > 0) || plates.some((pg) => ladderFaults(pg, look.plateVeil, less, false, true).length > 0), `${name} at ${less}`).toBe(true);
     }
-    // What the see-through costs: the share of the backdrop a pane still shows (1 − its green), per look.
-    expect(1 - (BRAND_PANEL_VEIL + LIGHT_PAY_OWN)).toBeGreaterThan(0.25);
-    expect(1 - (seeThroughVeils("liquid", "light", "clear").panel + LIGHT_PAY_WHITE)).toBeGreaterThan(0.1);
+    // What the see-through costs: the share of the backdrop a pane still shows (1 − its green), per look (§22.4).
+    expect(1 - (BRAND_PANEL_VEIL + LIGHT_PAY_OWN)).toBeGreaterThanOrEqual(0.8 - 1e-9);
+    expect(1 - (seeThroughVeils("liquid", "light", "clear").panel + LIGHT_PAY_WINDOW)).toBeCloseTo(0.27, 10);
+    expect(1 - (seeThroughVeils("liquid", "light", "frosted").panel + LIGHT_PAY_WINDOW)).toBeCloseTo(0.38, 10);
+    expect(1 - (PICTURE_PANEL_VEIL + LIGHT_PAY_WHITE)).toBeGreaterThanOrEqual(0.36 - 1e-9);
   });
 
   it("the light is soft and static: nothing transitions or animates backdrop-filter, and refraction blurs first", () => {
@@ -1143,12 +1251,12 @@ describe("the logic of light (ADR-87): the top layer is brighter, and every lift
       for (const m of text.matchAll(/@keyframes\s+[\w-]+\s*\{((?:[^{}]*\{[^{}]*\})*)[^{}]*\}/g)) if (/backdrop-filter/.test(m[1]!)) moving.push(`${f}: @keyframes with backdrop-filter`);
     }
     expect(moving).toEqual([]);
-    expect(block(glass, ".refract .glass--refract")).toContain("backdrop-filter: blur(14px) url(#cf-refract) saturate(1.75);");
+    expect(block(glass, ".refract .glass--refract")).toContain("backdrop-filter: blur(18px) url(#cf-refract) saturate(1.75) brightness(var(--glass-brightness));");
     // The page title plates hold their words by their tint alone: no blur and no bend of their own (at most three
     // refracting surfaces on a screen, e2e/refract.spec.ts), and Money's band blurs without bending.
     expect(glass).not.toMatch(/page-head__text[^{]*\{[^}]*backdrop-filter/);
     expect(glass).not.toMatch(/dash-head__text[^{]*\{[^}]*backdrop-filter/);
-    expect(block(glass, ".refract .dash-band.glass--refract")).toContain("backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));");
+    expect(block(glass, ".refract .dash-band.glass--refract")).toContain("backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));");
     expect(block(glass, ".refract .dash-band.glass--refract")).not.toContain("url(");
     // Reduced transparency: nothing to see through, so nothing to blur or bend.
     expect(glass).toMatch(/\.glass,\s*\.refract \.glass--refract,\s*\.refract \.dash-band\.glass--refract \{\s*-webkit-backdrop-filter: none;\s*backdrop-filter: none;/);
@@ -1284,23 +1392,25 @@ describe("what is drawn", () => {
   const base: LookInput = { mode: "see-through", picture: null, colours: [...DEFAULT_COLOURS], strength: "clear", glass: "none", scheme: "light" };
 
   it("see-through shows the window glass only when the desktop app has it", () => {
-    expect(resolveLook(base)).toEqual({ kind: "frosted", strength: "clear", panelVeil: BRAND_PANEL_VEIL });
-    expect(resolveLook({ ...base, strength: "frosted" })).toEqual({ kind: "frosted", strength: "frosted", panelVeil: BRAND_PANEL_VEIL });
+    expect(resolveLook(base)).toEqual({ kind: "frosted", strength: "clear", ...BRAND_GLASS });
+    expect(resolveLook({ ...base, strength: "frosted" })).toEqual({ kind: "frosted", strength: "frosted", ...BRAND_GLASS });
     for (const glass of GLASSES) {
       const v = seeThroughVeils(glass, "light", "clear");
-      expect(resolveLook({ ...base, glass })).toEqual({ kind: "window", glass, strength: "clear", pageVeil: v.page, panelVeil: v.panel });
+      expect(resolveLook({ ...base, glass })).toEqual({ kind: "window", glass, strength: "clear", pageVeil: v.page, panelVeil: v.panel, plateVeil: v.panel, brightness: WINDOW_BRIGHTNESS });
     }
     const d = seeThroughVeils("acrylic", "dark", "frosted");
-    expect(resolveLook({ ...base, glass: "acrylic", strength: "frosted", scheme: "dark" })).toMatchObject({ kind: "window", pageVeil: d.page, panelVeil: d.panel });
+    expect(resolveLook({ ...base, glass: "acrylic", strength: "frosted", scheme: "dark" })).toMatchObject({ kind: "window", pageVeil: d.page, panelVeil: d.panel, plateVeil: d.panel, brightness: 1 });
   });
 
   it("picture uses the picture on this device, or the Clip Factory colours until there is one", () => {
-    expect(resolveLook({ ...base, mode: "picture" })).toEqual({ kind: "brand", panelVeil: BRAND_PANEL_VEIL });
+    expect(resolveLook({ ...base, mode: "picture" })).toEqual({ kind: "brand", ...BRAND_GLASS });
     expect(resolveLook({ ...base, mode: "picture", picture: "data:image/jpeg;base64,x", glass: "vibrancy" })).toEqual({
       kind: "picture",
       url: "data:image/jpeg;base64,x",
       pageVeil: PICTURE_PAGE_VEIL,
       panelVeil: PICTURE_PANEL_VEIL,
+      plateVeil: PICTURE_PLATE_VEIL,
+      brightness: PICTURE_BRIGHTNESS,
     });
   });
 
@@ -1448,38 +1558,47 @@ describe("the page follows the look", () => {
     const { applyLook } = await import("../src/lib/look.ts");
     const root = document.createElement("html");
     const liquid = seeThroughVeils("liquid", "light", "clear");
-    applyLook({ kind: "window", glass: "liquid", strength: "clear", pageVeil: liquid.page, panelVeil: liquid.panel }, root);
+    applyLook({ kind: "window", glass: "liquid", strength: "clear", ...windowGlass("liquid", "light", "clear") }, root);
     expect(root.classList.contains("see-through")).toBe(true);
     expect(root.dataset.backdrop).toBe("window");
     expect(root.dataset.glass).toBe("liquid");
     expect(root.dataset.strength).toBe("clear");
     expect(root.style.getPropertyValue("--backdrop-veil")).toBe("0");
     expect(root.style.getPropertyValue("--panel-veil")).toBe(String(liquid.panel));
+    // Nothing dims the desktop behind the page: a plate is a pane, and the glass draws no brightness().
+    expect(root.style.getPropertyValue("--plate-veil")).toBe(String(liquid.panel));
+    expect(root.style.getPropertyValue("--glass-brightness")).toBe("1");
     // And each look's own pay for the ladder of light (lightPay).
-    expect(root.style.getPropertyValue("--light-pay")).toBe(String(LIGHT_PAY_WHITE));
-    const frosted = seeThroughVeils("liquid", "light", "frosted");
-    applyLook({ kind: "window", glass: "liquid", strength: "frosted", pageVeil: frosted.page, panelVeil: frosted.panel }, root);
+    expect(root.style.getPropertyValue("--light-pay")).toBe(String(LIGHT_PAY_WINDOW));
+    applyLook({ kind: "window", glass: "liquid", strength: "frosted", ...windowGlass("liquid", "light", "frosted") }, root);
     expect(root.dataset.strength).toBe("frosted");
     expect(root.style.getPropertyValue("--backdrop-veil")).toBe("0.3");
-    expect(Number(root.style.getPropertyValue("--panel-veil"))).toBeCloseTo(liquid.panel + 0.15, 10);
+    expect(root.style.getPropertyValue("--panel-veil")).toBe("0.62");
 
-    applyLook({ kind: "frosted", strength: "frosted", panelVeil: BRAND_PANEL_VEIL }, root);
+    applyLook({ kind: "frosted", strength: "frosted", ...BRAND_GLASS }, root);
     expect(root.classList.contains("see-through")).toBe(false);
     expect(root.dataset.backdrop).toBe("frosted");
     expect(root.dataset.glass).toBeUndefined();
     expect(root.dataset.strength).toBe("frosted");
     expect(root.style.getPropertyValue("--backdrop-veil")).toBe("");
-    expect(root.style.getPropertyValue("--panel-veil")).toBe("0.33");
+    expect(root.style.getPropertyValue("--panel-veil")).toBe("0.2");
+    expect(root.style.getPropertyValue("--plate-veil")).toBe("0.33");
+    expect(root.style.getPropertyValue("--glass-brightness")).toBe(String(BRAND_BRIGHTNESS));
     expect(root.style.getPropertyValue("--light-pay")).toBe(String(LIGHT_PAY_OWN));
 
+    // White: the glass dims it to half, so the page keeps no veil (it was 0.33 over panels at 0.60).
     applyLook({ kind: "colours", colours: ["#ffffff"], ...coloursVeils(["#ffffff"]) }, root);
-    expect(root.style.getPropertyValue("--backdrop-veil")).toBe("0.33");
-    expect(root.style.getPropertyValue("--panel-veil")).toBe("0.6");
+    expect(root.style.getPropertyValue("--backdrop-veil")).toBe("0");
+    expect(root.style.getPropertyValue("--panel-veil")).toBe("0.59");
+    expect(root.style.getPropertyValue("--plate-veil")).toBe("0.73");
+    expect(root.style.getPropertyValue("--glass-brightness")).toBe("0.5");
     expect(root.style.getPropertyValue("--light-pay")).toBe(String(lightPay({ kind: "colours", colours: ["#ffffff"], ...coloursVeils(["#ffffff"]) })));
 
-    // The picture look: no veil over the photo, and its own panel tint.
-    applyLook({ kind: "picture", url: "data:x", pageVeil: PICTURE_PAGE_VEIL, panelVeil: PICTURE_PANEL_VEIL }, root);
+    // The picture look: no veil over the photo, and its own panel tint, plate tint and dimming.
+    applyLook({ kind: "picture", url: "data:x", ...PICTURE_GLASS }, root);
     expect(root.style.getPropertyValue("--backdrop-veil")).toBe("0");
-    expect(root.style.getPropertyValue("--panel-veil")).toBe("0.73");
+    expect(root.style.getPropertyValue("--panel-veil")).toBe("0.59");
+    expect(root.style.getPropertyValue("--plate-veil")).toBe("0.73");
+    expect(root.style.getPropertyValue("--glass-brightness")).toBe("0.5");
   });
 });

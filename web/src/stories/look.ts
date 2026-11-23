@@ -10,11 +10,14 @@
 //   Colours      1 to 3 colours drawn as a base and two soft lights. Ember (the owner's warm reference) is the default
 //                choice of the whole Look.
 //
-// The veils: the least smoky tint that keeps every word at 4.5:1 over the lightest pixel each look can show. Over a
-// desktop or a picture that is white (the worst case of any photo or busy desktop), so the measured numbers hold
-// (tiles 0.74, tinted tiles 0.80 with the colour cut to 0.12, hero 0.76, rail 0.78, Frosted 0.30 + 0.89). Over the
-// colours they are worked out here from exactly what the stage draws (stageAt over STAGE_WINDOWS), the way Clip Factory's
-// lib/background.ts does for its own. StoriesApp calls useStoriesBackground(root, active) once: it puts the result on
+// The veils: the least smoky tint that keeps every word at 4.5:1 over the lightest pixel each look can show. Where the
+// page draws its own backdrop (the colours, a picture), each glass's own backdrop-filter dims what is behind it first
+// (brightness() below 1, DIM), so the tint can be far thinner and the words still hold: over the colours they are worked
+// out here from exactly what the stage draws (stageAt over STAGE_WINDOWS) through that filter, the way Clip Factory's
+// lib/background.ts does for its own; over a picture the drawn veils (PICTURE) are never lighter, dimmed, than the
+// measured floors over a white photo. Over the desktop (See-through in the app) nothing of the page is behind the glass,
+// so no filter can dim it: there the measured numbers hold (tiles 0.74, tinted tiles 0.80 with the colour cut to 0.12,
+// hero 0.76, rail 0.78, Frosted 0.30 + 0.89). StoriesApp calls useStoriesBackground(root, active) once: it puts the result on
 // .stories-app (data-look, data-strength, data-glass, the --st-veil-* numbers and the stage colours), and
 // glass.css paints .stories-app::before from them. Stories depends on nothing of Clip Factory's here: the two small
 // readers below are Stories' own copies, and See-through's transparent page is a wish Stories states to the shell
@@ -159,8 +162,35 @@ export function minVeilLit(under: Rgb, light: number, inks: readonly Rgb[] = INK
 
 /** How strong the stage's two main lights are (glass-tokens.css --st-stage-a2 copper, --st-stage-a3 amber). */
 export const GLOW_ALPHA = { second: 0.46, third: 0.3 } as const;
-/** What a bar's backdrop-filter can do to the colours under it (none, and the bar's saturate). */
-export const SATURATIONS: readonly number[] = [1, 1.35];
+/** What a glass's backdrop-filter can do to the colours under it (none, and the glass's saturate: --st-saturate). */
+export const SATURATIONS: readonly number[] = [1, 1.5];
+
+/**
+ * How far each glass's own backdrop-filter dims what is behind it (brightness(), glass-tokens.css --st-dim for cards,
+ * heroes, tinted tiles and the rail, --st-dim-over for bars, plates and sheets), per look. Where the page draws the
+ * backdrop (the colours, a picture) the filter sees it, so the tint can be thinner for the same contrast; over the desktop
+ * (window) the page is transparent and the window's own glass shows the desktop, which no web filter can reach: 1.
+ * Bars and sheets dim more: a cream card or the action can scroll under them.
+ */
+export type DimKind = "glass" | "over";
+export const DIM: Readonly<Record<LookKind, Readonly<Record<DimKind, number>>>> = {
+  colours: { glass: 0.7, over: 0.5 },
+  picture: { glass: 0.5, over: 0.5 },
+  window: { glass: 1, over: 1 },
+};
+/** Which dim each kind of glass's filter has (the page is the backdrop itself: nothing filters it). */
+export const KIND_DIM: Readonly<Record<keyof Veils, DimKind | null>> = { page: null, card: "glass", tinted: "glass", hero: "glass", rail: "glass", bar: "over", float: "over", plate: "over" };
+/** CSS brightness(b) on one colour. */
+export function dimRgb([r, g, b]: Rgb, k: number): Rgb {
+  return [r * k, g * k, b * k];
+}
+/** What a glass's backdrop-filter makes of the pixel behind it: brightness(dim), then saturate(s) (in this order, as
+ *  glass-tokens.css writes the filters, so no channel clips before it is dimmed). The blur only ever averages, so the
+ *  lightest pixel is the worst case. */
+export function filtered(under: Rgb, dim: number, s = 1): Rgb {
+  const d = dimRgb(under, dim);
+  return s === 1 ? d : saturateRgb(d, s);
+}
 
 export type ViewUnit = "vmax" | "vmin" | "vw" | "vh";
 /**
@@ -313,9 +343,13 @@ export interface Veils {
   plate: number;
 }
 
-/** Measured over a white desktop or photo (revise-notes, 22 Nov): the floor of See-through in the app and Picture. A
- *  sheet's (float) is the card's: its level-5 light (ELEVATION[5]) covers the rest, 0.94 in all, never thinner than the
- *  rail, and over white the light keeps the veil's own contrast (lit). */
+/** Measured over a white desktop or photo (revise-notes, 22 Nov): the floor of See-through in the app (no filter reaches
+ *  the desktop), and what a picture's dimmed glass is never lighter than over a white photo. A sheet's (float) is the
+ *  card's: its level-5 light (ELEVATION[5]) covers the rest, 0.94 in all, never thinner than the rail, and over white the
+ *  light keeps the veil's own contrast (lit). Worked out again on 23 Nov over a white desktop with the light in (lit):
+ *  every word on them 5.0:1 or more, a control's words 5.0:1 or more; the AA floor itself (4.5:1 at a surface's top,
+ *  with a hovered control on it) is 0.73 for a sheet and 0.74 for the rest (a card's words alone 0.72); under a 0.30
+ *  frost 0.65 to 0.72 (a sheet). */
 export const MEASURED: Veils = { page: 0, card: 0.74, tinted: 0.8, hero: 0.76, rail: 0.78, bar: 0.78, float: 0.74, plate: 0.78 };
 /** Frosted in the app: a 0.30 frost over the desktop and the panels at 0.89. */
 export const FROSTED: Veils = { page: 0.3, card: 0.89, tinted: 0.89, hero: 0.89, rail: 0.89, bar: 0.89, float: 0.89, plate: 0.89 };
@@ -324,18 +358,45 @@ export const FROSTED: Veils = { page: 0.3, card: 0.89, tinted: 0.89, hero: 0.89,
  *  step may go darker, where AA needs the veil. Over a white desktop or photo the light takes its share from what is
  *  behind (lit), so there the order is the veils' alone: each level's veil is thinner than the one under it. */
 export const LIGHT_STEP = 0.015;
-/** Clear over a picture or the desktop, as drawn: each glass at or above its measured floor (MEASURED), in the light's
- *  order over white: panels 0.90, cards 0.84, raised surfaces 0.79 (a hero, a bar; a card inside a card lays only a lift
- *  of light over its card, --st-elev-raised-lift, which comes out the same over white), sheets 0.74 (a tinted tile's
- *  tone lights it on its own): about +0.017 L a step over white (test/storiesLight.test.ts). */
-export const WINDOW_CLEAR: Veils = { page: 0, card: 0.84, tinted: 0.8, hero: 0.79, rail: 0.9, bar: 0.79, float: 0.74, plate: 0.9 };
-/** Frosted in the app, as drawn: the 0.30 frost, then the panels in the same order over the frosted desktop. */
-export const WINDOW_FROSTED: Veils = { page: 0.3, card: 0.84, tinted: 0.82, hero: 0.77, rail: 0.96, bar: 0.77, float: 0.72, plate: 0.96 };
-/** The least each glass gets over the colours, whatever they are (the look of glass, not only the maths). A sheet
- *  (float) is the top layer: its top (ELEVATION[5] + ELEVATION_TOP[5]) is brighter than any control under it, so its
- *  veil is the bar's, which keeps its own controls' second lines at 4.5:1 under that light; with it it covers 0.9 or
- *  more of what is behind, and over a cream card or the action under it its words keep 5:1. */
-export const COLOUR_FLOORS: Veils = { page: 0, card: 0.58, tinted: 0.66, hero: 0.6, rail: 0.62, bar: 0.72, float: 0.72, plate: 0 };
+/** See-through Clear in the app, as drawn (the desktop: nothing of the page is behind the glass, so no filter dims it).
+ *  Each glass at or above its measured floor (MEASURED), in the light's order over white: the sheet at its floor (its
+ *  level-5 light covers the rest at its top), then every level under it as thin as LIGHT_STEP over a white desktop
+ *  allows: raised surfaces 0.78 (a hero, a bar; a card inside a card lays only a lift of light over its card,
+ *  --st-elev-raised-lift), cards 0.83, panels 0.89 (a tinted tile's tone lights it on its own: its floor, 0.80). 23 Nov:
+ *  0.79 / 0.84 / 0.90 before. Over a white desktop the worst word is then 6.2:1 (a sheet), a control's 5.1:1: the light's
+ *  order, not AA, is what keeps the lower levels thicker (test/storiesLight.test.ts). */
+export const WINDOW_CLEAR: Veils = { page: 0, card: 0.83, tinted: 0.8, hero: 0.78, rail: 0.89, bar: 0.78, float: 0.74, plate: 0.89 };
+/** Frosted in the app, as drawn: the 0.30 frost, then the panels in the same order over the frosted desktop, each frost
+ *  and glass together at or above its measured floor: sheets 0.72 (a control's words on one 4.9:1 over a white desktop),
+ *  raised 0.76, tinted 0.77, cards 0.82, panels 0.90 (23 Nov: 0.72 / 0.77 / 0.82 / 0.84 / 0.96 before). */
+export const WINDOW_FROSTED: Veils = { page: 0.3, card: 0.82, tinted: 0.77, hero: 0.76, rail: 0.9, bar: 0.76, float: 0.72, plate: 0.9 };
+/** A picture, as drawn: the page draws it, so each glass's filter dims it (DIM.picture) before its veil. Dimmed, every
+ *  glass is never lighter over a white photo than its measured floor over a white desktop (at its top and its bottom;
+ *  so over any photo, since the dim only ever takes away, channel by channel), and the light keeps its order over a
+ *  white and a mid-grey picture: raised surfaces 0.67, tinted 0.71, sheets 0.72 (their light covers the rest at the
+ *  top), cards 0.75, panels 0.86. 23 Nov: the window's 0.79 / 0.80 / 0.74 / 0.84 / 0.90 before. */
+export const PICTURE: Veils = { page: 0, card: 0.75, tinted: 0.71, hero: 0.67, rail: 0.86, bar: 0.67, float: 0.72, plate: 0.86 };
+/** The least each glass gets over the colours, whatever they are (the look of glass, not only the maths): a thin smoky
+ *  tint, so the colours show through, the filter's dim (DIM.colours) doing the rest; the rail's keeps it a step brighter
+ *  than the stage over the espresso, under its dim. Everything above the floors is worked out in veilsFor (a control's
+ *  words on the glass, hovered too; a cream card or the action under a bar or a sheet): over Ember the rail 0.16, a card
+ *  0.18, a hero 0.31, a tinted tile 0.48, a bar 0.38, a sheet 0.62 (0.62 / 0.58 / 0.6 / 0.66 / 0.72 / 0.72 before). */
+export const COLOUR_FLOORS: Veils = { page: 0, card: 0.14, tinted: 0.16, hero: 0.13, rail: 0.16, bar: 0.2, float: 0.3, plate: 0 };
+/** The tones a tinted tile can take (glass-tokens.css: the action, amber, coral, mint and sky channels). */
+export const TINT_TONES: readonly Rgb[] = [
+  [255, 154, 69],
+  [255, 176, 84],
+  [255, 127, 106],
+  [111, 217, 164],
+  [124, 198, 230],
+];
+/** What may be under a bar or a sheet besides the page (things scroll under a bar; a sheet opens over the page): a
+ *  cream card, the action, the cream card's lower stop. */
+export const UNDERLAYS: readonly Rgb[] = [
+  [255, 243, 228],
+  [255, 154, 69],
+  [246, 230, 210],
+];
 /** Frosted outside the app: the colours under a 0.30 frost. */
 export const FROST_PAGE = 0.3;
 /** Solid glass (reduced transparency, or the device's choice): every glass at --st-veil-solid; a desktop or a picture
@@ -384,12 +445,74 @@ export function minPageForControls(spots: readonly Rgb[]): number {
   return 1;
 }
 
+/** A glass control inside glass over the colours, hovered (its brightest: --st-fill-control-lift, cream 0.16; at rest
+ *  --st-fill-control, cream 0.12), with its --st-light-4 at its top. */
+export const CONTROL_LIFT = 0.16;
+const CONTROL_HOVERED = 1 - (1 - CONTROL_LIFT) * (1 - ELEVATION_TOP[4]!);
+const CONTROL_AT_REST = 1 - (1 - LOOSE_CONTROL_FILL) * (1 - ELEVATION_TOP[4]!);
+const MUTED: Rgb = [220, 202, 180];
+const STRONG: Rgb = [255, 250, 242];
+/** The words on a control: its label and its second line. */
+const CONTROL_WORDS: readonly Rgb[] = [STRONG, hexToRgb(INKS.ink!), hexToRgb(INKS["ink-soft"]!)];
+const GLASS_WORDS: readonly Rgb[] = [STRONG, ...INK_RGB];
+const CARD_WORDS: readonly Rgb[] = [...GLASS_WORDS, MUTED];
+const readable = (bg: Rgb, inks: readonly Rgb[]) => inks.every((t) => contrast(t, bg) >= AA);
+/** Its words, and a control's words on it (hovered: its brightest), at AA. On a sheet (whose own light is the top of the
+ *  scale) and on a tinted tile (whose tone is light too) a control is held at rest: its hover lift there is brighter
+ *  than a thin veil carries over the stage's brightest spot (it was under 4.5:1 there before too: 3.8:1 on a tinted
+ *  tile, now 4.1:1). */
+const holds = (bg: Rgb, inks: readonly Rgb[], control = CONTROL_HOVERED) => readable(bg, inks) && readable(mix(CREAM, bg, control), CONTROL_WORDS);
+/** The least veil from `floor` up (in steps of 0.01) for which `ok` holds. */
+function least(floor: number, ok: (v: number) => boolean): number {
+  for (let n = Math.round(floor * 100); n <= 100; n++) if (ok(n / 100)) return n / 100;
+  return 1;
+}
+const topLight = (level: number) => ELEVATION[level]! + ELEVATION_TOP[level]!;
+/** A card inside a card over the colours covers this much more of what the hero's veil lets through (glass-tokens.css
+ *  --st-raised-cover, --st-shade-raised): its card's light under it never stacks past a sheet's. */
+export const RAISED_COVER = 0.6;
+export const raisedVeil = (hero: number) => 1 - (1 - hero) * (1 - RAISED_COVER);
+
+const veilCache = new Map<string, Veils>();
+/** The veils over these colours (and this page veil): each glass over every lightest spot as its own filter shows it
+ *  (filtered: dimmed by DIM.colours, through each saturation), at its top (its brightest part): its words, and a
+ *  control's words on it, at AA; a card's hints too; the hero's veil also lays a card inside a card (over its card,
+ *  glass.css .st-glass .st-glass, with no filter of its own) and keeps that one's words and its controls' at rest; a
+ *  tinted tile with every tone; a bar and a sheet over a cream card or the action too. */
+function colourVeils(spots: readonly Rgb[], page: number): Veils {
+  const key = `${spots.map((s) => s.map((c) => c.toFixed(1)).join(",")).join("|")}|${page}`;
+  const hit = veilCache.get(key);
+  if (hit) return { ...hit };
+  const seen = (dim: number, extra: readonly Rgb[] = []) => [...spots.map((s) => mix(VEIL, s, page)), ...extra].flatMap((s) => SATURATIONS.map((k) => filtered(s, dim, k)));
+  const glass = seen(DIM.colours.glass);
+  const over = seen(DIM.colours.over);
+  const underlays = UNDERLAYS.flatMap((u) => SATURATIONS.map((k) => filtered(u, DIM.colours.over, k)));
+  const out: Veils = { ...COLOUR_FLOORS, page };
+  out.rail = least(COLOUR_FLOORS.rail, (v) => glass.every((u) => holds(lit(u, v, topLight(1)), GLASS_WORDS)));
+  out.card = least(COLOUR_FLOORS.card, (v) => glass.every((u) => holds(lit(u, v, topLight(2)), CARD_WORDS)));
+  // (a plain card inside a sheet, a bar or a tinted tile is that card's veil laid over it: its words hold there too)
+  const cardIn = (bg: Rgb) => readable(lit(bg, out.card, topLight(2)), CARD_WORDS);
+  out.hero = least(COLOUR_FLOORS.hero, (v) =>
+    glass.every((u) => holds(lit(u, v, topLight(3)), GLASS_WORDS) && holds(lit(lit(u, out.card, topLight(2)), raisedVeil(v), topLight(3)), CARD_WORDS, CONTROL_AT_REST)),
+  );
+  const tile = (u: Rgb, v: number, tone: Rgb) => mix(CREAM, mix(tone, mix(VEIL, u, Math.min(1, v / (1 - topLight(3)))), TINT_CUT), topLight(3));
+  out.tinted = least(COLOUR_FLOORS.tinted, (v) => glass.every((u) => TINT_TONES.every((tone) => holds(tile(u, v, tone), GLASS_WORDS, CONTROL_AT_REST) && cardIn(tile(u, v, tone)))));
+  for (const [k, level, control] of [["bar", 3, CONTROL_HOVERED], ["float", 5, CONTROL_AT_REST]] as const)
+    out[k] = least(
+      COLOUR_FLOORS[k],
+      (v) => over.every((u) => holds(lit(u, v, topLight(level)), GLASS_WORDS, control) && cardIn(lit(u, v, topLight(level)))) && underlays.every((u) => readable(lit(u, v, topLight(level)), GLASS_WORDS)),
+    );
+  if (veilCache.size > 64) veilCache.clear();
+  veilCache.set(key, out);
+  return { ...out };
+}
+
 /** The veils for this look, worked out so every word stays at 4.5:1 over the lightest pixel it can sit on. */
 export function veilsFor(look: StoriesLook, glass: string = nativeGlass(), tier: GlassTier = "simple"): Veils {
   const kind = lookKind(look, glass);
   if (tier === "solid") return solidVeils(kind === "colours" ? veilsFor(look, glass).page : SOLID_PAGE);
   if (kind === "window") return look.strength === "frosted" ? { ...WINDOW_FROSTED } : { ...WINDOW_CLEAR };
-  if (kind === "picture") return { ...WINDOW_CLEAR };
+  if (kind === "picture") return { ...PICTURE };
   const colours = stageColours(look);
   const spots = stageSpots(colours);
   // Loose words on the page: the page veil keeps them readable over the lightest spot (Frosted adds its frost). It
@@ -398,20 +521,13 @@ export function veilsFor(look: StoriesLook, glass: string = nativeGlass(), tier:
   // own bright colours measured 4.47:1 with the words' veil alone, and mid-tones that need no veil for words
   // (#446677, #0066aa, #3355dd) 4.33-4.43:1 with none. Ember, Rose and Lagoon need none: their loose controls measure
   // 4.87:1 or more there, at rest and hovered (only the lamp's strip in the window's very edge column, where no
-  // control sits, is brighter).
+  // control sits, is brighter). Nothing filters the page itself, so these are worked out over the stage as drawn.
   const words = minVeil(lightest(spots));
   const loose = Math.max(words, minPageForControls(controlSpots(colours)));
   const page = Math.max(loose, look.mode === "see-through" && look.strength === "frosted" ? FROST_PAGE : 0);
-  // Under the glass: the page veil, then each glass over the lightest spot a bar's saturate can make of it.
-  const under = lightest(spots.flatMap((s) => SATURATIONS.map((k) => saturateRgb(mix(VEIL, s, page), k))));
-  // Each glass with its own level's light at its top (the brightest part of it), the light taking its share from
-  // what is behind (lit).
-  const out = { ...COLOUR_FLOORS, page };
-  for (const k of ["card", "tinted", "hero", "rail", "bar", "float"] as const) {
-    const lv = KIND_LEVEL[k];
-    out[k] = Math.max(COLOUR_FLOORS[k], minVeilLit(under, ELEVATION[lv]! + ELEVATION_TOP[lv]!));
-  }
-  return out;
+  // Under the glass: the page veil, then each glass's own filter (its dim and its saturate), then its veil and its own
+  // level's light at its top (the brightest part of it), the light taking its share from what is behind (lit).
+  return colourVeils(spots, page);
 }
 
 // ---------- The choice (Stories' own prefs) ----------

@@ -1,10 +1,11 @@
 // Clip Factory Stories › Social accounts and the setup on the liquid glass (styles/GLASS-CONTRACT.md): their four style
 // files use the contract's tokens only (no old names, no Clip Factory radii, no colour written out, no token defined
 // here), and every word on their boxes reaches 4.5:1 over the worst each look can show: Ember's lightest light, a
-// white or busy desktop or photo behind the measured veils (Picture and See-through Clear), and Frosted. The tiles
-// inside a card take the look-aware control fill: a light cream lift over the colours, a card's veil over a picture or
-// the desktop (so there they are a step deeper); notes and tinted cards carry the measured tinted veil under their
-// colour; wells are deeper still. From look.ts only what the contract lists (veilsFor); every colour and alpha comes
+// white or busy desktop or photo behind the measured veils (See-through Clear), a white photo through each glass's own
+// filter (Picture: it dims the picture before the veil, glass-tokens.css --st-dim), and Frosted. The tiles inside a
+// card take the look-aware control fill: a light cream lift over the colours, a veil over a picture or the desktop (so
+// there they are a step deeper); notes and tinted cards carry the tinted veil under their colour, over what their own
+// filter shows; wells are deeper still. From look.ts only what the contract lists (veilsFor); every colour and alpha comes
 // from glass-tokens.css, so a change there is checked here.
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
@@ -59,13 +60,11 @@ function token(name: string): string {
 const hex = (name: string): Rgb => hexToRgb(token(name));
 const channels = (name: string): Rgb => token(name).split(/\s+/).map(Number) as unknown as Rgb;
 const alphaOf = (value: string, channel: string): number => Number(new RegExp(`rgb\\(var\\(${channel}\\)\\s*/\\s*([\\d.]+)\\)`).exec(value)?.[1]);
-/** What a look block of glass-tokens.css sets a token to (`.stories-app[data-look="picture"]`, …). */
+/** What the look blocks of glass-tokens.css set a token to (`.stories-app[data-look="picture"]`, …): the last one wins. */
 const lookToken = (look: string, name: string): string | undefined => {
-  for (const r of rules(tokensCss)) if (r.selector.split(",").some((sel) => sel.trim() === `.stories-app[data-look="${look}"]`)) {
-    const v = decl(r.body, name);
-    if (v) return v;
-  }
-  return undefined;
+  let out: string | undefined;
+  for (const r of rules(tokensCss)) if (r.selector.split(",").some((sel) => sel.trim() === `.stories-app[data-look="${look}"]`)) out = decl(r.body, name) ?? out;
+  return out;
 };
 /** The rows that only show and the developer-app tile. */
 const ROWS = /^(\.st-(who|auth|app|limits|agent|setup__model)|\.st-setup__facts li)$/;
@@ -90,8 +89,11 @@ describe("the social screens' styles keep the contract", () => {
     const rows = FILES.flatMap((f) => rules(css[f]).map((r) => ({ f, ...r }))).filter((r) => ROWS.test(r.selector));
     expect(rows.length).toBe(7);
     for (const r of rows) expect(decl(r.body, "background"), `${r.f}: ${r.selector}`).toBe("var(--st-fill-control)");
-    // Over a picture or the desktop the control fill is a card's veil: the tiles are a step deeper there, never lighter.
-    for (const look of ["picture", "window"]) expect(lookToken(look, "--st-fill-control"), look).toBe("rgb(var(--st-veil-rgb) / var(--st-veil-card))");
+    // Over a picture or the desktop the control fill is a veil: the tiles are a step deeper there, never lighter. Over the
+    // desktop a card's; over a picture the measured card floor (look.ts MEASURED.card), as a glass control loose on the
+    // page there has no filter of its own to dim the picture.
+    expect(lookToken("window", "--st-fill-control")).toBe("rgb(var(--st-veil-rgb) / var(--st-veil-card))");
+    expect(lookToken("picture", "--st-fill-control")).toBe("rgb(var(--st-veil-rgb) / 0.74)");
     // Nothing with words is lit with raw cream: a lift only ever comes from the look-aware token.
     const lit: string[] = [];
     for (const f of FILES) for (const r of rules(css[f])) if (/--st-cream-rgb/.test(decl(r.body, "background") ?? "")) lit.push(`${f}: ${r.selector}`);
@@ -132,24 +134,36 @@ describe("every word on the social screens' boxes reaches 4.5:1 over all three b
   const C2 = channels("--st-stage-c2-rgb");
   const C3 = channels("--st-stage-c3-rgb");
   const [A2, A3] = [Number(token("--st-stage-a2")), Number(token("--st-stage-a3"))];
-  const EMBER_LIGHTEST = lightest([C1, mix(C2, C1, A2), mix(C3, C1, A3), mix(C3, mix(C2, C1, A2), A3)].flatMap((c) => [1, 1.35, 1.5].map((k) => saturate(c, k))));
+  // Each glass's own filter: blurred, dimmed (--st-dim: the page draws the colours and a picture, so it dims them; the
+  // desktop is not part of the page, so 1 there), then saturated (none, --st-saturate, a liquid hero's --st-saturate-lens).
+  const SATS = [1, Number(token("--st-saturate")), Number(token("--st-saturate-lens"))];
+  const dimOf = (look: string | null) => Number((look ? lookToken(look, "--st-dim") : undefined) ?? token("--st-dim"));
+  const through = (c: Rgb, dim: number): Rgb[] => SATS.map((k) => saturate(c.map((v) => v * dim) as unknown as Rgb, k));
+  const EMBER_LIGHTEST = lightest([C1, mix(C2, C1, A2), mix(C3, C1, A3), mix(C3, mix(C2, C1, A2), A3)].flatMap((c) => through(c, dimOf(null))));
   const ember: StoriesLook = { mode: "colours", strength: "clear", colours: [toHex(C1), toHex(C2), toHex(C3)], picture: null };
-  /** Each look: the lightest pixel under the glass, its veils, and the tiles' fill over a card. */
+  /** The fill of a tile inside a card over a picture or the desktop (look-aware: a veil). */
+  const rowVeil = (look: string, v: number) => (lookToken(look, "--st-fill-control") === "rgb(var(--st-veil-rgb) / var(--st-veil-card))" ? v : alphaOf(lookToken(look, "--st-fill-control")!, "--st-veil-rgb"));
+  /** Each look: the lightest pixel under the glass as its filter shows it, its veils, and the tiles' fill over a card. */
   const looks = [
     { name: "Colours › Ember", under: EMBER_LIGHTEST, v: veilsFor(ember, "none"), tile: (card: Rgb) => mix(CREAM, card, LIFT) },
-    { name: "Picture over white", under: WHITE, v: veilsFor({ ...ember, mode: "picture", picture: "data:image/png;base64," }, "none") },
-    { name: "See-through Clear over white", under: WHITE, v: veilsFor({ ...ember, mode: "see-through" }, "liquid") },
+    { name: "Picture over white", under: lightest(through(WHITE, dimOf("picture"))), v: veilsFor({ ...ember, mode: "picture", picture: "data:image/png;base64," }, "none"), row: rowVeil("picture", 0) },
+    { name: "See-through Clear over white", under: lightest(through(WHITE, dimOf("window"))), v: veilsFor({ ...ember, mode: "see-through" }, "liquid") },
     { name: "See-through Frosted over white", under: WHITE, v: veilsFor({ ...ember, mode: "see-through", strength: "frosted" }, "liquid"), frost: true },
   ];
 
   it("the looks are the ones the contract measured", () => {
-    expect(looks[1]!.v.card).toBeGreaterThanOrEqual(0.74);
+    // Over the desktop no filter can dim it: the measured card or more.
+    expect(dimOf("window")).toBe(1);
     expect(looks[2]!.v.card).toBeGreaterThanOrEqual(0.74);
+    // Over a picture the filter dims it first (to half), so the card is thinner, and a tile in it keeps the measured card.
+    expect(dimOf("picture")).toBeLessThan(1);
+    expect(looks[1]!.v.card).toBeLessThan(looks[2]!.v.card);
+    expect(looks[1]!.row).toBe(0.74);
     // Frosted: the 0.30 frost, then the panels in the light's order (look.ts WINDOW_FROSTED); the frost and a card
     // together still cover more than Clear's measured card.
-    expect(looks[3]!.v.card).toBeGreaterThanOrEqual(0.84);
+    expect(looks[3]!.v.card).toBeGreaterThanOrEqual(0.82);
     expect(looks[3]!.v.page).toBeGreaterThanOrEqual(0.3);
-    expect(1 - (1 - looks[3]!.v.page) * (1 - looks[3]!.v.card)).toBeGreaterThanOrEqual(0.88);
+    expect(1 - (1 - looks[3]!.v.page) * (1 - looks[3]!.v.card)).toBeGreaterThanOrEqual(0.87);
   });
 
   for (const look of looks)
@@ -164,8 +178,8 @@ describe("every word on the social screens' boxes reaches 4.5:1 over all three b
       const under = look.frost ? mix(VEIL, look.under, look.v.page) : look.under;
       const card = mix(VEIL, under, look.v.card);
       const hero = mix(VEIL, under, look.v.hero);
-      // A tile: the cream lift over the colours; a card's veil over a picture or the desktop.
-      const row = look.tile ? look.tile(card) : mix(VEIL, card, look.v.card);
+      // A tile: the cream lift over the colours; a veil over a picture (the measured card) or the desktop (a card's).
+      const row = look.tile ? look.tile(card) : mix(VEIL, card, look.row ?? look.v.card);
       check("a card", card, ON_GLASS);
       check("the setup's hero", hero, ON_GLASS);
       check("a tile that only shows", row, ON_GLASS);

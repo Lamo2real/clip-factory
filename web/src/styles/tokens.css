@@ -39,13 +39,14 @@
   /* Fills under words (ADR-87, the logic of light). A raised thing is one step BRIGHTER than what it sits on: a lift
      of bone paid for with a step of green under it (lib/background.ts works out every number; test/background.test.ts
      reads them back). Straight on the page a raised thing carries the pick-one track's recipe (TRACK_EXTRA_VEIL,
-     TRACK_LIFT); inside any lit surface glass.css re-declares the --light-raise-* numbers (RAISE_VEIL, RAISE_LIFT)
-     and these fills with them, because a custom property resolves var() where it is declared. */
-  --light-raise-veil: calc(var(--panel-veil) + 0.22);
+     TRACK_LIFT) over the plate veil (nothing dims the backdrop under it); inside any lit surface glass.css re-declares
+     the --light-raise-* numbers (RAISE_VEIL, RAISE_LIFT) and these fills with them, because a custom property resolves
+     var() where it is declared. */
+  --light-raise-veil: calc(var(--plate-veil) + 0.22);
   --light-raise-lift: 0.08;
-  --light-raise-hover-veil: calc(var(--panel-veil) + 0.22);
+  --light-raise-hover-veil: calc(var(--plate-veil) + 0.22);
   --light-raise-hover-lift: 0.09;
-  --light-ghost-veil: calc(var(--panel-veil) + 0.22);
+  --light-ghost-veil: calc(var(--plate-veil) + 0.22);
   --light-ghost-lift: 0.06;
   --light-press-lift: 0.03;
   --fill: linear-gradient(rgb(var(--bone-rgb) / var(--light-raise-lift)), rgb(var(--bone-rgb) / var(--light-raise-lift))), rgb(var(--green-rgb) / min(1, var(--light-raise-veil)));
@@ -67,11 +68,16 @@
   --glow-vermilion: 0 0 18px 2px rgb(var(--vermilion-rgb) / 0.6);
   --glow-leaf: 0 0 18px 2px rgb(var(--green-leaf-rgb) / 0.6);
 
-  /* The see-through glass (lib/background.ts works out every number; lib/look.ts sets --panel-veil and --backdrop-veil
-     for each look). --panel-veil here is BRAND_PANEL_VEIL, the tint over the app's own backdrop (its grain included). */
-  --panel-veil: 0.33;
+  /* The see-through glass (lib/background.ts works out every number; lib/look.ts sets --panel-veil, --plate-veil,
+     --glass-brightness and --backdrop-veil for each look). Here the app's own backdrop (its grain included): every
+     pane's backdrop-filter dims what it sees (brightness(), BRAND_BRIGHTNESS), so it holds bone words at AA with 0.20
+     green and shows 80 % of the backdrop (BRAND_PANEL_VEIL; 0.33 before); words where nothing dims the backdrop (the
+     title and line plates, controls straight on the page) keep 0.33 (BRAND_PLATE_VEIL). */
+  --panel-veil: 0.2;
+  --plate-veil: 0.33;
+  --glass-brightness: 0.73;
   --backdrop-veil: 0;
-  --glass-blur: 18px;
+  --glass-blur: 24px;
   --glass-saturate: 1.6; /* GLASS_SATURATE */
   /* Layers content scrolls under (toasts, the update bar, the setup list and pill, the Ask panel): a thumbnail can
      sit under them, so they plan for white. FLOAT_VEIL and TABBAR_VEIL (icons only, 3:1). */
@@ -81,8 +87,8 @@
   /* The logic of light: one key light above. Every bone lift is paid for with green under it. --light-pay is the
      ladder's pay (lib/background.ts lightPay: the least green that leaves room under the AA ceiling for every level
      above a pane to read a step brighter, over everything the look can show). lib/look.ts sets it on <html> for each
-     look; this is the app's own backdrop (LIGHT_PAY_OWN) until it does, and glass.css has the white looks' number. */
-  --light-pay: 0; /* LIGHT_PAY_OWN: see-through first, a pane keeps main's veil */
+     look; this is the app's own backdrop (LIGHT_PAY_OWN) until it does, and glass.css has a photo's number. */
+  --light-pay: 0; /* LIGHT_PAY_OWN (and LIGHT_PAY_WINDOW): see-through first, a pane carries no pay */
   --light-panel: 0.04; /* PANEL_LIGHT: E1 top lift, gone by 65 % of the height */
   --light-lead: 0.075; /* LEAD_LIGHT: the hero, the sign-in card, learnings: a whole step over a panel */
   --light-lead-pay: 0; /* LEAD_EXTRA_VEIL */
@@ -98,6 +104,8 @@
 
   /* Per-level tints (bottle green, flat, two stops) and lights (bone, 180deg, top brighter). */
   --glass-tint-panel: linear-gradient(rgb(var(--green-rgb) / min(1, var(--panel-veil) + var(--light-pay))), rgb(var(--green-rgb) / min(1, var(--panel-veil) + var(--light-pay))));
+  /* A title or line plate: E1 with no filter of its own, so its words take the plate veil (nothing dims under them). */
+  --glass-tint-plate: linear-gradient(rgb(var(--green-rgb) / min(1, var(--plate-veil) + var(--light-pay))), rgb(var(--green-rgb) / min(1, var(--plate-veil) + var(--light-pay))));
   --glass-tint-lead: linear-gradient(rgb(var(--green-rgb) / min(0.97, var(--panel-veil) + var(--light-pay) + var(--light-lead-pay))), rgb(var(--green-rgb) / min(0.97, var(--panel-veil) + var(--light-pay) + var(--light-lead-pay))));
   --glass-tint-float: linear-gradient(rgb(var(--green-rgb) / min(1, max(var(--float-veil), var(--panel-veil)) + var(--light-float-pay))), rgb(var(--green-rgb) / min(1, max(var(--float-veil), var(--panel-veil)) + var(--light-float-pay))));
   --glass-tint-overlay: linear-gradient(rgb(var(--green-rgb) / max(0.86, var(--panel-veil))), rgb(var(--green-rgb) / max(0.86, var(--panel-veil))));

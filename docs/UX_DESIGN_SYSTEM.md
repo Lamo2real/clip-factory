@@ -62,7 +62,7 @@ counted toward AA.
 
 | Token | Use |
 |---|---|
-| `--fill-control` | Buttons without a fill of their own (glass, ghost), drop zones, check chips, step numbers: the raise (`--fill`), one step brighter than what it sits on. Straight on the page that is the pick-one track's recipe (bone 0.08 over `--panel-veil` + 0.22); inside a pane the relative raise (green 0.22, bone 0.09) |
+| `--fill-control` | Buttons without a fill of their own (glass, ghost), drop zones, check chips, step numbers: the raise (`--fill`), one step brighter than what it sits on. Straight on the page that is the pick-one track's recipe (bone 0.08 over `--plate-veil` + 0.22); inside a pane the relative raise (green 0.22, bone 0.09) |
 | `--fill-field` | Text fields and the link box: deep green 0.45, a well deeper than the panel |
 | `--shade-field` | The field's soft inner shade (blurred, never a line) |
 | `--glow-bone`, `--glow-vermilion`, `--glow-leaf` | Soft glows (18 px blur) for a chosen, live, best or done thing, instead of a ring |
@@ -75,11 +75,14 @@ highlight from search and Ask's spotlight, progress bars and rings, the switch t
 
 Each glass variant sets its `--glass-tint` (green) and `--glass-light` (bone, from above) from the per-level tokens
 ([the logic of light](#the-logic-of-light)), and a component may override them. Every tint is flat bottle green;
-`--panel-veil` is how much, `--light-pay` the step more that pays for the light.
+`--panel-veil` is how much (over the backdrop as the pane's own `brightness()` dims it), `--plate-veil` how much where
+nothing dims it (the title and line plates, controls straight on the page), `--light-pay` the step more that pays for
+the light.
 
 | Class | `--glass-tint` | `--glass-light` |
 |---|---|---|
-| `.glass` | `--glass-tint-panel`: green at `--panel-veil` + `--light-pay` | `--glass-light-panel`: bone 0.04 at the top edge, gone 14 px down (inside the top padding, never under words), plus the catch light |
+| `.glass` | `--glass-tint-panel`: green at `--panel-veil` + `--light-pay`, over a backdrop its own filter blurs, saturates and dims (`--glass-brightness`) | `--glass-light-panel`: bone 0.04 at the top edge, gone 14 px down (inside the top padding, never under words), plus the catch light |
+| The title and line plates | `--glass-tint-plate`: green at `--plate-veil` + `--light-pay` (no filter of their own) | `--glass-light-panel` |
 | `.glass--green` | `--glass-tint-lead`: the panel's green (the lead panel: the hero, the sign-in card, Library's learnings) | `--glass-light-lead`: bone 0.075 at the top edge, gone 14 px down |
 | `.glass--vermilion` | the panel, a breath of vermilion (0.16 → 0.08), then green 0.20 over it | the panel's |
 | `.glass--clear` | the panel tint | the panel's |
@@ -106,8 +109,9 @@ loose words get a scrim at the panel tint.
   position: relative;
   isolation: isolate;
   background: var(--glass-light), var(--glass-tint);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)); /* 18px, 1.6 */
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  /* 24px, 1.6, and each look's own dimming (0.73 over the app's own backdrop, 0.5 over a photo, 1 in the window) */
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
   border: 1px solid transparent; /* keeps the box size; no edge is drawn */
   border-radius: var(--r-lg);
   box-shadow: var(--glass-shadow-panel); /* the top glow, the shade at its foot, the drop */
@@ -121,9 +125,11 @@ loose words get a scrim at the panel tint.
 }
 ```
 
-`--panel-veil` is 0.33 over the app's own living backdrop (worked out over every blob subset, both field ends, every
-`saturate()` the CSS uses and the grain at its peak, `lib/background.ts`), 0.73 over a white desktop or photo, and between the two for
-light owner colours.
+`--panel-veil` is 0.20 over the app's own living backdrop (worked out over every blob subset, both field ends, every
+`saturate()` the CSS uses and the grain at its peak, as the pane's own `brightness(0.73)` dims it, `lib/background.ts`;
+80 % of the backdrop shows through), 0.59 over a white photo (dimmed to half), 0.73 over a white desktop (no web
+filter dims the window's glass; 0.62 under Frosted's frost), and between for the owner's colours. `--plate-veil`
+is what words need with nothing dimmed: 0.33 over the app's backdrop, 0.73 over a white photo.
 
 Variants: `.glass--green` (the lead panel: the hero, the sign-in card, Library's learnings), `.glass--vermilion`,
 `.glass--clear`. In Chromium, `.glass--refract` and the page title plate also bend the backdrop through the
@@ -213,7 +219,7 @@ it more liquid glassy" ([DECISIONS.md ADR-87](DECISIONS.md#adr-87-the-logic-of-l
 | Level | What | Tint | Light (top → base) |
 |---|---|---|---|
 | L0 | The page and the backdrop | unchanged | none |
-| E1 | Panels, the sidebar, the title and line plates | panel veil + the pay (0 over the app's own backdrop and the window looks) | 0.04 → 0 at 14 px, plus the catch light |
+| E1 | Panels, the sidebar, the title and line plates | panel veil + the pay (0 over the app's own backdrop and the window looks); a plate: plate veil + the pay | 0.04 → 0 at 14 px, plus the catch light |
 | E1 lead | The hero, the sign-in card, Library's learnings | the panel's green | 0.075 → 0 at 14 px: brighter than E1 at its top edge |
 | E2, E3 | Rows, cards, controls, marks, chips (each over the one under it) | 0.22 over the parent (on the page: panel + 0.22) | flat 0.09 (on the page 0.08) |
 | Float | Toasts, the update bar, the setup pill and list, the Ask panel, the money dock | the floating veil + 0.16 | 0.08 → 0.02 |
@@ -247,11 +253,11 @@ every lit surface, so one name is right on the page and inside a pane):
 
 | Token | Value | Use |
 |---|---|---|
-| `--light-raise-veil` | `calc(var(--panel-veil) + 0.22)` | Green a raised thing lays over what it sits on. Page: panel + 0.22 (`TRACK_EXTRA_VEIL`); inside a lit surface, and on a pick-one track's options, 0.34 (`RAISE_VEIL`) |
+| `--light-raise-veil` | `calc(var(--plate-veil) + 0.22)` | Green a raised thing lays over what it sits on. Page: plate veil + 0.22 (`TRACK_EXTRA_VEIL`; nothing dims under it); inside a lit surface, and on a pick-one track's options, 0.34 (`RAISE_VEIL`) |
 | `--light-raise-lift` | `0.08` | Bone on top of it. Page 0.08 (`TRACK_LIFT`); inside 0.13 (`RAISE_LIFT`) |
-| `--light-raise-hover-veil` | `calc(var(--panel-veil) + 0.22)` | Hover green. Page: panel + 0.22; inside 0.37 (`RAISE_HOVER_VEIL`) |
+| `--light-raise-hover-veil` | `calc(var(--plate-veil) + 0.22)` | Hover green. Page: plate veil + 0.22; inside 0.37 (`RAISE_HOVER_VEIL`) |
 | `--light-raise-hover-lift` | `0.09` | Hover bone. Page 0.09 (`PAGE_HOVER_LIFT`); inside 0.145 (`RAISE_HOVER_LIFT`) |
-| `--light-ghost-veil` | `calc(var(--panel-veil) + 0.22)` | A quiet fill's green. Page: the track's; inside 0.33 (`GHOST_VEIL`) |
+| `--light-ghost-veil` | `calc(var(--plate-veil) + 0.22)` | A quiet fill's green. Page: the track's; inside 0.33 (`GHOST_VEIL`) |
 | `--light-ghost-lift` | `0.06` | A quiet fill's bone. Page 0.06 (`PAGE_GHOST_LIFT`); inside 0.125 (`GHOST_LIFT`) |
 | `--light-press-lift` | `0.03` | Bone when pressed (`RAISE_PRESS_LIFT`) |
 | `--light-pay` | `0` | Extra green on a pane (`lightPay`): lib/look.ts sets each look's own on `<html>`. See-through first: 0 over the app's own backdrop, Clear and Frosted (`LIGHT_PAY_OWN`), 0 where white can be behind (`LIGHT_PAY_WHITE`), at most 0.05 in a light Colours look (`MAX_LIGHT_PAY`, never 0.82 or more in all), 0.04 under reduced transparency. The ladder is earned with each level's own light |

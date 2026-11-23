@@ -6,7 +6,9 @@ import { asMacWindow } from "./desktopWindow.ts";
 // read from the page as the browser computed it (every background layer, top and bottom) and laid over the same
 // backdrop pixel (the espresso, the stage's own colour, and black): each level is brighter than the one under it,
 // at its top and at its bottom; every surface is lighter at the top than at the bottom; and every surface has a bright
-// top rim, brighter on higher levels. A card inside a card is laid over its card, as the browser paints it. Over a
+// top rim, brighter on higher levels. A card inside a card is laid over its card, as the browser paints it. Each
+// surface's own backdrop-filter dims the backdrop first (its brightness(), read as the browser computed it: below 1
+// where the page draws the backdrop, 1 over the desktop), as test/storiesLight.test.ts works it out. Over a
 // picture or the desktop also over white and mid grey: from the page panel
 // upward each level at least 0.015 brighter over white (the owner's rule). In every look: Colours › Ember, a picture,
 // See-through Clear and Frosted in the desktop app, and solid glass (reduced transparency). test/storiesLight.test.ts
@@ -15,7 +17,8 @@ import { asMacWindow } from "./desktopWindow.ts";
 
 type Rgb = [number, number, number];
 type Layer = { top: [number, number, number, number]; bottom: [number, number, number, number] };
-type Surface = { level: number; what: string; layers: Layer[]; parent: Layer[] | null; rim: number | null };
+/** `dim` and `parentDim`: the brightness() of the surface's own backdrop-filter and of its parent's (1 for none). */
+type Surface = { level: number; what: string; layers: Layer[]; parent: Layer[] | null; rim: number | null; dim: number; parentDim: number };
 
 const ESPRESSO: Rgb = [28, 19, 14];
 const BLACK: Rgb = [0, 0, 0];
@@ -88,13 +91,24 @@ async function surfaces(page: Page): Promise<Surface[]> {
       }
       return null;
     };
-    const pick = (sel: string) => Array.from(document.querySelectorAll(sel)).find(shown) ?? null;
-    const out: { level: number; what: string; layers: unknown; parent: unknown; rim: number | null }[] = [];
+    // How far its own backdrop-filter dims what it sees (brightness(); 1 when it has none).
+    const dimOf = (el: Element) => {
+      const m = /brightness\(([\d.]+)(%?)\)/.exec(getComputedStyle(el).backdropFilter || "");
+      return m ? Number(m[1]) / (m[2] ? 100 : 1) : 1;
+    };
+    // (one of the top level of glass where there is one: glass inside glass has no filter of its own and is painted over
+    // its parent, so read bare it would be neither what is drawn nor its level)
+    const onTop = (e: Element) => !e.parentElement?.closest(".st-glass, .st-plate");
+    const pick = (sel: string) => {
+      const all = Array.from(document.querySelectorAll(sel)).filter(shown);
+      return all.find(onTop) ?? all[0] ?? null;
+    };
+    const out: { level: number; what: string; layers: unknown; parent: unknown; rim: number | null; dim: number; parentDim: number }[] = [];
     const add = (level: number, what: string, sel: string, parentSel?: string) => {
       const el = pick(sel);
       if (!el) return;
       const parent = parentSel ? el.closest(parentSel) : null;
-      out.push({ level, what, layers: layersOf(el), parent: parent ? layersOf(parent) : null, rim: rimOf(el) });
+      out.push({ level, what, layers: layersOf(el), parent: parent ? layersOf(parent) : null, rim: rimOf(el), dim: dimOf(el), parentDim: parent ? dimOf(parent) : 1 });
     };
     const PLAIN = ":not(.st-glass--hero):not(.st-glass--bar):not(.st-glass--float):not(.st-glass--control):not(.st-glass--tinted):not(.st-rail):not(.st-empty)";
     add(1, "the rail", ".st-rail");
@@ -119,7 +133,7 @@ async function surfaces(page: Page): Promise<Surface[]> {
       nested.className = "st-glass";
       nested.style.cssText = "height: 48px; margin: 8px";
       card.append(nested);
-      out.push({ level: 3, what: "a card inside a card", layers: layersOf(nested), parent: layersOf(card), rim: rimOf(nested) });
+      out.push({ level: 3, what: "a card inside a card", layers: layersOf(nested), parent: layersOf(card), rim: rimOf(nested), dim: dimOf(nested), parentDim: dimOf(card) });
       nested.remove();
     }
     return out as Surface[];
@@ -137,8 +151,13 @@ function over(layers: Layer[], under: Rgb, at: "top" | "bottom"): Rgb {
   }
   return c;
 }
-/** What this surface shows over `under`: a control over the card it sits on. */
-const seen = (s: Surface, under: Rgb, at: "top" | "bottom") => over(s.layers, s.parent ? over(s.parent, under, at) : under, at);
+/** `under` through a backdrop-filter's brightness(). */
+const dimmed = (under: Rgb, k: number): Rgb => [under[0] * k, under[1] * k, under[2] * k];
+/** What a surface's parent shows over `under` (its own filter dims the backdrop first). */
+const parentSeen = (s: Surface, under: Rgb, at: "top" | "bottom") => over(s.parent!, dimmed(under, s.parentDim), at);
+/** What this surface shows over `under`: its filter's dim, then its layers; a control or a card inside a card over the
+ *  card it sits on (the card's filter has dimmed the backdrop under both). */
+const seen = (s: Surface, under: Rgb, at: "top" | "bottom") => (s.parent ? over(s.layers, dimmed(parentSeen(s, under, at), s.dim), at) : over(s.layers, dimmed(under, s.dim), at));
 
 test.describe("the logic of light: each level is brighter than the one under it", () => {
   for (const look of LOOKS)
@@ -209,7 +228,7 @@ test.describe("the logic of light: each level is brighter than the one under it"
               const here = lum(seen(s, under, at));
               const below =
                 s.level === 4
-                  ? [{ what: "the card it sits on", l: lum(over(s.parent!, under, at)) }]
+                  ? [{ what: "the card it sits on", l: lum(parentSeen(s, under, at)) }]
                   : s.level === 5
                     ? found.filter((o) => o.level === 3 && !o.what.startsWith("a tinted")).map((o) => ({ what: o.what, l: lum(seen(o, under, at)) }))
                     : s.level >= 2

@@ -370,8 +370,9 @@
   font-variant-numeric: lining-nums tabular-nums;
 }
 
-/* A notice: a colour-tinted glass tile (the colour cut to --st-tint-cut over the tinted veil, so its words stay at
-   4.5:1 over anything, loose on the page or on a panel). */
+/* A notice: a colour-tinted glass tile (the colour cut to --st-tint-cut over the tinted veil, over what its own filter
+   dims, as every glass's: glass-tokens.css 5, so its words stay at 4.5:1 over anything, loose on the page or on a
+   panel). */
 .st-s-notice {
   --st-s-tone: var(--st-sky-rgb);
   display: flex;
@@ -384,6 +385,8 @@
   color: var(--st-text);
   line-height: var(--st-lh-body);
   background: var(--st-light-3), linear-gradient(rgb(var(--st-s-tone) / var(--st-tint-cut)), rgb(var(--st-s-tone) / var(--st-tint-cut))), linear-gradient(180deg, rgb(var(--st-veil-rgb) / calc(var(--st-veil-tinted) / (1 - var(--st-elev-3) - var(--st-elev-grad-3)))), rgb(var(--st-veil-rgb) / calc(var(--st-veil-tinted) / (1 - var(--st-elev-3)))) var(--st-elev-settle));
+  -webkit-backdrop-filter: var(--st-filter-glass);
+  backdrop-filter: var(--st-filter-glass);
   box-shadow: var(--st-sheen-control);
 }
 
