@@ -88,9 +88,11 @@ async function findStep(page: Page, name: string, parentSel: string, childSel: s
         const c = child.getBoundingClientRect();
         const p = parent.getBoundingClientRect();
         if (c.width < 24 || c.height < 24 || c.top < 0 || c.bottom > innerHeight) continue;
-        // The child's top padding at its middle, just under its edge.
+        // The child's top padding at its middle, just under its edge, in whole pixels from the first one fully inside
+        // it: a post row's top padding is 6 px, and from a fractional top (the Library's rows sit at one once the cards
+        // above them have loaded) a rounded start put the patch's last line on the row's words.
         const cx = Math.round(c.left + c.width / 2 - 2);
-        const y = Math.round(c.top + 2);
+        const y = Math.ceil(c.top) + 1;
         // The parent beside the child, in the middle of the parent's own padding, at the same height.
         const gap = c.left - p.left;
         if (gap < 7) continue;
