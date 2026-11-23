@@ -151,14 +151,49 @@ describe("the owner's rules hold in Lamo Stories' styles", () => {
     expect(outside).toEqual([]);
   });
 
-  it("declare only Stories' own fonts (Playfair and Jost, from /fonts/stories/), never one of Clip Factory's names", () => {
+  it("declare only Funded Clips' own fonts (Fugaz One and Fraunces, from /fonts/stories/), never one of Clip Factory's names", () => {
     const faces = files.flatMap(([f, text]) => rules(text).filter((r) => r.selector === "@font-face").map((r) => [f, Object.fromEntries(decls(r.body))] as const));
     expect(faces.length).toBeGreaterThan(0);
     for (const [f, d] of faces) {
-      expect(d["font-family"], f).toMatch(/^"(Playfair|Jost)"$/);
+      expect(d["font-family"], f).toMatch(/^"(Fugaz One|Fraunces)"$/);
       expect(d.src, f).toMatch(/^url\("\/fonts\/stories\/[A-Za-z-]+\.woff2"\) format\("woff2"\)$/);
+      expect(existsSync(join(FONTS, /\/fonts\/stories\/([A-Za-z-]+\.woff2)/.exec(d.src!)![1]!)), d.src).toBe(true);
       expect(d["font-display"], f).toBe("swap");
+      // Roman only (nothing in Funded Clips is set in italic), and each file says which characters it carries.
+      expect(d["font-style"], f).toBe("normal");
+      expect(d["unicode-range"], `${f}: ${d.src}`).toMatch(/^U\+[0-9A-F]{4}(-[0-9A-F]{4})?(, U\+[0-9A-F]{4}(-[0-9A-F]{4})?)*$/);
     }
+    const of = (family: string) => faces.filter(([, d]) => d["font-family"] === `"${family}"`).map(([, d]) => d);
+    // Fraunces: its variable weight axis, a Latin file and a Latin Extended one. Fugaz One: its whole file, never cut
+    // (its "Fugaz One" name is reserved under the OFL), declared for every weight so a heading at 600 or more is never
+    // painted a fake bold.
+    expect(of("Fraunces").map((d) => d.src).sort()).toEqual(['url("/fonts/stories/Fraunces-latin-ext.woff2") format("woff2")', 'url("/fonts/stories/Fraunces-latin.woff2") format("woff2")']);
+    for (const d of of("Fraunces")) expect(d["font-weight"], d.src).toBe("100 900");
+    expect(of("Fugaz One").map((d) => d.src)).toEqual(['url("/fonts/stories/FugazOne-Regular.woff2") format("woff2")']);
+    expect(of("Fugaz One")[0]!["font-weight"]).toBe("100 900");
+  });
+
+  it("set the three font tokens the contract names: Fugaz One for large text, Fraunces for the smaller text and the caps", () => {
+    const t = tokens();
+    expect(t.get("--st-font-display")).toBe('"Fugaz One", "Arial Black", "Helvetica Neue", system-ui, sans-serif');
+    expect(t.get("--st-font")).toBe('"Fraunces", "Iowan Old Style", Georgia, serif');
+    expect(t.get("--st-font-caps")).toBe(t.get("--st-font"));
+    // The "C" of the logo keeps Clip Factory's Times.
+    expect(t.get("--st-font-mark")).toBe('"Times New Roman", "Times New Roman MT", Tinos, Times, serif');
+    // No font of the past is left in a token or a rule.
+    for (const [f, text] of files) expect(text, f).not.toMatch(/Playfair|\bJost\b/);
+  });
+
+  it("leave Clip Factory's own fonts as they are: Inter and Times, and no Funded Clips font name outside web/src/stories", () => {
+    const cf = readFileSync(join(import.meta.dirname, "..", "src", "styles", "tokens.css"), "utf8");
+    expect(/--font-ui:\s*([^;]+);/.exec(cf)?.[1]).toBe('"Inter Variable", Inter, system-ui, -apple-system, "Segoe UI", Roboto, sans-serif');
+    expect(/--font-display:\s*([^;]+);/.exec(cf)?.[1]).toBe('"Times New Roman", "Times New Roman MT", Tinos, Times, serif');
+    const SRC = join(import.meta.dirname, "..", "src");
+    const outside = (readdirSync(SRC, { recursive: true }) as string[])
+      .filter((p) => p.split(/[\\/]/)[0] !== "stories" && /\.(css|tsx?)$/.test(p))
+      .filter((p) => /Fugaz|Fraunces/.test(readFileSync(join(SRC, p), "utf8")));
+    expect(outside).toEqual([]);
+    expect(readFileSync(join(import.meta.dirname, "..", "index.html"), "utf8")).not.toMatch(/Fugaz|Fraunces|fonts\/stories/);
   });
 
   it("name every keyframes st-… (they share one page with Lamo Clips' own)", () => {
@@ -257,8 +292,9 @@ describe("contrast", () => {
 const FONTS = join(import.meta.dirname, "..", "public", "fonts", "stories");
 const WOFF2_TAGS = ["cmap", "head", "hhea", "hmtx", "maxp", "name", "OS/2", "post", "cvt ", "fpgm", "glyf", "loca", "prep", "CFF ", "VORG", "EBDT", "EBLC", "gasp", "hdmx", "kern", "LTSH", "PCLT", "VDMX", "vhea", "vmtx", "BASE", "GDEF", "GPOS", "GSUB", "EBSC", "JSTF", "MATH", "CBDT", "CBLC", "COLR", "CPAL", "SVG ", "sbix", "acnt", "avar", "bdat", "bloc", "bsln", "cvar", "fdsc", "feat", "fmtx", "fvar", "gvar", "hsty", "just", "lcar", "mort", "morx", "opbd", "prop", "trak", "Zapf", "Silf", "Glat", "Gloc", "Feat", "Sill"];
 
-/** The variation axes (tag → [min, max]) and the code points among `want` that the font maps. */
-function readWoff2(file: string, want: number[]): { axes: Record<string, [number, number]>; has: Set<number> } {
+/** The family name (Windows names: typographic family, else family), the variation axes (tag → [min, max]) and the
+ * code points among `want` that the font maps. */
+function readWoff2(file: string, want: number[]): { family: string; axes: Record<string, [number, number]>; has: Set<number> } {
   const b = readFileSync(join(FONTS, file));
   expect(b.toString("latin1", 0, 4), file).toBe("wOF2");
   const numTables = b.readUInt16BE(12);
@@ -321,32 +357,83 @@ function readWoff2(file: string, want: number[]): { axes: Record<string, [number
       }
     }
   }
-  return { axes, has };
+  const names = new Map<number, string>();
+  const n = at.name!;
+  for (let i = 0; i < n.readUInt16BE(2); i++) {
+    const r = 6 + i * 12;
+    if (n.readUInt16BE(r) !== 3 || n.readUInt16BE(r + 2) !== 1) continue;
+    const start = n.readUInt16BE(4) + n.readUInt16BE(r + 10);
+    const be = n.subarray(start, start + n.readUInt16BE(r + 8));
+    names.set(n.readUInt16BE(r + 6), Buffer.from(be).swap16().toString("utf16le"));
+  }
+  return { family: names.get(16) ?? names.get(1) ?? "", axes, has };
 }
 
-describe("Stories' own font files", () => {
+describe("Funded Clips' own font files", () => {
   // å ä ö Å Ä Ö and the marks the words use (− – ’ … · ›)
   const WANT = [0xe5, 0xe4, 0xf6, 0xc5, 0xc4, 0xd6, 0x2212, 0x2013, 0x2019, 0x2026, 0xb7, 0x203a];
+  // Latin Extended letters: ą č ę ł ń ő ś š ű ź ż ž
+  const WANT_EXT = [0x105, 0x10d, 0x119, 0x142, 0x144, 0x151, 0x15b, 0x161, 0x171, 0x17a, 0x17c, 0x17e];
+  const missing = (f: string, want: number[]) => {
+    const { has } = readWoff2(f, want);
+    return want.filter((cp) => !has.has(cp)).map((cp) => String.fromCodePoint(cp));
+  };
 
-  it("keep each family's OFL licence beside it", () => {
-    for (const f of ["OFL-Playfair.txt", "OFL-Jost.txt"]) {
+  it("keep each family's OFL licence beside it (Fugaz One's names its reserved name)", () => {
+    for (const f of ["OFL-FugazOne.txt", "OFL-Fraunces.txt"]) {
       expect(existsSync(join(FONTS, f)), f).toBe(true);
       expect(readFileSync(join(FONTS, f), "utf8")).toMatch(/SIL OPEN FONT LICENSE/i);
     }
+    expect(readFileSync(join(FONTS, "OFL-FugazOne.txt"), "utf8")).toMatch(/Reserved Font Names "Fugaz One"/);
+    expect(readFileSync(join(FONTS, "OFL-Fraunces.txt"), "utf8")).toMatch(/The Fraunces Project Authors/);
   });
 
-  it("Playfair has an optical-size axis (high contrast at display sizes, sturdy at reading sizes), a width and a weight axis", () => {
-    const { axes } = readWoff2("Playfair-latin.woff2", []);
-    expect(axes.opsz![0]).toBeLessThanOrEqual(8);
-    expect(axes.opsz![1]).toBeGreaterThanOrEqual(900);
-    expect(axes.wdth![0]).toBeLessThanOrEqual(92);
-    expect(axes.wght).toEqual([300, 900]);
+  it("are Fugaz One and Fraunces: every file in the folder is one a face declares, and Playfair's and Jost's files are gone", () => {
+    const declared = new Set(Array.from(readFileSync(join(DIR, "fonts.css"), "utf8").matchAll(/url\("\/fonts\/stories\/([A-Za-z-]+\.woff2)"\)/g), (m) => m[1]!));
+    // Nothing else ships (every file here is precached by the service worker): Playfair's and Jost's files are gone,
+    // and the switch's browser test takes Fugaz One's own file as its wide stand-in font.
+    const left = readdirSync(FONTS).filter((f) => !declared.has(f) && !/^OFL-(FugazOne|Fraunces)\.txt$/.test(f));
+    expect(left).toEqual([]);
+    expect(readFileSync(join(import.meta.dirname, "..", "e2e", "stories-switch-place.spec.ts"), "utf8")).toContain('"FugazOne-Regular.woff2"');
+    expect(readWoff2("FugazOne-Regular.woff2", []).family).toBe("Fugaz One");
+    for (const f of ["Fraunces-latin.woff2", "Fraunces-latin-ext.woff2"]) expect(readWoff2(f, []).family, f).toBe("Fraunces");
   });
 
-  it("the Latin files cover å ä ö and the marks the words use", () => {
-    for (const f of ["Playfair-latin.woff2", "Jost-latin.woff2"]) {
-      const { has } = readWoff2(f, WANT);
-      expect(WANT.filter((cp) => !has.has(cp)).map((cp) => String.fromCodePoint(cp)), f).toEqual([]);
+  it("Fraunces keeps its optical-size and weight axes, with SOFT and WONK pinned at 0 in the files (the plain h m n)", () => {
+    for (const f of ["Fraunces-latin.woff2", "Fraunces-latin-ext.woff2"]) {
+      const { axes } = readWoff2(f, []);
+      expect(axes, f).toEqual({ opsz: [9, 144], wght: [100, 900] });
     }
+  });
+
+  it("Fugaz One is its one weight, the whole font, not cut", () => {
+    const { axes, has } = readWoff2("FugazOne-Regular.woff2", [0x20, 0x7e, 0xa1, 0xff, 0x141, 0x152, 0x160, 0x178, 0x17d, 0x20ac, 0x2122, 0x2260, 0xfb02]);
+    expect(axes).toEqual({});
+    expect(has.size).toBe(13);
+  });
+
+  it("Fugaz One's unicode-range is exactly the characters its file draws (the next font draws every other one)", () => {
+    const face = /@font-face \{[^}]*"Fugaz One"[^}]*\}/.exec(readFileSync(join(DIR, "fonts.css"), "utf8"))![0];
+    const declared = /unicode-range: ([^;]+);/
+      .exec(face)![1]!
+      .split(", ")
+      .flatMap((r) => {
+        const [a, z = a] = r.slice(2).split("-").map((h) => parseInt(h, 16)) as [number, number?];
+        return Array.from({ length: z - a + 1 }, (_, i) => a + i);
+      });
+    // Every code point but U+FFFF (the cmap's closing segment, never a character).
+    const { has } = readWoff2("FugazOne-Regular.woff2", Array.from({ length: 0xffff }, (_, i) => i));
+    expect([...has].sort((x, y) => x - y)).toEqual(declared);
+    expect(declared).toHaveLength(226);
+  });
+
+  it("the Latin files cover å ä ö and the marks the words use (Fugaz One has no − of its own: the next font draws it)", () => {
+    expect(missing("Fraunces-latin.woff2", WANT)).toEqual([]);
+    expect(missing("FugazOne-Regular.woff2", WANT)).toEqual(["−"]);
+  });
+
+  it("the Latin Extended letters are there (Fraunces' own file; Fugaz One has Ł Š Ž among them)", () => {
+    expect(missing("Fraunces-latin-ext.woff2", WANT_EXT)).toEqual([]);
+    expect(missing("FugazOne-Regular.woff2", [0x141, 0x142, 0x160, 0x161, 0x17d, 0x17e])).toEqual([]);
   });
 });

@@ -45,20 +45,20 @@
 :where(.stories-app) a {
   color: inherit;
 }
+/* Headings in Fugaz One, the large words; everything smaller stays in Fraunces (--st-font above). */
 .stories-app h1,
 .stories-app h2,
 .stories-app h3 {
   margin: 0;
-  font-family: var(--st-font);
+  font-family: var(--st-font-display);
   line-height: var(--st-lh-head);
-  letter-spacing: -0.01em;
+  letter-spacing: 0;
 }
-/* Headings at the display weight with optical sizes on (a class of a screen's own still wins). */
+/* Fugaz One has one weight (a class of a screen's own still wins). */
 :where(.stories-app) h1,
 :where(.stories-app) h2,
 :where(.stories-app) h3 {
-  font-weight: var(--st-weight-display);
-  font-optical-sizing: auto;
+  font-weight: 400;
   text-wrap: balance;
 }
 .stories-app p {

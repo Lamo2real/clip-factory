@@ -307,11 +307,12 @@ test("Inter arriving after the switch is drawn never leaves it stacked: the same
   // stacked, 46 px higher, on every page where Inter came a moment late (CI run 45112115668: / side by side, /library
   // and Lamo Stories' pages stacked). A Mac with Inter installed draws Inter even before the web font is in, so a wide
   // font stands in for the missing one here, and Inter's file is held back. The stand-in is the same on every
-  // computer: the repo's own Jost (web/public/fonts/stories, OFL) at 160 %, put on the page by the test before
-  // anything is drawn (a system font such as Verdana is not on the Linux runner, whose own sans-serif fits).
+  // computer: the repo's own Fugaz One (web/public/fonts/stories, OFL), a wide display face, at 160 %, put on the page
+  // by the test before anything is drawn (a system font such as Verdana is not on the Linux runner, whose own
+  // sans-serif fits).
   const page = await open(browser, SIZES[0]!, true);
   const ctx = page.context();
-  const wide = readFileSync(join(import.meta.dirname, "..", "public", "fonts", "stories", "Jost-latin.woff2")).toString("base64");
+  const wide = readFileSync(join(import.meta.dirname, "..", "public", "fonts", "stories", "FugazOne-Regular.woff2")).toString("base64");
   await page.addInitScript((b64) => {
     const bytes = Uint8Array.from(atob(b64), (c) => c.charCodeAt(0));
     // From bytes, so it is loaded at once: the first measure already sees it.

@@ -34,10 +34,9 @@
 
 .st-s-make .st-s-make-empty .st-s-empty__title {
   color: var(--st-text-strong);
-  font-family: var(--st-font);
+  font-family: var(--st-font-display);
   font-size: var(--st-fs-h3);
-  font-weight: var(--st-weight-display);
-  font-stretch: var(--st-wdth-display);
+  font-weight: 400;
   line-height: var(--st-lh-head);
 }
 
@@ -121,13 +120,11 @@
 .st-s-draft__title {
   margin: 0;
   color: var(--st-text-strong);
-  font-family: var(--st-font);
+  font-family: var(--st-font-display);
   font-size: var(--st-fs-h3);
-  font-weight: var(--st-weight-display);
-  font-stretch: var(--st-wdth-display);
-  font-optical-sizing: auto;
+  font-weight: 400;
   line-height: var(--st-lh-head);
-  letter-spacing: -0.005em;
+  letter-spacing: 0;
   overflow-wrap: anywhere;
   text-wrap: balance;
 }
@@ -201,7 +198,7 @@
   color: var(--st-text-strong);
   font-family: var(--st-font);
   font-size: calc(var(--st-fs-body) * 1.12);
-  font-weight: var(--st-weight-display);
+  font-weight: 500;
   line-height: 1.4;
 }
 
@@ -270,10 +267,9 @@
 .st-s-drafts__title {
   margin: 0;
   color: var(--st-text-strong);
-  font-family: var(--st-font);
+  font-family: var(--st-font-display);
   font-size: var(--st-fs-h2);
-  font-weight: var(--st-weight-display);
-  font-stretch: var(--st-wdth-display);
+  font-weight: 400;
   line-height: var(--st-lh-head);
   overflow-wrap: anywhere;
   text-wrap: balance;
@@ -346,10 +342,12 @@
   }
 }
 
-/* The length of a full idea: white rounded-square − and + around the seconds. */
+/* The length of a full idea: white rounded-square − and + around the seconds. The slider stepper's 8 px gap, so
+   "45 seconds" in Fugaz One stays on one line between two 48 px buttons in a 320 px phone's field. */
 .st-s-length .st-stepper {
   justify-self: start;
   max-width: 100%;
+  gap: var(--st-space-2);
 }
 
 /* The make screens' small icons. */

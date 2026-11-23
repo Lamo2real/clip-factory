@@ -47,7 +47,9 @@
 .st-stg-head__title {
   margin: 0;
   color: var(--st-text-strong);
+  font-family: var(--st-font-display);
   font-size: var(--st-fs-h1);
+  font-weight: 400;
   overflow-wrap: anywhere;
 }
 .st-stg-head__lede {
@@ -196,7 +198,9 @@
 .st-stg-section__title {
   margin: 0;
   color: var(--st-text-strong);
+  font-family: var(--st-font-display);
   font-size: var(--st-fs-h2);
+  font-weight: 400;
   overflow-wrap: anywhere;
 }
 .st-stg-section__lede {
@@ -274,7 +278,9 @@
 .st-stg-card__title {
   margin: 0;
   color: var(--st-text-strong);
+  font-family: var(--st-font-display);
   font-size: var(--st-fs-h3);
+  font-weight: 400;
   overflow-wrap: anywhere;
 }
 .st-stg-card__lede {
@@ -301,7 +307,7 @@
   margin: 6px 0 0;
   color: var(--st-text-strong);
   font-size: var(--st-fs-body);
-  font-weight: var(--st-weight-display);
+  font-weight: 500;
 }
 .st-stg-small {
   color: var(--st-text-soft);
@@ -968,15 +974,17 @@
   gap: var(--st-space-1) var(--st-space-2);
   margin: 0;
   color: var(--st-text-strong);
+  font-family: var(--st-font-display);
   font-size: var(--st-fs-h1);
-  font-weight: var(--st-weight-num);
+  font-weight: 400;
   font-variant-numeric: lining-nums tabular-nums;
   line-height: 1.05;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
   overflow-wrap: anywhere;
 }
 .st-stg-total__note {
   color: var(--st-text-soft);
+  font-family: var(--st-font);
   font-size: var(--st-fs-small);
   font-weight: var(--st-weight-body);
   letter-spacing: 0;
@@ -1107,6 +1115,7 @@
   margin: -6px var(--st-space-1) 0;
   color: var(--st-text-soft);
   font-size: var(--st-fs-caps);
+  font-weight: 450;
 }
 .st-stg-days {
   display: grid;
@@ -1521,11 +1530,11 @@
 }
 .st-stg-length__value strong {
   color: var(--st-text-strong);
+  font-family: var(--st-font-display);
   font-size: var(--st-fs-num);
-  font-weight: var(--st-weight-num);
-  font-variation-settings: "opsz" var(--st-opsz-num);
+  font-weight: 400;
   font-variant-numeric: lining-nums tabular-nums;
-  letter-spacing: -0.02em;
+  letter-spacing: 0;
   line-height: 1;
 }
 .st-stg-length__value .st-stg-chip {
@@ -1643,6 +1652,7 @@
   padding: 0 58px;
   color: var(--st-text-soft);
   font-size: var(--st-fs-caps);
+  font-weight: 450;
 }
 @media (max-width: 399px) {
   .st-stg-length__scale {
@@ -1677,8 +1687,9 @@
 }
 .st-stg-stepper__value strong {
   color: var(--st-text-strong);
+  font-family: var(--st-font-display);
   font-size: var(--st-fs-h2);
-  font-weight: var(--st-weight-num);
+  font-weight: 400;
   font-variant-numeric: lining-nums tabular-nums;
 }
 
@@ -1704,8 +1715,9 @@
 .st-stg-empty__title {
   margin: 0;
   color: var(--st-text-strong);
+  font-family: var(--st-font-display);
   font-size: var(--st-fs-h3);
-  font-weight: var(--st-weight-display);
+  font-weight: 400;
 }
 .st-stg-empty__text,
 .st-stg-loading,

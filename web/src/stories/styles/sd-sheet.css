@@ -34,6 +34,8 @@
   border-radius: var(--st-r-surface);
   color: var(--st-text);
   font-family: var(--st-font);
+  font-optical-sizing: auto;
+  font-variation-settings: "SOFT" 0, "WONK" 0;
   box-shadow: var(--st-sheen-hero), var(--st-depth-3), var(--st-glow-behind);
   animation: st-s-rise var(--st-dur-enter) var(--st-ease-out);
 }
@@ -71,10 +73,9 @@
 .st-s-sheet__title {
   margin: 0;
   color: var(--st-text-strong);
-  font-family: var(--st-font);
+  font-family: var(--st-font-display);
   font-size: var(--st-fs-h3);
-  font-weight: var(--st-weight-display);
-  font-optical-sizing: auto;
+  font-weight: 400;
   line-height: 1.2;
   overflow-wrap: anywhere;
 }
@@ -301,6 +302,8 @@ button.st-s-place.is-on:hover {
   color: var(--st-on-cream);
   background: var(--st-cream);
   font: var(--st-weight-ui) var(--st-fs-min) / 1.2 var(--st-font);
+  font-optical-sizing: auto;
+  font-variation-settings: "SOFT" 0, "WONK" 0;
 }
 
 .st-s-ai-btn.is-set {
@@ -536,10 +539,9 @@ button.st-s-place.is-on:hover {
 .st-s-design__title {
   margin: 0;
   color: var(--st-text-strong);
-  font-family: var(--st-font);
+  font-family: var(--st-font-display);
   font-size: var(--st-fs-h3);
-  font-weight: var(--st-weight-display);
-  font-optical-sizing: auto;
+  font-weight: 400;
   line-height: 1.2;
 }
 

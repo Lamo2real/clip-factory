@@ -72,10 +72,10 @@
 
 .st-s-cast__name {
   color: var(--st-text-strong);
-  font-family: var(--st-font);
+  /* Large words: Fugaz One at its one weight, no width axis (--st-font-display). */
+  font-family: var(--st-font-display);
   font-size: var(--st-fs-h3);
-  font-weight: var(--st-weight-display);
-  font-stretch: var(--st-wdth-display);
+  font-weight: 400;
   line-height: var(--st-lh-head);
   overflow-wrap: anywhere;
 }
@@ -222,10 +222,9 @@
 
 .st-s-editor__now strong {
   color: var(--st-text-strong);
-  font-family: var(--st-font);
+  font-family: var(--st-font-display);
   font-size: var(--st-fs-h3);
-  font-weight: var(--st-weight-display);
-  font-stretch: var(--st-wdth-display);
+  font-weight: 400;
   line-height: var(--st-lh-head);
   overflow-wrap: anywhere;
 }
@@ -295,6 +294,8 @@
   color: var(--st-text-strong);
   font-family: var(--st-font);
   font-weight: var(--st-weight-ui);
+  font-optical-sizing: auto;
+  font-variation-settings: "SOFT" 0, "WONK" 0;
 }
 
 .st-s-face__btns {
@@ -324,10 +325,9 @@
 .st-s-refs__title {
   margin: 0;
   color: var(--st-text-strong);
-  font-family: var(--st-font);
+  font-family: var(--st-font-display);
   font-size: var(--st-fs-h3);
-  font-weight: var(--st-weight-display);
-  font-stretch: var(--st-wdth-display);
+  font-weight: 400;
   line-height: var(--st-lh-head);
 }
 

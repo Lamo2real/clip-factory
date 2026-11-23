@@ -14325,8 +14325,9 @@ accounts `/stories/connections`, Settings `/stories/settings/{section}` (`ai`, `
 * Look: its own tokens (`--st-*`, in `web/src/stories/styles/`, outside `web/src/styles` whose tests police Lamo
   Clips' palette; `test/storiesStyles.test.ts` holds the owner's rules there): a deep night-indigo stage (`#1C1842`)
   with soft spotlight glows, warm cream words (`#FFF6E5`), sunshine (`#FFC94A`) for every main action, coral
-  (`#FF6F61`), mint (`#47D6A0`) and sky (`#62C6FF`) for status and characters, rounded type (`ui-rounded`, then the
-  system font), frosted panels, character-shaped empty states, storyboard filmstrips. Every Funded Clips selector sits
+  (`#FF6F61`), mint (`#47D6A0`) and sky (`#62C6FF`) for status and characters, its own type (since 23 Nov Fugaz One
+  for the large text and Fraunces for the smaller text, §45.39), frosted panels, character-shaped empty states,
+  storyboard filmstrips. Every Funded Clips selector sits
   under `.stories-app` (or starts `st-`); no `:root`, `html` or `body` rule (the logo is the shell's `ws-mark`,
   §45.38); StoriesApp restores the page title and theme colour when it unmounts. The owner's rules that hold
   everywhere still hold: arrow cursor only (no `cursor:` CSS), hover states, click and deny sounds, `<Glide>` for
@@ -15472,6 +15473,44 @@ The owner (22 Nov, 18:01, with screenshots): "just like you have in the top or i
 * **The mark, an element of the shell.** Funded Clips' logo (the owner, 22 Nov: "the same logo as clip factory but with the colors in clip factory stories") is Clip Factory's own mark, the same markup (`web/src/components/ClipMark.tsx`: the italic "C" on its tile with its dot), beside the wordmark "Funded *Clips*" in Clip Factory's wordmark type. It lives with the shell, not in `web/src/stories/`: `web/src/components/WorkspaceMark.tsx` (`WorkspaceMark`, `WorkspaceWordmark`, `STORIES_BRAND`) and `web/src/styles/ws-mark.css` in the main stylesheet, classes `.ws-mark*` and `.ws-wordmark*`, because the shell shows it outside Funded Clips' own code too: the start-up card while that code loads (`App.tsx`) and the round toggle that goes to Funded Clips (`WorkspaceDock.tsx`). Four tokens colour it, `--ws-mark-tile`, `--ws-mark-letter`, `--ws-mark-dot` and `--ws-wordmark`; Funded Clips' own stylesheet sets them under `.stories-app`, and until it does each falls back to today's Funded Clips colours (sunshine tile `#FFC94A`, night-indigo "C" `#1C1842`, coral dot `#FF6F61`, cream words `#FFF6E5`). So no Clip Factory file imports `web/src/stories/` for it (A3), and none of Funded Clips' own look (`--st-*`, `st-` classes) goes into Clip Factory's main bundle. Clip Factory's own mark never carries `ws-mark` and is unchanged; the round toggle that goes back to Clip Factory shows it. `test/workspaceMark.test.tsx` holds this.
 * **E18, again.** Social accounts deals its cards into the number of columns (two up to as many as fit) that leaves the least empty area, each count measured with the cards' own heights at its width, every way of dealing them tried; a card that grows still only pushes the cards under it.
 * **S4. The dock behaves as part of the page under it (review fixes, 2026-11-22).** (a) While a dialog of either app is open (any `aria-modal="true"` outside the dock) the dock is inert: no tap and no key reach it. Where the dialog's dim is drawn over it already (Clip Factory's sheets and lists) nothing else changes; where the dock is drawn over the dim (the Stories app's sheets dim inside its own app's box) it dims with the page (opacity only) and a tap there lands on the dim, which closes the sheet. (b) The rows of Clip Factory's foot under the dock (Get the app, the jobs line) are read as Clip Factory last had them on screen: a Clip Factory job starting or ending, or the app being installed, while a Stories page is on screen never moves the switch there; back in Clip Factory it sits where Clip Factory's foot has it now. (c) For the keyboard the dock comes where it is drawn: right after the app's menu (each app marks its menu list `data-ws-tab-after`), before Get the app and the page; Shift+Tab goes back the same way; anywhere else Tab goes past it. (d) Unfolding Clip Factory's sidebar, the dock's parts show only as far as the sidebar's content has grown (a clip on the sidebar's own 520 ms curve, no layout), never past the glass. (e) A toast an app put up that is still on screen when the owner switches away leaves with its app and comes back, quietly, for the rest of its time if the owner is back by then; Clip Factory's session (above both apps) holds its toasts the same way while a Stories page is on screen. (f) The slide's frame check (S3) counts a frame as late only past twice the machine's own frame at rest (and its worst gap at rest, and 25 ms) and lets one such frame pass, and the slide must be there before the next frame after the tap's click (timed from the click: the test machine's own time from the pointer going down to the click is not the app's); the slide itself must still run its whole 360 ms on transform only, to its end, never cancelled, and the page changes only after it.
+
+### 45.39 Type: Fugaz One for large text, Fraunces for smaller text (owner request, 2026-11-23; wins over anything above)
+
+The owner (23 Nov): "i want to you to use Fugaz One font style in combination with Fraunces on the smaller text".
+Asked which app, they picked **Funded Clips only**: Clip Factory keeps Inter and Times, untouched. The tokens and their
+full rules are in `web/src/stories/styles/GLASS-CONTRACT.md` §10 and `glass-tokens.css` §10.
+
+* **Large text: Fugaz One** (`--st-font-display`: "Fugaz One", "Arial Black", "Helvetica Neue", system-ui,
+  sans-serif). Headings and titles (h1-h3, `.st-display` and the other display classes), the hero, the big stat
+  numerals, section names, and anything about 20 px or larger. One upright weight (400), no variable axes.
+* **Smaller text: Fraunces** (`--st-font`: "Fraunces", "Iowan Old Style", Georgia, serif). Body, labels, buttons,
+  chips, pills, captions, inputs, hints and toasts, with `font-optical-sizing: auto`, a weight of at least 400 (450 at
+  13 px and under) and `"SOFT" 0, "WONK" 0` wherever `font-variation-settings` is set. The caps captions
+  (`--st-font-caps`) are Fraunces too, with their `text-transform` and tracking kept. No size goes under today's
+  floors (13 px, `--st-fs-min`): the users are 6-8 years old.
+* **Never changed:** the logo's "C" (`--st-font-mark`, Clip Factory's Times), the "Funded Clips" wordmark (§45.38,
+  "The mark", as it is today), the shell's workspace switch and the shell's own toasts (`.toasts`, outside
+  `.stories-app`, where no Funded Clips font name may be used: the shell's `--font-ui`). Funded Clips' own toasts,
+  inside it, are Fraunces.
+* **Loading:** self-hosted from `web/public/fonts/stories/` on the app's own origin (no font CDN; the Mac and Windows
+  app loads the deployed web app, so it gets them from there too) and precached by the service worker, each family's
+  OFL licence text beside its files. The faces load only through `web/src/stories/fonts.ts` (`addStoriesFonts`,
+  `fonts.css?inline`), never in the chunk Clip Factory prefetches, and the names are used only under `.stories-app`,
+  so ci.yml's "Funded Clips is not in the main bundle" check still holds and no Clip Factory word moves.
+* **Sources and licences:**
+
+  | family | designer | source | licence |
+  |---|---|---|---|
+  | Fugaz One | LatinoType (2011) | google/fonts `ofl/fugazone`, from github.com/googlefonts/fugazone | SIL Open Font License 1.1, Reserved Font Name "Fugaz One" |
+  | Fraunces | Undercase Type: Phaedra Charles and Flavia Zimbardi (2018-2020) | google/fonts `ofl/fraunces`, from github.com/undercasetype/Fraunces | SIL Open Font License 1.1 |
+
+  Fugaz One's file has no minus sign − (U+2212) and only nine Latin Extended-A letters (Ł ł Œ œ Š š Ÿ Ž ž). Its
+  `unicode-range` is exactly the 226 code points it maps; every other character in large text comes from the next
+  font in its stack. Fraunces maps every mark the words use (å ä ö Å Ä Ö − – ’ … · ›). A unit beside a big numeral
+  ("videos", "seconds") is the smaller text of the pair, so Fraunces at every size, and so is an h3 at 15 px that only
+  labels the list under it (Social accounts' "What TikTok allows for a second account").
+* **Replaces:** Playfair (OFL; everywhere in Funded Clips, chosen as a look-alike of the owner's Womack sample) and
+  Jost (OFL; the caps captions), which Funded Clips used from 22 Nov until this change. Their files are gone.
 
 ## 46. Auto-posting: the oldest clips in Review go up by themselves, every X hours (owner request, 2026-11-22)
 
