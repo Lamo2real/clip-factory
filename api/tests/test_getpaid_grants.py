@@ -26,6 +26,15 @@ from cr_support import FakeCR, make_deps
 from fakes import FakeHttp, FakeSecretsManager, FakeSSM, FakeTable
 from test_oauth_state_formats import GOOD
 
+
+def _tamper(state: str) -> str:
+    """The same signed state with one signature character flipped in the middle (never a no-op, unlike changing its
+    last two characters, which may already be "AA" or be base64 padding bits)."""
+    head, signature = state.rsplit(".", 1)
+    middle = len(signature) // 2
+    return f"{head}.{signature[:middle]}{'B' if signature[middle] == 'A' else 'A'}{signature[middle + 1 :]}"
+
+
 PK = db.user_pk(USER)
 ADSENSE_SCOPE = "https://www.googleapis.com/auth/adsense.readonly"
 GOOGLE_TOKEN = {
@@ -313,7 +322,7 @@ def test_a_reused_or_expired_payments_state_writes_nothing_and_goes_back_to_get_
     assert len(http.calls) == calls
     assert snapshot(table) == before
     # A tampered one can't be told apart from any other: the setup page's "expired", as before.
-    assert back(hooks_deps, "youtube", {"code": "4/CODE", "state": late[:-2] + "AA"}) == (
+    assert back(hooks_deps, "youtube", {"code": "4/CODE", "state": _tamper(late)}) == (
         "/settings/posting/setup/youtube",
         "expired",
     )

@@ -64,7 +64,7 @@ const COUNTS_CONNECTED: SocialAccount["connectionStatus"][] = ["connected"];
  * word, §45.37 G8 (c)): never "use it for both", a separate account. The same sentence on every platform's step.
  */
 export function sameAsClipsLine(_step: OnboardStep): string {
-  return "This is Clip Factory's own account. Funded Clips needs its own separate account: sign in with a different one.";
+  return "This is Clip Factory's own account. Clips Funded needs its own separate account: sign in with a different one.";
 }
 
 /** The platform's Lamo Stories account in this workspace when it is Lamo Clips' own (stored so, or found later, D11). */

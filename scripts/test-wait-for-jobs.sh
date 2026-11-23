@@ -66,7 +66,7 @@ story_change='[{"address":"module.stories_agent.terraform_data.image","change":{
 both_change='[{"address":"module.agent.terraform_data.image","change":{"actions":["delete","create"]}},
   {"address":"module.stories_agent.terraform_data.image","change":{"actions":["delete","create"]}}]'
 
-# Clip Factory's scan, exactly as it was before Funded Clips (main's wait-for-jobs.sh).
+# Clip Factory's scan, exactly as it was before Clips Funded (main's wait-for-jobs.sh).
 clip_filter='begins_with(sk, :job) AND #s IN (:q, :r) AND heartbeatAt > :since'
 clip_values='{":job":{"S":"JOB#"},":q":{"S":"queued"},":r":{"S":"running"},":since":{"S":"2025-11-19T15:57:00.000Z"}}'
 
@@ -76,7 +76,7 @@ plan_with '[{"address":"module.web.aws_s3_object.x","change":{"actions":["update
   {"address":"module.stories_agent.aws_iam_role.agent","change":{"actions":["no-op"]}},
   {"address":"module.stories_api.aws_lambda_function.fn","change":{"actions":["update"]}}]'
 if run skip "3" && [ ! -s "$calls" ] && grep -q "not waiting" "$log"; then
-  ok "no agent change (Funded Clips' API Lambda alone does not count): no wait, no table read"
+  ok "no agent change (Clips Funded's API Lambda alone does not count): no wait, no table read"
 else
   not_ok "no agent change: $(cat "$log") / $(cat "$calls")"
 fi
@@ -98,24 +98,24 @@ else
   not_ok "scan arguments: $(cat "$calls")"
 fi
 
-# 3b. When only Clip Factory's agent changes, the scan is byte for byte the one it was before Funded Clips: clip jobs
-#     only, never a Funded Clips item (docs/CONTRACTS.md §45.15, ADR-76).
+# 3b. When only Clip Factory's agent changes, the scan is byte for byte the one it was before Clips Funded: clip jobs
+#     only, never a Clips Funded item (docs/CONTRACTS.md §45.15, ADR-76).
 if [ "$(arg_after --filter-expression)" = "$clip_filter" ] && [ "$(arg_after --expression-attribute-values)" = "$clip_values" ] \
   && grep -q "^Drain: the agent changes in this deploy (1 resource(s)); waiting for running jobs to finish.$" "$log" \
-  && ! grep -q "Funded Clips" "$log"; then
-  ok "Clip Factory's agent alone: the same clip-job scan and message as before Funded Clips"
+  && ! grep -q "Clips Funded" "$log"; then
+  ok "Clip Factory's agent alone: the same clip-job scan and message as before Clips Funded"
 else
   not_ok "clip-only scan: $(arg_after --filter-expression) / $(arg_after --expression-attribute-values)"
 fi
 
-# 3c. When only Funded Clips' agent changes, the drain waits for its own work only: production jobs (PJOB#) queued or
+# 3c. When only Clips Funded's agent changes, the drain waits for its own work only: production jobs (PJOB#) queued or
 #     running, AI tasks (TASK#) running and chat answers (MSG#) streaming, in workspace partitions, never clip jobs.
 plan_with "$story_change"
 if ITEM_SK="PJOB#x" run story "1 0" && [ "$(grep -c '^dynamodb scan' "$calls")" -eq 2 ] \
   && grep -q "Running jobs: 1; waiting" "$log" && grep -q "Running jobs: 0; going on." "$log" \
-  && grep -q "^Drain: Funded Clips' agent changes in this deploy (2 resource(s)); waiting for its running jobs, tasks and chat answers to finish.$" "$log" \
+  && grep -q "^Drain: Clips Funded's agent changes in this deploy (2 resource(s)); waiting for its running jobs, tasks and chat answers to finish.$" "$log" \
   && ! grep -q "^Drain: the agent changes" "$log"; then
-  ok "Funded Clips' agent alone: a running story job holds the deploy until it is done"
+  ok "Clips Funded's agent alone: a running story job holds the deploy until it is done"
 else
   not_ok "story drain: $(cat "$log")"
 fi
@@ -134,8 +134,8 @@ fi
 plan_with "$both_change"
 if run both "0" && [ "$(arg_after --filter-expression)" = "(${clip_filter}) OR (${story_filter})" ] && placeholders_match \
   && [ "$(arg_after --expression-attribute-values | jq -r '[.[":job"].S, .[":pjob"].S, .[":st"].S] | join(",")')" = "JOB#,PJOB#,streaming" ] \
-  && grep -q "^Drain: the agent changes in this deploy (1 resource(s))" "$log" && grep -q "^Drain: Funded Clips' agent changes" "$log"; then
-  ok "both agents change: clip jobs and Funded Clips' work are counted in one scan"
+  && grep -q "^Drain: the agent changes in this deploy (1 resource(s))" "$log" && grep -q "^Drain: Clips Funded's agent changes" "$log"; then
+  ok "both agents change: clip jobs and Clips Funded's work are counted in one scan"
 else
   not_ok "both: $(arg_after --filter-expression) / $(cat "$log")"
 fi

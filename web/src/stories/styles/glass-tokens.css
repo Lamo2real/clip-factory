@@ -1,12 +1,12 @@
 /* =====================================================================================================================
-   Funded Clips · "Ember Glass" · the design tokens (imported first, before stories.css)
+   Clips Funded · "Ember Glass" · the design tokens (imported first, before stories.css)
    ---------------------------------------------------------------------------------------------------------------------
    The owner's warm reference of 22 Nov (a warm dark espresso room, amber and copper light out of focus behind smoky
    glass, cream solids, an orange accent) on direction B's technical base (one radius scale, a liquid rim on a few
    hero surfaces, the three backgrounds). Its colours, feel and kinds of shapes only: every screen stays Stories' own.
 
      Clip Factory   Bottle Green #0F372B glass · Bone #EFE7DA words  · Vermilion #E8392B action · Times + Inter
-     Stories        Espresso #1C130E glass     · Cream #FFF6EA words · Ember #FF9A45 action    · Playfair + Jost
+     Stories        Espresso #1C130E glass     · Cream #FFF6EA words · Ember #FF9A45 action    · Fugaz One + Fraunces
 
    Scope: every rule sits on .stories-app (no :root, html or body rule), so nothing reaches a Clip Factory screen or
    the shell's workspace switch, which keeps the shell's own tokens (--fill, --selected, --r-md, --font-ui) in both
@@ -19,8 +19,8 @@
    --st-* design tokens; screens use them and never set them.
    ===================================================================================================================== */
 
-/* The fonts (Playfair and Jost, self-hosted with their OFL licences) are fonts.css, which StoriesApp puts on the page
-   with the first Stories screen (stories/fonts.ts), not this style sheet. */
+/* The fonts (Fugaz One and Fraunces, self-hosted with their OFL licences) are fonts.css, which StoriesApp puts on the
+   page with the first Clips Funded screen (stories/fonts.ts), not this style sheet. */
 
 .stories-app {
   /* ========== 1. The base: warm dark espresso and smoky brown (Colours › Ember is the default background) ==========
@@ -366,12 +366,16 @@
   --st-dial-track: 10px;
 
   /* ========== 10. Type ==========
-     Playfair everywhere in Stories (the owner: "rewrite the entire font of the application in Clip Factory
-     Stories"): OFL, opsz 5-1200, wdth 87.5-112.5, wght 300-900, self-hosted with its licence. Optical sizes on: high
-     contrast at display sizes, sturdy shapes at reading sizes. Jost (OFL) only for short wide-tracked caps captions.
+     Fugaz One with Fraunces (the owner, 23 Nov: "use Fugaz One font style in combination with Fraunces on the smaller
+     text"), both OFL and self-hosted with their licences (fonts.css). --st-font-display, Fugaz One (one weight), for
+     large text: headings and titles, hero and big stat numerals, section names, anything about 20 px or larger.
+     --st-font, Fraunces (opsz 9-144, wght 100-900; SOFT and WONK pinned at 0 in the files), for the smaller text:
+     body, labels, buttons, chips, pills, captions, inputs, hints and toasts. --st-font-caps is the same family (the
+     caps captions keep their caps and tracking). The "C" keeps --st-font-mark.
      THE TEXT FLOOR: nothing below 0.8125rem (13 px; the test's hard floor is 0.78rem). */
-  --st-font: "Playfair", "Iowan Old Style", "Palatino Linotype", Palatino, Georgia, serif;
-  --st-font-caps: "Jost", "Futura", "Avenir Next", "Century Gothic", system-ui, sans-serif;
+  --st-font-display: "Fugaz One", "Arial Black", "Helvetica Neue", system-ui, sans-serif;
+  --st-font: "Fraunces", "Iowan Old Style", Georgia, serif;
+  --st-font-caps: var(--st-font);
   --st-font-mark: "Times New Roman", "Times New Roman MT", Tinos, Times, serif; /* the "C" stays Clip Factory's */
   --st-fs-hero: clamp(2.125rem, 1.4rem + 2.6vw, 4.5rem); /* the dashboard question: 34 → 72 px */
   --st-fs-h1: clamp(2rem, 1.5rem + 1.5vw, 3.5rem); /* 32 → 56 px */
@@ -380,15 +384,17 @@
   --st-fs-body: 1.0625rem; /* 17 px */
   --st-fs-small: 0.9375rem; /* 15 px: second lines */
   --st-fs-chip: 0.875rem; /* 14 px: chips, counts, tab labels */
-  --st-fs-caps: 0.8125rem; /* 13 px Jost caps, tracked: THE FLOOR */
+  --st-fs-caps: 0.8125rem; /* 13 px Fraunces caps, tracked: THE FLOOR */
   --st-fs-min: 0.8125rem;
   --st-fs-num: clamp(2.5rem, 2rem + 2.4vw, 4.25rem); /* the big light numerals: 40 → 68 px */
   --st-fs-unit: 0.42em; /* the small unit beside a numeral (relative to it, never under the floor at 40 px) */
-  --st-opsz-display: 600;
-  --st-opsz-num: 900;
-  --st-wdth-display: 92%; /* headings a little condensed, like the owner's sample */
-  --st-weight-display: 500; /* Womack is a regular weight: high contrast, not bold */
-  --st-weight-num: 300;
+  /* The axis and weight names stay (GLASS-CONTRACT.md rule 2), at values true to the two faces: Fugaz One has one
+     weight (400) and no axes, Fraunces' optical size runs 9-144, and neither face has a width axis. */
+  --st-opsz-display: 144; /* Fraunces' largest optical size (Fugaz One has none) */
+  --st-opsz-num: 144;
+  --st-wdth-display: 100%; /* no width axis in either face: normal width */
+  --st-weight-display: 400; /* Fugaz One's one weight */
+  --st-weight-num: 400; /* the big numerals are Fugaz One too */
   --st-weight-body: 450;
   --st-weight-ui: 650; /* buttons, labels, rail rows */
   --st-lh-head: 1.08;
@@ -428,6 +434,14 @@
   /* The app's focus ring and the platform marks' cut-outs, in the Stories colours (the shell's names). */
   --focus: 0 0 0 4px rgb(var(--st-cream-rgb) / 0.42);
   --mark-cut: var(--st-base);
+}
+
+/* Clips Funded' toasts (docs/CONTRACTS.md §45.38): the shell draws every toast in its own .toasts box, outside
+   .stories-app, so the toasts Clips Funded' screens raise carry st-toast (App.tsx gives its ToastScope that class)
+   and get the smaller-text token here, the same stack as --st-font above (test/storiesStyles.test.ts keeps the two
+   the same). st-end.css sets them in it. Clip Factory's toasts, and the shell's own, carry no st-toast: Inter. */
+.toasts .st-toast {
+  --st-font: "Fraunces", "Iowan Old Style", Georgia, serif;
 }
 
 /* ---------- The looks (stories/look.ts puts data-look, data-strength, data-glass and the --st-veil-* numbers on

@@ -32,13 +32,15 @@
   background: var(--st-fill-control);
   box-shadow: var(--st-sheen-control);
 }
+/* A heading (an h3): Fugaz One at its one weight, like every heading. */
 .st-conn .st-app__title {
   display: flex;
   align-items: center;
   gap: var(--st-space-2);
   color: var(--st-text-strong);
+  font-family: var(--st-font-display);
   font-size: var(--st-fs-body);
-  font-weight: var(--st-weight-ui);
+  font-weight: 400;
 }
 .st-app__title .st-icon {
   flex: none;
@@ -205,10 +207,10 @@
 }
 .st-setupback__num {
   color: var(--st-text-strong);
-  font-family: var(--st-font);
+  font-family: var(--st-font-display);
   font-size: 1.625rem;
-  font-weight: var(--st-weight-num);
-  font-variation-settings: "opsz" var(--st-opsz-num);
+  font-weight: 400;
+  font-variation-settings: normal;
   line-height: 1;
 }
 .st-setupback__of {

@@ -25,7 +25,7 @@ const KINDS: { value: MakerKind; label: string; line: string }[] = [
 
 /** Each host in the form's words. */
 export const MAKER_HOST_WORDS: Record<MakerHost, { label: string; line: string }> = {
-  bedrock: { label: "Amazon Bedrock", line: "Funded Clips' own AWS access. No key." },
+  bedrock: { label: "Amazon Bedrock", line: "Clips Funded's own AWS access. No key." },
   openai_compatible: { label: "An OpenAI-compatible service", line: "Any https address that makes pictures the OpenAI way, with your key." },
   elevenlabs: { label: "ElevenLabs", line: "Sound effects and music with your ElevenLabs key." },
 };
@@ -70,7 +70,7 @@ export function baseUrlProblem(v: string): string | null {
   if (u.protocol !== "https:") return "The address must start with https:// so the key travels safely.";
   if (u.username || u.password) return "Leave the name and password out of the address. Save the key in Provider keys.";
   if (u.search || u.hash || t.includes("?") || t.includes("#")) return "Leave out anything after ? or # in the address.";
-  if (!u.hostname.includes(".")) return "That address is not on the public internet. Funded Clips can only call a public https address.";
+  if (!u.hostname.includes(".")) return "That address is not on the public internet. Clips Funded can only call a public https address.";
   return null;
 }
 
@@ -237,7 +237,7 @@ function MakerForm({ ws, start, kind, taken, onSaved, onCancel }: { ws: string; 
           />
         )}
       </span>
-      {d.kind === "audio" ? <Note tone="sky">Sound models make sound effects and music only. Funded Clips never asks them for a voice.</Note> : null}
+      {d.kind === "audio" ? <Note tone="sky">Sound models make sound effects and music only. Clips Funded never asks them for a voice.</Note> : null}
       <span className="st-stg-field">
         <span className="st-stg-label">Where it runs</span>
         <SetPick<MakerHost>
@@ -316,7 +316,7 @@ function MakerRow({ ws, m, keySaved, onChanged, onEdit }: { ws: string; m: Maker
     setBusy(true);
     try {
       await storiesApi().deleteMakerModel(ws, m.key);
-      toast.info(`${m.label} is removed from Funded Clips.`);
+      toast.info(`${m.label} is removed from Clips Funded.`);
       setSure(false);
       await onChanged();
     } catch (e) {
@@ -490,7 +490,7 @@ export function MakerModels({
           )}
         </ul>
       ) : open === null ? (
-        <p className="st-stg-small">No models added yet. The makers above come with Funded Clips; add any other picture, video or sound model here.</p>
+        <p className="st-stg-small">No models added yet. The makers above come with Clips Funded; add any other picture, video or sound model here.</p>
       ) : null}
     </SetCard>
   );

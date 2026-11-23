@@ -382,9 +382,9 @@ function contrastKit() {
 
   /**
    * Clip Factory's sidebar with its ancestors, from <html> down, when `el` is in the Live chip of the shell's dock
-   * (app/WorkspaceDock.tsx, while Funded Clips is switched on) and its words `r` lie over the sidebar on screen. The
+   * (app/WorkspaceDock.tsx, while Clips Funded is switched on) and its words `r` lie over the sidebar on screen. The
    * dock is not inside the sidebar but drawn over it, the chip in the place of the sidebar's own, so what is under its
-   * words is the sidebar first (like a <Glide> under its item, below). Otherwise null: over Funded Clips, or beside the
+   * words is the sidebar first (like a <Glide> under its item, below). Otherwise null: over Clips Funded, or beside the
    * sidebar, the chip is read on its own, as before; the switch is always read on its own.
    */
   function underDock(el: Element, r: DOMRect): Element[] | null {

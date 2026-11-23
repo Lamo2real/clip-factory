@@ -240,7 +240,7 @@ function Screen(props: StoriesScreenProps) {
   }
 }
 
-/** The brand in the rail and the phone top bar: Clip Factory's mark in Stories' colours and "Funded Clips". */
+/** The brand in the rail and the phone top bar: Clip Factory's mark in Stories' colours and "Clips Funded". */
 function Brand() {
   return (
     <A href="/stories" className="st-brand" aria-label={`${STORIES_BRAND} dashboard`}>
@@ -385,9 +385,9 @@ function StoriesShell({ page }: { page: StoriesPage }) {
           if (id) {
             setWs(id);
             setProblem(null);
-          } else setProblem("Funded Clips is not ready yet. Try again in a minute.");
+          } else setProblem("Clips Funded is not ready yet. Try again in a minute.");
         })
-        .catch(() => live && !quick && setProblem("Funded Clips could not load. Check that you are online, then try again."));
+        .catch(() => live && !quick && setProblem("Clips Funded could not load. Check that you are online, then try again."));
     };
     run();
     // The switcher picked another Lamo Stories workspace: check again.
@@ -414,7 +414,7 @@ function StoriesShell({ page }: { page: StoriesPage }) {
           if (id) setWs(id);
           else setProblem("We could not find that workspace. Reload the page to try again.");
         })
-        .catch(() => live && setProblem("Funded Clips could not load. Check that you are online, then try again."));
+        .catch(() => live && setProblem("Clips Funded could not load. Check that you are online, then try again."));
     };
     return () => {
       live = false;
@@ -543,7 +543,7 @@ function StoriesShell({ page }: { page: StoriesPage }) {
         Skip to content
       </a>
       {solo ? null : (
-        <nav className="st-rail st-glass" aria-label="Funded Clips">
+        <nav className="st-rail st-glass" aria-label="Clips Funded">
           <Brand />
           {/* For the keyboard the shell's switch comes right after this list, where it is drawn (data-ws-tab-after). */}
           <ul className="st-rail__list" data-ws-tab-after="" ref={railList}>
@@ -573,7 +573,7 @@ function StoriesShell({ page }: { page: StoriesPage }) {
           {ws && !solo ? <NeedsYouBar ws={ws} here={storiesHref(page)} /> : null}
           {problem ? (
             <section className="st-page">
-              <h1 className="sr-only">Funded Clips</h1>
+              <h1 className="sr-only">Clips Funded</h1>
               <StError message={problem} onRetry={() => location.reload()} />
             </section>
           ) : ws ? (
@@ -582,14 +582,14 @@ function StoriesShell({ page }: { page: StoriesPage }) {
             </StBoundary>
           ) : (
             <section className="st-page">
-              <h1 className="sr-only">Funded Clips</h1>
+              <h1 className="sr-only">Clips Funded</h1>
               <StLoading label="Opening the studio…" />
             </section>
           )}
         </main>
       </div>
       {solo ? null : (
-        <nav className="st-tabbar st-glass st-glass--bar" aria-label="Funded Clips">
+        <nav className="st-tabbar st-glass st-glass--bar" aria-label="Clips Funded">
           <ul className="st-tabbar__list">
             {/* The round active highlight (the figure's orb) slides between the tabs. */}
             <Glide active=".st-tabbar__item.is-active" className={`glide--st-tab ${TAB_ORB}`} as="li" />

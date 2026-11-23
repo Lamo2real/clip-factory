@@ -234,7 +234,7 @@ function frames(r: Recorded, rest: { median: number; worst: number }) {
 // the Linux CI runners is the GTK/WPE port, which never started the glide's Web Animation there.
 test.skip(({ browserName }) => browserName === "webkit" && process.platform !== "darwin", "WebKit's slide is measured on macOS (the Mac app's engine)");
 
-async function tapChoice(page: Page, name: "Funded Clips" | "Clip Factory") {
+async function tapChoice(page: Page, name: "Clips Funded" | "Clip Factory") {
   const opt = page.locator(".ws-dock .ws-switch__opt", { hasText: new RegExp(`^${name}$`) });
   const box = (await opt.boundingBox())!;
   await page.mouse.move(box.x + box.width / 2, box.y + box.height / 2);
@@ -263,13 +263,13 @@ for (const [label, glass] of [
     // about the slide: on a Mac. The Linux CI runners have 4 cores and no GPU, so Chromium draws this glass page in
     // software at 75 to 200 ms a frame, and a tap's first frame waits behind one (LayerTreeHost::WaitForCommitCompletion):
     // long tasks of 142 to 210 ms and starved frames there (runs 45112115668 and 45134524791) that measure the runner,
-    // not the app. The same test failed 2 of 3 runs on the older head 1477c325 under a 4x CPU throttle; no Funded Clips
+    // not the app. The same test failed 2 of 3 runs on the older head 1477c325 under a 4x CPU throttle; no Clips Funded
     // code ran during the slide. Everywhere the slide still has to start on the tap's own frame, run its whole 360 ms
     // on transform only to its end, keep the same switch and change the page only after it.
     const timing = process.platform === "darwin";
     const mainThread = timing;
     for (const [to, url] of [
-      ["Funded Clips", /\/stories$/],
+      ["Clips Funded", /\/stories$/],
       ["Clip Factory", /\/library$/],
     ] as const) {
       const rest = await restFrame(page);
@@ -277,7 +277,7 @@ for (const [label, glass] of [
       const tasks = chromium
         ? await trace(page, () => tapChoice(page, to).then(() => page.waitForURL(url)))
         : (await tapChoice(page, to), await page.waitForURL(url), null);
-      if (to === "Funded Clips") await storiesReady(page);
+      if (to === "Clips Funded") await storiesReady(page);
       else await settle(page);
       const r = await page.evaluate(() => (window as unknown as { __slide: Recorded }).__slide);
       const slides = r.slides.filter((s) => s.id === "glide-slide");
@@ -374,8 +374,8 @@ test.describe("the slide in pictures", () => {
       await warm(page);
       // The slide is held at six moments (the page changes only once it ends, which this test lets it do last).
       for (const [to, from, url] of [
-        ["Funded Clips", "clip-factory", /\/stories$/],
-        ["Clip Factory", "funded-clips", /\/library$/],
+        ["Clips Funded", "clip-factory", /\/stories$/],
+        ["Clip Factory", "clips-funded", /\/library$/],
       ] as const) {
         const opt = page.locator(".ws-dock .ws-switch__opt", { hasText: new RegExp(`^${to}$`) });
         await opt.click();
@@ -412,7 +412,7 @@ test.describe("the slide in pictures", () => {
           for (const a of document.querySelector(".ws-dock .ws-switch")!.getAnimations({ subtree: true })) a.finish();
         });
         await page.waitForURL(url);
-        if (to === "Funded Clips") await page.locator(".stories-app[data-ws]").waitFor();
+        if (to === "Clips Funded") await page.locator(".stories-app[data-ws]").waitFor();
         await page.waitForTimeout(1500);
       }
     });

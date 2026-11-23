@@ -1,6 +1,6 @@
 /* ---------- Social accounts (Connections.tsx) on the liquid glass (styles/GLASS-CONTRACT.md) ----------
    Five glass account cards (.st-conn.st-glass), each with a round glass puck for the platform's mark, its name in
-   Playfair and its status chip. A card that needs the owner is hero glass (brighter edge and sheen, its rim may bend;
+   Fugaz One and its status chip. A card that needs the owner is hero glass (brighter edge and sheen, its rim may bend;
    padded past the rim's band). The boxes inside are warm translucent tiles with a soft top highlight
    (--st-fill-control: a light cream lift over the colours, a card's veil over a picture or the desktop), wells deeper
    (what is copied or typed), the notes tinted with the measured veil (--st-veil-tinted, the colour cut to
@@ -48,10 +48,13 @@
 .st-conn--choose_account {
   background: var(--st-light-3), linear-gradient(165deg, rgb(var(--st-amber-rgb) / var(--st-tint-cut)), rgb(var(--st-amber-rgb) / 0) 60%), linear-gradient(180deg, rgb(var(--st-veil-rgb) / calc(var(--st-veil-tinted) / (1 - var(--st-elev-3) - var(--st-elev-grad-3)))), rgb(var(--st-veil-rgb) / calc(var(--st-veil-tinted) / (1 - var(--st-elev-3)))) var(--st-elev-settle));
 }
+/* On a narrow phone the status chip moves under the name rather than squeezing it: the platform's name in Fugaz One
+   is never cut mid-word ("TikT|ok" at 320 px). */
 .st-conn__head {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: var(--st-space-3);
+  gap: var(--st-space-2) var(--st-space-3);
   min-width: 0;
 }
 /* The platform's mark in a round glass puck (round: it is the account's face, like an avatar). */
@@ -67,11 +70,12 @@
   box-shadow: var(--st-sheen-control);
 }
 .st-conn .st-conn__name {
-  flex: 1;
+  flex: 1 1 auto;
   min-width: 0;
   color: var(--st-text-strong);
+  font-family: var(--st-font-display);
   font-size: var(--st-fs-h3);
-  font-weight: var(--st-weight-display);
+  font-weight: 400;
   overflow-wrap: anywhere;
 }
 /* The account: its picture, name and handle, a tile that only shows. */
@@ -279,10 +283,14 @@
   background: var(--st-fill-control);
   box-shadow: var(--st-sheen-control);
 }
+/* An h3 at 15 px that labels the list under it: small text, so Fraunces, not the headings' Fugaz One. */
 .st-conn .st-limits__title {
   color: var(--st-sky-ink);
+  font-family: var(--st-font);
   font-size: var(--st-fs-small);
   font-weight: var(--st-weight-ui);
+  font-optical-sizing: auto;
+  font-variation-settings: "SOFT" 0, "WONK" 0;
 }
 .st-limits__list {
   display: grid;

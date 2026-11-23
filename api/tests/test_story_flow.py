@@ -261,7 +261,7 @@ def test_a_dead_token_on_upload_asks_for_lamo_stories_connections(
     assert job is not None
     assert job["publishingStatus"] == "needs_attention"
     assert job["error"] == (
-        "This YouTube account (Lamo Stories youtube) needs connecting again. Open Funded Clips › Social accounts, "
+        "This YouTube account (Lamo Stories youtube) needs connecting again. Open Clips Funded › Social accounts, "
         "then tap Try again."
     )
     social = table.raw(sup.PK, "SOCIAL#youtube")
@@ -402,11 +402,11 @@ def test_every_kind_has_a_lamo_stories_sentence() -> None:
             assert "Settings" not in text, (platform, kind)
             assert text.endswith("."), (platform, kind)
     assert story_sentence("youtube", "reconnect", "Lamo Stories Channel") == (
-        "This YouTube account (Lamo Stories Channel) needs connecting again. Open Funded Clips › Social accounts, "
+        "This YouTube account (Lamo Stories Channel) needs connecting again. Open Clips Funded › Social accounts, "
         "then tap Try again."
     )
     assert story_sentence("tiktok", "private") == (
-        "Make the Funded Clips TikTok account private until TikTok approves the app, then tap Try again."
+        "Make the Clips Funded TikTok account private until TikTok approves the app, then tap Try again."
     )
 
 

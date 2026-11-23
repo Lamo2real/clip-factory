@@ -17,7 +17,7 @@ from ..errors import ApiError, not_found
 from . import types as ws
 
 NOT_FOUND = "We could not find that workspace."
-NOT_STORIES = "That is a Funded Clips page. Switch to Funded Clips first."
+NOT_STORIES = "That is a Clips Funded page. Switch to Clips Funded first."
 
 
 def clips_workspace() -> dict[str, Any]:

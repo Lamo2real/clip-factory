@@ -137,7 +137,7 @@ def switched_off(store: db.Store, user_id: str, workspace_id: str, kind: str) ->
         return None
     if found.get("active") is False:
         name = str(found.get("name") or agent.get("name") or agent_id)
-        return f"{name} is switched off. Switch it on in Funded Clips › Settings › Agents."
+        return f"{name} is switched off. Switch it on in Clips Funded › Settings › Agents."
     return None
 
 

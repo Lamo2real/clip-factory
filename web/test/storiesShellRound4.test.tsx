@@ -131,7 +131,7 @@ describe("each app has its own error boundary (§45.35 D16)", () => {
     );
     const card = q('[data-app-pane="stories"] [data-stories-problem]')!;
     expect(card).not.toBeNull();
-    expect(card.textContent).toContain("Funded Clips had a problem.");
+    expect(card.textContent).toContain("Clips Funded had a problem.");
     expect(card.textContent).toContain("Clip Factory is fine");
     expect(
       Array.from(card.querySelectorAll("button")).map((b) =>
@@ -195,7 +195,8 @@ describe("each app has its own error boundary (§45.35 D16)", () => {
     const app = source("app/App.tsx");
     // Each pane has its own toasts too (§45.38 A2): a toast of the app that is hidden waits for it.
     expect(app).toMatch(/clips=\{\s*<KeptSearchProvider value=\{lastClipsSearch\.current\}>\s*<ToastScope active=\{!inStories\} onScreen=\{clipsOnScreen\} onError=\{clipsDenied\}>\s*<ErrorBoundary scope="app">\s*<Shell \/>/);
-    expect(app).toMatch(/stories=\{\s*<ToastScope active=\{inStories\} onScreen=\{storiesOnScreen\} onError=\{storiesDeniedSound\}>\s*<StoriesPaneBoundary onClips=\{\(\) => navigate\(chooseClips\(\)\)\}>\s*<StoriesHost/);
+    // Clips Funded' toasts carry its st-toast class (its Fraunces in the shell's toast box); Clip Factory's carry none.
+    expect(app).toMatch(/stories=\{\s*<ToastScope active=\{inStories\} onScreen=\{storiesOnScreen\} onError=\{storiesDeniedSound\} className="st-toast">\s*<StoriesPaneBoundary onClips=\{\(\) => navigate\(chooseClips\(\)\)\}>\s*<StoriesHost/);
     // Clip Factory without Lamo Stories: the same Shell, with no pane and no new boundary around it.
     expect(app).toContain("{storiesEnabled() ? <BothApps /> : <Shell />}");
     // Campaign Home is kept now; only the skill editor opens fresh (§45.35 D18).

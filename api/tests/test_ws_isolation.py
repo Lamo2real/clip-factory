@@ -57,7 +57,7 @@ def clips_call(app: App) -> Call:
 
 
 NOT_FOUND = "We could not find that workspace."
-NOT_STORIES = "That is a Funded Clips page. Switch to Funded Clips first."
+NOT_STORIES = "That is a Clips Funded page. Switch to Clips Funded first."
 WORKSPACE_ROUTES = sorted((m, p) for m, p in ws_routes_core.EXPECTED if p.startswith("/v1/workspaces/stories"))
 STORIES_ONLY = [(m, p) for m, p in WORKSPACE_ROUTES if not (p == "/v1/workspaces/stories" and m == "GET")]
 WS_TYPES = {

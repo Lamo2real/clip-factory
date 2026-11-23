@@ -1,6 +1,6 @@
 /* stories.css: an index only. Its rules were split mechanically, in their original order, into one file per screen (22 Nov, for parallel work on the redesign).
    Keep this order: later files win over earlier ones at equal specificity. */
-/* fonts.css (the foundation: Playfair and Jost, self-hosted, OFL) is not imported here: StoriesApp puts it on the page
+/* fonts.css (the foundation: Fugaz One and Fraunces, self-hosted, OFL) is not imported here: StoriesApp puts it on the page
    with the first Stories screen (stories/fonts.ts), so the prefetched chunk never repaints Clip Factory. */
 @import "./glass-tokens.css"; /* the foundation: every --st-* token (the ONLY place they are defined) and the fonts */
 @import "./glass.css"; /* the foundation: the background behind the glass and the glass recipe as classes */

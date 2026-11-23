@@ -289,8 +289,8 @@ export function StMascot({ mood = "wave", size = 120, tone = "sun" }: { mood?: M
       )}
       {mood === "sleepy" ? (
         <g className="st-mascot__zzz" fill={PIP.light}>
-          <text x="92" y="30" fontSize="14" fontWeight="800" fontFamily="ui-rounded, system-ui, sans-serif">z</text>
-          <text x="102" y="18" fontSize="10" fontWeight="800" fontFamily="ui-rounded, system-ui, sans-serif">z</text>
+          <text x="92" y="30" fontSize="14" fontWeight="800" style={{ fontFamily: "var(--st-font)" }}>z</text>
+          <text x="102" y="18" fontSize="10" fontWeight="800" style={{ fontFamily: "var(--st-font)" }}>z</text>
         </g>
       ) : null}
       {mood === "think" ? <circle className="st-mascot__dot" cx="98" cy="30" r="5" fill={PIP.light} opacity="0.85" /> : null}
@@ -525,11 +525,11 @@ export function forgetDashboards(): void {
 }
 
 /**
- * The Social accounts page as Needs you sentences name it ("Funded Clips › Social accounts", or just "Social
- * accounts"). A sentence stored before a rename still says "Clip Factory Stories › Social accounts" or "Lamo Stories ›
- * Social accounts" and reads the same way.
+ * The Social accounts page as Needs you sentences name it ("Clips Funded › Social accounts", or just "Social
+ * accounts"). A sentence stored before a rename still says "Funded Clips › Social accounts", "Clip Factory Stories ›
+ * Social accounts" or "Lamo Stories › Social accounts" and reads the same way.
  */
-const SOCIAL_PAGE = String.raw`(?:(?:(?:Clip(?: Factory)?|Lamo) Stories|Funded Clips)\s*›\s*)?Social accounts`;
+const SOCIAL_PAGE = String.raw`(?:(?:(?:Clip(?: Factory)?|Lamo) Stories|Funded Clips|Clips Funded)\s*›\s*)?Social accounts`;
 
 /**
  * A Needs you sentence shown on the Social accounts page it sends the owner to, without the trip (§45.36 E17): "Open

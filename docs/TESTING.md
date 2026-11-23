@@ -13,7 +13,7 @@ with `validate` without a backend and `terraform test` against a mock AWS provid
 | Web end-to-end and layout tests | `web/` | Playwright in mock mode | yes | no |
 | API Lambdas | `api/` | pytest, ruff, mypy (uv) | yes | no |
 | Agent runtime | `agent/` | pytest, ruff, mypy (uv), the image build and its self-check | yes | no tests, but the apply builds and pushes a new image, and that build runs the Dockerfile's self-check (`agent/Dockerfile`: the PO token check, `python -m clipfactory_agent.pot`) |
-| Funded Clips agent | `stories/agent/` | pytest, ruff, mypy (uv), ffmpeg, the image build and its self-check | yes (job `stories-agent`; the `web` gate waits for it) | no tests, but it builds and pushes a new image, and that build runs the Dockerfile's self-checks (`stories/agent/Dockerfile`: the engine's `validate` under Deno and `python -m lamostories_agent.selfcheck`) |
+| Clips Funded agent | `stories/agent/` | pytest, ruff, mypy (uv), ffmpeg, the image build and its self-check | yes (job `stories-agent`; the `web` gate waits for it) | no tests, but it builds and pushes a new image, and that build runs the Dockerfile's self-checks (`stories/agent/Dockerfile`: the engine's `validate` under Deno and `python -m lamostories_agent.selfcheck`) |
 | Desktop app | `desktop/` | `cargo fmt --check`, clippy, `cargo test`, the tools lock and its signing | yes, when `desktop/` changes (the `web` gate waits for it) | no ([desktop.yml](../.github/workflows/desktop.yml) builds it after a deploy) |
 | Infrastructure | `infra/` | `terraform fmt -check`, `terraform validate`, `terraform test` (mock provider), tflint | yes | no tests: plan, the delete gate, the Clip Factory check and apply |
 | Help corpus drift | `web/` | `node scripts/help-corpus.mjs --check` (corpus, routes table in [HELP_ASSISTANT.md](HELP_ASSISTANT.md), `/v1/help` rows of CONTRACTS §19); the CI `web-checks` job runs it right after `npm ci`, before type check, lint and tests | yes | no (the build regenerates the corpus) |
@@ -48,7 +48,7 @@ CF_E2E_PORT=4233 npx playwright test e2e/help-pictures.spec.ts --project=chromiu
 
 The `webkit` (Desktop Safari) and `webkit-phone` (iPhone 15) projects run the specs that hold the Mac app (WKWebView)
 and the iPhone PWA, headless: Ask's pictures and files, the motion, stillness and top-line checks, Home's boxes and
-covers, Get paid, and the Funded Clips switch's slide (`webkit` only; `testMatch` in `web/playwright.config.ts`). CI
+covers, Get paid, and the Clips Funded switch's slide (`webkit` only; `testMatch` in `web/playwright.config.ts`). CI
 runs them in jobs of their own, the `web-e2e (WebKit N/5)` shards, so only those jobs install WebKit and its system
 packages.
 
@@ -62,10 +62,10 @@ as one job, so [ci.yml](../.github/workflows/ci.yml) splits it:
 | Job | What it runs |
 |---|---|
 | `changes` | which areas a change touches (web, e2e, the two agents, desktop) and how much of the browser tests run (`e2e_mode`, below). A job whose area did not change is skipped. |
-| `web-checks` | a real `npm ci` (never node_modules from a cache, so a `package.json` that disagrees with `package-lock.json` fails here), the help corpus and Ask knowledge checks, the shard check (`node scripts/e2e-shards.mjs check`), type check, lint, Vitest, the bundle (`vite build`) and the Funded Clips bundle check (none of its code or styles in the main bundle). npm's download folder comes from a cache that only the nightly run and a run by hand save; a pull request only reads it |
+| `web-checks` | a real `npm ci` (never node_modules from a cache, so a `package.json` that disagrees with `package-lock.json` fails here), the help corpus and Ask knowledge checks, the shard check (`node scripts/e2e-shards.mjs check`), type check, lint, Vitest, the bundle (`vite build`) and the Clips Funded bundle check (none of its code or styles in the main bundle). npm's download folder comes from a cache that only the nightly run and a run by hand save; a pull request only reads it |
 | `web-e2e (1/7)` … `web-e2e (7/7)` | Chromium (the `chromium` and, at night, `screenshots` projects), 4 workers each. Each shard builds the mock app once. |
 | `web-e2e (WebKit 1/5)` … `web-e2e (WebKit 5/5)` | `webkit` and `webkit-phone`, 2 workers each |
-| `web` | the gate: passes only when `web-checks`, every shard, `stories-agent` and `desktop` passed, or `changes` said they had nothing to check (then each must be skipped). `stories-agent` and `desktop` are not required checks of their own, so this is what holds back the merge and auto-merge of a pull request whose Funded Clips agent tests or desktop tests fail (an admin can still merge past it). It fails when `changes` did not finish, so "skipped" only ever means "nothing it tests changed". This is the check branch protection requires, so keep a job with this exact name. |
+| `web` | the gate: passes only when `web-checks`, every shard, `stories-agent` and `desktop` passed, or `changes` said they had nothing to check (then each must be skipped). `stories-agent` and `desktop` are not required checks of their own, so this is what holds back the merge and auto-merge of a pull request whose Clips Funded agent tests or desktop tests fail (an admin can still merge past it). It fails when `changes` did not finish, so "skipped" only ever means "nothing it tests changed". This is the check branch protection requires, so keep a job with this exact name. |
 
 **Shards are split by time, not by count.** Playwright's own `--shard` splits in file order, which put all of
 `contrast.spec.ts` in one shard (14 to 23 minutes while the others took 8 to 12). So every shard but the last runs a
@@ -1591,7 +1591,7 @@ cd web && CF_E2E_PORT=4804 npx playwright test e2e/bank.spec.ts
   including `ws_url`, `hooks_url`, `vector_bucket`, `vector_index`, `job_flow_alias_arn`, `clip_flow_alias_arn`,
   `stats_function_name`, `learn_function_name`, `stats_rule_name`, `stats_tick_minutes`.
 
-## Funded Clips (CONTRACTS §45)
+## Clips Funded (CONTRACTS §45)
 
 The list is CONTRACTS §45.19. Three checks matter most, because the owner put protecting Lamo Clips first:
 
@@ -1603,7 +1603,7 @@ The list is CONTRACTS §45.19. Three checks matter most, because the owner put p
 * **Lamo Clips unchanged.** Every existing test passes untouched (the old route list in `test_http.py`, the OAuth
   callback cases, the agent server tests, the nav and Glide specs). `web/scripts/clips-unchanged.sh` builds the mock
   of the merge base and of the branch on one machine and compares screenshots of `/`, `/jobs`, `/review`, `/library`,
-  `/money` and `/settings` at 390×844, 1000×600, 1000×720 and 1440×900: pixel-identical with Funded Clips off
+  `/money` and `/settings` at 390×844, 1000×600, 1000×720 and 1440×900: pixel-identical with Clips Funded off
   (`cf.storiesPreview` = `"0"`), and different only inside the switcher's box with it on (`"1"`; the default since the
   switch, §45.36). The lead runs it on the switch pull request and in the
   final check (Mac and CI fonts differ, so both shots come from one machine). §45.23 lists the live evidence for each

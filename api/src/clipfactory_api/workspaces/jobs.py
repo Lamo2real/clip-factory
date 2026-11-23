@@ -42,7 +42,7 @@ REFERENCE_STOPPED = "Looking at the video stopped. Tap Try again."
 # of content type ``provider``
 CHECK_STOPPED = "Trying Luma AI Ray2 stopped. Tap Try it again."
 CHECK_NOT_STARTED = "Trying Luma AI Ray2 did not start. Tap Try it again."
-CHECK_NOT_SET_UP = "Funded Clips' helper is not switched on yet, so Luma AI Ray2 could not be tried."
+CHECK_NOT_SET_UP = "Clips Funded's helper is not switched on yet, so Luma AI Ray2 could not be tried."
 CHECK_KIND: Final = "provider"  # the content type of a "Try it" job (providers.CHECK_CONTENT_TYPE)
 CANCELED_STEP = "You stopped it."
 STOPPED_BY_KIND: Final = {

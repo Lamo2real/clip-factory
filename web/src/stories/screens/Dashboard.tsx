@@ -502,7 +502,7 @@ function SetupCard({ data }: { data: Onboarding | null }) {
       </ArcDial>
       <div className="st-setupcard__text">
         <h2 className="st-setupcard__title st-display" id="st-setupcard-title">
-          Set up Funded Clips: {data.done} of {data.total} done
+          Set up Clips Funded: {data.done} of {data.total} done
         </h2>
         {left.length ? (
           <p className="st-setupcard__left">
@@ -557,7 +557,7 @@ export function DashboardScreen({ ws }: StoriesScreenProps) {
       ) : empty ? (
         <>
           <StEmpty title="Your studio is ready" action={<StLinkButton href="/stories/production/new" main={!settingUp}>Make your first video</StLinkButton>}>
-            Pick an idea and a character, and Funded Clips makes the cartoon.
+            Pick an idea and a character, and Clips Funded makes the cartoon.
           </StEmpty>
           <div className="st-tiles st-tiles--start">
             <Accounts items={data.accounts} />

@@ -32,7 +32,7 @@ describe("workspaces", () => {
 
   it("answers the API's 404 and 409 for a workspace that is not one, or not a Lamo Stories one", async () => {
     await expect(api.dashboard("01JZ0000000000000000000000")).rejects.toMatchObject({ status: 404, message: "We could not find that workspace." });
-    await expect(api.social("clips")).rejects.toMatchObject({ status: 409, message: "That is a Funded Clips page. Switch to Funded Clips first." });
+    await expect(api.social("clips")).rejects.toMatchObject({ status: 409, message: "That is a Clips Funded page. Switch to Clips Funded first." });
   });
 
   it("saves settings on top of the version it was given, and refuses a stale one or a bad value", async () => {
@@ -159,9 +159,9 @@ describe("developer apps (§45.30)", () => {
 
   it("never connects without a choice, and own keys must be saved first (no fallback)", async () => {
     store.social = store.social.map((a) => (a.platform === "x" ? { ...a, app: { choice: null, saved: false }, connectionStatus: "not_connected" } : a));
-    await expect(api.connectSocial("stories", "x")).rejects.toMatchObject({ status: 409, message: "Pick which X app Funded Clips uses first." });
+    await expect(api.connectSocial("stories", "x")).rejects.toMatchObject({ status: 409, message: "Pick which X app Clips Funded uses first." });
     store.social = store.social.map((a) => (a.platform === "x" ? { ...a, app: { choice: "own", saved: false } } : a));
-    await expect(api.connectSocial("stories", "x")).rejects.toMatchObject({ status: 409, message: "Paste your Funded Clips X app keys first." });
+    await expect(api.connectSocial("stories", "x")).rejects.toMatchObject({ status: 409, message: "Paste your Clips Funded X app keys first." });
   });
 
   it("checks the key formats, keeps only masked hints, and a new app disconnects the account first", async () => {
@@ -252,7 +252,7 @@ describe("the onboarding (§45.29)", () => {
   it("does not count a platform held as Lamo Clips' own (same_as_clips): it ticks once Lamo Stories' own is connected (§45.34)", async () => {
     // The seed's X is same_as_clips: nothing can be posted there, so the step stays to do.
     expect((await api.getOnboarding("stories")).steps.find((s) => s.step === "x")?.state).toBe("todo");
-    // Signing in with a separate account made for Funded Clips (never "use it for both", §45.37 G8): it ticks.
+    // Signing in with a separate account made for Clips Funded (never "use it for both", §45.37 G8): it ticks.
     await api.connectSocial("stories", "x");
     expect((await api.social("stories")).accounts.find((a) => a.platform === "x")).toMatchObject({ connectionStatus: "connected", handle: "@fundedclips" });
     expect((await api.getOnboarding("stories")).steps.find((s) => s.step === "x")?.state).toBe("done");

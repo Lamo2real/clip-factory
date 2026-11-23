@@ -666,7 +666,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
               <button type="button" className="st-btn st-btn--main st-s-big st-postit" onClick={() => setPosting(true)}>
                 Post it
               </button>
-              <p className="st-s-field__hint">Only to Funded Clips&apos; own accounts. You pick each one.</p>
+              <p className="st-s-field__hint">Only to Clips Funded&apos;s own accounts. You pick each one.</p>
             </section>
           ) : null}
           {done ? <PostsPanel jobs={pubs.data} onRetry={(j) => void retry(j)} busyId={retrying} /> : null}
@@ -806,7 +806,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
             </>
           }
         >
-          <p>Funded Clips writes a new storyboard with your characters as they look now, then makes every step again. This one is kept in the Library.</p>
+          <p>Clips Funded writes a new storyboard with your characters as they look now, then makes every step again. This one is kept in the Library.</p>
           <div className="st-s-decide__ai">
             <span className="st-s-field__hint">This remake uses</span>
             {menuFor("storyboard")}

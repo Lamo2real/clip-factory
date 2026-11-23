@@ -215,7 +215,7 @@ def model_label(key: str) -> str:
 
 
 def unknown_model(key: str) -> str:
-    return f"Funded Clips has no model called '{key}'. Pick another one in Funded Clips › Settings › AI."
+    return f"Clips Funded has no model called '{key}'. Pick another one in Clips Funded › Settings › AI."
 
 
 def unknown_effort(effort: str) -> str:

@@ -79,10 +79,9 @@
   align-items: center;
   min-height: 44px;
   color: var(--st-text-strong);
-  font-family: var(--st-font);
+  font-family: var(--st-font-display);
   font-size: 1.1875rem;
-  font-weight: var(--st-weight-display);
-  font-optical-sizing: auto;
+  font-weight: 400;
   line-height: 1.25;
   text-decoration: none;
   overflow-wrap: anywhere;
@@ -257,18 +256,19 @@
 }
 
 .st-s-preview__dial .st-stat__value {
+  font-family: var(--st-font-display);
   font-size: clamp(2.25rem, 1.9rem + 1vw, 2.875rem);
-  font-weight: var(--st-weight-num);
+  font-weight: 400;
   line-height: 1;
   animation: none;
 }
 
-/* The % in Jost at body size (Playfair's is a small high-set glyph that reads as a smudge at this size). */
+/* The % beside the big numeral: small text, so the reading face at body size, sturdy and plain. */
 .st-s-preview__dial .st-stat__unit {
-  font-family: var(--st-font-caps);
+  font-family: var(--st-font);
   font-size: var(--st-fs-body);
   font-weight: var(--st-weight-body);
-  font-variation-settings: normal;
+  font-variation-settings: "SOFT" 0, "WONK" 0;
   letter-spacing: 0;
 }
 
@@ -300,11 +300,13 @@
 }
 
 .st-s-preview__row .st-media__title {
+  display: block;
   color: var(--st-text-strong);
   font-family: var(--st-font);
-  font-weight: var(--st-weight-display);
+  font-weight: 500;
   white-space: normal;
   overflow-wrap: anywhere;
+  -webkit-line-clamp: none;
 }
 
 .st-s-preview.is-bad .st-s-preview__row .st-media__title {
@@ -371,9 +373,9 @@
   align-items: center;
   min-height: 48px;
   color: var(--st-text-strong);
-  font-family: var(--st-font);
+  font-family: var(--st-font-display);
   font-size: 1.125rem;
-  font-weight: var(--st-weight-display);
+  font-weight: 400;
   border-radius: var(--st-r-inner);
   transition: color var(--st-dur-hover) var(--st-ease-out);
 }
@@ -390,9 +392,9 @@
 .st-s-details__title {
   margin: 14px 0 8px;
   color: var(--st-text-strong);
-  font-family: var(--st-font);
+  font-family: var(--st-font-display);
   font-size: var(--st-fs-body);
-  font-weight: var(--st-weight-display);
+  font-weight: 400;
   line-height: 1.2;
 }
 
@@ -542,7 +544,7 @@
   gap: 2px;
 }
 
-/* "Scene 1": a short wide-tracked caps caption (Jost), warm. */
+/* "Scene 1": a short wide-tracked caps caption, warm. */
 .st-s-film__num {
   color: var(--st-text-amber);
   font-family: var(--st-font-caps);

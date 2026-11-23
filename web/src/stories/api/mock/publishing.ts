@@ -66,9 +66,9 @@ export function afterSeed(store: MockStore): void {
       job(published, "tiktok", "needs_attention", 57, {
         ...at("tiktok"),
         accountName: name("tiktok"),
-        error: "This TikTok account (Funded Clips) needs connecting again. Open Funded Clips › Social accounts, then tap Try again.",
+        error: "This TikTok account (Clips Funded) needs connecting again. Open Clips Funded › Social accounts, then tap Try again.",
       }),
-      job(published, "facebook", "failed", 57, { accountName: "Funded Clips", error: "Facebook did not answer. Tap Try again in a few minutes." }),
+      job(published, "facebook", "failed", 57, { accountName: "Clips Funded", error: "Facebook did not answer. Tap Try again in a few minutes." }),
     );
     if (!published.posted.some((p) => p.platform === "youtube")) published.posted.push({ platform: "youtube", url });
   }
@@ -79,7 +79,7 @@ export function afterSeed(store: MockStore): void {
       job(approved, "x", "needs_attention", 0.1, {
         ...at("x"),
         accountName: name("x"),
-        error: "This X account is the one Clip Factory posts to. Pick another in Funded Clips › Social accounts, then tap Try again.",
+        error: "This X account is the one Clip Factory posts to. Pick another in Clips Funded › Social accounts, then tap Try again.",
       }),
     );
   }
@@ -96,11 +96,11 @@ const upper = (t: string) => t.charAt(0).toUpperCase() + t.slice(1);
 function stopReason(store: MockStore, ws: string, platform: Platform): string | null {
   const a = store.social.find((s) => s.workspaceId === ws && s.platform === platform);
   const name = PLATFORM_NAME[platform];
-  if (!a || a.connectionStatus === "not_connected") return `Funded Clips' ${name} is not connected. Connect it in Funded Clips › Social accounts, then tap Try again.`;
-  if (a.connectionStatus === "needs_reconnect") return `${upper(thisAccount(platform, a.accountName))} needs connecting again. Open Funded Clips › Social accounts, then tap Try again.`;
-  if (a.connectionStatus === "choose_account") return `Pick which ${name} account Funded Clips posts to in Funded Clips › Social accounts, then tap Try again.`;
+  if (!a || a.connectionStatus === "not_connected") return `Clips Funded's ${name} is not connected. Connect it in Clips Funded › Social accounts, then tap Try again.`;
+  if (a.connectionStatus === "needs_reconnect") return `${upper(thisAccount(platform, a.accountName))} needs connecting again. Open Clips Funded › Social accounts, then tap Try again.`;
+  if (a.connectionStatus === "choose_account") return `Pick which ${name} account Clips Funded posts to in Clips Funded › Social accounts, then tap Try again.`;
   // Before every upload too (§45.37 G8): Clip Factory's own account, also when Clip Factory connected it later.
-  if (sameAsClips(a, store)) return `${upper(thisAccount(platform, a.accountName))} is the one Clip Factory posts to. Pick another in Funded Clips › Social accounts, then tap Try again.`;
+  if (sameAsClips(a, store)) return `${upper(thisAccount(platform, a.accountName))} is the one Clip Factory posts to. Pick another in Clips Funded › Social accounts, then tap Try again.`;
   return null;
 }
 
@@ -121,8 +121,8 @@ export function nextReset(platform: Platform, now = new Date()): string {
 
 /**
  * Whether a post on Clip Factory's shared app waits (§45.37 G6): Clip Factory's posts always go first, so when what
- * is left for Funded Clips is used up (knob `clipsFirst`: true or a list of platforms) the post waits in its
- * queue until the window resets, then goes out by itself. Never on Funded Clips' own app.
+ * is left for Clips Funded is used up (knob `clipsFirst`: true or a list of platforms) the post waits in its
+ * queue until the window resets, then goes out by itself. Never on Clips Funded's own app.
  */
 function waitFor(store: MockStore, j: PublishingJob): string | null {
   const a = store.social.find((s) => s.workspaceId === j.workspaceId && s.platform === j.platform);
@@ -231,13 +231,13 @@ function unsure(store: MockStore, a: SocialAccount | undefined, confirm: string 
   }
   // A raw open_id never goes in the sentence (§45.36 E14): "this TikTok account" when it has no name or handle.
   const name = a.accountName ?? a.handle ?? null;
-  return accountConflict(`Funded Clips cannot tell if ${thisAccount("tiktok", name)} is the one Clip Factory posts to. Tap Yes if it is your Funded Clips TikTok.`, a);
+  return accountConflict(`Clips Funded cannot tell if ${thisAccount("tiktok", name)} is the one Clip Factory posts to. Tap Yes if it is your Clips Funded TikTok.`, a);
 }
 
 function changed(a: SocialAccount): ApiError {
   // Its name or handle, never a raw channel id (§45.36 E14), as the API's _changed_account.
   const name = a.accountName ?? a.handle ?? null;
-  return accountConflict(`Funded Clips' ${PLATFORM_NAME[a.platform]} is a different account now: ${thisAccount(a.platform, name)}. Tap Yes if that is right.`, a);
+  return accountConflict(`Clips Funded's ${PLATFORM_NAME[a.platform]} is a different account now: ${thisAccount(a.platform, name)}. Tap Yes if that is right.`, a);
 }
 
 /** The exact account a job goes to (§45.34). */
@@ -257,7 +257,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       const seen = new Set<Platform>();
       for (const t of targets) {
         if (!STORIES_PLATFORMS.includes(t.platform) || seen.has(t.platform)) throw new ApiError(400, "bad_request", "Pick each app once.");
-        if (t.socialAccountId !== `${ws}.${t.platform}`) throw new ApiError(409, "conflict", "That account is not one of Funded Clips' own. Pick it again.");
+        if (t.socialAccountId !== `${ws}.${t.platform}`) throw new ApiError(409, "conflict", "That account is not one of Clips Funded's own. Pick it again.");
         if (t.confirmAccount !== undefined && (typeof t.confirmAccount !== "string" || !t.confirmAccount || t.confirmAccount.length > 200))
           throw new ApiError(400, "bad_request", "confirmAccount must be the account the app showed.");
         seen.add(t.platform);
