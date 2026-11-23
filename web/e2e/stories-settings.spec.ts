@@ -467,7 +467,13 @@ test.describe("Video and storage", () => {
     await expect(use).not.toContainText("builtin-rig");
     await canvas.getByRole("button", { name: "Add a price for Amazon Nova Canvas" }).click();
     const canvasPrice = page.locator(".st-stg-price").filter({ hasText: "Amazon Nova Canvas" });
+    // The first price's save may land after this form opened (under load it does): it closes its own form only, never
+    // this one. Its row's Remove button is switched off until that save is answered.
+    await expect(price.getByRole("button", { name: /^Remove your price for Luma AI Ray2/ })).not.toHaveAttribute("aria-disabled", "true");
+    await expect(price.getByRole("button", { name: "Save the price" })).toHaveCount(0);
+    await expect(canvasPrice.getByRole("button", { name: "Save the price" })).toBeVisible();
     await canvasPrice.getByLabel("Price for one picture").fill("0.04");
+    await expect(canvasPrice.getByLabel("Price for one picture")).toHaveValue("0.04");
     await canvasPrice.getByRole("button", { name: "Save the price" }).click();
     await expect(canvasPrice).toContainText("0.04 for a picture");
     await expect(canvas).not.toContainText("No price yet");

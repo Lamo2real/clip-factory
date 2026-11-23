@@ -507,7 +507,7 @@ export function VideoSection({ ws }: { ws: string }) {
           open={priceOpen}
           setOpen={(id, from) => {
             if (id !== null) return setPriceOpen(id);
-            // Only that maker's own form closes: its save may end after the owner opened another one.
+            // Only that maker's own form closes: its save may end after the owner opened another one, which stays open.
             setPriceOpen((now) => (now === from ? null : now));
             void usage.reload();
           }}
