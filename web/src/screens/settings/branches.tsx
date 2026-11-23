@@ -199,16 +199,25 @@ export function YoutubeBranch() {
         </div>
       </Apple>
       {hasCookies ? <p className="apple-panel__note">They are only used to download YouTube videos.</p> : null}
+      {/* The how-to is only for when YouTube blocks a video: one fold, shut until tapped. */}
       <section className="cookie-guide" aria-labelledby={guideId}>
-        <h3 className="cookie-guide__title" id={guideId}>
-          How to get cookies
-        </h3>
-        <ol className="cookie-guide__steps">
-          {COOKIES_STEPS.map((step) => (
-            <li key={step}>{step}</li>
-          ))}
-        </ol>
-        <p className="cookie-guide__tip">{COOKIES_TIP}</p>
+        <details className="cr-fold">
+          <summary className="cr-fold__q">
+            <Icon name="info" size={18} />
+            <span className="cookie-guide__title" id={guideId}>
+              How to get cookies
+            </span>
+            <Icon name="chevronRight" size={18} className="icon cr-fold__chev act-turn" />
+          </summary>
+          <div className="cr-fold__body">
+            <ol className="cookie-guide__steps">
+              {COOKIES_STEPS.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ol>
+            <p className="cookie-guide__tip">{COOKIES_TIP}</p>
+          </div>
+        </details>
       </section>
     </Panel>
   );
@@ -476,7 +485,7 @@ function PictureApple({ inUse, onPicked }: { inUse: boolean; onPicked: () => voi
           {prefs.background ? <img src={prefs.background} alt="" /> : <span className="bg-picker__mesh" />}
         </span>
         <div className="bg-picker__text">
-          <span className="muted small">{prefs.background ? "Your picture is ready." : "No picture yet. Until you pick one, you get the Clip Factory colours."}</span>
+          <span className="muted small">{prefs.background ? "Your picture is ready." : "No picture yet. You see the Clip Factory colours."}</span>
           <div className="row-actions">
             <input
               ref={file}
@@ -586,7 +595,7 @@ function ColoursApple({ inUse, colours, onChange }: { inUse: boolean; colours: s
           </label>
         </div>
         <span className="muted small">
-          {colours.length === 1 ? "1 colour picked." : `${colours.length} colours picked.`} Tap a colour to add it or take it off.
+          {colours.length === 1 ? "1 colour picked." : `${colours.length} colours picked.`} Tap one to add or remove it.
           {coloursVeils(colours).pageVeil > SOFT_COLOURS_VEIL ? <span className="bg-colours__soft"> {SOFT_COLOURS_NOTE}</span> : null}
         </span>
       </div>

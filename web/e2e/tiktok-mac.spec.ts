@@ -946,7 +946,7 @@ test("review: the hint, TikTok on My settings with no tap, and Uploaded just now
   // On: TikTok starts on My settings like every other place (Everyone, all three on), with no tap before Upload.
   await expect(card.getByRole("button", { name: "Your settings are on" })).toBeVisible();
   await expect(card.getByRole("button", { name: "Use my settings" })).toHaveCount(0);
-  await expect(card.locator(".my-settings__note")).toHaveText("Every place uses your settings. Tap a place below to change it for this clip.");
+  await expect(card.locator(".my-settings__note")).toHaveText("Tap a place below to change it for this clip.");
   const tiktokNow = card.locator('[data-place="tiktok"] .place-row__now');
   await expect(tiktokNow).toContainText("Who can see it: Everyone · Comments on · Duet on · Stitch on");
   await expect(tiktokNow).not.toContainText("not picked yet");

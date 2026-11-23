@@ -93,7 +93,7 @@ function MakerPriceRow({ maker, ai, open, setOpen }: { maker: (typeof PRICED_MAK
         <span className="st-stg-price__name">{maker.label}</span>
         {price ? <Chip tone="sky">Your price</Chip> : <Chip tone="sun">No price set.</Chip>}
       </div>
-      <p className="st-stg-price__text">{price ? `${money(unitPrice(price), price.currency)} for ${maker.per}` : `No cost is worked out for it until you type its price for ${maker.per}.`}</p>
+      <p className="st-stg-price__text">{price ? `${money(unitPrice(price), price.currency)} for ${maker.per}` : `Type its price for ${maker.per} to see costs.`}</p>
       {open ? (
         <form
           className="st-stg-price__form"

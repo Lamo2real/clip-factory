@@ -106,8 +106,9 @@ reading" and "the AdSense website" are the exceptions). Platform labels stay bol
    `cost`, "Steps checked on 21 Nov 2026"); the **status block** (`data-help="getpaid-status"`: the pill, the line,
    `missing` and `holds` lines, the reading chip (`readingChip`, YouTube and, while `WHOP_CONNECT` is on, Content
    Rewards), X's `warning`, and `next` as below); **Can you earn here?** (the guide's facts for his country from
-   `GET /v1/money`'s `country`, each short; one glass "Read YouTube's rules" per different official page; with no
-   country picked: "Pick your country in Money settings to see its rules." with a glass "Pick my country"
+   `GET /v1/money`'s `country`, each short, inside one closed fold "See the rules" with one glass "Read YouTube's
+   rules" per different official page; with no country picked: "Pick your country to see its rules." (above the fold)
+   with a glass "Pick my country"
    (→ `/settings/posting/money#money-country`) and the facts that hold everywhere); the **step cards** in time order;
    **What Clip Factory can see** (the server's `seen` lines); **Sent to your bank** (`data-help="getpaid-sent"`: the
    rows of §40.4); **When it's done** (glass "Check now" = `POST /v1/money/refresh` on YouTube and Content Rewards, the
@@ -1736,14 +1737,17 @@ answer 503 `unavailable` "Coming soon.").
 * Whop's sign-in is OAuth 2.1 + PKCE (S256) with public clients (`token_endpoint_auth_method` `none`) at
   `https://api.whop.com/oauth/`, and an app needs a `client_id` made in Whop's Developer Dashboard with exact redirect
   URIs. So, like every platform of §17, the owner makes his own Whop app once (no secret: a public client):
-  * step `whop-key` "Make your Whop key" (inside the card, not numbered; ticks itself when the key is saved): Open
+  * step `whop-key` "Make your Whop key" (inside the card, not numbered; ticks itself when the key is saved; the card's
+    lede is "Optional. See what Whop sent to your bank."), then "A grown-up does this once on the Mac.", then one
+    closed fold "How do I make it?" (`data-whop="how"`) holding everything up to the company hint, so the card stays
+    short (the owner, 23 Nov 2026); the "Whop key" box and "Save key" stay visible under it. In the fold: Open
     "Open Whop's developer page" → `https://whop.com/dashboard/developer`. "Tap **Create app**. Name it:" Copy chip
     "Clip Factory". "Find **OAuth**. Paste this in **Redirect URIs**:" Copy chip `GetPaid.connections.whop.redirectUri`
     (`{HOOKS_URL}/oauth/whop/callback`). "Tick **user:balance:read**, **payout:withdrawal:read**,
     **payout:destination:read** and **identity:read**." "Tap **Save**. Copy the **Client ID**. It starts with app_."
-    Paste box "Whop key" (`^app_[A-Za-z0-9]{4,64}$`, friendly 400 "Your Whop key starts with app_."), "Save key".
     "Whop may show this a little differently. Look for the same words." If you see: Whop asks for a company first →
-    "Make one. Any name is fine. It's free."
+    "Make one. Any name is fine. It's free." Under the fold: paste box "Whop key" (`^app_[A-Za-z0-9]{4,64}$`, friendly
+    400 "Your Whop key starts with app_."), "Save key".
   * then the card's "Connect Whop" (glass, except when the page's `next` is `null`, §40.1 item 2).
 * `PUT /v1/getpaid/whop/key {"clientId"}` → secret `cf-prod/platforms/whop/app` `{clientId, userId, savedAt}`;
   `PAYCONN#whop` `status "keys_saved"`, `keyHint` (first 6 + "…" + last 4). A different `clientId` while connected

@@ -133,7 +133,7 @@ export function Jobs() {
             Every <em>job</em>, start to finish.
           </>
         }
-        lede="Every link or video you add is one job. Tap one to watch it being made, step by step."
+        lede="Each link or video is one job. Tap one to watch it being made."
         actions={
           jobs.length ? (
             <>
@@ -167,7 +167,7 @@ export function Jobs() {
             </LinkButton>
           }
         >
-          Tap Make clips, paste a YouTube, Twitch or Kick link, and your first job starts.
+          Tap Make clips and paste a YouTube, Twitch or Kick link.
         </Empty>
       ) : null}
       {jobs.length ? (

@@ -200,7 +200,7 @@ describe("the page", () => {
     expect(hero.querySelector("a.st-pill.st-stg-head__setup-go")?.getAttribute("href")).toBe("/stories/setup");
     const head = $(".st-stg-section__head.st-plate")!;
     expect(head.querySelector("h2")?.textContent).toBe("Storage and production");
-    expect(head.querySelector(".st-stg-bar")?.textContent).toContain("Clips Funded keeps its files in its own folder, apart from Clip Factory's.");
+    expect(head.querySelector(".st-stg-bar")?.textContent).toContain("Your files stay apart from Clip Factory's.");
     expect(head.querySelector(".st-stg-saved")).not.toBeNull();
     // One plate above the first card: the bar has none of its own there.
     expect($$(".st-stg-section .st-plate")).toEqual([head]);
@@ -511,7 +511,7 @@ describe("Skills", () => {
     await click(byText("button", "Open", cards[0]!));
     await settle();
     expect($(".st-stg-pre")?.textContent).toMatch(/^---\nname: nonverbal-storytelling/);
-    expect(host.textContent).toContain("can't be changed");
+    expect(host.textContent).toContain("so its words can't change");
     expect($$("button", cards[0]!).some((b) => b.textContent?.includes("Change it"))).toBe(false);
     expect($$("button", cards[0]!).some((b) => b.textContent?.includes("Delete"))).toBe(false);
   });
@@ -628,7 +628,9 @@ describe("Video", () => {
     // said from this page (§45.36 E17): "Pick Built-in animation above", never "in Settings › Video".
     const details = $<HTMLElement>('[data-maker-model="luma-ray2"]', card("Video maker"))!;
     expect(details.textContent).toContain("Luma AI Ray2");
-    expect(details.textContent).toContain("Luma AI on Amazon Bedrock · Runs in the US (Oregon)");
+    expect(details.textContent).toContain("Luma AI on Amazon Bedrock · ");
+    // Where it runs, said once (its note says it).
+    expect(details.textContent?.split("Runs in the US (Oregon)")).toHaveLength(2);
     expect(details.textContent).toContain("No price known.");
     expect($$("[role=status]", card("Video maker")).map((n) => n.textContent)).toContain(LUMA_NOT_READY.replace(" in Settings › Video", " above"));
     expect(card("Video maker").textContent).not.toContain("in Settings › Video");
@@ -694,7 +696,7 @@ describe("Video", () => {
     await open("video");
     const video = card("Video maker");
     expect(video.textContent).toContain("Ended by Amazon on 30 Sep 2026.");
-    expect(video.textContent).toContain("new videos stop until you pick another video maker");
+    expect(video.textContent).toContain("New videos stop until you pick another video maker");
     expect(called("patchWorkspace")).toHaveLength(0);
     // Try it is Luma AI Ray2's now, never Nova Reel's.
     expect($('[data-provider="nova-reel"]')).toBeNull();
@@ -742,7 +744,7 @@ describe("Video", () => {
       ["16:9 wide", null],
     ]);
     expect(shapes[0]!.textContent).toContain("For Shorts, Reels and TikTok");
-    expect(card("Shape and size").textContent).toContain("Shorts, Reels and TikTok want 9:16.");
+    expect(card("Shape and size").textContent).toContain("Change it per video in Production › New.");
     const sizes = () => $$("[role=radio]", group("Size of the video")).map((r) => r.querySelector(".st-stg-pick__label")?.textContent);
     expect(sizes()).toEqual(["1080 × 1920", "720 × 1280"]);
     expect(host.textContent).toContain("30 frames a second (30 fps)");
@@ -1137,7 +1139,7 @@ describe("Storage and production (§45.34)", () => {
     expect(called("patchWorkspace").at(-1)?.args[1]).toMatchObject({ configuration: { production: { extraFormats: ["mov"] } } });
     await click(byText("[role=switch]", /On|Off/, byText(".st-stg-switchrow", /Put the captions into the picture/, file)));
     expect(byText(".st-stg-switchrow", /Put the captions into the picture/, file).textContent).toContain(
-      "Only the caption words are left out of the picture. The speech bubbles and the safety end card always stay in.",
+      "Only the captions are left out. Speech bubbles and the safety end card always stay in.",
     );
   });
 

@@ -627,7 +627,7 @@ function JobForm() {
                 <span>First, add a link. Tap Paste.</span>
               </>
             ) : (
-              <span>Copy a link from YouTube, Twitch or Kick, then tap Paste.</span>
+              <span>Copy a link, then tap Paste.</span>
             )}
           </p>
         </div>

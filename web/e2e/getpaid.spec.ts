@@ -286,7 +286,7 @@ for (const [name, use] of [
       expect(t.count).toBe(3);
     });
 
-    test("Connect Whop: Coming soon while off; on, 6 taps with the Whop key", async ({ page }) => {
+    test("Connect Whop: Coming soon while off; on, 7 taps with the Whop key (the how-to is one fold)", async ({ page }) => {
       await start(page, "/settings/posting/getpaid/contentrewards");
       const card = page.locator("[data-help='getpaid-whop']");
       await expect(card).toContainText("Coming soon: your Whop payouts here.");
@@ -295,7 +295,8 @@ for (const [name, use] of [
       await page.reload();
       await settle(page);
       await expect(card.locator(".btn--primary")).toHaveCount(0);
-      const t = tap(6);
+      const t = tap(7);
+      await t.tap(card.locator("summary", { hasText: "How do I make it?" }));
       await t.tap(card.getByRole("link", { name: /Open Whop's developer page/ }));
       await t.tap(card.getByRole("button", { name: "Copy App name" }));
       await t.tap(card.getByRole("button", { name: "Copy Redirect URI" }));
@@ -313,7 +314,7 @@ for (const [name, use] of [
       await expect(page).toHaveURL(/\/settings\/posting\/getpaid\/contentrewards#whop$/);
       await settle(page);
       await expect(card.locator(".gp-result")).toHaveText("Clip Factory can see your Whop payouts now (@faze).");
-      expect(t.count).toBe(6);
+      expect(t.count).toBe(7);
       await expect(card.getByRole("button", { name: "Stop reading Whop" })).toBeVisible();
     });
 

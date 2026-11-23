@@ -225,12 +225,12 @@ export function reviewLine(
 }
 
 /** Review's page lede (no job picked) while off or practising. */
-export const REVIEW_LEDE = "Watch each clip. Tap Upload to post it, or Throw away if you do not like it. Nothing posts until you tap Upload.";
+export const REVIEW_LEDE = "Watch each clip. Upload it or throw it away. Nothing posts until you tap Upload.";
 
 /** Review's page lede (no job picked): while on, the oldest clips go up by themselves, so it no longer says nothing posts. */
 export function reviewLede(a: Pick<AutoPostSettings, "on" | "practice" | "everyHours">): string {
   if (!a.on || a.practice) return REVIEW_LEDE;
-  return `Watch each clip. Tap Upload to post it now, or Throw away if you do not like it. Auto-posting is on: the oldest clips go up by themselves every ${hoursWords(a.everyHours)}.`;
+  return `Watch each clip. Upload it or throw it away. Auto-posting is on: the oldest clips go up by themselves every ${hoursWords(a.everyHours)}.`;
 }
 
 /** Throw away (or its decline) found the clip already taken by a run: nothing to throw away any more. */

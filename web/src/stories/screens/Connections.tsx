@@ -1,9 +1,13 @@
 // Lamo Stories › Social accounts (docs/CONTRACTS.md §45.13, §45.16.7, §45.30, §45.33): Lamo Stories' own social
-// accounts, separate from Clip Factory's. Five cards (YouTube, TikTok, Instagram, Facebook, X), each with the
-// platform's logo mark, its status, the account's name AND id, the authorization status and when it was last checked
-// (Check now), Connect / Reconnect / Pick another / Disconnect, what the platform allows for a second account, the
-// sign-in and Pages notes before Connect, the account's warning, and Clip Factory's own destination for that platform
-// so the owner sees they differ.
+// accounts, separate from Clip Factory's. Five cards (YouTube, TikTok, Instagram, Facebook, X), kid-proof (the owner,
+// 23 Nov: "less text … even an 8 year old should be able to use the app"): on the card only the platform's logo mark
+// and name, one status chip, the account (picture, name and handle), the one safety line, what needs the owner (the
+// account's warning, the list to pick from, the sign-in tip) and ONE main button (Connect / Reconnect / Pick another).
+// Everything else sits in one closed "More" fold per card: the authorization status and when it was last checked,
+// the account's id, Check now and Disconnect, the developer app (its choice, keys and redirect URIs), Clip Factory's
+// own destination for that platform and what the platform allows for a second account (minus the lines the card
+// already says). While the developer app still needs setting up the fold's line says "First, set up the app", and a
+// Connect tapped before that opens it; in a setup step (the card is the step) it opens by itself.
 //
 // The owner's hard rule (§45.37 G8): Clips Funded never posts to Clip Factory's own accounts, so there is no
 // "Use it for both" any more. Every card says up front to use a new account made for Clips Funded; an account
@@ -63,10 +67,11 @@ export function beforeConnect(p: Platform, choice: SocialAccount["app"]["choice"
   switch (p) {
     case "youtube":
       return "Google will ask which channel. Pick your Clips Funded channel.";
+    // The first sentence of the API's own line (social.py _TIKTOK, _X): its "why" stays in the More fold's limits.
     case "tiktok":
-      return "Sign in to your Clips Funded account on tiktok.com in this browser first. TikTok connects the account that is signed in.";
+      return "Sign in to your Clips Funded account on tiktok.com in this browser first.";
     case "x":
-      return "First sign in to your Clips Funded account on x.com in this browser. X connects the account that is signed in.";
+      return "First sign in to your Clips Funded account on x.com in this browser.";
     default:
       // Facebook and Instagram always go through Lamo Stories' own Meta app (§45.30), whatever `choice` says.
       void choice;
@@ -154,9 +159,9 @@ export function resultSentence(code: string, p: Platform): { text: string; good:
     case "expired":
       return { text: "That took too long. Tap Connect again.", good: false };
     case "keys_wrong":
-      return { text: `${name} did not accept the app keys. Check them on this page, then connect again.`, good: false };
+      return { text: `${name} did not accept the app keys. Check them under More, then connect again.`, good: false };
     case "redirect_wrong":
-      return { text: `The return address does not match. Copy the address on this page into your ${name} app's settings, then connect again.`, good: false };
+      return { text: `The return address does not match. Copy the address under More into your ${name} app's settings, then connect again.`, good: false };
     case "missing_permissions":
       return { text: "A permission box was not ticked. Connect again and tick every box.", good: false };
     case "no_channel":
@@ -220,40 +225,32 @@ export function storiesRedirectUri(p: Platform, apiUrl = config().apiUrl): strin
 const META: Platform[] = ["instagram", "facebook"];
 const isMeta = (p: Platform) => META.includes(p);
 
-/** Every own-app list ends with where its keys go: here, never into Clip Factory's guide (whose keys are its own). */
-const PASTE_HERE = "Paste its keys in the boxes below, never in Clip Factory.";
-
-/** What a separate developer app means on each platform, in plain words (the differences from Clip Factory's guide). */
+/**
+ * What a separate developer app means on each platform, in plain words (the differences from Clip Factory's guide).
+ * Where its keys go (here, never into Clip Factory's guide) is said once, by KEYS_HERE_ONLY beside the guide's link.
+ */
+const META_NOTES = [
+  "Make one new Meta app for Clips Funded. It serves Instagram and Facebook: its keys are entered once.",
+  "Copy both addresses below into your Meta app's settings, and make a sign-in setup there. Its number goes in the last box.",
+  "At first only you can connect. Meta checks the app before anyone else can.",
+];
 const OWN_APP_NOTES: Record<Platform, string[]> = {
   youtube: [
-    "Make a new project in Google Cloud and give its app its own name, for example Clips Funded.",
+    "Make a new Google Cloud project, named for example Clips Funded.",
     "Copy the address below into your app's settings (not Clip Factory's).",
     "Its uploads per day are its own.",
-    PASTE_HERE,
   ],
   tiktok: [
     "Make a new app on TikTok for Developers, named for example Clips Funded.",
     "Copy the address below into your app's settings (not Clip Factory's).",
     "TikTok checks every new app before posts can be public. That can take days to weeks.",
-    PASTE_HERE,
   ],
-  instagram: [
-    "Make one new Meta app for Clips Funded. It serves Instagram and Facebook: its keys are entered once.",
-    "Copy both addresses below into your Meta app's settings, and make a sign-in setup there. Its number goes in the last box.",
-    "At first only you can connect. Meta checks the app before anyone else can.",
-    PASTE_HERE,
-  ],
-  facebook: [
-    "Make one new Meta app for Clips Funded. It serves Instagram and Facebook: its keys are entered once.",
-    "Copy both addresses below into your Meta app's settings, and make a sign-in setup there. Its number goes in the last box.",
-    "At first only you can connect. Meta checks the app before anyone else can.",
-    PASTE_HERE,
-  ],
+  instagram: META_NOTES,
+  facebook: META_NOTES,
   x: [
     "Make a new app in the X Developer Portal, named for example Clips Funded.",
     "Copy the address below into your app's settings (not Clip Factory's).",
     "It needs its own X credits.",
-    PASTE_HERE,
   ],
 };
 
@@ -272,9 +269,9 @@ export const OWN_APP_TECH: Record<Platform, string[]> = {
 };
 
 /** Said before the link to Clip Factory's guide, whose keys step changes Clip Factory's own app (§45.1, §45.30). */
-export const KEYS_HERE_ONLY =
-  "Only read the steps there. Paste the new app's keys here on this page, never in Clip Factory's guide: its keys step changes Clip Factory's own app.";
+export const KEYS_HERE_ONLY = "Only read the steps there. Paste the keys here, never in Clip Factory's guide: that would change Clip Factory's own app.";
 
+/** The account on the card: its picture, name and handle (its id is in the More fold, §45.36 E14). */
 function Identity({ a }: { a: SocialAccount }) {
   if (!a.externalAccountId && !a.accountName) return null;
   return (
@@ -289,18 +286,32 @@ function Identity({ a }: { a: SocialAccount }) {
       <div className="st-who__text">
         <span className="st-who__name">{a.accountName ?? "No name"}</span>
         {a.handle && a.handle !== a.accountName ? <span className="st-who__handle">{a.handle}</span> : null}
-        {/* The platform's own id for it, one tap away (§45.36 E14). */}
-        {a.externalAccountId ? (
-          <StTech className="st-who__tech">
-            <span className="st-who__id">
-              {PLATFORM_NAME[a.platform]}'s ID for it: <code>{a.externalAccountId}</code>
-            </span>
-          </StTech>
-        ) : null}
       </div>
     </div>
   );
 }
+
+/** A line, in its sentences ("x.com" and "funded.clips" stay whole: a sentence ends at a stop and a space). */
+function sentences(line: string): string[] {
+  return line
+    .replace(/([.!?])\s+/g, "$1\n")
+    .split("\n")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+/**
+ * The platform's limits minus every sentence the card already says (the API repeats the card's own lines there: the
+ * new-account line, the sign-in tip, the shared app's two lines), so nothing on a card is said twice. A line left
+ * with nothing is dropped.
+ */
+export function unsaid(limits: readonly string[], said: readonly string[]): string[] {
+  const known = new Set(said.flatMap(sentences));
+  return limits.map((l) => sentences(l).filter((s) => !known.has(s)).join(" ")).filter(Boolean);
+}
+
+/** The More fold's body: a stack with the card's own gap (as .st-conn and .st-app__go). */
+const MORE_BODY: CSSProperties = { display: "grid", gap: "var(--st-space-3)", minWidth: 0, paddingBottom: "var(--st-space-3)" };
 
 /** A box of text with a Copy button (the redirect URI). */
 function CopyLine({ label, value, copyLabel }: { label: string; value: string; copyLabel?: string }) {
@@ -415,7 +426,7 @@ function KeysForm({ p, saving, onSave, onCancel }: { p: Platform; saving: boolea
           {saving ? "Saving…" : "Save the keys"}
         </StButton>
       </div>
-      <p className="st-keys__safe">The keys go straight to Clips Funded's own safe store. They never show here again.</p>
+      <p className="st-keys__safe">The keys are kept safe. They never show here again.</p>
     </form>
   );
 }
@@ -481,19 +492,18 @@ function AppPart({
     <div className="st-app" data-app={choice ?? "none"}>
       <h3 className="st-app__title">
         <StIcon name="key" size={18} />
-        {isMeta(p) ? "Developer app: Clips Funded's own Meta app" : `Developer app for ${name}`}
+        Developer app for {isMeta(p) ? "Meta" : name}
       </h3>
       {!showChoice ? (
         <>
           <p className="st-app__now">
             {choice === "clips" ? (
               <>
-                Shares <strong>Clip Factory's {name} app</strong>, on purpose. {SHARED_APP_LINE} Clips Funded still gets its own
-                sign-in and its own keys to the account, never Clip Factory's. {SHARED_APP_ACCOUNT_LINE}
+                Shares <strong>Clip Factory's {name} app</strong>, on purpose. {SHARED_APP_LINE} {SHARED_APP_ACCOUNT_LINE}
               </>
             ) : (
               <>
-                Uses <strong>its own {isMeta(p) ? "Meta" : name} app</strong>: fully separate from Clip Factory. Its keys are saved.
+                Uses <strong>its own {isMeta(p) ? "Meta" : name} app</strong>. Its keys are saved.
               </>
             )}
           </p>
@@ -514,9 +524,7 @@ function AppPart({
           {choice === "own" ? (
             <div className="st-app__uris">
               <p className="st-app__uris-note">
-                {isMeta(p)
-                  ? "Copy these two addresses into your Meta app's settings, so Instagram and Facebook can each come back here."
-                  : `Copy this address into your ${name} app's settings.`}
+                {isMeta(p) ? "Copy these two addresses into your Meta app's settings." : `Copy this address into your ${name} app's settings.`}
               </p>
               <RedirectLines p={p} />
               <StTech>
@@ -584,13 +592,13 @@ function AppPart({
         <>
           {shared ? (
             <>
-              <p className="st-app__ask">Which {name} app should Clips Funded use? You pick once; you can change it later.</p>
+              <p className="st-app__ask">Which {name} app should Clips Funded use?</p>
               <StPick<"own" | "clips">
                 label={`Which ${name} app Clips Funded uses`}
                 stack
                 value={(want ?? "none") as "own" | "clips"}
                 options={[
-                  { value: "own", label: "A separate app for Clips Funded", line: "Fully separate. You make a second app and paste its keys here." },
+                  { value: "own", label: "A separate app for Clips Funded", line: "You make a new app and paste its keys here." },
                   { value: "clips", label: "Share Clip Factory's app", line: `${SHARED_APP_LINE} ${SHARED_APP_ACCOUNT_LINE}` },
                 ]}
                 onChange={(v) => setPicking(v)}
@@ -647,7 +655,7 @@ function AppPart({
                 </ul>
               </StTech>
               <div className="st-app__guide">
-                <p>Every other step is the same as in Clip Factory's own guide. It opens in Clip Factory: come back here with the switcher.</p>
+                <p>The other steps are in Clip Factory's guide. It opens in Clip Factory: come back with the switch.</p>
                 <p className="st-note st-note--coral st-app__keys-here" role="note">
                   <StIcon name="alert" size={18} />
                   {KEYS_HERE_ONLY}
@@ -685,7 +693,7 @@ function IntendedAsk({ a, busy, onYes, onAnother }: { a: SocialAccount; busy: bo
         {connectedAsSentence(a)}.
       </p>
       <p className="st-intended__ask">
-        <strong>Is this your Clips Funded {place}?</strong> Clips Funded posts only here, never to Clip Factory's.
+        <strong>Is this your Clips Funded {place}?</strong>
       </p>
       <div className="st-sure__buttons">
         <StButton main disabled={busy} onClick={(e) => onYes(e.currentTarget)}>
@@ -778,6 +786,16 @@ export function PlatformCard({
 
   // Connect waits for the developer app: chosen, and (for its own app) its keys saved (§45.30: never a fallback).
   const appReady = a.app.choice === "clips" || (a.app.choice === "own" && a.app.saved);
+  // The More fold: closed on Social accounts, so five cards stay short (its line says "First, set up the app" while
+  // the developer app still needs it, and Connect opens it). In a setup step the card is the step, so there it opens
+  // by itself while the app needs setting up, also when it stops being ready after the card is on screen (fresh
+  // data); closed by hand, it stays so.
+  const [open, setOpen] = useState(inStep && !appReady);
+  const [wasReady, setWasReady] = useState(appReady);
+  if (wasReady !== appReady) {
+    setWasReady(appReady);
+    if (!appReady && inStep) setOpen(true);
+  }
   const connected = a.connectionStatus === "connected";
   // A connected YouTube changes channel by connecting again (Google asks which one, §45.13.5): its button says so,
   // as its limits line does ("To change it, tap Pick another channel.").
@@ -787,11 +805,26 @@ export function PlatformCard({
       : a.connectionStatus === "same_as_clips" || a.connectionStatus === "choose_account" || (p === "youtube" && connected)
         ? `Pick another ${PLACE[p]}`
         : "Reconnect";
+  // The one main button: only where connecting is what the card needs now (a list to pick from is its own main part).
+  const connectIsMain = appReady && (a.connectionStatus === "not_connected" || a.connectionStatus === "needs_reconnect" || a.connectionStatus === "same_as_clips");
   const reasonText = a.connectionStatus === "needs_reconnect" ? reasonSentence(a.reason, p) : null;
   // Any other code is said in words too (the two with their own lines below excepted); the server's warning, when
   // there is one, already says it.
   const otherReason =
     a.reason && a.connectionStatus !== "needs_reconnect" && a.connectionStatus !== "same_as_clips" && a.reason !== "expires_soon" && a.reason !== "expired" && !a.warning ? reasonSentence(a.reason, p) : null;
+  // The sign-in tip (§45.13.2): on the card while connecting is the next step, in the fold once connected.
+  const tip = appReady && a.connectionStatus !== "choose_account" ? beforeConnect(p, a.app.choice) : null;
+  const tipLine = tip ? (
+    <p className="st-conn__before">
+      <StIcon name="bulb" size={18} />
+      {tip}
+    </p>
+  ) : null;
+  // The shared app's two lines are on the card (its choice, or what it uses now) unless it has keys of its own.
+  const sharedSaid = SHARED_APP_PLATFORMS.includes(p) && !(a.app.choice === "own" && a.app.saved);
+  const limits = unsaid(a.limits, [NEW_ACCOUNT_LINE, ...(tip ? [tip] : []), ...(sharedSaid ? [SHARED_APP_LINE, SHARED_APP_ACCOUNT_LINE] : [])]);
+  const canCheck = a.connectionStatus !== "not_connected" && a.connectionStatus !== "choose_account";
+  const canDisconnect = a.connectionStatus !== "not_connected";
 
   return (
     <li className={`st-conn st-conn--${a.connectionStatus} ${inStep ? "st-conn--in-step" : NEEDS_OWNER.has(a.connectionStatus) ? "st-glass st-glass--hero st-lens st-lens--tinted" : "st-glass"}`} style={inStep ? undefined : LENS_TONE[a.connectionStatus]} data-platform={p}>
@@ -809,16 +842,6 @@ export function PlatformCard({
       </p>
 
       <Identity a={a} />
-      <dl className="st-auth">
-        <div>
-          <dt>Authorization</dt>
-          <dd>{status.auth}</dd>
-        </div>
-        <div>
-          <dt>Last checked</dt>
-          <dd>{a.lastCheckedAt ? relative(a.lastCheckedAt) : a.connectionStatus === "not_connected" ? "Not connected yet" : "Not checked yet"}</dd>
-        </div>
-      </dl>
       {a.connectionStatus === "same_as_clips" ? (
         <p className="st-note st-note--coral" role="status">
           <StIcon name="alert" size={18} />
@@ -904,18 +927,7 @@ export function PlatformCard({
         </div>
       ) : null}
 
-      <p className="st-conn__clips">
-        <span className="st-conn__clips-label">Clip Factory posts to:</span> {clips?.connected ? (clips.name ?? `its own ${PLACE[p]}`) : `no ${name} yet`}
-      </p>
-
-      <AppPart ws={ws} a={a} meta={otherMeta} busy={busy} run={run} />
-
-      {appReady && a.connectionStatus !== "choose_account" ? (
-        <p className="st-conn__before">
-          <StIcon name="bulb" size={18} />
-          {beforeConnect(p, a.app.choice)}
-        </p>
-      ) : null}
+      {!connected ? tipLine : null}
 
       {(askIntended || picked) && connected && !ask ? (
         <IntendedAsk
@@ -933,70 +945,21 @@ export function PlatformCard({
             void connect();
           }}
         />
-      ) : ask ? (
-        <div className="st-sure" role="group" aria-label="Are you sure?">
-          <p className="st-sure__ask">
-            <strong>Are you sure?</strong> Clips Funded stops posting to {thisPlace(a)}. Clip Factory is not touched.
-          </p>
-          <div className="st-sure__buttons">
-            <StButton onClick={() => setAsk(null)}>No, keep it as it is</StButton>
-            <StButton
-              main
-              className="st-btn--coral"
-              disabled={busy !== null}
-              onClick={() =>
-                void run(
-                  "disconnect",
-                  async () => {
-                    await storiesApi().disconnectSocial(ws, p);
-                    onDisconnected(p, a.app.choice);
-                  },
-                  { text: `${name} is disconnected from Clips Funded.` },
-                )
-              }
-            >
-              Yes, disconnect
-            </StButton>
-          </div>
-        </div>
       ) : (
         <div className="st-conn__actions">
-          {/* Not while a Page or account is still to be picked: there is nothing to check yet (the API's 409, §45.35 D21). */}
-          {a.connectionStatus !== "not_connected" && a.connectionStatus !== "choose_account" ? (
-            <StButton
-              disabled={busy !== null}
-              onClick={(e) => {
-                const el = e.currentTarget;
-                void run("check", async () => {
-                  const after = await storiesApi().checkSocial(ws, p);
-                  if (after.connectionStatus === "connected") {
-                    celebrate(centerOf(el));
-                    toast.success(`${name} answered. All good.`);
-                  } else if (after.connectionStatus === "needs_reconnect") toast.error(reasonSentence(after.reason, p));
-                  else toast.info(`${name} answered. Check the card for what is next.`);
-                });
-              }}
-            >
-              <StIcon name="retry" size={18} />
-              {busy === "check" ? "Checking…" : "Check now"}
-            </StButton>
-          ) : null}
-          {a.connectionStatus !== "not_connected" ? (
-            <StButton quiet disabled={busy !== null} onClick={() => setAsk({ kind: "disconnect" })}>
-              Disconnect
-            </StButton>
-          ) : null}
           <StButton
-            main={appReady && (!connected || a.connectionStatus === "needs_reconnect")}
+            main={connectIsMain}
             disabled={busy !== null}
             aria-disabled={!appReady || undefined}
             title={appReady ? undefined : a.app.choice === null && SHARED_APP_PLATFORMS.includes(p) ? "Pick the app first" : "Save the keys first"}
             onClick={() => {
               if (!appReady) {
-                // The deny sound comes from the global click handler (aria-disabled); the toast says what is first.
+                // The deny sound comes from the global click handler (aria-disabled); the toast says what is first, and
+                // the fold with the app's choice and keys opens right under the button.
                 toast.error(
                   a.app.choice === null && SHARED_APP_PLATFORMS.includes(p) ? `Pick which ${name} app Clips Funded uses first.` : `Paste your Clips Funded ${isMeta(p) ? "Meta" : name} app keys first.`,
                 );
+                setOpen(true);
                 return;
               }
               void connect();
@@ -1008,8 +971,105 @@ export function PlatformCard({
         </div>
       )}
 
-      {a.limits.length ? <Limits name={name} limits={a.limits} /> : null}
-      {a.connectedAt && a.connectionStatus !== "not_connected" ? <p className="st-conn__since">Connected {relative(a.connectedAt)}.</p> : null}
+      {/* Everything only sometimes needed, out of the way but one tap away (the owner, 23 Nov: less text). */}
+      <details className="st-tech-fold st-conn__more" open={open} onToggle={(e) => setOpen(e.currentTarget.open)}>
+        <summary className="st-tech-fold__sum">
+          <StIcon name="chevron" size={16} className="st-tech-fold__mark" />
+          {appReady ? "More" : "First, set up the app"}
+          <span className="sr-only"> for {name}</span>
+        </summary>
+        <div className="st-conn__more-body" style={MORE_BODY}>
+          {a.connectionStatus !== "not_connected" ? (
+            <dl className="st-auth">
+              <div>
+                <dt>Posting</dt>
+                <dd>{status.auth}</dd>
+              </div>
+              <div>
+                <dt>Last checked</dt>
+                <dd>{a.lastCheckedAt ? relative(a.lastCheckedAt) : "Not checked yet"}</dd>
+              </div>
+              {a.connectedAt ? (
+                <div>
+                  <dt>Connected</dt>
+                  <dd>{relative(a.connectedAt)}</dd>
+                </div>
+              ) : null}
+            </dl>
+          ) : null}
+          {/* The platform's own id for it (§45.36 E14). */}
+          {a.externalAccountId ? (
+            <p className="st-who__id">
+              {name}'s ID: <code>{a.externalAccountId}</code>
+            </p>
+          ) : null}
+          {connected ? tipLine : null}
+
+          {ask ? (
+            <div className="st-sure" role="group" aria-label="Are you sure?">
+              <p className="st-sure__ask">
+                <strong>Are you sure?</strong> Clips Funded stops posting to {thisPlace(a)}. Clip Factory is not touched.
+              </p>
+              <div className="st-sure__buttons">
+                <StButton onClick={() => setAsk(null)}>No, keep it as it is</StButton>
+                <StButton
+                  main
+                  className="st-btn--coral"
+                  disabled={busy !== null}
+                  onClick={() =>
+                    void run(
+                      "disconnect",
+                      async () => {
+                        await storiesApi().disconnectSocial(ws, p);
+                        onDisconnected(p, a.app.choice);
+                      },
+                      { text: `${name} is disconnected from Clips Funded.` },
+                    )
+                  }
+                >
+                  Yes, disconnect
+                </StButton>
+              </div>
+            </div>
+          ) : canCheck || canDisconnect ? (
+            <div className="st-conn__actions">
+              {/* Not while a Page or account is still to be picked: there is nothing to check yet (the API's 409, §45.35 D21). */}
+              {canCheck ? (
+                <StButton
+                  disabled={busy !== null}
+                  onClick={(e) => {
+                    const el = e.currentTarget;
+                    void run("check", async () => {
+                      const after = await storiesApi().checkSocial(ws, p);
+                      if (after.connectionStatus === "connected") {
+                        celebrate(centerOf(el));
+                        toast.success(`${name} answered. All good.`);
+                      } else if (after.connectionStatus === "needs_reconnect") toast.error(reasonSentence(after.reason, p));
+                      else toast.info(`${name} answered. Check the card for what is next.`);
+                    });
+                  }}
+                >
+                  <StIcon name="retry" size={18} />
+                  {busy === "check" ? "Checking…" : "Check now"}
+                </StButton>
+              ) : null}
+              {canDisconnect ? (
+                <StButton quiet disabled={busy !== null} onClick={() => setAsk({ kind: "disconnect" })}>
+                  Disconnect
+                </StButton>
+              ) : null}
+            </div>
+          ) : null}
+
+          <AppPart ws={ws} a={a} meta={otherMeta} busy={busy} run={run} />
+
+          {/* Beside what the platform allows: the two apps' accounts differ (§45.13). */}
+          <p className="st-conn__clips">
+            <span className="st-conn__clips-label">Clip Factory posts to:</span> {clips?.connected ? (clips.name ?? `its own ${PLACE[p]}`) : `no ${name} yet`}
+          </p>
+          {limits.length ? <Limits name={name} limits={limits} /> : null}
+        </div>
+      </details>
     </li>
   );
 }
@@ -1052,8 +1112,9 @@ function SetupBack({ ws }: { ws: string }) {
         <span className="st-setupback__num st-num">{data.done}</span>
         <span className="st-setupback__of">of {data.total}</span>
       </ArcDial>
+      {/* The dial beside it says how far: the words do not say it again. */}
       <p className="st-setupback__text">
-        <strong>Setting up Clips Funded:</strong> {data.done} of {data.total} done.
+        <strong>Setting up Clips Funded</strong>
       </p>
       <StLinkButton href="/stories/setup" className="st-setupback__go">
         Back to setup
@@ -1304,7 +1365,7 @@ export function ConnectionsScreen({ ws, page }: StoriesScreenProps) {
     <section className="st-page st-connections">
       <StPageHead
         title="Social accounts"
-        lede="Clips Funded posts only to the accounts you connect here. They are separate from Clip Factory's accounts, which stay as they are."
+        lede="Connect Clips Funded's own accounts here. Clip Factory's stay as they are."
       />
       <SetupBack ws={ws} />
       {gone ? <DisconnectedNote choice={gone.choice} onClose={() => setGone(null)} /> : null}

@@ -324,16 +324,23 @@ describe("Social accounts (§45.36 E13, E14, E18)", () => {
     expect(x.textContent!.split(SAME_AS_CLIPS_LINE)).toHaveLength(2);
   });
 
-  it("account and app ids sit behind Technical details; the card's first lines are plain words", async () => {
+  it("account and app ids sit behind a fold; the card's first lines are plain words", async () => {
+    // Less text (the owner, 23 Nov): the ids and the developer app are in each card's one More fold.
     await render();
+    /** What the card's More fold shows once opened (its own Technical details folds still closed). */
+    const inMore = (el: HTMLElement) => {
+      const copy = el.querySelector("details.st-conn__more")!.cloneNode(true) as HTMLElement;
+      for (const d of Array.from(copy.querySelectorAll("details")))
+        for (const c of Array.from(d.children))
+          if (c.tagName !== "SUMMARY") c.remove();
+      return copy.textContent ?? "";
+    };
     for (const p of ["youtube", "tiktok", "x"]) {
       const id = store.social.find((a) => a.platform === p)!.externalAccountId!;
       const c = card(p);
       expect(c.textContent).toContain(id);
       expect(shown(c)).not.toContain(id);
-      const fold = c.querySelector<HTMLDetailsElement>(
-        ".st-who details.st-tech-fold",
-      )!;
+      const fold = c.querySelector<HTMLDetailsElement>("details.st-conn__more")!;
       expect(fold.open).toBe(false);
       expect(fold.querySelector(".st-who__id code")?.textContent).toBe(id);
     }
@@ -346,17 +353,21 @@ describe("Social accounts (§45.36 E13, E14, E18)", () => {
     expect(shown(insta)).not.toMatch(
       /Valid OAuth|Login configuration|App Review|Development mode|Sandbox|redirect URI/i,
     );
+    expect(inMore(insta)).not.toMatch(
+      /Valid OAuth|Login configuration|App Review|Development mode|Sandbox|redirect URI/i,
+    );
     expect(insta.textContent).toContain("Valid OAuth Redirect URIs");
-    expect(shown(insta)).toContain(
+    expect(inMore(insta)).toContain(
       "Copy these two addresses into your Meta app's settings",
     );
-    // TikTok's Sandbox line goes behind the fold; its plain lines stay.
+    // TikTok's Sandbox line goes behind its own Technical details; its plain lines are in the More fold.
     const tiktok = card("tiktok");
     expect(shown(tiktok)).not.toContain("Sandbox");
+    expect(inMore(tiktok)).not.toContain("Sandbox");
     expect(tiktok.querySelector(".st-limits details")?.textContent).toContain(
       "Sandbox",
     );
-    expect(shown(tiktok)).toContain(
+    expect(inMore(tiktok)).toContain(
       "Until TikTok says yes, the account must be private",
     );
   });

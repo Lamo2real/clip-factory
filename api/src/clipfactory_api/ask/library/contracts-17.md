@@ -40,8 +40,8 @@ Order everywhere: **YouTube, TikTok, Instagram, Facebook, X** (`SETUP_ORDER = ST
   then (only what the step needs): **Open {site}** (opens the exact page in a new tab, `rel="noopener noreferrer"`),
   **Copy** chips (label + value in mono, one tap copies, leaf-green tick "Copied!", works without clipboard permission via a
   select-all fallback), **paste boxes** (with a Paste button, format check as you type, friendly error under the box),
-  an **upload box** (TikTok verification file), "**If you see** X, do Y" hints (for anything the research marks
-  uncertain), and **I did this** (green, ≥ 48 px). Auto steps (keys saved, connected, checked) tick themselves.
+  an **upload box** (TikTok verification file), "**If you see** X, do Y" hints in one shut "If you see…" fold (for anything
+  the research marks uncertain), and **I did this** (green, ≥ 48 px). Auto steps (keys saved, connected, checked) tick themselves.
 * **One main vermilion button per screen**: the current step's main action (its **Open** button, else **Save keys**, else
   **Connect {Platform}**, else **Connect again** when `needs_reconnect`). Everything else is green/glass.
 * **Connect** runs OAuth **in the same tab**: the page navigates to the platform, the owner approves, the hooks API
@@ -613,7 +613,7 @@ are shown and none is on by default; Commercial content is off until the creator
   With Branded content ticked, Only me and Followers stay in the list greyed (`DropdownOption.disabled`: skipped by
   the keys, a tap does nothing, `aria-disabled`) with TikTok's line "Branded content visibility cannot be set to
   private." When `SELF_ONLY` is the only option it is the one choice, and the line "TikTok keeps posts private until it
-  approves your app." shows under it. When Branded content leaves nothing: "Branded content can't be Only me. Turn off
+  approves Clip Factory." shows under it. When Branded content leaves nothing: "Branded content can't be Only me. Turn off
   Branded content." The sheet's hint reads "Pick who can see it to turn on Upload."
 * **Commercial content (TikTok's audit rules, 2026-11-21).** Shared by the sheet and the TikTok row
   (`screens/review/TikTokCommercial.tsx`). Under the two ticks one line says the label: nothing ticked "Pick Your
@@ -642,8 +642,8 @@ glass (`backdrop-filter`); a page keeps no transform of its own (pages have no e
 is a real modal: focus moves in once on open (typing in the caption never loses the caret), Tab and Shift+Tab wrap
 inside it, Escape closes it, and on close the focus goes back to the Upload that opened it. A clip longer than the
 creator's `maxDurationSec` (a limit of 0 means TikTok did not say: it does not block, the publisher checks again)
-or a creator-info error never leaves a dead end: the callout says what to do next ("… To upload it to your other
-places now, turn TikTok off above and tap Upload.", §33), and the error
+or a creator-info error never leaves a dead end: the callout says what to do next ("Too long for TikTok. To post it
+elsewhere, turn TikTok off above and tap Upload."; a creator-info error: "… Tap Ask TikTok again.", §33), and the error
 callout also has **Ask TikTok again**, which fetches the creator info again.
 
 ### 17.9 Infra (Terraform + scripts)

@@ -80,7 +80,7 @@ export const EXTRA_FORMATS: { value: ExtraFormat; label: string; description: st
 export function burnWords(on: boolean): string {
   return on
     ? "The words are part of the video, so they show everywhere."
-    : "Only the caption words are left out of the picture. The speech bubbles and the safety end card always stay in.";
+    : "Only the captions are left out. Speech bubbles and the safety end card always stay in.";
 }
 
 function Used({ storage }: { storage: StorageSummary }) {
@@ -215,7 +215,7 @@ function SoundsAndMotion() {
   const anySet = mine.sound !== undefined || mine.click !== undefined || mine.deny !== undefined || mine.motion !== undefined;
   const offWhy = soundOn ? undefined : "Turn Sounds on first";
   return (
-    <SetCard title="Sounds and motion" icon="sound" id="sounds-and-motion" lede="For Clips Funded on this device. Clip Factory's sounds and motion stay as they are.">
+    <SetCard title="Sounds and motion" icon="sound" id="sounds-and-motion" lede="For Clips Funded on this device. Clip Factory's stay as they are.">
       <SetSwitch
         label="Sounds"
         description="Click sounds on every button, and cheers when something works."
@@ -249,7 +249,6 @@ function SoundsAndMotion() {
           Hear it
         </button>
       </div>
-      <p className="st-stg-small">Clips Funded's own click sound.</p>
       <SetSelect
         label="Error sound"
         value={String(deny)}
@@ -302,7 +301,7 @@ export function StorageSection({ ws }: { ws: string }) {
   return (
     <div className="st-stg-cards">
       <SectionBar>
-        <p className="st-stg-small">Clips Funded keeps its files in its own folder, apart from Clip Factory's.</p>
+        <p className="st-stg-small">Your files stay apart from Clip Factory's.</p>
         <SavedMark saved={saved} busy={busy} />
       </SectionBar>
       <SetCard title="Space used" icon="box" lede="Everything Clips Funded has made and kept.">
@@ -310,12 +309,12 @@ export function StorageSection({ ws }: { ws: string }) {
         {storage.data ? <Used storage={storage.data} /> : storage.error ? <Failed message={storage.error} onRetry={() => void storage.reload()} /> : <Loading label="Adding it up…" />}
       </SetCard>
 
-      <SetCard title="The finished file" icon="film" lede="Every video is an MP4, which every platform takes. You can have other files made too.">
+      <SetCard title="The finished file" icon="film" lede="Every video is an MP4. You can add other files.">
         <dl className="st-stg-facts">
           <div>
             <dt>Format</dt>
             <dd>
-              An MP4, which every platform and phone plays, made to start playing fast.
+              An MP4, which every platform and phone plays.
               <StTech className="st-stg-tech">
                 <span>MP4: H.264 picture and AAC sound (+faststart).</span>
               </StTech>
@@ -349,7 +348,7 @@ export function StorageSection({ ws }: { ws: string }) {
         </StTech>
       </SetCard>
 
-      <SetCard title="Making the scenes" icon="clock" lede="More at a time is quicker; fewer is gentler when lots is going on.">
+      <SetCard title="Making the scenes" icon="clock" lede="How many scenes are drawn at once.">
         <SetPick<"1" | "2" | "3">
           label="Scenes drawn at a time"
           value={String(prod.scenesAtOnce) as "1" | "2" | "3"}
@@ -362,7 +361,7 @@ export function StorageSection({ ws }: { ws: string }) {
         />
       </SetCard>
 
-      <SetCard title="Old versions" icon="box" lede="Each remake makes a new version of a video. Old ones can be kept, or cleared away to save space.">
+      <SetCard title="Old versions" icon="box" lede="A remake makes a new version. Keep old ones, or clear them.">
         <SetPick<"all" | "some">
           label="Keep old versions"
           value={keep === "all" ? "all" : "some"}
@@ -404,20 +403,20 @@ export function StorageSection({ ws }: { ws: string }) {
             </button>
           </div>
         ) : null}
-        <p className="st-stg-small">{keep === "all" ? "Nothing is ever cleared away." : "When a new version is made, the files of older ones are deleted. The video's history stays."}</p>
+        <p className="st-stg-small">{keep === "all" ? "Nothing is ever cleared away." : "A new version deletes the files of older ones. The video's history stays."}</p>
       </SetCard>
 
-      <SetCard title="Keeping other files" icon="clock" id="keeping" lede="Reference videos and chat pictures can be cleared after a while to save space.">
+      <SetCard title="Keeping other files" icon="clock" id="keeping" lede="Clear old reference videos and chat pictures to save space.">
         <p className="st-stg-label">Reference videos</p>
         <SetPick<KeepReferences> label="Keep reference videos" stack value={prod.keepReferences ?? "all"} options={KEEP_REFERENCES} onChange={(v) => save({ production: { ...prod, keepReferences: v } })} />
         {(prod.keepReferences ?? "all") === "study_only" ? <p className="st-stg-small">Clips Funded still learns from each study after its video is gone.</p> : null}
         <p className="st-stg-label">Pictures added in the chat</p>
         <SetPick<KeepChatPictures> label="Keep chat pictures" value={prod.keepChatPictures ?? "all"} options={KEEP_CHAT_PICTURES} onChange={(v) => save({ production: { ...prod, keepChatPictures: v } })} />
-        <p className="st-stg-small">These choices and Old versions are applied after each video. Clean up now applies them at once.</p>
+        <p className="st-stg-small">Old files are cleared after each video. Clean up now does it at once.</p>
         <Cleanup ws={ws} onDone={() => storage.reload()} />
       </SetCard>
 
-      <SetCard title="YouTube posts" icon="film" lede="Clips Funded's own YouTube choices, never made for kids. Clip Factory's YouTube settings are not used here.">
+      <SetCard title="YouTube posts" icon="film" lede="Never made for kids. Clip Factory's YouTube settings aren't used.">
         <p className="st-stg-label">Which shelf on YouTube</p>
         <SetPick label="YouTube category" value={c.youtubeCategory} options={CATEGORIES} onChange={(v) => save({ youtubeCategory: v })} />
         <p className="st-stg-label">Who can see the videos</p>

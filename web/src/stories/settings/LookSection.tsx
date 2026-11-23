@@ -134,7 +134,7 @@ export function LookSection() {
           {look.mode === "see-through" ? (
             <>
               <SetPick label="Glass strength" value={look.strength} options={strengths} onChange={(strength) => setStoriesLook({ strength })} />
-              {inApp ? null : <p className="st-stg-card__lede">In a browser or on a phone the window cannot show the desktop, so the Ember colours show.</p>}
+              {inApp ? null : <p className="st-stg-card__lede">In a browser or on a phone, the Ember colours show instead.</p>}
             </>
           ) : null}
           {look.mode === "picture" ? (

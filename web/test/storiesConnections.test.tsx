@@ -4,7 +4,10 @@
 // Meta cards say that removing them goes for Instagram and Facebook; and the link to Clip Factory's guide says first
 // that the new app's keys go here, never into Clip Factory's guide. Round 3 (§45.34): both Meta cards show both
 // redirect URIs, a connect is said with the account it connected and asks whether it is the intended one, the line
-// after Disconnect follows the app used, and every reason code is said in words.
+// after Disconnect follows the app used, and every reason code is said in words. Less text (the owner, 23 Nov: "even
+// an 8 year old should be able to use the app"): each card keeps its safety line, its account, what needs the owner
+// and one main button; everything else is in one closed More fold (its line says "First, set up the app" while the
+// developer app still needs it, and Connect opens it); and the API's limits never say again what the card already says.
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -14,7 +17,7 @@ import { setStoriesApi } from "../src/stories/api/client.ts";
 import { mockStoriesApi } from "../src/stories/api/mock/index.ts";
 import { setMockLatency, type MockStore } from "../src/stories/api/mock/store.ts";
 import type { SocialReason, StoriesApi } from "../src/stories/api/types.ts";
-import { forgetDashboards, forgetOnboarding } from "../src/stories/ui.tsx";
+import { forgetDashboards, forgetOnboarding, PLATFORM_NAME } from "../src/stories/ui.tsx";
 import { resetWorkspaceMemory } from "../src/stories/workspace.ts";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -24,7 +27,9 @@ vi.mock("../src/lib/router.ts", async (orig) => {
   return { ...real, navigate: () => undefined };
 });
 
-const { ConnectionsScreen, KEYS_HERE_ONLY, reasonSentence } = await import("../src/stories/screens/Connections.tsx");
+const { beforeConnect, ConnectionsScreen, KEYS_HERE_ONLY, NEW_ACCOUNT_LINE, reasonSentence, SHARED_APP_ACCOUNT_LINE, SHARED_APP_LINE, unsaid } = await import(
+  "../src/stories/screens/Connections.tsx"
+);
 
 describe("the account's reason", () => {
   it("is a code said in plain words; anything unknown gets the plain sentence", () => {
@@ -115,7 +120,77 @@ describe("the Social accounts page", () => {
     expect(guide.textContent).toContain(KEYS_HERE_ONLY);
     const text = guide.textContent!;
     expect(text.indexOf(KEYS_HERE_ONLY)).toBeLessThan(text.indexOf("Read Clip Factory's Meta guide"));
-    expect(fb.querySelector(".st-app__notes")?.textContent).toContain("never in Clip Factory");
+    // Said once on the card, beside the guide's link: the steps above it do not say it again.
+    expect(fb.querySelector(".st-app__notes")?.textContent).not.toContain("never in Clip Factory");
+    expect(fb.textContent!.split("never in Clip Factory").length - 1).toBe(1);
+  });
+
+  /** The card as it shows before its More fold is opened. */
+  const surface = (el: HTMLElement) => {
+    const copy = el.cloneNode(true) as HTMLElement;
+    copy.querySelector(":scope > details.st-conn__more")?.remove();
+    return copy;
+  };
+  const names = (el: ParentNode) => Array.from(el.querySelectorAll("button")).map((b) => b.textContent?.trim());
+
+  it("keeps each card short: its safety line, one main button, and everything else in one closed More fold", () => {
+    for (const p of ["youtube", "tiktok", "instagram", "facebook", "x"] as const) {
+      const c = card(p);
+      const folds = c.querySelectorAll<HTMLDetailsElement>(":scope > details");
+      expect(folds, p).toHaveLength(1);
+      const more = folds[0]!;
+      expect(more.classList.contains("st-conn__more"), p).toBe(true);
+      // On the page every fold starts closed (each seed card's developer app is ready, so its line says More).
+      expect(more.open, p).toBe(false);
+      expect(more.querySelector("summary")?.textContent, p).toBe(`More for ${PLATFORM_NAME[p]}`);
+      const shown = surface(c);
+      expect(shown.querySelector(".st-conn__new")?.textContent, p).toBe(NEW_ACCOUNT_LINE);
+      expect(shown.querySelectorAll(".st-btn--main").length, p).toBeLessThanOrEqual(1);
+      expect(names(shown), p).not.toContain("Check now");
+      expect(names(shown), p).not.toContain("Disconnect");
+      for (const part of [".st-app", ".st-limits", ".st-auth", ".st-conn__clips", ".st-who__id", ".st-tech-fold"]) expect(shown.querySelector(part), `${p} ${part}`).toBeNull();
+      // All of it is still there, one tap away.
+      expect(more.querySelector(".st-app"), p).not.toBeNull();
+      expect(more.querySelector(".st-conn__clips")?.textContent, p).toMatch(/^Clip Factory posts to: /);
+    }
+    // A connected account: its authorization, when it was checked and since when, its id, Check now and Disconnect.
+    const yt = card("youtube").querySelector<HTMLElement>("details.st-conn__more")!;
+    expect(yt.querySelector(".st-auth")?.textContent).toContain("Allowed: Clips Funded may post here.");
+    expect(yt.querySelector(".st-auth")?.textContent).toContain("Last checked");
+    expect(yt.querySelector(".st-who__id code")?.textContent).toBe(store.social.find((a) => a.platform === "youtube")!.externalAccountId);
+    expect(names(yt)).toEqual(expect.arrayContaining(["Check now", "Disconnect"]));
+    // Its picture, name and handle stay on the card.
+    expect(surface(card("youtube")).querySelector(".st-who")?.textContent).toBe("Clips Funded@fundedclips");
+    // Not connected: the one main button is Connect, with the sign-in tip above it; nothing to check or disconnect.
+    const fb = card("facebook");
+    expect(Array.from(surface(fb).querySelectorAll(".st-btn--main")).map((b) => b.textContent?.trim())).toEqual(["Connect Facebook"]);
+    expect(surface(fb).querySelector(".st-conn__before")?.textContent).toBe(beforeConnect("facebook", "own"));
+    expect(fb.querySelector(".st-auth")).toBeNull();
+    expect(names(fb.querySelector("details.st-conn__more")!)).not.toContain("Disconnect");
+    // A list to pick from is the main part: Pick another stays, never as a second main button.
+    const ig = surface(card("instagram"));
+    expect(ig.querySelector(".st-choose__list")).not.toBeNull();
+    expect(ig.querySelectorAll(".st-btn--main")).toHaveLength(0);
+    expect(names(ig)).toContain("Pick another account");
+  });
+});
+
+describe("the limits say nothing the card already says", () => {
+  it("drops each sentence the card says, keeps the rest of its line, and drops a line left with nothing", () => {
+    // The API's own lines (social.py OWN_ACCOUNT, _TIKTOK, _X).
+    const tiktok = [
+      "Use a new account made for Clips Funded, not Clip Factory's.",
+      "Sign in to your Clips Funded account on tiktok.com in this browser first. TikTok connects the account that is signed in.",
+      "Until TikTok approves the app, the account must be private and posts stay Only me.",
+    ];
+    expect(unsaid(tiktok, [NEW_ACCOUNT_LINE, beforeConnect("tiktok", "clips")])).toEqual([
+      "TikTok connects the account that is signed in.",
+      "Until TikTok approves the app, the account must be private and posts stay Only me.",
+    ]);
+    // A sentence ends at a stop and a space: x.com stays whole.
+    const x = "Use a separate X account. First sign in to your Clips Funded account on x.com in this browser. X connects the account that is signed in.";
+    expect(unsaid([x], [beforeConnect("x", "clips")])).toEqual(["Use a separate X account. X connects the account that is signed in."]);
+    expect(unsaid([x], [])).toEqual([x]);
   });
 });
 
@@ -282,6 +357,54 @@ describe("round 3 on the Social accounts page (§45.34)", () => {
     });
     expect(card("tiktok").textContent).toContain("Clips Funded cannot tell this TikTok account apart from Clip Factory's own. Check which account is signed in.");
     expect(card("tiktok").textContent).not.toContain("clips_unknown");
+  });
+
+  it("a card whose developer app still needs setting up keeps its fold closed, says so on its line, and Connect opens it", async () => {
+    await render({ platform: null, result: null }, (s) => {
+      s.social.find((a) => a.platform === "youtube")!.app = { choice: null, saved: false };
+    });
+    const more = () => card("youtube").querySelector<HTMLDetailsElement>("details.st-conn__more")!;
+    // Five short cards on the page: closed, and its line says what to do first; the choice is in it.
+    expect(more().open).toBe(false);
+    expect(more().querySelector("summary")?.textContent).toBe("First, set up the app for YouTube");
+    expect(more().querySelector("[role=radiogroup]")?.getAttribute("aria-label")).toBe("Which YouTube app Clips Funded uses");
+    // The cards that are ready stay closed with their plain line.
+    for (const p of ["tiktok", "instagram", "facebook", "x"] as const) {
+      expect(card(p).querySelector<HTMLDetailsElement>("details.st-conn__more")!.open, p).toBe(false);
+      expect(card(p).querySelector("details.st-conn__more > summary")?.textContent, p).toBe(`More for ${PLATFORM_NAME[p]}`);
+    }
+    // Connect: it says what is first, opens the fold right under it and sends nothing.
+    const connect = button(card("youtube"), "Pick another channel")!;
+    expect(connect.getAttribute("aria-disabled")).toBe("true");
+    await click(connect);
+    expect(document.body.textContent).toContain("Pick which YouTube app Clips Funded uses first.");
+    expect(more().open).toBe(true);
+    expect(calls).not.toContain("connectSocial");
+    // Closed by hand, it stays closed.
+    await act(async () => {
+      more().open = false;
+      more().dispatchEvent(new Event("toggle"));
+    });
+    expect(more().open).toBe(false);
+  });
+
+  it("says each line once: the API's limits that repeat the card's own lines stay out of its fold", async () => {
+    const ONLY_ME = "Until TikTok approves the app, the account must be private and posts stay Only me.";
+    await render({ platform: null, result: null }, (s) => {
+      // As the API sends them (social.py _LIMITS["tiktok"] with Clip Factory's app).
+      s.social.find((a) => a.platform === "tiktok")!.limits = [
+        NEW_ACCOUNT_LINE,
+        SHARED_APP_LINE,
+        SHARED_APP_ACCOUNT_LINE,
+        ONLY_ME,
+        "Sign in to your Clips Funded account on tiktok.com in this browser first. TikTok connects the account that is signed in.",
+      ];
+    });
+    const t = card("tiktok");
+    for (const line of [NEW_ACCOUNT_LINE, SHARED_APP_LINE, SHARED_APP_ACCOUNT_LINE, beforeConnect("tiktok", "clips")]) expect(t.textContent!.split(line).length - 1, line).toBe(1);
+    // Who can see the posts, and why to sign in first, are still there.
+    expect(t.querySelector(".st-limits")?.textContent).toContain(ONLY_ME);
+    expect(t.querySelector(".st-limits")?.textContent).toContain("TikTok connects the account that is signed in.");
   });
 
   it("every SocialReason code has its own words", () => {

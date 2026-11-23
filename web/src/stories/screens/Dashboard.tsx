@@ -534,7 +534,7 @@ export function DashboardScreen({ ws }: StoriesScreenProps) {
           a picture or the desktop. */}
       <StPageHead
         title="Dashboard"
-        lede="Everything happening in your animation studio."
+        lede="What's happening in your studio."
         actions={
           <>
             <StLinkButton href="/stories/ideas">
@@ -557,7 +557,7 @@ export function DashboardScreen({ ws }: StoriesScreenProps) {
       ) : empty ? (
         <>
           <StEmpty title="Your studio is ready" action={<StLinkButton href="/stories/production/new" main={!settingUp}>Make your first video</StLinkButton>}>
-            Pick an idea and a character, and Clips Funded makes the cartoon.
+            Pick an idea and a character. Clips Funded draws it.
           </StEmpty>
           <div className="st-tiles st-tiles--start">
             <Accounts items={data.accounts} />

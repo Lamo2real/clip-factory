@@ -61,8 +61,8 @@ export function Library({ view = "all", week = null }: { view?: "all" | "week"; 
         }
         lede={
           view === "week"
-            ? "This week's clips, most views first. Star the ones that did best, and Clip Factory learns how to make more like them."
-            : "Clips you uploaded. Tap a clip to see how it did on each app."
+            ? "This week's clips, most views first."
+            : "Tap a clip to see how it did on each app."
         }
       />
       <nav className="lib-tabs" aria-label="Library views">
@@ -251,12 +251,12 @@ export function libraryEmptyCopy(filter: Filter, anyKept: boolean): { title: str
   if (!anyKept) {
     return {
       title: "Nothing uploaded yet",
-      body: "Clips you upload show up here. Tap Go to Review and tap Upload on the ones you like.",
+      body: "Go to Review and tap Upload on the clips you like.",
       action: "review",
     };
   }
-  if (filter === "waiting") return { title: "Everything is posted!", body: "Every clip you uploaded is out. Nice! Tap Show all to see them.", action: "all" };
-  return { title: "Nothing posted yet", body: "Your clips show up here once they are uploaded. Tap Show all to see how they are doing.", action: "all" };
+  if (filter === "waiting") return { title: "Everything is posted!", body: "Every clip is out. Nice!", action: "all" };
+  return { title: "Nothing posted yet", body: "Your clips are on their way. Tap Show all to see them.", action: "all" };
 }
 
 function LibraryEmpty({ filter, anyKept, onShowAll }: { filter: Filter; anyKept: boolean; onShowAll: () => void }) {

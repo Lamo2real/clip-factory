@@ -92,7 +92,7 @@ export const RULES_PASTE_LINES = [
   "Copy everything under **Brief** and **Content requirements**. Paste it in the box. Tap Read these rules.",
 ] as const;
 /** A manual campaign while Content Rewards hasn't let Clip Factory send (a connect can't help yet). */
-export const MANUAL_REFUSED = "Content Rewards hasn't said yes to Clip Factory yet, so you send each clip yourself. I'll remind you after each post.";
+export const MANUAL_REFUSED = "Content Rewards hasn't said yes to Clip Factory yet. You send each clip yourself. I'll remind you.";
 
 export function NextStepPanel({
   campaign,

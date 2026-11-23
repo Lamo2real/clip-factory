@@ -308,7 +308,7 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
             {`Connect ${guide.name}`}
           </Button>
           {!setup.keys.saved ? (
-            <p className="gstep__note">Paste your keys first (step {stepNumber(guide, "key-paste")}). Then this button works.</p>
+            <p className="gstep__note">Paste your keys first (step {stepNumber(guide, "key-paste")}).</p>
           ) : setup.account.status === "connected" ? (
             <p className="gstep__note is-ok">
               <Icon name="checkCircle" size={18} />
@@ -410,7 +410,8 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
               <h2 className="result-card__title">
                 Connected as <strong className="user-text">{name ?? guide.name}</strong>
               </h2>
-              <p>{copy.connected} Clip Factory can post there now.</p>
+              {/* The title says connected, and the toast says it too: the line only says what it means. */}
+              <p>Clip Factory can post there now.</p>
             </div>
           </section>
         ) : result === "choose" && choosing ? null : (

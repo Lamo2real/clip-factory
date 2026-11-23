@@ -1,6 +1,6 @@
 // One big numbered step (docs/CONTRACTS.md §17.1): number, icon, title, a few short lines, then only what the step
-// needs (Open, Copy chips, paste boxes, the upload box, "If you see…" hints) and I did this. A done step folds to a
-// leaf tick row; tapping it opens it again.
+// needs (Open, Copy chips, paste boxes, the upload box, a shut "If you see…" fold) and I did this. A done step folds
+// to a leaf tick row; tapping it opens it again.
 import type { ReactNode } from "react";
 import { Icon } from "../../../components/Icon.tsx";
 import { ActGlyph, Button } from "../../../components/ui.tsx";
@@ -111,20 +111,30 @@ export function StepCard({
             </div>
           ) : null}
           {children}
+          {/* Only needed when the platform looks different: one fold, shut until tapped (like Find campaigns). */}
           {step.ifYouSee?.length ? (
-            <ul className="gstep__hints">
-              {step.ifYouSee.map((h) => (
-                <li key={h.see} className="gstep__hint">
-                  <Icon name="info" size={18} />
-                  <span>
-                    <strong className="gstep__hint-see">
-                      If you see <Rich text={h.see} />:
-                    </strong>{" "}
-                    <Rich text={h.do} />
-                  </span>
-                </li>
-              ))}
-            </ul>
+            <details className="cr-fold">
+              <summary className="cr-fold__q">
+                <Icon name="info" size={18} />
+                <span>If you see…</span>
+                <Icon name="chevronRight" size={18} className="icon cr-fold__chev act-turn" />
+              </summary>
+              <div className="cr-fold__body">
+                <ul className="gstep__hints">
+                  {step.ifYouSee.map((h) => (
+                    <li key={h.see} className="gstep__hint">
+                      <Icon name="info" size={18} />
+                      <span>
+                        <strong className="gstep__hint-see">
+                          If you see <Rich text={h.see} />:
+                        </strong>{" "}
+                        <Rich text={h.do} />
+                      </span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </details>
           ) : null}
           {step.auto ? null : (
             <div className="gstep__done-row">

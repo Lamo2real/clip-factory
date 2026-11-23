@@ -23,7 +23,7 @@ import {
 } from "../../lib/finder.ts";
 import { PLATFORM_LABEL, PLATFORM_ORDER } from "../../lib/format.ts";
 
-export const SKIP_LINE = "I skip campaigns Clip Factory can't make clips for, like ones that need their own sound or picture on the video.";
+export const SKIP_LINE = "I skip campaigns that need their own sound or picture on the video.";
 export const NEWS_OFF = "Content Rewards news is off in Settings.";
 
 /** `even`: a pick-one bar whose choices take even halves on phones (finder.css), never one alone on a second row. */

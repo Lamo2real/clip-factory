@@ -298,7 +298,7 @@ export function Review({ jobId }: { jobId: string | null }) {
         }
         lede={
           jobId
-            ? "These clips all come from one job. Tap Upload to post one, or Throw away if you do not like it. Tap Show every job to see the rest."
+            ? "These clips all come from one job. Upload or throw away each one."
             : reviewLede(auto)
         }
         actions={
@@ -363,7 +363,7 @@ export function Review({ jobId }: { jobId: string | null }) {
               </LinkButton>
             }
           >
-            There is nothing to check right now. Tap Make clips to get new ones.
+            Nothing to check. Tap Make clips for new ones.
           </Empty>
         </div>
       ) : null}
@@ -779,8 +779,8 @@ function ReviewCard({
       const name = rows.current?.showTooLong();
       toast.error(
         name
-          ? `Your ${name} caption is longer than its platform allows. Make it shorter, then tap Upload.`
-          : "One caption is longer than its platform allows. Make it shorter, then tap Upload.",
+          ? `Your ${name} caption is too long. Make it shorter, then tap Upload.`
+          : "One caption is too long. Make it shorter, then tap Upload.",
       );
       return;
     }
@@ -1071,7 +1071,7 @@ function ReviewCard({
               ) : null}
               <span className="player__note">
                 <Icon name="play" size={16} />
-                Preview not available
+                No preview
               </span>
             </>
           )}
@@ -1136,7 +1136,7 @@ function ReviewCard({
           <div className="upload-to upload-to--none">
             <p className="callout callout--bad" role="alert">
               <Icon name="alert" size={18} />
-              <span>Could not check your places. Check again, then tap Upload.</span>
+              <span>Couldn&apos;t check your places. Tap Check again.</span>
             </p>
             <Button variant="glass" icon="retry" act="retry" onClick={onCheckAgain}>
               Check again
@@ -1173,13 +1173,12 @@ function ReviewCard({
               {settingsOn ? "Your settings are on" : "Use my settings"}
             </Button>
             <p className="my-settings__note" id={`mine-${clip.clipId}`}>
+              {/* The button already says "Your settings are on", and the line above Upload says what TikTok needs. */}
               {changed
-                ? "You changed some for this clip. Tap to put yours back."
-                : tiktokOn
-                  ? applied || macTikTok
-                    ? "Every place uses your settings. Tap a place below to change it for this clip."
-                    : "Your other places already use your settings. TikTok needs your tap each time."
-                  : "Every place uses your settings. Tap a place below to change it for this clip."}
+                ? "You changed some. Tap to put yours back."
+                : tiktokOn && !applied && !macTikTok
+                  ? "Your other places already use your settings."
+                  : "Tap a place below to change it for this clip."}
             </p>
           </div>
         ) : null}
@@ -1219,7 +1218,7 @@ function ReviewCard({
           }}
         />
         <p className={`save-state is-${save}`} aria-live="polite">
-          {save === "saving" ? "Saving…" : save === "saved" ? "Captions saved" : save === "failed" ? "Not saved yet. Your changes are saved when you tap Upload." : ""}
+          {save === "saving" ? "Saving…" : save === "saved" ? "Captions saved" : save === "failed" ? "Not saved yet. Upload saves your changes." : ""}
         </p>
 
         {keepFailed ? (

@@ -48,7 +48,7 @@ import { SentRows } from "./SentRows.tsx";
 import { StatusPill } from "./StatusPill.tsx";
 import { startWhop, WhopCard } from "./WhopCard.tsx";
 
-export const PICK_COUNTRY = "Pick your country in Money settings to see its rules.";
+export const PICK_COUNTRY = "Pick your country to see its rules.";
 /** The Finance question's id: the server's link to it (getpaid/status.py's FINANCE) ends in `#cr-finance`. */
 export const CR_FINANCE = "cr-finance";
 export const READING_GONE = "Clip Factory can't see YouTube payments anymore. Tap Allow payment reading again.";
@@ -513,20 +513,32 @@ export function GetPaidPage({ place }: { place: GetPaidPlace }) {
             </LinkButton>
           </div>
         ) : null}
-        {groups.map((g, i) => (
-          <div key={g.source} className="gp-facts__group">
-            <ul className="gp-facts__list">
-              {g.texts.map((t) => (
-                <li key={t}>{t}</li>
+        {/* The rules are long and needed only now and then: folded, one tap away. */}
+        {groups.length ? (
+          <details className="cr-fold gp-facts__fold">
+            <summary className="cr-fold__q">
+              <Icon name="info" size={18} />
+              <span>See the rules</span>
+              <Icon name="chevronRight" size={18} className="icon cr-fold__chev act-turn" />
+            </summary>
+            <div className="cr-fold__body">
+              {groups.map((g, i) => (
+                <div key={g.source} className="gp-facts__group">
+                  <ul className="gp-facts__list">
+                    {g.texts.map((t) => (
+                      <li key={t}>{t}</li>
+                    ))}
+                  </ul>
+                  <a className="btn btn--glass btn--sm cr-open" href={g.source} target="_blank" rel="noopener noreferrer">
+                    <Icon name="external" size={18} />
+                    <span className="btn__label">{rulesLabel(place, g.source)}</span>
+                    <span className="sr-only">{` (page ${i + 1} of ${groups.length}, opens in a new tab)`}</span>
+                  </a>
+                </div>
               ))}
-            </ul>
-            <a className="btn btn--glass btn--sm cr-open" href={g.source} target="_blank" rel="noopener noreferrer">
-              <Icon name="external" size={18} />
-              <span className="btn__label">{rulesLabel(place, g.source)}</span>
-              <span className="sr-only">{` (page ${i + 1} of ${groups.length}, opens in a new tab)`}</span>
-            </a>
-          </div>
-        ))}
+            </div>
+          </details>
+        ) : null}
       </section>
 
       {guide ? (

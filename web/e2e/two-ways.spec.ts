@@ -271,7 +271,7 @@ for (const [size, viewport] of [
       await expect(page.locator(".review-list__item")).toHaveCount(before + 1, { timeout: 15_000 });
       const copyCard = page.locator(".review-list__item").nth(1).locator(".review-card");
       await expect(copyCard.locator(".cr-fit")).toContainText(/Campaign clip · /);
-      await expect(line).toContainText(/The .+ copy is ready, right below\. Upload the copy to earn money\. You can throw this one away\./);
+      await expect(line).toContainText(/The .+ copy is ready, right below\. Upload the copy to earn money\./);
       await taps.tap(copyCard.locator("[data-help='use-my-settings'] button"), "Use my settings");
       await taps.tap(copyCard.getByRole("button", { name: /^Upload to 2$/ }));
       await expect(page.getByText(/^Uploading to/)).toBeVisible();

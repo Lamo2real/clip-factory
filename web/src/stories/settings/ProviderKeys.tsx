@@ -50,8 +50,7 @@ export function keepName(old: ProviderStatus, next: ProviderStatus): ProviderSta
 }
 
 /** An OpenAI-compatible key is for one address only (§45.37 G4): the one its models use, never sent anywhere else. */
-export const ONE_ADDRESS_LINE =
-  "This key is for one address only: the one your OpenAI-compatible models use. Clips Funded never sends it anywhere else. Add the model first, or type its address here.";
+export const ONE_ADDRESS_LINE = "This key only goes to one address. Add the model first, or type its address here.";
 
 function KeyForm({ ws, provider, onSaved }: { ws: string; provider: ProviderStatus; onSaved: (p: ProviderStatus) => void }) {
   const toast = useToast();
@@ -77,7 +76,7 @@ function KeyForm({ ws, provider, onSaved }: { ws: string; provider: ProviderStat
       setOpen(false);
       onSaved(next);
       cheer(el);
-      toast.success(`${provider.label}'s key is saved. Only its last four characters are ever shown.`);
+      toast.success(`${provider.label}'s key is saved. Only its last 4 characters show.`);
     } catch (e) {
       toast.error(friendlyMessage(e));
     } finally {
@@ -107,6 +106,7 @@ function KeyForm({ ws, provider, onSaved }: { ws: string; provider: ProviderStat
         <Chip tone={s.tone}>{s.label}</Chip>
       </div>
       <p className="st-stg-small">{here(provider.line)}</p>
+      {provider.lastError && provider.lastError !== provider.line ? <p className="st-stg-provider__error">Last problem: {here(provider.lastError)}</p> : null}
       {provider.key?.saved && !provider.line.includes("Key saved") ? (
         <p className="st-stg-small">
           Key saved{provider.key.hint ? ` · ends ${provider.key.hint}` : ""}
@@ -199,7 +199,7 @@ export function ProviderKeys({
   if (!list.length)
     return (
       <Note tone="sky" icon="key">
-        None of these providers needs a key: they run in Clips Funded's own AWS account. A provider that needs one shows its key form here.
+        None of these providers needs a key. Clips Funded's own account runs them.
       </Note>
     );
   return (

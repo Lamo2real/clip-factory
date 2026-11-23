@@ -131,7 +131,7 @@ test("Limit how many a day: off means no limit, on shows 1 to 20", async ({ page
   await open(page);
   const limit = page.getByRole("switch", { name: "Limit how many a day" });
   await expect(limit).toHaveAttribute("aria-checked", "false");
-  await expect(page.getByText("No limit. Each video costs the same as one you paste.")).toBeVisible();
+  await expect(page.getByText("No limit.", { exact: true })).toBeVisible();
   await expect(page.getByRole("group", { name: "Most videos a day" })).toHaveCount(0);
   await limit.click();
   const stepper = page.getByRole("group", { name: "Most videos a day" });

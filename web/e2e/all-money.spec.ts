@@ -62,9 +62,9 @@ test.describe("All your money", () => {
     await expect(row(page, "tiktok").locator(".cr-all__amount")).toHaveCount(0);
     await expect(row(page, "x").getByRole("link", { name: /Open X/ })).toHaveAttribute("href", "https://x.com/i/jf/creators/studio");
     await expect(row(page, "contentrewards")).toContainText("Content Rewards says");
-    // §40.8 change 5: "Paid out to your bank" becomes the row's sent line, "Sent to your bank".
+    // §40.8 change 5: "Paid to your bank" becomes the row's sent line, "Sent to your bank".
     await expect(row(page, "contentrewards")).toContainText("Sent to your bank: not available from Content Rewards. Look on Whop: Balances.");
-    await expect(row(page, "contentrewards")).not.toContainText("Paid out to your bank");
+    await expect(row(page, "contentrewards")).not.toContainText("Paid to your bank");
     await expect(row(page, "contentrewards").getByRole("link", { name: "See it all" })).toHaveAttribute("href", "/money#content-rewards");
     const sum = page.locator(".cr-all__sum");
     await expect(sum).toHaveCount(1);
@@ -98,7 +98,7 @@ test.describe("All your money", () => {
     await settle(page);
     await expect(row(page, "contentrewards")).toContainText("Not set up yet");
     await expect(row(page, "contentrewards").getByRole("link", { name: "Set up Content Rewards" })).toHaveAttribute("href", "/settings/posting/setup/contentrewards?back=/money");
-    await expect(row(page, "contentrewards")).not.toContainText("Earned so far");
+    await expect(row(page, "contentrewards")).not.toContainText("Earned since you started");
     await expect(card(page)).toContainText("Nothing to add up yet.");
     await expect(page.locator(".cr-all__sum")).toHaveCount(0);
     await expect(card(page)).not.toContainText("$0");

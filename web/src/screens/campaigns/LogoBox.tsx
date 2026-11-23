@@ -163,7 +163,7 @@ export function LogoBox({
               openCampaign
                 ? "Tap Open campaign. Open **Reference materials**. Tap the file with “logo” in its name. Download it."
                 : "On the campaign page, open **Reference materials**. Tap the file with “logo” in its name. Download it.",
-              "Tap Choose a file and pick it from Downloads. A Google Drive link works too: tap Paste.",
+              "Tap Choose a file. Pick it from Downloads.",
             ]}
           />
           <div

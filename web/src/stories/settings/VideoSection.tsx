@@ -47,22 +47,22 @@ export const modelTech = (m: { label: string; host: string; modelId: string; reg
  * `model` is its plain name; `tech` its exact Bedrock ID, folded away (§45.36 E14).
  */
 export const MAKERS: Record<string, { label: string; model: string; line: string; short?: string; tech?: string }> = {
-  "builtin-2d": { label: "Built-in animator", model: "Clips Funded's own 2D animator", line: "Draws and moves every character the same way in every video." },
+  "builtin-2d": { label: "Built-in animator", model: "Clips Funded's own 2D animator", line: "Moves every character the same way, every time." },
   "luma-ray": {
     label: "Luma AI Ray2",
     short: "Luma AI Ray2",
     model: "Luma AI Ray2",
     tech: modelTech({ label: "Luma AI Ray2", host: "Amazon Bedrock", modelId: "luma.ray-v2:0", region: "us-west-2" }),
-    line: "AI footage for cut-aways (scenes with no character), 5 seconds a shot. Runs in the US (Oregon). Posts that use it carry the platforms' AI label.",
+    line: "AI shots for scenes with no character. Runs in the US (Oregon). Posts get an AI label.",
   },
-  "own-video": { label: "Your own video model", model: "A video model you added", line: "AI footage for cut-aways from a video model you add below." },
+  "own-video": { label: "Your own video model", model: "A video model you added", line: "AI shots from a video model you add below." },
   "nova-reel": { label: "Amazon Nova Reel", model: "Amazon Nova Reel 1.1", line: "Ended by Amazon on 30 Sep 2026. It made AI footage for cut-aways (scenes with no character)." },
   "builtin-rig": { label: "Built-in drawings", model: "Clips Funded's own character drawings", line: "Every character looks the same in every video." },
   stability: {
     label: "Also AI portraits (Stability AI)",
     short: "Stability AI pictures",
     model: "Stability AI on Amazon Bedrock",
-    line: "Makes a portrait of each character for the app. Videos still use the drawings. Runs in the US (Oregon).",
+    line: "A portrait of each character. Videos still use the drawings. Runs in the US (Oregon).",
   },
   "own-images": { label: "Also AI portraits (your own picture model)", model: "A picture model you added", line: "Portraits from a picture model you add below. Videos still use the drawings." },
   "nova-canvas": { label: "Amazon Nova Canvas", model: "Amazon Nova Canvas", line: "Ended by Amazon on 30 Sep 2026. It made AI portraits." },
@@ -70,7 +70,7 @@ export const MAKERS: Record<string, { label: string; model: string; line: string
   elevenlabs: {
     label: "ElevenLabs sound effects and music",
     model: "ElevenLabs",
-    line: "Sound effects and a music bed with no singing, made by ElevenLabs with your own key. Never a voice.",
+    line: "Sound effects and music, with your ElevenLabs key. Never a voice.",
   },
   "own-sound": { label: "Your own sound model", model: "A sound model you added", line: "Sound effects and music from a sound model you add below. Never a voice." },
   polly: { label: "A spoken voice (Amazon Polly)", model: "Amazon Polly neural voices", line: "Adds words spoken aloud. Your videos are made without a voice unless you pick this." },
@@ -80,7 +80,7 @@ export const MAKERS: Record<string, { label: string; model: string; line: string
 export const MAKER_CARDS: Record<MakerKind, { title: string; icon: SIconName; id: string; lede: string; list: string[]; noun: string }> = {
   video: { title: "Video maker", icon: "film", id: "video-maker", lede: "What turns each story into moving pictures.", list: VIDEO_MAKERS, noun: "video" },
   image: { title: "Picture maker", icon: "brush", id: "picture-maker", lede: "How the characters are drawn.", list: IMAGE_MAKERS, noun: "picture" },
-  audio: { title: "Sound maker", icon: "sound", id: "sound-maker", lede: "Sound effects, character noises and music. No voice-over unless you pick a spoken voice.", list: SOUND_MAKERS, noun: "sound" },
+  audio: { title: "Sound maker", icon: "sound", id: "sound-maker", lede: "Effects and music. No voice-over unless you pick a spoken voice.", list: SOUND_MAKERS, noun: "sound" },
 };
 
 /** Which maker a model belongs to: the API says (`maker`); an added model is its kind's own maker. */
@@ -209,9 +209,12 @@ function modelOption(m: MakerModelInfo) {
  * The picked model's details: its plain name first, its exact ID one tap away (§45.36 E14), its line, price, last check
  * and, when it was refused, the provider's own sentence, said on this page (§45.36 E17).
  */
-function ModelDetails({ m }: { m: MakerModelInfo }) {
+function ModelDetails({ m, brief = false }: { m: MakerModelInfo; /** under its own pick, whose option already says who makes it, where it runs and its price */ brief?: boolean }) {
   const here = useOnThisPage();
   const refused = m.status === "denied" || m.status === "not_found" || m.status === "error";
+  // Where it runs, said once: a note that already says it ("Runs in the US (Oregon). …") is enough.
+  const region = regionWords(m.region);
+  const where = region && !m.note?.includes(region) ? region : null;
   return (
     <div className="st-stg-makermodel" data-maker-model={m.key}>
       <p className="st-stg-active">
@@ -219,17 +222,18 @@ function ModelDetails({ m }: { m: MakerModelInfo }) {
         <strong>{m.label}</strong>
         <Chip tone={MODEL_STATUS[m.status].tone}>{MODEL_STATUS[m.status].label}</Chip>
       </p>
-      {m.modelId ? (
-        <StTech className="st-stg-tech">
-          <span>{modelTech({ label: m.label, host: hostName(m.host, m.baseUrl, m.hostId), modelId: m.modelId, region: m.region })}</span>
-        </StTech>
-      ) : null}
-      <p className="st-stg-small">
-        {makerWho(m)}
-        {regionWords(m.region) ? ` · ${regionWords(m.region)}` : ""}
-        {m.note ? ` · ${m.note}` : ""}
-      </p>
-      <p className="st-stg-small">{priceWords(m.price) ? `Price: ${priceWords(m.price)}.` : "No price known. Type yours under Prices and keys."}</p>
+      {brief ? (
+        m.note ? <p className="st-stg-small">{m.note}</p> : null
+      ) : (
+        <>
+          <p className="st-stg-small">
+            {makerWho(m)}
+            {where ? ` · ${where}` : ""}
+            {m.note ? ` · ${m.note}` : ""}
+          </p>
+          <p className="st-stg-small">{priceWords(m.price) ? `Price: ${priceWords(m.price)}.` : "No price known. Add yours in Prices and keys."}</p>
+        </>
+      )}
       {refused ? (
         <Note tone="coral" role="status">
           {here(m.statusLine)}
@@ -240,6 +244,11 @@ function ModelDetails({ m }: { m: MakerModelInfo }) {
           {m.checkedAt ? ` (${whenText(m.checkedAt)})` : ""}
         </p>
       )}
+      {m.modelId ? (
+        <StTech className="st-stg-tech">
+          <span>{modelTech({ label: m.label, host: hostName(m.host, m.baseUrl, m.hostId), modelId: m.modelId, region: m.region })}</span>
+        </StTech>
+      ) : null}
     </div>
   );
 }
@@ -287,8 +296,7 @@ function MakerCard({
       {ended ? (
         <div className="st-stg-ended" role="status">
           <Note tone="coral" icon="alert">
-            {endedWords("2026-09-30")}. {MAKERS[maker]?.model ?? p?.label ?? "This maker"} cannot make anything any more, so{" "}
-            {kind === "image" ? "AI portraits stop" : "new videos stop"} until you pick another {card.noun} maker.
+            {endedWords("2026-09-30")}. {kind === "image" ? "AI portraits stop" : "New videos stop"} until you pick another {card.noun} maker.
           </Note>
           <div className="st-stg-actions">
             {replacement ? (
@@ -319,7 +327,7 @@ function MakerCard({
             options={mine.map(modelOption)}
             onChange={(v) => save({ providers: { [modelKey]: v } })}
           />
-          {used ? <ModelDetails m={used} /> : null}
+          {used ? <ModelDetails m={used} brief /> : null}
         </>
       ) : used ? (
         <ModelDetails m={used} />
@@ -429,7 +437,7 @@ export function VideoSection({ ws }: { ws: string }) {
   return (
     <div className="st-stg-cards">
       <SectionBar>
-        <p className="st-stg-small">These make the pictures, video and sound. The AI models that write the stories are in Settings › AI.</p>
+        <p className="st-stg-small">The makers of pictures, video and sound. Story writers are in Settings › AI.</p>
         <SavedMark saved={saved} busy={busy} />
       </SectionBar>
       <MakerCard kind="video" c={c} providers={p} models={models} save={save}>
@@ -446,7 +454,7 @@ export function VideoSection({ ws }: { ws: string }) {
 
       <MakerModels ws={ws} models={models} providers={p} aiKeys={ai.data?.models.map((m) => m.key) ?? []} onChanged={reloadAll} />
 
-      <SetCard title="Shape and size" icon="ruler" id="shape" lede="New videos start with this shape. Shorts, Reels and TikTok want 9:16. You can change it for one video in Production › New.">
+      <SetCard title="Shape and size" icon="ruler" id="shape" lede="New videos start with this shape. Change it per video in Production › New.">
         <p className="st-stg-label">Shape</p>
         <SetPick<VideoAspect>
           label="Shape of the video"
@@ -474,18 +482,18 @@ export function VideoSection({ ws }: { ws: string }) {
         </dl>
       </SetCard>
 
-      <SetCard title="Usual length" icon="clock" lede="New videos start at this length. You can change it for each video.">
+      <SetCard title="Usual length" icon="clock" lede="New videos start at this length. Change it per video.">
         <LengthPicker value={c.defaultDurationSec} onChange={(v) => save({ defaultDurationSec: v })} />
       </SetCard>
 
-      <SetCard title="Quality" icon="film" lede="Better quality makes bigger files that take a little longer to upload.">
+      <SetCard title="Quality" icon="film" lede="How sharp new videos are. Sharper files are bigger.">
         <SetPick label="Video quality" value={c.video.quality} options={QUALITY} onChange={(v) => save({ video: { ...c.video, quality: v } })} />
         <StTech className="st-stg-tech">
           <span>The H.264 quality number (CRF): Good 23, Better 20, Best 17. Lower is sharper.</span>
         </StTech>
       </SetCard>
 
-      <SetCard title="Words and music" icon="sound" lede="What new videos start with. You can still change it for one video.">
+      <SetCard title="Words and music" icon="sound" lede="New videos start with these. Change them per video.">
         <SetSwitch label="Captions" description="Short words on screen, like a comic." checked={c.captionsOn} onChange={(v) => save({ captionsOn: v })} />
         <SetSwitch label="Music" description="A tune under the sound effects." checked={c.musicOn} onChange={(v) => save({ musicOn: v })} />
       </SetCard>
@@ -500,7 +508,7 @@ export function VideoSection({ ws }: { ws: string }) {
         }}
       />
 
-      <SetCard title="Prices and keys" icon="coin" lede="What the AI makers cost, and keys for makers that need one.">
+      <SetCard title="Prices and keys" icon="coin" lede="What the AI makers cost, and their keys.">
         <h4 className="st-stg-subhead">Prices</h4>
         <MakerPrices
           ai={ai}

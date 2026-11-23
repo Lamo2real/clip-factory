@@ -103,7 +103,7 @@ function ProductionList({ ws }: { ws: string }) {
       <header className="st-s-head">
         <div className="st-plate">
           <h1 className="st-s-head__title">Production</h1>
-          <p className="st-s-head__lede">Every video being made, and every video made. Each one goes through eight steps.</p>
+          <p className="st-s-head__lede">Every video you make shows up here.</p>
         </div>
         <A href={storiesHref({ name: "production_new", ideaId: null })} className="st-btn st-btn--main">
           Make a new video
@@ -119,7 +119,7 @@ function ProductionList({ ws }: { ws: string }) {
         <div className="st-s-empty st-glass">
           <span className="st-s-empty__film" aria-hidden="true" />
           <h2 className="st-s-empty__title">No videos yet</h2>
-          <p className="st-s-empty__text">Pick an idea and a character, and Clips Funded makes the whole video.</p>
+          <p className="st-s-empty__text">Pick an idea and a character. Clips Funded does the rest.</p>
           <A href={storiesHref({ name: "production_new", ideaId: null })} className="st-btn st-btn--main">
             Make your first video
           </A>
@@ -359,7 +359,7 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec }: { ws:
             <span className="st-s-back__orb">‹</span> Production
           </A>
           <h1 className="st-s-head__title">Make a new video</h1>
-          <p className="st-s-head__lede">A few quick picks, then Clips Funded writes, draws, animates and puts it all together.</p>
+          <p className="st-s-head__lede">Pick a few things. Clips Funded makes the rest.</p>
         </div>
       </header>
       {!data.data ? (
@@ -404,13 +404,13 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec }: { ws:
                   />
                   {blockedCount ? (
                     <p className="st-s-field__hint">
-                      {blockedCount === 1 ? "1 driving-safety idea needs" : `${blockedCount} driving-safety ideas need`} checked advice first, so {blockedCount === 1 ? "it is" : "they are"} not here.
+                      {blockedCount === 1 ? "1 driving-safety idea is hidden. It needs" : `${blockedCount} driving-safety ideas are hidden. They need`} checked advice first.
                     </p>
                   ) : null}
                 </>
               ) : (
                 <p className="st-s-field__hint">
-                  No ideas to use yet. Tap Type my own, or save some on the <A href={storiesHref({ name: "ideas" })}>Ideas</A> page.
+                  No ideas yet. Tap Type my own, or add some in <A href={storiesHref({ name: "ideas" })}>Ideas</A>.
                 </p>
               )
             ) : (
@@ -434,7 +434,7 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec }: { ws:
               </ul>
             ) : (
               <p className="st-s-field__hint">
-                You have no characters yet. <A href={storiesHref({ name: "character_new" })}>Make one first</A>.
+                No characters yet. <A href={storiesHref({ name: "character_new" })}>Make one first</A>.
               </p>
             )}
           </section>
@@ -458,7 +458,7 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec }: { ws:
             <h2 className="st-s-panel__title" id="st-nv-4">
               <span className="st-s-num">5</span> Words and music
             </h2>
-            <Switch label="Captions" line="Short words on screen. No talking in Clips Funded videos." checked={captionsOn} onChange={setCaptions} />
+            <Switch label="Captions" line="Words on screen. The videos have no voices." checked={captionsOn} onChange={setCaptions} />
             <Pick label="Music" value={music} options={CATALOG.musicMoods.map((m) => ({ value: m.id, label: m.id === "none" ? "No music" : m.label }))} onChange={setMood} />
           </section>
 
@@ -471,9 +471,9 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec }: { ws:
 
           <section className="st-s-panel st-glass" aria-labelledby="st-nv-6">
             <h2 className="st-s-panel__title" id="st-nv-6">
-              <span className="st-s-num">7</span> Model and effort for this video
+              <span className="st-s-num">7</span> Model and effort for this video <span className="st-s-panel__hint">(you can skip this)</span>
             </h2>
-            <p className="st-s-field__hint">The AI that writes and checks this video. It stays with the video, so its remakes use it too.</p>
+            <p className="st-s-field__hint">The AI that writes and checks it.</p>
             <div className="st-s-aiwho">
               <ModelMenu
                 info={info}
@@ -481,7 +481,7 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec }: { ws:
                 value={ai}
                 onChange={setAi}
                 title="Model and effort for this video"
-                note="Kept with this video. Its remakes use it too. Your other settings stay the same."
+                note="Kept with this video. Your settings stay the same."
               />
             </div>
           </section>
@@ -538,21 +538,21 @@ function RefPicker({
   if (error && !refs)
     return (
       <Notice tone="info" action={<button type="button" className="st-btn" onClick={onRetry}>Try again</button>}>
-        Your reference videos could not load. You can make the video without them.
+        Your reference videos could not load. You can still make the video.
       </Notice>
     );
   if (!refs) return <p className="st-s-field__hint">Getting your reference videos…</p>;
   if (!refs.length)
     return (
       <p className="st-s-field__hint">
-        No reference videos yet. Upload one in <A href={storiesHref({ name: "references" })}>References</A> and Clips Funded studies how it is made.
+        No reference videos yet. Add one in <A href={storiesHref({ name: "references" })}>References</A>.
       </p>
     );
   // Only the picks that have a tile count (one that is not in the list can never be unpicked).
   const full = picked.filter((id) => refs.some((r) => r.refId === id)).length >= 3;
   return (
     <>
-      <p className="st-s-field__hint">Pick up to 3. Clips Funded borrows their timing and structure, never their characters or footage.</p>
+      <p className="st-s-field__hint">Pick up to 3. Clips Funded borrows their timing, never their characters or footage.</p>
       <ul className="st-s-refpick">
         {refs.map((r) => {
           const on = picked.includes(r.refId);
@@ -565,7 +565,7 @@ function RefPicker({
                 className={`st-s-reftile${on ? " is-on" : ""}`}
                 aria-pressed={on}
                 aria-disabled={off || undefined}
-                title={!ready ? "Analyze it first in References." : off ? "Pick up to 3 reference videos." : undefined}
+                title={!ready ? "Study it first in References." : off ? "Pick up to 3 reference videos." : undefined}
                 onClick={() => {
                   if (off) return;
                   onChange(on ? picked.filter((x) => x !== r.refId) : [...picked, r.refId]);
@@ -745,8 +745,9 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
             <span className="st-s-back__orb">‹</span> Production
           </A>
           <h1 className="st-s-head__title">{story.title}</h1>
+          {/* The kind and length are in the preview row just below, so only the status chip here. */}
           <p className="st-s-head__lede">
-            <Tag tone={STATUS_TONE[story.status]}>{STATUS_LABEL[story.status]}</Tag> {CATEGORY_LABEL[story.category]} · {seconds(story.actualDurationSec ?? story.durationSec)}
+            <Tag tone={STATUS_TONE[story.status]}>{STATUS_LABEL[story.status]}</Tag>
           </p>
         </div>
       </header>
@@ -758,7 +759,6 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
         actions={
           watch || live || canTryAgain ? (
             <div className="st-s-actionbar">
-              {canTryAgain && !pick ? <NextRun info={info} story={story} /> : null}
               {watch ? (
                 // One orange main action in the row: a remake waiting to be made (Try again) wins over watching.
                 <A href={storiesHref({ name: "review_story", storyId })} className={`st-btn${canTryAgain ? "" : " st-btn--main"}`}>
@@ -772,7 +772,7 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
               ) : null}
               {canTryAgain ? (
                 <>
-                  <ModelMenu info={info} usual={usual} value={pick} onChange={setPick} note="Just for this run. This video's own setting and yours stay the same." />
+                  <ModelMenu info={info} usual={usual} value={pick} onChange={setPick} note="Just for this run. Your settings stay the same." />
                   <button type="button" className="st-btn st-btn--main" aria-disabled={busy !== "none" || undefined} onClick={() => busy === "none" && void again()}>
                     {busy === "again" ? "Starting…" : story.status === "draft" && story.stale.length === STEP_ORDER.length ? "Make the video" : firstStale ? `Try again from “${STEP_LABEL[firstStale]}”` : "Try again"}
                   </button>
@@ -803,11 +803,11 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
         </h2>
         {story.scenes.length ? (
           <>
-            <p className="st-s-field__hint">Tap a scene to play it. The finished pictures appear once the scenes are drawn.</p>
+            <p className="st-s-field__hint">Tap a scene to play it.</p>
             <Filmstrip script={script} scenes={story.scenes} />
           </>
         ) : (
-          <p className="st-s-field__hint">{live ? "Writing the story… the scenes show here in a moment." : "No storyboard yet."}</p>
+          <p className="st-s-field__hint">{live ? "Writing the story… the scenes show up here soon." : "No storyboard yet."}</p>
         )}
       </section>
 

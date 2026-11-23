@@ -820,7 +820,8 @@ test.describe("the pages", () => {
     await expect(yt).toContainText("Clip Factory posts to: Clip Factory Gaming");
     await expect(yt.locator(".st-app")).toContainText("Shares Clip Factory's YouTube app, on purpose. Clip Factory's posts always go first. Clips Funded uses what's left.");
     await expect(yt.locator(".st-app")).toContainText("Even with Clip Factory's app, sign in with a different account made for Clips Funded.");
-    // Check now: a live check, and when it was last checked.
+    // Check now: a live check, and when it was last checked (in the card's More fold).
+    await yt.locator(".st-conn__more > summary").click();
     await yt.getByRole("button", { name: "Check now" }).click();
     await expect(page.locator(".toast").filter({ hasText: "YouTube answered. All good." })).toBeVisible();
     await expect(yt.locator(".st-auth")).toContainText(/Last checked\s*(just now|now|\d+ s ago|seconds? ago|a moment ago)/i);
@@ -858,6 +859,7 @@ test.describe("the pages", () => {
 
     // Disconnect asks first, and then says where the app can be removed by hand (nothing is revoked).
     const yt = page.locator(".st-conn").filter({ has: page.getByRole("heading", { name: "YouTube" }) });
+    await yt.locator(".st-conn__more > summary").click();
     await yt.getByRole("button", { name: "Disconnect" }).click();
     await yt.getByRole("button", { name: "Yes, disconnect" }).click();
     await expect(page.getByText("To remove Clip Factory from this account completely, remove the app in the account's own settings.")).toBeVisible();
@@ -879,8 +881,10 @@ test.describe("the pages", () => {
     await storiesReady(page);
     const card = (name: string) => page.locator(".st-conn").filter({ has: page.getByRole("heading", { name, exact: true }) });
 
-    // X: the choice comes first; Connect stays put until an app is picked.
+    // X: the choice comes first, in the card's fold, whose line says so; Connect stays put until an app is picked.
     const x = card("X");
+    await expect(x.locator(".st-conn__more > summary")).toHaveText("First, set up the app for X");
+    await x.locator(".st-conn__more > summary").click();
     await expect(x.getByRole("radiogroup", { name: "Which X app Clips Funded uses" }).getByRole("radio")).toHaveText([
       /A separate app for Clips Funded/,
       /Share Clip Factory's app.*Clip Factory's posts always go first\. Clips Funded uses what's left\. Even with Clip Factory's app, sign in with a different account made for Clips Funded\./,
@@ -897,6 +901,7 @@ test.describe("the pages", () => {
 
     // YouTube's own app: the redirect URI to copy (Lamo Stories' own callback), the keys form, Check it.
     const yt = card("YouTube");
+    await yt.locator(".st-conn__more > summary").click();
     await yt.getByRole("radio", { name: /A separate app for Clips Funded/ }).click();
     await expect(yt.locator(".st-copy__value")).toHaveText(/\/v1\/stories-oauth\/youtube\/callback$/);
     await expect(yt.getByRole("button", { name: "Copy the redirect uri" })).toBeVisible();
@@ -913,6 +918,7 @@ test.describe("the pages", () => {
 
     // Meta: no Clip Factory choice at all; one Meta app's keys, entered once, serve Instagram and Facebook.
     const fb = card("Facebook");
+    await fb.locator(".st-conn__more > summary").click();
     await expect(fb.getByRole("radio")).toHaveCount(0);
     await expect(fb).toContainText("Facebook always uses Clips Funded's own Meta app");
     await fb.getByLabel("App ID").fill("1234567890123456");

@@ -52,7 +52,7 @@ const TABS: { id: LibraryTab; label: string; icon: StIconName }[] = [
 
 /** Every empty Library page shows the same warm character (the owner's warm palette of 22 Nov: no cool blues or greens). */
 const EMPTY: Record<LibraryTab, { title: string; text: string; mood: MascotMood; tone: StTone }> = {
-  projects: { title: "No projects yet", text: "Every video you make is a project here, with all its files.", mood: "wave", tone: "sun" },
+  projects: { title: "No projects yet", text: "Each video you make shows up here, with its files.", mood: "wave", tone: "sun" },
   videos: { title: "No videos yet", text: "Finished videos land here, ready to download.", mood: "sleepy", tone: "sun" },
   storyboards: { title: "No storyboards yet", text: "Each video's story plan and its captions are kept here.", mood: "think", tone: "sun" },
   characters: { title: "No character pictures yet", text: "Pictures you add to a character show up here.", mood: "wave", tone: "sun" },
@@ -518,7 +518,7 @@ function Details({ ws, story }: { ws: string; story: Story }) {
                 ) : null}
                 <div>
                   <dt>Safety advice</dt>
-                  <dd>{topicTitle(topics, job.meta.safetyTopicId) ?? "None (only the nothing-dangerous check)"}</dd>
+                  <dd>{topicTitle(topics, job.meta.safetyTopicId) ?? "None (just the basic safety check)"}</dd>
                 </div>
                 {Object.entries(job.meta.providers).map(([kind, id]) => (
                   <div key={kind}>
@@ -783,7 +783,7 @@ export function LibraryScreen({ ws, page }: StoriesScreenProps) {
   }, [tab]);
   return (
     <section className="st-page st-library">
-      <StPageHead title="Library" lede="Every file Clips Funded made or you added, kept safe. Only Clips Funded's own: Clip Factory's Library stays separate." />
+      <StPageHead title="Library" lede="Your Clips Funded files. Clip Factory's files stay separate." />
       {/* The kinds as pills (the reference's chips): the chosen one solid cream with espresso words, sliding on
           <Glide>; the rest glass. Each keeps .st-tabs__tab and role="tab". One row on a phone, scrolling sideways. */}
       <div className="st-library__kinds" role="tablist" aria-label="Library" ref={kinds}>

@@ -10,6 +10,10 @@
 // as PUT …/ai `picked`), 4 when a video provider is picked, 6 to 10 when that platform is connected (an account that
 // is Lamo Clips' own is not); only 5 and 11 are ticked here by hand. Step 2 never saves an effort the owner did not
 // pick: a model that does not offer the current effort is held until he picks one in step 3, then both are saved.
+//
+// Kid-proof words (the owner, 23 Nov: "less text … even an 8 year old should be able to use the app"): each step a
+// short title, one plain line, at most a few short sentences, and its one main button; nothing said twice (the ring
+// already says how far, a connect step's card already says to use Clips Funded's own account).
 import "../styles/social.css";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { friendlyMessage } from "../../api/errors.ts";
@@ -26,7 +30,6 @@ import { ArcDial, GlassPill } from "../glass/index.ts";
 import {
   celebrate,
   centerOf,
-  PLATFORM_NAME,
   starBurst,
   refreshDashboard,
   setOnboarding,
@@ -139,7 +142,7 @@ function CheckRow({ checking, busy, onCheck }: { checking: boolean; busy: boolea
         <StIcon name="retry" size={18} />
         {checking ? "Checking every model…" : "Check models"}
       </StButton>
-      <span className="st-setup__hint">One tiny real call per model, so you see which ones answer.</span>
+      <span className="st-setup__hint">Sends each model one tiny real question.</span>
     </div>
   );
 }
@@ -153,24 +156,21 @@ function EnvironmentStep({ ws, ai, onSaved, onChecked, busy, setBusy }: { ws: st
   const { checking, models, check } = useCheckModels(ws, ai.models, onChecked);
   return (
     <>
-      <p className="st-setup__text">
-        Clips Funded is its own studio next to Clip Factory, with its own AI helpers, its own settings and its own social accounts. Nothing you set here
-        changes Clip Factory.
-      </p>
+      <p className="st-setup__text">Clips Funded is its own studio. Nothing you set here changes Clip Factory.</p>
       <ul className="st-setup__facts">
         <li>
           <StIcon name="bulb" size={20} />
-          An AI model writes each story, gives ideas and checks driving-safety facts against checked advice.
+          An AI model writes each story and checks the safety facts.
         </li>
         <li>
-          <StIcon name="clapper" size={20} />A video maker draws and animates it. That is a separate choice.
+          <StIcon name="clapper" size={20} />A video maker draws and moves it. You pick that later.
         </li>
         <li>
           <StIcon name="sliders" size={20} />
-          You pick the model and how hard it thinks. Nothing is swapped behind your back.
+          You pick the model and how hard it thinks. Nothing swaps by itself.
         </li>
       </ul>
-      <h3 className="st-setup__sub">The AI models Clips Funded can use</h3>
+      <h3 className="st-setup__sub">Your AI models</h3>
       <ul className="st-setup__models" aria-label="The AI models and their state">
         {models.map((m) => (
           <li key={m.key} className="st-setup__model" data-status={m.status}>
@@ -249,10 +249,7 @@ function ModelStep({
 
   return (
     <>
-      <p className="st-setup__text">
-        This model writes the stories, gives ideas and checks the facts, unless you pick another one for a task or an agent later. It is only for
-        Clips Funded: Clip Factory keeps its own.
-      </p>
+      <p className="st-setup__text">It also checks the facts. Clip Factory keeps its own model.</p>
       <StPick<string>
         label="Clips Funded's default model"
         stack
@@ -269,7 +266,7 @@ function ModelStep({
       {needsLevel ? (
         <p className="st-note st-note--sun" role="note">
           <StIcon name="sliders" size={18} />
-          {chosen.label} does not offer {EFFORT_LABEL[ai.ai.defaultEffort]}. Next you pick its level, then both are saved together.
+          {chosen.label} does not offer {EFFORT_LABEL[ai.ai.defaultEffort]}.
         </p>
       ) : null}
       <CheckRow checking={checking} busy={busy} onCheck={() => void check()} />
@@ -315,13 +312,10 @@ function EffortStep({ ws, ai, held, onSaved, busy, setBusy }: { ws: string; ai: 
       {held && model ? (
         <p className="st-note st-note--sun" role="note">
           <StIcon name="sliders" size={18} />
-          {model.label} does not offer {EFFORT_LABEL[ai.ai.defaultEffort]}. Pick its level: then {model.label} and that level are saved together.
+          {model.label} does not offer {EFFORT_LABEL[ai.ai.defaultEffort]}. Pick its level, then both are saved.
         </p>
       ) : null}
-      <p className="st-setup__text">
-        How hard {model?.label ?? "the model"} thinks before it answers. Higher is slower and costs more, and is best for storyboards and fact checks.
-        You can pick a different level per task later.
-      </p>
+      <p className="st-setup__text">Higher is slower and costs more. It is best for storyboards and fact checks.</p>
       <StPick<Effort>
         label="Clips Funded's default effort"
         value={(pick ?? "") as Effort}
@@ -384,7 +378,6 @@ function VideoStep({ ws, onSaved, busy, setBusy }: { ws: string; onSaved: () => 
   const config = (w.data?.configuration ?? null) as StoriesConfig | null;
   const [pick, setPick] = useState<StoriesConfig["providers"]["video"] | null>(null);
   const value = pick ?? config?.providers.video ?? "builtin-2d";
-  const reel = providers.data?.find((p) => p.id === "nova-reel");
   // §45.37 G7: Amazon ended Nova Reel on 30 Sep 2026, so it is never offered; Luma AI Ray2 makes the AI cut-aways.
   const luma = providers.data?.find((p) => p.id === "luma-ray");
   const ended = value === "nova-reel";
@@ -392,10 +385,7 @@ function VideoStep({ ws, onSaved, busy, setBusy }: { ws: string; onSaved: () => 
   if (!config) return <StLoading label="Reading the video settings…" />;
   return (
     <>
-      <p className="st-setup__text">
-        The AI models only write the story. The pictures and the movement are made by a video maker: the built-in animator draws your characters
-        the same way in every video.
-      </p>
+      <p className="st-setup__text">The AI writes the story. The video maker draws and moves it.</p>
       <StPick<StoriesConfig["providers"]["video"]>
         label="How videos are made"
         stack
@@ -406,29 +396,20 @@ function VideoStep({ ws, onSaved, busy, setBusy }: { ws: string; onSaved: () => 
         ]}
         onChange={setPick}
       />
-      {value === "nova-reel" && reel?.state === "needs_setup" ? (
-        <p className="st-note st-note--sun" role="note">
-          <StIcon name="alert" size={18} />
-          Nova Reel is not ready yet. Until it is, new videos, remakes and changes stop and say what is missing: nothing switches to the built-in
-          animation by itself. Pick Built-in animation above to keep making videos. To make it ready, tap Try it in Settings › Video: it makes one 6-second
-          test shot. Posts made with Nova Reel get the platforms' AI labels.
-        </p>
-      ) : null}
+      {/* An older Nova Reel pick: the ended note below says it all (it never gets ready again, §45.37 G7). */}
       {value === "luma-ray" && luma?.state !== "on" ? (
         <p className="st-note st-note--sun" role="note">
           <StIcon name="alert" size={18} />
           {luma?.line && /\bis not ready yet\b/.test(luma.line) ? `${luma.line} ` : "Luma AI Ray2 is not ready yet. "}
-          Until it is, new videos, remakes and changes stop and say what is missing: nothing switches to the built-in animation by itself. Pick Built-in
-          animation above to keep making videos. To make it ready, tap Try it in Settings › Video: it makes one 5-second test shot. Posts made with Luma
-          AI Ray2 get the platforms' AI labels.
+          Until then, new videos, remakes and changes stop. Nothing switches by itself. Pick Built-in animation above to keep making videos. To make it
+          ready, tap Try it in Settings › Video: it makes one 5-second test shot. Its posts get the platforms' AI labels.
         </p>
       ) : null}
       {ended ? (
         <div role="status">
           <p className="st-note st-note--coral">
             <StIcon name="alert" size={18} />
-            Amazon Nova Reel: Ended by Amazon on 30 Sep 2026. It cannot make anything any more, so new videos stop until you pick another way. Nothing
-            switches by itself.
+            Amazon Nova Reel: Ended by Amazon on 30 Sep 2026. It cannot make videos any more. Pick another way below: nothing switches by itself.
           </p>
           <div className="st-setup__row">
             <StButton main onClick={() => setPick("luma-ray")}>
@@ -446,7 +427,7 @@ function VideoStep({ ws, onSaved, busy, setBusy }: { ws: string; onSaved: () => 
         onSave={async (el) => {
           // An ended maker is never saved again: the API would keep an older pick, and nothing could make a video.
           if (ended) {
-            toast.error("Amazon Nova Reel was ended by Amazon on 30 Sep 2026. Pick another video maker in Clips Funded › Settings › Video.");
+            toast.error("Amazon Nova Reel has ended. Pick another video maker above.");
             return;
           }
           setBusy(true);
@@ -477,7 +458,7 @@ function AgentsStep({ ws }: { ws: string }) {
   const name = (key: string | null) => (key ? (ai.data!.models.find((m) => m.key === key)?.label ?? key) : "the default model");
   return (
     <>
-      <p className="st-setup__text">Five helpers work on every video. Each has its own instructions, model, effort and skills. You can change any of them in Settings › Agents.</p>
+      <p className="st-setup__text">They work on every video. Change them in Settings › Agents.</p>
       <ul className="st-agents">
         {ai.data.agents.map((a) => (
           <li key={a.agentId} className={`st-agent${a.active ? "" : " is-off"}`}>
@@ -518,11 +499,8 @@ function ConnectStep({ ws, platform, line }: { ws: string; platform: Platform; l
   return (
     <>
       {/* The card below says up front to use a new account, never Clip Factory's (§45.37 G8), and why an account that
-          is Clip Factory's own is stopped: each once, so the step does not say them again. */}
-      <p className="st-setup__text">
-        Connect the {PLATFORM_NAME[platform]} account that gets Clips Funded's videos. It stays separate from Clip Factory's. You can skip this and
-        connect it later.
-      </p>
+          is Clip Factory's own is stopped; the step's foot has Skip for now: each once, so the step does not say them
+          again. */}
       {gone ? <DisconnectedNote choice={gone.choice} onClose={() => setGone(null)} /> : null}
       {line && a.connectionStatus !== "same_as_clips" ? (
         <p className="st-note st-note--coral" role="note">
@@ -547,7 +525,7 @@ function ConnectStep({ ws, platform, line }: { ws: string; platform: Platform; l
 
 const WORDS: Record<OnboardStep, { title: string; lede: string }> = {
   ai: { title: "Set up the AI", lede: "What Clips Funded uses, and why." },
-  model: { title: "Pick your default model", lede: "The AI model Clips Funded uses unless you say otherwise." },
+  model: { title: "Pick your default model", lede: "The AI that writes your stories." },
   effort: { title: "Pick your default effort", lede: "How hard the model thinks." },
   video: { title: "Pick how videos are made", lede: "The video maker, apart from the AI models." },
   agents: { title: "Meet your agents and skills", lede: "The five helpers of your studio." },
@@ -717,7 +695,7 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
           <StMascot mood="cheer" size={120} tone="mint" />
           <p className="st-setup__text">
             {left.length
-              ? `You can start making videos now. ${left.length === 1 ? "One thing is" : `${left.length} things are`} still on the list; the dashboard keeps it for you, also after you finish.`
+              ? `You can make videos now. ${left.length === 1 ? "One thing is left" : `${left.length} things are left`}: the dashboard keeps ${left.length === 1 ? "it" : "them"} for you.`
               : "Everything is set up. Tap Finish!"}
           </p>
         </div>
@@ -769,7 +747,7 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
         </ArcDial>
         <h1 className="st-head__title st-setup__heading st-display">Set up Clips Funded</h1>
         <p className="st-head__lede st-setup__intro">
-          {data.done} of {data.total} done. Skip anything you do not need yet: making videos never waits for it.
+          {data.done} of {data.total} done. Skip any step: videos never wait for it.
         </p>
         <StLinkButton href="/stories" className="st-setup__later">
           Do this later

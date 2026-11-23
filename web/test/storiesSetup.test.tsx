@@ -175,12 +175,14 @@ describe("steps 2 and 3: the default model and effort", () => {
     });
     await click(button("Pick your default model"));
     await click($$("[role=radio]").find((r) => r.textContent?.includes("Quick One"))!);
-    expect(document.body.textContent).toContain("Quick One does not offer High. Next you pick its level, then both are saved together.");
+    // Said once: the note says what is missing, the button says what comes next.
+    expect(document.body.textContent).toContain("Quick One does not offer High.");
+    expect(document.body.textContent!.split("pick its level next").length - 1).toBe(1);
     await click(button("Use Quick One: pick its level next"));
     // Nothing saved yet; the effort step asks for its level, with nothing picked for the owner.
     expect(putAis()).toHaveLength(0);
     expect(stepTitle()).toBe("Pick your default effort");
-    expect(document.body.textContent).toContain("Quick One does not offer High. Pick its level: then Quick One and that level are saved together.");
+    expect(document.body.textContent).toContain("Quick One does not offer High. Pick its level, then both are saved.");
     expect($$("[role=radio]").map((r) => [r.textContent, r.getAttribute("aria-checked")])).toEqual([
       ["Low", "false"],
       ["MediumThe model's own", "false"],
@@ -205,7 +207,7 @@ describe("step 4 and the connect steps", () => {
     expect($$("[role=radio]").some((r) => r.textContent?.includes("Amazon Nova Reel"))).toBe(false);
     await click($$("[role=radio]").find((r) => r.textContent?.includes("Luma AI Ray2"))!);
     // Every create, remake and change stops while it is not ready (§45.34 "A provider that is not ready"), whatever the scenes.
-    expect(document.body.textContent).toContain("Until it is, new videos, remakes and changes stop and say what is missing: nothing switches to the built-in animation by itself.");
+    expect(document.body.textContent).toContain("Until then, new videos, remakes and changes stop. Nothing switches by itself.");
     expect(document.body.textContent).toContain("Pick Built-in animation above to keep making videos.");
     expect(document.body.textContent).not.toMatch(/a scene without characters stops/);
     expect(document.body.textContent).not.toMatch(/keep using the built-in animation/);
@@ -233,8 +235,32 @@ describe("step 4 and the connect steps", () => {
     expect(step.querySelector(".st-conn .st-conn__new")?.textContent).toBe(NEW);
     expect(times(step.textContent!, SAME)).toBe(1);
     expect(step.querySelector(".st-conn")?.textContent).toContain(SAME);
+    // No paragraph of its own around the card: the card says whose account, the foot has Skip for now.
+    expect(step.querySelector(".st-setup__text")).toBeNull();
+    expect(button("Skip for now")).toBeTruthy();
     expect(document.body.textContent).not.toMatch(/for both|both apps/i);
     for (const b of $$("button, [role=radio]")) expect(b.textContent ?? "").not.toMatch(/for both|share it/i);
+  });
+
+  /** The card's one fold in the open connect step. */
+  const more = () => $<HTMLDetailsElement>(".st-setup__body .st-conn details.st-conn__more")!;
+
+  it("a connect step whose developer app still needs setting up opens the card's fold by itself", async () => {
+    await start({ fresh: true });
+    await click(button("Connect YouTube"));
+    expect(stepTitle()).toBe("Connect YouTube");
+    // The card is the step: its app choice is open, under the line that says it comes first.
+    expect(more().open).toBe(true);
+    expect(more().querySelector("summary")?.textContent).toBe("First, set up the app for YouTube");
+    expect(more().querySelector("[role=radiogroup]")?.getAttribute("aria-label")).toBe("Which YouTube app Clips Funded uses");
+  });
+
+  it("a connect step whose developer app is ready keeps the card's fold closed under More", async () => {
+    // The seed's X shares Clip Factory's app.
+    await start({});
+    await click(button("Connect X"));
+    expect(more().open).toBe(false);
+    expect(more().querySelector("summary")?.textContent).toBe("More for X");
   });
 
   it("step 4 of a workspace whose older pick is Amazon Nova Reel says it ended, with a one-tap replacement, and never saves it (§45.37 G7)", async () => {

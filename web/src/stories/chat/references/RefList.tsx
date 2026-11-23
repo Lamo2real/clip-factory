@@ -82,7 +82,7 @@ export function RefList({ ws }: { ws: string }) {
       <header className="st-chat-head st-plate">
         <div className="st-chat-head__text">
           <h1 className="st-chat-head__title st-display">Reference videos</h1>
-          <p className="st-chat-head__lede">Upload a video you like. The video analysis agent studies its shots, timing and jokes, so your videos can borrow the ideas. It never copies the characters or the footage.</p>
+          <p className="st-chat-head__lede">Upload a video you like. We learn its tricks, never copy it.</p>
         </div>
       </header>
 
@@ -100,7 +100,7 @@ export function RefList({ ws }: { ws: string }) {
         </span>
         <div className="st-ref-drop__text">
           <p className="st-ref-drop__title">Add a reference video</p>
-          <p className="st-ref-drop__line">MP4 or MOV, up to 2 GB and 10 minutes. Found one online? Save it to your device first, then upload the video file.</p>
+          <p className="st-ref-drop__line">MP4 or MOV, up to 2 GB and 10 minutes. Found one online? Save it first.</p>
         </div>
         <Btn main icon="upload" onClick={() => input.current?.click()}>
           Upload a video
@@ -167,7 +167,7 @@ export function RefList({ ws }: { ws: string }) {
         </ul>
       ) : !uploads.length ? (
         <Empty card title="No reference videos yet">
-          Upload a short video you love. You'll see what makes it work, shot by shot.
+          Upload one to see why it works, shot by shot.
         </Empty>
       ) : null}
 

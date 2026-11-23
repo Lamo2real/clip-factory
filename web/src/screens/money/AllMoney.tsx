@@ -25,7 +25,7 @@ import { ReachedBlock } from "../getpaid/bank/BankMoney.tsx";
 export const ALL_MONEY_TITLE = "All your money";
 export const NOTHING_TO_ADD = "Nothing to add up yet.";
 export const TWO_MONIES = "Different money, like dollars and euros, is never added together.";
-export const PAID_OUT = "Paid out to your bank: not available from Content Rewards. Look on Whop: **Balances**.";
+export const PAID_OUT = "Paid to your bank: look on Whop, **Balances**.";
 /** The block under the total (§40.4). */
 export const SENT_TITLE = "Sent to your bank, so far";
 export const SENT_TWO_MONIES = "Different money, like dollars and kronor, is never added together.";
@@ -108,7 +108,7 @@ export function crLines(cr: NonNullable<MoneyPlace["cr"]>, withSent = false): st
   const at = clockTime(cr.asOf);
   return [
     ...(now.length ? [`Right now (Content Rewards says${at ? `, ${at}` : ""}): ${now.join(" · ")}`] : []),
-    `Earned so far, since you started: ${cr.paidSoFarCents == null ? "Checking…" : usd(cr.paidSoFarCents)}`,
+    `Earned since you started: ${cr.paidSoFarCents == null ? "Checking…" : usd(cr.paidSoFarCents)}`,
     ...(withSent ? [] : [PAID_OUT]),
   ];
 }

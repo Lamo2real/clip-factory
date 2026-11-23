@@ -77,7 +77,7 @@ other plain reason, the generic words. Every message names a real button ("Try a
 
 ### 29.6 The cookies file: guide and check
 
-- Settings › YouTube help shows "How to get cookies": open a private window in Chrome; allow Get cookies.txt LOCALLY
+- Settings › YouTube help has a shut "How to get cookies" fold: open a private window in Chrome; allow Get cookies.txt LOCALLY
   in private windows; sign in to YouTube there; in the same tab go to `youtube.com/robots.txt`; export; close the
   private window and don't open it again; tap Add cookies.txt. Tip: a spare Google account is safest.
 - Before upload the browser runs `checkCookies` (`web/src/lib/cookiesFile.ts`): Netscape lines of 7 tab-separated

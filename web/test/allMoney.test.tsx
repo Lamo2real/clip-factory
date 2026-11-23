@@ -91,11 +91,11 @@ describe("All your money (AllMoney.tsx)", () => {
   it("Content Rewards' small lines in money's time order; See it all only while the row has no button", async () => {
     expect(crLines(CR)).toEqual([
       `Right now (Content Rewards says, ${clockTime(CR.asOf)}): Still earning $4.20 · Ready to move to Whop $18.25 · On its way to Whop $0.00`,
-      "Earned so far, since you started: $62.40",
-      "Paid out to your bank: not available from Content Rewards. Look on Whop: **Balances**.",
+      "Earned since you started: $62.40",
+      "Paid to your bank: look on Whop, **Balances**.",
     ]);
     expect(crLines({ ...CR, paidSoFarCents: null, onItsWayCents: null })[0]).not.toContain("On its way");
-    expect(crLines({ ...CR, paidSoFarCents: null })[1]).toBe("Earned so far, since you started: Checking…");
+    expect(crLines({ ...CR, paidSoFarCents: null })[1]).toBe("Earned since you started: Checking…");
     expect(clockTime("2026-11-19T14:10:00.000Z")).toMatch(/^\d{1,2}:\d{2} [ap]m$/);
     await draw(card(ROWS));
     const seeAll = (i: number) => [...row(i).querySelectorAll("a")].some((a) => a.textContent?.includes("See it all"));
@@ -103,7 +103,7 @@ describe("All your money (AllMoney.tsx)", () => {
     expect(seeAll(12)).toBe(true); // waiting
     expect(seeAll(14)).toBe(false); // sign_in has its own button
     expect(seeAll(11)).toBe(false); // not_set_up has no small lines
-    expect(row(11).textContent).not.toContain("Earned so far");
+    expect(row(11).textContent).not.toContain("Earned since you started");
     expect(row(14).textContent).toContain("Sign in again");
   });
 
@@ -175,8 +175,8 @@ describe("All your money's sent lines (§40.4)", () => {
     // Its own button (Open Stripe) is on the place's Get paid page: a row keeps one button, at its right end (§39.2).
     expect(line(2)).toBe("Sent to your bank: Not available from X. Look in Stripe: Payouts. More in Get paid below.");
     expect(line(3)).toBe("Sent to your bank: not available from Content Rewards. Look on Whop: Balances.");
-    // Content Rewards' "Paid out to your bank" line is replaced by the row's sent line, never said twice.
-    expect(row(3).textContent).not.toContain("Paid out to your bank");
+    // Content Rewards' "Paid to your bank" line is replaced by the row's sent line, never said twice.
+    expect(row(3).textContent).not.toContain("Paid to your bank");
     for (let i = 0; i < places.length; i++) {
       expect(row(i).querySelectorAll(".btn").length).toBeLessThanOrEqual(1);
       if (places[i]!.sent!.state !== "number") expect(row(i).querySelector(".cr-all__sent")!.textContent).not.toMatch(/\$0\b/);

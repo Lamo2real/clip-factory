@@ -255,7 +255,7 @@ for (const size of SIZES) {
 
       await page.evaluate(() => (window as MockWindow).__cfMock!.autopost.advance(61_000));
       await expect(page.locator("#auto-private-line")).toHaveText(
-        "Posts the next clip so only you can see it: YouTube as Only me, Facebook as a draft on your Page, Instagram uploaded and checked but not published. It leaves Review.",
+        "Posts the next clip so only you see it: YouTube Only me, Facebook a draft, Instagram not published. It leaves Review.",
       );
       await page.getByRole("button", { name: "Private test run" }).click();
       await expect(recent.first().locator(".autopost__run-text")).toHaveText(
@@ -362,7 +362,7 @@ for (const size of SIZES) {
       const first = (await page.locator("#auto-post-next .autopost__hook").first().innerText()).trim();
       await go(page, "/review");
       await expect(page.locator(".page-head__lede")).toHaveText(
-        "Watch each clip. Tap Upload to post it now, or Throw away if you do not like it. Auto-posting is on: the oldest clips go up by themselves every 5 hours.",
+        "Watch each clip. Upload it or throw it away. Auto-posting is on: the oldest clips go up by themselves every 5 hours.",
       );
       const card = page.locator(".review-card", { has: page.locator(".review-card__hook", { hasText: first }) }).first();
       await expect(card.locator(".autopost-line")).toHaveText("Goes up by itself Sun 11:00. Throw it away to stop it.");

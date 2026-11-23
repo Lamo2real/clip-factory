@@ -206,7 +206,7 @@ export function MoneyClipList({ choice, onSort }: { choice: DashChoice; onSort: 
           ))}
         </ul>
       ) : null}
-      {data && !data.clips.length ? <p className="dash-empty-list glass">No posted clips for these apps yet. Clips show here once they're posted.</p> : null}
+      {data && !data.clips.length ? <p className="dash-empty-list glass">No posted clips for these apps yet.</p> : null}
       {data?.clips.length ? (
         <ul className={`mclip-list${fresh ? "" : " is-loading"}`} aria-label="Clips" aria-busy={!fresh || undefined}>
           {data.clips.map((c) => (

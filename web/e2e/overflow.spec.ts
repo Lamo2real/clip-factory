@@ -235,6 +235,8 @@ for (const width of WIDTHS) {
           await head.click();
         }
       }
+      // The "If you see…" hints sit in a shut fold: open them too, so every hint is measured.
+      await page.locator(".gstep details.cr-fold:not([open]) > summary").evaluateAll((els) => els.forEach((e) => (e as HTMLElement).click()));
       await check(`${path} (all steps open)`);
     }
     await page.goto("/settings/posting/setup/instagram");

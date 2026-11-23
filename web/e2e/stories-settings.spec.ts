@@ -501,7 +501,7 @@ test.describe("Video and storage", () => {
     await file.getByRole("switch", { name: "Also make a WebM file" }).click();
     await expect(file.getByRole("switch", { name: "Also make a WebM file" })).toHaveAttribute("aria-checked", "true");
     await file.getByRole("switch", { name: "Put the captions into the picture" }).click();
-    await expect(file).toContainText("Only the caption words are left out of the picture. The speech bubbles and the safety end card always stay in.");
+    await expect(file).toContainText("Only the captions are left out. Speech bubbles and the safety end card always stay in.");
     const keeping = card(page, "Keeping other files");
     await keeping.getByRole("radiogroup", { name: "Keep reference videos" }).getByRole("radio", { name: /Keep only the study/ }).click();
     await expect(keeping).toContainText("Clips Funded still learns from each study after its video is gone.");
@@ -521,7 +521,7 @@ test.describe("Video and storage", () => {
     await sm.getByLabel("Click sound").selectOption({ label: "Bubble: rises a little" });
     const kept = await page.evaluate(() => (JSON.parse(localStorage.getItem("cf.stories.prefs") ?? "{}") as { more?: Record<string, unknown> }).more);
     expect(kept).toMatchObject({ "motion.reduce": true, "sound.click": 3 });
-    await expect(sm).toContainText("Clips Funded's own click sound.");
+    await expect(sm).toContainText("For Clips Funded on this device.");
     // Hear it plays the pick once, never the usual click sound on top of it.
     // (The log keeps the last 200 sounds: it starts empty here, so only this click's sounds are in it. A tap within
     // 60 ms of the last one is one sound, so the pick's own sound is let go first.)
@@ -555,7 +555,7 @@ test.describe("round 4 (§45.35)", () => {
     // Nova Reel's Try it is gone (Amazon ended it, §45.37); Luma AI Ray2 has it now.
     await expect(page.locator('[data-provider="nova-reel"]')).toHaveCount(0);
     const row = page.locator('[data-provider="luma-ray"]');
-    await expect(row).toContainText("Try it makes one 5-second test shot to see if Luma AI Ray2 works for you. Amazon bills that one shot.");
+    await expect(row).toContainText("Try it makes one 5-second test shot. Amazon bills that one shot. Nothing is posted.");
     await row.getByRole("button", { name: "Try Luma AI Ray2" }).click();
     await expect(row.getByRole("progressbar", { name: "Trying Luma AI Ray2" })).toBeVisible();
     await expect(row).toContainText("It did not work", { timeout: 15_000 });

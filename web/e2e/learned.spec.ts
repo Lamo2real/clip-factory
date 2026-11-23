@@ -29,7 +29,7 @@ const lessonCard = (page: Page, text: string) => page.locator(".lesson", { hasTe
 
 test("reads every lesson, grouped by creator, with its evidence and winner clips", async ({ page }) => {
   await open(page);
-  await expect(page.getByText("Every day Clip Factory checks your clips 7 days after posting.", { exact: false })).toBeVisible();
+  await expect(page.getByText("Clip Factory checks each clip 7 days after posting.", { exact: false })).toBeVisible();
   const groups = page.locator(".learned__creator");
   await expect(groups).toHaveText(["Big Streamer", "Quiet Corner", "All creators"]);
   const using = lessonCard(page, "Start on the reaction itself");
@@ -84,7 +84,7 @@ test("deletes a lesson only after the question", async ({ page }) => {
 
 test("the empty state before the first check", async ({ page }) => {
   await openWith(page, "empty");
-  await expect(page.getByText("Nothing yet. Lessons show up here once your clips have been posted for 7 days.")).toBeVisible();
+  await expect(page.getByText("Nothing yet. Lessons come 7 days after your clips post.")).toBeVisible();
   await expect(page.locator(".lesson")).toHaveCount(0);
 });
 

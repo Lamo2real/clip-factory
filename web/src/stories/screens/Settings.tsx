@@ -23,12 +23,12 @@ import type { StoriesScreenProps } from "./types.ts";
 /** The sections in the order the bar shows them; Social accounts opens the Connections page. */
 export const SECTIONS: { section: SettingsSection | "social"; label: string; icon: SIconName; lede: string }[] = [
   { section: "ai", label: "AI", icon: "chip", lede: "Which AI models think for Clips Funded, and how hard." },
-  { section: "agents", label: "Agents", icon: "people", lede: "Clips Funded's five helpers: what each one does, and with which model and skills." },
-  { section: "skills", label: "Skills", icon: "book", lede: "Know-how the agents read before they work. Clip Factory's skills are separate." },
+  { section: "agents", label: "Agents", icon: "people", lede: "Your five helpers, and what each one does." },
+  { section: "skills", label: "Skills", icon: "book", lede: "Tips your helpers read first. Clip Factory's are separate." },
   { section: "memory", label: "Memory", icon: "note", lede: "What Clips Funded remembers about you and your videos." },
   { section: "social", label: "Social accounts", icon: "plug", lede: "" },
   { section: "video", label: "Video", icon: "film", lede: "How videos are made: the makers, size, length and quality." },
-  { section: "storage", label: "Storage", icon: "box", lede: "Space used, the files made, and how videos are put together." },
+  { section: "storage", label: "Storage", icon: "box", lede: "Space, files, and how videos are put together." },
   { section: "look", label: "Look", icon: "brush", lede: "What is behind the glass: See-through, a picture of yours, or colours." },
 ];
 

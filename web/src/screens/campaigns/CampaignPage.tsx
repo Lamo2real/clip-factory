@@ -29,7 +29,7 @@ import {
   useSubmissions,
   usdShort,
 } from "../../lib/contentRewards.ts";
-import { PLATFORM_LABEL, plural, relative } from "../../lib/format.ts";
+import { PLATFORM_LABEL, relative } from "../../lib/format.ts";
 import { useLiveEvents, useLivePoll } from "../../lib/live.ts";
 import { navigate } from "../../lib/router.ts";
 import { prefersReducedMotion } from "../../lib/prefs.ts";
@@ -213,7 +213,7 @@ export function CampaignPage({ campaignId }: { campaignId: string }) {
         {sendNow ? (
           <section className="cr-next cr-send-first" aria-labelledby="cr-send-title">
             <h2 className="cr-section__title" id="cr-send-title">
-              Send your clip now ({sendNow.minutesLeft} min left). Then make more clips.
+              Send your clip now ({sendNow.minutesLeft} min left)
             </h2>
             <CrPostLines subs={subs.subs.filter((x) => sendNow.postIds.includes(x.postId))} onChange={subs.put} primary />
           </section>
@@ -308,7 +308,7 @@ function PaySection({ c }: { c: Campaign }) {
       <p className="cr-quiet">{c.access === "open" ? "Open to everyone" : "The brand picks creators (you apply)"}</p>
       <p className="cr-quiet">Pays for: {placeList(paidHere.length ? c.platformsPaid : c.platformsPaid) || "not shown yet"}</p>
       {c.platformsPaid.includes("tiktok") ? <p className="cr-quiet">{TIKTOK_NOT_YET}</p> : null}
-      <p className="cr-quiet small">Content Rewards&apos; own rates. They are not a guess of what a clip will earn.</p>
+      <p className="cr-quiet small">Content Rewards&apos; own rates, not a guess of what you&apos;ll earn.</p>
     </section>
   );
 }
@@ -380,7 +380,7 @@ function RulesSection({ c, onCampaign }: { c: Campaign; onCampaign: (c: Campaign
       {c.uncertain.length ? (
         <div className="cr-unsure">
           <h3 className="cr-sub">I couldn&apos;t tell</h3>
-          <p className="cr-quiet">I&apos;m not sure about these. Read them on the campaign page.</p>
+          <p className="cr-quiet">Read these on the campaign page.</p>
           <ul className="cr-ticks is-unsure">
             {c.uncertain.map((r) => (
               <li key={r}>
@@ -395,12 +395,13 @@ function RulesSection({ c, onCampaign }: { c: Campaign; onCampaign: (c: Campaign
         <details className="cr-fold" open={open} onToggle={(e) => setOpen((e.currentTarget as HTMLDetailsElement).open)}>
           <summary className="cr-fold__q">
             <Icon name="info" size={18} />
-            <span>
-              <Rich text="Rules missing? On the campaign page, copy everything under **Brief** and **Content requirements**. Paste it here, then tap Read these rules." />
-            </span>
+            <span>Rules missing?</span>
             <Icon name="chevronRight" size={18} className="icon cr-fold__chev act-turn" />
           </summary>
           <div className="cr-fold__body">
+            <p>
+              <Rich text="On the campaign page, copy everything under **Brief** and **Content requirements**. Paste it here." />
+            </p>
             <RulesBox value={text} onChange={setText} />
             <Button variant="glass" icon="check" act="tick" loading={busy} onClick={read}>
               Read these rules
@@ -454,7 +455,6 @@ function VideosSection({ c, pickVideo }: { c: Campaign; pickVideo: boolean }) {
           <p className="cr-quiet">Pick a video there. Copy its link. Come back and tap Paste.</p>
         </>
       ) : null}
-      <p className="cr-quiet">{plural(c.sourceVideos.length + c.channels.length, "place")} to find videos.</p>
     </section>
   );
 }

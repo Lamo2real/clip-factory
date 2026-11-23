@@ -84,10 +84,7 @@ export function MoneyBranch() {
             Check now
           </Button>
         </div>
-        <p className="money-top__rule">
-          Clip Factory only shows money an app reports. It never guesses, and you never type money in. Each amount is that
-          app's own estimate.
-        </p>
+        <p className="money-top__rule">Clip Factory only shows money an app reports. Each amount is that app&apos;s own estimate.</p>
       </Panel>
       {error && !data ? (
         <Panel>

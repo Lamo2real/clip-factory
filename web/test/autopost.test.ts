@@ -314,15 +314,15 @@ describe("Review's line and Home's hint (§46.2)", () => {
         }
   });
   it("Review's page lede: unchanged while off or practising; on says the oldest clips go up by themselves", () => {
-    expect(REVIEW_LEDE).toBe("Watch each clip. Tap Upload to post it, or Throw away if you do not like it. Nothing posts until you tap Upload.");
+    expect(REVIEW_LEDE).toBe("Watch each clip. Upload it or throw it away. Nothing posts until you tap Upload.");
     expect(reviewLede({ on: false, practice: false, everyHours: 5 })).toBe(REVIEW_LEDE);
     expect(reviewLede({ on: true, practice: true, everyHours: 5 })).toBe(REVIEW_LEDE);
     expect(reviewLede(autoPostOf(undefined))).toBe(REVIEW_LEDE);
     expect(reviewLede({ on: true, practice: false, everyHours: 5 })).toBe(
-      "Watch each clip. Tap Upload to post it now, or Throw away if you do not like it. Auto-posting is on: the oldest clips go up by themselves every 5 hours.",
+      "Watch each clip. Upload it or throw it away. Auto-posting is on: the oldest clips go up by themselves every 5 hours.",
     );
     expect(reviewLede({ on: true, practice: false, everyHours: 1 })).toBe(
-      "Watch each clip. Tap Upload to post it now, or Throw away if you do not like it. Auto-posting is on: the oldest clips go up by themselves every 1 hour.",
+      "Watch each clip. Upload it or throw it away. Auto-posting is on: the oldest clips go up by themselves every 1 hour.",
     );
   });
   it("Review's Upload after a run took the clip: a calm note, never his own Upload's", () => {

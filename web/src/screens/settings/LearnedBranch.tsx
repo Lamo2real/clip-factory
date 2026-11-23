@@ -12,8 +12,7 @@ import { PLATFORM_LABEL, PLATFORM_ORDER, plural } from "../../lib/format.ts";
 import { useLoad } from "../../lib/hooks.ts";
 import { Apple, Panel } from "./parts.tsx";
 
-export const LEARNED_INTRO =
-  "Every day Clip Factory checks your clips 7 days after posting. Lessons it is sure about go to your skills as Prior learnings.";
+export const LEARNED_INTRO = "Clip Factory checks each clip 7 days after posting. Lessons it is sure of join your skills as Prior learnings.";
 export const ALL_CREATORS = "*";
 
 const CHIPS: Record<LessonStatus, { text: string; tone: Tone }> = {
@@ -85,7 +84,7 @@ export function LearnedBranch() {
         {error && !data ? <ErrorPanel message={error} onRetry={reload} /> : null}
         {!data && !error ? <Skeleton className="line-skel" /> : null}
         {groups && groups.length === 0 ? (
-          <p className="muted learned__empty">Nothing yet. Lessons show up here once your clips have been posted for 7 days.</p>
+          <p className="muted learned__empty">Nothing yet. Lessons come 7 days after your clips post.</p>
         ) : null}
         {groups?.map((g) => (
           <section key={g.key} className="learned__group" aria-label={g.name}>

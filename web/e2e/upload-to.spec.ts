@@ -251,12 +251,12 @@ test.describe("Upload to many places", () => {
     await page.goto("/review");
     await settle(page);
     const card = page.locator(".review-card").first();
-    await expect(card.getByText("Could not check your places. Check again, then tap Upload.")).toBeVisible();
+    await expect(card.getByText("Couldn't check your places. Tap Check again.")).toBeVisible();
     await expect(card.getByText("Nothing is set up yet")).toHaveCount(0);
     await expect(card.getByRole("button", { name: UPLOAD })).toHaveAttribute("aria-disabled", "true");
     // Check again while the server is still failing: still no guess.
     await card.getByRole("button", { name: "Check again" }).click();
-    await expect(card.getByText("Could not check your places. Check again, then tap Upload.")).toBeVisible();
+    await expect(card.getByText("Couldn't check your places. Tap Check again.")).toBeVisible();
     // The server answers again: the places come back (live setup news or Check again).
     await page.evaluate(() => {
       const w = window as MockWindow;

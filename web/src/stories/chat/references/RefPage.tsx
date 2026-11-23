@@ -403,12 +403,12 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
           {ref.status === "uploading" ? (
             <div className="st-ref-card2 st-glass">
               <h2 className="st-ref-block__title">Still uploading</h2>
-              <p>This video did not finish uploading. If it was stopped, delete it and upload it again.</p>
+              <p>If it stopped, delete it and upload it again.</p>
             </div>
           ) : ref.status === "analyzing" ? (
             <div className="st-ref-card2 st-glass" aria-live="polite">
               <h2 className="st-ref-block__title">Analyzing…</h2>
-              <p>The video analysis agent is looking at every shot. It takes a few minutes for a long video. You can look at other pages meanwhile.</p>
+              <p>A long video takes a few minutes. You can leave this page.</p>
               <div className={cx("st-ref-run", job && "st-ref-run--dial")}>
                 <ol className="st-ref-track" aria-label="Steps">
                   {steps.map((s, i) => (
@@ -460,7 +460,7 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
                 </ol>
               ) : null}
               <h2 className="st-ref-block__title">{ref.status === "analyzed" ? "Analyze it again" : "Analyze it"}</h2>
-              <p>The video analysis agent looks at the shots, the timing, the jokes and the sound. Your videos borrow the ideas, never the characters or the footage.</p>
+              <p>We learn its shots, timing, jokes and sound. We never copy its characters or footage.</p>
               {removed ? (
                 <p className="st-chat-note st-ref-removed" role="status">
                   {ref.status === "analyzed" ? "The video file is gone, so it cannot be analyzed again." : "The video file is gone, so it cannot be analyzed."}

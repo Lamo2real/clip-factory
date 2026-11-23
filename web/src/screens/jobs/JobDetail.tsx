@@ -344,7 +344,7 @@ export function emptyClipsText(status: Job["status"]): string {
     case "failed":
       return "No clips yet. Fix the problem above, then tap Try again.";
     case "canceled":
-      return "No clips yet. This job was stopped. Tap Try again to start it again.";
+      return "No clips yet. This job was stopped. Tap Try again.";
     case "ready":
       return "This job made no clips. Go back to Home and try a different link.";
   }

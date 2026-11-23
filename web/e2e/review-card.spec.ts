@@ -45,7 +45,7 @@ test.describe("the simple Review card", () => {
     // TikTok needs the owner's own tap: Upload waits, and says why in plain words.
     await expect(upload).toHaveAttribute("aria-disabled", "true");
     await expect(card.locator(".upload-going")).toHaveText("Tap Use my settings first. TikTok needs your tap.");
-    await expect(card.getByText("Your other places already use your settings. TikTok needs your tap each time.")).toBeVisible();
+    await expect(card.getByText("Your other places already use your settings.", { exact: true })).toBeVisible();
 
     // Tap 1.
     await card.getByRole("button", { name: "Use my settings" }).click();
@@ -104,7 +104,7 @@ test.describe("the simple Review card", () => {
     // A change for this clip only: the summary says it, and the button offers the owner's settings back.
     await yt.getByRole("radiogroup", { name: "Who can see it on YouTube" }).getByRole("radio", { name: "Link only" }).check();
     await expect(yt.locator("summary")).toContainText("Who can see it: Link only");
-    await expect(card.getByText("You changed some for this clip. Tap to put yours back.")).toBeVisible();
+    await expect(card.getByText("You changed some. Tap to put yours back.")).toBeVisible();
 
     const tt = card.locator('[data-place="tiktok"]');
     await tt.locator("summary").click();
@@ -119,7 +119,7 @@ test.describe("the simple Review card", () => {
     const fb = card.locator('[data-place="facebook"]');
     await fb.locator("summary").click();
     await expect(fb.getByLabel("Facebook caption")).toBeVisible();
-    await expect(fb).toContainText("Everyone can see it.");
+    await expect(fb).toContainText("Reel on your Page · Everyone can see it");
   });
 
   test("a paid partnership is one tick in the TikTok row and keeps the settings on", async ({ page }) => {
@@ -166,7 +166,7 @@ test.describe("the simple Review card", () => {
     await page.goto("/settings/posting/my-settings");
     await settle(page);
     for (const id of ["youtube", "tiktok", "instagram", "facebook", "x"]) await expect(page.locator(`#my-settings-${id}`)).toBeVisible();
-    await expect(page.getByText("Made for kids: No. My settings never mark a clip as made for kids.")).toBeVisible();
+    await expect(page.getByText("Made for kids: always No.")).toBeVisible();
     await page.locator("#my-settings-tiktok").getByRole("switch", { name: "Duet" }).click();
     await expect(page.locator("#my-settings-tiktok").getByRole("switch", { name: "Duet" })).toHaveAttribute("aria-checked", "false");
     // In-app navigation: a reload would start the in-memory mock over.

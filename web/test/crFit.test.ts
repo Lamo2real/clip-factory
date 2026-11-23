@@ -598,7 +598,7 @@ describe("the could-earn line (FitSuggestion.tsx)", () => {
 
   it("the copy in Review: ready, right below", async () => {
     await draw(createElement(FitSuggestion, { clipId: "c1", fit: suggested, onCopy: () => undefined, copy: "ready" }));
-    expect(host.textContent).toContain("The FaZe Clips copy is ready, right below. Upload the copy to earn money. You can throw this one away.");
+    expect(host.textContent).toContain("The FaZe Clips copy is ready, right below. Upload the copy to earn money.");
     expect(buttons()).toEqual([]);
   });
 });

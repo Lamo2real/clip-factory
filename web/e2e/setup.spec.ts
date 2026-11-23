@@ -422,7 +422,7 @@ test("a stale consent page answers expired, and Connect needs keys first", async
   await expect(page.getByText("That took too long. Press Connect TikTok again.")).toBeVisible();
   await page.locator("[data-step='connect'] .gstep__head").click();
   await expect(page.getByRole("button", { name: "Connect TikTok", exact: true })).toHaveAttribute("aria-disabled", "true");
-  await expect(page.getByText(`Paste your keys first (step ${stepNumber(GUIDES.tiktok, "key-paste")}). Then this button works.`)).toBeVisible();
+  await expect(page.getByText(`Paste your keys first (step ${stepNumber(GUIDES.tiktok, "key-paste")}).`, { exact: true })).toBeVisible();
 });
 
 // Ask's "Open Instagram step 2" button (§28.4): #step-{id} opens that step and brings it into view.

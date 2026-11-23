@@ -49,7 +49,7 @@ export function UploadToChips({
       <div className="upload-to upload-to--none" data-help="upload-to">
         <p className="callout">
           <Icon name="alert" size={18} />
-          <span>None of the places this campaign pays for is set up yet. Set one up, then tap Upload.</span>
+          <span>This campaign&apos;s places aren&apos;t set up yet. Set one up first.</span>
         </p>
         <CampaignLines campaign={campaign} />
       </div>
@@ -62,7 +62,7 @@ export function UploadToChips({
           <span>Nothing is set up yet. Upload saves it, and it goes up once you set up a place.</span>
         </p>
         <A href="/settings/posting/setup" className="text-link">
-          Open Set up posting
+          Set up posting
         </A>
       </div>
     );
@@ -86,7 +86,7 @@ export function UploadToChips({
   );
 }
 
-/** "Only places this campaign pays for.", the TikTok line, and "Add YouTube in Content Rewards first." */
+/** "Only places this campaign pays for.", the TikTok line, and "Add YouTube in Content Rewards first." with its two buttons. */
 function CampaignLines({ campaign }: { campaign: NonNullable<Parameters<typeof UploadToChips>[0]["campaign"]> }) {
   return (
     <div className="cr-places">
@@ -104,7 +104,6 @@ function CampaignLines({ campaign }: { campaign: NonNullable<Parameters<typeof U
               I added it
             </GreenButton>
           </div>
-          <p className="small">Then tap I added it. The next clip will go.</p>
         </div>
       ))}
     </div>

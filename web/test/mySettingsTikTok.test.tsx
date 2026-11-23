@@ -19,10 +19,12 @@ vi.mock("../src/screens/settings/setup/useSetup.ts", () => ({
 
 const { MySettingsBranch } = await import("../src/screens/settings/MySettingsBranch.tsx");
 
-const OWN_TAP = "TikTok wants your own tap on each clip, so tap Use my settings there.";
-const COMMERCIAL = "Commercial content is off. For a paid partnership, tick Branded content in the TikTok row of that clip.";
-const MAC_COMMERCIAL =
-  "Commercial content is off. Your Mac posts TikTok with these. Paid partnerships can't go through your Mac yet: untick TikTok for that clip, then post it in the TikTok app with its label, not with Post with my Mac or Send these to my Mac.";
+const OWN_TAP = "TikTok wants your own tap, so tap Use my settings on each clip.";
+const COMMERCIAL = "Commercial content: off.";
+const MAC_COMMERCIAL = "Commercial content: off. Your Mac posts TikTok with these.";
+// The paid-partnership how-to sits in one fold under the line (shut until tapped).
+const PAID = "Tick Branded content in that clip's TikTok row.";
+const MAC_PAID = "Your Mac can't post those yet.Untick TikTok on that clip.Post it in the TikTok app, with its label.Don't use Post with my Mac or Send these to my Mac for it.";
 
 let host: HTMLElement;
 let root: Root;
@@ -37,6 +39,7 @@ async function render(): Promise<void> {
 
 const tiktokHint = () => host.querySelector("#my-settings-tiktok .field__hint")?.textContent ?? "";
 const note = () => host.querySelector(".preset-page__note")?.textContent ?? "";
+const paidFold = () => host.querySelector<HTMLDetailsElement>("#my-settings-tiktok details[data-my='paid']");
 
 beforeEach(() => {
   platforms = null;
@@ -55,8 +58,12 @@ describe("My settings, TikTok (§47.9)", () => {
     me = meWith({ on: true });
     await render();
     expect(tiktokHint()).toBe(MAC_COMMERCIAL);
+    // A paid partnership can't go through the Mac: the fold says how to post it instead, shut until tapped.
+    expect(paidFold()!.open).toBe(false);
+    expect(paidFold()!.querySelector("summary")!.textContent).toBe("Paid partnership?");
+    expect(paidFold()!.querySelector(".cr-fold__body")!.textContent).toBe(MAC_PAID);
     expect(host.textContent).not.toContain("own tap");
-    expect(host.textContent).not.toContain("tick Branded content");
+    expect(host.textContent).not.toMatch(/tick Branded content/i);
     // Nothing on the page (the TikTok leaf included) still asks for a tap on each clip.
     expect(host.textContent).not.toMatch(/still tap|tap Use my settings/i);
     expect(note()).toContain("Every clip on Review starts on these, TikTok too, except campaign clips.");
@@ -67,6 +74,7 @@ describe("My settings, TikTok (§47.9)", () => {
     me = meWith({ on: false });
     await render();
     expect(tiktokHint()).toBe(`${COMMERCIAL} ${OWN_TAP}`);
+    expect(paidFold()!.querySelector(".cr-fold__body")!.textContent).toBe(PAID);
     expect(note()).toContain("Tap Use my settings on a clip to put these on.");
   });
 
