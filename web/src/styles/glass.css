@@ -213,6 +213,19 @@ html[data-strength="frosted"] .backdrop__frost {
   }
 }
 
+/* Kept while the other app is on screen (components/Backdrop.tsx `away`, app/ClipsBackdrop.tsx): the same element, not
+   drawn, and its drift, lens rings and caustics wait where they are, so back on screen nothing starts over. (After the
+   rules above: the lens rings' own selector is as specific as these.) */
+.backdrop.backdrop--away {
+  visibility: hidden;
+}
+.backdrop.backdrop--away,
+.backdrop.backdrop--away *,
+.backdrop.backdrop--away::before,
+.backdrop.backdrop--away::after {
+  animation-play-state: paused;
+}
+
 .glass-defs {
   position: absolute;
   width: 0;
@@ -412,6 +425,18 @@ html:is(.see-through, [data-backdrop]) .perf__updated > span {
    green), lit flat from the panel's light above it, with no blur of its own (the parent's blur is what it sits on).
    :where() keeps it as light as `.glass`, so a surface with a tint of its own wins. */
 :where(.glass) .glass {
+  --glass-tint: linear-gradient(rgb(var(--green-rgb) / var(--light-raise-veil)), rgb(var(--green-rgb) / var(--light-raise-veil)));
+  --glass-light: linear-gradient(rgb(var(--bone-rgb) / var(--light-raise-lift)), rgb(var(--bone-rgb) / var(--light-raise-lift)));
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: var(--glass-shadow-raise);
+}
+/* The shell's Live chip (app/WorkspaceDock.tsx, while Funded Clips is switched on) is drawn over Clip Factory's
+   sidebar, in the place of the sidebar's own chip. While Clip Factory is on screen it is that chip: raised on the
+   sidebar exactly as nested glass just above (the same declarations, as light, right after it; test/background.test.ts
+   holds them equal), so Clip Factory looks exactly as with Funded Clips off (the pixel check, §45.19). Over Funded
+   Clips it stays as it was. */
+:where([data-app-pane="clips"]:not([hidden]) ~ .ws-dock > .ws-dock__live) > .glass {
   --glass-tint: linear-gradient(rgb(var(--green-rgb) / var(--light-raise-veil)), rgb(var(--green-rgb) / var(--light-raise-veil)));
   --glass-light: linear-gradient(rgb(var(--bone-rgb) / var(--light-raise-lift)), rgb(var(--bone-rgb) / var(--light-raise-lift)));
   -webkit-backdrop-filter: none;

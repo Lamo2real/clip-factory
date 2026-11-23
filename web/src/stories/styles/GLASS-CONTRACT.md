@@ -105,12 +105,13 @@ Later files win at equal specificity, so a screen can place and size a figure, b
 
 Inline custom properties it sets: `--st-veil-page`, `--st-veil-card`, `--st-veil-tinted`, `--st-veil-hero`,
 `--st-veil-rail`, `--st-veil-bar`, `--st-veil-float`, `--st-veil-plate`, `--st-stage-c1`, `--st-stage-c2-rgb`,
-`--st-stage-c3-rgb`, `--st-picture`. In `window` while Stories is on screen it adds `html.see-through` (only when
-Clip Factory had not, and takes away only what it added). See-through and its Glass strength are Stories' own,
-never Clip Factory's Look or Glass strength: while Stories holds the window it marks `<html data-st-window>`, hides
-Clip Factory's own `.backdrop` (its colours, picture or Frosted frost; inline, on that element only) and puts the
-class back if Clip Factory's look takes it away meanwhile; Clip Factory on screen gets both back exactly as it left
-them (look.ts `holdWindowGlass`, `keepWindowGlass`; test/storiesSeeThroughOwn.test.tsx,
+`--st-stage-c3-rgb`, `--st-picture`. In `window` it states Stories' wish for a transparent page to the shell
+(`setPageGlass("stories", …)`, app/shell.ts); only the shell writes `html.see-through`, from the wish of the app on
+screen (Clip Factory's own applyLook states Clip Factory's), so neither app reads, keeps or takes away the other's.
+See-through and its Glass strength are Stories' own, never Clip Factory's Look or Glass strength: the shell draws Clip
+Factory's own backdrop (its colours, picture or Frosted frost) only while Clip Factory is on screen
+(app/ClipsBackdrop.tsx), so nothing of Clip Factory's lies under Stories, and Stories never touches Clip Factory's DOM;
+Clip Factory on screen is exactly as its own settings say (test/storiesSeeThroughOwn.test.tsx,
 e2e/stories-see-through-own.spec.ts). Screens style by these attributes only through the
 glass classes; if a screen needs a look-specific rule, select `.stories-app[data-look="picture"] .your-class`.
 
@@ -179,7 +180,7 @@ measured floors (`MEASURED`; Frosted's frost and glass together), and keep the l
 ### 5. The glass recipe
 | token | meaning |
 |---|---|
-| `--st-tint-card`, `--st-tint-hero`, `--st-tint-rail`, `--st-tint-bar`, `--st-tint-float`, `--st-tint-plate`, `--st-tint-tinted`, `--st-tint-raised`, `--st-tint-cream` | the fills of each kind of surface: each is its level's light (`--st-light-N`) over its veil (`--st-shade-*`), lighter at the top (5a below) |
+| `--st-tint-card`, `--st-tint-hero`, `--st-tint-rail`, `--st-tint-bar`, `--st-tint-float`, `--st-tint-plate`, `--st-tint-tinted`, `--st-tint-raised`, `--st-tint-cream` | the fills of each kind of surface: each is its level's light (`--st-light-N`) over its veil (`--st-shade-*`), lighter at the top (5a below); a card inside a card over a picture or the desktop is a lift of light over its card |
 | `--st-tint-lens` | a liquid hero's fill (its light over the rim's veil; glass.css only) |
 | `--st-shade-card`, `-tinted`, `-hero`, `-raised`, `-rail`, `-plate`, `-bar`, `-float`, `-lens` | each surface's veil, giving its level's light the share it takes: `v / (1 - light)`, top and bottom |
 | `--st-fill-control`, `--st-fill-control-hover` | a glass control or inactive pill (a card's veil loose in Picture/See-through; on the colours the hover deepens loose on the page and is the cream lift `--st-fill-control-lift` inside a `.st-glass`) |
@@ -301,11 +302,14 @@ motion); `--st-ease-out`, `--st-ease-glide`, `--st-ease-progress` (slow start, f
 
 ### 13. The logo (the shell draws it; Stories only sets its colours here, on `.stories-app`)
 The mark is a shell element (the rename branch: `web/src/components/WorkspaceMark.tsx` and `web/src/styles/ws-mark.css`,
-in Clip Factory's main bundle, where ci.yml forbids any `--st-` or `.st-`), coloured by the shell's four names with
-today's colours as fallbacks: `--ws-mark-tile` (cream tile gradient), `--ws-mark-letter` (espresso "C", 14.6:1),
-`--ws-mark-dot` (#ff8a3d), `--ws-wordmark` (#fff6ea; the rail's and the phone top bar's `.st-brand` words use it
-too). The old `--st-mark-tile`, `--st-mark-letter`, `--st-mark-dot`, `--st-wordmark` are gone. Also the shell's
-`--focus` and `--mark-cut` in Stories' colours.
+in Clip Factory's main bundle, where ci.yml forbids any `--st-` or `.st-`), coloured by the shell's four names:
+`--ws-mark-tile` (cream tile gradient), `--ws-mark-letter` (espresso "C", 14.6:1), `--ws-mark-dot` (#ff8a3d),
+`--ws-wordmark` (#fff6ea; the rail's and the phone top bar's `.st-brand` words use it too). Their fallbacks in
+ws-mark.css are these very colours written out (test/workspaceMark.test.tsx keeps the two the same), so the mark is
+warm wherever it stands for Stories, also outside `.stories-app`: Clip Factory's round toggle that goes to Stories and
+the start-up card. The toggle back to Clip Factory shows Clip Factory's real mark (WorkspaceMark `workspace="clips"`,
+Clip Factory's own colours). The old `--st-mark-tile`, `--st-mark-letter`, `--st-mark-dot`, `--st-wordmark` are gone.
+Also the shell's `--focus` and `--mark-cut` in Stories' colours.
 
 ## Classes
 
@@ -318,7 +322,12 @@ glass.css:
 - `.st-glass--float`: sheets, menus, toasts: the float veil and the heaviest blur.
 - `.st-glass--tinted`: a colour-tinted tile (level 3: its colour asks for the owner); set `--st-tone-rgb` (for
   example `var(--st-mint-rgb)`).
-- `.st-glass .st-glass` (a plain card inside a card): one level up (`--st-tint-raised`, `--st-sheen-raised`).
+- `.st-glass .st-glass` (a plain card inside a card): one level up (`--st-tint-raised`, `--st-sheen-raised`), painted
+  over its card: over the colours the hero's veil and level 3's light; over a picture or the desktop only a lift of light
+  (`--st-elev-raised-lift`, 0.06) and no veil of its own, so over white it is a step up from its card (0.041 to 0.059).
+  Inside the hero the same. Anywhere inside a sheet, a bar, a tinted tile or a control it stays a plain card (its own
+  measured veil over that parent), so its words, the muted ones too, keep 4.5:1 there (a lift alone over a sheet over a
+  white picture left `--st-text-muted` at 4.19:1).
 - `.st-glass--control`: a glass control or inactive pill (radius control, control fill, hover deepens).
 - `.st-cream`: the solid cream surface with espresso words (the one highlighted card).
 - `.st-plate`: the backing plate for loose words (rule 6).

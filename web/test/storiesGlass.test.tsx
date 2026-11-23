@@ -19,7 +19,6 @@ import {
   applyStoriesLook,
   contrast,
   hexToRgb,
-  holdWindowGlass,
   lookKind,
   minVeil,
   mix,
@@ -32,6 +31,9 @@ import {
   type StoriesLook,
 } from "../src/stories/look.ts";
 import { LookSection } from "../src/stories/settings/LookSection.tsx";
+import { AppPanes, useAppActive } from "../src/stories/pane.tsx";
+import { applyLook } from "../src/lib/look.ts";
+import { setPageGlass } from "../src/app/shell.ts";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -199,13 +201,16 @@ describe("the background is Stories' own", () => {
     setStoriesLook({ mode: "see-through", strength: "frosted" });
     (window as unknown as { __CF_DESKTOP__?: boolean; __CF_GLASS__?: string }).__CF_DESKTOP__ = true;
     (window as unknown as { __CF_GLASS__?: string }).__CF_GLASS__ = "vibrancy";
-    function App({ active }: { active: boolean }) {
+    // Lamo Stories as StoriesApp calls the hook, in the shell's own panes (stories/pane.tsx AppPanes): the shell shows
+    // one app and writes html.see-through from that app's wish.
+    function App() {
       const r = useRef<HTMLDivElement>(null);
-      useStoriesBackground(r, active);
+      useStoriesBackground(r, useAppActive());
       return <div ref={r} className="stories-app" />;
     }
+    const shell = (on: "clips" | "stories") => <AppPanes on={on} clips={<div className="clips" />} stories={<App />} />;
     try {
-      render(<App active />);
+      render(shell("stories"));
       const el = $(".stories-app")!;
       expect(el.dataset.look).toBe("window");
       expect(el.dataset.strength).toBe("frosted");
@@ -214,7 +219,7 @@ describe("the background is Stories' own", () => {
       expect(el.style.getPropertyValue("--st-veil-card")).toBe("0.84");
       expect(el.style.getPropertyValue("--st-veil-rail")).toBe("0.96");
       expect(document.documentElement.classList.contains("see-through")).toBe(true);
-      render(<App active={false} />);
+      render(shell("clips"));
       expect(document.documentElement.classList.contains("see-through")).toBe(false);
     } finally {
       delete (window as unknown as { __CF_DESKTOP__?: boolean }).__CF_DESKTOP__;
@@ -224,10 +229,38 @@ describe("the background is Stories' own", () => {
 
   it("never takes away a see-through that Clip Factory put there itself", () => {
     const html = document.documentElement;
-    html.classList.add("see-through");
-    holdWindowGlass(true);
-    holdWindowGlass(false);
-    expect(html.classList.contains("see-through")).toBe(true);
+    (window as unknown as { __CF_DESKTOP__?: boolean; __CF_GLASS__?: string }).__CF_DESKTOP__ = true;
+    (window as unknown as { __CF_GLASS__?: string }).__CF_GLASS__ = "vibrancy";
+    function App() {
+      const r = useRef<HTMLDivElement>(null);
+      useStoriesBackground(r, useAppActive());
+      return <div ref={r} className="stories-app" />;
+    }
+    const shell = (on: "clips" | "stories") => <AppPanes on={on} clips={<div className="clips" />} stories={<App />} />;
+    try {
+      // Clip Factory's own See-through (its applyLook says so to the shell), then Lamo Stories on screen in its own
+      // See-through and on its Colours, then Clip Factory again: its see-through is there, as its Look says.
+      applyLook({ kind: "window", glass: "vibrancy", strength: "clear", pageVeil: 0, panelVeil: 0.5 });
+      expect(html.classList.contains("see-through")).toBe(true);
+      setStoriesLook({ mode: "see-through", strength: "clear" });
+      render(shell("stories"));
+      expect(html.classList.contains("see-through")).toBe(true);
+      act(() => setStoriesLook({ mode: "colours" }));
+      expect(html.classList.contains("see-through")).toBe(false);
+      act(() => setStoriesLook({ mode: "see-through" }));
+      render(shell("clips"));
+      expect(html.classList.contains("see-through")).toBe(true);
+      act(() => root.unmount());
+      root = createRoot(host);
+      expect(html.classList.contains("see-through")).toBe(true);
+    } finally {
+      // Clip Factory's look as it was before this test: no wish of its own, nothing of it on <html>.
+      setPageGlass("clips", false);
+      for (const k of ["backdrop", "glass", "strength"]) delete html.dataset[k];
+      for (const p of ["--backdrop-veil", "--panel-veil"]) html.style.removeProperty(p);
+      delete (window as unknown as { __CF_DESKTOP__?: boolean }).__CF_DESKTOP__;
+      delete (window as unknown as { __CF_GLASS__?: string }).__CF_GLASS__;
+    }
   });
 
   it("solid glass (reduced transparency) comes inline from look.ts, so no rule can be beaten by the look's own veils", () => {

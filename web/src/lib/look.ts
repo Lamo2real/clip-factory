@@ -3,6 +3,7 @@
 import { useSyncExternalStore } from "react";
 import { cantSelfUpdate, isOldDesktopApp, lightPay, readDesktopVersion, readNativeGlass, resolveLook, type Look, type NativeGlass, type Scheme } from "./background.ts";
 import { getPrefs, usePrefs, type Prefs } from "./prefs.ts";
+import { setPageGlass } from "../app/shell.ts";
 
 /** The desktop wrapper sets these before the page loads (desktop/src-tauri/src/init.js). */
 type DesktopWindow = Window & {
@@ -80,7 +81,8 @@ export function useLook(): Look {
  * what is saved, which is never rewritten. Reduced transparency overrides the pay in glass.css (!important).
  */
 export function applyLook(look: Look, root: HTMLElement = document.documentElement) {
-  root.classList.toggle("see-through", look.kind === "window");
+  // (the class is the shell's: it is Clip Factory's wish, on the page whenever Clip Factory is, app/shell.ts)
+  setPageGlass("clips", look.kind === "window", root);
   root.dataset.backdrop = look.kind;
   if (look.kind === "window") root.dataset.glass = look.glass;
   else delete root.dataset.glass;

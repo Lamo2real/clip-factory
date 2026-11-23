@@ -17,8 +17,10 @@
 // lib/background.ts does for its own. StoriesApp calls useStoriesBackground(root, active) once: it puts the result on
 // .stories-app (data-look, data-strength, data-glass, the --st-veil-* numbers and the stage colours), and
 // glass.css paints .stories-app::before from them. Stories depends on nothing of Clip Factory's here: the two small
-// readers below are Stories' own copies.
+// readers below are Stories' own copies, and See-through's transparent page is a wish Stories states to the shell
+// (app/shell.ts setPageGlass), which alone writes html.see-through, from the wish of the app on screen.
 import { useEffect, useLayoutEffect, useSyncExternalStore, type RefObject } from "react";
+import { setPageGlass } from "../app/shell.ts";
 import { LENS_BUDGET, watchLenses } from "./glass/lens.ts";
 import { onStoriesPrefs, setStoriesPref, storiesPrefs } from "./workspace.ts";
 
@@ -239,17 +241,11 @@ const steps = (from: number, to: number, by: number) => {
   out.push(to);
   return out;
 };
-/**
- * The lightest colours the stage can show, worked out from exactly what it draws over every window in
- * STAGE_WINDOWS: per window and saturation, the lightest pixel (a 32 px grid, then 4 px around the best).
- */
-export function stageSpots(colours: readonly string[], saturations: readonly number[] = SATURATIONS): Rgb[] {
-  const key = `${colours.join()}|${saturations.join()}`;
-  const hit = spotCache.get(key);
-  if (hit) return hit;
+/** The lightest pixel of `at` per window of STAGE_WINDOWS and saturation, over x from `inset(w)` to w − inset(w). */
+function lightestPixels(at: (x: number, y: number, w: number, h: number) => Rgb, saturations: readonly number[], inset: (w: number) => number): Rgb[] {
   const out: Rgb[] = [];
-  const at = stageOf(colours);
   for (const [w, h] of STAGE_WINDOWS) {
+    const [x0, x1] = [inset(w), w - inset(w)];
     for (const s of saturations) {
       let best = { l: -1, x: 0, y: 0, c: [0, 0, 0] as Rgb };
       const look = (x: number, y: number) => {
@@ -257,15 +253,45 @@ export function stageSpots(colours: readonly string[], saturations: readonly num
         const l = luminance(s === 1 ? c : saturateRgb(c, s));
         if (l > best.l) best = { l, x, y, c };
       };
-      for (const y of steps(0, h, 32)) for (const x of steps(0, w, 32)) look(x, y);
+      for (const y of steps(0, h, 32)) for (const x of steps(x0, x1, 32)) look(x, y);
       const { x: bx, y: by } = best;
-      for (const y of steps(Math.max(0, by - 32), Math.min(h, by + 32), 4)) for (const x of steps(Math.max(0, bx - 32), Math.min(w, bx + 32), 4)) look(x, y);
+      for (const y of steps(Math.max(0, by - 32), Math.min(h, by + 32), 4)) for (const x of steps(Math.max(x0, bx - 32), Math.min(x1, bx + 32), 4)) look(x, y);
       out.push(best.c);
     }
   }
+  return out;
+}
+function cached(key: string, work: () => Rgb[]): Rgb[] {
+  const hit = spotCache.get(key);
+  if (hit) return hit;
+  const out = work();
   if (spotCache.size > 32) spotCache.clear();
   spotCache.set(key, out);
   return out;
+}
+
+/**
+ * The lightest colours the stage can show, worked out from exactly what it draws over every window in
+ * STAGE_WINDOWS: per window and saturation, the lightest pixel (a 32 px grid, then 4 px around the best).
+ */
+export function stageSpots(colours: readonly string[], saturations: readonly number[] = SATURATIONS): Rgb[] {
+  return cached(`${colours.join()}|${saturations.join()}`, () => lightestPixels(stageOf(colours), saturations, () => 0));
+}
+
+/**
+ * The page's side margin (st-frame.css .st-frame: max(--gutter, the safe area), --gutter clamp(16px, 3.2vw, 36px)):
+ * nothing of a Stories page, and so no glass control loose on it, sits closer to the window's side than this.
+ */
+export function frameGutter(w: number): number {
+  return Math.min(36, Math.max(16, 0.032 * w));
+}
+/**
+ * The lightest colours a glass control loose on the page can sit on: as stageSpots, but only where a page can put one,
+ * inside the frame's side margins (frameGutter). The lamp's light strip at the very right edge of the window (the
+ * stage's brightest column) lies in that margin, so it lights the page there but never under a control.
+ */
+export function controlSpots(colours: readonly string[]): Rgb[] {
+  return cached(`${colours.join()}|controls`, () => lightestPixels(stageOf(colours), [1], frameGutter));
 }
 
 /** Every colour the stage can show at its lightest, through each saturation (kept for the old name's readers). */
@@ -299,8 +325,9 @@ export const FROSTED: Veils = { page: 0.3, card: 0.89, tinted: 0.89, hero: 0.89,
  *  behind (lit), so there the order is the veils' alone: each level's veil is thinner than the one under it. */
 export const LIGHT_STEP = 0.015;
 /** Clear over a picture or the desktop, as drawn: each glass at or above its measured floor (MEASURED), in the light's
- *  order over white: panels 0.90, cards 0.84, raised surfaces 0.79 (a hero, a bar, a card inside a card), sheets 0.74
- *  (a tinted tile's tone lights it on its own): about +0.017 L a step over white (test/storiesLight.test.ts). */
+ *  order over white: panels 0.90, cards 0.84, raised surfaces 0.79 (a hero, a bar; a card inside a card lays only a lift
+ *  of light over its card, --st-elev-raised-lift, which comes out the same over white), sheets 0.74 (a tinted tile's
+ *  tone lights it on its own): about +0.017 L a step over white (test/storiesLight.test.ts). */
 export const WINDOW_CLEAR: Veils = { page: 0, card: 0.84, tinted: 0.8, hero: 0.79, rail: 0.9, bar: 0.79, float: 0.74, plate: 0.9 };
 /** Frosted in the app, as drawn: the 0.30 frost, then the panels in the same order over the frosted desktop. */
 export const WINDOW_FROSTED: Veils = { page: 0.3, card: 0.84, tinted: 0.82, hero: 0.77, rail: 0.96, bar: 0.77, float: 0.72, plate: 0.96 };
@@ -345,7 +372,7 @@ export function looseControl(page: Rgb): { rest: Rgb; hover: Rgb } {
   const fill = 1 - (1 - LOOSE_CONTROL_FILL) * (1 - ELEVATION_TOP[4]!);
   return { rest: mix(CREAM, page, fill), hover: mix(CREAM, mix(CONTROL_HOVER.rgb, page, CONTROL_HOVER.alpha), ELEVATION_TOP[4]!) };
 }
-/** The least page veil at which a loose control's words keep CONTROL_TARGET over every spot of the stage. */
+/** The least page veil at which a loose control's words keep CONTROL_TARGET over every one of these spots (veilsFor: controlSpots). */
 export function minPageForControls(spots: readonly Rgb[]): number {
   for (let v = 0; v <= 1.0001; v += 0.01) {
     const ok = spots.every((s) => {
@@ -365,12 +392,15 @@ export function veilsFor(look: StoriesLook, glass: string = nativeGlass(), tier:
   if (kind === "picture") return { ...WINDOW_CLEAR };
   const colours = stageColours(look);
   const spots = stageSpots(colours);
-  // Loose words on the page: the page veil keeps them readable over the lightest spot (Frosted adds its frost). Once
-  // the colours need a veil (the owner's own bright ones), it also keeps a glass control's words loose on the page
-  // at CONTROL_TARGET (its cream fill and level-4 light lie over the veil: they measured 4.47:1 with the words' veil
-  // alone). Ember, Rose and Lagoon need none: their loose controls measure 4.9:1 or more on every page.
+  // Loose words on the page: the page veil keeps them readable over the lightest spot (Frosted adds its frost). It
+  // also keeps a glass control's words loose on the page at CONTROL_TARGET (its cream fill and level-4 light lie over
+  // the veil), measured where a page can put a control (controlSpots, inside the frame's side margins): the owner's
+  // own bright colours measured 4.47:1 with the words' veil alone, and mid-tones that need no veil for words
+  // (#446677, #0066aa, #3355dd) 4.33-4.43:1 with none. Ember, Rose and Lagoon need none: their loose controls measure
+  // 4.87:1 or more there, at rest and hovered (only the lamp's strip in the window's very edge column, where no
+  // control sits, is brighter).
   const words = minVeil(lightest(spots));
-  const loose = words > 0 ? Math.max(words, minPageForControls(spots)) : 0;
+  const loose = Math.max(words, minPageForControls(controlSpots(colours)));
   const page = Math.max(loose, look.mode === "see-through" && look.strength === "frosted" ? FROST_PAGE : 0);
   // Under the glass: the page veil, then each glass over the lightest spot a bar's saturate can make of it.
   const under = lightest(spots.flatMap((s) => SATURATIONS.map((k) => saturateRgb(mix(VEIL, s, page), k))));
@@ -540,65 +570,6 @@ export function lookProps(value: StoriesLook, glass: string = nativeGlass(), tie
   return { attrs: { "data-look": kind, "data-strength": value.strength, "data-glass": tier }, style };
 }
 
-/**
- * See-through in the app: the page must be transparent while Stories is on screen (html.see-through, the class Clip
- * Factory's own see-through uses). Stories adds it only when it was not there and takes away only what it added, so
- * Clip Factory's own look is exactly as Clip Factory's settings left it when Stories goes off screen.
- * Stories' own Look decides, never Clip Factory's: while it holds the window glass, <html> carries data-st-window and
- * nothing of Clip Factory's own backdrop (components/Backdrop.tsx: its colours, its picture, its Frosted frost) is
- * drawn under Stories, so Stories' Clear is clear and its Frosted is only its own frost (--st-veil-page); the class
- * and the hiding come back if Clip Factory's look redraws meanwhile (keepWindowGlass). Clip Factory on screen: both
- * are exactly as Clip Factory left them.
- */
-const HELD = "stSeeThrough";
-const WINDOW = "stWindow";
-const HID = "stHidden";
-/** Clip Factory's own backdrop (`.backdrop`, never inside .stories-app), hidden or shown again by Stories. */
-function clipsBackdrops(root: HTMLElement): HTMLElement[] {
-  return [...root.querySelectorAll<HTMLElement>(".backdrop")].filter((el) => !el.closest(".stories-app"));
-}
-function hideClipsBackdrop(hide: boolean, root: HTMLElement): void {
-  for (const el of clipsBackdrops(root)) {
-    if (hide && el.dataset[HID] !== "1") {
-      el.dataset[HID] = "1";
-      el.style.setProperty("display", "none");
-    } else if (!hide && el.dataset[HID] === "1") {
-      delete el.dataset[HID];
-      el.style.removeProperty("display");
-    }
-  }
-}
-export function holdWindowGlass(on: boolean, root: HTMLElement = document.documentElement): void {
-  if (on) {
-    root.dataset[WINDOW] = "1";
-    hideClipsBackdrop(true, root);
-    if (!root.classList.contains("see-through")) {
-      root.classList.add("see-through");
-      root.dataset[HELD] = "1";
-    }
-    return;
-  }
-  if (root.dataset[WINDOW] === "1") hideClipsBackdrop(false, root);
-  delete root.dataset[WINDOW];
-  if (root.dataset[HELD] !== "1") return;
-  delete root.dataset[HELD];
-  root.classList.remove("see-through");
-}
-/** While Stories holds the window glass: html.see-through comes back whenever something else takes it away, and a
- *  backdrop Clip Factory draws anew is hidden too. */
-export function keepWindowGlass(root: HTMLElement = document.documentElement): () => void {
-  if (typeof MutationObserver !== "function") return () => undefined;
-  const again = () => {
-    if (root.dataset[WINDOW] === "1" && (!root.classList.contains("see-through") || clipsBackdrops(root).some((el) => el.dataset[HID] !== "1"))) holdWindowGlass(true, root);
-  };
-  const watch = new MutationObserver(again);
-  watch.observe(root, { attributes: true, attributeFilter: ["class"] });
-  // Clip Factory's Backdrop is redrawn in its place when its look changes kind: watch only its own parent.
-  const parent = clipsBackdrops(root)[0]?.parentElement;
-  if (parent) watch.observe(parent, { childList: true });
-  return () => watch.disconnect();
-}
-
 /** The theme colour of the window while Stories is on screen. */
 export const THEME_COLOUR = "#1C130E";
 
@@ -614,12 +585,6 @@ export function applyStoriesLook(el: HTMLElement, value: StoriesLook, glass: Nat
   return attrs["data-look"] as LookKind;
 }
 
-/**
- * The background hook: StoriesApp's one call. Follows Stories' own Look (here or from Settings › Look on another
- * screen) and puts it on `root`; while Stories is on screen (`active`) in See-through in the app, the page itself is
- * transparent so the window's glass shows the desktop.
- */
-
 /** True while the device asks for less transparency (it can change while Stories is open). */
 export function useReducedTransparency(): boolean {
   return useSyncExternalStore(
@@ -634,18 +599,24 @@ export function useReducedTransparency(): boolean {
   );
 }
 
+/**
+ * The background hook: StoriesApp's one call. Follows Stories' own Look (here or from Settings › Look on another
+ * screen) and puts it on `root`; in See-through in the app it asks the shell for a transparent page while Stories is on
+ * screen, so the window's glass shows the desktop. `active` (Stories is on screen) turns the liquid rim on.
+ */
 export function useStoriesBackground(root: RefObject<HTMLElement | null>, active: boolean): StoriesLook {
   const value = useStoriesLook();
   const lessTransparency = useReducedTransparency();
   useLayoutEffect(() => {
     const el = root.current;
     if (!el) return;
-    const kind = applyStoriesLook(el, value);
-    const hold = active && kind === "window";
-    holdWindowGlass(hold);
-    return hold ? keepWindowGlass() : undefined;
-  }, [root, value, active, lessTransparency]);
-  useLayoutEffect(() => () => holdWindowGlass(false), []);
+    // See-through in the app: Stories' wish is the page itself transparent (html.see-through) while it is on screen.
+    // The shell writes the class from the wish of the app it shows (app/shell.ts), so Stories never reads, keeps or
+    // takes away Clip Factory's, and nothing of Clip Factory's is drawn under Stories (the shell draws Clip Factory's
+    // backdrop only while Clip Factory is on screen, app/ClipsBackdrop.tsx).
+    setPageGlass("stories", applyStoriesLook(el, value) === "window");
+  }, [root, value, lessTransparency]);
+  useLayoutEffect(() => () => setPageGlass("stories", false), []);
   // The liquid rim (glass/lens.ts): only while Stories is on screen, only where the glass is "liquid" (Chromium on a
   // capable device; the layout effect above has just put data-glass on the root), and never over the window's own
   // glass (See-through in the app: the desktop is not part of the page, so there is nothing to bend, and the hero's

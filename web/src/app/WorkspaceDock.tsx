@@ -275,19 +275,12 @@ function dockCalm(): boolean {
 const warm = (w: Workspace | null) => (w && w.workspaceType === "stories" ? preloadStoriesApp : undefined);
 
 /**
- * The little picture of a workspace on its round toggle: Clip Factory's "C", and for Funded Clips the same
- * mark in Funded Clips' colours (its logo, components/WorkspaceMark.tsx).
+ * The little picture of a workspace on its round toggle: Clip Factory's real mark (its italic serif "C" on the bone
+ * tile with the vermilion dot, as .brand__mark draws it), and for Funded Clips the same mark in Funded Clips' warm
+ * colours (its logo). Both are components/WorkspaceMark.tsx's small mark, in either app.
  */
 export function ToggleMark({ type, size = 24 }: { type: Workspace["workspaceType"]; size?: number }) {
-  if (type === "clips")
-    return (
-      <svg className="ws-round__mark" width={size} height={size} viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-        <rect x="1.5" y="1.5" width="21" height="21" rx="6" fill="#EFE7DA" />
-        <path d="M15.6 8.2a4.6 4.6 0 1 0 0 7.6" fill="none" stroke="#0F372B" strokeWidth="2.4" strokeLinecap="round" />
-        <circle cx="17.4" cy="6.2" r="1.6" fill="#E8392B" />
-      </svg>
-    );
-  return <WorkspaceMark size={Math.round(size * 0.875)} className="ws-round__mark" />;
+  return <WorkspaceMark workspace={type === "clips" ? "clips" : "stories"} size={Math.round(size * 0.875)} className="ws-round__mark" />;
 }
 
 /**

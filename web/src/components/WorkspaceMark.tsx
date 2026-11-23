@@ -3,9 +3,10 @@
 // --ws-mark-letter, --ws-mark-dot and --ws-wordmark, styles/ws-mark.css), beside the wordmark "Funded Clips" in Clip
 // Factory's wordmark type. It is an element of the shell: Funded Clips' rail and phone top bar, the start-up card
 // while Funded Clips' own code loads (app/App.tsx) and the shell's round toggle that goes to Funded Clips
-// (app/WorkspaceDock.tsx) all show it. So it lives here, its styles are in the main stylesheet, and it carries no
-// look of Funded Clips itself: Funded Clips' own stylesheet sets the four tokens, and until it does each falls back
-// to today's colours. The round toggle that goes back to Clip Factory keeps Clip Factory's own mark.
+// (app/WorkspaceDock.tsx) all show it, in Funded Clips' warm colours everywhere (its own stylesheet sets the four
+// tokens inside its app, and the very same colours are the fallbacks outside it). So it lives here, its styles are in
+// the main stylesheet, and it carries no code of Funded Clips itself. The round toggle that goes back to Clip Factory
+// shows Clip Factory's real mark, the same small mark in Clip Factory's own colours (`workspace="clips"`).
 import "../styles/ws-mark.css";
 import type { CSSProperties } from "react";
 import { ClipMark } from "./ClipMark.tsx";
@@ -16,13 +17,18 @@ export const STORIES_BRAND = "Funded Clips";
 /**
  * The mark: Clip Factory's "C" tile with its dot, in Funded Clips' colours. `boot` is the start-up card's big
  * breathing one. `size` draws it smaller, in proportion, for the shell's round workspace toggle: the same "C" and dot,
- * but without Clip Factory's brand__ classes, so Clip Factory's top bar (where that toggle sits) still has one brand
- * mark, its own.
+ * but without Clip Factory's brand__ classes, so the top bar where that toggle sits still has one brand mark, its own.
+ * `workspace="clips"` (with `size`) is Clip Factory's own mark at that size, in Clip Factory's own colours: the round
+ * toggle that goes back to Clip Factory.
  */
-export function WorkspaceMark({ boot = false, size, className }: { boot?: boolean; size?: number; className?: string }) {
+export function WorkspaceMark({ boot = false, size, className, workspace = "stories" }: { boot?: boolean; size?: number; className?: string; workspace?: "clips" | "stories" }) {
   if (size)
     return (
-      <span className={`ws-mark ws-mark--sized${className ? ` ${className}` : ""}`} style={{ "--ws-mark-size": `${size}px` } as CSSProperties} aria-hidden="true">
+      <span
+        className={`${workspace === "clips" ? "ws-clipmark" : "ws-mark"} ws-mark--sized${className ? ` ${className}` : ""}`}
+        style={{ "--ws-mark-size": `${size}px` } as CSSProperties}
+        aria-hidden="true"
+      >
         C<span className="ws-mark__dot" />
       </span>
     );

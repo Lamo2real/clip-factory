@@ -6,23 +6,28 @@ import { applyLook, useLook } from "../lib/look.ts";
  * Factory backdrop that slowly moves (see-through anywhere else: deep teal, two vermilion glows, leaf, a breath of
  * bone and two soft lenses), the owner's own picture, or their 1 to 3 colours.
  * Glass needs something varied behind it; over a flat colour it would read as a grey sheet.
+ *
+ * `away`: the application shell shows the other app (app/ClipsBackdrop.tsx). The backdrop stays the same element, is
+ * not drawn and its drift waits (glass.css .backdrop--away), so back on screen it is exactly where the owner left it.
+ * Without it (always, while Funded Clips is switched off) the backdrop is exactly as it always was.
  */
-export function Backdrop() {
+export function Backdrop({ away = false }: { away?: boolean }) {
   const look = useLook();
   useLayoutEffect(() => applyLook(look), [look]);
+  const cls = (name: string) => (away ? `${name} backdrop--away` : name);
 
   if (look.kind === "window") {
     // The page is transparent. The veil here is empty for Clear and a light frost for Frosted; the tint that keeps
     // text readable sits on the panels (glass.css), so the desktop stays guessable between them.
     return (
-      <div className="backdrop backdrop--window" aria-hidden="true">
+      <div className={cls("backdrop backdrop--window")} aria-hidden="true">
         <span className="backdrop__veil" />
       </div>
     );
   }
   if (look.kind === "picture") {
     return (
-      <div className="backdrop has-image" aria-hidden="true">
+      <div className={cls("backdrop has-image")} aria-hidden="true">
         <div className="backdrop__image" style={{ backgroundImage: `url("${look.url}")` }} />
       </div>
     );
@@ -31,7 +36,7 @@ export function Backdrop() {
     const [c1, c2 = c1, c3 = c2] = look.colours;
     const style = { "--c1": c1, "--c2": c2, "--c3": c3 } as CSSProperties;
     return (
-      <div className="backdrop backdrop--colours" style={style} aria-hidden="true" data-colours={look.colours.join(" ")}>
+      <div className={cls("backdrop backdrop--colours")} style={style} aria-hidden="true" data-colours={look.colours.join(" ")}>
         <span className="blob blob--a" />
         <span className="blob blob--b" />
         <span className="blob blob--c" />
@@ -42,7 +47,7 @@ export function Backdrop() {
     );
   }
   return (
-    <div className={`backdrop${look.kind === "frosted" ? " backdrop--frosted" : ""}`} aria-hidden="true">
+    <div className={cls(`backdrop${look.kind === "frosted" ? " backdrop--frosted" : ""}`)} aria-hidden="true">
       <span className="blob blob--a" />
       <span className="blob blob--b" />
       <span className="blob blob--c" />

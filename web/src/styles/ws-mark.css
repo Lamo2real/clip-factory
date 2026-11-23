@@ -2,24 +2,29 @@
    the colors in clip factory stories"). The mark is Clip Factory's own markup and shape (.brand__mark and .brand__dot,
    layout.css: the italic "C" on its tile, its size, type and dot), so only its colours are set here. Four tokens colour
    it: --ws-mark-tile (the tile, a colour or a gradient), --ws-mark-letter (the "C"), --ws-mark-dot (the dot) and
-   --ws-wordmark (the words "Funded Clips"). Funded Clips' own stylesheet sets them, never this file; until it does,
-   each falls back to today's Funded Clips colours (sunshine tile, night-indigo "C", coral dot, cream words). In the
-   main stylesheet, because the mark is an element of the shell: it is there wherever the mark is, also on the start-up
-   card before Funded Clips' own styles load. Clip Factory's own mark never carries ws-mark, so its colours stay
-   exactly as they are. */
+   --ws-wordmark (the words "Funded Clips"). Funded Clips' own stylesheet sets them inside its app; everywhere else (Clip
+   Factory's round toggle that goes to Funded Clips, the start-up card before Funded Clips' own styles load) each falls
+   back to the very same warm colours, written out here (the owner, 23 Nov: Funded Clips' colours everywhere the mark
+   stands for Funded Clips; test/workspaceMark.test.tsx holds the two the same): the cream tile, the espresso "C", the
+   orange dot and the cream words. In the main stylesheet, because the mark is an element of the shell. Clip Factory's
+   own mark never carries ws-mark, so its colours stay exactly as they are. */
 
 .ws-mark.brand__mark {
-  color: var(--ws-mark-letter, #1c1842);
-  background: var(--ws-mark-tile, #ffc94a);
+  color: var(--ws-mark-letter, #2a160b);
+  background: var(--ws-mark-tile, linear-gradient(150deg, #fff3e4, #f2dcc2));
 }
 .ws-mark > .brand__dot {
-  background: var(--ws-mark-dot, #ff6f61);
+  background: var(--ws-mark-dot, #ff8a3d);
 }
 
 /* A smaller mark at a given size (--ws-mark-size), on the shell's round workspace toggle: Clip Factory's mark in
-   proportion (the same tile, italic "C" and dot as .brand__mark and .brand__dot), drawn with its own classes so Clip
-   Factory's top bar keeps one brand mark, and with no shadow, so nothing paints outside the toggle's own box. */
-.ws-mark.ws-mark--sized {
+   proportion (the same tile, italic "C" and dot as .brand__mark and .brand__dot), drawn with its own classes so the top
+   bar it sits in keeps one brand mark, and with no shadow, so nothing paints outside the toggle's own box. The same
+   small mark in two colourings: Funded Clips' (ws-mark, the four tokens above) on the toggle that goes to Funded Clips,
+   and Clip Factory's own (ws-clipmark: .brand__mark's bone tile and green "C", .brand__dot's vermilion) on the toggle
+   that goes back to Clip Factory, in either app. */
+.ws-mark.ws-mark--sized,
+.ws-clipmark.ws-mark--sized {
   position: relative;
   display: grid;
   place-items: center;
@@ -32,9 +37,6 @@
   font-style: italic;
   font-size: calc(var(--ws-mark-size) * 0.67);
   line-height: 1;
-  text-shadow: none;
-  color: var(--ws-mark-letter, #1c1842);
-  background: var(--ws-mark-tile, #ffc94a);
 }
 .ws-mark--sized > .ws-mark__dot {
   position: absolute;
@@ -43,7 +45,23 @@
   width: calc(var(--ws-mark-size) * 0.18);
   height: calc(var(--ws-mark-size) * 0.18);
   border-radius: 50%;
-  background: var(--ws-mark-dot, #ff6f61);
+}
+.ws-mark.ws-mark--sized {
+  color: var(--ws-mark-letter, #2a160b);
+  text-shadow: none;
+  background: var(--ws-mark-tile, linear-gradient(150deg, #fff3e4, #f2dcc2));
+}
+.ws-mark.ws-mark--sized > .ws-mark__dot {
+  background: var(--ws-mark-dot, #ff8a3d);
+}
+/* Clip Factory's own colours, exactly .brand__mark's and .brand__dot's (layout.css). */
+.ws-clipmark.ws-mark--sized {
+  color: var(--on-bone);
+  text-shadow: none;
+  background: var(--selected);
+}
+.ws-clipmark.ws-mark--sized > .ws-mark__dot {
+  background: var(--vermilion);
 }
 
 /* The wordmark: Clip Factory's wordmark type (.brand__name: "Clip Factory", its italic "Factory") in one colour.
@@ -59,7 +77,7 @@
   line-height: 1;
   letter-spacing: -0.01em;
   white-space: nowrap;
-  color: var(--ws-wordmark, #fff6e5);
+  color: var(--ws-wordmark, #fff6ea);
 }
 .ws-wordmark__main {
   font-size: 1.45rem;

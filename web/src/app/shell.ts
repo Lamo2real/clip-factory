@@ -9,10 +9,13 @@
 //   - which app is on screen right now (by the address: every /stories page is Lamo Stories);
 //   - Clip Factory's page changes that come after a wait (a request that answered): while Lamo Stories is on screen
 //     they wait, and happen the moment Clip Factory is back (clipsGoLater), the mirror of Lamo Stories' storiesGoLater;
-//   - the search of Clip Factory's kept page while it is hidden (useKeptSearch, §45.35 D18).
+//   - the search of Clip Factory's kept page while it is hidden (useKeptSearch, §45.35 D18);
+//   - the page's own glass: which app the shell shows (AppPanes says), and html.see-through, which only the shell
+//     writes, from the wish of the app on screen (each app states its own with setPageGlass, never the other's).
 //
 // Everything here is a no-op while Lamo Stories is switched off: no pane is around anything, `active` is always true,
-// `hosted` always false, Clip Factory is always on screen and clipsGoLater is exactly navigate.
+// `hosted` always false, Clip Factory is always on screen, clipsGoLater is exactly navigate and html.see-through is
+// exactly Clip Factory's own wish.
 import { createContext, useContext, useSyncExternalStore } from "react";
 import { navigate } from "../lib/router.ts";
 import { storiesEnabled } from "../stories/flag.ts";
@@ -124,4 +127,53 @@ export function useKeptSearch(): string {
   const kept = useContext(KeptSearch);
   if (kept !== null) return kept;
   return typeof location === "undefined" ? "" : location.search;
+}
+
+// ---------- The page's own glass: html.see-through, the shell's (from the wish of the app on screen) ----------
+
+/** The app the shell shows: AppPanes says, as it switches (always Clip Factory while Lamo Stories is switched off). */
+let onScreen: AppName = "clips";
+const screenListeners = new Set<() => void>();
+/** What each app wants while it is on screen: the page itself transparent (the desktop window's glass shows). */
+const pageGlass: Record<AppName, boolean> = { clips: false, stories: false };
+
+function writePageGlass(root: HTMLElement | null = typeof document === "undefined" ? null : document.documentElement): void {
+  root?.classList.toggle("see-through", pageGlass[onScreen]);
+}
+
+/**
+ * An app says whether it wants the page itself transparent while it is on screen (html.see-through: the desktop
+ * window's own glass shows the desktop): Clip Factory from its Look (lib/look.ts applyLook), Lamo Stories from its own
+ * (stories/look.ts). Only the shell writes the class, from the wish of the app on screen, so neither app ever reads,
+ * keeps or takes away the other's: a wish stated while the other app is on screen waits, and is the page's the moment
+ * its app is back. While Lamo Stories is switched off this is exactly Clip Factory's own toggle.
+ */
+export function setPageGlass(app: AppName, on: boolean, root?: HTMLElement): void {
+  pageGlass[app] = on;
+  writePageGlass(root);
+}
+
+/** The shell says which app it shows (AppPanes, as it switches; Clip Factory again once the panes are gone). */
+export function setAppOnScreen(app: AppName): void {
+  const changed = app !== onScreen;
+  onScreen = app;
+  writePageGlass();
+  if (changed) for (const fn of screenListeners) fn();
+}
+
+/** The app the shell shows now (always "clips" while Lamo Stories is switched off). */
+export function appOnScreen(): AppName {
+  return onScreen;
+}
+
+/** Re-renders when the shell shows the other app (App.tsx draws Clip Factory's own backdrop only while it is on screen). */
+export function useAppOnScreen(): AppName {
+  return useSyncExternalStore(
+    (fn) => {
+      screenListeners.add(fn);
+      return () => screenListeners.delete(fn);
+    },
+    () => onScreen,
+    () => "clips" as const,
+  );
 }

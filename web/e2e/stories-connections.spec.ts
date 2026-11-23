@@ -140,6 +140,40 @@ test("round 5: one name for the other app, ids and developer words one tap away,
   const words = await page.locator(".st-connections").evaluate((el) => (el as HTMLElement).innerText);
   expect(words).toContain("Clip Factory");
   expect(words).not.toContain("Lamo Clips");
+  // E18: in each column every card starts right under the one above it (16 px apart), never under an empty area and
+  // never over the card above it.
+  const columnsNow = async () => {
+    const boxes = await page.locator(".st-conns > .st-conn").evaluateAll((els) => els.map((e) => e.getBoundingClientRect()).map((r) => ({ x: Math.round(r.x), top: r.top, bottom: r.bottom })));
+    const columns = new Map<number, { top: number; bottom: number }[]>();
+    for (const b of boxes) columns.set(b.x, [...(columns.get(b.x) ?? []), b]);
+    for (const col of columns.values()) col.sort((a, b) => a.top - b.top);
+    return [...columns.values()];
+  };
+  const gapsOf = (columns: { top: number; bottom: number }[][]) => columns.flatMap((col) => col.slice(1).map((c, i) => c.top - col[i]!.bottom));
+  /** The E18 checks on the cards as they are now; returns the empty area under the shortest column. */
+  const flowsByHeight = async (when: string) => {
+    const columns = await columnsNow();
+    expect(columns.length, `${when}: the cards sit in more than one column at 1440`).toBeGreaterThan(1);
+    for (const gap of gapsOf(columns)) {
+      expect(gap, `${when}: the gap above a card`).toBeLessThanOrEqual(17);
+      expect(gap, `${when}: a card never over the one above it`).toBeGreaterThanOrEqual(15);
+    }
+    // Each card went into the shortest column: the empty area under the shortest column is never taller than the last
+    // card of the tallest one (that card could not have gone anywhere shorter).
+    const ends = columns.map((col) => ({ bottom: col.at(-1)!.bottom, last: col.at(-1)!.bottom - col.at(-1)!.top }));
+    const tallest = ends.reduce((a, b) => (b.bottom > a.bottom ? b : a));
+    const shortest = Math.min(...ends.map((e) => e.bottom));
+    expect(tallest.bottom - shortest, `${when}: the empty area under the shortest column`).toBeLessThanOrEqual(tallest.last + 16);
+    return tallest.bottom - shortest;
+  };
+  // The deal itself, as the page dealt the cards: less empty than before, when Instagram stood alone 721 px short.
+  // Measured before E14 below opens YouTube's Technical details: that card then grows (33 px here) and keeps its column
+  // by design (the next test), so the empty area grows by as much. Measured after it, this check raced the page's next
+  // frame: it held only while the cards under the grown one were not laid out again yet, which a page busy with Clip
+  // Factory's hidden backdrop still drifting under Funded Clips made likely; settled, the same layout leaves 724 px.
+  // (Measured once the cards' rise-in has ended, so no card is caught on its way up.)
+  await page.locator(".st-conns > .st-conn").evaluateAll((els) => Promise.all(els.flatMap((e) => e.getAnimations()).filter((a) => a.effect?.getComputedTiming().iterations !== Infinity).map((a) => a.finished.catch(() => undefined))));
+  expect(await flowsByHeight("as dealt"), "less empty than the columns left before").toBeLessThan(700);
   // E14: the account's id is not on screen until Technical details is opened; then it is, one tap away.
   const yt = cardOf(page, "YouTube");
   await expect(yt.locator(".st-who__id")).toBeHidden();
@@ -152,22 +186,9 @@ test("round 5: one name for the other app, ids and developer words one tap away,
   await expect(insta.getByText("Valid OAuth Redirect URIs", { exact: false })).toBeHidden();
   const tiktok = cardOf(page, "TikTok");
   await expect(tiktok.getByText("Sandbox", { exact: false })).toBeHidden();
-  // E18: in each column every card starts right under the one above it (16 px apart), never under an empty area.
-  const boxes = await page.locator(".st-conns > .st-conn").evaluateAll((els) => els.map((e) => e.getBoundingClientRect()).map((r) => ({ x: Math.round(r.x), top: r.top, bottom: r.bottom })));
-  const columns = new Map<number, { top: number; bottom: number }[]>();
-  for (const b of boxes) columns.set(b.x, [...(columns.get(b.x) ?? []), b]);
-  expect(columns.size, "the cards sit in more than one column at 1440").toBeGreaterThan(1);
-  for (const col of columns.values()) {
-    col.sort((a, b) => a.top - b.top);
-    for (let i = 1; i < col.length; i++) expect(col[i]!.top - col[i - 1]!.bottom, "the gap above a card").toBeLessThanOrEqual(17);
-  }
-  // Each card went into the shortest column: the empty area under the shortest column is never taller than the last
-  // card of the tallest one (that card could not have gone anywhere shorter). Before, Instagram stood alone 721 px short.
-  const ends = [...columns.values()].map((col) => ({ bottom: col.at(-1)!.bottom, last: col.at(-1)!.bottom - col.at(-1)!.top }));
-  const tallest = ends.reduce((a, b) => (b.bottom > a.bottom ? b : a));
-  const shortest = Math.min(...ends.map((e) => e.bottom));
-  expect(tallest.bottom - shortest, "the empty area under the shortest column").toBeLessThanOrEqual(tallest.last + 16);
-  expect(tallest.bottom - shortest, "less empty than the columns left before").toBeLessThan(700);
+  // YouTube's card has grown: the cards under it move down with it (never left under it), and E18 holds again.
+  await expect.poll(async () => Math.min(...gapsOf(await columnsNow())), { message: "the cards under YouTube's grown card move down with it" }).toBeGreaterThanOrEqual(15);
+  await flowsByHeight("after YouTube's card grew");
   for (const width of [320, 768, 1024, 1920]) {
     await page.setViewportSize({ width, height: 900 });
     await page.waitForTimeout(200);
