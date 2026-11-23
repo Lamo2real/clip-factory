@@ -42,20 +42,22 @@ interface Place {
  * A fresh window at `size`, with Lamo Stories switched on. `setupDone`: Clip Factory's "Set up posting" list finished
  * (all five skipped, the owner's own state), so nothing of Clip Factory's own sits above its phone top bar.
  */
-async function open(browser: Browser, size: (typeof SIZES)[number], setupDone: boolean): Promise<Page> {
+async function open(browser: Browser, size: (typeof SIZES)[number], setupDone: boolean, firstTime = false): Promise<Page> {
   const ctx = await browser.newContext({
     viewport: { width: size.w, height: size.h },
     reducedMotion: "reduce",
   });
+  // A brand-new studio: Lamo Stories opens its Setup by itself, on its own (no rail), the page the owner circled.
+  if (firstTime) await ctx.addInitScript(() => ((window as unknown as { __cfStoriesMock?: unknown }).__cfStoriesMock = { knobs: { fresh: true } }));
   await ctx.addInitScript(
-    ([folded, done]) => {
+    ([folded, done, first]) => {
       localStorage.setItem("cf.storiesPreview", "1");
-      localStorage.setItem("cf.stories.prefs", JSON.stringify({ setupShown: ["stories"] }));
+      if (!first) localStorage.setItem("cf.stories.prefs", JSON.stringify({ setupShown: ["stories"] }));
       if (folded) localStorage.setItem("cf.prefs", JSON.stringify({ sidebarCollapsed: true }));
       if (done && !sessionStorage.getItem("cf-mock-setup-skipped"))
         sessionStorage.setItem("cf-mock-setup-skipped", JSON.stringify(["youtube", "tiktok", "instagram", "facebook", "x"]));
     },
-    [!!size.folded, setupDone] as const,
+    [!!size.folded, setupDone, firstTime] as const,
   );
   const page = await ctx.newPage();
   if (size.window === "mac") await asMacWindow(page);
@@ -102,9 +104,9 @@ async function place(page: Page): Promise<Place> {
   });
 }
 
-/** Waits for the page and the Live chip, then freezes motion so nothing is read mid-pop. */
-async function ready(page: Page, path: string) {
-  await page.goto(path);
+/** Opens `path` (unless it is on screen already), waits for the page and the Live chip, and lets them settle. */
+async function ready(page: Page, path: string, go = true) {
+  if (go) await page.goto(path);
   if (path.startsWith("/stories")) {
     await page.locator(".stories-app[data-ws]").waitFor({ timeout: 15_000 });
     await page.waitForFunction(() => !document.querySelector(".st-loading, .boot"), undefined, { timeout: 15_000 });
@@ -118,6 +120,54 @@ async function ready(page: Page, path: string) {
   await page.waitForTimeout(500);
   await page.evaluate(() => window.scrollTo(0, 0));
   await page.evaluate(() => new Promise((done) => requestAnimationFrame(() => requestAnimationFrame(() => done(null)))));
+}
+
+/**
+ * Nothing covers the switch or the Live chip, and they cover nothing of the page: at their middle and near each side
+ * the topmost thing is the dock itself, and right under it only the app's own empty background (the sidebar's or the
+ * rail's glass, the page's frame): never a control, a picture or a line of words of the page.
+ */
+async function uncovered(page: Page, what: string) {
+  const found = await page.evaluate(() => {
+    const phone = innerWidth < 768;
+    const pane = document.querySelector("[data-app-pane]:not([hidden])");
+    const parts = phone
+      ? [pane?.querySelector(".ws-switch-host--topbar .ws-round"), pane?.querySelector(".ws-switch-host--topbar .live-dot")]
+      : [document.querySelector(".ws-dock .ws-switch-host"), document.querySelector(".ws-dock .live-dot")];
+    const own = (el: Element) => (phone ? !!el.closest(".ws-switch-host--topbar") : !!el.closest(".ws-dock"));
+    const content = (el: Element) =>
+      el.closest("a, button, input, select, textarea, label, img, svg, video, canvas, [tabindex]:not(main):not([tabindex='-1'])") ??
+      (Array.from(el.childNodes).some((n) => n.nodeType === 3 && n.textContent!.trim()) ? el : null);
+    const bad: string[] = [];
+    for (const part of parts) {
+      if (!part) {
+        bad.push("missing");
+        continue;
+      }
+      const r = part.getBoundingClientRect();
+      // Its middle, and 3 px in from the middle of each side (inside a pill's and a circle's round ends too).
+      const mx = r.x + r.width / 2;
+      const my = r.y + r.height / 2;
+      for (const [x, y] of [
+        [mx, my],
+        [r.x + 3, my],
+        [r.right - 3, my],
+        [mx, r.y + 3],
+        [mx, r.bottom - 3],
+      ] as const) {
+        const stack = document.elementsFromPoint(x, y);
+        if (!stack[0] || !own(stack[0])) {
+          bad.push(`${part.className} at ${Math.round(x)},${Math.round(y)}: covered by ${stack[0]?.className || stack[0]?.tagName}`);
+          continue;
+        }
+        const below = stack.find((el) => !own(el));
+        const hit = below ? content(below) : null;
+        if (hit) bad.push(`${part.className} at ${Math.round(x)},${Math.round(y)}: over ${hit.tagName}.${hit.className} "${(hit.textContent ?? "").trim().slice(0, 30)}"`);
+      }
+    }
+    return bad;
+  });
+  expect(found, `${what}: the switch and the Live chip, uncovered and over nothing of the page`).toEqual([]);
 }
 
 const same = (a: Box | null, b: Box | null, what: string) => {
@@ -136,6 +186,7 @@ for (const size of SIZES) {
       await ready(page, path);
       const at = await place(page);
       seen.push({ path, at });
+      await uncovered(page, `${label} ${path}`);
       await page.screenshot({
         path: join(SHOTS, `${label.replace(/ /g, "-")}${path === "/" ? "_home" : path.replace(/\//g, "_")}.png`),
       });
@@ -215,4 +266,175 @@ test("a longer workspace name stands the choices one above the other, the same b
   expect(clips.sw!.y).toBeGreaterThanOrEqual(sixth.y + sixth.height + 3.5);
   expect(await cut()).toEqual([]);
   await page.context().close();
+});
+
+test("Lamo Stories' first Setup, on its own (the page the owner circled), shows the switch and the Live chip at Clip Factory's box", async ({ browser }) => {
+  mkdirSync(SHOTS, { recursive: true });
+  for (const size of [SIZES[0]!, { w: 1280, h: 900 }, SIZES[2]!]) {
+    const page = await open(browser, size, true, true);
+    await ready(page, "/library");
+    const clips = await place(page);
+    await page.goto("/stories");
+    await expect(page).toHaveURL(/\/stories\/setup$/);
+    await ready(page, "/stories/setup", false);
+    await expect(page.locator(".stories-app.is-alone")).toHaveCount(1);
+    await expect(page.locator(".st-setup__head .st-ring")).toHaveAttribute("aria-label", "0 of 11 done");
+    const setup = await place(page);
+    await page.screenshot({ path: join(SHOTS, `${size.w}x${size.h}_first-setup-alone.png`) });
+    same(setup.sw, clips.sw, `${size.w}x${size.h} the first Setup vs /library: the switch`);
+    same(setup.live, clips.live, `${size.w}x${size.h} the first Setup vs /library: the Live chip`);
+    await uncovered(page, `${size.w}x${size.h} the first Setup`);
+    await page.context().close();
+  }
+});
+
+test("Clip Factory's jobs starting or ending behind Lamo Stories never move the switch there", async ({ browser }) => {
+  const page = await open(browser, SIZES[0]!, true);
+  await ready(page, "/library");
+  await expect(page.locator("nav.sidebar .sidebar__status")).toBeVisible();
+  await page.locator(".ws-dock .ws-switch__opt", { hasText: /^Funded Clips$/ }).click();
+  await page.locator(".stories-app[data-ws]").waitFor();
+  await page.waitForTimeout(500);
+  const before = await place(page);
+  const room = () => page.evaluate(() => getComputedStyle(document.documentElement).getPropertyValue("--ws-dock-room"));
+  const roomBefore = await room();
+  // Every Clip Factory job finishes now, while Lamo Stories is on screen: Clip Factory's own foot (kept behind it)
+  // loses its jobs line.
+  await page.evaluate(() => {
+    const jobs = (window as unknown as { __cfMock: { jobs: { finish(): string | null } } }).__cfMock.jobs;
+    for (let i = 0; i < 20 && jobs.finish(); i++);
+  });
+  await expect(page.locator('[data-app-pane="clips"] .sidebar__status')).toHaveCount(0, { timeout: 15_000 });
+  await page.waitForTimeout(400);
+  const after = await place(page);
+  same(after.sw, before.sw, "the switch, after Clip Factory's jobs ended behind Lamo Stories");
+  same(after.live, before.live, "the Live chip, after Clip Factory's jobs ended behind Lamo Stories");
+  expect(await room(), "the room Lamo Stories' rail leaves it").toBe(roomBefore);
+  // Back in Clip Factory it is where Clip Factory's foot has it now: right above the Live chip, right above Get the app.
+  await page.locator(".ws-dock .ws-switch__opt", { hasText: "Clip Factory" }).click();
+  await expect(page).toHaveURL(/\/library$/);
+  await page.waitForTimeout(500);
+  const back = await place(page);
+  const getApp = (await page.locator("nav.sidebar .sidebar__getapp").boundingBox())!;
+  expect(back.live!.y - (back.sw!.y + back.sw!.height)).toBeCloseTo(4, 0);
+  const row = (await page.locator(".ws-dock .ws-dock__live").boundingBox())!;
+  expect(getApp.y - (row.y + row.height)).toBeCloseTo(4, 0);
+  await page.context().close();
+});
+
+test("a Lamo Stories sheet covers the switch like the rest of the page: no tap and no key reach it, and it is back once the sheet closes", async ({ browser }) => {
+  const page = await open(browser, SIZES[0]!, true);
+  await ready(page, "/stories/characters/01JSTCH0000000000000000001");
+  await page.getByRole("button", { name: /^Delete/ }).first().click();
+  const sheet = page.getByRole("dialog", { name: /Delete Pip/ });
+  await expect(sheet).toBeVisible();
+  const centre = async () =>
+    page.evaluate(() => {
+      const r = document.querySelector(".ws-dock .ws-switch-host")!.getBoundingClientRect();
+      const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+      return { inDock: !!top?.closest(".ws-dock"), scrim: !!top && !!top.querySelector('[aria-modal="true"]'), inert: document.querySelector<HTMLElement>(".ws-dock")!.inert };
+    });
+  await expect.poll(centre).toEqual({ inDock: false, scrim: true, inert: true });
+  // A tap there is a tap on the dim (it closes the sheet, the safe answer): Lamo Stories stays, the page too.
+  const opt = (await page.locator(".ws-dock .ws-switch__opt", { hasText: "Clip Factory" }).boundingBox())!;
+  await page.mouse.click(opt.x + opt.width / 2, opt.y + opt.height / 2);
+  await expect(sheet).toHaveCount(0);
+  await expect(page).toHaveURL(/\/stories\/characters\//);
+  await expect.poll(centre).toEqual({ inDock: true, scrim: false, inert: false });
+  await page.context().close();
+});
+
+test("Clip Factory's own dialog covers the switch too (its dim is over it, and the switch takes no key)", async ({ browser }) => {
+  const page = await open(browser, { w: 1000, h: 720 }, false);
+  await ready(page, "/library");
+  await page.locator(".setup-todo__pill").click();
+  await expect(page.locator("#setup-todo-panel")).toBeVisible();
+  const centre = () =>
+    page.evaluate(() => {
+      const r = document.querySelector(".ws-dock .ws-switch-host")!.getBoundingClientRect();
+      const top = document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2);
+      return { inDock: !!top?.closest(".ws-dock"), inert: document.querySelector<HTMLElement>(".ws-dock")!.inert, dimmed: document.querySelector(".ws-dock")!.classList.contains("is-under") };
+    });
+  await expect.poll(centre).toEqual({ inDock: false, inert: true, dimmed: false });
+  await page.keyboard.press("Escape");
+  await expect(page.locator("#setup-todo-panel")).toHaveCount(0);
+  await expect.poll(centre).toEqual({ inDock: true, inert: false, dimmed: false });
+  await page.context().close();
+});
+
+test("for the keyboard the switch comes where it is drawn: right after the menu, before Get the app, in both apps", async ({ browser }) => {
+  const page = await open(browser, SIZES[0]!, true);
+  await ready(page, "/library");
+  const focused = () => page.evaluate(() => (document.activeElement?.textContent ?? "").trim());
+  await page.locator('nav.sidebar .sidebar__item[data-help="nav-settings"]').focus();
+  const forward: string[] = [];
+  for (let i = 0; i < 3; i++) {
+    await page.keyboard.press("Tab");
+    forward.push(await focused());
+  }
+  expect(forward).toEqual(["Clip Factory", "Funded Clips", "Get the app"]);
+  await page.keyboard.press("Shift+Tab");
+  expect(await focused()).toBe("Funded Clips");
+  await page.keyboard.press("Shift+Tab");
+  await page.keyboard.press("Shift+Tab");
+  expect(await focused()).toBe("Settings");
+  // Lamo Stories: right after its rail's pages.
+  await page.locator(".ws-dock .ws-switch__opt", { hasText: /^Funded Clips$/ }).click();
+  await page.locator(".stories-app[data-ws]").waitFor();
+  await page.locator(".st-rail .st-rail__item").last().focus();
+  await page.keyboard.press("Tab");
+  expect(await focused()).toBe("Clip Factory");
+  await page.keyboard.press("Tab");
+  expect(await focused()).toBe("Funded Clips");
+  await page.keyboard.press("Tab");
+  expect(await page.evaluate(() => !!document.activeElement?.closest(".ws-dock"))).toBe(false);
+  await page.context().close();
+});
+
+test("unfolding Clip Factory's sidebar, the switch and the Live chip never show past the growing sidebar", async ({ browser }) => {
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 } });
+  await ctx.addInitScript(() => {
+    localStorage.setItem("cf.storiesPreview", "1");
+    localStorage.setItem("cf.prefs", JSON.stringify({ sidebarCollapsed: true }));
+  });
+  const page = await ctx.newPage();
+  await page.goto("/jobs");
+  await settle(page);
+  await page.locator(".sidebar__toggle").click();
+  // Held at moments of the unfold (the sidebar's own growth and the dock's, on one clock).
+  for (const t of [40, 110, 220, 360]) {
+    const at = await page.evaluate((ms) => {
+      for (const a of document.getAnimations()) {
+        a.pause();
+        a.currentTime = ms;
+      }
+      const side = document.querySelector("nav.sidebar")!.getBoundingClientRect();
+      const shown = (el: Element) => {
+        const r = el.getBoundingClientRect();
+        const m = /inset\(([^)]*)\)/.exec(getComputedStyle(el).clipPath);
+        const right = m ? parseFloat(m[1]!.trim().split(/\s+/)[1] ?? m[1]!.trim().split(/\s+/)[0]!) : 0;
+        return r.right - Math.max(0, right);
+      };
+      return {
+        side: side.right,
+        sw: shown(document.querySelector(".ws-dock .ws-switch-host")!),
+        live: shown(document.querySelector(".ws-dock .ws-dock__live")!),
+      };
+    }, t);
+    expect(at.sw, `${t} ms: the switch`).toBeLessThanOrEqual(at.side + 0.5);
+    expect(at.live, `${t} ms: the Live chip's row`).toBeLessThanOrEqual(at.side + 0.5);
+  }
+  await page.evaluate(() => {
+    for (const a of document.getAnimations()) {
+      try {
+        a.finish();
+      } catch {
+        // An endless one (the Live chip's breath) has no end: it just plays on.
+        a.play();
+      }
+    }
+  });
+  await expect(page.locator(".ws-dock")).not.toHaveClass(/is-unfolding/);
+  await expect(page.locator(".ws-dock .ws-switch-host")).toHaveAttribute("data-ws-switch", "bar");
+  await ctx.close();
 });

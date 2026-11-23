@@ -199,6 +199,37 @@
     justify-content: center;
     padding-inline: 0;
   }
+  /* A dialog is open and the dock is drawn over its dim (Lamo Stories' sheets dim inside its own app): the dock dims
+     with the page under it (opacity only, as the dim fades in), takes no tap (it goes to the dim) and no key (it is
+     inert, WorkspaceDock.tsx). Under Clip Factory's sheets and lists the dim is over the dock already. */
+  .ws-dock > .ws-switch-host,
+  .ws-dock > .ws-dock__live {
+    transition: opacity 200ms ease;
+  }
+  .ws-dock.is-under > .ws-switch-host,
+  .ws-dock.is-under > .ws-dock__live {
+    opacity: 0.34;
+  }
+  .ws-dock.is-under > *,
+  .ws-dock.is-under > .ws-dock__live > * {
+    pointer-events: none;
+  }
+  /* Unfolding: the dock is laid out for the open sidebar at once while the sidebar still grows (layout.css, 520 ms
+     on --ease-out); each part shows only as far as the sidebar's own content has grown (--ws-unfold: how far its
+     right edge is past the folded sidebar's), on the same curve, so nothing pokes out past the glass. A clip only:
+     no layout during it. A slim toggle beside the sidebar (edge) is outside it and is left alone. */
+  .ws-dock.is-unfolding:not([data-ws-dock="edge"]) > .ws-switch-host,
+  .ws-dock.is-unfolding > .ws-dock__live {
+    animation: ws-dock-unfold var(--dur-3) var(--ease-out) both;
+  }
+}
+@keyframes ws-dock-unfold {
+  from {
+    clip-path: inset(-24px var(--ws-unfold, 0px) -24px -24px);
+  }
+  to {
+    clip-path: inset(-24px 0 -24px -24px);
+  }
 }
 /* The room of the Live chip's row in Clip Factory's sidebar foot while the shell draws the chip itself (Nav.tsx): as
    tall as the shell's row (its measured height), so Get the app and the jobs line stay exactly where they were. */

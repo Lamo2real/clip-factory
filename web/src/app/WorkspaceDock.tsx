@@ -447,6 +447,96 @@ function Bar({ list, current, stacked, barRef }: { list: Workspace[]; current: s
 
 // ---------- On a computer: the dock ----------
 
+/**
+ * A dialog of either app is open (outside the dock): the dock takes no tap and no key, as the page under the dialog.
+ * "covered": the dialog's dim is drawn over the dock already (Clip Factory's sheets and lists, on the page itself);
+ * "over": the dock is drawn over it (Lamo Stories' sheets dim inside its own app's box), so the dock dims with them
+ * (glide.css .is-under) and lets taps through to the dim, which closes the sheet as it does everywhere else.
+ */
+function useUnderDialog(frame: { current: HTMLDivElement | null }): "no" | "covered" | "over" {
+  const [under, setUnder] = useState<"no" | "covered" | "over">("no");
+  useEffect(() => {
+    if (typeof MutationObserver === "undefined" || typeof document === "undefined") return;
+    let now: "no" | "covered" | "over" = "no";
+    const check = () => {
+      const dock = frame.current;
+      if (!dock) return;
+      const open = Array.from(document.querySelectorAll('[aria-modal="true"]')).some((el) => !dock.contains(el) && !el.closest("[hidden]"));
+      if (!open) {
+        if (now !== "no") setUnder((now = "no"));
+        return;
+      }
+      if (now !== "no") return;
+      // Which is drawn on top at the switch's middle: the dock, or the dialog's dim.
+      const part = dock.querySelector<HTMLElement>(":scope > .ws-switch-host, :scope > .ws-dock__live > .live-dot");
+      const r = part?.getBoundingClientRect();
+      const hit = r && r.width > 0 && typeof document.elementFromPoint === "function" ? document.elementFromPoint(r.x + r.width / 2, r.y + r.height / 2) : null;
+      setUnder((now = hit && dock.contains(hit) ? "over" : "covered"));
+    };
+    check();
+    const watch = new MutationObserver(check);
+    watch.observe(document.body, { childList: true, subtree: true });
+    return () => watch.disconnect();
+  }, [frame]);
+  return under;
+}
+
+const TABBABLE = 'a[href], button, input:not([type="hidden"]), select, textarea, summary, [tabindex]';
+
+/** What Tab stops at inside `root`, in the page's order (not disabled, not inert, shown). */
+function tabStops(root: ParentNode): HTMLElement[] {
+  return Array.from(root.querySelectorAll<HTMLElement>(TABBABLE)).filter(
+    (el) =>
+      el.tabIndex >= 0 &&
+      !(el as HTMLButtonElement).disabled &&
+      !el.closest("[inert]") &&
+      (typeof el.checkVisibility === "function" ? el.checkVisibility({ visibilityProperty: true }) : el.getClientRects().length > 0),
+  );
+}
+
+/**
+ * For the keyboard the dock comes where it is drawn, not after both apps (where the page has it): right after the
+ * app's menu (Clip Factory's sidebar list, Lamo Stories' rail list: each marks it data-ws-tab-after), before what is
+ * under it (Get the app, the jobs line, the page). Tab from the menu's last item goes to the switch, Tab from the
+ * switch to what follows the menu, and Shift+Tab back the same way; anywhere else Tab goes past the dock. A page with
+ * no mark (Lamo Stories' first Setup, on its own) keeps the page's own order.
+ */
+function useDockTabPlace(frame: { current: HTMLDivElement | null }): void {
+  useEffect(() => {
+    const key = (e: KeyboardEvent) => {
+      if (e.key !== "Tab" || e.altKey || e.ctrlKey || e.metaKey || e.defaultPrevented) return;
+      const dock = frame.current;
+      if (!dock || dock.hidden || dock.inert || !wide()) return;
+      const mark = document.querySelector<HTMLElement>("[data-app-pane]:not([hidden]) [data-ws-tab-after]");
+      const own = mark ? tabStops(dock) : [];
+      if (!mark || !own.length) return;
+      const page = tabStops(mark.closest("[data-app-pane]") ?? document.body);
+      const past = (el: Element) => !mark.contains(el) && !!(mark.compareDocumentPosition(el) & Node.DOCUMENT_POSITION_FOLLOWING);
+      const next = page.find(past);
+      const before = page.filter((el) => !past(el)).at(-1);
+      const at = document.activeElement;
+      const i = at instanceof HTMLElement ? own.indexOf(at) : -1;
+      let to: HTMLElement | undefined;
+      if (i >= 0) to = e.shiftKey ? (own[i - 1] ?? before) : (own[i + 1] ?? next);
+      else if (at === before && !e.shiftKey) to = own[0];
+      else if (at === next && e.shiftKey) to = own.at(-1);
+      else {
+        // Anywhere else the browser's own order goes on, past the dock (taken out of it for this one key).
+        for (const el of own) el.tabIndex = -1;
+        setTimeout(() => {
+          for (const el of own) el.removeAttribute("tabindex");
+        }, 0);
+        return;
+      }
+      if (!to) return;
+      e.preventDefault();
+      to.focus();
+    };
+    document.addEventListener("keydown", key, true);
+    return () => document.removeEventListener("keydown", key, true);
+  }, [frame]);
+}
+
 const NO_LAYOUT: DockLayout = { mode: "none", sw: null, live: { top: 0, left: 0, width: 0 }, room: 0 };
 const WIDE = "(min-width: 768px)";
 /** A computer's layout (the left column), else a phone's (the top bar). */
@@ -469,7 +559,13 @@ export function WorkspaceDock() {
   const route = useRoute();
   const hash = useHash();
   const { sidebarCollapsed: folded } = usePrefs();
-  const { getApp, jobs } = useFootRows();
+  // The rows of Clip Factory's foot under the dock (Get the app, the jobs line) as they were when Clip Factory was last
+  // on screen: while Lamo Stories is, a Clip Factory job starting or ending, or the app being installed, never moves
+  // the switch there (the owner cannot see why it would). They are followed until the session's first answer is in.
+  const rows = useFootRows();
+  const kept = useRef(rows);
+  if (route.name !== "stories" || !kept.current.known) kept.current = rows;
+  const { getApp, jobs } = kept.current;
   const frame = useRef<HTMLDivElement>(null);
   const liveRow = useRef<HTMLSpanElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
@@ -512,7 +608,10 @@ export function WorkspaceDock() {
       }
       const r = el.getBoundingClientRect();
       const dot = row.querySelector<HTMLElement>(".live-dot");
-      const rowH = px(getComputedStyle(row).height);
+      // The row's own box, to the browser's own 1/64 px (the computed style rounds 36.71875 to 36.7188, which put the
+      // chip 1/64 px off its place in the sidebar and drew its light a little differently). The row is never scaled;
+      // only the chip in it pops in.
+      const rowH = row.getBoundingClientRect().height;
       // Clip Factory's sidebar keeps the room of this row in its foot (Nav.tsx), so the rows under it stay put.
       document.documentElement.style.setProperty("--ws-live-row", `${rowH}px`);
       const next = dockLayout({
@@ -593,13 +692,40 @@ export function WorkspaceDock() {
     [],
   );
 
+  // Unfolding: the sidebar grows over 520 ms, the dock is laid out for the open sidebar at once, so its parts are
+  // shown only as far as the sidebar has grown (a clip that follows the sidebar's own curve, glide.css), never past it.
+  const [unfolding, setUnfolding] = useState(false);
+  const wasFolded = useRef(folded);
+  useLayoutEffect(() => {
+    const was = wasFolded.current;
+    wasFolded.current = folded;
+    if (was === folded) return;
+    setUnfolding(!folded);
+    if (folded) return;
+    const t = setTimeout(() => setUnfolding(false), 1000);
+    return () => clearTimeout(t);
+  }, [folded]);
+
+  const under = useUnderDialog(frame);
+  useDockTabPlace(frame);
+
   // Clip Factory's own pages that stand alone (mock builds' pretend sign-in pages) have no left column.
   const alone = route.name === "mock_oauth" || route.name === "mock_cr_consent" || (typeof location !== "undefined" && location.pathname === "/mock-bank");
   const { mode, sw, live } = layout;
-  const box = (b: DockBox): CSSProperties => ({ top: b.top, left: b.left, width: b.width, height: b.height });
+  const reveal = (right: number) => `${Math.max(0, Math.ceil(right - (SIDEBAR.folded - SIDEBAR.rim - SIDEBAR.padX)))}px`;
+  const box = (b: DockBox) => ({ top: b.top, left: b.left, width: b.width, height: b.height, "--ws-unfold": reveal(b.left + b.width) }) as CSSProperties;
   const form = mode === "bar" ? "bar" : mode === "corner" || mode === "round" ? mode : "slim";
   return (
-    <div ref={frame} className={`ws-dock${folded ? " is-folded" : ""}`} data-ws-dock={mode} hidden={alone}>
+    <div
+      ref={frame}
+      className={`ws-dock${folded ? " is-folded" : ""}${unfolding ? " is-unfolding" : ""}${under === "over" ? " is-under" : ""}`}
+      data-ws-dock={mode}
+      hidden={alone}
+      inert={under !== "no"}
+      onAnimationEnd={(e) => {
+        if (e.animationName === "ws-dock-unfold") setUnfolding(false);
+      }}
+    >
       {sw ? (
         <div className={`ws-switch-host ws-switch-host--dock${folded ? " is-collapsed" : ""}`} data-ws-switch={form} style={box(sw)}>
           {mode === "bar" ? (
@@ -609,7 +735,7 @@ export function WorkspaceDock() {
           )}
         </div>
       ) : null}
-      <span ref={liveRow} className="sidebar__live ws-dock__live" style={{ top: live.top, left: live.left, width: live.width }}>
+      <span ref={liveRow} className="sidebar__live ws-dock__live" style={{ top: live.top, left: live.left, width: live.width, "--ws-unfold": reveal(live.left + live.width) } as CSSProperties}>
         <LiveDot compact={folded} />
       </span>
     </div>
