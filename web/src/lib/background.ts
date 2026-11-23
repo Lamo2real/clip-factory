@@ -552,7 +552,9 @@ export const LIGHT_PAY_REDUCED = 0.04;
 export const PANEL_LIGHT = 0.04;
 /**
  * The catch light at the top centre of a pane (`--glass-spec`): 8 px deep, inside the smallest top padding above words
- * (the line plates and compact rows start their words 8 to 12 px down), so it is never under them.
+ * (the line plates and compact rows start their words 8 to 12 px down). A display face's tall glyph box or a small
+ * chip can start its words about 6 px down, a little inside it: the window look's plates pay for that
+ * (`PLATE_WORDS_LIGHT`).
  */
 export const SPECULAR = 0.06;
 /**
@@ -813,8 +815,8 @@ export type LookGlass = { panelVeil: number; plateVeil: number; brightness: numb
 export type Look =
   /**
    * Desktop app with real window glass: the page is transparent; the panels carry the tint that keeps text readable.
-   * Nothing dims the desktop, so a plate is a pane and the glass draws no brightness() (`windowGlass`): left out,
-   * `plateVeil` is `panelVeil` and `brightness` is 1 (`glassOf`).
+   * Nothing dims the desktop, so the glass draws no brightness(), and a plate carries the green its words need in its
+   * top light (`windowGlass`): left out, `plateVeil` is `panelVeil` and `brightness` is 1 (`glassOf`).
    */
   | ({ kind: "window"; glass: NativeGlass; strength: GlassStrength; pageVeil: number } & Omit<LookGlass, "plateVeil" | "brightness"> & Partial<LookGlass>)
   /** See-through where the page cannot see behind itself: the living Clip Factory backdrop, frosted or clear. */
@@ -828,10 +830,36 @@ export type Look =
 export function glassOf(look: Look): LookGlass {
   return { panelVeil: look.panelVeil, plateVeil: look.plateVeil ?? look.panelVeil, brightness: look.brightness ?? WINDOW_BRIGHTNESS };
 }
-/** The glass of the window look for this glass, setting and strength: nothing dims the desktop, so a plate is a pane. */
+/**
+ * The light under a plate's words: a line plate has 8 px of room above its words, and a display face's glyph box
+ * (the brand in a phone's top bar, "This week") or a small chip (the top bar's Live chip) starts them about 6 px down,
+ * where half the plate's top light (`PANEL_LIGHT`) and a quarter of its catch light (`SPECULAR`, 8 px deep) still lie.
+ * A pane's words start below its light (`WORDS_LIGHT`); a plate's need this much more green wherever no pay and no
+ * dimming cover it: the window look.
+ */
+export const PLATE_WORDS_LIGHT = 1 - (1 - PANEL_LIGHT * 0.5) * (1 - SPECULAR * 0.25);
+
+/**
+ * The plate veil of the window look: the least (0.01 steps, never under the panel's) that keeps every window text
+ * colour at AA with `PLATE_WORDS_LIGHT` of bone over it, over the lightest glass under the look's frost. Nothing dims
+ * the desktop and the window look carries no pay (`LIGHT_PAY_WINDOW`), so the green pays for that light: Clear 0.75
+ * (the panel 0.73), Frosted 0.64 (the panel 0.62).
+ */
+export function windowPlateVeil(glass: NativeGlass, scheme: Scheme, strength: GlassStrength): number {
+  const v = seeThroughVeils(glass, scheme, strength);
+  const under = mix(VEIL, glassCeiling(glass, scheme), v.page);
+  let veil = v.panel;
+  while (veil < 1 && !TEXT_COLOURS_WINDOW.every((t) => contrast(t, lit(under, veil, PLATE_WORDS_LIGHT)) >= AA)) veil = round2(veil + 0.01);
+  return veil;
+}
+
+/**
+ * The glass of the window look for this glass, setting and strength: nothing dims the desktop, so the glass draws no
+ * brightness(), and a plate carries what its words need in its top light (`windowPlateVeil`).
+ */
 export function windowGlass(glass: NativeGlass, scheme: Scheme, strength: GlassStrength): LookGlass & { pageVeil: number } {
   const v = seeThroughVeils(glass, scheme, strength);
-  return { pageVeil: v.page, panelVeil: v.panel, plateVeil: v.panel, brightness: WINDOW_BRIGHTNESS };
+  return { pageVeil: v.page, panelVeil: v.panel, plateVeil: windowPlateVeil(glass, scheme, strength), brightness: WINDOW_BRIGHTNESS };
 }
 
 export interface LookInput {

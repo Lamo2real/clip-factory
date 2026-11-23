@@ -330,6 +330,13 @@ html[data-backdrop="picture"] {
 :where(html.see-through) :is(.glass, .glass--clear):where(:not(.glass--green)) {
   --glass-tint: var(--glass-tint-panel);
 }
+/* Two small surfaces whose words start inside their top light, as a plate's do, carry the plate's tint in the window
+   look (lib/background.ts PLATE_WORDS_LIGHT, windowPlateVeil): a phone's top bar (a narrow window) Live chip, beside
+   the brand's plate, its words about 6 px down; and the "All set!" card in a phone's pill strip, which keeps 8 px
+   above its words to stay inside the bar, its words about 9 px down in its lead light. */
+html.see-through :is(.topbar .live-dot, .setup-todo--done[data-mode="pill"]) {
+  --glass-tint: var(--glass-tint-plate);
+}
 /* Nothing that holds words is weaker than the panel tint: what can sit straight on the window carries at least
    that much, with the tab bar's own step on top. */
 html.see-through .tabbar {

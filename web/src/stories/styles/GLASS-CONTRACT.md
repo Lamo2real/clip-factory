@@ -172,13 +172,13 @@ keep the words.
 | token | Ember (dim 0.7, bars and sheets 0.5) | a picture (dim 0.5): drawn | the desktop: the measured floor (worst contrast) · drawn Clear · drawn Frosted |
 |---|---|---|---|
 | `--st-veil-page` | 0 (the owner's own colours: what keeps loose words, and loose controls at 4.6:1, readable) | 0 | 0 · 0 · 0.30 frost |
-| `--st-veil-card` | 0.18 | 0.75 | 0.74 (5.34:1) · 0.83 · 0.82 |
+| `--st-veil-card` | 0.18 | 0.75 | 0.74 (5.34:1) · 0.84 · 0.82 |
 | `--st-veil-tinted` | 0.48 | 0.71 | 0.80 with the colour cut to `--st-tint-cut` 0.12 (5.12:1) · 0.80 · 0.77 |
-| `--st-veil-hero` | 0.31 (a card inside a card: `--st-raised-cover` 0.6 more of what it lets through) | 0.67 | 0.76 (5.14:1), glare only in a top band with no words · 0.78 · 0.76 |
-| `--st-veil-rail` | 0.16 | 0.86 | 0.78 (6.47:1) · 0.89 · 0.90 |
-| `--st-veil-bar` | 0.38 | 0.67 | 0.78 · 0.78 · 0.76 |
+| `--st-veil-hero` | 0.31 (a card inside a card: `--st-raised-cover` 0.6 more of what it lets through) | 0.67 | 0.76 (5.14:1), glare only in a top band with no words · 0.79 · 0.76 |
+| `--st-veil-rail` | 0.16 | 0.86 | 0.78 (6.47:1) · 0.90 · 0.90 |
+| `--st-veil-bar` | 0.38 | 0.67 | 0.78 · 0.79 · 0.76 |
 | `--st-veil-float` | 0.62 (a cream card or the action under it, and its controls' second lines under the sheet's brighter top) | 0.72 | 0.74 · 0.74 · 0.72 |
-| `--st-veil-plate` | 0 | 0.86 | 0.78 · 0.89 · 0.90 |
+| `--st-veil-plate` | 0 | 0.86 | 0.78 · 0.90 · 0.90 |
 | `--st-veil-solid` | 0.96 (reduced transparency: look.ts puts it inline on every glass, no filter) | 0.96, page 0.9 | 0.96, page 0.9 |
 | `--st-veil-lens-rim` | 0.12 (a liquid hero's own tint: its filter lays the rest of `--st-veil-hero` under the words, so only the rim band, inside the padding with no words, is this thin; never thicker than the thinnest hero, look.ts `COLOUR_FLOORS`) | 0.4 | 0.12 |
 
@@ -259,7 +259,8 @@ glass. One scale, defined once in glass-tokens.css (5a) and held to look.ts (`EL
   raised surfaces 0.79, sheets 0.74 in Clear (about +0.017 a step), and a control a step up from the surface it sits
   on. Over white the light takes its share from what is behind, so there the order is the veils' alone: each level's
   veil is thinner than the one under it (test/storiesLight.test.ts and e2e/stories-light.spec.ts hold it). 23 Nov:
-  Clear panels 0.89, cards 0.83, raised 0.78, sheets 0.74; over a picture, dimmed by each glass's filter (0.5), the
+  Clear stays there (0.89 / 0.83 / 0.78 left a sheet 0.0150 above a raised surface as the page draws it, a hair under
+  the step); over a picture, dimmed by each glass's filter (0.5), the
   order is worked out on what is drawn: panels 0.86, cards 0.75, sheets 0.72, tinted 0.71, raised 0.67 (both tests lay
   each surface over its own filter's `brightness()`).
 - **For builders.** A new surface uses its level's tint (`background: var(--st-tint-card)` …) and sheen; a surface
@@ -488,11 +489,12 @@ How much of what is behind shows through each glass: 1 − its veil (the tint's 
 | Colours › the owner's own (white: a 0.70 page veil) | 38 → 84 % | 42 → 86 % | 40 → 74 % | 34 → 56 % | 28 → 62 % | 28 → 38 % | page | none → 0.7 / 1 → 0.5 |
 | Frosted in a browser or on a phone (Ember under the 0.30 frost) | 38 → 84 % | 42 → 86 % | 40 → 87 % | 34 → 72 % | 28 → 62 % | 28 → 45 % | page | none → 0.7 / 1 → 0.5 |
 | a picture | 10 → 14 % | 16 → 25 % | 21 → 33 % | 20 → 29 % | 21 → 33 % | 26 → 28 % | 10 → 14 % | 1 → 0.5 / 1 → 0.5 |
-| See-through Clear (the desktop) | 10 → 11 % | 16 → 17 % | 21 → 22 % | 20 → 20 % | 21 → 22 % | 26 → 26 % | 10 → 11 % | 1 (no filter reaches the desktop) |
+| See-through Clear (the desktop) | 10 → 10 % | 16 → 16 % | 21 → 21 % | 20 → 20 % | 21 → 21 % | 26 → 26 % | 10 → 10 % | 1 (no filter reaches the desktop) |
 | See-through Frosted (under the 0.30 frost) | 4 → 10 % | 16 → 18 % | 23 → 24 % | 18 → 23 % | 23 → 24 % | 28 → 28 % | 4 → 10 % | 1 |
 
 Over a white desktop or photo the top layer (a sheet) is at its AA floor and every level under it is the light's order
-(+0.015 a step) thicker, so the desktop and a picture gain less than the colours: there the dim can only stand in for
+(+0.015 a step) thicker, so the desktop and a picture gain less than the colours (See-through Clear keeps main's veils:
+one step thinner left a sheet a hair under the step above a raised surface as the page draws it): there the dim can only stand in for
 the veil where AA, not the order, is what holds it. Solid glass (reduced transparency) is unchanged: 0.96, no filter.
 
 ## Measured (22 Nov, the foundation's figures and glass classes in the mock app, e2e/stories-glass.spec.ts)

@@ -79,6 +79,7 @@ import {
   PICTURE_PAGE_VEIL,
   PICTURE_PANEL_VEIL,
   PICTURE_PLATE_VEIL,
+  PLATE_WORDS_LIGHT,
   plateWords,
   cantSelfUpdate,
   dimRgb,
@@ -124,6 +125,7 @@ import {
   WINDOW_BRIGHTNESS,
   WINDOW_TEXT_TOKENS,
   windowGlass,
+  windowPlateVeil,
   type GlassStrength,
   type LightLook,
   type LightState,
@@ -272,7 +274,24 @@ describe("see-through veil", () => {
     expect(PANEL_VEIL_FLOOR).toBe(0.2);
     // The window's glass is behind the page: no web brightness() dims it, so a pane is planned for white as it is.
     expect(WINDOW_BRIGHTNESS).toBe(1);
-    for (const glass of GLASSES) for (const scheme of SCHEMES) for (const strength of STRENGTHS) expect(windowGlass(glass, scheme, strength)).toMatchObject({ brightness: 1, plateVeil: seeThroughVeils(glass, scheme, strength).panel });
+    for (const glass of GLASSES) for (const scheme of SCHEMES) for (const strength of STRENGTHS) expect(windowGlass(glass, scheme, strength)).toMatchObject({ brightness: 1, plateVeil: windowPlateVeil(glass, scheme, strength) });
+  });
+
+  it("a window plate carries the green its words need in its top light: AA there, and one step less would not hold", () => {
+    // A plate's words start about 6 px down (a display face's glyph box, the top bar's Live chip): half the top light
+    // and a quarter of the catch light still lie there.
+    expect(PLATE_WORDS_LIGHT).toBeCloseTo(1 - (1 - PANEL_LIGHT / 2) * (1 - SPECULAR / 4), 10);
+    expect([windowPlateVeil("liquid", "light", "clear"), windowPlateVeil("liquid", "light", "frosted")]).toEqual([0.75, 0.64]);
+    for (const glass of GLASSES)
+      for (const scheme of SCHEMES)
+        for (const strength of STRENGTHS) {
+          const v = seeThroughVeils(glass, scheme, strength);
+          const plate = windowPlateVeil(glass, scheme, strength);
+          const under = mix(VEIL, WHITE, v.page);
+          expect(plate, `${glass} ${scheme} ${strength}`).toBeGreaterThanOrEqual(v.panel);
+          expect(worstInWindow(lit(under, plate, PLATE_WORDS_LIGHT)), `${glass} ${scheme} ${strength}`).toBeGreaterThanOrEqual(AA);
+          if (plate > v.panel) expect(worstInWindow(lit(under, plate - 0.01, PLATE_WORDS_LIGHT)), `${glass} ${scheme} ${strength}`).toBeLessThan(AA);
+        }
   });
 
   it("Frosted: a green frost everywhere, and panels the least that keeps AA over it and still shows less than Clear", () => {
@@ -1396,10 +1415,10 @@ describe("what is drawn", () => {
     expect(resolveLook({ ...base, strength: "frosted" })).toEqual({ kind: "frosted", strength: "frosted", ...BRAND_GLASS });
     for (const glass of GLASSES) {
       const v = seeThroughVeils(glass, "light", "clear");
-      expect(resolveLook({ ...base, glass })).toEqual({ kind: "window", glass, strength: "clear", pageVeil: v.page, panelVeil: v.panel, plateVeil: v.panel, brightness: WINDOW_BRIGHTNESS });
+      expect(resolveLook({ ...base, glass })).toEqual({ kind: "window", glass, strength: "clear", pageVeil: v.page, panelVeil: v.panel, plateVeil: windowPlateVeil(glass, "light", "clear"), brightness: WINDOW_BRIGHTNESS });
     }
     const d = seeThroughVeils("acrylic", "dark", "frosted");
-    expect(resolveLook({ ...base, glass: "acrylic", strength: "frosted", scheme: "dark" })).toMatchObject({ kind: "window", pageVeil: d.page, panelVeil: d.panel, plateVeil: d.panel, brightness: 1 });
+    expect(resolveLook({ ...base, glass: "acrylic", strength: "frosted", scheme: "dark" })).toMatchObject({ kind: "window", pageVeil: d.page, panelVeil: d.panel, plateVeil: windowPlateVeil("acrylic", "dark", "frosted"), brightness: 1 });
   });
 
   it("picture uses the picture on this device, or the Clip Factory colours until there is one", () => {
@@ -1565,8 +1584,10 @@ describe("the page follows the look", () => {
     expect(root.dataset.strength).toBe("clear");
     expect(root.style.getPropertyValue("--backdrop-veil")).toBe("0");
     expect(root.style.getPropertyValue("--panel-veil")).toBe(String(liquid.panel));
-    // Nothing dims the desktop behind the page: a plate is a pane, and the glass draws no brightness().
-    expect(root.style.getPropertyValue("--plate-veil")).toBe(String(liquid.panel));
+    // Nothing dims the desktop behind the page, so the glass draws no brightness(), and a plate carries the green its
+    // words need in its top light (0.75 over the panel's 0.73).
+    expect(root.style.getPropertyValue("--plate-veil")).toBe(String(windowPlateVeil("liquid", "light", "clear")));
+    expect(root.style.getPropertyValue("--plate-veil")).toBe("0.75");
     expect(root.style.getPropertyValue("--glass-brightness")).toBe("1");
     // And each look's own pay for the ladder of light (lightPay).
     expect(root.style.getPropertyValue("--light-pay")).toBe(String(LIGHT_PAY_WINDOW));
@@ -1574,6 +1595,7 @@ describe("the page follows the look", () => {
     expect(root.dataset.strength).toBe("frosted");
     expect(root.style.getPropertyValue("--backdrop-veil")).toBe("0.3");
     expect(root.style.getPropertyValue("--panel-veil")).toBe("0.62");
+    expect(root.style.getPropertyValue("--plate-veil")).toBe("0.64");
 
     applyLook({ kind: "frosted", strength: "frosted", ...BRAND_GLASS }, root);
     expect(root.classList.contains("see-through")).toBe(false);

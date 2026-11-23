@@ -360,12 +360,14 @@ export const FROSTED: Veils = { page: 0.3, card: 0.89, tinted: 0.89, hero: 0.89,
 export const LIGHT_STEP = 0.015;
 /** See-through Clear in the app, as drawn (the desktop: nothing of the page is behind the glass, so no filter dims it).
  *  Each glass at or above its measured floor (MEASURED), in the light's order over white: the sheet at its floor (its
- *  level-5 light covers the rest at its top), then every level under it as thin as LIGHT_STEP over a white desktop
- *  allows: raised surfaces 0.78 (a hero, a bar; a card inside a card lays only a lift of light over its card,
- *  --st-elev-raised-lift), cards 0.83, panels 0.89 (a tinted tile's tone lights it on its own: its floor, 0.80). 23 Nov:
- *  0.79 / 0.84 / 0.90 before. Over a white desktop the worst word is then 6.2:1 (a sheet), a control's 5.1:1: the light's
- *  order, not AA, is what keeps the lower levels thicker (test/storiesLight.test.ts). */
-export const WINDOW_CLEAR: Veils = { page: 0, card: 0.83, tinted: 0.8, hero: 0.78, rail: 0.89, bar: 0.78, float: 0.74, plate: 0.89 };
+ *  level-5 light covers the rest at its top), then every level under it LIGHT_STEP thicker over a white desktop, with
+ *  room to spare as the browser draws it: raised surfaces 0.79 (a hero, a bar; a card inside a card lays only a lift of
+ *  light over its card, --st-elev-raised-lift), cards 0.84, panels 0.90 (a tinted tile's tone lights it on its own: its
+ *  floor, 0.80), as on main. 0.78 / 0.83 / 0.89 left the sheet 0.0150 above a hero and a card inside a card as
+ *  e2e/stories-light.spec.ts reads them from the page (a hair under the step). Over a white desktop the worst word is
+ *  then 6.2:1 (a sheet), a control's 5.1:1: the light's order, not AA, is what keeps the lower levels thicker
+ *  (test/storiesLight.test.ts). */
+export const WINDOW_CLEAR: Veils = { page: 0, card: 0.84, tinted: 0.8, hero: 0.79, rail: 0.9, bar: 0.79, float: 0.74, plate: 0.9 };
 /** Frosted in the app, as drawn: the 0.30 frost, then the panels in the same order over the frosted desktop, each frost
  *  and glass together at or above its measured floor: sheets 0.72 (a control's words on one 4.9:1 over a white desktop),
  *  raised 0.76, tinted 0.77, cards 0.82, panels 0.90 (23 Nov: 0.72 / 0.77 / 0.82 / 0.84 / 0.96 before). */

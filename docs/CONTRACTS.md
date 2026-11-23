@@ -4805,6 +4805,17 @@ everywhere.
     over a white desktop, measured as the floors above (white 4.61:1 Clear, 4.67 Frosted). Over white the AA cap leaves
     the ladder no room at any pay a see-through pane can carry (a whole step would need 0.27 more green), so there the
     levels above a pane keep AA and never read darker (+0.000 to +0.001 L); everywhere else they climb.
+  * **Plates carry their words' light** (`windowPlateVeil`, `PLATE_WORDS_LIGHT`). A pane's words start below its top
+    light; a line plate's start about 6 px down (8 px of padding, less a display face's tall glyph box: the phone
+    top-bar name, This week's title), where half the plate's top light and a quarter of its catch light still lie
+    (0.035 of bone). With no pay and nothing dimming the desktop, the window look pays for that light with green: its
+    plates carry **0.75** in Clear (4.58:1 over white with that light; 0.74 gives 4.44) and **0.64** in Frosted over the
+    frost (4.55:1), against the panels' 0.73 and 0.62. Two small panes have their words in their top light too, so in
+    the window look they carry the plate's tint: the phone top bar's Live chip (straight on the window beside the
+    brand's plate, words about 6 px down) and the "All set!" card in a phone's pill strip (8 px above its words, to
+    stay inside the bar; words about 9 px down in its lead light, 4.47:1 over white on the panel's 0.73).
+    Settings › Posting › Money's first panel (`.money-top`, which holds no apple rows) has the apples' 18 px of room
+    above and below its words, so its words start below its light as every pane's do.
 * **What carries the tint** (`styles/glass.css`):
   * Every `.glass` panel (`.glass--green`, the lead panel: the same green under a stronger light, a whole step brighter,
     §22.7). The window
@@ -4858,7 +4869,7 @@ everywhere.
   | Surface | Tint | Light (bone, top → base, §22.7) | Worst text contrast (at the top) |
   |---|---|---|---|
   | `.glass` panels, the sidebar, `.glass--clear` | `--panel-veil` + `--light-pay` (§22.7) over the backdrop as the pane's own `brightness()` dims it: 0.20 + 0 over the app's backdrop, Clear and Frosted (`BRAND_PANEL_VEIL`, dimmed by 0.73; `LIGHT_PAY_OWN` 0); 0.59 + 0.05 over a white photo (dimmed by 0.5; `LIGHT_PAY_WHITE`); 0.73 + 0 over a white desktop in the window's Clear and 0.62 + 0 in its Frosted (no web filter dims it, `LIGHT_PAY_WINDOW` 0); in Colours 0.20 to 0.59 + 0 to 0.05 (`MAX_LIGHT_PAY`), never 0.82 or more | 0.04 at the top edge → 0 at 14 px, inside the top padding (`PANEL_LIGHT`), plus the catch light (`SPECULAR`) | 4.71 over the app's backdrop at its very brightest corner; 4.61 over white (window Clear), 4.67 (Frosted); 5.02 over a white photo; 4.74 in Colours |
-  | The loose-text plates (every look: `html:is(.see-through, [data-backdrop])`; `--glass-tint-plate`, no filter of their own) | `--plate-veil` + `--light-pay`: 0.33 over the app's backdrop (`BRAND_PLATE_VEIL`, main's), 0.73 over a white photo (`PICTURE_PLATE_VEIL`), the panel's in the window look, 0.20 to 0.73 in Colours | as a panel | 4.52 over the app's backdrop (as on main); 5.39 over a white photo; 4.77 in Colours |
+  | The loose-text plates (every look: `html:is(.see-through, [data-backdrop])`; `--glass-tint-plate`, no filter of their own) | `--plate-veil` + `--light-pay`: 0.33 over the app's backdrop (`BRAND_PLATE_VEIL`, main's), 0.73 over a white photo (`PICTURE_PLATE_VEIL`), 0.75 in the window's Clear and 0.64 in its Frosted (`windowPlateVeil`: the panel's, plus what the light under a plate's words needs), 0.20 to 0.73 in Colours | as a panel | 4.52 over the app's backdrop (as on main); 5.39 over a white photo; 4.77 in Colours |
   | `.glass--green` (the lead panel: hero, sign-in, learnings) | the panel's (`LEAD_EXTRA_VEIL` 0) | 0.075 at the top edge → 0 at 14 px (`LEAD_LIGHT`) | as the panel where its words are |
   | Nested `.glass`, rows, cards and controls inside a surface | the relative raise: green 0.34 over the parent (`RAISE_VEIL`) | flat 0.13 (`RAISE_LIFT`); hover 0.37 / 0.145 | 4.67 on hover at the brightest corner of the app's backdrop, 4.56 over a white desktop (4.63 in Colours) |
   | Pick-one tracks and every control straight on the page (`--fill` at `:root`, such as the Library tabs) | plate veil + 0.22 (`TRACK_EXTRA_VEIL`; no filter, so nothing dims under it) | flat 0.08 (`TRACK_LIFT`); hover 0.09 | 4.98 on hover (4.74 in Colours); an option's hover over it 4.68 |
@@ -4929,6 +4940,8 @@ look, where no web filter reaches the desktop, a pane drops to the AA floor over
 | The title and line plates over the app's backdrop (no filter of their own) | 67 % (0.33) | 67 % (0.33) | 67 % (0.33, unchanged) | none; 4.52:1 as on main |
 | Window Clear (liquid, every glass), over a white desktop | 27 % (0.73) | 22 % (0.78) | **27 %** (0.73 + 0, the AA floor: 0.72 is 4.47:1) | `brightness(1)`: the desktop cannot be dimmed; 4.61:1 over white |
 | Window Frosted (panels; 0.30 frost over the whole window) | 12 % (0.88) | 12 % (0.88) | **38 %** (0.62 + 0: AA over the frost needs 0.61, showing less than Clear needs 0.62) | `brightness(1)`; 4.67:1 over the frost on white |
+| Window Clear, the title and line plates, the phone top bar's Live chip and the pill strip's "All set!" | 27 % (0.73) | 22 % (0.78) | **25 %** (0.75 + 0: AA with the light under their words, 0.74 gives 4.44:1) | `brightness(1)`; 4.58:1 over white |
+| Window Frosted, the plates, the Live chip and "All set!" | 12 % (0.88) | 12 % (0.88) | **36 %** (0.64 + 0 over the 0.30 frost) | `brightness(1)`; 4.55:1 over the frost on white |
 | Picture (white or busy photo), panels | 27 % (0.73) | 22 % (0.78) | **36 %** (0.59 + 0.05) | `brightness(0.5)`; 5.02:1 over a white photo |
 | Picture, the plates | 27 % (0.73) | 22 % (0.78) | 22 % (0.73 + 0.05, unchanged) | none |
 | Colours, default trio | 70 % (0.30) | 65 % (0.35) | **75 %** (0.20 + 0.05) | `brightness(1)`: nothing to dim |
@@ -4943,7 +4956,10 @@ look, where no web filter reaches the desktop, a pane drops to the AA floor over
 The window numbers are the AA floors measured with the maths of this section over a white desktop (`glassCeiling`),
 the lightest any glass can be: Clear 0.73 (4.61:1; 0.72 gives 4.47:1), Frosted 0.62 over its 0.30 frost (4.67:1;
 0.61 also holds AA but would show as much as a Clear panel). They stay at or above that floor in every glass,
-setting and measured point (`glassChecks`; Clear 6.53:1 over the measured khaki, 12.77 over black).
+setting and measured point (`glassChecks`; Clear 6.53:1 over the measured khaki, 12.77 over black). A plate's words
+sit in its top light (0.035 of bone, `PLATE_WORDS_LIGHT`), so its floor is a little higher: Clear 0.75 (4.58:1;
+0.74 gives 4.44:1), Frosted 0.64 over the frost (4.55:1). e2e/contrast.spec.ts found the phone top-bar name, This
+week's title and the Live chip at 4.32 to 4.40:1 over white when the plates carried the panels' 0.73.
 
 
 Web pages, installed PWAs and phone home-screen apps are drawn on an opaque surface; no browser lets a page see the

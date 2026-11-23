@@ -27,7 +27,7 @@ it more liquid glassy" ([DECISIONS.md ADR-87](DECISIONS.md#adr-87-the-logic-of-l
 | Level | What | Tint | Light (top → base) |
 |---|---|---|---|
 | L0 | The page and the backdrop | unchanged | none |
-| E1 | Panels, the sidebar, the title and line plates | panel veil + the pay (0 over the app's own backdrop and the window looks) | 0.04 → 0 at 14 px, plus the catch light |
+| E1 | Panels, the sidebar, the title and line plates | panel veil + the pay (0 over the app's own backdrop and the window looks); a plate: plate veil + the pay | 0.04 → 0 at 14 px, plus the catch light |
 | E1 lead | The hero, the sign-in card, Library's learnings | the panel's green | 0.075 → 0 at 14 px: brighter than E1 at its top edge |
 | E2, E3 | Rows, cards, controls, marks, chips (each over the one under it) | 0.22 over the parent (on the page: panel + 0.22) | flat 0.09 (on the page 0.08) |
 | Float | Toasts, the update bar, the setup pill and list, the Ask panel, the money dock | the floating veil + 0.16 | 0.08 → 0.02 |
@@ -61,11 +61,11 @@ every lit surface, so one name is right on the page and inside a pane):
 
 | Token | Value | Use |
 |---|---|---|
-| `--light-raise-veil` | `calc(var(--panel-veil) + 0.22)` | Green a raised thing lays over what it sits on. Page: panel + 0.22 (`TRACK_EXTRA_VEIL`); inside a lit surface, and on a pick-one track's options, 0.34 (`RAISE_VEIL`) |
+| `--light-raise-veil` | `calc(var(--plate-veil) + 0.22)` | Green a raised thing lays over what it sits on. Page: plate veil + 0.22 (`TRACK_EXTRA_VEIL`; nothing dims under it); inside a lit surface, and on a pick-one track's options, 0.34 (`RAISE_VEIL`) |
 | `--light-raise-lift` | `0.08` | Bone on top of it. Page 0.08 (`TRACK_LIFT`); inside 0.13 (`RAISE_LIFT`) |
-| `--light-raise-hover-veil` | `calc(var(--panel-veil) + 0.22)` | Hover green. Page: panel + 0.22; inside 0.37 (`RAISE_HOVER_VEIL`) |
+| `--light-raise-hover-veil` | `calc(var(--plate-veil) + 0.22)` | Hover green. Page: plate veil + 0.22; inside 0.37 (`RAISE_HOVER_VEIL`) |
 | `--light-raise-hover-lift` | `0.09` | Hover bone. Page 0.09 (`PAGE_HOVER_LIFT`); inside 0.145 (`RAISE_HOVER_LIFT`) |
-| `--light-ghost-veil` | `calc(var(--panel-veil) + 0.22)` | A quiet fill's green. Page: the track's; inside 0.33 (`GHOST_VEIL`) |
+| `--light-ghost-veil` | `calc(var(--plate-veil) + 0.22)` | A quiet fill's green. Page: the track's; inside 0.33 (`GHOST_VEIL`) |
 | `--light-ghost-lift` | `0.06` | A quiet fill's bone. Page 0.06 (`PAGE_GHOST_LIFT`); inside 0.125 (`GHOST_LIFT`) |
 | `--light-press-lift` | `0.03` | Bone when pressed (`RAISE_PRESS_LIFT`) |
 | `--light-pay` | `0` | Extra green on a pane (`lightPay`): lib/look.ts sets each look's own on `<html>`. See-through first: 0 over the app's own backdrop, Clear and Frosted (`LIGHT_PAY_OWN`), 0 where white can be behind (`LIGHT_PAY_WHITE`), at most 0.05 in a light Colours look (`MAX_LIGHT_PAY`, never 0.82 or more in all), 0.04 under reduced transparency. The ladder is earned with each level's own light |
