@@ -9,19 +9,39 @@
 // - Clip Factory's pane carries its kept search (useKeptSearch), exactly window.location.search outside a pane;
 // - on phones the toasts sit above an open sheet's buttons.
 import { readFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { CharacterLook } from "../src/stories/engine/types.ts";
 
-(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+(
+  globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }
+).IS_REACT_ACT_ENVIRONMENT = true;
 
-vi.mock("../src/stories/StoriesApp.tsx", async (orig) => ({ ...(await orig<Record<string, unknown>>()), StoriesApp: () => null }));
+vi.mock("../src/stories/StoriesApp.tsx", async (orig) => ({
+  ...(await orig<Record<string, unknown>>()),
+  StoriesApp: () => null,
+}));
 
 const pane = await import("../src/stories/pane.tsx");
-const { AppPanes, AWAY_RAN_OUT, KeptSearchProvider, pauseMediaIn, StoriesPaneBoundary, storiesAwayLater, takeParkedStoriesAway, useAppActive, useKeptSearch } = pane;
-const { chooseClips, currentChoice, rememberStoriesPath, resetWorkspaceMemory } = await import("../src/stories/workspace.ts");
+const {
+  AppPanes,
+  AWAY_RAN_OUT,
+  KeptSearchProvider,
+  pauseMediaIn,
+  StoriesPaneBoundary,
+  storiesAwayLater,
+  takeParkedStoriesAway,
+  useAppActive,
+  useKeptSearch,
+} = pane;
+const {
+  chooseClips,
+  currentChoice,
+  rememberStoriesPath,
+  resetWorkspaceMemory,
+} = await import("../src/stories/workspace.ts");
 const { burst } = await import("../src/lib/confetti.ts");
 const { toastLift } = await import("../src/stories/StoriesApp.tsx");
 
@@ -47,14 +67,29 @@ afterEach(() => {
 
 const render = (node: React.ReactNode) => act(() => root.render(node));
 /** A source file of the web app, as written. */
-const source = (path: string) => readFileSync(join(import.meta.dirname, "..", "src", path), "utf8");
-const q = <T extends Element = HTMLElement>(sel: string) => host.querySelector<T>(sel);
-const buttonNamed = (name: string) => Array.from(host.querySelectorAll("button")).find((b) => b.textContent?.trim() === name)!;
+/** A stylesheet's text with its `@import "./x.css"` lines inlined in order (stories.css and studio.css are indexes). */
+const withImports = (file: string): string =>
+  readFileSync(file, "utf8").replace(
+    /@import "\.\/([^"]+)";[^\n]*\n?/g,
+    (_m, f: string) => withImports(join(dirname(file), f)) + "\n",
+  );
+const source = (path: string) =>
+  withImports(join(import.meta.dirname, "..", "src", path));
+const q = <T extends Element = HTMLElement>(sel: string) =>
+  host.querySelector<T>(sel);
+const buttonNamed = (name: string) =>
+  Array.from(host.querySelectorAll("button")).find(
+    (b) => b.textContent?.trim() === name,
+  )!;
 
 function Counter({ name }: { name: string }) {
   const [n, setN] = useState(0);
   return (
-    <button type="button" data-counter={name} onClick={() => setN((x) => x + 1)}>
+    <button
+      type="button"
+      data-counter={name}
+      onClick={() => setN((x) => x + 1)}
+    >
       {name} {n}
     </button>
   );
@@ -79,19 +114,41 @@ describe("each app has its own error boundary (§45.35 D16)", () => {
         <Breaks />
       </StoriesPaneBoundary>
     );
-    render(<AppPanes on="clips" clips={<Counter name="clips" />} stories={stories} />);
+    render(
+      <AppPanes
+        on="clips"
+        clips={<Counter name="clips" />}
+        stories={stories}
+      />,
+    );
     act(() => q<HTMLButtonElement>("[data-counter=clips]")!.click());
-    render(<AppPanes on="stories" clips={<Counter name="clips" />} stories={stories} />);
+    render(
+      <AppPanes
+        on="stories"
+        clips={<Counter name="clips" />}
+        stories={stories}
+      />,
+    );
     const card = q('[data-app-pane="stories"] [data-stories-problem]')!;
     expect(card).not.toBeNull();
     expect(card.textContent).toContain("Funded Clips had a problem.");
     expect(card.textContent).toContain("Clip Factory is fine");
-    expect(Array.from(card.querySelectorAll("button")).map((b) => b.textContent?.trim())).toEqual(["Try again", "Go to Clip Factory"]);
+    expect(
+      Array.from(card.querySelectorAll("button")).map((b) =>
+        b.textContent?.trim(),
+      ),
+    ).toEqual(["Try again", "Go to Clip Factory"]);
     // Its pane is the main landmark while it is on screen.
     expect(card.id).toBe("main");
     // Clip Factory is untouched: still mounted (hidden behind), with its own state.
     expect(q("[data-counter=clips]")!.textContent).toBe("clips 1");
-    render(<AppPanes on="clips" clips={<Counter name="clips" />} stories={stories} />);
+    render(
+      <AppPanes
+        on="clips"
+        clips={<Counter name="clips" />}
+        stories={stories}
+      />,
+    );
     expect(q('[data-app-pane="clips"]')!.hidden).toBe(false);
     expect(q("[data-counter=clips]")!.textContent).toBe("clips 1");
     // Hidden behind Clip Factory, the card never takes the page's main landmark.
@@ -115,13 +172,23 @@ describe("each app has its own error boundary (§45.35 D16)", () => {
 
   it("Go to Clip Factory says Clip Factory on this device at once and opens Clip Factory's last page", () => {
     localStorage.setItem("cf.storiesPreview", "1");
-    localStorage.setItem("cf.workspace", JSON.stringify({ workspaceId: "stories", lastStoriesWorkspaceId: "stories", lastClipsPath: "/library?view=week", lastStoriesPath: "/stories/ideas" }));
+    localStorage.setItem(
+      "cf.workspace",
+      JSON.stringify({
+        workspaceId: "stories",
+        lastStoriesWorkspaceId: "stories",
+        lastClipsPath: "/library?view=week",
+        lastStoriesPath: "/stories/ideas",
+      }),
+    );
     resetWorkspaceMemory();
     rememberStoriesPath("/stories/ideas", "stories");
     expect(currentChoice().workspaceId).toBe("stories");
     expect(chooseClips()).toBe("/library?view=week");
     expect(currentChoice().workspaceId).toBe("clips");
-    expect(JSON.parse(localStorage.getItem("cf.workspace")!).workspaceId).toBe("clips");
+    expect(JSON.parse(localStorage.getItem("cf.workspace")!).workspaceId).toBe(
+      "clips",
+    );
   });
 
   it("App.tsx gives each pane its boundary: Clip Factory's own (its fallback as before) and Lamo Stories' card", async () => {
@@ -132,7 +199,9 @@ describe("each app has its own error boundary (§45.35 D16)", () => {
     // Clip Factory without Lamo Stories: the same Shell, with no pane and no new boundary around it.
     expect(app).toContain("{storiesEnabled() ? <BothApps /> : <Shell />}");
     // Campaign Home is kept now; only the skill editor opens fresh (§45.35 D18).
-    expect(app).toContain('const fresh = held.name === "skill" && held.mode !== "read" ? "clips" : null;');
+    expect(app).toContain(
+      'const fresh = held.name === "skill" && held.mode !== "read" ? "clips" : null;',
+    );
     expect(app).not.toContain("campaignStart");
   });
 });
@@ -141,7 +210,10 @@ describe("the hidden app is quiet (§45.35 D17)", () => {
   /** A video (jsdom cannot play): `paused` and pause() as a browser has them. */
   function playing(el: HTMLMediaElement): { pause: ReturnType<typeof vi.fn> } {
     let paused = false;
-    Object.defineProperty(el, "paused", { configurable: true, get: () => paused });
+    Object.defineProperty(el, "paused", {
+      configurable: true,
+      get: () => paused,
+    });
     const pause = vi.fn(() => {
       paused = true;
     });
@@ -172,9 +244,16 @@ describe("the hidden app is quiet (§45.35 D17)", () => {
   });
 
   it("Clip Factory's confetti never draws while a Lamo Stories page is on screen, and draws as before everywhere else", () => {
-    vi.stubGlobal("matchMedia", (m: string) => ({ matches: false, media: m, addEventListener() {}, removeEventListener() {} }));
+    vi.stubGlobal("matchMedia", (m: string) => ({
+      matches: false,
+      media: m,
+      addEventListener() {},
+      removeEventListener() {},
+    }));
     vi.stubGlobal("requestAnimationFrame", () => 0);
-    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(() => new Proxy({}, { get: () => () => undefined }) as never);
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
+      () => new Proxy({}, { get: () => () => undefined }) as never,
+    );
     const bursts = () => document.querySelectorAll("canvas.confetti").length;
     // Lamo Stories switched off: /stories is just an address Clip Factory does not know, and the burst draws.
     localStorage.setItem("cf.storiesPreview", "0");
@@ -193,9 +272,17 @@ describe("the hidden app is quiet (§45.35 D17)", () => {
     // A frame clock the test turns by hand: what is asked for waits in the queue until tick().
     let id = 0;
     const queue = new Map<number, FrameRequestCallback>();
-    vi.stubGlobal("requestAnimationFrame", (fn: FrameRequestCallback) => (queue.set(++id, fn), id));
+    vi.stubGlobal(
+      "requestAnimationFrame",
+      (fn: FrameRequestCallback) => (queue.set(++id, fn), id),
+    );
     vi.stubGlobal("cancelAnimationFrame", (n: number) => queue.delete(n));
-    vi.stubGlobal("matchMedia", (m: string) => ({ matches: false, media: m, addEventListener() {}, removeEventListener() {} }));
+    vi.stubGlobal("matchMedia", (m: string) => ({
+      matches: false,
+      media: m,
+      addEventListener() {},
+      removeEventListener() {},
+    }));
     let now = 0;
     const tick = () => {
       now += 1000;
@@ -203,10 +290,15 @@ describe("the hidden app is quiet (§45.35 D17)", () => {
       queue.clear();
       for (const fn of due) fn(now);
     };
-    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(function (this: HTMLCanvasElement) {
-      return new Proxy({ canvas: this } as Record<string | symbol, unknown>, { get: (t, k) => (k in t ? t[k] : () => undefined) }) as never;
-    });
-    const { CharacterPreview } = await import("../src/stories/preview/CharacterPreview.tsx");
+    vi.spyOn(HTMLCanvasElement.prototype, "getContext").mockImplementation(
+      function (this: HTMLCanvasElement) {
+        return new Proxy({ canvas: this } as Record<string | symbol, unknown>, {
+          get: (t, k) => (k in t ? t[k] : () => undefined),
+        }) as never;
+      },
+    );
+    const { CharacterPreview } =
+      await import("../src/stories/preview/CharacterPreview.tsx");
     const look: CharacterLook = {
       body: "bean",
       skin: "#F6C9A0",
@@ -217,23 +309,53 @@ describe("the hidden app is quiet (§45.35 D17)", () => {
       brows: "thick",
       nose: "button",
       mouth: "wide",
-      outfit: { top: "#FFC94A", bottom: "#62C6FF", accent: "#FF6F61", pattern: "stripes" },
+      outfit: {
+        top: "#FFC94A",
+        bottom: "#62C6FF",
+        accent: "#FF6F61",
+        pattern: "stripes",
+      },
       accessory: "scarf",
       outline: "#1C1842",
     };
-    const Preview = () => <CharacterPreview look={look} movementStyle="bouncy" size={40} label="Pip" />;
-    render(<AppPanes on="stories" clips={<Counter name="clips" />} stories={<Preview />} />);
+    const Preview = () => (
+      <CharacterPreview
+        look={look}
+        movementStyle="bouncy"
+        size={40}
+        label="Pip"
+      />
+    );
+    render(
+      <AppPanes
+        on="stories"
+        clips={<Counter name="clips" />}
+        stories={<Preview />}
+      />,
+    );
     expect(queue.size).toBe(1);
     tick();
     // On screen it keeps painting: every frame asks for the next one.
     expect(queue.size).toBe(1);
-    render(<AppPanes on="clips" clips={<Counter name="clips" />} stories={<Preview />} />);
+    render(
+      <AppPanes
+        on="clips"
+        clips={<Counter name="clips" />}
+        stories={<Preview />}
+      />,
+    );
     // Hidden behind Clip Factory: the loop stopped, and nothing paints while time passes.
     expect(queue.size).toBe(0);
     tick();
     tick();
     expect(queue.size).toBe(0);
-    render(<AppPanes on="stories" clips={<Counter name="clips" />} stories={<Preview />} />);
+    render(
+      <AppPanes
+        on="stories"
+        clips={<Counter name="clips" />}
+        stories={<Preview />}
+      />,
+    );
     expect(queue.size).toBe(1);
     tick();
     expect(queue.size).toBe(1);
@@ -250,12 +372,21 @@ describe("the hidden app is quiet (§45.35 D17)", () => {
     history.replaceState(null, "", "/library");
     storiesAwayLater("https://accounts.example/authorize?a=2", until, go);
     expect(go).toHaveBeenCalledTimes(1);
-    expect(takeParkedStoriesAway(Date.parse("2026-11-22T10:05:00.000Z"))).toEqual({ url: "https://accounts.example/authorize?a=2", expired: false });
+    expect(
+      takeParkedStoriesAway(Date.parse("2026-11-22T10:05:00.000Z")),
+    ).toEqual({
+      url: "https://accounts.example/authorize?a=2",
+      expired: false,
+    });
     expect(takeParkedStoriesAway()).toBeNull();
     // StoriesApp takes it the moment it is on screen again (the same place a parked page change is taken).
-    expect(source("stories/StoriesApp.tsx")).toMatch(/const away = takeParkedStoriesAway\(\);\s*if \(away && !away\.expired\) \{\s*location\.assign\(away\.url\);/);
+    expect(source("stories/StoriesApp.tsx")).toMatch(
+      /const away = takeParkedStoriesAway\(\);\s*if \(away && !away\.expired\) \{\s*location\.assign\(away\.url\);/,
+    );
     const connections = source("stories/screens/Connections.tsx");
-    expect(connections).toContain('if (where === "away") storiesAwayLater(authorizeUrl, expiresAt);');
+    expect(connections).toContain(
+      'if (where === "away") storiesAwayLater(authorizeUrl, expiresAt);',
+    );
     expect(connections).toContain("else storiesGoLater(authorizeUrl);");
     expect(connections).not.toContain("location.assign(authorizeUrl)");
   });
@@ -264,30 +395,54 @@ describe("the hidden app is quiet (§45.35 D17)", () => {
     const go = vi.fn();
     localStorage.setItem("cf.storiesPreview", "1");
     history.replaceState(null, "", "/library");
-    storiesAwayLater("https://accounts.example/authorize?a=3", "2026-11-22T10:10:00.000Z", go);
+    storiesAwayLater(
+      "https://accounts.example/authorize?a=3",
+      "2026-11-22T10:10:00.000Z",
+      go,
+    );
     // Twenty minutes later: it ran out while Clip Factory was on screen.
-    expect(takeParkedStoriesAway(Date.parse("2026-11-22T10:20:00.000Z"))).toEqual({ url: "https://accounts.example/authorize?a=3", expired: true });
+    expect(
+      takeParkedStoriesAway(Date.parse("2026-11-22T10:20:00.000Z")),
+    ).toEqual({ url: "https://accounts.example/authorize?a=3", expired: true });
     expect(takeParkedStoriesAway()).toBeNull();
     // Exactly at its end it has run out too; with no end given it never runs out.
-    storiesAwayLater("https://accounts.example/authorize?a=4", "2026-11-22T10:10:00.000Z", go);
-    expect(takeParkedStoriesAway(Date.parse("2026-11-22T10:10:00.000Z"))?.expired).toBe(true);
+    storiesAwayLater(
+      "https://accounts.example/authorize?a=4",
+      "2026-11-22T10:10:00.000Z",
+      go,
+    );
+    expect(
+      takeParkedStoriesAway(Date.parse("2026-11-22T10:10:00.000Z"))?.expired,
+    ).toBe(true);
     storiesAwayLater("https://accounts.example/authorize?a=5", null, go);
-    expect(takeParkedStoriesAway(Date.parse("2030-01-01T00:00:00.000Z"))?.expired).toBe(false);
+    expect(
+      takeParkedStoriesAway(Date.parse("2030-01-01T00:00:00.000Z"))?.expired,
+    ).toBe(false);
     expect(go).not.toHaveBeenCalled();
     expect(AWAY_RAN_OUT).toBe("That sign-in link ran out. Tap Connect again.");
-    expect(source("stories/StoriesApp.tsx")).toContain("if (away) toast.info(AWAY_RAN_OUT);");
+    expect(source("stories/StoriesApp.tsx")).toContain(
+      "if (away) toast.info(AWAY_RAN_OUT);",
+    );
   });
 });
 
 describe("Clip Factory's kept search (§45.35 D18)", () => {
   function Shows() {
-    return <p data-search={useKeptSearch()} data-active={String(useAppActive())} />;
+    return (
+      <p data-search={useKeptSearch()} data-active={String(useAppActive())} />
+    );
   }
 
   it("is exactly window.location.search outside a pane (Lamo Stories switched off), following the address", () => {
-    history.replaceState(null, "", "/?campaign=200ea21b-be80-4db8-b552-8e32b148604e");
+    history.replaceState(
+      null,
+      "",
+      "/?campaign=200ea21b-be80-4db8-b552-8e32b148604e",
+    );
     render(<Shows />);
-    expect(q("[data-search]")!.getAttribute("data-search")).toBe("?campaign=200ea21b-be80-4db8-b552-8e32b148604e");
+    expect(q("[data-search]")!.getAttribute("data-search")).toBe(
+      "?campaign=200ea21b-be80-4db8-b552-8e32b148604e",
+    );
     history.replaceState(null, "", "/");
     render(<Shows />);
     expect(q("[data-search]")!.getAttribute("data-search")).toBe("");
@@ -300,7 +455,9 @@ describe("Clip Factory's kept search (§45.35 D18)", () => {
         <Shows />
       </KeptSearchProvider>,
     );
-    expect(q("[data-search]")!.getAttribute("data-search")).toBe("?campaign=200ea21b-be80-4db8-b552-8e32b148604e");
+    expect(q("[data-search]")!.getAttribute("data-search")).toBe(
+      "?campaign=200ea21b-be80-4db8-b552-8e32b148604e",
+    );
     render(
       <KeptSearchProvider value="">
         <Shows />
@@ -315,14 +472,22 @@ describe("Clip Factory's kept search (§45.35 D18)", () => {
     expect(form).toContain('import { clipsGoLater, useKeptSearch } from "../../app/shell.ts";');
     expect(form).not.toMatch(/stories\//);
     expect(form).not.toMatch(/location\.search/);
-    expect(form).toContain('const way = campaignStart(search).campaignId ? "campaign" : "normal";');
-    expect(form).toContain("const [start] = useState(() => fileStart(search));");
-    expect(form).toContain("const [fromCampaign] = useState(() => campaignStart(search));");
+    expect(form).toContain(
+      'const way = campaignStart(search).campaignId ? "campaign" : "normal";',
+    );
+    expect(form).toContain(
+      "const [start] = useState(() => fileStart(search));",
+    );
+    expect(form).toContain(
+      "const [fromCampaign] = useState(() => campaignStart(search));",
+    );
   });
 });
 
 describe("toasts on a phone clear an open sheet's buttons (§45.35 D21)", () => {
-  const bar = (top: number, height = 80) => ({ getBoundingClientRect: () => ({ top, height }) as DOMRect });
+  const bar = (top: number, height = 80) => ({
+    getBoundingClientRect: () => ({ top, height }) as DOMRect,
+  });
 
   it("lifts them above the sheet's action bar on phones only, with 8 px of air", () => {
     expect(toastLift(bar(700), 390, 844)).toBe(844 - 700 + 8);
@@ -336,6 +501,8 @@ describe("toasts on a phone clear an open sheet's buttons (§45.35 D21)", () => 
 
   it("Lamo Stories' stylesheet reads the lift only while StoriesApp sets it, on phones", async () => {
     const css = source("stories/styles/stories.css");
-    expect(css).toMatch(/@media \(max-width: 767px\) \{\s*\.st-toasts-up \.toasts \{\s*bottom: var\(--st-toast-lift/);
+    expect(css).toMatch(
+      /@media \(max-width: 767px\) \{\s*\.st-toasts-up \.toasts \{\s*bottom: var\(--st-toast-lift/,
+    );
   });
 });

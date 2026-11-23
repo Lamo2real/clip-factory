@@ -1,0 +1,4 @@
+/* ---------- Settings (the shell's part) ----------
+   Empty on purpose. The first round's Settings rules that lived here (.st-sets, .st-set, .st-saved, .st-length,
+   .st-round, .st-range, .st-provider, .st-providers) were never used by any markup: Settings is styled by
+   settings.css (every selector st-stg-…, on the liquid-glass contract), loaded with the Settings screen. */

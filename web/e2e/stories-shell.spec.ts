@@ -1082,9 +1082,8 @@ test.describe("every page keeps the owner's rules", () => {
       const el = page.locator(sel).first();
       const before = await el.evaluate((e) => getComputedStyle(e).backgroundColor);
       await el.hover();
-      await page.waitForTimeout(300);
-      const after = await el.evaluate((e) => getComputedStyle(e).backgroundColor);
-      expect(after, sel).not.toBe(before);
+      // The hover's colour eases in; a slow frame (a busy machine) must not read it before its first step.
+      await expect.poll(() => el.evaluate((e) => getComputedStyle(e).backgroundColor), { message: sel, timeout: 3000 }).not.toBe(before);
       await page.mouse.move(0, 0);
     }
   });

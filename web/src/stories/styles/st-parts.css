@@ -1,0 +1,548 @@
+/* Clip Factory Stories · the shared page parts (the shell builder's file): page heads, cards, buttons, chips, links,
+   the empty, waiting and broken states with their character, and the Needs you bar. On the glass recipe
+   (styles/GLASS-CONTRACT.md): glass surfaces at the surface radius, controls at the control radius, cream solids with
+   espresso words, orange only for shapes. Words loose on the page sit on a backing plate (.st-plate) in Picture and
+   See-through. */
+
+/* ---------- Page parts ---------- */
+
+.st-page {
+  display: grid;
+  gap: clamp(18px, 2.4vw, 26px);
+  padding: 0 0 var(--st-space-8);
+}
+/* The heading row is a backing plate (.st-plate): nothing over Ember, a glass plate in Picture and See-through. */
+.st-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 14px 24px;
+  padding-top: 6px;
+}
+.st-head__text {
+  display: grid;
+  gap: var(--st-space-2);
+  flex: 1 1 380px;
+  min-width: 0;
+}
+.st-head__title {
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-h1);
+  overflow-wrap: anywhere;
+}
+.st-head__lede {
+  max-width: 62ch;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-body);
+}
+.st-head__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-left: auto;
+}
+/* On a phone the actions wrap under the words: they line up with the title, not with the right edge. */
+@media (max-width: 767px) {
+  .st-head__actions {
+    justify-content: flex-start;
+    margin-left: 0;
+  }
+}
+
+/* A card: the glass recipe (StCard adds .st-glass: the smoky veil, the inner top highlight, the thin light edge). */
+.st-card {
+  padding: var(--st-inset);
+}
+
+/* ---------- Buttons: glass controls at the control radius; the one main action is the warm orange ---------- */
+
+.st-btn {
+  appearance: none;
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--st-space-2);
+  border: 0;
+  border-radius: var(--st-r-control);
+  min-height: var(--st-tap);
+  padding: 0 var(--st-space-5);
+  font: var(--st-weight-ui) 1rem/1.1 var(--st-font);
+  color: var(--st-text);
+  background-color: var(--st-fill-control);
+  /* level 4 (glass-tokens.css 5a): its light over the surface it sits on, lighter at the top, a bright top rim */
+  background-image: var(--st-light-4);
+  box-shadow: var(--st-sheen-control), var(--st-glow-4);
+  text-decoration: none;
+  text-align: center;
+  transition:
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    color var(--st-dur-hover) var(--st-ease-out),
+    box-shadow var(--st-dur-hover) var(--st-ease-out),
+    transform var(--st-dur-tap) var(--st-ease-spring);
+}
+.st-btn:hover {
+  background-color: var(--st-fill-control-hover);
+}
+.st-btn:active {
+  transform: scale(0.96);
+}
+.st-btn--main {
+  min-height: var(--st-tap-main);
+  padding: 0 var(--st-space-6);
+  color: var(--st-on-cream);
+  background-color: var(--st-action);
+  /* A soft light across its top (over the fill, so the hover colour shows through). */
+  background-image: linear-gradient(180deg, rgb(var(--st-cream-rgb) / 0.26), rgb(var(--st-cream-rgb) / 0) 58%);
+  box-shadow: var(--st-sheen-control), var(--st-glow-action);
+}
+.st-btn--main:hover {
+  background-color: var(--st-action-hover);
+  box-shadow: var(--st-sheen-control), var(--st-glow-action-hover);
+}
+.st-btn--main:active {
+  background-color: var(--st-action-pressed);
+}
+.st-btn--quiet {
+  background-color: transparent;
+  background-image: none;
+  box-shadow: none;
+  color: var(--st-text-soft);
+}
+.st-btn--quiet:hover {
+  color: var(--st-text);
+  background-color: var(--st-fill-control);
+  background-image: var(--st-light-4);
+}
+/* Over a picture or the desktop a quiet button can sit straight on anything: it carries a card's veil there. */
+.stories-app:is([data-look="window"], [data-look="picture"]) .st-btn--quiet {
+  background-color: var(--st-fill-control);
+  background-image: var(--st-light-4);
+  color: var(--st-text);
+}
+.stories-app:is([data-look="window"], [data-look="picture"]) .st-btn--quiet:hover {
+  background-color: var(--st-fill-control-hover);
+}
+.st-btn--coral {
+  color: var(--st-on-cream);
+  background-color: var(--st-coral);
+  box-shadow: var(--st-sheen-control), 0 14px 30px -14px rgb(var(--st-coral-rgb) / 0.6);
+}
+.st-btn--coral:hover {
+  background-color: color-mix(in srgb, var(--st-coral) 82%, var(--st-cream));
+}
+/* A solid cream button with espresso words: an action that stands out without being the screen's one orange main
+   action (the Needs you bar's Fix it and Show me, on every page). */
+.st-btn--cream {
+  color: var(--st-on-cream);
+  background-color: var(--st-cream);
+  box-shadow: var(--st-sheen-cream), var(--st-depth-1);
+}
+.st-btn--cream:hover {
+  background-color: var(--st-cream-hover);
+}
+.st-btn--cream:active {
+  background-color: var(--st-cream-2);
+}
+/* Inside a glass surface or a plate over a picture or the desktop: the surface already carries the measured veil, so a
+   glass control there keeps the light cream glass (a second veil would make it a dark hole). Over a white picture,
+   on the thinnest veil (a card's 0.74): its words 5.4:1 at rest and 4.9:1 on hover; not ready yet 5.4:1 and 4.7:1
+   (test/storiesShellGlass.test.tsx). A control loose on the page keeps a card's veil itself (above). */
+.stories-app:is([data-look="window"], [data-look="picture"]) :is(.st-glass, .st-plate) .st-btn:not(.st-btn--main, .st-btn--coral, .st-btn--cream, .st-cream .st-btn) {
+  background-color: rgb(var(--st-cream-rgb) / 0.12);
+}
+.stories-app:is([data-look="window"], [data-look="picture"]) :is(.st-glass, .st-plate) .st-btn:not(.st-btn--main, .st-btn--coral, .st-btn--cream, .st-cream .st-btn):hover {
+  background-color: rgb(var(--st-cream-rgb) / 0.16);
+}
+/* On the cream card: espresso words on a light copper wash (glass words would vanish on cream). */
+.st-cream .st-btn:not(.st-btn--main, .st-btn--coral) {
+  color: var(--st-on-cream);
+  background-color: rgb(var(--st-copper-rgb) / 0.14);
+  box-shadow: none;
+}
+.st-cream .st-btn:not(.st-btn--main, .st-btn--coral):hover {
+  background-color: rgb(var(--st-copper-rgb) / 0.24);
+}
+/* Not ready yet (aria-disabled, never disabled: a tap plays the deny sound): quiet, still easy to read. */
+.st-btn:disabled,
+.st-btn[aria-disabled="true"] {
+  transform: none;
+  color: var(--st-text-soft);
+  background-color: var(--st-fill-control);
+  background-image: none;
+  box-shadow: none;
+}
+.st-btn:disabled:hover,
+.st-btn[aria-disabled="true"]:hover {
+  background-color: var(--st-fill-control-hover);
+}
+.stories-app:is([data-look="window"], [data-look="picture"]) :is(.st-glass, .st-plate) .st-btn:is(:disabled, [aria-disabled="true"]):not(.st-cream .st-btn) {
+  background-color: rgb(var(--st-cream-rgb) / 0.06);
+}
+.stories-app:is([data-look="window"], [data-look="picture"]) :is(.st-glass, .st-plate) .st-btn:is(:disabled, [aria-disabled="true"]):not(.st-cream .st-btn):hover {
+  background-color: rgb(var(--st-cream-rgb) / 0.12);
+}
+.st-btn:focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
+}
+@media (max-width: 767px) {
+  .st-btn {
+    min-height: var(--st-tap-phone);
+  }
+  .st-btn--main {
+    min-height: var(--st-tap-main);
+  }
+}
+
+/* ---------- Chips: round, a tone word on its tone (always words, never colour alone) ---------- */
+
+.st-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: 28px;
+  padding: 0 12px;
+  border-radius: var(--st-r-round);
+  font: var(--st-weight-ui) var(--st-fs-chip)/1 var(--st-font);
+  color: var(--st-text);
+  background: var(--st-fill-control);
+  white-space: nowrap;
+}
+.st-chip--sun {
+  color: var(--st-text-amber);
+  background: rgb(var(--st-amber-rgb) / 0.2);
+}
+.st-chip--coral {
+  color: var(--st-coral-ink);
+  background: rgb(var(--st-coral-rgb) / 0.22);
+}
+.st-chip--mint {
+  color: var(--st-mint-ink);
+  background: rgb(var(--st-mint-rgb) / 0.2);
+}
+.st-chip--sky {
+  color: var(--st-sky-ink);
+  background: rgb(var(--st-sky-rgb) / 0.2);
+}
+/* Over a picture or the desktop: the tone is cut back over a deep well, so its words keep 4.5:1 over white too. */
+.stories-app:is([data-look="window"], [data-look="picture"]) .st-chip {
+  background: rgb(var(--st-well-rgb) / 0.42);
+}
+.stories-app:is([data-look="window"], [data-look="picture"]) .st-chip--sun {
+  background: linear-gradient(rgb(var(--st-amber-rgb) / 0.12), rgb(var(--st-amber-rgb) / 0.12)), rgb(var(--st-well-rgb) / 0.42);
+}
+.stories-app:is([data-look="window"], [data-look="picture"]) .st-chip--coral {
+  background: linear-gradient(rgb(var(--st-coral-rgb) / 0.12), rgb(var(--st-coral-rgb) / 0.12)), rgb(var(--st-well-rgb) / 0.42);
+}
+.stories-app:is([data-look="window"], [data-look="picture"]) .st-chip--mint {
+  background: linear-gradient(rgb(var(--st-mint-rgb) / 0.12), rgb(var(--st-mint-rgb) / 0.12)), rgb(var(--st-well-rgb) / 0.42);
+}
+.stories-app:is([data-look="window"], [data-look="picture"]) .st-chip--sky {
+  background: linear-gradient(rgb(var(--st-sky-rgb) / 0.12), rgb(var(--st-sky-rgb) / 0.12)), rgb(var(--st-well-rgb) / 0.42);
+}
+
+/* On the cream card (in every look): espresso words on a light wash of the tone (glass words would vanish on cream). */
+.st-cream .st-chip,
+.stories-app:is([data-look="window"], [data-look="picture"]) .st-cream .st-chip {
+  color: var(--st-on-cream);
+  background: rgb(var(--st-copper-rgb) / 0.14);
+}
+.st-cream .st-chip--sun,
+.stories-app:is([data-look="window"], [data-look="picture"]) .st-cream .st-chip--sun {
+  background: rgb(var(--st-amber-rgb) / 0.3);
+}
+.st-cream .st-chip--coral,
+.stories-app:is([data-look="window"], [data-look="picture"]) .st-cream .st-chip--coral {
+  background: rgb(var(--st-coral-rgb) / 0.26);
+}
+.st-cream .st-chip--mint,
+.stories-app:is([data-look="window"], [data-look="picture"]) .st-cream .st-chip--mint {
+  background: rgb(var(--st-mint-rgb) / 0.3);
+}
+.st-cream .st-chip--sky,
+.stories-app:is([data-look="window"], [data-look="picture"]) .st-cream .st-chip--sky {
+  background: rgb(var(--st-sky-rgb) / 0.3);
+}
+
+.st-icon {
+  display: block;
+  flex: none;
+}
+
+/* ---------- Links ---------- */
+
+.st-textlink {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: var(--st-tap);
+  min-width: var(--st-tap);
+  padding: 0 6px;
+  border-radius: var(--st-r-inner);
+  color: var(--st-text-amber);
+  font-weight: var(--st-weight-ui);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  transition: background-color var(--st-dur-hover) var(--st-ease-out);
+}
+.st-textlink:hover {
+  background-color: var(--st-fill-control);
+}
+/* On the cream card: the dark orange for words on cream (6.3:1), a copper wash on hover. */
+.st-cream .st-textlink {
+  color: var(--st-on-cream-orange);
+}
+.st-cream .st-textlink:hover {
+  background-color: rgb(var(--st-copper-rgb) / 0.14);
+}
+/* Back: a glass pill with a round glass puck for its arrow (the reference's round back button). */
+.st-back {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--st-space-2);
+  min-height: var(--st-tap);
+  padding: 0 var(--st-space-4) 0 5px;
+  border-radius: var(--st-r-round);
+  background-color: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  color: var(--st-text);
+  font-weight: var(--st-weight-ui);
+  text-decoration: none;
+  transition:
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    color var(--st-dur-hover) var(--st-ease-out);
+}
+.st-back:hover {
+  color: var(--st-text-strong);
+  background-color: var(--st-fill-control-hover);
+}
+.st-back__icon {
+  box-sizing: border-box;
+  width: 34px;
+  height: 34px;
+  padding: 8px;
+  border-radius: var(--st-r-round);
+  background: rgb(var(--st-cream-rgb) / 0.14);
+  box-shadow: var(--st-sheen-control);
+  transform: rotate(180deg);
+}
+:is(.st-textlink, .st-back):focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
+}
+
+/* ---------- Empty, waiting and broken: always a character, never a blank box ---------- */
+
+/* A glass card (StEmpty adds .st-glass) with a soft warm light behind the character. */
+.st-empty {
+  display: grid;
+  justify-items: center;
+  gap: 10px;
+  padding: clamp(24px, 4vw, 40px) var(--st-inset);
+  background: radial-gradient(120% 70% at 50% 0%, rgb(var(--st-amber-rgb) / 0.14), transparent 62%), var(--st-tint-card);
+  text-align: center;
+}
+/* Over a picture or the desktop the light is left out: only the measured veil sits under the words. */
+.stories-app:is([data-look="window"], [data-look="picture"]) .st-empty {
+  background: var(--st-tint-card);
+}
+.st-empty__title {
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-h3);
+}
+.st-empty__text {
+  max-width: 46ch;
+  color: var(--st-text-soft);
+}
+.st-empty__action {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-top: 6px;
+}
+/* A short wait: loose words on the page, so on a backing plate (StLoading adds .st-plate). Its room stays the same
+   in every look (the plate's own padding over a picture or the desktop would shrink it). */
+.st-loading {
+  display: grid;
+  justify-items: center;
+  gap: 8px;
+  width: fit-content;
+  max-width: 100%;
+  margin-inline: auto;
+  color: var(--st-text-soft);
+  font-weight: var(--st-weight-ui);
+  text-align: center;
+}
+.st-loading,
+.stories-app:is([data-look="window"], [data-look="picture"]) .st-loading.st-plate {
+  padding: 36px 16px;
+}
+/* Something did not load: a coral-tinted glass card (StError adds .st-glass.st-glass--tinted). */
+.st-error {
+  --st-tone-rgb: var(--st-coral-rgb);
+  display: grid;
+  justify-items: center;
+  gap: 12px;
+  padding: 28px var(--st-inset);
+  color: var(--st-text);
+  text-align: center;
+}
+.st-stale {
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-chip);
+}
+.st-calm {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--st-text-soft);
+  font-weight: var(--st-weight-ui);
+}
+
+.st-mascot {
+  display: block;
+  overflow: visible;
+}
+.st-mascot__body {
+  transform-box: view-box;
+  transform-origin: 60px 106px;
+  animation: st-bob 2.8s ease-in-out infinite;
+}
+.st-mascot__arm--wave {
+  transform-box: view-box;
+  transform-origin: 88px 66px;
+  animation: st-wave 1.7s ease-in-out infinite;
+}
+.st-mascot--cheer .st-mascot__arm--l,
+.st-mascot--cheer .st-mascot__arm--r {
+  transform-box: view-box;
+  animation: st-cheer 0.9s ease-in-out infinite alternate;
+}
+.st-mascot--cheer .st-mascot__arm--l {
+  transform-origin: 32px 62px;
+}
+.st-mascot--cheer .st-mascot__arm--r {
+  transform-origin: 88px 62px;
+  animation-delay: 0.45s;
+}
+.st-mascot__zzz {
+  animation: st-float 2.6s ease-in-out infinite;
+}
+.st-mascot__dot {
+  animation: st-float 2s ease-in-out infinite;
+}
+@keyframes st-bob {
+  0%,
+  100% {
+    transform: translateY(0) scale(1, 1);
+  }
+  50% {
+    transform: translateY(-4px) scale(0.98, 1.03);
+  }
+}
+@keyframes st-wave {
+  0%,
+  100% {
+    transform: rotate(0deg);
+  }
+  50% {
+    transform: rotate(-22deg);
+  }
+}
+@keyframes st-cheer {
+  to {
+    transform: rotate(-10deg);
+  }
+}
+@keyframes st-float {
+  0%,
+  100% {
+    transform: translateY(0);
+    opacity: 0.9;
+  }
+  50% {
+    transform: translateY(-5px);
+    opacity: 0.5;
+  }
+}
+@keyframes st-rise {
+  from {
+    opacity: 0;
+    transform: translateY(14px);
+  }
+}
+@keyframes st-pop {
+  0% {
+    transform: scale(0.6);
+    opacity: 0;
+  }
+  70% {
+    transform: scale(1.08);
+    opacity: 1;
+  }
+  100% {
+    transform: scale(1);
+  }
+}
+
+/* ---------- Needs you (every page): a coral-tinted glass bar (.st-glass.st-glass--tinted) ----------
+   It hugs its round mark, its main action and its round close the surface gap from its sides, so they sit concentric
+   in its corners (20 - 6 = 14 for the button). */
+
+.st-needs {
+  --st-tone-rgb: var(--st-coral-rgb);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+  margin-bottom: 18px;
+  padding: var(--st-gap-surface);
+  animation: st-rise var(--st-dur-enter) var(--st-ease-out) both;
+}
+.st-needs__mark {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  margin: 4px 0 4px 4px;
+  border-radius: var(--st-r-round);
+  background: var(--st-coral);
+  color: var(--st-on-cream);
+  box-shadow: var(--st-sheen-control), 0 8px 18px -10px rgb(var(--st-coral-rgb) / 0.8);
+}
+.st-needs__text {
+  flex: 1 1 180px;
+  min-width: 0;
+  padding-block: 6px;
+  color: var(--st-text);
+  overflow-wrap: anywhere;
+}
+.st-needs__text strong {
+  color: var(--st-coral-ink);
+  font-weight: var(--st-weight-ui);
+}
+.st-needs__more {
+  color: var(--st-text-soft);
+}
+.st-needs__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+}
+.st-needs__hide {
+  flex: none;
+}
+/* Over a picture or the desktop the bar already carries its measured veil: the round close stays light glass there
+   too (the card's veil again would make it a dark hole). */
+.stories-app:is([data-look="window"], [data-look="picture"]) .st-needs .st-needs__hide {
+  background: rgb(var(--st-cream-rgb) / 0.12);
+}
+.stories-app:is([data-look="window"], [data-look="picture"]) .st-needs .st-needs__hide:hover {
+  background: rgb(var(--st-cream-rgb) / 0.16);
+}

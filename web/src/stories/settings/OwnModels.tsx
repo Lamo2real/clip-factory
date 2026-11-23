@@ -503,7 +503,7 @@ function ModelForm({ start, editing, taken, onSaved, onCancel, ws }: { start: Mo
           </span>
           <span className="st-stg-toggles" role="group" aria-labelledby={`${id}-eff`}>
             {(host === "openai_compatible" ? REASONING_EFFORTS : EFFORTS).map((e) => (
-              <button key={e} type="button" className={`st-stg-toggle${d.efforts.includes(e) ? " is-on" : ""}`} aria-pressed={d.efforts.includes(e)} onClick={() => toggleEffort(e)}>
+              <button key={e} type="button" className={`st-pill st-stg-toggle${d.efforts.includes(e) ? " is-on" : ""}`} aria-pressed={d.efforts.includes(e)} onClick={() => toggleEffort(e)}>
                 {d.efforts.includes(e) ? <SIcon name="check" size={18} /> : null}
                 {EFFORT_LABEL[e]}
               </button>

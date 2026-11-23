@@ -14,7 +14,7 @@ import { settle } from "./helpers.ts";
 
 const CLIPS = ["/", "/library", "/settings"];
 const STORIES = ["/stories", "/stories/setup", "/stories/ideas", "/stories/production", "/stories/settings", "/stories/connections"];
-const SIZES: { w: number; h: number; folded?: boolean; window?: "mac" | "windows" }[] = [
+const SIZES: { w: number; h: number; folded?: boolean; window?: "mac" | "windows"; picture?: boolean }[] = [
   { w: 1440, h: 900 },
   { w: 1280, h: 800 },
   { w: 768, h: 1024 },
@@ -23,6 +23,9 @@ const SIZES: { w: number; h: number; folded?: boolean; window?: "mac" | "windows
   // The desktop app's see-through window: the Mac's (its title bar laid over the page) and Windows' (its frame outside).
   { w: 1280, h: 800, window: "mac" },
   { w: 1280, h: 800, window: "windows" },
+  // Stories' own Picture background (a white picture): its rail and phone top bar are glass plates over it there.
+  { w: 1440, h: 900, picture: true },
+  { w: 375, h: 812, picture: true },
 ];
 const SHOTS = join(import.meta.dirname, "..", "test-results", "switch-place");
 
@@ -50,14 +53,24 @@ async function open(browser: Browser, size: (typeof SIZES)[number], setupDone: b
   // A brand-new studio: Lamo Stories opens its Setup by itself, on its own (no rail), the page the owner circled.
   if (firstTime) await ctx.addInitScript(() => ((window as unknown as { __cfStoriesMock?: unknown }).__cfStoriesMock = { knobs: { fresh: true } }));
   await ctx.addInitScript(
-    ([folded, done, first]) => {
+    ([folded, done, first, picture]) => {
       localStorage.setItem("cf.storiesPreview", "1");
-      if (!first) localStorage.setItem("cf.stories.prefs", JSON.stringify({ setupShown: ["stories"] }));
+      const more = picture ? { more: { "look.mode": "picture" } } : {};
+      if (!first) localStorage.setItem("cf.stories.prefs", JSON.stringify({ setupShown: ["stories"], ...more }));
+      else if (picture) localStorage.setItem("cf.stories.prefs", JSON.stringify(more));
+      if (picture) {
+        const c = document.createElement("canvas");
+        c.width = c.height = 32;
+        const x = c.getContext("2d")!;
+        x.fillStyle = "#fff";
+        x.fillRect(0, 0, 32, 32);
+        localStorage.setItem("cf.stories.picture", c.toDataURL("image/png"));
+      }
       if (folded) localStorage.setItem("cf.prefs", JSON.stringify({ sidebarCollapsed: true }));
       if (done && !sessionStorage.getItem("cf-mock-setup-skipped"))
         sessionStorage.setItem("cf-mock-setup-skipped", JSON.stringify(["youtube", "tiktok", "instagram", "facebook", "x"]));
     },
-    [!!size.folded, setupDone, firstTime] as const,
+    [!!size.folded, setupDone, firstTime, !!size.picture] as const,
   );
   const page = await ctx.newPage();
   if (size.window === "mac") await asMacWindow(page);
@@ -177,7 +190,7 @@ const same = (a: Box | null, b: Box | null, what: string) => {
 };
 
 for (const size of SIZES) {
-  const label = `${size.w}x${size.h}${size.folded ? " folded" : ""}${size.window ? ` ${size.window}-window` : ""}`;
+  const label = `${size.w}x${size.h}${size.folded ? " folded" : ""}${size.window ? ` ${size.window}-window` : ""}${size.picture ? " picture" : ""}`;
   test(`the switch and the Live chip are one box, the same in Clip Factory and on every Lamo Stories page, at ${label}`, async ({ browser }) => {
     mkdirSync(SHOTS, { recursive: true });
     const page = await open(browser, size, true);

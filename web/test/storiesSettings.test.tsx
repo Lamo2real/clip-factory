@@ -192,6 +192,22 @@ describe("the page", () => {
     expect($("h1")?.textContent).toBe("Settings");
   });
 
+  it("puts the page head and the section pills on one hero, and each section's note and Saved mark in its head's one plate", async () => {
+    await open("storage");
+    const hero = $(".st-stg-top.st-glass--hero")!;
+    expect(hero.querySelector("h1")?.textContent).toBe("Settings");
+    expect(hero.querySelectorAll(".st-stg-tab.st-pill")).toHaveLength(7);
+    expect(hero.querySelector("a.st-pill.st-stg-head__setup-go")?.getAttribute("href")).toBe("/stories/setup");
+    const head = $(".st-stg-section__head.st-plate")!;
+    expect(head.querySelector("h2")?.textContent).toBe("Storage and production");
+    expect(head.querySelector(".st-stg-bar")?.textContent).toContain("Funded Clips keeps its files in its own folder, apart from Clip Factory's.");
+    expect(head.querySelector(".st-stg-saved")).not.toBeNull();
+    // One plate above the first card: the bar has none of its own there.
+    expect($$(".st-stg-section .st-plate")).toEqual([head]);
+    await open("skills");
+    expect($(".st-stg-section__head .st-stg-bar")).toBeNull();
+  });
+
   for (const section of ["ai", "agents", "skills", "memory", "video", "storage"] as const)
     it(`${section}: every pick-one bar is on <Glide>, and nothing is disabled (the deny sound needs the click)`, async () => {
       await open(section);

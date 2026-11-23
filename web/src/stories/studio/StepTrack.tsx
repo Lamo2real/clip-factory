@@ -41,11 +41,17 @@ export function StepTrack({
   story,
   compact = false,
   label = "Making the video",
+  bar = true,
+  line = true,
 }: {
   job: ProductionJob | null;
   story: Pick<Story, "stale" | "status"> | null;
   compact?: boolean;
   label?: string;
+  /** the eased progress bar (off where the page shows the progress itself: a video's preview dial) */
+  bar?: boolean;
+  /** the "what is happening now" line (off where the preview says it) */
+  line?: boolean;
 }) {
   const steps = stepsOf(job, story);
   const live = job && (job.status === "queued" || job.status === "running");
@@ -70,8 +76,8 @@ export function StepTrack({
           </li>
         ))}
       </ol>
-      <ProgressBar value={progress} label={`${label}: ${Math.round(progress * 100)}% done`} />
-      {job ? <p className={`st-s-track__now${job.status === "failed" ? " is-bad" : ""}`}>{nowLine(job, steps)}</p> : null}
+      {bar ? <ProgressBar value={progress} label={`${label}: ${Math.round(progress * 100)}% done`} /> : null}
+      {job && line ? <p className={`st-s-track__now${job.status === "failed" ? " is-bad" : ""}`}>{nowLine(job, steps)}</p> : null}
     </div>
   );
 }

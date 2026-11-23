@@ -1,0 +1,686 @@
+/* ---------- The sheet: hero float glass (StSheet adds .st-glass.st-glass--hero.st-glass--float) ----------
+   The float veil and the heaviest blur over a warm dim, the hero's brighter edge and inner top light. Its buttons sit
+   at the bottom right (on phones, at the bottom of the screen). */
+.st-s-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--st-z-float);
+  display: grid;
+  align-items: end;
+  justify-items: center;
+  padding: 12px;
+  background: rgb(var(--st-shadow-rgb) / 0.62);
+  animation: st-s-fade var(--st-dur-hover) var(--st-ease-out);
+}
+
+@media (min-width: 720px) {
+  .st-s-scrim {
+    align-items: center;
+  }
+}
+
+@keyframes st-s-fade {
+  from {
+    opacity: 0;
+  }
+}
+
+.st-s-sheet {
+  display: grid;
+  grid-template-rows: auto 1fr auto;
+  width: min(100%, 560px);
+  max-height: min(92vh, 900px);
+  overflow: hidden;
+  border-radius: var(--st-r-surface);
+  color: var(--st-text);
+  font-family: var(--st-font);
+  box-shadow: var(--st-sheen-hero), var(--st-depth-3), var(--st-glow-behind);
+  animation: st-s-rise var(--st-dur-enter) var(--st-ease-out);
+}
+
+/* A sheet drawn before the glass classes (or without them): the same float recipe from the tokens. */
+.st-s-sheet:not(.st-glass) {
+  background: var(--st-tint-float);
+  -webkit-backdrop-filter: var(--st-filter-float);
+  backdrop-filter: var(--st-filter-float);
+}
+
+.st-s-sheet--wide {
+  width: min(100%, 720px);
+}
+
+@keyframes st-s-rise {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+}
+
+.st-s-sheet:focus-visible {
+  outline: none;
+}
+
+.st-s-sheet__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 16px 16px 8px 20px;
+}
+
+.st-s-sheet__title {
+  margin: 0;
+  color: var(--st-text-strong);
+  font-family: var(--st-font);
+  font-size: var(--st-fs-h3);
+  font-weight: var(--st-weight-display);
+  font-optical-sizing: auto;
+  line-height: 1.2;
+  overflow-wrap: anywhere;
+}
+
+.st-s-sheet__body {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  padding: 6px 20px 16px;
+  overflow-y: auto;
+  line-height: var(--st-lh-body);
+}
+
+.st-s-sheet__body p {
+  margin: 0;
+}
+
+/* The foot: a shallow well across the sheet, its buttons at the bottom right. */
+.st-s-sheet__actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 12px 20px 18px;
+  background: rgb(var(--st-well-rgb) / 0.32);
+}
+
+/* ---------- Where to post: account tiles (radius control); a picked one solid cream with the orange tick ---------- */
+.st-s-places {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.st-s-place {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  min-height: 64px;
+  padding: 10px 14px 10px 10px;
+  border: 0;
+  border-radius: var(--st-r-control);
+  text-align: left;
+  color: var(--st-text);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  font: inherit;
+  transition:
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    color var(--st-dur-hover) var(--st-ease-out),
+    box-shadow var(--st-dur-hover) var(--st-ease-out);
+}
+
+button.st-s-place:hover {
+  background: var(--st-fill-control-hover);
+}
+
+button.st-s-place:focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
+}
+
+.st-s-place.is-on {
+  color: var(--st-on-cream);
+  background: var(--st-tint-cream);
+  box-shadow: var(--st-sheen-cream), var(--st-depth-1), var(--st-glow-behind);
+}
+
+button.st-s-place.is-on:hover {
+  background: var(--st-cream-hover);
+}
+
+.st-s-place--off {
+  background: rgb(var(--st-well-rgb) / 0.24);
+  box-shadow: none;
+}
+
+/* The platform's mark in a deep round puck (its cut-outs are the shell's --mark-cut, espresso in Stories). */
+.st-s-place__mark {
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--st-r-round);
+  color: var(--st-text);
+  background: var(--st-fill-well);
+}
+
+.st-s-place__text {
+  display: grid;
+  gap: 2px;
+}
+
+.st-s-place__platform {
+  font-weight: var(--st-weight-ui);
+}
+
+.st-s-place__name {
+  font-weight: var(--st-weight-body);
+  overflow-wrap: anywhere;
+}
+
+.st-s-place__handle {
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
+  overflow-wrap: anywhere;
+}
+
+.st-s-place.is-on .st-s-place__handle {
+  color: var(--st-on-cream-soft);
+}
+
+.st-s-place__tick {
+  display: grid;
+  place-items: center;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--st-r-round);
+  color: var(--st-text);
+  background: rgb(var(--st-cream-rgb) / 0.16);
+  font-weight: var(--st-weight-ui);
+}
+
+.st-s-place.is-on .st-s-place__tick {
+  color: var(--st-on-accent);
+  background: var(--st-accent);
+  box-shadow: var(--st-glow-accent);
+}
+
+.st-s-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.st-s-more {
+  display: grid;
+  gap: 12px;
+}
+
+.st-s-why {
+  font-weight: var(--st-weight-ui);
+}
+
+/* The app's own dropdown, in Stories' colours: a glass control, its list float glass, the chosen one cream. */
+.stories-app .dropdown__button,
+.st-s-sheet .dropdown__button {
+  border-radius: var(--st-r-control);
+  color: var(--st-text);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  transition: background-color var(--st-dur-hover) var(--st-ease-out);
+}
+
+.stories-app .dropdown__button:hover,
+.st-s-sheet .dropdown__button:hover {
+  background: var(--st-fill-control-hover);
+}
+
+.stories-app .dropdown__button.is-picked,
+.st-s-sheet .dropdown__button.is-picked {
+  color: var(--st-on-cream);
+  background: var(--st-cream);
+}
+
+.stories-app .dropdown__value.is-empty,
+.st-s-sheet .dropdown__value.is-empty {
+  color: var(--st-text-soft);
+}
+
+.stories-app .dropdown__list,
+.st-s-sheet .dropdown__list {
+  max-height: 320px;
+  overflow-y: auto;
+  border-radius: var(--st-r-control);
+  color: var(--st-text);
+  background: var(--st-tint-float);
+  -webkit-backdrop-filter: var(--st-filter-float);
+  backdrop-filter: var(--st-filter-float);
+  box-shadow: var(--st-sheen), var(--st-depth-3);
+}
+
+.stories-app .dropdown__opt,
+.st-s-sheet .dropdown__opt {
+  border-radius: var(--st-r-inner);
+}
+
+.stories-app .dropdown__opt:hover,
+.stories-app .dropdown__opt.is-at,
+.st-s-sheet .dropdown__opt:hover,
+.st-s-sheet .dropdown__opt.is-at {
+  background: var(--st-fill-control-hover);
+}
+
+.stories-app .dropdown__opt.is-on,
+.st-s-sheet .dropdown__opt.is-on {
+  color: var(--st-on-cream);
+  background: var(--st-cream);
+}
+
+/* ---------- Model and effort (the "for this one" menu, task lines, made with) ---------- */
+.st-s-ai-btn {
+  gap: 8px;
+  padding: 0 14px;
+  font-size: var(--st-fs-small);
+}
+
+.st-s-ai-btn .icon {
+  flex: 0 0 auto;
+}
+
+.st-s-ai-btn__words {
+  overflow-wrap: anywhere;
+}
+
+/* "Just this one": a small cream badge. */
+.st-s-ai-btn__set {
+  padding: 2px 8px;
+  border-radius: var(--st-r-round);
+  color: var(--st-on-cream);
+  background: var(--st-cream);
+  font: var(--st-weight-ui) var(--st-fs-min) / 1.2 var(--st-font);
+}
+
+.st-s-ai-btn.is-set {
+  background: linear-gradient(rgb(var(--st-amber-rgb) / 0.18), rgb(var(--st-amber-rgb) / 0.18)), var(--st-fill-control);
+}
+
+.st-s-ai-btn.is-set:hover {
+  background: linear-gradient(rgb(var(--st-amber-rgb) / 0.26), rgb(var(--st-amber-rgb) / 0.26)), var(--st-fill-control-hover);
+}
+
+.st-s-ai-btn.is-compact:not(.is-set) {
+  padding: 0;
+}
+
+/* A button and its menu side by side, as one pair: the corners where they meet are tiny. */
+.st-s-aipair {
+  display: inline-flex;
+  flex-wrap: wrap;
+  align-items: stretch;
+  gap: 2px;
+  max-width: 100%;
+}
+
+.st-s-aipair > .st-btn:first-child {
+  border-top-right-radius: var(--st-r-tiny);
+  border-bottom-right-radius: var(--st-r-tiny);
+}
+
+.st-s-aipair > .st-s-ai-btn {
+  border-top-left-radius: var(--st-r-tiny);
+  border-bottom-left-radius: var(--st-r-tiny);
+}
+
+.st-s-ai-secs {
+  white-space: nowrap;
+  font-variant-numeric: lining-nums tabular-nums;
+  color: var(--st-text-amber);
+}
+
+.st-s-ai-fix {
+  display: inline-flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.st-s-ai-models .st-s-pick__opt {
+  min-height: 64px;
+}
+
+.st-s-aiwho {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+
+.st-s-decide__ai {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 10px;
+}
+
+.st-s-used__list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* One step and its model: a row (radius control) on the card. */
+.st-s-used__item {
+  display: grid;
+  gap: 4px;
+  padding: 10px 12px;
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+}
+
+.st-s-used__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 10px;
+}
+
+.st-s-used__step {
+  font-weight: var(--st-weight-ui);
+}
+
+.st-s-used__model {
+  color: var(--st-text-soft);
+  overflow-wrap: anywhere;
+}
+
+.st-s-used__note {
+  flex: 1 1 100%;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
+}
+
+.st-s-jobs__models {
+  flex: 1 1 100%;
+  font-size: var(--st-fs-small);
+  overflow-wrap: anywhere;
+}
+
+/* ---------- Reference videos in a new video: tiles like the places, a picked one cream ---------- */
+.st-s-refpick {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 220px), 1fr));
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.st-s-refpick li {
+  display: grid;
+  gap: 6px;
+}
+
+.st-s-reftile {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  min-height: 64px;
+  padding: 10px 14px 10px 10px;
+  border: 0;
+  border-radius: var(--st-r-control);
+  text-align: left;
+  color: var(--st-text);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  font: inherit;
+  transition:
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    color var(--st-dur-hover) var(--st-ease-out);
+}
+
+.st-s-reftile:hover {
+  background: var(--st-fill-control-hover);
+}
+
+.st-s-reftile:focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
+}
+
+.st-s-reftile.is-on {
+  color: var(--st-on-cream);
+  background: var(--st-tint-cream);
+  box-shadow: var(--st-sheen-cream), var(--st-depth-1);
+}
+
+.st-s-reftile.is-on:hover {
+  background: var(--st-cream-hover);
+}
+
+.st-s-reftile[aria-disabled="true"] {
+  background: rgb(var(--st-well-rgb) / 0.24);
+  box-shadow: none;
+}
+
+.st-s-reftile__tick {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: var(--st-r-round);
+  color: var(--st-text);
+  background: rgb(var(--st-cream-rgb) / 0.16);
+  font-weight: var(--st-weight-ui);
+}
+
+.st-s-reftile.is-on .st-s-reftile__tick {
+  color: var(--st-on-accent);
+  background: var(--st-accent);
+  box-shadow: var(--st-glow-accent);
+}
+
+.st-s-reftile__text {
+  display: grid;
+  gap: 2px;
+}
+
+.st-s-reftile__title {
+  font-weight: var(--st-weight-ui);
+  overflow-wrap: anywhere;
+}
+
+.st-s-reftile__meta {
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
+}
+
+.st-s-reftile.is-on .st-s-reftile__meta {
+  color: var(--st-on-cream-soft);
+}
+
+.st-s-refpick .st-s-small {
+  justify-self: end;
+}
+
+/* ---------- Design with AI: a hero glass card (Design.tsx adds .st-glass.st-glass--hero) ---------- */
+.st-s-design {
+  display: grid;
+  gap: 12px;
+  padding: var(--st-inset);
+  border-radius: var(--st-r-surface);
+}
+
+.st-s-design:not(.st-glass) {
+  background: var(--st-tint-hero);
+  -webkit-backdrop-filter: var(--st-filter-glass);
+  backdrop-filter: var(--st-filter-glass);
+  box-shadow: var(--st-sheen-hero), var(--st-depth-2), var(--st-glow-behind);
+}
+
+.st-s-design--closed {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px 16px;
+}
+
+.st-s-design__title {
+  margin: 0;
+  color: var(--st-text-strong);
+  font-family: var(--st-font);
+  font-size: var(--st-fs-h3);
+  font-weight: var(--st-weight-display);
+  font-optical-sizing: auto;
+  line-height: 1.2;
+}
+
+.st-s-design__lede {
+  margin: 4px 0 0;
+  color: var(--st-text-soft);
+  line-height: var(--st-lh-body);
+}
+
+.st-s-design__pic,
+.st-s-design__pics {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.st-s-design__pic img,
+.st-s-design__noimg {
+  width: 72px;
+  height: 72px;
+  border-radius: var(--st-r-control);
+  object-fit: cover;
+  background: var(--st-fill-well);
+  box-shadow: var(--st-depth-1);
+}
+
+.st-s-design__own {
+  display: grid;
+  place-items: center;
+  width: 64px;
+  height: 64px;
+  padding: 0;
+  border: 0;
+  border-radius: var(--st-r-control);
+  overflow: hidden;
+  background: var(--st-fill-well);
+  box-shadow: var(--st-depth-1);
+  transition:
+    transform var(--st-dur-hover) var(--st-ease-out),
+    box-shadow var(--st-dur-hover) var(--st-ease-out);
+}
+
+.st-s-design__own:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--st-depth-1), 0 0 18px rgb(var(--st-amber-rgb) / 0.5);
+}
+
+.st-s-design__own:focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
+}
+
+.st-s-design__own img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* ---------- Where the video goes (the publish sheet): a sky-tinted well under its place ---------- */
+.st-s-places__item {
+  display: grid;
+  gap: 6px;
+}
+
+.st-s-dest {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 2px 12px;
+  margin-left: clamp(8px, 4vw, 56px);
+  padding: 10px 14px;
+  border-radius: var(--st-r-control);
+  background: linear-gradient(rgb(var(--st-sky-rgb) / var(--st-tint-cut)), rgb(var(--st-sky-rgb) / var(--st-tint-cut))), rgb(var(--st-well-rgb) / 0.3);
+}
+
+.st-s-dest > p {
+  grid-column: 1;
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.st-s-dest > .st-btn {
+  grid-column: 2;
+  grid-row: 1 / span 3;
+}
+
+.st-s-dest__id,
+.st-s-dest__note {
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
+}
+
+.st-s-dest__note.is-bad {
+  color: var(--st-coral-ink);
+  font-weight: var(--st-weight-ui);
+}
+
+@media (max-width: 420px) {
+  .st-s-dest {
+    grid-template-columns: 1fr;
+    margin-left: 0;
+  }
+
+  .st-s-dest > .st-btn {
+    grid-column: 1;
+    grid-row: auto;
+    justify-self: end;
+  }
+}
+
+/* ---------- Bottom bars: phone controls at the bottom right ----------
+   On a phone the main action rides in a glass bar (the bar recipe: heavy blur in every look) just above the shell's
+   tab bar, so the thumb finds it and nothing scrolls under its words unblurred. */
+.st-s-actionbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.st-s-actionbar:empty {
+  display: none;
+}
+
+@media (max-width: 767.98px) {
+  .st-s-actionbar--pin {
+    position: sticky;
+    bottom: calc(env(safe-area-inset-bottom) + var(--st-tab-h) + 20px);
+    z-index: 5;
+    padding: var(--st-gap-surface);
+    border-radius: var(--st-r-surface);
+    background: var(--st-tint-bar);
+    -webkit-backdrop-filter: var(--st-filter-bar);
+    backdrop-filter: var(--st-filter-bar);
+    box-shadow: var(--st-sheen), var(--st-depth-2);
+  }
+
+  /* The main action in the bar hugs its corner: the bar's radius less the bar's gap. */
+  .st-studio .st-s-actionbar--pin > .st-btn {
+    border-radius: var(--st-r-control);
+  }
+}

@@ -29,7 +29,7 @@ import {
   type VideoAspect,
   type VideoResolution,
 } from "../api/types.ts";
-import { Btn, Chip, Failed, hostName, Loading, makerWho, MODEL_STATUS, money, Note, PROVIDER_STATE, SavedMark, SetCard, SetPick, SetSwitch, useOnThisPage, useSaved, whenText, type SIconName } from "./bits.tsx";
+import { Btn, Chip, Failed, hostName, Loading, makerWho, MODEL_STATUS, money, Note, PROVIDER_STATE, SavedMark, SectionBar, SetCard, SetPick, SetSwitch, useOnThisPage, useSaved, whenText, type SIconName } from "./bits.tsx";
 import { useAi, useWorkspaceConfig } from "./data.ts";
 import { bundledMakerModels, endedWords, regionWords } from "./makerFile.ts";
 import { MakerModels } from "./MakerModels.tsx";
@@ -383,14 +383,14 @@ export function LengthPicker({ value, onChange }: { value: number; onChange: (v:
         {shown >= 30 && shown <= 60 ? <Chip tone="mint">Best length</Chip> : <Chip tone="sun">Longer or shorter than most</Chip>}
       </p>
       <div className="st-stg-length__row">
-        <button type="button" className="st-stg-round" aria-label="5 seconds shorter" aria-disabled={shown <= 15 || undefined} onClick={() => shown > 15 && pick(shown - 5)}>
+        <button type="button" className="st-stg-round st-stepper__btn" aria-label="5 seconds shorter" aria-disabled={shown <= 15 || undefined} onClick={() => shown > 15 && pick(shown - 5)}>
           <span aria-hidden="true">−</span>
         </button>
         <div className="st-stg-range" style={{ "--st-stg-range": `${pct}%` } as CSSProperties}>
           <span className="st-stg-range__best" aria-hidden="true" />
           <input type="range" min={15} max={90} step={5} value={shown} aria-label="Usual video length in seconds" aria-valuetext={`${shown} seconds`} onChange={(e) => pick(Number(e.target.value))} />
         </div>
-        <button type="button" className="st-stg-round" aria-label="5 seconds longer" aria-disabled={shown >= 90 || undefined} onClick={() => shown < 90 && pick(shown + 5)}>
+        <button type="button" className="st-stg-round st-stepper__btn" aria-label="5 seconds longer" aria-disabled={shown >= 90 || undefined} onClick={() => shown < 90 && pick(shown + 5)}>
           <span aria-hidden="true">+</span>
         </button>
       </div>
@@ -428,10 +428,10 @@ export function VideoSection({ ws }: { ws: string }) {
 
   return (
     <div className="st-stg-cards">
-      <div className="st-stg-bar">
+      <SectionBar>
         <p className="st-stg-small">These make the pictures, video and sound. The AI models that write the stories are in Settings › AI.</p>
         <SavedMark saved={saved} busy={busy} />
-      </div>
+      </SectionBar>
       <MakerCard kind="video" c={c} providers={p} models={models} save={save}>
         {/* Luma AI Ray2's own row: Try it, one 5-second test shot, so it can become ready before any video (§45.37). */}
         {p?.some((x) => x.id === "luma-ray") ? <ReelTry ws={ws} p={stateOf(p, "luma-ray")} reload={providers.reload} /> : null}

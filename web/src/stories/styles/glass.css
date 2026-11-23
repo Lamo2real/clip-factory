@@ -1,0 +1,334 @@
+/* Clip Factory Stories · the glass recipe and the background behind it (glass-tokens.css has every number; the
+   contract with every name is styles/GLASS-CONTRACT.md).
+
+   The background (Stories › Settings › Look, Stories' own prefs: stories/look.ts useStoriesBackground puts
+   data-look, data-strength, data-glass and the --st-veil-* numbers on .stories-app):
+     .stories-app::before   one fixed layer under every Stories page, painted once (no animation, no filter):
+                            colours  the first colour as the base, the second and third as soft lights (a strip,
+                                     two glows, a haze: look.ts STAGE_LIGHTS)
+                            picture  the owner's picture at full strength (--st-picture)
+                            window   nothing but the page veil (Frosted's 0.30 frost): the window's glass shows
+                                     the desktop
+   The glass (every one keeps the owner's rules: light, never a border; no cursor; no transform or filter change on
+   a glass surface):
+     .st-glass               a smoky warm translucent panel: the card veil, the inner top highlight, the outer glow,
+                             the thin light edge (::after), radius surface
+     .st-glass--hero         a hero surface: its own veil, a brighter edge and sheen; with .st-lens its rim can bend
+     .st-glass--bar          a bar something scrolls under (top bar, tab bar): heavy blur in every look
+     .st-glass--float        sheets, menus and toasts: the float veil and the heaviest blur
+     .st-glass--tinted       a colour-tinted tile: set --st-tone-rgb; the colour is cut to 0.12 over a heavier veil
+     .st-glass--control      a glass control or inactive pill: radius control, the control fill, hover deepens
+     .st-cream               the solid cream surface (the one highlighted card, the active pill, steppers): espresso words
+     .st-plate               a backing plate for words loose on the page (a page head, the studio title, the studio's
+                             tab bar, the phone top bar): nothing over Ember, a glass plate in Picture and See-through
+     .st-edge                the thin light edge alone, for a surface that has its own fill
+     .st-lens                a hero whose rim may bend (stories/look.ts decides; .is-liquid turns it on)
+     .st-lens--tinted        a liquid hero keeps its colour (--st-tone-rgb) over the rim's tint
+   Type helpers: .st-display (Playfair at display optical sizes, a little condensed), .st-caps (Jost, wide-tracked
+   caps captions), .st-num (lining tabular figures). */
+
+/* ---------- The background ---------- */
+
+.stories-app::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  z-index: var(--st-z-stage);
+  pointer-events: none;
+  /* The warm room of the owner's reference, out of focus: a lamp's light strip at the right edge, amber high on the
+     right, copper low on the left, a darker corner behind the page heads, a warm haze over everything. These are
+     stories/look.ts STAGE_LIGHTS exactly (the veils are worked out from them; storiesGlass.test.tsx holds the two
+     together): change one, change both. */
+  background:
+    linear-gradient(rgb(var(--st-veil-rgb) / var(--st-veil-page)), rgb(var(--st-veil-rgb) / var(--st-veil-page))),
+    radial-gradient(7vw 34vh at 100% 48%, rgb(var(--st-stage-c3-rgb) / 0.34), transparent 70%),
+    radial-gradient(46vmax 36vmax at 92% 2%, rgb(var(--st-stage-c3-rgb) / var(--st-stage-a3)), transparent 70%),
+    radial-gradient(50vmax 40vmax at 0% 104%, rgb(var(--st-stage-c2-rgb) / var(--st-stage-a2)), transparent 70%),
+    radial-gradient(56vmax 40vmax at 10% 8%, rgb(var(--st-shadow-rgb) / 0.5), transparent 70%),
+    radial-gradient(90vmax 64vmax at 56% 46%, rgb(var(--st-stage-c2-rgb) / 0.24), transparent 100%),
+    var(--st-stage-c1);
+}
+.stories-app[data-look="picture"]::before {
+  background:
+    linear-gradient(rgb(var(--st-veil-rgb) / var(--st-veil-page)), rgb(var(--st-veil-rgb) / var(--st-veil-page))),
+    var(--st-picture) center / cover no-repeat,
+    var(--st-base);
+}
+.stories-app[data-look="window"] {
+  background-color: transparent;
+}
+.stories-app[data-look="window"]::before {
+  background: rgb(var(--st-veil-rgb) / var(--st-veil-page));
+}
+
+/* ---------- The glass ---------- */
+
+:where(.st-glass, .st-cream, .st-plate, .st-edge) {
+  position: relative;
+}
+/* Each kind sits on its level of light (glass-tokens.css 5a): its level's light over its veil, lighter at the top, a
+   bright top rim (in its sheen), a glow; a higher level is never darker than a lower one over the same backdrop. */
+.st-glass {
+  border-radius: var(--st-r-surface);
+  background: var(--st-tint-card); /* level 2 */
+  color: var(--st-text);
+  -webkit-backdrop-filter: var(--st-filter-glass);
+  backdrop-filter: var(--st-filter-glass);
+  box-shadow: var(--st-sheen), var(--st-depth-1), var(--st-glow-2);
+}
+.st-glass--hero {
+  background: var(--st-tint-hero); /* level 3 */
+  box-shadow: var(--st-sheen-hero), var(--st-rim-light), var(--st-depth-2), var(--st-glow-3);
+}
+.st-glass--bar {
+  background: var(--st-tint-bar); /* level 3: things scroll under it */
+  -webkit-backdrop-filter: var(--st-filter-bar);
+  backdrop-filter: var(--st-filter-bar);
+  box-shadow: var(--st-sheen-raised), var(--st-depth-1), var(--st-glow-3);
+}
+.st-glass--float {
+  background: var(--st-tint-float); /* level 5: the top */
+  -webkit-backdrop-filter: var(--st-filter-float);
+  backdrop-filter: var(--st-filter-float);
+  box-shadow: var(--st-sheen-float), var(--st-depth-3), var(--st-glow-5);
+}
+/* A card inside a card (or inside the hero) is one level up from it. */
+.st-glass .st-glass:not(.st-glass--hero, .st-glass--bar, .st-glass--float, .st-glass--control, .st-glass--tinted) {
+  background: var(--st-tint-raised);
+  box-shadow: var(--st-sheen-raised), var(--st-depth-1), var(--st-glow-3);
+}
+/* Written out rather than var(--st-tint-tinted): that token is worked out on .stories-app, where no tone is set, so it
+   would always be the orange. Here the tile's own --st-tone-rgb (Glass tone, or a screen's rule) is the colour. */
+.st-glass--tinted {
+  /* level 3 (it asks for the owner: needs you, done, a note): its light, the tone cut, the veil giving the light its
+     share */
+  background:
+    var(--st-light-3),
+    linear-gradient(rgb(var(--st-tone-rgb, var(--st-action-rgb)) / var(--st-tint-cut)), rgb(var(--st-tone-rgb, var(--st-action-rgb)) / var(--st-tint-cut))),
+    linear-gradient(180deg, rgb(var(--st-veil-rgb) / calc(var(--st-veil-tinted) / (1 - var(--st-elev-3) - var(--st-elev-grad-3)))), rgb(var(--st-veil-rgb) / calc(var(--st-veil-tinted) / (1 - var(--st-elev-3)))) var(--st-elev-settle));
+}
+.st-glass--tinted:where(:not(.st-glass--hero)) {
+  box-shadow: var(--st-sheen-raised), var(--st-depth-1), var(--st-glow-3);
+}
+.st-glass--control {
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-control); /* level 4: its light over the surface it sits on */
+  background-image: var(--st-light-4);
+  box-shadow: var(--st-sheen-control), var(--st-glow-4);
+  transition:
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    box-shadow var(--st-dur-hover) var(--st-ease-out);
+}
+.st-glass--control:hover {
+  background: var(--st-fill-control-hover);
+  background-image: var(--st-light-4);
+}
+
+/* The solid cream: the one highlighted card among the glass, the active pill, the steppers. Espresso words. */
+.st-cream {
+  border-radius: var(--st-r-surface);
+  background: var(--st-tint-cream);
+  color: var(--st-on-cream);
+  box-shadow: var(--st-sheen-cream), var(--st-depth-2), var(--st-glow-behind);
+}
+
+/* The thin light edge: a 1.25 px ring of light (a masked gradient, not a border), bright along the top left. */
+.st-glass::after,
+.st-cream::after,
+.st-edge::after,
+.st-plate::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  padding: var(--st-edge-width);
+  border-radius: inherit;
+  background: var(--st-edge);
+  pointer-events: none;
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask:
+    linear-gradient(#000 0 0) content-box exclude,
+    linear-gradient(#000 0 0);
+}
+.st-glass--hero::after {
+  padding: calc(var(--st-edge-width) + 0.25px);
+  background: var(--st-edge-hero);
+}
+.st-cream::after {
+  background: var(--st-edge-cream);
+}
+
+/* Words loose on the page: a plate only where anything can be behind them. */
+.st-plate {
+  border-radius: var(--st-r-surface);
+}
+.st-plate::after {
+  opacity: 0;
+}
+.stories-app:is([data-look="window"], [data-look="picture"]) .st-plate {
+  padding: var(--st-space-3) var(--st-space-4);
+  background: var(--st-tint-plate); /* level 1: a page panel (over the colours a plate is the page itself: level 0) */
+  -webkit-backdrop-filter: var(--st-filter-bar);
+  backdrop-filter: var(--st-filter-bar);
+  box-shadow: var(--st-sheen-panel), var(--st-depth-1), var(--st-glow-1);
+}
+.stories-app:is([data-look="window"], [data-look="picture"]) .st-plate::after {
+  opacity: 1;
+}
+
+/* ---------- The liquid rim (a hero with .st-lens; .is-liquid and --st-lens-url come from its own lens code) ----------
+   Chromium only (html.refract), Glass "liquid" only, never animated. Everywhere else the hero keeps the plain CSS
+   light above. */
+.refract .stories-app[data-glass="liquid"] .st-lens.is-liquid {
+  /* The filter frosts the middle and lays the rest of the hero's veil under the words itself (glass/lens.ts), so the
+     tint here is only the rim's: the band at the edge (inside the padding, no words) shows the bend. */
+  background: var(--st-tint-lens);
+  -webkit-backdrop-filter: blur(1px) var(--st-lens-url) saturate(var(--st-saturate-lens));
+  backdrop-filter: blur(1px) var(--st-lens-url) saturate(var(--st-saturate-lens));
+}
+/* A liquid hero that says something (a card that needs the owner, .st-lens--tinted with --st-tone-rgb on it): its
+   colour from the top left, cut to --st-tint-cut, over the rim's tint. The filter still lays the hero's veil under the
+   words, so the colour only adds a little light there (over a white picture or desktop: 5.5:1 for --st-text-soft). */
+.refract .stories-app[data-glass="liquid"] .st-lens.st-lens--tinted.is-liquid {
+  background:
+    linear-gradient(165deg, rgb(var(--st-tone-rgb, var(--st-action-rgb)) / var(--st-tint-cut)), rgb(var(--st-tone-rgb, var(--st-action-rgb)) / 0) 60%),
+    var(--st-tint-lens);
+}
+.st-lens__defs {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+/* ---------- Type helpers ---------- */
+
+.st-display {
+  font-family: var(--st-font);
+  /* High contrast like the owner's Womack sample: Playfair's optical size for display (its hairlines and sharp
+     wedge serifs), a little condensed. Reading sizes keep opsz auto (sturdy shapes for a 6-8-year-old). */
+  font-variation-settings: "opsz" var(--st-opsz-display);
+  font-stretch: var(--st-wdth-display);
+  font-weight: var(--st-weight-display);
+  letter-spacing: -0.01em;
+  line-height: var(--st-lh-head);
+  text-wrap: balance;
+}
+.st-caps {
+  font-family: var(--st-font-caps);
+  font-size: var(--st-fs-caps);
+  font-weight: 500;
+  letter-spacing: var(--st-track-caps);
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+.st-num {
+  font-variant-numeric: lining-nums tabular-nums;
+}
+
+/* ---------- Reduced transparency: solid glass, nothing filtered ---------- */
+@media (prefers-reduced-transparency: reduce), (prefers-contrast: more) {
+  .stories-app .st-glass,
+  .stories-app .st-plate,
+  .refract .stories-app .st-lens.is-liquid {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+  }
+}
+.stories-app[data-glass="solid"] :is(.st-glass, .st-plate, .st-lens.is-liquid) {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
+/* ---------- Settings › Look (settings/LookSection.tsx) ---------- */
+.st-look {
+  display: grid;
+  gap: var(--st-space-4);
+  min-width: 0;
+}
+/* A little picture of each choice: what you get. It sits in the option (control 14 − its 4 px gap = inner 10). */
+.st-look__art {
+  position: relative;
+  display: inline-block;
+  flex: none;
+  width: 72px;
+  height: 46px;
+  overflow: hidden;
+  border-radius: var(--st-r-inner);
+  background: var(--st-base) center / cover no-repeat;
+  box-shadow: var(--st-sheen-control), var(--st-depth-1);
+}
+.st-look__art--window {
+  /* a desktop: sky, a sun and hills, seen through the window */
+  background:
+    radial-gradient(9px 9px at 76% 26%, #f6c945 0 98%, transparent),
+    radial-gradient(120% 70% at 30% 112%, #5c7a4a 0 60%, transparent 61%),
+    radial-gradient(110% 60% at 90% 118%, #3f5a34 0 60%, transparent 61%),
+    linear-gradient(#7cc4f2, #bfe3f7);
+}
+.st-look__art--picture {
+  background-color: var(--st-base-2);
+}
+/* the glass over it: a small smoky pane with its light edge */
+.st-look__pane {
+  position: absolute;
+  inset: 22% 30% 22% 12%;
+  border-radius: var(--st-r-tiny);
+  background: rgb(var(--st-veil-rgb) / 0.62);
+  box-shadow: inset 0 4px 6px -4px rgb(255 240 220 / 0.6);
+}
+.st-look__art--colours .st-look__pane {
+  inset: 30% 40% 30% 14%;
+}
+.st-look__art--picture .st-look__pane {
+  inset: 26%;
+  border-radius: var(--st-r-tiny);
+  background:
+    radial-gradient(5px 5px at 70% 32%, var(--st-cream) 0 98%, transparent),
+    linear-gradient(150deg, transparent 52%, rgb(var(--st-cream-rgb) / 0.7) 53% 66%, transparent 67%),
+    rgb(var(--st-cream-rgb) / 0.16);
+}
+.st-look__swatches {
+  display: inline-flex;
+  flex: none;
+}
+.st-look__swatch {
+  width: 18px;
+  height: 18px;
+  margin-left: -5px;
+  border-radius: var(--st-r-round);
+  box-shadow:
+    inset 0 4px 6px -3px rgb(255 250 240 / 0.55),
+    -2px 0 6px -1px rgb(var(--st-shadow-rgb) / 0.6);
+}
+.st-look__swatch:first-child {
+  margin-left: 0;
+}
+.st-look__picture {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--st-space-4);
+  min-width: 0;
+}
+.st-look__thumb {
+  flex: none;
+  width: 112px;
+  aspect-ratio: 16 / 10;
+  border-radius: var(--st-r-control);
+  background-position: center;
+  background-size: cover;
+  box-shadow: var(--st-sheen-control), var(--st-depth-1);
+}
+.st-look__actions {
+  display: flex;
+  flex: 1 1 220px;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--st-space-3);
+  min-width: 0;
+}

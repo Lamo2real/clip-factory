@@ -22,6 +22,7 @@ import { storiesApi } from "../api/client.ts";
 import { EFFORT_LABEL, type Effort, type ModelInfo, type Onboarding, type OnboardStep, type Platform, type SocialAccount, type StoriesAiConfig, type StoriesConfig } from "../api/types.ts";
 import { madeBy, MODEL_STATUS } from "../settings/bits.tsx";
 import { aiBody } from "../settings/data.ts";
+import { ArcDial, GlassPill } from "../glass/index.ts";
 import {
   celebrate,
   centerOf,
@@ -36,7 +37,6 @@ import {
   StLoading,
   StMascot,
   StPick,
-  StRing,
   useOnboarding,
   type StIconName,
 } from "../ui.tsx";
@@ -532,6 +532,7 @@ function ConnectStep({ ws, platform, line }: { ws: string; platform: Platform; l
       ) : null}
       <ul className="st-conns st-conns--one">
         <PlatformCard
+          inStep
           ws={ws}
           a={a}
           all={social.data.accounts}
@@ -759,14 +760,17 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
 
   return (
     <section className="st-page st-setup" data-step={step}>
-      <header className="st-setup__head">
-        <StRing done={data.done} total={data.total} size={96} />
-        <div className="st-setup__intro">
-          <h1 className="st-head__title">Set up Funded Clips</h1>
-          <p className="st-head__lede">
-            {data.done} of {data.total} done. Skip anything you do not need yet: making videos never waits for it.
-          </p>
-        </div>
+      {/* The hero: the setup's ring (the ArcDial: an orange arc, its white knob, a big light numeral), the title and
+          what it means. It keeps the name st-ring, the setup's ring as before. */}
+      <header className="st-setup__head st-glass st-glass--hero st-lens">
+        <ArcDial className="st-ring st-setup__dial" value={data.done} max={data.total} label={`${data.done} of ${data.total} done`} valueText={`${data.done} of ${data.total} done`}>
+          <span className="st-setup__dial-num st-num">{data.done}</span>
+          <span className="st-setup__dial-of">of {data.total}</span>
+        </ArcDial>
+        <h1 className="st-head__title st-setup__heading st-display">Set up Funded Clips</h1>
+        <p className="st-head__lede st-setup__intro">
+          {data.done} of {data.total} done. Skip anything you do not need yet: making videos never waits for it.
+        </p>
         <StLinkButton href="/stories" className="st-setup__later">
           Do this later
         </StLinkButton>
@@ -774,7 +778,7 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
 
       <div className="st-setup__grid">
         <nav className="st-steps" aria-label="Setup steps">
-          <ol className="st-steps__list">
+          <ol className="st-steps__list st-glass">
             <Glide active=".st-steps__item.is-on" className="glide--st-steps" as="li" />
             {data.steps.map((s, n) => (
               <li key={s.step}>
@@ -796,9 +800,11 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
           </ol>
         </nav>
 
-        <div className="st-setup__panel" ref={panel} tabIndex={-1} aria-labelledby="st-setup-step">
+        <div className="st-setup__panel st-glass" ref={panel} tabIndex={-1} aria-labelledby="st-setup-step">
           <p className="st-setup__count">
-            Step {i + 1} of {SETUP_ORDER.length}
+            <span className="st-caps">
+              Step {i + 1} of {SETUP_ORDER.length}
+            </span>
             {state === "done" ? (
               <span className="st-chip st-chip--mint">Done</span>
             ) : state === "skipped" ? (
@@ -806,8 +812,10 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
             ) : null}
           </p>
           <h2 className="st-setup__title" id="st-setup-step">
-            <StIcon name={ICON[step]} size={24} />
-            {WORDS[step].title}
+            <span className="st-setup__title-icon" aria-hidden="true">
+              <StIcon name={ICON[step]} size={22} />
+            </span>
+            <span className="st-display">{WORDS[step].title}</span>
           </h2>
           <p className="st-setup__lede">{WORDS[step].lede}</p>
           <div className="st-setup__body">{body}</div>
@@ -815,39 +823,44 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
             {foot}
           </Foot>
         </div>
-      </div>
 
-      {left.length ? (
-        <section className="st-left" aria-labelledby="st-left-title">
-          <h2 className="st-left__title" id="st-left-title">
-            What is left
-          </h2>
-          <ul className="st-left__list">
-            {left.map((s) => (
-              <li key={s.step}>
-                <button type="button" className="st-left__item" onClick={() => go(s.step)}>
-                  <StIcon name={ICON[s.step]} size={18} />
-                  {s.label}
-                  {s.state === "skipped" ? <span className="st-left__tag">skipped</span> : null}
-                </button>
-              </li>
-            ))}
-          </ul>
-          {/* A platform held because its account is Lamo Clips' own says why, in the server's words (§45.35 D11). */}
-          {left.some((s) => s.line) ? (
-            <ul className="st-left__why">
-              {left
-                .filter((s) => s.line)
-                .map((s) => (
-                  <li key={s.step} className="st-note st-note--coral">
-                    <StIcon name="alert" size={18} />
-                    {s.line}
-                  </li>
-                ))}
+        {/* What is left: glass pills, one tap back to each step (in the grid, under the steps). None is cream: the step
+            list already marks the open step, so one choice has one cream marker. */}
+        {left.length ? (
+          <section className="st-left st-glass" aria-labelledby="st-left-title">
+            <h2 className="st-left__title st-display" id="st-left-title">
+              What is left
+            </h2>
+            <ul className="st-left__list">
+              {left.map((s) => (
+                <li key={s.step}>
+                  <GlassPill
+                    className="st-left__item"
+                    icon={<StIcon name={ICON[s.step]} size={18} />}
+                    onClick={() => go(s.step)}
+                  >
+                    <span className="st-left__label">{s.label}</span>
+                    {s.state === "skipped" ? <span className="st-left__tag">skipped</span> : null}
+                  </GlassPill>
+                </li>
+              ))}
             </ul>
-          ) : null}
-        </section>
-      ) : null}
+            {/* A platform held because its account is Lamo Clips' own says why, in the server's words (§45.35 D11). */}
+            {left.some((s) => s.line) ? (
+              <ul className="st-left__why">
+                {left
+                  .filter((s) => s.line)
+                  .map((s) => (
+                    <li key={s.step} className="st-note st-note--coral">
+                      <StIcon name="alert" size={18} />
+                      {s.line}
+                    </li>
+                  ))}
+              </ul>
+            ) : null}
+          </section>
+        ) : null}
+      </div>
     </section>
   );
 }

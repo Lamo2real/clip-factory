@@ -24,6 +24,9 @@ import { navigate, useHash } from "../lib/router.ts";
 import { loadStoriesApi, setStoriesApi } from "./api/client.ts";
 import { GlideCalm } from "../components/Glide.tsx";
 import { AWAY_RAN_OUT, takeParkedStoriesAway, takeParkedStoriesGo, useAppPane } from "./pane.tsx";
+import { THEME_COLOUR, useStoriesBackground } from "./look.ts";
+import { addStoriesFonts } from "./fonts.ts";
+import { TAB_ORB } from "./glass/index.ts";
 import { followStoriesClicks, storiesReduceMotion } from "./prefs.ts";
 import type { StoriesApi, Workspace } from "./api/types.ts";
 import { storiesHref, type StoriesPage } from "./routes.ts";
@@ -141,7 +144,6 @@ export function opensSetup(
 const TABS = NAV.slice(0, 5);
 const MORE = NAV.slice(5);
 
-const STAGE = "#1C1842";
 
 /** Picks the workspace to show: a checked id from the server's own list, never one taken from the address alone. */
 export function pickWorkspace(list: Workspace[], wanted: string | null): string | null {
@@ -325,6 +327,8 @@ function quickWorkspace(fromAddress: string | null): string | null {
 }
 
 export function StoriesApp({ page }: { page: StoriesPage }) {
+  // Its own fonts, put on the page by the first Stories screen (never by the prefetched chunk: stories/fonts.ts).
+  useLayoutEffect(() => addStoriesFonts(), []);
   // Its sliding highlights follow Lamo Stories' own calm-motion switch, never Clip Factory's once it has its own.
   return (
     <GlideCalm.Provider value={storiesReduceMotion}>
@@ -349,6 +353,8 @@ function StoriesShell({ page }: { page: StoriesPage }) {
   const hash = useHash();
   const toast = useToast();
   const pageKey = JSON.stringify(page);
+  // The background behind the glass (Stories › Settings › Look, the glass contract): data-look and the veils on the root.
+  useStoriesBackground(root, active);
 
   const check = useCallback(
     async (skip: string[] = []) => {
@@ -449,7 +455,7 @@ function StoriesShell({ page }: { page: StoriesPage }) {
     const meta = document.querySelector<HTMLMetaElement>('meta[name="theme-color"]');
     const colour = meta?.getAttribute("content") ?? null;
     const title = document.title;
-    meta?.setAttribute("content", STAGE);
+    meta?.setAttribute("content", THEME_COLOUR);
     return () => {
       if (meta && colour !== null) meta.setAttribute("content", colour);
       document.title = title;
@@ -512,7 +518,7 @@ function StoriesShell({ page }: { page: StoriesPage }) {
         Skip to content
       </a>
       {solo ? null : (
-        <nav className="st-rail" aria-label="Funded Clips">
+        <nav className="st-rail st-glass" aria-label="Funded Clips">
           <Brand />
           {/* For the keyboard the shell's switch comes right after this list, where it is drawn (data-ws-tab-after). */}
           <ul className="st-rail__list" data-ws-tab-after="">
@@ -533,7 +539,8 @@ function StoriesShell({ page }: { page: StoriesPage }) {
         </nav>
       )}
       <div className="st-frame">
-        <header className="st-top">
+        {/* The phone top bar is a backing plate for its words (nothing over Ember, glass over a picture or the desktop). */}
+        <header className="st-top st-plate">
           <Brand />
           <TopBarSwitch />
         </header>
@@ -557,9 +564,10 @@ function StoriesShell({ page }: { page: StoriesPage }) {
         </main>
       </div>
       {solo ? null : (
-        <nav className="st-tabbar" aria-label="Funded Clips">
+        <nav className="st-tabbar st-glass st-glass--bar" aria-label="Funded Clips">
           <ul className="st-tabbar__list">
-            <Glide active=".st-tabbar__item.is-active" className="glide--st-tab" as="li" />
+            {/* The round active highlight (the figure's orb) slides between the tabs. */}
+            <Glide active=".st-tabbar__item.is-active" className={`glide--st-tab ${TAB_ORB}`} as="li" />
             {TABS.map((item) => (
               <li key={item.label} className="st-tabbar__cell">
                 <A href={storiesHref(item.page)} className={`st-tabbar__item${on(item) ? " is-active" : ""}`} aria-current={on(item) ? "page" : undefined} aria-label={item.label} title={item.label}>
@@ -587,7 +595,7 @@ function StoriesShell({ page }: { page: StoriesPage }) {
       {more ? (
         <div className="st-more" id="st-more" role="dialog" aria-label="More pages">
           <button type="button" className="st-more__shade" aria-label="Close" onClick={() => setMore(false)} />
-          <div className="st-more__sheet">
+          <div className="st-more__sheet st-glass st-glass--float">
             {MORE.map((item) => (
               <A key={item.label} href={storiesHref(item.page)} className={`st-more__item${on(item) ? " is-active" : ""}`} aria-current={on(item) ? "page" : undefined}>
                 <StIcon name={item.icon} size={24} />

@@ -1,0 +1,708 @@
+/* ---------- Dashboard (screens/Dashboard.tsx) ----------
+   The liquid-glass contract (styles/GLASS-CONTRACT.md) on the owner's warm reference: the page head on its backing
+   plate, every tile a smoky glass card (.st-glass), the counts as big light numerals with a small unit (StatNumeral),
+   one solid cream card among them with an orange toggle (the next video), the videos being made as media rows, the
+   setup's progress on an arc with a white knob (ArcDial), round glass marks (the figure .st-round-btn, only sized
+   here) with warm amber glyphs, and cream and glass pills for "What happened lately". Coral and mint only where they
+   say something (needs you, stopped, done); orange only for shapes and the screen's one main action. Rows inside a
+   tile are lighter glass (--st-fill-control: cream light over Ember, a deeper veil over a picture or the desktop, so
+   their words hold over all three). Radii from the --st-r-* scale only (kinds: surface for the cards, control for
+   rows, round for marks, pills and counts); words from the contract's word tokens only (light on glass, espresso on
+   cream and on the status fills); hover never moves glass. The layout follows the page's own width (container
+   st-dash), not the window's: the rail takes a different share at each size. Figures are placed and sized here, never
+   restyled inside (rule 2).
+
+   The Continue and setup cards keep their names (.st-continue, .st-setupcard: tests read them). Their fill and rest
+   shadow are the glass classes' own (.st-glass--hero, .st-glass in the markup): this file only lays them out and
+   adds the hover. */
+
+.st-dash {
+  container: st-dash / inline-size;
+}
+
+/* A note that the numbers could not be refreshed: loose words, on a plate too. */
+.st-dash .st-stale {
+  justify-self: start;
+  margin: 0;
+}
+
+/* ---------- The tiles ---------- */
+
+.st-tiles {
+  display: grid;
+  grid-template-columns: repeat(12, minmax(0, 1fr));
+  gap: var(--st-gap);
+}
+.st-tile {
+  grid-column: span 12;
+  display: grid;
+  align-content: start;
+  gap: var(--st-space-3);
+  min-width: 0;
+  padding: var(--st-inset);
+  animation: st-rise var(--st-dur-enter) var(--st-ease-out) both;
+}
+.st-tile__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--st-space-3) var(--st-space-4);
+  min-width: 0;
+}
+.st-tile__title {
+  display: flex;
+  align-items: center;
+  gap: var(--st-space-3);
+  min-width: 0;
+  margin: 0;
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-h3);
+  overflow-wrap: anywhere;
+}
+.st-tile__title .st-icon {
+  color: var(--st-text-amber);
+}
+.st-tile--needs .st-tile__title .st-icon {
+  color: var(--st-coral);
+}
+/* A count: a round glass chip; Needs you's is the orange dot with espresso figures. */
+.st-tile__count {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 var(--st-space-2);
+  border-radius: var(--st-r-round);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  color: var(--st-text-strong);
+  font-family: var(--st-font);
+  font-size: var(--st-fs-chip);
+  font-weight: var(--st-weight-ui);
+  font-variant-numeric: lining-nums tabular-nums;
+  letter-spacing: 0;
+}
+.st-tile--needs .st-tile__count {
+  background: var(--st-accent);
+  box-shadow: var(--st-glow-accent);
+  color: var(--st-on-accent);
+}
+.st-tile__note {
+  margin: 0;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
+  line-height: var(--st-lh-body);
+}
+/* "3 of 5": the numeral (StatNumeral's classes), a little smaller inside a half tile. */
+.st-tile__big {
+  margin: 0;
+  font-size: var(--st-fs-h1);
+}
+
+/* ---------- The three counts: a glass tile each, a big light numeral with its unit, a round glass mark ---------- */
+
+.st-dash-stat {
+  grid-column: span 6;
+  position: relative;
+  align-content: space-between;
+  gap: var(--st-space-4);
+  min-height: 150px;
+  color: var(--st-text);
+  text-decoration: none;
+  transition:
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    box-shadow var(--st-dur-hover) var(--st-ease-out);
+}
+.st-dash-stat--link:hover {
+  background-color: rgb(var(--st-well-rgb) / 0.26);
+  box-shadow: var(--st-sheen), var(--st-depth-2), var(--st-glow-behind);
+}
+/* The round glass marks (decorations inside a link or a row, aria-hidden: the row is the target, so they may be
+   smaller than a tap). Only their size is set here; the glyph inside is the Dashboard's own icon, in warm amber. */
+.st-dash :is(.st-dash-stat__icon, .st-needs-list__mark) {
+  width: 40px;
+  height: 40px;
+  min-height: 0;
+}
+.st-dash :is(.st-dash-stat__go, .st-making__go, .st-accounts__mark, .st-activity__icon) {
+  width: 36px;
+  height: 36px;
+  min-height: 0;
+}
+.st-dash .st-perf__icon {
+  width: 32px;
+  height: 32px;
+  min-height: 0;
+}
+.st-dash :is(.st-dash-stat__icon, .st-perf__icon, .st-dash-continue__icon, .st-dash-setup__mark, .st-round-btn.st-activity__icon) > .st-icon,
+.st-making__thumb {
+  color: var(--st-text-amber);
+}
+/* The way in: a round glass mark at the top right, the figure's cream when the tile is hovered. */
+.st-dash-stat__go {
+  position: absolute;
+  top: var(--st-inset);
+  right: var(--st-inset);
+}
+.st-dash-stat--link:hover .st-dash-stat__go {
+  background: var(--st-cream);
+  color: var(--st-on-cream);
+}
+
+/* ---------- The next video: the one cream card (CreamCard, an orange toggle) ---------- */
+
+.st-dash-next {
+  grid-column: span 6;
+  align-content: space-between;
+  min-width: 0;
+  min-height: 150px;
+  animation: st-rise var(--st-dur-enter) var(--st-ease-out) both;
+}
+/* The next video's length: the same big light numeral and small unit as the glass tiles beside it (StatNumeral's
+   cut: light weight, the hairline optical size), in espresso words on the cream. */
+.st-dash-next__len {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 0.08em;
+  margin: 0;
+  color: var(--st-on-cream);
+  font-family: var(--st-font);
+  font-size: var(--st-fs-num);
+  font-weight: var(--st-weight-num);
+  font-variation-settings: "opsz" var(--st-opsz-num);
+  font-stretch: var(--st-wdth-display);
+  font-variant-numeric: lining-nums tabular-nums;
+  line-height: 1;
+  letter-spacing: -0.02em;
+}
+.st-dash-next__unit {
+  color: var(--st-on-cream-soft);
+  font-size: var(--st-fs-unit);
+  font-weight: var(--st-weight-body);
+  letter-spacing: 0;
+}
+.st-dash-next__music {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--st-space-1) var(--st-space-2);
+}
+.st-dash-next__label {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--st-space-2);
+  color: var(--st-on-cream);
+  font-size: var(--st-fs-small);
+  font-weight: var(--st-weight-ui);
+}
+.st-dash-next__label .st-icon {
+  color: var(--st-on-cream-orange);
+}
+.st-dash-next__label:hover {
+  color: var(--st-on-cream-orange);
+}
+
+/* A brand-new studio: Connected accounts and the next video, side by side once there is room. */
+.st-tiles--start .st-dash-next {
+  grid-column: span 12;
+}
+
+/* ---------- Needs you ---------- */
+
+.st-needs-list {
+  display: grid;
+  gap: var(--st-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* A row of lighter glass inside the card (a control's fill: cream light over Ember, a deeper veil over a picture or
+   the desktop, so its words hold over all three). */
+.st-needs-list__item {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--st-space-2) var(--st-space-3);
+  padding: var(--st-space-3);
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+}
+.st-needs-list__text {
+  flex: 1 1 240px;
+  min-width: 0;
+  margin: 0;
+  color: var(--st-text);
+  font-size: var(--st-fs-small);
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+.st-needs-list__text strong {
+  color: var(--st-text-strong);
+  font-weight: var(--st-weight-ui);
+}
+.st-needs-list__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--st-space-2);
+  margin-left: auto;
+}
+
+/* ---------- Being made now: a media row per video (MediaRow inside a row that opens the studio) ---------- */
+
+.st-making {
+  display: grid;
+  gap: var(--st-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* A row like the tiles' other rows: lighter glass at the control radius. */
+.st-making__row {
+  display: flex;
+  align-items: center;
+  gap: var(--st-space-2);
+  min-width: 0;
+  padding-right: var(--st-space-3);
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  color: var(--st-text);
+  text-decoration: none;
+  transition: background-color var(--st-dur-hover) var(--st-ease-out);
+}
+.st-making__row:hover {
+  background-color: var(--st-fill-control-hover);
+}
+.st-making__row > .st-media {
+  flex: 1 1 auto;
+}
+/* The Dashboard's own icon in the media row's thumbnail slot, in its middle. */
+.st-making__thumb {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  aspect-ratio: 1;
+}
+.st-making__step {
+  color: var(--st-text-amber);
+  font-weight: var(--st-weight-ui);
+}
+.st-making__row:hover .st-making__go {
+  background: var(--st-cream);
+  color: var(--st-on-cream);
+}
+
+/* ---------- Connected accounts ---------- */
+
+.st-accounts {
+  display: grid;
+  gap: var(--st-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* A long name takes two lines, and where the row is narrow (a phone) the chip goes under it on the right: nothing is
+   cut off (§45.35 D21). */
+.st-accounts__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--st-space-1) var(--st-space-3);
+  min-height: 44px;
+}
+.st-accounts__row > .st-chip {
+  margin-left: auto;
+}
+.st-accounts__name {
+  flex: 1 1 9rem;
+  min-width: 0;
+  color: var(--st-text);
+  font-size: var(--st-fs-small);
+  font-weight: var(--st-weight-ui);
+  line-height: 1.25;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- How the videos do: four big light numerals ---------- */
+
+.st-perf {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--st-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.st-perf__item {
+  display: grid;
+  align-content: start;
+  gap: var(--st-space-2);
+  min-width: 0;
+  padding: var(--st-space-3) var(--st-space-4);
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+}
+/* Sized only: four numerals share a half tile. */
+.st-perf__figure .st-stat__value {
+  font-size: var(--st-fs-h1);
+}
+
+/* ---------- What happened lately: glass pills (the shell's pick-one bar, on its sliding highlight) ---------- */
+
+/* The bar keeps its own width beside the title, or takes the next line when it does not fit there. */
+.st-dash-pills {
+  flex: 0 0 auto;
+  min-width: 0;
+  max-width: 100%;
+}
+/* The pills wrap onto another line where the row is narrow: every choice in sight, never behind a hidden scroll. */
+.st-dash-pills .st-pick {
+  flex-wrap: wrap;
+  gap: var(--st-space-2);
+  padding: 0;
+  border-radius: var(--st-r-round);
+  background: none;
+}
+.st-dash-pills .st-pick__opt {
+  flex-direction: row;
+  align-items: center;
+  flex: none;
+  min-height: var(--st-tap);
+  padding: 0 var(--st-space-4);
+  border-radius: var(--st-r-round);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  color: var(--st-text);
+  font-size: var(--st-fs-chip);
+  font-weight: var(--st-weight-ui);
+  white-space: nowrap;
+}
+.st-dash-pills .st-pick__opt:not(.is-on):hover {
+  background: var(--st-fill-control-hover);
+  color: var(--st-text-strong);
+}
+.st-dash-pills .st-pick__opt.is-on {
+  background: var(--st-cream);
+  box-shadow: var(--st-depth-1);
+  color: var(--st-on-cream);
+}
+.st-dash-pills .has-glide > .st-pick__opt.is-on {
+  background: transparent;
+  box-shadow: none;
+}
+.stories-app .st-dash-pills .glide--st {
+  border-radius: var(--st-r-round);
+  background: var(--st-cream);
+  box-shadow: var(--st-depth-1);
+}
+@media (max-width: 767.98px) {
+  .st-dash-pills .st-pick__opt {
+    min-height: var(--st-tap-phone);
+  }
+}
+
+.st-activity {
+  display: grid;
+  gap: var(--st-space-1);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.st-activity__row {
+  display: flex;
+  align-items: center;
+  gap: var(--st-space-3);
+  min-height: 52px;
+  padding: var(--st-space-1) var(--st-space-3) var(--st-space-1) var(--st-space-2);
+  border-radius: var(--st-r-control);
+  color: var(--st-text);
+  text-decoration: none;
+  transition: background-color var(--st-dur-hover) var(--st-ease-out);
+}
+.st-activity__row:hover {
+  background-color: var(--st-fill-control);
+}
+/* A line's mark: a round glass mark (made, changes asked for), or a status in its colour (done, stopped). */
+.st-activity__icon--mint,
+.st-activity__icon--coral {
+  display: grid;
+  place-items: center;
+  flex: none;
+  border-radius: var(--st-r-round);
+  color: var(--st-on-cream);
+  box-shadow: var(--st-sheen-cream);
+}
+.st-activity__icon--mint {
+  background: var(--st-mint);
+}
+.st-activity__icon--coral {
+  background: var(--st-coral);
+}
+.st-activity__text {
+  flex: 1;
+  min-width: 0;
+  font-size: var(--st-fs-small);
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+.st-activity__text strong {
+  color: var(--st-text-strong);
+  font-weight: var(--st-weight-ui);
+}
+.st-activity__when {
+  flex: none;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-chip);
+  white-space: nowrap;
+}
+
+/* ---------- Calm: nothing needs you, nothing is being made ---------- */
+
+.st-dash .st-calm {
+  display: flex;
+  align-items: center;
+  gap: var(--st-space-4);
+  padding: var(--st-space-2) var(--st-space-3);
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
+  font-weight: var(--st-weight-ui);
+}
+.st-dash .st-calm p {
+  margin: 0;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
+/* ---------- Continue: {name} (hero glass; its rim may bend where the device allows: .st-lens) ---------- */
+
+/* The padding is the full inset, so a liquid rim gets its whole band (the lens never reaches past the padding). */
+.st-dash .st-continue {
+  display: flex;
+  align-items: center;
+  gap: var(--st-space-4);
+  min-height: 72px;
+  padding: var(--st-inset);
+  border-radius: var(--st-r-surface);
+  color: var(--st-text);
+  text-decoration: none;
+  transform: none;
+  transition:
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    box-shadow var(--st-dur-hover) var(--st-ease-out);
+  animation: st-rise var(--st-dur-enter) var(--st-ease-out) both;
+}
+.st-dash .st-continue:hover {
+  background-color: rgb(var(--st-well-rgb) / 0.26);
+  box-shadow: var(--st-sheen-hero), var(--st-rim-light), var(--st-depth-2), var(--st-glow-action);
+  transform: none;
+}
+/* Under a liquid rim too: the lens's own fill is a gradient, so the colour under it deepens on hover (the words only
+   gain contrast; the filter itself never changes). */
+.refract .stories-app[data-glass="liquid"] .st-dash .st-continue.is-liquid:hover {
+  background-color: rgb(var(--st-well-rgb) / 0.26);
+}
+.st-dash .st-dash-continue__icon {
+  width: 48px;
+  height: 48px;
+}
+.st-dash .st-continue__text {
+  display: flex;
+  flex: 1 1 auto;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.st-dash .st-continue__kind {
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
+}
+.st-dash .st-continue__name {
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-h3);
+  font-weight: var(--st-weight-display);
+  font-stretch: var(--st-wdth-display);
+  line-height: var(--st-lh-head);
+  overflow-wrap: anywhere;
+}
+/* The one way in: a round cream mark (the figure's cream), the accent's orange while the card is hovered. */
+.st-dash .st-dash-continue__go {
+  width: 44px;
+  height: 44px;
+  min-height: 0;
+}
+.st-dash .st-continue:hover .st-dash-continue__go {
+  background: var(--st-accent);
+  box-shadow: var(--st-glow-accent), var(--st-depth-1);
+  color: var(--st-on-accent);
+}
+
+/* ---------- The setup's card: the arc with its white knob, what is left, the way on ---------- */
+
+.st-dash .st-setupcard {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--st-space-4) var(--st-space-5);
+  margin: 0;
+  padding: var(--st-inset);
+  border-radius: var(--st-r-surface);
+  color: var(--st-text);
+  animation: st-rise var(--st-dur-enter) var(--st-ease-out) both;
+}
+.st-dash .st-setupcard__dial {
+  flex: none;
+  width: 112px;
+}
+.st-setupcard__dial .st-dial__value {
+  font-size: var(--st-fs-h2);
+}
+.st-setupcard__of {
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-chip);
+  font-weight: var(--st-weight-ui);
+  line-height: 1;
+}
+.st-dash .st-setupcard__text {
+  display: grid;
+  gap: var(--st-space-1);
+  flex: 1 1 240px;
+  min-width: 0;
+}
+.st-dash .st-setupcard__title {
+  margin: 0;
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-h3);
+  overflow-wrap: anywhere;
+}
+.st-dash .st-setupcard__left {
+  margin: 0;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
+  line-height: var(--st-lh-body);
+  overflow-wrap: anywhere;
+}
+.st-dash .st-setupcard__go {
+  margin-left: auto;
+}
+/* After Finish with steps skipped: a plain glass card listing them as small glass pills (§45.36 E15). */
+.st-dash .st-setupcard--left {
+  padding: var(--st-space-4) var(--st-inset);
+}
+.st-dash .st-dash-setup__mark {
+  width: 48px;
+  height: 48px;
+}
+.st-dash .st-setupcard--left .st-setupcard__title {
+  font-size: var(--st-fs-body);
+}
+.st-dash .st-setupcard__list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--st-space-2);
+  margin: var(--st-space-2) 0 0;
+  padding: 0;
+  list-style: none;
+}
+.st-dash .st-setupcard__list > li {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+  min-height: 32px;
+  padding: var(--st-space-1) var(--st-space-3);
+  border-radius: var(--st-r-round);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  color: var(--st-text);
+  font-size: var(--st-fs-chip);
+  font-weight: var(--st-weight-ui);
+  overflow-wrap: anywhere;
+}
+
+/* ---------- The page's own widths ---------- */
+
+/* Narrow (phones, a narrow window): the three counts and the cream card two by two; the media rows lose the
+   chevron (the whole row opens the studio). */
+@container st-dash (max-width: 399px) {
+  .st-tiles {
+    gap: var(--st-space-3);
+  }
+  .st-tile,
+  .st-dash-next {
+    padding: var(--st-space-4) var(--st-space-3);
+  }
+  .st-dash-stat {
+    min-height: 136px;
+  }
+  .st-dash-stat__go {
+    top: var(--st-space-3);
+    right: var(--st-space-3);
+  }
+  .st-dash-next {
+    min-height: 136px;
+  }
+  .st-dash-next__label .st-icon {
+    display: none;
+  }
+  .st-making__go {
+    display: none;
+  }
+  .st-making__row {
+    padding-right: var(--st-space-1);
+  }
+  .st-perf__item {
+    padding: var(--st-space-3);
+  }
+  /* The arc is the hero of its card: big and in the middle, the words and the way on under it. */
+  .st-dash .st-setupcard:not(.st-setupcard--left) {
+    justify-content: center;
+  }
+  .st-dash .st-setupcard__dial {
+    width: min(var(--st-dial), 100%);
+  }
+  .st-dash .st-setupcard:not(.st-setupcard--left) > .st-setupcard__text {
+    flex-basis: 100%;
+    text-align: center;
+  }
+  .st-dash .st-setupcard__go {
+    flex: 1 1 100%;
+  }
+  .st-dash .st-setupcard--left {
+    align-items: flex-start;
+  }
+  .st-dash .st-dash-setup__mark {
+    width: 40px;
+    height: 40px;
+  }
+  /* The pills take their own lines under the title. */
+  .st-dash-pills {
+    flex: 1 1 100%;
+  }
+}
+/* Wide enough: the three counts and the cream card in one row. */
+@container st-dash (min-width: 640px) {
+  .st-dash-stat,
+  .st-dash-next {
+    grid-column: span 3;
+  }
+}
+/* Wide: Connected accounts and How the videos do side by side, the arc a little bigger. */
+@container st-dash (min-width: 880px) {
+  .st-dash .st-tile:not(.st-tile--wide, .st-dash-stat) {
+    grid-column: span 6;
+  }
+  .st-dash .st-setupcard__dial {
+    width: 128px;
+  }
+  .st-tiles--start .st-dash-next {
+    grid-column: span 6;
+  }
+}

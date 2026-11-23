@@ -116,7 +116,7 @@ function ReviewQueue({ ws }: { ws: string }) {
   return (
     <section className="st-page st-studio">
       <header className="st-s-head">
-        <div>
+        <div className="st-plate">
           <h1 className="st-s-head__title">Review</h1>
           <p className="st-s-head__lede">Watch each new video. Approve it, ask for changes, or make a scene again.</p>
         </div>
@@ -133,7 +133,7 @@ function QueueGroup({ ws, group }: { ws: string; group: (typeof QUEUE)[number] }
   if (list.error && !list.data)
     return (
       <section aria-label={group.title}>
-        <h2 className="st-s-section">{group.title}</h2>
+        <h2 className="st-s-section st-plate">{group.title}</h2>
         <Notice tone="bad" action={<button type="button" className="st-btn" onClick={() => void list.reload()}>Try again</button>}>
           {list.error}
         </Notice>
@@ -142,20 +142,20 @@ function QueueGroup({ ws, group }: { ws: string; group: (typeof QUEUE)[number] }
   if (!list.data)
     return group.empty ? (
       <section aria-label={group.title}>
-        <h2 className="st-s-section">{group.title}</h2>
-        <Busy>Getting the videos to review…</Busy>
+        <h2 className="st-s-section st-plate">{group.title}</h2>
+        <Busy plate>Getting the videos to review…</Busy>
       </section>
     ) : null;
   const items = list.data.filter((s) => group.statuses.includes(s.status));
   if (!items.length && !group.empty) return null;
   return (
     <section aria-label={group.title}>
-      <h2 className="st-s-section">{group.title}</h2>
+      <h2 className="st-s-section st-plate">{group.title}</h2>
       {items.length ? (
         <ul className="st-s-queue">
           {items.map((s) => (
             <li key={s.storyId}>
-              <A href={storiesHref({ name: "review_story", storyId: s.storyId })} className="st-s-qcard">
+              <A href={storiesHref({ name: "review_story", storyId: s.storyId })} className="st-s-qcard st-glass">
                 {s.coverUrl ? <img className="st-s-qcard__cover" src={s.coverUrl} alt="" width={90} height={160} /> : <span className="st-s-qcard__cover is-blank" aria-hidden="true" />}
                 <span className="st-s-qcard__text">
                   <Tag tone={STATUS_TONE[s.status]}>{STATUS_LABEL[s.status]}</Tag>
@@ -171,7 +171,7 @@ function QueueGroup({ ws, group }: { ws: string; group: (typeof QUEUE)[number] }
           ))}
         </ul>
       ) : (
-        <p className="st-s-field__hint">{group.empty}</p>
+        <p className="st-s-field__hint st-plate">{group.empty}</p>
       )}
       <ShowMore list={list} what="videos" />
     </section>
@@ -415,7 +415,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
   if (!story)
     return (
       <section className="st-page st-studio">
-        <Busy>Getting the video…</Busy>
+        <Busy plate>Getting the video…</Busy>
       </section>
     );
 
@@ -443,9 +443,9 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
   return (
     <section className="st-page st-studio">
       <header className="st-s-head">
-        <div>
-          <A href={storiesHref({ name: "review" })} className="st-s-back">
-            ‹ Review
+        <div className="st-plate">
+          <A href={storiesHref({ name: "review" })} className="st-s-back st-s-back--orb">
+            <span className="st-s-back__orb">‹</span> Review
           </A>
           <h1 className="st-s-head__title">{story.title}</h1>
           <p className="st-s-head__lede">
@@ -473,7 +473,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
 
         <div className="st-s-review__side">
           {live ? (
-            <section className="st-s-panel" aria-label="Being made again">
+            <section className="st-s-panel st-glass" aria-label="Being made again">
               <StepTrack job={job} story={story} label={`Making ${story.title}`} />
               <A href={storiesHref({ name: "production_story", storyId })} className="st-btn">
                 Watch it being made
@@ -553,7 +553,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
           {problem ? <Notice tone="bad">{problem}</Notice> : null}
 
           {deciding ? (
-            <section className="st-s-panel st-s-decide" aria-label="Your decision">
+            <section className="st-s-panel st-s-decide st-glass" aria-label="Your decision">
               <div className="st-s-decide__main">
                 <button
                   type="button"
@@ -662,7 +662,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
           ) : null}
 
           {done ? (
-            <section className="st-s-panel st-s-decide" aria-label="Post it">
+            <section className="st-s-panel st-s-decide st-glass" aria-label="Post it">
               <button type="button" className="st-btn st-btn--main st-s-big st-postit" onClick={() => setPosting(true)}>
                 Post it
               </button>
@@ -690,7 +690,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
               <p className="st-s-field__hint">The video ends with “Check your local road rules.”</p>
             </section>
           ) : null}
-          <details className="st-s-details st-s-made">
+          <details className="st-s-details st-s-made st-glass">
             <summary className="st-s-details__sum">How it was made</summary>
             <dl className="st-s-facts">
               <dt>Model and effort for this video</dt>
@@ -706,7 +706,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
       </div>
 
       {story.scenes.length ? (
-        <section className="st-s-panel" aria-labelledby="st-scenes-title">
+        <section className="st-s-panel st-glass" aria-labelledby="st-scenes-title">
           <h2 className="st-s-panel__title" id="st-scenes-title">
             Scenes
           </h2>
@@ -744,13 +744,13 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
 
       {editable && script ? (
         <>
-          <section className="st-s-panel" aria-labelledby="st-captions-title">
+          <section className="st-s-panel st-glass" aria-labelledby="st-captions-title">
             <h2 className="st-s-panel__title" id="st-captions-title">
               Captions
             </h2>
             <CaptionEditor key={`c:${story.scriptVersion}:${story.version}`} ws={ws} info={info} story={story} script={script} saving={saving} onSave={(e) => void save(e)} tab={captionTab} onTab={setCaptionTab} />
           </section>
-          <section className="st-s-panel" aria-labelledby="st-sfx-title">
+          <section className="st-s-panel st-glass" aria-labelledby="st-sfx-title">
             <h2 className="st-s-panel__title" id="st-sfx-title">
               Sound effects and music
             </h2>
@@ -758,7 +758,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
           </section>
         </>
       ) : done ? (
-        <p className="st-s-field__hint">An approved video can&apos;t be changed. Its captions and sounds stay as they are.</p>
+        <p className="st-s-field__hint st-plate">An approved video can&apos;t be changed. Its captions and sounds stay as they are.</p>
       ) : null}
 
       {unusable ? (

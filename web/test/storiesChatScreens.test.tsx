@@ -468,3 +468,63 @@ describe("references", () => {
     expect(location.pathname).toBe(`/stories/references/${made.refId}`);
   }, 20_000);
 });
+
+describe("the warm liquid glass on a reference video's page", () => {
+  it("keeps one main action: Analyze it before the analysis, Use in a video after", async () => {
+    await render(<ReferencesScreen ws="stories" page={page({ name: "reference", refId: REF.ready })} />);
+    await until(() => !!byText("button", "Analyze it"));
+    expect(byText("button", "Analyze it")?.classList.contains("st-chat-btn--main")).toBe(true);
+    const use = byText("button", "Use in a video")!;
+    expect(use.classList.contains("st-chat-btn--main")).toBe(false);
+    expect(use.getAttribute("aria-disabled")).toBe("true");
+
+    await act(async () => root.unmount());
+    root = createRoot(host);
+    await render(<ReferencesScreen ws="stories" page={page({ name: "reference", refId: REF.analyzed })} />);
+    await until(() => !!$(".st-ref-analysis"));
+    expect(byText("button", "Analyze again")?.classList.contains("st-chat-btn--main")).toBe(false);
+    expect(byText("button", "Use in a video")?.classList.contains("st-chat-btn--main")).toBe(true);
+  });
+
+  it("shows the hook and the pacing as big numerals with a small unit, in the same words", async () => {
+    await render(<ReferencesScreen ws="stories" page={page({ name: "reference", refId: REF.analyzed })} />);
+    await until(() => !!$(".st-ref-analysis"));
+    const big = $$(".st-ref-big");
+    expect(big).toHaveLength(2);
+    expect(big[0]!.textContent).toMatch(/^At \d+:\d\d$/);
+    expect(big[0]!.querySelector(".st-stat__num")?.textContent).toMatch(/^\d+:\d\d$/);
+    expect(big[0]!.querySelector(".st-stat__unit")?.textContent).toBe("At");
+    expect(big[1]!.textContent).toMatch(/^[\d.]+ cuts? every 10 seconds$/);
+    expect(big[1]!.querySelector(".st-stat__unit")?.textContent).toMatch(/^cuts? every 10 seconds$/);
+  });
+
+  it("plays the video with Stories' own controls, never the browser's grey strip", async () => {
+    await render(<ReferencesScreen ws="stories" page={page({ name: "reference", refId: REF.analyzed })} />);
+    await until(() => !!$("video.st-ref-player__video"));
+    const video = $("video.st-ref-player__video") as HTMLVideoElement;
+    expect(video.controls).toBe(false);
+    const play = vi.spyOn(video, "play").mockImplementation(async () => undefined);
+    await click($(".st-ref-controls button[aria-label='Play']"));
+    expect(play).toHaveBeenCalledTimes(1);
+    const seek = $(".st-ref-seek") as HTMLInputElement;
+    expect(seek.type).toBe("range");
+    expect(seek.getAttribute("aria-label")).toBe("Where in the video");
+    for (const name of ["Sound off", "Full screen"]) expect($(`.st-ref-controls button[aria-label='${name}']`), name).not.toBeNull();
+    // Round icon buttons keep their name for screen readers only: no new hover tooltip words.
+    for (const b of $$(".st-ref-controls button, .st-chat-btn--icon")) expect(b.getAttribute("title") ?? "", b.getAttribute("aria-label") ?? "").toBe("");
+  });
+
+  it("shows a running analysis' own progress as the arc with the white knob beside the steps", async () => {
+    store.knobs.refJobInGet = true;
+    store.knobs.refSeconds = 9;
+    await render(<ReferencesScreen ws="stories" page={page({ name: "reference", refId: REF.ready })} />);
+    await until(() => !!byText("button", "Analyze it"));
+    await click(byText("button", "Analyze it"));
+    await until(() => !!$(".st-ref-card2 .st-chat-progress"));
+    const dial = $(".st-ref-run .st-chat-progress--dial .st-dial[role=progressbar]");
+    expect(dial).not.toBeNull();
+    expect(dial!.getAttribute("aria-label")).toBe("How far the analysis is");
+    expect(dial!.querySelector(".st-dial__knob")).not.toBeNull();
+    expect($(".st-ref-busybar")).toBeNull();
+  }, 20_000);
+});
