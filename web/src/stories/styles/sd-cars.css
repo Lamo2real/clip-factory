@@ -235,20 +235,13 @@
 }
 
 /* ---------- Cars (screens/Cars.tsx): the one big "Make a car", and Characters' way to the cars ---------- */
-.st-s-makecar {
-  min-height: 56px;
-  padding: 0 var(--st-space-6);
-  font-family: var(--st-font-display);
-  font-size: 1.15rem;
-  font-weight: 400;
-}
-
 .st-s-makecar .st-icon {
   flex: none;
 }
 
-.st-s-tocars {
-  justify-self: start;
+/* The real control is the hidden file input: its keyboard focus shows on the visible button. */
+.st-s-photos__add:has(input:focus-visible) .st-btn {
+  box-shadow: var(--st-focus-ring);
 }
 
 @media (prefers-reduced-motion: reduce) {

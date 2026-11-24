@@ -4,11 +4,9 @@
 // voice and picks its car sounds first (§45.41). The samples are the videos' own sounds (samples.ts). Tapping a chip
 // only picks it; its play button plays it, and a second tap stops it.
 import { useState } from "react";
-import { A } from "../../components/ui.tsx";
-import { navigate } from "../../lib/router.ts";
 import { CATALOG } from "../engine/catalog.ts";
 import type { CharacterKind, CharacterVoice, NoiseId, SfxId } from "../engine/types.ts";
-import { storiesHref } from "../routes.ts";
+import { setStoriesDevicePref } from "../prefs.ts";
 import { Chip, HearButton, Notice, Pick, Slider, type HearProp } from "./kit.tsx";
 import { CHAR_LIMITS, VOICE_STYLE } from "./looks.ts";
 import { CAR_SFX, playSample, SAMPLE_WORDS, sampleUrl, snapPitch, useSamples, type SampleRef } from "./samples.ts";
@@ -19,19 +17,10 @@ function toggle<T extends string>(list: T[], v: T, max: number): T[] {
   return list.length >= max ? list : [...list, v];
 }
 
-const SOUND_SETTINGS = `${storiesHref({ name: "settings", section: "storage" })}#sounds-and-motion`;
-
-/** Settings › Storage and production, scrolled to its Sounds and motion card once it is drawn. */
-function openSoundSettings(e: { preventDefault(): void }): void {
-  e.preventDefault();
-  navigate(SOUND_SETTINGS);
-  let tries = 0;
-  const find = () => {
-    const card = document.getElementById("sounds-and-motion");
-    if (card) card.scrollIntoView?.({ block: "start" });
-    else if (++tries < 90) requestAnimationFrame(find);
-  };
-  requestAnimationFrame(find);
+/** Turns Clips Funded's Sounds on right here (the same switch as Settings › Sounds and motion): the page, and a
+ * character not saved yet, stay as they are. */
+function turnSoundsOn(): void {
+  setStoriesDevicePref("sound.enabled", true);
 }
 
 export function SoundsPart({
@@ -75,9 +64,9 @@ export function SoundsPart({
       {samples.state === "off" ? (
         <div className="st-sd-hint" role="status">
           <span className="st-sd-hint__text">{SAMPLE_WORDS.soundsOff}</span>
-          <A href={SOUND_SETTINGS} className="st-btn st-sd-hint__btn" onClick={openSoundSettings}>
+          <button type="button" className="st-btn st-sd-hint__btn" onClick={turnSoundsOn}>
             {SAMPLE_WORDS.turnOn}
-          </A>
+          </button>
         </div>
       ) : null}
       {otherMaker ? <p className="st-s-field__hint st-sd-other">{SAMPLE_WORDS.otherMaker}</p> : null}
@@ -150,6 +139,7 @@ export function SoundsPart({
         <span className="st-s-field__label">
           Noises ({voice.noises.length} of {CHAR_LIMITS.noises})
         </span>
+        {voiced ? null : <p className="st-s-field__hint st-sd-quiet">{SAMPLE_WORDS.quietLine}</p>}
         <div className="st-s-chips st-sd-chips">
           {CATALOG.noises.map((n) => (
             <Chip

@@ -74,3 +74,19 @@ def test_an_older_script_without_cars_reads_as_before() -> None:
     del s["cars"]
     beats = [i for i in safety.items(s, None) if i["ref"] == "beat:s1:1"]
     assert beats[0]["action"] == "the car does speed up"
+
+
+def test_a_drivers_wave_is_an_item_and_a_passengers_is_not() -> None:
+    s = script()
+    s["cast"]["c3"] = {"name": "Bo"}
+    scene = s["scenes"][0]
+    scene["actors"] = [{"castId": "c1", "inCar": "car1"}, {"castId": "c3", "inCar": "car1"}]
+    scene["beats"] = [
+        {"at": 2.0, "dur": 1.0, "who": "car1", "do": "speed_up"},
+        {"at": 2.2, "dur": 0.8, "who": "c1", "do": "wave"},
+        {"at": 2.4, "dur": 0.8, "who": "c3", "do": "wave"},
+    ]
+    beats = {i["ref"]: i for i in safety.items(s, None) if i["ref"].startswith("beat:")}
+    assert sorted(beats) == ["beat:s1:0", "beat:s1:1"]  # the passenger's wave is no driving item
+    assert beats["beat:s1:1"]["action"] == "Pip does wave from the driver's seat"
+    assert beats["beat:s1:1"]["at"] == 2.2 and beats["beat:s1:0"]["do"] == "speed_up"

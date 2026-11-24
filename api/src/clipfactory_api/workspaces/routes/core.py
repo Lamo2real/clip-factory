@@ -1299,7 +1299,8 @@ def create_story(app: App, req: Request) -> Response:
         topic = guidance.match(g, [brief["title"], brief["logline"]]) if brief["category"] == "driving_safety" else None
     if idea is not None and idea.get("category") == "driving_safety" and not topic:
         topic = guidance.match(g, ideas.idea_texts(idea))  # the concept's words count too (an Expand put them there)
-    series_id = fields.get("seriesId") or (idea or {}).get("seriesId")
+    # null: No series on purpose; left out: the idea's series (§45.43)
+    series_id = fields["seriesId"] if "seriesId" in fields else (idea or {}).get("seriesId")
     if series_id and not _series_exists(ctx, series_id):
         series_id = None  # §45.43: the series is gone: the video is made anyway, under No series
     category = str(brief.get("category") or "explainer")

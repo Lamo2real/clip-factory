@@ -137,7 +137,10 @@ function recapOf(store: MockStore, s: StoredSeries, story: Story): { summary: st
   const { people, car } = namesOf(store, s);
   const who = [...people, ...(car ? [car] : [])].join(" and ") || "The cast";
   const n = episodesOf(store, s).findIndex((x) => x.storyId === story.storyId) + 1 || episodesOf(store, s).length + 1;
-  const summary = `Episode ${n}, ${story.title}: ${who} had a new day together, and it ended with a smile.`.slice(0, SUMMARY_MAX);
+  // The video's own scenes say what happened (a practice recap: the real one reads the script).
+  const scenes = story.scenes.map((x) => x.title).filter(Boolean).slice(0, 3);
+  const what = scenes.length ? `${scenes.join(", then ")}` : "a new day together";
+  const summary = `Episode ${n}, ${story.title}: ${who}. ${what}.`.slice(0, SUMMARY_MAX);
   const stands = `Where things stand: after "${story.title}", ${who} are ready for the next day.`;
   let storySoFar: string;
   if (s.storySoFarBy === "owner" && s.storySoFar) {
@@ -193,14 +196,14 @@ export function seed(store: MockStore): void {
     castIds: [C.pip, SEED_CAR_ID],
     cover: null,
     storySoFar: [
-      "Who: Pip and Rosso, the small red hatchback.",
+      "Who: Pip and Rosso, the small red hatchback, and Pip's friend Dash.",
       "Places: the car park and the town road.",
-      "Running jokes: Pip forgets where Rosso is parked.",
-      "Where things stand: Pip bought Rosso and drove it home, slowly.",
+      "Running jokes: Pip forgets where Rosso is parked, and builds snacks too tall.",
+      "Where things stand: Pip bought Rosso, and his sandwich tower fell off its roof.",
     ].join("\n"),
     storySoFarBy: "ai",
     storySoFarAt: iso(at + 86_400_000),
-    summaries: [{ storyId: S.published, summary: "Pip bought Rosso, the red hatchback, and drove it home slowly, waving at everyone.", by: "ai", at: iso(at + 86_400_000) }],
+    summaries: [{ storyId: S.published, summary: "Pip built the tallest sandwich ever on Rosso's roof in the car park. Dash wanted a bite, Rosso honked, and the tower fell.", by: "ai", at: iso(at + 86_400_000) }],
     recap: null,
     version: 2,
     createdAt: iso(at),

@@ -4,7 +4,9 @@ The creative director reads the series (its story so far and the episodes before
 approved (its scenes, captions and beats), and writes two things: a short summary of that episode and the whole
 series so far. The model is the owner's "Small text edits" choice (the task ``text_edit``). The ``SERIES#`` item is
 written in the same transaction as the task's end, under the version that was read: a series changed meanwhile (the
-owner edited it, or another recap ran) fails the task with "Write it again", and nothing is half written.
+owner edited it, or another recap ran) is read again and the recap written once more from it; changed a second time,
+the task fails with "Write it again", and nothing is half written. Once the owner has edited the story so far it stays
+the owner's (``storySoFarBy`` "owner"), so every later recap keeps the owner's words.
 """
 
 from __future__ import annotations
@@ -17,6 +19,7 @@ from lamostories_agent.series_memory import STORY_SO_FAR_MAX, SUMMARY_MAX, episo
 
 from .ask import ask_json, user
 from .captions import _script, _story_data
+from .characters import strip_brands
 from .common import TaskFailed, now_iso, owned
 from .store import Expr
 from .work import GONE, Outcome, TaskEnv
@@ -137,6 +140,7 @@ def recap(env: TaskEnv) -> Outcome:
         failure=FAILED,
         max_tokens=6000,
     )
+    found = {k: _no_brands(v) for k, v in found.items()}
     at = now_iso()
     kept = [e for e in _summaries(series) if e["storyId"] != story_id]
     kept.append({"storyId": story_id, "summary": found["episodeSummary"], "by": "ai", "at": at})
@@ -146,7 +150,7 @@ def recap(env: TaskEnv) -> Outcome:
             {
                 "summaries": kept[-KEEP_SUMMARIES:],
                 "storySoFar": found["storySoFar"],
-                "storySoFarBy": "ai",
+                "storySoFarBy": "owner" if by == "owner" else "ai",  # the owner's words stay the owner's
                 "storySoFarAt": at,
                 "updatedAt": at,
             }
@@ -163,4 +167,11 @@ def recap(env: TaskEnv) -> Outcome:
         "episodeSummary": found["episodeSummary"],
         "storySoFar": found["storySoFar"],
     }
-    return Outcome(result, reply, ops=[("update", env.pk, str(series["sk"]), write)], refused=GONE)
+    return Outcome(
+        result, reply, ops=[("update", env.pk, str(series["sk"]), write)], refused=GONE, again_if_refused=True
+    )
+
+
+def _no_brands(text: str) -> str:
+    """Each line with any car make or model swapped for "car" (the lines of the story so far stay lines)."""
+    return "\n".join(strip_brands(line)[0] for line in text.split("\n"))

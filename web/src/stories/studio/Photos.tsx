@@ -22,6 +22,10 @@ export interface Photo {
 /** At most this many photos send at once. */
 const AT_ONCE = 3;
 
+/** The photos still on their way, by key (the asset id once sent, null when it did not): a panel closed while one
+ * sends keeps it sending, and the panel opened again shows how it ended instead of sending it again. */
+const inflight = new Map<string, Promise<string | null>>();
+
 /** The files a drop carries (its files list, else its file items). */
 export function filesFrom(dt: DataTransfer | null | undefined): File[] {
   if (!dt) return [];
@@ -106,29 +110,47 @@ export function Photos({ ws, max, photos, onChange, label, hint }: { ws: string;
   const patch = (key: string, p: Partial<Photo>) => commit(list.current.map((x) => (x.key === key ? { ...x, ...p } : x)));
   const here = (key: string) => list.current.some((p) => p.key === key);
 
+  const settle = (key: string, assetId: string | null) => {
+    if (!live.current || !here(key)) return;
+    if (assetId) return patch(key, { assetId, state: "ready" });
+    patch(key, { state: "failed" });
+    setProblem("That photo didn't send. Tap it to try again.");
+  };
+
   useEffect(() => {
     live.current = true;
+    // Opened again: a photo that was still sending shows how it ends; one that never started (it was waiting its turn
+    // when the panel closed) is "Tap to try again".
+    for (const p of list.current) {
+      if (p.state !== "sending") continue;
+      const on = inflight.get(p.key);
+      if (on) void on.then((assetId) => settle(p.key, assetId));
+      else patch(p.key, { state: "failed" });
+    }
     return () => {
       live.current = false;
       queue.current = [];
-      // A photo still on its way when the panel closes is "Tap to try again" when it opens again.
-      if (list.current.some((p) => p.state === "sending")) commit(list.current.map((p) => (p.state === "sending" ? { ...p, state: "failed" } : p)));
     };
-    // Only on unmount.
+    // Only on mount and unmount (patch and settle read the newest list through refs).
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   async function send(photo: Photo) {
-    try {
-      const target = await storiesApi().designUpload(ws, { filename: photo.file.name, contentType: photo.file.type, size: photo.file.size });
-      await putFile({ key: target.assetId, uploadUrl: target.uploadUrl, headers: target.headers }, photo.file, (n) => {
-        if (live.current) setProgress((m) => ({ ...m, [photo.key]: n }));
-      });
-      if (live.current && here(photo.key)) patch(photo.key, { assetId: target.assetId, state: "ready" });
-    } catch {
-      if (!live.current || !here(photo.key)) return;
-      patch(photo.key, { state: "failed" });
-      setProblem("That photo didn't send. Tap it to try again.");
-    }
+    const on = (async () => {
+      try {
+        const target = await storiesApi().designUpload(ws, { filename: photo.file.name, contentType: photo.file.type, size: photo.file.size });
+        await putFile({ key: target.assetId, uploadUrl: target.uploadUrl, headers: target.headers }, photo.file, (n) => {
+          if (live.current) setProgress((m) => ({ ...m, [photo.key]: n }));
+        });
+        return target.assetId;
+      } catch {
+        return null;
+      }
+    })();
+    inflight.set(photo.key, on);
+    const assetId = await on;
+    inflight.delete(photo.key);
+    settle(photo.key, assetId);
   }
 
   function pump() {
@@ -219,20 +241,26 @@ export function Photos({ ws, max, photos, onChange, label, hint }: { ws: string;
         ) : null}
         <span className="st-s-photos__drop">{drop.over ? "Let go to add" : "Drop photos here"}</span>
         <span className="st-s-photos__add">
+          {/* Never disabled: a full strip still takes the tap or the key and says why (aria-disabled). */}
           <input
             type="file"
             multiple
             accept="image/png,image/jpeg,image/webp"
             className="st-s-sr"
             id={`${id}-f`}
-            disabled={full}
+            aria-disabled={full || undefined}
+            onClick={(e) => {
+              if (!full) return;
+              e.preventDefault();
+              setProblem(tooMany);
+            }}
             onChange={(e) => {
               const files = Array.from(e.target.files ?? []);
               e.target.value = "";
               if (files.length) add(files);
             }}
           />
-          <label htmlFor={`${id}-f`} className="st-btn" aria-disabled={full || undefined} onClick={() => full && setProblem(tooMany)}>
+          <label htmlFor={`${id}-f`} className="st-btn" aria-disabled={full || undefined}>
             Add photos
           </label>
         </span>

@@ -163,6 +163,12 @@ def test_a_make_in_the_words_is_reported_then_replaced() -> None:
     assert strip_brands("a mini seat that is smart") == ("a mini seat that is smart", [])
     assert strip_brands("Fordham Road") == ("Fordham Road", [])  # whole words only
     assert "toyota" in BRANDS and "mini" not in BRANDS
+    # models and nicknames too, and a make with a hyphen after it; everyday words that are also models stay
+    assert strip_brands("my Corolla, the Merc and a Mini Cooper") == ("my car, the car and a car",
+                                                                     ["Corolla", "Merc", "Mini Cooper"])  # fmt: skip
+    assert strip_brands("a BMW-ish Model 3") == ("a car-ish car", ["BMW", "Model 3"])
+    assert strip_brands("a Toyota Corolla") == ("a car", ["Toyota", "Corolla"])
+    assert strip_brands("golf, a beetle and a merchant") == ("golf, a beetle and a merchant", [])
 
 
 @pytest.mark.parametrize(
@@ -208,6 +214,24 @@ def test_four_photos_make_four_labelled_pictures_at_1024_and_three_options(tmp_p
     assert model.calls[0]["task"] == "character_design" and model.calls[0]["ctx"].agent_id == "character"
     assert not any((tmp_path / "work").glob("design-*"))  # every download is cleaned up
     assert db.prefixed(PK, "CHAR#") == [db.get(PK, "CHAR#C1")]  # nothing saved
+
+
+def test_one_photo_that_cannot_be_opened_is_named(tmp_path: Path) -> None:
+    seen: list[int] = []
+
+    def opens(path: Path, long_edge: int | None = None) -> bytes:
+        seen.append(1)
+        if len(seen) == 3:
+            raise ValueError("not a picture")
+        return b"\xff\xd8jpeg"
+
+    model = FakeModel()
+    svc, db, s3 = services(tmp_path, model, images=opens)  # type: ignore[arg-type]
+    db.seed(car_task(seed_photos(db, s3, 4)))
+    assert run(svc) == "failed"
+    assert db.get(PK, "TASK#T1")["error"] == "Photo 3 can't be opened. Remove it and try again."
+    assert model.calls == []
+    assert not any((tmp_path / "work").glob("design-*"))
 
 
 def test_up_to_three_photos_go_at_the_helpers_own_size(tmp_path: Path) -> None:

@@ -227,6 +227,14 @@ describe("the car's photos", () => {
     expect(puts.count).toBe(6);
     expect(upload).toHaveBeenCalledWith("stories", { filename: "car-1.png", contentType: "image/png", size: 3000 });
     expect(document.querySelectorAll(".st-s-photos__item.is-ready")).toHaveLength(6);
+    // Full: the file input is never disabled, so a key or a tap on it still says why instead of opening the picker.
+    const input = document.querySelector<HTMLInputElement>('.st-s-photos input[type="file"]')!;
+    expect(input.disabled).toBe(false);
+    expect(input.getAttribute("aria-disabled")).toBe("true");
+    const pick = new MouseEvent("click", { bubbles: true, cancelable: true });
+    await act(async () => input.dispatchEvent(pick));
+    expect(pick.defaultPrevented).toBe(true);
+    expect(text()).toContain("Up to 6 photos. Remove one first.");
     await click(control("Remove photo 1"), 50);
     expect(thumbs()).toHaveLength(5);
     expect(control("Add photos").getAttribute("aria-disabled")).toBeNull();
@@ -243,6 +251,19 @@ describe("the car's photos", () => {
     expect(text()).toContain("Pick a PNG, JPEG or WebP picture.");
     await wait(4000);
     expect(puts.count).toBe(2);
+  });
+
+  it("a photo still sending when the panel closes keeps sending, and shows ready when it opens again", async () => {
+    await show(<CharactersScreen {...page({ name: "character_new", kind: "car" })} />);
+    await addFiles([png("front.png")]);
+    expect(document.querySelectorAll(".st-s-photos__item.is-sending")).toHaveLength(1);
+    await click(control("Close"), 50);
+    expect(document.querySelector(".st-s-photos")).toBeNull();
+    await click(control("Design with AI"), 50);
+    await wait(3000);
+    expect(document.querySelectorAll(".st-s-photos__item.is-ready")).toHaveLength(1);
+    expect(text()).not.toContain("Tap to try again");
+    expect(puts.count).toBe(1); // sent once, never again
   });
 
   it("a photo that did not send says Tap to try again, and a tap sends it again", async () => {
@@ -366,11 +387,11 @@ describe("the car editor", () => {
     expect(location.pathname).toMatch(/^\/stories\/cars\/[0-9A-Z]{26}$/);
   });
 
-  it("a car's page redesigns it from its own pictures, and an older link under Characters moves to Cars", async () => {
+  it("a car's page redesigns it from its own pictures, and an older link at a person's address moves to the car's", async () => {
     await show(<CharactersScreen {...page({ name: "character", characterId: characters.SEED_CAR_ID })} />);
     expect(location.pathname).toBe(`/stories/cars/${characters.SEED_CAR_ID}`);
-    const back = control(/Cars$/);
-    expect(back.getAttribute("href")).toBe("/stories/cars");
+    const back = control(/Characters$/);
+    expect(back.getAttribute("href")).toBe("/stories/characters");
     const design = vi.spyOn(api, "designCharacter");
     await click(control("Design with AI"), 50);
     type(field(/^What is your car like\?/), "make it blue");
@@ -385,7 +406,7 @@ describe("the car editor", () => {
   });
 });
 
-describe("Cars: the cars' own place", () => {
+describe("Cars: characters of kind car", () => {
   const castCards = () => Array.from(document.querySelectorAll<HTMLAnchorElement>("a.st-s-cast__card"));
   const castNames = () => castCards().map((c) => c.querySelector(".st-s-cast__name")?.textContent);
 
@@ -397,41 +418,33 @@ describe("Cars: the cars' own place", () => {
     for (const path of ["/stories/cars", "/stories/cars/new", `/stories/cars/${characters.SEED_CAR_ID}`]) expect(storiesHref(matchStories(path, ""))).toBe(path);
   });
 
-  it("lists the cars only, each opening its own page, with one big Make a car; Characters lists the people and the way to Cars", async () => {
-    await show(<CarsScreen {...page({ name: "cars" })} />);
-    expect(document.querySelector("h1")?.textContent).toBe("Cars");
-    expect(castNames()).toEqual(["Rosso"]);
-    const card = castCards()[0]!;
+  it("Characters lists the people and the cars, each car with its Car tag and its own page, and one Make a car", async () => {
+    await show(<CharactersScreen {...page({ name: "characters" })} />);
+    expect(document.querySelector("h1")?.textContent).toBe("Characters");
+    expect(castNames()).toEqual(["Bolt", "Dash", "Nana Rose", "Pip", "Rosso"]);
+    const card = castCards().find((c) => c.textContent?.includes("Rosso"))!;
     expect(card.getAttribute("href")).toBe(`/stories/cars/${characters.SEED_CAR_ID}`);
     expect(card.querySelector(".st-s-tag")?.textContent).toBe("Car");
     expect(card.querySelector("canvas[role=img]")).not.toBeNull();
+    expect(castCards().find((c) => c.textContent?.includes("Pip"))!.getAttribute("href")).toBe(`/stories/characters/${C.pip}`);
     const make = Array.from(document.querySelectorAll<HTMLAnchorElement>("a")).filter((a) => a.textContent?.trim() === "Make a car");
     expect(make).toHaveLength(1);
     expect(make[0]!.getAttribute("href")).toBe("/stories/cars/new");
-    await act(async () => root.render(<ToastProvider><CharactersScreen {...page({ name: "characters" })} /></ToastProvider>));
-    await wait();
-    expect(castNames()).toEqual(["Bolt", "Dash", "Nana Rose", "Pip"]);
-    expect(control("Your car is in Cars ›").getAttribute("href")).toBe("/stories/cars");
-  });
-
-  it("with no cars it shows an empty garage with Make a car, and Characters has no way to Cars", async () => {
-    store.characters = store.characters.filter((c) => c.characterId !== characters.SEED_CAR_ID);
-    await show(<CarsScreen {...page({ name: "cars" })} />);
-    expect(text()).toContain("No cars yet");
-    expect(castCards()).toHaveLength(0);
-    const make = Array.from(document.querySelectorAll<HTMLAnchorElement>("a")).filter((a) => a.textContent?.trim() === "Make a car");
-    expect(make.map((a) => a.getAttribute("href"))).toEqual(["/stories/cars/new"]);
-    await act(async () => root.render(<ToastProvider><CharactersScreen {...page({ name: "characters" })} /></ToastProvider>));
-    await wait();
     expect(text()).not.toContain("in Cars");
   });
 
-  it("Make a car is the car flow under Cars: no kind tiles, New car, back to Cars, and Save car opens the car under Cars", async () => {
+  it("/stories/cars, an older link, is the same Characters gallery", async () => {
+    await show(<CarsScreen {...page({ name: "cars" })} />);
+    expect(document.querySelector("h1")?.textContent).toBe("Characters");
+    expect(castNames()).toEqual(["Bolt", "Dash", "Nana Rose", "Pip", "Rosso"]);
+  });
+
+  it("Make a car is the car flow: no kind tiles, New car, back to Characters, and Save car opens the car's page", async () => {
     const create = vi.spyOn(api, "createCharacter");
     await show(<CarsScreen {...page({ name: "car_new" })} />);
     expect(document.querySelector(".st-s-kind")).toBeNull();
     expect(document.querySelector("h1")?.textContent).toBe("New car");
-    expect(control(/Cars$/).getAttribute("href")).toBe("/stories/cars");
+    expect(control(/Characters$/).getAttribute("href")).toBe("/stories/characters");
     expect(text()).toContain("Your car's photos");
     expect(chosen("Car shape")).toBe("Hatchback");
     await addFiles([png("front.png")]);
@@ -445,14 +458,14 @@ describe("Cars: the cars' own place", () => {
     expect(location.pathname).toMatch(/^\/stories\/cars\/[0-9A-Z]{26}$/);
     const id = location.pathname.split("/").pop()!;
     expect(store.characters.find((c) => c.characterId === id)).toMatchObject({ kind: "car", references: [expect.anything()] });
-    // Its page under Cars, back to Cars, and Delete goes back there too.
+    // Its own page, back to Characters, and Delete goes back there too.
     await act(async () => root.render(<ToastProvider><CarsScreen {...page({ name: "car", characterId: id })} /></ToastProvider>));
     await wait();
     expect(location.pathname).toBe(`/stories/cars/${id}`);
-    expect(control(/Cars$/).getAttribute("href")).toBe("/stories/cars");
+    expect(control(/Characters$/).getAttribute("href")).toBe("/stories/characters");
     await click(control("Delete"), 50);
     await click(control("Delete", document.querySelector<HTMLElement>('[role="dialog"]')!), 2000);
-    expect(location.pathname).toBe("/stories/cars");
+    expect(location.pathname).toBe("/stories/characters");
   });
 });
 

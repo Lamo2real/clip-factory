@@ -37,6 +37,12 @@ export function seriesProblem(name: string, line: string, cast: Character[]): st
   return castProblem(cast);
 }
 
+/** Make the next episode (§45.43): a new video in the series with its cast, and the series' next saved idea already
+ * picked when it has one (with none, New video lists the other ideas, or asks for some in the series). */
+export function nextEpisodeHref(s: Pick<Series, "seriesId" | "castIds">, ideas: Pick<Idea, "ideaId">[]): string {
+  return storiesHref({ name: "production_new", ideaId: ideas[0]?.ideaId ?? null, castIds: s.castIds, seriesId: s.seriesId });
+}
+
 export function episodesWord(n: number): string {
   return n === 0 ? "No episodes yet" : n === 1 ? "1 episode" : `${n} episodes`;
 }
@@ -181,7 +187,7 @@ function Folder({ ws, seriesId }: { ws: string; seriesId: string }) {
   const chars = useLoad(() => storiesApi().listCharacters(ws), ws, "st-series-chars");
   const ideas = useLoad(() => storiesApi().listIdeas(ws, "saved"), ws, "st-series-ideas");
   const stories = useLoad(() => storiesApi().listStories(ws, { seriesId, limit: 50 }), `${ws}/${seriesId}`, "st-series-stories");
-  const [sheet, setSheet] = useState<"none" | "menu" | "rename" | "cover" | "delete">("none");
+  const [sheet, setSheet] = useState<"none" | "menu" | "rename" | "cover" | "cast" | "delete">("none");
   const s = series.data;
   const writing = !!s?.recap && s.recap.status !== "failed";
   usePoll(() => series.reload(), writing && active, 2000);
@@ -230,11 +236,7 @@ function Folder({ ws, seriesId }: { ws: string; seriesId: string }) {
           {s.line ? <p className="st-series-head__line">{s.line}</p> : null}
         </div>
         <div className="st-series-head__actions">
-          <button
-            type="button"
-            className="st-btn st-btn--main"
-            onClick={() => navigate(storiesHref({ name: "production_new", ideaId: null, castIds: s.castIds, seriesId: s.seriesId }))}
-          >
+          <button type="button" className="st-btn st-btn--main" onClick={() => navigate(nextEpisodeHref(s, mine))}>
             Make the next episode
           </button>
           <button type="button" className="st-btn" onClick={() => navigate(storiesHref({ name: "ideas", seriesId: s.seriesId, ask: true }))}>
@@ -336,6 +338,9 @@ function Folder({ ws, seriesId }: { ws: string; seriesId: string }) {
             <button type="button" className="st-btn" onClick={() => setSheet("cover")}>
               Change cover
             </button>
+            <button type="button" className="st-btn" onClick={() => setSheet("cast")}>
+              Change cast
+            </button>
             <button type="button" className="st-btn" onClick={() => setSheet("delete")}>
               Delete
             </button>
@@ -344,6 +349,7 @@ function Folder({ ws, seriesId }: { ws: string; seriesId: string }) {
       ) : null}
       {sheet === "rename" ? <RenameSheet ws={ws} series={s} onClose={() => setSheet("none")} onSaved={put} /> : null}
       {sheet === "cover" ? <CoverSheet ws={ws} series={s} cast={cast} onClose={() => setSheet("none")} onSaved={put} /> : null}
+      {sheet === "cast" ? <CastSheet ws={ws} series={s} onClose={() => setSheet("none")} onSaved={put} /> : null}
       {sheet === "delete" ? (
         <DeleteSheet
           ws={ws}
@@ -445,6 +451,55 @@ function StorySoFar({ ws, series: s, onSaved, onRecap }: { ws: string; series: S
         </Notice>
       ) : null}
     </section>
+  );
+}
+
+/** Who is in the series (the main character first, at most one car): a new episode starts with them. */
+function CastSheet({ ws, series: s, onClose, onSaved }: { ws: string; series: Series; onClose: () => void; onSaved: (s: Series) => void }) {
+  const chars = useLoad(() => storiesApi().listCharacters(ws), ws, "st-series-chars");
+  const [cast, setCast] = useState<string[]>(s.castIds);
+  const [problem, setProblem] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false);
+  const all = chars.data ?? [];
+
+  async function save() {
+    if (busy || !chars.data) return;
+    const picked = cast.map((id) => all.find((c) => c.characterId === id)).filter((c): c is Character => !!c);
+    const why = castProblem(picked);
+    if (why) return setProblem(why);
+    const castIds = castOrder(cast, all);
+    if (castIds.join() === s.castIds.join()) return onClose();
+    setBusy(true);
+    setProblem(null);
+    try {
+      onSaved(await storiesApi().patchSeries(ws, s.seriesId, { version: s.version, castIds }));
+      onClose();
+    } catch (e) {
+      setProblem(say(e));
+      setBusy(false);
+    }
+  }
+
+  return (
+    <StSheet
+      title="Who's in it?"
+      onClose={onClose}
+      wide
+      className="st-series-sheet st-series"
+      actions={
+        <>
+          <button type="button" className="st-btn" onClick={onClose}>
+            Cancel
+          </button>
+          <button type="button" className="st-btn st-btn--main" aria-disabled={busy || !chars.data || undefined} onClick={() => void save()}>
+            {busy ? "Saving…" : "Save"}
+          </button>
+        </>
+      }
+    >
+      {chars.data ? <CastPicker characters={all} value={cast} onChange={setCast} /> : <Busy>Getting your characters…</Busy>}
+      {problem ? <Notice tone="bad">{problem}</Notice> : null}
+    </StSheet>
   );
 }
 

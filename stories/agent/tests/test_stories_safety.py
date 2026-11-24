@@ -383,3 +383,28 @@ def test_the_last_look_s_problems_stand_until_a_new_look_and_are_never_added_twi
     assert fourth is not None and fourth["status"] == "review"
     assert fourth["safety"]["status"] == "ok" and fourth["safety"]["problems"] == []
     assert fourth["safety"]["checkedScriptVersion"] == fourth["scriptVersion"]
+
+
+@needs_deno
+def test_a_car_comedy_is_always_checked_for_driving_advice(tmp_path: Path) -> None:
+    """A comedy with a car of the cast (§45.42), no topic and the quality agent off: the fact check still runs, the
+    checker is told to report any driving advice (none of it is checked), and a caption that gives some holds the
+    story until it is taken out or a checked topic is picked."""
+    from lamostories_agent.safety import CAR_NOTE
+
+    script = sample()
+    script["cars"] = {"c2": {"name": "Rosso"}}
+    script["captions"] = [{"id": "cap1", "at": 0.5, "dur": 2, "text": "Check your mirrors first!"}]
+    advice = problem("caption:cap1", "This gives driving advice that is not on the checked list.")
+    job = job_item("J1", "S1", run=["safety"])
+    svc, store, table, fake = world(tmp_path, answers(fact_check=quality_off(advice)), job=job)
+    store.objects[PREFIX + "script/v1.json"] = (json.dumps(script).encode(), "application/json")
+    table.seed(story_item(scriptVersion=1, scriptKey=PREFIX + "script/v1.json", postCaptions=POST))
+    assert run_job(svc) == "needs_check"
+    check = fake.calls[0]
+    assert check["task"] == "fact_check" and check["allow_inactive"] is True  # never skipped
+    body = json.loads(check["messages"][0]["content"][1]["text"].split("\n", 1)[1])
+    assert body["guidance"] is None and body["note"] == CAR_NOTE
+    story = table.item(f"STORY#{STORY}")
+    assert story is not None and story["safety"]["status"] == "problems"
+    assert HELD_TOPIC in story["safety"]["problems"]

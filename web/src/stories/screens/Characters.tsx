@@ -5,9 +5,10 @@
 // redesign of this character, §45.34: which parts change is shown before "Use this" puts it in the editor), the
 // reference pictures, the AI picture when it is on (else the way to Settings › Video › Picture maker), and Delete.
 // New character first asks "What are you making?" (§45.41): a person (as above) or a car, made from up to 6 real
-// photos into cartoon cars to pick from; a saved car keeps those photos as its pictures. Cars have their own place
-// in the rail (Cars, screens/Cars.tsx, which uses NewCharacter and CharacterPage from here): the gallery here shows
-// people only, with a link to Cars, and a car's page always opens under Cars (/stories/cars/{id}).
+// photos into cartoon cars to pick from; a saved car keeps those photos as its pictures. A car is a character: the
+// gallery here shows the people and the cars (each car with its Car tag) and a "Make a car" next to New character;
+// a car's own addresses (screens/Cars.tsx: /stories/cars/new and /stories/cars/{id}, with NewCharacter and
+// CharacterPage from here) sit under Characters in the rail, and /stories/cars is this gallery.
 import "../styles/studio.css";
 import "../styles/sd-cars.css";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
@@ -30,10 +31,11 @@ import { CharacterEditor } from "../studio/CharacterEditor.tsx";
 import { CarDesign, DesignPanel, RedesignCompare } from "../studio/Design.tsx";
 import { useWorkspace } from "../studio/hooks.ts";
 import { Busy, celebrate, Notice, Pick, StSheet, Tag, type PickOption } from "../studio/kit.tsx";
-import { CHAR_LIMITS, DEFAULT_LOOK, inputOf, MOVE_LINE, newCar, newCharacter } from "../studio/looks.ts";
+import { CAR_MOVE_LINE, CHAR_LIMITS, DEFAULT_LOOK, inputOf, MOVE_LINE, newCar, newCharacter } from "../studio/looks.ts";
 import type { Photo } from "../studio/Photos.tsx";
 import { Portrait, References } from "../studio/References.tsx";
 import { count, isConflict, say } from "../studio/words.ts";
+import { StIcon } from "../ui.tsx";
 import { MakeIcon } from "./Ideas.tsx";
 import type { StoriesScreenProps } from "./types.ts";
 
@@ -56,26 +58,26 @@ export function EmptyCast({ title, children, action }: { title: string; children
   );
 }
 
-/** Where a character lives: people in Characters, cars in Cars (§45.41). */
+/** Which addresses a character's pages use: a person's /stories/characters/…, a car's /stories/cars/… (§45.41). Both
+ * are Characters in the rail. */
 export type CastPlace = "characters" | "cars";
 
 /** Back to the cast: the studio kit's back link with its round glass orb (the same as Production's and Review's). */
-function BackToCast({ place = "characters" }: { place?: CastPlace }) {
+function BackToCast() {
   return (
-    <A href={storiesHref({ name: place })} className="st-s-back st-s-back--orb">
-      <span className="st-s-back__orb">‹</span> {place === "cars" ? "Cars" : "Characters"}
+    <A href={storiesHref({ name: "characters" })} className="st-s-back st-s-back--orb">
+      <span className="st-s-back__orb">‹</span> Characters
     </A>
   );
 }
 
-/** A character's own page: a car's is under Cars. */
+/** A character's own page: a car's has its own address (/stories/cars/{id}). */
 export const characterHref = (c: { characterId: string; kind?: CharacterKind }) => storiesHref(c.kind === "car" ? { name: "car", characterId: c.characterId } : { name: "character", characterId: c.characterId });
 
-function Gallery({ ws }: { ws: string }) {
+export function Gallery({ ws }: { ws: string }) {
   const list = useLoad(() => storiesApi().listCharacters(ws), ws, "st-characters");
-  // People only: cars have their own place (Cars), so nothing shows in two lists.
-  const people = list.data?.filter((c) => !isCar(c)) ?? null;
-  const cars = list.data?.filter(isCar).length ?? 0;
+  // The whole cast: the people, then the cars (each with its Car tag).
+  const people = list.data ? [...list.data.filter((c) => !isCar(c)), ...list.data.filter(isCar)] : null;
   return (
     <section className="st-page st-studio st-s-make">
       <header className="st-s-head">
@@ -86,6 +88,10 @@ function Gallery({ ws }: { ws: string }) {
         <div className="st-s-head__actions">
           <A href={`${storiesHref({ name: "character_new" })}#design`} className="st-btn">
             Design with AI
+          </A>
+          <A href={storiesHref({ name: "car_new" })} className="st-btn st-s-makecar">
+            <StIcon name="car" size={18} />
+            Make a car
           </A>
           <A href={storiesHref({ name: "character_new" })} className="st-btn st-btn--main">
             New character
@@ -106,14 +112,14 @@ function Gallery({ ws }: { ws: string }) {
         <ul className="st-s-cast">
           {people.map((c) => (
             <li key={c.characterId}>
-              <A href={storiesHref({ name: "character", characterId: c.characterId })} className="st-glass st-lens st-s-cast__card">
+              <A href={characterHref(c)} className="st-glass st-lens st-s-cast__card">
                 <span className="st-s-cast__stage">
                   <CastPreview c={c} size={132} label={`${c.name}, moving`} />
                 </span>
                 <span className="st-s-cast__name">{c.name}</span>
-                <span className="st-s-cast__line">{c.personality || MOVE_LINE[c.movementStyle]}</span>
+                <span className="st-s-cast__line">{c.personality || (isCar(c) ? c.description || CAR_MOVE_LINE[c.movementStyle] : MOVE_LINE[c.movementStyle])}</span>
                 <span className="st-s-cast__tags">
-                  <Tag tone="sky">{CATALOG.movementStyles.find((m) => m.id === c.movementStyle)?.label ?? c.movementStyle}</Tag>
+                  {isCar(c) ? <Tag tone="coral">Car</Tag> : <Tag tone="sky">{CATALOG.movementStyles.find((m) => m.id === c.movementStyle)?.label ?? c.movementStyle}</Tag>}
                   <Tag>In {count(c.storyCount, "video")}</Tag>
                 </span>
               </A>
@@ -121,11 +127,6 @@ function Gallery({ ws }: { ws: string }) {
           ))}
         </ul>
       )}
-      {cars ? (
-        <A href={storiesHref({ name: "cars" })} className="st-btn st-s-tocars">
-          Your {cars === 1 ? "car is" : `${cars} cars are`} in Cars ›
-        </A>
-      ) : null}
     </section>
   );
 }
@@ -148,22 +149,30 @@ function kindArt(kind: CharacterKind) {
   );
 }
 
-/** A saved car keeps the photos it was made from as its pictures (§45.41), best effort, up to the pictures limit. */
-async function keepPhotos(ws: string, characterId: string, photos: Photo[]): Promise<void> {
-  for (const p of photos.filter((x) => x.state === "ready" && x.file.size > 0).slice(0, CHAR_LIMITS.refs)) {
+/** A saved car keeps the photos it was made from as its pictures (§45.41), best effort, up to the pictures limit, 3
+ * at a time (as the photos box sends them). Gives how many did not stay. */
+async function keepPhotos(ws: string, characterId: string, photos: Photo[]): Promise<number> {
+  const todo = photos.filter((x) => x.state === "ready" && x.file.size > 0).slice(0, CHAR_LIMITS.refs);
+  let missed = 0;
+  const one = async (p: Photo) => {
     try {
       const target = await storiesApi().referenceUpload(ws, characterId, { filename: p.file.name, contentType: p.file.type, size: p.file.size });
       await putFile({ key: target.assetId, uploadUrl: target.uploadUrl, headers: target.headers }, p.file);
       await storiesApi().referenceComplete(ws, characterId, target.assetId);
     } catch {
-      // The car is saved; a photo that does not stay can be added on its page.
+      missed += 1; // the car is saved; a photo that does not stay can be added on its page
     }
-  }
+  };
+  const lane = async () => {
+    for (let p = todo.shift(); p; p = todo.shift()) await one(p);
+  };
+  await Promise.all(Array.from({ length: Math.min(3, todo.length) }, lane));
+  return missed;
 }
 
 /**
- * New character, or (place "cars", Cars › Make a car) a new car: then the kind is a car from the start, so there are
- * no kind tiles, and the page says "New car".
+ * New character, or (place "cars", Characters › Make a car) a new car: then the kind is a car from the start, so
+ * there are no kind tiles, and the page says "New car".
  */
 export function NewCharacter({ ws, kind: asked, place = "characters" }: { ws: string; kind?: CharacterKind; place?: CastPlace }) {
   const toast = useToast();
@@ -214,7 +223,8 @@ export function NewCharacter({ ws, kind: asked, place = "characters" }: { ws: st
       toast.success(`Say hi to ${made.name}!`);
       if (isCar(c) && photos.current.some((p) => p.state === "ready")) {
         setKeeping(true);
-        await keepPhotos(ws, made.characterId, photos.current);
+        const missed = await keepPhotos(ws, made.characterId, photos.current);
+        if (missed) toast.info(missed === 1 ? "1 photo didn't stay. Add it on the car's page." : `${missed} photos didn't stay. Add them on the car's page.`);
       }
       // After the wait: never while Clip Factory is on screen (it happens once Clips Funded is back, §45.35 D17).
       storiesGoLater(characterHref(made), { replace: true });
@@ -228,7 +238,7 @@ export function NewCharacter({ ws, kind: asked, place = "characters" }: { ws: st
     <section className="st-page st-studio st-s-make">
       <header className="st-s-head">
         <div className="st-plate st-s-head__text">
-          <BackToCast place={place} />
+          <BackToCast />
           <h1 className="st-s-head__title">{place === "cars" ? "New car" : "New character"}</h1>
           <p className="st-s-head__lede">
             {car ? "Add photos of your car. Pick the cartoon car you like, then give it a name." : "Pick how they look, their faces, how they move and their sounds. Then give them a name."}
@@ -322,7 +332,7 @@ export function CharacterPage({ ws, characterId, place = "characters" }: { ws: s
   const wrongPlace = !!c && home !== place;
 
   useEffect(() => {
-    // An older link (the dashboard's Continue, the library, a chat card) to a car under Characters: the same page under Cars.
+    // An older link (the dashboard's Continue, the library, a chat card) to a car at a person's address: its own.
     if (wrongPlace && c) storiesGoLater(characterHref(c), { replace: true });
   }, [wrongPlace, c]);
 
@@ -360,7 +370,7 @@ export function CharacterPage({ ws, characterId, place = "characters" }: { ws: s
     try {
       await storiesApi().deleteCharacter(ws, characterId);
       toast.success(`${c.name} is deleted.`);
-      storiesGoLater(storiesHref({ name: home }), { replace: true });
+      storiesGoLater(storiesHref({ name: "characters" }), { replace: true });
     } catch (e) {
       setAsking(false);
       setProblem(say(e));
@@ -372,7 +382,7 @@ export function CharacterPage({ ws, characterId, place = "characters" }: { ws: s
   if (loaded.error && !c)
     return (
       <section className="st-page st-studio st-s-make">
-        <Notice tone="bad" action={<A href={storiesHref({ name: place })} className="st-btn">{place === "cars" ? "Back to Cars" : "Back to Characters"}</A>}>
+        <Notice tone="bad" action={<A href={storiesHref({ name: "characters" })} className="st-btn">Back to Characters</A>}>
           {loaded.error}
         </Notice>
       </section>
@@ -388,7 +398,7 @@ export function CharacterPage({ ws, characterId, place = "characters" }: { ws: s
     <section className="st-page st-studio st-s-make">
       <header className="st-s-head">
         <div className="st-plate st-s-head__text">
-          <BackToCast place={home} />
+          <BackToCast />
           <h1 className="st-s-head__title">{c.name}</h1>
           <p className="st-s-head__lede">
             In {count(c.storyCount, "video")}. Changes show in new videos and in a Remake the whole video, never in one already made.

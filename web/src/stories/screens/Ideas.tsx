@@ -82,6 +82,8 @@ export function IdeasScreen({ ws, page }: StoriesScreenProps) {
   const seriesFilter = page.name === "ideas" ? filterOf(page) : "all";
   const { list: seriesList } = useSeriesList(ws);
   const inSeries = seriesOn(seriesFilter, seriesList);
+  // The address's series id, even while the list loads or could not be read (the API drops one whose series is gone).
+  const seriesHere = inSeries?.seriesId ?? (seriesFilter === "all" || seriesFilter === "none" ? undefined : seriesFilter);
   const [topics, setTopics] = useState<GuidanceTopic[] | null>(null);
   const workspace = useWorkspace(ws);
   const info = useAiInfo(ws);
@@ -179,7 +181,9 @@ export function IdeasScreen({ ws, page }: StoriesScreenProps) {
           series={inSeries}
           onCancel={() => setOpen("none")}
           onSave={async (input) => {
-            const idea = await storiesApi().createIdea(ws, inSeries ? { ...input, seriesId: inSeries.seriesId, ...(inSeries.castIds.length ? { characterIds: [...inSeries.castIds] } : {}) } : input);
+            // Filed in the page's series; its cast comes along once the list has it.
+            const cast = inSeries?.castIds.length ? { characterIds: [...inSeries.castIds] } : {};
+            const idea = await storiesApi().createIdea(ws, seriesHere ? { ...input, seriesId: seriesHere, ...cast } : input);
             put(idea);
             setOpen("none");
             setFilter("all");
@@ -193,7 +197,7 @@ export function IdeasScreen({ ws, page }: StoriesScreenProps) {
           ws={ws}
           info={info}
           series={inSeries}
-          seriesId={inSeries?.seriesId ?? (seriesFilter === "all" || seriesFilter === "none" ? undefined : seriesFilter)}
+          seriesId={seriesHere}
           onCancel={() => setOpen("none")}
           onDrafts={(list, from) => showDrafts({ from, drafts: list.map((input) => ({ input, saved: false, saving: false })) })}
         />

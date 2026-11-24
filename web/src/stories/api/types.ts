@@ -816,8 +816,8 @@ export interface StoryInput {
   format?: StoryFormat;
   /** the first job's model and effort only, never kept (§45.5 POST /stories; the stand-in for a usual model the studio knows cannot be used, §45.36 E12) */
   override?: ModelOverride;
-  /** the series it is filed in (§45.43); left out: the idea's, else No series */
-  seriesId?: string;
+  /** the series it is filed in (§45.43); null: No series, picked on purpose; left out: the idea's, else No series */
+  seriesId?: string | null;
 }
 
 /** A video's shape and size (CONTRACTS §45.34 "Video size and shape"); the size matches the aspect. */

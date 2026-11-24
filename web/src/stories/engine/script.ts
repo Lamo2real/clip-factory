@@ -445,7 +445,10 @@ function checkScene(sc: unknown, i: number, castIds: string[], seenScenes: Set<s
         if (!isObj(to) || !isNum(to.x) || !isNum(to.y) || to.x < lo || to.x > hi || to.y < lo || to.y > hi) err(`${bw}: to must be { x, y } from ${lo} to ${hi}.`);
       }
     });
-    if (actors) checkBoarding(where, actors, beats, err);
+    if (actors) {
+      checkBoarding(where, actors, beats, err);
+      checkDriverWave(where, actors, beats, err);
+    }
   }
 
   const sfx = sc.sfx === undefined ? [] : Array.isArray(sc.sfx) ? sc.sfx : null;
@@ -505,6 +508,28 @@ function checkBoarding(where: string, actors: unknown[], beats: unknown[], err: 
       // a tenth of a second of slack, for a length fitDuration stretched to its 0.8 s
       const moving = all.find((m) => m.who === car && isNum(m.at) && isNum(m.dur) && movesCar(m) && (m.at as number) < end - BOARDING.slack && (m.at as number) + (m.dur as number) > from + BOARDING.slack);
       if (moving) err(`${where}: ${car} moves at ${round(moving.at as number)} s while ${id} is still getting ${word} (until ${round(end)} s). ${fix}`);
+    }
+  }
+}
+
+/** The driver (a car's first rider, §45.42) waves only while the car stands still: a wave while it is in the car may
+ * not overlap a beat that moves the car. A passenger may wave any time. */
+function checkDriverWave(where: string, actors: unknown[], beats: unknown[], err: (m: string) => void): void {
+  const all = beats.filter(isObj).filter((b) => isNum(b.at) && isNum(b.dur));
+  const drivers = new Map<string, string>();
+  for (const a of actors) if (isObj(a) && typeof a.castId === "string" && typeof a.inCar === "string" && !drivers.has(a.inCar)) drivers.set(a.inCar, a.castId);
+  for (const [car, id] of drivers) {
+    const own = all.filter((b) => b.who === id);
+    const gi = own.find((b) => b.do === "get_in");
+    const go = own.find((b) => b.do === "get_out");
+    const inFrom = gi ? (gi.at as number) + (gi.dur as number) : 0;
+    const inTo = go ? (go.at as number) : Infinity;
+    for (const w of own.filter((b) => b.do === "wave")) {
+      const from = Math.max(w.at as number, inFrom);
+      const to = Math.min((w.at as number) + (w.dur as number), inTo);
+      if (to - from <= BOARDING.slack) continue; // waving from outside the car
+      const moving = all.find((m) => m.who === car && movesCar(m) && (m.at as number) < to - BOARDING.slack && (m.at as number) + (m.dur as number) > from + BOARDING.slack);
+      if (moving) err(`${where}: ${id} drives ${car} and waves at ${round(w.at as number)} s while it moves (${round(moving.at as number)} to ${round((moving.at as number) + (moving.dur as number))} s). The driver waves only while the car is stopped: wave before it moves or after it stops, or let a passenger wave.`);
     }
   }
 }

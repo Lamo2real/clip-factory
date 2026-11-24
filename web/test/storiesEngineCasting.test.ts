@@ -186,6 +186,21 @@ describe("getting in and out (§45.42)", () => {
     expect(errorsOf(out)).toEqual(["scene 1 (s1): car1 moves at 3.4 s while c1 is still getting out (until 4.5 s). Stop the car before get_out starts."]);
   });
 
+  it("the driver waves only while the car stands still; a passenger may wave any time", () => {
+    const two = (beats: Beat[]) => {
+      const s = script({ actors: [rider(), rider({ castId: "c3", x: 0.42 })], props: [carProp()], beats });
+      s.cast.c3 = { ...clone(PIP), name: "Bo" }; // a passenger
+      return s;
+    };
+    const drive: Beat = { at: 2.2, dur: 1.5, who: "car1", do: "speed_up" };
+    const waveWhileMoving = "scene 1 (s1): c1 drives car1 and waves at 2.5 s while it moves (2.2 to 3.7 s). The driver waves only while the car is stopped: wave before it moves or after it stops, or let a passenger wave.";
+    expect(errorsOf(two([{ at: 0.2, dur: 1.5, who: "c1", do: "get_in" }, drive, { at: 2.5, dur: 1, who: "c1", do: "wave" }]))).toEqual([waveWhileMoving]);
+    // the passenger's wave, the driver's wave before the drive, and a wave from outside before getting in are fine
+    expect(errorsOf(two([{ at: 0.2, dur: 1.5, who: "c1", do: "get_in" }, drive, { at: 2.5, dur: 1, who: "c3", do: "wave" }]))).toEqual([]);
+    expect(errorsOf(two([{ at: 0.2, dur: 1.5, who: "c1", do: "get_in" }, { at: 1.8, dur: 0.4, who: "c1", do: "wave" }, { ...drive, at: 2.4 }]))).toEqual([]);
+    expect(errorsOf(two([{ at: 0.1, dur: 0.8, who: "c1", do: "wave" }, { at: 1, dur: 1, who: "c1", do: "get_in" }, drive]))).toEqual([]);
+  });
+
   it("before get_in the rider stands outside, walks to the door, then sits in its seat", () => {
     const s = valid(boarding());
     const before = rt(s, 0.3).actors[0]!;

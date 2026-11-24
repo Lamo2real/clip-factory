@@ -251,9 +251,24 @@ BRANDS: frozenset[str] = frozenset(
         "skoda", "škoda", "subaru", "suzuki", "tesla", "toyota", "vauxhall", "volkswagen", "volvo", "vw",
     }
 )  # fmt: skip
+# Model names and nicknames that are not also everyday words (golf, beetle, mustang, polo, focus, leaf stay out), so
+# a car is never called "Corolla" or "the Merc" either.
+MODELS: frozenset[str] = frozenset(
+    {
+        "astra", "beemer", "bimmer", "camaro", "camry", "civic", "clio", "corolla", "corsa", "corvette", "cr-v",
+        "cx-5", "elantra", "f-150", "f150", "fabia", "hilux", "impreza", "jetta", "lambo", "land cruiser",
+        "landcruiser", "megane", "mégane", "merc", "miata", "micra", "mini cooper", "model 3", "model s", "model x",
+        "model y", "mx-5", "octavia", "passat", "picanto", "prius", "qashqai", "range rover", "rav4", "sportage",
+        "tiguan", "twingo", "yaris", "zafira",
+    }
+)  # fmt: skip
+# Whole words in any case: nothing may come right before (a letter or a hyphen) or a letter right after, so
+# "BMW-ish" is caught and "Fordham" is not.
 _BRAND = re.compile(
-    r"(?<![\w-])(" + "|".join(re.escape(b) for b in sorted(BRANDS, key=len, reverse=True)) + r")(?![\w-])", re.I
+    r"(?<![\w-])(" + "|".join(re.escape(b) for b in sorted(BRANDS | MODELS, key=len, reverse=True)) + r")(?!\w)",
+    re.I,
 )
+_CAR_CAR = re.compile(r"\bcar(?: car)+\b")
 NO_BRANDS = "do not use car brand or model names"
 CAR_FACES_ON = ("happy", "surprised")
 
@@ -327,11 +342,11 @@ def car_words(car: Mapping[str, Any]) -> str:
 
 
 def strip_brands(text: str) -> tuple[str, list[str]]:
-    """The text with every car make replaced by "car", and the makes found."""
+    """The text with every car make, model or nickname replaced by "car", and the ones found."""
     found = [m.group(1) for m in _BRAND.finditer(text)]
     if not found:
         return text, []
-    return " ".join(_BRAND.sub("car", text).split()), found
+    return _CAR_CAR.sub("car", " ".join(_BRAND.sub("car", text).split())), found  # "Toyota Corolla": one "car"
 
 
 def car_schema(cat: dict[str, Any]) -> dict[str, Any]:

@@ -23,6 +23,7 @@ export const CAR_SFX: readonly SfxId[] = ["engine", "honk", "brake_squeal", "ski
 export const SAMPLE_WORDS = {
   off: "Turn Sounds on first",
   quiet: "Pick Babble or Hum first",
+  quietLine: "Quiet makes no noises. Pick Babble or Hum to hear them.",
   soundsOff: "Sounds are off. Turn them on to hear these.",
   turnOn: "Turn on",
   failed: "That sound didn't load. Tap again.",

@@ -341,9 +341,11 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
     setAsking(null);
     setBusy(true);
     setProblem(null);
-    // The people in the order they were picked, then the car (§45.42); the series only when one is picked (§45.43).
+    // The people in the order they were picked, then the car (§45.42); the series when one is picked, and null when the
+    // owner picked No series himself, so an idea's own series does not file it anyway (§45.43).
     const body: StoryInput = { characterIds: castOrder(cast, characters), durationSec: lengthSec, captionsOn, musicMood: music };
     if (series) body.seriesId = series;
+    else if (seriesTouched.current) body.seriesId = null;
     // This video's own shape, only when the owner picked one that is not the workspace's (§45.34). Nothing picked:
     // the API uses Settings › Video itself (also while it has not loaded here, or could not be read).
     if (shape && (!workspace || !sameFormat(shape, usualShape))) body.format = { ...shape };
@@ -450,7 +452,15 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
                 </>
               ) : (
                 <p className="st-s-field__hint">
-                  No ideas to use yet. Tap Type my own, or save some on the <A href={storiesHref({ name: "ideas" })}>Ideas</A> page.
+                  {series ? (
+                    <>
+                      No ideas to use yet. Tap Type my own, or <A href={storiesHref({ name: "ideas", seriesId: series, ask: true })}>ask for ideas</A> for this series.
+                    </>
+                  ) : (
+                    <>
+                      No ideas to use yet. Tap Type my own, or save some on the <A href={storiesHref({ name: "ideas" })}>Ideas</A> page.
+                    </>
+                  )}
                 </p>
               )
             ) : (

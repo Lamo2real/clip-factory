@@ -84,6 +84,7 @@ class Outcome:
     effort: str | None = None
     effort_applied: bool | None = None
     refused: str | None = None  # the sentence when another item in ``ops`` refused (it was deleted or changed)
+    again_if_refused: bool = False  # run the handler once more, from fresh reads, when another item in ``ops`` refused
 
 
 Handler = Callable[[TaskEnv], Outcome]
@@ -185,7 +186,14 @@ async def run_task(svc: Services, payload: dict[str, Any], *, kinds: tuple[str, 
         at = now_iso()
         await asyncio.to_thread(fence.write, {"status": "running", "heartbeatAt": at, "updatedAt": at})
         outcome = await run_with_heartbeat(fence, svc.heartbeat_s, lambda: handler(env))
-        await asyncio.to_thread(_finish, fence, outcome)
+        try:
+            await asyncio.to_thread(_finish, fence, outcome)
+        except TaskFailed as e:
+            if not (outcome.again_if_refused and isinstance(e.__cause__, Refused)):
+                raise
+            log("info", "stories.task_again_after_refused", task=task_id, kind=kind)
+            outcome = await run_with_heartbeat(fence, svc.heartbeat_s, lambda: handler(env))
+            await asyncio.to_thread(_finish, fence, outcome)
     except Superseded:
         log("info", "stories.task_superseded", task=task_id)
         return "superseded"

@@ -27,6 +27,9 @@ from . import core
 
 Item = dict[str, Any]
 Ctx = core.Ctx
+# The recap is the creative director's "Small text edits" work (§45.43): that task kind names the agent whose switch
+# stops it (``series_recap`` itself is no task of agents.json, so Settings › Agents lists no raw id).
+RECAP_SWITCH = "text_edit"
 
 
 # --- reads ----------------------------------------------------------------------------------------------------
@@ -131,11 +134,12 @@ def _start_recap(ctx: Ctx, series: Mapping[str, Any], story_id: str) -> Item:
 
 
 def after_approve(ctx: Ctx, story: Mapping[str, Any]) -> None:
-    """After an approval of a story filed in a series: its recap starts, but only while the series exists. Never
-    raises (an approval never fails because of it)."""
+    """After an approval of a story filed in a series: its recap starts, but only while the series exists and the
+    creative director is switched on (off, nothing starts; "Write it" says why). Never raises (an approval never fails
+    because of it)."""
     try:
         series = find(ctx, story.get("seriesId"))
-        if series is not None:
+        if series is not None and tasks.switched_off(ctx.store, ctx.user_id, ctx.ws_id, RECAP_SWITCH) is None:
             _start_recap(ctx, series, str(story["storyId"]))
     except Exception as e:
         log("warning", "stories.series_recap_not_started", storyId=story.get("storyId"), error=type(e).__name__)
@@ -253,7 +257,7 @@ def recap_episode(app: App, req: Request) -> Response:
     story = core._get(ctx, ws.STORY_SK, story_id, ws.TYPE_STORY, core.NO_STORY)
     if story.get("seriesId") != series["seriesId"] or story.get("status") not in rules.EPISODE_STATUSES:
         raise conflict(rules.NOT_AN_EPISODE, "storyId")
-    tasks.refuse_if_off(ctx.store, ctx.user_id, ctx.ws_id, "series_recap")
+    tasks.refuse_if_off(ctx.store, ctx.user_id, ctx.ws_id, RECAP_SWITCH)
     try:
         started = _start_recap(ctx, series, story_id)
     except db.ConditionFailed as e:  # deleted meanwhile

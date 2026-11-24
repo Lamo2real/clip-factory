@@ -407,16 +407,15 @@
        margin. So the list of pages always stops above them. */
     height: max(0px, calc(var(--ws-dock-room, 0px) - 36px));
   }
-  /* A short room: as soon as the twelve pages (StoriesApp's NAV) no longer fit at 48 px, 12 × 48 + 11 × 4
-     (--st-gap-control) = 620 px of the list's own room, the rows share the room they have, (room − 11 × 4) / 12, down
-     to 32 px (428 px of room). So all twelve fit above the switch from 768 px high in a browser (33.5 px rows) and in
-     the Mac app from 800 px, at every height where 48 px rows would not (a window's title bar, a stacked switch), and
-     from 900 px high they are still 44 px targets; below 428 px of room the list scrolls and the chosen page is
-     scrolled into view (StoriesApp). 100cqh is the list's own room (its content box). */
-  @container st-rail-list (height < 620px) {
+  /* A short room: the rows are a little lower (40 px, a computer's pointer target, and never lower) as soon as the
+     eleven pages (StoriesApp's NAV) no longer fit at 48 px: 11 × 48 + 10 × 4 (--st-gap-control) = 568 px of the
+     list's own room. So all eleven fit above the switch wherever 40 px rows can (480 px of room), and at every height
+     where 48 px rows would not (a window's title bar, a stacked switch); below 480 px of room the list scrolls and
+     the chosen page is scrolled into view (StoriesApp). */
+  @container st-rail-list (height < 568px) {
     .st-rail .st-rail__item {
-      min-height: max(32px, calc((100cqh - 44px) / 12));
-      padding-block: 2px;
+      min-height: 40px;
+      padding-block: 4px;
     }
   }
   /* A folded sidebar in a short window has the switch beside its fold button, over the brand's name here: the shell

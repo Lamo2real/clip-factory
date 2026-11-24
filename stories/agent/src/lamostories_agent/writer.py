@@ -82,7 +82,9 @@ House rules (always):
   moves only after get_in ends.
 - The driver waves only while the car is stopped; a passenger may wave any time.
 - In a story that is not a driving-safety one, a car may stall, stop or bump for fun, but no caption gives driving
-  advice and teachesSafety stays false.
+  advice; if the story starts to teach it, set teachesSafety to true (see above). A story with a car of the cast is
+  always fact checked for driving advice.
+- There is no car dealer set: a story about buying a car stages the sale in the car park (parking_lot).
 - When the request has a series, this video is its episode number `series.episode`: follow on from storySoFar and
   lastEpisodes (the same cast, places and running jokes, and where things stand now), never retell an earlier episode,
   and make it work on its own for someone who has not seen the others."""

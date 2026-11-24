@@ -196,6 +196,25 @@ describe("Series", () => {
     expect(location.pathname + location.search).toBe(`/stories/production/new?cast=${C.pip}&cast=${characters.SEED_CAR_ID}&series=${SR}`);
   });
 
+  it("with an idea saved in the series, Make the next episode opens it ready to make, with the cast and the series", async () => {
+    store.ideas.find((i) => i.ideaId === I.gps)!.seriesId = SR;
+    await show(<SeriesScreen {...page({ name: "series_one", seriesId: SR })} />);
+    await click(control("Make the next episode"), 50);
+    expect(location.pathname + location.search).toBe(`/stories/production/new?idea=${I.gps}&cast=${C.pip}&cast=${characters.SEED_CAR_ID}&series=${SR}`);
+  });
+
+  it("Change cast saves the series' new cast (the main character first, then the car)", async () => {
+    const patch = vi.spyOn(api, "patchSeries");
+    await show(<SeriesScreen {...page({ name: "series_one", seriesId: SR })} />);
+    await click(control(/^More for/), 50);
+    await click(control("Change cast"), 300);
+    const dash = Array.from(document.querySelectorAll<HTMLButtonElement>(".st-s-casttile")).find((b) => b.textContent?.includes("Dash"))!;
+    await click(dash, 50);
+    await click(control("Save"), 300);
+    expect(patch).toHaveBeenCalledWith("stories", SR, expect.objectContaining({ castIds: [C.pip, C.dash, characters.SEED_CAR_ID] }));
+    expect(Array.from(document.querySelectorAll(".st-series-cast li span")).map((e) => e.textContent)).toEqual(["Pip", "Dash", "Rosso"]);
+  });
+
   it("Ask for ideas opens Ideas inside the series with Ask for ideas open", async () => {
     await show(<SeriesScreen {...page({ name: "series_one", seriesId: SR })} />);
     await click(control("Ask for ideas"), 50);
@@ -353,6 +372,19 @@ describe("Ideas in a series", () => {
       seriesId: SR,
       characterIds: [C.pip, characters.SEED_CAR_ID],
     });
+  });
+
+  it("New idea inside a series is filed there even when the series list could not be read", async () => {
+    vi.spyOn(api, "listSeries").mockRejectedValue(new Error("offline"));
+    const create = vi.spyOn(api, "createIdea");
+    await show(<IdeasScreen {...page({ name: "ideas", seriesId: SR })} />);
+    await click(control("New idea"), 50);
+    type(field("Title"), "The car wash");
+    type(field("What happens, in one line"), "Pip washes Rosso and gets soaked.");
+    const funny = Array.from(document.querySelectorAll<HTMLInputElement>('input[type="radio"]')).find((r) => r.closest("label")?.textContent?.includes("Funny"))!;
+    await click(funny, 50);
+    await click(control("Save idea"));
+    expect(create).toHaveBeenCalledWith("stories", expect.objectContaining({ title: "The car wash", seriesId: SR }));
   });
 
   it("?ask=1 opens Ask for ideas at once, and it asks for the series", async () => {

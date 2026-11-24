@@ -312,6 +312,21 @@ def test_write_it_again_starts_a_recap_for_an_episode_only(call: Call, store: db
     assert call("POST", f"{BASE}/series/{ulid()}/recap", {"storyId": ep["storyId"]})[0] == 404
 
 
+def test_the_creative_director_switched_off_writes_no_recap(call: Call, store: db.Store, s3_client: FakeS3) -> None:
+    made = make(call)
+    assert call("PATCH", f"{BASE}/agents/creative_director", {"version": 1, "active": False})[0] == 200
+    ep = seed_story(store, s3_client, seriesId=made["seriesId"])
+    status, body = call("POST", f"{BASE}/stories/{ep['storyId']}/approve", {"version": ep["version"]})
+    assert status == 200
+    assert body["story"]["status"] == "approved"  # the approval still works
+    assert recap_tasks(store) == []  # but no recap starts only to fail in the agent
+    status, body = call("POST", f"{BASE}/series/{made['seriesId']}/recap", {"storyId": ep["storyId"]})
+    assert status == 409
+    assert body["error"]["message"] == (
+        "Creative director is switched off. Switch it on in Clips Funded › Settings › Agents."
+    )
+
+
 # --- moving and deleting ------------------------------------------------------------------------------------------
 
 
@@ -482,6 +497,15 @@ def test_a_story_is_filed_from_the_body_or_its_idea(call: Call, store: db.Store)
     assert "seriesId" not in lost[1]["story"]
     plain = call("POST", f"{BASE}/stories", {"brief": brief, "characterIds": [hero["characterId"]]})[1]["story"]
     assert "seriesId" not in plain
+    # "No series" picked on purpose (null): a series idea makes a one-off video
+    idea_two = seed_idea(store, seriesId=made["seriesId"])
+    one_off = call(
+        "POST",
+        f"{BASE}/stories",
+        {"ideaId": idea_two["ideaId"], "characterIds": [hero["characterId"]], "seriesId": None},
+    )
+    assert one_off[0] == 201
+    assert "seriesId" not in one_off[1]["story"]
 
 
 def test_a_story_cast_follows_the_car_rules(call: Call, store: db.Store) -> None:

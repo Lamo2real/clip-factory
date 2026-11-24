@@ -1330,7 +1330,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
         updatedAt: iso(now),
       };
       // the body's series, else the idea's; one that is gone is dropped (§45.43)
-      const seriesId = body.seriesId ?? idea?.seriesId;
+      const seriesId = body.seriesId === null ? null : (body.seriesId ?? idea?.seriesId); // null: No series, on purpose
       if (seriesId && seriesExists(store, ws, seriesId)) story.seriesId = seriesId;
       store.stories.push(story);
       extraOf(store, storyId).brief = brief;

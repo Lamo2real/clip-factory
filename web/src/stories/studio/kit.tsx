@@ -274,11 +274,24 @@ export function Slider({
       last = { v, at };
       commitRef.current?.(v);
     };
+    // The value when a press began: a release commits only when it moved the value, so a swipe that starts on the
+    // slider and scrolls the page plays nothing (never on scroll, lib/sound.ts); a cancelled press commits nothing.
+    let pressed: number | null = null;
     const onKey = () => {
       keyed = true;
     };
     const onPress = () => {
       keyed = false;
+      if (pressed === null) pressed = Number(el.value);
+    };
+    const onCancel = () => {
+      pressed = null;
+    };
+    const onRelease = () => {
+      const from = pressed;
+      pressed = null;
+      if (from === null || Number(el.value) === from) return;
+      commit();
     };
     const onChange = () => {
       if (!keyed) return commit();
@@ -288,16 +301,20 @@ export function Slider({
     el.addEventListener("keydown", onKey);
     el.addEventListener("pointerdown", onPress);
     el.addEventListener("touchstart", onPress, { passive: true });
-    el.addEventListener("pointerup", commit);
-    el.addEventListener("touchend", commit);
+    el.addEventListener("pointercancel", onCancel);
+    el.addEventListener("touchcancel", onCancel);
+    el.addEventListener("pointerup", onRelease);
+    el.addEventListener("touchend", onRelease);
     el.addEventListener("change", onChange);
     return () => {
       clearTimeout(timer);
       el.removeEventListener("keydown", onKey);
       el.removeEventListener("pointerdown", onPress);
       el.removeEventListener("touchstart", onPress);
-      el.removeEventListener("pointerup", commit);
-      el.removeEventListener("touchend", commit);
+      el.removeEventListener("pointercancel", onCancel);
+      el.removeEventListener("touchcancel", onCancel);
+      el.removeEventListener("pointerup", onRelease);
+      el.removeEventListener("touchend", onRelease);
       el.removeEventListener("change", onChange);
     };
   }, [commits]);
@@ -362,12 +379,15 @@ export interface HearProp {
 export function HearButton({ label, playing, state, disabledWhy, onHear, className = "", children }: HearProp & { className?: string; children?: ReactNode }) {
   const why = disabledWhy ?? (state === "off" ? "Turn Sounds on first" : undefined);
   const off = state !== "ok" || !!disabledWhy;
+  const whyId = useId();
+  const told = off && !!why; // the reason is read out too, not only shown as a mouse tooltip
   return (
     <button
       type="button"
       className={`st-s-hear${children ? " st-s-hear--words" : " st-round-btn"}${playing ? " is-playing" : ""}${className ? ` ${className}` : ""}`}
       aria-label={`${playing ? "Stop" : "Play"} ${label}`}
       aria-disabled={off || undefined}
+      aria-describedby={told ? whyId : undefined}
       title={off ? why : undefined}
       data-sound={off ? undefined : "off"}
       onClick={() => {
@@ -378,6 +398,11 @@ export function HearButton({ label, playing, state, disabledWhy, onHear, classNa
         {playing ? <rect x="6.5" y="6.5" width="11" height="11" rx="2.5" fill="currentColor" /> : <path d="M8.5 5.8v12.4a1 1 0 0 0 1.52.85l9.9-6.2a1 1 0 0 0 0-1.7l-9.9-6.2a1 1 0 0 0-1.52.85Z" fill="currentColor" />}
       </svg>
       {children}
+      {told ? (
+        <span className="st-s-sr" id={whyId}>
+          {why}
+        </span>
+      ) : null}
     </button>
   );
 }

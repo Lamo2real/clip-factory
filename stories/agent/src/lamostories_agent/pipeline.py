@@ -802,10 +802,15 @@ class StoryJob(Job):
         return self.story.get("category") == "driving_safety"
 
     async def guarded(self) -> bool:
-        """Driving content, whatever its category: a driving-safety story, one with a checked topic, or one the writer
-        flagged ``teachesSafety``. Its fact check runs whatever the quality agent's switch says and is never
-        recorded as skipped (§45.26, §45.33)."""
-        return self.driving or bool(self.story.get("safetyTopicId")) or await self._teaches()
+        """Driving content, whatever its category: a driving-safety story, one with a checked topic, one the writer
+        flagged ``teachesSafety``, or one with a car of the cast (its script's ``cars``, §45.42). Its fact check runs
+        whatever the quality agent's switch says and is never recorded as skipped (§45.26, §45.33)."""
+        return (
+            self.driving
+            or bool(self.story.get("safetyTopicId"))
+            or bool((self.script or {}).get("cars"))
+            or await self._teaches()
+        )
 
     async def _teaches(self) -> bool:
         if self.teaches is None:
@@ -1628,7 +1633,9 @@ class StoryJob(Job):
         found = safety.code_problems(script, topic)
         if not self.budget.take("checker"):
             return safety.Check(found or [{"ref": "", "problem": "The facts could not be checked again this time."}])
-        body = safety.request(script, post, topic, unchecked_advice=guarded and topic is None)
+        body = safety.request(
+            script, post, topic, unchecked_advice=guarded and topic is None and not script.get("cars")
+        )
         catalog, rules = await self._engine_catalog()
         body["catalog"] = self._lists(catalog)
         body.update({k: v for k, v in rules.items() if k in ("rules", "propStates", "limits")})

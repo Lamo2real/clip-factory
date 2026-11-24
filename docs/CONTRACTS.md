@@ -16031,8 +16031,12 @@ A car sees, in this order:
 There is no Voice, no pitch and no noises. The count is shared: up to 8 favourite effects in total.
 
 Hints (one line, at the top of the part):
-- Sounds off: "Sounds are off. Turn them on to hear these." followed by a "Turn on" link to
-  /stories/settings/storage#sounds-and-motion, which scrolls to that card once it is drawn.
+- Sounds off: "Sounds are off. Turn them on to hear these." followed by a "Turn on" button that turns Clips Funded's
+  Sounds on right there (`setStoriesDevicePref("sound.enabled", true)`, the same switch as Settings › Sounds and
+  motion), so the page, and a character not saved yet, stay as they are.
+- Quiet: "Quiet makes no noises. Pick Babble or Hum to hear them." above the Noises chips (a phone shows no tooltip).
+- A play button that is off says why to a screen reader too: its reason is a visually hidden line it points at with
+  `aria-describedby`, besides the `title`.
 - `otherMaker`: "Effects may sound a bit different in videos."
 
 Styles go in `web/src/stories/styles/sd-sounds.css`, imported by `SoundsPart.tsx`. They keep the storiesStyles rules:
@@ -16044,7 +16048,7 @@ phones.
 | where | words |
 |---|---|
 | play button | aria-label "Play {Label}" / "Stop {Label}"; title when off "Turn Sounds on first" |
-| Quiet | "Pick Babble or Hum first" |
+| Quiet | "Pick Babble or Hum first" (the play buttons) · "Quiet makes no noises. Pick Babble or Hum to hear them." (the line above Noises) |
 | sounds off | "Sounds are off. Turn them on to hear these." + "Turn on" |
 | load error | "That sound didn't load. Tap again." (logged `error`) |
 | other maker | "Effects may sound a bit different in videos." |
@@ -16529,29 +16533,25 @@ the gallery with "Car".
 - `storiesStudioScreens.test.tsx:479`.
 They change `x.look` to `(x as PersonInput).look`.
 
-#### 45.41.10 Cars: the cars' own place in the rail (owner, 23 Nov ~22:05 UTC: "where are cars? i need cars as well")
+#### 45.41.10 Cars are characters (owner, 23 Nov ~22:05 UTC: "where are cars? i need cars as well"; review, 24 Nov)
 
-- **The rail.** A "Cars" item with a car icon (`StIcon` "car", in `ui.tsx`) right under Characters:
-  `{label: "Cars", icon: "car", page: {name: "cars"}, match: ["cars", "car_new", "car"]}`. On phones the five tabs stay
-  as they are (Cars is never a tab), and Cars is the first item under More, before Series. The rail now has 12 pages:
-  under 620 px of list room (12 × 48 + 11 × 4) `st-frame.css` makes the rows share the room they have, (room − 44) / 12
-  (`100cqh` of the list), down to 32 px at 428 px of room, where the list starts to scroll. So all twelve still fit
-  from 768 px high in a browser (33.5 px rows) and from 800 px in the Mac app, and from 900 px high they are still
-  44 px targets (`stories-rail-room.spec.ts`, `stories-shell.spec.ts`). The 10-page rule (40 px rows under 516 px)
-  is gone: 12 rows of 40 px need 524 px, more than a 768 px window has (446 px).
-- **Routes** (`routes.ts`): `{name: "cars"}` /stories/cars, `{name: "car_new"}` /stories/cars/new and
-  `{name: "car", characterId}` /stories/cars/{id}. `workspace.ts` titles them "Cars", "New car" and "Car"; a car's page
-  is a project like a character's (`openedOn`).
-- **`screens/Cars.tsx`.** The cars (the same `listCharacters` data, kind "car") as cards, each opening
-  /stories/cars/{id}, with ONE big "Make a car" (in the head, or in the empty garage: "No cars yet" · "Add photos of a
-  real car. You get a cartoon car for your videos."). Make a car is New character with the kind fixed: no kind tiles,
-  the heading "New car", "‹ Cars", the photo strip open at once. A car's page is the character page with "‹ Cars";
-  Delete goes back to Cars.
-- **Characters shows the people only**, with "Your car is in Cars ›" (or "Your {n} cars are in Cars ›") when there
-  are cars. Why: one home per thing. A child never sees the same car in two lists or wonders which one to change, and
-  the rail's word says what is inside. New character keeps its "A person / A car" tiles for a child who looks there
-  first; a car saved from anywhere opens under Cars, and an older /stories/characters/{id} link to a car moves to
-  /stories/cars/{id} once it loads (the dashboard's Continue, the library, chat cards).
+- **Characters shows the whole cast**: the people, then the cars, each car card with its coral "Car" tag and its own
+  page (/stories/cars/{id}). The head has "Design with AI", "Make a car" (/stories/cars/new) and the main "New
+  character" (whose "A person / A car" tiles stay). Why: a car is a character (§45.41), so it lives where the cast
+  lives; one home per thing, and the rail keeps room for 40 px targets. The first build gave cars their own rail page,
+  which pushed the rail to 12 pages and its rows down to 32 px; the reviewers took that out.
+- **The rail** has 11 pages (Series is the new one). Characters' `match` takes `cars`, `car_new` and `car`, so a car's
+  pages light up Characters. On phones the five tabs are Dashboard, Ideas, Characters, Production and Review; More holds
+  Series, Chat, References, Library, Social accounts and Settings. Under 568 px of list room (11 × 48 + 10 × 4)
+  `st-frame.css` makes the rows 40 px, never lower; below 480 px of room (11 × 40 + 10 × 4) the list scrolls and the
+  chosen page is scrolled into view (`stories-rail-room.spec.ts`: rows are 48 or 40 px, and every window with 480 px of
+  room shows all eleven with no scrolling).
+- **Routes** (`routes.ts`): `{name: "car_new"}` /stories/cars/new and `{name: "car", characterId}` /stories/cars/{id};
+  `{name: "cars"}` /stories/cars, an older link, shows the Characters gallery. `workspace.ts` titles them "Cars", "New
+  car" and "Car"; a car's page is a project like a character's (`openedOn`).
+- **`screens/Cars.tsx`** only routes: Make a car is New character with the kind fixed (no kind tiles, the heading "New
+  car", "‹ Characters", the photo strip open at once). A car's page is the character page with "‹ Characters"; Delete
+  goes back to Characters. An older /stories/characters/{id} link to a car moves to /stories/cars/{id} once it loads.
 - Production's cast picker shows "Your cars" as its own row (CastPicker).
 
 ### 45.42 A person and a car in one story (owner request, 2026-11-23)
@@ -16676,13 +16676,25 @@ People get `"kind": "person"`, and `"main": true` on the first person.
    moves only after get_in ends."
 3. "The driver waves only while the car is stopped; a passenger may wave any time."
 4. "In a story that is not a driving-safety one, a car may stall, stop or bump for fun, but no caption gives driving
-   advice and teachesSafety stays false."
+   advice; if the story starts to teach it, set teachesSafety to true (see above). A story with a car of the cast is
+   always fact checked for driving advice." (review, 24 Nov: the first wording told the writer to keep the flag false,
+   against the line above it)
+5. "There is no car dealer set: a story about buying a car stages the sale in the car park (parking_lot)."
 
 **House brief, ideas.** One line: "A car never stars alone: name the person who drives it too."
 
 #### 45.42.5 The safety checker (`stories/agent/.../safety.py`)
 
 - `VEHICLE_ACTIONS` gains `speed_up` and `stall`, so the checker sees them on car props, a castId car included.
+- **A story with a car of the cast is guarded** (review, 24 Nov): `StoryJob.guarded()` is also true when the script's
+  `cars` is not empty. So its fact check and final look run whatever the quality agent's switch says, are never
+  "skipped", and with no checked topic the checker gets `CAR_NOTE` ("A car of the cast is in this video and no checked
+  advice covers it. Report every item that gives driving advice or shows how to handle a driving situation: none of it
+  is checked. Also check that nothing dangerous is shown as fun."); any problem then holds the story (`HELD_TOPIC`),
+  as a story the writer flags `teachesSafety` is held.
+- **The driver's wave** is an item too: a `wave` beat by a car's first rider (its driver) reaches the checker as "{name}
+  does wave from the driver's seat", with its time, so the rule "The driver waves only while the car is stopped" can be
+  applied to it; a passenger's wave is no item.
 - `get_in` and `get_out` are not DRIVING_ACTIONS.
 - Every existing rule stays: checked guidance only, "nothing dangerous shown as fun", "Check your local road rules." on
   safety stories.
@@ -16766,7 +16778,8 @@ tiles, make it more specific, with no assertion removed.
   - a draft with no characterIds gets the series' `castIds`;
   - a draft with only a car gets the main person put first.
 - `stories.STORY_KEYS` gains `seriesId`. `create_story` takes the body's `seriesId`, else the idea's, and drops it when
-  the series is gone. It also runs `characters.cast_problem` on the cast.
+  the series is gone. A `seriesId: null` in the body is "No series" picked on purpose: the idea's series is not used
+  (the web sends null when the owner picked No series himself). It also runs `characters.cast_problem` on the cast.
 - `list_stories ?seriesId=` is one more test inside `keep()`. "none" needs the set of series ids.
 - `get_library ?seriesId=` passes the series' story ids into `library.asset_filter`.
 - `delete_story` drops the story's summary, best effort.
@@ -16776,9 +16789,12 @@ tiles, make it more specific, with no assertion removed.
   if item.get("seriesId"):
       series_routes.after_approve(ctx, item)   # never raises: try/except Exception, then a log line
   ```
-  `after_approve` starts the recap, but only when the SERIES# exists: `tasks.new_task(kind="series_recap", input={…})`,
-  `tasks.start(...)`, and `recapTaskId` stored. It does not call `refuse_if_off` or `_refuse_unusable`, because both
-  raise.
+  `after_approve` starts the recap, but only when the SERIES# exists and the creative director is on:
+  `tasks.new_task(kind="series_recap", input={…})`, `tasks.start(...)`, and `recapTaskId` stored. It does not call
+  `refuse_if_off` or `_refuse_unusable`, because both raise; it asks `tasks.switched_off(…, "text_edit")` instead
+  (`RECAP_SWITCH`: the recap is the creative director's "Small text edits" work; `series_recap` is no task of
+  agents.json, so Settings › Agents lists no raw id), and with the agent off it starts nothing. "Write it" (POST
+  …/recap) refuses with the agent's own sentence through `refuse_if_off(…, "text_edit")`.
 - `tasks.KINDS` gains `"series_recap"`.
 
 #### 45.43.2 The recap task: `stories/agent/.../tasks/series.py`
@@ -16794,8 +16810,12 @@ Registration in `work.py`:
 2. Call `ask_json(task="text_edit", …)`, so the model is the owner's "Small text edits" choice. The schema is
    `{episodeSummary ≤ 400, storySoFar ≤ 1500}`; longer text is cut and asked once more.
 3. Return `Outcome(result, ops=[the conditional SERIES# update])`. The update upserts `summaries[storyId]` with `by:
-   "ai"` and sets `storySoFar`, `storySoFarBy: "ai"`, `storySoFarAt`, under the condition `version` = the one read.
-   A refused condition fails the task with `GONE`, and the series page offers "Write it again".
+   "ai"` and sets `storySoFar`, `storySoFarBy`, `storySoFarAt`, under the condition `version` = the one read.
+   `storySoFarBy` stays "owner" once the owner has edited it (so every later recap gets `OWNER_RULE` and keeps the
+   owner's words), else "ai". A refused condition (another approval's recap, a rename or a move meanwhile) runs the
+   recap once more from fresh reads (`Outcome.again_if_refused`, one more model call); refused again, the task fails
+   with `GONE`, and the series page offers "Write it again". Any car make or model in the two texts becomes "car"
+   (`characters.strip_brands`, line by line).
 
 `RECAP_BRIEF`:
 
@@ -16873,8 +16893,8 @@ goes into MEM#.
 `workspace.ts` `TITLES` maps both series pages to "Series".
 
 **`StoriesApp.tsx`.** One NAV entry `{label: "Series", icon: "folder", page: {name: "series"}, match: ["series",
-"series_one"]}` right after Review. On phones the five tabs stay as they are, and Series is under More, after Cars
-(§45.41.10). One `case` for the two pages.
+"series_one"]}` right after Review. On phones the five tabs stay as they are, and Series is the first item under
+More (§45.41.10). One `case` for the two pages.
 
 **`studio/SeriesSwitch.tsx`** (new; casting uses it):
 ```ts
@@ -17028,7 +17048,37 @@ settings; on a phone Series is under More, so one more tap (at most 9).
   `/stories/characters/new?kind=car` (the last for car-web). They get the 320 px, edges, cursor, AA, 44/48 px and
   sliding-highlight audits.
 
+#### 45.43.7a Review fixes (24 Nov)
+
+- **Make the next episode** (`Series.tsx` `nextEpisodeHref`) opens New video in the series with its cast and, when the
+  series has a saved idea of its own, that idea already picked. With no idea anywhere, New video's line says "ask for
+  ideas" for this series (/stories/ideas?series={id}&ask=1).
+- **Change cast** in the folder's "…" menu: the CastPicker in a sheet, saved with `patchSeries({version, castIds})`
+  (the people first, then the car).
+- **New idea** on Ideas inside a series is filed there from the address's series id, even while the series list loads
+  or could not be read (the API drops an id whose series is gone); the cast comes along once the list has it.
+- **The pitch slider** commits (and plays the voice) only when a press really moved its value: a swipe that starts on it
+  and scrolls the page, or a press the browser cancels, plays nothing (never on scroll).
+- **Car photos**: the "Add photos" input is never `disabled` (a full strip takes the key or tap and says "Up to 6
+  photos. Remove one first."), its keyboard focus shows on the button (`:has(input:focus-visible)`), a photo still
+  sending when the panel closes keeps sending and shows how it ended when the panel opens again, and one photo of
+  several that cannot be opened is named ("Photo 3 can't be opened. Remove it and try again."). A saved car keeps its
+  photos 3 at a time and says when some did not stay.
+- **Brands**: `strip_brands` also knows common model names and nicknames that are not everyday words (Corolla, Civic,
+  the Merc, Mini Cooper, Model 3 …; golf, beetle and mustang stay words), catches a make before a hyphen ("BMW-ish"),
+  and says "car" once for "Toyota Corolla".
+- **The car brief** no longer lists "eyes on" as a way to make the options differ: eyes only when the owner's words ask.
+- **The engine** refuses a driver's wave while the car moves (`checkDriverWave`: a wave by a car's first rider, while
+  inside it, may not overlap a beat that moves the car).
+
 #### 45.43.8 Not in this change (follow-ups for §45.40 to §45.43)
+
+- **The brand check on post captions** of a story with a cast car (the writer is told never to name a make; code
+  checks the car's own words and the story so far only).
+- **Stopping an upload** when its photo is removed while it is still sending, and **copying** the design photos into
+  the saved car's pictures on the server instead of sending them from the device again (3 at a time now).
+- **A dealership set** for "buying a car" (the writer stages it in the car park).
+- **More car body shapes** (a nose, a roof line) so two real hatchbacks look less alike.
 
 
 - **An animal kind** ("an animal" in the owner's kinds): the person rig plus ears, a tail and a snout.

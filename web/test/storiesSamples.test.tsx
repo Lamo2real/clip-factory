@@ -175,12 +175,20 @@ describe("the play buttons", () => {
     expect(play.title).toBe("Turn Sounds on first");
     expect(play.hasAttribute("data-sound")).toBe(false); // the deny path of the click rules
     expect(host.textContent).toContain("Sounds are off. Turn them on to hear these.");
-    const on = Array.from(host.querySelectorAll("a")).find((a) => a.textContent === "Turn on");
-    expect(on?.getAttribute("href")).toBe("/stories/settings/storage#sounds-and-motion");
+    expect(play.getAttribute("aria-describedby")).toBeTruthy(); // the reason is read out, not only a tooltip
+    expect(document.getElementById(play.getAttribute("aria-describedby")!)?.textContent).toBe("Turn Sounds on first");
     tap(play);
     expect(plays()).toEqual([]);
     expect(playSample({ kind: "sfx", id: "honk" })).toBe(false);
     expect(sampleLog().map((e) => e.action)).toEqual(["off"]);
+    // "Turn on" switches Sounds on right here: no other page, so a character not saved yet stays as it is
+    const on = Array.from(host.querySelectorAll("button")).find((b) => b.textContent === "Turn on")!;
+    const at = location.pathname;
+    tap(on);
+    expect(location.pathname).toBe(at);
+    expect(hearState()).toBe("ok");
+    expect(host.textContent).not.toContain("Sounds are off");
+    expect(button("Play Gasp").hasAttribute("aria-disabled")).toBe(false);
   });
 
   it("carry data-sound=off with Sounds on, so the click sound does not play over the sample", () => {
@@ -208,6 +216,9 @@ describe("the play buttons", () => {
     const play = button("Play Gasp");
     expect(play.getAttribute("aria-disabled")).toBe("true");
     expect(play.title).toBe("Pick Babble or Hum first");
+    // a phone shows no tooltip: the reason is a line anyone can see, and read out on the button
+    expect(host.textContent).toContain("Quiet makes no noises. Pick Babble or Hum to hear them.");
+    expect(document.getElementById(play.getAttribute("aria-describedby")!)?.textContent).toBe("Pick Babble or Hum first");
     tap(play);
     expect(plays()).toEqual([]);
     tap(chip("Whoa"));
@@ -273,6 +284,26 @@ describe("the voice pitch slider", () => {
     });
     expect(plays()).toEqual([`${SAMPLE_ROOT}/babble/p115/babble.mp3`]);
     expect(slider.value).toBe("1.15");
+  });
+
+  it("plays nothing when a swipe that starts on it scrolls the page instead (the value never moves)", () => {
+    show(<Harness />);
+    const slider = host.querySelector<HTMLInputElement>("input[type=range]")!;
+    act(() => {
+      slider.dispatchEvent(new Event("touchstart", { bubbles: true }));
+      slider.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+      slider.dispatchEvent(new Event("pointerup", { bubbles: true }));
+      slider.dispatchEvent(new Event("touchend", { bubbles: true }));
+    });
+    expect(sampleLog()).toEqual([]);
+    // a press the browser cancels for a scroll commits nothing, even if the value moved a step first
+    act(() => {
+      slider.dispatchEvent(new Event("pointerdown", { bubbles: true }));
+      setValue(slider, "1.05");
+      slider.dispatchEvent(new Event("pointercancel", { bubbles: true }));
+      slider.dispatchEvent(new Event("touchend", { bubbles: true }));
+    });
+    expect(sampleLog()).toEqual([]);
   });
 
   it("after keys, plays once 300 ms pass with no key", () => {

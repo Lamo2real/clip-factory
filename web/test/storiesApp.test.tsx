@@ -152,7 +152,6 @@ describe("the shell", () => {
       "Dashboard",
       "Ideas",
       "Characters",
-      "Cars",
       "Production",
       "Review",
       "Series",

@@ -163,6 +163,8 @@ def story_input(body: Mapping[str, Any]) -> dict[str, Any]:
         if not (isinstance(body["seriesId"], str) and is_ulid(body["seriesId"])):
             raise bad_request("seriesId is not valid.", "seriesId")
         out["seriesId"] = body["seriesId"]
+    elif "seriesId" in body:  # null: the owner picked No series himself, so an idea's own series is not used
+        out["seriesId"] = None
     return out
 
 

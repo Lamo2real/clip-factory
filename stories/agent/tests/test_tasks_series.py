@@ -2,7 +2,8 @@
 
 The creative director reads the series and the approved episode and writes the episode's summary and the whole story
 so far, on the owner's "Small text edits" model (the task ``text_edit``). The SERIES# item is written with the task's
-end, under the version that was read; a series changed meanwhile fails the task with "Write it again".
+end, under the version that was read; a series changed meanwhile is read again and written once more, and changed
+twice it fails the task with "Write it again".
 """
 
 from __future__ import annotations
@@ -142,12 +143,24 @@ def test_the_recap_writes_the_summary_and_the_story_so_far_under_the_version_it_
 
 def test_the_owners_own_words_are_kept(tmp_path: Path) -> None:
     model = FakeModel(answer())
-    svc, _ = world(tmp_path, model, series=series_item(storySoFar="Who: Pip, who loves maps.", storySoFarBy="owner"))
+    svc, db = world(tmp_path, model, series=series_item(storySoFar="Who: Pip, who loves maps.", storySoFarBy="owner"))
     assert run(svc) == "done"
     text = model.texts(0)
     assert recap_task.OWNER_RULE in text
     data = json.loads(text.split("DATA as JSON:\n", 1)[1])
     assert data["storySoFar"] == {"text": "Who: Pip, who loves maps.", "by": "owner"}
+    saved = db.get(PK, "SERIES#SR1")
+    assert saved["storySoFarBy"] == "owner"  # still the owner's: the next recap gets OWNER_RULE too
+
+
+def test_a_car_make_never_reaches_the_story_so_far(tmp_path: Path) -> None:
+    svc, db = world(
+        tmp_path, FakeModel(answer("Pip bought a Toyota Corolla.", "Who: Pip and his BMW-ish car.\nPlaces: home."))
+    )
+    assert run(svc) == "done"
+    saved = db.get(PK, "SERIES#SR1")
+    assert saved["summaries"][-1]["summary"] == "Pip bought a car."
+    assert saved["storySoFar"] == "Who: Pip and his car-ish car.\nPlaces: home."
 
 
 def test_the_limits_are_asked_once_more_then_cut(tmp_path: Path) -> None:
@@ -163,17 +176,41 @@ def test_the_limits_are_asked_once_more_then_cut(tmp_path: Path) -> None:
     assert recap_task.check_recap({"episodeSummary": "", "storySoFar": "Who:"}, final=True)[0] is None
 
 
-def test_a_series_changed_meanwhile_fails_with_write_it_again(tmp_path: Path) -> None:
+def test_a_series_changed_meanwhile_is_read_again_and_written_once_more(tmp_path: Path) -> None:
+    svc, db = world(tmp_path, FakeModel())
+    calls: list[int] = []
+
+    def meanwhile(_call: dict[str, Any]):
+        calls.append(1)
+        if len(calls) == 1:  # another approval's recap saved while this one was being written
+            item = db.get(PK, "SERIES#SR1")
+            item.update(version=9, summaries=[{"storyId": "ST0", "summary": "Pip went to buy a car.", "by": "ai",
+                                               "at": "x"}])  # fmt: skip
+            db.seed(item)
+        return answer()
+
+    svc.model = FakeModel(meanwhile, meanwhile)
+    assert run(svc) == "done"
+    assert len(calls) == 2  # asked again from the series as it is now
+    saved = db.get(PK, "SERIES#SR1")
+    assert saved["version"] == 10 and saved["storySoFar"] == SO_FAR
+    assert [e["storyId"] for e in saved["summaries"]] == ["ST0", "ST1"]  # the other recap's summary is kept
+    data = json.loads(svc.model.texts(1).split("DATA as JSON:\n", 1)[1])
+    assert data["episodesBefore"][0]["summary"] == "Pip went to buy a car."
+
+
+def test_a_series_changed_twice_meanwhile_fails_with_write_it_again(tmp_path: Path) -> None:
     svc, db = world(tmp_path, FakeModel())
 
     def meanwhile(_call: dict[str, Any]):
         item = db.get(PK, "SERIES#SR1")
-        item["version"] = 9  # the owner saved an edit while the recap was being written
+        item["version"] = int(item["version"]) + 5  # the owner keeps saving edits while the recap is written
         db.seed(item)
         return answer()
 
-    svc.model = FakeModel(meanwhile)
+    svc.model = FakeModel(meanwhile, meanwhile)
     assert run(svc) == "failed"
+    assert len(svc.model.calls) == 2  # read again once, never more
     task = db.get(PK, "TASK#T1")
     assert task["error"] == GONE
     saved = db.get(PK, "SERIES#SR1")
