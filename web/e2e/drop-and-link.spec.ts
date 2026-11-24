@@ -254,8 +254,12 @@ test("keyboard upload still works on References: Tab to Upload a video, Enter, p
   const upload = page.getByRole("button", { name: "Upload a video" });
   await box(page).focus();
   for (let i = 0; i < 4 && !(await upload.evaluate((el) => el === document.activeElement)); i++) await page.keyboard.press("Tab");
-  await expect(upload).toBeFocused();
+  // Listening for the picker turns on Playwright's file-chooser interception, a message the page's renderer may handle
+  // after input that is already waiting: a key sent right behind it can open the picker first, past the interception,
+  // and no "filechooser" event ever comes (a click does page round trips before its mouse events; a key press none).
+  // So it listens first, and the focus check's round trip lands the interception before Enter is sent.
   const chooser = page.waitForEvent("filechooser");
+  await expect(upload).toBeFocused();
   await page.keyboard.press("Enter");
   await (await chooser).setFiles({ name: "snow_day.mp4", mimeType: "video/mp4", buffer: Buffer.alloc(400_000, 7) });
   await expect(page).toHaveURL(REF_PAGE, { timeout: 20_000 });
