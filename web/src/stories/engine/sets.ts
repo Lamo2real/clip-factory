@@ -11,11 +11,11 @@
 // rail or reflector posts and warm charcoal asphalt. Every other place keeps its own layout and palette row, passed
 // through the light it stands in (art.ts `grade`, the light scene.ts sets); in classic every colour is as before.
 
-import { grade, ND, nightDrive } from "./art.ts";
+import { grade, ND, nightDrive, softCount, softRings } from "./art.ts";
 import { F, X, Y } from "./frame.ts";
-import { mix, rand, shade } from "./math.ts";
+import { clamp, mix, rand, shade } from "./math.ts";
 import type { Pen } from "./pen.ts";
-import { arcPts, starPts } from "./pen.ts";
+import { arcPts, joinShapes, roundRectPts, starPts } from "./pen.ts";
 import { drawWeather } from "./props.ts";
 import type { SetId } from "./types.ts";
 
@@ -683,10 +683,45 @@ const LAMP_HALOS: readonly [number, "halo1" | "halo2" | "halo3", number][] = [
   [1.15, "halo1", 0.42],
 ];
 
-/** A street lamp's light (§45.45): the soft gold bloom (LAMP_HALOS, dimmed by `k`), then the head: given a `housing`
- * colour, a cobra head (a dark dome over the lens, which glows on its underside only), else the whole lens; the lens
- * is warm yellow (ND.lampHead) with a small white-hot centre (ND.lampCore). */
-export function lampGlow(pen: Pick<Pen, "circle" | "ellipse" | "poly">, x: number, y: number, r: number, rx: number, ry: number, k = 1, housing?: string): void {
+/** The colour of a night lamp's glow ring `t` (softRings) out from the lens: the lens's warm white at the lens, gold
+ * by an eighth of the way and amber by three fifths, where it fades out. */
+export function lampTint(t: number): string {
+  if (t <= 0.12) return mix(ND.lampLens, ND.lampGlowIn, t / 0.12);
+  return mix(ND.lampGlowIn, ND.lampGlowOut, (t - 0.12) / 0.48);
+}
+
+/** How far a night lamp's glow reaches past its lens, in lens half widths (the eye's own bloom round a bright light). */
+export const LAMP_GLOW = 3;
+
+/** A night lamp's glow ring `t` round a lens of half sizes rx × ry at (x, y), the glow reaching `reach` past it:
+ * [x, y, rx, ry] of an oval that follows the lens out, flatter than round and a little lower the further out it is
+ * (the light falls down, so the glow reaches further under the lamp than over it). */
+export function lampRing(x: number, y: number, rx: number, ry: number, reach: number, t: number): [number, number, number, number] {
+  const d = t * reach;
+  return [x, y + 0.2 * d, rx + d, ry + 0.9 * d];
+}
+
+/** A street lamp's light (§45.45). In night drive a bright warm emitter: its glow is `softRings` of ovals following
+ * the lens out (more rings the bigger it shows, so no ring edge reads), from the lens's warm white through gold to
+ * amber and clear, LAMP_GLOW lens half widths past it and dimmed by `k`, the most light right along the lens and none
+ * of it a flat disc; given a `housing`, a slim dark grey head (ND.lampHousing) over the lens, a bright bar
+ * (ND.lampLens) along its underside. In Bright the soft gold bloom (LAMP_HALOS) round a cobra head (a dark dome over
+ * the lens, which glows on its underside only) or the whole lens, warm yellow (ND.lampHead) with a small white-hot
+ * centre (ND.lampCore). */
+export function lampGlow(pen: Pick<Pen, "circle" | "ellipse" | "poly" | "rect" | "unit">, x: number, y: number, r: number, rx: number, ry: number, k = 1, housing?: string): void {
+  if (nightDrive()) {
+    const reach = LAMP_GLOW * rx;
+    for (const [t, a] of softRings(softCount((reach * pen.unit()) / F.k))) {
+      const [gx, gy, grx, gry] = lampRing(x, y, rx, ry, reach, t);
+      pen.ellipse(gx, gy, grx, gry, 0, lampTint(t), a * k);
+    }
+    if (housing) {
+      // a slim flat head with the lens, a bright bar, along its underside
+      pen.rect(x - rx * 1.06, y - ry * 0.9, rx * 2.12, ry * 1.05, ry * 0.45, ND.lampHousing);
+      pen.rect(x - rx * 0.96, y - ry * 0.05, rx * 1.92, ry * 0.75, ry * 0.37, ND.lampLens);
+    } else pen.ellipse(x, y, rx, ry, 0, ND.lampLens);
+    return;
+  }
   for (const [m, c, a] of LAMP_HALOS) pen.circle(x, y, r * m, ND[c], a * k);
   if (housing) {
     pen.poly(arcPts(x, y + ry * 0.15, rx * 1.1, ry * 1.6, 180, 360, 10), housing);
@@ -699,6 +734,27 @@ export function lampGlow(pen: Pick<Pen, "circle" | "ellipse" | "poly">, x: numbe
 }
 
 const LAMP_EVERY = 520;
+
+/** Night drive's row of street lamps at one depth (the side view), lit as lampGlow lights one with a head: each glow
+ * ring of every lamp on screen is one polygon, then all their heads and all their lenses, so a whole row costs about
+ * what one lamp does. `xs` are the lenses' centres (layer px), all at `y`; rx × ry the lens's half sizes. */
+function lampRow(pen: Pen, xs: number[], y: number, rx: number, ry: number): void {
+  const reach = LAMP_GLOW * rx;
+  const unit = pen.unit();
+  const seen = xs.filter((x) => {
+    const [sx] = pen.at(x, y);
+    const r = (rx + reach) * unit;
+    return sx + r > -60 * F.k && sx - r < (F.w + 60) * F.k;
+  });
+  if (!seen.length) return;
+  for (const [t, a] of softRings(softCount((reach * unit) / F.k))) {
+    const [, gy, grx, gry] = lampRing(0, y, rx, ry, reach, t);
+    const segs = clamp(Math.round((grx * unit) / F.k / 3), 12, 32);
+    pen.poly(joinShapes(seen.map((x) => arcPts(x, gy, grx, gry, 0, 360, segs))), lampTint(t), a);
+  }
+  pen.poly(joinShapes(seen.map((x) => roundRectPts(x - rx * 1.06, y - ry * 0.9, rx * 2.12, ry * 1.05, ry * 0.45))), ND.lampHousing);
+  pen.poly(joinShapes(seen.map((x) => roundRectPts(x - rx * 0.96, y - ry * 0.05, rx * 1.92, ry * 0.75, ry * 0.37))), ND.lampLens);
+}
 
 function nightSide(highway: boolean, env: SetEnv): void {
   const { pen, t, seed } = env;
@@ -740,13 +796,17 @@ function nightSide(highway: boolean, env: SetEnv): void {
   const scroll = env.scroll * 0.7;
   const baseY = S.verge + 40 * S.sy;
   const lamps = repeat(LAMP_EVERY, mod(-scroll + 140, LAMP_EVERY), -400, F.w + 400, 6 + more(LAMP_EVERY));
+  const nd = nightDrive();
+  const pole = nd ? ND.lampPole : ND.pole;
   for (const x of lamps) {
-    pen.rect(x - 7, baseY - 330, 14, 330, 4, ND.pole);
-    pen.rect(x + 1, baseY - 330, 6, 330, 3, ND.poleDark);
-    pen.rect(x - 7, baseY - 334, 90, 11, 5, ND.pole);
+    pen.rect(x - 7, baseY - 330, 14, 330, 4, pole);
+    pen.rect(x + 1, baseY - 330, 6, 330, 3, nd ? ND.lampPoleDark : ND.poleDark);
+    pen.rect(x - 7, baseY - 334, 90, 11, 5, pole);
     // no cone of light under it (that read as a spotlight): the soft bloom and the pool on the road
-    lampGlow(pen, x + 76, baseY - 318, 30, 30, 9, 1, ND.pole);
+    if (!nd) lampGlow(pen, x + 76, baseY - 318, 30, 30, 9, 1, ND.pole);
   }
+  // night drive: the whole row's light at once, over the poles and arms
+  if (nd) lampRow(pen, lamps.map((x) => x + 76), baseY - 320, 26, 7);
   // the ground: the far verge, then the guard rail (or reflector posts) along it
   env.layer(1);
   const gx0 = env.view.x0 - 200;
@@ -926,20 +986,20 @@ export function roadLook(set: SetId): RoadLook {
  * web/test/storiesNightShots.test.ts on every view, camera and size): the writer's estimate (script.ts sceneShapes)
  * can read it. */
 export const SET_SHAPES_ND: Record<SetId, number> = {
-  studio: 36,
-  road_day: 58,
-  road_night: 111,
-  icy_road: 76,
-  snowy_road: 98,
-  rainy_road: 106,
-  foggy_road: 46,
-  highway: 76,
-  country_road: 68,
-  city_street: 96,
-  parking_lot: 64,
-  kitchen: 40,
-  living_room: 36,
-  office: 43,
-  park: 68,
-  highway_night: 135,
+  studio: 44,
+  road_day: 66,
+  road_night: 104,
+  icy_road: 84,
+  snowy_road: 106,
+  rainy_road: 112,
+  foggy_road: 54,
+  highway: 84,
+  country_road: 76,
+  city_street: 104,
+  parking_lot: 72,
+  kitchen: 48,
+  living_room: 44,
+  office: 51,
+  park: 75,
+  highway_night: 128,
 };

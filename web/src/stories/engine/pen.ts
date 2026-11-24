@@ -340,6 +340,27 @@ function signedArea(p: number[]): number {
   return s / 2;
 }
 
+/** Many closed shapes as one polygon (non-zero winding): each walked round clockwise on screen and back to its start,
+ * the next one reached by a bridge from there, and every bridge walked back at the end, so the bridges add nothing and
+ * shapes that overlap fill once. Lights that share a colour and an alpha (the far street lamps' glow rings, a car's
+ * two headlights) draw as one shape instead of one each. */
+export function joinShapes(shapes: number[][]): number[] {
+  const pts: number[] = [];
+  const starts: number[] = [];
+  for (const s of shapes) {
+    if (s.length < 6) continue;
+    let loop = s;
+    if (signedArea(s) < 0) {
+      loop = [];
+      for (let i = s.length - 2; i >= 0; i -= 2) loop.push(s[i]!, s[i + 1]!);
+    }
+    pts.push(...loop, loop[0]!, loop[1]!);
+    starts.push(loop[0]!, loop[1]!);
+  }
+  for (let i = starts.length - 4; i >= 0; i -= 2) pts.push(starts[i]!, starts[i + 1]!);
+  return pts;
+}
+
 /** Sutherland–Hodgman: the part of `subject` inside the convex polygon `clip`. */
 export function clipConvex(subject: number[], clip: number[]): number[] {
   let out = subject;

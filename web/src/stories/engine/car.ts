@@ -7,7 +7,7 @@
 // tones, door lines, handles, a mirror on a stalk, glass reflections, rim light, soft shadows and glowing lights; the
 // front and back views of the shots are carView.ts. A script without `art` draws exactly as before.
 
-import { cel, grade, ink, lift, lineUnits, ND, nightDrive } from "./art.ts";
+import { cel, grade, ink, lift, lineUnits, ND, nightDrive, softRings } from "./art.ts";
 import { CATALOG } from "./catalog.ts";
 import { blink as blinkAt, FACES, type FaceParams, type Mouth } from "./face.ts";
 import { F } from "./frame.ts";
@@ -392,15 +392,19 @@ export function lightGlow(pen: Pen, x: number, y: number, blink: number, k: numb
   if (blink > 0.04) pen.circle(x, y, 46 * k, nightDrive() ? ND.headBloom : "#fff3b0", 0.55 * blink);
 }
 
-/** Night drive: a headlight's bloom, the halos only (the lens is the core): four halos with small alpha steps, r ×
- * 3.6, 2.6, 1.8 and 1.3 at 0.04, 0.08, 0.16 and 0.34 × k (§45.45 §3), so it falls off softly like the street lamps.
- * Stacked circles, so both drawers paint it the same. */
+/** Night drive: a tail light's glow in the side view, over its lens: two soft rings (art.ts softRings) that reach 1.5 ×
+ * the lens's radius `r` past it and fade to clear, instead of one flat disc; `a` is the old disc's alpha (0.25 lit,
+ * up to 0.45 on the brakes). */
+export function tailGlow(pen: Pen, x: number, y: number, r: number, a: number): void {
+  for (const [t, ra] of softRings(2, 0.7)) pen.circle(x, y, r * (1 + 1.5 * t), ND.tailGlow, Math.min(1, ra * a * 1.4));
+}
+
+/** Night drive: a headlight's bloom, the halos only (the lens is the core): three soft rings (art.ts softRings) out
+ * to about 3.7 × the lens's radius, × k, so it falls off softly like the street lamps. Stacked circles, so both drawers
+ * paint it the same. */
 export function bloom(pen: Pen, x: number, y: number, r: number, k: number): void {
   if (k <= 0.02) return;
-  pen.circle(x, y, r * 3.6, ND.headBloom, 0.04 * k);
-  pen.circle(x, y, r * 2.6, ND.headBloom, 0.08 * k);
-  pen.circle(x, y, r * 1.8, ND.headBloom, 0.16 * k);
-  pen.circle(x, y, r * 1.3, ND.headBloom, 0.34 * k);
+  for (const [t, a] of softRings(3, 0.55)) pen.circle(x, y, r * (1.1 + 2.6 * t), ND.headBloom, a * k);
 }
 
 // ---- the face ----------------------------------------------------------------------------------------------------
@@ -1075,7 +1079,7 @@ function drawCarLookSideND(pen: Pen, st: PropState, k: number, t: number, d: Car
   const s = g.lowH / 136;
   if (lit) bloom(pen, front[0], front[1], (car.lights.front === "slim" ? 11 : 15) * s, (dark ? 1 : 0.5) * (headEyes ? 0.6 : 1));
   const tailA = Math.max(tailOn ? 0.25 : 0, braking ? 0.45 * st.braking : 0);
-  if (tailA > 0) pen.circle(back[0], back[1], 13 * s * 2.5, ND.tailGlow, tailA);
+  if (tailA > 0) tailGlow(pen, back[0], back[1], 13 * s, tailA);
   lightGlow(pen, front[0], front[1], st.blink, 1);
   if (face) {
     const closedBy = Math.max(face.eyes === "normal" || face.eyes === "lidded" ? blinkAt(d.seed, t) : 0, st.blink);

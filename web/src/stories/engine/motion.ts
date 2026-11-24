@@ -2,6 +2,7 @@
 // curves (bouncy overshoots, calm eases, clumsy wobbles, zippy is quick, heavy settles slowly). Beats layer: each
 // active beat is blended over the pose under it, so a walk and a wave can play at once.
 
+import { nightDrive } from "./art.ts";
 import { F } from "./frame.ts";
 import { TAU, clamp, clamp01, ease, lerp, noise, smoothstep, type Ease } from "./math.ts";
 import { FACES, NOISE_MOUTH, type FaceParams } from "./face.ts";
@@ -52,6 +53,8 @@ const STANDING: Set<ActionId> = new Set(["walk", "run", "jump", "celebrate", "da
 const SELF_BLEND: Set<ActionId> = new Set(["sit", "fall", "get_up"]);
 export const DRIVING: Set<ActionId> = new Set(["drive", "steer_left", "steer_right", "brake"]);
 const TRAVELLERS: Set<ActionId> = new Set(["walk", "run"]);
+/** Actions with both hands up in joy: night drive shows them with happy eyes. */
+const CHEERING: Set<ActionId> = new Set(["celebrate", "dance", "jump"]);
 
 /** The face an action shows when its beat names none (only while the beat plays). */
 const IMPLIED: Partial<Record<ActionId, Expression>> = {
@@ -610,6 +613,9 @@ export function actorState(actor: ActorInput, beats: Beat[], style: Style, g: Ge
   if (implied && faces && !faces.includes(implied)) implied = null;
   const exprShown = implied ?? expression;
   let face: FaceParams = FACES[exprShown] ?? FACES.neutral;
+  // night drive: cheering (celebrate, dance, jump) shows closed happy ^ ^ eyes and a grin, never proud's half-lidded,
+  // smug eyes and smirk
+  if (nightDrive() && face.eyes === "lidded" && active.some((b) => CHEERING.has(b.do as ActionId))) face = { ...face, eyes: "happy", lid: 0, mouth: face.mouth === "smirk" ? "grin" : face.mouth };
   // talking: a noise moves the mouth while it plays; a humming voice keeps its lips closed and hums
   for (const b of beats) {
     if (b.at > t || !b.noise) continue;

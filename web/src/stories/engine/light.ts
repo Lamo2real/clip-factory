@@ -50,16 +50,30 @@ export function lightFor(set: SetId, part: LightPart, warm: number): Light {
   return { ...LIGHTS.indoor };
 }
 
-/** The vignette's rings: the frame outside an ellipse (rx, ry as parts of half the frame) darkened by `a` at night.
- * Four soft steps of 0.05, close together, in the corners only: steps of 0.10 showed as oval rings in a flat night
- * sky, and rings across the whole frame cost a full frame of rasterizing each; these darken the corners by about 0.19
- * with a gentle falloff and leave the middle of each edge alone. */
+/** The vignette's rings: the frame outside an ellipse (rx, ry as parts of half the frame) darkened by `a` at night,
+ * in the corners only (rings across the whole frame cost a full frame of rasterizing each). The top corners, where
+ * the flat night sky shows any step, have eight fine steps of 0.025 (about one level each on the sky); the bottom
+ * corners, over the dark road, the verge or the dashboard, four of 0.05. Both reach the same ellipses and darken the
+ * very corners by about 0.18, with a gentle falloff, and leave the middle of each edge alone. */
 const RINGS: [number, number, number][] = [
   [1.27, 1.17, 0.05],
   [1.21, 1.12, 0.05],
   [1.15, 1.08, 0.05],
   [1.1, 1.04, 0.05],
 ];
+const RING_TOP = 8;
+/** The top's rings: eight from RINGS' outermost ellipse to its innermost, each darkening by 0.025, so two of them
+ * darken about as much as one of the bottom's. */
+const TOP_RINGS: [number, number, number][] = Array.from({ length: RING_TOP }, (_, i) => {
+  const t = (i * (RINGS.length - 1)) / (RING_TOP - 1);
+  const j = Math.min(RINGS.length - 2, Math.floor(t));
+  const f = t - j;
+  const [a0, b0] = RINGS[j]!;
+  const [a1, b1] = RINGS[j + 1]!;
+  return [Math.round((a0 + (a1 - a0) * f) * 1e4) / 1e4, Math.round((b0 + (b1 - b0) * f) * 1e4) / 1e4, 0.025];
+});
+/** The vignette's rings at the top corners and at the bottom ones: [rx, ry, alpha at night], the outermost first. */
+export const VIGNETTE: Readonly<{ top: readonly [number, number, number][]; bottom: readonly [number, number, number][] }> = Object.freeze({ top: TOP_RINGS, bottom: RINGS });
 const RING_SEGS = 36;
 
 /** A keyhole polygon (screen px): the rectangle (x0, y0)-(x1, y1) clockwise, a bridge into the hole, the hole
@@ -101,24 +115,20 @@ export function ellipsePts(cx: number, cy: number, rx: number, ry: number, segs 
 }
 
 /** The vignette (§4.5): rings in ND.vignette over the whole picture, before the bubbles, darker towards the corners on
- * a night place and half as dark by day. Each ring is drawn as four corner pieces (the frame's corner outside the
- * ring's ellipse), so only the corners are rasterized. Fixed to the screen. */
+ * a night place and half as dark by day (VIGNETTE: finer steps at the top). Each ring is drawn as two corner pieces
+ * (the frame's corner outside the ring's ellipse), so only the corners are rasterized. Fixed to the screen. */
 export function drawVignette(pen: Pen, night: boolean): void {
   pen.setMatrix([1, 0, 0, 1, 0, 0]);
   const hw = F.w / 2;
   const hh = F.h / 2;
   const out = 1.02;
-  for (const [a, b, alpha] of RINGS) {
+  const rings: [number, number, number, 1 | -1][] = [...VIGNETTE.bottom.map(([a, b, al]) => [a, b, al, 1] as [number, number, number, 1]), ...VIGNETTE.top.map(([a, b, al]) => [a, b, al, -1] as [number, number, number, -1])];
+  for (const [a, b, alpha, sy] of rings) {
     // where the ellipse meets the frame's side (u = 1) and its top or bottom (v = 1), in parts of half the frame
     const v1 = a > 1 ? b * Math.sqrt(1 - 1 / (a * a)) : 0;
     const t0 = Math.atan2(v1 / b, Math.min(1, 1 / a));
     const t1 = b > 1 ? Math.atan2(1 / b, Math.sqrt(1 - 1 / (b * b))) : Math.PI / 2;
-    for (const [sx, sy] of [
-      [1, 1],
-      [-1, 1],
-      [-1, -1],
-      [1, -1],
-    ] as const) {
+    for (const sx of sy > 0 ? ([1, -1] as const) : ([-1, 1] as const)) {
       const pts: number[] = [hw + sx * hw * out, hh + sy * hh * out, hw + sx * hw * out, hh + sy * hh * v1];
       for (let i = 0; i <= 6; i += 1) {
         const t = t0 + ((t1 - t0) * i) / 6;

@@ -2,6 +2,7 @@
 // lines). The balloon is drawn in the frames; the symbol inside it is a TextEvent (textTrack), placed at the same
 // screen spot, so the balloon and its symbol always line up. Bubbles are fixed to the screen while they show.
 
+import { nightDrive } from "./art.ts";
 import { DEG, clamp01, ease } from "./math.ts";
 import type { Pen } from "./pen.ts";
 import { dropPts, inflate, starPts } from "./pen.ts";
@@ -38,7 +39,11 @@ export const BUBBLE_SYMBOL: Record<BubbleId, { text: string; size: number; color
 };
 
 export const BUBBLE_R = 104;
-const INK = "#1c1842";
+const CLASSIC_INK = "#1c1842";
+/** Night drive's balloon: a warm off-white (never the brightest thing in a night frame, the lamps are) inside a softer,
+ * thinner, lighter outline. */
+const NIGHT_FILL = "#e9e0cf";
+const NIGHT_INK = "#3a3448";
 
 /** How long a bubble shows for a beat of this length. */
 export function bubbleSpan(dur: number): number {
@@ -79,6 +84,11 @@ export function drawBubble(pen: Pen, b: Bubble, t: number): void {
   }
   pen.translate(b.x, b.y);
   pen.scale(k);
+  const nd = nightDrive();
+  const INK = nd ? NIGHT_INK : CLASSIC_INK;
+  // the outline's width round the balloon (classic 8, night drive 6) and round the thought cloud's lobes (7, 5)
+  const ow = nd ? 6 : 8;
+  const lw = nd ? 5 : 7;
   const wide = b.kind === "dots" || b.kind === "angry" || b.kind === "zzz";
   const rx = wide ? BUBBLE_R * 1.3 : BUBBLE_R;
   const ry = wide ? BUBBLE_R * 0.92 : BUBBLE_R;
@@ -88,7 +98,7 @@ export function drawBubble(pen: Pen, b: Bubble, t: number): void {
   const ux = tx / len;
   const uy = ty / len;
   const thought = b.kind === "dots" || b.kind === "zzz" || b.kind === "question";
-  const fill = b.kind === "angry" ? "#ff4f4f" : b.kind === "idea" ? "#ffd54a" : "#ffffff";
+  const fill = b.kind === "angry" ? "#ff4f4f" : b.kind === "idea" ? "#ffd54a" : nd ? NIGHT_FILL : "#ffffff";
   if (b.kind === "idea") {
     // a glowing light bulb: the classic "I've got an idea"
     const glow = 0.18 + 0.1 * Math.sin(t * 8);
@@ -110,7 +120,7 @@ export function drawBubble(pen: Pen, b: Bubble, t: number): void {
     for (let i = 2; i >= 1; i -= 1) {
       const d = len * (i === 2 ? 0.72 : 0.5);
       const r = i === 2 ? 14 : 22;
-      pen.circle(ux * d, uy * d, r + 6, INK);
+      pen.circle(ux * d, uy * d, r + ow - 2, INK);
       pen.circle(ux * d, uy * d, r, fill);
     }
     const lobes: [number, number, number][] = [
@@ -121,7 +131,7 @@ export function drawBubble(pen: Pen, b: Bubble, t: number): void {
       [0.34, -0.42, 0.6],
       [0, 0.42, 0.62],
     ];
-    for (const [lx, ly, lr] of lobes) pen.ellipse(lx * rx, ly * ry, lr * rx * 0.72 + 7, lr * ry * 0.72 + 7, 0, INK);
+    for (const [lx, ly, lr] of lobes) pen.ellipse(lx * rx, ly * ry, lr * rx * 0.72 + lw, lr * ry * 0.72 + lw, 0, INK);
     for (const [lx, ly, lr] of lobes) pen.ellipse(lx * rx, ly * ry, lr * rx * 0.72, lr * ry * 0.72, 0, fill);
     return;
   }
@@ -133,14 +143,14 @@ export function drawBubble(pen: Pen, b: Bubble, t: number): void {
   const spiky = b.kind === "exclaim" || b.kind === "angry";
   if (spiky) {
     const pts = starPts(0, 0, rx * 1.12, rx * 0.86, 11, t * 20);
-    pen.poly(inflate(tail, 8), INK);
-    pen.poly(inflate(pts, 8), INK);
+    pen.poly(inflate(tail, ow), INK);
+    pen.poly(inflate(pts, ow), INK);
     pen.poly(tail, fill);
     pen.poly(pts, fill);
     return;
   }
-  pen.poly(inflate(tail, 8), INK);
-  pen.ellipse(0, 0, rx + 8, ry + 8, 0, INK);
+  pen.poly(inflate(tail, ow), INK);
+  pen.ellipse(0, 0, rx + ow, ry + ow, 0, INK);
   pen.poly(tail, fill);
   pen.ellipse(0, 0, rx, ry, 0, fill);
   if (b.kind === "heart") pen.ellipse(-rx * 0.45, -ry * 0.5, rx * 0.2, ry * 0.12, -30, "#ffe0e7", 0.9);

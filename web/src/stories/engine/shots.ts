@@ -64,14 +64,14 @@ export function nextCutAfter(scene: Pick<Scene, "cuts">, t: number): number {
  * writer's estimate (script.ts sceneShapes) reads it. */
 export const SHOT_SHAPES: Record<ShotId, number> = {
   scene: 0,
-  driver_view: 260,
-  face: 145,
+  driver_view: 299,
+  face: 164,
   side_window: 165,
-  mirror: 185,
-  speed_dial: 115,
-  pedals: 60,
-  road_behind: 200,
-  road_wide: 205,
+  mirror: 226,
+  speed_dial: 123,
+  pedals: 76,
+  road_behind: 235,
+  road_wide: 236,
 };
 /** At most this many other cars show in a shot (the nearest ones). */
 export const SHOT_CARS = 4;
@@ -525,6 +525,24 @@ function cabinFront(pen: Pen, x: ShotInput, w: World, top: number, dashY: number
   pen.rect(mx - mw / 2 + 8, my - mh / 2 + 7, mw - 16, mh - 14, mh / 2 - 7, "#1f2c44");
   pen.line([mx - mw / 2 + mh / 2, my - mh / 2 + 3, mx + mw / 2 - mh / 2, my - mh / 2 + 3], 2.5, ND.pillarLit, 0.6);
   const behind = w.others.filter((o) => o.ahead < 0 && o.gap < 45).sort((a, b) => a.gap - b.gap)[0];
+  if (!behind && nightDrive()) {
+    // night drive with nobody close behind: a faint reflection of the road far behind, a lane line and a pair of
+    // small headlights far down it
+    const gx = mx - mw / 2 + 8;
+    const gy = my - mh / 2 + 7;
+    const gw = mw - 16;
+    const gh = mh - 14;
+    const glass = roundRectPts(gx, gy, gw, gh, gh / 2);
+    const hz = my + gh * 0.02;
+    const vx = mx - w.steer * gw * 0.06 + noise(x.seed + 51, x.t * 0.25) * gw * 0.04;
+    pen.poly(clipConvex([gx, hz, gx + gw, hz, gx + gw, gy + gh, gx, gy + gh], glass), "#1a2233", 0.85);
+    pen.poly(clipConvex([vx - 5, hz, vx + 5, hz, vx + gw * 0.34, gy + gh + 2, vx - gw * 0.34, gy + gh + 2], glass), "#2a2a30", 0.9);
+    pen.line([vx, hz + 2, vx + gw * 0.05, gy + gh], 1.6, ND.laneFar, 0.3);
+    for (const s of [-1, 1]) {
+      pen.circle(vx + s * 8 - 8, hz + 4, 6, ND.headBloom, 0.16);
+      pen.circle(vx + s * 8 - 8, hz + 4, 1.8, ND.headCore, 0.85);
+    }
+  }
   if (behind) {
     const sp = clamp(60 / behind.gap, 6, 28);
     const ox = behind.X === 0 ? 0 : -mw * 0.22;
@@ -942,26 +960,38 @@ function revs(x: ShotInput, w: World): number {
   return v;
 }
 
+/** Night drive: the camera `c` eased so the box (x0, y0)-(x1, y1) stays in the frame, `m` px in from its edges: zoomed
+ * out as far as it needs (never in), then moved along as little as it needs. */
+function keepInFrame(c: Cam, x0: number, y0: number, x1: number, y1: number, m: number): Cam {
+  const zoom = Math.min(c.zoom, (F.w - 2 * m) / (x1 - x0), (F.h - 2 * m) / (y1 - y0));
+  const fit = (v: number, lo: number, hi: number, half: number) => (hi - lo >= 2 * half ? (lo + hi) / 2 : clamp(v, hi - half, lo + half));
+  return { ...c, zoom, cx: fit(c.cx, x0, x1, (F.w / 2 - m) / zoom), cy: fit(c.cy, y0, y1, (F.h / 2 - m) / zoom) };
+}
+
 function speedDial(pen: Pen, x: ShotInput, w: World): void {
   const W = F.w;
   const H = F.h;
   const tl = tall();
-  const cx = W * P(0.56, 0.5);
-  const cy = H * P(0.56, 0.58);
-  const r = S * P(0.58, 0.46);
+  const nd = nightDrive();
+  // night drive: a dial small enough that its whole ring, 0 to 8 and the red zone, is always in the frame
+  const cx = W * P(nd ? 0.5 : 0.56, 0.5);
+  const cy = H * P(nd ? 0.52 : 0.56, 0.58);
+  const r = S * (nd ? P(0.41, 0.4) : P(0.58, 0.46));
   const v = revs(x, w);
   const ang = (n: number) => (225 - (270 * n) / 8) * DEG;
   const pt = (n: number, rr: number): [number, number] => [cx + Math.cos(ang(n)) * rr, cy - Math.sin(ang(n)) * rr];
   const tip = pt(v, r * 0.86);
-  pen.setMatrix(layerMatrix(camFor(x, tip[0], tip[1]), 1));
+  const cam = camFor(x, tip[0], tip[1]);
+  const R = r * 1.058 + 0.02 * S;
+  pen.setMatrix(layerMatrix(nd ? keepInFrame(cam, cx - R, cy - R, cx + R, cy + r * 0.8, 0.03 * S) : cam, 1));
   lightPart(x, "cabin");
   pen.fill(ND.dashFace);
   pen.ellipse(W * 0.5, -0.2 * S, W, 0.36 * S, 0, ND.dashTop);
-  // the edge of a second dial on the right (9:16) or both sides (wider frames)
+  // the edge of a second dial on the right (9:16; below the rev counter in night drive) or both sides (wider frames)
   for (const s of tl ? [1] : [-1, 1]) {
-    const ox = tl ? W + 0.22 * S : cx + s * r * 2.15;
-    const oy = tl ? cy + r * 1.02 : cy + 0.05 * S;
-    const r2 = r * (tl ? 0.62 : 0.74);
+    const ox = tl ? (nd ? W * 0.9 : W + 0.22 * S) : cx + s * r * 2.15;
+    const oy = tl ? cy + r * (nd ? 1.78 : 1.02) : cy + 0.05 * S;
+    const r2 = r * (tl ? (nd ? 0.7 : 0.62) : 0.74);
     pen.circle(ox, oy, r2 * 1.05, ND.bezel);
     pen.circle(ox, oy, r2, ND.dialFace);
     pen.line(arcPts(ox, oy, r2 * 0.86, r2 * 0.86, 140, 270, 12), 4, ND.tick, 0.6);

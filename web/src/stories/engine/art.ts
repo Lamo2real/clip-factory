@@ -84,6 +84,14 @@ export const ND = {
   halo3: "#ff9a3c",
   pool: "#ffb35c",
   cone: "#ffcf7a",
+  /** night drive's street lamp (sets.ts lampGlow): a warm white-yellow emitter under a small dark grey head, its
+   * glow falling off from gold (lampGlowIn) through amber (lampGlowOut) to clear, on a slate grey pole */
+  lampLens: "#fff6d8",
+  lampGlowIn: "#f2c76a",
+  lampGlowOut: "#d98a3a",
+  lampHousing: "#34373e",
+  lampPole: "#4a5162",
+  lampPoleDark: "#343a48",
   // car lights
   headCore: "#fdfdfd",
   headBloom: "#fff7e0",
@@ -201,6 +209,34 @@ export function lineUnits(pen: Pen, designPx: number): number {
   const u = pen.unit();
   return u > 0 ? (designPx * F.k) / u : designPx;
 }
+
+const SOFT_RINGS = new Map<string, readonly (readonly [number, number])[]>();
+
+/** A soft light's rings (§45.45): `n` stacked rings, the biggest first, each [t, alpha], t being how far out the ring
+ * reaches from the light's own edge as a part of the whole glow (1 the outermost). Painted one over the other they
+ * build up the falloff peak · (1 − t)^power, in steps that grow with the square of the ring's number, so the faint
+ * outside (where a step shows most on a dark sky) moves in the smallest steps and no ring edge reads as a ring. Each
+ * ring's edge sits where the falloff crosses the middle of its step. Stacked shapes, no gradient, so both drawers
+ * paint it the same. */
+export function softRings(n: number, peak = 0.85, power = 3): readonly (readonly [number, number])[] {
+  const k = Math.max(1, Math.round(n));
+  const key = `${k} ${peak} ${power}`;
+  const hit = SOFT_RINGS.get(key);
+  if (hit) return hit;
+  const out: [number, number][] = [];
+  let before = 0;
+  for (let j = 1; j <= k; j += 1) {
+    const level = peak * (j / k) ** 2;
+    const mid = (before + level) / 2;
+    out.push([1 - (mid / peak) ** (1 / power), 1 - (1 - level) / (1 - before)]);
+    before = level;
+  }
+  SOFT_RINGS.set(key, out);
+  return out;
+}
+
+/** How many soft rings a glow reaching `px` design px out on screen gets: one every 2.6 px, 3 to 20. */
+export const softCount = (px: number): number => clamp(Math.round(px / 2.6), 3, 20);
 
 /** A light: three stacked halos (r × 5, 3 and 1.6 at a 0.07, 0.16 and 0.38 × k, the biggest first) and the core on
  * top. Stacked circles, no gradient, so both drawers paint it the same. */

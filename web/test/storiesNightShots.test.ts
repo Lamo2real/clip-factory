@@ -5,7 +5,7 @@
 // same every time, keeps the face and the bubbles where they belong, and never touches the sound. A script without
 // `art` and without cuts draws exactly as before.
 import { describe, expect, it } from "vitest";
-import { grade, LIGHTS, ND } from "../src/stories/engine/art.ts";
+import { grade, LIGHTS, ND, softRings } from "../src/stories/engine/art.ts";
 import { shotCamera } from "../src/stories/engine/camera.ts";
 import { CAR_VIEW_SHAPES } from "../src/stories/engine/car.ts";
 import { audioTrack, CATALOG, drawFrame, ENGINE_VERSION, FORMATS, normalizeScript, textTrack, validateScript } from "../src/stories/engine/engine.ts";
@@ -310,19 +310,33 @@ describe("the light and the finish", () => {
     const s = valid(story([drive("highway_night", [])]));
     const isRing = (p: Prim) => p.k === "poly" && p.color === ND.vignette;
     const nd = drawFrame(s, 30);
-    // four soft rings (0.05 each, no hard oval edge in the sky), each drawn as four corner pieces: every corner is
-    // under all four rings, the middle and the middle of each edge under none
+    // soft rings, each drawn as two corner pieces: the top corners, over the flat night sky, step down in eight fine
+    // rings of 0.025 (about one level each on the sky, so no ring shows as an oval edge), the bottom corners in four
+    // of 0.05; every corner is under all its rings and darkened about the same, the middle and the middle of each edge
+    // under none
+    const alpha = (p: Prim | undefined): number => (p && "a" in p && typeof p.a === "number" ? p.a : 1);
     const rings = nd.filter(isRing) as Extract<Prim, { k: "poly" }>[];
-    expect(rings.length).toBe(16);
-    expect(rings.every((p) => p.a === 0.05)).toBe(true);
-    const over = (x: number, y: number) => rings.filter((p) => winding(p.pts, x, y) !== 0).length;
+    expect(rings.length).toBe(24);
+    const over = (x: number, y: number) => rings.filter((p) => winding(p.pts, x, y) !== 0);
+    const dark = (ps: Prim[]): number => 1 - ps.reduce((k, p) => k * (1 - alpha(p)), 1);
     for (const [x, y] of [
       [3, 3],
       [1077, 3],
+    ]) {
+      expect(over(x!, y!).length, `${x},${y}`).toBe(8);
+      expect(over(x!, y!).every((p) => p.a === 0.025), `${x},${y}`).toBe(true);
+    }
+    for (const [x, y] of [
       [3, 1917],
       [1077, 1917],
-    ])
-      expect(over(x!, y!), `${x},${y}`).toBe(4);
+    ]) {
+      expect(over(x!, y!).length, `${x},${y}`).toBe(4);
+      expect(over(x!, y!).every((p) => p.a === 0.05), `${x},${y}`).toBe(true);
+    }
+    expect(dark(over(3, 3))).toBeGreaterThan(0.17);
+    expect(Math.abs(dark(over(3, 3)) - dark(over(3, 1917)))).toBeLessThan(0.01);
+    // no step anywhere over the sky is bigger than 0.025
+    expect(rings.filter((p) => Math.max(...p.pts.filter((_, i) => i % 2 === 1)) < 960).every((p) => alpha(p) <= 0.025)).toBe(true);
     for (const [x, y] of [
       [540, 960],
       [540, 3],
@@ -330,14 +344,51 @@ describe("the light and the finish", () => {
       [1077, 960],
       [540, 1917],
     ])
-      expect(over(x!, y!), `${x},${y}`).toBe(0);
+      expect(over(x!, y!).length, `${x},${y}`).toBe(0);
     const classic = drawFrame({ ...clone(s), art: "classic" }, 30);
     expect(classic.filter(isRing).length).toBe(0);
     // by day the rings are half as dark
     const day = drawFrame(valid(story([drive("road_day", [])])), 30).filter(isRing);
     const night = nd.filter(isRing);
-    const alpha = (p: Prim | undefined): number => (p && "a" in p && typeof p.a === "number" ? p.a : 1);
+    expect(day.length).toBe(night.length);
     day.forEach((p, i) => expect(alpha(p)).toBeCloseTo(alpha(night[i]) / 2, 2));
+  });
+
+  it("street lamps are warm emitters in night drive: soft glow rings in small steps, a slim dark head over the lens, poles behind the rails", () => {
+    // the glow's rings: inside one another, building up to the peak, the faint outside in the smallest steps
+    for (let n = 3; n <= 20; n += 1) {
+      const rings = softRings(n);
+      expect(rings.length).toBe(n);
+      let level = 0;
+      let step = 0;
+      rings.forEach(([t, a], i) => {
+        expect(t).toBeGreaterThan(0);
+        expect(t).toBeLessThan(1);
+        if (i > 0) expect(t).toBeLessThan(rings[i - 1]![0]);
+        const next = 1 - (1 - level) * (1 - a);
+        expect(next - level).toBeGreaterThanOrEqual(step - 1e-9);
+        step = next - level;
+        level = next;
+      });
+      expect(level).toBeCloseTo(0.85, 6);
+      expect(rings[0]![1]).toBeLessThanOrEqual(0.85 / (n * n) + 1e-9);
+    }
+    for (const shot of ["road_behind", "driver_view"] as const) {
+      const prims = drawFrame(valid(story([drive("highway_night", [{ at: 0.1, shot }])])), 40);
+      const first = (c: string) => prims.findIndex((p) => "color" in p && p.color === c);
+      const last = (c: string) => prims.findLastIndex((p) => "color" in p && p.color === c);
+      // the lens, a warm white bar, under a dark grey head; no flat gold disc of Bright's
+      expect(first(ND.lampLens), shot).toBeGreaterThan(-1);
+      expect(first(ND.lampHousing), shot).toBeGreaterThan(-1);
+      expect(first(ND.lampHead), shot).toBe(-1);
+      // every pole is drawn before the rails (so a rail stands in front of its foot), every lens after them
+      expect(last(ND.lampPole), shot).toBeLessThan(first(ND.rail));
+      expect(first(ND.lampLens), shot).toBeGreaterThan(last(ND.rail));
+    }
+    // Bright keeps its own lamps
+    const bright = drawFrame(valid(story([drive("highway_night", [{ at: 0.1, shot: "road_behind" }])], FORMATS[0], { art: "classic" })), 40);
+    expect(bright.some((p) => "color" in p && p.color === ND.lampHead)).toBe(true);
+    expect(bright.some((p) => "color" in p && p.color === ND.lampLens)).toBe(false);
   });
 
   it("a shot's camera never shows past the shot's 80 px margin, whatever it zooms into", () => {

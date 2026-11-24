@@ -685,7 +685,7 @@ function halfPlane(ax: number, ay: number, bx: number, by: number, sx: number, s
 
 /** A convex clip for a curved cel shadow: the big circle through A and B on S's side, its arc bulging `sag` past the
  * chord AB away from S, so the shadow's edge is a soft curve, not a straight cut. */
-function lensClip(ax: number, ay: number, bx: number, by: number, sx: number, sy: number, sag: number): number[] {
+function lensClip(ax: number, ay: number, bx: number, by: number, sx: number, sy: number, sag: number, segs = 48): number[] {
   const c = Math.hypot(bx - ax, by - ay) || 1;
   let nx = -(by - ay) / c;
   let ny = (bx - ax) / c;
@@ -697,7 +697,7 @@ function lensClip(ax: number, ay: number, bx: number, by: number, sx: number, sy
   }
   const s = Math.max(0.01, sag);
   const R = (c * c) / 4 / (2 * s) + s / 2;
-  return arcPts(mx + nx * (R - s), my + ny * (R - s), R, R, 0, 360, 48).slice(0, -2);
+  return arcPts(mx + nx * (R - s), my + ny * (R - s), R, R, 0, 360, segs).slice(0, -2);
 }
 
 /** The cel shade along a limb: a narrower line on its lower back side, inside the limb's own line. */
@@ -954,9 +954,15 @@ function wheelNight(pen: Pen, g: Geo, pose: Pose, P: Paint): void {
   pen.circle(cx, cy, 2.2, ND.wheelHub, k);
 }
 
-/** The head's points: its superellipse, or the ellipse as a polygon. */
-function headPts(g: Geo): number[] {
-  return g.headN > 2.2 ? superellipse(0, 0, g.headRX, g.headRY, g.headN, 0, 28) : arcPts(0, 0, g.headRX, g.headRY, 0, 360, 32).slice(0, -2);
+/** How many times the usual points a night head and its hair are drawn with: 1 at a standing character's size, 2
+ * from 6 design px per rig unit and 3 from 10 (the shots' close-ups, where a few long straight edges show). */
+function fine(P: Paint): number {
+  return P.u >= 10 ? 3 : P.u >= 6 ? 2 : 1;
+}
+
+/** The head's points: its superellipse, or the ellipse as a polygon (k times the usual points, `fine`). */
+function headPts(g: Geo, k = 1): number[] {
+  return g.headN > 2.2 ? superellipse(0, 0, g.headRX, g.headRY, g.headN, 0, 28 * k) : arcPts(0, 0, g.headRX, g.headRY, 0, 360, 32 * k).slice(0, -2);
 }
 
 function headShapeNight(pen: Pen, g: Geo, look: CharacterLook, P: Paint, farEar = 0): void {
@@ -972,7 +978,8 @@ function headShapeNight(pen: Pen, g: Geo, look: CharacterLook, P: Paint, farEar 
       pen.line(arcPts(ex + s * 0.5, 2.2, 2.3, 2.8, s > 0 ? -75 : 105, s > 0 ? 75 : 255, 6), P.ow * 0.7, dk(P, P.skin, 0.4), 0.8);
     }
   }
-  const pts = headPts(g);
+  const k = fine(P);
+  const pts = headPts(g, k);
   if (g.headN > 2.2) pen.poly(inflate(pts, P.ow), P.O);
   else pen.ellipse(0, 0, rx + P.ow, ry + P.ow, 0, P.O);
   if (g.headN > 2.2) pen.poly(pts, P.skin);
@@ -983,23 +990,23 @@ function headShapeNight(pen: Pen, g: Geo, look: CharacterLook, P: Paint, farEar 
   const ay = Math.sin(190 * DEG) * ry;
   const bx = Math.cos(112 * DEG) * rx * m;
   const by = Math.sin(112 * DEG) * ry;
-  pen.poly(clipConvex(pts, lensClip(ax, ay, bx, by, -rx * m, ry, Math.hypot(bx - ax, by - ay) * 0.12)), dk(P, P.skin));
+  pen.poly(clipConvex(pts, lensClip(ax, ay, bx, by, -rx * m, ry, Math.hypot(bx - ax, by - ay) * 0.12, 48 * k)), dk(P, P.skin));
   if (look.hair.style === "none" && look.accessory !== "helmet") pen.ellipse(rx * 0.3 * m, -ry * 0.64, 6, 2.8, 20 * m, lt(P, P.skin, 0.16), 0.8);
 }
 
 /** The scalloped fringe cap (short, long and bun): the top of the head and a soft edge of 7 scallops across the
  * forehead at -0.50 × headRY, a little lower at the temples. */
-function scallopCapPts(g: Geo): number[] {
+function scallopCapPts(g: Geo, fk = 1): number[] {
   const rx = g.headRX + 1.2;
   const ry = g.headRY + 1.2;
   const pts: number[] = [];
-  for (let i = 0; i <= 16; i += 1) {
-    const a = (186 + (168 * i) / 16) * DEG;
+  for (let i = 0; i <= 16 * fk; i += 1) {
+    const a = (186 + (168 * i) / (16 * fk)) * DEG;
     pts.push(Math.cos(a) * rx, Math.sin(a) * ry);
   }
   const x0 = g.headRX * 0.86;
   const base = (x: number) => -g.headRY * 0.5 + 0.1 * g.headRY * (x / g.headRX) ** 2;
-  const per = 4;
+  const per = 4 * fk;
   const steps = 7 * per;
   for (let k = 0; k <= steps; k += 1) {
     const x = x0 - (2 * x0 * k) / steps;
@@ -1019,8 +1026,9 @@ function hairNight(pen: Pen, g: Geo, look: CharacterLook, P: Paint): void {
   const m = P.mx;
   const fringe = -ry * 0.56;
   const lw = Math.max(P.thin, P.ow * 0.5);
+  const fk = fine(P);
   if (style === "short" || style === "long" || style === "bun") {
-    const pts = scallopCapPts(g);
+    const pts = scallopCapPts(g, fk);
     pen.poly(inflate(pts, P.ow), P.O);
     pen.poly(pts, c);
     // three strand groups sweeping from the crown to the fringe, and a highlight on the lit side
@@ -1028,12 +1036,12 @@ function hairNight(pen: Pen, g: Geo, look: CharacterLook, P: Paint): void {
       const x = i * 0.36 * rx;
       pen.line(quadPts(x - 0.12 * rx, -ry * 0.98, x + 0.16 * rx, -ry * 0.86, x + 0.24 * rx, -ry * 0.62, 5), lw, strand, 0.75);
     }
-    pen.line(arcPts(0, 0, (rx + 1.2) * 0.8, (ry + 1.2) * 0.86, m > 0 ? 284 : 216, m > 0 ? 324 : 256, 6), P.ow * 2, mix(c, "#c9b8a0", 0.25), 0.35);
+    pen.line(arcPts(0, 0, (rx + 1.2) * 0.8, (ry + 1.2) * 0.86, m > 0 ? 284 : 216, m > 0 ? 324 : 256, 6 * fk), P.ow * 2, mix(c, "#c9b8a0", 0.25), 0.35);
     if (style === "bun") {
       const by = -ry - 4;
       pen.circle(0, by, 7.5 + P.ow, P.O);
       pen.circle(0, by, 7.5, c);
-      pen.line(arcPts(0, by, 5.2, 4.2, 200, 340, 6), lw, strand, 0.8);
+      pen.line(arcPts(0, by, 5.2, 4.2, 200, 340, 6 * fk), lw, strand, 0.8);
       pen.ellipse(0, by + 6, 4.2, 1.8, 0, P.accent);
     }
     return;
@@ -1049,7 +1057,7 @@ function hairNight(pen: Pen, g: Geo, look: CharacterLook, P: Paint): void {
       const ty = Math.sin(a) * (ry + 1.2 + 7);
       pen.line([tx * 0.86, ty * 0.86, tx * 0.6, ty * 0.6 + 1], lw, strand, 0.75);
     }
-    pen.line(arcPts(0, 0, (rx + 1.2) * 0.82, (ry + 1.2) * 0.84, m > 0 ? 288 : 212, m > 0 ? 326 : 252, 6), P.ow * 2, mix(c, "#c9b8a0", 0.25), 0.35);
+    pen.line(arcPts(0, 0, (rx + 1.2) * 0.82, (ry + 1.2) * 0.84, m > 0 ? 288 : 212, m > 0 ? 326 : 252, 6 * fk), P.ow * 2, mix(c, "#c9b8a0", 0.25), 0.35);
     return;
   }
   if (style === "curly") {
@@ -1057,20 +1065,22 @@ function hairNight(pen: Pen, g: Geo, look: CharacterLook, P: Paint): void {
     const crx = rx + 2;
     const cry = ry + 2;
     const bumps = 7;
-    for (let i = 0; i <= bumps * 8; i += 1) {
-      const a = (182 + (176 * i) / (bumps * 8)) * DEG;
-      const bump = Math.sqrt(Math.abs(Math.sin((i / 8) * Math.PI))) * 4.2;
+    const per = 8 * fk;
+    for (let i = 0; i <= bumps * per; i += 1) {
+      const a = (182 + (176 * i) / (bumps * per)) * DEG;
+      const bump = Math.sqrt(Math.abs(Math.sin((i / per) * Math.PI))) * 4.2;
       pts.push(Math.cos(a) * (crx + bump), Math.sin(a) * (cry + bump));
     }
     // a soft fringe of small curls, joined to each temple by a rounded curve (not a straight cut)
     const fy = (x: number) => fringe + 2 + 0.12 * ry * (x / rx) ** 2;
     const ty = pts[pts.length - 1]!;
-    pts.push(...quadPts(crx, ty, rx * 0.86, ty, rx * 0.86, fy(rx * 0.86), 5).slice(2, -2));
-    for (let k = 1; k < 20; k += 1) {
-      const x = rx * 0.86 - (rx * 1.72 * k) / 20;
-      pts.push(x, fy(x) + 1.4 * Math.sin((Math.PI * (k % 4)) / 4));
+    pts.push(...quadPts(crx, ty, rx * 0.86, ty, rx * 0.86, fy(rx * 0.86), 5 * fk).slice(2, -2));
+    const fp = 4 * fk;
+    for (let k = 1; k < 5 * fp; k += 1) {
+      const x = rx * 0.86 - (rx * 1.72 * k) / (5 * fp);
+      pts.push(x, fy(x) + 1.4 * Math.sin((Math.PI * (k % fp)) / fp));
     }
-    pts.push(...quadPts(-rx * 0.86, fy(-rx * 0.86), -rx * 0.86, pts[1]!, pts[0]!, pts[1]!, 5).slice(2, -2));
+    pts.push(...quadPts(-rx * 0.86, fy(-rx * 0.86), -rx * 0.86, pts[1]!, pts[0]!, pts[1]!, 5 * fk).slice(2, -2));
     pen.poly(inflate(pts, P.ow), P.O);
     pen.poly(pts, c);
     // four small curls
@@ -1080,13 +1090,13 @@ function hairNight(pen: Pen, g: Geo, look: CharacterLook, P: Paint): void {
       [0.28, -0.84],
       [0.6, -0.62],
     ];
-    for (const [fx, fy] of curls) pen.line(arcPts(fx * rx, fy * ry, 2.6, 2.2, 140, 400, 7), lw, strand, 0.75);
+    for (const [fx, fy] of curls) pen.line(arcPts(fx * rx, fy * ry, 2.6, 2.2, 140, 400, 7 * fk), lw, strand, 0.75);
     return;
   }
   if (style === "cap") {
     pen.ellipse(-rx * 0.9, -ry * 0.22, 3, 4.4, 0, c);
     pen.ellipse(rx * 0.9, -ry * 0.22, 3, 4.4, 0, c);
-    const dome = arcPts(0, -ry * 0.28, rx + 1.5, ry * 0.82, 180, 360, 14);
+    const dome = arcPts(0, -ry * 0.28, rx + 1.5, ry * 0.82, 180, 360, 14 * fk);
     pen.poly(inflate(dome, P.ow), P.O);
     pen.poly(dome, P.accent);
     // the seam over the dome, and the brim's shadow on the forehead
@@ -1102,7 +1112,7 @@ function hairNight(pen: Pen, g: Geo, look: CharacterLook, P: Paint): void {
 function longHairBackNight(pen: Pen, g: Geo, P: Paint): void {
   const rx = g.headRX;
   const ry = g.headRY;
-  const pts = [...arcPts(0, 0, rx + 3, ry + 3, 180, 360, 12), rx + 4, ry * 1.25, rx * 0.6, ry * 1.55, -rx * 0.6, ry * 1.55, -rx - 4, ry * 1.25];
+  const pts = [...arcPts(0, 0, rx + 3, ry + 3, 180, 360, 12 * fine(P)), rx + 4, ry * 1.25, rx * 0.6, ry * 1.55, -rx * 0.6, ry * 1.55, -rx - 4, ry * 1.25];
   const c = mix(P.hair, cel(P.hair), 0.4);
   pen.poly(inflate(pts, P.ow), P.O);
   pen.poly(pts, c);
@@ -1134,7 +1144,7 @@ function accessoryNight(pen: Pen, g: Geo, look: CharacterLook, P: Paint, pose: {
     return;
   }
   if (acc === "helmet") {
-    const dome = arcPts(0, -ry * 0.18, rx + 3.5, ry * 0.98, 180, 360, 16);
+    const dome = arcPts(0, -ry * 0.18, rx + 3.5, ry * 0.98, 180, 360, 16 * fine(P));
     pen.poly(inflate(dome, P.ow), P.O);
     pen.poly(dome, P.accent);
     pen.poly(clipConvex(dome, halfPlane(-rx * 0.2 * P.mx, -ry, -rx * 0.9 * P.mx, -ry * 0.2, -rx * 2 * P.mx, 0)), ND.celDark, 0.2);
@@ -1143,8 +1153,8 @@ function accessoryNight(pen: Pen, g: Geo, look: CharacterLook, P: Paint, pose: {
     return;
   }
   if (acc === "headphones") {
-    pen.line(arcPts(0, -2, rx + 2.5, ry + 3.5, 190, 350, 12), 2 + P.ow * 2, P.O);
-    pen.line(arcPts(0, -2, rx + 2.5, ry + 3.5, 190, 350, 12), 2, cel(P.accent, 0.2));
+    pen.line(arcPts(0, -2, rx + 2.5, ry + 3.5, 190, 350, 12 * fine(P)), 2 + P.ow * 2, P.O);
+    pen.line(arcPts(0, -2, rx + 2.5, ry + 3.5, 190, 350, 12 * fine(P)), 2, cel(P.accent, 0.2));
     for (const s of [-1, 1]) {
       pen.ellipse(s * (rx + 0.5), 1, 4.8 + P.ow, 7 + P.ow, 0, P.O);
       pen.ellipse(s * (rx + 0.5), 1, 4.8, 7, 0, P.accent);
@@ -1176,8 +1186,9 @@ function rimNight(pen: Pen, g: Geo, look: CharacterLook, P: Paint): void {
   if (style === "curly" && acc !== "helmet") {
     // along the curls' own outer edge (hairNight's 7 bumps from 182° to 358°), never across them
     const pts: number[] = [];
-    for (let i = 0; i <= 24; i += 1) {
-      const deg = a0 + ((a1 - a0) * i) / 24;
+    const n = 24 * fine(P);
+    for (let i = 0; i <= n; i += 1) {
+      const deg = a0 + ((a1 - a0) * i) / n;
       const along = ((((deg - 182) % 360) + 360) % 360) / 176;
       const bump = Math.sqrt(Math.abs(Math.sin(along * 7 * Math.PI))) * 4.2;
       const a = deg * DEG;
@@ -1186,7 +1197,7 @@ function rimNight(pen: Pen, g: Geo, look: CharacterLook, P: Paint): void {
     pen.line(pts, P.ow, P.rim, P.rimA);
     return;
   }
-  pen.line(arcPts(0, cy, g.headRX + ex - inset, ry + (acc === "helmet" || style === "cap" ? 0 : ex) - inset, a0, a1, 10), P.ow, P.rim, P.rimA);
+  pen.line(arcPts(0, cy, g.headRX + ex - inset, ry + (acc === "helmet" || style === "cap" ? 0 : ex) - inset, a0, a1, 10 * fine(P)), P.ow, P.rim, P.rimA);
 }
 
 // ---- the shots' close-ups (§45.45): busts, hands on the wheel and a foot on a pedal -------------------------------
@@ -1392,6 +1403,11 @@ export function drawFoot(pen: Pen, look: CharacterLook, x: number, y: number, an
   pen.save();
   pen.translate(x, y);
   pen.rotate(angle);
+  if (nightDrive()) {
+    footNight(pen, look, angle, p, L, W);
+    pen.restore();
+    return;
+  }
   pen.translate(0, 18 * p);
   pen.scale(1, 1 - 0.07 * p);
   // the rig's shoe is 13.2 units long: the outline a person drawn at this size would have
@@ -1419,4 +1435,144 @@ export function drawFoot(pen: Pen, look: CharacterLook, x: number, y: number, an
   for (const k of [-0.2, -0.1, 0, 0.1]) pen.line([-W * 0.18, k * L, W * 0.16, k * L + 5], P.ow * 1.2, lt(P, P.accent, 0.35), 0.85);
   pen.ellipse(-W * 0.14, 0.44 * L, W * 0.17, 0.06 * L, 0, lt(P, P.accent, 0.25), 0.6);
   pen.restore();
+}
+
+/** A strip along a centre line `c` (x, y pairs) of width `w` at each point: the part between the signed fractions
+ * f0 and f1 of the half width (-1..1, + on the left of the line's direction), grown by `grow` on both sides. A strip
+ * from -1 to 1 is the whole tube, which widens, narrows and bends with the line. */
+function strip(c: number[], w: number[], f0: number, f1: number, grow = 0): number[] {
+  const n = c.length / 2;
+  const a: number[] = [];
+  const b: number[] = [];
+  for (let i = 0; i < n; i += 1) {
+    const i0 = Math.max(0, i - 1);
+    const i1 = Math.min(n - 1, i + 1);
+    const dx = c[i1 * 2]! - c[i0 * 2]!;
+    const dy = c[i1 * 2 + 1]! - c[i0 * 2 + 1]!;
+    const len = Math.hypot(dx, dy) || 1;
+    const nx = dy / len;
+    const ny = -dx / len;
+    const h = w[i]! / 2;
+    a.push(c[i * 2]! + nx * (f1 * h + grow), c[i * 2 + 1]! + ny * (f1 * h + grow));
+    b.push(c[i * 2]! + nx * (f0 * h - grow), c[i * 2 + 1]! + ny * (f0 * h - grow));
+  }
+  for (let i = n - 1; i >= 0; i -= 1) a.push(b[i * 2]!, b[i * 2 + 1]!);
+  return a;
+}
+
+/** The line at the signed fraction f of the half width along a strip's centre line (strip's sides). */
+function stripLine(c: number[], w: number[], f: number): number[] {
+  const s = strip(c, w, f, f);
+  return s.slice(0, s.length / 2);
+}
+
+/** Night drive's foot on a pedal, in drawFoot's frame (turned `angle`, the ball of the shoe at the origin, the toe
+ * towards +y): a sneaker seen from above in the outfit's accent, on a dark sole that shows along its outer side and
+ * round the toe, with a heel, a toe cap, a tongue and crossed laces; and the trouser leg from its cuff at the ankle up
+ * through a bent knee to the thigh, which leaves the frame at the top right towards the seat, wider the nearer it
+ * comes, so the foot always belongs to the driver. */
+function footNight(pen: Pen, look: CharacterLook, angle: number, p: number, L0: number, W0: number): void {
+  // a little bigger than classic's, so the shoe's parts read on a phone
+  const L = L0 * 1.2;
+  const W = W0 * 1.2;
+  const unit = L / 13.2;
+  const P = paintOf(pen, look, -1, (unit * pen.unit()) / (F.k || 1), unit);
+  const soleC = mix(ND.ink, P.accent, 0.16);
+  const heelC = mix(soleC, ND.celDark, 0.45);
+  const cy0 = 0.06 * L;
+  // the shoe's last: a narrow heel, widest across the ball, a rounded toe, the arch curving in on the inner side (+x)
+  const last: number[] = [];
+  for (let i = 0; i < 48; i += 1) {
+    const t = (i / 48) * Math.PI * 2;
+    const c = Math.cos(t);
+    const s = Math.sin(t);
+    const v = Math.sign(s) * Math.abs(s) ** (2 / 2.3);
+    const half = 0.5 * W * (0.8 + 0.2 * v + 0.12 * (1 - v * v));
+    let lx = half * Math.sign(c) * Math.abs(c) ** (2 / 2.3);
+    if (lx > 0) lx -= 0.07 * W * Math.exp(-(((v + 0.12) / 0.3) ** 2)) * Math.sqrt(Math.abs(c));
+    last.push(lx, cy0 + 0.5 * L * v);
+  }
+  pen.save();
+  pen.translate(0, 18 * p);
+  pen.scale(1, 1 - 0.07 * p);
+  // the heel under the back of the shoe, then the sole: it shows along the outer side and round the toe
+  const hx = 0.36 * W;
+  const hy = cy0 - 0.33 * L;
+  pen.ellipse(hx, hy, 0.18 * W + P.ow, 0.12 * L + P.ow, 0, P.O);
+  pen.ellipse(hx, hy, 0.18 * W, 0.12 * L, 0, heelC);
+  const sole = inflate(last, 0.06 * W).map((v, i) => v + (i % 2 === 0 ? 0.05 * W : 0.032 * L));
+  pen.poly(inflate(sole, P.ow), P.O);
+  pen.poly(sole, soleC);
+  // the upper, its heel counter and toe cap in a darker tone of the accent, the shade along its outer side
+  pen.poly(last, P.accent);
+  pen.poly(clipConvex(last, lensClip(-W, cy0 - 0.27 * L, W, cy0 - 0.27 * L, 0, -L, 0.07 * L)), dk(P, P.accent, 0.2));
+  const cap = clipConvex(last, lensClip(-W, cy0 + 0.3 * L, W, cy0 + 0.3 * L, 0, L, 0.09 * L));
+  pen.poly(cap, dk(P, P.accent, 0.13));
+  pen.poly(clipConvex(last, lensClip(W * 0.22, -L, W * 0.28, L, W * 2, 0, W * 0.06)), ND.celDark, 0.2);
+  pen.line([...last, last[0]!, last[1]!], P.ow * 0.8, P.O, 0.75);
+  // the toe cap's seam, and a shine on the toe
+  pen.line(arcPts(0, cy0 + 0.3 * L + 0.55 * W, 0.5 * W, 0.55 * W + 0.09 * L, 228, 312, 10), P.ow * 0.8, dk(P, P.accent, 0.4), 0.85);
+  pen.ellipse(-0.14 * W, cy0 + 0.44 * L, 0.08 * W, 0.025 * L, -12, lt(P, P.accent, 0.4), 0.6);
+  // the tongue, and the laces crossing over it from eyelet to eyelet
+  pen.poly(superellipse(0, cy0 - 0.12 * L, 0.18 * W, 0.27 * L, 2.6, 0.1, 20), lt(P, P.accent, 0.12));
+  const rows = [-0.24, -0.13, -0.02, 0.09].map((k) => cy0 + k * L);
+  const laceC = mix(ND.ink, P.accent, 0.3);
+  for (const s of [-1, 1]) {
+    const zig: number[] = [];
+    rows.forEach((ry, i) => zig.push(((i % 2 === 0 ? s : -s) * 0.2 * W), ry));
+    pen.line(zig, P.ow * 1.3, laceC, 0.95);
+  }
+  pen.restore();
+
+  // the trouser leg: up from the ankle (36° right of up on screen), bending at the knee towards the seat (66°)
+  const dirAt = (deg: number): [number, number] => [Math.sin((deg - angle) * DEG), -Math.cos((deg - angle) * DEG)];
+  const A: [number, number] = [-0.03 * W, -0.3 * L * (1 - 0.07 * p) + 18 * p];
+  const sd = dirAt(36);
+  const td = dirAt(66);
+  const shin = 2.2 * L;
+  const K: [number, number] = [A[0] + sd[0] * shin, A[1] + sd[1] * shin];
+  const c: number[] = [A[0], A[1], A[0] + sd[0] * shin * 0.5, A[1] + sd[1] * shin * 0.5];
+  c.push(...quadPts(K[0] - sd[0] * 0.3 * L, K[1] - sd[1] * 0.3 * L, K[0], K[1], K[0] + td[0] * 0.3 * L, K[1] + td[1] * 0.3 * L, 6));
+  for (const k of [2, 9]) c.push(K[0] + td[0] * k * L, K[1] + td[1] * k * L);
+  const w: number[] = [];
+  let run = 0;
+  for (let i = 0; i < c.length; i += 2) {
+    if (i > 0) run += Math.hypot(c[i]! - c[i - 2]!, c[i + 1]! - c[i - 1]!);
+    w.push(run <= shin ? W * (0.62 + 0.66 * (run / shin)) : W * (1.28 + 2.6 * clamp01((run - shin) / (9 * L))));
+  }
+  pen.poly(strip(c, w, -1, 1, P.ow), P.O);
+  pen.poly(strip(c, w, -1, 1), P.bottom);
+  pen.poly(strip(c, w, 0.4, 0.86), lt(P, P.bottom, 0.08), 0.45);
+  pen.poly(strip(c, w, -1, -0.4), ND.celDark, 0.28);
+  pen.line(stripLine(c, w, 0.9), P.ow, P.rim, P.rimA);
+  // a crease on the inside of the knee's bend (the right of the leg as it goes up)
+  const kw = 1.28 * W;
+  const ns: [number, number] = [sd[1], -sd[0]];
+  const nt: [number, number] = [td[1], -td[0]];
+  const h = -0.25 * kw;
+  const from = [K[0] - sd[0] * 0.42 * L + ns[0] * h, K[1] - sd[1] * 0.42 * L + ns[1] * h];
+  const to = [K[0] + td[0] * 0.42 * L + nt[0] * h, K[1] + td[1] * 0.42 * L + nt[1] * h];
+  const mid = [K[0] + (ns[0] + nt[0]) * h * 0.62, K[1] + (ns[1] + nt[1]) * h * 0.62];
+  pen.line(quadPts(from[0]!, from[1]!, mid[0]!, mid[1]!, to[0]!, to[1]!, 5), P.thin * 1.6, dk(P, P.bottom, 0.4), 0.7);
+  // the cuff at the ankle, a little wider, its hem rounded over the shoe, and a fold along its top
+  const cl = 0.16 * L;
+  const cuff = (grow: number): number[] => {
+    const hw = W * 0.35 + grow;
+    const top = [A[0] + sd[0] * (cl + grow), A[1] + sd[1] * (cl + grow)];
+    const pts = [top[0]! + ns[0] * hw, top[1]! + ns[1] * hw];
+    for (let i = 0; i <= 10; i += 1) {
+      const a = (Math.PI * i) / 10;
+      const across = Math.cos(a) * hw;
+      const down = Math.sin(a) * (W * 0.1 + grow);
+      pts.push(A[0] + ns[0] * across - sd[0] * down, A[1] + ns[1] * across - sd[1] * down);
+    }
+    pts.push(top[0]! - ns[0] * hw, top[1]! - ns[1] * hw);
+    return pts;
+  };
+  pen.poly(cuff(P.ow), P.O);
+  pen.poly(cuff(0), dk(P, P.bottom, 0.07));
+  const fh = W * 0.33;
+  const fx = A[0] + sd[0] * cl;
+  const fy = A[1] + sd[1] * cl;
+  pen.line([fx - ns[0] * fh, fy - ns[1] * fh, fx + ns[0] * fh, fy + ns[1] * fh], P.thin * 1.4, dk(P, P.bottom, 0.4), 0.8);
 }

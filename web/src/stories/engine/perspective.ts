@@ -5,12 +5,12 @@
 // and carries on across cuts. Everything is screen px of the frame being drawn, through the pen's matrix (the shot's
 // camera); only prims of types.ts, no gradients but the sky's.
 
-import { ND } from "./art.ts";
+import { ND, nightDrive, softRings } from "./art.ts";
 import { F } from "./frame.ts";
-import { LAMP_GAP } from "./light.ts";
+import { ellipsePts, LAMP_GAP } from "./light.ts";
 import { rand, smoothstep } from "./math.ts";
-import type { Pen } from "./pen.ts";
-import { lampGlow, ridgeFacets, ridgeTop, type RoadLook } from "./sets.ts";
+import { joinShapes, type Pen } from "./pen.ts";
+import { LAMP_GLOW, lampGlow, lampRing, lampTint, ridgeFacets, ridgeTop, type RoadLook } from "./sets.ts";
 
 /** The focal length, design px: 0.9 of the short side. */
 export const FOCAL = 0.9 * 1080;
@@ -24,6 +24,12 @@ const LAMP_ARM = 2;
 const Z_FAR = 900;
 const LAMP_NEAR = 130;
 const LAMP_LAST = 300;
+/** Night drive: a far lamp's glow is never smaller than this (px), so the rows of far lamps run together into a warm
+ * glowing line where they meet at the vanishing point. */
+const FAR_GLOW = 6.5;
+/** Night drive: a lamp whose glow reaches this far (px on screen) or more is drawn on its own, in soft rings by its
+ * size; the smaller ones share the far lamps' few polygons. */
+const NEAR_GLOW = 13.5;
 
 const mod = (a: number, n: number): number => ((a % n) + n) % n;
 
@@ -178,6 +184,10 @@ export function drawOutside(pen: Pen, c: Cam3, o: OutsideOpts): void {
       pen.ellipse(x, y, rx, Math.max(1, (rx * c.camH) / z), 0, ND.pool, 0.07 + 0.03 * (o.warm ?? 0));
     }
   }
+  // night drive: the lamps' poles before the rails and posts, so a lamp stands behind its rail on its own foot
+  const nd = nightDrive();
+  const lamps = nd ? lampsAt(pen, c, o) : [];
+  if (nd) lampPoles(pen, o, lamps);
   // the edge lines and the rails in a few lengths, so each is rasterized over a small box
   const spans = [zn, Math.max(zn + 1, 8), 30, Z_FAR];
   if (look.edge) {
@@ -214,6 +224,10 @@ export function drawOutside(pen: Pen, c: Cam3, o: OutsideOpts): void {
       }
     }
   }
+  if (nd) {
+    lampLights(pen, o, lamps);
+    return;
+  }
   // street lamps: near ones in full (pole, arm, cobra head, the soft bloom), far ones as a dotted line of glows
   for (const L of plan.lamps) {
     const zs = streamed(m, LAMP_GAP, zn + 1, o.simple ? LAMP_NEAR : LAMP_LAST, back);
@@ -241,5 +255,102 @@ export function drawOutside(pen: Pen, c: Cam3, o: OutsideOpts): void {
         lampGlow(pen, hX, hY, r, r * 1.3, Math.max(0.8, r * 0.38), 1, look.pole);
       } else pen.ellipse(hX, hY, r * 1.3, Math.max(0.8, r * 0.38), 0, "#e6ecf3");
     }
+  }
+}
+
+// ---- night drive's street lamps (§45.45 §8.1) ---------------------------------------------------------------------
+
+/** One street lamp as a camera sees it: its foot, the top of its pole and its head (screen px), its lens's half
+ * sizes, its glow's radius and whether it is near (drawn on its own, soft rings by its size) or far (one of the few
+ * polygons all the far lamps share). */
+interface LampView {
+  z: number;
+  u: number;
+  arm: number;
+  bx: number;
+  by: number;
+  tx: number;
+  ty: number;
+  hX: number;
+  hY: number;
+  rx: number;
+  ry: number;
+  glow: number;
+  near: boolean;
+}
+
+/** Every lamp the camera sees, far to near: on poles all the way to the horizon (to Z_FAR; a mirror's glass, `simple`,
+ * only the near ones). Each lamp is smaller than the one before it, its glow too, down to FAR_GLOW. */
+function lampsAt(pen: Pen, c: Cam3, o: OutsideOpts): LampView[] {
+  const out: LampView[] = [];
+  if (!o.plan.lamps.length) return out;
+  const zs = streamed(o.m, LAMP_GAP, o.zNear + 1, o.simple ? LAMP_NEAR : Z_FAR, !!o.back);
+  const zoom = pen.unit() / F.k;
+  for (const L of o.plan.lamps) {
+    for (const z of zs) {
+      const u = pxPerM(c, z);
+      const [bx, by] = project(c, L.x, 0, z);
+      const [tx, ty] = project(c, L.x, LAMP_H, z);
+      const [hX, hY] = project(c, L.x + L.arm * LAMP_ARM, LAMP_H, z);
+      const r = 0.42 * u;
+      const rx = Math.max(1.4, r * 1.3);
+      const glow = Math.max(FAR_GLOW, LAMP_GLOW * rx);
+      out.push({ z, u, arm: L.arm, bx, by, tx, ty, hX, hY, rx, ry: Math.max(0.9, r * 0.38), glow, near: glow * zoom >= NEAR_GLOW });
+    }
+  }
+  return out.sort((a, b) => b.z - a.z);
+}
+
+/** A stick from (x0, y0) to (x1, y1), `w` wide, as a quad. */
+function stick(x0: number, y0: number, x1: number, y1: number, w: number): number[] {
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+  const len = Math.hypot(dx, dy) || 1;
+  const nx = (-dy / len) * (w / 2);
+  const ny = (dx / len) * (w / 2);
+  return [x0 + nx, y0 + ny, x1 + nx, y1 + ny, x1 - nx, y1 - ny, x0 - nx, y0 - ny];
+}
+
+/** The lamps' poles and arms (before the rails): a near lamp's pole down to a flat darker foot on the ground, its shaded
+ * side and its arm; every far lamp's pole and arm in one polygon, thinner the further it is. */
+function lampPoles(pen: Pen, o: OutsideOpts, lamps: LampView[]): void {
+  const pole = o.look.night ? ND.lampPole : o.look.pole;
+  const dark = o.look.night ? ND.lampPoleDark : o.look.poleDark;
+  const far: number[][] = [];
+  for (const l of lamps) {
+    if (!l.near) {
+      if (!o.look.lit) continue;
+      far.push(stick(l.bx, l.by, l.tx, l.ty, Math.max(0.6, 0.22 * l.u)), stick(l.tx, l.ty, l.hX, l.hY, Math.max(0.5, 0.14 * l.u)));
+      continue;
+    }
+    const w = Math.max(1.2, 0.22 * l.u);
+    pen.line([l.bx, l.by, l.tx, l.ty], w, pole);
+    if (l.z < 60) pen.line([l.bx + w * 0.3 * l.arm, l.by, l.tx + w * 0.3 * l.arm, l.ty], w * 0.4, dark);
+    pen.line([l.tx, l.ty, l.hX, l.hY], Math.max(1, 0.14 * l.u), pole);
+    pen.poly(stick(l.bx, l.by + 0.04 * l.u, l.bx, l.by - 0.55 * l.u, w * 1.8), dark);
+  }
+  if (far.length) pen.poly(joinShapes(far), pole);
+}
+
+/** The lamps' light (after the rails): the far lamps first, each glow ring and the lenses one polygon for them all (the
+ * same soft rings as a near lamp's, a little stronger, so the far rows glow and meet in a warm line), then each near
+ * lamp from far to near, a bright warm emitter under its head (sets.ts lampGlow). Unlit (by day) a near lamp shows a
+ * plain pale lens. */
+function lampLights(pen: Pen, o: OutsideOpts, lamps: LampView[]): void {
+  const far = o.look.lit ? lamps.filter((l) => !l.near) : [];
+  if (far.length) {
+    for (const [t, a] of softRings(3)) {
+      const discs = far.map((l) => {
+        const [gx, gy, grx, gry] = lampRing(l.hX, l.hY, l.rx, l.ry, l.glow, t);
+        return ellipsePts(gx, gy, grx, gry, grx < 4 ? 10 : 14);
+      });
+      pen.poly(joinShapes(discs), lampTint(t), Math.min(1, a * 1.15));
+    }
+    pen.poly(joinShapes(far.map((l) => ellipsePts(l.hX, l.hY, l.rx, l.ry, 8))), ND.lampLens);
+  }
+  for (const l of lamps) {
+    if (!l.near) continue;
+    if (o.look.lit) lampGlow(pen, l.hX, l.hY, 0.42 * l.u, l.rx, l.ry, 1, ND.lampHousing);
+    else pen.ellipse(l.hX, l.hY, l.rx, l.ry, 0, "#e6ecf3");
   }
 }

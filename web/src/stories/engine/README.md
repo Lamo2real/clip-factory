@@ -250,9 +250,14 @@ the same prims for a missing `art` and for `"classic"`. `inFrame` puts the style
   car sizes, the seats), so layout, bubbles and the in-frame rules stay. Every new drawing path sits behind
   `nightDrive()`. Outlines are soft and thin (`ink(outline)`, half way to a soft brown; `inkPx`, 2 to 3.6 design px),
   with cel shadows (`cel`), lit tops (`lift`), a rim light from the street lamps and soft shadows under chins, cars
-  and feet. Lights glow as stacked circles (`glow`), never gradients, and a vignette darkens the corners (two
-  rings of four corner polygons, `light.ts drawVignette`, a 0.10 at night and half that by day; the middle of each
-  edge is left alone). There is no film grain and no new prim kind.
+  and feet. Lights glow as stacked shapes (`glow`, and `softRings`: rings whose alphas build a smooth falloff in
+  steps that are smallest where the light is faintest, more rings the bigger a light shows), never gradients, and a
+  vignette darkens the corners (`light.ts drawVignette`, `VIGNETTE`: eight rings of 0.025 at the top corners, where
+  the flat sky would show a bigger step, four of 0.05 at the bottom, each ring two corner polygons, about 0.18 in the
+  very corners at night and half that by day; the middle of each edge is left alone). There is no film grain and no
+  new prim kind. Lights that share a colour and an alpha (the far street lamps' rings, a row of side-view lamps, a
+  car's two headlights) are one polygon of several loops (`pen.ts joinShapes`, bridges walked out and back, so the
+  non-zero rule fills each loop once in both drawers).
 * **Light** (`LIGHTS`): studio changes nothing; day, indoor, night and cabin mute an own colour through `grade`
   (a little grey, the light's colour, darker, warmed by the lamps' pulse). Own colours (skin, paint, a place's palette)
   are graded; the palette tokens (`ND`) are final. Night places (`road_night`, `highway_night`) use the night light,
@@ -272,8 +277,8 @@ the same prims for a missing `art` and for `"classic"`. `inFrame` puts the style
   valid at any length (getting in or out also keeps its 0.8 to 3 s). `rules.ts` tells the writer as `shots` and
   `shot_world`.
 * **Shapes.** In night drive `sceneShapes(scene, "night_drive")` is the larger of the whole scene's estimate and
-  each cut's shot. The whole scene is its place's measured count (`sets.ts SET_SHAPES_ND`, e.g. 135 for
-  `highway_night` and 111 for `road_night`), 92 a character, the measured props (`props.ts PROP_SHAPES_ND`: 58 a car,
+  each cut's shot. The whole scene is its place's measured count (`sets.ts SET_SHAPES_ND`, e.g. 128 for
+  `highway_night` and 104 for `road_night`), 92 a character, the measured props (`props.ts PROP_SHAPES_ND`: 58 a car,
   60 a truck, 30 a deer), 72 a car of the cast (`car.ts CAR_CAST_SHAPES_ND`) and any other prop 2 more than in
   Bright. A shot is its measured count (`shots.ts SHOT_SHAPES`, its place, the inside of the car, the own car and the
   driver) plus 34 (`car.ts CAR_VIEW_SHAPES`) for each other car or truck it may show, at most 4. Night drive's limit
@@ -283,11 +288,16 @@ the same prims for a missing `art` and for `"classic"`. `inFrame` puts the style
 * **Where it is drawn.**
   * `art.ts`: the tokens (`ND`), the lights, `grade`, `cel`, `lift`, `ink`, `inkPx`, `lineUnits`, `glow`, `withWarm`.
   * `light.ts`: which light each part stands in (`lightFor`), the lamps' warm pulse that rolls with the road
-    (`lampWarm`, a lamp every 40 m), the vignette (four soft steps of 0.05 in the corners) and the warm sweep over
-    the dashboard and the face.
-  * `sets.ts lampGlow`: a street lamp is a soft gold bloom (six stacked halos with small alpha steps, gold to orange,
-    at most r × 3.2) round a cobra head: a dark dome over a warm yellow lens (`ND.lampHead`) with a small white-hot
-    centre; no cone of light under it. Headlights bloom the same soft way (`car.ts bloom`, four halos).
+    (`lampWarm`, a lamp every 40 m), the vignette (eight fine steps at the top corners, four at the bottom) and the
+    warm sweep over the dashboard and the face.
+  * `sets.ts lampGlow`: in night drive a street lamp is a bright warm emitter: a warm white lens bar
+    (`ND.lampLens`) under a slim dark grey head (`ND.lampHousing`), its glow `softRings` of ovals that follow the lens
+    out (`lampRing`, `LAMP_GLOW` lens half widths, a little flatter than round and lower the further out: light falls
+    down), from the lens's white through gold (`ND.lampGlowIn`) to amber (`ND.lampGlowOut`) and clear (`lampTint`),
+    on a slate pole (`ND.lampPole`); no flat disc and no cone of light under it. The side view lights its whole row
+    at once (`lampRow`). Bright keeps its gold bloom round a cobra head (`ND.lampHead`, `ND.lampCore`). Headlights
+    and tail lights fade the same soft way (`car.ts bloom` and `tailGlow`, `carView.ts headBloom`, `softPair`,
+    `softBar`), the glow under a lens in the front and back views.
   * `rig.ts`, `face.ts`: the night people (dot eyes tinted with the picked eye colour, a pupil up close, short thick
     brows, soft scalloped hair with strand groups, cel shadows, rim light along the hair's own edge, folds) and three
     new drawings for the shots, both styles: `drawBust` (front or three-quarter, from the head's centre),
@@ -297,7 +307,10 @@ the same prims for a missing `art` and for `"classic"`. `inFrame` puts the style
     reflections, rims, headlight bloom, tail and brake glow, soft shadows); `carView.ts`: a car or truck from the
     back or the front (`drawCarView`, `drawPropView`), boxy with a side towards the vanishing point, for the shots.
   * `perspective.ts`: the road ahead in perspective (`project`, 3.6 m lanes, lamps 10 m high every 40 m), streaming
-    with the road's metres so it carries on across cuts; `shots.ts`: `shotAt`, each shot's world (who drives, the
+    with the road's metres so it carries on across cuts. In night drive the lamps stand on poles all the way to the
+    horizon, each smaller than the one before, so the two rows meet in a warm glowing line at the vanishing point:
+    the near ones each with their own soft rings, the far ones (glow under 13.5 px) sharing a few polygons; every pole
+    and arm is drawn before the rails, so a rail stands in front of a pole's flat foot; `shots.ts`: `shotAt`, each shot's world (who drives, the
     other cars' gaps and lanes) and the eight shots, each filling the frame in every size; `camera.ts shotCamera`.
   * `sets.ts`: `highway_night`, the night recipe for `road_night` and the other places graded under their light.
 

@@ -18719,6 +18719,54 @@ changed:
     - the previews hearing a style only once it is saved (`storiesSettings`);
     - the API's scene-length edit keeping boarding valid (`test_ws_story_art.py`).
 
+#### 45.45.20 Polish round 1 (24 Nov; wins over anything above in §45.45)
+
+Two judges scored the sample 7/10. What changed:
+
+- **Street lamps are bright warm emitters** (`sets.ts lampGlow`). A warm white lens bar (`ND.lampLens` `#fff6d8`)
+  sits under a slim dark grey head (`ND.lampHousing` `#34373e`). Its glow is `art.ts softRings` of ovals that follow
+  the lens out (`lampRing`, `LAMP_GLOW` = 3 lens half widths). Further out they are flatter and a little lower,
+  because light falls down. The colour runs from the lens's white through gold (`ND.lampGlowIn` `#f2c76a`) to amber
+  (`ND.lampGlowOut` `#d98a3a`) and clear (`lampTint`). `softRings(n)` builds the falloff peak · (1 − t)³ in steps
+  that are smallest at the faint outside. A light gets one ring for every 2.6 px it shows, 3 to 20 (`softCount`).
+  There is no flat disc and no cone. Poles are `ND.lampPole` and `ND.lampPoleDark`. Bright keeps its cobra heads.
+- **Lamps all the way to the horizon** (`perspective.ts`). Lamps stand on poles out to `Z_FAR`, each smaller than
+  the one before. A glow is never under 6.5 px, so both rows meet in a warm line at the vanishing point. Lamps whose
+  glow shows under 13.5 px share a few polygons (`pen.ts joinShapes`: clockwise loops joined by bridges walked out
+  and back, so the non-zero rule fills each loop once in both drawers). Every pole and arm is drawn before the
+  rails, and a near pole stands on a darker foot behind its rail. The side view lights its whole row at once
+  (`lampRow`).
+- **Headlights and tail lights fade the same soft way** (`car.ts bloom` and `tailGlow`, `carView.ts headBloom`,
+  `softPair` and `softBar`). The truck in Mirror shows a white bloom that fades, not a grey oval.
+- **The vignette** (`light.ts VIGNETTE`): the top corners, over the flat sky, step in eight rings of 0.025 (at most
+  about 2 levels each on the sky); the bottom corners in four of 0.05. That is 24 corner pieces, about 0.18 in the
+  very corners at night.
+- **Pedals** (`rig.ts footNight`): a sneaker 1.2 × the classic shoe, with a dark sole, a heel, a toe cap, a tongue and
+  laces. The trouser leg runs from a cuff at the ankle through a bent knee to the thigh, which leaves the frame at the
+  top right towards the seat.
+- **Speed dial:** in night drive the dial is smaller (r 0.41 S in 9:16), and `keepInFrame` clamps its camera, so the
+  whole ring, 0 to 8 and the red zone, stays in the frame. In 9:16 the second dial sits under it.
+- **Driver's eyes:** with nobody close behind, the rear-view mirror shows a faint reflection: the road, a lane line
+  and two small headlights far down it.
+- **Bubbles:** night drive's balloon is a warm off-white (`#e9e0cf`) in a thinner, lighter outline (`#3a3448`, 6;
+  the thought cloud's lobes 5).
+- **Cheering** (celebrate, dance, jump) shows closed happy ^ ^ eyes and a grin in night drive, never proud's lidded
+  eyes and smirk.
+- **Close-ups:** heads, hair, hats and the rim light get 2 × their points from 6 design px per rig unit and 3 × from
+  10 (`rig.ts fine`).
+- **Measured budgets now:**
+  - `SET_SHAPES_ND`: studio 44, road_day 66, road_night 104, icy_road 84, snowy_road 106, rainy_road 112,
+    foggy_road 54, highway 84, country_road 76, city_street 104, parking_lot 72, kitchen 48, living_room 44,
+    office 51, park 75, highway_night 128.
+  - `SHOT_SHAPES`: driver_view 299, face 164, mirror 226, speed_dial 123, pedals 76, road_behind 235 and road_wide
+    236; side_window stays 165.
+- **Speed** (`raster.py`, 1080 × 1920, best of 5): the sample's ten stills take 1.22 × what they took before; Pedals
+  takes the most, 1.5 ×. The sample's 240-frame clip went from 19.3 s to 22.8 s (1.18 ×).
+- **Bright is byte-identical:** 7200 Bright frames match the build before prim by prim, and the Bright shapes and
+  raster goldens are unchanged. The night golden (`stories-engine-night.json`) is written again.
+  `test_stories_raster.py`'s lamp places are now the lens bar and its head.
+- **Not changed:** the sky gradient's own 8-bit steps (one level each). A dither stays a follow-up.
+
 ## 46. Auto-posting: the oldest clips in Review go up by themselves, every X hours (owner request, 2026-11-22)
 
 Decision record: ADR-81. Builders: §46.16. Everything here is additive: no table, index, secret, bucket, Cognito or

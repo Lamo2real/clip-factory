@@ -8,7 +8,7 @@
 // stand in the scene's light, with soft thin outlines. A script without `art` draws exactly as before.
 
 import { cel, grade, ink, lift, lineUnits, ND, nightDrive } from "./art.ts";
-import { bloom, burst, drawCarLookSide, drawCarLookTop, exhaust, GLASS_ND, honkWaves, impact, LENS_OFF, lightGlow, outlined, TAIL_OFF, TYRE_ND, type CarDraw } from "./car.ts";
+import { bloom, burst, drawCarLookSide, drawCarLookTop, exhaust, GLASS_ND, honkWaves, impact, LENS_OFF, lightGlow, outlined, TAIL_OFF, tailGlow, TYRE_ND, type CarDraw } from "./car.ts";
 import { F } from "./frame.ts";
 import { DEG, TAU, clamp, clamp01, ease, hash, hex, lerp, mix, rand, shade, smoothstep } from "./math.ts";
 import type { Pen } from "./pen.ts";
@@ -771,7 +771,7 @@ function drawCarSideND(pen: Pen, st: PropState, k: number, t: number, truck: boo
   if (st.lights || night) pen.poly([truck ? 420 : 280, -140, 820, -230, 820, -10], ND.beam, night ? 0.08 : 0.05);
   if (lit) bloom(pen, head[0], head[1], 14, dark ? 1 : 0.5);
   const tailA = Math.max(tailOn ? 0.25 : 0, braking ? 0.45 * st.braking : 0);
-  if (tailA > 0) pen.circle(back[0], back[1], 35, ND.tailGlow, tailA);
+  if (tailA > 0) tailGlow(pen, back[0], back[1], 14, tailA);
   pen.restore();
   // effects in the car's world frame (not mirrored twice)
   const fx = st.facing * (truck ? 300 : 185) * k;
