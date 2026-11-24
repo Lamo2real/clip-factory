@@ -78,6 +78,30 @@ describe("Sheet and a double-click", () => {
     expect(pressed).not.toHaveBeenCalled();
   });
 
+  it("lets the next tap through when the owner typed in between (Use the newest, new words, then Save changes)", () => {
+    const words = document.createElement("textarea");
+    document.body.appendChild(words);
+    try {
+      click(document.querySelector(".keep")!, 187, 691);
+      act(() => {
+        words.dispatchEvent(new Event("input", { bubbles: true }));
+      });
+      click(behind, 187, 696);
+      expect(pressed).toHaveBeenCalledTimes(1);
+
+      act(() => root.render(<></>));
+      act(() => root.render(<Asks key="key" />));
+      click(document.querySelector(".go")!, 187, 691);
+      act(() => {
+        words.dispatchEvent(new KeyboardEvent("keydown", { key: "a", bubbles: true }));
+      });
+      click(behind, 187, 696);
+      expect(pressed).toHaveBeenCalledTimes(2);
+    } finally {
+      words.remove();
+    }
+  });
+
   it("lets a click somewhere else, a later click, or a keyboard close through", () => {
     click(document.querySelector(".go")!, 200, 300);
     click(behind, 600, 300);
