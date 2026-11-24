@@ -93,7 +93,8 @@ test("Clip Factory's clip goes first: its check-in is 1.1.0's, Clips Funded chec
   const clipsPing = calls.find((c) => c.url === `${API}/v1/tiktok/mac/ping`).body;
   assert.deepEqual(Object.keys(clipsPing).sort(), ["device", "login", "state", "version"]);
   assert.deepEqual([clipsPing.state, clipsPing.version, clipsPing.login], ["ok", VERSION, "none"]);
-  assert.deepEqual(calls.find((c) => c.url === `${API}/v1/clips/c1/tiktok/mac/claim`).body, { device: clipsPing.device });
+  // 1.3.0: the claim also says the helper's version (MAC_BRAND_FROM: only it gets posts with TikTok's label).
+  assert.deepEqual(calls.find((c) => c.url === `${API}/v1/clips/c1/tiktok/mac/claim`).body, { device: clipsPing.device, version: VERSION });
   const wsPing = calls.find((c) => c.url === `${W}/tiktok/mac/ping`).body;
   assert.deepEqual(wsPing, { state: "ok", version: VERSION, device: clipsPing.device, setUp: false });
   // Clip Factory's account is known now (D3), and Clips Funded's lane has its own port and store.

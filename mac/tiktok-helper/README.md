@@ -62,6 +62,21 @@ claim is 50 minutes old. Only then does the row offer It's on TikTok, and Try ag
   beat for that post and for every other pressed post of this Mac, and keeps beating them every minute while it looks
   (a login can take 20 minutes). A 409 on the post it looks for means it isn't this try's any more, so it isn't looked
   for this tick.
+- **TikTok's label (1.3.0, CONTRACTS §47.9).** A Clip Factory job says `brandContent` (Branded content: TikTok's
+  "Paid partnership" label, on every campaign clip) and `brandOrganic` (Your brand: "Promotional content"). Under Show
+  more the helper turns "Disclose post content" on, ticks those boxes as the job says, reads them back, checks Who can
+  see it again (Branded content can't be Only you), and reads both back once more right before Post. A job without a
+  label turns the switch off (TikTok may carry the last post's over). Anything that doesn't stick stops before Post:
+  "Your Mac couldn't set TikTok's Branded content label the way this clip needs, so it didn't post. Tap Try again."
+  Studio draws a checkbox anew when it changes, so every read finds it again by its text. Who can see it is the clip's
+  own now (Everyone, Friends, Only you); Studio's Friends option reads "Friends Followers you follow back", so options
+  are picked by their first word. The claim says the helper's `version`; Clip Factory claims a labelled post only for
+  1.3.0 or later (`MAC_BRAND_FROM`), so an older helper never posts one without its label. The kept video leaves
+  Downloads once the post is up with the job's own privacy (`tidyGoes`).
+  Check run, nothing posted, nothing on screen:
+  `node ".../cli.js" probe <clipId> --branded --quiet` (also `--your-brand`, `--privacy MUTUAL_FOLLOW_FRIENDS`, and
+  `--caption <text>` for a clip that is on TikTok already). It prints `label` as TikTok reads it back and
+  `paidPartnership` (Studio shows the label).
 - Clip Factory counts beats only from a helper of version 1.1.0 or later (`MAC_BEATS_FROM`). For an older helper on
   the Mac only the 50-minute claim counts, and Start my Mac again isn't offered. After merging, run `./install.sh`
   again so the Mac runs this version.
@@ -211,7 +226,7 @@ differences:
   Clip Factory's account. With no account known at all, Clip Factory's ping says paused, with why.
 - **AI label.** Every Clips Funded post turns on TikTok Studio's "AI-generated content" switch and reads it back
   (again right before Post), or it doesn't post. "Disclose post content" stays off. Clip Factory's posts never touch
-  either switch.
+  the AI label; their "Disclose post content" follows the job (1.3.0, below).
 - **Fixed public defaults.** Everyone, Comments on, Reuse of content (Duet and Stitch) on, Audience control off,
   whatever the job says.
 - **No caption matching with older posts.** A Clips Funded lane relies on the server's never-twice rule and the

@@ -43,7 +43,14 @@ test("this helper's version is one Clips Funded hands its TikTok jobs to (MAC_WS
   const [mine, from] = [parts(VERSION), parts(found[1])];
   const cmp = mine.map((n, i) => n - (from[i] ?? 0)).find((d) => d !== 0) ?? 0;
   assert.ok(cmp >= 0, `VERSION ${VERSION} is at least ${found[1]}`);
-  assert.equal(VERSION, "1.2.3");
+  assert.equal(VERSION, "1.3.0");
+});
+
+test("1.3.0: this helper is the first Clip Factory hands posts with TikTok's label to (MAC_BRAND_FROM, the same version)", () => {
+  const text = fs.readFileSync(SERVER, "utf8");
+  const found = text.match(/^MAC_BRAND_FROM = "(\d+\.\d+\.\d+)"$/m);
+  assert.ok(found, 'MAC_BRAND_FROM = "x.y.z" is in tiktok_self.py');
+  assert.equal(found[1], VERSION);
 });
 
 test("package.json and its lockfile say the same version as the helper", () => {
