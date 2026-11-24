@@ -95,3 +95,19 @@ test('nothing the helper says or writes calls the second workspace "Funded Clips
     assert.doesNotMatch(fs.readFileSync(new URL(file, import.meta.url), "utf8"), /funded clips/i, file);
   }
 });
+
+test("1.2.2's setup lines (§47.11), word for word, kid-proof", async () => {
+  const { BACK_LINES, WS_BACK_LINES } = await import("../src/hold.js");
+  assert.deepEqual({ ...BACK_LINES }, {
+    resumed: "Your Mac carries on with the stopped clip now.",
+    pressed: "Your Mac goes on. The clip it stopped on may already be on TikTok: check it in Clip Factory.",
+    cleared: "Your Mac goes on.",
+    logged_out: "TikTok isn't logged in yet.",
+  });
+  assert.deepEqual({ ...WS_BACK_LINES }, {
+    resumed: "Your Mac carries on with the stopped post now.",
+    pressed: "Your Mac goes on. The post it stopped on may already be on TikTok: check it in Clips Funded.",
+    cleared: "Your Mac goes on.",
+    logged_out: "TikTok isn't logged in yet.",
+  });
+});

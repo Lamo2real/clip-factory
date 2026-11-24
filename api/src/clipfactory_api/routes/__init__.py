@@ -64,6 +64,7 @@ ROUTES: list[Route] = [
     route("POST", "/v1/clips/{clipId}/tiktok/mac/step", tiktok_mac.step),
     route("POST", "/v1/clips/{clipId}/tiktok/mac/done", tiktok_mac.done),
     route("POST", "/v1/clips/{clipId}/tiktok/mac/stopped", tiktok_mac.stopped),
+    route("POST", "/v1/clips/{clipId}/tiktok/mac/logged-in", tiktok_mac.logged_in),
     route("POST", "/v1/clips/{clipId}/tiktok/mac/retry", tiktok_mac.retry),
     route("DELETE", "/v1/clips/{clipId}/tiktok/mac", tiktok_mac.take_back),
     route("GET", "/v1/clips/{clipId}/performance", performance.get_performance),

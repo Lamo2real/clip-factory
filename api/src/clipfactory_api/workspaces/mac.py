@@ -13,7 +13,9 @@ TikTok job the way it posts Clip Factory's (§47), to Clips Funded's own TikTok 
   account is refused (``wrong_account``) with nothing written.
 * The helper item is this workspace's ``USER#{u}#WS#{ws}`` / ``MACHELPER``, never Clip Factory's ``USER#{u}`` one, so a
   Clips Funded problem never pauses Clip Factory's posts and the other way round. A helper older than ``MAC_WS_FROM``
-  gets an empty queue and cannot claim.
+  gets an empty queue and cannot claim. A needs-you stop may say why (``needsYouCode``: ``login``, a TikTok login
+  problem and nothing else); such a hold ends by itself once the helper sees the lane's Chrome logged in to the job's
+  account again (``logged_in``, §47.11).
 * Nothing here calls TikTok, reads Clip Factory's token or imports Clip Factory's Mac module (``tiktok_mac``); the
   timing constants are ``tiktok_self``'s, so both lanes share one stuck rule.
 """
@@ -75,6 +77,11 @@ PRESSED: Final = (
 WRONG_ACCOUNT: Final = "That post is on another TikTok account."
 BAD_LINK: Final = "Paste the video's full TikTok link: tiktok.com/@name/video/…"
 CHANGED: Final = "This post just changed. Try again."
+# §47.11 (tiktok_mac.HOLD_CODES, never imported): why a needs-you stop needs the owner, when the helper says: only a
+# TikTok login problem. Only such a hold may end by itself once the Mac is logged in to the job's account again.
+HOLD_CODES: Final = ("login",)
+BAD_CODE: Final = "code must be login."
+NOT_LOGIN_HOLD: Final = "Your Mac isn't waiting for a TikTok login on this one."
 # Why the claim stopped a job (§47.10.4, Claim): the server's own reasons.
 ACCOUNT_CHANGED: Final = "Clips Funded's TikTok is a different account now. Tap Try again."
 NOT_CONNECTED: Final = "Connect TikTok again in Social accounts. Then tap Try again."
@@ -112,7 +119,8 @@ def helper_item(store: db.Store, user_id: str, workspace_id: str) -> Item | None
 
 
 def public_helper(item: Mapping[str, Any] | None) -> Item | None:
-    """``WsMacHelper``: when the Mac last checked in for this workspace and how it is (never its device id)."""
+    """``WsMacHelper``: when the Mac last checked in for this workspace and how it is (never its device id), and why
+    it needs the owner (``needsYouCode``, only while it does)."""
     if not item or not item.get("seenAt"):
         return None
     state = item.get("state")
@@ -124,6 +132,8 @@ def public_helper(item: Mapping[str, Any] | None) -> Item | None:
     for key in ("reason", "version", "handle", "needsYouJobId", "needsYouStoryId"):
         if item.get(key):
             out[key] = str(item[key])
+    if out["state"] == "needs_you" and item.get("needsYouCode") in HOLD_CODES:
+        out["needsYouCode"] = str(item["needsYouCode"])
     if item.get("loginRequestAt"):
         out["loginRequest"] = {"at": str(item["loginRequestAt"])}
     if item.get("resumeRequestAt"):
@@ -277,8 +287,8 @@ def ping(
     resume_done: str | None = None,
 ) -> None:
     """The helper checks in for this workspace: when, how it is and why, its version and device, and whether its
-    Chrome profile is logged in to this workspace's TikTok (``setUp``, the ``handle`` it read). ``needsYouJobId``
-    and ``needsYouStoryId`` go with any ping whose state isn't ``needs_you``; the owner's Log in on my Mac and Start my
+    Chrome profile is logged in to this workspace's TikTok (``setUp``, the ``handle`` it read). ``needsYouJobId``,
+    ``needsYouStoryId`` and ``needsYouCode`` go with any ping whose state isn't ``needs_you``; the owner's Log in on my Mac and Start my
     Mac again stay until the helper says it handled that one (``login_done`` / ``resume_done``: its ``at``)."""
     pk = _pk(user_id, workspace_id)
     current = store.get(pk, ws.MACHELPER_SK)
@@ -301,7 +311,7 @@ def ping(
     else:
         gone = [k for k, given in (("reason", reason), ("handle", handle)) if not given]
         if state != "needs_you":
-            gone += ["needsYouJobId", "needsYouStoryId"]
+            gone += ["needsYouJobId", "needsYouStoryId", "needsYouCode"]
         store.update(pk, ws.MACHELPER_SK, fields, remove=[k for k in gone if k in current])
     for done, key in ((login_done, "loginRequestAt"), (resume_done, "resumeRequestAt")):
         if not done:
@@ -353,9 +363,15 @@ def clear_needs_you(store: db.Store, user_id: str, workspace_id: str, publishing
         store.update_expr(
             _pk(user_id, workspace_id),
             ws.MACHELPER_SK,
-            "SET #st = :ok REMOVE #re, #nj, #ns",
+            "SET #st = :ok REMOVE #re, #nj, #ns, #cd",
             condition="#st = :nu AND #nj = :id",
-            names={"#st": "state", "#re": "reason", "#nj": "needsYouJobId", "#ns": "needsYouStoryId"},
+            names={
+                "#st": "state",
+                "#re": "reason",
+                "#nj": "needsYouJobId",
+                "#ns": "needsYouStoryId",
+                "#cd": "needsYouCode",
+            },
             values={":ok": "ok", ":nu": "needs_you", ":id": publishing_job_id},
         )
 
@@ -586,10 +602,12 @@ def stopped(
     needs_you: bool,
     attempt: int | None,
     now: datetime,
+    code: str | None = None,
 ) -> Item:
     """The helper stopped instead of guessing: the job says why (at most 200 characters; once Post was pressed
     always ``PRESSED``). ``needs_you`` puts this workspace's helper item in ``needs_you`` with the job and its story
-    (never Clip Factory's helper item)."""
+    (never Clip Factory's helper item), and why in ``needsYouCode`` (``code``, §47.11) in the same write; a needs-you
+    stop without a code removes it. A code without ``needs_you`` holds nothing, so it isn't stored."""
     row = _mac_row(store, user_id, workspace_id, publishing_job_id)
     if not owns(row, device, ("working", "stopped"), attempt):
         raise conflict(MAC_TAKEN)
@@ -605,10 +623,27 @@ def stopped(
     )
     written = _write(store, row, request)
     if needs_you:
+        values: Item = {
+            ":st": "needs_you",
+            ":re": said,
+            ":se": iso(now),
+            ":de": device,
+            ":ty": ws.TYPE_MACHELPER,
+            ":us": user_id,
+            ":ws": workspace_id,
+            ":nj": publishing_job_id,
+            ":ns": str(row.get("contentId") or ""),
+        }
+        sets = "SET #st = :st, #re = :re, #se = :se, #de = :de, #ty = :ty, #us = :us, #ws = :ws, #nj = :nj, #ns = :ns"
+        if code in HOLD_CODES:
+            values[":cd"] = code
+            update = sets + ", #cd = :cd"
+        else:
+            update = sets + " REMOVE #cd"
         store.update_expr(
             _pk(user_id, workspace_id),
             ws.MACHELPER_SK,
-            "SET #st = :st, #re = :re, #se = :se, #de = :de, #ty = :ty, #us = :us, #ws = :ws, #nj = :nj, #ns = :ns",
+            update,
             names={
                 "#st": "state",
                 "#re": "reason",
@@ -619,21 +654,80 @@ def stopped(
                 "#ws": "workspaceId",
                 "#nj": "needsYouJobId",
                 "#ns": "needsYouStoryId",
+                "#cd": "needsYouCode",
             },
-            values={
-                ":st": "needs_you",
-                ":re": said,
-                ":se": iso(now),
-                ":de": device,
-                ":ty": ws.TYPE_MACHELPER,
-                ":us": user_id,
-                ":ws": workspace_id,
-                ":nj": publishing_job_id,
-                ":ns": str(row.get("contentId") or ""),
+            values=values,
+        )
+    log("info", "ws_mac.stopped", publishingJobId=publishing_job_id, pressed=bool(row.get("macPressedAt")), code=code)
+    return job(written, _story_of(store, user_id, workspace_id, written))
+
+
+def logged_in(
+    store: db.Store, user_id: str, workspace_id: str, publishing_job_id: str, *, device: str, now: datetime
+) -> tuple[Item | None, str]:
+    """The helper saw this workspace's Chrome profile logged in to the job's TikTok again while it was held for a
+    TikTok login on this job (§47.11): the hold ends by itself, as after the owner's Try again, and the job waits for
+    the Mac again. Only the device that stopped it, only a login hold (``needsYouCode = login``) on this job, else
+    ``409 NOT_LOGIN_HOLD`` and nothing is written. Returns the workspace's helper item and the outcome: ``resumed``
+    (a stopped Mac job of this device that never pressed Post waits again, keeping its place, ``since``, its attempt,
+    ``macDevice``, ``macPressedBefore`` and ``macAgainAt``; no account confirm: the claim checks the destination),
+    ``pressed`` (Post was pressed: the job stays exactly as it is, never twice) or ``cleared`` (anything else, the
+    job gone too: only the hold ends). One transaction, conditional on both as read (``CHANGED`` when either moved).
+    Clip Factory's ``USER#{u}`` item is never read or written."""
+    pk = _pk(user_id, workspace_id)
+    item = helper_item(store, user_id, workspace_id)
+    if not (
+        item
+        and item.get("state") == "needs_you"
+        and item.get("needsYouCode") == "login"
+        and item.get("needsYouJobId") == publishing_job_id
+        and item.get("device") == device
+    ):
+        raise conflict(NOT_LOGIN_HOLD)
+    row = publish.job_item(store, user_id, workspace_id, publishing_job_id)
+    outcome = "cleared"
+    updates: list[Item] = []
+    if row is not None and row.get("publishingStatus") == publish.MAC_STATUS:
+        if row.get("macDevice") and row.get("macDevice") != device:
+            raise conflict(NOT_LOGIN_HOLD)
+        if row.get("macPressedAt"):
+            outcome = "pressed"
+        elif row.get("macState") == "stopped" and row.get("macDevice") == device:
+            outcome = "resumed"
+            updates.append(
+                db.update_request(
+                    str(row["pk"]),
+                    str(row["sk"]),
+                    {"macState": "waiting", "updatedAt": iso(now)},
+                    remove=[k for k in ("macStep", "macClaimedAt", "macStoppedAt", "macReason") if k in row],
+                    expect_in={
+                        "publishingStatus": [publish.MAC_STATUS],
+                        "macState": ["stopped"],
+                        "macDevice": [device],
+                    },
+                    expect_absent=["macPressedAt"],
+                )
+            )
+    updates.append(
+        db.update_request(
+            pk,
+            ws.MACHELPER_SK,
+            {"state": "ok"},
+            remove=[k for k in ("reason", "needsYouJobId", "needsYouStoryId", "needsYouCode") if k in item],
+            expect_in={
+                "state": ["needs_you"],
+                "needsYouCode": ["login"],
+                "needsYouJobId": [publishing_job_id],
+                "device": [device],
             },
         )
-    log("info", "ws_mac.stopped", publishingJobId=publishing_job_id, pressed=bool(row.get("macPressedAt")))
-    return job(written, _story_of(store, user_id, workspace_id, written))
+    )
+    try:
+        store.transact(updates=updates)
+    except db.ConditionFailed:
+        raise conflict(CHANGED) from None
+    log("info", "ws_mac.logged_in", publishingJobId=publishing_job_id, outcome=outcome)
+    return helper_item(store, user_id, workspace_id), outcome
 
 
 # --- posted: the Mac's done and the owner's It's on TikTok ---------------------------------------------------------
