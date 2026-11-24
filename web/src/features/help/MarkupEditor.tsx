@@ -135,6 +135,15 @@ export function MarkupEditor({ source, onSave, onCancel }: { source: MarkupSourc
     };
   }, []);
 
+  // The page under the editor rests while it is open (ask.css, html.mk-open): no blur and no endless loop of its own,
+  // so a frame of drawing blurs only the dialog. A layout effect, so the page has its glass back in the frame the
+  // editor goes.
+  useLayoutEffect(() => {
+    const html = document.documentElement;
+    html.classList.add("mk-open");
+    return () => html.classList.remove("mk-open");
+  }, []);
+
   const fit = box.w && box.h ? Math.min(box.w / source.width, box.h / source.height) : 1;
   const drawW = source.width * fit;
   const drawH = source.height * fit;
