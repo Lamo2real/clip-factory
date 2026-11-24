@@ -8,6 +8,7 @@ IDEA = f"{W}/ideas/01J0000000000000000000000A"
 CHAR = f"{W}/characters/01J0000000000000000000000B"
 STORY = f"{W}/stories/01J0000000000000000000000C"
 TASK = f"{W}/tasks/01J0000000000000000000000E"
+SERIES = f"{W}/series/01J0000000000000000000000F"
 
 EXPECTED: set[tuple[str, str]] = {
     ("GET", "/v1/workspaces"),
@@ -52,4 +53,12 @@ EXPECTED: set[tuple[str, str]] = {
     ("GET", f"{W}/providers"),
     ("POST", f"{W}/providers/luma-ray/check"),  # §45.37 G7: Try it moved from Nova Reel (ended) to Luma AI Ray2
     ("GET", f"{W}/guidance"),
+    # §45.44: series (routes/series.py)
+    ("GET", f"{W}/series"),
+    ("POST", f"{W}/series"),
+    ("GET", SERIES),
+    ("PATCH", SERIES),
+    ("DELETE", SERIES),
+    ("POST", f"{SERIES}/recap"),
+    ("PUT", f"{STORY}/series"),
 }

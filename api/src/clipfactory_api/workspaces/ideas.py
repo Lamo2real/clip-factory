@@ -22,7 +22,7 @@ TOPIC_MAX = 200
 MAX_CHARACTERS = 3
 TONES: Final = ("funny", "calm", "tense_then_relief", "wholesome")
 SOURCES: Final = ("manual", "ai", "variation")
-IDEA_KEYS: Final = ("title", "logline", "category", "characterIds", "concept", "source", "parentIdeaId")
+IDEA_KEYS: Final = ("title", "logline", "category", "characterIds", "concept", "source", "parentIdeaId", "seriesId")
 
 
 # --- the owner's input -----------------------------------------------------------------------------------------
@@ -98,6 +98,11 @@ def idea_input(body: Mapping[str, Any], *, partial: bool = False) -> dict[str, A
         if parent is not None and not (isinstance(parent, str) and is_ulid(parent)):
             raise bad_request("parentIdeaId is not valid.")
         out["parentIdeaId"] = parent
+    if "seriesId" in body:  # §45.44: null (a patch) is No series; the route drops an id whose series is gone
+        series_id = body["seriesId"]
+        if series_id is not None and not (isinstance(series_id, str) and is_ulid(series_id)):
+            raise bad_request("seriesId is not valid.", "seriesId")
+        out["seriesId"] = series_id
     return out
 
 
@@ -129,14 +134,19 @@ def _category(value: Any) -> str:
 
 
 def generate_body(body: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, str] | None]:
-    """``{ topic?, category?, count?: 1..6 (4), override? }`` → (the task's input, the override)."""
-    validate.only_keys(body, {"topic", "category", "count", "override"})
+    """``{ topic?, category?, count?: 1..6 (4), override?, seriesId? }`` → (the task's input, the override). The route
+    answers 404 when the series is gone (§45.44)."""
+    validate.only_keys(body, {"topic", "category", "count", "override", "seriesId"})
     out: dict[str, Any] = {"count": validate.integer(body.get("count", 4), "count", lo=1, hi=6)}
     topic = validate.string(body, "topic", required=False, max_len=TOPIC_MAX)
     if topic:
         out["topic"] = topic
     if body.get("category") is not None:
         out["category"] = _category(body["category"])
+    if body.get("seriesId") is not None:
+        if not (isinstance(body["seriesId"], str) and is_ulid(body["seriesId"])):
+            raise bad_request("seriesId is not valid.", "seriesId")
+        out["seriesId"] = body["seriesId"]
     return out, overrides.model_override(body.get("override"))
 
 

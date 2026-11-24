@@ -2,9 +2,10 @@
 // ASSET# items, newest first, filtered by kind, story or character, with each item's story or character title.
 // Once every part has seeded, the stories that have a video and the characters get their files (whoever seeded
 // them), as the agent's jobs and the owner's uploads would have made them. In mock mode every file is a small
-// picture or a placeholder written in the page itself (no network).
+// picture or a placeholder written in the page itself (no network). `?seriesId=` keeps the files of one series'
+// stories ("none": of the stories in no series, §45.44); a file with no story shows only under All.
 import { ApiError } from "../../../api/errors.ts";
-import type { AssetKind, Character, LibraryItem, StoriesApi, Story } from "../types.ts";
+import { isCar, type AssetKind, type Character, type LibraryItem, type StoriesApi, type Story } from "../types.ts";
 import { ago, delay, HOUR, mockId, type MockStore } from "./store.ts";
 import { storiesWorkspace } from "./workspace.ts";
 
@@ -33,7 +34,20 @@ export function stillSvg(n: number, wide = false): string {
   );
 }
 
+/** A car's picture (§45.42): a cartoon hatchback in its own paint, on the same backdrop. */
+function carSvg(paint: string, sketch: boolean): string {
+  const svg =
+    `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><rect width="200" height="200" fill="${sketch ? "#FFF6E5" : "#26205A"}"/>` +
+    `<path d="M28 132 q4 -26 30 -30 l22 -26 h52 l26 26 q30 4 32 30 v12 h-162z" fill="${paint}" stroke="#1C1842" stroke-width="5" stroke-linejoin="round"/>` +
+    `<path d="M86 82 h40 l18 20 h-58z" fill="#BFE3F2" stroke="#1C1842" stroke-width="4" stroke-linejoin="round"/>` +
+    `<circle cx="62" cy="146" r="17" fill="#1C1842"/><circle cx="62" cy="146" r="7" fill="#C9CCD2"/>` +
+    `<circle cx="146" cy="146" r="17" fill="#1C1842"/><circle cx="146" cy="146" r="7" fill="#C9CCD2"/>` +
+    `<circle cx="178" cy="122" r="6" fill="#FFF6E5" stroke="#1C1842" stroke-width="3"/></svg>`;
+  return svgUrl(svg);
+}
+
 function faceSvg(c: Character, sketch: boolean): string {
+  if (isCar(c)) return carSvg(c.car.paint, sketch);
   const top = c.look.outfit.top;
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><rect width="200" height="200" fill="${sketch ? "#FFF6E5" : "#26205A"}"/>` +
@@ -118,11 +132,19 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       const start = q.cursor ? Number(q.cursor) : 0;
       if (!Number.isInteger(start) || start < 0) throw new ApiError(400, "bad_request", "That list link is old. Open the Library again.");
       const mine = new Set([...store.stories.filter((s) => s.workspaceId === ws).map((s) => s.storyId), ...store.characters.filter((c) => c.workspaceId === ws).map((c) => c.characterId)]);
+      const known = new Set(store.series.filter((x) => x.workspaceId === ws).map((x) => x.seriesId));
+      const inSeries = (storyId: string | null) => {
+        if (!q.seriesId) return true;
+        const st = storyId ? store.stories.find((s) => s.storyId === storyId) : undefined;
+        if (!st) return false; // a file with no story shows only under All
+        return q.seriesId === "none" ? !st.seriesId || !known.has(st.seriesId) : st.seriesId === q.seriesId;
+      };
       const all = store.assets
         .filter((a) => (a.storyId ? mine.has(a.storyId) : a.characterId ? mine.has(a.characterId) : false))
         .filter((a) => !q.kind || q.kind === "all" || a.kind === q.kind)
         .filter((a) => !q.storyId || a.storyId === q.storyId)
         .filter((a) => !q.characterId || a.characterId === q.characterId)
+        .filter((a) => inSeries(a.storyId))
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
       const page = all.slice(start, start + limit).map((a) => withTitle(store, a));
       return { items: structuredClone(page), nextCursor: start + limit < all.length ? String(start + limit) : null };
@@ -139,8 +161,10 @@ export function shellFallbacks(store: MockStore): Partial<StoriesApi> {
     async listStories(ws, q = {}) {
       await delay(160);
       storiesWorkspace(store, ws);
+      const known = new Set(store.series.filter((x) => x.workspaceId === ws).map((x) => x.seriesId));
+      const inSeries = (s: Story) => !q.seriesId || (q.seriesId === "none" ? !s.seriesId || !known.has(s.seriesId) : s.seriesId === q.seriesId);
       const list = store.stories
-        .filter((s) => s.workspaceId === ws && (!q.status || q.status === "all" || s.status === q.status))
+        .filter((s) => s.workspaceId === ws && (!q.status || q.status === "all" || s.status === q.status) && inSeries(s))
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
       return { stories: structuredClone(list.slice(0, q.limit ?? 50)), nextCursor: null };
     },

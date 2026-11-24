@@ -1,11 +1,16 @@
 // Making and changing a character (docs/CONTRACTS.md §45.8, §45.16.5): a stepper of five parts (Looks, Face, Moves,
 // Sounds, Name and personality) beside a live preview drawn by the same engine as the videos. Every look choice the
-// rig has is here; each face and each move can be tried on the preview. Save stays at the bottom right.
+// rig has is here; each face and each move can be tried on the preview. Save stays at the bottom right. A car (§45.42)
+// has the same five parts and stepper with its own Looks, Face and Moves (CarParts.tsx) and a car preview; Sounds is
+// SoundsPart for both, where every sound can be heard first (§45.41).
 import { useState, type ReactNode } from "react";
-import type { CharacterInput } from "../api/types.ts";
+import { isCar, type CarInput, type CharacterInput, type PersonInput } from "../api/types.ts";
 import { CATALOG } from "../engine/catalog.ts";
-import type { ActionId, CharacterLook, Expression, NoiseId, SfxId } from "../engine/types.ts";
+import type { CarMove } from "../engine/engine.ts";
+import type { ActionId, CarLook, CharacterLook, Expression } from "../engine/types.ts";
+import { CarPreview } from "../preview/CarPreview.tsx";
 import { CharacterPreview } from "../preview/CharacterPreview.tsx";
+import { CarFacePart, CarLooksPart, CarMovesPart } from "./CarParts.tsx";
 import { useWidth } from "./hooks.ts";
 import { Chip, Notice, Pick, Slider, Swatches, TextField } from "./kit.tsx";
 import {
@@ -14,6 +19,7 @@ import {
   BROWS,
   CHAR_LIMITS,
   characterProblem,
+  carMoveLabel,
   CLOTHES,
   EYE_COLORS,
   EYES,
@@ -26,8 +32,8 @@ import {
   PATTERN,
   showFace,
   SKIN,
-  VOICE_STYLE,
 } from "./looks.ts";
+import { SoundsPart } from "./SoundsPart.tsx";
 
 export type EditorPart = "looks" | "face" | "moves" | "sounds" | "name";
 
@@ -49,6 +55,12 @@ function partFor(problem: string): EditorPart {
 
 const sizeWords = (n: number, small: string, big: string) => (n < 0.95 ? small : n > 1.05 ? big : "Just right");
 
+/** What a person and a car both have (the parts the editor changes the same way for both). */
+type Common = Omit<PersonInput, "kind" | "look" | "car">;
+
+/** A person's moves to try: getting in and out need a car, so they are tried in a video. */
+const PERSON_MOVES = CATALOG.actions.filter((a) => a.id !== "get_in" && a.id !== "get_out").map((a) => ({ value: a.id, label: a.label }));
+
 export function CharacterEditor({
   initial,
   mode,
@@ -57,6 +69,8 @@ export function CharacterEditor({
   serverProblem,
   aside,
   startPart,
+  otherMaker,
+  onEdit,
 }: {
   initial: CharacterInput;
   /** the part to open first (after Design with AI: the name and personality, to check them) */
@@ -68,22 +82,32 @@ export function CharacterEditor({
   serverProblem?: ReactNode;
   /** More under the preview (the reference pictures, the AI picture). */
   aside?: ReactNode;
+  /** the workspace's effects maker is not the built-in one (the Sounds part says the videos can sound different) */
+  otherMaker?: boolean;
+  /** told on each change the owner makes */
+  onEdit?: () => void;
 }) {
   const [c, setC] = useState<CharacterInput>(initial);
   const [part, setPart] = useState<EditorPart>(startPart ?? "looks");
   // The preview opens on the character's own face (happy if it has it, else its first face that is not neutral).
   const [face, setFace] = useState<Expression>(() => showFace(initial));
   const [move, setMove] = useState<ActionId>("idle");
+  const [carMove, setCarMove] = useState<CarMove>("idle");
   const [problem, setProblem] = useState<string | null>(null);
   const [trait, setTrait] = useState("");
   const [box, width] = useWidth<HTMLDivElement>(220);
   const size = Math.max(140, Math.min(260, width - 24));
 
-  const set = (patch: Partial<CharacterInput>) => {
+  const update = (next: (prev: CharacterInput) => CharacterInput) => {
     setProblem(null);
-    setC((prev) => ({ ...prev, ...patch }));
+    onEdit?.();
+    setC(next);
   };
-  const setLook = (patch: Partial<CharacterLook>) => set({ look: { ...c.look, ...patch } });
+  const set = (patch: Partial<Common>) => update((prev) => ({ ...prev, ...patch }) as CharacterInput);
+  const setLook = (patch: Partial<CharacterLook>) => update((prev) => (isCar(prev) ? prev : { ...prev, look: { ...prev.look, ...patch } }));
+  const setCar = (patch: Partial<CarLook>) => update((prev) => (isCar(prev) ? { ...prev, car: { ...prev.car, ...patch } } : prev));
+  const car: CarInput | null = isCar(c) ? c : null;
+  const person: PersonInput | null = isCar(c) ? null : c;
   const at = PARTS.findIndex((p) => p.value === part);
   const last = at === PARTS.length - 1;
 
@@ -103,11 +127,6 @@ export function CharacterEditor({
     setFace(e);
   }
 
-  function toggle<T extends string>(list: T[], v: T, max: number): T[] {
-    if (list.includes(v)) return list.filter((x) => x !== v);
-    return list.length >= max ? list : [...list, v];
-  }
-
   function addTrait() {
     const t = trait.trim();
     if (!t) return;
@@ -117,67 +136,73 @@ export function CharacterEditor({
     setTrait("");
   }
 
-  const name = c.name.trim() || "Your character";
+  const name = c.name.trim() || (car ? "Your car" : "Your character");
   const faceLabel = CATALOG.expressions.find((e) => e.id === face)?.label ?? face;
-  const moveLabel = CATALOG.actions.find((a) => a.id === move)?.label ?? move;
+  const moveLabel = car ? carMoveLabel(carMove) : (CATALOG.actions.find((a) => a.id === move)?.label ?? move);
 
   return (
     <div className="st-s-editor">
       <div className="st-s-editor__stage" ref={box}>
         {/* The editor's hero: its rim may bend (glass/lens.ts decides). */}
         <div className="st-s-editor__preview st-lens">
-          <CharacterPreview look={c.look} movementStyle={c.movementStyle} expression={face} action={move} size={size} label={`${name}, ${faceLabel} face, ${moveLabel}`} />
+          {car ? (
+            <CarPreview car={car.car} movementStyle={car.movementStyle} expression={face} move={carMove} size={size} label={car.car.face.eyes === "none" ? `${name}, ${moveLabel}` : `${name}, ${faceLabel} face, ${moveLabel}`} />
+          ) : person ? (
+            <CharacterPreview look={person.look} movementStyle={person.movementStyle} expression={face} action={move} size={size} label={`${name}, ${faceLabel} face, ${moveLabel}`} />
+          ) : null}
           <p className="st-s-editor__now">
             <strong>{name}</strong>
-            <span>
-              {faceLabel} · {moveLabel}
-            </span>
+            <span>{car && car.car.face.eyes === "none" ? moveLabel : `${faceLabel} · ${moveLabel}`}</span>
           </p>
         </div>
         {aside}
       </div>
 
       <div className="st-s-editor__panel">
-        <Pick label="Make your character" hideLabel value={part} options={PARTS} onChange={setPart} className="st-s-editor__parts" />
+        <Pick label={car ? "Make your car" : "Make your character"} hideLabel value={part} options={PARTS} onChange={setPart} className="st-s-editor__parts" />
 
-        {part === "looks" ? (
+        {car && part === "looks" ? <CarLooksPart car={car.car} onChange={setCar} /> : null}
+        {car && part === "face" ? <CarFacePart c={car} name={name} face={face} onTry={setFace} onChange={(next) => update(() => next)} /> : null}
+        {car && part === "moves" ? <CarMovesPart name={name} style={car.movementStyle} move={carMove} onStyle={(movementStyle) => set({ movementStyle })} onMove={setCarMove} /> : null}
+
+        {person && part === "looks" ? (
           <div className="st-s-editor__part" aria-label="Looks">
             <fieldset className="st-s-group">
               <legend className="st-s-group__title">Body</legend>
-              <Pick label="Shape" value={c.look.body} options={BODY} onChange={(body) => setLook({ body })} />
-              <Slider label="Height" min={0.85} max={1.15} step={0.05} value={c.look.height} words={sizeWords(c.look.height, "Shorter", "Taller")} onChange={(height) => setLook({ height })} />
-              <Slider label="Width" min={0.85} max={1.15} step={0.05} value={c.look.width} words={sizeWords(c.look.width, "Thinner", "Wider")} onChange={(w) => setLook({ width: w })} />
-              <Swatches label="Skin" value={c.look.skin} colors={SKIN} onChange={(skin) => setLook({ skin })} />
+              <Pick label="Shape" value={person.look.body} options={BODY} onChange={(body) => setLook({ body })} />
+              <Slider label="Height" min={0.85} max={1.15} step={0.05} value={person.look.height} words={sizeWords(person.look.height, "Shorter", "Taller")} onChange={(height) => setLook({ height })} />
+              <Slider label="Width" min={0.85} max={1.15} step={0.05} value={person.look.width} words={sizeWords(person.look.width, "Thinner", "Wider")} onChange={(w) => setLook({ width: w })} />
+              <Swatches label="Skin" value={person.look.skin} colors={SKIN} onChange={(skin) => setLook({ skin })} />
             </fieldset>
             <fieldset className="st-s-group">
               <legend className="st-s-group__title">Hair</legend>
-              <Pick label="Hair style" value={c.look.hair.style} options={HAIR} onChange={(style) => setLook({ hair: { ...c.look.hair, style } })} />
-              <Swatches label="Hair colour" value={c.look.hair.color} colors={HAIR_COLORS} onChange={(color) => setLook({ hair: { ...c.look.hair, color } })} />
+              <Pick label="Hair style" value={person.look.hair.style} options={HAIR} onChange={(style) => setLook({ hair: { ...person.look.hair, style } })} />
+              <Swatches label="Hair colour" value={person.look.hair.color} colors={HAIR_COLORS} onChange={(color) => setLook({ hair: { ...person.look.hair, color } })} />
             </fieldset>
             <fieldset className="st-s-group">
               <legend className="st-s-group__title">Face</legend>
-              <Pick label="Eyes" value={c.look.eyes.shape} options={EYES} onChange={(shape) => setLook({ eyes: { ...c.look.eyes, shape } })} />
-              <Swatches label="Eye colour" value={c.look.eyes.color} colors={EYE_COLORS} onChange={(color) => setLook({ eyes: { ...c.look.eyes, color } })} />
-              <Pick label="Eyebrows" value={c.look.brows} options={BROWS} onChange={(brows) => setLook({ brows })} />
-              <Pick label="Nose" value={c.look.nose} options={NOSE} onChange={(nose) => setLook({ nose })} />
-              <Pick label="Mouth" value={c.look.mouth} options={MOUTH} onChange={(mouth) => setLook({ mouth })} />
+              <Pick label="Eyes" value={person.look.eyes.shape} options={EYES} onChange={(shape) => setLook({ eyes: { ...person.look.eyes, shape } })} />
+              <Swatches label="Eye colour" value={person.look.eyes.color} colors={EYE_COLORS} onChange={(color) => setLook({ eyes: { ...person.look.eyes, color } })} />
+              <Pick label="Eyebrows" value={person.look.brows} options={BROWS} onChange={(brows) => setLook({ brows })} />
+              <Pick label="Nose" value={person.look.nose} options={NOSE} onChange={(nose) => setLook({ nose })} />
+              <Pick label="Mouth" value={person.look.mouth} options={MOUTH} onChange={(mouth) => setLook({ mouth })} />
             </fieldset>
             <fieldset className="st-s-group">
               <legend className="st-s-group__title">Clothes</legend>
-              <Swatches label="Top" value={c.look.outfit.top} colors={CLOTHES} onChange={(top) => setLook({ outfit: { ...c.look.outfit, top } })} />
-              <Swatches label="Bottom" value={c.look.outfit.bottom} colors={CLOTHES} onChange={(bottom) => setLook({ outfit: { ...c.look.outfit, bottom } })} />
-              <Swatches label="Little bits" value={c.look.outfit.accent} colors={CLOTHES} onChange={(accent) => setLook({ outfit: { ...c.look.outfit, accent } })} />
-              <Pick label="Pattern" value={c.look.outfit.pattern} options={PATTERN} onChange={(pattern) => setLook({ outfit: { ...c.look.outfit, pattern } })} />
+              <Swatches label="Top" value={person.look.outfit.top} colors={CLOTHES} onChange={(top) => setLook({ outfit: { ...person.look.outfit, top } })} />
+              <Swatches label="Bottom" value={person.look.outfit.bottom} colors={CLOTHES} onChange={(bottom) => setLook({ outfit: { ...person.look.outfit, bottom } })} />
+              <Swatches label="Little bits" value={person.look.outfit.accent} colors={CLOTHES} onChange={(accent) => setLook({ outfit: { ...person.look.outfit, accent } })} />
+              <Pick label="Pattern" value={person.look.outfit.pattern} options={PATTERN} onChange={(pattern) => setLook({ outfit: { ...person.look.outfit, pattern } })} />
             </fieldset>
             <fieldset className="st-s-group">
               <legend className="st-s-group__title">Extras</legend>
-              <Pick label="Wears" value={c.look.accessory} options={ACCESSORY} onChange={(accessory) => setLook({ accessory })} />
-              <Swatches label="Outline" value={c.look.outline} colors={OUTLINES} onChange={(outline) => setLook({ outline })} />
+              <Pick label="Wears" value={person.look.accessory} options={ACCESSORY} onChange={(accessory) => setLook({ accessory })} />
+              <Swatches label="Outline" value={person.look.outline} colors={OUTLINES} onChange={(outline) => setLook({ outline })} />
             </fieldset>
           </div>
         ) : null}
 
-        {part === "face" ? (
+        {person && part === "face" ? (
           <div className="st-s-editor__part" aria-label="Face">
             <p className="st-s-editor__lede">Pick the faces {name} can make. Tap Try to see one. Neutral is always there.</p>
             <ul className="st-s-faces">
@@ -185,7 +210,7 @@ export function CharacterEditor({
                 const on = c.expressions.includes(e.id);
                 return (
                   <li key={e.id} className={`st-s-face${on ? " is-on" : ""}${face === e.id ? " is-trying" : ""}`}>
-                    <CharacterPreview look={c.look} movementStyle={c.movementStyle} expression={e.id} action="idle" size={72} playing={false} label={`${name} looking ${e.label.toLowerCase()}`} />
+                    <CharacterPreview look={person.look} movementStyle={c.movementStyle} expression={e.id} action="idle" size={72} playing={false} label={`${name} looking ${e.label.toLowerCase()}`} />
                     <span className="st-s-face__name">{e.label}</span>
                     <span className="st-s-face__btns">
                       <Chip on={on} onToggle={() => toggleFace(e.id)} locked={e.id === "neutral"} lockedWhy="Every character keeps the Neutral face.">
@@ -205,7 +230,7 @@ export function CharacterEditor({
           </div>
         ) : null}
 
-        {part === "moves" ? (
+        {person && part === "moves" ? (
           <div className="st-s-editor__part" aria-label="Moves">
             <Pick
               label={`How ${name} moves`}
@@ -214,59 +239,21 @@ export function CharacterEditor({
               options={CATALOG.movementStyles.map((m) => ({ value: m.id, label: m.label, line: MOVE_LINE[m.id] }))}
               onChange={(movementStyle) => set({ movementStyle })}
             />
-            <Pick label="Try a move" value={move} options={CATALOG.actions.map((a) => ({ value: a.id, label: a.label }))} onChange={setMove} className="st-s-moves" />
+            <Pick label="Try a move" value={move} options={PERSON_MOVES} onChange={setMove} className="st-s-moves" />
           </div>
         ) : null}
 
-        {part === "sounds" ? (
-          <div className="st-s-editor__part" aria-label="Sounds">
-            <p className="st-s-editor__lede">Clips Funded videos have no talking. {name} makes little noises instead. You will hear them in the video.</p>
-            <Pick label="Voice" value={c.voice.style} options={VOICE_STYLE} onChange={(style) => set({ voice: { ...c.voice, style } })} />
-            <Slider
-              label="Voice pitch"
-              min={0.5}
-              max={2}
-              step={0.05}
-              value={c.voice.pitch}
-              words={c.voice.pitch < 0.85 ? "Low" : c.voice.pitch > 1.3 ? "High" : "Middle"}
-              onChange={(pitch) => set({ voice: { ...c.voice, pitch } })}
-            />
-            <div className="st-s-field">
-              <span className="st-s-field__label">
-                Noises ({c.voice.noises.length} of {CHAR_LIMITS.noises})
-              </span>
-              <div className="st-s-chips">
-                {CATALOG.noises.map((n) => (
-                  <Chip key={n.id} on={c.voice.noises.includes(n.id)} onToggle={() => set({ voice: { ...c.voice, noises: toggle<NoiseId>(c.voice.noises, n.id, CHAR_LIMITS.noises) } })}>
-                    {n.label}
-                  </Chip>
-                ))}
-              </div>
-            </div>
-            <div className="st-s-field">
-              <span className="st-s-field__label">
-                Favourite sound effects ({c.voice.sfx.length} of {CHAR_LIMITS.sfx})
-              </span>
-              <div className="st-s-chips">
-                {CATALOG.sfx.map((s) => (
-                  <Chip key={s.id} on={c.voice.sfx.includes(s.id)} onToggle={() => set({ voice: { ...c.voice, sfx: toggle<SfxId>(c.voice.sfx, s.id, CHAR_LIMITS.sfx) } })}>
-                    {s.label}
-                  </Chip>
-                ))}
-              </div>
-            </div>
-          </div>
-        ) : null}
+        {part === "sounds" ? <SoundsPart kind={car ? "car" : "person"} name={name} voice={c.voice} onChange={(voice) => set({ voice })} otherMaker={otherMaker} /> : null}
 
         {part === "name" ? (
           <div className="st-s-editor__part" aria-label="Name and personality">
-            <TextField label="Name" value={c.name} max={CHAR_LIMITS.name} placeholder="For example: Pip" onChange={(name) => set({ name })} />
+            <TextField label="Name" value={c.name} max={CHAR_LIMITS.name} placeholder={car ? "For example: Rosso" : "For example: Pip"} onChange={(name) => set({ name })} />
             <TextField
               label="What they look like"
               multiline
               value={c.description}
               max={CHAR_LIMITS.description}
-              placeholder="For example: a small driver in a yellow jumper"
+              placeholder={car ? "For example: a small red hatchback" : "For example: a small driver in a yellow jumper"}
               onChange={(description) => set({ description })}
             />
             <TextField
@@ -331,7 +318,7 @@ export function CharacterEditor({
           ) : null}
           {mode === "edit" || last ? (
             <button type="button" className="st-btn st-btn--main" aria-disabled={saving || undefined} onClick={() => !saving && save()}>
-              {saving ? "Saving…" : mode === "new" ? "Save character" : "Save changes"}
+              {saving ? "Saving…" : mode === "new" ? (car ? "Save car" : "Save character") : "Save changes"}
             </button>
           ) : null}
         </div>

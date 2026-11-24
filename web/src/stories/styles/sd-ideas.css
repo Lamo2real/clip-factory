@@ -112,6 +112,9 @@
   display: flex;
   flex: none;
   flex-wrap: wrap;
+  justify-content: flex-end;
+  /* Edit, Delete and Move (§45.44) wrap inside the card on a small phone instead of running off it. */
+  max-width: 100%;
   gap: var(--st-space-2);
   margin-inline-start: auto;
 }

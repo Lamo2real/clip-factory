@@ -1,12 +1,15 @@
 // Lamo Stories engine: props. Each PropKind has a side view and a top-down view (a road seen from above, for showing
-// how a car moves). Prop actions (move, skid, spin, stop, bump, tyre_burst, appear, vanish, wobble, flash) change a
-// prop's state over time; cars leave skid marks and motion lines so a phone viewer can follow what happened.
+// how a car moves). Prop actions (move, skid, spin, stop, bump, tyre_burst, appear, vanish, wobble, flash, and the car
+// moves speed_up, bounce, honk, blink and stall) change a prop's state over time; cars leave skid marks and motion
+// lines so a phone viewer can follow what happened. A car of the cast (a car prop with a castId, CONTRACTS §45.42) is
+// drawn by car.ts from its own look; given no CarDraw, everything draws exactly as before.
 
+import { burst, drawCarLookSide, drawCarLookTop, exhaust, honkWaves, impact, lightGlow, type CarDraw } from "./car.ts";
 import { F } from "./frame.ts";
 import { DEG, TAU, clamp, clamp01, ease, hex, lerp, rand, shade, smoothstep } from "./math.ts";
 import type { Pen } from "./pen.ts";
 import { arcPts, heartPts, inflate, quadPts, roundRectPts, starPts } from "./pen.ts";
-import type { Beat, PropAction, PropKind, SceneProp } from "./types.ts";
+import type { Beat, Expression, PropAction, PropKind, SceneProp } from "./types.ts";
 
 export const CARS: Set<PropKind> = new Set(["car", "truck"]);
 /** Flat things on the ground: drawn before anything that stands. */
@@ -15,7 +18,8 @@ export const DECALS: Set<PropKind> = new Set(["ice_patch", "puddle"]);
 export const OVERLAYS: Set<PropKind> = new Set(["arrow", "check", "cross", "exclamation", "question", "heart", "sparkles", "dust"]);
 export const WEATHER: Set<PropKind> = new Set(["snow", "rain", "fog"]);
 
-const MOVERS: Set<PropAction> = new Set(["move", "skid", "spin", "stop", "bump"]);
+/** The prop actions that move a prop to their `to` (a stall without `to` happens in place). */
+const MOVERS: Set<PropAction> = new Set(["move", "skid", "spin", "stop", "bump", "speed_up", "stall"]);
 /** Side view: the prop actions whose `dir` turns the prop to face that way. */
 const FACERS: Set<PropAction> = new Set(["move", "stop", "bump", "appear"]);
 
@@ -52,9 +56,26 @@ export interface PropState {
   /** side view: x of the wheels when the current skid started (world px) */
   skidFrom: number | null;
   lights: boolean;
+  /** the newest beat of this prop at or before t that has a face (a car of the cast with eyes shows it) */
+  face: Expression | null;
+  /** seconds since a honk started, while it sounds; -1 otherwise */
+  honkAge: number;
+  /** the headlights flashing (blink): 0..1 */
+  blink: number;
+  /** a suspension hop (bounce): 1 at the top, a little below 0 as it settles */
+  bounce: number;
+  /** seconds since the newest stall started; -1 before any */
+  stallAge: number;
+  /** seconds since the newest speed_up started (its exhaust puffs); -1 before any */
+  puffAge: number;
 }
 
+/** A stall's stop: like a stop, with a judder in it. */
+const stallEase = (p: number): number => clamp01(ease.outCubic(p) - 0.04 * Math.sin(p * Math.PI * 5) * (1 - p));
+
 function moveEase(a: PropAction): (t: number) => number {
+  if (a === "speed_up") return ease.inQuad;
+  if (a === "stall") return stallEase;
   if (a === "skid") return ease.outQuad;
   if (a === "spin") return ease.outCubic;
   if (a === "stop") return ease.outCubic;
@@ -138,8 +159,14 @@ export interface DriverInput {
   rolled: number;
 }
 
-/** Everything about one prop at scene time t. */
-export function propState(prop: SceneProp, beats: Beat[], view: "side" | "top", t: number, driver: DriverInput): PropState {
+/** The suspension hop of a bounce at progress p: up about 6% of the car's height, then a small settle. */
+function hop(p: number): number {
+  if (p < 0.55) return Math.sin((Math.PI * p) / 0.55);
+  return -0.22 * Math.sin((Math.PI * (p - 0.55)) / 0.45);
+}
+
+/** Everything about one prop at scene time t. `car`: a car of the cast (its movement style changes the drawing). */
+export function propState(prop: SceneProp, beats: Beat[], view: "side" | "top", t: number, driver: DriverInput, car?: CarDraw | null): PropState {
   const path = propPath(prop, beats, view, t);
   const firstAppear = beats.find((b) => b.do === "appear");
   const state = prop.state ?? "";
@@ -167,7 +194,16 @@ export function propState(prop: SceneProp, beats: Beat[], view: "side" | "top", 
     marks: [],
     skidFrom: null,
     lights: /lights|night/.test(state),
+    face: null,
+    honkAge: -1,
+    blink: 0,
+    bounce: 0,
+    stallAge: -1,
+    puffAge: -1,
   };
+  const dip = car?.style === "heavy" ? 1.5 : 1;
+  let stalledAt: number | null = null;
+  let movedAt = -Infinity;
   for (const b of beats) {
     if (b.at > t) break;
     const a = b.do as PropAction;
@@ -176,6 +212,8 @@ export function propState(prop: SceneProp, beats: Beat[], view: "side" | "top", 
     const on = tau < b.dur;
     const side = b.dir === "left" ? -1 : 1;
     const marked = view === "top" && st.marks.length < 3;
+    if (b.face) st.face = b.face;
+    if (MOVERS.has(a) && b.to) movedAt = b.at;
     switch (a) {
       case "skid":
         if (on) {
@@ -205,7 +243,7 @@ export function propState(prop: SceneProp, beats: Beat[], view: "side" | "top", 
       }
       case "stop":
         if (on) st.braking = Math.max(st.braking, 1 - smoothstep(0.85, 1, p) * 0.5);
-        if (view === "side" && on) st.rot += 3.5 * Math.sin(Math.PI * smoothstep(0.55, 1, p)) * Math.exp(-2 * Math.max(0, p - 0.8));
+        if (view === "side" && on) st.rot += 3.5 * dip * Math.sin(Math.PI * smoothstep(0.55, 1, p)) * Math.exp(-2 * Math.max(0, p - 0.8));
         if (marked && b.to && propPath(prop, beats, view, b.at + Math.min(0.05, b.dur / 4)).speed > 0.12) {
           st.marks.push(skidMarks(prop, beats, b, Math.min(t, b.at + b.dur * 0.7)));
         }
@@ -237,10 +275,33 @@ export function propState(prop: SceneProp, beats: Beat[], view: "side" | "top", 
       case "flash":
         if (on) st.flash = 0.5 + 0.5 * Math.sin(TAU * 3.5 * tau - Math.PI / 2);
         break;
+      case "speed_up":
+        st.puffAge = tau;
+        break;
+      case "bounce":
+        st.bounce = on ? hop(p) : 0;
+        break;
+      case "honk":
+        st.honkAge = tau < Math.max(b.dur, 0.6) ? tau : -1;
+        break;
+      case "blink": {
+        // two flashes over the beat
+        const ph = (p * 2) % 1;
+        st.blink = on && ph < 0.6 ? Math.sin((Math.PI * ph) / 0.6) : 0;
+        break;
+      }
+      case "stall":
+        st.stallAge = tau;
+        stalledAt = b.at;
+        if (on && b.to) st.braking = Math.max(st.braking, 1 - smoothstep(0.85, 1, p) * 0.5);
+        if (tau < 0.4) st.rot += (view === "side" ? 2.2 : 3) * Math.sin(tau * 55) * (1 - tau / 0.4);
+        break;
       case "move":
         break;
     }
   }
+  // a stall in place brings the speed down to 0 over its shudder, until the next move
+  if (stalledAt !== null && movedAt < stalledAt) st.speed *= 1 - smoothstep(0, 0.4, t - stalledAt);
   st.scale = Math.max(0, st.scale);
   return st;
 }
@@ -288,8 +349,9 @@ export function propBaseScale(st: PropState, view: "side" | "top"): number {
   return (st.prop.scale || 1) * depth * st.scale * (BASE[st.prop.kind] ?? 1);
 }
 
-/** Draws one prop at its state; the pen is in world pixels (camera applied). */
-export function drawProp(pen: Pen, st: PropState, view: "side" | "top", t: number, seed: number, occ: Occupants, night: boolean): void {
+/** Draws one prop at its state; the pen is in world pixels (camera applied). `car`: a car prop of the cast, drawn as
+ * that car (its `color` is ignored). */
+export function drawProp(pen: Pen, st: PropState, view: "side" | "top", t: number, seed: number, occ: Occupants, night: boolean, car?: CarDraw | null): void {
   if (!st.visible || st.alpha <= 0.01 || st.scale <= 0.01) return;
   const kind = st.prop.kind;
   const k = propBaseScale(st, view);
@@ -301,9 +363,16 @@ export function drawProp(pen: Pen, st: PropState, view: "side" | "top", t: numbe
     pen.circle(x, y - (view === "side" && !OVERLAYS.has(kind) && !DECALS.has(kind) ? 120 * k : 0), 190 * k, "#ffc94a", 0.28 * st.flash);
   }
   pen.translate(x, y);
-  if (kind === "car" || kind === "truck") {
-    if (view === "top") drawCarTop(pen, st, k, t, kind === "truck", occ, night);
-    else drawCarSide(pen, st, k, t, kind === "truck", occ, night);
+  if (kind === "car" && car) {
+    if (view === "top") drawCarLookTop(pen, st, k, t, car, occ, night);
+    else drawCarLookSide(pen, st, k, t, car, occ, night);
+  } else if (kind === "car" || kind === "truck") {
+    const truck = kind === "truck";
+    // the car moves (bounce, honk, blink, speed_up, stall) on a plain car or truck
+    if (st.bounce !== 0) pen.translate(0, -st.bounce * (view === "top" ? 0 : 18) * k);
+    if (view === "top") drawCarTop(pen, st, k, t, truck, occ, night);
+    else drawCarSide(pen, st, k, t, truck, occ, night);
+    plainCarMoves(pen, st, view, k, truck);
   } else {
     pen.rotate(st.rot);
     pen.scale(k * (view === "side" ? st.facing : 1), k);
@@ -315,42 +384,37 @@ export function drawProp(pen: Pen, st: PropState, view: "side" | "top", t: numbe
   if (st.vanishAge >= 0 && st.vanishAge < 0.7) puff(pen, x, y - (view === "side" && !OVERLAYS.has(kind) ? 60 * k : 0), st.vanishAge / 0.7, 110 * k, seed + 1);
 }
 
+/** The new car moves on a plain car or truck (they draw nothing in a script that does not use them). */
+function plainCarMoves(pen: Pen, st: PropState, view: "side" | "top", k: number, truck: boolean): void {
+  if (st.honkAge < 0 && st.blink <= 0.04 && st.puffAge < 0 && st.stallAge < 0) return;
+  const nose = truck ? 430 : 300;
+  const tail = truck ? 440 : 300;
+  if (view === "side") {
+    const f = st.facing;
+    honkWaves(pen, f * (nose + 16) * k, -134 * k, st.honkAge, k, f > 0 ? 0 : 180);
+    lightGlow(pen, f * (nose - 30) * k, -134 * k, st.blink, k);
+    exhaust(pen, -f * (tail + 12) * k, -40 * k, st.puffAge, st.stallAge, k, -f * 0.9, -0.45);
+    return;
+  }
+  const L = truck ? 560 : 350;
+  const h = st.rot * DEG;
+  const at = (lx: number, ly: number): [number, number] => [(lx * Math.cos(h) - ly * Math.sin(h)) * k, (lx * Math.sin(h) + ly * Math.cos(h)) * k];
+  const [hx, hy] = at(0, -L / 2 - 18);
+  honkWaves(pen, hx, hy, st.honkAge, k, st.rot - 90);
+  for (const s of [-1, 1]) {
+    const [lx, ly] = at(s * 62, -L / 2 + 14);
+    lightGlow(pen, lx, ly, st.blink, k * 0.8);
+  }
+  const [ex, ey] = at(0, L / 2 + 18);
+  exhaust(pen, ex, ey, st.puffAge, st.stallAge, k, -Math.sin(h) * 1, Math.cos(h) * 1);
+}
+
 export function puff(pen: Pen, x: number, y: number, p: number, r: number, seed: number): void {
   for (let i = 0; i < 6; i += 1) {
     const a = (i / 6) * TAU + rand(seed, i) * 0.6;
     const d = r * (0.4 + p * 0.9);
     pen.circle(x + Math.cos(a) * d, y + Math.sin(a) * d * 0.7, r * 0.22 * (1 - p * 0.6), "#ffffff", 0.85 * (1 - p));
   }
-}
-
-function burst(pen: Pen, x: number, y: number, age: number, k: number, seed: number, gravity: boolean): void {
-  if (age < 0 || age > 0.9) return;
-  if (age < 0.45) {
-    const g = ease.outBack(Math.min(1, age / 0.12));
-    const a = 1 - smoothstep(0.25, 0.45, age);
-    pen.poly(starPts(x, y, 95 * k * g, 42 * k * g, 10, age * 60), "#ff6f61", a);
-    pen.poly(starPts(x, y, 66 * k * g, 30 * k * g, 10, age * 60 + 18), "#ffc94a", a);
-    pen.circle(x, y, 18 * k * g, "#ffffff", a);
-  }
-  for (let i = 0; i < 4; i += 1) {
-    const ang = (-150 + i * 40 + rand(seed, i + 40) * 20) * DEG;
-    const v = (380 + rand(seed, i + 50) * 260) * k;
-    const bx = x + Math.cos(ang) * v * age;
-    const by = y + Math.sin(ang) * v * age + (gravity ? 900 * k * age * age : 0);
-    pen.save();
-    pen.translate(bx, by);
-    pen.rotate(age * 720 + i * 40);
-    pen.poly([-10 * k, -5 * k, 9 * k, -7 * k, 11 * k, 6 * k, -8 * k, 5 * k], "#2b2b36", 1 - smoothstep(0.6, 0.9, age));
-    pen.restore();
-  }
-}
-
-function impact(pen: Pen, x: number, y: number, age: number, k: number): void {
-  if (age < 0 || age > 0.4) return;
-  const g = ease.outBack(Math.min(1, age / 0.1));
-  const a = 1 - smoothstep(0.2, 0.4, age);
-  pen.poly(starPts(x, y, 70 * k * g, 30 * k * g, 8, 10), "#ffffff", a);
-  pen.poly(starPts(x, y, 46 * k * g, 20 * k * g, 8, 10), "#ffc94a", a);
 }
 
 function wheel(pen: Pen, x: number, y: number, r: number, spin: number, flat: boolean): void {
