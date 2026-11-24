@@ -1141,3 +1141,88 @@ test("no sideways scroll from 320 to 1920 on the campaign card and the setup pag
   }
   expect(failures).toEqual([]);
 });
+
+// Kid-proof (an 8-year-old must never get stuck): every Set it up leads back to its campaign, a removed campaign is gone
+// from the list while its Undo counts, Videos to clip has its own way on, pasted rules survive a reload, a failed
+// Paste says what works on a computer, and an answer never drops the keyboard's focus.
+test.describe("kid-proof campaign pages", () => {
+  test.use(DESKTOP);
+
+  test("Set it up on a campaign carries the way back to that campaign", async ({ page }) => {
+    await start(page);
+    await page.goto(`/campaigns/${IDS.manual}`);
+    await settle(page);
+    const setIt = page.locator("[data-help='cr-next-step']").getByRole("link", { name: "Set it up" });
+    await expect(setIt).toHaveAttribute("href", new RegExp(`^/settings/posting/setup/[a-z]+\\?back=/campaigns/${IDS.manual}$`));
+    const name = (await page.locator("#cr-name").textContent())!.trim();
+    const platform = /setup\/([a-z]+)\?/.exec((await setIt.getAttribute("href"))!)![1]!;
+    await setIt.click();
+    await mock(page);
+    await finishSetup(page, platform);
+    await page.reload();
+    await settle(page);
+    await expect(page.locator(".done-panel").getByRole("link", { name: `Back to ${name}` })).toHaveAttribute("href", `/campaigns/${IDS.manual}`);
+  });
+
+  test("Remove: gone from Your campaigns while Undo counts, back on Undo; an open card leaves once it commits", async ({ page }) => {
+    await start(page);
+    await page.goto(`/campaigns/${IDS.manual}`);
+    await settle(page);
+    await page.getByRole("button", { name: "Remove from Clip Factory" }).click();
+    await expect(page).toHaveURL(/\/campaigns$/);
+    await expect(page.locator(`[data-campaign='${IDS.manual}']`)).toHaveCount(0);
+    await page.getByRole("button", { name: "Undo" }).click();
+    await expect(page).toHaveURL(new RegExp(`/campaigns/${IDS.manual}$`));
+    await page.locator(".cr-below").getByRole("link", { name: "All your campaigns" }).click();
+    await expect(page.locator(`[data-campaign='${IDS.manual}']`)).toHaveCount(1);
+    // Removed again, and its card opened with Back while the Undo counts: it leaves when the removal goes through.
+    await page.locator(`[data-campaign='${IDS.manual}']`).click();
+    await settle(page);
+    await page.getByRole("button", { name: "Remove from Clip Factory" }).click();
+    await expect(page).toHaveURL(/\/campaigns$/);
+    await page.goBack();
+    await expect(page).toHaveURL(new RegExp(`/campaigns/${IDS.manual}$`));
+    await expect(page).toHaveURL(/\/campaigns$/, { timeout: 12_000 });
+    await expect(page.locator(`[data-campaign='${IDS.manual}']`)).toHaveCount(0);
+  });
+
+  test("Videos to clip has its own Make clips button, and pasted rules stay through a reload", async ({ page }) => {
+    await start(page);
+    await page.goto("/");
+    await mock(page);
+    await finishSetup(page, "youtube", "instagram");
+    await page.goto(`/campaigns/${IDS.faze}`);
+    await settle(page);
+    const videos = page.locator(".cr-videos");
+    await expect(videos).toContainText("Pick a video there. Copy its link. Then tap Make clips for this campaign.");
+    await expect(videos.getByRole("link", { name: "Make clips for this campaign" })).toHaveAttribute("href", `/?campaign=${IDS.faze}`);
+    await page.locator("#rules .cr-fold__q").click();
+    await page.locator("#rules textarea").fill("Brief: clip the best plays. Content requirements: say #ad.");
+    await page.reload();
+    await settle(page);
+    await expect(page.locator("#rules details.cr-fold")).toHaveAttribute("open", "");
+    await expect(page.locator("#rules textarea")).toHaveValue("Brief: clip the best plays. Content requirements: say #ad.");
+  });
+
+  test("a Paste the browser refuses says to click and press ⌘V on a computer", async ({ page }) => {
+    await start(page);
+    await page.goto("/campaigns");
+    await settle(page);
+    await page.locator("form.cr-paste").getByRole("button", { name: "Paste" }).click();
+    await expect(page.getByText("Click in the box and press ⌘V (Ctrl+V on Windows).")).toBeVisible();
+    await expect(page.getByText("Press and hold in the box")).toHaveCount(0);
+  });
+
+  test("Yes, I applied: the focus moves to the new Next step, never to the page", async ({ page }) => {
+    await start(page);
+    await page.goto("/");
+    await mock(page);
+    await finishSetup(page, "youtube");
+    await page.goto(`/campaigns/${IDS.apply}`);
+    await settle(page);
+    await page.getByRole("button", { name: "Yes, I applied" }).focus();
+    await page.keyboard.press("Enter");
+    await expect(page.locator(".cr-chip")).toHaveText("Waiting for the brand");
+    await expect(page.locator("#cr-next-title")).toBeFocused();
+  });
+});

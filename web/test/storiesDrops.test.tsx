@@ -213,7 +213,7 @@ describe("Settings › Look takes a dropped picture anywhere on its page", () =>
     await render(<LookSection />);
     await dropOn($(".st-look")!, [pdf()]);
     expect(storiesLook().picture).toBeNull();
-    expect(said("Pick a picture.")).toBe(true);
+    expect(said("Pick a photo (JPG or PNG).")).toBe(true);
 
     await dropOn($(".st-look")!, [png("beach.png")]);
     await until(() => !!storiesLook().picture);

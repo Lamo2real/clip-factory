@@ -120,7 +120,9 @@ reads the official pages first and mentions the key at most once, at the end.
   `ask.done` carries `webMissing` and the panel shows **Turn on web search** once per chat.
 * Owner card: Settings › App & account › **Ask** (apples `ask-web-setup` and `ask-status`): the steps (make a free
   account and pick **Search**, copy the key, paste it and tap **Save key**) with **Get a search key** as a glass
-  button (≥ 48 px, external icon) under them, not a link inside a sentence; **Take key away**.
+  button (≥ 48 px, external icon) under them, not a link inside a sentence; **Take key away** (an 8 s Undo toast
+  "Search key removed."; the card shows web search off at once, the `DELETE` goes when the toast ends or the page
+  closes, saving a new key first sends it; a failed delete says "… Your key is still saved.").
 * Caps per answer: `web_search` 6, `web_fetch` 6; past a cap the tool says "limit reached, answer with what you have".
 
 ### 28.4 The other tools (all read only)

@@ -7,6 +7,7 @@ import { settle } from "./helpers.ts";
 
 type MockWindow = Window & {
   __cfMock?: {
+    setup: { finish(p: string): void };
     mac: {
       ping(): unknown;
       claim(clipId: string): unknown;
@@ -114,6 +115,8 @@ test("no Post it yourself, I posted it, AirDrop or Open TikTok anywhere: Library
   await none();
   await expect(page.locator(".perf__actions").getByRole("link", { name: "Turn on" })).toBeVisible();
 
+  // One place set up, so the clip really uploads (a clip only saved for set up has no TikTok row).
+  await page.evaluate(() => (window as MockWindow).__cfMock!.setup.finish("youtube"));
   await go(page, "/review");
   const first = page.locator(".review-card").first();
   await first.getByRole("button", { name: /^Upload( to .+)?$/ }).click();

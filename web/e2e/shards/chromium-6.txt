@@ -1,23 +1,28 @@
-# chromium shard 6 of 7: about 44.6 core, 53.0 style, 56.4 full worker-minutes (148 lines).
+# chromium shard 6 of 7: about 46.6 core, 55.1 style, 58.4 full worker-minutes (146 lines).
 # Written by: node scripts/e2e-shards.mjs build (from timings.tsv). The last shard runs every test in no list.
-[chromium] › audit-setup.spec.ts › Set up posting at 375 px (touch) › the list, every step of every platform, a finished one, the picker and a failed Connect fit
-[chromium] › audit-setup.spec.ts › Set up posting at 390 px (touch) › the list, every step of every platform, a finished one, the picker and a failed Connect fit
-[chromium] › audit-setup.spec.ts › Set up posting on the smallest phone › Connect by tapping, through the pretend consent page
-[chromium] › bank.spec.ts › phone screens › the main button sits at the bottom right from page open, and Ask is never over it
-[chromium] › bank.spec.ts › phone › a question answered with 1 tap, and another with 2
+[chromium] › ask-assistant.spec.ts
+[chromium] › audit-shell.spec.ts
+[chromium] › bank.spec.ts › axe AA contrast, dark: desktop 1440x900
+[chromium] › bank.spec.ts › axe AA contrast, dark: phone 375x812
+[chromium] › bank.spec.ts › desktop › with the optional email first: 20
+[chromium] › bank.spec.ts › no sideways scroll at 1920 px on Your bank's screens
+[chromium] › contrast.spec.ts › text on / is readable at 375 and 1440 px, light
 [chromium] › contrast.spec.ts › text on /get-app is readable at 320 px light, and at 320, 375 and 1440 px dark
+[chromium] › contrast.spec.ts › text on /jobs/:failed is readable at 375 and 1440 px, light
+[chromium] › contrast.spec.ts › text on /jobs/:running is readable at 375 and 1440 px, light
 [chromium] › contrast.spec.ts › text on /legal/privacy.html is readable at 320 px light, and at 320, 375 and 1440 px dark
 [chromium] › contrast.spec.ts › text on /money is readable at 320 px light, and at 320, 375 and 1440 px dark
 [chromium] › contrast.spec.ts › text on /review is readable at 320 px light, and at 320, 375 and 1440 px dark
+[chromium] › contrast.spec.ts › text on /settings/app/ask is readable at 375 and 1440 px, light
 [chromium] › contrast.spec.ts › text on /settings/app/get-the-app is readable at 320 px light, and at 320, 375 and 1440 px dark
 [chromium] › contrast.spec.ts › text on /settings/app/notifications is readable at 320 px light, and at 320, 375 and 1440 px dark
-[chromium] › contrast.spec.ts › text on /settings/app/updates is readable at 375 and 1440 px, light
+[chromium] › contrast.spec.ts › text on /settings/clip-making/clips is readable at 375 and 1440 px, light
 [chromium] › contrast.spec.ts › text on /settings/clip-making/streamers is readable at 375 and 1440 px, light
 [chromium] › contrast.spec.ts › text on /settings/clip-making/youtube is readable at 320 px light, and at 320, 375 and 1440 px dark
 [chromium] › contrast.spec.ts › text on /settings/look-and-feel/motion is readable at 320 px light, and at 320, 375 and 1440 px dark
-[chromium] › contrast.spec.ts › text on /settings/posting is readable at 375 and 1440 px, light
 [chromium] › contrast.spec.ts › text on /settings/posting/setup/facebook is readable at 320 px light, and at 320, 375 and 1440 px dark
-[chromium] › contrast.spec.ts › text on /settings/posting/setup/x is readable at 375 and 1440 px, light
+[chromium] › contrast.spec.ts › the setup list is readable as the open column, folded and under the skip question at 1440 px (light)
+[chromium] › contrast.spec.ts › the tab bar, the setup pill and the Ask sheet hold their words over a white thumbnail, at 390 px
 [chromium] › contrast.spec.ts › window look (blur): text on / is readable over every stand-in for the glass, at 320, 375 and 1440 px
 [chromium] › contrast.spec.ts › window look (blur): text on /get-app is readable over every stand-in for the glass, at 320, 375 and 1440 px
 [chromium] › contrast.spec.ts › window look (blur): text on /jobs/:failed is readable over every stand-in for the glass, at 320, 375 and 1440 px
@@ -39,89 +44,82 @@
 [chromium] › contrast.spec.ts › window look (vibrancy): text on /settings/posting/auto is readable over every stand-in for the glass, at 320, 375 and 1440 px
 [chromium] › contrast.spec.ts › window look (vibrancy): text on /settings/posting/setup is readable over every stand-in for the glass, at 320, 375 and 1440 px
 [chromium] › contrast.spec.ts › window look (vibrancy): text on /settings/posting/setup/facebook is readable over every stand-in for the glass, at 320, 375 and 1440 px
-[chromium] › deep.spec.ts
-[chromium] › drop-video.spec.ts
 [chromium] › finder.spec.ts › desktop journeys › Open (a new page, opened sent) → I joined: add it → the campaign card
+[chromium] › finder.spec.ts › desktop journeys › Why not more? says what was skipped, with Content Rewards' numbers only
+[chromium] › finder.spec.ts › desktop journeys › not signed in: the rules box, then I joined: add it reads the pasted rules
+[chromium] › finder.spec.ts › desktop journeys › not_allowed: its sentence, the stored matches "As of", the open match keeps the vermilion
 [chromium] › finder.spec.ts › desktop journeys › signed in: joined on Content Rewards, back to the window (focus) → You're in! → Reading the rules… → Make clips
-[chromium] › finder.spec.ts › desktop journeys › signed in: joined on Content Rewards, back to the window (visibilitychange) → You're in! → Reading the rules… → Make clips
-[chromium] › finder.spec.ts › desktop journeys › the notification's page: /campaigns/find opens the Find page with the matches
-[chromium] › finder.spec.ts › every finder screen, phone, dark › fits, one vermilion at most, no edges, big targets, the arrow cursor, AA contrast, reduced motion, the phone's main button bottom right
-[chromium] › finder.spec.ts › phone 320 px: the pinned vermilion never hides a line › never started, before Open, after Open signed in, and after Open by hand with the rules pasted
-[chromium] › finder.spec.ts › phone › never started → the defaults → Find campaigns for me → looking → six matches, one vermilion
 [chromium] › finder.spec.ts › phone › signed in, a match that isn't the first: back from Content Rewards, the You're in! row comes into view
-[chromium] › getapp.spec.ts
-[chromium] › getpaid.spec.ts › axe AA contrast, dark, owner: phone 375x812
-[chromium] › getpaid.spec.ts › axe AA contrast, light, hold: phone 375x812
-[chromium] › getpaid.spec.ts › desktop › Content Rewards: 5 taps without Finance, 3 with it; §38.7's words and ticks
+[chromium] › getpaid.spec.ts › axe AA contrast, light, owner: desktop 1440x900
+[chromium] › getpaid.spec.ts › desktop › computer, first visit: the first step not done is brought into view, so the one vermilion is on screen
+[chromium] › getpaid.spec.ts › no sideways scroll at 1024 px on every Get paid screen (hold) desktop
 [chromium] › getpaid.spec.ts › no sideways scroll at 1024 px on every Get paid screen (unread) desktop
+[chromium] › getpaid.spec.ts › no sideways scroll at 320 px on every Get paid screen (hold)
+[chromium] › getpaid.spec.ts › no sideways scroll at 320 px on every Get paid screen (owner)
+[chromium] › getpaid.spec.ts › no sideways scroll at 320 px on every Get paid screen (unread)
 [chromium] › getpaid.spec.ts › no sideways scroll at 768 px on every Get paid screen (unread)
 [chromium] › getpaid.spec.ts › phone › Allow payment reading's results say their sentences, word for word
-[chromium] › getpaid.spec.ts › phone › Connect Whop: Coming soon while off; on, 6 taps with the Whop key
-[chromium] › getpaid.spec.ts › phone › TikTok and Instagram: 4 taps each, the Opens open the apps
-[chromium] › getpaid.spec.ts › phone › never Live on a Get paid screen: the app's realtime chip steps aside there, and only there
-[chromium] › help-pictures.spec.ts
-[chromium] › help.spec.ts › Ask Clip Factory at 1440x900 › #off says so, then the launcher is gone
-[chromium] › help.spec.ts › Ask Clip Factory at 1440x900 › with reduced motion nothing in the panel animates
-[chromium] › help.spec.ts › Ask Clip Factory at 375x812 › #503 answers from the local notes with a help code to copy
-[chromium] › help.spec.ts › Ask Clip Factory at 375x812 › opens with three suggestions and takes you to the click sound
-[chromium] › help.spec.ts › Ask Clip Factory launcher home spot at 390 px › is always at its home spot
-[chromium] › help.spec.ts › Ask Clip Factory launcher is mostly there on a phone › on /review
-[chromium] › help.spec.ts › Ask Clip Factory launcher is mostly there on a phone › on /settings
-[chromium] › job-progress.spec.ts
-[chromium] › light.spec.ts › Colours at 390 › Home: the new-clip card is one level of light above the hero
-[chromium] › light.spec.ts › brand see-through at 390 › Home: the new-clip card is one level of light above the hero
-[chromium] › live.spec.ts
+[chromium] › help.spec.ts › Ask Clip Factory at 1440x900 › #429 shows a calm countdown and Ask stays off
+[chromium] › help.spec.ts › Ask Clip Factory at 1440x900 › refuses secrets and says when it does not know
+[chromium] › help.spec.ts › Ask Clip Factory at 1440x900 › the launcher never sits on Keep on Review, even before any scroll
+[chromium] › help.spec.ts › Ask Clip Factory at 375x812 › #off says so, then the launcher is gone
+[chromium] › help.spec.ts › Ask Clip Factory at 375x812 › fills the best clip's views from the owner's own data
+[chromium] › help.spec.ts › Ask Clip Factory guides for posting setup and skills › "#503 connect youtube" opens Set up YouTube and lights it up
+[chromium] › help.spec.ts › Ask Clip Factory guides for posting setup and skills › "delete a skill" opens Open Skills and lights it up
+[chromium] › help.spec.ts › Ask Clip Factory launcher at 1440 px › covers no control on any page with the update bar
+[chromium] › help.spec.ts › Ask Clip Factory launcher at 430 px › covers no control on any page
+[chromium] › help.spec.ts › Ask Clip Factory launcher at 768 px › covers no control on any page
+[chromium] › help.spec.ts › Ask Clip Factory launcher is mostly there on a phone › on /
+[chromium] › learned.spec.ts
 [chromium] › money-dashboard.spec.ts › fits, no edges, readable, big targets, arrow cursor: 1920x1080
-[chromium] › money-dashboard.spec.ts › fits, no edges, readable, big targets, arrow cursor: 430x932 touch
+[chromium] › money-dashboard.spec.ts › fits, no edges, readable, big targets, arrow cursor: 380x600
+[chromium] › money-dashboard.spec.ts › flows › All your money comes right after the title, then Get paid, then the filters, in reading and tab order (§39.2, §40.8 change 6)
+[chromium] › money-dashboard.spec.ts › flows › Get paid comes right after All your money and before the filters; no vermilion; one glass button per row (§40.1)
 [chromium] › money-dashboard.spec.ts › flows › Home's See money and the tab bar go to Money, and Money shows as the active tab
-[chromium] › money-dashboard.spec.ts › flows › no money yet shows the nearest goal; a failed check shows a banner with the data kept
-[chromium] › money-dashboard.spec.ts › flows › phones without All your money (an API from before §39): the dock floats at the bottom right as before
-[chromium] › money-dashboard.spec.ts › flows › with reduced motion the number is final on first paint (no count-up)
-[chromium] › money-dashboard.spec.ts › no words under Ask, at rest anywhere on the page: 320x568 touch light
-[chromium] › money-dashboard.spec.ts › no words under Ask, at rest anywhere on the page: 380x600 dark
+[chromium] › money-dashboard.spec.ts › flows › a clip row opens its clip page, and Show more loads the next page
+[chromium] › money-dashboard.spec.ts › no words under Ask, at rest anywhere on the page: 380x600 light
 [chromium] › money-dashboard.spec.ts › thumb zone: controls bottom right, nothing tappable top left: 1024x768 touch
-[chromium] › money-dashboard.spec.ts › thumb zone: controls bottom right, nothing tappable top left: 320x568 touch
-[chromium] › money-dashboard.spec.ts › thumb zone: controls bottom right, nothing tappable top left: 390x844 touch
 [chromium] › money-dashboard.spec.ts › thumb zone: controls bottom right, nothing tappable top left: 768x1024 touch
-[chromium] › money-dashboard.spec.ts › toolbar top right, stays in view after scrolling: 1024x768
-[chromium] › motion-settings.spec.ts
-[chromium] › nav-smooth.spec.ts
-[chromium] › overflow.spec.ts › clip pages and This week fit at 600px
-[chromium] › overflow.spec.ts › no overflow on any screen at 1280px
-[chromium] › overflow.spec.ts › no overflow on any screen at 320px
-[chromium] › overflow.spec.ts › skills pages fit at 1440px
-[chromium] › overflow.spec.ts › skills pages fit at 320px
+[chromium] › money-dashboard.spec.ts › toolbar top right, stays in view after scrolling: 1440x900
+[chromium] › overflow.spec.ts › clip pages and This week fit at 375px
+[chromium] › overflow.spec.ts › no overflow on any screen at 1024px
+[chromium] › overflow.spec.ts › no overflow on any screen at 768px
+[chromium] › overflow.spec.ts › the Ask Clip Factory panel fits at 375px
 [chromium] › overflow.spec.ts › the posting setup and the Review place rows fit at 1280px
-[chromium] › overflow.spec.ts › the posting setup and the Review place rows fit at 1440px
-[chromium] › overflow.spec.ts › the posting setup and the Review place rows fit at 430px
-[chromium] › page-still.spec.ts
-[chromium] › refract.spec.ts
-[chromium] › send-fade.spec.ts
+[chromium] › overflow.spec.ts › the posting setup and the Review place rows fit at 320px
+[chromium] › review-card.spec.ts
+[chromium] › setup-todo.spec.ts › "All set!" on a setup page does not move the page at 375 px
 [chromium] › setup-todo.spec.ts › never covers a control and nothing overflows at 1280 px (light)
-[chromium] › setup-todo.spec.ts › the floating setup list at 1440 px › the page keeps the room its layouts were made for: the column opens from 1440 px, below that it is the pill
-[chromium] › setup.spec.ts › setup at 1440x900 › YouTube: every step, keys, Check it, Connect, reconnect and Disconnect
-[chromium] › setup.spec.ts › setup at 375x812 › Instagram: every step, keys, Check it, Connect, reconnect and Disconnect
-[chromium] › sound.spec.ts
-[chromium] › stories-apart.spec.ts
-[chromium] › stories-rail-room.spec.ts
-[chromium] › stories-shell.spec.ts › each app stays exactly as it was left (§45.34) › Clip Factory's Jobs keeps the older jobs it showed, Select, and its scroll; its Escape stays quiet in Lamo Stories
-[chromium] › stories-shell.spec.ts › round 4: the two apps stay apart and quiet (§45.35) › D21: on a phone the toasts sit above an open sheet's buttons, and go back when it closes
-[chromium] › stories-shell.spec.ts › round 4: the two apps stay apart and quiet (§45.35) › E16: at 1280x600 Lamo Stories' own switcher is in view and takes one click, with no scrolling
-[chromium] › stories-shell.spec.ts › round 4: the two apps stay apart and quiet (§45.35) › E16: in a short window every page of the rail can still be reached (the list scrolls inside the rail)
-[chromium] › stories-shell.spec.ts › switching › a reload of a Lamo Stories page stays in Lamo Stories, and the choice is kept on the device
-[chromium] › stories-shell.spec.ts › switching › coming back to Clip Factory opens its page where it was scrolled to
-[chromium] › stories-studio.spec.ts › round 5: Posted! in the Post it sheet gets the star burst and the cheer
-[chromium] › stories-studio.spec.ts › round 5: a stand-in is never kept with the video, and a video made with Amazon Nova Pro names it as its writer
-[chromium] › stories-studio.spec.ts › studio page fits and follows the rules: A character at 320x640
-[chromium] › stories-studio.spec.ts › studio page fits and follows the rules: Characters at 1024x768
-[chromium] › stories-studio.spec.ts › studio page fits and follows the rules: Ideas at 320x640
-[chromium] › stories-studio.spec.ts › studio page fits and follows the rules: New video at 390x844
-[chromium] › stories-studio.spec.ts › studio page fits and follows the rules: New video from the chat at 390x844
-[chromium] › stories-studio.spec.ts › studio page fits and follows the rules: Review at 320x640
-[chromium] › stories-studio.spec.ts › studio page fits and follows the rules: Review: ready to watch at 1024x768
-[chromium] › stories-studio.spec.ts › the whole flow: idea, character, production, review, approve and the publish sheet
-[chromium] › stories-switch-slide.spec.ts
-[chromium] › top-line.spec.ts
+[chromium] › setup-todo.spec.ts › never covers a control and nothing overflows at 1440 px (dark)
+[chromium] › setup-todo.spec.ts › never covers a control and nothing overflows at 1440 px (light)
+[chromium] › setup-todo.spec.ts › never covers a control and nothing overflows at 1920 px (dark)
+[chromium] › setup-todo.spec.ts › never covers a control and nothing overflows at 768 px (light)
+[chromium] › setup-todo.spec.ts › the floating setup list at 1440 px › all five ready: "Every place is ready."
+[chromium] › setup-todo.spec.ts › the floating setup list at 1440 px › folds to a pill and unfolds; the choice stays on this device
+[chromium] › setup.spec.ts › setup tap targets are at least 44 px at 1440x900
+[chromium] › skill-section-offer.spec.ts
+[chromium] › stories-chat.spec.ts
+[chromium] › stories-clips-unchanged.spec.ts
+[chromium] › stories-fonts.spec.ts
+[chromium] › stories-shell.spec.ts › Lamo Stories kept behind Clip Factory stays quiet (§45.34) › Clip Factory calm, Lamo Stories' own motion on: Lamo Stories' highlights slide and its confetti shows; Clip Factory's stay calm
+[chromium] › stories-shell.spec.ts › Lamo Stories kept behind Clip Factory stays quiet (§45.34) › a chat's Undo that ends behind Clip Factory never moves the owner out of it
+[chromium] › stories-shell.spec.ts › each app stays exactly as it was left (§45.34) › Lamo Stories keeps its page as it was (typing included), and the hidden app never takes the title
+[chromium] › stories-shell.spec.ts › switching › E1: on a phone (390x844) too, coming back to Clip Factory opens its Library where it was scrolled to
+[chromium] › stories-shell.spec.ts › the pages › the dashboard shows every tile in the contract's order
+[chromium] › stories-studio.spec.ts › round 4: the timeline chip shows the short name, and a one-line idea is never cut in the idea picker
+[chromium] › stories-studio.spec.ts › round 5, Review: new post words need only Check again and the tab stays; account problems open Social accounts; ids are folded
+[chromium] › stories-studio.spec.ts › studio page fits and follows the rules: A character at 390x844
+[chromium] › stories-studio.spec.ts › studio page fits and follows the rules: Characters at 390x844
+[chromium] › stories-studio.spec.ts › studio page fits and follows the rules: Ideas at 1920x1080
+[chromium] › stories-studio.spec.ts › studio page fits and follows the rules: New character at 320x640
+[chromium] › stories-studio.spec.ts › studio page fits and follows the rules: Review at 1024x768
+[chromium] › stories-studio.spec.ts › studio page fits and follows the rules: Review: ready to watch at 1920x1080
+[chromium] › stories-studio.spec.ts › studio page fits and follows the rules: Review: ready to watch at 320x640
+[chromium] › stories-studio.spec.ts › the publish sheet fits and follows the rules on a phone and a desktop
+[chromium] › stories-switch-place.spec.ts
+[chromium] › text-line.spec.ts
+[chromium] › tiktok-sheet.spec.ts
+[chromium] › use-file.spec.ts
 [screenshots] › screenshots.spec.ts › campaign finder desktop 1440x900 › screenshot campaign finder
 [screenshots] › screenshots.spec.ts › content rewards desktop 1440x900 › screenshot content rewards
 [screenshots] › screenshots.spec.ts › content rewards loose ends desktop 1440x900 › screenshot review check one, job strip, library chip

@@ -14,13 +14,14 @@ import type { MoneyEverywhere, MoneyPlace, SentLine } from "../../api/types.ts";
 import { Icon } from "../../components/Icon.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { Button, LinkButton } from "../../components/ui.tsx";
-import { usd } from "../../lib/contentRewards.ts";
+import { CR_MONEY_PATH, usd } from "../../lib/contentRewards.ts";
 import { bankView, useBank } from "../../lib/bank.ts";
 import { onLiveSignal } from "../../lib/live.ts";
 import { formatMoney } from "../../lib/money.ts";
 import { OpenButton } from "../campaigns/bits.tsx";
 import { Rich } from "../settings/setup/bits.tsx";
 import { ReachedBlock } from "../getpaid/bank/BankMoney.tsx";
+import { showCrMoney } from "./CrMoneyPart.tsx";
 
 export const ALL_MONEY_TITLE = "All your money";
 export const NOTHING_TO_ADD = "Nothing to add up yet.";
@@ -146,7 +147,17 @@ function RowButton({ p }: { p: MoneyPlace }) {
   if (p.where?.button) return <OpenButton label={p.where.button.label} href={p.where.button.url} size="sm" />;
   if (p.place === "contentrewards" && p.state !== "not_set_up")
     return (
-      <LinkButton href="/money#content-rewards" variant="glass" size="sm" iconAfter="chevronRight">
+      <LinkButton
+        href={CR_MONEY_PATH}
+        variant="glass"
+        size="sm"
+        iconAfter="chevronRight"
+        onClick={(e) => {
+          // Money's own Content Rewards part is on this page: scroll there on every tap (the router does nothing for
+          // the address it is already on, and opens a new one at its top).
+          if (showCrMoney()) e.preventDefault();
+        }}
+      >
         See it all
       </LinkButton>
     );

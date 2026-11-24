@@ -125,7 +125,7 @@ async function sendAll(page: Page): Promise<Job> {
   await page.getByRole("button", { name: "Send these to my Mac" }).click();
   await expect(page.getByText("They go one at a time, oldest first.")).toBeVisible();
   await page.getByRole("button", { name: "Yes, send them" }).click();
-  await expect(page.getByText(/^Sent \d+ clips? to your Mac\.$/)).toBeVisible();
+  await expect(page.getByText(/^Sent \d+ clips? to your Mac\./)).toBeVisible();
   const first = (await mac.queue(page))[0];
   expect(first).toBeTruthy();
   return first!;
@@ -146,6 +146,10 @@ test("settings: the switch, the Mac's check-in and Send these to my Mac", async 
   await go(page, "/settings/posting/tiktok-mac");
   await expect(page.getByText("Off. Your Mac doesn't post your TikTok clips.")).toBeVisible();
   await expect(page.getByText("Your Mac hasn't checked in yet. Set it up on your Mac.")).toBeVisible();
+  // Never a dead end: how to set it up, right under it.
+  const setUp = page.locator('[data-mac="setup"]');
+  await expect(setUp).toContainText("./install.sh --no-start");
+  await expect(setUp).toContainText("Log in to TikTok and to Clip Factory in the window that opens.");
   await expect(page.getByText("To stop it, turn the switch off. Your Mac stops at once.")).toBeVisible();
   // Off: nothing to send.
   await expect(page.getByRole("button", { name: "Send these to my Mac" })).toHaveCount(0);
@@ -165,10 +169,13 @@ test("settings: the switch, the Mac's check-in and Send these to my Mac", async 
   await expect(page.getByText("Posts when you tap Upload · 0 waiting")).toBeVisible();
 
   await page.getByRole("button", { name: "Send these to my Mac" }).click();
+  // The Mac never checked in: they wait for it, and the page says so before and after.
+  await expect(page.getByText("They wait until your Mac checks in.")).toBeVisible();
   await page.getByRole("button", { name: "Yes, send them" }).click();
-  await expect(page.getByText(`Sent ${n} clip${n === 1 ? "" : "s"} to your Mac.`)).toBeVisible();
+  await expect(page.getByText(`Sent ${n} clip${n === 1 ? "" : "s"} to your Mac. They wait until your Mac checks in.`)).toBeVisible();
   await expect(page.getByText(`Posts when you tap Upload · ${n} waiting`)).toBeVisible();
-  await expect(page.getByText("0 clips aren't on TikTok yet.")).toBeVisible();
+  await expect(page.getByText(`${n} clip${n === 1 ? " already waits" : "s already wait"} for your Mac.`)).toBeVisible();
+  await expect(page.getByText("0 clips aren't on TikTok yet.")).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Send these to my Mac" })).toHaveCount(0);
   // The backlog goes one after each auto-posting run, not at once.
   expect((await mac.queue(page)).every((j) => j.source === "sent")).toBe(true);
@@ -177,6 +184,7 @@ test("settings: the switch, the Mac's check-in and Send these to my Mac", async 
   await mac.ping(page);
   await refocus(page);
   await expect(page.getByText(/^Your Mac checked in \w{3} \d\d:\d\d\.$/)).toBeVisible();
+  await expect(setUp).toHaveCount(0);
   await mac.ping(page, "needs_you", "TikTok wants you to log in again.");
   await refocus(page);
   await expect(page.getByText("Your Mac needs you: TikTok wants you to log in again.")).toBeVisible();
@@ -278,10 +286,11 @@ test("library: off, not set up, Post with my Mac, Posting…, Didn't work with T
   await page.getByRole("switch", { name: SWITCH }).click();
   await expect(page.getByRole("switch", { name: SWITCH })).toHaveAttribute("aria-checked", "true");
 
-  // On, but the Mac never checked in.
+  // On, but the Mac never checked in: its page (with the setup steps), never Turn on (the switch is on).
   await go(page, "/library");
   await expect(status).toHaveText("Your Mac isn't set up yet");
-  await expect(row.getByRole("link", { name: "Turn on" })).toBeVisible();
+  await expect(row.getByRole("link", { name: OPEN_MAC })).toHaveAttribute("href", "/settings/posting/tiktok-mac");
+  await expect(row.getByRole("link", { name: "Turn on" })).toHaveCount(0);
 
   // It checks in: not on TikTok yet, with one Post with my Mac.
   await mac.ping(page);
@@ -583,7 +592,7 @@ test("library: a campaign clip skips TikTok for now, in plain words with no butt
   await expect(page.getByText(new RegExp(`^${before - 1} clips? (isn't|aren't) on TikTok yet\\.$`))).toBeVisible();
   await page.getByRole("button", { name: "Send these to my Mac" }).click();
   await page.getByRole("button", { name: "Yes, send them" }).click();
-  await expect(page.getByText(/^Sent \d+ clips? to your Mac\.$/)).toBeVisible();
+  await expect(page.getByText(/^Sent \d+ clips? to your Mac\./)).toBeVisible();
   expect((await mac.queue(page)).some((j) => j.clipId === clipId)).toBe(false);
 });
 
@@ -946,7 +955,9 @@ test("review: the hint, TikTok on My settings with no tap, and Uploaded just now
   const card = page.locator(".review-card").first();
   const clipId = (await card.locator("..").getAttribute("id"))!.replace("clip-", "");
   const hook = await card.locator(".review-card__hook").innerText();
-  await expect(card.locator(".tt-yourself-hint")).toHaveText("TikTok: your Mac posts it for everyone.");
+  // The Mac never checked in: the line says so before Upload, with its page (never "for everyone", never Turn on).
+  await expect(card.locator(".tt-yourself-hint")).toHaveText("TikTok: Your Mac isn't set up yet");
+  await expect(card.locator('[data-mac="card"]').getByRole("link", { name: OPEN_MAC })).toHaveAttribute("href", "/settings/posting/tiktok-mac");
   await expect(card.getByRole("link", { name: "Turn on" })).toHaveCount(0);
   // On: TikTok starts on My settings like every other place (Everyone, all three on), with no tap before Upload.
   await expect(card.getByRole("button", { name: "Your settings are on" })).toBeVisible();
@@ -976,9 +987,10 @@ test("review: the hint, TikTok on My settings with no tap, and Uploaded just now
   await upload.click();
   const item = page.locator(".kept-now__item", { hasText: hook.slice(0, 20) });
   const line = item.locator(".kept-now__mac");
-  // The Mac never checked in: said, with Turn on.
+  // The Mac never checked in: said, with its page (the switch is on: never Turn on).
   await expect(line).toHaveText("TikTok: Your Mac isn't set up yet");
-  await expect(item.getByRole("link", { name: "Turn on" })).toHaveAttribute("href", "/settings/posting/tiktok-mac");
+  await expect(item.getByRole("link", { name: OPEN_MAC })).toHaveAttribute("href", "/settings/posting/tiktok-mac");
+  await expect(item.getByRole("link", { name: "Turn on" })).toHaveCount(0);
   // Nothing of Clip Factory's own goes to TikTok's API, and no sheet.
   await expect(page.getByRole("dialog")).toHaveCount(0);
   const posts = await page.evaluate((id) => (window as MockWindow).__cfMock!.posting.posts(id), clipId);

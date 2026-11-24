@@ -67,9 +67,14 @@ def money(cents: int) -> str:
 
 
 def setup_href(campaign_id: Any) -> str:
-    """The setup page with the way back to this campaign's card (§39.1 ``?back=``): the one server-made href that
-    carries one."""
+    """The setup page with the way back to this campaign's card (§39.1 ``?back=``)."""
     return f"{config.SETUP_HREF}?back=/campaigns/{campaign_id}"
+
+
+def place_setup_href(platform: str, campaign_id: Any) -> str:
+    """A platform's setup page (``no_place``'s Set it up), with the way back to this campaign's card when it has an id."""
+    href = f"/settings/posting/setup/{platform}"
+    return f"{href}?back=/campaigns/{campaign_id}" if campaign_id else href
 
 
 def _join(items: list[str]) -> str:
@@ -211,7 +216,7 @@ def stops(  # noqa: PLR0915 (every stop of §38.4, in the table's order)
             _stop(
                 "no_place",
                 f"Set up {LABELS.get(first, first)} first. This campaign pays for {_join(names)}.",
-                f"/settings/posting/setup/{first}",
+                place_setup_href(first, item.get("campaignId")),
             )
         )
     if isinstance(item.get("held"), Mapping):

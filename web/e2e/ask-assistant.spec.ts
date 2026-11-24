@@ -167,6 +167,20 @@ test.describe("Ask as a full assistant", () => {
     await expect(page.locator(".help-ring")).toBeVisible();
   });
 
+  test("Take key away asks nothing but waits for its Undo, like every other delete", async ({ page }) => {
+    await page.goto("/settings/app/ask");
+    await settle(page);
+    await page.getByRole("button", { name: "Take key away" }).click();
+    // The card shows it off at once; the key is only deleted once the Undo has run out.
+    await expect(page.getByText("Web search is off.")).toBeVisible();
+    const toast = page.locator(".toast", { hasText: "Search key removed." });
+    await expect(toast).toBeVisible();
+    await toast.getByRole("button", { name: "Undo" }).click();
+    await expect(page.getByRole("button", { name: "Take key away" })).toBeVisible();
+    await expect(page.locator('[data-help="ask-web-setup"]').getByText("On", { exact: true })).toBeVisible();
+    await expect(page.getByLabel("Your search key")).toHaveCount(0);
+  });
+
   test("the search key card saves and takes away a key without showing it again", async ({ page }) => {
     await page.goto("/settings/app/ask");
     await settle(page);

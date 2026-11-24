@@ -35,7 +35,7 @@ const sizeWords = (n: number, small: string, big: string) => (n < 0.95 ? small :
 
 export function CarLooksPart({ car, onChange }: { car: CarLook; onChange: (patch: Partial<CarLook>) => void }) {
   return (
-    <div className="st-s-editor__part" aria-label="Looks">
+    <div className="st-s-editor__part" aria-label="Looks" tabIndex={-1}>
       <fieldset className="st-s-group">
         <legend className="st-s-group__title">Shape</legend>
         <Pick label="Car shape" value={car.body} options={CAR_BODY} onChange={(body) => onChange({ body })} />
@@ -89,7 +89,7 @@ export function CarFacePart({ c, name, face, onTry, onChange }: { c: CarInput; n
     onTry(e);
   }
   return (
-    <div className="st-s-editor__part" aria-label="Face">
+    <div className="st-s-editor__part" aria-label="Face" tabIndex={-1}>
       <p className="st-s-editor__lede">Real cars have no face. Add one for fun.</p>
       <Pick label="Face" value={eyes} options={CAR_EYES} onChange={setEyes} />
       {eyes !== "none" ? (
@@ -141,7 +141,7 @@ export function CarMovesPart({ name, style, move, onStyle, onMove }: { name: str
   // A honk still sounding stops when the part changes or the editor closes.
   useEffect(() => () => stopSample(), []);
   return (
-    <div className="st-s-editor__part" aria-label="Moves">
+    <div className="st-s-editor__part" aria-label="Moves" tabIndex={-1}>
       <Pick label={`How ${name} drives`} big value={style} options={CATALOG.movementStyles.map((m) => ({ value: m.id, label: m.label, line: CAR_MOVE_LINE[m.id] }))} onChange={onStyle} />
       <div
         ref={bar}

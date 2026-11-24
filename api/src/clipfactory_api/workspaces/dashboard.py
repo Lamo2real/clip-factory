@@ -4,9 +4,11 @@ the numbers and recent activity, all from this workspace's partition.
 ``SOCIAL#`` and ``PUBJOB#`` items are builder B's and are only read here. The accounts are the public ones the Social
 accounts page shows (``social.accounts_shown``, settled the same way, §45.35 D11), so a key change or Clip Factory
 connecting the same account later shows here too. A post that stopped on an account problem (its sentence sends the
-owner to Social accounts) has its Fix it open Social accounts; Try again stays on the video's Review page. A TikTok
-post the owner's Mac stopped (§47.10: ``publishingStatus`` ``mac``, ``macState`` ``stopped``) is in Needs you too, with
-its stored reason, ``publishingStatus: "mac"`` and its ``mac`` (so the web's Try again asks the Mac again).
+owner to Social accounts) has its Fix it open Social accounts while the problem is there; once that account is
+connected again, nothing is left to fix there, so the line says to tap Try again on the post and Fix it opens the
+video's Review page, where that Try again is. A TikTok post the owner's Mac stopped (§47.10: ``publishingStatus``
+``mac``, ``macState`` ``stopped``) is in Needs you too, with its stored reason, ``publishingStatus: "mac"`` and its
+``mac`` (so the web's Try again asks the Mac again).
 """
 
 from __future__ import annotations
@@ -35,16 +37,21 @@ MAC_STOPPED = "Your Mac stopped posting it to TikTok. Open the story and tap Try
 SOCIAL_ACCOUNTS: Final = "/stories/connections"  # Lamo Stories › Social accounts
 
 
-def _post_href(job: Mapping[str, Any], story_id: str) -> str:
+def _post_href(job: Mapping[str, Any], story_id: str, account_fixed: bool = False) -> str:
     """Fix it: Social accounts when the post stopped on an account problem (needs connecting again, not connected,
-    keys changed, Clip Factory's own account: its sentence names that page), else the video's Review page."""
-    if sentences.CONNECTIONS in str(job.get("error") or ""):
+    keys changed, Clip Factory's own account: its sentence names that page) that is still there, else the video's
+    Review page (its Try again; also once that account is connected again)."""
+    if sentences.CONNECTIONS in str(job.get("error") or "") and not account_fixed:
         return SOCIAL_ACCOUNTS
     return f"/stories/review/{story_id}" if story_id else "/stories"
 
 
-def _post_sentence(job: Mapping[str, Any]) -> str:
+def _post_sentence(job: Mapping[str, Any], title: str = "", account_fixed: bool = False) -> str:
     error = str(job.get("error") or "").strip()
+    if error and account_fixed and sentences.CONNECTIONS in error:
+        name = PLATFORM_NAMES.get(str(job.get("platform")), "The account")
+        on = f"“{title}”" if title else "the video"
+        return f"{name} is connected now. Tap Try again on {on}."
     if error:
         return error
     name = PLATFORM_NAMES.get(str(job.get("platform")), "the platform")
@@ -76,6 +83,7 @@ def needs_you(
     stories: Sequence[Mapping[str, Any]], pubjobs: Sequence[Mapping[str, Any]], socials: Sequence[Mapping[str, Any]]
 ) -> list[dict[str, Any]]:
     titles = {str(s.get("storyId")): str(s.get("title") or "") for s in stories}
+    connected = {str(a.get("platform")) for a in socials if a.get("connectionStatus") == "connected"}
     out: list[dict[str, Any]] = []
     latest_posted: dict[tuple[str, str], str] = {}
     for job in pubjobs:
@@ -90,13 +98,14 @@ def needs_you(
         if latest_posted.get(key, "") > str(job.get("createdAt") or ""):
             continue
         story_id = str(job.get("contentId") or "")
+        fixed = str(job.get("platform")) in connected
         item: dict[str, Any] = {
             "publishingJobId": str(job.get("publishingJobId") or "") or None,
             "storyId": story_id or None,
             "title": titles.get(story_id, ""),
             "platform": job.get("platform") if job.get("platform") in ws.PLATFORMS else None,
-            "sentence": _mac_sentence(job) if mac else _post_sentence(job),
-            "href": f"/stories/review/{story_id}" if mac and story_id else _post_href(job, story_id),
+            "sentence": _mac_sentence(job) if mac else _post_sentence(job, titles.get(story_id, ""), fixed),
+            "href": f"/stories/review/{story_id}" if mac and story_id else _post_href(job, story_id, fixed),
         }
         if mac:
             item["publishingStatus"] = MAC_STATUS

@@ -156,7 +156,10 @@ def test_stop_words() -> None:
     no_place = gates.stops(campaign(platformsPaid=["youtube", "instagram"]), CONNECTED, [], NOW)
     found = next(s for s in no_place if s["code"] == "no_place")
     assert found["text"] == "Set up YouTube first. This campaign pays for YouTube and Instagram."
-    assert found["fixHref"] == "/settings/posting/setup/youtube"
+    # Set it up leads back to this campaign's card once YouTube is connected (§39.1 ``?back=``).
+    assert found["fixHref"] == f"/settings/posting/setup/youtube?back=/campaigns/{UUID}"
+    step = gates.next_step(campaign(platformsPaid=["youtube", "instagram"], membership="in"), CONNECTED, no_place, NOW)
+    assert step["button"]["href"] == f"/settings/posting/setup/youtube?back=/campaigns/{UUID}"
 
 
 def test_manual_and_not_connected_is_a_note_only() -> None:

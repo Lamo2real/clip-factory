@@ -529,3 +529,39 @@ test("the server's Finance link brings the question into view at 390x844", async
   expect(new URL(page.url()).hash).toBe("");
   await ctx.close();
 });
+
+// Kid-proof (an 8-year-old must never get stuck): a button to a step on the same page goes there on every tap and keeps
+// the way back; an answered Finance question keeps the keyboard's focus.
+test.describe("kid-proof Get paid", () => {
+  test.use(DESKTOP);
+
+  test("Sent to your bank's Allow payment reading: every tap goes to the step, and ?back= stays", async ({ page }) => {
+    await start(page, "/settings/posting/getpaid/youtube?back=/money", "fresh", ["youtube"]);
+    const sent = page.locator("[data-help='getpaid-sent']");
+    const go = sent.getByRole("button", { name: "Allow payment reading" });
+    await go.click();
+    await expect(page).toHaveURL(/\/settings\/posting\/getpaid\/youtube\?back=\/money#yt-reading$/);
+    await expect(step(page, "yt-reading")).toBeInViewport();
+    await expect(step(page, "yt-reading").locator(".gstep__head")).toBeFocused();
+    // A second tap (from further down, the focus elsewhere) goes there again.
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await go.focus();
+    await go.click();
+    await expect(step(page, "yt-reading").locator(".gstep__head")).toBeFocused();
+    await expect(step(page, "yt-reading").locator(".gstep__head")).toBeInViewport();
+    await expect(page).toHaveURL(/\?back=\/money#yt-reading$/);
+  });
+
+  test("Do you see Finance: after the answer and after Change my answer, the focus stays on the question", async ({ page }) => {
+    await start(page, "/settings/posting/getpaid/contentrewards");
+    const q = page.locator("#cr-finance");
+    await q.getByRole("radio", { name: "Yes" }).focus();
+    await page.keyboard.press("Space");
+    await expect(q.getByRole("button", { name: "Change my answer" })).toBeVisible();
+    await expect(q).toBeFocused();
+    await q.getByRole("button", { name: "Change my answer" }).focus();
+    await page.keyboard.press("Enter");
+    await expect(q.getByRole("radio", { name: "Yes" })).toBeAttached();
+    await expect(q).toBeFocused();
+  });
+});

@@ -8,13 +8,14 @@ import type { Clip, Learning, Platform, Post, TikTokPostOptions, CrSubmission } 
 import { Icon } from "../../components/Icon.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { useToast } from "../../components/Toasts.tsx";
-import { A, Button, Empty, ErrorPanel, LinkButton, PageHeader, Pill, Segmented, Skeleton } from "../../components/ui.tsx";
+import { A, Button, Empty, ErrorPanel, LinkButton, PageHeader, Pill, Segmented, Skeleton, type Tone } from "../../components/ui.tsx";
 import { compact, postNumbersNote, postStatusLabel, STATUS_LABEL } from "../../lib/metrics.ts";
 import { autoPostLabel } from "../../lib/autopost.ts";
 import { WeekView } from "./WeekView.tsx";
 import { byPlatformOrder, count, MOMENT_LABEL, PLATFORM_LABEL, plural, relative } from "../../lib/format.ts";
 import { useHeld, useLoad } from "../../lib/hooks.ts";
 import { settingsPath } from "../../lib/settingsTree.ts";
+import { navigate } from "../../lib/router.ts";
 import { useLiveEvents } from "../../lib/live.ts";
 import { useAction } from "../../lib/motion.ts";
 import { applyClipEvent, applyLearningEvent, applyPostEvent, withMedia } from "../../lib/liveCache.ts";
@@ -27,27 +28,69 @@ import { failedForPublicAccount, postError, tiktokAudited } from "../../lib/tikt
 import { rowNeedsMac, tiktokFacts, tiktokRow, type TikTokRow, type TikTokRowContext } from "../../lib/tiktokMac.ts";
 import { TikTokRowAction, useTikTokRowContext } from "./MacButtons.tsx";
 
-interface LibraryData {
+export interface LibraryData {
   clips: Clip[];
   posts: Post[];
   learnings: Learning[];
+  /** The posts or the insights did not load: the numbers part says so, with its own Try again. The clips still show. */
+  numbersError: string | null;
+  /** False when the post list did not load: a card then never guesses that a clip's posting did not start. */
+  postsKnown: boolean;
 }
 
 /** The Library lists clips the owner kept: on their way out, out, or stuck on the way. */
 const inLibrary = (c: Clip) => c.status === "confirmed" || c.status === "publishing" || c.status === "posted" || c.status === "failed";
 
-async function loadLibrary(): Promise<LibraryData> {
-  const [all, posts, insights] = await Promise.all([api().listClips({ status: "all" }), api().listPosts(), api().insights()]);
+/**
+ * The clips, their posts and the insights. Only the clips are needed to show the Library: a failed post list or
+ * insights call leaves the cards on screen and is said in the numbers part (numbersError).
+ */
+export async function loadLibrary(): Promise<LibraryData> {
+  const [all, posts, insights] = await Promise.allSettled([api().listClips({ status: "all" }), api().listPosts(), api().insights()]);
+  if (all.status === "rejected") throw all.reason;
+  const failed = [posts, insights].find((r) => r.status === "rejected");
+  const learned = insights.status === "fulfilled" ? insights.value : null;
   // Insights carry the freshest metrics; prefer them over the plain post list.
-  const withMetrics = new Map(insights.posts.map((p) => [p.postId, p]));
+  const withMetrics = new Map((learned?.posts ?? []).map((p) => [p.postId, p]));
   return {
-    clips: all.filter(inLibrary),
-    posts: posts.map((p) => withMetrics.get(p.postId) ?? p),
-    learnings: insights.learnings,
+    clips: all.value.filter(inLibrary),
+    posts: posts.status === "fulfilled" ? posts.value.map((p) => withMetrics.get(p.postId) ?? p) : [],
+    learnings: learned?.learnings ?? [],
+    numbersError: failed ? friendlyMessage(failed.reason) : null,
+    postsKnown: posts.status === "fulfilled",
   };
 }
 
 export type Filter = "all" | "waiting" | "posted";
+
+/** The Library's filter, read from its address (?show=waiting|posted), so Back and a reload keep it. */
+export function filterFrom(search: string): Filter {
+  const show = new URLSearchParams(search).get("show");
+  return show === "waiting" || show === "posted" ? show : "all";
+}
+
+/** The Library's address for a filter. */
+export function filterHref(filter: Filter): string {
+  return filter === "all" ? "/library" : `/library?show=${filter}`;
+}
+
+/** A card's views: its posts' own numbers whenever one has them (live news keeps those fresh), else the clip's total. */
+export function cardViews(clip: Pick<Clip, "totalViews">, posts: Pick<Post, "metrics">[]): number {
+  if (posts.some((p) => p.metrics)) return posts.reduce((n, p) => n + (p.metrics?.views ?? 0), 0);
+  return clip.totalViews ?? 0;
+}
+
+/**
+ * A card's state word when the clip's own status would say the wrong thing: "Not started" while its posting never
+ * started (Try again is under it), "Waiting for setup" while every post waits for its account. Null: the clip's
+ * status pill ("Uploading" only while a post is really on its way).
+ */
+export function cardPill(clip: Pick<Clip, "status">, posts: Pick<Post, "status">[], notStarted: boolean): { label: string; tone: Tone } | null {
+  if (notStarted) return { label: "Not started", tone: "warn" };
+  const sending = clip.status === "confirmed" || clip.status === "publishing";
+  if (sending && posts.length > 0 && posts.every((p) => p.status === "pending_integration")) return { label: STATUS_LABEL.waiting_for_connection, tone: "neutral" };
+  return null;
+}
 
 /** Library: every kept clip, or This week's clips with their "Best this week" stars (§16.8). */
 export function Library({ view = "all", week = null }: { view?: "all" | "week"; week?: string | null }) {
@@ -102,7 +145,17 @@ function AllClips() {
           }
         : d,
     );
-  const [filter, setFilter] = useState<Filter>("all");
+  // The filter lives in the address (?show=), so opening a clip and going Back, or a reload, keeps it.
+  const [, redraw] = useState(0);
+  const filter = filterFrom(typeof location === "undefined" ? "" : location.search);
+  const setFilter = (next: Filter) => {
+    if (next === filter) return;
+    // Only the address changes: the list stays where it is on screen (navigate scrolls a new page to the top).
+    const y = window.scrollY;
+    navigate(filterHref(next), { replace: true });
+    window.scrollTo({ top: y });
+    redraw((n) => n + 1);
+  };
   // The places that are set up (GET /v1/setup, kept fresh by live setup news, as on Review): a post still waiting
   // for one of them gets its own Post now. Unknown (loading, or the check failed): every waiting post stays grouped.
   const setup = useSetup();
@@ -153,54 +206,49 @@ function AllClips() {
     <>
       {error && !data ? <ErrorPanel message={error} onRetry={reload} /> : null}
       {!data && !error ? <Skeleton className="review-skel" /> : null}
-      {data ? (
+      {data && data.clips.length === 0 ? (
+        // Nothing kept yet: the one next step (Go to Review) comes first; no zero totals and no filter above it.
+        <>
+          <LibraryEmpty filter="all" anyKept={false} onShowAll={() => setFilter("all")} />
+          {data.learnings.length ? (
+            <section className="insights" aria-labelledby="learn-title">
+              <Learnings learnings={data.learnings} />
+            </section>
+          ) : null}
+        </>
+      ) : null}
+      {data && data.clips.length > 0 ? (
         <>
           <section className="insights" aria-labelledby="learn-title">
-            <div className="learnings glass glass--green">
-              <h2 className="display-3" id="learn-title">
-                What&rsquo;s <em>working</em>
-              </h2>
-              {data.learnings.length ? (
-                <ul className="learnings__list">
-                  {data.learnings.map((l) => (
-                    <li key={l.learningId}>
-                      <p className="user-text">{l.text}</p>
-                      <span className="learnings__meta">
-                        {l.kind === "week" ? "" : "Older note · "}
-                        {relative(l.createdAt)} · from {plural(l.postIds.length, "post")}
-                      </span>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="muted">Star your best clips in This week, and Clip Factory learns from them.</p>
-              )}
-              <p className="learnings__more">
-                <A href={settingsPath("clip-making", "learned")}>See what it learned from your best clips</A>
-              </p>
-            </div>
+            <Learnings learnings={data.learnings} />
             <div className="totals">
-              <div className="stat glass">
-                <span className="stat__value">{count(totals.views)}</span>
-                <span className="stat__dots" aria-hidden="true">
-                  {Array.from({ length: 5 }, (_, i) => (
-                    <span key={i} />
-                  ))}
-                </span>
-                <span className="stat__label">views across every app</span>
-              </div>
-              <div className="mini-stats">
-                <div className="mini-stat glass">
-                  <Icon name="heart" size={18} />
-                  <span className="mini-stat__value">{count(totals.likes)}</span>
-                  <span className="mini-stat__label">likes</span>
-                </div>
-                <div className="mini-stat glass">
-                  <Icon name="share" size={18} />
-                  <span className="mini-stat__value">{count(totals.shares)}</span>
-                  <span className="mini-stat__label">shares</span>
-                </div>
-              </div>
+              {data.numbersError ? (
+                <ErrorPanel message={data.numbersError} onRetry={reload} />
+              ) : (
+                <>
+                  <div className="stat glass">
+                    <span className="stat__value">{count(totals.views)}</span>
+                    <span className="stat__dots" aria-hidden="true">
+                      {Array.from({ length: 5 }, (_, i) => (
+                        <span key={i} />
+                      ))}
+                    </span>
+                    <span className="stat__label">views across every app</span>
+                  </div>
+                  <div className="mini-stats">
+                    <div className="mini-stat glass">
+                      <Icon name="heart" size={18} />
+                      <span className="mini-stat__value">{count(totals.likes)}</span>
+                      <span className="mini-stat__label">likes</span>
+                    </div>
+                    <div className="mini-stat glass">
+                      <Icon name="share" size={18} />
+                      <span className="mini-stat__value">{count(totals.shares)}</span>
+                      <span className="mini-stat__label">shares</span>
+                    </div>
+                  </div>
+                </>
+              )}
             </div>
           </section>
 
@@ -227,6 +275,7 @@ function AllClips() {
                     clip={c}
                     posts={data.posts.filter((p) => p.clipId === c.clipId)}
                     ready={ready}
+                    postsKnown={data.postsKnown}
                     macCtx={macCtx}
                     onKept={kept}
                     crSubs={cr.subs.filter((x) => x.clipId === c.clipId)}
@@ -242,6 +291,35 @@ function AllClips() {
   );
 }
 
+
+/** What's working: the learnings from the owner's best clips, and the way to all of them. */
+function Learnings({ learnings }: { learnings: Learning[] }) {
+  return (
+    <div className="learnings glass glass--green">
+      <h2 className="display-3" id="learn-title">
+        What&rsquo;s <em>working</em>
+      </h2>
+      {learnings.length ? (
+        <ul className="learnings__list">
+          {learnings.map((l) => (
+            <li key={l.learningId}>
+              <p className="user-text">{l.text}</p>
+              <span className="learnings__meta">
+                {l.kind === "week" ? "" : "Older note · "}
+                {relative(l.createdAt)} · from {plural(l.postIds.length, "post")}
+              </span>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <p className="muted">Star your best clips in This week, and Clip Factory learns from them.</p>
+      )}
+      <p className="learnings__more">
+        <A href={settingsPath("clip-making", "learned")}>See what it learned from your best clips</A>
+      </p>
+    </div>
+  );
+}
 
 /**
  * What an empty list says depends on why it is empty: nothing kept at all (go keep some), every kept clip already
@@ -285,6 +363,7 @@ function LibraryEmpty({ filter, anyKept, onShowAll }: { filter: Filter; anyKept:
 function LibraryCard({
   clip,
   posts,
+  postsKnown = true,
   ready = [],
   macCtx = { audited: false },
   onKept,
@@ -293,6 +372,8 @@ function LibraryCard({
 }: {
   clip: Clip;
   posts: Post[];
+  /** False when the post list did not load: no "No posts yet" and no Try again for a start that may well have run. */
+  postsKnown?: boolean;
   /** What the TikTok row reads (§47.4): the switches, the Mac's last check-in, auto-posting's runs, TikTok's approval. */
   macCtx?: TikTokRowContext;
   /** This clip's posts on Content Rewards (§38.6). */
@@ -312,7 +393,7 @@ function LibraryCard({
   const tiktok = tiktokRow(tiktokFacts(clip, posts), macCtx);
   const ownRow = (p: Post) => p.status !== "pending_integration" || canPostNow(p) || (!!tiktok && p.platform === "tiktok");
   const waiting = ordered.filter((p) => !ownRow(p));
-  const totalViews = clip.totalViews ?? posts.reduce((n, p) => n + (p.metrics?.views ?? 0), 0);
+  const totalViews = cardViews(clip, posts);
   const rest = ordered.filter(ownRow);
   const noTikTok = !!tiktok && !posts.some((p) => p.platform === "tiktok");
   const failedPosts = posts.filter((p) => p.status === "failed");
@@ -389,6 +470,8 @@ function LibraryCard({
   // Uploaded, but its posting did not start (the start after a Try again, Post now or connect did not go through,
   // §14.5): once that lasts past the normal moment, the big Try again starts it.
   const stuck = useHeld(!!clip.startPending, START_GRACE_MS);
+  const neverStarted = postsKnown && needsUploadAgain(clip, posts);
+  const pill = cardPill(clip, posts, neverStarted || stuck);
   return (
     <article className="lib-card glass" aria-labelledby={`lib-${clip.clipId}`}>
       <div className="lib-card__top">
@@ -405,7 +488,7 @@ function LibraryCard({
             {MOMENT_LABEL[clip.momentType]}
             {clip.decidedAt ? ` · uploaded ${relative(clip.decidedAt)}` : ""}
           </span>
-          <ClipStatusPill status={clip.status} />
+          {pill ? <Pill tone={pill.tone}>{pill.label}</Pill> : <ClipStatusPill status={clip.status} />}
           {/* A clip made the campaign way wears a small "Campaign" chip (§39.1); a normal clip carries no label. */}
           {clip.campaignId ? (
             <span className="lib-card__campaign" data-cr="campaign-chip">
@@ -435,11 +518,11 @@ function LibraryCard({
           {noTikTok ? <NoTikTokRow clip={clip} row={tiktok!} onKept={onKept} /> : null}
           {rest.filter((p) => p.platform !== "youtube").map(row)}
         </ul>
-      ) : needsUploadAgain(clip, posts) ? null : (
+      ) : neverStarted || !postsKnown ? null : (
         <p className="muted small">No posts yet.</p>
       )}
       {/* A clip that failed only because TikTok refused the public account: its row's Post with my Mac, not Try again. */}
-      {needsUploadAgain(clip, posts) || stuck || (clip.status === "failed" && !onlyPublicTikTok) ? <UploadAgain clip={clip} posts={posts} onKept={onKept} /> : null}
+      {neverStarted || stuck || (clip.status === "failed" && !onlyPublicTikTok) ? <UploadAgain clip={clip} posts={posts} onKept={onKept} /> : null}
       {crSubs.length ? <CrPostLines subs={crSubs} onChange={onCrChange} compact /> : null}
       <SimilarClips clipId={clip.clipId} />
     </article>

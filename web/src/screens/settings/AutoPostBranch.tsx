@@ -448,8 +448,8 @@ export function AutoPostBranch() {
         </Apple>
       </Panel>
 
-      {/* Found with "Find a setting": the branch page opens it and can focus it. */}
-      <details className="apple-panel glass autopost__test" id="auto-post-test" data-help="auto-post-test" tabIndex={-1}>
+      {/* Found with "Find a setting": the branch page opens it and focuses its summary (the part Tab reaches). */}
+      <details className="apple-panel glass autopost__test" id="auto-post-test" data-help="auto-post-test">
         <summary className="cr-fold__q" data-help="auto-post-test-open">
           <Icon name="sliders" size={18} />
           <span>Test it first</span>

@@ -427,9 +427,15 @@ for slow groups, "Checked 2 days ago" (`insightsUpdatedAt`); "Open on {Platform}
   `/settings/posting/where`.
 * Posting: "Posting now…" with a small spinner.
 * Posted privately (TikTok): "Posted privately. TikTok shows numbers after the app is approved."
-* Posted, no metrics yet: "Numbers are on the way. Check back in a few minutes."; when the last read failed, its
-  `statsError` sentence instead (`error` of the stack, e.g. "Facebook did not answer. We will try again soon.").
-* Failed: "Posting failed: {error}. Go to Library and press Try again."
+* Posted, no metrics yet: when the last read failed, its `statsError` sentence (`error` of the stack, e.g. "Facebook
+  did not answer. We will try again soon."); else the post's `perfCheckAt` in the Library's words (`numbersComing`):
+  "Numbers come tomorrow." (Library: "· numbers tomorrow"), else "Numbers are on the way. Check back in a few
+  minutes." (also when that time has passed).
+* Not sent yet (posting never started, or the start is stuck past `START_GRACE_MS`): "Not sent yet. Tap Try again.";
+  the Library's line and its **Try again** (`UploadAgain`) lead the page's actions as its one red button; "This clip
+  was not sent to {Platform}." when the place is on in Where clips go (no wrong "Turn on" link).
+* Failed: "{why}. Tap Try again." with that platform's own **Try again** inside its stack (not TikTok while it has
+  its Mac row, and not TikTok's public-account refusal).
 * YouTube, `views` 0 at least 6 h after `postedAt`: under the top number "That's YouTube's own count: it hasn't shown
   this Short to viewers yet." (the 0 is what YouTube reports, not a failed read).
 

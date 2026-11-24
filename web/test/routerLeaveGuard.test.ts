@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from "vitest";
-import { navigate, setLeaveGuard } from "../src/lib/router.ts";
+import { leaveGuarded, navigate, setLeaveGuard } from "../src/lib/router.ts";
 
 // "Leave without saving?" (docs/CONTRACTS.md §18.7) holding a browser Back: after Leave the owner is where Back was
 // taking them, and the next Back goes on from there (no duplicate history entry to stall on).
@@ -80,5 +80,33 @@ describe("leave guard after Leave", () => {
     await step;
     expect(path()).toBe("/settings");
     expect(asked).toEqual(["/settings/clip-making/skills"]);
+  });
+});
+
+describe("leaveGuarded", () => {
+  it("says which page changes a guard holds, so the switch to the other app still slides (§45.38 S3)", () => {
+    expect(leaveGuarded()).toBe(false);
+    expect(leaveGuarded("/stories")).toBe(false);
+    // A guard that holds every change (the skill editor).
+    unguard = setLeaveGuard(() => true);
+    expect(leaveGuarded()).toBe(true);
+    expect(leaveGuarded("/stories/ideas")).toBe(true);
+    unguard();
+    // A guard that lets the other app through (Home's running upload): asked without showing its question.
+    let asked = 0;
+    unguard = setLeaveGuard(
+      (to) => {
+        asked++;
+        return !to.startsWith("/stories");
+      },
+      (to) => !to.startsWith("/stories"),
+    );
+    expect(leaveGuarded()).toBe(true);
+    expect(leaveGuarded("/stories/ideas")).toBe(false);
+    expect(leaveGuarded("/jobs")).toBe(true);
+    expect(asked).toBe(0);
+    unguard();
+    unguard = null;
+    expect(leaveGuarded("/jobs")).toBe(false);
   });
 });

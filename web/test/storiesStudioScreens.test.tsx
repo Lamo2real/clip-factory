@@ -918,7 +918,10 @@ describe("Review", () => {
     await show(<ReviewScreen {...page({ name: "review_story", storyId: S.review })} />);
     await click(control("Reject"), 50);
     type(field(/^Why\?/), "Too dark");
-    await click(control("Reject the video"));
+    await click(control("Reject the video"), 50);
+    // It asks first: it can't be undone.
+    expect(reject).not.toHaveBeenCalled();
+    await click(control("Reject it", document.querySelector('[role="dialog"]')!));
     expect(reject).toHaveBeenCalledWith("stories", S.review, "Too dark");
     expect(text()).toContain("Not used.");
   });

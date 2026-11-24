@@ -20,9 +20,11 @@ import { useToast } from "../../components/Toasts.tsx";
 import { A } from "../../components/ui.tsx";
 import { count, relative } from "../../lib/format.ts";
 import { storiesApi } from "../api/client.ts";
-import { STEP_LABEL, type Onboarding, type ProjectRef, type StoriesApi, type StoriesDashboard, type StoryStatus } from "../api/types.ts";
+import { STEP_LABEL, type ErrorAccount, type Onboarding, type ProjectRef, type StoriesApi, type StoriesDashboard, type StoryStatus } from "../api/types.ts";
 import { ArcDial, CreamCard, GlassToggle, MediaRow, StatNumeral } from "../glass/index.ts";
 import { useWorkspaceConfig } from "../settings/data.ts";
+import { postToTitle, postYes } from "../studio/PublishSheet.tsx";
+import { accountOf } from "../studio/words.ts";
 import { currentChoice, rememberProject } from "../workspace.ts";
 import {
   celebrate,
@@ -101,20 +103,39 @@ function Stat({ value, label, tone, icon, href }: { value: number; label: string
   );
 }
 
+/**
+ * What a Try again that came back still stuck says: the post's own sentence (it names the fix, Social accounts), or a
+ * plain one; null when it is on its way again.
+ */
+export function stillStuck(job: { publishingStatus: string; error?: string | undefined }): string | null {
+  if (job.publishingStatus !== "needs_attention" && job.publishingStatus !== "failed") return null;
+  return job.error?.trim() || "It is still stuck. Tap Open to see what to fix, then tap Try again.";
+}
+
 function NeedsYou({ ws, items }: { ws: string; items: StoriesDashboard["needsYou"] }) {
   const toast = useToast();
   const [busy, setBusy] = useState<string | null>(null);
-  const retry = async (id: string, el: HTMLElement | null, mac: boolean) => {
+  // The API asks before a post goes to another account than before (error.account, §45.34): yes or not now, here.
+  const [ask, setAsk] = useState<{ id: string; account: ErrorAccount; message: string; mac: boolean } | null>(null);
+  const retry = async (id: string, el: HTMLElement | null, mac: boolean, confirmAccount?: string) => {
     setBusy(id);
     try {
       // A Mac post (§47.10) waits for the Mac again; any other post is sent again.
-      if (mac) await storiesApi().macRetry(ws, id);
-      else await storiesApi().retryPublishing(ws, id);
-      celebrate(centerOf(el));
-      toast.success("Trying again now.");
+      const body = confirmAccount ? { confirmAccount } : undefined;
+      const next = mac ? await storiesApi().macRetry(ws, id, body) : await storiesApi().retryPublishing(ws, id, body);
+      setAsk(null);
+      const stuck = stillStuck(next);
+      // Still stuck: its reason, never confetti (it did not work).
+      if (stuck) toast.error(stuck);
+      else {
+        celebrate(centerOf(el));
+        toast.success("Trying again now.");
+      }
       await refreshDashboard(ws).catch(() => undefined);
     } catch (e) {
-      toast.error(friendlyMessage(e));
+      const named = accountOf(e);
+      if (named && named.externalAccountId !== confirmAccount) setAsk({ id, account: named, message: friendlyMessage(e), mac });
+      else toast.error(friendlyMessage(e));
     } finally {
       setBusy(null);
     }
@@ -166,6 +187,20 @@ function NeedsYou({ ws, items }: { ws: string; items: StoriesDashboard["needsYou
                 ) : null}
                 {n.href === "/stories/connections" ? null : <StLinkButton href={n.href}>Open</StLinkButton>}
               </div>
+              {/* The API asks first when the post would go to another account: the question under the row, full width. */}
+              {ask && n.publishingJobId === ask.id && n.platform ? (
+                <div className="st-needs-list__ask" role="group" aria-label={postToTitle(n.platform, ask.account)} style={{ flexBasis: "100%" }}>
+                  <p className="st-needs-list__text">
+                    <strong>{postToTitle(n.platform, ask.account)}</strong> {ask.message}
+                  </p>
+                  <div className="st-needs-list__actions">
+                    <StButton main aria-disabled={busy === ask.id || undefined} onClick={(e) => busy !== ask.id && void retry(ask.id, e.currentTarget, ask.mac, ask.account.externalAccountId)}>
+                      {postYes(ask.message)}
+                    </StButton>
+                    <StButton onClick={() => setAsk(null)}>Not now</StButton>
+                  </div>
+                </div>
+              ) : null}
             </li>
           ))}
         </ul>
@@ -542,7 +577,7 @@ export function DashboardScreen({ ws }: StoriesScreenProps) {
         lede="What's happening in your studio."
         actions={
           <>
-            <StLinkButton href="/stories/ideas">
+            <StLinkButton href="/stories/ideas?new=1">
               <StIcon name="bulb" size={20} />
               New idea
             </StLinkButton>

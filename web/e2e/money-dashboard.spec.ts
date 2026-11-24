@@ -335,6 +335,18 @@ test.describe("flows", () => {
     await expect(page.locator(".money-dash .btn--action, .money-dash .btn--primary")).toHaveCount(0);
   });
 
+  test("a place that isn't connected has its own Set up button, with the way back to Money", async ({ page }) => {
+    await open(page, "dash_youtube_only");
+    const note = page.locator(".dash-note[data-reason='not_connected']").first();
+    await expect(note).toBeVisible();
+    const name = (await note.textContent())!.match(/Connect (\w+) in Settings/)![1]!;
+    const button = note.getByRole("link", { name: `Set up ${name}` });
+    await expect(button).toHaveAttribute("href", `/settings/posting/setup/${name.toLowerCase()}?back=/money`);
+    await button.evaluate((el) => el.scrollIntoView({ block: "center" }));
+    await button.click();
+    await expect(page).toHaveURL(new RegExp(`/settings/posting/setup/${name.toLowerCase()}\\?back=/money$`));
+  });
+
   test("TikTok only: one card says where to look, the clips sort by views with a note", async ({ page }) => {
     await open(page);
     await page.locator(".dash-app[data-app='tiktok']").click();

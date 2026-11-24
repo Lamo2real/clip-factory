@@ -17,11 +17,29 @@ export const MAX_PICTURE_BYTES = 25_000_000;
 /** A picture is kept at most this wide or tall (it only ever sits behind frosted glass). */
 export const PICTURE_SIDE = 1920;
 
-/** Why this file cannot be the background, or null. */
-export function lookPictureProblem(f: { type: string; size: number }): string | null {
-  if (!f.type.startsWith("image/")) return "Pick a picture.";
-  if (f.size > MAX_PICTURE_BYTES) return "That picture is too big. Pick a smaller one.";
+/** What Picture says when a file cannot be the background: each with what to do instead. */
+export const PICTURE_WORDS = {
+  notPicture: "Pick a photo (JPG or PNG).",
+  unreadable: "That picture would not open. Pick another one.",
+  tooBig: "That picture is too big. Pick a smaller one.",
+} as const;
+
+/** Why a chosen or dropped file is not opened at all (not a picture, or far too big), or null. */
+export function pickedProblem(f: Pick<File, "type" | "size">): string | null {
+  if (!f.type.startsWith("image/")) return PICTURE_WORDS.notPicture;
+  if (f.size > MAX_PICTURE_BYTES) return PICTURE_WORDS.tooBig;
   return null;
+}
+
+/** Why this file cannot be the background, or null: a drop (useFileDrop's check) and the picker say the same. */
+export const lookPictureProblem = pickedProblem;
+
+/** Why shrinkPicture refused a file, in Picture's words. */
+export function shrinkProblem(e: unknown): string {
+  const m = e instanceof Error ? e.message : "";
+  if (m === "not a picture") return PICTURE_WORDS.notPicture;
+  if (m === "unreadable") return PICTURE_WORDS.unreadable;
+  return PICTURE_WORDS.tooBig;
 }
 
 /** The colours as they really sit behind the glass: the base, and the two lights in their own places. */
@@ -114,20 +132,21 @@ export function LookSection() {
   ];
 
   const take = (f: File) => {
-    const bad = lookPictureProblem(f);
-    if (bad) {
-      setProblem(bad);
+    const wrong = pickedProblem(f);
+    if (wrong) {
+      setProblem(wrong);
       return;
     }
     setBusy(true);
     shrinkPicture(f)
       .then((url) => {
+        // Kept on this device: a picture that does not fit there is too big.
         if (setStoriesPicture(url)) {
           setProblem(null);
           setStoriesLook({ mode: "picture" });
-        } else setProblem("That picture is too big. Pick a smaller one.");
+        } else setProblem(PICTURE_WORDS.tooBig);
       })
-      .catch(() => setProblem("That picture is too big. Pick a smaller one."))
+      .catch((err: unknown) => setProblem(shrinkProblem(err)))
       .finally(() => setBusy(false));
   };
   const pick = (e: ChangeEvent<HTMLInputElement>) => {

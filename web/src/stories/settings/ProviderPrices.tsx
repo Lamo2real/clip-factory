@@ -6,7 +6,7 @@
 import { useState } from "react";
 import { useToast } from "../../components/Toasts.tsx";
 import type { Price } from "../api/types.ts";
-import { Btn, cheer, Chip, money, SetSelect } from "./bits.tsx";
+import { Btn, cheer, Chip, Failed, money, SetSelect } from "./bits.tsx";
 import type { useAi } from "./data.ts";
 
 /**
@@ -140,7 +140,8 @@ function MakerPriceRow({ maker, ai, open, setOpen }: { maker: (typeof PRICED_MAK
  * and leaves that other form open (the owner is typing in it).
  */
 export function MakerPrices({ ai, open, setOpen }: { ai: Ai; open: string | null; setOpen: (id: string | null, from: string) => void }) {
-  if (!ai.data) return ai.error ? <p className="st-stg-small">{ai.error}</p> : null;
+  // The same card with Try again as the rest of Settings when the prices did not load.
+  if (!ai.data) return ai.error ? <Failed message={ai.error} onRetry={() => void ai.reload()} /> : null;
   return (
     <ul className="st-stg-prices" aria-label="Each maker's price">
       {PRICED_MAKERS.map((m) => (

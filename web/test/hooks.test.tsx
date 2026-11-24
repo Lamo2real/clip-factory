@@ -1,7 +1,7 @@
 import { act } from "react";
 import { createRoot } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { forgetLoaded, useLoad, usePoll } from "../src/lib/hooks.ts";
+import { forgetLoaded, patchLoaded, useLoad, usePoll } from "../src/lib/hooks.ts";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -128,5 +128,30 @@ describe("useLoad remembers a page's last result (docs/CONTRACTS.md §20.16)", (
     const after: (string | null)[] = [];
     (await visit({ load, cache: "review", k: "job-1", seen: after })).unmount();
     expect(after[0]).toBeNull();
+  });
+
+  it("patchLoaded changes every remembered result of one cache name, even after its page is gone", async () => {
+    // Review's caption save lands after the page was left: coming back must show the saved words (bug hunt, 23 Nov).
+    const load = () => new Promise<string>(() => undefined);
+    for (const k of ["", "job-1"]) {
+      const root = createRoot(document.createElement("div"));
+      await act(async () => root.render(<Shows load={() => Promise.resolve("old")} cache="review" k={k} seen={[]} />));
+      root.unmount();
+    }
+    (await visit({ load: () => Promise.resolve("jobs"), cache: "jobs", seen: [] })).unmount();
+    patchLoaded<string>("review", (prev) => `${prev} + saved`);
+    for (const k of ["", "job-1"]) {
+      const seen: (string | null)[] = [];
+      (await visit({ load, cache: "review", k, seen })).unmount();
+      expect(seen[0]).toBe("old + saved");
+    }
+    // Another cache name is left alone, and nothing is made up for a cache never loaded.
+    const jobs: (string | null)[] = [];
+    (await visit({ load, cache: "jobs", seen: jobs })).unmount();
+    expect(jobs[0]).toBe("jobs");
+    patchLoaded<string>("library", () => "made up");
+    const library: (string | null)[] = [];
+    (await visit({ load, cache: "library", seen: library })).unmount();
+    expect(library[0]).toBeNull();
   });
 });

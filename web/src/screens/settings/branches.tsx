@@ -637,6 +637,8 @@ export function GetAppBranch() {
   return <GetAppPanel installedNote title="For this device" />;
 }
 
+export const UPDATE_CHECK_FAILED = "Couldn't check. Check your internet and tap Check for updates again.";
+
 export function UpdatesBranch() {
   const toast = useToast();
   const [checking, setChecking] = useState(false);
@@ -651,10 +653,12 @@ export function UpdatesBranch() {
   async function check() {
     setChecking(true);
     // The arrow's turn (act="refresh") shows the tap did something; the answer is not held back for it (§20.4).
-    await checkForUpdate();
+    const found = await checkForUpdate();
     if (!alive.current) return;
     setChecking(false);
     if (updateState().available) toast.info("A new version is ready. Tap Reload at the bottom of the screen.");
+    // A check that did not get an answer never says "newest": it says how to try again.
+    else if (found === "failed") toast.error(UPDATE_CHECK_FAILED);
     else toast.success("You have the newest version.");
   }
 

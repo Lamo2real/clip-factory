@@ -1,5 +1,5 @@
 {
- "version": "dd02a5f3b16a",
+ "version": "e6334a8cdd6b",
  "parts": [
   {
    "id": "app-map",
@@ -93,13 +93,13 @@
    "id": "contracts-11",
    "title": "CONTRACTS: 11. Design system (summary; details in docs/UX_DESIGN_SYSTEM.md)",
    "line": "Colours (owner request 2026-11-18, ADR-43): Bottle Green #0F372B (the surface), Bone #EFE7DA (the",
-   "chars": 11204
+   "chars": 11885
   },
   {
    "id": "contracts-12",
    "title": "CONTRACTS: 12. Get the app, updates, and kid-proof UX (added by the owner after the first build)",
    "line": "12.1 \"Get the app\" (sidebar item; on phones a card in Settings plus a one-time banner on Home)",
-   "chars": 19612
+   "chars": 22830
   },
   {
    "id": "contracts-13",
@@ -111,7 +111,7 @@
    "id": "contracts-14",
    "title": "CONTRACTS: 14. Serverless expansion: WebSocket API, REST API, durable functions, S3 Vectors",
    "line": "Everything stays serverless and in eu-north-1: CloudFront + S3 (web), S3 (media), S3 Vectors, DynamoDB, three API",
-   "chars": 44643
+   "chars": 44685
   },
   {
    "id": "contracts-15",
@@ -123,13 +123,13 @@
    "id": "contracts-16",
    "title": "CONTRACTS: 16. Clip performance, stats refresh and weekly best (owner request, 2026-11-16)",
    "line": "The owner's words: \"click on any video and see how they performed for each social media platform ... the video on",
-   "chars": 60326
+   "chars": 60921
   },
   {
    "id": "contracts-17",
    "title": "CONTRACTS: 17. Posting setup: a setup list per platform, real Connect, real posting (owner request, 2026-11-16)",
    "line": "The owner's words: \"Facebook, Instagram, YouTube, TikTok and X should each be a step to connect to in order for this",
-   "chars": 106186
+   "chars": 107519
   },
   {
    "id": "contracts-18",
@@ -195,7 +195,7 @@
    "id": "contracts-28",
    "title": "CONTRACTS: 28. Ask becomes a full assistant (owner request, 2026-11-19)",
    "line": "The owner: Ask should answer any question (Clip Factory, Terraform, food, a file he gives it), always knowing the",
-   "chars": 33490
+   "chars": 33717
   },
   {
    "id": "contracts-29",
@@ -231,19 +231,19 @@
    "id": "contracts-35",
    "title": "CONTRACTS: 35. Mac fetches it (owner decision, 2026-11-20)",
    "line": "When YouTube blocks the cloud (the bot check, \"cookies ran out\", a 403 that the §29.4 fallback cannot get past), the",
-   "chars": 16060
+   "chars": 16132
   },
   {
    "id": "contracts-34",
    "title": "CONTRACTS: 34. Delete jobs (owner request, 2026-11-20)",
    "line": "34.1 The owner's words and what they mean",
-   "chars": 8638
+   "chars": 8992
   },
   {
    "id": "contracts-36",
    "title": "CONTRACTS: 36. One simple Review card: Use my settings and one row per place (owner request, 2026-11-20)",
    "line": "The owner, on a Review card after §33: \"How can I select platforms on the bottom bar AND tick/untick them under Upload",
-   "chars": 10667
+   "chars": 10877
   },
   {
    "id": "contracts-37",
@@ -255,13 +255,13 @@
    "id": "contracts-38",
    "title": "CONTRACTS: 38. Content Rewards campaigns (owner request, 2026-11-21)",
    "line": "The owner's words: \"browse Content Rewards, join a campaign there, then paste the campaign URL into Clip Factory. Clip",
-   "chars": 176349
+   "chars": 176806
   },
   {
    "id": "contracts-39",
    "title": "CONTRACTS: 39. Content Rewards: the two ways, all your money, and does this clip fit (owner request, 2026-11-21)",
    "line": "The owner's words, the day §38 was approved: \"please double check that the steps to conect to contentrewards is",
-   "chars": 81845
+   "chars": 82305
   },
   {
    "id": "contracts-40",
@@ -297,7 +297,7 @@
    "id": "contracts-45",
    "title": "CONTRACTS: 45. Clips Funded: a second, separate workspace (owner request, 2026-11-21)",
    "line": "Planned: not in the app until the switch pull request turns it on (§45.21). Until then nothing of Clips Funded",
-   "chars": 390274
+   "chars": 394207
   },
   {
    "id": "contracts-46",
@@ -309,7 +309,7 @@
    "id": "contracts-47",
    "title": "CONTRACTS: 47. Your Mac posts it on TikTok (owner request, 2026-11-22)",
    "line": "The owner (2026-11-22, verbatim): \"can you create a automation for my mac so everytime the clip factory wants upload to",
-   "chars": 110850
+   "chars": 111163
   },
   {
    "id": "adr-01",

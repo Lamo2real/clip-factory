@@ -121,6 +121,11 @@ test("a video file used on a job the Mac is getting stops the Mac and replaces t
   await expect(page.locator(".job-replaced")).toContainText("Replaced by your video file.");
   await expect(page.locator(".mac-wait")).toHaveCount(0);
   await expect(page.getByRole("link", { name: "Open the new job" })).toBeVisible();
+  // Its one way on is the new job: no Try again (it would make the video twice) and no second Use a video file.
+  const actions = page.locator(".panel__actions");
+  await expect(actions.getByRole("link", { name: "Open the new job" })).toHaveClass(/btn--primary/);
+  await expect(actions.getByRole("button", { name: "Try again" })).toHaveCount(0);
+  await expect(actions.getByRole("link", { name: "Use a video file" })).toHaveCount(0);
   // The Mac never starts on the stopped job again.
   const starts = (await macCalls()).filter((c) => c === `start ${oldId}`);
   expect(starts).toHaveLength(1);

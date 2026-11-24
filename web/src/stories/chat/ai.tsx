@@ -4,7 +4,8 @@
 // the effort opens the picker: in the chat it changes the conversation's own setting, or, with "Just for this
 // message", only the next message (never saved); on a reference video, "Keep with this video" saves the video's own
 // setting. Each model names who makes it and who runs it (§45.35 D8: "{provider} on {host}"), shows what its last real
-// call said, and only the efforts it offers.
+// call said, and only the efforts it offers. In the chat's box on a small phone (under 360 px) the line folds into one
+// chip, "Opus 5.5 · High", so the box stays a short row.
 import type { ReactNode } from "react";
 import { EFFORT_LABEL, type Effort, type ModelOverride } from "../api/types.ts";
 import { GlassPill } from "../glass/index.ts";
@@ -45,18 +46,22 @@ export function AiLine({
       <div className="st-chat-ai__row">
         {once ? <Chip tone="sun">{onceLabel}</Chip> : null}
         <p className="st-chat-ai__line">
+          {/* On a small phone the chat's box folds the two into this one chip, "Claude Opus 5.5 · High" (data-effort;
+              its sheet has both): chat.css. */}
           <GlassPill
             active={once}
-            className="st-chat-ai__part"
+            className="st-chat-ai__part st-chat-ai__part--model"
+            data-effort={noEffort ? "Its own level" : effortLabel(current.effort)}
             onClick={() => onPick("model", once)}
             aria-label={`Model: ${modelLabel(models, current.model)}${provider ? `, ${provider}` : ""}. Change the model`}
           >
-            Model: <b>{modelLabel(models, current.model)}</b>
+            <span className="st-chat-ai__word">Model: </span>
+            <b>{modelLabel(models, current.model)}</b>
           </GlassPill>
           <span className="st-chat-ai__dot" aria-hidden="true">
             {" · "}
           </span>
-          <GlassPill active={once} className="st-chat-ai__part" onClick={() => onPick("effort", once)} aria-label={`Effort: ${noEffort ? "its own level" : effortLabel(current.effort)}. Change the effort`}>
+          <GlassPill active={once} className="st-chat-ai__part st-chat-ai__part--effort" onClick={() => onPick("effort", once)} aria-label={`Effort: ${noEffort ? "its own level" : effortLabel(current.effort)}. Change the effort`}>
             Effort: <b>{noEffort ? "Its own level" : effortLabel(current.effort)}</b>
           </GlassPill>
         </p>

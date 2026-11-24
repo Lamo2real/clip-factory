@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type SyntheticEvent } from "react";
 import { api } from "../../api/index.ts";
-import { friendlyMessage } from "../../api/errors.ts";
+import { ApiError, friendlyMessage } from "../../api/errors.ts";
 import type { Campaign, Captions, Clip, Platform, Post, TikTokCreator, TikTokPostOptions, YoutubePrivacy } from "../../api/types.ts";
 import { useSession } from "../../app/session.tsx";
 import { Icon } from "../../components/Icon.tsx";
@@ -9,7 +9,7 @@ import { A, Button, Empty, ErrorPanel, LinkButton, PageHeader, Pill, Skeleton } 
 import { burst, centerOf } from "../../lib/confetti.ts";
 import { MOMENT_LABEL, PLATFORM_ORDER, plural, timecode } from "../../lib/format.ts";
 import { ACT_REWIND_MS, useAction } from "../../lib/motion.ts";
-import { useLoad } from "../../lib/hooks.ts";
+import { patchLoaded, useLoad } from "../../lib/hooks.ts";
 import { useLiveEvents } from "../../lib/live.ts";
 import { applyClipEvent, applyPostEvent, withMedia } from "../../lib/liveCache.ts";
 import { SimilarClips } from "../../components/SimilarClips.tsx";
@@ -49,8 +49,30 @@ import { TIKTOK_PUBLIC_HINT, tiktokAudited } from "../../lib/tiktokYourself.ts";
 import { useAutoPost } from "../settings/AutoPostBranch.tsx";
 import { TikTokRowAction, TurnOnMac, useTikTokRowContext } from "../library/MacButtons.tsx";
 import { settingsPath } from "../../lib/settingsTree.ts";
-import { commercialRow, MAC_HINT, MAC_WHERE_LINE, macOn, rowNeedsMac, tiktokFacts, tiktokRow } from "../../lib/tiktokMac.ts";
+import { commercialRow, macOn, macUploadLine, rowNeedsMac, savedForSetup, tiktokFacts, tiktokRow, type TikTokRowContext } from "../../lib/tiktokMac.ts";
 import { autoPostOf, reviewLede, reviewLine, sentFirstLine } from "../../lib/autopost.ts";
+
+/**
+ * A thrown-away card's own choices (where it goes, each place's options, TikTok's, the captions and edits not saved
+ * yet), kept until its decline goes: the card leaves the page while its Undo counts down, so Undo (or a decline that
+ * failed) brings it back exactly as it was, even on a Review opened again meanwhile. Keyed by clip id.
+ */
+interface CardStash {
+  captions: Captions;
+  dirty: Partial<Captions>;
+  picked: Platform[] | null;
+  own: CardOptions | null;
+  changed: boolean;
+  choices: TikTokChoices;
+  applied: boolean;
+  ttWanted: boolean;
+}
+const stashed = new Map<string, CardStash>();
+
+/** A caption saved on a Review card: every remembered Review list holds it now (also after Review was left). */
+function savedCaptions(clips: Clip[], clipId: string, patch: Partial<Captions>): Clip[] {
+  return clips.map((c) => (c.clipId === clipId ? { ...c, captions: { ...c.captions, ...patch } } : c));
+}
 
 /** Video and cover links are presigned for an hour (docs/CONTRACTS.md §5); fetch new ones a little before that. */
 export const MEDIA_FRESH_MS = 50 * 60 * 1000;
@@ -209,10 +231,18 @@ export function Review({ jobId }: { jobId: string | null }) {
     },
     () => undefined,
   );
-  const keptFacts = justKept.map((c) => tiktokFacts(c, keptPosts[c.clipId] ?? []));
+  // Saved only (every place waits for set up, §33.1): nothing is uploading, so it says saved, with Set up posting. Its
+  // TikTok row only while Your Mac posts TikTok is on (the Mac can post it before anything is set up); never a Turn
+  // on beside a clip that is only saved.
+  const savedOnly = justKept.map((c) => savedForSetup(keptPosts[c.clipId] ?? []));
+  const allSaved = savedOnly.length > 0 && savedOnly.every(Boolean);
+  const keptFacts = justKept.map((c, i) => (savedOnly[i] && !macOn(me?.settings) ? null : tiktokFacts(c, keptPosts[c.clipId] ?? [])));
+  // While the Mac posts TikTok, each card's line above Upload says what the Mac is doing now (§47.4), so its check-in is
+  // read for the cards too.
+  const macCards = macOn(me?.settings) && !tiktokAudited(setup.data?.platforms);
   const macCtx = useTikTokRowContext({
     audited: tiktokAudited(setup.data?.platforms),
-    needsMac: keptFacts.some(rowNeedsMac),
+    needsMac: macCards || keptFacts.some((f) => !!f && rowNeedsMac(f)),
   });
   // Those uploaded with Commercial content on their card while the Mac posts TikTok (§47.9): the Mac can't add TikTok's
   // label yet, so their row never offers Post with my Mac (commercialRow). Only this visit knows it.
@@ -245,8 +275,11 @@ export function Review({ jobId }: { jobId: string | null }) {
   useLayoutEffect(() => {
     const target = focusNext.current;
     if (!target) return;
-    const el =
-      target === "review-empty" ? document.querySelector<HTMLElement>(".review-empty a, .review-empty .empty__title") : document.getElementById(target);
+    // The empty state's own button (Make clips, or Show every job): its title is not focusable.
+    const el = target === "review-empty" ? document.querySelector<HTMLElement>(".review-empty a, .review-empty button") : document.getElementById(target);
+    // A job's empty state first checks what else waits: its button comes a moment later, so try again on the next
+    // render, unless the focus went somewhere meanwhile.
+    if (!el && target === "review-empty" && (!document.activeElement || document.activeElement === document.body)) return;
     focusNext.current = null;
     el?.focus();
   });
@@ -290,8 +323,47 @@ export function Review({ jobId }: { jobId: string | null }) {
   /** "Throw away" happens for real only after 8 seconds, so a slip of the finger can be undone. */
   function throwAway(clip: Clip) {
     leaving(clip.clipId);
-    throwAwayWithUndo(clip, toast, () => void refresh().catch(() => undefined));
+    throwAwayWithUndo(clip, toast, () => {
+      stashed.delete(clip.clipId);
+      void refresh().catch(() => undefined);
+    });
   }
+
+  // A card's caption save landed: the list holds the saved words, also the remembered one shown when Review opens
+  // again (the card reads its words from it), so coming back never shows the text from before.
+  const captionsSaved = (clipId: string, patch: Partial<Captions>) => {
+    setData((d) => (d ? savedCaptions(d, clipId, patch) : d));
+    patchLoaded<Clip[]>("review", (list) => savedCaptions(list, clipId, patch));
+  };
+
+  // A job's Review with nothing left (§34): what else waits, from every job's list, and whether the job is there at all,
+  // so it never says "All done!" while other clips wait, nor about a job that does not exist.
+  const empty = !!visible && visible.length === 0;
+  const [jobLeft, setJobLeft] = useState<{ jobId: string; others: Clip[]; missing: boolean } | null>(null);
+  useEffect(() => {
+    if (!jobId || !empty) return;
+    let alive = true;
+    void Promise.all([
+      api()
+        .listClips({ status: "review" })
+        .catch(() => [] as Clip[]),
+      api()
+        .getJob(jobId)
+        .then(
+          () => false,
+          (e: unknown) => e instanceof ApiError && (e.status === 404 || e.code === "not_found"),
+        ),
+    ]).then(([others, missing]) => {
+      if (alive) setJobLeft({ jobId, others, missing });
+    });
+    return () => {
+      alive = false;
+    };
+  }, [jobId, empty]);
+  const jobInfo = jobId && jobLeft?.jobId === jobId ? jobLeft : null;
+  const othersWaiting = jobInfo
+    ? jobInfo.others.filter((c) => c.jobId !== jobId && c.remakeOf?.jobId !== jobId && !thrown.has(c.clipId) && !goneJobs.has(c.jobId)).length
+    : 0;
 
   return (
     <div className="page">
@@ -318,14 +390,16 @@ export function Review({ jobId }: { jobId: string | null }) {
         <section className="kept-now glass" aria-labelledby="kept-now-title">
           <h2 className="kept-now__title" id="kept-now-title">
             <Icon name="checkCircle" size={20} />
-            Uploaded just now
+            {allSaved ? SAVED_FOR_SETUP : "Uploaded just now"}
           </h2>
           <ul className="kept-now__list">
             {justKept.map((c, i) => {
-              const row = tiktokRow(keptFacts[i]!, macCtx);
+              const facts = keptFacts[i];
+              const row = facts ? tiktokRow(facts, macCtx) : null;
               const tiktok = commercialKept.has(c.clipId) ? commercialRow(row) : row;
+              const saved = savedOnly[i];
               return (
-                <li key={c.clipId} className="kept-now__item">
+                <li key={c.clipId} className="kept-now__item" data-kept={saved ? "saved" : undefined}>
                   {/* The words first (the hook, then what the Mac does with TikTok), the buttons after them: the same
                       order for reading and on screen. */}
                   <span className="kept-now__text">
@@ -342,22 +416,51 @@ export function Review({ jobId }: { jobId: string | null }) {
                           </a>
                         ) : null}
                       </span>
+                    ) : saved && !allSaved ? (
+                      // Beside clips that did upload, it says this one was only saved.
+                      <span className="kept-now__mac small">{SAVED_FOR_SETUP}</span>
                     ) : null}
                   </span>
                   <LinkButton href={`/clips/${c.clipId}`} size="sm" icon="chart" iconAfter="chevronRight">
                     See how it does
                   </LinkButton>
                   {/* The row's own button, as on Library: Try again, Post with my Mac, Turn on, Add link or It's on TikTok. */}
-                  <TikTokRowAction clip={c} row={tiktok} mac={keptFacts[i]!.post?.mac} onKept={keptAgain} />
+                  <TikTokRowAction clip={c} row={tiktok} mac={facts?.post?.mac} onKept={keptAgain} />
                 </li>
               );
             })}
           </ul>
+          {/* A clip only saved goes up once a place is set up: the one way there. */}
+          {savedOnly.some(Boolean) ? (
+            <div className="kept-now__setup" data-kept="setup">
+              <LinkButton href={settingsPath("posting", "setup")} size="sm" icon="sliders" iconAfter="chevronRight">
+                Set up posting
+              </LinkButton>
+            </div>
+          ) : null}
         </section>
       ) : null}
       {error && !data ? <ErrorPanel message={error} onRetry={reload} /> : null}
       {!data && !error ? <Skeleton className="review-skel" /> : null}
-      {visible && visible.length === 0 ? (
+      {empty && jobId && !jobInfo ? <Skeleton className="review-skel" /> : null}
+      {empty && jobInfo && (jobInfo.missing || othersWaiting > 0) ? (
+        <div className="review-empty" data-review-empty="job">
+          <Empty
+            icon={jobInfo.missing ? "alert" : "checkCircle"}
+            title={jobInfo.missing ? "This job isn't here" : "This job is done!"}
+            action={
+              <LinkButton href="/review" variant="primary" iconAfter="chevronRight">
+                Show every job
+              </LinkButton>
+            }
+          >
+            {jobInfo.missing
+              ? "It may have been deleted. Tap Show every job to see your clips."
+              : `${plural(othersWaiting, "more clip")} ${othersWaiting === 1 ? "is" : "are"} waiting.`}
+          </Empty>
+        </div>
+      ) : null}
+      {empty && (!jobId || (jobInfo && !jobInfo.missing && othersWaiting === 0)) ? (
         <div className="review-empty">
           <Empty
             icon="checkCircle"
@@ -394,6 +497,8 @@ export function Review({ jobId }: { jobId: string | null }) {
                   copyHere={visible.some((x) => x.remakeOf?.clipId === c.clipId)}
                   tiktokApproved={tiktokAudited(setup.data?.platforms)}
                   autoLine={autoLine(c.clipId)}
+                  macCtx={macCtx}
+                  onSaved={captionsSaved}
                 />
               </li>
             ))}
@@ -403,6 +508,9 @@ export function Review({ jobId }: { jobId: string | null }) {
     </div>
   );
 }
+
+/** Review's Uploaded just now, a clip Upload only saved: every place waits for set up (§33.1). */
+export const SAVED_FOR_SETUP = "Saved, waiting for set up";
 
 /** Why Clip Factory picked this moment, in a few plain words; nothing at all when nothing stood out (§5 pickedFor). */
 export function WhyPicked({ text }: { text: string | undefined }) {
@@ -436,8 +544,14 @@ function ReviewCard({
   copyHere = false,
   tiktokApproved = true,
   autoLine = null,
+  macCtx,
+  onSaved,
 }: {
   clip: Clip;
+  /** What the TikTok rows read about the owner's Mac (§47.4): the card's line above Upload says what it is doing. */
+  macCtx: TikTokRowContext;
+  /** A caption edit was saved on the server (the list and the remembered list hold it from now on). */
+  onSaved: (clipId: string, patch: Partial<Captions>) => void;
   /** Auto-posting's one quiet line (§46.2), only while it is on. */
   autoLine?: string | null;
   /** TikTok approved Clip Factory's own public uploads (§42); until then a ticked TikTok goes to the Mac (§47). */
@@ -465,7 +579,14 @@ function ReviewCard({
 }) {
   const toast = useToast();
   const { me, refresh } = useSession();
-  const [captions, setCaptions] = useState<Captions>(clip.captions);
+  // Back after Undo (or a decline that failed): exactly as it was when Throw away was tapped (CardStash).
+  const [back] = useState(() => stashed.get(clip.clipId) ?? null);
+  useEffect(() => {
+    stashed.delete(clip.clipId);
+  }, [clip.clipId]);
+  const onSavedRef = useRef(onSaved);
+  onSavedRef.current = onSaved;
+  const [captions, setCaptions] = useState<Captions>(back?.captions ?? clip.captions);
   // The Post to TikTok sheet (§17.8) is open: only when nothing is set up yet but TikTok is connected (§36.4).
   const [sheet, setSheet] = useState(false);
   // A campaign clip (§38.5): its campaign's card. Until it is read, Upload waits (it must never go to a place the
@@ -526,7 +647,7 @@ function ReviewCard({
   const placesReady: Platform[] | null = campaignWait ? null : ready && paidPlaces && (campaign || ownFit) ? ready.filter((p) => paidPlaces.includes(p)) : ready;
   // Where it goes (§33): the owner's taps on this card, else this device's last choice / Where clips go, minus
   // places that are not set up. A campaign clip starts with every place the campaign pays for.
-  const [picked, setPicked] = useState<Platform[] | null>(null);
+  const [picked, setPicked] = useState<Platform[] | null>(back?.picked ?? null);
   const chosen: Platform[] = placesReady
     ? picked
       ? picked.filter((p) => placesReady.includes(p))
@@ -537,7 +658,7 @@ function ReviewCard({
   function toggle(p: Platform) {
     setPicked(chosen.includes(p) ? chosen.filter((x) => x !== p) : [...chosen, p]);
   }
-  const [dirty, setDirty] = useState<Partial<Captions>>({});
+  const [dirty, setDirty] = useState<Partial<Captions>>(back?.dirty ?? {});
   const [copyBusy, setCopyBusy] = useState(false);
   const [fixing, setFixing] = useState(false);
   const [save, setSave] = useState<SaveState>("idle");
@@ -545,6 +666,9 @@ function ReviewCard({
   const [leaving, setLeaving] = useState(false);
   // The last Upload did not finish: the button becomes "Try again", which asks the server to finish it.
   const [keepFailed, setKeepFailed] = useState(false);
+  // That Upload may have reached the server (it holds the clip as uploaded, or the connection dropped): Try again is
+  // the one way on. Throw away goes, and the places and words lock (the server keeps what Upload sent).
+  const [sent, setSent] = useState(false);
   const [keepNote, setKeepNote] = useState("");
   // Upload's plane flies when an upload really starts (Try again's arrow turns once it failed); an Upload that is
   // refused or does not finish shakes it.
@@ -560,14 +684,14 @@ function ReviewCard({
   // TikTok row (TikTok's rules: this creator's current options, every time), never before. While the Mac posts TikTok
   // they are asked at once, in the background, for the account's name and the longest clip it takes only.
   const tiktokOn = chosen.includes("tiktok");
-  const [ttWanted, setTtWanted] = useState(false);
+  const [ttWanted, setTtWanted] = useState(back?.ttWanted ?? false);
   const [ttAsk, setTtAsk] = useState(0);
   const [creator, setCreator] = useState<TikTokCreator | null>(null);
   const [ttError, setTtError] = useState<string | null>(null);
-  const [choices, setChoices] = useState<TikTokChoices>(NO_TIKTOK_CHOICES);
+  const [choices, setChoices] = useState<TikTokChoices>(back?.choices ?? NO_TIKTOK_CHOICES);
   // Use my settings was tapped on this card (TikTok's choices are the owner's own tap, never a default). Not needed
   // while the Mac posts TikTok.
-  const [applied, setApplied] = useState(false);
+  const [applied, setApplied] = useState(back?.applied ?? false);
   // The last ask (and so `creator`, or `ttError`) was the Mac mode's shared one (macCreatorInfo), not a fresh one.
   const macAsked = useRef(false);
   // My settings (§36), from the server. YouTube, Instagram and X use them from the start (no TikTok-style rule there);
@@ -576,14 +700,14 @@ function ReviewCard({
   const preset = presetOf(me?.settings.postPreset);
   const presetRef = useRef(preset);
   presetRef.current = preset;
-  const [own, setOwn] = useState<CardOptions | null>(null);
+  const [own, setOwn] = useState<CardOptions | null>(back?.own ?? null);
   const opts: CardOptions = own ?? (isCampaign ? campaignCardOptions(preset) : cardOptionsFrom(preset, youtubePrivacy));
   // What TikTok's row holds now. The Mac posts TikTok: My settings, always (Commercial content as ticked on this clip),
   // and TikTok Studio's choices whatever TikTok's API answered, or if it did not.
   const ttChoices: TikTokChoices = macTikTok ? macTikTokChoices(preset.tiktok, choices) : choices;
   const ttCreator: TikTokCreator | null = macTikTok ? macCreator(creator) : creator;
   // The owner changed something in a row after My settings went on: the button offers to put his settings back.
-  const [changed, setChanged] = useState(false);
+  const [changed, setChanged] = useState(back?.changed ?? false);
   function setOpt<K extends keyof CardOptions>(platform: K, patch: Partial<CardOptions[K]>) {
     setOwn({ ...opts, [platform]: { ...opts[platform], ...patch } });
     setChanged(true);
@@ -713,14 +837,22 @@ function ReviewCard({
     }
   }
 
-  // Leaving Review (or closing the app) within the save delay still saves what was typed.
+  // Leaving Review (or closing the app, or Throw away) within the save delay still saves what was typed.
   const flush = useCallback(() => {
     const patch = dirtyRef.current;
     if (settled.current || !Object.keys(patch).length) return;
     clearTimeout(timer.current);
     void api()
       .updateClip(clip.clipId, patch)
-      .catch(() => undefined);
+      .then(
+        () => {
+          onSavedRef.current(clip.clipId, patch);
+          // Thrown away meanwhile: Undo brings the card back with nothing left to save.
+          const kept = stashed.get(clip.clipId);
+          if (kept?.dirty === patch) stashed.set(clip.clipId, { ...kept, dirty: {} });
+        },
+        () => undefined,
+      );
   }, [clip.clipId]);
 
   useEffect(() => {
@@ -740,6 +872,7 @@ function ReviewCard({
       setSave("saving");
       try {
         await api().updateClip(clip.clipId, patch);
+        onSavedRef.current(clip.clipId, patch);
         setDirty((d) => {
           const rest = { ...d };
           for (const k of Object.keys(patch) as (keyof Captions)[]) if (rest[k] === patch[k]) delete rest[k];
@@ -838,10 +971,11 @@ function ReviewCard({
     settled.current = true;
     onSettling(clip.clipId, true);
     try {
+      // Only the words changed on this card (never the whole set, which may be older than what the server holds).
       const out = await uploadClip(
         api(),
         clip.clipId,
-        Object.keys(dirty).length || tiktok ? captions : undefined,
+        Object.keys(dirty).length ? dirty : undefined,
         tiktok,
         chosen.length ? chosen : undefined,
         chosen.length ? optionsFor(chosen, opts) : undefined,
@@ -872,13 +1006,21 @@ function ReviewCard({
         return;
       }
       setKeepFailed(true);
+      setSent(true);
       setKeepNote(STILL_WORKING);
       setBusy(null);
       (sheet ? sheetAct : keepAct).fail();
     } catch (e) {
-      settled.current = false;
       onSettling(clip.clipId, false);
       setKeepFailed(true);
+      // Refused (4xx): the server did not take it, so it can still be changed or thrown away, even after an earlier
+      // try that lost its connection (a 409 never lands here: uploadClip handles it). Anything else (no connection,
+      // a server error) may have reached it: from now on Try again is the way on.
+      const refused = e instanceof ApiError && e.status >= 400 && e.status < 500;
+      if (refused) {
+        settled.current = false;
+        setSent(false);
+      } else setSent(true);
       // The error toast plays the deny sound.
       (sheet ? sheetAct : keepAct).fail({ sound: false });
       toast.error(friendlyMessage(e));
@@ -956,6 +1098,9 @@ function ReviewCard({
   }
 
   function throwAway() {
+    // What was typed within the save delay is saved, and the card is kept as it is now, for Undo.
+    flush();
+    stashed.set(clip.clipId, { captions, dirty: dirtyRef.current, picked, own, changed, choices, applied, ttWanted });
     clearTimeout(timer.current);
     settled.current = true;
     setLeaving(true);
@@ -1006,6 +1151,7 @@ function ReviewCard({
                 : (brandedBlocked(ttChoices.privacy) ?? "Pick Your brand or Branded content on TikTok first.");
   const uploadWhy: string | null = fitWhy ?? ttWhy;
   const placesShown = placesReady && !noneReady ? chosen : PLATFORM_ORDER;
+  const macLine = macUploadLine(macCtx, ttChoices.privacy === "PUBLIC_TO_EVERYONE");
 
   return (
     <article
@@ -1125,6 +1271,9 @@ function ReviewCard({
           <FitSuggestion clipId={clip.clipId} fit={suggested} copy={copyState} onCopy={(anyway) => makeCopy(suggested.campaignId, anyway)} busy={copyBusy} />
         ) : null}
 
+        {/* Once the server may hold the clip as uploaded (`sent`), where it goes and its words lock: Try again finishes
+            what Upload sent, so a change here would be lost (a disabled fieldset turns off every control in it). */}
+        <fieldset className="review-card__edit" disabled={sent} style={{ display: "contents" }}>
         {placesReady ? (
           <UploadToChips
             ready={placesReady}
@@ -1222,8 +1371,15 @@ function ReviewCard({
             mac: macTikTok ? { line: macPostsLine(preset.tiktok), settingsHref: settingsPath("posting", "my-settings"), held: ttMacHeld } : undefined,
           }}
         />
+        </fieldset>
         <p className={`save-state is-${save}`} aria-live="polite">
-          {save === "saving" ? "Saving…" : save === "saved" ? "Captions saved" : save === "failed" ? "Not saved yet. Upload saves your changes." : ""}
+          {save === "saving"
+            ? "Saving…"
+            : save === "saved"
+              ? "Captions saved"
+              : save === "failed" && !sent
+                ? `Not saved yet. ${keepFailed ? "Try again" : "Upload"} saves your changes.`
+                : ""}
         </p>
 
         {keepFailed ? (
@@ -1232,6 +1388,7 @@ function ReviewCard({
               <Icon name="alert" size={18} />
               <span>Uploading this clip did not finish. Tap Try again.</span>
             </p>
+            {sent ? <p className="keep-again__note small">It&apos;s already sent, so you can&apos;t change it now.</p> : null}
             <p className="keep-again__note" role="status">
               {keepNote}
             </p>
@@ -1259,7 +1416,17 @@ function ReviewCard({
             with the switch on it has no line here. */}
         {placesReady && !noneReady && tiktokOn && !tiktokApproved && !keepFailed ? (
           macTikTok ? (
-            <p className="tt-yourself-hint">{ttChoices.privacy === "PUBLIC_TO_EVERYONE" ? MAC_HINT : MAC_WHERE_LINE}</p>
+            // What the Mac is doing now (never set up, needs him, paused, not seen lately), with its one fix (§47.4).
+            macLine.row ? (
+              <div className="tt-yourself-hint-row" data-mac="card">
+                <p className="tt-yourself-hint">{macLine.words}</p>
+                <TikTokRowAction clip={clip} row={macLine.row} onKept={() => undefined} />
+              </div>
+            ) : (
+              <p className="tt-yourself-hint" data-mac="card">
+                {macLine.words}
+              </p>
+            )
           ) : macOn(me?.settings) ? null : (
             // Off: Turn on, right beside it, goes to the switch (Settings › Posting › Your Mac posts TikTok).
             <div className="tt-yourself-hint-row">
@@ -1272,9 +1439,12 @@ function ReviewCard({
           <TikTokLegal className="tt-legal" branded={ttChoices.commercial && ttChoices.branded} />
         ) : null}
         <div className="review-card__actions" ref={confirmRef} data-help-dodge="">
-          <Button variant="ghost" icon="trash" act="throw" data-help="throw-away" disabled={busy !== null || leaving} onClick={throwAway}>
-            Throw away
-          </Button>
+          {/* Upload may have reached the server: it can't be thrown away now, Try again is the one way on. */}
+          {sent ? null : (
+            <Button variant="ghost" icon="trash" act="throw" data-help="throw-away" disabled={busy !== null || leaving} onClick={throwAway}>
+              Throw away
+            </Button>
+          )}
           <Button
             variant={next && !blockMain && !mineFirst ? "primary" : "glass"}
             size="lg"

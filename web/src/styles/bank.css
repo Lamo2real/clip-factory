@@ -450,10 +450,26 @@
 }
 
 /* ---------- The picker (a sheet) ---------- */
+/* A long list scrolls inside the sheet, between its title and Cancel: on a phone the way out stays on screen. */
 .sheet:has(.bank-picker),
 .sheet:has(.bank-places) {
+  display: flex;
+  flex-direction: column;
   width: min(100%, 520px);
   max-height: calc(100dvh - var(--top-safe, 0px) - 40px);
+  overflow: hidden;
+}
+.sheet:has(.bank-picker) > :not(.sheet__text),
+.sheet:has(.bank-places) > :not(.sheet__text) {
+  flex: none;
+}
+.sheet:has(.bank-picker) > .sheet__text,
+.sheet:has(.bank-places) > .sheet__text {
+  flex: 0 1 auto;
+  min-height: 0;
+  /* Room for the rows' shadows and focus rings at the scroll area's edges. */
+  margin: -6px;
+  padding: 6px;
   overflow-y: auto;
   overscroll-behavior: contain;
 }

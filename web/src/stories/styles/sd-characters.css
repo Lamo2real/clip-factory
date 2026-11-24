@@ -407,6 +407,18 @@
   justify-self: start;
 }
 
+/* "Add a picture" is a label for a hidden file input: the label wears the ring while its input has the keyboard. */
+.st-s-refs__add:has(input:focus-visible) label,
+.st-s-design__pics:has(#st-design-file:focus-visible) label[for="st-design-file"] {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
+}
+
+/* Next and Back move the focus to the part they open (for the keyboard's next Tab); the part itself draws no ring. */
+.st-s-editor__part:focus {
+  outline: none;
+}
+
 /* ---------- Phones: every target 48 px ---------- */
 @media (max-width: 767px), (pointer: coarse) {
   :is(.st-s-editor__parts, .st-s-moves) .st-s-pick__opt {

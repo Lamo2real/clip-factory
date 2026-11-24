@@ -405,6 +405,9 @@ describe("AI", () => {
     expect(host.innerHTML).not.toContain("0123456789abcdef");
     expect(after.querySelector("input")).toBeNull();
     await click(byText("button", "Remove the saved key", after));
+    // It asks first (kid-proof): nothing is removed until Yes.
+    expect(called("deleteProviderKey")).toHaveLength(0);
+    await click(byText("button", "Yes, remove the key", byText(".st-stg-keyrow", /Acme Motion/, card("Providers"))));
     expect(called("deleteProviderKey").at(-1)?.args).toEqual(["stories", "acme-motion"]);
     expect(byText(".st-stg-keyrow", /Acme Motion/, card("Providers")).textContent).toContain("Paste your Acme Motion key to use it.");
   });
@@ -818,6 +821,12 @@ describe("Video", () => {
     expect(byText("button", "Remove the saved key", row())).toBeTruthy();
     expect(byText("button", "Paste a new key", row())).toBeTruthy();
     await click(byText("button", "Remove the saved key", row()));
+    // "No, keep it" keeps the key; "Yes, remove the key" removes it.
+    expect(row().textContent).toContain("Remove Acme Motion's key?");
+    await click(byText("button", "No, keep it", row()));
+    expect(row().textContent).toContain("Key saved · ends 4f2a.");
+    await click(byText("button", "Remove the saved key", row()));
+    await click(byText("button", "Yes, remove the key", row()));
     expect(row().textContent).not.toContain("Remove the saved key");
     expect(row().textContent).toContain("Paste your Acme Motion key to use it.");
   });

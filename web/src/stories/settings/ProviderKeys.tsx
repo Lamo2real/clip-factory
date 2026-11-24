@@ -1,7 +1,7 @@
 // Provider keys (docs/CONTRACTS.md §45.29 AI and Video, §45.31, §45.34): a provider that needs an API key gets a key
 // form. The key goes to Secrets Manager through PUT …/providers/{id}/key and never comes back: what the page shows of
 // it is ProviderStatus.key (saved or not, its last four, when) and the provider's own line ("Key saved · ends 4f2a.").
-// "Remove the saved key" shows only while a key is saved. ProviderStatus.key is present only for a provider that takes
+// "Remove the saved key" shows only while a key is saved, and asks "Are you sure?" first (like Social accounts). ProviderStatus.key is present only for a provider that takes
 // a key; for an API that does not send it yet, the contract's provider tables say which need none (§45.11.6, §45.31:
 // the built-in makers, Claude, Stability AI, Luma AI, Amazon Polly and the ended Nova makers use Lamo Stories' own AWS
 // access). Since §45.37 G4 the keyed hosts take one: the Anthropic API, an OpenAI-compatible API and ElevenLabs.
@@ -64,6 +64,8 @@ function KeyForm({ ws, provider, onSaved }: { ws: string; provider: ProviderStat
   const forAddress = provider.id === "openai_compatible";
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  // "Remove the saved key" asks first: Yes, remove the key / No, keep it.
+  const [sure, setSure] = useState(false);
   const s = PROVIDER_STATE[provider.state];
   const here = useOnThisPage();
   // The provider's name without "API" on the surface ("Anthropic", not "Anthropic API"): the same in its lines.
@@ -96,6 +98,7 @@ function KeyForm({ ws, provider, onSaved }: { ws: string; provider: ProviderStat
     setBusy(true);
     try {
       await storiesApi().deleteProviderKey(ws, provider.id);
+      setSure(false);
       onSaved({ ...provider, state: "needs_setup", line: `Paste your ${provider.label} key to use it.`, key: { saved: false, hint: null, savedAt: null } });
       toast.info(`${provider.label} has no saved key now.`);
     } catch (e) {
@@ -172,6 +175,20 @@ function KeyForm({ ws, provider, onSaved }: { ws: string; provider: ProviderStat
             </Btn>
           </div>
         </form>
+      ) : sure && provider.key?.saved ? (
+        <div className="st-stg-confirm" role="group" aria-label="Are you sure?">
+          <p>
+            <strong>Remove {provider.label}'s key?</strong> {provider.label} stops working until you paste a key again.
+          </p>
+          <div className="st-stg-actions">
+            <Btn main danger off={busy ? "Removing…" : undefined} onClick={() => void remove()}>
+              {busy ? "Removing…" : "Yes, remove the key"}
+            </Btn>
+            <Btn quiet onClick={() => setSure(false)}>
+              No, keep it
+            </Btn>
+          </div>
+        </div>
       ) : (
         <div className="st-stg-actions">
           {/* Glass: the card's one orange button is its own main action (Check models, Add a model), never a key row's. */}
@@ -179,7 +196,7 @@ function KeyForm({ ws, provider, onSaved }: { ws: string; provider: ProviderStat
             {provider.key?.saved ? "Paste a new key" : "Paste a key"}
           </Btn>
           {provider.key?.saved ? (
-            <Btn quiet danger off={busy ? "Working…" : undefined} onClick={() => void remove()} label={`Remove the saved key of ${provider.label}`}>
+            <Btn quiet danger onClick={() => setSure(true)} label={`Remove the saved key of ${provider.label}`}>
               Remove the saved key
             </Btn>
           ) : null}

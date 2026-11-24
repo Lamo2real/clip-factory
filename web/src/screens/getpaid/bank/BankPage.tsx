@@ -253,16 +253,22 @@ export function BankPage() {
       setBusy(null);
     }
   }
+  /** The tapped button goes with its folded step: the focus moves to that step's head, so a keyboard keeps its place. */
+  const focusHead = (id: BankStepId) =>
+    setTimeout(() => document.querySelector<HTMLElement>(`#step-${id} > .gstep__head`)?.focus({ preventScroll: true }), 0);
   async function tick(id: BankStepId, done: boolean) {
     fold(id);
     const v = await run(id, () => api().bankStep(id as BankTickId, done));
     if (v) putBank(v);
-    setTimeout(() => document.querySelector<HTMLElement>(`#step-${id} > .gstep__head`)?.focus({ preventScroll: true }), 0);
+    focusHead(id);
     return !!v;
   }
   async function makeKey() {
     const v = await run("bank-key", () => api().bankMakeKey());
-    if (v) putBank(v);
+    if (v) {
+      putBank(v);
+      focusHead("bank-key");
+    }
     return !!v;
   }
   function openedStep(id: BankStepId) {
@@ -297,7 +303,15 @@ export function BankPage() {
       keepOpen(which === "check" ? "bank-appid" : "bank-link");
       putBank(out.view);
       if (which === "check") setCheck(out.check);
-      else setLinkCheck(out.check.text);
+      else {
+        setLinkCheck(out.check.text);
+        // Step 6 is done: step 5 folds, and its sentence from Save ("Next: … (step 6)") gives way to the new check.
+        if (out.view.steps.find((st) => st.id === "bank-link")?.done) {
+          fold("bank-appid");
+          setCheck(null);
+        }
+        focusHead("bank-link");
+      }
       return true;
     } catch (e) {
       toast.error(friendlyMessage(e));

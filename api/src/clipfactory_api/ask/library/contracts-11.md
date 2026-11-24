@@ -32,9 +32,15 @@
   setup. Posts once these accounts are connected.", except one whose place is set up now: it gets its own row
   "Ready to post" with **Post now** (§33.6). A clip whose posting did not start (`startPending` for more than 4 s,
   `START_GRACE_MS`: the start after a Try again, Post now or connect did not go through) shows "This clip has not started
-  uploading yet. Tap Try again." with the big **Try again**, which sends Confirm and starts it (§14.5). The "Show" filter's empty list says why it is empty: no kept
-  clips at all → "Nothing kept yet" + Go to Review; "Not posted yet" with every kept clip posted → "Everything is
-  posted!" + Show all; "Posted" with kept clips still on their way → "Nothing posted yet" + Show all.
+  uploading yet. Tap Try again." with the big **Try again**, which sends Confirm and starts it (§14.5); its pill reads
+  "Not started" (warn, not the green "Uploading"), and "Waiting for setup" when every post waits for its account. A
+  card's views are the sum of its posts' views whenever any post has numbers. The "Show" filter lives in the address
+  (`?show=waiting|posted`, changed with replace and the scroll kept), so Back and a reload keep it. The "Show" filter's empty list says why it is empty: no kept
+  clips at all → "Nothing kept yet" + Go to Review, first on the page (no totals, no filter; the learnings box only
+  when there are learnings); "Not posted yet" with every kept clip posted → "Everything is
+  posted!" + Show all; "Posted" with kept clips still on their way → "Nothing posted yet" + Show all. Only a failed
+  clip list is a page error: failed posts or insights show their own error panel with Try again in the totals area.
+  This week's stars are saved at once when the page is hidden or closed (`keepalive`), not only after 800 ms.
 * Installable PWA (manifest + service worker) on phone and desktop.
 
 ### 11.1 One top line (owner request, 2026-11-19)

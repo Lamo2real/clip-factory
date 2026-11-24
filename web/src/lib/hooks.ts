@@ -24,6 +24,16 @@ export function forgetLoaded(): void {
 }
 
 /**
+ * Changes every remembered result of one `cache` name, whatever its key (a caption saved on Review: the list of every
+ * job and a job's own list both hold the clip). For a screen that may already be gone when the save lands: its own
+ * setData no longer runs then, and coming back must show what was saved, not the text from before.
+ */
+export function patchLoaded<T>(cache: string, fn: (prev: T) => T): void {
+  const prefix = `${cache}\u0000`;
+  for (const [at, value] of lastLoaded) if (at.startsWith(prefix)) lastLoaded.set(at, fn(value as T));
+}
+
+/**
  * Loads once on mount (and when `key` changes). Errors become a sentence for the screen to show. With `cache`, the
  * last result for the same name and key shows at once while the load runs again.
  */

@@ -12,10 +12,12 @@
 // `confirmAccount` for that place. After Upload, the sheet shows each publishing job's status, its sentence and Try
 // again, and "Posted!" gets Lamo Stories' star burst and success cheer, as Approve does (§45.36 E11). Account ids sit
 // behind "Technical details" (§45.36 E14); an account problem offers "Open Social accounts" (§45.36 E9); the other
-// app is always "Clip Factory" (§45.36 E13). While My Mac posts TikTok is on (§47.10) TikTok's part is one read-only
-// line (the Mac posts it for everyone, with the AI label; Comments, Duet and Stitch on): no Who can see it and no
-// Commercial content, and Upload never waits for TikTok's choices (still asked, for Posting as and the length limit).
-import { useEffect, useId, useMemo, useState } from "react";
+// app is always "Clip Factory" (§45.36 E13). Upload is the sheet's one main button: tapped before a place is picked, it
+// says which place to tap (by the buttons) and points at the places; "Use my settings" picks the place too when only
+// one is connected. While My Mac posts TikTok is on (§47.10) TikTok's part is one read-only line (the Mac posts it for
+// everyone, with the AI label; Comments, Duet and Stitch on): no Who can see it and no Commercial content, and Upload
+// never waits for TikTok's choices (still asked, for Posting as and the length limit).
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Dropdown } from "../../components/Dropdown.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { A } from "../../components/ui.tsx";
@@ -175,6 +177,13 @@ export function postYes(message: string | null | undefined): string {
 /** The Clip Factory-shaped creator the shared TikTok rules read (the same fields, §17.4). */
 const asClips = (c: TikTokCreator): ClipsTikTokCreator => ({ ...c, avatarUrl: c.avatarUrl ?? undefined });
 
+/** What Upload says before a place is picked: the place to tap, by its name. */
+export function pickPlaceFirst(connected: Pick<SocialAccount, "platform">[]): string {
+  const first = connected[0];
+  if (!first) return "Connect an account in Social accounts first.";
+  return connected.length === 1 ? `Tap ${PLATFORM_LABEL[first.platform]} first.` : `Tap ${PLATFORM_LABEL[first.platform]} (or another place) first.`;
+}
+
 /**
  * The flat options each target carries (§45.6 PublishOptions; the server allow-lists them). While the Mac posts TikTok
  * (`mac`) TikTok's are My settings in full (everyone, Comments, Duet and Stitch on, never branded): the Mac's own.
@@ -233,6 +242,9 @@ export function PublishSheet({
   /** The accounts the owner said yes to after a 409 named them (sent as confirmAccount), and the one being asked. */
   const [confirms, setConfirms] = useState<Partial<Record<Platform, string>>>({});
   const [ask, setAsk] = useState<{ platform: Platform; account: ErrorAccount; message: string } | null>(null);
+  /** Upload was tapped while something is missing: the reason shows by the buttons. */
+  const [nudged, setNudged] = useState(false);
+  const places = useRef<HTMLUListElement>(null);
 
   useEffect(() => {
     let live = true;
@@ -287,6 +299,7 @@ export function PublishSheet({
 
   function toggle(p: Platform) {
     setProblem(null);
+    setNudged(false);
     setChosen((c) => (c.includes(p) ? c.filter((x) => x !== p) : [...c, p]));
   }
 
@@ -321,6 +334,9 @@ export function PublishSheet({
 
   function useMine() {
     setMine(true);
+    setNudged(false);
+    // Only one place to post to: my settings are for it.
+    if (!chosen.length && connected.length === 1) setChosen([connected[0]!.platform]);
     setYt({ privacy: "public", category: config.youtubeCategory ?? "27", notifySubscribers: true });
     setShareToFeed(true);
     if (creator) setTt((now) => myTikTokChoices(MY_TIKTOK, asClips(creator), now));
@@ -331,7 +347,7 @@ export function PublishSheet({
   const ttReady = !tiktokOn || (!!creator && !ttTooLong && choicesReady(tt));
   const tooLong = "This video is longer than TikTok allows for this account. Tap TikTok to leave it out.";
   const why = !chosen.length
-    ? "Tap the places to post to."
+    ? pickPlaceFirst(connected)
     : tiktokOn && macMode
       ? // The Mac's settings are fixed: Upload never waits for TikTok's choices, only TikTok's length limit counts.
         ttTooLong
@@ -380,6 +396,14 @@ export function PublishSheet({
     }
   }
 
+  /** Upload: the post, or, while something is missing, what it is (by the buttons), with the places pointed at. */
+  function upload() {
+    if (checking.length || sending) return;
+    if (!why) return void post();
+    setNudged(true);
+    if (!chosen.length) places.current?.querySelector<HTMLElement>("button.st-s-place")?.focus();
+  }
+
   function sayYes() {
     if (!ask) return;
     const next = { ...confirms, [ask.platform]: ask.account.externalAccountId };
@@ -404,10 +428,15 @@ export function PublishSheet({
       wide
       actions={
         <>
+          {nudged && why ? (
+            <p className="st-s-sheet__why" role="alert">
+              {why}
+            </p>
+          ) : null}
           <button type="button" className="st-btn" onClick={onClose}>
             Not now
           </button>
-          <button type="button" className="st-btn st-btn--main st-s-big st-s-upload" aria-disabled={!!why || sending || checking.length > 0 || undefined} title={why ?? undefined} onClick={() => checking.length === 0 && void post()}>
+          <button type="button" className="st-btn st-btn--main st-s-big st-s-upload" aria-disabled={!!why || sending || checking.length > 0 || undefined} title={why ?? undefined} onClick={upload}>
             {sending ? "Checking and sending…" : chosen.length > 1 ? `Upload to ${chosen.length} places` : "Upload"}
           </button>
         </>
@@ -421,7 +450,7 @@ export function PublishSheet({
         <>
           <p className="st-s-field__hint">Only Clips Funded&apos;s own accounts are here. Tap each place to post “{story.title}” to.</p>
           {connected.length ? (
-            <ul className="st-s-places" aria-label="Where to post">
+            <ul className={`st-s-places${nudged && !chosen.length ? " is-nudged" : ""}`} aria-label="Where to post" ref={places}>
               {connected.map((a) => {
                 const on = chosen.includes(a.platform);
                 const busy = checking.includes(a.platform);
@@ -483,7 +512,8 @@ export function PublishSheet({
 
           {connected.length ? (
             <div className="st-s-presets">
-              <button type="button" className={`st-btn${mine ? "" : " st-btn--main"}`} onClick={useMine}>
+              {/* Upload is the one main button: this one is plain. */}
+              <button type="button" className="st-btn" onClick={useMine}>
                 {mine ? "✓ Using my settings" : "Use my settings"}
               </button>
               <button type="button" className="st-btn" aria-expanded={more} aria-controls={`${id}-more`} onClick={() => setMore((m) => !m)}>
@@ -619,7 +649,7 @@ export function PublishSheet({
             </div>
           ) : null}
 
-          {why && chosen.length ? <p className="st-s-field__hint st-s-why">{why}</p> : null}
+          {why && chosen.length && !nudged ? <p className="st-s-field__hint st-s-why">{why}</p> : null}
           {problem ? (
             <Notice tone="bad" action={accountProblem(problem) ? <SocialAccountsLink className="st-btn" /> : undefined}>
               {problem}

@@ -20,6 +20,8 @@ export const MAC_WHERE_LINE = "TikTok: your Mac posts it.";
 export const MAC_OFF_LINE = "Off. Your Mac doesn't post your TikTok clips.";
 export const MAC_ON_LINE = "On. Upload and auto-posting hand TikTok to your Mac.";
 export const MAC_NEVER_SEEN = "Your Mac hasn't checked in yet. Set it up on your Mac.";
+/** Send these to my Mac while the Mac never checked in: the clips are sent, but nothing posts them yet. */
+export const MAC_SENT_WAITS = "They wait until your Mac checks in.";
 /** Paused with no reason of its own (a helper from before it said why). */
 export const MAC_PAUSED = "Paused on your Mac";
 export const MAC_SEND_CONFIRM = "They go one at a time, oldest first.";
@@ -445,15 +447,18 @@ function needsYouWords(h: Pick<MacHelper, "reason">): string {
 const sinceWords = (seen: number, now: number) => `Your Mac hasn't checked in since ${clockWords(seen, now)}`;
 
 /**
- * The Mac can't post right now (§47.4, 6.3): its switch is off or it never checked in (Turn on), or it was not seen
- * for 30 minutes (Open Your Mac posts TikTok: the switch is already on). On waiting and not-yet rows (not on a stopped
+ * The Mac can't post right now (§47.4, 6.3): its switch is off (Turn on), it never checked in (Open Your Mac posts
+ * TikTok, where its setup steps are), or it was not seen for 30 minutes (Open Your Mac posts TikTok: the switch is
+ * already on). On waiting and not-yet rows (not on a stopped
  * row, which keeps its Try again: that is what turns "needs you" back to ok) also: it needs him (Open the stopped
  * clip, where its Try again and It's on TikTok are), or it is paused (Start my Mac again, or "starting again within a
  * minute" once asked). Null while it is ready, or while that is not known.
  */
 function notReady(ctx: TikTokRowContext, stopped: boolean, clipId?: string): TikTokRow | null {
   if (ctx.macOn === false) return turnOn(MAC_ROW_OFF);
-  if (ctx.helper === null) return turnOn(MAC_ROW_NOT_SET_UP);
+  // The switch is on (or not known yet) but the Mac never checked in: Turn on would open a switch that is already on,
+  // so the row opens the page whose setup steps say what to do.
+  if (ctx.helper === null) return openMac(MAC_ROW_NOT_SET_UP);
   const h = ctx.helper;
   if (!h) return null;
   const now = ctx.now ?? Date.now();
@@ -567,6 +572,26 @@ export function commercialRow(row: TikTokRow | null): TikTokRow | null {
   return { kind: "commercial", words: MAC_ROW_COMMERCIAL, button: "add_link" };
 }
 
+/**
+ * Review's TikTok line above Upload while the Mac will post this clip's TikTok (§47.4, §47.9): what the Mac is doing now
+ * when it can't post (never checked in, needs him, paused, not seen for 30 minutes), with that row's one button;
+ * otherwise MAC_HINT when My settings says Everyone, else MAC_WHERE_LINE. While the Mac's check-in is not known yet:
+ * the plain line, never a wrong warning.
+ */
+export function macUploadLine(ctx: TikTokRowContext, everyone: boolean): { words: string; row: TikTokRow | null } {
+  const ready = notReady(ctx, false);
+  if (ready) return { words: `TikTok: ${ready.words}`, row: ready };
+  return { words: everyone ? MAC_HINT : MAC_WHERE_LINE, row: null };
+}
+
+/**
+ * Upload saved the clip but every place waits for set up (nothing is set up yet, §33.1): nothing is uploading, so
+ * Review's Uploaded just now calls it saved, with Set up posting, and no TikTok row.
+ */
+export function savedForSetup(posts: readonly Pick<Post, "status">[]): boolean {
+  return posts.length > 0 && posts.every((p) => p.status === "pending_integration");
+}
+
 /** Does this row read the Mac's check-in (GET /v1/tiktok/mac)? Its Mac post, or a clip the Mac could take. */
 export function rowNeedsMac(facts: TikTokFacts): boolean {
   return facts.post?.status === "mac" || (facts.offer && !facts.campaign && !facts.privateTest);
@@ -643,12 +668,19 @@ export function waitingLine(n: number): string {
   return `${n} waiting for your Mac`;
 }
 
-/** What Send these to my Mac takes: "3 clips aren't on TikTok yet." */
-export function sendableLine(n: number): string {
-  return `${plural(n, "clip")} ${n === 1 ? "isn't" : "aren't"} on TikTok yet.`;
+/**
+ * What Send these to my Mac takes: "3 clips aren't on TikTok yet.", and the clips already waiting for the Mac
+ * (`waiting`), so a page that just sent them never says 0 and nothing else: "2 clips already wait for your Mac."
+ */
+export function sendableLine(n: number, waiting = 0): string {
+  const already = waiting > 0 ? `${plural(waiting, "clip")} already ${waiting === 1 ? "waits" : "wait"} for your Mac.` : "";
+  if (!n && already) return already;
+  const line = `${plural(n, "clip")} ${n === 1 ? "isn't" : "aren't"} on TikTok yet.`;
+  return already ? `${line} ${already}` : line;
 }
 
-/** The toast after Send these to my Mac. */
-export function sentLine(sent: number): string {
-  return `Sent ${plural(sent, "clip")} to your Mac.`;
+/** The toast after Send these to my Mac; `waits`: the Mac never checked in, so they wait for it (MAC_SENT_WAITS). */
+export function sentLine(sent: number, waits = false): string {
+  const line = `Sent ${plural(sent, "clip")} to your Mac.`;
+  return waits ? `${line} ${MAC_SENT_WAITS}` : line;
 }
