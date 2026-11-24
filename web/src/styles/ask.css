@@ -480,6 +480,20 @@
   background: rgb(var(--shadow-rgb) / 0.62);
   animation: mk-in 220ms var(--ease-out) both;
 }
+/* The page under the editor rests while it is open (MarkupEditor.tsx puts mk-open on <html>). It is inert, under the
+   editor's veil and, where the dialog lies, under the dialog's own blur, so its panes blur nothing of their own (as
+   nested glass, glass.css: a blur no one can see only costs a layer) and its endless loops (the Ask mark's dot, the
+   Live dot, a job's pulse and sweep) hold their pose. Their tint, light and shadow stay. Every frame drawn re-blurs
+   every pane: where the page is painted without a GPU (CI's Linux WebKit), a frame with the page's nine on-screen
+   blurs and the dialog's took 1 to 4 s, so each tap in the editor waited seconds for its frames. The living backdrop
+   keeps drifting. */
+html.mk-open body > :not(.mk) :not(.backdrop, .backdrop *),
+html.mk-open body > :not(.mk) :not(.backdrop, .backdrop *)::before,
+html.mk-open body > :not(.mk) :not(.backdrop, .backdrop *)::after {
+  -webkit-backdrop-filter: none !important;
+  backdrop-filter: none !important;
+  animation-play-state: paused !important;
+}
 /* An overlay (SHEET_VEIL and up), lit from above; two classes, so it wins over a look's own glass tint. */
 .mk .mk__dialog {
   --glass-tint: var(--glass-tint-overlay);
