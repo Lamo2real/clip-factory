@@ -550,7 +550,7 @@ describe("every shot", () => {
         }
       }
     }
-  });
+  }, 20_000); // every road place, now with the sky and the sea (§45.47): slower on CI runners, same checks
 
   it("takes every camera of the scene (zoomed, swayed, pushed in or shaken) and still fills the frame", () => {
     for (const f of [FORMATS[0]!, FORMATS[4]!, FORMATS[2]!]) {
