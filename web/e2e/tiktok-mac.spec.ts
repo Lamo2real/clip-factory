@@ -4,7 +4,8 @@
 // with at most one button (§47.4, ADR-86): Waiting for your Mac (its place in the Mac's queue, or the backlog's own
 // time), Posting… (never Not sure it posted while the Mac works on it), Didn't work with Try again, Not sure it posted
 // (pressed and stopped, or stuck) with It's on TikTok and, once the Mac stopped looking, a quieter Try again that asks
-// first, Posted by your Mac, Not on TikTok yet with Post with my Mac, a campaign clip that skips TikTok for now, Turn on
+// first, Posted by your Mac, Not on TikTok yet with Post with my Mac (a campaign clip's with TikTok's Paid partnership
+// label), Turn on
 // while the Mac can't post, Open the stopped clip while it needs him, and Start my Mac again while it is paused. On a
 // narrow card the button goes under the words. The Mac is moved by the helper's knobs (window.__cfMock.mac). The
 // pretend app keeps its settings and posts in this page only, so every step after the first page is an in-app
@@ -23,6 +24,8 @@ type Job = {
   comment: boolean;
   duet: boolean;
   stitch: boolean;
+  brandContent: boolean;
+  brandOrganic: boolean;
   pressedBefore?: string;
   againAt?: string;
 };
@@ -30,7 +33,11 @@ type Extra = { backlogAt?: string; backfill?: boolean; holdBefore?: string; resu
 type MockWindow = Window & {
   __cfMock?: {
     setup: { finish(p: string): void; setAudit(passed: boolean): void };
-    posting: { posts(clipId: string): { postId: string; platform: string; status: string }[]; campaignClip(): string };
+    posting: {
+      posts(clipId: string): { postId: string; platform: string; status: string }[];
+      campaignClip(): string;
+      lastConfirm(): { clipId: string; tiktok?: { privacyLevel: string; brandContent: boolean; brandOrganic: boolean }; platforms?: string[]; tiktokMac?: true } | null;
+    };
     mac: {
       ping(state?: string, reason?: string, device?: string, extra?: Extra): { on: boolean };
       seen(at: string | null): void;
@@ -56,7 +63,8 @@ const PRESSED_WAIT = /^Not sure it posted · look on your TikTok · Try again fr
 const STOPPED_EARLY = "Your Mac stopped before it pressed Post";
 const AGAIN_ASK = "Post it again? Only if it's not on your TikTok.";
 const OPEN_MAC = "Open Your Mac posts TikTok";
-const CAMPAIGN = "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet.";
+/** A campaign clip not on TikTok yet: the Mac posts it with TikTok's Paid partnership label. */
+const CAMPAIGN = "Not on TikTok yet · Paid partnership label";
 /** Post was pressed this long ago: the Mac's 30-minute find window is over, so Try again shows. */
 const WINDOW_OVER = 31 * MIN;
 
@@ -76,6 +84,9 @@ async function refocus(page: Page) {
 }
 
 /** The Mac helper's routes, through the mock's knobs (window.__cfMock.mac). */
+/** The last Upload's body as the API reads it (`tiktok`, `platforms`, `tiktokMac`). */
+const lastConfirm = (page: Page) => page.evaluate(() => (window as MockWindow).__cfMock!.posting.lastConfirm());
+
 const mac = {
   ping: (page: Page, state?: string, reason?: string, extra?: Extra) =>
     page.evaluate(([s, r, x]) => (window as MockWindow).__cfMock!.mac.ping(s, r, undefined, x), [state, reason, extra] as const),
@@ -572,28 +583,32 @@ test("library: the backlog's first clip says the Mac's own time; the rest their 
   await expect(first).toHaveText("Waiting for your Mac");
 });
 
-test("library: a campaign clip skips TikTok for now, in plain words with no button, and Send these leaves it out", async ({ page }) => {
+test("library: a campaign clip goes with TikTok's Paid partnership label: its row and Post with my Mac say so, and Send these takes it", async ({ page }) => {
   await page.goto("/");
   await settle(page);
   await turnOn(page);
   const before = Number((await page.getByText(/^\d+ clips? (isn't|aren't) on TikTok yet\.$/).innerText()).split(" ")[0]);
   await mac.ping(page);
   const clipId = await page.evaluate(() => (window as MockWindow).__cfMock!.posting.campaignClip());
+  // Settings' Send these to my Mac still counts it, and says it goes with TikTok's label (the page read again).
+  await go(page, "/library");
+  await go(page, "/settings/posting/tiktok-mac");
+  await expect(page.getByText(new RegExp(`^${before} clips? (isn't|aren't) on TikTok yet\\.$`))).toBeVisible();
+  await page.getByRole("button", { name: "Send these to my Mac" }).click();
+  await expect(page.locator("[data-mac='label']")).toHaveText("1 clip goes with TikTok's Paid partnership label.");
+  await page.getByRole("button", { name: "Not now" }).click();
+  // Library: the row says the label, with Post with my Mac.
   await go(page, "/library");
   const row = tiktokRow(page, clipId);
   await expect(cardOf(page, clipId).locator("[data-cr='campaign-chip']")).toHaveText("Campaign");
   await expect(row.locator(".post__status")).toHaveText(CAMPAIGN);
-  await expect(row.getByRole("button")).toHaveCount(0);
-  await expect(row.getByRole("link", { name: /Turn on|Open/ })).toHaveCount(0);
   await expect(row).not.toHaveClass(/is-failed/);
-  await expect(page.getByText("Campaign clip: post it in the TikTok app")).toHaveCount(0);
-  // Settings' Send these to my Mac counts it no more.
-  await go(page, "/settings/posting/tiktok-mac");
-  await expect(page.getByText(new RegExp(`^${before - 1} clips? (isn't|aren't) on TikTok yet\\.$`))).toBeVisible();
-  await page.getByRole("button", { name: "Send these to my Mac" }).click();
-  await page.getByRole("button", { name: "Yes, send them" }).click();
-  await expect(page.getByText(/^Sent \d+ clips? to your Mac\./)).toBeVisible();
-  expect((await mac.queue(page)).some((j) => j.clipId === clipId)).toBe(false);
+  await expect(page.getByText(/skip TikTok|post it in the TikTok app/)).toHaveCount(0);
+  await row.getByRole("button", { name: "Post with my Mac" }).click();
+  await expect(page.getByText("Sent to your Mac! It posts it in a minute, with TikTok's Paid partnership label.")).toBeVisible();
+  await expect(row.locator(".post__status")).toHaveText("Waiting for your Mac · next · Paid partnership label");
+  // The Mac's job: Everyone, with TikTok's Branded content label.
+  expect((await mac.queue(page)).find((j) => j.clipId === clipId)).toMatchObject({ source: "upload", privacy: "PUBLIC_TO_EVERYONE", brandContent: true, brandOrganic: false });
 });
 
 test("library: a post left Posting… once the switch went off says so; a Mac gone quiet says since when, with It's on TikTok and Try again", async ({ page }) => {
@@ -966,25 +981,26 @@ test("review: the hint, TikTok on My settings with no tap, and Uploaded just now
   const tiktokNow = card.locator('[data-place="tiktok"] .place-row__now');
   await expect(tiktokNow).toContainText("Who can see it: Everyone · Comments on · Duet on · Stitch on");
   await expect(tiktokNow).not.toContainText("not picked yet");
-  // Its row is read-only for what the Mac uses (§47.9): the Mac posts My settings, so no per-clip privacy or switches.
+  // Its row is the clip's own (§47.9, 24 Nov): TikTok Studio's Who can see it and the switches, on My settings.
   await card.locator('[data-place="tiktok"] summary').click();
   const ttRow = card.locator('[data-place="tiktok"]');
-  await expect(ttRow.locator(".tt-mac-uses")).toContainText("Your Mac posts it with My settings: Everyone · Comments on · Duet on · Stitch on");
-  await expect(ttRow.getByRole("link", { name: "Change My settings" })).toHaveAttribute("href", "/settings/posting/my-settings");
-  await expect(ttRow.locator('[aria-haspopup="listbox"]')).toHaveCount(0);
-  await expect(ttRow.getByRole("switch")).toHaveCount(1);
-  // Branded content waits: the Mac can't add TikTok's label yet.
+  await expect(ttRow.locator('.dropdown__button[aria-haspopup="listbox"]')).toContainText("Everyone");
+  await expect(ttRow.getByRole("switch")).toHaveCount(4);
+  await expect(page.getByText(/Change My settings|can't add TikTok's Branded content label/)).toHaveCount(0);
+  // Branded content goes with the Mac: nothing holds Upload, and the Mac adds TikTok's label.
   await ttRow.getByRole("switch", { name: "Commercial content" }).click();
   await ttRow.getByRole("checkbox", { name: /^Branded content/ }).click();
-  const held = "Your Mac can't add TikTok's Branded content label yet. Untick it, or untick TikTok, then post this clip in the TikTok app with its label, not with your Mac.";
-  await expect(card.locator(".upload-going")).toHaveText(held);
-  await expect(ttRow.getByRole("alert")).toHaveText(held);
-  await ttRow.getByRole("checkbox", { name: /^Branded content/ }).click();
-  await ttRow.getByRole("switch", { name: "Commercial content" }).click();
+  await expect(ttRow).toContainText("Your video will be labeled as 'Paid partnership'.");
+  await expect(ttRow.getByRole("alert")).toHaveCount(0);
   await expect(card.locator(".upload-going")).toHaveText("Going to: YouTube · TikTok");
+  await expect(card.getByRole("button", { name: "Your settings are on" })).toBeVisible();
   const upload = card.getByRole("button", { name: /^Upload( to .+)?$/ });
   await expect(upload).not.toHaveAttribute("aria-disabled", "true");
   await upload.click();
+  // The body: the card's own TikTok row, in Mac mode, with TikTok's label.
+  await expect
+    .poll(() => lastConfirm(page))
+    .toMatchObject({ clipId, tiktokMac: true, platforms: ["youtube", "tiktok"], tiktok: { privacyLevel: "PUBLIC_TO_EVERYONE", brandContent: true, brandOrganic: false } });
   const item = page.locator(".kept-now__item", { hasText: hook.slice(0, 20) });
   const line = item.locator(".kept-now__mac");
   // The Mac never checked in: said, with its page (the switch is on: never Turn on).
@@ -996,23 +1012,23 @@ test("review: the hint, TikTok on My settings with no tap, and Uploaded just now
   const posts = await page.evaluate((id) => (window as MockWindow).__cfMock!.posting.posts(id), clipId);
   expect(posts.find((p) => p.platform === "tiktok")?.status).toBe("mac");
   expect(posts.find((p) => p.platform === "youtube")?.status).toBe("queued");
-  // The Mac's job: Everyone, with Comment, Duet and Stitch on.
-  expect((await mac.queue(page)).find((j) => j.clipId === clipId)).toMatchObject({ privacy: "PUBLIC_TO_EVERYONE", comment: true, duet: true, stitch: true });
+  // The Mac's job: Everyone, with Comment, Duet and Stitch on, and TikTok's Branded content label.
+  expect((await mac.queue(page)).find((j) => j.clipId === clipId)).toMatchObject({ privacy: "PUBLIC_TO_EVERYONE", comment: true, duet: true, stitch: true, brandContent: true });
 
-  // It checks in, then posts it, live.
+  // It checks in (a helper that adds TikTok's label), then posts it, live.
   await mac.ping(page);
   await refocus(page);
-  await expect(line).toHaveText(`TikTok: ${NEXT}`);
+  await expect(line).toHaveText(`TikTok: ${NEXT} · Paid partnership label`);
   await mac.claim(page, clipId);
   await mac.step(page, clipId, "uploading");
-  await expect(line).toHaveText("TikTok: Posting…");
+  await expect(line).toHaveText("TikTok: Posting… · Paid partnership label");
   await mac.done(page, clipId);
   await expect(line).toHaveText("TikTok: Posted by your Mac · Everyone");
   // Its Open link, as on Library.
   await expect(item.getByRole("link", { name: "Open the TikTok post" })).toHaveAttribute("href", /tiktok\.com/);
 });
 
-test("review: a clip with Branded content ticked, uploaded without TikTok, is never offered Post with my Mac", async ({ page }) => {
+test("review: a clip with Branded content ticked, uploaded without TikTok, keeps its label: Post with my Mac posts it with TikTok's label", async ({ page }) => {
   await page.goto("/");
   await settle(page);
   await page.evaluate(() => {
@@ -1031,16 +1047,20 @@ test("review: a clip with Branded content ticked, uploaded without TikTok, is ne
   const ttRow = card.locator('[data-place="tiktok"]');
   await ttRow.getByRole("switch", { name: "Commercial content" }).click();
   await ttRow.getByRole("checkbox", { name: /^Branded content/ }).click();
-  // The hold's way out: untick TikTok here and post it in the TikTok app.
+  // TikTok unticked: the other places go, and the body still carries the row's choices so the clip keeps its label.
   await card.locator(".upload-chip", { hasText: "TikTok" }).click();
   await expect(card.locator(".upload-going")).toHaveText("Going to: YouTube");
   await card.getByRole("button", { name: /^Upload( to .+)?$/ }).click();
   const item = page.locator(".kept-now__item", { hasText: hook.slice(0, 20) });
-  // The Mac can't add TikTok's label: no Post with my Mac, the Add link for the post he makes in the TikTok app.
-  await expect(item.locator(".kept-now__mac")).toHaveText("TikTok: Commercial content: post it in the TikTok app, with its label");
-  await expect(item.getByRole("button", { name: "Post with my Mac" })).toHaveCount(0);
-  await expect(item.getByRole("button", { name: "Save the link" })).toBeVisible();
+  await expect(item.locator(".kept-now__mac")).toHaveText("TikTok: Not on TikTok yet · Paid partnership label");
+  await expect.poll(() => lastConfirm(page)).toMatchObject({ clipId, tiktokMac: true, platforms: ["youtube"], tiktok: { brandContent: true, brandOrganic: false } });
   expect((await mac.queue(page)).find((j) => j.clipId === clipId)).toBeUndefined();
+  // Post with my Mac says the label, and the Mac's job carries it.
+  await item.getByRole("button", { name: "Post with my Mac" }).click();
+  await expect(page.getByText("Sent to your Mac! It posts it in a minute, with TikTok's Paid partnership label.")).toBeVisible();
+  await expect(item.locator(".kept-now__mac")).toHaveText(`TikTok: ${NEXT} · Paid partnership label`);
+  expect((await mac.queue(page)).find((j) => j.clipId === clipId)).toMatchObject({ source: "upload", privacy: "PUBLIC_TO_EVERYONE", brandContent: true });
+  await expect(page.getByText(/post it in the TikTok app/)).toHaveCount(0);
 });
 
 test("review: uploaded without TikTok, Uploaded just now offers Post with my Mac", async ({ page }) => {

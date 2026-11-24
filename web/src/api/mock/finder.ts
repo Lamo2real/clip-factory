@@ -746,6 +746,8 @@ export interface FinderMockDeps {
   /** Adds the campaign to Content Rewards' mock (the add, or an adopt with `listed`). */
   add: (uuid: string, cat: FinderCatalog, how: { said?: "applied" | "joined_by_hand"; listed?: boolean }) => { campaign: Campaign; summary: CampaignSummary };
   rules: (partial: Partial<CampaignRules>) => CampaignRules;
+  /** Your Mac posts TikTok is on: TikTok takes campaign clips through his Mac before its audit (§47.2 item 6). */
+  macOn?: () => boolean;
 }
 
 export type FinderMockApi = Pick<Api, "crFinder" | "crPatchFinder" | "crFinderCheck" | "crFinderSaid" | "crFinderAdd" | "crFinderJoined" | "crFinderAsk">;
@@ -797,7 +799,7 @@ export function finderMockApi(deps: FinderMockDeps): FinderMock {
   };
 
   function tiktokOk(): boolean {
-    return deps.setup().platforms.find((x) => x.platform === "tiktok")?.gates.find((g) => g.key === "posting_audit")?.state === "ok";
+    return deps.setup().platforms.find((x) => x.platform === "tiktok")?.gates.find((g) => g.key === "posting_audit")?.state === "ok" || deps.macOn?.() === true;
   }
   function resolved(want: FinderWant): Platform[] {
     const ready = new Set(deps.setup().platforms.filter((x) => x.ready).map((x) => x.platform));

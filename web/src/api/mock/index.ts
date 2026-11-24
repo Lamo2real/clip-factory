@@ -28,8 +28,9 @@ import { isBackgroundMode, isGlassStrength, isHexColour, MAX_COLOURS } from "../
 import { currentClipModel, isClipModel } from "../../lib/models.ts";
 import { autoPostMock, NOTE_NO_PLACES, CR_BY_HAND, CR_CANT_TAKE, type AutoPostControls } from "./autopost.ts";
 import { AUTO_ALREADY_SENT } from "../../lib/autopost.ts";
-import { tiktokMacMock, presetChoices, type TikTokMacControls } from "./tiktokMac.ts";
-import { MAC_FIND_NONE, MAC_ROW_CAMPAIGN, MAC_UNDO_REFUSED, MAC_UNKNOWN_SETTING, macOn } from "../../lib/tiktokMac.ts";
+import { macOptions, tiktokMacMock, type TikTokMacControls } from "./tiktokMac.ts";
+import { MAC_FIND_NONE, MAC_UNDO_REFUSED, MAC_UNKNOWN_SETTING, macOn } from "../../lib/tiktokMac.ts";
+import { CAMPAIGN_MAC_OFF, CAMPAIGN_MAC_POSTS } from "../../lib/contentRewards.ts";
 import { canPostYourself, tiktokAudited } from "../../lib/tiktokYourself.ts";
 
 const STEP_MS = 3500;
@@ -200,6 +201,8 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
   const claimedAt = new Map<string, number>();
   // The TikTok sheet's choices stored on each TikTok post (the API's postOptions.tiktok, never returned).
   const postOptions = new Map<string, TikTokPostOptions>();
+  // The last Upload's body as the API would read it (tests: `tiktok`, `platforms` and `tiktokMac`).
+  let lastConfirm: { clipId: string; tiktok?: TikTokPostOptions; platforms?: Platform[]; tiktokMac?: true } | null = null;
   // Find it for me (D3): the clips Clip Factory looked for once already (the next look finds it).
   const lookedFor = new Set<string>();
   // Posted on TikTok by the owner (§42): what the TikTok post was before (null: made by It's on TikTok), for Undo.
@@ -220,9 +223,9 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     const missing = PLATFORM_ORDER.find((p) => waiting.some((w) => w.platform === p) && !connected.includes(p));
     if (missing) throw bad(`${PLATFORM_LABEL[missing]} is not set up yet. Turn it off, then tap Upload.`);
     if (!tiktok && waiting.some((p) => p.platform === "tiktok" && !postOptions.get(p.postId)?.privacyLevel)) throw bad("Pick who can see it on TikTok.");
-    // D1: a campaign clip's TikTok waits until TikTok approved the app (Try again's own words).
+    // A campaign clip's TikTok goes only through his Mac until TikTok approved the app (§47.2 item 6, Try again's words).
     if (c.campaignId && [...failed, ...waiting].some((p) => p.platform === "tiktok") && !tiktokAudited(setup.overview().platforms))
-      throw bad(`${MAC_ROW_CAMPAIGN} Tap Try again on another place.`);
+      throw bad(macOn(store.settings) ? CAMPAIGN_MAC_POSTS : `${CAMPAIGN_MAC_OFF} Tap Try again on another place.`);
     // Naming nothing to send changes nothing (§33), except a start that did not go through earlier: it starts now.
     if (!failed.length && !waiting.length) {
       if (c.startPending) started(c);
@@ -338,6 +341,10 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     },
     options(postId: string): TikTokPostOptions | null {
       return clone(postOptions.get(postId) ?? null);
+    },
+    /** The last Upload's body (POST /v1/clips/{id}/confirm): its `tiktok`, `platforms` and `tiktokMac`. */
+    lastConfirm() {
+      return clone(lastConfirm);
     },
     /** §36.3: the YouTube, Instagram or X choices stored on a post. */
     clipOptions(postId: string): object | null {
@@ -542,6 +549,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     publish: crPublish,
     finder: () => finder?.overview(),
     catalog: (uuid, rules) => catalogOf(uuid, rules),
+    macOn: () => macOn(store.settings),
   });
   finder = finderMockApi({
     setup: () => setup.overview(),
@@ -552,6 +560,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     ownIds: () => cr.ownIds(),
     add: (uuid, cat, how) => cr.finderAdd(uuid, cat, how),
     rules: (partial) => cr.rules(partial),
+    macOn: () => macOn(store.settings),
   });
   const finderApi = finder.api;
 
@@ -591,6 +600,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       ],
       remakeOn: remakeOn(),
       now: Date.now(),
+      macOn: macOn(store.settings),
     };
   };
   const fitOf = (c: Clip) => clipFit(c, fitInputs(c), cr.served());
@@ -733,6 +743,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     platforms?: Platform[],
     options?: ClipPostOptions,
     auto?: NonNullable<Clip["auto"]>,
+    tiktokMac = false,
   ): Promise<{ clip: Clip; posts: Post[] }> {
     if (options !== undefined) {
       const wrong = clipOptionsProblem(options);
@@ -752,8 +763,9 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     if (c.status === "review" && chosen) {
       const missing = chosen.find((p) => !connected.includes(p));
       if (missing) throw bad(`${PLATFORM_LABEL[missing]} is not set up yet. Turn it off, then tap Upload.`);
-      // D1 (routes/clips._place_refusal): a campaign clip's TikTok waits until TikTok approved the app.
-      if (c.campaignId && chosen.includes("tiktok") && !tiktokAudited(setup.overview().platforms)) throw bad(`${MAC_ROW_CAMPAIGN} Turn TikTok off, then tap Upload.`);
+      // routes/clips._place_refusal: before TikTok approved the app a campaign clip's TikTok goes only through his Mac.
+      if (c.campaignId && chosen.includes("tiktok") && !tiktokAudited(setup.overview().platforms) && !macOn(store.settings))
+        throw bad(`${CAMPAIGN_MAC_OFF} Or turn TikTok off, then tap Upload.`);
     }
     // A campaign clip (§38.14): only the campaign's places, public, never made for kids, TikTok Branded content.
     if (c.status === "review") await cr.confirmCheck(c, chosen, options, tiktok);
@@ -768,10 +780,12 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     const tiktokGoing = chosen ? chosen.includes("tiktok") : store.settings.platforms.includes("tiktok") && connected.includes("tiktok");
     if (c.status === "review" && tiktokGoing && !tiktok?.privacyLevel) throw bad("Pick who can see it on TikTok.");
     // Your Mac posts TikTok (§47.2): Upload's TikTok goes to the Mac while TikTok has not approved the app, and a live
-    // auto-posting run gives a clip a Mac post too (never a Private test run). Never a campaign clip (D1): the Mac
-    // can't mark it as Branded content yet (once TikTok approved the app, its TikTok goes through TikTok's API).
-    const macUpload = !auto && !!chosen?.includes("tiktok") && macOn(store.settings) && !tiktokAudited(setup.overview().platforms) && !c.campaignId;
-    const macAuto = !!auto && !auto.test && macOn(store.settings) && !c.campaignId;
+    // auto-posting run gives a clip a Mac post too (never a Private test run). A campaign clip too, always Everyone with
+    // Branded content (TikTok's Paid partnership label); once TikTok approved the app it goes through TikTok's API.
+    const macUpload = !auto && !!chosen?.includes("tiktok") && macOn(store.settings) && !tiktokAudited(setup.overview().platforms);
+    const macAuto = !!auto && !auto.test && macOn(store.settings);
+    // The Mac post's options: with `tiktokMac` the card's own TikTok row (as validated), else My settings.
+    const macChoices = (source: "upload" | "auto") => macOptions(store.settings, c, source === "upload" && tiktokMac ? tiktok : null);
     const startPosting = () => {
       const have = new Set(store.posts.filter((p) => p.clipId === clipId).map((p) => p.platform));
       const targets = c.uploadTo ?? store.settings.platforms;
@@ -779,20 +793,21 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
         .filter((platform) => !have.has(platform))
         .map((platform) =>
           platform === "tiktok" && macUpload
-            ? { postId: ulid(), clipId, platform, ...mac.macFields("upload") }
+            ? { postId: ulid(), clipId, platform, ...mac.macFields("upload", macChoices("upload")) }
             : { postId: ulid(), clipId, platform, status: connected.includes(platform) ? "queued" : "pending_integration" },
         );
       // Auto-posting's posts (§46.9); a Private test run's go up for him only, at once here (no flow in the mock).
       if (auto) for (const p of created) privateTest(Object.assign(p, { auto: true as const }), auto.test);
       if (macAuto && !have.has("tiktok") && !targets.includes("tiktok")) {
-        const made: Post = { postId: ulid(), clipId, platform: "tiktok", ...mac.macFields("auto"), auto: true };
-        postOptions.set(made.postId, presetChoices(store.settings));
+        const made: Post = { postId: ulid(), clipId, platform: "tiktok", ...mac.macFields("auto", macChoices("auto")), auto: true };
+        postOptions.set(made.postId, macChoices("auto"));
         created.splice(PLATFORM_ORDER.filter((p) => p === "youtube" && created.some((x) => x.platform === p)).length, 0, made);
       }
       store.posts.push(...created);
       for (const p of created) if (p.platform === "tiktok" && p.status === "queued" && tiktok) postOptions.set(p.postId, clone(tiktok));
-      // Every Mac post asks the Mac for My settings' choices (Everyone, all three on), whatever the sheet said (§47.1).
-      for (const p of created) if (p.platform === "tiktok" && p.status === "mac") postOptions.set(p.postId, presetChoices(store.settings));
+      // Upload's Mac post: the card's own row with `tiktokMac`, else My settings (an older web); a campaign clip's always
+      // ends Everyone with Branded content (§47.2).
+      for (const p of created) if (p.platform === "tiktok" && p.status === "mac" && !p.auto) postOptions.set(p.postId, macChoices("upload"));
       for (const p of created) {
         const own = options?.[p.platform as keyof ClipPostOptions];
         if (own) clipOptions.set(p.postId, clone(own));
@@ -819,6 +834,8 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     if (c.status !== "review") throw conflict(ALREADY_DECIDED);
     if (captions) c.captions = { ...c.captions, ...captions };
     if (chosen) c.uploadTo = chosen;
+    // TikTok's label ticked on the card (TikTok chosen or not): the clip keeps it for a later Mac post (Clip.tiktokLabel).
+    if (tiktok && (tiktok.brandContent || tiktok.brandOrganic)) c.tiktokLabel = { brandContent: tiktok.brandContent === true, brandOrganic: tiktok.brandOrganic === true };
     if (auto) c.auto = clone(auto);
     c.status = "confirmed";
     c.decidedAt = new Date().toISOString();
@@ -884,6 +901,12 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     removePost: (p) => mockLive.publish({ type: "post", op: "delete", id: p.postId }),
     publishClip,
     now: () => Date.now(),
+    // A campaign clip goes to the Mac only while its campaign takes clips (the API's _require_campaign_open).
+    campaignRefusal(c) {
+      const full = cr.served().find((x) => x.campaignId === c.campaignId);
+      if (!full) return "Add the campaign again on the Campaigns page.";
+      return full.stops.find((x) => x.hard && (x.code === "held" || x.code === "paused" || x.code === "ended"))?.text ?? null;
+    },
   });
   if (typeof window !== "undefined") {
     const w = window as unknown as { __cfMock?: Record<string, unknown> & { mac?: TikTokMacControls } };
@@ -1233,12 +1256,14 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       publishClip(c);
       return clone(c);
     },
-    async confirmClip(clipId, captions, tiktok, platforms, options) {
+    async confirmClip(clipId, captions, tiktok, platforms, options, tiktokMac) {
       await delay();
       const fail = faults.confirmFails?.shift();
       if (fail === "network") throw networkError();
       if (fail === "refused") throw bad("Pick who can see it on TikTok.");
-      return confirmNow(clipId, captions, tiktok, platforms, options);
+      if (tiktokMac !== undefined && typeof tiktokMac !== "boolean") throw bad("tiktokMac must be true or false.");
+      lastConfirm = { clipId, ...(tiktok ? { tiktok: clone(tiktok) } : {}), ...(platforms ? { platforms: [...platforms] } : {}), ...(tiktokMac ? { tiktokMac: true } : {}) };
+      return confirmNow(clipId, captions, tiktok, platforms, options, undefined, tiktokMac === true);
     },
     // Post it on TikTok yourself (§42): the same rules as the API's tiktok_self.py.
     async clipFile(clipId) {

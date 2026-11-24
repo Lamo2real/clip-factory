@@ -673,6 +673,14 @@ def subs_by_campaign(store: db.Store, user_id: str) -> dict[str, list[Item]]:
     return out
 
 
+def mac_on(store: db.Store, user_id: str) -> bool:
+    """Your Mac posts TikTok (§47) is on: then TikTok is one of a campaign clip's places before TikTok approves the
+    app (``gates.upload_places``), since the owner's Mac posts it for Everyone with Branded content."""
+    from .. import settings, tiktok_mac
+
+    return tiktok_mac.is_on(settings.load(store, user_id))
+
+
 class View:
     """What serving campaigns needs once per request: CRCONN, the setups, the follows and the submissions."""
 
@@ -682,11 +690,17 @@ class View:
         self.now = now
         self.conn = connection.load(deps.store, user_id)
         self.setups = oauth_setup.all_setups(deps.store, user_id, now)
+        self.mac_on = mac_on(deps.store, user_id)
         self.follows = [f for f in deps.store.query_all(db.user_pk(user_id), "FOLLOW#") if f.get("type") == "follow"]
         self.subs = subs_by_campaign(deps.store, user_id)
 
     def places(self, item: Mapping[str, Any]) -> list[str]:
-        return gates.upload_places(item.get("platformsPaid") or [], self.setups, connection.crlinked(self.conn))
+        paid = item.get("platformsPaid") or []
+        return gates.upload_places(paid, self.setups, connection.crlinked(self.conn), mac_on=self.mac_on)
+
+    def waits(self, item: Mapping[str, Any]) -> bool:
+        """TikTok is paid but not one of the places: not approved yet and Your Mac posts TikTok off."""
+        return gates.tiktok_waits(item.get("platformsPaid") or [], self.setups, mac_on=self.mac_on)
 
     def full(self, item: Mapping[str, Any]) -> Item:
         return public_campaign(self, item)
@@ -724,8 +738,8 @@ def _places_note(view: View, item: Mapping[str, Any], places: list[str]) -> str 
     refused = [p for p in STATS_ORDER if p in paid and linked.get(p) is False]
     if refused:
         return f"Add {gates.LABELS.get(refused[0], refused[0])} in Content Rewards first."
-    if gates.tiktok_waits(paid, view.setups):
-        return "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet."  # tiktok_mac.CAMPAIGN_SKIPS
+    if gates.tiktok_waits(paid, view.setups, mac_on=view.mac_on):
+        return gates.TIKTOK_MAC_OFF
     return None
 
 
@@ -820,7 +834,7 @@ def language_rule_text(item: Mapping[str, Any]) -> str | None:
 def public_campaign(view: View, item: Mapping[str, Any]) -> Item:
     now = view.now
     places = view.places(item)
-    stop_list = gates.stops(item, view.conn, places, now)
+    stop_list = gates.stops(item, view.conn, places, now, tiktok_waits=view.waits(item))
     rules_now = item.get("rules") if isinstance(item.get("rules"), Mapping) else None
     out: Item = {k: item[k] for k in STORED if k in item and item[k] is not None}
     out.setdefault("name", "Campaign")

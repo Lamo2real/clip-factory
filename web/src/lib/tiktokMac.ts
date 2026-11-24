@@ -11,11 +11,44 @@ import { canPostYourself } from "./tiktokYourself.ts";
 
 /**
  * Review, above Upload, instead of TIKTOK_PUBLIC_HINT while the Mac posts this clip's TikTok (TikTok has not approved
- * the app, not a campaign clip) and My settings' Who can see it is Everyone; otherwise MAC_WHERE_LINE (§47.9).
+ * the app) and the card's own Who can see it is Everyone; otherwise MAC_WHERE_LINE (§47.9). With a label ticked (or a
+ * campaign clip) macUploadLine adds macAddsLabel.
  */
 export const MAC_HINT = "TikTok: your Mac posts it for everyone.";
-/** Auto-posting › Where they go, while it is on; and Review's line above Upload while My settings isn't Everyone. */
+/** Auto-posting › Where they go, while it is on; and Review's line above Upload while the card isn't Everyone. */
 export const MAC_WHERE_LINE = "TikTok: your Mac posts it.";
+/** TikTok's labels (its commercial content disclosure): Branded content shows "Paid partnership", Your brand "Promotional content". */
+export const MAC_LABEL_PAID = "Paid partnership";
+export const MAC_LABEL_PROMO = "Promotional content";
+
+/** " and adds TikTok's Paid partnership label": the end of Review's line above Upload when the Mac adds a label. */
+export function macAddsLabel(label: string): string {
+  return ` and adds TikTok's ${label} label`;
+}
+
+/** "Paid partnership label": what a TikTok row adds after its words when the Mac posts the clip with TikTok's label. */
+export function labelWords(label: string): string {
+  return `${label} label`;
+}
+
+/**
+ * The label the Mac posts a clip with, in TikTok's own words: "Paid partnership" for Branded content (it wins),
+ * "Promotional content" for Your brand only, null for none.
+ */
+export function macLabel(flags: { brandContent?: boolean; brandOrganic?: boolean } | null | undefined): string | null {
+  if (flags?.brandContent) return MAC_LABEL_PAID;
+  return flags?.brandOrganic ? MAC_LABEL_PROMO : null;
+}
+
+/**
+ * The label a clip goes to the Mac with (Post with my Mac, Send these to my Mac): every campaign clip is a paid
+ * partnership; otherwise the one ticked on its Review card (`tiktokLabel`); none for the rest (the server may still
+ * find one on a Clip Factory TikTok post it hands over).
+ */
+export function clipLabel(clip: Pick<Clip, "campaignId" | "tiktokLabel">): string | null {
+  if (clip.campaignId) return MAC_LABEL_PAID;
+  return macLabel(clip.tiktokLabel);
+}
 
 export const MAC_OFF_LINE = "Off. Your Mac doesn't post your TikTok clips.";
 export const MAC_ON_LINE = "On. Upload and auto-posting hand TikTok to your Mac.";
@@ -74,6 +107,12 @@ export const MAC_OFFLINE_MS = 10 * 60_000;
  * rows keep Open Your Mac posts TikTok (it would never read Start my Mac again).
  */
 export const MAC_BEATS_FROM = "1.1.0";
+/**
+ * The first helper version that sets TikTok's commercial content disclosure (Your brand, Branded content) in TikTok
+ * Studio (the API's tiktok_self.MAC_BRAND_FROM, the helper's paths.js VERSION; tests pin them). The server lets an
+ * older helper claim no post with a label, so such a post waits until the helper is updated (MAC_ROW_BRAND_UPDATE).
+ */
+export const MAC_BRAND_FROM = "1.3.0";
 /** POST /v1/tiktok/mac/send takes at most this many clips at once. */
 export const MAC_SEND_MAX = 25;
 
@@ -107,17 +146,14 @@ export const MAC_ROW_PRESSED = `${MAC_NOT_SURE} · look on your TikTok`;
 /** A job stuck before the Mac pressed Post: it can't be on TikTok, so only Try again (review round 3, item 2). */
 export const MAC_ROW_STOPPED_EARLY = "Your Mac stopped before it pressed Post";
 /**
- * Review's "Uploaded just now", a clip uploaded with Commercial content on its card while the Mac posts TikTok (§47.9):
- * the Mac can't add TikTok's label yet, so he posts it in the TikTok app, with its label (commercialRow).
+ * A Mac post with TikTok's label waits while the helper on his Mac is older than MAC_BRAND_FROM: the server lets it claim
+ * none (MAC_NEEDS_UPDATE: it would post it without the label), so it goes once the helper is updated.
  */
-export const MAC_ROW_COMMERCIAL = "Commercial content: post it in the TikTok app, with its label";
+export const MAC_ROW_BRAND_UPDATE = "Waiting for your Mac · it needs an update to add TikTok's label";
+/** The claim's refusal then (tiktok_mac.MAC_NEEDS_UPDATE), word for word. */
+export const MAC_NEEDS_UPDATE = "Your Mac needs an update to add TikTok's label to this clip. Set up your Mac again.";
 export const MAC_ROW_PRIVATE_TEST = "Private test · stays off TikTok";
 export const MAC_ROW_ADD_LINK = " · add the link";
-/**
- * A campaign clip (D1): the Mac can't set TikTok's Branded content disclosure yet, so it never posts one (the server
- * refuses it on every Mac path: tiktok_mac.CAMPAIGN_SKIPS, word for word).
- */
-export const MAC_ROW_CAMPAIGN = "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet.";
 /** The clip page's stack line while its chip says "Not sure it posted" (it never says that twice). */
 export const MAC_CLIP_PAGE_LOOK = "Look on your TikTok";
 /** "starting again within a minute": a paused row after Start my Mac again, until the Mac checks in. */
@@ -187,11 +223,11 @@ export function macInsteadOk(mac: Pick<PostMac, "state" | "pressedAt">): boolean
 
 /**
  * Can the Mac take this clip (§47.2)? A kept clip that is not on TikTok for everyone (no TikTok post, one waiting for
- * setup, failed, or uploaded privately), not a campaign clip (the Mac can't mark it as Branded content yet, D1) and not
- * a Private test run's clip.
+ * setup, failed, or uploaded privately) and not a Private test run's clip. A campaign clip goes too, with TikTok's
+ * Paid partnership label (the server checks its campaign first and says why when it can't).
  */
 export function canSendToMac(clip: Clip, posts: Post[]): boolean {
-  return canPostYourself(clip, posts) && !clip.campaignId && clip.auto?.test !== "private";
+  return canPostYourself(clip, posts) && clip.auto?.test !== "private";
 }
 
 // ---------- The TikTok row (§47.4) ----------
@@ -201,20 +237,24 @@ export interface TikTokFacts {
   /** The clip, for its place in the Mac's queue (a backlog clip's wait). */
   clipId?: string;
   post: Pick<Post, "status" | "by" | "via" | "url" | "privacy" | "mac" | "postedAt"> | null;
-  /** Kept and not on TikTok for everyone (canPostYourself): the Mac can take it, unless campaign or Private test. */
+  /** Kept and not on TikTok for everyone (canPostYourself): the Mac can take it, unless it is a Private test's. */
   offer: boolean;
-  /** A campaign clip (`campaignId`): it skips TikTok for now (D1). */
-  campaign: boolean;
+  /**
+   * The label the Mac posts it with ("Paid partnership", "Promotional content"), or null: its Mac post's own
+   * (`mac.brandContent`/`brandOrganic`), else the clip's (a campaign clip, or `tiktokLabel`, clipLabel).
+   */
+  label: string | null;
   privateTest: boolean;
 }
 
 /** The facts from a clip and its posts (Library, Review). */
 export function tiktokFacts(clip: Clip, posts: readonly Post[]): TikTokFacts {
+  const post = posts.find((p) => p.platform === "tiktok") ?? null;
   return {
     clipId: clip.clipId,
-    post: posts.find((p) => p.platform === "tiktok") ?? null,
+    post,
     offer: canPostYourself(clip, [...posts]),
-    campaign: !!clip.campaignId,
+    label: post?.status === "mac" && post.mac ? macLabel(post.mac) : clipLabel(clip),
     privateTest: clip.auto?.test === "private",
   };
 }
@@ -265,7 +305,7 @@ export interface TikTokRowContext {
 /** What macPlace reads of a job in the Mac's queue. */
 export type MacQueueJob = Pick<MacJob, "clipId" | "source" | "state"> & Partial<Pick<MacJob, "since" | "claimedAt" | "beatAt">>;
 
-export type TikTokRowKind = "posted" | "posted_you" | "working" | "waiting" | "stopped" | "not_ready" | "offer" | "campaign" | "commercial" | "private_test";
+export type TikTokRowKind = "posted" | "posted_you" | "working" | "waiting" | "stopped" | "not_ready" | "offer" | "private_test";
 /**
  * The row's button. `try_again`: retry `now`. `post_with_mac`: send `now` (also a waiting post while auto-posting is
  * off, or one the Mac holds, which then goes as an Upload tap's). `turn_on` and `open_mac`: links to `href`
@@ -294,6 +334,8 @@ export interface TikTokRow {
   again?: boolean;
   /** on_tiktok: "It's on TikTok, no link" is offered (never while the Mac works on it before Post, D3). */
   noLink?: boolean;
+  /** The label the Mac posts it with (its words end with labelWords), for Post with my Mac's toast. */
+  label?: string;
 }
 
 const MINUTE = 60_000;
@@ -327,19 +369,33 @@ const versionParts = (v: string | undefined): number[] | null => {
   return parts.every((p) => /^\d+$/.test(p)) ? parts.map(Number) : null;
 };
 
-/**
- * Does the owner's helper beat every job it works on (tiktok_self.helper_beats, the same)? Yes unless it says a version
- * older than MAC_BEATS_FROM (absent, never checked in, or not known yet: yes).
- */
-export function macHelperBeats(helper: Pick<MacHelper, "version"> | null | undefined): boolean {
+/** The helper says `version` or newer, or says no version that can be read (absent, never checked in, or not known yet). */
+function helperFrom(helper: Pick<MacHelper, "version"> | null | undefined, version: string): boolean {
   const said = versionParts(helper?.version);
   if (!said) return true;
-  const from = versionParts(MAC_BEATS_FROM)!;
+  const from = versionParts(version)!;
   for (let i = 0; i < Math.max(said.length, from.length); i++) {
     const d = (said[i] ?? 0) - (from[i] ?? 0);
     if (d !== 0) return d > 0;
   }
   return true;
+}
+
+/**
+ * Does the owner's helper beat every job it works on (tiktok_self.helper_beats, the same)? Yes unless it says a version
+ * older than MAC_BEATS_FROM (absent, never checked in, or not known yet: yes).
+ */
+export function macHelperBeats(helper: Pick<MacHelper, "version"> | null | undefined): boolean {
+  return helperFrom(helper, MAC_BEATS_FROM);
+}
+
+/**
+ * Can the owner's helper add TikTok's label (Your brand, Branded content)? Yes unless it says a version older than
+ * MAC_BRAND_FROM (absent, never checked in, or not known yet: yes, as macHelperBeats). The server lets an older one
+ * claim no labelled post.
+ */
+export function macHelperBrands(helper: Pick<MacHelper, "version"> | null | undefined): boolean {
+  return helperFrom(helper, MAC_BRAND_FROM);
 }
 
 /**
@@ -503,8 +559,17 @@ function notSure(mac: PostMac, words: string, now: number): TikTokRow {
   return { kind: "stopped", words: `${words}${when}`, button: "on_tiktok", ...(since ? { since } : {}), again, noLink: true };
 }
 
-/** A Mac post's row (6.2): not sure it posted, Didn't work, the Mac can't post, Posting…, held, or waiting. */
-function macRow(mac: PostMac, ctx: TikTokRowContext, clipId?: string): TikTokRow {
+/** The row's words end with the label the Mac posts it with: "Waiting for your Mac · next · Paid partnership label". */
+function labelled(row: TikTokRow, label: string | null): TikTokRow {
+  return label ? { ...row, words: `${row.words} · ${labelWords(label)}`, label } : row;
+}
+
+/**
+ * A Mac post's row (6.2): not sure it posted, Didn't work, the Mac can't post, Posting…, held, or waiting. `label`: the
+ * one the Mac posts it with: the rows that say it waits for the Mac or is posting add it, and a labelled post waits
+ * for the helper's update while the Mac's helper is older than MAC_BRAND_FROM.
+ */
+function macRow(mac: PostMac, ctx: TikTokRowContext, clipId?: string, label: string | null = null): TikTokRow {
   const now = ctx.now ?? Date.now();
   // It may be on TikTok. Words chosen by pressedAt, never by matching the stored reason. Saying it's on TikTok needs
   // no Mac, so this shows even while it can't post.
@@ -531,57 +596,50 @@ function macRow(mac: PostMac, ctx: TikTokRowContext, clipId?: string): TikTokRow
     }
     // The Mac is on it (D2): never Not sure it posted or Try again here. The switch turned off before Post says so.
     if (ctx.macOn === false) return turnOn(MAC_ROW_OFF);
-    return { kind: "working", words: MAC_ROW_POSTING, button: null, spinner: true };
+    return labelled({ kind: "working", words: MAC_ROW_POSTING, button: null, spinner: true }, label);
   }
   const ready = notReady(ctx, false, clipId);
   if (ready) return ready;
+  // A label the helper on his Mac can't add yet: the server lets it claim none of these, so it waits for the update.
+  if (label && ctx.helper && !macHelperBrands(ctx.helper)) return { kind: "waiting", words: MAC_ROW_BRAND_UPDATE, button: null, label };
   // Auto-posting off: a backlog or auto-posting clip would wait for good, so he can send this one now.
-  if ((mac.source === "sent" || mac.source === "auto") && ctx.autoPostOn === false) return { kind: "waiting", words: MAC_ROW_AUTO_OFF, button: "post_with_mac" };
+  if ((mac.source === "sent" || mac.source === "auto") && ctx.autoPostOn === false) return labelled({ kind: "waiting", words: MAC_ROW_AUTO_OFF, button: "post_with_mac" }, label);
   // Held on the Mac (its holdAutoBefore): it would wait for good too.
-  if (heldBy(mac, ctx.helper)) return { kind: "waiting", words: heldWords(clockWords(ctx.helper!.holdBefore!, now)), button: "post_with_mac" };
-  return { kind: "waiting", words: macWaitWords(mac, ctx, clipId), button: null };
+  if (heldBy(mac, ctx.helper)) return labelled({ kind: "waiting", words: heldWords(clockWords(ctx.helper!.holdBefore!, now)), button: "post_with_mac" }, label);
+  return labelled({ kind: "waiting", words: macWaitWords(mac, ctx, clipId), button: null }, label);
 }
 
 /**
  * The TikTok row (§47.4): only what the Mac is doing, with at most one button (It's on TikTok may come with Try
  * again). In this order: posted by the Mac (Open, or Add link); posted by him (§42); a Mac post (macRow); a Private
- * test; a campaign clip (it skips TikTok for now, D1); not on TikTok yet (Post with my Mac). Null: the row keeps its
- * old words and buttons, for a clip not on TikTok once TikTok approved the app, and for Clip Factory's own posts.
+ * test; not on TikTok yet (Post with my Mac). A clip the Mac posts with TikTok's label (a campaign clip, or one ticked
+ * so on Review) says it after the words ("Not on TikTok yet · Paid partnership label"). Null: the row keeps its old
+ * words and buttons, for a clip not on TikTok once TikTok approved the app, and for Clip Factory's own posts.
  */
 export function tiktokRow(facts: TikTokFacts, ctx: TikTokRowContext): TikTokRow | null {
   const p = facts.post;
   if (p && p.status === "posted" && p.via === "mac") return postedRow("posted", p.privacy === "private" ? MAC_POSTED_PRIVATE : MAC_POSTED, p);
   if (p && p.by === "you") return postedRow("posted_you", YOU_POSTED, p);
-  if (p && p.status === "mac" && p.mac) return macRow(p.mac, ctx, facts.clipId);
+  if (p && p.status === "mac" && p.mac) return macRow(p.mac, ctx, facts.clipId, facts.label);
   // The rest is TikTok's API or the Mac: once TikTok approved the app, those rows stay as they were.
   if (ctx.audited || !facts.offer) return null;
   if (facts.privateTest) return { kind: "private_test", words: MAC_ROW_PRIVATE_TEST, button: null };
-  if (facts.campaign) return { kind: "campaign", words: MAC_ROW_CAMPAIGN, button: null };
   const words = p && p.status === "posted" && p.privacy === "private" ? MAC_ROW_ONLY_YOU : MAC_ROW_NOT_YET;
-  return notReady(ctx, false, facts.clipId) ?? { kind: "offer", words, button: "post_with_mac" };
-}
-
-/**
- * Review's "Uploaded just now" row of a clip uploaded with Commercial content on its card while the Mac posts TikTok
- * (§47.9): the Mac can't add TikTok's label yet, so instead of Post with my Mac (or what the Mac still needs) it says to
- * post it in the TikTok app and offers Add link, as a campaign clip's row does. Any other row stays. Only this card
- * knows: nothing on the clip keeps Commercial content (a server-side flag is a later step).
- */
-export function commercialRow(row: TikTokRow | null): TikTokRow | null {
-  if (!row || (row.kind !== "offer" && row.kind !== "not_ready")) return row;
-  return { kind: "commercial", words: MAC_ROW_COMMERCIAL, button: "add_link" };
+  return notReady(ctx, false, facts.clipId) ?? labelled({ kind: "offer", words, button: "post_with_mac" }, facts.label);
 }
 
 /**
  * Review's TikTok line above Upload while the Mac will post this clip's TikTok (§47.4, §47.9): what the Mac is doing now
  * when it can't post (never checked in, needs him, paused, not seen for 30 minutes), with that row's one button;
- * otherwise MAC_HINT when My settings says Everyone, else MAC_WHERE_LINE. While the Mac's check-in is not known yet:
- * the plain line, never a wrong warning.
+ * otherwise MAC_HINT when the card's own Who can see it is Everyone, else MAC_WHERE_LINE, and with a label (`label`,
+ * ticked on the card, or a campaign clip's) the Mac adds it: "TikTok: your Mac posts it for everyone and adds TikTok's
+ * Paid partnership label." While the Mac's check-in is not known yet: the plain line, never a wrong warning.
  */
-export function macUploadLine(ctx: TikTokRowContext, everyone: boolean): { words: string; row: TikTokRow | null } {
+export function macUploadLine(ctx: TikTokRowContext, everyone: boolean, label: string | null = null): { words: string; row: TikTokRow | null } {
   const ready = notReady(ctx, false);
   if (ready) return { words: `TikTok: ${ready.words}`, row: ready };
-  return { words: everyone ? MAC_HINT : MAC_WHERE_LINE, row: null };
+  const line = everyone ? MAC_HINT : MAC_WHERE_LINE;
+  return { words: label ? `${line.slice(0, -1)}${macAddsLabel(label)}.` : line, row: null };
 }
 
 /**
@@ -594,7 +652,7 @@ export function savedForSetup(posts: readonly Pick<Post, "status">[]): boolean {
 
 /** Does this row read the Mac's check-in (GET /v1/tiktok/mac)? Its Mac post, or a clip the Mac could take. */
 export function rowNeedsMac(facts: TikTokFacts): boolean {
-  return facts.post?.status === "mac" || (facts.offer && !facts.campaign && !facts.privateTest);
+  return facts.post?.status === "mac" || (facts.offer && !facts.privateTest);
 }
 
 /**
@@ -685,6 +743,22 @@ export function sendableLine(n: number, waiting = 0): string {
   if (!n && already) return already;
   const line = `${plural(n, "clip")} ${n === 1 ? "isn't" : "aren't"} on TikTok yet.`;
   return already ? `${line} ${already}` : line;
+}
+
+/**
+ * Send these to my Mac's confirm lines for the clips that go with TikTok's label (campaign clips, or ones ticked so on
+ * Review: clipLabel): "2 clips go with TikTok's Paid partnership label." None when no clip does.
+ */
+export function sendLabelLines(labels: readonly (string | null)[]): string[] {
+  return [MAC_LABEL_PAID, MAC_LABEL_PROMO].flatMap((label) => {
+    const n = labels.filter((l) => l === label).length;
+    return n ? [`${plural(n, "clip")} ${n === 1 ? "goes" : "go"} with TikTok's ${label} label.`] : [];
+  });
+}
+
+/** Post with my Mac's toast: "Sent to your Mac! It posts it in a minute, with TikTok's Paid partnership label." */
+export function postWithMacToast(label?: string | null): string {
+  return label ? `Sent to your Mac! It posts it in a minute, with TikTok's ${label} label.` : "Sent to your Mac! It posts it in a minute.";
 }
 
 /** The toast after Send these to my Mac; `waits`: the Mac never checked in, so they wait for it (MAC_SENT_WAITS). */

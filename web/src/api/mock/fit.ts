@@ -8,7 +8,7 @@
 // start flag `cf-mock-cr-remake = "on"` turns it on.
 import type { Campaign, CampaignFit, Clip, ClipFit, CrConnection, FitFix, FitItem, FitRule, FitState, Job, Platform, Post } from "../types.ts";
 import { adLive, canUploadOf, headlineOf, isWait, joinList, newClipsHref, paidLive, placesLive, sortItems, tagsLive, verdictOf } from "../../lib/crFit.ts";
-import { campaignPath, CR_SETUP_PATH } from "../../lib/contentRewards.ts";
+import { CAMPAIGN_MAC_OFF, campaignPath, CR_SETUP_PATH } from "../../lib/contentRewards.ts";
 import { PLATFORM_LABEL, PLATFORM_ORDER } from "../../lib/format.ts";
 import { CR_DISCOVER, CR_SETTINGS } from "../../setup/contentrewards.ts";
 
@@ -23,7 +23,6 @@ const GONE = "This video is gone from Clip Factory. Make new clips for this camp
 const AUTO_SEND = "After it posts, Clip Factory sends it to Content Rewards by itself.";
 const HAND_SEND = "After it posts, send its link to Content Rewards within 30 minutes. I'll remind you.";
 const SPOKEN = "The brand wants “paid partnership” said out loud. Clip Factory can't. This clip may be turned down.";
-const TIKTOK_WAITS = "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet.";
 const SOURCE_KEPT_MS = 13 * 86_400_000;
 const MONTH = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
 const LANGUAGES: [string, string][] = [
@@ -71,6 +70,8 @@ export interface FitInputs {
   others: { campaignId: string; name: string }[];
   remakeOn: boolean;
   now: number;
+  /** Your Mac posts TikTok is on: a campaign's TikTok goes through his Mac (the served uploadPlaces keep it, §47.2). */
+  macOn?: boolean;
 }
 
 const checklist = (clip: Clip, key: string) => clip.checklist.items.find((i) => i.key === key) ?? null;
@@ -205,13 +206,14 @@ export function fitOne(i: FitInputs): CampaignFit {
 
   // The places.
   const paid = PLATFORM_ORDER.filter((p) => c.platformsPaid.includes(p));
-  const places = paid.length && paid.every((p) => p === "tiktok") ? [] : c.uploadPlaces;
+  // A's tiktok_only stop: no place can earn (the places row says why), as fit.py.
+  const tiktokOnly = c.stops.find((s) => s.code === "tiktok_only");
+  const places = tiktokOnly ? [] : c.uploadPlaces;
   const named = new Set<Platform>();
   if (!paid.length) {
     if (c.membership === "in" || c.membership === "manual") items.push(item("places", "todo", `I can't tell where ${name} pays yet. Tap Check now.`, open("Open campaign", campaignPath(cid))));
-  } else if (paid.every((p) => p === "tiktok")) {
-    const stop = c.stops.find((s) => s.code === "tiktok_only");
-    items.push(item("places", "no", stop?.text ?? `${name} only pays for TikTok.`, findAnother()));
+  } else if (paid.every((p) => p === "tiktok") && tiktokOnly) {
+    items.push(item("places", "no", tiktokOnly.text || `${name} only pays for TikTok.`, findAnother()));
   } else if (!places.length) {
     const first = paid.find((p) => p !== "tiktok") ?? paid[0]!;
     if (conn.crLinked[first] === false) {
@@ -221,7 +223,8 @@ export function fitOne(i: FitInputs): CampaignFit {
   } else {
     for (const p of paid) {
       if (places.includes(p) || conn.crLinked[p] === false) continue;
-      if (p === "tiktok") items.push(item("places", "note", TIKTOK_WAITS, null, p));
+      // TikTok can't take campaign clips yet while his Mac doesn't post TikTok: the way on, its switch (fit.py MAC_SWITCH).
+      if (p === "tiktok" && !i.macOn) items.push(item("places", "note", CAMPAIGN_MAC_OFF, open("Turn on your Mac", "/settings/posting/tiktok-mac"), p));
       else items.push(item("places", "note", `${label(p)} pays too. Set it up to earn there as well.`, open(`Set up ${label(p)}`, `/settings/posting/setup/${p}`), p));
     }
   }

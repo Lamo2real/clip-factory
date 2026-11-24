@@ -19,11 +19,12 @@ is ``live``, ``practice`` (a scheduled run while Practice is on, or ``practice_n
    after all of that run's Lambda retries), with Upload's own ``release.start_flow``, while ``clip_seconds`` are
    left for that start and for each of its own planned clips (earlier ones left over wait for the next run).
 4. **Send** each planned clip through Upload's own code (``uploads.upload_review_clip``; with Your Mac posts TikTok
-   on, a live run's normal clip also gets a TikTok post for the owner's Mac, §47): the same conditional
-   transaction (``status = review``, no live Throw away hold, posts created once) and idempotent flow start, so a clip
-   is confirmed and its flow started only once, whichever run, retry or Upload gets there first. Practice sends
-   nothing (``would_send``). A clip still in Review after its transaction was cancelled (nothing took it) is tried
-   once more; a clip the owner is throwing away (its hold is on) is skipped: "You threw it away first."
+   on, a live run's clip also gets a TikTok post for the owner's Mac, §47, a campaign clip's with Branded content):
+   the same conditional transaction (``status = review``, no live Throw away hold, posts created once) and idempotent
+   flow start, so a clip is confirmed and its flow started only once, whichever run, retry or Upload gets there
+   first. Practice sends nothing (``would_send``). A clip still in Review after its transaction was cancelled
+   (nothing took it) is tried once more; a clip the owner is throwing away (its hold is on) is skipped: "You threw it
+   away first."
 5. **Done:** the run item gets ``state: done`` and each clip's outcome. A new clip only starts with ``clip_seconds``
    left; the rest wait for the next run ("Out of time. It goes next run."). A scheduled run whose clip flow did not
    start stays ``planned`` and raises once every clip was tried: the Lambda's retry resumes it and finishes the start.
@@ -343,8 +344,9 @@ def _send_one(
                 platforms=places,
                 options=post_preset.upload_options(current, places, campaign=campaign),
                 auto=auto,
-                # §47: with Your Mac posts TikTok on, a live run's normal clip also gets a TikTok post for the Mac (in
-                # the same transaction; TikTok is still never one of the run's places). Never Practice or a Private test.
+                # §47: with Your Mac posts TikTok on, a live run's clip also gets a TikTok post for the Mac (in the
+                # same transaction; TikTok is still never one of the run's places); a campaign clip only when TikTok is
+                # one of its places and it fits there too (uploads). Never Practice or a Private test.
                 tiktok_mac=run.get("mode") == "live" and tiktok_mac.is_on(current),
             )
         except uploads.ClipTaken:

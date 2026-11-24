@@ -14,7 +14,9 @@ type MockWindow = Window & {
       posts(clipId: string): { postId: string; platform: string; status: string }[];
       options(postId: string): Record<string, unknown> | null;
       clipOptions(postId: string): Record<string, unknown> | null;
+      lastConfirm(): { tiktok?: Record<string, unknown>; platforms?: string[]; tiktokMac?: true } | null;
     };
+    mac: { ping(): unknown; queue(): { clipId: string; privacy: string; comment: boolean; brandContent: boolean; brandOrganic: boolean }[] };
   };
 };
 
@@ -156,6 +158,53 @@ test.describe("the simple Review card", () => {
     await expect(tt.locator("summary")).toContainText("Paid partnership");
     await expect(card.locator(".tt-legal")).toContainText("Branded Content Policy");
     await expect(card.getByRole("button", { name: UPLOAD })).not.toHaveAttribute("aria-disabled", "true");
+  });
+
+  test("while his Mac posts TikTok, TikTok's row is this clip's own: Friends and Your brand go to the Mac as picked, with no hold", async ({ page }) => {
+    await page.goto("/");
+    await settle(page);
+    await page.evaluate(() => {
+      localStorage.removeItem("cf-upload-to");
+      const s = (window as MockWindow).__cfMock!.setup;
+      for (const p of ["youtube", "tiktok", "instagram", "facebook"]) s.finish(p);
+      s.setAudit(false);
+    });
+    // Your Mac posts TikTok on (the mock keeps it in this page: in-app from here).
+    const go = async (path: string) => {
+      await page.evaluate((to) => {
+        history.pushState({}, "", to);
+        dispatchEvent(new PopStateEvent("popstate"));
+      }, path);
+      await settle(page);
+    };
+    await go("/settings/posting/tiktok-mac");
+    await page.getByRole("switch", { name: "My Mac posts my TikTok clips" }).click();
+    await page.evaluate(() => (window as MockWindow).__cfMock!.mac.ping());
+    await go("/review");
+    const card = page.locator(".review-card").first();
+    const clipId = (await card.locator("..").getAttribute("id"))!.replace("clip-", "");
+    // On My settings from the start: no tap.
+    await expect(card.getByRole("button", { name: "Your settings are on" })).toBeVisible();
+    const tt = card.locator('[data-place="tiktok"]');
+    await tt.locator("summary").click();
+    await tt.locator('.dropdown__button[aria-haspopup="listbox"]').click();
+    await expect(tt.getByRole("option")).toHaveText(["Everyone", "Friends", "Only me"]);
+    await tt.getByRole("option", { name: "Friends" }).click();
+    await tt.getByRole("switch", { name: "Comments" }).click();
+    await tt.getByRole("switch", { name: "Commercial content" }).click();
+    await tt.getByRole("checkbox", { name: /^Your brand/ }).check();
+    await expect(tt).toContainText("Your video will be labeled as 'Promotional content'.");
+    await expect(card.locator(".tt-yourself-hint")).toHaveText("TikTok: your Mac posts it and adds TikTok's Promotional content label.");
+    const upload = card.getByRole("button", { name: UPLOAD });
+    await expect(upload).not.toHaveAttribute("aria-disabled", "true");
+    await upload.click();
+    await expect(page.getByText(/Uploading to \d places?!/)).toBeVisible();
+    await expect.poll(() => page.evaluate(() => (window as MockWindow).__cfMock!.posting.lastConfirm())).toMatchObject({
+      tiktokMac: true,
+      tiktok: { privacyLevel: "MUTUAL_FOLLOW_FRIENDS", disableComment: true, brandContent: false, brandOrganic: true },
+    });
+    const job = (await page.evaluate(() => (window as MockWindow).__cfMock!.mac.queue())).find((j) => j.clipId === clipId);
+    expect(job).toMatchObject({ privacy: "MUTUAL_FOLLOW_FRIENDS", comment: false, brandContent: false, brandOrganic: true });
   });
 
   test("the closed TikTok row names the account he posts as", async ({ page }) => {

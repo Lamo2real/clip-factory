@@ -85,10 +85,19 @@ def _retry(deps: CrDeps, user_id: str, sub: Mapping[str, Any], code: str) -> dic
     return _hand(deps, user_id, sub, "window_over")
 
 
-def _create(deps: CrDeps, user_id: str, post: Mapping[str, Any], campaign_id: str, cr_id: str | None) -> Item | None:
-    """The first write (``sending``); the existing item when there is one."""
+def _create(
+    deps: CrDeps,
+    user_id: str,
+    post: Mapping[str, Any],
+    campaign_id: str,
+    cr_id: str | None,
+    *,
+    posted_at: Any = None,
+) -> Item | None:
+    """The first write (``sending``); the existing item when there is one. Its window counts from ``posted_at`` when
+    given (the owner's Mac pressed Post then, §47.12), else the post's ``postedAt``."""
     pk, sk = key(user_id, str(post["postId"]))
-    posted = parse(post.get("postedAt")) or _now(deps)
+    posted = parse(posted_at) or parse(post.get("postedAt")) or _now(deps)
     item: Item = {
         "pk": pk,
         "sk": sk,
@@ -117,11 +126,20 @@ def _create(deps: CrDeps, user_id: str, post: Mapping[str, Any], campaign_id: st
     return item
 
 
-def send(deps: CrDeps, user_id: str, post_id: str, campaign_id: str, *, timeout: float | None = None) -> dict[str, Any]:
+def send(
+    deps: CrDeps,
+    user_id: str,
+    post_id: str,
+    campaign_id: str,
+    *,
+    timeout: float | None = None,
+    posted_at: Any = None,
+) -> dict[str, Any]:
     """One try for one post. Never raises: any exception makes the post ``send_by_hand`` (``not_sent_by_app``)
-    while there is time left, else ``missed``, and returns ``{outcome: "error", pending: []}``."""
+    while there is time left, else ``missed``, and returns ``{outcome: "error", pending: []}``. ``posted_at`` (only
+    for the first write) is when the post went up, if not its ``postedAt``."""
     try:
-        return _send(deps, user_id, post_id, campaign_id, timeout or deps.submit_timeout)
+        return _send(deps, user_id, post_id, campaign_id, timeout or deps.submit_timeout, posted_at=posted_at)
     except Exception as e:
         log("error", "cr.send_failed", postId=post_id, error=type(e).__name__)
         try:
@@ -133,12 +151,14 @@ def send(deps: CrDeps, user_id: str, post_id: str, campaign_id: str, *, timeout:
         return {"outcome": "error", "pending": []}
 
 
-def _send(deps: CrDeps, user_id: str, post_id: str, campaign_id: str, timeout: float) -> dict[str, Any]:
+def _send(
+    deps: CrDeps, user_id: str, post_id: str, campaign_id: str, timeout: float, *, posted_at: Any = None
+) -> dict[str, Any]:
     post = deps.store.get(db.user_pk(user_id), db.post_sk(post_id))
     if post is None or post.get("status") != "posted":
         return {"outcome": "not_posted", "pending": []}
     campaign = campaigns.get(deps.store, user_id, campaign_id) or {}
-    sub = _create(deps, user_id, post, campaign_id, campaign.get("crId"))
+    sub = _create(deps, user_id, post, campaign_id, campaign.get("crId"), posted_at=posted_at)
     if sub is None:
         return {"outcome": "missing", "pending": []}
     if sub.get("campaignId") != campaign_id:
