@@ -4,6 +4,10 @@
 // each Clips Funded workspace's lane (ws:{id}) reads its own queue and checks in. Then the tick does one thing:
 // Clip Factory's post, resume or find; else a Clips Funded find, resume or post; else a Clips Funded login the owner
 // asked for; else tidying. An error in a Clips Funded lane is logged (ws.error) and never reaches Clip Factory's.
+//
+// 1.2.2 (§47.11): a lane held only for a TikTok login (its stop carried code "login") looks, at most every 5 minutes,
+// whether its Chrome is logged in to exactly its account again (headless, nothing on screen); then the hold ends and
+// the stopped clip carries on by itself, as if the owner had tapped Try again (hold.js).
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -13,6 +17,7 @@ import { SignInNeeded, appConfig, freshTokens, tokenSource } from "./auth.js";
 import * as cdp from "./cdp.js";
 import * as chrome from "./chrome.js";
 import { ask, frame, yourTurn } from "./frame.js";
+import { BACK_OUTCOMES, loginBack, sendBack } from "./hold.js";
 import { WS_ID, clipsLane, helperPorts, jobIds, normalizeWsJob, otherAccounts, reasonFor, setUpFor, wsFileName, wsLane } from "./lanes.js";
 import { freeName } from "./match.js";
 import { event, log } from "./notify.js";
@@ -25,6 +30,8 @@ import {
   beatTargets,
   claimFields,
   earlierIds,
+  loginCheckDue,
+  loginHold,
   nextAction,
   pickWork,
   pingExtras,
@@ -162,16 +169,28 @@ const pressedIn = (lane, job) => {
   return step === "pressing" || step === "finding";
 };
 
-async function stopped(lane, job, reason, needsYou) {
+/**
+ * The helper stops this job and tells the server why. ``code: "login"`` (§47.11) only for a stop that is a TikTok
+ * login problem and nothing else (``isLogin``): then the hold may end by itself once the Mac is logged in again.
+ */
+async function stopped(lane, job, reason, needsYou, { code } = {}) {
   const said = reasonFor(lane, reason); // a Clips Funded lane's own words
   const pressed = pressedIn(lane, job);
+  const send = (withCode) => lane.api.stopped(job.clipId, lane.state.device, said, needsYou, job.attempt, withCode);
   try {
-    await lane.api.stopped(job.clipId, lane.state.device, said, needsYou, job.attempt);
+    try {
+      await send(code);
+    } catch (e) {
+      // A server from before §47.11 doesn't know the code: the stop goes once more without it, so it is never lost.
+      if (!(code && e instanceof ApiError && e.status === 400)) throw e;
+      log("stopped.code_refused", { account: lane.id, ...jobIds(lane, job) });
+      await send(undefined);
+    }
   } catch (e) {
     log("stopped.call_failed", { account: lane.id, ...jobIds(lane, job), error: words(e) });
   }
   lane.remember(job.clipId, { step: pressed ? "finding" : "stopped", reason: said });
-  lane.event("stopped", { ...jobIds(lane, job), hook: job.hook, reason: said, needsYou, pressed });
+  lane.event("stopped", { ...jobIds(lane, job), hook: job.hook, reason: said, needsYou, pressed, ...(code ? { code } : {}) });
   // The owner's one-time batch (22 Nov): "If TikTok shows a limit, a warning or a puzzle, stop at once, hold the
   // rest". Any stop during a batch pauses this Mac (cli.js on resumes it); the rest wait on the server. The batch is
   // Clip Factory's only.
@@ -228,6 +247,8 @@ async function finished(lane, job, link, { counted }) {
 }
 
 const LOGIN_WAIT_MS = 20 * 60_000;
+// D6 (§47.11): the owner's window stays this long after TikTok's session shows, before it closes.
+export const SESSION_SETTLE_MS = 3000;
 export const LOGIN_ASK = "TikTok logged the helper out: log in again in the helper window";
 const CODE_ASK = "TikTok wants a code or a check for the helper's login: finish it in the helper window";
 
@@ -279,6 +300,9 @@ async function relogin(lane, fr, browser, page) {
     const until = Date.now() + LOGIN_WAIT_MS;
     while (Date.now() < until) {
       if (await loggedIn(shownPage).catch(() => false)) {
+        // D6 (§47.11): TikTok finishes its own redirects and keeps the session first (loginWindow waits the same),
+        // so the hidden Chrome that opens next reads the login (24 Nov: it read logged out 7 seconds later).
+        await sleep(SESSION_SETTLE_MS);
         closeAsk();
         lane.event("setup", { part: "tiktok", again: true, how: "owner" });
         await fr.step("Logged in to TikTok again, carrying on");
@@ -391,6 +415,59 @@ export async function lookHeadless(lane) {
   };
 }
 
+/**
+ * §47.11: the cheap look while a lane is held for a TikTok login. Headless, on the lane's own profile: no TikTok
+ * session cookie at all is ``logged_out`` (no TikTok page is loaded); else who it is logged in as, read as
+ * lookHeadless reads it. Chrome quits either way. Nothing on screen, no cookie cleared, nothing typed.
+ * @returns {Promise<{state: "logged_out"} | {state: "in", seen: object}>}
+ */
+export async function lookLogin(lane) {
+  const { browser, page } = await chrome.open(lane);
+  try {
+    if (!(await loggedIn(page).catch(() => false))) return { state: "logged_out" };
+    let seen = { handles: [], uids: [] };
+    try {
+      await goto(page, "content").catch(() => {}); // a login page reads as nobody
+      await page.locator('a[href*="/video/"]').first().waitFor({ timeout: 15_000 }).catch(() => {}); // the rows, if any
+      seen = (await identify(page)).seen;
+    } catch (e) {
+      log("login_back.look_error", { account: lane.id, error: words(e) });
+    }
+    return { state: "in", seen };
+  } finally {
+    await chrome.quit(browser, lane);
+  }
+}
+
+/** What hold.js loginBack needs for Clip Factory's lane: its account (GET /v1/accounts first), never another lane's. */
+export async function clipsBack(api, state, lane, { capped = true } = {}) {
+  const target = await clipsTarget(api, state);
+  return {
+    look: () => lookLogin(lane),
+    call: (id) => api.loggedIn(id, state.device),
+    now: () => Date.now(),
+    event: (kind, fields) => lane.event(kind, fields),
+    target,
+    pinnedUid: state.clipsAccount?.uid || null,
+    others: otherAccounts(state, "clips"),
+    capped,
+  };
+}
+
+/** The same for a Clips Funded lane: the workspace's account (``target``), never Clip Factory's or another lane's. */
+export function wsBack(lane, target, { capped = true } = {}) {
+  return {
+    look: () => lookLogin(lane),
+    call: (id) => lane.api.loggedIn(id, lane.state.device),
+    now: () => Date.now(),
+    event: (kind, fields) => lane.event(kind, fields),
+    target: at(target),
+    pinnedUid: lane.pinnedUid({ account: { handle: target } }),
+    others: otherAccounts(lane.root, lane.id),
+    capped,
+  };
+}
+
 /** A Clips Funded lane logged out in the middle of a post: the owner's login window, once (D6). */
 async function wsRelogin(lane, job) {
   lane.loggedOut();
@@ -488,7 +565,7 @@ async function doPost(lane, job, { fresh = false, fr, relogged = false, queue = 
         return await doPost(lane, job, { fr, relogged: true, queue, beats: beat });
       }
       await beat.stop();
-      await stopped(lane, job, e.reason, true);
+      await stopped(lane, job, e.reason, true, { code: "login" });
       return;
     }
     await beat.stop();
@@ -505,7 +582,8 @@ async function doPost(lane, job, { fresh = false, fr, relogged = false, queue = 
         lane.loggedOut();
         reason = WS_REASONS.nobody;
       }
-      await stopped(lane, job, reason, e.needsYou);
+      // A logout right after a login (or after Post was pressed) is still only a login problem (§47.11).
+      await stopped(lane, job, reason, e.needsYou, isLogin(e) ? { code: "login" } : {});
     } else if (!pressed && e instanceof ApiError && e.status === 409) {
       // The server said wait (its switch or auto-posting went off, or another try has it): nothing was pressed, so
       // stop quietly; the clip waits on the server and is not counted as a failed try.
@@ -581,7 +659,7 @@ async function doFind(lane, job, { relogged = false, fr = frame(), queue = [], b
         return await doFind(lane, job, { relogged: true, fr, queue, beats: beat });
       }
       await beat.stop();
-      await stopped(lane, job, e.reason, true);
+      await stopped(lane, job, e.reason, true, { code: "login" });
     } else if (e instanceof Stop && e.unknown) {
       // The account couldn't be read this time: no link is taken; it looks again next tick, within the find window.
       log("find.who_unknown", { account: lane.id, ...jobIds(lane, job) });
@@ -593,7 +671,7 @@ async function doFind(lane, job, { relogged = false, fr = frame(), queue = [], b
     } else if (e instanceof Stop) {
       await beat.stop();
       if (e.wrongAccount) lane.event("wrong_account", { ...jobIds(lane, job), seen: e.seen, target: postTarget(lane, job) });
-      await stopped(lane, job, e.reason, e.needsYou);
+      await stopped(lane, job, e.reason, e.needsYou, isLogin(e) ? { code: "login" } : {});
     } else log("find.error", { account: lane.id, ...jobIds(lane, job), error: words(e) });
   } finally {
     await beat.stop();
@@ -639,9 +717,11 @@ async function tidyWs({ lane, queue }) {
 
 /**
  * B. Each Clips Funded workspace's lane: its queue, what it would do, and its check-in. Read once per tick; a
- * failure to list the workspaces skips them all, and one lane's error skips only that lane.
+ * failure to list the workspaces skips them all, and one lane's error skips only that lane. A lane held only for a
+ * TikTok login looks whether it is logged in again (§47.11), at most one lane per tick and only while Clip Factory's
+ * lane has nothing to do (``clipsBusy``): one thing per tick, Clip Factory first.
  */
-async function wsLanes({ api, state, settings: given, config, tokens, now }) {
+async function wsLanes({ api, state, settings: given, config, tokens, now, clipsBusy = false }) {
   let settings = given;
   let list;
   try {
@@ -651,14 +731,35 @@ async function wsLanes({ api, state, settings: given, config, tokens, now }) {
     return [];
   }
   const out = [];
+  let looked = false;
   for (const w of list) {
     if (!w || w.workspaceType !== "stories" || !WS_ID.test(String(w.workspaceId || ""))) continue;
     try {
       const lane = wsLane(state, w.workspaceId, wsClient(config.apiUrl, tokens, w.workspaceId));
-      const status = (await lane.api.queue()) || {};
+      let status = (await lane.api.queue()) || {};
+      const hold = loginHold(status.helper, "ws");
+      let heldReason = null;
+      if (hold && !clipsBusy && !looked && status.on === true && !settings.paused && loginCheckDue(lane.store.loginCheckAt, Date.now())) {
+        looked = true;
+        lane.store.loginCheckAt = iso(); // before the look: a crash mid-look still waits 5 minutes
+        lane.save();
+        await clipsTarget(api, state); // Clip Factory's account, which this lane must never be
+        const back = await loginBack(lane, hold, wsBack(lane, status.account?.handle));
+        if (BACK_OUTCOMES.includes(back.outcome)) {
+          // The hold ended: decide and check in on a fresh read only. A ping of the stale needs_you would put back a
+          // hold with no job and no code, which nothing could end; so when that read fails, no ping this tick.
+          try {
+            status = (await lane.api.queue()) || {};
+          } catch (e) {
+            log("ws.error", { account: lane.id, part: "login_back_read", error: words(e) });
+            continue;
+          }
+        } else if (back.words) heldReason = back.words;
+      }
       const queue = (Array.isArray(status.queue) ? status.queue : []).filter((j) => j && j.publishingJobId).map(normalizeWsJob);
       const target = at(status.account?.handle);
-      const helper = status.helper || null;
+      // After a look that read another account (or no login), the check-in says so; the hold and its code stay.
+      const helper = status.helper && heldReason ? { ...status.helper, reason: heldReason } : status.helper || null;
       // The account this workspace has connected: Clip Factory's lane never posts to it (rule 1, otherAccounts).
       if (target && lane.store.connected !== target) {
         lane.store.connected = target;
@@ -691,9 +792,10 @@ async function wsLanes({ api, state, settings: given, config, tokens, now }) {
 }
 
 /** A ws lane's check-in body. ``loginDone`` once the owner's Log in on my Mac was carried out; ``clearLogin`` when it
- * logged in as the target, which ends a needs-you that only a login could fix. */
-function pingFor(entry, { loginDone, resumeDone, clearLogin = false } = {}) {
-  const needsYou = entry.helper?.state === "needs_you" && !(clearLogin && loginReason(entry.helper?.reason));
+ * logged in as the target, which ends a needs-you that only a login could fix; ``released`` when the server's
+ * logged-in route already ended the hold (§47.11), so this ping never puts it back. */
+function pingFor(entry, { loginDone, resumeDone, clearLogin = false, released = false } = {}) {
+  const needsYou = entry.helper?.state === "needs_you" && !released && !(clearLogin && loginReason(entry.helper?.reason));
   const action = needsYou || entry.helper?.state !== "needs_you" ? entry.action : wsAction({ ...entry.args, helper: null, setUp: true });
   return wsPingBody({
     action,
@@ -730,7 +832,12 @@ async function wsLoginRequest(entry, api) {
   } else {
     lane.event("login_window", { outcome: "no_account" });
   }
-  await lane.api.ping(pingFor(entry, { loginDone: entry.loginRequest, clearLogin: ok }));
+  // §47.11: logged in as the target while held for a TikTok login: the stopped post carries on too (his own tap, so
+  // never capped). The ping below still ends a wrong-account hold he fixed, as before.
+  let released = false;
+  const hold = ok ? loginHold(entry.helper, "ws") : null;
+  if (hold) released = BACK_OUTCOMES.includes((await sendBack(lane, hold, wsBack(lane, target, { capped: false }))).outcome);
+  await lane.api.ping(pingFor(entry, { loginDone: entry.loginRequest, clearLogin: ok, released }));
 }
 
 /**
@@ -843,9 +950,10 @@ export async function tick() {
     const api = client(config.apiUrl, tokens);
     const clips = clipsLane(state, api);
     // A. Clip Factory's lane, as in 1.1.0.
-    const { on, helper, queue = [] } = await api.queue();
+    let { on, helper, queue = [] } = await api.queue();
     // The owner's Start my Mac again and Let them go (D5): applied before anything is decided this tick; the ping
-    // below says they are done. "Needs you" is never cleared here (only his answer on the stopped clip clears it).
+    // below says they are done. "Needs you" is never cleared here: only his answer on the stopped clip clears it, or
+    // the helper's logged-in (§47.11, just below).
     const requests = applyRequests({ helper, settings, state });
     if (Object.keys(requests.patch).length) {
       saveSettings(requests.patch);
@@ -853,6 +961,26 @@ export async function tick() {
     }
     if (requests.resumeDone) clips.event("resumed", {});
     if (requests.letGoDone) clips.event("hold_released", {});
+    // §47.11: held only for a TikTok login, with the switch on and the Mac not paused: at most every 5 minutes a
+    // headless look whether its Chrome is logged in to Clip Factory's TikTok again.
+    let heldReason = null;
+    const hold = loginHold(helper, "clips");
+    if (hold && on === true && !settings.paused && loginCheckDue(state.loginCheckAt, Date.now())) {
+      state.loginCheckAt = iso(); // before the look: a crash mid-look still waits 5 minutes
+      saveState(state);
+      const back = await loginBack(clips, hold, await clipsBack(api, state, clips));
+      if (BACK_OUTCOMES.includes(back.outcome)) {
+        // The hold ended: decide and check in on a fresh read only (the resumed clip may go in this same tick). A
+        // ping of the stale needs_you would put back a hold with no clip and no code, which nothing could end; so
+        // when that read fails, the tick ends here with no ping.
+        try {
+          ({ on, helper, queue = [] } = await api.queue());
+        } catch (e) {
+          log("login_back.read_failed", { error: words(e) });
+          return { action: "login_back", outcome: back.outcome };
+        }
+      } else if (back.words) heldReason = back.words; // the hold and its code stay; the ping says why
+    }
     const needsYou = helper?.state === "needs_you";
     // Auto-posting's schedule, only needed while a backlog clip waits (it goes ~30 minutes after each run).
     let autopost = null;
@@ -866,7 +994,7 @@ export async function tick() {
       }
     }
     let action = needsYou
-      ? { action: "paused", reason: helper.reason || "Your Mac needs you." }
+      ? { action: "paused", reason: heldReason || helper.reason || "Your Mac needs you." }
       : nextAction({ on, queue, state, settings, device: state.device, now: new Date(), autopost });
     // D3: Clip Factory's lane posts, resumes or looks only once it knows which TikTok is Clip Factory's.
     if (["post", "resume", "find"].includes(action.action) && !(await clipsTarget(api, state))) {
@@ -920,7 +1048,7 @@ export async function tick() {
     // B. Clips Funded's lanes: their queues and check-ins (never in the way of Clip Factory's).
     let lanes = [];
     try {
-      lanes = await wsLanes({ api, state, settings, config, tokens, now: new Date() });
+      lanes = await wsLanes({ api, state, settings, config, tokens, now: new Date(), clipsBusy: ["post", "resume", "find"].includes(action.action) });
     } catch (e) {
       log("ws.error", { part: "lanes", error: words(e) });
     }

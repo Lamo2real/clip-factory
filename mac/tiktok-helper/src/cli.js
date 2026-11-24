@@ -2,7 +2,8 @@
 // Clip Factory TikTok helper (docs/CONTRACTS.md §47).
 //   node src/cli.js run           one tick (launchd runs this every minute)
 //   node src/cli.js setup         ON THE OWNER'S COMMAND ONLY: shows the helper's Chrome so he logs in to TikTok and
-//                                 signs in to Clip Factory once
+//                                 signs in to Clip Factory once; a clip stopped only for a TikTok login then carries
+//                                 on by itself once the profile reads Clip Factory's TikTok (§47.11)
 //   node src/cli.js status        what the helper sees
 //   node src/cli.js off | on      pause or resume on this Mac (the switch in Clip Factory is the main one)
 //   node src/cli.js trial <n|none>  posts before the trial pause (none = no limit)
@@ -23,6 +24,7 @@ import { frame, yourTurn } from "./frame.js";
 import { askAndSaveLogin, forgetLogin, hasLogin, loginWindow } from "./login.js";
 import { accessToken, appConfig, freshTokens, readRefreshToken, saveRefreshToken, tokenSource } from "./auth.js";
 import * as chrome from "./chrome.js";
+import { backLine, loginBack, sendBack } from "./hold.js";
 import { WS_ID, clipsLane, normalizeWsJob, wsFileName, wsLane } from "./lanes.js";
 import { event, log } from "./notify.js";
 import { APP_URL, BASE } from "./paths.js";
@@ -33,7 +35,8 @@ import path from "node:path";
 import { freeName } from "./match.js";
 import { DOWNLOADS } from "./paths.js";
 import { loggedIn, post } from "./tiktok.js";
-import { clipsTarget, lookHeadless, tick, windowDeps, withLock } from "./run.js";
+import { loginHold } from "./plan.js";
+import { clipsBack, clipsTarget, lookHeadless, tick, windowDeps, withLock, wsBack } from "./run.js";
 import { at, sameAccount } from "./whoami.js";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -96,6 +99,33 @@ async function setup() {
   return tiktok && signedIn;
 }
 
+/**
+ * §47.11, after his own setup (still under run.lock): when Clip Factory's lane is held only for a TikTok login, the
+ * helper looks at once (headless; never capped: it was his command) and, logged in to Clip Factory's TikTok, ends the
+ * hold so the stopped clip carries on. Prints one line; false only when the profile is on another account.
+ */
+async function afterLogin() {
+  try {
+    const config = await appConfig();
+    const api = client(config.apiUrl, await signIn(config));
+    const state = loadState();
+    const lane = clipsLane(state, api);
+    delete state.loginCheckAt; // the next tick looks at once
+    saveState(state);
+    const { helper } = (await api.queue()) || {};
+    const hold = loginHold(helper, "clips");
+    if (!hold) return true;
+    const d = await clipsBack(api, state, lane, { capped: false });
+    const back = await loginBack(lane, hold, d);
+    const line = backLine(lane, back, d.target);
+    if (line) console.log(line);
+    return back.outcome !== "wrong";
+  } catch (e) {
+    log("setup.after_login_error", { error: String(e.stack || e) });
+    return true;
+  }
+}
+
 /** The signed-in API clients and a Clips Funded workspace's lane with its Mac status (the account it posts to). */
 async function wsContext(workspaceId) {
   if (!WS_ID.test(String(workspaceId || ""))) throw new Error("--workspace takes a Clips Funded workspace id (like stories).");
@@ -111,7 +141,7 @@ async function wsContext(workspaceId) {
 /** A Clips Funded workspace's one-time TikTok login (§47.10, D6): the owner's own, in the lane's own window. */
 async function wsSetup(workspaceId) {
   return withLock(async () => {
-    const { api, state, lane, target } = await wsContext(workspaceId);
+    const { api, state, lane, status, target } = await wsContext(workspaceId);
     if (!target) {
       console.log("Connect TikTok in Clips Funded › Social accounts first.");
       return false;
@@ -120,6 +150,17 @@ async function wsSetup(workspaceId) {
     console.log(`A TikTok window opens. Log in as ${target}: scan the code with the TikTok app.`);
     const result = await loginWindow(lane, target, windowDeps(lane));
     console.log(result.ok ? `Logged in as ${result.handle}.` : `Not logged in (${result.outcome}).`);
+    if (result.ok) {
+      // §47.11: the window already read and pinned the account, so a post held only for a TikTok login carries on
+      // now, with no second look (his command: never capped).
+      delete lane.store.loginCheckAt;
+      lane.save();
+      const hold = loginHold(status.helper, "ws");
+      if (hold) {
+        const line = backLine(lane, await sendBack(lane, hold, wsBack(lane, target, { capped: false })), target);
+        if (line) console.log(line);
+      }
+    }
     return result.ok;
   });
 }
@@ -325,7 +366,7 @@ try {
   } else if (cmd === "setup" && flags.workspace) {
     process.exitCode = (await wsSetup(flags.workspace)) ? 0 : 1;
   } else if (cmd === "setup") {
-    process.exitCode = (await withLock(() => setup())) ? 0 : 1;
+    process.exitCode = (await withLock(async () => (await setup()) && (await afterLogin()))) ? 0 : 1;
   } else if (cmd === "whoami") {
     process.exitCode = (await whoami(flags.workspace === true ? undefined : flags.workspace)) ? 0 : 1;
   } else if (cmd === "status") {

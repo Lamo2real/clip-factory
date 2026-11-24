@@ -957,3 +957,137 @@ def test_another_owners_job_is_not_found(
 def test_clip_factorys_workspace_has_no_mac_routes(call: Call, starter: sup.FakeStarter) -> None:
     assert call("GET", "/v1/workspaces/clips/tiktok/mac")[0] == 409
     assert call("POST", "/v1/workspaces/clips/tiktok/mac/ping", {})[0] == 409
+
+
+# --- §47.11: a TikTok login hold ends by itself once the lane's Chrome is logged in again ---------------------------
+
+
+def _login_stop(call: Call, store: db.Store, *, code: str | None = "login", pressed: bool = False) -> None:
+    _claimed(call, store)
+    if pressed:
+        assert call("POST", job_path("step"), {"device": DEVICE, "step": "pressing"})[0] == 200
+    body: dict[str, Any] = {
+        "device": DEVICE,
+        "reason": "TikTok logged your Mac out. Tap Log in on my Mac.",
+        "needsYou": True,
+    }
+    if code is not None:
+        body["code"] = code
+    assert call("POST", job_path("stopped"), body)[0] == 200
+
+
+def test_a_login_stop_stores_its_code_on_the_workspace_helper_item_only(
+    call: Call, store: db.Store, table: FakeTable, starter: sup.FakeStarter
+) -> None:
+    _login_stop(call, store)
+    helper = stored(table, "MACHELPER")
+    assert (helper["state"], helper["needsYouJobId"], helper["needsYouCode"]) == ("needs_you", JOB_ID, "login")
+    assert call("GET", STATUS)[1]["helper"]["needsYouCode"] == "login"
+    clips_untouched(table)
+    body = {"device": DEVICE, "reason": "x", "needsYou": True, "code": "captcha"}
+    assert call("POST", job_path("stopped"), body)[1]["error"]["message"] == "code must be login."
+    # A later needs-you stop without a code removes it; a needs_you ping keeps it, any other ping removes it.
+    assert call("POST", job_path("stopped"), {"device": DEVICE, "reason": "A puzzle.", "needsYou": True})[0] == 200
+    assert "needsYouCode" not in stored(table, "MACHELPER")
+    call("POST", job_path("stopped"), {"device": DEVICE, "reason": "Out.", "needsYou": True, "code": "login"})
+    ping = {"version": "1.2.2", "device": DEVICE, "setUp": False}
+    call("POST", PING, {**ping, "state": "needs_you", "reason": "Out."})
+    assert stored(table, "MACHELPER")["needsYouCode"] == "login"
+    call("POST", PING, {**ping, "state": "ok"})
+    assert not {"needsYouCode", "needsYouJobId"} & set(stored(table, "MACHELPER"))
+    assert "needsYouCode" not in (mac.public_helper({**helper, "state": "ok"}) or {})
+
+
+@pytest.mark.parametrize("answer", ["retry", "posted"])
+def test_the_owners_answer_removes_the_login_code(
+    call: Call, store: db.Store, table: FakeTable, starter: sup.FakeStarter, answer: str
+) -> None:
+    _login_stop(call, store)
+    body = {} if answer == "retry" else {"link": LINK}
+    status, out = call("POST", job_path(answer), body)
+    assert status == 200, out
+    helper = stored(table, "MACHELPER")
+    assert helper["state"] == "ok"
+    assert not {"needsYouCode", "needsYouJobId", "needsYouStoryId"} & set(helper)
+
+
+def test_logged_in_puts_the_stopped_job_back_in_line_and_ends_the_hold(
+    call: Call, store: db.Store, table: FakeTable, starter: sup.FakeStarter, clock: Clock
+) -> None:
+    _login_stop(call, store)
+    clock.now = NOW + timedelta(minutes=7)
+    status, body = call("POST", job_path("logged-in"), {"device": DEVICE})
+    assert status == 200, body
+    assert body["outcome"] == "resumed"
+    assert body["helper"]["state"] == "ok"
+    assert not {"reason", "needsYouJobId", "needsYouStoryId", "needsYouCode"} & set(body["helper"])
+    item = stored(table)
+    assert (item["macState"], item["macSince"], item["macAttempt"], item["macDevice"], item["updatedAt"]) == (
+        "waiting",
+        "2026-11-15T11:59:00.000Z",
+        1,
+        DEVICE,
+        "2026-11-15T12:07:00.000Z",
+    )
+    assert not {"macStep", "macClaimedAt", "macStoppedAt", "macReason", "macAgainAt", "macPressedAt"} & set(item)
+    clips_untouched(table)
+    assert claim(call)[1]["job"]["attempt"] == 2  # the claim checks the account again, as for any post
+    status, body = call("POST", job_path("logged-in"), {"device": DEVICE})
+    assert (status, body["error"]["message"]) == (409, mac.NOT_LOGIN_HOLD)
+
+
+def test_logged_in_after_a_press_and_on_a_job_that_is_gone(
+    call: Call, store: db.Store, table: FakeTable, starter: sup.FakeStarter
+) -> None:
+    _login_stop(call, store, pressed=True)
+    job_before = stored(table)
+    status, body = call("POST", job_path("logged-in"), {"device": DEVICE})
+    assert (status, body["outcome"], body["helper"]["state"]) == (200, "pressed", "ok")
+    assert stored(table) == job_before  # never twice: the owner's question stays
+    assert claim(call)[0] == 409
+    call("POST", job_path("stopped"), {"device": DEVICE, "reason": "Out.", "needsYou": True, "code": "login"})
+    store.delete(sup.PK, JOB_SK)
+    status, body = call("POST", job_path("logged-in"), {"device": DEVICE})
+    assert (status, body["outcome"]) == (200, "cleared")
+    assert stored(table, "MACHELPER")["state"] == "ok"
+    clips_untouched(table)
+
+
+def test_logged_in_is_refused_unless_this_mac_holds_this_job_for_a_login(
+    call: Call, store: db.Store, table: FakeTable, starter: sup.FakeStarter
+) -> None:
+    mac_job(store)
+    assert call("POST", job_path("logged-in"), {"device": DEVICE})[0] == 409  # no helper item
+    _login_stop(call, store, code=None)
+    assert call("POST", job_path("logged-in"), {"device": DEVICE})[0] == 409  # no code
+    call("POST", job_path("stopped"), {"device": DEVICE, "reason": "Out.", "needsYou": True, "code": "login"})
+    assert call("POST", job_path("logged-in", "01JZ0000000000000000000PJ2"), {"device": DEVICE})[0] == 409
+    assert call("POST", job_path("logged-in"), {"device": "mac-2"})[0] == 409
+    store.update(sup.PK, JOB_SK, {"macDevice": "mac-2"})
+    before = snapshot(table)
+    status, body = call("POST", job_path("logged-in"), {"device": DEVICE})
+    assert (status, body["error"]["message"]) == (409, mac.NOT_LOGIN_HOLD)
+    assert snapshot(table) == before
+    for bad in ({"device": DEVICE, "x": 1}, {}):
+        assert call("POST", job_path("logged-in"), bad)[0] == 400
+    assert snapshot(table) == before
+
+
+def test_logged_in_loses_to_a_change(
+    call: Call, store: db.Store, table: FakeTable, starter: sup.FakeStarter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _login_stop(call, store)
+    stale = stored(table)
+    store.update(sup.PK, JOB_SK, {"macState": "working"})  # claimed again meanwhile
+    monkeypatch.setattr(publish, "job_item", lambda *_a: stale)
+    before = snapshot(table)
+    status, body = call("POST", job_path("logged-in"), {"device": DEVICE})
+    assert (status, body["error"]["message"]) == (409, mac.CHANGED)
+    assert snapshot(table) == before
+
+
+def test_the_workspace_hold_codes_are_clip_factorys() -> None:
+    text = (SRC / "workspaces" / "mac.py").read_text()
+    assert re.findall(r"^HOLD_CODES: Final = \(([^)]*)\)$", text, re.MULTILINE) == ['"login",']
+    assert mac.HOLD_CODES == tiktok_mac.HOLD_CODES
+    assert mac.NOT_LOGIN_HOLD == tiktok_mac.NOT_LOGIN_HOLD

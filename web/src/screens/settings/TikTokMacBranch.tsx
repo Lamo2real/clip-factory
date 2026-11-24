@@ -20,6 +20,7 @@ import {
   canSendToMac,
   helperLine,
   holdLine,
+  loginBackLine,
   loginLine,
   loginRequestLine,
   MAC_LET_GO_BUTTON,
@@ -259,6 +260,16 @@ function MacLogin({ helper, onAsked }: { helper: MacHelper; onAsked: () => void 
   );
 }
 
+/** §47.11: while the Mac is held only for a TikTok login, one quiet line says it carries on by itself (else nothing). */
+export function MacLoginBack({ helper }: { helper: MacHelper | null }) {
+  const line = loginBackLine(helper);
+  return line ? (
+    <p className="autopost__line" data-mac="login-back">
+      {line}
+    </p>
+  ) : null;
+}
+
 /**
  * Under the Mac's status line (D5): Start my Mac again while it is paused, Open the stopped clip while it needs him,
  * and its hold on older auto-posting clips with Let them go. Once asked, the line says the Mac does it at its next tick.
@@ -397,6 +408,7 @@ export function TikTokMacBranch() {
               <p className="autopost__line" data-mac="helper">
                 {helperLine(status.helper)}
               </p>
+              <MacLoginBack helper={status.helper} />
               {status.helper ? <MacAsks helper={status.helper} /> : <MacSetUp />}
               {on ? (
                 <p className="autopost__line" data-mac="when">

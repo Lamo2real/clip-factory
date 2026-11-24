@@ -45,7 +45,8 @@ try again in a minute, §17.4), `internal`.
 | POST `/v1/clips/{clipId}/tiktok/mac/claim` | `{ "device" }` | `{ "job": MacJob }` (§47) |
 | POST `/v1/clips/{clipId}/tiktok/mac/step` | `{ "device", "step", "attempt"? }` | `{ "job": MacJob }` (§47; the same step sent again is the job's beat) |
 | POST `/v1/clips/{clipId}/tiktok/mac/done` | `{ "device", "link"? }` | `{ "clip", "posts", "note"? }` (the Mac posted it, §47) |
-| POST `/v1/clips/{clipId}/tiktok/mac/stopped` | `{ "device", "reason", "needsYou"? }` | `{ "job": MacJob }` (§47) |
+| POST `/v1/clips/{clipId}/tiktok/mac/stopped` | `{ "device", "reason", "needsYou"?, "attempt"?, "code"?: "login" }` | `{ "job": MacJob }` (§47; `code` §47.11) |
+| POST `/v1/clips/{clipId}/tiktok/mac/logged-in` | `{ "device" }` | `{ "helper": MacHelper \| null, "outcome": "resumed" \| "pressed" \| "cleared" }` (the helper only: its Mac is logged in to the right TikTok again, so its login hold ends, §47.11) |
 | POST `/v1/clips/{clipId}/tiktok/mac/retry` | `{ "notOnTikTok"?: true, "now"?: boolean }` | `{ "clip", "posts" }` (the owner's Try again, §47; `now: true` makes it `macSource: "upload"`; after Post was pressed only once the 30-minute find window is over, §47.3) |
 | DELETE `/v1/clips/{clipId}/tiktok/mac` | – | `{ "clip", "posts" }` (Take it back, §47; kept, the web no longer calls it, ADR-86) |
 | GET `/v1/skills` | – | `{ "skills": Skill[] }` (§18.3: built-ins first, then the owner's by name; no `enabled`) |

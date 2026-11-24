@@ -77,6 +77,11 @@ password, kept only in the Keychain and never logged or sent anywhere). When Tik
 logs back in with it, at most twice in 24 hours, and never again after TikTok refuses it. Clip Factory's Settings ›
 Posting › Your Mac posts TikTok has Change TikTok login and Forget TikTok login.
 
+1.2.2 (§47.11): when a stop was only a TikTok login problem, the helper looks every 5 minutes (headless, nothing on
+screen) and right after `setup`; once that lane's Chrome reads exactly its own account, "Your Mac needs you" ends and
+the stopped clip carries on by itself (never another account, never a second press: a clip whose Post was pressed
+stays for the owner).
+
 ## Stops instead of guessing
 
 It stops on any of these: a login page, a puzzle or code check, "Something went wrong", "Content may be restricted",

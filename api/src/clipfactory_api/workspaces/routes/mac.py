@@ -3,7 +3,8 @@ Clips Funded's own Lambda (``workspaces/http.py``), under the existing ``ANY /v1
 
 * Helper: ``GET …/tiktok/mac`` (``?version=``: the queue is empty for a helper older than ``MAC_WS_FROM``),
   ``POST …/tiktok/mac/ping``, and per job ``…/publishing/{id}/mac/claim``, ``step`` (a re-sent step is the job's
-  beat), ``done`` and ``stopped``. It downloads the video with the existing ``…/stories/{storyId}/download``.
+  beat), ``done``, ``stopped`` (``code: "login"``, §47.11) and ``logged-in`` (the lane's Chrome is logged in to the
+  job's TikTok again: its login hold on that job ends, §47.11; the web never calls it). It downloads the video with the existing ``…/stories/{storyId}/download``.
 * Owner: ``POST …/tiktok/mac/login`` (Log in on my Mac), ``POST …/tiktok/mac/request`` (Start my Mac again),
   ``…/publishing/{id}/mac/retry`` (Try again) and ``…/publishing/{id}/mac/posted`` (It's on TikTok).
 
@@ -142,14 +143,17 @@ def step(app: App, req: Request) -> Response:
 
 
 def stopped(app: App, req: Request) -> Response:
-    """``POST …/publishing/{id}/mac/stopped`` ``{device, reason, needsYou?, attempt?}`` → ``{job: WsMacJob}``."""
+    """``POST …/publishing/{id}/mac/stopped`` ``{device, reason, needsYou?, attempt?, code?}`` → ``{job: WsMacJob}``."""
     workspace = _workspace(app, req)
     body = req.json()
-    validate.only_keys(body, {"device", "reason", "needsYou", "attempt"})
+    validate.only_keys(body, {"device", "reason", "needsYou", "attempt", "code"})
     device = _device(body)
     attempt = _attempt(body)
     reason = validate.required_string(body, "reason", max_len=10_000)
     needs_you = validate.boolean(body.get("needsYou", False), "needsYou")
+    code = body.get("code")
+    if code is not None and code not in ws_mac.HOLD_CODES:
+        raise bad_request(ws_mac.BAD_CODE, "code")
     found = ws_mac.stopped(
         app.store,
         req.user_id,
@@ -160,8 +164,22 @@ def stopped(app: App, req: Request) -> Response:
         needs_you=needs_you,
         attempt=attempt,
         now=app.clock(),
+        code=code,
     )
     return ok({"job": found})
+
+
+def logged_in(app: App, req: Request) -> Response:
+    """``POST …/publishing/{id}/mac/logged-in`` ``{device}`` → ``{helper: WsMacHelper | null, outcome}`` (§47.11):
+    ``resumed``, ``pressed`` or ``cleared``. A job that is gone still has its hold end (no 404 for it)."""
+    workspace = _workspace(app, req)
+    body = req.json()
+    validate.only_keys(body, {"device"})
+    device = _device(body)
+    item, outcome = ws_mac.logged_in(
+        app.store, req.user_id, str(workspace["workspaceId"]), _job_id(req), device=device, now=app.clock()
+    )
+    return ok({"helper": ws_mac.public_helper(item), "outcome": outcome})
 
 
 def done(app: App, req: Request) -> Response:
@@ -249,6 +267,7 @@ ROUTES = [
     route("POST", f"{JOB}/step", step),
     route("POST", f"{JOB}/done", done),
     route("POST", f"{JOB}/stopped", stopped),
+    route("POST", f"{JOB}/logged-in", logged_in),
     route("POST", f"{JOB}/retry", retry),
     route("POST", f"{JOB}/posted", posted),
 ]

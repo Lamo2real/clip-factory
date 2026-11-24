@@ -27,4 +27,5 @@ export const KEYCHAIN_SERVICE = "Clip Factory TikTok helper";
 export const SECURITY = process.env.CF_TT_SECURITY || "/usr/bin/security";
 // 1.2.0: Clips Funded's lanes, the handle check before every post, and the AI label (the server's MAC_WS_FROM).
 // 1.2.1: a fresh Clip Factory token for every call (auth.js tokenSource), so a 20-minute login wait ends with its stop.
-export const VERSION = "1.2.1";
+// 1.2.2: a hold that is only a TikTok login ends by itself once the lane's Chrome reads its own account again (§47.11).
+export const VERSION = "1.2.2";

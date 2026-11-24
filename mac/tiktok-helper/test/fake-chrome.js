@@ -1,11 +1,23 @@
 // A helper Chrome for whole-tick tests, in place of src/chrome.js and src/cdp.js (tick-token.test.js swaps it in
-// with a module hook): nothing starts, nothing shows, nothing is attached. Its TikTok is logged out: every TikTok
-// page lands on TikTok's login, no session cookie ever appears, and the owner never logs in. ``mac`` records what
-// the tick asked of it.
-export const mac = { opened: [], windows: [], closedPorts: [], clearedPorts: [], quits: 0 };
+// with a module hook): nothing starts, nothing shows, nothing is attached. By default its TikTok is logged out: every
+// TikTok page lands on TikTok's login, no session cookie ever appears, and the owner never logs in. ``mac`` records
+// what the tick asked of it, and a test may set:
+//   mac.account  the account a lane's profile is logged in to: "@name", {handle, uid}, or {[laneId]: one of those}.
+//                Its pages then have TikTok's session cookie and the passport answer names that account.
+//   mac.text     what TikTok's page says (its visible text: "Verify to continue" is a puzzle).
+//   mac.ownerLogsInAfterMs  a visible window (the owner's) has the session this long after it opened; a hidden
+//                Chrome on the same profile still reads logged out (24 Nov 2026: the session wasn't kept).
+export const mac = { opened: [], windows: [], closedPorts: [], clearedPorts: [], quits: 0, quitsAt: [], visits: [], account: null, text: "", ownerLogsInAfterMs: null, sessionShownAt: null };
 
 export function resetMac() {
-  Object.assign(mac, { opened: [], windows: [], closedPorts: [], clearedPorts: [], quits: 0 });
+  Object.assign(mac, { opened: [], windows: [], closedPorts: [], clearedPorts: [], quits: 0, quitsAt: [], visits: [], account: null, text: "", ownerLogsInAfterMs: null, sessionShownAt: null });
+}
+
+const one = (a) => (!a ? null : typeof a === "string" ? { handle: a } : a);
+function accountOf(laneId) {
+  const a = mac.account;
+  if (!a || typeof a === "string" || a.handle) return one(a);
+  return one(a[laneId]);
 }
 
 /** Every locator finds nothing (no dialog, no button, no rows). */
@@ -19,42 +31,65 @@ function nothing() {
     getByText: () => none,
     isVisible: async () => false,
     isEnabled: async () => false,
+    isChecked: async () => false,
     count: async () => 0,
     innerText: async () => "",
     click: async () => {},
+    scrollIntoViewIfNeeded: async () => {},
     waitFor: async () => {
-      throw new Error("Nothing like that on TikTok's login page.");
+      throw new Error("Nothing like that on this TikTok page.");
     },
   };
   return none;
 }
 
-/** A page of the logged-out Chrome: TikTok sends every page to its login, and there is no session cookie. */
-function loggedOutPage() {
+/** A page of the lane's Chrome: logged out (every TikTok page is its login) unless the profile has an account. */
+function tiktokPage(laneId, visible) {
+  const openedAt = Date.now();
   let url = "about:blank";
+  const session = () => {
+    if (accountOf(laneId)) return true;
+    if (visible && mac.ownerLogsInAfterMs !== null && Date.now() - openedAt >= mac.ownerLogsInAfterMs) {
+      mac.sessionShownAt ??= Date.now();
+      return true;
+    }
+    return false;
+  };
   return {
     goto: async (to) => {
-      url = /tiktok\.com/.test(String(to)) ? `https://www.tiktok.com/login?redirect_url=${encodeURIComponent(to)}` : String(to);
+      mac.visits.push({ lane: laneId, visible, url: String(to) });
+      url = /tiktok\.com/.test(String(to)) && !session() ? `https://www.tiktok.com/login?redirect_url=${encodeURIComponent(to)}` : String(to);
     },
     url: () => url,
     waitForLoadState: async () => {},
     getByRole: () => nothing(),
     getByText: () => nothing(),
     locator: () => nothing(),
-    evaluate: async () => "",
+    $$eval: async () => [],
+    evaluate: async (fn) => {
+      const code = String(fn);
+      const account = accountOf(laneId);
+      if (code.includes("/passport/")) {
+        return account ? { data: { username: account.handle.replace(/^@/, ""), ...(account.uid ? { user_id_str: account.uid } : {}) } } : null;
+      }
+      if (code.includes("innerText")) return mac.text || "";
+      return null;
+    },
     screenshot: async () => {},
     setDefaultTimeout: () => {},
-    context: () => ({ cookies: async () => [], clearCookies: async () => {} }),
+    mouse: { wheel: async () => {} },
+    context: () => ({ cookies: async () => (session() ? [{ name: "sessionid", value: "fake-session" }] : []), clearCookies: async () => {} }),
   };
 }
 
 // chrome.js
 export async function open(lane, { visible = false } = {}) {
   mac.opened.push({ lane: lane.id, visible });
-  return { browser: { lane: lane.id }, page: loggedOutPage() };
+  return { browser: { lane: lane.id, visible }, page: tiktokPage(lane.id, visible) };
 }
-export async function quit() {
+export async function quit(browser) {
   mac.quits++;
+  mac.quitsAt.push({ lane: browser?.lane, visible: Boolean(browser?.visible), at: Date.now() });
 }
 export async function closePort(port) {
   mac.closedPorts.push(port);
