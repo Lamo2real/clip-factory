@@ -23,6 +23,7 @@ import {
   chipFor,
   chipSentence,
   choiceSearch,
+  DASH_PATH,
   isAll,
   PERIOD_LABEL,
   PERIODS,
@@ -35,6 +36,7 @@ import {
   type DashChoice,
 } from "../../lib/moneyDash.ts";
 import { useAction } from "../../lib/motion.ts";
+import { withBack } from "../../lib/backLink.ts";
 import { prefersReducedMotion } from "../../lib/prefs.ts";
 import { MoneyChart } from "./MoneyChart.tsx";
 import { MoneyClipList } from "./MoneyClipList.tsx";
@@ -294,6 +296,10 @@ function Notes({ excluded }: { excluded: MoneyExcluded[] }) {
           {e.reason === "needs_permission" ? (
             <LinkButton href={`${MONEY_PATH}#money-youtube`} variant="action" size="md" icon="key">
               Allow money reading
+            </LinkButton>
+          ) : e.reason === "not_connected" ? (
+            <LinkButton href={withBack(`/settings/posting/setup/${e.platform}`, DASH_PATH)} variant="glass" size="md" icon="link" data-note="set-up">
+              {`Set up ${PLATFORM_LABEL[e.platform]}`}
             </LinkButton>
           ) : null}
         </div>

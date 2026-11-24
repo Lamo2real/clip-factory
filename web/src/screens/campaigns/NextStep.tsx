@@ -2,7 +2,7 @@
 // button (pinned at the bottom right on phones while the card is on screen). Quiet green asks change only Clip
 // Factory, each with an 8 s Undo. The rules box sits here when the owner has to copy the rules himself. With the
 // campaign finder on, "Find another campaign" opens the Find page in the same tab (§41.6 change 2).
-import { useId, useState, type ReactNode } from "react";
+import { useCallback, useId, useState, type ReactNode } from "react";
 import { createPortal } from "react-dom";
 import { api } from "../../api/index.ts";
 import { friendlyMessage } from "../../api/errors.ts";
@@ -10,7 +10,7 @@ import type { Campaign, SaidAnswer, StopCode } from "../../api/types.ts";
 import { Icon } from "../../components/Icon.tsx";
 import { useToast } from "../../components/Toasts.tsx";
 import { Button, LinkButton } from "../../components/ui.tsx";
-import { CR_SETUP_PATH, MEMBERSHIP_TEXT, SOFT_STOPS, crSetupFor, forDevice, refused, reloadCr, signedIn, useCr, vermilionOf } from "../../lib/contentRewards.ts";
+import { MEMBERSHIP_TEXT, SOFT_STOPS, crSetupFor, forDevice, pasteByHand, refused, reloadCr, signedIn, useCr, vermilionOf } from "../../lib/contentRewards.ts";
 import { withBack } from "../../lib/backLink.ts";
 import { FIND_PATH, finderHref, useFinderSummary } from "../../lib/finder.ts";
 import { isTouchDevice } from "../../lib/crConnect.ts";
@@ -18,12 +18,42 @@ import { Rich } from "../settings/setup/bits.tsx";
 import { GreenButton, OpenButton } from "./bits.tsx";
 
 export const RULES_MAX = 8000;
+/** Every setup page (the five platforms' and Content Rewards'): a link to one carries the way back to this card. */
+const SETUP_PREFIX = "/settings/posting/setup/";
 
 const SAID_SAVED: Record<SaidAnswer, string> = {
   applied: "Saved: you applied.",
   not_eligible: "Saved: the brand said no.",
   joined_by_hand: "Saved: you're in.",
 };
+
+/**
+ * Rules pasted into a box but not read yet, kept for this tab's visit (a reload or a trip to another page keeps
+ * them); emptied once they are read. `key` names the box ("next:{campaignId}", "rules:{campaignId}").
+ */
+export function useKeptRules(key: string): [string, (v: string) => void] {
+  const slot = `cf-cr-rules:${key}`;
+  const [text, setText] = useState(() => {
+    try {
+      return sessionStorage.getItem(slot) ?? "";
+    } catch {
+      return "";
+    }
+  });
+  const keep = useCallback(
+    (v: string) => {
+      setText(v);
+      try {
+        if (v) sessionStorage.setItem(slot, v.slice(0, RULES_MAX));
+        else sessionStorage.removeItem(slot);
+      } catch {
+        /* no storage: kept while the page is open */
+      }
+    },
+    [slot],
+  );
+  return [text, keep];
+}
 
 /**
  * The rules box (≤ 8,000 characters): "Copy everything under Brief and Content requirements. Paste it here." A glass
@@ -42,7 +72,7 @@ export function RulesBox({ value, onChange, label = "The campaign's rules" }: { 
       onChange(got.slice(0, RULES_MAX));
     } catch {
       document.getElementById(`${id}-rules`)?.focus();
-      toast.info("Press and hold in the box, then choose Paste.");
+      toast.info(pasteByHand());
     }
   }
   return (
@@ -118,7 +148,7 @@ export function NextStepPanel({
   const conn = cr.state === "ok" ? cr.data.connection : null;
   // Every link to a setup page leads back to this card (§39.1): the API's own href already does; an older one gets it.
   const served = campaign.nextStep;
-  const withWayBack: typeof served = served.button?.href?.startsWith(CR_SETUP_PATH)
+  const withWayBack: typeof served = served.button?.href?.startsWith(SETUP_PREFIX)
     ? { ...served, button: { ...served.button, href: withBack(served.button.href, `/campaigns/${campaign.campaignId}`) } }
     : served;
   // §41.6 change 2: while the overview has `finder`, Discover becomes the Find page (the server's words stay).
@@ -130,7 +160,7 @@ export function NextStepPanel({
   };
   const device = forDevice(withWayBack, isTouchDevice());
   const step = finderOn ? { ...device, ...(device.button ? { button: toFinder(device.button) } : {}), ...(device.glass ? { glass: device.glass.map(toFinder) } : {}) } : device;
-  const [box, setBox] = useState("");
+  const [box, setBox] = useKeptRules(`next:${campaign.campaignId}`);
   const [busy, setBusy] = useState<string | null>(null);
   // "It says Submit clip" while the rules can't be read: the box opens at once (saying you're in and giving the
   // rules is one step).
@@ -144,6 +174,8 @@ export function NextStepPanel({
       const next = await api().crPatchCampaign(campaign.campaignId, body);
       onCampaign(next);
       void reloadCr();
+      // The tapped answer goes with the old step: the focus moves to the new one's heading, not to the page.
+      setTimeout(() => document.getElementById("cr-next-title")?.focus({ preventScroll: true }), 0);
       if (body.said) toast.undo(SAID_SAVED[body.said], { onUndo: () => undo?.(), onCommit: () => undefined });
       return true;
     } catch (e) {
@@ -249,7 +281,7 @@ export function NextStepPanel({
 
   return (
     <section className={`cr-next${isIn ? " is-in" : ""}`} data-help="cr-next-step" data-kind={step.kind} aria-labelledby="cr-next-title">
-      <h2 className="cr-section__title" id="cr-next-title">
+      <h2 className="cr-section__title" id="cr-next-title" tabIndex={-1}>
         Next step
       </h2>
       {justIn && !/^You're in!/.test(step.text) ? (

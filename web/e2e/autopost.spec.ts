@@ -408,6 +408,30 @@ for (const size of SIZES) {
       await expect(page.locator("#auto-post-recent")).toBeVisible();
     });
 
+    test("Tab reaches Test it first, and Enter opens it", async ({ page }) => {
+      await open(page);
+      const fold = page.locator("#auto-post-test");
+      await expect(fold).not.toHaveAttribute("open", "");
+      // The last stop Tab makes before the fold, whatever the lists above it hold today.
+      await page.evaluate(() => {
+        const fold = document.getElementById("auto-post-test")!;
+        const stops = Array.from(document.querySelectorAll<HTMLElement>("a[href], button, input, select, textarea, summary, [tabindex]")).filter(
+          (el) =>
+            el.tabIndex >= 0 &&
+            !(el as HTMLButtonElement).disabled &&
+            el.getClientRects().length > 0 &&
+            !fold.contains(el) &&
+            !!(el.compareDocumentPosition(fold) & Node.DOCUMENT_POSITION_FOLLOWING),
+        );
+        stops.at(-1)!.focus();
+      });
+      await page.keyboard.press("Tab");
+      await expect(fold.locator(":scope > summary")).toBeFocused();
+      await page.keyboard.press("Enter");
+      await expect(fold).toHaveAttribute("open", "");
+      await expect(page.getByRole("button", { name: "Practice run now" })).toBeVisible();
+    });
+
     test("Find a setting: a list that draws once the status is read, and the Test it first fold", async ({ page }) => {
       await open(page);
       await turnOn(page);
@@ -426,12 +450,12 @@ for (const size of SIZES) {
       await expect(found).toBeInViewport();
       await page.evaluate(() => delete (window as unknown as { __cfMockFaults: { latencyMs?: number } }).__cfMockFaults.latencyMs);
 
-      // The fold opens by itself and takes the focus.
+      // The fold opens by itself and its summary (the part the keyboard reaches) takes the focus.
       await go(page, "/settings/posting");
       await go(page, "/settings/posting/auto#auto-post-test");
       const fold = page.locator("#auto-post-test");
       await expect(fold).toHaveAttribute("open", "");
-      await expect(fold).toBeFocused();
+      await expect(fold.locator(":scope > summary")).toBeFocused();
       await expect(page.getByRole("button", { name: "Practice run now" })).toBeInViewport();
     });
   });

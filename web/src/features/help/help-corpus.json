@@ -1,5 +1,5 @@
 {
-  "version": "dd122590e490",
+  "version": "24bf6158fe56",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -4552,6 +4552,8 @@
         "cancel",
         "upload",
         "check",
+        "stay",
+        "leave",
         "make",
         "normal",
         "instead",
@@ -4559,9 +4561,7 @@
         "clear",
         "link",
         "progress",
-        "many",
-        "number",
-        "videos"
+        "many"
       ],
       "answer": "Paste a link. Clip Factory makes short clips. You pick the best ones.",
       "steps": [
@@ -4587,9 +4587,9 @@
       "keywords": [
         "jobs list",
         "keep",
+        "cancel",
         "select",
         "make",
-        "cancel",
         "show",
         "older",
         "no",
@@ -4643,12 +4643,12 @@
         "source",
         "delete",
         "stop",
+        "new",
         "use",
         "video",
         "file",
         "check",
-        "gone",
-        "stopping"
+        "gone"
       ],
       "answer": "A job's page shows each step as your clips are made. Tap a job in Jobs to open it.",
       "steps": [
@@ -4697,11 +4697,11 @@
         "stitch",
         "commercial",
         "content",
-        "uploaded",
         "show",
         "every",
-        "make",
-        "check"
+        "set",
+        "up",
+        "posting"
       ],
       "answer": "These clips all come from one job. Upload or throw away each one.",
       "steps": [

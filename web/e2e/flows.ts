@@ -101,6 +101,9 @@ export async function controlsIn(page: Page, selector: string): Promise<string[]
     };
     return [...root.querySelectorAll("a[href], button, input, textarea, select, summary")]
       .filter((el) => {
+        // "Like clips that did well" (§14.6): its tiles are links out to other clips, never a step on the way to
+        // Upload, and they come in when the search answers (library-audit.spec checks them).
+        if (el.closest(".similar")) return false;
         if ((el as HTMLInputElement).type === "radio") return !!el.closest("label")?.getBoundingClientRect().width;
         const r = (el as HTMLElement).getBoundingClientRect();
         return r.width > 0 && r.height > 0;

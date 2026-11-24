@@ -49,20 +49,86 @@ test("each calm state says one plain thing and links to the fix", async ({ page 
   await expect(stack(page, "tiktok")).toContainText("Uploaded privately");
   await expect(stack(page, "instagram")).toContainText("Connect Instagram in Settings › Posting › Set up posting.");
   await expect(stack(page, "instagram").getByRole("link", { name: "Set up Instagram" })).toHaveAttribute("href", "/settings/posting/setup/instagram");
-  await expect(stack(page, "facebook")).toContainText("Facebook said the video was too long for a Reel. Go to Library and tap Try again.");
-  await expect(stack(page, "facebook").getByRole("link", { name: "Go to Library" })).toHaveAttribute("href", "/library");
-  await expect(stack(page, "x")).toContainText("Not posted here. Turn on X in Settings › Posting › Where clips go.");
-  await expect(stack(page, "x").getByRole("link", { name: "Open Where clips go" })).toHaveAttribute("href", "/settings/posting/where");
+  // Didn't work: its Try again is right in the stack, not at the top of the Library (thousands of px from it).
+  await expect(stack(page, "facebook")).toContainText("Facebook said the video was too long for a Reel. Tap Try again.");
+  await expect(stack(page, "facebook").getByRole("button", { name: "Try again, Facebook" })).toBeVisible();
+  await expect(stack(page, "facebook").getByRole("link", { name: "Go to Library" })).toHaveCount(0);
+  // X is on in Where clips go already: no "Turn on X" and no trip there.
+  await expect(stack(page, "x")).toContainText("This clip was not sent to X.");
+  await expect(stack(page, "x")).not.toContainText("Turn on");
+  await expect(page.getByRole("link", { name: "Open Where clips go" })).toHaveCount(0);
   await expect(stack(page, "youtube").locator('[data-metric="top"]')).toBeVisible();
 
   await stack(page, "instagram").getByRole("link", { name: "Set up Instagram" }).click();
   await expect(page).toHaveURL(/\/settings\/posting\/setup\/instagram$/);
   await expect(page.getByRole("heading", { level: 1, name: "Set up Instagram" })).toBeVisible();
 
+  // (When the TikTok numbers come depends on the day: "the Library and the clip page say the same time" below.)
   await openClip(page, CLIPS.fresh);
   await expect(stack(page, "youtube")).toContainText("Posting now…");
-  await expect(stack(page, "tiktok")).toContainText("Numbers are on the way. Check back in a few minutes.");
   await expect(stack(page, "instagram")).toContainText("Can take 2 days");
+});
+
+test.describe("on a Monday morning", () => {
+  test.use({ timezoneId: "UTC" });
+
+  test("the Library and the clip page say the same time for a post's numbers (its perfCheckAt)", async ({ page }) => {
+    // The mock dates this week's clips from the page's clock: on a Monday morning the fresh clip's numbers come tomorrow.
+    await page.clock.install({ time: new Date("2026-11-23T09:00:00Z") });
+    await page.goto("/library");
+    await settle(page);
+    const card = page.locator(".lib-card", { has: page.locator(".lib-card__hook", { hasText: CLIPS.fresh }) });
+    await expect(card.locator(".post", { hasText: "TikTok" })).toContainText("· numbers tomorrow");
+    await openClip(page, CLIPS.fresh);
+    await expect(stack(page, "tiktok")).toContainText("Numbers come tomorrow.");
+    await expect(stack(page, "tiktok")).not.toContainText("a few minutes");
+  });
+});
+
+test("a place that didn't work: Try again in its own stack sends it there again", async ({ page }) => {
+  await openClip(page, CLIPS.mixed);
+  await stack(page, "facebook").getByRole("button", { name: "Try again, Facebook" }).click();
+  await expect(page.getByText("Trying Facebook again!")).toBeVisible();
+  await expect(stack(page, "facebook").getByRole("button", { name: "Try again, Facebook" })).toHaveCount(0);
+  await expect(stack(page, "facebook")).not.toContainText("too long for a Reel");
+});
+
+test("a clip whose posting never started: Try again leads the page, and no stack says Turn on", async ({ page }) => {
+  for (const size of [
+    { width: 390, height: 844 },
+    { width: 1440, height: 900 },
+  ]) {
+    await page.setViewportSize(size);
+    await page.goto("/library");
+    await settle(page);
+    // The Library card's line (keep-again.spec.ts): the same line and Try again come on its page.
+    const lib = page.locator(".lib-card", { hasText: "This clip has not started uploading yet." });
+    await lib.locator(".lib-card__link").click();
+    await page.waitForURL(/\/clips\/[A-Z0-9]+$/);
+    await page.locator("[data-stack]").nth(4).waitFor();
+    const again = page.locator(".perf__actions .keep-again");
+    await expect(again).toContainText("This clip has not started uploading yet. Tap Try again.");
+    // The one main (vermilion) button is Try again; Refresh numbers, which has nothing to check, steps back.
+    await expect(page.locator(".perf .btn--primary")).toHaveCount(1);
+    await expect(page.locator(".perf .btn--primary")).toHaveText("Try again");
+    await expect(page.getByRole("button", { name: "Refresh numbers" })).not.toHaveClass(/btn--primary/);
+    // Every place is on in Where clips go: no stack sends him there.
+    await expect(page.getByRole("link", { name: "Open Where clips go" })).toHaveCount(0);
+    for (const p of ["youtube", "instagram", "facebook", "x"]) await expect(stack(page, p)).toContainText("Not sent yet. Tap Try again.");
+    const result = await findOverflow(page);
+    expect(result.items, JSON.stringify(result.items)).toEqual([]);
+  }
+  await page.locator(".perf__actions .keep-again").getByRole("button", { name: "Try again", exact: true }).click();
+  await expect(page.getByText(/Saved! It uploads as soon as your accounts are set up/)).toBeVisible();
+  await expect(page.locator(".perf__actions .keep-again")).toHaveCount(0);
+  await expect(page.locator(".perf .btn--primary")).toHaveText("Refresh numbers");
+});
+
+test("TikTok's Turn on on the clip page says what it turns on", async ({ page }) => {
+  // Every post of this clip waits for setup, and Your Mac posts TikTok is off: its one button turns the Mac on.
+  await openClip(page, "First time seeing the new map");
+  await expect(page.locator(".perf__actions").getByRole("link", { name: "Turn on TikTok on my Mac" })).toBeVisible();
+  await expect(page.locator(".perf__actions").getByRole("link", { name: "Turn on", exact: true })).toHaveCount(0);
 });
 
 test("Refresh numbers: spinner, new numbers over the live connection, then when the next check is", async ({ page }) => {

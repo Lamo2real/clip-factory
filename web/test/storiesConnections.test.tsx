@@ -443,8 +443,10 @@ describe("round 3 on the Social accounts page (§45.34)", () => {
     expect(setup.querySelector(".st-limits, .st-conn__clips")).toBeNull();
     expect(calls).not.toContain("connectSocial");
     // Share Clip Factory's app: the app is ready, so Connect is back as the main button and the choice goes to More.
+    // YouTube is connected, so the pick asks once more (Yes, switch apps); there is no second button of the pick's name.
     await click(button(setup, /Share Clip Factory's app/));
-    await click(button(yt(), "Share Clip Factory's app"));
+    expect(button(yt(), "Share Clip Factory's app")).toBeUndefined();
+    await click(button(yt(), "Yes, switch apps"));
     expect(button(yt(), /^Set up the app/)).toBeUndefined();
     // Switching apps disconnected it first (Clip Factory is not touched): Connect YouTube is the one main button.
     expect(button(yt(), "Connect YouTube")?.classList.contains("st-btn--main")).toBe(true);

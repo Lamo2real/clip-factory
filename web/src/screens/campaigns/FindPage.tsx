@@ -451,8 +451,14 @@ export function FindPage() {
 
   function notForMe(m: FinderMatch) {
     const at = visible.findIndex((x) => x.campaignId === m.campaignId);
-    if (openMatch?.campaignId === m.campaignId) setOpenId(visible[at + 1]?.campaignId ?? visible[at - 1]?.campaignId ?? null);
+    const after = visible[at + 1]?.campaignId ?? visible[at - 1]?.campaignId ?? null;
+    if (openMatch?.campaignId === m.campaignId) setOpenId(after);
     setHidden((h) => new Set([...h, m.campaignId]));
+    // Its card goes: the focus moves to the next match (else What you want), never to the page.
+    setTimeout(() => {
+      const next = after ? document.querySelector<HTMLElement>(`.finder-match[data-campaign="${after}"] .finder-match__head`) : null;
+      (next ?? document.querySelector<HTMLElement>("#want button, #want h2"))?.focus({ preventScroll: !!next });
+    }, 0);
     const back = () =>
       setHidden((h) => {
         const next = new Set(h);

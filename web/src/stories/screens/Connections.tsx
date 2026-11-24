@@ -44,6 +44,7 @@ import { storiesAwayLater, storiesGoLater } from "../pane.tsx";
 import { storiesApi } from "../api/client.ts";
 import { SHARED_APP_PLATFORMS, type ClipsDestination, type KeyCheck, type Platform, type SocialAccount } from "../api/types.ts";
 import { ArcDial } from "../glass/index.ts";
+import { TikTokMac } from "../studio/TikTokMac.tsx";
 import {
   celebrate,
   centerOf,
@@ -163,9 +164,28 @@ const LENS_TONE: Partial<Record<SocialAccount["connectionStatus"], CSSProperties
   same_as_clips: { "--st-tone-rgb": "var(--st-coral-rgb)" } as CSSProperties,
 };
 
-/** The callback's result code (§17.5's codes plus same_as_clips and clips_meta_check) in plain words. */
-export function resultSentence(code: string, p: Platform): { text: string; good: boolean } {
+/**
+ * The connect button's words on a card: "Connect YouTube" before anything is connected, "Pick another channel" where
+ * the platform asks which one (and for a connected YouTube, §45.13.5), else "Connect again".
+ */
+export function connectLabelOf(a: Pick<SocialAccount, "platform" | "connectionStatus">): string {
+  const p = a.platform;
+  if (a.connectionStatus === "not_connected") return `Connect ${PLATFORM_NAME[p]}`;
+  if (a.connectionStatus === "same_as_clips" || a.connectionStatus === "choose_account" || (p === "youtube" && a.connectionStatus === "connected")) return `Pick another ${PLACE[p]}`;
+  return "Connect again";
+}
+
+/**
+ * The callback's result code (§17.5's codes plus same_as_clips and clips_meta_check) in plain words. With the card's
+ * account (`a`) each sentence names the button the card shows, and app keys that live in Clip Factory (its shared
+ * app) are sent there, never to keys this page does not have.
+ */
+export function resultSentence(code: string, p: Platform, a?: Pick<SocialAccount, "platform" | "connectionStatus" | "app"> | null): { text: string; good: boolean } {
   const name = PLATFORM_NAME[p];
+  const tap = a ? connectLabelOf(a) : `Connect ${name}`;
+  // "Tap Connect again", never "Tap Connect again again".
+  const again = tap.endsWith(" again") ? tap : `${tap} again`;
+  const clipsApp = a?.app.choice === "clips";
   switch (code) {
     case "connected":
       return { text: `${name} is connected to Clips Funded!`, good: true };
@@ -176,13 +196,17 @@ export function resultSentence(code: string, p: Platform): { text: string; good:
     case "clips_meta_check":
       return { text: `${name} is connected. But Clip Factory may have lost ${name}: connect it again in Clip Factory, keeping its Page ticked.`, good: false };
     case "denied":
-      return { text: `You pressed cancel. Tap Connect ${name} to try again.`, good: false };
+      return { text: `You pressed cancel. Tap ${tap} to try again.`, good: false };
     case "expired":
-      return { text: "That took too long. Tap Connect again.", good: false };
+      return { text: `That took too long. Tap ${again}.`, good: false };
     case "keys_wrong":
-      return { text: `${name} did not accept the app keys. Check them under More, then connect again.`, good: false };
+      return clipsApp
+        ? { text: `${name} did not accept Clip Factory's app keys. They are in Clip Factory: check them there, then tap ${again}.`, good: false }
+        : { text: `${name} did not accept the app keys. Check them under More, then connect again.`, good: false };
     case "redirect_wrong":
-      return { text: `The return address does not match. Copy the address under More into your ${name} app's settings, then connect again.`, good: false };
+      return clipsApp
+        ? { text: `The return address does not match Clip Factory's ${name} app. Check it in Clip Factory, then tap ${again}.`, good: false }
+        : { text: `The return address does not match. Copy the address under More into your ${name} app's settings, then connect again.`, good: false };
     case "missing_permissions":
       return { text: "A permission box was not ticked. Connect again and tick every box.", good: false };
     case "no_channel":
@@ -195,7 +219,7 @@ export function resultSentence(code: string, p: Platform): { text: string; good:
     case "platform_down":
       return { text: `${name} did not answer. Try again in a few minutes.`, good: false };
     default:
-      return { text: `Something went wrong. Tap Connect ${name} again.`, good: false };
+      return { text: `Something went wrong. Tap ${tap} again.`, good: false };
   }
 }
 
@@ -479,6 +503,22 @@ function AppPart({
   const connected = a.connectionStatus !== "not_connected";
   const showChoice = changing || choice === null || (choice === "own" && !a.app.saved);
   const want = picking ?? (choice === "own" || isMeta(p) ? "own" : choice === "clips" ? "clips" : null);
+  // Picking Clip Factory's app is the choice itself: it is saved at once. Only a switch that disconnects this account
+  // first asks once more ("Yes, switch apps"), after saying so.
+  const switchAsks = connected && choice !== "clips";
+  const shareApp = (el?: HTMLElement | null) =>
+    void run(
+      "clips-app",
+      async () => {
+        await storiesApi().setSocialApp(ws, p as "youtube" | "tiktok" | "x", { choice: "clips" });
+        setPicking(null);
+        setChanging(false);
+      },
+      { text: `Clips Funded shares Clip Factory's ${name} app. Now tap ${switchAsks ? `Connect ${name}` : connectLabelOf(a)} and sign in with the Clips Funded account.`, ...(el ? { cheer: el } : {}) },
+    ).then((ok) => {
+      // Not saved: the choice is open again, so the same tap tries once more.
+      if (!ok) setPicking(null);
+    });
 
   // One own Meta app serves Instagram and Facebook (§45.30, entered once): the server saves, changes and deletes its
   // keys for both at once (and disconnects each one whose app changed), so the page sends them once and then shows
@@ -622,7 +662,10 @@ function AppPart({
                   { value: "own", label: "A separate app for Clips Funded", line: "You make a new app and paste its keys here." },
                   { value: "clips", label: "Share Clip Factory's app", line: `${SHARED_APP_LINE} ${SHARED_APP_ACCOUNT_LINE}` },
                 ]}
-                onChange={(v) => setPicking(v)}
+                onChange={(v) => {
+                  setPicking(v);
+                  if (v === "clips" && !switchAsks && busy === null) shareApp();
+                }}
               />
             </>
           ) : (
@@ -630,36 +673,27 @@ function AppPart({
               {name} always uses Clips Funded's own Meta app, so Clip Factory's Meta connection is never touched.
             </p>
           )}
-          {want === "clips" ? (
+          {want === "clips" && switchAsks ? (
             <div className="st-app__go">
-              {connected && choice !== "clips" ? <p className="st-app__warn">Switching apps disconnects Clips Funded's {name} first. Clip Factory is not touched.</p> : null}
+              <p className="st-app__warn">Switching apps disconnects Clips Funded's {name} first. Clip Factory is not touched.</p>
               <div className="st-app__actions">
                 {changing ? (
                   <StButton quiet onClick={() => (setChanging(false), setPicking(null))}>
                     Not now
                   </StButton>
                 ) : null}
-                <StButton
-                  main
-                  disabled={busy !== null}
-                  onClick={(e) => {
-                    const el = e.currentTarget;
-                    void run(
-                      "clips-app",
-                      async () => {
-                        await storiesApi().setSocialApp(ws, p as "youtube" | "tiktok" | "x", { choice: "clips" });
-                        setPicking(null);
-                        setChanging(false);
-                      },
-                      { text: `Clips Funded shares Clip Factory's ${name} app. Now tap Connect ${name} and sign in with the Clips Funded account.`, cheer: el },
-                    );
-                  }}
-                >
+                <StButton main disabled={busy !== null} onClick={(e) => shareApp(e.currentTarget)}>
                   <StIcon name="check" size={18} />
-                  Share Clip Factory's app
+                  Yes, switch apps
                 </StButton>
               </div>
             </div>
+          ) : want === "clips" ? (
+            busy === "clips-app" ? (
+              <p className="st-app__ask" role="status">
+                Saving your pick…
+              </p>
+            ) : null
           ) : want === "own" ? (
             <div className="st-app__go">
               <ul className="st-app__notes">
@@ -827,12 +861,7 @@ export function PlatformCard({
   const asking = (askIntended || picked) && connected && !ask;
   // A connected YouTube changes channel by connecting again (Google asks which one, §45.13.5): its button says so,
   // as its limits line does ("To change it, tap Pick another channel.").
-  const connectLabel =
-    a.connectionStatus === "not_connected"
-      ? `Connect ${name}`
-      : a.connectionStatus === "same_as_clips" || a.connectionStatus === "choose_account" || (p === "youtube" && connected)
-        ? `Pick another ${PLACE[p]}`
-        : "Connect again";
+  const connectLabel = connectLabelOf(a);
   // The one main button: only where connecting is what the card needs now (a list to pick from is its own main part).
   const connectIsMain = appReady && (a.connectionStatus === "not_connected" || a.connectionStatus === "needs_reconnect" || a.connectionStatus === "same_as_clips");
   const reasonText = a.connectionStatus === "needs_reconnect" ? reasonSentence(a.reason, p) : null;
@@ -1019,6 +1048,7 @@ export function PlatformCard({
         </div>
       )}
 
+      {p === "tiktok" && !inStep ? <TikTokMac ws={ws} account={a} /> : null}
       {/* Everything only sometimes needed, out of the way but one tap away (the owner, 23 Nov: less text). */}
       <details
         className="st-tech-fold st-conn__more"

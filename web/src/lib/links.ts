@@ -58,6 +58,14 @@ const KICK_PAGES = new Set([
 const sitePage = (name: string) =>
   `That ${name} link goes to a ${name} page, not a video, clip or channel. Open the video or the channel and copy its link.`;
 
+/** A channel's Videos or Clips tab (twitch.tv/lamo/videos, kick.com/lamo/clips): a list, so say how to get one. */
+function listPage(platform: LinkPlatform, parts: string[]): LinkCheck | null {
+  const tab = parts.length === 2 ? parts[1]!.toLowerCase() : "";
+  if (tab !== "videos" && tab !== "clips") return null;
+  const one = tab === "videos" ? "video" : "clip";
+  return { state: "error", platform, message: `That's a list of ${tab}. Open one ${one}, then copy its link.` };
+}
+
 function twitch(u: URL): LinkCheck {
   const h = host(u);
   const parts = u.pathname.split("/").filter(Boolean);
@@ -66,6 +74,8 @@ function twitch(u: URL): LinkCheck {
     return { state: "ok", platform: "twitch", kind: "video", url: `https://www.twitch.tv/videos/${parts[1]}` };
   if (parts[1] === "clip" && parts[2]) return { state: "ok", platform: "twitch", kind: "clip", url: u.toString() };
   if (parts.length === 1 && TWITCH_PAGES.has(parts[0]!.toLowerCase())) return { state: "error", platform: "twitch", message: sitePage("Twitch") };
+  const twitchList = listPage("twitch", parts);
+  if (twitchList) return twitchList;
   if (parts.length === 1 && /^\w{3,25}$/.test(parts[0]!))
     return { state: "ok", platform: "twitch", kind: "live", url: `https://www.twitch.tv/${parts[0]!.toLowerCase()}` };
   return {
@@ -81,6 +91,8 @@ function kick(u: URL): LinkCheck {
   if (parts.length >= 3 && (parts[1] === "videos" || parts[1] === "clips"))
     return { state: "ok", platform: "kick", kind: parts[1] === "clips" ? "clip" : "video", url: u.toString() };
   if (parts.length === 1 && KICK_PAGES.has(parts[0]!.toLowerCase())) return { state: "error", platform: "kick", message: sitePage("Kick") };
+  const kickList = listPage("kick", parts);
+  if (kickList) return kickList;
   if (parts.length === 1 && /^[\w-]{2,40}$/.test(parts[0]!))
     return { state: "ok", platform: "kick", kind: "live", url: `https://kick.com/${parts[0]!.toLowerCase()}` };
   return { state: "error", platform: "kick", message: "That Kick link does not point to a video, clip or channel." };

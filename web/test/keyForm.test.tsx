@@ -1,4 +1,4 @@
-import { act } from "react";
+import { act, useState } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Api, PlatformSetup } from "../src/api/types.ts";
@@ -8,7 +8,8 @@ import type { Api, PlatformSetup } from "../src/api/types.ts";
 let current: Partial<Api>;
 vi.mock("../src/api/index.ts", () => ({ api: () => current }));
 
-const { KeyForm } = await import("../src/screens/settings/setup/KeyForm.tsx");
+const { KeyForm, NO_DRAFT } = await import("../src/screens/settings/setup/KeyForm.tsx");
+type KeyDraft = import("../src/screens/settings/setup/KeyForm.tsx").KeyDraft;
 const { ToastProvider } = await import("../src/components/Toasts.tsx");
 
 const ID = "123456789012-abcdefghij0123456789klmnopqrst.apps." + "googleusercontent.com";
@@ -104,5 +105,65 @@ describe("KeyForm", () => {
     expect(host.textContent).toContain("123456….com");
     expect(host.textContent).toContain("••••yz12");
     expect(host.querySelectorAll("input.key-field__input")).toHaveLength(0);
+  });
+
+  it("keeps what was typed when its step folds and opens again (the page holds the draft)", () => {
+    current = {};
+    // The step's body (and the form with it) goes away while the step is folded; the page keeps the typing.
+    function Page({ open }: { open: boolean }) {
+      const [draft, setDraft] = useState<KeyDraft>(NO_DRAFT);
+      return open ? <KeyForm platform="youtube" setup={setup} primary onSaved={() => undefined} draft={draft} onDraft={setDraft} /> : null;
+    }
+    const draw = (open: boolean) =>
+      act(() =>
+        root.render(
+          <ToastProvider>
+            <Page open={open} />
+          </ToastProvider>,
+        ),
+      );
+    draw(true);
+    const [id] = Array.from(host.querySelectorAll<HTMLInputElement>("input.key-field__input"));
+    type(id!, ID);
+    expect(host.textContent).toContain("Looks right.");
+    draw(false);
+    expect(host.querySelectorAll("input.key-field__input")).toHaveLength(0);
+    draw(true);
+    expect(host.querySelector<HTMLInputElement>("input.key-field__input")!.value).toBe(ID);
+    expect(host.textContent).toContain("Looks right.");
+  });
+
+  it("keeps Change keys open with its typing through a fold, and forgets the typing once saved", async () => {
+    const savedSetup = { ...setup, keys: { saved: true, hints: { clientId: "123456….com", clientSecret: "••••yz12" } } };
+    current = { saveSetupKeys: vi.fn(async () => savedSetup) };
+    let seen: KeyDraft = NO_DRAFT;
+    function Page({ open }: { open: boolean }) {
+      const [draft, setDraft] = useState<KeyDraft>(NO_DRAFT);
+      seen = draft;
+      return open ? <KeyForm platform="youtube" setup={savedSetup} primary onSaved={() => undefined} draft={draft} onDraft={setDraft} /> : null;
+    }
+    const draw = (open: boolean) =>
+      act(() =>
+        root.render(
+          <ToastProvider>
+            <Page open={open} />
+          </ToastProvider>,
+        ),
+      );
+    draw(true);
+    act(() => Array.from(host.querySelectorAll("button")).find((b) => b.textContent === "Change keys")!.click());
+    const [id, secret] = Array.from(host.querySelectorAll<HTMLInputElement>("input.key-field__input"));
+    type(id!, ID);
+    type(secret!, SECRET);
+    draw(false);
+    draw(true);
+    const again = Array.from(host.querySelectorAll<HTMLInputElement>("input.key-field__input"));
+    expect(again.map((i) => i.value)).toEqual([ID, SECRET]);
+    await act(async () => {
+      Array.from(host.querySelectorAll("button")).find((b) => b.textContent === "Save keys")!.click();
+      await new Promise((r) => setTimeout(r, 0));
+    });
+    expect(seen).toEqual(NO_DRAFT);
+    expect(host.textContent).toContain("Keys saved");
   });
 });

@@ -343,6 +343,8 @@ describe("a platform the owner skipped", () => {
     expect(() => button("Skip for now", foot)).toThrow();
     const unskip = button("Un-skip", foot);
     expect(unskip.disabled).toBe(false);
+    // Its way on is a quiet Next (Un-skip took Skip for now's place, so the step is never a dead end).
+    expect(button("Next", foot).classList.contains("st-btn--main")).toBe(false);
     await click(unskip);
     expect(calls.filter((c) => c.name === "patchOnboarding").at(-1)?.args[1]).toEqual({ step: "x", skipped: false });
     expect(document.body.textContent).toContain("X is back.");
@@ -350,6 +352,8 @@ describe("a platform the owner skipped", () => {
     expect(stepItem("Connect X").querySelector(".st-steps__skipped")).toBeNull();
     expect(button("Skip for now", $(".st-setup__foot")!)).toBeTruthy();
     expect(() => button("Un-skip", $(".st-setup__foot")!)).toThrow();
+    // To do again: Skip for now is its one way on, with no Next (the bug hunt's footer).
+    expect(() => button("Next", $(".st-setup__foot")!)).toThrow();
   });
 
   it("a step of another kind skipped still says Later and Skipped for now, and is still counted", async () => {

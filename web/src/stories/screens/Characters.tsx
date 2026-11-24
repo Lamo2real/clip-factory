@@ -2,8 +2,9 @@
 // character (the five-part stepper with a live preview, and Design with AI: the character agent's first try from the
 // owner's words and/or a picture, which the owner changes and saves), and each character's own page: edit with its
 // version (a 409 means it changed elsewhere: a friendly Reload), Design with AI from words or its own pictures (a
-// redesign of this character, §45.34: which parts change is shown before "Use this" puts it in the editor), the
-// reference pictures, the AI picture when it is on (else the way to Settings › Video › Picture maker), and Delete.
+// redesign of this character, §45.34: which parts change is shown before "Use this" puts only those parts into the
+// editor, on top of the changes not saved yet), the reference pictures, the AI picture when it is on (else the way to
+// Settings › Video › Picture maker), and Delete.
 // New character first asks "What are you making?" (§45.42): a person (as above) or a car, made from up to 6 real
 // photos into cartoon cars to pick from; a saved car keeps those photos as its pictures. A car is a character: the
 // gallery here shows the people and the cars (each car with its Car tag) and a "Make a car" next to New character.
@@ -17,7 +18,7 @@ import { A } from "../../components/ui.tsx";
 import { useToast } from "../../components/Toasts.tsx";
 import { useLoad } from "../../lib/hooks.ts";
 import { storiesApi } from "../api/client.ts";
-import { isCar, type Character, type CharacterInput, type CharacterKind, type StoriesConfig } from "../api/types.ts";
+import { isCar, type CarLook, type Character, type CharacterInput, type CharacterKind, type CharacterLook, type StoriesConfig } from "../api/types.ts";
 import { DEFAULT_CAR } from "../engine/car.ts";
 import { CATALOG } from "../engine/catalog.ts";
 import { Glass, GlassPill } from "../glass/index.ts";
@@ -169,6 +170,35 @@ async function keepPhotos(ws: string, characterId: string, photos: Photo[]): Pro
   return missed;
 }
 
+/** The look's parts a redesign changes as one ("body" is its shape, height and width; "face shape" its eyes to mouth). */
+const LOOK_GROUPS: (keyof CharacterLook)[][] = [["body", "height", "width"], ["skin"], ["hair"], ["eyes", "brows", "nose", "mouth"], ["outfit"], ["accessory"], ["outline"]];
+/** A car's parts the same way (§45.42), as the redesign's "What changes" names them (shape, paint, windows, …). */
+const CAR_GROUPS: (keyof CarLook)[][] = [["body", "length", "height"], ["paint", "accent", "pattern"], ["windows"], ["wheels"], ["lights"], ["extra"], ["face"], ["outline"]];
+const OTHER_PARTS = ["expressions", "movementStyle", "voice", "name", "description", "personality", "traits"] as const;
+const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
+
+/**
+ * "Use this" on a redesign (§45.34): only the parts the redesign changed from the saved character (`before`) go into
+ * the editor, on top of what the editor has now (`now`, with its changes not saved yet); every other part stays as
+ * the owner left it.
+ */
+export function mergeRedesign(now: CharacterInput, before: CharacterInput, next: CharacterInput): CharacterInput {
+  // A redesign keeps the kind; should one ever differ, there are no parts in common and the redesign goes in whole.
+  if (isCar(now) !== isCar(next) || isCar(before) !== isCar(next)) return inputOf(next);
+  const out = inputOf(now);
+  const part = (c: CharacterInput) => (isCar(c) ? c.car : c.look) as unknown as Record<string, unknown>;
+  const look = part(out);
+  const was = part(before);
+  const to = part(next);
+  const base: string[][] = isCar(out) ? CAR_GROUPS : LOOK_GROUPS;
+  const grouped = new Set<string>(base.flat());
+  const groups: string[][] = [...base, ...Object.keys(to).filter((k) => !grouped.has(k)).map((k) => [k])];
+  for (const g of groups) if (g.some((k) => !same(was[k], to[k]))) for (const k of g) look[k] = structuredClone(to[k]);
+  const all = out as unknown as Record<string, unknown>;
+  for (const k of OTHER_PARTS) if (!same(before[k], next[k])) all[k] = structuredClone(next[k]);
+  return out;
+}
+
 /**
  * New character, or (place "cars", Make a car in Cars or Characters) a new car: then the kind is a car from the
  * start, so there are no kind tiles, and the page says "New car".
@@ -181,6 +211,9 @@ export function NewCharacter({ ws, kind: asked, place = "characters" }: { ws: st
   const [chosen, setChosen] = useState(!!asked);
   const [asking, setAsking] = useState<CharacterKind | null>(null);
   const [edited, setEdited] = useState(false);
+  /** Nothing is saved yet: anything in the editor is unsaved (it asks before the page changes). One blank per kind. */
+  const [blanks] = useState(() => ({ person: newCharacter(), car: newCar() }));
+  const blank: CharacterInput = kind === "car" ? blanks.car : blanks.person;
   const [saving, setSaving] = useState(false);
   const [keeping, setKeeping] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -264,7 +297,8 @@ export function NewCharacter({ ws, kind: asked, place = "characters" }: { ws: st
       )}
       <CharacterEditor
         key={`new:${kind}:${draft?.round ?? 0}`}
-        initial={draft?.input ?? (car ? newCar() : newCharacter())}
+        initial={draft?.input ?? blank}
+        saved={blank}
         startPart={draft ? "name" : undefined}
         mode="new"
         saving={saving}
@@ -301,6 +335,8 @@ export function CharacterPage({ ws, characterId, place = "characters" }: { ws: s
   const workspace = useWorkspace(ws);
   const info = useAiInfo(ws);
   const [draft, setDraft] = useState<CharacterInput | null>(null);
+  /** The character as the editor has it now (its changes not saved yet too). */
+  const [current, setCurrent] = useState<CharacterInput | null>(null);
   /** A redesign the owner has not taken yet: shown beside the character as it is (§45.34). */
   const [proposal, setProposal] = useState<CharacterInput | null>(null);
   // The picked AI picture maker makes the portraits (§45.37: Stability AI or the owner's own; Amazon ended Nova Canvas).
@@ -336,6 +372,8 @@ export function CharacterPage({ ws, characterId, place = "characters" }: { ws: s
   }, [wrongPlace, c]);
 
   const replace = (next: Character) => loaded.setData(() => next);
+  const savedNow = c ? inputOf(c) : null;
+  const inEditor = current ?? draft ?? savedNow;
 
   async function save(input: CharacterInput) {
     if (!c) return;
@@ -427,13 +465,13 @@ export function CharacterPage({ ws, characterId, place = "characters" }: { ws: s
           onDraft={(input) => setProposal(input)}
         />
       )}
-      {proposal ? (
+      {proposal && inEditor && savedNow ? (
         <RedesignCompare
-          now={draft ?? inputOf(c)}
-          next={proposal}
+          now={inEditor}
+          next={mergeRedesign(inEditor, savedNow, proposal)}
           onDrop={() => setProposal(null)}
           onUse={() => {
-            setDraft(proposal);
+            setDraft(mergeRedesign(inEditor, savedNow, proposal));
             setProposal(null);
             setRound((n) => n + 1);
           }}
@@ -443,6 +481,9 @@ export function CharacterPage({ ws, characterId, place = "characters" }: { ws: s
       <CharacterEditor
         key={`${c.characterId}:${round}`}
         initial={draft ?? inputOf(c)}
+        saved={savedNow ?? undefined}
+        onChange={setCurrent}
+        hold={!deleting}
         mode="edit"
         saving={saving}
         otherMaker={otherMaker}

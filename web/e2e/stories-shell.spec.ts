@@ -414,7 +414,8 @@ test.describe("each app stays exactly as it was left (§45.34)", () => {
     await toStories(page);
     await storiesReady(page);
     await toClips(page);
-    await expect(page).toHaveURL(/\/library$/);
+    // The filter is part of the address (Back and a reload keep it too).
+    await expect(page).toHaveURL(/\/library\?show=waiting$/);
     // At once: the same page, still filtered, the same cards, where it was scrolled to.
     await expect(waiting).toBeChecked();
     await expect(page.locator(".lib-card")).toHaveCount(shown);
@@ -929,7 +930,8 @@ test.describe("the pages", () => {
     await on(page);
     await page.goto("/stories/connections?platform=youtube&result=denied&ws=stories");
     await storiesReady(page);
-    await expect(page.locator(".toast").filter({ hasText: "You pressed cancel. Tap Connect YouTube to try again." })).toBeVisible();
+    // The connected YouTube's button is "Pick another channel": the sentence names that one.
+    await expect(page.locator(".toast").filter({ hasText: "You pressed cancel. Tap Pick another channel to try again." })).toBeVisible();
     // It landed on YouTube's own page, whose address is its own now (a reload never says it again).
     await expect(page).toHaveURL(/\/stories\/connections\/youtube$/);
     await expect(page.locator('section.st-social-one[data-platform="youtube"]')).toBeVisible();
@@ -957,8 +959,9 @@ test.describe("the pages", () => {
       /Share Clip Factory's app.*Clip Factory's posts always go first\. Clips Funded uses what's left\. Even with Clip Factory's app, sign in with a different account made for Clips Funded\./,
     ]);
     await expect(x).not.toContainText("quicker");
+    // Picking Clip Factory's app is the choice: it is saved at once, with no second button of the same name.
     await x.getByRole("radio", { name: /Share Clip Factory's app/ }).click();
-    await x.getByRole("button", { name: "Share Clip Factory's app" }).click();
+    await expect(x.getByRole("button", { name: "Share Clip Factory's app" })).toHaveCount(0);
     await expect(x.locator(".st-app")).toContainText("Shares Clip Factory's X app, on purpose. Clip Factory's posts always go first. Clips Funded uses what's left.");
     await x.getByRole("button", { name: "Connect X" }).click();
     await expect(x.locator(".st-chip").first()).toHaveText("Ready");

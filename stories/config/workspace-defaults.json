@@ -1,5 +1,5 @@
 {
-  "$comment": "Lamo Stories' workspace defaults (docs/CONTRACTS.md \u00a745.6 StoriesConfig). The one source: the API's guard reads it when it creates a workspace, and a web test checks it against the StoriesConfig type. providers.imageModel, videoModel and audioModel name the model the picked maker uses (\u00a745.37 G1); null is that maker's first model that has not ended.",
+  "$comment": "Lamo Stories' workspace defaults (docs/CONTRACTS.md \u00a745.6 StoriesConfig). The one source: the API's guard reads it when it creates a workspace, and a web test checks it against the StoriesConfig type. providers.imageModel, videoModel and audioModel name the model the picked maker uses (\u00a745.37 G1); null is that maker's first model that has not ended. tiktokMac.on is My Mac posts TikTok (\u00a747.10): off until the owner turns it on.",
   "defaultDurationSec": 45,
   "captionsOn": true,
   "musicOn": true,
@@ -27,5 +27,8 @@
   },
   "youtubeCategory": "27",
   "youtubePrivacy": "public",
-  "xMonthlyLimitUsd": null
+  "xMonthlyLimitUsd": null,
+  "tiktokMac": {
+    "on": false
+  }
 }

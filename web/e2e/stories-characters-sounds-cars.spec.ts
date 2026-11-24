@@ -433,8 +433,14 @@ test("the owner's flow: a car from 3 dropped photos, the main character and the 
 
   let seriesId = "";
   await test.step("a series “My first car” with the main character and the car", async () => {
-    // The mock seeds a series with that name: deleting it keeps its videos, under No series.
+    // The cast picked on Make a new video is not saved, so leaving it asks first; Leave goes on to the series.
     await go(page, `/stories/series/${SEED_SERIES}`);
+    const leave = page.getByRole("dialog", { name: "Leave without saving?" });
+    await expect(leave).toBeVisible();
+    await leave.getByRole("button", { name: "Leave", exact: true }).click();
+    await expect(page).toHaveURL(new RegExp(`/stories/series/${SEED_SERIES}$`));
+    await settle(page);
+    // The mock seeds a series with that name: deleting it keeps its videos, under No series.
     await page.getByRole("button", { name: "More for My first car" }).click();
     await page.locator(".st-series-menu").getByRole("button", { name: "Delete", exact: true }).click();
     await expect(page.getByText("Delete My first car? Its videos stay, under No series.")).toBeVisible();

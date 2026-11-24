@@ -153,7 +153,9 @@
   display: none;
 }
 @media (min-width: 768px) {
-  /* The left column (the sidebar's own box): the dock's parts are placed in it; the column itself takes no clicks. */
+  /* The left column (the sidebar's own box): the dock's parts are placed in it; the column itself takes no clicks. It
+     takes its folded or open width at once, as its parts below take their places (no transition, also under reduced
+     motion), and is measured for them right then (WorkspaceDock.tsx). */
   .ws-dock {
     display: block;
     position: fixed;
@@ -165,6 +167,7 @@
     pointer-events: none;
     font-family: var(--font-ui);
     line-height: 1.5;
+    transition: none;
   }
   .ws-dock.is-folded {
     width: var(--sidebar-w-collapsed);
@@ -172,11 +175,13 @@
   .ws-dock[hidden] {
     display: none;
   }
-  /* Their box is placed by WorkspaceDock.tsx (top, left, width, height) and is never animated: it is at its new place
-     at once, in both apps. With calm motion base.css gives every element a 1 ms transition, and with no property
-     named that is all of them, so the switch's top and height glided too. Such a transition only starts on the next
-     frame drawn, and on a slow renderer (CI's software GPU under a heavy Clips Funded page) that frame came late:
-     for a while the stacked switch still stood where the side-by-side one had been, 46 px lower (§45.38). */
+  /* Their box is placed by WorkspaceDock.tsx (top, left, width, height) and is never animated: each part lands at its
+     new place at once, in both apps. With calm (reduced) motion base.css gives every element a 1 ms transition of
+     every property, so the switch's top and height glided too, and a 1 ms move still waits for the next animation
+     frame. On a slow renderer (CI's software GPU under a heavy Clips Funded page, or any busy computer) that frame can
+     come a second or more late: the stacked switch still stood where the side-by-side one had been, 46 px lower, and
+     the switch and the Live chip stayed where they were first placed (over Get the app) while the page under them had
+     moved on (§45.38). */
   .ws-dock > .ws-switch-host,
   .ws-dock > .ws-dock__live {
     position: absolute;

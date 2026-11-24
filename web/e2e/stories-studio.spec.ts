@@ -204,13 +204,21 @@ test("reference videos in a new video, and the model notes of a video, fit and f
     const tile = page.locator(".st-s-reftile", { hasText: "The banana slip" });
     await expect(tile.or(page.getByText("Your reference videos could not load."))).toBeVisible();
     // The list comes from the references part (builder H); until it is built the page says so and never blocks.
-    if (await tile.isVisible()) {
+    const picked = await tile.isVisible();
+    if (picked) {
       await tile.click();
       await expect(tile).toHaveAttribute("aria-pressed", "true");
       await expect(page.locator(".st-s-reftile", { hasText: "Snow day sketch" })).toHaveAttribute("aria-disabled", "true");
     } else test.info().annotations.push({ type: "note", description: "The mock's references part is not built here yet." });
     expect(await audit(page, `New video with references ${w}`, touch && w < 768)).toEqual([]);
     await go(page, `/stories/production/${S.failed}`);
+    if (picked) {
+      // The pick is not made into a video yet: leaving asks first.
+      const leave = page.getByRole("dialog", { name: "Leave without saving?" });
+      await expect(leave).toBeVisible();
+      await leave.getByRole("button", { name: "Leave" }).click();
+      await expect(page).toHaveURL(new RegExp(`/stories/production/${S.failed}$`));
+    }
     await page.locator(".st-s-details__sum", { hasText: "Production details" }).click();
     await expect(page.locator(".st-s-used__row").first()).toBeVisible();
     expect(await audit(page, `A stopped video, details open ${w}`, touch && w < 768)).toEqual([]);

@@ -70,11 +70,25 @@ function PlatformPage({ ws, platform, result }: { ws: string; platform: Platform
           void reload();
         });
     } else {
-      if (good) {
-        toast.success(text);
-        cheerUp();
-      } else toast.error(text);
-      void reload();
+      // Said with the card as it is now: the button it names is the one the card shows (Connect, Connect again, Pick
+      // another channel), and keys that live in Clip Factory are sent there.
+      const tell = (a?: SocialAccount) => {
+        const r = resultSentence(result, platform, a);
+        if (r.good) {
+          toast.success(r.text);
+          cheerUp();
+        } else toast.error(r.text);
+      };
+      void storiesApi()
+        .social(ws)
+        .then((fresh) => {
+          setData(() => fresh);
+          tell(fresh.accounts.find((x) => x.platform === platform));
+        })
+        .catch(() => {
+          tell();
+          void reload();
+        });
     }
     void refreshDashboard(ws).catch(() => undefined);
     void refreshOnboarding(ws).catch(() => undefined);

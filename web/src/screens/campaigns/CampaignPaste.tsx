@@ -7,7 +7,7 @@ import type { GroupChoice } from "../../api/types.ts";
 import { Icon } from "../../components/Icon.tsx";
 import { useToast } from "../../components/Toasts.tsx";
 import { ActGlyph, Button } from "../../components/ui.tsx";
-import { campaignPath, payLine, reloadCr } from "../../lib/contentRewards.ts";
+import { campaignPath, pasteByHand, payLine, reloadCr } from "../../lib/contentRewards.ts";
 import { campaignLink } from "../../lib/links.ts";
 import { useAction } from "../../lib/motion.ts";
 import { clipsGoLater } from "../../app/shell.ts";
@@ -98,7 +98,7 @@ export function CampaignPasteBox({ onGroup, onTyped }: { onGroup: (g: { name: st
     } catch {
       pasteAct.fail({ sound: false });
       document.getElementById(`${id}-box`)?.focus();
-      toast.info("Press and hold in the box, then choose Paste.");
+      toast.info(pasteByHand());
     }
   }
 

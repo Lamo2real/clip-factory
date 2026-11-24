@@ -24,14 +24,48 @@ import { navigate, useRoute } from "../../lib/router.ts";
 import { plural } from "../../lib/format.ts";
 import { useUnsaved } from "../../features/help/unsaved.ts";
 import { canMacFetch, macBridge } from "../../lib/macFetch.ts";
-import { clipsGoLater, useKeptSearch } from "../../app/shell.ts";
+import { clipsGoLater, storiesAddress, useAppActive, useKeptSearch } from "../../app/shell.ts";
+import { Sheet } from "../../components/Sheet.tsx";
+import { jobTitle } from "../../components/JobBits.tsx";
+import { isTouchDevice } from "../../lib/crConnect.ts";
+import { setLeaveGuard } from "../../lib/router.ts";
+import { prefersReducedMotion } from "../../lib/prefs.ts";
 
 const MAX_UPLOAD = 5 * 1024 ** 3;
+/** Paste and Clear take turns in one spot: a tap this soon after they swapped is the second half of a double tap. */
+const SWAP_MS = 400;
 
 type Mode = "link" | "upload";
 /** The highlight over the card while something is dragged over it (§12.5); "busy" while an upload or a start runs. */
 type Over = Exclude<DragKind, null> | "busy" | null;
 type Count = "range" | "exact";
+
+/**
+ * Home's unsent link, notes and clip count: kept while the app stays open (leaving Home for Jobs and coming back keeps
+ * them), gone on a reload or once the job started.
+ */
+export type Draft = { link: string; notes: string; count: Count; exact: number };
+let draftKept: Draft | null = null;
+
+export function readDraft(): Draft | null {
+  return draftKept ? { ...draftKept } : null;
+}
+
+/** Keeps the draft (an untouched form keeps nothing). */
+export function saveDraft(d: Draft): void {
+  const empty = !d.link.trim() && !d.notes.trim() && d.count === "range" && d.exact === 6;
+  draftKept = empty ? null : { ...d };
+}
+
+export function clearDraft(): void {
+  draftKept = null;
+}
+
+/** Paste's fallback when the clipboard can't be read: a mouse can't press and hold. */
+export function pasteFallback(touch: boolean, platform: string): string {
+  if (touch) return "Press and hold in the box, then choose Paste.";
+  return `Click in the box and press ${/Mac|iPhone|iPad/.test(platform) ? "⌘V" : "Ctrl+V"}.`;
+}
 
 /** "Make clips for this campaign" opens Home at `/?campaign={uuid}` (§38.5), and a campaign video at `&link=`. */
 export function campaignStart(search: string): { campaignId: string | null; link: string | null } {
@@ -85,7 +119,10 @@ function JobForm() {
   const [start] = useState(() => fileStart(search));
   const [mode, setMode] = useState<Mode>(start.file ? "upload" : "link");
   const [fromCampaign] = useState(() => campaignStart(search));
-  const [link, setLink] = useState(fromCampaign.link ?? "");
+  // The normal way keeps an unsent draft; a campaign or a failed job's file way starts from its own.
+  const keepsDraft = !fromCampaign.campaignId && !start.file && !start.from;
+  const [draft] = useState(() => (keepsDraft ? readDraft() : null));
+  const [link, setLink] = useState(fromCampaign.link ?? draft?.link ?? "");
   // Content Rewards (§38.4, §38.5): the campaign these clips are for, and a pasted campaign link.
   const cr = useCr();
   const [pickedCampaign, setPickedCampaign] = useState<string | null>(fromCampaign.campaignId);
@@ -96,16 +133,28 @@ function JobForm() {
   const resend = useRef<"waiting" | "sent" | null>(null);
   const [waitingRules, setWaitingRules] = useState(false);
   const [resendNow, setResendNow] = useState(false);
-  const [touched, setTouched] = useState(false);
+  const [touched, setTouched] = useState(!!draft?.link);
   const [file, setFile] = useState<File | null>(null);
   const [fileError, setFileError] = useState<string | null>(null);
-  const [count, setCount] = useState<Count>("range");
-  const [exact, setExact] = useState(6);
-  const [notes, setNotes] = useState("");
+  const [count, setCount] = useState<Count>(draft?.count ?? "range");
+  const [exact, setExact] = useState(draft?.exact ?? 6);
+  const [notes, setNotes] = useState(draft?.notes ?? "");
   const [busy, setBusy] = useState(false);
   const [progress, setProgress] = useState<number | null>(null);
   const abort = useRef<AbortController | null>(null);
+  // A file that finished going up for a Make clips that then failed: trying again only makes the job.
+  const sent = useRef<{ file: File; key: string } | null>(null);
   const linkInput = useRef<HTMLInputElement>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+  const actions = useRef<HTMLDivElement>(null);
+  // When Paste and Clear last swapped places (a second tap that soon is ignored).
+  const swappedAt = useRef(-Infinity);
+  // The link changed by the owner (typed, pasted, dropped): a link that turns good then brings Make clips into view.
+  const linkByHand = useRef(false);
+  // From a failed job (Use a video file): its name, so the owner sees which job the file is for.
+  const [fromTitle, setFromTitle] = useState<string | null>(null);
+  // "Leave and stop the upload?": where the owner wanted to go, while the question is open.
+  const [leaveTo, setLeaveTo] = useState<(() => void) | null>(null);
   const [nudge, setNudge] = useState(false);
   const mounted = useRef(true);
   // A video or a link dragged over the card (§12.5): one soft highlight for the whole card, counted so moving over
@@ -124,6 +173,46 @@ function JobForm() {
   const uploadAct = useAction("upload");
   // A pasted link that is not sent yet, or an upload in progress: Ask Clip Factory asks before leaving (§19.8).
   useUnsaved(() => (mode === "link" && link.trim().length > 0 && !busy) || progress !== null);
+  // The file is going up (once it is all up, the job starts even if the owner leaves).
+  const uploading = progress !== null && progress < 1;
+  // The file can't change while it goes up (or while the job it is for starts).
+  const fileLocked = busy || progress !== null;
+  const active = useAppActive();
+
+  // While a file goes up, leaving Home asks first (Stay is the safe answer), and a reload or closing the tab lets the
+  // browser ask.
+  // Only while Clip Factory is on screen: a Home kept behind Clips Funded never holds Clips Funded's page changes, and the
+  // switch to Clips Funded keeps Home (and its upload) running as it is, so it asks nothing.
+  useEffect(() => {
+    if (!uploading) {
+      setLeaveTo(null);
+      return;
+    }
+    const off = active
+      ? setLeaveGuard(
+          (to, proceed) => {
+            if (storiesAddress(to)) return false;
+            setLeaveTo(() => proceed);
+            return true;
+          },
+          (to) => !storiesAddress(to),
+        )
+      : null;
+    const unload = (e: BeforeUnloadEvent) => {
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", unload);
+    return () => {
+      off?.();
+      window.removeEventListener("beforeunload", unload);
+    };
+  }, [uploading, active]);
+
+  // The unsent draft is kept while the app stays open.
+  useEffect(() => {
+    if (keepsDraft) saveDraft({ link, notes, count, exact });
+  }, [keepsDraft, link, notes, count, exact]);
 
   // Leaving Home stops a running upload: it has no progress or Cancel anywhere else, and must not pull the owner
   // back to a job page later from whatever screen they moved on to.
@@ -149,12 +238,24 @@ function JobForm() {
           setExact(t.min);
         }
         if (job.notes) setNotes((n) => n || job.notes!);
+        setFromTitle(jobTitle(job));
       })
       .catch(() => undefined);
     return () => {
       live = false;
     };
   }, [start.from]);
+
+  // Use a video file: the video box comes into view with the focus on it (after the page change has moved the focus
+  // to the page and the window to the top).
+  useEffect(() => {
+    if (!start.file) return;
+    const frame = requestAnimationFrame(() => {
+      form.current?.scrollIntoView({ block: "start" });
+      fileInput.current?.focus({ preventScroll: true });
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [start.file]);
 
   // A drop anywhere, the drag ending, the drag going into another part of the page, or leaving the window (Escape
   // fires a dragleave too) clears the highlight, even when the card itself never heard about it.
@@ -252,6 +353,9 @@ function JobForm() {
   const min = me?.settings.clipMin ?? 5;
   const max = me?.settings.clipMax ?? 10;
   const target: ClipTarget = count === "range" ? { min, max } : { min: exact, max: exact };
+  // What the form shows now, for a Make clips that is still uploading when the owner changes the count or the notes.
+  const latest = useRef({ target, notes });
+  latest.current = { target, notes };
   // The campaign way never sends a job without its campaign: not while the overview loads, not when it failed (then
   // it says so, with Check again), not for a campaign that can't take clips (its stop says why).
   const crDown = campaignWay && !forCampaign && crKnown.state === "error";
@@ -262,11 +366,27 @@ function JobForm() {
   const showLinkError = !isCampaignLink && check.state === "error" && (touched || link.length > 8);
 
   function takeLink(text: string) {
+    linkByHand.current = true;
     setLink(extractLink(text));
     setNudge(false);
     setCrError(null);
     setGroup(null);
   }
+
+  // A link that just turned good: Make clips comes into view (on a phone it can sit under the tab bar). After a Paste
+  // it waits out a double tap, so the page never moves under its second tap.
+  const wasOk = useRef(check.state === "ok");
+  useEffect(() => {
+    const ok = check.state === "ok";
+    const turned = ok && !wasOk.current && linkByHand.current;
+    wasOk.current = ok;
+    if (!turned) return;
+    const timer = setTimeout(
+      () => actions.current?.scrollIntoView({ block: "nearest", behavior: prefersReducedMotion() ? "auto" : "smooth" }),
+      Math.max(0, SWAP_MS - (performance.now() - swappedAt.current)),
+    );
+    return () => clearTimeout(timer);
+  }, [check.state]);
 
   useEffect(() => {
     if (!resendNow || busy || !ready) return;
@@ -283,16 +403,28 @@ function JobForm() {
         return;
       }
       takeLink(text);
+      swappedAt.current = performance.now();
       setTouched(true);
     } catch {
       pasteAct.fail({ sound: false });
       linkInput.current?.focus();
-      toast.info("Press and hold in the box, then choose Paste.");
+      toast.info(pasteFallback(isTouchDevice(), navigator.platform));
     }
+  }
+
+  /** The tap lands on the button that has just taken the other one's place: the second half of a double tap. */
+  function justSwapped(): boolean {
+    return performance.now() - swappedAt.current < SWAP_MS;
+  }
+
+  function stillUploading() {
+    toast.info(progress !== null ? "The upload is still running. Tap Cancel upload first." : "Clip Factory is starting your job. Wait a moment.");
   }
 
   /** Picks a file (from the picker or a drop) and says what is wrong with it, if anything. */
   function pick(f: File | null, how: "tap" | "drop" = "tap"): string | null {
+    if (fileLocked) return null;
+    sent.current = null;
     setFile(f);
     setFileError(null);
     if (!f) return null;
@@ -369,7 +501,7 @@ function JobForm() {
     e.preventDefault();
     if (o === "busy") {
       toast.info(
-        progress !== null ? "The upload is still running. Cancel it first, then drop again." : "Clip Factory is starting your job. Drop it again in a moment.",
+        uploading ? "The upload is still running. Cancel it first, then drop again." : "Clip Factory is starting your job. Drop it again in a moment.",
       );
       return;
     }
@@ -379,6 +511,7 @@ function JobForm() {
 
   /** A dropped video is picked like the file picker's; a dropped link is pasted like Paste's. Both switch the bar. */
   function takeDrop(d: Exclude<Dropped, { kind: "none" }>) {
+    if (fileLocked) return stillUploading();
     setNudge(false);
     if (d.kind === "link") {
       setMode("link");
@@ -430,20 +563,32 @@ function JobForm() {
         source = { type: "link", url: check.url };
       } else {
         const f = file!;
-        const contentType = videoType(f);
-        const up = await api().createUpload({ filename: f.name, contentType, size: f.size });
-        abort.current = new AbortController();
-        setProgress(0);
-        await putFile(up, f, setProgress, abort.current.signal);
-        source = { type: "upload", key: up.key, filename: f.name };
+        const kept = sent.current?.file === f ? sent.current : null;
+        if (kept) {
+          // Already up (the job after it failed): only the job is made again.
+          source = { type: "upload", key: kept.key, filename: f.name };
+        } else {
+          // The progress and Cancel upload show from the tap (leaving Home or Cancel then stops it before it starts).
+          const ctl = new AbortController();
+          abort.current = ctl;
+          setProgress(0);
+          const contentType = videoType(f);
+          const up = await api().createUpload({ filename: f.name, contentType, size: f.size });
+          if (ctl.signal.aborted) throw new DOMException("Upload canceled", "AbortError");
+          await putFile(up, f, setProgress, ctl.signal);
+          sent.current = { file: f, key: up.key };
+          source = { type: "upload", key: up.key, filename: f.name };
+        }
       }
       if (!mounted.current) return;
       // In the desktop app a YouTube link is fetched by this computer from the start (§35.1): no cloud block to hit.
       const macFirst = source.type === "link" && check.state === "ok" && check.platform === "youtube" && canMacFetch();
+      // The count and notes on screen now: they may have changed while the file went up.
+      const now = latest.current;
       const job = await api().createJob({
         source,
-        clipTarget: target,
-        ...(notes.trim() ? { notes: notes.trim() } : {}),
+        clipTarget: now.target,
+        ...(now.notes.trim() ? { notes: now.notes.trim() } : {}),
         ...(macFirst ? { macFetch: true } : {}),
         // From a link job (Use a video file): this file replaces it, so its wait for the Mac ends (§35.8).
         ...(source.type === "upload" && start.from ? { replaces: start.from } : {}),
@@ -453,13 +598,19 @@ function JobForm() {
       // This computer stops getting that job's video now and removes its copy (the job's stop says so too, a moment later).
       // Only when the server really stopped that job: its replace is best effort, and a job still waiting keeps its download.
       if (source.type === "upload" && start.from) void stopMacCopy(start.from, job.jobId);
+      sent.current = null;
+      clearDraft();
       // A later "Reading the rules…" in this visit gets its own one resend.
       resend.current = null;
       setWaitingRules(false);
       toast.success("Started! Your clips show up in Review when they are ready.");
       void refresh().catch(() => undefined);
-      if (mounted.current && location.pathname === "/") navigate(`/jobs/${job.jobId}`);
+      // Never held by this form's own "Leave and stop the upload?" (the file is all up by now).
+      if (mounted.current && location.pathname === "/") navigate(`/jobs/${job.jobId}`, { force: true });
     } catch (err) {
+      // The server lost the file ("We could not find your upload. Upload the video again."): the next Make clips sends
+      // the file again instead of the same dead key.
+      if (err instanceof ApiError && err.status === 400 && /find your upload/i.test(err.message)) sent.current = null;
       if ((err as DOMException)?.name === "AbortError")
         toast.info(mounted.current ? "Upload canceled." : "Upload stopped because you left Home. Start it again from Home.");
       else if (forCampaign && err instanceof ApiError && err.status === 409 && err.retryAfter !== undefined && resend.current !== "sent") {
@@ -567,6 +718,8 @@ function JobForm() {
                 aria-label="Clear link"
                 data-act="clear"
                 onClick={() => {
+                  if (justSwapped()) return;
+                  swappedAt.current = performance.now();
                   setLink("");
                   clearAct.play();
                 }}
@@ -582,6 +735,8 @@ function JobForm() {
                 data-help="paste-link"
                 data-act="paste"
                 onClick={() => {
+                  if (justSwapped()) return;
+                  swappedAt.current = performance.now();
                   void pasteFromClipboard();
                   pasteAct.play();
                 }}
@@ -636,13 +791,22 @@ function JobForm() {
           <span className="field__label" id={`${id}-fl`}>
             Video file
           </span>
-          <label className={`dropzone${file ? " has-file" : ""}${fileError ? " is-bad" : ""}`}>
+          <label
+            className={`dropzone${file ? " has-file" : ""}${fileError ? " is-bad" : ""}${fileLocked ? " is-locked" : ""}`}
+            onClick={(e) => {
+              if (!fileLocked) return;
+              e.preventDefault();
+              stillUploading();
+            }}
+          >
             <input
+              ref={fileInput}
               type="file"
               accept="video/*"
               className="sr-only"
               aria-labelledby={`${id}-fl`}
               aria-describedby={`${id}-fs`}
+              disabled={fileLocked}
               onChange={(e) => pick(e.target.files?.[0] ?? null)}
             />
             <ActGlyph act={uploadAct}>
@@ -652,7 +816,7 @@ function JobForm() {
               {file ? (
                 <>
                   <strong className="user-text">{file.name}</strong>
-                  <span>{bytes(file.size)} · tap to pick a different one</span>
+                  <span>{fileLocked ? bytes(file.size) : `${bytes(file.size)} · tap to pick a different one`}</span>
                 </>
               ) : (
                 <>
@@ -672,8 +836,14 @@ function JobForm() {
               </>
             ) : progress !== null ? (
               <span>Uploading… {Math.round(progress * 100)}%</span>
+            ) : nudge ? (
+              <span>First, choose a video. Tap the box above.</span>
+            ) : fromTitle ? (
+              <span>
+                For <strong className="user-text">{fromTitle}</strong>
+              </span>
             ) : (
-              <span>{nudge ? "First, choose a video. Tap the box above." : "Only you can see your videos."}</span>
+              <span>Only you can see your videos.</span>
             )}
           </p>
           {progress !== null ? (
@@ -727,7 +897,7 @@ function JobForm() {
         />
       </div>
 
-      <div className="newjob__actions">
+      <div className="newjob__actions" ref={actions}>
         <Button
           type="submit"
           variant="primary"
@@ -784,7 +954,7 @@ function JobForm() {
             <Icon name={over === "busy" ? "clock" : over === "link" ? "link" : "upload"} size={30} />
             <p>
               {over === "busy"
-                ? progress !== null
+                ? uploading
                   ? "Upload still running"
                   : "Starting your job…"
                 : over === "file"
@@ -795,6 +965,33 @@ function JobForm() {
             </p>
           </div>
         </div>
+      ) : null}
+      {leaveTo ? (
+        <Sheet
+          title="Leave and stop the upload?"
+          onClose={() => setLeaveTo(null)}
+          actions={
+            <>
+              <Button icon="check" className="leave-upload__stay" onClick={() => setLeaveTo(null)}>
+                Stay
+              </Button>
+              <Button
+                variant="danger"
+                icon="x"
+                className="leave-upload__go"
+                onClick={() => {
+                  const go = leaveTo;
+                  setLeaveTo(null);
+                  go();
+                }}
+              >
+                Leave
+              </Button>
+            </>
+          }
+        >
+          <p>Your video is still going up. Leaving Home stops it.</p>
+        </Sheet>
       ) : null}
     </form>
   );

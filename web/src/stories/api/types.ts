@@ -68,6 +68,11 @@ export interface StoriesConfig {
   youtubePrivacy: "public" | "unlisted" | "private";
   /** only with Lamo Stories' own X app */
   xMonthlyLimitUsd: number | null;
+  /**
+   * My Mac posts TikTok (docs/CONTRACTS.md §47.10, D8): on, Post it hands TikTok to the owner's Mac helper, which posts
+   * it for everyone with TikTok's AI label. Missing reads as off (a workspace saved before it).
+   */
+  tiktokMac?: { on: boolean };
 }
 
 /** A video's shape and its sizes (§45.34): 9:16 stays the default, the one Shorts, Reels and TikTok want. */
@@ -1194,7 +1199,8 @@ export interface PublishingJob {
   contentId: string;
   socialAccountId: string;
   platform: Platform;
-  publishingStatus: "queued" | "publishing" | "posted" | "failed" | "needs_attention";
+  /** "mac": the owner's Mac posts it on TikTok (§47.10); its state is `mac` */
+  publishingStatus: "queued" | "publishing" | "posted" | "failed" | "needs_attention" | "mac";
   accountName: string | null;
   /** the exact account the post goes to (CONTRACTS §45.34) */
   handle?: string | null;
@@ -1210,8 +1216,88 @@ export interface PublishingJob {
   waitingUntil?: string | null;
   waiting?: string | null;
   metrics?: { views: number | null; likes: number | null; comments: number | null; shares: number | null; checkedAt: string };
+  /** only while publishingStatus is "mac": what the owner's Mac is doing (§47.10) */
+  mac?: PubJobMac;
+  /** posted by the owner's Mac */
+  via?: "mac";
+  /** saved by the owner's It's on TikTok */
+  by?: "you";
+  /** a TikTok post the API made Only me (TikTok's Sandbox): only the owner sees it, and the Mac may post it again */
+  onlyMe?: true;
   createdAt: string;
   updatedAt: string;
+}
+
+// ---------- My Mac posts TikTok (docs/CONTRACTS.md §47.10) ----------
+
+export type MacStep = "video" | "opening" | "uploading" | "settings" | "pressing" | "finding";
+
+/** A Mac post's state on its publishing job (the job's mac* fields). */
+export interface PubJobMac {
+  state: "waiting" | "working" | "stopped";
+  step?: MacStep;
+  since: string;
+  claimedAt?: string;
+  /** the Mac pressed Post: it never presses it again by itself */
+  pressedAt?: string;
+  stoppedAt?: string;
+  reason?: string;
+  /** the Mac's last beat on this job: the stuck rule reads it */
+  beatAt?: string;
+  pressedBefore?: string;
+  againAt?: string;
+}
+
+/** One job of the Mac's queue, as the helper reads it. */
+export interface WsMacJob {
+  workspaceId: string;
+  publishingJobId: string;
+  storyId: string;
+  hook: string;
+  caption: string;
+  fileName: string;
+  /** the ONLY TikTok account it may go to */
+  account: { handle: string; openId: string };
+  aiLabel: true;
+  privacy: "PUBLIC_TO_EVERYONE";
+  comment: true;
+  duet: true;
+  stitch: true;
+  source: "upload";
+  since: string;
+  state: "waiting" | "working" | "stopped";
+  step?: MacStep;
+  claimedAt?: string;
+  pressedAt?: string;
+  beatAt?: string;
+  attempt: number;
+  pressedBefore?: string;
+  againAt?: string;
+}
+
+/** This workspace's Mac helper, as it last checked in. */
+export interface WsMacHelper {
+  seenAt: string;
+  state: "ok" | "needs_you" | "paused";
+  reason?: string;
+  version?: string;
+  /** its Chrome profile for this workspace is logged in to the target TikTok */
+  setUp: boolean;
+  handle?: string;
+  needsYouJobId?: string;
+  needsYouStoryId?: string;
+  /** the owner's Log in on my Mac, until the Mac did it */
+  loginRequest?: { at: string };
+  /** the owner's Start my Mac again, until the Mac did it */
+  resumeRequest?: { at: string };
+}
+
+/** GET …/tiktok/mac */
+export interface WsMacStatus {
+  on: boolean;
+  helper: WsMacHelper | null;
+  account: { handle: string | null; accountName: string | null; status: string } | null;
+  queue: WsMacJob[];
 }
 
 export interface StoriesDashboard {
@@ -1223,6 +1309,9 @@ export interface StoriesDashboard {
     platform: Platform | null;
     sentence: string;
     href: string;
+    /** "mac" for a Mac post that stopped (§47.10), with its state */
+    publishingStatus?: PublishingJob["publishingStatus"];
+    mac?: PubJobMac;
   }[];
   producing: { storyId: string; title: string; step: StepKey; progress: number }[];
   accounts: { platform: Platform; status: SocialAccount["connectionStatus"]; accountName: string | null }[];
@@ -1414,4 +1503,15 @@ export interface StoriesApi {
   publish(ws: string, storyId: string, targets: PublishTarget[]): Promise<PublishingJob[]>;
   listPublishing(ws: string, storyId?: string): Promise<PublishingJob[]>;
   retryPublishing(ws: string, publishingJobId: string, body?: { options?: PublishOptions; confirmAccount?: string }): Promise<PublishingJob>;
+
+  /** My Mac posts TikTok (§47.10): the switch is StoriesConfig.tiktokMac, saved with patchWorkspace */
+  macStatus(ws: string): Promise<WsMacStatus>;
+  /** Log in on my Mac: the Mac opens a TikTok window to log in to this workspace's TikTok */
+  macLogin(ws: string): Promise<{ helper: WsMacHelper }>;
+  /** Start my Mac again: the paused Mac goes on within a minute */
+  macResume(ws: string): Promise<{ helper: WsMacHelper }>;
+  /** Try again on a Mac post; `notOnTikTok` after the Mac pressed Post (only if it's not on TikTok) */
+  macRetry(ws: string, publishingJobId: string, body?: { notOnTikTok?: true; confirmAccount?: string }): Promise<PublishingJob>;
+  /** It's on TikTok: its link, or none */
+  macPosted(ws: string, publishingJobId: string, body: { link: string } | { noLink: true }): Promise<PublishingJob>;
 }

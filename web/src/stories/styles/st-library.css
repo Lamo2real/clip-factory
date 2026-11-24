@@ -85,7 +85,12 @@
   background: var(--st-selected);
   box-shadow: var(--st-depth-1), var(--st-glow-behind);
 }
-.stories-app .st-library__kinds:has(> .st-tabs__tab.is-on:hover) > .st-library__glide {
+/* The chosen pill is found by its aria-selected (Library.tsx sets it with is-on), never by .is-on: a class inside a
+   :has() makes Chromium check every :has() above any element whose class changes, the html:has(…) rules included, so
+   each .is-on that moved anywhere (the workspace switch's tap, every tab and menu) matched those against the whole
+   document, both apps' panes, in that tap's own task, and the switch's slide no longer started on the tap's own frame
+   (§45.38; test/hasArgsLight.test.ts). */
+.stories-app .st-library__kinds:has(> .st-tabs__tab[aria-selected="true"]:hover) > .st-library__glide {
   background: var(--st-cream-hover);
 }
 /* The focus ring on every pill, the chosen one too (the rules above take its shadow away for the glide). */

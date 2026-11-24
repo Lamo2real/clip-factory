@@ -517,3 +517,48 @@ test("reduced motion: nothing on the bank page keeps moving", async ({ browser }
   expect(running).toBe(0);
   await ctx.close();
 });
+
+// Kid-proof (an 8-year-old must never get stuck): Pick your bank's Cancel stays on a small phone's screen, and step 5
+// stops saying "Next: step 6" once step 6 is done, with the keyboard's focus kept on the steps.
+test.describe("kid-proof Your bank", () => {
+  for (const size of [
+    { width: 320, height: 640 },
+    { width: 390, height: 844 },
+  ])
+    test(`Pick your bank at ${size.width}x${size.height}: Cancel is on screen, the list scrolls inside the sheet`, async ({ page }) => {
+      await page.setViewportSize(size);
+      await start(page, BANK, "setup");
+      await page.getByRole("button", { name: "Connect your bank", exact: true }).click();
+      const sheet = page.getByRole("dialog", { name: "Pick your bank" });
+      await expect(sheet.locator(".bank-pick").first()).toBeVisible();
+      const cancel = sheet.getByRole("button", { name: "Cancel" });
+      await expect(cancel).toBeInViewport({ ratio: 1 });
+      await expect(sheet.locator(".bank-pick").last()).not.toBeInViewport();
+      await cancel.click();
+      await expect(sheet).toHaveCount(0);
+    });
+
+  test("step 6 done: step 5 folds and no longer says Next: step 6; the focus stays on the steps", async ({ page }) => {
+    await page.setViewportSize({ width: 1440, height: 900 });
+    await start(page, BANK);
+    await tomato(page).click();
+    await answer(page, "bank-account").click();
+    await page.getByRole("button", { name: "Make my bank key" }).focus();
+    await page.keyboard.press("Enter");
+    await expect(step(page, "bank-key")).toHaveAttribute("data-done", "true");
+    await expect(step(page, "bank-key").locator(".gstep__head")).toBeFocused();
+    await tomato(page).click();
+    await answer(page, "bank-app").click();
+    await step(page, "bank-details").getByRole("button", { name: "I did this" }).click();
+    await step(page, "bank-appid").getByLabel("App ID").fill(`New application Clip Factory ${UUID} has been added.`);
+    await tomato(page).click();
+    await expect(step(page, "bank-appid")).toContainText("Saved. Next: link your bank accounts (step 6).");
+    await tomato(page).click();
+    await answer(page, "bank-link").focus();
+    await page.keyboard.press("Enter");
+    await expect(step(page, "bank-link")).toHaveAttribute("data-done", "true");
+    await expect(step(page, "bank-appid").locator(".gstep__head")).toHaveAttribute("aria-expanded", "false");
+    await expect(page.getByText("Saved. Next: link your bank accounts (step 6).")).toHaveCount(0);
+    await expect(step(page, "bank-link").locator(".gstep__head")).toBeFocused();
+  });
+});

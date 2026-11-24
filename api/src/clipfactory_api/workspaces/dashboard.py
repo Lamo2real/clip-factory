@@ -4,9 +4,13 @@ the numbers and recent activity, all from this workspace's partition.
 ``SOCIAL#`` and ``PUBJOB#`` items are builder B's and are only read here. The accounts are the public ones the Social
 accounts page shows (``social.accounts_shown``, settled the same way, §45.35 D11), so a key change or Clip Factory
 connecting the same account later shows here too. A post that stopped on an account problem (its sentence sends the
-owner to Social accounts) has its Fix it open that platform's page on Social accounts; Try again stays on the video's
-Review page. A platform the owner skipped (``SocialAccount.skipped``, ``skips``) is left out of the accounts and of
-Needs you (its own line and a stopped post there): it shows only on Social accounts and in the setup.
+owner to Social accounts) has its Fix it open that platform's page on Social accounts while the problem is there;
+once that account is connected again, nothing is left to fix there, so the line says to tap Try again on the post and
+Fix it opens the video's Review page, where that Try again is. A TikTok post the owner's Mac stopped (§47.10:
+``publishingStatus`` ``mac``, ``macState`` ``stopped``) is in Needs you too, with its stored reason,
+``publishingStatus: "mac"`` and its ``mac`` (so the web's Try again asks the Mac again). A platform the owner skipped
+(``SocialAccount.skipped``, ``skips``) is left out of the accounts and of Needs you (its own line and a stopped post
+there, the Mac's too): it shows only on Social accounts and in the setup.
 """
 
 from __future__ import annotations
@@ -18,6 +22,7 @@ from typing import Any, Final
 from ..clock import iso, parse
 from . import activity, sentences, shapes, skips
 from . import types as ws
+from .publish import MAC_STATUS, public_mac
 
 PLATFORM_NAMES: Final = {
     "youtube": "YouTube",
@@ -30,14 +35,15 @@ METRICS: Final = ("views", "likes", "comments", "shares")
 NUMBERS_FOR = timedelta(days=7)
 ACTIVITY_SHOWN = 10
 CHECK_FACTS = "Check the facts in this video before you approve it."
+MAC_STOPPED = "Your Mac stopped posting it to TikTok. Open the story and tap Try again."
 SOCIAL_ACCOUNTS: Final = skips.SOCIAL_ACCOUNTS  # Clips Funded › Social accounts
 
 
-def _post_href(job: Mapping[str, Any], story_id: str) -> str:
+def _post_href(job: Mapping[str, Any], story_id: str, account_fixed: bool = False) -> str:
     """Fix it: the platform's page on Social accounts when the post stopped on an account problem (needs connecting
-    again, not connected, keys changed, Clip Factory's own account: its sentence names that page), else the video's
-    Review page."""
-    if sentences.CONNECTIONS in str(job.get("error") or ""):
+    again, not connected, keys changed, Clip Factory's own account: its sentence names that page) that is still there,
+    else the video's Review page (its Try again; also once that account is connected again)."""
+    if sentences.CONNECTIONS in str(job.get("error") or "") and not account_fixed:
         return skips.social_href(str(job.get("platform") or "") or None)
     return f"/stories/review/{story_id}" if story_id else "/stories"
 
@@ -46,12 +52,22 @@ def _skipped(socials: Sequence[Mapping[str, Any]]) -> frozenset[str]:
     return frozenset(str(a.get("platform")) for a in socials if a.get("skipped") is True)
 
 
-def _post_sentence(job: Mapping[str, Any]) -> str:
+def _post_sentence(job: Mapping[str, Any], title: str = "", account_fixed: bool = False) -> str:
     error = str(job.get("error") or "").strip()
+    if error and account_fixed and sentences.CONNECTIONS in error:
+        name = PLATFORM_NAMES.get(str(job.get("platform")), "The account")
+        on = f"“{title}”" if title else "the video"
+        return f"{name} is connected now. Tap Try again on {on}."
     if error:
         return error
     name = PLATFORM_NAMES.get(str(job.get("platform")), "the platform")
     return f"Posting to {name} stopped. Open the story and tap Try again."
+
+
+def _mac_sentence(job: Mapping[str, Any]) -> str:
+    """Why the Mac stopped (its stored reason, the row's "Didn't work: …"), else a plain Try again."""
+    reason = str(job.get("macReason") or "").strip()
+    return reason or MAC_STOPPED
 
 
 def _account_sentence(account: Mapping[str, Any]) -> str | None:
@@ -74,6 +90,7 @@ def needs_you(
 ) -> list[dict[str, Any]]:
     titles = {str(s.get("storyId")): str(s.get("title") or "") for s in stories}
     skipped = _skipped(socials)
+    connected = {str(a.get("platform")) for a in socials if a.get("connectionStatus") == "connected"}
     out: list[dict[str, Any]] = []
     latest_posted: dict[tuple[str, str], str] = {}
     for job in pubjobs:
@@ -81,7 +98,8 @@ def needs_you(
             key = (str(job.get("contentId")), str(job.get("platform")))
             latest_posted[key] = max(latest_posted.get(key, ""), str(job.get("createdAt") or ""))
     for job in sorted(pubjobs, key=lambda j: str(j.get("createdAt") or ""), reverse=True):
-        if job.get("publishingStatus") not in {"needs_attention", "failed"}:
+        mac = job.get("publishingStatus") == MAC_STATUS and job.get("macState") == "stopped"
+        if job.get("publishingStatus") not in {"needs_attention", "failed"} and not mac:
             continue
         if str(job.get("platform")) in skipped:
             continue  # a skipped platform shows only on Social accounts and in the setup
@@ -89,16 +107,19 @@ def needs_you(
         if latest_posted.get(key, "") > str(job.get("createdAt") or ""):
             continue
         story_id = str(job.get("contentId") or "")
-        out.append(
-            {
-                "publishingJobId": str(job.get("publishingJobId") or "") or None,
-                "storyId": story_id or None,
-                "title": titles.get(story_id, ""),
-                "platform": job.get("platform") if job.get("platform") in ws.PLATFORMS else None,
-                "sentence": _post_sentence(job),
-                "href": _post_href(job, story_id),
-            }
-        )
+        fixed = str(job.get("platform")) in connected
+        item: dict[str, Any] = {
+            "publishingJobId": str(job.get("publishingJobId") or "") or None,
+            "storyId": story_id or None,
+            "title": titles.get(story_id, ""),
+            "platform": job.get("platform") if job.get("platform") in ws.PLATFORMS else None,
+            "sentence": _mac_sentence(job) if mac else _post_sentence(job, titles.get(story_id, ""), fixed),
+            "href": f"/stories/review/{story_id}" if mac and story_id else _post_href(job, story_id, fixed),
+        }
+        if mac:
+            item["publishingStatus"] = MAC_STATUS
+            item["mac"] = public_mac(job)
+        out.append(item)
     for account in sorted(
         socials, key=lambda a: ws.PLATFORMS.index(a["platform"]) if a.get("platform") in ws.PLATFORMS else 9
     ):

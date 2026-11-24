@@ -335,14 +335,18 @@ top to bottom:
    row per link, all buttons glass: YouTube, Twitch and Kick links get "Make clips from this" (starts Home with the
    link and the campaign picked); Drive or Dropbox footage gets "Open" and "Download it, then tap Use a video file on
    Home."; any other link is plain text. One chip per channel the brief allows, "Open FaZe's YouTube" (→ the channel's
-   videos page, §38.10), with "Pick a video there. Copy its link. Come back and tap Paste." When the brief allows only
+   videos page, §38.10), with "Pick a video there. Copy its link. Come back and tap Paste." and the section's own
+   **Make clips for this campaign** (the line then says "Then tap Make clips for this campaign."; vermilion only when
+   nothing else on the page is). When the brief allows only
    its own videos, the next step is `pick_video` ("Pick a video below.") and the first row's "Make clips from this"
    is the vermilion one.
 7. **Your clips for this campaign** (`data-help="cr-campaign-clips"`, from `GET /v1/contentrewards/submissions?
    campaignId=`; only once there is one): "3 approved · 2 waiting · 1 not approved" (`Campaign.clipCounts`), then one
    `CrPostLine` (§38.6) per post, newest first, 10 then **Show more**.
 8. Footer: "Remove from Clip Factory" (quiet; 8 s toast "Removing FaZe Clips… Undo"; it never touches Content Rewards,
-   your posts or what was sent).
+   your posts or what was sent). The campaign is hidden from every list while the Undo counts (live refreshes
+   included) and after, until the server's list drops it; its own page, if open then, goes to /campaigns. Text pasted
+   into either rules box is kept per campaign (sessionStorage) until the rules are read.
 
 **Membership and the next step** (`Campaign.membership`, read from `list_my_campaigns`, §38.9; a campaign is "in" when
 CR lists it for you; `said` is the owner's own answer, kept per campaign, every answer undoable with an 8 s toast and

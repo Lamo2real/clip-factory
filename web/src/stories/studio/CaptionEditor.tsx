@@ -4,12 +4,14 @@
 // the steps it makes out of date (captions, put together, ready to watch and the fact check), so Remake shows.
 // "Write them again" asks the storyboard agent for new post captions (a captions task, with its own model menu): the
 // draft shows next to the saved words, and only "Use these" saves it (PATCH postCaptions). The tab can be kept by the
-// page (`tab`, `onTab`), so the box stays on "With the post" after Use these or Save remakes it (§45.36 E10).
+// page (`tab`, `onTab`), so the box stays on "With the post" after Use these or Save remakes it (§45.36 E10). Words
+// changed and not saved ask "Leave without saving?" before the page changes.
 import { useMemo, useState } from "react";
 import { storiesApi } from "../api/client.ts";
 import type { AiTask, CaptionCue, Captions, CaptionsResult, ModelOverride, Story, StoryPatch, StoryScript } from "../api/types.ts";
 import { LISTED_INFO, merged, ModelMenu, sendPick, storyUsual, TaskLine, useAiTask, type AiInfo } from "./ai.tsx";
 import { celebrate, Notice, Pick, Slider, Switch, TextField } from "./kit.tsx";
+import { useLeaveGuard } from "./leaveGuard.tsx";
 import { clock } from "./words.ts";
 
 /** The platforms' own caption limits (the same as Lamo Clips', CONTRACTS §17.6). */
@@ -131,6 +133,7 @@ export function CaptionEditor({
   const sceneChanges = script.scenes.filter((sc) => (sceneWords[sc.sceneId] ?? "").trim() !== (sc.caption ?? "")).map((sc) => sc.sceneId);
   const videoDirty = cuesChanged || on !== script.captionsOn || sceneChanges.length > 0;
   const postChanges = (Object.keys(POST_LIMITS) as (keyof Captions)[]).filter((k) => posts[k] !== story.postCaptions[k]);
+  const leave = useLeaveGuard(!saving && (videoDirty || postChanges.length > 0));
 
   const setCue = (id: string, patch: Partial<CaptionCue>) => {
     setProblem(null);
@@ -291,6 +294,7 @@ export function CaptionEditor({
           </div>
         </div>
       )}
+      {leave}
     </div>
   );
 }

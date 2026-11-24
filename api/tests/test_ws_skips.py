@@ -286,3 +286,23 @@ def ws_onboard(skipped: list[str]) -> dict[str, Any]:
         "createdAt": "2026-11-15T09:00:00.000Z",
         "updatedAt": "2026-11-15T09:00:00.000Z",
     }
+
+
+def test_a_stopped_mac_post_on_a_skipped_tiktok_leaves_needs_you_too() -> None:
+    """§47.10's Mac stops are a stopped post there too (rule S): a skipped TikTok has none in Needs you."""
+    from clipfactory_api.workspaces import dashboard
+
+    job = {
+        "publishingJobId": JOB,
+        "contentId": sup.STORY_ID,
+        "platform": "tiktok",
+        "publishingStatus": "mac",
+        "macState": "stopped",
+        "macReason": "Your Mac is logged out of TikTok. Log in again, then tap Try again.",
+        "createdAt": "2026-11-15T11:59:00.000Z",
+    }
+    stories = [{"storyId": sup.STORY_ID, "title": "Out"}]
+    tiktok = {"platform": "tiktok", "connectionStatus": "not_connected"}
+    (shown,) = dashboard.needs_you(stories, [job], [tiktok])
+    assert (shown["publishingStatus"], shown["href"]) == ("mac", f"/stories/review/{sup.STORY_ID}")
+    assert dashboard.needs_you(stories, [job], [{**tiktok, "skipped": True}]) == []

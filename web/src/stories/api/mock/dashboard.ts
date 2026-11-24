@@ -25,12 +25,19 @@ const CONNECTIONS = "Clips Funded › Social accounts";
 const socialPage = (platform?: Platform | null) => (platform ? `/stories/connections/${platform}` : "/stories/connections");
 
 /**
- * Fix it for a stopped post: the platform's page on Social accounts when it stopped on an account problem, else the
- * video's Review page.
+ * Fix it for a stopped post: the platform's page on Social accounts when it stopped on an account problem that is
+ * still there, else the video's Review page (its Try again), as the API's _post_href does: once the account is
+ * connected again nothing is left to fix on Social accounts.
  */
-export function postHref(error: string | null | undefined, storyId: string, platform?: Platform | null): string {
-  if ((error ?? "").includes(CONNECTIONS)) return socialPage(platform);
+export function postHref(error: string | null | undefined, storyId: string, platform?: Platform | null, accountFixed = false): string {
+  if ((error ?? "").includes(CONNECTIONS) && !accountFixed) return socialPage(platform);
   return storyId ? `/stories/review/${encodeURIComponent(storyId)}` : "/stories";
+}
+
+/** A stopped post's line: the server's sentence, or, once its account problem is fixed, to tap Try again on the post. */
+export function postSentence(error: string | null | undefined, platform: Platform, title: string, accountFixed = false): string {
+  if (error && error.includes(CONNECTIONS) && accountFixed) return `${PLATFORM_NAME[platform]} is connected now. Tap Try again on “${title}”.`;
+  return error ?? `Posting “${title}” to ${PLATFORM_NAME[platform]} stopped. Tap Try again.`;
 }
 
 /** The dashboard of workspace `ws`, as GET …/dashboard answers it. */
@@ -53,13 +60,14 @@ export function dashboardOf(store: MockStore, ws: string): StoriesDashboard {
     if (skipped.has(j.platform)) continue;
     const later = jobs.some((o) => o.contentId === j.contentId && o.platform === j.platform && o.publishingStatus === "posted" && o.createdAt > j.createdAt);
     if (later) continue;
+    const fixed = accounts.find((a) => a.platform === j.platform)?.connectionStatus === "connected";
     needsYou.push({
       publishingJobId: j.publishingJobId,
       storyId: j.contentId,
       title: title(j.contentId),
       platform: j.platform,
-      sentence: j.error ?? `Posting “${title(j.contentId)}” to ${PLATFORM_NAME[j.platform]} stopped. Tap Try again.`,
-      href: postHref(j.error, j.contentId, j.platform),
+      sentence: postSentence(j.error, j.platform, title(j.contentId), fixed),
+      href: postHref(j.error, j.contentId, j.platform, fixed),
     });
   }
   // One line per account, as the API words it (its reason is a code, never shown as it is): connect again, else

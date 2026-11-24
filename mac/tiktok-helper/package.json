@@ -1,8 +1,8 @@
 {
   "name": "clip-factory-tiktok-helper",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "private": true,
-  "description": "Posts the owner's Clip Factory clips on TikTok from his Mac, in a background Chrome profile (docs/CONTRACTS.md §47).",
+  "description": "Posts the owner's Clip Factory clips and Clips Funded stories on TikTok from his Mac, each in its own background Chrome profile (docs/CONTRACTS.md §47).",
   "type": "module",
   "engines": {
     "node": ">=22"

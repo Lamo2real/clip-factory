@@ -203,7 +203,9 @@ test("the OAuth landing address opens the platform's page and says the result on
   await ready(page);
   await expect(page).toHaveURL(/\/stories\/connections\/tiktok$/);
   await expect(page.locator("section.st-social-one")).toHaveAttribute("data-platform", "tiktok");
-  await expect(page.locator(".toast").filter({ hasText: "You pressed cancel. Tap Connect TikTok to try again." })).toBeVisible();
+  // The sentence names the button the card shows: TikTok needs connecting again, so it is "Connect again".
+  await expect(page.locator(".toast").filter({ hasText: "You pressed cancel. Tap Connect again to try again." })).toBeVisible();
+  await expect(page.locator('.st-conn[data-platform="tiktok"]').getByRole("button", { name: "Connect again" })).toBeVisible();
   // The rail marks Social accounts on the platform's page.
   await expect(page.locator(".st-rail .st-rail__item", { hasText: "Social accounts" })).toHaveAttribute("aria-current", "page");
 });

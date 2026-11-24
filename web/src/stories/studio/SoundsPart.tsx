@@ -77,7 +77,7 @@ export function SoundsPart({
   if (car) {
     const others = CATALOG.sfx.map((s) => s.id).filter((id) => !CAR_SFX.includes(id));
     return (
-      <div className="st-s-editor__part st-sd" aria-label="Sounds">
+      <div className="st-s-editor__part st-sd" aria-label="Sounds" tabIndex={-1}>
         {hints}
         <p className="st-s-editor__lede">{name} has no voice. Pick its car sounds.</p>
         <div className="st-s-field">
@@ -104,7 +104,7 @@ export function SoundsPart({
   const quiet = voiced ? undefined : SAMPLE_WORDS.quiet;
   const noiseVoice = voiced ? style : "babble";
   return (
-    <div className="st-s-editor__part st-sd" aria-label="Sounds">
+    <div className="st-s-editor__part st-sd" aria-label="Sounds" tabIndex={-1}>
       {hints}
       <p className="st-s-editor__lede">Clips Funded videos have no talking. {name} makes little noises instead. You will hear them in the video.</p>
       <Pick label="Voice" value={style} options={VOICE_STYLE} onChange={(s) => onChange({ ...voice, style: s })} />

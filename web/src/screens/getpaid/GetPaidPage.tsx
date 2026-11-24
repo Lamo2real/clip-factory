@@ -44,7 +44,7 @@ import { CrStepCard, OpenButton } from "../campaigns/bits.tsx";
 import { Rich } from "../settings/setup/bits.tsx";
 import { PlaceMark, ringLabel } from "./GetPaidList.tsx";
 import { GetPaidStep, MainAction, whoSaid, type StepState } from "./GetPaidStep.tsx";
-import { SentRows } from "./SentRows.tsx";
+import { intoView, SentRows } from "./SentRows.tsx";
 import { StatusPill } from "./StatusPill.tsx";
 import { startWhop, WhopCard } from "./WhopCard.tsx";
 
@@ -150,11 +150,13 @@ export function GetPaidPage({ place }: { place: GetPaidPlace }) {
     const to = anchor ?? (result && (result in WHOP_RESULTS) ? "whop" : result ? "step-yt-reading" : current ? `step-${current}` : null);
     if (!to || scrolled.current === to) return;
     // The current step moves only as far as it must (the status block stays on screen when there is room); a link or a
-    // result goes to the middle.
-    const block = !anchor && !result ? "nearest" : "center";
+    // result goes to the middle, or to its start when it is taller than the screen (its head stays in sight).
     const t = setTimeout(() => {
       scrolled.current = to;
-      document.getElementById(to)?.scrollIntoView?.({ block, behavior: prefersReducedMotion() ? "auto" : "smooth" });
+      const el = document.getElementById(to);
+      if (!el) return;
+      if (!anchor && !result) el.scrollIntoView?.({ block: "nearest", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+      else intoView(el);
     }, 160);
     return () => clearTimeout(t);
   }, [card, anchor, current, result]);
@@ -242,6 +244,8 @@ export function GetPaidPage({ place }: { place: GetPaidPlace }) {
       const connection = await api().crPatchConnection({ finance: v });
       patchCr((o) => ({ ...o, connection }));
       scheduleGetPaid(0);
+      // The answer (or the question again) takes the tapped control's place: the focus stays on the question.
+      setTimeout(() => document.getElementById(CR_FINANCE)?.focus({ preventScroll: true }), 0);
       return true;
     } catch (e) {
       toast.error(friendlyMessage(e));

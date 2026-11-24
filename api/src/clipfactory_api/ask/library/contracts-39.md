@@ -101,7 +101,9 @@ shapes count, anything else (another origin, `//`, a scheme, other paths, extra 
 `/review`, `/review?job={uuid}` and `/clips/{uuid}` → "Back to your clip", `/money` → "Back to Money". A platform's setup
 page (`SetupPlatform.tsx`) reads it the same way: once that platform is connected, its "When it's done" vermilion is
 the back button. Every link of §39 to a setup page adds the `?back=` of the page it is on (the server's hrefs never
-carry one, except the campaign card's, below).
+carry one, except the campaign card's, below, and `no_place`'s Set it up, `gates.place_setup_href`; the campaign's
+NextStep adds it to any `/settings/posting/setup/` link). Money's not-connected note has a glass **Set up {Platform}**
+(`/settings/posting/setup/{p}?back=/money`).
 
 | Way in | Taps to reach the page |
 |---|---|
@@ -302,7 +304,9 @@ number only when CR reported it, none of them in the total:
   $0.00" (time = `asOf`; a number CR didn't report is left out of the line).
 * "Earned since you started: $62.40" ("Checking…" until the paid list was read to its end).
 * "Paid to your bank: look on Whop, **Balances**."
-* the glass "See it all" (→ `#content-rewards`), only while the row has no button of its own.
+* the glass "See it all" (→ `#content-rewards`), only while the row has no button of its own. The part reacts to
+  `#content-rewards` (also on /money itself, on every tap): once drawn it scrolls into view and focuses its heading,
+  and scrolls again while the page above still fills in, unless the owner scrolls or types.
 
 The owner's four words map to CR's: "earned so far" = the `paid` payouts ("The amount reached your balance", net of
 all fees: §38.7's "paid you … so far"), "on its way" = `withdrawal_pending`, "ready to move" = `available`; "paid out"
