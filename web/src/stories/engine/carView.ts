@@ -52,6 +52,11 @@ const VIEW: Record<CarBody, { topW: number; belt: number }> = {
   van: { topW: 0.9, belt: 0.48 },
   sports: { topW: 0.6, belt: 0.6 },
   compact: { topW: 0.72, belt: 0.54 },
+  // §45.47: a bus's tall glass box, a bike's slim screen, a plane's nose, a boat's cabin
+  bus: { topW: 0.94, belt: 0.4 },
+  motorbike: { topW: 0.62, belt: 0.55 },
+  plane: { topW: 0.6, belt: 0.55 },
+  boat: { topW: 0.66, belt: 0.5 },
 };
 
 /** The look a plain car is drawn with in a front or back view: a sedan in its colour, steel wheels, no face. */
@@ -113,8 +118,11 @@ function carView(pen: Pen, car: CarLook, view: "back" | "front", o: CarViewOpts)
   const aoX = showSide ? (sd * depth) / 2 : 0;
   pen.ellipse(aoX, 0, W / 2 + 0.12 * W, 0.07 * W, 0, ND.ao, 0.16);
   pen.ellipse(aoX, -0.004 * W, W / 2 - 0.02 * W, 0.035 * W, 0, ND.ao, 0.38);
-  // tyres at the bottom corners, under the body
-  for (const x of [-1, 1]) pen.rect(x * (W / 2 - 0.12 * W) - 0.085 * W, sill - 0.08 * H, 0.17 * W, -(sill - 0.08 * H), 0.03 * W, TYRE_ND);
+  // tyres at the bottom corners, under the body (a bike's one in the middle; a plane's wings and a boat's water instead)
+  const form = spec.form;
+  if (form === "plane") pen.rect(-0.98 * o.w, sill - 0.5 * (sill - belt) - 0.03 * o.w, 1.96 * o.w, 0.06 * o.w, 0.03 * o.w, cel(paint, 0.3));
+  else if (form === "boat") pen.rect(-W / 2 - 0.06 * W, -0.03 * W, W * 1.12, 0.045 * W, 0.02 * W, g("#e9f6ff"), 0.75);
+  else for (const x of form === "bike" ? [0] : [-1, 1]) pen.rect(x * (W / 2 - 0.12 * W) - 0.085 * W, sill - 0.08 * H, 0.17 * W, -(sill - 0.08 * H), 0.03 * W, TYRE_ND);
   // the outline round the whole car, then the body: a lower box and a cabin
   const near: Pt[] = [
     [W / 2, sill],

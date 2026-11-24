@@ -498,11 +498,40 @@ function driverView(pen: Pen, x: ShotInput, w: World): void {
   cabinFront(pen, x, w, top, dashY);
 }
 
+/** The colours of a car's inside: its own from its inside photos (§45.47 `CarLook.interior`: the seats, the dash and
+ * the trim of the roof and pillars), standing in the cabin's light, or the cabin's usual ones. */
+export interface CabinColours {
+  roof: string;
+  pillar: string;
+  dashTop: string;
+  dashFace: string;
+  dashLip: string;
+  seat: string;
+  seatInk: string;
+}
+
+export function cabinColours(car: ShotCar | null | undefined): CabinColours {
+  const inside = car && car.draw && !car.truck ? car.draw.car.interior : undefined;
+  if (!inside) return { roof: ND.cabinRoof, pillar: ND.pillar, dashTop: ND.dashTop, dashFace: ND.dashFace, dashLip: ND.dashLip, seat: ND.seat, seatInk: ND.seatInk };
+  const c = (v: string, k = 0): string => grade(mix(hex(v, "#46454b"), "#000000", k));
+  const trim = inside.trim ?? null;
+  return {
+    roof: trim ? c(trim, 0.2) : ND.cabinRoof,
+    pillar: trim ? c(trim) : ND.pillar,
+    dashTop: c(inside.dash),
+    dashFace: c(inside.dash, 0.35),
+    dashLip: c(inside.dash, 0.6),
+    seat: c(inside.seat),
+    seatInk: c(inside.seat, 0.45),
+  };
+}
+
 /** The inside of the car from the driver's seat: the windscreen's frame (roof, pillars, the dash), the mirror, the
- * dashboard's vents, buttons and dials, the wheel and the hands on it. */
+ * dashboard's vents, buttons and dials, the wheel and the hands on it. The car's own inside colours (§45.47), if any. */
 function cabinFront(pen: Pen, x: ShotInput, w: World, top: number, dashY: number): void {
   const W = F.w;
   const H = F.h;
+  const cab = cabinColours(w.own);
   const tl = tall();
   const pin = tl ? [0.12, 0.05] : [0.16, 0.08];
   // the A pillars either side of the windscreen (the roof and the dash cover the rest); in the wider frames a side
@@ -516,9 +545,9 @@ function cabinFront(pen: Pen, x: ShotInput, w: World, top: number, dashY: number
     pen.poly(side, ND.glassIn, 0.18);
     pen.poly(mirrorX(side), ND.glassIn, 0.18);
   }
-  pen.poly(pillar, ND.pillar);
-  pen.poly(mirrorX(pillar), ND.pillar);
-  pen.rect(-90, -90, W + 180, top + 90, 0, ND.cabinRoof);
+  pen.poly(pillar, cab.pillar);
+  pen.poly(mirrorX(pillar), cab.pillar);
+  pen.rect(-90, -90, W + 180, top + 90, 0, cab.roof);
   // the pillars' soft ink edges and the lamps' light along them
   for (const s of [1, -1]) {
     const ex0 = s > 0 ? W * pin[0]! : W * (1 - pin[0]!);
@@ -563,7 +592,7 @@ function cabinFront(pen: Pen, x: ShotInput, w: World, top: number, dashY: number
       const from = Math.max(t0, clear);
       if (from <= t1 - 0.04) dashes.push([...at(from, -1), ...at(from, 1), ...at(t1, 1), ...at(t1, -1)]);
     }
-    if (dashes.length) pen.poly(joinShapes(dashes), ND.laneFar, 0.22);
+    if (dashes.length && !w.look.open) pen.poly(joinShapes(dashes), ND.laneFar, 0.22);
     if (!behind) mirrorLights(pen, [vx - 16, vx], hz + 4, 1.8, 7.5, 0.85, glass, gx, gy, gw, gh);
   }
   if (behind) {
@@ -579,10 +608,10 @@ function cabinFront(pen: Pen, x: ShotInput, w: World, top: number, dashY: number
   }
   // the dashboard: the lip under the glass, its top (where a passing lamp's light sweeps), its face
   const topBand = dashY + P(0.055, 0.07) * H;
-  pen.rect(-90, dashY - 2, W + 180, topBand + 0.012 * H - dashY + 2, 0, ND.dashTop);
-  pen.poly([-90, topBand + 0.013 * H, W * 0.5, topBand - 0.006 * H, W + 90, topBand + 0.013 * H], ND.dashFace);
-  pen.rect(-90, topBand + 0.012 * H, W + 180, H + 90 - topBand, 0, ND.dashFace);
-  pen.line([-90, dashY + 2, W + 90, dashY + 2], 9, ND.dashLip);
+  pen.rect(-90, dashY - 2, W + 180, topBand + 0.012 * H - dashY + 2, 0, cab.dashTop);
+  pen.poly([-90, topBand + 0.013 * H, W * 0.5, topBand - 0.006 * H, W + 90, topBand + 0.013 * H], cab.dashFace);
+  pen.rect(-90, topBand + 0.012 * H, W + 180, H + 90 - topBand, 0, cab.dashFace);
+  pen.line([-90, dashY + 2, W + 90, dashY + 2], 9, cab.dashLip);
   drawLightSweep(pen, x.warm, w.m, -60, W + 60, dashY - 0.02 * H, topBand + 0.05 * H);
   // the wheel's centre and size
   const wx = W / 2;
@@ -610,7 +639,7 @@ function cabinFront(pen: Pen, x: ShotInput, w: World, top: number, dashY: number
   // the dials behind the wheel, glowing a little more the faster the car goes
   const speed = clamp01(w.own?.speedAt?.(x.t) ?? 0);
   const dialY = tl ? dashY + 0.085 * H : wy - wr * 0.62;
-  pen.ellipse(wx, dialY + 0.005 * S, 0.27 * S, 0.075 * S, 0, ND.dashLip);
+  pen.ellipse(wx, dialY + 0.005 * S, 0.27 * S, 0.075 * S, 0, cab.dashLip);
   for (const s of [-1, 1]) {
     const dx = wx + s * 0.1 * S;
     pen.circle(dx, dialY, 0.056 * S, ND.dialFace);
@@ -710,16 +739,17 @@ function faceShot(pen: Pen, x: ShotInput, w: World, p: ShotPerson): void {
         pen.line([px, ry - 4, px, ry + 26], 5, ND.railPost, 0.9);
       }
     }
-    // the rear seats' backs and headrests, then the driver's own seat behind the head
+    // the rear seats' backs and headrests, then the driver's own seat behind the head, in the car's seat colour
+    const cab = cabinColours(car);
     for (const s of [-1, 1]) {
       const cx = W / 2 + s * W * 0.37;
-      seatShape(pen, cx - 0.17 * S, P(0.4, 0.46) * H, 0.34 * S, H, 0.09 * S);
-      seatShape(pen, cx - 0.085 * S, P(0.355, 0.39) * H, 0.17 * S, 0.08 * S, 0.04 * S);
+      seatShape(pen, cx - 0.17 * S, P(0.4, 0.46) * H, 0.34 * S, H, 0.09 * S, cab);
+      seatShape(pen, cx - 0.085 * S, P(0.355, 0.39) * H, 0.17 * S, 0.08 * S, 0.04 * S, cab);
     }
     const u = b.rx / p.geo.headRX;
     const ry = p.geo.headRY * u;
-    seatShape(pen, b.hx - b.rx * 1.25, b.hy + ry * 0.4, b.rx * 2.5, H, b.rx * 0.6);
-    seatShape(pen, b.hx - b.rx * 0.75, b.hy - ry * 1.08, b.rx * 1.5, ry * 0.9, b.rx * 0.35);
+    seatShape(pen, b.hx - b.rx * 1.25, b.hy + ry * 0.4, b.rx * 2.5, H, b.rx * 0.6, cab);
+    seatShape(pen, b.hx - b.rx * 0.75, b.hy - ry * 1.08, b.rx * 1.5, ry * 0.9, b.rx * 0.35, cab);
   } else backdrop(pen, x, w, b.hy);
   bust(pen, p, b.hx, b.hy + bob(x, p), b.rx, "front", bustTurn(p, x.t), lampSide, x.t);
   if (car) {
@@ -747,9 +777,9 @@ function faceShot(pen: Pen, x: ShotInput, w: World, p: ShotPerson): void {
 }
 
 /** A seat's back or headrest: a soft rounded block with a darker edge and a stitch line. */
-function seatShape(pen: Pen, x: number, y: number, w: number, h: number, r: number): void {
-  pen.rect(x - 3, y - 3, w + 6, h + 6, r + 3, ND.seatInk);
-  pen.rect(x, y, w, h, r, ND.seat);
+function seatShape(pen: Pen, x: number, y: number, w: number, h: number, r: number, cab?: Pick<CabinColours, "seat" | "seatInk">): void {
+  pen.rect(x - 3, y - 3, w + 6, h + 6, r + 3, cab?.seatInk ?? ND.seatInk);
+  pen.rect(x, y, w, h, r, cab?.seat ?? ND.seat);
   pen.line([x + r * 0.6, y + Math.min(h * 0.5, r * 1.4), x + w - r * 0.6, y + Math.min(h * 0.5, r * 1.4)], 2.5, ND.seatStitch, 0.9);
 }
 

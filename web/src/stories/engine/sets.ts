@@ -54,7 +54,7 @@ function side(): typeof SIDE & { sy: number; tall: number } {
 /** How many more copies a row needs to cover a frame wider than 1080 px at this spacing. */
 const more = (spacing: number): number => Math.max(0, Math.ceil((F.w - 1080) / spacing));
 
-type Decor = "trees" | "pines" | "posts" | "lamps" | "city" | "highway" | "fields" | "parking";
+type Decor = "trees" | "pines" | "posts" | "lamps" | "city" | "highway" | "fields" | "parking" | "air" | "water";
 
 interface OutdoorLook {
   sky: [string, string];
@@ -71,7 +71,8 @@ interface OutdoorLook {
   weather: "snow" | "rain" | "fog" | null;
   night: boolean;
   surface: "dry" | "ice" | "snow" | "wet";
-  lanes: 1 | 2;
+  /** 0: no road at all (the sky, the sea: §45.47) */
+  lanes: 0 | 1 | 2;
 }
 
 const OUT: Partial<Record<SetId, OutdoorLook>> = {
@@ -86,6 +87,10 @@ const OUT: Partial<Record<SetId, OutdoorLook>> = {
   city_street: { sky: ["#74c4ff", "#e0f4ff"], body: "sun", clouds: 2, cloud: "#ffffff", hills: ["#a9b8d6", "#8796b8"], verge: "#c9ced8", near: "#b7bdc9", road: "#40444f", lane: "#ffd54a", edge: "#ffffff", decor: "city", weather: null, night: false, surface: "dry", lanes: 1 },
   parking_lot: { sky: ["#5cc2ff", "#d8f3ff"], body: "sun", clouds: 2, cloud: "#ffffff", hills: ["#b8e08c", "#8fcf6b"], verge: "#b9bec8", near: "#5a5f6b", road: "#5a5f6b", lane: "#ffffff", edge: null, decor: "parking", weather: null, night: false, surface: "dry", lanes: 1 },
   // drawn by nightSide in both styles; the row says what kind of place it is (outdoor, night, a road of two lanes)
+  // §45.47: where a plane flies and a boat sails; no road, no lanes (verge: the far cloud or water, near: the near one,
+  // road: what the shots see under the horizon)
+  sky: { sky: ["#3fa4f0", "#cdeeff"], body: "sun", clouds: 4, cloud: "#ffffff", hills: ["#e8f6ff", "#ffffff"], verge: "#d6eefc", near: "#eef8ff", road: "#d6eefc", lane: "#c4e2f7", edge: null, decor: "air", weather: null, night: false, surface: "dry", lanes: 0 },
+  sea: { sky: ["#4fb3ff", "#d6f1ff"], body: "sun", clouds: 2, cloud: "#ffffff", hills: ["#9cc9b0", "#7fb59a"], verge: "#2f8fc9", near: "#1f74ad", road: "#2a86c2", lane: "#bfe6ff", edge: null, decor: "water", weather: null, night: false, surface: "dry", lanes: 0 },
   highway_night: { sky: [ND.skyTop, ND.skyHorizon], body: "none", clouds: 0, cloud: "#ffffff", hills: [ND.mtnFar, ND.mtnNear], verge: ND.verge, near: ND.vergeNear, road: ND.asphalt, lane: ND.lane, edge: ND.edge, decor: "highway", weather: null, night: true, surface: "dry", lanes: 2 },
 };
 
@@ -108,6 +113,8 @@ export function setInfo(set: SetId): SetInfo {
     highway: { sfx: "engine", volume: 0.16 },
     highway_night: { sfx: "engine", volume: 0.16 },
     park: { sfx: "wind", volume: 0.08 },
+    sky: { sfx: "wind", volume: 0.16 },
+    sea: { sfx: "wind", volume: 0.1 },
   };
   return { outdoor: !!o || set === "park", night: o?.night ?? false, weather: o?.weather ?? null, road: !!o, loop: loops[set] ?? null };
 }
@@ -152,7 +159,8 @@ export function drawSetBack(set: SetId, view: "side" | "top", env: SetEnv): void
     return;
   }
   const o = OUT[set];
-  if (o) outdoorSide(o, env);
+  if (o && o.lanes === 0) openSide(o, env);
+  else if (o) outdoorSide(o, env);
   else if (set === "park") parkSide(env);
   else if (set === "studio") studioSide(env);
   else indoorSide(set, env);
@@ -297,6 +305,56 @@ function outdoorSide(o: OutdoorLook, env: SetEnv): void {
     pen.line([gx0, S.roadTop - 30, gx0 + gw, S.roadTop - 30], 12, "#c9d3de");
     for (const x of repeat(180, mod(-env.scroll, 180), env.view.x0, env.view.x1, 16 + more(180))) pen.rect(x - 5, S.roadTop - 34, 10, 40, 3, "#8b97a8");
   }
+}
+
+/** The sky or the sea from the side (§45.47): the sky, the sun and clouds; over the sea a far island and the water with
+ * its waves, in the sky a bank of cloud below. Nothing to drive on, so no road and no lanes. */
+function openSide(o: OutdoorLook, env: SetEnv): void {
+  const { t, seed } = env;
+  const pen = penOf(env);
+  const S = side();
+  const sea = o.decor === "water";
+  sky(pen, o);
+  if (!sea) {
+    // the sky goes on down to a pale haze over the cloud bank
+    pen.grad(0, S.verge, 0, F.h, [
+      [0, o.sky[1]],
+      [1, o.verge],
+    ]);
+  }
+  env.layer(0.04);
+  const [sx, sy] = [X(820), Y(360)];
+  pen.circle(sx, sy, 150, "#fff3b0", 0.18);
+  pen.circle(sx, sy, 110, "#fff3b0", 0.3);
+  pen.circle(sx, sy, 78, "#ffd54a");
+  // clouds: in the sky they stream by with the flight, faster the nearer
+  env.layer(0.12);
+  for (let i = 0; i < o.clouds; i += 1) {
+    const x = mod(rand(seed, i + 90) * (F.w + 520) + t * (10 + i * 4) - env.scroll * (sea ? 0.03 : 0.12), F.w + 820) - 400;
+    cloud(pen, x, Y(180 + i * (sea ? 150 : 210) + rand(seed, i + 95) * 80), 0.8 + rand(seed, i + 99) * 0.5, o.cloud, 0.9);
+  }
+  const gx0 = env.view.x0 - 200;
+  const gw = env.view.x1 - env.view.x0 + 400;
+  if (sea) {
+    env.layer(0.25);
+    hills(pen, seed, S.horizon + 20 * S.sy, 110 * S.tall, o.hills[0], env.scroll * 0.12, -700, F.w + 700);
+    env.layer(1);
+    pen.rect(gx0, S.horizon, gw, F.h + 200 - S.horizon, 0, o.verge);
+    pen.rect(gx0, S.roadTop, gw, F.h + 200 - S.roadTop, 0, o.road);
+    pen.rect(gx0, S.roadBottom, gw, F.h + 200 - S.roadBottom, 0, o.near);
+    // the waves stream by with the boat
+    for (const [row, y] of [S.verge + 30 * S.sy, S.lane, S.roadBottom + 120 * S.sy].entries()) {
+      for (const x of repeat(260, mod(-env.scroll + row * 90, 260), env.view.x0, env.view.x1, 8 + more(260))) {
+        pen.line([x, y, x + 40, y - 12, x + 80, y], 6, o.lane, 0.55 + 0.1 * Math.sin(t * 2 + x * 0.01));
+      }
+    }
+    return;
+  }
+  // in the sky: a bank of cloud far below, its puffs streaming by
+  env.layer(0.7);
+  for (const x of repeat(340, mod(-env.scroll * 0.7, 340), -400, F.w + 400, 6 + more(340))) pen.circle(x, S.roadBottom + 170 * S.sy, 150, o.near, 0.95);
+  env.layer(1);
+  pen.rect(gx0, S.roadBottom + 170 * S.sy, gw, F.h + 200, 0, o.near);
 }
 
 function drawDecor(o: OutdoorLook, env: SetEnv): void {
@@ -533,6 +591,10 @@ function drawTop(set: SetId, env: SetEnv): void {
     if (set === "studio") pen.circle(F.w / 2, F.h / 2, 420, "#ffc94a", 0.1);
     return;
   }
+  if (o.lanes === 0) {
+    openTop(o, env);
+    return;
+  }
   const grass = o.decor === "city" ? "#b7bdc9" : o.decor === "parking" ? o.road : o.surface === "snow" || o.surface === "ice" ? "#f4fbff" : o.near;
   pen.fill(grass);
   env.layer(1);
@@ -625,6 +687,22 @@ function drawTop(set: SetId, env: SetEnv): void {
   }
   if (o.weather === "fog") {
     for (let i = 0; i < 2; i += 1) pen.ellipse(mod(t * 40 + i * 600, F.w + 520) - 300, Y(500 + i * 800), 800, 260, 0, "#f2f5f8", 0.3);
+  }
+}
+
+/** The sky or the sea from above (§45.47): the water with its waves, or cloud tops far below with clouds drifting by;
+ * no road. */
+function openTop(o: OutdoorLook, env: SetEnv): void {
+  const { t, seed } = env;
+  const pen = penOf(env);
+  const sea = o.decor === "water";
+  pen.fill(sea ? o.road : o.verge);
+  env.layer(1);
+  for (let i = 0; i < 6; i += 1) {
+    const y = mod(i * 400 + env.scroll + rand(seed, i) * 160, 2400) - 240;
+    const x = rand(seed, i + 10) * F.w;
+    if (sea) pen.line([x - 70, y, x - 20, y - 16, x + 30, y, x + 80, y - 16], 7, o.lane, 0.55 + 0.1 * Math.sin(t * 2 + i));
+    else pen.circle(x, y, 150 + rand(seed, i + 20) * 60, o.near, 0.9);
   }
 }
 
@@ -934,6 +1012,9 @@ export interface RoadLook {
   pole: string;
   poleDark: string;
   weather: "snow" | "rain" | "fog" | null;
+  /** §45.47: no road (the sky, the sea): the ground under the horizon is all `verge`, with no lanes, edges, posts or
+   * lamps */
+  open?: boolean;
 }
 
 export function roadLook(set: SetId): RoadLook {
@@ -971,6 +1052,7 @@ export function roadLook(set: SetId): RoadLook {
   }
   const o = OUT[set] ?? OUT.road_day!;
   const lampy = o.decor === "lamps" || o.decor === "city" || o.decor === "highway";
+  const open = o.lanes === 0;
   return {
     night: o.night,
     sky: [
@@ -996,12 +1078,13 @@ export function roadLook(set: SetId): RoadLook {
     oneWay: o.lanes === 2,
     rail: o.decor === "highway",
     reflectors: false,
-    posts: !lampy,
+    posts: !lampy && !open,
     lamps: lampy ? "far" : "none",
     lit: o.night,
     pole: C("#8b97a8"),
     poleDark: C("#6b7686"),
     weather: o.weather,
+    ...(open ? { open } : {}),
   };
 }
 
@@ -1024,5 +1107,7 @@ export const SET_SHAPES_ND: Record<SetId, number> = {
   living_room: 44,
   office: 51,
   park: 75,
+  sky: 48,
+  sea: 64,
   highway_night: 128,
 };

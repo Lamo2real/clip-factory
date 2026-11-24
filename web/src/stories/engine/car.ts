@@ -88,6 +88,11 @@ export function checkCarLook(look: unknown, where: string, err: (m: string) => v
   if (!isObj(f) || !ids(CL.eyes).includes(f.eyes as string) || !isHex(f.color) || !ids(CL.mouth).includes(f.mouth as string)) {
     err(`${where}: car.face needs eyes (${ids(CL.eyes).join(", ")}), a colour and a mouth (${ids(CL.mouth).join(", ")}).`);
   }
+  // §45.47: the inside colours from the inside photos; left out, the cabin keeps its usual colours
+  const inside = look.interior;
+  if (inside !== undefined && (!isObj(inside) || !isHex(inside.seat) || !isHex(inside.dash) || (inside.trim !== undefined && !isHex(inside.trim)))) {
+    err(`${where}: car.interior needs a seat and a dash colour like "#2d2d2f" (and a trim colour, if any).`);
+  }
 }
 
 // ---- geometry ----------------------------------------------------------------------------------------------------
@@ -122,6 +127,9 @@ export interface Spec {
   /** top view corner radius */
   round: number;
   bed?: boolean;
+  /** §45.47: a vehicle that is not a car or truck. A bike has no glass (its riders sit in the open) and two wheels in
+   * line; a plane has wings, a tail fin and small wheels under it; a boat has a hull and floats (no wheels). */
+  form?: "bike" | "plane" | "boat";
 }
 
 const BODIES: Record<CarBody, Spec> = {
@@ -133,6 +141,11 @@ const BODIES: Record<CarBody, Spec> = {
   van: { len: 1.15, hgt: 1.3, top: [[1, 0.92], [0.96, 1.08], [0.78, 1.2], [0.56, 2], [-0.96, 2], [-1, 1.9]], ws: [2, 3], back: [4, 5], pillar: 0.4, rear: true, lift: 6, axle: 0.68, wide: 1.1, spoiler: [-0.9, 2], round: 34 },
   sports: { len: 1.08, hgt: 0.82, top: [[1, 0.58], [0.96, 0.8], [0.44, 0.96], [0.08, 1.86], [-0.24, 1.92], [-0.74, 1.22], [-0.98, 1.02], [-1, 0.72]], ws: [2, 3], back: [4, 5], pillar: -0.14, rear: true, lift: -4, axle: 0.64, wide: 1.02, spoiler: [-0.9, 1], round: 70 },
   compact: { len: 0.82, hgt: 0.95, top: [[1, 0.8], [0.94, 1], [0.62, 1.06], [0.3, 2], [-0.52, 2.02], [-0.78, 1.84], [-0.88, 1.04], [-1, 0.86]], ws: [2, 3], back: [4, 6], pillar: -0.08, rear: true, lift: 0, axle: 0.66, wide: 0.92, spoiler: [-0.66, 2], round: 60 },
+  // §45.47: more vehicles, drawn by the same rig (a long tall box; a bike; a plane's fuselage, tail fin and wing; a hull)
+  bus: { len: 1.3, hgt: 1.38, top: [[1, 0.9], [0.98, 1.06], [0.95, 2], [-0.97, 2], [-1, 1.9]], ws: [1, 2], back: [3, 4], pillar: 0.3, rear: true, lift: 6, axle: 0.7, wide: 1.14, spoiler: [-0.9, 2], round: 30 },
+  motorbike: { len: 0.72, hgt: 0.62, top: [[1, 0.72], [0.88, 1.02], [0.64, 1.9], [0.5, 1.12], [-0.55, 1.08], [-0.8, 1.22], [-1, 0.92]], ws: [1, 2], back: [4, 5], pillar: -0.1, rear: true, lift: 30, axle: 0.78, wide: 0.42, spoiler: [-0.8, 1.22], round: 40, form: "bike" },
+  plane: { len: 1.3, hgt: 0.86, top: [[1, 0.62], [0.9, 1.12], [0.62, 2], [-0.6, 2], [-0.84, 2.62], [-1, 2.62], [-1, 1.2]], ws: [1, 2], back: [3, 4], pillar: 0.3, rear: true, lift: 10, axle: 0.5, wide: 0.9, spoiler: [-0.9, 2.62], round: 80, form: "plane" },
+  boat: { len: 1.15, hgt: 0.95, top: [[1.02, 1.38], [0.8, 1.06], [0.46, 1.1], [0.22, 2], [-0.46, 2], [-0.56, 1.1], [-1, 1.06]], ws: [2, 3], back: [4, 5], pillar: -0.12, rear: true, lift: 0, axle: 0.6, wide: 0.95, spoiler: [-0.9, 1.06], round: 70, form: "boat" },
 };
 
 /** A body's shape numbers (the side view's, which the front and back views of carView.ts read too). */
@@ -266,7 +279,8 @@ export function carSide(car: CarLook): Side {
   const hl = 292 * spec.len * clamp(car.length, 0.85, 1.15);
   const H = spec.hgt * clamp(car.height, 0.85, 1.15);
   const wr = 54 * clamp(car.wheels.size, 0.85, 1.2) * (car.wheels.style === "offroad" ? 1.06 : 1);
-  const sill = -(wr * 0.6) - spec.lift - (car.wheels.style === "offroad" ? 6 : 0);
+  // a boat's hull sits a little in the water: its keel under the ground line
+  const sill = spec.form === "boat" ? 12 : -(wr * 0.6) - spec.lift - (car.wheels.style === "offroad" ? 6 : 0);
   const lowH = 136 * H;
   const cabH = 130 * H;
   const y = (lv: number) => (lv <= 1 ? sill - lv * lowH : sill - lowH - (lv - 1) * cabH);
@@ -275,7 +289,8 @@ export function carSide(car: CarLook): Side {
   const ws = (lv: number) => X(chainX(top, spec.ws[0], spec.ws[1], lv));
   const bk = (lv: number) => X(chainX(top, spec.back[0], spec.back[1], lv));
   const raw: Pt[] = top.map(([fx, lv]) => [X(fx), y(lv)]);
-  raw.push([X(-1), y(0.14)], [X(-0.95), sill], [X(0.95), sill], [X(1), y(0.14)]);
+  if (spec.form === "boat") raw.push([X(-1), y(0.34)], [X(-0.92), sill], [X(0.42), sill]);
+  else raw.push([X(-1), y(0.14)], [X(-0.95), sill], [X(0.95), sill], [X(1), y(0.14)]);
   const sil = rounded(raw, 24);
   const cab: Pt[] = [[X(top[spec.ws[0]]![0]), y(1)]];
   for (let i = spec.ws[0]; i <= spec.back[1]; i += 1) cab.push([X(top[i]![0]), y(top[i]![1])]);
@@ -517,6 +532,80 @@ export function carBrows(pen: Pen, xs: [number, number], y: number, rx: number, 
   }
 }
 
+// ---- the other vehicles' parts (§45.47) --------------------------------------------------------------------------
+
+/** A plane's wing in the side view: a swept slab across the fuselage's lower half. */
+function wingSide(g: Side): number[] {
+  return [g.X(0.34), g.y(0.8), g.X(0.04), g.y(0.8), g.X(-0.32), g.y(0.2), g.X(-0.12), g.y(0.2)];
+}
+
+/** A boat on the water: the waterline along its hull, and foam at the bow while it moves. */
+function waterSide(pen: Pen, g: Side, moving: boolean): void {
+  pen.line([-g.hl - 24, -4, g.X(0.42) + 34, -4], 9, tone("#e9f6ff"), 0.75);
+  if (moving) pen.ellipse(g.X(0.42) + 14, -8, 38, 11, 0, tone("#ffffff"), 0.7);
+}
+
+/** The wheels a vehicle shows from above: a car's four, a bike's two in line, none on a plane or a boat. */
+function topWheels(spec: Spec, Wd: number, wy: number): [number, number, boolean][] {
+  if (spec.form === "bike") return [[0, -wy, true], [0, wy, false]];
+  if (spec.form) return [];
+  return [[-Wd / 2 + 2, -wy, true], [Wd / 2 - 2, -wy, true], [-Wd / 2 + 2, wy, false], [Wd / 2 - 2, wy, false]];
+}
+
+/** The body seen from above: a rounded box, or a boat's hull with a pointed bow. */
+function topShape(spec: Spec, L: number, Wd: number): number[] {
+  if (spec.form === "boat") return rounded([[0, -L / 2], [Wd / 2, -L / 5], [Wd / 2, L / 2], [-Wd / 2, L / 2], [-Wd / 2, -L / 5]], 40);
+  return roundRectPts(-Wd / 2, -L / 2, Wd, L, Math.min(spec.round, Wd / 2 - 1));
+}
+
+/** A bike's parts in the side view: the fork, the handlebar, the seat, the engine, the exhaust and the rear mudguard. */
+function bikeSide(pen: Pen, g: Side, paint: string, dark: string, chrome: string): void {
+  pen.line([g.ax, -g.wr, g.X(0.8), g.y(1.5)], 10, chrome);
+  pen.line([g.X(0.8) - 10, g.y(1.5), g.X(0.7), g.y(1.75)], 9, dark);
+  pen.rect(g.X(-0.6), g.y(1.08) - 16, g.X(0.6), 18, 9, dark);
+  pen.rect(g.X(-0.2), g.sill - 10, g.X(0.45), 40, 10, dark);
+  pen.line([g.X(-0.1), g.sill + 16, g.X(-1.05), g.sill - 4], 12, chrome);
+  pen.line(arcPts(-g.ax, -g.wr, g.wr * 1.15, g.wr * 1.15, 200, 320, 6), 10, paint);
+}
+
+/** A boat's parts in the side view: a stripe along the hull, three portholes, a lifebuoy, the deck rail and a flag. */
+function boatSide(pen: Pen, g: Side, accent: string, dark: string, glass: string, chrome: string): void {
+  pen.line([g.X(-1) + 6, g.y(0.3), g.X(0.5), g.y(0.3)], 8, dark);
+  for (const fx of [-0.6, -0.3, 0]) pen.circle(g.X(fx), g.y(0.66), 10, glass);
+  pen.circle(g.X(-0.8), g.y(0.72), 16, tone("#ff6f61"));
+  pen.circle(g.X(-0.8), g.y(0.72), 8, dark);
+  pen.line([g.X(-0.98), g.y(1.06) - 24, g.X(0.8), g.y(1.06) - 24, g.X(0.98), g.y(1.3) - 24], 4, chrome, 0.9);
+  pen.line([g.X(-0.95), g.y(1.06), g.X(-0.95), g.y(1.06) - 90], 4, chrome);
+  pen.poly([g.X(-0.95), g.y(1.06) - 90, g.X(-0.95) - 46, g.y(1.06) - 76, g.X(-0.95), g.y(1.06) - 62], accent);
+}
+
+/** The other vehicles' parts from above (§45.47): a plane's engines and tail fin, a boat's rails and swim platform, a
+ * bike's handlebar, front mudguard and exhaust. */
+function formTop(pen: Pen, spec: Spec, L: number, Wd: number, dark: string, chrome: string): void {
+  if (spec.form === "plane") {
+    for (const s of [-1, 1]) pen.ellipse(s * Wd * 0.95, -0.02 * L, 22, 46, 0, dark);
+    pen.line([0, L * 0.3, 0, L / 2 - 6], 14, dark);
+  } else if (spec.form === "boat") {
+    for (const s of [-1, 1]) pen.line([s * (Wd / 2 - 10), -L / 5 + 20, s * (Wd / 2 - 10), L / 2 - 14], 4, chrome, 0.9);
+    pen.rect(-Wd * 0.4, L / 2 - 4, Wd * 0.8, 22, 6, dark);
+  } else if (spec.form === "bike") {
+    pen.line([-Wd * 0.95, -L * 0.3, Wd * 0.95, -L * 0.3], 10, dark);
+    pen.rect(-Wd * 0.18, -L / 2 - 10, Wd * 0.36, L * 0.18, 10, dark);
+    pen.line([Wd * 0.4, 0, Wd * 0.5, L / 2], 10, chrome);
+  }
+}
+
+/** A boat's wake from above: two foam lines spreading out behind it. */
+function wakeTop(pen: Pen, L: number, Wd: number): void {
+  for (const s of [-1, 1]) pen.line([s * Wd * 0.3, L / 2 - 10, s * Wd * 0.85, L / 2 + 150], 12, tone("#ffffff"), 0.5);
+}
+
+/** A plane's wings and tailplane from above, under its fuselage. */
+function wingsTop(pen: Pen, L: number, Wd: number, colour: string): void {
+  pen.rect(-1.55 * Wd, -0.05 * L, 3.1 * Wd, 0.16 * L, 22, colour);
+  pen.rect(-0.75 * Wd, 0.34 * L, 1.5 * Wd, 0.1 * L, 14, colour);
+}
+
 // ---- side view ---------------------------------------------------------------------------------------------------
 
 function wheelSide(pen: Pen, x: number, y: number, r: number, spin: number, flat: boolean, car: CarLook, ink: string): void {
@@ -681,39 +770,61 @@ export function drawCarLookSide(pen: Pen, st: PropState, k: number, t: number, d
     pen.line(pts, 10, accent);
   }
   if (g.spec.bed) pen.line([g.X(-0.25), g.y(1.02), g.X(-0.95), g.y(1.02)], 7, shade(paint, -0.4));
-  pen.poly(g.front, glass.glass);
-  if (g.rear) pen.poly(g.rear, glass.glass);
+  const form = g.spec.form;
+  if (form === "plane") pen.poly(wingSide(g), shade(paint, -0.22));
+  else if (form === "bike") bikeSide(pen, g, paint, "#2b2b36", "#c9ccd2");
+  else if (form === "boat") boatSide(pen, g, accent, shade(paint, -0.45), glass.glass, "#c9ccd2");
+  // a bike's riders sit in the open: no glass
+  const glazed = form !== "bike";
+  if (glazed) {
+    pen.poly(g.front, glass.glass);
+    if (g.rear) pen.poly(g.rear, glass.glass);
+  }
   occ.side?.(pen, g.seats);
-  pen.poly(g.front, glass.tint, glass.a);
-  if (g.rear) pen.poly(g.rear, glass.tint, glass.a);
-  // a glint near the window's front edge, clear of the faces
-  pen.line([g.frontRight - 26, g.y(1.72), g.frontRight - 12, g.y(1.3)], 7, "#ffffff", car.windows === "clear" ? 0.55 : 0.3);
-  if (g.spec.rear) pen.line([g.X(g.spec.pillar), g.y(1.02), g.X(g.spec.pillar), g.y(0.2)], 3, shade(paint, -0.28), 0.8);
-  pen.ellipse(g.ws(LV_B) - 6, g.y(1.12), 15, 11, 0, accent);
-  extraSide(pen, g, car, ink);
-  // the grille (a smile or a frown with a grille mouth), bumpers and plain plates
+  if (glazed) {
+    pen.poly(g.front, glass.tint, glass.a);
+    if (g.rear) pen.poly(g.rear, glass.tint, glass.a);
+    // a glint near the window's front edge, clear of the faces
+    pen.line([g.frontRight - 26, g.y(1.72), g.frontRight - 12, g.y(1.3)], 7, "#ffffff", car.windows === "clear" ? 0.55 : 0.3);
+    if (g.spec.rear) pen.line([g.X(g.spec.pillar), g.y(1.02), g.X(g.spec.pillar), g.y(0.2)], 3, shade(paint, -0.28), 0.8);
+  }
+  if (!form) {
+    pen.ellipse(g.ws(LV_B) - 6, g.y(1.12), 15, 11, 0, accent);
+    extraSide(pen, g, car, ink);
+  }
+  // the grille (a smile or a frown with a grille mouth), bumpers and plain plates (a car's, a truck's, a bus's)
   const mouth = face && car.face.mouth === "grille" ? face.mouth : null;
-  if (mouth === null) pen.rect(g.hl - 30, g.y(0.52), 26, g.lowH * 0.22, 8, GRILLE);
+  if (mouth === null) {
+    if (!form) pen.rect(g.hl - 30, g.y(0.52), 26, g.lowH * 0.22, 8, GRILLE);
+  }
   else if (mouth === "o" || mouth === "bigo") pen.ellipse(g.hl - 28, g.y(0.42), 18, 8 + 7 * clamp(face!.mouthOpen, 0.3, 1.3), 0, MOUTH_DARK);
   else {
     const c = MOUTH_CURVE[mouth] ?? 0;
     const yy = g.y(0.44);
     pen.line(quadPts(g.hl - 64, yy - c * 10, g.hl - 34, yy + c * 13, g.hl - 6, yy - c * 4, 8), g.lowH * 0.09, GRILLE);
   }
-  pen.rect(g.hl - 34, g.y(0.3), 40, g.lowH * 0.18, 10, TRIM);
-  pen.rect(-g.hl - 6, g.y(0.3), 40, g.lowH * 0.18, 10, TRIM);
-  pen.rect(g.hl - 2, g.y(0.36), 9, g.lowH * 0.12, 3, PLATE);
-  pen.rect(-g.hl - 7, g.y(0.36), 9, g.lowH * 0.12, 3, PLATE);
+  if (!form) {
+    pen.rect(g.hl - 34, g.y(0.3), 40, g.lowH * 0.18, 10, TRIM);
+    pen.rect(-g.hl - 6, g.y(0.3), 40, g.lowH * 0.18, 10, TRIM);
+    pen.rect(g.hl - 2, g.y(0.36), 9, g.lowH * 0.12, 3, PLATE);
+    pen.rect(-g.hl - 7, g.y(0.36), 9, g.lowH * 0.12, 3, PLATE);
+  }
   // lights
   const headEyes = face !== null && car.face.eyes === "headlights";
   const front: [number, number] = headEyes ? [g.hl - clamp(g.lowH * 0.2, 14, 34) * 1.45, g.y(0.7)] : frontLight(pen, g, car, lit ? "#fff3b0" : "#ffe08a");
   const back = rearLight(pen, g, car, st.braking > 0.1 ? "#ff2d2d" : "#b3262d");
   pen.restore();
-  // wheel arches and wheels
-  pen.ellipse(-g.ax, -g.wr + 2 + dy * 0.5, g.wr * 1.37, g.wr * 1.19, 0, shade(paint, -0.45));
-  pen.ellipse(g.ax, -g.wr + 2 + dy * 0.5, g.wr * 1.37, g.wr * 1.19, 0, shade(paint, -0.45));
-  wheelSide(pen, -g.ax, -g.wr, g.wr, spin, false, car, ink);
-  wheelSide(pen, g.ax, -g.wr, g.wr, spin, st.flat, car, ink);
+  // wheel arches and wheels (a bike's in the open, a plane's small ones under it); a boat floats
+  if (!form) {
+    pen.ellipse(-g.ax, -g.wr + 2 + dy * 0.5, g.wr * 1.37, g.wr * 1.19, 0, shade(paint, -0.45));
+    pen.ellipse(g.ax, -g.wr + 2 + dy * 0.5, g.wr * 1.37, g.wr * 1.19, 0, shade(paint, -0.45));
+  }
+  if (form === "boat") waterSide(pen, g, moving);
+  else {
+    const wr = form === "plane" ? g.wr * 0.5 : g.wr;
+    wheelSide(pen, -g.ax, -wr, wr, spin, false, car, ink);
+    wheelSide(pen, g.ax, -wr, wr, spin, st.flat, car, ink);
+  }
   pen.save();
   pen.translate(0, dy);
   if (beam) pen.poly([front[0] + 10, front[1] - 6, g.hl + 540, front[1] - 90, g.hl + 540, front[1] + 130], "#fff3b0", 0.16);
@@ -782,6 +893,8 @@ export function drawCarLookTop(pen: Pen, st: PropState, k: number, t: number, d:
   const car = d.car;
   const g = carTop(car);
   const { L, Wd } = g;
+  // a bike, a plane or a boat carries no roof extras
+  const extra = g.spec.form ? "none" : car.extra;
   const ms = styleOf(d.style);
   const ink = hex(car.outline, "#1c1842");
   const paint = hex(car.paint, "#d8352a");
@@ -814,17 +927,13 @@ export function drawCarLookTop(pen: Pen, st: PropState, k: number, t: number, d:
     }
   }
   if (beam) pen.poly([-70, -L / 2, 70, -L / 2, 200, -L / 2 - 520, -200, -L / 2 - 520], "#fff3b0", 0.18);
+  if (g.spec.form === "boat") wakeTop(pen, L, Wd);
   pen.ellipse(10, 14, Wd / 2 + 16, L / 2 + 10, 0, "#000000", 0.2);
   // wheels peek out at the corners; the front pair turns with the steering
   const wy = (L / 2) * g.spec.axle * 0.94;
   const ww = (car.wheels.style === "offroad" ? 42 : 34) * car.wheels.size;
   const wl = 72 * car.wheels.size;
-  for (const [wx, wyy, front] of [
-    [-Wd / 2 + 2, -wy, true],
-    [Wd / 2 - 2, -wy, true],
-    [-Wd / 2 + 2, wy, false],
-    [Wd / 2 - 2, wy, false],
-  ] as [number, number, boolean][]) {
+  for (const [wx, wyy, front] of topWheels(g.spec, Wd, wy)) {
     pen.save();
     pen.translate(wx, wyy);
     if (front) pen.rotate(clamp(st.wheelTurn, -40, 40));
@@ -832,9 +941,11 @@ export function drawCarLookTop(pen: Pen, st: PropState, k: number, t: number, d:
     pen.restore();
   }
   pen.scale(grow, grow);
-  const shape = roundRectPts(-Wd / 2, -L / 2, Wd, L, Math.min(g.spec.round, Wd / 2 - 1));
+  if (g.spec.form === "plane") wingsTop(pen, L, Wd, shade(paint, -0.22));
+  const shape = topShape(g.spec, L, Wd);
   pen.poly(outlined(shape, 8), ink);
   pen.poly(shape, paint);
+  formTop(pen, g.spec, L, Wd, shade(paint, -0.45), "#c9ccd2");
   if (car.pattern === "racing_stripes") {
     for (const s of [-1, 1]) pen.line([s * Wd * 0.12, -L / 2 + 12, s * Wd * 0.12, L / 2 - 12], Wd * 0.1, accent);
   } else pen.line([0, -L / 2 + 14, 0, g.wsBase - 10], 18, shade(paint, 0.3), 0.7);
@@ -861,13 +972,13 @@ export function drawCarLookTop(pen: Pen, st: PropState, k: number, t: number, d:
   pen.line([-0.24 * Wd, r0 + 14, -0.14 * Wd, Math.min(r1 - 10, r0 + 130)], 8, "#ffffff", 0.3);
   if (g.spec.bed) pen.rect(-Wd / 2 + 14, g.backFoot + 10, Wd - 28, L / 2 - 16 - (g.backFoot + 10), 10, shade(paint, -0.38));
   else if (g.backFoot - g.roofBack > 14) pen.poly([-0.36 * Wd, g.roofBack + 4, 0.36 * Wd, g.roofBack + 4, 0.3 * Wd, g.backFoot, -0.3 * Wd, g.backFoot], glass.glass);
-  if (car.extra === "roof_rack") {
+  if (extra === "roof_rack") {
     for (const p of [0.22, 0.78]) pen.line([-0.44 * Wd, lerp(r0, r1, p), 0.44 * Wd, lerp(r0, r1, p)], 9, TRIM);
-  } else if (car.extra === "roof_box") {
+  } else if (extra === "roof_box") {
     const y0 = lerp(r0, r1, 0.45);
     pen.rect(-0.3 * Wd - 6, y0 - 6, 0.6 * Wd + 12, r1 - y0 + 6, 20, ink);
     pen.rect(-0.3 * Wd, y0, 0.6 * Wd, r1 - y0 - 6, 16, "#454b58");
-  } else if (car.extra === "spoiler") pen.rect(-Wd / 2 - 6, L / 2 - 34, Wd + 12, 16, 7, shade(paint, -0.35));
+  } else if (extra === "spoiler") pen.rect(-Wd / 2 - 6, L / 2 - 34, Wd + 12, 16, 7, shade(paint, -0.35));
   // lights and plain plates
   const head = lit ? "#fff3b0" : "#ffe08a";
   for (const s of [-1, 1]) {
@@ -890,8 +1001,10 @@ export function drawCarLookTop(pen: Pen, st: PropState, k: number, t: number, d:
   }
   lightGlow(pen, -0.32 * Wd, -L / 2 + 14, st.blink, 0.8);
   lightGlow(pen, 0.32 * Wd, -L / 2 + 14, st.blink, 0.8);
-  pen.rect(-26, -L / 2 - 4, 52, 8, 3, PLATE);
-  pen.rect(-26, L / 2 - 4, 52, 8, 3, PLATE);
+  if (!g.spec.form) {
+    pen.rect(-26, -L / 2 - 4, 52, 8, 3, PLATE);
+    pen.rect(-26, L / 2 - 4, 52, 8, 3, PLATE);
+  }
   // the top view shows the windscreen eyes only, small
   if (face && car.face.eyes === "windscreen") {
     const closedBy = Math.max(face.eyes === "normal" || face.eyes === "lidded" ? blinkAt(d.seed, t) : 0, st.blink);
@@ -1051,61 +1164,83 @@ function drawCarLookSideND(pen: Pen, st: PropState, k: number, t: number, d: Car
     pen.line(pts, 10, accent);
   }
   if (g.spec.bed) pen.line([g.X(-0.25), g.y(1.02), g.X(-0.95), g.y(1.02)], 7, cel(paint, 0.4));
+  const form = g.spec.form;
   const topLine: number[] = [];
   for (const [fx, lv] of g.spec.top) topLine.push(g.X(fx) * 0.98, g.y(lv) + ow * 2);
   pen.line(topLine, ow * 2.2, lift(car.pattern === "two_tone" ? accent : paint, 0.16), 0.8);
-  pen.poly(g.front, glass);
-  if (g.rear) pen.poly(g.rear, glass);
+  if (form === "plane") pen.poly(wingSide(g), cel(paint, 0.3));
+  else if (form === "bike") bikeSide(pen, g, paint, tone("#2b2b36"), tone("#c9ccd2"));
+  else if (form === "boat") boatSide(pen, g, accent, cel(paint, 0.5), glass, tone("#c9ccd2"));
+  // a bike's riders sit in the open: no glass
+  const glazed = form !== "bike";
+  if (glazed) {
+    pen.poly(g.front, glass);
+    if (g.rear) pen.poly(g.rear, glass);
+  }
   occ.side?.(pen, g.seats);
-  pen.poly(g.front, glass, tintA);
-  if (g.rear) pen.poly(g.rear, glass, tintA);
-  // two reflection bands in the window's low front corner, clear of the faces
-  const edge = (lv: number) => g.ws(lv) - INSET;
-  const band = (i0: number, i1: number): number[] => [edge(1.4) - i0, g.y(1.4), edge(1.4) - i1, g.y(1.4), edge(1) - i1 - 12, g.y(1), edge(1) - i0 - 12, g.y(1)];
-  pen.poly(clipConvex(band(4, 22), g.front), "#ffffff", 0.12);
-  pen.poly(clipConvex(band(30, 38), g.front), "#ffffff", 0.07);
-  // door lines (the front door's front edge, the B pillar), handles, the mirror on its stalk and the side marker
-  const pillar = g.X(g.spec.pillar);
-  const doorFront = Math.min(g.ws(LV_B) - 8, g.ax - g.wr * 1.37 + 4);
-  pen.line([doorFront, g.y(1.02), doorFront, g.y(0.16)], fine, inkC, 0.8);
-  pen.line([pillar, g.y(1.02), pillar, g.y(0.16)], fine, inkC, 0.8);
-  const handleY = g.y(0.86) - 2.5;
-  pen.rect(pillar + 8, handleY, 18, 5, 2.5, cel(paint, 0.3));
-  if (g.spec.rear) pen.rect(Math.min(pillar - 44, -g.ax + g.wr * 1.37 + 10), handleY, 18, 5, 2.5, cel(paint, 0.3));
-  const mx = g.ws(LV_B) - 6;
-  const my = g.y(1.12);
-  pen.line([mx - 14, g.y(1.0), mx - 4, my + 4], 5, tone(TRIM));
-  pen.ellipse(mx, my, 15 + ow, 11 + ow, 0, inkC);
-  pen.ellipse(mx, my, 15, 11, 0, accent);
+  if (glazed) {
+    pen.poly(g.front, glass, tintA);
+    if (g.rear) pen.poly(g.rear, glass, tintA);
+    // two reflection bands in the window's low front corner, clear of the faces
+    const edge = (lv: number) => g.ws(lv) - INSET;
+    const band = (i0: number, i1: number): number[] => [edge(1.4) - i0, g.y(1.4), edge(1.4) - i1, g.y(1.4), edge(1) - i1 - 12, g.y(1), edge(1) - i0 - 12, g.y(1)];
+    pen.poly(clipConvex(band(4, 22), g.front), "#ffffff", 0.12);
+    pen.poly(clipConvex(band(30, 38), g.front), "#ffffff", 0.07);
+  }
+  if (!form) {
+    // door lines (the front door's front edge, the B pillar), handles, the mirror on its stalk and the side marker
+    const pillar = g.X(g.spec.pillar);
+    const doorFront = Math.min(g.ws(LV_B) - 8, g.ax - g.wr * 1.37 + 4);
+    pen.line([doorFront, g.y(1.02), doorFront, g.y(0.16)], fine, inkC, 0.8);
+    pen.line([pillar, g.y(1.02), pillar, g.y(0.16)], fine, inkC, 0.8);
+    const handleY = g.y(0.86) - 2.5;
+    pen.rect(pillar + 8, handleY, 18, 5, 2.5, cel(paint, 0.3));
+    if (g.spec.rear) pen.rect(Math.min(pillar - 44, -g.ax + g.wr * 1.37 + 10), handleY, 18, 5, 2.5, cel(paint, 0.3));
+    const mx = g.ws(LV_B) - 6;
+    const my = g.y(1.12);
+    pen.line([mx - 14, g.y(1.0), mx - 4, my + 4], 5, tone(TRIM));
+    pen.ellipse(mx, my, 15 + ow, 11 + ow, 0, inkC);
+    pen.ellipse(mx, my, 15, 11, 0, accent);
+  }
   pen.rect(g.hl - 44, g.y(0.56) - 4, 14, 8, 3, ND.marker);
   // rim light from the street lamps along the roof line and the rear pillar
   const rim: number[] = [];
   for (let i = g.spec.ws[1]; i <= g.spec.back[1]; i += 1) rim.push(g.X(g.spec.top[i]![0]) * 0.99, g.y(g.spec.top[i]![1]) + ow * 0.7);
   pen.line(rim, ow, light.rim, light.rimA);
-  extraSide(pen, g, car, inkC);
-  // the grille (a smile or a frown with a grille mouth), bumpers and plain plates
+  if (!form) extraSide(pen, g, car, inkC);
+  // the grille (a smile or a frown with a grille mouth), bumpers and plain plates (a car's, a truck's, a bus's)
   const mouth = face && car.face.mouth === "grille" ? face.mouth : null;
-  if (mouth === null) pen.rect(g.hl - 30, g.y(0.52), 26, g.lowH * 0.22, 8, tone(GRILLE));
+  if (mouth === null) {
+    if (!form) pen.rect(g.hl - 30, g.y(0.52), 26, g.lowH * 0.22, 8, tone(GRILLE));
+  }
   else if (mouth === "o" || mouth === "bigo") pen.ellipse(g.hl - 28, g.y(0.42), 18, 8 + 7 * clamp(face!.mouthOpen, 0.3, 1.3), 0, tone(MOUTH_DARK));
   else {
     const c = MOUTH_CURVE[mouth] ?? 0;
     const yy = g.y(0.44);
     pen.line(quadPts(g.hl - 64, yy - c * 10, g.hl - 34, yy + c * 13, g.hl - 6, yy - c * 4, 8), g.lowH * 0.09, tone(GRILLE));
   }
-  pen.rect(g.hl - 34, g.y(0.3), 40, g.lowH * 0.18, 10, tone(TRIM));
-  pen.rect(-g.hl - 6, g.y(0.3), 40, g.lowH * 0.18, 10, tone(TRIM));
-  pen.rect(g.hl - 2, g.y(0.36), 9, g.lowH * 0.12, 3, tone(PLATE));
-  pen.rect(-g.hl - 7, g.y(0.36), 9, g.lowH * 0.12, 3, tone(PLATE));
+  if (!form) {
+    pen.rect(g.hl - 34, g.y(0.3), 40, g.lowH * 0.18, 10, tone(TRIM));
+    pen.rect(-g.hl - 6, g.y(0.3), 40, g.lowH * 0.18, 10, tone(TRIM));
+    pen.rect(g.hl - 2, g.y(0.36), 9, g.lowH * 0.12, 3, tone(PLATE));
+    pen.rect(-g.hl - 7, g.y(0.36), 9, g.lowH * 0.12, 3, tone(PLATE));
+  }
   // lights: the lenses glow when they are on
   const front: [number, number] = headEyes ? [g.hl - clamp(g.lowH * 0.2, 14, 34) * 1.45, g.y(0.7)] : frontLight(pen, g, car, lit ? ND.headCore : grade(LENS_OFF));
   const back = rearLight(pen, g, car, braking ? ND.brakeCore : tailOn ? ND.tailCore : grade(TAIL_OFF));
   pen.restore();
   // wheel arches and wheels
-  const arch = mix(paint, ND.ao, 0.6);
-  pen.ellipse(-g.ax, -g.wr + 2 + dy * 0.5, g.wr * 1.37, g.wr * 1.19, 0, arch);
-  pen.ellipse(g.ax, -g.wr + 2 + dy * 0.5, g.wr * 1.37, g.wr * 1.19, 0, arch);
-  wheelSideND(pen, -g.ax, -g.wr, g.wr, spin, false, car, ow);
-  wheelSideND(pen, g.ax, -g.wr, g.wr, spin, st.flat, car, ow);
+  if (!form) {
+    const arch = mix(paint, ND.ao, 0.6);
+    pen.ellipse(-g.ax, -g.wr + 2 + dy * 0.5, g.wr * 1.37, g.wr * 1.19, 0, arch);
+    pen.ellipse(g.ax, -g.wr + 2 + dy * 0.5, g.wr * 1.37, g.wr * 1.19, 0, arch);
+  }
+  if (form === "boat") waterSide(pen, g, moving);
+  else {
+    const wr = form === "plane" ? g.wr * 0.5 : g.wr;
+    wheelSideND(pen, -g.ax, -wr, wr, spin, false, car, ow);
+    wheelSideND(pen, g.ax, -wr, wr, spin, st.flat, car, ow);
+  }
   pen.save();
   pen.translate(0, dy);
   const s = g.lowH / 136;
@@ -1159,6 +1294,8 @@ function drawCarLookTopND(pen: Pen, st: PropState, k: number, t: number, d: CarD
   const car = d.car;
   const g = carTop(car);
   const { L, Wd } = g;
+  // a bike, a plane or a boat carries no roof extras
+  const extra = g.spec.form ? "none" : car.extra;
   const ms = styleOf(d.style);
   const light = F.light;
   const inkC = ink(hex(car.outline, "#1c1842"));
@@ -1198,17 +1335,13 @@ function drawCarLookTopND(pen: Pen, st: PropState, k: number, t: number, d: CarD
     }
   }
   if (beam) beamGlow(pen, 0, -L / 2, 520, 230, night ? 0.08 : 0.05, true);
+  if (g.spec.form === "boat") wakeTop(pen, L, Wd);
   pen.ellipse(8, 12, Wd / 2 + 30, L / 2 + 24, 0, ND.ao, 0.16);
   pen.ellipse(4, 6, Wd / 2 + 4, L / 2 + 2, 0, ND.ao, 0.38);
   const wy = (L / 2) * g.spec.axle * 0.94;
   const ww = (car.wheels.style === "offroad" ? 42 : 34) * car.wheels.size;
   const wl = 72 * car.wheels.size;
-  for (const [wx, wyy, front] of [
-    [-Wd / 2 + 2, -wy, true],
-    [Wd / 2 - 2, -wy, true],
-    [-Wd / 2 + 2, wy, false],
-    [Wd / 2 - 2, wy, false],
-  ] as [number, number, boolean][]) {
+  for (const [wx, wyy, front] of topWheels(g.spec, Wd, wy)) {
     pen.save();
     pen.translate(wx, wyy);
     if (front) pen.rotate(clamp(st.wheelTurn, -40, 40));
@@ -1216,9 +1349,11 @@ function drawCarLookTopND(pen: Pen, st: PropState, k: number, t: number, d: CarD
     pen.restore();
   }
   pen.scale(grow, grow);
-  const shape = roundRectPts(-Wd / 2, -L / 2, Wd, L, Math.min(g.spec.round, Wd / 2 - 1));
+  if (g.spec.form === "plane") wingsTop(pen, L, Wd, cel(paint, 0.3));
+  const shape = topShape(g.spec, L, Wd);
   pen.poly(outlined(shape, ow), inkC);
   pen.poly(shape, paint);
+  formTop(pen, g.spec, L, Wd, cel(paint, 0.5), tone("#c9ccd2"));
   // the side away from the lamps in the cel shadow, a lit line down the bonnet
   pen.poly(clipConvex(shape, [Wd * 0.22, -L, Wd, -L, Wd, L, Wd * 0.22, L]), cel(paint));
   if (car.pattern === "racing_stripes") {
@@ -1250,13 +1385,13 @@ function drawCarLookTopND(pen: Pen, st: PropState, k: number, t: number, d: CarD
   pen.line([-0.38 * Wd + ow, r0 + 18, -0.38 * Wd + ow, r1 - 18], ow, light.rim, light.rimA);
   if (g.spec.bed) pen.rect(-Wd / 2 + 14, g.backFoot + 10, Wd - 28, L / 2 - 16 - (g.backFoot + 10), 10, cel(paint, 0.4));
   else if (g.backFoot - g.roofBack > 14) pen.poly([-0.36 * Wd, g.roofBack + 4, 0.36 * Wd, g.roofBack + 4, 0.3 * Wd, g.backFoot, -0.3 * Wd, g.backFoot], glass);
-  if (car.extra === "roof_rack") {
+  if (extra === "roof_rack") {
     for (const p of [0.22, 0.78]) pen.line([-0.44 * Wd, lerp(r0, r1, p), 0.44 * Wd, lerp(r0, r1, p)], 9, tone(TRIM));
-  } else if (car.extra === "roof_box") {
+  } else if (extra === "roof_box") {
     const y0 = lerp(r0, r1, 0.45);
     pen.rect(-0.3 * Wd - ow, y0 - ow, 0.6 * Wd + 2 * ow, r1 - y0 - 6 + 2 * ow, 16 + ow, inkC);
     pen.rect(-0.3 * Wd, y0, 0.6 * Wd, r1 - y0 - 6, 16, tone("#454b58"));
-  } else if (car.extra === "spoiler") pen.rect(-Wd / 2 - 6, L / 2 - 34, Wd + 12, 16, 7, cel(paint, 0.35));
+  } else if (extra === "spoiler") pen.rect(-Wd / 2 - 6, L / 2 - 34, Wd + 12, 16, 7, cel(paint, 0.35));
   // lights (glowing when on) and plain plates
   const head = lit ? ND.headCore : grade(LENS_OFF);
   for (const s of [-1, 1]) {
@@ -1278,8 +1413,10 @@ function drawCarLookTopND(pen: Pen, st: PropState, k: number, t: number, d: CarD
   if (tailA > 0) for (const s of [-1, 1]) pen.glow(s * 0.33 * Wd, L / 2 - 8, 54, 54, ND.tailGlow, haloStops(1, 0.3, 1.6), Math.min(1, tailA * 1.5));
   lightGlow(pen, -0.32 * Wd, -L / 2 + 14, st.blink, 0.8);
   lightGlow(pen, 0.32 * Wd, -L / 2 + 14, st.blink, 0.8);
-  pen.rect(-26, -L / 2 - 4, 52, 8, 3, tone(PLATE));
-  pen.rect(-26, L / 2 - 4, 52, 8, 3, tone(PLATE));
+  if (!g.spec.form) {
+    pen.rect(-26, -L / 2 - 4, 52, 8, 3, tone(PLATE));
+    pen.rect(-26, L / 2 - 4, 52, 8, 3, tone(PLATE));
+  }
   if (face && car.face.eyes === "windscreen") {
     const closedBy = Math.max(face.eyes === "normal" || face.eyes === "lidded" ? blinkAt(d.seed, t) : 0, st.blink);
     const cy = (g.wsBase + g.wsTop) / 2;
