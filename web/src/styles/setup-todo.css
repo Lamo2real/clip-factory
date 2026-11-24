@@ -135,10 +135,13 @@ html:has(.setup-todo[data-mode="pill"]) {
   /* "backwards", never "both": a finished animation kept on glass can make Chromium skip painting under it. */
   animation: todo-in 520ms var(--ease-spring) backwards;
 }
+/* It drops into place from at most the room between the top safe area (a phone's status bar, the desktop title bar)
+   and the top line, so it never starts under the clock: 14 px on a computer (the line is 14 px down), 12 px on a phone
+   (the line is 12 px down there). */
 @keyframes todo-in {
   from {
     opacity: 0;
-    translate: 0 -14px;
+    translate: 0 calc(-1 * min(14px, var(--top-line) - var(--top-safe)));
   }
 }
 @media (min-width: 768px) {
@@ -271,8 +274,15 @@ html:has(.setup-todo[data-mode="pill"]) {
 @keyframes todo-drop {
   from {
     opacity: 0;
-    translate: 0 -16px;
+    translate: 0 var(--todo-drop-y, -16px);
     scale: 0.98;
+  }
+}
+/* On a phone the top line is only 12 px under the status bar: the panel drops those 12 px at most, never from under
+   the clock (as the pill, todo-in). */
+@media (max-width: 767.98px) {
+  .setup-todo-panel {
+    --todo-drop-y: calc(-1 * min(16px, var(--top-line) - var(--top-safe)));
   }
 }
 @media (min-width: 768px) {

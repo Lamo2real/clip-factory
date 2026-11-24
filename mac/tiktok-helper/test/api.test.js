@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 
 import { ApiError, client, wsClient } from "../src/api.js";
+import { tokenSource } from "../src/auth.js";
 import { VERSION } from "../src/paths.js";
 
 function fake(status = 200, body = {}) {
@@ -100,4 +101,41 @@ test("a Clips Funded refusal comes back as an ApiError with its code", async () 
     api.done("pj-1", "mac-1", "https://www.tiktok.com/@x/video/7710644811602169121"),
     (e) => e instanceof ApiError && e.status === 409 && e.code === "wrong_account"
   );
+});
+
+test("a 401 gets one more try with a fresh token from the tick's source; a plain token is never renewed", async () => {
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    calls.push(init.headers.Authorization);
+    const ok = init.headers.Authorization === "Bearer new";
+    return { status: ok ? 200 : 401, ok, json: async () => ({}) };
+  };
+  const renewed = [];
+  const source = { get: async () => "old", renew: async (stale) => (renewed.push(stale), "new") };
+  await client("https://api.example", source, fetchImpl).step("c1", "mac-1", "opening", 2);
+  assert.deepEqual(calls, ["Bearer old", "Bearer new"]);
+  assert.deepEqual(renewed, ["old"]);
+  calls.length = 0;
+  await assert.rejects(client("https://api.example", "old", fetchImpl).step("c1", "mac-1", "opening"), (e) => e.status === 401);
+  assert.deepEqual(calls, ["Bearer old"]);
+  // Twice refused: the second 401 is the answer (no loop).
+  calls.length = 0;
+  const stuck = { get: async () => "old", renew: async () => "older" };
+  await assert.rejects(client("https://api.example", stuck, fetchImpl).stopped("c1", "mac-1", "Why.", true), (e) => e.status === 401);
+  assert.deepEqual(calls, ["Bearer old", "Bearer older"]);
+});
+
+test("the tick's token source renews before the token runs out, once at a time, and not again for a stale 401", async () => {
+  let clock = 0;
+  let n = 0;
+  const fetchTokens = async () => ({ token: `t${++n}`, expiresIn: 900 });
+  const tokens = tokenSource(fetchTokens, () => clock);
+  assert.deepEqual(await Promise.all([tokens.get(), tokens.get(), tokens.renew(null)]), ["t1", "t1", "t1"]);
+  clock = 12 * 60_000;
+  assert.equal(await tokens.get(), "t1"); // 12 minutes in: still good
+  clock = 13 * 60_000 + 1;
+  assert.equal(await tokens.get(), "t2"); // 2 minutes before the 15: a new one
+  assert.equal(await tokens.renew("t1"), "t2"); // a 401 on the old one: the newer one, no extra refresh
+  assert.equal(await tokens.renew("t2"), "t3"); // a 401 on the current one: refreshed
+  assert.equal(n, 3);
 });

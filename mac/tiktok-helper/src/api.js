@@ -14,17 +14,32 @@ export class ApiError extends Error {
 
 const withAttempt = (attempt) => (Number.isInteger(attempt) && attempt >= 1 ? { attempt } : {});
 
+/**
+ * ``token``: a string (one token, never renewed), or auth.js tokenSource() for anything that can outlast a token (a
+ * tick: its login wait is 20 minutes, an access token lasts 15). A source's token is renewed before it runs out, and
+ * once more on a 401: API Gateway's JWT authorizer refuses an expired token before Clip Factory sees the request, so
+ * sending it again with a fresh token can't do anything twice.
+ */
 function caller(apiUrl, token, fetchImpl, app) {
+  const source = typeof token === "string" ? null : token;
   return async function call(method, path, body) {
     // The saved TikTok password never leaves the Mac: a request that would carry it is never sent.
     if (holdsSecret(path) || (body && holdsSecret(JSON.stringify(body)))) {
       throw new ApiError(0, "The helper refused to send something secret.", "secret");
     }
-    const res = await fetchImpl(`${apiUrl}/v1${path}`, {
-      method,
-      headers: { Authorization: `Bearer ${token}`, ...(body ? { "Content-Type": "application/json" } : {}) },
-      body: body ? JSON.stringify(body) : undefined,
-    });
+    const send = (bearer) =>
+      fetchImpl(`${apiUrl}/v1${path}`, {
+        method,
+        headers: { Authorization: `Bearer ${bearer}`, ...(body ? { "Content-Type": "application/json" } : {}) },
+        body: body ? JSON.stringify(body) : undefined,
+      });
+    const bearer = source ? await source.get() : token;
+    let res = await send(bearer);
+    if (res.status === 401 && source) {
+      // Let go of the refused answer first, so its connection isn't held until garbage collection.
+      await res.body?.cancel().catch(() => {});
+      res = await send(await source.renew(bearer));
+    }
     if (res.status === 204) return null;
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {

@@ -51,6 +51,40 @@ export async function forgetRefreshToken() {
 
 /** A fresh access token (15 minutes). Saves the rotated refresh token before returning. */
 export async function accessToken(config, fetchImpl = fetch) {
+  return (await freshTokens(config, fetchImpl)).token;
+}
+
+/**
+ * The access token for a whole tick, or any run longer than one token (24 Nov 2026: a tick that waits 20 minutes for
+ * a TikTok login sent 401s from minute 15, so its beats and its stop never reached Clip Factory). ``get()`` renews
+ * it 2 minutes before it runs out; ``renew(stale)`` after a 401, unless a newer one is already there. One refresh
+ * at a time: each refresh rotates the refresh token, so two at once would spend the same one twice.
+ * @param {() => Promise<{token: string, expiresIn: number}>} fetchTokens freshTokens(config) (a fake in tests)
+ */
+export function tokenSource(fetchTokens, now = () => Date.now()) {
+  let token = null;
+  let until = 0;
+  let pending = null;
+  const refresh = () => {
+    pending ||= fetchTokens()
+      .then((fresh) => {
+        token = fresh.token;
+        until = now() + Math.max(60, (Number(fresh.expiresIn) || 900) - 120) * 1000;
+        return token;
+      })
+      .finally(() => {
+        pending = null;
+      });
+    return pending;
+  };
+  return {
+    get: () => (token && now() < until ? Promise.resolve(token) : refresh()),
+    renew: (stale) => (token && token !== stale && now() < until ? Promise.resolve(token) : refresh()),
+  };
+}
+
+/** freshTokens: one GetTokensFromRefreshToken, with how long the access token lasts (seconds). */
+export async function freshTokens(config, fetchImpl = fetch) {
   const refresh = await readRefreshToken();
   if (!refresh) throw new SignInNeeded("Your Mac isn't signed in to Clip Factory yet. Run the setup on your Mac.");
   const res = await fetchImpl(`https://cognito-idp.${config.region}.amazonaws.com/`, {
@@ -70,5 +104,5 @@ export async function accessToken(config, fetchImpl = fetch) {
   const result = body.AuthenticationResult || {};
   if (result.RefreshToken && result.RefreshToken !== refresh) await saveRefreshToken(result.RefreshToken);
   if (!result.AccessToken) throw new SignInNeeded();
-  return result.AccessToken;
+  return { token: result.AccessToken, expiresIn: Number(result.ExpiresIn) || 900 };
 }

@@ -591,7 +591,10 @@ the traffic lights' band; nothing ever covers the traffic lights.
   `apple-mobile-web-app-status-bar-style: black-translucent` with `viewport-fit=cover`, so an installed iPhone app has
   no solid band at the top: each app's own backdrop (Clip Factory's `.backdrop`, Clips Funded's `.stories-app::before`,
   both `position: fixed; inset: 0`) shows under the clock, the Dynamic Island and the signal. Nothing of a page sits
-  there: every column still starts on `--top-line`. `--status-bar-h` (`env(safe-area-inset-top)`, in `tokens.css`) is
+  there: every column still starts on `--top-line`, and nothing passes through it on the way in either: the setup
+  list's pill (`todo-in`) and, on a phone, its panel (`todo-drop`) drop into place from at most the room between
+  `--top-safe` and the line: 12 px on a phone, so the pill starts on the status bar's edge, never under the clock (a
+  computer keeps their 14 and 16 px). `--status-bar-h` (`env(safe-area-inset-top)`, in `tokens.css`) is
   the status bar alone; only the status-bar scrim and glass strip are that tall. The scrim (`.app::after`,
   `.stories-app::after`): black, held under the clock to 75 % and easing out over the bar's last quarter
   (`--status-bar-fade`, a mask), exactly as strong as the white clock needs for AA over the look's top edge
@@ -19693,6 +19696,8 @@ Unknown body keys → 400 everywhere; `device` is required text (at most 100 cha
 caller's → 404 "We could not find that clip." `MAC_OFF` is "Your Mac posting is off. Turn it on in Settings › Posting ›
 Your Mac posts TikTok."
 
+* **The token** (helper 1.2.1): never one access token (15 minutes) for a whole tick; `auth.js tokenSource` renews it
+  2 minutes early and once on a 401, one refresh at a time, so a stop after a 20-minute login wait still lands.
 * **Queue:** empty while the switch is off. Else the Mac posts that are `waiting` plus the `working` ones (a restarted
   helper sees its own), minus `source: "auto"` ones whose Post was not pressed while `autoPost.on` is false (§47.2). Order: `source: "upload"` first,
   then the rest; oldest `since` first, then the oldest clip (`decidedAt`); at most 50. `caption` is the clip's stored
@@ -20429,8 +20434,8 @@ interface PubJobMac { state: "waiting" | "working" | "stopped"; step?: MacStep; 
 
 #### 47.10.5 The helper, 1.2.0 (`mac/tiktok-helper/**`)
 
-* `VERSION = "1.2.0"` in paths.js, package.json and package-lock.json. Clip Factory's ping says 1.2.0 (≥
-  `MAC_BEATS_FROM`, so beats keep counting) with the same keys as 1.1.0.
+* `VERSION = "1.2.1"` in paths.js, package.json and package-lock.json (1.2.1: §47.3's token rule, in every lane and
+  CLI command). Clip Factory's ping says it (≥ `MAC_BEATS_FROM`, so beats keep counting) with the same keys as 1.1.0.
 * **Lanes** (`src/lanes.js`): `clipsLane` is 1.1.0's (profile `chrome/`, port 9339, Keychain items `tiktok-username`/
   `tiktok-password`, the top-level ledger, pacing, trial and backfill). `wsLane` has profile `chrome-ws-{id}/`, the
   lowest free port of 9340–9349 (kept in state.json), its own store `state.ws[id] = {port, ledger, posted,
