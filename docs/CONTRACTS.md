@@ -13659,8 +13659,9 @@ Lamo Clips' partition `USER#{userId}` gets **no new items**. Two new kinds of pa
 | Workspace | `USER#{userId}#WSREG` | `WS#{workspaceId}` | `type="workspace"`, `userId`, `workspaceId`, `workspaceName`, `workspaceType`, `configuration` (map, §45.6), `version`, `createdAt`, `updatedAt` |
 | Idea | `USER#{userId}#WS#{workspaceId}` | `IDEA#{ideaId}` | `type="ws_idea"`, `userId`, `workspaceId`, Idea fields (§45.7), `seriesId?` (§45.44) |
 | Character | same | `CHAR#{characterId}` | `type="ws_character"`, Character fields (§45.8), `kind` and `car` (§45.42; a missing kind is a person, a car's `look` is null), `version` |
-| Story | same | `STORY#{storyId}` | `type="ws_story"`, Story fields (§45.9), internal `scriptKey`, `videoKey`, `coverKey`, `stillKeys` (map sceneId → key), `statusBefore`, `run` (publishing run number), `version`, `seriesId?` (§45.44), `art?` (the drawing style; none means Bright, §45.45), `ownScript?` (the owner's own script with its scene ids; none means the AI wrote it, §45.46) |
+| Story | same | `STORY#{storyId}` | `type="ws_story"`, Story fields (§45.9), internal `scriptKey`, `videoKey`, `coverKey`, `stillKeys` (map sceneId → key), `statusBefore`, `run` (publishing run number), `version`, `seriesId?` (§45.44), `art?` (the drawing style; none means Bright, §45.45), `ownScript?` (the owner's own script with its scene ids; none means the AI wrote it, §45.46), `roles?` (§45.47) |
 | Series | same | `SERIES#{seriesId}` | `type="ws_series"`, `userId`, `workspaceId`, `seriesId`, `name`, `line`, `castIds`, `cover`, `storySoFar`, `storySoFarBy`, `storySoFarAt`, `summaries` (the newest 50 `{storyId, summary, by, at}`), `recapTaskId`, `version`, `createdAt`, `updatedAt` (§45.44; episodes are worked out on each read, never stored) |
+| Video draft | same | `VDRAFT#{draftId}` | `type="ws_video_draft"`, `userId`, `workspaceId`, `draftId`, `name`, `form`, `version`, `createdAt`, `updatedAt` (§45.47; at most 50, 32 KB each; not a stream prefix) |
 | Production job | same | `PJOB#{jobId}` | `type="ws_pjob"`, ProductionJob fields (§45.10), internal `sessionId`, `heartbeatAt` |
 | Asset | same | `ASSET#{assetId}` | `type="ws_asset"`, Asset fields (§45.12), internal `key` |
 | Social account | same | `SOCIAL#{platform}` | `type="ws_social"`, SocialAccount fields (§45.13), internal `refreshLeaseUntil`, `appClientId`, `sharedExternalAccountId`, `choicesExpireAt`, `lastResult` |
@@ -13776,6 +13777,9 @@ Clips Funded first." Bodies are validated with `validate.py`; unknown keys are `
 | GET `/v1/workspaces/{ws}/stories/{storyId}/download` **S** | – | `{ "url", "filename" }` (only `approved` or `published`) |
 | POST `/v1/workspaces/{ws}/stories/{storyId}/download` **S** | `{ "format"?: "mp4" \| "webm" \| "mov" }` | `{ "url", "filename" }` (404 "That format was not made for this video." when that copy is absent; §45.34) |
 | POST `/v1/workspaces/{ws}/stories/{storyId}/captions` **S** | `{ "override"?: ModelOverride }` | `202 { "task": AiTask }` (kind `captions`; result `{ storyId, scriptVersion, postCaptions }`, a draft; 409 without a storyboard; §45.34) |
+| GET `/v1/workspaces/{ws}/video-drafts` **S** (§45.47) | – | `{ "items": VideoDraft[] }` most recently changed first |
+| POST `/v1/workspaces/{ws}/video-drafts` **S** (§45.47) | `{ "form": VideoDraftForm }` | `201` VideoDraft; `409` at 50 ("You have 50 drafts. Delete one first.") |
+| GET / PUT / DELETE `/v1/workspaces/{ws}/video-drafts/{draftId}` **S** (§45.47) | PUT: `{ "form", "version" }` | VideoDraft (404 when gone) / VideoDraft (`409` stale version, `413` over 32 KB) / `204` |
 | GET `/v1/workspaces/{ws}/library` **S** | query `kind?` (an AssetKind or `all`), `storyId?`, `characterId?`, `limit` ≤ 100, `cursor` | `{ "items": LibraryItem[], "nextCursor" }` |
 | GET `/v1/workspaces/{ws}/providers` **S** | – | `{ "providers": ProviderStatus[] }` (§45.11.6) |
 | POST `/v1/workspaces/{ws}/providers/nova-reel/check` **S** | – | `202 { "job": ProductionJob }` (jobType `provider_check`, one step "Try it"; never behind the not-ready guard; §45.35 D2). Since §45.37 G7: `409` with Nova Reel's ended sentence |
@@ -13962,7 +13966,7 @@ interface StoryInput { ideaId?: string; brief?: { title: string; logline?: strin
   myself (§45.46), with brief or ideaId: staged, never written */; title?: string; characterIds: string[] /* 1..3 */;
   durationSec?: number /* 15..90 */; captionsOn?: boolean; musicMood?: MusicMood;
   referenceIds?: string[] /* ≤ 3, §45.28 */; ai?: { model: string | null; effort: Effort | null } /* this video's own
-  setting, kept (§45.25 level 2) */ }
+  setting, kept (§45.25 level 2) */; roles?: CastRoles; draftId?: string /* §45.47 */ }
 interface Captions { youtubeTitle: string; youtubeDescription: string; instagram: string; facebook: string;
   tiktok: string; x: string }   // the same shape as Lamo Clips' (§5), so the platform publishers take it as is
 interface Story { storyId: string; workspaceId: string; contentType: "animation"; title: string;
@@ -14048,6 +14052,20 @@ interface StoriesDashboard { counts: { made: number; review: number; published: 
   checkedAt: string | null; lastAt: string | null /* "numbers until 7 days after each post" */ };
   activity: { at: string; kind: "made" | "approved" | "rejected" | "changes" | "posted" | "failed";
   storyId: string; title: string; platform?: Platform }[] }
+// §45.47 (additive; every new field is left out when empty)
+type VehicleType = "car" | "truck" | "bus" | "motorbike" | "plane" | "boat"; type PhotoSide = "outside" | "inside";
+// CarBody gains "bus" | "motorbike" | "plane" | "boat"; VEHICLE_OF: Record<CarBody, VehicleType> (engine/types.ts);
+// CarLook gains interior?: { seat: Hex; dash: Hex; trim?: Hex }; SetId gains "sky" | "sea";
+// CharacterSaved.references[] gains side?: PhotoSide; Story gains roles?: CastRoles;
+// DesignBody gains referenceSides?: PhotoSide[] /* same length as referenceAssetIds (now ≤ 8) */; vehicle?: VehicleType
+interface CastRoles { mainId: string /* the first person in characterIds */; villainId?: string /* another person */ }
+interface VideoDraftForm { source?: "idea" | "own" | "script"; ideaId?: string; title?: string; logline?: string;
+  category?: string; script?: { scenes: { what: string; caption?: string; who?: string[] }[];
+  answers?: Record<string, string> }; characterIds?: string[] /* ≤ 4 */; roles?: CastRoles; seriesId?: string | null;
+  durationSec?: number; format?: StoryFormat; art?: ArtStyle; captionsOn?: boolean; musicMood?: string;
+  referenceIds?: string[]; ai?: ModelOverride }
+interface VideoDraft { draftId: string; workspaceId: string; name: string /* ≤ 60 */; form: VideoDraftForm;
+  version: number; createdAt: string; updatedAt: string }
 ```
 
 ### 45.7 Ideas
@@ -14669,7 +14687,8 @@ second request names it), shown only when `storiesEnabled()`; one click switches
   answer still streaming in, and the panel open or closed as it was: Ask's conversation state moves into an
   `AskMemoryProvider` mounted once above the Clip Factory / Clips Funded branch (its look and behaviour unchanged;
   sign-out still forgets it and revokes its object URLs). Not kept across a switch: unsaved form drafts and open
-  sheets on the Clip Factory page (they are not kept across any page change today either).
+  sheets on the Clip Factory page (they are not kept across any page change today either). Clips Funded's saved video
+  drafts are kept on the server (§45.47).
 * The choice persists on the device (`localStorage` `cf.workspace`: `{ workspaceId, lastStoriesWorkspaceId,
   lastClipsPath, lastStoriesPath, lastConversationId, lastProject }`; Clips Funded's own device preferences in
   `cf.stories.prefs`, never in Clip Factory's `cf.prefs`) and the URL carries it: a reload of a `/stories` page stays in Clips Funded;
@@ -16923,7 +16942,7 @@ The three places:
 - agent `check_car` (car-agent).
 
 The rules:
-- `kind`: "person" (the default) or "car". Anything else: "Pick a person or a car."
+- `kind`: "person" (the default) or "car". Anything else: "Pick a person or a vehicle." (§45.47)
 - **A person**: as today. `car` is absent or null.
 - **A car**:
   - `car` passes `car_look`: catalog enums, #rrggbb colours, and numbers in range.
@@ -16935,7 +16954,7 @@ The rules:
     only the neutral face." With eyes, at least 3 faces with neutral, as for people.
   - name, description, personality, traits and movementStyle: as for people.
 - **`characters.cast_problem(items) -> str | None`**, used for stories and series casts:
-  - two or more cars: "Pick one car.";
+  - three or more vehicles: "Pick up to 2 vehicles." (§45.47; was two or more cars: "Pick one car.");
   - a car with no person: "Add someone to drive it.";
   - otherwise None.
 - **API `characters.py`**: `CHARACTER_KEYS` gains `kind` and `car`. `character_input` returns every key of
@@ -17140,7 +17159,7 @@ def design_character(app: App, req: Request) -> Response:
 - **Checking.** `check=` runs `check_car` on each variant. `taken_names` = the workspace's names plus the earlier
   variants' names. If fewer than `count` are valid, it asks once more. On the final try it keeps the valid ones (at least
   1).
-  - `problem` set and no variants: `TaskFailed("Those photos don't show a car. Try other photos.")`.
+  - `problem` set and no variants: `TaskFailed("Those photos don't show a vehicle. Try other photos.")`.
   - Nothing valid: `TaskFailed("The car helper could not finish. Tap Try again.")`.
 - **Tokens.** `max_tokens = min(36000, 12000 + 6000 * count)`. Thinking counts towards it.
 - **Result.** `Outcome({"character": variants[0], "characters": variants})`.
@@ -17298,13 +17317,13 @@ face. In `Design.tsx`, `designsOf(task): CharacterInput[]` reads `result.charact
 
 | where | words |
 |---|---|
-| kind | "What are you making?" · "A person" · "A car" |
+| kind | "What are you making?" · "A person" · "A vehicle" (§45.47) |
 | photos | label "Your car's photos" · zone "Drop photos here" · button "Add photos" · hint "Front, side, back. Up to 6." · while dragging "Let go to add" |
 | words box | "What is your car like? (you can skip this)" · placeholder "For example: my red hatchback, a bit old" |
 | button | "Design it" · "Designing 3 cars…" · "Design it again" |
 | options | "Pick one" · "Picked" · "Make more" · "Change photos" |
-| editor | "Save car" · tag "Car" |
-| errors | "Up to 6 photos. Remove one first." · "Pick a PNG, JPEG or WebP picture." · "That photo is too big. Pick one under 10 MB." · "That photo didn't send. Tap it to try again." · "Add a photo of your car, or say what it is like." · "Those photos don't show a car. Try other photos." · "The car helper could not finish. Tap Try again." · "No cars came back. Tap Design it again." · the existing "{model} can't look at pictures. Pick another model in Clips Funded › Settings › AI." |
+| editor | "Save vehicle" · tag "Vehicle" (§45.47) |
+| errors | "Up to 6 photos. Remove one first." · "Pick a PNG, JPEG or WebP picture." · "That photo is too big. Pick one under 10 MB." · "That photo didn't send. Tap it to try again." · "Add a photo of your car, or say what it is like." · "Those photos don't show a vehicle. Try other photos." · "The car helper could not finish. Tap Try again." · "No cars came back. Tap Design it again." · the existing "{model} can't look at pictures. Pick another model in Clips Funded › Settings › AI." |
 
 #### 45.42.9 Tests (car-agent and car-web)
 
@@ -17368,6 +17387,11 @@ They change `x.look` to `(x as PersonInput).look`.
 
 #### 45.42.10 Cars: the cars' own place in the rail (owner, 23 Nov ~22:05 UTC: "where are cars? i need cars as well"; again 24 Nov, with a screenshot of the rail)
 
+§45.47 renames what this section shows: the rail label, titles and words say **Vehicles** ("Vehicles", "New vehicle",
+"Vehicle", "Make a vehicle"), and `/stories/vehicles…` is the URL while `/stories/cars…` still opens the same pages.
+The route names `cars`, `car_new` and `car` stay; the phone-tab filter goes by the page name, not the label.
+Everything else below holds.
+
 - **The rail.** A "Cars" item with a car icon (`StIcon` "car", in `ui.tsx`) right under Characters:
   `{label: "Cars", icon: "car", page: {name: "cars"}, match: ["cars", "car_new", "car"]}`. On phones the five tabs stay
   as they are (Cars is never a tab), and Cars is the first item under More, before Series. The rail has 12 pages.
@@ -17400,8 +17424,9 @@ They change `x.look` to `(x as PersonInput).look`.
 
 #### 45.43.1 The cast rules
 
-- `characterIds` stays 1 to 3, with at most 1 car and at least 1 person when there is a car (`cast_problem`).
-- The order is the people first, then the car. The first person is the main character.
+- `characterIds` is 1 to 4 (§45.47; was 1 to 3): at most 3 people and 2 vehicles, and at least 1 person when there is
+  a vehicle (`cast_problem`). Series `castIds` and idea `characterIds` stay at most 3.
+- The order is the people first, then the vehicles. The first person is the main character (`roles.mainId`, §45.47).
 - The web always sends that order (`castOrder`). The API does not reorder.
 
 #### 45.43.2 Production › Make a new video (`Production.tsx`)
@@ -19732,6 +19757,38 @@ the fixer's own cases; `web/test/storiesOwnScript.test.tsx` › round 2). The ru
   carries the scene before's people ("both", "everyone", "together" still do); the cast's car is ticked for a car,
   never for cars in general ("scared of cars") or a toy car. R14 is not ported as written: the check keeps honouring a
   Who the owner sends, and the web no longer sends that one.
+
+### 45.47 Drafts, main and villain, Vehicles (owner request, 2026-11-24; wins over anything above)
+
+Owner: "allow me to save drafts before making video and allow me to select cars or whatever vehicle (it could even be
+a plane) … images for the interior and exterior in the cars tab that we should change to vehicle instead of cars, for
+the main character and the villain character for each video", then "or rather vehicles (in plural)". ADR-97. All
+additive; internal names stay (`kind:"car"`, `script.cars`, `CHAR#`, `STORY#`, the route names).
+
+- **Drafts.** Their own `VDRAFT#` item (§45.3), never a STORY# (`draft` already means "Not made yet"); routes §45.5,
+  shapes §45.6. At most 50 per workspace, 32 KB each; the form is checked loosely (types and limits only, unknown
+  keys 400). "Save draft" sits next to "Make the video" (toast "Draft saved"); once a draft exists the form saves
+  itself 2 s after the last change ("Saved" / "Saving…"). "Your drafts (N)" folds at the top of Make a new video and
+  a "Drafts" group sits above "Being made"; rows have "Open" and "Delete" (toast with Undo, no "Are you sure?"). The
+  leave guard ("Leave without saving?") offers "Save draft", "Keep editing", "Leave". Open is
+  `/stories/production/new?draft={id}`; gone ids are dropped ("Some picks are gone. Pick again."). POST /stories
+  with `draftId` deletes that draft in the same transaction (a missing one is fine).
+- **Main and villain.** `roles` on StoryInput and Story, left out when empty. Panel 2 is "2 Who is in it": "Main
+  character" (required; the first person in `characterIds`), "Villain" (another person; "you can skip this"),
+  "Vehicles" (0 to 2; "you can skip this"). The writer marks only the villain (`"villain": true`); with no roles
+  and no vehicles its brief stays byte-identical.
+- **Vehicles.** Still `kind:"car"`. New bodies `bus`, `motorbike`, `plane`, `boat`; the family is
+  `VEHICLE_OF[body]` (car: hatchback, sedan, estate, suv, sports, compact; truck: pickup, van; the rest their own),
+  never stored. New sets `sky` and `sea` (no lanes) for planes and boats. New vehicle asks "What is it?" (Car, Truck,
+  Bus, Motorbike, Plane, Boat), then "Outside" ("Front, side, back. Up to 6.") and "Inside" ("Seats and dashboard.
+  Up to 4."), 8 photos in all; "Drop, paste or pick photos." Each reference keeps `side`; design sends
+  `referenceSides` and `vehicle` (bodies limited to that family; inside photos set only `CarLook.interior`, which the
+  cabin shot draws). Vehicles page: "Your vehicles. Each looks the same in every video." · "Make a vehicle" · "No
+  vehicles yet" · "Add photos. Tap Make a vehicle." · "Getting your vehicles…".
+- **Rule texts** (API, agent, engine and mock say exactly these): "Pick a main character." · "The villain can't be
+  the main character." · "Pick up to 2 vehicles." · "Add someone to drive it." · "Pick a person or a vehicle." ·
+  "Those photos don't show a vehicle. Try other photos." · "You have 50 drafts. Delete one first."
+- **Later:** cockpit, handlebar and helm shots; photo-real vehicles (photos still give a cartoon vehicle).
 
 ## 46. Auto-posting: the oldest clips in Review go up by themselves, every X hours (owner request, 2026-11-22)
 

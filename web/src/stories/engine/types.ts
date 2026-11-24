@@ -41,7 +41,46 @@ export interface CharacterLook {
 
 export type CharacterKind = "person" | "car";
 
-export type CarBody = "hatchback" | "sedan" | "estate" | "suv" | "pickup" | "van" | "sports" | "compact";
+export type CarBody =
+  | "hatchback"
+  | "sedan"
+  | "estate"
+  | "suv"
+  | "pickup"
+  | "van"
+  | "sports"
+  | "compact"
+  // §45.47: more vehicles, still kind "car" (a vehicle is a CHAR# item with kind "car", ADR-97)
+  | "bus"
+  | "motorbike"
+  | "plane"
+  | "boat";
+
+/** A vehicle's family (§45.47), worked out from its body; never stored. Shown as "Vehicles" (the kind stays "car"). */
+export type VehicleType = "car" | "truck" | "bus" | "motorbike" | "plane" | "boat";
+
+/** body → family (§45.47 D6). */
+export const VEHICLE_OF: Record<CarBody, VehicleType> = {
+  hatchback: "car",
+  sedan: "car",
+  estate: "car",
+  suv: "car",
+  sports: "car",
+  compact: "car",
+  pickup: "truck",
+  van: "truck",
+  bus: "bus",
+  motorbike: "motorbike",
+  plane: "plane",
+  boat: "boat",
+};
+
+/** The inside colours a vehicle's inside photos give (§45.47): drawn by the cabin shot. All #rrggbb. */
+export interface CarInterior {
+  seat: Hex;
+  dash: Hex;
+  trim?: Hex;
+}
 
 /** A car character's look (CONTRACTS §45.42): drawn by engine/car.ts in the side and the top view. */
 export interface CarLook {
@@ -61,6 +100,8 @@ export interface CarLook {
   /** a cartoon face; eyes "none" is a real-looking car (the default) */
   face: { eyes: "none" | "windscreen" | "headlights"; color: Hex; mouth: "none" | "grille" };
   outline: Hex;
+  /** from the inside photos (§45.47); left out: the cabin's usual colours */
+  interior?: CarInterior;
 }
 
 export type ActionId =
@@ -128,7 +169,10 @@ export type SetId =
   | "living_room"
   | "office"
   | "park"
-  | "highway_night";
+  | "highway_night"
+  // §45.47: where a plane or a boat goes (no road lanes)
+  | "sky"
+  | "sea";
 
 export type PropKind =
   | "car"
