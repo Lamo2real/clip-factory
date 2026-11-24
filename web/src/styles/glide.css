@@ -172,10 +172,16 @@
   .ws-dock[hidden] {
     display: none;
   }
+  /* Their box is placed by WorkspaceDock.tsx (top, left, width, height) and is never animated: it is at its new place
+     at once, in both apps. With calm motion base.css gives every element a 1 ms transition, and with no property
+     named that is all of them, so the switch's top and height glided too. Such a transition only starts on the next
+     frame drawn, and on a slow renderer (CI's software GPU under a heavy Clips Funded page) that frame came late:
+     for a while the stacked switch still stood where the side-by-side one had been, 46 px lower (§45.38). */
   .ws-dock > .ws-switch-host,
   .ws-dock > .ws-dock__live {
     position: absolute;
     pointer-events: auto;
+    transition: none;
   }
   /* The switch over the Live chip's row (a toggle beside the chip sits in that row); the row itself takes no clicks
      beyond the chip. */
