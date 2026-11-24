@@ -182,7 +182,7 @@ export function characterProblem(c: CharacterInput): string | null {
 
 /** Why this car cannot be saved yet, or null (the API's rules, §45.42: no voice, and no face keeps only neutral). */
 function carProblem(c: CarInput): string | null {
-  if (!c.name.trim()) return "Give your car a name.";
+  if (!c.name.trim()) return "Give your vehicle a name.";
   if (c.name.trim().length > CHAR_LIMITS.name) return `Keep the name to ${CHAR_LIMITS.name} letters.`;
   if (c.description.length > CHAR_LIMITS.description) return "Make the description a little shorter.";
   if (c.personality.length > CHAR_LIMITS.personality) return "Make the personality a little shorter.";

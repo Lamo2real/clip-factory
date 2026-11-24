@@ -756,7 +756,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       const kind = body.kind ?? saved ?? "person";
       if (kind !== "car" && (sides ?? []).includes("inside")) fail(400, "bad_request", "Inside photos are for a vehicle only.");
       if (kind !== "car" && body.vehicle !== undefined) fail(400, "bad_request", "vehicle is for a vehicle's design only.");
-      if (!words && !refs.length) fail(400, "bad_request", kind === "car" ? "Add a photo of your car, or say what it is like." : "Say what your character is like, or add a picture.");
+      if (!words && !refs.length) fail(400, "bad_request", kind === "car" ? "Add a photo of your vehicle, or say what it is like." : "Say what your character is like, or add a picture.");
       for (const ref of refs) {
         const design = designsOf(store).get(ref);
         const charRef = store.assets.some((a) => a.assetId === ref && a.kind === "character_ref" && store.characters.some((c) => c.workspaceId === ws && c.characterId === a.characterId));

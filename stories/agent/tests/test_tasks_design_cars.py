@@ -323,7 +323,7 @@ def test_nothing_to_go_on_for_a_car(tmp_path: Path) -> None:
     svc, db, _ = services(tmp_path, FakeModel())
     db.seed(task_item("T1", "character_design", input={"kind": "car", "count": 3, "references": []}))
     assert run(svc) == "failed"
-    assert db.get(PK, "TASK#T1")["error"] == "Add a photo of your car, or say what it is like."
+    assert db.get(PK, "TASK#T1")["error"] == "Add a photo of your vehicle, or say what it is like."
 
 
 def test_make_more_sends_avoid_and_a_redesign_keeps_the_saved_name(tmp_path: Path) -> None:

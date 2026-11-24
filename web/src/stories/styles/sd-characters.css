@@ -407,6 +407,21 @@
   justify-self: start;
 }
 
+/* A vehicle's pictures (§45.47): Outside and Inside, each its own drop place inside the one glass card. */
+.st-s-refs__strip {
+  position: relative;
+  display: grid;
+  gap: var(--st-space-2);
+  border-radius: var(--st-r-control);
+}
+
+.st-s-refs__side {
+  margin: 0;
+  color: var(--st-text-strong);
+  font-size: var(--st-fs-body);
+  font-weight: var(--st-weight-ui);
+}
+
 /* "Add a picture" is a label for a hidden file input: the label wears the ring while its input has the keyboard. */
 .st-s-refs__add:has(input:focus-visible) label,
 .st-s-design__pics:has(#st-design-file:focus-visible) label[for="st-design-file"] {

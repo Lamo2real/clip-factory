@@ -12,6 +12,7 @@ import type {
   Expression,
   MovementStyle,
   MusicMood,
+  SetId,
   SfxCue,
   StoryScript,
   VehicleType,
@@ -896,6 +897,8 @@ export interface VideoDraftScene {
   what: string;
   caption?: string;
   who?: string[];
+  /** the place picked by hand ("ai": AI picks, on purpose); left out: read from the words */
+  place?: SetId | "ai";
 }
 export interface VideoDraftForm {
   source?: "idea" | "own" | "script";

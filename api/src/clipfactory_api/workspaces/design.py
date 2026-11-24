@@ -37,7 +37,7 @@ VEHICLE_CARS = "vehicle is for a vehicle's design only."
 BAD_COUNT = "count must be 1 to 4."
 NOT_IDS = "referenceAssetIds must be a list of picture ids."
 NEEDS_PERSON = "Describe the character, or add a picture of it."
-NEEDS_CAR = "Add a photo of your car, or say what it is like."
+NEEDS_CAR = "Add a photo of your vehicle, or say what it is like."
 AVOID_CARS = "avoid is for a car's design only."
 KEYS = (
     "description",

@@ -1,8 +1,9 @@
-// Lamo Stories mock: the video drafts part (docs/CONTRACTS.md §45.47, §45.16.8). A draft is a saved "Make a new video"
+// Clips Funded mock: the video drafts part (docs/CONTRACTS.md §45.47, §45.16.8). A draft is a saved "Make a new video"
 // form, its own VDRAFT# item (never a story). Like the API it is checked loosely, because a draft may be unfinished:
 // only the keys, the types and the limits. At most 50 per workspace and 32 KB each; a save sends the version it read,
 // and a stale one is a 409. Making the video with its draftId deletes it (stories.ts). Knob `seedDraft`: one draft
 // ("Dash at the beach") is there from the start, for the browser tests.
+import { catalogIds } from "../../engine/catalog.ts";
 import type { StoriesApi, VideoDraft, VideoDraftForm } from "../types.ts";
 import { delay, type MockStore } from "./store.ts";
 import { clone, fail, guardWs, iso, mockId, SEED_IDS } from "./stories.ts";
@@ -14,6 +15,18 @@ export const SEED_DRAFT_ID = "01JSTVD0000000000000000001";
 export const MAX_DRAFTS = 50;
 export const MAX_DRAFT_BYTES = 32_000;
 const NAME_MAX = 60;
+// The API's loose limits (video_drafts.py), so the mock and the API take the same unfinished or over-long forms.
+const TEXT_MAX = 2000;
+const CATEGORY_MAX = 40;
+const MOOD_MAX = 40;
+const MAX_CAST = 4;
+const MAX_REFERENCES = 3;
+const MAX_SCENES = 40;
+const MAX_WHO = 12;
+const WHO_MAX = 80;
+const MAX_ANSWERS = 40;
+const ANSWER_KEY_MAX = 80;
+const PLACES = new Set<string>([...catalogIds("sets"), "ai"]);
 
 export const FULL = "You have 50 drafts. Delete one first.";
 export const GONE = "That draft is gone.";
@@ -43,6 +56,17 @@ const FORM_KEYS = new Set<keyof VideoDraftForm>([
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 const str = (v: unknown, max: number) => v === undefined || (typeof v === "string" && v.length <= max);
 const ids = (v: unknown, max: number) => v === undefined || (Array.isArray(v) && v.length <= max && v.every((x) => typeof x === "string" && x.length <= 64));
+const who = (v: unknown) => v === undefined || (Array.isArray(v) && v.length <= MAX_WHO && v.every((x) => typeof x === "string" && x.length <= WHO_MAX));
+const scene = (x: unknown) =>
+  isObj(x) &&
+  Object.keys(x).every((k) => ["what", "caption", "who", "place"].includes(k)) &&
+  str(x.what, TEXT_MAX) &&
+  str(x.caption, TEXT_MAX) &&
+  who(x.who) &&
+  (x.place === undefined || (typeof x.place === "string" && PLACES.has(x.place)));
+const answers = (v: unknown) =>
+  v === undefined ||
+  (isObj(v) && Object.keys(v).length <= MAX_ANSWERS && Object.entries(v).every(([k, a]) => k.length <= ANSWER_KEY_MAX && typeof a === "string" && a.length <= TEXT_MAX));
 
 /** The loose check (types and limits only): an unfinished form is fine, an unknown key or a wrong type is a 400. */
 export function draftForm(raw: unknown): VideoDraftForm {
@@ -52,13 +76,13 @@ export function draftForm(raw: unknown): VideoDraftForm {
   const ok =
     (f.source === undefined || ["idea", "own", "script"].includes(f.source)) &&
     str(f.ideaId, 64) &&
-    str(f.title, 80) &&
-    str(f.logline, 280) &&
-    str(f.category, 40) &&
+    str(f.title, TEXT_MAX) &&
+    str(f.logline, TEXT_MAX) &&
+    str(f.category, CATEGORY_MAX) &&
     str(f.art, 40) &&
-    str(f.musicMood, 40) &&
-    ids(f.characterIds, 4) &&
-    ids(f.referenceIds, 3) &&
+    str(f.musicMood, MOOD_MAX) &&
+    ids(f.characterIds, MAX_CAST) &&
+    ids(f.referenceIds, MAX_REFERENCES) &&
     (f.seriesId === undefined || f.seriesId === null || (typeof f.seriesId === "string" && f.seriesId.length <= 64)) &&
     (f.durationSec === undefined || (typeof f.durationSec === "number" && f.durationSec >= 15 && f.durationSec <= 90)) &&
     (f.captionsOn === undefined || typeof f.captionsOn === "boolean") &&
@@ -66,11 +90,7 @@ export function draftForm(raw: unknown): VideoDraftForm {
     (f.ai === undefined || isObj(f.ai)) &&
     (f.roles === undefined || (isObj(f.roles) && typeof f.roles.mainId === "string" && str(f.roles.villainId, 64))) &&
     (f.script === undefined ||
-      (isObj(f.script) &&
-        Array.isArray(f.script.scenes) &&
-        f.script.scenes.length <= 40 &&
-        f.script.scenes.every((x) => isObj(x) && typeof x.what === "string" && str(x.caption, 400) && ids(x.who, 4)) &&
-        (f.script.answers === undefined || isObj(f.script.answers))));
+      (isObj(f.script) && Array.isArray(f.script.scenes) && f.script.scenes.length <= MAX_SCENES && f.script.scenes.every(scene) && answers(f.script.answers)));
   if (!ok) fail(400, "bad_request", UNREADABLE);
   if (JSON.stringify(f).length > MAX_DRAFT_BYTES) fail(413, "too_large", TOO_BIG);
   return clone(f);

@@ -27,7 +27,10 @@ FULL: dict[str, Any] = {
     "logline": "Lamo chases the van.",
     "category": "comedy",
     "script": {
-        "scenes": [{"what": "Lamo runs.", "caption": "Go!", "who": ["Lamo"]}, {"what": ""}],
+        "scenes": [
+            {"what": "Lamo runs.", "caption": "Go!", "who": ["Lamo"], "place": "road_day"},
+            {"what": "", "place": "ai"},
+        ],
         "answers": {"where": "a road"},
     },
     "characterIds": [ulid(), ulid(), ulid(), ulid()],
@@ -148,7 +151,8 @@ def test_a_stale_version_is_409(call: Call, store: db.Store) -> None:
         {"captionsOn": "yes"},
         {"referenceIds": [ulid() for _ in range(4)]},
         {"ai": {"effort": "huge"}},
-        {"script": {"scenes": [{"what": "x", "place": "road_day"}]}},
+        {"script": {"scenes": [{"what": "x", "place": "moon"}]}},
+        {"script": {"scenes": [{"what": "x", "sceneId": "s1"}]}},
         {"script": {"scenes": "x"}},
         {"script": {"scenes": [], "answers": {"a": 1}}},
     ],

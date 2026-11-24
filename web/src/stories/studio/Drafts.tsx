@@ -91,11 +91,13 @@ export function DraftsFold({ drafts, onDelete }: { drafts: VideoDraft[]; onDelet
   );
 }
 
-/** The owner's scenes as a draft keeps them (only up to the last written one; no keys, no places). */
+/** The owner's scenes as a draft keeps them (only up to the last written one; no keys; a place picked by hand kept). */
 export function draftScript(script: ScriptDraft): VideoDraftForm["script"] | undefined {
   const last = script.scenes.reduce((n, s, i) => (written(s) ? i : n), -1);
   if (last < 0) return undefined;
-  const scenes = script.scenes.slice(0, last + 1).map((s) => ({ what: s.what, ...(s.caption ? { caption: s.caption } : {}), ...(s.who ? { who: [...s.who] } : {}) }));
+  const scenes = script.scenes
+    .slice(0, last + 1)
+    .map((s) => ({ what: s.what, ...(s.caption ? { caption: s.caption } : {}), ...(s.who ? { who: [...s.who] } : {}), ...(s.place ? { place: s.place } : {}) }));
   return { scenes, ...(Object.keys(script.answers).length ? { answers: { ...script.answers } } : {}) };
 }
 
@@ -109,6 +111,7 @@ export function scriptOfDraft(saved: VideoDraftForm["script"], known: (id: strin
       if (who.length !== s.who.length) dropped = true;
       scene.who = who;
     }
+    scene.place = s.place ?? null;
     return scene;
   });
   while (scenes.length < 2) scenes.push(newScene());

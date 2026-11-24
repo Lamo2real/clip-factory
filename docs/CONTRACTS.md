@@ -14060,8 +14060,8 @@ type VehicleType = "car" | "truck" | "bus" | "motorbike" | "plane" | "boat"; typ
 // DesignBody gains referenceSides?: PhotoSide[] /* same length as referenceAssetIds (now ≤ 8) */; vehicle?: VehicleType
 interface CastRoles { mainId: string /* the first person in characterIds */; villainId?: string /* another person */ }
 interface VideoDraftForm { source?: "idea" | "own" | "script"; ideaId?: string; title?: string; logline?: string;
-  category?: string; script?: { scenes: { what: string; caption?: string; who?: string[] }[];
-  answers?: Record<string, string> }; characterIds?: string[] /* ≤ 4 */; roles?: CastRoles; seriesId?: string | null;
+  category?: string; script?: { scenes: { what: string; caption?: string; who?: string[];
+  place?: SetId | "ai" /* a place picked by hand */ }[]; answers?: Record<string, string> }; characterIds?: string[] /* ≤ 4 */; roles?: CastRoles; seriesId?: string | null;
   durationSec?: number; format?: StoryFormat; art?: ArtStyle; captionsOn?: boolean; musicMood?: string;
   referenceIds?: string[]; ai?: ModelOverride }
 interface VideoDraft { draftId: string; workspaceId: string; name: string /* ≤ 60 */; form: VideoDraftForm;
@@ -19772,7 +19772,9 @@ additive; internal names stay (`kind:"car"`, `script.cars`, `CHAR#`, `STORY#`, t
   a "Drafts" group sits above "Being made"; rows have "Open" and "Delete" (toast with Undo, no "Are you sure?"). The
   leave guard ("Leave without saving?") offers "Save draft", "Keep editing", "Leave". Open is
   `/stories/production/new?draft={id}`; gone ids are dropped ("Some picks are gone. Pick again."). POST /stories
-  with `draftId` deletes that draft in the same transaction (a missing one is fine).
+  with `draftId` deletes that draft in the same transaction (a missing one is fine). Scenes keep a place picked by
+  hand (`place`). A save that fails shows "Save draft" again; a stale version lets go of the draft (the next Save
+  draft makes a new one). A draft that could not be read for another reason shows Try again, never an empty form.
 - **Main and villain.** `roles` on StoryInput and Story, left out when empty. Panel 2 is "2 Who is in it": "Main
   character" (required; the first person in `characterIds`), "Villain" (another person; "you can skip this"),
   "Vehicles" (0 to 2; "you can skip this"). The writer marks only the villain (`"villain": true`); with no roles
@@ -19783,11 +19785,15 @@ additive; internal names stay (`kind:"car"`, `script.cars`, `CHAR#`, `STORY#`, t
   Bus, Motorbike, Plane, Boat), then "Outside" ("Front, side, back. Up to 6.") and "Inside" ("Seats and dashboard.
   Up to 4."), 8 photos in all; "Drop, paste or pick photos." Each reference keeps `side`; design sends
   `referenceSides` and `vehicle` (bodies limited to that family; inside photos set only `CarLook.interior`, which the
-  cabin shot draws). Vehicles page: "Your vehicles. Each looks the same in every video." · "Make a vehicle" · "No
-  vehicles yet" · "Add photos. Tap Make a vehicle." · "Getting your vehicles…".
+  cabin shot draws). A saved vehicle's own page keeps its pictures in the same two strips, so inside photos can be
+  added later. Vehicles page: "Your vehicles. Each looks the same in every video." · "Make a vehicle" · "No
+  vehicles yet" · "Add photos. Tap Make a vehicle." · "Getting your vehicles…". The vehicle editor says vehicle,
+  never car: "Give your vehicle a name." · "None came back. Tap Design it again." · "The ones to pick from" ·
+  "Shape" · "Your vehicle's colour" · "Real vehicles have no face. Add one for fun."
 - **Rule texts** (API, agent, engine and mock say exactly these): "Pick a main character." · "The villain can't be
   the main character." · "Pick up to 2 vehicles." · "Add someone to drive it." · "Pick a person or a vehicle." ·
-  "Those photos don't show a vehicle. Try other photos." · "You have 50 drafts. Delete one first."
+  "Those photos don't show a vehicle. Try other photos." · "Add a photo of your vehicle, or say what it is like." ·
+  "You have 50 drafts. Delete one first."
 - **Later:** cockpit, handlebar and helm shots; photo-real vehicles (photos still give a cartoon vehicle).
 
 ## 46. Auto-posting: the oldest clips in Review go up by themselves, every X hours (owner request, 2026-11-22)

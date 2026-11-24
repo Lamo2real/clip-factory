@@ -6,7 +6,7 @@
 // * Who is in it: the people, the Main character and Villain bars, and up to 2 vehicles (a third is held);
 // * Make the video sends the main character first with the roles, and the draft is gone;
 // * the page keeps the studio's rules (no sideways scroll, targets of 44 px, 48 on phones, contrast, sliding bars).
-// Lamo Stories is switched on with cf.storiesPreview = 1; nothing leaves the machine. The mock's store lives in the
+// Clips Funded is switched on with cf.storiesPreview = 1; nothing leaves the machine. The mock's store lives in the
 // page, so the flow moves inside the app and never reloads.
 import AxeBuilder from "@axe-core/playwright";
 import { expect, test, type Browser, type Page } from "@playwright/test";

@@ -18,6 +18,7 @@ import { createStore, type MockStore } from "../src/stories/api/mock/store.ts";
 import * as stories from "../src/stories/api/mock/stories.ts";
 import type { StoriesApi, StoriesConfig, VideoDraft, Workspace } from "../src/stories/api/types.ts";
 import { matchStories, storiesHref, type StoriesPage } from "../src/stories/routes.ts";
+import { ApiError } from "../src/api/errors.ts";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 // jsdom has no canvas: the engine previews draw nothing, quietly.
@@ -27,6 +28,8 @@ const { ProductionScreen } = await import("../src/stories/screens/Production.tsx
 const { resetSeriesLists } = await import("../src/stories/studio/SeriesSwitch.tsx");
 const { LISTED_INFO } = await import("../src/stories/studio/ai.tsx");
 const { LEAVE_TITLE } = await import("../src/stories/studio/leaveGuard.tsx");
+const { draftScript, scriptOfDraft } = await import("../src/stories/studio/Drafts.tsx");
+const { newScene } = await import("../src/stories/studio/ownScript.ts");
 
 const C = stories.SEED_IDS.characters;
 const CAR = characters.SEED_CAR_ID;
@@ -218,6 +221,27 @@ describe("the video drafts routes (mock)", () => {
     await expect(call(api.listVideoDrafts("clips"))).rejects.toMatchObject({ status: 409 });
   });
 
+  it("takes the API's loose limits: a long title, 12 Who names and a place picked by hand are fine", async () => {
+    const form = { title: "t".repeat(300), logline: "l".repeat(1500), script: { scenes: [{ what: "w", caption: "c".repeat(900), who: Array.from({ length: 12 }, (_, i) => `N${i}`), place: "park" as const }, { what: "", place: "ai" as const }] } };
+    const made = await call(api.createVideoDraft("stories", { form }));
+    expect(made.form).toEqual(form);
+    await expect(call(api.createVideoDraft("stories", { form: { title: "t".repeat(2001) } }))).rejects.toMatchObject({ status: 400 });
+    await expect(call(api.createVideoDraft("stories", { form: { script: { scenes: [{ what: "w", place: "moon" as never }] } } }))).rejects.toMatchObject({ status: 400 });
+    await expect(call(api.createVideoDraft("stories", { form: { script: { scenes: [{ what: "w", who: Array.from({ length: 13 }, () => "x") }] } } }))).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("a scene's place picked by hand is kept and comes back (Write it myself)", () => {
+    const a = newScene("Pip runs.", "Go!");
+    a.place = "park";
+    const b = newScene("Rosso waits.");
+    b.place = "ai";
+    const kept = draftScript({ scenes: [a, b, newScene()], answers: {} });
+    expect(kept).toEqual({ scenes: [{ what: "Pip runs.", caption: "Go!", place: "park" }, { what: "Rosso waits.", place: "ai" }] });
+    const back = scriptOfDraft(kept, () => true).script.scenes;
+    expect(back.map((x) => x.place)).toEqual(["park", "ai"]);
+    expect(scriptOfDraft({ scenes: [{ what: "x" }] }, () => true).script.scenes[0]!.place).toBeNull();
+  });
+
   it("making the video with its draftId deletes the draft; a draft that is gone already is fine", async () => {
     const d = seedDraft();
     const body = { characterIds: [C.pip], brief: { title: "x", logline: "y", category: "comedy" as const } };
@@ -273,6 +297,46 @@ describe("Make a new video › Save draft", () => {
     await click(control("Make the video"), 1500);
     expect(create.mock.calls[0]![1]).toMatchObject({ characterIds: [C.pip], draftId: id });
     expect(store.drafts).toEqual([]);
+  });
+
+  it("Make the video tapped while the first Save draft is on its way still sends that draft's id", async () => {
+    const create = vi.spyOn(api, "createStory");
+    await show(<ProductionScreen {...page({ name: "production_new", ideaId: null })} />);
+    await ownIdea();
+    await click(tile("Pip"));
+    await act(async () => control("Save draft").click());
+    await act(async () => control("Make the video").click());
+    await wait(1500);
+    expect(create).toHaveBeenCalledTimes(1);
+    expect(create.mock.calls[0]![1]).toHaveProperty("draftId");
+    expect(store.drafts).toEqual([]);
+  });
+
+  it("a save that fails brings Save draft back; a stale version lets go of the draft and stops autosave", async () => {
+    await show(<ProductionScreen {...page({ name: "production_new", ideaId: null })} />);
+    await ownIdea();
+    await click(control("Save draft"));
+    expect(stateWord()).toBe("Saved");
+    const save = vi.spyOn(api, "saveVideoDraft").mockRejectedValueOnce(new ApiError(503, "internal", "Clips Funded is busy right now."));
+    type(field("Title"), "Again");
+    await wait(2500);
+    expect(save).toHaveBeenCalledTimes(1);
+    expect(stateWord()).toBeNull();
+    expect(control("Save draft")).toBeTruthy();
+    // Save draft tries again with the same draft
+    await click(control("Save draft"));
+    expect(save).toHaveBeenCalledTimes(2);
+    expect(stateWord()).toBe("Saved");
+    // changed on another screen: one 409, then no more saves of that draft
+    store.drafts[0]!.version += 5;
+    type(field("Title"), "Third");
+    await wait(2500);
+    expect(save).toHaveBeenCalledTimes(3);
+    expect(text()).toContain("This draft changed on another screen. Open it again.");
+    type(field("Title"), "Fourth");
+    await wait(5000);
+    expect(save).toHaveBeenCalledTimes(3);
+    expect(control("Save draft")).toBeTruthy();
   });
 
   it("with no draft, Make the video sends no draftId (the body stays as it was)", async () => {
@@ -355,6 +419,18 @@ describe("Make a new video › Your drafts and opening one", () => {
     await show(<ProductionScreen {...page({ name: "production_new", ideaId: null, draftId: d.draftId })} />);
     await click(control("Make the video"), 1500);
     expect(create.mock.calls[0]![1]).toMatchObject({ characterIds: [C.pip, C.bolt], roles: { mainId: C.pip, villainId: C.bolt }, draftId: d.draftId });
+  });
+
+  it("a draft that could not be read (not gone) shows Try again, never an empty form", async () => {
+    const d = seedDraft();
+    const get = vi.spyOn(api, "getVideoDraft").mockRejectedValueOnce(new ApiError(503, "internal", "Clips Funded is busy right now."));
+    await show(<ProductionScreen {...page({ name: "production_new", ideaId: null, draftId: d.draftId })} />);
+    expect(text()).not.toContain("That draft is gone.");
+    expect(document.querySelector(".st-s-newvideo")).toBeNull();
+    await click(control("Try again"), 1500);
+    expect(get).toHaveBeenCalledTimes(2);
+    expect(field("Title").value).toBe("Dash at the beach");
+    expect(stateWord()).toBe("Saved");
   });
 
   it("a draft that is gone says so and starts a new form", async () => {

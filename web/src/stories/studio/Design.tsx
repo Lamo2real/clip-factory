@@ -491,7 +491,7 @@ export function CarDesign({
         .filter(isCar)
         .map((c) => (name ? { ...c, name } : c));
       if (!cars.length) {
-        setProblem("No cars came back. Tap Design it again.");
+        setProblem("None came back. Tap Design it again.");
         return;
       }
       if (more.current) setOptions((now) => [...now, ...cars].slice(0, MAX_CAR_OPTIONS));
@@ -520,7 +520,7 @@ export function CarDesign({
   function design(again = false) {
     if (busy || sending) return;
     const description = words.trim();
-    if (!description && !ready.length) return setProblem("Add a photo of your car, or say what it is like.");
+    if (!description && !ready.length) return setProblem("Add a photo of your vehicle, or say what it is like.");
     if (description.length > 600) return setProblem("Keep it to 600 letters.");
     setProblem(null);
     const count = again ? Math.min(CARS_PER_DESIGN, MAX_CAR_OPTIONS - options.length) : CARS_PER_DESIGN;

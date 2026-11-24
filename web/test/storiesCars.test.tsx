@@ -194,14 +194,14 @@ describe("New character: a person or a car", () => {
     expect(text()).toContain("Front, side, back. Up to 6.");
     expect(field(/^What is it like\?/)).toBeTruthy();
     // A change, then the other kind: it asks before anything goes.
-    await pick("Car shape", "Van");
+    await pick("Shape", "Van");
     await pick("What are you making?", "A person");
     const sheet = document.querySelector<HTMLElement>('[role="dialog"]')!;
     expect(sheet.textContent).toContain("Start again as a person?");
     expect(sheet.textContent).toContain("Your changes go.");
     await click(control("Keep it", sheet), 50);
     expect(chosen("What are you making?")).toBe("A vehicle");
-    expect(chosen("Car shape")).toBe("Van");
+    expect(chosen("Shape")).toBe("Van");
     await pick("What are you making?", "A person");
     await click(control("Start again"), 50);
     expect(chosen("What are you making?")).toBe("A person");
@@ -213,7 +213,7 @@ describe("New character: a person or a car", () => {
     expect(document.querySelector(".st-s-kind--tiles")).toBeNull();
     expect(chosen("What are you making?")).toBe("A vehicle");
     expect(control("Next: Face")).toBeTruthy();
-    expect(chosen("Car shape")).toBe("Hatchback");
+    expect(chosen("Shape")).toBe("Hatchback");
   });
 });
 
@@ -328,10 +328,10 @@ describe("Vehicles: What is it?, outside and inside photos, and paste (§45.47)"
     await show(<CarsScreen {...page({ name: "car_new" })} />);
     const create = vi.spyOn(api, "createCharacter");
     await pick("What is it?", "Truck");
-    expect(chosen("Car shape")).toBe("Pickup");
-    await pick("Car shape", "Van");
+    expect(chosen("Shape")).toBe("Pickup");
+    await pick("Shape", "Van");
     await pick("What is it?", "Car");
-    expect(chosen("Car shape")).toBe("Van");
+    expect(chosen("Shape")).toBe("Van");
     await click(control("Next: Face"), 50);
     await click(control("Next: Moves"), 50);
     await click(control("Next: Sounds"), 50);
@@ -416,7 +416,7 @@ describe("Design it: 3 cars to pick from", () => {
     const design = vi.spyOn(api, "designCharacter");
     await show(<CharactersScreen {...page({ name: "character_new", kind: "car" })} />);
     await click(control("Design it"), 50);
-    expect(text()).toContain("Add a photo of your car, or say what it is like.");
+    expect(text()).toContain("Add a photo of your vehicle, or say what it is like.");
     expect(design).not.toHaveBeenCalled();
     await addFiles([png("front.png"), png("side.png"), png("back.png")]);
     await wait(5000);
@@ -480,11 +480,11 @@ describe("the car editor", () => {
   it("Looks change the car, Face starts with no face and eyes on gives 3 faces, Try a move honks, and Sounds has no voice", async () => {
     const create = vi.spyOn(api, "createCharacter");
     await show(<CharactersScreen {...page({ name: "character_new", kind: "car" })} />);
-    await pick("Car shape", "Van");
+    await pick("Shape", "Van");
     await pick("Wheels", "Off-road");
     await pick("On top", "Roof rack");
     await click(control("Next: Face"), 50);
-    expect(text()).toContain("Real cars have no face. Add one for fun.");
+    expect(text()).toContain("Real vehicles have no face. Add one for fun.");
     expect(chosen("Face")).toBe("No face");
     expect(document.querySelectorAll(".st-s-face")).toHaveLength(0);
     await pick("Face", "Eyes on the windscreen");
@@ -503,7 +503,7 @@ describe("the car editor", () => {
     await click(control("Next: Name and personality"), 50);
     expect(field("Name").getAttribute("placeholder")).toBe("For example: Rosso");
     await click(control("Save vehicle"), 50);
-    expect(text()).toContain("Give your car a name.");
+    expect(text()).toContain("Give your vehicle a name.");
     type(field("Name"), "Vanessa");
     await click(control("Save vehicle"));
     const sent = create.mock.calls[0]![1] as CarInput;
@@ -511,6 +511,26 @@ describe("the car editor", () => {
     expect(sent.expressions).toEqual(["neutral", "happy", "surprised"]);
     // A car's page is under Cars.
     expect(location.pathname).toMatch(/^\/stories\/vehicles\/[0-9A-Z]{26}$/);
+  });
+
+  it("a saved vehicle's page keeps pictures in Outside and Inside strips, and an inside one added there keeps its side", async () => {
+    const upload = vi.spyOn(api, "referenceUpload");
+    await show(<CarsScreen {...page({ name: "car", characterId: characters.SEED_CAR_ID })} />);
+    const refs = document.querySelector<HTMLElement>("section.st-s-refs--vehicle")!;
+    expect(refs).not.toBeNull();
+    const strips = Array.from(refs.querySelectorAll<HTMLElement>(".st-s-refs__strip"));
+    expect(strips.map((x) => x.querySelector(".st-s-refs__side")?.textContent)).toEqual(["Outside", "Inside"]);
+    expect(strips.every((x) => x.classList.contains("st-drop-host"))).toBe(true);
+    expect(refs.textContent).toContain("Seats and dashboard. Up to 4.");
+    const input = strips[1]!.querySelector<HTMLInputElement>('input[type="file"]')!;
+    Object.defineProperty(input, "files", { value: [png("dash.png")], configurable: true });
+    await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
+    await wait(4000);
+    expect(upload.mock.calls[0]![2]).toEqual({ filename: "dash.png", contentType: "image/png", size: 3000, side: "inside" });
+    const saved = store.characters.find((c) => c.characterId === characters.SEED_CAR_ID)!;
+    expect(saved.references.filter((r) => r.side === "inside")).toHaveLength(1);
+    const inside = Array.from(document.querySelectorAll<HTMLElement>(".st-s-refs__strip"))[1]!;
+    expect(inside.querySelectorAll(".st-s-refs__item")).toHaveLength(1);
   });
 
   it("a car's page redesigns it from its own pictures, and an older link under Characters moves to Cars", async () => {
@@ -595,7 +615,7 @@ describe("Vehicles: the vehicles' own place, and the vehicles in Characters", ()
     expect(document.querySelector("h1")?.textContent).toBe("New vehicle");
     expect(control(/Vehicles$/).getAttribute("href")).toBe("/stories/vehicles");
     expect(text()).toContain("Front, side, back. Up to 6.");
-    expect(chosen("Car shape")).toBe("Hatchback");
+    expect(chosen("Shape")).toBe("Hatchback");
     await addFiles([png("front.png")]);
     await wait(3000);
     await click(control("Design it"), 250);
@@ -636,7 +656,7 @@ describe("the car's words and checks", () => {
   it("characterProblem knows a car's rules, and showFace keeps a car with no face neutral", () => {
     const car = { ...newCar(), name: "Rosso" };
     expect(characterProblem(car)).toBeNull();
-    expect(characterProblem({ ...car, name: " " })).toBe("Give your car a name.");
+    expect(characterProblem({ ...car, name: " " })).toBe("Give your vehicle a name.");
     expect(characterProblem({ ...car, expressions: ["neutral", "happy", "sad"] })).toBe("A car with no face keeps only the neutral face.");
     const eyes: CarInput = { ...car, car: { ...car.car, face: { ...car.car.face, eyes: "headlights" } }, expressions: ["neutral", "happy"] };
     expect(characterProblem(eyes)).toBe("Pick at least 3 faces.");
@@ -668,7 +688,7 @@ describe("the car's words and checks", () => {
     const car = { ...newCar(), name: "Zippy" };
     expect((await refused(api.createCharacter("stories", { ...car, voice: { ...car.voice, style: "hum" } }))).message).toBe("A car has no voice. Pick its sounds instead.");
     expect((await refused(api.createCharacter("stories", { ...car, expressions: ["neutral", "happy", "sad"] }))).message).toBe("A car with no face keeps only the neutral face.");
-    expect((await refused(api.designCharacter("stories", { kind: "car" }))).message).toBe("Add a photo of your car, or say what it is like.");
+    expect((await refused(api.designCharacter("stories", { kind: "car" }))).message).toBe("Add a photo of your vehicle, or say what it is like.");
     expect((await refused(api.designCharacter("stories", { kind: "car", referenceAssetIds: ["a", "b", "c", "d", "e", "f", "g", "h", "i"] }))).message).toBe("Pick up to 8 photos.");
     expect((await refused(api.designCharacter("stories", { kind: "car", referenceAssetIds: ["a", "b"], referenceSides: ["outside"] }))).message).toBe("referenceSides must be outside or inside, one for each photo.");
     expect(

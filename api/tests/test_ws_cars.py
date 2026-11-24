@@ -237,7 +237,7 @@ def test_task_input_kinds_counts_and_sentences() -> None:
         design.task_input(design.parse({"kind": "person", "description": "x"}), [], saved)
     with pytest.raises(ApiError, match=re.escape("Keep the same kind: this character is a person.")):
         design.task_input(design.parse({"kind": "car", "description": "x"}), [], {"characterId": ULIDS[8]})
-    with pytest.raises(ApiError, match=re.escape("Add a photo of your car, or say what it is like.")):
+    with pytest.raises(ApiError, match=re.escape("Add a photo of your vehicle, or say what it is like.")):
         design.task_input(design.parse({"kind": "car"}), [], None)
     with pytest.raises(ApiError, match=re.escape("Describe the character, or add a picture of it.")):
         design.task_input(design.parse({}), [], None)
@@ -341,7 +341,7 @@ def test_design_refusals_start_no_task(call: Call, store: db.Store, s3_client: F
     assert body["error"]["message"] == "Pick up to 6 photos."
     status, body = call("POST", f"{BASE}/characters/design", {"kind": "car"})
     assert status == 400
-    assert body["error"]["message"] == "Add a photo of your car, or say what it is like."
+    assert body["error"]["message"] == "Add a photo of your vehicle, or say what it is like."
     assert call("POST", f"{BASE}/characters/design", {"kind": "car", "description": "x", "count": 9})[0] == 400
     assert call("POST", f"{BASE}/characters/design", {"description": "x", "avoid": [CAR]})[0] == 400
     gone = "01J0000000000000000000000Q"

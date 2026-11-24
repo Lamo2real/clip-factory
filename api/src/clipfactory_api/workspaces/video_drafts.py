@@ -16,7 +16,7 @@ from typing import Any, Final, Protocol
 from .. import validate
 from ..errors import bad_request, too_large
 from ..ids import is_ulid
-from . import overrides, stories
+from . import catalog, overrides, stories
 from . import types as ws
 from .types import VIDEO_DRAFT_SK
 
@@ -104,7 +104,7 @@ def _ids(value: Any, field: str, max_items: int) -> list[str]:
 
 def _scene(value: Any, field: str) -> Item:
     body = validate.obj(value, field)
-    validate.only_keys(body, {"what", "caption", "who"})
+    validate.only_keys(body, {"what", "caption", "who", "place"})
     out: Item = {"what": _text(body.get("what", ""), f"{field}.what")}
     if body.get("caption") is not None:
         out["caption"] = _text(body["caption"], f"{field}.caption")
@@ -113,6 +113,11 @@ def _scene(value: Any, field: str) -> Item:
         if not isinstance(who, list) or len(who) > MAX_WHO:
             raise bad_request(f"{field}.who must be a list of at most {MAX_WHO}.", field)
         out["who"] = [_text(w, f"{field}.who", WHO_MAX) for w in who]
+    if body.get("place") is not None:
+        # the place picked by hand: a catalog set, or "ai" (AI picks, on purpose)
+        if body["place"] != "ai" and body["place"] not in catalog.SETS:
+            raise bad_request(f"{field}.place is not a place.", f"{field}.place")
+        out["place"] = body["place"]
     return out
 
 

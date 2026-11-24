@@ -323,6 +323,8 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
   /** The form as last saved or opened (what "Saved" means), and whether a save is on its way. */
   const [savedJson, setSavedJson] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  /** The last save failed: "Save draft" comes back instead of "Saving…" (a stale version stops the draft, below). */
+  const [saveFailed, setSaveFailed] = useState(false);
   const [gonePicks, setGonePicks] = useState(false);
   const [draftGone, setDraftGone] = useState(false);
   const opened = useLoad(async () => (draftId ? await storiesApi().getVideoDraft(ws, draftId) : null), `${ws}:${draftId ?? ""}`);
@@ -374,10 +376,19 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
         savedRef.current = { draftId: next.draftId, version: next.version };
         setSaved(savedRef.current);
         setSavedJson(json);
+        setSaveFailed(false);
         if (!auto) toast.success(DRAFT_WORDS.saved);
         return true;
       } catch (e) {
         toast.error(say(e, "The draft could not be saved. Try again."), { group: "st-draft-save" });
+        if (isConflict(e)) {
+          // Changed on another screen: this form lets go of that draft, so autosave stops sending a stale version.
+          // "Save draft" then keeps this form as a new draft; the other one stays in "Your drafts".
+          savedRef.current = null;
+          setSaved(null);
+          setSavedJson(null);
+          setSaveFailed(false);
+        } else setSaveFailed(true);
         return false;
       } finally {
         setSaving(false);
@@ -454,9 +465,12 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
   useEffect(() => {
     if (ready || !data.data || opened.loading) return;
     const d = opened.data;
+    // A draft that could not be read for another reason (a network blip) stays unopened: Try again, below. Starting
+    // an empty form then would make a second draft next to the one that is still there.
+    if (!d && opened.error && !opened.missing) return;
     setReady(true);
     if (!d) {
-      if (opened.error) setDraftGone(true);
+      if (opened.missing) setDraftGone(true);
       return;
     }
     const f = d.form;
@@ -504,7 +518,7 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
     setSaved(savedRef.current);
     // "Saved" is the form as it opens (worked out on the next render, once every pick above is in).
     setSavedJson(null);
-  }, [data.data, opened.data, opened.loading, opened.error, ready]);
+  }, [data.data, opened.data, opened.loading, opened.error, opened.missing, ready]);
 
   // The opened form is what "Saved" means: set on the render after the picks went in.
   useEffect(() => {
@@ -533,12 +547,12 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
 
   // Autosave (§45.47 D3): once there is a draft, 2 s after the last change; never while the video starts.
   useEffect(() => {
-    if (!saved || savedJson === null || busy || formJson === savedJson) return;
+    if (!saved || savedJson === null || busy || saveFailed || formJson === savedJson) return;
     const t = window.setTimeout(() => void saveDraft(true), AUTOSAVE_MS);
     return () => window.clearTimeout(t);
     // The form's JSON is what changes.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [formJson, saved, savedJson, busy]);
+  }, [formJson, saved, savedJson, busy, saveFailed]);
 
   const kind: IdeaCategory | "" = source === "idea" ? (idea?.category ?? "") : category;
   // The owner's scenes as they will be sent (Write it myself): the length and the captions follow them.
@@ -707,11 +721,10 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
     const body: StoryInput = { characterIds: storyOrder(cast, characters, roles), durationSec: lengthSec, captionsOn, musicMood: music };
     const picked = rolesOf(cast, characters, roles);
     if (picked && (picked.villainId || roles.mainId)) body.roles = picked;
-    // The draft it is made from goes (§45.47); a save on its way is waited for, and none starts after this.
-    if (saved) {
-      body.draftId = saved.draftId;
-      await saveChain.current.catch(() => undefined);
-    }
+    // The draft it is made from goes (§45.47): a save on its way (even the very first one) is waited for, then the
+    // draft is read from the ref, never this click's render; busy stops autosave, so none starts after this.
+    await saveChain.current.catch(() => undefined);
+    if (savedRef.current) body.draftId = savedRef.current.draftId;
     if (series) body.seriesId = series;
     else if (seriesTouched.current) body.seriesId = null;
     // This video's own shape, only when the owner picked one that is not the workspace's (§45.34). Nothing picked:
@@ -777,7 +790,11 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
       {draftGone ? <Notice tone="bad">{DRAFT_WORDS.gone}</Notice> : null}
       {gonePicks ? <Notice tone="bad">{DRAFT_WORDS.gonePicks}</Notice> : null}
       <DraftsFold drafts={drafts.items.filter((d) => d.draftId !== saved?.draftId)} onDelete={drafts.remove} />
-      {!data.data || !ready ? (
+      {opened.error && !opened.missing && !ready ? (
+        <Notice tone="bad" action={<button type="button" className="st-btn" onClick={() => void opened.reload()}>Try again</button>}>
+          {opened.error}
+        </Notice>
+      ) : !data.data || !ready ? (
         <Busy plate>Getting your ideas and characters…</Busy>
       ) : (
         <div className="st-s-newvideo">
@@ -970,7 +987,7 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
               </Notice>
             ) : null}
             {/* Save draft until there is one; then the draft saves itself and one word says so (§45.47). */}
-            {saved ? (
+            {saved && !saveFailed ? (
               <span className="st-s-field__hint st-vd-state" role="status">
                 {saving || formJson !== savedJson ? DRAFT_WORDS.saving : DRAFT_WORDS.savedState}
               </span>

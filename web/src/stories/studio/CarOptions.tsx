@@ -38,16 +38,16 @@ export function CarOptions({
         Pick one
       </h3>
       <Pick
-        label="The cars to pick from"
+        label="The ones to pick from"
         hideLabel
         big
         className="st-s-caropts__grid"
         value={String(picked)}
         options={options.map((o, i) => ({
           value: String(i),
-          label: o.name || `Car ${i + 1}`,
+          label: o.name || `Vehicle ${i + 1}`,
           line: i === picked ? "Picked" : undefined,
-          art: <CarPreview car={o.car} movementStyle={o.movementStyle} expression={showFace(o)} move="drive" size={size} label={`${o.name || `Car ${i + 1}`}, driving`} />,
+          art: <CarPreview car={o.car} movementStyle={o.movementStyle} expression={showFace(o)} move="drive" size={size} label={`${o.name || `Vehicle ${i + 1}`}, driving`} />,
         }))}
         onChange={(v) => onPick(Number(v))}
       />
