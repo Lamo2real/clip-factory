@@ -459,8 +459,11 @@
   max-height: calc(100dvh - var(--top-safe, 0px) - 40px);
   overflow: hidden;
 }
-.sheet:has(.bank-picker) > :not(.sheet__text),
-.sheet:has(.bank-places) > :not(.sheet__text) {
+/* The title and the buttons by their own classes, never `> :not(.sheet__text)`: a :has() rule whose last part has no
+   class of its own makes Chromium restyle the whole page on every class change anywhere (a tap's restyle took 19 ms
+   instead of 3 under a 4x slower CPU, and the workspace switch's slide started frames late on CI). */
+.sheet:has(.bank-picker) > :is(.sheet__title, .sheet__actions),
+.sheet:has(.bank-places) > :is(.sheet__title, .sheet__actions) {
   flex: none;
 }
 .sheet:has(.bank-picker) > .sheet__text,

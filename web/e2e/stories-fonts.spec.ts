@@ -37,8 +37,10 @@ test("Clips Funded' toasts are Fraunces in the shell's toast box; Clip Factory's
 
   await page.locator(".ws-dock .ws-switch__opt", { hasText: "Clips Funded" }).click();
   await storiesReady(page);
+  // The first stuck post is TikTok's, whose account needs connecting again: its Try again comes back still stuck, and
+  // its toast says why (never "Trying again now.", which would not be true).
   await page.getByRole("button", { name: "Try again" }).first().click();
-  const mine = await toastType(page, "Trying again now.");
+  const mine = await toastType(page, "needs connecting again. Open Clips Funded › Social accounts, then tap Try again.");
   expect(mine.inStories, "the shell draws it, outside .stories-app").toBe(false);
   expect(mine.cls.split(" ")).toContain("st-toast");
   expect(mine.family).toMatch(/^"?Fraunces"?, "Iowan Old Style", Georgia, serif$/);

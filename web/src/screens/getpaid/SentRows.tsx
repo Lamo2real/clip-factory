@@ -60,6 +60,18 @@ export function anchorHere(href: string, here: string | undefined): string | nul
 }
 
 /**
+ * Brings a place on the page (a step, a question) into view: in the middle when it fits the screen's free part (inside
+ * html's scroll-padding, so clear of the top line and the phone's tab bar), else at its start. An open step can be
+ * taller than a phone's screen, and its middle in the middle left its head, where the focus goes, above the screen.
+ */
+export function intoView(el: HTMLElement): void {
+  const css = getComputedStyle(document.documentElement);
+  const room = window.innerHeight - (parseFloat(css.scrollPaddingTop) || 0) - (parseFloat(css.scrollPaddingBottom) || 0);
+  const block = el.getBoundingClientRect().height <= room ? "center" : "start";
+  el.scrollIntoView?.({ block, behavior: prefersReducedMotion() ? "auto" : "smooth" });
+}
+
+/**
  * Goes to a step on this page on every tap: the address keeps its `?back=` and gets the step's `#anchor` (so the page
  * opens that step), and the step comes into view with the focus on its head. Going to the same address again
  * through the router would do nothing.
@@ -73,7 +85,7 @@ export function jumpHere(anchor: string): void {
   setTimeout(() => {
     const el = document.getElementById(anchor) ?? document.getElementById(`step-${anchor}`);
     if (!el) return;
-    el.scrollIntoView?.({ block: "center", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+    intoView(el);
     (el.querySelector<HTMLElement>(":scope > .gstep__head") ?? el).focus({ preventScroll: true });
   }, 60);
 }

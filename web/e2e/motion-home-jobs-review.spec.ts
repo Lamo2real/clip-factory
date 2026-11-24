@@ -226,8 +226,14 @@ test.describe("motion: Review (APPLY a)", () => {
   test("Show every job clears the job filter", async ({ page }) => {
     const href = await page.locator(".review-card__job").first().getAttribute("href");
     const jobId = href!.split("/").pop()!;
-    await page.goto(`/review?job=${jobId}`);
+    // In the app: the pretend app keeps its jobs in this page only, so a fresh load would ask for a job that is not
+    // there (its own "This job isn't here" with a Show every job of its own), never this job's clips.
+    await page.evaluate((to) => {
+      history.pushState({}, "", to);
+      dispatchEvent(new PopStateEvent("popstate"));
+    }, `/review?job=${jobId}`);
     await settle(page);
+    await expect(page.locator(".review-card").first()).toBeVisible();
     const all = page.getByRole("link", { name: "Show every job" });
     await expect(all).toHaveAttribute("data-act", "clear");
     await all.click();

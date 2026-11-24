@@ -541,13 +541,17 @@ test.describe("kid-proof Get paid", () => {
     await go.click();
     await expect(page).toHaveURL(/\/settings\/posting\/getpaid\/youtube\?back=\/money#yt-reading$/);
     await expect(step(page, "yt-reading")).toBeInViewport();
-    await expect(step(page, "yt-reading").locator(".gstep__head")).toBeFocused();
+    // The open step is taller than the screen: its head, where the focus goes, is all in sight (never its middle in the
+    // middle with the head above the screen).
+    const head = step(page, "yt-reading").locator(".gstep__head");
+    await expect(head).toBeFocused();
+    await expect(head).toBeInViewport({ ratio: 1 });
     // A second tap (from further down, the focus elsewhere) goes there again.
     await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
     await go.focus();
     await go.click();
-    await expect(step(page, "yt-reading").locator(".gstep__head")).toBeFocused();
-    await expect(step(page, "yt-reading").locator(".gstep__head")).toBeInViewport();
+    await expect(head).toBeFocused();
+    await expect(head).toBeInViewport({ ratio: 1 });
     await expect(page).toHaveURL(/\?back=\/money#yt-reading$/);
   });
 

@@ -610,7 +610,7 @@ function StoriesShell({ page }: { page: StoriesPage }) {
         </main>
       </div>
       {solo ? null : (
-        <nav className="st-tabbar st-glass st-glass--bar" aria-label="Clips Funded">
+        <nav className="st-tabbar st-glass st-glass--bar" aria-label="Clips Funded" data-bottom-bar="">
           <ul className="st-tabbar__list">
             {/* The round active highlight (the figure's orb) slides between the tabs. */}
             <Glide active=".st-tabbar__item.is-active" className={`glide--st-tab ${TAB_ORB}`} as="li" />
