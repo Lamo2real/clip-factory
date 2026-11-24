@@ -3,7 +3,9 @@
 The owner's Mac helper signs in as the owner (the same JWT) and uses the helper routes; the app uses the owner's.
 
 * Helper: ``GET /v1/tiktok/mac`` (on, the helper item, the queue), ``POST /v1/tiktok/mac/ping``, and per clip
-  ``claim``, ``step`` (a re-sent step is the job's beat), ``done`` and ``stopped``.
+  ``claim``, ``step`` (a re-sent step is the job's beat), ``done``, ``stopped`` (``code: "login"``: a TikTok login
+  problem, §47.11) and ``logged-in`` (the Mac is logged in to the right TikTok again: its login hold on that clip ends,
+  §47.11; the web never calls it).
 * Owner: ``POST /v1/tiktok/mac/send`` (Send these to my Mac, or with ``now: true`` a row's Post with my Mac),
   ``POST /v1/tiktok/mac/login`` (Change or Forget TikTok login), ``POST /v1/tiktok/mac/request`` (Start my Mac
   again, Let them go), ``POST …/tiktok/mac/retry`` (Try again; ``now: true`` from a row) and ``DELETE …/tiktok/mac``
@@ -244,21 +246,50 @@ def step(app: App, req: Request) -> Response:
     return _job(app, req, row)
 
 
+def _code(body: dict[str, Any]) -> str | None:
+    """The stop's optional ``code`` (§47.11): only ``login``."""
+    code = body.get("code")
+    if code is not None and code not in tiktok_mac.HOLD_CODES:
+        raise bad_request(tiktok_mac.BAD_CODE)
+    return code
+
+
 def stopped(app: App, req: Request) -> Response:
-    """``POST /v1/clips/{clipId}/tiktok/mac/stopped`` ``{device, reason, needsYou?}`` → ``{job}``."""
+    """``POST /v1/clips/{clipId}/tiktok/mac/stopped`` ``{device, reason, needsYou?, attempt?, code?}`` → ``{job}``."""
     body = req.json()
-    validate.only_keys(body, {"device", "reason", "needsYou", "attempt"})
+    validate.only_keys(body, {"device", "reason", "needsYou", "attempt", "code"})
     device = _device(body)
     attempt = _attempt(body)
     reason = validate.required_string(body, "reason", max_len=10_000)
     needs_you = validate.boolean(body.get("needsYou", False), "needsYou")
+    code = _code(body)
     item = clip_routes._clip_or_404(app, req)
     try:
-        row = tiktok_mac.stopped(app.store, item, device, reason, app.clock(), needs_you=needs_you, attempt=attempt)
+        row = tiktok_mac.stopped(
+            app.store, item, device, reason, app.clock(), needs_you=needs_you, attempt=attempt, code=code
+        )
     except tiktok_self.Refused as e:
         raise _refused(e) from e
-    log("info", "tiktok_mac.stopped", clipId=item["clipId"], pressed=bool(row.get("macPressedAt")))
+    log("info", "tiktok_mac.stopped", clipId=item["clipId"], pressed=bool(row.get("macPressedAt")), code=code)
     return _job(app, req, row)
+
+
+def logged_in(app: App, req: Request) -> Response:
+    """``POST /v1/clips/{clipId}/tiktok/mac/logged-in`` ``{device}`` → ``{helper, outcome}`` (§47.11): the helper's
+    Chrome is logged in to Clip Factory's TikTok again, so its login hold on this clip ends. ``outcome`` is
+    ``resumed`` (the stopped clip waits for the Mac again), ``pressed`` (Post was pressed: the clip stays for the owner)
+    or ``cleared`` (only the hold ended). No 404 for a clip that is gone: its hold still ends. 409 unless this device's
+    hold is a login hold on this clip, or when it changed meanwhile."""
+    body = req.json()
+    validate.only_keys(body, {"device"})
+    device = _device(body)
+    clip_id = str(req.params["clipId"])
+    try:
+        item, outcome = tiktok_mac.logged_in(app.store, req.user_id, clip_id, device)
+    except tiktok_self.Refused as e:
+        raise _refused(e) from e
+    log("info", "tiktok_mac.logged_in", clipId=clip_id, outcome=outcome)
+    return ok({"helper": tiktok_mac.public_helper(item), "outcome": outcome})
 
 
 def done(app: App, req: Request) -> Response:

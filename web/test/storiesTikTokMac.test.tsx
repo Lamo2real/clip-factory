@@ -439,6 +439,62 @@ describe("the TikTok card's states (§47.10.6)", () => {
   });
 });
 
+describe("§47.11: the card while the Mac is held only for a TikTok login", () => {
+  const h = "@clips.funded";
+  const out = "TikTok logged your Mac out. Tap Log in on my Mac.";
+  it("one quiet carry-on line under the needs-you line, only for a login code, never naming Clip Factory", () => {
+    expect(W.loginBackWords(h)).toBe("Once you log in to @clips.funded again, your Mac carries on by itself.");
+    const held = cardState(helper({ state: "needs_you", reason: out, needsYouJobId: "J", needsYouStoryId: "S0", needsYouCode: "login" }), h, NOW);
+    expect(held).toMatchObject({ line: `Your Mac needs you: ${out}`, note: "Once you log in to @clips.funded again, your Mac carries on by itself.", button: "login" });
+    expect(`${held.line} ${held.note}`).not.toMatch(/clip factory/i);
+    const wrong = "Your Mac is logged in to TikTok as @lamo.clips, not @clips.funded. Nothing was posted.";
+    expect(cardState(helper({ state: "needs_you", reason: wrong, needsYouCode: "login" }), h, NOW)).toMatchObject({ note: W.loginBackWords(h), button: "login" });
+    for (const other of [
+      helper({ state: "needs_you", reason: out }),
+      helper({ state: "needs_you", reason: "TikTok says it's posting too much right now. The rest wait.", needsYouStoryId: "S0" }),
+      helper({ state: "paused" }),
+      helper(),
+    ]) {
+      expect(cardState(other, h, NOW).note).toBeUndefined();
+    }
+  });
+
+  it("the mock: a login stop holds with its code; logged-in resumes the stopped post once, pressed posts only end the hold", async () => {
+    start(READY);
+    const tiktok = { platform: "tiktok" as const, socialAccountId: "stories.tiktok", options: { ...MAC_TIKTOK_OPTIONS } };
+    const [j] = await call(api.publish("stories", S.approved, [tiktok]));
+    const id = j!.publishingJobId;
+    mac.claim();
+    mac.stopped(out, true, id, "login");
+    expect(mac.helper()).toMatchObject({ state: "needs_you", needsYouJobId: id, needsYouCode: "login" });
+    expect(mac.loggedIn(id)).toMatchObject({ outcome: "resumed", helper: { state: "ok" } });
+    expect(store.publishing.find((x) => x.publishingJobId === id)?.mac).toMatchObject({ state: "waiting" });
+    expect(mac.helper()?.needsYouCode).toBeUndefined();
+    expect(() => mac.loggedIn(id)).toThrow(macMock.NOT_LOGIN_HOLD);
+    mac.claim();
+    mac.stopped("TikTok wants a check (a puzzle or a code). Do it on your Mac, then tap Try again.", true, id);
+    expect(() => mac.loggedIn(id)).toThrow(macMock.NOT_LOGIN_HOLD); // a puzzle never ends by itself
+    await call(api.macRetry("stories", id)); // the owner's Try again ends that one
+    expect(mac.helper()?.state).toBe("ok");
+    mac.claim();
+    mac.step("pressing");
+    mac.stopped(out, true, id, "login");
+    const pressed = structuredClone(store.publishing.find((x) => x.publishingJobId === id));
+    expect(mac.loggedIn(id).outcome).toBe("pressed");
+    expect(store.publishing.find((x) => x.publishingJobId === id)).toEqual(pressed);
+    expect(mac.helper()?.state).toBe("ok");
+  });
+
+  it("shows the line on the card", async () => {
+    start({ ...READY, macHelper: { state: "needs_you", reason: out, needsYouJobId: "J", needsYouStoryId: S.approved, needsYouCode: "login" } });
+    const account = store.social.find((a) => a.platform === "tiktok")!;
+    await show(<TikTokMac ws="stories" account={account} />);
+    const c = document.querySelector<HTMLElement>("#tiktok-mac")!;
+    expect(c.querySelector('[data-mac="login-back"]')?.textContent).toMatch(/^Once you log in to @[a-z.]+ again, your Mac carries on by itself\.$/);
+    expect(has("Log in on my Mac", c)).toBe(true);
+  });
+});
+
 describe("the TikTok card in Social accounts", () => {
   const card = async () => {
     const account = store.social.find((a) => a.platform === "tiktok")!;

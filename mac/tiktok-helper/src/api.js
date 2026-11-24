@@ -13,6 +13,7 @@ export class ApiError extends Error {
 }
 
 const withAttempt = (attempt) => (Number.isInteger(attempt) && attempt >= 1 ? { attempt } : {});
+const withCode = (code) => (code ? { code } : {});
 
 /**
  * ``token``: a string (one token, never renewed), or auth.js tokenSource() for anything that can outlast a token (a
@@ -63,13 +64,17 @@ export function client(apiUrl, token, fetchImpl = fetch) {
       call("POST", `${clip(clipId)}/tiktok/mac/step`, { device, step, ...withAttempt(attempt) }),
     done: (clipId, device, link, attempt) =>
       call("POST", `${clip(clipId)}/tiktok/mac/done`, { device, ...(link ? { link } : {}), ...withAttempt(attempt) }),
-    stopped: (clipId, device, reason, needsYou = false, attempt) =>
+    // ``code`` (§47.11): "login" only for a stop that is a TikTok login problem and nothing else; sent only when given.
+    stopped: (clipId, device, reason, needsYou = false, attempt, code) =>
       call("POST", `${clip(clipId)}/tiktok/mac/stopped`, {
         device,
         reason,
         ...(needsYou ? { needsYou: true } : {}),
         ...withAttempt(attempt),
+        ...withCode(code),
       }),
+    // §47.11: this Mac's Chrome is logged in to Clip Factory's TikTok again, so its login hold on that clip ends.
+    loggedIn: (clipId, device) => call("POST", `${clip(clipId)}/tiktok/mac/logged-in`, { device }),
     file: (clipId) => call("GET", `${clip(clipId)}/file`),
     clip: (clipId) => call("GET", clip(clipId)),
     posts: (clipId) => call("GET", `/posts?clipId=${encodeURIComponent(clipId)}`),
@@ -98,13 +103,15 @@ export function wsClient(apiUrl, token, workspaceId, fetchImpl = fetch) {
     claim: (id, device) => call("POST", `${job(id)}/claim`, { device, version: VERSION }),
     step: (id, device, step, attempt) => call("POST", `${job(id)}/step`, { device, step, ...withAttempt(attempt) }),
     done: (id, device, link, attempt) => call("POST", `${job(id)}/done`, { device, link, ...withAttempt(attempt) }),
-    stopped: (id, device, reason, needsYou = false, attempt) =>
+    stopped: (id, device, reason, needsYou = false, attempt, code) =>
       call("POST", `${job(id)}/stopped`, {
         device,
         reason,
         ...(needsYou ? { needsYou: true } : {}),
         ...withAttempt(attempt),
+        ...withCode(code),
       }),
+    loggedIn: (id, device) => call("POST", `${job(id)}/logged-in`, { device }),
     /** The finished video's link (``{url, filename}``); the helper saves it under the job's own fileName. */
     file: (wsJob) => call("GET", `${ws}/stories/${encodeURIComponent(wsJob.storyId)}/download`),
     story: (storyId) => call("GET", `${ws}/stories/${encodeURIComponent(storyId)}`),

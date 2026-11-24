@@ -1330,6 +1330,9 @@ export interface WsMacHelper {
   handle?: string;
   needsYouJobId?: string;
   needsYouStoryId?: string;
+  /** §47.11, only while it needs him: "login" when it stopped only for a TikTok login (it carries on by itself once
+   * it is logged in to this workspace's TikTok again) */
+  needsYouCode?: "login";
   /** the owner's Log in on my Mac, until the Mac did it */
   loginRequest?: { at: string };
   /** the owner's Start my Mac again, until the Mac did it */

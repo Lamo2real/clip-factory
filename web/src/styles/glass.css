@@ -221,20 +221,13 @@ html[data-strength="frosted"] .backdrop__frost {
   visibility: hidden;
 }
 /* Away and back land at once, in both directions, under every motion setting. The backdrop and everything in it is
-   never transitioned (its drift is an animation; the slide between the apps is a Web Animation, app-slide.css), so at
-   normal motion nothing here changes. But with calm motion base.css gives every element a 1 ms transition of every
-   property (transition-property is `all` unless set), and visibility is animatable: the swap to hidden stays visible,
-   and the swap back stays hidden, until that 1 ms transition has run, which starts only on the next frame drawn. While
-   CI's software paint drew Clips Funded's frosted page slowly, the backdrop (and the blobs and veil inheriting its
-   visibility, five transitions in all) still read "visible" under Clips Funded, and "hidden" back in Clip Factory
-   (e2e/stories-see-through-own.spec.ts; the same family as glide.css .ws-dock, st-frame.css's rail foot and
-   ws-mark.css). */
-.backdrop,
-.backdrop *,
-.backdrop::before,
-.backdrop::after {
-  transition: none;
-}
+   never transitioned (its drift is an animation; the slide between the apps is a Web Animation, app-slide.css), and
+   calm motion adds no transition (base.css, CONTRACTS §20.6). When it gave every element a 1 ms transition of every
+   property (transition-property is `all` unless set), visibility, which is animatable, swapped a frame late: the swap
+   to hidden stayed visible, and the swap back stayed hidden, until that 1 ms transition had run, which starts only on
+   the next frame drawn. While CI's software paint drew Clips Funded's frosted page slowly, the backdrop (and the blobs
+   and veil inheriting its visibility, five transitions in all) still read "visible" under Clips Funded, and "hidden"
+   back in Clip Factory (e2e/stories-see-through-own.spec.ts). */
 .backdrop.backdrop--away,
 .backdrop.backdrop--away *,
 .backdrop.backdrop--away::before,

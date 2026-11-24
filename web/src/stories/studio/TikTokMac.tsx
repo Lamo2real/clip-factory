@@ -37,6 +37,8 @@ type CardState = {
   line: string;
   tone: "sky" | "sun" | "coral";
   steps?: string[];
+  /** §47.11: one quiet line under it (the Mac carries on by itself once it's logged in). */
+  note?: string;
   button?: "login" | "login_quiet" | "open_stopped" | "resume";
 };
 
@@ -46,7 +48,12 @@ export function cardState(helper: WsMacHelper | null, handle: string, now: numbe
   if (macNotSeen(helper, now)) return { line: W.notSeenWords(clockWords(helper.seenAt, now)), tone: "sun" };
   if (helper.loginRequest) return { line: W.MAC_ASKED, tone: "sky" };
   if (helper.state === "needs_you")
-    return { line: W.needsYouWords(helper.reason), tone: "coral", button: loginReason(helper.reason) ? "login" : helper.needsYouStoryId ? "open_stopped" : undefined };
+    return {
+      line: W.needsYouWords(helper.reason),
+      tone: "coral",
+      ...(helper.needsYouCode === "login" ? { note: W.loginBackWords(handle) } : {}),
+      button: loginReason(helper.reason) ? "login" : helper.needsYouStoryId ? "open_stopped" : undefined,
+    };
   if (helper.state === "paused") return helper.resumeRequest ? { line: W.MAC_CARD_STARTING, tone: "sky" } : { line: W.MAC_CARD_PAUSED, tone: "sun", button: "resume" };
   if (!helper.setUp) return { line: W.notLoggedInWords(handle), tone: "sun", steps: W.macSteps(handle, 2), button: "login" };
   return { line: W.checkedInWords(clockWords(helper.seenAt, now), helper.handle ?? handle), tone: "sky", button: "login_quiet" };
@@ -113,6 +120,14 @@ export function TikTokMac({ ws, account }: { ws: string; account: SocialAccount 
               <StIcon name={state.tone === "coral" ? "alert" : "bulb"} size={18} />
               <span>
                 {state.line}
+                {state.note ? (
+                  <>
+                    <br />
+                    <small data-mac="login-back">
+                      {state.note}
+                    </small>
+                  </>
+                ) : null}
                 {state.steps ? (
                   <ol className="st-conn__mac-steps" style={{ listStyle: "none", margin: "6px 0 0", padding: 0 }}>
                     {state.steps.map((s) => (

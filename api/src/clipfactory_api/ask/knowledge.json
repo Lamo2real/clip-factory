@@ -1,5 +1,5 @@
 {
- "version": "4227904f2963",
+ "version": "023b8c723c47",
  "parts": [
   {
    "id": "app-map",
@@ -57,7 +57,7 @@
    "id": "contracts-5",
    "title": "CONTRACTS: 5. HTTP API (API Gateway HTTP API v2 → Lambda `cf-prod-api`)",
    "line": "Base: ${apiUrl}/v1. JSON in and out, camelCase. Every route requires the JWT except GET /v1/health.",
-   "chars": 17618
+   "chars": 17913
   },
   {
    "id": "contracts-6",
@@ -147,7 +147,7 @@
    "id": "contracts-20",
    "title": "CONTRACTS: 20. Action animations (owner request, 2026-11-16)",
    "line": "The owner's words: \"Most buttons in the application should have that: the animation of sending a paper plane or",
-   "chars": 50834
+   "chars": 51966
   },
   {
    "id": "contracts-21",
@@ -297,7 +297,7 @@
    "id": "contracts-45",
    "title": "CONTRACTS: 45. Clips Funded: a second, separate workspace (owner request, 2026-11-21)",
    "line": "Planned: not in the app until the switch pull request turns it on (§45.21). Until then nothing of Clips Funded",
-   "chars": 498554
+   "chars": 511322
   },
   {
    "id": "contracts-46",
@@ -309,7 +309,7 @@
    "id": "contracts-47",
    "title": "CONTRACTS: 47. Your Mac posts it on TikTok (owner request, 2026-11-22)",
    "line": "The owner (2026-11-22, verbatim): \"can you create a automation for my mac so everytime the clip factory wants upload to",
-   "chars": 111449
+   "chars": 128077
   },
   {
    "id": "contracts-48",
@@ -873,7 +873,7 @@
    "id": "adr-95",
    "title": "DECISIONS: ADR-95 An owner's script is staged, never written: a faithful adapter, a code check and a report-only fact check",
    "line": "Context. The owner (2026-11-24), about Clips Funded: \"i also want the option to write my own script ... of",
-   "chars": 3354
+   "chars": 4916
   },
   {
    "id": "architecture-overview",

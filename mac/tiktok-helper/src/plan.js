@@ -208,7 +208,7 @@ const trialHolds = (settings, state) =>
  * The owner's taps in Clip Factory (D5): Start my Mac again (helper.resumeRequest) unpauses this Mac, and ends the
  * trial pause when that is what holds it; Let them go (helper.letGoRequest) lifts holdAutoBefore. ``patch`` goes to
  * settings.json; resumeDone / letGoDone go in the ping, which clears the request. Neither touches "needs you": only
- * the owner's answer on the stopped clip clears that.
+ * the owner's answer on the stopped clip clears that, or the helper's logged-in (§47.11, loginHold below).
  * @returns {{patch: object, resumeDone?: string, letGoDone?: string}}
  */
 export function applyRequests({ helper, settings, state }) {
@@ -240,6 +240,33 @@ export function pingExtras({ settings, state, autopost, resumeDone, letGoDone })
     ...(resumeDone ? { resumeDone } : {}),
     ...(letGoDone ? { letGoDone } : {}),
   };
+}
+
+// §47.11: while a lane is held only for a TikTok login, the helper looks at most this often whether its Chrome is
+// logged in to the right account again (a cheap headless look; nothing on screen).
+export const LOGIN_CHECK_EVERY_MS = 5 * MINUTE;
+
+/**
+ * The lane's hold, when it is a TikTok login problem and nothing else (§47.11): ``{id}`` of the clip (Clip Factory,
+ * ``needsYouClipId``) or Clips Funded job (``needsYouJobId``) it stopped on. Only a needs-you whose code is "login"
+ * counts: a puzzle, a code, a limit, a warning, "three times", a pause or an older helper's hold (no code) is null,
+ * and then the helper never looks.
+ * @param {object|null} helper MacHelper / WsMacHelper from the lane's GET …/tiktok/mac
+ * @param {"clips"|"ws"} kind
+ * @returns {{id: string}|null}
+ */
+export function loginHold(helper, kind) {
+  if (helper?.state !== "needs_you" || helper.needsYouCode !== "login") return null;
+  const id = kind === "ws" ? helper.needsYouJobId : helper.needsYouClipId;
+  return typeof id === "string" && id ? { id } : null;
+}
+
+/** Is a look due? With no stamp, one 5 minutes old or more, or one in the future (the clock moved). */
+export function loginCheckDue(lastAt, now) {
+  const last = lastAt ? Date.parse(lastAt) : NaN;
+  const t = now instanceof Date ? now.getTime() : Number(now);
+  if (!Number.isFinite(last)) return true;
+  return last > t || t - last >= LOGIN_CHECK_EVERY_MS;
 }
 
 const HOUR = 60 * MINUTE;

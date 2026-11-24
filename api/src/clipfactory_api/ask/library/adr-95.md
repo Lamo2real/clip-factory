@@ -29,3 +29,17 @@
   caption with emoji is never refused; ASCII text counts the same, so no old script changes. Code cannot prove that a
   beat really "shows" its piece of the text (a report-only final look over the owner's scenes is a follow-up), and
   any change to what happens stages every scene again.
+- **Review round (2026-11-24).** Three reviews and 18 attack cases showed the code check trusted the adapter's own
+  answer about which beats show which piece. It now also proves: who does each event (a piece's beats are by who it
+  names, or their car or its rider); the order of the events inside a scene; that no event action, event sound or
+  event prop is drawn unless the words say it (at most one drawn a bit differently per piece, told in the note);
+  that a piece shown only by idle beats, the place or the camera says how; that a left-out name never hides the rest
+  of a piece; that a scene with no Who has exactly the cast its words name; and that every name nobody gave, and
+  anyone the cast lost, stops the video before a model is asked. A name the owner answered (another name for someone
+  in Who, or the new "Not a name") is kept as the scene's optional `known` (additive). Remake this scene stages the
+  whole script once the script has changed. In the fact check a problem only with the AI's staging sets that scene
+  up again once (a staging fix, never a rewrite), the owner's words are data and never instructions, and the
+  owner's driving words always guard the check. Captions refuse `{`, `}` and `\` (the burned-in words would change
+  them) and the agent image draws emoji (Symbola). The web says "Type an idea" for the AI path, asks nothing about
+  everyday words, and says "Your script" once on the video's page. A name at a sentence start is still asked about:
+  skipping it would let the AI give Max's part to someone in the cast.

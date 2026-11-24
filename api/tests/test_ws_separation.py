@@ -478,6 +478,8 @@ def _sample_bodies(r: Route, ids: dict[str, str]) -> list[Any]:
         ("POST", "/mac/claim", {"device": "mac-1", "version": "1.2.0"}),
         ("POST", "/mac/step", {"device": "mac-1", "step": "video"}),
         ("POST", "/mac/stopped", {"device": "mac-1", "reason": "Stopped.", "needsYou": True}),
+        ("POST", "/mac/stopped", {"device": "mac-1", "reason": "Stopped.", "needsYou": True, "code": "login"}),
+        ("POST", "/mac/logged-in", {"device": "mac-1"}),
         ("POST", "/mac/posted", {"noLink": True}),
     ]
     return [{}] + [body for method, end, body in samples if method == m and p.endswith(end + "$")]
