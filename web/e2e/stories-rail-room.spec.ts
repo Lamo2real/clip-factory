@@ -3,9 +3,11 @@ import { asMacWindow } from "./desktopWindow.ts";
 
 // Clip Factory Stories' rail in short windows (owner, 23 Nov: the switch never covers anything). The shell's fixed
 // workspace switch and Live chip (app/WorkspaceDock.tsx) sit over the rail's foot: the rail's list of pages ends above
-// their box (--ws-dock-room) at every size and scrolls when it needs more room. From 768 px high all its pages fit with
-// no scrolling; in a shorter window the chosen page is scrolled into view, and every page can be scrolled to and
-// clicked, never the switch in its place.
+// their box (--ws-dock-room) at every size and scrolls when it needs more room. Wherever its twelve pages fit at 40 px
+// (524 px of the list's own room: from 846 px high in a browser, from 822 px in the Mac app) they all show with no
+// scrolling; in a shorter window the list scrolls, the chosen page is scrolled into view, and every page can be
+// scrolled to and clicked, never the switch in its place. A row is never lower than 40 px: 48 px from 942 px high in a
+// browser (918 px in the Mac app), 44 px from 894 px (870 px), so a 900 px window keeps 44 px targets.
 
 async function on(page: Page) {
   await page.addInitScript(() => localStorage.setItem("cf.storiesPreview", "1"));
@@ -37,6 +39,10 @@ async function room(page: Page) {
   });
 }
 
+/** The rows' height in this much of the list's own room: 48 px where the twelve fit at 48 (12 × 48 + 11 × 4 = 620 px),
+ * 44 px where they fit at 44 (572 px), else 40 px, never lower (st-frame.css). */
+const rowFor = (room: number) => (room >= 620 ? 48 : room >= 572 ? 44 : 40);
+
 /** Each page of the rail, scrolled into the list's view, is itself at its centre (nothing of the shell over it). */
 async function reachable(page: Page) {
   return page.evaluate(() => {
@@ -59,13 +65,15 @@ for (const [w, h] of [
   [1366, 768],
   [1280, 800],
   [1280, 720],
-  // just over the old 820 px breakpoint, where 48 px rows came back before the ten pages fit at 48 (the review: the
+  // just over the old 820 px breakpoint, where 48 px rows came back before the pages fit at 48 (the review: the
   // list scrolled and Settings was cut at its end from 821 to 837 px high)
   [1280, 821],
   [1280, 830],
   [1280, 837],
   [1280, 840],
   [1920, 845],
+  // the first height where all twelve fit at 40 px with no scrolling (524 px of room)
+  [1280, 846],
   [1440, 900],
   // tall windows, where the list has far more room than its pages need (they stay packed under the brand)
   [1920, 1080],
@@ -78,9 +86,15 @@ for (const [w, h] of [
       await open(page, path);
       const r = await room(page);
       expect(r.bottom, `${path}: the list ends above the switch`).toBeLessThanOrEqual(r.dockTop);
-      if (h >= 768) expect(r.scrolls, `${path}: all the pages fit from 768 px high`).toBe(false);
-      // 48 px rows wherever the ten fit at 48 (10 × 48 + 9 × 4 = 516 px of room), the lower 40 px only where not
-      expect(r.row, `${path}: rows of ${r.row} px in ${r.room} px of room`).toBe(r.room >= 516 ? 48 : 40);
+      // All twelve fit with no scrolling wherever 40 px rows can (12 × 40 + 11 × 4 = 524 px of room), and a browser
+      // window has that room from 846 px high (Series and Cars made the rail 12 pages; shorter windows scroll the list)
+      if (r.room >= 524) expect(r.scrolls, `${path}: all the pages fit in ${r.room} px of room`).toBe(false);
+      if (h >= 846) expect(r.room, `${path}: room for all the pages from 846 px high`).toBeGreaterThanOrEqual(524);
+      // 48 px rows wherever the twelve fit at 48 (620 px of room), 44 px where they fit at 44 (572 px), the lower 40 px
+      // only where not, and from 894 px high (so at 900) they are still 44 px targets
+      expect(r.row, `${path}: rows of ${r.row} px in ${r.room} px of room`).toBe(rowFor(r.room));
+      expect(r.row, `${path}: never under 40 px`).toBeGreaterThanOrEqual(40);
+      if (h >= 894) expect(r.row, `${path}: 44 px targets from 894 px high`).toBeGreaterThanOrEqual(44);
       // The pages packed under the brand, 4 px apart, never spread down the rail's room.
       expect(r.gap, `${path}: --st-gap-control`).toBe(4);
       expect(r.gaps, `${path}: the room between the pages`).toEqual(r.gaps.map(() => 4));
@@ -102,14 +116,16 @@ for (const [w, h] of [
   });
 
 // The Mac app lays its 28 px title bar over the page, so the rail starts lower: the rows follow the list's own room, not
-// the window's height, so its pages fit there too wherever 40 px rows can (from 800 px high), at 48 px where 48 fit.
+// the window's height, so its pages fit there too wherever 40 px rows can (from 822 px high), at 44 px from 870 px and
+// at 48 px where 48 fit (from 918 px); a shorter window scrolls the list, every page still reachable.
 for (const [w, h] of [
   [1280, 800],
+  [1280, 822],
   [1280, 850],
   [1280, 866],
   [1440, 900],
 ] as const)
-  test(`the Mac app, ${w}x${h}: the rail's pages fit above the switch, at 48 px where they can`, async ({ page }) => {
+  test(`the Mac app, ${w}x${h}: the rail's pages end above the switch, every one can be reached, at 48 px where they fit`, async ({ page }) => {
     await asMacWindow(page);
     await on(page);
     await page.setViewportSize({ width: w, height: h });
@@ -117,8 +133,9 @@ for (const [w, h] of [
       await open(page, path);
       const r = await room(page);
       expect(r.bottom, `${path}: the list ends above the switch`).toBeLessThanOrEqual(r.dockTop);
-      expect(r.scrolls, `${path}: all the pages fit`).toBe(false);
-      expect(r.row, `${path}: rows of ${r.row} px in ${r.room} px of room`).toBe(r.room >= 516 ? 48 : 40);
+      if (r.room >= 524) expect(r.scrolls, `${path}: all the pages fit in ${r.room} px of room`).toBe(false);
+      if (h >= 822) expect(r.room, `${path}: room for all the pages from 822 px high`).toBeGreaterThanOrEqual(524);
+      expect(r.row, `${path}: rows of ${r.row} px in ${r.room} px of room`).toBe(rowFor(r.room));
       expect(r.gaps, `${path}: the room between the pages`).toEqual(r.gaps.map(() => 4));
       expect(await reachable(page), `${path}: every page can be reached`).toEqual([]);
     }

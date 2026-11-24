@@ -336,6 +336,7 @@ class BedrockWriter(_Base):
             brief.get("topicIds") or [],
             mode=mode,
             scene_ids=brief.get("sceneIds") or None,
+            car_ids=brief.get("carIds") or (),  # the cast's cars (§45.43): a car prop's castId
         )
         task = "scene_rewrite" if mode == "scenes" else "storyboard"
         if brief.get("restage"):

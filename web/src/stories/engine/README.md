@@ -163,7 +163,7 @@ A script has at most 30 scenes, 6 cast members, and per scene 4 actors, 12 props
 own limit for an edited list); at most 40 captions; scenes add up to at most 180 s before `fitDuration`, and the
 script's `durationSec` is their sum (within 0.05 s), so `frameCount` = round(durationSec × fps). A car seats 2 and a truck 1. A scene's busiest frame
 must stay under about 480 shapes (`sceneShapes`): about 60 for the set (80 on a snowy or rainy road), 70 per
-character, 45 per car, 36 per truck, 30 per deer, 36 to 42 for snow or rain (once), 15 for ice, trees and sparkles,
+character, 45 per car, 56 per car of the cast, 36 per truck, 30 per deer, 36 to 42 for snow or rain (once), 15 for ice, trees and sparkles,
 12 for any other prop. A writer who goes over gets a sentence that says which things to use fewer of.
 
 ## Own faces and noises (`validateScript`, `repairScript`, `cli.ts repair`)
@@ -182,6 +182,60 @@ The look and voice choices are `CATALOG.looks` (the character agent's vocabulary
 character agent's answer as a `CharacterInput` (CONTRACTS §45.6): its look, movement style and voice the way a script's
 cast is checked; its `expressions` (required: at least 3 different known faces, `neutral` among them); and, when they
 are there, `name` (1 to 30), `description` and `personality` (at most 400 each) and `traits` (at most 8, each 1 to 30).
+
+## Cars of the cast (`car.ts`, CONTRACTS §45.42, §45.43)
+
+A car character is never an actor. It is `script.cars[id]` (a `CarMember`: `characterId`, `name`, `car` (a `CarLook`),
+`movementStyle`, `voice` with style `none` and no noises, and `expressions`), with an id that is never a `cast` key.
+A scene shows it as a car prop with `castId: id`. That prop draws the car's own look, and its `color` is ignored.
+Beats reach it by the prop's `propId`. `cast` stays people only, so the people code (geometry, motion, faces, bubbles,
+noises) never sees a car, and `prepare()` makes no geometry for one. A script made before engine 6 has no `cars`.
+
+* **The look** (`CATALOG.carLooks`, `checkCarLook`): a body (hatchback, saloon, estate, SUV, pickup, van, sports car,
+  tiny car), `length` and `height` 0.85 to 1.15, `paint`, `accent` (the roof and pillars of a two-tone car, the
+  stripes, the mirror caps) and `outline` colours, a pattern (plain, two colours, a side stripe, racing stripes),
+  windows (clear, tinted, dark), wheels (steel, hubcaps, alloy, sporty, off-road; a rim colour; size 0.85 to 1.2),
+  front lights (round, square, slim), back lights (round, a long bar, square), one thing on top (nothing, a roof rack,
+  a spoiler, a roof box) and a face. `DEFAULT_CAR` is a red hatchback with alloy wheels and no face.
+* **The drawing** works in the same frame as the plain car: origin on the ground at its centre, facing +x (top view:
+  its centre, nose up), px × k. Each body is one silhouette polygon (bonnet, windscreen rake, roof, back) scaled by its
+  body's length and height factors times `length` and `height`, with an outline of the people's weight. The riders sit
+  behind the glass with a tint over them (0.25 tinted, 0.4 dark), so a driver always shows. A plate is always one
+  plain light rectangle (`#f4f1ea`), front and back, and no badge or text is ever drawn. The wheels' spokes turn with
+  the distance rolled and the front pair with the steering (top view), as on the plain car. A car with eyes `none` is
+  a real-looking car. Eyes `windscreen` are two big eyes on the windscreen glass; `headlights` turns the front lights
+  into eyes with pupils. They use `face.ts`'s face parameters and blink timing, in `face.color`; the top view shows
+  the windscreen eyes only, small. A `grille` mouth bends the grille into the face's smile or frown.
+* **Its movement style** changes the drawing, never the timing: bouncy bounces 1.6 times as much and sways a little
+  when it stands, calm 0.6 times, clumsy wobbles by up to 2°, zippy shows speed lines sooner, and heavy dips its nose
+  half as much again when it stops.
+* **The car moves** (prop actions; on a plain car or truck too): `speed_up` is a `move` that starts slowly and ends
+  fast, with two exhaust puffs at its start; `bounce` is a suspension hop (the body rises about 6% of the car's height
+  and settles, the wheels stay down); `honk` pulses the body and sends three sound-wave arcs from the nose
+  (`normalizeScript` adds its `honk` effect by itself); `blink` flashes the headlights twice over its beat (and the
+  eyes, when it has them); `stall` is a 0.4 s shudder with one dark puff that brings the speed to 0, and with `to` it
+  stops like `stop`, only jerkier. `speed_up` is a mover, and so is `stall` with `to`. A beat's `face` on a car is the
+  car's face from then on (only on a car with a face, and only from its own faces).
+* **People with a car.** A car seats 2 (`CAR_SEATS`); the first rider drives. `get_in` and `get_out` need `inCar`
+  (that car's `propId`), last 0.8 to 3 s each, at most one of each per actor and scene, getting in first. Before
+  `get_in` the actor is an actor outside: it can walk, wave and make faces. During the first 60% it walks to the door
+  (the car's x minus 0.35 of its length, on the camera side, on the ground); then it steps in with a small squash,
+  sliding into the seat, and fades out over the last 25% while the seated rider fades in. `get_out` is the reverse
+  and ends standing just beside the door. The road rolls only while a seated driver is in, the car is not `parked`,
+  the last `get_in` has ended and the first `get_out` has not started; the car itself does not move during them.
+  A driver waves only while the car is stopped; a passenger may wave any time.
+* **Validation** says, in a sentence the writer can act on: at most 2 cars; a car id that is also a cast id; each car
+  through `checkCarLook`, a voice of `none` and the faces rule (`["neutral"]` without eyes, at least 3 with neutral
+  with them); a car used as an actor ("put it in props as {kind: "car", castId}"); a `castId` on a prop that is not a
+  car, or that is not one of the cars; one car in two props of a scene; a face the car does not make (`repairScript`
+  takes it out, as for people); getting in or out without `inCar`, too short or too long, or out of order; and the car
+  moving while someone is still getting in.
+* **Shapes.** A car of the cast is at most `CAR_CAST_SHAPES` (56) prims at its busiest, with eyes on
+  (`web/test/storiesEngineCars.test.ts` measures every choice, every prop action and both views); `sceneShapes`
+  counts it so.
+* **The editor's preview** (`previewCar(car, style, expression, move, t, size)`) draws the car on plain ground into a
+  size × size box, looping the move over 2.4 s: idle, drive, speed up, brake, turn (the top view, nose left then
+  right), bounce, honk, flash its lights and stall.
 
 ## Scenes stand alone
 

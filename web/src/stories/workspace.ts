@@ -140,6 +140,7 @@ export function openedOn(page: StoriesPage): { conversation: string | null; proj
     case "review_story":
       return { conversation: null, project: { kind: "story", id: page.storyId } };
     case "character":
+    case "car":
       return { conversation: null, project: { kind: "character", id: page.characterId } };
     case "reference":
       return { conversation: null, project: { kind: "reference", id: page.refId } };
@@ -554,12 +555,17 @@ const TITLES: Record<StoriesPage["name"], string> = {
   characters: "Characters",
   character_new: "New character",
   character: "Character",
+  cars: "Cars",
+  car_new: "New car",
+  car: "Car",
   production: "Production",
   production_new: "Make a video",
   production_story: "Making a video",
   review: "Review",
   review_story: "Review a video",
   library: "Library",
+  series: "Series",
+  series_one: "Series",
   connections: "Social accounts",
   settings: "Settings",
   chat: "Chat",

@@ -8,6 +8,8 @@
 // whose Try again asks "Post to {name}?" when the API names a changed account (§45.34). Each queue group has Show more.
 // Facts to fix have "Fix the words", which opens the caption to change; Reject asks first; saving the captions keeps
 // the sounds' changes not saved yet (and the other way round).
+// Series (§45.44): the queue's "All ▾" switch asks each group for one series (`?series=`); a video's page shows its
+// series with Move, and approving an episode says which episode it became.
 import "../styles/studio.css";
 import { useEffect, useRef, useState } from "react";
 import { A } from "../../components/ui.tsx";
@@ -18,6 +20,7 @@ import { storiesSound } from "../prefs.ts";
 import { starBurst } from "../ui.tsx";
 import { storiesApi } from "../api/client.ts";
 import type { DownloadFormat, ErrorAccount, ModelOverride, PublishingJob, SocialAccount, StepKey, StoriesConfig, Story, StoryPatch, StoryStatus, TaskKind } from "../api/types.ts";
+import { navigate } from "../../lib/router.ts";
 import { storiesHref } from "../routes.ts";
 import { cleanPick, insteadPick, madeWith, ModelMenu, ModelsUsed, NextRun, runTask, sendPick, SettingsFix, StoryAi, storyUsual, UnusableSheet, unusableAsk, useAiInfo } from "../studio/ai.tsx";
 import { CaptionEditor, type CaptionTab } from "../studio/CaptionEditor.tsx";
@@ -27,6 +30,7 @@ import { storiesReduceMotion } from "../prefs.ts";
 import { Busy, celebrate, Chip, Notice, ShowMore, StSheet, Tag, TextField } from "../studio/kit.tsx";
 import { Player } from "../studio/Player.tsx";
 import { PostsPanel } from "../studio/PostsPanel.tsx";
+import { filterOf, MoveToSeries, SeriesSwitch, seriesChanged, seriesQuery, useSeriesList, type SeriesFilter } from "../studio/SeriesSwitch.tsx";
 import { AccountCard, claimPostCheer, postToTitle, postYes, PublishSheet } from "../studio/PublishSheet.tsx";
 import { SfxEditor } from "../studio/SfxEditor.tsx";
 import { StepTrack } from "../studio/StepTrack.tsx";
@@ -35,7 +39,7 @@ import type { StoriesScreenProps } from "./types.ts";
 
 export function ReviewScreen({ ws, page }: StoriesScreenProps) {
   if (page.name === "review_story") return <ReviewStory ws={ws} storyId={page.storyId} />;
-  return <ReviewQueue ws={ws} />;
+  return <ReviewQueue ws={ws} series={page.name === "review" ? filterOf(page) : "all"} />;
 }
 
 /** True when the facts check holds for the storyboard as it is now ("skipped" only outside driving safety). */
@@ -110,10 +114,11 @@ const QUEUE: { title: string; statuses: StoryStatus[]; empty: string }[] = [
 ];
 
 /** One page of a queue group: each of its statuses has its own cursor, kept together as one ("Show more", §45.34). */
-async function groupPage(ws: string, statuses: StoryStatus[], cursor?: string): Promise<{ items: Story[]; nextCursor: string | null }> {
+async function groupPage(ws: string, statuses: StoryStatus[], cursor?: string, series?: string): Promise<{ items: Story[]; nextCursor: string | null }> {
   const cursors: Partial<Record<StoryStatus, string | null>> = cursor ? (JSON.parse(cursor) as Partial<Record<StoryStatus, string | null>>) : {};
   const asked = cursor ? statuses.filter((st) => cursors[st]) : statuses;
-  const pages = await Promise.all(asked.map((status) => storiesApi().listStories(ws, cursors[status] ? { status, limit: 50, cursor: cursors[status]! } : { status, limit: 50 })));
+  const inSeries = series ? { seriesId: series } : {};
+  const pages = await Promise.all(asked.map((status) => storiesApi().listStories(ws, cursors[status] ? { status, limit: 50, cursor: cursors[status]!, ...inSeries } : { status, limit: 50, ...inSeries })));
   const next: Partial<Record<StoryStatus, string | null>> = {};
   asked.forEach((status, i) => {
     next[status] = pages[i]!.nextCursor;
@@ -122,7 +127,7 @@ async function groupPage(ws: string, statuses: StoryStatus[], cursor?: string): 
   return { items, nextCursor: Object.values(next).some(Boolean) ? JSON.stringify(next) : null };
 }
 
-function ReviewQueue({ ws }: { ws: string }) {
+function ReviewQueue({ ws, series }: { ws: string; series: SeriesFilter }) {
   return (
     <section className="st-page st-studio">
       <header className="st-s-head">
@@ -130,16 +135,24 @@ function ReviewQueue({ ws }: { ws: string }) {
           <h1 className="st-s-head__title">Review</h1>
           <p className="st-s-head__lede">Watch each new video. Approve it, ask for changes, or make a scene again.</p>
         </div>
+        <div className="st-s-head__actions">
+          <SeriesSwitch ws={ws} value={series} onChange={(v) => navigate(storiesHref({ name: "review", ...(seriesQuery(v) ? { seriesId: seriesQuery(v) } : {}) }))} />
+        </div>
       </header>
       {QUEUE.map((group) => (
-        <QueueGroup key={group.title} ws={ws} group={group} />
+        <QueueGroup key={`${group.title}|${series}`} ws={ws} group={group} series={seriesQuery(series)} />
       ))}
     </section>
   );
 }
 
-function QueueGroup({ ws, group }: { ws: string; group: (typeof QUEUE)[number] }) {
-  const list = usePaged((cursor) => groupPage(ws, group.statuses, cursor), `${ws}|${group.statuses.join(",")}`, "st-s-review-group", (s) => s.storyId);
+function QueueGroup({ ws, group, series }: { ws: string; group: (typeof QUEUE)[number]; series?: string }) {
+  const list = usePaged(
+    (cursor) => groupPage(ws, group.statuses, cursor, series),
+    `${ws}|${group.statuses.join(",")}${series ? `|${series}` : ""}`,
+    "st-s-review-group",
+    (s) => s.storyId,
+  );
   if (list.error && !list.data)
     return (
       <section aria-label={group.title}>
@@ -189,6 +202,36 @@ function QueueGroup({ ws, group }: { ws: string; group: (typeof QUEUE)[number] }
 }
 
 // ---------- One video ----------
+
+/** "Added to {name} as episode {n}." after an approval in a series (§45.44), else null (no series, or not read). */
+async function episodeWords(ws: string, story: Story): Promise<string | null> {
+  if (!story.seriesId) return null;
+  try {
+    const s = await storiesApi().getSeries(ws, story.seriesId);
+    void seriesChanged(ws);
+    const n = s.episodes.find((e) => e.storyId === story.storyId)?.number;
+    return n ? `Added to ${s.name} as episode ${n}.` : null;
+  } catch {
+    return null;
+  }
+}
+
+/** "Series: {name}" and Move, under a video's title (nothing while the workspace has no series). */
+function SeriesChip({ ws, story, onMoved }: { ws: string; story: Story; onMoved: (seriesId: string | null) => void }) {
+  const { list } = useSeriesList(ws);
+  const s = story.seriesId ? list?.find((x) => x.seriesId === story.seriesId) : undefined;
+  if (!list?.length && !story.seriesId) return null;
+  return (
+    <p className="st-series-chip">
+      {s ? (
+        <A href={storiesHref({ name: "series_one", seriesId: s.seriesId })} className="st-btn st-s-small">
+          Series: {s.name}
+        </A>
+      ) : null}
+      <MoveToSeries ws={ws} kind="story" id={story.storyId} title={story.title} current={story.seriesId ?? null} onMoved={onMoved} />
+    </p>
+  );
+}
 
 type Confirm = { job: PublishingJob; account: ErrorAccount; message: string };
 
@@ -480,6 +523,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
           <p className="st-s-head__lede">
             <Tag tone={STATUS_TONE[story.status]}>{STATUS_LABEL[story.status]}</Tag> {CATEGORY_LABEL[story.category]} · {seconds(story.actualDurationSec ?? story.durationSec)}
           </p>
+          <SeriesChip ws={ws} story={story} onMoved={(seriesId) => setStory({ ...story, seriesId: seriesId ?? undefined, version: story.version + 1 })} />
         </div>
       </header>
 
@@ -605,7 +649,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                       const s = await storiesApi().approve(ws, storyId, story.version);
                       setStory(s);
                       celebrate(btn, 150);
-                      toast.success("Approved! Now you can post it.");
+                      toast.success((await episodeWords(ws, s)) ?? "Approved! Now you can post it.");
                     });
                   }}
                 >

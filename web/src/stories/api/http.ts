@@ -27,6 +27,7 @@ import type {
   PublishingJob,
   ReferenceAnalysis,
   ReferenceVideo,
+  Series,
   Skill,
   SocialAccount,
   StoriesAiConfig,
@@ -161,7 +162,10 @@ export function httpStoriesApi(deps: StoriesHttpDeps = {}): StoriesApi {
     designCharacter: async (ws, body) => (await call<{ task: AiTask }>("POST", w(ws, "/characters/design"), body)).task,
 
     listStories: async (ws, query = {}) => {
-      const r = await call<{ stories: Story[]; nextCursor?: string | null }>("GET", w(ws, `/stories${q({ status: query.status, limit: query.limit, cursor: query.cursor })}`));
+      const r = await call<{ stories: Story[]; nextCursor?: string | null }>(
+        "GET",
+        w(ws, `/stories${q({ status: query.status, limit: query.limit, cursor: query.cursor, seriesId: query.seriesId })}`),
+      );
       return { stories: r.stories, nextCursor: r.nextCursor ?? null };
     },
     createStory: (ws, body) => call<{ story: Story; job: ProductionJob }>("POST", w(ws, "/stories"), body),
@@ -194,10 +198,23 @@ export function httpStoriesApi(deps: StoriesHttpDeps = {}): StoriesApi {
     library: async (ws, query = {}) => {
       const r = await call<{ items: LibraryItem[]; nextCursor?: string | null }>(
         "GET",
-        w(ws, `/library${q({ kind: query.kind, storyId: query.storyId, characterId: query.characterId, limit: query.limit, cursor: query.cursor })}`),
+        w(
+          ws,
+          `/library${q({ kind: query.kind, storyId: query.storyId, characterId: query.characterId, limit: query.limit, cursor: query.cursor, seriesId: query.seriesId })}`,
+        ),
       );
       return { items: r.items, nextCursor: r.nextCursor ?? null };
     },
+
+    // Series (CONTRACTS §45.44): folders of story videos and their story so far.
+    listSeries: async (ws) => (await call<{ series: Series[] }>("GET", w(ws, "/series"))).series,
+    createSeries: async (ws, s) => (await call<{ series: Series }>("POST", w(ws, "/series"), s)).series,
+    getSeries: async (ws, seriesId) => (await call<{ series: Series }>("GET", w(ws, `/series/${id(seriesId)}`))).series,
+    patchSeries: async (ws, seriesId, patch) => (await call<{ series: Series }>("PATCH", w(ws, `/series/${id(seriesId)}`), patch)).series,
+    deleteSeries: (ws, seriesId) => call<void>("DELETE", w(ws, `/series/${id(seriesId)}`)),
+    moveStoryToSeries: async (ws, storyId, seriesId) =>
+      (await call<{ story: Story }>("PUT", w(ws, `/stories/${id(storyId)}/series`), { seriesId })).story,
+    recapEpisode: async (ws, seriesId, storyId) => (await call<{ task: AiTask }>("POST", w(ws, `/series/${id(seriesId)}/recap`), { storyId })).task,
     providers: async (ws) => (await call<{ providers: ProviderStatus[] }>("GET", w(ws, "/providers"))).providers,
     tryNovaReel: async (ws) => (await call<{ job: ProductionJob }>("POST", w(ws, "/providers/nova-reel/check"))).job,
     // §45.37: Try it moved to Luma AI Ray2 (Nova Reel was ended by Amazon); the same route shape, by provider id.

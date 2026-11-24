@@ -12,6 +12,7 @@ import modelsFile from "../../../../../stories/config/models.json";
 import type { AgentId, AiTask, Effort, Idea, IdeaCategory, IdeaInput, ModelOverride, StoriesApi, TaskKind, VideoConcept } from "../types.ts";
 import { allModels } from "./ai.ts";
 import { AGENT_REGION, modelCall } from "./chat.ts";
+import { seriesExists } from "./series.ts";
 import { delay, type MockStore } from "./store.ts";
 import { clone, fail, guardWs, iso, mockId, SEED_IDS } from "./stories.ts";
 
@@ -341,10 +342,19 @@ function matchSafety(idea: Pick<Idea, "title" | "logline" | "category">): { safe
   return { safetyTopicId: id, needsGuidance: !id };
 }
 
+/** The idea's lead: its first person (a car never stars alone, §45.43), else the workspace's first person. */
 function leadName(store: MockStore, ws: string, idea?: Pick<IdeaInput, "characterIds">): string {
-  const chars = store.characters.filter((c) => c.workspaceId === ws);
+  const chars = store.characters.filter((c) => c.workspaceId === ws && c.kind !== "car");
   const picked = idea?.characterIds?.map((id) => chars.find((c) => c.characterId === id)).find(Boolean);
   return picked?.name ?? chars[0]?.name ?? "Pip";
+}
+
+/** A series' drafts (§45.44): filed in it, with its cast when a draft has none (the API's _task_result). */
+function inSeries(store: MockStore, ws: string, seriesId: string | undefined, drafts: IdeaInput[]): IdeaInput[] {
+  const series = seriesId ? store.series.find((x) => x.seriesId === seriesId && x.workspaceId === ws) : undefined;
+  if (!series) return drafts;
+  const cast = series.castIds.filter((id) => store.characters.some((c) => c.characterId === id));
+  return drafts.map((d) => ({ ...d, seriesId: series.seriesId, ...(!d.characterIds?.length && cast.length ? { characterIds: [...cast] } : {}) }));
 }
 
 const cap = (s: string) => (s ? s[0]!.toUpperCase() + s.slice(1) : s);
@@ -367,8 +377,8 @@ function drivingDraft(topicId: string, lead: string): IdeaInput | null {
 }
 
 /** The "idea helper" in the practice app: plain drafts from a topic and a kind, no network. */
-function draftsFor(store: MockStore, ws: string, topic: string, category: IdeaCategory | undefined, count: number): IdeaInput[] {
-  const lead = leadName(store, ws);
+function draftsFor(store: MockStore, ws: string, topic: string, category: IdeaCategory | undefined, count: number, castIds?: string[]): IdeaInput[] {
+  const lead = leadName(store, ws, castIds ? { characterIds: castIds } : undefined);
   const t = topic.trim();
   const kinds = category ? [category] : CATEGORIES;
   const out: IdeaInput[] = [];
@@ -452,8 +462,10 @@ function find(store: MockStore, ws: string, ideaId: string): Idea {
 
 function make(store: MockStore, ws: string, input: IdeaInput, at: number): Idea {
   const base = { title: input.title.trim(), logline: input.logline.trim(), category: input.category };
+  const { seriesId, ...fields } = input;
   const idea: Idea = {
-    ...input,
+    ...fields,
+    ...(seriesId ? { seriesId } : {}),
     ...base,
     ideaId: mockId(),
     workspaceId: ws,
@@ -503,7 +515,9 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       guardWs(store, ws);
       checkInput(input, true);
       await delay(160);
-      const idea = make(store, ws, input, Date.now());
+      // a series that is gone is dropped: the idea is kept, under No series (§45.44)
+      const filed = input.seriesId && !seriesExists(store, ws, input.seriesId) ? { ...input, seriesId: undefined } : input;
+      const idea = make(store, ws, filed, Date.now());
       store.ideas.push(idea);
       return out(idea);
     },
@@ -512,7 +526,11 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       checkInput(patch, false);
       await delay(140);
       const idea = find(store, ws, ideaId);
-      Object.assign(idea, clone(patch));
+      const { seriesId, ...rest } = clone(patch);
+      Object.assign(idea, rest);
+      // null: No series; a series that is gone leaves the idea where it is (§45.44)
+      if (seriesId === null) delete idea.seriesId;
+      else if (seriesId && seriesExists(store, ws, seriesId)) idea.seriesId = seriesId;
       Object.assign(idea, matchSafety(idea), { updatedAt: iso() });
       return out(idea);
     },
@@ -528,12 +546,16 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       if (!Number.isInteger(count) || count < 1 || count > 6) fail(400, "bad_request", "Ask for 1 to 6 ideas.");
       if ((body.topic ?? "").length > 200) fail(400, "bad_request", "Keep the topic to 200 letters.");
       if (body.category && !CATEGORIES.includes(body.category)) fail(400, "bad_request", "Pick a kind of video.");
+      if (body.seriesId && !seriesExists(store, ws, body.seriesId)) fail(404, "not_found", "That series is gone.");
       checkOverride(body.override, store);
       await delay(160);
       const topic = body.topic ?? "";
       const category = body.category;
+      const cast = store.series.find((x) => x.seriesId === body.seriesId)?.castIds;
       // Nothing is saved: the owner taps Save on each draft.
-      return startMockTask(store, ws, "brainstorm", body.override, () => ({ drafts: draftsFor(store, ws, topic, category, count) }));
+      return startMockTask(store, ws, "brainstorm", body.override, () => ({
+        drafts: inSeries(store, ws, body.seriesId, draftsFor(store, ws, topic, category, count, cast)),
+      }));
     },
     async expandIdea(ws, ideaId, body) {
       guardWs(store, ws);

@@ -16,7 +16,7 @@ import * as characters from "../src/stories/api/mock/characters.ts";
 import * as ideas from "../src/stories/api/mock/ideas.ts";
 import { createStore, type MockStore } from "../src/stories/api/mock/store.ts";
 import * as stories from "../src/stories/api/mock/stories.ts";
-import type { CharacterInput, PublishingJob, SocialAccount, StoriesApi, StoriesConfig, TikTokCreator, Workspace } from "../src/stories/api/types.ts";
+import { isCar, type CharacterInput, type PersonInput, type PublishingJob, type SocialAccount, type StoriesApi, type StoriesConfig, type TikTokCreator, type Workspace } from "../src/stories/api/types.ts";
 import type { StoriesPage } from "../src/stories/routes.ts";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -31,7 +31,13 @@ const { notMadeYet, statusLabel } = await import("../src/stories/studio/words.ts
 const { statusWords } = await import("../src/stories/ui.tsx");
 const { leaveHolders, LEAVE_TITLE } = await import("../src/stories/studio/leaveGuard.tsx");
 const { sameCharacter } = await import("../src/stories/studio/CharacterEditor.tsx");
-const { inputOf } = await import("../src/stories/studio/looks.ts");
+const { inputOf, newCar } = await import("../src/stories/studio/looks.ts");
+
+/** A seeded person (a car has no person look). */
+function person(c: CharacterInput): PersonInput {
+  if (isCar(c)) throw new Error("expected a person, got a car");
+  return c;
+}
 
 const S = stories.SEED_IDS.stories;
 const C = stories.SEED_IDS.characters;
@@ -344,7 +350,8 @@ describe("Leave without saving?", () => {
 
   it("a character as saved compares the same, whatever the order of its parts", () => {
     const c = store.characters.find((x) => x.characterId === C.pip)!;
-    const shuffled = { ...inputOf(c), look: Object.fromEntries(Object.entries(inputOf(c).look).reverse()) } as CharacterInput;
+    const p = person(inputOf(c));
+    const shuffled = { ...p, look: Object.fromEntries(Object.entries(p.look).reverse()) } as unknown as CharacterInput;
     expect(sameCharacter(inputOf(c), shuffled)).toBe(true);
     expect(sameCharacter(inputOf(c), { ...inputOf(c), name: `${c.name} ` })).toBe(true);
     expect(sameCharacter(inputOf(c), { ...inputOf(c), name: "Lulu" })).toBe(false);
@@ -470,13 +477,24 @@ describe("A draft nothing is making reads Not made yet", () => {
 describe("Characters: Use this, Try, Next, and a picture's ×", () => {
   it("Use this keeps the editor's own changes and takes only the parts the redesign changed", () => {
     const c = store.characters.find((x) => x.characterId === C.pip)!;
-    const saved = inputOf(c);
-    const now = { ...inputOf(c), look: { ...inputOf(c).look, skin: "#b8f2d0" } };
-    const next = { ...inputOf(c), look: { ...inputOf(c).look, outfit: { ...c.look.outfit, top: "#e8453c" } } };
-    const merged = mergeRedesign(now, saved, next);
+    const saved = person(inputOf(c));
+    const now = { ...saved, look: { ...saved.look, skin: "#b8f2d0" } };
+    const next = { ...saved, look: { ...saved.look, outfit: { ...saved.look.outfit, top: "#e8453c" } } };
+    const merged = person(mergeRedesign(now, saved, next));
     expect(merged.look.skin).toBe("#b8f2d0");
     expect(merged.look.outfit.top).toBe("#e8453c");
     expect(merged.name).toBe(c.name);
+  });
+
+  it("Use this on a car keeps the editor's own changes and takes only the car parts the redesign changed", () => {
+    const saved = { ...newCar(), name: "Rosso" };
+    const now = { ...saved, car: { ...saved.car, paint: "#2f6fe0" } };
+    const next = { ...saved, car: { ...saved.car, wheels: { ...saved.car.wheels, style: "sport" as const } } };
+    const merged = mergeRedesign(now, saved, next);
+    if (!isCar(merged)) throw new Error("expected a car");
+    expect(merged.car.paint).toBe("#2f6fe0");
+    expect(merged.car.wheels.style).toBe("sport");
+    expect(merged.name).toBe("Rosso");
   });
 
   it("Try on a face brings the preview into view when it is off screen", async () => {

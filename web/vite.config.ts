@@ -11,6 +11,8 @@ function publicFiles(dir = join(root, "public")): string[] {
   const out: string[] = [];
   for (const name of readdirSync(dir)) {
     const full = join(dir, name);
+    // Clips Funded's sound samples (public/sounds/, 4 MB, docs/CONTRACTS.md §45.41) load only when one is played.
+    if (dir === join(root, "public") && name === "sounds") continue;
     if (statSync(full).isDirectory()) out.push(...publicFiles(full));
     // The big 1024px icon is only downloaded during the posting setup (§17.2): not worth precaching.
     else if (name !== "config.json" && name !== "clip-factory-1024.png") out.push("/" + relative(join(root, "public"), full).split("\\").join("/"));
