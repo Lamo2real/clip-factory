@@ -3301,7 +3301,7 @@ They change `x.look` to `(x as PersonInput).look`.
   chosen page is scrolled into view (`stories-rail-room.spec.ts`: rows are 48 or 40 px, and every window with 480 px of
   room shows all eleven with no scrolling).
 - **Routes** (`routes.ts`): `{name: "car_new"}` /stories/cars/new and `{name: "car", characterId}` /stories/cars/{id};
-  `{name: "cars"}` /stories/cars, an older link, shows the Characters gallery. `workspace.ts` titles them "Cars", "New
+  `{name: "cars"}` /stories/cars, an older link, shows the Characters gallery. `workspace.ts` titles them "Characters", "New
   car" and "Car"; a car's page is a project like a character's (`openedOn`).
 - **`screens/Cars.tsx`** only routes: Make a car is New character with the kind fixed (no kind tiles, the heading "New
   car", "‹ Characters", the photo strip open at once). A car's page is the character page with "‹ Characters"; Delete

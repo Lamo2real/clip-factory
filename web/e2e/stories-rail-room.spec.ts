@@ -3,9 +3,10 @@ import { asMacWindow } from "./desktopWindow.ts";
 
 // Clip Factory Stories' rail in short windows (owner, 23 Nov: the switch never covers anything). The shell's fixed
 // workspace switch and Live chip (app/WorkspaceDock.tsx) sit over the rail's foot: the rail's list of pages ends above
-// their box (--ws-dock-room) at every size and scrolls when it needs more room. From 768 px high all its pages fit with
-// no scrolling; in a shorter window the chosen page is scrolled into view, and every page can be scrolled to and
-// clicked, never the switch in its place.
+// their box (--ws-dock-room) at every size and scrolls when it needs more room. Wherever its eleven pages fit at 40 px
+// (480 px of the list's own room: from 810 px high in a browser, from 800 px in the Mac app) they all show with no
+// scrolling; in a shorter window the chosen page is scrolled into view, and every page can be scrolled to and
+// clicked, never the switch in its place. A row is never lower than 40 px.
 
 async function on(page: Page) {
   await page.addInitScript(() => localStorage.setItem("cf.storiesPreview", "1"));
@@ -59,7 +60,7 @@ for (const [w, h] of [
   [1366, 768],
   [1280, 800],
   [1280, 720],
-  // just over the old 820 px breakpoint, where 48 px rows came back before the ten pages fit at 48 (the review: the
+  // just over the old 820 px breakpoint, where 48 px rows came back before the pages fit at 48 (the review: the
   // list scrolled and Settings was cut at its end from 821 to 837 px high)
   [1280, 821],
   [1280, 830],
@@ -78,9 +79,12 @@ for (const [w, h] of [
       await open(page, path);
       const r = await room(page);
       expect(r.bottom, `${path}: the list ends above the switch`).toBeLessThanOrEqual(r.dockTop);
-      if (h >= 768) expect(r.scrolls, `${path}: all the pages fit from 768 px high`).toBe(false);
-      // 48 px rows wherever the ten fit at 48 (10 × 48 + 9 × 4 = 516 px of room), the lower 40 px only where not
-      expect(r.row, `${path}: rows of ${r.row} px in ${r.room} px of room`).toBe(r.room >= 516 ? 48 : 40);
+      // All eleven fit with no scrolling wherever 40 px rows can (11 × 40 + 10 × 4 = 480 px of room), and a browser
+      // window has that room from 810 px high (Series made the rail 11 pages; 768 px windows scroll the list)
+      if (r.room >= 480) expect(r.scrolls, `${path}: all the pages fit in ${r.room} px of room`).toBe(false);
+      if (h >= 810) expect(r.room, `${path}: room for all the pages from 810 px high`).toBeGreaterThanOrEqual(480);
+      // 48 px rows wherever the eleven fit at 48 (11 × 48 + 10 × 4 = 568 px of room), the lower 40 px only where not
+      expect(r.row, `${path}: rows of ${r.row} px in ${r.room} px of room`).toBe(r.room >= 568 ? 48 : 40);
       // The pages packed under the brand, 4 px apart, never spread down the rail's room.
       expect(r.gap, `${path}: --st-gap-control`).toBe(4);
       expect(r.gaps, `${path}: the room between the pages`).toEqual(r.gaps.map(() => 4));
@@ -118,7 +122,7 @@ for (const [w, h] of [
       const r = await room(page);
       expect(r.bottom, `${path}: the list ends above the switch`).toBeLessThanOrEqual(r.dockTop);
       expect(r.scrolls, `${path}: all the pages fit`).toBe(false);
-      expect(r.row, `${path}: rows of ${r.row} px in ${r.room} px of room`).toBe(r.room >= 516 ? 48 : 40);
+      expect(r.row, `${path}: rows of ${r.row} px in ${r.room} px of room`).toBe(r.room >= 568 ? 48 : 40);
       expect(r.gaps, `${path}: the room between the pages`).toEqual(r.gaps.map(() => 4));
       expect(await reachable(page), `${path}: every page can be reached`).toEqual([]);
     }

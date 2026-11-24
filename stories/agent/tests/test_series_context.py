@@ -216,10 +216,15 @@ def test_the_writer_is_told_about_cars_and_series_in_new_lines_only() -> None:
         'A cast member with kind "car" is a car, never an actor: put it in a scene\'s props as {kind: "car", castId}',
         "give them inCar and a get_in or get_out beat while the car is parked; the car moves only after get_in ends.",
         "The driver waves only while the car is stopped; a passenger may wave any time.",
-        "a car may stall, stop or bump for fun, but no caption gives driving advice and teachesSafety stays false.",
+        "a car may stall, stop or bump for fun, but no caption gives driving advice; if the story starts to teach it, "
+        "set teachesSafety to true (see above). A story with a car of the cast is always fact checked for driving advice.",
+        "There is no car dealer set: a story about buying a car stages the sale in the car park (parking_lot).",
         "When the request has a series, this video is its episode number `series.episode`",
     ):
         assert line in flat, line
+    # never told to keep the flag false: that went against the rule that a story which starts teaching flags it
+    assert "teachesSafety stays false" not in flat
+    assert "If a story of another kind starts to teach driving safety, set teachesSafety to true" in flat
     # the earlier rules are all still there, word for word
     assert "Recurring characters: use only the cast you are given, by cast id." in flat
     assert "never copy their characters, logos, footage, music or catchphrases." in flat
