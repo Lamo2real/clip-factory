@@ -273,7 +273,7 @@ export function NewCharacter({ ws, kind: asked, place = "characters" }: { ws: st
           <BackToCast place={place} />
           <h1 className="st-s-head__title">{place === "cars" ? "New car" : "New character"}</h1>
           <p className="st-s-head__lede">
-            {car ? "Add photos of your car. Pick the cartoon car you like, then give it a name." : "Pick their looks, face, moves and sounds. Then name them."}
+            {car ? "Add photos of your car. Pick a cartoon car, then name it." : "Pick their looks, face, moves and sounds. Then name them."}
           </p>
         </div>
       </header>
