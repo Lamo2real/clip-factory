@@ -23,9 +23,10 @@ Items: the post's internal ``mac*`` fields (``tiktok_self.MAC_FIELDS``; public a
 ``tiktokForMac`` mark (a send made its post, ``tiktok_self.MAC_MARK``), and the helper item ``USER#{id}`` /
 ``MACHELPER`` (``seenAt``, ``state``, ``reason``, ``version``, ``device``, ``login``, ``backlogAt``, ``holdBefore``,
 ``backfill``), written by its ping, plus what the server writes on it: ``needsYouClipId`` (the stop that needs the
-owner), ``needsYouCode`` (why, when the helper said: ``login``, a TikTok login problem and nothing else, §47.11) and
-the owner's requests (``loginRequest*``, ``resumeRequestAt``, ``letGoRequestAt``), each removed when the helper says
-it did that one. A login hold ends when the helper sees its Chrome logged in to the right TikTok again
+owner), ``needsYouCode`` (why, when the helper said: ``login``, a TikTok login problem and nothing else, §47.11),
+``needsYouDevice`` (the Mac that stopped, which no ping overwrites, §47.11; never public) and the owner's requests
+(``loginRequest*``, ``resumeRequestAt``, ``letGoRequestAt``), each removed when the helper says it did that one. A
+login hold ends when the helper sees its Chrome logged in to the right TikTok again
 (``logged_in``, §47.11). No table, index or infrastructure change: every route is under ``ANY /v1/{proxy+}``.
 """
 
@@ -340,11 +341,16 @@ def ping(
     whether a TikTok login is kept in the Mac's Keychain (``login``: ``saved`` | ``none``, §47.8), and what its plan
     says (§47.3): when the first backlog clip goes (``backlog_at``), the auto-posting clips it holds (made before
     ``hold_before``) and a backfill (``backfill``). Each of those three is removed by a ping without it, and
-    ``needsYouClipId`` and ``needsYouCode`` by a ping whose state is not ``needs_you`` (a ``needs_you`` ping keeps
-    both). The owner's pending requests (login, resume, let go)
-    stay until the helper says it handled that one (``login_done``, ``resume_done``, ``let_go_done`` = its ``at``): a
-    newer request meanwhile stays."""
+    ``needsYouClipId``, ``needsYouCode`` and ``needsYouDevice`` by a ping whose state is not ``needs_you`` (a
+    ``needs_you`` ping keeps them). Only a stop starts a hold (``stopped``): a ``needs_you`` ping on an item that
+    isn't ``needs_you`` (the owner's Try again, or the helper's logged-in, ended the hold after the Mac read it,
+    §47.11) checks in as ``ok`` without its reason, also when the hold ends between this read and this write; else it
+    would put back a hold with no clip and no code that nothing ends. The owner's pending requests (login, resume,
+    let go) stay until the helper says it handled that one (``login_done``, ``resume_done``, ``let_go_done`` = its
+    ``at``): a newer request meanwhile stays."""
     current = helper_item(store, user_id)
+    if state == "needs_you" and (current is None or current.get("state") != "needs_you"):
+        state, reason = "ok", None
     fields: Item = {"type": "machelper", "userId": user_id, "seenAt": iso(now), "state": state, "device": device}
     if reason:
         fields["reason"] = _reason(reason)
@@ -361,8 +367,33 @@ def ping(
         if not reason:
             gone.append("reason")
         if state != "needs_you":
-            gone += ["needsYouClipId", "needsYouCode"]
-        store.update(db.user_pk(user_id), HELPER_SK, fields, remove=[k for k in gone if k in current])
+            gone += ["needsYouClipId", "needsYouCode", "needsYouDevice"]
+        held = {"state": ["needs_you"]} if state == "needs_you" else None
+        try:
+            store.update(
+                db.user_pk(user_id), HELPER_SK, fields, remove=[k for k in gone if k in current], expect_in=held
+            )
+        except db.ConditionFailed:
+            if held is None:
+                raise
+            # The hold ended between the read and the write: the same check-in, as ok.
+            ping(
+                store,
+                user_id,
+                state="ok",
+                device=device,
+                reason=None,
+                version=version,
+                now=now,
+                login=login,
+                login_done=login_done,
+                backlog_at=backlog_at,
+                hold_before=hold_before,
+                backfill=backfill,
+                resume_done=resume_done,
+                let_go_done=let_go_done,
+            )
+            return
     for done, names in (
         (login_done, ("loginRequestAt", "loginRequestAction")),
         (resume_done, ("resumeRequestAt",)),
@@ -538,9 +569,10 @@ def stopped(
     """The helper stopped instead of guessing. The post says why (at most 200 characters); once it pressed Post the
     reason is always ``PRESSED`` (only the owner knows whether it is on TikTok). ``needs_you`` also puts the helper
     item in ``needs_you`` with that reason and this clip (``needsYouClipId``: Settings and the rows link to it), and
-    why in ``needsYouCode`` (§47.11: ``code``, one of ``HOLD_CODES``) in the same write; a needs-you stop without a
-    code removes it, so a puzzle after a login never reads as a login. A code without ``needs_you`` holds nothing, so
-    it isn't stored."""
+    why in ``needsYouCode`` (§47.11: ``code``, one of ``HOLD_CODES``) and which Mac stopped (``needsYouDevice``, which
+    no ping overwrites: another Mac's needs_you ping rewrites ``device``) in the same write; a needs-you stop without
+    a code removes it, so a puzzle after a login never reads as a login. A code without ``needs_you`` holds nothing,
+    so it isn't stored."""
     row, _rows = mac_row(store, clip)
     _own(row, device, ("working", "stopped"), attempt)
     said = _reason(reason)
@@ -569,7 +601,7 @@ def stopped(
             ":us": str(clip["userId"]),
             ":nc": str(clip["clipId"]),
         }
-        sets = "SET #st = :st, #re = :re, #se = :se, #de = :de, #ty = :ty, #us = :us, #nc = :nc"
+        sets = "SET #st = :st, #re = :re, #se = :se, #de = :de, #nd = :de, #ty = :ty, #us = :us, #nc = :nc"
         if code in HOLD_CODES:
             values[":cd"] = code
             update = sets + ", #cd = :cd"
@@ -584,6 +616,7 @@ def stopped(
                 "#re": "reason",
                 "#se": "seenAt",
                 "#de": "device",
+                "#nd": "needsYouDevice",
                 "#ty": "type",
                 "#us": "userId",
                 "#nc": "needsYouClipId",
@@ -594,21 +627,23 @@ def stopped(
     return written
 
 
-def _login_hold(item: Mapping[str, Any] | None, held_id: str, device: str, key: str = "needsYouClipId") -> bool:
-    """§47.11: the helper item holds for a TikTok login (``needsYouCode = login``) on this clip, from this Mac."""
+def _login_hold(item: Mapping[str, Any] | None, held_id: str, device: str) -> bool:
+    """§47.11: the helper item holds for a TikTok login (``needsYouCode = login``) on this clip, stopped by this Mac
+    (``needsYouDevice``: with two Macs the other one's needs_you ping rewrites ``device`` every minute)."""
     return bool(
         item
         and item.get("state") == "needs_you"
         and item.get("needsYouCode") == "login"
-        and item.get(key) == held_id
-        and item.get("device") == device
+        and item.get("needsYouClipId") == held_id
+        and item.get("needsYouDevice") == device
     )
 
 
 def logged_in(store: db.Store, user_id: str, clip_id: str, device: str) -> tuple[Item | None, str]:
     """The helper saw its Chrome logged in to Clip Factory's TikTok again while it was held for a TikTok login on
     this clip (§47.11): the hold ends by itself, as after the owner's Try again, and the clip waits for the Mac again.
-    Only the device that stopped it, only a login hold (``needsYouCode = login``) on this clip, else ``Refused``
+    Only the device that stopped it (``needsYouDevice``: with two Macs the other one's needs_you ping rewrites
+    ``device`` every minute), only a login hold (``needsYouCode = login``) on this clip, else ``Refused``
     (``NOT_LOGIN_HOLD``) and nothing is written. Returns the helper item and the outcome:
 
     * ``resumed``: a stopped Mac post of this device that never pressed Post waits again. It keeps its place
@@ -649,12 +684,12 @@ def logged_in(store: db.Store, user_id: str, clip_id: str, device: str) -> tuple
             pk,
             HELPER_SK,
             {"state": "ok"},
-            remove=[k for k in ("reason", "needsYouClipId", "needsYouCode") if k in item],
+            remove=[k for k in ("reason", "needsYouClipId", "needsYouCode", "needsYouDevice") if k in item],
             expect_in={
                 "state": ["needs_you"],
                 "needsYouCode": ["login"],
                 "needsYouClipId": [clip_id],
-                "device": [device],
+                "needsYouDevice": [device],
             },
         )
     )

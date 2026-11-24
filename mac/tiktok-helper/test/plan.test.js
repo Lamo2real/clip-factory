@@ -15,6 +15,7 @@ import {
   nextAction,
   pickWork,
   pingExtras,
+  triedHere,
   wsAction,
   wsPingBody,
 } from "../src/plan.js";
@@ -579,6 +580,17 @@ test("loginCheckDue: no stamp, 5 minutes or more, or a stamp in the future", () 
   assert.equal(loginCheckDue(stamp, at + 5 * 60_000), true); // 5:00
   assert.equal(loginCheckDue(stamp, new Date(at + 5 * 60_000)), true);
   assert.equal(loginCheckDue(stamp, at - 60_000), true); // the clock moved back
+});
+
+test("triedHere: only a Mac whose ledger has the held clip or job looks (a second Mac never does)", () => {
+  const ledger = { c1: { step: "stopped", device: "mac-a", tries: 1 }, "pj-1": { step: "finding" } };
+  assert.equal(triedHere(ledger, { id: "c1" }), true);
+  assert.equal(triedHere(ledger, { id: "pj-1" }), true); // a pressed post's stop: the hold may end ("pressed")
+  assert.equal(triedHere(ledger, { id: "c2" }), false);
+  assert.equal(triedHere({}, { id: "c1" }), false);
+  assert.equal(triedHere(ledger, null), false);
+  assert.equal(triedHere(undefined, { id: "c1" }), false);
+  assert.equal(triedHere(ledger, { id: "constructor" }), false); // never an inherited key
 });
 
 test("pickWork is the same with a login hold: Clip Factory first, one thing per tick", () => {

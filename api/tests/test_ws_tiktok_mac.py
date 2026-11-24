@@ -1086,6 +1086,64 @@ def test_logged_in_loses_to_a_change(
     assert snapshot(table) == before
 
 
+def test_a_second_macs_needs_you_ping_never_takes_the_workspace_hold_from_the_mac_that_stopped(
+    call: Call, store: db.Store, table: FakeTable, starter: sup.FakeStarter
+) -> None:
+    """Review, 24 Nov: another Mac's needs_you ping rewrites ``device`` every minute; the hold keeps the Mac that
+    stopped (``needsYouDevice``, never public), so that Mac's logged-in still ends it and the other Mac's never does."""
+    _login_stop(call, store)
+    ping = {"version": "1.2.2", "device": "mac-2", "setUp": True, "state": "needs_you", "reason": "Out."}
+    assert call("POST", PING, ping)[0] == 200
+    held = stored(table, "MACHELPER")
+    assert (held["device"], held["needsYouDevice"], held["needsYouCode"]) == ("mac-2", DEVICE, "login")
+    assert "needsYouDevice" not in call("GET", STATUS)[1]["helper"]
+    assert call("POST", job_path("logged-in"), {"device": "mac-2"})[0] == 409
+    status, body = call("POST", job_path("logged-in"), {"device": DEVICE})
+    assert (status, body["outcome"]) == (200, "resumed"), body
+    assert not {"needsYouJobId", "needsYouCode", "needsYouDevice"} & set(stored(table, "MACHELPER"))
+    clips_untouched(table)
+
+
+def test_a_needs_you_ping_never_starts_a_workspace_hold(
+    call: Call, store: db.Store, table: FakeTable, starter: sup.FakeStarter, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Review, 24 Nov: the owner's Try again lands while the Mac's Log in on my Mac window is open, and the tick's ping
+    then repeats the needs_you it read before: only a stop starts a hold, so that ping checks in as ok."""
+    _login_stop(call, store)
+    assert call("POST", job_path("retry"), {})[0] == 200
+    stale = {"version": "1.2.2", "device": DEVICE, "setUp": False, "state": "needs_you", "reason": "Out."}
+    assert call("POST", PING, stale)[0] == 200
+    helper = stored(table, "MACHELPER")
+    assert (helper["state"], helper["setUp"]) == ("ok", False)
+    assert not {"reason", "needsYouJobId", "needsYouStoryId", "needsYouCode", "needsYouDevice"} & set(helper)
+    assert stored(table)["macState"] == "waiting"
+    # The hold ends between the ping's read and its write: the conditional write loses and checks in as ok.
+    assert claim(call)[0] == 200
+    stop = {"device": DEVICE, "reason": "Out.", "needsYou": True, "code": "login"}
+    assert call("POST", job_path("stopped"), stop)[0] == 200
+    read = stored(table, "MACHELPER")
+    assert call("POST", job_path("retry"), {})[0] == 200
+    real_get = store.get
+    monkeypatch.setattr(store, "get", lambda pk, sk: dict(read) if sk == ws.MACHELPER_SK else real_get(pk, sk))
+    assert call("POST", PING, stale)[0] == 200
+    monkeypatch.undo()
+    helper = stored(table, "MACHELPER")
+    assert helper["state"] == "ok"
+    assert not {"reason", "needsYouJobId", "needsYouCode", "needsYouDevice"} & set(helper)
+    # A hold a stop started stays with a needs_you ping.
+    assert claim(call)[0] == 200
+    assert call("POST", job_path("stopped"), stop)[0] == 200
+    assert call("POST", PING, stale)[0] == 200
+    helper = stored(table, "MACHELPER")
+    assert (helper["state"], helper["needsYouJobId"], helper["needsYouCode"], helper["needsYouDevice"]) == (
+        "needs_you",
+        JOB_ID,
+        "login",
+        DEVICE,
+    )
+    clips_untouched(table)
+
+
 def test_the_workspace_hold_codes_are_clip_factorys() -> None:
     text = (SRC / "workspaces" / "mac.py").read_text()
     assert re.findall(r"^HOLD_CODES: Final = \(([^)]*)\)$", text, re.MULTILINE) == ['"login",']
