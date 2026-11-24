@@ -37,7 +37,7 @@ const PAGES: [string, string][] = [
   ["Series", "/stories/series"],
   ["A series", `/stories/series/${SERIES}`],
   ["New character: a car", "/stories/characters/new?kind=car"],
-  ["Characters at the old Cars address", "/stories/cars"],
+  ["Cars", "/stories/cars"],
   ["New car", "/stories/cars/new"],
   ["A car", `/stories/cars/${CAR}`],
 ];

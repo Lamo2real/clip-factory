@@ -77,9 +77,10 @@ const NAV: NavItem[] = [
     label: "Characters",
     icon: "face",
     page: { name: "characters" },
-    // the cars are characters too (§45.41): their pages sit under Characters
-    match: ["characters", "character", "character_new", "cars", "car_new", "car"],
+    match: ["characters", "character", "character_new"],
   },
+  // The cars' own place, right under Characters (§45.41.10, the owner: "where are cars? i need cars as well").
+  { label: "Cars", icon: "car", page: { name: "cars" }, match: ["cars", "car_new", "car"] },
   {
     label: "Production",
     icon: "clapper",
@@ -144,9 +145,9 @@ export function opensSetup(
   return o.done === 0 && o.steps.every((s) => s.state === "todo");
 }
 
-/** On phones the bar has room for five pages and More; More holds the rest. */
-const TABS = NAV.slice(0, 5);
-const MORE = NAV.slice(5);
+/** On phones the bar has room for five pages and More; More holds the rest (Cars first). */
+const TABS = NAV.filter((n) => n.label !== "Cars").slice(0, 5);
+const MORE = NAV.filter((n) => !TABS.includes(n));
 
 
 /** Picks the workspace to show: a checked id from the server's own list, never one taken from the address alone. */

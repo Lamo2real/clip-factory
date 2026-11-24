@@ -1,5 +1,5 @@
 {
- "version": "f7d7b0f46297",
+ "version": "d21ef7b3f409",
  "parts": [
   {
    "id": "app-map",
@@ -297,7 +297,7 @@
    "id": "contracts-45",
    "title": "CONTRACTS: 45. Clips Funded: a second, separate workspace (owner request, 2026-11-21)",
    "line": "Planned: not in the app until the switch pull request turns it on (§45.21). Until then nothing of Clips Funded",
-   "chars": 346838
+   "chars": 347668
   },
   {
    "id": "contracts-46",
@@ -831,7 +831,7 @@
    "id": "adr-89",
    "title": "DECISIONS: ADR-89 A car of the cast is a car prop with a castId, kept in its own `cars` map",
    "line": "Context. The owner (2026-11-23) wants a character that is a car, made in cartoon style from real photos, picked",
-   "chars": 2056
+   "chars": 2218
   },
   {
    "id": "adr-90",

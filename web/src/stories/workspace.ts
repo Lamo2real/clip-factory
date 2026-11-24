@@ -555,7 +555,7 @@ const TITLES: Record<StoriesPage["name"], string> = {
   characters: "Characters",
   character_new: "New character",
   character: "Character",
-  cars: "Characters", // an older link: the Characters gallery (§45.41.10)
+  cars: "Cars",
   car_new: "New car",
   car: "Car",
   production: "Production",

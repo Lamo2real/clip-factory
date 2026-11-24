@@ -16654,25 +16654,33 @@ the gallery with "Car".
 - `storiesStudioScreens.test.tsx:479`.
 They change `x.look` to `(x as PersonInput).look`.
 
-#### 45.41.10 Cars are characters (owner, 23 Nov ~22:05 UTC: "where are cars? i need cars as well"; review, 24 Nov)
+#### 45.41.10 Cars: the cars' own place in the rail (owner, 23 Nov ~22:05 UTC: "where are cars? i need cars as well"; again 24 Nov, with a screenshot of the rail)
 
-- **Characters shows the whole cast**: the people, then the cars, each car card with its coral "Car" tag and its own
-  page (/stories/cars/{id}). The head has "Design with AI", "Make a car" (/stories/cars/new) and the main "New
-  character" (whose "A person / A car" tiles stay). Why: a car is a character (§45.41), so it lives where the cast
-  lives; one home per thing, and the rail keeps room for 40 px targets. The first build gave cars their own rail page,
-  which pushed the rail to 12 pages and its rows down to 32 px; the reviewers took that out.
-- **The rail** has 11 pages (Series is the new one). Characters' `match` takes `cars`, `car_new` and `car`, so a car's
-  pages light up Characters. On phones the five tabs are Dashboard, Ideas, Characters, Production and Review; More holds
-  Series, Chat, References, Library, Social accounts and Settings. Under 568 px of list room (11 × 48 + 10 × 4)
-  `st-frame.css` makes the rows 40 px, never lower; below 480 px of room (11 × 40 + 10 × 4) the list scrolls and the
-  chosen page is scrolled into view (`stories-rail-room.spec.ts`: rows are 48 or 40 px, and every window with 480 px of
-  room shows all eleven with no scrolling).
-- **Routes** (`routes.ts`): `{name: "car_new"}` /stories/cars/new and `{name: "car", characterId}` /stories/cars/{id};
-  `{name: "cars"}` /stories/cars, an older link, shows the Characters gallery. `workspace.ts` titles them "Characters", "New
-  car" and "Car"; a car's page is a project like a character's (`openedOn`).
-- **`screens/Cars.tsx`** only routes: Make a car is New character with the kind fixed (no kind tiles, the heading "New
-  car", "‹ Characters", the photo strip open at once). A car's page is the character page with "‹ Characters"; Delete
-  goes back to Characters. An older /stories/characters/{id} link to a car moves to /stories/cars/{id} once it loads.
+- **The rail.** A "Cars" item with a car icon (`StIcon` "car", in `ui.tsx`) right under Characters:
+  `{label: "Cars", icon: "car", page: {name: "cars"}, match: ["cars", "car_new", "car"]}`. On phones the five tabs stay
+  as they are (Cars is never a tab), and Cars is the first item under More, before Series. The rail has 12 pages.
+  Under 620 px of list room (12 × 48 + 11 × 4) `st-frame.css` makes the rows 44 px, and under 572 px (12 × 44 + 11 × 4)
+  40 px, never lower; below 524 px of room (12 × 40 + 11 × 4) the list scrolls and the chosen page is scrolled into
+  view. So all twelve show with no scrolling from 846 px high in a browser and from 822 px in the Mac app, at 44 px
+  from 894 px (the Mac app 870 px: a 900 px window keeps 44 px targets) and at 48 px from 942 px (918 px); a shorter
+  window (768 px: 446 px of room) scrolls the list, and every page can still be scrolled to and clicked, never the
+  switch in its place (`stories-rail-room.spec.ts`: rows are 48, 44 or 40 px for the room, never under 40, every
+  window with 524 px of room shows all twelve with no scrolling; `stories-shell.spec.ts` the order and 44 px targets
+  at 1440 × 900). The first build's shared rows down to 32 px and the review's 11-page rail (Cars only inside
+  Characters) are both gone: the owner asked for Cars again.
+- **Routes** (`routes.ts`): `{name: "cars"}` /stories/cars, `{name: "car_new"}` /stories/cars/new and
+  `{name: "car", characterId}` /stories/cars/{id}. `workspace.ts` titles them "Cars", "New car" and "Car"; a car's page
+  is a project like a character's (`openedOn`).
+- **`screens/Cars.tsx`.** The page is titled "Cars": the cars (the same `listCharacters` data, kind "car") as cards,
+  each opening /stories/cars/{id}, with ONE big "Make a car" (in the head, or in the empty garage: "No cars yet" ·
+  "Add photos of a real car. You get a cartoon car for your videos."). Make a car is New character with the kind
+  fixed: no kind tiles, the heading "New car", "‹ Cars", the photo strip open at once. A car's page is the character
+  page with "‹ Cars"; Delete goes back to Cars.
+- **Characters still shows the whole cast**: the people, then the cars, each car card with its coral "Car" tag and
+  its own page under Cars (/stories/cars/{id}). Its head has "Design with AI", "Make a car" (/stories/cars/new) and the
+  main "New character" (whose "A person / A car" tiles stay), so a child who looks for a car in Characters finds it
+  too. A car saved from anywhere opens under Cars, and an older /stories/characters/{id} link to a car moves to
+  /stories/cars/{id} once it loads (the dashboard's Continue, the library, chat cards).
 - Production's cast picker shows "Your cars" as its own row (CastPicker).
 
 ### 45.42 A person and a car in one story (owner request, 2026-11-23)
@@ -17014,8 +17022,8 @@ goes into MEM#.
 `workspace.ts` `TITLES` maps both series pages to "Series".
 
 **`StoriesApp.tsx`.** One NAV entry `{label: "Series", icon: "folder", page: {name: "series"}, match: ["series",
-"series_one"]}` right after Review. On phones the five tabs stay as they are, and Series is the first item under
-More (§45.41.10). One `case` for the two pages.
+"series_one"]}` right after Review. On phones the five tabs stay as they are, and Series is under More, after Cars
+(§45.41.10). One `case` for the two pages.
 
 **`studio/SeriesSwitch.tsx`** (new; casting uses it):
 ```ts

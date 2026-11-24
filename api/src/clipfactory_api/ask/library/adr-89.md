@@ -16,5 +16,7 @@
 - **Consequences.** People code and old scripts are unchanged; the shape goldens keep every prim (only
   `ENGINE_VERSION` goes 5 to 6). The writer and the idea agent get the car as a cast entry with words, never a look.
   `CHAR#` gains `kind` and `car` (a missing kind is a person). A car design costs one call for 3 options, a person
-  design what it cost before. A car is a character, so it lives in Characters with a Car tag (the first build's own
-  Cars rail page made 12 pages and 32 px rows; the review took it out): the rail keeps 40 px targets.
+  design what it cost before. Cars have their own place in the rail, Cars, right under Characters (the owner asked
+  for it twice), and Characters shows the cars too, each with a Car tag. The rail's 12 pages keep 48, 44 or 40 px rows,
+  never lower than 40 (the first build's shared rows went down to 32 px); in a window too short for twelve 40 px rows
+  the rail's list scrolls.

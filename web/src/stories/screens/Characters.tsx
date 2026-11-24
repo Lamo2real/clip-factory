@@ -6,9 +6,9 @@
 // reference pictures, the AI picture when it is on (else the way to Settings › Video › Picture maker), and Delete.
 // New character first asks "What are you making?" (§45.41): a person (as above) or a car, made from up to 6 real
 // photos into cartoon cars to pick from; a saved car keeps those photos as its pictures. A car is a character: the
-// gallery here shows the people and the cars (each car with its Car tag) and a "Make a car" next to New character;
-// a car's own addresses (screens/Cars.tsx: /stories/cars/new and /stories/cars/{id}, with NewCharacter and
-// CharacterPage from here) sit under Characters in the rail, and /stories/cars is this gallery.
+// gallery here shows the people and the cars (each car with its Car tag) and a "Make a car" next to New character.
+// Cars also have their own place in the rail, right under Characters (Cars, screens/Cars.tsx, which uses
+// NewCharacter and CharacterPage from here): a car's page always opens under Cars (/stories/cars/{id}).
 import "../styles/studio.css";
 import "../styles/sd-cars.css";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
@@ -58,23 +58,22 @@ export function EmptyCast({ title, children, action }: { title: string; children
   );
 }
 
-/** Which addresses a character's pages use: a person's /stories/characters/…, a car's /stories/cars/… (§45.41). Both
- * are Characters in the rail. */
+/** Where a character's pages live: a person's under Characters, a car's under Cars (§45.41.10). */
 export type CastPlace = "characters" | "cars";
 
 /** Back to the cast: the studio kit's back link with its round glass orb (the same as Production's and Review's). */
-function BackToCast() {
+function BackToCast({ place = "characters" }: { place?: CastPlace }) {
   return (
-    <A href={storiesHref({ name: "characters" })} className="st-s-back st-s-back--orb">
-      <span className="st-s-back__orb">‹</span> Characters
+    <A href={storiesHref({ name: place })} className="st-s-back st-s-back--orb">
+      <span className="st-s-back__orb">‹</span> {place === "cars" ? "Cars" : "Characters"}
     </A>
   );
 }
 
-/** A character's own page: a car's has its own address (/stories/cars/{id}). */
+/** A character's own page: a car's is under Cars (/stories/cars/{id}). */
 export const characterHref = (c: { characterId: string; kind?: CharacterKind }) => storiesHref(c.kind === "car" ? { name: "car", characterId: c.characterId } : { name: "character", characterId: c.characterId });
 
-export function Gallery({ ws }: { ws: string }) {
+function Gallery({ ws }: { ws: string }) {
   const list = useLoad(() => storiesApi().listCharacters(ws), ws, "st-characters");
   // The whole cast: the people, then the cars (each with its Car tag).
   const people = list.data ? [...list.data.filter((c) => !isCar(c)), ...list.data.filter(isCar)] : null;
@@ -171,8 +170,8 @@ async function keepPhotos(ws: string, characterId: string, photos: Photo[]): Pro
 }
 
 /**
- * New character, or (place "cars", Characters › Make a car) a new car: then the kind is a car from the start, so
- * there are no kind tiles, and the page says "New car".
+ * New character, or (place "cars", Make a car in Cars or Characters) a new car: then the kind is a car from the
+ * start, so there are no kind tiles, and the page says "New car".
  */
 export function NewCharacter({ ws, kind: asked, place = "characters" }: { ws: string; kind?: CharacterKind; place?: CastPlace }) {
   const toast = useToast();
@@ -238,7 +237,7 @@ export function NewCharacter({ ws, kind: asked, place = "characters" }: { ws: st
     <section className="st-page st-studio st-s-make">
       <header className="st-s-head">
         <div className="st-plate st-s-head__text">
-          <BackToCast />
+          <BackToCast place={place} />
           <h1 className="st-s-head__title">{place === "cars" ? "New car" : "New character"}</h1>
           <p className="st-s-head__lede">
             {car ? "Add photos of your car. Pick the cartoon car you like, then give it a name." : "Pick how they look, their faces, how they move and their sounds. Then give them a name."}
@@ -332,7 +331,7 @@ export function CharacterPage({ ws, characterId, place = "characters" }: { ws: s
   const wrongPlace = !!c && home !== place;
 
   useEffect(() => {
-    // An older link (the dashboard's Continue, the library, a chat card) to a car at a person's address: its own.
+    // An older link (the dashboard's Continue, the library, a chat card) to a car under Characters: the same page under Cars.
     if (wrongPlace && c) storiesGoLater(characterHref(c), { replace: true });
   }, [wrongPlace, c]);
 
@@ -370,7 +369,7 @@ export function CharacterPage({ ws, characterId, place = "characters" }: { ws: s
     try {
       await storiesApi().deleteCharacter(ws, characterId);
       toast.success(`${c.name} is deleted.`);
-      storiesGoLater(storiesHref({ name: "characters" }), { replace: true });
+      storiesGoLater(storiesHref({ name: home }), { replace: true });
     } catch (e) {
       setAsking(false);
       setProblem(say(e));
@@ -382,7 +381,7 @@ export function CharacterPage({ ws, characterId, place = "characters" }: { ws: s
   if (loaded.error && !c)
     return (
       <section className="st-page st-studio st-s-make">
-        <Notice tone="bad" action={<A href={storiesHref({ name: "characters" })} className="st-btn">Back to Characters</A>}>
+        <Notice tone="bad" action={<A href={storiesHref({ name: place })} className="st-btn">{place === "cars" ? "Back to Cars" : "Back to Characters"}</A>}>
           {loaded.error}
         </Notice>
       </section>
@@ -398,7 +397,7 @@ export function CharacterPage({ ws, characterId, place = "characters" }: { ws: s
     <section className="st-page st-studio st-s-make">
       <header className="st-s-head">
         <div className="st-plate st-s-head__text">
-          <BackToCast />
+          <BackToCast place={home} />
           <h1 className="st-s-head__title">{c.name}</h1>
           <p className="st-s-head__lede">
             In {count(c.storyCount, "video")}. Changes show in new videos and in a Remake the whole video, never in one already made.

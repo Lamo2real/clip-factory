@@ -3,9 +3,10 @@
 // * Sounds (§45.40): every voice, noise and effect has a play button that plays the synth's own sample (Web Audio is
 //   watched: each source started names its file), one at a time, a second tap stops it, a play button never picks its
 //   chip and never makes the click sound, a car hears its car sounds, and the part keeps 44 px targets (48 on phones).
-// * Cars (§45.41): Characters › Make a car opens the car flow; New character › A car takes photos by drag and
-//   drop (3 dropped photos, 3 thumbnails); Design it makes 3 cartoon cars to pick from; the picked one saves as a car
-//   in Characters, with its Car tag; the car pages keep the studio's rules.
+// * Cars (§45.41): the rail's Cars, right under Characters, › Make a car opens the car flow; New character › A car
+//   takes photos by drag and drop (3 dropped photos, 3 thumbnails); Design it makes 3 cartoon cars to pick from; the
+//   picked one saves as a car in Cars, and Characters shows it too with its Car tag; the car pages keep the studio's
+//   rules.
 // * A person and a car (§45.42): Production's cast picker takes the main character plus a car, and the practice
 //   writer's car scenes draw.
 // * Series (§45.43): "My first car" made with the main character and the car, an idea filed in it, the "All ▾" switch,
@@ -339,15 +340,21 @@ test("the owner's flow: a car from 3 dropped photos, the main character and the 
   const page = await ctx.newPage();
   let car = { id: "", name: "" };
 
-  await test.step("Characters shows the cars too: Make a car opens the car flow", async () => {
+  await test.step("the rail's Cars place: Make a car opens the car flow", async () => {
     await page.goto("/stories");
     await page.locator(".st-rail .st-rail__item.is-active").waitFor({ timeout: 20_000 });
     const rail = page.locator(".st-rail");
-    await expect(rail.getByRole("link", { name: "Cars", exact: true })).toHaveCount(0); // a car is a character
-    await rail.getByRole("link", { name: "Characters", exact: true }).click();
-    await expect(page).toHaveURL(/\/stories\/characters$/);
+    // Right under Characters, with its car icon.
+    await expect(rail.locator(".st-rail__label").nth(2)).toHaveText("Characters");
+    await expect(rail.locator(".st-rail__label").nth(3)).toHaveText("Cars");
+    await expect(rail.getByRole("link", { name: "Cars", exact: true }).locator("svg")).toHaveCount(1);
+    await rail.getByRole("link", { name: "Cars", exact: true }).click();
+    await expect(page).toHaveURL(/\/stories\/cars$/);
     await settle(page);
-    await expect(page.locator(".st-s-cast__card", { hasText: "Rosso" }).locator(".st-s-tag").first()).toHaveText("Car");
+    await expect(page).toHaveTitle(/^Cars · /);
+    await expect(page.getByRole("heading", { level: 1 })).toHaveText("Cars");
+    await expect(rail.locator(".st-rail__item.is-active .st-rail__label")).toHaveText("Cars");
+    await expect(page.locator(".st-s-cast__card", { hasText: "Rosso" })).toBeVisible();
     await page.getByRole("link", { name: "Make a car", exact: true }).click();
     await expect(page).toHaveURL(/\/stories\/cars\/new$/);
     await expect(page.getByRole("heading", { name: "New car", exact: true })).toBeVisible();
@@ -377,7 +384,7 @@ test("the owner's flow: a car from 3 dropped photos, the main character and the 
     await expect(page.getByRole("button", { name: "Remove photo 3" })).toBeVisible();
   });
 
-  await test.step("Design it makes 3 cartoon cars; picking the second and saving makes a car in Characters", async () => {
+  await test.step("Design it makes 3 cartoon cars; picking the second and saving makes a car in Cars", async () => {
     await page.getByLabel("What is your car like? (you can skip this)").fill("my red hatchback, a bit old");
     // The model chip: the owner's pick for character_design (Fable 5.2 · High unless changed).
     await expect(page.locator(".st-s-design--car .st-s-ai-btn")).toBeVisible();
@@ -401,7 +408,7 @@ test("the owner's flow: a car from 3 dropped photos, the main character and the 
     await expect(page.locator(".st-s-refs__item")).toHaveCount(3, { timeout: 15_000 });
     const saved = (await store(page))!.characters.find((c) => c.characterId === car.id);
     expect(saved).toMatchObject({ name: second, kind: "car" });
-    await rail(page, "Characters");
+    await rail(page, "Cars");
     await expect(page.locator(".st-s-cast__card", { hasText: second }).locator(".st-s-tag").first()).toHaveText("Car");
   });
 
@@ -515,11 +522,11 @@ test.describe("cars", () => {
     [390, 844, true],
     [1280, 800, false],
   ] as const)
-    test(`a car from 3 photos: pick the second option, save, and it is in Characters as a Car (${w})`, async ({ browser }) => {
+    test(`a car from 3 photos: pick the second option, save, and it is in Cars as a Car (${w})`, async ({ browser }) => {
       test.setTimeout(90_000);
       const ctx = await context(browser, w, h, touch, { taskSeconds: 1 });
       const page = await ctx.newPage();
-      await open(page, "/stories/characters");
+      await open(page, "/stories/cars");
       await page.getByRole("link", { name: "Make a car", exact: true }).click();
       await expect(page).toHaveURL(/\/stories\/cars\/new$/);
       await expect(page.getByRole("heading", { name: "New car", exact: true })).toBeVisible();
@@ -545,13 +552,16 @@ test.describe("cars", () => {
       await expect(page.getByRole("heading", { name: second, exact: true })).toBeVisible();
       // The photos it was made from stay with it.
       await expect(page.locator(".st-s-refs__item")).toHaveCount(3, { timeout: 15_000 });
-      // Back to Characters: the new car and Rosso, each a Car, with the people.
-      await page.locator(".st-s-head").getByRole("link", { name: /Characters$/ }).click();
-      await expect(page).toHaveURL(/\/stories\/characters$/);
+      // Back to Cars: the new car and Rosso, each a Car.
+      await page.locator(".st-s-head").getByRole("link", { name: /Cars$/ }).click();
+      await expect(page).toHaveURL(/\/stories\/cars$/);
       const card = page.locator(".st-s-cast__card", { hasText: second });
       await expect(card).toBeVisible();
       await expect(card.locator(".st-s-tag").first()).toHaveText("Car");
       await expect(page.locator(".st-s-cast__card", { hasText: "Rosso" }).locator(".st-s-tag").first()).toHaveText("Car");
+      // Characters shows the whole cast: the people and the new car, with its Car tag.
+      await go(page, "/stories/characters");
+      await expect(page.locator(".st-s-cast__card", { hasText: second }).locator(".st-s-tag").first()).toHaveText("Car");
       await expect(page.locator(".st-s-cast__card", { hasText: "Pip" })).toBeVisible();
       await ctx.close();
     });
