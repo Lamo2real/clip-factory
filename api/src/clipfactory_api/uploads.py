@@ -190,7 +190,11 @@ def _mac_options(
     if card and tiktok is not None:
         return dict(tiktok)
     options = mac_posts.preset_options(current_settings)
-    return mac_posts.campaign_tiktok(options) if campaign else options
+    if campaign:
+        return mac_posts.campaign_tiktok(options)
+    # A card on TikTok's API path (an older web, or settings read before the Mac went on) may still carry a label: the
+    # Mac post keeps it, as the clip's ``tiktokLabel`` does (§47.12).
+    return mac_posts.with_label(options, tiktok) if tiktok is not None and mac_posts.labelled(tiktok) else options
 
 
 def _campaign_checks(  # noqa: PLR0917 (one call site)

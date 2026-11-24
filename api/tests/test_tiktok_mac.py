@@ -42,6 +42,8 @@ MINE = {**TIKTOK, "disableDuet": False}  # My settings: Everyone, Comment, Duet 
 VIDEO_ID = "7710644811602169121"
 LINK = f"https://www.tiktok.com/@lamo.clips/video/{VIDEO_ID}"
 DEVICE = "mac-studio-1"
+# The helper 1.3.0 reads its queue with its version: a labelled post is in it (an older helper's has none, §47.12).
+NEW_HELPER = {"version": "1.3.0"}
 
 
 # --- helpers -----------------------------------------------------------------------------------------------------
@@ -261,7 +263,7 @@ def test_upload_in_mac_mode_keeps_the_cards_own_tiktok_choices(call: Call, store
     }
     assert body["clip"]["tiktokLabel"] == {"brandContent": True, "brandOrganic": True}
     assert (table.raw(clip["pk"], clip["sk"]) or {})["tiktokLabel"] == {"brandContent": True, "brandOrganic": True}
-    job = call("GET", "/v1/tiktok/mac")[1]["queue"][0]
+    job = call("GET", "/v1/tiktok/mac", query=NEW_HELPER)[1]["queue"][0]
     assert {k: job[k] for k in ("privacy", "comment", "duet", "stitch", "brandContent", "brandOrganic")} == {
         "privacy": "MUTUAL_FOLLOW_FRIENDS",
         "comment": False,
@@ -357,7 +359,7 @@ def test_a_campaign_clips_upload_makes_a_mac_post_for_everyone_with_branded_cont
     assert (raw["status"], raw["campaignId"]) == ("mac", CAMPAIGN)
     assert raw["postOptions"] == {**chosen, "campaign": CAMPAIGN_OPTIONS}
     assert _tiktok(answer)["mac"]["brandContent"] is True
-    job = call("GET", "/v1/tiktok/mac")[1]["queue"][0]
+    job = call("GET", "/v1/tiktok/mac", query=NEW_HELPER)[1]["queue"][0]
     assert (job["privacy"], job["brandContent"]) == ("PUBLIC_TO_EVERYONE", True)
     assert job["caption"].startswith("#Ad")  # the campaign caption, as TikTok's publisher would send it
     assert "#FaZe" in job["caption"]
@@ -1672,7 +1674,7 @@ def test_send_posts_a_campaign_clip_for_everyone_with_branded_content(
     assert (raw["status"], raw["macSource"], raw["campaignId"]) == ("mac", "upload" if now else "sent", CAMPAIGN)
     assert raw["postOptions"] == {**MINE, "brandContent": True, "campaign": CAMPAIGN_OPTIONS}
     assert posts.public_post(raw)["mac"]["brandContent"] is True  # the row shows the label
-    job = call("GET", "/v1/tiktok/mac")[1]["queue"][0]
+    job = call("GET", "/v1/tiktok/mac", query=NEW_HELPER)[1]["queue"][0]
     assert (job["clipId"], job["privacy"], job["brandContent"]) == (paid["clipId"], "PUBLIC_TO_EVERYONE", True)
 
 
@@ -2830,7 +2832,10 @@ def test_a_labelled_post_is_never_claimed_by_a_helper_that_cant_set_the_label(
     status, body = _claim_as(call, clip["clipId"], version)
     assert (status, _message(body)) == (409, tiktok_mac.MAC_NEEDS_UPDATE)
     assert _raw_post(store, clip["clipId"]) == before
-    assert [j["clipId"] for j in call("GET", "/v1/tiktok/mac")[1]["queue"]] == [clip["clipId"]]  # it still waits
+    # It still waits: for a helper that sets the label (an older one never sees it in its queue, below).
+    assert [j["clipId"] for j in call("GET", "/v1/tiktok/mac", query={"version": "1.3.0"})[1]["queue"]] == [
+        clip["clipId"]
+    ]
 
 
 @pytest.mark.parametrize("version", ["1.3.0", "1.3.1", "2.0"])
@@ -2990,3 +2995,108 @@ def test_a_send_content_rewards_asks_to_retry_waits_for_the_owners_send(call: Ca
     sub = _crsub(store, clip["clipId"])
     assert sub is not None
     assert (sub["state"], sub["reason"]["code"]) == ("send_by_hand", "not_sent_by_app")
+
+
+# --- review round (24 Nov): an older helper, a campaign that closes before Post, an older web, CR's window ---------
+
+
+def test_an_older_helper_never_sees_a_labelled_post_that_waits_so_every_other_post_still_goes(
+    call: Call, store: db.Store
+) -> None:
+    # Helper 1.2.3 takes the first waiting post every tick and gets a 409 on a labelled one: it would never get to the
+    # rest. Its queue leaves the labelled one out (the helper's last check-in says 1.2.3, or the read says its version).
+    _mac_on(call)
+    labelled = _mac_clip(store, postOptions={**MINE, "brandContent": True})
+    plain = _mac_clip(store, source="sent")
+    assert call("POST", "/v1/tiktok/mac/ping", {"state": "ok", "device": DEVICE, "version": "1.2.3"})[0] == 200
+
+    def ids(version: str | None = None) -> list[str]:
+        query = {"version": version} if version else None
+        return [j["clipId"] for j in call("GET", "/v1/tiktok/mac", query=query)[1]["queue"]]
+
+    assert ids() == [plain["clipId"]]
+    assert ids("1.2.3") == [plain["clipId"]]
+    assert ids("1.3.0") == [labelled["clipId"], plain["clipId"]]  # Upload's first
+    assert _claim_as(call, plain["clipId"], None)[0] == 200  # the older helper posts the rest
+    assert call("POST", "/v1/tiktok/mac/ping", {"state": "ok", "device": DEVICE, "version": "1.3.0"})[0] == 200
+    assert ids() == [labelled["clipId"], plain["clipId"]]
+
+
+def test_a_labelled_post_a_newer_mac_works_on_stays_in_every_queue(call: Call, store: db.Store) -> None:
+    _mac_on(call)
+    clip = _mac_clip(store, postOptions={**MINE, "brandContent": True})
+    assert _claim_as(call, clip["clipId"], "1.3.0")[0] == 200
+    assert call("POST", "/v1/tiktok/mac/ping", {"state": "ok", "device": "old-mac", "version": "1.2.3"})[0] == 200
+    assert [j["clipId"] for j in call("GET", "/v1/tiktok/mac")[1]["queue"]] == [clip["clipId"]]
+
+
+@pytest.mark.parametrize("step", ["video", "opening", "uploading", "settings"])
+def test_a_campaign_that_closes_before_post_stops_the_post_at_its_next_step(
+    call: Call, store: db.Store, step: str
+) -> None:
+    # The claim saw it open; the campaign ended while the Mac uploaded (or the helper crashed and resumes the same
+    # claim without a new one): the next step before Post stops it with the campaign's words, so it is never posted.
+    _mac_on(call)
+    put_campaign(store, platformsPaid=["youtube", "tiktok"])
+    clip = _mac_clip(
+        store, campaignId=CAMPAIGN, postOptions={**MINE, "brandContent": True, "campaign": CAMPAIGN_OPTIONS}
+    )
+    assert _claim_as(call, clip["clipId"], "1.3.0")[0] == 200
+    put_campaign(store, platformsPaid=["youtube", "tiktok"], state="paused")
+    paused = "The brand paused this campaign. I'll tell you when it opens again."
+    status, body = _step(call, clip["clipId"], step)
+    assert (status, _message(body)) == (409, paused)
+    raw = _raw_post(store, clip["clipId"])
+    assert (raw["macState"], raw["macReason"]) == ("stopped", paused)
+    assert "macPressedAt" not in raw
+
+
+def test_a_campaign_step_from_pressing_on_is_never_stopped_by_the_campaign(call: Call, store: db.Store) -> None:
+    # The helper writes its press on disk before the server's yes: a refusal at pressing would read as pressed. After
+    # the press only the owner knows whether it is on TikTok. So pressing and finding go on as before.
+    _mac_on(call)
+    put_campaign(store, platformsPaid=["youtube", "tiktok"])
+    clip = _mac_clip(
+        store, campaignId=CAMPAIGN, postOptions={**MINE, "brandContent": True, "campaign": CAMPAIGN_OPTIONS}
+    )
+    assert _claim_as(call, clip["clipId"], "1.3.0")[0] == 200
+    put_campaign(store, platformsPaid=["youtube", "tiktok"], state="ended")
+    assert _step(call, clip["clipId"], "pressing")[0] == 200
+    assert _step(call, clip["clipId"], "finding")[0] == 200
+    assert _step(call, clip["clipId"], "settings")[0] == 200  # after the press: a beat, never a stop
+    assert _raw_post(store, clip["clipId"])["macState"] == "working"
+
+
+def test_an_older_webs_upload_keeps_the_cards_label_on_the_mac_post(
+    call: Call, store: db.Store, table: FakeTable
+) -> None:
+    # No tiktokMac (a card read before the Mac went on): My settings, but the label the card ticked stays, the same
+    # one the clip keeps, so the Mac post and tiktokLabel always agree.
+    _connect(store, "tiktok")
+    _mac_on(call)
+    clip = seed_clip(store)
+    _upload(call, clip["clipId"], ["tiktok"], tiktok={**TIKTOK, "brandOrganic": True})
+    raw = _raw_tiktok(table, clip["clipId"])
+    assert raw is not None
+    assert raw["postOptions"] == {**MINE, "brandOrganic": True}
+    assert (table.raw(clip["pk"], clip["sk"]) or {})["tiktokLabel"] == {"brandContent": False, "brandOrganic": True}
+
+
+def test_content_rewards_counts_its_30_minutes_from_the_macs_press(
+    call: Call, store: db.Store, cr: Any, clock: Clock
+) -> None:
+    _mac_on(call)
+    clip = _cr_mac_clip(store)
+    assert _claim_as(call, clip["clipId"], "1.3.0")[0] == 200
+    pressed = NOW + timedelta(minutes=2)
+    clock.now = pressed
+    assert _step(call, clip["clipId"], "pressing")[0] == 200
+    clock.now = NOW + timedelta(minutes=9)  # the link was found in Studio a few minutes later
+    assert _done(call, clip["clipId"], LINK)[0] == 200
+    sub = _crsub(store, clip["clipId"])
+    assert sub is not None
+    assert (sub["postedAt"], sub["deadline"], sub["sendBy"]) == (
+        iso(pressed),
+        iso(pressed + timedelta(minutes=25)),
+        iso(pressed + timedelta(minutes=30)),
+    )

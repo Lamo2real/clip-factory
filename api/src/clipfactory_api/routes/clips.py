@@ -556,13 +556,20 @@ def tiktok_posted(app: App, req: Request) -> Response:
     return _with_posts(app, req, note=note)
 
 
-def send_to_cr(app: App, req: Request, clip_id: str) -> None:
+# A send CR asks to try again (it can't see the post yet) gets one more try this long after, when the request has the
+# time; then it waits for the owner's Send.
+CR_AGAIN_AFTER = 8.0
+
+
+def send_to_cr(app: App, req: Request, clip_id: str, *, posted_at: Any = None) -> None:
     """A campaign post the owner's Mac posted goes to Content Rewards once it has its link (§47.8): after the Mac's
     done, and after his Add link / It's on TikTok gives a link to a post his Mac posted. Only for the clip's TikTok post
     that is ``posted`` by the Mac (``via: "mac"``), public, for a campaign (``campaignId``), with its ``url``, while
     Content Rewards is on, and only once (no ``CRSUB#{postId}`` yet): ``contentrewards.submit.send`` creates it, keeps
-    to CR's 30 minutes and never raises. A send CR asks to try again later (it can't see the post yet) waits for the
-    owner's Send, as the Send button's own route leaves it (``send_by_hand``). Never breaks the answer it follows."""
+    to CR's 30 minutes and never raises. Those 30 minutes count from ``posted_at`` (the Mac's press, when the done
+    knows it), else the post's ``postedAt``. A send CR asks to try again later (it can't see the post yet) gets one more
+    try ``CR_AGAIN_AFTER`` seconds later while the request has the time, then waits for the owner's Send, as the Send
+    button's own route leaves it (``send_by_hand``). Never breaks the answer it follows."""
     deps = getattr(app, "contentrewards", None)
     if deps is None:
         return
@@ -578,7 +585,13 @@ def send_to_cr(app: App, req: Request, clip_id: str) -> None:
         if deps.store.get(*submissions.key(req.user_id, post_id)) is not None:
             return  # sent (or tried) already: CR's own reminders and the owner's Send take it from there
         deps.for_request(req.started)
-        result = submit.send(deps, req.user_id, post_id, str(row["campaignId"]), timeout=cr_config.SUBMIT_TIMEOUT_API)
+        campaign_id = str(row["campaignId"])
+        result = submit.send(
+            deps, req.user_id, post_id, campaign_id, timeout=cr_config.SUBMIT_TIMEOUT_API, posted_at=posted_at
+        )
+        if result.get("pending") and deps.remaining() > CR_AGAIN_AFTER + cr_config.SUBMIT_TIMEOUT_API + 2:
+            deps.sleep(CR_AGAIN_AFTER)
+            result = submit.send(deps, req.user_id, post_id, campaign_id, timeout=cr_config.SUBMIT_TIMEOUT_API)
         if result.get("pending"):
             reason = {"code": "not_sent_by_app", "text": submissions.reason_text("not_sent_by_app", "tiktok")}
             with contextlib.suppress(db.ConditionFailed):

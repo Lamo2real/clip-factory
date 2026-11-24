@@ -316,10 +316,12 @@ def helper_item(store: db.Store, user_id: str) -> Item | None:
     return store.get(db.user_pk(user_id), HELPER_SK)
 
 
-def queue(store: db.Store, user_id: str, settings: Mapping[str, Any]) -> list[Item]:
+def queue(store: db.Store, user_id: str, settings: Mapping[str, Any], *, brands: bool = True) -> list[Item]:
     """The helper's queue: empty while the switch is off; else the Mac posts that wait (but an auto-posted one while
     auto-posting is off: "While it is off, nothing posts") and the ones a Mac is working on (so a restarted helper sees
-    its own). Upload's first, then oldest ``since`` first (then the oldest clip), at most 50."""
+    its own). Upload's first, then oldest ``since`` first (then the oldest clip), at most 50. Without ``brands`` (the
+    helper reading it is older than ``MAC_BRAND_FROM``, §47.12) a labelled post that waits is left out: that helper
+    can't claim it, and it would take the first waiting post every tick and never get to the others."""
     if not is_on(settings):
         return []
     auto = auto_on(settings)
@@ -334,6 +336,7 @@ def queue(store: db.Store, user_id: str, settings: Mapping[str, Any]) -> list[It
         # and not one a Mac claimed but never pressed Post for. One whose Post was pressed stays, so the Mac can still
         # find its link.
         and (auto or p.get("macSource") != "auto" or bool(p.get("macPressedAt")))
+        and (brands or p.get("macState") != "waiting" or not labelled(p.get("postOptions")))
     ]
     pk = db.user_pk(user_id)
     clip_ids = sorted({str(p.get("clipId")) for p in rows})

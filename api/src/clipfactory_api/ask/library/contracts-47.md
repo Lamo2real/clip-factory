@@ -1341,8 +1341,18 @@ Branded content is only for Everyone or Friends (`tiktok_mac.BRANDED_PRIVACY`).
   this clip. Set up your Mac again.", nothing written): an older helper would post it without its label. A campaign
   clip whose campaign takes no clips now (`_require_campaign_open`'s words: ended, paused, held, not in it) is
   written `stopped` with those words under the claim's own condition (`_stop_closed`), so it leaves the queue and its
-  row says why, and the claim answers 409 with them. Never posted for a closed campaign. That check runs before the
-  version check.
+  row says why, and the claim answers 409 with them. That check runs before the version check.
+* **The queue** (`GET /v1/tiktok/mac?version=`, `version` optional and additive) leaves out a labelled post that
+  waits for a helper older than `MAC_BRAND_FROM`: the `version` the read says, else the helper's last check-in (the
+  web and helper 1.3.0 send none). Such a helper takes the first waiting post every tick and would get the 409 forever,
+  so every other post would wait behind it (review, 24 Nov). A labelled post a Mac already works on stays.
+* **The steps before Post** (`video`, `opening`, `uploading`, `settings`, and their beats) check the campaign again: a
+  campaign that stopped taking clips since the claim (or a helper that resumes its claim after a crash, with no new
+  claim) stops the post with the campaign's words (`routes/tiktok_mac._campaign_before_post`, `tiktok_mac.stopped`,
+  only that device's claim, never once Post was pressed) and the step answers 409. Never on `pressing` or after it:
+  the helper writes its press on disk before the server's yes. Never posted for a closed campaign.
+* **An older web's Upload** (no `tiktokMac`) with a label in `tiktok` keeps it on the Mac post (`with_label` on My
+  settings), so the post and the clip's `tiktokLabel` always agree.
 
 #### 47.12.2 The campaign checks for the Mac's TikTok (all of Upload's)
 
@@ -1373,10 +1383,12 @@ Branded content is only for Everyone or Friends (`tiktok_mac.BRANDED_PRIVACY`).
 After the Mac's done (`POST …/tiktok/mac/done`) and after the owner's Add link / It's on TikTok with a link
 (`POST …/tiktok/posted`), `routes/clips.send_to_cr` sends the clip's TikTok post to Content Rewards when it is posted
 by the Mac (`via: "mac"`), public, for a campaign (`campaignId`), with its `url`, while Content Rewards is on, and only
-once (no `CRSUB#{postId}` yet): `contentrewards.submit.send` creates `CRSUB#{postId}` (idempotent, its 30-minute
-window, `deadline` and `sendBy` from `postedAt`, which the done writes) with `SUBMIT_TIMEOUT_API`. A send that CR asks
-to try later goes to `send_by_hand` (the owner's Send on Campaigns), as the Send route leaves it, since nothing else
-retries outside the clip flow. A done without a link sends nothing; the later link sends it. It never breaks the
+once (no `CRSUB#{postId}` yet): `contentrewards.submit.send` creates `CRSUB#{postId}` (idempotent) with `SUBMIT_TIMEOUT_API`. Its
+30-minute window (`deadline` +25, `sendBy` +30) counts from when the Mac pressed Post (`posted_at`: the post's
+`macPressedAt`, read before the done removes it), else from `postedAt` (a later link). A send that CR asks to try later
+(it can't see the post yet) gets one more try `CR_AGAIN_AFTER` (8 s) later while the request has the time, then goes to
+`send_by_hand` (the owner's Send on Campaigns), as the Send route leaves it, since nothing else retries outside the
+clip flow. A done without a link sends nothing; the later link sends it. It never breaks the
 answer it follows (`clip.mac_cr_failed` in the log). The clip flow's CR step finds the Mac post not `posted` yet and
 leaves it (`not_posted`), so a submission is never made twice.
 
@@ -1398,6 +1410,9 @@ leaves it (`not_posted`), so a submission is never made twice.
   `REASONS.label`, "Your Mac couldn't set TikTok's Branded content label the way this clip needs, so it didn't post.
   Tap Try again." Clips Funded's lane is unchanged (AI label on, Disclose post content off).
 * **The claim** says `{device, version}`; against a server from before this (400) once more with `{device}`.
+* **The last look** at the label and Who can see it comes after the account check, right before the press step, and
+  a click that Studio hasn't shown after 3 s gets one more 3 s look before it is tried another way (a second click
+  would undo a late first one).
 * **The kept video** leaves Downloads once the clip's TikTok post is `posted` for everyone or with the privacy the
   job set (`tidyGoes`; the job's privacy is kept in the ledger at the claim; an entry from before 1.3.0 means
   Everyone), not only `public`.
@@ -1456,10 +1471,12 @@ leaves it (`not_posted`), so a submission is never made twice.
 
 #### 47.12.7 Rollout and not verified live
 
-* One PR (API, web, helper). The API deploys first; the helper on the Mac (1.2.3) sends no `version`, so it never
-  claims a labelled post (409, nothing written) until 1.3.0 is installed from main (`install.sh`, keeping settings,
-  state, the profile and the Keychain; only with no `run.lock`; then `whoami` must print @lamo.clips). Meanwhile a
-  labelled post waits, and the row says the Mac needs its update. Unlabelled posts go on as before.
+* One PR (API, web, helper). The API deploys first; the helper on the Mac (1.2.3) checks in as 1.2.3 and sends no
+  claim `version`, so its queue has no labelled post that waits and a claim of one is refused (409, nothing written)
+  until 1.3.0 is installed from main (`install.sh`, keeping settings, state, the profile and the Keychain; only with
+  no `run.lock`; then `whoami` must print @lamo.clips). Meanwhile a labelled post waits, the row says the Mac needs its
+  update, and every unlabelled post goes on as before. 1.3.0's first tick still reads the queue as 1.2.3 (its check-in
+  comes after the read), so a labelled post goes from its second tick, a minute later.
 * Not verified live: what TikTok shows after Post is pressed on a branded post (the probe never presses Post; the
   press loop still clicks only "Post now", and a post it can't confirm is looked for and asked about after 30
   minutes, §47.6), and Content Rewards' answer to a Mac-posted TikTok link (the same `create_my_submission` as every

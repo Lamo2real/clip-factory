@@ -62,13 +62,18 @@ def _job(app: App, req: Request, row: dict[str, Any]) -> Response:
 
 
 def status(app: App, req: Request) -> Response:
-    """``GET /v1/tiktok/mac`` → ``{on, helper, queue}``."""
+    """``GET /v1/tiktok/mac?version=`` → ``{on, helper, queue}``. ``version`` (optional, additive: the helper 1.3.0
+    sends its own) says which helper reads it; without it (the web, an older helper) the helper's last check-in says.
+    A helper older than ``MAC_BRAND_FROM`` gets no labelled post that waits (``tiktok_mac.queue``'s ``brands``)."""
     current = settings.load(app.store, req.user_id)
+    item = tiktok_mac.helper_item(app.store, req.user_id)
+    said = req.query.get("version")
+    brands = tiktok_self.helper_brands(said if said else (item or {}).get("version"))
     return ok(
         {
             "on": tiktok_mac.is_on(current),
-            "helper": tiktok_mac.public_helper(tiktok_mac.helper_item(app.store, req.user_id)),
-            "queue": tiktok_mac.queue(app.store, req.user_id, current),
+            "helper": tiktok_mac.public_helper(item),
+            "queue": tiktok_mac.queue(app.store, req.user_id, current, brands=brands),
         }
     )
 
@@ -254,6 +259,8 @@ def step(app: App, req: Request) -> Response:
     if name not in tiktok_mac.STEPS:
         raise bad_request("step must be video, opening, uploading, settings, pressing or finding.")
     item = clip_routes._clip_or_404(app, req)
+    if name in BEFORE_POST:
+        _campaign_before_post(app, req, item, device, attempt)
     try:
         row, pressed = tiktok_mac.step(
             app.store, item, device, name, app.clock(), settings=settings.load(app.store, req.user_id), attempt=attempt
@@ -263,6 +270,30 @@ def step(app: App, req: Request) -> Response:
     if pressed:
         log("info", "tiktok_mac.pressing", clipId=item["clipId"])
     return _job(app, req, row)
+
+
+# The steps before Post (and their beats): a campaign that stopped taking clips meanwhile stops the post here, so a
+# resumed or long try never posts it (the claim checks it too). Never on ``pressing`` or after it: the helper records
+# its press on disk before the server's yes, so a refusal there would read as pressed.
+BEFORE_POST = ("video", "opening", "uploading", "settings")
+
+
+def _campaign_before_post(app: App, req: Request, item: dict[str, Any], device: str, attempt: int | None) -> None:
+    """A campaign clip's Mac post that never pressed Post, whose campaign takes no clips now: it stops with the
+    campaign's words (``tiktok_mac.stopped``, only this device's claim) and the step answers 409 with them."""
+    rows = posts.posts_for_clip(app.store, req.user_id, item["clipId"], consistent=True)
+    row = tiktok_self.tiktok_row(rows)
+    if row is None or row.get("status") != posts.MAC_STATUS or row.get("macPressedAt"):
+        return
+    closed = clip_routes.campaign_closed(app, clip_routes.campaign_clip(app, req.user_id, item, rows))
+    if not closed:
+        return
+    try:
+        tiktok_mac.stopped(app.store, item, device, closed, app.clock(), attempt=attempt)
+    except tiktok_self.Refused as e:
+        raise _refused(e) from e
+    log("info", "tiktok_mac.campaign_stopped", clipId=item["clipId"], at="step")
+    raise conflict(closed)
 
 
 def _code(body: dict[str, Any]) -> str | None:
@@ -352,7 +383,8 @@ def done(app: App, req: Request) -> Response:
     except db.ConditionFailed as e:
         raise conflict(tiktok_mac.CHANGED) from e
     log("info", "tiktok_mac.done", clipId=item["clipId"], link=video is not None, views=count_views)
-    clip_routes.send_to_cr(app, req, str(item["clipId"]))
+    # Content Rewards counts its 30 minutes from when the post went up: when the Mac pressed Post, not this done.
+    clip_routes.send_to_cr(app, req, str(item["clipId"]), posted_at=row.get("macPressedAt"))
     return clip_routes._with_posts(app, req, note=note)
 
 

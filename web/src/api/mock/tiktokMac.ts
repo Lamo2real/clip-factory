@@ -249,6 +249,8 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
       // While auto-posting is off nothing auto-posted goes on: not a waiting one, not one claimed but never pressed.
       .filter((p) => p.status === "mac" && p.mac && (p.mac.state === "working" || p.mac.state === "waiting") && (autoOn || p.mac.source !== "auto" || !!p.mac.pressedAt))
       .filter((p) => deps.clips().some((c) => c.clipId === p.clipId))
+      // As the API (§47.12): a helper that says it is older than MAC_BRAND_FROM gets no labelled post that waits.
+      .filter((p) => !helper || macHelperBrands(helper) || p.mac!.state !== "waiting" || !(p.mac!.brandContent || p.mac!.brandOrganic))
       .sort(
         (a, b) =>
           Number(a.mac!.source !== "upload") - Number(b.mac!.source !== "upload") ||

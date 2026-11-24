@@ -713,10 +713,15 @@ export function studioForm(page) {
           const id = await switchId(page, name);
           if (id) await page.locator(`[id="${id}"]`).click({ force: true, timeout: 5000 }).catch(() => {});
           if (await moved()) return;
+          // A slow page may still show the first click: never click again before a last look (a second click would
+          // undo a late first one).
+          await sleep(LABEL_WAIT_MS);
+          if ((await on()) !== before) return;
           // Studio's switch input is hidden under its own track: click the track (or the checkbox's label) instead.
           const again = await switchId(page, name);
           if (again) await page.evaluate((i) => document.getElementById(i)?.closest(".Switch__content, label, [role=switch]")?.click(), again);
           await moved();
+          await sleep(1000); // let a late change land before turn() reads it back
         },
       };
     },
@@ -804,11 +809,12 @@ export async function post(page, job, file, onStep, opts = {}) {
   // Right before Post: the AI label is still on (Clips Funded), Clip Factory's disclosure and who can see it are still
   // as the job says, and it is still the same account.
   if (kind === "ws" && !(await aiLabelOn(page))) throw new Stop(REASONS.aiLabel);
+  await recheckAccount(page, opts, session);
   if (kind !== "ws") {
+    // The last look, after the account check: nothing slow comes between it and Post now.
     await checkLabel(studioForm(page), job);
     await checkPrivacy(page, job.privacy);
   }
-  await recheckAccount(page, opts, session);
   if (dryRun) {
     // A check run: everything up to Post, then nothing. Quitting Chrome afterwards throws the upload away. It says
     // what TikTok's disclosure reads now (Clip Factory's lane) and whether Studio shows "Paid partnership".
