@@ -19,6 +19,7 @@ import type {
   ProductionJob,
   PublishingJob,
   ReferenceVideo,
+  Series,
   Skill,
   SocialAccount,
   Story,
@@ -27,7 +28,28 @@ import type {
   StoriesDashboard,
   Workspace,
 } from "../types.ts";
-import type { StoryScript } from "../../engine/types.ts";
+import type { CharacterLook, StoryScript } from "../../engine/types.ts";
+
+/**
+ * A SERIES# item as the mock keeps it (§45.44): the owner's fields, the story so far and the episode summaries. Its
+ * episodes, counts and cover are worked out on every read (series.ts), like the API.
+ */
+export interface StoredSeries {
+  seriesId: string;
+  workspaceId: string;
+  name: string;
+  line: string | null;
+  castIds: string[];
+  cover: Series["cover"];
+  storySoFar: string;
+  storySoFarBy: "ai" | "owner" | null;
+  storySoFarAt: string | null;
+  summaries: { storyId: string; summary: string; by: "ai" | "owner"; at: string }[];
+  recap: Series["recap"];
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
 
 export interface MockStore {
   workspaces: Workspace[];
@@ -47,6 +69,8 @@ export interface MockStore {
   conversations: Conversation[];
   messages: Message[];
   references: ReferenceVideo[];
+  /** Series (§45.44), the series part's */
+  series: StoredSeries[];
   /** Lamo Clips' own destination per platform (names only), as GET …/social returns it. */
   clips: ClipsDestination[];
   /** ACT# items any part may add (approve, reject, changes, made, posted, failed); the dashboard shows the last 10. */
@@ -80,6 +104,7 @@ export function createStore(): MockStore {
     conversations: [],
     messages: [],
     references: [],
+    series: [],
     clips: [],
     activity: [],
     onboarding: { stepsDone: [], skipped: [], finishedAt: null, providersPickedAt: null },
@@ -158,7 +183,7 @@ export { CLIPS_WORKSPACE_ID, FIRST_STORIES_WORKSPACE_ID };
 // story in the store, the shell adds this small set so the dashboard, the Library and the posts have something to
 // show; it never runs once the studio part seeds stories.
 
-const LOOK_PIP: Character["look"] = {
+const LOOK_PIP: CharacterLook = {
   body: "bean",
   skin: "#F6C9A0",
   height: 1,
@@ -173,7 +198,7 @@ const LOOK_PIP: Character["look"] = {
   outline: "#1C1842",
 };
 
-const LOOK_BOLT: Character["look"] = {
+const LOOK_BOLT: CharacterLook = {
   body: "square",
   skin: "#8C5A3C",
   height: 1.1,
@@ -243,7 +268,7 @@ function demoJob(ws: string, storyId: string, at: string, running: number | null
 export function seedShellDemo(store: MockStore): void {
   if (store.stories.length > 0) return;
   const ws = FIRST_STORIES_WORKSPACE_ID;
-  const character = (name: string, look: Character["look"], style: Character["movementStyle"], personality: string, days: number): Character => ({
+  const character = (name: string, look: CharacterLook, style: Character["movementStyle"], personality: string, days: number): Character => ({
     characterId: mockId(),
     workspaceId: ws,
     name,

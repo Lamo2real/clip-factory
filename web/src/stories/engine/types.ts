@@ -39,6 +39,30 @@ export interface CharacterLook {
   outline: Hex;
 }
 
+export type CharacterKind = "person" | "car";
+
+export type CarBody = "hatchback" | "sedan" | "estate" | "suv" | "pickup" | "van" | "sports" | "compact";
+
+/** A car character's look (CONTRACTS §45.42): drawn by engine/car.ts in the side and the top view. */
+export interface CarLook {
+  body: CarBody;
+  /** 0.85..1.15 */
+  length: number;
+  /** 0.85..1.15 */
+  height: number;
+  paint: Hex;
+  /** the second colour: roof and pillars (two_tone), the stripes, the mirror caps */
+  accent: Hex;
+  pattern: "plain" | "two_tone" | "stripe" | "racing_stripes";
+  windows: "clear" | "tinted" | "dark";
+  wheels: { style: "steel" | "hubcap" | "alloy" | "sport" | "offroad"; rim: Hex; /** 0.85..1.2 */ size: number };
+  lights: { front: "round" | "square" | "slim"; rear: "round" | "bar" | "square" };
+  extra: "none" | "roof_rack" | "spoiler" | "roof_box";
+  /** a cartoon face; eyes "none" is a real-looking car (the default) */
+  face: { eyes: "none" | "windscreen" | "headlights"; color: Hex; mouth: "none" | "grille" };
+  outline: Hex;
+}
+
 export type ActionId =
   | "idle"
   | "walk"
@@ -67,9 +91,26 @@ export type ActionId =
   | "dance"
   | "think"
   | "gesture"
-  | "gasp";
+  | "gasp"
+  | "get_in"
+  | "get_out";
 
-export type PropAction = "move" | "skid" | "spin" | "stop" | "bump" | "tyre_burst" | "appear" | "vanish" | "wobble" | "flash";
+export type PropAction =
+  | "move"
+  | "skid"
+  | "spin"
+  | "stop"
+  | "bump"
+  | "tyre_burst"
+  | "appear"
+  | "vanish"
+  | "wobble"
+  | "flash"
+  | "speed_up"
+  | "bounce"
+  | "honk"
+  | "blink"
+  | "stall";
 
 export type SetId =
   | "studio"
@@ -172,6 +213,18 @@ export interface CastMember {
   expressions?: Expression[];
 }
 
+/** A car of the cast (§45.43): never an actor; a car prop whose castId names it is drawn as it. */
+export interface CarMember {
+  characterId: string;
+  name: string;
+  car: CarLook;
+  movementStyle: MovementStyle;
+  /** always style "none" and noises [] */
+  voice: CharacterVoice;
+  /** ["neutral"] without a face; at least 3, neutral among them, with one */
+  expressions?: Expression[];
+}
+
 /** The shape of a video (CONTRACTS §45.34). 9:16 is the default: Shorts, Reels and TikTok want it. */
 export type VideoAspect = "9:16" | "1:1" | "16:9";
 /** The six sizes, width × height; each belongs to one shape. */
@@ -225,13 +278,15 @@ export interface SceneProp {
   rot: number;
   color?: Hex;
   state?: string;
+  /** a key of script.cars, on kind "car" only: drawn as that car, `color` ignored */
+  castId?: CastId;
 }
 
 export interface Beat {
   /** seconds from the scene's start */
   at: number;
   dur: number;
-  /** a cast id or a prop id of this scene */
+  /** a cast id, or a prop id of this scene (a car of the cast is reached by its prop id) */
   who: string;
   do: ActionId | PropAction;
   face?: Expression;
@@ -303,6 +358,8 @@ export interface StoryScript {
   title: string;
   seed: number;
   cast: Record<CastId, CastMember>;
+  /** the cast's cars by cast id (never the same id as a `cast` key); missing in older scripts */
+  cars?: Record<CastId, CarMember>;
   scenes: Scene[];
   music: { mood: MusicMood; volume: number } | null;
   captionsOn: boolean;
@@ -370,8 +427,21 @@ export interface LookCatalog {
   voiceStyle: CatalogEntry<CharacterVoice["style"]>[];
 }
 
+export interface CarLookCatalog {
+  body: CatalogEntry<CarBody>[];
+  pattern: CatalogEntry<CarLook["pattern"]>[];
+  windows: CatalogEntry<CarLook["windows"]>[];
+  wheels: CatalogEntry<CarLook["wheels"]["style"]>[];
+  frontLights: CatalogEntry<CarLook["lights"]["front"]>[];
+  rearLights: CatalogEntry<CarLook["lights"]["rear"]>[];
+  extra: CatalogEntry<CarLook["extra"]>[];
+  eyes: CatalogEntry<CarLook["face"]["eyes"]>[];
+  mouth: CatalogEntry<CarLook["face"]["mouth"]>[];
+}
+
 export interface Catalog {
   looks: LookCatalog;
+  carLooks: CarLookCatalog;
   actions: CatalogEntry<ActionId>[];
   propActions: CatalogEntry<PropAction>[];
   sets: CatalogEntry<SetId>[];

@@ -2514,3 +2514,68 @@ Amends ADR-78 (its "Reference links to other people's videos are not downloaded"
   does not guarantee them; Instagram may want a login, and no cookies are used). The image grows by about 175 MB for
   the PO-token server. Follow-ups: "Get it again" for a link reference whose file a keep setting cleared; Vimeo or
   other sites as rows of the table; one public link per site tried on the live app after the deploy.
+
+## ADR-90 The sound samples are rendered ahead of time from the renderer's own synth
+
+- **Context.** The owner (2026-11-23), on a character's Sounds tab: "id like everything here to be in samples so i can
+  here what each sounds like". The videos' sounds come from one numpy synth in the stories agent
+  (`stories/agent/.../audio.py`, CONTRACTS §45.11.3), with no audio files; the web had nothing to play.
+- **Options.** (1) A TypeScript copy of the synth in the browser (Web Audio): two synths to keep equal, and what he
+  hears drifts from the videos. (2) An API route that renders on demand: new infra, a wait on every tap, and Lambda
+  time. (3) Render every sample ahead of time with the agent's own synth into small files the web serves.
+- **Decision.** (CONTRACTS §45.41) Option 3. `python -m lamostories_agent.samples` renders each effect and each noise
+  (both voices at all 31 pitch stops) as one event through `audio.mix`, the videos' chain without the final loudnorm,
+  then mono, the end silence trimmed, one library gain (2.28, the loudest at -1 dBFS, so the files keep the videos'
+  levels against each other) and a 64 kbps MP3: 705 files, 4.07 MB, under `web/public/sounds/stories/<recipe>/`.
+  `recipe` hashes the tokens of audio.py and samples.py (comments do not count; `ast.dump` was not used because its
+  text changes between Python versions) and the settings, so a changed synth is a new folder name that also gets past
+  the 1-hour browser cache. The web plays them with Web Audio, one at a time, from a play button beside each chip;
+  tapping a chip still only picks it.
+- **Consequences.** No infra and no API. The repo holds 4 MB of MP3s; the service worker never precaches
+  `public/sounds/`, so neither app's install grows. `test_sound_samples.py` fails while the files are stale (the
+  recipe, the file list, and PCM spot renders against the manifest), and ci.yml runs it when the files or
+  `samplesRoot.ts` change: after a change to audio.py, run the generator (it needs ffmpeg) and commit its output. The
+  samples are the built-in synth's; when the workspace picks another effects maker the part says "Effects may sound a
+  bit different in videos."
+
+## ADR-91 A car of the cast is a car prop with a castId, kept in its own `cars` map
+
+- **Context.** The owner (2026-11-23) wants a character that is a car, made in cartoon style from real photos, picked
+  among several generated cars, for a series "where its a guy buying a car and then driving it for the first time",
+  with the main character. The built-in animator had people only (`cast`), and cars only as plain props.
+- **Options.** (1) Make a car an actor in `cast`: every people part (geometry, motion, faces, bubbles, noises) would
+  branch on the kind. (2) Keep `cast` people only and put the cast's cars in a separate `script.cars` map; a car prop
+  with `castId` is drawn as that car, with its own `CarLook`. Also: (a) one model call per option, or (b) one call
+  that makes 3 options, so the photos are sent once.
+- **Decision.** (CONTRACTS §45.42, §45.43) Option 2, with (b). Two kinds: person and car ("an animal" and "a thing"
+  need rigs of their own and are follow-ups). A car is drawn by `engine/car.ts` in the side and top views (8 bodies,
+  paint patterns, windows with riders behind the glass, wheels, lights, optional eyes on the windscreen or in the
+  headlights, off by default) and moves by prop actions (the new speed_up, bounce, honk, blink and stall). Plates are
+  plain and badges never drawn: the engine has no text shapes, the prompt forbids makes and models, and the checker
+  strips a brand that gets through. A cast is 1 to 3, at most one car and someone to drive it.
+- **Consequences.** People code and old scripts are unchanged; the shape goldens keep every prim (only
+  `ENGINE_VERSION` goes 5 to 6). The writer and the idea agent get the car as a cast entry with words, never a look.
+  `CHAR#` gains `kind` and `car` (a missing kind is a person). A car design costs one call for 3 options, a person
+  design what it cost before. Cars have their own place in the rail, Cars, right under Characters (the owner asked
+  for it twice), and Characters shows the cars too, each with a Car tag. The rail's 12 pages keep 48, 44 or 40 px rows,
+  never lower than 40 (the first build's shared rows went down to 32 px); in a window too short for twelve 40 px rows
+  the rail's list scrolls.
+
+## ADR-92 A series' memory is data kept per series, written by a recap task after each approval
+
+- **Context.** The owner (2026-11-23): "Can you create a folder for each series i create so it is organized and if
+  you think it good maybe it could save context from previous videos if they are in the same folder".
+- **Options.** (1) Keep it in the workspace memory (MEM#): it would mix series, grow without a bound and fill the
+  owner's own memory. (2) Rebuild it from every earlier script for each new idea or video: large prompts and cost
+  that grows with each episode. (3) A `SERIES#` item per series with a short story so far and one summary per
+  episode, written by a task after each approval, and a bounded slice of it sent to the idea agent and the writer.
+- **Decision.** (CONTRACTS §45.44) Option 3. A series is a folder (a name, a line, a cast and a cover) and a place in
+  the rail, with an "All ▾" switch on Ideas, Production, Review and Library whose choice lives in the address
+  (`?series=`), never in a hidden filter. After an approval, a `series_recap` task (the creative director, routed as
+  `text_edit`) writes the episode's summary (≤ 400) and the story so far (≤ 1500, in Who, Places, Running jokes and
+  Where things stand), under a version condition; the owner can read and edit it. `series_context` sends the story so
+  far, the newest 5 summaries, up to 20 earlier titles and the cast, at most 8000 bytes.
+- **Consequences.** An approval never fails because of the recap (it is best effort, and the folder offers "Write it
+  again"). Episodes and their numbers are worked out on each read. Deleting a series never deletes a video: its
+  videos and ideas move to "No series". No infra: the same table partition, and API Gateway already proxies the
+  routes. The series memory never goes into MEM#.

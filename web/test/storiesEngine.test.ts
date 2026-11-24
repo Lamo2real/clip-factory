@@ -510,7 +510,7 @@ describe("the engine folder is plain TypeScript (§45.10)", () => {
 
 // ---- every catalog id draws ---------------------------------------------------------------------------------
 
-type ListKey = Exclude<keyof typeof CATALOG, "looks">;
+type ListKey = Exclude<keyof typeof CATALOG, "looks" | "carLooks">;
 const ids = <K extends ListKey>(k: K) => CATALOG[k].map((e) => e.id) as (typeof CATALOG)[K][number]["id"][];
 
 /** Looks that use every body, hair style, eye shape, brow, nose, mouth, pattern and accessory at least once. */
@@ -593,7 +593,8 @@ describe("every catalog id draws", () => {
   });
 
   it("every action with every movement style, every face, bubble and noise, standing and in a car", () => {
-    const actions = ids("actions");
+    // getting in and out needs a parked car and its own timing rules: storiesEngineCasting.test.ts draws those
+    const actions = ids("actions").filter((a) => a !== "get_in" && a !== "get_out");
     const faces = ids("expressions");
     const bubbles = ids("bubbles");
     const noises = ids("noises");

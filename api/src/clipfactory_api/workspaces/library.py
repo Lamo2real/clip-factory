@@ -70,8 +70,16 @@ def title_for(item: Mapping[str, Any], names: Mapping[str, str]) -> str:
 
 
 def asset_filter(
-    user_id: str, workspace_id: str, *, kind: str | None, story_id: str | None, character_id: str | None
+    user_id: str,
+    workspace_id: str,
+    *,
+    kind: str | None,
+    story_id: str | None,
+    character_id: str | None,
+    story_ids: frozenset[str] | None = None,
 ) -> Callable[[Item], bool]:
+    """``story_ids`` (§45.44, ``?seriesId=``): only the files of those stories; a file with no story is left out."""
+
     def keep(item: Item) -> bool:
         if item.get("type") != ws.TYPE_ASSET or not guard.owned(item, user_id, workspace_id):
             return False
@@ -80,6 +88,8 @@ def asset_filter(
         if not kind and item.get("kind") in shapes.LIBRARY_HIDDEN:
             return False  # "Design with AI" pictures are not Library files (§45.6)
         if story_id and item.get("storyId") != story_id:
+            return False
+        if story_ids is not None and item.get("storyId") not in story_ids:
             return False
         return not (character_id and item.get("characterId") != character_id)
 
