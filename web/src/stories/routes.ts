@@ -1,7 +1,7 @@
 // Lamo Stories pages (docs/CONTRACTS.md §45.16.2). Every path under /stories is Lamo Stories; the main router
 // (web/src/lib/router.ts) hands those paths to matchStories() and everything else stays Lamo Clips.
 import type { Platform } from "./api/types.ts";
-import type { CharacterKind } from "./engine/types.ts";
+import type { ArtStyle, CharacterKind } from "./engine/types.ts";
 
 /**
  * `?series=` (CONTRACTS §45.44): a series id, or "none" (videos in no series). Each page key below that holds it is
@@ -23,8 +23,10 @@ export type StoriesPage =
   /**
    * Make a new video, filled in from the address (CONTRACTS §45.34): `?idea=`, `?ref=` (repeatable, up to 3 reference
    * videos), `?cast=` (repeatable, up to 3 characters) and `?sec=` (15 to 90). The router always fills every key.
+   * `?art=` (night_drive or classic, §45.45) is there only when the address has a known drawing style: the chat's
+   * "Make the video" carries the style the director offered.
    */
-  | { name: "production_new"; ideaId: string | null; refIds?: string[]; castIds?: string[]; durationSec?: number | null; seriesId?: string }
+  | { name: "production_new"; ideaId: string | null; refIds?: string[]; castIds?: string[]; durationSec?: number | null; seriesId?: string; art?: ArtStyle }
   | { name: "production_story"; storyId: string }
   | { name: "review"; seriesId?: string }
   | { name: "review_story"; storyId: string }
@@ -101,6 +103,7 @@ export function matchStories(pathname: string, search: string): StoriesPage {
     if (b === undefined) return { name: "production", ...seriesOf(q) };
     if (b === "new") {
       const series = seriesOf(q).seriesId;
+      const art = q.get("art");
       return {
         name: "production_new",
         ideaId: q.get("idea"),
@@ -108,6 +111,7 @@ export function matchStories(pathname: string, search: string): StoriesPage {
         castIds: idList(q.getAll("cast")),
         durationSec: lengthOf(q.get("sec")),
         ...(series && series !== "none" ? { seriesId: series } : {}),
+        ...(art === "night_drive" || art === "classic" ? { art } : {}),
       };
     }
     if (ID.test(b)) return { name: "production_story", storyId: b };
@@ -178,6 +182,7 @@ export function storiesHref(page: StoriesPage): string {
       for (const c of (page.castIds ?? []).slice(0, 3)) q.append("cast", c);
       if (page.durationSec) q.set("sec", String(page.durationSec));
       if (page.seriesId) q.set("series", page.seriesId);
+      if (page.art) q.set("art", page.art);
       const qs = q.toString();
       return `${STORIES_ROOT}/production/new${qs ? `?${qs}` : ""}`;
     }

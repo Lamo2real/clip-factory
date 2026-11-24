@@ -7,8 +7,15 @@
 // `F` is the frame being drawn now. Every entry point that lays a script out (drawFrame, prepare, textTrack,
 // audioTrack) runs inside `inFrame(script, …)`, which sets it from the script's width and height and puts it back
 // afterwards; everything else reads it. The engine is synchronous, so two previews never see each other's frame.
+// `F` also carries the drawing style (`script.art`, §45.45) and the light the part being drawn now stands in
+// (art.ts): inFrame sets the style from the script and the studio light; scene.ts sets the light per place and part.
 
-import type { FrameHeight, FrameWidth, VideoAspect, VideoFormat, VideoResolution } from "./types.ts";
+import type { Light } from "./art.ts";
+import type { ArtStyle, FrameHeight, FrameWidth, VideoAspect, VideoFormat, VideoResolution } from "./types.ts";
+
+/** The light that changes nothing (art.ts LIGHTS.studio): the editors' previews keep the owner's own colours. It lives
+ * here so frame.ts needs nothing from art.ts but its types (art.ts reads F). */
+export const STUDIO_LIGHT: Readonly<Light> = Object.freeze({ ambient: "#ffffff", amount: 0, desat: 0, dark: 0, warm: 0, rim: "#fff6e5", rimA: 0.25, night: false });
 
 /** The short side of the design space (px): everything's size is measured against it. */
 export const SHORT = 1080;
@@ -86,6 +93,10 @@ export interface Frame {
   uy: number;
   /** where text may go, design px */
   safe: Safe;
+  /** the drawing style of the script being drawn (§45.45): "classic" unless the script says "night_drive" */
+  art: ArtStyle;
+  /** the light the part being drawn now stands in (art.ts): studio (no change) outside a scene */
+  light: Light;
 }
 
 /** The frame being drawn now (the 1080 × 1920 default between calls). */
@@ -93,18 +104,38 @@ export const F: Frame = frameFor(DEFAULT_FORMAT);
 
 function frameFor(f: VideoFormat): Frame {
   const d = DESIGN[f.aspect];
-  return { aspect: f.aspect, w: d.w, h: d.h, k: Math.min(f.width, f.height) / SHORT, sx: d.w / 1080, sy: d.h / 1920, ux: 1080 / d.w, uy: 1080 / d.h, safe: SAFE[f.aspect] };
+  return { aspect: f.aspect, w: d.w, h: d.h, k: Math.min(f.width, f.height) / SHORT, sx: d.w / 1080, sy: d.h / 1920, ux: 1080 / d.w, uy: 1080 / d.h, safe: SAFE[f.aspect], art: "classic", light: STUDIO_LIGHT };
 }
 
-/** Runs `fn` with `F` set to the script's size (a size that is not one of the six draws as 1080 × 1920), then puts the
- * frame that was there back. */
-export function inFrame<T>(size: { width?: unknown; height?: unknown }, fn: () => T): T {
+/** A script's drawing style: only "night_drive" draws in night drive; anything else (missing, older scripts) is
+ * classic. */
+export const artOf = (art: unknown): ArtStyle => (art === "night_drive" ? "night_drive" : "classic");
+
+/** Runs `fn` with `F` set to the script's size (a size that is not one of the six draws as 1080 × 1920), its drawing
+ * style and the studio light, then puts the frame that was there back. */
+export function inFrame<T>(size: { width?: unknown; height?: unknown; art?: unknown }, fn: () => T): T {
   const saved: Frame = { ...F };
   Object.assign(F, frameFor(formatOf(size.width, size.height) ?? DEFAULT_FORMAT));
+  F.art = artOf(size.art);
+  F.light = STUDIO_LIGHT;
   try {
     return fn();
   } finally {
     Object.assign(F, saved);
+  }
+}
+
+/** Runs `fn` in a drawing style with the studio light (the editors' previews, which have no script), then puts the
+ * style and light that were there back. */
+export function withArt<T>(art: ArtStyle | undefined, fn: () => T): T {
+  const was = { art: F.art, light: F.light };
+  F.art = artOf(art);
+  F.light = STUDIO_LIGHT;
+  try {
+    return fn();
+  } finally {
+    F.art = was.art;
+    F.light = was.light;
   }
 }
 

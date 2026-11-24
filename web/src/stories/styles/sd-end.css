@@ -628,3 +628,20 @@
 .st-s-ai-btn.is-bad .st-s-ai-btn__set {
   flex: 0 0 auto;
 }
+
+/* The drawing style pick (§45.45): a small sample character drawn in each style beside its words. */
+.st-s-art {
+  display: grid;
+  gap: 12px;
+  margin-top: 12px;
+}
+
+.st-s-artpick .st-s-pick__opt {
+  flex-direction: row;
+  align-items: center;
+}
+
+.st-s-artpick .st-s-pick__art {
+  width: 56px;
+  height: 56px;
+}

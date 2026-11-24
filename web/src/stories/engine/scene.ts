@@ -3,14 +3,22 @@
 // frame's design px (frame.ts: the short side is 1080, positions 0..1 of the frame); the pen scales the result to
 // the script's own size. A car of the cast (§45.43) is a car prop with a castId, drawn as that car; a rider can get in
 // (walk to the door, step in, fade into the seat) and get out again.
+//
+// In the night drive style (CONTRACTS §45.45) each part stands in its place's light (light.ts: the place outside, the
+// inside of a car), the street lamps' warm pulse rolls with the road, and a vignette finishes the picture under the
+// bubbles. A scene's `cuts` cut the picture to another shot (shots.ts) while the action and the sound go on; a scene
+// without cuts, in a script without `art`, draws exactly as before.
 
+import { nightDrive } from "./art.ts";
 import { BUBBLE_R, bubbleSpan, drawBubble, type Bubble } from "./bubbles.ts";
 import { cameraAt, layerMatrix, toScreen, visibleBox, type Box, type Cam, type Focus } from "./camera.ts";
 import { F, inFrame } from "./frame.ts";
 import { DEG, TAU, clamp, clamp01, ease, hash, rand, smoothstep } from "./math.ts";
 import { carSide, type CarDraw } from "./car.ts";
 import { actorState, boardingAt, boardingOf, DRIVING, STYLES, type ActorState, type Boarding, type Style } from "./motion.ts";
+import { drawVignette, lampWarm, lightFor } from "./light.ts";
 import { frameView, Pen } from "./pen.ts";
+import { drawShot, nextCutAfter, shotAt, shotHead, shotShows, type ShotCar, type ShotInput, type ShotPerson, type ShotSpan } from "./shots.ts";
 import { endCardFrom, endCardLayout, textBoxes } from "./text.ts";
 import { CARS, DECALS, drawProp, OVERLAYS, propBaseScale, propState, steerArrow, WEATHER, type DriverInput, type PropState } from "./props.ts";
 import { drawCharacter, geometry, headTop, type Geo } from "./rig.ts";
@@ -37,7 +45,7 @@ const CACHE = new WeakMap<StoryScript, { sig: string; prep: Prepared }>();
 
 /** Everything the cached layout depends on, so a script edited in place is laid out again. */
 function signature(s: StoryScript): string {
-  return JSON.stringify([s.width, s.height, s.seed, s.cast, s.cars ?? null, s.safety?.citations?.map((c) => c.publisher) ?? null, s.scenes.map((sc) => [sc.sceneId, sc.durationSec, sc.seed, sc.view, sc.camera, sc.actors, sc.props, sc.beats, sc.sfx])]);
+  return JSON.stringify([s.width, s.height, s.seed, s.cast, s.cars ?? null, s.safety?.citations?.map((c) => c.publisher) ?? null, s.scenes.map((sc) => [sc.sceneId, sc.durationSec, sc.seed, sc.view, sc.camera, sc.actors, sc.props, sc.beats, sc.sfx, sc.cuts ?? null]), s.art ?? null]);
 }
 
 export function sceneStarts(s: StoryScript): number[] {
@@ -126,6 +134,12 @@ interface SceneRT {
   steering: Map<string, number>;
   cam: Cam;
   scroll: number;
+  /** a car with people in it (or driving by itself) rolls the road by */
+  rolling: boolean;
+  /** how fast each driven car goes (0..1.3) at a scene time */
+  speeds: Map<string, (time: number) => number>;
+  /** the shot showing now (shots.ts) */
+  span: ShotSpan;
 }
 
 /** The seated view of a rider (the main one or the cross-fade's other half), if it shows. */
@@ -288,6 +302,8 @@ export function sceneRuntime(s: StoryScript, prep: Prepared, index: number, t: n
   // drivers steer and brake their cars; a car with people in it rolls the road by
   let scroll = 0;
   let scrollSign = 1;
+  let rolling = false;
+  const speeds = new Map<string, (time: number) => number>();
   const steering = new Map<string, number>();
   const props: PropState[] = [];
   for (const prop of scene.props) {
@@ -312,6 +328,9 @@ export function sceneRuntime(s: StoryScript, prep: Prepared, index: number, t: n
     const driven = CARS.has(prop.kind) && (riders.length > 0 || (prop.state ?? "").includes("driving")) && !(prop.state ?? "").includes("parked");
     const selfMoving = pb.some((b) => MOVERS.has(b.do as PropAction) && !!b.to);
     if (driven && !selfMoving) {
+      rolling = true;
+      const dBeats = driver?.beats ?? [];
+      speeds.set(prop.propId, (time) => driveSpeed(pb, dBeats, time, 1, win));
       const px = view === "top" ? 1300 : 1150;
       const r = rolled(pb, driver?.beats ?? [], t, 1, px, win);
       input.rolled = r;
@@ -377,9 +396,10 @@ export function sceneRuntime(s: StoryScript, prep: Prepared, index: number, t: n
     actors.push(rt);
   }
   const focus = focusOf(actors, props, view, carDraws);
-  const cam = cameraAt(scene.camera, t, scene.durationSec, focus, seed, prep.impacts[index] ?? []);
+  const span = shotAt(scene, t);
+  const cam = cameraAt(scene.camera, t, scene.durationSec, focus, seed, prep.impacts[index] ?? [], t - span.from);
   if (prep.cardBottom !== null && index === s.scenes.length - 1) clearEndCard(cam, actors, view, focus, prep.cardBottom, t, scene.durationSec);
-  return { scene, view, t, seed, actors, props, carDraws, occupants, steering, cam, scroll: scroll * scrollSign };
+  return { scene, view, t, seed, actors, props, carDraws, occupants, steering, cam, scroll: scroll * scrollSign, rolling, speeds, span };
 }
 
 /** In a square or wide frame the end card's band at the top reaches down to where heads are. Over the 0.4 s before
@@ -496,8 +516,9 @@ function drawActorNow(pen: Pen, a: ActorRT, st: ActorState, view: "side" | "top"
   const px = actorScale(st.y, view);
   const x = st.x * F.w;
   const y = st.y * F.h;
-  if (dark) {
-    // a soft light behind the head keeps dark hair readable at night and on the stage
+  const nd = nightDrive();
+  if (dark && !nd) {
+    // a soft light behind the head keeps dark hair readable at night and on the stage (night drive's rim light does it)
     const hy = y + (a.geo.headY + st.pose.dy) * px;
     pen.circle(x, hy, (a.geo.headRX + 22) * px, "#fff6e5", 0.07);
     pen.circle(x, hy, (a.geo.headRX + 10) * px, "#fff6e5", 0.07);
@@ -505,11 +526,12 @@ function drawActorNow(pen: Pen, a: ActorRT, st: ActorState, view: "side" | "top"
   const lift = Math.max(0, -st.pose.dy);
   const lying = st.pose.rot < -45;
   const shadowK = 1 - Math.min(0.5, lift / 40);
-  pen.ellipse(x - (lying ? st.facing * 40 * px : 0), y + 2, (lying ? 60 : 30) * px * shadowK, 6 * px * shadowK, 0, "#000000", 0.2 * shadowK);
+  // night drive's soft shadows under the feet (§4.4) are drawn by the rig itself, with the pose
+  if (!nd) pen.ellipse(x - (lying ? st.facing * 40 * px : 0), y + 2, (lying ? 60 : 30) * px * shadowK, 6 * px * shadowK, 0, "#000000", 0.2 * shadowK);
   pen.save();
   pen.translate(x, y);
   pen.scale(px * st.flip, px);
-  drawCharacter(pen, a.member.look, a.geo, st.pose, { t, seed: a.seed, face: st.face, inCar: false });
+  drawCharacter(pen, a.member.look, a.geo, st.pose, { t, seed: a.seed, face: st.face, inCar: false, faceSince: st.faceSince });
   pen.restore();
   drawExtras(pen, st, a.seed, a.geo, x, y, px, t);
 }
@@ -574,7 +596,7 @@ function drawOccupantsSide(pen: Pen, riders: ActorRT[], t: number, seats: { x: n
     if (v.alpha < 1) pen.fade(v.alpha);
     pen.translate(seat.x, y0);
     pen.scale(s);
-    drawCharacter(pen, a.member.look, g, v.st.pose, { t, seed: a.seed, face: v.st.face, inCar: true });
+    drawCharacter(pen, a.member.look, g, v.st.pose, { t, seed: a.seed, face: v.st.face, inCar: true, faceSince: v.st.faceSince });
     pen.restore();
   });
 }
@@ -603,6 +625,16 @@ function drawSceneNow(s: StoryScript, index: number, t: number): Prim[] {
   const rt = sceneRuntime(s, prep, index, t);
   const pen = new Pen(frameView(F.w * F.k, F.h * F.k, F.k), F.k);
   const scene = rt.scene;
+  const nd = nightDrive();
+  const night = setInfo(scene.set).night;
+  const warm = lampWarm(scene.set, rt.scroll, rt.rolling);
+  // night drive: the place's light (shots.ts sets the inside of a car's); classic keeps the studio light
+  if (nd) F.light = lightFor(scene.set, "out", warm);
+  if (rt.span.cue.shot !== "scene" && rt.view === "side" && drawShot(pen, shotInput(s, prep, index, rt, warm))) {
+    if (nd) drawVignette(pen, night);
+    drawBubbles(pen, prep, index, t);
+    return pen.out;
+  }
   const env: SetEnv = {
     pen,
     t,
@@ -616,7 +648,6 @@ function drawSceneNow(s: StoryScript, index: number, t: number): Prim[] {
   drawSetWeatherBack(scene.set, env, weather);
   const ground = layerMatrix(rt.cam, 1);
   pen.setMatrix(ground);
-  const night = setInfo(scene.set).night;
   const dark = night || scene.set === "studio";
   for (const p of rt.props) if (DECALS.has(p.prop.kind)) drawProp(pen, p, rt.view, t, rt.seed, {}, night);
   type Item = { y: number; i: number; draw: () => void };
@@ -630,11 +661,7 @@ function drawSceneNow(s: StoryScript, index: number, t: number): Prim[] {
   rt.props.forEach((p, i) => {
     const kind = p.prop.kind;
     if (DECALS.has(kind) || OVERLAYS.has(kind) || WEATHER.has(kind)) return;
-    const riders = rt.occupants.get(p.prop.propId) ?? [];
-    const occ = {
-      side: (pn: Pen, seats: { x: number; beltY: number; topY: number }[]) => drawOccupantsSide(pn, riders, t, seats),
-      top: (pn: Pen, seats: { x: number; y: number; r: number }[]) => drawOccupantsTop(pn, riders, seats),
-    };
+    const occ = occupantsOf(rt, p);
     const car = rt.carDraws.get(p.prop.propId);
     items.push({
       // at the same depth the characters stand in front of the props
@@ -657,8 +684,58 @@ function drawSceneNow(s: StoryScript, index: number, t: number): Prim[] {
   }
   for (const p of rt.props) if (OVERLAYS.has(p.prop.kind)) drawProp(pen, p, rt.view, t, rt.seed, {}, night);
   drawSetFront(scene.set, rt.view, env, weather);
-  for (const b of prep.bubbles) if (b.scene === index && t >= b.at && t < b.at + b.span) drawBubble(pen, b, t - b.at);
+  if (nd) drawVignette(pen, night);
+  drawBubbles(pen, prep, index, t);
   return pen.out;
+}
+
+function drawBubbles(pen: Pen, prep: Prepared, index: number, t: number): void {
+  for (const b of prep.bubbles) if (b.scene === index && t >= b.at && t < b.at + b.span) drawBubble(pen, b, t - b.at);
+}
+
+/** How a car's riders are drawn in it (side and top views). */
+function occupantsOf(rt: SceneRT, p: PropState): { side: (pn: Pen, seats: { x: number; beltY: number; topY: number }[]) => void; top: (pn: Pen, seats: { x: number; y: number; r: number }[]) => void } {
+  const riders = rt.occupants.get(p.prop.propId) ?? [];
+  return {
+    side: (pn, seats) => drawOccupantsSide(pn, riders, rt.t, seats),
+    top: (pn, seats) => drawOccupantsTop(pn, riders, seats),
+  };
+}
+
+/** What a shot reads of the scene now (shots.ts): its people and cars, the road's roll, the lamps' pulse. */
+function shotInput(s: StoryScript, prep: Prepared, index: number, rt: SceneRT, warm: number): ShotInput {
+  const people: ShotPerson[] = [];
+  for (const a of rt.actors) {
+    const seated = seatedView(a);
+    const outside = outsideView(a);
+    const v = seated && (!outside || seated.alpha >= outside.alpha) ? seated : (outside ?? a);
+    const car = seated && v === seated ? (a.actor.inCar ?? null) : null;
+    const seat = car ? Math.max(0, (rt.occupants.get(car) ?? []).indexOf(a)) : 0;
+    people.push({ castId: a.actor.castId, look: a.member.look, geo: a.geo, st: v.st, seed: a.seed, car, seat });
+  }
+  const cars: ShotCar[] = [];
+  for (const p of rt.props) {
+    if (!CARS.has(p.prop.kind)) continue;
+    cars.push({ st: p, draw: rt.carDraws.get(p.prop.propId) ?? null, truck: p.prop.kind === "truck", speedAt: rt.speeds.get(p.prop.propId) ?? null, occ: occupantsOf(rt, p) });
+  }
+  const last = index === s.scenes.length - 1;
+  return {
+    set: rt.scene.set,
+    span: rt.span,
+    t: rt.t,
+    dur: rt.scene.durationSec,
+    seed: rt.seed,
+    scroll: rt.scroll,
+    rolling: rt.rolling,
+    warm,
+    people,
+    cars,
+    steering: rt.steering,
+    camera: rt.scene.camera,
+    impacts: prep.impacts[index] ?? [],
+    beats: rt.scene.beats,
+    card: last && prep.cardBottom !== null ? { bottom: prep.cardBottom, from: endCardFrom(rt.scene.durationSec) } : null,
+  };
 }
 
 // ---- bubbles: placed once per script so the frames and the text track agree -----------------------------
@@ -707,7 +784,10 @@ const BALLOON = BUBBLE_R * 1.3 + 8;
 
 /** Places every bubble once per script: beside the speaker's head (never over it), clear of the bubbles showing at the
  * same time, and in a safety story's last seconds below the end card. A bubble that cannot keep clear of the end card
- * ends when the card starts, or is left out (the card's sources line matters more than a symbol). */
+ * ends when the card starts, or is left out (the card's sources line matters more than a symbol). In a shot (§45.45
+ * §8.4) the head is where the shot draws it: beside or above the big head in Face up close and Side window, at the top
+ * middle in the shots without a face. A bubble never shows across a cut: it ends at the next cut, and one shorter than
+ * 0.4 s is left out. */
 function layoutBubbles(s: StoryScript, prep: Prepared): Bubble[] {
   const out: Bubble[] = [];
   const W = F.w;
@@ -720,8 +800,59 @@ function layoutBubbles(s: StoryScript, prep: Prepared): Bubble[] {
     const cardFrom = s.safety && i === last ? endCardFrom(scene.durationSec) : Infinity;
     for (const b of [...scene.beats].sort((x, y) => x.at - y.at)) {
       if (!b.bubble || !(b.who in s.cast) || !scene.actors.some((a) => a.castId === b.who)) continue;
+      let span = Math.min(bubbleSpan(b.dur), scene.durationSec - b.at);
+      const cut = nextCutAfter(scene, b.at);
+      if (cut - b.at < span) {
+        span = cut - b.at;
+        if (span < 0.4) continue;
+      }
       const rt = sceneRuntime(s, prep, i, b.at);
-      const head = headOnScreen(rt, b.who);
+      const shot = rt.span.cue.shot !== "scene" && rt.view === "side" ? shotInput(s, prep, i, rt, 0) : null;
+      const inShot = !!shot && shotShows(shot);
+      const big = inShot ? shotHead(shot!) : null;
+      if (big) {
+        // a big head in a shot: round it, beside or above, clear of the bubbles showing then; the tail points at it when
+        // it is the speaker's, else down the frame (the speaker is out of the shot)
+        const g = BALLOON + 12;
+        const pref = big.x > W / 2 ? -1 : 1;
+        const angles = pref > 0 ? [-60, -90, -30, -120, 0, -150, 30, 180] : [-120, -90, -150, -60, 180, -30, 150, 0];
+        const placeShot = (top: number, span: number): { x: number; y: number } | null => {
+          const others = out.filter((o) => o.scene === i && o.at < b.at + span && o.at + o.span > b.at);
+          for (const a of angles) {
+            const x = clamp(big.x + (big.ax + g) * Math.cos(a * DEG), BUBBLE_SIDE, W - BUBBLE_SIDE);
+            const y = clamp(big.y + (big.ay + g) * Math.sin(a * DEG), top, BUBBLE_LOW);
+            if (((x - big.x) / (big.ax + g)) ** 2 + ((y - big.y) / (big.ay + g)) ** 2 < 1 - 1e-9) continue;
+            if (others.some((o) => Math.hypot(o.x - x, o.y - y) < BUBBLE_R * 2.3)) continue;
+            return { x, y };
+          }
+          return null;
+        };
+        let spot = placeShot(b.at + span > cardFrom ? below : BUBBLE_HIGH, span);
+        if (!spot && b.at + span > cardFrom && cardFrom - b.at >= 0.6) {
+          span = cardFrom - b.at;
+          spot = placeShot(BUBBLE_HIGH, span);
+        }
+        const own = big.castId === b.who;
+        const tail = own ? { hx: big.x, hy: big.y } : b.bubble === "sweat" ? { hx: spot?.x ?? 0, hy: (spot?.y ?? 0) + 120 } : { hx: W / 2, hy: F.h * 0.9 };
+        if (spot) out.push({ kind: b.bubble, start: start + b.at, end: start + b.at + span, scene: i, at: b.at, span, x: spot.x, y: spot.y, ...tail });
+        continue;
+      }
+      const head = inShot ? null : headOnScreen(rt, b.who);
+      if (inShot) {
+        // a shot without the speaker's face: at the top middle, the tail pointing down the frame
+        let top = b.at + span > cardFrom ? below : BUBBLE_HIGH;
+        if (Math.max(top, F.safe.top + BUBBLE_R * 1.4) > BUBBLE_LOW && b.at + span > cardFrom && cardFrom - b.at >= 0.6) {
+          span = cardFrom - b.at;
+          top = BUBBLE_HIGH;
+        }
+        const y = Math.max(top, F.safe.top + BUBBLE_R * 1.4);
+        if (y > BUBBLE_LOW) continue;
+        const others = out.filter((o) => o.scene === i && o.at < b.at + span && o.at + o.span > b.at);
+        const x = [0, -1, 1].map((d) => W / 2 + d * BUBBLE_R * 2.4).find((xx) => !others.some((o) => Math.hypot(o.x - xx, o.y - y) < BUBBLE_R * 2.3)) ?? W / 2;
+        const tail = b.bubble === "sweat" ? { hx: x, hy: y + 120 } : { hx: W / 2, hy: F.h * 0.9 };
+        out.push({ kind: b.bubble, start: start + b.at, end: start + b.at + span, scene: i, at: b.at, span, x, y, ...tail });
+        continue;
+      }
       if (!head) continue;
       const [hx, hy, hr] = head;
       const pref = hx > W / 2 ? -1 : 1;
@@ -741,7 +872,6 @@ function layoutBubbles(s: StoryScript, prep: Prepared): Bubble[] {
         }
         return null;
       };
-      let span = Math.min(bubbleSpan(b.dur), scene.durationSec - b.at);
       let spot = place(b.at + span > cardFrom ? below : BUBBLE_HIGH, span);
       if (!spot && b.at + span > cardFrom && cardFrom - b.at >= 0.6) {
         span = cardFrom - b.at;

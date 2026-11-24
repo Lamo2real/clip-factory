@@ -178,6 +178,7 @@ export const CATALOG: Catalog = {
     { id: "living_room", label: "Living room" },
     { id: "office", label: "Office" },
     { id: "park", label: "Park" },
+    { id: "highway_night", label: "Highway at night" },
   ],
   props: [
     { id: "car", label: "Car" },
@@ -294,6 +295,21 @@ export const CATALOG: Catalog = {
     { id: "triumphant", label: "Triumphant" },
     { id: "wonder", label: "Wonder" },
     { id: "comedic", label: "Comedic" },
+  ],
+  arts: [
+    { id: "night_drive", label: "Night drive" },
+    { id: "classic", label: "Bright" },
+  ],
+  shots: [
+    { id: "scene", label: "Whole scene" },
+    { id: "driver_view", label: "Driver's eyes" },
+    { id: "face", label: "Face up close" },
+    { id: "side_window", label: "Side window" },
+    { id: "mirror", label: "Mirror" },
+    { id: "speed_dial", label: "Speed dial" },
+    { id: "pedals", label: "Feet on the pedals" },
+    { id: "road_behind", label: "Behind the car" },
+    { id: "road_wide", label: "Down the road" },
   ],
 };
 

@@ -24,6 +24,7 @@ import {
   STEP_LABEL,
   STEP_ORDER,
   type AiSetting,
+  type ArtStyle,
   type Character,
   type GuidanceTopic,
   type Idea,
@@ -47,6 +48,7 @@ import { filterOf, MoveToSeries, SeriesField, seriesQuery, SeriesSwitch, useSeri
 import { ArcDial, MediaRow, StatNumeral } from "../glass/index.ts";
 import { usePaged, useReferenceList, useSameScript, useWorkspace } from "../studio/hooks.ts";
 import { formatOf, formatWords, sameFormat, ShapePicker } from "../studio/shape.tsx";
+import { ArtPicker, artOf, artWords, storyArt } from "../studio/art.tsx";
 import { Busy, celebrate, Notice, Pick, ShowMore, Slider, Switch, Tag, TechDetails, TextField } from "../studio/kit.tsx";
 import { useLeaveGuard } from "../studio/leaveGuard.tsx";
 import { currentStep, nowLine, StepTrack, stepsOf } from "../studio/StepTrack.tsx";
@@ -59,8 +61,8 @@ export function ProductionScreen({ ws, page }: StoriesScreenProps) {
     const refIds = page.refIds ?? [];
     const castIds = page.castIds ?? [];
     // A new hand-over (another chat button, another reference video) starts the form again from its address.
-    const from = [page.ideaId ?? "", refIds.join(","), castIds.join(","), page.durationSec ?? "", page.seriesId ?? ""].join("|");
-    return <NewVideo key={from} ws={ws} ideaId={page.ideaId} refIds={refIds} castIds={castIds} durationSec={page.durationSec ?? null} seriesId={page.seriesId ?? null} />;
+    const from = [page.ideaId ?? "", refIds.join(","), castIds.join(","), page.durationSec ?? "", page.seriesId ?? "", page.art ?? ""].join("|");
+    return <NewVideo key={from} ws={ws} ideaId={page.ideaId} refIds={refIds} castIds={castIds} durationSec={page.durationSec ?? null} seriesId={page.seriesId ?? null} givenArt={page.art ?? null} />;
   }
   if (page.name === "production_story") return <StoryProduction ws={ws} storyId={page.storyId} />;
   return <ProductionList ws={ws} filter={filterOf(page.name === "production" ? page : {})} />;
@@ -215,7 +217,7 @@ function RunRow({ ws, story, job, onMoved }: { ws: string; story: Story; job: Pr
 
 // ---------- Make a new video ----------
 
-function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesId: givenSeries }: { ws: string; ideaId: string | null; refIds: string[]; castIds: string[]; durationSec: number | null; seriesId: string | null }) {
+function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesId: givenSeries, givenArt }: { ws: string; ideaId: string | null; refIds: string[]; castIds: string[]; durationSec: number | null; seriesId: string | null; givenArt: ArtStyle | null }) {
   const toast = useToast();
   const workspace = useWorkspace(ws);
   const cfg = (workspace?.configuration ?? {}) as Partial<StoriesConfig>;
@@ -241,6 +243,8 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
   const seriesList = useSeriesList(ws).list;
   const [length, setLength] = useState<number | null>(durationSec);
   const [shape, setShape] = useState<StoryFormat | null>(null);
+  // the drawing style the address carries (the chat's Make the video, §45.45), else the workspace's
+  const [art, setArt] = useState<ArtStyle | null>(givenArt);
   const [captions, setCaptions] = useState<boolean | null>(null);
   const [mood, setMood] = useState<MusicMood | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
@@ -340,6 +344,8 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
   const lengthSec = Math.min(90, Math.max(15, length ?? ideaLength ?? cfg.defaultDurationSec ?? 45));
   const usualShape = formatOf(workspace ? cfg : null);
   const format = shape ?? usualShape;
+  const usualArt = artOf(workspace ? cfg : null);
+  const drawing = art ?? usualArt;
   const captionsOn = captions ?? cfg.captionsOn ?? true;
   const music: MusicMood = mood ?? (cfg.musicOn === false ? "none" : kind ? MOOD_FOR[kind] : "playful");
 
@@ -397,6 +403,8 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
     // This video's own shape, only when the owner picked one that is not the workspace's (§45.34). Nothing picked:
     // the API uses Settings › Video itself (also while it has not loaded here, or could not be read).
     if (shape && (!workspace || !sameFormat(shape, usualShape))) body.format = { ...shape };
+    // This video's own drawing style the same way (§45.45): nothing picked, the API uses Settings › Video's.
+    if (art && (!workspace || art !== usualArt)) body.art = art;
     // Kept with this video: only what the owner picked in its menu. When the usual model cannot be used, the model the
     // menu shows instead goes with the first job only, never kept (§45.5 `override`, §45.36 E12), so a later remake
     // uses the usual again once it works.
@@ -546,6 +554,7 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
               <span className="st-s-num">4</span> Shape and size
             </h2>
             <ShapePicker value={format} usual={usualShape} onChange={setShape} usualKnown={!!workspace} picked={shape !== null} />
+            <ArtPicker value={drawing} usual={usualArt} onChange={setArt} usualKnown={!!workspace} picked={art !== null} />
           </section>
 
           <section className="st-s-panel st-glass st-s-words" aria-labelledby="st-nv-4">
@@ -903,6 +912,8 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
           </dd>
           <dt>Size</dt>
           <dd>{formatWords(story.format)}, 30 frames a second</dd>
+          <dt>Drawing style</dt>
+          <dd>{artWords(storyArt(story))}</dd>
           {job ? (
             <>
               <dt>Helpers used</dt>

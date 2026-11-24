@@ -1,7 +1,8 @@
 // Draws the engine's output on a 2D canvas (docs/CONTRACTS.md §45.10): the browser half of "one engine, two places".
 // Lamo Stories' agent's numpy rasterizer (stories/agent/src/lamostories_agent/raster.py) follows the same rules,
 // written down in engine/README.md: painter's order, source-over blending, round caps and joins, non-zero fill, output
-// pixels of the script's own size (any of the six, CONTRACTS §45.34); `scale` is canvas pixels per output pixel.
+// pixels of the script's own size (any of the six, CONTRACTS §45.34); `scale` is canvas pixels per output pixel. A
+// `glow` is a radial gradient in the ellipse's own frame, so its alpha fades along the same stops as raster.py's.
 // Owned by builder D (engine).
 import type { Prim, TextEvent } from "../engine/types.ts";
 
@@ -47,6 +48,24 @@ export function drawPrims(ctx: CanvasRenderingContext2D, prims: Prim[], scale: n
         ctx.ellipse(p.x * scale, p.y * scale, Math.max(0, p.rx * scale), Math.max(0, p.ry * scale), (p.rot * Math.PI) / 180, 0, Math.PI * 2);
         ctx.fill();
         break;
+      case "glow": {
+        // the ellipse's own unit circle, so the radial gradient's offset is how far out a point is (0 the centre, 1 the
+        // edge); one colour, so the alpha stops interpolate the same premultiplied or not
+        if (p.rx <= 0 || p.ry <= 0 || !p.fade.length) break;
+        const [r, g, b] = [1, 3, 5].map((i) => parseInt(p.color.slice(i, i + 2), 16));
+        ctx.save();
+        ctx.translate(p.x * scale, p.y * scale);
+        ctx.rotate((p.rot * Math.PI) / 180);
+        ctx.scale(p.rx * scale, p.ry * scale);
+        const fade = ctx.createRadialGradient(0, 0, 0, 0, 0, 1);
+        for (const [offset, alpha] of p.fade) fade.addColorStop(Math.min(1, Math.max(0, offset)), `rgba(${r}, ${g}, ${b}, ${Math.min(1, Math.max(0, alpha))})`);
+        ctx.fillStyle = fade;
+        ctx.beginPath();
+        ctx.arc(0, 0, 1, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
+        break;
+      }
       case "poly":
         if (p.pts.length < 6) break;
         ctx.fillStyle = p.color;

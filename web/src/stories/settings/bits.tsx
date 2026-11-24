@@ -145,6 +145,8 @@ export interface PickOption<T extends string> {
   label: string;
   line?: ReactNode;
   chip?: ReactNode;
+  /** a small picture above the label (Settings › Video's drawing styles) */
+  pic?: ReactNode;
   /** Not offered: the option is shown (and says why) but cannot be picked. */
   off?: string;
 }
@@ -203,6 +205,11 @@ export function SetPick<T extends string>({
               if (!o.off && !on) onChange(o.value);
             }}
           >
+            {o.pic ? (
+              <span className="st-stg-pick__pic" aria-hidden="true">
+                {o.pic}
+              </span>
+            ) : null}
             <span className="st-stg-pick__top">
               <span className="st-stg-pick__label">{o.label}</span>
               {o.chip ? <span className="st-stg-pick__chip">{o.chip}</span> : null}

@@ -21,9 +21,11 @@ import pytest
 from lamostories_agent import raster
 from lamostories_agent.raster import Canvas, png_bytes, prim_problems, render
 from lamostories_agent.scene_render import image_loader
-from ls_fakes import FIXTURES, needs_ffmpeg
+from ls_fakes import FIXTURES, REPO, needs_ffmpeg
 
-KINDS_WITHOUT_ASSETS = ["fill", "grad", "rect", "circle", "ellipse", "poly", "line", "mixed"]
+# "keyhole": the night drive vignette's frame with an ellipse hole wound the other way (§45.45); "glow": night drive's
+# soft lights, fading along their stops
+KINDS_WITHOUT_ASSETS = ["fill", "grad", "rect", "circle", "ellipse", "glow", "poly", "line", "mixed", "keyhole"]
 TOLERANCE_MAX = 3  # per channel, out of 255 (another CPU's floating point)
 TOLERANCE_MEAN = 0.05
 
@@ -128,6 +130,26 @@ def test_circles_and_ellipses_cover_their_area() -> None:
     assert cov[round(end[0]), round(end[1])] > 0.9
 
 
+def test_a_glow_fades_along_its_stops_to_nothing_at_its_edge() -> None:
+    """Night drive's soft light (§45.45): the alpha at a pixel is the fade at its distance from the centre in radii,
+    linear between stops (the browser's radial gradient in the ellipse's own frame), and nothing past the edge."""
+    glow = {"k": "glow", "x": 60.5, "y": 60.5, "rx": 40, "ry": 20, "rot": 0, "fade": [[0, 0.8], [0.5, 0.2], [1, 0]]}
+    cov = coverage(glow)
+    assert cov[60, 60] == pytest.approx(0.8, abs=1e-3)  # the centre (pixel 60's centre is 60.5)
+    assert cov[60, 70] == pytest.approx(0.5, abs=1e-3)  # a quarter of the way out: half way between the first stops
+    assert cov[60, 80] == pytest.approx(0.2, abs=1e-3)  # on the middle stop, along rx
+    assert cov[70, 60] == pytest.approx(0.2, abs=1e-3)  # the same along ry, half as far
+    assert cov[60, 101] == 0.0 and cov[81, 60] == 0.0  # past the edge
+    # every step from one pixel to the next is small: a gradient, not rings
+    assert float(np.abs(np.diff(cov[60, 60:101])).max()) < 0.04
+    # the end stops carry on: a fade that starts at 0.4 keeps 1 inside it
+    inner = coverage({**glow, "fade": [[0.4, 1], [1, 0]]})
+    assert inner[60, 60] == 1.0 and inner[60, 70] == 1.0
+    # rotated 90° clockwise on screen, its long axis runs down the frame
+    turned = coverage({**glow, "rot": 90})
+    assert turned[80, 60] == pytest.approx(0.2, abs=1e-3) and turned[60, 80] == pytest.approx(0.0, abs=1e-3)
+
+
 def test_a_polygon_covers_its_area_with_the_non_zero_rule() -> None:
     tri = coverage({"k": "poly", "pts": [10, 100, 60, 10, 110, 100]})
     assert tri.sum() == pytest.approx(0.5 * 100 * 90, rel=3e-3)
@@ -141,6 +163,49 @@ def test_a_polygon_covers_its_area_with_the_non_zero_rule() -> None:
     assert coverage({"k": "poly", "pts": ring_reverse})[60, 60] == 0.0  # an inner square wound back: a hole
     same_way = [10, 10, 110, 10, 110, 110, 10, 110, 10, 10, 30, 30, 90, 30, 90, 90, 30, 90, 30, 30]
     assert coverage({"k": "poly", "pts": same_way})[60, 60] == 1.0  # wound the same way: winding 2, filled
+
+
+def test_a_keyhole_polygon_leaves_its_hole_empty() -> None:
+    """The night drive vignette (§45.45): the frame clockwise, a bridge in, an ellipse anticlockwise and the bridge out;
+    the non-zero rule fills the frame's corners and leaves the hole (and the bridge's zero width) empty."""
+    f = fixture("keyhole")
+    hole = f["p"][4]
+    cov = coverage({"k": "poly", "pts": hole["pts"]}, int(f["w"]), int(f["h"]))
+    assert cov[80, 48] == 0.0  # the hole's centre
+    assert cov[2, 2] == 1.0 and cov[157, 93] == 1.0  # the frame's corners
+    assert cov[60:100, 36:60].sum() == pytest.approx(0.0, abs=1e-3)  # well inside the hole
+    # the hole's area, roughly that of its ellipse
+    w, h = int(f["w"]), int(f["h"])
+    assert float((1 - cov).sum()) == pytest.approx(math.pi * (w / 2 * 0.6) * (h / 2 * 0.5), rel=0.03)
+
+
+# Night drive's four frames pinned prim by prim by the web's storiesEngineNight.test.ts (§45.45 §12): raster.py
+# draws them without a problem, and seven places in them average within 6 of the palette's tokens, so the agent's
+# final video shows the colours the preview paints.
+NIGHT_GOLDEN = REPO / "web" / "test" / "fixtures" / "stories-engine-night.json"
+NIGHT_REGIONS: list[tuple[str, tuple[int, int, int, int], str, str]] = [
+    ("scene", (500, 10, 580, 40), "#141f3d", "the top of the night sky (ND.skyTop)"),
+    ("scene", (950, 950, 1000, 990), "#1d3339", "the far mountains (ND.mtnFar)"),
+    ("scene", (238, 870, 268, 874), "#fff6d8", "a street lamp's lens, a bright warm white bar (ND.lampLens)"),
+    ("scene", (238, 867, 268, 869), "#34373e", "the lamp's thin dark grey head over it (ND.lampHousing)"),
+    ("driver_view", (450, 1000, 650, 1040), "#2e2a20", "the road through the windscreen (ND.asphalt)"),
+    ("driver_view", (900, 1150, 1000, 1200), "#46454b", "the dashboard's top (ND.dashTop)"),
+    ("face", (350, 940, 600, 990), "#9c8270", "the sample's skin #f2c9a0 in the cabin light (art.ts grade)"),
+]
+
+
+def test_night_drive_goldens_draw_in_their_palette() -> None:
+    golden = json.loads(NIGHT_GOLDEN.read_text())
+    assert sorted(golden["full"]) == ["driver_view", "face", "mirror", "scene"]
+    pictures: dict[str, np.ndarray] = {}
+    for name, prims in golden["full"].items():
+        assert [p for p in prims if prim_problems(p)] == [], name
+        pictures[name] = render(prims, 1080, 1920)
+        assert pictures[name].shape == (1920, 1080, 3)
+    for name, (x0, y0, x1, y1), token, what in NIGHT_REGIONS:
+        mean = pictures[name][y0:y1, x0:x1].reshape(-1, 3).astype(np.float64).mean(axis=0)
+        off = float(np.abs(mean - raster.rgb(token)).max())
+        assert off <= 6, f"{what}: averages {mean.round().astype(int).tolist()}, {off:.1f} away from {token}"
 
 
 def test_lines_have_round_caps_and_joins_drawn_once() -> None:
@@ -211,6 +276,14 @@ def test_off_frame_and_empty_primitives_draw_nothing() -> None:
         ({"k": "poly", "pts": [1, 2, 3], "color": "#ffffff"}, "even list"),
         ({"k": "line", "pts": [1, 2], "w": 1, "color": "#ffffff", "a": 2}, "a must be"),
         ({"k": "grad", "x0": 0, "y0": 0, "x1": 1, "y1": 1, "stops": [[0, "nope"]]}, "stops"),
+        (
+            {"k": "glow", "x": 0, "y": 0, "rx": 1, "ry": 1, "rot": 0, "color": "#ffffff", "fade": [[0, 2]]},
+            "fade must be",
+        ),
+        (
+            {"k": "glow", "x": 0, "y": 0, "rx": 1, "ry": 1, "rot": 0, "color": "#ffffff", "fade": [[1, 0], [0, 1]]},
+            "fade must be",
+        ),
         ({"k": "fill", "color": "#ffffff", "extra": 1}, "unknown field"),
     ],
 )

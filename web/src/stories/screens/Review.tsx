@@ -25,6 +25,7 @@ import type { DownloadFormat, ErrorAccount, ModelOverride, Platform, PublishingJ
 import { navigate } from "../../lib/router.ts";
 import { storiesHref } from "../routes.ts";
 import { cleanPick, insteadPick, madeWith, ModelMenu, ModelsUsed, NextRun, runTask, sendPick, SettingsFix, StoryAi, storyUsual, UnusableSheet, unusableAsk, useAiInfo } from "../studio/ai.tsx";
+import { artWords, storyArt } from "../studio/art.tsx";
 import { CaptionEditor, type CaptionTab } from "../studio/CaptionEditor.tsx";
 import { Filmstrip } from "../studio/Filmstrip.tsx";
 import { usePaged, useSameScript, useWidth, useWorkspace } from "../studio/hooks.ts";
@@ -875,6 +876,8 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                 <StoryAi info={info} story={story} editable={editable && busy === null} onChange={(v) => void keepAi(v)} />
                 <NextRun info={info} story={story} />
               </dd>
+              <dt>Drawing style</dt>
+              <dd>{artWords(storyArt(story))}</dd>
             </dl>
             <ModelsUsed info={info} job={job} jobs={runs.data} title={live ? "Models working on it" : "Made with"} />
             {!used.length ? <p className="st-s-field__hint">No model notes for this version.</p> : null}

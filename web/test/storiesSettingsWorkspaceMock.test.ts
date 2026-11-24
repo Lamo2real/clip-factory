@@ -32,7 +32,7 @@ describe("the shape and its size", () => {
       ["9:16", "1080x1920"],
     ] as const) {
       const w = await patch({ video: { aspect, resolution, quality: "high", fps: 30 } });
-      expect((w.configuration as StoriesConfig).video).toEqual({ aspect, resolution, quality: "high", fps: 30 });
+      expect((w.configuration as StoriesConfig).video).toEqual({ aspect, resolution, quality: "high", fps: 30, art: "night_drive" });
     }
     await expect(patch({ video: { aspect: "1:1", resolution: "1080x1920", quality: "high", fps: 30 } })).rejects.toMatchObject({ status: 400, field: "video", message: "That size does not fit that shape. Pick one of its sizes." });
     await expect(patch({ video: { aspect: "4:3" as never, resolution: "1080x1920", quality: "high", fps: 30 } })).rejects.toMatchObject({ status: 400, field: "video" });

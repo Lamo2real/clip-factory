@@ -362,9 +362,12 @@ test("round 3, Production › New: the hand-over keys, the idea's own length, an
     await expect(page.locator('.st-s-casttile[aria-pressed="true"]')).toHaveCount(2);
     await expect(page.locator('input[type="range"]').first()).toHaveValue("40");
     await expect(page.locator('.st-s-reftile[aria-pressed="true"]')).toHaveCount(1);
-    await expect(page.getByText("From Settings › Video.")).toBeVisible();
+    // the shape and the drawing style (§45.45) each say where they come from, under their own pick
+    await expect(page.locator(".st-s-shape").getByText("From Settings › Video.")).toBeVisible();
+    await expect(page.locator(".st-s-art").getByText("From Settings › Video.")).toBeVisible();
     await page.locator(".st-s-shapepick .st-s-pick__opt", { hasText: "Wide" }).click();
-    await expect(page.getByText("Just for this video. Settings › Video stays the same.")).toBeVisible();
+    await expect(page.locator(".st-s-shape").getByText("Just for this video. Settings › Video stays the same.")).toBeVisible();
+    await expect(page.locator(".st-s-art").getByText("From Settings › Video.")).toBeVisible();
     await settle(page);
     expect(await audit(page, `New video with a wide shape ${w}`, touch && w < 768)).toEqual([]);
     await page.getByRole("button", { name: "Make the video" }).click();

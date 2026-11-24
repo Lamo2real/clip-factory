@@ -10,6 +10,7 @@ import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MockStore } from "../src/stories/api/mock/store.ts";
 import type { Onboarding, OnboardStep, ProviderStatus, StoriesApi, StoriesConfig, Workspace } from "../src/stories/api/types.ts";
+import { ART_PICKED } from "../src/stories/preview/art.tsx";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -742,6 +743,40 @@ describe("Video", () => {
     expect(pictures.textContent).toContain("AI portraits stop until you pick another picture maker");
     await click(byText("button", "Use Built-in drawings", pictures));
     expect(called("patchWorkspace").at(-1)?.args[1]).toMatchObject({ configuration: { providers: { images: "builtin-rig", imageModel: null } } });
+  });
+
+  it("picks the drawing style new videos start with: Night drive or Bright, each with a sample drawn in it (§45.45)", async () => {
+    await open("video");
+    const picks = () => $$("[role=radio]", group("Drawing style of new videos"));
+    expect(picks().map((p) => [p.querySelector(".st-stg-pick__label")?.textContent, p.getAttribute("aria-checked")])).toEqual([
+      ["Night drive", "true"],
+      ["Bright", "false"],
+    ]);
+    expect(picks()[0]!.textContent).toContain("Soft night colours, street lights and film-like close-ups.");
+    expect(picks()[1]!.textContent).toContain("The bright, sunny cartoon look of the first videos.");
+    expect(picks().every((p) => p.querySelector(".st-stg-pick__pic canvas[role=img]"))).toBe(true);
+    expect(card("Drawing style").textContent).toContain("New videos start with this drawing style. You can change it for one video in Production › New.");
+    // the open previews hear of a new style only once it is saved
+    const heard: string[] = [];
+    const hear = (e: Event) => heard.push((e as CustomEvent<{ art: string }>).detail.art);
+    window.addEventListener(ART_PICKED, hear);
+    try {
+      await click(byText("[role=radio]", /^Bright/));
+      expect(called("patchWorkspace").at(-1)?.args[1]).toMatchObject({ configuration: { video: { art: "classic", aspect: "9:16", fps: 30 } } });
+      expect(picks()[1]!.getAttribute("aria-checked")).toBe("true");
+      expect(heard).toEqual(["classic"]);
+      // a refused save: the page goes back to the stored style, and the previews never left it
+      failures.set("patchWorkspace", new Error("offline"));
+      await click(byText("[role=radio]", /^Night drive/));
+      await vi.waitFor(() => expect(picks()[1]!.getAttribute("aria-checked")).toBe("true"));
+      expect(heard).toEqual(["classic"]);
+      failures.delete("patchWorkspace");
+      await click(byText("[role=radio]", /^Night drive/));
+      expect(called("patchWorkspace").at(-1)?.args[1]).toMatchObject({ configuration: { video: { art: "night_drive" } } });
+      await vi.waitFor(() => expect(heard).toEqual(["classic", "night_drive"]));
+    } finally {
+      window.removeEventListener(ART_PICKED, hear);
+    }
   });
 
   it("takes the owner's price for the AI makers, kept in the AI settings as a price for one unit (§45.34)", async () => {

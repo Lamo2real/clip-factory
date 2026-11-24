@@ -1,7 +1,7 @@
 // Lamo Stories engine: what the script's free words and numbers mean, in plain sentences for the story writer and the
-// fact checker (CONTRACTS §45.10, §45.11.2, §45.11.5, §45.34, §45.43). `cli.ts catalog` gives them next to the catalog, the
-// limits and the formats, so a writer never has to guess which way a skid slides, which faces a character has or
-// what shape the frame is. engine/README.md says the same at more length.
+// fact checker (CONTRACTS §45.10, §45.11.2, §45.11.5, §45.34, §45.43, §45.45). `cli.ts catalog` gives them next to the
+// catalog, the limits and the formats, so a writer never has to guess which way a skid slides, which faces a character
+// has or what shape the frame is. engine/README.md says the same at more length.
 
 import type { PropKind } from "./types.ts";
 
@@ -101,5 +101,22 @@ export const RULES: { id: string; text: string }[] = [
       "but about two fifths of a square or wide one's, so keep standing characters on the ground there. A wide frame " +
       "has room for up to 4 characters side by side (x 0.15 to 0.85); a tall one fits 2 or 3. Captions, teaching " +
       "text, bubbles and the end card are placed inside each shape's safe area for you.",
+  },
+  {
+    id: "shots",
+    text:
+      "A scene can cut between shots while its action and sound go on: cuts is a list of {at, shot, who?}, seconds " +
+      "from the scene's start, at least 0.6 s apart, at most 8; before the first cut the scene shows the whole scene. " +
+      "Driver's eyes, Side window, Mirror, Speed dial, Feet on the pedals and Behind the car need someone sitting in a " +
+      "car on a road; Down the road needs a road; Face up close needs a person. Bubbles show beside the face in Face " +
+      "up close and Side window, and at the top in the other shots.",
+  },
+  {
+    id: "shot_world",
+    text:
+      "In shots, the side view's places still count: a car further along the way the driver's car faces is ahead, one " +
+      "the other way is behind; a car whose y is under 0.72 is in the other lane; a car facing the other way comes " +
+      "towards it. move, speed_up, stop, stall, blink and honk show in every shot; steer_left and steer_right turn the " +
+      "wheel; brake lights the brake lights and drops the speed needle.",
   },
 ];

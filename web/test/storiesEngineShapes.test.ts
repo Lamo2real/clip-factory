@@ -7,6 +7,7 @@
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
+import { ink } from "../src/stories/engine/art.ts";
 import { runCli } from "../src/stories/engine/commands.ts";
 import {
   CATALOG,
@@ -112,6 +113,10 @@ const markedLook = (i: number): CharacterLook => ({
 });
 const member = (i: number, extra: Partial<CastMember> = {}): CastMember => ({ characterId: `ch${i}`, name: `Kid ${i}`, look: markedLook(i), movementStyle: "calm", voice: { style: "babble", pitch: 1, noises: ["gasp", "yay"], sfx: [] }, ...extra });
 const isMarked = (p: Prim) => "color" in p && MARKS.includes(p.color);
+/** In night drive the own colours are lit by the place's light, but the outline is always ink(outline) (art.ts), so
+ * the marked outline still picks the character out, all of it (§45.45). */
+const NIGHT_MARK = ink(MARKS[0]!);
+const isMarkedAt = (p: Prim, night: boolean) => isMarked(p) || (night && "color" in p && p.color === NIGHT_MARK);
 
 const scene = (sceneId: string, p: Partial<Scene>): Scene => ({ sceneId, title: sceneId, durationSec: 3, set: "studio", view: "side", camera: "wide", actors: [], props: [], beats: [], sfx: [], caption: null, note: null, ...p });
 
@@ -121,7 +126,8 @@ function story(scenes: Scene[], f: Pick<VideoFormat, "width" | "height">, extra:
 
 /** Where one marked character is drawn at frame f (output px). */
 function markedBox(s: StoryScript, f: number): Box | null {
-  return union(drawFrame(s, f).filter(isMarked).map((p) => primBox(p, s.width, s.height)));
+  const night = s.art === "night_drive";
+  return union(drawFrame(s, f).filter((p) => isMarkedAt(p, night)).map((p) => primBox(p, s.width, s.height)));
 }
 
 // ---- the six sizes --------------------------------------------------------------------------------------------
@@ -315,7 +321,10 @@ describe("draw lists are in output pixels of the script's size", () => {
 
 const SETS = CATALOG.sets.map((e) => e.id) as SetId[];
 
-describe("characters are fully in the frame in every set and every shape", () => {
+// in both drawing styles: Bright (no art, as before) and night drive (§45.45), whose geometry is the same
+for (const art of ["classic", "night_drive"] as const)
+describe(art === "classic" ? "characters are fully in the frame in every set and every shape" : "characters are fully in the frame in every set and every shape in night drive", () => {
+  const styled = art === "classic" ? {} : { art };
   for (const f of FORMATS) {
     it(`${f.resolution}: side and top views, wide shots of two characters and medium shots of one`, () => {
       const frame = { x0: 0, y0: 0, x1: f.width, y1: f.height };
@@ -327,7 +336,7 @@ describe("characters are fully in the frame in every set and every shape", () =>
           scenes.push(scene(`m${scenes.length}`, { set, camera: "medium", actors: [{ castId: "c0", x: 0.5, y, facing: "right" }] }));
         }
         for (const y of [0.3, 0.6, 0.85]) scenes.push(scene(`t${scenes.length}`, { set, view: "top", actors: [{ castId: "c0", x: 0.4, y, facing: "right" }] }));
-        const s = valid(story(scenes, f));
+        const s = valid(story(scenes, f, styled));
         for (const sc of s.scenes) {
           // apart from the first scene, each one starts in its own frames; each character alone, the other kept out
           const [from, to] = sceneFrames(s, sc.sceneId);
@@ -355,7 +364,7 @@ describe("characters are fully in the frame in every set and every shape", () =>
           props: [{ propId: "car", kind: "car", x: 0.5, y: view === "top" ? 0.55 : 0.74, scale: 1, rot: 0 }],
         }),
       );
-      const s = valid(story(scenes, f));
+      const s = valid(story(scenes, f, styled));
       for (const sc of s.scenes) {
         const [from, to] = sceneFrames(s, sc.sceneId);
         const b = markedBox(s, Math.floor((from + to) / 2));
