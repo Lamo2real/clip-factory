@@ -133,7 +133,7 @@ export interface CrGuide { name: "Content Rewards"; checkedOn: "2026-11-21"; min
 | # | id | title | essentials |
 |---|---|---|---|
 | 1 | `ready-account` | Make a Content Rewards account | Open "Open Content Rewards" → `[hidden]`. "You'll see **Create your account**. Type your email in **Email**. Tap **Send code**." "Type the 6 numbers from the email. Tap **Verify**." "Or tap **Continue with Google**." "You must be 18 or older. One account per person." "I did this"; `auto: connected` (a finished Connect also ticks it, and so does Content Rewards saying the account can't connect apps; both are in `stepsDone`, and so is a sent pilot email, §38.8, §39.1). If you see: "That code is incorrect or has expired" → "Tap **Resend code** and use the newest email."; "We already sent a code" → "Look in Spam or Promotions."; the wrong email → "Tap **Change it**."; a few questions after signing in → "Answer them. Any answer is fine."; a cookie bar → "Tap **Accept** or **Decline**. Both are fine." |
-| 2 | `ready-socials` | Connect your accounts there | Open "Open Content Rewards settings" → `https://contentrewards.com/c/settings`. "Tap **Accounts**." "Tap **Connect account**. Tap YouTube." "On the next screen, leave every box ticked and tap Allow or Continue." "Do the same for Instagram, X and Facebook." "Each one should say **Connected**." Then one line made from `GET /v1/setup` (connected places only, never TikTok): "Clip Factory posts to: YouTube @faze · Instagram @faze · X @faze · Facebook FaZe Page." Line: "TikTok can wait. Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet." "I did this" (sets every `crLinked` that is `false` back to unknown, §38.11); `auto: linked` (ticks when any `crLinked` is `true`); a finished Connect also ticks it (`stepsDone`). A `crLinked: false` re-opens the step with the line "Content Rewards doesn't know your YouTube account. Connect it here, then tap I did this." If you see: "No **Accounts** tab?" → "Look for **Connected accounts**."; **Verify** in red → "Tap it and allow again."; **Sign in again** → "Tap it."; **In review** → "Nothing to do. Content Rewards links it for you."; "already connected to another creator" → "That account is on another Content Rewards account. Unlink it there, or ask Content Rewards support."; "access wasn't granted" → "Tap **Connect account** again and leave every box ticked."; "No YouTube channel found" → "Pick the Google account that owns your channel." Folds: `fold-instagram`, `fold-facebook` (below). |
+| 2 | `ready-socials` | Connect your accounts there | Open "Open Content Rewards settings" → `https://contentrewards.com/c/settings`. "Tap **Accounts**." "Tap **Connect account**. Tap YouTube." "On the next screen, leave every box ticked and tap Allow or Continue." "Do the same for Instagram, X and Facebook." "Each one should say **Connected**." Then one line made from `GET /v1/setup` (connected places only, never TikTok): "Clip Factory posts to: YouTube @faze · Instagram @faze · X @faze · Facebook FaZe Page." Line: "Add TikTok the same way too, for the campaign clips your Mac posts there." (`CR_TIKTOK_ADD`, §47.12) "I did this" (sets every `crLinked` that is `false` back to unknown, §38.11); `auto: linked` (ticks when any `crLinked` is `true`); a finished Connect also ticks it (`stepsDone`). A `crLinked: false` re-opens the step with the line "Content Rewards doesn't know your YouTube account. Connect it here, then tap I did this." If you see: "No **Accounts** tab?" → "Look for **Connected accounts**."; **Verify** in red → "Tap it and allow again."; **Sign in again** → "Tap it."; **In review** → "Nothing to do. Content Rewards links it for you."; "already connected to another creator" → "That account is on another Content Rewards account. Unlink it there, or ask Content Rewards support."; "access wasn't granted" → "Tap **Connect account** again and leave every box ticked."; "No YouTube channel found" → "Pick the Google account that owns your channel." Folds: `fold-instagram`, `fold-facebook` (below). |
 | 3 | `connect` | Connect Content Rewards | `auto: connected` (ticks on `connected` **or** `read_only`), `manual: false`. Words by where the page runs (below). If you see: **Sign-in failed** → "Close that tab and tap Connect Content Rewards again."; "your account can't connect apps" (or anything about connecting apps) → "Look at the card Content Rewards said no? below. It has an email for you."; nothing happens → "Look for a new browser tab. Still nothing? Tap Connect Content Rewards again." |
 
 Fold-outs inside step 2 (closed unless the question applies):
@@ -302,9 +302,10 @@ top to bottom:
    countries: $0.20", "Unknown country: …"). These are CR's published rates, never a guess of what a clip will earn.
    Then "Money left: $7,890 of $8,500 · as of 2:10 pm" over a soft bar with a chip "Plenty left" (< 50% used) / "Half
    used" / "Almost gone" (≥ 95%), "Open to everyone" or "The brand picks creators (you apply)", and "Pays for:
-   YouTube, Instagram". When the campaign pays for TikTok: "TikTok: not yet. Campaign clips skip TikTok for now: your Mac
-   can't mark them as Branded content yet." (round 3, ADR-86: the one source is the server's
-   `tiktok_mac.CAMPAIGN_SKIPS`)
+   YouTube, Instagram". When the campaign pays for TikTok: while Your Mac posts TikTok is on, "TikTok: your Mac posts campaign clips with
+   TikTok's Paid partnership label." (`CAMPAIGN_TIKTOK_MAC`, §47.12); with it off, "TikTok: not yet. Campaign clips go
+   on TikTok from your Mac. Turn it on in Settings › Posting › Your Mac posts TikTok." (the server's
+   `tiktok_mac.CAMPAIGN_MAC_OFF`, word for word; ADR-96)
 4. **Rules I'll follow** (`data-help="cr-rules"`): `plainRules` with a tick each (code-made, §38.10: "Clips are 15 to
    60 seconds long.", "Every caption has #FaZe and @FaZeClan.", "#Ad goes at the start of each caption.", "'Paid
    partnership' shows on the video for the first 3 seconds.", "The FaZe logo stays on screen the whole clip, away
@@ -403,7 +404,7 @@ that is never "accepted": it just shows.
 | `budget_half` | no | spent > 50% (`MAX_SPENT_FRACTION = 0.5`) | "Half the money is used. $3,880 is left. Post soon, before it runs out." |
 | `low_rate` | no | every paid CPM rate under $1.00 per 1,000 views (`MIN_RATE_CENTS = 100`) | "It pays only $0.50 per 1,000 views. Most campaigns pay $1 or more. You can still make clips, or pick another one." |
 | `logo_missing` | yes | `logo.needed` and no ready logo | "This campaign needs its logo on every clip. Add it below." (next step `logo`, vermilion "Add the logo") |
-| `tiktok_only` | yes | the campaign pays only for TikTok | "This campaign only pays for TikTok. Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet. Pick a campaign that pays for YouTube, Instagram, X or Facebook." |
+| `tiktok_only` | yes | the campaign pays only for TikTok | "This campaign only pays for TikTok. Campaign clips go on TikTok from your Mac. Turn it on in Settings › Posting › Your Mac posts TikTok. Or pick a campaign that pays for YouTube, Instagram, X or Facebook." (`gates.TIKTOK_ONLY`; only while TikTok isn't one of its places: the Mac off and TikTok not approved, §47.12) |
 | `no_place` | yes | no paid platform is set up in Clip Factory (TikTok counted only after its audit) | "Set up YouTube first. This campaign pays for YouTube and Instagram." (→ the first paid place's setup page) |
 | `held` | yes | CR said too many clips wait for approval (§38.12) | "Content Rewards wants the brand to check your other clips first. I'll tell you when you can post again." |
 | `cap_reached` | yes | CR said `creator_cap_reached` | "You reached the most you can earn on this campaign. Pick another one." |
@@ -437,9 +438,11 @@ that is never "accepted": it just shows.
     "Paid partnership", "#Ad at the start", "Logo on" (the last only when the campaign needs it).
   * **Upload to** shows only `campaign.uploadPlaces` (§38.8: places the campaign pays for, set up in Clip Factory,
     not refused as unlinked by CR, and TikTok only after its audit, §17.4 gate `posting_audit: ok`; Review also takes
-    TikTok out of a campaign clip's places until TikTok approved the app, `tiktokAudited`, round 3). One line under the
-    chips: "Only places this campaign pays for." and, when the campaign pays for TikTok and TikTok is not offered:
-    "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet." (the server's `fit.TIKTOK_WAITS`, the same words as `tiktok_mac.CAMPAIGN_SKIPS`). A place CR refused as not linked (`crLinked: false`): the line "Link YouTube inside Content Rewards
+    TikTok out of a campaign clip's places until TikTok approved the app or while Your Mac posts TikTok is off,
+    `campaignPlaces(…, tiktokGoes)`, §47.12). One line under the chips: "Only places this campaign pays for." and,
+    when the campaign pays for TikTok and TikTok can't go (not approved and the Mac off): "Campaign clips go on TikTok
+    from your Mac. Turn it on in Settings › Posting › Your Mac posts TikTok." (the server's `fit.TIKTOK_MAC_OFF`, the
+    same words as `tiktok_mac.CAMPAIGN_MAC_OFF`; the fit's note has **Turn on your Mac** → `/settings/posting/tiktok-mac`). A place CR refused as not linked (`crLinked: false`): the line "Link YouTube inside Content Rewards
     first." with the glass Open "Open Content Rewards settings" (→ `https://contentrewards.com/c/settings`), the green
     "I linked it" (`PATCH /v1/contentrewards/connection {"relinked": "youtube"}`: back to unknown, so YouTube returns
     to the chips) and the second line "Then tap I linked it. The next clip will go."
@@ -1236,9 +1239,10 @@ Check now (`POST …/campaigns/{id}/read`) runs step 3 for one campaign synchron
   * Every chosen place is one of the clip's places (the §38.8 `uploadPlaces` rule), else 400 with the first refusal:
     not paid → "This campaign doesn't pay for {Platform}. Turn it off, then tap Upload."; not `ready` on Set up
     posting → "{Platform} is not set up yet. Turn it off, then tap Upload."; TikTok before TikTok approved the app
-    (its `app_review` and `posting_audit` gates not both `ok`, `tiktok_mac.setup_audited`; round 3, ADR-86: before
-    that only the owner's Mac posts TikTok, and it can't mark a campaign clip as Branded content yet) → "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet. Turn
-    TikTok off, then tap Upload."; `CRCONN.crLinked[place]` is `false` → "Add {Platform} in Content Rewards first.
+    (its `app_review` and `posting_audit` gates not both `ok`, `tiktok_mac.setup_audited`) goes to the owner's Mac
+    with Everyone and Branded content while Your Mac posts TikTok is on (§47.12, ADR-96); with it off → "Campaign
+    clips go on TikTok from your Mac. Turn it on in Settings › Posting › Your Mac posts TikTok. Or turn TikTok off,
+    then tap Upload."; `CRCONN.crLinked[place]` is `false` → "Add {Platform} in Content Rewards first.
     Then tap I added it, or turn {Platform} off and tap Upload."
   * YouTube: `options.youtube.privacy` other than `public` → 400 "Campaign clips must be public. Pick Everyone.";
     `madeForKids: true` → 400 "Campaign clips are never made for kids."; the post keeps `privacy: "public"` and
@@ -1258,7 +1262,7 @@ Check now (`POST …/campaigns/{id}/read`) runs step 3 for one campaign synchron
   the same 409s, place rule and fit gate on the posts they send (the failed and the waiting ones), with sentences that
   name the buttons those screens have (no switch, no Upload): "This campaign doesn't pay for {Platform} any more. Tap
   Try again on another place.", "{Platform} is not set up yet. Set it up in Settings › Posting › Set up posting, then
-  tap Try again.", "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet. Tap Try again on another place." and "Add {Platform} in Content Rewards first, then tap Try again." TikTok's
+  tap Try again.", "Campaign clips go on TikTok from your Mac. Turn it on in Settings › Posting › Your Mac posts TikTok. Tap Try again on another place." (the Mac off), "Your Mac posts campaign clips on TikTok. Tap Post with my Mac." (TikTok's API before the approval, the Mac on: `CAMPAIGN_MAC_POSTS`, §47.12) and "Add {Platform} in Content Rewards first, then tap Try again." TikTok's
   public and Branded content rule runs when new TikTok choices come with it; they replace the TikTok post's
   `postOptions` but its `campaign` part goes along unchanged. A waiting campaign post is never released by itself when
   its account comes back (`release.release_waiting`): it waits for Post now (§39.3).

@@ -24,7 +24,7 @@ const PHONE = { viewport: { width: 375, height: 812 }, hasTouch: true, isMobile:
 const DESKTOP = { viewport: { width: 1440, height: 900 } } as const;
 
 type Cr = Record<string, (...a: unknown[]) => unknown>;
-type MockWin = Window & { __cfMock?: { cr?: Cr; setup?: Cr; finder?: Cr } };
+type MockWin = Window & { __cfMock?: { cr?: Cr; setup?: Cr; finder?: Cr; mac?: Cr; posting?: Cr } };
 
 /** Start states read once by the mock (src/api/mock/contentrewards.ts). */
 async function start(page: Page, flags: { fresh?: boolean; review?: boolean | "tiktok"; off?: "404" | "503" } = {}) {
@@ -140,7 +140,8 @@ for (const [name, use] of [
       await expect(socials.locator(".gstep__lead")).toHaveText(/^Already added .+ there\? Tap I added them\.$/);
       await expect(socials).toContainText("Add Instagram, X and Facebook the same way, if you post there.");
       await expect(socials).toContainText("Then come back to Clip Factory. Tap I added them.");
-      await expect(socials).toContainText("TikTok can wait. Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet.");
+      await expect(socials).toContainText("Add TikTok the same way too, for the campaign clips your Mac posts there.");
+      await expect(socials).not.toContainText("skip TikTok");
       await expect(page.locator("[data-cr='shortcut']")).toHaveCount(0);
       await socials.getByRole("button", { name: "I added them" }).click();
       await expect(page.locator(".setup-head")).toContainText("2/3");
@@ -1024,7 +1025,7 @@ test.describe("a phone's campaign card (§39.1)", () => {
 test.describe("campaign clips after Upload", () => {
   test.use(DESKTOP);
 
-  test("Review: a campaign that pays for TikTok skips TikTok for now (the Mac can't mark Branded content), and says so", async ({ page }) => {
+  test("Review: a campaign that pays for TikTok, with Your Mac posts TikTok off: no TikTok, and the card says to turn the Mac on", async ({ page }) => {
     await start(page, { review: "tiktok" });
     await page.goto("/");
     await mock(page);
@@ -1032,10 +1033,56 @@ test.describe("campaign clips after Upload", () => {
     await page.goto("/review");
     await settle(page);
     const card = page.locator(".review-card").filter({ has: page.locator("[data-help~='cr-review-strip']") });
-    await expect(card.locator(".upload-to")).toContainText("Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet.");
-    await expect(card.locator(".upload-to")).not.toContainText(/posts are private|left out for now/);
+    await expect(card.locator(".upload-to")).toContainText("Campaign clips go on TikTok from your Mac. Turn it on in Settings › Posting › Your Mac posts TikTok.");
+    await expect(card.locator(".upload-to")).not.toContainText(/posts are private|left out for now|skip TikTok/);
     await expect(card.locator(".upload-chip", { hasText: "TikTok" })).toHaveCount(0);
     await expect(card.locator(".upload-chip")).toHaveCount(2);
+  });
+
+  test("Review: with Your Mac posts TikTok on, a campaign clip uploads to TikTok through the Mac, Everyone with Branded content", async ({ page }) => {
+    await start(page, { review: "tiktok" });
+    await page.goto("/");
+    await mock(page);
+    await finishSetup(page, "youtube", "instagram", "tiktok");
+    await page.goto("/review");
+    await settle(page);
+    // The mock keeps its settings in this page only: Settings and back in-app.
+    const go = async (path: string) => {
+      await page.evaluate((to) => {
+        history.pushState({}, "", to);
+        dispatchEvent(new PopStateEvent("popstate"));
+      }, path);
+      await settle(page);
+    };
+    await go("/settings/posting/tiktok-mac");
+    const sw = page.getByRole("switch", { name: "My Mac posts my TikTok clips" });
+    await sw.click();
+    await expect(sw).toHaveAttribute("aria-checked", "true");
+    await page.evaluate(() => (window as MockWin).__cfMock!.mac!.ping!());
+    await go("/review");
+    const card = page.locator(".review-card").filter({ has: page.locator("[data-help~='cr-review-strip']") });
+    const clipId = ((await card.getAttribute("aria-labelledby")) ?? "").replace(/^hook-/, "");
+    // TikTok is one of its places, ticked, on Everyone with TikTok's Paid partnership label: no tap needed.
+    await expect(card.locator(".upload-chip", { hasText: "TikTok" })).toHaveCount(1);
+    await expect(card.locator(".upload-chip", { hasText: "TikTok" })).toHaveAttribute("aria-pressed", "true");
+    await expect(card.locator(".upload-to")).not.toContainText(/skip TikTok|Turn it on in Settings/);
+    await expect(card.locator('[data-place="tiktok"] .place-row__now')).toContainText("Who can see it: Everyone");
+    await expect(card.locator('[data-place="tiktok"] .place-row__now')).toContainText("Paid partnership");
+    await expect(card.locator(".tt-yourself-hint")).toHaveText("TikTok: your Mac posts it for everyone and adds TikTok's Paid partnership label.");
+    await expect(card.getByRole("button", { name: "Your settings are on" })).toBeVisible();
+    const upload = card.getByRole("button", { name: /^Upload to \d/ });
+    await expect(upload).not.toHaveAttribute("aria-disabled", "true");
+    await upload.click();
+    await expect(page.getByText(/Uploading to \d places?!/)).toBeVisible();
+    // The body: Mac mode, the card's own TikTok row (Everyone, Branded content).
+    const body = await page.evaluate(() => (window as MockWin).__cfMock!.posting!.lastConfirm!());
+    expect(body).toMatchObject({ clipId, tiktokMac: true, tiktok: { privacyLevel: "PUBLIC_TO_EVERYONE", brandContent: true } });
+    expect((body as { platforms: string[] }).platforms).toContain("tiktok");
+    // Its TikTok post is the Mac's, with TikTok's label.
+    const posts = (await page.evaluate((id) => (window as MockWin).__cfMock!.posting!.posts!(id), clipId)) as { platform: string; status: string; mac?: { brandContent?: true } }[];
+    expect(posts.find((p) => p.platform === "tiktok")).toMatchObject({ status: "mac", mac: { brandContent: true } });
+    const job = ((await page.evaluate(() => (window as MockWin).__cfMock!.mac!.queue!())) as { clipId: string }[]).find((j) => j.clipId === clipId);
+    expect(job).toMatchObject({ privacy: "PUBLIC_TO_EVERYONE", brandContent: true });
   });
 
   test("the clip's line walks Sending → Sent → Approved after Upload", async ({ page }) => {

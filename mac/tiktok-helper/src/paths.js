@@ -29,4 +29,6 @@ export const SECURITY = process.env.CF_TT_SECURITY || "/usr/bin/security";
 // 1.2.1: a fresh Clip Factory token for every call (auth.js tokenSource), so a 20-minute login wait ends with its stop.
 // 1.2.2: a hold that is only a TikTok login ends by itself once the lane's Chrome reads its own account again (§47.11).
 // 1.2.3: a pause during a login look wins, only the Mac that stopped looks, and a pause since the lane decided wins.
-export const VERSION = "1.2.3";
+// 1.3.0: Clip Factory's posts get TikTok's Branded content / Your brand disclosure from the job, read back before Post
+// (the server's MAC_BRAND_FROM: a post with a label is only claimed by this version or newer), and the claim says it.
+export const VERSION = "1.3.0";

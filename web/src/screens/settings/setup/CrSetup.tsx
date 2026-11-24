@@ -37,7 +37,7 @@ import { isTouchDevice } from "../../../lib/crConnect.ts";
 import { PLATFORM_LABEL, PLATFORM_ORDER } from "../../../lib/format.ts";
 import { prefersReducedMotion } from "../../../lib/prefs.ts";
 import { navigate } from "../../../lib/router.ts";
-import { CR_GUIDE, CR_LOGIN_ASK, CR_LOGIN_FIRST, CR_PILOT, CR_PILOT_AFTER, CR_SAID_CANT, CR_SETUP_STEPS, CR_SHORTCUT, CR_TIKTOK_WAITS } from "../../../setup/contentrewards.ts";
+import { CR_GUIDE, CR_LOGIN_ASK, CR_LOGIN_FIRST, CR_PILOT, CR_PILOT_AFTER, CR_SAID_CANT, CR_SETUP_STEPS, CR_SHORTCUT, CR_TIKTOK_ADD } from "../../../setup/contentrewards.ts";
 import type { CrStep } from "../../../setup/types.ts";
 import { BrandText, CrStepCard, GreenButton, Lines, Note } from "../../campaigns/bits.tsx";
 import { CopyChip } from "./bits.tsx";
@@ -396,9 +396,9 @@ export function CrSetup() {
     return true;
   }
   const socialsSay = (step: CrStep) => {
-    const lines = step.say.filter((l) => l !== CR_TIKTOK_WAITS);
+    const lines = step.say.filter((l) => l !== CR_TIKTOK_ADD);
     const last = lines.pop();
-    return [...lines, ...(postsTo ? [postsTo] : []), CR_TIKTOK_WAITS, ...(last ? [last] : [])];
+    return [...lines, ...(postsTo ? [postsTo] : []), CR_TIKTOK_ADD, ...(last ? [last] : [])];
   };
   // On a phone, step 3 is done on the Mac: with a way back, the page still leads back (the vermilion when step 3 is the
   // only step left, since a phone's step 3 has no button), and says where that campaign is on the Mac.

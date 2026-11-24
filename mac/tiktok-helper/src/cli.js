@@ -13,6 +13,10 @@
 //   node src/cli.js probe <clipId>  a check run in the hidden Chrome: fills in TikTok Studio for that clip exactly as
 //                                 for a post, reads every setting back, then stops before Post (nothing is posted,
 //                                 nothing is claimed). Saves a picture of the filled-in page as probe.png.
+//                                 1.3.0: --branded (Branded content, as every campaign clip), --your-brand, --privacy
+//                                 <PUBLIC_TO_EVERYONE|MUTUAL_FOLLOW_FRIENDS|SELF_ONLY>, --caption <text> (a clip that
+//                                 is on TikTok already), --quiet (no frame: nothing on screen at all). It prints the
+//                                 disclosure TikTok reads back (label) and whether Studio shows "Paid partnership".
 //   node src/cli.js whoami [--workspace <id>]  which TikTok the lane's Chrome is logged in to (Clip Factory's lane
 //                                 without --workspace), and the account it may post to. Prints a handle, never a cookie.
 //   node src/cli.js setup --workspace <id>  ON THE OWNER'S COMMAND ONLY: a Clips Funded workspace's one-time TikTok
@@ -250,32 +254,43 @@ async function wsProbe(workspaceId, storyId) {
   });
 }
 
-async function probe(clipId) {
-  return withLock(() => clipsProbe(clipId));
+/** --quiet: the check run shows nothing at all (no frame, no notification), as a normal post. */
+function quietFrame() {
+  return { shown: true, on: async () => true, step: async () => {}, done: async () => {}, off: async () => {} };
 }
 
-async function clipsProbe(clipId) {
+async function probe(clipId, options = {}) {
+  return withLock(() => clipsProbe(clipId, options));
+}
+
+const PROBE_PRIVACY = ["PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS", "SELF_ONLY"];
+
+async function clipsProbe(clipId, options = {}) {
   const config = await appConfig();
   const api = client(config.apiUrl, await signIn(config));
   const state = loadState();
   const lane = clipsLane(state, api);
   const target = await clipsTarget(api, state);
   const clip = (await api.clip(clipId)).clip;
+  const privacy = typeof options.privacy === "string" ? options.privacy : "PUBLIC_TO_EVERYONE";
+  if (!PROBE_PRIVACY.includes(privacy)) throw new Error(`--privacy takes ${PROBE_PRIVACY.join(", ")}`);
   const job = {
     clipId,
     hook: clip.hook || "",
-    caption: clip.captions?.tiktok || "",
-    privacy: "PUBLIC_TO_EVERYONE",
+    caption: typeof options.caption === "string" ? options.caption : clip.captions?.tiktok || "",
+    privacy,
     comment: true,
     duet: true,
     stitch: true,
+    brandContent: options.branded === true,
+    brandOrganic: options["your-brand"] === true,
   };
   const { url, filename } = await api.file(clipId);
   const res = await fetch(url);
   if (!res.ok) throw new Error(`The video did not download (${res.status}).`);
   const file = path.join(DOWNLOADS, freeName(filename, (n) => fs.existsSync(path.join(DOWNLOADS, n))));
   fs.writeFileSync(file, Buffer.from(await res.arrayBuffer()));
-  const fr = frame();
+  const fr = options.quiet === true ? quietFrame() : frame();
   if (!(await fr.on(`Check run: filling in TikTok for “${job.hook}” (nothing is posted)`))) {
     fs.rmSync(file, { force: true });
     throw new Error("The red frame couldn't be shown, so the check didn't run.");
@@ -407,7 +422,7 @@ try {
     await wsProbe(flags.workspace, flags.story === true ? undefined : flags.story);
   } else if (cmd === "probe") {
     if (!arg) throw new Error("probe takes a clip id");
-    await probe(arg);
+    await probe(arg, flags);
   } else if (cmd === "trial") {
     const n = arg === "none" ? null : Number(arg);
     if (n !== null && !(Number.isInteger(n) && n >= 0)) throw new Error("trial takes a whole number or none");

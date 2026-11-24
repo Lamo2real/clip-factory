@@ -71,6 +71,31 @@ def test_upload_places_cases() -> None:
     assert gates.upload_places(["tiktok"], SETUPS, {}) == []  # TikTok only
 
 
+def test_with_the_mac_on_tiktok_is_a_place_before_its_audit() -> None:
+    # §47: Your Mac posts TikTok posts a campaign clip for Everyone with Branded content before TikTok approves the app.
+    assert gates.upload_places(["tiktok", "youtube"], SETUPS, {}, mac_on=True) == ["youtube", "tiktok"]
+    assert gates.upload_places(["tiktok"], SETUPS, {}, mac_on=True) == ["tiktok"]
+    assert gates.upload_places(["tiktok"], [setup("tiktok", ready=False)], {}, mac_on=True) == []  # not set up
+    assert gates.upload_places(["tiktok"], SETUPS, {"tiktok": False}, mac_on=True) == []  # CR doesn't know it
+    assert gates.tiktok_waits(["tiktok", "youtube"], SETUPS)
+    assert not gates.tiktok_waits(["tiktok", "youtube"], SETUPS, mac_on=True)
+    assert not gates.tiktok_waits(["youtube"], SETUPS)
+
+
+def test_tiktok_only_stops_only_while_tiktok_waits() -> None:
+    item = campaign(platformsPaid=["tiktok"])
+    stop = next(s for s in gates.stops(item, CONNECTED, [], NOW) if s["code"] == "tiktok_only")
+    assert (stop["hard"], stop["text"]) == (True, gates.TIKTOK_ONLY)
+    assert "Your Mac posts TikTok" in stop["text"]
+    # TikTok is one of its places (the Mac is on, or TikTok approved the app): nothing stops it.
+    assert [s["code"] for s in gates.stops(item, CONNECTED, ["tiktok"], NOW, tiktok_waits=False)] == []
+    # The Mac is on but TikTok isn't set up: set it up first.
+    found = gates.stops(item, CONNECTED, [], NOW, tiktok_waits=False)
+    assert [(s["code"], s.get("fixHref")) for s in found] == [
+        ("no_place", f"/settings/posting/setup/tiktok?back=/campaigns/{UUID}")
+    ]
+
+
 # --- stops ----------------------------------------------------------------------------------------------------------
 
 

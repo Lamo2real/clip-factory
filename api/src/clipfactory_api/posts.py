@@ -43,6 +43,8 @@ MAC_PUBLIC = {
     "macReason": "reason",
     "macBeatAt": "beatAt",
 }
+# TikTok's label on a Mac post (its ``postOptions``), public in ``mac`` only when true (tiktok_mac.LABELS).
+MAC_LABELS = ("brandContent", "brandOrganic")
 COMMON_METRICS = ("views", "likes", "comments", "shares")
 REFRESH_CLAIM = timedelta(minutes=5)  # a manual refresh counts as running for this long (§16.2)
 PERF_CHECK_DELAY = timedelta(hours=48)
@@ -81,12 +83,18 @@ def is_private_test(item: Mapping[str, Any]) -> bool:
 
 def public_mac(item: Mapping[str, Any]) -> Item | None:
     """``Post.mac`` (§47): where a Mac post stands (``state``, ``step``, ``since``, ``source``, ``claimedAt``,
-    ``pressedAt``, ``stoppedAt``, ``reason``, and ``beatAt``: when the Mac last beat the job, for the stuck rule);
-    None for every other post. ``macDevice``, ``macAttempt``, ``macPressedBefore``, ``macAgainAt``, ``beforeMac`` and
-    ``madeForMac`` stay internal."""
+    ``pressedAt``, ``stoppedAt``, ``reason``, and ``beatAt``: when the Mac last beat the job, for the stuck rule), and
+    TikTok's label the Mac sets (``brandContent: true``, ``brandOrganic: true``, only when its choices say so); None
+    for every other post. ``macDevice``, ``macAttempt``, ``macPressedBefore``, ``macAgainAt``, ``beforeMac``,
+    ``madeForMac`` and ``postOptions`` stay internal."""
     if item.get("status") != MAC_STATUS:
         return None
-    return {public: item[field] for field, public in MAC_PUBLIC.items() if item.get(field) not in (None, "")}
+    out = {public: item[field] for field, public in MAC_PUBLIC.items() if item.get(field) not in (None, "")}
+    options = item.get("postOptions")
+    for key in MAC_LABELS:
+        if isinstance(options, Mapping) and options.get(key) is True:
+            out[key] = True
+    return out
 
 
 def new_mac_fields(source: str, now: str) -> Item:
@@ -291,7 +299,7 @@ def create_for_clip(
         options = dict((post_options or {}).get(platform) or {})
         if campaign_options is not None:
             options["campaign"] = dict(campaign_options)
-        created.append({**post, "mac": public_mac({**post, **mac})} if mac else post)
+        created.append({**post, "mac": public_mac({**post, **mac, "postOptions": options})} if mac else post)
         items.append(
             {
                 "pk": db.user_pk(user_id),

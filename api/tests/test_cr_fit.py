@@ -636,6 +636,31 @@ def test_a_campaign_clip_is_checked_against_its_own_campaign_only(cr: Any) -> No
     )
 
 
+def test_the_fit_and_the_campaign_card_read_your_mac_posts_tiktok(cr: Any) -> None:
+    """§47: before TikTok approves the app, TikTok is one of a campaign clip's places while the owner's Mac posts it."""
+    from clipfactory_api.contentrewards import campaigns, gates
+
+    seed_setup(cr.store, USER, "tiktok", audit="waiting")
+    item = seed_campaign(cr.store, USER, NOW, platformsPaid=["youtube", "tiktok"])
+    job = seed_job(
+        cr.store,
+        status="ready",
+        campaignId=UUID,
+        campaign={"campaignId": UUID, "name": "FaZe Clips", "rules": base_rules()},
+    )
+    clip = seed_clip(cr.store, job_id=job["jobId"], campaignId=UUID, captions=dict(GOOD))
+    off = fit.for_clip(cr, USER, clip["clipId"], NOW)["fits"][0]
+    assert off["uploadPlaces"] == ["youtube"]
+    note = next(i for i in off["items"] if i.get("platform") == "tiktok")
+    assert (note["state"], note["text"], note["fix"]["href"]) == ("note", gates.TIKTOK_MAC_OFF, fit.MAC_SETTINGS)
+    assert campaigns.public_campaign(campaigns.View(cr, USER, NOW), item)["uploadPlaces"] == ["youtube"]
+    cr.store.put({"pk": db.user_pk(USER), "sk": db.SETTINGS_SK, "type": "settings", "tiktokMac": {"on": True}})
+    on = fit.for_clip(cr, USER, clip["clipId"], NOW)["fits"][0]
+    assert on["uploadPlaces"] == ["youtube", "tiktok"]
+    assert not [i for i in on["items"] if i.get("text") == gates.TIKTOK_MAC_OFF]
+    assert campaigns.public_campaign(campaigns.View(cr, USER, NOW), item)["uploadPlaces"] == ["youtube", "tiktok"]
+
+
 def test_one_campaign_per_moment_through_copies_and_the_original(cr: Any) -> None:
     seed_campaign(cr.store, USER, NOW)
     seed_campaign(cr.store, USER, NOW, UUID2, name="Valorant Clips")

@@ -15,6 +15,7 @@ import {
   CAMPAIGNS_PATH,
   COMING_SOON,
   TIKTOK_NOT_YET,
+  CAMPAIGN_TIKTOK_MAC,
   budgetChip,
   campaignPath,
   campaignRemoved,
@@ -33,6 +34,8 @@ import {
   usdShort,
 } from "../../lib/contentRewards.ts";
 import { PLATFORM_LABEL, relative } from "../../lib/format.ts";
+import { macOn } from "../../lib/tiktokMac.ts";
+import { useSessionIfAny } from "../../app/session.tsx";
 import { useLiveEvents, useLivePoll } from "../../lib/live.ts";
 import { navigate } from "../../lib/router.ts";
 import { prefersReducedMotion } from "../../lib/prefs.ts";
@@ -291,6 +294,7 @@ function ClipLines({ subs, onChange }: { subs: Parameters<typeof CrPostLines>[0]
 }
 
 function PaySection({ c }: { c: Campaign }) {
+  const me = useSessionIfAny()?.me;
   const countries = c.pay.flatMap((p) => countryLines(p));
   const chip = budgetChip(c.budget.usedPct);
   const paidHere = c.platformsPaid.filter((p) => p !== "tiktok");
@@ -326,7 +330,8 @@ function PaySection({ c }: { c: Campaign }) {
       ) : null}
       <p className="cr-quiet">{c.access === "open" ? "Open to everyone" : "The brand picks creators (you apply)"}</p>
       <p className="cr-quiet">Pays for: {placeList(paidHere.length ? c.platformsPaid : c.platformsPaid) || "not shown yet"}</p>
-      {c.platformsPaid.includes("tiktok") ? <p className="cr-quiet">{TIKTOK_NOT_YET}</p> : null}
+      {/* TikTok goes through his Mac (with TikTok's Paid partnership label) until TikTok approves the app (§47). */}
+      {c.platformsPaid.includes("tiktok") ? <p className="cr-quiet">{macOn(me?.settings) ? CAMPAIGN_TIKTOK_MAC : TIKTOK_NOT_YET}</p> : null}
       <p className="cr-quiet small">Content Rewards&apos; own rates, not a guess of what you&apos;ll earn.</p>
     </section>
   );

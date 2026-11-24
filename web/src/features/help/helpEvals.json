@@ -166,6 +166,7 @@
     { "q": "Where do I add the campaign logo?", "expect": "cr-logo" },
     { "q": "How do I make clips for a campaign?", "expect": "cr-make-clips" },
     { "q": "Why is TikTok left out for campaigns?", "expect": "cr-tiktok" },
+    { "q": "Do campaign clips go to TikTok?", "expect": "cr-tiktok" },
     { "q": "Did my clip go to Content Rewards?", "expect": "cr-clip-sent" },
     { "q": "How do I send a clip to Content Rewards myself?", "expect": "cr-send-by-hand" },
     { "q": "The brand wants proof of views", "expect": "cr-proof" },

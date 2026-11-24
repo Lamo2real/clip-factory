@@ -2590,12 +2590,6 @@ html:where(.see-through, [data-backdrop]) .btn.post__again {
   font-size: var(--fs-small);
   font-weight: 600;
 }
-/* The TikTok row while his Mac posts TikTok (§47.9): what the Mac posts it with, read-only, and Change My settings. */
-.tt-mac-uses {
-  display: grid;
-  justify-items: start;
-  gap: 8px;
-}
 
 /* ---------- Settings › Posting › My settings (§36) ---------- */
 .preset-page__controls {
