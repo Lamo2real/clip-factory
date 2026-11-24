@@ -81,6 +81,21 @@ function primProblems(prims: Prim[], box = { x0: -4000, y0: -4000, x1: 5080, y1:
         inX(p.x, at);
         inY(p.y, at);
         break;
+      case "glow":
+        // night drive's soft lights: an ellipse whose alpha fades along sorted stops, from the centre out to 0 at its edge
+        [p.x, p.y, p.rx, p.ry, p.rot].forEach((v) => num(v, at));
+        if (p.rx <= 0 || p.ry <= 0) bad.push(`${at}: radii ${p.rx} ${p.ry}`);
+        if (p.fade.length < 2) bad.push(`${at}: fewer than 2 fade stops`);
+        p.fade.forEach(([o, al], j) => {
+          num(o, at);
+          num(al, at);
+          if (o < 0 || o > 1 || (j > 0 && o < p.fade[j - 1]![0])) bad.push(`${at}: fade offset ${o}`);
+          if (al < 0 || al > 1) bad.push(`${at}: fade alpha ${al}`);
+        });
+        if (p.fade.at(-1)?.[1] !== 0) bad.push(`${at}: a glow's fade must end at alpha 0`);
+        inX(p.x, at);
+        inY(p.y, at);
+        break;
       case "poly":
       case "line":
         if (p.pts.length % 2 !== 0 || p.pts.length < (p.k === "poly" ? 6 : 4)) bad.push(`${at}: ${p.pts.length} coordinates`);

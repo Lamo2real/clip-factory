@@ -842,6 +842,12 @@ function legNight(pen: Pen, g: Geo, P: Paint, hip: [number, number], knee: [numb
   const cy = foot[1] - 1.2 + Math.sin(rot * DEG) * 2.4;
   pen.ellipse(cx, cy, 6.6 + P.ow, 3.9 + P.ow, rot, P.O);
   pen.ellipse(cx, cy, 6.6, 3.9, rot, shoe);
+  // a dark sole along the bottom of the shoe (the pedals' close-up shoe's sole colour), so it reads as a shoe
+  pen.save();
+  pen.translate(cx, cy);
+  pen.rotate(rot);
+  pen.poly(clipConvex(arcPts(0, 0, 6.6, 3.9, 0, 360, 32).slice(0, -2), [-8, 2.1, 8, 2.1, 8, 5, -8, 5]), mix(ND.ink, shoe, 0.2));
+  pen.restore();
   // a small highlight on the toe cap
   pen.ellipse(cx + Math.cos(rot * DEG) * 2.6 + Math.sin(rot * DEG) * 1.3, cy + Math.sin(rot * DEG) * 2.6 - Math.cos(rot * DEG) * 1.3, 2.2, 0.9, rot, lift(shoe, 0.3), 0.7);
 }

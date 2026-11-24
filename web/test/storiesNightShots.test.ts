@@ -160,6 +160,27 @@ function winding(pts: number[], x: number, y: number): number {
   return w;
 }
 
+/** How much of its colour a glow prim lays on the point (x, y), before its alpha: the fade at the point's distance
+ * from the centre in radii, linear between stops, the end stops' values past them and nothing past the edge (the
+ * semantics of engine/README.md that draw.ts and raster.py share). */
+function glowAt(p: Extract<Prim, { k: "glow" }>, x: number, y: number): number {
+  const r = (p.rot * Math.PI) / 180;
+  const dx = x - p.x;
+  const dy = y - p.y;
+  const u = (dx * Math.cos(r) + dy * Math.sin(r)) / p.rx;
+  const v = (dy * Math.cos(r) - dx * Math.sin(r)) / p.ry;
+  const d = Math.hypot(u, v);
+  if (d >= 1) return 0;
+  const f = p.fade;
+  if (d <= f[0]![0]) return f[0]![1];
+  for (let i = 1; i < f.length; i += 1) {
+    const [o1, a1] = f[i]!;
+    const [o0, a0] = f[i - 1]!;
+    if (d <= o1) return o1 > o0 ? a0 + ((a1 - a0) * (d - o0)) / (o1 - o0) : a1;
+  }
+  return f.at(-1)![1];
+}
+
 function finite(prims: Prim[], w: number, h: number): string[] {
   const bad: string[] = [];
   prims.forEach((p, i) => {
@@ -308,35 +329,38 @@ describe("the light and the finish", () => {
 
   it("the vignette darkens the corners and leaves the middle of the frame alone, in night drive only", () => {
     const s = valid(story([drive("highway_night", [])]));
-    const isRing = (p: Prim) => p.k === "poly" && p.color === ND.vignette;
+    const isVignette = (p: Prim) => p.k === "glow" && p.color === ND.vignette;
     const nd = drawFrame(s, 30);
-    // soft rings, each drawn as two corner pieces: the top corners, over the flat night sky, step down in eight fine
-    // rings of 0.025 (about one level each on the sky, so no ring shows as an oval edge), the bottom corners in four
-    // of 0.05; every corner is under all its rings and darkened about the same, the middle and the middle of each edge
-    // under none
-    const alpha = (p: Prim | undefined): number => (p && "a" in p && typeof p.a === "number" ? p.a : 1);
-    const rings = nd.filter(isRing) as Extract<Prim, { k: "poly" }>[];
-    expect(rings.length).toBe(24);
-    const over = (x: number, y: number) => rings.filter((p) => winding(p.pts, x, y) !== 0);
-    const dark = (ps: Prim[]): number => 1 - ps.reduce((k, p) => k * (1 - alpha(p)), 1);
+    // a soft dark glow in each corner, a true gradient (the glow prim), so no ring or step shows on the flat night sky:
+    // every corner is darkened about the same, top and bottom, the middle and the middle of each edge not at all
+    const glows = nd.filter(isVignette) as Extract<Prim, { k: "glow" }>[];
+    expect(glows.length).toBe(4);
+    const dark = (x: number, y: number, ps = glows): number => 1 - ps.reduce((k, p) => k * (1 - (p.a ?? 1) * glowAt(p, x, y)), 1);
     for (const [x, y] of [
       [3, 3],
       [1077, 3],
-    ]) {
-      expect(over(x!, y!).length, `${x},${y}`).toBe(8);
-      expect(over(x!, y!).every((p) => p.a === 0.025), `${x},${y}`).toBe(true);
-    }
-    for (const [x, y] of [
       [3, 1917],
       [1077, 1917],
-    ]) {
-      expect(over(x!, y!).length, `${x},${y}`).toBe(4);
-      expect(over(x!, y!).every((p) => p.a === 0.05), `${x},${y}`).toBe(true);
+    ])
+      expect(dark(x!, y!), `${x},${y}`).toBeGreaterThan(0.17);
+    expect(Math.abs(dark(3, 3) - dark(3, 1917))).toBeLessThan(0.01);
+    expect(Math.abs(dark(3, 3) - dark(1077, 3))).toBeLessThan(0.01);
+    // from each corner towards the middle it never steps: from one pixel to the next it darkens less than a level
+    // (1 / 255 of the way to black), and it fades all the way out
+    for (const [x0, y0] of [
+      [0.5, 0.5],
+      [1079.5, 0.5],
+      [0.5, 1919.5],
+      [1079.5, 1919.5],
+    ] as const) {
+      let before = dark(x0, y0);
+      for (let i = 1; i <= 600; i += 1) {
+        const now = dark(x0 + ((540 - x0) * i) / 600, y0 + ((960 - y0) * i) / 600);
+        expect(Math.abs(now - before), `${x0},${y0} step ${i}`).toBeLessThan(1 / 255);
+        before = now;
+      }
+      expect(before).toBe(0);
     }
-    expect(dark(over(3, 3))).toBeGreaterThan(0.17);
-    expect(Math.abs(dark(over(3, 3)) - dark(over(3, 1917)))).toBeLessThan(0.01);
-    // no step anywhere over the sky is bigger than 0.025
-    expect(rings.filter((p) => Math.max(...p.pts.filter((_, i) => i % 2 === 1)) < 960).every((p) => alpha(p) <= 0.025)).toBe(true);
     for (const [x, y] of [
       [540, 960],
       [540, 3],
@@ -344,14 +368,15 @@ describe("the light and the finish", () => {
       [1077, 960],
       [540, 1917],
     ])
-      expect(over(x!, y!).length, `${x},${y}`).toBe(0);
+      expect(dark(x!, y!), `${x},${y}`).toBe(0);
     const classic = drawFrame({ ...clone(s), art: "classic" }, 30);
-    expect(classic.filter(isRing).length).toBe(0);
-    // by day the rings are half as dark
-    const day = drawFrame(valid(story([drive("road_day", [])])), 30).filter(isRing);
-    const night = nd.filter(isRing);
-    expect(day.length).toBe(night.length);
-    day.forEach((p, i) => expect(alpha(p)).toBeCloseTo(alpha(night[i]) / 2, 2));
+    expect(classic.filter(isVignette).length).toBe(0);
+    expect(classic.some((p) => "color" in p && p.color === ND.vignette)).toBe(false);
+    // by day it is half as dark
+    const day = drawFrame(valid(story([drive("road_day", [])])), 30).filter(isVignette) as Extract<Prim, { k: "glow" }>[];
+    expect(day.length).toBe(glows.length);
+    expect(dark(3, 3, day)).toBeCloseTo(dark(3, 3) / 2, 2);
+    day.forEach((p, i) => p.fade.forEach(([o, a], j) => expect([o, a]).toEqual([glows[i]!.fade[j]![0], expect.closeTo(glows[i]!.fade[j]![1] / 2, 2)])));
   });
 
   it("street lamps are warm emitters in night drive: soft glow rings in small steps, a slim dark head over the lens, poles behind the rails", () => {
@@ -384,6 +409,24 @@ describe("the light and the finish", () => {
       // every pole is drawn before the rails (so a rail stands in front of its foot), every lens after them
       expect(last(ND.lampPole), shot).toBeLessThan(first(ND.rail));
       expect(first(ND.lampLens), shot).toBeGreaterThan(last(ND.rail));
+      // a near lamp's light is soft glows (a true gradient, so no ring edge shows however big it is): amber, gold and
+      // warm white round its lens, never a stack of see-through ovals, each fading out to nothing at its edge
+      const glows = prims.filter((p): p is Extract<Prim, { k: "glow" }> => p.k === "glow");
+      for (const c of [ND.lampGlowOut, ND.lampGlowIn, ND.lampLens]) expect(glows.some((p) => p.color === c), `${shot} ${c}`).toBe(true);
+      expect(prims.some((p) => (p.k === "ellipse" || p.k === "circle") && (p.color === ND.lampGlowIn || p.color === ND.lampGlowOut)), shot).toBe(false);
+      for (const g of glows) {
+        expect(g.fade.length, shot).toBeGreaterThanOrEqual(12);
+        expect(g.fade.at(-1)![1], shot).toBe(0);
+      }
+    }
+    // through the car's windows too: lamps glow through the rear window (Face up close) and the side window, each with
+    // its thin dark head over its lens
+    for (const shot of ["face", "side_window"] as const) {
+      for (const fr of [40, 75]) {
+        const prims = drawFrame(valid(story([drive("highway_night", [{ at: 0.1, shot }])])), fr);
+        expect(prims.some((p) => "color" in p && p.color === ND.lampHousing), `${shot} ${fr}`).toBe(true);
+        expect(prims.some((p) => p.k === "glow" && p.color === ND.lampGlowIn), `${shot} ${fr}`).toBe(true);
+      }
     }
     // Bright keeps its own lamps
     const bright = drawFrame(valid(story([drive("highway_night", [{ at: 0.1, shot: "road_behind" }])], FORMATS[0], { art: "classic" })), 40);

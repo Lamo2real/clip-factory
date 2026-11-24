@@ -40,10 +40,11 @@ export const BUBBLE_SYMBOL: Record<BubbleId, { text: string; size: number; color
 
 export const BUBBLE_R = 104;
 const CLASSIC_INK = "#1c1842";
-/** Night drive's balloon: a warm off-white (never the brightest thing in a night frame, the lamps are) inside a softer,
- * thinner, lighter outline. */
+/** Night drive's balloon: a warm off-white (never the brightest thing in a night frame, the lamps are) inside a thin,
+ * muted warm grey-brown outline, not the heavy navy; its shine a warm white, never pink. */
 const NIGHT_FILL = "#e9e0cf";
-const NIGHT_INK = "#3a3448";
+const NIGHT_INK = "#5a4c4a";
+const NIGHT_SHINE = "#fbf3e6";
 
 /** How long a bubble shows for a beat of this length. */
 export function bubbleSpan(dur: number): number {
@@ -86,9 +87,9 @@ export function drawBubble(pen: Pen, b: Bubble, t: number): void {
   pen.scale(k);
   const nd = nightDrive();
   const INK = nd ? NIGHT_INK : CLASSIC_INK;
-  // the outline's width round the balloon (classic 8, night drive 6) and round the thought cloud's lobes (7, 5)
-  const ow = nd ? 6 : 8;
-  const lw = nd ? 5 : 7;
+  // the outline's width round the balloon (classic 8, night drive 3.5) and round the thought cloud's lobes (7, 3)
+  const ow = nd ? 3.5 : 8;
+  const lw = nd ? 3 : 7;
   const wide = b.kind === "dots" || b.kind === "angry" || b.kind === "zzz";
   const rx = wide ? BUBBLE_R * 1.3 : BUBBLE_R;
   const ry = wide ? BUBBLE_R * 0.92 : BUBBLE_R;
@@ -107,8 +108,8 @@ export function drawBubble(pen: Pen, b: Bubble, t: number): void {
       const a = (-180 + i * 30) * DEG;
       pen.line([Math.cos(a) * rx * 1.12, -6 + Math.sin(a) * rx * 1.12, Math.cos(a) * rx * 1.4, -6 + Math.sin(a) * rx * 1.4], 12, "#ffc94a");
     }
-    pen.circle(0, -6, rx + 8, INK);
-    pen.rect(-rx * 0.42 - 8, rx * 0.62, rx * 0.84 + 16, rx * 0.62 + 8, 14, INK);
+    pen.circle(0, -6, rx + ow, INK);
+    pen.rect(-rx * 0.42 - ow, rx * 0.62, rx * 0.84 + 2 * ow, rx * 0.62 + ow, 14, INK);
     pen.circle(0, -6, rx, fill);
     pen.rect(-rx * 0.42, rx * 0.66, rx * 0.84, rx * 0.5, 10, "#c9d3de");
     pen.line([-rx * 0.36, rx * 0.84, rx * 0.36, rx * 0.84], 6, "#8b97a8");
@@ -120,7 +121,7 @@ export function drawBubble(pen: Pen, b: Bubble, t: number): void {
     for (let i = 2; i >= 1; i -= 1) {
       const d = len * (i === 2 ? 0.72 : 0.5);
       const r = i === 2 ? 14 : 22;
-      pen.circle(ux * d, uy * d, r + ow - 2, INK);
+      pen.circle(ux * d, uy * d, r + (nd ? lw : ow - 2), INK);
       pen.circle(ux * d, uy * d, r, fill);
     }
     const lobes: [number, number, number][] = [
@@ -153,5 +154,5 @@ export function drawBubble(pen: Pen, b: Bubble, t: number): void {
   pen.ellipse(0, 0, rx + ow, ry + ow, 0, INK);
   pen.poly(tail, fill);
   pen.ellipse(0, 0, rx, ry, 0, fill);
-  if (b.kind === "heart") pen.ellipse(-rx * 0.45, -ry * 0.5, rx * 0.2, ry * 0.12, -30, "#ffe0e7", 0.9);
+  if (b.kind === "heart") pen.ellipse(-rx * 0.45, -ry * 0.5, rx * 0.2, ry * 0.12, -30, nd ? NIGHT_SHINE : "#ffe0e7", nd ? 0.75 : 0.9);
 }

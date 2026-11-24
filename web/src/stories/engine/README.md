@@ -59,6 +59,7 @@ premultiplied input). The frame starts as opaque black, and every frame's first 
 | `rect` | `x, y, w, h, r, color, a?` | An axis-aligned rectangle, top-left (x, y), size w × h, corners rounded with radius r (already ≤ min(w, h) / 2). |
 | `circle` | `x, y, r, color, a?` | A filled disc. |
 | `ellipse` | `x, y, rx, ry, rot, color, a?` | A filled ellipse centred on (x, y) with radii rx, ry, rotated by `rot` **degrees clockwise on screen** (y is down, the same as canvas `ellipse()`). |
+| `glow` | `x, y, rx, ry, rot, color, fade: [offset, alpha][], a?` | A soft light (night drive only): the ellipse of `ellipse`, painted in one colour whose alpha fades with how far out a point is, in radii (0 the centre, 1 the edge): linear between the `fade` stops (offsets 0..1 and sorted, alphas 0..1), the end stops' alphas before the first and after the last, times `a`; nothing past the edge, so the engine ends every fade at alpha 0. The browser draws it as a radial gradient in the ellipse's own frame (`preview/draw.ts`), `raster.py` by the same formula. |
 | `poly` | `pts: [x0, y0, x1, y1, …], color, a?` | A closed polygon filled with the **non-zero** winding rule. Curves are already flattened. At least 3 points. |
 | `line` | `pts: [x0, y0, …], w, color, a?` | An open polyline stroked with width `w`, **round caps and round joins**. At least 2 points. It is not closed: a closed ring repeats its first point at the end. |
 | `image` | `asset, x, y, w, h, a?` | Reserved for reference pictures. The built-in engine never emits it. |
@@ -250,14 +251,17 @@ the same prims for a missing `art` and for `"classic"`. `inFrame` puts the style
   car sizes, the seats), so layout, bubbles and the in-frame rules stay. Every new drawing path sits behind
   `nightDrive()`. Outlines are soft and thin (`ink(outline)`, half way to a soft brown; `inkPx`, 2 to 3.6 design px),
   with cel shadows (`cel`), lit tops (`lift`), a rim light from the street lamps and soft shadows under chins, cars
-  and feet. Lights glow as stacked shapes (`glow`, and `softRings`: rings whose alphas build a smooth falloff in
-  steps that are smallest where the light is faintest, more rings the bigger a light shows), never gradients, and a
-  vignette darkens the corners (`light.ts drawVignette`, `VIGNETTE`: eight rings of 0.025 at the top corners, where
-  the flat sky would show a bigger step, four of 0.05 at the bottom, each ring two corner polygons, about 0.18 in the
-  very corners at night and half that by day; the middle of each edge is left alone). There is no film grain and no
-  new prim kind. Lights that share a colour and an alpha (the far street lamps' rings, a row of side-view lamps, a
-  car's two headlights) are one polygon of several loops (`pen.ts joinShapes`, bridges walked out and back, so the
-  non-zero rule fills each loop once in both drawers).
+  and feet. The big soft lights are `glow` prims, the one prim kind night drive adds (a true gradient, so no ring
+  or step shows however big a light is): each near street lamp's amber halo, gold glow and warm white bloom
+  (`sets.ts lampBloom`, `art.ts fadeStops`: 16 stops of peak · (1 − d)^power), the warm sweep of a lamp passing
+  (`light.ts drawLightSweep`) and the vignette (`light.ts drawVignette`, `VIGNETTE`: a dark glow in each corner,
+  about 0.18 in the very corners at night and half that by day; the middle of each edge is left alone). Small
+  lights are stacked shapes (`art.ts glow`, and `softRings`: rings whose alphas build a smooth falloff in steps that
+  are smallest where the light is faintest, more rings the bigger a light shows): car lights and the headlights in
+  the rear-view mirror; each far street lamp is one small `glow`. There is no film grain. Lights that share a colour
+  and an alpha (the far street lamps' lenses, a row of side-view lamps' heads, a car's two headlights) are one
+  polygon of several loops (`pen.ts joinShapes`, bridges
+  walked out and back, so the non-zero rule fills each loop once in both drawers).
 * **Light** (`LIGHTS`): studio changes nothing; day, indoor, night and cabin mute an own colour through `grade`
   (a little grey, the light's colour, darker, warmed by the lamps' pulse). Own colours (skin, paint, a place's palette)
   are graded; the palette tokens (`ND`) are final. Night places (`road_night`, `highway_night`) use the night light,
@@ -288,14 +292,18 @@ the same prims for a missing `art` and for `"classic"`. `inFrame` puts the style
 * **Where it is drawn.**
   * `art.ts`: the tokens (`ND`), the lights, `grade`, `cel`, `lift`, `ink`, `inkPx`, `lineUnits`, `glow`, `withWarm`.
   * `light.ts`: which light each part stands in (`lightFor`), the lamps' warm pulse that rolls with the road
-    (`lampWarm`, a lamp every 40 m), the vignette (eight fine steps at the top corners, four at the bottom) and the
-    warm sweep over the dashboard and the face.
+    (`lampWarm`, a lamp every 40 m), the vignette (a soft dark glow in each corner) and the warm sweep over the
+    dashboard and the face (in night drive a soft warm glow along the band, its edges fading out).
   * `sets.ts lampGlow`: in night drive a street lamp is a bright warm emitter: a warm white lens bar
-    (`ND.lampLens`) under a slim dark grey head (`ND.lampHousing`), its glow `softRings` of ovals that follow the lens
-    out (`lampRing`, `LAMP_GLOW` lens half widths, a little flatter than round and lower the further out: light falls
-    down), from the lens's white through gold (`ND.lampGlowIn`) to amber (`ND.lampGlowOut`) and clear (`lampTint`),
-    on a slate pole (`ND.lampPole`); no flat disc and no cone of light under it. The side view lights its whole row
-    at once (`lampRow`). Bright keeps its gold bloom round a cobra head (`ND.lampHead`, `ND.lampCore`). Headlights
+    (`ND.lampLens`) nearly as wide as its thin dark grey head (`ND.lampHousing`, `lampHeadPts`), its light three
+    `glow` prims (`lampBloom`): a wide amber halo (`ND.lampGlowOut`, `LAMP_HALO` lens half widths past the lens), a
+    strong gold glow (`ND.lampGlowIn`) half as far and a warm white bloom round the lens, each a little lower than
+    the one inside it (light falls down), on a slate pole (`ND.lampPole`) that stands on a flat darker base with a
+    soft shadow; no flat disc, no ring and no cone of light under it. Each far lamp is one gold glow
+    (`lampRing`, `LAMP_GLOW`) and all their lenses one polygon. The side view draws each lamp's light, then the
+    whole row's heads and lenses at once (`lampRow`). Lamps show through the windows too (`perspective.ts`
+    `lampsBehind` in Face up close, `sideLamps` in Side window, `glassLamp` in the mirror's glass). Bright keeps its
+    gold bloom round a cobra head (`ND.lampHead`, `ND.lampCore`). Headlights
     and tail lights fade the same soft way (`car.ts bloom` and `tailGlow`, `carView.ts headBloom`, `softPair`,
     `softBar`), the glow under a lens in the front and back views.
   * `rig.ts`, `face.ts`: the night people (dot eyes tinted with the picked eye colour, a pupil up close, short thick

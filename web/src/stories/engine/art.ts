@@ -235,6 +235,26 @@ export function softRings(n: number, peak = 0.85, power = 3): readonly (readonly
   return out;
 }
 
+const FADES = new Map<string, readonly (readonly [number, number])[]>();
+/** How many stops a fade has: 16, so the straight pieces between them never show as a ring. */
+const FADE_STOPS = 16;
+
+/** A glow's fade (pen.glow, the `glow` prim): peak · (1 − d)^power at 16 stops from the centre (d 0) to the edge
+ * (d 1, alpha 0), denser near the centre where it falls fastest. A real gradient, so no step shows however big the
+ * light is; the same numbers every time. */
+export function fadeStops(peak: number, power = 2): readonly (readonly [number, number])[] {
+  const key = `${peak} ${power}`;
+  const hit = FADES.get(key);
+  if (hit) return hit;
+  const out: [number, number][] = [];
+  for (let i = 0; i < FADE_STOPS; i += 1) {
+    const d = (i / (FADE_STOPS - 1)) ** 1.3;
+    out.push([d, peak * (1 - d) ** power]);
+  }
+  FADES.set(key, out);
+  return out;
+}
+
 /** How many soft rings a glow reaching `px` design px out on screen gets: one every 2.6 px, 3 to 20. */
 export const softCount = (px: number): number => clamp(Math.round(px / 2.6), 3, 20);
 

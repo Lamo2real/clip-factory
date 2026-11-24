@@ -147,6 +147,21 @@ export class Pen {
   ellipse(x: number, y: number, rx: number, ry: number, rot: number, color: string, a = 1): void {
     const al = this.a(a);
     if (al === null || rx <= 0 || ry <= 0) return;
+    const e = this.onScreen(x, y, rx, ry, rot);
+    if (e) this.push({ k: "ellipse", ...e, color }, al);
+  }
+
+  /** A soft light (night drive): the ellipse in `color`, its alpha fading from the centre out along `fade` ([offset,
+   * alpha] stops, offset 0 the centre and 1 the edge, alpha × a); it ends at alpha 0, so its edge never shows. */
+  glow(x: number, y: number, rx: number, ry: number, color: string, fade: readonly (readonly [number, number])[], a = 1): void {
+    const al = this.a(a);
+    if (al === null || rx <= 0 || ry <= 0 || fade.length === 0) return;
+    const e = this.onScreen(x, y, rx, ry, 0);
+    if (e) this.push({ k: "glow", ...e, color, fade: fade.map(([o, v]) => [r3(o), r3(v)]) }, al);
+  }
+
+  /** An ellipse (local centre, radii and rotation) on screen, rounded, or null when it is wholly outside the view. */
+  private onScreen(x: number, y: number, rx: number, ry: number, rot: number): { x: number; y: number; rx: number; ry: number; rot: number } | null {
     const [m0, m1, m2, m3] = this.m;
     const cr = Math.cos(rot * DEG);
     const sr = Math.sin(rot * DEG);
@@ -165,13 +180,13 @@ export class Pen {
     const s2 = Math.abs(Q - R);
     const theta = (Math.atan2(G, F) + Math.atan2(H, E)) / 2;
     const [px, py] = this.at(x, y);
-    if (px + s1 < this.view.x0 || px - s1 > this.view.x1 || py + s1 < this.view.y0 || py - s1 > this.view.y1) return;
+    if (px + s1 < this.view.x0 || px - s1 > this.view.x1 || py + s1 < this.view.y0 || py - s1 > this.view.y1) return null;
     // round first, then wrap into [0, 180): an angle a hair below 180 and one a hair above 0 are the same ellipse
     let deg = r1(theta / DEG) % 180;
     if (deg < 0) deg += 180;
     const major = r1(Math.max(0.1, s1));
     const minor = r1(Math.max(0.1, s2));
-    this.push({ k: "ellipse", x: r1(px), y: r1(py), rx: major, ry: minor, rot: major - minor < 0.15 ? 0 : r1(deg) % 180, color }, al);
+    return { x: r1(px), y: r1(py), rx: major, ry: minor, rot: major - minor < 0.15 ? 0 : r1(deg) % 180 };
   }
 
   rect(x: number, y: number, w: number, h: number, r: number, color: string, a = 1): void {

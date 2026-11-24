@@ -398,6 +398,9 @@ export type Prim =
   | { k: "ellipse"; x: number; y: number; rx: number; ry: number; rot: number; color: Hex; a?: number }
   | { k: "poly"; pts: number[]; color: Hex; a?: number }
   | { k: "line"; pts: number[]; w: number; color: Hex; a?: number }
+  /** a soft light (night drive's lamp glows and passing light): the ellipse painted in one colour whose alpha fades
+   * with the distance from the centre, `fade` the [offset, alpha] stops along it (0 the centre, 1 the edge) */
+  | { k: "glow"; x: number; y: number; rx: number; ry: number; rot: number; color: Hex; fade: [number, number][]; a?: number }
   | { k: "image"; asset: string; x: number; y: number; w: number; h: number; a?: number };
 
 /** Text drawn over the video (captions and bubble symbols): the browser draws it, the agent writes it as ASS. */

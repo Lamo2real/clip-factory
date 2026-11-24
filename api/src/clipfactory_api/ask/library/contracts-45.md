@@ -600,6 +600,8 @@ type Prim =
   | { k: "ellipse"; x: number; y: number; rx: number; ry: number; rot: number /* degrees */; color: Hex; a?: number }
   | { k: "poly"; pts: number[]; color: Hex; a?: number }          // flattened curves, non-zero fill
   | { k: "line"; pts: number[]; w: number; color: Hex; a?: number } // round caps and joins
+  | { k: "glow"; x: number; y: number; rx: number; ry: number; rot: number; color: Hex;
+      fade: [number, number][]; a?: number }  // night drive's soft lights: the ellipse, its alpha fading out (§45.45.21)
   | { k: "image"; asset: string; x: number; y: number; w: number; h: number; a?: number };
 // Output pixels 0..1080 × 0..1920, painter's order, source-over in sRGB, colours "#rrggbb", alpha a 0..1 (default 1).
 // The web draws them with preview/draw.ts; the agent with stories/raster.py; engine/README.md is the one description.
@@ -4304,7 +4306,7 @@ It also adds:
 - one new place, the highway at night.
 
 Everything is still drawn by the one engine (`web/src/stories/engine`), so the preview and the final video stay the
-same picture. There is no new prim kind and no ffmpeg filter.
+same picture. There is no ffmpeg filter; the one new prim kind is `glow`, a soft light (§45.45.21).
 
 #### 45.45.1 Decisions
 
@@ -5061,7 +5063,8 @@ A night drive request adds:
 #### 45.45.12 Preview and final stay the same picture
 
 1. **All in the engine:** every pixel of the new look is engine prims. The preview paints them with `draw.ts`; the
-   agent runs the same files with Deno and rasterizes them with `raster.py`. There is no new prim kind, no
+   agent runs the same files with Deno and rasterizes them with `raster.py`. The one new prim kind is `glow`
+   (§45.45.21, both drawers), and there is no
    ffmpeg-only filter, no grain and no blur.
 2. **Holes:** keyhole polygons (the vignette, the mirror housing and the windscreen frame) rely on non-zero
    winding, which both drawers already use. A raster golden for a polygon with a hole is added.
@@ -5395,3 +5398,58 @@ Two judges scored the sample 7/10. What changed:
   raster goldens are unchanged. The night golden (`stories-engine-night.json`) is written again.
   `test_stories_raster.py`'s lamp places are now the lens bar and its head.
 - **Not changed:** the sky gradient's own 8-bit steps (one level each). A dither stays a follow-up.
+
+#### 45.45.21 Polish round 2 (24 Nov; wins over anything above in §45.45)
+
+Two judges scored round 1 8.5/10; the big lamp glow still showed faint oval rings (steps of 10 to 19 levels every
+6 to 7 px), which more stacked rings could not fix within the 400-shape cap or the time a frame takes. What changed:
+
+- **One new prim kind, `glow`** (`types.ts`, `pen.ts glow`, `preview/draw.ts`, `raster.py`, `engine/README.md`):
+  `{ k: "glow", x, y, rx, ry, rot, color, fade: [offset, alpha][], a? }`, the ellipse of `ellipse` in one colour
+  whose alpha fades with how far out a point is, in radii (0 the centre, 1 the edge): linear between the `fade`
+  stops (offsets 0..1 and sorted, alphas 0..1), the end stops' alphas past them, times `a`, and nothing past the
+  edge. The engine ends every fade at alpha 0. The browser draws it as a radial gradient in the ellipse's own frame;
+  `raster.py` by the same formula, so the preview and the final video stay the same picture. Only night drive draws
+  it: Bright and every old script are byte-identical. `art.ts fadeStops(peak, power)` gives 16 stops of
+  peak · (1 − d)^power, denser near the centre.
+- **Street lamps** (`sets.ts lampBloom`, `lampHeadPts`): each near lamp's light is three glows, each a little lower
+  than the one inside it (light falls down): a wide amber halo (`ND.lampGlowOut`, `LAMP_HALO` = 3.4 lens half widths
+  past the lens), a strong gold glow (`ND.lampGlowIn`) half as far, and a warm white bloom round the lens. No step
+  between two pixels of a glow is over 2 levels. The dark head is half as tall as before and the emitter
+  (`ND.lampLens`) nearly its whole width. A near pole stands flat on the ground on a darker base with a soft shadow
+  (no round stub), and a rail's lengths overlap a little, all the rail before its lit top, so no seam shows a pole
+  behind it. Each far lamp is one soft gold glow (`lampRing`, `LAMP_GLOW` = 3), so even the nearest of them shows
+  no ring, and where the rows close up at the vanishing point the glows add up into a warm line.
+- **The warm sweep of a lamp passing** (`light.ts drawLightSweep`): in night drive a long soft glow in `ND.halo1`
+  along the band (up to 0.13 × the pulse), its edges fading out, never a flat bar across a face.
+- **The vignette** (`light.ts VIGNETTE`): a dark glow in each corner (0.8 × 0.62 of half the frame), 0.18 in the
+  very corners at night and half that by day, the middle of each edge untouched: no ring at all on the sky, and a
+  quarter of the 24 ring pieces' rasterizing.
+- **Lamps through the windows:** Face up close shows the road's lamps behind the car through the rear window, the
+  two nearest whose glow reaches the glass (`perspective.ts lampsBehind`); Side window a row of small lamps along the
+  far side of the road, about one a window apart, so one or two always show, and the near lamp passing on its pole
+  (`sideLamps`); the mirror's glass a small warm glow round each far lamp's lens (`glassLamp`).
+- **Mirror:** night drive's horizon through the windscreen is a little lower (0.5 of the height in 9:16), and the
+  lamps run to the horizon in every shot (`lampsAt`), so the two rows meet in their warm V under the mirror too.
+- **Shapes:** a near lamp is 5 prims (it was up to 22), a far lamp 1, the vignette 4 (it was 24), so every shot and
+  place draws fewer; the measured budgets stay as they are.
+- **Rear-view mirror** (Driver's eyes, `shots.ts mirrorLights`): its headlights, far down the road or of a car close
+  behind, are a small white core (`ND.headCore`) in a soft bloom (`ND.headBloom`) that fades to clear, kept on the
+  glass: no ring edge, no grey button. The reflected centre line is three short faint dashes, none in a headlight's
+  glow, not a long stick.
+- **Mirror** (the shot): the glass and its sky are one finely rounded shape (`fineRoundRect`, 7.5° steps), so no
+  sliver of sky shows between the glass and the housing, and the glint stays on the rear window's glass, off the dark
+  frame round it.
+- **Round rims:** in night drive the rev dial's arcs, the steering wheel's rim and their lit arcs get points by size
+  (`shots.ts roundSegs`: no step's middle more than 0.15 output px inside the true curve, about 120 on a 460 px rim),
+  and the dial's bezel ring is two true circles, so no straight side shows up close.
+- **Speech bubble:** night drive's outline is thin (3.5, the thought cloud's lobes 3) in a muted warm grey-brown
+  (`#5a4c4a`), and the heart balloon's shine a warm white (`#fbf3e6`), never pink.
+- **Shoes in the wide shots:** night drive's shoe has a dark sole along its bottom (`rig.ts legNight`), the colour of
+  the pedals close-up's sole, so it reads as a shoe, not a plain oval.
+- **Speed** (`raster.py`, 1080 × 1920, best of 5): the sample's ten stills take 0.76 × what they took after round 1
+  and 0.92 × what they took before round 1 (Pedals the most, 1.18 ×). The sample's 240-frame clip went from 23.8 s
+  (round 1) to 18.2 s (19.9 s before round 1).
+- **Bright is byte-identical:** 7200 Bright frames and every Bright bubble match the build before prim by prim, the
+  Bright still is the same PNG, and the Bright shapes and raster goldens are unchanged. The night golden
+  (`stories-engine-night.json`) is written again, and `prims-glow` is a new raster golden.

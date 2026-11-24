@@ -6,7 +6,7 @@
 // lane dashes, posts and lamps stream on across cuts. Every shot fills the frame (no band, no letterbox) and is drawn
 // only with the engine's prims, so the preview and the final video are the same picture.
 
-import { grade, LIGHTS, lift, ND, nightDrive } from "./art.ts";
+import { grade, LIGHTS, lift, ND, nightDrive, softCount, softRings } from "./art.ts";
 import { layerMatrix, shotCamera, type Cam } from "./camera.ts";
 import type { CarDraw } from "./car.ts";
 import { drawPropView } from "./carView.ts";
@@ -14,8 +14,8 @@ import { F } from "./frame.ts";
 import { drawLightSweep, lampPhase, lightFor, metres, type LightPart } from "./light.ts";
 import { DEG, clamp, clamp01, ease, hash, hex, lerp, mix, noise, rand, smoothstep } from "./math.ts";
 import type { ActorState } from "./motion.ts";
-import { arcPts, clipConvex, roundRectPts, type Pen } from "./pen.ts";
-import { depthAtRow, drawOutside, FOCAL, groundQuad, LANE_W, project, pxPerM, roadPlan, type Cam3, type RoadPlan } from "./perspective.ts";
+import { arcPts, clipConvex, joinShapes, roundRectPts, type Pen } from "./pen.ts";
+import { depthAtRow, drawOutside, FOCAL, glassLamp, groundQuad, LANE_W, lampsBehind, project, pxPerM, roadPlan, sideLamps, type Cam3, type RoadPlan } from "./perspective.ts";
 import { drawProp, drawWeather, plainColor, type Occupants, type PropState } from "./props.ts";
 import { drawBust, drawFoot, drawWheelHands, type BustView, type Geo, type Pose } from "./rig.ts";
 import { lampGlow, ridgeTop, roadLook, setInfo, type RoadLook } from "./sets.ts";
@@ -238,14 +238,25 @@ function rotateAbout(pen: Pen, x: number, y: number, deg: number): void {
 }
 
 /** An arc drawn as a few short lines, so each is rasterized over a small box (a whole rim in one line costs its whole
- * box); angles in degrees, clockwise on screen. */
-function arcLine(pen: Pen, cx: number, cy: number, r: number, a0: number, a1: number, w: number, color: Hex, a = 1, pieces = 8): void {
+ * box); angles in degrees, clockwise on screen; `segs` straight steps in each piece. */
+function arcLine(pen: Pen, cx: number, cy: number, r: number, a0: number, a1: number, w: number, color: Hex, a = 1, pieces = 8, segs = 4): void {
   for (let i = 0; i < pieces; i += 1) {
     const f0 = a0 + ((a1 - a0) * i) / pieces;
     const f1 = a0 + ((a1 - a0) * (i + 1)) / pieces;
-    pen.line(arcPts(cx, cy, r, r, f0, f1, 4), w, color, a);
+    pen.line(arcPts(cx, cy, r, r, f0, f1, segs), w, color, a);
   }
 }
+
+/** Night drive: how many straight steps an arc of radius `r` (pen units) over `deg` degrees needs so that, as it shows
+ * now, no step's middle falls more than 0.15 output px inside the true curve (a 460 px rim: about 120), at least
+ * `least`; classic keeps `least`. */
+function roundSegs(pen: Pen, r: number, deg: number, least: number): number {
+  if (!nightDrive()) return least;
+  return Math.max(least, Math.ceil(Math.abs(deg) * DEG * Math.sqrt((r * pen.unit()) / 1.2)));
+}
+
+/** arcLine's steps per piece for a smooth night drive arc (roundSegs over `pieces` pieces), 4 in classic. */
+const pieceSegs = (pen: Pen, r: number, deg: number, pieces: number): number => Math.ceil(roundSegs(pen, r, deg, 4 * pieces) / pieces);
 
 /** Everything of the box (ox0, oy0)-(ox1, oy1) but a rounded window (x0, y0)-(x1, y1), as rects round it and a fillet
  * in each rounded corner (radii top-left, top-right, bottom-right, bottom-left): the inside of a car round a window,
@@ -525,30 +536,45 @@ function cabinFront(pen: Pen, x: ShotInput, w: World, top: number, dashY: number
   pen.rect(mx - mw / 2 + 8, my - mh / 2 + 7, mw - 16, mh - 14, mh / 2 - 7, "#1f2c44");
   pen.line([mx - mw / 2 + mh / 2, my - mh / 2 + 3, mx + mw / 2 - mh / 2, my - mh / 2 + 3], 2.5, ND.pillarLit, 0.6);
   const behind = w.others.filter((o) => o.ahead < 0 && o.gap < 45).sort((a, b) => a.gap - b.gap)[0];
-  if (!behind && nightDrive()) {
-    // night drive with nobody close behind: a faint reflection of the road far behind, a lane line and a pair of
+  const gx = mx - mw / 2 + 8;
+  const gy = my - mh / 2 + 7;
+  const gw = mw - 16;
+  const gh = mh - 14;
+  const glass = roundRectPts(gx, gy, gw, gh, gh / 2);
+  const hz = my + gh * 0.02;
+  // a car close behind: its headlights' half spacing in the mirror
+  const sp = behind ? clamp(60 / behind.gap, 6, 28) : 0;
+  if (nightDrive()) {
+    // night drive: a faint reflection of the road behind and its centre line, and with nobody close behind a pair of
     // small headlights far down it
-    const gx = mx - mw / 2 + 8;
-    const gy = my - mh / 2 + 7;
-    const gw = mw - 16;
-    const gh = mh - 14;
-    const glass = roundRectPts(gx, gy, gw, gh, gh / 2);
-    const hz = my + gh * 0.02;
     const vx = mx - w.steer * gw * 0.06 + noise(x.seed + 51, x.t * 0.25) * gw * 0.04;
     pen.poly(clipConvex([gx, hz, gx + gw, hz, gx + gw, gy + gh, gx, gy + gh], glass), "#1a2233", 0.85);
     pen.poly(clipConvex([vx - 5, hz, vx + 5, hz, vx + gw * 0.34, gy + gh + 2, vx - gw * 0.34, gy + gh + 2], glass), "#2a2a30", 0.9);
-    pen.line([vx, hz + 2, vx + gw * 0.05, gy + gh], 1.6, ND.laneFar, 0.3);
-    for (const s of [-1, 1]) {
-      pen.circle(vx + s * 8 - 8, hz + 4, 6, ND.headBloom, 0.16);
-      pen.circle(vx + s * 8 - 8, hz + 4, 1.8, ND.headCore, 0.85);
+    // the centre line: three short faint dashes, longer the nearer they come, and none of them in a headlight's glow
+    const bottom = gy + gh;
+    const clear = behind ? (sp * 1.85 + 4) / (bottom - hz) : 0;
+    const ddx = gw * 0.12 - 3;
+    const ddy = bottom - hz;
+    const dl = Math.hypot(ddx, ddy) || 1;
+    // a point on the line, 0.7 px (half the dash's width) to one side of it
+    const at = (t: number, side: number): number[] => [vx + 3 + ddx * t + (side * 0.7 * ddy) / dl, hz + ddy * t - (side * 0.7 * ddx) / dl];
+    const dashes: number[][] = [];
+    for (const [t0, t1] of [[0.34, 0.42], [0.56, 0.7], [0.82, 0.96]] as const) {
+      const from = Math.max(t0, clear);
+      if (from <= t1 - 0.04) dashes.push([...at(from, -1), ...at(from, 1), ...at(t1, 1), ...at(t1, -1)]);
     }
+    if (dashes.length) pen.poly(joinShapes(dashes), ND.laneFar, 0.22);
+    if (!behind) mirrorLights(pen, [vx - 16, vx], hz + 4, 1.8, 7.5, 0.85, glass);
   }
   if (behind) {
-    const sp = clamp(60 / behind.gap, 6, 28);
     const ox = behind.X === 0 ? 0 : -mw * 0.22;
-    for (const s of [-1, 1]) {
-      pen.circle(mx + ox + s * sp, my, sp * 0.9, ND.headBloom, 0.3);
-      pen.circle(mx + ox + s * sp, my, Math.max(2.4, sp * 0.3), ND.headCore);
+    // night drive: a car close behind sits on the reflected road, its lights a little under the horizon
+    if (nightDrive()) mirrorLights(pen, [mx + ox - sp, mx + ox + sp], hz + sp * 0.35, Math.max(2.4, sp * 0.3), sp * 1.1, 1, glass);
+    else {
+      for (const s of [-1, 1]) {
+        pen.circle(mx + ox + s * sp, my, sp * 0.9, ND.headBloom, 0.3);
+        pen.circle(mx + ox + s * sp, my, Math.max(2.4, sp * 0.3), ND.headCore);
+      }
     }
   }
   // the dashboard: the lip under the glass, its top (where a passing lamp's light sweeps), its face
@@ -594,9 +620,10 @@ function cabinFront(pen: Pen, x: ShotInput, w: World, top: number, dashY: number
   }
   // the wheel: rim, a lit top arc that follows the lamps, three spokes and the hub, turning with the steering
   const rot = w.steer * 35;
-  arcLine(pen, wx, wy, wr, 0, 360, rim + 5, ND.pillarInk, 1, 10);
-  arcLine(pen, wx, wy, wr, 0, 360, rim, ND.wheel, 1, 10);
-  arcLine(pen, wx, wy, wr - rim * 0.16, -140 + rot, -40 + rot, rim * 0.26, ND.wheelLit, 0.45 + 0.45 * x.warm, 3);
+  const wSegs = pieceSegs(pen, wr + rim / 2, 360, 10);
+  arcLine(pen, wx, wy, wr, 0, 360, rim + 5, ND.pillarInk, 1, 10, wSegs);
+  arcLine(pen, wx, wy, wr, 0, 360, rim, ND.wheel, 1, 10, wSegs);
+  arcLine(pen, wx, wy, wr - rim * 0.16, -140 + rot, -40 + rot, rim * 0.26, ND.wheelLit, 0.45 + 0.45 * x.warm, 3, pieceSegs(pen, wr, 100, 3));
   for (const a of [180, 0, 90]) {
     const r0 = (a + rot) * DEG;
     pen.line([wx + Math.cos(r0) * 0.1 * S, wy + Math.sin(r0) * 0.1 * S, wx + Math.cos(r0) * (wr - rim * 0.3), wy + Math.sin(r0) * (wr - rim * 0.3)], rim * 0.8, ND.wheel);
@@ -609,6 +636,15 @@ function cabinFront(pen: Pen, x: ShotInput, w: World, top: number, dashY: number
     return [wx + Math.sin(r0) * wr, wy - Math.cos(r0) * wr] as [number, number];
   });
   if (w.driver) drawWheelHands(pen, w.driver.look, grips, rim * 1.05, [wx, wy]);
+}
+
+/** Night drive: a pair of headlights in the rear-view mirror, each a small white core of radius `r` (alpha `core`) in
+ * a soft bloom that fades to clear `reach` past it (art.ts softRings, each ring of both lights one polygon, kept on the
+ * mirror's `glass`): no ring edge, no grey button. */
+function mirrorLights(pen: Pen, xs: number[], y: number, r: number, reach: number, core: number, glass: number[]): void {
+  const ring = (rr: number) => joinShapes(xs.map((cx) => clipConvex(arcPts(cx, y, rr, rr, 0, 360, 16).slice(0, -2), glass)));
+  for (const [t, a] of softRings(Math.min(6, softCount((reach * pen.unit()) / F.k)), 0.75)) pen.poly(ring(r + t * reach), ND.headBloom, a);
+  pen.poly(ring(r), ND.headCore, core);
 }
 
 // ---- Face up close ------------------------------------------------------------------------------------------------
@@ -630,7 +666,14 @@ function faceShot(pen: Pen, x: ShotInput, w: World, p: ShotPerson): void {
     const ridge = ridgeTop(W * 0.06, W * 0.94, horizon, 0.17 * S, w.m * 3 * w.dir, x.seed, 18, w.look.ridge);
     pen.poly([...ridge, W * 0.94, winBot + 40, W * 0.06, winBot + 40], w.look.far);
     pen.line(ridge, 2.4, w.look.rim ?? w.look.farLit, 0.5);
-    if (w.look.lit) {
+    if (w.look.lit && nightDrive()) {
+      // night drive: the road's lamps behind the car glowing through the rear window, the near ones at its top edge,
+      // never hidden behind the head; in the wider frames the road behind runs off to the side of the head
+      const hu = b.rx / p.geo.headRX;
+      const hair = HAIR_UP * hu * 0.5;
+      const head = { x: b.hx, y: b.hy - hair, rx: b.rx * 1.12, ry: p.geo.headRY * hu + hair };
+      lampsBehind(pen, { vpX: b.hx + P(0, 0.27) * W, hor: horizon, f: FOCAL * 0.7, camX: 0, camH: 1.2 }, w.plan, w.m, W * 0.1, winTop, W * 0.9, winBot, head);
+    } else if (w.look.lit) {
       // one lamp's glow crossing the rear window at each lamp passing
       const lx = W / 2 + lampPhase(w.m) * W * 4 * w.dir;
       if (lx > W * 0.05 && lx < W * 0.95) lampGlow(pen, lx, winTop + 0.07 * H, 0.012 * S, 0.02 * S, 0.006 * S);
@@ -681,9 +724,10 @@ function faceShot(pen: Pen, x: ShotInput, w: World, p: ShotPerson): void {
       const r = P(0.5, 0.55) * S;
       const rot = w.steer * 35;
       const rim = 0.06 * S;
-      arcLine(pen, cx, cy, r, 200 + rot, 340 + rot, rim + 5, ND.pillarInk, 1, 6);
-      arcLine(pen, cx, cy, r, 200 + rot, 340 + rot, rim, ND.wheel, 1, 6);
-      arcLine(pen, cx, cy, r - rim * 0.15, 235 + rot, 305 + rot, rim * 0.26, ND.wheelLit, 0.45 + 0.45 * x.warm, 3);
+      const wSegs = pieceSegs(pen, r + rim / 2, 140, 6);
+      arcLine(pen, cx, cy, r, 200 + rot, 340 + rot, rim + 5, ND.pillarInk, 1, 6, wSegs);
+      arcLine(pen, cx, cy, r, 200 + rot, 340 + rot, rim, ND.wheel, 1, 6, wSegs);
+      arcLine(pen, cx, cy, r - rim * 0.15, 235 + rot, 305 + rot, rim * 0.26, ND.wheelLit, 0.45 + 0.45 * x.warm, 3, pieceSegs(pen, r, 70, 3));
       const grips = [-58, 58]
         .map((d) => {
           const r0 = (d + rot) * DEG;
@@ -763,7 +807,9 @@ function sideWindow(pen: Pen, x: ShotInput, w: World): void {
   // slow mountains, the rail streaming fast, a lamp passing at each pulse
   const mtn = ridgeTop(wx0 - 60, wx1 + 60, wy0 + wh * 0.62, wh * 0.45, -w.m * 6 * w.dir, x.seed, 14, w.look.ridge);
   pen.poly([...mtn, wx1 + 60, wy1 + 40, wx0 - 60, wy1 + 40], w.look.far);
-  if (w.look.lit) {
+  // night drive: small lamps along the far side of the road always in the window, and the near one passing
+  if (w.look.lit && nightDrive()) sideLamps(pen, wx0, wx1, wy0, wh, w.m, w.dir, back, LAMP_SPAN);
+  else if (w.look.lit) {
     const lx = (wx0 + wx1) / 2 - lampPhase(w.m) * LAMP_SPAN * w.dir;
     if (lx > wx0 - 120 && lx < wx1 + 120) {
       pen.line([lx, wy1 + 20, lx, wy0 + wh * 0.12], 0.02 * S, w.look.pole);
@@ -824,7 +870,8 @@ function mirrorShot(pen: Pen, x: ShotInput, w: World): void {
   // around it, the road ahead through the windscreen, simplified
   lightPart(x, "out");
   // the road's horizon just under the mirror in 9:16, so the far road, its lamps and the lane lines fill the windscreen
-  const hor = P(0.45, 0.42) * H;
+  // (night drive: a little lower, so the two rows of lamps show under the mirror and meet in their warm V)
+  const hor = P(nightDrive() ? 0.5 : 0.45, 0.42) * H;
   const c: Cam3 = { vpX: W / 2 + w.steer * 0.03 * W, hor, f: FOCAL, camX: -0.35, camH: 1.2 };
   drawOutside(pen, c, { look: w.look, plan: w.plan, m: w.m, t: x.t, seed: x.seed, sway: -(c.vpX - W / 2), x0: -80, x1: W + 80, top: 0, bottom: H + 80, zNear: 0.6, simple: true, warm: x.warm });
   lightPart(x, "cabin");
@@ -840,7 +887,9 @@ function mirrorShot(pen: Pen, x: ShotInput, w: World): void {
   // the mirror's glass: the road behind receding to its middle, seen through the own car's rear window
   const gx0 = cx - mw / 2;
   const gy0 = cy - mh / 2;
-  const glass = roundRectPts(gx0, gy0, mw, mh, mh * 0.3);
+  // night drive: the glass's corners in fine steps, its sky the same shape as everything clipped to it, so no sliver
+  // of sky shows between the glass and the housing
+  const glass = nightDrive() ? fineRoundRect(gx0, gy0, mw, mh, mh * 0.3) : roundRectPts(gx0, gy0, mw, mh, mh * 0.3);
   lightPart(x, "out");
   const ghor = cy - mh * 0.08;
   const gc: Cam3 = { vpX: cx, hor: ghor, f: FOCAL * 0.42, camX: -0.35, camH: 1.2 };
@@ -851,7 +900,9 @@ function mirrorShot(pen: Pen, x: ShotInput, w: World): void {
   pen.rect(hx0 - 3, hy0 - 3, mw + 0.07 * S + 6, mh + 0.07 * S + 6, mh * 0.38 + 3, ND.pillarInk);
   pen.rect(hx0, hy0, mw + 0.07 * S, mh + 0.07 * S, mh * 0.38, ND.pillar);
   pen.rect(gx0 - 0.01 * S, gy0 - 0.01 * S, mw + 0.02 * S, mh + 0.02 * S, mh * 0.32, ND.mirrorHousing);
-  pen.rect(gx0, gy0, mw, mh, mh * 0.3, w.look.sky[Math.floor((w.look.sky.length - 1) / 2)]![1]);
+  const glassSky = w.look.sky[Math.floor((w.look.sky.length - 1) / 2)]![1];
+  if (nightDrive()) pen.poly(glass, glassSky);
+  else pen.rect(gx0, gy0, mw, mh, mh * 0.3, glassSky);
   pen.poly(clip([gx0, ghor - mh * 0.12, gx0 + mw, ghor - mh * 0.12, gx0 + mw, ghor + 2, gx0, ghor + 2]), w.look.sky[w.look.sky.length - 1]![1]);
   const ridge = ridgeTop(gx0, gx0 + mw, ghor + 2, mh * 0.12, w.m * 2, x.seed + 9, 14, w.look.ridge);
   pen.poly(clip([...ridge, gx0 + mw, ghor + 4, gx0, ghor + 4]), w.look.far);
@@ -868,7 +919,10 @@ function mirrorShot(pen: Pen, x: ShotInput, w: World): void {
       for (let k = 0; k < 4; k += 1) {
         const z = ((w.m % 40) + 40) % 40 + k * 40 + 4;
         const [lx, ly] = project(gc, L.x + L.arm * 2, 10, z);
-        if (lx > gx0 + 10 && lx < gx0 + mw - 10 && ly > gy0 + 10) pen.circle(lx, ly, Math.max(2, 7 - k * 1.5), ND.halo1, 0.7);
+        if (!(lx > gx0 + 10 && lx < gx0 + mw - 10 && ly > gy0 + 10)) continue;
+        // night drive: a small warm glow round a bright lens, never a flat see-through dot
+        if (nightDrive()) glassLamp(pen, lx, ly, Math.max(2, 7 - k * 1.5));
+        else pen.circle(lx, ly, Math.max(2, 7 - k * 1.5), ND.halo1, 0.7);
       }
     }
   }
@@ -899,10 +953,26 @@ function mirrorShot(pen: Pen, x: ShotInput, w: World): void {
   for (const f of frame) pen.poly(clip(f), ND.cabinRoof);
   for (let i = 0; i < 4; i += 1) pen.line([rw[i * 2]!, rw[i * 2 + 1]!, rw[((i + 1) % 4) * 2]!, rw[((i + 1) % 4) * 2 + 1]!], 3, ND.pillarInk, 0.9);
   for (const s of [-1, 1]) seatShape(pen, cx + s * mw * 0.2 - mh * 0.24, gy0 + mh * 0.68, mh * 0.48, mh * 0.27, mh * 0.12);
-  pen.poly(clip([cx - mw * 0.3, gy0, cx - mw * 0.18, gy0, cx - mw * 0.36, gy0 + mh, cx - mw * 0.48, gy0 + mh]), "#ffffff", 0.06);
+  // the glint: night drive keeps it on the rear window's glass, off the car's dark frame round it
+  const glint = clip([cx - mw * 0.3, gy0, cx - mw * 0.18, gy0, cx - mw * 0.36, gy0 + mh, cx - mw * 0.48, gy0 + mh]);
+  pen.poly(nightDrive() ? clipConvex(glint, rw) : glint, "#ffffff", 0.06);
   // the housing's lit top edge, along its top (a flat arc, not a circle through the sky)
   const hTop = gy0 - 0.035 * S;
   pen.line(arcPts(cx, hTop + mh * 0.38, mw * 0.5, mh * 0.38, 200, 340, 16), 4, ND.pillarLit, 0.6 + 0.3 * x.warm);
+}
+
+/** A rounded rectangle's outline with each corner in 12 steps of 7.5° (pen.ts roundRectPts takes 30° steps, which
+ * show as corners on a big mirror). */
+function fineRoundRect(x: number, y: number, w: number, h: number, r: number): number[] {
+  const pts: number[] = [];
+  const corners: [number, number, number][] = [
+    [x + w - r, y + r, -90],
+    [x + w - r, y + h - r, 0],
+    [x + r, y + h - r, 90],
+    [x + r, y + r, 180],
+  ];
+  for (const [cx, cy, a0] of corners) pts.push(...arcPts(cx, cy, r, r, a0, a0 + 90, 12));
+  return pts;
 }
 
 // ---- Speed dial ---------------------------------------------------------------------------------------------------
@@ -994,15 +1064,22 @@ function speedDial(pen: Pen, x: ShotInput, w: World): void {
     const r2 = r * (tl ? (nd ? 0.7 : 0.62) : 0.74);
     pen.circle(ox, oy, r2 * 1.05, ND.bezel);
     pen.circle(ox, oy, r2, ND.dialFace);
-    pen.line(arcPts(ox, oy, r2 * 0.86, r2 * 0.86, 140, 270, 12), 4, ND.tick, 0.6);
-    pen.line(arcPts(ox, oy, r2 * 1.03, r2 * 1.03, 200, 290, 10), 3, ND.bezelLit, 0.5);
+    pen.line(arcPts(ox, oy, r2 * 0.86, r2 * 0.86, 140, 270, roundSegs(pen, r2 * 0.86, 130, 12)), 4, ND.tick, 0.6);
+    pen.line(arcPts(ox, oy, r2 * 1.03, r2 * 1.03, 200, 290, roundSegs(pen, r2 * 1.03, 90, 10)), 3, ND.bezelLit, 0.5);
   }
-  // the dial: bezel with its lit arc, the face, ticks, the red zone and the numbers
-  pen.circle(cx, cy, r * 1.02, ND.dialFace);
-  arcLine(pen, cx, cy, r * 1.035, 0, 360, 0.04 * S, ND.bezel, 1, 12);
-  arcLine(pen, cx, cy, r * 1.04, 200, 300, 0.014 * S, ND.bezelLit, 0.6, 4);
+  // the dial: bezel with its lit arc, the face, ticks, the red zone and the numbers (night drive: the bezel's ring
+  // as two true circles, so its edges stay round however close the camera comes)
+  if (nd) {
+    pen.circle(cx, cy, r * 1.035 + 0.02 * S, ND.bezel);
+    pen.circle(cx, cy, r * 1.035 - 0.02 * S, ND.dialFace);
+  } else {
+    pen.circle(cx, cy, r * 1.02, ND.dialFace);
+    arcLine(pen, cx, cy, r * 1.035, 0, 360, 0.04 * S, ND.bezel, 1, 12);
+  }
+  arcLine(pen, cx, cy, r * 1.04, 200, 300, 0.014 * S, ND.bezelLit, 0.6, 4, pieceSegs(pen, r * 1.04, 100, 4));
   const red: number[] = [];
-  for (let i = 0; i <= 10; i += 1) red.push(...pt(6.5 + (1.5 * i) / 10, r * 0.9));
+  const redSegs = roundSegs(pen, r * 0.9, 50.625, 10);
+  for (let i = 0; i <= redSegs; i += 1) red.push(...pt(6.5 + (1.5 * i) / redSegs, r * 0.9));
   pen.line(red, 0.035 * S, ND.redZone);
   for (let n = 0; n <= 8; n += 1) {
     const [x0, y0] = pt(n, r * 0.95);
@@ -1029,9 +1106,9 @@ function speedDial(pen: Pen, x: ShotInput, w: World): void {
   pen.line([bx, by, tip[0], tip[1]], 0.03 * S, ND.needleGlow1, 0.35);
   pen.line([bx, by, tip[0], tip[1]], 0.016 * S, ND.needle);
   pen.circle(cx, cy, 0.075 * S, ND.hub);
-  pen.line(arcPts(cx, cy, 0.075 * S, 0.075 * S, 0, 360, 24), 4, ND.bezel);
+  pen.line(arcPts(cx, cy, 0.075 * S, 0.075 * S, 0, 360, roundSegs(pen, 0.075 * S, 360, 24)), 4, ND.bezel);
   pen.circle(cx - 0.02 * S, cy - 0.02 * S, 0.02 * S, ND.bezelLit, 0.35);
-  arcLine(pen, cx, cy, r * 1.058, 0, 360, 3, ND.pillarInk, 0.8, 12);
+  arcLine(pen, cx, cy, r * 1.058, 0, 360, 3, ND.pillarInk, 0.8, 12, pieceSegs(pen, r * 1.058, 360, 12));
 }
 
 // ---- Feet on the pedals -------------------------------------------------------------------------------------------

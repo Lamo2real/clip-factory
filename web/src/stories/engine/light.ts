@@ -3,7 +3,7 @@
 // that rolls with the road, the vignette and the warm sweep of a lamp passing over the dashboard and the face. Pure
 // functions of the place, the road's distance and the frame (frame.ts): no Date, no Math.random.
 
-import { LIGHTS, ND, withWarm, type Light } from "./art.ts";
+import { fadeStops, LIGHTS, ND, nightDrive, withWarm, type Light } from "./art.ts";
 import { F } from "./frame.ts";
 import { clamp01 } from "./math.ts";
 import type { Pen } from "./pen.ts";
@@ -50,30 +50,10 @@ export function lightFor(set: SetId, part: LightPart, warm: number): Light {
   return { ...LIGHTS.indoor };
 }
 
-/** The vignette's rings: the frame outside an ellipse (rx, ry as parts of half the frame) darkened by `a` at night,
- * in the corners only (rings across the whole frame cost a full frame of rasterizing each). The top corners, where
- * the flat night sky shows any step, have eight fine steps of 0.025 (about one level each on the sky); the bottom
- * corners, over the dark road, the verge or the dashboard, four of 0.05. Both reach the same ellipses and darken the
- * very corners by about 0.18, with a gentle falloff, and leave the middle of each edge alone. */
-const RINGS: [number, number, number][] = [
-  [1.27, 1.17, 0.05],
-  [1.21, 1.12, 0.05],
-  [1.15, 1.08, 0.05],
-  [1.1, 1.04, 0.05],
-];
-const RING_TOP = 8;
-/** The top's rings: eight from RINGS' outermost ellipse to its innermost, each darkening by 0.025, so two of them
- * darken about as much as one of the bottom's. */
-const TOP_RINGS: [number, number, number][] = Array.from({ length: RING_TOP }, (_, i) => {
-  const t = (i * (RINGS.length - 1)) / (RING_TOP - 1);
-  const j = Math.min(RINGS.length - 2, Math.floor(t));
-  const f = t - j;
-  const [a0, b0] = RINGS[j]!;
-  const [a1, b1] = RINGS[j + 1]!;
-  return [Math.round((a0 + (a1 - a0) * f) * 1e4) / 1e4, Math.round((b0 + (b1 - b0) * f) * 1e4) / 1e4, 0.025];
-});
-/** The vignette's rings at the top corners and at the bottom ones: [rx, ry, alpha at night], the outermost first. */
-export const VIGNETTE: Readonly<{ top: readonly [number, number, number][]; bottom: readonly [number, number, number][] }> = Object.freeze({ top: TOP_RINGS, bottom: RINGS });
+/** The vignette (§4.5): a soft dark glow in each corner, `rx` × `ry` parts of half the frame, darkening the very corner
+ * by `corner` at night (half that by day) and fading smoothly to nothing well before the middle of each edge. A true
+ * gradient (the `glow` prim), so no ring or step shows on the flat night sky. */
+export const VIGNETTE: Readonly<{ rx: number; ry: number; corner: number }> = Object.freeze({ rx: 0.8, ry: 0.62, corner: 0.18 });
 const RING_SEGS = 36;
 
 /** A keyhole polygon (screen px): the rectangle (x0, y0)-(x1, y1) clockwise, a bridge into the hole, the hole
@@ -114,40 +94,42 @@ export function ellipsePts(cx: number, cy: number, rx: number, ry: number, segs 
   return out;
 }
 
-/** The vignette (§4.5): rings in ND.vignette over the whole picture, before the bubbles, darker towards the corners on
- * a night place and half as dark by day (VIGNETTE: finer steps at the top). Each ring is drawn as two corner pieces
- * (the frame's corner outside the ring's ellipse), so only the corners are rasterized. Fixed to the screen. */
+/** The vignette (§4.5): VIGNETTE's four corner glows in ND.vignette over the whole picture, before the bubbles, about
+ * 0.18 in the very corners on a night place and half that by day; the middle of each edge is left alone. Each glow is
+ * rasterized over its corner only. Fixed to the screen. */
 export function drawVignette(pen: Pen, night: boolean): void {
   pen.setMatrix([1, 0, 0, 1, 0, 0]);
-  const hw = F.w / 2;
-  const hh = F.h / 2;
-  const out = 1.02;
-  const rings: [number, number, number, 1 | -1][] = [...VIGNETTE.bottom.map(([a, b, al]) => [a, b, al, 1] as [number, number, number, 1]), ...VIGNETTE.top.map(([a, b, al]) => [a, b, al, -1] as [number, number, number, -1])];
-  for (const [a, b, alpha, sy] of rings) {
-    // where the ellipse meets the frame's side (u = 1) and its top or bottom (v = 1), in parts of half the frame
-    const v1 = a > 1 ? b * Math.sqrt(1 - 1 / (a * a)) : 0;
-    const t0 = Math.atan2(v1 / b, Math.min(1, 1 / a));
-    const t1 = b > 1 ? Math.atan2(1 / b, Math.sqrt(1 - 1 / (b * b))) : Math.PI / 2;
-    for (const sx of sy > 0 ? ([1, -1] as const) : ([-1, 1] as const)) {
-      const pts: number[] = [hw + sx * hw * out, hh + sy * hh * out, hw + sx * hw * out, hh + sy * hh * v1];
-      for (let i = 0; i <= 6; i += 1) {
-        const t = t0 + ((t1 - t0) * i) / 6;
-        pts.push(hw + sx * hw * a * Math.cos(t), hh + sy * hh * b * Math.sin(t));
-      }
-      // back along the top or bottom edge, just outside the frame, to the corner
-      pts.push(hw + sx * hw * (b > 1 ? a * Math.cos(t1) : 0), hh + sy * hh * out);
-      pen.poly(pts, ND.vignette, night ? alpha : alpha / 2);
-    }
-  }
+  const fade = fadeStops(night ? VIGNETTE.corner : VIGNETTE.corner / 2, 1.6);
+  for (const [x, y] of [
+    [0, 0],
+    [F.w, 0],
+    [0, F.h],
+    [F.w, F.h],
+  ] as const)
+    pen.glow(x, y, (F.w / 2) * VIGNETTE.rx, (F.h / 2) * VIGNETTE.ry, ND.vignette, fade);
 }
 
-/** The warm sweep of a lamp passing (§4.5): while the pulse is over 0.05, a translucent warm band (ND.halo2 at 0.10 ×
- * warm) moves down from `y0` to `y1` (screen px) across x0..x1 as the lamp goes over. `m` is the road's metres. */
+/** The warm sweep of a lamp passing (§4.5): while the pulse is over 0.05, a translucent warm band moves down from `y0`
+ * to `y1` (screen px) across x0..x1 as the lamp goes over. `m` is the road's metres. Bright: a flat band (ND.halo2 at
+ * 0.10 × warm). Night drive: the same band as a soft warm light (a long glow in ND.halo1, up to 0.13 × warm in its
+ * middle), its edges fading out, so it never reads as a grey bar across a face. */
 export function drawLightSweep(pen: Pen, warm: number, m: number, x0: number, x1: number, y0: number, y1: number): void {
   if (warm <= 0.05) return;
   const p = clamp01((lampPhase(m) + 0.2) / 0.4);
   const band = (y1 - y0) * 0.38;
   const y = y0 - band + (y1 - y0 + band) * p;
   const lean = (x1 - x0) * 0.08;
+  if (nightDrive()) {
+    // a long soft oval along the band, leaning with it: rotated by the lean, wider than the span so its ends stay lit
+    const cx = (x0 + x1) / 2;
+    const cy = y + band / 2;
+    const rot = Math.atan2(-2 * lean, x1 - x0) / (Math.PI / 180);
+    pen.save();
+    pen.translate(cx, cy);
+    pen.rotate(rot);
+    pen.glow(0, 0, (x1 - x0) * 0.75, band * 0.85, ND.halo1, fadeStops(0.13, 1.4), warm);
+    pen.restore();
+    return;
+  }
   pen.poly([x0, y + lean, x1, y - lean, x1, y - lean + band, x0, y + lean + band], ND.halo2, 0.1 * warm);
 }

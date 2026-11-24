@@ -23,8 +23,9 @@ from lamostories_agent.raster import Canvas, png_bytes, prim_problems, render
 from lamostories_agent.scene_render import image_loader
 from ls_fakes import FIXTURES, REPO, needs_ffmpeg
 
-# "keyhole": the night drive vignette's frame with an ellipse hole wound the other way (§45.45)
-KINDS_WITHOUT_ASSETS = ["fill", "grad", "rect", "circle", "ellipse", "poly", "line", "mixed", "keyhole"]
+# "keyhole": the night drive vignette's frame with an ellipse hole wound the other way (§45.45); "glow": night drive's
+# soft lights, fading along their stops
+KINDS_WITHOUT_ASSETS = ["fill", "grad", "rect", "circle", "ellipse", "glow", "poly", "line", "mixed", "keyhole"]
 TOLERANCE_MAX = 3  # per channel, out of 255 (another CPU's floating point)
 TOLERANCE_MEAN = 0.05
 
@@ -129,6 +130,26 @@ def test_circles_and_ellipses_cover_their_area() -> None:
     assert cov[round(end[0]), round(end[1])] > 0.9
 
 
+def test_a_glow_fades_along_its_stops_to_nothing_at_its_edge() -> None:
+    """Night drive's soft light (§45.45): the alpha at a pixel is the fade at its distance from the centre in radii,
+    linear between stops (the browser's radial gradient in the ellipse's own frame), and nothing past the edge."""
+    glow = {"k": "glow", "x": 60.5, "y": 60.5, "rx": 40, "ry": 20, "rot": 0, "fade": [[0, 0.8], [0.5, 0.2], [1, 0]]}
+    cov = coverage(glow)
+    assert cov[60, 60] == pytest.approx(0.8, abs=1e-3)  # the centre (pixel 60's centre is 60.5)
+    assert cov[60, 70] == pytest.approx(0.5, abs=1e-3)  # a quarter of the way out: half way between the first stops
+    assert cov[60, 80] == pytest.approx(0.2, abs=1e-3)  # on the middle stop, along rx
+    assert cov[70, 60] == pytest.approx(0.2, abs=1e-3)  # the same along ry, half as far
+    assert cov[60, 101] == 0.0 and cov[81, 60] == 0.0  # past the edge
+    # every step from one pixel to the next is small: a gradient, not rings
+    assert float(np.abs(np.diff(cov[60, 60:101])).max()) < 0.04
+    # the end stops carry on: a fade that starts at 0.4 keeps 1 inside it
+    inner = coverage({**glow, "fade": [[0.4, 1], [1, 0]]})
+    assert inner[60, 60] == 1.0 and inner[60, 70] == 1.0
+    # rotated 90° clockwise on screen, its long axis runs down the frame
+    turned = coverage({**glow, "rot": 90})
+    assert turned[80, 60] == pytest.approx(0.2, abs=1e-3) and turned[60, 80] == pytest.approx(0.0, abs=1e-3)
+
+
 def test_a_polygon_covers_its_area_with_the_non_zero_rule() -> None:
     tri = coverage({"k": "poly", "pts": [10, 100, 60, 10, 110, 100]})
     assert tri.sum() == pytest.approx(0.5 * 100 * 90, rel=3e-3)
@@ -166,7 +187,7 @@ NIGHT_REGIONS: list[tuple[str, tuple[int, int, int, int], str, str]] = [
     ("scene", (500, 10, 580, 40), "#141f3d", "the top of the night sky (ND.skyTop)"),
     ("scene", (950, 950, 1000, 990), "#1d3339", "the far mountains (ND.mtnFar)"),
     ("scene", (238, 870, 268, 874), "#fff6d8", "a street lamp's lens, a bright warm white bar (ND.lampLens)"),
-    ("scene", (238, 865, 268, 869), "#34373e", "the lamp's slim dark grey head over it (ND.lampHousing)"),
+    ("scene", (238, 867, 268, 869), "#34373e", "the lamp's thin dark grey head over it (ND.lampHousing)"),
     ("driver_view", (450, 1000, 650, 1040), "#2e2a20", "the road through the windscreen (ND.asphalt)"),
     ("driver_view", (900, 1150, 1000, 1200), "#46454b", "the dashboard's top (ND.dashTop)"),
     ("face", (350, 940, 600, 990), "#9c8270", "the sample's skin #f2c9a0 in the cabin light (art.ts grade)"),
@@ -255,6 +276,14 @@ def test_off_frame_and_empty_primitives_draw_nothing() -> None:
         ({"k": "poly", "pts": [1, 2, 3], "color": "#ffffff"}, "even list"),
         ({"k": "line", "pts": [1, 2], "w": 1, "color": "#ffffff", "a": 2}, "a must be"),
         ({"k": "grad", "x0": 0, "y0": 0, "x1": 1, "y1": 1, "stops": [[0, "nope"]]}, "stops"),
+        (
+            {"k": "glow", "x": 0, "y": 0, "rx": 1, "ry": 1, "rot": 0, "color": "#ffffff", "fade": [[0, 2]]},
+            "fade must be",
+        ),
+        (
+            {"k": "glow", "x": 0, "y": 0, "rx": 1, "ry": 1, "rot": 0, "color": "#ffffff", "fade": [[1, 0], [0, 1]]},
+            "fade must be",
+        ),
         ({"k": "fill", "color": "#ffffff", "extra": 1}, "unknown field"),
     ],
 )
