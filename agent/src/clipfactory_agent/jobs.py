@@ -481,19 +481,35 @@ async def _stop(task: asyncio.Future[Any]) -> None:
 async def watched(tr: Tracker, key: str, fn: StepFn) -> StepDone | str | None:
     """Runs one step under the watchdog: a step with no sign of life (``Tracker.report``, ``say``) for
     ``tr.stall_seconds[key]`` is stopped and raises StepStalled with a plain message. A cancel of the run stops the
-    step too."""
+    step too.
+
+    Quiet time counts only while the event loop runs. When the whole loop is held up (a busy machine, a long
+    garbage-collection pause, a paused VM) nothing in it runs, the step included, and the watchdog wakes late. That
+    lateness is not the step's silence: the step's own wake-up is due at the same moment and only runs after the
+    watchdog's, so counting it ended a step that was saying how far it was a moment before (nightly run 45395204955).
+    A step with no sign of life is still ended once it has been quiet for the limit while the loop ran."""
     limit = tr.stall_seconds.get(key)
     if not limit:
         return await fn()
     loop = asyncio.get_running_loop()
     tr.last_sign = loop.time()  # a step tried again starts its quiet time afresh
     task: asyncio.Future[StepDone | str | None] = asyncio.ensure_future(fn())
+    tick = min(tr.watch_tick, limit)
+    sign = tr.last_sign
+    held = 0.0  # how long the loop was held up since the step's last sign of life
     try:
         while True:
-            done, _ = await asyncio.wait({task}, timeout=min(tr.watch_tick, limit))
+            asked = loop.time()
+            done, _ = await asyncio.wait({task}, timeout=tick)
             if task in done:
                 return task.result()
-            quiet = loop.time() - tr.last_sign
+            now = loop.time()
+            if tr.last_sign != sign:
+                sign, held = tr.last_sign, 0.0
+            # Woke later than asked: the loop was held up that long. Only a hold-up since the last sign counts, so a
+            # hold-up before it never lends the step quiet time it did not have (quiet is never below 0).
+            held = min(held + max(0.0, now - asked - tick), now - sign)
+            quiet = now - sign - held
             if quiet >= limit:
                 log("error", "job.step_stalled", job=tr.job_id, step=key, seconds=round(quiet))
                 await _stop(task)

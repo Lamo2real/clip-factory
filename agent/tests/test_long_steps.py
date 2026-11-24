@@ -282,6 +282,55 @@ async def test_a_slow_step_that_keeps_saying_how_far_it_is_is_never_ended() -> N
     assert status == "ready"
 
 
+def hold_up_loop(seconds: float) -> None:
+    """The whole event loop stops for ``seconds``, as on a busy machine or in a long garbage-collection pause: run
+    from a loop callback, so neither the step nor the watchdog gets a turn until it lets go."""
+    asyncio.get_running_loop().call_soon(time.sleep, seconds)
+
+
+async def test_a_held_up_loop_is_not_the_step_going_quiet() -> None:
+    """Nightly run 45395204955: the loop was held up about 0.13 s right after "Checked 8 of 10 clips." and the
+    watchdog, waking first, ended Watch the video that was about to say "Checked 9"."""
+    store = FakeStore()
+    tr = quick(store, 0.1)
+
+    async def slow() -> StepDone:
+        for i in range(10):
+            await asyncio.sleep(0.03)
+            tr.say(f"Checked {i + 1} of 10 clips.")
+            if i == 7:
+                hold_up_loop(0.25)  # two and a half times the quiet limit, right after the step spoke
+        return StepDone("done slowly")
+
+    async def ok() -> StepDone:
+        return StepDone("ok")
+
+    status = await run_job(tr, [(k, slow if k == "watch" else ok) for k in KEYS], clip_count=lambda: 1)
+    assert status == "ready", store.last.get("error")
+    assert tr.step("watch")["status"] == "done"
+
+
+async def test_a_step_with_no_sign_of_life_is_still_ended_when_the_loop_is_held_up() -> None:
+    store = FakeStore()
+    tr = quick(store, 0.1)
+
+    async def stuck() -> StepDone:
+        hold_up_loop(0.25)
+        await asyncio.sleep(3600)
+        raise AssertionError("unreachable")
+
+    async def ok() -> StepDone:
+        return StepDone("ok")
+
+    began = time.monotonic()
+    steps = [(k, stuck if k == "checklist" else ok) for k in KEYS]
+    status = await asyncio.wait_for(run_job(tr, steps, clip_count=lambda: 0), 5)
+    assert status == "failed"
+    assert store.last["error"] == stalled_message("checklist")
+    # Ended for 0.1 s of quiet while the loop ran, not for the hold-up: at most one watchdog tick of it counts.
+    assert time.monotonic() - began >= 0.25 + 0.1 - 0.01 - 0.005
+
+
 # --- the model is not turned on ------------------------------------------------------------------------------------
 
 

@@ -554,11 +554,21 @@ interface PaneRun {
   topBefore: number | null;
   /** How many times anything took data-app-slide (a pane, or the backdrop). */
   slideMarks: number;
+  /**
+   * The page as the tap's own click left it, read at the very end of that click (a window listener, after the app's
+   * handler and React's render of it, before the browser draws again): when (ms after the tap), the address, and
+   * whether each app's pane is shown (not hidden, its own display: contents). Only with recordPanes' `inTap` (calm
+   * motion): it reads the DOM only, never a style, so it adds no work of its own to the tap's task.
+   */
+  inTap: { at: number; path: string; shown: Record<"clips" | "stories", boolean> } | null;
 }
 
-/** Starts the in-page recorder of the panes' slide: their Web Animations, and every frame from the tap on. */
-async function recordPanes(page: Page) {
-  await page.evaluate((id) => {
+/**
+ * Starts the in-page recorder of the panes' slide: their Web Animations, and every frame from the tap on. `inTap`:
+ * also the page as the tap's own click left it (PaneRun.inTap).
+ */
+async function recordPanes(page: Page, { inTap = false } = {}) {
+  await page.evaluate(([id, atTap]) => {
     const w = window as unknown as { __panes: PaneRun };
     const from = location.pathname.startsWith("/stories") ? "stories" : "clips";
     const to = from === "clips" ? "stories" : "clips";
@@ -575,11 +585,21 @@ async function recordPanes(page: Page) {
       frames: [],
       topBefore: mainOf(from)?.getBoundingClientRect().top ?? null,
       slideMarks: 0,
+      inTap: null,
     };
     w.__panes = r;
     const startPath = location.pathname;
     document.addEventListener("pointerdown", () => (r.tapAt = performance.now()), { capture: true, once: true });
     document.addEventListener("click", () => (r.clickAt = performance.now() - r.tapAt), { capture: true, once: true });
+    if (atTap) {
+      const shown = (app: string) => {
+        const p = pane(app);
+        return !!p && !p.hidden && p.style.display === "contents";
+      };
+      window.addEventListener("click", () => (r.inTap = { at: performance.now() - r.tapAt, path: location.pathname, shown: { clips: shown("clips"), stories: shown("stories") } }), {
+        once: true,
+      });
+    }
     const seen = new Set<Animation>();
     const shift = (kf: Keyframe | undefined) => {
       const m = /translateX\((-?[\d.]+)%\)/.exec(String(kf?.transform ?? ""));
@@ -661,7 +681,7 @@ async function recordPanes(page: Page) {
       if (!r.tapAt || performance.now() - r.tapAt < 2200) requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
-  }, APP_SLIDE);
+  }, [APP_SLIDE, inTap] as const);
 }
 
 const readPanes = (page: Page) => page.evaluate(() => (window as unknown as { __panes: PaneRun }).__panes);
@@ -835,71 +855,195 @@ test("a quick tap forth, back and forth again: each slides on from where the pan
   await quietBackdrop(page, browserName);
   await on(page);
   await page.setViewportSize({ width: 1440, height: 900 });
-  await page.goto("/library");
-  await warm(page);
-  // Every pane slide made, in order, how each ended, the taps, and when the address changed.
-  await page.evaluate((id) => {
-    type Run = { at: number; what: string; to: number | null; end?: string; endAt?: number };
-    const w = window as unknown as { __runs: Run[]; __taps: number[]; __changedAt: number | null };
-    const t0 = performance.now();
-    w.__runs = [];
-    w.__taps = [];
-    w.__changedAt = null;
-    document.addEventListener("pointerdown", () => w.__taps.push(performance.now() - t0), { capture: true });
-    const seen = new Set<Animation>();
-    const start = location.pathname;
-    const tick = () => {
-      for (const a of document.getAnimations()) {
-        if (a.id !== id || seen.has(a)) continue;
-        seen.add(a);
-        const effect = a.effect as KeyframeEffect | null;
-        const target = effect?.target as HTMLElement | null;
-        const last = effect?.getKeyframes().at(-1);
-        const m = /translateX\((-?[\d.]+)%\)/.exec(String(last?.transform ?? ""));
-        const run: Run = { at: performance.now() - t0, what: target?.dataset.appPane ?? "backdrop", to: m ? Number(m[1]) + 0 : null };
-        w.__runs.push(run);
-        a.finished.then(
-          () => {
-            run.end = "finished";
-            run.endAt = performance.now() - t0;
-          },
-          () => (run.end = "cancelled"),
-        );
-      }
-      if (location.pathname !== start && w.__changedAt === null) w.__changedAt = performance.now() - t0;
-      if (performance.now() - t0 < 6000) requestAnimationFrame(tick);
-    };
-    requestAnimationFrame(tick);
-  }, APP_SLIDE);
-  const press = async (to: To) => {
-    const b = (await choice(page, to).boundingBox())!;
-    await page.mouse.move(b.x + b.width / 2, b.y + b.height / 2);
-    await page.mouse.down();
-    await page.mouse.up();
+  type Run = { at: number; what: string; to: number | null; end?: string; endAt?: number };
+  /**
+   * What the test saw before a tap: the slide it waited for under way ("sliding"), that slide run its whole way before
+   * it was seen under way ("landed": the page drew no frame meanwhile), that slide cut short ("cancelled"), the address
+   * changed first ("changed"), or nothing at all.
+   */
+  type Seen = "sliding" | "landed" | "cancelled" | "changed" | "nothing in 10 s";
+  type Taps = {
+    runs: Run[];
+    taps: number[];
+    clicks: { at: number; sliding: boolean; path: string }[];
+    paths: string[];
+    changedAt: number | null;
+    seen: Seen[];
   };
-  // As a child taps: forth, back while it slides, forth again while it slides back.
-  await press("Clips Funded");
-  await page.waitForTimeout(160);
-  await press("Clip Factory");
-  await page.waitForTimeout(120);
-  await press("Clips Funded");
+  const at = async (to: To) => {
+    const b = (await choice(page, to).boundingBox())!;
+    return { x: b.x + b.width / 2, y: b.y + b.height / 2 };
+  };
+  const read = (stop = false) =>
+    page.evaluate((s) => {
+      const w = window as unknown as { __runs: Run[]; __taps: number[]; __clicks: Taps["clicks"]; __paths: string[]; __changedAt: number | null; __stop: boolean };
+      if (s) w.__stop = true;
+      return { runs: w.__runs, taps: w.__taps, clicks: w.__clicks, paths: w.__paths, changedAt: w.__changedAt };
+    }, stop);
+
+  /** The three taps, on the page opened afresh: what the page recorded, and what the test saw before each tap. */
+  const go = async (): Promise<Taps> => {
+    await page.goto("/library");
+    await warm(page);
+    // Every pane slide made, in order, how each ended, the taps and what each click found, every address the page
+    // showed, and the slide of Clips Funded's pane under way now (its own clock, for the taps' timing). It records
+    // until it is read for the last time (a busy machine's three taps can take a few seconds).
+    await page.evaluate((id) => {
+      const w = window as unknown as {
+        __runs: Run[];
+        __taps: number[];
+        __clicks: { at: number; sliding: boolean; path: string }[];
+        __paths: string[];
+        __changedAt: number | null;
+        __sliding: { to: number | null; ms: number } | null;
+        __stop: boolean;
+      };
+      const t0 = performance.now();
+      w.__runs = [];
+      w.__taps = [];
+      w.__clicks = [];
+      w.__changedAt = null;
+      w.__sliding = null;
+      w.__stop = false;
+      const start = location.pathname;
+      w.__paths = [start];
+      document.addEventListener("pointerdown", () => w.__taps.push(performance.now() - t0), { capture: true });
+      // Whether a slide was under way when the click came (one made and not yet ended), and the address then: from
+      // what the recorder already knows, so the click itself reads nothing from the page.
+      document.addEventListener("click", () => w.__clicks.push({ at: performance.now() - t0, sliding: w.__runs.some((x) => !x.end), path: location.pathname }), { capture: true });
+      const runs = new Map<Animation, Run>();
+      const frames = new Map<Animation, number>();
+      const tick = () => {
+        w.__sliding = null;
+        for (const a of document.getAnimations()) {
+          if (a.id !== id) continue;
+          let run = runs.get(a);
+          if (!run) {
+            const effect = a.effect as KeyframeEffect | null;
+            const target = effect?.target as HTMLElement | null;
+            const last = effect?.getKeyframes().at(-1);
+            const m = /translateX\((-?[\d.]+)%\)/.exec(String(last?.transform ?? ""));
+            const made: Run = { at: performance.now() - t0, what: target?.dataset.appPane ?? "backdrop", to: m ? Number(m[1]) + 0 : null };
+            run = made;
+            runs.set(a, made);
+            w.__runs.push(made);
+            a.finished.then(
+              () => {
+                made.end = "finished";
+                made.endAt = performance.now() - t0;
+              },
+              () => (made.end = "cancelled"),
+            );
+          }
+          if (run.what !== "stories" || a.playState !== "running") continue;
+          // How far Clips Funded's pane has slid on the slide's own clock: from its third frame on (AppPanes starts
+          // the slide again on its second, once the page coming in is drawn, so its first frames' time is not the
+          // slide's).
+          const n = (frames.get(a) ?? 0) + 1;
+          frames.set(a, n);
+          if (n >= 3) w.__sliding = { to: run.to, ms: Number(a.currentTime ?? 0) };
+        }
+        if (location.pathname !== w.__paths.at(-1)) w.__paths.push(location.pathname);
+        if (location.pathname !== start && w.__changedAt === null) w.__changedAt = performance.now() - t0;
+        if (!w.__stop && performance.now() - t0 < 60_000) requestAnimationFrame(tick);
+      };
+      requestAnimationFrame(tick);
+    }, APP_SLIDE);
+    // Both choices measured before (the dock does not move), so each tap is the finger alone: one call, with no round
+    // trip to the page between it and the slide it answers.
+    const where = { "Clips Funded": await at("Clips Funded"), "Clip Factory": await at("Clip Factory") };
+    const tap = (to: To) => page.mouse.click(where[to].x, where[to].y);
+    /**
+     * Waits until Clips Funded's pane has slid 100 ms of its way `to` (0: in, forth; 100: out, back), on the slide's
+     * own clock rather than the test's. Timed by the test's clock (160 ms, then a tap's round trips to a busy page),
+     * the tap back on CI came after the whole first slide had landed and the page had changed (24 Nov, both tries):
+     * the three taps were then a switch, and a second switch sent back. Returns too once that slide has ended (a busy
+     * machine can draw no frame for longer than a slide's last 350 ms, and the slide runs its whole way meanwhile), or
+     * once the address changed, so what the test saw is named. The tap follows at once, and what was seen is read
+     * after it, so nothing waits between the two.
+     */
+    const sliding = (to: number) =>
+      page
+        .waitForFunction(
+          ([t, start]) => {
+            const w = window as unknown as { __sliding: { to: number | null; ms: number } | null; __runs: Run[]; __taps: number[] };
+            const s = w.__sliding;
+            if (s && s.to === t && s.ms >= 100) return "sliding";
+            const tapped = w.__taps.at(-1) ?? 0;
+            const ran = w.__runs.find((x) => x.what === "stories" && x.to === t && x.at >= tapped && x.end);
+            if (ran) return ran.end === "finished" ? "landed" : "cancelled";
+            return location.pathname !== start ? "changed" : false;
+          },
+          [to, "/library"] as const,
+          { polling: "raf", timeout: 10_000 },
+        )
+        .catch(() => null);
+    const seen: Seen[] = [];
+    // As a child taps: forth, back while it slides, forth again while it slides back.
+    await page.mouse.move(where["Clips Funded"].x, where["Clips Funded"].y);
+    await tap("Clips Funded");
+    await page.mouse.move(where["Clip Factory"].x, where["Clip Factory"].y);
+    let waited = await sliding(0);
+    await tap("Clip Factory");
+    seen.push(waited ? ((await waited.jsonValue()) as Seen) : "nothing in 10 s");
+    await page.mouse.move(where["Clips Funded"].x, where["Clips Funded"].y);
+    waited = await sliding(100);
+    await tap("Clips Funded");
+    seen.push(waited ? ((await waited.jsonValue()) as Seen) : "nothing in 10 s");
+    return { ...(await read()), seen };
+  };
+
+  /**
+   * This machine, not the app, missed the window for a tap: the slide the tap was for ran its whole way, to its end,
+   * before the test saw it under way, or before the tap's click came (the page drew no frame, or took the tap late).
+   */
+  const missed = (r: Taps) => {
+    const late = (i: number) => {
+      const c = r.clicks[i];
+      if (!c || c.sliding) return false;
+      const before = r.runs.filter((x) => x.what === "stories" && x.at < c.at).at(-1);
+      return before?.end === "finished" && before.endAt! <= c.at;
+    };
+    return r.seen.includes("landed") || late(1) || late(2);
+  };
+
+  // A tap that came too late on a busy machine is tried again on a fresh page, up to three times in all. Each time,
+  // the app is held to never cutting over: if the page changed, it changed only once Clips Funded's pane had slid
+  // into its place, to its end. The last time, every check below holds, by name.
+  let r = await go();
+  for (let n = 1; n < 3 && missed(r); n++) {
+    await page.waitForTimeout(APP_SLIDE_MS + 1000);
+    const was = { ...(await read(true)), seen: r.seen };
+    test.info().annotations.push({ type: `forth, back, forth: a tap came too late on this machine (go ${n})`, description: JSON.stringify(was) });
+    if (was.changedAt !== null) {
+      const landed = was.runs.filter((x) => x.what === "stories" && x.at < was.changedAt!).at(-1);
+      expect(landed?.to, `go ${n}: the page changed once Clips Funded's pane slid into its place`).toBe(0);
+      expect(landed?.end, `go ${n}: once it slid to its end`).toBe("finished");
+      expect(was.changedAt, `go ${n}: after it landed`).toBeGreaterThanOrEqual(landed!.endAt! - 20);
+    }
+    r = await go();
+  }
+  expect(r.seen[0], "the first slide under way before the tap back").toBe("sliding");
+  expect(r.seen[1], "the slide back under way before the tap forth again").toBe("sliding");
   await page.waitForURL(/\/stories$/);
   await storiesReady(page);
-  const r = await page.evaluate(() => {
-    const w = window as unknown as { __runs: { at: number; what: string; to: number | null; end?: string; endAt?: number }[]; __taps: number[]; __changedAt: number | null };
-    return { runs: w.__runs, taps: w.__taps, changedAt: w.__changedAt };
-  });
+  r = { ...(await read(true)), seen: r.seen };
   test.info().annotations.push({ type: "forth, back, forth", description: JSON.stringify(r) });
   expect(r.taps.length, "three taps").toBeGreaterThanOrEqual(3);
+  expect(r.clicks.length, "three clicks").toBeGreaterThanOrEqual(3);
+  // The taps back and forth again each came while the panes slid, before anything changed.
+  expect(r.clicks[1], "the tap back came while the first slide was under way").toMatchObject({ sliding: true, path: "/library" });
+  expect(r.clicks[2], "the tap forth again came while the slide back was under way").toMatchObject({ sliding: true, path: "/library" });
   // The third tap slid the panes (a slide made after it), to Clips Funded, and that slide ran to its end.
   const third = r.runs.filter((x) => x.what === "stories" && x.at >= r.taps[2]!);
   expect(third.length, "the third tap slid Clips Funded's pane").toBeGreaterThan(0);
   const last = third.at(-1)!;
   expect(last.to, "into its place").toBe(0);
   expect(last.end, "to its end").toBe("finished");
-  // The page changed only once it had landed: never a cut over with no slide.
+  // The page changed only once it had landed, and once: never a cut over with no slide, never there and back.
   expect(r.changedAt, "the page changed").not.toBeNull();
   expect(r.changedAt!, "after the last slide landed").toBeGreaterThanOrEqual(last.endAt! - 20);
+  expect(r.paths, "the address changed once").toEqual(["/library", "/stories"]);
   // At rest after: no slide left, the lens on Clips Funded.
   await expect(page.locator(".ws-dock .ws-switch__opt.is-on")).toHaveAttribute("data-ws-type", "stories");
   expect(await page.evaluate(() => [document.querySelectorAll("[data-app-slide]").length, document.getAnimations().filter((a) => a.id === "app-slide").length])).toEqual([0, 0]);
@@ -930,14 +1074,38 @@ for (const [label, how] of [
       ["Clips Funded", /\/stories$/],
       ["Clip Factory", /\/library$/],
     ] as const) {
-      await recordPanes(page);
+      await recordPanes(page, { inTap: true });
       await tapChoice(page, to);
       await page.waitForURL(url);
       const r = await landedPanes(page);
+      const going = APP[to];
+      const other = going === "clips" ? "stories" : "clips";
       expect(r.anims, `${how} → ${to}: nothing slid`).toEqual([]);
       expect(r.slideMarks, `${how} → ${to}: no pane ever left its place`).toBe(0);
       expect(r.frames.filter((f) => f.shown.clips !== "none" && f.shown.stories !== "none"), `${how} → ${to}: never both on screen`).toEqual([]);
-      expect(r.changedAt, `${how} → ${to}: the page changed at once`).toBeLessThan(300);
+      // At once, timed against the tap itself rather than the clock: the tap's own click changes the page in its own
+      // task (the address, and the app coming in shown with the other one hidden, by the end of that click, before the
+      // browser draws again), and every frame drawn after the click shows the new page, so nothing waits for anything
+      // (not even one frame) and no frame of the old page comes after the tap. How long that one task takes is the
+      // machine's: with the app's work the same, from the finger going down to the next frame a Mac takes 20 to 30 ms,
+      // the same Mac at 16x CPU throttle 440 to 580 and CI's 4-CPU runners 361 and 672 (24 Nov), so a limit on the
+      // clock measured the runner. That task is mostly the first style and layout of the page coming on screen (its
+      // pane was display: none), then React's render and the effects it runs before the frame (at 4x: 85 to 97 ms,
+      // two thirds of it style and layout); the rest is the test machine's press and release of the mouse.
+      expect(r.inTap, `${how} → ${to}: the tap's own click was heard`).not.toBeNull();
+      expect(r.inTap!.path, `${how} → ${to}: the address changed in the tap's own click`).toMatch(url);
+      expect(r.inTap!.shown, `${how} → ${to}: the page changed in the tap's own click`).toEqual({ [going]: true, [other]: false });
+      const drawn = r.frames.filter((f) => f.t > r.clickAt!);
+      expect(drawn.length, `${how} → ${to}: frames drawn after the click`).toBeGreaterThan(2);
+      for (const f of drawn) {
+        expect(f.path, `${how} → ${to}: the new page's address at ${f.t.toFixed(0)} ms`).toMatch(url);
+        expect(f.shown[going], `${how} → ${to}: the new page on screen at ${f.t.toFixed(0)} ms`).toBe("contents");
+        expect(f.shown[other], `${how} → ${to}: the old page gone at ${f.t.toFixed(0)} ms`).toBe("none");
+      }
+      test.info().annotations.push({
+        type: `${how} → ${to}: the calm switch`,
+        description: JSON.stringify({ clickAtMs: +r.clickAt!.toFixed(1), tapTaskMs: +(r.inTap!.at - r.clickAt!).toFixed(1), nextFrameMs: +(drawn[0]!.t - r.clickAt!).toFixed(1) }),
+      });
       if (to === "Clips Funded") await storiesReady(page);
       else await settle(page);
     }
