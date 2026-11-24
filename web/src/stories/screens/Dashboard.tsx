@@ -1,5 +1,5 @@
 // Lamo Stories › Dashboard (docs/CONTRACTS.md §45.16.3): the tiles in the contract's order: Needs you, animations
-// made, waiting for review, published, being made now (each with its step), connected accounts (n of 5 with names
+// made, waiting for review, published, being made now (each with its step), connected accounts (n of m with names
 // and statuses), performance (views, likes, comments, shares; "No numbers yet"; numbers until 7 days after each post)
 // and recent activity (the last 10). Polled every 15 s with the Needs you bar (one shared call, §45.16.4). Until the
 // setup is finished, a card above the tiles shows its ring ("4 of 11 done") and what is left (§45.29). Above both,
@@ -20,9 +20,12 @@ import { useToast } from "../../components/Toasts.tsx";
 import { A } from "../../components/ui.tsx";
 import { count, relative } from "../../lib/format.ts";
 import { storiesApi } from "../api/client.ts";
-import { STEP_LABEL, type Onboarding, type ProjectRef, type StoriesApi, type StoriesDashboard, type StoryStatus } from "../api/types.ts";
+import { STEP_LABEL, type ErrorAccount, type Onboarding, type ProjectRef, type StoriesApi, type StoriesDashboard, type StoryStatus } from "../api/types.ts";
 import { ArcDial, CreamCard, GlassToggle, MediaRow, StatNumeral } from "../glass/index.ts";
 import { useWorkspaceConfig } from "../settings/data.ts";
+import { isSocialHref, leftOf } from "../skips.ts";
+import { postToTitle, postYes } from "../studio/PublishSheet.tsx";
+import { accountOf } from "../studio/words.ts";
 import { currentChoice, rememberProject } from "../workspace.ts";
 import {
   celebrate,
@@ -47,9 +50,9 @@ import type { StoriesScreenProps } from "./types.ts";
 
 const ACCOUNT_WORDS: Record<StoriesDashboard["accounts"][number]["status"], { label: string; tone: StTone }> = {
   connected: { label: "Connected", tone: "mint" },
-  choose_account: { label: "Pick an account", tone: "sun" },
+  choose_account: { label: "Pick one", tone: "sun" },
   needs_reconnect: { label: "Connect again", tone: "coral" },
-  same_as_clips: { label: "Same as Clip Factory", tone: "coral" },
+  same_as_clips: { label: "Clip Factory's own", tone: "coral" },
   not_connected: { label: "Not connected", tone: "sky" },
 };
 
@@ -101,18 +104,39 @@ function Stat({ value, label, tone, icon, href }: { value: number; label: string
   );
 }
 
+/**
+ * What a Try again that came back still stuck says: the post's own sentence (it names the fix, Social accounts), or a
+ * plain one; null when it is on its way again.
+ */
+export function stillStuck(job: { publishingStatus: string; error?: string | undefined }): string | null {
+  if (job.publishingStatus !== "needs_attention" && job.publishingStatus !== "failed") return null;
+  return job.error?.trim() || "It is still stuck. Tap Open to see what to fix, then tap Try again.";
+}
+
 function NeedsYou({ ws, items }: { ws: string; items: StoriesDashboard["needsYou"] }) {
   const toast = useToast();
   const [busy, setBusy] = useState<string | null>(null);
-  const retry = async (id: string, el: HTMLElement | null) => {
+  // The API asks before a post goes to another account than before (error.account, §45.34): yes or not now, here.
+  const [ask, setAsk] = useState<{ id: string; account: ErrorAccount; message: string; mac: boolean } | null>(null);
+  const retry = async (id: string, el: HTMLElement | null, mac: boolean, confirmAccount?: string) => {
     setBusy(id);
     try {
-      await storiesApi().retryPublishing(ws, id);
-      celebrate(centerOf(el));
-      toast.success("Trying again now.");
+      // A Mac post (§47.10) waits for the Mac again; any other post is sent again.
+      const body = confirmAccount ? { confirmAccount } : undefined;
+      const next = mac ? await (body ? storiesApi().macRetry(ws, id, body) : storiesApi().macRetry(ws, id)) : await storiesApi().retryPublishing(ws, id, body);
+      setAsk(null);
+      const stuck = stillStuck(next);
+      // Still stuck: its reason, never confetti (it did not work).
+      if (stuck) toast.error(stuck);
+      else {
+        celebrate(centerOf(el));
+        toast.success("Trying again now.");
+      }
       await refreshDashboard(ws).catch(() => undefined);
     } catch (e) {
-      toast.error(friendlyMessage(e));
+      const named = accountOf(e);
+      if (named && named.externalAccountId !== confirmAccount) setAsk({ id, account: named, message: friendlyMessage(e), mac });
+      else toast.error(friendlyMessage(e));
     } finally {
       setBusy(null);
     }
@@ -147,20 +171,37 @@ function NeedsYou({ ws, items }: { ws: string; items: StoriesDashboard["needsYou
                 {n.sentence}
               </p>
               <div className="st-needs-list__actions">
-                {n.publishingJobId ? (
+                {/* An account problem is fixed on Social accounts first: its way there comes first, then Try again. */}
+                {isSocialHref(n.href) ? <StLinkButton href={n.href}>Fix it</StLinkButton> : null}
+                {/* A Mac post that pressed Post may be on TikTok: only Open (its Review page) for it, never Try again. */}
+                {n.publishingJobId && !(n.publishingStatus === "mac" && n.mac?.pressedAt) ? (
                   <StButton
                     aria-disabled={busy === n.publishingJobId || undefined}
                     onClick={(e) => {
                       // Kid-proof: never disabled; a second tap while it is trying says no (the deny sound).
-                      if (busy !== n.publishingJobId) void retry(n.publishingJobId!, e.currentTarget);
+                      if (busy !== n.publishingJobId) void retry(n.publishingJobId!, e.currentTarget, n.publishingStatus === "mac");
                     }}
                   >
                     <StIcon name="retry" size={18} />
                     Try again
                   </StButton>
                 ) : null}
-                <StLinkButton href={n.href}>Open</StLinkButton>
+                {isSocialHref(n.href) ? null : <StLinkButton href={n.href}>Open</StLinkButton>}
               </div>
+              {/* The API asks first when the post would go to another account: the question under the row, full width. */}
+              {ask && n.publishingJobId === ask.id && n.platform ? (
+                <div className="st-needs-list__ask" role="group" aria-label={postToTitle(n.platform, ask.account)} style={{ flexBasis: "100%" }}>
+                  <p className="st-needs-list__text">
+                    <strong>{postToTitle(n.platform, ask.account)}</strong> {ask.message}
+                  </p>
+                  <div className="st-needs-list__actions">
+                    <StButton main aria-disabled={busy === ask.id || undefined} onClick={(e) => busy !== ask.id && void retry(ask.id, e.currentTarget, ask.mac, ask.account.externalAccountId)}>
+                      {postYes(ask.message)}
+                    </StButton>
+                    <StButton onClick={() => setAsk(null)}>Not now</StButton>
+                  </div>
+                </div>
+              ) : null}
             </li>
           ))}
         </ul>
@@ -211,6 +252,7 @@ function Producing({ items }: { items: StoriesDashboard["producing"] }) {
   );
 }
 
+/** The accounts not skipped (the API leaves a skipped one out): "N of M" counts only these. */
 function Accounts({ items }: { items: StoriesDashboard["accounts"] }) {
   const connected = items.filter((a) => a.status === "connected").length;
   return (
@@ -219,9 +261,13 @@ function Accounts({ items }: { items: StoriesDashboard["accounts"] }) {
         <StIcon name="plug" size={22} />
         Connected accounts
       </h2>
-      <p className="st-tile__big st-stat__value">
-        <span className="st-stat__num">{connected}</span> <span className="st-stat__unit">of {items.length || 5}</span>
-      </p>
+      {items.length ? (
+        <p className="st-tile__big st-stat__value">
+          <span className="st-stat__num">{connected}</span> <span className="st-stat__unit">of {items.length}</span>
+        </p>
+      ) : (
+        <p className="st-tile__note">Nothing to connect.</p>
+      )}
       <ul className="st-accounts">
         {items.map((a) => (
           <li key={a.platform} className="st-accounts__row">
@@ -454,7 +500,10 @@ function ContinueCard({ ws }: { ws: string }) {
   );
 }
 
-/** The steps still left after Finish (skipped ones), as a short list with a way back to them (§45.36 E15). */
+/**
+ * The steps still left after Finish, as a short list with a way back to them (§45.36 E15). A platform the owner skipped
+ * is not one of them: it stays only on Social accounts and in the setup.
+ */
 function SetupLeft({ left }: { left: { step: string; label: string }[] }) {
   return (
     <section className="st-setupcard st-setupcard--left st-glass" aria-labelledby="st-setupleft-title">
@@ -490,7 +539,7 @@ function setupOpen(o: Onboarding | null): boolean {
  */
 function SetupCard({ data }: { data: Onboarding | null }) {
   if (!data) return null;
-  const left = data.steps.filter((s) => s.state !== "done" && s.step !== "done");
+  const left = leftOf(data);
   if (data.finishedAt) return left.length ? <SetupLeft left={left} /> : null;
   return (
     <section className="st-setupcard st-glass st-glass--hero st-lens" aria-labelledby="st-setupcard-title">
@@ -534,10 +583,10 @@ export function DashboardScreen({ ws }: StoriesScreenProps) {
           a picture or the desktop. */}
       <StPageHead
         title="Dashboard"
-        lede="Everything happening in your animation studio."
+        lede="What's happening in your studio."
         actions={
           <>
-            <StLinkButton href="/stories/ideas">
+            <StLinkButton href="/stories/ideas?new=1">
               <StIcon name="bulb" size={20} />
               New idea
             </StLinkButton>
@@ -557,7 +606,7 @@ export function DashboardScreen({ ws }: StoriesScreenProps) {
       ) : empty ? (
         <>
           <StEmpty title="Your studio is ready" action={<StLinkButton href="/stories/production/new" main={!settingUp}>Make your first video</StLinkButton>}>
-            Pick an idea and a character, and Clips Funded makes the cartoon.
+            Pick an idea and a character. Clips Funded draws it.
           </StEmpty>
           <div className="st-tiles st-tiles--start">
             <Accounts items={data.accounts} />

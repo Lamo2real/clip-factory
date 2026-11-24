@@ -221,16 +221,26 @@ export function YoutubeBranch() {
         </div>
       </Apple>
       {hasCookies ? <p className="apple-panel__note">They are only used to download YouTube videos.</p> : null}
+      {/* The how-to is only for when YouTube blocks a video: one fold, shut until tapped. */}
       <section className="cookie-guide" aria-labelledby={guideId}>
-        <h3 className="cookie-guide__title" id={guideId}>
-          How to get cookies
-        </h3>
-        <ol className="cookie-guide__steps">
-          {COOKIES_STEPS.map((step) => (
-            <li key={step}>{step}</li>
-          ))}
-        </ol>
-        <p className="cookie-guide__tip">{COOKIES_TIP}</p>
+        <details className="cr-fold">
+          <summary className="cr-fold__q">
+            <Icon name="info" size={18} />
+            {/* Still a heading (its section is named by it), in the fold's own place for the words. */}
+            <h3 className="cookie-guide__title" id={guideId} style={{ flex: 1, minWidth: 0 }}>
+              How to get cookies
+            </h3>
+            <Icon name="chevronRight" size={18} className="icon cr-fold__chev act-turn" />
+          </summary>
+          <div className="cr-fold__body">
+            <ol className="cookie-guide__steps">
+              {COOKIES_STEPS.map((step) => (
+                <li key={step}>{step}</li>
+              ))}
+            </ol>
+            <p className="cookie-guide__tip">{COOKIES_TIP}</p>
+          </div>
+        </details>
       </section>
       <DropOverlay drop={drop} scope="element" words={DROP_WORDS} />
     </div>
@@ -501,7 +511,7 @@ function PictureApple({ inUse, onPicked }: { inUse: boolean; onPicked: () => voi
           {prefs.background ? <img src={prefs.background} alt="" /> : <span className="bg-picker__mesh" />}
         </span>
         <div className="bg-picker__text">
-          <span className="muted small">{prefs.background ? "Your picture is ready." : "No picture yet. Until you pick one, you get the Clip Factory colours."}</span>
+          <span className="muted small">{prefs.background ? "Your picture is ready." : "No picture yet. You see the Clip Factory colours."}</span>
           <div className="row-actions">
             <input
               ref={file}
@@ -612,7 +622,7 @@ function ColoursApple({ inUse, colours, onChange }: { inUse: boolean; colours: s
           </label>
         </div>
         <span className="muted small">
-          {colours.length === 1 ? "1 colour picked." : `${colours.length} colours picked.`} Tap a colour to add it or take it off.
+          {colours.length === 1 ? "1 colour picked." : `${colours.length} colours picked.`} Tap one to add or remove it.
           {coloursVeils(colours).pageVeil > SOFT_COLOURS_VEIL ? <span className="bg-colours__soft"> {SOFT_COLOURS_NOTE}</span> : null}
         </span>
       </div>
@@ -626,6 +636,8 @@ export function GetAppBranch() {
   // The card carries the #get-app anchor itself.
   return <GetAppPanel installedNote title="For this device" />;
 }
+
+export const UPDATE_CHECK_FAILED = "Couldn't check. Check your internet and tap Check for updates again.";
 
 export function UpdatesBranch() {
   const toast = useToast();
@@ -641,10 +653,12 @@ export function UpdatesBranch() {
   async function check() {
     setChecking(true);
     // The arrow's turn (act="refresh") shows the tap did something; the answer is not held back for it (§20.4).
-    await checkForUpdate();
+    const found = await checkForUpdate();
     if (!alive.current) return;
     setChecking(false);
     if (updateState().available) toast.info("A new version is ready. Tap Reload at the bottom of the screen.");
+    // A check that did not get an answer never says "newest": it says how to try again.
+    else if (found === "failed") toast.error(UPDATE_CHECK_FAILED);
     else toast.success("You have the newest version.");
   }
 

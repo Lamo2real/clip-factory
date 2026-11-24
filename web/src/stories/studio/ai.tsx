@@ -571,6 +571,8 @@ export function useAiTask(ws: string, onDone: (task: AiTask) => void, again?: ()
   const againRef = useRef(again);
   againRef.current = again;
   const misses = useRef(0);
+  // Set at once when a task starts and until it ends: a double tap (or Enter twice) in the same moment starts one task.
+  const working = useRef(false);
   const live = useRef(true);
   useEffect(() => {
     live.current = true;
@@ -583,9 +585,11 @@ export function useAiTask(ws: string, onDone: (task: AiTask) => void, again?: ()
     if (!live.current) return;
     setTask(t);
     if (t.status === "done") {
+      working.current = false;
       setPhase("done");
       doneRef.current(t);
     } else if (t.status === "failed") {
+      working.current = false;
       setPhase("failed");
       setProblem(t.error || "The helper stopped. Tap Try again.");
     }
@@ -593,6 +597,8 @@ export function useAiTask(ws: string, onDone: (task: AiTask) => void, again?: ()
 
   const start = useCallback(
     async (begin: () => Promise<AiTask>) => {
+      if (working.current) return;
+      working.current = true;
       last.current = begin;
       misses.current = 0;
       setProblem(null);
@@ -602,6 +608,7 @@ export function useAiTask(ws: string, onDone: (task: AiTask) => void, again?: ()
       try {
         settle(await begin());
       } catch (e) {
+        working.current = false;
         if (!live.current) return;
         setPhase("failed");
         setProblem(say(e, "The helper is busy. Try again in a minute."));
@@ -621,6 +628,7 @@ export function useAiTask(ws: string, onDone: (task: AiTask) => void, again?: ()
         if (!live.current) return;
         misses.current += 1;
         if (lasting(e) || misses.current >= MAX_MISSES) {
+          working.current = false;
           setPhase("failed");
           setProblem(say(e, "We lost touch with the helper. Tap Try again."));
           return;
@@ -640,6 +648,7 @@ export function useAiTask(ws: string, onDone: (task: AiTask) => void, again?: ()
   }, [start]);
 
   const reset = useCallback(() => {
+    working.current = false;
     setPhase("idle");
     setTask(null);
     setProblem(null);

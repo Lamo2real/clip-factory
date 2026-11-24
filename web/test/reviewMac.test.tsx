@@ -54,8 +54,8 @@ const knobs = () => (window as unknown as { __cfMock: Knobs }).__cfMock;
 
 const ASK = "Tap Use my settings first. TikTok needs your tap.";
 const MAC_LINE = "Your Mac posts it with My settings: Everyone · Comments on · Duet on · Stitch on";
-const EVERY = "Every place uses your settings. Tap a place below to change it for this clip.";
-const OTHERS = "Your other places already use your settings. TikTok needs your tap each time.";
+const EVERY = "Tap a place below to change it for this clip.";
+const OTHERS = "Tap this first. TikTok needs your tap.";
 
 let root: Root;
 let app: HTMLElement;
@@ -101,8 +101,11 @@ async function mount({
   audited = false,
   creator,
   tiktok,
+  seen = true,
 }: {
   mac: boolean;
+  /** The Mac checked in (a set-up Mac); false: it never did. */
+  seen?: boolean;
   audited?: boolean;
   creator?: () => Promise<TikTokCreator>;
   /** My settings' TikTok choices (the defaults when absent). */
@@ -117,6 +120,7 @@ async function mount({
   const api = mockApi(store);
   for (const p of ["youtube", "tiktok"] as const) knobs().setup.finish(p);
   knobs().setup.setAudit(audited);
+  if (mac && seen) knobs().mac.ping();
   localStorage.setItem("cf-upload-to", JSON.stringify(["youtube", "tiktok"]));
   const askCreator = creator ?? api.tiktokCreatorInfo.bind(api);
   const confirm = api.confirmClip.bind(api);
@@ -315,6 +319,20 @@ describe("Review card while the Mac posts TikTok", () => {
     expect(upload().getAttribute("aria-disabled")).toBe("true");
     await click(upload());
     expect(sent).toEqual([]);
+  });
+});
+
+describe("Review card's TikTok line when the Mac can't post yet (bug hunt, 23 Nov)", () => {
+  it("never promises 'your Mac posts it for everyone' while the Mac never checked in, and never offers Turn on: the switch is on", async () => {
+    await mount({ mac: true, seen: false });
+    await until(() => inCard(".tt-yourself-hint")?.textContent === "TikTok: Your Mac isn't set up yet", "the Mac's own line");
+    expect(card().textContent).not.toContain(MAC_HINT);
+    const row = inCard('[data-mac="card"]')!;
+    const links = Array.from(row.querySelectorAll<HTMLAnchorElement>("a"));
+    expect(links.map((a) => a.textContent?.trim())).toEqual(["Open Your Mac posts TikTok"]);
+    expect(links[0]!.getAttribute("href")).toBe("/settings/posting/tiktok-mac");
+    // Upload still goes (its TikTok waits for the Mac).
+    expect(upload().getAttribute("aria-disabled")).toBeNull();
   });
 });
 

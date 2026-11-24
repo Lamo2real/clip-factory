@@ -49,7 +49,7 @@ describe("workspaces", () => {
     const { $comment: _c, ...file } = defaults as unknown as StoriesConfig & { $comment: string };
     expect(DEFAULT_CONFIG).toEqual(file);
     // Every key of StoriesConfig, and nothing else (a key added to the type must be added to the file).
-    const keys: (keyof StoriesConfig)[] = ["defaultDurationSec", "captionsOn", "musicOn", "providers", "video", "production", "youtubeCategory", "youtubePrivacy", "xMonthlyLimitUsd"];
+    const keys: (keyof StoriesConfig)[] = ["defaultDurationSec", "captionsOn", "musicOn", "providers", "video", "production", "youtubeCategory", "youtubePrivacy", "xMonthlyLimitUsd", "tiktokMac"];
     expect(Object.keys(file).sort()).toEqual([...keys].sort());
     expect(store.workspaces.find((w) => w.workspaceId === "stories")?.configuration).toEqual(file);
   });
@@ -278,6 +278,41 @@ describe("the onboarding (§45.29)", () => {
     expect(store.onboarding.providersPickedAt).not.toBeNull();
   });
 
+  it("a platform skipped is marked on its account and not counted; connected wins and drops the skip (the owner, 24 Nov)", async () => {
+    // Nothing skipped: every account says so, and the count is 11.
+    expect((await api.social("stories")).accounts.map((a) => a.skipped)).toEqual([false, false, false, false, false]);
+    let o = await api.patchOnboarding("stories", { step: "x", skipped: true });
+    expect(o.total).toBe(10);
+    expect(o.steps).toHaveLength(11);
+    expect(o.steps.find((s) => s.step === "x")?.state).toBe("skipped");
+    const { accounts } = await api.social("stories");
+    expect(accounts.filter((a) => a.skipped).map((a) => a.platform)).toEqual(["x"]);
+    // The single answers say it too.
+    expect((await api.checkSocial("stories", "x")).skipped).toBe(true);
+    // A step of another kind skipped is "later": it still counts.
+    o = await api.patchOnboarding("stories", { step: "video", skipped: true });
+    expect(o.total).toBe(10);
+    // Un-skip brings it back.
+    o = await api.patchOnboarding("stories", { step: "x", skipped: false });
+    expect(o.total).toBe(11);
+    expect((await api.social("stories")).accounts.find((a) => a.platform === "x")?.skipped).toBe(false);
+    // Connected wins: a skip on a connected YouTube is dropped at once, and never comes back by itself.
+    o = await api.patchOnboarding("stories", { step: "youtube", skipped: true });
+    expect(o.steps.find((s) => s.step === "youtube")?.state).toBe("done");
+    expect(o.total).toBe(11);
+    expect(store.onboarding.skipped).not.toContain("youtube");
+    store.knobs.tokenDead = "youtube";
+    const dead = await api.checkSocial("stories", "youtube");
+    expect([dead.connectionStatus, dead.skipped]).toEqual(["needs_reconnect", false]);
+    expect((await api.dashboard("stories")).accounts.some((a) => a.platform === "youtube")).toBe(true);
+    // Connecting a skipped platform drops its skip too.
+    await api.patchOnboarding("stories", { step: "facebook", skipped: true });
+    store.knobs.connectResult = "connected";
+    await api.connectSocial("stories", "facebook");
+    expect((await api.social("stories")).accounts.find((a) => a.platform === "facebook")).toMatchObject({ connectionStatus: "connected", skipped: false });
+    expect(store.onboarding.skipped).not.toContain("facebook");
+  });
+
   it("a brand-new studio starts at 0 of 11 with nothing connected and no app picked", async () => {
     (window as unknown as { __cfStoriesMock: unknown }).__cfStoriesMock = { knobs: { fresh: true } };
     const fresh = mockStoriesApi();
@@ -351,7 +386,9 @@ describe("the dashboard", () => {
     expect(d.counts.needsYou).toBe(d.needsYou.length);
     // A stuck post, an account to connect again, an account warning, a story that needs a check.
     expect(d.needsYou.some((n) => n.publishingJobId && n.href.startsWith("/stories/review/"))).toBe(true);
-    expect(d.needsYou.some((n) => !n.publishingJobId && n.platform === "tiktok" && n.href === "/stories/connections")).toBe(true);
+    // An account's line opens that platform's own page on Social accounts.
+    expect(d.needsYou.some((n) => !n.publishingJobId && n.platform === "tiktok" && n.href === "/stories/connections/tiktok")).toBe(true);
+    for (const n of d.needsYou.filter((x) => !x.publishingJobId && x.platform)) expect(n.href).toBe(`/stories/connections/${n.platform}`);
     expect(d.needsYou.some((n) => n.platform === "instagram" && /Clip Factory may have lost Instagram/.test(n.sentence))).toBe(true);
     expect(d.needsYou.some((n) => n.storyId && !n.platform && /needs a check/.test(n.sentence))).toBe(true);
     for (const n of d.needsYou) expect(n.sentence.length).toBeGreaterThan(10);
@@ -367,6 +404,22 @@ describe("the dashboard", () => {
     expect(d.performance.views).toBe(posted.reduce((n, p) => n + (p.metrics?.views ?? 0), 0));
     expect(d.performance.posts).toBe(store.publishing.filter((p) => p.publishingStatus === "posted").length);
     expect(Date.parse(d.performance.lastAt!)).toBeGreaterThan(Date.now());
+  });
+
+  it("leaves out a platform the owner skipped: its account, its line and a stopped post there (the owner, 24 Nov)", async () => {
+    const before = await api.dashboard("stories");
+    expect(before.needsYou.some((n) => n.platform === "tiktok" && !n.publishingJobId)).toBe(true);
+    expect(before.needsYou.some((n) => n.platform === "tiktok" && n.publishingJobId)).toBe(true);
+    await api.patchOnboarding("stories", { step: "tiktok", skipped: true });
+    const d = await api.dashboard("stories");
+    expect(d.accounts.map((a) => a.platform)).toEqual(STORIES_PLATFORMS.filter((p) => p !== "tiktok"));
+    expect(d.needsYou.some((n) => n.platform === "tiktok")).toBe(false);
+    expect(d.counts.needsYou).toBe(d.needsYou.length);
+    expect(d.counts.needsYou).toBeLessThan(before.counts.needsYou);
+    // Every platform skipped (YouTube disconnected first: a connected one is never skipped): nothing to count.
+    await api.disconnectSocial("stories", "youtube");
+    for (const step of STORIES_PLATFORMS) await api.patchOnboarding("stories", { step, skipped: true });
+    expect((await api.dashboard("stories")).accounts).toEqual([]);
   });
 
   it("drops a stuck post once a later post of the same story on the same app went through", async () => {

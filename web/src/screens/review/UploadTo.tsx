@@ -1,7 +1,9 @@
 // Review › one clip › where it goes (docs/CONTRACTS.md §33): the "Upload to" chips (only places that are set up, any
-// number on). There are no other choices here: each place uses its own saved setup.
+// number on). There are no other choices here: each place uses its own saved setup. The "Set up X" hint never names a
+// skipped place.
 import { useId } from "react";
 import type { Platform } from "../../api/types.ts";
+import { useSession } from "../../app/session.tsx";
 import { Icon } from "../../components/Icon.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { A, ActGlyph } from "../../components/ui.tsx";
@@ -9,6 +11,7 @@ import { CR_SETTINGS } from "../../setup/contentrewards.ts";
 import { GreenButton, OpenButton } from "../campaigns/bits.tsx";
 import { PLATFORM_LABEL, PLATFORM_ORDER } from "../../lib/format.ts";
 import { useAction } from "../../lib/motion.ts";
+import { withoutSkipped } from "../../lib/setupTodo.ts";
 
 /** "X", "X and TikTok", "X, TikTok and Facebook". */
 export function nameList(list: readonly Platform[]): string {
@@ -16,11 +19,18 @@ export function nameList(list: readonly Platform[]): string {
   return names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : (names[0] ?? "");
 }
 
-/** The quiet line under the chips: which places are not set up yet (none when all five are). */
-export function notReadyLine(ready: readonly Platform[]): string | null {
-  const missing = PLATFORM_ORDER.filter((p) => !ready.includes(p));
+/** The places not set up yet that the hint may name: never a skipped one (he chose to leave it out). */
+export function missingPlaces(ready: readonly Platform[], skipped: readonly Platform[] = []): Platform[] {
+  return withoutSkipped(PLATFORM_ORDER.filter((p) => !ready.includes(p)), skipped);
+}
+
+/** The quiet line under the chips: which places are not set up yet (none when all five are, or the rest are skipped). */
+export function notReadyLine(ready: readonly Platform[], skipped: readonly Platform[] = []): string | null {
+  const missing = missingPlaces(ready, skipped);
   return missing.length ? `Set up ${nameList(missing)} to upload there too.` : null;
 }
+
+const NO_SKIPS: readonly Platform[] = [];
 
 /**
  * One soft-fill toggle chip per place that is set up, in STATS_ORDER. Any number can be on (so not a Glide bar); a
@@ -42,14 +52,16 @@ export function UploadToChips({
   campaign?: { lines: string[]; unlinked: Platform[]; onRelinked: (p: Platform) => unknown };
 }) {
   const id = useId();
-  const line = campaign ? null : notReadyLine(ready);
-  const firstMissing = PLATFORM_ORDER.find((p) => !ready.includes(p));
+  // The skipped places (Settings.setupSkipped): the hint never names one (rule S).
+  const skips = useSession().me?.settings.setupSkipped ?? NO_SKIPS;
+  const line = campaign ? null : notReadyLine(ready, skips);
+  const firstMissing = missingPlaces(ready, skips)[0];
   if (!ready.length && campaign)
     return (
       <div className="upload-to upload-to--none" data-help="upload-to">
         <p className="callout">
           <Icon name="alert" size={18} />
-          <span>None of the places this campaign pays for is set up yet. Set one up, then tap Upload.</span>
+          <span>This campaign&apos;s places aren&apos;t set up yet. Set one up first.</span>
         </p>
         <CampaignLines campaign={campaign} />
       </div>
@@ -62,7 +74,7 @@ export function UploadToChips({
           <span>Nothing is set up yet. Upload saves it, and it goes up once you set up a place.</span>
         </p>
         <A href="/settings/posting/setup" className="text-link">
-          Open Set up posting
+          Go to Set up posting
         </A>
       </div>
     );
@@ -86,7 +98,7 @@ export function UploadToChips({
   );
 }
 
-/** "Only places this campaign pays for.", the TikTok line, and "Add YouTube in Content Rewards first." */
+/** "Only places this campaign pays for.", the TikTok line, and "Add YouTube in Content Rewards first." with its two buttons. */
 function CampaignLines({ campaign }: { campaign: NonNullable<Parameters<typeof UploadToChips>[0]["campaign"]> }) {
   return (
     <div className="cr-places">
@@ -104,7 +116,6 @@ function CampaignLines({ campaign }: { campaign: NonNullable<Parameters<typeof U
               I added it
             </GreenButton>
           </div>
-          <p className="small">Then tap I added it. The next clip will go.</p>
         </div>
       ))}
     </div>

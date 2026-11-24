@@ -191,7 +191,7 @@ describe("every state of §41.1's table, with its single vermilion", () => {
     expect(host.querySelector<HTMLInputElement>("input[value='100']")!.checked).toBe(true);
     expect(host.querySelector<HTMLInputElement>("input[value='25']")!.checked).toBe(true);
     expect(text()).toContain("The places you set up.");
-    expect(text()).toContain("I skip campaigns Clip Factory can't make clips for, like ones that need their own sound or picture on the video.");
+    expect(text()).toContain("I skip campaigns that need their own sound or picture on the video.");
     // The first PATCH sends the whole want, with a change he made before it.
     await tap(host.querySelector<HTMLElement>("input[value='200']")!);
     await tap(button("Find campaigns for me"));
@@ -226,7 +226,7 @@ describe("every state of §41.1's table, with its single vermilion", () => {
     current = finder({ matches: [], looked: { campaigns: 120, pending: 646 } });
     await draw();
     expect(text()).toContain("No match yet. I've looked at 120 campaigns so far. I'll look at more later today.");
-    expect(text()).toContain("You don't need to do anything. I'll tell you when one matches.");
+    expect(text()).toContain("I'll tell you when one matches.");
     expect(main()).toHaveLength(0);
   });
 
@@ -687,7 +687,7 @@ describe("what you want and the rest of the page", () => {
   it("the quiet lines say who joins and when the rules are read", async () => {
     await draw();
     expect(text()).toContain("You join each campaign yourself on Content Rewards.");
-    expect(text()).toContain("Open campaigns show their rules only after you join. I read them right after.");
+    expect(text()).toContain("Rules show after you join. I read them then.");
     expect(button(/Look on Content Rewards yourself/).getAttribute("href")).toBe("https://contentrewards.com/c/discover");
   });
 

@@ -1,13 +1,14 @@
 // Settings › App & account › Ask (docs/CONTRACTS.md §28.3): turn on web search with a free Brave Search API key, take
 // the key away again, and see what Ask can do. The key goes once to the API, which keeps it in AWS Secrets Manager:
 // it is never shown again, never stored in the browser and never logged.
-import { useId, useState, type FormEvent } from "react";
+import { useId, useRef, useState, type FormEvent } from "react";
 import { Icon } from "../../components/Icon.tsx";
+import { useToast } from "../../components/Toasts.tsx";
 import { Button, Pill } from "../../components/ui.tsx";
 import { sounds } from "../../lib/sounds.ts";
 import { defaultAskApi } from "../../features/help/askApi.ts";
 import { defaultHelpClient } from "../../features/help/helpApi.ts";
-import { checkHelpStatus, setAssistantStatus, useAssistant } from "../../features/help/status.ts";
+import { assistantStatus, checkHelpStatus, setAssistantStatus, useAssistant } from "../../features/help/status.ts";
 import { Apple, Panel } from "./parts.tsx";
 
 export const SEARCH_KEY_URL = "https://brave.com/search/api/";
@@ -15,14 +16,20 @@ export const KEY_SAVED_TEXT = "Web search is on.";
 export const KEY_GONE_TEXT = "Web search is off. Ask answers from what it knows.";
 export const KEY_BAD_TEXT = "That key didn't work. Check you copied all of it.";
 export const KEY_TROUBLE_TEXT = "That didn't work this time. Try again in a minute.";
+export const KEY_REMOVED_TOAST = "Search key removed.";
 
 export function AskBranch() {
   const st = useAssistant();
   const keyId = useId();
   const [key, setKey] = useState("");
-  const [busy, setBusy] = useState<"save" | "remove" | null>(null);
+  const [busy, setBusy] = useState<"save" | null>(null);
   const [message, setMessage] = useState<{ tone: "ok" | "bad"; text: string } | null>(null);
-  const webOn = st.web === "on";
+  const toast = useToast();
+  // Take key away waits for its Undo (8 s, like every other delete): the card shows it off at once, and the key is
+  // only deleted when the time is up (or the page closes). Saving a new key meanwhile carries the delete out first.
+  const [taking, setTaking] = useState(false);
+  const takeAway = useRef<AbortController | null>(null);
+  const webOn = st.web === "on" && !taking;
 
   async function refresh() {
     try {
@@ -38,6 +45,13 @@ export function AskBranch() {
     if (!value || busy) return;
     setBusy("save");
     setMessage(null);
+    // He has moved on to a new key: the Take key away still waiting for its Undo happens now, before the new key is
+    // sent, so it can never take the new key away afterwards.
+    const waiting = takeAway.current;
+    if (waiting) {
+      waiting.abort();
+      await commitRemove(waiting);
+    }
     const result = await (await defaultAskApi()).putSearchKey(value);
     setBusy(null);
     if (result === "ok") {
@@ -51,19 +65,35 @@ export function AskBranch() {
     setMessage({ tone: "bad", text: result === "bad" ? KEY_BAD_TEXT : KEY_TROUBLE_TEXT });
   }
 
-  async function remove() {
-    if (busy) return;
-    setBusy("remove");
-    setMessage(null);
+  function remove() {
+    if (busy || taking) return;
+    const stop = new AbortController();
+    takeAway.current = stop;
+    setTaking(true);
+    setMessage({ tone: "ok", text: KEY_GONE_TEXT });
+    toast.undo(KEY_REMOVED_TOAST, {
+      signal: stop.signal,
+      onUndo: () => {
+        takeAway.current = null;
+        setTaking(false);
+        setMessage(null);
+      },
+      onCommit: () => void commitRemove(stop),
+    });
+  }
+
+  async function commitRemove(stop: AbortController) {
     const ok = await (await defaultAskApi()).deleteSearchKey();
-    setBusy(null);
+    if (takeAway.current === stop) takeAway.current = null;
     if (ok) {
-      setMessage({ tone: "ok", text: KEY_GONE_TEXT });
-      setAssistantStatus({ ...st, web: "no_key" });
+      // The status as it is now (it may have been read again in the 8 s), with web search off.
+      setAssistantStatus({ ...assistantStatus(), web: "no_key" });
+      setTaking(false);
       void refresh();
     } else {
+      setTaking(false);
       sounds.play("deny");
-      setMessage({ tone: "bad", text: KEY_TROUBLE_TEXT });
+      setMessage({ tone: "bad", text: `${KEY_TROUBLE_TEXT} Your key is still saved.` });
     }
   }
 
@@ -134,7 +164,7 @@ export function AskBranch() {
                 <Icon name="external" size={18} />
                 <span>Brave Search API</span>
               </a>
-              <Button size="sm" variant="glass" icon="x" loading={busy === "remove"} onClick={() => void remove()}>
+              <Button size="sm" variant="glass" icon="x" onClick={remove}>
                 Take key away
               </Button>
             </div>

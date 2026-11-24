@@ -1,6 +1,7 @@
 import type { AnimationEvent } from "react";
 import { api } from "../../api/index.ts";
-import type { Clip, Job } from "../../api/types.ts";
+import type { Clip, Job, Platform } from "../../api/types.ts";
+import { useSessionIfAny } from "../../app/session.tsx";
 import { Icon } from "../../components/Icon.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { A, Button, ErrorPanel, LinkButton, Progress, Skeleton, Swash } from "../../components/ui.tsx";
@@ -17,6 +18,8 @@ import { StreamersRow } from "./StreamersRow.tsx";
 import { CampaignsRow } from "./CampaignsRow.tsx";
 import { LiveLine } from "../jobs/LiveLine.tsx";
 import { jobPercent, jobProgress } from "../../lib/jobProgress.ts";
+
+const NO_SKIPS: readonly Platform[] = [];
 
 /** The most review clips Home sends to its row; the row draws as many as fit across (screens.css, `.home-row__cards`). */
 export const TEASERS_MAX = 6;
@@ -52,6 +55,8 @@ export async function loadHome(): Promise<HomeData> {
 
 export function Home() {
   const { data, error, setData, reload } = useLoad(loadHome, "", "home");
+  // The skipped places (Settings.setupSkipped): the money and followers tiles never remind him of them (rule S).
+  const skipped = useSessionIfAny()?.me?.settings.setupSkipped ?? NO_SKIPS;
   // Nothing loaded and the last try failed: say so and offer Try again, instead of skeletons forever (§12.4).
   const failed = !data && error ? error : null;
   // Deleted jobs (and their Review clips, when those go too) leave at once; Undo brings them back (§34.5).
@@ -94,10 +99,7 @@ export function Home() {
           <h1 className="hero__title" id="hero-title">
             Clips worth <Swash>posting</Swash>.
           </h1>
-          <p className="hero__lede">
-            Paste a link to a stream or a video. Clip Factory finds the best moments and makes short clips. You
-            pick the ones to upload.
-          </p>
+          <p className="hero__lede">Paste a link. Clip Factory makes short clips. You pick the best ones.</p>
           <NewJobForm />
         </div>
         <div className="hero__side">
@@ -116,8 +118,8 @@ export function Home() {
               ? "Could not check for new clips."
               : view
               ? view.review.length
-                ? `${plural(view.review.length, "clip")} waiting. Tap Go to Review to upload or throw away each one.`
-                : "Nothing to check yet. Paste a link above and tap Make clips."
+                ? `${plural(view.review.length, "clip")} waiting for you.`
+                : "Nothing yet. Paste a link above."
               : "Checking for new clips…"}
           </p>
           <LinkButton href="/review" size="sm" icon="review" iconAfter="chevronRight">
@@ -144,8 +146,8 @@ export function Home() {
         </div>
         <Stat views={data?.views ?? null} posts={data?.postsChecked ?? 0} unavailable={data !== null && data.views === null} />
       </section>
-      <MoneyTile />
-      <FollowersTile />
+      <MoneyTile skipped={skipped} />
+      <FollowersTile skipped={skipped} />
       <StreamersRow />
       <CampaignsRow />
     </div>
@@ -213,8 +215,7 @@ function WorkingCard({ jobs, failed, onRetry }: { jobs: Job[] | null; failed: bo
           {latest ? (
             <>
               {" "}
-              Last finished: <A href={`/jobs/${latest.jobId}`}>{latest.source.title ?? "your last job"}</A> with{" "}
-              {plural(latest.clipCount, "clip")}.
+              Last one: <A href={`/jobs/${latest.jobId}`}>{latest.source.title ?? "your last job"}</A>, {plural(latest.clipCount, "clip")}.
             </>
           ) : null}
         </p>
@@ -284,7 +285,7 @@ function Stat({ views, posts, unavailable }: { views: number | null; posts: numb
       <span className="stat__label">views after 48 hours</span>
       <span className="stat__sub">
         {unavailable
-          ? "Could not get the numbers right now. Come back to Home later to see them."
+          ? "Could not get the numbers right now. Check back later."
           : posts
             ? `across ${plural(posts, "post")}`
             : "Shown once clips are posted"}

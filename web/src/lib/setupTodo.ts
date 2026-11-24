@@ -53,9 +53,38 @@ export function todoVisible(rows: readonly TodoRow[] | null): boolean {
   return !!rows && rows.some((r) => !isFinished(r));
 }
 
-/** "2/5": how many rows are finished. */
+/** "2/5": how many rows are finished (ready or skipped). Reminders count with `listCount`, which leaves skips out. */
 export function todoCount(rows: readonly TodoRow[]): { finished: number; total: number } {
   return { finished: rows.filter(isFinished).length, total: rows.length };
+}
+
+/**
+ * The rows a reminder lists: every row that is not skipped. A skipped platform leaves the floating list and every
+ * count and nudge; only Settings › Posting › Set up posting (and its own step page) still shows it, with Un-skip.
+ */
+export function listRows(rows: readonly TodoRow[]): TodoRow[] {
+  return rows.filter((r) => r.state !== "skipped");
+}
+
+/** "3 of 4": the ready rows over the rows that are not skipped. All five skipped: `{ ready: 0, total: 0 }`. */
+export function listCount(rows: readonly TodoRow[]): { ready: number; total: number } {
+  const shown = listRows(rows);
+  return { ready: shown.filter((r) => r.state === "ready").length, total: shown.length };
+}
+
+/**
+ * A list of platforms without the skipped ones, in the list's own order. Pass only skips of platforms that are not
+ * ready (ready wins over a skip), or a list of places that are not ready, so a stale skip never hides a ready place.
+ */
+export function withoutSkipped<P extends Platform>(list: readonly P[], skipped: readonly Platform[] = []): P[] {
+  return list.filter((p) => !skipped.includes(p));
+}
+
+/** The skips that count now: confirmed skips of platforms that are not ready (ready wins over a skip). */
+export function activeSkips(setups: readonly PlatformSetup[] | null | undefined, skipped: readonly Platform[] = []): Platform[] {
+  return todoRows(setups, skipped)
+    .filter((r) => r.state === "skipped")
+    .map((r) => r.platform);
 }
 
 /** A confirmed skip: the platform joins the list (canonical order, no repeats). Asking alone changes nothing. */

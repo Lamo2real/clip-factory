@@ -155,7 +155,9 @@ def test_an_account_named_lamo_stories_reads_plainly() -> None:
     line = dashboard._account_sentence(
         {"platform": "tiktok", "connectionStatus": "needs_reconnect", "accountName": "Lamo Stories"}
     )
-    assert line == "This TikTok account (Lamo Stories) needs connecting again. Open Social accounts and tap Connect."
+    assert line == (
+        "This TikTok account (Lamo Stories) needs connecting again. Open Social accounts and tap Connect again."
+    )
 
 
 def test_the_posting_sentences_still_send_account_problems_to_social_accounts() -> None:
@@ -166,5 +168,6 @@ def test_the_posting_sentences_still_send_account_problems_to_social_accounts() 
             text = sentences.story_sentence(platform, kind, "Lamo Stories")
             assert sentences.CONNECTIONS in text, (platform, kind)
             job = {"error": text, "platform": platform}
-            assert dashboard._post_href(job, "01J0000000000000000000ST1") == dashboard.SOCIAL_ACCOUNTS
+            # that platform's own page on Social accounts
+            assert dashboard._post_href(job, "01J0000000000000000000ST1") == f"{dashboard.SOCIAL_ACCOUNTS}/{platform}"
     assert ws.PLATFORMS == PLATFORMS

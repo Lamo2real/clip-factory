@@ -776,6 +776,21 @@ def test_rules_read_pictures_and_never_block_fetch_without_a_key() -> None:
     assert "web_search" not in names
 
 
+def test_rules_leave_a_skipped_platform_out() -> None:
+    """Rule S (24 Nov): a platform he skipped is never suggested, never gets setup buttons and is not left to do."""
+    text = prompt.rules("anthropic.claude-opus-5-5")
+    rule = next(line for line in text.splitlines() if line.startswith("14. "))
+    assert 'APP STATE setup[] may say a platform is "skipped": he chose to leave it out.' in rule
+    assert "Never suggest setting it up" in rule
+    assert "never show its setup buttons" in rule
+    assert "leave it out of what is left to do" in rule
+    assert rule.endswith("unless he asks about that platform himself.")
+    # It comes after the other rules and before the APP STATE note, and keeps the no-dash rule.
+    assert text.index("13. A short question") < text.index("14. APP STATE") < text.index("The APP STATE arrives")
+    assert "–" not in rule
+    assert "—" not in rule
+
+
 def _recording_box(store: db.Store, **kw: Any) -> tuple[Toolbox, list[tuple[str, Any]]]:
     opened: list[tuple[str, Any]] = []
 

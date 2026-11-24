@@ -2,7 +2,8 @@
 // Clips", the verdict's headline, its lines and the buttons that fix what Clip Factory can fix. The API decides the
 // fit; the card only re-checks the four items that change while the owner types or taps (lib/crFit.ts). The block
 // never adds a second vermilion: when it has its own main button (a copy, new clips, the one thing to do first)
-// Upload steps back to glass; otherwise Upload is the screen's vermilion.
+// Upload steps back to glass; otherwise Upload is the screen's vermilion. A note asking to set up a skipped place
+// ("X pays too. Set it up…") is left out; a campaign that pays only there keeps its own blocker.
 import { useId, useState } from "react";
 import type { CampaignFit as Fit, FitItem, FitState, Platform } from "../../api/types.ts";
 import { Icon, type IconName } from "../../components/Icon.tsx";
@@ -20,7 +21,7 @@ export const KEEP_IT_HERE = "Keep it here. Upload turns on by itself when it can
 export const COULDNT_CHECK = "I couldn't check these:";
 export const READ_THEM = "I read them. They're OK";
 export const making = (name: string) => `Making a ${name} copy… It shows here in about 3 minutes.`;
-export const copyReady = (name: string) => `The ${name} copy is ready, right below. Upload the copy to earn money. You can throw this one away.`;
+export const copyReady = (name: string) => `The ${name} copy is ready, right below. Upload the copy to earn money.`;
 export const copyDone = (name: string) => `The ${name} copy is uploaded. You can throw this one away.`;
 
 /** The copy's line (null when there is none to show). */
@@ -37,6 +38,20 @@ const ICON: Record<FitState, IconName> = {
   note: "info",
   ok: "checkCircle",
 };
+
+/**
+ * The fit without the notes that ask him to set up a skipped place ("Instagram pays too. Set it up to earn there as
+ * well."): he chose to leave it out (rule S). Only those notes go: a place that is set up (its "Turn it on" note),
+ * a todo or a no (the campaign's own rule, such as "Set up YouTube first.") all stay.
+ */
+export function withoutSkippedNotes(fit: Fit, skipped: readonly Platform[]): Fit {
+  if (!skipped.length) return fit;
+  const hidden = (i: FitItem) =>
+    i.rule === "places" && i.state === "note" && i.fix?.kind === "open" && !!i.platform && skipped.includes(i.platform) && !fit.uploadPlaces.includes(i.platform);
+  return fit.items.some(hidden) ? { ...fit, items: fit.items.filter((i) => !hidden(i)) } : fit;
+}
+
+const NO_SKIPS: readonly Platform[] = [];
 
 /** One line of the block: an icon for its state (never colour alone) and the server's sentence. */
 export function FitLine({ item, text }: { item: FitItem; text?: string }) {
@@ -75,7 +90,7 @@ function FixLink({ item, primary, label }: { item: FitItem; primary: boolean; la
 
 export function CampaignFit({
   clipId,
-  fit,
+  fit: given,
   primary,
   copy = "none",
   onRemake,
@@ -84,6 +99,7 @@ export function CampaignFit({
   fixing = false,
   onBranded,
   onAdded,
+  skipped = NO_SKIPS,
 }: {
   clipId: string;
   /** The fit after the card's live check. */
@@ -100,8 +116,11 @@ export function CampaignFit({
   onBranded?: () => unknown;
   /** "I added it" for a place Content Rewards doesn't know yet (Review only: the same relinked PATCH as its row). */
   onAdded?: (platform: Platform) => unknown;
+  /** The skipped places (Settings.setupSkipped): their "Set it up" notes are left out. */
+  skipped?: readonly Platform[];
 }) {
   const id = useId();
+  const fit = withoutSkippedNotes(given, skipped);
   const name = fit.campaignName;
   const oks = fit.items.filter((i) => i.state === "ok");
   const checks = fit.items.filter((i) => i.state === "check");

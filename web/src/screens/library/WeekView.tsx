@@ -203,15 +203,25 @@ function WeekBody({ week, isCurrent }: { week: string; isCurrent: boolean }) {
   // Leaving the page with unsaved stars: save them now rather than drop them.
   const saveRef = useRef(save);
   saveRef.current = save;
-  useEffect(
-    () => () => {
-      if (pending.current !== null) {
-        clearTimeout(timer.current);
-        void saveRef.current();
-      }
-    },
-    [],
-  );
+  useEffect(() => {
+    const flush = () => {
+      if (pending.current === null) return;
+      clearTimeout(timer.current);
+      void saveRef.current();
+    };
+    // Closing the tab, reloading or switching away within the 800 ms: the page may never come back to save them, so
+    // they go now (the PUT is sent with keepalive, so it still lands after the page is gone).
+    const hidden = () => {
+      if (document.visibilityState === "hidden") flush();
+    };
+    window.addEventListener("pagehide", flush);
+    document.addEventListener("visibilitychange", hidden);
+    return () => {
+      window.removeEventListener("pagehide", flush);
+      document.removeEventListener("visibilitychange", hidden);
+      flush();
+    };
+  }, []);
 
   /** Stars or unstars a clip; false when it could not (the toast says why). */
   function toggle(clipId: string): boolean {
@@ -249,7 +259,7 @@ function WeekBody({ week, isCurrent }: { week: string; isCurrent: boolean }) {
             </LinkButton>
           }
         >
-          {isCurrent ? "No clips this week yet. Make clips on Home." : "Nothing was posted that week. Tap the arrows to look at another week."}
+          {isCurrent ? "Make clips on Home." : "Tap the arrows to see another week."}
         </Empty>
       ) : null}
       {data && data.clips.length > 0 ? (

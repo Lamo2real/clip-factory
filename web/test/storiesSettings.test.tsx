@@ -9,7 +9,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MockStore } from "../src/stories/api/mock/store.ts";
-import type { ProviderStatus, StoriesApi, StoriesConfig, Workspace } from "../src/stories/api/types.ts";
+import type { Onboarding, OnboardStep, ProviderStatus, StoriesApi, StoriesConfig, Workspace } from "../src/stories/api/types.ts";
 import { ART_PICKED } from "../src/stories/preview/art.tsx";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -27,6 +27,7 @@ const { ToastProvider } = await import("../src/components/Toasts.tsx");
 const { SettingsScreen } = await import("../src/stories/screens/Settings.tsx");
 const { DEFAULTS } = await import("../src/stories/settings/data.ts");
 const { ApiError } = await import("../src/api/errors.ts");
+const { forgetOnboarding } = await import("../src/stories/ui.tsx");
 
 let root: Root;
 let host: HTMLElement;
@@ -35,6 +36,8 @@ let workspace: Workspace;
 let providers: ProviderStatus[];
 /** A test where no maker takes a key (the ElevenLabs row is left out). */
 let noKeyedMakers = false;
+/** The setup a test answers (none: GET …/onboarding is not in the test, as before). */
+let onboarding: Onboarding | null = null;
 let calls: { name: string; args: unknown[] }[];
 /** Holds the next answers of a route until the test lets them go (a slow connection). */
 const gates = new Map<string, Promise<void>>();
@@ -101,6 +104,7 @@ function fakeApi(): StoriesApi {
     },
     providers: async () => structuredClone([...makers(), ...providers]),
     getTask: async (_ws, id) => structuredClone(store.tasks.find((t) => t.taskId === id)!),
+    getOnboarding: async () => (onboarding ? structuredClone(onboarding) : Promise.reject(new Error("not in this test: getOnboarding"))),
   };
   const all = { ...parts, ...own } as unknown as Record<string, (...a: unknown[]) => Promise<unknown>>;
   return new Proxy(all, {
@@ -201,12 +205,39 @@ describe("the page", () => {
     expect(hero.querySelector("a.st-pill.st-stg-head__setup-go")?.getAttribute("href")).toBe("/stories/setup");
     const head = $(".st-stg-section__head.st-plate")!;
     expect(head.querySelector("h2")?.textContent).toBe("Storage and production");
-    expect(head.querySelector(".st-stg-bar")?.textContent).toContain("Clips Funded keeps its files in its own folder, apart from Clip Factory's.");
+    expect(head.querySelector(".st-stg-bar")?.textContent).toContain("Your files stay apart from Clip Factory's.");
     expect(head.querySelector(".st-stg-saved")).not.toBeNull();
     // One plate above the first card: the bar has none of its own there.
     expect($$(".st-stg-section .st-plate")).toEqual([head]);
     await open("skills");
     expect($(".st-stg-section__head .st-stg-bar")).toBeNull();
+  });
+
+  it("Open setup again counts the steps left, never a platform the owner skipped (the owner, 24 Nov)", async () => {
+    const steps = (states: Partial<Record<OnboardStep, "done" | "skipped" | "todo">>): Onboarding => {
+      const all: OnboardStep[] = ["ai", "model", "effort", "video", "agents", "instagram", "tiktok", "youtube", "facebook", "x", "done"];
+      const list = all.map((step) => ({ step, label: step, state: states[step] ?? ("done" as const) }));
+      return { steps: list, done: list.filter((s) => s.state === "done").length, total: 11, finishedAt: "2026-11-24T00:00:00.000Z" };
+    };
+    const left = async (o: Onboarding) => {
+      onboarding = o;
+      forgetOnboarding();
+      // a fresh page each time, so the setup is read again
+      act(() => root.unmount());
+      root = createRoot(host);
+      await open("ai");
+      return $(".st-stg-head__setup-left")?.textContent ?? null;
+    };
+    try {
+      // The owner's case: only X was left, and he skipped it: nothing is left.
+      expect(await left(steps({ x: "skipped" }))).toBeNull();
+      expect(await left(steps({ x: "skipped", tiktok: "skipped", video: "skipped" }))).toBe("1 step left");
+      expect(await left(steps({ x: "todo", tiktok: "skipped", video: "skipped" }))).toBe("2 steps left");
+      expect($("a.st-pill.st-stg-head__setup-go")?.getAttribute("href")).toBe("/stories/setup");
+    } finally {
+      onboarding = null;
+      forgetOnboarding();
+    }
   });
 
   it("gives Look its own page: the three backgrounds under their own pill and head, no longer at the end of Storage", async () => {
@@ -406,6 +437,9 @@ describe("AI", () => {
     expect(host.innerHTML).not.toContain("0123456789abcdef");
     expect(after.querySelector("input")).toBeNull();
     await click(byText("button", "Remove the saved key", after));
+    // It asks first (kid-proof): nothing is removed until Yes.
+    expect(called("deleteProviderKey")).toHaveLength(0);
+    await click(byText("button", "Yes, remove the key", byText(".st-stg-keyrow", /Acme Motion/, card("Providers"))));
     expect(called("deleteProviderKey").at(-1)?.args).toEqual(["stories", "acme-motion"]);
     expect(byText(".st-stg-keyrow", /Acme Motion/, card("Providers")).textContent).toContain("Paste your Acme Motion key to use it.");
   });
@@ -414,12 +448,13 @@ describe("AI", () => {
     providers.push(aiPart.keyedHostStatus(store, "anthropic"), aiPart.keyedHostStatus(store, "openai_compatible"));
     await open("ai");
     const names = () => $$(".st-stg-keyrow", card("Providers")).map((r) => r.querySelector(".st-stg-keyrow__name")?.textContent);
-    expect(names()).toEqual(["ElevenLabs", "Anthropic API", "OpenAI-compatible API"]);
+    // On the surface without the word "API" (the owner, 23 Nov: kid words).
+    expect(names()).toEqual(["ElevenLabs", "Anthropic", "OpenAI-compatible"]);
     // An OpenAI-compatible key is for one address (the API's provider_keys, §45.37 G4): with no model on it yet, its
     // address goes with the key, and the row names it.
     for (const [label, id, key, address, saved] of [
-      ["Anthropic API", "anthropic", "sk-ant-api03-0123456789abcdefWXYZ", null, "Key saved · ends WXYZ."],
-      ["OpenAI-compatible API", "openai_compatible", "sk-proj-0123456789abcdef9k2q", "https://api.example.com/v1", "Key saved for api.example.com · ends 9k2q."],
+      ["Anthropic", "anthropic", "sk-ant-api03-0123456789abcdefWXYZ", null, "Key saved · ends WXYZ."],
+      ["OpenAI-compatible", "openai_compatible", "sk-proj-0123456789abcdef9k2q", "https://api.example.com/v1", "Key saved for api.example.com · ends 9k2q."],
     ] as const) {
       const row = byText(".st-stg-keyrow", new RegExp(label), card("Providers"));
       expect(row.textContent).toContain(`Paste your ${label} key to use it.`);
@@ -512,7 +547,7 @@ describe("Skills", () => {
     await click(byText("button", "Open", cards[0]!));
     await settle();
     expect($(".st-stg-pre")?.textContent).toMatch(/^---\nname: nonverbal-storytelling/);
-    expect(host.textContent).toContain("can't be changed");
+    expect(host.textContent).toContain("so its words can't change");
     expect($$("button", cards[0]!).some((b) => b.textContent?.includes("Change it"))).toBe(false);
     expect($$("button", cards[0]!).some((b) => b.textContent?.includes("Delete"))).toBe(false);
   });
@@ -629,7 +664,9 @@ describe("Video", () => {
     // said from this page (§45.36 E17): "Pick Built-in animation above", never "in Settings › Video".
     const details = $<HTMLElement>('[data-maker-model="luma-ray2"]', card("Video maker"))!;
     expect(details.textContent).toContain("Luma AI Ray2");
-    expect(details.textContent).toContain("Luma AI on Amazon Bedrock · Runs in the US (Oregon)");
+    expect(details.textContent).toContain("Luma AI on Amazon Bedrock · ");
+    // Where it runs, said once (its note says it).
+    expect(details.textContent?.split("Runs in the US (Oregon)")).toHaveLength(2);
     expect(details.textContent).toContain("No price known.");
     expect($$("[role=status]", card("Video maker")).map((n) => n.textContent)).toContain(LUMA_NOT_READY.replace(" in Settings › Video", " above"));
     expect(card("Video maker").textContent).not.toContain("in Settings › Video");
@@ -695,7 +732,7 @@ describe("Video", () => {
     await open("video");
     const video = card("Video maker");
     expect(video.textContent).toContain("Ended by Amazon on 30 Sep 2026.");
-    expect(video.textContent).toContain("new videos stop until you pick another video maker");
+    expect(video.textContent).toContain("New videos stop until you pick another video maker");
     expect(called("patchWorkspace")).toHaveLength(0);
     // Try it is Luma AI Ray2's now, never Nova Reel's.
     expect($('[data-provider="nova-reel"]')).toBeNull();
@@ -777,7 +814,7 @@ describe("Video", () => {
       ["16:9 wide", null],
     ]);
     expect(shapes[0]!.textContent).toContain("For Shorts, Reels and TikTok");
-    expect(card("Shape and size").textContent).toContain("Shorts, Reels and TikTok want 9:16.");
+    expect(card("Shape and size").textContent).toContain("Change it per video in Production › New.");
     const sizes = () => $$("[role=radio]", group("Size of the video")).map((r) => r.querySelector(".st-stg-pick__label")?.textContent);
     expect(sizes()).toEqual(["1080 × 1920", "720 × 1280"]);
     expect(host.textContent).toContain("30 frames a second (30 fps)");
@@ -850,6 +887,12 @@ describe("Video", () => {
     expect(byText("button", "Remove the saved key", row())).toBeTruthy();
     expect(byText("button", "Paste a new key", row())).toBeTruthy();
     await click(byText("button", "Remove the saved key", row()));
+    // "No, keep it" keeps the key; "Yes, remove the key" removes it.
+    expect(row().textContent).toContain("Remove Acme Motion's key?");
+    await click(byText("button", "No, keep it", row()));
+    expect(row().textContent).toContain("Key saved · ends 4f2a.");
+    await click(byText("button", "Remove the saved key", row()));
+    await click(byText("button", "Yes, remove the key", row()));
     expect(row().textContent).not.toContain("Remove the saved key");
     expect(row().textContent).toContain("Paste your Acme Motion key to use it.");
   });
@@ -1172,7 +1215,7 @@ describe("Storage and production (§45.34)", () => {
     expect(called("patchWorkspace").at(-1)?.args[1]).toMatchObject({ configuration: { production: { extraFormats: ["mov"] } } });
     await click(byText("[role=switch]", /On|Off/, byText(".st-stg-switchrow", /Put the captions into the picture/, file)));
     expect(byText(".st-stg-switchrow", /Put the captions into the picture/, file).textContent).toContain(
-      "Only the caption words are left out of the picture. The speech bubbles and the safety end card always stay in.",
+      "Only the captions are left out. Speech bubbles and the safety end card always stay in.",
     );
   });
 

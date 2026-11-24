@@ -48,7 +48,12 @@ async function settle(times = 4) {
   for (let i = 0; i < times; i++) await act(async () => await new Promise((r) => setTimeout(r, 0)));
 }
 const $$ = <T extends Element = HTMLElement>(sel: string, from: ParentNode = host) => Array.from(from.querySelectorAll<T>(sel));
-const button = (name: string) => $$<HTMLButtonElement>("button").find((b) => b.textContent?.trim() === name)!;
+/** A step in the step list (its number, its name, and "(done)" for screen readers): the way to each step. */
+function stepItem(name: string): HTMLButtonElement {
+  const b = Array.from(host.querySelectorAll<HTMLButtonElement>(".st-steps__item")).find((x) => x.querySelector(".st-steps__label")?.textContent === name);
+  if (!b) throw new Error(`no step ${name}`);
+  return b;
+}
 async function click(el: Element) {
   await act(async () => el.dispatchEvent(new MouseEvent("click", { bubbles: true })));
   await settle(6);
@@ -76,7 +81,7 @@ describe("step 4 (§45.35 D21)", () => {
   it("says the built-in animator draws tall, square or wide videos at 30 frames a second, never only 9:16", async () => {
     expect(BUILTIN_LINE).toBe("On. Cartoons drawn right here, tall, square or wide, 30 frames a second.");
     await start({ fresh: true });
-    await click(button("Pick how videos are made"));
+    await click(stepItem("Pick how videos are made"));
     const builtin = $$("[role=radio]").find((r) => r.textContent?.includes("Built-in animation"))!;
     expect(builtin.textContent).toContain(BUILTIN_LINE);
     expect(builtin.textContent).not.toContain("9:16");
@@ -109,7 +114,7 @@ describe("Lamo Clips' own account (§45.35 D11)", () => {
     expect(why.textContent).toContain(sameAsClipsLine("x"));
     // Its step says it too, once: the card reads the account as the page shows it (Clip Factory's own) and says why in
     // the API's words; the step around it does not say it again.
-    await click(button("Connect X"));
+    await click(stepItem("Connect X"));
     const step = host.querySelector(".st-setup__body")!;
     const card = step.querySelector(".st-conn")!;
     expect(card.textContent).toMatch(/This is Clip Factory's (own account|account now)\./);
@@ -124,5 +129,32 @@ describe("Lamo Clips' own account (§45.35 D11)", () => {
     });
     expect(host.querySelector(".st-left__why")).toBeNull();
     expect($$(".st-steps__item").find((b) => b.textContent?.includes("Connect X"))!.className).toContain("is-done");
+  });
+});
+
+describe("a platform the owner skipped (the owner, 24 Nov)", () => {
+  it("is not in What is left, even when its account is Clip Factory's own; its step says Skipped and offers Un-skip", async () => {
+    // The seed's X is Clip Factory's own (same_as_clips), and the owner skipped it.
+    await start({}, (s) => {
+      s.onboarding.skipped = ["x"];
+    });
+    expect(host.querySelector(".st-left__why")).toBeNull();
+    const x = stepItem("Connect X");
+    expect(x.className).toContain("is-skipped");
+    expect(x.querySelector(".st-steps__skipped")?.textContent).toBe("Skipped");
+    expect(host.querySelector(".st-setup__head .st-ring")?.getAttribute("aria-label")).toMatch(/ of 10 done/);
+    // It opens at the first step still to do, never on the skipped platform.
+    expect(host.querySelector("#st-setup-step")?.textContent).not.toBe("Connect X");
+    await click(x);
+    expect(host.querySelector(".st-setup__count .st-chip")?.textContent).toBe("Skipped");
+    const foot = () => $$("button", host.querySelector(".st-setup__foot")!).map((b) => b.textContent?.trim());
+    expect(foot()).toContain("Un-skip");
+    expect(foot()).not.toContain("Skip for now");
+    // Un-skip: it is back, with its line under What is left again.
+    await click($$("button", host.querySelector(".st-setup__foot")!).find((b) => b.textContent?.trim() === "Un-skip")!);
+    expect(store.onboarding.skipped).toEqual([]);
+    expect(host.querySelector(".st-left__why")?.textContent).toContain(sameAsClipsLine("x"));
+    expect(stepItem("Connect X").querySelector(".st-steps__skipped")).toBeNull();
+    expect(foot()).toContain("Skip for now");
   });
 });

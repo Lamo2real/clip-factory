@@ -341,7 +341,8 @@
 @container (min-width: 760px) {
   .st-s-ideaedit:has(> .st-s-ideaedit__full) > .st-s-ideaedit__basics {
     position: sticky;
-    top: var(--st-space-4);
+    /* Below an installed iPad app's status bar, which the page runs under (--top-safe). */
+    top: calc(var(--top-safe, 0px) + var(--st-space-4));
   }
 }
 

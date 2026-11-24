@@ -337,7 +337,7 @@ Replaces the publish queue, DLQ, publisher, Scheduler group/role and perf-check.
   itself; `similarity = round(1 - distance, 2)`; BatchGetItem the hits' Clip items (drop missing/declined) to add a
   presigned `coverUrl`; return at most 5 as `SimilarClip[]` sorted by similarity. Vector errors → `{"clips": []}` + log.
 * **Web:** Review and Library show a "Like clips that did well" strip (cover, hook, views) under the clip, hidden when
-  empty; mock mode has fixtures.
+  empty; each tile is a link to `/clips/{clipId}`; mock mode has fixtures.
 
 ### 14.7 Decision: OpenSearch is not deployed
 

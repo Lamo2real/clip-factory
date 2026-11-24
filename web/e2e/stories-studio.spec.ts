@@ -204,13 +204,21 @@ test("reference videos in a new video, and the model notes of a video, fit and f
     const tile = page.locator(".st-s-reftile", { hasText: "The banana slip" });
     await expect(tile.or(page.getByText("Your reference videos could not load."))).toBeVisible();
     // The list comes from the references part (builder H); until it is built the page says so and never blocks.
-    if (await tile.isVisible()) {
+    const picked = await tile.isVisible();
+    if (picked) {
       await tile.click();
       await expect(tile).toHaveAttribute("aria-pressed", "true");
       await expect(page.locator(".st-s-reftile", { hasText: "Snow day sketch" })).toHaveAttribute("aria-disabled", "true");
     } else test.info().annotations.push({ type: "note", description: "The mock's references part is not built here yet." });
     expect(await audit(page, `New video with references ${w}`, touch && w < 768)).toEqual([]);
     await go(page, `/stories/production/${S.failed}`);
+    if (picked) {
+      // The pick is not made into a video yet: leaving asks first.
+      const leave = page.getByRole("dialog", { name: "Leave without saving?" });
+      await expect(leave).toBeVisible();
+      await leave.getByRole("button", { name: "Leave" }).click();
+      await expect(page).toHaveURL(new RegExp(`/stories/production/${S.failed}$`));
+    }
     await page.locator(".st-s-details__sum", { hasText: "Production details" }).click();
     await expect(page.locator(".st-s-used__row").first()).toBeVisible();
     expect(await audit(page, `A stopped video, details open ${w}`, touch && w < 768)).toEqual([]);
@@ -396,7 +404,9 @@ test("round 3, Review: Next run, Write them again beside the saved words, the pl
     await ctx.addInitScript(() => ((window as unknown as { __cfStoriesMock?: unknown }).__cfStoriesMock = { knobs: { extraFormats: ["webm"], taskSeconds: 1 } }));
     const page = await ctx.newPage();
     await open(page, `/stories/review/${S.review}`);
-    await expect(page.locator(".st-s-decide .st-s-nextrun")).toHaveText(/^Next run: Claude .+ · .+$/);
+    // Said once: "Remakes use" in the decision names the model, and Next run is in How it was made.
+    await expect(page.locator(".st-s-decide .st-s-nextrun")).toHaveCount(0);
+    await expect(page.locator(".st-s-made .st-s-nextrun")).toHaveText(/^Next run: Claude .+ · .+$/);
     // The place's own sounds, labelled, from each scene's start.
     await expect(page.locator(".st-s-sfx__row.is-place").first()).toContainText("Sound (whole scene)");
     // Write them again: the draft beside the saved words, saved only by Use these.
@@ -850,7 +860,9 @@ test("round 5: the play badge leaves a square video's caption clear; a full idea
   });
   const item = page.locator(".st-needs-list__item", { hasText: "needs connecting again. Open Clips Funded › Social accounts" }).first();
   await expect(item).toBeVisible({ timeout: 20_000 });
-  await expect(item.locator("a").last()).toHaveAttribute("href", "/stories/connections");
+  // that platform's own page on Social accounts
+  await expect(item.locator("a").last()).toHaveAttribute("href", "/stories/connections/tiktok");
+  await expect(item.locator("a").last()).toHaveText("Fix it");
   await ctx.close();
 });
 

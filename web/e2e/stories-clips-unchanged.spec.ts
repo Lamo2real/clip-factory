@@ -155,7 +155,9 @@ test.describe("with Lamo Stories switched off", () => {
       await page.context().close();
     });
 
-  for (const path of ["/stories", "/stories/ideas", "/stories/connections?platform=youtube&result=connected&ws=stories"])
+  // The OAuth landing and a platform's own page under Social accounts too: with Lamo Stories off they are Clip Factory's
+  // own "page does not exist", nothing more.
+  for (const path of ["/stories", "/stories/ideas", "/stories/connections?platform=youtube&result=connected&ws=stories", "/stories/connections/youtube"])
     test(`${path} is Lamo Clips' own "page does not exist"`, async ({ browser }) => {
       const page = await open(browser, { w: 1280, h: 800 }, false, path);
       await expect(page.getByText("This page does not exist")).toBeVisible();

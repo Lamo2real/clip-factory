@@ -244,3 +244,27 @@ describe("the new Upload styles (§33)", () => {
     expect(ours).not.toMatch(/outline\s*:(?!\s*none)/);
   });
 });
+
+describe("the Set up hint under the chips never names a skipped place (rule S)", () => {
+  it("names every place that is not set up when nothing is skipped", async () => {
+    const { missingPlaces, notReadyLine } = await import("../src/screens/review/UploadTo.tsx");
+    expect(notReadyLine(["youtube", "tiktok", "instagram", "facebook"])).toBe("Set up X to upload there too.");
+    expect(notReadyLine(["youtube", "tiktok"])).toBe("Set up Instagram, Facebook and X to upload there too.");
+    expect(missingPlaces(["youtube", "tiktok"])).toEqual(["instagram", "facebook", "x"]);
+    expect(notReadyLine(["youtube", "tiktok", "instagram", "facebook", "x"])).toBeNull();
+  });
+
+  it("leaves skipped places out, and says nothing when only skipped places are missing", async () => {
+    const { missingPlaces, notReadyLine } = await import("../src/screens/review/UploadTo.tsx");
+    // The owner's case: four set up and X skipped.
+    expect(notReadyLine(["youtube", "tiktok", "instagram", "facebook"], ["x"])).toBeNull();
+    expect(missingPlaces(["youtube", "tiktok", "instagram", "facebook"], ["x"])).toEqual([]);
+    // Two missing, one skipped: only the other is named, and it is the one the hint opens.
+    expect(notReadyLine(["youtube", "tiktok", "instagram"], ["x"])).toBe("Set up Facebook to upload there too.");
+    expect(missingPlaces(["youtube", "tiktok", "instagram"], ["x"])).toEqual(["facebook"]);
+    expect(notReadyLine(["youtube"], ["tiktok", "facebook"])).toBe("Set up Instagram and X to upload there too.");
+    expect(notReadyLine(["youtube"], ["tiktok", "facebook"])).not.toMatch(/TikTok|Facebook/);
+    // A stale skip of a place that is set up changes nothing: it is not missing.
+    expect(notReadyLine(["youtube", "tiktok", "instagram", "facebook"], ["youtube"])).toBe("Set up X to upload there too.");
+  });
+});

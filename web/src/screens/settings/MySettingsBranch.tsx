@@ -8,7 +8,7 @@ import type { PostPreset, XReplies, YoutubePrivacy } from "../../api/types.ts";
 import { useSession } from "../../app/session.tsx";
 import { Dropdown } from "../../components/Dropdown.tsx";
 import { Icon } from "../../components/Icon.tsx";
-import { Segmented, Skeleton, Toggle } from "../../components/ui.tsx";
+import { Pill, Segmented, Skeleton, Toggle } from "../../components/ui.tsx";
 import { presetOf, X_REPLIES_LABEL, YOUTUBE_CATEGORIES, YT_WHO } from "../../lib/preset.ts";
 import { PRIVACY_LABEL } from "../../lib/tiktokChoices.ts";
 import { macOn } from "../../lib/tiktokMac.ts";
@@ -17,6 +17,18 @@ import { useSetup } from "./setup/useSetup.ts";
 import { Apple, Panel } from "./parts.tsx";
 
 const TIKTOK_ORDER = ["PUBLIC_TO_EVERYONE", "FOLLOWER_OF_CREATOR", "MUTUAL_FOLLOW_FRIENDS", "SELF_ONLY"];
+
+/** TikTok's line under its switches: one short line, and the paid-partnership how-to in its fold. */
+export const COMMERCIAL_OFF = "Commercial content: off.";
+export const OWN_TAP = "TikTok wants your own tap, so tap Use my settings on each clip.";
+export const MAC_COMMERCIAL = "Commercial content: off. Your Mac posts TikTok with these.";
+export const PAID_STEPS = ["Tick Branded content in that clip's TikTok row."];
+export const MAC_PAID_STEPS = [
+  "Your Mac can't post those yet.",
+  "Untick TikTok on that clip.",
+  "Post it in the TikTok app, with its label.",
+  "Don't use Post with my Mac or Send these to my Mac for it.",
+];
 
 export function MySettingsBranch() {
   const { me, saveSettings } = useSession();
@@ -48,7 +60,7 @@ export function MySettingsBranch() {
               Tap <strong>Use my settings</strong> on a clip to put these on.
             </>
           )}{" "}
-          Whether a clip earns money is up to each app (like YouTube&apos;s Partner Program or TikTok&apos;s Creator Rewards), not these switches.
+          Each app decides if a clip earns money. These switches don&apos;t.
         </span>
       </p>
       <Apple id="my-settings-youtube" wide>
@@ -74,7 +86,7 @@ export function MySettingsBranch() {
           <Toggle label="Let other sites show it" checked={yt.embeddable} onChange={(v) => save("youtube", { embeddable: v })} />
           <p className="place-row__fixed">
             <Icon name="lock" size={16} />
-            <span>Made for kids: No. My settings never mark a clip as made for kids.</span>
+            <span>Made for kids: always No.</span>
           </p>
         </div>
       </Apple>
@@ -93,20 +105,30 @@ export function MySettingsBranch() {
           <Toggle label="Comments" checked={tt.comments} onChange={(v) => save("tiktok", { comments: v })} />
           <Toggle label="Duet" checked={tt.duet} onChange={(v) => save("tiktok", { duet: v })} />
           <Toggle label="Stitch" checked={tt.stitch} onChange={(v) => save("tiktok", { stitch: v })} />
-          <p className="field__hint">
-            {macPosts
-              ? "Commercial content is off. Your Mac posts TikTok with these. Paid partnerships can't go through your Mac yet: untick TikTok for that clip, then post it in the TikTok app with its label, not with Post with my Mac or Send these to my Mac."
-              : "Commercial content is off. For a paid partnership, tick Branded content in the TikTok row of that clip. TikTok wants your own tap on each clip, so tap Use my settings there."}
-          </p>
+          <p className="field__hint">{macPosts ? MAC_COMMERCIAL : `${COMMERCIAL_OFF} ${OWN_TAP}`}</p>
+          {/* Only for a paid partnership: the how-to waits in one fold. */}
+          <details className="cr-fold" data-my="paid">
+            <summary className="cr-fold__q">
+              <Icon name="info" size={18} />
+              <span>Paid partnership?</span>
+              <Icon name="chevronRight" size={18} className="icon cr-fold__chev act-turn" />
+            </summary>
+            <div className="cr-fold__body">
+              <ul className="gstep__say">
+                {(macPosts ? MAC_PAID_STEPS : PAID_STEPS).map((line) => (
+                  <li key={line}>{line}</li>
+                ))}
+              </ul>
+            </div>
+          </details>
         </div>
       </Apple>
       <Apple id="my-settings-instagram" wide>
         <Toggle label="Also show it in my feed" checked={preset.instagram.shareToFeed} onChange={(v) => save("instagram", { shareToFeed: v })} />
       </Apple>
-      <Apple id="my-settings-facebook" wide>
-        <p className="field__hint">Reels on your Facebook Page are public: everyone can see them.</p>
-      </Apple>
-      <Apple id="my-settings-x" wide>
+      {/* Its leaf says it all: Reels on a Page are public, nothing to pick. */}
+      <Apple id="my-settings-facebook" wide />
+      <Apple id="my-settings-x" wide aside={xReady ? null : <Pill tone="neutral">Not set up yet</Pill>}>
         <div className="preset-page__controls">
           <span className="field__label" id="my-x-replies">
             Who can reply
@@ -118,7 +140,6 @@ export function MySettingsBranch() {
             options={(Object.keys(X_REPLIES_LABEL) as XReplies[]).map((v) => ({ value: v, label: X_REPLIES_LABEL[v] }))}
             onChange={(v) => save("x", { replies: v as XReplies })}
           />
-          {xReady ? null : <p className="field__hint">X is not set up yet. This is used once it is.</p>}
         </div>
       </Apple>
     </Panel>

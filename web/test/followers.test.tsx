@@ -17,6 +17,8 @@ const { FollowersTile } = await import("../src/screens/home/FollowersTile.tsx");
 const { ClipFollowers } = await import("../src/screens/clip/ClipFollowers.tsx");
 const { forgetLoaded } = await import("../src/lib/hooks.ts");
 const { STATS_ORDER } = await import("../src/lib/metrics.ts");
+const { moneyTileLine } = await import("../src/screens/home/MoneyTile.tsx");
+const { buildMoneyView } = await import("../src/api/mock/money.ts");
 
 const T = "2026-11-20T10:00:00.000Z";
 const NOW = Date.parse("2026-11-20T13:00:00.000Z");
@@ -177,6 +179,48 @@ describe("rendered", () => {
     expect(rows[0]!.textContent).toContain("1.2K subscribers");
     expect(rows[1]!.textContent).toContain("512 followers");
     expect(host.querySelector(".followers-tile__off")!.textContent).toBe("Not connected: TikTok, Facebook and X.");
+  });
+
+  it("a skipped place is not named as not connected (rule S)", async () => {
+    current = { getFollowers: async () => buildFollowers("owner") };
+    await act(async () => root.render(<FollowersTile skipped={["x"]} />));
+    expect(host.querySelector(".followers-tile__off")!.textContent).toBe("Not connected: TikTok and Facebook.");
+    expect(host.querySelector<HTMLElement>(".followers-tile__off")!.dataset.off).toBe("tiktok,facebook");
+    expect([...host.querySelectorAll<HTMLElement>(".followers-tile__row")].map((r) => r.dataset.platform)).toEqual(["youtube", "instagram"]);
+    // Every app that is off is skipped: the connected ones still show, with no not-connected line at all.
+    await act(async () => root.render(<FollowersTile skipped={["tiktok", "facebook", "x"]} />));
+    expect(host.querySelector(".followers-tile__off")).toBeNull();
+    expect(host.querySelectorAll(".followers-tile__row")).toHaveLength(2);
+    expect(f.notConnected(buildFollowers("owner").platforms, ["x"])).toEqual(["tiktok", "facebook"]);
+    expect(f.notConnected(buildFollowers("owner").platforms)).toEqual(["tiktok", "facebook", "x"]);
+  });
+
+  it("nothing connected: Connect an app and Set up posting while one that is off is not skipped; no tile when all are", async () => {
+    current = { getFollowers: async () => buildFollowers("start") };
+    await act(async () => root.render(<FollowersTile skipped={["tiktok", "facebook", "x"]} />));
+    expect(host.querySelector(".followers-tile")).not.toBeNull();
+    expect(host.textContent).toContain("Connect an app to see your followers here.");
+    expect(host.querySelector(".followers-tile__off")!.textContent).toBe("Not connected: YouTube and Instagram.");
+    expect([...host.querySelectorAll("a")].find((a) => a.textContent?.includes("Set up posting"))?.getAttribute("href")).toBe("/settings/posting/setup");
+    // Every app skipped: no reminder of them, so no tile.
+    await act(async () => root.render(<FollowersTile skipped={["youtube", "tiktok", "instagram", "facebook", "x"]} />));
+    expect(host.querySelector(".followers-tile")).toBeNull();
+    expect(host.textContent).not.toContain("Connect an app");
+    expect(f.followersTileEmpty(buildFollowers("start").platforms, ["youtube", "tiktok", "instagram", "facebook", "x"])).toBe(true);
+    expect(f.followersTileEmpty(buildFollowers("start").platforms, ["youtube", "tiktok", "instagram", "facebook"])).toBe(false);
+    expect(f.followersTileEmpty(buildFollowers("owner").platforms, ["tiktok", "facebook", "x"])).toBe(false);
+  });
+
+  it("the money tile follows the same rule: Connect an app only while one that is off is not skipped", () => {
+    const off = buildMoneyView({ scenario: "not_connected", country: null, seen: [] });
+    expect(moneyTileLine(off)).toBe("Connect an app to see how close you are to getting paid.");
+    expect(moneyTileLine(off, ["tiktok", "x"])).toBe("Connect an app to see how close you are to getting paid.");
+    expect(moneyTileLine(off, ["youtube", "tiktok", "instagram", "facebook", "x"])).toBeNull();
+    // Something connected: the skips change nothing there.
+    expect(moneyTileLine(buildMoneyView({ scenario: "start", country: "US", seen: [] }), ["x"])).toBe("No money yet. Here's how close you are.");
+    expect(moneyTileLine(buildMoneyView({ scenario: "earning", country: "US", seen: [] }), ["youtube", "tiktok", "instagram", "facebook", "x"])).toBe(
+      "Money the apps reported this month.",
+    );
   });
 
   it("Home hides the tile when the load fails", async () => {

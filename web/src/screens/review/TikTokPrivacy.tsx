@@ -49,7 +49,7 @@ export function TikTokPrivacy({
       )}
       {onlyMe ? (
         <p className="field__hint" id={`${id}-hint`}>
-          TikTok keeps posts private until it approves your app.
+          TikTok keeps posts private until it approves Clip Factory.
         </p>
       ) : null}
     </div>

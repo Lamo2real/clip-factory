@@ -404,8 +404,10 @@
     /* The shell's workspace switch and Live chip are laid over the rail's foot (app/WorkspaceDock.tsx): the foot keeps
        their box free, from the window's bottom up to the dock's top and 4 px of air (--ws-dock-room), less the rail's
        own 14 px padding and its 14 px gap above the foot, less the 6 px the list's scroll box reaches past its own
-       margin. So the list of pages always stops above them. */
+       margin. So the list of pages always stops above them. It follows that room at once, never in a transition (calm
+       motion gives every element a 1 ms one, which only starts on the next frame drawn: glide.css .ws-dock). */
     height: max(0px, calc(var(--ws-dock-room, 0px) - 36px));
+    transition: none;
   }
   /* A short room: the rows are a little lower as soon as the twelve pages (StoriesApp's NAV) no longer fit at 48 px,
      12 × 48 + 11 × 4 (--st-gap-control) = 620 px of the list's own room: 44 px (a touch target still) while twelve

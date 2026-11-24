@@ -10,6 +10,7 @@ import { EFFORT_LABEL } from "../api/types.ts";
 import { modelOf, notOffered, offers, pairText } from "./AiSection.tsx";
 import { Btn, cheer, Chip, Empty, Failed, Loading, Note, refusedLine, SavedMark, SectionBar, SetCard, SetPick, SetSelect, SetSwitch, SIcon, statusSuffix, useSaved } from "./bits.tsx";
 import { useAi, type AiData } from "./data.ts";
+import { StTech } from "../ui.tsx";
 
 /** What each agent is for, in plain words (the API's agents carry their task list; these are the page's own lines). */
 export const AGENT_LINE: Record<AgentId, string> = {
@@ -89,7 +90,6 @@ function SkillList({ agent, skills, onSave }: { agent: Agent; skills: Skill[]; o
           </Btn>
         </div>
       ) : null}
-      <p className="st-stg-small">The agent reads its skills in this order, before your memory and the task.</p>
     </div>
   );
 }
@@ -239,7 +239,7 @@ export function AgentsSection({ ws }: { ws: string }) {
   return (
     <div className="st-stg-cards">
       <SectionBar>
-        <p className="st-stg-small">Clips Funded's own agents. Clip Factory's agent is separate and stays as it is.</p>
+        <p className="st-stg-small">Clips Funded's own agents. Clip Factory's agent stays as it is.</p>
         <SavedMark saved={saved} busy={ai.busy} />
       </SectionBar>
       <SetPick
@@ -261,10 +261,12 @@ export function AgentsSection({ ws }: { ws: string }) {
           checked={agent.active}
           description={
             quality
-              ? `${DRIVING_RULE} With this off, other videos skip its checks and say "Quality check is off".`
+              ? agent.active
+                ? `${DRIVING_RULE} Off: other videos skip its checks.`
+                : undefined
               : agent.active
-                ? "Switch it off and its work stops with a note saying it is off."
-                : `Its work stops with "${agent.name} is switched off." until you switch it on.`
+                ? "Switch it off and its work stops."
+                : "Its work is stopped until you switch it on."
           }
           onChange={(v) => void save({ active: v })}
         />
@@ -274,13 +276,16 @@ export function AgentsSection({ ws }: { ws: string }) {
           </Note>
         ) : null}
       </SetCard>
-      <SetCard title="Model and effort" icon="chip" lede="Leave it on Workspace default, or give this agent its own. A task can still have its own (Settings › AI).">
+      <SetCard title="Model and effort" icon="chip" lede="Use Workspace default, or pick this agent's own.">
         <ModelAndEffort agent={agent} data={data} onSave={(patch) => void save(patch)} />
+        <StTech className="st-stg-tech" label="More details">
+          <span>A task can still have its own model and effort, in Settings › AI.</span>
+        </StTech>
       </SetCard>
-      <SetCard title="Instructions" icon="pencil" lede="The words this agent reads first, every time. Reset puts back the original.">
+      <SetCard title="Instructions" icon="pencil" lede="What this agent reads first, every time.">
         <Instructions agent={agent} onSave={(text, el) => void save({ instructions: text.trim() }, el)} onReset={() => void save({ reset: true })} />
       </SetCard>
-      <SetCard title="Skills" icon="book" lede="Know-how this agent reads. Only Clips Funded skills, never Clip Factory's.">
+      <SetCard title="Skills" icon="book" lede="Know-how it reads before each task, top to bottom.">
         {skills.data ? (
           <SkillList agent={agent} skills={skills.data} onSave={(ids) => void save({ skillIds: ids })} />
         ) : skills.error ? (

@@ -14,9 +14,11 @@ Decision record: ADR-60 (which corrects ADR-57).
    They are the only place picker on the card.
 3. **Use my settings**: one big soft-fill button (`.my-settings__btn`, a glass button, full width). It puts My
    settings on every ticked place. Done state: bone fill, a check, **Your settings are on**. Under it one plain line:
-   "Your other places already use your settings. TikTok needs your tap each time." (before the tap, TikTok ticked),
-   "Every place uses your settings. Tap a place below to change it for this clip." (after, or with TikTok unticked),
-   "You changed some for this clip. Tap to put yours back." (after a change in a row). YouTube, Instagram, Facebook
+   "Tap this first. TikTok needs your tap." (before the tap, TikTok ticked: then **Use my settings** is the card's
+   vermilion and Upload is glass; the line above Upload keeps "Tap Use my settings first. TikTok needs your tap." for
+   screen readers only, so it is said once),
+   "Tap a place below to change it for this clip." (after, or with TikTok unticked; the button already says Your settings are on),
+   "You changed some. Tap to put yours back." (after a change in a row). YouTube, Instagram, Facebook
    and X use My settings from the start (nothing in their rules asks for a tap); TikTok's choices go on only with this
    tap (or picks in its row), because TikTok wants the creator's own action and no default. While his Mac posts TikTok,
    TikTok starts on My settings too, with no tap (§47.9). Ticking Commercial content
@@ -35,7 +37,7 @@ Decision record: ADR-60 (which corrects ADR-57).
      brand (Promotional content) / Branded content (Paid partnership). While his Mac posts TikTok, Who can see it and
      the three switches are one read-only line of what the Mac posts with, and a ticked label holds Upload (§47.9).
    * Instagram: Caption, Also show it in my feed (Reel).
-   * Facebook: Caption, "Goes up as a Reel on your Page. Everyone can see it." (Page Reels are public; nothing to pick).
+   * Facebook: Caption; the row's own line says "Reel on your Page · Everyone can see it", open or closed (Page Reels are public; nothing to pick).
    * X: Caption, Who can reply (the app's own dropdown: Everyone, People you follow, Only people you mention, Verified
      accounts).
    With nothing set up (or the check failed) the rows hold the words only. There is no caption tab bar and no second
@@ -76,9 +78,9 @@ never come from My settings**: `madeForKids` (or `selfDeclaredMadeForKids`, `for
 `settings.youtubePrivacy` (one field, shown in both places). TikTok's Commercial content is not in it either (per clip).
 
 **Settings › Posting › My settings** (`/settings/posting/my-settings`, `MySettingsBranch.tsx`): one section per
-platform, X included ("This is used once it is." while X is not set up), each saving as it changes. YouTube's section
-shows "Made for kids: No. My settings never mark a clip as made for kids." TikTok's says Commercial content is picked
-per clip.
+platform, X included (a "Not set up yet" chip while X is not set up; Facebook shows its leaf alone), each saving as it
+changes. YouTube's section shows "Made for kids: always No." TikTok's says "Commercial content: off." with a shut
+"Paid partnership?" fold.
 
 ### 34.3 Confirm sends each place's options (API, additive)
 
@@ -113,9 +115,11 @@ settings is kept in localStorage.
 ### 34.5 TikTok's "Who can see it"
 
 The app's own dropdown (`components/Dropdown.tsx`: a soft-fill button that opens a solid list, keyboard arrows,
-Escape, never the OS list), labelled "Who can see it", with exactly `privacyOptions` (Only me and Followers greyed when branded, §17.8),
+Escape, never the OS list; an open list measures itself against the phone tab bar or the screen's bottom and opens
+upward when there is room above, else scrolls into view, and the arrow, Home and End keys keep the chosen option in
+view), labelled "Who can see it", with exactly `privacyOptions` (Only me and Followers greyed when branded, §17.8),
 Everyone first, and the placeholder "Pick who can see it" until the owner picks or taps Use my settings. When only
-`SELF_ONLY` is allowed: one choice and the line "TikTok keeps posts private until it approves your app." Used in the
+`SELF_ONLY` is allowed: one choice and the line "TikTok keeps posts private until it approves Clip Factory." Used in the
 TikTok row and on the Post to TikTok sheet (which still opens for Library's Try again, and on Upload while nothing is
 set up but TikTok is connected).
 

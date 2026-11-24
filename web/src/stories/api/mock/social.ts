@@ -153,6 +153,27 @@ function settled(a: SocialAccount, store: MockStore): SocialAccount {
   return sameWarning ? { ...out, warning: null } : out;
 }
 
+/**
+ * Each account's `skipped`, as the API's skips.mark works it out: the platform is in the setup's skips
+ * (ONBOARD.skipped) and is not connected as Social accounts shows it (one that is Clip Factory's own is not). Connected
+ * wins: a skip on a platform connected now is dropped from the setup's skips on this read, so a platform that later
+ * needs the owner comes back to every list.
+ */
+export function markSkips<T extends Pick<SocialAccount, "platform" | "connectionStatus"> & Partial<Pick<SocialAccount, "externalAccountId" | "handle" | "accountName">>>(
+  store: MockStore,
+  accounts: T[],
+): (T & { skipped: boolean })[] {
+  const connected = (a: T) =>
+    a.connectionStatus === "connected" &&
+    !sameAsClips({ platform: a.platform, connectionStatus: a.connectionStatus, externalAccountId: a.externalAccountId ?? null, handle: a.handle ?? null, accountName: a.accountName ?? null }, store);
+  const stale = accounts.filter((a) => connected(a) && store.onboarding.skipped.includes(a.platform)).map((a) => a.platform as string);
+  if (stale.length) store.onboarding.skipped = store.onboarding.skipped.filter((s) => !stale.includes(s));
+  return accounts.map((a) => ({ ...a, skipped: !connected(a) && store.onboarding.skipped.includes(a.platform) }));
+}
+
+/** One account as the API answers it: marked `skipped`. */
+const shown = (store: MockStore, a: SocialAccount): SocialAccount => markSkips(store, [a])[0]!;
+
 /** What a connect in the pretend app finds for each platform: the Clips Funded account the owner picked. */
 const STORIES_IDENTITY: Record<Platform, { id: string; name: string; handle: string }> = {
   youtube: { id: "UC7stories0lamo00000000a", name: "Clips Funded", handle: "@fundedclips" },
@@ -199,6 +220,7 @@ function base(ws: string, platform: Platform, app: SocialAccount["app"] = NO_APP
     choices: null,
     limits: limitsFor(platform, app.choice),
     warning: null,
+    skipped: false,
   };
 }
 
@@ -316,7 +338,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       await delay(160);
       storiesWorkspace(store, ws);
       // Settled as the API's public_of does: Lamo Clips connecting the same account later shows here (§45.35 D11).
-      const accounts = STORIES_PLATFORMS.map((p) => replace(store, settled(account(store, ws, p), store)));
+      const accounts = markSkips(store, STORIES_PLATFORMS.map((p) => replace(store, settled(account(store, ws, p), store))));
       return { accounts: structuredClone(accounts), clips: structuredClone(store.clips) };
     },
     async connectSocial(ws, platform) {
@@ -372,16 +394,16 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       // Clip Factory's own is never connected for posting (§45.37 G8): it stays same_as_clips, and the card says why.
       const clipsOwn = choice.usedByClips || matchesClips(platform, { externalAccountId: choice.id, handle: choice.name, accountName: choice.name }, store);
       const next = connectedAs(a, { id: choice.id, name: choice.name, handle: choice.name }, clipsOwn ? "#0F372B" : "#62C6FF");
-      return replace(store, { ...next, connectionStatus: clipsOwn ? "same_as_clips" : "connected", warning: a.warning });
+      return shown(store, replace(store, { ...next, connectionStatus: clipsOwn ? "same_as_clips" : "connected", warning: a.warning }));
     },
     async checkSocial(ws, platform) {
       await delay(400);
       const a = account(store, ws, platform);
       if (a.connectionStatus === "not_connected") throw new ApiError(409, "conflict", `Clips Funded's ${PLATFORM_NAME[platform]} is not connected. Tap Connect first.`);
       // A live profile call: a dead token turns the account to needs_reconnect (a test knob plays that).
-      if (store.knobs.tokenDead === platform) return replace(store, { ...a, connectionStatus: "needs_reconnect", reason: "token_dead", lastCheckedAt: new Date().toISOString() });
+      if (store.knobs.tokenDead === platform) return shown(store, replace(store, { ...a, connectionStatus: "needs_reconnect", reason: "token_dead", lastCheckedAt: new Date().toISOString() }));
       // Check it settles the account as the page does: Clip Factory connecting it later blocks it (§45.37 G8).
-      return replace(store, { ...settled(a, store), lastCheckedAt: new Date().toISOString() });
+      return shown(store, replace(store, { ...settled(a, store), lastCheckedAt: new Date().toISOString() }));
     },
     async tiktokCreatorInfo(ws) {
       await delay(200);
@@ -414,7 +436,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
           throw new ApiError(400, "bad_request", `${name} always uses Clips Funded's own Meta app, so Clip Factory's Meta connection is never touched.`);
         const changed = a.app.choice !== "clips";
         const next = changed ? base(ws, platform, CLIPS_APP) : a;
-        return replace(store, { ...next, app: CLIPS_APP, limits: limitsFor(platform, "clips") });
+        return shown(store, replace(store, { ...next, app: CLIPS_APP, limits: limitsFor(platform, "clips") }));
       }
       const keys: Partial<Record<KeyName, string>> = { clientId: cleanKey(body.clientId ?? ""), clientSecret: cleanKey(body.clientSecret ?? "") };
       if (platform === "instagram" || platform === "facebook") keys.configId = extractConfigId(body.configId ?? "");
@@ -433,7 +455,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
         const next = changed ? base(ws, each, app) : { ...b, app };
         replace(store, { ...next, app, limits: limitsFor(each, "own") });
       }
-      return structuredClone(account(store, ws, platform));
+      return shown(store, structuredClone(account(store, ws, platform)));
     },
     async checkSocialApp(ws, platform) {
       await delay(500);

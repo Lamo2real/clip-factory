@@ -5,12 +5,14 @@
 // - E13: one name for the other app ("Clip Factory", never "Lamo Clips"), and sentences that read right when an
 //   account is itself called "Lamo Stories" ("this Facebook Page (Lamo Stories)");
 // - E14: developer-app words and account ids behind "Technical details", under a plain first line;
-// - E15: after Finish with steps skipped, the dashboard keeps "Finish setting up: {n} left" with them;
+// - E15: after Finish with steps skipped, the dashboard keeps "Finish setting up: {n} left" with them, never with a
+//   skipped platform (the owner, 24 Nov: a skipped platform shows only in Settings and Social accounts);
 // - E16: Lamo Stories' rail keeps its brand and its switcher in view (only the pages scroll), and Clip Factory's phone
 //   top bar drops the brand's name before its switch gets under 44 px (only while the switcher asks for it);
-// - E17: the Needs you bar on the page it points to never sends the owner there again: Social accounts' sentence says
-//   "below", and Show me brings the card to fix into view;
-// - E18: Social accounts' cards flow by their own height; a reconnect clears the old warning (the mock, as the API).
+// - E17: the Needs you bar on the page it points to never sends the owner there again: a platform's page says "below",
+//   and Show me brings its card into view; elsewhere (Social accounts' list too) Fix it opens the platform's page;
+// - E18: Social accounts is rows now (each platform's card on its own page), the column helpers kept; a reconnect
+//   clears the old warning (the mock, as the API).
 import { readFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { act } from "react";
@@ -52,7 +54,10 @@ vi.mock("../src/lib/router.ts", async (orig) => {
 });
 
 const { ConnectionsScreen, columnsFor, OWN_APP_TECH, SAME_AS_CLIPS_LINE, shortestColumns, thisPlace } = await import("../src/stories/screens/Connections.tsx");
+const { ConnectionScreen } = await import("../src/stories/screens/SocialPlatform.tsx");
 const { DashboardScreen } = await import("../src/stories/screens/Dashboard.tsx");
+const { leftOf } = await import("../src/stories/skips.ts");
+const { stampPicked } = await import("../src/stories/api/mock/ai.ts");
 
 /** A source file of the web app, as written. */
 /** A stylesheet's text with its `@import "./x.css"` lines inlined in order (stories.css and studio.css are indexes). */
@@ -215,25 +220,41 @@ describe("Social accounts (§45.36 E13, E14, E18)", () => {
   let root: Root;
   let store: MockStore;
   let api: StoriesApi;
+  /** The platform whose page is on screen (null: the list). */
+  let at: string | null = null;
 
-  async function render() {
+  /** Social accounts' list, or a platform's own page. */
+  async function render(platform: string | null = null) {
     await act(async () =>
       root.render(
         <ToastProvider>
-          <ConnectionsScreen
-            ws="stories"
-            page={{
-              name: "connections",
-              platform: null,
-              result: null,
-              ws: null,
-            }}
-          />
+          {platform ? (
+            <ConnectionScreen
+              ws="stories"
+              page={{
+                name: "connection",
+                platform: platform as never,
+                result: null,
+                ws: null,
+              }}
+            />
+          ) : (
+            <ConnectionsScreen
+              ws="stories"
+              page={{
+                name: "connections",
+                platform: null,
+                result: null,
+                ws: null,
+              }}
+            />
+          )}
         </ToastProvider>,
       ),
     );
     for (let i = 0; i < 4; i++)
       await act(async () => await new Promise((r) => setTimeout(r, 0)));
+    at = platform;
   }
 
   beforeEach(async () => {
@@ -260,6 +281,7 @@ describe("Social accounts (§45.36 E13, E14, E18)", () => {
     host = document.createElement("div");
     document.body.appendChild(host);
     root = createRoot(host);
+    at = null;
   });
 
   afterEach(() => {
@@ -269,8 +291,13 @@ describe("Social accounts (§45.36 E13, E14, E18)", () => {
     localStorage.clear();
   });
 
-  const card = (platform: string) =>
-    host.querySelector<HTMLElement>(`.st-conn[data-platform="${platform}"]`)!;
+  /** The platform's card, on its own page (opened if another page is on screen). */
+  const card = async (platform: string) => {
+    if (at !== platform) await render(platform);
+    return host.querySelector<HTMLElement>(
+      `.st-conn[data-platform="${platform}"]`,
+    )!;
+  };
   const button = (el: HTMLElement, name: string | RegExp) =>
     Array.from(el.querySelectorAll<HTMLButtonElement>("button")).find((b) =>
       typeof name === "string"
@@ -296,6 +323,12 @@ describe("Social accounts (§45.36 E13, E14, E18)", () => {
     await render();
     expect(host.textContent).toContain("Clip Factory");
     expect(host.textContent).not.toContain("Lamo Clips");
+    // And on every platform's own page, its card and all.
+    for (const p of ["youtube", "tiktok", "instagram", "facebook", "x"]) {
+      await card(p);
+      expect(host.textContent, p).toContain("Clip Factory");
+      expect(host.textContent, p).not.toContain("Lamo Clips");
+    }
     // Every card's limits too, with either developer app.
     for (const p of [
       "youtube",
@@ -312,33 +345,38 @@ describe("Social accounts (§45.36 E13, E14, E18)", () => {
     expect(thisPlace({ platform: "facebook", accountName: "Clips Funded", handle: null })).toBe("this Facebook Page (Clips Funded)");
     expect(thisPlace({ platform: "tiktok", accountName: null, handle: "@funded.clips" })).toBe("this TikTok account (@funded.clips)");
     expect(thisPlace({ platform: "youtube", accountName: null, handle: null })).toBe("this YouTube channel");
-    await render();
-    const yt = card("youtube");
+    const yt = await card("youtube");
     await click(button(yt, "Disconnect"));
     expect(yt.querySelector(".st-sure__ask")?.textContent).toBe("Are you sure? Clips Funded stops posting to this YouTube channel (Clips Funded). Clip Factory is not touched.");
     expect(yt.querySelector(".st-sure__ask")?.textContent).not.toMatch(/posting to Clips Funded/);
     // The X account is Clip Factory's own (named "Clip Factory"): it is never shared (§45.37 G8), so there is no Use it
     // for both, and its one sentence says so plainly, said once.
-    const x = card("x");
+    const x = await card("x");
     expect(button(x, "Use it for both")).toBeUndefined();
     expect(x.textContent!.split(SAME_AS_CLIPS_LINE)).toHaveLength(2);
   });
 
-  it("account and app ids sit behind Technical details; the card's first lines are plain words", async () => {
-    await render();
+  it("account and app ids sit behind a fold; the card's first lines are plain words", async () => {
+    // Less text (the owner, 23 Nov): the ids and the developer app are in each card's one More fold.
+    /** What the card's More fold shows once opened (its own Technical details folds still closed). */
+    const inMore = (el: HTMLElement) => {
+      const copy = el.querySelector("details.st-conn__more")!.cloneNode(true) as HTMLElement;
+      for (const d of Array.from(copy.querySelectorAll("details")))
+        for (const c of Array.from(d.children))
+          if (c.tagName !== "SUMMARY") c.remove();
+      return copy.textContent ?? "";
+    };
     for (const p of ["youtube", "tiktok", "x"]) {
       const id = store.social.find((a) => a.platform === p)!.externalAccountId!;
-      const c = card(p);
+      const c = await card(p);
       expect(c.textContent).toContain(id);
       expect(shown(c)).not.toContain(id);
-      const fold = c.querySelector<HTMLDetailsElement>(
-        ".st-who details.st-tech-fold",
-      )!;
+      const fold = c.querySelector<HTMLDetailsElement>("details.st-conn__more")!;
       expect(fold.open).toBe(false);
       expect(fold.querySelector(".st-who__id code")?.textContent).toBe(id);
     }
     // The own Meta app: its App ID and Configuration ID in the fold, the redirect words too.
-    const insta = card("instagram");
+    const insta = await card("instagram");
     expect(insta.querySelector(".st-app")!.textContent).toContain(
       "123456…3456",
     );
@@ -346,17 +384,21 @@ describe("Social accounts (§45.36 E13, E14, E18)", () => {
     expect(shown(insta)).not.toMatch(
       /Valid OAuth|Login configuration|App Review|Development mode|Sandbox|redirect URI/i,
     );
+    expect(inMore(insta)).not.toMatch(
+      /Valid OAuth|Login configuration|App Review|Development mode|Sandbox|redirect URI/i,
+    );
     expect(insta.textContent).toContain("Valid OAuth Redirect URIs");
-    expect(shown(insta)).toContain(
+    expect(inMore(insta)).toContain(
       "Copy these two addresses into your Meta app's settings",
     );
-    // TikTok's Sandbox line goes behind the fold; its plain lines stay.
-    const tiktok = card("tiktok");
+    // TikTok's Sandbox line goes behind its own Technical details; its plain lines are in the More fold.
+    const tiktok = await card("tiktok");
     expect(shown(tiktok)).not.toContain("Sandbox");
+    expect(inMore(tiktok)).not.toContain("Sandbox");
     expect(tiktok.querySelector(".st-limits details")?.textContent).toContain(
       "Sandbox",
     );
-    expect(shown(tiktok)).toContain(
+    expect(inMore(tiktok)).toContain(
       "Until TikTok says yes, the account must be private",
     );
   });
@@ -367,8 +409,12 @@ describe("Social accounts (§45.36 E13, E14, E18)", () => {
       ...a,
       app: { choice: null, saved: false },
     }));
-    await render();
-    const yt = card("youtube");
+    // Each card's one main button opens its app's choice on the card (on the platform's own page).
+    const setUp = async (p: string) => {
+      await click(Array.from((await card(p)).querySelectorAll<HTMLButtonElement>("button")).find((b) => /^Set up the app/.test(b.textContent ?? "")));
+      return card(p);
+    };
+    const yt = await setUp("youtube");
     await click(
       Array.from(yt.querySelectorAll<HTMLButtonElement>("[role=radio]")).find(
         (r) => /A separate app/.test(r.textContent ?? ""),
@@ -390,7 +436,7 @@ describe("Social accounts (§45.36 E13, E14, E18)", () => {
     expect(go.querySelector("details.st-tech-fold")?.textContent).toContain(
       OWN_APP_TECH.youtube[0],
     );
-    const fb = card("facebook");
+    const fb = await setUp("facebook");
     expect(fb.querySelector(".st-app__notes")?.textContent).not.toMatch(
       /Valid OAuth|Login configuration|App Review|Development mode/,
     );
@@ -403,8 +449,7 @@ describe("Social accounts (§45.36 E13, E14, E18)", () => {
   });
 
   it("a reconnect clears the old keys-changed warning (the mock as the API), and a connected card never shows it", async () => {
-    await render();
-    expect(card("tiktok").textContent).toContain(
+    expect((await card("tiktok")).textContent).toContain(
       "The TikTok app keys changed. Connect again.",
     );
     await api.connectSocial("stories", "tiktok");
@@ -423,14 +468,14 @@ describe("Social accounts (§45.36 E13, E14, E18)", () => {
     act(() => root.unmount());
     root = createRoot(host);
     forgetLoaded();
-    await render();
-    expect(card("tiktok").querySelector(".st-chip")?.textContent).toBe(
-      "Connected",
+    await render("tiktok");
+    expect((await card("tiktok")).querySelector(".st-chip")?.textContent).toBe(
+      "Ready",
     );
-    expect(card("tiktok").textContent).not.toContain("app keys changed");
+    expect((await card("tiktok")).textContent).not.toContain("app keys changed");
   });
 
-  it("the cards flow by their own height: each goes into the shortest column, and keeps it", () => {
+  it("Social accounts is rows now: two a line at most, the same height, no columns dealt; the column helpers stay", () => {
     // As many 340 px columns as fit, with 16 px between them.
     expect([320, 695, 696, 1051, 1052, 1440].map(columnsFor)).toEqual([
       1, 1, 2, 2, 3, 4,
@@ -445,22 +490,27 @@ describe("Social accounts (§45.36 E13, E14, E18)", () => {
     );
     expect(Math.max(...bottoms) - Math.min(...bottoms)).toBeLessThan(700);
     expect(shortestColumns([500, 500], 1)).toEqual([0, 0]);
-    // The grid places each card in its own column; a card that grows only pushes the cards under it (stories.css).
+    // The list page is rows (the owner, 24 Nov: "organized like" Clip Factory's Set up posting): at least 340 px each,
+    // two a line at most, and each row's link fills its glass so rows in one line are the same height (stories.css).
     const css = source("stories/styles/stories.css");
     expect(css).toMatch(
-      /\.st-conns\[data-cols\] \{[^}]*grid-auto-flow: row dense;/,
+      /\.st-social-rows \{[^}]*grid-template-columns: repeat\(auto-fill, minmax\(max\(min\(100%, 340px\), calc\(\(100% - var\(--st-space-4\)\) \/ 2\)\), 1fr\)\);/,
     );
     expect(css).toMatch(
-      /\.st-conns\[data-cols\] > \.st-conn \{[^}]*grid-column: var\(--st-col, auto\);[^}]*grid-row-end: span var\(--st-span, 1\);/,
+      /\.st-social-row-wrap \{[^}]*display: grid;[^}]*grid-template-rows: 1fr auto;/,
     );
     expect(css).not.toMatch(/\.st-conns[^{]*\{[^}]*columns: 340px/);
+    // No card is dealt into a column any more: nothing sets data-cols or a card's column.
+    const page = source("stories/screens/Connections.tsx");
+    expect(page).not.toMatch(/useCardColumns|dataset\.cols|--st-col\b|--st-span\b/);
   });
 });
 
-describe("Finish setting up (§45.36 E15)", () => {
+describe("Finish setting up (§45.36 E15, a skipped platform left out)", () => {
   let host: HTMLElement;
   let root: Root;
   let api: StoriesApi;
+  let store: MockStore;
 
   beforeEach(() => {
     localStorage.clear();
@@ -469,6 +519,8 @@ describe("Finish setting up (§45.36 E15)", () => {
     forgetOnboarding();
     setMockLatency(0);
     api = mockStoriesApi();
+    store = (window as unknown as { __cfStoriesMock: { store: MockStore } })
+      .__cfStoriesMock.store;
     setStoriesApi(api);
     host = document.createElement("div");
     document.body.appendChild(host);
@@ -479,6 +531,12 @@ describe("Finish setting up (§45.36 E15)", () => {
     host.remove();
     setStoriesApi(null);
   });
+
+  /** The AI's three steps really done (the API's picks), and Instagram connected (its Clips Funded account picked). */
+  async function aiAndInstagram() {
+    stampPicked(store, ["environment", "model", "effort"]);
+    await api.chooseSocial("stories", "instagram", "17841400000000001");
+  }
 
   async function dashboard() {
     forgetOnboarding();
@@ -494,13 +552,18 @@ describe("Finish setting up (§45.36 E15)", () => {
       await act(async () => await new Promise((r) => setTimeout(r, 0)));
   }
 
-  it("after Finish with steps skipped, a small card lists what is left and opens the setup", async () => {
-    for (const step of ["tiktok", "facebook", "x"] as const)
+  it("after Finish with steps skipped, a small card lists what is left and opens the setup, never a skipped platform", async () => {
+    await aiAndInstagram();
+    for (const step of ["tiktok", "facebook", "x", "video"] as const)
       await api.patchOnboarding("stories", { step, skipped: true });
     await api.patchOnboarding("stories", { finish: true });
     const o = await api.getOnboarding("stories");
-    const left = o.steps.filter((s) => s.state !== "done" && s.step !== "done");
-    expect(left.length).toBeGreaterThanOrEqual(3);
+    // The setup keeps every step: the platforms and the video step skipped.
+    expect(o.steps).toHaveLength(11);
+    expect(o.steps.filter((s) => s.state === "skipped").map((s) => s.step)).toEqual(["video", "tiktok", "facebook", "x"]);
+    // What is left: the video step only (it is not a platform, so it stays to do later).
+    const left = leftOf(o);
+    expect(left.map((s) => s.label)).toEqual(["Pick how videos are made"]);
     await dashboard();
     const card = host.querySelector<HTMLElement>(".st-setupcard--left")!;
     expect(card).not.toBeNull();
@@ -512,22 +575,30 @@ describe("Finish setting up (§45.36 E15)", () => {
         (l) => l.textContent,
       ),
     ).toEqual(left.map((s) => s.label));
-    expect(
-      Array.from(card.querySelectorAll(".st-setupcard__list li")).map(
-        (l) => l.textContent,
-      ),
-    ).toEqual(
-      expect.arrayContaining([
-        "Connect TikTok",
-        "Connect Facebook",
-        "Connect X",
-      ]),
-    );
+    // None of the Connect steps: a skipped platform is only in Settings and Social accounts.
+    for (const p of ["Instagram", "TikTok", "YouTube", "Facebook", "X"])
+      expect(card.textContent, p).not.toContain(`Connect ${p}`);
     expect(card.querySelector("a")?.getAttribute("href")).toBe(
       "/stories/setup",
     );
     // The big setup card is gone once finished.
     expect(host.textContent).not.toContain("Set up Clips Funded:");
+  });
+
+  it("after Finish with only platforms skipped (the owner's X) there is no card at all", async () => {
+    await aiAndInstagram();
+    store.onboarding.providersPickedAt = new Date().toISOString();
+    for (const step of ["tiktok", "facebook", "x"] as const)
+      await api.patchOnboarding("stories", { step, skipped: true });
+    await api.patchOnboarding("stories", { finish: true });
+    const o = await api.getOnboarding("stories");
+    expect(o.steps.filter((s) => s.state === "skipped").map((s) => s.step)).toEqual(["tiktok", "facebook", "x"]);
+    expect(leftOf(o)).toEqual([]);
+    await dashboard();
+    expect(host.querySelector(".st-setupcard--left")).toBeNull();
+    expect(host.querySelector(".st-setupcard")).toBeNull();
+    expect(host.textContent).not.toContain("Finish setting up");
+    expect(host.textContent).not.toMatch(/Connect (TikTok|Facebook|X)\b/);
   });
 
   it("before Finish the usual setup card shows; finished with nothing left there is no card at all", async () => {
@@ -558,6 +629,7 @@ describe("the Needs you bar on the page it points to (§45.36 E17)", () => {
 
   const STUCK = "Clips Funded's TikTok (Clips Funded) needs connecting again. Open Clips Funded › Social accounts, then tap Try again.";
   async function render(here: string, item: { sentence: string; href: string; platform: "tiktok" | null }) {
+    const onPlatform = /^\/stories\/connections\/([a-z]+)$/.exec(here)?.[1] ?? null;
     const api = mockStoriesApi();
     const real = await api.dashboard("stories");
     setStoriesApi({
@@ -573,7 +645,17 @@ describe("the Needs you bar on the page it points to (§45.36 E17)", () => {
       root.render(
         <ToastProvider>
           <NeedsYouBar ws="stories" here={here} />
-          {here === "/stories/connections" ? (
+          {onPlatform ? (
+            <ConnectionScreen
+              ws="stories"
+              page={{
+                name: "connection",
+                platform: onPlatform as never,
+                result: null,
+                ws: null,
+              }}
+            />
+          ) : here === "/stories/connections" ? (
             <ConnectionsScreen
               ws="stories"
               page={{
@@ -620,41 +702,69 @@ describe("the Needs you bar on the page it points to (§45.36 E17)", () => {
   });
 
   it("says the Social accounts trip in words for this page", () => {
-    expect(socialHere(STUCK)).toBe("Clips Funded's TikTok (Clips Funded) needs connecting again. Fix it below, then tap Try again.");
-    expect(socialHere("Clips Funded's TikTok needs connecting again. Open Social accounts and tap Connect.")).toBe("Clips Funded's TikTok needs connecting again. Tap Connect below.");
-    expect(socialHere("Clips Funded's X is not connected. Open Clips Funded › Social accounts, connect it, then tap Try again.")).toBe("Clips Funded's X is not connected. Connect it below, then tap Try again.");
-    expect(socialHere("The TikTok app keys changed. Connect TikTok again in Clips Funded › Social accounts, then tap Try again.")).toBe("The TikTok app keys changed. Connect TikTok again below, then tap Try again.");
+    expect(socialHere(STUCK)).toBe("Clips Funded's TikTok (Clips Funded) needs connecting again. Tap Connect again below. Then tap Try again on the video.");
+    expect(socialHere("Clips Funded's TikTok needs connecting again. Open Social accounts and tap Connect.")).toBe("Clips Funded's TikTok needs connecting again. Tap Connect again below.");
+    expect(socialHere("Clips Funded's X is not connected. Open Clips Funded › Social accounts, connect it, then tap Try again.")).toBe("Clips Funded's X is not connected. Connect it below. Then tap Try again on the video.");
+    expect(socialHere("The TikTok app keys changed. Connect TikTok again in Clips Funded › Social accounts, then tap Try again.")).toBe("The TikTok app keys changed. Connect TikTok again below. Then tap Try again on the video.");
     expect(socialHere("“Bike lights” needs a check before you can approve it.")).toBe("“Bike lights” needs a check before you can approve it.");
   });
 
   it("reads a sentence saved before a rename the same way, and never takes Clip Factory's own Social accounts", () => {
     for (const old of ["Funded Clips", "Clip Stories", "Clip Factory Stories", "Lamo Stories"]) {
-      expect(socialHere(`${old}' X is not connected. Open ${old} › Social accounts, connect it, then tap Try again.`)).toBe(`${old}' X is not connected. Connect it below, then tap Try again.`);
-      expect(socialHere(`Pick another in ${old} › Social accounts, then tap Try again.`)).toBe("Pick another below, then tap Try again.");
+      expect(socialHere(`${old}' X is not connected. Open ${old} › Social accounts, connect it, then tap Try again.`)).toBe(`${old}' X is not connected. Connect it below. Then tap Try again on the video.`);
+      expect(socialHere(`Pick another in ${old} › Social accounts, then tap Try again.`)).toBe("Pick another below. Then tap Try again on the video.");
     }
     expect(socialHere("Open Clip Factory › Social accounts, then tap Try again.")).toBe("Open Clip Factory › Social accounts, then tap Try again.");
   });
 
-  it("on another page: the server's sentence and Fix it, which opens Social accounts", async () => {
+  it("on another page: the server's sentence and Fix it, which opens the platform's page on Social accounts", async () => {
     await render("/stories/ideas", {
       sentence: STUCK,
-      href: "/stories/connections",
+      href: "/stories/connections/tiktok",
       platform: "tiktok",
     });
     const bar = host.querySelector<HTMLElement>(".st-needs")!;
     expect(bar.textContent).toContain("Open Clips Funded › Social accounts, then tap Try again.");
-    expect(bar.querySelector<HTMLAnchorElement>("a.st-needs__go")?.getAttribute("href")).toBe("/stories/connections");
+    expect(bar.querySelector<HTMLAnchorElement>("a.st-needs__go")?.getAttribute("href")).toBe("/stories/connections/tiktok");
   });
 
-  it("on Social accounts: never sends him there again, and Show me brings the card into view", async () => {
+  it("on Social accounts' list: Fix it opens the platform's own page, where its card is", async () => {
     await render("/stories/connections", {
       sentence: STUCK,
-      href: "/stories/connections",
+      href: "/stories/connections/tiktok",
+      platform: "tiktok",
+    });
+    const bar = host.querySelector<HTMLElement>(".st-needs")!;
+    const go = bar.querySelector<HTMLAnchorElement>("a.st-needs__go")!;
+    expect(go.textContent?.trim()).toBe("Fix it");
+    expect(go.getAttribute("href")).toBe("/stories/connections/tiktok");
+    expect(Array.from(bar.querySelectorAll("button")).map((b) => b.textContent?.trim())).not.toContain("Show me");
+    // The list has rows, no card to bring into view.
+    expect(host.querySelector(".st-conn")).toBeNull();
+    expect(host.querySelector('.st-social-row-wrap[data-platform="tiktok"]')).not.toBeNull();
+  });
+
+  it("on another platform's page: Fix it opens that platform's page", async () => {
+    await render("/stories/connections/youtube", {
+      sentence: STUCK,
+      href: "/stories/connections/tiktok",
+      platform: "tiktok",
+    });
+    const bar = host.querySelector<HTMLElement>(".st-needs")!;
+    expect(bar.querySelector<HTMLAnchorElement>("a.st-needs__go")?.getAttribute("href")).toBe("/stories/connections/tiktok");
+    expect(Array.from(bar.querySelectorAll("button")).map((b) => b.textContent?.trim())).not.toContain("Show me");
+    expect(bar.textContent).toContain("Open Clips Funded › Social accounts, then tap Try again.");
+  });
+
+  it("on the platform's own page: never sends him there again, and Show me brings the card into view", async () => {
+    await render("/stories/connections/tiktok", {
+      sentence: STUCK,
+      href: "/stories/connections/tiktok",
       platform: "tiktok",
     });
     const bar = host.querySelector<HTMLElement>(".st-needs")!;
     expect(bar.textContent).toContain(
-      "needs connecting again. Fix it below, then tap Try again.",
+      "needs connecting again. Tap Connect again below. Then tap Try again on the video.",
     );
     expect(bar.textContent).not.toContain("Social accounts");
     expect(bar.querySelector("a")).toBeNull();

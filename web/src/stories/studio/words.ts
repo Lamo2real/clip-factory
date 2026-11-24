@@ -1,7 +1,7 @@
 // The plain words the Lamo Stories studio screens show (docs/CONTRACTS.md §45.16.5, §45.16.6). Kid-proof: short
 // sentences, everyday words, one name for each thing.
 import { ApiError } from "../../api/errors.ts";
-import type { ErrorAccount, IdeaCategory, Platform, PublishingJob, StepKey, StoryStatus, VideoConcept } from "../api/types.ts";
+import type { ErrorAccount, IdeaCategory, Platform, PublishingJob, StepKey, Story, StoryStatus, VideoConcept } from "../api/types.ts";
 
 export const CATEGORY_LABEL: Record<IdeaCategory, string> = {
   driving_safety: "Driving safety",
@@ -30,6 +30,18 @@ export const STATUS_LABEL: Record<StoryStatus, string> = {
   published: "Posted",
   failed: "Stopped",
 };
+
+/** A draft nothing is making now (never started, or stopped with Cancel): it waits for the owner's tap. */
+export function notMadeYet(story: Pick<Story, "status" | "currentJobId">): boolean {
+  return story.status === "draft" && !story.currentJobId;
+}
+
+export const NOT_MADE_YET = "Not made yet";
+
+/** A story's status in words: a draft nothing is making says "Not made yet", never "Getting ready". */
+export function statusLabel(story: Pick<Story, "status" | "currentJobId">): string {
+  return notMadeYet(story) ? NOT_MADE_YET : STATUS_LABEL[story.status];
+}
 
 /** The colour of each status chip. */
 export const STATUS_TONE: Record<StoryStatus, "sun" | "coral" | "mint" | "sky" | "plain"> = {
@@ -64,6 +76,8 @@ export const PUBLISH_LABEL: Record<PublishingJob["publishingStatus"], string> = 
   posted: "Posted",
   failed: "Did not post",
   needs_attention: "Needs you",
+  // §47.10: the owner's Mac posts it on TikTok (its row's chip is macChip's)
+  mac: "Your Mac",
 };
 
 export const PUBLISH_TONE: Record<PublishingJob["publishingStatus"], "sun" | "coral" | "mint" | "sky" | "plain"> = {
@@ -72,6 +86,7 @@ export const PUBLISH_TONE: Record<PublishingJob["publishingStatus"], "sun" | "co
   posted: "mint",
   failed: "coral",
   needs_attention: "coral",
+  mac: "sky",
 };
 
 /** A running production step, as a "now doing" line. */

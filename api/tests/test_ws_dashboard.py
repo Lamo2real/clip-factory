@@ -170,8 +170,8 @@ def test_every_tile(call: Call, store: db.Store, s3_client: FakeS3) -> None:
     you = d["needsYou"]
     assert [(n["platform"], n["href"]) for n in you] == [
         ("tiktok", f"/stories/review/{published['storyId']}"),
-        ("instagram", "/stories/connections"),
-        ("facebook", "/stories/connections"),
+        ("instagram", "/stories/connections/instagram"),
+        ("facebook", "/stories/connections/facebook"),
         (None, f"/stories/review/{check['storyId']}"),
     ]
     assert you[0]["sentence"].startswith("Make the Clips Funded TikTok account private")
@@ -179,7 +179,7 @@ def test_every_tile(call: Call, store: db.Store, s3_client: FakeS3) -> None:
     assert you[0]["title"] == "Out"
     assert (
         you[2]["sentence"]
-        == "This Facebook account (Lamo Page) needs connecting again. Open Social accounts and tap Connect."
+        == "This Facebook account (Lamo Page) needs connecting again. Open Social accounts and tap Connect again."
     )
     assert d["producing"] == [{"storyId": making["storyId"], "title": "Making", "step": "scenes", "progress": 0.3125}]
     accounts = {a["platform"]: a for a in d["accounts"]}
@@ -242,8 +242,8 @@ def test_the_dashboards_accounts_are_the_ones_social_accounts_shows(
     )
     you = [n for n in d["needsYou"] if n["platform"] == "tiktok"]
     assert [(n["href"], n["sentence"]) for n in you] == [
-        ("/stories/connections", "This TikTok account (Lamo Stories tiktok) needs connecting again. Open Social "
-                                 "accounts and tap Connect."),
+        ("/stories/connections/tiktok", "This TikTok account (Lamo Stories tiktok) needs connecting again. Open "
+                                        "Social accounts and tap Connect again."),
     ]  # fmt: skip
     # the same as the Social accounts page itself
     page = {a["platform"]: a["connectionStatus"] for a in sup.ws_call(app)("GET", f"{BASE}/social")[1]["accounts"]}
@@ -325,11 +325,11 @@ def test_without_posting_switched_on_the_dashboard_still_compares_with_lamo_clip
 @pytest.mark.parametrize(
     ("kind", "href"),
     [
-        ("reconnect", "/stories/connections"),
-        ("token_dead", "/stories/connections"),
-        ("not_connected", "/stories/connections"),
-        ("keys_changed", "/stories/connections"),
-        ("same_as_clips", "/stories/connections"),
+        ("reconnect", "/stories/connections/tiktok"),
+        ("token_dead", "/stories/connections/tiktok"),
+        ("not_connected", "/stories/connections/tiktok"),
+        ("keys_changed", "/stories/connections/tiktok"),
+        ("same_as_clips", "/stories/connections/tiktok"),
         ("private", "review"),
         ("daily", "review"),
         ("clips_unknown", "review"),  # Try again on the video checks the account first
@@ -347,6 +347,24 @@ def test_fix_it_opens_social_accounts_for_an_account_problem(
     (shown,) = call("GET", f"{BASE}/dashboard")[1]["dashboard"]["needsYou"]
     assert shown["sentence"] == sentence
     assert shown["href"] == (f"/stories/review/{story['storyId']}" if href == "review" else href)
+
+
+def test_once_the_account_is_connected_again_fix_it_opens_the_post(
+    call: Call, store: db.Store, s3_client: FakeS3
+) -> None:
+    """The post stopped because TikTok needed connecting again, and it is connected now: nothing is left to fix on
+    Social accounts, so the line says to tap Try again on the post and Fix it opens the video's Review page."""
+    story = seed_story(store, s3_client, status="approved", title="Out")
+    sentence = sentences.story_sentence("tiktok", "reconnect", "Lamo Stories")
+    seed_item(store, "PUBJOB#01J0000000000000000000PJ1", "ws_pubjob", publishingJobId="01J0000000000000000000PJ1",
+              contentId=story["storyId"], platform="tiktok", publishingStatus="needs_attention", error=sentence,
+              createdAt="2026-11-15T10:20:00.000Z")  # fmt: skip
+    seed_item(store, "SOCIAL#tiktok", "ws_social", platform="tiktok", connectionStatus="connected",
+              externalAccountId="tt-stories-own", accountName="Lamo Stories", updatedAt="2026-11-15T10:30:00.000Z")  # fmt: skip
+    you = [n for n in call("GET", f"{BASE}/dashboard")[1]["dashboard"]["needsYou"] if n["publishingJobId"]]
+    assert [(n["href"], n["sentence"]) for n in you] == [
+        (f"/stories/review/{story['storyId']}", "TikTok is connected now. Tap Try again on “Out”."),
+    ]
 
 
 def test_a_job_the_api_fails_itself_shows_in_recent_activity(

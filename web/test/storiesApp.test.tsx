@@ -92,6 +92,8 @@ describe("the first-time setup", () => {
     expect(opensSetup({ name: "dashboard" }, "stories", null, [])).toBe(false);
     // An OAuth return or a link to another page is never taken away.
     expect(opensSetup({ name: "connections", platform: "x", result: "connected", ws: "stories" }, "stories", onboarding(0), [])).toBe(false);
+    // The OAuth return lands on the platform's own page now: never taken away either.
+    expect(opensSetup({ name: "connection", platform: "x", result: "connected", ws: "stories" }, "stories", onboarding(0), [])).toBe(false);
   });
 });
 
@@ -195,6 +197,8 @@ describe("the shell", () => {
     await flush();
     expect(host.querySelector(".stories-app.is-alone")).toBeNull();
     expect(host.querySelector(".st-rail")).not.toBeNull();
+    // The phone's tab bar carries the shared mark the app's dropdown keeps its list above (Dropdown.tsx).
+    expect(host.querySelector(".st-tabbar[data-bottom-bar]")).not.toBeNull();
   });
 
   it("does not go to the setup by itself once it has started, or when it was shown here before", async () => {

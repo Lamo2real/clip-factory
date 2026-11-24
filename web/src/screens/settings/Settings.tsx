@@ -11,7 +11,6 @@ import { prefersReducedMotion, setPrefs, usePrefs } from "../../lib/prefs.ts";
 import { useInstall } from "../../lib/pwa.ts";
 import { navigate, useHash, type Route } from "../../lib/router.ts";
 import {
-  appleCount,
   findBranch,
   findTree,
   searchSettings,
@@ -179,9 +178,8 @@ function FieldPage({ trees, installed }: { trees: Tree[]; installed: boolean }) 
               <span className="tree-card__text">
                 <span className="tree-card__name">{t.name}</span>
                 <span className="tree-card__line">{t.line}</span>
-                <span className="tree-card__count">
-                  {plural(appleCount(t), "setting")} · {t.branches.map((b) => b.name).join(", ")}
-                </span>
+                {/* What is inside, by name (no count: nobody acts on it). */}
+                <span className="tree-card__count">{t.branches.map((b) => b.name).join(", ")}</span>
               </span>
               <Icon name="chevronRight" size={22} className="icon tree-card__go" />
             </A>
@@ -362,7 +360,6 @@ function TreePage({ tree }: { tree: Tree }) {
               <span className="branch-card__text">
                 <span className="branch-card__name">{b.name}</span>
                 <span className="branch-card__line">{b.line}</span>
-                <span className="branch-card__apples">{b.apples.map((a) => a.name).join(" · ")}</span>
               </span>
               <Icon name="chevronRight" size={20} className="icon branch-card__go" />
             </A>
@@ -411,7 +408,9 @@ function BranchPage({ tree, branch }: { tree: Tree; branch: Branch }) {
       el.classList.remove("is-found");
       void el.offsetWidth;
       el.classList.add("is-found");
-      el.focus({ preventScroll: true });
+      // A fold takes the focus on its summary: the part the keyboard reaches and opens with Enter or Space.
+      const focusable = el instanceof HTMLDetailsElement ? (el.querySelector<HTMLElement>(":scope > summary") ?? el) : el;
+      focusable.focus({ preventScroll: true });
       fade = setTimeout(() => el?.classList.remove("is-found"), FOUND_MS);
       return true;
     };

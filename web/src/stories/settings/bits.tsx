@@ -644,7 +644,7 @@ export function effortWord(e: Effort | null | undefined): string {
 /** "Claude Fable 5.1 isn't available right now: …" when the last call was refused; null when it worked or was never tried. */
 export function refusedLine(m: ModelInfo | undefined): string | null {
   if (!m || m.status === "ok" || m.status === "not_checked") return null;
-  return `${m.label} said no last time: ${m.statusLine} Work that uses it stops and tells you; it never switches to another model by itself.`;
+  return `${m.label} said no last time: ${m.statusLine} Its work stops. It never switches to another model by itself.`;
 }
 
 // ---------- Numbers ----------

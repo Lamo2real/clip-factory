@@ -237,6 +237,7 @@ def test_list_shows_five_accounts_their_app_limits_and_lamo_clips_without_names(
     for account in body["accounts"]:
         assert account["limits"], account["platform"]
         assert account["socialAccountId"] == f"stories.{account['platform']}"
+        assert account["skipped"] is False  # nothing skipped in the setup (workspaces.skips)
     youtube, _, instagram, _, x = body["accounts"]
     assert (x["connectionStatus"], x["externalAccountId"], x["accountName"]) == ("connected", "77", "Lamo Stories x")
     assert x["lastCheckedAt"] == "2026-11-15T10:00:00.000Z"
@@ -1131,4 +1132,4 @@ def test_no_sentence_names_the_old_connections_page() -> None:
             assert "Connections" not in sentences.story_sentence(platform, kind, "Lamo"), (platform, kind)
     assert "Connections" not in social.TIKTOK_NOT_CONNECTED
     line = dashboard._account_sentence({"platform": "youtube", "connectionStatus": "needs_reconnect"})
-    assert line == "Clips Funded's YouTube needs connecting again. Open Social accounts and tap Connect."
+    assert line == "Clips Funded's YouTube needs connecting again. Open Social accounts and tap Connect again."

@@ -54,6 +54,9 @@ export function JobDetail({ jobId }: { jobId: string }) {
   // rewinding when Undo is tapped (§20.7). Try again shakes when the server says no.
   const stopAct = useAction("stop");
   const retryAct = useAction("retry");
+  // Stop job leaves for its "Stopping…" note: the focus goes there too (not to the page's body).
+  const stoppingNote = useRef<HTMLParagraphElement>(null);
+  const focusNote = useRef(false);
 
   const [asking, setAsking] = useState(false);
   const deleted = useDeletedJobs().jobs.has(jobId);
@@ -137,8 +140,15 @@ export function JobDetail({ jobId }: { jobId: string }) {
     }
   }
 
+  useEffect(() => {
+    if (!stopping || !focusNote.current) return;
+    focusNote.current = false;
+    stoppingNote.current?.focus({ preventScroll: true });
+  }, [stopping]);
+
   /** Stopping waits 8 seconds for an Undo, so a slip of the finger never loses a job. */
   function stop() {
+    focusNote.current = true;
     stopWithUndo(jobId, toast, {
       onUndo: () => stopAct.rewind(),
       onStopped: (updated) => {
@@ -224,12 +234,7 @@ export function JobDetail({ jobId }: { jobId: string }) {
           {job.status === "canceled" && job.replacedBy ? (
             <div className="callout callout--info job-replaced" role="status">
               <Icon name="upload" />
-              <p>
-                Replaced by your video file.{" "}
-                <A className="text-link" href={`/jobs/${job.replacedBy}`}>
-                  Open the new job
-                </A>
-              </p>
+              <p>Replaced by your video file.</p>
             </div>
           ) : null}
           <LiveLine job={job} />
@@ -255,19 +260,25 @@ export function JobDetail({ jobId }: { jobId: string }) {
               </Button>
             ) : null}
             {working && stopping ? (
-              <p className="panel__note" role="status">
+              <p className="panel__note" role="status" tabIndex={-1} ref={stoppingNote}>
                 <Icon name="clock" size={18} />
                 <span>Stopping in a few seconds. Tap Undo to keep it going. Clips already made are kept.</span>
               </p>
             ) : null}
-            {job.status === "failed" || job.status === "canceled" ? (
+            {/* A job a video file replaced has one way on: the new job (Try again would make the video twice). */}
+            {job.replacedBy ? (
+              <LinkButton variant="primary" iconAfter="chevronRight" href={`/jobs/${job.replacedBy}`}>
+                Open the new job
+              </LinkButton>
+            ) : null}
+            {(job.status === "failed" || job.status === "canceled") && !job.replacedBy ? (
               <Button variant="primary" icon="retry" act={retryAct} data-help="try-again" loading={busy} onClick={retry}>
                 Try again
               </Button>
             ) : null}
             {/* Also while the job waits for a Mac (nobody may have the app, a PC user reads "your Mac") and after Stop:
                 a link job never leaves the owner without a way out (§35.5). */}
-            {(job.status === "failed" || job.status === "canceled" || wantsMac(job)) && job.source.type === "link" ? (
+            {(job.status === "failed" || job.status === "canceled" || wantsMac(job)) && job.source.type === "link" && !job.replacedBy ? (
               <LinkButton href={`/?file=1&from=${job.jobId}`} variant="ghost" icon="upload">
                 Use a video file
               </LinkButton>
@@ -344,7 +355,7 @@ export function emptyClipsText(status: Job["status"]): string {
     case "failed":
       return "No clips yet. Fix the problem above, then tap Try again.";
     case "canceled":
-      return "No clips yet. This job was stopped. Tap Try again to start it again.";
+      return "No clips yet. This job was stopped. Tap Try again.";
     case "ready":
       return "This job made no clips. Go back to Home and try a different link.";
   }

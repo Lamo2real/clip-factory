@@ -29,6 +29,7 @@ import { runAsk, type AskConnection, type Running, type RunEnd, type UploadFile 
 import { addedText, carriedFiles, classify, COUNTER_FROM as ASK_COUNTER_FROM, FILE_TEXT, FILES_MAX, BYTES_PER_FILE, IMAGES_MAX, formatLabel, pastedTextFile, QUESTION_CHARS, type AskFile } from "./files.ts";
 import { MarkupEditor, type MarkupResult } from "./MarkupEditor.tsx";
 import { api } from "../../api/index.ts";
+import { useSessionIfAny } from "../../app/session.tsx";
 import { Icon, type IconName } from "../../components/Icon.tsx";
 import { Flight, PaperPlaneIcon, useLaunch } from "../../components/PaperPlane.tsx";
 import { useToast } from "../../components/Toasts.tsx";
@@ -189,6 +190,8 @@ export function HelpPanel({
   const [now, setNow] = useState(() => Date.now());
   const [slow, setSlow] = useState(false);
   const pics = usePicturesOn();
+  /** The places he skipped (Settings.setupSkipped): the suggestion chips never name one. */
+  const skippedPlaces = useSessionIfAny()?.me?.settings.setupSkipped ?? null;
   /** A short glass note floating above the tray and field (a picture that could not be added), gone after 5 s. */
   const [note, setNote] = useState<string | null>(null);
   /** What a screen reader hears about the tray ("Picture added. 2 of 4."). */
@@ -912,7 +915,8 @@ export function HelpPanel({
   // "Go Home" while already on Home would be a dead tap: the suggestion chips are the next step there.
   const shown = (actions: readonly HelpAction[]) => (route.name === "home" ? actions.filter((x) => x.id !== GO_HOME.id) : actions);
   const mainTaken = !!newestEntry && newestEntry.role === "assistant" && shown(newestEntry.answer.actions).length > 0;
-  const suggestions = suggestionsFor({ page: helpPage(route.name) });
+  // A skipped place is never named by a suggestion chip (rule S, §48.3).
+  const suggestions = suggestionsFor({ page: helpPage(route.name) }, skippedPlaces ?? undefined);
   const left = Math.max(0, Math.ceil((state.blockedUntil - now) / 1000));
   const tray = state.tray;
   const processing = tray.some((p) => p.busy);

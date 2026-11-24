@@ -37,8 +37,8 @@ reference files are not in the API either.
   line, plain words ("Join", "Copy", "Paste", "Make clips", "Upload"), no jargon (never "MCP", "OAuth", "token",
   "scope", "CPM", "submission", "API"; say "sign in", "allow", "per 1,000 views", "clip", "sent"). The one exception is
   the body of the pilot email (§38.3), which is written for CR's support team: it sits under **Show more** and is
-  never the visible label of anything. Since §41 the same exception covers the finder's `ASK_MESSAGE` under **Show
-  more** "What it says" (§41.1 item 6), with the line "This is what Clip Factory sends to Content Rewards' team." above
+  never the visible label of anything. Since §41 the same exception covers the finder's `ASK_MESSAGE` under the fold
+  **See the message** (§41.1 item 6), with the line "This is what Clip Factory sends to Content Rewards' team." above
   it.
 * **Bold** inside the owner's words in this section = an exact label of the other site the step opens, word for word
   (CR's app code of 21 Nov 2026; Whop's, YouTube Studio's, Instagram's and Facebook's own words). Where CR's help pages
@@ -223,8 +223,8 @@ my Content Rewards account connect apps, so Clip Factory can send my own clips f
 Thank you! (For your team: MCP sign-in pilot, scope my_submissions:write.)"
 
 **When it's done** (`data-help="cr-ready"`): "Signed in to Content Rewards since 21 Nov.", then one line: connected
-"Clip Factory sends your campaign clips for you."; read-only "Clip Factory can see your campaigns and money. It can't
-send clips yet, so I remind you after each post." Buttons, all glass unless said: "Check it", "Connect again"
+"Clip Factory sends your campaign clips for you."; read-only "It can see your campaigns and money, but can't send clips
+yet. You get a reminder after each post." Buttons, all glass unless said: "Check it", "Connect again"
 (vermilion only when `needs_reconnect` and there is no calm card), "Disconnect" (8 s toast "Disconnecting Content
 Rewards… Undo"; the `DELETE` goes when the toast ends; afterwards the line "To remove Clip Factory on Content Rewards
 too: Settings, **Connected apps**, **Disconnect**."). From 7 days before `signInBy`: a calm card "Sign in to Content
@@ -314,16 +314,16 @@ top to bottom:
    from `postSubmissionRules`, `keepPublicDays`, `disclosure.spoken`, `audience`): "After 48 hours, send a screen
    recording of this clip's views. I'll remind you.", "Keep each clip up for 30 days. Don't delete it.", "Say “paid
    partnership” out loud in the first 10 seconds.", "Show the brand where your viewers live if it asks."
-   **I couldn't tell** (`uncertain`, a question mark each) under the line "I'm not sure about these. Read them on the
-   campaign page." Then the quiet link "Rules missing? On the campaign page, copy everything under **Brief** and
-   **Content requirements**. Paste it here, then tap Read these rules." (a text box, ≤ 8,000 characters, "Read these
+   **I couldn't tell** (`uncertain`, a question mark each) under the line "Read these on the campaign page." Then the
+   fold "Rules missing?" whose first line is "On the campaign page, copy everything under **Brief** and **Content
+   requirements**. Paste it here." (a text box, ≤ 8,000 characters, "Read these
    rules"). Open campaigns hide their rules until you join: "You'll see the rules once you join." (`rulesState:
    waiting_for_join`); Clip Factory reads them by itself when you're in. While reading: "Reading the rules… (about
    30 seconds)".
 5. **Logo** (only when `logo.needed`, `data-help="cr-logo"`). Before he is in: only "You can get the logo once you're
    in." After: one drop box "Drop the logo here, or paste a Google Drive or Dropbox link." with "Paste" and "Choose a
    file" (glass). "On the campaign page, open **Reference materials**. Tap the file with “logo” in its name. Download
-   it." "Tap Choose a file and pick it from Downloads. A Google Drive link works too: tap Paste." When the logo is the
+   it." "Tap Choose a file. Pick it from Downloads." (the drop box line already names Google Drive and Dropbox) When the logo is the
    next step, the vermilion is the next step's "Add the logo" (it opens the file picker). Ready: the logo on a soft
    tile, "Logo added ✓" and "Change" (glass). Errors: an SVG or other type → "Clip Factory needs a PNG, JPG or WebP
    picture. Save the logo as PNG and try again."; over 10 MB → "That picture is too big. Use one under 10 MB."; a
@@ -335,14 +335,18 @@ top to bottom:
    row per link, all buttons glass: YouTube, Twitch and Kick links get "Make clips from this" (starts Home with the
    link and the campaign picked); Drive or Dropbox footage gets "Open" and "Download it, then tap Use a video file on
    Home."; any other link is plain text. One chip per channel the brief allows, "Open FaZe's YouTube" (→ the channel's
-   videos page, §38.10), with "Pick a video there. Copy its link. Come back and tap Paste." When the brief allows only
+   videos page, §38.10), with "Pick a video there. Copy its link. Come back and tap Paste." and the section's own
+   **Make clips for this campaign** (the line then says "Then tap Make clips for this campaign."; vermilion only when
+   nothing else on the page is). When the brief allows only
    its own videos, the next step is `pick_video` ("Pick a video below.") and the first row's "Make clips from this"
    is the vermilion one.
 7. **Your clips for this campaign** (`data-help="cr-campaign-clips"`, from `GET /v1/contentrewards/submissions?
    campaignId=`; only once there is one): "3 approved · 2 waiting · 1 not approved" (`Campaign.clipCounts`), then one
    `CrPostLine` (§38.6) per post, newest first, 10 then **Show more**.
 8. Footer: "Remove from Clip Factory" (quiet; 8 s toast "Removing FaZe Clips… Undo"; it never touches Content Rewards,
-   your posts or what was sent).
+   your posts or what was sent). The campaign is hidden from every list while the Undo counts (live refreshes
+   included) and after, until the server's list drops it; its own page, if open then, goes to /campaigns. Text pasted
+   into either rules box is kept per campaign (sessionStorage) until the rules are read.
 
 **Membership and the next step** (`Campaign.membership`, read from `list_my_campaigns`, §38.9; a campaign is "in" when
 CR lists it for you; `said` is the owner's own answer, kept per campaign, every answer undoable with an 8 s toast and
@@ -440,8 +444,7 @@ that is never "accepted": it just shows.
     "I linked it" (`PATCH /v1/contentrewards/connection {"relinked": "youtube"}`: back to unknown, so YouTube returns
     to the chips) and the second line "Then tap I linked it. The next clip will go."
   * **Use my settings** puts the campaign versions on: YouTube Who can see it **Everyone**, Made for kids **No**,
-    "Paid promotion: on" (the three are shown locked, with "Campaign clips are public, never made for kids, and
-    marked as paid."); Instagram and Facebook as My settings; X "Paid partnership: on"; TikTok (after the audit only)
+    "Paid promotion: on" (the row's line names the three; inside the row one locked line says "Campaign clips are public, never made for kids, and marked as paid."); Instagram and Facebook as My settings; X "Paid partnership: on"; TikTok (after the audit only)
     Everyone (`PUBLIC_TO_EVERYONE`: Use my settings picks it; the dropdown still lists TikTok's own options with no
     default, §17.8, and any other pick shows "Campaign clips must be public. Pick Everyone." under the row), Commercial
     content on with
@@ -544,15 +547,15 @@ platform estimates; it has its own part.
 `data-help="cr-money"`; Settings › Posting › Money gains the apple `money-contentrewards` with href
 `/money#content-rewards`):
 * Three tiles from `GET /v1/contentrewards/money` (all in USD cents as CR reports them, formatted only): "**Still
-  earning** $4.20" ("Clips still earning. The amount can still change. (On Content Rewards: **Queued** and
-  **Arriving**.)" = the sum of `pending` payouts), "**On its way** $0.00" ("Moving to your Whop balance." =
-  `withdrawal_pending`), "**Ready to move** $18.25" ("You can move this to Whop now. (On Content Rewards: **Balance**.)"
-  = `available`). When campaign clips wait for the brand: "3 clips are waiting for the brand. Their money shows here
-  after the brand says yes." (CR's pending amount is $0 until approval). Then "Content Rewards paid you $62.40 so far
+  earning** $4.20" ("Can still change. On Content Rewards: **Queued** and **Arriving**." = the sum of `pending`
+  payouts), "**On its way** $0.00" ("Moving to your Whop balance." =
+  `withdrawal_pending`), "**Ready to move** $18.25" ("Move it to Whop now. On Content Rewards: **Balance**." = `available`).
+  When campaign clips wait for the brand: "3 clips are waiting for the brand." (CR's pending amount is $0 until
+  approval). Then "Content Rewards paid you $62.40 so far
   · last money Tue 18 Nov" (`paidSoFarCents`, newest `paid_at`), a per-campaign list (name, paid, still earning), and
-  the grey line "Content Rewards' numbers · checked 20 min ago". Not connected: "Connect Content Rewards to see your
+  the grey line "Checked 20 min ago" (the part's head keeps the tag "Content Rewards' numbers"). Not connected: "Connect Content Rewards to see your
   campaign money." (→ setup page); `needs_reconnect`: "Sign in to Content Rewards again to see your money."; nothing
-  yet: "No campaign money yet. It shows here when the brand approves your clips."; `checking`: the tiles show and the
+  yet: "No campaign money yet. It comes when the brand says yes."; `checking`: the tiles show and the
   paid line says "Checking…".
 * "Ready to move" of $1.00 or more makes "Move your money to Whop" the part's vermilion step. When a move to Whop has
   just finished (`withdrawal_pending` went back to 0 after being above 0, `auto: money_moved`), the bank step is the
@@ -569,8 +572,8 @@ question first, asked once and kept (`CRCONN.finance`, `PATCH /v1/contentrewards
 "Do you see **Finance** in the Content Rewards menu?" as a `<Glide>` pick-one bar "Yes" / "No" (no main button on
 the part until it is answered; then the next money step's button is the vermilion one). "Yes" shows only the
 `finance: "yes"` steps, "No" only the `finance: "no"` steps; "Change my
-answer" (quiet) asks again. First line of the part: "Whop is the website where Content Rewards sends your money. From
-there it goes to your bank."
+answer" (quiet) asks again. First line of the part: "Content Rewards pays you on Whop. Then you move it to your
+bank."
 | id | for | title | essentials |
 |---|---|---|---|
 | `move-whop` | no | Link your Whop account | once; "I did this". "No Whop account? Tap **Open Whop** and make one with the same email." Open "Open Content Rewards settings" → `https://contentrewards.com/c/settings`. "Find Connect your Whop account and tap **Open Whop**." "Sign in to Whop and allow it. Then come back." If you see: can't find it → "Tap **Profile** and look again."; "Could not open Whop. Try again." → "Tap **Open Whop** again."; "already connected to another creator" → "Use your own Whop account, or ask Content Rewards support." |

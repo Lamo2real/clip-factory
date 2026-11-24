@@ -12,7 +12,7 @@ import modelsFile from "../../../../../stories/config/models.json";
 import { ApiError } from "../../../api/errors.ts";
 import type { Agent, AgentId, AiTask, Effort, ModelInfo, Onboarding, OnboardStep, SocialAccount, StoriesAiConfig, StoriesApi, TaskInfo, TaskKind } from "../types.ts";
 import { aiPicks, stampPicked } from "./ai.ts";
-import { sameAsClips } from "./social.ts";
+import { markSkips, sameAsClips } from "./social.ts";
 import { ago, delay, HOUR, mockId, type MockStore } from "./store.ts";
 import { DEFAULT_CONFIG, storiesWorkspace } from "./workspace.ts";
 
@@ -98,14 +98,21 @@ function realDone(store: MockStore, ws: string, step: OnboardStep): boolean {
   return store.onboarding.stepsDone.includes(step);
 }
 
+/**
+ * The onboarding as GET …/onboarding answers it. Like the API (its accounts read drops a stale skip: connected wins), a
+ * platform connected now loses its skip first. `total` leaves out the platform steps skipped (a skipped platform is not
+ * counted anywhere but Social accounts), while `steps` keeps all eleven.
+ */
 export function onboardingOf(store: MockStore, ws: string): Onboarding {
+  markSkips(store, store.social.filter((a) => a.workspaceId === ws));
   const steps = ONBOARD_STEPS.map(({ step, label }) => {
     const done = realDone(store, ws, step);
     const state = done ? ("done" as const) : store.onboarding.skipped.includes(step) ? ("skipped" as const) : ("todo" as const);
     // Lamo Clips' own account: the step stays to do and says why (§45.34, §45.35 D11).
     return SOCIAL_STEPS.includes(step) && clipsOwn(store, ws, step) ? { step, label, state, line: sameAsClipsLine(step) } : { step, label, state };
   });
-  return { steps, done: steps.filter((s) => s.state === "done").length, total: 11, finishedAt: store.onboarding.finishedAt };
+  const skippedPlatforms = steps.filter((s) => SOCIAL_STEPS.includes(s.step) && s.state === "skipped").length;
+  return { steps, done: steps.filter((s) => s.state === "done").length, total: ONBOARD_STEPS.length - skippedPlatforms, finishedAt: store.onboarding.finishedAt };
 }
 
 const isStep = (s: unknown): s is OnboardStep => ONBOARD_STEPS.some((o) => o.step === s);

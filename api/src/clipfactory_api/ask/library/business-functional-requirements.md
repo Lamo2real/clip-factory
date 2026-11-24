@@ -445,7 +445,7 @@ using eaither the content rewards way of videos or normal way we have done so fa
   Balance."), never a number and never $0. Nothing is calculated, guessed, converted or typed in; all arithmetic is on
   the server.
 - AC3: The Content Rewards row also shows, in money's time order and only what Content Rewards reported: "Right now":
-  Still earning, Ready to move to Whop, On its way to Whop; "Earned so far, since you started"; and "Sent to your
+  Still earning, Ready to move to Whop, On its way to Whop; "Earned since you started"; and "Sent to your
   bank: not available from Content Rewards. Look on Whop: **Balances**." (or, once "Connect Whop" is on, what Whop
   sent: BR-30 AC5)
 - AC4: A place that isn't set up, needs his OK or must sign in again has one glass button to its own page; a setup

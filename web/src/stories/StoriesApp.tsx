@@ -34,6 +34,7 @@ import { CarsScreen } from "./screens/Cars.tsx";
 import { CharactersScreen } from "./screens/Characters.tsx";
 import { ChatScreen } from "./screens/Chat.tsx";
 import { ConnectionsScreen } from "./screens/Connections.tsx";
+import { ConnectionScreen } from "./screens/SocialPlatform.tsx";
 import { DashboardScreen } from "./screens/Dashboard.tsx";
 import { IdeasScreen } from "./screens/Ideas.tsx";
 import { LibraryScreen } from "./screens/Library.tsx";
@@ -117,7 +118,7 @@ const NAV: NavItem[] = [
     label: "Social accounts",
     icon: "plug",
     page: { name: "connections", platform: null, result: null, ws: null },
-    match: ["connections"],
+    match: ["connections", "connection"],
   },
   {
     label: "Settings",
@@ -222,6 +223,8 @@ function Screen(props: StoriesScreenProps) {
       return <SeriesScreen {...props} />;
     case "connections":
       return <ConnectionsScreen {...props} />;
+    case "connection":
+      return <ConnectionScreen {...props} />;
     case "settings":
       return <SettingsScreen {...props} />;
     case "chat":
@@ -356,7 +359,7 @@ export function StoriesApp({ page }: { page: StoriesPage }) {
 function StoriesShell({ page }: { page: StoriesPage }) {
   // On screen (Clip Factory's shell may stay mounted behind it, and this one behind Clip Factory: stories/pane.tsx).
   const { active } = useAppPane();
-  const fromAddress = page.name === "connections" ? page.ws : null;
+  const fromAddress = page.name === "connections" || page.name === "connection" ? page.ws : null;
   const [ws, setWs] = useState<string | null>(() => quickWorkspace(fromAddress));
   // Mounted ahead of a slide, hidden behind Clip Factory (stories/pane.tsx), its workspace was chosen then. Coming on
   // screen it opens the one the switcher picked since (§45.35 D19: Studio 3 from a list of four), chosen in this same
@@ -626,7 +629,7 @@ function StoriesShell({ page }: { page: StoriesPage }) {
         </main>
       </div>
       {solo ? null : (
-        <nav className="st-tabbar st-glass st-glass--bar" aria-label="Clips Funded">
+        <nav className="st-tabbar st-glass st-glass--bar" aria-label="Clips Funded" data-bottom-bar="">
           <ul className="st-tabbar__list">
             {/* The round active highlight (the figure's orb) slides between the tabs. */}
             <Glide active=".st-tabbar__item.is-active" className={`glide--st-tab ${TAB_ORB}`} as="li" />

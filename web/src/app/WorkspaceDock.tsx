@@ -295,7 +295,7 @@ const warm = (w: Workspace | null) =>
  * happens at once, as before.
  */
 function slidePanes(w: Workspace): AppSlide | null {
-  if (dockCalm() || leaveGuarded()) return null;
+  if (dockCalm() || leaveGuarded(hrefFor(w))) return null;
   return startAppSlide(appOf(w), hrefFor(w));
 }
 
@@ -460,7 +460,7 @@ function Bar({ list, current, stacked, barRef }: { list: Workspace[]; current: s
       return;
     }
     const at = leaving(false);
-    if (dockCalm() || leaveGuarded()) {
+    if (dockCalm() || leaveGuarded(hrefFor(w))) {
       switchTo(w, at);
       return;
     }

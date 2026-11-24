@@ -212,4 +212,15 @@ describe("httpApi", () => {
     await api.me();
     expect((fetcher.mock.calls[1] as unknown as [string, RequestInit])[1].keepalive).toBeUndefined();
   });
+
+  it("keeps the week's stars alive past page unload, so picks saved as the page closes still land", async () => {
+    const week = { week: "2026-W48", clipIds: ["C1"], clips: [] };
+    const fetcher = vi.fn(async () => json(200, { week }));
+    const api = httpApi({ baseUrl: "https://api.test", auth: auth(["tok"]), fetcher });
+    await api.saveWeekBest("2026-W48", { from: "2026-11-23", to: "2026-11-30", clipIds: ["C1"] });
+    const [url, init] = fetcher.mock.calls[0] as unknown as [string, RequestInit];
+    expect(url).toBe("https://api.test/v1/weeks/2026-W48/best");
+    expect(init.method).toBe("PUT");
+    expect(init.keepalive).toBe(true);
+  });
 });

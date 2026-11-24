@@ -26,7 +26,7 @@ test.describe("at 375px", () => {
     await expect(x).not.toHaveAttribute("open", "");
 
     await card.getByRole("button", { name: /^Upload( to .+)?$/ }).click();
-    await expect(page.getByText("Your X caption is longer than its platform allows. Make it shorter, then tap Upload.")).toBeVisible();
+    await expect(page.getByText("Your X caption is too long. Make it shorter, then tap Upload.")).toBeVisible();
     await expect(x).toHaveAttribute("open", "");
     const box = card.getByLabel("X caption");
     await expect(box).toBeFocused();

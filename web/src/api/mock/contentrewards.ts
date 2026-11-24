@@ -711,7 +711,8 @@ export function crMockApi({ store, setup, publish, finder, catalog }: CrMockDeps
     if (cat.platformsPaid.length && cat.platformsPaid.every((p) => p === "tiktok")) add("tiktok_only");
     else if (!uploadPlaces.length) {
       const first = PLATFORM_ORDER.find((p) => cat.platformsPaid.includes(p) && p !== "tiktok");
-      add("no_place", first ? { fixHref: `/settings/posting/setup/${first}` } : {});
+      // Set it up leads back to this card once the place is connected (§39.1 `?back=`, as gates.py makes it).
+      add("no_place", first ? { fixHref: `/settings/posting/setup/${first}?back=/campaigns/${c.campaignId}` } : {});
     }
     if (c.held) add("held");
     if ((cat.budget.usedPct ?? 0) >= 95) add("budget_gone");

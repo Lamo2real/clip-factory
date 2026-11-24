@@ -6,7 +6,7 @@ import { TODO_CELEBRATE_MS } from "../src/lib/setupTodo.ts";
 import { GUIDES, SETUP_ORDER } from "../src/setup/index.ts";
 import { decode } from "./pixels.ts";
 import { asDesktop, paintGlass, WINDOW_EXTRA_ROUTES, WINDOW_LOOKS, type GlassPaint } from "./glass.ts";
-import { animationsDone, CLIPS, looseText, MIXED_SETUP, mixedSetup, openClip, resolveRoute, ROUTES, scanText, settle, whiteContrastOnGradient } from "./helpers.ts";
+import { animationsDone, CLIPS, expectMixedList, looseText, mixedSetup, openClip, resolveRoute, ROUTES, scanText, settle, whiteContrastOnGradient } from "./helpers.ts";
 
 // Every screen's text is readable (audit F081, WCAG 2.1 AA 1.4.3; docs/TESTING.md "Contrast and text size"):
 // at 320, 375 and 1440 px, with the browser asking for light and for dark (the app is light-only, so dark must
@@ -111,7 +111,8 @@ for (const route of [...ROUTES, ...CR_ROUTES]) {
 // ---------- The floating setup to-do list (docs/CONTRACTS.md §17.13) ----------
 // The routes above carry it in its plainest face: five "Not started" rows, as the open column at 1440 px and as the
 // pill at 320 and 375 px. Here every other face is read the same way, in light and dark: the open column and the
-// phone sheet with one row of every kind (ready, skipped, half done, needs you, not started), the pill folded on a
+// phone sheet with one row of every kind (ready, half done, needs you, not started; a skipped one is only in
+// Settings), the pill folded on a
 // wide screen and on its glass bar once the page has scrolled, the skip question over each, the "All set!" card,
 // and Settings › Set up posting with its Skip and Un-skip lines.
 
@@ -184,7 +185,7 @@ for (const scheme of SCHEMES) {
     await withEveryRow(page, "/library");
     const failures: string[] = [];
     const rail = page.locator(".setup-todo--rail");
-    for (const [platform, state] of Object.entries(MIXED_SETUP)) await expect(rail.locator(`.todo-row[data-platform='${platform}']`)).toHaveAttribute("data-state", state);
+    await expectMixedList(rail);
     await readableList(page, `open column ${scheme}`, failures);
 
     // The skip question over it.
@@ -226,7 +227,8 @@ for (const scheme of SCHEMES) {
       await withEveryRow(page, "/library");
       const failures: string[] = [];
       const pill = page.locator(".setup-todo__pill");
-      await expect(pill).toContainText("2/5");
+      // TikTok skipped is not counted: YouTube ready of the four left.
+      await expect(pill).toContainText("1/4");
       await readableList(page, `pill @${width} ${scheme}`, failures);
       await page.evaluate(() => window.scrollTo(0, 500));
       await expect(page.locator(".setup-todo-bar")).toHaveClass(/is-scrolled/);
@@ -236,7 +238,7 @@ for (const scheme of SCHEMES) {
       // The sheet, with one row of every kind.
       await pill.click();
       const sheet = page.locator(".setup-todo-panel");
-      for (const [platform, state] of Object.entries(MIXED_SETUP)) await expect(sheet.locator(`.todo-row[data-platform='${platform}']`)).toHaveAttribute("data-state", state);
+      await expectMixedList(sheet);
       await readableList(page, `sheet @${width} ${scheme}`, failures);
 
       // The skip question over the sheet.
@@ -321,7 +323,7 @@ for (const { glass, paints } of WINDOW_LOOKS) {
     await withEveryRow(page, "/library");
     await expect(page.locator("html")).toHaveClass(/see-through/);
     const pill = page.locator(".setup-todo__pill");
-    await expect(pill).toContainText("2/5");
+    await expect(pill).toContainText("1/4");
     await scan("the pill @375");
     await page.evaluate(() => window.scrollTo(0, 500));
     await expect(page.locator(".setup-todo-bar")).toHaveClass(/is-scrolled/);
@@ -329,7 +331,7 @@ for (const { glass, paints } of WINDOW_LOOKS) {
     await page.evaluate(() => window.scrollTo(0, 0));
     await pill.click();
     const sheet = page.locator(".setup-todo-panel");
-    await expect(sheet.locator(".todo-row[data-platform='tiktok']")).toHaveAttribute("data-state", "skipped");
+    await expectMixedList(sheet);
     await scan("the sheet @375");
     await sheet.getByRole("button", { name: "Skip X", exact: true }).click();
     await expect(skipQuestion(page, "x")).toBeVisible();
@@ -340,7 +342,7 @@ for (const { glass, paints } of WINDOW_LOOKS) {
     await page.setViewportSize({ width: 1440, height: 900 });
     await withEveryRow(page, "/library");
     const rail = page.locator(".setup-todo--rail");
-    for (const [platform, state] of Object.entries(MIXED_SETUP)) await expect(rail.locator(`.todo-row[data-platform='${platform}']`)).toHaveAttribute("data-state", state);
+    await expectMixedList(rail);
     await scan("the open column @1440");
     await rail.getByRole("button", { name: "Skip X", exact: true }).click();
     await expect(skipQuestion(page, "x")).toBeVisible();

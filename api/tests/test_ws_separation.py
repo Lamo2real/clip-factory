@@ -471,6 +471,14 @@ def _sample_bodies(r: Route, ids: dict[str, str]) -> list[Any]:
         ("POST", "/choose", {"choiceId": "page-1"}),
         ("PUT", "/app", {"choice": "clips"}),
         ("PUT", "/app", {"choice": "own", "clientId": "own-id", "clientSecret": "own-secret"}),
+        # §47.10: My Mac posts TikTok (the helper's check-in, Log in on my Mac, a claim)
+        ("POST", "/tiktok/mac/ping", {"state": "ok", "version": "1.2.0", "device": "mac-1", "setUp": False}),
+        ("POST", "/tiktok/mac/login", {"action": "sign_in"}),
+        ("POST", "/tiktok/mac/request", {"action": "resume"}),
+        ("POST", "/mac/claim", {"device": "mac-1", "version": "1.2.0"}),
+        ("POST", "/mac/step", {"device": "mac-1", "step": "video"}),
+        ("POST", "/mac/stopped", {"device": "mac-1", "reason": "Stopped.", "needsYou": True}),
+        ("POST", "/mac/posted", {"noLink": True}),
     ]
     return [{}] + [body for method, end, body in samples if method == m and p.endswith(end + "$")]
 

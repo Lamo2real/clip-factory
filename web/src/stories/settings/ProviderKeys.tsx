@@ -1,7 +1,7 @@
 // Provider keys (docs/CONTRACTS.md §45.29 AI and Video, §45.31, §45.34): a provider that needs an API key gets a key
 // form. The key goes to Secrets Manager through PUT …/providers/{id}/key and never comes back: what the page shows of
 // it is ProviderStatus.key (saved or not, its last four, when) and the provider's own line ("Key saved · ends 4f2a.").
-// "Remove the saved key" shows only while a key is saved. ProviderStatus.key is present only for a provider that takes
+// "Remove the saved key" shows only while a key is saved, and asks "Are you sure?" first (like Social accounts). ProviderStatus.key is present only for a provider that takes
 // a key; for an API that does not send it yet, the contract's provider tables say which need none (§45.11.6, §45.31:
 // the built-in makers, Claude, Stability AI, Luma AI, Amazon Polly and the ended Nova makers use Lamo Stories' own AWS
 // access). Since §45.37 G4 the keyed hosts take one: the Anthropic API, an OpenAI-compatible API and ElevenLabs.
@@ -30,6 +30,11 @@ export const NO_KEY: ReadonlySet<string> = new Set([
   "own-sound",
 ]);
 
+/** A key row's name: the provider's, without the word "API" ("Anthropic API" reads "Anthropic"). */
+export function keyName(label: string): string {
+  return label.replace(/\s+API$/, "") || label;
+}
+
 export function takesKey(p: ProviderStatus): boolean {
   if (p.key) return true;
   if (p.key === null) return false;
@@ -50,8 +55,7 @@ export function keepName(old: ProviderStatus, next: ProviderStatus): ProviderSta
 }
 
 /** An OpenAI-compatible key is for one address only (§45.37 G4): the one its models use, never sent anywhere else. */
-export const ONE_ADDRESS_LINE =
-  "This key is for one address only: the one your OpenAI-compatible models use. Clips Funded never sends it anywhere else. Add the model first, or type its address here.";
+export const ONE_ADDRESS_LINE = "This key only goes to one address. Add the model first, or type its address here.";
 
 function KeyForm({ ws, provider, onSaved }: { ws: string; provider: ProviderStatus; onSaved: (p: ProviderStatus) => void }) {
   const toast = useToast();
@@ -60,8 +64,13 @@ function KeyForm({ ws, provider, onSaved }: { ws: string; provider: ProviderStat
   const forAddress = provider.id === "openai_compatible";
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
+  // "Remove the saved key" asks first: Yes, remove the key / No, keep it.
+  const [sure, setSure] = useState(false);
   const s = PROVIDER_STATE[provider.state];
   const here = useOnThisPage();
+  // The provider's name without "API" on the surface ("Anthropic", not "Anthropic API"): the same in its lines.
+  const shown = keyName(provider.label);
+  const words = (line: string) => here(line).split(provider.label).join(shown);
   const save = async (el: HTMLElement | null) => {
     if (busy) return;
     if (!text.trim()) {
@@ -77,7 +86,7 @@ function KeyForm({ ws, provider, onSaved }: { ws: string; provider: ProviderStat
       setOpen(false);
       onSaved(next);
       cheer(el);
-      toast.success(`${provider.label}'s key is saved. Only its last four characters are ever shown.`);
+      toast.success(`${provider.label}'s key is saved. Only its last 4 characters show.`);
     } catch (e) {
       toast.error(friendlyMessage(e));
     } finally {
@@ -89,6 +98,7 @@ function KeyForm({ ws, provider, onSaved }: { ws: string; provider: ProviderStat
     setBusy(true);
     try {
       await storiesApi().deleteProviderKey(ws, provider.id);
+      setSure(false);
       onSaved({ ...provider, state: "needs_setup", line: `Paste your ${provider.label} key to use it.`, key: { saved: false, hint: null, savedAt: null } });
       toast.info(`${provider.label} has no saved key now.`);
     } catch (e) {
@@ -102,11 +112,12 @@ function KeyForm({ ws, provider, onSaved }: { ws: string; provider: ProviderStat
       <div className="st-stg-keyrow__head">
         <span className="st-stg-keyrow__name">
           <SIcon name="key" size={20} />
-          {provider.label}
+          {shown}
         </span>
         <Chip tone={s.tone}>{s.label}</Chip>
       </div>
-      <p className="st-stg-small">{here(provider.line)}</p>
+      <p className="st-stg-small">{words(provider.line)}</p>
+      {provider.lastError && provider.lastError !== provider.line ? <p className="st-stg-provider__error">Last problem: {words(provider.lastError)}</p> : null}
       {provider.key?.saved && !provider.line.includes("Key saved") ? (
         <p className="st-stg-small">
           Key saved{provider.key.hint ? ` · ends ${provider.key.hint}` : ""}
@@ -123,7 +134,7 @@ function KeyForm({ ws, provider, onSaved }: { ws: string; provider: ProviderStat
           }}
         >
           <label className="st-stg-label" htmlFor={`key-${provider.id}`}>
-            {provider.label} key
+            {shown} key
           </label>
           <input
             id={`key-${provider.id}`}
@@ -164,13 +175,28 @@ function KeyForm({ ws, provider, onSaved }: { ws: string; provider: ProviderStat
             </Btn>
           </div>
         </form>
+      ) : sure && provider.key?.saved ? (
+        <div className="st-stg-confirm" role="group" aria-label="Are you sure?">
+          <p>
+            <strong>Remove {provider.label}'s key?</strong> {provider.label} stops working until you paste a key again.
+          </p>
+          <div className="st-stg-actions">
+            <Btn main danger off={busy ? "Removing…" : undefined} onClick={() => void remove()}>
+              {busy ? "Removing…" : "Yes, remove the key"}
+            </Btn>
+            <Btn quiet onClick={() => setSure(false)}>
+              No, keep it
+            </Btn>
+          </div>
+        </div>
       ) : (
         <div className="st-stg-actions">
-          <Btn main onClick={() => setOpen(true)} label={`${provider.key?.saved ? "Paste a new key" : "Paste a key"} for ${provider.label}`}>
+          {/* Glass: the card's one orange button is its own main action (Check models, Add a model), never a key row's. */}
+          <Btn onClick={() => setOpen(true)} label={`${provider.key?.saved ? "Paste a new key" : "Paste a key"} for ${shown}`}>
             {provider.key?.saved ? "Paste a new key" : "Paste a key"}
           </Btn>
           {provider.key?.saved ? (
-            <Btn quiet danger off={busy ? "Working…" : undefined} onClick={() => void remove()} label={`Remove the saved key of ${provider.label}`}>
+            <Btn quiet danger onClick={() => setSure(true)} label={`Remove the saved key of ${provider.label}`}>
               Remove the saved key
             </Btn>
           ) : null}
@@ -199,7 +225,7 @@ export function ProviderKeys({
   if (!list.length)
     return (
       <Note tone="sky" icon="key">
-        None of these providers needs a key: they run in Clips Funded's own AWS account. A provider that needs one shows its key form here.
+        None of these providers needs a key. Clips Funded's own account runs them.
       </Note>
     );
   return (

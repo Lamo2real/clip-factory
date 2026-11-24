@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../api/index.ts";
 import { friendlyMessage } from "../../api/errors.ts";
-import type { Campaign, CampaignSummary, FinderMatch, FinderWant } from "../../api/types.ts";
+import type { Campaign, CampaignSummary, FinderMatch, FinderWant, Platform } from "../../api/types.ts";
 import { useSession } from "../../app/session.tsx";
 import { Icon } from "../../components/Icon.tsx";
 import { useToast } from "../../components/Toasts.tsx";
@@ -29,6 +29,7 @@ import {
   putFinder,
   readyPlaces,
   reloadFinder,
+  SETUP_LIST_PATH,
   setupPlaceHref,
   shownMatches,
   stateLine,
@@ -36,6 +37,7 @@ import {
   useWantSaver,
 } from "../../lib/finder.ts";
 import { PLATFORM_LABEL } from "../../lib/format.ts";
+import { activeSkips } from "../../lib/setupTodo.ts";
 import { useLiveEvents, useLivePoll } from "../../lib/live.ts";
 import { clipsGoLater } from "../../app/shell.ts";
 import { CR_DISCOVER } from "../../setup/contentrewards.ts";
@@ -55,6 +57,13 @@ export const READING = "Reading the rules… (about 30 seconds)";
 function useNewsOff(): boolean {
   const session = useSession();
   return session.me?.settings.notify?.contentRewards === false;
+}
+
+const NO_SKIPS: readonly Platform[] = [];
+
+/** The skipped places (Settings.setupSkipped, rule S): the page never asks him to set one up. */
+function useSkipped(): readonly Platform[] {
+  return useSession().me?.settings.setupSkipped ?? NO_SKIPS;
 }
 
 /** The row's fields a campaign's newer copy updates. */
@@ -116,6 +125,7 @@ export function FindPage() {
   const toast = useToast();
   const pin = true;
   const newsOff = useNewsOff();
+  const saved = useSkipped();
   const saver = useWantSaver((m) => toast.error(m));
   const now = useNow(true, 60_000);
 
@@ -286,6 +296,8 @@ export function FindPage() {
     [setup.data, data?.tiktokWaits, data?.resolvedPlaces],
   );
   const accountCopies = useMemo(() => accountLinks(setup.data?.platforms), [setup.data]);
+  // Skips of places that are not set up (a place that is set up is never skipped).
+  const skipped = useMemo(() => activeSkips(setup.data?.platforms, saved), [setup.data, saved]);
 
   if (f.state === "missing" || f.state === "soon")
     return (
@@ -323,7 +335,7 @@ export function FindPage() {
 
   const want: FinderWant = fresh ? { ...WANT_DEFAULTS, ...data.want, ...draft } : { ...data.want, ...saver.shown };
   const noPlace = (fresh && ready.length === 0) || (data.state === "ok" && data.resolvedPlaces.length === 0);
-  const setUpFirst = placeToSetUp(setup.data);
+  const setUpFirst = placeToSetUp(setup.data, skipped);
   const off = data.state === "off";
   const looking = data.state === "looking";
   const updating = looking && saver.sent;
@@ -439,8 +451,14 @@ export function FindPage() {
 
   function notForMe(m: FinderMatch) {
     const at = visible.findIndex((x) => x.campaignId === m.campaignId);
-    if (openMatch?.campaignId === m.campaignId) setOpenId(visible[at + 1]?.campaignId ?? visible[at - 1]?.campaignId ?? null);
+    const after = visible[at + 1]?.campaignId ?? visible[at - 1]?.campaignId ?? null;
+    if (openMatch?.campaignId === m.campaignId) setOpenId(after);
     setHidden((h) => new Set([...h, m.campaignId]));
+    // Its card goes: the focus moves to the next match (else What you want), never to the page.
+    setTimeout(() => {
+      const next = after ? document.querySelector<HTMLElement>(`.finder-match[data-campaign="${after}"] .finder-match__head`) : null;
+      (next ?? document.querySelector<HTMLElement>("#want button, #want h2"))?.focus({ preventScroll: !!next });
+    }, 0);
     const back = () =>
       setHidden((h) => {
         const next = new Set(h);
@@ -565,12 +583,12 @@ export function FindPage() {
             <span>{line}</span>
           </p>
           {data.state === "ok" && !noPlace && !list.length && data.looked.pending > 0 && want.tellMe ? (
-            <p className="finder-state__sub">You don&apos;t need to do anything. I&apos;ll tell you when one matches.</p>
+            <p className="finder-state__sub">I&apos;ll tell you when one matches.</p>
           ) : null}
           {data.state === "ok" && noPlace ? (
             <div className="finder-state__main">
-              <LinkButton href={setupPlaceHref(setUpFirst)} variant={main === "setup" ? "primary" : "glass"} size="lg" icon="link" data-help-clear={main === "setup" ? "" : undefined}>
-                Set up {PLATFORM_LABEL[setUpFirst]}
+              <LinkButton href={setUpFirst ? setupPlaceHref(setUpFirst) : SETUP_LIST_PATH} variant={main === "setup" ? "primary" : "glass"} size="lg" icon="link" data-help-clear={main === "setup" ? "" : undefined}>
+                {setUpFirst ? `Set up ${PLATFORM_LABEL[setUpFirst]}` : "Open Set up posting"}
               </LinkButton>
             </div>
           ) : null}
@@ -597,6 +615,7 @@ export function FindPage() {
         fresh={fresh}
         noPlace={noPlace}
         setUpFirst={setUpFirst}
+        skipped={skipped}
         main={main === "start" || (fresh && main === "setup")}
         pinned={pin}
         newsOff={newsOff}
@@ -651,9 +670,7 @@ export function FindPage() {
         <div className="finder-quiet">
           <p>You join each campaign yourself on Content Rewards.</p>
           <p>
-            {data.signedIn
-              ? "Open campaigns show their rules only after you join. I read them right after."
-              : "Open campaigns show their rules only after you join. Then I'll ask you to copy them here once."}
+            {data.signedIn ? "Rules show after you join. I read them then." : "Rules show after you join. Then you copy them here once."}
           </p>
           {data.skipped.length || data.looked.campaigns ? (
             <details className="cr-fold finder-why-not">
@@ -693,7 +710,7 @@ export function FindPage() {
           <h2 className="cr-section__title" id="finder-ask-title">
             Clip Factory can&apos;t join for you
           </h2>
-          <p>Content Rewards has no way yet for apps to join. You can ask them to add one.</p>
+          <p>Content Rewards doesn&apos;t let apps join yet. You can ask them.</p>
           {data.askedAt ? (
             <p className="finder-ask__done">
               <Icon name="checkCircle" size={18} />
@@ -707,11 +724,10 @@ export function FindPage() {
           <details className="cr-fold">
             <summary className="cr-fold__q">
               <Icon name="info" size={18} />
-              <span>Show more</span>
+              <span>See the message</span>
               <Icon name="chevronRight" size={18} className="icon cr-fold__chev act-turn" />
             </summary>
             <div className="cr-fold__body">
-              <p className="finder-ask__what">What it says</p>
               <p>This is what Clip Factory sends to Content Rewards&apos; team.</p>
               <blockquote className="finder-ask__msg">{ASK_MESSAGE}</blockquote>
             </div>

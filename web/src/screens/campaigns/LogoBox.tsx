@@ -8,7 +8,7 @@ import type { Campaign } from "../../api/types.ts";
 import { Icon } from "../../components/Icon.tsx";
 import { useToast } from "../../components/Toasts.tsx";
 import { Button, Progress } from "../../components/ui.tsx";
-import { reloadCr } from "../../lib/contentRewards.ts";
+import { pasteByHand, reloadCr } from "../../lib/contentRewards.ts";
 import { Lines, OpenButton } from "./bits.tsx";
 
 export const LOGO_TYPES = { "image/png": "png", "image/jpeg": "jpg", "image/webp": "webp" } as const;
@@ -114,7 +114,7 @@ export function LogoBox({
       void fromLink(text);
     } catch {
       document.getElementById(`${id}-link`)?.focus();
-      toast.info("Press and hold in the link box, then choose Paste.");
+      toast.info(pasteByHand("the link box"));
     }
   }
 
@@ -163,7 +163,7 @@ export function LogoBox({
               openCampaign
                 ? "Tap Open campaign. Open **Reference materials**. Tap the file with “logo” in its name. Download it."
                 : "On the campaign page, open **Reference materials**. Tap the file with “logo” in its name. Download it.",
-              "Tap Choose a file and pick it from Downloads. A Google Drive link works too: tap Paste.",
+              "Tap Choose a file. Pick it from Downloads.",
             ]}
           />
           <div

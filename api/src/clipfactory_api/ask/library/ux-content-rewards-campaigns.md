@@ -193,7 +193,7 @@ Contract: [CONTRACTS.md §39.2](CONTRACTS.md#392-all-your-money-in-one-place),
   again"), never a number or $0 for a place that doesn't report one, and at most one glass button at the row's right
   end (so on phones nothing tappable sits in the top-left third). Under Content Rewards, its small lines in money's
   time order: "Right now (Content Rewards says, 2:10 pm): Still earning … · Ready to move to Whop … · On its way to
-  Whop …", "Earned so far, since you started: …", "Sent to your bank: not available from Content Rewards. Look on
+  Whop …", "Earned since you started: …", "Sent to your bank: not available from Content Rewards. Look on
   Whop: **Balances**." (since §40.4 every row's `sent` line; it was "Paid out to your bank") and a glass "See it all" (to `#content-rewards`) only while the row has no button of its own.
 - **The total**: "Total: $24.80" (the biggest number on the page; it never counts up), "YouTube + Content Rewards · 30
   days up to Sat 16 Nov", the tag line "YouTube's estimate + Content Rewards' numbers"; two currencies give one line
@@ -252,8 +252,7 @@ each one himself on Content Rewards. The server decides every match and writes e
   join" lay their choices out in even halves (a 2 × 2 grid with a rounded track and highlight, and two halves side by
   side), never one choice alone on a second row.
 
-  Under them, fixed: "I skip campaigns Clip Factory can't make clips for, like ones that need their own sound or
-  picture on the video." Chips are toggle buttons (`aria-pressed`), soft-filled when on, at least 44 px (48 on
+  Under them, fixed: "I skip campaigns that need their own sound or picture on the video." Chips are toggle buttons (`aria-pressed`), soft-filled when on, at least 44 px (48 on
   phones). TikTok, until TikTok's audit, and a place not set up are shown off and can't be tapped (`aria-disabled`),
   with their one line ("TikTok: not yet. …", "Set it up first."), and a quiet "Set up another place" under the chips.
 - **The match card** (`FinderMatchCard`, `data-help="cr-finder-match"`), one open at a time (the first on load;

@@ -13,7 +13,7 @@ import { forgetLoaded } from "../src/lib/hooks.ts";
 import { setStoriesApi } from "../src/stories/api/client.ts";
 import { mockStoriesApi } from "../src/stories/api/mock/index.ts";
 import { setMockLatency, type MockStore } from "../src/stories/api/mock/store.ts";
-import type { StoriesApi } from "../src/stories/api/types.ts";
+import type { Onboarding, OnboardStep, StoriesApi } from "../src/stories/api/types.ts";
 import { forgetDashboards, forgetOnboarding } from "../src/stories/ui.tsx";
 import { resetWorkspaceMemory } from "../src/stories/workspace.ts";
 
@@ -24,7 +24,7 @@ vi.mock("../src/lib/router.ts", async (orig) => {
   return { ...real, navigate: () => undefined };
 });
 
-const { SetupScreen } = await import("../src/stories/screens/Setup.tsx");
+const { SETUP_ORDER, SetupScreen, firstOpen, leftOf } = await import("../src/stories/screens/Setup.tsx");
 
 let host: HTMLElement;
 let root: Root;
@@ -65,6 +65,12 @@ const $$ = <T extends Element = HTMLElement>(sel: string, from: ParentNode = hos
 function button(name: string | RegExp, from: ParentNode = host): HTMLButtonElement {
   const b = $$<HTMLButtonElement>("button", from).find((x) => (typeof name === "string" ? x.textContent?.trim() === name : name.test(x.textContent ?? "")));
   if (!b) throw new Error(`no button ${String(name)}; have: ${$$("button", from).map((x) => x.textContent?.trim()).join(" | ")}`);
+  return b;
+}
+/** A step in the step list (its number, its name, and "(done)" for screen readers): the way to each step. */
+function stepItem(name: string): HTMLButtonElement {
+  const b = Array.from(host.querySelectorAll<HTMLButtonElement>(".st-steps__item")).find((x) => x.querySelector(".st-steps__label")?.textContent === name);
+  if (!b) throw new Error(`no step ${name}`);
   return b;
 }
 async function click(el: Element) {
@@ -152,7 +158,7 @@ describe("step 1: set up the AI", () => {
 describe("steps 2 and 3: the default model and effort", () => {
   it("saves the model alone with picked model; then the effort with picked effort", async () => {
     await start({ fresh: true });
-    await click(button("Pick your default model"));
+    await click(stepItem("Pick your default model"));
     await click($$("[role=radio]").find((r) => r.textContent?.includes("Claude Fable 5.2"))!);
     await click(button("Use Claude Fable 5.2"));
     await settle(6);
@@ -173,14 +179,16 @@ describe("steps 2 and 3: the default model and effort", () => {
     await start({ fresh: true }, async (api) => {
       await api.putAiModel("stories", "custom-quick", { label: "Quick One", provider: "Amazon", modelId: "eu.amazon.nova-lite-v1:0", region: "eu-north-1", efforts: ["low", "medium"], defaultEffort: "medium", vision: false, maxOutputTokens: 4096, price: null });
     });
-    await click(button("Pick your default model"));
+    await click(stepItem("Pick your default model"));
     await click($$("[role=radio]").find((r) => r.textContent?.includes("Quick One"))!);
-    expect(document.body.textContent).toContain("Quick One does not offer High. Next you pick its level, then both are saved together.");
+    // Said once: the note says what is missing, the button says what comes next.
+    expect(document.body.textContent).toContain("Quick One does not offer High.");
+    expect(document.body.textContent!.split("pick its level next").length - 1).toBe(1);
     await click(button("Use Quick One: pick its level next"));
     // Nothing saved yet; the effort step asks for its level, with nothing picked for the owner.
     expect(putAis()).toHaveLength(0);
     expect(stepTitle()).toBe("Pick your default effort");
-    expect(document.body.textContent).toContain("Quick One does not offer High. Pick its level: then Quick One and that level are saved together.");
+    expect(document.body.textContent).toContain("Quick One does not offer High. Pick its level, then both are saved.");
     expect($$("[role=radio]").map((r) => [r.textContent, r.getAttribute("aria-checked")])).toEqual([
       ["Low", "false"],
       ["MediumThe model's own", "false"],
@@ -200,12 +208,12 @@ describe("steps 2 and 3: the default model and effort", () => {
 describe("step 4 and the connect steps", () => {
   it("Luma AI Ray2's note (Nova Reel's before Amazon ended it) says videos stop until it is ready, never that the built-in animation takes over", async () => {
     await start({ fresh: true });
-    await click(button("Pick how videos are made"));
+    await click(stepItem("Pick how videos are made"));
     // §45.37 G7: Amazon ended Nova Reel, so step 4 never offers it; Luma AI Ray2 makes the AI cut-aways.
     expect($$("[role=radio]").some((r) => r.textContent?.includes("Amazon Nova Reel"))).toBe(false);
     await click($$("[role=radio]").find((r) => r.textContent?.includes("Luma AI Ray2"))!);
     // Every create, remake and change stops while it is not ready (§45.34 "A provider that is not ready"), whatever the scenes.
-    expect(document.body.textContent).toContain("Until it is, new videos, remakes and changes stop and say what is missing: nothing switches to the built-in animation by itself.");
+    expect(document.body.textContent).toContain("Until then, new videos, remakes and changes stop. Nothing switches by itself.");
     expect(document.body.textContent).toContain("Pick Built-in animation above to keep making videos.");
     expect(document.body.textContent).not.toMatch(/a scene without characters stops/);
     expect(document.body.textContent).not.toMatch(/keep using the built-in animation/);
@@ -213,7 +221,7 @@ describe("step 4 and the connect steps", () => {
 
   it("an account that is Lamo Clips' own keeps its step to do, and says so", async () => {
     await start({});
-    await click(button("Connect X"));
+    await click(stepItem("Connect X"));
     expect(stepTitle()).toBe("Connect X");
     expect(document.body.textContent).toContain("This is Clip Factory's own account. Clips Funded needs its own separate account: sign in with a different one.");
     expect(stepState("Connect X")).not.toContain("is-done");
@@ -221,7 +229,7 @@ describe("step 4 and the connect steps", () => {
 
   it("the connect step of Clip Factory's own account never offers sharing it, and says each account line once (§45.37 G8 (c), (d))", async () => {
     await start({});
-    await click(button("Connect X"));
+    await click(stepItem("Connect X"));
     // A different account made for Clips Funded; nothing to share it with. The card says both lines, and the step
     // around it does not say them again.
     const NEW = "Use a new account made for Clips Funded, not Clip Factory's.";
@@ -233,8 +241,42 @@ describe("step 4 and the connect steps", () => {
     expect(step.querySelector(".st-conn .st-conn__new")?.textContent).toBe(NEW);
     expect(times(step.textContent!, SAME)).toBe(1);
     expect(step.querySelector(".st-conn")?.textContent).toContain(SAME);
+    // No paragraph of its own around the card: the card says whose account, the foot has Skip for now.
+    expect(step.querySelector(".st-setup__text")).toBeNull();
+    expect(button("Skip for now")).toBeTruthy();
     expect(document.body.textContent).not.toMatch(/for both|both apps/i);
     for (const b of $$("button, [role=radio]")) expect(b.textContent ?? "").not.toMatch(/for both|share it/i);
+  });
+
+  /** The card's one fold in the open connect step. */
+  const more = () => $<HTMLDetailsElement>(".st-setup__body .st-conn details.st-conn__more")!;
+
+  it("a connect step whose developer app still needs setting up opens the app's choice on the card by itself", async () => {
+    await start({ fresh: true });
+    await click(stepItem("Connect YouTube"));
+    expect(stepTitle()).toBe("Connect YouTube");
+    // The card is the step: its app choice is open on the card (never in a fold), and More stays closed.
+    const setup = $(".st-setup__body .st-conn .st-conn__setup")!;
+    expect(setup).not.toBeNull();
+    expect(setup.closest("details")).toBeNull();
+    expect(setup.querySelector("[role=radiogroup]")?.getAttribute("aria-label")).toBe("Which YouTube app Clips Funded uses");
+    expect(button(/^Set up the app/).getAttribute("aria-expanded")).toBe("true");
+    expect(more().open).toBe(false);
+    expect(more().querySelector("summary")?.textContent).toBe("More for YouTube");
+    // The next connect step starts fresh: a choice closed by hand on this one does not carry over.
+    await click(button(/^Set up the app/));
+    expect($(".st-setup__body .st-conn__setup")).toBeNull();
+    await click(stepItem("Connect Facebook"));
+    expect($(".st-setup__body .st-conn__setup")).not.toBeNull();
+  });
+
+  it("a connect step whose developer app is ready keeps the card's fold closed under More", async () => {
+    // The seed's X shares Clip Factory's app.
+    await start({});
+    await click(stepItem("Connect X"));
+    expect(more().open).toBe(false);
+    expect(more().querySelector("summary")?.textContent).toBe("More for X");
+    expect($(".st-setup__body .st-conn__setup")).toBeNull();
   });
 
   it("step 4 of a workspace whose older pick is Amazon Nova Reel says it ended, with a one-tap replacement, and never saves it (§45.37 G7)", async () => {
@@ -254,5 +296,87 @@ describe("step 4 and the connect steps", () => {
     await click(button("Use this"));
     const body = calls.filter((c) => c.name === "patchWorkspace").at(-1)?.args[1] as { configuration: { providers: Record<string, unknown> } };
     expect(body.configuration.providers).toEqual({ video: "luma-ray", videoModel: null });
+  });
+});
+
+// ---------- A platform the owner skipped (the owner, 24 Nov: "if i skip on a platform setup then i dont want to see
+// it anywhere except in settings or social accounts tab") ----------
+
+const ob = (states: Partial<Record<OnboardStep, Onboarding["steps"][number]["state"]>>, finished = false): Onboarding => {
+  const steps = SETUP_ORDER.map((step) => ({ step, label: step, state: states[step] ?? (step === "done" && finished ? "done" : "todo") }));
+  return { steps, done: steps.filter((s) => s.state === "done").length, total: 11, finishedAt: finished ? "2026-11-24T00:00:00.000Z" : null };
+};
+
+describe("a platform the owner skipped", () => {
+  const allDone: Partial<Record<OnboardStep, "done">> = { ai: "done", model: "done", effort: "done", video: "done", agents: "done", instagram: "done", tiktok: "done", youtube: "done", facebook: "done", x: "done" };
+
+  it("leftOf leaves out a skipped platform but keeps a step skipped for later; firstOpen never lands on a skipped platform", () => {
+    const x = ob({ ...allDone, x: "skipped" }, true);
+    expect(leftOf(x)).toEqual([]);
+    expect(firstOpen(x)).toBe("done");
+    const both = ob({ ...allDone, tiktok: "skipped", video: "skipped" }, true);
+    expect(leftOf(both).map((s) => s.step)).toEqual(["video"]);
+    expect(firstOpen(both)).toBe("video");
+    // still to do comes first, a skipped platform never
+    const open = ob({ ai: "done", instagram: "skipped", tiktok: "skipped" });
+    expect(firstOpen(open)).toBe("model");
+    expect(leftOf(open).map((s) => s.step)).toEqual(["model", "effort", "video", "agents", "youtube", "facebook", "x"]);
+  });
+
+  it("Skip for now on a connect step says it stays in Social accounts; the step says Skipped and its foot has Un-skip", async () => {
+    await start({});
+    const total = () => Number(/of (\d+) done/.exec(ring() ?? "")?.[1]);
+    expect(total()).toBe(11);
+    await click(stepItem("Connect X"));
+    await click(button("Skip for now"));
+    expect(calls.filter((c) => c.name === "patchOnboarding").at(-1)?.args[1]).toEqual({ step: "x", skipped: true });
+    expect(document.body.textContent).toContain("Skipped. It stays in Social accounts.");
+    expect(stepItem("Connect X").querySelector(".st-steps__skipped")?.textContent).toBe("Skipped");
+    expect(stepItem("Connect X").className).toContain("is-skipped");
+    // a skipped platform is not counted
+    expect(total()).toBe(10);
+    expect($(".st-setup__intro")?.textContent).toMatch(/^\d+ of 10 done\./);
+    // back on its step: the chip says Skipped, and the foot has Un-skip instead of Skip for now
+    await click(stepItem("Connect X"));
+    expect($(".st-setup__count .st-chip")?.textContent).toBe("Skipped");
+    const foot = $(".st-setup__foot")!;
+    expect(() => button("Skip for now", foot)).toThrow();
+    const unskip = button("Un-skip", foot);
+    expect(unskip.disabled).toBe(false);
+    // Its way on is a quiet Next (Un-skip took Skip for now's place, so the step is never a dead end).
+    expect(button("Next", foot).classList.contains("st-btn--main")).toBe(false);
+    await click(unskip);
+    expect(calls.filter((c) => c.name === "patchOnboarding").at(-1)?.args[1]).toEqual({ step: "x", skipped: false });
+    expect(document.body.textContent).toContain("X is back.");
+    expect(total()).toBe(11);
+    expect(stepItem("Connect X").querySelector(".st-steps__skipped")).toBeNull();
+    expect(button("Skip for now", $(".st-setup__foot")!)).toBeTruthy();
+    expect(() => button("Un-skip", $(".st-setup__foot")!)).toThrow();
+    // To do again: Skip for now is its one way on, with no Next (the bug hunt's footer).
+    expect(() => button("Next", $(".st-setup__foot")!)).toThrow();
+  });
+
+  it("a step of another kind skipped still says Later and Skipped for now, and is still counted", async () => {
+    await start({});
+    await click(stepItem("Pick how videos are made"));
+    await click(button("Skip for now"));
+    expect(document.body.textContent).toContain("Skipped. It stays on the list for later.");
+    expect(stepItem("Pick how videos are made").querySelector(".st-steps__skipped")?.textContent).toBe("Later");
+    expect(ring()).toMatch(/ of 11 done$/);
+    await click(stepItem("Pick how videos are made"));
+    expect($(".st-setup__count .st-chip")?.textContent).toBe("Skipped for now");
+    expect(button("Skip for now", $(".st-setup__foot")!)).toBeTruthy();
+  });
+
+  it("the Done step's words count only what is left: never a skipped platform", async () => {
+    await start({}, async (api) => {
+      for (const step of ["tiktok", "facebook", "x"] as const) await api.patchOnboarding("stories", { step, skipped: true });
+    });
+    await click(stepItem("Done"));
+    const o = (await (await import("../src/stories/api/client.ts")).storiesApi().getOnboarding("stories"));
+    const left = leftOf(o);
+    expect(left.some((s) => ["tiktok", "facebook", "x"].includes(s.step))).toBe(false);
+    expect(left.length).toBeGreaterThan(1);
+    expect($(".st-setup__done")?.textContent).toBe(`You can make videos now. ${left.length} things are left: the dashboard keeps them for you.`);
   });
 });

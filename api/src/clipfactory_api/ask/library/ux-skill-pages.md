@@ -22,7 +22,7 @@ words.
 | Page | Address | What is on it | Leaf |
 |---|---|---|---|
 | **Write a skill** | `…/skills/new` | Three big glass fields, one question each, with an example under each and a "Use the example" link that fills it: "What is the skill called?", "When should Clip Factory use it?", "What should it do?" (the last at least 10 lines tall and growing as you type). A live character count under each; errors (too long, same name as another skill) sit right under their field. Vermilion **Save skill**, ghost **Cancel**. | "Clip Factory reads your skill every time it makes clips." |
-| **Skill page** | `…/skills/{skillId}` | Title, badges and where it came from in words (the same words as the row), "When it is used" (the description), then the skill itself as formatted text: headings, lists, bold, code. The frontmatter is not shown (the title and "When it is used" already say it), and a first heading that only repeats the title is left out. A `.zip` lists "Other files in this skill". Owner skills: vermilion **Edit**, ghost **Delete**. Built-ins: no buttons, only reading. | owner: "Always used. Changes count from your next clips." built-in: "This skill comes with Clip Factory. It is always used. You can read it, but not change or delete it." |
+| **Skill page** | `…/skills/{skillId}` | Title, badges and where it came from in words (the same words as the row), "When it is used" (the description), then the skill itself as formatted text: headings, lists, bold, code. The frontmatter is not shown (the title and "When it is used" already say it), and a first heading that only repeats the title is left out. A `.zip` lists "Other files in this skill". Owner skills: vermilion **Edit**, ghost **Delete**. Built-ins: no buttons, only reading. | owner: "Always used. Changes count from your next clips." built-in: "Comes with Clip Factory. Always used. You can read it, but not change or delete it." |
 | **Edit** | `…/skills/{skillId}/edit` | Titled "Change this skill": the same three fields, filled in, and vermilion **Save changes** (then the toast "Saved {title}. Clip Factory uses it from your next clips."). A `.zip` skill also gets a ghost **Replace the whole file**; a skill too long to edit here shows only that option ("This skill is too long to change here. Upload a new file to replace it."). | "Change the words, then tap Save changes." |
 
 **Safe reading.** The skill text is shown with the app's own small markdown renderer, never as HTML: anything that
@@ -59,7 +59,7 @@ name inside your file, then upload it again."
 | Form, "What should it do?" empty / too long | "Say what the skill should do." / "Make this shorter: at most 50,000 letters." |
 | Upload, not a `.md` or `.zip` (toast) | "That is not a skill. Pick a SKILL.md file or a .zip with one inside." |
 | Upload, too big (toast) | "That skill file is too big. Pick one under 1 MB." / "That .zip is too big. Pick one under 20 MB." |
-| Replace the whole file (hint under the heading) | "Pick a skill file from your computer. It takes the place of this skill." |
+| Replace the whole file (hint under the heading) | "Pick a skill file. It replaces this skill." |
 | Opening a built-in's edit address (toast, then its page) | "Built-in skills can be read, but not changed." |
 
 The delete sheet is the only confirm in Settings, because a skill can hold a lot of typing. After **Delete** the app

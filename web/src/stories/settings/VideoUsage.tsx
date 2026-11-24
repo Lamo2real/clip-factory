@@ -81,7 +81,7 @@ export function VideoUsage({ usage, error, providers, onAddPrice }: { usage: Usa
   for (const t of totals) if (t.cost !== null && t.currency) sums.set(t.currency, (sums.get(t.currency) ?? 0) + t.cost);
 
   return (
-    <SetCard title="Use and costs, last 30 days" icon="coin" tone="mint" lede="How many minutes of video were made each day, and what the picture and video makers cost.">
+    <SetCard title="Use and costs, last 30 days" icon="coin" tone="mint" lede="Minutes of video made each day, and what the makers cost.">
       {error && !usage ? <p className="st-stg-small">{error}</p> : null}
       {usage ? (
         <>

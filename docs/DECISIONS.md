@@ -2515,6 +2515,55 @@ Amends ADR-78 (its "Reference links to other people's videos are not downloaded"
   the PO-token server. Follow-ups: "Get it again" for a link reference whose file a keep setting cleared; Vimeo or
   other sites as rows of the table; one public link per site tried on the live app after the deploy.
 
+## ADR-89 Clips Funded posts TikTok through the same Mac: one helper, two lanes, the right account checked every time
+
+- **Context.** Since ADR-83 and ADR-86 the owner's Mac posts Clip Factory's TikTok clips for everyone, out of sight.
+  Clips Funded posts TikTok through Clip Factory's shared TikTok app, still in Sandbox, so its API posts can only be
+  Only me. On 2026-11-23, with a screenshot of Clips Funded › Social accounts › TikTok connected as @clips.funded, the
+  owner said: "btw i want the same way we upload to tiktok in clip factory for clips funded". Hard rules: never cross
+  accounts (Clips Funded never touches Clip Factory's, and the other way round); every Clips Funded post carries
+  TikTok's AI label and is never branded; Clip Factory's flow (four auto-posting runs a day) stays exactly as it is;
+  an older helper never picks a Clips Funded job; no password in chat, logs, files or the server; no Terraform change.
+- **Options.** (1) A second helper install with its own launchd job: two Chromes racing for one Mac, two sign-ins,
+  and nothing to keep Clip Factory first. (2) Clips Funded jobs in Clip Factory's `/v1/tiktok/mac` queue: one queue,
+  but Clips Funded data in Clip Factory's partition and Clip Factory's Lambda reading Clips Funded's accounts, which
+  §45 forbids. (3) One helper with two lanes: Clip Factory's lane unchanged on the wire, and one lane per Clips Funded
+  workspace on new routes in Clips Funded's own Lambda and partition, each lane with its own Chrome profile, port,
+  ledger, needs-you and login. For the @clips.funded login (it signs in with Google): (a) a TikTok password for
+  @clips.funded in the Keychain, which he would have to make and type; (b) an email-code login, which still needs his
+  inbox and his turn each time; (c) one visible sign-in in the lane's own Chrome profile with the TikTok app's QR code,
+  the helper never attached to that window (Continue with Google there would type his Google password on the Mac, so
+  the code is the documented way, and the window's profile is hardened so it can't save a password either).
+- **Decision.** (CONTRACTS §47.10, §45.14) Option 3 with login (c). Helper 1.2.0 runs Clip Factory's lane first every
+  tick, exactly as 1.1.0, and a Clips Funded lane only when Clip Factory's has nothing to post, resume or find; a ws
+  error never reaches Clip Factory's lane. Before Studio › Posts is read, right before Post, before every look for a
+  link and on the link itself, the helper reads the signed-in handle (the passport answer, Studio's own post links,
+  the page's rehydration data) and refuses unless it is the lane's target: the job's recorded `@handle` for Clips
+  Funded, `GET /v1/accounts`' TikTok handle for Clip Factory (else the one account of the helper's own Clip Factory
+  posts, so a 1.1.0 Mac goes on as it did). Each lane also refuses every other lane's account by handle and uid, both
+  ways. The server's claim re-checks the open_id and the stored handle, and done refuses a link on another account. Clips Funded's Mac posts are always Everyone with Comments, Duet
+  and Stitch on, Disclose post content off and TikTok's "AI-generated content" switch on and read back (no switch, no
+  post). `MAC_WS_FROM = "1.2.0"` gates the queue and the claim. The switch is `StoriesConfig.tiktokMac`, shown as **My
+  Mac posts TikTok** in Clips Funded's TikTok card, which also shows the Mac's state and **Log in on my Mac**. The web
+  rows follow Clip Factory's Mac rows in Clips Funded's own words; a post the API made Only me (`onlyMe`) offers **Post
+  with my Mac** and is handed over in place, so a story keeps one TikTok row.
+- **Alternatives.** *Reuse Clip Factory's routes with a workspace field*: Clip Factory's Lambda would read Clips
+  Funded's partition. *Caption matching for Clips Funded's lost posts* (as Clip Factory's `findExisting`): an older
+  story's post with a similar caption could be taken as done, so a ws lane relies on the server's never-twice rule and
+  the baseline saved at pressing. *A Keychain password for @clips.funded*: a password he never had to make, in one
+  more place. *Reading the handle from www.tiktok.com's feed links*: those are other people's videos, so off Studio
+  only the account's own data counts.
+- **Consequences.** No Clip Factory route, server file, web file or Terraform changes; Clip Factory's ping keeps its
+  keys and now says 1.2.0 (and `paused`, with why, when it can't tell which TikTok is Clip Factory's). A Clips Funded
+  post can make one Clip Factory job wait one tick at most (about 40 minutes at worst, when it meets a logout). A later
+  TikTok logout of @clips.funded is the owner's turn again (no saved login): the row says so with **Set it up** and the
+  card has Log in on my Mac, which clears the profile's old cookies first. A paused Mac has **Start my Mac again** in
+  Clips Funded too (the same pause as Clip Factory's). If no handle source is readable, nothing posts in either lane
+  (`whoami` before 1.2.0 starts is the go-live gate). TikTok may link two
+  automated accounts on one Mac and network, so an automation flag could hit both; the owner accepted the automation
+  risk for @lamo.clips on 22 Nov. Mac-posted Clips Funded videos get no view numbers yet, and It's on TikTok is
+  paste-only (no Find it for me); both are follow-ups.
+
 ## ADR-90 The sound samples are rendered ahead of time from the renderer's own synth
 
 - **Context.** The owner (2026-11-23), on a character's Sounds tab: "id like everything here to be in samples so i can
@@ -2605,3 +2654,37 @@ Amends ADR-78 (its "Reference links to other people's videos are not downloaded"
   about 1.7 to 2.3 times the Bright highway's time a frame (a faster polygon fill is a follow-up). The look reaches
   final videos only through the PR and the agent image's CI deploy; no infra changes and no data is reset (older
   workspaces get `video.art` filled in on read).
+
+## ADR-94 A skipped platform is hidden everywhere but Settings and Social accounts
+
+Supersedes §17.13's skipped rows on the floating setup list, §45.36 E15 for platform steps and §45.36 E18's card
+columns on Clips Funded's Social accounts. The contract is CONTRACTS §48.
+
+- **Context.** The owner (2026-11-24, with a screenshot of Clips Funded's Dashboard showing "Finish setting up: 1 left
+  · Connect X · Open setup" and "Connected accounts 4 of 5" after X was skipped): "if i skip on a platform setup then
+  i dont want to see it anywhere except in settings or social accounts tab". In the same message, with a screenshot
+  of Clip Factory's Set up posting: "can you make the social account page to look organized like this".
+- **Decision.**
+  1. *One rule in both apps (rule S).* A platform the owner confirmed as skipped, and that is not ready (Clip Factory)
+     or not connected (Clips Funded), is left out of every reminder, count, "N left" list, nudge, "connect X" link and
+     Ask suggestion. It shows only in Clip Factory › Settings › Posting › Set up posting and Clips Funded › Social
+     accounts (and Clips Funded's setup, which its nav counts as Settings), each with Un-skip. Counts are "N of M"
+     over the platforms not skipped. Ready or connected wins over a skip, and the skip is then dropped, so a platform
+     that later needs the owner comes back.
+  2. *Clips Funded keeps its existing store.* Platform skips are the platform keys of `ONBOARD.skipped`, written by
+     the existing `PATCH …/onboarding {step, skipped}`. The API marks `SocialAccount.skipped`, gives
+     `Onboarding.total` as 11 minus the platform steps skipped, and leaves skipped platforms out of the dashboard's
+     accounts and Needs you. A read that finds a skipped platform connected drops the skip with one conditional put.
+  3. *Social accounts becomes a list and pages.* The list page has a header card, a progress card ("N of M ready" with
+     a ring) and a 2-column grid of rows (icon tile, name, one status word, one line, a check or an empty circle, a
+     chevron). Each row has its Skip (asked first) or Un-skip and opens `/stories/connections/<p>`, which holds the
+     platform's card as it was. The OAuth return lands on that page.
+- **Alternatives.** *A new SKIPS item or route*: a migration and a Terraform change, for what `ONBOARD.skipped`
+  already stores (the owner's X skip was in it). *Hiding a skipped platform from Social accounts too*: no way back,
+  against "except in settings or social accounts tab". *Keeping skipped rows on the floating list with Un-skip*: the
+  list is a reminder, which the owner said he does not want. *Keeping the masonry cards with rows above them*: two
+  ways to do one thing on one page.
+- **Consequences.** The owner's stored X skip takes effect on deploy, with no data rewritten. A skip never turns a
+  posting switch off: in Clip Factory, "Your Mac posts TikTok" keeps posting if TikTok is skipped while it is on, and
+  the clip page's stack for a skipped X with no post says only "Not posted here." (no Set up or Where clips go link).
+  Whether a TikTok skip should also pause the Mac is left to the owner. Each app's skips stay its own.

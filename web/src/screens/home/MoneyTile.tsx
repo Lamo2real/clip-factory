@@ -1,7 +1,8 @@
 // Home › Your money (docs/CONTRACTS.md §25.7): the money apps reported this month (one line per currency, each tagged
 // as that app's estimate), or "No money yet. Here's how close you are" with the bar nearest its goal. A failed load
-// simply hides it (Home's own lists still show). Celebrations play here too, once each.
-import type { MoneyView } from "../../api/types.ts";
+// simply hides it (Home's own lists still show). Celebrations play here too, once each. "Connect an app…" never stands
+// for skipped places only (rule S): with nothing connected and every app skipped, there is no tile.
+import type { MoneyView, Platform } from "../../api/types.ts";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { LinkButton } from "../../components/ui.tsx";
 import { PLATFORM_LABEL } from "../../lib/format.ts";
@@ -10,16 +11,24 @@ import { DASH_PATH } from "../../lib/moneyDash.ts";
 import { useMoney } from "../../lib/useMoney.ts";
 import { MonthLines } from "../settings/MoneyBranch.tsx";
 
-/** What the tile says under its title, for the tests. */
-export function moneyTileLine(view: MoneyView): string {
+/**
+ * What the tile says under its title, for the tests. null: nothing is connected and every app is skipped, so the
+ * only thing to say would be a reminder of places he chose to leave out, and the tile does not show.
+ */
+export function moneyTileLine(view: MoneyView, skipped: readonly Platform[] = []): string | null {
   if (view.thisMonth.length) return "Money the apps reported this month.";
-  if (view.platforms.every((c) => c.state === "not_connected")) return "Connect an app to see how close you are to getting paid.";
+  if (view.platforms.every((c) => c.state === "not_connected"))
+    return view.platforms.some((c) => !skipped.includes(c.platform)) ? "Connect an app to see how close you are to getting paid." : null;
   return "No money yet. Here's how close you are.";
 }
 
-export function MoneyTile() {
+const NO_SKIPS: readonly Platform[] = [];
+
+/** `skipped`: the skipped places (Settings.setupSkipped, Home passes them). */
+export function MoneyTile({ skipped = NO_SKIPS }: { skipped?: readonly Platform[] }) {
   const { data } = useMoney();
-  if (!data) return null;
+  const line = data ? moneyTileLine(data, skipped) : null;
+  if (!data || line === null) return null;
   const near = data.thisMonth.length ? null : nearestGoal(data.platforms);
   return (
     <section className="home-row money-tile" aria-labelledby="money-title" data-help="home-money">
@@ -27,7 +36,7 @@ export function MoneyTile() {
         <h2 className="display-2" id="money-title">
           Your <em>money</em>.
         </h2>
-        <p className="muted">{moneyTileLine(data)}</p>
+        <p className="muted">{line}</p>
         <LinkButton href={DASH_PATH} size="sm" icon="coin" iconAfter="chevronRight">
           See money
         </LinkButton>

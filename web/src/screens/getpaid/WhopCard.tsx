@@ -2,7 +2,8 @@
 // the API's WHOP_CONNECT switch: while it is off (`connections.whop` is null) the card only says "Coming soon". The
 // owner makes his own Whop app once (a public client, no secret), pastes its key here, then taps Connect Whop. Clip
 // Factory only reads his payouts: it never asks to move money. Every button is glass unless the page has no next step
-// and Whop isn't connected (§40.1 item 2).
+// and Whop isn't connected (§40.1 item 2). The how-to (Whop's developer page, the app, the ticks) is one fold above the
+// key box, so the card itself is short.
 import { useState } from "react";
 import { api, friendlyMessage } from "../../api/index.ts";
 import type { PayConn } from "../../api/types.ts";
@@ -19,6 +20,8 @@ export const WHOP_SOON = "Coming soon: your Whop payouts here.";
 /** A new key while connected: the server forgot the old sign-in (it belonged to the old Whop app), so sign in again. */
 export const WHOP_KEY_CHANGED = "Your Whop key changed. Tap Connect Whop again.";
 export const WHOP_KEY_LEAD = "A grown-up does this once on the Mac.";
+/** The fold with the how-to (Whop's developer page, the app, the four ticks). */
+export const WHOP_HOW = "How do I make it?";
 const SCOPES = "Tick **user:balance:read**, **payout:withdrawal:read**, **payout:destination:read** and **identity:read**.";
 
 /** Starts Connect Whop: the authorize page in this tab (only Whop's https page, or the mock's own page). */
@@ -120,7 +123,7 @@ export function WhopCard({ conn, main, result }: { conn: PayConn | null; main: b
       <h2 className="gp-section__title" id="gp-whop-title">
         See your Whop payouts here
       </h2>
-      <p className="gp-whop__lede">Optional. Then Clip Factory sees what Whop sent to your bank.</p>
+      <p className="gp-whop__lede">Optional. See what Whop sent to your bank.</p>
       {result ? (
         <p className="gp-result" role="status">
           <Icon name={result.startsWith("Clip Factory can see") ? "checkCircle" : "info"} size={18} />
@@ -151,18 +154,29 @@ export function WhopCard({ conn, main, result }: { conn: PayConn | null; main: b
             <span>Make your Whop key</span>
           </h3>
           <p className="gstep__lead">{WHOP_KEY_LEAD}</p>
-          <div className="gstep__actions">
-            <OpenButton label="Open Whop's developer page" href={WHOP_DEVELOPER} size="md" />
-          </div>
-          <Lines lines={["Tap **Create app**. Name it:"]} />
-          <div className="gstep__copies">
-            <CopyChip label="App name" value="Clip Factory" quiet />
-          </div>
-          <Lines lines={["Find **OAuth**. Paste this in **Redirect URIs**:"]} />
-          <div className="gstep__copies">
-            <CopyChip label="Redirect URI" value={conn.redirectUri ?? null} quiet />
-          </div>
-          <Lines lines={[SCOPES, "Tap **Save**. Copy the **Client ID**. It starts with app_.", "Whop may show this a little differently. Look for the same words."]} />
+          {/* The how-to is long and done once: folded, one tap away, right above the box it fills. */}
+          <details className="cr-fold" data-whop="how">
+            <summary className="cr-fold__q">
+              <Icon name="info" size={18} />
+              <span>{WHOP_HOW}</span>
+              <Icon name="chevronRight" size={18} className="icon cr-fold__chev act-turn" />
+            </summary>
+            <div className="cr-fold__body">
+              <div className="gstep__actions">
+                <OpenButton label="Open Whop's developer page" href={WHOP_DEVELOPER} size="md" />
+              </div>
+              <Lines lines={["Tap **Create app**. Name it:"]} />
+              <div className="gstep__copies">
+                <CopyChip label="App name" value="Clip Factory" quiet />
+              </div>
+              <Lines lines={["Find **OAuth**. Paste this in **Redirect URIs**:"]} />
+              <div className="gstep__copies">
+                <CopyChip label="Redirect URI" value={conn.redirectUri ?? null} quiet />
+              </div>
+              <Lines lines={[SCOPES, "Tap **Save**. Copy the **Client ID**. It starts with app_.", "Whop may show this a little differently. Look for the same words."]} />
+              <Hints list={[{ see: "that Whop asks for a company first", do: "Make one. Any name is fine. It's free." }]} />
+            </div>
+          </details>
           <form
             className="gp-whop__form"
             onSubmit={(e) => {
@@ -200,7 +214,6 @@ export function WhopCard({ conn, main, result }: { conn: PayConn | null; main: b
               Save key
             </Button>
           </form>
-          <Hints list={[{ see: "that Whop asks for a company first", do: "Make one. Any name is fine. It's free." }]} />
         </div>
       ) : (
         <p className="gstep__note is-ok" data-step="whop-key" data-done="">

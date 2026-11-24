@@ -69,10 +69,14 @@ export const SUGGESTIONS = {
   tiktokPrivate: "Why is my clip private on TikTok?",
 } as const;
 
-/** Three questions for the empty state, chosen by the page (§19.8). */
-export function suggestionsFor(context: Pick<HelpContext, "page"> | null): string[] {
+/**
+ * Three questions for the empty state, chosen by the page (§19.8). `skipped`: the places he skipped (rule S, §48.3);
+ * with TikTok skipped, a clip page asks what Upload does instead of naming TikTok.
+ */
+export function suggestionsFor(context: Pick<HelpContext, "page"> | null, skipped: readonly string[] = []): string[] {
   const page = boostPage(context?.page); // a skill page gets the Settings chips
-  const second = page === "settings" ? SUGGESTIONS.clickSound : page === "clip" ? SUGGESTIONS.tiktokPrivate : SUGGESTIONS.keep;
+  const tiktok = !skipped.includes("tiktok");
+  const second = page === "settings" ? SUGGESTIONS.clickSound : page === "clip" && tiktok ? SUGGESTIONS.tiktokPrivate : SUGGESTIONS.keep;
   return [SUGGESTIONS.twitch, second, SUGGESTIONS.bestViews];
 }
 

@@ -202,6 +202,13 @@ test("while a job is starting, a drag says so and the drop is refused with plain
     (window as unknown as { __cfMockFaults: { latencyMs: number } }).__cfMockFaults.latencyMs = 4000;
   });
   await page.getByRole("button", { name: "Make clips" }).click();
+  // The upload bar and Cancel upload show from the tap; once the file is all up, the job is starting. That start is
+  // the createJob call, waited for itself: the 4 s answer delay above holds the upload's address first, then the
+  // mock upload's 20 ticks run (40 ms each, about twice that in CI's WebKit), so it comes 5 to 6 s after the tap,
+  // past a default 5 s wait. Its own 4 s answer delay then keeps "Starting your job…" up for the drag below.
+  const started = () => page.evaluate(() => (window as unknown as { __cfMockCalls: Record<string, number> }).__cfMockCalls.createJob ?? 0);
+  await expect.poll(started, { timeout: 15_000, intervals: [100] }).toBe(1);
+  await expect(page.locator("form.newjob")).toContainText("Uploading… 100%");
   const other = { files: [{ name: "other.mp4", type: "video/mp4" }] };
   await fire(page, "form.newjob", "dragenter", other);
   await expect(overlay(page)).toHaveText("Starting your job…");

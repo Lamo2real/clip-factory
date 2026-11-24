@@ -176,15 +176,27 @@ export function GetPaidStep({
           {copyAt >= step.say.length ? copies : null}
           {main && step.action ? <div className="gstep__actions">{main}</div> : null}
           {children}
-          <Hints list={step.ifYouSee} />
-          {step.ifYouSee?.some((h) => h.open) ? (
-            <div className="gstep__actions">
-              {step.ifYouSee
-                .filter((h) => h.open)
-                .map((h) => (
-                  <OpenButton key={h.open!.url} label={h.open!.label} href={h.open!.url} size="md" />
-                ))}
-            </div>
+          {/* Only needed when the place looks different: one fold, shut until tapped (as in the setup guides). */}
+          {step.ifYouSee?.length ? (
+            <details className="cr-fold">
+              <summary className="cr-fold__q">
+                <Icon name="info" size={18} />
+                <span>If you see…</span>
+                <Icon name="chevronRight" size={18} className="icon cr-fold__chev act-turn" />
+              </summary>
+              <div className="cr-fold__body">
+                <Hints list={step.ifYouSee} />
+                {step.ifYouSee.some((h) => h.open) ? (
+                  <div className="gstep__actions">
+                    {step.ifYouSee
+                      .filter((h) => h.open)
+                      .map((h) => (
+                        <OpenButton key={h.open!.url} label={h.open!.label} href={h.open!.url} size="md" />
+                      ))}
+                  </div>
+                ) : null}
+              </div>
+            </details>
           ) : null}
           {manual ? (
             <div className="gstep__done-row">

@@ -47,6 +47,9 @@ export const STATUS_EVERY_MS = 60_000;
 export const BURST_EVERY_MS = 3_000;
 export const BURST_FOR_MS = 30_000;
 
+/** The Private test run's line: who can see it on each place, and that the clip leaves Review. */
+export const PRIVATE_LINE = "Posts the next clip so only you see it: YouTube Only me, Facebook a draft, Instagram not published. It leaves Review.";
+
 export interface AutoPostData {
   status: AutoPostStatus | null;
   error: string | null;
@@ -445,8 +448,8 @@ export function AutoPostBranch() {
         </Apple>
       </Panel>
 
-      {/* Found with "Find a setting": the branch page opens it and can focus it. */}
-      <details className="apple-panel glass autopost__test" id="auto-post-test" data-help="auto-post-test" tabIndex={-1}>
+      {/* Found with "Find a setting": the branch page opens it and focuses its summary (the part Tab reaches). */}
+      <details className="apple-panel glass autopost__test" id="auto-post-test" data-help="auto-post-test">
         <summary className="cr-fold__q" data-help="auto-post-test-open">
           <Icon name="sliders" size={18} />
           <span>Test it first</span>
@@ -455,7 +458,7 @@ export function AutoPostBranch() {
         <div className="cr-fold__body">
           <Toggle
             label="Practice"
-            description="Pick the clips on time, but send nothing. The clips stay in Review."
+            description="Sends nothing. The clips stay in Review."
             checked={a.practice}
             onChange={(practice) => void save({ practice })}
           />
@@ -476,8 +479,7 @@ export function AutoPostBranch() {
                 Private test run
               </Button>
               <p className="field__hint" id="auto-private-line">
-                Posts the next clip so only you can see it: YouTube as Only me, Facebook as a draft on your Page, Instagram
-                uploaded and checked but not published. It leaves Review.
+                {PRIVATE_LINE}
               </p>
             </div>
           </div>

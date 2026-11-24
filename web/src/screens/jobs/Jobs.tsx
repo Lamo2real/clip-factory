@@ -36,6 +36,12 @@ export function Jobs() {
   const [selecting, setSelecting] = useState(false);
   const [picked, setPicked] = useState<ReadonlySet<string>>(new Set());
   const [asking, setAsking] = useState<Job[] | null>(null);
+  // Select and Done take turns in one spot (so Make clips never slides under the finger): a second tap that soon is
+  // the second half of a double tap, and does nothing.
+  const selectButton = useRef<HTMLButtonElement>(null);
+  const selectAt = useRef(-Infinity);
+  // Select ended (either Cancel, Escape, a delete): the focus goes back to Select when its old place is gone.
+  const refocus = useRef(false);
 
   // A deleted job leaves at once (Undo brings it back), wherever the news came from.
   const jobs = (data?.jobs ?? []).filter((j) => !deleted.jobs.has(j.jobId));
@@ -46,7 +52,18 @@ export function Jobs() {
   function stopSelecting() {
     setSelecting(false);
     setPicked(new Set());
+    refocus.current = true;
   }
+  function startSelecting() {
+    selectAt.current = performance.now();
+    setSelecting(true);
+  }
+  useEffect(() => {
+    if (selecting || !refocus.current) return;
+    refocus.current = false;
+    const at = document.activeElement;
+    if (!at || at === document.body || !at.isConnected) selectButton.current?.focus({ preventScroll: true });
+  }, [selecting, asking]);
   function toggle(jobId: string) {
     setPicked((p) => {
       const next = new Set(p);
@@ -133,12 +150,24 @@ export function Jobs() {
             Every <em>job</em>, start to finish.
           </>
         }
-        lede="Every link or video you add is one job. Tap one to watch it being made, step by step."
+        lede="Each link or video is one job. Tap one to watch it being made."
         actions={
           jobs.length ? (
             <>
-              {selecting ? null : (
-                <Button variant="ghost" icon="check" className="jobs-select" data-help="jobs-select" onClick={() => setSelecting(true)}>
+              {selecting ? (
+                <Button
+                  ref={selectButton}
+                  variant="ghost"
+                  icon="x"
+                  className="jobs-select"
+                  onClick={() => {
+                    if (performance.now() - selectAt.current >= 400) stopSelecting();
+                  }}
+                >
+                  Cancel
+                </Button>
+              ) : (
+                <Button ref={selectButton} variant="ghost" icon="check" className="jobs-select" data-help="jobs-select" onClick={startSelecting}>
                   Select
                 </Button>
               )}
@@ -167,7 +196,7 @@ export function Jobs() {
             </LinkButton>
           }
         >
-          Tap Make clips, paste a YouTube, Twitch or Kick link, and your first job starts.
+          Tap Make clips and paste a YouTube, Twitch or Kick link.
         </Empty>
       ) : null}
       {jobs.length ? (

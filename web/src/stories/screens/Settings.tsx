@@ -17,18 +17,19 @@ import { MemorySection } from "../settings/MemorySection.tsx";
 import { SkillsSection } from "../settings/SkillsSection.tsx";
 import { StorageSection } from "../settings/StorageSection.tsx";
 import { VideoSection } from "../settings/VideoSection.tsx";
+import { leftOf } from "../skips.ts";
 import { StIcon, useOnboarding } from "../ui.tsx";
 import type { StoriesScreenProps } from "./types.ts";
 
 /** The sections in the order the bar shows them; Social accounts opens the Connections page. */
 export const SECTIONS: { section: SettingsSection | "social"; label: string; icon: SIconName; lede: string }[] = [
   { section: "ai", label: "AI", icon: "chip", lede: "Which AI models think for Clips Funded, and how hard." },
-  { section: "agents", label: "Agents", icon: "people", lede: "Clips Funded's five helpers: what each one does, and with which model and skills." },
-  { section: "skills", label: "Skills", icon: "book", lede: "Know-how the agents read before they work. Clip Factory's skills are separate." },
+  { section: "agents", label: "Agents", icon: "people", lede: "Your five helpers, and what each one does." },
+  { section: "skills", label: "Skills", icon: "book", lede: "Tips your helpers read first. Clip Factory's are separate." },
   { section: "memory", label: "Memory", icon: "note", lede: "What Clips Funded remembers about you and your videos." },
   { section: "social", label: "Social accounts", icon: "plug", lede: "" },
   { section: "video", label: "Video", icon: "film", lede: "How videos are made: the makers, size, length and quality." },
-  { section: "storage", label: "Storage", icon: "box", lede: "Space used, the files made, and how videos are put together." },
+  { section: "storage", label: "Storage", icon: "box", lede: "Space, files, and how videos are put together." },
   { section: "look", label: "Look", icon: "brush", lede: "What is behind the glass: See-through, a picture of yours, or colours." },
 ];
 
@@ -39,10 +40,13 @@ function hrefOf(section: SettingsSection | "social"): string {
   return section === "social" ? storiesHref({ name: "connections", platform: null, result: null, ws: null }) : storiesHref({ name: "settings", section });
 }
 
-/** The first-time setup, always one tap away (§45.36 E15): with what is still left when steps were skipped. */
+/**
+ * The first-time setup, always one tap away (§45.36 E15): with what is still left when steps were skipped. A platform
+ * the owner skipped is not counted (it waits on Social accounts).
+ */
 function SetupAgain({ ws }: { ws: string }) {
   const { data } = useOnboarding(ws);
-  const left = data ? data.steps.filter((s) => s.state !== "done" && s.step !== "done").length : 0;
+  const left = data ? leftOf(data).length : 0;
   return (
     <p className="st-stg-head__setup">
       {/* The shared glass pill (.st-pill), on the hero like the section pills under it. */}

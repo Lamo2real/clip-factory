@@ -275,6 +275,11 @@
   --st-filter-glass: none; /* cards and plates over the colours (nothing to blur, and WebView2 pays per filter) */
   --st-filter-bar: blur(var(--st-blur)) brightness(var(--st-dim-over)) saturate(var(--st-saturate));
   --st-filter-float: blur(var(--st-blur-float)) brightness(var(--st-dim-over)) saturate(var(--st-saturate));
+  /* The glass strip under the phone's status bar once the page has scrolled (glass.css .st-frame::before): what slides
+     up under the white clock is blurred and veiled as if it were white, so the clock keeps AA over any card (the cream
+     ones too). Nothing dims there and saturate() keeps white white, so it is the same in every look
+     (stories/look.ts statusStripVeil). */
+  --st-status-strip-veil: 0.59;
 
   --st-edge-width: 1.25px;
   --st-edge: linear-gradient(160deg, rgb(255 246 234 / 0.56), rgb(255 246 234 / 0.14) 20%, rgb(255 246 234 / 0) 40%, rgb(255 246 234 / 0) 68%, rgb(255 196 130 / 0.28));

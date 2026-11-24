@@ -181,7 +181,7 @@ describe("Post to TikTok sheet", () => {
   it("before TikTok approves the app: one choice, Only me, a plain line, still the owner's tap", async () => {
     current = { tiktokCreatorInfo: async () => ({ ...creator, privacyOptions: ["SELF_ONLY"] }) };
     const { dialog } = await openSheet();
-    expect(dialog.textContent).toContain("TikTok keeps posts private until it approves your app.");
+    expect(dialog.textContent).toContain("TikTok keeps posts private until it approves Clip Factory.");
     expect(privacyNames(dialog)).toEqual(["Only me"]);
     expect(privacyOn(dialog)).toBeNull();
     expect(uploadButton(dialog).getAttribute("aria-disabled")).toBe("true");
@@ -316,7 +316,7 @@ describe("Post to TikTok sheet", () => {
     expect(tooLongForTikTok(32, 0)).toBe(false);
     current = { tiktokCreatorInfo: async () => ({ ...creator, maxDurationSec: 5 }) };
     const { dialog } = await openSheet();
-    expect(dialog.textContent).toContain("To upload it to your other places now, turn TikTok off above and tap Upload.");
+    expect(dialog.textContent).toContain("Too long for TikTok. To post it elsewhere, turn TikTok off above and tap Upload.");
     expect(dialog.textContent).not.toContain("Tap who can see it to turn on Upload.");
   });
 

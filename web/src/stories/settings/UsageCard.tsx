@@ -40,7 +40,7 @@ export function UsageCard({ usage, models, error }: { usage: UsageSummary | null
     <SetCard
       title="Usage and cost, last 30 days"
       icon="coin"
-      lede="Tokens are the bits of words a model reads and writes. Costs are worked out from each model's price."
+      lede="Tokens are bits of words. Costs use each model's price."
       tone="mint"
     >
       {error && !usage ? <p className="st-stg-small">{error}</p> : null}

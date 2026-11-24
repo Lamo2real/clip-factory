@@ -129,7 +129,7 @@ export function MemorySection({ ws }: { ws: string }) {
 
   return (
     <div className="st-stg-cards">
-      <SetCard title="Add something to remember" icon="plus" lede="A fact or a wish, in one short line. Like: Lamo likes slapstick endings.">
+      <SetCard title="Add something to remember" icon="plus" lede="One short fact or wish. Like: Lamo likes slapstick endings.">
         <form
           className="st-stg-mem__add"
           onSubmit={(e) => {
@@ -150,7 +150,7 @@ export function MemorySection({ ws }: { ws: string }) {
           </div>
         </form>
       </SetCard>
-      <SetCard title="What Clips Funded remembers" icon="note" lede="Every Clips Funded agent reads these before it works, newest first. Clip Factory never sees them.">
+      <SetCard title="What Clips Funded remembers" icon="note" lede="Every agent reads these, newest first. Clip Factory never sees them.">
         {memory.error && !memory.data ? <Failed message={memory.error} onRetry={() => void memory.reload()} /> : null}
         {!memory.data && !memory.error ? <Loading label="Getting the memory…" /> : null}
         {memory.data && !list.length ? (

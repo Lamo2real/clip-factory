@@ -228,6 +228,11 @@
   font-size: var(--st-fs-small);
 }
 
+/* An idea card's way out of "Needs checked advice" (Edit it), under the note: its own width, never the card's. */
+.st-s-idea__fix {
+  align-self: flex-start;
+}
+
 .st-s-big {
   min-height: var(--st-tap-main);
   padding: 0 28px;
@@ -318,6 +323,11 @@
   gap: 14px;
   padding: var(--st-inset);
   border-radius: var(--st-r-surface);
+}
+
+/* A panel kept on the page while another one is open (Ask for ideas keeps its topic and its running ask). */
+.st-s-panel[hidden] {
+  display: none;
 }
 
 /* A panel a screen has not moved onto .st-glass yet: the same recipe, from the tokens. */
@@ -679,8 +689,10 @@
   box-shadow: none;
 }
 
-/* The keyboard's place: the cream and orange focus ring (light, no outline). */
-.st-s-pick__opt:has(input:focus-visible) {
+/* The keyboard's place: the cream and orange focus ring (light, no outline). The chosen option on the sliding
+   highlight drops its own shadow (the highlight is its cream), but never the ring: the keyboard's place shows on it too. */
+.st-s-pick__opt:has(input:focus-visible),
+.st-s-pick.has-glide > .st-s-pick__opt.is-on:has(input:focus-visible) {
   box-shadow: var(--st-focus-ring);
 }
 

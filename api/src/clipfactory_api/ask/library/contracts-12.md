@@ -35,6 +35,9 @@
   fast middle, slow end), holds/creeps while the new service worker installs and activates (`skipWaiting` via
   postMessage) and fresh assets are fetched, then eases to 100 %, a small sparkle/confetti, then `location.reload()`.
   Cap at 10 s, then reload anyway. Reduced motion → simple fill.
+* Settings › Updates' **Check for updates** (`checkForUpdate` answers `'newer' | 'current' | 'failed'`): a newer
+  version → "A new version is ready. Tap Reload at the bottom of the screen."; a check that got no answer → "Couldn't
+  check. Check your internet and tap Check for updates again." (never "newest"); else "You have the newest version.".
 
 ### 12.3 Desktop wrapper (`desktop/`, Tauri v2)
 * A thin native window that loads `app_url` (no bundled UI), window title "Clip Factory", the app icon, minimum size
@@ -144,8 +147,7 @@ not, so the page said "This computer can't show see-through" on macOS 27 with Li
   (confirmed, publishing, posted, failed) opens `/clips/{clipId}`; a thrown-away one is not a link (it is listed
   nowhere else) and does not lift on hover like one.
 * **Empty Clips line** follows the job: working "Clips show up here as soon as they are made."; failed "No clips
-  yet. Fix the problem above, then tap Try again."; canceled "No clips yet. This job was stopped. Tap Try again to
-  start it again."; ready with none "This job made no clips. Go back to Home and try a different link."
+  yet. Fix the problem above, then tap Try again."; canceled "No clips yet. This job was stopped. Tap Try again."; ready with none "This job made no clips. Go back to Home and try a different link."
 * **Words** (§12.4): the job status pill says **Didn't work** (never "Failed"); the Home source switch is
   **Paste a link / Pick a video** (the help anchor stays `upload-video`).
 * **Drag and drop on the new-job card** (`web/src/lib/drops.ts`): a video dragged from Finder (or the desktop)
@@ -164,6 +166,17 @@ not, so the page said "This computer can't show see-through" on macOS 27 with Li
   serves Use a video file (`/?file=1&from=`). Covered by `web/test/drops.test.ts` and `web/e2e/drop-video.spec.ts`.
   This card keeps its own drop code; every other upload site uses the shared hook `web/src/lib/useFileDrop.ts` and
   its layer `web/src/components/DropOverlay.tsx` (§45.40.1).
+* **Kid-proof Home form** (`NewJobForm.tsx`, `web/e2e/home-jobs-guards.spec.ts`): the upload bar and **Cancel upload**
+  show from the tap on Make clips; while the file goes up, leaving Home asks "Leave and stop the upload?" (**Stay**
+  first and focused; the browser asks on a reload), never once the file is all up, never on the switch to Clips Funded
+  (Home keeps going behind it). During the upload the file can't change ("The upload is still running. Tap Cancel upload
+  first."); notes and clip count are read when the upload ends; a Make clips that fails after the upload tries again
+  without sending the file twice. The unsent link, notes and count are kept while the app stays open (not over a
+  reload) and cleared once the job starts. A tap within 400 ms after Paste and Clear swapped places is ignored. A
+  link that turns good scrolls Make clips into view above the tab bar. Paste's fallback says "Click in the box and
+  press ⌘V." (Ctrl+V off a Mac) with a mouse and "Press and hold…" only on touch screens. A Twitch or Kick Videos or
+  Clips tab says "That's a list of videos. Open one video, then copy its link." (or the clips version). Use a video
+  file from a failed job scrolls to the form, focuses the file box and says "For {job title}".
 * **Jobs list on phones**: when a job started is never cut (the source part shortens with "…" instead), and a failed
   job's error is shown in full because its last sentence says how to fix it.
 * **No blank pages**: a malformed `#anchor` (`/jobs#100%`) is used as typed instead of throwing, and render errors
@@ -175,8 +188,7 @@ not, so the page said "This computer can't show see-through" on macOS 27 with Li
   fail with a server error). Covered by `web/e2e/audit-shell.spec.ts`.
 * **Review screen** (`web/src/screens/review/`):
   * A refused Upload (a caption too long for a chosen place) opens the first too-long place row, scrolls it into view,
-    focuses its box and names the platform: "Your X caption is longer than its platform allows. Make it shorter, then
-    tap Upload.". Every row whose caption is too long carries `.is-over` and "Too long. Make it shorter." so it shows
+    focuses its box and names the platform: "Your X caption is too long. Make it shorter, then tap Upload.". Every row whose caption is too long carries `.is-over` and "Too long. Make it shorter." so it shows
     even while the row is closed.
   * Place rows (§36.1): one closed row per chosen place, no tab bar. A closed TikTok row also names the account:
     "Posting as <nickname>" (TikTok's rules). Review's launcher keeps clear of the rows (`data-help-dodge`).
@@ -191,7 +203,21 @@ not, so the page said "This computer can't show see-through" on macOS 27 with Li
     Undo brings it back on whichever Review is on screen. A decline answered 409/404 (already kept or thrown away
     somewhere else) leaves the clip gone and shows a calm note instead of an error ("This clip was already kept or
     thrown away somewhere else, so there is nothing more to do."); any other failure brings it back with "… The
-    clip is back in your list.".
+    clip is back in your list.". A 409 for a clip that is confirmed, publishing, posted or failed closes the Undo
+    toast and says "This clip is already uploading, so it can't be thrown away." (`ALREADY_UPLOADING`). Throw away
+    first saves the words typed in the save delay, and the card's state (captions, edits, places, options, TikTok
+    choices) is kept by clip id, so Undo or a failed decline brings the card back exactly as it was.
+  * After an Upload the server took (held as confirmed with no posts, or a network or 5xx answer), the card is
+    `sent`: Throw away is hidden, Try again is the only button, and the chips, Use my settings and the place rows are
+    locked (`<fieldset disabled>`, "It's already sent, so you can't change it now."). A 4xx answer (the server never took
+    that Upload) opens the card again, even on a Try again after a lost connection, and the button says "Try again". Every autosave patches the lists on screen and remembered (`patchLoaded`), and
+    Upload sends only the captions changed on the card.
+  * Before Upload, a card whose TikTok goes through the Mac says what the Mac is doing (`macUploadLine`: not set up,
+    needs you, paused, or not checked in since a time) with that row's one button. After Upload, a clip where every
+    place waits for setup reads "Saved, waiting for set up" with one **Set up posting** link.
+  * A job's Review with nothing left: other clips wait → "This job is done!" / "N more clips are waiting." with **Show
+    every job**; an unknown job id → "This job isn't here" with the same button; only when nothing waits anywhere
+    "All done!" with Make clips.
   * Arriving from a clip link (`/review#clip-…`) scrolls to that clip once per arrival; later list changes never
     jump back to it.
   * When a card leaves while it holds the focus (Keep, Throw away), the focus moves to the next card's title (or

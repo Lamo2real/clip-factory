@@ -567,6 +567,7 @@ const TITLES: Record<StoriesPage["name"], string> = {
   series: "Series",
   series_one: "Series",
   connections: "Social accounts",
+  connection: "Social accounts",
   settings: "Settings",
   chat: "Chat",
   chat_conv: "Chat",

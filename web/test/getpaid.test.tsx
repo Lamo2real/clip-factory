@@ -494,7 +494,7 @@ describe("the place page's steps", () => {
   it("Can you earn here? shows his country's facts, or asks him to pick his country", async () => {
     country = null;
     await draw(<GetPaidPage place="youtube" />);
-    expect(text()).toContain("Pick your country in Money settings to see its rules.");
+    expect(text()).toContain("Pick your country to see its rules.");
     expect(host.querySelector<HTMLAnchorElement>("a[href='/settings/posting/money#money-country']")!.textContent).toContain("Pick my country");
     expect(text()).not.toContain("YouTube pays in kronor");
   });

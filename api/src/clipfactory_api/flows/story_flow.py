@@ -73,7 +73,7 @@ from ..platforms.base import (
 )
 from ..platforms.publishers import publisher_for
 from ..stats import budget, config
-from ..workspaces import apps, shared_room
+from ..workspaces import apps, shared_room, story_posted
 from ..workspaces import publish as ws_publish
 from ..workspaces import types as ws
 from ..workspaces.destinations import Destination, DestinationProblem, story_sk, validate_destination
@@ -89,7 +89,7 @@ NUMBERS_AT = (timedelta(hours=1), timedelta(hours=24), timedelta(hours=72), time
 ACTIVE = ("processing", "ready_to_finish")
 POSTED_ANYWAY = frozenset({"youtube", "tiktok"})  # the platform finishes processing on its own
 NUMBERS_SLACK = timedelta(minutes=10)
-ACT_TTL = timedelta(days=90)
+ACT_TTL = story_posted.ACT_TTL
 MAX_JOBS = 5
 
 
@@ -258,6 +258,8 @@ def load_jobs(deps: StoryFlowDeps, target: Target) -> list[dict[str, str]]:
         if job is None or job.get("platform") not in ws.PLATFORMS:
             log("warning", "story_flow.job_missing", publishingJobId=job_id)
             continue
+        if job.get("publishingStatus") == ws_publish.MAC_STATUS:
+            continue  # the owner's Mac posts it (§47.10): never this flow, whatever started it
         if any(o["platform"] == job["platform"] for o in out):
             continue  # each platform once per run (the publish route says so too)
         out.append({"publishingJobId": job_id, "platform": str(job["platform"])})
@@ -265,19 +267,17 @@ def load_jobs(deps: StoryFlowDeps, target: Target) -> list[dict[str, str]]:
 
 
 def _activity(target: Target, job: Mapping[str, Any], kind: str, *, at: str, title: str, now: datetime) -> Item:
-    return {
-        "pk": target.pk,
-        "sk": f"{ws.ACT_SK}{at}#{job['publishingJobId']}",
-        "type": ws.TYPE_ACTIVITY,
-        "userId": target.user_id,
-        "workspaceId": target.workspace_id,
-        "at": at,
-        "kind": kind,
-        "storyId": target.story_id,
-        "title": title,
-        "platform": str(job.get("platform") or ""),
-        "ttl": int((now + ACT_TTL).timestamp()),
-    }
+    return story_posted.activity(
+        target.pk,
+        job,
+        kind,
+        user_id=target.user_id,
+        workspace_id=target.workspace_id,
+        story_id=target.story_id,
+        at=at,
+        title=title,
+        now=now,
+    )
 
 
 def end_job(deps: StoryFlowDeps, target: Target, job_id: str, kind: str) -> dict[str, str]:
@@ -800,32 +800,13 @@ def _story_posted(deps: StoryFlowDeps, target: Target, platform: str, url: str, 
         if story is None:
             return ""
         title = str(story.get("title") or "")
-        current = [dict(p) for p in story.get("posted") or [] if isinstance(p, Mapping)]
-        entry = {"platform": platform, "url": url}
-        status = story.get("status")
-        promote = status in ("approved", "published") and status != "published"
-        if entry in current and story.get("publishedAt") and not promote:
+        write = story_posted.story_write(story, platform, url, posted_at, deps.clock())
+        if write is None:
             return title
-        sets: Item = {"posted": current if entry in current else [*current, entry], "updatedAt": iso(deps.clock())}
-        if not story.get("publishedAt"):
-            sets["publishedAt"] = posted_at
-        if status in ("approved", "published"):
-            sets["status"] = "published"
-        names = {f"#f{i}": k for i, k in enumerate(sets)}
-        values: Item = {f":f{i}": v for i, v in enumerate(sets.values())}
-        names["#v"] = "version"
-        values[":one"] = 1
-        values[":zero"] = 0
-        expression = "SET " + ", ".join(f"#f{i} = :f{i}" for i in range(len(sets)))
-        expression += ", #v = if_not_exists(#v, :zero) + :one"
-        version = story.get("version")
-        if isinstance(version, int) and not isinstance(version, bool):
-            condition = "attribute_exists(pk) AND #v = :ver"
-            values[":ver"] = version
-        else:
-            condition = "attribute_exists(pk) AND attribute_not_exists(#v)"
         try:
-            _update_story(deps, target, expression, condition=condition, names=names, values=values)
+            _update_story(
+                deps, target, write.expression, condition=write.condition, names=write.names, values=write.values
+            )
         except db.ConditionFailed:
             continue  # someone else wrote the story a moment ago: read it again
         return title

@@ -5,8 +5,11 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import type { AccountStatus, Platform, PlatformSetup } from "../src/api/types.ts";
 import {
+  activeSkips,
   doneLine,
   isFinished,
+  listCount,
+  listRows,
   skippedNote,
   skipQuestion,
   staleSkips,
@@ -18,6 +21,7 @@ import {
   todoRows,
   todoVisible,
   withoutSkip,
+  withoutSkipped,
   withSkip,
 } from "../src/lib/setupTodo.ts";
 import { SETUP_ORDER } from "../src/setup/index.ts";
@@ -178,6 +182,56 @@ describe("the setup to-do list (§17.13)", () => {
     expect(todoNoRailOn("/clips/01ABC")).toBe(true);
     expect(todoNoRailOn("/library")).toBe(false);
     expect(todoNoRailOn("/")).toBe(false);
+  });
+});
+
+describe("a skipped platform leaves every reminder and count (rule S, 24 Nov)", () => {
+  it("listRows: the floating list shows only the rows that are not skipped, in the setup order", () => {
+    const rows = todoRows(every("blank", { youtube: "ready", instagram: "started", x: "needs_reconnect" }), ["tiktok", "facebook"]);
+    expect(listRows(rows).map((r) => r.platform)).toEqual(["youtube", "instagram", "x"]);
+    expect(listRows(rows).map((r) => r.state)).toEqual(["ready", "in_progress", "needs_you"]);
+    expect(listRows(rows).some((r) => r.state === "skipped")).toBe(false);
+    // Nothing skipped: every row, as todoRows gives them.
+    expect(listRows(todoRows(every("blank")))).toEqual(todoRows(every("blank")));
+  });
+
+  it("listCount: skipped ones are not counted, ready over the rest", () => {
+    expect(listCount(todoRows(every("blank")))).toEqual({ ready: 0, total: 5 });
+    // The owner's case: X skipped, four ready → "4 of 4".
+    expect(listCount(todoRows(every("ready", { x: "blank" }), ["x"]))).toEqual({ ready: 4, total: 4 });
+    expect(listCount(todoRows(every("blank", { youtube: "ready" }), ["tiktok"]))).toEqual({ ready: 1, total: 4 });
+    // todoCount still says how many rows are finished (ready or skipped), for "All set!".
+    expect(todoCount(todoRows(every("blank", { youtube: "ready" }), ["tiktok"]))).toEqual({ finished: 2, total: 5 });
+  });
+
+  it("listCount: all five skipped is no count at all", () => {
+    const rows = todoRows(every("blank"), ALL);
+    expect(listCount(rows)).toEqual({ ready: 0, total: 0 });
+    expect(listRows(rows)).toEqual([]);
+    expect(todoVisible(rows)).toBe(false);
+  });
+
+  it("ready wins over a stale skip: it is counted and listed as ready", () => {
+    const rows = todoRows(every("ready", { tiktok: "blank" }), ["instagram"]);
+    expect(state(rows, "instagram").state).toBe("ready");
+    expect(listRows(rows).map((r) => r.platform)).toEqual(ALL);
+    expect(listCount(rows)).toEqual({ ready: 4, total: 5 });
+    expect(activeSkips(every("ready", { tiktok: "blank" }), ["instagram"])).toEqual([]);
+  });
+
+  it("the list shows while a row that is not skipped is not ready, and only then", () => {
+    expect(todoVisible(todoRows(every("ready", { tiktok: "blank", x: "blank" }), ["x"]))).toBe(true);
+    expect(todoVisible(todoRows(every("ready", { tiktok: "blank", x: "blank" }), ["tiktok", "x"]))).toBe(false);
+  });
+
+  it("withoutSkipped filters a list of places and keeps its order; activeSkips counts only places that are not ready", () => {
+    expect(withoutSkipped(["youtube", "tiktok", "x"], ["tiktok"])).toEqual(["youtube", "x"]);
+    expect(withoutSkipped(["x", "youtube"], ["facebook"])).toEqual(["x", "youtube"]);
+    expect(withoutSkipped(["youtube", "x"])).toEqual(["youtube", "x"]);
+    expect(withoutSkipped(["tiktok"], ["tiktok"])).toEqual([]);
+    expect(activeSkips(every("blank", { x: "ready" }), ["tiktok", "x"])).toEqual(["tiktok"]);
+    // Before the setups are in, every skip counts (nothing is known to be ready).
+    expect(activeSkips(null, ["facebook", "x"])).toEqual(["facebook", "x"]);
   });
 });
 

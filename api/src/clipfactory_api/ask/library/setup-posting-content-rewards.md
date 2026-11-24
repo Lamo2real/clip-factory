@@ -179,8 +179,8 @@ The email, written for Content Rewards' support team (Clip Factory fills it in):
 
 #### When it's done
 - The card says "Signed in to Content Rewards since 21 Nov." and either "Clip Factory sends your campaign clips for
-  you." or, while it may only look, "Clip Factory can see your campaigns and money. It can't send clips yet, so I
-  remind you after each post."
+  you." or, while it may only look, "It can see your campaigns and money, but can't send clips yet. You get a
+  reminder after each post."
 - "Check it" asks Content Rewards if the sign-in still works and says so in one sentence.
 - "Connect again" signs in again (on your Mac).
 - "Disconnect" shows "Disconnecting Content Rewards… Undo" for 8 seconds. Your campaigns, clips and money stay in
@@ -253,9 +253,9 @@ From top to bottom:
   seconds.").
 - "Things you do": what only you can do, with a hand icon (for example "Keep each clip up for 30 days. Don't delete
   it.").
-- "I couldn't tell": "I'm not sure about these. Read them on the campaign page."
-- "Rules missing?" On the campaign page, copy everything under **Brief** and **Content requirements**. Paste it in
-  the box, then tap "Read these rules". Reading takes about 30 seconds. Open campaigns hide their rules until you
+- "I couldn't tell": "Read these on the campaign page."
+- "Rules missing?" (a fold: tap it) On the campaign page, copy everything under **Brief** and **Content
+  requirements**. Paste it in the box, then tap "Read these rules". Reading takes about 30 seconds. Open campaigns hide their rules until you
   join: "You'll see the rules once you join." Clip Factory reads them by itself when you're in.
 - "Logo" (only when the campaign needs one), see below.
 - "Videos to clip" (when the brief gives videos or channels): "Make clips from this" on a YouTube, Twitch or Kick
@@ -345,7 +345,7 @@ the red button is "Make clips anyway".
 - "Upload to" shows only the places this campaign pays for: "Only places this campaign pays for."
 - TikTok is left out for now: "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet."
 - A place Content Rewards doesn't know yet: "Add YouTube in Content Rewards first." Tap "Open Content Rewards
-  settings", add it, then tap "I added it". "Then tap I added it. The next clip will go."
+  settings", add it, then tap "I added it". The next clip will go.
 - Tap "Use my settings". Campaign clips are public, never made for kids, and marked as paid. On YouTube that is Who can
   see it **Everyone**, Made for kids **No** and Paid promotion on, shown locked. X gets "Paid partnership: on".
   Instagram and Facebook don't let apps turn on Paid partnership, so "#Ad" and the words on the video tell viewers.
@@ -440,17 +440,16 @@ record button, and tap it again to stop. On a Mac, press Shift, Command and 5, t
 
 ### Part 5: Move your money to Whop
 
-The Money page has a Content Rewards part. Whop is the website where Content Rewards sends your money. From there it
-goes to your bank.
+The Money page has a Content Rewards part. Its first line: "Content Rewards pays you on Whop. Then you move it to
+your bank."
 
 It shows three tiles, all Content Rewards' own numbers, never a guess:
-- "Still earning": clips still earning. The amount can still change. (On Content Rewards: **Queued** and
-  **Arriving**.)
+- "Still earning": "Can still change. On Content Rewards: **Queued** and **Arriving**."
 - "On its way": moving to your Whop balance.
-- "Ready to move": you can move this to Whop now. (On Content Rewards: **Balance**.)
+- "Ready to move": "Move it to Whop now. On Content Rewards: **Balance**."
 
-Then "Content Rewards paid you $62.40 so far · last money Tue 18 Nov", a line per campaign, and "Content Rewards'
-numbers · checked 20 min ago". While it reads everything for the first time the total says "Checking…". Clips the
+Then "Content Rewards paid you $62.40 so far · last money Tue 18 Nov", a line per campaign, and "Checked 20 min ago"
+(the part's head says "Content Rewards' numbers"). While it reads everything for the first time the total says "Checking…". Clips the
 brand hasn't checked yet show $0 until the brand says yes.
 
 First, one question, asked once: "Do you see **Finance** in the Content Rewards menu?" Tap "Yes" or "No". "Change my

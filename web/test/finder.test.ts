@@ -213,6 +213,24 @@ describe("the words the web makes", () => {
     }
   });
 
+  it("the no-place state's place to set up: YouTube first, never TikTok, never a skipped place (rule S)", () => {
+    const { placeToSetUp, SETUP_LIST_PATH } = lib;
+    expect(placeToSetUp(setup([]))).toBe("youtube");
+    expect(placeToSetUp(setup(["youtube"]))).toBe("instagram");
+    expect(placeToSetUp(null)).toBe("youtube");
+    // Skipped places are passed over, in order.
+    expect(placeToSetUp(setup([]), ["youtube"])).toBe("instagram");
+    expect(placeToSetUp(setup([]), ["youtube", "instagram"])).toBe("facebook");
+    expect(placeToSetUp(setup(["youtube"]), ["instagram", "facebook"])).toBe("x");
+    // Only skipped places left to set up (TikTok is never offered here): null, and the page opens Set up posting.
+    expect(placeToSetUp(setup([]), ["youtube", "instagram", "facebook", "x"])).toBeNull();
+    expect(placeToSetUp(setup(["youtube", "instagram"]), ["facebook", "x"])).toBeNull();
+    expect(placeToSetUp(null, ["youtube", "tiktok", "instagram", "facebook", "x"])).toBeNull();
+    expect(SETUP_LIST_PATH).toBe("/settings/posting/setup");
+    // Everything but TikTok set up (the server still matched no place): YouTube, as before.
+    expect(placeToSetUp(setup(["youtube", "instagram", "facebook", "x"]), ["tiktok"])).toBe("youtube");
+  });
+
   it("If you see is §38.4 join-join's list word for word, with the sign-in line and two more", () => {
     expect(lib.IF_YOU_SEE.map((h) => h.see)).toEqual([
       "**Hold to confirm**",
@@ -474,5 +492,71 @@ describe("the mock's matching and words match §41.3's golden cases", () => {
     expect(() => checkWant({ places: ["youtube", "youtube"] })).toThrow();
     expect(() => checkWant({ languages: ["ja"] })).toThrow();
     expect(checkWant({ places: null, minLeftPct: 50, access: "any" })).toEqual({ places: null, minLeftPct: 50, access: "any" });
+  });
+});
+
+describe("What you want never names a skipped place (rule S)", () => {
+  type WantProps = Parameters<typeof import("../src/screens/campaigns/FinderWant.tsx").FinderWant>[0];
+  async function drawWant(over: Partial<WantProps>) {
+    const { createElement, act } = await import("react");
+    const { createRoot } = await import("react-dom/client");
+    const { FinderWant } = await import("../src/screens/campaigns/FinderWant.tsx");
+    (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
+    const host = document.createElement("div");
+    document.body.appendChild(host);
+    const root = createRoot(host);
+    const props: WantProps = {
+      finder: finder(),
+      want: { ...WANT_DEFAULTS },
+      ready: ["youtube"],
+      open: true,
+      fresh: false,
+      noPlace: false,
+      setUpFirst: "instagram",
+      main: false,
+      pinned: false,
+      newsOff: false,
+      starting: false,
+      onChange: () => undefined,
+      onOpen: () => undefined,
+      onDone: () => undefined,
+      onStart: () => undefined,
+      onKeepOne: () => undefined,
+      ...over,
+    };
+    await act(async () => root.render(createElement(FinderWant, props)));
+    const chips = [...host.querySelectorAll<HTMLElement>("ul[aria-label='Where you post'] .finder-chip")].map((c) => c.textContent?.trim());
+    const links = [...host.querySelectorAll("a")].map((a) => ({ name: a.textContent?.trim(), href: a.getAttribute("href") }));
+    const link = (name: string) => links.find((a) => a.name === name)?.href ?? null;
+    const text = host.textContent ?? "";
+    act(() => root.unmount());
+    host.remove();
+    return { chips, link, text };
+  }
+
+  it("a skipped place has no chip, and Set up another place passes over it", async () => {
+    const none = await drawWant({});
+    expect(none.chips).toEqual(["YouTube", "TikTok", "Instagram", "Facebook", "X"]);
+    const out = await drawWant({ skipped: ["instagram", "x"] });
+    expect(out.chips).toEqual(["YouTube", "TikTok", "Facebook"]);
+    expect(out.text.split("Set it up first.")).toHaveLength(2);
+    expect(out.link("Set up another place")).toBe("/settings/posting/setup/facebook?back=/campaigns/find");
+  });
+
+  it("only skipped places left to set up: no Set it up first, no Set up another place", async () => {
+    const out = await drawWant({ skipped: ["instagram", "facebook", "x"] });
+    expect(out.chips).toEqual(["YouTube", "TikTok"]);
+    expect(out.text).not.toContain("Set it up first.");
+    expect(out.link("Set up another place")).toBeNull();
+    expect(out.link("Set up a place")).toBeNull();
+  });
+
+  it("never started with no place, and only skipped places left: the main button opens Set up posting", async () => {
+    const out = await drawWant({ fresh: true, noPlace: true, ready: [], setUpFirst: null, skipped: ["youtube", "instagram", "facebook", "x"] });
+    expect(out.link("Open Set up posting")).toBe("/settings/posting/setup");
+    expect(out.text).not.toMatch(/Set up (YouTube|Instagram|Facebook|X)\b/);
+    // With a place left that is not skipped, it names that one, as before.
+    const named = await drawWant({ fresh: true, noPlace: true, ready: [], setUpFirst: "facebook", skipped: ["youtube", "instagram"] });
+    expect(named.link("Set up Facebook")).toBe("/settings/posting/setup/facebook?back=/campaigns/find");
   });
 });

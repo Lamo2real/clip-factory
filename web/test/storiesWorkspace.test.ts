@@ -127,6 +127,8 @@ describe("the stored choice", () => {
     expect(cleanPath("/library?view=week&week=2026-W47#top")).toBe("/library?view=week&week=2026-W47#top");
     rememberStoriesPath("/stories/connections?platform=x&result=denied&ws=stories", "stories");
     expect(currentChoice().lastStoriesPath).toBe("/stories/connections");
+    // A platform's own page keeps its address, without the landing's words.
+    expect(cleanPath("/stories/connections/youtube?result=connected&ws=stories")).toBe("/stories/connections/youtube");
   });
 
   it("ignores pages of the other workspace and addresses that are not the app's", () => {
@@ -339,6 +341,7 @@ it("keeps Lamo Stories' own scroll position for one way back, only for a Lamo St
 it("names each Lamo Stories page in the tab title", () => {
   expect(storiesTitle({ name: "dashboard" })).toBe("Dashboard · Clips Funded");
   expect(storiesTitle({ name: "connections", platform: null, result: null, ws: null })).toBe("Social accounts · Clips Funded");
+  expect(storiesTitle({ name: "connection", platform: "tiktok", result: null, ws: null })).toBe("Social accounts · Clips Funded");
   expect(storiesTitle({ name: "setup" })).toBe("Set up · Clips Funded");
   expect(storiesTitle({ name: "chat_conv", convId: "c" })).toBe("Chat · Clips Funded");
 });

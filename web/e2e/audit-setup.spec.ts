@@ -274,12 +274,14 @@ test.describe("setup layout details", () => {
       await expect(page.locator(".setup-home")).toHaveCount(0);
       const pill = page.locator(".setup-todo__pill");
       await expect(pill).toContainText("Set up posting");
-      await expect(pill).toContainText("2/5");
+      // TikTok is skipped: not counted, and not on the list (rule S).
+      await expect(pill).toContainText("1/4");
       // The pill is one line: its words and its count never split.
       expect(await lineStarts(page, ".setup-todo__pill"), `pill at ${width}`).toEqual(["S"]);
       await pill.click();
       const panel = page.locator(".setup-todo-panel");
-      await expect(panel.locator(".todo-row__state")).toHaveText(["Ready", "Skipped", /^In progress: \d+ of \d+$/, "Needs you: connect again", "Not started"]);
+      await expect(panel.locator(".todo-row__state")).toHaveText(["Ready", /^In progress: \d+ of \d+$/, "Needs you: connect again", "Not started"]);
+      await expect(panel.locator(".todo-row[data-platform='tiktok']")).toHaveCount(0);
       for (const sel of [".setup-todo-panel .setup-todo__title", ".setup-todo-panel .setup-todo__lede", ".setup-todo-panel .setup-todo__foot"])
         for (const mark of ["·", ":", "/", "›", ".", ","]) expect(await lineStarts(page, sel), `${sel} at ${width}`).not.toContain(mark);
       for (const line of await panel.locator(".todo-row__state").all()) {

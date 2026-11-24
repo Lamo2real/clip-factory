@@ -83,3 +83,24 @@ export function stateLine(guide: SetupGuide, setup: PlatformSetup | null | undef
   const p = progressOf(guide, setup);
   return p.current ? `Step ${p.currentNumber} of ${p.steps}` : "Almost there";
 }
+
+/** When it's done's state line under the account, in step with the platform card's own line (stateLine). */
+export function doneLine(
+  name: string,
+  setup: PlatformSetup,
+  { leaving = false, macOn = false }: { leaving?: boolean; macOn?: boolean } = {},
+): string {
+  if (leaving) return "Disconnecting…";
+  if (setup.account.status === "needs_reconnect") return `${name} logged Clip Factory out. Press Connect again.`;
+  if (!setup.ready) return "Connected.";
+  if (!postsPrivate(setup)) return "Ready. Clip Factory posts here by itself.";
+  // TikTok before its audit: only the owner's Mac posts for everyone (§47).
+  if (setup.platform === "tiktok")
+    return macOn ? "Works now, posts stay private. Your Mac posts TikTok for everyone." : "Works now, posts stay private. To post for everyone, turn on Your Mac posts TikTok.";
+  return "Works now, posts stay private.";
+}
+
+/** After a Connect again that was cancelled or failed while the account still works: nothing changed. */
+export function stillConnectedLine(name: string): string {
+  return `Still connected as ${name}. Nothing changed.`;
+}

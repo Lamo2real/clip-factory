@@ -1,9 +1,9 @@
 // How one clip did on each platform (docs/CONTRACTS.md §16.8): the video on top, five smooth lines growing out of
 // it into five platform stacks, a crown on the best one, a "Best this week" star and one Refresh numbers button.
 // Numbers arrive live over the WebSocket; while it is down the page checks every minute.
-import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { ApiError, api, friendlyMessage } from "../../api/index.ts";
-import type { ClipPerformance as Perf, Platform, RefreshResult } from "../../api/types.ts";
+import type { Clip, ClipPerformance as Perf, Platform, Post, RefreshResult } from "../../api/types.ts";
 import { Icon } from "../../components/Icon.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { PerfLines, type LinesLayout } from "../../components/PerfLines.tsx";
@@ -11,9 +11,9 @@ import { PlatformStack } from "../../components/PlatformStack.tsx";
 import { useToast } from "../../components/Toasts.tsx";
 import { ActGlyph, Button, Empty, LinkButton, Skeleton } from "../../components/ui.tsx";
 import { MOMENT_LABEL, PLATFORM_LABEL, plural } from "../../lib/format.ts";
-import { useMedia, usePoll } from "../../lib/hooks.ts";
+import { useHeld, useMedia, usePoll } from "../../lib/hooks.ts";
 import { useLiveEvents, useLiveStatus } from "../../lib/live.ts";
-import { applyPerfEvent, withTotals } from "../../lib/liveCache.ts";
+import { applyPerfEvent, applyPostEvent, withTotals } from "../../lib/liveCache.ts";
 import { STATS_ORDER, ago, compact, full, until } from "../../lib/metrics.ts";
 import { useAction } from "../../lib/motion.ts";
 import { prefersReducedMotion, usePrefs } from "../../lib/prefs.ts";
@@ -23,10 +23,14 @@ import { ClipFollowers } from "./ClipFollowers.tsx";
 import { CrPostLines } from "../../components/CrPostLine.tsx";
 import { sendGroups, useSubmissions } from "../../lib/contentRewards.ts";
 import { CampaignsFold, ClipFit, useClipPageFit, useWaitingClip, WaitingClipFit } from "./ClipFit.tsx";
-import { tiktokAudited } from "../../lib/tiktokYourself.ts";
+import { failedForPublicAccount, tiktokAudited } from "../../lib/tiktokYourself.ts";
 import { TikTokRowAction, useTikTokRowContext } from "../library/MacButtons.tsx";
 import { rowNeedsMac, tiktokFactsFromStacks, tiktokRow } from "../../lib/tiktokMac.ts";
 import { useSetup } from "../settings/setup/useSetup.ts";
+import { useSessionIfAny } from "../../app/session.tsx";
+import { activeSkips } from "../../lib/setupTodo.ts";
+import { UploadAgain } from "../library/Library.tsx";
+import { needsUploadAgain, START_GRACE_MS } from "../../lib/upload.ts";
 
 /** Re-renders every `ms` so "3 min ago" and "Next check in 4 min" stay true. */
 export function useNow(ms = 15_000): number {
@@ -96,6 +100,9 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
   const sendNow = sendGroups(crSubs.subs).length > 0;
   const crFirst = sendNow || (typeof location !== "undefined" && new URLSearchParams(location.search).has("cr"));
   const [perf, setPerf] = useState<Perf | null>(null);
+  // The clip's own posts (GET /v1/posts?clipId=): what Try again needs, and when each post's numbers come.
+  // Null until they load (or when that failed): the page then never guesses that posting did not start.
+  const [posts, setPosts] = useState<Post[] | null>(null);
   const [error, setError] = useState<{ message: string; missing: boolean } | null>(null);
   const [busy, setBusy] = useState(false);
   const [starBusy, setStarBusy] = useState(false);
@@ -121,12 +128,21 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
   const inReview = waitingClip?.status === "review";
   // TikTok's row (§47.4): what the owner's Mac is doing, said in its stack, with its one button in the actions.
   const setup = useSetup();
+  // The places he skipped that are not set up (rule S, §48.3): no stack, fit line or campaign note asks him to set one up.
+  const session = useSessionIfAny();
+  const saved = session?.me?.settings.setupSkipped;
+  const skipped = useMemo(() => activeSkips(setup.data?.platforms, saved), [setup.data, saved]);
   const tiktokFacts = perf ? tiktokFactsFromStacks(perf.clip, perf.posts) : null;
   const macCtx = useTikTokRowContext({
     audited: tiktokAudited(setup.data?.platforms),
     needsMac: !!tiktokFacts && rowNeedsMac(tiktokFacts),
   });
   const tiktok = tiktokFacts ? tiktokRow(tiktokFacts, macCtx) : null;
+  // Where clips go (Settings): a stack says "Turn on" only for a place that is off there.
+  const whereOn = session?.me?.settings.platforms;
+  // Uploaded, but its posting never started (as on the Library card): once that lasts past the normal moment, the
+  // page's main button is Try again.
+  const stuck = useHeld(!!perf?.clip.startPending, START_GRACE_MS);
 
   const stage = useRef<HTMLDivElement | null>(null);
   const stageObserver = useRef<ResizeObserver | null>(null);
@@ -149,9 +165,10 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
 
   const load = useCallback(async () => {
     try {
-      const fresh = await api().clipPerformance(clipId);
+      const [fresh, list] = await Promise.all([api().clipPerformance(clipId), api().listPosts(clipId).catch(() => null)]);
       // Keep presigned links already playing (a fresh pair would restart the video).
       setPerf((old) => (old ? { ...fresh, clip: { ...fresh.clip, videoUrl: old.clip.videoUrl ?? fresh.clip.videoUrl, coverUrl: old.clip.coverUrl ?? fresh.clip.coverUrl } } : fresh));
+      if (list) setPosts(list.filter((p) => p.clipId === clipId));
       setError(null);
     } catch (e) {
       setError({ message: friendlyMessage(e), missing: e instanceof ApiError && e.status === 404 });
@@ -164,7 +181,10 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
   }, [load]);
 
   useLiveEvents(
-    (e) => setPerf((p) => (p ? applyPerfEvent(p, e) : p)),
+    (e) => {
+      setPerf((p) => (p ? applyPerfEvent(p, e) : p));
+      if (e.type === "post" && (e.op === "delete" || e.item?.clipId === clipId)) setPosts((ps) => (ps ? applyPostEvent(ps, e) : ps));
+    },
     () => void load().catch(() => undefined),
   );
   // The fallback while the live connection is down: look again every minute.
@@ -183,7 +203,7 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
       <div className="page perf">
         <h1 className="sr-only">{error.missing ? "No numbers for this clip" : "Could not load the numbers"}</h1>
         <BackRow />
-        {error.missing ? <WaitingClipFit clip={waitingClip} /> : null}
+        {error.missing ? <WaitingClipFit clip={waitingClip} skipped={skipped} /> : null}
         <Empty
           icon={error.missing ? "chart" : "alert"}
           title={error.missing ? "No numbers for this clip" : "Could not load the numbers"}
@@ -223,6 +243,21 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
 
   const state = refreshState(perf, now, busy);
   const clip = perf.clip;
+  // Posting never started (§14.5): the Library card's line and Try again lead the page, and every stack says so.
+  const notStarted = (!!posts && needsUploadAgain(clip, posts)) || stuck;
+  // Try again sent from this page: the fresh clip and its posts, then the page as the server has it now.
+  const kept = (fresh: Clip, list: Post[]) => {
+    setPosts(list);
+    setPerf((p) => (p ? { ...p, clip: { ...fresh, videoUrl: p.clip.videoUrl, coverUrl: p.clip.coverUrl } } : p));
+    void load().catch(() => undefined);
+  };
+  /** One place that didn't work, on an uploaded clip: its own Try again, in its stack (as on the Library card, §33). */
+  const retryHere = (platform: Platform) => {
+    const s = perf.posts.find((p) => p.platform === platform);
+    if (!posts || !s || s.status !== "failed" || failedForPublicAccount({ platform, status: "failed", error: s.error })) return false;
+    if (platform === "tiktok" && tiktok) return false;
+    return clip.status === "posted" || clip.status === "failed";
+  };
 
   async function refresh() {
     if (!perf) return;
@@ -302,11 +337,11 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
       <header className="perf__head">
         <h1 className="perf__title user-text">{clip.hook}</h1>
         <p className="perf__meta">
-          {MOMENT_LABEL[clip.momentType]} · {plural(perf.totals.platformsPosted, "platform")} posted
+          {MOMENT_LABEL[clip.momentType]} · posted on {plural(perf.totals.platformsPosted, "app")}
         </p>
       </header>
 
-      <ClipFit clip={clip} data={fitPage.data} primary={fitMain} copy={fitPage.copy} />
+      <ClipFit clip={clip} data={fitPage.data} primary={fitMain} copy={fitPage.copy} skipped={skipped} />
 
       {/* From the send-now notification (?cr=), or while a post waits to be sent, the lines lead the page (§38.6). */}
       {crSubs.subs.length && crFirst ? <ClipOnContentRewards clipId={clipId} subs={crSubs} sendNow={sendNow} /> : null}
@@ -378,7 +413,7 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
                 {compact(perf.totals.views)}
               </span>
               <span className="sr-only">{full(perf.totals.views)}</span>
-              <span className="perf__views-label">views across platforms</span>
+              <span className="perf__views-label">views on all apps</span>
             </p>
             <p className="perf__fine">(each app counts views its own way)</p>
             {best ? (
@@ -403,6 +438,11 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
           </div>
 
           <div className="perf__actions">
+            {notStarted ? (
+              <div className="perf__again" style={{ flexBasis: "100%" }}>
+                <UploadAgain clip={clip} posts={posts ?? []} onKept={kept} />
+              </div>
+            ) : null}
             <button
               type="button"
               className={`star-btn glass glass--green${perf.bestThisWeek ? " is-on" : ""}`}
@@ -422,7 +462,7 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
               <span>Best this week</span>
             </button>
             <Button
-              variant={sendNow || fitMain ? "glass" : "primary"}
+              variant={sendNow || fitMain || notStarted ? "glass" : "primary"}
               size="lg"
               icon={waiting ? "clock" : "retry"}
               loading={state.refreshing}
@@ -442,6 +482,7 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
               row={tiktok}
               mac={perf.posts.find((p) => p.platform === "tiktok")?.mac}
               size="md"
+              turnOnLabel="Turn on TikTok on my Mac"
               onKept={() => void load().catch(() => undefined)}
             />
             {/* Not a live region: the clock re-renders it every minute. New numbers are announced by the toast. */}
@@ -455,6 +496,7 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
         <div className="perf__stacks">
           {STATS_ORDER.map((platform: Platform, i) => {
             const s = perf.posts.find((p) => p.platform === platform)!;
+            const retry = retryHere(platform);
             return (
               <PlatformStack
                 key={platform}
@@ -468,6 +510,9 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
                 now={now}
                 auto={perf.clip.auto}
                 row={platform === "tiktok" ? tiktok : null}
+                skipped={skipped.includes(platform)}
+                context={{ whereOn, notStarted, retryHere: retry, perfCheckAt: posts?.find((p) => p.platform === platform)?.perfCheckAt }}
+                action={retry ? <UploadAgain clip={clip} posts={posts ?? []} platform={platform} onKept={kept} /> : null}
               />
             );
           })}
@@ -476,7 +521,7 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
       <ClipFollowers perf={perf} />
       {crSubs.subs.length && !crFirst ? <ClipOnContentRewards clipId={clipId} subs={crSubs} sendNow={false} /> : null}
       {/* §39.3: closed by default, at the end, so the video and its numbers still come first. */}
-      <CampaignsFold data={fitPage.data} />
+      <CampaignsFold data={fitPage.data} skipped={skipped} />
     </div>
   );
 }
