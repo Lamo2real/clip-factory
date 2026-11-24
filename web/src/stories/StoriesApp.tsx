@@ -14,7 +14,7 @@
 import "./styles/stories.css";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { ApiError } from "../api/errors.ts";
-import { appSwitched, setStoriesWorkspaceShown, setSwitchBare, whenAppSlidesIn } from "../app/shell.ts";
+import { appSwitched, onDockRoom, setStoriesWorkspaceShown, setSwitchBare, whenAppSlidesIn } from "../app/shell.ts";
 import { TopBarSwitch } from "../app/WorkspaceDock.tsx";
 import { useToast } from "../components/Toasts.tsx";
 import { Glide } from "../components/Glide.tsx";
@@ -567,11 +567,20 @@ function StoriesShell({ page }: { page: StoriesPage }) {
     };
     show();
     // The list's room changes after the first paint (the shell lays out its switch, the fonts arrive, the window
-    // is resized): the chosen page stays in view.
-    if (typeof ResizeObserver !== "function") return;
-    const watch = new ResizeObserver(show);
-    watch.observe(list);
-    return () => watch.disconnect();
+    // is resized): the chosen page stays in view. The shell's dock and the fonts are followed in the very task they
+    // change the room: a ResizeObserver only hears a change on the next frame drawn, which on a slow machine (CI's
+    // software paint under the glass) came hundreds of ms later, and until then the chosen page sat cut off at the
+    // list's end (Settings at 1280 x 830, once a row of the shell's foot arrived and the dock took 41 px more room).
+    const offDock = onDockRoom(show);
+    const fonts = typeof document !== "undefined" ? document.fonts : undefined;
+    fonts?.addEventListener?.("loadingdone", show);
+    const watch = typeof ResizeObserver === "function" ? new ResizeObserver(show) : null;
+    watch?.observe(list);
+    return () => {
+      offDock();
+      fonts?.removeEventListener?.("loadingdone", show);
+      watch?.disconnect();
+    };
   }, [page.name, solo]);
 
   return (
