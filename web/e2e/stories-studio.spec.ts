@@ -360,6 +360,12 @@ test("round 3, Production › New: the hand-over keys, the idea's own length, an
     const page = await ctx.newPage();
     await open(page, `/stories/production/new?idea=${I.sandwich}&ref=${REF.analyzed}&cast=${C.pip}&cast=${C.bolt}&sec=40`);
     await expect(page.locator('.st-s-casttile[aria-pressed="true"]')).toHaveCount(2);
+    // §45.47: panel 2 is "Who is in it"; the first person from the address is the main character, no villain yet;
+    // Save draft sits by Make the video
+    await expect(page.locator("#st-nv-2")).toHaveText("2 Who is in it");
+    await expect(page.getByRole("radiogroup", { name: "Main character" }).locator(".st-s-pick__opt.is-on")).toHaveText("Pip");
+    await expect(page.getByRole("radiogroup", { name: "Villain (you can skip this)" }).locator(".st-s-pick__opt.is-on")).toHaveText("No villain");
+    await expect(page.locator(".st-s-actionbar--pin").getByRole("button", { name: "Save draft" })).toBeVisible();
     await expect(page.locator('input[type="range"]').first()).toHaveValue("40");
     await expect(page.locator('.st-s-reftile[aria-pressed="true"]')).toHaveCount(1);
     // the shape and the drawing style (§45.45) each say where they come from, under their own pick

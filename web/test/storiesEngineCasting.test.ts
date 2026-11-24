@@ -443,10 +443,15 @@ describe("every car draft of the mock writer validates", () => {
     expect(safe.scenes.some((sc) => sc.props.some((p) => p.castId === "c2"))).toBe(true);
   });
 
-  it("a car alone, or two cars, is refused in the API's words", async () => {
+  it("a car alone, or three vehicles, is refused in the API's words; two vehicles with a driver are fine (§45.47)", async () => {
     const C = stories.SEED_IDS.characters;
     await expect(call(api.createStory("stories", { characterIds: [ROSSO_ID], brief: { title: "x", logline: "y", category: "comedy" } }))).rejects.toMatchObject({ status: 400, message: "Add someone to drive it." });
     store.characters.push({ ...clone(store.characters.find((c) => c.characterId === ROSSO_ID)!), characterId: "01JSTCH00000000000000CAR98", name: "Blue" });
-    await expect(call(api.createStory("stories", { characterIds: [C.pip, ROSSO_ID, "01JSTCH00000000000000CAR98"], brief: { title: "x", logline: "y", category: "comedy" } }))).rejects.toMatchObject({ status: 400, message: "Pick one car." });
+    store.characters.push({ ...clone(store.characters.find((c) => c.characterId === ROSSO_ID)!), characterId: "01JSTCH00000000000000CAR97", name: "Green" });
+    await expect(
+      call(api.createStory("stories", { characterIds: [C.pip, ROSSO_ID, "01JSTCH00000000000000CAR98", "01JSTCH00000000000000CAR97"], brief: { title: "x", logline: "y", category: "comedy" } })),
+    ).rejects.toMatchObject({ status: 400, message: "Pick up to 2 vehicles." });
+    const two = await call(api.createStory("stories", { characterIds: [C.pip, ROSSO_ID, "01JSTCH00000000000000CAR98"], brief: { title: "x", logline: "y", category: "comedy" } }));
+    expect(two.story.characterIds).toEqual([C.pip, ROSSO_ID, "01JSTCH00000000000000CAR98"]);
   });
 });
