@@ -56,7 +56,7 @@ import { ArtPicker, artOf, artWords, storyArt } from "../studio/art.tsx";
 import { Busy, celebrate, Notice, Pick, ShowMore, Slider, Switch, Tag, TechDetails, TextField } from "../studio/kit.tsx";
 import { useLeaveGuard } from "../studio/leaveGuard.tsx";
 import { defaultLength, draftFromIdea, emptyDraft, fitTarget, hasCaption, lengthRange, namesIn, scriptProblem, stepLabel, toOwnScript, written, type ScriptDraft } from "../studio/ownScript.ts";
-import { ChangeScriptSheet, fixId, focusField, OwnChip, ScriptEditor } from "../studio/ScriptEditor.tsx";
+import { ChangeScriptSheet, fixId, focusField, ScriptEditor } from "../studio/ScriptEditor.tsx";
 import { currentStep, nowLine, StepTrack, stepsOf } from "../studio/StepTrack.tsx";
 import { ago, CATEGORY_LABEL, helpersLine, isConflict, NO_GUIDANCE, notMadeYet, say, seconds, STATUS_TONE, statusLabel, STORAGE_WORDS } from "../studio/words.ts";
 import { KIND_OPTIONS } from "./Ideas.tsx";
@@ -410,7 +410,7 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
   function check(): string | null {
     scriptFix.current = null;
     if (source === "idea") {
-      if (!idea) return "Pick an idea, or tap Type my own.";
+      if (!idea) return "Pick an idea, or tap Type an idea.";
       if (blockedIdea(idea)) return NO_GUIDANCE;
     } else if (source === "script") {
       if (!title.trim()) {
@@ -552,12 +552,14 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
               value={source}
               options={[
                 { value: "idea", label: "Use an idea" },
-                { value: "own", label: "Type my own" },
+                { value: "own", label: "Type an idea" },
                 { value: "script", label: "Write it myself" },
               ]}
               onChange={pickSource}
             />
+            {/* one short line a choice: only Write it myself makes the video from the owner's own words */}
             {source === "script" ? <p className="st-s-field__hint st-sc-lede">You write what happens. Clips Funded draws it.</p> : null}
+            {source === "own" ? <p className="st-s-field__hint st-sc-lede">You type the idea. Clips Funded writes the story.</p> : null}
             {source === "script" ? (
               <>
                 <TextField id="st-sc-title" label="Title" value={title} onChange={setTitle} max={80} placeholder="For example: Dash learns to juggle" />
@@ -613,11 +615,11 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
                 <p className="st-s-field__hint">
                   {series ? (
                     <>
-                      No ideas yet. Tap Type my own, or <A href={storiesHref({ name: "ideas", seriesId: series, ask: true })}>ask for ideas</A> for this series.
+                      No ideas yet. Tap Type an idea, or <A href={storiesHref({ name: "ideas", seriesId: series, ask: true })}>ask for ideas</A> for this series.
                     </>
                   ) : (
                     <>
-                      No ideas yet. Tap Type my own, or add some in <A href={storiesHref({ name: "ideas" })}>Ideas</A>.
+                      No ideas yet. Tap Type an idea, or add some in <A href={storiesHref({ name: "ideas" })}>Ideas</A>.
                     </>
                   )}
                 </p>
@@ -985,7 +987,6 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
       />
 
       <section className="st-s-panel st-glass" aria-label="The steps">
-        {story.ownScript ? <OwnChip /> : null}
         <StepTrack job={job} story={story} label={`Making ${story.title}`} bar={false} line={false} />
         {asking ? (
           <UnusableSheet

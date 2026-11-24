@@ -98,10 +98,14 @@ function SceneField({
         </span>
       ) : null}
       {over ? (
-        <span className="st-s-field__problem" id={`${id}-p`} role="alert">
+        <span className="st-s-field__problem" id={`${id}-p`}>
           {over}
         </span>
       ) : null}
+      {/* said once when the field goes over its limit, not on every key (the counter shows the number) */}
+      <span className="st-s-sr" aria-live="polite">
+        {over ? "Too long." : ""}
+      </span>
     </div>
   );
 }
@@ -189,9 +193,10 @@ export function ScriptEditor({ draft, update, characters, cast, onAddToCast, add
     const low = ask.name.toLowerCase();
     update((d) => ({
       answers: { ...d.answers, [low]: to },
-      // picking someone ticks them in every scene that names the name (one picked by hand too)
+      // picking someone ticks them in every scene that names the name (one picked by hand too); Not a name and Leave
+      // out tick nobody
       scenes:
-        to === "out"
+        to === "out" || to === "seen"
           ? d.scenes
           : d.scenes.map((s) => (s.who && names(s.what, ask.name) && !s.who.includes(to) ? { ...s, who: [...s.who, to] } : s)),
     }));
@@ -364,7 +369,7 @@ export function ScriptEditor({ draft, update, characters, cast, onAddToCast, add
   );
 }
 
-/** A question about a name in a scene: who it is (one of the cast, or left out), or a character not in the cast. */
+/** A question about a name in a scene: who it is (one of the cast, not a name, or left out), or a character not in the cast. */
 function AskRow({ id, ask, cast, onAnswer, onAdd, addWhy }: { id?: string; ask: Ask; cast: Character[]; onAnswer: (to: string) => void; onAdd?: (characterId: string) => void; addWhy?: (characterId: string) => string | null }) {
   const why = ask.kind === "outside" && onAdd ? (addWhy?.(ask.characterId) ?? null) : null;
   const words = ask.kind === "who" ? `Who is ${ask.name}?` : `${ask.name} isn't in the cast.`;
@@ -383,6 +388,12 @@ function AskRow({ id, ask, cast, onAnswer, onAdd, addWhy }: { id?: string; ask: 
                 Add {ask.name}
               </button>
             ) : null}
+        {ask.kind === "who" ? (
+          // a word with a capital that is no one ("Breakfast"): nothing is left out, and nobody is asked for it again
+          <button type="button" className="st-pill st-pill--small" onClick={() => onAnswer("seen")}>
+            Not a name
+          </button>
+        ) : null}
         <button type="button" className="st-pill st-pill--small" onClick={() => onAnswer("out")}>
           Leave {ask.name} out
         </button>
@@ -484,6 +495,8 @@ export function ChangeScriptSheet({ ws, story, focus, onClose, onStarted }: { ws
   const [draft, setDraft] = useState<ScriptDraft | null>(null);
   const [problem, setProblem] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
+  /** The story as this sheet last saved it: a retry after a failed start sends its version, never the old one. */
+  const [saved, setSaved] = useState<Story | null>(null);
   const opened = useRef(false);
   const cast = story.characterIds;
 
@@ -512,8 +525,11 @@ export function ChangeScriptSheet({ ws, story, focus, onClose, onStarted }: { ws
     setProblem(null);
     try {
       const own = toOwnScript(draft, cast, characters);
-      let now = story;
-      if (!sameScript(own, story.ownScript)) now = (await storiesApi().patchStory(ws, story.storyId, { version: story.version, ownScript: own })).story;
+      let now = saved ?? story;
+      if (!sameScript(own, now.ownScript)) {
+        now = (await storiesApi().patchStory(ws, story.storyId, { version: now.version, ownScript: own })).story;
+        setSaved(now);
+      }
       const r = await storiesApi().produce(ws, story.storyId, now.stale.length ? {} : { from: "storyboard" });
       onStarted(r);
       toast.success("Making it again!");

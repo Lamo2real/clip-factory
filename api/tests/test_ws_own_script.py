@@ -505,3 +505,70 @@ def test_sets_match_the_engine_catalog() -> None:
     assert m
     assert list(catalog.SETS) == re.findall(r'id: "([^"]+)"', m.group(1))
     assert len(catalog.SETS) == 16
+
+
+# --- the reviewers' fixes (24 Nov) ---------------------------------------------------------------------------------
+
+
+def test_known_words_are_kept_only_when_given(call: Call, dash: str) -> None:
+    scenes = [_scene("Dash and Max fly to Paris.", known=["Max", " Paris ", "Max"]), _scene("Bye.")]
+    status, body = _create(call, [dash], scenes)
+    assert status == 201
+    got = body["story"]["ownScript"]["scenes"]
+    assert got[0]["known"] == ["Max", "Paris"]
+    assert "known" not in got[1]
+    status, body = _create(call, [dash], [_scene("Dash waves.", known=["M" * 41]), _scene("Bye.")])
+    assert (status, body["error"]["field"]) == (400, "ownScript.scenes[0].known")
+
+
+@pytest.mark.parametrize("caption", ["Oh {no}", "Back\\slash", "}"])
+def test_a_caption_mark_the_video_would_change_is_refused_never_changed(call: Call, dash: str, caption: str) -> None:
+    status, body = _create(call, [dash], [_scene("Dash wakes."), _scene("Bye.", caption)])
+    assert (status, body["error"]["message"], body["error"]["field"]) == (
+        400,
+        "Scene 2's caption can't use { } or \\. Take them out.",
+        "ownScript.scenes[1].caption",
+    )
+
+
+def test_a_caption_edit_with_a_mark_is_refused_on_an_owner_script(
+    call: Call, store: db.Store, s3_client: FakeS3, dash: str
+) -> None:
+    story = _made_own(store, s3_client, [dash])
+    cues = [{"id": "w_s1", "at": 0.25, "dur": 2.5, "text": "Oh {no}"}]
+    status, body = _patch(call, story, captions=cues)
+    assert (status, body["error"]["message"]) == (400, "Scene 1's caption can't use { } or \\. Take them out.")
+
+
+def test_who_counts_each_person_once_and_says_when_there_are_too_many(call: Call, store: db.Store) -> None:
+    ids = [str(seed_character(store, name=f"P{k}")["characterId"]) for k in range(3)]
+    status, body = _create(call, ids, [_scene("They play.", who=[ids[0]] * 5 + ids[1:]), _scene("Bye.")])
+    assert status == 201
+    assert body["story"]["ownScript"]["scenes"][0]["who"] == ids
+    assert own_script.TOO_MANY_WHO.format(n=1) == "Scene 1 has too many people. Keep 4 or fewer."
+
+
+def test_an_own_script_from_a_checked_idea_keeps_its_topic(call: Call, store: db.Store, dash: str) -> None:
+    idea = seed_idea(store, category="driving_safety", safetyTopicId="skid-recovery", title="Dash's big day")
+    scenes = [_scene("Dash drives to school."), _scene("Dash gets there.")]  # no word names a topic
+    status, body = _create(call, [dash], scenes, ideaId=idea["ideaId"])
+    assert (status, body["story"]["safetyTopicId"]) == (201, "skid-recovery")
+
+
+def test_the_first_words_turn_the_captions_on_and_a_long_one_is_staged_again(
+    call: Call, store: db.Store, s3_client: FakeS3, dash: str
+) -> None:
+    none = {"scenes": [_full("s1", "Dash wakes up late."), _full("s2", "Dash runs for the bus.")]}
+    story = _made_own(store, s3_client, [dash], own=none, captionsOn=False)
+    staged = json.loads(s3_client.objects[story["scriptKey"]])
+    s3_client.objects[story["scriptKey"]] = json.dumps({**staged, "captions": [], "captionsOn": False}).encode()
+    status, body = _patch(call, story, ownScript=_with(none, 1, caption="Run!"))
+    assert status == 200
+    assert body["story"]["captionsOn"] is True
+    assert body["story"]["stale"] == CAPTION_STEPS
+    assert body["script"]["captionsOn"] is True
+    # A caption too long to read in its 3 s scene: the video is staged again, so the scene gets the time.
+    long = _with(body["story"]["ownScript"], 0, caption="Dash is late again, so he has to hurry up!")
+    status, body = _patch(call, body["story"], ownScript=long)
+    assert (status, body["story"]["stale"]) == (200, ALL)
+    assert own_script.MIN_CUE == 0.3

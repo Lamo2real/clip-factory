@@ -1371,7 +1371,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       }
       const line = (body.brief?.logline ?? "").trim() || (own ? own.scenes[0]!.what.replace(/\s+/g, " ").slice(0, 280) : "");
       const brief: Brief = idea ? { title: idea.title, logline: own ? own.scenes[0]!.what : idea.logline, category: idea.category } : { title: body.brief!.title.trim(), logline: line, category: body.brief!.category };
-      const safetyTopicId = own ? ownTopic((body.title ?? brief.title).trim(), brief.logline, own) : brief.category === "driving_safety" ? (idea ? idea.safetyTopicId : topicFor(`${brief.title} ${brief.logline}`)) : null;
+      const safetyTopicId = own ? (ownTopic((body.title ?? brief.title).trim(), brief.logline, own) ?? idea?.safetyTopicId ?? null) : brief.category === "driving_safety" ? (idea ? idea.safetyTopicId : topicFor(`${brief.title} ${brief.logline}`)) : null;
       if (brief.category === "driving_safety" && !safetyTopicId) fail(409, "conflict", NO_GUIDANCE);
       const ownDefault = own ? ownDefaults(own) : null;
       const durationSec = body.durationSec ?? ownDefault?.durationSec ?? cfg.defaultDurationSec ?? 45;
@@ -1549,7 +1549,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
           mirrorCaptions(story, script.captions);
         }
         // Change my script (§45.46): only the words, or the scenes staged again
-        if (patch.ownScript !== undefined) mark(...patchOwn(story, script, patch.ownScript, extraOf(store, storyId).brief.logline));
+        if (patch.ownScript !== undefined) mark(...patchOwn(story, script, patch.ownScript, extraOf(store, storyId).brief.logline, patch.captionsOn !== undefined));
         if (JSON.stringify(script) !== JSON.stringify(before)) {
           const r = validateScript(script);
           if (!r.ok) fail(400, "bad_request", "That change would break the video. Try a smaller change.");

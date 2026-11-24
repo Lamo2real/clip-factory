@@ -35,7 +35,7 @@ import hashlib
 import json
 import shutil
 import time
-from collections.abc import Awaitable, Callable, Coroutine, Iterable, Sequence
+from collections.abc import Awaitable, Callable, Coroutine, Iterable, Mapping, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -838,6 +838,7 @@ class StoryJob(Job):
             self.driving
             or bool(self.story.get("safetyTopicId"))
             or bool((self.script or {}).get("cars"))
+            or (self.own and own_script.about_driving(self.story))  # the owner's own words, not only a model's flag
             or await self._teaches()
         )
 
@@ -1306,6 +1307,16 @@ class StoryJob(Job):
             if ch:
                 self.characters[str(cid)] = ch
 
+    def _staged_as_now(self, old: Mapping[str, Any], own: Sequence[Mapping[str, Any]]) -> bool:
+        """The saved storyboard is the owner's script as it is now: its storyboard is not out of date (a changed
+        script makes it so), and its scenes are the script's scenes in order, each labelled with its what happens."""
+        if "storyboard" in self.stale:
+            return False
+        scenes = [sc for sc in old.get("scenes") or [] if isinstance(sc, Mapping)]
+        return [str(sc.get("sceneId")) for sc in scenes] == [o["sceneId"] for o in own] and all(
+            str(sc.get("title") or "") == own_script.label(o["what"]) for sc, o in zip(scenes, own, strict=True)
+        )
+
     async def _concept(self) -> dict[str, Any]:
         story = self.story
         if self.own:  # the owner's story as written; an idea's concept never goes in (§45.46)
@@ -1519,13 +1530,16 @@ class StoryJob(Job):
         self.writer_texts = writer.texts(script, post)
         return f"{len(script.get('scenes') or [])} scenes, {round(frame_count(script) / 30)} s"
 
-    async def _storyboard_own(self) -> str:
+    async def _storyboard_own(self, fix: tuple[Sequence[str], Sequence[str]] | None = None) -> str:
         """Write it myself (§45.46, ADR-95): the faithful adapter stages the owner's script (``animation_plan``), code
         builds the script around its staging (the owner's words as the ``w_sN`` cues, the notes, the scenes in his
         order), the engine checks it and ``own_script.own_problems`` proves it kept the script. On any break the
         adapter is asked once more with the exact problems; still broken, the video stops with the owner's sentence
         for the first one and nothing is saved. Remake this scene (``own_scenes``) is a new take of those scenes'
-        staging: their events, cast, place, length and words stay."""
+        staging: their events, cast, place, length and words stay; it is a whole staging when the script changed
+        since it was staged. A name nobody gave, or someone the cast lost, stops it before any model is asked.
+        ``fix``: the fact check's staging fix (scene ids, the checker's problems with them): a new take of only those
+        scenes, saved with the post captions as they are."""
         topic = self._require_topic()
         await self._load_characters()
         own = self._own_scenes()
@@ -1536,11 +1550,11 @@ class StoryJob(Job):
                 old = await self._load_script()
         own_ids = [o["sceneId"] for o in own]
         asked: list[str] = []
-        if self.job.get("jobType") == "changes" and old is not None:
-            old_ids = [str(sc.get("sceneId")) for sc in old.get("scenes") or []]
-            wanted = {str(x) for x in conf.get("sceneIds") or []}
-            if old_ids == own_ids:  # a new take only of a script that is staged as it is now
-                asked = [sid for sid in own_ids if sid in wanted]
+        if fix is not None and old is not None:  # the fact check's staging fix: a new take of the flagged scenes
+            asked = [sid for sid in own_ids if sid in set(fix[0])]
+        elif self.job.get("jobType") == "changes" and old is not None and self._staged_as_now(old, own):
+            wanted = {str(x) for x in conf.get("sceneIds") or []}  # a new take only of a script staged as it is now
+            asked = [sid for sid in own_ids if sid in wanted]
         mode = "own_scenes" if asked else "own"
         if mode == "own_scenes" and old is not None:
             cast, cars = dict(old.get("cast") or {}), dict(old.get("cars") or {})
@@ -1552,6 +1566,10 @@ class StoryJob(Job):
         catalog, rules = await self._engine_catalog()
         lists = self._lists(catalog)
         places = {str(e.get("id")): str(e.get("label") or e.get("id")) for e in lists.get("sets") or []}
+        cast_names = [str((m or {}).get("name") or "") for m in [*cast.values(), *cars.values()]]
+        early = own_script.script_problems(own, castmap, cast_names, places.values())
+        if early:  # a name nobody gave, someone the cast lost: no staging can fix it, so no model is asked
+            raise StoryFailed(early[0].for_owner)
         target = own_script.target(self.story.get("durationSec"), own)
         self.meta["targetSec"] = target
         keep_size = old is not None and (mode == "own_scenes" or not isinstance(self.story.get("format"), dict))
@@ -1579,6 +1597,8 @@ class StoryJob(Job):
         if mode == "own_scenes" and old is not None:
             request["current"] = writer.without_looks(old)
             request["sceneIds"] = asked
+        if fix is not None:  # the fact checker's problems with the AI's own staging of these scenes (data)
+            request["factProblems"] = list(fix[1])[:20]
         seed = keys.seed_for(self.fence.job_id, "script")
         if mode == "own_scenes" and old is not None and old.get("seed") is not None:
             seed = int(old["seed"])
@@ -1637,6 +1657,9 @@ class StoryJob(Job):
         if mode == "own_scenes":  # a new take of some scenes: the rest still teaches what it taught
             teaches = teaches or await self._teaches()
         self.teaches = teaches
+        if fix is not None:  # the staging fix keeps the post captions: only the flagged scenes' staging changed
+            await self._save_script(script, self._post(), by="writer")
+            return f"{len(asked)} scene{'s' if len(asked) != 1 else ''} set up again"
         story_set: dict[str, Any] = {}
         if teaches and not self.driving and not self.story.get("safetyTopicId"):
             self.held_for_topic = True
@@ -1873,10 +1896,17 @@ class StoryJob(Job):
             return Done(QUALITY_OFF, skipped=True)
         result = first
         rewritten = False
+        own_fixed: list[str] = []  # an owner's script: what the AI changed of its own (its staging, its post words)
         if not first.ok and own:  # an owner's script is reported, never rewritten: only the AI's post captions
             new_post = await self._fix_own_post(script, post, topic, first.problems, set(refs_names))
             if new_post is not None:
                 post = new_post
+                own_fixed.append("post")
+            new_script = await self._fix_own_staging(first.problems, own)
+            if new_script is not None:
+                script = new_script
+                own_fixed.append("staging")
+            if own_fixed:
                 refs_names = {it["ref"]: it["where"] for it in safety.items(script, post, own=own)}
                 result = await self._check(script, post, topic, guarded=guarded)
         elif not first.ok:
@@ -1902,7 +1932,8 @@ class StoryJob(Job):
         problems = result.sentences(refs_names)
         if self.held_for_topic or (guarded and topic is None and problems):
             problems = [*problems, HELD_TOPIC]  # driving advice with no checked topic is held (§45.11.5)
-        return await self._save_check(topic, problems, rewritten=rewritten)
+        words = any(p["ref"].startswith((safety.OWN_REF, "caption:" + safety.OWN_CUE)) for p in result.problems)
+        return await self._save_check(topic, problems, rewritten=rewritten, fixed=own_fixed, words=words)
 
     async def _fix_own_post(
         self,
@@ -1930,12 +1961,52 @@ class StoryJob(Job):
         self.writer_texts = own_script.post_texts(new_post)
         return new_post
 
+    async def _fix_own_staging(
+        self, problems: Sequence[dict[str, str]], own: Sequence[dict[str, Any]]
+    ) -> dict[str, Any] | None:
+        """The fact check on an owner's own script found problems only with how a scene is drawn (its ``beat:`` or
+        ``scene:`` refs, none on its own words, ``own:sN`` or ``caption:w_sN``): that is the AI's own staging, so
+        those scenes are set up once more with the checker's problems (a staging fix, never a rewrite: what happens
+        and the words stay, and the faithful check runs again). Only in a run that draws and animates the scenes
+        again. Returns the new script, saved, or None."""
+        if "beat" not in safety.allowed_refs(self.run_steps) or not self.budget.has("writer"):
+            return None
+        mine = {p["ref"].split(":")[1] for p in problems if p["ref"].startswith(safety.OWN_REF)}
+        mine |= {
+            p["ref"].removeprefix("caption:" + safety.OWN_CUE)
+            for p in problems
+            if p["ref"].startswith("caption:" + safety.OWN_CUE)
+        }
+        drawn: dict[str, list[str]] = {}
+        for p in problems:
+            kind, _, rest = p["ref"].partition(":")
+            sid = rest.split(":")[0]
+            if kind in ("beat", "scene") and sid and sid not in mine:
+                drawn.setdefault(sid, []).append(f"{p['ref']}: {p['problem']}")
+        ids = [o["sceneId"] for o in own if o["sceneId"] in drawn]
+        if not ids:
+            return None
+        try:
+            await self._storyboard_own(fix=(ids, [line for sid in ids for line in drawn[sid]]))
+        except (StoryFailed, AnswerInvalid) as e:
+            log("info", "stories.own_restage_kept", job=self.fence.job_id, scenes=ids, error=str(e)[:200])
+            return None
+        return self.script
+
     def _kept_last_look(self) -> list[str]:
         """The final review's problems that still stand after a new fact check: kept when this job does not look at
         the video again (it did not change), dropped when its own preview step will look."""
         return [] if "preview" in self.run_steps else last_look(self.story.get("safety"))
 
-    async def _save_check(self, topic: Topic | None, problems: list[str], *, rewritten: bool) -> str:
+    async def _save_check(
+        self,
+        topic: Topic | None,
+        problems: list[str],
+        *,
+        rewritten: bool,
+        fixed: Sequence[str] = (),
+        words: bool = True,
+    ) -> str:
         record = with_last_look(
             {
                 "topicId": topic.id if topic else None,
@@ -1952,9 +2023,14 @@ class StoryJob(Job):
         )
         self.story["safety"] = record
         if record["status"] == "ok":
+            if self.own and fixed:  # the AI changed only what is its own: say what, never "Checked" alone
+                said = {"staging": "Scenes set up again", "post": "post words rewritten"}
+                done = ", ".join(said[f] for f in ("staging", "post") if f in fixed)
+                return done[:1].upper() + done[1:] + ", then checked"
             return "Rewritten, then checked" if rewritten and not self.own else "Checked"
         n = len(record["problems"])
-        return f"{n} thing{'s' if n != 1 else ''} to check" + (" in your script" if self.own else "")
+        where = (" in your script" if words else " in the video") if self.own else ""
+        return f"{n} thing{'s' if n != 1 else ''} to check" + where
 
     async def _rewrite(
         self,

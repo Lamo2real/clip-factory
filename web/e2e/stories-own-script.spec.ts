@@ -82,7 +82,7 @@ test("Write it myself: three scenes, Who is Max?, a caption, made, reviewed with
   await page.locator(".st-make").click();
   await expect(page).toHaveURL(/\/stories\/production\/[0-9A-Z]{26}$/);
   const storyId = page.url().split("/").pop()!;
-  await expect(page.locator(".st-sc-chip")).toHaveText("Your script");
+  await expect(page.locator(".st-sc-chip")).toHaveCount(0); // said once: the first step is "Your script"
   await expect(page.locator(".st-s-track__step").first()).toContainText("Your script");
   await expect(page.locator(".st-s-track__step", { hasText: "Add your words" })).toHaveCount(1);
   await expect(page.getByRole("link", { name: "Watch it in Review" })).toBeVisible({ timeout: 30_000 });

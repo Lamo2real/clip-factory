@@ -9,7 +9,7 @@ import { CATALOG } from "../engine/catalog.ts";
 import type { SetId } from "../engine/types.ts";
 
 /** The limits (§45.46.4): 2 to 12 scenes, 160 letters of what happens, 60 of a caption, ≤ 4 in a scene, ≤ 5 left out. */
-export const OWN = { min: 2, max: 12, what: 160, caption: 60, who: 4, leaveOut: 5, name: 40 } as const;
+export const OWN = { min: 2, max: 12, what: 160, caption: 60, who: 4, leaveOut: 5, known: 12, name: 40 } as const;
 
 /** Letters as the API counts them (code points: an emoji is one). */
 export function letters(s: string): number {
@@ -164,9 +164,21 @@ export function namesIn<C extends Pick<Character, "characterId" | "name">>(what:
   return found.sort((a, b) => a.at - b.at).map((x) => x.c);
 }
 
-/** Words with a capital that are not names (sentence starts, little words, sounds). */
+/**
+ * Everyday words that often start a sentence and are never names (days, months, meals, times, places to be): "Breakfast
+ * is ready." or "On Saturday …" asks nothing (the agent's own_script.EVERYDAY is the same list). A person's word such as
+ * Mum is still asked about: the cast may have no Mum to draw.
+ */
+export const EVERYDAY =
+  "monday tuesday wednesday thursday friday saturday sunday january february march april may june july august september " +
+  "october november december breakfast lunch dinner supper snack teatime lunchtime bedtime playtime upstairs downstairs " +
+  "everywhere somewhere nowhere weekend birthday holiday holidays christmas easter halloween summer winter spring autumn " +
+  "afternoon noon midnight tonight outside inside home school";
+
+/** Words with a capital that are not names (sentence starts, little words, sounds, everyday words). */
 const COMMON = new Set(
-  (
+  (EVERYDAY +
+    " " +
     "the then he she they it i oh no yes suddenly later scene shot a an and but so or now next after before when while we you me my " +
     "his her him their them its our your this that these those there here what why how who where which wow hey hi hello ok okay " +
     "finally first second third last at in on out up down off over into onto behind under above near by for from to of as with without " +
@@ -295,6 +307,7 @@ export function draftFromOwn(own: OwnScript, cast: string[], characters: readonl
   const answers: Record<string, string> = {};
   for (const s of own.scenes) {
     for (const n of s.leaveOut ?? []) answers[n.toLowerCase()] = "out";
+    for (const n of s.known ?? []) if (!answers[n.toLowerCase()]) answers[n.toLowerCase()] = "seen";
     for (const n of unknownNames(s.what, characters)) if (!answers[n.toLowerCase()]) answers[n.toLowerCase()] = "seen";
   }
   const draft: ScriptDraft = { scenes: [], answers };
@@ -342,7 +355,10 @@ export function sceneLeaveOut(s: DraftScene, draft: Pick<ScriptDraft, "answers">
   return out.slice(0, OWN.leaveOut).map((n) => [...n].slice(0, OWN.name).join(""));
 }
 
-/** A question about a name: "Who is Max?" (`who`), or "Rosa isn't in the cast." (`outside`, a character of the workspace). */
+/**
+ * A question about a name: "Who is Max?" (`who`: one of the cast, Not a name, or Leave Max out), or "Rosa isn't in the
+ * cast." (`outside`, a character of the workspace).
+ */
 export type Ask = { kind: "who"; name: string } | { kind: "outside"; name: string; characterId: string };
 
 /** The questions still open, each once, at the first scene that names it. */
@@ -366,6 +382,19 @@ export function openAsks(draft: ScriptDraft, cast: readonly string[], characters
   return out;
 }
 
+/**
+ * The words of a scene the owner answered and did not leave out (another name for someone in Who, or Not a name), as
+ * the words write them: sent as `known`, so the agent never takes them for someone missing from the cast.
+ */
+export function sceneKnown(s: Pick<DraftScene, "what">, draft: Pick<ScriptDraft, "answers">): string[] {
+  const out: string[] = [];
+  for (const w of wordsOf(s.what)) {
+    const to = draft.answers[w.toLowerCase()];
+    if (to && to !== "out" && !out.some((x) => x.toLowerCase() === w.toLowerCase())) out.push(w);
+  }
+  return out.slice(0, OWN.known).map((n) => [...n].slice(0, OWN.name).join(""));
+}
+
 /** The script to send (§45.46.4): the written scenes in order, the words exactly as typed (only the ends trimmed). */
 export function toOwnScript(draft: ScriptDraft, cast: readonly string[], characters: readonly Pick<Character, "characterId" | "name">[]): OwnScript {
   const last = draft.scenes.reduce((n, s, i) => (written(s) ? i : n), -1);
@@ -375,7 +404,15 @@ export function toOwnScript(draft: ScriptDraft, cast: readonly string[], charact
       const who = sceneWho(s, draft, cast, characters).slice(0, OWN.who);
       const place = scenePlace(s);
       const leaveOut = sceneLeaveOut(s, draft, characters);
-      return { what: s.what.trim(), ...(caption ? { caption } : {}), ...(who.length ? { who } : {}), ...(place ? { place } : {}), ...(leaveOut.length ? { leaveOut } : {}) };
+      const known = sceneKnown(s, draft);
+      return {
+        what: s.what.trim(),
+        ...(caption ? { caption } : {}),
+        ...(who.length ? { who } : {}),
+        ...(place ? { place } : {}),
+        ...(leaveOut.length ? { leaveOut } : {}),
+        ...(known.length ? { known } : {}),
+      };
     }),
   };
 }
@@ -384,12 +421,22 @@ export function toOwnScript(draft: ScriptDraft, cast: readonly string[], charact
 export function sameScript(a: OwnScript | null | undefined, b: OwnScript | null | undefined): boolean {
   const flat = (o: OwnScript | null | undefined) =>
     JSON.stringify(
-      (o?.scenes ?? []).map((s) => [s.what.trim(), (s.caption ?? "").trim() || null, [...(s.who ?? [])].sort(), s.place ?? null, [...(s.leaveOut ?? [])].map((x) => x.toLowerCase()).sort()]),
+      (o?.scenes ?? []).map((s) => [
+        s.what.trim(),
+        (s.caption ?? "").trim() || null,
+        [...(s.who ?? [])].sort(),
+        s.place ?? null,
+        [...(s.leaveOut ?? [])].map((x) => x.toLowerCase()).sort(),
+        [...(s.known ?? [])].map((x) => x.toLowerCase()).sort(),
+      ]),
     );
   return flat(a) === flat(b);
 }
 
 // ---------- The checks before making it (§45.46.3) ----------
+
+/** The caption marks the video's burned-in words would change (braces, a backslash): refused, never changed (§45.46.4). */
+export const CAPTION_MARKS = /[{}\\]/;
 
 /** Where a problem's fix is: a scene's what happens, its caption, its question, or the Add a scene button. */
 export type Fix = { scene: number; field: "what" | "caption" | "ask" } | { add: true };
@@ -424,6 +471,7 @@ export function scriptProblem(draft: ScriptDraft, cast: readonly string[], chara
   for (let i = 0; i <= last; i += 1) {
     const s = scenes[i]!;
     if (hasControl(s.what.trim(), true) || hasControl(s.caption.trim())) return { text: `Use plain letters in scene ${i + 1}.`, fix: { scene: i, field: hasControl(s.what.trim(), true) ? "what" : "caption" } };
+    if (CAPTION_MARKS.test(s.caption)) return { text: `Scene ${i + 1}'s caption can't use { } or \\. Take them out.`, fix: { scene: i, field: "caption" } };
   }
   return null;
 }
@@ -448,11 +496,9 @@ export function sceneOfProblem(problem: string): number | null {
 /** A scene's label for the storyboard: its first words, cut at a word to 40 letters, with "…" (§45.46.6). */
 export function sceneLabel(what: string): string {
   const t = what.trim().replace(/\s+/g, " ");
-  // the engine counts a scene title's length in UTF-16 units (an emoji is two)
-  if (t.length <= 40) return t;
-  const chars = [...t];
-  while (chars.join("").length > 39) chars.pop();
-  const cut = chars.join("");
+  // letters as the engine and the API count them (code points: an emoji is one)
+  if (letters(t) <= 40) return t;
+  const cut = [...t].slice(0, 39).join("");
   const at = cut.lastIndexOf(" ");
   return `${(at > 10 ? cut.slice(0, at) : cut).replace(/[\s,;:.!?-]+$/, "")}…`;
 }

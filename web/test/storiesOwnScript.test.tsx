@@ -336,14 +336,14 @@ describe("who and where from the words, and reading time", () => {
 // ---------- Production › New ----------
 
 describe("Production › New: Write it myself", () => {
-  it("is the third choice; Use an idea stays the default and Type my own keeps its words", async () => {
+  it("is the third choice; Use an idea stays the default and Type an idea keeps its words", async () => {
     await show(<ProductionScreen {...page({ name: "production_new", ideaId: null })} />);
     const opts = Array.from(document.querySelectorAll(".st-s-pick__opt .st-s-pick__label")).slice(0, 3).map((e) => e.textContent);
-    expect(opts).toEqual(["Use an idea", "Type my own", "Write it myself"]);
+    expect(opts).toEqual(["Use an idea", "Type an idea", "Write it myself"]);
     expect(document.querySelector<HTMLInputElement>(".st-s-pick__opt.is-on input")?.value).toBe("idea");
     expect(text()).not.toContain("You write what happens.");
     await click(control("Make the video"));
-    expect(pinned()).toContain("Pick an idea, or tap Type my own.");
+    expect(pinned()).toContain("Pick an idea, or tap Type an idea.");
     await pick("Where the idea comes from", "Write it myself");
     expect(text()).toContain("You write what happens. Clips Funded draws it.");
     expect(scenes()).toHaveLength(2);
@@ -401,7 +401,7 @@ describe("Production › New: Write it myself", () => {
     expect(body.ownScript).toEqual({
       scenes: [
         { what: "Dash wakes up late in the kitchen.", caption: "Oh no!!", who: [C.dash], place: "kitchen" },
-        { what: "Max drops the balls.", who: [C.dash] },
+        { what: "Max drops the balls.", who: [C.dash], known: ["Max"] }, // answered: never asked about again
         { what: "Dash and Bolt juggle in the park.", caption: "We did it! 🎉", who: [C.dash, C.bolt], place: "park" },
       ],
     });
@@ -543,10 +543,11 @@ describe("the step track on an owner's script", () => {
     expect(document.querySelector(".st-s-track__step")?.textContent).toContain("Your script");
   });
 
-  it("the video's page shows the Your script chip, Story: By you, and the scenes' own wait line", async () => {
+  it("the video's page says Your script once (the first step, no chip over it), Story: By you, and the scenes' own wait line", async () => {
     const { story } = await call(api.createStory("stories", { characterIds: [C.dash], durationSec: 30, brief: { title: "Dash learns to juggle", category: "comedy" }, ownScript: JUGGLE }));
     await show(<ProductionScreen {...page({ name: "production_story", storyId: story.storyId })} />);
-    expect(document.querySelector('[aria-label="The steps"] .st-sc-chip')?.textContent).toBe("Your script");
+    expect(document.querySelector('[aria-label="The steps"] .st-sc-chip')).toBeNull();
+    expect(document.querySelector('[aria-label="The steps"] .st-s-track__step')?.textContent).toContain("Your script");
     expect(text()).toContain("Setting up your scenes… they show up here soon.");
     await wait(14_000);
     document.querySelector<HTMLDetailsElement>(".st-s-details")!.open = true;
@@ -741,5 +742,82 @@ describe("the mock: an owner's script", () => {
     expect((await refused(api.approve("stories", story.storyId, story.version))).message).toMatch(/^Fix the facts first: Your scene 2/);
     // A driving-safety script no checked advice covers is refused, with the list.
     expect((await refused(api.createStory("stories", { characterIds: [C.nana], brief: { title: "Parking", category: "driving_safety" }, ownScript: { scenes: [{ what: "Nana Rose parks." }, { what: "Nana Rose waves." }] } }))).message).toContain("checked advice");
+  });
+});
+
+// ---------- The reviewers' fixes (24 Nov) ----------
+
+describe("the reviewers' fixes", () => {
+  const cast = [
+    { characterId: C.dash, name: "Dash" },
+    { characterId: ROSSO, name: "Rosso" },
+  ];
+
+  it("everyday words with a capital are never asked about; a name at a sentence start still is", () => {
+    expect(unknownNames("Dash wakes up. Breakfast is ready. Outside, Dash plays on Saturday in May.", cast)).toEqual([]);
+    expect(unknownNames("Max drops every ball.", cast)).toEqual(["Max"]);
+    expect(unknownNames("Mum makes pancakes.", cast)).toEqual(["Mum"]); // a person: the cast may have no Mum to draw
+  });
+
+  it("Not a name answers the question without leaving anything out, and is sent as known", async () => {
+    await writeItMyself();
+    type(field("Title"), "Dash's breakfast");
+    await pick("What kind of video?", "Funny");
+    type(what(0), "Dash eats Cornflakes in the kitchen.");
+    type(what(1), "Dash runs to the park.");
+    await wait(50);
+    const ask = document.querySelector<HTMLElement>(".st-sc-ask")!;
+    expect(ask.textContent).toContain("Who is Cornflakes?");
+    expect(Array.from(ask.querySelectorAll("button")).map((b) => b.textContent)).toEqual(["Dash", "Not a name", "Leave Cornflakes out"]);
+    await click(control("Not a name", ask));
+    expect(document.querySelector(".st-sc-ask")).toBeNull();
+    const create = vi.spyOn(api, "createStory");
+    await click(control("Make the video"), 1500);
+    expect(create.mock.calls[0]![1].ownScript?.scenes[0]).toEqual({ what: "Dash eats Cornflakes in the kitchen.", who: [C.dash], place: "kitchen", known: ["Cornflakes"] });
+  });
+
+  it("Type an idea says the AI writes the story; only Write it myself says you write it", async () => {
+    await show(<ProductionScreen {...page({ name: "production_new", ideaId: null })} />);
+    await pick("Where the idea comes from", "Type an idea");
+    expect(text()).toContain("You type the idea. Clips Funded writes the story.");
+    expect(text()).not.toContain("You write what happens.");
+  });
+
+  it("a caption mark the video would change is refused with its sentence, by the web and the mock", async () => {
+    const d = emptyDraft();
+    d.scenes = [
+      { ...d.scenes[0]!, what: "Dash naps.", caption: "Zzz {snore}" },
+      { ...d.scenes[1]!, what: "Dash wakes." },
+    ];
+    expect(scriptProblem(d, [C.dash], cast)).toEqual({ text: "Scene 1's caption can't use { } or \\. Take them out.", fix: { scene: 0, field: "caption" } });
+    const base = { characterIds: [C.dash], brief: { title: "Dash", category: "comedy" as const } };
+    const refusedWith = await refused(api.createStory("stories", { ...base, ownScript: { scenes: [{ what: "Dash.", caption: "a\\b" }, { what: "Dash." }] } }));
+    expect(refusedWith.message).toBe("Scene 1's caption can't use { } or \\. Take them out.");
+  });
+
+  it("Review on an owner's script shows its words once: no Words on each scene under the captions", async () => {
+    const { story } = await made({ ownScript: JUGGLE });
+    await show(<ReviewScreen {...page({ name: "review_story", storyId: story.storyId })} />);
+    const editor = document.querySelector('[aria-labelledby="st-captions-title"]')!;
+    expect(editor.textContent).toContain("Show captions");
+    expect(Array.from(editor.querySelectorAll(".st-s-cue__head strong")).map((e) => e.textContent)).toEqual(["Caption 1", "Caption 2"]);
+    expect(text()).not.toContain("Words on each scene");
+    expect(text()).not.toContain("No words on this scene");
+  });
+
+  it("Change my script: a start that fails after the save is retried with the saved version, never a 409", async () => {
+    const { story } = await made({ ownScript: JUGGLE });
+    await show(<ReviewScreen {...page({ name: "review_story", storyId: story.storyId })} />);
+    await click(control("Change my script"), 1500);
+    const sheet = dialog("Change my script")!;
+    const patch = vi.spyOn(api, "patchStory");
+    const produce = vi.spyOn(api, "produce").mockRejectedValueOnce(new ApiError(409, "conflict", "Wait for the last run to finish."));
+    type(caption(1, sheet), "Butterfingers!");
+    await click(control("Make it again", sheet), 1500);
+    expect(sheet.textContent).toContain("Wait for the last run to finish.");
+    await click(control("Make it again", sheet), 1500);
+    expect(patch).toHaveBeenCalledTimes(1); // the script was saved once; the retry only starts it
+    expect(produce).toHaveBeenCalledTimes(2);
+    expect(text()).toContain("Making it again!");
   });
 });

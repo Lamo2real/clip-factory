@@ -713,7 +713,8 @@ def _own_patch(
 ) -> Mapping[str, Any]:
     """Write it myself (§45.46). A new owner's script that changes only captions is a captions edit of its ``w_sN``
     cues (the patch returned carries them); any other change makes every step stale, so the video is staged again
-    from it. A captions edit (the CaptionEditor) on an owner's script is copied into it (the mirror)."""
+    from it. The first words on a video whose captions are off turn them on. A captions edit (the CaptionEditor) on
+    an owner's script is copied into it (the mirror)."""
     stored = story.get("ownScript")
     if "ownScript" in patch:
         if not isinstance(stored, Mapping):
@@ -724,10 +725,15 @@ def _own_patch(
         if new_own == own_script.public(stored):
             return patch
         edit.sets["ownScript"] = new_own
+        # the owner's first words turn the captions on (as a new video's do), unless he sets the switch himself
+        first_words = own_script.has_words(new_own) and not own_script.has_words(stored)
+        turn_on = first_words and "captionsOn" not in patch and story.get("captionsOn") is False
+        if turn_on:
+            edit.sets["captionsOn"] = True
         if script is not None and own_script.only_words(stored, new_own):
             cues = own_script.word_cues(script, new_own)
-            if cues is not None:
-                return {**patch, "captions": cues}
+            if cues is not None:  # the switch goes on in the script too (its words are burned in)
+                return {**patch, "captions": cues, **({"captionsOn": True} if turn_on else {})}
         edit.stale.update(shapes.STEP_ORDER)
         return patch
     if "captions" in patch and isinstance(stored, Mapping):

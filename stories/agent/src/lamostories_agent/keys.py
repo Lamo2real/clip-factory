@@ -72,6 +72,8 @@ OWN_NOT_SHOWN: Final = "Scene {n} didn't fit: we couldn't show “{words}”. Ch
 OWN_WHO: Final = "Scene {n} didn't fit: {name} isn't in your cast. Add {name} to the cast, or change scene {n}."
 OWN_EXTRA: Final = "Scene {n} got something you didn't write. Tap Try again."
 OWN_PLACE: Final = "Scene {n} didn't stay in the {place}. Tap Try again."
+OWN_ORDER: Final = "Scene {n} didn't keep what happens in your order. Tap Try again."
+OWN_GONE: Final = "Scene {n} didn't fit: someone in it isn't in your cast now. Change scene {n}, then tap Try again."
 
 
 def ws_pk(user_id: str, workspace_id: str) -> str:

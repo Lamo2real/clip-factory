@@ -384,7 +384,7 @@ class BedrockWriter(_Base):
             + "\n\n"
             + own_script.RULES
             + "\n\n"
-            + own_script.instructions(mode, scene_ids, request.get("problems"))
+            + own_script.instructions(mode, scene_ids, request.get("problems"), facts=bool(request.get("factProblems")))
         )
         reply = await self.ctx.ask(
             task="animation_plan",  # "Plan the animation": the adapter stages, it never writes the story

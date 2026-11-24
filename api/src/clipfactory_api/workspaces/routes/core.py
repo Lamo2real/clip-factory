@@ -1310,11 +1310,13 @@ def _new_topic(
     g: guidance.Guidance, fields: Mapping[str, Any], idea: Item | None, brief: Mapping[str, Any], own: Item | None
 ) -> str | None:
     """The checked advice a new video is about. An owner's script (§45.46): its own words, for every kind (a match on
-    another kind is kept, so it is fact checked against it: a deterministic guard). Else for driving safety: the
-    idea's topic, then its words (the concept's too: an Expand put them there), or the brief's words."""
+    another kind is kept, so it is fact checked against it: a deterministic guard), the idea's checked topic breaking
+    a tie or standing in when no word matches. Else for driving safety: the idea's topic, then its words (the
+    concept's too: an Expand put them there), or the brief's words."""
     if own is not None:
         texts = [fields.get("title") or brief.get("title"), brief.get("logline"), *own_script.texts(own)]
-        return guidance.match(g, [str(t) for t in texts if t])
+        picked = (idea or {}).get("safetyTopicId")
+        return guidance.match(g, [str(t) for t in texts if t], str(picked) if picked else None)
     if idea is None:
         return guidance.match(g, [brief["title"], brief["logline"]]) if brief["category"] == "driving_safety" else None
     if idea.get("category") != "driving_safety":

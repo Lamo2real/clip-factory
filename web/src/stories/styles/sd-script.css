@@ -226,6 +226,11 @@
   box-shadow: var(--st-sheen-control), 0 0 0 3px rgb(var(--st-accent-rgb) / 0.7);
 }
 
+/* A tile with an open question keeps its focus ring when the keyboard is on it. */
+.st-sc-tile.is-asking:focus-visible {
+  box-shadow: var(--st-focus-ring), 0 0 0 9px rgb(var(--st-accent-rgb) / 0.7);
+}
+
 .st-sc-tile.is-empty {
   opacity: 0.75;
 }

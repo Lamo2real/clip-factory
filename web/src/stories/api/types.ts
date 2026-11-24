@@ -831,6 +831,11 @@ export interface OwnScene {
   place?: string | null;
   /** names in `what` the owner said are not drawn ("Leave Max out"): ≤ 5, each 1..40 */
   leaveOut?: string[];
+  /**
+   * capitalised words in `what` the owner already answered: another name for someone in `who` ("Max" is Dash) or not a
+   * name at all ("Not a name"): ≤ 12, each 1..40. Additive: left out when there are none.
+   */
+  known?: string[];
 }
 
 /** "Write it myself" (§45.46): 2..12 scenes in the owner's order. */

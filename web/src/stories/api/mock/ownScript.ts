@@ -9,7 +9,7 @@ import { ApiError } from "../../../api/errors.ts";
 import { ENGINE_VERSION, fitDuration, normalizeScript, validateScript } from "../../engine/engine.ts";
 import { setInfo } from "../../engine/sets.ts";
 import type { ActionId, ArtStyle, Beat, CaptionCue, CarMember, CastMember, Scene, SceneActor, SceneProp, SetId, StoryScript } from "../../engine/types.ts";
-import { fitTarget, hasCaption, hasControl, letters, namesIn, need, PLACES, placeIn, placeLabel, sameWords, sceneLabel, stepLabel } from "../../studio/ownScript.ts";
+import { CAPTION_MARKS, fitTarget, hasCaption, hasControl, letters, namesIn, need, PLACES, placeIn, placeLabel, sameWords, sceneLabel, stepLabel } from "../../studio/ownScript.ts";
 import { isCar, STEP_ORDER, type Character, type IdeaCategory, type MusicMood, type OwnScene, type OwnScript, type StepKey, type Story, type StoryFormat } from "../types.ts";
 import { citationsFor, topicFor } from "./ideas.ts";
 
@@ -23,6 +23,8 @@ export const OWN_WORDS = {
   long: (n: number) => `Scene ${n} is too long. Use 160 letters or fewer.`,
   captionLong: (n: number) => `Scene ${n}'s caption is too long. Use 60 letters or fewer.`,
   notInCast: (n: number) => `Scene ${n} has someone who isn't in the cast.`,
+  tooManyWho: (n: number) => `Scene ${n} has too many people. Keep 4 or fewer.`,
+  marks: (n: number) => `Scene ${n}'s caption can't use { } or \\. Take them out.`,
   badPlace: (n: number) => `Scene ${n}'s place isn't one we can draw. Pick one from the list.`,
   plain: (n: number) => `Use plain letters in scene ${n}.`,
   manyLeftOut: (n: number) => `Scene ${n} leaves out too many names. Keep 5 or fewer.`,
@@ -57,7 +59,7 @@ export function checkOwnScript(value: unknown, characterIds: readonly string[]):
   const body = value as { scenes?: unknown } | null;
   if (!body || typeof body !== "object" || !Array.isArray(body.scenes) || body.scenes.length < 2) bad(OWN_WORDS.few, "ownScript.scenes");
   if (body.scenes.length > 12) bad(OWN_WORDS.many, "ownScript.scenes");
-  const scenes = (body.scenes as unknown[]).map((raw, i): Required<OwnScene> => {
+  const scenes = (body.scenes as unknown[]).map((raw, i): OwnScene => {
     const n = i + 1;
     const f = `ownScript.scenes[${i}]`;
     const s = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
@@ -72,11 +74,13 @@ export function checkOwnScript(value: unknown, characterIds: readonly string[]):
       caption = s.caption.trim() || null;
       if (caption && letters(caption) > 60) bad(OWN_WORDS.captionLong(n), `${f}.caption`);
       if (caption && hasControl(caption)) bad(OWN_WORDS.plain(n), `${f}.caption`);
+      if (caption && CAPTION_MARKS.test(caption)) bad(OWN_WORDS.marks(n), `${f}.caption`);
     }
     let who: string[] = [];
     if (s.who !== undefined && s.who !== null) {
-      if (!Array.isArray(s.who) || s.who.length > 4 || s.who.some((x) => typeof x !== "string" || !characterIds.includes(x))) bad(OWN_WORDS.notInCast(n), `${f}.who`);
-      who = [...new Set(s.who as string[])];
+      if (!Array.isArray(s.who) || s.who.some((x) => typeof x !== "string" || !characterIds.includes(x))) bad(OWN_WORDS.notInCast(n), `${f}.who`);
+      who = [...new Set(s.who as string[])]; // a repeat counts once
+      if (who.length > 4) bad(OWN_WORDS.tooManyWho(n), `${f}.who`);
     }
     let place: string | null = null;
     if (s.place !== undefined && s.place !== null) {
@@ -91,7 +95,14 @@ export function checkOwnScript(value: unknown, characterIds: readonly string[]):
       if (leaveOut.some((x) => letters(x) > 40)) bad(OWN_WORDS.nameLong(n), `${f}.leaveOut`);
       if (leaveOut.some((x) => hasControl(x))) bad(OWN_WORDS.plain(n), `${f}.leaveOut`);
     }
-    return { sceneId: `s${n}`, what, caption, who, place, leaveOut };
+    let known: string[] = [];
+    if (s.known !== undefined && s.known !== null) {
+      if (!Array.isArray(s.known) || s.known.some((x) => typeof x !== "string")) bad(OWN_WORDS.plain(n), `${f}.known`);
+      known = [...new Set((s.known as string[]).map((x) => x.trim()).filter(Boolean))];
+      if (known.length > 12 || known.some((x) => letters(x) > 40)) bad(OWN_WORDS.nameLong(n), `${f}.known`);
+      if (known.some((x) => hasControl(x))) bad(OWN_WORDS.plain(n), `${f}.known`);
+    }
+    return { sceneId: `s${n}`, what, caption, who, place, leaveOut, ...(known.length ? { known } : {}) };
   });
   return { scenes };
 }
@@ -334,10 +345,21 @@ const sameShape = (a: OwnScript, b: OwnScript) =>
  * else: every step is out of date and the topic is matched again (a driving-safety video needs checked advice). The
  * script is changed in place; the story's ownScript is the new one.
  */
-export function patchOwn(story: Story, script: StoryScript | undefined, value: unknown, logline: string): StepKey[] {
+export function patchOwn(story: Story, script: StoryScript | undefined, value: unknown, logline: string, switchGiven = false): StepKey[] {
   if (!story.ownScript) bad(OWN_WORDS.noScript, "ownScript");
   const next = checkOwnScript(value, story.characterIds);
-  if (script && sameShape(story.ownScript, next) && script.scenes.length === next.scenes.length) {
+  // The owner's first words turn the captions on (as a new video's do), unless the switch is set in the same change.
+  const firstWords = !story.ownScript.scenes.some((s) => s.caption) && next.scenes.some((s) => s.caption);
+  if (firstWords && !switchGiven && story.captionsOn === false) {
+    story.captionsOn = true;
+    if (script) script.captionsOn = true;
+  }
+  // A new or changed caption that needs more time than its scene has (the agent's 90 % rule) stages it again.
+  const fits = (sc: { durationSec: number }, i: number) => {
+    const c = next.scenes[i]?.caption ?? null;
+    return !c || c === (story.ownScript!.scenes[i]?.caption ?? null) || sc.durationSec >= 0.9 * need({ caption: c }) - 1e-9;
+  };
+  if (script && sameShape(story.ownScript, next) && script.scenes.length === next.scenes.length && script.scenes.every(fits)) {
     const changed = next.scenes.some((s, i) => (s.caption ?? null) !== (story.ownScript!.scenes[i]?.caption ?? null));
     if (!changed) {
       story.ownScript = next;
@@ -373,6 +395,10 @@ export function patchOwn(story: Story, script: StoryScript | undefined, value: u
 export function mirrorCaptions(story: Story, cues: CaptionCue[]): void {
   if (!story.ownScript) return;
   const by = new Map(cues.map((c) => [c.id, c]));
+  story.ownScript.scenes.forEach((s, i) => {
+    const cue = by.get(`w_${s.sceneId ?? `s${i + 1}`}`);
+    if (cue && CAPTION_MARKS.test(cue.text)) bad(OWN_WORDS.marks(i + 1), "captions");
+  });
   story.ownScript = {
     scenes: story.ownScript.scenes.map((s, i) => {
       const cue = by.get(`w_${s.sceneId ?? `s${i + 1}`}`);

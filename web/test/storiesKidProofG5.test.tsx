@@ -261,7 +261,7 @@ describe("Make the video: a missing pick shows by the button, and its part comes
     await click(control("Make the video"), 50);
     expect(create).not.toHaveBeenCalled();
     const bar = document.querySelector(".st-s-actionbar--pin")!;
-    expect(bar.querySelector(".st-s-notice")?.textContent).toContain("Pick an idea, or tap Type my own.");
+    expect(bar.querySelector(".st-s-notice")?.textContent).toContain("Pick an idea, or tap Type an idea.");
     expect(document.activeElement?.id).toBe("st-nv-1");
     expect(Element.prototype.scrollIntoView).toHaveBeenCalled();
   });
@@ -273,9 +273,9 @@ describe("Make the video: a missing pick shows by the button, and its part comes
     expect(document.activeElement?.id).toBe("st-nv-2");
   });
 
-  it("Type my own with no title: the title box gets the focus", async () => {
+  it("Type an idea with no title: the title box gets the focus", async () => {
     await show(<ProductionScreen {...page({ name: "production_new", ideaId: null })} />);
-    await pick("Where the idea comes from", "Type my own");
+    await pick("Where the idea comes from", "Type an idea");
     await click(control("Make the video"), 50);
     expect(document.activeElement).toBe(field("Title"));
   });
@@ -327,7 +327,7 @@ describe("Leave without saving?", () => {
   it("a typed video title asks before Study it or Back; nothing picked does not", async () => {
     await show(<ProductionScreen {...page({ name: "production_new", ideaId: null })} />);
     expect(leaveHolders()).toBe(0);
-    await pick("Where the idea comes from", "Type my own");
+    await pick("Where the idea comes from", "Type an idea");
     type(field("Title"), "Pip flies a kite");
     await wait(50);
     expect(leaveHolders()).toBe(1);

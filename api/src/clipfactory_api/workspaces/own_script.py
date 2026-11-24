@@ -1,9 +1,11 @@
 """Write it myself: the owner's own script of what happens (docs/CONTRACTS.md §45.46).
 
 An ``OwnScript`` is 2 to 12 scenes, each with what happens (``what``), the words on screen (``caption``), who is in it
-(``who``, some of the story's ``characterIds``), the place (``place``, a catalog set) and the names the owner left out
-(``leaveOut``). The words are kept exactly as typed: only their ends are trimmed, and a value over its limit is refused
-(400), never shortened. The API gives the scene ids (``s1`` … ``sN``, by position) on every save; the owner's caption
+(``who``, some of the story's ``characterIds``), the place (``place``, a catalog set), the names the owner left out
+(``leaveOut``) and, only when there are some, the capitalised words the owner already answered (``known``: another name
+for someone in Who, or not a name). The words are kept exactly as typed: only their ends are trimmed, and a value over
+its limit, or a caption mark the burned-in words would change (braces, a backslash), is refused (400), never
+changed. The API gives the scene ids (``s1`` … ``sN``, by position) on every save; the owner's caption
 cue of scene ``sN`` is ``w_sN`` (built by code, never by a model).
 """
 
@@ -24,9 +26,11 @@ WHAT_MAX: Final = 160
 CAPTION_MAX: Final = 60
 WHO_MAX: Final = 4
 LEAVE_OUT_MAX: Final = 5
+KNOWN_MAX: Final = 12
 NAME_MAX: Final = 40
 LOGLINE_MAX: Final = 280  # ideas.LOGLINE_MAX (ideas imports guidance; this module stays light)
-SCENE_KEYS: Final = ("sceneId", "what", "caption", "who", "place", "leaveOut")
+SCENE_KEYS: Final = ("sceneId", "what", "caption", "who", "place", "leaveOut", "known")
+CAPTION_MARKS: Final = frozenset("{}\\")  # the video's burned-in words (libass) would change them
 CUE_PREFIX: Final = "w_"
 
 # §45.46.4's sentences (the web's own checks say the same, so an 8 year old never sees two wordings)
@@ -36,6 +40,8 @@ EMPTY: Final = "Scene {n} is empty. Write what happens."
 LONG: Final = "Scene {n} is too long. Use 160 letters or fewer."
 CAPTION_LONG: Final = "Scene {n}'s caption is too long. Use 60 letters or fewer."
 NOT_IN_CAST: Final = "Scene {n} has someone who isn't in the cast."
+TOO_MANY_WHO: Final = "Scene {n} has too many people. Keep 4 or fewer."
+MARKS: Final = "Scene {n}'s caption can't use {{ }} or \\. Take them out."
 BAD_PLACE: Final = "Scene {n}'s place isn't one we can draw. Pick one from the list."
 PLAIN: Final = "Use plain letters in scene {n}."
 TOO_MANY_LEFT_OUT: Final = "Scene {n} leaves out too many names. Keep 5 or fewer."
@@ -80,6 +86,8 @@ def _caption(raw: Mapping[str, Any], i: int) -> str | None:
         raise bad_request(CAPTION_LONG.format(n=n), field)
     if not _plain(text, newline=False):
         raise bad_request(PLAIN.format(n=n), field)
+    if CAPTION_MARKS & set(text):
+        raise bad_request(MARKS.format(n=n), field)
     return text
 
 
@@ -88,12 +96,15 @@ def _who(raw: Mapping[str, Any], i: int, character_ids: Iterable[str]) -> list[s
     value = raw.get("who")
     if value is None:
         return []
-    if not isinstance(value, list) or len(value) > WHO_MAX or not all(isinstance(v, str) for v in value):
+    if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
         raise bad_request(NOT_IN_CAST.format(n=n), field)
     cast = set(character_ids)
     if any(v not in cast for v in value):
         raise bad_request(NOT_IN_CAST.format(n=n), field)
-    return list(dict.fromkeys(value))
+    who = list(dict.fromkeys(value))  # a repeat counts once
+    if len(who) > WHO_MAX:
+        raise bad_request(TOO_MANY_WHO.format(n=n), field)
+    return who
 
 
 def _place(raw: Mapping[str, Any], i: int) -> str | None:
@@ -122,9 +133,25 @@ def _leave_out(raw: Mapping[str, Any], i: int) -> list[str]:
     return names
 
 
+def _known(raw: Mapping[str, Any], i: int) -> list[str]:
+    n, field = i + 1, f"ownScript.scenes[{i}].known"
+    value = raw.get("known")
+    if value is None:
+        return []
+    if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+        raise bad_request(PLAIN.format(n=n), field)
+    names = list(dict.fromkeys(v.strip() for v in value if v.strip()))
+    if len(names) > KNOWN_MAX or any(len(name) > NAME_MAX for name in names):
+        raise bad_request(NAME_LONG.format(n=n), field)
+    if not all(_plain(name, newline=False) for name in names):
+        raise bad_request(PLAIN.format(n=n), field)
+    return names
+
+
 def own_script(value: Any, character_ids: Iterable[str]) -> dict[str, Any]:
     """The owner's script, checked (§45.46 limits), with the scene ids given by position. ``character_ids``: the
-    story's cast; each scene's ``who`` is some of it. Every scene comes back with all six keys."""
+    story's cast; each scene's ``who`` is some of it. Every scene comes back with all six keys (and ``known`` when it
+    has some)."""
     body = validate.obj(value, "ownScript")
     validate.only_keys(body, {"scenes"})
     raw_scenes = body.get("scenes")
@@ -137,33 +164,38 @@ def own_script(value: Any, character_ids: Iterable[str]) -> dict[str, Any]:
     for i, item in enumerate(raw_scenes):
         raw = validate.obj(item, f"ownScript.scenes[{i}]")
         validate.only_keys(raw, SCENE_KEYS)  # sceneId is ignored on input: the ids are given here
-        scenes.append(
-            {
-                "sceneId": f"s{i + 1}",
-                "what": _what(raw, i),
-                "caption": _caption(raw, i),
-                "who": _who(raw, i, cast),
-                "place": _place(raw, i),
-                "leaveOut": _leave_out(raw, i),
-            }
-        )
+        scene = {
+            "sceneId": f"s{i + 1}",
+            "what": _what(raw, i),
+            "caption": _caption(raw, i),
+            "who": _who(raw, i, cast),
+            "place": _place(raw, i),
+            "leaveOut": _leave_out(raw, i),
+        }
+        known = _known(raw, i)
+        if known:  # additive: only a scene with answered words has it
+            scene["known"] = known
+        scenes.append(scene)
     return {"scenes": scenes}
 
 
 def public(value: Any) -> dict[str, Any]:
-    """``Story.ownScript`` as stored, with exactly the six keys per scene (an absent one as null or [])."""
+    """``Story.ownScript`` as stored, with exactly the six keys per scene (an absent one as null or []), and ``known``
+    only when the scene has some."""
     scenes = []
     for raw in _scenes(value) if isinstance(value, Mapping) else []:
-        scenes.append(
-            {
-                "sceneId": str(raw.get("sceneId") or ""),
-                "what": str(raw.get("what") or ""),
-                "caption": raw.get("caption") if isinstance(raw.get("caption"), str) and raw.get("caption") else None,
-                "who": [str(w) for w in raw.get("who") or []],
-                "place": raw.get("place") if isinstance(raw.get("place"), str) and raw.get("place") else None,
-                "leaveOut": [str(w) for w in raw.get("leaveOut") or []],
-            }
-        )
+        scene: dict[str, Any] = {
+            "sceneId": str(raw.get("sceneId") or ""),
+            "what": str(raw.get("what") or ""),
+            "caption": raw.get("caption") if isinstance(raw.get("caption"), str) and raw.get("caption") else None,
+            "who": [str(w) for w in raw.get("who") or []],
+            "place": raw.get("place") if isinstance(raw.get("place"), str) and raw.get("place") else None,
+            "leaveOut": [str(w) for w in raw.get("leaveOut") or []],
+        }
+        known = [str(w) for w in raw.get("known") or [] if str(w).strip()]
+        if known:
+            scene["known"] = known
+        scenes.append(scene)
     return {"scenes": scenes}
 
 
@@ -232,11 +264,16 @@ def _round(value: float) -> int | float:
     return int(value) if float(value).is_integer() else value
 
 
+READING_SHARE: Final = 0.9  # the agent's rule: a scene with words lasts at least 90 % of their reading time
+MIN_CUE: Final = 0.3  # the agent's shortest cue (writer.CAPTION_SCHEMA)
+
+
 def word_cues(script: Mapping[str, Any], own: Mapping[str, Any]) -> list[dict[str, Any]] | None:
     """The script's caption cues with the owner's words applied (a words-only change, §45.46): a changed caption
-    changes its ``w_sN`` cue's text, a new one gets a cue at ``start + 0.25`` for ``d - 0.5`` inside its scene, and a
-    cleared one loses its cue. Every other cue stays as it is. None when the script's scenes are not the script's (it
-    is then staged again)."""
+    changes its ``w_sN`` cue's text, a new one gets a cue at ``start + 0.25`` for ``d - 0.5`` (at least 0.3 s) inside
+    its scene, and a cleared one loses its cue. Every other cue stays as it is. None when the script's scenes are not
+    the script's, or a new or changed caption needs more reading time than its scene has (the agent's 90 % rule): it
+    is then staged again."""
     windows: dict[str, tuple[float, float]] = {}
     start = 0.0
     for scene in script.get("scenes") or []:
@@ -252,6 +289,9 @@ def word_cues(script: Mapping[str, Any], own: Mapping[str, Any]) -> list[dict[st
     for scene in scenes:
         wanted, caption = cue_id(scene["sceneId"]), scene["caption"]
         found = next((k for k, c in enumerate(cues) if c.get("id") == wanted), None)
+        changed = caption is not None and (found is None or cues[found].get("text") != caption)
+        if changed and windows[scene["sceneId"]][1] < READING_SHARE * need(scene) - 1e-9:
+            return None  # too long to read in the scene as it is: staged again, so the scene gets the time
         if caption is None:
             if found is not None:
                 cues.pop(found)
@@ -260,7 +300,7 @@ def word_cues(script: Mapping[str, Any], own: Mapping[str, Any]) -> list[dict[st
                 cues[found] = {**cues[found], "text": caption}
         else:
             at, length = windows[scene["sceneId"]]
-            cue = {"id": wanted, "at": _round(at + 0.25), "dur": _round(max(0.2, length - 0.5)), "text": caption}
+            cue = {"id": wanted, "at": _round(at + 0.25), "dur": _round(max(MIN_CUE, length - 0.5)), "text": caption}
             later = next((k for k, c in enumerate(cues) if float(c.get("at") or 0) > at + 0.25), len(cues))
             cues.insert(later, cue)
     return cues
@@ -276,5 +316,7 @@ def mirrored(own: Mapping[str, Any], cues: Iterable[Mapping[str, Any]]) -> dict[
         text = str(cue.get("text") or "").strip() if cue is not None else ""
         if text and not _plain(text, newline=False):
             raise bad_request(PLAIN.format(n=i + 1), "captions")
+        if CAPTION_MARKS & set(text):
+            raise bad_request(MARKS.format(n=i + 1), "captions")
         scene["caption"] = text or None
     return out
