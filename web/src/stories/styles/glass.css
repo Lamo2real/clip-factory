@@ -83,9 +83,10 @@
    (the cream ones too), so a strip of Stories' own glass lies there: its blur and saturation and the smoky veil planned
    for white (--st-status-strip-veil, stories/look.ts statusStripVeil), so the white clock keeps AA over anything. It
    runs off the top of the screen and eases out at the bar's bottom (the fade masks the veil and the blur together).
-   At the top of the page it is not drawn (opacity 0) and the stage shows under the clock as it is. It comes and goes
-   on its opacity alone (the flag is on <html>; Stories' sheets name no html rule of their own). Just under the
-   scrim. */
+   At the top of the page it is not drawn (opacity 0) and the stage shows under the clock as it is. It moves on its
+   opacity alone: it is there at once, on the first frame the page has moved (a fade in would leave the white clock
+   over a cream card while it came; WebKit, the iPhone's engine, drew its first frames late), and it fades out back at
+   the top (the flag is on <html>; Stories' sheets name no html rule of their own). Just under the scrim. */
 .st-frame::before {
   content: "";
   position: fixed;
@@ -103,6 +104,7 @@
 }
 [data-scrolled] .st-frame::before {
   opacity: 1;
+  transition: none;
 }
 
 /* ---------- The glass ---------- */

@@ -194,10 +194,11 @@ describe("once the page has scrolled, a glass strip under the clock keeps it at 
     expect(body).toMatch(/(^|\s)backdrop-filter: blur\(var\(--glass-blur\)\) saturate\(var\(--glass-saturate\)\);/);
     expect(body).toMatch(/(^|\s)mask-image: var\(--status-bar-fade\);/);
     expect(body).toMatch(/opacity: 0;/);
-    // Never a transition of the filter: only the opacity moves.
+    // Never a transition of the filter: only the opacity moves, and only on the way out (back at the top). Once the
+    // page has moved it is there at once: a fade in would leave the white clock over a light card while it came.
     expect(/transition:\s*([^;]+);/.exec(body)?.[1]).toBe("opacity var(--dur-2) var(--ease-out)");
     expect(body).not.toMatch(/animation/);
-    expect(rule(layout, "html[data-scrolled] :is(.app, .signin)::before")).toMatch(/^\s*opacity: 1;\s*$/);
+    expect(rule(layout, "html[data-scrolled] :is(.app, .signin)::before")).toMatch(/^\s*opacity: 1;\s*transition: none;\s*$/);
   });
 
   it("Clips Funded: its own glass the same way, from its own veil", () => {
@@ -211,9 +212,11 @@ describe("once the page has scrolled, a glass strip under the clock keeps it at 
     expect(body).toMatch(/(^|\s)backdrop-filter: blur\(var\(--st-blur\)\) saturate\(var\(--st-saturate\)\);/);
     expect(body).toMatch(/(^|\s)mask-image: var\(--status-bar-fade\);/);
     expect(body).toMatch(/opacity: 0;/);
+    // It fades out back at the top, and is there at once once the page has moved (a cream card never shows under
+    // the white clock while it comes).
     expect(/transition:\s*([^;]+);/.exec(body)?.[1]).toBe("opacity var(--st-dur-hover) var(--st-ease-out)");
     expect(body).not.toMatch(/animation/);
-    expect(rule(css, "[data-scrolled] .st-frame::before")).toMatch(/^\s*opacity: 1;\s*$/);
+    expect(rule(css, "[data-scrolled] .st-frame::before")).toMatch(/^\s*opacity: 1;\s*transition: none;\s*$/);
   });
 
   it("Clip Factory's veil is the least green that keeps the white clock at AA over white, in every look", () => {

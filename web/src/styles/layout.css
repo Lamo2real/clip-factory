@@ -41,7 +41,9 @@ html[data-titlebar="overlay"] .titlebar-drag {
    (--status-strip-veil, lib/background.ts statusStripVeil), the lightest thing a page can put under the clock, so the
    white clock keeps AA over anything, with or without the blur. It runs off the top of the screen and eases out at the
    bar's bottom (the fade masks the veil and the blur together), so it has no edge. At the top of the page it is not
-   drawn (opacity 0) and the backdrop shows under the clock as it is. It comes and goes on its opacity alone. */
+   drawn (opacity 0) and the backdrop shows under the clock as it is. It moves on its opacity alone: it is there at
+   once, on the first frame the page has moved (a fade in would leave the white clock over a light card while it
+   came; WebKit, the iPhone's engine, drew its first frames late), and it fades out back at the top. */
 .app::before,
 .signin::before {
   content: "";
@@ -60,6 +62,7 @@ html[data-titlebar="overlay"] .titlebar-drag {
 }
 html[data-scrolled] :is(.app, .signin)::before {
   opacity: 1;
+  transition: none;
 }
 .shell {
   min-height: 100vh;

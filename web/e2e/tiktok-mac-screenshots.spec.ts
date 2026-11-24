@@ -127,14 +127,14 @@ for (const width of [375, 1440]) {
       await expect(rowOf(page, b).locator(".post__status")).toHaveText(/^Waiting for your Mac/);
       // Inside the find window after Post: no Try again yet, and the row says from when.
       await pressed(page, b, 10 * MIN);
-      await expect(rowOf(page, b).locator(".post__status")).toHaveText(/^Not sure it posted · look on your TikTok · Try again from \d\d:\d\d$/);
+      await expect(rowOf(page, b).locator(".post__status")).toHaveText(/^Not sure it posted · look on your TikTok · Try again from (?:\w{3} )?\d\d:\d\d$/);
       await expect(rowOf(page, b).getByRole("button", { name: "It's on TikTok", exact: true })).toBeVisible();
       await expect(rowOf(page, b).getByRole("button", { name: "Try again, TikTok" })).toHaveCount(0);
       await shot(page, cardOf(page, b), "lib-not-sure-in-window", width);
       // The same on the clip page: from when Try again comes (and none yet).
       await go(page, `/clips/${b}`);
       const stack = page.locator('[data-stack="tiktok"]');
-      await expect(stack.locator(".pstack__calm-text")).toHaveText(/^Look on your TikTok · Try again from \d\d:\d\d$/);
+      await expect(stack.locator(".pstack__calm-text")).toHaveText(/^Look on your TikTok · Try again from (?:\w{3} )?\d\d:\d\d$/);
       await expect(page.locator(".perf__actions").getByRole("button", { name: "Try again, TikTok" })).toHaveCount(0);
       await shot(page, stack, "clip-try-again-from", width);
       await go(page, "/library");

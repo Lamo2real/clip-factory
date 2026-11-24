@@ -193,7 +193,8 @@ test.describe("a phone runs edge to edge: the backdrop shows under the status ba
       let stops = 0;
       for (let y = 50; y <= Math.min(room, 2500); y += y < 400 ? 50 : 100) {
         await page.evaluate((y) => window.scrollTo({ top: y, behavior: "instant" as ScrollBehavior }), y);
-        // The strip fades in on its opacity (--dur-2) the first time; then only the page moves under it.
+        // The strip is there at once (no fade in: the clock never waits on a light card); then only the page moves
+        // under it.
         await page.waitForTimeout(stops === 0 ? 450 : 90);
         await expect.poll(() => page.evaluate(() => document.documentElement.hasAttribute("data-scrolled"))).toBe(true);
         const clock = await rows(page, 12, 40);
