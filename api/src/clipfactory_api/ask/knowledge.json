@@ -1,5 +1,5 @@
 {
- "version": "0ad9489a0af3",
+ "version": "f32fd1450054",
  "parts": [
   {
    "id": "app-map",
@@ -147,7 +147,7 @@
    "id": "contracts-20",
    "title": "CONTRACTS: 20. Action animations (owner request, 2026-11-16)",
    "line": "The owner's words: \"Most buttons in the application should have that: the animation of sending a paper plane or",
-   "chars": 50834
+   "chars": 51467
   },
   {
    "id": "contracts-21",

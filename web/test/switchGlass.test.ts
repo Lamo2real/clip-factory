@@ -275,20 +275,27 @@ describe("the workspace switch is see-through, colour-free glass (§45.38 S5)", 
   });
 
   it("the dock's placed parts land at once, also under reduced motion: the dock's frame, the switch's host and the Live chip's row never transition", () => {
-    // Under reduced motion base.css gives every element a 1 ms transition of every property (transition-property is
-    // `all` unless a rule says otherwise). A 1 ms move of the dock's host still waits for the next animation frame, and
-    // on CI's runner that frame came over a second late in the Colours look: the switch was read at the place it was
-    // first given (over Get the app and the jobs line) and pictured at its real one, so its words read 1.17:1 against
-    // Get the app's own white words (PR #186; e2e/switch-glass.spec.ts holds the same in real pixels, every frame held).
-    const reduced = ruleList(sheet(STYLES, "base.css")).filter(([sel, rule]) => sel === "*, *::before, *::after" && decls(rule).has("transition-duration"));
+    // Under reduced motion base.css cuts every transition to 1 ms. transition-property is `all` unless a rule says
+    // otherwise, so before base.css also set it to none (at specificity 0) every element had a 1 ms transition of every
+    // property. A 1 ms move of the dock's host still waits for the next animation frame, and on CI's runner that frame
+    // came over a second late in the Colours look: the switch was read at the place it was first given (over Get the
+    // app and the jobs line) and pictured at its real one, so its words read 1.17:1 against Get the app's own white
+    // words (PR #186; e2e/switch-glass.spec.ts holds the same in real pixels, every frame held).
+    const base = sheet(STYLES, "base.css");
+    const reduced = ruleList(base).filter(([sel, rule]) => sel === "*, *::before, *::after" && decls(rule).has("transition-duration"));
     expect(reduced, "base.css's reduced-motion rule").toHaveLength(1);
     expect(decls(reduced[0]![1]).get("transition-duration")).toBe("1ms !important");
-    expect(decls(body(".ws-dock > .ws-switch-host, .ws-dock > .ws-dock__live")).get("transition")).toBe("none");
+    // Calm motion adds no transition: transition-property none, under the system's setting and under Settings › Motion,
+    // at specificity 0 and never !important, so a part's own transition still wins and keeps its 1 ms.
+    const media = /@media \(prefers-reduced-motion: reduce\) \{((?:[^{}]*\{[^{}]*\})*)\s*\}/.exec(base)?.[1] ?? "";
+    const none = (text: string, selector: string) => ruleList(text).filter(([sel, rule]) => sel === selector && decls(rule).get("transition-property") === "none" && decls(rule).size === 1);
+    expect(none(media, "*, *::before, *::after"), "under the system's setting").toHaveLength(1);
+    expect(none(base, ":where(.reduce-motion) *, :where(.reduce-motion) *::before, :where(.reduce-motion) *::after"), "under Settings › Motion").toHaveLength(1);
     // The frame they are placed in (the sidebar's box on a wide window) takes its folded or open width at once too.
     const frame = ruleList(glide).filter(([sel, rule]) => sel === ".ws-dock" && decls(rule).get("position") === "fixed");
     expect(frame, "the dock's frame on a wide window").toHaveLength(1);
-    expect(decls(frame[0]![1]).get("transition")).toBe("none");
-    // No later rule of glide.css hands the frame or either part a transition back.
+    expect(decls(body(".ws-dock > .ws-switch-host, .ws-dock > .ws-dock__live")).get("position")).toBe("absolute");
+    // No rule of glide.css hands the frame or either part a transition of its own (one would keep its 1 ms).
     const placed = ruleList(glide).filter(([sel]) =>
       sel.split(",").some((one) => /^\.ws-dock(?:\.[a-z-]+|\[[^\]]*\]|:[a-z-]+\([^)]*\))*(?: > (?:\.ws-switch-host|\.ws-dock__live|\.sidebar__live))?$/.test(one.trim())),
     );
