@@ -6561,7 +6561,11 @@ marking** and **Throw away**). Save draws picture and marks into one JPEG (0.9, 
 APPn stripped) that **replaces** the tray picture; the original and the marks stay in memory so the picture can be
 marked again, and the original is let go when the question is sent. Phones: full screen, tools bottom left, Undo, Clear
 and Save bottom right (Save at the far right, 56 px tall), Cancel top right. Tablets: a 92vw × 88vh dialog, Undo,
-Redo, Clear and Cancel (×) as 48 px icons in the bar, so Undo stays in the right half. Desktop: ≤ 1100 × 820. Modal everywhere (the page is inert). Less motion: nothing moves.
+Redo, Clear and Cancel (×) as 48 px icons in the bar, so Undo stays in the right half. Desktop: ≤ 1100 × 820. Modal
+everywhere (the page is inert). While it is open the page under it rests (`html.mk-open`, ask.css): no blur and no
+endless loop of its own (the living backdrop still drifts), so a frame of drawing blurs only the dialog; a computer that
+paints without a GPU drew each frame in 1 to 4 s with the page's nine on-screen blurs as well. Less motion: nothing
+moves.
 
 ### 28.9 The panel
 
