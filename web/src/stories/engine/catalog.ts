@@ -68,6 +68,11 @@ export const CATALOG: Catalog = {
       { id: "van", label: "Van" },
       { id: "sports", label: "Sports car" },
       { id: "compact", label: "Tiny car" },
+      // §45.47: more vehicles (still kind "car")
+      { id: "bus", label: "Bus" },
+      { id: "motorbike", label: "Motorbike" },
+      { id: "plane", label: "Plane" },
+      { id: "boat", label: "Boat" },
     ],
     pattern: [
       { id: "plain", label: "Plain" },
@@ -178,10 +183,13 @@ export const CATALOG: Catalog = {
     { id: "living_room", label: "Living room" },
     { id: "office", label: "Office" },
     { id: "park", label: "Park" },
+    // §45.47: where a plane or a boat goes (no road lanes)
+    { id: "sky", label: "Sky" },
+    { id: "sea", label: "Sea" },
     { id: "highway_night", label: "Highway at night" },
   ],
   props: [
-    { id: "car", label: "Car" },
+    { id: "car", label: "Vehicle" },
     { id: "truck", label: "Truck" },
     { id: "tyre", label: "Tyre" },
     { id: "ice_patch", label: "Ice patch" },

@@ -112,7 +112,7 @@ describe("a car's look", () => {
       checkCarLook({ ...DEFAULT_CAR, ...change }, "cars.c2", (m) => errors.push(m));
       return errors;
     };
-    expect(bad({ body: "limo" })).toEqual(["cars.c2: car.body is \"limo\"; use one of hatchback, sedan, estate, suv, pickup, van, sports, compact."]);
+    expect(bad({ body: "limo" })).toEqual(["cars.c2: car.body is \"limo\"; use one of hatchback, sedan, estate, suv, pickup, van, sports, compact, bus, motorbike, plane, boat."]);
     expect(bad({ paint: "red" })).toEqual(['cars.c2: car.paint must be a colour like "#d8352a".']);
     expect(bad({ length: 1.3 })).toEqual(["cars.c2: car.length is 1.3; use a number from 0.85 to 1.15."]);
     expect(bad({ wheels: { style: "alloy", rim: "#c9ccd2", size: 1.3 } })[0]).toMatch(/^cars\.c2: car\.wheels needs a style \(steel, hubcap, alloy, sport, offroad\)/);
