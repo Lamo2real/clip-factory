@@ -259,6 +259,49 @@ export function fadeStops(peak: number, power = 2): readonly (readonly [number, 
   return out;
 }
 
+const HALOS = new Map<string, readonly (readonly [number, number])[]>();
+
+/** A car light's fade round its lens (pen.glow): flat at `peak` out to `inner` (the lens's own edge as a part of the
+ * glow's radius, to 0.01), then peak · (1 − t)^power on out to the edge (t 0 at `inner`, 1 at the edge, alpha 0).
+ * softRings' falloff as one smooth gradient: the same light, no ring edges. 16 stops, as fadeStops. */
+export function haloStops(peak: number, inner: number, power = 3): readonly (readonly [number, number])[] {
+  const k = Math.round(clamp(inner, 0, 0.95) * 100) / 100;
+  if (k <= 0) return fadeStops(peak, power);
+  const key = `${peak} ${k} ${power}`;
+  const hit = HALOS.get(key);
+  if (hit) return hit;
+  const out: [number, number][] = [[0, peak]];
+  for (let i = 0; i < FADE_STOPS - 1; i += 1) {
+    const t = (i / (FADE_STOPS - 2)) ** 1.3;
+    out.push([k + (1 - k) * t, peak * (1 - t) ** power]);
+  }
+  HALOS.set(key, out);
+  return out;
+}
+
+const BELLS = new Map<string, readonly (readonly [number, number])[]>();
+
+/** A pool of light's fade on the ground (pen.glow): peak · (1 − d²)^power at 16 even stops, flat-topped at its centre
+ * (no bright point, as the light under a lamp) and ending at alpha 0, so pools that overlap add up with no seam. A
+ * bell of `power` 2 over a glow 1.35 × a flat pool's size is as much light as that pool at 1.65 × its alpha. */
+export function bellStops(peak: number, power = 2): readonly (readonly [number, number])[] {
+  const key = `${peak} ${power}`;
+  const hit = BELLS.get(key);
+  if (hit) return hit;
+  const out: [number, number][] = [];
+  for (let i = 0; i < FADE_STOPS; i += 1) {
+    const d = i / (FADE_STOPS - 1);
+    out.push([d, peak * (1 - d * d) ** power]);
+  }
+  BELLS.set(key, out);
+  return out;
+}
+
+/** How much bigger a soft pool of light (bellStops) is than the flat pool it replaces, and how much brighter at its
+ * middle, so it is as much light. */
+export const POOL_GROW = 1.35;
+export const POOL_LIFT = 1.65;
+
 /** How many soft rings a glow reaching `px` design px out on screen gets: one every 2.6 px, 3 to 20. */
 export const softCount = (px: number): number => clamp(Math.round(px / 2.6), 3, 20);
 

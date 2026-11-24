@@ -6,7 +6,7 @@
 // lane dashes, posts and lamps stream on across cuts. Every shot fills the frame (no band, no letterbox) and is drawn
 // only with the engine's prims, so the preview and the final video are the same picture.
 
-import { fadeStops, grade, LIGHTS, lift, ND, nightDrive, railSide, softCount, softRings } from "./art.ts";
+import { fadeStops, grade, haloStops, LIGHTS, lift, ND, nightDrive, railSide } from "./art.ts";
 import { layerMatrix, shotCamera, type Cam } from "./camera.ts";
 import type { CarDraw } from "./car.ts";
 import { drawPropView } from "./carView.ts";
@@ -564,12 +564,12 @@ function cabinFront(pen: Pen, x: ShotInput, w: World, top: number, dashY: number
       if (from <= t1 - 0.04) dashes.push([...at(from, -1), ...at(from, 1), ...at(t1, 1), ...at(t1, -1)]);
     }
     if (dashes.length) pen.poly(joinShapes(dashes), ND.laneFar, 0.22);
-    if (!behind) mirrorLights(pen, [vx - 16, vx], hz + 4, 1.8, 7.5, 0.85, glass);
+    if (!behind) mirrorLights(pen, [vx - 16, vx], hz + 4, 1.8, 7.5, 0.85, glass, gx, gy, gw, gh);
   }
   if (behind) {
     const ox = behind.X === 0 ? 0 : -mw * 0.22;
     // night drive: a car close behind sits on the reflected road, its lights a little under the horizon
-    if (nightDrive()) mirrorLights(pen, [mx + ox - sp, mx + ox + sp], hz + sp * 0.35, Math.max(2.4, sp * 0.3), sp * 1.1, 1, glass);
+    if (nightDrive()) mirrorLights(pen, [mx + ox - sp, mx + ox + sp], hz + sp * 0.35, Math.max(2.4, sp * 0.3), sp * 1.1, 1, glass, gx, gy, gw, gh);
     else {
       for (const s of [-1, 1]) {
         pen.circle(mx + ox + s * sp, my, sp * 0.9, ND.headBloom, 0.3);
@@ -639,12 +639,16 @@ function cabinFront(pen: Pen, x: ShotInput, w: World, top: number, dashY: number
 }
 
 /** Night drive: a pair of headlights in the rear-view mirror, each a small white core of radius `r` (alpha `core`) in
- * a soft bloom that fades to clear `reach` past it (art.ts softRings, each ring of both lights one polygon, kept on the
- * mirror's `glass`): no ring edge, no grey button. */
-function mirrorLights(pen: Pen, xs: number[], y: number, r: number, reach: number, core: number, glass: number[]): void {
-  const ring = (rr: number) => joinShapes(xs.map((cx) => clipConvex(arcPts(cx, y, rr, rr, 0, 360, 16).slice(0, -2), glass)));
-  for (const [t, a] of softRings(Math.min(6, softCount((reach * pen.unit()) / F.k)), 0.75)) pen.poly(ring(r + t * reach), ND.headBloom, a);
-  pen.poly(ring(r), ND.headCore, core);
+ * a soft glow (art.ts haloStops) that fades to clear `reach` past it: no ring edge, no grey button. Every glow stays
+ * wholly inside the straight middle of the mirror's glass (gx, gy, gw × gh, round ends gh / 2; `glass` its outline), a
+ * glow too big for it squeezed to fit, so none of its light reaches the mirror's frame. */
+function mirrorLights(pen: Pen, xs: number[], y: number, r: number, reach: number, core: number, glass: number[], gx: number, gy: number, gw: number, gh: number): void {
+  const ry = Math.min(r + reach, y - gy, gy + gh - y);
+  for (const cx of xs) {
+    const rx = Math.min(r + reach, cx - (gx + gh / 2), gx + gw - gh / 2 - cx);
+    if (rx > 0 && ry > 0) pen.glow(cx, y, rx, ry, ND.headBloom, haloStops(1, r / Math.max(rx, ry)), 0.75);
+  }
+  pen.poly(joinShapes(xs.map((cx) => clipConvex(arcPts(cx, y, r, r, 0, 360, 16).slice(0, -2), glass))), ND.headCore, core);
 }
 
 // ---- Face up close ------------------------------------------------------------------------------------------------

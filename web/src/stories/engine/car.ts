@@ -7,7 +7,7 @@
 // tones, door lines, handles, a mirror on a stalk, glass reflections, rim light, soft shadows and glowing lights; the
 // front and back views of the shots are carView.ts. A script without `art` draws exactly as before.
 
-import { cel, grade, ink, lift, lineUnits, ND, nightDrive, softRings } from "./art.ts";
+import { cel, fadeStops, grade, haloStops, ink, lift, lineUnits, ND, nightDrive } from "./art.ts";
 import { CATALOG } from "./catalog.ts";
 import { blink as blinkAt, FACES, type FaceParams, type Mouth } from "./face.ts";
 import { F } from "./frame.ts";
@@ -387,24 +387,52 @@ export function exhaust(pen: Pen, x: number, y: number, puffAge: number, stallAg
   }
 }
 
-/** The headlights flashing (`blink`): a glow at a light (night drive: the headlights' own bloom colour). */
+/** The headlights flashing (`blink`): a glow at a light. Night drive: one soft glow (the `glow` prim) in the
+ * headlights' own bloom colour, bright at the lens and fading to clear half as far again as Bright's flat disc. */
 export function lightGlow(pen: Pen, x: number, y: number, blink: number, k: number): void {
-  if (blink > 0.04) pen.circle(x, y, 46 * k, nightDrive() ? ND.headBloom : "#fff3b0", 0.55 * blink);
+  if (blink <= 0.04) return;
+  if (nightDrive()) pen.glow(x, y, 69 * k, 69 * k, ND.headBloom, haloStops(0.85, 0.25, 2), blink);
+  else pen.circle(x, y, 46 * k, "#fff3b0", 0.55 * blink);
 }
 
-/** Night drive: a tail light's glow in the side view, over its lens: two soft rings (art.ts softRings) that reach 1.5 ×
- * the lens's radius `r` past it and fade to clear, instead of one flat disc; `a` is the old disc's alpha (0.25 lit,
- * up to 0.45 on the brakes). */
+/** Night drive: a tail light's glow in the side view, over its lens: one soft glow (art.ts haloStops) as bright as
+ * the lens's own light over it, fading to clear 1.5 × the lens's radius `r` past it; `a` is Bright's flat disc's alpha
+ * (0.25 lit, up to 0.45 on the brakes). */
 export function tailGlow(pen: Pen, x: number, y: number, r: number, a: number): void {
-  for (const [t, ra] of softRings(2, 0.7)) pen.circle(x, y, r * (1 + 1.5 * t), ND.tailGlow, Math.min(1, ra * a * 1.4));
+  pen.glow(x, y, r * 2.5, r * 2.5, ND.tailGlow, haloStops(1, 0.4), Math.min(1, a * 1.05));
 }
 
-/** Night drive: a headlight's bloom, the halos only (the lens is the core): three soft rings (art.ts softRings) out
- * to about 3.7 × the lens's radius, × k, so it falls off softly like the street lamps. Stacked circles, so both drawers
- * paint it the same. */
+/** Night drive: a headlight's bloom, the halo only (the lens is the core): one soft glow (art.ts haloStops) flat over
+ * the lens and fading to clear at 3.7 × its radius, × k, so it falls off softly like the street lamps. */
 export function bloom(pen: Pen, x: number, y: number, r: number, k: number): void {
   if (k <= 0.02) return;
-  for (const [t, a] of softRings(3, 0.55)) pen.circle(x, y, r * (1.1 + 2.6 * t), ND.headBloom, a * k);
+  pen.glow(x, y, r * 3.7, r * 3.7, ND.headBloom, haloStops(1, 0.3), Math.min(1, 0.55 * k));
+}
+
+/** Night drive: the headlights' beam from the lens at (x, y), reaching `reach` ahead along +x in the pen's frame
+ * (`up`: along -y, the top view's nose) and `spread` either side of its middle at its far end: two soft glows (art.ts
+ * fadeStops) that add up smoothly, a bright narrow one from the lens and a wide faint one further out, so the light is
+ * strongest at the lens, widens as it goes and fades to clear at its far end, a little lower than the lens in the side
+ * view (it falls towards the road). The bright one starts a little behind the lens, so the beam is drawn before the
+ * car's body, which covers that end: it never lights its own car. `a` is the flat cone's alpha it replaces (0.08 at
+ * night, 0.05 with the lights on by day). */
+export function beamGlow(pen: Pen, x: number, y: number, reach: number, spread: number, a: number, up = false): void {
+  const glows: [number, number, number, number, number][] = [
+    // [ahead of the lens, half length, half width, alpha × a, fade power]
+    [0.22, 0.36, 0.55, 3, 1.6],
+    [0.55, 0.47, 1.1, 1.9, 1.4],
+  ];
+  for (const [at, len, wide, k, power] of glows) {
+    const al = Math.min(1, a * k);
+    if (up) pen.glow(x, y - reach * at, spread * wide, reach * len, ND.beam, fadeStops(1, power), al);
+    else pen.glow(x + reach * at, y + reach * at * 0.05, reach * len, spread * wide, ND.beam, fadeStops(1, power), al);
+  }
+}
+
+/** Where frontLight puts a headlight's lens (the point its glows centre on), without drawing it. */
+function frontLightAt(g: Side, car: CarLook): [number, number] {
+  const s = g.lowH / 136;
+  return [g.hl - (car.lights.front === "square" ? 19 : car.lights.front === "slim" ? 24 : 20) * s, g.y(0.72)];
 }
 
 // ---- the face ----------------------------------------------------------------------------------------------------
@@ -985,6 +1013,12 @@ function drawCarLookSideND(pen: Pen, st: PropState, k: number, t: number, d: Car
   const ow = lineUnits(pen, 2.6) / k;
   const fine = ow * 0.35;
   pen.scale(k * st.facing * st.spinX, k);
+  // the headlights' beam, under the car's shadow and body so it never lights its own car
+  const headEyes = face !== null && car.face.eyes === "headlights";
+  if (beam) {
+    const [lx, ly] = headEyes ? [g.hl - clamp(g.lowH * 0.2, 14, 34) * 1.45, g.y(0.7)] : frontLightAt(g, car);
+    beamGlow(pen, lx, ly + dy, g.hl + 540 - lx, 100, night ? 0.08 : 0.05);
+  }
   // soft shadows under the car (ambient occlusion), skid marks and skid smoke
   pen.ellipse(0, 7, g.hl + 30, 22, 0, ND.ao, 0.16);
   pen.ellipse(0, 3, g.hl - 10, 10, 0, ND.ao, 0.38);
@@ -1063,7 +1097,6 @@ function drawCarLookSideND(pen: Pen, st: PropState, k: number, t: number, d: Car
   pen.rect(g.hl - 2, g.y(0.36), 9, g.lowH * 0.12, 3, tone(PLATE));
   pen.rect(-g.hl - 7, g.y(0.36), 9, g.lowH * 0.12, 3, tone(PLATE));
   // lights: the lenses glow when they are on
-  const headEyes = face !== null && car.face.eyes === "headlights";
   const front: [number, number] = headEyes ? [g.hl - clamp(g.lowH * 0.2, 14, 34) * 1.45, g.y(0.7)] : frontLight(pen, g, car, lit ? ND.headCore : grade(LENS_OFF));
   const back = rearLight(pen, g, car, braking ? ND.brakeCore : tailOn ? ND.tailCore : grade(TAIL_OFF));
   pen.restore();
@@ -1075,7 +1108,6 @@ function drawCarLookSideND(pen: Pen, st: PropState, k: number, t: number, d: Car
   wheelSideND(pen, g.ax, -g.wr, g.wr, spin, st.flat, car, ow);
   pen.save();
   pen.translate(0, dy);
-  if (beam) pen.poly([front[0] + 10, front[1] - 6, g.hl + 540, front[1] - 90, g.hl + 540, front[1] + 130], ND.beam, night ? 0.08 : 0.05);
   const s = g.lowH / 136;
   if (lit) bloom(pen, front[0], front[1], (car.lights.front === "slim" ? 11 : 15) * s, (dark ? 1 : 0.5) * (headEyes ? 0.6 : 1));
   const tailA = Math.max(tailOn ? 0.25 : 0, braking ? 0.45 * st.braking : 0);
@@ -1165,7 +1197,7 @@ function drawCarLookTopND(pen: Pen, st: PropState, k: number, t: number, d: CarD
       pen.line([i * 60, L / 2 + 40, i * 60, L / 2 + 40 + len], 10, streak, 0.5);
     }
   }
-  if (beam) pen.poly([-70, -L / 2, 70, -L / 2, 200, -L / 2 - 520, -200, -L / 2 - 520], ND.beam, night ? 0.08 : 0.05);
+  if (beam) beamGlow(pen, 0, -L / 2, 520, 230, night ? 0.08 : 0.05, true);
   pen.ellipse(8, 12, Wd / 2 + 30, L / 2 + 24, 0, ND.ao, 0.16);
   pen.ellipse(4, 6, Wd / 2 + 4, L / 2 + 2, 0, ND.ao, 0.38);
   const wy = (L / 2) * g.spec.axle * 0.94;
@@ -1232,7 +1264,7 @@ function drawCarLookTopND(pen: Pen, st: PropState, k: number, t: number, d: CarD
     if (car.lights.front === "round") pen.ellipse(x, -L / 2 + 14, 20, 12, 0, head);
     else if (car.lights.front === "square") pen.rect(x - 18, -L / 2 + 6, 36, 18, 5, head);
     else pen.rect(x - 26, -L / 2 + 8, 52, 10, 5, head);
-    if (lit) pen.circle(x, -L / 2 + 14, 30, ND.headBloom, dark ? 0.32 : 0.16);
+    if (lit) pen.glow(x, -L / 2 + 14, 45, 45, ND.headBloom, haloStops(1, 0.3, 1.6), dark ? 0.5 : 0.25);
   }
   const tail = braking ? ND.brakeCore : tailOn ? ND.tailCore : grade(TAIL_OFF);
   if (car.lights.rear === "bar") pen.rect(-0.43 * Wd, L / 2 - 16, 0.86 * Wd, 12, 5, tail);
@@ -1243,10 +1275,7 @@ function drawCarLookTopND(pen: Pen, st: PropState, k: number, t: number, d: CarD
     }
   }
   const tailA = Math.max(tailOn ? 0.25 : 0, braking ? 0.45 * st.braking : 0);
-  if (tailA > 0) {
-    pen.circle(-0.33 * Wd, L / 2 - 8, 36, ND.tailGlow, tailA);
-    pen.circle(0.33 * Wd, L / 2 - 8, 36, ND.tailGlow, tailA);
-  }
+  if (tailA > 0) for (const s of [-1, 1]) pen.glow(s * 0.33 * Wd, L / 2 - 8, 54, 54, ND.tailGlow, haloStops(1, 0.3, 1.6), Math.min(1, tailA * 1.5));
   lightGlow(pen, -0.32 * Wd, -L / 2 + 14, st.blink, 0.8);
   lightGlow(pen, 0.32 * Wd, -L / 2 + 14, st.blink, 0.8);
   pen.rect(-26, -L / 2 - 4, 52, 8, 3, tone(PLATE));

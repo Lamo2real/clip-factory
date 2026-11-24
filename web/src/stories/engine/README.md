@@ -55,11 +55,11 @@ premultiplied input). The frame starts as opaque black, and every frame's first 
 | `k` | Fields | Meaning |
 |---|---|---|
 | `fill` | `color` | The whole frame in one colour (opaque). |
-| `grad` | `x0, y0, x1, y1, stops: [offset, color][]` | The whole frame painted with a linear gradient along the line (x0, y0) → (x1, y1). Each pixel takes the value at its projection onto that line. Before the first stop and after the last, the end colours carry on. Interpolate between stops in sRGB. Offsets are 0..1 and sorted. |
+| `grad` | `x0, y0, x1, y1, stops: [offset, color][], dither?` | The whole frame painted with a linear gradient along the line (x0, y0) → (x1, y1). Each pixel takes the value at its projection onto that line. Before the first stop and after the last, the end colours carry on. Interpolate between stops in sRGB. Offsets are 0..1 and sorted. With `dither` (night drive), its values are rounded by the dither (below). |
 | `rect` | `x, y, w, h, r, color, a?` | An axis-aligned rectangle, top-left (x, y), size w × h, corners rounded with radius r (already ≤ min(w, h) / 2). |
 | `circle` | `x, y, r, color, a?` | A filled disc. |
 | `ellipse` | `x, y, rx, ry, rot, color, a?` | A filled ellipse centred on (x, y) with radii rx, ry, rotated by `rot` **degrees clockwise on screen** (y is down, the same as canvas `ellipse()`). |
-| `glow` | `x, y, rx, ry, rot, color, fade: [offset, alpha][], a?` | A soft light (night drive only): the ellipse of `ellipse`, painted in one colour whose alpha fades with how far out a point is, in radii (0 the centre, 1 the edge): linear between the `fade` stops (offsets 0..1 and sorted, alphas 0..1), the end stops' alphas before the first and after the last, times `a`; nothing past the edge, so the engine ends every fade at alpha 0. The browser draws it as a radial gradient in the ellipse's own frame (`preview/draw.ts`), `raster.py` by the same formula. |
+| `glow` | `x, y, rx, ry, rot, color, fade: [offset, alpha][], a?, dither?` | A soft light (night drive only): the ellipse of `ellipse`, painted in one colour whose alpha fades with how far out a point is, in radii (0 the centre, 1 the edge): linear between the `fade` stops (offsets 0..1 and sorted, alphas 0..1), the end stops' alphas before the first and after the last, times `a`; nothing past the edge, so the engine ends every fade at alpha 0. The browser draws it as a radial gradient in the ellipse's own frame (`preview/draw.ts`), `raster.py` by the same formula. With `dither` (the vignette), the pixels inside it are rounded by the dither (below). |
 | `poly` | `pts: [x0, y0, x1, y1, …], color, a?` | A closed polygon filled with the **non-zero** winding rule. Curves are already flattened. At least 3 points. |
 | `line` | `pts: [x0, y0, …], w, color, a?` | An open polyline stroked with width `w`, **round caps and round joins**. At least 2 points. It is not closed: a closed ring repeats its first point at the end. |
 | `image` | `asset, x, y, w, h, a?` | Reserved for reference pictures. The built-in engine never emits it. |
@@ -71,6 +71,29 @@ premultiplied input). The frame starts as opaque black, and every frame's first 
   supersampling or an analytic distance-to-edge ramp of about 1 px are both fine. The browser's canvas is the
   reference.
 * Sizes are in output pixels. A `line` of `w` 3 is 3 px wide. Very thin lines (w < 1) still show faintly by coverage.
+
+### Dither
+
+Night drive's sky gradients and its vignette carry `dither`, a seed (a whole number 0 .. 2^32 − 1; the engine uses the
+script's seed, `pen.ts ditherSeed`, so one story has one fixed pattern in every frame). Such a prim's painted values
+are rounded to whole 8-bit levels with a threshold instead of to the nearest: `out = floor(value + T(x, y, seed))`,
+where `(x, y)` is the pixel's column and row and, in 32-bit unsigned arithmetic (multiplications wrap):
+
+```
+h = x · 0x9E3779B1 + y · 0x85EBCA77 + seed · 0xC2B2AE3D
+h = (h ^ (h >> 15)) · 0x2C1B3C6D
+h = (h ^ (h >> 12)) · 0x297A2D39
+h = h ^ (h >> 15)
+T = (h >> 16) / 2^16         (0 ≤ T ≤ 1 − 2^-16, so a whole level plus T stays below the next in float32)
+```
+
+Every pixel is its true value rounded down or up, never further, and the levels mix where the fade crosses a level,
+so a slow fade over a dark sky never shows as 1-level rings (a phone's re-encode makes those worse). A dithered `grad`
+rounds the whole frame; a dithered `glow` rounds the pixels inside its ellipse (the rest of its box keeps its nearest
+level). Both drawers work the value out with the same float32 steps (`raster.py`'s numpy order, mirrored with
+`Math.fround` in `preview/draw.ts`, which paints these prims pixel by pixel), so at 1:1 they are the same bytes:
+`web/test/fixtures/stories-dither.json` pins the thresholds and four small pictures, and both the web's
+`storiesDither.test.ts` and the agent's `test_stories_raster.py` check against it. Bright never dithers.
 
 ## Text (`textTrack`)
 
@@ -255,10 +278,11 @@ the same prims for a missing `art` and for `"classic"`. `inFrame` puts the style
   or step shows however big a light is): each near street lamp's amber halo, gold glow and warm white bloom
   (`sets.ts lampBloom`, `art.ts fadeStops`: 16 stops of peak · (1 − d)^power), the warm sweep of a lamp passing
   (`light.ts drawLightSweep`) and the vignette (`light.ts drawVignette`, `VIGNETTE`: a dark glow in each corner,
-  about 0.18 in the very corners at night and half that by day; the middle of each edge is left alone). Small
-  lights are stacked shapes (`art.ts glow`, and `softRings`: rings whose alphas build a smooth falloff in steps that
-  are smallest where the light is faintest, more rings the bigger a light shows): car lights and the headlights in
-  the rear-view mirror; each far street lamp is one small `glow`. There is no film grain. Lights that share a colour
+  about 0.18 in the very corners at night and half that by day; the middle of each edge is left alone). The car
+  and truck lights are glows too: headlights, tail and brake lights, the blink flash, the beams and the headlights in
+  the rear-view mirror (`art.ts haloStops`: flat over the lens, then the falloff), and so are the pools of light on
+  the road (`art.ts bellStops`, flat in the middle, so two that overlap blend); each far street lamp is one small
+  `glow`. The sky's gradients and the vignette are dithered (Dither, above). There is no film grain. Lights that share a colour
   and an alpha (the far street lamps' lenses, a row of side-view lamps' heads, a car's two headlights) are one
   polygon of several loops (`pen.ts joinShapes`, bridges
   walked out and back, so the non-zero rule fills each loop once in both drawers).
@@ -304,8 +328,8 @@ the same prims for a missing `art` and for `"classic"`. `inFrame` puts the style
     whole row's heads and lenses at once (`lampRow`). Lamps show through the windows too (`perspective.ts`
     `lampsBehind` in Face up close, `sideLamps` in Side window, `glassLamp` in the mirror's glass). Bright keeps its
     gold bloom round a cobra head (`ND.lampHead`, `ND.lampCore`). Headlights
-    and tail lights fade the same soft way (`car.ts bloom` and `tailGlow`, `carView.ts headBloom`, `softPair`,
-    `softBar`), the glow under a lens in the front and back views.
+    and tail lights fade the same soft way, each one glow (`car.ts bloom`, `tailGlow`, `beamGlow` and `lightGlow`,
+    `carView.ts headBloom`, `softPair`, `softBar`), the glow under a lens in the front and back views.
   * `rig.ts`, `face.ts`: the night people (dot eyes tinted with the picked eye colour, a pupil up close, short thick
     brows, soft scalloped hair with strand groups, cel shadows, rim light along the hair's own edge, folds) and three
     new drawings for the shots, both styles: `drawBust` (front or three-quarter, from the head's centre),

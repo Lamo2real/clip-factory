@@ -7,6 +7,7 @@ tests/test_stories_raster.py``, then look at every picture before committing it.
 
 from __future__ import annotations
 
+import base64
 import json
 import math
 import os
@@ -267,6 +268,43 @@ def test_off_frame_and_empty_primitives_draw_nothing() -> None:
     assert c.rgb8().max() == 0
 
 
+DITHER = REPO / "web" / "test" / "fixtures" / "stories-dither.json"
+
+
+def test_the_dither_matches_the_preview_bit_for_bit() -> None:
+    """Night drive's seeded 1-level dither (§45.45.23): raster.py's thresholds and pictures are the ones in the file
+    the web's storiesDither.test.ts checks preview/draw.ts against, byte for byte."""
+    fixture = json.loads(DITHER.read_text())
+    for x, y, seed, t in fixture["thresholds"]:
+        assert float(raster.dither_thresholds(seed, 1080, 1920)[y, x]) == t, (x, y, seed)
+    assert len(fixture["cases"]) >= 4
+    for case in fixture["cases"]:
+        got = render(case["prims"], case["width"], case["height"])
+        want = np.frombuffer(base64.b64decode(case["rgb"]), np.uint8).reshape(case["height"], case["width"], 3)
+        assert (got == want).all(), case["name"]
+
+
+def test_a_dithered_fade_rounds_each_pixel_to_one_of_its_two_levels() -> None:
+    """A dithered grad or glow rounds down or up by the seeded threshold: never more than a level from the true value,
+    unbiased over many pixels, the same every time; without ``dither`` it rounds to the nearest as before."""
+    sky = {"k": "grad", "x0": 0, "y0": 0, "x1": 0, "y1": 400, "stops": [[0, "#141f3d"], [1, "#1e305a"]]}
+    plain = Canvas(64, 400)
+    plain.grad(sky)
+    true = plain.buf.copy()
+    dithered = render([{**sky, "dither": 5}], 64, 400).astype(np.float64)
+    assert (np.abs(dithered - true) < 1).all()
+    assert float(np.abs(dithered.mean(axis=(1, 2)) - true.mean(axis=(1, 2))).max()) < 0.2  # each row keeps its mean
+    assert (render([{**sky, "dither": 5}], 64, 400) == render([{**sky, "dither": 5}], 64, 400)).all()
+    assert not (render([{**sky, "dither": 5}], 64, 400) == render([{**sky, "dither": 6}], 64, 400)).all()
+    # the plain gradient's rows are one level each, in bands; the dithered one mixes two levels in most rows
+    assert sum(len(np.unique(dithered[y, :, 2])) > 1 for y in range(400)) > 200
+    assert all(len(np.unique(render([sky], 64, 400)[y, :, 2])) == 1 for y in range(400))
+    # a dithered glow leaves the pixels outside its ellipse at their nearest level
+    corner = {"k": "glow", "x": 0, "y": 0, "rx": 30, "ry": 30, "rot": 0, "color": "#000000", "fade": [[0, 0.2], [1, 0]]}
+    a = render([{"k": "fill", "color": "#2f4369"}, {**corner, "dither": 3}], 40, 40)
+    assert (a[39, 39] == [47, 67, 105]).all() and (a[35, 25] == [47, 67, 105]).all()
+
+
 @pytest.mark.parametrize(
     ("prim", "why"),
     [
@@ -285,6 +323,9 @@ def test_off_frame_and_empty_primitives_draw_nothing() -> None:
             "fade must be",
         ),
         ({"k": "fill", "color": "#ffffff", "extra": 1}, "unknown field"),
+        ({"k": "grad", "x0": 0, "y0": 0, "x1": 1, "y1": 1, "stops": [[0, "#000000"]], "dither": -1}, "dither must be"),
+        ({"k": "grad", "x0": 0, "y0": 0, "x1": 1, "y1": 1, "stops": [[0, "#000000"]], "dither": 1.5}, "dither must be"),
+        ({"k": "circle", "x": 0, "y": 0, "r": 1, "color": "#ffffff", "dither": 1}, "unknown field"),
     ],
 )
 def test_prim_problems_names_what_is_wrong(prim: dict[str, Any], why: str) -> None:

@@ -11,7 +11,7 @@
 // rail or reflector posts and warm charcoal asphalt. Every other place keeps its own layout and palette row, passed
 // through the light it stands in (art.ts `grade`, the light scene.ts sets); in classic every colour is as before.
 
-import { fadeStops, grade, ND, nightDrive, railSide } from "./art.ts";
+import { bellStops, fadeStops, grade, ND, nightDrive, POOL_GROW, POOL_LIFT, railSide } from "./art.ts";
 import { F, X, Y } from "./frame.ts";
 import { mix, rand, shade } from "./math.ts";
 import type { Pen } from "./pen.ts";
@@ -785,9 +785,13 @@ function nightSide(highway: boolean, env: SetEnv): void {
     env.layer(0.2);
     const cx = X(756);
     const hy = S.horizon + 10 * S.sy;
-    pen.ellipse(cx, hy, 430, 120 * S.tall, 0, ND.cityGlow, 0.05);
-    pen.ellipse(cx, hy, 290, 74 * S.tall, 0, ND.cityGlow, 0.07);
-    pen.ellipse(cx, hy, 170, 40 * S.tall, 0, ND.cityGlow, 0.1);
+    // night drive: one soft glow (art.ts fadeStops) as bright as Bright's three stacked ovals, with no ring edges
+    if (nightDrive()) pen.glow(cx, hy, 495, 138 * S.tall, ND.cityGlow, fadeStops(0.24, 1.5));
+    else {
+      pen.ellipse(cx, hy, 430, 120 * S.tall, 0, ND.cityGlow, 0.05);
+      pen.ellipse(cx, hy, 290, 74 * S.tall, 0, ND.cityGlow, 0.07);
+      pen.ellipse(cx, hy, 170, 40 * S.tall, 0, ND.cityGlow, 0.1);
+    }
     for (let i = 0; i < 12; i += 1) pen.rect(cx - 230 + rand(seed, i + 240) * 460, hy - 8 - rand(seed, i + 250) * 46 * S.tall, 5, 5, 1, ND.cityDot, 0.6);
   }
   // near mountains with a lit facet and a soft rim along the top
@@ -838,7 +842,11 @@ function nightSide(highway: boolean, env: SetEnv): void {
   env.layer(1);
   pen.rect(gx0, S.roadTop, gw, S.roadBottom - S.roadTop, 0, ND.asphalt);
   pen.rect(gx0, S.roadTop, gw, 40 * S.sy, 0, ND.asphaltFar);
-  for (const x of lamps) pen.ellipse(x + 76, S.roadTop + 70 * S.sy, 170, 26, 0, ND.pool, 0.07);
+  // night drive: soft pools (art.ts bellStops) as much light as the flat ones, adding up smoothly where they meet
+  for (const x of lamps) {
+    if (nd) pen.glow(x + 76, S.roadTop + 70 * S.sy, 170 * POOL_GROW, 26 * POOL_GROW, ND.pool, bellStops(1), 0.07 * POOL_LIFT);
+    else pen.ellipse(x + 76, S.roadTop + 70 * S.sy, 170, 26, 0, ND.pool, 0.07);
+  }
   pen.rect(gx0, S.roadBottom, gw, F.h + 200 - S.roadBottom, 0, ND.vergeNear);
   pen.rect(gx0, S.roadBottom, gw, 10, 0, ND.kerb);
   pen.rect(gx0, S.roadTop + 14, gw, 8, 0, ND.edge, 0.85);
@@ -878,8 +886,12 @@ function nightTop(highway: boolean, env: SetEnv): void {
   for (let i = 0; i < 5; i += 1) {
     const y = mod(i * LAMP_EVERY + scroll, LAMP_EVERY * 5) - LAMP_EVERY;
     for (const x of highway ? [left - 90, right + 90] : [left - 90]) {
-      pen.circle(x, y, 120, ND.pool, 0.08);
-      pen.circle(x, y, 60, ND.pool, 0.06);
+      // night drive: one soft pool (art.ts bellStops), as much light as the two flat discs
+      if (nightDrive()) pen.glow(x, y, 120 * POOL_GROW, 120 * POOL_GROW, ND.pool, bellStops(1), 0.154);
+      else {
+        pen.circle(x, y, 120, ND.pool, 0.08);
+        pen.circle(x, y, 60, ND.pool, 0.06);
+      }
       pen.circle(x, y, 16, ND.lampCore);
     }
   }

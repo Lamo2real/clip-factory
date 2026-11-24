@@ -96,7 +96,8 @@ export function ellipsePts(cx: number, cy: number, rx: number, ry: number, segs 
 
 /** The vignette (§4.5): VIGNETTE's four corner glows in ND.vignette over the whole picture, before the bubbles, about
  * 0.18 in the very corners on a night place and half that by day; the middle of each edge is left alone. Each glow is
- * rasterized over its corner only. Fixed to the screen. */
+ * rasterized over its corner only, and dithered (the pen's seed), so its slow fade over the sky never shows as rings.
+ * Fixed to the screen. */
 export function drawVignette(pen: Pen, night: boolean): void {
   pen.setMatrix([1, 0, 0, 1, 0, 0]);
   const fade = fadeStops(night ? VIGNETTE.corner : VIGNETTE.corner / 2, 1.6);
@@ -106,7 +107,7 @@ export function drawVignette(pen: Pen, night: boolean): void {
     [0, F.h],
     [F.w, F.h],
   ] as const)
-    pen.glow(x, y, (F.w / 2) * VIGNETTE.rx, (F.h / 2) * VIGNETTE.ry, ND.vignette, fade);
+    pen.glow(x, y, (F.w / 2) * VIGNETTE.rx, (F.h / 2) * VIGNETTE.ry, ND.vignette, fade, 1, true);
 }
 
 /** The warm sweep of a lamp passing (§4.5): while the pulse is over 0.05, a translucent warm band moves down from `y0`

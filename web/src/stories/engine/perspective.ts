@@ -5,7 +5,7 @@
 // and carries on across cuts. Everything is screen px of the frame being drawn, through the pen's matrix (the shot's
 // camera); only prims of types.ts, no gradients but the sky's.
 
-import { fadeStops, ND, nightDrive } from "./art.ts";
+import { bellStops, fadeStops, ND, nightDrive, POOL_GROW, POOL_LIFT } from "./art.ts";
 import { F } from "./frame.ts";
 import { ellipsePts, LAMP_GAP, lampPhase } from "./light.ts";
 import { mix, rand, smoothstep } from "./math.ts";
@@ -178,9 +178,13 @@ export function drawOutside(pen: Pen, c: Cam3, o: OutsideOpts): void {
   ridge(pen, c, o, (mountains ? 0.26 : 0.09) * S, look.far, mountains ? look.farLit : null, null, mountains ? 0.6 : 0.3, o.seed);
   if (look.city && !o.simple) {
     const cx = c.vpX + 0.1 * (o.x1 - o.x0);
-    pen.ellipse(cx, c.hor, 0.2 * S, 0.05 * S, 0, ND.cityGlow, 0.05);
-    pen.ellipse(cx, c.hor, 0.13 * S, 0.03 * S, 0, ND.cityGlow, 0.07);
-    pen.ellipse(cx, c.hor, 0.07 * S, 0.016 * S, 0, ND.cityGlow, 0.1);
+    // night drive: one soft glow (art.ts fadeStops) as bright as Bright's three stacked ovals, with no ring edges
+    if (nightDrive()) pen.glow(cx, c.hor, 0.23 * S, 0.0575 * S, ND.cityGlow, fadeStops(0.24, 1.5));
+    else {
+      pen.ellipse(cx, c.hor, 0.2 * S, 0.05 * S, 0, ND.cityGlow, 0.05);
+      pen.ellipse(cx, c.hor, 0.13 * S, 0.03 * S, 0, ND.cityGlow, 0.07);
+      pen.ellipse(cx, c.hor, 0.07 * S, 0.016 * S, 0, ND.cityGlow, 0.1);
+    }
     for (let i = 0; i < 6; i += 1) pen.circle(cx + (rand(o.seed, i + 340) - 0.5) * 0.3 * S, c.hor - 2 - rand(o.seed, i + 350) * 0.02 * S, 1.6, ND.cityDot, 0.6);
   }
   ridge(pen, c, o, (mountains ? 0.17 : 0.06) * S, look.near, mountains ? look.nearLit : null, look.rim, 0.85, o.seed + 5);
@@ -198,7 +202,11 @@ export function drawOutside(pen: Pen, c: Cam3, o: OutsideOpts): void {
       const px = L.x + L.arm * LAMP_ARM;
       const [x, y] = project(c, px, 0, z);
       const rx = pxPerM(c, z) * 3.2;
-      pen.ellipse(x, y, rx, Math.max(1, (rx * c.camH) / z), 0, ND.pool, 0.07 + 0.03 * (o.warm ?? 0));
+      const ry = Math.max(1, (rx * c.camH) / z);
+      const a = 0.07 + 0.03 * (o.warm ?? 0);
+      // night drive: a soft pool (art.ts bellStops) as much light as the flat one, so two that overlap add up smoothly
+      if (nightDrive()) pen.glow(x, y, rx * POOL_GROW, ry * POOL_GROW, ND.pool, bellStops(1), a * POOL_LIFT);
+      else pen.ellipse(x, y, rx, ry, 0, ND.pool, a);
     }
   }
   // night drive: the lamps' poles before the rails and posts, so a lamp stands behind its rail on its own foot

@@ -7,8 +7,8 @@
 // three tones, door detail, reflections, rim light, soft shadows, glowing lights), and every other prop's colours
 // stand in the scene's light, with soft thin outlines. A script without `art` draws exactly as before.
 
-import { cel, grade, ink, lift, lineUnits, ND, nightDrive } from "./art.ts";
-import { bloom, burst, drawCarLookSide, drawCarLookTop, exhaust, GLASS_ND, honkWaves, impact, LENS_OFF, lightGlow, outlined, TAIL_OFF, tailGlow, TYRE_ND, type CarDraw } from "./car.ts";
+import { cel, grade, haloStops, ink, lift, lineUnits, ND, nightDrive } from "./art.ts";
+import { beamGlow, bloom, burst, drawCarLookSide, drawCarLookTop, exhaust, GLASS_ND, honkWaves, impact, LENS_OFF, lightGlow, outlined, TAIL_OFF, tailGlow, TYRE_ND, type CarDraw } from "./car.ts";
 import { F } from "./frame.ts";
 import { DEG, TAU, clamp, clamp01, ease, hash, hex, lerp, mix, rand, shade, smoothstep } from "./math.ts";
 import type { Pen } from "./pen.ts";
@@ -690,6 +690,8 @@ function drawCarSideND(pen: Pen, st: PropState, k: number, t: number, truck: boo
       pen.circle(-200 - ph * 160, -20 - ph * 40, 26 + ph * 30, grade("#e9eef5"), 0.55 * st.skidding * (1 - ph));
     }
   }
+  // the headlights' beam, under the body so it never lights its own car or truck
+  if (st.lights || night) beamGlow(pen, truck ? 413 : 268, truck ? -105 : -134 + bob, truck ? 407 : 552, 100, night ? 0.08 : 0.05);
   let head: [number, number];
   let back: [number, number];
   if (truck) {
@@ -768,7 +770,6 @@ function drawCarSideND(pen: Pen, st: PropState, k: number, t: number, truck: boo
     head = [268, -134 + bob];
     back = [-279, -135 + bob];
   }
-  if (st.lights || night) pen.poly([truck ? 420 : 280, -140, 820, -230, 820, -10], ND.beam, night ? 0.08 : 0.05);
   if (lit) bloom(pen, head[0], head[1], 14, dark ? 1 : 0.5);
   const tailA = Math.max(tailOn ? 0.25 : 0, braking ? 0.45 * st.braking : 0);
   if (tailA > 0) tailGlow(pen, back[0], back[1], 14, tailA);
@@ -823,7 +824,7 @@ function drawCarTopND(pen: Pen, st: PropState, k: number, t: number, truck: bool
       pen.line([i * 60, L / 2 + 40, i * 60, L / 2 + 40 + len], 10, streak, 0.5);
     }
   }
-  if (st.lights || night) pen.poly([-70, -L / 2, 70, -L / 2, 200, -L / 2 - 520, -200, -L / 2 - 520], ND.beam, night ? 0.08 : 0.05);
+  if (st.lights || night) beamGlow(pen, 0, -L / 2, 520, 230, night ? 0.08 : 0.05, true);
   pen.ellipse(8, 12, Wd / 2 + 30, L / 2 + 24, 0, ND.ao, 0.16);
   pen.ellipse(4, 6, Wd / 2 + 4, L / 2 + 2, 0, ND.ao, 0.38);
   const wy = L / 2 - (truck ? 80 : 70);
@@ -881,16 +882,9 @@ function drawCarTopND(pen: Pen, st: PropState, k: number, t: number, truck: bool
     pen.rect(48, L / 2 - 16, 36, 12, 5, tail);
   }
   const hx = truck ? 72 : 62;
-  if (lit) {
-    pen.circle(-hx, -L / 2 + 12, 30, ND.headBloom, dark ? 0.32 : 0.16);
-    pen.circle(hx, -L / 2 + 12, 30, ND.headBloom, dark ? 0.32 : 0.16);
-  }
+  if (lit) for (const s of [-1, 1]) pen.glow(s * hx, -L / 2 + 12, 45, 45, ND.headBloom, haloStops(1, 0.3, 1.6), dark ? 0.5 : 0.25);
   const tailA = Math.max(tailOn ? 0.25 : 0, braking ? 0.45 * st.braking : 0);
-  if (tailA > 0) {
-    const tx = truck ? 92 : 66;
-    pen.circle(-tx, L / 2 - 8, 36, ND.tailGlow, tailA);
-    pen.circle(tx, L / 2 - 8, 36, ND.tailGlow, tailA);
-  }
+  if (tailA > 0) for (const s of [-1, 1]) pen.glow(s * (truck ? 92 : 66), L / 2 - 8, 54, 54, ND.tailGlow, haloStops(1, 0.3, 1.6), Math.min(1, tailA * 1.5));
   pen.restore();
   // effects at the front-right wheel (burst) and the nose (bump), in the car's heading
   const h = st.rot * DEG;
