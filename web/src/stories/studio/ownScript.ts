@@ -136,7 +136,8 @@ export function splitScript(text: string): { what: string; caption: string | nul
 // ---------- Who and where, read from the words (§45.46.2) ----------
 
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-const wholeWord = (w: string) => new RegExp(`(?<![\\p{L}\\p{N}])${esc(w)}(?![\\p{L}\\p{N}])`, "iu");
+/** A name as a whole word, ignoring case; "Dashs" (a possessive typed without its apostrophe) is Dash too. */
+const wholeWord = (w: string) => new RegExp(`(?<![\\p{L}\\p{N}])${esc(w)}${letters(w) >= 3 ? "s?" : ""}(?![\\p{L}\\p{N}])`, "iu");
 
 /** True when the words use this name as a whole word, ignoring case. */
 export function names(what: string, name: string): boolean {
@@ -186,7 +187,14 @@ const COMMON = new Set(
     "five some each every everyone everybody someone somebody nobody nothing something everything meanwhile uh oops yay phew ah aha " +
     "ha haha hmm ooh ouch look wait stop go let lets don't can't won't isn't it's i'm he's she's they're we're you're that's there's " +
     "what's please thanks thank sorry good great bye goodbye end morning night day today tomorrow yesterday tonight bang boom crash " +
-    "splash zoom vroom beep honk ding pop whoosh yikes uh-oh whoa nope yeah yep well like see watch come"
+    "splash zoom vroom beep honk ding pop whoosh yikes uh-oh whoa nope yeah yep well like see watch come " +
+    // cheers, sounds and words a sentence starts with that are never names (the agent's COMMON_WORDS too)
+    "happy sad big little small new old bad hooray hurray hurrah woohoo woo yippee yahoo omg lol goodnight night-night help ugh argh eek bravo cheers ready push " +
+    "pull get drive ride ignore make take put open close turn start run jump walk climb follow find pick throw catch grab " +
+    "bring give keep try hold listen remember red blue green yellow orange purple pink black white brown grey gray silver " +
+    "gold super fast slow quick quickly slowly luckily sadly happily poor silly crazy funny scary cool awesome amazing best " +
+    "tiny huge mr mrs ms dr london paris england france spain italy germany scotland wales ireland america usa uk australia " +
+    "canada india china japan africa europe asia minecraft fortnite roblox lego youtube tiktok xbox playstation nintendo ipad iphone"
   ).split(/\s+/),
 );
 
@@ -201,29 +209,100 @@ const PLACE_WORDS = new Set(
 );
 
 const TOKEN = /[\p{L}][\p{L}\p{M}\p{N}'’-]*/gu;
+/** Invisible format characters (a zero-width space pasted inside a word): read as if they were not there. */
+const FORMAT = /\p{Cf}/gu;
 
 /** The words of a text, each without a possessive or a trailing dash ("Dash's" → "Dash"). */
 function wordsOf(what: string): string[] {
-  return (what.match(TOKEN) ?? []).map((w) => w.replace(/['’]s$/i, "").replace(/[-'’]+$/, "")).filter(Boolean);
+  return (what.normalize("NFC").replace(FORMAT, "").match(TOKEN) ?? []).map((w) => w.replace(/['’]s$/i, "").replace(/[-'’]+$/, "")).filter(Boolean);
 }
+
+/** Each word with whether it starts a sentence and the word before it (lower case). */
+function wordsAt(what: string): { word: string; start: boolean; prev: string }[] {
+  const text = what.normalize("NFC").replace(FORMAT, "");
+  const out: { word: string; start: boolean; prev: string }[] = [];
+  let prev = "";
+  for (const m of text.matchAll(TOKEN)) {
+    const word = m[0].replace(/['’]s$/i, "").replace(/[-'’]+$/, "");
+    const start = !prev || /[.!?;:\n…]\s*$/.test(text.slice(0, m.index));
+    if (word) out.push({ word, start, prev });
+    prev = m[0].toLowerCase();
+  }
+  return out;
+}
+
+const PLAYED = new Set(["play", "plays", "played", "playing"]);
 
 /**
  * The names the words use that the app does not know (§45.46.2): a word with a capital that is not a common word, not a
- * place word, not a character's name and not answered yet ("Max"), each once, in text order.
+ * place word, not a character's name (or that name with an "s": "Dashs") and not answered yet ("Max"), each once, in
+ * text order. A word in capitals ("FAST", "OMG"), a word ending in "ing" that starts a sentence ("Driving home, …") and a
+ * game after play ("plays Minecraft") are never asked about (the agent's own_script.unknown_name reads them the same).
  */
 export function unknownNames(what: string, characters: readonly Pick<Character, "name">[], answered: Iterable<string> = []): string[] {
   const known = new Set<string>([...answered].map((a) => a.toLowerCase()));
   for (const c of characters) for (const w of c.name.toLowerCase().split(/\s+/)) if (w) known.add(w);
   const out: string[] = [];
-  for (const w of wordsOf(what)) {
+  for (const { word: w, start, prev } of wordsAt(what)) {
     const first = w[0]!;
     if (first === first.toLowerCase() || letters(w) < 2) continue;
     const low = w.toLowerCase();
     if (COMMON.has(low) || COMMON.has(low.replace(/['’]/g, "'")) || PLACE_WORDS.has(low) || known.has(low)) continue;
+    if (low.endsWith("s") && letters(low) >= 4 && known.has(low.slice(0, -1))) continue; // "Dashs": Dash
+    if (w === w.toUpperCase()) continue; // in capitals: shouting, not a name
+    if (start && low.endsWith("ing") && letters(low) >= 5) continue; // "Driving home, …"
+    if (PLAYED.has(prev)) continue; // "plays Minecraft": a game
     if (out.some((x) => x.toLowerCase() === low)) continue;
     out.push(w);
   }
   return out;
+}
+
+/**
+ * The owner's words that make a script driving content (the API's and the agent's DRIVING_WORDS: a word that starts with
+ * one): only such a script gets checked road advice when its kind is not driving safety (§45.46.5).
+ */
+export const DRIVING_WORDS = [
+  "drive",
+  "driv",
+  "drove",
+  "brak",
+  "seatbelt",
+  "seat belt",
+  "steer",
+  "speed",
+  "motorway",
+  "highway",
+  "traffic",
+  "road",
+  "crossing",
+  "indicator",
+  "headlight",
+  "full beam",
+  "dipped",
+  "overtak",
+  "junction",
+  "roundabout",
+  "pedestrian",
+  "zebra",
+] as const;
+
+const flatWords = (t: string) => ` ${t.normalize("NFC").replace(FORMAT, "").toLowerCase().replace(/[^\p{L}\p{N}]+/gu, " ").trim()}`;
+
+/** True when the texts talk about driving or the road (a word that starts with one of DRIVING_WORDS). */
+export function aboutDriving(texts: readonly string[]): boolean {
+  return texts.some((t) => DRIVING_WORDS.some((w) => flatWords(t).includes(` ${w}`)));
+}
+
+/**
+ * Words that put a car in a scene ("the car", "drives", "parks", "his headlights"): with one car in the cast, it is in
+ * that scene's Who (the words rarely spell the car's name in every scene).
+ */
+const CAR_WORDS = /(?<![\p{L}\p{N}])(?:cars?|truck|van|drives?|drove|driving|driver|parks|parked|parking|honks?|honked|brakes?|braked|braking|steers?|steering|engine|headlights?|wheels?|tyres?|tires?|seat ?belts?|zooms? off)(?![\p{L}\p{N}])/iu;
+
+/** True when the words put a car in the scene (CAR_WORDS). */
+export function saysCar(what: string): boolean {
+  return CAR_WORDS.test(what.normalize("NFC").replace(FORMAT, ""));
 }
 
 /** The places Where can pick: the 16 sets of the catalog, by their labels. */
@@ -311,24 +390,34 @@ export function draftFromOwn(own: OwnScript, cast: string[], characters: readonl
     for (const n of unknownNames(s.what, characters)) if (!answers[n.toLowerCase()]) answers[n.toLowerCase()] = "seen";
   }
   const draft: ScriptDraft = { scenes: [], answers };
-  draft.scenes = own.scenes.map((s) => {
+  for (const s of own.scenes) {
     const sc = newScene(s.what, s.caption ?? "");
+    draft.scenes.push(sc);
     const auto = sceneWho(sc, draft, cast, characters);
     // read back exactly as it was sent: Who stays as the words give it, else as it was picked ([]: AI picks)
     const given = (s.who ?? []).filter((id) => cast.includes(id));
     if (given.slice().sort().join() !== auto.slice().sort().join()) sc.who = given;
     const place = (s.place ?? null) as SetId | null;
-    if (place !== placeIn(s.what)) sc.place = place ?? "ai";
-    return sc;
-  });
+    if (place !== scenePlace(sc, draft, cast, characters)) sc.place = place ?? "ai";
+  }
   return draft;
 }
 
 // ---------- Who, where and the questions, for one scene ----------
 
-/** Who is in a scene: the Who chips picked by hand, else the cast the words name (and the names answered for them). */
-export function sceneWho(s: DraftScene, draft: Pick<ScriptDraft, "answers">, cast: readonly string[], characters: readonly Pick<Character, "characterId" | "name">[]): string[] {
-  if (s.who) return s.who.filter((id) => cast.includes(id));
+type Who = Pick<Character, "characterId" | "name"> & Partial<Pick<Character, "kind" | "car">>;
+
+/** The cast's only car, when it has exactly one. */
+function onlyCar(cast: readonly string[], characters: readonly Who[]): string | null {
+  const cars = cast.filter((id) => {
+    const c = characters.find((x) => x.characterId === id);
+    return !!c && (c.kind === "car" || !!c.car);
+  });
+  return cars.length === 1 ? cars[0]! : null;
+}
+
+/** Who the words of a scene name themselves: the cast they name, and the names answered for them. */
+function namedWho(s: Pick<DraftScene, "what">, draft: Pick<ScriptDraft, "answers">, cast: readonly string[], characters: readonly Who[]): string[] {
   const out: string[] = [];
   for (const c of namesIn(s.what, characters)) if (cast.includes(c.characterId) && !out.includes(c.characterId)) out.push(c.characterId);
   for (const w of wordsOf(s.what)) {
@@ -338,10 +427,55 @@ export function sceneWho(s: DraftScene, draft: Pick<ScriptDraft, "answers">, cas
   return out;
 }
 
-/** Where a scene happens: picked by hand, else read from the words; null: the AI picks. */
-export function scenePlace(s: Pick<DraftScene, "what" | "place">): SetId | null {
+/**
+ * Who is in a scene: the Who chips picked by hand, else read from the words: the cast they name (and the names answered
+ * for them); words that name nobody keep the scene before's Who ("He turns on the headlights."); and the cast's one car
+ * is in every scene whose words say car, drive, park and the like ("The car gets stuck.": that car is Rosso).
+ */
+export function sceneWho(s: DraftScene, draft: Pick<ScriptDraft, "answers"> & Partial<Pick<ScriptDraft, "scenes">>, cast: readonly string[], characters: readonly Who[]): string[] {
+  if (s.who) return s.who.filter((id) => cast.includes(id));
+  let out = namedWho(s, draft, cast, characters);
+  const scenes = draft.scenes ?? [];
+  const at = scenes.findIndex((x) => x.key === s.key);
+  if (!out.length && at > 0 && s.what.trim()) out = sceneWho(scenes[at - 1]!, draft, cast, characters).slice();
+  const car = onlyCar(cast, characters);
+  if (car && !out.includes(car) && saysCar(s.what)) out.push(car);
+  return out;
+}
+
+/** True when the words name a place (a set's words, or another place word: "at home", "in the forest"). */
+function namesPlace(what: string): boolean {
+  return wordsOf(what).some((w) => PLACE_WORDS.has(w.toLowerCase())) || placeIn(what) !== null;
+}
+
+/**
+ * Where a scene happens: picked by hand, else read from the words; words that go on from the scene before (they name
+ * nobody and no place: "He turns on the headlights.") keep its Where; null: the AI picks. A scene that names its own
+ * people may be somewhere new, so the AI picks there.
+ */
+export function scenePlace(
+  s: Pick<DraftScene, "what" | "place"> & Partial<Pick<DraftScene, "key">>,
+  draft?: Pick<ScriptDraft, "answers"> & Partial<Pick<ScriptDraft, "scenes">>,
+  cast: readonly string[] = [],
+  characters: readonly Who[] = [],
+): SetId | null {
   if (s.place === "ai") return null;
-  return s.place ?? placeIn(s.what);
+  if (s.place) return s.place;
+  const own = placeIn(s.what);
+  if (own || !draft?.scenes || !s.what.trim() || namesPlace(s.what)) return own;
+  if (namesIn(s.what, characters).length || namedWho(s, draft, cast, characters).length || unknownNames(s.what, characters, Object.keys(draft.answers)).length) return null;
+  if (wordsOf(s.what).some((w) => draft.answers[w.toLowerCase()])) return null; // a name answered: someone of its own
+  const at = draft.scenes.findIndex((x) => x.key === s.key);
+  return at > 0 ? scenePlace(draft.scenes[at - 1]!, draft, cast, characters) : null;
+}
+
+/** The cast members no scene has in its Who (a car in the cast that is in no scene is never drawn). */
+export function castInNoScene(draft: ScriptDraft, cast: readonly string[], characters: readonly Who[]): string[] {
+  const scenes = draft.scenes.filter((x) => x.what.trim());
+  if (!scenes.length) return [];
+  const who = scenes.map((x) => sceneWho(x, draft, cast, characters));
+  if (who.some((w) => !w.length)) return []; // a scene the AI casts may have them
+  return cast.filter((id) => !who.some((w) => w.includes(id)));
 }
 
 /** The names in a scene the owner left out (as the words write them). */
@@ -396,13 +530,13 @@ export function sceneKnown(s: Pick<DraftScene, "what">, draft: Pick<ScriptDraft,
 }
 
 /** The script to send (§45.46.4): the written scenes in order, the words exactly as typed (only the ends trimmed). */
-export function toOwnScript(draft: ScriptDraft, cast: readonly string[], characters: readonly Pick<Character, "characterId" | "name">[]): OwnScript {
+export function toOwnScript(draft: ScriptDraft, cast: readonly string[], characters: readonly Who[]): OwnScript {
   const last = draft.scenes.reduce((n, s, i) => (written(s) ? i : n), -1);
   return {
     scenes: draft.scenes.slice(0, last + 1).map((s): OwnScene => {
       const caption = s.caption.trim();
       const who = sceneWho(s, draft, cast, characters).slice(0, OWN.who);
-      const place = scenePlace(s);
+      const place = scenePlace(s, draft, cast, characters);
       const leaveOut = sceneLeaveOut(s, draft, characters);
       const known = sceneKnown(s, draft);
       return {
@@ -480,11 +614,6 @@ export function scriptProblem(draft: ScriptDraft, cast: readonly string[], chara
 export function tooLong(value: string, max: number): string | null {
   const n = letters(value.trim());
   return n > max ? `Too long: ${n} of ${max} letters.` : null;
-}
-
-/** True when a caption has emoji (some may not show in the video's letters). */
-export function hasEmoji(s: string): boolean {
-  return /\p{Extended_Pictographic}/u.test(s);
 }
 
 /** The scene a fact problem is about ("Your scene 2 …"), from 1; null when it names none. */

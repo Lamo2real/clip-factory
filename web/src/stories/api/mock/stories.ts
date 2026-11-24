@@ -43,7 +43,8 @@ import {
   type TaskKind,
 } from "../types.ts";
 import { callOf, checkOverride, citationsFor, effectiveFor, shownSteps, startMockTask, topicFor, writerOf } from "./ideas.ts";
-import { checkOwnScript, jobLabel, mirrorCaptions, OWN_WORDS, ownDefaults, ownFactProblems, OwnFailed, ownTopic, patchOwn, stageOwn } from "./ownScript.ts";
+import { aboutDriving } from "../../studio/ownScript.ts";
+import { checkOwnScript, jobLabel, mirrorCaptions, OWN_WORDS, ownDefaults, ownFactProblems, OwnFailed, ownTexts, ownTopic, patchOwn, stageOwn } from "./ownScript.ts";
 import { seriesApproved, seriesExists, seriesForgetStory } from "./series.ts";
 import { delay, type MockStore } from "./store.ts";
 
@@ -1371,7 +1372,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       }
       const line = (body.brief?.logline ?? "").trim() || (own ? own.scenes[0]!.what.replace(/\s+/g, " ").slice(0, 280) : "");
       const brief: Brief = idea ? { title: idea.title, logline: own ? own.scenes[0]!.what : idea.logline, category: idea.category } : { title: body.brief!.title.trim(), logline: line, category: body.brief!.category };
-      const safetyTopicId = own ? (ownTopic((body.title ?? brief.title).trim(), brief.logline, own) ?? idea?.safetyTopicId ?? null) : brief.category === "driving_safety" ? (idea ? idea.safetyTopicId : topicFor(`${brief.title} ${brief.logline}`)) : null;
+      const safetyTopicId = own ? ((brief.category === "driving_safety" || aboutDriving(ownTexts(own)) ? (ownTopic((body.title ?? brief.title).trim(), brief.logline, own) ?? idea?.safetyTopicId ?? null) : null)) : brief.category === "driving_safety" ? (idea ? idea.safetyTopicId : topicFor(`${brief.title} ${brief.logline}`)) : null;
       if (brief.category === "driving_safety" && !safetyTopicId) fail(409, "conflict", NO_GUIDANCE);
       const ownDefault = own ? ownDefaults(own) : null;
       const durationSec = body.durationSec ?? ownDefault?.durationSec ?? cfg.defaultDurationSec ?? 45;

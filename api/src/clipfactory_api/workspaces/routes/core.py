@@ -1309,11 +1309,14 @@ def _refuse_not_ready(ctx: Ctx) -> None:
 def _new_topic(
     g: guidance.Guidance, fields: Mapping[str, Any], idea: Item | None, brief: Mapping[str, Any], own: Item | None
 ) -> str | None:
-    """The checked advice a new video is about. An owner's script (§45.46): its own words, for every kind (a match on
-    another kind is kept, so it is fact checked against it: a deterministic guard), the idea's checked topic breaking
-    a tie or standing in when no word matches. Else for driving safety: the idea's topic, then its words (the
-    concept's too: an Expand put them there), or the brief's words."""
+    """The checked advice a new video is about. An owner's script (§45.46): its own words, the idea's checked topic
+    breaking a tie or standing in when no word matches; on another kind only when its words are about driving (then a
+    match is kept, so it is fact checked against it: a deterministic guard; a joke about a puddle gets no road rules).
+    Else for driving safety: the idea's topic, then its words (the concept's too: an Expand put them there), or the
+    brief's words."""
     if own is not None:
+        if brief.get("category") != "driving_safety" and not own_script.about_driving(own):
+            return None
         texts = [fields.get("title") or brief.get("title"), brief.get("logline"), *own_script.texts(own)]
         picked = (idea or {}).get("safetyTopicId")
         return guidance.match(g, [str(t) for t in texts if t], str(picked) if picked else None)
@@ -1527,11 +1530,14 @@ def patch_story(app: App, req: Request) -> Response:
 def _own_topic(story: Mapping[str, Any], sets: Item, *, restage: bool) -> None:
     """The topic of a changed owner's script, matched again on its words (§45.46). Staged again, a driving-safety
     video needs checked advice for its new words (409 ``NO_GUIDANCE`` otherwise); after a words-only change the
-    current topic stays unless the words name another one better."""
+    current topic stays unless the words name another one better. A video of another kind whose words are no longer
+    about driving has no topic."""
     g = guidance.load()
     current = story.get("safetyTopicId") or None
     texts = [sets.get("title") or story.get("title"), *own_script.texts(sets["ownScript"])]
     topic = guidance.match(g, [str(t) for t in texts if t], None if restage else current)
+    if story.get("category") != "driving_safety" and not own_script.about_driving(sets["ownScript"]):
+        topic = None
     if story.get("category") == "driving_safety" and not topic:
         raise ApiError(409, "conflict", guidance.NO_GUIDANCE, extra={"topics": guidance.topic_choices(g)})
     if topic != current:
