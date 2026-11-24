@@ -11,19 +11,21 @@ import {
   canSendToMac,
   MAC_BEAT_STALE_MS,
   MAC_MAY_HAVE_POSTED,
+  MAC_NEEDS_UPDATE,
   MAC_NEVER_SEEN,
   MAC_NOT_HOLDING,
   MAC_NOT_PAUSED,
   MAC_NOT_PRESSED,
   MAC_NOT_POSTING,
   MAC_PRESSED_REASON,
+  MAC_BRAND_FROM,
   MAC_REQUEST_PICK,
-  MAC_ROW_CAMPAIGN,
   MAC_SEND_MAX,
   MAC_STILL_LOOKING,
   MAC_WORKING,
   macOn,
   macHelperBeats,
+  macHelperBrands,
   macStuck,
   macWindowOver,
 } from "../../lib/tiktokMac.ts";
@@ -63,10 +65,14 @@ export interface TikTokMacDeps {
   removePost(p: Post): void;
   publishClip(c: Clip): void;
   now(): number;
+  /** Why a campaign clip can't go to the Mac now (its campaign is gone or closed), or null. */
+  campaignRefusal?(c: Clip): string | null;
 }
 
 /** What a ping may add (§47.3 ping, D4/D5): each absent key is removed from the helper item. */
 export interface MacPingExtra {
+  /** The helper's version (MAC_BRAND_FROM, the current helper's, when absent). */
+  version?: string;
   backlogAt?: string;
   backfill?: boolean;
   holdBefore?: string;
@@ -81,8 +87,11 @@ export interface TikTokMacControls {
   login(login: "saved" | "none", done?: boolean): void;
   /** The helper was last seen at `at` (ISO), or never (null). */
   seen(at: string | null): void;
-  /** `agoMs`: the claim (and its beat) was made that long ago (a helper that crashed or lost track of it: stuck). */
-  claim(clipId: string, device?: string, agoMs?: number): MacJob;
+  /**
+   * `agoMs`: the claim (and its beat) was made that long ago (a helper that crashed or lost track of it: stuck).
+   * `version`: the claim's (the helper's ping version when absent): a post with TikTok's label needs MAC_BRAND_FROM.
+   */
+  claim(clipId: string, device?: string, agoMs?: number, version?: string): MacJob;
   /** `agoMs`: the step (its beat, and Post's press for `pressing`) was that long ago. A step sent again is a beat. */
   step(clipId: string, step: MacStep, device?: string, agoMs?: number): MacJob;
   /** The job's last beat was `agoMs` ago (5 minutes or more: stuck). */
@@ -102,6 +111,33 @@ export interface TikTokMacControls {
   post(clipId: string): Post | null;
   /** Tests only: a waiting Mac post becomes `source`'s (an auto-posting run's, say), made `sinceAgoMs` ago. */
   source(clipId: string, source: MacSource, sinceAgoMs?: number): Post;
+}
+
+/**
+ * A Mac post's options for a clip (§47.2): Upload in Mac mode (`own`: the card's own row, sent with `tiktokMac`, which
+ * Upload checked: a campaign clip's must be Everyone with Branded content) or My settings (preset_options); without
+ * `own` a campaign clip always Everyone with Branded content, else the label the clip keeps (`tiktokLabel`, Send these
+ * and Post with my Mac) or one a handed-over post had (`had`), with Everyone when Branded content can't go with the
+ * privacy (Only me, Followers).
+ */
+export function macOptions(
+  settings: Settings,
+  c: Pick<Clip, "campaignId" | "tiktokLabel">,
+  own?: TikTokPostOptions | null,
+  had?: TikTokPostOptions | null,
+): TikTokPostOptions {
+  if (own) return { ...own };
+  const o = presetChoices(settings);
+  if (c.campaignId) return { ...o, privacyLevel: "PUBLIC_TO_EVERYONE", brandContent: true };
+  const label = c.tiktokLabel ?? (had && (had.brandContent || had.brandOrganic) ? { brandContent: had.brandContent, brandOrganic: had.brandOrganic } : null);
+  if (!label) return o;
+  const privacyLevel = label.brandContent && !["PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS"].includes(o.privacyLevel) ? "PUBLIC_TO_EVERYONE" : o.privacyLevel;
+  return { ...o, privacyLevel, brandContent: label.brandContent, brandOrganic: label.brandOrganic };
+}
+
+/** Post.mac's label flags from its options (only when true, as the API's public Post.mac). */
+export function macLabelFields(o: TikTokPostOptions | undefined): Pick<PostMac, "brandContent" | "brandOrganic"> {
+  return { ...(o?.brandContent ? { brandContent: true as const } : {}), ...(o?.brandOrganic ? { brandOrganic: true as const } : {}) };
 }
 
 /** My settings' TikTok choices (Everyone, Comment, Duet and Stitch on), in the TikTok sheet's shape (preset_options). */
@@ -163,9 +199,9 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
     }
   }
 
-  /** A new Mac post's fields (waiting since now). */
-  function macFields(source: MacSource): { status: "mac"; mac: PostMac } {
-    return { status: "mac", mac: { state: "waiting", since: iso(deps.now()), source } };
+  /** A new Mac post's fields (waiting since now), with its label flags from `options` (Post.mac.brandContent/brandOrganic). */
+  function macFields(source: MacSource, options?: TikTokPostOptions): { status: "mac"; mac: PostMac } {
+    return { status: "mac", mac: { state: "waiting", since: iso(deps.now()), source, ...macLabelFields(options) } };
   }
 
   function job(p: Post): MacJob {
@@ -182,6 +218,8 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
       comment: !o.disableComment,
       duet: !o.disableDuet,
       stitch: !o.disableStitch,
+      brandContent: o.brandContent === true,
+      brandOrganic: o.brandOrganic === true,
       source: mac.source,
       since: mac.since,
       state: mac.state,
@@ -259,7 +297,7 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
 
   const controls: TikTokMacControls = {
     ping(state = "ok", reason, device = "mock-mac", extra = {}) {
-      helper = { seenAt: iso(deps.now()), state, ...(reason ? { reason: reason.trim().slice(0, 200) } : {}), version: "1.1.0", device };
+      helper = { seenAt: iso(deps.now()), state, ...(reason ? { reason: reason.trim().slice(0, 200) } : {}), version: extra.version ?? MAC_BRAND_FROM, device };
       // Absent keys go; only a needs-you ping keeps the clip it stopped on; a done request goes only while it is the same.
       if (state !== "needs_you") {
         needsYouClipId = undefined;
@@ -282,9 +320,11 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
     seen(at) {
       helper = at === null ? null : { seenAt: at, state: helper?.state ?? "ok", ...(helper?.reason ? { reason: helper.reason } : {}), device: helper?.device ?? "mock-mac" };
     },
-    claim(clipId, device = "mock-mac", agoMs = 0) {
+    claim(clipId, device = "mock-mac", agoMs = 0, version = helper?.version) {
       if (!macOn(deps.settings())) throw conflict(MAC_OFF);
       const p = macOf(clipId);
+      // A post with TikTok's label only goes to a helper that adds it (MAC_BRAND_FROM); nothing is written.
+      if ((p.mac.brandContent || p.mac.brandOrganic) && (!version || !macHelperBrands({ version }))) throw conflict(MAC_NEEDS_UPDATE);
       if (p.mac.source === "auto" && deps.settings().autoPost?.on !== true) throw conflict(AUTO_OFF);
       const now = deps.now();
       // Never a post whose Post was pressed (D2): a waiting one with pressedAt, or a crashed claim after Post.
@@ -457,9 +497,11 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
           out.push({ clipId, sent: true });
           continue;
         }
-        const choices = presetChoices(deps.settings());
+        // My settings, with TikTok's label when the clip has one (a campaign clip's Paid partnership, its tiktokLabel,
+        // or the label a handed-over Clip Factory post had).
+        const choices = macOptions(deps.settings(), c, null, p ? deps.options.get(p.postId) : null);
         if (!p) {
-          const made: Post = { postId: ulid(), clipId, platform: "tiktok", ...macFields(source) };
+          const made: Post = { postId: ulid(), clipId, platform: "tiktok", ...macFields(source, choices) };
           deps.posts().push(made);
           madeForMac.add(made.postId);
           deps.options.set(made.postId, choices);
@@ -469,7 +511,7 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
           before.set(p.postId, structuredClone(p));
           beforeOptions.set(p.postId, deps.options.get(p.postId));
           for (const k of ["url", "postedAt", "perfCheckAt", "privacy", "error", "metrics", "nextRefreshAt"] as const) delete p[k];
-          Object.assign(p, macFields(source));
+          Object.assign(p, macFields(source, choices));
           deps.options.set(p.postId, choices);
           deps.publishPost(p);
         }
@@ -491,6 +533,9 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
       const t = deps.now();
       const stuck = macStuck(p.mac, t, macHelperBeats(helper));
       if (p.mac.state === "working" && !stuck) throw conflict(MAC_WORKING);
+      // A campaign clip's Mac post goes again only while its campaign takes clips (§47.2 item 6).
+      const closed = c.campaignId ? deps.campaignRefusal?.(c) : null;
+      if (closed) throw conflict(closed);
       if (p.mac.state === "waiting" && tapped) goNow(p);
       if (p.mac.state === "stopped" || stuck) {
         if (p.mac.pressedAt && !notOnTikTok) throw conflict(MAC_MAY_HAVE_POSTED);
@@ -580,14 +625,14 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
     const posts = postsOf(c.clipId);
     if (c.status === "review" || c.status === "declined") return "Upload this clip first.";
     if (!posts.length) return "This clip is still starting to upload. Try again in a minute.";
-    // A campaign clip skips TikTok (D1, tiktok_mac.SEND_CAMPAIGN): the Mac can't mark it as Branded content yet.
-    if (c.campaignId) return MAC_ROW_CAMPAIGN;
     if (c.auto?.test === "private") return "This was a Private test, so it stays off TikTok.";
     const state = tiktokState(posts);
     if (state === "mac") return source === "upload" && tiktokOf(c.clipId)?.mac?.state === "waiting" ? null : "Your Mac already has this clip.";
     if (state === "uploading") return "This clip is still uploading to TikTok. Wait until it is done, then try again.";
     if (state === "public") return "This clip is already on TikTok for everyone.";
     if (state === "yours") return "You already posted this one on TikTok.";
-    return canSendToMac(c, posts) ? null : "This clip can't go to your Mac.";
+    if (!canSendToMac(c, posts)) return "This clip can't go to your Mac.";
+    // A campaign clip goes with TikTok's Paid partnership label, only while its campaign takes clips (§47.2 item 6).
+    return c.campaignId ? (deps.campaignRefusal?.(c) ?? null) : null;
   }
 }

@@ -27,6 +27,7 @@ import {
   MAC_RESUME_BUTTON,
   MAC_RESUMED_TOAST,
   macOn,
+  postWithMacToast,
   type TikTokRow,
   type TikTokRowContext,
 } from "../../lib/tiktokMac.ts";
@@ -96,8 +97,12 @@ export function MacTryAgain({ clip, mac, onKept, size = "sm" }: { clip: Pick<Cli
   );
 }
 
-/** Post with my Mac: a clip that isn't on TikTok yet goes to the Mac at once, like an Upload tap (§47.2, `now`). */
-export function PostWithMyMac({ clip, onKept, size = "sm" }: { clip: Pick<Clip, "clipId">; onKept: Kept; size?: Size }) {
+/**
+ * Post with my Mac: a clip that isn't on TikTok yet goes to the Mac at once, like an Upload tap (§47.2, `now`). `label`:
+ * the label the Mac posts it with (a campaign clip's "Paid partnership", or the one ticked on Review), said by the row's
+ * words and the toast. The server's refusal (a closed campaign, say) is the toast.
+ */
+export function PostWithMyMac({ clip, onKept, size = "sm", label }: { clip: Pick<Clip, "clipId">; onKept: Kept; size?: Size; label?: string }) {
   const toast = useToast();
   const [busy, setBusy] = useState(false);
   const act = useAction("send");
@@ -112,7 +117,7 @@ export function PostWithMyMac({ clip, onKept, size = "sm" }: { clip: Pick<Clip, 
       }
       const [posts, fresh] = await Promise.all([api().listPosts(clip.clipId), api().getClip(clip.clipId)]);
       onKept(fresh, posts);
-      toast.success("Sent to your Mac! It posts it in a minute.", { group: "tiktok-mac" });
+      toast.success(postWithMacToast(label), { group: "tiktok-mac" });
     } catch (e) {
       act.fail({ sound: false });
       toast.error(friendlyMessage(e));
@@ -486,7 +491,7 @@ export function TikTokRowAction({
     case "on_tiktok":
       return <MacOnTikTok clip={clip} since={row.since ?? mac?.pressedAt} again={!!row.again} noLink={!!row.noLink} onKept={onKept} size={size} />;
     case "post_with_mac":
-      return <PostWithMyMac clip={clip} onKept={onKept} size={size} />;
+      return <PostWithMyMac clip={clip} onKept={onKept} size={size} label={row.label} />;
     case "turn_on":
       return row.href ? <TurnOnMac href={row.href} size={size} label={turnOnLabel} /> : null;
     case "open_mac":

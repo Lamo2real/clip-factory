@@ -25,6 +25,7 @@ import {
   MAC_AGAIN_CONFIRM,
   MAC_BEAT_STALE_MS,
   MAC_BEATS_FROM,
+  MAC_BRAND_FROM,
   MAC_CLAIM_MAX_MS,
   MAC_CLIP_PAGE_LOOK,
   MAC_FIND_BUTTON,
@@ -36,6 +37,7 @@ import {
   MAC_LINK_EMPTY,
   MAC_LOGIN_BACK_LINE,
   MAC_MAY_HAVE_POSTED,
+  MAC_NEEDS_UPDATE,
   MAC_NO_LINK_BUTTON,
   MAC_NO_LINK_CONFIRM,
   MAC_NO_LINK_SAVED,
@@ -55,7 +57,7 @@ import {
   MAC_RESUME_BUTTON,
   MAC_RESUME_PENDING,
   MAC_RESUMED_TOAST,
-  MAC_ROW_CAMPAIGN,
+  MAC_ROW_BRAND_UPDATE,
   MAC_ROW_IN_LINE,
   MAC_ROW_NEXT,
   MAC_ROW_PRESSED,
@@ -66,7 +68,12 @@ import {
   MAC_UNKNOWN_SETTING,
   MAC_WORKING,
   macChip,
+  clipLabel,
   macHelperBeats,
+  macHelperBrands,
+  macLabel,
+  postWithMacToast,
+  sendLabelLines,
   macInsteadOk,
   macOn,
   macPlace,
@@ -149,6 +156,10 @@ describe("the constants shared with the API (D2)", () => {
     expect(/^MAC_NOT_PRESSED = "(.+)"$/m.exec(py)?.[1]).toBe(MAC_NOT_PRESSED);
     // The helper version beats count from: the same on both sides.
     expect(/^MAC_BEATS_FROM = "([\d.]+)"$/m.exec(py)?.[1]).toBe(MAC_BEATS_FROM);
+    // The helper version that adds TikTok's label: the API's, the web's and the helper's own version are the same.
+    expect(/^MAC_BRAND_FROM = "([\d.]+)"$/m.exec(py)?.[1]).toBe(MAC_BRAND_FROM);
+    const paths = readFileSync(join(import.meta.dirname, "../../mac/tiktok-helper/src/paths.js"), "utf8");
+    expect(/^export const VERSION = "([\d.]+)";$/m.exec(paths)?.[1]).toBe(MAC_BRAND_FROM);
     // The old 15-minute rule is gone on both sides (no alias).
     expect(py).not.toMatch(/^MAC_STUCK = /m);
     expect("MAC_STUCK_MS" in tiktokMacLib).toBe(false);
@@ -415,15 +426,19 @@ describe("the TikTok row (§47.4)", () => {
     expect(rowOf([tiktok({ privacy: "public" })], ready())).toBeNull();
   });
 
-  it("a campaign clip skips TikTok for now (D1): plain words, no button, whatever the Mac does; a Private test stays off TikTok", () => {
+  it("a campaign clip goes with TikTok's Paid partnership label: Post with my Mac, and the row says the label; a Private test stays off TikTok", () => {
     const campaign = clip("posted", { campaignId: "camp-1" });
-    const skips = { kind: "campaign", words: "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet.", button: null };
-    expect(MAC_ROW_CAMPAIGN).toBe(skips.words);
-    for (const ctx of [ready(), ready({ macOn: false }), ready({ helper: null }), ready({ helper: helper(iso(NOW - MIN), { state: "paused" }) })])
-      expect(rowOf([], ctx, campaign)).toEqual(skips);
-    expect(rowOf([tiktok({ status: "failed", error: "TikTok did not answer." })], ready(), campaign)).toEqual(skips);
+    const paid = { kind: "offer", words: "Not on TikTok yet · Paid partnership label", button: "post_with_mac", label: "Paid partnership" };
+    expect(rowOf([], ready(), campaign)).toEqual(paid);
+    expect(rowOf([tiktok({ status: "failed", error: "TikTok did not answer." })], ready(), campaign)).toEqual(paid);
+    // What the Mac still needs comes first, as for any clip (Turn on, set up, paused).
+    expect(rowOf([], ready({ macOn: false }), campaign)).toEqual(turnOn("Your Mac posts TikTok is off"));
+    expect(rowOf([], ready({ helper: null }), campaign)).toEqual(openMac("Your Mac isn't set up yet"));
+    expect(rowOf([], ready({ helper: helper(iso(NOW - MIN), { state: "paused" }) }), campaign)?.button).toBe("resume");
     // Once TikTok approved the app, its TikTok goes through TikTok's API (the old rows).
     expect(rowOf([], ready({ audited: true }), campaign)).toBeNull();
+    // No "Campaign clips skip TikTok" anywhere any more.
+    expect("MAC_ROW_CAMPAIGN" in tiktokMacLib).toBe(false);
     expect(rowOf([], ready(), clip("posted", { auto: { runId: "r", at: "t", test: "private" } }))).toEqual({
       kind: "private_test",
       words: "Private test · stays off TikTok",
@@ -452,13 +467,15 @@ describe("the TikTok row (§47.4)", () => {
     expect(tiktokRow(tiktokFactsFromStacks(clip("confirmed"), stopped), ready())?.words).toBe("Didn't work: Timed out");
     const mine = [stack("tiktok", "posted", { by: "you", via: "mac", url: "https://vm.tiktok.com/x/" })];
     expect(tiktokRow(tiktokFactsFromStacks(clip("posted"), mine), ready())?.kind).toBe("posted");
-    expect(tiktokRow(tiktokFactsFromStacks(clip("posted", { campaignId: "c" }), stacks), ready())?.kind).toBe("campaign");
+    expect(tiktokRow(tiktokFactsFromStacks(clip("posted", { campaignId: "c" }), stacks), ready())).toMatchObject({ kind: "offer", label: "Paid partnership" });
+    const labelled = [stack("tiktok", "mac", { mac: mac({ brandContent: true }) })];
+    expect(tiktokRow(tiktokFactsFromStacks(clip("confirmed"), labelled), ready())?.words).toBe("Waiting for your Mac · Paid partnership label");
   });
 
   it("which rows read the Mac's check-in (no row reads auto-posting's runs any more)", () => {
     expect(rowNeedsMac(tiktokFacts(clip("posted"), [youtube]))).toBe(true);
     expect(rowNeedsMac(tiktokFacts(clip("posted"), [youtube, macPost()]))).toBe(true);
-    expect(rowNeedsMac(tiktokFacts(clip("posted", { campaignId: "c" }), [youtube]))).toBe(false);
+    expect(rowNeedsMac(tiktokFacts(clip("posted", { campaignId: "c" }), [youtube]))).toBe(true);
     expect(rowNeedsMac(tiktokFacts(clip("posted", { auto: { runId: "r", at: "t", test: "private" } }), [youtube]))).toBe(false);
     expect(rowNeedsMac(tiktokFacts(clip("posted"), [youtube, tiktok({ privacy: "public" })]))).toBe(false);
     for (const gone of ["rowNeedsRuns", "lastLiveRunAt", "afterRunWords", "MAC_ROW_CHECK_IN"]) expect(gone in tiktokMacLib, gone).toBe(false);
@@ -540,11 +557,73 @@ describe("Review's line above Upload while the Mac posts this clip's TikTok (bug
     });
   });
 
+  it("with TikTok's label ticked on the card (or a campaign clip), the line says the Mac adds it", () => {
+    expect(macUploadLine(ready(), true, "Paid partnership").words).toBe("TikTok: your Mac posts it for everyone and adds TikTok's Paid partnership label.");
+    expect(macUploadLine(ready(), false, "Promotional content").words).toBe("TikTok: your Mac posts it and adds TikTok's Promotional content label.");
+    // What the Mac still needs first, as without a label.
+    expect(macUploadLine(ready({ helper: null }), true, "Paid partnership").words).toBe("TikTok: Your Mac isn't set up yet");
+  });
+
   it("a clip Upload only saved (every place waits for set up) is not uploading", () => {
     const waits = (platform: Post["platform"]): Post => ({ postId: platform, clipId: "c1", platform, status: "pending_integration" });
     expect(savedForSetup([waits("youtube"), waits("tiktok")])).toBe(true);
     expect(savedForSetup([waits("youtube"), { ...waits("tiktok"), status: "queued" }])).toBe(false);
     expect(savedForSetup([])).toBe(false);
+  });
+});
+
+describe("TikTok's label on the Mac's rows (campaign clips and paid clips, 24 Nov)", () => {
+  it("the label in TikTok's words: Branded content is Paid partnership (it wins), Your brand alone Promotional content", () => {
+    expect(macLabel({ brandContent: true })).toBe("Paid partnership");
+    expect(macLabel({ brandContent: true, brandOrganic: true })).toBe("Paid partnership");
+    expect(macLabel({ brandOrganic: true })).toBe("Promotional content");
+    for (const none of [{}, { brandContent: false, brandOrganic: false }, null, undefined]) expect(macLabel(none)).toBeNull();
+    // A clip's: every campaign clip is a paid partnership; else the label ticked on its Review card.
+    expect(clipLabel({ campaignId: "camp" })).toBe("Paid partnership");
+    expect(clipLabel({ tiktokLabel: { brandContent: false, brandOrganic: true } })).toBe("Promotional content");
+    expect(clipLabel({})).toBeNull();
+  });
+
+  it("a clip with a label not on TikTok yet: Post with my Mac, and the row says the label", () => {
+    const paid = clip("posted", { tiktokLabel: { brandContent: true, brandOrganic: false } });
+    expect(rowOf([], ready(), paid)).toEqual({ kind: "offer", words: "Not on TikTok yet · Paid partnership label", button: "post_with_mac", label: "Paid partnership" });
+    const own = clip("posted", { tiktokLabel: { brandContent: false, brandOrganic: true } });
+    expect(rowOf([], ready(), own)?.words).toBe("Not on TikTok yet · Promotional content label");
+    expect(postWithMacToast("Paid partnership")).toBe("Sent to your Mac! It posts it in a minute, with TikTok's Paid partnership label.");
+    expect(postWithMacToast(undefined)).toBe("Sent to your Mac! It posts it in a minute.");
+  });
+
+  it("a Mac post reads its own label (post.mac.brandContent / brandOrganic) while it waits or posts; the other rows keep their words", () => {
+    const ctx = ready({ queue: [job("c1", "upload")] });
+    expect(rowOf([macPost({ brandContent: true })], ctx)).toEqual({ kind: "waiting", words: "Waiting for your Mac · next · Paid partnership label", button: null, label: "Paid partnership" });
+    expect(rowOf([macPost({ brandOrganic: true })], ctx)?.words).toBe("Waiting for your Mac · next · Promotional content label");
+    expect(rowOf([working({ brandContent: true })], ready())?.words).toBe("Posting… · Paid partnership label");
+    expect(rowOf([macPost({ brandContent: true, state: "stopped", reason: "Timed out." })], ready())?.words).toBe("Didn't work: Timed out");
+    // The Mac post's own flags win over the clip's (the server set them).
+    expect(rowOf([macPost()], ctx, clip("posted", { tiktokLabel: { brandContent: true, brandOrganic: false } }))?.words).toBe("Waiting for your Mac · next");
+  });
+
+  it("a labelled Mac post waits for the helper's update while the Mac says a version before MAC_BRAND_FROM", () => {
+    expect(MAC_BRAND_FROM).toBe("1.3.0");
+    expect(MAC_ROW_BRAND_UPDATE).toBe("Waiting for your Mac · it needs an update to add TikTok's label");
+    const older = ready({ helper: helper(iso(NOW - MIN), { version: "1.2.3" }) });
+    expect(rowOf([macPost({ brandContent: true })], older)).toEqual({ kind: "waiting", words: MAC_ROW_BRAND_UPDATE, button: null, label: "Paid partnership" });
+    // A post without a label, or a helper that adds it (or says nothing we can read), goes on as before.
+    expect(rowOf([macPost()], older)?.words).toBe("Waiting for your Mac");
+    for (const version of ["1.3.0", "1.10.0", "2.0", undefined])
+      expect(rowOf([macPost({ brandContent: true })], ready({ helper: helper(iso(NOW - MIN), version ? { version } : {}) }))?.words).not.toBe(MAC_ROW_BRAND_UPDATE);
+    for (const h of [{ version: "1.2.3" }, { version: "1.2" }, { version: "0.9" }]) expect(macHelperBrands(h)).toBe(false);
+    for (const h of [{ version: "1.3.0" }, { version: "1.3" }, { version: "dev" }, {}, null, undefined]) expect(macHelperBrands(h)).toBe(true);
+    // What the Mac needs first still comes first (switch off, never set up).
+    expect(rowOf([macPost({ brandContent: true })], ready({ macOn: false }))).toEqual(turnOn("Your Mac posts TikTok is off"));
+  });
+
+  it("Send these to my Mac says which clips go with TikTok's label", () => {
+    expect(sendLabelLines([null, "Paid partnership", "Paid partnership", "Promotional content"])).toEqual([
+      "2 clips go with TikTok's Paid partnership label.",
+      "1 clip goes with TikTok's Promotional content label.",
+    ]);
+    expect(sendLabelLines([null, null])).toEqual([]);
   });
 });
 
@@ -623,9 +702,9 @@ describe("who may go to the Mac", () => {
     expect(tiktokState([{ ...youtube, platform: "tiktok", by: "you", via: "mac", privacy: "public" }])).toBe("yours");
   });
 
-  it("Send these to my Mac and Post with my Mac take clips not on TikTok yet, never a campaign clip (D1) or a Private test", () => {
+  it("Send these to my Mac and Post with my Mac take clips not on TikTok yet, campaign clips too, never a Private test", () => {
     expect(canSendToMac(clip("posted"), [youtube])).toBe(true);
-    expect(canSendToMac(clip("posted", { campaignId: "camp" }), [youtube])).toBe(false);
+    expect(canSendToMac(clip("posted", { campaignId: "camp" }), [youtube])).toBe(true);
     expect(canSendToMac(clip("posted", { auto: { runId: "r", at: "t", test: "private" } }), [youtube])).toBe(false);
     expect(canSendToMac(clip("posted"), [youtube, macPost()])).toBe(false);
     expect(canSendToMac(clip("review"), [])).toBe(false);
@@ -1011,32 +1090,93 @@ describe("the mock follows the API", () => {
     expect((await api.autoPostStatus()).tiktokYourself.map((t) => t.clipId)).not.toContain(c.clipId);
   });
 
-  it("a campaign clip never goes to the Mac (D1): send refuses it with and without now; Upload with TikTok is refused until TikTok approved the app", async () => {
+  it("a campaign clip goes to the Mac with TikTok's Paid partnership label: Everyone, whatever My settings say", async () => {
     const { store, api } = start();
     await api.putSettings({ tiktokMac: { on: true }, postPreset: { tiktok: { privacy: "SELF_ONLY" } } as never });
     const c = store.clips.find((x) => x.status === "posted" && canSendToMac(x, store.posts.filter((p) => p.clipId === x.clipId)))!;
-    c.campaignId = "camp-1";
-    for (const now of [false, true]) expect((await api.sendToMac([c.clipId], now))[0]).toEqual({ clipId: c.clipId, sent: false, reason: MAC_ROW_CAMPAIGN });
-    expect(knobs().mac.post(c.clipId)?.status).not.toBe("mac");
-    expect((await api.tiktokMacStatus()).queue.find((j) => j.clipId === c.clipId)).toBeUndefined();
-    delete c.campaignId;
-    c.auto = { runId: "r", at: "2026-11-22T10:00:00.000Z", test: "private" };
-    expect((await api.sendToMac([c.clipId]))[0]).toMatchObject({ sent: false, reason: "This was a Private test, so it stays off TikTok." });
+    c.campaignId = "200ea21b-be80-4db8-b552-8e32b148604e";
+    expect(await api.sendToMac([c.clipId], true)).toEqual([{ clipId: c.clipId, sent: true }]);
+    expect(knobs().mac.post(c.clipId)?.mac).toMatchObject({ state: "waiting", source: "upload", brandContent: true });
+    expect(knobs().mac.post(c.clipId)?.mac?.brandOrganic).toBeUndefined();
+    expect((await api.tiktokMacStatus()).queue.find((j) => j.clipId === c.clipId)).toMatchObject({ privacy: "PUBLIC_TO_EVERYONE", brandContent: true, brandOrganic: false });
+    // A campaign that is gone: the server's words, nothing written.
+    const other = sendable(store).find((x) => x.clipId !== c.clipId)!;
+    other.campaignId = "no-such-campaign";
+    expect((await api.sendToMac([other.clipId]))[0]).toEqual({ clipId: other.clipId, sent: false, reason: "Add the campaign again on the Campaigns page." });
+    expect(knobs().mac.post(other.clipId)?.status).not.toBe("mac");
+    delete other.campaignId;
+    other.auto = { runId: "r", at: "2026-11-22T10:00:00.000Z", test: "private" };
+    expect((await api.sendToMac([other.clipId]))[0]).toMatchObject({ sent: false, reason: "This was a Private test, so it stays off TikTok." });
   });
 
-  it("Upload of a campaign clip with TikTok ticked: refused with the D1 words while TikTok has not approved the app", async () => {
+  it("a clip's own label (tiktokLabel) goes with it to the Mac; Branded content never goes with Only me", async () => {
+    const { store, api } = start();
+    await api.putSettings({ tiktokMac: { on: true }, postPreset: { tiktok: { privacy: "SELF_ONLY" } } as never });
+    const [paid, own] = sendable(store);
+    paid!.tiktokLabel = { brandContent: true, brandOrganic: false };
+    own!.tiktokLabel = { brandContent: false, brandOrganic: true };
+    await api.sendToMac([paid!.clipId, own!.clipId]);
+    const queue = (await api.tiktokMacStatus()).queue;
+    expect(queue.find((j) => j.clipId === paid!.clipId)).toMatchObject({ privacy: "PUBLIC_TO_EVERYONE", brandContent: true, brandOrganic: false });
+    expect(queue.find((j) => j.clipId === own!.clipId)).toMatchObject({ privacy: "SELF_ONLY", brandContent: false, brandOrganic: true });
+    expect(knobs().mac.post(own!.clipId)?.mac).toMatchObject({ brandOrganic: true });
+  });
+
+  it("Upload in Mac mode (tiktokMac): the Mac posts the card's own TikTok row, label included, and the clip keeps the label", async () => {
     const { store, api } = start();
     for (const p of ["youtube", "tiktok"]) knobs().setup.finish(p);
     knobs().setup.setAudit(false);
     await api.putSettings({ tiktokMac: { on: true } });
-    const c = store.clips.find((x) => x.status === "review")!;
-    c.campaignId = "camp-1";
-    const tiktok = { privacyLevel: "PUBLIC_TO_EVERYONE", disableComment: false, disableDuet: false, disableStitch: false, brandContent: true, brandOrganic: false };
-    await expect(api.confirmClip(c.clipId, undefined, tiktok, ["youtube", "tiktok"])).rejects.toMatchObject({
-      status: 400,
-      message: "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet. Turn TikTok off, then tap Upload.",
+    const [first, second] = store.clips.filter((c) => c.status === "review" && !c.campaignId);
+    const friends = { privacyLevel: "MUTUAL_FOLLOW_FRIENDS", disableComment: true, disableDuet: false, disableStitch: true, brandContent: true, brandOrganic: false };
+    const out = await api.confirmClip(first!.clipId, undefined, friends, ["youtube", "tiktok"], undefined, true);
+    expect(tiktokOf(out)?.mac).toMatchObject({ state: "waiting", source: "upload", brandContent: true });
+    expect(out.clip.tiktokLabel).toEqual({ brandContent: true, brandOrganic: false });
+    expect((await api.tiktokMacStatus()).queue.find((j) => j.clipId === first!.clipId)).toMatchObject({
+      privacy: "MUTUAL_FOLLOW_FRIENDS",
+      comment: false,
+      duet: true,
+      stitch: false,
+      brandContent: true,
+      brandOrganic: false,
     });
-    expect(store.posts.some((p) => p.clipId === c.clipId)).toBe(false);
+    // TikTok unticked with a label ticked: no TikTok post, but the clip keeps its label for a later Post with my Mac.
+    const own = { ...friends, privacyLevel: "PUBLIC_TO_EVERYONE", brandContent: false, brandOrganic: true };
+    const kept = await api.confirmClip(second!.clipId, undefined, own, ["youtube"], undefined, true);
+    expect(tiktokOf(kept)).toBeUndefined();
+    expect(kept.clip.tiktokLabel).toEqual({ brandContent: false, brandOrganic: true });
+    await expect(api.confirmClip(second!.clipId, undefined, own, ["youtube"], undefined, "yes" as never)).rejects.toMatchObject({ status: 400 });
+  });
+
+  it("a labelled Mac post is claimed only by a helper that adds TikTok's label (MAC_BRAND_FROM)", async () => {
+    const { store, api } = start();
+    await api.putSettings({ tiktokMac: { on: true } });
+    const [paid, plain] = sendable(store);
+    paid!.tiktokLabel = { brandContent: true, brandOrganic: false };
+    await api.sendToMac([paid!.clipId, plain!.clipId]);
+    knobs().mac.ping("ok", undefined, undefined, { version: "1.2.3" });
+    expect(() => knobs().mac.claim(paid!.clipId)).toThrow(MAC_NEEDS_UPDATE);
+    expect(MAC_NEEDS_UPDATE).toBe("Your Mac needs an update to add TikTok's label to this clip. Set up your Mac again.");
+    expect(knobs().mac.post(paid!.clipId)?.mac?.state).toBe("waiting");
+    // A post without a label goes to the older helper as before; the new helper takes the labelled one.
+    expect(knobs().mac.claim(plain!.clipId).state).toBe("working");
+    expect(knobs().mac.claim(paid!.clipId, "mock-mac", 0, MAC_BRAND_FROM)).toMatchObject({ state: "working", brandContent: true });
+  });
+
+  it("Upload of a campaign clip with TikTok ticked while the Mac is off (and TikTok not approved): it says to turn it on", async () => {
+    const { store, api } = start();
+    for (const p of ["youtube", "tiktok"]) knobs().setup.finish(p);
+    knobs().setup.setAudit(false);
+    const c = store.clips.find((x) => x.status === "review");
+    c!.campaignId = "camp-1";
+    const tiktok = { privacyLevel: "PUBLIC_TO_EVERYONE", disableComment: false, disableDuet: false, disableStitch: false, brandContent: true, brandOrganic: false };
+    await expect(api.confirmClip(c!.clipId, undefined, tiktok, ["youtube", "tiktok"])).rejects.toMatchObject({
+      status: 400,
+      message: "Campaign clips go on TikTok from your Mac. Turn it on in Settings › Posting › Your Mac posts TikTok. Or turn TikTok off, then tap Upload.",
+    });
+    expect(store.posts.some((p) => p.clipId === c!.clipId)).toBe(false);
+    // Every "Campaign clips skip TikTok" sentence is gone.
+    expect(JSON.stringify(store)).not.toContain("skip TikTok");
   });
 
   it("the owner's requests (D5): Start my Mac again only while paused, Let them go only while it holds clips; the Mac's ping clears each", async () => {

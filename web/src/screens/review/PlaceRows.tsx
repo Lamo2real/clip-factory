@@ -7,7 +7,7 @@ import type { Captions, Platform, TikTokCreator, XReplies, YoutubePrivacy } from
 import { Dropdown } from "../../components/Dropdown.tsx";
 import { Icon } from "../../components/Icon.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
-import { Button, LinkButton, Segmented, Toggle } from "../../components/ui.tsx";
+import { Button, Segmented, Toggle } from "../../components/ui.tsx";
 import { PLATFORM_LABEL, PLATFORM_ORDER } from "../../lib/format.ts";
 import { CAMPAIGN_LOCKED, META_PAID_LINE, X_REPLIES_LABEL, YOUTUBE_CATEGORIES, YT_WHO, type CardOptions } from "../../lib/preset.ts";
 import { campaignTikTokProblem, PRIVACY_LABEL, tooLongForTikTok, type TikTokChoices } from "../../lib/tiktokChoices.ts";
@@ -114,17 +114,10 @@ export interface TikTokRow {
   /** The TikTok row was opened: TikTok must be asked for this creator's current options. */
   onOpen: () => void;
   /**
-   * The owner's Mac posts TikTok (§47.9): the row shows what the Mac posts it with (My settings, read-only, with a link
-   * to change them) instead of TikTok's privacy and switches; only Commercial content is this clip's own.
+   * The owner's Mac posts TikTok (§47.9): the row is the clip's own, on TikTok Studio's choices (macCreator), and the
+   * Mac posts exactly what it says, TikTok's label included. TikTok's API may not have named the account yet.
    */
-  mac?: {
-    /** "Your Mac posts it with My settings: Everyone · Comments on · Duet on · Stitch on" (macPostsLine). */
-    line: string;
-    /** Settings › Posting › My settings. */
-    settingsHref: string;
-    /** Why Upload is held for TikTok: Commercial content is on (macTikTokHeld), else null. */
-    held: string | null;
-  };
+  mac?: boolean;
 }
 
 export function PlaceRows({
@@ -409,20 +402,7 @@ function TikTokFields({ row, field, campaign = false }: { row: TikTokRow; field:
         </div>
       ) : null}
       {field}
-      {mac ? (
-        // What the Mac really posts it with (the server asks the Mac for My settings, §47.9): nothing to change here.
-        <div className="tt-mac-uses">
-          <p className="place-row__fixed">
-            <Icon name="monitor" size={16} />
-            <span>{mac.line}</span>
-          </p>
-          <LinkButton href={mac.settingsHref} size="sm" variant="glass" icon="sliders" iconAfter="chevronRight">
-            Change My settings
-          </LinkButton>
-        </div>
-      ) : (
-        <TikTokPrivacy creator={creator} value={privacy} branded={branded && commercial} onChange={(v) => onChoices({ privacy: v })} />
-      )}
+      <TikTokPrivacy creator={creator} value={privacy} branded={branded && commercial} onChange={(v) => onChoices({ privacy: v })} />
       {campaign && campaignTikTokProblem(choices) ? (
         <p className="callout callout--bad" role="alert">
           <Icon name="alert" size={18} />
@@ -430,19 +410,14 @@ function TikTokFields({ row, field, campaign = false }: { row: TikTokRow; field:
         </p>
       ) : null}
       <div className="tt-sheet__switches">
-        {mac ? null : (
-          <>
-            <Toggle label="Comments" checked={comments && !creator.commentDisabled} disabled={creator.commentDisabled} onChange={(v) => onChoices({ comments: v })} description={creator.commentDisabled ? "Turned off in your TikTok settings." : undefined} />
-            <Toggle label="Duet" checked={duet && !creator.duetDisabled} disabled={creator.duetDisabled} onChange={(v) => onChoices({ duet: v })} description={creator.duetDisabled ? "Turned off in your TikTok settings." : undefined} />
-            <Toggle label="Stitch" checked={stitch && !creator.stitchDisabled} disabled={creator.stitchDisabled} onChange={(v) => onChoices({ stitch: v })} description={creator.stitchDisabled ? "Turned off in your TikTok settings." : undefined} />
-          </>
-        )}
+        <Toggle label="Comments" checked={comments && !creator.commentDisabled} disabled={creator.commentDisabled} onChange={(v) => onChoices({ comments: v })} description={creator.commentDisabled ? "Turned off in your TikTok settings." : undefined} />
+        <Toggle label="Duet" checked={duet && !creator.duetDisabled} disabled={creator.duetDisabled} onChange={(v) => onChoices({ duet: v })} description={creator.duetDisabled ? "Turned off in your TikTok settings." : undefined} />
+        <Toggle label="Stitch" checked={stitch && !creator.stitchDisabled} disabled={creator.stitchDisabled} onChange={(v) => onChoices({ stitch: v })} description={creator.stitchDisabled ? "Turned off in your TikTok settings." : undefined} />
         <Toggle label="Commercial content" description="Turn on if this clip promotes a brand, a product or yourself." checked={commercial} onChange={(v) => onChoices({ commercial: v })} />
         {commercial ? (
-          // The Mac can't add TikTok's label (no "will be labeled" line), and there is no privacy to pick on its row.
+          // The label TikTok puts on it (the Mac adds it too, §47.9); Branded content can't go with Only me.
           <TikTokCommercial
-            privacy={mac ? "" : privacy}
-            hint={!mac}
+            privacy={privacy}
             yourBrand={yourBrand}
             branded={branded}
             onYourBrand={(v) => onChoices({ yourBrand: v })}
@@ -450,12 +425,6 @@ function TikTokFields({ row, field, campaign = false }: { row: TikTokRow; field:
           />
         ) : null}
       </div>
-      {mac?.held ? (
-        <p className="callout callout--bad" role="alert">
-          <Icon name="alert" size={18} />
-          <span>{mac.held}</span>
-        </p>
-      ) : null}
       {tooLong ? (
         <p className="callout callout--bad" role="alert">
           <Icon name="alert" size={18} />

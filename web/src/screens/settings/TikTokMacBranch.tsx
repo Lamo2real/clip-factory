@@ -1,8 +1,8 @@
 // Settings › Posting › Your Mac posts TikTok (docs/CONTRACTS.md §47.4): the switch and its line, when the Mac last
 // checked in and how many clips wait for it (with Start my Mac again while it is paused, Open the stopped clip while it
 // needs him, and Let them go while it holds older auto-posting clips), Send these to my Mac (the backlog: every clip
-// that isn't on TikTok yet, campaign clips never), the TikTok login kept on the Mac with Change and Forget (§47.8), and
-// how to stop it. GET /v1/tiktok/mac on open, on focus, every 60 s while open, after a post changes (its live news) and
+// that isn't on TikTok yet, campaign clips with TikTok's label), the TikTok login kept on the Mac with Change and
+// Forget (§47.8), and how to stop it. GET /v1/tiktok/mac on open, on focus, every 60 s while open, after a post changes (its live news) and
 // after the owner asked the Mac something (macChanged). Until TikTok approves the app the Mac is the only way to TikTok
 // (ADR-86); the words are in lib/tiktokMac.ts.
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -18,6 +18,7 @@ import { useLiveEvents } from "../../lib/live.ts";
 import { useAction } from "../../lib/motion.ts";
 import {
   canSendToMac,
+  clipLabel,
   helperLine,
   holdLine,
   loginBackLine,
@@ -36,6 +37,7 @@ import {
   macHelperBeats,
   macOn,
   sendableLine,
+  sendLabelLines,
   sendLots,
   sentLine,
   whenLine,
@@ -107,23 +109,37 @@ export function useTikTokMac(active: boolean): TikTokMacData {
   return { status: active ? status : null, error, reload };
 }
 
-/** The clips Send these to my Mac takes (canSendToMac: kept, not on TikTok yet, never a campaign clip), oldest first. */
-async function sendable(): Promise<string[]> {
+/**
+ * The clips Send these to my Mac takes (canSendToMac: kept, not on TikTok yet), oldest first, each with the label the
+ * Mac posts it with (a campaign clip's Paid partnership, or the one ticked on Review: clipLabel).
+ */
+async function sendable(): Promise<{ clipId: string; label: string | null }[]> {
   const [clips, posts] = await Promise.all([api().listClips({ status: "all" }), api().listPosts()]);
   const by = new Map<string, Post[]>();
   for (const p of posts) by.set(p.clipId, [...(by.get(p.clipId) ?? []), p]);
   return clips
     .filter((c) => canSendToMac(c, by.get(c.clipId) ?? []))
     .sort((a: Clip, b: Clip) => (a.decidedAt ?? a.createdAt).localeCompare(b.decidedAt ?? b.createdAt))
-    .map((c) => c.clipId);
+    .map((c) => ({ clipId: c.clipId, label: clipLabel(c) }));
 }
 
 /**
  * Send these to my Mac (§47.2): one tap shows the confirm line, Yes sends them (25 at a time, without `now`, so they
  * wait as the backlog), Not now closes it. `clipIds`: the clips to send (oldest first). `waits`: the Mac never checked
- * in, so the confirm line and the toast say they wait for it (MAC_SENT_WAITS).
+ * in, so the confirm line and the toast say they wait for it (MAC_SENT_WAITS). `labels`: each clip's label (clipLabel),
+ * so the confirm line says which go with TikTok's label. A clip the server refuses (a closed campaign) says why.
  */
-export function SendToMac({ clipIds, onSent, waits = false }: { clipIds: readonly string[]; onSent: () => void; waits?: boolean }) {
+export function SendToMac({
+  clipIds,
+  onSent,
+  waits = false,
+  labels = [],
+}: {
+  clipIds: readonly string[];
+  onSent: () => void;
+  waits?: boolean;
+  labels?: readonly (string | null)[];
+}) {
   const toast = useToast();
   const [asking, setAsking] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -158,6 +174,11 @@ export function SendToMac({ clipIds, onSent, waits = false }: { clipIds: readonl
   return asking ? (
     <div className="mac-send" role="group" aria-label="Send these to my Mac">
       <p className="mac-send__confirm">{MAC_SEND_CONFIRM}</p>
+      {sendLabelLines(labels).map((line) => (
+        <p className="mac-send__confirm" key={line} data-mac="label">
+          {line}
+        </p>
+      ))}
       {waits ? <p className="mac-send__confirm">{MAC_SENT_WAITS}</p> : null}
       <div className="mac-send__buttons">
         <Button variant="primary" icon="monitor" act={act} loading={busy} onClick={() => void send()}>
@@ -357,7 +378,7 @@ export function TikTokMacBranch() {
       live = false;
     };
   }, [on, autoOn, status]);
-  const [ids, setIds] = useState<string[] | null>(null);
+  const [ids, setIds] = useState<{ clipId: string; label: string | null }[] | null>(null);
   const readSendable = useCallback(() => {
     sendable()
       .then(setIds)
@@ -441,7 +462,8 @@ export function TikTokMacBranch() {
               <div className="autopost__where">
                 <p className="autopost__line">{sendableLine(ids.length, waiting)}</p>
                 <SendToMac
-                  clipIds={ids}
+                  clipIds={ids.map((c) => c.clipId)}
+                  labels={ids.map((c) => c.label)}
                   waits={!!status && !status.helper}
                   onSent={() => {
                     readSendable();

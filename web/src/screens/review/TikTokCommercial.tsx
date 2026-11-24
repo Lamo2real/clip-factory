@@ -1,23 +1,18 @@
 // TikTok's Commercial content choices and its "By posting, you agree" line (TikTok's Content Sharing Guidelines,
 // CONTRACTS §17.8), the same in the TikTok row on the Review card and on the Post to TikTok sheet. Branded content
 // (a paid partnership) can only be seen by Everyone or Friends: while Only me or Followers is picked it is greyed.
+// While the owner's Mac posts TikTok it adds the same label in TikTok Studio (§47.9), so the words are the same.
 import { useId } from "react";
 import { brandedBlocked, tiktokLabel } from "../../lib/tiktokChoices.ts";
 
 export function TikTokCommercial({
   privacy,
-  hint = true,
   yourBrand,
   branded,
   onYourBrand,
   onBranded,
 }: {
   privacy: string;
-  /**
-   * The line under the choices ("Your video will be labeled as …", or "Pick Your brand, Branded content, or both.").
-   * Off while the owner's Mac posts TikTok (§47.9): nothing would add the label, and the row's alert says what to do.
-   */
-  hint?: boolean;
   yourBrand: boolean;
   branded: boolean;
   onYourBrand: (on: boolean) => void;
@@ -45,7 +40,7 @@ export function TikTokCommercial({
         <span>Branded content</span>
         <span className="tt-sheet__tag">Paid partnership</span>
       </label>
-      {!hint ? null : label ? (
+      {label ? (
         <p className="field__hint">Your video will be labeled as &apos;{label}&apos;.</p>
       ) : (
         <p className="field__hint">Pick Your brand, Branded content, or both.</p>

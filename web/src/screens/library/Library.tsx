@@ -413,7 +413,6 @@ function LibraryCard({
   const look = (p: Post) => {
     if (!mine(p)) return p.status;
     const kind = tiktok!.kind;
-    if (kind === "campaign") return "none";
     if (kind === "stopped") return tiktok!.button === "on_tiktok" ? "none" : "failed";
     if ((kind === "posted" || kind === "posted_you") && p.privacy !== "private") return "posted";
     return p.status === "failed" || p.status === "posted" ? "none" : p.status;
