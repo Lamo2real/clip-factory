@@ -1,0 +1,49 @@
+/* Rolling numbers (components/Roll.tsx): a digit that changed slides up or down to its new value, slow in, slow out.
+   Every digit is the same width, so nothing beside the number moves. Reduced motion never gets here: Roll swaps the
+   text with no roll. */
+.roll {
+  --roll-dur: 750ms;
+  font-variant-numeric: tabular-nums lining-nums;
+}
+.roll__row {
+  white-space: nowrap;
+}
+/* The window: one line high, showing one digit of the strip behind it. */
+.roll__col {
+  display: inline-block;
+  height: 1lh;
+  overflow: hidden;
+  vertical-align: top;
+}
+.roll__strip {
+  display: block;
+  animation: var(--roll-dur) var(--ease-in-out) both;
+  will-change: transform;
+}
+.roll__strip > span {
+  display: block;
+  height: 1lh;
+  text-align: center;
+}
+[data-roll="up"] .roll__strip {
+  animation-name: roll-up;
+}
+[data-roll="down"] .roll__strip {
+  animation-name: roll-down;
+}
+@keyframes roll-up {
+  from {
+    transform: translateY(0);
+  }
+  to {
+    transform: translateY(var(--roll-end));
+  }
+}
+@keyframes roll-down {
+  from {
+    transform: translateY(var(--roll-end));
+  }
+  to {
+    transform: translateY(0);
+  }
+}

@@ -960,8 +960,11 @@ when a new skill is saved.
   - A skill is added (written or uploaded): success sound, confetti, the toast "Your skill is ready. Clip Factory will
     use it every time.", and the new row pops in with a small bounce on the way back.
   - An update is installed: the Reload progress bar ([the reload curve](#the-reload-curve)) ends in a small sparkle.
+- **Numbers roll.** A number that changes while it is on screen rolls like an odometer: digits slide up when it
+  grew and down when it shrank, 750 ms, `--ease-in-out`, never on first load, no sound
+  ([CONTRACTS §49](CONTRACTS.md#49-numbers-roll-when-they-change-owner-request-2026-11-24)).
 - Reduced motion (system `prefers-reduced-motion` or `reduceMotion` in Settings): no confetti, no drifting backdrop,
-  fades only (action motions too, see below).
+  fades only (action motions too, see below), and numbers swap with no roll.
 
 ### Action motion (every action button acts out what it does)
 

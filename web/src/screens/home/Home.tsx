@@ -3,6 +3,7 @@ import { api } from "../../api/index.ts";
 import type { Clip, Job, Platform } from "../../api/types.ts";
 import { useSessionIfAny } from "../../app/session.tsx";
 import { Icon } from "../../components/Icon.tsx";
+import { Roll } from "../../components/Roll.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { A, Button, ErrorPanel, LinkButton, Progress, Skeleton, Swash } from "../../components/ui.tsx";
 import { count, MOMENT_LABEL, plural, timecode } from "../../lib/format.ts";
@@ -276,7 +277,9 @@ function ClipTeaser({ clip }: { clip: Clip }) {
 function Stat({ views, posts, unavailable }: { views: number | null; posts: number; unavailable: boolean }) {
   return (
     <div className="stat glass">
-      <span className="stat__value">{views === null ? "–" : count(views)}</span>
+      <span className="stat__value">
+        <Roll n={views} text={views === null ? "–" : count(views)} />
+      </span>
       <span className="stat__dots" aria-hidden="true">
         {Array.from({ length: 5 }, (_, i) => (
           <span key={i} />

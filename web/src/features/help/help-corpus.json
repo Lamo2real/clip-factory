@@ -1,5 +1,5 @@
 {
-  "version": "a298be36b2df",
+  "version": "b112b0fd90bd",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -11,6 +11,7 @@
     "src/components/MoneyCard.tsx",
     "src/components/Nav.tsx",
     "src/components/PerfLines.tsx",
+    "src/components/Roll.tsx",
     "src/components/Sheet.tsx",
     "src/components/SimilarClips.tsx",
     "src/features/help/helpKb.json",

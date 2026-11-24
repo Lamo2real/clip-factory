@@ -13,6 +13,7 @@ import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type 
 import { api, friendlyMessage } from "../../api/index.ts";
 import type { MoneyChange, MoneyCurrencySummary, MoneyExcluded, MoneySummary, MoneyView, Platform } from "../../api/types.ts";
 import { Icon } from "../../components/Icon.tsx";
+import { Roll } from "../../components/Roll.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { A, ErrorPanel, LinkButton, Pill, Segmented, Skeleton } from "../../components/ui.tsx";
 import { PLATFORM_LABEL } from "../../lib/format.ts";
@@ -137,7 +138,8 @@ function Amount({ micros, currency, count = false }: { micros: number; currency:
   const shown = useCountUp(micros, count);
   return (
     <span className="dash-num" data-final={formatMoney(micros, currency)}>
-      {formatMoney(shown, currency)}
+      {/* The counted-up number keeps its own count-up; every other amount rolls when it changes. */}
+      {count ? formatMoney(shown, currency) : <Roll n={micros} text={formatMoney(micros, currency)} />}
     </span>
   );
 }

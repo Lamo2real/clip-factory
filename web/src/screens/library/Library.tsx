@@ -3,6 +3,7 @@ import { api } from "../../api/index.ts";
 import { CrPostLines } from "../../components/CrPostLine.tsx";
 import { useCr, useSubmissions } from "../../lib/contentRewards.ts";
 import { Glide } from "../../components/Glide.tsx";
+import { Roll } from "../../components/Roll.tsx";
 import { friendlyMessage } from "../../api/errors.ts";
 import type { Clip, Learning, Platform, Post, TikTokPostOptions, CrSubmission } from "../../api/types.ts";
 import { Icon } from "../../components/Icon.tsx";
@@ -227,7 +228,9 @@ function AllClips() {
               ) : (
                 <>
                   <div className="stat glass">
-                    <span className="stat__value">{count(totals.views)}</span>
+                    <span className="stat__value">
+                      <Roll n={totals.views} text={count(totals.views)} />
+                    </span>
                     <span className="stat__dots" aria-hidden="true">
                       {Array.from({ length: 5 }, (_, i) => (
                         <span key={i} />
@@ -238,12 +241,16 @@ function AllClips() {
                   <div className="mini-stats">
                     <div className="mini-stat glass">
                       <Icon name="heart" size={18} />
-                      <span className="mini-stat__value">{count(totals.likes)}</span>
+                      <span className="mini-stat__value">
+                        <Roll n={totals.likes} text={count(totals.likes)} />
+                      </span>
                       <span className="mini-stat__label">likes</span>
                     </div>
                     <div className="mini-stat glass">
                       <Icon name="share" size={18} />
-                      <span className="mini-stat__value">{count(totals.shares)}</span>
+                      <span className="mini-stat__value">
+                        <Roll n={totals.shares} text={count(totals.shares)} />
+                      </span>
                       <span className="mini-stat__label">shares</span>
                     </div>
                   </div>
@@ -447,15 +454,15 @@ function LibraryCard({
           </span>
           <span aria-hidden="true">
             <Icon name="eye" size={15} />
-            {compact(p.metrics.views)}
+            <Roll n={p.metrics.views} text={compact(p.metrics.views)} />
           </span>
           <span aria-hidden="true">
             <Icon name="heart" size={15} />
-            {compact(p.metrics.likes)}
+            <Roll n={p.metrics.likes} text={compact(p.metrics.likes)} />
           </span>
           <span aria-hidden="true">
             <Icon name="comment" size={15} />
-            {compact(p.metrics.comments)}
+            <Roll n={p.metrics.comments} text={compact(p.metrics.comments)} />
           </span>
         </span>
       ) : null}
