@@ -347,7 +347,7 @@ class BedrockWriter(_Base):
         if brief.get("restage"):
             task = "animation_plan"
         prompt = (
-            writer.system_for(brief.get("art"))
+            writer.system_for(brief.get("art"), (brief.get("request") or {}).get("cast"))  # + the cast's rules
             + "\n\n"
             + writer.instructions(mode, note=brief.get("note"), scene_ids=brief.get("sceneIds"))
         )
@@ -380,7 +380,7 @@ class BedrockWriter(_Base):
             mode=mode,
         )
         prompt = (
-            writer.system_for(art)
+            writer.system_for(art, request.get("cast"))  # + the cast's rules (§45.47)
             + "\n\n"
             + own_script.RULES
             + "\n\n"

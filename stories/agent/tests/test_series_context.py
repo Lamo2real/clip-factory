@@ -299,6 +299,7 @@ def test_the_cast_brief_says_who_is_main_and_describes_the_car_in_words() -> Non
         "faces": ["neutral"],
         "favouriteEffects": ["engine", "honk"],
         "car": "a small red hatchback with alloy wheels and round lights",
+        "vehicle": "car",
         "seats": 2,
         "propOnly": True,
     }
