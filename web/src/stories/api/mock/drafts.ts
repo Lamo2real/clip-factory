@@ -17,8 +17,8 @@ const NAME_MAX = 60;
 
 export const FULL = "You have 50 drafts. Delete one first.";
 export const GONE = "That draft is gone.";
-export const CHANGED = "Someone changed this draft meanwhile. Open it again.";
-export const TOO_BIG = "This draft is too big. Make it shorter.";
+export const CHANGED = "This draft changed on another screen. Open it again.";
+export const TOO_BIG = "This draft is too big to save. Make the script shorter.";
 const UNREADABLE = "We could not read that draft.";
 
 const FORM_KEYS = new Set<keyof VideoDraftForm>([

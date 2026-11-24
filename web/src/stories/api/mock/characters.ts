@@ -656,7 +656,14 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       if (!TYPES.includes(file.contentType)) fail(400, "bad_request", "Pick a PNG, JPG or WebP picture.");
       if (file.size > MAX_BYTES) fail(413, "too_large", "That picture is too big. Pick one under 10 MB.");
       if (c.references.length >= 8) fail(409, "conflict", "A character can have up to 8 pictures. Remove one first.");
-      if (file.side !== undefined && file.side !== "outside" && file.side !== "inside") fail(400, "bad_request", "Pick outside or inside.");
+      // The API's words and caps (routes/core.py SIDE_LIMITS): a vehicle keeps at most 6 outside and 4 inside.
+      if (file.side !== undefined && file.side !== "outside" && file.side !== "inside") fail(400, "bad_request", "side must be outside or inside.");
+      if (file.side === "inside" && (c.kind ?? "person") !== "car") fail(400, "bad_request", "Inside photos are for a vehicle only.");
+      if ((c.kind ?? "person") === "car") {
+        const wanted = file.side ?? "outside";
+        const has = c.references.filter((r) => (r.side ?? "outside") === wanted).length + [...uploads.values()].filter((u) => u.characterId === id && (u.side ?? "outside") === wanted).length;
+        if (has >= (wanted === "inside" ? 4 : 6)) fail(409, "conflict", wanted === "inside" ? "Pick up to 4 inside photos." : "Pick up to 6 photos.");
+      }
       await delay(120);
       const assetId = mockId();
       uploads.set(assetId, { characterId: id, contentType: file.contentType, filename: file.filename, size: file.size, ...(file.side === "inside" ? { side: "inside" } : {}) });
@@ -733,10 +740,12 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       if (refs.length > 8) fail(400, "bad_request", "Pick up to 8 photos.");
       const sides: PhotoSide[] | null = body.referenceSides ?? null;
       if (sides) {
-        if (sides.length !== (body.referenceAssetIds ?? []).length || sides.some((x) => x !== "outside" && x !== "inside")) fail(400, "bad_request", "Say outside or inside for each photo.");
-        if (sides.filter((x) => x === "outside").length > 6 || sides.filter((x) => x === "inside").length > 4) fail(400, "bad_request", "Pick up to 6 outside and 4 inside photos.");
+        // The API's words (design.py): NOT_SIDES, TOO_MANY_OUTSIDE, TOO_MANY_INSIDE.
+        if (sides.length !== (body.referenceAssetIds ?? []).length || sides.some((x) => x !== "outside" && x !== "inside")) fail(400, "bad_request", "referenceSides must be outside or inside, one for each photo.");
+        if (sides.filter((x) => x === "outside").length > 6) fail(400, "bad_request", "Pick up to 6 photos.");
+        if (sides.filter((x) => x === "inside").length > 4) fail(400, "bad_request", "Pick up to 4 inside photos.");
       }
-      if (body.vehicle !== undefined && !(Object.values(VEHICLE_OF) as string[]).includes(body.vehicle)) fail(400, "bad_request", "Pick a person or a vehicle.");
+      if (body.vehicle !== undefined && !(Object.values(VEHICLE_OF) as string[]).includes(body.vehicle)) fail(400, "bad_request", "Pick a car, truck, bus, motorbike, plane or boat.");
       if (body.count !== undefined && (!Number.isInteger(body.count) || body.count < 1 || body.count > 4)) fail(400, "bad_request", "count must be 1 to 4.");
       if (body.kind !== undefined && body.kind !== "person" && body.kind !== "car") fail(400, "bad_request", "Pick a person or a vehicle.");
       if ((body.avoid ?? []).length > 8) fail(400, "bad_request", "Send up to 8 cars to stay away from.");
@@ -745,6 +754,8 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       const saved = current ? (current.kind ?? "person") : null;
       if (saved && body.kind && body.kind !== saved) fail(400, "bad_request", `Keep the same kind: this character is ${saved === "car" ? "a car" : "a person"}.`);
       const kind = body.kind ?? saved ?? "person";
+      if (kind !== "car" && (sides ?? []).includes("inside")) fail(400, "bad_request", "Inside photos are for a vehicle only.");
+      if (kind !== "car" && body.vehicle !== undefined) fail(400, "bad_request", "vehicle is for a vehicle's design only.");
       if (!words && !refs.length) fail(400, "bad_request", kind === "car" ? "Add a photo of your car, or say what it is like." : "Say what your character is like, or add a picture.");
       for (const ref of refs) {
         const design = designsOf(store).get(ref);

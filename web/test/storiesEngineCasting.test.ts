@@ -360,7 +360,7 @@ describe("a car character's check (§45.42)", () => {
     expect(sentence({ ...car(), car: { ...DEFAULT_CAR, paint: "red" } })).toMatch(/car\.paint must be a colour/);
     expect(sentence({ ...car(), car: undefined })).toMatch(/car is missing/);
     expect(sentence({ ...car(), voice: { style: "none", pitch: 1, noises: [], sfx: Array.from({ length: 9 }, () => "honk") } })).toMatch(/voice\.sfx must be up to 8 known effects/);
-    expect(sentence({ ...car(), kind: "boat" })).toBe("character Rosso: Pick a person or a car.");
+    expect(sentence({ ...car(), kind: "boat" })).toBe("character Rosso: Pick a person or a vehicle.");
   });
 
   it("a person is checked as before (with or without kind)", () => {

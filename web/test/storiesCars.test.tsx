@@ -670,10 +670,15 @@ describe("the car's words and checks", () => {
     expect((await refused(api.createCharacter("stories", { ...car, expressions: ["neutral", "happy", "sad"] }))).message).toBe("A car with no face keeps only the neutral face.");
     expect((await refused(api.designCharacter("stories", { kind: "car" }))).message).toBe("Add a photo of your car, or say what it is like.");
     expect((await refused(api.designCharacter("stories", { kind: "car", referenceAssetIds: ["a", "b", "c", "d", "e", "f", "g", "h", "i"] }))).message).toBe("Pick up to 8 photos.");
-    expect((await refused(api.designCharacter("stories", { kind: "car", referenceAssetIds: ["a", "b"], referenceSides: ["outside"] }))).message).toBe("Say outside or inside for each photo.");
+    expect((await refused(api.designCharacter("stories", { kind: "car", referenceAssetIds: ["a", "b"], referenceSides: ["outside"] }))).message).toBe("referenceSides must be outside or inside, one for each photo.");
     expect(
       (await refused(api.designCharacter("stories", { kind: "car", referenceAssetIds: ["a", "b", "c", "d", "e"], referenceSides: ["inside", "inside", "inside", "inside", "inside"] }))).message,
-    ).toBe("Pick up to 6 outside and 4 inside photos.");
+    ).toBe("Pick up to 4 inside photos.");
+    expect(
+      (await refused(api.designCharacter("stories", { kind: "car", referenceAssetIds: ["a", "b", "c", "d", "e", "f", "g"], referenceSides: ["outside", "outside", "outside", "outside", "outside", "outside", "outside"] }))).message,
+    ).toBe("Pick up to 6 photos.");
+    expect((await refused(api.designCharacter("stories", { kind: "car", vehicle: "rocket" } as never))).message).toBe("Pick a car, truck, bus, motorbike, plane or boat.");
+    expect((await refused(api.designCharacter("stories", { kind: "person", description: "x", referenceAssetIds: ["a"], referenceSides: ["inside"] }))).message).toBe("Inside photos are for a vehicle only.");
     expect((await refused(api.createCharacter("stories", { ...car, kind: "boat" } as never))).message).toBe("Pick a person or a vehicle.");
     expect((await refused(api.designCharacter("stories", { kind: "person", characterId: characters.SEED_CAR_ID, description: "x" }))).message).toBe("Keep the same kind: this character is a car.");
     expect((await refused(api.designCharacter("stories", { description: "x", count: 5 }))).message).toBe("count must be 1 to 4.");

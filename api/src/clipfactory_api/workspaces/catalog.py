@@ -71,10 +71,10 @@ SETS: Final = (
     "living_room",
     "office",
     "park",
-    "highway_night",
-    # §45.47: where a plane or a boat goes (no road lanes)
+    # §45.47: where a plane or a boat goes (no road lanes); before highway_night, as in catalog.ts
     "sky",
     "sea",
+    "highway_night",
 )
 
 # CharacterLook (engine/types.ts): the rig's choices.

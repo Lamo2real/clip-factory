@@ -268,7 +268,7 @@ function rolesRule(chars: Character[], roles: CastRoles | undefined): string | n
   return null;
 }
 
-const VILLAIN_GONE = "Pick the villain from the people in it.";
+const VILLAIN_GONE = "Pick the villain from the people in this video."; // the API's VILLAIN_NOT_CAST
 
 const TROUBLE: Record<string, { set: SetId; prop?: PropKind; carDo: PropAction; sfx: SfxId; face: Expression; top?: boolean }> = {
   "skid-recovery": { set: "icy_road", prop: "ice_patch", carDo: "skid", sfx: "skid", face: "shocked", top: true },
@@ -1370,7 +1370,8 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       const cfg = wsConfig(store, ws);
       const ids = body.characterIds ?? [];
       // 1 to 4: at most 3 people and 2 vehicles, and a vehicle needs a person (§45.47)
-      if (ids.length < 1 || ids.length > 4) fail(400, "bad_request", "Pick 1 to 4 characters.");
+      if (ids.length < 1) fail(400, "bad_request", "Pick 1 to 4 characters.");
+      if (ids.length > 4) fail(400, "bad_request", "Pick at most 4 characters."); // the API's words (stories.cast_ids)
       const chars = ids.map((id) => store.characters.find((c) => c.characterId === id && c.workspaceId === ws));
       if (chars.some((c) => !c)) fail(404, "not_found", "We could not find one of those characters.");
       const castWrong = castRule(chars as Character[]);
