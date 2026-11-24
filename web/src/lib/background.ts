@@ -923,6 +923,61 @@ export function resolveLook(i: LookInput): Look {
   }
 }
 
+// ---------- The phone's status bar (index.html black-translucent, layout.css .app::after) ----------
+
+/**
+ * The blobs of the living backdrop that reach its top edge (glass.css): a (the deep teal, top left) and d (the breath
+ * of bone, high in the middle). b starts 18vh down, c and e at the bottom, and they only drift down from there.
+ */
+const TOP_EDGE_BLOBS: readonly string[] = ["a", "d"];
+
+/**
+ * The lightest thing an installed phone app shows under its status bar in this look, where iOS draws the clock and
+ * icons white (black-translucent): the backdrop's top edge under the look's page veil. The living backdrop: every
+ * subset of the blobs at its top edge over both field ends, with its lens glow, caustics and grain at their peak (its
+ * Frosted frost only darkens it). Colours: the first colour, which is the whole top edge (the field starts with it and
+ * blob a is drawn in it; the second and third colours lie lower). A picture: planned for white. The desktop window has
+ * no status bar (its title bar is --titlebar-h): black.
+ */
+export function statusBarUnder(look: Look): Rgb {
+  switch (look.kind) {
+    case "window":
+      return BLACK;
+    case "picture":
+      return mix(VEIL, WHITE, look.pageVeil);
+    case "colours":
+      return mix(VEIL, hexToRgb(normaliseColours(look.colours)[0] ?? DEFAULT_COLOURS[0]!), look.pageVeil);
+    case "frosted":
+    case "brand": {
+      const blobs = BRAND_MESH.blobs.filter((b) => TOP_EDGE_BLOBS.includes(b.name));
+      const spots: Rgb[] = [];
+      for (const field of BRAND_MESH.field) for (let m = 0; m < 1 << blobs.length; m++) spots.push(brandSpot(field, blobs.filter((_, i) => m & (1 << i))));
+      return lightest(spots);
+    }
+  }
+}
+
+/**
+ * The status bar's scrim: the least black (0.01 steps) that keeps its white clock and icons at AA over `under`. 0 over
+ * the dark looks, so nothing is drawn there and the backdrop shows under the clock as it is.
+ */
+export function statusScrim(under: Rgb): number {
+  for (let a = 0; a < 100; a++) if (contrast(WHITE, mix(BLACK, under, a / 100)) >= AA) return a / 100;
+  return 1;
+}
+
+/**
+ * The status bar's glass strip once the page has scrolled (layout.css .app::before, tokens.css `--status-strip-veil`):
+ * the least green (0.01 steps) that keeps the white clock and icons at AA over white, the lightest thing a page can
+ * slide under the clock, one 8-bit rounding step lighter to spare. It counts on no dimming: the strip's filter only
+ * blurs and saturates (saturate() keeps white white), so it holds over every card and button in every look, and
+ * where a browser draws no backdrop-filter at all (WebKit's test build paints none, e2e/phone-edge-to-edge.spec.ts).
+ */
+export function statusStripVeil(): number {
+  for (let a = 0; a < 100; a++) if (contrast(WHITE, mix(VEIL, WHITE, a / 100).map((c) => Math.min(255, c + 1)) as unknown as Rgb) >= AA) return a / 100;
+  return 1;
+}
+
 // ---------- The logic of light: what words sit on at each level (ADR-87) ----------
 
 /** `veil` of bottle green (at most solid) over `under`, then `lift` of bone over that: how every lit surface composites. */

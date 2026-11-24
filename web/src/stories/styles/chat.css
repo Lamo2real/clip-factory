@@ -2179,11 +2179,12 @@
   /* The list stays in view; a long one scrolls inside the card's own rounded shape (the light edge stays put). */
   .st-chat-side {
     position: sticky;
-    top: 12px;
+    /* Below an installed iPad app's status bar, which the page runs under (--top-safe). */
+    top: calc(var(--top-safe, 0px) + 12px);
   }
 
   .st-chat-side > .st-chat-list {
-    max-height: calc(100vh - 36px);
+    max-height: calc(100vh - 36px - var(--top-safe, 0px));
     margin: calc(-1 * var(--st-gap-surface));
     padding: var(--st-gap-surface);
     overflow-y: auto;

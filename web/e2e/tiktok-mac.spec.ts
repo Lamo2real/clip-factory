@@ -435,7 +435,8 @@ test("library: inside the Mac's 30-minute find window after Post there is no Try
   await pressedAndStopped(page, clipId, 10 * MIN);
   await expect(status).toHaveText(PRESSED_WAIT);
   // From 30 minutes after Post (20 from now, give or take the minute it is).
-  const said = (await status.innerText()).slice(-5);
+  // All the words after "from": past midnight they carry the day in front ("Tue 00:02"), as rowTime does.
+  const said = (await status.innerText()).replace(/^.* Try again from /, "");
   expect([rowTime(Date.now() + 20 * MIN), rowTime(Date.now() + 19 * MIN), rowTime(Date.now() + 21 * MIN)]).toContain(said);
   await expect(row.getByRole("button")).toHaveCount(1);
   await expect(row.getByRole("button", { name: "It's on TikTok", exact: true })).toBeVisible();

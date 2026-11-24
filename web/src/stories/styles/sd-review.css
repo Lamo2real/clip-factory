@@ -12,7 +12,8 @@
 
   .st-s-review__player {
     position: sticky;
-    top: 16px;
+    /* Below an installed iPad app's status bar, which the page runs under (--top-safe). */
+    top: calc(var(--top-safe, 0px) + 16px);
   }
 }
 

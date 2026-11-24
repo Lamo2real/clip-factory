@@ -954,6 +954,8 @@
   align-items: end;
   justify-items: center;
   padding: 12px;
+  /* A tall sheet scrolled to its top stops below the phone's status bar (the page runs under it). */
+  padding-top: calc(var(--top-safe) + 12px);
   background: rgb(var(--green-deep-rgb) / 0.5);
   overflow-y: auto;
   overscroll-behavior: contain;

@@ -9,6 +9,8 @@
   align-items: end;
   justify-items: center;
   padding: 12px;
+  /* Below the phone's status bar (the stage runs under it): a tall sheet's head never lies under the clock. */
+  padding-top: calc(var(--top-safe, 0px) + 12px);
   background: rgb(var(--st-shadow-rgb) / 0.62);
   animation: st-s-fade var(--st-dur-hover) var(--st-ease-out);
 }
@@ -29,7 +31,7 @@
   display: grid;
   grid-template-rows: auto 1fr auto;
   width: min(100%, 560px);
-  max-height: min(92vh, 900px);
+  max-height: min(92vh, 900px, calc(100dvh - var(--top-safe, 0px) - 24px));
   overflow: hidden;
   border-radius: var(--st-r-surface);
   color: var(--st-text);

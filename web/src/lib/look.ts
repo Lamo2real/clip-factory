@@ -1,7 +1,7 @@
 // Puts the background choice (§22) on the page: which backdrop to draw, and the <html> class and veil strength the
 // CSS reads. Runs once before the first paint (main.tsx) and again whenever the choice or the system scheme changes.
 import { useSyncExternalStore } from "react";
-import { cantSelfUpdate, glassOf, isOldDesktopApp, lightPay, readDesktopVersion, readNativeGlass, resolveLook, type Look, type NativeGlass, type Scheme } from "./background.ts";
+import { cantSelfUpdate, glassOf, isOldDesktopApp, lightPay, readDesktopVersion, readNativeGlass, resolveLook, statusBarUnder, statusScrim, type Look, type NativeGlass, type Scheme } from "./background.ts";
 import { getPrefs, usePrefs, type Prefs } from "./prefs.ts";
 import { setPageGlass } from "../app/shell.ts";
 
@@ -99,6 +99,8 @@ export function applyLook(look: Look, root: HTMLElement = document.documentEleme
   root.style.setProperty("--plate-veil", String(glass.plateVeil));
   root.style.setProperty("--glass-brightness", String(glass.brightness));
   root.style.setProperty("--light-pay", String(lightPay({ ...look, ...glass })));
+  // The phone's status bar runs over the backdrop: its scrim, only as strong as the white clock needs (layout.css).
+  root.style.setProperty("--status-scrim", String(statusScrim(statusBarUnder(look))));
 }
 
 /**
