@@ -58,3 +58,16 @@
   event ("the snow falls") is never a cast member's. The web puts the cast's one car in every scene whose words say
   car or drive, carries Who (and Where, for a scene that names nobody) from the scene before, asks fewer silly
   questions, and an owner's script of another kind gets a checked topic only when its words are about driving.
+- **Round 1 of the re-review (2026-11-24, PR #201).** 80 more attacks (77 got through) showed the code reader owed
+  events the words only mention ("afraid of falling", "If Lamo falls", 'shouts "Jump!"', "Lamo's ice cream falls"),
+  so the retry was told to draw them and the faithful staging was lost with no note; that a character's own he or she
+  could be unlearnt by the words; and that a hug's feeling went to the one hugged. Options: (a) keep owing every event
+  word and let the note explain (the retry still changes the story); (b) owe only what the words say happens, and let
+  a mention be drawn or not. Chosen: (b) (§45.46.11): an event after a fear, a wish, an "if", a future, a warning, "to"
+  or in quotes may be drawn and is never owed; who does what is the names right before the event (each of "Lamo and
+  Rosa"), an owner's thing is not its owner, a car's event is its owner's car; a description's he or she always wins;
+  counts are exact and an event said again is owed again; a car's stop, getting in and out of a car and a cast car's
+  tricks are events too. The web never puts an answer ("seen", "out") in the cast, makes a friend's character in place
+  ("Make Zara", the usual look: the draft is never lost to a page change), lets one who joined by themselves leave
+  again, and carries Where with the same people. Still open, on purpose: genders the descriptions do not give leave a
+  pronoun open (either may be drawn, the note says who); "alone" with an open pronoun keeps everyone wanted.

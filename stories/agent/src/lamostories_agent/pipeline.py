@@ -2002,8 +2002,9 @@ class StoryJob(Job):
         for p in problems:
             kind, _, rest = p["ref"].partition(":")
             sid = rest.split(":")[0]
-            if kind == "beat" and own_script.owners_beat(script, sid, rest.split(":")[-1], whats.get(sid, "")):
-                continue  # the owner's own event, as drawn ("very fast": its speed_up): reported, never set up again
+            if kind == "beat" and own_script.owners_beat(script, sid, rest.split(":")[-1], whats.get(sid, ""),
+                                                         str(p.get("problem") or "")):  # fmt: skip
+                continue  # the owner's own event, as drawn ("very fast": its speed_up; his phone): reported only
             if kind in ("beat", "scene") and sid and sid not in mine:
                 drawn.setdefault(sid, []).append(f"{p['ref']}: {p['problem']}")
         ids = [o["sceneId"] for o in own if o["sceneId"] in drawn]

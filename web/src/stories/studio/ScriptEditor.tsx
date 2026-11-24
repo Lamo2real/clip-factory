@@ -122,6 +122,12 @@ export interface ScriptEditorProps {
   onAddToCast?: (characterId: string) => void;
   /** why that character can't join the cast now, or null */
   addWhy?: (characterId: string) => string | null;
+  /** makes a new character with a name the words use ("Make Zara"), who then joins the cast; left out: no such answer */
+  onMake?: (name: string) => Promise<void>;
+  /** why a new character can't join the cast now (the cast is full), or null */
+  makeWhy?: () => string | null;
+  /** the reason a scene must change (Fix the words), shown inside that scene (0-based) so it stays next to it */
+  why?: { scene: number; lines: string[] } | null;
   /** the video's length, for the preview's "about 5 s" */
   lengthSec: number;
   /** the fields' id prefix (the page and a sheet each have their own) */
@@ -130,7 +136,7 @@ export interface ScriptEditorProps {
   note?: string | null;
 }
 
-export function ScriptEditor({ draft, update, characters, cast, onAddToCast, addWhy, lengthSec, prefix = "st-sc", note }: ScriptEditorProps) {
+export function ScriptEditor({ draft, update, characters, cast, onAddToCast, addWhy, onMake, makeWhy, why, lengthSec, prefix = "st-sc", note }: ScriptEditorProps) {
   const toast = useToast();
   const [pasting, setPasting] = useState(false);
   const [pasted, setPasted] = useState("");
@@ -192,8 +198,10 @@ export function ScriptEditor({ draft, update, characters, cast, onAddToCast, add
 
   function answer(ask: Ask, to: string) {
     const low = ask.name.toLowerCase();
+    // a name in two words ("Peppa Pig") is answered for each of its words too (the words are read one by one)
+    const each = Object.fromEntries([low, ...low.split(/\s+/)].map((w) => [w, to]));
     update((d) => ({
-      answers: { ...d.answers, [low]: to },
+      answers: { ...d.answers, ...each },
       // picking someone ticks them in every scene that names the name (one picked by hand too); Not a name and Leave
       // out tick nobody
       scenes:
@@ -265,6 +273,16 @@ export function ScriptEditor({ draft, update, characters, cast, onAddToCast, add
                   </button>
                 </span>
               </div>
+              {why && why.scene === i && why.lines.length ? (
+                // Fix the words: the reason sits in its scene, beside the words to change (never scrolled away)
+                <Notice tone="bad">
+                  <ul className="st-s-list st-sc-why">
+                    {why.lines.map((w, k) => (
+                      <li key={k}>{w}</li>
+                    ))}
+                  </ul>
+                </Notice>
+              ) : null}
               <SceneField
                 id={`${prefix}-what-${s.key}`}
                 label="What happens"
@@ -311,12 +329,14 @@ export function ScriptEditor({ draft, update, characters, cast, onAddToCast, add
                   // a car's own name in words about a car ("drives his Ferrari"): the workspace's cars may be it
                   others={onAddToCast && saysCar(s.what) ? characters.filter((c) => isCar(c) && !cast.includes(c.characterId) && !addWhy?.(c.characterId)) : []}
                   onAnswer={(to) => {
-                    // someone not in the cast yet joins it first, then is the answer
-                    if (!cast.includes(to) && onAddToCast) onAddToCast(to);
+                    // someone not in the cast yet joins it first, then is the answer (Not a name and Leave out add nobody)
+                    if (onAddToCast && !cast.includes(to) && characters.some((c) => c.characterId === to)) onAddToCast(to);
                     answer(ask, to);
                   }}
                   onAdd={onAddToCast}
                   addWhy={addWhy}
+                  onMake={onMake}
+                  makeWhy={makeWhy}
                 />
               ))}
             </li>
@@ -397,8 +417,29 @@ export function ScriptEditor({ draft, update, characters, cast, onAddToCast, add
  * A question about a name in a scene: who it is ("It's Dash": one of the cast, or in words about a car one of the
  * workspace's cars, which then joins the cast; Not a name; or left out), or a character not in the cast.
  */
-function AskRow({ id, ask, cast, others = [], onAnswer, onAdd, addWhy }: { id?: string; ask: Ask; cast: Character[]; others?: Character[]; onAnswer: (to: string) => void; onAdd?: (characterId: string) => void; addWhy?: (characterId: string) => string | null }) {
-  const why = ask.kind === "outside" && onAdd ? (addWhy?.(ask.characterId) ?? null) : null;
+function AskRow({
+  id,
+  ask,
+  cast,
+  others = [],
+  onAnswer,
+  onAdd,
+  addWhy,
+  onMake,
+  makeWhy,
+}: {
+  id?: string;
+  ask: Ask;
+  cast: Character[];
+  others?: Character[];
+  onAnswer: (to: string) => void;
+  onAdd?: (characterId: string) => void;
+  addWhy?: (characterId: string) => string | null;
+  onMake?: (name: string) => Promise<void>;
+  makeWhy?: () => string | null;
+}) {
+  const [making, setMaking] = useState(false);
+  const why = ask.kind === "outside" && onAdd ? (addWhy?.(ask.characterId) ?? null) : ask.kind === "who" && onMake ? (makeWhy?.() ?? null) : null;
   const words = ask.kind === "who" ? `Who is ${ask.name}?` : `${ask.name} isn't in the cast.`;
   return (
     <div className="st-sc-ask" id={id} role="group" aria-label={words}>
@@ -415,6 +456,22 @@ function AskRow({ id, ask, cast, others = [], onAnswer, onAdd, addWhy }: { id?: 
                 Add {ask.name}
               </button>
             ) : null}
+        {ask.kind === "who" && onMake ? (
+          // a friend the app has no character for ("Who is Zara?"): made here, with the usual look, and in the cast
+          <button
+            type="button"
+            className="st-pill st-pill--small"
+            aria-disabled={!!why || making || undefined}
+            title={why ?? undefined}
+            onClick={() => {
+              if (why || making) return;
+              setMaking(true);
+              void onMake(ask.name).finally(() => setMaking(false));
+            }}
+          >
+            {making ? "Making…" : `Make ${ask.name}`}
+          </button>
+        ) : null}
         {ask.kind === "who" ? (
           // a word with a capital that is no one ("Breakfast"): nothing is left out, and nobody is asked for it again
           <button type="button" className="st-pill st-pill--small" onClick={() => onAnswer("seen")}>
@@ -584,8 +641,8 @@ export function ChangeScriptSheet({ ws, story, focus, why, onClose, onStarted }:
         </>
       }
     >
-      {why?.length ? (
-        // Fix the words: the reason stays in view while the owner changes the scene
+      {why?.length && !(focus && draft?.scenes[focus - 1]) ? (
+        // Fix the words with no scene to open at: the reason over the list (else it sits in its scene)
         <Notice tone="bad">
           <ul className="st-s-list st-sc-why">
             {why.map((w, i) => (
@@ -611,6 +668,7 @@ export function ChangeScriptSheet({ ws, story, focus, why, onClose, onStarted }:
           cast={cast}
           lengthSec={story.durationSec}
           prefix="st-scs"
+          why={why?.length && focus ? { scene: focus - 1, lines: why } : null}
           note="Clips Funded sets up your scenes again. Your words stay as you write them."
         />
       )}
