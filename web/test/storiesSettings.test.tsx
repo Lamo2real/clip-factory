@@ -707,6 +707,24 @@ describe("Video", () => {
     expect(called("patchWorkspace").at(-1)?.args[1]).toMatchObject({ configuration: { providers: { images: "builtin-rig", imageModel: null } } });
   });
 
+  it("picks the drawing style new videos start with: Night drive or Bright, each with a sample drawn in it (§45.45)", async () => {
+    await open("video");
+    const picks = () => $$("[role=radio]", group("Drawing style of new videos"));
+    expect(picks().map((p) => [p.querySelector(".st-stg-pick__label")?.textContent, p.getAttribute("aria-checked")])).toEqual([
+      ["Night drive", "true"],
+      ["Bright", "false"],
+    ]);
+    expect(picks()[0]!.textContent).toContain("Soft night colours, street lights and film-like close-ups.");
+    expect(picks()[1]!.textContent).toContain("The bright, sunny cartoon look of the first videos.");
+    expect(picks().every((p) => p.querySelector(".st-stg-pick__pic canvas[role=img]"))).toBe(true);
+    expect(card("Drawing style").textContent).toContain("New videos start with this drawing style. You can change it for one video in Production › New.");
+    await click(byText("[role=radio]", /^Bright/));
+    expect(called("patchWorkspace").at(-1)?.args[1]).toMatchObject({ configuration: { video: { art: "classic", aspect: "9:16", fps: 30 } } });
+    expect(picks()[1]!.getAttribute("aria-checked")).toBe("true");
+    await click(byText("[role=radio]", /^Night drive/));
+    expect(called("patchWorkspace").at(-1)?.args[1]).toMatchObject({ configuration: { video: { art: "night_drive" } } });
+  });
+
   it("takes the owner's price for the AI makers, kept in the AI settings as a price for one unit (§45.34)", async () => {
     await open("video");
     const makerPrices = () => $<HTMLElement>('[aria-label="Each maker\'s price"]')!;

@@ -476,6 +476,9 @@ export interface ActorState {
   extras: { confetti: number; notes: number; speed: number; dust: number };
   /** the active beats (for bubbles and car effects) */
   active: Beat[];
+  /** the scene time the face shown last changed (a beat's face, a face an action implies, getting up from lying), or
+   * -99 when it has not changed in this scene: night drive's brows overshoot a little just after it (§45.45 §9) */
+  faceSince: number;
 }
 
 export interface ActorInput {
@@ -648,5 +651,43 @@ export function actorState(actor: ActorInput, beats: Beat[], style: Style, g: Ge
       dust,
     },
     active,
+    faceSince: faceSince(beats, t, faces, exprShown),
   };
+}
+
+/** The face shown at time t, by the same rules as actorState: the last beat's face, a face the active beats imply
+ * (when the character has it), a dizzy face lying down. */
+export function shownExpression(beats: Beat[], t: number, faces: readonly Expression[] | null = null): Expression {
+  let expression: Expression = "neutral";
+  let implied: Expression | null = null;
+  for (const b of beats) {
+    if (b.at > t) break;
+    if (b.face) expression = b.face;
+    if (t >= b.at + b.dur) continue;
+    const id = b.do as ActionId;
+    if (!b.face && IMPLIED[id]) implied = IMPLIED[id]!;
+    if (id === "fall" && t - b.at > Math.min(0.6, b.dur * 0.6) && !b.face) implied = "dizzy";
+  }
+  if (!implied && restStateAt(beats, t) === "lie" && expression === "neutral") implied = "dizzy";
+  if (implied && faces && !faces.includes(implied)) implied = null;
+  return implied ?? expression;
+}
+
+/** When the face shown at t (`now`) began: the latest moment at or before t where the face before it was another one.
+ * The face only changes where a beat starts or ends, or a fall's dizziness begins, so only those moments are tried. */
+export function faceSince(beats: Beat[], t: number, faces: readonly Expression[] | null, now: Expression): number {
+  const moments: number[] = [];
+  for (const b of beats) {
+    if (b.at > t) break;
+    moments.push(b.at);
+    if (b.at + b.dur <= t) moments.push(b.at + b.dur);
+    const dizzy = b.at + Math.min(0.6, b.dur * 0.6);
+    if (b.do === "fall" && dizzy <= t) moments.push(dizzy);
+  }
+  moments.sort((a, b) => b - a);
+  for (const m of moments) {
+    if (m <= 0) break;
+    if (shownExpression(beats, m - 1e-4, faces) !== now) return m;
+  }
+  return -99;
 }

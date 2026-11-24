@@ -3,11 +3,15 @@
 // car of props.ts (origin on the ground at its centre, facing +x, px × k; top view: its centre, nose up). Cartoon
 // style: bold friendly shapes with the same outline weight as people. A plate is always one plain light rectangle and
 // no badge is ever drawn: the engine has no text shapes. Its movement style changes the drawing, never the timing.
+// In the night drive style (§45.45, art.ts) the same shapes are drawn with soft thin lines, graded paint in three
+// tones, door lines, handles, a mirror on a stalk, glass reflections, rim light, soft shadows and glowing lights; the
+// front and back views of the shots are carView.ts. A script without `art` draws exactly as before.
 
+import { cel, grade, ink, lift, lineUnits, ND, nightDrive } from "./art.ts";
 import { CATALOG } from "./catalog.ts";
 import { blink as blinkAt, FACES, type FaceParams, type Mouth } from "./face.ts";
 import { F } from "./frame.ts";
-import { DEG, TAU, clamp, clamp01, ease, hex, isHex, lerp, noise, rand, shade, smoothstep } from "./math.ts";
+import { DEG, TAU, clamp, clamp01, ease, hex, isHex, lerp, mix, noise, rand, shade, smoothstep } from "./math.ts";
 import type { Pen } from "./pen.ts";
 import { arcPts, clipConvex, quadPts, roundRectPts, starPts } from "./pen.ts";
 import type { Occupants, PropState } from "./props.ts";
@@ -33,6 +37,12 @@ export const CAR_SEATS = 2;
 /** The busiest measured frame of a car of the cast with eyes on, in prims (every look choice, every prop action, both
  * views; web/test/storiesEngineCars.test.ts measures it): script.ts counts it for a scene's shape budget. */
 export const CAR_CAST_SHAPES = 56;
+/** The same in the night drive style (softer lines, three tones, door detail, reflections and glowing lights),
+ * measured the same way by web/test/storiesNightCars.test.ts. */
+export const CAR_CAST_SHAPES_ND = 72;
+/** The busiest front or back view of any car (carView.ts: a car of the cast with eyes, a plain car or a truck, at
+ * night with its lights on), measured by web/test/storiesNightCars.test.ts: the shots count it per car they show. */
+export const CAR_VIEW_SHAPES = 34;
 
 export function carHasFace(car: CarLook): boolean {
   return car.face.eyes !== "none";
@@ -88,7 +98,7 @@ export interface CarDraw {
   seed: number;
 }
 
-interface Spec {
+export interface Spec {
   /** length and height against today's plain car (1 / 1) */
   len: number;
   hgt: number;
@@ -125,6 +135,11 @@ const BODIES: Record<CarBody, Spec> = {
   compact: { len: 0.82, hgt: 0.95, top: [[1, 0.8], [0.94, 1], [0.62, 1.06], [0.3, 2], [-0.52, 2.02], [-0.78, 1.84], [-0.88, 1.04], [-1, 0.86]], ws: [2, 3], back: [4, 6], pillar: -0.08, rear: true, lift: 0, axle: 0.66, wide: 0.92, spoiler: [-0.66, 2], round: 60 },
 };
 
+/** A body's shape numbers (the side view's, which the front and back views of carView.ts read too). */
+export function carSpec(body: CarBody): Spec {
+  return BODIES[body] ?? BODIES.hatchback;
+}
+
 /** The side windows sit between these levels. */
 const LV_B = 1.06;
 const LV_T = 1.88;
@@ -135,15 +150,27 @@ const GLASS: Record<CarLook["windows"], { glass: string; tint: string; a: number
   tinted: { glass: "#5f7a8c", tint: "#5f7a8c", a: 0.25, roof: "#26323f" },
   dark: { glass: "#2b3440", tint: "#2b3440", a: 0.4, roof: "#1b222b" },
 };
-const PLATE = "#f4f1ea";
-const GRILLE = "#2a2d36";
-const TRIM = "#3d4250";
-const MOUTH_DARK = "#4a1830";
+export const PLATE = "#f4f1ea";
+export const GRILLE = "#2a2d36";
+export const TRIM = "#3d4250";
+export const MOUTH_DARK = "#4a1830";
 const TYRE = "#2b2b36";
+/** Night drive's glass (graded in the light), tyre and sidewall (§45.45 §6). */
+export const GLASS_ND: Record<CarLook["windows"], string> = { clear: "#3e6e7f", tinted: "#2c4a57", dark: "#1c2830" };
+export const TYRE_ND = "#1b1a1d";
+const SIDEWALL_ND = "#2b2a2e";
+/** A lens that is off (by day), before the light grades it. */
+export const LENS_OFF = "#ece6d2";
+export const TAIL_OFF = "#b3262d";
 /** How a face's mouth bends the grille: + a smile, - a frown. */
-const MOUTH_CURVE: Record<Mouth, number> = { smile: 1, grin: 1.15, laugh: 1.3, o: 0, bigo: 0, flat: 0, frown: -1, wavy: -0.35, smirk: 0.6, grit: 0, pout: -0.3, hum: 0.4 };
+export const MOUTH_CURVE: Record<Mouth, number> = { smile: 1, grin: 1.15, laugh: 1.3, o: 0, bigo: 0, flat: 0, frown: -1, wavy: -0.35, smirk: 0.6, grit: 0, pout: -0.3, hum: 0.4 };
 
 type Pt = [number, number];
+
+/** Night drive: an own colour in the light it stands in now (art.ts `grade`); classic: unchanged. */
+export function tone(c: string): string {
+  return nightDrive() ? grade(c) : c;
+}
 
 /** The x part along a chain of `top` points (from → to) at a level, held at its ends. */
 function chainX(top: Pt[], from: number, to: number, lv: number): number {
@@ -162,7 +189,7 @@ function chainX(top: Pt[], from: number, to: number, lv: number): number {
 }
 
 /** A closed polygon with every corner rounded by up to r (a short quadratic curve). */
-function rounded(pts: Pt[], r: number): number[] {
+export function rounded(pts: Pt[], r: number): number[] {
   const out: number[] = [];
   const n = pts.length;
   for (let i = 0; i < n; i += 1) {
@@ -179,7 +206,7 @@ function rounded(pts: Pt[], r: number): number[] {
 }
 
 /** The polygon pushed out by d along its corners' normals: an outline of even weight, even where it is not convex. */
-function outlined(pts: number[], d: number): number[] {
+export function outlined(pts: number[], d: number): number[] {
   const n = pts.length / 2;
   let area = 0;
   for (let i = 0; i < n; i += 1) {
@@ -298,7 +325,7 @@ export function carSide(car: CarLook): Side {
   };
 }
 
-// ---- effects shared with the plain car (props.ts) ---------------------------------------------------------------
+// ---- effects shared with the plain car (props.ts); in night drive their colours stand in the light ------------
 
 /** A tyre bursting: a star flash and bits flying off. */
 export function burst(pen: Pen, x: number, y: number, age: number, k: number, seed: number, gravity: boolean): void {
@@ -306,9 +333,9 @@ export function burst(pen: Pen, x: number, y: number, age: number, k: number, se
   if (age < 0.45) {
     const g = ease.outBack(Math.min(1, age / 0.12));
     const a = 1 - smoothstep(0.25, 0.45, age);
-    pen.poly(starPts(x, y, 95 * k * g, 42 * k * g, 10, age * 60), "#ff6f61", a);
-    pen.poly(starPts(x, y, 66 * k * g, 30 * k * g, 10, age * 60 + 18), "#ffc94a", a);
-    pen.circle(x, y, 18 * k * g, "#ffffff", a);
+    pen.poly(starPts(x, y, 95 * k * g, 42 * k * g, 10, age * 60), tone("#ff6f61"), a);
+    pen.poly(starPts(x, y, 66 * k * g, 30 * k * g, 10, age * 60 + 18), tone("#ffc94a"), a);
+    pen.circle(x, y, 18 * k * g, tone("#ffffff"), a);
   }
   for (let i = 0; i < 4; i += 1) {
     const ang = (-150 + i * 40 + rand(seed, i + 40) * 20) * DEG;
@@ -318,7 +345,7 @@ export function burst(pen: Pen, x: number, y: number, age: number, k: number, se
     pen.save();
     pen.translate(bx, by);
     pen.rotate(age * 720 + i * 40);
-    pen.poly([-10 * k, -5 * k, 9 * k, -7 * k, 11 * k, 6 * k, -8 * k, 5 * k], "#2b2b36", 1 - smoothstep(0.6, 0.9, age));
+    pen.poly([-10 * k, -5 * k, 9 * k, -7 * k, 11 * k, 6 * k, -8 * k, 5 * k], tone("#2b2b36"), 1 - smoothstep(0.6, 0.9, age));
     pen.restore();
   }
 }
@@ -328,18 +355,19 @@ export function impact(pen: Pen, x: number, y: number, age: number, k: number): 
   if (age < 0 || age > 0.4) return;
   const g = ease.outBack(Math.min(1, age / 0.1));
   const a = 1 - smoothstep(0.2, 0.4, age);
-  pen.poly(starPts(x, y, 70 * k * g, 30 * k * g, 8, 10), "#ffffff", a);
-  pen.poly(starPts(x, y, 46 * k * g, 20 * k * g, 8, 10), "#ffc94a", a);
+  pen.poly(starPts(x, y, 70 * k * g, 30 * k * g, 8, 10), tone("#ffffff"), a);
+  pen.poly(starPts(x, y, 46 * k * g, 20 * k * g, 8, 10), tone("#ffc94a"), a);
 }
 
 /** A honk: three sound-wave arcs spreading from the nose. `dir` is the way the nose points, in degrees on screen
  * (0 = +x, clockwise). */
 export function honkWaves(pen: Pen, x: number, y: number, age: number, k: number, dir: number): void {
   if (age < 0) return;
+  const c = tone("#ffc94a");
   for (let i = 0; i < 3; i += 1) {
     const ph = (age / 0.6 + i / 3) % 1;
     const r = (26 + ph * 120) * k;
-    pen.line(arcPts(x, y, r, r * 1.1, dir - 38, dir + 38, 8), 8 * k, "#ffc94a", 0.9 * (1 - ph));
+    pen.line(arcPts(x, y, r, r * 1.1, dir - 38, dir + 38, 8), 8 * k, c, 0.9 * (1 - ph));
   }
 }
 
@@ -350,18 +378,27 @@ export function exhaust(pen: Pen, x: number, y: number, puffAge: number, stallAg
     for (let i = 0; i < 2; i += 1) {
       const p = clamp01((puffAge - i * 0.15) / 0.6);
       if (p <= 0 || p >= 1) continue;
-      pen.circle(x + dx * (p * 80 + i * 14) * k, y + dy * (p * 80 + i * 14) * k, (14 + p * 26) * k, "#d9dde3", 0.8 * (1 - p));
+      pen.circle(x + dx * (p * 80 + i * 14) * k, y + dy * (p * 80 + i * 14) * k, (14 + p * 26) * k, tone("#d9dde3"), 0.8 * (1 - p));
     }
   }
   if (stallAge >= 0 && stallAge < 0.8) {
     const p = stallAge / 0.8;
-    pen.circle(x + dx * p * 70 * k, y + dy * p * 70 * k, (20 + p * 34) * k, "#55586a", 0.75 * (1 - p));
+    pen.circle(x + dx * p * 70 * k, y + dy * p * 70 * k, (20 + p * 34) * k, tone("#55586a"), 0.75 * (1 - p));
   }
 }
 
-/** The headlights flashing (`blink`): a glow at a light. */
+/** The headlights flashing (`blink`): a glow at a light (night drive: the headlights' own bloom colour). */
 export function lightGlow(pen: Pen, x: number, y: number, blink: number, k: number): void {
-  if (blink > 0.04) pen.circle(x, y, 46 * k, "#fff3b0", 0.55 * blink);
+  if (blink > 0.04) pen.circle(x, y, 46 * k, nightDrive() ? ND.headBloom : "#fff3b0", 0.55 * blink);
+}
+
+/** Night drive: a headlight's bloom, the halos only (the lens is the core): r × 5, 3 and 1.6 at a 0.06, 0.16 and
+ * 0.45 × k (§45.45 §3). Stacked circles, so both drawers paint it the same. */
+export function bloom(pen: Pen, x: number, y: number, r: number, k: number): void {
+  if (k <= 0.02) return;
+  pen.circle(x, y, r * 5, ND.headBloom, 0.06 * k);
+  pen.circle(x, y, r * 3, ND.headBloom, 0.16 * k);
+  pen.circle(x, y, r * 1.6, ND.headBloom, 0.45 * k);
 }
 
 // ---- the face ----------------------------------------------------------------------------------------------------
@@ -383,13 +420,18 @@ function styleOf(style: MovementStyle): { bob: number; sway: number; wobble: num
   return { bob: 1, sway: 0, wobble: 0, lines: 1 };
 }
 
-function faceOf(st: PropState, car: CarLook): FaceParams | null {
+/** A car's face now (null for a car with no eyes). */
+export function carFace(face: Expression | null, car: CarLook): FaceParams | null {
   if (!carHasFace(car)) return null;
-  return FACES[(st.face ?? "neutral") as Expression] ?? FACES.neutral;
+  return FACES[(face ?? "neutral") as Expression] ?? FACES.neutral;
+}
+
+function faceOf(st: PropState, car: CarLook): FaceParams | null {
+  return carFace(st.face, car);
 }
 
 /** One eye: an outlined white, a pupil and a glint, or a closed or happy arc; the face.ts parameters drive it. */
-function carEye(pen: Pen, x: number, y: number, rx: number, ry: number, f: FaceParams, closedBy: number, iris: string, ink: string, white: string, lidColour: string, t: number, s: number): void {
+export function carEye(pen: Pen, x: number, y: number, rx: number, ry: number, f: FaceParams, closedBy: number, iris: string, ink: string, white: string, lidColour: string, t: number, s: number, glint = "#ffffff"): void {
   const lw = Math.max(2, rx * 0.24);
   if (f.eyes === "happy") {
     pen.line(arcPts(x, y + ry * 0.35, rx, ry * 0.75, 200, 340, 6), lw, ink);
@@ -426,11 +468,11 @@ function carEye(pen: Pen, x: number, y: number, rx: number, ry: number, f: FaceP
     pen.poly(clipConvex(eye, [x - ew * 2, y - eh * 2, x + ew * 2, y - eh * 2, x + ew * 2, edge, x - ew * 2, edge]), lidColour);
     return;
   }
-  pen.circle(ix - ir * 0.32, iy - ir * 0.38, Math.max(0.6, ir * 0.34), "#ffffff");
+  pen.circle(ix - ir * 0.32, iy - ir * 0.38, Math.max(0.6, ir * 0.34), glint);
 }
 
 /** Brows over two eyes side by side (xs: the back eye, then the front one), only on a face that uses them. */
-function carBrows(pen: Pen, xs: [number, number], y: number, rx: number, ry: number, f: FaceParams, ink: string): void {
+export function carBrows(pen: Pen, xs: [number, number], y: number, rx: number, ry: number, f: FaceParams, ink: string): void {
   if (Math.abs(f.brow) < 4 && f.browUp < 1 && f.browAsym < 1) return;
   for (const s of [-1, 1]) {
     const ex = s < 0 ? xs[0] : xs[1];
@@ -541,21 +583,22 @@ function extraSide(pen: Pen, g: Side, car: CarLook, ink: string): void {
   if (car.extra === "roof_rack") {
     const a = r0 - 24;
     const b = r1 + 22;
-    pen.line([a, roofY + 2, a + 6, roofY - 16, b - 6, roofY - 16, b, roofY + 2], 8, TRIM);
+    pen.line([a, roofY + 2, a + 6, roofY - 16, b - 6, roofY - 16, b, roofY + 2], 8, tone(TRIM));
   } else if (car.extra === "roof_box") {
     const w = (r0 - r1) * 0.72;
     const x = (r0 + r1) / 2 - w / 2 - 10;
     pen.rect(x - 6, roofY - 44, w + 12, 46, 20, ink);
-    pen.rect(x, roofY - 38, w, 36, 16, "#454b58");
+    pen.rect(x, roofY - 38, w, 36, 16, tone("#454b58"));
   } else if (car.extra === "spoiler") {
     const x = g.X(spec.spoiler[0]);
     const y = g.y(spec.spoiler[1]);
-    pen.line([x + 8, y + 2, x + 4, y - 20, x - 54, y - 26, x + 22, y - 22], 10, shade(hex(car.paint), -0.35));
+    pen.line([x + 8, y + 2, x + 4, y - 20, x - 54, y - 26, x + 22, y - 22], 10, tone(shade(hex(car.paint), -0.35)));
   }
 }
 
 /** Side view car of the cast, facing +x before the facing mirror; origin on the ground between the wheels. */
 export function drawCarLookSide(pen: Pen, st: PropState, k: number, t: number, d: CarDraw, occ: Occupants, night: boolean): void {
+  if (nightDrive()) return drawCarLookSideND(pen, st, k, t, d, occ, night);
   const car = d.car;
   const g = carSide(car);
   const ms = styleOf(d.style);
@@ -701,6 +744,7 @@ function carTop(car: CarLook): Top {
 
 /** Top-down car of the cast: nose up before its heading; origin at its centre. */
 export function drawCarLookTop(pen: Pen, st: PropState, k: number, t: number, d: CarDraw, occ: Occupants, night: boolean): void {
+  if (nightDrive()) return drawCarLookTopND(pen, st, k, t, d, occ, night);
   const car = d.car;
   const g = carTop(car);
   const { L, Wd } = g;
@@ -836,12 +880,386 @@ export function drawCarLookTop(pen: Pen, st: PropState, k: number, t: number, d:
 }
 
 /** A small eye seen from above on the windscreen: a white and a pupil, or an arc. */
-function topEye(pen: Pen, x: number, y: number, r: number, f: FaceParams, closedBy: number, iris: string, ink: string): void {
+function topEye(pen: Pen, x: number, y: number, r: number, f: FaceParams, closedBy: number, iris: string, ink: string, white = "#ffffff"): void {
   const open = f.open * (1 - closedBy);
   if (f.eyes === "happy" || f.eyes === "closed" || open < 0.16) {
     pen.line(arcPts(x, y, r, r * 0.6, f.eyes === "happy" ? 200 : 20, f.eyes === "happy" ? 340 : 160, 6), Math.max(2, r * 0.3), ink);
     return;
   }
-  pen.ellipse(x, y, r, r * Math.min(1.3, open), 0, "#ffffff");
+  pen.ellipse(x, y, r, r * Math.min(1.3, open), 0, white);
   pen.circle(x, y - r * 0.3 * Math.min(1, open), r * 0.5 * f.pupil, iris);
+}
+
+// ---- night drive (§45.45 §6): the same shapes, drawn softer, lit and in more detail ----------------------------
+
+/** A wheel in night drive: the tyre (its own dark edge is the outline), a sidewall ring, the rim in its own style and
+ * colour (graded) and an inner rim shadow under the arch. */
+function wheelSideND(pen: Pen, x: number, y: number, r: number, spin: number, flat: boolean, car: CarLook, ow: number): void {
+  const style = car.wheels.style;
+  const rim = grade(hex(car.wheels.rim, "#c9ccd2"));
+  const sq = flat ? 0.72 : 1;
+  const cy = flat ? y + r * (1 - sq) : y;
+  if (style === "offroad") {
+    const pts: number[] = [];
+    for (let i = 0; i < 28; i += 1) {
+      const a = spin + (i / 28) * TAU;
+      const rr = (i % 2 === 0 ? r : r * 0.9) + ow;
+      pts.push(x + Math.cos(a) * rr, cy + Math.sin(a) * rr * sq);
+    }
+    pen.poly(pts, TYRE_ND);
+  } else pen.ellipse(x, cy, r + ow, r * sq + ow, 0, TYRE_ND);
+  pen.ellipse(x, cy, r * 0.8, r * 0.8 * sq, 0, SIDEWALL_ND);
+  const rr = r * (style === "offroad" ? 0.48 : style === "sport" ? 0.66 : 0.58);
+  const spokes = (n: number, w: number, colour: string, len: number) => {
+    const pts: number[] = [];
+    for (let i = 0; i < n; i += 1) {
+      const a = spin + (i / n) * TAU;
+      pts.push(x, cy, x + Math.cos(a) * rr * len, cy + Math.sin(a) * rr * len * sq);
+    }
+    pen.line(pts, w, colour);
+  };
+  switch (style) {
+    case "steel": {
+      pen.ellipse(x, cy, rr, rr * sq, 0, grade("#9aa3af"));
+      for (let i = 0; i < 4; i += 1) {
+        const a = spin + (i / 4) * TAU;
+        pen.circle(x + Math.cos(a) * rr * 0.55, cy + Math.sin(a) * rr * 0.55 * sq, rr * 0.13, grade("#4a505c"));
+      }
+      break;
+    }
+    case "hubcap":
+      pen.ellipse(x, cy, rr, rr * sq, 0, rim);
+      pen.line(arcPts(x, cy, rr * 0.68, rr * 0.68 * sq, 0, 360, 20), rr * 0.1, cel(rim, 0.35));
+      pen.circle(x, cy, rr * 0.2, cel(rim, 0.18));
+      break;
+    case "alloy":
+      pen.ellipse(x, cy, rr, rr * sq, 0, cel(rim, 0.55));
+      spokes(5, rr * 0.26, rim, 0.92);
+      pen.circle(x, cy, rr * 0.24, rim);
+      break;
+    case "sport":
+      pen.ellipse(x, cy, rr, rr * sq, 0, cel(rim, 0.62));
+      spokes(10, rr * 0.11, rim, 0.95);
+      pen.circle(x, cy, rr * 0.2, rim);
+      break;
+    case "offroad":
+      pen.ellipse(x, cy, rr, rr * sq, 0, rim);
+      pen.circle(x, cy, rr * 0.32, cel(rim, 0.4));
+      break;
+  }
+  pen.line(arcPts(x, cy, rr * 0.86, rr * 0.86 * sq, 200, 340, 6), rr * 0.16, ND.ao, 0.35);
+}
+
+/** The night drive side view of a car of the cast: the same body, seats and moves as drawCarLookSide. */
+function drawCarLookSideND(pen: Pen, st: PropState, k: number, t: number, d: CarDraw, occ: Occupants, night: boolean): void {
+  const car = d.car;
+  const g = carSide(car);
+  const ms = styleOf(d.style);
+  const light = F.light;
+  const inkC = ink(hex(car.outline, "#1c1842"));
+  const paint = grade(hex(car.paint, "#d8352a"));
+  const accent = grade(hex(car.accent, "#f4f1ea"));
+  const glass = grade(GLASS_ND[car.windows] ?? GLASS_ND.clear);
+  const tintA = (GLASS[car.windows] ?? GLASS.clear).a;
+  const face = faceOf(st, car);
+  const moving = st.speed > 0.02 || st.rolled > 0;
+  const bob = (moving ? Math.sin(t * TAU * 3.1) * 1.6 * ms.bob : 0) + (!moving && ms.sway ? Math.sin(t * TAU * 0.7) * ms.sway : 0);
+  const dy = bob - st.bounce * 0.06 * g.tall;
+  const spin = (st.rolled / g.wr) % TAU;
+  const dark = night || light.night;
+  const lit = st.lights || dark || st.blink > 0.3;
+  const beam = st.lights || night;
+  const tailOn = st.lights || dark;
+  const braking = st.braking > 0.1;
+  const pulse = st.honkAge >= 0 ? 1 + 0.035 * Math.sin(Math.PI * Math.min(1, st.honkAge / 0.3)) : 1;
+  const wob = ms.wobble ? ms.wobble * noise(d.seed + 17, t * 1.6) : 0;
+  pen.save();
+  pen.rotate(st.rot + wob);
+  // the line weights in the car's own px, taken before the facing mirror, so a spin's squeeze never thickens them
+  const ow = lineUnits(pen, 2.6) / k;
+  const fine = ow * 0.35;
+  pen.scale(k * st.facing * st.spinX, k);
+  // soft shadows under the car (ambient occlusion), skid marks and skid smoke
+  pen.ellipse(0, 7, g.hl + 30, 22, 0, ND.ao, 0.16);
+  pen.ellipse(0, 3, g.hl - 10, 10, 0, ND.ao, 0.38);
+  if (st.skidFrom !== null) {
+    const from = (st.skidFrom * st.facing) / k;
+    for (const wx of [-g.ax, g.ax]) pen.line([wx + from, -2, wx, -2], 16, grade("#1d1d26"), 0.4);
+  }
+  if (st.skidding > 0.05) {
+    for (let i = 0; i < 4; i += 1) {
+      const ph = (t * 1.6 + i / 4) % 1;
+      pen.circle(-g.ax - 15 - ph * 160, -20 - ph * 40, 26 + ph * 30, grade("#e9eef5"), 0.55 * st.skidding * (1 - ph));
+    }
+  }
+  // the body moves on its springs; the wheels stay on the ground
+  pen.save();
+  pen.translate(0, dy + g.y(1));
+  pen.scale(pulse, pulse);
+  pen.translate(0, -g.y(1));
+  pen.poly(outlined(g.sil, ow), inkC);
+  pen.poly(g.sil, paint);
+  // three tones: the lower body in the cel shadow, the body, and a lit top along the bonnet and the roof line
+  const low = g.y(0.42);
+  const far = g.hl * 2 + 200;
+  pen.poly(clipConvex(g.sil, [-far, low, far, low, far, 400, -far, 400]), cel(paint));
+  if (car.pattern === "two_tone") pen.poly(g.cabin, accent);
+  else if (car.pattern === "stripe") pen.rect(-g.hl + 14, g.y(0.7), 2 * g.hl - 28, g.lowH * 0.13, 5, accent);
+  else if (car.pattern === "racing_stripes") {
+    const pts: number[] = [];
+    for (const [fx, lv] of g.spec.top) pts.push(g.X(fx) * 0.97, g.y(lv) + 9);
+    pen.line(pts, 10, accent);
+  }
+  if (g.spec.bed) pen.line([g.X(-0.25), g.y(1.02), g.X(-0.95), g.y(1.02)], 7, cel(paint, 0.4));
+  const topLine: number[] = [];
+  for (const [fx, lv] of g.spec.top) topLine.push(g.X(fx) * 0.98, g.y(lv) + ow * 2);
+  pen.line(topLine, ow * 2.2, lift(car.pattern === "two_tone" ? accent : paint, 0.16), 0.8);
+  pen.poly(g.front, glass);
+  if (g.rear) pen.poly(g.rear, glass);
+  occ.side?.(pen, g.seats);
+  pen.poly(g.front, glass, tintA);
+  if (g.rear) pen.poly(g.rear, glass, tintA);
+  // two reflection bands in the window's low front corner, clear of the faces
+  const edge = (lv: number) => g.ws(lv) - INSET;
+  const band = (i0: number, i1: number): number[] => [edge(1.4) - i0, g.y(1.4), edge(1.4) - i1, g.y(1.4), edge(1) - i1 - 12, g.y(1), edge(1) - i0 - 12, g.y(1)];
+  pen.poly(clipConvex(band(4, 22), g.front), "#ffffff", 0.12);
+  pen.poly(clipConvex(band(30, 38), g.front), "#ffffff", 0.07);
+  // door lines (the front door's front edge, the B pillar), handles, the mirror on its stalk and the side marker
+  const pillar = g.X(g.spec.pillar);
+  const doorFront = Math.min(g.ws(LV_B) - 8, g.ax - g.wr * 1.37 + 4);
+  pen.line([doorFront, g.y(1.02), doorFront, g.y(0.16)], fine, inkC, 0.8);
+  pen.line([pillar, g.y(1.02), pillar, g.y(0.16)], fine, inkC, 0.8);
+  const handleY = g.y(0.86) - 2.5;
+  pen.rect(pillar + 8, handleY, 18, 5, 2.5, cel(paint, 0.3));
+  if (g.spec.rear) pen.rect(Math.min(pillar - 44, -g.ax + g.wr * 1.37 + 10), handleY, 18, 5, 2.5, cel(paint, 0.3));
+  const mx = g.ws(LV_B) - 6;
+  const my = g.y(1.12);
+  pen.line([mx - 14, g.y(1.0), mx - 4, my + 4], 5, tone(TRIM));
+  pen.ellipse(mx, my, 15 + ow, 11 + ow, 0, inkC);
+  pen.ellipse(mx, my, 15, 11, 0, accent);
+  pen.rect(g.hl - 44, g.y(0.56) - 4, 14, 8, 3, ND.marker);
+  // rim light from the street lamps along the roof line and the rear pillar
+  const rim: number[] = [];
+  for (let i = g.spec.ws[1]; i <= g.spec.back[1]; i += 1) rim.push(g.X(g.spec.top[i]![0]) * 0.99, g.y(g.spec.top[i]![1]) + ow * 0.7);
+  pen.line(rim, ow, light.rim, light.rimA);
+  extraSide(pen, g, car, inkC);
+  // the grille (a smile or a frown with a grille mouth), bumpers and plain plates
+  const mouth = face && car.face.mouth === "grille" ? face.mouth : null;
+  if (mouth === null) pen.rect(g.hl - 30, g.y(0.52), 26, g.lowH * 0.22, 8, tone(GRILLE));
+  else if (mouth === "o" || mouth === "bigo") pen.ellipse(g.hl - 28, g.y(0.42), 18, 8 + 7 * clamp(face!.mouthOpen, 0.3, 1.3), 0, tone(MOUTH_DARK));
+  else {
+    const c = MOUTH_CURVE[mouth] ?? 0;
+    const yy = g.y(0.44);
+    pen.line(quadPts(g.hl - 64, yy - c * 10, g.hl - 34, yy + c * 13, g.hl - 6, yy - c * 4, 8), g.lowH * 0.09, tone(GRILLE));
+  }
+  pen.rect(g.hl - 34, g.y(0.3), 40, g.lowH * 0.18, 10, tone(TRIM));
+  pen.rect(-g.hl - 6, g.y(0.3), 40, g.lowH * 0.18, 10, tone(TRIM));
+  pen.rect(g.hl - 2, g.y(0.36), 9, g.lowH * 0.12, 3, tone(PLATE));
+  pen.rect(-g.hl - 7, g.y(0.36), 9, g.lowH * 0.12, 3, tone(PLATE));
+  // lights: the lenses glow when they are on
+  const headEyes = face !== null && car.face.eyes === "headlights";
+  const front: [number, number] = headEyes ? [g.hl - clamp(g.lowH * 0.2, 14, 34) * 1.45, g.y(0.7)] : frontLight(pen, g, car, lit ? ND.headCore : grade(LENS_OFF));
+  const back = rearLight(pen, g, car, braking ? ND.brakeCore : tailOn ? ND.tailCore : grade(TAIL_OFF));
+  pen.restore();
+  // wheel arches and wheels
+  const arch = mix(paint, ND.ao, 0.6);
+  pen.ellipse(-g.ax, -g.wr + 2 + dy * 0.5, g.wr * 1.37, g.wr * 1.19, 0, arch);
+  pen.ellipse(g.ax, -g.wr + 2 + dy * 0.5, g.wr * 1.37, g.wr * 1.19, 0, arch);
+  wheelSideND(pen, -g.ax, -g.wr, g.wr, spin, false, car, ow);
+  wheelSideND(pen, g.ax, -g.wr, g.wr, spin, st.flat, car, ow);
+  pen.save();
+  pen.translate(0, dy);
+  if (beam) pen.poly([front[0] + 10, front[1] - 6, g.hl + 540, front[1] - 90, g.hl + 540, front[1] + 130], ND.beam, night ? 0.08 : 0.05);
+  const s = g.lowH / 136;
+  if (lit) bloom(pen, front[0], front[1], (car.lights.front === "slim" ? 11 : 15) * s, (dark ? 1 : 0.5) * (headEyes ? 0.6 : 1));
+  const tailA = Math.max(tailOn ? 0.25 : 0, braking ? 0.45 * st.braking : 0);
+  if (tailA > 0) pen.circle(back[0], back[1], 13 * s * 2.5, ND.tailGlow, tailA);
+  lightGlow(pen, front[0], front[1], st.blink, 1);
+  if (face) {
+    const closedBy = Math.max(face.eyes === "normal" || face.eyes === "lidded" ? blinkAt(d.seed, t) : 0, st.blink);
+    const iris = grade(hex(car.face.color, "#1c1842"));
+    const white = grade("#ffffff");
+    if (headEyes) {
+      const rx = clamp(g.lowH * 0.2, 14, 34);
+      const far2 = g.hl - rx * 0.55;
+      const lens = lit ? ND.headCore : white;
+      carEye(pen, far2, front[1] - rx * 0.35, rx * 0.72, rx * 0.8, face, closedBy, iris, inkC, lens, paint, t, -1, ND.glint);
+      carEye(pen, front[0], front[1], rx, rx * 1.05, face, closedBy, iris, inkC, lens, paint, t, 1, ND.glint);
+      carBrows(pen, [front[0], far2], front[1], rx, rx * 1.05, face, inkC);
+    } else {
+      const winH = g.y(LV_B) - g.y(LV_T);
+      const rx = clamp(winH * 0.27, 11, 36);
+      const cy = g.y((LV_B + LV_T) / 2);
+      const x1 = g.frontRight - rx * 1.3;
+      const x0 = Math.max(g.frontLeft + rx * 1.2, x1 - rx * 2.3);
+      carEye(pen, x0, cy, rx, rx * 1.15, face, closedBy, iris, inkC, white, glass, t, -1, ND.glint);
+      carEye(pen, x1, cy, rx, rx * 1.15, face, closedBy, iris, inkC, white, glass, t, 1, ND.glint);
+      carBrows(pen, [x0, x1], cy, rx, rx * 1.15, face, inkC);
+    }
+  }
+  pen.restore();
+  pen.restore();
+  // effects in the car's world frame (not mirrored twice)
+  const f = st.facing;
+  burst(pen, f * g.ax * k, -g.wr * k, st.burstAge, k, 7, true);
+  impact(pen, f * (g.hl + 8) * k, g.y(0.6) * k, st.bumpAge, k);
+  honkWaves(pen, f * (g.hl + 16) * k, (g.y(0.7) + dy) * k, st.honkAge, k, f > 0 ? 0 : 180);
+  exhaust(pen, -f * (g.hl + 12) * k, g.y(0.2) * k, st.puffAge, st.stallAge, k, -f * 0.9, -0.45);
+  if (st.speed > 0.08 * ms.lines) {
+    const streak = grade("#ffffff");
+    for (let i = 0; i < 3; i += 1) {
+      const yy = lerp(g.y(1.5), g.y(0.5), i / 2) * k;
+      const len = (120 + i * 40) * k * clamp01(st.speed * 2.5);
+      const x0 = -f * (g.hl + 18) * k;
+      pen.line([x0, yy, x0 - f * len, yy], 8 * k, streak, 0.55);
+    }
+  }
+}
+
+/** The night drive top view of a car of the cast: the same body, seats and moves as drawCarLookTop. */
+function drawCarLookTopND(pen: Pen, st: PropState, k: number, t: number, d: CarDraw, occ: Occupants, night: boolean): void {
+  const car = d.car;
+  const g = carTop(car);
+  const { L, Wd } = g;
+  const ms = styleOf(d.style);
+  const light = F.light;
+  const inkC = ink(hex(car.outline, "#1c1842"));
+  const paint = grade(hex(car.paint, "#d8352a"));
+  const accent = grade(hex(car.accent, "#f4f1ea"));
+  const glass = grade(GLASS_ND[car.windows] ?? GLASS_ND.clear);
+  const tintA = (GLASS[car.windows] ?? GLASS.clear).a;
+  const face = faceOf(st, car);
+  const dark = night || light.night;
+  const lit = st.lights || dark || st.blink > 0.3;
+  const beam = st.lights || night;
+  const tailOn = st.lights || dark;
+  const braking = st.braking > 0.1;
+  const mark = grade("#1d1d26");
+  for (const m of st.marks) {
+    if (m.length < 8) continue;
+    const left: number[] = [];
+    const right: number[] = [];
+    for (let i = 0; i + 3 < m.length; i += 4) {
+      left.push(m[i]! - st.x * F.w, m[i + 1]! - st.y * F.h);
+      right.push(m[i + 2]! - st.x * F.w, m[i + 3]! - st.y * F.h);
+    }
+    pen.line(left, 20 * k, mark, 0.42);
+    pen.line(right, 20 * k, mark, 0.42);
+  }
+  const wob = ms.wobble ? ms.wobble * noise(d.seed + 17, t * 1.6) : 0;
+  const grow = (1 + st.bounce * 0.04) * (st.honkAge >= 0 ? 1 + 0.03 * Math.sin(Math.PI * Math.min(1, st.honkAge / 0.3)) : 1);
+  pen.save();
+  pen.rotate(st.rot + wob);
+  const ow = lineUnits(pen, 2.6) / k;
+  pen.scale(k, k);
+  if (st.speed > 0.06 * ms.lines) {
+    const streak = grade("#ffffff");
+    for (let i = -1; i <= 1; i += 1) {
+      const len = 160 * clamp01(st.speed * 2.5);
+      pen.line([i * 60, L / 2 + 40, i * 60, L / 2 + 40 + len], 10, streak, 0.5);
+    }
+  }
+  if (beam) pen.poly([-70, -L / 2, 70, -L / 2, 200, -L / 2 - 520, -200, -L / 2 - 520], ND.beam, night ? 0.08 : 0.05);
+  pen.ellipse(8, 12, Wd / 2 + 30, L / 2 + 24, 0, ND.ao, 0.16);
+  pen.ellipse(4, 6, Wd / 2 + 4, L / 2 + 2, 0, ND.ao, 0.38);
+  const wy = (L / 2) * g.spec.axle * 0.94;
+  const ww = (car.wheels.style === "offroad" ? 42 : 34) * car.wheels.size;
+  const wl = 72 * car.wheels.size;
+  for (const [wx, wyy, front] of [
+    [-Wd / 2 + 2, -wy, true],
+    [Wd / 2 - 2, -wy, true],
+    [-Wd / 2 + 2, wy, false],
+    [Wd / 2 - 2, wy, false],
+  ] as [number, number, boolean][]) {
+    pen.save();
+    pen.translate(wx, wyy);
+    if (front) pen.rotate(clamp(st.wheelTurn, -40, 40));
+    pen.rect(-ww / 2, -wl / 2, ww, wl, 10, st.flat && front && wx > 0 ? grade("#55556a") : TYRE_ND);
+    pen.restore();
+  }
+  pen.scale(grow, grow);
+  const shape = roundRectPts(-Wd / 2, -L / 2, Wd, L, Math.min(g.spec.round, Wd / 2 - 1));
+  pen.poly(outlined(shape, ow), inkC);
+  pen.poly(shape, paint);
+  // the side away from the lamps in the cel shadow, a lit line down the bonnet
+  pen.poly(clipConvex(shape, [Wd * 0.22, -L, Wd, -L, Wd, L, Wd * 0.22, L]), cel(paint));
+  if (car.pattern === "racing_stripes") {
+    for (const s of [-1, 1]) pen.line([s * Wd * 0.12, -L / 2 + 12, s * Wd * 0.12, L / 2 - 12], Wd * 0.1, accent);
+  } else pen.line([0, -L / 2 + 14, 0, g.wsBase - 10], 18, lift(paint, 0.2), 0.8);
+  pen.ellipse(-Wd / 2 - 6, g.wsBase + 18, 12, 18, 0, accent);
+  pen.ellipse(Wd / 2 + 6, g.wsBase + 18, 12, 18, 0, accent);
+  pen.poly([-0.33 * Wd, g.wsBase, 0.33 * Wd, g.wsBase, 0.4 * Wd, g.wsTop, -0.4 * Wd, g.wsTop], glass);
+  if (car.pattern === "two_tone") pen.rect(-0.43 * Wd, g.wsTop - 2, 0.86 * Wd, g.roofBack - g.wsTop + 4, 30, accent);
+  pen.rect(-0.38 * Wd, g.wsTop + 4, 0.76 * Wd, g.roofBack - g.wsTop - 8, 34, mix(glass, ND.celDark, 0.45));
+  const r0 = g.wsTop + 4;
+  const r1 = g.roofBack - 4;
+  occ.top?.(
+    pen,
+    g.spec.bed
+      ? [
+          { x: -0.2 * Wd, y: (r0 + r1) / 2, r: 30 },
+          { x: 0.2 * Wd, y: (r0 + r1) / 2, r: 28 },
+        ]
+      : [
+          { x: 0, y: lerp(r0, r1, 0.28), r: 34 },
+          { x: 0, y: lerp(r0, r1, 0.76), r: 30 },
+        ],
+  );
+  pen.rect(-0.38 * Wd, g.wsTop + 4, 0.76 * Wd, g.roofBack - g.wsTop - 8, 34, glass, car.windows === "clear" ? 0.12 : tintA);
+  pen.line([-0.24 * Wd, r0 + 14, -0.14 * Wd, Math.min(r1 - 10, r0 + 130)], 8, "#ffffff", 0.12);
+  pen.line([0.2 * Wd, r0 + 30, 0.26 * Wd, Math.min(r1 - 10, r0 + 90)], 5, "#ffffff", 0.07);
+  // rim light along the lit side of the roof
+  pen.line([-0.38 * Wd + ow, r0 + 18, -0.38 * Wd + ow, r1 - 18], ow, light.rim, light.rimA);
+  if (g.spec.bed) pen.rect(-Wd / 2 + 14, g.backFoot + 10, Wd - 28, L / 2 - 16 - (g.backFoot + 10), 10, cel(paint, 0.4));
+  else if (g.backFoot - g.roofBack > 14) pen.poly([-0.36 * Wd, g.roofBack + 4, 0.36 * Wd, g.roofBack + 4, 0.3 * Wd, g.backFoot, -0.3 * Wd, g.backFoot], glass);
+  if (car.extra === "roof_rack") {
+    for (const p of [0.22, 0.78]) pen.line([-0.44 * Wd, lerp(r0, r1, p), 0.44 * Wd, lerp(r0, r1, p)], 9, tone(TRIM));
+  } else if (car.extra === "roof_box") {
+    const y0 = lerp(r0, r1, 0.45);
+    pen.rect(-0.3 * Wd - ow, y0 - ow, 0.6 * Wd + 2 * ow, r1 - y0 - 6 + 2 * ow, 16 + ow, inkC);
+    pen.rect(-0.3 * Wd, y0, 0.6 * Wd, r1 - y0 - 6, 16, tone("#454b58"));
+  } else if (car.extra === "spoiler") pen.rect(-Wd / 2 - 6, L / 2 - 34, Wd + 12, 16, 7, cel(paint, 0.35));
+  // lights (glowing when on) and plain plates
+  const head = lit ? ND.headCore : grade(LENS_OFF);
+  for (const s of [-1, 1]) {
+    const x = s * 0.32 * Wd;
+    if (car.lights.front === "round") pen.ellipse(x, -L / 2 + 14, 20, 12, 0, head);
+    else if (car.lights.front === "square") pen.rect(x - 18, -L / 2 + 6, 36, 18, 5, head);
+    else pen.rect(x - 26, -L / 2 + 8, 52, 10, 5, head);
+    if (lit) pen.circle(x, -L / 2 + 14, 30, ND.headBloom, dark ? 0.32 : 0.16);
+  }
+  const tail = braking ? ND.brakeCore : tailOn ? ND.tailCore : grade(TAIL_OFF);
+  if (car.lights.rear === "bar") pen.rect(-0.43 * Wd, L / 2 - 16, 0.86 * Wd, 12, 5, tail);
+  else {
+    for (const s of [-1, 1]) {
+      if (car.lights.rear === "round") pen.circle(s * 0.33 * Wd, L / 2 - 12, 10, tail);
+      else pen.rect(s * 0.33 * Wd - 18, L / 2 - 16, 36, 12, 5, tail);
+    }
+  }
+  const tailA = Math.max(tailOn ? 0.25 : 0, braking ? 0.45 * st.braking : 0);
+  if (tailA > 0) {
+    pen.circle(-0.33 * Wd, L / 2 - 8, 36, ND.tailGlow, tailA);
+    pen.circle(0.33 * Wd, L / 2 - 8, 36, ND.tailGlow, tailA);
+  }
+  lightGlow(pen, -0.32 * Wd, -L / 2 + 14, st.blink, 0.8);
+  lightGlow(pen, 0.32 * Wd, -L / 2 + 14, st.blink, 0.8);
+  pen.rect(-26, -L / 2 - 4, 52, 8, 3, tone(PLATE));
+  pen.rect(-26, L / 2 - 4, 52, 8, 3, tone(PLATE));
+  if (face && car.face.eyes === "windscreen") {
+    const closedBy = Math.max(face.eyes === "normal" || face.eyes === "lidded" ? blinkAt(d.seed, t) : 0, st.blink);
+    const cy = (g.wsBase + g.wsTop) / 2;
+    const rx = clamp(Math.abs(g.wsTop - g.wsBase) * 0.26, 9, 20);
+    const iris = grade(hex(car.face.color, "#1c1842"));
+    const top: FaceParams = { ...face, lookX: 0, lookY: -0.6 };
+    for (const s of [-1, 1]) topEye(pen, s * 0.17 * Wd, cy, rx, top, closedBy, iris, inkC, grade("#ffffff"));
+  }
+  honkWaves(pen, 0, -L / 2 - 18, st.honkAge, 1, -90);
+  exhaust(pen, 0, L / 2 + 18, st.puffAge, st.stallAge, 1, 0, 1);
+  pen.restore();
+  const h = st.rot * DEG;
+  const at = (lx: number, ly: number): [number, number] => [(lx * Math.cos(h) - ly * Math.sin(h)) * k, (lx * Math.sin(h) + ly * Math.cos(h)) * k];
+  const [bx, by] = at(Wd / 2, -wy);
+  burst(pen, bx, by, st.burstAge, k, 9, false);
+  const [ix, iy] = at(0, -L / 2 - 20);
+  impact(pen, ix, iy, st.bumpAge, k);
 }

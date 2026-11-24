@@ -98,6 +98,18 @@ class Check:
         return out
 
 
+def shot_at(cuts: Sequence[dict[str, Any]], at: Any) -> str | None:
+    """The shot a moment of a scene is seen in (the last cut at or before it, §45.45), or None before the first cut
+    or in a scene with no cuts (the whole scene)."""
+    if not isinstance(at, int | float):
+        return None
+    shot = None
+    for c in sorted(cuts, key=lambda c: float(c["at"])):
+        if float(c["at"]) <= float(at) + 1e-9:
+            shot = str(c.get("shot") or "") or None
+    return shot
+
+
 def items(script: dict[str, Any], post: dict[str, Any] | None) -> list[dict[str, Any]]:
     """Every item the checker reads, with its ref and where it is (for the owner's sentences)."""
     cast = {k: str((v or {}).get("name") or k) for k, v in (script.get("cast") or {}).items()}
@@ -119,6 +131,7 @@ def items(script: dict[str, Any], post: dict[str, Any] | None) -> list[dict[str,
         if s.get("caption"):
             out.append({"ref": f"scene:{sid}", "where": f"Scene “{title}”", "text": s["caption"]})
         props = {str(p.get("propId")): p for p in s.get("props") or []}
+        cuts = [c for c in s.get("cuts") or [] if isinstance(c, dict) and isinstance(c.get("at"), int | float)]
         drivers: dict[str, str] = {}  # a car's first rider drives it (§45.42)
         for a in s.get("actors") or []:
             if isinstance(a, dict) and isinstance(a.get("inCar"), str) and isinstance(a.get("castId"), str):
@@ -138,8 +151,12 @@ def items(script: dict[str, Any], post: dict[str, Any] | None) -> list[dict[str,
                 words += f" to the {b['dir']}"  # a skid's dir: the side the rear slides to (the engine's rules)
             if b.get("face"):
                 words += f" with a {b['face']} face"
-            out.append({"ref": f"beat:{sid}:{i}", "where": f"Scene “{title}”", "action": words, "set": s.get("set"),
-                        "who": who, "do": action, "dir": b.get("dir"), "at": b.get("at"), "dur": b.get("dur")})  # fmt: skip
+            item = {"ref": f"beat:{sid}:{i}", "where": f"Scene “{title}”", "action": words, "set": s.get("set"),
+                    "who": who, "do": action, "dir": b.get("dir"), "at": b.get("at"), "dur": b.get("dur")}  # fmt: skip
+            shot = shot_at(cuts, b.get("at"))
+            if shot:  # the shot the beat is seen in (§45.45), only in a scene that cuts between shots
+                item["shot"] = shot
+            out.append(item)
     for f in POST_FIELDS:
         if post and post.get(f):
             out.append({"ref": f"post:{f}", "where": f"Post caption ({f})", "text": post[f]})

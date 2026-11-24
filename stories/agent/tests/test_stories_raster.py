@@ -21,9 +21,10 @@ import pytest
 from lamostories_agent import raster
 from lamostories_agent.raster import Canvas, png_bytes, prim_problems, render
 from lamostories_agent.scene_render import image_loader
-from ls_fakes import FIXTURES, needs_ffmpeg
+from ls_fakes import FIXTURES, REPO, needs_ffmpeg
 
-KINDS_WITHOUT_ASSETS = ["fill", "grad", "rect", "circle", "ellipse", "poly", "line", "mixed"]
+# "keyhole": the night drive vignette's frame with an ellipse hole wound the other way (§45.45)
+KINDS_WITHOUT_ASSETS = ["fill", "grad", "rect", "circle", "ellipse", "poly", "line", "mixed", "keyhole"]
 TOLERANCE_MAX = 3  # per channel, out of 255 (another CPU's floating point)
 TOLERANCE_MEAN = 0.05
 
@@ -141,6 +142,48 @@ def test_a_polygon_covers_its_area_with_the_non_zero_rule() -> None:
     assert coverage({"k": "poly", "pts": ring_reverse})[60, 60] == 0.0  # an inner square wound back: a hole
     same_way = [10, 10, 110, 10, 110, 110, 10, 110, 10, 10, 30, 30, 90, 30, 90, 90, 30, 90, 30, 30]
     assert coverage({"k": "poly", "pts": same_way})[60, 60] == 1.0  # wound the same way: winding 2, filled
+
+
+def test_a_keyhole_polygon_leaves_its_hole_empty() -> None:
+    """The night drive vignette (§45.45): the frame clockwise, a bridge in, an ellipse anticlockwise and the bridge out;
+    the non-zero rule fills the frame's corners and leaves the hole (and the bridge's zero width) empty."""
+    f = fixture("keyhole")
+    hole = f["p"][4]
+    cov = coverage({"k": "poly", "pts": hole["pts"]}, int(f["w"]), int(f["h"]))
+    assert cov[80, 48] == 0.0  # the hole's centre
+    assert cov[2, 2] == 1.0 and cov[157, 93] == 1.0  # the frame's corners
+    assert cov[60:100, 36:60].sum() == pytest.approx(0.0, abs=1e-3)  # well inside the hole
+    # the hole's area, roughly that of its ellipse
+    w, h = int(f["w"]), int(f["h"])
+    assert float((1 - cov).sum()) == pytest.approx(math.pi * (w / 2 * 0.6) * (h / 2 * 0.5), rel=0.03)
+
+
+# Night drive's four frames pinned prim by prim by the web's storiesEngineNight.test.ts (§45.45 §12): raster.py
+# draws them without a problem, and six places in them average within 6 of the palette's tokens, so the agent's
+# final video shows the colours the preview paints.
+NIGHT_GOLDEN = REPO / "web" / "test" / "fixtures" / "stories-engine-night.json"
+NIGHT_REGIONS: list[tuple[str, tuple[int, int, int, int], str, str]] = [
+    ("scene", (500, 10, 580, 40), "#141f3d", "the top of the night sky (ND.skyTop)"),
+    ("scene", (950, 950, 1000, 990), "#1d3339", "the far mountains (ND.mtnFar)"),
+    ("scene", (240, 868, 264, 874), "#fffdf1", "a street lamp's core (ND.lampCore)"),
+    ("driver_view", (450, 1000, 650, 1040), "#2e2a20", "the road through the windscreen (ND.asphalt)"),
+    ("driver_view", (900, 1150, 1000, 1200), "#46454b", "the dashboard's top (ND.dashTop)"),
+    ("face", (350, 940, 600, 990), "#9c8270", "the sample's skin #f2c9a0 in the cabin light (art.ts grade)"),
+]
+
+
+def test_night_drive_goldens_draw_in_their_palette() -> None:
+    golden = json.loads(NIGHT_GOLDEN.read_text())
+    assert sorted(golden["full"]) == ["driver_view", "face", "mirror", "scene"]
+    pictures: dict[str, np.ndarray] = {}
+    for name, prims in golden["full"].items():
+        assert [p for p in prims if prim_problems(p)] == [], name
+        pictures[name] = render(prims, 1080, 1920)
+        assert pictures[name].shape == (1920, 1080, 3)
+    for name, (x0, y0, x1, y1), token, what in NIGHT_REGIONS:
+        mean = pictures[name][y0:y1, x0:x1].reshape(-1, 3).astype(np.float64).mean(axis=0)
+        off = float(np.abs(mean - raster.rgb(token)).max())
+        assert off <= 6, f"{what}: averages {mean.round().astype(int).tolist()}, {off:.1f} away from {token}"
 
 
 def test_lines_have_round_caps_and_joins_drawn_once() -> None:

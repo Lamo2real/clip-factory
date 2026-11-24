@@ -164,7 +164,7 @@ class Budget:
 
 def scene_hash(script: dict[str, Any], scene: dict[str, Any], engine: int | None = None) -> str:
     """What a scene's pictures depend on: the scene itself, its cast's looks and styles, the engine that draws it (the
-    running one, ``engine``; the script's own when not given) and the frame."""
+    running one, ``engine``; the script's own when not given), the frame and the drawing style."""
     names = {a.get("castId") for a in scene.get("actors") or []} | {b.get("who") for b in scene.get("beats") or []}
     cast = {  # a cast member's list of faces is what it may do, not how it looks: it never changes a picture
         k: {f: x for f, x in v.items() if f != "expressions"} if isinstance(v, dict) else v
@@ -188,6 +188,10 @@ def scene_hash(script: dict[str, Any], scene: dict[str, Any], engine: int | None
     }
     if cars:
         body["cars"] = cars
+    # The drawing style (§45.45): a night drive scene is drawn again when the style changes; a script with no art
+    # (every Bright one the writer writes) hashes exactly as before.
+    if script.get("art") is not None:
+        body["art"] = script["art"]
     return hashlib.sha256(json.dumps(body, sort_keys=True, separators=(",", ":")).encode()).hexdigest()[:24]
 
 
@@ -934,6 +938,7 @@ class StoryJob(Job):
             provider_key=self.key_reader(),
             http=self.svc.http,
             polly=self.svc.polly,
+            extra={"art": writer.workspace_art(self.config)},  # the built-in pictures' drawing style (§45.45)
         )
 
     def _provider(self, kind: str, ctx: ProviderContext, pid: str | None = None) -> Any:
@@ -1351,6 +1356,8 @@ class StoryJob(Job):
             # The second call after the engine refused the first staging is the re-staging pass (§45.37 G5).
             "restage": restage,
         }
+        if request.get("art") == writer.NIGHT:  # the night drive style's house rules and cuts (§45.45)
+            brief["art"] = writer.NIGHT
         answer: dict[str, Any] = await provider.write(brief)
         await self.prove("writer", "bedrock-claude")
         return answer
@@ -1396,11 +1403,12 @@ class StoryJob(Job):
         target = float(self.story.get("durationSec") or 45)
         keep_size = old is not None and (mode == "scenes" or not isinstance(self.story.get("format"), dict))
         size = (int(old.get("width") or 1080), int(old.get("height") or 1920)) if keep_size and old else self._size()
+        # the drawing style (§45.45): a new write takes the story's; asked changes keep the storyboard's own
+        art = writer.art_of(old) if keep_cast and old is not None else writer.art_of(self.story)
         request: dict[str, Any] = {
             "story": await self._concept(),
             "cast": writer.cast_brief(cast, self.characters, cars),
-            "catalog": self._lists(catalog),
-            **rules,
+            **writer.styled_request(self._lists(catalog), rules, art),
             "format": writer.format_of(size),
             "targetSec": target,
             "captionsOn": bool(self.story.get("captionsOn", self.config.get("captionsOn", True))),
@@ -1428,7 +1436,7 @@ class StoryJob(Job):
         self.meta.update({"engineVersion": engine_version, "seed": seed})
         args: dict[str, Any] = {"old": old, "cast": cast, "seed": seed, "engine": engine_version, "topic": topic,
                 "scene_ids": scene_ids, "new_take": mode == "scenes" and not note, "size": size,
-                "cars": cars}  # fmt: skip
+                "cars": cars, "art": art}  # fmt: skip
         # A remade scene gets its new seed after normalizing (§45.34), so it is new to normalizeScript.
         reseed = (
             {sid: keys.seed_for(self.fence.job_id, "scene", sid) for sid in scene_ids} if mode == "scenes" else None
@@ -1523,6 +1531,7 @@ class StoryJob(Job):
         new_take: bool,
         size: tuple[int, int] = writer.DEFAULT_SIZE,
         cars: dict[str, dict[str, Any]] | None = None,
+        art: str | None = None,
     ) -> tuple[dict[str, Any], bool, list[str]]:
         """The script from the writer's answer, whether it teaches driving safety, and the asked scene ids the answer
         left out (a remake must name exactly those, §45.34)."""
@@ -1543,6 +1552,7 @@ class StoryJob(Job):
             topic=topic,
             size=size,
             cars=cars,
+            art=art,
         )
         if old is not None:  # the same scene ids keep their seeds, so an unchanged scene is not drawn again
             seeds_old = {str(s.get("sceneId")): s.get("seed") for s in old.get("scenes") or []}
@@ -1751,11 +1761,11 @@ class StoryJob(Job):
         cast = dict(script.get("cast") or {})
         cars = dict(script.get("cars") or {})
         size = (int(script.get("width") or 1080), int(script.get("height") or 1920))
+        art = writer.art_of(script)  # the fix keeps the storyboard's drawing style (§45.45)
         request = {
             "story": await self._concept(),
             "cast": writer.cast_brief(cast, self.characters, cars),
-            "catalog": self._lists(catalog),
-            **rules,
+            **writer.styled_request(self._lists(catalog), rules, art),
             "format": writer.format_of(size),
             "targetSec": float(script.get("durationSec") or 45),
             "captionsOn": bool(script.get("captionsOn")),
@@ -1781,6 +1791,7 @@ class StoryJob(Job):
             topic=topic,
             size=size,
             cars=cars,
+            art=art,
         )
         old_scenes = {str(s.get("sceneId")): s for s in script.get("scenes") or []}
         new_ids = [str(s.get("sceneId")) for s in new.get("scenes") or []]

@@ -3,14 +3,18 @@
 // fitDuration lands the story on its target length without breaking any scene rule; repairScript swaps a face or
 // drops a noise a character does not have, after the writer's last try (CONTRACTS §45.34). A car of the cast
 // (§45.42) lives in the script's own `cars` map and is drawn by the one car prop of a scene whose castId names it.
+// The drawing style (`art`) and the cuts between shots inside a scene (`cuts`) are §45.45: both are optional, and a
+// script without them is checked, normalized and fitted exactly as before.
 
 import { sceneBeds } from "./ambience.ts";
-import { CAR_CAST_SHAPES, carHasFace, checkCarLook } from "./car.ts";
+import { CAR_CAST_SHAPES, CAR_CAST_SHAPES_ND, CAR_VIEW_SHAPES, carHasFace, checkCarLook } from "./car.ts";
 import { CATALOG, catalogIds } from "./catalog.ts";
 import { formatOf, formatsSentence } from "./frame.ts";
 import { clamp, hash, isHex } from "./math.ts";
-import { CARS } from "./props.ts";
-import type { CaptionCue, CarLook, Scene, ScriptRepair, SfxCue, StoryScript, ValidateResult } from "./types.ts";
+import { CARS, PROP_SHAPES_ND } from "./props.ts";
+import { SET_SHAPES_ND, setInfo } from "./sets.ts";
+import { SHOT_CARS as SHOT_CARS_MAX, SHOT_SHAPES } from "./shots.ts";
+import type { ArtStyle, CaptionCue, CarLook, Scene, SetId, ShotCue, ShotId, ScriptRepair, SfxCue, StoryScript, ValidateResult } from "./types.ts";
 
 /** The default size (9:16); FORMATS (frame.ts) has all six. */
 export const WIDTH = 1080;
@@ -43,8 +47,62 @@ export const SHAPES = {
 } as const;
 const ONCE = new Set(["snow", "rain", "fog"]);
 
-/** A scene's busiest frame, roughly, in shapes: validateScript keeps it at most LIMITS.shapes. */
-export function sceneShapes(scene: { set?: unknown; actors?: unknown; props?: unknown }): number {
+/** The night drive style's estimates (§45.45): every person, car and place has more shading, so more shapes. A place
+ * at night has lamps, halos, mountains and the vignette (each place's own measure is SET_SHAPES_ND, sets.ts); "props"
+ * is each kind's classic estimate plus `prop`; a car of the cast is car.ts's measured CAR_CAST_SHAPES_ND. */
+export const SHAPES_ND = {
+  set: 72,
+  nightSet: 100,
+  wetSet: 95,
+  actor: 92,
+  /** measured by props.ts (PROP_SHAPES_ND) */
+  props: { ...PROP_SHAPES_ND } as Partial<Record<string, number>>,
+  /** added to a classic estimate of any other prop */
+  prop: 2,
+  carCast: CAR_CAST_SHAPES_ND,
+} as const;
+
+/** Each shot's busiest frame (§45.45, measured by shots.ts): its place, the inside of the car, the own car and the
+ * driver. */
+export const SHOT_ESTIMATES: Readonly<Record<ShotId, number>> = SHOT_SHAPES;
+/** Each other car or truck a shot shows adds its front or back view (car.ts CAR_VIEW_SHAPES), for at most
+ * `SHOT_CARS` of them (the nearest). */
+export const SHOT_CAR = CAR_VIEW_SHAPES;
+export const SHOT_CARS = SHOT_CARS_MAX;
+
+/** A scene's busiest frame, roughly, in shapes: validateScript keeps it at most LIMITS.shapes. In night drive it is
+ * the larger of the whole scene's estimate and each cut's shot (its own estimate plus the other cars it shows). */
+export function sceneShapes(scene: { set?: unknown; actors?: unknown; props?: unknown; cuts?: unknown }, art: ArtStyle = "classic"): number {
+  if (art !== "night_drive") return classicShapes(scene);
+  const night = scene.set === "road_night" || scene.set === "highway_night";
+  const wet = scene.set === "snowy_road" || scene.set === "rainy_road";
+  const measured = typeof scene.set === "string" ? SET_SHAPES_ND[scene.set as SetId] : undefined;
+  let n: number = measured ?? (night ? SHAPES_ND.nightSet : wet ? SHAPES_ND.wetSet : SHAPES_ND.set);
+  if (Array.isArray(scene.actors)) n += scene.actors.length * SHAPES_ND.actor;
+  const seen = new Set<string>();
+  let vehicles = 0;
+  if (Array.isArray(scene.props)) {
+    for (const p of scene.props) {
+      const kind = isObj(p) && typeof p.kind === "string" ? p.kind : "";
+      if (kind === "car" || kind === "truck") vehicles += 1;
+      if (ONCE.has(kind) && seen.has(kind)) continue;
+      seen.add(kind);
+      if (kind === "car" && isObj(p) && typeof p.castId === "string") n += SHAPES_ND.carCast;
+      else n += SHAPES_ND.props[kind] ?? (SHAPES.props[kind] ?? SHAPES.prop) + SHAPES_ND.prop;
+    }
+  }
+  if (Array.isArray(scene.cuts)) {
+    // the own car is in the shot's estimate; every other car or truck it may show adds its own
+    const others = Math.min(SHOT_CARS, Math.max(0, vehicles - 1)) * SHOT_CAR;
+    for (const c of scene.cuts) {
+      const shot = isObj(c) && typeof c.shot === "string" ? SHOT_ESTIMATES[c.shot as ShotId] : undefined;
+      if (shot) n = Math.max(n, shot + others);
+    }
+  }
+  return n;
+}
+
+function classicShapes(scene: { set?: unknown; actors?: unknown; props?: unknown }): number {
   let n = scene.set === "snowy_road" || scene.set === "rainy_road" ? SHAPES.wetSet : SHAPES.set;
   if (Array.isArray(scene.actors)) n += scene.actors.length * SHAPES.actor;
   const seen = new Set<string>();
@@ -83,6 +141,7 @@ const SFX = new Set(catalogIds("sfx"));
 const FACES = new Set(catalogIds("expressions"));
 const STYLES = new Set(catalogIds("movementStyles"));
 const MOODS = new Set(catalogIds("musicMoods"));
+const SHOTS = new Set(catalogIds("shots"));
 
 /** The look and voice choices come from the catalog (CONTRACTS §45.33), so the character agent's schema and this
  * check can never disagree. */
@@ -301,7 +360,7 @@ const movesCar = (b: Obj): boolean => CAR_MOVES.has(b.do as string) || ((b.do ==
 /** Getting in or out of a car takes 0.8 to 3 seconds; the car may start or stop moving within `slack` of it. */
 export const BOARDING = { min: 0.8, max: 3, slack: 0.1 } as const;
 
-function checkScene(sc: unknown, i: number, castIds: string[], seenScenes: Set<string>, seenFx: Set<string>, err: (m: string) => void, own: Map<string, Own>, cars: Map<string, CarInfo> = new Map()): Obj | null {
+function checkScene(sc: unknown, i: number, castIds: string[], seenScenes: Set<string>, seenFx: Set<string>, err: (m: string) => void, own: Map<string, Own>, cars: Map<string, CarInfo> = new Map(), art: ArtStyle = "classic"): Obj | null {
   if (!isObj(sc)) {
     err(`scene ${i + 1}: must be an object.`);
     return null;
@@ -389,11 +448,12 @@ function checkScene(sc: unknown, i: number, castIds: string[], seenScenes: Set<s
   }
 
   if (props && actors && props.length <= LIMITS.props && actors.length <= LIMITS.actors) {
-    const shapes = sceneShapes(sc);
+    const shapes = sceneShapes(sc, art);
     if (shapes > LIMITS.shapes) {
       const plural: Record<string, string> = { car: "cars", truck: "trucks", deer: "deer" };
       const heavy = [...new Set(props.map((p) => plural[(isObj(p) && (p.kind as string)) || ""]).filter((v): v is string => !!v))];
-      err(`${where}: is too busy to draw quickly (about ${shapes} shapes at once; the most is ${LIMITS.shapes}). Use fewer ${[...heavy, "characters"].join(", ").replace(/, ([^,]*)$/, " or $1")} in it (a character is about ${SHAPES.actor} shapes, a car ${SHAPES.props.car}, a small prop ${SHAPES.prop}).`);
+      const nd = art === "night_drive";
+      err(`${where}: is too busy to draw quickly (about ${shapes} shapes at once; the most is ${LIMITS.shapes}). Use fewer ${[...heavy, "characters"].join(", ").replace(/, ([^,]*)$/, " or $1")} in it (a character is about ${nd ? SHAPES_ND.actor : SHAPES.actor} shapes, a car ${nd ? SHAPES_ND.props.car : SHAPES.props.car}, a small prop ${nd ? SHAPES.prop + SHAPES_ND.prop : SHAPES.prop}).`);
     }
   }
 
@@ -450,6 +510,7 @@ function checkScene(sc: unknown, i: number, castIds: string[], seenScenes: Set<s
       checkDriverWave(where, actors, beats, err);
     }
   }
+  if (sc.cuts !== undefined) checkCuts(sc, sid || `${i + 1}`, dur, actors ?? [], beats ?? [], propKinds, err);
 
   const sfx = sc.sfx === undefined ? [] : Array.isArray(sc.sfx) ? sc.sfx : null;
   if (!sfx) err(`${where}: sfx must be a list of effects (it may be empty).`);
@@ -534,6 +595,90 @@ function checkDriverWave(where: string, actors: unknown[], beats: unknown[], err
   }
 }
 
+/** The most cuts a scene may have, and how close two may be (and how near the scene's end the last). */
+export const CUTS = { max: 8, gap: 0.6 } as const;
+/** The shots that look from inside or right behind the driver's car (§45.45): they need someone sitting in a car on a
+ * road. Face up close needs it too when its person sits in a car. */
+export const CAR_SHOTS: ReadonlySet<ShotId> = new Set<ShotId>(["driver_view", "side_window", "mirror", "speed_dial", "pedals", "road_behind"]);
+
+const shotList = () => [...SHOTS].join(", ");
+
+/** The cuts of a scene (§45.45): at most 8, sorted, at least 0.6 s apart and 0.6 s before the end, in a side view, each
+ * shot with what it shows: a rider in a car on a road for the car shots, a road for Down the road, a person for Face
+ * up close, and never while that rider is getting in or out. */
+function checkCuts(sc: Obj, sid: string, dur: number, actors: unknown[], beats: unknown[], propKinds: Map<string, string>, err: (m: string) => void): void {
+  const scene = `Scene ${sid}`;
+  const cuts = sc.cuts;
+  if (!Array.isArray(cuts)) {
+    err(`${scene}: cuts must be a list of up to ${CUTS.max} cuts { at, shot, who } (it may be empty).`);
+    return;
+  }
+  if (!cuts.length) return;
+  if (cuts.length > CUTS.max) err(`${scene}: has ${cuts.length} cuts; the most is ${CUTS.max}.`);
+  if (sc.view === "top") {
+    err(`${scene} is seen from above; cuts work in side views only.`);
+    return;
+  }
+  const actorIds = actors.filter(isObj).map((a) => a.castId).filter((v): v is string => typeof v === "string");
+  // who sits in a car or truck of this scene, in the scene's order (the first is the scene's driver)
+  const riders = actors.filter(isObj).filter((a) => typeof a.castId === "string" && typeof a.inCar === "string" && (propKinds.get(a.inCar) === "car" || propKinds.get(a.inCar) === "truck")).map((a) => a.castId as string);
+  const road = SETS.has(sc.set as string) && setInfo(sc.set as SetId).road;
+  const label = (CATALOG.sets.find((e) => e.id === sc.set)?.label ?? String(sc.set)).toLowerCase();
+  const boarding = beats.filter(isObj).filter((b) => (b.do === "get_in" || b.do === "get_out") && typeof b.who === "string" && isNum(b.at) && isNum(b.dur));
+  let prev: number | null = null;
+  cuts.forEach((c, j) => {
+    if (!isObj(c)) return err(`${scene}: cut ${j + 1} must be an object { at, shot, who }.`);
+    const shot = c.shot as string;
+    const at = c.at;
+    if (!SHOTS.has(shot)) err(`${scene}: cut ${j + 1}'s shot ${show(shot)} is not a shot; use one of ${shotList()}.`);
+    if (!isNum(at) || at < 0) {
+      err(`${scene}: cut ${j + 1}'s at is ${show(at)}; use seconds from the scene's start (0 or more).`);
+      return;
+    }
+    if (at >= dur - CUTS.gap) err(`${scene}: the cut at ${round(at)} s is too near the end; cut before ${round(dur - CUTS.gap)} s (${CUTS.gap} s before the scene ends).`);
+    if (prev !== null) {
+      if (at < prev) err(`${scene}: cuts must be in time order; the cut at ${round(at)} s comes after the one at ${round(prev)} s.`);
+      else if (at - prev < CUTS.gap - 1e-9) err(`${scene}: cuts at ${round(prev)} s and ${round(at)} s are too close; keep cuts at least ${CUTS.gap} s apart.`);
+    }
+    prev = at;
+    const who = c.who;
+    if (who !== undefined && (typeof who !== "string" || !actorIds.includes(who))) {
+      err(`${scene}: the cut at ${round(at)} s is about ${show(who)}, who is not in this scene; use one of its actors (${list(actorIds) || "none"}) or leave who out.`);
+      return;
+    }
+    if (!SHOTS.has(shot) || shot === "scene") return;
+    // the shot lasts until the next cut or the scene's end
+    const next = cuts[j + 1];
+    const until = isObj(next) && isNum(next.at) && next.at > at ? next.at : dur;
+    const name = `the shot "${shot}" at ${round(at)} s`;
+    const needsRoad = () => {
+      if (!road) err(`${scene} is in the ${label}; the shot "${shot}" needs a road. Use a road place or another shot.`);
+      return road;
+    };
+    let rider: string | null = null;
+    if (shot === "face") {
+      const person = typeof who === "string" ? who : (riders[0] ?? actorIds[0]);
+      if (!person) return err(`${scene}: ${name} needs a person in the scene; add an actor or use another shot.`);
+      if (!riders.includes(person)) return;
+      rider = person;
+    } else if (shot === "road_wide") {
+      needsRoad();
+      return;
+    } else if (CAR_SHOTS.has(shot as ShotId)) {
+      rider = typeof who === "string" && riders.includes(who) ? who : (riders[0] ?? null);
+      if (!rider) return err(`${scene}: ${name} needs someone sitting in a car; nobody in this scene has inCar. Put the driver in a car, or use the whole scene.`);
+    }
+    if (!rider || !needsRoad()) return;
+    for (const b of boarding.filter((x) => x.who === rider)) {
+      const from = b.at as number;
+      const end = from + (b.dur as number);
+      if (from >= until - 1e-9 || end <= at + 1e-9) continue;
+      if (b.do === "get_in") err(`${scene}: ${name} needs someone sitting in a car; ${rider} is still getting in until ${round(end)} s. Cut after that, or use the whole scene.`);
+      else err(`${scene}: ${name} needs someone sitting in a car; ${rider} gets out from ${round(from)} s. Cut back to the whole scene before that.`);
+    }
+  });
+}
+
 export function validateScript(input: unknown): ValidateResult {
   const errors: string[] = [];
   const err = (m: string) => {
@@ -550,6 +695,8 @@ export function validateScript(input: unknown): ValidateResult {
       err(`width × height is ${show(s.width)} × ${show(s.height)}; a script for engine ${show(s.engine)} must be ${WIDTH} × ${HEIGHT} (vertical 9:16). Scripts for engine ${SIZES_FROM_ENGINE} and later may also be ${sizes}.`);
     }
   }
+  if (s.art !== undefined && s.art !== "night_drive" && s.art !== "classic") err('art must be "night_drive" or "classic" (the drawing style).');
+  const art: ArtStyle = s.art === "night_drive" ? "night_drive" : "classic";
   if (!isNum(s.durationSec) || s.durationSec <= 0 || s.durationSec > LIMITS.totalSec) err(`durationSec is ${show(s.durationSec)}; use the story's length in seconds (fitDuration brings it to at most ${MAX_SECONDS}).`);
   if (typeof s.title !== "string" || !s.title.trim() || s.title.length > 100) err("title must be 1 to 100 characters.");
   if (!isInt(s.seed) || s.seed < 0 || s.seed > 0xffffffff) err(`seed is ${show(s.seed)}; it must be a whole number from 0 to 4294967295.`);
@@ -573,7 +720,7 @@ export function validateScript(input: unknown): ValidateResult {
     const seenScenes = new Set<string>();
     const seenFx = new Set<string>();
     s.scenes.forEach((sc, i) => {
-      checkScene(sc, i, castIds, seenScenes, seenFx, err, own, cars);
+      checkScene(sc, i, castIds, seenScenes, seenFx, err, own, cars, art);
       if (isObj(sc) && isNum(sc.durationSec)) total += sc.durationSec;
     });
     if (total > LIMITS.totalSec) err(`the scenes add up to ${round(total)} s; write at most ${LIMITS.totalSec} s (fitDuration then brings it to the target).`);
@@ -736,7 +883,9 @@ export function normalizeScript(s: StoryScript): StoryScript {
       }
     }
     const seed = hasSeed ? (sc.seed as number) : hash(s.seed, sc.sceneId);
-    return { ...sc, seed, beats: stableSort(beats, byAt), sfx: stableSort(sfx, (a, b) => a.at - b.at || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)), caption: sc.caption ?? null, note: sc.note ?? null };
+    const out: Scene = { ...sc, seed, beats: stableSort(beats, byAt), sfx: stableSort(sfx, (a, b) => a.at - b.at || (a.id < b.id ? -1 : a.id > b.id ? 1 : 0)), caption: sc.caption ?? null, note: sc.note ?? null };
+    if (Array.isArray(sc.cuts)) out.cuts = stableSort(sc.cuts.map((c) => ({ ...c })), byAt);
+    return out;
   });
   return { ...s, scenes, captions: stableSort([...(s.captions ?? [])], byAt), music: s.music ?? null, safety: s.safety ?? null };
 }
@@ -817,6 +966,7 @@ export function fitDuration(s: StoryScript, targetSec: number): StoryScript {
         return { ...bt, at, dur };
       }),
       sfx: (sc.sfx ?? []).map((c) => ({ ...c, at: Math.min(ms(c.at * k), ms(d - 0.01)) })),
+      ...(Array.isArray(sc.cuts) ? { cuts: scaleCuts(sc.cuts, k, d) } : {}),
     };
   });
   const total = nt;
@@ -832,6 +982,20 @@ export function fitDuration(s: StoryScript, targetSec: number): StoryScript {
     return { ...c, at, dur: Math.max(0.3, ms(end - at)) };
   });
   return { ...s, scenes, captions, durationSec: Math.round(total * 10) / 10 };
+}
+
+/** A scene's cuts scaled with it (§45.45): each at × k, then any cut that comes less than 0.6 s after the one kept
+ * before it, or less than 0.6 s before the scene's new end, is dropped. The API's _scale_scene does the same. */
+export function scaleCuts(cuts: ShotCue[], k: number, d: number): ShotCue[] {
+  const out: ShotCue[] = [];
+  for (const c of cuts) {
+    const at = ms(c.at * k);
+    if (at >= d - CUTS.gap) continue;
+    const last = out[out.length - 1];
+    if (last && at - last.at < CUTS.gap - 1e-9) continue;
+    out.push({ ...c, at });
+  }
+  return out;
 }
 
 export function frameCount(s: StoryScript): number {

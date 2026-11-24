@@ -6,8 +6,9 @@
 // and an older pick of one says so with a one-tap replacement. The sound maker saves (G3): built-in sounds, ElevenLabs
 // effects and music, the owner's own sound model, or, only when he picks it, a spoken voice (Amazon Polly). The
 // owner's own picture, video and sound models (G2) are added below the makers. Then the default shape (9:16, 1:1 or
-// 16:9) and its size, the frame rate, the usual length, the quality, the captions and music defaults, the use and
-// costs, prices for the AI makers and provider keys.
+// 16:9) and its size, the frame rate, the drawing style new videos start with (Night drive or Bright, §45.45), the
+// usual length, the quality, the captions and music defaults, the use and costs, prices for the AI makers and
+// provider keys.
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
 import { useLoad } from "../../lib/hooks.ts";
 import { storiesApi } from "../api/client.ts";
@@ -17,9 +18,11 @@ import {
   MAKER_FIELD_OF,
   makerModelsIn,
   OWN_MAKER,
+  ART_STYLES,
   RESOLUTIONS,
   SOUND_MAKERS,
   VIDEO_MAKERS,
+  type ArtStyle,
   type MakerKind,
   type MakerModelInfo,
   type MakerPrice,
@@ -37,6 +40,8 @@ import { keepName, ProviderKeys } from "./ProviderKeys.tsx";
 import { MakerPrices } from "./ProviderPrices.tsx";
 import { ReelTry } from "./ReelTry.tsx";
 import { StTech } from "../ui.tsx";
+import { sayArtPicked } from "../preview/art.tsx";
+import { ArtSample, artOf, ART_WORDS } from "../studio/art.tsx";
 import { VideoUsage } from "./VideoUsage.tsx";
 
 /** A model's exact ID (and its Region on Amazon Bedrock), said only behind "Technical details" (§45.36 E14). */
@@ -472,6 +477,18 @@ export function VideoSection({ ws }: { ws: string }) {
             <dd>30 frames a second (30 fps)</dd>
           </div>
         </dl>
+      </SetCard>
+
+      <SetCard title="Drawing style" icon="brush" id="drawing-style" lede="New videos start with this drawing style. You can change it for one video in Production › New.">
+        <SetPick<ArtStyle>
+          label="Drawing style of new videos"
+          value={artOf(c)}
+          onChange={(v) => {
+            save({ video: { ...c.video, art: v } });
+            sayArtPicked(ws, v);
+          }}
+          options={ART_STYLES.map((a) => ({ value: a, label: ART_WORDS[a].label, line: ART_WORDS[a].line, pic: <ArtSample art={a} /> }))}
+        />
       </SetCard>
 
       <SetCard title="Usual length" icon="clock" lede="New videos start at this length. You can change it for each video.">

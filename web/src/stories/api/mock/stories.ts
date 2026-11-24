@@ -15,8 +15,9 @@
 // stages it as a car prop with its castId (getting in, driving off, honking, stalling), and a video filed in a series
 // (§45.43) tells the series part when it is approved or deleted.
 import { ApiError, type ErrorCode } from "../../../api/errors.ts";
-import { CATALOG, drawFrame, ENGINE_VERSION, fitDuration, normalizeScript, sceneFrames, validateScript } from "../../engine/engine.ts";
-import type { ActionId, Beat, CameraId, CarMember, CastMember, Expression, NoiseId, PropAction, PropKind, Scene, SceneActor, SceneProp, SetId, SfxId, StoryScript } from "../../engine/types.ts";
+import { CATALOG, CUTS, drawFrame, ENGINE_VERSION, fitDuration, normalizeScript, scaleCuts, sceneFrames, validateScript } from "../../engine/engine.ts";
+import { setInfo } from "../../engine/sets.ts";
+import type { ActionId, ArtStyle, Beat, CameraId, CarMember, CastMember, Expression, NoiseId, PropAction, PropKind, Scene, SceneActor, SceneProp, SetId, SfxId, ShotCue, ShotId, StoryScript } from "../../engine/types.ts";
 import { drawPrims } from "../../preview/draw.ts";
 import {
   isCar,
@@ -151,6 +152,18 @@ function defaultFormat(cfg: Partial<StoriesConfig>): StoryFormat {
   return fits && w && h ? { aspect, width: w, height: h } : VERTICAL;
 }
 
+/** The workspace's drawing style for new videos (StoriesConfig.video.art), Night drive when it has none (§45.45). */
+function defaultArt(cfg: Partial<StoriesConfig>): ArtStyle {
+  const art = (cfg.video as { art?: unknown } | undefined)?.art;
+  return art === "classic" ? "classic" : "night_drive";
+}
+
+/** A create body's drawing style, checked like the API. */
+function checkArt(a: unknown): ArtStyle {
+  if (a !== "night_drive" && a !== "classic") fail(400, "bad_request", "Pick a drawing style: Night drive or Bright.");
+  return a;
+}
+
 /** A create body's format, checked like the API: a known aspect and one of its sizes. */
 function checkFormat(f: unknown): StoryFormat {
   const v = (f ?? {}) as Partial<StoryFormat>;
@@ -263,8 +276,10 @@ function actionFor(text: string): ActionId {
   return "drive";
 }
 
-function drivingDrafts(chars: Person[], topicId: string, n: number, carId: string | null = null): Draft[] {
-  const t = TROUBLE[topicId] ?? { set: "road_day" as SetId, carDo: "wobble" as PropAction, sfx: "screech" as SfxId, face: "surprised" as Expression };
+function drivingDrafts(chars: Person[], topicId: string, n: number, carId: string | null = null, night = false): Draft[] {
+  const found = TROUBLE[topicId] ?? { set: "road_day" as SetId, carDo: "wobble" as PropAction, sfx: "screech" as SfxId, face: "surprised" as Expression };
+  // night drive (§45.45): a highway topic happens on the highway at night
+  const t = night && found.set === "highway" ? { ...found, set: "highway_night" as SetId } : found;
   const lead = chars[0];
   const pal = chars[1];
   const steps = shownSteps(topicId).filter((s) => s.text.length <= 60);
@@ -385,15 +400,19 @@ function storyDrafts(chars: Person[], category: Exclude<IdeaCategory, "driving_s
 
 /** A story with the cast's car (§45.42): the main character gets in, they drive off, honk and stop, then the car
  * stalls and goes again. A longer video drives round the block in between. The lead is always the first person. */
-function carDrafts(people: Person[], carId: string, n: number): Draft[] {
+function carDrafts(people: Person[], carId: string, n: number, night = false): Draft[] {
   const lead = people[0];
+  // night drive (§45.45): the same story at night, the drive on the highway at night and the rest on a road at night
+  const parked: SetId = night ? "road_night" : "parking_lot";
+  const road: SetId = night ? "highway_night" : "road_day";
+  const last: SetId = night ? "road_night" : "road_day";
   const pal = people[1];
   const car = (x: number, state?: string): SceneProp => ({ propId: "car1", kind: "car", castId: carId, x, y: 0.74, scale: 1, rot: 0, ...(state ? { state } : {}) });
   const riders = (x: number): SceneActor[] => [{ castId: "c1", x, y: 0.74, facing: "right", inCar: "car1" }, ...(pal ? [{ castId: "c2", x, y: 0.74, facing: "right" as const, inCar: "car1" }] : [])];
   const getIn = (d: number) => Math.min(2.8, Math.max(0.9, d * 0.3));
   const drive = (title: string, x: number): Draft => ({
     title,
-    set: "road_day",
+    set: road,
     camera: "medium",
     actors: riders(x),
     props: [car(x)],
@@ -408,7 +427,7 @@ function carDrafts(people: Person[], carId: string, n: number): Draft[] {
   const out: Draft[] = [
     {
       title: "The new car",
-      set: "parking_lot",
+      set: parked,
       camera: "wide",
       actors: [{ castId: "c1", x: 0.16, y: 0.76, facing: "right", inCar: "car1" }, ...(pal ? [{ castId: "c2", x: 0.9, y: 0.78, facing: "left" as const }] : [])],
       props: [car(0.56, "parked")],
@@ -424,7 +443,7 @@ function carDrafts(people: Person[], carId: string, n: number): Draft[] {
   for (let i = 0; i < n - 3; i += 1) out.push(drive("Round the block", 0.5));
   out.push({
     title: "Oops",
-    set: "road_day",
+    set: last,
     camera: "close",
     actors: riders(0.5),
     props: [car(0.5)],
@@ -465,7 +484,7 @@ function cuesFor(s: StoryScript, texts: Record<string, { text: string; ref?: str
   return out;
 }
 
-function writeScript(chars: Character[], brief: Brief, o: { seed: number; topicId: string | null; captionsOn: boolean; musicMood: MusicMood; durationSec: number; note?: string | null; format?: StoryFormat }): StoryScript {
+function writeScript(chars: Character[], brief: Brief, o: { seed: number; topicId: string | null; captionsOn: boolean; musicMood: MusicMood; durationSec: number; note?: string | null; format?: StoryFormat; art?: ArtStyle }): StoryScript {
   // The video's own size (§45.34); an engine that only draws 9:16 refuses another size, so the practice writer then
   // writes it at 1080 × 1920.
   const f = o.format;
@@ -479,17 +498,18 @@ function writeScript(chars: Character[], brief: Brief, o: { seed: number; topicI
   return writeSized(chars, brief, o, 1080, 1920);
 }
 
-function writeSized(chars: Character[], brief: Brief, o: { seed: number; topicId: string | null; captionsOn: boolean; musicMood: MusicMood; durationSec: number; note?: string | null }, width: number, height: number): StoryScript {
+function writeSized(chars: Character[], brief: Brief, o: { seed: number; topicId: string | null; captionsOn: boolean; musicMood: MusicMood; durationSec: number; note?: string | null; art?: ArtStyle }, width: number, height: number): StoryScript {
   const safety = brief.category === "driving_safety" && o.topicId ? o.topicId : null;
+  const night = o.art === "night_drive";
   const n = Math.min(8, Math.max(safety ? 5 : 4, Math.round(o.durationSec / 7.5)));
   const { cast, cars } = castOf(chars);
   const people = chars.filter((c): c is Person => !isCar(c));
   const carId = Object.keys(cars)[0] ?? null;
   // a car story is 3 scenes (each up to 15 s): a longer one drives round the block in between
   const drafts = safety
-    ? drivingDrafts(people, safety, n, carId)
+    ? drivingDrafts(people, safety, n, carId, night)
     : carId
-      ? carDrafts(people, carId, Math.max(3, Math.ceil(o.durationSec / 15)))
+      ? carDrafts(people, carId, Math.max(3, Math.ceil(o.durationSec / 15)), night)
       : storyDrafts(people, brief.category === "driving_safety" ? "explainer" : brief.category, n);
   const d = Math.min(15, Math.max(2, r1(o.durationSec / drafts.length)));
   const texts: Record<string, { text: string; ref?: string }> = {};
@@ -527,9 +547,63 @@ function writeSized(chars: Character[], brief: Brief, o: { seed: number; topicId
     captionsOn: o.captionsOn,
     captions: [],
     safety: safety ? { topicId: safety, citations: citationsFor(safety) } : null,
+    ...(night ? { art: "night_drive" as const } : {}),
   };
   const fitted = fitDuration(normalizeScript(raw), o.durationSec);
-  return checked({ ...fitted, captions: cuesFor(fitted, texts) });
+  const cut = night ? withCuts(fitted) : fitted;
+  return checked({ ...cut, captions: cuesFor(cut, texts) });
+}
+
+/** The shots a night drive scene with someone driving cuts between, like a short film (§45.45's house rules): open
+ * behind the car, then the driver's eyes, the face for a reaction, the speed dial when the car speeds up or stops,
+ * and down the road. Cuts stay 0.6 s apart, 0.6 s before the end, and never while the driver gets in or out. A scene
+ * with nobody in a car on a road keeps the whole scene. */
+function sceneCuts(sc: Scene): ShotCue[] {
+  if (sc.view !== "side" || !setInfo(sc.set).road) return [];
+  const vehicles = new Set(sc.props.filter((p) => p.kind === "car" || p.kind === "truck").map((p) => p.propId));
+  const rider = sc.actors.find((a) => a.inCar && vehicles.has(a.inCar));
+  if (!rider) return [];
+  const d = sc.durationSec;
+  const own = sc.beats.filter((bt) => bt.who === rider.castId);
+  const boarding = own.filter((bt) => bt.do === "get_in" || bt.do === "get_out");
+  const getIn = boarding.find((bt) => bt.do === "get_in");
+  const from = getIn ? getIn.at + getIn.dur + 0.1 : 0;
+  const reaction = own.find((bt) => bt.at >= from + 0.6 && (bt.face || bt.noise));
+  const pace = sc.beats.find((bt) => bt.who === rider.inCar && bt.at >= from + 1.2 && (bt.do === "speed_up" || bt.do === "stop" || bt.do === "stall"));
+  const plan: ShotCue[] = getIn
+    ? [
+        { at: from, shot: "face" },
+        { at: from + 1.4, shot: "driver_view" },
+      ]
+    : [
+        { at: 0, shot: "road_behind" },
+        { at: d * 0.22, shot: "driver_view" },
+        ...(reaction ? [{ at: reaction.at, shot: "face" as ShotId }] : []),
+        ...(pace ? [{ at: pace.at, shot: "speed_dial" as ShotId }] : []),
+        { at: d * 0.78, shot: "road_wide" },
+      ];
+  const out: ShotCue[] = [];
+  for (const c of [...plan].sort((x, y) => x.at - y.at)) {
+    const at = r1(c.at);
+    if (at >= d - CUTS.gap || (out.length && at - out[out.length - 1]!.at < CUTS.gap)) continue;
+    out.push({ at, shot: c.shot });
+  }
+  // a shot in the car never shows while the driver gets in or out: those cuts go back to the whole scene
+  const span = (i: number) => [out[i]!.at, out[i + 1]?.at ?? d] as const;
+  for (let i = 0; i < out.length; i += 1) {
+    const [a, z] = span(i);
+    if (boarding.some((bt) => bt.at < z && bt.at + bt.dur > a)) out[i] = { at: out[i]!.at, shot: "scene" };
+  }
+  return out.slice(0, CUTS.max);
+}
+
+/** Every scene of a night drive script with its cuts; the whole scene again if the engine refuses any (it never should). */
+function withCuts(s: StoryScript): StoryScript {
+  const next: StoryScript = { ...s, scenes: s.scenes.map((sc) => {
+    const cuts = sceneCuts(sc);
+    return cuts.length ? { ...sc, cuts } : sc;
+  }) };
+  return validateScript(next).ok ? next : s;
 }
 
 const OTHER_TAKE: Partial<Record<string, ActionId | PropAction>> = {
@@ -811,7 +885,7 @@ function finishStep(store: MockStore, job: ProductionJob, key: StepKey, run: Run
     const next =
       script && sceneIds?.length && !note
         ? retake(script, sceneIds, story.scriptVersion)
-        : writeScript(chars.length ? chars : [], extra.brief, { seed, topicId: story.safetyTopicId, captionsOn: story.captionsOn, musicMood: story.musicMood, durationSec: story.durationSec, note, format: story.format });
+        : writeScript(chars.length ? chars : [], extra.brief, { seed, topicId: story.safetyTopicId, captionsOn: story.captionsOn, musicMood: story.musicMood, durationSec: story.durationSec, note, format: story.format, art: story.art });
     story.scriptVersion += 1;
     store.scripts[story.storyId] = next;
     story.scenes = next.scenes.map((sc) => ({ sceneId: sc.sceneId, title: sc.title, durationSec: sc.durationSec }));
@@ -1296,6 +1370,8 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       // The first job's own model and effort, never kept with the video (§45.5 POST /stories `override`).
       if (body.override) checkOverride(body.override, store);
       const format = body.format !== undefined ? checkFormat(body.format) : defaultFormat(cfg);
+      // The drawing style (§45.45): the body's, else the workspace's (Night drive unless it picked Bright).
+      const art = body.art !== undefined ? checkArt(body.art) : defaultArt(cfg);
       await delay(220);
       const now = Date.now();
       const storyId = mockId();
@@ -1321,6 +1397,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
         safety: null,
         ai: { model: body.ai?.model ?? null, effort: body.ai?.effort ?? null },
         format,
+        art,
         referenceIds,
         reviewNote: null,
         currentJobId: null,
@@ -1417,6 +1494,8 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
             const f = edit.durationSec / sc.durationSec;
             sc.beats = sc.beats.map((bt) => ({ ...bt, at: r1(bt.at * f), dur: r1(bt.dur * f) }));
             sc.sfx = sc.sfx.map((c) => ({ ...c, at: r1(Math.min(edit.durationSec!, c.at * f)) }));
+            // its cuts between shots too, as the API's _scale_scene and the engine's fitDuration (§45.45)
+            if (sc.cuts) sc.cuts = scaleCuts(sc.cuts, f, edit.durationSec);
             sc.durationSec = edit.durationSec;
             mark("animation", "sound", "captions", "assemble", "preview");
           }

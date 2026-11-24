@@ -2,9 +2,10 @@
 // every cast picker. The same drawing as the videos (engine/car.ts through previewCar), looping its move.
 import { useEffect, useRef } from "react";
 import { previewCar, type CarMove } from "../engine/engine.ts";
-import type { CarLook, Expression, MovementStyle } from "../engine/types.ts";
+import type { ArtStyle, CarLook, Expression, MovementStyle } from "../engine/types.ts";
 import { useAppActive } from "../pane.tsx";
 import { storiesReduceMotion } from "../prefs.ts";
+import { useArt } from "./art.tsx";
 import { drawPrims } from "./draw.ts";
 
 export interface CarPreviewProps {
@@ -17,10 +18,14 @@ export interface CarPreviewProps {
   /** animate (default true; reduced motion shows one still frame) */
   playing?: boolean;
   label: string;
+  /** the drawing style (§45.45); left out, the nearest ArtProvider's (Bright with none) */
+  art?: ArtStyle;
 }
 
-export function CarPreview({ car, movementStyle, expression = "neutral", move = "idle", size, playing = true, label }: CarPreviewProps) {
+export function CarPreview({ car, movementStyle, expression = "neutral", move = "idle", size, playing = true, label, art }: CarPreviewProps) {
   const ref = useRef<HTMLCanvasElement | null>(null);
+  const shared = useArt();
+  const style = art ?? shared;
   // Clips Funded kept hidden behind Clip Factory: no painting at all (the last frame stays), again once it is back.
   const active = useAppActive();
   useEffect(() => {
@@ -41,12 +46,12 @@ export function CarPreview({ car, movementStyle, expression = "neutral", move = 
       if (t !== last) {
         last = t;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        drawPrims(ctx, previewCar(car, movementStyle, expression, move, t, canvas.width), 1);
+        drawPrims(ctx, previewCar(car, movementStyle, expression, move, t, canvas.width, style), 1);
       }
       if (!still) raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [car, movementStyle, expression, move, size, playing, active]);
+  }, [car, movementStyle, expression, move, size, playing, active, style]);
   return <canvas ref={ref} className="st-character-preview st-car-preview" style={{ width: size, height: size }} role="img" aria-label={label} />;
 }

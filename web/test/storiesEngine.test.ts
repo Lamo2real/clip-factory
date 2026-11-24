@@ -9,6 +9,7 @@ import {
   ENGINE_VERSION,
   fitDuration,
   frameCount,
+  LIMITS,
   MAX_SECONDS,
   normalizeScript,
   sceneFrames,
@@ -17,7 +18,7 @@ import {
   validateScript,
 } from "../src/stories/engine/engine.ts";
 import { CATALOG, previewCharacter } from "../src/stories/engine/engine.ts";
-import type { CastMember, CharacterLook, Prim, Scene, StoryScript } from "../src/stories/engine/types.ts";
+import type { ArtStyle, CastMember, CharacterLook, Prim, Scene, StoryScript } from "../src/stories/engine/types.ts";
 
 const ENGINE = join(import.meta.dirname, "../src/stories/engine");
 const raw = (name: string): StoryScript => JSON.parse(readFileSync(join(ENGINE, "fixtures", name), "utf8")) as StoryScript;
@@ -549,8 +550,9 @@ function castOf(n: number): Record<string, CastMember> {
   ) as Record<string, CastMember>;
 }
 
-function storyOf(scenes: Scene[], cast = castOf(5)): StoryScript {
-  return { engine: 2, fps: 30, width: 1080, height: 1920, durationSec: scenes.reduce((a, sc) => a + sc.durationSec, 0), title: "Every id", seed: 3, cast, scenes, music: { mood: "calm", volume: 0.3 }, captionsOn: true, captions: [], safety: null };
+/** `art` is the drawing style (§45.45): Bright leaves the field out, as every script before it did. */
+function storyOf(scenes: Scene[], cast = castOf(5), art: ArtStyle = "classic"): StoryScript {
+  return { engine: 2, fps: 30, width: 1080, height: 1920, durationSec: scenes.reduce((a, sc) => a + sc.durationSec, 0), title: "Every id", seed: 3, cast, scenes, music: { mood: "calm", volume: 0.3 }, captionsOn: true, captions: [], safety: null, ...(art === "night_drive" ? { art } : {}) };
 }
 
 const scene = (sceneId: string, p: Partial<Scene>): Scene => ({ sceneId, title: sceneId, durationSec: 2, set: "studio", view: "side", camera: "wide", actors: [], props: [], beats: [], sfx: [], caption: null, note: null, ...p });
@@ -571,7 +573,9 @@ function drawsCleanly(s: StoryScript): void {
   expect(() => audioTrack(n)).not.toThrow();
 }
 
-describe("every catalog id draws", () => {
+// every id draws in both drawing styles: Bright (no art, as before) and night drive (CONTRACTS §45.45)
+for (const art of ["classic", "night_drive"] as const)
+describe(art === "classic" ? "every catalog id draws" : "every catalog id draws in night drive", () => {
   it("every set, in side and top view, with every camera", () => {
     const cams = ids("cameras");
     const scenes = ids("sets").flatMap((set, i) =>
@@ -589,7 +593,8 @@ describe("every catalog id draws", () => {
         }),
       ),
     );
-    drawsCleanly(storyOf(scenes));
+    // a story holds at most LIMITS.scenes scenes: every set and view is drawn, in as many stories as that takes
+    for (let i = 0; i < scenes.length; i += LIMITS.scenes) drawsCleanly(storyOf(scenes.slice(i, i + LIMITS.scenes), castOf(5), art));
   });
 
   it("every action with every movement style, every face, bubble and noise, standing and in a car", () => {
@@ -619,7 +624,7 @@ describe("every catalog id draws", () => {
         }),
       );
     }
-    drawsCleanly(storyOf(scenes));
+    drawsCleanly(storyOf(scenes, castOf(5), art));
   });
 
   for (const view of ["side", "top"] as const) {
@@ -639,7 +644,7 @@ describe("every catalog id draws", () => {
           }),
         ),
       );
-      drawsCleanly(storyOf(scenes));
+      drawsCleanly(storyOf(scenes, castOf(5), art));
     });
   }
 
@@ -649,12 +654,12 @@ describe("every catalog id draws", () => {
     const styles = ids("movementStyles");
     for (const [i, look] of looks().entries()) {
       for (const expression of ids("expressions")) {
-        const prims = previewCharacter(look, styles[i % styles.length]!, expression, "idle", 0.7, size);
+        const prims = previewCharacter(look, styles[i % styles.length]!, expression, "idle", 0.7, size, art);
         expect(primProblems(prims, box), `${expression}`).toEqual([]);
       }
       for (const action of ids("actions")) {
         for (const t of [0, 0.4, 0.9, 1.6, 2.3]) {
-          const prims = previewCharacter(look, styles[(i + 1) % styles.length]!, "happy", action, t, size);
+          const prims = previewCharacter(look, styles[(i + 1) % styles.length]!, "happy", action, t, size, art);
           expect(prims.length, action).toBeGreaterThan(25);
           expect(primProblems(prims, box), `${action} at ${t}`).toEqual([]);
         }
@@ -662,15 +667,15 @@ describe("every catalog id draws", () => {
     }
     // the same inputs always draw the same character
     const l = looks()[0]!;
-    expect(previewCharacter(l, "bouncy", "happy", "wave", 1.1, 300)).toEqual(previewCharacter(l, "bouncy", "happy", "wave", 1.1, 300));
+    expect(previewCharacter(l, "bouncy", "happy", "wave", 1.1, 300, art)).toEqual(previewCharacter(l, "bouncy", "happy", "wave", 1.1, 300, art));
   });
 
   it("the same character looks the same in every story (the rig, not a picture)", () => {
     const l = looks()[2]!;
-    const a = previewCharacter(l, "calm", "neutral", "idle", 0, 300);
-    const b = previewCharacter(JSON.parse(JSON.stringify(l)) as CharacterLook, "calm", "neutral", "idle", 0, 300);
+    const a = previewCharacter(l, "calm", "neutral", "idle", 0, 300, art);
+    const b = previewCharacter(JSON.parse(JSON.stringify(l)) as CharacterLook, "calm", "neutral", "idle", 0, 300, art);
     expect(a).toEqual(b);
-    const other = previewCharacter({ ...l, hair: { ...l.hair, color: "#00ff00" } }, "calm", "neutral", "idle", 0, 300);
+    const other = previewCharacter({ ...l, hair: { ...l.hair, color: "#00ff00" } }, "calm", "neutral", "idle", 0, 300, art);
     expect(other).not.toEqual(a);
   });
 });

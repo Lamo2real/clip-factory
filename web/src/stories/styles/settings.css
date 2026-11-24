@@ -1966,3 +1966,11 @@
   gap: 10px;
   min-width: 0;
 }
+
+/* Settings › Video's drawing styles (§45.45): a small sample character drawn in each style above its name. */
+.st-stg-pick__pic {
+  display: block;
+  width: 56px;
+  height: 56px;
+  margin-bottom: 4px;
+}

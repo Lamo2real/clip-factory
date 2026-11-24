@@ -15,7 +15,8 @@
     "resolution": "1080x1920",
     "aspect": "9:16",
     "quality": "high",
-    "fps": 30
+    "fps": 30,
+    "art": "night_drive"
   },
   "production": {
     "burnCaptions": true,

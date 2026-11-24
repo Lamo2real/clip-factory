@@ -293,6 +293,27 @@ def _money(value: Any, field: str) -> int | float:
     return value if isinstance(value, int) or not float(value).is_integer() else int(value)
 
 
+def _video_patch(current: Mapping[str, Any], value: Any) -> Item:
+    """Settings › Video's shape, size, frame rate, quality and drawing style, merged onto the current ones and checked.
+    §45.45: a configuration stored before drawing styles has no ``art``; it gets the default first, so a later video
+    edit never fails on it."""
+    base = dict(current.get("video") or {})
+    base.setdefault("art", shapes.DEFAULT_ART)
+    merged = _merge_section(base, value, "video")
+    if merged.get("art") not in shapes.ARTS:
+        raise bad_request(shapes.PICK_ART, "configuration.video")
+    if merged.get("aspect") not in stories.ASPECTS:
+        raise bad_request("Pick a shape: 9:16 (tall), 1:1 (square) or 16:9 (wide).", "configuration.video")
+    if merged.get("resolution") not in stories.ASPECTS[str(merged["aspect"])]:
+        sizes = " or ".join(s.replace("x", " by ") for s in stories.ASPECTS[str(merged["aspect"])])
+        raise bad_request(f"A {merged['aspect']} video is {sizes}.", "configuration.video")
+    if merged.get("fps") != 30:
+        raise bad_request("The built-in animator makes 30 frames a second only.", "configuration.video")
+    if merged.get("quality") not in QUALITIES:
+        raise bad_request("configuration.video.quality must be standard, high or best.")
+    return merged
+
+
 def _config_patch(
     current: Mapping[str, Any], value: Any, maker_models: list[Item] | Callable[[], list[Item]] | None = None
 ) -> Item:
@@ -313,17 +334,7 @@ def _config_patch(
             listed = makers.all_models() if found is None else found
             out[key] = makers.clean_providers(current.get("providers") or {}, chosen, listed)
         elif key == "video":
-            merged = _merge_section(current.get("video") or {}, v, key)
-            if merged.get("aspect") not in stories.ASPECTS:
-                raise bad_request("Pick a shape: 9:16 (tall), 1:1 (square) or 16:9 (wide).", "configuration.video")
-            if merged.get("resolution") not in stories.ASPECTS[str(merged["aspect"])]:
-                sizes = " or ".join(s.replace("x", " by ") for s in stories.ASPECTS[str(merged["aspect"])])
-                raise bad_request(f"A {merged['aspect']} video is {sizes}.", "configuration.video")
-            if merged.get("fps") != 30:
-                raise bad_request("The built-in animator makes 30 frames a second only.", "configuration.video")
-            if merged.get("quality") not in QUALITIES:
-                raise bad_request("configuration.video.quality must be standard, high or best.")
-            out[key] = merged
+            out[key] = _video_patch(current, v)
         elif key == "production":
             merged = _merge_section(current.get("production") or {}, v, key)
             merged["burnCaptions"] = validate.boolean(
@@ -1261,6 +1272,13 @@ def _check_references(ctx: Ctx, ids: list[str]) -> None:
         raise bad_request(NO_REFERENCE_VIDEO, "referenceIds")
 
 
+def _default_art(config: Mapping[str, Any]) -> str:
+    """The workspace's drawing style for new videos (Settings › Video, §45.45), else the default (Night drive)."""
+    video = config.get("video") if isinstance(config.get("video"), Mapping) else {}
+    art = (video or {}).get("art")
+    return str(art) if art in shapes.ARTS else shapes.DEFAULT_ART
+
+
 def _default_format(config: Mapping[str, Any]) -> Item:
     """The workspace's default size and shape (Settings › Video), as a story's ``format`` (§45.34)."""
     video = config.get("video") if isinstance(config.get("video"), Mapping) else {}
@@ -1336,6 +1354,7 @@ def create_story(app: App, req: Request) -> Response:
         "ai": fields["ai"],
         "referenceIds": fields["referenceIds"],
         "format": fields.get("format") or _default_format(config),
+        "art": fields.get("art") or _default_art(config),
         "version": 1,
         "createdAt": ctx.at(),
         "updatedAt": ctx.at(),

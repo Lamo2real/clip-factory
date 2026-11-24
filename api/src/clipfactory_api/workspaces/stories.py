@@ -33,6 +33,8 @@ DEFAULT_MOOD: Final = {
     "explainer": "wonder",
 }
 ASPECTS: Final = shapes.ASPECTS
+ARTS: Final = shapes.ARTS
+CUT_GAP: Final = 0.6  # cuts between shots stay this far apart and this far before the scene's end (§45.45)
 FORMAT_SET: Final = "The video's size is set once it is made. Make a new video for another size."
 MAX_SECONDS = 89.5  # Facebook Reels' 90 s limit, with room for the audio tail (§45.9)
 MAX_REFERENCES = 3  # reference videos per story (§45.28)
@@ -115,7 +117,15 @@ STORY_KEYS: Final = (
     "override",
     "format",
     "seriesId",
+    "art",
 )
+
+
+def art_style(value: Any, field: str = "art") -> str:
+    """A video's drawing style (§45.45): ``night_drive`` or ``classic`` (Bright)."""
+    if value not in ARTS:
+        raise bad_request(shapes.PICK_ART, field)
+    return str(value)
 
 
 def story_input(body: Mapping[str, Any]) -> dict[str, Any]:
@@ -159,6 +169,8 @@ def story_input(body: Mapping[str, Any]) -> dict[str, Any]:
     out["override"] = overrides.model_override(body.get("override"))
     if body.get("format") is not None:
         out["format"] = video_format(body["format"])
+    if body.get("art") is not None:  # §45.45: kept apart from format; left out, the workspace's default
+        out["art"] = art_style(body["art"])
     if body.get("seriesId") is not None:  # §45.43: create_story keeps it only while the series exists
         if not (isinstance(body["seriesId"], str) and is_ulid(body["seriesId"])):
             raise bad_request("seriesId is not valid.", "seriesId")
@@ -559,7 +571,7 @@ def _switches(edit: _Edit, new: dict[str, Any], patch: Mapping[str, Any]) -> Non
 
 
 def _scale_scene(scene: dict[str, Any], seconds: float) -> None:
-    """A new scene length: its beats and effects keep their place in it (as ``fitDuration`` scales them)."""
+    """A new scene length: its beats, effects and cuts keep their place in it (as ``fitDuration`` scales them)."""
     length = float(scene.get("durationSec") or 0)
     ratio = seconds / length if length > 0 else 1.0
     for beat in scene.get("beats") or []:
@@ -571,7 +583,25 @@ def _scale_scene(scene: dict[str, Any], seconds: float) -> None:
         for cue in scene.get("sfx") or []
         if isinstance(cue, Mapping)
     ]
+    if isinstance(scene.get("cuts"), list):
+        scene["cuts"] = scale_cuts(scene["cuts"], ratio, seconds)
     scene["durationSec"] = _int_or_float(seconds)
+
+
+def scale_cuts(cuts: list[Any], ratio: float, seconds: float) -> list[dict[str, Any]]:
+    """A scene's cuts between shots (§45.45) scaled with it, as the engine's ``scaleCuts``: each ``at`` times
+    ``ratio``; a cut less than 0.6 s after the one kept before it, or less than 0.6 s before the new end, is dropped."""
+    out: list[dict[str, Any]] = []
+    for cut in cuts:
+        if not isinstance(cut, Mapping):
+            continue
+        at = round(float(cut.get("at") or 0) * ratio, 3)
+        if at >= seconds - CUT_GAP:
+            continue
+        if out and at - float(out[-1]["at"]) < CUT_GAP - 1e-9:
+            continue
+        out.append({**cut, "at": _int_or_float(at)})
+    return out
 
 
 def _scene_edit(edit: _Edit, scene: dict[str, Any], change: Mapping[str, Any]) -> None:

@@ -127,7 +127,8 @@ export type SetId =
   | "kitchen"
   | "living_room"
   | "office"
-  | "park";
+  | "park"
+  | "highway_night";
 
 export type PropKind =
   | "car"
@@ -156,6 +157,22 @@ export type PropKind =
   | "dust";
 
 export type CameraId = "wide" | "medium" | "close" | "pan_left" | "pan_right" | "shake" | "push_in";
+
+/** The drawing style of a whole video (CONTRACTS §45.45): "classic" (Bright, the first videos' look) or "night_drive"
+ * (soft lines, cel shading, a muted night palette). A script without `art` draws as classic. */
+export type ArtStyle = "classic" | "night_drive";
+
+/** A shot inside a scene (§45.45): "scene" is the whole side or top view; the others look from inside or behind the
+ * driver's car, or down the road. */
+export type ShotId = "scene" | "driver_view" | "face" | "side_window" | "mirror" | "speed_dial" | "pedals" | "road_behind" | "road_wide";
+
+/** A cut to another shot at `at` seconds from the scene's start; the action and sound go on. */
+export interface ShotCue {
+  at: number;
+  shot: ShotId;
+  /** whose face or whose car; default the scene's driver */
+  who?: CastId;
+}
 
 /** Speech bubbles hold symbols only, never words: Lamo Stories has no voice-over and no spoken lines. */
 export type BubbleId = "question" | "exclaim" | "idea" | "music" | "dots" | "heart" | "angry" | "sweat" | "zzz";
@@ -318,6 +335,8 @@ export interface Scene {
   /** ≤ 60: on-screen teaching text */
   caption: string | null;
   note: string | null;
+  /** ≤ 8 cuts between shots (§45.45), sorted, at least 0.6 s apart; missing: the whole scene all the way */
+  cuts?: ShotCue[];
 }
 
 export interface CaptionCue {
@@ -365,6 +384,8 @@ export interface StoryScript {
   captionsOn: boolean;
   captions: CaptionCue[];
   safety: { topicId: string; citations: Citation[] } | null;
+  /** the drawing style (§45.45); missing: "classic", as every script before it */
+  art?: ArtStyle;
 }
 
 /** One draw instruction in output pixels (0..width × 0..height of the script, 1080 × 1920 by default), painter's
@@ -453,6 +474,9 @@ export interface Catalog {
   expressions: CatalogEntry<Expression>[];
   movementStyles: CatalogEntry<MovementStyle>[];
   musicMoods: CatalogEntry<MusicMood>[];
+  /** the drawing styles (§45.45), the default for new videos first */
+  arts: CatalogEntry<ArtStyle>[];
+  shots: CatalogEntry<ShotId>[];
 }
 
 export type ValidateResult = { ok: true; script: StoryScript } | { ok: false; errors: string[] };

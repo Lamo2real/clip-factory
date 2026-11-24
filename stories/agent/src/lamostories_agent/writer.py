@@ -89,6 +89,59 @@ House rules (always):
   lastEpisodes (the same cast, places and running jokes, and where things stand now), never retell an earlier episode,
   and make it work on its own for someone who has not seen the others."""
 
+# The night drive drawing style (§45.45): its house rules come after SYSTEM, which stays word for word. A request in
+# the Bright style (classic) is the request it always was: no arts or shots lists, no shot rules, no cuts.
+ARTS = ("night_drive", "classic")
+NIGHT = "night_drive"
+SHOT_RULES = ("shots", "shot_world")
+NIGHT_LISTS = ("arts", "shots")
+MAX_CUTS = 8
+
+NIGHT_RULES = """House rules for this video's drawing style:
+- This video is drawn in the night drive style. Car stories happen at night on highway_night or road_night unless
+  the story needs day, snow, rain or a place indoors.
+- Cut often, like a short film: a new shot every 2 to 4 seconds, as cuts inside a scene; the action and sound go on
+  across a cut.
+- Open a drive on road_wide or road_behind, then driver_view. Cut to face for each reaction (a new face or a noise).
+  Use mirror when a car comes up behind, side_window when one is alongside, speed_dial when the car speeds up or
+  slows down.
+- Show the cast's car whole at least once: the whole scene or road_behind.
+- Use pedals only on a brake beat that a guidance step gives, and never use speed_dial to teach a speed."""
+
+
+DEFAULT_ART = NIGHT  # the workspace default for new videos (stories/config/workspace-defaults.json video.art)
+
+
+def workspace_art(config: dict[str, Any] | None) -> str:
+    """The workspace's drawing style for new videos (Settings › Video): its ``video.art``, else the default."""
+    video = (config or {}).get("video")
+    art = video.get("art") if isinstance(video, dict) else None
+    return str(art) if art in ARTS else DEFAULT_ART
+
+
+def art_of(item: Any) -> str:
+    """A story's or a script's drawing style: ``night_drive`` only when it says so; anything else (an older story or
+    script with none) is ``classic``."""
+    return NIGHT if isinstance(item, dict) and item.get("art") == NIGHT else "classic"
+
+
+def system_for(art: str | None) -> str:
+    """The writer's system text: SYSTEM, and the night drive house rules after it for a night drive video."""
+    return SYSTEM + "\n\n" + NIGHT_RULES if art == NIGHT else SYSTEM
+
+
+def styled_request(lists: dict[str, Any], rules: dict[str, Any], art: str | None) -> dict[str, Any]:
+    """The catalog lists and the engine's rules as the writer reads them in this drawing style: a Bright (classic)
+    request leaves out the arts and shots lists and the two shot rules, so it is the request it was before them; a
+    night drive request has them all and its ``art``."""
+    if art == NIGHT:
+        return {"catalog": lists, **rules, "art": NIGHT}
+    kept = dict(rules)
+    if isinstance(kept.get("rules"), list):
+        kept["rules"] = [r for r in kept["rules"] if not (isinstance(r, dict) and r.get("id") in SHOT_RULES)]
+    return {"catalog": {k: v for k, v in lists.items() if k not in NIGHT_LISTS}, **kept}
+
+
 CAPTIONS_TEMPLATE = """You write the six post captions of one finished Clips Funded video (a short {shape} animated
 story with no voice-over), from its script.
 
@@ -151,10 +204,12 @@ def scene_schema(
     cast_ids: Sequence[str],
     scene_ids: Sequence[str] | None = None,
     car_ids: Sequence[str] = (),
+    art: str | None = None,
 ) -> dict[str, Any]:
     """One scene; with ``scene_ids`` (a remake of named scenes) its ``sceneId`` is one of exactly those. ``cast_ids``
     are the people (the actors); ``car_ids`` the cast's cars (§45.42), reached only as a car prop's ``castId``: with
-    none, the schema is exactly what it was before cars."""
+    none, the schema is exactly what it was before cars. ``art`` ``night_drive`` adds the scene's ``cuts`` between
+    shots (§45.45); in the Bright style the schema is what it was before them."""
     actions = catalog_ids(catalog, "actions") + catalog_ids(catalog, "propActions")
     point = {
         "type": ["object", "null"],
@@ -212,7 +267,7 @@ def scene_schema(
             "enum": [*car_ids, None],
             "description": "A car of the cast, on kind car only.",
         }
-    return {
+    out: dict[str, Any] = {
         "type": "object",
         "additionalProperties": False,
         "required": ["sceneId", "title", "durationSec", "set", "view", "camera", "actors", "props", "beats", "caption"],
@@ -234,6 +289,24 @@ def scene_schema(
             "note": {"type": ["string", "null"], "maxLength": 200},
         },
     }
+    if art == NIGHT:
+        cut = {
+            "type": "object",
+            "additionalProperties": False,
+            "required": ["at", "shot"],
+            "properties": {
+                "at": _num(0, 15),
+                "shot": _enum(catalog_ids(catalog, "shots")),
+                "who": {"type": ["string", "null"], "description": "Whose face or whose car; left out: the driver."},
+            },
+        }
+        out["properties"]["cuts"] = {
+            "type": ["array", "null"],
+            "maxItems": MAX_CUTS,
+            "items": cut,
+            "description": "Cuts to other shots, seconds from the scene's start, at least 0.6 s apart.",
+        }
+    return out
 
 
 CAPTION_SCHEMA: dict[str, Any] = {
@@ -265,8 +338,10 @@ def storyboard_schema(
     mode: str,
     scene_ids: Sequence[str] | None = None,
     car_ids: Sequence[str] = (),
+    art: str | None = None,
 ) -> dict[str, Any]:
-    """The ``write_storyboard`` tool's input schema (``car_ids``: the cast's cars, §45.42). ``full``: the whole story; ``scenes``: only the named scenes
+    """The ``write_storyboard`` tool's input schema (``car_ids``: the cast's cars, §45.42; ``art``: the drawing style,
+    night drive adds each scene's cuts, §45.45). ``full``: the whole story; ``scenes``: only the named scenes
     (``scene_ids``: each answer scene's id is one of them, and there are exactly as many scenes as asked, §45.34) and,
     if they change, the whole captions list; ``fix``: the whole story again with the facts fixed."""
     asked = list(dict.fromkeys(str(s) for s in scene_ids or [])) if mode == "scenes" else []
@@ -274,7 +349,7 @@ def storyboard_schema(
         "type": "array",
         "minItems": len(asked) or 1,
         "maxItems": len(asked) or MAX_SCENES,
-        "items": scene_schema(catalog, cast_ids, asked or None, car_ids),
+        "items": scene_schema(catalog, cast_ids, asked or None, car_ids, art),
     }
     captions = {"type": "array", "maxItems": 24, "items": CAPTION_SCHEMA}
     if mode == "scenes":
@@ -519,9 +594,11 @@ def script_from(
     topic: Topic | None,
     size: tuple[int, int] = DEFAULT_SIZE,
     cars: dict[str, dict[str, Any]] | None = None,
+    art: str | None = None,
 ) -> dict[str, Any]:
     """A whole ``StoryScript`` from a ``full`` (or ``fix``) answer, at the story's own size; the cast's cars
-    (§45.42) are stored in ``cars`` only when there are any, so a people-only script is as before."""
+    (§45.42) are stored in ``cars`` only when there are any, so a people-only script is as before; ``art`` is written
+    only for the night drive style (§45.45), so a Bright script is as before."""
     used: set[str] = set()
     scenes = [clean_scene(s, used, i) for i, s in enumerate(answer.get("scenes") or [])]
     width, height = size if size in SIZES else DEFAULT_SIZE
@@ -542,6 +619,8 @@ def script_from(
     }
     if cars:
         script["cars"] = cars
+    if art == NIGHT:
+        script["art"] = NIGHT
     return script
 
 

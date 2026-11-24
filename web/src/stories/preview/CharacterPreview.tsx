@@ -2,9 +2,10 @@
 // Owned by builder D (engine); screens only pass props.
 import { useEffect, useRef } from "react";
 import { previewCharacter } from "../engine/engine.ts";
-import type { ActionId, CharacterLook, Expression, MovementStyle } from "../engine/types.ts";
+import type { ActionId, ArtStyle, CharacterLook, Expression, MovementStyle } from "../engine/types.ts";
 import { useAppActive } from "../pane.tsx";
 import { storiesReduceMotion } from "../prefs.ts";
+import { useArt } from "./art.tsx";
 import { drawPrims } from "./draw.ts";
 
 export interface CharacterPreviewProps {
@@ -17,10 +18,14 @@ export interface CharacterPreviewProps {
   /** animate (default true; reduced motion shows one still frame) */
   playing?: boolean;
   label: string;
+  /** the drawing style (§45.45); left out, the nearest ArtProvider's (Bright with none) */
+  art?: ArtStyle;
 }
 
-export function CharacterPreview({ look, movementStyle, expression = "neutral", action = "idle", size, playing = true, label }: CharacterPreviewProps) {
+export function CharacterPreview({ look, movementStyle, expression = "neutral", action = "idle", size, playing = true, label, art }: CharacterPreviewProps) {
   const ref = useRef<HTMLCanvasElement | null>(null);
+  const shared = useArt();
+  const style = art ?? shared;
   // Lamo Stories kept hidden behind Clip Factory: no painting at all (the last frame stays), again once it is back.
   const active = useAppActive();
   useEffect(() => {
@@ -41,12 +46,12 @@ export function CharacterPreview({ look, movementStyle, expression = "neutral", 
       if (t !== last) {
         last = t;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        drawPrims(ctx, previewCharacter(look, movementStyle, expression, action, t, canvas.width), 1);
+        drawPrims(ctx, previewCharacter(look, movementStyle, expression, action, t, canvas.width, style), 1);
       }
       if (!still) raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [look, movementStyle, expression, action, size, playing, active]);
+  }, [look, movementStyle, expression, action, size, playing, active, style]);
   return <canvas ref={ref} className="st-character-preview" style={{ width: size, height: size }} role="img" aria-label={label} />;
 }

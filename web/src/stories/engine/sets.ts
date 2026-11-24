@@ -5,13 +5,40 @@
 // Each place is laid out for the 1080 × 1920 frame and kept in the same parts of any other shape's frame (frame.ts):
 // the horizon, the road and a window stay at the same height and across the same part of the width, things keep
 // their size, and the rows of trees, lamps and buildings repeat across a wider frame.
+//
+// The night drive style (CONTRACTS §45.45 §7) adds the highway at night (both styles draw it) and draws the night road
+// with the same recipe: a navy sky, teal mountains or hills, sodium street lamps with halos and pools of light, a guard
+// rail or reflector posts and warm charcoal asphalt. Every other place keeps its own layout and palette row, passed
+// through the light it stands in (art.ts `grade`, the light scene.ts sets); in classic every colour is as before.
 
+import { grade, ND, nightDrive } from "./art.ts";
 import { F, X, Y } from "./frame.ts";
 import { mix, rand, shade } from "./math.ts";
 import type { Pen } from "./pen.ts";
 import { starPts } from "./pen.ts";
 import { drawWeather } from "./props.ts";
 import type { SetId } from "./types.ts";
+
+/** A place's own colour as drawn now: through the part's light in night drive, unchanged in classic. */
+const C = (c: string): string => (nightDrive() ? grade(c) : c);
+
+/** What a place draws with: the scene's pen, which in night drive passes every colour through the light (§4.2). */
+type SetPen = Pick<Pen, "fill" | "grad" | "circle" | "ellipse" | "rect" | "poly" | "line" | "setMatrix">;
+
+function penOf(env: { pen: Pen }): SetPen {
+  const p = env.pen;
+  if (!nightDrive()) return p;
+  return {
+    fill: (c) => p.fill(grade(c)),
+    grad: (x0, y0, x1, y1, stops) => p.grad(x0, y0, x1, y1, stops.map(([o, c]) => [o, grade(c)] as [number, string])),
+    circle: (x, y, r, c, a) => p.circle(x, y, r, grade(c), a),
+    ellipse: (x, y, rx, ry, rot, c, a) => p.ellipse(x, y, rx, ry, rot, grade(c), a),
+    rect: (x, y, w, h, r, c, a) => p.rect(x, y, w, h, r, grade(c), a),
+    poly: (pts, c, a) => p.poly(pts, grade(c), a),
+    line: (pts, w, c, a) => p.line(pts, w, grade(c), a),
+    setMatrix: (m) => p.setMatrix(m),
+  };
+}
 
 /** Side-view layout of the 1080 × 1920 frame (world px). Actors and cars stand around y 0.62–0.85 of the frame. */
 export const SIDE = { horizon: 1080, verge: 1150, roadTop: 1225, roadBottom: 1545, lane: 1385 };
@@ -58,6 +85,8 @@ const OUT: Partial<Record<SetId, OutdoorLook>> = {
   country_road: { sky: ["#5cc2ff", "#d8f3ff"], body: "sun", clouds: 3, cloud: "#ffffff", hills: ["#b8e08c", "#8fcf6b"], verge: "#a7d86d", near: "#86c95a", road: "#6a6f7a", lane: "#ffffff", edge: null, decor: "fields", weather: null, night: false, surface: "dry", lanes: 1 },
   city_street: { sky: ["#74c4ff", "#e0f4ff"], body: "sun", clouds: 2, cloud: "#ffffff", hills: ["#a9b8d6", "#8796b8"], verge: "#c9ced8", near: "#b7bdc9", road: "#40444f", lane: "#ffd54a", edge: "#ffffff", decor: "city", weather: null, night: false, surface: "dry", lanes: 1 },
   parking_lot: { sky: ["#5cc2ff", "#d8f3ff"], body: "sun", clouds: 2, cloud: "#ffffff", hills: ["#b8e08c", "#8fcf6b"], verge: "#b9bec8", near: "#5a5f6b", road: "#5a5f6b", lane: "#ffffff", edge: null, decor: "parking", weather: null, night: false, surface: "dry", lanes: 1 },
+  // drawn by nightSide in both styles; the row says what kind of place it is (outdoor, night, a road of two lanes)
+  highway_night: { sky: [ND.skyTop, ND.skyHorizon], body: "none", clouds: 0, cloud: "#ffffff", hills: [ND.mtnFar, ND.mtnNear], verge: ND.verge, near: ND.vergeNear, road: ND.asphalt, lane: ND.lane, edge: ND.edge, decor: "highway", weather: null, night: true, surface: "dry", lanes: 2 },
 };
 
 export interface SetInfo {
@@ -77,6 +106,7 @@ export function setInfo(set: SetId): SetInfo {
     icy_road: { sfx: "wind", volume: 0.18 },
     foggy_road: { sfx: "wind", volume: 0.14 },
     highway: { sfx: "engine", volume: 0.16 },
+    highway_night: { sfx: "engine", volume: 0.16 },
     park: { sfx: "wind", volume: 0.08 },
   };
   return { outdoor: !!o || set === "park", night: o?.night ?? false, weather: o?.weather ?? null, road: !!o, loop: loops[set] ?? null };
@@ -108,7 +138,15 @@ function repeat(spacing: number, offset: number, x0: number, x1: number, max = 1
 
 const mod = (a: number, n: number) => ((a % n) + n) % n;
 
+/** The night drive recipe draws this place (§7): the highway at night always, the night road in night drive. */
+const nightRecipe = (set: SetId): boolean => set === "highway_night" || (set === "road_night" && nightDrive());
+
 export function drawSetBack(set: SetId, view: "side" | "top", env: SetEnv): void {
+  if (nightRecipe(set)) {
+    if (view === "top") nightTop(set === "highway_night", env);
+    else nightSide(set === "highway_night", env);
+    return;
+  }
   if (view === "top") {
     drawTop(set, env);
     return;
@@ -138,7 +176,7 @@ export function drawSetWeatherBack(set: SetId, env: SetEnv, extraWeather: ("snow
 
 // ---- side views ---------------------------------------------------------------------------------------------
 
-function sky(pen: Pen, o: { sky: [string, string] }): void {
+function sky(pen: SetPen, o: { sky: [string, string] }): void {
   pen.setMatrix([1, 0, 0, 1, 0, 0]);
   pen.grad(0, 0, 0, side().verge, [
     [0, o.sky[0]],
@@ -146,14 +184,14 @@ function sky(pen: Pen, o: { sky: [string, string] }): void {
   ]);
 }
 
-function cloud(pen: Pen, x: number, y: number, s: number, c: string, a: number): void {
+function cloud(pen: SetPen, x: number, y: number, s: number, c: string, a: number): void {
   pen.circle(x, y, 60 * s, c, a);
   pen.circle(x - 70 * s, y + 18 * s, 44 * s, c, a);
   pen.circle(x + 72 * s, y + 14 * s, 50 * s, c, a);
   pen.rect(x - 110 * s, y + 10 * s, 230 * s, 50 * s, 25 * s, c, a);
 }
 
-function hills(pen: Pen, seed: number, base: number, height: number, color: string, shift: number, x0: number, x1: number): void {
+function hills(pen: SetPen, seed: number, base: number, height: number, color: string, shift: number, x0: number, x1: number): void {
   const pts: number[] = [];
   const n = 26;
   const span = x1 - x0;
@@ -168,7 +206,8 @@ function hills(pen: Pen, seed: number, base: number, height: number, color: stri
 }
 
 function outdoorSide(o: OutdoorLook, env: SetEnv): void {
-  const { pen, t, seed } = env;
+  const { t, seed } = env;
+  const pen = penOf(env);
   const S = side();
   sky(pen, o);
   // sun or moon and stars, almost fixed
@@ -261,7 +300,7 @@ function outdoorSide(o: OutdoorLook, env: SetEnv): void {
 }
 
 function drawDecor(o: OutdoorLook, env: SetEnv): void {
-  const { pen } = env;
+  const pen = penOf(env);
   env.layer(0.7);
   const scroll = env.scroll * 0.7;
   const S = side();
@@ -323,7 +362,8 @@ function drawDecor(o: OutdoorLook, env: SetEnv): void {
 }
 
 function surfaceSide(o: OutdoorLook, env: SetEnv): void {
-  const { pen, t, seed } = env;
+  const { t, seed } = env;
+  const pen = penOf(env);
   const S = side();
   const x0 = env.view.x0;
   const x1 = env.view.x1;
@@ -354,7 +394,8 @@ function surfaceSide(o: OutdoorLook, env: SetEnv): void {
 }
 
 function parkSide(env: SetEnv): void {
-  const { pen, t, seed } = env;
+  const { t, seed } = env;
+  const pen = penOf(env);
   const S = side();
   sky(pen, { sky: ["#5cc2ff", "#d8f3ff"] });
   env.layer(0.04);
@@ -390,7 +431,8 @@ function parkSide(env: SetEnv): void {
 }
 
 function studioSide(env: SetEnv): void {
-  const { pen, t, seed } = env;
+  const { t, seed } = env;
+  const pen = penOf(env);
   const S = side();
   pen.setMatrix([1, 0, 0, 1, 0, 0]);
   pen.grad(0, 0, 0, F.h, [
@@ -415,7 +457,8 @@ function studioSide(env: SetEnv): void {
 }
 
 function indoorSide(set: SetId, env: SetEnv): void {
-  const { pen, t } = env;
+  const { t } = env;
+  const pen = penOf(env);
   const wall = set === "kitchen" ? "#fff1d6" : set === "living_room" ? "#ffe0c2" : "#e3ecf7";
   const floor = set === "kitchen" ? "#f2c48d" : set === "living_room" ? "#c98d5a" : "#9fb0c4";
   const S = side();
@@ -476,7 +519,8 @@ function indoorSide(set: SetId, env: SetEnv): void {
 // ---- top views ----------------------------------------------------------------------------------------------
 
 function drawTop(set: SetId, env: SetEnv): void {
-  const { pen, t, seed } = env;
+  const { t, seed } = env;
+  const pen = penOf(env);
   const o = OUT[set];
   pen.setMatrix([1, 0, 0, 1, 0, 0]);
   if (!o) {
@@ -583,3 +627,300 @@ function drawTop(set: SetId, env: SetEnv): void {
     for (let i = 0; i < 2; i += 1) pen.ellipse(mod(t * 40 + i * 600, F.w + 520) - 300, Y(500 + i * 800), 800, 260, 0, "#f2f5f8", 0.3);
   }
 }
+
+// ---- the night drive recipe (§45.45 §7): the highway at night, and the night road in night drive --------------------
+
+/** A mountain ridge's or a hill line's top, x0..x1 (layer px), on `base`, up to `height` above it: pointed peaks from
+ * |sin| terms for mountains, soft bumps for hills. `shift` slides it sideways (parallax). Top points only, left to
+ * right. */
+export function ridgeTop(x0: number, x1: number, base: number, height: number, shift: number, seed: number, segs: number, kind: "mountains" | "hills"): number[] {
+  const pts: number[] = [];
+  const a = (seed % 7) * 0.9;
+  const b = (seed % 5) * 1.3;
+  for (let i = 0; i <= segs; i += 1) {
+    const x = x0 + ((x1 - x0) * i) / segs;
+    const u = (x + shift) / 430;
+    const k =
+      kind === "mountains"
+        ? 0.3 + 0.44 * (1 - Math.abs(Math.sin(u * 1.25 + a))) ** 1.4 + 0.18 * (1 - Math.abs(Math.sin(u * 2.9 + b))) + 0.06 * Math.sin(u * 6.3 + a)
+        : 0.55 + 0.25 * Math.sin(u * 1.1 + a) + 0.2 * Math.sin(u * 2.7 + b);
+    pts.push(x, base - height * k);
+  }
+  return pts;
+}
+
+/** The lit facets of a ridge: on the `count` highest peaks, a sliver down the flank that faces the lamps. */
+export function ridgeFacets(top: number[], base: number, count: number): number[][] {
+  const peaks: [number, number][] = [];
+  for (let i = 2; i + 3 < top.length; i += 2) {
+    const y = top[i + 1]!;
+    if (y < top[i - 1]! && y <= top[i + 3]!) peaks.push([top[i]!, y]);
+  }
+  peaks.sort((p, q) => p[1] - q[1]);
+  return peaks.slice(0, count).map(([x, y]) => {
+    const d = base - y;
+    return [x, y + 2, x + d * 0.5, y + d * 0.72, x + d * 0.18, y + d * 0.62, x - d * 0.04, y + d * 0.3];
+  });
+}
+
+/** The night sky (§3): the grad's stops from the top of the frame to the horizon. */
+export const NIGHT_SKY: [number, string][] = [
+  [0, ND.skyTop],
+  [0.17, ND.skyHigh],
+  [0.87, ND.skyMid],
+  [1, ND.skyHorizon],
+];
+
+/** A street lamp's light: three halos (r × 5, 3 and 1.6 at 0.07, 0.16 and 0.38) and the head. `k` dims the halos. */
+export function lampGlow(pen: Pick<Pen, "circle" | "ellipse">, x: number, y: number, r: number, rx: number, ry: number, k = 1): void {
+  pen.circle(x, y, r * 5, ND.halo3, 0.07 * k);
+  pen.circle(x, y, r * 3, ND.halo2, 0.16 * k);
+  pen.circle(x, y, r * 1.6, ND.halo1, 0.38 * k);
+  pen.ellipse(x, y, rx, ry, 0, ND.lampCore);
+}
+
+const LAMP_EVERY = 520;
+
+function nightSide(highway: boolean, env: SetEnv): void {
+  const { pen, t, seed } = env;
+  const S = side();
+  pen.setMatrix([1, 0, 0, 1, 0, 0]);
+  pen.grad(0, 0, 0, S.horizon, NIGHT_SKY);
+  // eight small stars that twinkle softly
+  for (let i = 0; i < 8; i += 1) {
+    const a = 0.35 + 0.25 * (0.5 + 0.5 * Math.sin(t * (0.7 + rand(seed, i + 200) * 1.5) + i * 2.1));
+    pen.circle(rand(seed, i + 210) * F.w, Y(70 + rand(seed, i + 220) * 620), 2.2 + rand(seed, i + 230) * 1.4, ND.star, a);
+  }
+  const vx0 = -700;
+  const vx1 = F.w + 700;
+  // far mountains (the night road has low teal hills instead)
+  env.layer(0.12);
+  const farBase = S.horizon + 40 * S.sy;
+  const far = ridgeTop(vx0, vx1, farBase, (highway ? 420 : 210) * S.tall, env.scroll * 0.12, seed, 30, highway ? "mountains" : "hills");
+  pen.poly([...far, vx1, S.verge + 4, vx0, S.verge + 4], ND.mtnFar);
+  if (highway) for (const f of ridgeFacets(far, farBase, 2)) pen.poly(f, ND.mtnFarLit);
+  // a town's glow beyond the hills, on the horizon
+  if (highway) {
+    env.layer(0.2);
+    const cx = X(756);
+    const hy = S.horizon + 10 * S.sy;
+    pen.ellipse(cx, hy, 430, 120 * S.tall, 0, ND.cityGlow, 0.05);
+    pen.ellipse(cx, hy, 290, 74 * S.tall, 0, ND.cityGlow, 0.07);
+    pen.ellipse(cx, hy, 170, 40 * S.tall, 0, ND.cityGlow, 0.1);
+    for (let i = 0; i < 12; i += 1) pen.rect(cx - 230 + rand(seed, i + 240) * 460, hy - 8 - rand(seed, i + 250) * 46 * S.tall, 5, 5, 1, ND.cityDot, 0.6);
+  }
+  // near mountains with a lit facet and a soft rim along the top
+  env.layer(0.3);
+  const nearBase = S.verge + 30 * S.sy;
+  const near = ridgeTop(-800, F.w + 800, nearBase, (highway ? 230 : 120) * S.tall, env.scroll * 0.3 + 900, seed + 3, 26, highway ? "mountains" : "hills");
+  pen.poly([...near, F.w + 800, nearBase + 8, -800, nearBase + 8], ND.mtnNear);
+  if (highway) for (const f of ridgeFacets(near, nearBase, 1)) pen.poly(f, ND.mtnNearLit);
+  pen.line(near, 3, ND.mtnRim, 0.5);
+  // the street lamps on the far verge
+  env.layer(0.7);
+  const scroll = env.scroll * 0.7;
+  const baseY = S.verge + 40 * S.sy;
+  const lamps = repeat(LAMP_EVERY, mod(-scroll + 140, LAMP_EVERY), -400, F.w + 400, 6 + more(LAMP_EVERY));
+  for (const x of lamps) {
+    pen.rect(x - 7, baseY - 330, 14, 330, 4, ND.pole);
+    pen.rect(x + 1, baseY - 330, 6, 330, 3, ND.poleDark);
+    pen.rect(x - 7, baseY - 334, 90, 11, 5, ND.pole);
+    pen.poly([x + 58, baseY - 318, x + 94, baseY - 318, x + 76 + 170, S.roadTop + 70 * S.sy, x + 76 - 170, S.roadTop + 70 * S.sy], ND.cone, 0.05);
+    lampGlow(pen, x + 76, baseY - 318, 30, 30, 9);
+  }
+  // the ground: the far verge, then the guard rail (or reflector posts) along it
+  env.layer(1);
+  const gx0 = env.view.x0 - 200;
+  const gw = env.view.x1 - env.view.x0 + 400;
+  pen.rect(gx0, S.verge, gw, S.roadTop - S.verge + 10, 0, ND.verge);
+  env.layer(0.85);
+  const railY = S.roadTop - 30;
+  if (highway) {
+    for (const x of repeat(180, mod(-env.scroll * 0.85, 180), -400, F.w + 400, 16 + more(180))) pen.rect(x - 5, railY - 4, 10, 36, 2, ND.railPost);
+    pen.line([-600, railY, F.w + 600, railY], 10, ND.rail);
+    pen.line([-600, railY - 4, F.w + 600, railY - 4], 3, ND.railLit);
+  } else {
+    for (const x of repeat(260, mod(-env.scroll * 0.85, 260), -400, F.w + 400, 12 + more(260))) {
+      pen.rect(x - 5, railY - 22, 10, 50, 3, ND.lane);
+      pen.rect(x - 3, railY - 16, 6, 9, 2, ND.marker);
+    }
+  }
+  // the road: warm charcoal with a haze band at its far edge, the pools of lamp light, edge lines and lane dashes
+  env.layer(1);
+  pen.rect(gx0, S.roadTop, gw, S.roadBottom - S.roadTop, 0, ND.asphalt);
+  pen.rect(gx0, S.roadTop, gw, 40 * S.sy, 0, ND.asphaltFar);
+  for (const x of lamps) pen.ellipse(x + 76, S.roadTop + 70 * S.sy, 170, 26, 0, ND.pool, 0.07);
+  pen.rect(gx0, S.roadBottom, gw, F.h + 200 - S.roadBottom, 0, ND.vergeNear);
+  pen.rect(gx0, S.roadBottom, gw, 10, 0, ND.kerb);
+  pen.rect(gx0, S.roadTop + 14, gw, 8, 0, ND.edge, 0.85);
+  pen.rect(gx0, S.roadBottom - 24, gw, 8, 0, ND.edge, 0.85);
+  const lanes = highway ? [S.roadTop + 105 * S.sy, S.roadBottom - 105 * S.sy] : [S.lane];
+  for (const ly of lanes) {
+    for (const x of repeat(250, mod(-env.scroll, 250), env.view.x0, env.view.x1, 14)) pen.rect(x, ly - 6, 140, 12, 6, ND.lane);
+  }
+}
+
+function nightTop(highway: boolean, env: SetEnv): void {
+  const { pen } = env;
+  pen.setMatrix([1, 0, 0, 1, 0, 0]);
+  pen.fill(ND.verge);
+  env.layer(1);
+  const y0 = env.view.y0 - 300;
+  const y1 = env.view.y1 + 300;
+  const left = X(highway ? 170 : TOP.left);
+  const right = X(highway ? 910 : TOP.right);
+  const scroll = env.scroll;
+  pen.rect(left - 30, y0, right - left + 60, y1 - y0, 0, ND.kerb);
+  pen.rect(left, y0, right - left, y1 - y0, 0, ND.asphalt);
+  pen.rect(left + 14, y0, 9, y1 - y0, 0, ND.edge, 0.9);
+  pen.rect(right - 23, y0, 9, y1 - y0, 0, ND.edge, 0.9);
+  const dashes = highway ? [left + (right - left) / 3, left + (2 * (right - left)) / 3] : [(left + right) / 2];
+  for (const lx of dashes) {
+    for (let i = 0; i < 10; i += 1) pen.rect(lx - 7, mod(i * 240 + scroll, 2400) - 240, 14, 130, 7, ND.lane);
+  }
+  // guard rails on both edges (reflector posts on the night road), and the lamps' pools of light every 520 px
+  for (const x of [left - 52, right + 52]) {
+    if (highway) {
+      pen.rect(x - 8, y0, 16, y1 - y0, 4, ND.rail);
+      pen.rect(x - 8, y0, 5, y1 - y0, 2, ND.railLit);
+    } else for (let i = 0; i < 8; i += 1) pen.rect(x - 7, mod(i * 300 + scroll, 2400) - 240, 14, 14, 3, ND.lane);
+  }
+  for (let i = 0; i < 5; i += 1) {
+    const y = mod(i * LAMP_EVERY + scroll, LAMP_EVERY * 5) - LAMP_EVERY;
+    for (const x of highway ? [left - 90, right + 90] : [left - 90]) {
+      pen.circle(x, y, 120, ND.pool, 0.08);
+      pen.circle(x, y, 60, ND.pool, 0.06);
+      pen.circle(x, y, 16, ND.lampCore);
+    }
+  }
+}
+
+// ---- the road the shots see (§45.45 §8): a place's colours in perspective -----------------------------------------
+
+/** What a road place looks like from inside a car or down the road: its sky, ridge, road, roadside and lamps. Night
+ * places are the night drive palette (both styles); day places are their own row, through the light in night drive. */
+export interface RoadLook {
+  night: boolean;
+  /** the sky's grad from the top of the frame (0) to the horizon (1) */
+  sky: [number, string][];
+  stars: boolean;
+  ridge: "mountains" | "hills";
+  far: string;
+  farLit: string;
+  near: string;
+  nearLit: string;
+  rim: string | null;
+  city: boolean;
+  asphalt: string;
+  asphaltFar: string;
+  lane: string;
+  laneFar: string;
+  edge: string | null;
+  verge: string;
+  vergeNear: string;
+  kerb: string;
+  /** both lanes go the same way (a highway); otherwise one lane each way */
+  oneWay: boolean;
+  rail: boolean;
+  /** white reflector posts with amber dots along the verge */
+  reflectors: boolean;
+  /** white roadside posts with a red band (day country roads) */
+  posts: boolean;
+  lamps: "both" | "far" | "none";
+  /** the lamps are lit (halos and pools) */
+  lit: boolean;
+  pole: string;
+  poleDark: string;
+  weather: "snow" | "rain" | "fog" | null;
+}
+
+export function roadLook(set: SetId): RoadLook {
+  if (set === "highway_night" || set === "road_night") {
+    const hw = set === "highway_night";
+    return {
+      night: true,
+      sky: NIGHT_SKY,
+      stars: true,
+      ridge: hw ? "mountains" : "hills",
+      far: ND.mtnFar,
+      farLit: ND.mtnFarLit,
+      near: ND.mtnNear,
+      nearLit: ND.mtnNearLit,
+      rim: ND.mtnRim,
+      city: hw,
+      asphalt: ND.asphalt,
+      asphaltFar: ND.asphaltFar,
+      lane: ND.lane,
+      laneFar: ND.laneFar,
+      edge: ND.edge,
+      verge: ND.verge,
+      vergeNear: ND.vergeNear,
+      kerb: ND.kerb,
+      oneWay: hw,
+      rail: hw,
+      reflectors: !hw,
+      posts: false,
+      lamps: hw ? "both" : "far",
+      lit: true,
+      pole: ND.pole,
+      poleDark: ND.poleDark,
+      weather: null,
+    };
+  }
+  const o = OUT[set] ?? OUT.road_day!;
+  const lampy = o.decor === "lamps" || o.decor === "city" || o.decor === "highway";
+  return {
+    night: o.night,
+    sky: [
+      [0, C(o.sky[0])],
+      [1, C(o.sky[1])],
+    ],
+    stars: false,
+    ridge: "hills",
+    far: C(o.hills[0]),
+    farLit: C(shade(o.hills[0], 0.08)),
+    near: C(o.hills[1]),
+    nearLit: C(shade(o.hills[1], 0.08)),
+    rim: null,
+    city: false,
+    asphalt: C(o.road),
+    asphaltFar: C(shade(o.road, 0.12)),
+    lane: C(o.lane),
+    laneFar: C(shade(o.lane, -0.15)),
+    edge: o.edge ? C(o.edge) : null,
+    verge: C(o.verge),
+    vergeNear: C(o.near),
+    kerb: C(shade(o.road, -0.2)),
+    oneWay: o.lanes === 2,
+    rail: o.decor === "highway",
+    reflectors: false,
+    posts: !lampy,
+    lamps: lampy ? "far" : "none",
+    lit: o.night,
+    pole: C("#8b97a8"),
+    poleDark: C("#6b7686"),
+    weather: o.weather,
+  };
+}
+
+/** About how many shapes each place draws at its busiest in night drive, with the vignette (measured by
+ * web/test/storiesNightShots.test.ts on every view, camera and size): the writer's estimate (script.ts sceneShapes)
+ * can read it. */
+export const SET_SHAPES_ND: Record<SetId, number> = {
+  studio: 34,
+  road_day: 54,
+  road_night: 94,
+  icy_road: 70,
+  snowy_road: 98,
+  rainy_road: 106,
+  foggy_road: 44,
+  highway: 70,
+  country_road: 64,
+  city_street: 90,
+  parking_lot: 58,
+  kitchen: 38,
+  living_room: 34,
+  office: 41,
+  park: 68,
+  highway_night: 116,
+};

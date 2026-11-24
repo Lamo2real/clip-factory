@@ -7,27 +7,29 @@
 // scene.ts (one frame of a scene), rig.ts and face.ts (characters), motion.ts (actions and movement styles),
 // props.ts, car.ts (a car of the cast, drawn from its own look), sets.ts, camera.ts, bubbles.ts, text.ts and
 // tracks.ts (text and audio), ambience.ts (the place's sounds normalize lists), rules.ts (what the script's words
-// mean, for the writer), commands.ts and cli.ts (the command line), pen.ts (transforms into prims), math.ts.
+// mean, for the writer), commands.ts and cli.ts (the command line), pen.ts (transforms into prims), math.ts, and
+// art.ts (the night drive drawing style's palette, light and shading, §45.45).
 
+import { nightDrive } from "./art.ts";
 import { CAR_CAST_SHAPES, CAR_SEATS, carHasFace, checkCarLook, DEFAULT_CAR, type CarDraw } from "./car.ts";
 import { CATALOG } from "./catalog.ts";
 import { FACES } from "./face.ts";
-import { DEFAULT_FORMAT, F, FORMATS, formatOf, sizeFor } from "./frame.ts";
+import { artOf, DEFAULT_FORMAT, F, FORMATS, formatOf, sizeFor, withArt } from "./frame.ts";
 import { hash } from "./math.ts";
 import { actorState, restPose, STYLES } from "./motion.ts";
 import { Pen } from "./pen.ts";
 import { drawProp, propState, type DriverInput } from "./props.ts";
 import { blendPose, drawCharacter, geometry } from "./rig.ts";
 import { drawExtras, drawSceneFrame } from "./scene.ts";
-import { fitDuration, FPS, frameCount, HEIGHT, LIMITS, locateFrame, MAX_SECONDS, normalizeScript, repairScript, sceneFrames, sceneList, sceneShapes, SEATS, SIZES_FROM_ENGINE, validateCharacter, validateScript, WIDTH } from "./script.ts";
+import { CUTS, fitDuration, FPS, frameCount, HEIGHT, LIMITS, locateFrame, MAX_SECONDS, normalizeScript, repairScript, scaleCuts, sceneFrames, sceneList, sceneShapes, SEATS, SIZES_FROM_ENGINE, validateCharacter, validateScript, WIDTH } from "./script.ts";
 import { audioTrack, textTrack } from "./tracks.ts";
-import type { ActionId, Beat, CarLook, CharacterLook, Expression, MovementStyle, Prim, SceneProp, StoryScript } from "./types.ts";
+import type { ActionId, ArtStyle, Beat, CarLook, CharacterLook, Expression, MovementStyle, Prim, SceneProp, StoryScript } from "./types.ts";
 
 export { CATALOG };
 export type * from "./types.ts";
 export { prng } from "./math.ts";
-export { audioTrack, fitDuration, FPS, frameCount, HEIGHT, LIMITS, MAX_SECONDS, normalizeScript, repairScript, sceneFrames, sceneList, sceneShapes, SEATS, SIZES_FROM_ENGINE, textTrack, validateCharacter, validateScript, WIDTH };
-export { DEFAULT_FORMAT, FORMATS, formatOf, sizeFor };
+export { audioTrack, CUTS, fitDuration, FPS, frameCount, HEIGHT, LIMITS, MAX_SECONDS, normalizeScript, repairScript, scaleCuts, sceneFrames, sceneList, sceneShapes, SEATS, SIZES_FROM_ENGINE, textTrack, validateCharacter, validateScript, WIDTH };
+export { artOf, DEFAULT_FORMAT, FORMATS, formatOf, sizeFor, withArt };
 export { CAR_CAST_SHAPES, CAR_SEATS, carHasFace, checkCarLook, DEFAULT_CAR };
 export type { CarDraw };
 
@@ -36,8 +38,10 @@ export type { CarDraw };
  * side-view skid with a dir goes nose first, a humming voice keeps its lips closed, the place's sounds are listed;
  * 5: six sizes, 9:16, 1:1 and 16:9 at 1080 or 720 (the 1080 × 1920 frames are drawn as before), and a character
  * that carries its own faces shows only those, even the ones an action implies; 6: a car of the cast, drawn from its own
- * look, the car moves speed_up, bounce, honk, blink and stall, and getting in and out: older scripts draw as before). */
-export const ENGINE_VERSION = 6;
+ * look, the car moves speed_up, bounce, honk, blink and stall, and getting in and out: older scripts draw as before;
+ * 7: the night drive drawing style (script.art), cuts between shots inside a scene and the highway at night: older
+ * scripts draw as before). */
+export const ENGINE_VERSION = 7;
 
 /** The draw list for one frame of the whole story (frames past the end show the last frame). */
 export function drawFrame(s: StoryScript, frame: number): Prim[] {
@@ -51,8 +55,13 @@ export function drawFrame(s: StoryScript, frame: number): Prim[] {
 /** How long each action's loop lasts on the Characters page (seconds). */
 const LOOP: Partial<Record<ActionId, number>> = { idle: 3, walk: 2, run: 1.6, fall: 3.4, get_up: 3, sit: 3, dance: 3, celebrate: 2.6, slip: 2.4 };
 
-/** One character, drawn into a size × size box from (0, 0): the Characters page and every cast picker. */
-export function previewCharacter(look: CharacterLook, style: MovementStyle, expression: Expression, action: ActionId, t: number, size: number): Prim[] {
+/** One character, drawn into a size × size box from (0, 0): the Characters page and every cast picker. `art` is the
+ * drawing style (§45.45; classic when left out), drawn in the studio light so the owner's own colours show. */
+export function previewCharacter(look: CharacterLook, style: MovementStyle, expression: Expression, action: ActionId, t: number, size: number, art: ArtStyle = "classic"): Prim[] {
+  return withArt(artOf(art), () => drawPreviewCharacter(look, style, expression, action, t, size));
+}
+
+function drawPreviewCharacter(look: CharacterLook, style: MovementStyle, expression: Expression, action: ActionId, t: number, size: number): Prim[] {
   const g = geometry(look);
   const st = STYLES[style] ?? STYLES.bouncy;
   const seed = hash(look.skin, look.body, look.hair.style, look.outfit.top);
@@ -70,7 +79,8 @@ export function previewCharacter(look: CharacterLook, style: MovementStyle, expr
   // a character lying down is moved over so all of it stays in the box
   const lie = Math.max(0, Math.min(1, -pose.rot / 90));
   const x = size / 2 + lie * 40 * px;
-  pen.ellipse(x - lie * 40 * px, y + 2, (30 + lie * 30) * px, 6 * px, 0, "#000000", 0.18);
+  // night drive's soft shadows under the feet are drawn by the rig itself
+  if (!nightDrive()) pen.ellipse(x - lie * 40 * px, y + 2, (30 + lie * 30) * px, 6 * px, 0, "#000000", 0.18);
   pen.save();
   pen.translate(x, y);
   pen.scale(px, px);
@@ -100,8 +110,13 @@ const CAR_MOVES: Record<CarMove, { beats: Omit<Beat, "who">[]; speed: (t: number
 };
 
 /** A car of the cast on plain ground, drawn into a size × size box from (0, 0), looping the move over 2.4 s: the
- * Characters page, the car options and every cast picker. "turn" shows the top view, nose left then right. */
-export function previewCar(car: CarLook, style: MovementStyle, expression: Expression, move: CarMove, t: number, size: number): Prim[] {
+ * Characters page, the car options and every cast picker. "turn" shows the top view, nose left then right. `art` is
+ * the drawing style (§45.45; classic when left out), in the studio light. */
+export function previewCar(car: CarLook, style: MovementStyle, expression: Expression, move: CarMove, t: number, size: number, art: ArtStyle = "classic"): Prim[] {
+  return withArt(artOf(art), () => drawPreviewCar(car, style, expression, move, t, size));
+}
+
+function drawPreviewCar(car: CarLook, style: MovementStyle, expression: Expression, move: CarMove, t: number, size: number): Prim[] {
   const spec = CAR_MOVES[move] ?? CAR_MOVES.idle;
   const tt = ((t % CAR_LOOP) + CAR_LOOP) % CAR_LOOP;
   const view = move === "turn" ? "top" : "side";

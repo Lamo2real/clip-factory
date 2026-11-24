@@ -318,6 +318,37 @@ describe("Production › New from the address (§45.34)", () => {
     expect(formatOf({ video: { aspect: "1:1", resolution: "720x720", quality: "high", fps: 30 } as never })).toEqual({ aspect: "1:1", width: 720, height: 720 });
     expect(formatOf({ video: { aspect: "1:1", resolution: "1080x1920", quality: "high", fps: 30 } as never })).toEqual({ aspect: "9:16", width: 1080, height: 1920 });
   });
+
+  it("the drawing style pick sits beside the shape, starts from Settings › Video and sends this video's own as art (§45.45)", async () => {
+    const create = vi.spyOn(api, "createStory");
+    await show(<ProductionScreen {...page({ name: "production_new", ideaId: I.sandwich })} />);
+    const styles = () => Array.from(document.querySelectorAll<HTMLInputElement>(".st-s-artpick input[type=radio]"));
+    expect(styles().map((r) => [r.closest("label")?.querySelector(".st-s-pick__label")?.textContent, r.checked])).toEqual([
+      ["Night drive", true],
+      ["Bright", false],
+    ]);
+    expect(document.querySelector(".st-s-artpick")?.closest("section")?.querySelector(".st-s-shapepick")).not.toBeNull();
+    await click(control("Make the video"));
+    expect(create.mock.calls[0]![1]).not.toHaveProperty("art");
+    await act(async () => root.unmount());
+    host.remove();
+    await show(<ProductionScreen {...page({ name: "production_new", ideaId: I.sandwich })} />);
+    await pick("Drawing style", "Bright");
+    expect(text()).toContain("Just for this video. Settings › Video stays the same.");
+    await click(control("Make the video"));
+    expect(create.mock.calls[1]![1]).toMatchObject({ art: "classic" });
+    expect(store.stories.filter((s) => s.title === "The sandwich tower").map((s) => s.art).slice(-2)).toEqual(["night_drive", "classic"]);
+  });
+
+  it("a video's details say its drawing style; one made before drawing styles is Bright", async () => {
+    await show(<ProductionScreen {...page({ name: "production_story", storyId: S.failed })} />);
+    const facts = Array.from(document.querySelectorAll(".st-s-facts dt")).map((dt) => [dt.textContent, dt.nextElementSibling?.textContent]);
+    expect(facts).toContainEqual(["Drawing style", "Bright"]);
+    await act(async () => root.render(<ToastProvider><ReviewScreen {...page({ name: "review_story", storyId: S.approved })} /></ToastProvider>));
+    await wait();
+    const made = Array.from(document.querySelectorAll(".st-s-made .st-s-facts dt")).map((dt) => [dt.textContent, dt.nextElementSibling?.textContent]);
+    expect(made).toContainEqual(["Drawing style", "Bright"]);
+  });
 });
 
 // ---------- Next run ----------

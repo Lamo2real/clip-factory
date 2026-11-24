@@ -77,7 +77,7 @@ Lamo Clips' partition `USER#{userId}` gets **no new items**. Two new kinds of pa
 | Workspace | `USER#{userId}#WSREG` | `WS#{workspaceId}` | `type="workspace"`, `userId`, `workspaceId`, `workspaceName`, `workspaceType`, `configuration` (map, §45.6), `version`, `createdAt`, `updatedAt` |
 | Idea | `USER#{userId}#WS#{workspaceId}` | `IDEA#{ideaId}` | `type="ws_idea"`, `userId`, `workspaceId`, Idea fields (§45.7), `seriesId?` (§45.43) |
 | Character | same | `CHAR#{characterId}` | `type="ws_character"`, Character fields (§45.8), `kind` and `car` (§45.41; a missing kind is a person, a car's `look` is null), `version` |
-| Story | same | `STORY#{storyId}` | `type="ws_story"`, Story fields (§45.9), internal `scriptKey`, `videoKey`, `coverKey`, `stillKeys` (map sceneId → key), `statusBefore`, `run` (publishing run number), `version`, `seriesId?` (§45.43) |
+| Story | same | `STORY#{storyId}` | `type="ws_story"`, Story fields (§45.9), internal `scriptKey`, `videoKey`, `coverKey`, `stillKeys` (map sceneId → key), `statusBefore`, `run` (publishing run number), `version`, `seriesId?` (§45.43), `art?` (the drawing style; none means Bright, §45.45) |
 | Series | same | `SERIES#{seriesId}` | `type="ws_series"`, `userId`, `workspaceId`, `seriesId`, `name`, `line`, `castIds`, `cover`, `storySoFar`, `storySoFarBy`, `storySoFarAt`, `summaries` (the newest 50 `{storyId, summary, by, at}`), `recapTaskId`, `version`, `createdAt`, `updatedAt` (§45.43; episodes are worked out on each read, never stored) |
 | Production job | same | `PJOB#{jobId}` | `type="ws_pjob"`, ProductionJob fields (§45.10), internal `sessionId`, `heartbeatAt` |
 | Asset | same | `ASSET#{assetId}` | `type="ws_asset"`, Asset fields (§45.12), internal `key` |
@@ -3842,3 +3842,1006 @@ settings; on a phone Series is under More, so one more tap (at most 9).
 - **Chat tools for series**: `list_series` and `read_series`.
 - **New car sound effects** (ignition, door, indicator): each needs five catalog places, a synth function, and new
   samples.
+
+### 45.45 Night drive: the new drawing style (owner request, 2026-11-24; wins over anything above for drawing)
+
+The owner sent a reference video (a 78 s vertical cartoon of a drive at night) and asked: "this is the type of style
+i want my videos in so keep the application you have created for me but make sure the character and style is this
+way but a little bit more detailed. so keep all features that we have so far i like it as it is, its just a simple
+design style change that i wanted to give as an input". It is a style reference only: nothing of it (characters,
+scenes, watermark, footage) is copied anywhere, and Clips Funded still "never copies characters or footage"
+(§45.45.17). ADR-93 records the decision. Every feature stays: the characters editor (Looks, Face, Moves, Sounds,
+Name), car characters, series, captions, sounds, the publish flow and all UI; the engine's data model only grows,
+with defaults that keep every old character and story drawing as before.
+
+#### 45.45.0 In short
+
+The owner wants their videos to look like a soft, film-like cartoon of a drive at night, a little more detailed than
+the reference, and every feature kept. So we add one drawing style, `night_drive` ("Night drive"), next to today's
+`classic` ("Bright"). New videos use Night drive. Old scripts have no style field and draw exactly as before.
+
+The style changes how people, cars and places are drawn:
+
+- soft, thin outlines;
+- cel shading, rim light and soft shadows (ambient occlusion);
+- a muted night palette with sodium street lights and glow.
+
+It also adds:
+
+- shots inside a scene: driver's eyes, face up close, side window, mirror, speed dial, pedals, behind the car and
+  down the road;
+- one new place, the highway at night.
+
+Everything is still drawn by the one engine (`web/src/stories/engine`), so the preview and the final video stay the
+same picture. There is no new prim kind and no ffmpeg filter.
+
+#### 45.45.1 Decisions
+
+1. **The style field** is `StoryScript.art?: ArtStyle`, `"classic" | "night_drive"`. A missing field means
+   classic. It is not called "style" (that is MovementStyle) or "look" (that is CharacterLook and Settings › Look).
+2. **Night drive is the default for new videos only.** The pipeline writes `art: "night_drive"` into new
+   scripts. The engine never reads a missing field as night drive, so every golden and every old story stay the same.
+3. **Shots are cuts inside a scene:** `Scene.cuts?: ShotCue[]`. The action, beats and sound go on, and only the
+   picture cuts. A missing list means today's whole-scene view. Cuts give the 2 to 4 s pacing without more scenes.
+   The writer still has at most 12 scenes, and the engine hum does not restart at each cut.
+4. **One new place: `highway_night`.** In Night drive, `road_night` gets the new night palette. In Bright it stays
+   as it is.
+5. **Geometry is unchanged.** The BODY table, `CHAR_PX`, the car sizes and the seat positions stay. The new look
+   is surface drawing only, so layout, bubbles, seats and the in-frame tests stay valid.
+6. **Own colours are kept and lit.** A character's or car's own colours pass through the scene's light
+   (`grade`). A red car stays red, just at night. Token colours (sky, lamps, interior) are final and are not graded.
+7. **A vignette, but no film grain.** Grain needs a noise prim in both drawers, so it is a follow-up. The
+   vignette is made of prims.
+8. **No copied characters.** There is no preset or default look that copies the reference's main character. The
+   owner's characters keep their own looks, drawn in the new way.
+9. **`ENGINE_VERSION` becomes 7.** Its note: "7: the night drive drawing style (script.art), cuts between shots
+   inside a scene and the highway at night: older scripts draw as before".
+
+#### 45.45.2 Data model (additive)
+
+`types.ts`:
+
+```ts
+export type ArtStyle = "classic" | "night_drive";
+export type ShotId = "scene" | "driver_view" | "face" | "side_window" | "mirror" | "speed_dial" | "pedals" | "road_behind" | "road_wide";
+/** A cut to another shot at `at` seconds from the scene's start; the action and sound go on. */
+export interface ShotCue { at: number; shot: ShotId; /** whose face or whose car; default the scene's driver */ who?: CastId }
+// Scene:        cuts?: ShotCue[];
+// StoryScript:  art?: ArtStyle;
+// SetId:        | "highway_night"
+// Catalog:      arts: CatalogEntry<ArtStyle>[]; shots: CatalogEntry<ShotId>[];   (inside CATALOG: the CLI test pins the top-level keys)
+```
+
+`catalog.ts` labels (kid-proof; the writer sees them, and Arts shows in the UI):
+
+| List | id | label |
+|---|---|---|
+| arts | night_drive | Night drive |
+| arts | classic | Bright |
+| sets | highway_night | Highway at night |
+| shots | scene | Whole scene |
+| shots | driver_view | Driver's eyes |
+| shots | face | Face up close |
+| shots | side_window | Side window |
+| shots | mirror | Mirror |
+| shots | speed_dial | Speed dial |
+| shots | pedals | Feet on the pedals |
+| shots | road_behind | Behind the car |
+| shots | road_wide | Down the road |
+
+`frame.ts`:
+
+- `Frame` gains `art: ArtStyle` and `light: Light` (`Light` is in `art.ts`, §45.45.4).
+- `inFrame(size, fn)` sets `F.art = size.art === "night_drive" ? "night_drive" : "classic"` and
+  `F.light = LIGHTS.studio`, and puts both back afterwards.
+- `withArt(art, fn)` does the same for the previews, which have no script.
+- scene.ts sets `F.light` per frame and per part (§45.45.4.2).
+
+`script.ts`, `validateScript`. Each problem is one sentence the writer can act on:
+
+- `art` is checked only when it is there:
+  - "art must be "night_drive" or "classic" (the drawing style)."
+- `cuts` is checked only when it is there:
+  - an array of at most 8, each `{at, shot, who?}`;
+  - `at` from 0, below `durationSec − 0.6`, sorted, and at least 0.6 s after the cut before it;
+  - side view only;
+  - `who` must be an actor of the scene.
+- **Shots that need someone in a car** are driver_view, side_window, mirror, speed_dial, pedals and road_behind.
+  `face` needs it too when its person is in a car. Each needs:
+  - an actor `inCar` a car or truck of the scene;
+  - a road place (`setInfo(set).road`);
+  - the shot's span not overlapping that rider's `get_in` or `get_out`.
+- **`road_wide`** needs a road place. **`face`** needs any actor.
+- Example sentences:
+  - "Scene s2: the shot "driver_view" at 1.5 s needs someone sitting in a car; c1 is still getting in until 2.4 s.
+    Cut after that, or use the whole scene."
+  - "Scene s4 is in the kitchen; the shot "road_wide" needs a road. Use a road place or another shot."
+  - "Scene s2: cuts at 3 s and 3.3 s are too close; keep cuts at least 0.6 s apart."
+  - "Scene s3 is seen from above; cuts work in side views only."
+
+Other changes in `script.ts`:
+
+- `normalizeScript` sorts the cuts.
+- `fitDuration` scales each `at` with its scene, then drops any cut that breaks the 0.6 s rules. The API's
+  `_scale_scene` and the mock's edit scaling do exactly the same.
+- `sceneShapes(scene, art = "classic")` takes the style. In night drive it is the larger of the whole-scene estimate
+  and each cut's shot estimate (§45.45.13). `validateScript` passes `s.art`.
+
+`rules.ts`: append the ids `shots` and `shot_world`, and add them to the pinned list in `storiesEngineRules.test.ts`.
+
+- **shots:** "A scene can cut between shots while its action and sound go on: cuts is a list of {at, shot, who?},
+  seconds from the scene's start, at least 0.6 s apart, at most 8; before the first cut the scene shows the whole
+  scene. Driver's eyes, Side window, Mirror, Speed dial, Feet on the pedals and Behind the car need someone sitting in
+  a car on a road; Down the road needs a road; Face up close needs a person. Bubbles show beside the face in Face up
+  close and Side window, and at the top in the other shots."
+- **shot_world:** "In shots, the side view's places still count: a car further along the way the driver's car faces
+  is ahead, one the other way is behind; a car whose y is under 0.72 is in the other lane; a car facing the other
+  way comes towards it. move, speed_up, stop, stall, blink and honk show in every shot; steer_left and steer_right
+  turn the wheel; brake lights the brake lights and drops the speed needle."
+
+#### 45.45.3 Palette tokens (`art.ts`, the `ND` object; exact values)
+
+These were tuned from the mood of the reference. They are our own tokens.
+
+| Group | Token | Hex | Notes |
+|---|---|---|---|
+| Night sky | skyTop | #141f3d | grad stop 0 |
+| | skyHigh | #1e305a | stop at 0.17 of the horizon height |
+| | skyMid | #2f4369 | stop at 0.87 of the horizon height |
+| | skyHorizon | #4d5a77 | at the horizon |
+| | star | #e8e6f2 | a 0.35 to 0.6, 8 stars only |
+| Mountains | mtnFar | #1d3339 | far ridge |
+| | mtnFarLit | #26434a | 2 lit facets on the far ridge |
+| | mtnNear | #163a3b | near ridge |
+| | mtnNearLit | #1f4a4a | 1 facet |
+| | mtnRim | #2e5a5c | ridge rim line, a 0.5 |
+| | cityGlow | #ffb35c | 3 stacked ellipses at the horizon, a 0.05 / 0.07 / 0.10 |
+| | cityDot | #ffcf7a | tiny window dots on the horizon, a 0.6 |
+| Road | asphalt | #2e2a20 | warm charcoal |
+| | asphaltFar | #3a3629 | haze band near the horizon |
+| | lane | #d8d4c4 | dashes, near |
+| | laneFar | #aba896 | dashes far away (perspective shots) |
+| | edge | #cfcabb | solid edge lines |
+| | kerb | #4a4840 | |
+| | verge | #1f2a2a | night grass |
+| | vergeNear | #182222 | |
+| | railLit | #8a8c80 | guard-rail top highlight |
+| | rail | #6c6e60 | |
+| | railShadow | #444845 | |
+| | railPost | #3e4140 | |
+| Lamps | pole | #364767 | sky-lit grey-blue |
+| | poleDark | #263248 | the shaded side |
+| | lampCore | #fffdf1 | |
+| | halo1 | #ffcf7a | a 0.38, r × 1.6 |
+| | halo2 | #ffb35c | a 0.16, r × 3 |
+| | halo3 | #ff9a3c | a 0.07, r × 5 |
+| | pool | #ffb35c | light pool on the road, a 0.07 |
+| | cone | #ffcf7a | soft cone from head to pool, a 0.05 |
+| Car lights | headCore | #fdfdfd | |
+| | headBloom | #fff7e0 | r × 1.6 / 3 / 5 at a 0.45 / 0.16 / 0.06 (night) |
+| | beam | #fff3d0 | a 0.08, night only |
+| | tailCore | #ff2d2d | |
+| | tailGlow | #ff3b30 | r × 2.5, a 0.25 (night) |
+| | brakeCore | #ff5a4a | glow a 0.45 |
+| | marker | #caae3c | amber side marker |
+| Inside the car | cabinRoof | #2a282c | |
+| | pillar | #312f33 | |
+| | pillarLit | #4a474d | lit edge line |
+| | pillarInk | #1b1a1e | |
+| | dashTop | #46454b | |
+| | dashFace | #2b2a2f | |
+| | dashLip | #1c1b1f | |
+| | vent | #1f1e22 | |
+| | ventSlat | #3a393f | |
+| | button | #34333a | |
+| | ledWarm | #ffb35c | |
+| | ledCool | #7fd1ff | |
+| | wheel | #252525 | |
+| | wheelLit | #3a3a3e | |
+| | wheelHub | #1f1f22 | |
+| | seat | #2d2d2f | |
+| | seatInk | #1d1c20 | |
+| | seatStitch | #3a393e | |
+| | floor | #23212b | |
+| | pedal | #6a6870 | |
+| | pedalGroove | #4a4850 | |
+| | glassIn | #0e1424 | a 0.18 over the outside view seen through glass |
+| | mirrorHousing | #232227 | |
+| Speed dial | dialFace | #151417 | |
+| | bezel | #5a5a60 | |
+| | bezelLit | #8a8a92 | a 0.6 |
+| | tick | #f2efe6 | |
+| | redZone | #c0392b | |
+| | needle | #ff7a1a | |
+| | needleGlow1 | #ff9a3c | a 0.35 |
+| | needleGlow2 | #ffb35c | a 0.12 |
+| | hub | #2a292e | |
+| People | ink | #2a211c | outline base: outline = mix(look.outline, ink, 0.5) |
+| | eye | #17110f | |
+| | glint | #fff6e5 | |
+| | mouthLine | #2a1a17 | |
+| | mouthInside | #5a1414 | |
+| | tongue | #7a2a26 | |
+| | teeth | #efe9dc | |
+| | blush | #c0756a | a 0.12 × blush |
+| | flush | #a33a2a | a 0.10 × red |
+| Shading | celDark | #141018 | cel(c, k) = mix(c, celDark, k), k 0.22 |
+| | ao | #0b0a10 | |
+| | rimNight | #ffb35c | |
+| | rimDay | #fff6e5 | |
+| | vignette | #05060c | |
+
+Plates stay one plain `#f4f1ea` rectangle (graded), with no text and no badge, as today.
+
+#### 45.45.4 Light, line and shading (`art.ts` plus scenes' `light.ts`)
+
+##### 45.45.4.1 `art.ts` exports (pure)
+
+```ts
+export interface Light { ambient: Hex; amount: number; desat: number; dark: number; warm: number; rim: Hex; rimA: number; night: boolean }
+export const LIGHTS: Record<"studio" | "day" | "indoor" | "night" | "cabin", Light>;
+export const ND: { ...the tokens of §45.45.3 };
+export const nightDrive = (): boolean => F.art === "night_drive";
+export function grade(c: Hex, L: Light = F.light): Hex;   // below
+export function cel(c: Hex, k = 0.22): Hex;                // mix(c, ND.celDark, k)
+export function lift(c: Hex, k = 0.1): Hex;                // lit top surfaces: mix(c, "#ffffff", k), then warm by F.light.warm × 0.12 towards #ffcf8a
+export function ink(outline: Hex): Hex;                    // mix(outline, ND.ink, 0.5)
+export function inkPx(designPxPerUnit: number): number;    // clamp(1.8 + 0.1·u, 2, 3.6): the outline in design px
+export function lineUnits(pen: Pen, designPx: number): number; // designPx · F.k / pen.unit(): that width in the pen's local units
+export function glow(pen: Pen, x: number, y: number, r: number, core: Hex, halo: Hex, k = 1): void; // core + 3 stacked halos (r × 1.6/3/5, a 0.38/0.16/0.07 × k)
+```
+
+`grade(c, L)`:
+
+1. `d = mix(c, grey(c), L.desat)`, where `grey` is the luma grey 0.2126/0.7152/0.0722 of sRGB.
+2. `g = mix(d, mul(d, L.ambient), L.amount)`, where `mul` is the channel product / 255.
+3. `g = mix(g, ND.celDark, L.dark)`.
+4. If `L.warm > 0`: `g = mix(g, mul(c, "#ffc07a"), 0.30 × L.warm)`.
+
+Every step rounds through `toHex`, so it is deterministic.
+
+| Light | ambient | amount | desat | dark | rim | rimA | night |
+|---|---|---|---|---|---|---|---|
+| studio | #ffffff | 0 | 0 | 0 | #fff6e5 | 0.25 | no |
+| day | #ece6dc | 0.22 | 0.18 | 0.04 | #fff6e5 | 0.30 | no |
+| indoor | #f0d9b8 | 0.25 | 0.12 | 0.06 | #ffe2b8 | 0.28 | no |
+| night | #a7a3b8 | 0.60 | 0.10 | 0.10 | #ffb35c | 0.40 (+ 0.25 × warm) | yes |
+| cabin | #8f93ad | 0.62 | 0.10 | 0.16 | #ffb35c | 0.45 (+ 0.25 × warm) | yes |
+
+Checked results:
+
+- skin #f2c9a0 at night → about #af8f7a;
+- a red car #d8352a at night → #932925;
+- mustard #c9a227 at night → #8e7428;
+- the road_day sky #4fb3ff in day light → #5aa6de.
+
+`studio` changes nothing, so the editors' previews and Library portraits keep the owner's picked colours.
+
+##### 45.45.4.2 Which light, when (scenes sets `F.light`)
+
+- **Night places** (`setInfo(set).night`: road_night, highway_night) use `night`. Inside-car shots use `cabin`.
+- **Outdoor day places and park** use `day`. Shots inside a car on a day road use `day` with dark 0.10.
+- **kitchen, living_room and office** use `indoor`. **studio** uses `studio`.
+- **The lamp pulse** is `warm = max(0, cos(2π · (m mod 40) / 40))^4`, where `m = scroll / 54` metres. 1080 px is
+  20 m, lamps are 40 m apart, so a lamp passes about every 1.9 s at full speed. When nothing drives on a night place,
+  warm is a steady 0.35. On day places it is 0.
+
+##### 45.45.4.3 Line weight and outline colour
+
+- **Outline colour:** `ink(look.outline)` for people and `ink(car.outline)` for cars. The owner's pick still
+  tints it, but it is never the heavy navy.
+- **People's outline width:** `ow = lineUnits(pen, inkPx(u))`, where `u` = design px per rig unit at that moment.
+  It is drawn the same way as today: inflated polygons, and limb lines that are `2·ow` wider.
+  - A standing character (u = 5) gets a 2.3 px outline.
+  - Face up close (u ≈ 13.5) gets 3.2 px.
+  - Today's close camera gives 29 px; night drive never does.
+- **Cars:** `lineUnits(pen, 2.6)`. **Plain props:** `lineUnits(pen, 2.2)`.
+- **Inner detail lines** (folds, strands, door lines, slats) are 0.35 × the outline, at a 0.7 to 0.8.
+
+##### 45.45.4.4 The shading recipe (every person, car and big prop)
+
+1. **Base:** the own colour through `grade`.
+2. **Shadow:** one cel shape per part, on the side away from the key light, in `cel(base)`. It is
+   `clipConvex(part, halfPlane)`. The key light comes from the upper front of the thing (the facing side, +x in rig
+   units, so a mirrored character stays right). For cars, the lower body and the side away from the lamps.
+3. **Lit top:** roofs, bonnet tops, the top of the head, shoulders and dashboard tops, in `lift(base)`.
+4. **Rim light:** a thin line (about 1 outline width) along the edge facing the lamps, in `F.light.rim` at
+   `F.light.rimA`. On a person: the top-back of the head and hair (arc 200° to 290°) and the back shoulder. On a car:
+   the roof line and the rear pillar.
+5. **Ambient occlusion:**
+   - under the chin: an ellipse `rx 0.55·headRX, ry 0.12·headRY` on the shirt top, `ND.ao` a 0.40;
+   - under cars: two ellipses, `ND.ao` a 0.38 (`rx hl−10, ry 10`) and a 0.16 (`rx hl+30, ry 22`);
+   - under feet: a 0.32 (`rx 26, ry 5` units) plus a 0.12 wider one.
+6. **Glow:** lights get `glow()` (stacked circles). There are no radial gradients.
+
+##### 45.45.4.5 The finish (`light.ts`, scenes)
+
+- **Vignette:** 3 keyhole polygons in `ND.vignette`, drawn after the picture and before bubbles.
+  - Each is the frame rectangle (clockwise) with an ellipse hole (anticlockwise), joined by a bridge. Non-zero
+    winding leaves the hole empty in the canvas (`fill("nonzero")`) and in `raster.py` alike.
+  - The holes are `rx = W/2 × (1.30, 1.18, 1.06)` and `ry = H/2 × (1.18, 1.08, 0.98)`, at a 0.10 / 0.10 / 0.12 on
+    night places and half that by day.
+- **No grain** (§45.45.1.7).
+- **Light sweep inside the car:** while `warm > 0.05`, a translucent warm quad (`ND.halo2` a 0.10·warm) moves down
+  the dashboard top and the face. The wheel rim highlight follows warm too.
+
+#### 45.45.5 People (characters builder)
+
+The parts and proportions do not change. `geometry()` and the BODY table stay, so the big head (about half the body)
+and the chunky body stay. Each body keeps its own head shape, so a character is still the same character. Night drive
+changes only the surface drawing. All of it sits behind `nightDrive()`, so the classic path is byte-identical.
+
+- **Head:** the body's head shape in `grade(skin)`, a cel shadow on the lower back quarter, and the rim arc.
+- **Ears:** the same circles, plus an inner arc line.
+- **Nose:** for every `look.nose` but `none`, a small rounded bump (ellipse) in `mix(skin, cel(skin), 0.12)`, with
+  a thin arc line along its lower half (mouthLine at a 0.7).
+  - `dot`: rx 2.0, ry 1.4 units;
+  - `button`: 2.8 × 2.2;
+  - `long`: 3.2 × 2.0.
+- **Eyes:** tiny dots, with no white.
+  - The dot is an ellipse `rx 1.25, ry 1.55` units × `(0.85 + 0.15·open)` × `√pupil`, in `ND.eye`, at
+    `x = fx ± 0.44·rx`, `y = −0.06·ry + nod·3`.
+  - A glint (r 0.4, `ND.glint`) shows only where the head is drawn at 8 design px per unit or more.
+  - A blink squashes the dot to a short line.
+  - `happy`: ^ arcs. `closed`: ∪ arcs. `spiral`: a small spiral. `lidded`: the top half of the dot with a flat lid
+    line over it.
+- **Brows:** short, thick strokes that carry the emotion. Each is a tapered lens polygon (9 points) in
+  `mix(hair, ND.eye, 0.6)`.
+  - Length `0.30·rx`. The widest part is 2.6 units for `thick` brows and 1.7 for `thin`, at 35% from the inner end.
+  - `y = eye y − 0.22·ry − browUp·0.9`, minus `browAsym` on one side.
+  - The tilt comes from `face.brow`, as today.
+  - The arch is `clamp(0.12·browUp, −0.2, 0.6) × length`.
+- **Mouth:** line mouths are 1.1 units in `ND.mouthLine`.
+  - `wavy` is 7 points with a 0.7 amplitude (the worried look).
+  - **Open mouths** are a rounded shape (flatter top, rounder bottom) in `ND.mouthInside`, with an outline and a
+    `ND.tongue` lower lip. These are grin and laugh (a D shape), o (a small oval) and bigo (a tall oval).
+  - `grit`: a band of teeth in `ND.teeth` with 1 or 2 lines, rimmed in mouthInside.
+  - `hum` stays closed, as the hum rule says.
+- **Cheeks:** blush is `ND.blush` at a 0.12 × blush. The angry flush is `ND.flush` at a 0.10 × red.
+- **Hair:** a soft scalloped fringe of 7 scallops, amplitude 1.6 units, at `−0.50·ry`. It also gets 3 strand
+  groups (curved inner lines in `mix(hair, "#0f0b0a", 0.35)`), 1 highlight arc on the lit side (`mix(hair, "#c9b8a0",
+  0.25)` at a 0.35) and the rim arc.
+  - curly: 4 small curl arcs;
+  - spiky: one line per spike;
+  - long: 2 strand lines on the back hair;
+  - bun: a wrap line;
+  - cap: a brim shadow and a seam.
+- **Clothes:** muted by `grade`.
+  - The torso gets a cel shadow on its back third, two fabric folds (an armpit curve and a waist curve, in
+    `cel(top, 0.3)`), the chin shadow (§45.45.4.4) instead of today's collar ellipse, and a rim line on the back
+    shoulder.
+  - Sleeves and trousers get a cel shade. Shoes get a small highlight.
+- **The dark-place halo** behind heads (scene.ts) is not drawn in night drive, because the rim light does that job.
+- **Extras** (sweat, tear, vein, stars, shock, sparkle, puff) stay, recoloured: sweat `#7fb2d9`, vein `#c0392b`,
+  stars `#d9a441`.
+
+**Faces** (the FACES data and `Expression` stay the same; only the drawing changes):
+
+| Face | Eyes | Brows | Mouth |
+|---|---|---|---|
+| neutral | dots | level, slight arch | short soft line |
+| happy | dots, a little higher | gentle arches | open D, dark red inside |
+| laughing | ^ ^ | high arches | wide open D, tongue, top teeth |
+| surprised | dots with a glint | high round arches | small open oval |
+| shocked | smaller dots | very high arches | tall open oval, shock lines |
+| scared | small dots | inner ends steeply up | wobbly line, 2 sweat drops |
+| worried | dots looking aside | inner ends up | wobbly line, 1 sweat drop |
+| angry | dots | thick, inner ends hard down | gritted teeth (an open shout while a noise plays), faint flush, vein |
+| determined | dots | inner ends down | flat line |
+| thinking | dots looking up and aside | one raised | short pout line |
+| sad | dots looking down | inner ends up | frown arc, tear |
+| proud (smug) | half-lidded dots | one a little up | smirk |
+| dizzy | small spirals | uneven | wobbly line, stars |
+| relieved | closed arcs | relaxed up | small smile, puff |
+
+**New exports for the shots** (`rig.ts`; night drive and classic both draw them):
+
+- **`drawBust(pen, look, g, pose, o: DrawOpts & { view: "front" | "three_quarter" })`:** the origin is the head's
+  centre, in rig units, and the caller scales it.
+  - Shoulders are `2.6·headRX` wide, from `0.85·headRY` down past the frame.
+  - It draws the shirt with its cel shadow, 3 or 4 folds, the neckline, the chin shadow and the upper arms reaching
+    down to the wheel, then the head, hair, face and accessory through the same code as `drawCharacter`.
+  - So each character keeps its own faces, blinks, hum and noise mouths.
+  - `three_quarter` uses `pose.turn` −0.45.
+- **`drawWheelHands(pen, look, grips: [number, number][], r: number)`:** mitt hands (an ellipse plus a thumb that
+  wraps the rim) in graded skin, and sleeve cuffs coming in from the frame's bottom edge.
+- **`drawFoot(pen, look, x, y, angle, press)`:** a trouser leg coming in from off-frame, then the shoe (the rig's
+  shoe colour) as a rounded sole shape with a sole line.
+
+#### 45.45.6 Cars (cars builder)
+
+**Side and top views** (`drawCarLookSide` and `drawCarLookTop` in car.ts; plain `drawCarSide` and `drawCarTop` in
+props.ts), behind `nightDrive()`:
+
+- **Lines:** outline `lineUnits(pen, 2.6)` in `ink(car.outline)`.
+- **Paint:** graded. It has three tones: a lit top (`lift`) along the roof line and bonnet, the body, and a lower body
+  in `cel(paint)`.
+- **Door detail:**
+  - door lines at the front door edge and the B pillar, down to the sill;
+  - door handles: 18 × 5 rounded rects in `cel(paint, 0.3)`;
+  - the mirror on a small stalk, in paint or accent;
+  - the amber side marker (`ND.marker`) at the front corner.
+- **Glass:** clear #3e6e7f, tinted #2c4a57, dark #1c2830, all graded. Two diagonal reflection bands (`#ffffff` at a
+  0.12 and 0.07) go across the glass, clear of the riders' faces. The tint over the riders stays.
+- **Wheels:** tyre `#1b1a1d` with a sidewall ring (`#2b2a2e`). The rims keep each style and rim colour, graded, with
+  an inner rim shadow.
+- **Lights:**
+  - headlights: `headCore` with `headBloom` (§45.45.3);
+  - beam: the polygon in `ND.beam` at a 0.08 at night;
+  - tail lights: `tailCore` with `tailGlow`; braking switches to `brakeCore` with the stronger glow.
+- **AO and plate:** the AO under the car (§45.45.4.4); the plate is unchanged.
+- **Kept as they are:** faces (windscreen eyes, headlight eyes, the grille mouth), every movement style, honk waves,
+  exhaust and speed lines. Their colours are graded.
+
+**New views from the front and the back** (a new `carView.ts`, used by the shots):
+
+- **Signature:** `drawCarView(pen, car: CarLook, view: "back" | "front", o: { x, y, w, side, light: Light, braking,
+  lights, blink, face, t, seed })`.
+  - The origin is the ground at the car's centre. `w` is the car's width on screen.
+  - `side` (−1..1) sets how much of one side shows as a skewed quad, towards the vanishing point. This gives the boxy,
+    slightly 3D look.
+  - The height is `w × 0.78 × spec.hgt × car.height`, lifted by `spec.lift`, and the width is scaled by `spec.wide`.
+- **The back:**
+  - a lower box (rounded 0.08w), a cabin trapezoid (its top 0.78w) with the rear glass and reflections, a lit roof
+    quad, the side sliver in `cel`, the bumper (TRIM), the plate, an exhaust, and tyres at the bottom corners;
+  - tail lights by `lights.rear`: round is two circles r 0.07w at ±0.36w; bar is one rounded bar 0.06w tall; square
+    is two rects 0.13w × 0.07w;
+  - pattern: two_tone puts the cabin in the accent colour, stripe is a band, racing_stripes are two stripes over the
+    middle;
+  - extra: roof_rack, spoiler, roof_box.
+- **The front:**
+  - the windscreen, the lit bonnet quad, the grille (it bends into the face's mouth with the grille mouth), and two
+    door mirrors at the A pillars in paint or accent;
+  - headlights by `lights.front` (round, square, slim) with bloom at night;
+  - a car with eyes shows them: windscreen eyes on the glass, and headlight eyes through `carEye`.
+- **Plain props:** a plain car is drawn through the same function with a look made from its colour (a sedan in
+  `prop.color`, steel wheels). A plain truck has a back that is a tall box (`#d9d4c8`, graded) with roller-door lines
+  and two low red lights, and a front that is a cab with a big windscreen.
+- **Props:** every other prop's colours (cones, signs, trees, deer, arrows) go through `grade` in night drive, with
+  outlines at `lineUnits(pen, 2.2)`.
+
+**Budgets** (measured, as `storiesEngineCars.test.ts` measures today):
+
+- A car of the cast in night drive is at most `CAR_CAST_SHAPES_ND` in the side and top views (the note started at
+  74; measured 72, §45.45.18).
+- Any car view is at most 34.
+- The plain car's classic drawing stays "as before".
+
+#### 45.45.7 Places (scenes builder, `sets.ts`)
+
+**`highway_night`** (both styles draw it; Bright draws it without the finish).
+
+Side view layers, back to front:
+
+1. **Sky:** one grad from `skyTop` to `skyHorizon` (§45.45.3 stops), with 8 small twinkling star circles.
+2. **Far mountains** at depth 0.12: a jagged ridge (peaks from `|sin|` terms) in `mtnFar`, with 2 `mtnFarLit`
+   facets.
+3. **City glow** at depth 0.2: 3 glow ellipses and 12 window dots on the horizon, centred at x 0.7.
+4. **Near mountains** at depth 0.3: `mtnNear`, 1 facet and the `mtnRim` line.
+5. **Lamps** at depth 0.7, every 520 px:
+   - a pole 330 px tall (`pole`, with a `poleDark` side);
+   - an arm of 90 px towards the road;
+   - a head ellipse 30 × 9 in `lampCore`, with 3 halos;
+   - a `cone` polygon at a 0.05 and a `pool` ellipse (rx 170, ry 26) on the road.
+6. **Far guard rail** at depth 0.85: a rail line (`rail`, w 10), a `railLit` top line and `railPost` posts every
+   180 px.
+7. **Ground** at depth 1:
+   - `verge`;
+   - `asphalt` with an `asphaltFar` band along its far edge;
+   - `edge` lines and 2 lanes of `lane` dashes;
+   - `vergeNear` with a `kerb` line.
+
+Other parts:
+
+- **Top view:** asphalt, verges, the lane lines, rails at both edges and lamp pools (circles r 120 / 60 at a 0.08 /
+  0.06) every 520 px.
+- **`setInfo`:** night, road, and the loop engine 0.16 (as on the highway). `reel_prompt` gets the label "a
+  motorway at night under orange street lights".
+- **`road_night` in night drive:** the same recipe with one lane each way (centre dashes), lamps on the far side
+  only, low teal hills instead of mountains, no city glow, and white reflector posts with amber dots instead of a
+  rail. In Bright it is unchanged.
+- **Every other place in night drive** keeps its own layout and palette row, passed through `grade` under its light
+  (§45.45.4.2). Cars and people get the new drawing and the finish. Day places stay day and indoor places stay indoors.
+  Parallax depths do not change. No place becomes night by itself; the writer picks night places (§45.45.11.4).
+
+#### 45.45.8 Shots (scenes builder, `shots.ts` and `perspective.ts`)
+
+##### 45.45.8.1 The shot's world (the same for every shot)
+
+- **The driver** is `cut.who` when that actor is in a car, else the first rider of the scene. **The own car** is
+  the driver's car. `dir` is the own car's facing.
+- **The other cars and trucks** keep their side-view places, read like this:
+  - **Ahead or behind:** `(p.x − own.x) · dir`, more than 0 is ahead.
+  - **Gap:** `|Δx| · F.w / 1080 · 20` metres, at least 4.
+  - **Lane:** a y under 0.72 is the other lane, drawn to the left. The own lane is the own car's bucket.
+  - **Oncoming:** a car facing the other way comes towards the camera in the other lane, drawn with its front view.
+  - Moves change the gap smoothly. A skid or spin rolls the car's view up to ±15°. A bump or tyre burst flashes and
+    shakes.
+- **Perspective:**
+  - the vanishing point (`vpX`, horizon) and a focal length of `0.9 × 1080` design px;
+  - a point (X lateral, Y up, Z ahead, in metres) lands at `x = vpX + f·X/Z`, `y = horizon + f·(camH − Y)/Z`;
+  - lanes are 3.6 m wide, lamps are every 40 m at the road's edge + 1.5 m, 10 m high, with a 2 m arm.
+- **Streaming:** dashes, posts and lamps are placed at `z = k·gap − (m mod gap)`, using the same metres as the lamp
+  pulse, so streaming matches the side view's speed and carries on across cuts.
+- **Steering:** the steer input moves `vpX` ±0.03 W and rolls the horizon ±1.2° (driver_view). It sways the own car
+  ±0.05 W (road_behind). The wheel turns `steer × 35°`.
+- **Drawing limits:** at most the 4 nearest other cars, with the far lamps merging into a dotted line towards the
+  vanishing point.
+
+##### 45.45.8.2 The camera inside a shot
+
+`scene.camera` still counts. The shot's own framing is "wide". The other cameras change it:
+
+- **medium:** zooms 1.08 into the shot's focus.
+- **close:** zooms 1.25 into the focus. The focus is the face, the road ahead, the car in the mirror, the needle, or
+  the foot.
+- **pan_left / pan_right:** sway 0.04 W over the shot.
+- **push_in:** zooms 1 → 1.12.
+- **shake:** 11 px, and impacts shake as they do today.
+
+Every cut gets today's settle (zoom 1.035 → 1 over 0.4 s). While the road rolls there is a 1.2 px hum shake. Cuts are
+hard, with no fades. The vignette and the bubbles are not zoomed.
+
+##### 45.45.8.3 Each shot
+
+Positions are parts of the frame (x of W, y of H); sizes are parts of S = 1080. 1:1 and 16:9 share the y values
+(both are 1080 high), and 1:1 uses the 16:9 x parts squeezed to its width. Every shot fills the frame: there is no
+band and no letterbox.
+
+**driver_view ("Driver's eyes")**, the POV through the windscreen:
+
+- **Outside, in the windscreen:**
+  - the sky grad, far and near mountains and the city glow (as in §45.45.7, with sideways parallax of steer and sway
+    only);
+  - the perspective road with dashes and edge lines;
+  - rails both sides with posts, and lamp rows both sides with halos and pools;
+  - the cars ahead from their backs, and oncoming cars from their fronts.
+- **A sliver of your own bonnet:** a band at the windscreen's bottom in the own car's graded paint, with a lit top
+  line.
+- **Inside:**
+  - the roof liner band;
+  - A pillars: slanted `pillar` quads with a `pillarLit` edge;
+  - the rear-view mirror at the top centre: `mirrorHousing`, glass `#1f2c44`, showing two headlight dots when a car
+    is behind;
+  - the dashboard: a curved top in `dashTop` with the light sweep, a `dashFace`, and the `dashLip` shadow;
+  - two vents with 3 slats each;
+  - three buttons with LEDs on the right;
+  - a cluster hood with two dial glows behind the wheel (the speed glow).
+- **The wheel:** `wheel` with a `wheelLit` top arc that follows warm, 3 spokes and a hub, turning with the steer.
+  `drawWheelHands` at 10 and 2.
+
+| | horizon | dash top | wheel centre, r | pillars | mirror |
+|---|---|---|---|---|---|
+| 9:16 | 0.335 H | 0.585 H | (0.5 W, 0.94 H), 0.40 S, rim 0.055 S | [0,0.03H 0.12W,0.03H 0.05W,0.585H 0,0.585H] and its mirror | (0.5 W, 0.085 H), 0.36 S × 0.075 S |
+| 16:9 | 0.40 H | 0.70 H | (0.5 W, 1.10 H), 0.42 S | slanted, 0.08 W to 0.16 W | (0.5 W, 0.10 H) |
+
+**face ("Face up close")**, the driver from the dashboard:
+
+- **Behind the head:** the rear window (the night sky, slow mountains, one lamp glow crossing at each pass), the rear
+  headrests and seat backs (`seat`, `seatInk`, a stitch line), the driver's own headrest behind the head, and pillars
+  at the edges with slivers of side window where the rail lines stream past.
+- **The person:** `drawBust` front-on, then the top arc of the wheel along the bottom with the hands at its ends when
+  they are in frame.
+- **Light:** the rim light from the side-window side, pulsing with warm.
+- **Without a car:** a standing person gets their place's sky and far layer behind them, and no interior.
+
+| | head centre | head rx | wheel arc |
+|---|---|---|---|
+| 9:16 | (0.5 W, 0.47 H) | 0.30 S | centre (0.5 W, 1.15 H), r 0.50 S |
+| 16:9 | (0.5 W, 0.50 H) | 0.30 S | centre (0.5 W, 1.30 H), r 0.55 S |
+
+The head sits low enough that a bubble fits above it under the 9:16 top tabs.
+
+**side_window ("Side window")**:
+
+- **The driver:** at 3/4 (`drawBust` three_quarter) on the near side.
+- **The window:** the door window behind them, with a rounded top-back corner.
+- **Outside, streaming opposite to the own car's facing (as in the side view):**
+  - slow mountains;
+  - fast rail lines;
+  - a lamp passing in about 0.35 s at each pulse;
+  - a car in the other lane within 8 m, drawn in its side view (the existing side drawing, scaled into the window).
+- **Below the sill:** a door panel with an armrest line and a handle.
+
+| | head | window |
+|---|---|---|
+| 9:16 | (0.36 W, 0.50 H), rx 0.26 S | x 0.48 W to 0.98 W, y 0.14 H to 0.62 H |
+| 16:9 | (0.30 W, 0.50 H) | x 0.45 W to 0.95 W, y 0.12 H to 0.70 H |
+
+**mirror ("Mirror")**, the centred rear-view mirror:
+
+- This mirror claims no side of the road, which the fact checker needs.
+- **Around it:** the windscreen view, simplified (road, lamps).
+- **The mirror:** a big rounded housing with a lit edge, on a stalk to the liner.
+- **In the glass:**
+  - the road behind receding to the glass's centre;
+  - the inner outline of the own car's rear window;
+  - two headrest shapes at the bottom;
+  - the nearest car behind, drawn with its front view, scaled by its gap, with strong headlight bloom.
+- **Its moves:** blink flares the bloom × 1.8; honk shows small sound arcs.
+
+| | mirror centre | size |
+|---|---|---|
+| 9:16 | (0.5 W, 0.42 H) | 1.25 W wide (cropped at the sides), 0.42 S high |
+| 16:9 | (0.5 W, 0.45 H) | 0.70 W wide, 0.42 S high |
+
+**speed_dial ("Speed dial")**, the rev counter:
+
+- **The dial:**
+  - a face in `dialFace` on the dash;
+  - a 270° sweep from 225° (0) clockwise to −45° (8);
+  - 9 major ticks (0.07 S long, 0.012 S wide) and 4 minor ticks between each pair (0.035 S, 0.006 S);
+  - the `redZone` arc from 6.5 to 8;
+  - **stroke numerals** 0 to 8, drawn as `line` prims with a small built-in 5 × 7 stroke font, 0.065 S tall, at 0.78
+    r. They are not text, so there is no track and no font;
+  - a `bezel` ring with a `bezelLit` arc;
+  - a `hub` with a ring;
+  - a glow pool at the needle's tip.
+- **The needle:** `needle` w 0.016 S, with two glow lines.
+- **The needle's value:** `rpm = 0.9 + 2.6·speed + 2.2·(speed_up rise) − 1.0·braking`, eased over 0.15 s. A stall
+  shudders ±3° for 0.4 s, then falls to 0.
+- **9:16:** centre (0.56 W, 0.56 H), r 0.58 S, cropped by the left edge, with the edge of a second dial at the
+  right.
+- **16:9:** centre (0.5 W, 0.58 H), r 0.46 S.
+
+**pedals ("Feet on the pedals")**:
+
+- **The footwell:** the `floor`, and the dash underside as a top band with a lip line.
+- **The pedals:**
+  - brake: a rounded pad 0.30 S × 0.20 S at −20°, with 5 slots;
+  - accelerator: tall, 0.16 S × 0.46 S at −15°, with grooves.
+- **The foot:** `drawFoot` from the top right.
+  - It rests on the accelerator (press 0.2) and presses it fully on speed_up.
+  - On a brake beat it moves to the brake in 0.25 s and presses it (the pedal travels 0.04 S).
+- **9:16:** brake at (0.36 W, 0.52 H), accelerator at (0.68 W, 0.58 H). **16:9:** at 0.42 W and 0.62 W.
+
+**road_behind ("Behind the car")**, over the car's shoulder:
+
+- The camera is 1.6 m up and 7 m behind the own car.
+- The own car's back view is big at the bottom, with brake lights, the plate and AO.
+- The traffic ahead, rails, lamps and mountains as in driver_view.
+- **9:16:** vanishing point (0.5 W, 0.38 H); car ground at 0.86 H, width 0.62 S.
+- **16:9:** vanishing point (0.5 W, 0.42 H); car ground at 0.90 H, width 0.46 S.
+
+**road_wide ("Down the road")**, a wide highway view:
+
+- The camera is at the roadside, 1.2 m up. The road takes the left 70%; the verge, rail and teal grass take the
+  right.
+- Lamps on both sides. Every car is drawn by its gap and lane: the own car about 12 m ahead, from behind; oncoming
+  cars from the front, with bloom.
+- **Vanishing point:** (0.42 W, 0.40 H) in 9:16 and (0.45 W, 0.42 H) in 16:9.
+
+##### 45.45.8.4 Bubbles and text in shots
+
+- **Placement, once per script, in `layoutBubbles`:**
+  - The head position comes from the shot active at the bubble's start.
+  - In face and side_window, the bubble goes beside the big head, or above it. This "above" try is a new candidate
+    added for shots only, so classic layout is unchanged.
+  - In shots with no face, the bubble sits at the top middle (x 0.5 W, the safe top + 1.4 × `BUBBLE_R`), with its
+    tail towards (0.5 W, 0.9 H).
+- **Bubbles never cross a cut:** a bubble ends at the next cut, and one shorter than 0.4 s is left out. The frames
+  and the text track read the same layout, so the preview and the final agree.
+- **End card in face shots:** in 1:1 and 16:9 the face shot keeps the head below the end card in the last
+  seconds, as `clearEndCard` does.
+- **Captions, teaching text and the end card are unchanged.** Their boxes already clear the 9:16 tabs and buttons.
+
+#### 45.45.9 Motion cues
+
+- **Body bob** while the road rolls: in shots, the bust moves `2.2 px · sin(2π·1.7·t)` plus `1.2 px` noise. In the
+  side view, the existing rest bob stays.
+- **Streaming:** dashes, posts, rails and lamps come from the rolled metres in every shot, and the lamp pulse lights
+  faces and the dashboard in time with the lamps.
+- **Head turns:** idle turns of `0.08 · noise(seed, 0.6·t)` in face and side_window. `look_left` / `look_right`
+  turn the bust ±0.6.
+- **Expression changes:** faces change on beats as today. On a change, the brows overshoot by 20% and settle in
+  0.12 s. This needs the change's time, which motion.ts can give as `faceSince`.
+- **Cut-based editing:** hard cuts with the settle zoom, and the hum shake while driving.
+
+#### 45.45.10 The "a little more detailed" checklist
+
+| Extra | Where |
+|---|---|
+| Rim light from the street lights | people, cars, pillars, wheel rim (§45.45.4.4, 4.5) |
+| AO under the chin and under cars and feet | §45.45.4.4 |
+| Light falloff | halos and pools, light sweep, vignette |
+| Hair in strand groups, a scalloped fringe | §45.45.5 |
+| Fabric folds | torso and bust |
+| Dashboard vents, buttons and LEDs, speed glow | driver_view |
+| Grille, mirrors, door lines and handles, rims, glass reflections, side marker | §45.45.6 |
+| Parallax layers: mountains, rails, poles, city glow, stars | §45.45.7, §45.45.8 |
+| Vignette (grain is a follow-up) | §45.45.4.5 |
+
+#### 45.45.11 The style switch, end to end
+
+##### 45.45.11.1 Engine
+
+- §45.45.2 adds `art` and `cuts`.
+- `signature()` in scene.ts adds `s.art ?? null` and each scene's `cuts ?? null`.
+- `previewCharacter(..., art: ArtStyle = "classic")` and `previewCar(..., art = "classic")` run inside
+  `withArt(art)` with the studio light, so the editors show the new drawing in the owner's true colours.
+
+##### 45.45.11.2 API (additive; infra only through the PR)
+
+- **`workspace-defaults.json`:** `video.art: "night_drive"`. `public_workspace` fills it in for existing workspaces,
+  so no data is reset.
+- **`_config_patch`:** the `video` branch first does `merged.setdefault("art", "night_drive")`, so an older stored
+  config never fails a later video edit. Then it checks it: "Pick a drawing style: Night drive or Bright."
+- **Story create** (routes/core.py, next to `format`): `"art": fields.get("art") or _default_art(config)`, checked
+  against the two ids. It is kept separate from the strictly checked `format`.
+- **Old stories** have no `art`, which means classic.
+- **`_scale_scene`:** scales `cuts[].at` and applies the 0.6 s rules.
+
+##### 45.45.11.3 Agent
+
+- **`writer.script_from(..., art=None)`:** writes `script["art"]` only for `"night_drive"`.
+- **`pipeline.storyboard` / `_script_from`:** a new write takes `story.get("art")`. The fix-facts path and full
+  "changes" rewrites keep the old script's art. `merge_scenes` already keeps the old script.
+- **`scene_hash`:** adds `art` when it is there.
+- **`portrait_script(..., art)`:** uses the workspace art with the studio light.
+- **`reel_prompt`:** adds "at night under orange street lights, muted blue and teal colours, flat cartoon look" for
+  night drive.
+- **`safety.py`:** fact-check items add the shot only when it is there.
+- **Director:**
+  - `chat/tools.py` read_story adds `art` and `cuts` to the whitelist;
+  - `offer_make_video` gets an optional `art` enum ("night_drive" or "classic"; the workspace default when left
+    out);
+  - agents.json instructions are unchanged.
+
+##### 45.45.11.4 Writer
+
+The classic request stays today's request byte for byte. It leaves out the `shots` and `arts` lists, the two shot
+rules and the cuts schema.
+
+A night drive request adds:
+
+- `request["art"]`;
+- `cuts` in the scene schema (items `{at, shot: enum(shots), who?}`, at most 8), added the same way `car_ids` is;
+- a house-rules block appended after SYSTEM, leaving every old line word for word:
+  - "This video is drawn in the night drive style. Car stories happen at night on highway_night or road_night unless
+    the story needs day, snow, rain or a place indoors."
+  - "Cut often, like a short film: a new shot every 2 to 4 seconds, as cuts inside a scene; the action and sound go
+    on across a cut."
+  - "Open a drive on road_wide or road_behind, then driver_view. Cut to face for each reaction (a new face or a
+    noise). Use mirror when a car comes up behind, side_window when one is alongside, speed_dial when the car speeds
+    up or slows down."
+  - "Show the cast's car whole at least once: the whole scene or road_behind."
+  - "Use pedals only on a brake beat that a guidance step gives, and never use speed_dial to teach a speed." This
+    squares with the existing "do not show braking or gear changes" line.
+
+##### 45.45.11.5 Web
+
+- **Types:** StoriesConfig `video.art`, Story `art`, and `art` in the create body.
+- **Settings › Video:** a new card, "Drawing style":
+  - lede: "New videos start with this drawing style. You can change it for one video in Production › New.";
+  - two picks, each with a small CharacterPreview drawn in that style:
+    - "Night drive": "Soft night colours, street lights and film-like close-ups.";
+    - "Bright": "The bright, sunny cartoon look of the first videos.".
+- **Production › New:** a "Drawing style" pick beside the shape.
+- **Review facts:** a "Drawing style" row.
+- **Previews:** an `ArtProvider`, where the Stories app loads the workspace config, feeds CharacterPreview,
+  CarPreview and CastPreview. With no provider they draw classic, so the existing tests stay as they are.
+- **Mock:** the workspace default, story `art`, and the practice writer:
+  - car drafts get night drive versions on road_night or highway_night, with cuts;
+  - they keep the pinned titles "The new car", "Off we go" and last "Oops", car1 with castId c2 in every scene, get_in
+    in scene 0 and the honk in scene 1;
+  - highway topics use highway_night.
+- **Words:** every new UI string passes `storiesLooseWords`.
+
+#### 45.45.12 Preview and final stay the same picture
+
+1. **All in the engine:** every pixel of the new look is engine prims. The preview paints them with `draw.ts`; the
+   agent runs the same files with Deno and rasterizes them with `raster.py`. There is no new prim kind, no
+   ffmpeg-only filter, no grain and no blur.
+2. **Holes:** keyhole polygons (the vignette, the mirror housing and the windscreen frame) rely on non-zero
+   winding, which both drawers already use. A raster golden for a polygon with a hole is added.
+3. **Text:** the text track is unchanged. Captions and the end card look the same in `draw.ts` and `ass.py`. The
+   dial's numbers are line prims, not text.
+4. **Determinism:** `grade` and the lamp pulse use only `rand`, `noise`, rounding and the script, with no `Date` or
+   `Math.random`. The engine folder scan test still holds.
+5. **Re-renders:** `scene_hash` includes the art and the engine (7), so a style change is always drawn again. The
+   agent image copies the engine at build time, so the new look reaches final videos only through the PR and CI
+   deploy.
+6. **AI footage:** AI cut-away footage (luma-ray, own-video) is the one thing that cannot match. It gets the
+   night-style prompt words, and the writer prefers built-in shots.
+
+#### 45.45.13 Budgets and speed
+
+- **Caps that stay:** ≤ 400 prims a frame for every set × camera and for every shot (2 people, the own car and 2
+  more cars); `LIMITS.shapes` 480; random valid scenes ≤ 520 a frame. All of these hold in both styles.
+- **`sceneShapes` in night drive (the note's starting estimates; §45.45.18 has the measured values, which win):**
+  - set 72; night set 100 (highway_night, road_night); wet set 95;
+  - actor 92; car 60; truck 48; car of the cast `CAR_CAST_SHAPES_ND` (74); deer 34; other props + 2.
+- **Shot estimates** include their place, interior, own car and driver, plus 34 per other car shown (at most 4):
+
+  | Shot | Estimate |
+  |---|---|
+  | driver_view | 230 |
+  | face | 190 |
+  | side_window | 210 (+ the car alongside) |
+  | mirror | 150 |
+  | speed_dial | 110 |
+  | pedals | 80 |
+  | road_behind | 200 |
+  | road_wide | 190 |
+
+- **Raster time** grows with covered area. At most 6 prims a frame may cover more than a quarter of the frame
+  (vignette 3, light sweep, windscreen frame, dash).
+- **Speed targets:**
+  - the ice-skid fixture keeps its < 2 ms a frame;
+  - the night fixture averages < 4 ms a frame in Node;
+  - one manual `CF_STORIES_BENCH` run of 5 s of driver_view at 1080 × 1920 must stay within 1.6 × the classic
+    highway's time a frame (not in CI).
+
+#### 45.45.14 Test plan
+
+The rule is "never weaken a test": only the version number, the golden's engine field and the pinned RULES list
+change, and each only grows or moves up.
+
+1. **Bright is unchanged.**
+   - Write the shapes golden again with `STORIES_GOLDENS=write`. The diff must show only `engine: 7`.
+   - `storiesEngineCars` `toBe(6)` → `toBe(7)`.
+   - Append the two ids to the RULES list.
+   - New check: every fixture draws byte-identical with `art` missing and with `art: "classic"`.
+2. **Night goldens.**
+   - New fixture `engine/fixtures/night-drive.json`, our own characters only. It has:
+     - highway_night with cuts through all 9 shots;
+     - road_night;
+     - road_day and kitchen in night drive;
+     - a car of the cast with eyes.
+   - New golden `web/test/fixtures/stories-engine-night.json`:
+     - full prims for frame 45 of the scene shot and of driver_view, face and mirror at 1080 × 1920;
+     - sha256 of the prims for every shot in the other five sizes.
+   - New test `storiesEngineNight.test.ts`: "night drive frames are exactly what this engine drew"; a change needs a
+     bump and a rewrite.
+3. **Budgets and determinism.** Every shot × both styles × every road place × 6 sizes ≤ 400, the same twice, and
+   the measured busiest frame ≤ `sceneShapes`. "Every catalog id draws" and the 300 random scenes run again in night
+   drive.
+4. **Framing.**
+   - Characters are fully in frame in every set and shape in night drive. The marked-colour test computes the marks
+     through the exported `grade`.
+   - The face is in frame in face and side_window in every shape.
+   - Bubbles stay off faces in shots, and none crosses a cut.
+   - Heads stay below the end card in 1:1 and 16:9.
+5. **Cuts.** Each validation sentence; `normalizeScript` sorts; `fitDuration`, the API's `_scale_scene` (pytest)
+   and the mock's edit scaling (vitest) scale cuts the same way and keep the 0.6 s rules.
+6. **Parity.**
+   - `test_stories_raster.py` gets the keyhole-polygon golden.
+   - A pytest rasterizes the 4 full-prim night goldens through `raster.py`. It checks there are no prim problems and
+     that 6 sample regions (sky top, mountains, asphalt, a lamp core, the dash, a face) average within ±6 of the
+     token colours.
+7. **Writer and API.**
+   - `test_series_context`: the classic schema and request are identical; the night schema has cuts; the old SYSTEM
+     lines are word for word.
+   - API: `video.art` defaults and is checked; a story is created with `art`; an older config without `art` passes a
+     video edit.
+8. **UI.** The Settings card and Production › New pick (storiesSettings and studio tests), the mock defaults, and
+   loose words.
+9. **Look check, by eye.** A Sonnet helper rasterizes stills of each shot, highway_night and two day places into
+   `/tmp/cf-night-stills/` (never committed). It compares their mood with the reference frames only.
+10. **Pixel gates.** Clip Factory's clips-unchanged gate stays green: no shell or shared CSS change, and everything
+    is in the Stories bundle. The e2e "painted to every corner" checks pass as they are. Only targeted vitest and
+    pytest files run locally; CI is the full run.
+
+#### 45.45.15 Who built what, and the interfaces between them
+
+| Builder | Owns (nobody else edits these) |
+|---|---|
+| characters | `engine/rig.ts`, `engine/face.ts`, `engine/motion.ts` (additive: `faceSince`), new `web/test/storiesNightPeople.test.ts` |
+| cars | `engine/car.ts`, `engine/props.ts`, new `engine/carView.ts`, new `web/test/storiesNightCars.test.ts` |
+| scenes | `engine/sets.ts`, `engine/scene.ts`, `engine/camera.ts`, `engine/bubbles.ts`, new `engine/shots.ts`, `engine/perspective.ts`, `engine/light.ts`, new `web/test/storiesNightShots.test.ts` |
+| pipeline | everything else: `engine/types.ts`, `catalog.ts`, `frame.ts`, new `art.ts`, `script.ts`, `rules.ts`, `engine.ts`, `commands.ts`, `README.md`, `engine/fixtures/*`; `preview/*`, `settings/VideoSection.tsx`, `studio/*`, `screens/Production.tsx`, `api/types.ts`, `api/mock/*`; `stories/config/workspace-defaults.json`; `api/.../routes/core.py`, `workspaces/stories.py`; `stories/agent/...` writer, pipeline, providers, safety, chat/tools; all existing tests, goldens and fixtures; docs (CONTRACTS §45.45.45.45, the ADR, README) and the Ask files |
+
+**The interfaces each builder codes against.**
+
+- **From pipeline:**
+  - the `types.ts` additions;
+  - the `catalog.ts` lists;
+  - `F.art`, `F.light`, `withArt`;
+  - `art.ts` exactly as in §45.45.4.1.
+- **From characters:** `drawBust`, `drawWheelHands`, `drawFoot` (§45.45.5). `drawCharacter` and `drawFace` keep their
+  signatures and read `F.art` and `F.light` inside.
+- **From cars:** `drawCarView` (§45.45.6), and `CAR_CAST_SHAPES_ND` plus a measured `CAR_VIEW_SHAPES` (34) exported from
+  car.ts. `drawProp`, `drawCarLookSide` and `drawCarLookTop` keep their signatures.
+- **From scenes:**
+  - `shotAt(scene, t): { cue: ShotCue; from: number; until: number }`;
+  - `SHOT_SHAPES: Record<ShotId, number>` and `SET_SHAPES_ND`, which pipeline's `sceneShapes` reads;
+  - scenes sets `F.light` before each part it draws.
+
+#### 45.45.16 Not in this change (follow-ups)
+
+- Film grain. It needs a seeded `noise` prim in `types.ts`, `draw.ts`, `raster.py`, the README and the raster goldens.
+- A gear stick shot.
+- Switching an existing story to another drawing style. That would be a re-render with all scenes stale.
+- 3/4 car views; rain or snow on the windscreen; city_night and rainy_night places.
+- A "see it in Bright" toggle inside the character editor.
+
+#### 45.45.17 Reference rules
+
+- The frames stay in `~/projects/clips/progress/style-ref`. They are never copied into the repo, fixtures, tests,
+  goldens, prompts or outputs.
+- It is a style reference only. Do not copy its characters (no round-faced boy in a teal shirt as a preset or
+  default), its scenes, its watermark or its footage.
+- Clips Funded "never copies characters or footage" still holds. The writer and the director never mention the
+  reference.
+
+#### 45.45.18 What the build settled (24 Nov; wins over anything above in §45.45)
+
+**Measured budgets** (each pinned by a test that measures the busiest frame):
+
+| Constant | File | Values |
+|---|---|---|
+| `SET_SHAPES_ND` | sets.ts | studio 34, road_day 54, road_night 94, icy_road 70, snowy_road 98, rainy_road 106, foggy_road 44, highway 70, country_road 64, city_street 90, parking_lot 58, kitchen 38, living_room 34, office 41, park 68, highway_night 116 |
+| `SHOT_SHAPES` | shots.ts | driver_view 240, face 145, side_window 165, mirror 160, speed_dial 115, pedals 60, road_behind 200, road_wide 205 |
+| `CAR_CAST_SHAPES_ND` | car.ts | 72 (side and top views) |
+| `CAR_VIEW_SHAPES` | car.ts | 34 (any car or truck from the back or the front) |
+| `PROP_SHAPES_ND` | props.ts | car 58, truck 60, deer 30 |
+
+`sceneShapes(scene, "night_drive")` reads all of them: a place's own measured count wins over the flat `SHAPES_ND`
+set estimates, and `SHAPES_ND.props` is `PROP_SHAPES_ND`. The writer's "too busy" sentence names the measured car.
+
+**People** (rig.ts, face.ts, motion.ts):
+
+- The head's and torso's cel shadows are clipped by a gently curved convex shape (a big circle through the same
+  chord), not a straight half-plane: a straight cut read as a fold across the face. It is still one `clipConvex`.
+- The worried `wavy` mouth is a smooth wave through the same 7 crests and dips, not a zigzag.
+- Brows sit just under the fringe or the cap's edge, so shocked brows never land on a cap.
+- `drawBust` takes an optional `lampSide` (1 or −1; front −1, three-quarter +1 by default) and draws 4 folds;
+  `drawWheelHands` takes an optional wheel `centre` (else worked out from two grips at 10 and 2).
+- In Bright, busts, hands and feet use an outline of min(1.7 units, 8 px).
+- **The soft shadows under the feet are drawn by the rig** (`footShadow`, two `ND.ao` ellipses that shrink in a jump,
+  widen lying down and are left out in a car). In night drive scene.ts and the editors' `previewCharacter` leave out
+  their old black ground shadow, so there is one shadow, never two.
+- `ActorState.faceSince` is passed to `drawCharacter` (standing and seated) and to `drawBust`, so the brows'
+  overshoot shows in the whole scene and in the shots.
+
+**Cars** (car.ts, props.ts, carView.ts):
+
+- `drawCarView(pen, car, view, o)` also takes `truck?` and `bloom?` (the mirror's flare). `plainCarLook(color)` (a
+  sedan with steel wheels and no face) draws a plain car; `drawPropView` reads braking, lights, blink and face from a
+  prop's state.
+- A plain car with no colour gets a muted colour picked by its id (`plainColor`: mustard, khaki, red, off-white, navy
+  or grey-green). A truck's box is `BOX_ND` `#d9d4c8`, graded, the same from the side and from behind.
+- The outline is taken before the facing mirror, so a spin never thickens it. `grade("#d8352a")` at night is
+  `#932926` (one digit from the note's sample; the note's samples are "about").
+
+**Places, shots and the finish** (sets.ts, shots.ts, perspective.ts, light.ts, camera.ts, scene.ts):
+
+- **The vignette** is two rings of four corner polygons (8 prims) in `ND.vignette`, a 0.10 at night and half that by
+  day, and the middle of each edge is left alone. The note's three full-frame keyholes showed steps of about 9
+  levels in the flat night sky and cost about 19 ms each in `raster.py`. The keyhole polygon and its raster golden
+  stay (the non-zero rule is still what both drawers use).
+- **No keyholes in the shots:** the windscreen, the face shot's rear window and the side window are pillar shapes,
+  rects and corner fillets, for speed.
+- **Face up close:** the head at 0.53 H in 9:16 and 0.56 H in 16:9; in 1:1 at (0.40 W, 0.54 H) with rx 0.25 S.
+  **Side window** in 1:1: the head at (0.36 W, 0.54 H), rx 0.23 S. With the note's positions a tall head with
+  spiky hair left the 16:9 frame and no bubble fitted in 9:16 or 1:1. **Mirror** in 9:16 is 1.12 W wide (its rounded
+  ends show, so it reads as a mirror).
+- Bubbles in Face up close and Side window sit round the head; in the shots without a face at the top middle. A
+  bubble never crosses a cut, and one shorter than 0.4 s is left out.
+- `cameraAt` takes an optional `since`, so a cut back to the whole scene settles again; `shotCamera` zooms about the
+  shot's focus, sways, pushes in, shakes and hums 1.2 px while the road rolls. Bright is unchanged.
+- **Speed** (`raster.py`, 1080 × 1920): Driver's eyes about 80 ms a frame against the Bright highway's 34 ms (2.3×),
+  the night whole scene about 58 ms (1.7×), over the note's 1.6× target; most of it is the large perspective road
+  polygons. Drawing in Node is well inside its target: the night fixture averages about 0.13 ms a frame, with at most
+  290 prims. A faster polygon fill in `raster.py` is a follow-up.
+
+**Pipeline** (types.ts, art.ts, frame.ts, script.ts, API, agent, web):
+
+- `STUDIO_LIGHT` lives in frame.ts, so art.ts and frame.ts do not import each other in a loop. `withWarm(light,
+  warm)` adds the lamp pulse to a light (night rim 0.40 + 0.25 × warm).
+- The API checks the video settings in one helper (`_video_patch`), which fills in `art` before it checks, so an
+  older saved config never fails an edit.
+
+**Tests** (all targeted; CI runs the full suites):
+
+- `storiesNightPeople`, `storiesNightCars`, `storiesNightShots` and `storiesNightScript`: each part, its budgets,
+  Bright byte-identical without `art` and with `art: "classic"`, every shot in every road place, size, camera and
+  style, faces and bubbles in frame, cuts and their sentences.
+- `storiesEngineNight` (new): the night goldens, `web/test/fixtures/stories-engine-night.json` (four frames of the
+  night fixture prim by prim at 1080 × 1920, and the sha256 of the middle frame of every shot span in all six sizes).
+- `storiesEngine` "every catalog id draws", `storiesEngineRules` "300 random valid scenes" and `storiesEngineShapes`
+  "characters are fully in the frame" each run again in night drive (the marked outline is `ink(outline)`); the
+  Bright runs are as they were. The Bright shapes golden changed only its `engine` field (7).
+- `test_stories_raster.py`: the keyhole golden, and the four night golden frames rasterized through `raster.py` with
+  no prim problems and six places (the sky's top, the far mountains, a lamp's core, the road, the dashboard's top, a
+  face) within 6 of their colours.
