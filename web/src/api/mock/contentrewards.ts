@@ -522,6 +522,8 @@ export interface CrMockDeps {
   finder?: () => CrFinderSummary | undefined;
   /** A finder campaign's catalog entry (its public page), for campaigns the finder added. */
   catalog?: (uuid: string, rules: (partial: Partial<CampaignRules>) => CampaignRules) => Catalog | null;
+  /** Your Mac posts TikTok is on: a campaign's TikTok goes through his Mac before TikTok's audit (§47.2 item 6). */
+  macOn?: () => boolean;
 }
 
 export type CrMockApi = Pick<
@@ -579,7 +581,7 @@ export interface CrMock {
   rules(partial: Partial<CampaignRules>): CampaignRules;
 }
 
-export function crMockApi({ store, setup, publish, finder, catalog }: CrMockDeps): CrMock {
+export function crMockApi({ store, setup, publish, finder, catalog, macOn }: CrMockDeps): CrMock {
   finderCatalog = catalog ? (uuid) => catalog(uuid, rules) : null;
   let state = load();
   const off = readFlag("cf-mock-cr-off");
@@ -681,10 +683,11 @@ export function crMockApi({ store, setup, publish, finder, catalog }: CrMockDeps
     return c.rulesState === "ready" ? cat.rules : null;
   }
 
+  /** The places that are set up, and whether TikTok can take a campaign clip: its audit passed, or his Mac posts TikTok. */
   function readyPlaces(): { ready: Platform[]; tiktokAudit: boolean } {
     const o = setup();
     const ready = o.platforms.filter((p) => p.ready).map((p) => p.platform);
-    const tiktokAudit = o.platforms.find((p) => p.platform === "tiktok")?.gates.find((g) => g.key === "posting_audit")?.state === "ok";
+    const tiktokAudit = o.platforms.find((p) => p.platform === "tiktok")?.gates.find((g) => g.key === "posting_audit")?.state === "ok" || macOn?.() === true;
     return { ready, tiktokAudit };
   }
 
@@ -708,7 +711,8 @@ export function crMockApi({ store, setup, publish, finder, catalog }: CrMockDeps
     if (m === "manual" && !signedIn(conn)) add("not_connected");
     if (cat.state === "paused") add("paused");
     if (cat.state === "ended") add("ended");
-    if (cat.platformsPaid.length && cat.platformsPaid.every((p) => p === "tiktok")) add("tiktok_only");
+    // gates.py: only while TikTok can't take a campaign clip (no audit, and his Mac doesn't post TikTok).
+    if (cat.platformsPaid.length && cat.platformsPaid.every((p) => p === "tiktok") && !tiktokAudit) add("tiktok_only");
     else if (!uploadPlaces.length) {
       const first = PLATFORM_ORDER.find((p) => cat.platformsPaid.includes(p) && p !== "tiktok");
       // Set it up leads back to this card once the place is connected (§39.1 `?back=`, as gates.py makes it).

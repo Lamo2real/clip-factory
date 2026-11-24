@@ -29,6 +29,9 @@ import {
   stopText,
   subLineFor,
   TIKTOK_NOT_YET,
+  CAMPAIGN_TIKTOK_MAC,
+  CAMPAIGN_MAC_OFF,
+  CAMPAIGN_MAC_POSTS,
   unlinkedPlaces,
   usd,
   usdShort,
@@ -240,22 +243,23 @@ describe("send by hand: one line for one clip's posts to one campaign", () => {
 });
 
 describe("places, connection and money", () => {
-  it("Upload to's lines: only paid places, and campaign clips skip TikTok until TikTok approved the app (D1)", () => {
-    const SKIPS = "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet.";
-    expect(placesLines({ platformsPaid: ["youtube", "instagram"], uploadPlaces: ["youtube"] }, false)).toEqual(["Only places this campaign pays for."]);
-    expect(placesLines({ platformsPaid: ["youtube", "tiktok"], uploadPlaces: ["youtube"] }, false)[1]).toBe(SKIPS);
-    // Content Rewards may list TikTok once only its posting audit reads ok: still skipped until the app is approved.
-    expect(placesLines({ platformsPaid: ["youtube", "tiktok"], uploadPlaces: ["youtube", "tiktok"] }, false)).toEqual(["Only places this campaign pays for.", SKIPS]);
-    expect(placesLines({ platformsPaid: ["youtube", "tiktok"], uploadPlaces: ["youtube", "tiktok"] }, true)).toHaveLength(1);
-    expect(placesLines({ platformsPaid: ["youtube", "tiktok"], uploadPlaces: ["youtube"] }, true)[1]).toBe(SKIPS);
-    for (const line of placesLines({ platformsPaid: ["tiktok"], uploadPlaces: [] }, false)) expect(line).not.toMatch(/private/i);
+  it("Upload to's lines: only paid places; TikTok goes while TikTok approved the app or his Mac posts TikTok, else the way on", () => {
+    // The API's tiktok_mac.CAMPAIGN_MAC_OFF and CAMPAIGN_MAC_POSTS, word for word.
+    const TURN_ON = "Campaign clips go on TikTok from your Mac. Turn it on in Settings › Posting › Your Mac posts TikTok.";
+    expect(CAMPAIGN_MAC_OFF).toBe(TURN_ON);
+    expect(CAMPAIGN_MAC_POSTS).toBe("Your Mac posts campaign clips on TikTok. Tap Post with my Mac.");
+    expect(placesLines({ platformsPaid: ["youtube", "instagram"] }, false)).toEqual(["Only places this campaign pays for."]);
+    expect(placesLines({ platformsPaid: ["youtube", "tiktok"] }, false)).toEqual(["Only places this campaign pays for.", TURN_ON]);
+    // TikTok goes (approved, or the Mac posts it with TikTok's Paid partnership label): no TikTok line.
+    expect(placesLines({ platformsPaid: ["youtube", "tiktok"] }, true)).toEqual(["Only places this campaign pays for."]);
+    for (const line of placesLines({ platformsPaid: ["tiktok"] }, false)) expect(line).not.toMatch(/private|skip TikTok/i);
     // The one helper Review reads every campaign place list through.
     expect(campaignPlaces(["youtube", "tiktok", "x"], false)).toEqual(["youtube", "x"]);
     expect(campaignPlaces(["youtube", "tiktok"], true)).toEqual(["youtube", "tiktok"]);
-    expect(TIKTOK_NOT_YET).toBe(`TikTok: not yet. ${SKIPS}`);
-    expect(stopText("tiktok_only")).toBe(
-      `This campaign only pays for TikTok. ${SKIPS} Pick a campaign that pays for YouTube, Instagram, X or Facebook.`,
-    );
+    expect(TIKTOK_NOT_YET).toBe(`TikTok: not yet. ${TURN_ON}`);
+    expect(CAMPAIGN_TIKTOK_MAC).toBe("TikTok: your Mac posts campaign clips with TikTok's Paid partnership label.");
+    // gates.TIKTOK_ONLY (only while TikTok can't take campaign clips).
+    expect(stopText("tiktok_only")).toBe(`This campaign only pays for TikTok. ${TURN_ON} Or pick a campaign that pays for YouTube, Instagram, X or Facebook.`);
     expect(unlinkedPlaces({ platformsPaid: ["youtube", "instagram"] }, conn({ crLinked: { youtube: false, instagram: true } }))).toEqual(["youtube"]);
     expect(unlinkedPlaces({ platformsPaid: ["instagram"] }, conn({ crLinked: { youtube: false } }))).toEqual([]);
   });

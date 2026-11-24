@@ -1,7 +1,8 @@
 // The Post to TikTok sheet's choices (docs/CONTRACTS.md §17.8). Nothing starts picked: TikTok wants the creator to
 // choose who can see the post every time, and Comments, Duet and Stitch start off. That is TikTok's rule for apps that
-// post through its API; while the owner's Mac posts TikTok (§47) a Review card holds My settings instead, read-only
-// (macCreator, macTikTokChoices, macPostsLine).
+// post through its API; while the owner's Mac posts TikTok (§47) a Review card starts on My settings instead, with no
+// tap, and its TikTok row is the clip's own (macCreator, macTikTokChoices): the Mac posts exactly what the row says,
+// TikTok's label included.
 import type { TikTokCreator, TikTokPostOptions, TikTokPreset } from "../api/types.ts";
 
 export interface TikTokChoices {
@@ -153,10 +154,10 @@ export function campaignTikTokProblem(c: TikTokChoices): string | null {
 // ---- Your Mac posts TikTok (docs/CONTRACTS.md §47) ----
 
 /**
- * Who can see it while the owner's Mac posts TikTok: TikTok Studio's own choices, which the Mac sets on TikTok's
- * website (§47.1), whatever TikTok's API offers the app (only Only me until TikTok approves it).
+ * Who can see it while the owner's Mac posts TikTok: TikTok Studio's own choices (Everyone, Friends, Only you), which
+ * the Mac sets on TikTok's website (§47.1), whatever TikTok's API offers the app (only Only me until TikTok approves it).
  */
-export const MAC_PRIVACY_OPTIONS: readonly string[] = ["PUBLIC_TO_EVERYONE", "FOLLOWER_OF_CREATOR", "MUTUAL_FOLLOW_FRIENDS", "SELF_ONLY"];
+export const MAC_PRIVACY_OPTIONS: readonly string[] = ["PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS", "SELF_ONLY"];
 
 /**
  * What a Review card's TikTok row works from while the Mac posts TikTok: TikTok Studio's choices and switches, with
@@ -176,18 +177,16 @@ export function macCreator(creator: TikTokCreator | null): TikTokCreator {
   };
 }
 
-/** My settings' Who can see it as the Mac posts it (the server's `tiktok_mac.preset_options`): unset is Everyone. */
+/** My settings' Who can see it as the Mac starts a clip on it: one of TikTok Studio's choices, else Everyone. */
 function macPrivacy(saved: TikTokPreset): string {
   return MAC_PRIVACY_OPTIONS.includes(saved.privacy) ? saved.privacy : "PUBLIC_TO_EVERYONE";
 }
 
 /**
- * The TikTok choices a Review card holds while the Mac posts TikTok: My settings, always (Everyone with Comments, Duet
- * and Stitch on, by default), as the server asks the Mac for whatever the card sends (§47.1, `preset_options`). There
- * is no per-clip change for the Mac yet (§47.9), so the row shows these read-only. Commercial content is about this
- * one clip, as ticked on it: the Mac can't add TikTok's label yet, so a ticked Your brand or Branded content holds
- * Upload for TikTok (`macTikTokHeld`). The clip goes to the other places with TikTok unticked, and he posts it on TikTok
- * himself in the TikTok app with the label, never through the Mac (nothing on the clip keeps the label for it).
+ * Where a Review card's TikTok row starts while the Mac posts TikTok (§47.9): My settings (Everyone with Comments, Duet
+ * and Stitch on, by default), with no tap. Commercial content is about this one clip, as ticked on it (`now`). Once the
+ * owner changes Who can see it or a switch on the card, the row holds his own choices instead, and the Mac posts
+ * those (Upload sends them with `tiktokMac`), TikTok's label included.
  */
 export function macTikTokChoices(saved: TikTokPreset, now: TikTokChoices = NO_TIKTOK_CHOICES): TikTokChoices {
   return {
@@ -201,26 +200,3 @@ export function macTikTokChoices(saved: TikTokPreset, now: TikTokChoices = NO_TI
   };
 }
 
-/** The TikTok row while the Mac posts TikTok, read-only: what the Mac posts it with, from My settings' real values. */
-export function macPostsLine(saved: TikTokPreset): string {
-  const onOff = (on: boolean) => (on ? "on" : "off");
-  const who = macPrivacy(saved);
-  return `Your Mac posts it with My settings: ${PRIVACY_LABEL[who] ?? who} · Comments ${onOff(saved.comments)} · Duet ${onOff(saved.duet)} · Stitch ${onOff(saved.stitch)}`;
-}
-
-/** Upload's line (and the row's) while Your brand or Branded content is ticked and the Mac posts TikTok (§47.9). */
-export const MAC_LABEL_HELD = "Your Mac can't add TikTok's Branded content label yet. Untick it, or untick TikTok, then post this clip in the TikTok app with its label, not with your Mac.";
-/**
- * The same with Commercial content on and nothing ticked under it. TikTok's own "Pick Your brand or Branded content"
- * would send him round in a circle here (either one holds the Mac too), so the way out is to turn it off.
- */
-export const MAC_COMMERCIAL_HELD = "Your Mac can't add TikTok's Branded content label yet. Turn off Commercial content, or untick TikTok, then post this clip in the TikTok app with its label, not with your Mac.";
-
-/**
- * Why the Mac can't post this clip on TikTok, or null: Commercial content is on (Your brand or Branded content ticked,
- * or nothing yet), and the Mac can't add TikTok's label (§47.9).
- */
-export function macTikTokHeld(c: TikTokChoices): string | null {
-  if (!c.commercial) return null;
-  return c.yourBrand || c.branded ? MAC_LABEL_HELD : MAC_COMMERCIAL_HELD;
-}

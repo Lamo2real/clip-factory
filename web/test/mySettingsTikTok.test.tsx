@@ -1,7 +1,7 @@
 // Settings › Posting › My settings, TikTok's words (docs/CONTRACTS.md §47.9): while his Mac posts TikTok, every Review
 // card but a campaign clip starts on My settings, TikTok included, so the page never asks for "your own tap on each
-// clip", and it never tells him to tick Branded content for the Mac (it can't add TikTok's label yet). While the Mac
-// is off, TikTok's API rule still wants his tap, and the page says so as before.
+// clip"; for a paid partnership he ticks Branded content on that clip's TikTok row and the Mac adds TikTok's label.
+// While the Mac is off, TikTok's API rule still wants his tap, and the page says so as before.
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -24,7 +24,7 @@ const COMMERCIAL = "Commercial content: off.";
 const MAC_COMMERCIAL = "Commercial content: off. Your Mac posts TikTok with these.";
 // The paid-partnership how-to sits in one fold under the line (shut until tapped).
 const PAID = "Tick Branded content in that clip's TikTok row.";
-const MAC_PAID = "Your Mac can't post those yet.Untick TikTok on that clip.Post it in the TikTok app, with its label.Don't use Post with my Mac or Send these to my Mac for it.";
+const MAC_PAID = "Tick Branded content in that clip's TikTok row.Your Mac adds TikTok's Paid partnership label when it posts it.Campaign clips have it ticked already.";
 
 let host: HTMLElement;
 let root: Root;
@@ -58,12 +58,13 @@ describe("My settings, TikTok (§47.9)", () => {
     me = meWith({ on: true });
     await render();
     expect(tiktokHint()).toBe(MAC_COMMERCIAL);
-    // A paid partnership can't go through the Mac: the fold says how to post it instead, shut until tapped.
+    // A paid partnership goes through the Mac with TikTok's label: the fold says how, shut until tapped.
     expect(paidFold()!.open).toBe(false);
     expect(paidFold()!.querySelector("summary")!.textContent).toBe("Paid partnership?");
     expect(paidFold()!.querySelector(".cr-fold__body")!.textContent).toBe(MAC_PAID);
     expect(host.textContent).not.toContain("own tap");
-    expect(host.textContent).not.toMatch(/tick Branded content/i);
+    // Never the old way round: no "can't post those", no TikTok app by hand, no "don't use Post with my Mac".
+    expect(host.textContent).not.toMatch(/can't post those|in the TikTok app|Don't use Post with my Mac/i);
     // Nothing on the page (the TikTok leaf included) still asks for a tap on each clip.
     expect(host.textContent).not.toMatch(/still tap|tap Use my settings/i);
     expect(note()).toContain("Every clip on Review starts on these, TikTok too, except campaign clips.");

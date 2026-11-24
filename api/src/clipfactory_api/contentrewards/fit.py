@@ -30,7 +30,7 @@ from ..clock import iso, parse
 from ..platforms import campaign_caption as cc
 from ..stats import STATS_ORDER
 from . import config, connection, gates, links
-from .campaigns import LANGUAGES, SITES, allowed_sites, language_words, languages_in, possessive
+from .campaigns import LANGUAGES, SITES, allowed_sites, language_words, languages_in, mac_on, possessive
 from .util import obj
 
 Item = dict[str, Any]
@@ -97,9 +97,11 @@ HAND_SEND = "After it posts, send its link to Content Rewards within 30 minutes.
 UNJUDGED = "Claude couldn't check the campaign's rules. Check it yourself."
 # The agent's ``logo`` row that passes only because the job's rules didn't ask for a logo.
 LOGO_NOT_ASKED = "This campaign does not ask for a logo."
-# A campaign clip's TikTok waits until TikTok approves the app (tiktok_mac.CAMPAIGN_SKIPS, the same words: a test pins
-# them): before that only the owner's Mac posts TikTok, and it can't mark a post as Branded content yet.
-TIKTOK_WAITS = "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet."
+# A campaign clip's TikTok before TikTok approves the app with Your Mac posts TikTok off: only the owner's Mac posts it
+# then (gates.TIKTOK_MAC_OFF, tiktok_mac.CAMPAIGN_MAC_OFF), so the note links to the Mac's switch.
+TIKTOK_MAC_OFF = gates.TIKTOK_MAC_OFF
+MAC_SETTINGS = "/settings/posting/tiktok-mac"
+MAC_SWITCH = "Turn on your Mac"
 _NOT_WORD = re.compile(r"[\W_]+")
 _CHANNEL_PATHS = ("c", "user", "channel")
 COUNTS = {3: "all three", 4: "all four", 5: "all five"}
@@ -463,8 +465,9 @@ def _places_rows(
             text = f"I can't tell where {ctx.name} pays yet. Tap Check now."
             return [_item("places", "todo", text, _open(gates.OPEN_CAMPAIGN, _campaign_href(ctx.cid)))], set()
         return [], set()
-    if set(paid) == {"tiktok"}:
-        text = next((str(s.get("text")) for s in stops if s.get("code") == "tiktok_only"), "")
+    tiktok_only = next((s for s in stops if s.get("code") == "tiktok_only"), None)
+    if set(paid) == {"tiktok"} and tiktok_only is not None:
+        text = str(tiktok_only.get("text") or "")
         return [_item("places", "no", text or f"{ctx.name} only pays for TikTok.", _find_another())], set()
     if not places:
         first = next((p for p in paid if p != "tiktok"), paid[0])
@@ -480,7 +483,7 @@ def _places_rows(
         if p in places or linked.get(p) is False:
             continue  # going, or the place_link row says it
         if p == "tiktok" and tiktok_waits:
-            out.append(_item("places", "note", TIKTOK_WAITS, platform=p))
+            out.append(_item("places", "note", TIKTOK_MAC_OFF, _open(MAC_SWITCH, MAC_SETTINGS), p))
         else:
             out.append(
                 _item(
@@ -911,7 +914,7 @@ def fit(
     ctx = _Ctx(clip, job, campaign, posts)
     words = captions if captions is not None else obj(clip.get("captions"))
     required = required_of(ctx.caption_rules)
-    if set(campaign.get("platformsPaid") or []) == {"tiktok"}:
+    if any(s.get("code") == "tiktok_only" for s in stops):
         places = []  # A's tiktok_only stop: no place can earn (the places row says why)
     going = [p for p in places if chosen is None or p in chosen]
     places_fixed, named = _places_rows(ctx, campaign, stops, places, conn, tiktok_waits=tiktok_waits)
@@ -1087,6 +1090,7 @@ class Loader:
         self.pk = db.user_pk(user_id)
         self.conn = connection.load(deps.store, user_id)
         self.setups = oauth_setup.all_setups(deps.store, user_id, now)
+        self.mac_on = mac_on(deps.store, user_id)
         self._campaigns: dict[str, Item | None] = {}
         self._jobs: dict[str, Item | None] = {}
         self._alive: dict[str, bool] = {}
@@ -1153,10 +1157,14 @@ class Loader:
 
     def places(self, item: Mapping[str, Any]) -> list[str]:
         paid = [str(p) for p in item.get("platformsPaid") or []]
-        return gates.upload_places(paid, self.setups, connection.crlinked(self.conn))
+        return gates.upload_places(paid, self.setups, connection.crlinked(self.conn), mac_on=self.mac_on)
+
+    def waits(self, item: Mapping[str, Any]) -> bool:
+        paid = [str(p) for p in item.get("platformsPaid") or []]
+        return gates.tiktok_waits(paid, self.setups, mac_on=self.mac_on)
 
     def stops(self, item: Mapping[str, Any]) -> list[Item]:
-        return gates.stops(item, self.conn, self.places(item), self.now)
+        return gates.stops(item, self.conn, self.places(item), self.now, tiktok_waits=self.waits(item))
 
     def name(self, campaign_id: str) -> str:
         found = self.campaign(campaign_id)
@@ -1198,7 +1206,6 @@ class Loader:
         item = self.campaign(campaign_id)
         if item is None:
             return gone(clip, job, campaign_id, self.now)
-        paid = [str(p) for p in item.get("platformsPaid") or []]
         places = self.places(item)
         rows = self.posts(str(clip["clipId"]))
         return fit(
@@ -1217,7 +1224,7 @@ class Loader:
             captions=captions,
             chosen=chosen,
             tiktok=tiktok,
-            tiktok_waits=gates.tiktok_waits(paid, self.setups),
+            tiktok_waits=self.waits(item),
         )
 
     def clip_fit(

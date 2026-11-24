@@ -38,7 +38,31 @@ test("a refusal comes back as an ApiError with Clip Factory's own sentence", asy
   await assert.rejects(api.claim("c1", "mac-1"), (e) => e instanceof ApiError && e.status === 409 && /Auto-posting is off/.test(e.message));
 });
 
-test("Clip Factory's client is unchanged on the wire: the same paths and bodies as 1.1.0", async () => {
+test("1.3.0: a Clip Factory from before MAC_BRAND_FROM refuses the claim's version (400): the claim goes once more without it", async () => {
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    const body = JSON.parse(init.body);
+    calls.push(body);
+    if (body.version) return { status: 400, ok: false, json: async () => ({ error: { code: "bad_request", message: "Unknown key: version." } }) };
+    return { status: 200, ok: true, json: async () => ({ job: { clipId: "c1", attempt: 1 } }) };
+  };
+  const api = client("https://api.example", "tok", fetchImpl);
+  assert.deepEqual(await api.claim("c1", "mac-1"), { job: { clipId: "c1", attempt: 1 } });
+  assert.deepEqual(calls, [{ device: "mac-1", version: VERSION }, { device: "mac-1" }]);
+});
+
+test("1.3.0: a 409 on the claim (an older helper's label refusal, auto-posting off) is never sent twice", async () => {
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    calls.push(JSON.parse(init.body));
+    return { status: 409, ok: false, json: async () => ({ error: { code: "conflict", message: "Another try already has this clip." } }) };
+  };
+  const api = client("https://api.example", "tok", fetchImpl);
+  await assert.rejects(api.claim("c1", "mac-1"), (e) => e instanceof ApiError && e.status === 409);
+  assert.equal(calls.length, 1);
+});
+
+test("Clip Factory's client is unchanged on the wire: the same paths and bodies as 1.1.0, but the claim says the version (1.3.0)", async () => {
   const { calls, fetchImpl } = fake();
   const api = client("https://api.example", "tok", fetchImpl);
   await api.queue();
@@ -51,7 +75,7 @@ test("Clip Factory's client is unchanged on the wire: the same paths and bodies 
     [
       ["GET", "https://api.example/v1/tiktok/mac", undefined],
       ["POST", "https://api.example/v1/tiktok/mac/ping", { state: "ok", version: VERSION, device: "mac-1" }],
-      ["POST", "https://api.example/v1/clips/c1/tiktok/mac/claim", { device: "mac-1" }],
+      ["POST", "https://api.example/v1/clips/c1/tiktok/mac/claim", { device: "mac-1", version: VERSION }],
       ["GET", "https://api.example/v1/clips/c1/file", undefined],
       ["GET", "https://api.example/v1/posts?clipId=c1", undefined],
     ]

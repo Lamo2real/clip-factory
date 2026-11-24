@@ -8,6 +8,9 @@
 // - 1.2.0 (§47.10, D3, D4): before Studio › Posts is read, right before Post and before every look for a link, the
 //   signed-in account must be the lane's target (whoami.js). A Clips Funded post also turns on TikTok's
 //   "AI-generated content" label and keeps "Disclose post content" off, or it doesn't post.
+// - 1.3.0 (§47.9): Clip Factory's posts get TikTok's commercial content disclosure from the job (``brandContent``:
+//   Branded content, the "Paid partnership" label every campaign clip needs; ``brandOrganic``: Your brand), read back
+//   before Post like privacy. A job without a label keeps "Disclose post content" off (read back too).
 import { loginOutcome } from "./login.js";
 import { captionMatches, findExisting, findNewPost, normalize, postLink, videoId } from "./match.js";
 import { accountInfo, at, bare, mergeSeen, sameAccount, sessionHash, whoAmI } from "./whoami.js";
@@ -59,6 +62,8 @@ export const REASONS = {
   // Clips Funded only.
   otherWorkspace: "That TikTok account is your other workspace's. Nothing was posted. Connect TikTok again in Social accounts.",
   aiLabel: "Your Mac couldn't turn on TikTok's AI label, so it didn't post. Tap Try again.",
+  // 1.3.0, Clip Factory's lane: the disclosure didn't come out as the job says (on, off, or the wrong label).
+  label: "Your Mac couldn't set TikTok's Branded content label the way this clip needs, so it didn't post. Tap Try again.",
   videoGone: "The video is gone. Make it again, then tap Try again.",
 };
 
@@ -435,11 +440,22 @@ async function setPrivacy(page, privacy) {
     const control = section.locator("[role='combobox'], select").first();
     await control.click();
     await sleep(500);
-    const option = page.getByRole("option", { name: want, exact: true }).first();
+    // An option's name may say more under its word: Studio's Friends reads "Friends Followers you follow back"
+    // (probe, 24 Nov), so the option is the one whose name starts with the word.
+    const word = want.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    const option = page.getByRole("option", { name: new RegExp(`^${word}(\\s|$)`, "i") }).first();
     if (await option.isVisible().catch(() => false)) await option.click();
     else await page.getByText(want, { exact: true }).last().click({ timeout: 5000 }).catch(() => {});
     await sleep(500);
   }
+  await checkPrivacy(page, privacy, section);
+}
+
+/** Who can see it still says the job's choice (after setPrivacy, and again right before Post: the label may move it). */
+async function checkPrivacy(page, privacy, given = null) {
+  const want = privacyWord(privacy);
+  const section = given || (await sectionOf(page, "Who can see this post")) || (await sectionOf(page, "Who can watch this video"));
+  if (!section) throw new Stop(REASONS.noUpload);
   const after = normalize(await section.innerText().catch(() => ""));
   if (!after.includes(normalize(want))) throw new Stop(REASONS.privacy(want));
   for (const other of ["Only you", "Friends", "Followers"]) {
@@ -563,10 +579,159 @@ async function keepDiscloseOff(page) {
   if (await switchOn(box)) throw new Stop(REASONS.toggle(name));
 }
 
+// ---------------------------------------------------------------------------------------------------------------
+// TikTok's commercial content disclosure (1.3.0, §47.9)
+//
+// TikTok Studio, read with the probe on 24 Nov 2026 (headless, nothing posted): under "Show more", the switch
+// "Disclose post content" ("Let others know this post promotes a brand, product or service."). On, it shows two
+// checkboxes: "Your brand" (the "Promotional content" label) and "Branded content" (the "Paid partnership" label, with
+// "By posting, you agree to our Branded Content Policy and Music Usage Confirmation."). With Branded content ticked
+// Who can see it greys out Only you ("Private"); with Only you picked, Branded content is greyed out. On with nothing
+// ticked, Post still works, so the helper never leaves it like that.
+
+// How long one click waits for Studio to show the change before it is tried another way (and then read back).
+const LABEL_WAIT_MS = 3000;
+
+export const DISCLOSE = "Disclose post content";
+export const YOUR_BRAND = "Your brand";
+export const BRANDED = "Branded content";
+
+/** What the job asks TikTok's disclosure to say: on for any label, and which ones. */
+export function labelOf(job) {
+  const organic = job?.brandOrganic === true;
+  const branded = job?.brandContent === true;
+  return { disclose: organic || branded, organic, branded };
+}
+
+/** One control to the right state: read, click when it differs (never a greyed-out one), read again. */
+async function turn(box, on) {
+  if ((await box.on()) === on) return;
+  if (await box.disabled()) throw new Stop(REASONS.label);
+  await box.click();
+  if ((await box.on()) !== on) throw new Stop(REASONS.label);
+}
+
+/**
+ * Sets the disclosure on ``form`` (Studio's controls, ``studioForm``: ``openMore()`` and ``box(name)`` →
+ * ``{on(), disabled(), click()}`` or null) and reads it back. With a label: the switch on, then Your brand and
+ * Branded content each as the job says. Without one: the switch off (TikTok may carry the last post's over); a page
+ * without the switch is fine then. Throws ``Stop(REASONS.label)`` when it can't be made so.
+ */
+export async function applyLabel(form, job) {
+  const want = labelOf(job);
+  await form.openMore();
+  const sw = await form.box(DISCLOSE);
+  if (!sw) {
+    if (want.disclose) throw new Stop(REASONS.label);
+    return;
+  }
+  await turn(sw, want.disclose);
+  if (want.disclose) {
+    for (const [name, on] of [
+      [YOUR_BRAND, want.organic],
+      [BRANDED, want.branded],
+    ]) {
+      const box = await form.box(name);
+      if (!box) {
+        if (on) throw new Stop(REASONS.label);
+        continue;
+      }
+      await turn(box, on);
+    }
+  }
+  await checkLabel(form, job);
+}
+
+/** What the disclosure says now (the probe's proof): the switch and both boxes. */
+export async function readLabel(form) {
+  const read = async (name) => {
+    const box = await form.box(name);
+    return box ? Boolean(await box.on()) : null;
+  };
+  return { disclose: await read(DISCLOSE), organic: await read(YOUR_BRAND), branded: await read(BRANDED) };
+}
+
+/** Read back only (after applyLabel, and again right before Post): every part is as the job says. */
+export async function checkLabel(form, job) {
+  const want = labelOf(job);
+  const now = await readLabel(form);
+  if (Boolean(now.disclose) !== want.disclose) throw new Stop(REASONS.label);
+  if (!want.disclose) return;
+  if (Boolean(now.organic) !== want.organic || Boolean(now.branded) !== want.branded) throw new Stop(REASONS.label);
+}
+
+/**
+ * Studio's controls for applyLabel, by their own text (switchId). Studio draws a checkbox anew when it changes (a new
+ * element with a new id, probe of 24 Nov), so every read and click finds it again by its text. Clicks go through CDP
+ * only (no OS input).
+ */
+export function studioForm(page) {
+  const state = (name) =>
+    page.evaluate((want) => {
+      const norm = (t) => (t || "").trim().split("\n")[0].trim().toLowerCase();
+      for (const inp of document.querySelectorAll("input[type=checkbox], [role=switch], [role=checkbox]")) {
+        let el = inp;
+        for (let k = 0; k < 6 && el; k++, el = el.parentElement) {
+          const t = norm(el.innerText);
+          if (t) {
+            if (t === want.toLowerCase()) {
+              return {
+                on: inp.checked === true || inp.getAttribute("aria-checked") === "true",
+                disabled: inp.disabled === true || Boolean(inp.closest('[aria-disabled="true"], [data-disabled="true"]')),
+              };
+            }
+            break;
+          }
+        }
+      }
+      return null;
+    }, name);
+  return {
+    openMore: async () => {
+      const more = page.getByText("Show more", { exact: true }).first();
+      if (await more.isVisible().catch(() => false)) {
+        await more.click();
+        await sleep(800);
+      }
+    },
+    box: async (name) => {
+      if (!(await state(name))) return null;
+      const on = async () => Boolean((await state(name))?.on);
+      return {
+        on,
+        disabled: async () => (await state(name))?.disabled !== false,
+        click: async () => {
+          const before = await on();
+          // Studio takes a moment to show the tick (over 600 ms for Branded content, probe of 24 Nov): wait for it.
+          const moved = async () => {
+            for (let waited = 0; waited < LABEL_WAIT_MS; waited += 250) {
+              if ((await on()) !== before) return true;
+              await sleep(250);
+            }
+            return false;
+          };
+          const id = await switchId(page, name);
+          if (id) await page.locator(`[id="${id}"]`).click({ force: true, timeout: 5000 }).catch(() => {});
+          if (await moved()) return;
+          // A slow page may still show the first click: never click again before a last look (a second click would
+          // undo a late first one).
+          await sleep(LABEL_WAIT_MS);
+          if ((await on()) !== before) return;
+          // Studio's switch input is hidden under its own track: click the track (or the checkbox's label) instead.
+          const again = await switchId(page, name);
+          if (again) await page.evaluate((i) => document.getElementById(i)?.closest(".Switch__content, label, [role=switch]")?.click(), again);
+          await moved();
+          await sleep(1000); // let a late change land before turn() reads it back
+        },
+      };
+    },
+  };
+}
+
 /**
  * Comment, Duet and Stitch as the job says. Studio now has one "Reuse of content" switch for Duet and Stitch.
  * A Clips Funded lane (``kind`` "ws", whatever the job says) then turns on the AI label and keeps Disclose post
- * content off; Clip Factory's lane never touches either.
+ * content off; Clip Factory's lane never touches the AI label and sets Disclose post content from the job (1.3.0).
  */
 async function setInteractions(page, job, kind = "clips") {
   if (!(await setToggle(page, "Comment", job.comment !== false))) throw new Stop(REASONS.noUpload);
@@ -581,6 +746,11 @@ async function setInteractions(page, job, kind = "clips") {
   if (kind === "ws") {
     await setAiLabel(page);
     await keepDiscloseOff(page);
+  } else {
+    // 1.3.0: TikTok's disclosure as the job says (a campaign clip: Branded content), then Who can see it again (a
+    // label must never leave it on something else).
+    await applyLabel(studioForm(page), job);
+    await checkPrivacy(page, job.privacy);
   }
 }
 
@@ -636,12 +806,21 @@ export async function post(page, job, file, onStep, opts = {}) {
   if (dialog) throw new Stop(REASONS.popup(dialog));
   const button = postButton(page);
   if (!(await button.isEnabled().catch(() => false))) throw new Stop(REASONS.noPost);
-  // Right before Post: the AI label is still on (Clips Funded), and it is still the same account.
+  // Right before Post: the AI label is still on (Clips Funded), Clip Factory's disclosure and who can see it are still
+  // as the job says, and it is still the same account.
   if (kind === "ws" && !(await aiLabelOn(page))) throw new Stop(REASONS.aiLabel);
   await recheckAccount(page, opts, session);
+  if (kind !== "ws") {
+    // The last look, after the account check: nothing slow comes between it and Post now.
+    await checkLabel(studioForm(page), job);
+    await checkPrivacy(page, job.privacy);
+  }
   if (dryRun) {
-    // A check run: everything up to Post, then nothing. Quitting Chrome afterwards throws the upload away.
-    return { dryRun: true, link: null, sure: false, posts: before.length, baseline };
+    // A check run: everything up to Post, then nothing. Quitting Chrome afterwards throws the upload away. It says
+    // what TikTok's disclosure reads now (Clip Factory's lane) and whether Studio shows "Paid partnership".
+    const label = kind !== "ws" ? await readLabel(studioForm(page)) : undefined;
+    if (label) label.paidPartnership = await page.getByText("Paid partnership", { exact: true }).first().isVisible().catch(() => false);
+    return { dryRun: true, link: null, sure: false, posts: before.length, baseline, ...(label ? { label } : {}) };
   }
 
   await onStep("pressing", { baseline }); // the point of no return: recorded before the click

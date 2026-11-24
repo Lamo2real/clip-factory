@@ -2,8 +2,8 @@
 // "Use my settings" on Review. One section per platform, X included. Saved on the server, so every device has them.
 // My settings never mark a clip as made for kids, and TikTok's Commercial content is picked per clip only. While his
 // Mac posts TikTok, every Review card but a campaign clip starts on these, TikTok too, with no tap, and his Mac posts
-// TikTok with them (§47.9); a paid partnership can't go through the Mac yet (he posts that clip in the TikTok app
-// himself). While it is off, TikTok's API rule still wants his own tap on each clip.
+// TikTok with what the clip's row says (§47.9): for a paid partnership he ticks Branded content on that clip's TikTok
+// row and the Mac adds TikTok's label. While it is off, TikTok's API rule still wants his own tap on each clip.
 import type { PostPreset, XReplies, YoutubePrivacy } from "../../api/types.ts";
 import { useSession } from "../../app/session.tsx";
 import { Dropdown } from "../../components/Dropdown.tsx";
@@ -24,10 +24,9 @@ export const OWN_TAP = "TikTok wants your own tap, so tap Use my settings on eac
 export const MAC_COMMERCIAL = "Commercial content: off. Your Mac posts TikTok with these.";
 export const PAID_STEPS = ["Tick Branded content in that clip's TikTok row."];
 export const MAC_PAID_STEPS = [
-  "Your Mac can't post those yet.",
-  "Untick TikTok on that clip.",
-  "Post it in the TikTok app, with its label.",
-  "Don't use Post with my Mac or Send these to my Mac for it.",
+  "Tick Branded content in that clip's TikTok row.",
+  "Your Mac adds TikTok's Paid partnership label when it posts it.",
+  "Campaign clips have it ticked already.",
 ];
 
 export function MySettingsBranch() {

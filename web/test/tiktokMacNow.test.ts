@@ -205,6 +205,21 @@ describe("the http bodies", () => {
     return { api, sent };
   }
 
+  it("Upload adds tiktokMac only when it is true and comes with the card's TikTok row", async () => {
+    const { api, sent } = client();
+    const tiktok = { privacyLevel: "MUTUAL_FOLLOW_FRIENDS", disableComment: false, disableDuet: false, disableStitch: false, brandContent: true, brandOrganic: false };
+    await api.confirmClip("c1", undefined, tiktok, ["youtube", "tiktok"]);
+    await api.confirmClip("c1", undefined, tiktok, ["youtube"], undefined, true);
+    await api.confirmClip("c1", undefined, undefined, ["youtube"], undefined, true);
+    await api.confirmClip("c1", undefined, tiktok, ["tiktok"], undefined, false);
+    expect(sent().map((c) => c.body)).toEqual([
+      { tiktok, platforms: ["youtube", "tiktok"] },
+      { tiktok, tiktokMac: true, platforms: ["youtube"] },
+      { platforms: ["youtube"] },
+      { tiktok, platforms: ["tiktok"] },
+    ]);
+  });
+
   it("send adds now only when it is true", async () => {
     const { api, sent } = client();
     await api.sendToMac(["c1", "c2"]);

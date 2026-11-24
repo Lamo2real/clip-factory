@@ -174,6 +174,12 @@ export interface Clip {
   startPending?: boolean;
   /** Sent by auto-posting (§46.9): the run that sent it and when; `test` on a Private test run. Absent otherwise. */
   auto?: { runId: string; at: string; test?: "private" };
+  /**
+   * TikTok's label for this clip (its commercial content disclosure), from Upload's `tiktok` whenever Your brand or
+   * Branded content was ticked, TikTok chosen or not: Post with my Mac and Send these to my Mac post it with the label.
+   * Absent when neither was ticked.
+   */
+  tiktokLabel?: { brandContent: boolean; brandOrganic: boolean };
 }
 
 /** One skill (docs/CONTRACTS.md §5, §18). Every skill is always used: there is no on/off switch. */
@@ -337,6 +343,10 @@ export interface PostMac {
   reason?: string;
   /** The Mac's last beat on this job (each step, and every minute while it works on it): the stuck rule reads it. */
   beatAt?: string;
+  /** The Mac posts it with TikTok's Branded content label ("Paid partnership"); only present when true. */
+  brandContent?: true;
+  /** The Mac posts it with TikTok's Your brand label ("Promotional content"); only present when true. */
+  brandOrganic?: true;
 }
 
 /** The Mac helper's last check-in (§47.3). */
@@ -382,6 +392,10 @@ export interface MacJob {
   comment: boolean;
   duet: boolean;
   stitch: boolean;
+  /** TikTok's Branded content disclosure ("Paid partnership"): every campaign clip, or a clip ticked so. */
+  brandContent: boolean;
+  /** TikTok's Your brand disclosure ("Promotional content"). */
+  brandOrganic: boolean;
   source: MacSource;
   since: string;
   state: MacState;
@@ -2230,6 +2244,8 @@ export interface Api {
   /**
    * Upload a clip (§14.5, §33). `platforms`: exactly where it goes (each must be set up); left out, Settings › Where
    * clips go decides (older clients). On an uploaded clip, `platforms` names the failed places to try again.
+   * `tiktokMac` (body `tiktokMac: true`): the card is in Mac mode, so `tiktok` is its own TikTok row (the Mac posts
+   * with it); it may come without TikTok among `platforms`, so the clip keeps its label (`Clip.tiktokLabel`).
    */
   confirmClip(
     clipId: string,
@@ -2237,6 +2253,7 @@ export interface Api {
     tiktok?: TikTokPostOptions,
     platforms?: Platform[],
     options?: ClipPostOptions,
+    tiktokMac?: boolean,
   ): Promise<{ clip: Clip; posts: Post[] }>;
   declineClip(clipId: string): Promise<Clip>;
   /**

@@ -246,6 +246,8 @@ def case(name: str, **kw: Any) -> dict[str, Any]:
         "captions": kw.pop("captions", None),
         "chosen": kw.pop("chosen", None),
         "tiktok": kw.pop("tiktok", None),
+        # §47: Your Mac posts TikTok on (only the cases that say so carry the key)
+        **({"macOn": kw.pop("mac_on")} if "mac_on" in kw else {}),
         **({"expect": kw.pop("expect")} if "expect" in kw else {}),
     }
 
@@ -256,12 +258,14 @@ def run(c: dict[str, Any]) -> dict[str, Any]:
     assert now is not None
     item, conn = c["campaign"], c["conn"]
     paid = [str(p) for p in item.get("platformsPaid") or []]
-    places = gates.upload_places(paid, c["setups"], connection.crlinked(conn))
+    mac_on = c.get("macOn") is True
+    places = gates.upload_places(paid, c["setups"], connection.crlinked(conn), mac_on=mac_on)
+    waits = gates.tiktok_waits(paid, c["setups"], mac_on=mac_on)
     return fit.fit(
         copy.deepcopy(c["clip"]),
         copy.deepcopy(c["job"]),
         copy.deepcopy(item),
-        stops=gates.stops(item, conn, places, now),
+        stops=gates.stops(item, conn, places, now, tiktok_waits=waits),
         places=places,
         conn=conn,
         posts=c["posts"],
@@ -273,7 +277,7 @@ def run(c: dict[str, Any]) -> dict[str, Any]:
         captions=c["captions"],
         chosen=c["chosen"],
         tiktok=c["tiktok"],
-        tiktok_waits=gates.tiktok_waits(paid, c["setups"]),
+        tiktok_waits=waits,
     )
 
 
@@ -373,12 +377,31 @@ def _fit_cases() -> list[dict[str, Any]]:
         ),
         case("no place set up yet", setups=[setup("youtube", ready=False), setup("instagram", ready=False)]),
         case("where it pays isn't known yet", campaign=cam(platformsPaid=[])),
-        case("tiktok only", campaign=cam(platformsPaid=["tiktok"])),
+        case(
+            "tiktok only",
+            campaign=cam(platformsPaid=["tiktok"]),
+            setups=[setup("youtube"), setup("tiktok", audit="waiting")],
+        ),
+        case("tiktok only, after its audit", campaign=cam(platformsPaid=["tiktok"]), tiktok=TIKTOK_ON),
+        case(
+            "tiktok only, the mac posts it",
+            campaign=cam(platformsPaid=["tiktok"]),
+            setups=[setup("youtube"), setup("tiktok", audit="waiting")],
+            tiktok=TIKTOK_ON,
+            mac_on=True,
+        ),
         case("a paid place not set up is a note", setups=[setup("youtube"), setup("instagram", ready=False)]),
         case(
             "tiktok before its audit is a note",
             campaign=cam(platformsPaid=["youtube", "tiktok"]),
             setups=[setup("youtube"), setup("tiktok", audit="waiting")],
+        ),
+        case(
+            "tiktok before its audit goes from the mac",
+            campaign=cam(platformsPaid=["youtube", "tiktok"]),
+            setups=[setup("youtube"), setup("tiktok", audit="waiting")],
+            tiktok=TIKTOK_ON,
+            mac_on=True,
         ),
         case("a place turned off on the card", chosen=["youtube"]),
         case("accounts added: not checked", conn=base_conn(stepsDone=["connect", "ready-account"])),

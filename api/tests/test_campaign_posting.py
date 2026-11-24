@@ -275,8 +275,8 @@ def test_tiktok_is_refused_until_tiktok_approved_the_app(
     status, body = confirm(call, clip["clipId"], {"platforms": ["youtube", "tiktok"], "tiktok": TIKTOK})
     assert (status, message(body)) == (
         400,
-        "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet. "
-        "Turn TikTok off, then tap Upload.",
+        "Campaign clips go on TikTok from your Mac. Turn it on in Settings › Posting › Your Mac posts TikTok. "
+        "Or turn TikTok off, then tap Upload.",
     )
     assert stored_posts(table) == {}
 
@@ -496,13 +496,13 @@ def test_try_again_runs_the_campaign_checks(
         (
             "tiktok",
             {"audit": "waiting"},
-            "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet. "
+            "Campaign clips go on TikTok from your Mac. Turn it on in Settings › Posting › Your Mac posts TikTok. "
             "Tap Try again on another place.",
         ),
         (
             "tiktok",
             {"audit": "ok", "review": None},
-            "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet. "
+            "Campaign clips go on TikTok from your Mac. Turn it on in Settings › Posting › Your Mac posts TikTok. "
             "Tap Try again on another place.",
         ),
         ("youtube", {"unlinked": True}, "Add YouTube in Content Rewards first, then tap Try again."),
@@ -522,6 +522,19 @@ def test_try_again_says_what_to_tap_on_its_own_screen(
     status, answer = confirm(call, clip["clipId"], body)
     assert (status, message(answer)) == (400, sentence)
     assert "Upload" not in sentence
+    assert lambda_client.calls == []
+
+
+def test_try_again_through_tiktoks_api_with_the_mac_on_says_the_mac_posts_it(
+    call: Call, store: db.Store, lambda_client: FakeLambda
+) -> None:
+    """Before TikTok approves the app its API would post a campaign clip privately: the owner's Mac posts it."""
+    assert call("PUT", "/v1/settings", {"tiktokMac": {"on": True}})[0] == 200
+    ready(store, "tiktok", audit="waiting")
+    put_campaign(store, platformsPaid=["youtube", "tiktok"])
+    clip = failed_campaign_clip(store, "tiktok", status="posted")
+    status, answer = confirm(call, clip["clipId"], {"platforms": ["tiktok"], "tiktok": TIKTOK})
+    assert (status, message(answer)) == (400, "Your Mac posts campaign clips on TikTok. Tap Post with my Mac.")
     assert lambda_client.calls == []
 
 

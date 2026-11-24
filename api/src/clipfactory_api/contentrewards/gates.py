@@ -45,6 +45,13 @@ ELSEWHERE = frozenset(
 OVERLAY_NEEDED = (
     "This campaign wants its own picture on top of the video. Clip Factory can't add it yet. Pick another campaign."
 )
+# Before TikTok approves the app only the owner's Mac posts a campaign clip on TikTok: with Your Mac posts TikTok off,
+# TikTok is not one of its places (tiktok_mac.CAMPAIGN_MAC_OFF, the same words: a test pins them).
+TIKTOK_MAC_OFF = "Campaign clips go on TikTok from your Mac. Turn it on in Settings › Posting › Your Mac posts TikTok."
+TIKTOK_ONLY = (
+    f"This campaign only pays for TikTok. {TIKTOK_MAC_OFF} Or pick a campaign that pays for YouTube, Instagram, X or "
+    "Facebook."
+)
 STUDIO = "https://studio.youtube.com/"
 OPEN_CAMPAIGN = "Open campaign"
 FIND_ANOTHER = "Find another campaign"
@@ -85,10 +92,15 @@ def _join(items: list[str]) -> str:
 
 
 def upload_places(
-    platforms_paid: Iterable[str], setups: Iterable[Mapping[str, Any]], crlinked: Mapping[str, Any]
+    platforms_paid: Iterable[str],
+    setups: Iterable[Mapping[str, Any]],
+    crlinked: Mapping[str, Any],
+    *,
+    mac_on: bool = False,
 ) -> list[str]:
     """``platformsPaid`` ∩ places ``ready`` in ``GET /v1/setup`` ∩ not ``crLinked: false``, with TikTok only while its
-    ``posting_audit`` gate is ``ok``, in STATS_ORDER."""
+    ``posting_audit`` gate is ``ok`` or Your Mac posts TikTok is on (``mac_on``: the owner's Mac posts it, §47), in
+    STATS_ORDER."""
     paid = set(platforms_paid)
     by_platform = {str(s.get("platform")): s for s in setups}
     out = []
@@ -98,15 +110,16 @@ def upload_places(
             continue
         if platform == "tiktok":
             gates = {g.get("key"): g.get("state") for g in setup.get("gates") or [] if isinstance(g, Mapping)}
-            if gates.get("posting_audit") != "ok":
+            if gates.get("posting_audit") != "ok" and not mac_on:
                 continue
         out.append(platform)
     return out
 
 
-def tiktok_waits(platforms_paid: Iterable[str], setups: Iterable[Mapping[str, Any]]) -> bool:
-    """The campaign pays for TikTok but TikTok's posting audit has not passed (posts would be private)."""
-    if "tiktok" not in set(platforms_paid):
+def tiktok_waits(platforms_paid: Iterable[str], setups: Iterable[Mapping[str, Any]], *, mac_on: bool = False) -> bool:
+    """The campaign pays for TikTok but TikTok's posting audit has not passed (posts would be private) and Your Mac
+    posts TikTok is off (``mac_on``: with it on the owner's Mac posts it)."""
+    if "tiktok" not in set(platforms_paid) or mac_on:
         return False
     tiktok = next((s for s in setups if s.get("platform") == "tiktok"), {})
     gates = {g.get("key"): g.get("state") for g in tiktok.get("gates") or [] if isinstance(g, Mapping)}
@@ -126,7 +139,7 @@ def _stop(code: str, text: str, fix: str | None = None, accepted: Iterable[str] 
 
 
 def stops(  # noqa: PLR0915 (every stop of §38.4, in the table's order)
-    item: Mapping[str, Any], conn: Mapping[str, Any], places: list[str], now: datetime
+    item: Mapping[str, Any], conn: Mapping[str, Any], places: list[str], now: datetime, *, tiktok_waits: bool = True
 ) -> list[Item]:
     from .rules import toggles
 
@@ -199,14 +212,8 @@ def stops(  # noqa: PLR0915 (every stop of §38.4, in the table's order)
     logo = obj(item.get("logo"))
     if logo_needed(item) and logo.get("state") != "ready":
         out.append(_stop("logo_missing", "This campaign needs its logo on every clip. Add it below."))
-    if paid and set(paid) == {"tiktok"}:
-        out.append(
-            _stop(
-                "tiktok_only",
-                "This campaign only pays for TikTok. Campaign clips skip TikTok for now: your Mac can't mark them as "
-                "Branded content yet. Pick a campaign that pays for YouTube, Instagram, X or Facebook.",
-            )
-        )
+    if paid and set(paid) == {"tiktok"} and "tiktok" not in places and tiktok_waits:
+        out.append(_stop("tiktok_only", TIKTOK_ONLY))
     elif not paid and membership in CAN_MAKE:
         out.append(_stop("no_place", "I can't tell where this campaign pays yet. Tap Check now."))
     elif paid and not places:
