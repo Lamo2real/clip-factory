@@ -11,6 +11,7 @@ import { CAR_VIEW_SHAPES } from "../src/stories/engine/car.ts";
 import { audioTrack, CATALOG, drawFrame, ENGINE_VERSION, FORMATS, normalizeScript, textTrack, validateScript } from "../src/stories/engine/engine.ts";
 import { F, inFrame } from "../src/stories/engine/frame.ts";
 import { ellipsePts, keyhole, lampWarm, lightFor } from "../src/stories/engine/light.ts";
+import { ditherSeed } from "../src/stories/engine/pen.ts";
 import { prepare } from "../src/stories/engine/scene.ts";
 import { NIGHT_SKY, SET_SHAPES_ND, setInfo } from "../src/stories/engine/sets.ts";
 import { nextCutAfter, SHOT_SHAPES, shotAt } from "../src/stories/engine/shots.ts";
@@ -274,9 +275,13 @@ describe("the places in night drive", () => {
     ]);
     const wall = drawFrame(still("kitchen", "side", "night_drive"), 0)[0]!;
     expect(wall).toEqual({ k: "fill", color: grade("#fff1d6", LIGHTS.indoor) });
-    // the studio's light changes nothing
-    const stage = drawFrame(still("studio", "side", "night_drive"), 0)[0]!;
-    expect(stage).toEqual(drawFrame(still("studio", "side", "classic"), 0)[0]);
+    // the studio's light changes nothing: its backdrop is Bright's, only dithered with the story's seed (§45.45.23)
+    const studio = still("studio", "side", "night_drive");
+    const stage = drawFrame(studio, 0)[0]!;
+    expect(stage.k === "grad" && stage.dither).toBe(ditherSeed(studio.seed));
+    const { dither: _seed, ...colours } = stage as Extract<Prim, { k: "grad" }>;
+    expect(colours).toEqual(drawFrame(still("studio", "side", "classic"), 0)[0]);
+    expect("dither" in drawFrame(still("studio", "side", "classic"), 0)[0]!).toBe(false);
   });
 
   it("each place draws within its measured shapes (SET_SHAPES_ND), the vignette too, in every view, camera and size", () => {

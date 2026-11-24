@@ -17,7 +17,7 @@ import { DEG, TAU, clamp, clamp01, ease, hash, rand, smoothstep } from "./math.t
 import { carSide, type CarDraw } from "./car.ts";
 import { actorState, boardingAt, boardingOf, DRIVING, STYLES, type ActorState, type Boarding, type Style } from "./motion.ts";
 import { drawVignette, lampWarm, lightFor } from "./light.ts";
-import { frameView, Pen } from "./pen.ts";
+import { ditherSeed, frameView, Pen } from "./pen.ts";
 import { drawShot, nextCutAfter, shotAt, shotHead, shotShows, type ShotCar, type ShotInput, type ShotPerson, type ShotSpan } from "./shots.ts";
 import { endCardFrom, endCardLayout, textBoxes } from "./text.ts";
 import { CARS, DECALS, drawProp, OVERLAYS, propBaseScale, propState, steerArrow, WEATHER, type DriverInput, type PropState } from "./props.ts";
@@ -626,6 +626,8 @@ function drawSceneNow(s: StoryScript, index: number, t: number): Prim[] {
   const pen = new Pen(frameView(F.w * F.k, F.h * F.k, F.k), F.k);
   const scene = rt.scene;
   const nd = nightDrive();
+  // night drive: the sky's gradients and the vignette are dithered, one fixed pattern for the whole story (its seed)
+  if (nd) pen.dither = ditherSeed(s.seed);
   const night = setInfo(scene.set).night;
   const warm = lampWarm(scene.set, rt.scroll, rt.rolling);
   // night drive: the place's light (shots.ts sets the inside of a car's); classic keeps the studio light

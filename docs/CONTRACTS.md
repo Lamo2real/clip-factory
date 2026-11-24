@@ -16982,13 +16982,14 @@ Cars use the existing effects only, so no new SfxId and no synth change:
   ```ts
   export interface Photo { key: string; assetId: string | null; url: string; state: "sending" | "ready" | "failed"; file: File }
   export function Photos(p: { ws: string; max: number; photos: Photo[]; onChange: (next: Photo[]) => void; label: string; hint: string }): JSX.Element;
-  /** the small drop handler kept local until the shared useFileDrop hook lands (swap this one function) */
-  export function useLocalDrop(onFiles: (files: File[]) => void): { over: boolean; props: { onDragEnter; onDragOver; onDragLeave; onDrop } };
   ```
+  Drops go through the shared `useFileDrop` (`lib/useFileDrop.ts`, §45.40.1; `scope: "element"`): it hands every
+  dropped file to the same `add()` as "Add photos", which takes the pictures that fit and says why any other cannot
+  be a photo, so a drop and the picker say the same. (It replaced the first build's local `useLocalDrop`, 24 Nov.)
   - A glass drop zone with an "Add photos" button (a hidden `input type=file multiple accept=image/png,image/jpeg,image/webp`).
   - Thumbnails 72 px with a × button "Remove photo {n}".
   - A failed photo shows "Tap to try again".
-  - Its own 10-line `filesFrom(DataTransfer)`. It does not import Clip Factory's `features/help`.
+  - It does not import Clip Factory's `features/help` itself (the shared hook reads the drop's files).
 - **API.** `design.parse` merges the old `referenceAssetId` (first) with `referenceAssetIds`. The ids must be unique,
   with at most 6. Each one goes through `_design_picture`, unchanged.
 
@@ -19063,6 +19064,68 @@ above the rail. What changed (night drive only):
 - **Bright is byte-identical:** 7200 Bright frames and every Bright bubble match the build before prim by prim, the
   Bright still is the same PNG, and the Bright shapes and raster goldens are unchanged. Only the night golden
   (`stories-engine-night.json`) is written again.
+
+#### 45.45.23 Polish round 4 (24 Nov; wins over anything above in §45.45)
+
+The final judge scored round 3 9/10 and left five notes. What changed (night drive only, apart from the drop zone):
+
+- **Every car and truck light is one soft `glow`** (`car.ts lightGlow`, `tailGlow`, `bloom`, `beamGlow`, the top
+  views of `car.ts` and `props.ts`, `carView.ts softPair`, `headBloom` and `softBar`, `shots.ts mirrorLights`):
+  headlights, tail and brake lights, the blink flash and the beams, no stacked rings and no hard disc. `art.ts
+  haloStops(peak, inner, power)` is the old rings' falloff as one gradient: flat over the lens, then
+  peak · (1 − t)^power. A beam is two glows from the lens, a narrow bright one and a wide faint one further out, drawn
+  before the car's shadow and body so it never lights the car itself. The mirror's lights are sized to stay on its
+  glass. Bright keeps its circles, cones and rings.
+- **Pools of light on the road blend** (`perspective.ts drawOutside`, `sets.ts nightSide` and `nightTop`): each pool is
+  a glow with `art.ts bellStops` (peak · (1 − d²)^power: flat in its middle, nothing at its edge), `POOL_GROW` 1.35 ×
+  the flat pool's size at `POOL_LIFT` 1.65 × its alpha, so it is as much light, and two that overlap add up with no
+  seam. The town's glow on the horizon is one glow instead of three stacked ovals.
+- **A seeded 1-level dither** on night drive's gradients (the skies, the studio's backdrop) and the vignette: `grad`
+  and `glow` prims may carry `dither`, a seed (the script's, `pen.ts ditherSeed`; one fixed pattern for the whole
+  story). Such a prim rounds what it paints with `floor(value + T(x, y, seed))`, `T` the top 16 bits of a 32-bit hash
+  of the pixel and the seed over 2^16 (the formula is in `engine/README.md`, Dither), instead of to the nearest
+  level, so every pixel is its true value rounded down or up and a slow fade never shows as 1-level rings.
+  - `raster.py`: `dither_thresholds` (cached per seed and size); a vertical gradient dithers only its rows inside the
+    fade (outside it a stop's whole colour stays itself, exactly), and a glow adds the threshold into its blend step.
+  - `preview/draw.ts` paints these prims pixel by pixel with `raster.py`'s own float32 steps (`Math.fround`), the
+    same hash (`ditherAt`): the sky as a cached `ImageData` (each row's level and one integer compare a pixel), the
+    vignette's four corners with one `getImageData` and one `putImageData`. At 1:1 the two drawers give the same
+    bytes: `web/test/fixtures/stories-dither.json` (thresholds and four small pictures) is checked by
+    `storiesDither.test.ts` and `test_stories_raster.py`, and a whole night sky with a vignette corner matched with 0
+    pixels apart for two seeds.
+  - 16 bits, not 24: with 24, float32(77 + T) can round up to 78 for T just under 1.
+  - The video's own encode (x264, CRF 20) keeps part of the dither: the steps' edges break up, but some of the
+    straight banding survives where the encoder flattens very faint noise, and a harsh re-encode flattens more. An
+    encoder setting for dark gradients (x264 `aq-mode` 3) would change every video's bytes, Bright's too, so it is a
+    follow-up.
+- **Real sleeves on a bust** (`rig.ts drawBust`, night drive's `bustBodyNight`, which replaces `bustArmsNight`): each
+  upper arm is its own shape with its own outline all round (a round cap, its front edge curving in to the armpit,
+  straight outer and inner edges), narrowing a little to the elbow and hanging a little out, so a narrow gap shows
+  the seat between it and the chest below the armpit. The far arm is drawn before the chest, the near one after it.
+  The lamp-side sleeve has its cel shadow down its outside with a fold up to the armpit and the rim light; the key
+  side its shadow down its inside with the armpit fold and the lit shoulder band. Stripes are laid per part between
+  its straight edges, and dots have their own spots (`BUST_DOTS`). The outer silhouette and the bust's 13 prims stay.
+  Bright's bust is the same code as before.
+- **The car's photos** (`studio/Photos.tsx`) drop through the shared `useFileDrop` (§45.40.1); `useLocalDrop` and its
+  own `filesFrom` are gone (§45.42.5).
+- **Tests:** `storiesNightCars`'s allowed car shapes include `glow`, and its box check covers glows; "the studio's
+  light changes nothing" still compares the studio backdrop with Bright's, now beside its dither seed. New:
+  `storiesDither.test.ts`; in `test_stories_raster.py`, the shared fixture, the rounding to one of two levels, and
+  three more bad prims.
+- **Speed:**
+  - The sample's 240-frame clip, rendered by `scene_render` (Deno, `raster.py`, x264): 26.6 s, against 26.4 s on main
+    (1.0 ×).
+  - The engine's frames take 0.93 × as long.
+  - In `raster.py` the dither costs about 2 ms a frame for a sky and about 5 ms for the vignette; the soft car lights
+    and pools save about as much.
+  - In the browser, a 720 × 1280 preview takes about the same as before in Chromium (6 to 7 ms a frame, about 10 ms
+    while the camera moves the sky); in headless WebKit, 7 to 11 ms (about 12 to 17 ms while the sky moves).
+- **Preview and final:** over the sample's nine shots the canvas and `raster.py` differ by 0.09 to 0.16 levels on
+  average.
+- **Bright is byte-identical:** 7200 Bright frames and every Bright bubble match main prim by prim, 12 Bright frames
+  of the sample are the same PNG bytes through main's and this `raster.py`, and the Bright shapes and raster goldens
+  are unchanged. `ENGINE_VERSION` stays 7. Only the night golden (`stories-engine-night.json`) is written again;
+  `stories-dither.json` is new.
 
 ## 46. Auto-posting: the oldest clips in Review go up by themselves, every X hours (owner request, 2026-11-22)
 

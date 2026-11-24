@@ -6,13 +6,12 @@
 // top views, so a car of the cast is the same car in every shot. A plain car is a sedan made from its colour; a plain
 // truck has its own box back and cab front. Plates are one plain light rectangle and no badge is ever drawn.
 
-import { cel, grade, ink, lineUnits, ND, nightDrive, softCount, softRings, type Light } from "./art.ts";
+import { cel, grade, haloStops, ink, lineUnits, ND, nightDrive, type Light } from "./art.ts";
 import { carBrows, carEye, carFace, carSpec, DEFAULT_CAR, GLASS_ND, GRILLE, LENS_OFF, MOUTH_CURVE, MOUTH_DARK, outlined, PLATE, rounded, TAIL_OFF, TRIM, TYRE_ND, type CarDraw } from "./car.ts";
 import { blink as blinkAt, type FaceParams } from "./face.ts";
-import { F } from "./frame.ts";
 import { clamp, hex, mix } from "./math.ts";
 import type { Pen } from "./pen.ts";
-import { arcPts, clipConvex, joinShapes, quadPts, roundRectPts } from "./pen.ts";
+import { clipConvex, quadPts, roundRectPts } from "./pen.ts";
 import { BOX_ND, plainColor, type PropState } from "./props.ts";
 import type { CarBody, CarLook, Expression } from "./types.ts";
 
@@ -233,7 +232,7 @@ function carView(pen: Pen, car: CarLook, view: "back" | "front", o: CarViewOpts)
       pen.rect(-0.4 * W, ty - 0.022 * o.w, 0.8 * W, 0.014 * o.w, 0.007 * o.w, shine, 0.7);
       if (glowA > 0 && !soft) pen.ellipse(0, ty, 0.42 * W + 0.03 * o.w * 1.5, 0.03 * o.w * 2.5, 0, ND.tailGlow, glowA);
     } else {
-      if (soft) softPair(pen, [-0.36 * o.w, 0.36 * o.w], ty, glowR / 2.5, glowR * 0.6, ND.tailGlow, glowA / 0.45, 3);
+      if (soft) softPair(pen, [-0.36 * o.w, 0.36 * o.w], ty, glowR / 2.5, glowR * 0.6, ND.tailGlow, glowA / 0.45);
       for (const x of [-1, 1]) {
         const cx = x * 0.36 * o.w;
         if (car.lights.rear === "round") {
@@ -269,7 +268,7 @@ function carView(pen: Pen, car: CarLook, view: "back" | "front", o: CarViewOpts)
   const headEyes = face !== null && car.face.eyes === "headlights";
   const lensR = car.lights.front === "slim" ? 0.035 * o.w : 0.05 * o.w;
   const flare = (o.bloom ?? 1) * ((lit ? (dark ? 1 : 0.5) : 0) + 0.8 * o.blink) * (headEyes ? 0.6 : 1);
-  if (flare > 0.02 && nightDrive()) headBloom(pen, hx, hy, lensR, flare, 4);
+  if (flare > 0.02 && nightDrive()) headBloom(pen, hx, hy, lensR, flare);
   else if (flare > 0.02) {
     // the two wider halos are shared by both lights (they meet in the middle); the nearest is each light's own
     pen.ellipse(0, hy, hx + lensR * 5, lensR * 4, 0, ND.headBloom, Math.min(1, 0.06 * flare));
@@ -366,7 +365,7 @@ function truckView(pen: Pen, car: CarLook, view: "back" | "front", o: CarViewOpt
     const glowA = Math.max(tailOn ? 0.25 : 0, braking ? 0.45 * o.braking : 0);
     const ty = sill - 0.11 * o.w;
     const soft = glowA > 0 && nightDrive();
-    if (soft) softPair(pen, [-0.4 * W, 0.4 * W], ty, 0.04 * W, 0.08 * W, ND.tailGlow, glowA / 0.45, 3);
+    if (soft) softPair(pen, [-0.4 * W, 0.4 * W], ty, 0.04 * W, 0.08 * W, ND.tailGlow, glowA / 0.45);
     for (const x of [-1, 1]) {
       pen.rect(x * 0.4 * W - 0.05 * W, ty - 0.03 * W, 0.1 * W, 0.06 * W, 0.01 * W, tail);
       if (glowA > 0 && !soft) pen.circle(x * 0.4 * W, ty, 0.12 * W, ND.tailGlow, glowA);
@@ -402,7 +401,7 @@ function truckView(pen: Pen, car: CarLook, view: "back" | "front", o: CarViewOpt
   const hx = 0.36 * W;
   const lensR = 0.06 * o.w;
   const flare = (o.bloom ?? 1) * ((lit ? (dark ? 1 : 0.5) : 0) + 0.8 * o.blink);
-  if (flare > 0.02 && nightDrive()) headBloom(pen, hx, hy, lensR, flare, 6);
+  if (flare > 0.02 && nightDrive()) headBloom(pen, hx, hy, lensR, flare);
   else if (flare > 0.02) {
     pen.ellipse(0, hy, hx + lensR * 5, lensR * 4, 0, ND.headBloom, Math.min(1, 0.06 * flare));
     pen.ellipse(0, hy, hx + lensR * 3, lensR * 2.6, 0, ND.headBloom, Math.min(1, 0.16 * flare));
@@ -414,26 +413,24 @@ function truckView(pen: Pen, car: CarLook, view: "back" | "front", o: CarViewOpt
 
 // ---- night drive's soft lights -------------------------------------------------------------------------------------
 
-/** A pair of lights' soft bloom (night drive): soft rings (art.ts softRings, more the bigger it shows, at most `most`)
- * round each lens of radius `r` at (x, y) for each x of `xs`, reaching `reach` past it, each ring of both lights one
- * polygon; `k` scales the alphas (none over 1). It fades from the lens to clear, with no flat oval round the two. */
-function softPair(pen: Pen, xs: number[], y: number, r: number, reach: number, color: string, k: number, most = 6): void {
-  for (const [t, a] of softRings(Math.min(most, softCount((reach * pen.unit()) / F.k)), 0.8)) {
-    const rx = r + t * reach;
-    const segs = rx * pen.unit() > 12 ? 20 : 12;
-    pen.poly(joinShapes(xs.map((x) => arcPts(x, y, rx, rx * 0.86, 0, 360, segs))), color, Math.min(1, a * k));
-  }
+/** A pair of lights' soft bloom (night drive): one soft glow (the `glow` prim, art.ts haloStops) round each lens of
+ * radius `r` at (x, y) for each x of `xs`, flat over the lens and fading to clear `reach` past it, a little flatter
+ * than round; `k` scales its light (at most 1). No ring edge, and no flat oval round the two. */
+function softPair(pen: Pen, xs: number[], y: number, r: number, reach: number, color: string, k: number): void {
+  const R = r + reach;
+  const fade = haloStops(1, r / R);
+  for (const x of xs) pen.glow(x, y, R, R * 0.86, color, fade, Math.min(1, 0.8 * k));
 }
 
-/** Night drive's headlights (a car's in at most 4 rings, within CAR_VIEW_SHAPES; a truck's in 6): a soft white bloom
- * round each lens that fades to clear, reaching further and stronger with `flare` (lit at night 1, the mirror's 1.8, a
- * blink 0.8 more). */
-function headBloom(pen: Pen, hx: number, hy: number, lensR: number, flare: number, most: number): void {
+/** Night drive's headlights: a soft white bloom round each lens that fades to clear, reaching further and stronger
+ * with `flare` (lit at night 1, the mirror's 1.8, a blink 0.8 more). */
+function headBloom(pen: Pen, hx: number, hy: number, lensR: number, flare: number): void {
   const f = Math.min(flare, 2.2);
-  softPair(pen, [-hx, hx], hy, lensR, lensR * (1.3 + 1.2 * f), ND.headBloom, Math.min(1.3, 0.55 + 0.45 * f), most);
+  softPair(pen, [-hx, hx], hy, lensR, lensR * (1.3 + 1.2 * f), ND.headBloom, Math.min(1.3, 0.55 + 0.45 * f));
 }
 
-/** Night drive's bar tail light's glow: three soft rings that follow the bar (half sizes hw × hh) out by `reach`. */
+/** Night drive's bar tail light's glow (half sizes hw × hh): one soft glow along the bar, flat over its middle and
+ * fading to clear 0.7 × `reach` past it above and below and 2.5 × `reach` past its ends. */
 function softBar(pen: Pen, y: number, hw: number, hh: number, reach: number, k: number): void {
-  for (const [t, a] of softRings(3, 0.8)) pen.ellipse(0, y, hw + t * reach, hh + t * reach, 0, ND.tailGlow, Math.min(1, a * k));
+  pen.glow(0, y, hw + 2.5 * reach, hh + 0.7 * reach, ND.tailGlow, haloStops(1, 0.5, 2), Math.min(1, 0.8 * k));
 }
