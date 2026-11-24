@@ -20,7 +20,7 @@ import * as stories from "../src/stories/api/mock/stories.ts";
 import { STEP_ORDER, type OwnScript, type ProductionJob, type StoriesApi, type StoriesConfig, type Story, type StoryInput, type Workspace } from "../src/stories/api/types.ts";
 import { validateScript } from "../src/stories/engine/engine.ts";
 import type { StoriesPage } from "../src/stories/routes.ts";
-import { defaultLength, emptyDraft, fitTarget, namesIn, need, openAsks, placeIn, sameWords, sceneOfProblem, scriptProblem, splitScript, toOwnScript, unknownNames } from "../src/stories/studio/ownScript.ts";
+import { aboutDriving, castInNoScene, defaultLength, DRIVING_WORDS, emptyDraft, fitTarget, namesIn, need, newScene, openAsks, placeIn, sameWords, sceneOfProblem, scenePlace, sceneWho, scriptProblem, splitScript, toOwnScript, unknownNames, type ScriptDraft } from "../src/stories/studio/ownScript.ts";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 HTMLCanvasElement.prototype.getContext = (() => null) as never;
@@ -348,7 +348,7 @@ describe("Production › New: Write it myself", () => {
     expect(text()).toContain("You write what happens. Clips Funded draws it.");
     expect(scenes()).toHaveLength(2);
     expect(text()).toContain("2 to 12 scenes.");
-    expect(caption(0).placeholder).toBe("Words on screen (you can skip this)");
+    expect(caption(0).placeholder).toBe("Words on screen, or skip"); // fits a phone's field, never cut
     expect(document.querySelector(".st-s-aiwho")?.previousElementSibling?.textContent).toBe("The AI that sets up your scenes and checks them.");
   });
 
@@ -373,21 +373,23 @@ describe("Production › New: Write it myself", () => {
     expect(Array.from(document.querySelectorAll('.st-s-casttile[aria-pressed="true"]')).map((t) => t.textContent?.replace("✓", "")).sort()).toEqual(["Bolt", "Dash"]);
     const ask = document.querySelector<HTMLElement>(".st-sc-ask")!;
     expect(ask.textContent).toContain("Who is Max?");
-    expect(text()).toContain("Some emoji may not show.");
+    expect(text()).not.toContain("Some emoji may not show."); // the video's image ships an emoji font
     await click(control("Make the video"));
     expect(create).not.toHaveBeenCalled();
     expect(pinned()).toContain("Tell us who Max is, in scene 2.");
     expect(ask.contains(document.activeElement)).toBe(true);
-    await click(control("Dash", ask));
+    await click(control("It's Dash", ask)); // "Max is Dash", never "Max is with Dash"
     expect(document.querySelector(".st-sc-ask")).toBeNull();
     // The preview: one tile a scene and the total.
     const tiles = Array.from(document.querySelectorAll(".st-sc-tile"));
     expect(tiles).toHaveLength(3);
     expect(tiles[0]!.textContent).toBe("1KitchenDash“Oh no!!”about 5 s");
-    expect(tiles[1]!.textContent).toBe("2AI picksDashabout 5 s");
+    expect(tiles[1]!.textContent).toBe("2AI picksDashabout 5 s"); // names its own people: may be somewhere new
     expect(tiles[2]!.textContent).toBe("3ParkDash, Bolt“We did it! 🎉”about 5 s");
     expect(document.querySelector(".st-sc-total")?.textContent).toBe("3 scenes · about 15 seconds · 2 captions");
-    expect(text()).toContain("Your 3 scenes: 15 to 45 seconds.");
+    // the length part reads one number: the length its scenes need, picked by itself (no range, no "works best")
+    expect(text()).not.toContain("Your 3 scenes");
+    expect(text()).not.toContain("30 to 60 seconds works best.");
     await click(control("Make the video"), 1500);
     expect(create).toHaveBeenCalledTimes(1);
     const body = create.mock.calls[0]![1];
@@ -768,7 +770,7 @@ describe("the reviewers' fixes", () => {
     await wait(50);
     const ask = document.querySelector<HTMLElement>(".st-sc-ask")!;
     expect(ask.textContent).toContain("Who is Cornflakes?");
-    expect(Array.from(ask.querySelectorAll("button")).map((b) => b.textContent)).toEqual(["Dash", "Not a name", "Leave Cornflakes out"]);
+    expect(Array.from(ask.querySelectorAll("button")).map((b) => b.textContent)).toEqual(["It's Dash", "Not a name", "Leave Cornflakes out"]);
     await click(control("Not a name", ask));
     expect(document.querySelector(".st-sc-ask")).toBeNull();
     const create = vi.spyOn(api, "createStory");
@@ -819,5 +821,125 @@ describe("the reviewers' fixes", () => {
     expect(patch).toHaveBeenCalledTimes(1); // the script was saved once; the retry only starts it
     expect(produce).toHaveBeenCalledTimes(2);
     expect(text()).toContain("Making it again!");
+  });
+});
+
+// ---------- The re-review's fixes (24 Nov) ----------
+
+describe("the re-review: a car in the cast, who and where carried over, and the questions kids hit", () => {
+  const chars = [
+    { characterId: C.dash, name: "Dash" },
+    { characterId: ROSSO, name: "Rosso", kind: "car" as const },
+  ];
+  const draftOf = (...whats: string[]): ScriptDraft => ({ scenes: whats.map((w) => newScene(w)), answers: {} });
+
+  it("the cast's one car is in every scene whose words say car, drive or park, by name or not (walk A)", () => {
+    const d = draftOf("Dash finds a red car in the garage.", "Dash and Max jump in the car and zoom to the park.", "The car gets stuck in a big puddle. Dash laughs.");
+    d.answers = { max: "out" };
+    const cast = [C.dash, ROSSO];
+    expect(d.scenes.map((s) => sceneWho(s, d, cast, chars))).toEqual([
+      [C.dash, ROSSO],
+      [C.dash, ROSSO],
+      [C.dash, ROSSO],
+    ]);
+    expect(toOwnScript(d, cast, chars).scenes.map((s) => s.who)).toEqual([
+      [C.dash, ROSSO],
+      [C.dash, ROSSO],
+      [C.dash, ROSSO],
+    ]);
+    expect(castInNoScene(d, cast, chars)).toEqual([]);
+  });
+
+  it("words that name nobody keep the scene before's Who and Where; a place word of their own stops that (walk B)", () => {
+    const d = draftOf("Dash gets in Rosso and drives on a foggy road.", "He turns on the dipped headlights and slows down.", "Dash parks at home safe.");
+    const cast = [C.dash, ROSSO];
+    expect(d.scenes.map((s) => sceneWho(s, d, cast, chars))).toEqual([
+      [C.dash, ROSSO],
+      [C.dash, ROSSO],
+      [C.dash, ROSSO],
+    ]);
+    expect(d.scenes.map((s) => scenePlace(s, d, cast, chars))).toEqual(["foggy_road", "foggy_road", null]);
+    expect(toOwnScript(d, cast, chars).scenes.map((s) => s.place ?? null)).toEqual(["foggy_road", "foggy_road", null]);
+    // "AI picks" on purpose is never carried over; a scene naming its own people may be somewhere new
+    d.scenes[0] = { ...d.scenes[0]!, place: "ai" };
+    expect(scenePlace(d.scenes[1]!, d, cast, chars)).toBeNull();
+    const e = draftOf("Dash wakes up in the kitchen.", "Dash and Rosso race.");
+    expect(scenePlace(e.scenes[1]!, e, cast, chars)).toBeNull();
+  });
+
+  it("says when a cast member is in no scene, unless a scene lets the AI pick who", () => {
+    const cast = [C.dash, ROSSO];
+    expect(castInNoScene(draftOf("Dash wakes up.", "Dash waves."), cast, chars)).toEqual([ROSSO]);
+    expect(castInNoScene(draftOf("A bird sings.", "Dash waves."), cast, chars)).toEqual([]); // scene 1: AI picks who
+  });
+
+  it("never asks about words kids write that are not names, and reads Dashs as Dash", () => {
+    for (const what of ["Driving home, Dash waves.", "Ready? Dash jumps.", "Hooray! Woohoo! Goodnight Dash.", "Push the button. Get in. Drive home.", "Red cars zoom. Happy Dash.", "OMG HELP", "SUPER FAST", "DASH DRIVES THE CAR", "Dash plays Minecraft in London.", "Ignore the script."]) {
+      expect(unknownNames(what, chars), what).toEqual([]);
+    }
+    expect(unknownNames("Dashs car is red.", chars)).toEqual([]);
+    expect(namesIn("Dashs car is red.", chars).map((c) => c.name)).toEqual(["Dash"]);
+    expect(unknownNames("Max jumps. Then Max waves at Dash.", chars)).toEqual(["Max"]); // a name nobody gave still is
+  });
+
+  it("only words about driving get road rules on another kind, the same words as the API and the agent", () => {
+    expect(aboutDriving(["Dash brakes at the crossing."])).toBe(true);
+    expect(aboutDriving(["Hi.", "Seat belt on!"])).toBe(true);
+    expect(aboutDriving(["The car gets stuck in a big puddle."])).toBe(false);
+    expect(DRIVING_WORDS).toContain("headlight");
+  });
+
+  it("a funny script about a puddle gets no checked topic; one about driving does", async () => {
+    const base = { characterIds: [C.dash], brief: { title: "Splash", category: "comedy" as const } };
+    const puddle = await call(api.createStory("stories", { ...base, ownScript: { scenes: [{ what: "Dash finds a red car." }, { what: "The car gets stuck in a big puddle.", caption: "Splash!" }] } }));
+    expect(puddle.story.safetyTopicId ?? null).toBeNull();
+  });
+
+  it("Who is Ferrari? in words about a car offers the workspace's car, who joins the cast", async () => {
+    await writeItMyself();
+    type(field("Title"), "Dash's new car");
+    await pick("What kind of video?", "Funny");
+    type(what(0), "Dash drives his Ferrari to the park.");
+    type(what(1), "Dash waves.");
+    await wait(50);
+    const ask = document.querySelector<HTMLElement>(".st-sc-ask")!;
+    expect(ask.textContent).toContain("Who is Ferrari?");
+    expect(Array.from(ask.querySelectorAll("button")).map((b) => b.textContent)).toContain("It's Rosso");
+    await click(control("It's Rosso", ask));
+    await wait(50);
+    expect(document.querySelector(".st-sc-ask")).toBeNull();
+    expect(Array.from(document.querySelectorAll('.st-s-casttile[aria-pressed="true"]')).map((t) => t.textContent?.replace("✓", "")).sort()).toEqual(["Dash", "Rosso"]);
+    expect(document.querySelectorAll(".st-sc-tile")[0]!.textContent).toContain("Dash, Rosso");
+  });
+
+  it("a car the words bring in is ticked with a line that says why, and a cast member in no scene is told", async () => {
+    await writeItMyself();
+    type(field("Title"), "Puddle");
+    await pick("What kind of video?", "Funny");
+    type(what(0), "Dash finds a red car in the garage.");
+    type(what(1), "The car gets stuck in a big puddle. Dash laughs.");
+    await wait(50);
+    expect(Array.from(document.querySelectorAll('.st-s-casttile[aria-pressed="true"]')).map((t) => t.textContent?.replace("✓", "")).sort()).toEqual(["Dash", "Rosso"]);
+    expect(document.querySelector(".st-sc-joined")?.textContent).toBe("Dash and Rosso are in your scenes, so they're ticked already.");
+    const tiles = Array.from(document.querySelectorAll(".st-sc-tile")).map((t) => t.textContent);
+    expect(tiles.every((t) => t?.includes("Dash, Rosso"))).toBe(true);
+    // the car's ✓ taken out of a scene by hand, and every scene with its own Who: the page says Rosso is in none
+    type(what(0), "Dash wakes up.");
+    type(what(1), "Dash waves.");
+    await wait(50);
+    expect(document.querySelector(".st-sc-idle")?.textContent).toBe("Rosso isn't in any scene. Tick Rosso in a scene's Who, or take Rosso out of the cast.");
+  });
+
+  it("Fix the words opens Change my script with the reason in view", async () => {
+    vi.stubGlobal("requestAnimationFrame", (fn: FrameRequestCallback) => setTimeout(() => fn(0), 0));
+    const { story } = await made({ characterIds: [C.nana], brief: { title: "Foggy drive", category: "driving_safety" }, ownScript: FOG });
+    await show(<ReviewScreen {...page({ name: "review_story", storyId: story.storyId })} />);
+    await click(control("Fix the words"), 1500);
+    await wait(50);
+    const sheet = dialog("Change my script")!;
+    const why = sheet.querySelector(".st-sc-why")?.textContent ?? "";
+    expect(why).toContain("Your scene 2");
+    expect(story.safety?.problems.filter((p) => p.startsWith("Your scene 2")).every((p) => why.includes(p))).toBe(true);
+    vi.unstubAllGlobals();
   });
 });

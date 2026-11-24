@@ -9,7 +9,7 @@ import { ApiError } from "../../../api/errors.ts";
 import { ENGINE_VERSION, fitDuration, normalizeScript, validateScript } from "../../engine/engine.ts";
 import { setInfo } from "../../engine/sets.ts";
 import type { ActionId, ArtStyle, Beat, CaptionCue, CarMember, CastMember, Scene, SceneActor, SceneProp, SetId, StoryScript } from "../../engine/types.ts";
-import { CAPTION_MARKS, fitTarget, hasCaption, hasControl, letters, namesIn, need, PLACES, placeIn, placeLabel, sameWords, sceneLabel, stepLabel } from "../../studio/ownScript.ts";
+import { aboutDriving, CAPTION_MARKS, fitTarget, hasCaption, hasControl, letters, namesIn, need, PLACES, placeIn, placeLabel, sameWords, sceneLabel, stepLabel } from "../../studio/ownScript.ts";
 import { isCar, STEP_ORDER, type Character, type IdeaCategory, type MusicMood, type OwnScene, type OwnScript, type StepKey, type Story, type StoryFormat } from "../types.ts";
 import { citationsFor, topicFor } from "./ideas.ts";
 
@@ -112,8 +112,12 @@ export function ownTexts(own: OwnScript): string[] {
   return [...own.scenes.map((s) => s.what), ...own.scenes.map((s) => s.caption ?? "").filter(Boolean)];
 }
 
-/** The checked topic the owner's words are about (any kind keeps it: such a video is always fact checked), or null. */
-export function ownTopic(title: string, logline: string, own: OwnScript): string | null {
+/**
+ * The checked topic the owner's words are about, or null. Another kind than driving safety gets one only when its
+ * words are about driving (then it is kept: such a video is always fact checked); a joke about a puddle gets none.
+ */
+export function ownTopic(title: string, logline: string, own: OwnScript, category?: IdeaCategory): string | null {
+  if (category && category !== "driving_safety" && !aboutDriving(ownTexts(own))) return null;
   return topicFor([title, logline, ...ownTexts(own)].join(" \n "));
 }
 
@@ -383,7 +387,7 @@ export function patchOwn(story: Story, script: StoryScript | undefined, value: u
     story.ownScript = next;
     return ["safety", "captions", "assemble", "preview"];
   }
-  const topic = ownTopic(story.title, logline, next);
+  const topic = ownTopic(story.title, logline, next, story.category);
   if (story.category === "driving_safety" && !topic) throw new ApiError(409, "conflict", NO_GUIDANCE);
   story.safetyTopicId = topic;
   story.ownScript = next;

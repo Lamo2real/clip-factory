@@ -1000,6 +1000,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
           ws={ws}
           story={story}
           focus={changing}
+          why={changing ? problems.filter((p) => sceneOfProblem(p) === changing) : undefined}
           onClose={() => setChanging(false)}
           onStarted={(r) => {
             startRun(r);

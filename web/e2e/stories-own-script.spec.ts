@@ -70,7 +70,7 @@ test("Write it myself: three scenes, Who is Max?, a caption, made, reviewed with
   await expect(page.locator('.st-s-casttile[aria-pressed="true"]', { hasText: "Dash" })).toHaveCount(1);
   const ask = page.getByRole("group", { name: "Who is Max?" });
   await expect(ask).toBeVisible();
-  await ask.getByRole("button", { name: "Dash", exact: true }).click();
+  await ask.getByRole("button", { name: "It's Dash", exact: true }).click();
   await expect(ask).toHaveCount(0);
 
   // The preview: one tile a scene, in order.
@@ -160,6 +160,37 @@ test("a driving-safety script with full beam in fog is reported as written, held
   const sheet = page.getByRole("dialog", { name: "Change my script" });
   await expect(sheet.locator(".st-sc-scene").nth(1).getByRole("textbox", { name: "What happens" })).toBeFocused();
   await expect(sheet.locator(".st-sc-scene").nth(1).getByRole("textbox", { name: "What happens" })).toHaveValue("Nana Rose puts on full beam in the fog.");
+  await ctx.close();
+});
+
+test("a car in the cast is in every scene whose words say car or drive, on a phone, and the video has the car in each", async ({ browser }) => {
+  test.setTimeout(90_000);
+  const ctx = await context(browser, 390, 844, true);
+  const page = await ctx.newPage();
+  await writeItMyself(page, "Foggy drive home", "Funny");
+  await quickJobs(page);
+  await whatBox(page, 0).fill("Dash gets in Rosso and drives on a foggy road.");
+  await whatBox(page, 1).fill("He turns on the dipped headlights and slows down.");
+  await page.getByRole("button", { name: "+ Add a scene" }).click();
+  await whatBox(page, 2).fill("Dash parks at home safe.");
+  // Rosso came in from the words and is ticked in every scene; scene 2 goes on from scene 1 (who and where)
+  await expect(page.locator(".st-sc-joined")).toHaveText("Dash and Rosso are in your scenes, so they're ticked already.");
+  const tiles = page.locator(".st-sc-tile");
+  await expect(tiles).toHaveCount(3);
+  for (let i = 0; i < 3; i += 1) await expect(tiles.nth(i).locator(".st-sc-tile__who")).toHaveText("Dash, Rosso");
+  await expect(tiles.nth(1).locator(".st-sc-tile__place")).toHaveText("Foggy road");
+  await expect(page.locator(".st-sc-idle")).toHaveCount(0);
+  await expect(page.getByText("30 to 60 seconds works best.")).toHaveCount(0); // the length part: one number
+  await page.locator(".st-make").click();
+  await expect(page).toHaveURL(/\/stories\/production\/[0-9A-Z]{26}$/);
+  const storyId = page.url().split("/").pop()!;
+  await expect(page.getByRole("link", { name: /in Review$/ })).toBeVisible({ timeout: 30_000 });
+  const cars = await page.evaluate((id) => {
+    const script = (window as StoriesWindow).__cfStoriesMock?.store?.scripts[id] as unknown as { scenes: { props: { kind: string }[] }[] } | undefined;
+    return script?.scenes.map((s) => s.props.filter((p) => p.kind === "car").length);
+  }, storyId);
+  expect(cars).toEqual([1, 1, 1]);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth + 1)).toBe(true);
   await ctx.close();
 });
 

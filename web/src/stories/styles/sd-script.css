@@ -360,3 +360,9 @@
     grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
   }
 }
+
+/* Change my script, opened by Fix the words: the fact check's reason stays in view (§45.46.8). */
+.st-sc-why {
+  margin: 0;
+  padding-left: 1.1em;
+}

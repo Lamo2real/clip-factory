@@ -41,7 +41,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar
 
-from . import ass, config, images, keys, media, own_script, retention, safety, writer
+from . import ass, config, images, keys, media, own_script, own_words, retention, safety, writer
 from .data import AssetPut, JobFence, StoryData
 from .engine import Engine, find_engine_dir, frame_count, write_json
 from .guidance import Guidance, Topic, load
@@ -1307,6 +1307,16 @@ class StoryJob(Job):
             if ch:
                 self.characters[str(cid)] = ch
 
+    def _own_genders(self, cast: Mapping[str, Any], cars: Mapping[str, Any]) -> dict[str, str]:
+        """cast key -> "he" or "she" where a character's own description says (an owner's script: who a pronoun is,
+        §45.46.6); the script's own words add more in ``own_script.genders_of``."""
+        out: dict[str, str] = {}
+        for key, member in [*cast.items(), *cars.items()]:
+            g = own_words.gender_of(self.characters.get(str((member or {}).get("characterId"))))
+            if g:
+                out[str(key)] = g
+        return out
+
     def _staged_as_now(self, old: Mapping[str, Any], own: Sequence[Mapping[str, Any]]) -> bool:
         """The saved storyboard is the owner's script as it is now: its storyboard is not out of date (a changed
         script makes it so), and its scenes are the script's scenes in order, each labelled with its what happens."""
@@ -1563,6 +1573,7 @@ class StoryJob(Job):
         if not cast:
             raise StoryFailed("This story's characters are gone. Pick a character, then tap Try again.")
         castmap = own_script.cast_map(cast, cars)
+        genders = self._own_genders(cast, cars)
         catalog, rules = await self._engine_catalog()
         lists = self._lists(catalog)
         places = {str(e.get("id")): str(e.get("label") or e.get("id")) for e in lists.get("sets") or []}
@@ -1612,21 +1623,25 @@ class StoryJob(Job):
 
         def build(answer: dict[str, Any]) -> dict[str, Any]:
             if mode == "own_scenes" and old is not None:
-                script, _missing = own_script.merged_take(old, answer, own, asked, shown=shown, extra_ids=extra_ids)
+                script, _missing = own_script.merged_take(old, answer, own, asked, shown=shown, extra_ids=extra_ids,
+                                                          genders=genders)  # fmt: skip
                 script["engine"] = engine_version
                 return script
             return own_script.script_from_own(
                 answer, own, title=str(self.story.get("title") or "Clips Funded"), engine_version=engine_version,
                 seed=seed, cast=cast, cars=cars, captions_on=captions_on, music=self._music(answer), topic=topic,
-                size=size, art=art, keep_from=old, extra_ids=extra_ids,
+                size=size, art=art, keep_from=old, extra_ids=extra_ids, genders=genders,
             )  # fmt: skip
 
         def fit_for(script: dict[str, Any]) -> float | None:
             return None if mode == "own_scenes" and self._fits(script, target) else target
 
         def check(answer: dict[str, Any], script: dict[str, Any]) -> list[own_script.Problem]:
-            return own_script.own_problems(answer, script, own, castmap, extra_ids,
-                                           asked=asked or None, places=places)  # fmt: skip
+            found = own_script.own_problems(answer, script, own, castmap, extra_ids, asked=asked or None,
+                                            places=places, genders=genders)  # fmt: skip
+            if mode == "own_scenes" and old is not None:  # a new take keeps every event of the owner's words
+                found += own_script.kept_problems(old, script, own, asked)
+            return found
 
         extra = {"shownSteps": shown}
         answer = await self._write(mode, request, note=None, scene_ids=ask_ids, extra=extra)
@@ -1967,10 +1982,15 @@ class StoryJob(Job):
         """The fact check on an owner's own script found problems only with how a scene is drawn (its ``beat:`` or
         ``scene:`` refs, none on its own words, ``own:sN`` or ``caption:w_sN``): that is the AI's own staging, so
         those scenes are set up once more with the checker's problems (a staging fix, never a rewrite: what happens
-        and the words stay, and the faithful check runs again). Only in a run that draws and animates the scenes
-        again. Returns the new script, saved, or None."""
+        and the words stay, and the faithful check runs again, with every event of the words kept). A beat that draws
+        an event the owner's words say ("very fast": its speed_up) is the owner's, never the AI's: it is only
+        reported, and its scene is not set up again for it. Only in a run that draws and animates the scenes again.
+        Returns the new script, saved, or None."""
         if "beat" not in safety.allowed_refs(self.run_steps) or not self.budget.has("writer"):
             return None
+        script: dict[str, Any] | None = None
+        with contextlib.suppress(StoryFailed):
+            script = await self._load_script()
         mine = {p["ref"].split(":")[1] for p in problems if p["ref"].startswith(safety.OWN_REF)}
         mine |= {
             p["ref"].removeprefix("caption:" + safety.OWN_CUE)
@@ -1978,9 +1998,12 @@ class StoryJob(Job):
             if p["ref"].startswith("caption:" + safety.OWN_CUE)
         }
         drawn: dict[str, list[str]] = {}
+        whats = {o["sceneId"]: o["what"] for o in own}
         for p in problems:
             kind, _, rest = p["ref"].partition(":")
             sid = rest.split(":")[0]
+            if kind == "beat" and own_script.owners_beat(script, sid, rest.split(":")[-1], whats.get(sid, "")):
+                continue  # the owner's own event, as drawn ("very fast": its speed_up): reported, never set up again
             if kind in ("beat", "scene") and sid and sid not in mine:
                 drawn.setdefault(sid, []).append(f"{p['ref']}: {p['problem']}")
         ids = [o["sceneId"] for o in own if o["sceneId"] in drawn]

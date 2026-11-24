@@ -2734,3 +2734,18 @@ columns on Clips Funded's Social accounts. The contract is CONTRACTS §48.
   them) and the agent image draws emoji (Symbola). The web says "Type an idea" for the AI path, asks nothing about
   everyday words, and says "Your script" once on the video's page. A name at a sentence start is still asked about:
   skipping it would let the AI give Max's part to someone in the cast.
+- **Re-review (2026-11-24).** 30 more attacks (24 got through) showed the check still trusted the adapter's pieces
+  and only policed added events. Options: (a) ask a model to judge faithfulness (it can be fooled the same way, and
+  costs a call); (b) read the owner's own words in code. Chosen: (b), in a new pure module `own_words.py` (§45.46.10):
+  the events the words say are owed, by who does them, in their order, as many times as they say; what the words say
+  does not happen is never drawn; a face never shows the other feeling; someone the words say is away is not drawn;
+  the caption no longer allows an event (the adapter never reads it, so only an unfaithful staging could use it, and a
+  caption-only change can then never leave a stale event); the note names every event drawn differently and is never
+  cut there; a zero-width space and decomposed letters change nothing. The fact check never sets a scene up again
+  for a beat that draws the owner's own event ("very fast"): it is reported. A pronoun two people could be is the one
+  case code cannot settle without knowing who is a he or a she: it is settled by a character's description or the
+  script's own "his"/"her", else either may be drawn and the note says who. Strict word lists on purpose: an owed
+  event the words only seem to say would stop a kid's video, so idioms ("falls asleep") are excluded and a thing's
+  event ("the snow falls") is never a cast member's. The web puts the cast's one car in every scene whose words say
+  car or drive, carries Who (and Where, for a scene that names nobody) from the scene before, asks fewer silly
+  questions, and an owner's script of another kind gets a checked topic only when its words are about driving.
