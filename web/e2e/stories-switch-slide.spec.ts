@@ -554,11 +554,21 @@ interface PaneRun {
   topBefore: number | null;
   /** How many times anything took data-app-slide (a pane, or the backdrop). */
   slideMarks: number;
+  /**
+   * The page as the tap's own click left it, read at the very end of that click (a window listener, after the app's
+   * handler and React's render of it, before the browser draws again): when (ms after the tap), the address, and
+   * whether each app's pane is shown (not hidden, its own display: contents). Only with recordPanes' `inTap` (calm
+   * motion): it reads the DOM only, never a style, so it adds no work of its own to the tap's task.
+   */
+  inTap: { at: number; path: string; shown: Record<"clips" | "stories", boolean> } | null;
 }
 
-/** Starts the in-page recorder of the panes' slide: their Web Animations, and every frame from the tap on. */
-async function recordPanes(page: Page) {
-  await page.evaluate((id) => {
+/**
+ * Starts the in-page recorder of the panes' slide: their Web Animations, and every frame from the tap on. `inTap`:
+ * also the page as the tap's own click left it (PaneRun.inTap).
+ */
+async function recordPanes(page: Page, { inTap = false } = {}) {
+  await page.evaluate(([id, atTap]) => {
     const w = window as unknown as { __panes: PaneRun };
     const from = location.pathname.startsWith("/stories") ? "stories" : "clips";
     const to = from === "clips" ? "stories" : "clips";
@@ -575,11 +585,21 @@ async function recordPanes(page: Page) {
       frames: [],
       topBefore: mainOf(from)?.getBoundingClientRect().top ?? null,
       slideMarks: 0,
+      inTap: null,
     };
     w.__panes = r;
     const startPath = location.pathname;
     document.addEventListener("pointerdown", () => (r.tapAt = performance.now()), { capture: true, once: true });
     document.addEventListener("click", () => (r.clickAt = performance.now() - r.tapAt), { capture: true, once: true });
+    if (atTap) {
+      const shown = (app: string) => {
+        const p = pane(app);
+        return !!p && !p.hidden && p.style.display === "contents";
+      };
+      window.addEventListener("click", () => (r.inTap = { at: performance.now() - r.tapAt, path: location.pathname, shown: { clips: shown("clips"), stories: shown("stories") } }), {
+        once: true,
+      });
+    }
     const seen = new Set<Animation>();
     const shift = (kf: Keyframe | undefined) => {
       const m = /translateX\((-?[\d.]+)%\)/.exec(String(kf?.transform ?? ""));
@@ -661,7 +681,7 @@ async function recordPanes(page: Page) {
       if (!r.tapAt || performance.now() - r.tapAt < 2200) requestAnimationFrame(tick);
     };
     requestAnimationFrame(tick);
-  }, APP_SLIDE);
+  }, [APP_SLIDE, inTap] as const);
 }
 
 const readPanes = (page: Page) => page.evaluate(() => (window as unknown as { __panes: PaneRun }).__panes);
@@ -930,14 +950,38 @@ for (const [label, how] of [
       ["Clips Funded", /\/stories$/],
       ["Clip Factory", /\/library$/],
     ] as const) {
-      await recordPanes(page);
+      await recordPanes(page, { inTap: true });
       await tapChoice(page, to);
       await page.waitForURL(url);
       const r = await landedPanes(page);
+      const going = APP[to];
+      const other = going === "clips" ? "stories" : "clips";
       expect(r.anims, `${how} → ${to}: nothing slid`).toEqual([]);
       expect(r.slideMarks, `${how} → ${to}: no pane ever left its place`).toBe(0);
       expect(r.frames.filter((f) => f.shown.clips !== "none" && f.shown.stories !== "none"), `${how} → ${to}: never both on screen`).toEqual([]);
-      expect(r.changedAt, `${how} → ${to}: the page changed at once`).toBeLessThan(300);
+      // At once, timed against the tap itself rather than the clock: the tap's own click changes the page in its own
+      // task (the address, and the app coming in shown with the other one hidden, by the end of that click, before the
+      // browser draws again), and every frame drawn after the click shows the new page, so nothing waits for anything
+      // (not even one frame) and no frame of the old page comes after the tap. How long that one task takes is the
+      // machine's: with the app's work the same, from the finger going down to the next frame a Mac takes 20 to 30 ms,
+      // the same Mac at 16x CPU throttle 440 to 580 and CI's 4-CPU runners 361 and 672 (24 Nov), so a limit on the
+      // clock measured the runner. That task is mostly the first style and layout of the page coming on screen (its
+      // pane was display: none), then React's render and the effects it runs before the frame (at 4x: 85 to 97 ms,
+      // two thirds of it style and layout); the rest is the test machine's press and release of the mouse.
+      expect(r.inTap, `${how} → ${to}: the tap's own click was heard`).not.toBeNull();
+      expect(r.inTap!.path, `${how} → ${to}: the address changed in the tap's own click`).toMatch(url);
+      expect(r.inTap!.shown, `${how} → ${to}: the page changed in the tap's own click`).toEqual({ [going]: true, [other]: false });
+      const drawn = r.frames.filter((f) => f.t > r.clickAt!);
+      expect(drawn.length, `${how} → ${to}: frames drawn after the click`).toBeGreaterThan(2);
+      for (const f of drawn) {
+        expect(f.path, `${how} → ${to}: the new page's address at ${f.t.toFixed(0)} ms`).toMatch(url);
+        expect(f.shown[going], `${how} → ${to}: the new page on screen at ${f.t.toFixed(0)} ms`).toBe("contents");
+        expect(f.shown[other], `${how} → ${to}: the old page gone at ${f.t.toFixed(0)} ms`).toBe("none");
+      }
+      test.info().annotations.push({
+        type: `${how} → ${to}: the calm switch`,
+        description: JSON.stringify({ clickAtMs: +r.clickAt!.toFixed(1), tapTaskMs: +(r.inTap!.at - r.clickAt!).toFixed(1), nextFrameMs: +(drawn[0]!.t - r.clickAt!).toFixed(1) }),
+      });
       if (to === "Clips Funded") await storiesReady(page);
       else await settle(page);
     }

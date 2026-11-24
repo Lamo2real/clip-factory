@@ -1527,10 +1527,21 @@
   animation: none;
   opacity: 0;
 }
+/* Calm motion: the chip is simply there, whole and at its own size, from its first frame. Calm motion's 1 ms arrival
+   (base.css) still shows its first keyframe (no light, 85 % of its size) until the browser starts it, and on a slow
+   renderer (CI's software GPU, any busy computer) that start comes hundreds of ms after the chip appears, so the chip
+   stood small and 4.6 px off its place in the dock that long (e2e/stories-switch-place.spec.ts, 24 Nov). It starts at
+   its end instead (its unfold clip too, glide.css): the same last frame, with nothing left to wait for. */
+.reduce-motion .live-dot {
+  animation-delay: -1s !important;
+}
 @media (prefers-reduced-motion: reduce) {
   .live-dot__light::after {
     animation: none;
     opacity: 0;
+  }
+  .live-dot {
+    animation-delay: -1s !important;
   }
 }
 .topbar .live-dot {
