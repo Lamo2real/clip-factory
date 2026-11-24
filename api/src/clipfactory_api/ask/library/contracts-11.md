@@ -83,7 +83,10 @@ the traffic lights' band; nothing ever covers the traffic lights.
   `apple-mobile-web-app-status-bar-style: black-translucent` with `viewport-fit=cover`, so an installed iPhone app has
   no solid band at the top: each app's own backdrop (Clip Factory's `.backdrop`, Clips Funded's `.stories-app::before`,
   both `position: fixed; inset: 0`) shows under the clock, the Dynamic Island and the signal. Nothing of a page sits
-  there: every column still starts on `--top-line`. `--status-bar-h` (`env(safe-area-inset-top)`, in `tokens.css`) is
+  there: every column still starts on `--top-line`, and nothing passes through it on the way in either: the setup
+  list's pill (`todo-in`) and, on a phone, its panel (`todo-drop`) drop into place from at most the room between
+  `--top-safe` and the line: 12 px on a phone, so the pill starts on the status bar's edge, never under the clock (a
+  computer keeps their 14 and 16 px). `--status-bar-h` (`env(safe-area-inset-top)`, in `tokens.css`) is
   the status bar alone; only the status-bar scrim and glass strip are that tall. The scrim (`.app::after`,
   `.stories-app::after`): black, held under the clock to 75 % and easing out over the bar's last quarter
   (`--status-bar-fade`, a mask), exactly as strong as the white clock needs for AA over the look's top edge

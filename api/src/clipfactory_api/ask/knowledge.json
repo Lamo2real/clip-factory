@@ -1,5 +1,5 @@
 {
- "version": "b264040501eb",
+ "version": "0ad9489a0af3",
  "parts": [
   {
    "id": "app-map",
@@ -93,7 +93,7 @@
    "id": "contracts-11",
    "title": "CONTRACTS: 11. Design system (summary; details in docs/UX_DESIGN_SYSTEM.md)",
    "line": "Colours (owner request 2026-11-18, ADR-43): Bottle Green #0F372B (the surface), Bone #EFE7DA (the",
-   "chars": 11885
+   "chars": 12215
   },
   {
    "id": "contracts-12",
