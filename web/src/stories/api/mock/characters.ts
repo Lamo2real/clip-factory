@@ -7,7 +7,23 @@
 // A car character (§45.42): the API's car rules mirrored (no voice, no face keeps only neutral), a design from up to 6
 // photos that suggests 3 cartoon cars to pick from (result.characters; result.character is the first), and Rosso,
 // the seeded red hatchback (SEED_CAR_ID, added once every part has seeded: afterSeed, or seedCar in a test).
-import { isCar, type CarInput, type Character, type CharacterInput, type LibraryItem, type PersonInput, type ProductionJob, type StoriesApi, type StoriesConfig } from "../types.ts";
+// Vehicles (§45.47): still kind "car", with the new bodies (bus, motorbike, plane, boat) and an optional `interior`;
+// a design takes up to 8 photos (6 outside, 4 inside, `referenceSides`) and keeps to the `vehicle` family's bodies,
+// and inside photos give the interior; each reference picture keeps its `side`. The rule texts are §45.47's.
+import {
+  isCar,
+  VEHICLE_OF,
+  type CarInput,
+  type Character,
+  type CharacterInput,
+  type LibraryItem,
+  type PersonInput,
+  type PhotoSide,
+  type ProductionJob,
+  type StoriesApi,
+  type StoriesConfig,
+  type VehicleType,
+} from "../types.ts";
 import { DEFAULT_CAR } from "../../engine/car.ts";
 import { CATALOG } from "../../engine/catalog.ts";
 import type { CarBody, CarLook, CharacterLook, Expression, MovementStyle, NoiseId, SfxId } from "../../engine/types.ts";
@@ -70,7 +86,8 @@ function carLookProblem(car: unknown): string | null {
   const c = car as Partial<CarLook> | null;
   if (!c || typeof c !== "object") return "Pick how the car looks.";
   const inRange = (n: unknown, lo: number, hi: number) => typeof n === "number" && n >= lo && n <= hi;
-  if (!ids(k.body).includes(c.body as string)) return "Pick the car's shape.";
+  // Every body the engine knows (§45.47: the new vehicles too), the same list as the API's CAR_BODIES.
+  if (!Object.keys(VEHICLE_OF).includes(c.body as string)) return "Pick the car's shape.";
   if (!inRange(c.length, 0.85, 1.15) || !inRange(c.height, 0.85, 1.15)) return "Keep the car's length and height in range.";
   if (![c.paint, c.accent, c.outline, c.wheels?.rim, c.face?.color].every((h) => typeof h === "string" && HEX.test(h))) return "Pick the car's colours.";
   if (!ids(k.pattern).includes(c.pattern as string) || !ids(k.windows).includes(c.windows as string)) return "Pick the car's paint and windows.";
@@ -78,12 +95,16 @@ function carLookProblem(car: unknown): string | null {
   if (!c.lights || !ids(k.frontLights).includes(c.lights.front) || !ids(k.rearLights).includes(c.lights.rear)) return "Pick the car's lights.";
   if (!ids(k.extra).includes(c.extra as string)) return "Pick what is on top of the car.";
   if (!c.face || !ids(k.eyes).includes(c.face.eyes) || !ids(k.mouth).includes(c.face.mouth)) return "Pick the car's face.";
+  if (c.interior !== undefined) {
+    const i = c.interior as Partial<NonNullable<CarLook["interior"]>> | null;
+    if (!i || typeof i !== "object" || ![i.seat, i.dash, ...(i.trim === undefined ? [] : [i.trim])].every((h) => typeof h === "string" && HEX.test(h))) return "Pick the car's colours.";
+  }
   return null;
 }
 
 function check(c: CharacterInput): void {
   const kind = (c as { kind?: unknown }).kind;
-  if (kind !== undefined && kind !== "person" && kind !== "car") fail(400, "bad_request", "Pick a person or a car.");
+  if (kind !== undefined && kind !== "person" && kind !== "car") fail(400, "bad_request", "Pick a person or a vehicle.");
   const name = (c.name ?? "").trim();
   if (!name) fail(400, "bad_request", "Give your character a name.");
   if (name.length > 30) fail(400, "bad_request", "Keep the name to 30 letters.");
@@ -150,7 +171,7 @@ function config(store: MockStore, ws: string): Partial<StoriesConfig> {
 }
 
 /** The pretend upload in flight: assetId → the character and type it was asked for. */
-const pending = new WeakMap<MockStore, Map<string, { characterId: string; contentType: string; filename: string; size: number }>>();
+const pending = new WeakMap<MockStore, Map<string, { characterId: string; contentType: string; filename: string; size: number; side?: PhotoSide }>>();
 /** A portrait job and when it started. */
 const portraits = new WeakMap<ProductionJob, number>();
 
@@ -379,6 +400,11 @@ const PAINT_NAME: Record<string, string> = {
 };
 
 const CAR_BODY_WORDS: [RegExp, CarBody][] = [
+  // §45.47: the other vehicles first ("a bus" is never a hatchback).
+  [/\b(bus|coach)\b/i, "bus"],
+  [/\b(motorbike|motorcycle|scooter|moped)\b/i, "motorbike"],
+  [/\b(plane|aeroplane|airplane|jet)\b/i, "plane"],
+  [/\b(boat|ship|yacht|ferry)\b/i, "boat"],
   [/\bhatch(back)?\b/i, "hatchback"],
   [/\b(saloon|sedan)\b/i, "sedan"],
   [/\b(estate|wagon)\b/i, "estate"],
@@ -408,9 +434,17 @@ function shade(hex: string, by: number): string {
   return `#${ch((n >> 16) & 255)}${ch((n >> 8) & 255)}${ch(n & 255)}`;
 }
 
-/** The car the words (and the photos) describe, before any option's own change. */
-function carFromWords(t: string, base: CarLook): CarLook {
-  const body = CAR_BODY_WORDS.find(([re]) => re.test(t))?.[1] ?? base.body;
+/** Each kind's bodies (§45.47 D6), from VEHICLE_OF. */
+const BODIES_OF = (vehicle: VehicleType) => (Object.keys(VEHICLE_OF) as CarBody[]).filter((b) => VEHICLE_OF[b] === vehicle);
+
+/** The inside colours the mock "sees" in inside photos (the real agent reads them off the photos). */
+const MOCK_INTERIOR = { seat: "#3a3f4b", dash: "#23262e", trim: "#c9ccd2" };
+
+/** The car the words (and the photos) describe, before any option's own change. A `vehicle` keeps to its bodies. */
+function carFromWords(t: string, base: CarLook, vehicle?: VehicleType): CarLook {
+  const said = CAR_BODY_WORDS.find(([re]) => re.test(t))?.[1] ?? base.body;
+  const allowed = vehicle ? BODIES_OF(vehicle) : null;
+  const body = !allowed || allowed.includes(said) ? said : allowed.includes(base.body) ? base.body : allowed[0]!;
   const paint = CAR_COLOR_WORDS.find(([re]) => re.test(t))?.[1] ?? base.paint;
   const face = /\b(eyes|face|smile|smiling|cute)\b/i.test(t) ? { ...base.face, eyes: "windscreen" as const } : base.face;
   return {
@@ -429,9 +463,21 @@ function carFromWords(t: string, base: CarLook): CarLook {
  * clearly different from the others and from `avoid`, the first the closest; their names are not taken. A redesign
  * starts from the saved car (`current`) and keeps its name.
  */
-export function designCars(words: string, photos: number, salt: number, count: number, avoid: CarLook[], taken: string[], current: CarInput | null = null): CarInput[] {
+export function designCars(
+  words: string,
+  photos: number,
+  salt: number,
+  count: number,
+  avoid: CarLook[],
+  taken: string[],
+  current: CarInput | null = null,
+  vehicle?: VehicleType,
+  insidePhotos = 0,
+): CarInput[] {
   const t = words.trim();
-  const start = carFromWords(t, current ? current.car : { ...DEFAULT_CAR, wheels: { ...DEFAULT_CAR.wheels }, lights: { ...DEFAULT_CAR.lights }, face: { ...DEFAULT_CAR.face } });
+  const start = carFromWords(t, current ? current.car : { ...DEFAULT_CAR, wheels: { ...DEFAULT_CAR.wheels }, lights: { ...DEFAULT_CAR.lights }, face: { ...DEFAULT_CAR.face } }, vehicle);
+  // Inside photos set only the interior (§45.47).
+  if (insidePhotos > 0) start.interior = { ...MOCK_INTERIOR };
   const names = new Set(taken.map((n) => n.toLowerCase()));
   const zippy = /\b(fast|quick|zippy|sport|racing)\b/i.test(t);
   const out: CarInput[] = [];
@@ -444,7 +490,7 @@ export function designCars(words: string, photos: number, salt: number, count: n
     names.add(name.toLowerCase());
     const eyes = car.face.eyes !== "none";
     const colour = PAINT_NAME[start.paint] ?? "bright";
-    const shape = CATALOG.carLooks.body.find((b) => b.id === car.body)?.label.toLowerCase() ?? "car";
+    const shape = CATALOG.carLooks.body.find((b) => b.id === car.body)?.label.toLowerCase() ?? (VEHICLE_OF[car.body] === "car" ? "car" : car.body);
     out.push({
       kind: "car",
       name,
@@ -610,9 +656,10 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       if (!TYPES.includes(file.contentType)) fail(400, "bad_request", "Pick a PNG, JPG or WebP picture.");
       if (file.size > MAX_BYTES) fail(413, "too_large", "That picture is too big. Pick one under 10 MB.");
       if (c.references.length >= 8) fail(409, "conflict", "A character can have up to 8 pictures. Remove one first.");
+      if (file.side !== undefined && file.side !== "outside" && file.side !== "inside") fail(400, "bad_request", "Pick outside or inside.");
       await delay(120);
       const assetId = mockId();
-      uploads.set(assetId, { characterId: id, contentType: file.contentType, filename: file.filename, size: file.size });
+      uploads.set(assetId, { characterId: id, contentType: file.contentType, filename: file.filename, size: file.size, ...(file.side === "inside" ? { side: "inside" } : {}) });
       return { assetId, uploadUrl: `mock://stories/refs/${assetId}`, headers: { "Content-Type": file.contentType } };
     },
     async referenceComplete(ws, id, assetId) {
@@ -624,7 +671,8 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       await delay(140);
       uploads.delete(assetId);
       const url = pictureOf(c, "#26205a");
-      c.references.push({ assetId, url, contentType: up.contentType, createdAt: iso() });
+      // A picture keeps its side (§45.47); left out, it is an outside one.
+      c.references.push({ assetId, url, contentType: up.contentType, createdAt: iso(), ...(up.side === "inside" ? { side: "inside" as const } : {}) });
       c.updatedAt = iso();
       addAsset(store, c, assetId, "character_ref", url, up.contentType, up.size);
       return out(store, c);
@@ -680,11 +728,17 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       guardWs(store, ws);
       const words = (body.description ?? "").trim();
       if (words.length > 600) fail(400, "bad_request", "Keep the description to 600 letters.");
-      // The older single picture goes first (§45.42); up to 6, each once.
+      // The older single picture goes first (§45.42); up to 8 (§45.47: 6 outside, 4 inside), each once.
       const refs = [...new Set([...(body.referenceAssetId ? [body.referenceAssetId] : []), ...(body.referenceAssetIds ?? [])])];
-      if (refs.length > 6) fail(400, "bad_request", "Pick up to 6 photos.");
+      if (refs.length > 8) fail(400, "bad_request", "Pick up to 8 photos.");
+      const sides: PhotoSide[] | null = body.referenceSides ?? null;
+      if (sides) {
+        if (sides.length !== (body.referenceAssetIds ?? []).length || sides.some((x) => x !== "outside" && x !== "inside")) fail(400, "bad_request", "Say outside or inside for each photo.");
+        if (sides.filter((x) => x === "outside").length > 6 || sides.filter((x) => x === "inside").length > 4) fail(400, "bad_request", "Pick up to 6 outside and 4 inside photos.");
+      }
+      if (body.vehicle !== undefined && !(Object.values(VEHICLE_OF) as string[]).includes(body.vehicle)) fail(400, "bad_request", "Pick a person or a vehicle.");
       if (body.count !== undefined && (!Number.isInteger(body.count) || body.count < 1 || body.count > 4)) fail(400, "bad_request", "count must be 1 to 4.");
-      if (body.kind !== undefined && body.kind !== "person" && body.kind !== "car") fail(400, "bad_request", "Pick a person or a car.");
+      if (body.kind !== undefined && body.kind !== "person" && body.kind !== "car") fail(400, "bad_request", "Pick a person or a vehicle.");
       if ((body.avoid ?? []).length > 8) fail(400, "bad_request", "Send up to 8 cars to stay away from.");
       // A redesign (§45.34): that character is the agent's CURRENT; it keeps its name and only what was asked changes.
       const current = body.characterId !== undefined ? find(store, ws, body.characterId) : null;
@@ -703,7 +757,8 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       return startMockTask(store, ws, "character_design", body.override, () => {
         if (kind === "car") {
           const taken = store.characters.filter((c) => c.workspaceId === ws).map((c) => c.name);
-          const cars = designCars(words, refs.length, salt, body.count ?? 3, body.avoid ?? [], taken, current && isCar(current) ? (input(current) as CarInput) : null);
+          const insides = (sides ?? []).filter((x) => x === "inside").length;
+          const cars = designCars(words, refs.length, salt, body.count ?? 3, body.avoid ?? [], taken, current && isCar(current) ? (input(current) as CarInput) : null, body.vehicle, insides);
           return { character: cars[0], characters: cars };
         }
         const fresh = designFromWords(words, refs.length > 0, salt);

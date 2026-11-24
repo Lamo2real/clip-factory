@@ -15,7 +15,11 @@ export type StoriesPage =
   /** `?kind=car` starts on the car tile (§45.42) */
   | { name: "character_new"; kind?: CharacterKind }
   | { name: "character"; characterId: string }
-  /** Cars (§45.42): the car characters (the same characters, kind "car"), making one, and one car's page */
+  /**
+   * Vehicles (§45.42, shown as Vehicles since §45.47): the car characters (the same characters, kind "car"), making
+   * one, and one vehicle's page. The names stay `cars`, `car_new` and `car`; the address is `/stories/vehicles…`, and
+   * `/stories/cars…` still opens the same pages.
+   */
   | { name: "cars" }
   | { name: "car_new" }
   | { name: "car"; characterId: string }
@@ -24,9 +28,19 @@ export type StoriesPage =
    * Make a new video, filled in from the address (CONTRACTS §45.34): `?idea=`, `?ref=` (repeatable, up to 3 reference
    * videos), `?cast=` (repeatable, up to 3 characters) and `?sec=` (15 to 90). The router always fills every key.
    * `?art=` (night_drive or classic, §45.45) is there only when the address has a known drawing style: the chat's
-   * "Make the video" carries the style the director offered.
+   * "Make the video" carries the style the director offered. `?draft=` (§45.47) opens a saved video draft: there only
+   * when the address has an id.
    */
-  | { name: "production_new"; ideaId: string | null; refIds?: string[]; castIds?: string[]; durationSec?: number | null; seriesId?: string; art?: ArtStyle }
+  | {
+      name: "production_new";
+      ideaId: string | null;
+      refIds?: string[];
+      castIds?: string[];
+      durationSec?: number | null;
+      seriesId?: string;
+      art?: ArtStyle;
+      draftId?: string;
+    }
   | { name: "production_story"; storyId: string }
   | { name: "review"; seriesId?: string }
   | { name: "review_story"; storyId: string }
@@ -94,7 +108,8 @@ export function matchStories(pathname: string, search: string): StoriesPage {
     if (b === "new") return q.get("kind") === "car" ? { name: "character_new", kind: "car" } : { name: "character_new" };
     if (ID.test(b)) return { name: "character", characterId: b };
   }
-  if (a === "cars") {
+  // §45.47: `/stories/vehicles…` is the address; `/stories/cars…` (old links) still opens the same pages.
+  if (a === "vehicles" || a === "cars") {
     if (b === undefined) return { name: "cars" };
     if (b === "new") return { name: "car_new" };
     if (ID.test(b)) return { name: "car", characterId: b };
@@ -104,6 +119,7 @@ export function matchStories(pathname: string, search: string): StoriesPage {
     if (b === "new") {
       const series = seriesOf(q).seriesId;
       const art = q.get("art");
+      const draft = q.get("draft");
       return {
         name: "production_new",
         ideaId: q.get("idea"),
@@ -112,6 +128,7 @@ export function matchStories(pathname: string, search: string): StoriesPage {
         durationSec: lengthOf(q.get("sec")),
         ...(series && series !== "none" ? { seriesId: series } : {}),
         ...(art === "night_drive" || art === "classic" ? { art } : {}),
+        ...(draft && ID.test(draft) ? { draftId: draft } : {}),
       };
     }
     if (ID.test(b)) return { name: "production_story", storyId: b };
@@ -159,10 +176,12 @@ export function storiesHref(page: StoriesPage): string {
       return `${STORIES_ROOT}/characters/${encodeURIComponent(page.characterId)}`;
     case "character_new":
       return `${STORIES_ROOT}/characters/new${page.kind === "car" ? "?kind=car" : ""}`;
+    case "cars":
+      return `${STORIES_ROOT}/vehicles`;
     case "car_new":
-      return `${STORIES_ROOT}/cars/new`;
+      return `${STORIES_ROOT}/vehicles/new`;
     case "car":
-      return `${STORIES_ROOT}/cars/${encodeURIComponent(page.characterId)}`;
+      return `${STORIES_ROOT}/vehicles/${encodeURIComponent(page.characterId)}`;
     case "ideas": {
       const q = new URLSearchParams();
       if (page.seriesId) q.set("series", page.seriesId);
@@ -183,6 +202,7 @@ export function storiesHref(page: StoriesPage): string {
       if (page.durationSec) q.set("sec", String(page.durationSec));
       if (page.seriesId) q.set("series", page.seriesId);
       if (page.art) q.set("art", page.art);
+      if (page.draftId) q.set("draft", page.draftId);
       const qs = q.toString();
       return `${STORIES_ROOT}/production/new${qs ? `?${qs}` : ""}`;
     }

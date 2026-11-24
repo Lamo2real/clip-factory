@@ -197,7 +197,7 @@ export function CharacterEditor({
     setTrait("");
   }
 
-  const name = c.name.trim() || (car ? "Your car" : "Your character");
+  const name = c.name.trim() || (car ? "Your vehicle" : "Your character");
   const faceLabel = CATALOG.expressions.find((e) => e.id === face)?.label ?? face;
   const moveLabel = car ? carMoveLabel(carMove) : (CATALOG.actions.find((a) => a.id === move)?.label ?? move);
 
@@ -220,7 +220,7 @@ export function CharacterEditor({
       </div>
 
       <div className="st-s-editor__panel" ref={panel}>
-        <Pick label={car ? "Make your car" : "Make your character"} hideLabel value={part} options={PARTS} onChange={setPart} className="st-s-editor__parts" />
+        <Pick label={car ? "Make your vehicle" : "Make your character"} hideLabel value={part} options={PARTS} onChange={setPart} className="st-s-editor__parts" />
 
         {car && part === "looks" ? <CarLooksPart car={car.car} onChange={setCar} /> : null}
         {car && part === "face" ? (
@@ -418,7 +418,7 @@ export function CharacterEditor({
           ) : null}
           {mode === "edit" || last ? (
             <button type="button" className="st-btn st-btn--main" aria-disabled={saving || undefined} onClick={() => !saving && save()}>
-              {saving ? "Saving…" : mode === "new" ? (car ? "Save car" : "Save character") : "Save changes"}
+              {saving ? "Saving…" : mode === "new" ? (car ? "Save vehicle" : "Save character") : "Save changes"}
             </button>
           ) : null}
         </div>

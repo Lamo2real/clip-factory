@@ -154,7 +154,7 @@ describe("the shell", () => {
       "Dashboard",
       "Ideas",
       "Characters",
-      "Cars",
+      "Vehicles",
       "Production",
       "Review",
       "Series",
@@ -165,6 +165,9 @@ describe("the shell", () => {
       "Settings",
     ]);
     expect(host.querySelector(".st-needs")?.textContent).toContain("Clips Funded's TikTok needs connecting again.");
+    // Vehicles (§45.47): the rail opens the Vehicles address; the phone's tab bar keeps its five pages (Vehicles is in More).
+    expect([...host.querySelectorAll<HTMLAnchorElement>(".st-rail a")].find((a) => a.textContent?.includes("Vehicles"))?.getAttribute("href")).toBe("/stories/vehicles");
+    expect([...host.querySelectorAll(".st-tabbar .st-tabbar__label, .st-tabbar a")].some((e) => e.textContent?.includes("Vehicles"))).toBe(false);
     // Lamo Clips' Ask and setup to-do are not part of Lamo Stories.
     expect(host.querySelector(".help-launcher, .setup-todo")).toBeNull();
   });
