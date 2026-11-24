@@ -24,9 +24,9 @@ export type StoriesPage =
    * Make a new video, filled in from the address (CONTRACTS §45.34): `?idea=`, `?ref=` (repeatable, up to 3 reference
    * videos), `?cast=` (repeatable, up to 3 characters) and `?sec=` (15 to 90). The router always fills every key.
    * `?art=` (night_drive or classic, §45.45) is there only when the address has a known drawing style: the chat's
-   * "Make the video" carries the style the director offered.
+   * "Make the video" carries the style the director offered. `?draft=` (§45.47) opens a saved draft.
    */
-  | { name: "production_new"; ideaId: string | null; refIds?: string[]; castIds?: string[]; durationSec?: number | null; seriesId?: string; art?: ArtStyle }
+  | { name: "production_new"; ideaId: string | null; refIds?: string[]; castIds?: string[]; durationSec?: number | null; seriesId?: string; art?: ArtStyle; draftId?: string }
   | { name: "production_story"; storyId: string }
   | { name: "review"; seriesId?: string }
   | { name: "review_story"; storyId: string }
@@ -104,6 +104,7 @@ export function matchStories(pathname: string, search: string): StoriesPage {
     if (b === "new") {
       const series = seriesOf(q).seriesId;
       const art = q.get("art");
+      const draft = q.get("draft");
       return {
         name: "production_new",
         ideaId: q.get("idea"),
@@ -112,6 +113,7 @@ export function matchStories(pathname: string, search: string): StoriesPage {
         durationSec: lengthOf(q.get("sec")),
         ...(series && series !== "none" ? { seriesId: series } : {}),
         ...(art === "night_drive" || art === "classic" ? { art } : {}),
+        ...(draft && ID.test(draft) ? { draftId: draft } : {}),
       };
     }
     if (ID.test(b)) return { name: "production_story", storyId: b };
@@ -183,6 +185,7 @@ export function storiesHref(page: StoriesPage): string {
       if (page.durationSec) q.set("sec", String(page.durationSec));
       if (page.seriesId) q.set("series", page.seriesId);
       if (page.art) q.set("art", page.art);
+      if (page.draftId) q.set("draft", page.draftId);
       const qs = q.toString();
       return `${STORIES_ROOT}/production/new${qs ? `?${qs}` : ""}`;
     }

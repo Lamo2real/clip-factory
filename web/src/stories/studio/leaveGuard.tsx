@@ -1,5 +1,6 @@
 // "Leave without saving?" for Clips Funded's editors (docs/CONTRACTS.md §18.7): a box with unsaved typing or picks holds
-// every page change (an in-app link, a tab, Back) and asks first, with Keep editing and Leave; the browser asks on a
+// every page change (an in-app link, a tab, Back) and asks first, with Keep editing and Leave (and, on Make a new
+// video, Save draft as the main button, §45.47: it saves, then goes on); the browser asks on a
 // reload or a closed tab. Several boxes on one page (Review's captions and sounds) share the one guard the router has:
 // the newest box with changes asks. Only while Clips Funded is on screen: a page kept behind Clip Factory never holds
 // Clip Factory's own page changes.
@@ -37,13 +38,22 @@ export function leaveHolders(): number {
 
 export const LEAVE_TITLE = "Leave without saving?";
 
+export const SAVE_DRAFT = "Save draft";
+
+export interface LeaveOptions {
+  /** Save draft (§45.47): saves, and resolves true when it did; the page change then goes on. */
+  onSave?: () => Promise<boolean>;
+}
+
 /**
  * Holds page changes while `dirty` (and the box is not saving), and returns the question to draw ("Leave without
- * saving?" with Keep editing and Leave) once the owner tries to go.
+ * saving?" with Keep editing and Leave, plus Save draft when `onSave` is given) once the owner tries to go.
  */
-export function useLeaveGuard(dirty: boolean): ReactNode {
+export function useLeaveGuard(dirty: boolean, options: LeaveOptions = {}): ReactNode {
   const active = useAppActive();
   const [leaving, setLeaving] = useState<(() => void) | null>(null);
+  const [saving, setSaving] = useState(false);
+  const { onSave } = options;
   const on = dirty && active;
   const holder = useRef<Holder>({ ask: (proceed) => setLeaving(() => proceed) });
 
@@ -84,9 +94,31 @@ export function useLeaveGuard(dirty: boolean): ReactNode {
           >
             Leave
           </button>
-          <button type="button" className="st-btn st-btn--main" onClick={() => setLeaving(null)}>
+          <button type="button" className={onSave ? "st-btn" : "st-btn st-btn--main"} onClick={() => setLeaving(null)}>
             Keep editing
           </button>
+          {onSave ? (
+            <button
+              type="button"
+              className="st-btn st-btn--main"
+              aria-disabled={saving || undefined}
+              onClick={() => {
+                if (saving) return;
+                const go = leaving;
+                setSaving(true);
+                void onSave()
+                  .catch(() => false)
+                  .then((ok) => {
+                    setSaving(false);
+                    if (!ok) return;
+                    setLeaving(null);
+                    go();
+                  });
+              }}
+            >
+              {saving ? "Saving…" : SAVE_DRAFT}
+            </button>
+          ) : null}
         </>
       }
     >

@@ -412,22 +412,23 @@ test("the owner's flow: a car from 3 dropped photos, the main character and the 
     await expect(page.locator(".st-s-cast__card", { hasText: second }).locator(".st-s-tag").first()).toHaveText("Car");
   });
 
-  await test.step("Production's cast picker takes the main character plus the car", async () => {
+  await test.step("Production's cast picker takes the main character plus up to 2 vehicles", async () => {
     await rail(page, "Production");
     await page.getByRole("link", { name: "Make a new video" }).first().click();
     await expect(page).toHaveURL(/\/stories\/production\/new/);
     await settle(page);
-    await expect(page.locator(".st-cast__row")).toHaveText(["People", "Your cars"]);
+    await expect(page.locator(".st-cast__row")).toHaveText(["People", "Vehicles (you can skip this)"]);
     const pip = page.locator(".st-s-casttile", { hasText: "Pip" }).first();
     if ((await pip.getAttribute("aria-pressed")) !== "true") await pip.click();
     await page.locator(".st-cast__cars .st-s-casttile", { hasText: car.name }).click();
     await expect(page.locator('.st-s-casttile[aria-pressed="true"]')).toHaveCount(2);
     await expect(pip).toHaveAttribute("aria-pressed", "true");
-    // A second car swaps for the first: one car at most.
+    // A second vehicle adds (§45.47: vehicles, in plural); tapping one again takes it out.
     await page.locator(".st-cast__cars .st-s-casttile", { hasText: "Rosso" }).click();
-    await expect(page.locator('.st-cast__cars .st-s-casttile[aria-pressed="true"]')).toHaveText(/Rosso/);
-    await page.locator(".st-cast__cars .st-s-casttile", { hasText: car.name }).click();
+    await expect(page.locator('.st-cast__cars .st-s-casttile[aria-pressed="true"]')).toHaveCount(2);
+    await page.locator(".st-cast__cars .st-s-casttile", { hasText: "Rosso" }).click();
     await expect(page.locator('.st-cast__cars .st-s-casttile[aria-pressed="true"]')).toHaveCount(1);
+    await expect(page.locator('.st-cast__cars .st-s-casttile[aria-pressed="true"]')).toHaveText(new RegExp(car.name));
     await expect(page.getByText("Add someone to drive it.")).toHaveCount(0);
   });
 
@@ -609,8 +610,8 @@ test.describe("a person and a car", () => {
         if (s) s.knobs.jobSeconds = 3;
       });
 
-      // The cast: People, then the "Your cars" row; Rosso joins Pip.
-      await expect(page.locator(".st-cast__row")).toHaveText(["People", "Your cars"]);
+      // Who is in it: People, then the "Vehicles" row; Rosso joins Pip.
+      await expect(page.locator(".st-cast__row")).toHaveText(["People", "Vehicles (you can skip this)"]);
       await page.locator(".st-cast__cars .st-s-casttile", { hasText: "Rosso" }).click();
       await expect(page.locator('.st-s-casttile[aria-pressed="true"]')).toHaveCount(2);
       expect(await audit(page, `New video with a car ${w}`, touch && w < 768, false)).toEqual([]);

@@ -1,5 +1,5 @@
 // Lamo Stories › Production (docs/CONTRACTS.md §45.9, §45.16.5, §45.25, §45.28, §45.34; spec §5.D). Make a new video
-// (an idea or a short concept, the cast of 1 to 3, the length, captions, music, up to 3 reference videos to learn
+// (an idea or a short concept, who is in it (§45.47), the length, captions, music, up to 3 reference videos to learn
 // from, the shape and size, and the model and effort for this video, kept with it), filled in from the address
 // (`?idea=`, `?ref=`, `?cast=`, `?sec=`: the chat's and a reference video's hand-over) and starting at a picked idea's
 // own length; the list of every video being made or made with its eight-step track and Show more; and each video's own
@@ -8,8 +8,11 @@
 // effort that made each step. A running job is checked every 2 seconds. On the warm liquid glass
 // (styles/GLASS-CONTRACT.md): the words loose on the page sit on a .st-plate, every panel and row is .st-glass, and a
 // video's page opens with its preview, hero glass holding the ArcDial (the render progress) and the video's MediaRow.
-// A cast may be people and one car (§45.43: CastPicker, the people first, then the car), and a video can be filed in a
-// series (§45.44): the list shows one series or all (`?series=`), a new video picks its series and starts with its cast.
+// A cast may be people and up to 2 vehicles (§45.43, §45.47: CastPicker's "Who is in it", the main character first, an
+// optional villain, then the vehicles), and a video can be filed in a series (§45.44): the list shows one series or
+// all (`?series=`), a new video picks its series and starts with its cast. Drafts (§45.47): Save draft keeps the form on
+// the server, it then saves itself 2 s after each change, "Your drafts (N)" and the list's Drafts group open one
+// (`?draft=`), and making the video deletes it.
 // Write it myself (§45.46): the idea's third choice, the owner's own scenes (ScriptEditor), staged and never rewritten;
 // its video's page shows the "Your script" chip and Change my script.
 import "../styles/studio.css";
@@ -42,11 +45,14 @@ import {
   type StoryInput,
   type StoryScript,
   type TaskKind,
+  type VideoDraft,
+  type VideoDraftForm,
 } from "../api/types.ts";
 import { CATALOG } from "../engine/catalog.ts";
 import { storiesHref } from "../routes.ts";
 import { cleanPick, effortName, insteadPick, madeWith, ModelIdList, modelIdLine, ModelMenu, modelName, modelOf, ModelsUsed, NextRun, runTask, sendPick, SettingsFix, shortName, stoppedOn, StoryAi, storyUsual, UnusableSheet, unusableAsk, useAiInfo, usedOf, usualFor, type AiInfo } from "../studio/ai.tsx";
-import { CastPicker, castOrder, castProblem } from "../studio/CastPicker.tsx";
+import { CastPicker, castOrder, castProblem, FULL_STORY, NO_MAIN, NO_ROLES, PEOPLE_MAX, rolesOf, SAME_VILLAIN, STORY_CAST_MAX, storyCastProblem, storyOrder, TOO_MANY_PEOPLE, TOO_MANY_VEHICLES, type RolePick } from "../studio/CastPicker.tsx";
+import { AUTOSAVE_MS, DraftRow, DraftsFold, draftScript, scriptOfDraft, useDrafts } from "../studio/Drafts.tsx";
 import { Filmstrip } from "../studio/Filmstrip.tsx";
 import { filterOf, MoveToSeries, SeriesField, seriesQuery, SeriesSwitch, useSeriesList, type SeriesFilter } from "../studio/SeriesSwitch.tsx";
 import { ArcDial, MediaRow, StatNumeral } from "../glass/index.ts";
@@ -59,7 +65,7 @@ import { newCharacter } from "../studio/looks.ts";
 import { defaultLength, draftFromIdea, emptyDraft, fitTarget, hasCaption, lengthRange, namesIn, saysCar, scriptProblem, stepLabel, toOwnScript, written, type ScriptDraft } from "../studio/ownScript.ts";
 import { ChangeScriptSheet, fixId, focusField, ScriptEditor } from "../studio/ScriptEditor.tsx";
 import { currentStep, nowLine, StepTrack, stepsOf } from "../studio/StepTrack.tsx";
-import { ago, CATEGORY_LABEL, helpersLine, isConflict, NO_GUIDANCE, notMadeYet, say, seconds, STATUS_TONE, statusLabel, STORAGE_WORDS } from "../studio/words.ts";
+import { ago, CATEGORY_LABEL, DRAFT_WORDS, helpersLine, isConflict, NO_GUIDANCE, notMadeYet, say, seconds, STATUS_TONE, statusLabel, STORAGE_WORDS } from "../studio/words.ts";
 import { KIND_OPTIONS } from "./Ideas.tsx";
 import type { StoriesScreenProps } from "./types.ts";
 
@@ -68,8 +74,8 @@ export function ProductionScreen({ ws, page }: StoriesScreenProps) {
     const refIds = page.refIds ?? [];
     const castIds = page.castIds ?? [];
     // A new hand-over (another chat button, another reference video) starts the form again from its address.
-    const from = [page.ideaId ?? "", refIds.join(","), castIds.join(","), page.durationSec ?? "", page.seriesId ?? "", page.art ?? ""].join("|");
-    return <NewVideo key={from} ws={ws} ideaId={page.ideaId} refIds={refIds} castIds={castIds} durationSec={page.durationSec ?? null} seriesId={page.seriesId ?? null} givenArt={page.art ?? null} />;
+    const from = [page.ideaId ?? "", refIds.join(","), castIds.join(","), page.durationSec ?? "", page.seriesId ?? "", page.art ?? "", page.draftId ?? ""].join("|");
+    return <NewVideo key={from} ws={ws} ideaId={page.ideaId} refIds={refIds} castIds={castIds} durationSec={page.durationSec ?? null} seriesId={page.seriesId ?? null} givenArt={page.art ?? null} draftId={page.draftId ?? null} />;
   }
   if (page.name === "production_story") return <StoryProduction ws={ws} storyId={page.storyId} />;
   return <ProductionList ws={ws} filter={filterOf(page.name === "production" ? page : {})} />;
@@ -119,6 +125,19 @@ function ProductionList({ ws, filter }: { ws: string; filter: SeriesFilter }) {
   usePoll(() => list.reload(), active && making.some((r) => r.story.status === "producing"), 2000);
   // inside one series, a new video is filed there and starts with its cast
   const newVideo = storiesHref({ name: "production_new", ideaId: null, ...(seriesId && seriesId !== "none" ? { seriesId } : {}) });
+  // Saved drafts (§45.47) of the series shown (none: those filed in no series), above Being made.
+  const drafts = useDrafts(ws);
+  const draftsHere = drafts.items.filter((d) => !seriesId || (seriesId === "none" ? !d.form.seriesId : d.form.seriesId === seriesId));
+  const draftGroup = draftsHere.length ? (
+    <>
+      <h2 className="st-s-section st-plate">{DRAFT_WORDS.group}</h2>
+      <ul className="st-s-runs">
+        {draftsHere.map((d) => (
+          <DraftRow key={d.draftId} draft={d} onDelete={() => drafts.remove(d)} />
+        ))}
+      </ul>
+    </>
+  ) : null;
 
   return (
     <section className="st-page st-studio">
@@ -139,6 +158,8 @@ function ProductionList({ ws, filter }: { ws: string; filter: SeriesFilter }) {
       ) : !list.data ? (
         <Busy plate>Getting your videos…</Busy>
       ) : all.length === 0 ? (
+        <>
+        {draftGroup}
         <div className="st-s-empty st-glass">
           <span className="st-s-empty__film" aria-hidden="true" />
           <h2 className="st-s-empty__title">No videos yet</h2>
@@ -147,8 +168,10 @@ function ProductionList({ ws, filter }: { ws: string; filter: SeriesFilter }) {
             Make your first video
           </A>
         </div>
+        </>
       ) : (
         <>
+          {draftGroup}
           {making.length ? (
             <>
               <h2 className="st-s-section st-plate">Being made</h2>
@@ -224,7 +247,11 @@ function RunRow({ ws, story, job, onMoved }: { ws: string; story: Story; job: Pr
 
 // ---------- Make a new video ----------
 
-function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesId: givenSeries, givenArt }: { ws: string; ideaId: string | null; refIds: string[]; castIds: string[]; durationSec: number | null; seriesId: string | null; givenArt: ArtStyle | null }) {
+/** The cast sentences: a problem with one of them shows panel 2, Who is in it. */
+const CAST_WORDS = new Set(["Pick at least one character.", NO_MAIN, SAME_VILLAIN, TOO_MANY_VEHICLES, TOO_MANY_PEOPLE, "Add someone to drive it."]);
+const CAST_FULL = FULL_STORY;
+
+function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesId: givenSeries, givenArt, draftId }: { ws: string; ideaId: string | null; refIds: string[]; castIds: string[]; durationSec: number | null; seriesId: string | null; givenArt: ArtStyle | null; draftId: string | null }) {
   const toast = useToast();
   const workspace = useWorkspace(ws);
   const cfg = (workspace?.configuration ?? {}) as Partial<StoriesConfig>;
@@ -249,6 +276,8 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
   // The address may bring the cast, the length and the reference videos (the chat's or a reference video's hand-over).
   const [cast, setCast] = useState<string[]>(() => castIds.slice(0, 3));
   const castTouched = useRef(castIds.length > 0);
+  // The main character and the villain (§45.47); no main picked: the first person in the cast.
+  const [roles, setRoles] = useState<RolePick>(NO_ROLES);
   // The series it is filed in (§45.44): the address's, else a picked idea's, until the owner picks one himself.
   const [series, setSeries] = useState<string | null>(givenSeries && givenSeries !== "none" ? givenSeries : null);
   const seriesTouched = useRef(!!givenSeries);
@@ -286,7 +315,77 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
     ai !== null ||
     refIds.join(",") !== givenRefs.slice(0, 3).join(",") ||
     draft.scenes.some(written);
-  const leave = useLeaveGuard(dirty && !busy);
+
+  // ---- Drafts (§45.47) ----
+  const drafts = useDrafts(ws);
+  /** The draft this form is (after Save draft, or opened with ?draft=): it then saves itself. */
+  const [saved, setSaved] = useState<{ draftId: string; version: number } | null>(null);
+  /** The form as last saved or opened (what "Saved" means), and whether a save is on its way. */
+  const [savedJson, setSavedJson] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [gonePicks, setGonePicks] = useState(false);
+  const [draftGone, setDraftGone] = useState(false);
+  const opened = useLoad(async () => (draftId ? await storiesApi().getVideoDraft(ws, draftId) : null), `${ws}:${draftId ?? ""}`);
+  /** The opened draft is in the form (at once when there is none). */
+  const [ready, setReady] = useState(!draftId);
+  const saveChain = useRef<Promise<unknown>>(Promise.resolve());
+  const carIds = new Set((data.data?.characters ?? []).filter(isCar).map((c) => c.characterId));
+  /** The draft as the last save left it (the chain reads it, never a stale render's). */
+  const savedRef = useRef<{ draftId: string; version: number } | null>(null);
+  const formJson = JSON.stringify(formNow());
+  // With a draft, only changes since its last save hold the page.
+  const unsaved = saved ? formJson !== savedJson : dirty;
+  const leave = useLeaveGuard(unsaved && !busy && ready, { onSave: () => saveDraft(false) });
+
+  /** The form as a draft keeps it: only what the owner typed or picked (a default stays a default). */
+  function formNow(): VideoDraftForm {
+    const f: VideoDraftForm = { source };
+    const idea = source === "script" ? (fromIdea ?? picked) : picked;
+    if (idea) f.ideaId = idea;
+    if (title.trim()) f.title = title;
+    if (logline.trim()) f.logline = logline;
+    if (category) f.category = category;
+    const script = draftScript(draft);
+    if (script) f.script = script;
+    if (cast.length) f.characterIds = cast.slice(0, STORY_CAST_MAX);
+    // the roles as picked; a villain with no main picked keeps the first other person as the main
+    const main = roles.mainId ?? (roles.villainId ? (cast.find((id) => id !== roles.villainId && !carIds.has(id)) ?? null) : null);
+    if (main) f.roles = { mainId: main, ...(roles.villainId && roles.villainId !== main ? { villainId: roles.villainId } : {}) };
+    if (series) f.seriesId = series;
+    else if (seriesTouched.current) f.seriesId = null;
+    if (length !== null) f.durationSec = length;
+    if (shape) f.format = { ...shape };
+    if (art) f.art = art;
+    if (captions !== null) f.captionsOn = captions;
+    if (mood) f.musicMood = mood;
+    if (refIds.length) f.referenceIds = [...refIds];
+    if (ai) f.ai = { ...ai };
+    return f;
+  }
+
+  /** Saves the form as a draft: the first time makes it (Save draft), then each save sends the version it read. */
+  function saveDraft(auto: boolean): Promise<boolean> {
+    const run = saveChain.current.catch(() => undefined).then(async () => {
+      const form = formNow();
+      const json = JSON.stringify(form);
+      setSaving(true);
+      try {
+        const next: VideoDraft = savedRef.current ? await storiesApi().saveVideoDraft(ws, savedRef.current.draftId, { form, version: savedRef.current.version }) : await storiesApi().createVideoDraft(ws, { form });
+        savedRef.current = { draftId: next.draftId, version: next.version };
+        setSaved(savedRef.current);
+        setSavedJson(json);
+        if (!auto) toast.success(DRAFT_WORDS.saved);
+        return true;
+      } catch (e) {
+        toast.error(say(e, "The draft could not be saved. Try again."), { group: "st-draft-save" });
+        return false;
+      } finally {
+        setSaving(false);
+      }
+    });
+    saveChain.current = run;
+    return run;
+  }
 
   useEffect(() => {
     let live = true;
@@ -350,6 +449,97 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [data.data]);
 
+  // Opening a draft (?draft=, §45.47): its picks come back once the ideas and characters are here; ids that are gone
+  // (characters, the idea) are left out and the page says so. A draft that is gone starts a new form, and says so.
+  useEffect(() => {
+    if (ready || !data.data || opened.loading) return;
+    const d = opened.data;
+    setReady(true);
+    if (!d) {
+      if (opened.error) setDraftGone(true);
+      return;
+    }
+    const f = d.form;
+    const knownChar = (id: string) => data.data!.characters.some((c) => c.characterId === id);
+    let dropped = false;
+    if (f.source) setSource(f.source);
+    if (f.ideaId) {
+      if (data.data.ideas.some((i) => i.ideaId === f.ideaId)) {
+        setPicked(f.ideaId);
+        if (f.source === "script") setFromIdea(f.ideaId);
+      } else {
+        setPicked("");
+        dropped = true;
+      }
+    }
+    if (f.title) setTitle(f.title);
+    if (f.logline) setLogline(f.logline);
+    if (f.category && f.category in CATEGORY_LABEL) setCategory(f.category as IdeaCategory);
+    if (f.script) {
+      const back = scriptOfDraft(f.script, knownChar);
+      setDraft(back.script);
+      dropped ||= back.dropped;
+    }
+    if (f.characterIds) {
+      const keep = f.characterIds.filter(knownChar).slice(0, STORY_CAST_MAX);
+      dropped ||= keep.length !== f.characterIds.length;
+      castTouched.current = true;
+      setCastPicked(true);
+      setCast(keep);
+      if (f.roles) setRoles({ mainId: f.roles.mainId && keep.includes(f.roles.mainId) ? f.roles.mainId : null, villainId: f.roles.villainId && keep.includes(f.roles.villainId) ? f.roles.villainId : null });
+    }
+    if (f.seriesId !== undefined) {
+      seriesTouched.current = true;
+      setSeries(f.seriesId);
+    }
+    if (f.durationSec !== undefined) setLength(f.durationSec);
+    if (f.format) setShape(f.format);
+    if (f.art) setArt(f.art);
+    if (f.captionsOn !== undefined) setCaptions(f.captionsOn);
+    if (f.musicMood && CATALOG.musicMoods.some((m) => m.id === f.musicMood)) setMood(f.musicMood as MusicMood);
+    if (f.referenceIds) setRefIds(f.referenceIds.slice(0, 3));
+    if (f.ai) setAi(f.ai);
+    setGonePicks(dropped);
+    savedRef.current = { draftId: d.draftId, version: d.version };
+    setSaved(savedRef.current);
+    // "Saved" is the form as it opens (worked out on the next render, once every pick above is in).
+    setSavedJson(null);
+  }, [data.data, opened.data, opened.loading, opened.error, ready]);
+
+  // The opened form is what "Saved" means: set on the render after the picks went in.
+  useEffect(() => {
+    if (saved && savedJson === null) setSavedJson(formJson);
+  }, [saved, savedJson, formJson]);
+
+  // The draft's reference videos and series that are gone (their lists come later) are left out the same way.
+  useEffect(() => {
+    if (!saved || !opened.data || refs.loading || refs.error || !refs.data) return;
+    const list = refs.data;
+    const keep = refIds.filter((id) => list.some((r) => r.refId === id));
+    if (keep.length === refIds.length) return;
+    setRefIds(keep);
+    setGonePicks(true);
+    // Once, when the list is here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [refs.data, refs.loading, refs.error, opened.data, saved]);
+  useEffect(() => {
+    if (!saved || !opened.data || !seriesList || !series) return;
+    if (seriesList.some((x) => x.seriesId === series)) return;
+    setSeries(null);
+    setGonePicks(true);
+    // Once, when the series are here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [seriesList, opened.data, saved]);
+
+  // Autosave (§45.47 D3): once there is a draft, 2 s after the last change; never while the video starts.
+  useEffect(() => {
+    if (!saved || savedJson === null || busy || formJson === savedJson) return;
+    const t = window.setTimeout(() => void saveDraft(true), AUTOSAVE_MS);
+    return () => window.clearTimeout(t);
+    // The form's JSON is what changes.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [formJson, saved, savedJson, busy]);
+
   const kind: IdeaCategory | "" = source === "idea" ? (idea?.category ?? "") : category;
   // The owner's scenes as they will be sent (Write it myself): the length and the captions follow them.
   const ownScenes = useMemo(() => (source === "script" ? toOwnScript(draft, cast, characters).scenes : []), [source, draft, cast, characters]);
@@ -374,13 +564,23 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
     castTouched.current = true;
     setCastPicked(true);
     setProblem(null);
-    setCast(ids.slice(0, 3));
+    setCast(ids.slice(0, STORY_CAST_MAX));
   }
 
-  /** Why a character the words name can't join the cast now (at most 3, one car, a car needs a person), or null. */
+  function pickRoles(next: RolePick) {
+    castTouched.current = true;
+    setCastPicked(true);
+    setProblem(null);
+    setRoles(next);
+  }
+
+  const peopleIn = (ids: string[]) => ids.filter((id) => !characters.some((c) => c.characterId === id && isCar(c))).length;
+
+  /** Why a character the words name can't join the cast now (3 people, 4 in all, 2 vehicles, a vehicle needs a person), or null. */
   function castJoinWhy(id: string, now: string[] = cast): string | null {
     if (now.includes(id)) return null;
-    if (now.length >= 3) return "The cast has 3 already. Take someone out in The cast first.";
+    const vehicle = characters.some((c) => c.characterId === id && isCar(c));
+    if (now.length >= STORY_CAST_MAX || (!vehicle && peopleIn(now) >= PEOPLE_MAX)) return CAST_FULL;
     const next = castOrder([...now, id], characters).map((x) => characters.find((c) => c.characterId === x)).filter((c): c is Character => !!c);
     return castProblem(next);
   }
@@ -428,9 +628,9 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
     }
   }
 
-  /** Why a new character can't join the cast now (at most 3), or null. */
+  /** Why a new character can't join the cast now (3 people, 4 in all), or null. */
   function makeWhy(): string | null {
-    return cast.length >= 3 ? "The cast has 3 already. Take someone out in The cast first." : null;
+    return cast.length >= STORY_CAST_MAX || peopleIn(cast) >= PEOPLE_MAX ? CAST_FULL : null;
   }
   const joinedNames = source === "script" ? joined.filter((id) => cast.includes(id)).map((id) => characters.find((c) => c.characterId === id)?.name).filter((n): n is string => !!n) : [];
 
@@ -470,19 +670,19 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
       if (!category) return "Pick what kind of video it is.";
     }
     if (!cast.length) return "Pick at least one character.";
-    return castProblem(cast.map((id) => characters.find((c) => c.characterId === id)).filter((c): c is Character => !!c));
+    return storyCastProblem(cast, characters, roles);
   }
 
   /** A missing pick: its part comes into view with the focus (on a phone it is far above the pinned button). */
   function showFix(why: string) {
     // Write it myself: the field the problem names (its title, its kind, a scene's words or its question).
     if (source === "script" && scriptFix.current && focusField(scriptFix.current)) return;
-    const part = document.getElementById(why === "Pick at least one character." ? "st-nv-2" : "st-nv-1");
+    const part = document.getElementById(CAST_WORDS.has(why) ? "st-nv-2" : "st-nv-1");
     const box = part?.closest("section");
     if (!part || !box) return;
     box.scrollIntoView?.({ block: "start", behavior: storiesReduceMotion() ? "auto" : "smooth" });
     const field = source === "own" ? box.querySelector<HTMLElement>(!title.trim() ? "input.st-s-input" : !logline.trim() ? "textarea" : "input[type=radio]") : null;
-    if (field && why !== "Pick at least one character.") return field.focus({ preventScroll: true });
+    if (field && !CAST_WORDS.has(why)) return field.focus({ preventScroll: true });
     part.setAttribute("tabindex", "-1");
     part.focus({ preventScroll: true });
   }
@@ -503,7 +703,15 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
     setProblem(null);
     // The people in the order they were picked, then the car (§45.43); the series when one is picked, and null when the
     // owner picked No series himself, so an idea's own series does not file it anyway (§45.44).
-    const body: StoryInput = { characterIds: castOrder(cast, characters), durationSec: lengthSec, captionsOn, musicMood: music };
+    // The main character goes first (§45.47); the roles only when the owner picked one (a villain, or the main).
+    const body: StoryInput = { characterIds: storyOrder(cast, characters, roles), durationSec: lengthSec, captionsOn, musicMood: music };
+    const picked = rolesOf(cast, characters, roles);
+    if (picked && (picked.villainId || roles.mainId)) body.roles = picked;
+    // The draft it is made from goes (§45.47); a save on its way is waited for, and none starts after this.
+    if (saved) {
+      body.draftId = saved.draftId;
+      await saveChain.current.catch(() => undefined);
+    }
     if (series) body.seriesId = series;
     else if (seriesTouched.current) body.seriesId = null;
     // This video's own shape, only when the owner picked one that is not the workspace's (§45.34). Nothing picked:
@@ -523,7 +731,7 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
     if (source === "idea" && idea) body.ideaId = idea.ideaId;
     else if (source === "script") {
       // The owner's scenes, the words exactly as typed (§45.46); the idea they started from, while its kind is kept.
-      body.ownScript = toOwnScript(draft, cast, characters);
+      body.ownScript = toOwnScript(draft, body.characterIds, characters);
       const started = fromIdea ? ideas.find((i) => i.ideaId === fromIdea) : undefined;
       if (started && started.category === category) {
         body.ideaId = started.ideaId;
@@ -566,7 +774,10 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
           <p className="st-s-head__lede">Pick a few things. Clips Funded makes the rest.</p>
         </div>
       </header>
-      {!data.data ? (
+      {draftGone ? <Notice tone="bad">{DRAFT_WORDS.gone}</Notice> : null}
+      {gonePicks ? <Notice tone="bad">{DRAFT_WORDS.gonePicks}</Notice> : null}
+      <DraftsFold drafts={drafts.items.filter((d) => d.draftId !== saved?.draftId)} onDelete={drafts.remove} />
+      {!data.data || !ready ? (
         <Busy plate>Getting your ideas and characters…</Busy>
       ) : (
         <div className="st-s-newvideo">
@@ -617,7 +828,7 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
                     setDraft(fn);
                   }}
                   characters={characters}
-                  cast={castOrder(cast, characters)}
+                  cast={storyOrder(cast, characters, roles)}
                   onAddToCast={(id) => pickCast(castOrder([...cast, id], characters))}
                   addWhy={(id) => castJoinWhy(id)}
                   onMake={makeNamed}
@@ -675,11 +886,11 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
 
           <section className="st-s-panel st-glass" aria-labelledby="st-nv-2">
             <h2 className="st-s-panel__title" id="st-nv-2">
-              <span className="st-s-num">2</span> The cast <span className="st-s-panel__hint">(1 to 3)</span>
+              <span className="st-s-num">2</span> Who is in it
             </h2>
             {characters.length ? (
               <>
-                <CastPicker characters={characters} value={cast} onChange={pickCast} />
+                <CastPicker characters={characters} value={cast} onChange={pickCast} max={STORY_CAST_MAX} roles={roles} onRoles={pickRoles} />
                 {joinedNames.length ? (
                   <p className="st-s-field__hint st-sc-joined">
                     {joinedNames.length === 1 ? `${joinedNames[0]} is` : `${joinedNames.slice(0, -1).join(", ")} and ${joinedNames[joinedNames.length - 1]} are`} in your scenes, so {joinedNames.length === 1 ? `${joinedNames[0]} is` : "they're"} ticked already.
@@ -758,6 +969,16 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
                 ) : null}
               </Notice>
             ) : null}
+            {/* Save draft until there is one; then the draft saves itself and one word says so (§45.47). */}
+            {saved ? (
+              <span className="st-s-field__hint st-vd-state" role="status">
+                {saving || formJson !== savedJson ? DRAFT_WORDS.saving : DRAFT_WORDS.savedState}
+              </span>
+            ) : (
+              <button type="button" className="st-btn st-vd-save" aria-disabled={busy || saving || undefined} onClick={() => !busy && !saving && void saveDraft(false)}>
+                {saving ? DRAFT_WORDS.saving : DRAFT_WORDS.save}
+              </button>
+            )}
             <button type="button" className="st-btn st-btn--main st-s-big st-make" aria-disabled={busy || undefined} onClick={() => !busy && void make()}>
               {busy ? "Starting…" : "Make the video"}
             </button>
