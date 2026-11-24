@@ -1,6 +1,7 @@
 // Lamo Stories API shapes (docs/CONTRACTS.md §45.6), the web's copy. The Python side uses the same keys.
 // Changed only through docs/CONTRACTS.md §45.6 (builders ask the lead).
 import type {
+  ArtStyle,
   CaptionCue,
   CarLook,
   CharacterKind,
@@ -13,7 +14,7 @@ import type {
   StoryScript,
 } from "../engine/types.ts";
 
-export type { CaptionCue, CarLook, CharacterKind, CharacterLook, CharacterVoice, Expression, MovementStyle, MusicMood, SfxCue, StoryScript };
+export type { ArtStyle, CaptionCue, CarLook, CharacterKind, CharacterLook, CharacterVoice, Expression, MovementStyle, MusicMood, SfxCue, StoryScript };
 
 export type Platform = "youtube" | "instagram" | "facebook" | "tiktok" | "x";
 export const STORIES_PLATFORMS: Platform[] = ["youtube", "tiktok", "instagram", "facebook", "x"];
@@ -50,8 +51,10 @@ export interface StoriesConfig {
     videoModel?: string | null;
     audioModel?: string | null;
   };
-  /** CRF: standard 23, high 20, best 17; the resolution matches the aspect (§45.34); 30 fps is the only rate */
-  video: { resolution: VideoResolution; aspect: VideoAspect; quality: "standard" | "high" | "best"; fps: 30 };
+  /** CRF: standard 23, high 20, best 17; the resolution matches the aspect (§45.34); 30 fps is the only rate;
+   * `art` is the drawing style new videos start with (§45.45; the API fills in "night_drive" for an older workspace,
+   * and missing reads as that default) */
+  video: { resolution: VideoResolution; aspect: VideoAspect; quality: "standard" | "high" | "best"; fps: 30; art?: ArtStyle };
   production: {
     burnCaptions: boolean;
     scenesAtOnce: 1 | 2 | 3;
@@ -74,6 +77,11 @@ export interface StoriesConfig {
    */
   tiktokMac?: { on: boolean };
 }
+
+/** A video's drawing style (CONTRACTS §45.45, the engine's ArtStyle): Night drive (the default for new videos) or
+ * Bright ("classic", the look of the first videos). A story made before drawing styles has none and is drawn Bright. */
+export const ART_STYLES: ArtStyle[] = ["night_drive", "classic"];
+export const DEFAULT_ART: ArtStyle = "night_drive";
 
 /** A video's shape and its sizes (§45.34): 9:16 stays the default, the one Shorts, Reels and TikTok want. */
 export type VideoAspect = "9:16" | "1:1" | "16:9";
@@ -825,6 +833,8 @@ export interface StoryInput {
   ai?: AiSetting;
   /** this video's own shape (CONTRACTS §45.34): the workspace's video default when left out */
   format?: StoryFormat;
+  /** this video's own drawing style (CONTRACTS §45.45): the workspace's video default when left out */
+  art?: ArtStyle;
   /** the first job's model and effort only, never kept (§45.5 POST /stories; the stand-in for a usual model the studio knows cannot be used, §45.36 E12) */
   override?: ModelOverride;
   /** the series it is filed in (§45.44); null: No series, picked on purpose; left out: the idea's, else No series */
@@ -908,6 +918,8 @@ export interface Story {
   effective?: Effective;
   /** this video's shape (CONTRACTS §45.34); 9:16 at 1080 × 1920 when the API leaves it out */
   format?: StoryFormat;
+  /** this video's drawing style (CONTRACTS §45.45); Bright ("classic") when the API leaves it out */
+  art?: ArtStyle;
   referenceIds: string[];
   reviewNote: string | null;
   currentJobId: string | null;

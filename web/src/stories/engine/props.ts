@@ -2,13 +2,17 @@
 // how a car moves). Prop actions (move, skid, spin, stop, bump, tyre_burst, appear, vanish, wobble, flash, and the car
 // moves speed_up, bounce, honk, blink and stall) change a prop's state over time; cars leave skid marks and motion
 // lines so a phone viewer can follow what happened. A car of the cast (a car prop with a castId, CONTRACTS §45.42) is
-// drawn by car.ts from its own look; given no CarDraw, everything draws exactly as before.
+// drawn by car.ts from its own look; given no CarDraw, everything draws exactly as before. In the night drive style
+// (§45.45, art.ts) a plain car or truck keeps its shapes and seats and is drawn the night drive way (soft thin lines,
+// three tones, door detail, reflections, rim light, soft shadows, glowing lights), and every other prop's colours
+// stand in the scene's light, with soft thin outlines. A script without `art` draws exactly as before.
 
-import { burst, drawCarLookSide, drawCarLookTop, exhaust, honkWaves, impact, lightGlow, type CarDraw } from "./car.ts";
+import { cel, grade, ink, lift, lineUnits, ND, nightDrive } from "./art.ts";
+import { bloom, burst, drawCarLookSide, drawCarLookTop, exhaust, GLASS_ND, honkWaves, impact, LENS_OFF, lightGlow, outlined, TAIL_OFF, tailGlow, TYRE_ND, type CarDraw } from "./car.ts";
 import { F } from "./frame.ts";
-import { DEG, TAU, clamp, clamp01, ease, hex, lerp, rand, shade, smoothstep } from "./math.ts";
+import { DEG, TAU, clamp, clamp01, ease, hash, hex, lerp, mix, rand, shade, smoothstep } from "./math.ts";
 import type { Pen } from "./pen.ts";
-import { arcPts, heartPts, inflate, quadPts, roundRectPts, starPts } from "./pen.ts";
+import { arcPts, clipConvex, heartPts, inflate, quadPts, roundRectPts, starPts } from "./pen.ts";
 import type { Beat, Expression, PropAction, PropKind, SceneProp } from "./types.ts";
 
 export const CARS: Set<PropKind> = new Set(["car", "truck"]);
@@ -341,6 +345,22 @@ export interface Occupants {
 
 const INK = "#1c1842";
 
+/** The muted colours a plain car or truck has in night drive when its prop names none, and a truck's box. */
+const PLAIN_ND = ["#c9a227", "#a39a6b", "#b5402f", "#e6e2d8", "#2e3d5c", "#6f7d70"];
+export const BOX_ND = "#d9d4c8";
+
+/** The busiest measured frame of a plain car, a truck and a deer in night drive (web/test/storiesNightCars.test.ts
+ * measures them with every prop action, both views, by day and at night): script.ts can count them. */
+export const PROP_SHAPES_ND = { car: 58, truck: 60, deer: 30 } as const;
+
+/** A plain car's or truck's colour: its prop's own; with none, a muted one picked by its id in night drive (`nd`),
+ * else the first videos' default. */
+export function plainColor(prop: SceneProp, nd: boolean): string {
+  const truck = prop.kind === "truck";
+  if (prop.color || !nd) return hex(prop.color, truck ? "#47d6a0" : "#ff6f61");
+  return PLAIN_ND[hash(prop.propId, prop.kind) % PLAIN_ND.length]!;
+}
+
 /** Small things are drawn a little bigger at scale 1, so they read on a phone. */
 const BASE: Partial<Record<PropKind, number>> = { tyre: 1.6, warning_triangle: 1.5, phone: 1.6, cone: 1.5, steering_wheel: 1.2, stop_sign: 1.2, ice_sign: 1.2, deer: 1.15 };
 
@@ -370,7 +390,10 @@ export function drawProp(pen: Pen, st: PropState, view: "side" | "top", t: numbe
     const truck = kind === "truck";
     // the car moves (bounce, honk, blink, speed_up, stall) on a plain car or truck
     if (st.bounce !== 0) pen.translate(0, -st.bounce * (view === "top" ? 0 : 18) * k);
-    if (view === "top") drawCarTop(pen, st, k, t, truck, occ, night);
+    if (nightDrive()) {
+      if (view === "top") drawCarTopND(pen, st, k, t, truck, occ, night);
+      else drawCarSideND(pen, st, k, t, truck, occ, night);
+    } else if (view === "top") drawCarTop(pen, st, k, t, truck, occ, night);
     else drawCarSide(pen, st, k, t, truck, occ, night);
     plainCarMoves(pen, st, view, k, truck);
   } else {
@@ -610,6 +633,274 @@ function drawCarTop(pen: Pen, st: PropState, k: number, t: number, truck: boolea
   impact(pen, ix, iy, st.bumpAge, k);
 }
 
+// ---- night drive plain cars and trucks (§45.45 §6): the same shapes and seats, drawn softer and in more detail --
+
+/** A plain wheel in night drive: the tyre (its dark edge is the outline), a sidewall ring, the rim with two spokes and
+ * a hub (graded), and an inner rim shadow. */
+function wheelND(pen: Pen, x: number, y: number, r: number, spin: number, flat: boolean, ow: number): void {
+  const ry = flat ? r * 0.72 : r;
+  const cy = flat ? y + (r - ry) : y;
+  pen.ellipse(x, cy, r + ow, ry + ow, 0, TYRE_ND);
+  pen.ellipse(x, cy, r * 0.8, ry * 0.8, 0, "#2b2a2e");
+  pen.ellipse(x, cy, r * 0.5, ry * 0.5, 0, grade("#c9d3de"));
+  const spoke = grade("#8b97a8");
+  const pts: number[] = [];
+  for (let i = 0; i < 2; i += 1) {
+    const a = spin + (i * Math.PI) / 2;
+    pts.push(x - Math.cos(a) * r * 0.42, cy - Math.sin(a) * ry * 0.42, x + Math.cos(a) * r * 0.42, cy + Math.sin(a) * ry * 0.42);
+  }
+  pen.line(pts.slice(0, 4), r * 0.12, spoke);
+  pen.line(pts.slice(4), r * 0.12, spoke);
+  pen.circle(x, cy, r * 0.14, grade("#5b6478"));
+  pen.line(arcPts(x, cy, r * 0.44, ry * 0.44, 200, 340, 6), r * 0.08, ND.ao, 0.35);
+}
+
+/** The night drive side view of a plain car or truck, facing +x before the facing mirror; origin on the ground
+ * between the wheels. */
+function drawCarSideND(pen: Pen, st: PropState, k: number, t: number, truck: boolean, occ: Occupants, night: boolean): void {
+  const light = F.light;
+  const body = grade(plainColor(st.prop, true));
+  const inkC = ink(INK);
+  const glass = grade(GLASS_ND.clear);
+  const box = grade(BOX_ND);
+  const moving = st.speed > 0.02 || st.rolled > 0;
+  const bob = moving ? Math.sin(t * TAU * 3.1) * 1.6 : 0;
+  const spin = (st.rolled / 54) % TAU;
+  const dark = night || light.night;
+  const lit = st.lights || dark || st.blink > 0.3;
+  const tailOn = st.lights || dark;
+  const braking = st.braking > 0.1;
+  const tail = braking ? ND.brakeCore : tailOn ? ND.tailCore : grade(TAIL_OFF);
+  const lens = lit ? ND.headCore : grade(LENS_OFF);
+  pen.save();
+  pen.rotate(st.rot);
+  const ow = lineUnits(pen, 2.6) / k;
+  const fine = ow * 0.35;
+  pen.scale(k * st.facing * st.spinX, k);
+  const hl = truck ? 430 : 292;
+  pen.ellipse(0, 7, hl + 30, 22, 0, ND.ao, 0.16);
+  pen.ellipse(0, 3, hl - 10, 10, 0, ND.ao, 0.38);
+  if (st.skidFrom !== null) {
+    const from = (st.skidFrom * st.facing) / k;
+    for (const wx of truck ? [-300, 300] : [-185, 185]) pen.line([wx + from, -2, wx, -2], 16, grade("#1d1d26"), 0.4);
+  }
+  if (st.skidding > 0.05) {
+    for (let i = 0; i < 4; i += 1) {
+      const ph = (t * 1.6 + i / 4) % 1;
+      pen.circle(-200 - ph * 160, -20 - ph * 40, 26 + ph * 30, grade("#e9eef5"), 0.55 * st.skidding * (1 - ph));
+    }
+  }
+  let head: [number, number];
+  let back: [number, number];
+  if (truck) {
+    // the box: its own light colour in three tones, a seam, two amber markers and the rim light along its top
+    pen.rect(-422 - ow, -342 - ow, 604 + 2 * ow, 284 + 2 * ow, 18 + ow, inkC);
+    pen.rect(-422, -342, 604, 284, 18, box);
+    pen.poly(clipConvex(roundRectPts(-422, -342, 604, 284, 18), [-500, -132, 300, -132, 300, 0, -500, 0]), cel(box));
+    pen.line([-404, -334, 164, -334], ow * 2.2, lift(box, 0.18), 0.8);
+    pen.line([-120, -336, -120, -62], fine, inkC, 0.7);
+    pen.line([-416, -339, 176, -339], ow, light.rim, light.rimA);
+    pen.rect(-300, -84, 16, 8, 3, ND.marker);
+    pen.rect(60, -84, 16, 8, 3, ND.marker);
+    // the cab
+    const cab = [200, -50, 200, -300, 330, -300, 420, -190, 420, -50];
+    pen.poly(outlined(cab, ow), inkC);
+    pen.poly(cab, body);
+    pen.poly(clipConvex(cab, [150, -118, 500, -118, 500, 0, 150, 0]), cel(body));
+    const win = [232, -190, 232, -282, 322, -282, 392, -190];
+    pen.poly(win, glass);
+    occ.side?.(pen, [{ x: 300, beltY: -190, topY: -282 }]);
+    pen.poly(win, glass, 0.22);
+    pen.poly(clipConvex([352, -250, 366, -250, 392, -192, 378, -192], win), "#ffffff", 0.12);
+    pen.line([226, -186, 226, -62], fine, inkC, 0.8);
+    pen.rect(238, -176, 18, 5, 2.5, cel(body, 0.3));
+    pen.line([392, -186, 404, -200], 5, grade("#3d4250"));
+    pen.ellipse(410, -206, 10 + ow, 16 + ow, 0, inkC);
+    pen.ellipse(410, -206, 10, 16, 0, body);
+    pen.line([206, -296, 326, -296], ow, light.rim, light.rimA);
+    for (const wx of [-300, -120, 300]) wheelND(pen, wx, -56 + bob * 0.3, 56, spin, st.flat && wx === 300, ow);
+    pen.rect(400, -120, 26, 30, 8, lens);
+    pen.rect(-436, -120, 14, 40, 6, tail);
+    head = [413, -105];
+    back = [-430, -100];
+  } else {
+    const cabin = [-218, -158, -186, -268, -158, -292, 44, -294, 78, -284, 168, -158];
+    pen.poly(outlined(cabin, ow), inkC);
+    pen.poly(cabin, body);
+    pen.line([-182, -266 + ow * 0.7, -156, -290 + ow * 0.7, 44, -292 + ow * 0.7, 76, -282 + ow * 0.7], ow, light.rim, light.rimA);
+    const front = [-8, -168, -8, -276, 50, -278, 140, -168];
+    const rear = [-192, -168, -168, -266, -40, -276, -40, -168];
+    pen.poly(front, glass);
+    pen.poly(rear, glass);
+    occ.side?.(pen, [
+      { x: 52, beltY: -168, topY: -276 },
+      { x: -112, beltY: -168, topY: -270 },
+    ]);
+    pen.poly(front, glass, 0.22);
+    pen.poly(rear, glass, 0.22);
+    // two reflection bands in the front window's low front corner, clear of the faces
+    pen.poly(clipConvex([96, -226, 112, -226, 132, -170, 116, -170], front), "#ffffff", 0.12);
+    pen.poly(clipConvex([84, -212, 90, -212, 106, -170, 100, -170], front), "#ffffff", 0.07);
+    // the lower body in three tones
+    pen.rect(-284 - ow, -170 + bob - ow, 568 + 2 * ow, 130 + 2 * ow, 40 + ow, inkC);
+    pen.rect(-284, -170 + bob, 568, 130, 40, body);
+    pen.poly(clipConvex(roundRectPts(-284, -170 + bob, 568, 130, 40), [-400, -90 + bob, 400, -90 + bob, 400, 0, -400, 0]), cel(body));
+    pen.line([-262, -163 + bob, 262, -163 + bob], ow * 2.2, lift(body, 0.16), 0.8);
+    // door lines, handles, the mirror on its stalk and the side marker
+    pen.line([108, -166 + bob, 108, -48 + bob], fine, inkC, 0.8);
+    pen.line([-40, -166 + bob, -40, -48 + bob], fine, inkC, 0.8);
+    pen.rect(-28, -144 + bob, 18, 5, 2.5, cel(body, 0.3));
+    pen.rect(-104, -144 + bob, 18, 5, 2.5, cel(body, 0.3));
+    pen.line([132, -166, 146, -178], 5, grade("#3d4250"));
+    pen.ellipse(154, -182, 15 + ow, 11 + ow, 0, inkC);
+    pen.ellipse(154, -182, 15, 11, 0, body);
+    pen.rect(244, -112 + bob, 14, 8, 3, ND.marker);
+    pen.rect(-300, -84 + bob, 44, 30, 12, grade("#c9d3de"));
+    pen.rect(256, -84 + bob, 44, 30, 12, grade("#c9d3de"));
+    // wheel arches, wheels, lights
+    const arch = mix(body, ND.ao, 0.6);
+    pen.ellipse(-185, -52, 74, 64, 0, arch);
+    pen.ellipse(185, -52, 74, 64, 0, arch);
+    wheelND(pen, -185, -54, 54, spin, false, ow);
+    wheelND(pen, 185, -54, 54, spin, st.flat, ow);
+    pen.ellipse(268, -134 + bob, 16, 13, 0, lens);
+    pen.rect(-286, -150 + bob, 14, 30, 6, tail);
+    head = [268, -134 + bob];
+    back = [-279, -135 + bob];
+  }
+  if (st.lights || night) pen.poly([truck ? 420 : 280, -140, 820, -230, 820, -10], ND.beam, night ? 0.08 : 0.05);
+  if (lit) bloom(pen, head[0], head[1], 14, dark ? 1 : 0.5);
+  const tailA = Math.max(tailOn ? 0.25 : 0, braking ? 0.45 * st.braking : 0);
+  if (tailA > 0) tailGlow(pen, back[0], back[1], 14, tailA);
+  pen.restore();
+  // effects in the car's world frame (not mirrored twice)
+  const fx = st.facing * (truck ? 300 : 185) * k;
+  burst(pen, fx, -54 * k, st.burstAge, k, 7, true);
+  impact(pen, st.facing * 300 * k, -110 * k, st.bumpAge, k);
+  if (st.speed > 0.08) {
+    const streak = grade("#ffffff");
+    for (let i = 0; i < 3; i += 1) {
+      const yy = (-230 + i * 70) * k;
+      const len = (120 + i * 40) * k * clamp01(st.speed * 2.5);
+      const x0 = -st.facing * (truck ? 450 : 310) * k;
+      pen.line([x0, yy, x0 - st.facing * len, yy], 8 * k, streak, 0.55);
+    }
+  }
+}
+
+/** The night drive top view of a plain car or truck: nose up before its heading; origin at its centre. */
+function drawCarTopND(pen: Pen, st: PropState, k: number, t: number, truck: boolean, occ: Occupants, night: boolean): void {
+  const light = F.light;
+  const body = grade(plainColor(st.prop, true));
+  const inkC = ink(INK);
+  const glass = grade(GLASS_ND.clear);
+  const dark = night || light.night;
+  const lit = st.lights || dark || st.blink > 0.3;
+  const tailOn = st.lights || dark;
+  const braking = st.braking > 0.1;
+  const mark = grade("#1d1d26");
+  for (const m of st.marks) {
+    if (m.length < 8) continue;
+    const left: number[] = [];
+    const right: number[] = [];
+    for (let i = 0; i + 3 < m.length; i += 4) {
+      left.push(m[i]! - st.x * F.w, m[i + 1]! - st.y * F.h);
+      right.push(m[i + 2]! - st.x * F.w, m[i + 3]! - st.y * F.h);
+    }
+    pen.line(left, 20 * k, mark, 0.42);
+    pen.line(right, 20 * k, mark, 0.42);
+  }
+  pen.save();
+  pen.rotate(st.rot);
+  const ow = lineUnits(pen, 2.6) / k;
+  pen.scale(k, k);
+  const L = truck ? 560 : 350;
+  const Wd = truck ? 232 : 196;
+  if (st.speed > 0.06) {
+    const streak = grade("#ffffff");
+    for (let i = -1; i <= 1; i += 1) {
+      const len = 160 * clamp01(st.speed * 2.5);
+      pen.line([i * 60, L / 2 + 40, i * 60, L / 2 + 40 + len], 10, streak, 0.5);
+    }
+  }
+  if (st.lights || night) pen.poly([-70, -L / 2, 70, -L / 2, 200, -L / 2 - 520, -200, -L / 2 - 520], ND.beam, night ? 0.08 : 0.05);
+  pen.ellipse(8, 12, Wd / 2 + 30, L / 2 + 24, 0, ND.ao, 0.16);
+  pen.ellipse(4, 6, Wd / 2 + 4, L / 2 + 2, 0, ND.ao, 0.38);
+  const wy = L / 2 - (truck ? 80 : 70);
+  for (const [wx, wyy, front] of [
+    [-Wd / 2 + 2, -wy, true],
+    [Wd / 2 - 2, -wy, true],
+    [-Wd / 2 + 2, wy, false],
+    [Wd / 2 - 2, wy, false],
+  ] as [number, number, boolean][]) {
+    pen.save();
+    pen.translate(wx, wyy);
+    if (front) pen.rotate(clamp(st.wheelTurn, -40, 40));
+    pen.rect(-17, -36, 34, 72, 10, st.flat && front && wx > 0 ? grade("#55556a") : TYRE_ND);
+    pen.restore();
+  }
+  const head = lit ? ND.headCore : grade(LENS_OFF);
+  const tail = braking ? ND.brakeCore : tailOn ? ND.tailCore : grade(TAIL_OFF);
+  if (truck) {
+    const box = grade(BOX_ND);
+    pen.rect(-Wd / 2 - ow, -L / 2 - ow, Wd + 2 * ow, 154 + 2 * ow, 24 + ow, inkC);
+    pen.rect(-Wd / 2, -L / 2, Wd, 154, 24, body);
+    pen.rect(-Wd / 2 + 18, -L / 2 + 30, Wd - 36, 56, 16, glass);
+    occ.top?.(pen, [{ x: 0, y: -L / 2 + 110, r: 30 }]);
+    pen.rect(-Wd / 2 - ow, -L / 2 + 174 - ow, Wd + 2 * ow, L - 174 + 2 * ow, 12 + ow, inkC);
+    pen.rect(-Wd / 2, -L / 2 + 174, Wd, L - 174, 12, box);
+    pen.poly(clipConvex(roundRectPts(-Wd / 2, -L / 2 + 174, Wd, L - 174, 12), [Wd * 0.24, -L, Wd, -L, Wd, L, Wd * 0.24, L]), cel(box));
+    pen.line([-Wd / 2 + 24, -L / 2 + 200, -Wd / 2 + 24, L / 2 - 30], 10, lift(box, 0.2), 0.7);
+    pen.line([-Wd / 2 + ow, -L / 2 + 186, -Wd / 2 + ow, L / 2 - 14], ow, light.rim, light.rimA);
+    for (const s of [-1, 1]) {
+      pen.rect(s * 72 - 18, -L / 2 + 4, 36, 14, 5, head);
+      pen.rect(s * 92 - 12, L / 2 - 14, 24, 10, 4, tail);
+    }
+  } else {
+    const shape = roundRectPts(-Wd / 2, -L / 2, Wd, L, 56);
+    pen.poly(outlined(shape, ow), inkC);
+    pen.poly(shape, body);
+    pen.poly(clipConvex(shape, [Wd * 0.22, -L, Wd, -L, Wd, L, Wd * 0.22, L]), cel(body));
+    pen.line([0, -L / 2 + 14, 0, -L / 2 + 70], 18, lift(body, 0.2), 0.8);
+    pen.ellipse(-Wd / 2 - 6, -48, 12, 18, 0, cel(body, 0.25));
+    pen.ellipse(Wd / 2 + 6, -48, 12, 18, 0, cel(body, 0.25));
+    pen.poly([-74, -74, 74, -74, 62, -122, -62, -122], glass);
+    pen.rect(-76, -74, 152, 180, 40, mix(glass, ND.celDark, 0.45));
+    occ.top?.(pen, [
+      { x: 0, y: -24, r: 34 },
+      { x: 0, y: 62, r: 30 },
+    ]);
+    pen.rect(-76, -74, 152, 180, 40, glass, 0.12);
+    pen.line([-50, -60, -30, 60], 8, "#ffffff", 0.12);
+    pen.line([40, -40, 50, 20], 5, "#ffffff", 0.07);
+    pen.line([-76 + ow, -54, -76 + ow, 86], ow, light.rim, light.rimA);
+    pen.poly([-64, 112, 64, 112, 56, 142, -56, 142], glass);
+    pen.ellipse(-62, -L / 2 + 14, 20, 12, 0, head);
+    pen.ellipse(62, -L / 2 + 14, 20, 12, 0, head);
+    pen.rect(-84, L / 2 - 16, 36, 12, 5, tail);
+    pen.rect(48, L / 2 - 16, 36, 12, 5, tail);
+  }
+  const hx = truck ? 72 : 62;
+  if (lit) {
+    pen.circle(-hx, -L / 2 + 12, 30, ND.headBloom, dark ? 0.32 : 0.16);
+    pen.circle(hx, -L / 2 + 12, 30, ND.headBloom, dark ? 0.32 : 0.16);
+  }
+  const tailA = Math.max(tailOn ? 0.25 : 0, braking ? 0.45 * st.braking : 0);
+  if (tailA > 0) {
+    const tx = truck ? 92 : 66;
+    pen.circle(-tx, L / 2 - 8, 36, ND.tailGlow, tailA);
+    pen.circle(tx, L / 2 - 8, 36, ND.tailGlow, tailA);
+  }
+  pen.restore();
+  // effects at the front-right wheel (burst) and the nose (bump), in the car's heading
+  const h = st.rot * DEG;
+  const at = (lx: number, ly: number): [number, number] => [(lx * Math.cos(h) - ly * Math.sin(h)) * k, (lx * Math.sin(h) + ly * Math.cos(h)) * k];
+  const [bx, by] = at(Wd / 2, -(L / 2 - 70));
+  burst(pen, bx, by, st.burstAge, k, 9, false);
+  const [ix, iy] = at(0, -L / 2 - 20);
+  impact(pen, ix, iy, st.bumpAge, k);
+}
+
 /** The steering arrow drawn over a top-view car while its driver steers (local to the car's centre). */
 export function steerArrow(pen: Pen, st: PropState, side: number, strength: number): void {
   const k = propBaseScale(st, "top");
@@ -626,19 +917,42 @@ export function steerArrow(pen: Pen, st: PropState, side: number, strength: numb
   pen.restore();
 }
 
+/** Night drive's look for the other props (classic: every colour and width as before): own colours graded in the
+ * scene's light, the soft ink and a thin outline of 2.2 design px in the prop's own units. */
+interface Look {
+  nd: boolean;
+  /** a colour in the light */
+  col: (c: string) => string;
+  /** the outline colour */
+  ink: string;
+  /** an outline's width: `d` in classic */
+  o: (d: number) => number;
+}
+
+function lookFor(pen: Pen): Look {
+  if (!nightDrive()) return { nd: false, col: (c) => c, ink: INK, o: (d) => d };
+  const w = lineUnits(pen, 2.2);
+  return { nd: true, col: (c) => grade(c), ink: ink(INK), o: () => w };
+}
+
 /** Every other prop, in its own frame scaled to its size (origin: bottom centre for things that stand). */
 function drawThing(pen: Pen, kind: PropKind, st: PropState, view: "side" | "top", t: number, seed: number): void {
-  const c = (fallback: string) => hex(st.prop.color, fallback);
+  const lk = lookFor(pen);
+  const { col, o } = lk;
+  const K = lk.ink;
+  const c = (fallback: string) => col(hex(st.prop.color, fallback));
   const top = view === "top";
   switch (kind) {
     case "tyre": {
       const spin = st.rolled / 70;
       if (top) {
-        pen.rect(-40, -75, 80, 150, 22, INK);
-        pen.rect(-32, -67, 64, 134, 18, "#2b2b36");
+        const d = o(8);
+        pen.rect(-32 - d, -67 - d, 64 + 2 * d, 134 + 2 * d, lk.nd ? 18 + d : 22, K);
+        pen.rect(-32, -67, 64, 134, 18, lk.nd ? TYRE_ND : "#2b2b36");
         return;
       }
-      wheel(pen, 0, -70, 64, spin + t * (st.speed > 0.02 ? 8 : 0), st.flat);
+      if (lk.nd) wheelND(pen, 0, -70, 64, spin + t * (st.speed > 0.02 ? 8 : 0), st.flat, o(5));
+      else wheel(pen, 0, -70, 64, spin + t * (st.speed > 0.02 ? 8 : 0), st.flat);
       return;
     }
     case "ice_patch": {
@@ -649,18 +963,18 @@ function drawThing(pen: Pen, kind: PropKind, st: PropState, view: "side" | "top"
           const r = 170 * (0.78 + 0.3 * rand(seed + 3, i));
           pts.push(Math.cos(a) * r, Math.sin(a) * r * 0.8);
         }
-        pen.poly(inflate(pts, 6), "#ffffff", 0.5);
+        pen.poly(inflate(pts, 6), col("#ffffff"), 0.5);
         pen.poly(pts, c("#bfe9ff"), 0.75);
       } else {
-        pen.ellipse(0, 0, 170, 22, 0, "#ffffff", 0.45);
+        pen.ellipse(0, 0, 170, 22, 0, col("#ffffff"), 0.45);
         pen.ellipse(0, 0, 160, 18, 0, c("#bfe9ff"), 0.8);
       }
       for (let i = 0; i < 3; i += 1) {
         const tw = 0.4 + 0.6 * Math.abs(Math.sin(t * 2.4 + i * 1.7));
         const gx = -80 + i * 70;
         const gy = top ? -40 + i * 35 : -4 + (i % 2) * 6;
-        pen.line([gx, gy, gx + 40, gy - (top ? 20 : 6)], 6, "#ffffff", 0.8 * tw);
-        pen.poly(starPts(gx + 46, gy - (top ? 24 : 8), 16 * tw, 4 * tw, 4, 0), "#ffffff", tw);
+        pen.line([gx, gy, gx + 40, gy - (top ? 20 : 6)], 6, col("#ffffff"), 0.8 * tw);
+        pen.poly(starPts(gx + 46, gy - (top ? 24 : 8), 16 * tw, 4 * tw, 4, 0), col("#ffffff"), tw);
       }
       return;
     }
@@ -668,22 +982,22 @@ function drawThing(pen: Pen, kind: PropKind, st: PropState, view: "side" | "top"
       if (top) pen.ellipse(0, 0, 150, 110, 0, c("#7aa7c7"), 0.75);
       else pen.ellipse(0, 0, 140, 18, 0, c("#7aa7c7"), 0.8);
       const p = (t * 0.7) % 1;
-      pen.line(arcPts(0, 0, 40 + p * 80, (top ? 30 : 5) + p * (top ? 60 : 10), 0, 360, 16), 4, "#ffffff", 0.5 * (1 - p));
+      pen.line(arcPts(0, 0, 40 + p * 80, (top ? 30 : 5) + p * (top ? 60 : 10), 0, 360, 16), 4, col("#ffffff"), 0.5 * (1 - p));
       return;
     }
     case "warning_triangle": {
       const tri = [0, -150, 76, -14, -76, -14];
       if (top) {
-        pen.poly(inflate([0, -60, 52, 30, -52, 30], 6), INK);
-        pen.poly([0, -60, 52, 30, -52, 30], "#ff3b30");
+        pen.poly(inflate([0, -60, 52, 30, -52, 30], o(6)), K);
+        pen.poly([0, -60, 52, 30, -52, 30], col("#ff3b30"));
         return;
       }
-      pen.line([-40, -14, -60, 0], 6, "#5b6478");
-      pen.line([40, -14, 60, 0], 6, "#5b6478");
-      pen.poly(inflate(tri, 7), INK);
-      pen.poly(tri, "#ff3b30");
-      pen.poly([0, -112, 44, -34, -44, -34], "#ffffff");
-      pen.poly([0, -96, 30, -44, -30, -44], "#ff6f61", 0.35 + 0.35 * Math.abs(Math.sin(t * 4)));
+      pen.line([-40, -14, -60, 0], 6, col("#5b6478"));
+      pen.line([40, -14, 60, 0], 6, col("#5b6478"));
+      pen.poly(inflate(tri, o(7)), K);
+      pen.poly(tri, col("#ff3b30"));
+      pen.poly([0, -112, 44, -34, -44, -34], col("#ffffff"));
+      pen.poly([0, -96, 30, -44, -30, -44], col("#ff6f61"), 0.35 + 0.35 * Math.abs(Math.sin(t * 4)));
       return;
     }
     case "phone": {
@@ -691,79 +1005,79 @@ function drawThing(pen: Pen, kind: PropKind, st: PropState, view: "side" | "top"
       const shake = ring ? Math.sin(t * 60) * 4 : 0;
       pen.save();
       pen.translate(shake, 0);
-      pen.rect(-50, -170, 100, 170, 18, INK);
-      pen.rect(-42, -160, 84, 146, 12, ring || /on/.test(st.prop.state ?? "") ? "#62c6ff" : "#2d3a55");
-      pen.circle(0, -10, 5, "#5b6478");
+      pen.rect(-50, -170, 100, 170, 18, K);
+      pen.rect(-42, -160, 84, 146, 12, col(ring || /on/.test(st.prop.state ?? "") ? "#62c6ff" : "#2d3a55"));
+      pen.circle(0, -10, 5, col("#5b6478"));
       pen.restore();
       if (ring) {
-        for (const s of [-1, 1]) for (let i = 1; i <= 2; i += 1) pen.line(arcPts(0, -90, 60 + i * 24, 70 + i * 24, s > 0 ? -40 : 140, s > 0 ? 40 : 220, 6), 7, "#ffc94a", 0.8);
+        for (const s of [-1, 1]) for (let i = 1; i <= 2; i += 1) pen.line(arcPts(0, -90, 60 + i * 24, 70 + i * 24, s > 0 ? -40 : 140, s > 0 ? 40 : 220, 6), 7, col("#ffc94a"), 0.8);
       }
       return;
     }
     case "steering_wheel": {
       pen.translate(0, top ? 0 : -110);
       const ring = arcPts(0, 0, 100, 100, 0, 360, 24);
-      pen.line(ring, 34, INK);
-      pen.line(ring, 22, "#3d4458");
-      for (const a of [90, 210, 330]) pen.line([0, 0, Math.cos(a * DEG) * 96, Math.sin(a * DEG) * 96], 16, "#3d4458");
-      pen.circle(0, 0, 26, "#ffc94a");
+      pen.line(ring, 22 + 2 * o(6), K);
+      pen.line(ring, 22, col("#3d4458"));
+      for (const a of [90, 210, 330]) pen.line([0, 0, Math.cos(a * DEG) * 96, Math.sin(a * DEG) * 96], 16, col("#3d4458"));
+      pen.circle(0, 0, 26, col("#ffc94a"));
       return;
     }
     case "stop_sign": {
       if (top) {
-        pen.poly(starPts(0, 0, 60, 60, 4, 22.5), "#e53935");
+        pen.poly(starPts(0, 0, 60, 60, 4, 22.5), col("#e53935"));
         return;
       }
-      pen.rect(-8, -300, 16, 300, 6, "#8b97a8");
+      pen.rect(-8, -300, 16, 300, 6, col("#8b97a8"));
       const oct: number[] = [];
       for (let i = 0; i < 8; i += 1) oct.push(Math.cos((22.5 + i * 45) * DEG) * 82, -380 + Math.sin((22.5 + i * 45) * DEG) * 82);
-      pen.poly(inflate(oct, 6), INK);
-      pen.poly(oct, "#ffffff");
-      pen.poly(inflate(oct, -9), "#e53935");
-      pen.rect(-46, -392, 92, 24, 8, "#ffffff");
+      pen.poly(inflate(oct, o(6)), K);
+      pen.poly(oct, col("#ffffff"));
+      pen.poly(inflate(oct, -9), col("#e53935"));
+      pen.rect(-46, -392, 92, 24, 8, col("#ffffff"));
       return;
     }
     case "ice_sign": {
       if (top) {
-        pen.poly([0, -60, 52, 30, -52, 30], "#ffffff");
+        pen.poly([0, -60, 52, 30, -52, 30], col("#ffffff"));
         return;
       }
-      pen.rect(-8, -300, 16, 300, 6, "#8b97a8");
+      pen.rect(-8, -300, 16, 300, 6, col("#8b97a8"));
       const tri = [0, -500, 104, -310, -104, -310];
-      pen.poly(inflate(tri, 6), INK);
-      pen.poly(tri, "#e53935");
-      pen.poly([0, -462, 74, -330, -74, -330], "#ffffff");
+      pen.poly(inflate(tri, o(6)), K);
+      pen.poly(tri, col("#e53935"));
+      pen.poly([0, -462, 74, -330, -74, -330], col("#ffffff"));
       // a snowflake: three crossed strokes
       for (let i = 0; i < 3; i += 1) {
         const a = (i * 60 + 90) * DEG;
-        pen.line([Math.cos(a) * -30, -372 + Math.sin(a) * -30, Math.cos(a) * 30, -372 + Math.sin(a) * 30], 7, "#1c1842");
+        pen.line([Math.cos(a) * -30, -372 + Math.sin(a) * -30, Math.cos(a) * 30, -372 + Math.sin(a) * 30], 7, lk.nd ? K : "#1c1842");
       }
       return;
     }
     case "tree": {
       const snowy = /snow/.test(st.prop.state ?? "");
       if (top) {
-        pen.circle(10, 12, 150, "#000000", 0.18);
-        pen.circle(0, 0, 150, INK);
+        pen.circle(10, 12, 150, lk.nd ? ND.ao : "#000000", 0.18);
+        pen.circle(0, 0, 142 + o(8), K);
         pen.circle(0, 0, 142, c("#3fa55b"));
         pen.circle(-40, -40, 70, shade(c("#3fa55b"), 0.18));
-        if (snowy) pen.circle(20, -10, 80, "#ffffff", 0.7);
+        if (snowy) pen.circle(20, -10, 80, col("#ffffff"), 0.7);
         return;
       }
-      pen.rect(-26, -200, 52, 200, 14, "#7a4a2a");
+      pen.rect(-26, -200, 52, 200, 14, col("#7a4a2a"));
       if (/pine/.test(st.prop.state ?? "") || snowy) {
         for (let i = 0; i < 3; i += 1) {
           const yy = -200 - i * 110;
           const wd = 170 - i * 40;
-          pen.poly(inflate([0, yy - 170, wd, yy, -wd, yy], 6), INK);
+          pen.poly(inflate([0, yy - 170, wd, yy, -wd, yy], o(6)), K);
           pen.poly([0, yy - 170, wd, yy, -wd, yy], c("#2f8f57"));
-          if (snowy) pen.poly([0, yy - 170, wd * 0.45, yy - 95, -wd * 0.45, yy - 95], "#ffffff");
+          if (snowy) pen.poly([0, yy - 170, wd * 0.45, yy - 95, -wd * 0.45, yy - 95], col("#ffffff"));
         }
         return;
       }
-      pen.circle(0, -330, 170, INK);
-      pen.circle(-90, -260, 120, INK);
-      pen.circle(90, -260, 120, INK);
+      pen.circle(0, -330, 162 + o(8), K);
+      pen.circle(-90, -260, 112 + o(8), K);
+      pen.circle(90, -260, 112 + o(8), K);
       const leaf = c("#3fa55b");
       pen.circle(0, -330, 162, leaf);
       pen.circle(-90, -260, 112, leaf);
@@ -773,40 +1087,40 @@ function drawThing(pen: Pen, kind: PropKind, st: PropState, view: "side" | "top"
     }
     case "cone": {
       if (top) {
-        pen.circle(0, 0, 50, INK);
-        pen.circle(0, 0, 44, "#ff8a3d");
-        pen.circle(0, 0, 18, "#ffffff");
+        pen.circle(0, 0, 44 + o(6), K);
+        pen.circle(0, 0, 44, col("#ff8a3d"));
+        pen.circle(0, 0, 18, col("#ffffff"));
         return;
       }
-      pen.rect(-70, -18, 140, 18, 6, "#c4561d");
-      pen.poly(inflate([-52, -18, 52, -18, 14, -150, -14, -150], 5), INK);
-      pen.poly([-52, -18, 52, -18, 14, -150, -14, -150], "#ff8a3d");
-      pen.poly([-36, -62, 36, -62, 28, -92, -28, -92], "#ffffff");
+      pen.rect(-70, -18, 140, 18, 6, col("#c4561d"));
+      pen.poly(inflate([-52, -18, 52, -18, 14, -150, -14, -150], o(5)), K);
+      pen.poly([-52, -18, 52, -18, 14, -150, -14, -150], col("#ff8a3d"));
+      pen.poly([-36, -62, 36, -62, 28, -92, -28, -92], col("#ffffff"));
       return;
     }
     case "deer":
-      drawDeer(pen, st, view, t);
+      drawDeer(pen, st, view, t, lk);
       return;
     case "arrow": {
       // a chunky arrow pointing up (rotate it to point anywhere); "curve_left"/"curve_right" bend it
       const s = st.prop.state ?? "";
-      const col = c("#ffc94a");
+      const colour = c("#ffc94a");
       const pulse = 1 + 0.06 * Math.sin(t * 6);
       pen.scale(pulse);
       if (/curve_(left|right)|turn_(left|right)/.test(s)) {
         const side = /left/.test(s) ? -1 : 1;
         const pts = quadPts(0, 110, 0, -40, side * 120, -80, 10);
-        pen.line(pts, 64, INK);
-        pen.line(pts, 44, col);
+        pen.line(pts, 44 + 2 * o(10), K);
+        pen.line(pts, 44, colour);
         const tip = [side * 120, -150, side * 210, -80, side * 120, -10];
-        pen.poly(inflate(tip, 8), INK);
-        pen.poly(tip, col);
+        pen.poly(inflate(tip, o(8)), K);
+        pen.poly(tip, colour);
         return;
       }
       const pts = [-34, 110, 34, 110, 34, -20, 90, -20, 0, -120, -90, -20, -34, -20];
-      pen.poly(inflate(pts, 9), INK);
-      pen.poly(pts, col);
-      pen.line([-12, 80, -12, -10], 10, "#ffffff", 0.45);
+      pen.poly(inflate(pts, o(9)), K);
+      pen.poly(pts, colour);
+      pen.line([-12, 80, -12, -10], 10, col("#ffffff"), 0.45);
       return;
     }
     case "check":
@@ -816,9 +1130,9 @@ function drawThing(pen: Pen, kind: PropKind, st: PropState, view: "side" | "top"
       const fill = kind === "check" ? "#47d6a0" : kind === "cross" ? "#ff4f4f" : kind === "exclamation" ? "#ffc94a" : "#62c6ff";
       const pop = 1 + 0.05 * Math.sin(t * 5);
       pen.scale(pop);
-      pen.circle(0, 0, 92, INK);
+      pen.circle(0, 0, 84 + o(8), K);
       pen.circle(0, 0, 84, c(fill));
-      const mark = kind === "exclamation" ? INK : "#ffffff";
+      const mark = kind === "exclamation" ? K : col("#ffffff");
       if (kind === "check") pen.line([-40, 2, -10, 34, 44, -30], 22, mark);
       if (kind === "cross") {
         pen.line([-34, -34, 34, 34], 22, mark);
@@ -837,9 +1151,9 @@ function drawThing(pen: Pen, kind: PropKind, st: PropState, view: "side" | "top"
     case "heart": {
       const beat = 1 + 0.1 * Math.max(0, Math.sin(t * 7));
       pen.scale(beat);
-      pen.poly(inflate(heartPts(0, 0, 86), 8), INK);
+      pen.poly(inflate(heartPts(0, 0, 86), o(8)), K);
       pen.poly(heartPts(0, 0, 86), c("#ff6f8f"));
-      pen.ellipse(-36, -30, 18, 11, -30, "#ffffff", 0.45);
+      pen.ellipse(-36, -30, 18, 11, -30, col("#ffffff"), 0.45);
       return;
     }
     case "sparkles": {
@@ -848,7 +1162,7 @@ function drawThing(pen: Pen, kind: PropKind, st: PropState, view: "side" | "top"
         const sx = [-80, 60, -10, 100][i]!;
         const sy = [-40, -90, 70, 40][i]!;
         pen.poly(starPts(sx, sy, 42 * tw, 10 * tw, 4, 0), c("#ffc94a"));
-        pen.poly(starPts(sx, sy, 22 * tw, 6 * tw, 4, 0), "#ffffff");
+        pen.poly(starPts(sx, sy, 22 * tw, 6 * tw, 4, 0), col("#ffffff"));
       }
       return;
     }
@@ -869,16 +1183,20 @@ function drawThing(pen: Pen, kind: PropKind, st: PropState, view: "side" | "top"
   }
 }
 
-function drawDeer(pen: Pen, st: PropState, view: "side" | "top", t: number): void {
-  const fur = hex(st.prop.color, "#b9773f");
-  const belly = "#f3d9b8";
+function drawDeer(pen: Pen, st: PropState, view: "side" | "top", t: number, lk: Look): void {
+  const { col, o } = lk;
+  const K = lk.ink;
+  const fur = col(hex(st.prop.color, "#b9773f"));
+  const belly = col("#f3d9b8");
+  const antler = col("#7a4a2a");
+  const dark = lk.nd ? K : "#1c1842";
   if (view === "top") {
-    pen.ellipse(0, 0, 60, 120, 0, INK);
+    pen.ellipse(0, 0, 54 + o(6), 114 + o(6), 0, K);
     pen.ellipse(0, 0, 54, 114, 0, fur);
-    pen.circle(0, -128, 36, INK);
+    pen.circle(0, -128, 30 + o(6), K);
     pen.circle(0, -128, 30, fur);
-    pen.line([-14, -150, -46, -190, -60, -172], 8, "#7a4a2a");
-    pen.line([14, -150, 46, -190, 60, -172], 8, "#7a4a2a");
+    pen.line([-14, -150, -46, -190, -60, -172], 8, antler);
+    pen.line([14, -150, 46, -190, 60, -172], 8, antler);
     return;
   }
   const run = st.speed > 0.02;
@@ -893,24 +1211,24 @@ function drawDeer(pen: Pen, st: PropState, view: "side" | "top", t: number): voi
     const a = run ? Math.sin(ph) * 28 * s : 0;
     const fx = lx + Math.sin(a * DEG) * 150;
     const fy = -150 + Math.cos(a * DEG) * 150;
-    pen.line([lx, -150, fx, fy], 22, INK);
+    pen.line([lx, -150, fx, fy], 14 + 2 * o(4), K);
     pen.line([lx, -150, fx, fy], 14, shade(fur, -0.1));
   }
-  pen.ellipse(0, -190, 150, 70, 0, INK);
+  pen.ellipse(0, -190, 142 + o(8), 62 + o(8), 0, K);
   pen.ellipse(0, -190, 142, 62, 0, fur);
   pen.ellipse(10, -165, 90, 28, 0, belly, 0.8);
-  pen.poly(inflate([90, -230, 140, -330, 175, -320, 135, -210], 6), INK);
+  pen.poly(inflate([90, -230, 140, -330, 175, -320, 135, -210], o(6)), K);
   pen.poly([90, -230, 140, -330, 175, -320, 135, -210], fur);
-  pen.ellipse(172, -348, 52, 38, 15, INK);
+  pen.ellipse(172, -348, 45 + o(7), 31 + o(7), 15, K);
   pen.ellipse(172, -348, 45, 31, 15, fur);
-  pen.ellipse(214, -334, 14, 11, 0, "#1c1842");
+  pen.ellipse(214, -334, 14, 11, 0, dark);
   pen.ellipse(150, -384, 14, 26, -30, fur);
-  pen.circle(174, -356, 9, "#ffffff");
-  pen.circle(177, -356, 5.5, "#1c1842");
-  pen.line([160, -380, 150, -450, 120, -480], 9, "#7a4a2a");
-  pen.line([150, -450, 180, -478], 8, "#7a4a2a");
-  pen.line([184, -382, 200, -450, 230, -470], 9, "#7a4a2a");
-  pen.ellipse(-150, -210, 22, 16, -20, "#ffffff");
+  pen.circle(174, -356, 9, col("#ffffff"));
+  pen.circle(177, -356, 5.5, dark);
+  pen.line([160, -380, 150, -450, 120, -480], 9, antler);
+  pen.line([150, -450, 180, -478], 8, antler);
+  pen.line([184, -382, 200, -450, 230, -470], 9, antler);
+  pen.ellipse(-150, -210, 22, 16, -20, col("#ffffff"));
 }
 
 /** Full-screen weather in screen space: snow flakes, rain streaks and fog bands, split into a back and a front layer.

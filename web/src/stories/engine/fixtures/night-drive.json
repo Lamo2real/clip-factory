@@ -1,0 +1,516 @@
+{
+  "engine": 7,
+  "fps": 30,
+  "width": 1080,
+  "height": 1920,
+  "durationSec": 28,
+  "title": "Night drive",
+  "seed": 7,
+  "art": "night_drive",
+  "cast": {
+    "c1": {
+      "characterId": "ch_lamo",
+      "name": "Lamo",
+      "look": {
+        "body": "bean",
+        "skin": "#f2c9a0",
+        "height": 1,
+        "width": 1,
+        "hair": {
+          "style": "short",
+          "color": "#3b2a1a"
+        },
+        "eyes": {
+          "shape": "round",
+          "color": "#1c1842"
+        },
+        "brows": "thick",
+        "nose": "button",
+        "mouth": "wide",
+        "outfit": {
+          "top": "#ff6f61",
+          "bottom": "#1c1842",
+          "accent": "#ffc94a",
+          "pattern": "stripes"
+        },
+        "accessory": "scarf",
+        "outline": "#1c1842"
+      },
+      "movementStyle": "bouncy",
+      "voice": {
+        "style": "babble",
+        "pitch": 1.2,
+        "noises": [
+          "gasp",
+          "phew",
+          "yay",
+          "hmm"
+        ],
+        "sfx": [
+          "boing"
+        ]
+      },
+      "expressions": [
+        "neutral",
+        "happy",
+        "surprised",
+        "worried",
+        "angry",
+        "relieved"
+      ]
+    },
+    "c2": {
+      "characterId": "ch_pip",
+      "name": "Pip",
+      "look": {
+        "body": "round",
+        "skin": "#8d5a3b",
+        "height": 0.95,
+        "width": 1.05,
+        "hair": {
+          "style": "curly",
+          "color": "#1b1b2a"
+        },
+        "eyes": {
+          "shape": "oval",
+          "color": "#2b1a10"
+        },
+        "brows": "thin",
+        "nose": "dot",
+        "mouth": "small",
+        "outfit": {
+          "top": "#8a5aa8",
+          "bottom": "#2a2466",
+          "accent": "#62c6ff",
+          "pattern": "dots"
+        },
+        "accessory": "glasses",
+        "outline": "#1c1842"
+      },
+      "movementStyle": "calm",
+      "voice": {
+        "style": "hum",
+        "pitch": 0.85,
+        "noises": [
+          "giggle",
+          "phew",
+          "hmm",
+          "sigh"
+        ],
+        "sfx": [
+          "ding"
+        ]
+      },
+      "expressions": [
+        "neutral",
+        "happy",
+        "thinking",
+        "proud"
+      ]
+    }
+  },
+  "cars": {
+    "c3": {
+      "characterId": "chBeep",
+      "name": "Beep",
+      "car": {
+        "body": "hatchback",
+        "length": 1,
+        "height": 1,
+        "paint": "#c9a227",
+        "accent": "#2b2f45",
+        "pattern": "plain",
+        "windows": "clear",
+        "wheels": {
+          "style": "alloy",
+          "rim": "#c9ccd2",
+          "size": 1
+        },
+        "lights": {
+          "front": "round",
+          "rear": "bar"
+        },
+        "extra": "none",
+        "face": {
+          "eyes": "windscreen",
+          "color": "#1c1842",
+          "mouth": "grille"
+        },
+        "outline": "#1c1842"
+      },
+      "movementStyle": "zippy",
+      "voice": {
+        "style": "none",
+        "pitch": 1,
+        "noises": [],
+        "sfx": [
+          "engine",
+          "honk"
+        ]
+      },
+      "expressions": [
+        "neutral",
+        "happy",
+        "surprised"
+      ]
+    }
+  },
+  "scenes": [
+    {
+      "sceneId": "s1",
+      "title": "The highway at night",
+      "durationSec": 12,
+      "seed": 101,
+      "set": "highway_night",
+      "view": "side",
+      "camera": "wide",
+      "actors": [
+        {
+          "castId": "c1",
+          "x": 0.5,
+          "y": 0.78,
+          "facing": "right",
+          "inCar": "car1"
+        }
+      ],
+      "props": [
+        {
+          "propId": "car1",
+          "kind": "car",
+          "castId": "c3",
+          "x": 0.5,
+          "y": 0.78,
+          "scale": 1,
+          "rot": 0,
+          "state": "lights"
+        },
+        {
+          "propId": "ahead",
+          "kind": "car",
+          "x": 0.92,
+          "y": 0.78,
+          "scale": 1,
+          "rot": 0,
+          "color": "#d8352a",
+          "state": "lights"
+        },
+        {
+          "propId": "oncoming",
+          "kind": "car",
+          "x": 1.3,
+          "y": 0.68,
+          "scale": 0.9,
+          "rot": 0,
+          "color": "#e8e4da",
+          "state": "lights"
+        },
+        {
+          "propId": "behind",
+          "kind": "truck",
+          "x": 0.02,
+          "y": 0.8,
+          "scale": 1,
+          "rot": 0,
+          "color": "#2b3f6b",
+          "state": "lights"
+        }
+      ],
+      "beats": [
+        {
+          "at": 0,
+          "dur": 3,
+          "who": "c1",
+          "do": "drive",
+          "face": "happy"
+        },
+        {
+          "at": 0.2,
+          "dur": 11,
+          "who": "oncoming",
+          "do": "move",
+          "dir": "left",
+          "to": {
+            "x": -0.45,
+            "y": 0.68
+          }
+        },
+        {
+          "at": 3.6,
+          "dur": 1.2,
+          "who": "c1",
+          "do": "look_left",
+          "face": "worried"
+        },
+        {
+          "at": 4.9,
+          "dur": 0.6,
+          "who": "behind",
+          "do": "blink"
+        },
+        {
+          "at": 5.4,
+          "dur": 0.5,
+          "who": "behind",
+          "do": "honk"
+        },
+        {
+          "at": 6.1,
+          "dur": 1,
+          "who": "c1",
+          "do": "steer_left",
+          "face": "surprised"
+        },
+        {
+          "at": 7.3,
+          "dur": 1,
+          "who": "car1",
+          "do": "speed_up"
+        },
+        {
+          "at": 8.5,
+          "dur": 1.2,
+          "who": "c1",
+          "do": "brake",
+          "face": "angry"
+        },
+        {
+          "at": 10,
+          "dur": 1.6,
+          "who": "c1",
+          "do": "drive",
+          "face": "relieved"
+        }
+      ],
+      "sfx": [],
+      "caption": null,
+      "note": null,
+      "cuts": [
+        {
+          "at": 1.2,
+          "shot": "road_wide"
+        },
+        {
+          "at": 2.4,
+          "shot": "road_behind"
+        },
+        {
+          "at": 3.5999999999999996,
+          "shot": "driver_view"
+        },
+        {
+          "at": 4.8,
+          "shot": "face"
+        },
+        {
+          "at": 6,
+          "shot": "mirror"
+        },
+        {
+          "at": 7.199999999999999,
+          "shot": "side_window"
+        },
+        {
+          "at": 8.4,
+          "shot": "speed_dial"
+        },
+        {
+          "at": 9.6,
+          "shot": "pedals"
+        }
+      ]
+    },
+    {
+      "sceneId": "s2",
+      "title": "The road at night",
+      "durationSec": 6,
+      "seed": 202,
+      "set": "road_night",
+      "view": "side",
+      "camera": "medium",
+      "actors": [
+        {
+          "castId": "c1",
+          "x": 0.5,
+          "y": 0.78,
+          "facing": "right",
+          "inCar": "car1"
+        },
+        {
+          "castId": "c2",
+          "x": 0.5,
+          "y": 0.78,
+          "facing": "right",
+          "inCar": "car1"
+        }
+      ],
+      "props": [
+        {
+          "propId": "car1",
+          "kind": "car",
+          "castId": "c3",
+          "x": 0.5,
+          "y": 0.78,
+          "scale": 1,
+          "rot": 0,
+          "state": "lights"
+        }
+      ],
+      "beats": [
+        {
+          "at": 0.2,
+          "dur": 5.5,
+          "who": "c1",
+          "do": "drive",
+          "face": "neutral"
+        },
+        {
+          "at": 2.6,
+          "dur": 1.4,
+          "who": "c2",
+          "do": "think",
+          "face": "thinking"
+        },
+        {
+          "at": 4.2,
+          "dur": 1.2,
+          "who": "car1",
+          "do": "honk",
+          "face": "happy"
+        }
+      ],
+      "sfx": [],
+      "caption": null,
+      "note": null,
+      "cuts": [
+        {
+          "at": 1.2,
+          "shot": "side_window"
+        },
+        {
+          "at": 2.6,
+          "shot": "face",
+          "who": "c2"
+        },
+        {
+          "at": 4.2,
+          "shot": "road_behind"
+        }
+      ]
+    },
+    {
+      "sceneId": "s3",
+      "title": "A sunny road",
+      "durationSec": 5,
+      "seed": 303,
+      "set": "road_day",
+      "view": "side",
+      "camera": "wide",
+      "actors": [
+        {
+          "castId": "c2",
+          "x": 0.3,
+          "y": 0.76,
+          "facing": "right"
+        }
+      ],
+      "props": [
+        {
+          "propId": "car1",
+          "kind": "car",
+          "castId": "c3",
+          "x": 0.66,
+          "y": 0.78,
+          "scale": 1,
+          "rot": 0,
+          "state": "parked"
+        }
+      ],
+      "beats": [
+        {
+          "at": 0.3,
+          "dur": 2,
+          "who": "c2",
+          "do": "walk",
+          "to": {
+            "x": 0.45,
+            "y": 0.76
+          }
+        },
+        {
+          "at": 2.6,
+          "dur": 1.6,
+          "who": "c2",
+          "do": "wave",
+          "face": "proud"
+        }
+      ],
+      "sfx": [],
+      "caption": null,
+      "note": null,
+      "cuts": [
+        {
+          "at": 2.6,
+          "shot": "face"
+        }
+      ]
+    },
+    {
+      "sceneId": "s4",
+      "title": "Home",
+      "durationSec": 5,
+      "seed": 404,
+      "set": "kitchen",
+      "view": "side",
+      "camera": "medium",
+      "actors": [
+        {
+          "castId": "c1",
+          "x": 0.36,
+          "y": 0.76,
+          "facing": "right"
+        },
+        {
+          "castId": "c2",
+          "x": 0.64,
+          "y": 0.76,
+          "facing": "left"
+        }
+      ],
+      "props": [],
+      "beats": [
+        {
+          "at": 0.4,
+          "dur": 1.6,
+          "who": "c1",
+          "do": "celebrate",
+          "face": "happy",
+          "noise": "yay"
+        },
+        {
+          "at": 2.4,
+          "dur": 1.4,
+          "who": "c2",
+          "do": "nod",
+          "face": "happy"
+        }
+      ],
+      "sfx": [],
+      "caption": null,
+      "note": null
+    }
+  ],
+  "music": {
+    "mood": "calm",
+    "volume": 0.3
+  },
+  "captionsOn": true,
+  "captions": [
+    {
+      "id": "cap1",
+      "at": 0.4,
+      "dur": 2.4,
+      "text": "A long drive home"
+    }
+  ],
+  "safety": null
+}

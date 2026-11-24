@@ -55,6 +55,17 @@ ASPECTS: Final = {
     "16:9": ("1920x1080", "1280x720"),
 }
 DEFAULT_FORMAT: Final = {"aspect": "9:16", "width": 1080, "height": 1920}
+# The drawing style (§45.45): Night drive, the default for new videos, or Bright (``classic``, the first videos' look).
+# A story made before it has no ``art`` and is drawn Bright.
+ARTS: Final = ("night_drive", "classic")
+DEFAULT_ART: Final = "night_drive"
+PICK_ART: Final = "Pick a drawing style: Night drive or Bright."
+
+
+def stored_art(story: Mapping[str, Any]) -> str:
+    """A story's drawing style: its own ``art``, else ``classic`` (a story made before drawing styles)."""
+    art = story.get("art")
+    return str(art) if art in ARTS else "classic"
 
 
 def format_of(aspect: Any, resolution: Any) -> dict[str, Any]:
@@ -277,6 +288,7 @@ def public_story(item: Mapping[str, Any], presign: Presign, user_id: str, bucket
         "ai": ai_setting(item.get("ai")),
         "referenceIds": [str(r) for r in item.get("referenceIds") or [] if isinstance(r, str)],
         "format": stored_format(item),
+        "art": stored_art(item),
         "posted": posted,
         "version": int(item.get("version") or 1),
         "createdAt": str(item.get("createdAt") or ""),

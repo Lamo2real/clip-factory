@@ -136,6 +136,7 @@ function checkConfig(store: MockStore, c: StoriesConfigPatch, before: StoriesCon
   // The shape and its size (§45.34): the resolution must be one of that shape's; 30 fps is the only rate.
   if (c.video?.aspect !== undefined && !(c.video.aspect in RESOLUTIONS)) throw bad("video", "Pick 9:16, 1:1 or 16:9.");
   if (c.video?.fps !== undefined && c.video.fps !== 30) throw bad("video", "Videos are made at 30 frames a second.");
+  if (c.video?.art !== undefined && c.video.art !== "night_drive" && c.video.art !== "classic") throw bad("video", "Pick a drawing style: Night drive or Bright.");
   if (c.production?.scenesAtOnce !== undefined && ![1, 2, 3].includes(c.production.scenesAtOnce)) throw bad("production", "Pick 1, 2 or 3 scenes at a time.");
   if (c.production?.keepReferences !== undefined && !KEEP_REFERENCES.includes(c.production.keepReferences)) throw bad("production", "Pick how long reference videos are kept.");
   if (c.production?.keepChatPictures !== undefined && !KEEP_CHAT_PICTURES.includes(c.production.keepChatPictures)) throw bad("production", "Pick how long chat pictures are kept.");

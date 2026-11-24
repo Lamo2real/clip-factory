@@ -43,6 +43,7 @@ from lamostories_agent.tasks.fence import Fence
 from lamostories_agent.tasks.ideas import CATEGORIES, LOGLINE_MAX, TITLE_MAX, TONES, check_concept
 from lamostories_agent.tasks.services import Services
 from lamostories_agent.tasks.store import Expr
+from lamostories_agent.writer import ARTS
 
 MAX_ACTIONS = 6
 CARS_IN_CHARACTERS = "Make cars in Characters: tap New character, then A car."
@@ -139,6 +140,18 @@ _IDEA_PROPS = {
 }
 
 
+_SCENE_KEYS = ("sceneId", "title", "durationSec", "set", "view", "camera", "actors", "props", "beats", "sfx", "caption",
+               "note")  # fmt: skip
+
+
+def _scene_view(sc: dict[str, Any]) -> dict[str, Any]:
+    """One scene of read_story's storyboard; its cuts between shots (§45.45) only when it has them."""
+    out = {k: sc.get(k) for k in _SCENE_KEYS}
+    if sc.get("cuts") is not None:
+        out["cuts"] = sc["cuts"]
+    return out
+
+
 def specs() -> list[dict[str, Any]]:
     """The tool list in Converse's ``toolSpec`` form (a fixed order, so the request prefix stays the same)."""
     return [
@@ -226,6 +239,11 @@ def specs() -> list[dict[str, Any]]:
                     "description": "up to 3 analyzed reference videos (list_references)",
                 },
                 "durationSec": {"type": "integer", "description": "15 to 90"},
+                "art": {
+                    "type": "string",
+                    "enum": list(ARTS),
+                    "description": "the drawing style: night_drive or classic (Bright); left out: the workspace's",
+                },
             },
             ["characterIds"],
         ),
@@ -466,6 +484,7 @@ class Toolbox:
             "safety",
             "reviewNote",
             "referenceIds",
+            "art",
         )
         out: dict[str, Any] = {"story": {k: v for k, v in public(s).items() if k in keep}}
         script = self._s3_json(s.get("scriptKey"))
@@ -475,27 +494,10 @@ class Toolbox:
                 "cast": {k: (v or {}).get("name") for k, v in (script.get("cast") or {}).items()},
                 "music": script.get("music"),
                 "captions": script.get("captions") or [],
-                "scenes": [
-                    {
-                        k: sc.get(k)
-                        for k in (
-                            "sceneId",
-                            "title",
-                            "durationSec",
-                            "set",
-                            "view",
-                            "camera",
-                            "actors",
-                            "props",
-                            "beats",
-                            "sfx",
-                            "caption",
-                            "note",
-                        )
-                    }
-                    for sc in script.get("scenes") or []
-                ],
+                "scenes": [_scene_view(sc) for sc in script.get("scenes") or [] if isinstance(sc, dict)],
             }
+            if script.get("art") is not None:  # the drawing style (§45.45); a Bright script has none
+                out["storyboard"]["art"] = script["art"]
         return out
 
     def list_references(self, args: dict[str, Any]) -> dict[str, Any]:
@@ -641,6 +643,10 @@ class Toolbox:
                 story["durationSec"] = min(90, max(15, int(args["durationSec"])))
             except (TypeError, ValueError) as e:
                 raise ToolError("durationSec is a number of seconds from 15 to 90.") from e
+        if args.get("art") is not None:  # the drawing style (§45.45); left out, the workspace's own
+            if args["art"] not in ARTS:
+                raise ToolError("art is night_drive or classic (Bright).")
+            story["art"] = args["art"]
         return self.offer("make_video", "Make the video", {"story": story})
 
     def offer_analyze_reference(self, args: dict[str, Any]) -> dict[str, Any]:

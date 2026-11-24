@@ -337,12 +337,15 @@ class BedrockWriter(_Base):
             mode=mode,
             scene_ids=brief.get("sceneIds") or None,
             car_ids=brief.get("carIds") or (),  # the cast's cars (§45.43): a car prop's castId
+            art=brief.get("art"),  # night drive: each scene's cuts between shots (§45.45)
         )
         task = "scene_rewrite" if mode == "scenes" else "storyboard"
         if brief.get("restage"):
             task = "animation_plan"
         prompt = (
-            writer.SYSTEM + "\n\n" + writer.instructions(mode, note=brief.get("note"), scene_ids=brief.get("sceneIds"))
+            writer.system_for(brief.get("art"))
+            + "\n\n"
+            + writer.instructions(mode, note=brief.get("note"), scene_ids=brief.get("sceneIds"))
         )
         reply = await self.ctx.ask(
             task=task,
@@ -357,9 +360,10 @@ class BedrockWriter(_Base):
 # --- images -------------------------------------------------------------------------------------------------------
 
 
-def portrait_script(ch: dict[str, Any], seed: int, engine_version: int) -> dict[str, Any]:
-    """A 2-second studio scene of the character alone (the built-in picture of it)."""
-    return {
+def portrait_script(ch: dict[str, Any], seed: int, engine_version: int, art: str | None = None) -> dict[str, Any]:
+    """A 2-second studio scene of the character alone (the built-in picture of it), in the workspace's drawing style
+    (``art``, §45.45: the studio light keeps the character's own colours; a Bright portrait is as before)."""
+    script: dict[str, Any] = {
         "engine": engine_version,
         "fps": 30,
         "width": 1080,
@@ -398,6 +402,9 @@ def portrait_script(ch: dict[str, Any], seed: int, engine_version: int) -> dict[
         "captions": [],
         "safety": None,
     }
+    if art == writer.NIGHT:
+        script["art"] = writer.NIGHT
+    return script
 
 
 class RigImages(_Base):
@@ -408,7 +415,8 @@ class RigImages(_Base):
     line = "Built in: draws your characters the same way in every video. Nothing to set up."
 
     async def image(self, prompt: str, width: int, height: int, seed: int, refs: list[Path]) -> bytes:
-        script = portrait_script(self.ctx.character or {}, seed, await self.ctx.engine.version())
+        art = self.ctx.extra.get("art")  # the workspace's drawing style (§45.45), in the studio light
+        script = portrait_script(self.ctx.character or {}, seed, await self.ctx.engine.version(), art)
         work = self.ctx.workdir / "portrait"
         path = write_json(work / "script.json", script)
         jpg = work / "still.jpg"
@@ -735,13 +743,16 @@ def reel_prompt(script: dict[str, Any], scene: dict[str, Any]) -> str:
               "foggy_road": "a foggy road", "road_night": "a road at night", "road_day": "a road on a sunny day",
               "highway": "a motorway", "country_road": "a country road", "city_street": "a city street",
               "parking_lot": "a parking lot", "kitchen": "a kitchen", "living_room": "a living room",
-              "office": "an office", "park": "a park", "studio": "a plain bright studio"}  # fmt: skip
+              "office": "an office", "park": "a park", "studio": "a plain bright studio",
+              "highway_night": "a motorway at night under orange street lights"}  # fmt: skip
     place = labels.get(str(scene.get("set")), str(scene.get("set") or "a road").replace("_", " "))
     things = ", ".join(dict.fromkeys(str(p.get("kind")).replace("_", " ") for p in scene.get("props") or []))
     view = "seen from above" if scene.get("view") == "top" else "at eye level"
     parts = [f"Slow cinematic shot of {place}, {view}"]
     if things:
         parts.append(f"with {things}")
+    if writer.art_of(script) == writer.NIGHT:  # the night drive style (§45.45): the cut-away keeps its mood
+        parts.append("at night under orange street lights, muted blue and teal colours, flat cartoon look")
     parts.append("no people, no text, no logos, calm camera, natural light")
     return ", ".join(parts)[:500]
 

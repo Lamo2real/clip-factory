@@ -120,7 +120,13 @@ def test_patch_merges_the_configuration_with_a_version(call: Call) -> None:
         "videoModel": None,
         "audioModel": None,
     }
-    assert w["configuration"]["video"] == {"resolution": "1080x1920", "aspect": "9:16", "quality": "best", "fps": 30}
+    assert w["configuration"]["video"] == {
+        "resolution": "1080x1920",
+        "aspect": "9:16",
+        "quality": "best",
+        "fps": 30,
+        "art": "night_drive",
+    }
     assert w["configuration"]["production"] == {
         "burnCaptions": True,
         "scenesAtOnce": 3,
@@ -222,6 +228,7 @@ def test_every_shape_and_its_sizes_can_be_the_default(call: Call, aspect: str, r
         "aspect": aspect,
         "quality": "high",
         "fps": 30,
+        "art": "night_drive",
     }
 
 

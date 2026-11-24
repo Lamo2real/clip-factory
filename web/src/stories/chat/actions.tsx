@@ -102,6 +102,11 @@ function makeVideo(p: Record<string, unknown>): ActionPlan {
   if (s.durationSec !== undefined && s.durationSec !== null && typeof s.durationSec !== "number") return { kind: "broken" };
   const prefill: ProductionPrefill = { ideaId: isId(s.ideaId) ? s.ideaId : null, referenceIds: refs, characterIds: cast };
   if (typeof s.durationSec === "number") prefill.durationSec = Math.round(s.durationSec);
+  // the drawing style the director offered (§45.45): Night drive or Bright; anything else is a broken button
+  if (s.art !== undefined && s.art !== null) {
+    if (s.art !== "night_drive" && s.art !== "classic") return { kind: "broken" };
+    prefill.art = s.art;
+  }
   const b = obj(s.brief);
   if (s.brief !== undefined && s.brief !== null && !b) return { kind: "broken" };
   if (b && !prefill.ideaId) {

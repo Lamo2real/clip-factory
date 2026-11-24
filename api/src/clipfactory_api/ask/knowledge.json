@@ -1,5 +1,5 @@
 {
- "version": "13c5f9fb813c",
+ "version": "b264040501eb",
  "parts": [
   {
    "id": "app-map",
@@ -297,7 +297,7 @@
    "id": "contracts-45",
    "title": "CONTRACTS: 45. Clips Funded: a second, separate workspace (owner request, 2026-11-21)",
    "line": "Planned: not in the app until the switch pull request turns it on (§45.21). Until then nothing of Clips Funded",
-   "chars": 395035
+   "chars": 473599
   },
   {
    "id": "contracts-46",
@@ -856,6 +856,12 @@
    "title": "DECISIONS: ADR-92 A series' memory is data kept per series, written by a recap task after each approval",
    "line": "Context. The owner (2026-11-23): \"Can you create a folder for each series i create so it is organized and if",
    "chars": 1826
+  },
+  {
+   "id": "adr-93",
+   "title": "DECISIONS: ADR-93 Night drive is a drawing style in the one engine: an `art` field, cuts between shots, surface drawing only",
+   "line": "Context. The owner (2026-11-24) sent a reference video of a cartoon drive at night and asked for their videos",
+   "chars": 2677
   },
   {
    "id": "adr-94",

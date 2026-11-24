@@ -87,7 +87,9 @@ describe("busy scenes", () => {
     expect(errorsOf(crowd("car", "side", "road_night"))[0]).toContain("Use fewer cars or characters in it");
   });
 
-  it("a scene the budget allows really draws within it: 300 random valid scenes, every other frame", () => {
+  // in both drawing styles: Bright (no art, as before) and night drive (CONTRACTS §45.45), with night drive's estimates
+  for (const art of ["classic", "night_drive"] as const)
+  it(`a scene the budget allows really draws within it: 300 random valid scenes, every other frame${art === "classic" ? "" : " (night drive)"}`, () => {
     const rnd = prng(20261121);
     const pick = <T>(list: readonly T[]): T => list[Math.floor(rnd() * list.length)]!;
     const sets = CATALOG.sets.map((s) => s.id) as SetId[];
@@ -109,10 +111,11 @@ describe("busy scenes", () => {
           return { at: (i % 4) * 1.3, dur: 1.2, who: p.propId, do: act, ...(act === "move" || act === "skid" ? { to: { x: p.x + 0.05, y: p.y - 0.05 }, dir: "right" as const } : {}) };
         }),
       ];
-      const s = oneScene({ set: pick(sets), view, camera: pick(cameras), actors, props, beats });
+      const one = oneScene({ set: pick(sets), view, camera: pick(cameras), actors, props, beats });
+      const s = art === "classic" ? one : { ...one, art };
       if (errorsOf(s).length) continue;
       const n = valid(s);
-      const estimate = sceneShapes(n.scenes[0]!);
+      const estimate = sceneShapes(n.scenes[0]!, art);
       for (let f = 0; f < 180; f += 2) {
         const count = drawFrame(n, f).length;
         worst = Math.max(worst, count);
@@ -122,8 +125,9 @@ describe("busy scenes", () => {
     }
     expect(checked).toBe(300);
     expect(worst).toBeGreaterThan(250);
-    // 300 scenes x 90 frames each takes about 6 s on a CI runner, past vitest's 5 s default.
-  }, 30_000);
+    // 300 scenes x 90 frames each takes about 6 s on a CI runner (night drive about twice that), past vitest's 5 s
+    // default.
+  }, art === "classic" ? 30_000 : 60_000);
 
   it("every scene of the fixtures is well inside the budget", () => {
     for (const name of ["sample-script.json", "ice-skid.json"]) for (const sc of raw(name).scenes) expect(sceneShapes(sc), `${name} ${sc.sceneId}`).toBeLessThanOrEqual(400);
@@ -248,7 +252,7 @@ describe("the rules the writer reads (§45.43)", () => {
   it("every rule has its own id, the car rules among them, and a script holds at most 2 cars", () => {
     const ids = RULES.map((r) => r.id);
     expect(new Set(ids).size).toBe(ids.length);
-    expect(ids).toEqual(["skid_dir", "spin_dir", "side_dir", "top_rot", "steering", "coordinates", "arrow_rot", "prop_state", "sounds", "own_faces", "car_cast", "get_in_out", "honk", "driver_wave", "frame_shape"]);
+    expect(ids).toEqual(["skid_dir", "spin_dir", "side_dir", "top_rot", "steering", "coordinates", "arrow_rot", "prop_state", "sounds", "own_faces", "car_cast", "get_in_out", "honk", "driver_wave", "frame_shape", "shots", "shot_world"]);
     expect(LIMITS.cars).toBe(2);
     expect(SEATS.car).toBe(2);
   });

@@ -7,6 +7,10 @@ order with source-over blending in sRGB (no linear-light conversion, exactly lik
 * ``fill`` and ``grad`` paint the whole frame (a linear gradient between two points, clamped at both ends);
 * ``rect`` (corner radius ``r``), ``circle`` and ``ellipse`` (``rot`` in degrees, clockwise on screen) use the exact
   area of straight edges and a half-pixel distance ramp on curves;
+* ``glow`` is an ellipse (as ``ellipse``) in one colour whose alpha fades from its centre to its edge along ``fade``,
+  ``[offset, alpha]`` stops (offset 0 the centre, 1 the edge, linear between stops and the end stops' alphas past
+  them), the browser's radial gradient in the ellipse's own frame; nothing past the edge (the engine ends every fade
+  at alpha 0, so the edge needs no anti-aliasing);
 * ``poly`` is a closed polygon of flattened curves with the non-zero winding rule: exact horizontal coverage and
   ``POLY_SAMPLES`` sample rows per pixel row, the winding summed per pixel and capped at 1 (exact inside, and on
   every edge pixel except where two opposite windings meet inside one pixel);
@@ -30,7 +34,7 @@ import numpy as np
 WIDTH = 1080
 HEIGHT = 1920
 POLY_SAMPLES = 16  # sample rows per pixel row in a polygon (horizontal coverage is exact)
-KINDS = ("fill", "grad", "rect", "circle", "ellipse", "poly", "line", "image")
+KINDS = ("fill", "grad", "rect", "circle", "ellipse", "glow", "poly", "line", "image")
 _HEX: dict[str, np.ndarray] = {}
 
 # What each primitive must carry (CONTRACTS §45.10): the numbers, the colour, and the optional alpha.
@@ -40,6 +44,7 @@ PRIM_FIELDS: dict[str, tuple[str, ...]] = {
     "rect": ("x", "y", "w", "h", "r", "color"),
     "circle": ("x", "y", "r", "color"),
     "ellipse": ("x", "y", "rx", "ry", "rot", "color"),
+    "glow": ("x", "y", "rx", "ry", "rot", "color", "fade"),
     "poly": ("pts", "color"),
     "line": ("pts", "w", "color"),
     "image": ("asset", "x", "y", "w", "h"),
@@ -82,10 +87,18 @@ def prim_problems(p: Any) -> list[str]:
             ok = ok and all(isinstance(s, list) and len(s) == 2 and _is_num(s[0]) and _is_hex(s[1]) for s in v)
             if not ok:
                 out.append(f"{k}: stops must be [offset, #rrggbb] pairs")
+        elif f == "fade":
+            pairs = v if isinstance(v, list) else []
+            ok = len(pairs) >= 1 and all(
+                isinstance(s, list) and len(s) == 2 and all(_is_num(n) and 0 <= n <= 1 for n in s) for s in pairs
+            )
+            ok = ok and all(pairs[i - 1][0] <= pairs[i][0] for i in range(1, len(pairs)))
+            if not ok:
+                out.append(f"{k}: fade must be [offset, alpha] pairs, offsets 0..1 in order and alphas 0..1")
         elif f == "pts":
             if not (isinstance(v, list) and len(v) % 2 == 0 and all(_is_num(x) for x in v)):
                 out.append(f"{k}: pts must be an even list of numbers")
-        elif f not in ("color", "asset", "stops", "pts") and not _is_num(v):
+        elif f not in ("color", "asset", "stops", "fade", "pts") and not _is_num(v):
             out.append(f"{k}: {f} must be a number")
     if "a" in p and not (_is_num(p["a"]) and 0 <= p["a"] <= 1):
         out.append(f"{k}: a must be 0..1")
@@ -252,6 +265,31 @@ class Canvas:
             cov *= np.float32(small / 0.5)
         self._blend(ya, xa, cov, rgb(p["color"]), _alpha(p))
 
+    def glow(self, p: Mapping[str, Any]) -> None:
+        cx, cy = float(p["x"]), float(p["y"])
+        rx, ry = abs(float(p["rx"])), abs(float(p["ry"]))
+        fade = p["fade"]
+        if rx <= 0 or ry <= 0 or not fade:
+            return
+        th = math.radians(float(p.get("rot") or 0))
+        c, s = math.cos(th), math.sin(th)
+        ex = math.hypot(rx * c, ry * s)
+        ey = math.hypot(rx * s, ry * c)
+        xa, xb = _span(cx - ex, cx + ex, self.width)
+        ya, yb = _span(cy - ey, cy + ey, self.height)
+        if xa >= xb or ya >= yb:
+            return
+        ddx = (self._xs[0, xa:xb] - cx)[None, :]
+        ddy = (self._ys[ya:yb, 0] - cy)[:, None]
+        u = (ddx * c + ddy * s) / rx  # along the rx axis, in radii
+        v = (ddy * c - ddx * s) / ry
+        rho = np.sqrt(u * u + v * v)
+        offs = np.array([min(1.0, max(0.0, float(o))) for o, _ in fade], np.float64)
+        alps = np.array([min(1.0, max(0.0, float(a))) for _, a in fade], np.float64)
+        cov = np.interp(rho, offs, alps).astype(np.float32)
+        cov[rho >= 1.0] = 0.0
+        self._blend(ya, xa, cov, rgb(p["color"]), _alpha(p))
+
     def poly(self, p: Mapping[str, Any]) -> None:
         pts = np.asarray(p["pts"], np.float64)
         if pts.size < 6:
@@ -351,6 +389,7 @@ _DISPATCH: dict[str, Callable[[Canvas, Mapping[str, Any]], None]] = {
     "rect": Canvas.rect,
     "circle": Canvas.circle,
     "ellipse": Canvas.ellipse,
+    "glow": Canvas.glow,
     "poly": Canvas.poly,
     "line": Canvas.line,
     "image": Canvas.image,

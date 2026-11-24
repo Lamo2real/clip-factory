@@ -119,12 +119,14 @@ export function hex(v: string | undefined, fallback = "#ff6f61"): string {
   return isHex(v) ? v.toLowerCase() : fallback;
 }
 
-function channels(h: string): [number, number, number] {
+/** The red, green and blue of a colour, 0..255. */
+export function channels(h: string): [number, number, number] {
   const n = parseInt(hex(h).slice(1), 16);
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255];
 }
 
-function toHex(r: number, g: number, b: number): string {
+/** "#rrggbb" from 0..255 channels, rounded and clamped. */
+export function toHex(r: number, g: number, b: number): string {
   const c = (v: number) => clamp(Math.round(v), 0, 255).toString(16).padStart(2, "0");
   return `#${c(r)}${c(g)}${c(b)}`;
 }

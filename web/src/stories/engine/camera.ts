@@ -1,7 +1,8 @@
 // Lamo Stories engine: cameras. A camera is a centre, a zoom, a little roll and a shake, applied as one transform to
 // every prim of a layer. Layers further away (depth < 1) move and zoom less: light parallax. Everything is in the
 // frame's design px (frame.ts), so each shape frames its shots the same way: a close shot's face is about 40% of
-// the short side in every shape.
+// the short side in every shape. The shots inside a scene (CONTRACTS §45.45 §8.2) have their own framing: the scene's
+// camera only zooms into the shot's focus, sways it, pushes in or shakes it, and each cut gets the same settle.
 
 import { F } from "./frame.ts";
 import { clamp, clamp01, ease, lerp, noise } from "./math.ts";
@@ -38,7 +39,9 @@ function keep(c: number, half: number, lo: number, hi: number): number {
   return a > b ? (lo + hi) / 2 : clamp(c, a, b);
 }
 
-export function cameraAt(id: CameraId, t: number, dur: number, focus: Focus, seed: number, impacts: number[]): Cam {
+/** The scene's camera at scene time t. `since` is the time since the shot began (a cut back to the whole scene settles
+ * again); a scene without cuts leaves it out, so its camera is exactly as before. */
+export function cameraAt(id: CameraId, t: number, dur: number, focus: Focus, seed: number, impacts: number[], since: number = t): Cam {
   const W = F.w;
   const H = F.h;
   const box = focus.box ?? { x0: W * 0.3, y0: H * 0.45, x1: W * 0.7, y1: H * 0.75 };
@@ -93,7 +96,7 @@ export function cameraAt(id: CameraId, t: number, dur: number, focus: Focus, see
     }
   }
   // a tiny settle after each cut keeps the cuts lively
-  zoom *= 1 + 0.035 * (1 - ease.outCubic(t / 0.4));
+  zoom *= 1 + 0.035 * (1 - ease.outCubic(since / 0.4));
   for (const at of impacts) {
     const since = t - at;
     if (since >= 0 && since < 0.7) shake += 20 * Math.exp(-since * 7);
@@ -109,6 +112,57 @@ export function cameraAt(id: CameraId, t: number, dur: number, focus: Focus, see
     rot: shake > 0 ? noise(seed + 41, t * 9) * shake * 0.04 : 0,
     shakeX: shake > 0 ? noise(seed + 42, t * 24) * shake : 0,
     shakeY: shake > 0 ? noise(seed + 43, t * 24) * shake : 0,
+  };
+}
+
+/** A shot's camera (§45.45 §8.2), from `from` to `until` (scene seconds), on the shot's focus (screen px of the frame):
+ * the shot's own framing is "wide"; medium zooms 1.08 and close 1.25 into the focus, pan_left and pan_right sway 0.04 of
+ * the width over the shot, push_in zooms 1 → 1.12 and shake shakes 11 px. Zooming keeps the focus where it is, so the
+ * frame never shows past the shot's edges. Every cut settles (1.035 → 1 over 0.4 s), impacts shake as in the whole
+ * scene, and while the road rolls there is a 1.2 px hum. */
+export function shotCamera(id: CameraId, t: number, from: number, until: number, focus: [number, number], seed: number, impacts: number[], rolling: boolean): Cam {
+  const W = F.w;
+  const H = F.h;
+  const p = clamp01((t - from) / Math.max(0.1, until - from));
+  let zoom = 1;
+  let sway = 0;
+  let shake = 0;
+  switch (id) {
+    case "medium":
+      zoom = 1.08;
+      break;
+    case "close":
+      zoom = 1.25;
+      break;
+    case "pan_left":
+    case "pan_right":
+      zoom = 1.05;
+      sway = (id === "pan_left" ? -1 : 1) * 0.04 * W * (ease.inOutSine(p) - 0.5);
+      break;
+    case "push_in":
+      zoom = lerp(1, 1.12, ease.inOutSine(p));
+      break;
+    case "shake":
+      zoom = 1.04;
+      shake = 11;
+      break;
+    case "wide":
+      break;
+  }
+  zoom *= 1 + 0.035 * (1 - ease.outCubic((t - from) / 0.4));
+  for (const at of impacts) {
+    const since = t - at;
+    if (since >= 0 && since < 0.7) shake += 20 * Math.exp(-since * 7);
+  }
+  const hum = rolling ? 1.2 : 0;
+  const [fx, fy] = focus;
+  return {
+    cx: fx - (fx - W / 2) / zoom + sway,
+    cy: fy - (fy - H / 2) / zoom,
+    zoom,
+    rot: shake > 0 ? noise(seed + 41, t * 9) * shake * 0.04 : 0,
+    shakeX: (shake > 0 ? noise(seed + 42, t * 24) * shake : 0) + hum * noise(seed + 44, t * 17),
+    shakeY: (shake > 0 ? noise(seed + 43, t * 24) * shake : 0) + hum * noise(seed + 45, t * 19),
   };
 }
 

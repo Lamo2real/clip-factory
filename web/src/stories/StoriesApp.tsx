@@ -44,6 +44,7 @@ import { ReviewScreen } from "./screens/Review.tsx";
 import { SeriesScreen } from "./screens/Series.tsx";
 import { SettingsScreen } from "./screens/Settings.tsx";
 import { SetupScreen } from "./screens/Setup.tsx";
+import { WorkspaceArt } from "./studio/art.tsx";
 import type { StoriesScreenProps } from "./screens/types.ts";
 import { NeedsYouBar, refreshOnboarding, StBoundary, StEmpty, StError, StIcon, StLinkButton, StLoading, useDashboard, type StIconName } from "./ui.tsx";
 import {
@@ -614,7 +615,10 @@ function StoriesShell({ page }: { page: StoriesPage }) {
             </section>
           ) : ws ? (
             <StBoundary resetKey={pageKey}>
-              <Screen key={ws} ws={ws} page={page} />
+              {/* Every preview on the page draws in this workspace's drawing style (§45.45). */}
+              <WorkspaceArt key={ws} ws={ws}>
+                <Screen key={ws} ws={ws} page={page} />
+              </WorkspaceArt>
             </StBoundary>
           ) : (
             <section className="st-page">
