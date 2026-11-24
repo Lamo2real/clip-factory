@@ -187,7 +187,8 @@ for (const width of [375, 1440]) {
       await fresh(page, width);
       const campaign = await page.evaluate(() => (window as MockWindow).__cfMock!.posting.campaignClip());
       await go(page, "/library");
-      await expect(rowOf(page, campaign).locator(".post__status")).toHaveText("Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet.");
+      // The Mac posts it with TikTok's Paid partnership label (Post with my Mac).
+      await expect(rowOf(page, campaign).locator(".post__status")).toHaveText("Not on TikTok yet · Paid partnership label");
       await shot(page, cardOf(page, campaign), "lib-campaign", width);
     });
 
@@ -343,7 +344,8 @@ for (const width of [375, 1440]) {
       });
       await go(page, "/review");
       const campaignCard = page.locator(".review-card").filter({ has: page.locator("[data-help~='cr-review-strip']") });
-      await expect(campaignCard.locator(".upload-to")).toContainText("Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet.");
+      // Your Mac posts TikTok is off: TikTok can't take the campaign clip, and the card says how to turn the Mac on.
+      await expect(campaignCard.locator(".upload-to")).toContainText("Campaign clips go on TikTok from your Mac. Turn it on in Settings › Posting › Your Mac posts TikTok.");
       await shot(page, campaignCard.locator(".upload-to"), "review-campaign-skip", width);
 
       await turnOn(page);

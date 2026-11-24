@@ -130,10 +130,10 @@ try again in a minute, §17.4), `internal`.
 | DELETE `/v1/clips/{clipId}/tiktok/posted` | – | `{ "clip", "posts" }` (Undo of the above, §42; a post the owner's Mac made → 409, §47; kept, the web no longer calls it, ADR-86) |
 | GET `/v1/tiktok/mac` | – | `{ "on", "helper": MacHelper \| null, "queue": MacJob[] }` (the Mac helper's queue, §47) |
 | POST `/v1/tiktok/mac/ping` | `{ "state", "reason"?, "version"?, "device", "login"?, "loginDone"?, "backlogAt"?, "holdBefore"?, "backfill"?, "resumeDone"?, "letGoDone"? }` | `{ "on" }` (the Mac helper checks in, §47; `login` and `loginDone` §47.8; its plan and the owner's requests §47.3) |
-| POST `/v1/tiktok/mac/send` | `{ "clipIds": string[] (1–25), "now"?: boolean }` | `{ "results": [{ "clipId", "sent", "reason"? }] }` (Send these to my Mac, §47; in order, each id once; `now: true` is a row's Post with my Mac, `macSource: "upload"`, §47.2) |
+| POST `/v1/tiktok/mac/send` | `{ "clipIds": string[] (1–25), "now"?: boolean }` | `{ "results": [{ "clipId", "sent", "reason"? }] }` (Send these to my Mac, §47; in order, each id once; `now: true` is a row's Post with my Mac, `macSource: "upload"`, §47.2; a campaign or paid clip goes with TikTok's label, §47.12) |
 | POST `/v1/tiktok/mac/login` | `{ "action": "change" \| "forget" }` | `{ "helper": MacHelper }` (Change or Forget the TikTok login kept on the Mac; the Mac does it when it next checks in, §47.8) |
 | POST `/v1/tiktok/mac/request` | `{ "action": "resume" \| "let_go" }` | `{ "helper": MacHelper }` (Start my Mac again, Let them go; the Mac does it when it next checks in, §47.3) |
-| POST `/v1/clips/{clipId}/tiktok/mac/claim` | `{ "device" }` | `{ "job": MacJob }` (§47) |
+| POST `/v1/clips/{clipId}/tiktok/mac/claim` | `{ "device", "version"? }` | `{ "job": MacJob }` (§47; a post with TikTok's label only for `version` ≥ `MAC_BRAND_FROM`, §47.12) |
 | POST `/v1/clips/{clipId}/tiktok/mac/step` | `{ "device", "step", "attempt"? }` | `{ "job": MacJob }` (§47; the same step sent again is the job's beat) |
 | POST `/v1/clips/{clipId}/tiktok/mac/done` | `{ "device", "link"? }` | `{ "clip", "posts", "note"? }` (the Mac posted it, §47) |
 | POST `/v1/clips/{clipId}/tiktok/mac/stopped` | `{ "device", "reason", "needsYou"?, "attempt"?, "code"?: "login" }` | `{ "job": MacJob }` (§47; `code` §47.11) |
@@ -7960,7 +7960,7 @@ export interface CrGuide { name: "Content Rewards"; checkedOn: "2026-11-21"; min
 | # | id | title | essentials |
 |---|---|---|---|
 | 1 | `ready-account` | Make a Content Rewards account | Open "Open Content Rewards" → `https://contentrewards.com/login?intent=signup`. "You'll see **Create your account**. Type your email in **Email**. Tap **Send code**." "Type the 6 numbers from the email. Tap **Verify**." "Or tap **Continue with Google**." "You must be 18 or older. One account per person." "I did this"; `auto: connected` (a finished Connect also ticks it, and so does Content Rewards saying the account can't connect apps; both are in `stepsDone`, and so is a sent pilot email, §38.8, §39.1). If you see: "That code is incorrect or has expired" → "Tap **Resend code** and use the newest email."; "We already sent a code" → "Look in Spam or Promotions."; the wrong email → "Tap **Change it**."; a few questions after signing in → "Answer them. Any answer is fine."; a cookie bar → "Tap **Accept** or **Decline**. Both are fine." |
-| 2 | `ready-socials` | Connect your accounts there | Open "Open Content Rewards settings" → `https://contentrewards.com/c/settings`. "Tap **Accounts**." "Tap **Connect account**. Tap YouTube." "On the next screen, leave every box ticked and tap Allow or Continue." "Do the same for Instagram, X and Facebook." "Each one should say **Connected**." Then one line made from `GET /v1/setup` (connected places only, never TikTok): "Clip Factory posts to: YouTube @faze · Instagram @faze · X @faze · Facebook FaZe Page." Line: "TikTok can wait. Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet." "I did this" (sets every `crLinked` that is `false` back to unknown, §38.11); `auto: linked` (ticks when any `crLinked` is `true`); a finished Connect also ticks it (`stepsDone`). A `crLinked: false` re-opens the step with the line "Content Rewards doesn't know your YouTube account. Connect it here, then tap I did this." If you see: "No **Accounts** tab?" → "Look for **Connected accounts**."; **Verify** in red → "Tap it and allow again."; **Sign in again** → "Tap it."; **In review** → "Nothing to do. Content Rewards links it for you."; "already connected to another creator" → "That account is on another Content Rewards account. Unlink it there, or ask Content Rewards support."; "access wasn't granted" → "Tap **Connect account** again and leave every box ticked."; "No YouTube channel found" → "Pick the Google account that owns your channel." Folds: `fold-instagram`, `fold-facebook` (below). |
+| 2 | `ready-socials` | Connect your accounts there | Open "Open Content Rewards settings" → `https://contentrewards.com/c/settings`. "Tap **Accounts**." "Tap **Connect account**. Tap YouTube." "On the next screen, leave every box ticked and tap Allow or Continue." "Do the same for Instagram, X and Facebook." "Each one should say **Connected**." Then one line made from `GET /v1/setup` (connected places only, never TikTok): "Clip Factory posts to: YouTube @faze · Instagram @faze · X @faze · Facebook FaZe Page." Line: "Add TikTok the same way too, for the campaign clips your Mac posts there." (`CR_TIKTOK_ADD`, §47.12) "I did this" (sets every `crLinked` that is `false` back to unknown, §38.11); `auto: linked` (ticks when any `crLinked` is `true`); a finished Connect also ticks it (`stepsDone`). A `crLinked: false` re-opens the step with the line "Content Rewards doesn't know your YouTube account. Connect it here, then tap I did this." If you see: "No **Accounts** tab?" → "Look for **Connected accounts**."; **Verify** in red → "Tap it and allow again."; **Sign in again** → "Tap it."; **In review** → "Nothing to do. Content Rewards links it for you."; "already connected to another creator" → "That account is on another Content Rewards account. Unlink it there, or ask Content Rewards support."; "access wasn't granted" → "Tap **Connect account** again and leave every box ticked."; "No YouTube channel found" → "Pick the Google account that owns your channel." Folds: `fold-instagram`, `fold-facebook` (below). |
 | 3 | `connect` | Connect Content Rewards | `auto: connected` (ticks on `connected` **or** `read_only`), `manual: false`. Words by where the page runs (below). If you see: **Sign-in failed** → "Close that tab and tap Connect Content Rewards again."; "your account can't connect apps" (or anything about connecting apps) → "Look at the card Content Rewards said no? below. It has an email for you."; nothing happens → "Look for a new browser tab. Still nothing? Tap Connect Content Rewards again." |
 
 Fold-outs inside step 2 (closed unless the question applies):
@@ -8129,9 +8129,10 @@ top to bottom:
    countries: $0.20", "Unknown country: …"). These are CR's published rates, never a guess of what a clip will earn.
    Then "Money left: $7,890 of $8,500 · as of 2:10 pm" over a soft bar with a chip "Plenty left" (< 50% used) / "Half
    used" / "Almost gone" (≥ 95%), "Open to everyone" or "The brand picks creators (you apply)", and "Pays for:
-   YouTube, Instagram". When the campaign pays for TikTok: "TikTok: not yet. Campaign clips skip TikTok for now: your Mac
-   can't mark them as Branded content yet." (round 3, ADR-86: the one source is the server's
-   `tiktok_mac.CAMPAIGN_SKIPS`)
+   YouTube, Instagram". When the campaign pays for TikTok: while Your Mac posts TikTok is on, "TikTok: your Mac posts campaign clips with
+   TikTok's Paid partnership label." (`CAMPAIGN_TIKTOK_MAC`, §47.12); with it off, "TikTok: not yet. Campaign clips go
+   on TikTok from your Mac. Turn it on in Settings › Posting › Your Mac posts TikTok." (the server's
+   `tiktok_mac.CAMPAIGN_MAC_OFF`, word for word; ADR-96)
 4. **Rules I'll follow** (`data-help="cr-rules"`): `plainRules` with a tick each (code-made, §38.10: "Clips are 15 to
    60 seconds long.", "Every caption has #FaZe and @FaZeClan.", "#Ad goes at the start of each caption.", "'Paid
    partnership' shows on the video for the first 3 seconds.", "The FaZe logo stays on screen the whole clip, away
@@ -8230,7 +8231,7 @@ that is never "accepted": it just shows.
 | `budget_half` | no | spent > 50% (`MAX_SPENT_FRACTION = 0.5`) | "Half the money is used. $3,880 is left. Post soon, before it runs out." |
 | `low_rate` | no | every paid CPM rate under $1.00 per 1,000 views (`MIN_RATE_CENTS = 100`) | "It pays only $0.50 per 1,000 views. Most campaigns pay $1 or more. You can still make clips, or pick another one." |
 | `logo_missing` | yes | `logo.needed` and no ready logo | "This campaign needs its logo on every clip. Add it below." (next step `logo`, vermilion "Add the logo") |
-| `tiktok_only` | yes | the campaign pays only for TikTok | "This campaign only pays for TikTok. Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet. Pick a campaign that pays for YouTube, Instagram, X or Facebook." |
+| `tiktok_only` | yes | the campaign pays only for TikTok | "This campaign only pays for TikTok. Campaign clips go on TikTok from your Mac. Turn it on in Settings › Posting › Your Mac posts TikTok. Or pick a campaign that pays for YouTube, Instagram, X or Facebook." (`gates.TIKTOK_ONLY`; only while TikTok isn't one of its places: the Mac off and TikTok not approved, §47.12) |
 | `no_place` | yes | no paid platform is set up in Clip Factory (TikTok counted only after its audit) | "Set up YouTube first. This campaign pays for YouTube and Instagram." (→ the first paid place's setup page) |
 | `held` | yes | CR said too many clips wait for approval (§38.12) | "Content Rewards wants the brand to check your other clips first. I'll tell you when you can post again." |
 | `cap_reached` | yes | CR said `creator_cap_reached` | "You reached the most you can earn on this campaign. Pick another one." |
@@ -8264,9 +8265,11 @@ that is never "accepted": it just shows.
     "Paid partnership", "#Ad at the start", "Logo on" (the last only when the campaign needs it).
   * **Upload to** shows only `campaign.uploadPlaces` (§38.8: places the campaign pays for, set up in Clip Factory,
     not refused as unlinked by CR, and TikTok only after its audit, §17.4 gate `posting_audit: ok`; Review also takes
-    TikTok out of a campaign clip's places until TikTok approved the app, `tiktokAudited`, round 3). One line under the
-    chips: "Only places this campaign pays for." and, when the campaign pays for TikTok and TikTok is not offered:
-    "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet." (the server's `fit.TIKTOK_WAITS`, the same words as `tiktok_mac.CAMPAIGN_SKIPS`). A place CR refused as not linked (`crLinked: false`): the line "Link YouTube inside Content Rewards
+    TikTok out of a campaign clip's places until TikTok approved the app or while Your Mac posts TikTok is off,
+    `campaignPlaces(…, tiktokGoes)`, §47.12). One line under the chips: "Only places this campaign pays for." and,
+    when the campaign pays for TikTok and TikTok can't go (not approved and the Mac off): "Campaign clips go on TikTok
+    from your Mac. Turn it on in Settings › Posting › Your Mac posts TikTok." (the server's `fit.TIKTOK_MAC_OFF`, the
+    same words as `tiktok_mac.CAMPAIGN_MAC_OFF`; the fit's note has **Turn on your Mac** → `/settings/posting/tiktok-mac`). A place CR refused as not linked (`crLinked: false`): the line "Link YouTube inside Content Rewards
     first." with the glass Open "Open Content Rewards settings" (→ `https://contentrewards.com/c/settings`), the green
     "I linked it" (`PATCH /v1/contentrewards/connection {"relinked": "youtube"}`: back to unknown, so YouTube returns
     to the chips) and the second line "Then tap I linked it. The next clip will go."
@@ -9063,9 +9066,10 @@ Check now (`POST …/campaigns/{id}/read`) runs step 3 for one campaign synchron
   * Every chosen place is one of the clip's places (the §38.8 `uploadPlaces` rule), else 400 with the first refusal:
     not paid → "This campaign doesn't pay for {Platform}. Turn it off, then tap Upload."; not `ready` on Set up
     posting → "{Platform} is not set up yet. Turn it off, then tap Upload."; TikTok before TikTok approved the app
-    (its `app_review` and `posting_audit` gates not both `ok`, `tiktok_mac.setup_audited`; round 3, ADR-86: before
-    that only the owner's Mac posts TikTok, and it can't mark a campaign clip as Branded content yet) → "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet. Turn
-    TikTok off, then tap Upload."; `CRCONN.crLinked[place]` is `false` → "Add {Platform} in Content Rewards first.
+    (its `app_review` and `posting_audit` gates not both `ok`, `tiktok_mac.setup_audited`) goes to the owner's Mac
+    with Everyone and Branded content while Your Mac posts TikTok is on (§47.12, ADR-96); with it off → "Campaign
+    clips go on TikTok from your Mac. Turn it on in Settings › Posting › Your Mac posts TikTok. Or turn TikTok off,
+    then tap Upload."; `CRCONN.crLinked[place]` is `false` → "Add {Platform} in Content Rewards first.
     Then tap I added it, or turn {Platform} off and tap Upload."
   * YouTube: `options.youtube.privacy` other than `public` → 400 "Campaign clips must be public. Pick Everyone.";
     `madeForKids: true` → 400 "Campaign clips are never made for kids."; the post keeps `privacy: "public"` and
@@ -9085,7 +9089,7 @@ Check now (`POST …/campaigns/{id}/read`) runs step 3 for one campaign synchron
   the same 409s, place rule and fit gate on the posts they send (the failed and the waiting ones), with sentences that
   name the buttons those screens have (no switch, no Upload): "This campaign doesn't pay for {Platform} any more. Tap
   Try again on another place.", "{Platform} is not set up yet. Set it up in Settings › Posting › Set up posting, then
-  tap Try again.", "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet. Tap Try again on another place." and "Add {Platform} in Content Rewards first, then tap Try again." TikTok's
+  tap Try again.", "Campaign clips go on TikTok from your Mac. Turn it on in Settings › Posting › Your Mac posts TikTok. Tap Try again on another place." (the Mac off), "Your Mac posts campaign clips on TikTok. Tap Post with my Mac." (TikTok's API before the approval, the Mac on: `CAMPAIGN_MAC_POSTS`, §47.12) and "Add {Platform} in Content Rewards first, then tap Try again." TikTok's
   public and Branded content rule runs when new TikTok choices come with it; they replace the TikTok post's
   `postOptions` but its `campaign` part goes along unchanged. A waiting campaign post is never released by itself when
   its account comes back (`release.release_waiting`): it waits for Post now (§39.3).
@@ -12384,8 +12388,9 @@ brands, CR's category names) is plain escaped text, at most 300 characters, neve
 
    Under the controls, fixed (not a control): "I skip campaigns that need their own sound or picture on the
    video." The TikTok chip, until TikTok's posting audit passes (§17.4 gate
-   `posting_audit: ok`): shown off and not tappable (`aria-disabled`), with the §38.4 line "TikTok: not yet. Campaign clips skip
-   TikTok for now: your Mac can't mark them as Branded content yet." A place not set up yet (not
+   `posting_audit: ok`): shown off and not tappable (`aria-disabled`), with the §38.4 line "TikTok: not yet. Campaign clips go on
+   TikTok from your Mac. Turn it on in Settings › Posting › Your Mac posts TikTok." (the server's `tiktokWaits`, which
+   still leaves TikTok out of the finder until TikTok's audit; §47.12) A place not set up yet (not
    `ready` in `GET /v1/setup`) is shown off and not tappable, with "Set it up first." under it (matching only ever uses
    ready places, §41.3); while any place but TikTok isn't ready, a quiet "Set up another place" sits under the chips
    (→ `/settings/posting/setup?back=/campaigns/find`). S sends `places: null` whenever the picked chips equal every
@@ -13215,8 +13220,8 @@ What stays for the owner:
   row's problem line says the server's words and nothing is saved). A toast says what happened ("Link saved! Clip
   Factory will count its views.", "Found it on your TikTok! …", or the answer's `note`). The clip page has the same field beside Refresh numbers, and its
   TikTok stack says "Posted by you. Add its TikTok link to count views." ("Posted by your Mac. …" for the Mac's).
-* **A campaign clip** never goes to his Mac (round 3, D1, §47.2): its row says "Campaign clips skip TikTok for now:
-  your Mac can't mark them as Branded content yet." with no button, and Review leaves TikTok unticked for it. The
+* **A campaign clip** goes to his Mac like any clip, with TikTok's Paid partnership label (§47.12, ADR-96): its row
+  is the not-yet or Mac row with " · Paid partnership label", and Review offers TikTok for it while the Mac is on. The
   inline Add link has **Find it for me** right beside its box (the `{since}` call), then **Paste** and **Save the
   link**; from a "Not sure it posted" row also **It's on TikTok, no link** behind its own question (`{noLink: true}`).
 * **Review** (TikTok ticked, TikTok not approved: `app_review` and `posting_audit` not both `ok`): one line just above
@@ -20235,17 +20240,16 @@ Upload and auto-posting write the Mac post in the same transaction as the clip's
 1. **Upload** (`routes/clips.confirm` → `uploads.upload_review_clip`): the TikTok post is written as a Mac post
    (`source: "upload"`, `madeForMac`) instead of `queued` when all hold: `"tiktok"` is among the chosen places;
    `settings.tiktokMac.on`; TikTok has not approved the app (`tiktok_mac.tiktok_audited`, the server twin of the web's
-   `tiktokAudited`: `app_review` and `posting_audit` not both `ok`); the clip is not a campaign clip. **A campaign
-   clip never gets a Mac post** (round 3, D1, ADR-86; `uploads._mac_source` returns None for it): the helper can't set
-   TikTok's Branded content disclosure yet, and the Mac's done never reaches Content Rewards, so the post could not
-   earn and would break TikTok's rules. Before TikTok approved the app Upload with TikTok refuses a campaign clip (400
-   "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet. Turn TikTok off, then tap
+   `tiktokAudited`: `app_review` and `posting_audit` not both `ok`); a campaign clip too, since 2026-11-24 (§47.12,
+   ADR-96: Everyone with Branded content, after all of Upload's campaign checks; until then round 3's D1 kept campaign
+   clips off the Mac). With the switch off a campaign clip's TikTok is refused before the approval ("Campaign clips go
+   on TikTok from your Mac. Turn it on in Settings › Posting › Your Mac posts TikTok. Or turn TikTok off, then tap
    Upload.", §38.14 `_place_refusal`); once approved its TikTok goes through TikTok's API as before (`queued`, the
-   sheet's Branded content). All other campaign checks stay. The `tiktok` body stays required ("Pick who can see it on TikTok.") and is checked as before, but
-   the post's `postOptions` are My settings' choices (§47.1); `uploadTo` names TikTok (he chose it). Upload's API TikTok rule (`queued`, the refusals) is
+   sheet's Branded content). The `tiktok` body stays required ("Pick who can see it on TikTok.") and is checked as before, but
+   the post's `postOptions` are My settings' choices (§47.1), or the card's own with `tiktokMac: true` (§47.12); `uploadTo` names TikTok (he chose it). Upload's API TikTok rule (`queued`, the refusals) is
    otherwise unchanged, and exactly as before with the switch off or once TikTok approved the app.
-2. **Auto-posting runs** (`autopost/run.py`, live mode only): with `tiktokMac.on`, a clip (never a campaign clip,
-   round 3) also gets a TikTok Mac post (`source: "auto"`) through `upload_review_clip(..., tiktok_mac=True)`; its options are My
+2. **Auto-posting runs** (`autopost/run.py`, live mode only): with `tiktokMac.on`, a clip (a campaign clip only when TikTok is one of its places and it fits with TikTok, §47.12)
+   also gets a TikTok Mac post (`source: "auto"`) through `upload_review_clip(..., tiktok_mac=True)`; its options are My
    settings' (§36: Everyone, Comment, Duet and Stitch on). TikTok is **not** added to the run's places (`uploadTo` never
    names it). Practice and Private test runs never make one ("Nothing gets sent"). `GET /v1/autopost`: `leftOut` drops
    TikTok while on, `macPlaces: ["tiktok"]` (else `[]`; also `[]`, with TikTok back in `leftOut`, when no other place is
@@ -20265,9 +20269,9 @@ Upload and auto-posting write the Mac post in the same transaction as the clip's
    now?: boolean}` → `{results: [{clipId, sent, reason?}]}`, in order, each id once; 409 `MAC_OFF` while the switch is
    off; `now` must be a boolean, else 400). A clip goes when it is not on TikTok yet (the web's `canSendToMac`):
    uploaded, its TikTok not out for everyone, not `by: "you"`, not `queued`, not a Mac post already; never a Private
-   test and **never a campaign clip** (`routes/clips.campaign_clip(...)` is not None → `{sent: false, reason:
-   "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet."}`, `tiktok_mac.SEND_CAMPAIGN
-   = CAMPAIGN_SKIPS`, checked right after "still starting", with and without `now`; nothing written). **`now`** (additive, ADR-86): Settings' bulk Send these to my Mac sends no `now`, so its
+   test. A campaign clip goes with Everyone and Branded content once Upload's campaign checks pass for TikTok
+   (`routes/clips.mac_campaign_refusal`; else its own `{sent: false, reason}` and nothing written), and a paid clip
+   with its label (`tiktok_mac.send_options`, §47.12). **`now`** (additive, ADR-86): Settings' bulk Send these to my Mac sends no `now`, so its
    posts are `source: "sent"`, the backlog (one after each auto-posting run, §47.8); a row's Post with my Mac sends
    `{clipIds: [clipId], now: true}`, so its post is `source: "upload"` and the Mac posts it at once and first, as after
    an Upload tap. The refusals and race guards are the same either way. A clip with no TikTok post gets a new Mac post (`madeForMac`, appended to
@@ -20281,8 +20285,7 @@ Upload and auto-posting write the Mac post in the same transaction as the clip's
    "This was a Private test, so it stays off TikTok.",
    "This clip is still uploading to TikTok. Wait until it is done, then try again.", "You already posted this one on
    TikTok.", "This clip is already on TikTok for everyone.", "Your Mac already has this clip.", "We could not find
-   that clip.", "This clip just changed. Try again.", "Campaign clips skip TikTok for now: your Mac can't mark them as
-   Branded content yet." (the server's words).
+   that clip.", "This clip just changed. Try again.", and a campaign clip's campaign refusals (§47.12; the server's words).
 4. **Take it back** (`DELETE /v1/clips/{clipId}/tiktok/mac` → `{clip, posts}`): only while `mac.state` is `waiting` or
    `stopped` and the Mac never pressed Post. A `madeForMac` post is deleted and leaves `postIds` (and
    `tiktokForMac`); a handed-over post gets `beforeMac` back. The post and the clip (its settle rule) are **one
@@ -20303,7 +20306,7 @@ Upload and auto-posting write the Mac post in the same transaction as the clip's
 | POST `/v1/tiktok/mac/send` | `{ clipIds, now?: boolean }` | `{ results }` |
 | POST `/v1/tiktok/mac/login` | `{ action: "change" \| "forget" }` | `{ helper }` (§47.8) |
 | POST `/v1/tiktok/mac/request` | `{ action: "resume" \| "let_go" }` | `{ helper }` (the owner's Start my Mac again and Let them go, round 3) |
-| POST `/v1/clips/{clipId}/tiktok/mac/claim` | `{ device }` | `{ job: MacJob }` |
+| POST `/v1/clips/{clipId}/tiktok/mac/claim` | `{ device, version? }` | `{ job: MacJob }` (§47.12) |
 | POST `/v1/clips/{clipId}/tiktok/mac/step` | `{ device, step, attempt? }` | `{ job: MacJob }` (a re-sent step is the beat) |
 | POST `/v1/clips/{clipId}/tiktok/mac/done` | `{ device, link? }` | `{ clip, posts, note? }` |
 | POST `/v1/clips/{clipId}/tiktok/mac/stopped` | `{ device, reason, needsYou?: boolean, attempt?, code?: "login" }` | `{ job: MacJob }` (`code` §47.11) |
@@ -20321,7 +20324,8 @@ Your Mac posts TikTok."
   helper sees its own), minus `source: "auto"` ones whose Post was not pressed while `autoPost.on` is false (§47.2). Order: `source: "upload"` first,
   then the rest; oldest `since` first, then the oldest clip (`decidedAt`); at most 50. `caption` is the clip's stored
   TikTok caption, repaired as §5 says and in NFC; `fileName` is the web's `videoFileName(hook)`; `privacy` and the
-  three switches come from the post's options.
+  three switches come from the post's options, and so do `brandContent` and `brandOrganic` (TikTok's label, always
+  there, false unless the options say true; a campaign post's `caption` is its campaign caption, §47.12).
 * **Ping:** writes the helper item (`seenAt` now) and answers `on`. State other than the three → 400. Round 3 adds
   `backlogAt?` and `holdBefore?` (text of at most 40 characters that `clock.parse` reads, else 400 "backlogAt must be
   a time." / "holdBefore must be a time."), `backfill?` (`validate.boolean`, 400 "backfill must be true or false."),
@@ -20437,9 +20441,8 @@ there is no manual TikTok sheet, so every TikTok row says only what the Mac is d
   `web/src/lib/tiktokMac.ts`:
 
   1. Posted `via: "mac"` → unchanged (row 1 below). 2. `by: "you"` → unchanged (row 2). 3. A Mac post → `macRow`
-  (below). 4. TikTok approved the app, or nothing to offer → no Mac row. 5. A Private test → unchanged. 6. **A campaign
-  clip** → "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet." (`MAC_ROW_CAMPAIGN`,
-  no button: nothing to do, and no dead end). 7. Otherwise the not-yet rows (`notReady`) or "Not on TikTok yet" /
+  (below). 4. TikTok approved the app, or nothing to offer → no Mac row. 5. A Private test → unchanged. 6. *Removed
+  2026-11-24 (§47.12): a campaign clip now has the rows below, with " · Paid partnership label".* 7. Otherwise the not-yet rows (`notReady`) or "Not on TikTok yet" /
   "Only you can see it on TikTok" with **Post with my Mac**.
 
   `macRow` (round 3):
@@ -20491,7 +20494,7 @@ there is no manual TikTok sheet, so every TikTok row says only what the Mac is d
   | 6 | `mac.state` `waiting` | "Waiting for your Mac · next", "… · in line (2 before it)", "… · in line" (a backfill) or "… · goes at about 20:30" (the helper's `backlogAt`), counted the way the helper picks; held: "Held on your Mac: made before {time}"; not known: "Waiting for your Mac" alone | none; held: **Post with my Mac** |
   | 7 | Waiting, `source` `sent` or `auto`, auto-posting off | "Waiting for your Mac · auto-posting is off" | **Turn on** → `/settings/posting/auto` |
   | 8 | `mac.state` `stopped` | "Didn't work: {the reason's first sentence, without its full stop}"; once `pressedAt` is set, "Not sure it posted · look on your TikTok" (chosen by `pressedAt`, never by the stored sentence; shown even while the Mac can't post), with " · Try again from {time}" inside the find window | **Try again**; pressed: **It's on TikTok** (the inline Add link with **Find it for me**, and **It's on TikTok, no link**) and, once the 30-minute find window is over, a quieter **Try again** (no fill, its words underlined) that asks "Post it again? Only if it's not on your TikTok." with **Yes, post it again** and **Not now** |
-  | 9 | Not on TikTok yet (`canSendToMac`: no TikTok post, or one waiting for setup, failed, failed for the public account, or private; never a campaign clip) | "Not on TikTok yet"; a campaign clip: "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet." | **Post with my Mac**; a campaign clip: none |
+  | 9 | Not on TikTok yet (`canSendToMac`: no TikTok post, or one waiting for setup, failed, failed for the public account, or private; a campaign clip too, §47.12) | "Not on TikTok yet" (a paid clip: " · Paid partnership label" or " · Promotional content label") | **Post with my Mac** |
   | 10 | A Private test's clip | "Private test · stays off TikTok" | none |
 
   Rows 9 and 10 are only shown while TikTok has not approved the app (`tiktokAudited`); afterwards a clip without a Mac
@@ -20543,10 +20546,9 @@ there is no manual TikTok sheet, so every TikTok row says only what the Mac is d
   while the switch is off `TIKTOK_PUBLIC_HINT`, "TikTok: turn on Your Mac posts TikTok so
   it posts for everyone." (§42.1). "Uploaded just now" shows, for each kept clip, the words first (its hook, then
   "TikTok: {the row's words}"), then See how it does and the row's one button, in that order on screen and for
-  reading; on a phone the buttons go under the words, on the right. A campaign clip's row shows its words alone (no
-  "TikTok: " prefix), and Review never ticks or offers TikTok for a campaign clip while TikTok has not approved the app
-  (round 3, D1: `campaignPlaces`, with the line "Campaign clips skip TikTok for now: your Mac can't mark them as
-  Branded content yet."). Nothing opens by itself after Upload. Upload's own rules and buttons are
+  reading; on a phone the buttons go under the words, on the right. Review offers TikTok for a campaign clip while TikTok
+  approved the app or the Mac posts TikTok (`campaignPlaces(…, tiktokGoes)`, §47.12), else the line "Campaign clips go
+  on TikTok from your Mac. Turn it on in Settings › Posting › Your Mac posts TikTok.". Nothing opens by itself after Upload. Upload's own rules and buttons are
   unchanged: with the switch on it writes the Mac post as `source: "upload"`, which the helper posts at once. With the
   switch on, the card starts TikTok on My settings with no tap (§47.9).
 * **Settings › Posting › Your Mac posts TikTok** (`/settings/posting/tiktok-mac`, `TikTokMacBranch.tsx`, in the tree
@@ -20582,10 +20584,10 @@ there is no manual TikTok sheet, so every TikTok row says only what the Mac is d
 ### 47.5 Tests (offline, fakes only)
 
 * `api/tests/test_tiktok_mac.py`: the setting; Upload with the switch on (a Mac post in the same transaction), off,
-  once TikTok approved the app, without the TikTok choices, without TikTok; **a campaign clip never goes to the Mac**
-  (round 3: Upload with TikTok refused with `CAMPAIGN_SKIPS` while not approved, nothing written; once approved it goes
-  through TikTok's API, `queued` with Branded content, never a Mac post); a run never gives a campaign clip a Mac post
-  and never a Private test; It's on TikTok on a stopped post turns `needs_you` back to `ok` (pressed or not; not for a
+  once TikTok approved the app, without the TikTok choices, without TikTok; a campaign clip's Mac post (§47.12: Everyone with Branded content after
+  the campaign checks; refused with `CAMPAIGN_MAC_OFF` while the switch is off and TikTok not approved, nothing
+  written; once approved it goes through TikTok's API, `queued` with Branded content); a run gives a campaign clip a
+  Mac post only when TikTok passes its checks, and never a Private test; It's on TikTok on a stopped post turns `needs_you` back to `ok` (pressed or not; not for a
   post that only waits; never makes a helper item); **the stuck rule** (beat 4:59 not stuck, 5:00 stuck; a claim
   49:59 old with fresh beats not stuck, 50:00 stuck; Try again and It's on TikTok refused while not stuck; a stuck
   claim taken back, a new claim or a beat meanwhile wins, the Mac's late done refused); **the find window** (Try
@@ -20597,9 +20599,9 @@ there is no manual TikTok sheet, so every TikTok row says only what the Mac is d
   for me on a working post answers `MAC_WORKING` before the finder; the ping's plan keys stored and removed, their
   400s, `resumeDone`/`letGoDone` removing only their own request; the request route (each refusal, each write);
   `needsYouClipId` set by a needs-you stop and cleared by Try again, It's on TikTok and an ok ping; Send these to my
-  Mac and Post with my Mac refuse a campaign clip with `SEND_CAMPAIGN` (with and without `now`, also one whose campaign
-  lives on its posts); the words (one source for `CAMPAIGN_SKIPS`: `fit.TIKTOK_WAITS`, `_places_note` and the start of
-  both `_place_refusal` sentences; `PRESSED`, `MAC_STILL_LOOKING`, `NOT_UPLOADED`, `TIKTOK_PRIVATE_ONLY`; no string
+  Mac and Post with my Mac send a campaign clip with its label once its checks pass and refuse it with their words
+  otherwise (§47.12); the words (one source for `CAMPAIGN_MAC_OFF`: `fit.TIKTOK_MAC_OFF`, `gates.TIKTOK_MAC_OFF` and
+  the start of the Mac-off `_place_refusal` sentences; `PRESSED`, `MAC_STILL_LOOKING`, `NOT_UPLOADED`, `TIKTOK_PRIVATE_ONLY`; no string
   constant in `tiktok_self.py`, `tiktok_mac.py`, `routes/tiktok_mac.py` or `platforms/errors.py` says "post it
   yourself" or "I posted it"; the three constants one line each); never TikTok's API: the clip flow's publish loop and
   `ensure-posts`, `release.release_waiting`, Try again and Post now (`_try_again`, `release.restart`, a failed clip's
@@ -20755,54 +20757,38 @@ TikTok. No API, table or infrastructure change.
      it reads "Tap a place below to change it for this clip.", and TikTok's row line
      says "Who can see it: Everyone · …", never "not picked yet". Upload is never held with "Tap Use my settings
      first. TikTok needs your tap."
-   * **TikTok's row is read-only for what the Mac uses** (decided for this release, 2026-11-23). The server asks the
-     Mac for My settings whatever the card sends (§47.1, `uploads.py` sets every Mac post's `tiktok` to
-     `tiktok_mac.preset_options`, `brandContent` always false), and the helper has no Branded content step. So the open
-     row shows, in place of Who can see it and the Comments, Duet and Stitch switches, one fixed line built from the
-     preset's real values (`macPostsLine`): "Your Mac posts it with My settings: Everyone · Comments on · Duet on ·
-     Stitch on", and a small **Change My settings** button to Settings › Posting › My settings
-     (`/settings/posting/my-settings`). There is no per-clip privacy or switch change in this mode, so the card never
-     says "Only me" while the Mac posts for Everyone. "Posting as {name}" shows once TikTok's API named the account;
-     with no name yet (not asked, slow, failed) the line is left out in this mode only.
-   * **Commercial content stays visible and is this clip's own.** Ticking **Your brand** or **Branded content** (with
-     Commercial content on) holds Upload for TikTok (`macTikTokHeld`): Upload's line and an alert in the row say
-     `MAC_LABEL_HELD`, "Your Mac can't add TikTok's Branded content label yet. Untick it, or untick TikTok, then post
-     this clip in the TikTok app with its label, not with your Mac." With Commercial content on and nothing
-     ticked it is held too, with `MAC_COMMERCIAL_HELD`, "Your Mac can't add TikTok's Branded content label yet. Turn
-     off Commercial content, or untick TikTok, then post this clip in the TikTok app with its label, not with
-     your Mac." (TikTok's own
-     `PICK_WHOSE` line would send him round in a circle: either pick holds the Mac too; Upload's hover text is left
-     empty). TikTokCommercial leaves out its hint line in this mode ("Your video will be labeled as …" would be untrue;
-     "Pick Your brand, Branded content, or both." is the circle again). With TikTok unticked the other places upload as
-     usual. So Upload never hands a clip with a label ticked to the Mac. But nothing on the clip records Commercial
-     content (it lives only in the card's state), so once that clip is uploaded without TikTok it is like any other
-     kept clip: Post with my Mac (Library, the clip page) and Settings › Your Mac posts TikTok › Send these to my Mac
-     would hand it to the Mac, which posts it with `preset_options` (`brandContent` false), without the label TikTok's
-     Branded Content Policy requires. So the hold's words above, My settings (item 3) and Ask tell him to post that clip
-     himself in the TikTok app with the label, never with Post with my Mac or Send these to my Mac; and Review's
-     "Uploaded just now" row of a clip uploaded from a card with Commercial content on (`commercialRow`, this visit
-     only) reads "TikTok: Commercial content: post it in the TikTok app, with its label" (`MAC_ROW_COMMERCIAL`)
-     with the inline Add link, never Post with my Mac. A flag on the clip that keeps every Mac path off it is the later
-     step's (below).
+   * **TikTok's row is the clip's own** (since 2026-11-24, §47.12; from 2026-11-23 until then it was read-only, with
+     `macPostsLine` and Change My settings, and a ticked label held Upload: `macTikTokHeld`, `MAC_LABEL_HELD`,
+     `MAC_COMMERCIAL_HELD`, `commercialRow`, `MAC_ROW_COMMERCIAL`, all gone). The open row has Who can see it with
+     TikTok Studio's three choices (`MAC_PRIVACY_OPTIONS`: Everyone, Friends, Only me; a saved Followers starts on
+     Everyone, as Studio has none), the Comments, Duet and Stitch switches, and Commercial content (Your brand,
+     Branded content; Branded content can't be Only me, TikTok's rule, shown as on the API path). All start on My
+     settings with no tap; changing one makes the card's button "Use my settings" again, which puts them back. Nothing
+     holds Upload for a label: the Mac adds TikTok's label (§47.12). "Posting as {name}" shows once TikTok's API named
+     the account; with no name yet (not asked, slow, failed) the line is left out in this mode only.
+   * **A campaign clip** in this mode has TikTok among its places (`campaignPlaces(…, tiktokGoes)`), starting on
+     Everyone with Branded content (`campaignTikTokChoices`); the campaign checks hold Upload if he changes either.
+     The card reads its campaign and fit again whenever the Mac switch changes, so an open Review never keeps a fit
+     without TikTok.
    * **The line above Upload** (§47.4) is built for this clip: `MAC_HINT`, "TikTok: your Mac posts it for everyone.",
-     only while the Mac posts this clip's TikTok and My settings' Who can see it is Everyone; with Followers, Friends or
-     Only me it is `MAC_WHERE_LINE`, "TikTok: your Mac posts it." (the row says who). A campaign clip with the switch on
-     has no line there, as the Mac never takes one.
+     only while the Mac posts this clip's TikTok and the card's own Who can see it is Everyone; with Friends or Only
+     me it is `MAC_WHERE_LINE`, "TikTok: your Mac posts it." (the row says who). With a label it ends
+     `macAddsLabel`: "TikTok: your Mac posts it for everyone and adds TikTok's Paid partnership label." (Promotional
+     content for Your brand alone), a campaign clip's too.
    * TikTok's creator info (`GET /v1/accounts/tiktok/creator-info`, TikTok API data) is still asked, in the background
      as soon as TikTok is ticked, only for the account's name and the longest video it takes (`macCreator`). In this
      mode only, one ask serves every card for 60 seconds (`macCreatorInfo` in `Review.tsx`; a failed ask is not kept).
      Upload never waits for it: while it is slow or after it failed, the card uploads with the preset's choices and no
      creator (opening the TikTok row asks again), and the too-long check uses the creator's longest video once known.
-   * The confirm body still carries `tiktok`, as the server requires ("Pick who can see it on TikTok.", §47.2 item 1),
-     and it is always valid: `macTikTokChoices` is the preset's privacy (Everyone when unset) with the preset's
-     Comments, Duet and Stitch, and Commercial content as ticked (Upload is held while a label is ticked, so
-     `brandContent` and `brandOrganic` go false). The Mac job gets the same (`privacy: "PUBLIC_TO_EVERYONE"`, the
-     saved privacy, with the saved Comment, Duet and Stitch).
-   * **Later step, not in this release:** per-clip TikTok choices and Branded content through the Mac. Both need the
-     helper's Branded content step (TikTok Studio's content disclosure) and the server honouring the card's own
-     `tiktok` choices for a Mac post instead of `preset_options`, and a flag on the clip (its label) that Post with my
-     Mac and Send these to my Mac honour. Until they ship, the row stays read-only, a ticked label holds
-     Upload for TikTok, and the words tell him to post a paid partnership in the TikTok app himself.
+   * The confirm body carries `tiktok`, as the server requires ("Pick who can see it on TikTok.", §47.2 item 1), and
+     **`tiktokMac: true`**: `tiktok` is the card's own row (`macTikTokChoices`: the preset's privacy, Everyone when
+     unset or Followers, with the preset's Comments, Duet and Stitch, then his changes and Commercial content as
+     ticked), and the server hands exactly that to the Mac (§47.12). A normal clip with a label ticked and TikTok
+     unticked still sends them, so the clip keeps its label (`Clip.tiktokLabel`) for a later Post with my Mac.
+   * **Later step, shipped 2026-11-24 (§47.12, ADR-96):** per-clip TikTok choices and TikTok's label through the Mac
+     (the helper's Branded content step, 1.3.0), the server honouring the card's own `tiktok` for a Mac post, the
+     clip's label for Post with my Mac and Send these to my Mac, and campaign clips through the Mac with Content
+     Rewards told.
 2. **Your Mac posts TikTok off, or TikTok approved the app** (TikTok's API path; the app is still in review), and every
    campaign clip: exactly as §36. Who can see it starts unpicked, Comments, Duet and Stitch start off, creator info is
    asked only on Use my settings or when the TikTok row opens, and Upload waits for his tap ("Tap Use my settings
@@ -20814,28 +20800,26 @@ TikTok. No API, table or infrastructure change.
    posts TikTok off.
 3. **Words elsewhere:** Settings › Posting › My settings (`MySettingsBranch.tsx`) reads "Every clip on Review starts
    on these, TikTok too, except campaign clips." at the top, and under TikTok "Commercial content: off. Your Mac posts
-   TikTok with these." in item 1's mode, with a shut "Paid partnership?" fold: "Your Mac can't post those yet.", "Untick
-   TikTok on that clip.", "Post it in the TikTok app, with its label.", "Don't use Post with my Mac or Send these to my Mac
-   for it."; otherwise "Tap Use my settings on a clip to put these on." at the top, and "Commercial content: off. TikTok
+   TikTok with these." in item 1's mode, with a shut "Paid partnership?" fold: "Tick Branded content in that clip's
+   TikTok row.", "Your Mac adds TikTok's Paid partnership label when it posts it.", "Campaign clips have it ticked
+   already." (§47.12); otherwise "Tap Use my settings on a clip to put these on." at the top, and "Commercial content: off. TikTok
    wants your own tap, so tap Use my settings on each clip." with the fold's one line "Tick Branded content in that
    clip's TikTok row.". The TikTok part's leaf (`settingsTree.ts`, `my-settings-tiktok`) reads
    "Everyone can see it; comments, Duet and Stitch on. Every clip starts on these while your Mac posts TikTok." in
    both modes. Ask's "Use my settings" guide (`helpKb.json`, `review-use-my-settings`, titled "Use my settings: your
    saved choices on every place", true in both modes) says every ticked place, TikTok included, starts on his settings
-   while his Mac posts TikTok, so he just taps Upload, that the Mac always posts with them (change them in My
-   settings), and that paid partnerships can't go through the Mac yet, so he unticks TikTok for that clip and posts it
-   himself in the TikTok app with the label, never with Post with my Mac or Send these to my Mac;
-   `review-place-rows` says the same after its Branded content step; `review-upload-to` says to tap Use my settings
-   only when the card does not already say Your settings are on. None of them tells him to tick Branded content for
-   the Mac. docs/SETUP_POSTING.md says the same, and its demo step (`public-demo`, also in `tiktok.ts`) says to record
+   while his Mac posts TikTok, so he just taps Upload, that he can change a clip's TikTok row (or My settings), and that a
+   paid partnership gets Branded content ticked on that clip's TikTok row, which the Mac adds as TikTok's label;
+   `review-place-rows` says the same after its Branded content step; `cr-tiktok` ("Campaign clips on TikTok") says
+   campaign clips go through his Mac with the Paid partnership label; `review-upload-to` says to tap Use my settings
+   only when the card does not already say Your settings are on. None of them tells him to post a clip himself in the TikTok
+   app. docs/SETUP_POSTING.md says the same, and its demo step (`public-demo`, also in `tiktok.ts`) says to record
    with Your Mac posts TikTok off.
 4. **Tests:** the Review tests (`web/test/reviewMac.test.tsx`) pin both modes: with the Mac on, TikTok starts on My
-   settings and Upload is not held, also while creator info is slow or failed; the row is read-only (the Mac line,
-   Change My settings, no Who can see it, no Comments, Duet or Stitch switch) and the Mac job gets the preset's privacy;
-   Your brand or Branded content holds Upload for TikTok with `MAC_LABEL_HELD` (Commercial content alone with
-   `MAC_COMMERCIAL_HELD`) and unticking TikTok lets the rest go, and that clip's "Uploaded just now" row says
-   `MAC_ROW_COMMERCIAL` with Add link and no Post with my Mac; the line above Upload says `MAC_WHERE_LINE` with
-   Followers saved; the shared creator-info answer is used in Mac mode
+   settings and Upload is not held, also while creator info is slow or failed; the row is the clip's own (Who can see it with
+   Studio's three choices, the switches, Commercial content) and Upload sends it with `tiktokMac: true`; Branded content
+   ticked uploads with no hold and the label in the body, also with TikTok unticked; the line above Upload says
+   `MAC_WHERE_LINE` with Friends picked and names the label when one is ticked; the shared creator-info answer is used in Mac mode
    only, and a card that switches to the API path asks again on Use my settings. With it off: today's unpicked start and
    held Upload, a fresh ask per card, and "Posting as" shown even with an empty nickname.
    `web/test/mySettingsTikTok.test.tsx` pins My settings' words in both modes; `helpEvals.json` has "Does TikTok need my
@@ -21454,6 +21438,190 @@ frame, no Apple Events).
   (written without `needsYouDevice`) still ends by itself (D2). 1.2.3 (the re-review's fixes) reaches the owner's Mac
   after merge, again only on his command (`install.sh` from main); 1.2.2 works against the new server meanwhile. No
   Terraform change, no owner data touched.
+
+### 47.12 Campaign clips and paid clips go through the Mac with TikTok's label (owner request, 2026-11-24)
+
+The owner's Content Rewards campaign clips are paid partnerships, and he wants every clip on TikTok through his Mac
+("its always the automation that covers it"). Until now a campaign clip never got a Mac post (round 3, D1, ADR-86)
+and a card with Your brand or Branded content ticked held Upload for TikTok (§47.9 item 1), because the helper could
+not set TikTok's commercial content disclosure and the Mac's done never reached Content Rewards. Both now work
+([ADR-96](DECISIONS.md#adr-96-campaign-and-paid-clips-post-tiktok-through-the-mac-with-tiktoks-label)). This
+replaces §47.2's "a campaign clip never gets a Mac post", §47.9 item 1's read-only row and its label holds, and every
+"Campaign clips skip TikTok for now…" sentence (`CAMPAIGN_SKIPS`, `SEND_CAMPAIGN`, `fit.TIKTOK_WAITS` and their
+copies are gone). No table, index, route or Terraform change: every field and body key is additive.
+
+**A label** is TikTok's commercial content disclosure: `brandContent` (Branded content: the "Paid partnership" label,
+promoting someone else, on every campaign clip) and `brandOrganic` (Your brand: "Promotional content"). TikTok's rule:
+Branded content is only for Everyone or Friends (`tiktok_mac.BRANDED_PRIVACY`).
+
+#### 47.12.1 Data and API
+
+* **Upload** (`POST /v1/clips/{clipId}/confirm`): optional body key **`tiktokMac: true`** (boolean; anything else is
+  400). It says the card is in Mac mode, so `tiktok` is the card's own TikTok row (privacy, Comment, Duet, Stitch, Your
+  brand, Branded content; validated by `tiktok_options` as before). When Upload makes the TikTok post a Mac post
+  (§47.2 item 1) the post's `postOptions.tiktok` is that `tiktok` (`uploads._mac_options`); without the key (an older
+  web) it is `tiktok_mac.preset_options` as before. A campaign clip with the key must send Everyone with Branded content
+  (`_require_campaign_tiktok`: "Campaign clips must be public. Pick Everyone." / "Turn on Branded content on TikTok for
+  campaign clips."); without it My settings get Everyone and Branded content (`tiktok_mac.campaign_tiktok`).
+* **The clip's label** (`Clip.tiktokLabel: {brandContent, brandOrganic}`, public, additive): written in the Upload
+  write whenever the confirm's `tiktok` has either one true, TikTok chosen or not, in any mode. It is how a paid clip
+  uploaded without TikTok keeps its label for a later Post with my Mac or Send these to my Mac.
+* **Where a Mac post's label comes from:** Upload (above); an auto-posting run: My settings, a campaign clip with
+  Everyone and Branded content; **Send these to my Mac** and a row's **Post with my Mac** (`tiktok_mac.send_options`):
+  a campaign clip → Everyone with Branded content; else the clip's `tiktokLabel`; else a handed-over Clip Factory
+  post's own `postOptions` label (the API sheet's); else My settings. A label with Branded content and another
+  privacy (Only me, Followers) goes Everyone (`with_label`). A new Mac post for a campaign clip carries `campaignId` and
+  `postOptions.campaign` like Upload's posts; a handed-over one keeps its own.
+* **MacJob** (§47.3) always has `brandContent` and `brandOrganic` (booleans, false when the post's choices don't say
+  true). A campaign post's job `caption` is the campaign caption (`campaign_caption("tiktok", …)`: the disclosure
+  first, every required tag, inside TikTok's limit), as TikTok's publisher would send it.
+* **`Post.mac`** also says `brandContent: true` / `brandOrganic: true` (only when true), so rows can show the label.
+* **Claim** (`POST …/tiktok/mac/claim`): body `{device, version?}` (`version`: text, at most 40 characters). A Mac
+  post with a label is only claimed with a `version` of `tiktok_self.MAC_BRAND_FROM` = "1.3.0" or newer
+  (`helper_brands`; none, "dev" or older → 409 `MAC_NEEDS_UPDATE`, "Your Mac needs an update to add TikTok's label to
+  this clip. Set up your Mac again.", nothing written): an older helper would post it without its label. A campaign
+  clip whose campaign takes no clips now (`_require_campaign_open`'s words: ended, paused, held, not in it) is
+  written `stopped` with those words under the claim's own condition (`_stop_closed`), so it leaves the queue and its
+  row says why, and the claim answers 409 with them. That check runs before the version check.
+* **The queue** (`GET /v1/tiktok/mac?version=`, `version` optional and additive) leaves out a labelled post that
+  waits for a helper older than `MAC_BRAND_FROM`: the `version` the read says, else the helper's last check-in (the
+  web and helper 1.3.0 send none). Such a helper takes the first waiting post every tick and would get the 409 forever,
+  so every other post would wait behind it (review, 24 Nov). A labelled post a Mac already works on stays.
+* **The steps before Post** (`video`, `opening`, `uploading`, `settings`, and their beats) check the campaign again: a
+  campaign that stopped taking clips since the claim (or a helper that resumes its claim after a crash, with no new
+  claim) stops the post with the campaign's words (`routes/tiktok_mac._campaign_before_post`, `tiktok_mac.stopped`,
+  only that device's claim, never once Post was pressed) and the step answers 409. Never on `pressing` or after it:
+  the helper writes its press on disk before the server's yes. Never posted for a closed campaign.
+* **An older web's Upload** (no `tiktokMac`) with a label in `tiktok` keeps it on the Mac post (`with_label` on My
+  settings), so the post and the clip's `tiktokLabel` always agree.
+
+#### 47.12.2 The campaign checks for the Mac's TikTok (all of Upload's)
+
+* `_place_refusal` for TikTok before TikTok approved the app: allowed while **Your Mac posts TikTok** is on (`mac_on`;
+  `_require_campaign_places` reads Settings when not given). With it off: `CAMPAIGN_MAC_OFF`, "Campaign clips go on
+  TikTok from your Mac. Turn it on in Settings › Posting › Your Mac posts TikTok." plus " Or turn TikTok off, then tap
+  Upload." (Upload) or " Tap Try again on another place." (Try again, send). Try again of a campaign clip's TikTok
+  through TikTok's API before the approval while the Mac is on (`api=True`): `CAMPAIGN_MAC_POSTS`, "Your Mac posts
+  campaign clips on TikTok. Tap Post with my Mac." (TikTok's API would post it privately; private posts can't earn).
+* Content Rewards' copies follow: `gates.TIKTOK_MAC_OFF` and `fit.TIKTOK_MAC_OFF` (a test pins them to
+  `CAMPAIGN_MAC_OFF`); the fit's TikTok note now has the fix **Turn on your Mac** → `/settings/posting/tiktok-mac`
+  while the Mac is off; the fit's `uploadPlaces` keep TikTok while the Mac is on. `gates.TIKTOK_ONLY` ("This campaign
+  only pays for TikTok. {CAMPAIGN_MAC_OFF} Or pick a campaign that pays for YouTube, Instagram, X or Facebook.") stops
+  a TikTok-only campaign only while TikTok isn't one of its places (the Mac off and TikTok not approved).
+* **Upload** with TikTok: `_require_campaign_open`, the paid places with TikTok, YouTube public and never made for
+  kids, TikTok's choices (the Mac's) for Everyone with Branded content, and `_require_fit` with TikTok.
+* **Send these to my Mac / Post with my Mac** (`routes/clips.mac_campaign_refusal`): the campaign takes clips, TikTok
+  is one of its places, the fit with the Mac's choices; a refusal is that clip's `{sent: false, reason}` and nothing
+  is written. The refusals that are not about the campaign come first (§47.2 item 3).
+* **Try again** of a campaign clip's Mac post (`routes/tiktok_mac._campaign_retry`): `_require_campaign_open` and the
+  fit with the post's own choices first (409 with their words).
+* **Auto-posting runs** (`uploads._auto_mac_refusal`): a campaign clip gets its Mac post only when TikTok passes
+  `_place_refusal` and the fit with TikTok among its places; otherwise no Mac post, and its other places go as before
+  (`clip.campaign_mac_skipped` in the log). A campaign that pays only for TikTok is not taken by a run (§46.7).
+
+#### 47.12.3 The Mac's done reaches Content Rewards
+
+After the Mac's done (`POST …/tiktok/mac/done`) and after the owner's Add link / It's on TikTok with a link
+(`POST …/tiktok/posted`), `routes/clips.send_to_cr` sends the clip's TikTok post to Content Rewards when it is posted
+by the Mac (`via: "mac"`), public, for a campaign (`campaignId`), with its `url`, while Content Rewards is on, and only
+once (no `CRSUB#{postId}` yet): `contentrewards.submit.send` creates `CRSUB#{postId}` (idempotent) with `SUBMIT_TIMEOUT_API`. Its
+30-minute window (`deadline` +25, `sendBy` +30) counts from when the Mac pressed Post (`posted_at`: the post's
+`macPressedAt`, read before the done removes it), else from `postedAt` (a later link). A send that CR asks to try later
+(it can't see the post yet) gets one more try `CR_AGAIN_AFTER` (8 s) later while the request has the time, then goes to
+`send_by_hand` (the owner's Send on Campaigns), as the Send route leaves it, since nothing else retries outside the
+clip flow. A done without a link sends nothing; the later link sends it. It never breaks the
+answer it follows (`clip.mac_cr_failed` in the log). The clip flow's CR step finds the Mac post not `posted` yet and
+leaves it (`not_posted`), so a submission is never made twice.
+
+#### 47.12.4 The helper, 1.3.0 (`mac/tiktok-helper/**`)
+
+* **TikTok Studio** (read by the headless probe on 24 Nov 2026, nothing posted; side note
+  `tiktok-mac-label-probe.md`): under **Show more**, the switch **Disclose post content** ("Let others know this post
+  promotes a brand, product or service."). On, it shows two checkboxes, **Your brand** and **Branded content**;
+  Branded content adds "Paid partnership" and the line "By posting, you agree to our Branded Content Policy and Music
+  Usage Confirmation.", with no dialog. With Branded content ticked, Who can see it greys out Only you ("Private");
+  with Only you picked, Branded content is greyed out. On with nothing ticked, Post still works, so the helper never
+  leaves it so. Studio draws a checkbox anew on every change (a new element and id) and takes over 600 ms, so every
+  read finds it again by its text and a click waits up to 3 s (`studioForm`). Who can see it offers Everyone,
+  "Friends Followers you follow back" and Only you; options are picked by their first word.
+* **Clip Factory's lane** (`setInteractions`): after Who can see it and the switches, `applyLabel` opens Show more,
+  sets Disclose post content on for a label (then Your brand and Branded content each as the job says) or off without
+  one (TikTok may carry the last post's over), reads it back, and checks Who can see it again. Right before Post
+  `checkLabel` and `checkPrivacy` read both back once more. Anything that doesn't stick stops before Post with
+  `REASONS.label`, "Your Mac couldn't set TikTok's Branded content label the way this clip needs, so it didn't post.
+  Tap Try again." Clips Funded's lane is unchanged (AI label on, Disclose post content off).
+* **The claim** says `{device, version}`; against a server from before this (400) once more with `{device}`.
+* **The last look** at the label and Who can see it comes after the account check, right before the press step, and
+  a click that Studio hasn't shown after 3 s gets one more 3 s look before it is tried another way (a second click
+  would undo a late first one).
+* **The kept video** leaves Downloads once the clip's TikTok post is `posted` for everyone or with the privacy the
+  job set (`tidyGoes`; the job's privacy is kept in the ledger at the claim; an entry from before 1.3.0 means
+  Everyone), not only `public`.
+* **Check run:** `cli.js probe <clipId> --branded | --your-brand [--privacy …] [--caption <text>] --quiet` (no frame,
+  nothing on screen) prints `label` as TikTok reads it back and `paidPartnership`. 24 Nov, all ok: Branded content →
+  `{disclose: true, organic: false, branded: true, paidPartnership: true}`; Your brand → `{true, true, false}`; both
+  with Friends → `{true, true, true}`, Friends kept; none after those → `{disclose: false}`; Only you kept.
+
+#### 47.12.5 What the owner sees (web)
+
+* **Review** (§47.9 item 1, rewritten): TikTok's row is the clip's own in Mac mode, starting on My settings with no
+  tap; a ticked label never holds Upload; Upload sends `tiktokMac: true` and `tiktok` (also with TikTok unticked when
+  a label is ticked, for a normal clip). A campaign clip has TikTok among its places while the Mac is on
+  (`campaignPlaces(…, tiktokGoes)`), on Everyone with Branded content. The line above Upload names the label
+  (`macAddsLabel`).
+* **Rows** (Library, the clip page, Review's "Uploaded just now", §47.4): a paid clip (a campaign clip, or
+  `Clip.tiktokLabel`; a Mac post's own `mac.brandContent` / `brandOrganic` win) ends its not-yet, waiting and posting
+  rows with " · Paid partnership label" or " · Promotional content label" (`labelWords`, `macLabel`, `clipLabel`;
+  Branded content wins). Post with my Mac's toast names it (`postWithMacToast`: "Sent to your Mac! It posts it in a
+  minute, with TikTok's Paid partnership label."). Campaign clips are sendable (`canSendToMac`); the server's refusal
+  shows as before. A labelled Mac post that waits while the helper says a version older than `MAC_BRAND_FROM`
+  (`macHelperBrands`) reads `MAC_ROW_BRAND_UPDATE`, "Waiting for your Mac · it needs an update to add TikTok's label".
+* **Settings › Posting › Your Mac posts TikTok › Send these to my Mac** adds `sendLabelLines`, e.g. "1 clip goes with
+  TikTok's Paid partnership label."
+* **Content Rewards:** the campaign page says `CAMPAIGN_TIKTOK_MAC` while the Mac is on, else `TIKTOK_NOT_YET`
+  ("TikTok: not yet. " + `CAMPAIGN_MAC_OFF`); `placesLines` uses `CAMPAIGN_MAC_OFF`; Connect's accounts step says
+  `CR_TIKTOK_ADD`, "Add TikTok the same way too, for the campaign clips your Mac posts there."; the fit's TikTok note
+  has **Turn on your Mac**. Removed: `CAMPAIGN_TIKTOK_SKIPS`, `MAC_ROW_CAMPAIGN`, `CR_TIKTOK_WAITS`, the row kinds
+  "campaign" and "commercial".
+* **My settings** (§47.9 item 3) and **Ask** (`helpKb.json`: `review-use-my-settings`, `review-place-rows`,
+  `tiktok-mac`, `cr-tiktok` "Campaign clips on TikTok" with **Turn on your Mac**; `helpEvals.json` "Do campaign clips
+  go to TikTok?" → `cr-tiktok`) say the Mac adds TikTok's label; nothing tells him to post a clip in the TikTok app
+  himself. docs/SETUP_POSTING.md says the same.
+* **The mock API** (`web/src/api/mock/`) follows: `tiktokMac`, `tiktokLabel`, the job's and `mac`'s label, the version
+  gate (its helper pings 1.3.0 by default; a ping or the claim knob can say an older one), the campaign refusals of
+  send and Try again (gone, held, paused, ended), and `posting.lastConfirm()` for tests.
+
+#### 47.12.6 Tests (offline, fakes only; CI is the full run)
+
+* **Helper** (`node --test`, 191): `label.test.js` (a fake Studio with the probe's rules: a campaign job ticks
+  Branded content under Show more; Your brand; both; a carried-over box unticked; no label turns the switch off; no
+  switch, a greyed-out Branded content with Only you, or a box TikTok doesn't keep stops before Post with
+  `REASONS.label`; the read back right before Post; `tidyGoes`), `api.test.js` (the claim's `version` and its 400
+  fallback, a 409 sent once), `tick.test.js` (the claim body), `constants.test.js` (`VERSION` 1.3.0 equals
+  `MAC_BRAND_FROM`).
+* **API** (`pytest`): `test_tiktok_mac.py` (Upload with and without `tiktokMac`; `tiktokLabel`; a campaign clip's
+  Upload, auto run and send with Everyone and Branded content and `campaignId`; a closed campaign's send refused with
+  nothing written and its claim stopped; send of a labelled clip; MacJob and `Post.mac` labels; the claim's version
+  gate; the done's `CRSUB#` with a link and none without; Add link's), `test_campaign_posting.py`, `test_cr_gates.py`,
+  `test_cr_fit.py` (with `fixtures/cr_fit_cases.json` regenerated), plus the existing CR and auto-posting suites.
+* **Web** (vitest): `reviewMac.test.tsx`, `tiktokMac.test.ts` (`MAC_BRAND_FROM` pinned to the API's and the helper's),
+  `tiktokMacNow.test.ts`, `mySettingsTikTok.test.tsx`, `crWords.test.ts`, `finderPage.test.tsx`; e2e (chromium):
+  `tiktok-mac.spec.ts`, `review-card.spec.ts` (a campaign clip in Mac mode uploads with TikTok, Everyone and Branded
+  content and `tiktokMac: true`; a normal clip with Branded content ticked uploads with the label; Post with my Mac on
+  a paid clip shows it), `content-rewards.spec.ts`, `tiktok-mac-screenshots.spec.ts` (with `CF_TT_SHOTS_DIR`).
+
+#### 47.12.7 Rollout and not verified live
+
+* One PR (API, web, helper). The API deploys first; the helper on the Mac (1.2.3) checks in as 1.2.3 and sends no
+  claim `version`, so its queue has no labelled post that waits and a claim of one is refused (409, nothing written)
+  until 1.3.0 is installed from main (`install.sh`, keeping settings, state, the profile and the Keychain; only with
+  no `run.lock`; then `whoami` must print @lamo.clips). Meanwhile a labelled post waits, the row says the Mac needs its
+  update, and every unlabelled post goes on as before. 1.3.0's first tick still reads the queue as 1.2.3 (its check-in
+  comes after the read), so a labelled post goes from its second tick, a minute later.
+* Not verified live: what TikTok shows after Post is pressed on a branded post (the probe never presses Post; the
+  press loop still clicks only "Post now", and a post it can't confirm is looked for and asked about after 30
+  minutes, §47.6), and Content Rewards' answer to a Mac-posted TikTok link (the same `create_my_submission` as every
+  other campaign post). The first labelled post is watched in `events.log`.
 
 ## 48. A skipped platform shows only in Settings and Social accounts, and Clips Funded's Social accounts look like Set up posting (owner request, 2026-11-24; wins over anything above)
 

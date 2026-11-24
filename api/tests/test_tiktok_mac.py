@@ -22,9 +22,10 @@ from clipfactory_api.app import App
 from clipfactory_api.clock import iso
 from clipfactory_api.flows.clip_flow import run_clip_flow
 from clipfactory_api.ids import ulid
+from clipfactory_api.routes.clips import CAMPAIGN_HELD
 from conftest import CLIP_FLOW_ARN, NOW, USER, Call, Clock, seed_clip
 from fakes import FakeDurableContext, FakeLambda, FakeTable
-from test_campaign_posting import CAMPAIGN, campaign_clip, put_campaign
+from test_campaign_posting import CAMPAIGN, CAMPAIGN_OPTIONS, campaign_clip, put_campaign
 from test_campaign_posting import ready as ready_with_audit
 from test_flows import FakeAdapter, _clip_deps
 
@@ -41,6 +42,8 @@ MINE = {**TIKTOK, "disableDuet": False}  # My settings: Everyone, Comment, Duet 
 VIDEO_ID = "7710644811602169121"
 LINK = f"https://www.tiktok.com/@lamo.clips/video/{VIDEO_ID}"
 DEVICE = "mac-studio-1"
+# The helper 1.3.0 reads its queue with its version: a labelled post is in it (an older helper's has none, §47.12).
+NEW_HELPER = {"version": "1.3.0"}
 
 
 # --- helpers -----------------------------------------------------------------------------------------------------
@@ -229,24 +232,182 @@ def test_upload_without_tiktok_makes_no_mac_post(call: Call, store: db.Store, ta
     assert _raw_tiktok(table, clip["clipId"]) is None
 
 
-def test_a_campaign_clip_never_goes_to_the_mac(call: Call, store: db.Store, table: FakeTable) -> None:
-    # D1: the Mac can't mark a post as Branded content yet, and Content Rewards never receives what it posts. Posting
-    # audit ok but the app review not live is not TikTok's approval: Upload with TikTok is refused, nothing written.
+def test_upload_in_mac_mode_keeps_the_cards_own_tiktok_choices(call: Call, store: db.Store, table: FakeTable) -> None:
+    # §47: with tiktokMac the card's TikTok row is the clip's own (who can see it, the switches, TikTok's label).
+    _connect(store, "youtube", "tiktok")
+    _mac_on(call)
+    clip = seed_clip(store)
+    card = {
+        "privacyLevel": "MUTUAL_FOLLOW_FRIENDS",
+        "disableComment": True,
+        "disableDuet": False,
+        "disableStitch": True,
+        "brandContent": True,
+        "brandOrganic": True,
+    }
+    status, body = call(
+        "POST",
+        f"/v1/clips/{clip['clipId']}/confirm",
+        {"platforms": ["youtube", "tiktok"], "tiktok": card, "tiktokMac": True},
+    )
+    assert status == 200, body
+    raw = _raw_tiktok(table, clip["clipId"])
+    assert raw is not None
+    assert (raw["status"], raw["macSource"], raw["postOptions"]) == ("mac", "upload", card)
+    assert _tiktok(body)["mac"] == {
+        "state": "waiting",
+        "since": iso(NOW),
+        "source": "upload",
+        "brandContent": True,
+        "brandOrganic": True,
+    }
+    assert body["clip"]["tiktokLabel"] == {"brandContent": True, "brandOrganic": True}
+    assert (table.raw(clip["pk"], clip["sk"]) or {})["tiktokLabel"] == {"brandContent": True, "brandOrganic": True}
+    job = call("GET", "/v1/tiktok/mac", query=NEW_HELPER)[1]["queue"][0]
+    assert {k: job[k] for k in ("privacy", "comment", "duet", "stitch", "brandContent", "brandOrganic")} == {
+        "privacy": "MUTUAL_FOLLOW_FRIENDS",
+        "comment": False,
+        "duet": True,
+        "stitch": False,
+        "brandContent": True,
+        "brandOrganic": True,
+    }
+
+
+def test_upload_without_tiktok_mac_still_asks_the_mac_for_my_settings(
+    call: Call, store: db.Store, table: FakeTable
+) -> None:
+    # An older web sends no tiktokMac: the Mac post is My settings' exactly as before, and the public mac has no label.
+    _connect(store, "tiktok")
+    _mac_on(call)
+    clip = seed_clip(store)
+    body = _upload(call, clip["clipId"], ["tiktok"], tiktok={**TIKTOK, "privacyLevel": "SELF_ONLY"})
+    raw = _raw_tiktok(table, clip["clipId"])
+    assert raw is not None
+    assert raw["postOptions"] == MINE
+    assert _tiktok(body)["mac"] == {"state": "waiting", "since": iso(NOW), "source": "upload"}
+    assert "tiktokLabel" not in body["clip"]
+    assert "tiktokLabel" not in (table.raw(clip["pk"], clip["sk"]) or {})
+
+
+def test_the_clip_keeps_its_label_without_tiktok_and_a_later_send_posts_it_with_it(
+    call: Call, store: db.Store, table: FakeTable
+) -> None:
+    _connect(store, "youtube", "tiktok")
+    _mac_on(call)
+    clip = seed_clip(store)
+    label = {**TIKTOK, "privacyLevel": "SELF_ONLY", "brandOrganic": True}
+    status, body = call(
+        "POST",
+        f"/v1/clips/{clip['clipId']}/confirm",
+        {"platforms": ["youtube"], "tiktok": label, "tiktokMac": True},
+    )
+    assert status == 200, body
+    assert _raw_tiktok(table, clip["clipId"]) is None  # TikTok was not chosen
+    assert body["clip"]["tiktokLabel"] == {"brandContent": False, "brandOrganic": True}
+    status, body = call("POST", "/v1/tiktok/mac/send", {"clipIds": [clip["clipId"]], "now": True})
+    assert body["results"] == [{"clipId": clip["clipId"], "sent": True}]
+    raw = _raw_tiktok(table, clip["clipId"])
+    assert raw is not None
+    assert raw["postOptions"] == {**MINE, "brandOrganic": True}  # My settings, with the clip's own label
+    assert "campaignId" not in raw
+
+
+def test_send_gives_branded_content_everyone_and_keeps_a_handed_over_posts_label(
+    call: Call, store: db.Store, table: FakeTable
+) -> None:
+    _mac_on(call)
+    call("PUT", "/v1/settings", {"postPreset": {"tiktok": {"privacy": "SELF_ONLY"}}})
+    paid = _uploaded(store, tiktokLabel={"brandContent": True, "brandOrganic": False})
+    assert call("POST", "/v1/tiktok/mac/send", {"clipIds": [paid["clipId"]]})[1]["results"][0]["sent"] is True
+    raw = _raw_tiktok(table, paid["clipId"])
+    assert raw is not None
+    # Branded content can't be Only me on TikTok: the label goes Everyone.
+    assert raw["postOptions"]["privacyLevel"] == "PUBLIC_TO_EVERYONE"
+    assert (raw["postOptions"]["brandContent"], raw["postOptions"]["brandOrganic"]) == (True, False)
+    failed = _uploaded(store, status="failed")
+    old = _post(store, failed, "tiktok", status="failed", error="x", postOptions={**TIKTOK, "brandOrganic": True})
+    assert call("POST", "/v1/tiktok/mac/send", {"clipIds": [failed["clipId"]]})[1]["results"][0]["sent"] is True
+    handed = table.raw(PK, db.post_sk(old["postId"])) or {}
+    assert handed["postOptions"]["privacyLevel"] == "SELF_ONLY"  # Your brand alone keeps My settings' privacy
+    assert (handed["postOptions"]["brandContent"], handed["postOptions"]["brandOrganic"]) == (False, True)
+
+
+def test_tiktok_mac_must_be_true_or_false(call: Call, store: db.Store) -> None:
+    _connect(store, "tiktok")
+    clip = seed_clip(store)
+    body = {"platforms": ["tiktok"], "tiktok": TIKTOK, "tiktokMac": "yes"}
+    assert call("POST", f"/v1/clips/{clip['clipId']}/confirm", body)[0] == 400
+
+
+@pytest.mark.parametrize("card", [False, True])
+def test_a_campaign_clips_upload_makes_a_mac_post_for_everyone_with_branded_content(
+    call: Call, store: db.Store, table: FakeTable, card: bool
+) -> None:
+    # Before TikTok approves the app the owner's Mac posts a campaign clip: Everyone, with TikTok's Branded content.
     ready_with_audit(store, "tiktok", audit="ok")
     put_campaign(store, platformsPaid=["tiktok"])
     _mac_on(call)
+    clip = campaign_clip(store)
+    sheet = {**TIKTOK, "brandContent": True}
+    body: dict[str, Any] = {"platforms": ["tiktok"], "tiktok": sheet, **({"tiktokMac": True} if card else {})}
+    status, answer = call("POST", f"/v1/clips/{clip['clipId']}/confirm", body)
+    assert status == 200, answer
+    raw = _raw_tiktok(table, clip["clipId"])
+    assert raw is not None
+    chosen = sheet if card else {**MINE, "brandContent": True}  # the card's own, else My settings with the label
+    assert (raw["status"], raw["campaignId"]) == ("mac", CAMPAIGN)
+    assert raw["postOptions"] == {**chosen, "campaign": CAMPAIGN_OPTIONS}
+    assert _tiktok(answer)["mac"]["brandContent"] is True
+    job = call("GET", "/v1/tiktok/mac", query=NEW_HELPER)[1]["queue"][0]
+    assert (job["privacy"], job["brandContent"]) == ("PUBLIC_TO_EVERYONE", True)
+    assert job["caption"].startswith("#Ad")  # the campaign caption, as TikTok's publisher would send it
+    assert "#FaZe" in job["caption"]
+
+
+@pytest.mark.parametrize(
+    ("tiktok", "campaign", "sentence"),
+    [
+        (
+            {**TIKTOK, "privacyLevel": "MUTUAL_FOLLOW_FRIENDS", "brandContent": True},
+            {},
+            "Campaign clips must be public. Pick Everyone.",
+        ),
+        ({**TIKTOK, "brandContent": False}, {}, "Turn on Branded content on TikTok for campaign clips."),
+        ({**TIKTOK, "brandContent": True}, {"state": "ended"}, "This campaign has ended. Pick another one."),
+        (
+            {**TIKTOK, "brandContent": True},
+            {"platformsPaid": ["youtube"]},
+            "This campaign doesn't pay for TikTok. Turn it off, then tap Upload.",
+        ),
+    ],
+)
+def test_a_campaign_clips_mac_upload_runs_the_campaign_checks(
+    call: Call, store: db.Store, table: FakeTable, tiktok: dict[str, Any], campaign: dict[str, Any], sentence: str
+) -> None:
+    ready_with_audit(store, "tiktok", audit="ok")
+    put_campaign(store, **{"platformsPaid": ["tiktok"], **campaign})
+    _mac_on(call)
+    clip = campaign_clip(store)
+    status, body = call(
+        "POST", f"/v1/clips/{clip['clipId']}/confirm", {"platforms": ["tiktok"], "tiktok": tiktok, "tiktokMac": True}
+    )
+    assert (status, _message(body)) in ((400, sentence), (409, sentence))
+    assert _raw_tiktok(table, clip["clipId"]) is None
+    assert (table.raw(clip["pk"], clip["sk"]) or {})["status"] == "review"
+
+
+def test_a_campaign_clip_with_the_mac_off_says_to_turn_it_on(call: Call, store: db.Store, table: FakeTable) -> None:
+    ready_with_audit(store, "tiktok", audit="ok")
+    put_campaign(store, platformsPaid=["tiktok"])
     clip = campaign_clip(store)
     status, body = call(
         "POST",
         f"/v1/clips/{clip['clipId']}/confirm",
         {"platforms": ["tiktok"], "tiktok": {**TIKTOK, "brandContent": True}},
     )
-    assert (status, _message(body)) == (
-        400,
-        f"{tiktok_mac.CAMPAIGN_SKIPS} Turn TikTok off, then tap Upload.",
-    )
+    assert (status, _message(body)) == (400, f"{tiktok_mac.CAMPAIGN_MAC_OFF} Or turn TikTok off, then tap Upload.")
     assert _raw_tiktok(table, clip["clipId"]) is None
-    assert call("GET", "/v1/tiktok/mac")[1]["queue"] == []
 
 
 def test_once_tiktok_approved_the_app_a_campaign_clip_goes_through_its_api(
@@ -270,11 +431,41 @@ def test_once_tiktok_approved_the_app_a_campaign_clip_goes_through_its_api(
     assert call("GET", "/v1/tiktok/mac")[1]["queue"] == []
 
 
-def test_an_auto_posting_run_never_gives_a_campaign_clip_a_mac_post(
+def test_an_auto_posting_run_gives_a_campaign_clip_a_mac_post_when_tiktok_is_one_of_its_places(
     app: App, store: db.Store, table: FakeTable
 ) -> None:
     ready_with_audit(store, "youtube")
-    put_campaign(store, platformsPaid=["youtube"])
+    ready_with_audit(store, "tiktok", audit="waiting")
+    put_campaign(store, platformsPaid=["youtube", "tiktok"])
+    store.put({"pk": PK, "sk": "SETTINGS", "type": "settings", "userId": USER, "tiktokMac": {"on": True}})
+    clip = campaign_clip(store)
+    confirmed, _ = uploads.upload_review_clip(
+        app, USER, clip, platforms=["youtube"], auto={"runId": "r#scheduled", "at": iso(NOW)}, tiktok_mac=True
+    )
+    raw = _raw_tiktok(table, clip["clipId"])
+    assert raw is not None
+    assert (raw["status"], raw["macSource"], raw["campaignId"], raw["autoRun"]) == (
+        "mac",
+        "auto",
+        CAMPAIGN,
+        "r#scheduled",
+    )
+    assert raw["postOptions"] == {**MINE, "brandContent": True, "campaign": CAMPAIGN_OPTIONS}
+    assert confirmed["uploadTo"] == ["youtube"]  # TikTok is never one of the run's own places
+
+
+@pytest.mark.parametrize(
+    ("paid", "tiktok_ready"),
+    [(["youtube"], True), (["youtube", "tiktok"], False)],
+)
+def test_an_auto_posting_runs_campaign_clip_gets_no_mac_post_when_tiktok_is_not_one_of_its_places(
+    app: App, store: db.Store, table: FakeTable, paid: list[str], tiktok_ready: bool
+) -> None:
+    # The campaign doesn't pay for TikTok, or TikTok isn't set up: its other places go as before, no Mac post.
+    ready_with_audit(store, "youtube")
+    if tiktok_ready:
+        ready_with_audit(store, "tiktok")
+    put_campaign(store, platformsPaid=paid)
     store.put({"pk": PK, "sk": "SETTINGS", "type": "settings", "userId": USER, "tiktokMac": {"on": True}})
     clip = campaign_clip(store)
     uploads.upload_review_clip(
@@ -453,6 +644,8 @@ def test_the_queue_order_and_its_jobs(call: Call, store: db.Store, clock: Clock)
         "comment": True,
         "duet": False,
         "stitch": True,
+        "brandContent": False,  # TikTok's label: always there, false when the post's choices don't say it
+        "brandOrganic": False,
         "source": "upload",
         "since": "2026-11-15T10:00:00.000Z",
         "state": "waiting",
@@ -1381,7 +1574,7 @@ def test_a_send_and_i_posted_it_at_the_same_moment_never_make_two_posts(app: App
         tiktok_self.mark_posted(store, clip, None, NOW, min_interval=60)
     # And the other way round: a send after I posted it's mark finds the clip changed.
     other = _uploaded(store, tiktokByYou=ulid())
-    assert tiktok_mac.send(store, USER, other, {"tiktokMac": {"on": True}}, NOW, is_campaign=False) == (
+    assert tiktok_mac.send(store, USER, other, {"tiktokMac": {"on": True}}, NOW) == (
         "This clip just changed. Try again."
     )
 
@@ -1466,38 +1659,66 @@ def test_send_refuses_with_plain_sentences(call: Call, store: db.Store, table: F
 
 
 @pytest.mark.parametrize("now", [False, True])
-def test_send_refuses_a_campaign_clip(call: Call, store: db.Store, table: FakeTable, now: bool) -> None:
-    # D1: Send these to my Mac and a row's Post with my Mac never take a campaign clip; nothing is written.
+def test_send_posts_a_campaign_clip_for_everyone_with_branded_content(
+    call: Call, store: db.Store, table: FakeTable, now: bool
+) -> None:
+    # Send these to my Mac and a row's Post with my Mac take a campaign clip once Upload's checks pass for TikTok.
     _mac_on(call)
-    put_campaign(store, platformsPaid=["tiktok"])
+    ready_with_audit(store, "tiktok", audit="waiting")
+    put_campaign(store, platformsPaid=["youtube", "tiktok"])
     paid = campaign_clip(store, status="posted", postsCreated=True, postIds=[])
     status, body = call("POST", "/v1/tiktok/mac/send", {"clipIds": [paid["clipId"]], "now": now})
-    assert (status, body) == (
-        200,
-        {"results": [{"clipId": paid["clipId"], "sent": False, "reason": tiktok_mac.SEND_CAMPAIGN}]},
-    )
-    assert tiktok_mac.SEND_CAMPAIGN == (
-        "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet."
-    )
+    assert (status, body) == (200, {"results": [{"clipId": paid["clipId"], "sent": True}]})
+    raw = _raw_tiktok(table, paid["clipId"])
+    assert raw is not None
+    assert (raw["status"], raw["macSource"], raw["campaignId"]) == ("mac", "upload" if now else "sent", CAMPAIGN)
+    assert raw["postOptions"] == {**MINE, "brandContent": True, "campaign": CAMPAIGN_OPTIONS}
+    assert posts.public_post(raw)["mac"]["brandContent"] is True  # the row shows the label
+    job = call("GET", "/v1/tiktok/mac", query=NEW_HELPER)[1]["queue"][0]
+    assert (job["clipId"], job["privacy"], job["brandContent"]) == (paid["clipId"], "PUBLIC_TO_EVERYONE", True)
+
+
+@pytest.mark.parametrize(
+    ("campaign", "sentence"),
+    [
+        ({"state": "ended"}, "This campaign has ended. Pick another one."),
+        ({"held": {"at": "2026-11-15T11:00:00.000Z"}}, CAMPAIGN_HELD),
+        (
+            {"platformsPaid": ["youtube"]},
+            "This campaign doesn't pay for TikTok any more. Tap Try again on another place.",
+        ),
+    ],
+)
+def test_send_refuses_a_campaign_clip_that_cant_go_and_writes_nothing(
+    call: Call, store: db.Store, table: FakeTable, campaign: dict[str, Any], sentence: str
+) -> None:
+    _mac_on(call)
+    ready_with_audit(store, "tiktok", audit="waiting")
+    put_campaign(store, **{"platformsPaid": ["youtube", "tiktok"], **campaign})
+    paid = campaign_clip(store, status="posted", postsCreated=True, postIds=[])
+    before = table.raw(paid["pk"], paid["sk"])
+    status, body = call("POST", "/v1/tiktok/mac/send", {"clipIds": [paid["clipId"]], "now": True})
+    assert (status, body) == (200, {"results": [{"clipId": paid["clipId"], "sent": False, "reason": sentence}]})
     assert _raw_tiktok(table, paid["clipId"]) is None
-    assert "tiktokForMac" not in (table.raw(paid["pk"], paid["sk"]) or {})
+    assert table.raw(paid["pk"], paid["sk"]) == before
     assert call("GET", "/v1/tiktok/mac")[1]["queue"] == []
 
 
-def test_send_refuses_a_campaign_clip_whose_campaign_lives_on_its_posts(
+def test_send_hands_over_a_campaign_clips_own_post_with_its_campaign(
     call: Call, store: db.Store, table: FakeTable
 ) -> None:
     # A clip that outlived its job: its failed TikTok post still says which campaign it is for.
     _mac_on(call)
+    ready_with_audit(store, "tiktok", audit="waiting")
     put_campaign(store, platformsPaid=["youtube", "tiktok"])
     clip = _uploaded(store, status="failed")
     old = _post(store, clip, "tiktok", status="failed", error="x", campaignId=CAMPAIGN, postOptions=TIKTOK)
     status, body = call("POST", "/v1/tiktok/mac/send", {"clipIds": [clip["clipId"]], "now": True})
-    assert (status, body["results"]) == (
-        200,
-        [{"clipId": clip["clipId"], "sent": False, "reason": tiktok_mac.SEND_CAMPAIGN}],
-    )
-    assert (table.raw(PK, db.post_sk(old["postId"])) or {})["status"] == "failed"
+    assert (status, body["results"]) == (200, [{"clipId": clip["clipId"], "sent": True}])
+    raw = table.raw(PK, db.post_sk(old["postId"])) or {}
+    assert (raw["status"], raw["campaignId"]) == ("mac", CAMPAIGN)
+    assert raw["postOptions"] == {**MINE, "brandContent": True, "campaign": CAMPAIGN_OPTIONS}
+    assert raw["beforeMac"]["postOptions"] == TIKTOK
 
 
 def test_sent_clips_go_after_uploads_oldest_clip_first(call: Call, store: db.Store) -> None:
@@ -1739,7 +1960,7 @@ def test_now_on_a_waiting_post_the_mac_just_claimed_is_refused_and_changes_nothi
         tiktok_mac.retry(store, clip, not_on_tiktok=False, now=True, at=NOW)
     assert refused.value.message == tiktok_mac.CHANGED
     monkeypatch.setattr(tiktok_mac, "posts_for_clip", lambda *_a, **_k: [dict(seen)])
-    assert tiktok_mac.send(store, USER, clip, settings, NOW, is_campaign=False, source="upload") == tiktok_mac.CHANGED
+    assert tiktok_mac.send(store, USER, clip, settings, NOW, source="upload") == tiktok_mac.CHANGED
     raw = _raw_post(store, clip["clipId"])
     assert (raw["macState"], raw["macSource"], raw["macDevice"]) == ("working", "sent", DEVICE)
 
@@ -2072,28 +2293,75 @@ def test_the_request_route_refuses_what_it_does_not_know(call: Call, body: dict[
 
 
 def test_the_campaign_words_have_one_source() -> None:
-    from clipfactory_api.contentrewards import campaigns, fit
+    from clipfactory_api.contentrewards import campaigns, fit, gates
     from clipfactory_api.routes import clips as clip_routes
 
-    skips = tiktok_mac.CAMPAIGN_SKIPS
-    assert skips == "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet."
-    assert skips == fit.TIKTOK_WAITS
-    assert skips == tiktok_mac.SEND_CAMPAIGN
-    assert not hasattr(tiktok_mac, "options_for")
+    off = tiktok_mac.CAMPAIGN_MAC_OFF
+    assert off == "Campaign clips go on TikTok from your Mac. Turn it on in Settings › Posting › Your Mac posts TikTok."
+    assert off == gates.TIKTOK_MAC_OFF == fit.TIKTOK_MAC_OFF
+    assert (
+        f"This campaign only pays for TikTok. {off} Or pick a campaign that pays for YouTube, Instagram, X or Facebook."
+    ) == gates.TIKTOK_ONLY
+    assert tiktok_mac.CAMPAIGN_MAC_POSTS == "Your Mac posts campaign clips on TikTok. Tap Post with my Mac."
+    assert clip_routes.TIKTOK_BRANDED_PRIVACY == tiktok_mac.BRANDED_PRIVACY
+    for gone in ("CAMPAIGN_SKIPS", "SEND_CAMPAIGN", "options_for"):
+        assert not hasattr(tiktok_mac, gone)
+    assert not hasattr(fit, "TIKTOK_WAITS")
     assert not hasattr(clip_routes, "TIKTOK_PRIVATE")
     assert not hasattr(tiktok_self, "MAC_STUCK")
-    view = SimpleNamespace(
-        conn={}, setups=[{"platform": "tiktok", "gates": [{"key": "posting_audit", "state": "waiting"}]}]
-    )
-    assert campaigns._places_note(view, {"platformsPaid": ["youtube", "tiktok"]}, ["youtube"]) == skips  # type: ignore[arg-type]
+    setups = [{"platform": "tiktok", "ready": True, "gates": [{"key": "posting_audit", "state": "waiting"}]}]
+    paid = {"platformsPaid": ["youtube", "tiktok"]}
+    view = SimpleNamespace(conn={}, setups=setups, mac_on=False)
+    assert campaigns._places_note(view, paid, ["youtube"]) == off  # type: ignore[arg-type]
+    assert campaigns._places_note(SimpleNamespace(conn={}, setups=setups, mac_on=True), paid, ["youtube"]) is None  # type: ignore[arg-type]
     campaign = clip_routes.CampaignClip(CAMPAIGN, {}, ("tiktok",), {})
-    setups = [{"platform": "tiktok", "ready": True, "gates": [{"key": "posting_audit", "state": "ok"}]}]
-    upload = clip_routes._place_refusal("tiktok", campaign, setups, {})
-    again = clip_routes._place_refusal("tiktok", campaign, setups, {}, try_again=True)
-    assert upload == f"{skips} Turn TikTok off, then tap Upload."
-    assert again == f"{skips} Tap Try again on another place."
-    audited = [{**setups[0], "gates": [{"key": "app_review", "state": "ok"}, {"key": "posting_audit", "state": "ok"}]}]
+    ok_audit = [{"platform": "tiktok", "ready": True, "gates": [{"key": "posting_audit", "state": "ok"}]}]
+    upload = clip_routes._place_refusal("tiktok", campaign, ok_audit, {})
+    again = clip_routes._place_refusal("tiktok", campaign, ok_audit, {}, try_again=True)
+    assert upload == f"{off} Or turn TikTok off, then tap Upload."
+    assert again == f"{off} Tap Try again on another place."
+    # With Your Mac posts TikTok on, TikTok is a campaign clip's place before the approval; only TikTok's API can't.
+    assert clip_routes._place_refusal("tiktok", campaign, ok_audit, {}, mac_on=True) is None
+    assert clip_routes._place_refusal("tiktok", campaign, ok_audit, {}, mac_on=True, try_again=True) is None
+    api = clip_routes._place_refusal("tiktok", campaign, ok_audit, {}, mac_on=True, try_again=True, api=True)
+    assert api == tiktok_mac.CAMPAIGN_MAC_POSTS
+    audited = [
+        {**ok_audit[0], "gates": [{"key": "app_review", "state": "ok"}, {"key": "posting_audit", "state": "ok"}]}
+    ]
     assert clip_routes._place_refusal("tiktok", campaign, audited, {}) is None
+    assert clip_routes._place_refusal("tiktok", campaign, audited, {}, mac_on=True, api=True) is None
+
+
+def test_the_label_helpers() -> None:
+    assert tiktok_mac.label_of(None) == {"brandContent": False, "brandOrganic": False}
+    assert tiktok_mac.label_of({"brandContent": "yes", "brandOrganic": True}) == {
+        "brandContent": False,
+        "brandOrganic": True,
+    }
+    assert not tiktok_mac.labelled(MINE)
+    assert tiktok_mac.labelled({**MINE, "brandContent": True})
+    for privacy, after in (
+        ("SELF_ONLY", "PUBLIC_TO_EVERYONE"),
+        ("FOLLOWER_OF_CREATOR", "PUBLIC_TO_EVERYONE"),
+        ("MUTUAL_FOLLOW_FRIENDS", "MUTUAL_FOLLOW_FRIENDS"),
+    ):
+        branded = tiktok_mac.with_label({**MINE, "privacyLevel": privacy}, {"brandContent": True})
+        assert (branded["privacyLevel"], branded["brandContent"], branded["brandOrganic"]) == (after, True, False)
+        own = tiktok_mac.with_label({**MINE, "privacyLevel": privacy}, {"brandOrganic": True})
+        assert own["privacyLevel"] == privacy  # only Branded content needs Everyone or Friends
+    assert tiktok_mac.campaign_tiktok({**MINE, "privacyLevel": "SELF_ONLY"}) == {**MINE, "brandContent": True}
+    assert tiktok_mac.clip_label({"tiktokLabel": {"brandContent": False, "brandOrganic": False}}) is None
+    assert tiktok_mac.send_options({}, {"tiktokLabel": {"brandOrganic": True}}, None, campaign=True) == {
+        **MINE,
+        "brandContent": True,
+    }
+
+
+def test_public_mac_shows_the_label_only_when_it_is_on() -> None:
+    row = {**posts.new_mac_fields("upload", iso(NOW)), "postOptions": {**MINE, "brandContent": True}}
+    assert posts.public_mac(row) == {"state": "waiting", "since": iso(NOW), "source": "upload", "brandContent": True}
+    assert "brandContent" not in (posts.public_mac({**row, "postOptions": MINE}) or {})
+    assert "postOptions" not in posts.public_post({**row, "postId": "p", "clipId": "c", "platform": "tiktok"})
 
 
 def test_the_server_words_name_only_buttons_the_owner_has() -> None:
@@ -2527,3 +2795,308 @@ def test_the_hold_codes_stay_one_line_for_the_helper_pin() -> None:
     text = Path(tiktok_mac.__file__).read_text(encoding="utf-8")
     assert re.findall(r"^HOLD_CODES = \(([^)]*)\)$", text, re.M) == ['"login",']
     assert tiktok_mac.HOLD_CODES == ("login",)
+
+
+# --- TikTok's label and campaign clips on the Mac (§47, 24 Nov) ----------------------------------------------------
+
+
+def _claim_as(call: Call, clip_id: str, version: str | None) -> tuple[int, Any]:
+    body: dict[str, Any] = {"device": DEVICE, **({"version": version} if version is not None else {})}
+    return call("POST", f"/v1/clips/{clip_id}/tiktok/mac/claim", body)
+
+
+def test_mac_brand_from_is_the_helpers_own_version() -> None:
+    import re
+    from pathlib import Path
+
+    paths = Path(__file__).resolve().parents[2] / "mac" / "tiktok-helper" / "src" / "paths.js"
+    found = re.search(r'^export const VERSION = "(\d+(?:\.\d+)*)";$', paths.read_text(encoding="utf-8"), re.M)
+    assert found, 'export const VERSION = "x.y.z"; is in the helper\'s paths.js'
+    assert tiktok_self.MAC_BRAND_FROM == "1.3.0"
+    assert found.group(1) == tiktok_self.MAC_BRAND_FROM
+    assert tiktok_self.helper_brands("1.3.0")
+    assert tiktok_self.helper_brands("1.10.0")
+    for older in (None, "", "dev", "1.2.3", "1.2.10", "0.9"):
+        assert not tiktok_self.helper_brands(older)
+
+
+@pytest.mark.parametrize("label", [{"brandContent": True}, {"brandOrganic": True}])
+@pytest.mark.parametrize("version", [None, "1.2.3", "dev"])
+def test_a_labelled_post_is_never_claimed_by_a_helper_that_cant_set_the_label(
+    call: Call, store: db.Store, label: dict[str, bool], version: str | None
+) -> None:
+    # The helper on the owner's Mac (1.2.3, no version sent) would post it without TikTok's label: 409, nothing written.
+    _mac_on(call)
+    clip = _mac_clip(store, postOptions={**MINE, **label})
+    before = _raw_post(store, clip["clipId"])
+    status, body = _claim_as(call, clip["clipId"], version)
+    assert (status, _message(body)) == (409, tiktok_mac.MAC_NEEDS_UPDATE)
+    assert _raw_post(store, clip["clipId"]) == before
+    # It still waits: for a helper that sets the label (an older one never sees it in its queue, below).
+    assert [j["clipId"] for j in call("GET", "/v1/tiktok/mac", query={"version": "1.3.0"})[1]["queue"]] == [
+        clip["clipId"]
+    ]
+
+
+@pytest.mark.parametrize("version", ["1.3.0", "1.3.1", "2.0"])
+def test_a_helper_from_mac_brand_from_claims_a_labelled_post(call: Call, store: db.Store, version: str) -> None:
+    _mac_on(call)
+    clip = _mac_clip(store, postOptions={**MINE, "brandContent": True})
+    status, body = _claim_as(call, clip["clipId"], version)
+    assert status == 200, body
+    assert (body["job"]["state"], body["job"]["brandContent"], body["job"]["brandOrganic"]) == ("working", True, False)
+    # An unlabelled post is claimed with or without a version, as before.
+    plain = _mac_clip(store)
+    assert _claim_as(call, plain["clipId"], None)[0] == 200
+
+
+@pytest.mark.parametrize("version", [3, "x" * 41])
+def test_the_claims_version_is_short_text(call: Call, store: db.Store, version: Any) -> None:
+    _mac_on(call)
+    clip = _mac_clip(store)
+    assert (
+        call("POST", f"/v1/clips/{clip['clipId']}/tiktok/mac/claim", {"device": DEVICE, "version": version})[0] == 400
+    )
+
+
+def test_a_closed_campaigns_post_is_stopped_at_its_claim_and_try_again_checks_again(
+    call: Call, store: db.Store, clock: Clock
+) -> None:
+    _mac_on(call)
+    put_campaign(store, platformsPaid=["youtube", "tiktok"], state="ended")
+    clip = _mac_clip(
+        store, campaignId=CAMPAIGN, postOptions={**MINE, "brandContent": True, "campaign": CAMPAIGN_OPTIONS}
+    )
+    ended = "This campaign has ended. Pick another one."
+    status, body = _claim_as(call, clip["clipId"], "1.3.0")
+    assert (status, _message(body)) == (409, ended)
+    raw = _raw_post(store, clip["clipId"])
+    assert (raw["macState"], raw["macReason"], raw["macStoppedAt"]) == ("stopped", ended, iso(NOW))
+    assert "macDevice" not in raw  # never claimed
+    assert call("GET", "/v1/tiktok/mac")[1]["queue"] == []  # it left the queue
+    status, body = _retry(call, clip["clipId"], {"now": True})
+    assert (status, _message(body)) == (409, ended)
+    assert _raw_post(store, clip["clipId"])["macState"] == "stopped"
+    put_campaign(store, platformsPaid=["youtube", "tiktok"])  # it takes clips again
+    status, body = _retry(call, clip["clipId"], {"now": True})
+    assert status == 200, body
+    assert _tiktok(body)["mac"]["state"] == "waiting"
+    assert _claim_as(call, clip["clipId"], "1.3.0")[0] == 200
+
+
+@pytest.mark.parametrize("pressed", [False, True])
+def test_a_closed_campaign_never_stops_a_post_the_mac_is_on(call: Call, store: db.Store, pressed: bool) -> None:
+    _mac_on(call)
+    put_campaign(store, platformsPaid=["tiktok"], membership="left")
+    fields: dict[str, Any] = {"macState": "working", "macDevice": "other-mac", "macBeatAt": iso(NOW)}
+    if pressed:
+        fields["macPressedAt"] = iso(NOW)
+    clip = _mac_clip(store, campaignId=CAMPAIGN, postOptions={**MINE, "brandContent": True}, **fields)
+    before = _raw_post(store, clip["clipId"])
+    status, body = _claim_as(call, clip["clipId"], "1.3.0")
+    assert (status, _message(body)) == (409, tiktok_self.MAC_TAKEN)
+    assert _raw_post(store, clip["clipId"]) == before
+
+
+@pytest.fixture
+def cr(app: App, secrets_client: Any, clock: Clock) -> Any:
+    """Content Rewards on and signed in, with one campaign that takes clips and pays for TikTok (cr_support's fakes)."""
+    from cr_support import FakeCR, listed_campaign, make_deps, page, seed_campaign, seed_connection
+
+    fake = FakeCR()
+    deps = make_deps(app.store, secrets_client, fake, clock)
+    app.contentrewards = deps  # type: ignore[attr-defined]
+    seed_connection(deps, USER, clock.now)
+    seed_campaign(app.store, USER, clock.now, platformsPaid=["youtube", "tiktok"])
+    fake.answer("list_my_campaigns", page([listed_campaign(access="open")]))
+    fake.answer("create_my_submission", {"id": "sub_1", "status": "pending"})
+    return SimpleNamespace(deps=deps, fake=fake)
+
+
+def _cr_mac_clip(store: db.Store) -> dict[str, Any]:
+    from cr_support import UUID
+
+    options = {**MINE, "brandContent": True, "campaign": CAMPAIGN_OPTIONS}
+    return _mac_clip(store, campaignId=UUID, postOptions=options)
+
+
+def _crsub(store: db.Store, clip_id: str) -> dict[str, Any] | None:
+    return store.get(PK, db.crsub_sk(_raw_post(store, clip_id)["postId"]))
+
+
+def _done(call: Call, clip_id: str, link: str | None = None) -> tuple[int, Any]:
+    body: dict[str, Any] = {"device": DEVICE, **({"link": link} if link else {})}
+    return call("POST", f"/v1/clips/{clip_id}/tiktok/mac/done", body)
+
+
+def test_the_macs_done_with_a_link_sends_a_campaign_post_to_content_rewards(
+    call: Call, store: db.Store, cr: Any
+) -> None:
+    from cr_support import CMP, UUID
+
+    _mac_on(call)
+    clip = _cr_mac_clip(store)
+    assert _claim_as(call, clip["clipId"], "1.3.0")[0] == 200
+    status, body = _done(call, clip["clipId"], LINK)
+    assert status == 200, body
+    post_id = _raw_post(store, clip["clipId"])["postId"]
+    sub = _crsub(store, clip["clipId"])
+    assert sub is not None
+    assert (sub["state"], sub["campaignId"], sub["url"], sub["platform"]) == ("sent", UUID, LINK, "tiktok")
+    args, _headers, _timeout = cr.fake.calls("create_my_submission")[0]
+    assert args == {"campaign": CMP, "url": LINK, "idempotency_key": post_id}
+    # A repeated done never sends again.
+    assert _done(call, clip["clipId"], LINK)[0] == 200
+    assert len(cr.fake.calls("create_my_submission")) == 1
+
+
+def test_the_macs_done_without_a_link_sends_nothing_until_the_link_comes(call: Call, store: db.Store, cr: Any) -> None:
+    _mac_on(call)
+    clip = _cr_mac_clip(store)
+    assert _claim_as(call, clip["clipId"], "1.3.0")[0] == 200
+    assert _done(call, clip["clipId"])[0] == 200  # TikTok isn't connected, so nothing is looked for: no link
+    assert _crsub(store, clip["clipId"]) is None
+    assert cr.fake.calls("create_my_submission") == []
+    assert _done(call, clip["clipId"], LINK)[0] == 200  # a later done adds the link: it goes then
+    sub = _crsub(store, clip["clipId"])
+    assert sub is not None
+    assert (sub["state"], sub["url"]) == ("sent", LINK)
+
+
+def test_add_link_on_a_post_the_mac_posted_sends_it_to_content_rewards(call: Call, store: db.Store, cr: Any) -> None:
+    _mac_on(call)
+    clip = _cr_mac_clip(store)
+    assert _claim_as(call, clip["clipId"], "1.3.0")[0] == 200
+    assert _done(call, clip["clipId"])[0] == 200
+    status, body = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/posted", {"link": LINK})
+    assert status == 200, body
+    sub = _crsub(store, clip["clipId"])
+    assert sub is not None
+    assert (sub["state"], sub["url"]) == ("sent", LINK)
+
+
+def test_the_macs_done_on_a_normal_clip_sends_nothing(call: Call, store: db.Store, cr: Any) -> None:
+    _mac_on(call)
+    clip = _mac_clip(store)
+    assert _claim_as(call, clip["clipId"], None)[0] == 200
+    assert _done(call, clip["clipId"], LINK)[0] == 200
+    assert _crsub(store, clip["clipId"]) is None
+    assert cr.fake.calls("create_my_submission") == []
+
+
+def test_a_send_content_rewards_asks_to_retry_waits_for_the_owners_send(call: Call, store: db.Store, cr: Any) -> None:
+    from cr_support import tool_error
+
+    _mac_on(call)
+    cr.fake.answer("create_my_submission", tool_error("resource_missing", "not visible yet", 404))
+    clip = _cr_mac_clip(store)
+    assert _claim_as(call, clip["clipId"], "1.3.0")[0] == 200
+    assert _done(call, clip["clipId"], LINK)[0] == 200
+    sub = _crsub(store, clip["clipId"])
+    assert sub is not None
+    assert (sub["state"], sub["reason"]["code"]) == ("send_by_hand", "not_sent_by_app")
+
+
+# --- review round (24 Nov): an older helper, a campaign that closes before Post, an older web, CR's window ---------
+
+
+def test_an_older_helper_never_sees_a_labelled_post_that_waits_so_every_other_post_still_goes(
+    call: Call, store: db.Store
+) -> None:
+    # Helper 1.2.3 takes the first waiting post every tick and gets a 409 on a labelled one: it would never get to the
+    # rest. Its queue leaves the labelled one out (the helper's last check-in says 1.2.3, or the read says its version).
+    _mac_on(call)
+    labelled = _mac_clip(store, postOptions={**MINE, "brandContent": True})
+    plain = _mac_clip(store, source="sent")
+    assert call("POST", "/v1/tiktok/mac/ping", {"state": "ok", "device": DEVICE, "version": "1.2.3"})[0] == 200
+
+    def ids(version: str | None = None) -> list[str]:
+        query = {"version": version} if version else None
+        return [j["clipId"] for j in call("GET", "/v1/tiktok/mac", query=query)[1]["queue"]]
+
+    assert ids() == [plain["clipId"]]
+    assert ids("1.2.3") == [plain["clipId"]]
+    assert ids("1.3.0") == [labelled["clipId"], plain["clipId"]]  # Upload's first
+    assert _claim_as(call, plain["clipId"], None)[0] == 200  # the older helper posts the rest
+    assert call("POST", "/v1/tiktok/mac/ping", {"state": "ok", "device": DEVICE, "version": "1.3.0"})[0] == 200
+    assert ids() == [labelled["clipId"], plain["clipId"]]
+
+
+def test_a_labelled_post_a_newer_mac_works_on_stays_in_every_queue(call: Call, store: db.Store) -> None:
+    _mac_on(call)
+    clip = _mac_clip(store, postOptions={**MINE, "brandContent": True})
+    assert _claim_as(call, clip["clipId"], "1.3.0")[0] == 200
+    assert call("POST", "/v1/tiktok/mac/ping", {"state": "ok", "device": "old-mac", "version": "1.2.3"})[0] == 200
+    assert [j["clipId"] for j in call("GET", "/v1/tiktok/mac")[1]["queue"]] == [clip["clipId"]]
+
+
+@pytest.mark.parametrize("step", ["video", "opening", "uploading", "settings"])
+def test_a_campaign_that_closes_before_post_stops_the_post_at_its_next_step(
+    call: Call, store: db.Store, step: str
+) -> None:
+    # The claim saw it open; the campaign ended while the Mac uploaded (or the helper crashed and resumes the same
+    # claim without a new one): the next step before Post stops it with the campaign's words, so it is never posted.
+    _mac_on(call)
+    put_campaign(store, platformsPaid=["youtube", "tiktok"])
+    clip = _mac_clip(
+        store, campaignId=CAMPAIGN, postOptions={**MINE, "brandContent": True, "campaign": CAMPAIGN_OPTIONS}
+    )
+    assert _claim_as(call, clip["clipId"], "1.3.0")[0] == 200
+    put_campaign(store, platformsPaid=["youtube", "tiktok"], state="paused")
+    paused = "The brand paused this campaign. I'll tell you when it opens again."
+    status, body = _step(call, clip["clipId"], step)
+    assert (status, _message(body)) == (409, paused)
+    raw = _raw_post(store, clip["clipId"])
+    assert (raw["macState"], raw["macReason"]) == ("stopped", paused)
+    assert "macPressedAt" not in raw
+
+
+def test_a_campaign_step_from_pressing_on_is_never_stopped_by_the_campaign(call: Call, store: db.Store) -> None:
+    # The helper writes its press on disk before the server's yes: a refusal at pressing would read as pressed. After
+    # the press only the owner knows whether it is on TikTok. So pressing and finding go on as before.
+    _mac_on(call)
+    put_campaign(store, platformsPaid=["youtube", "tiktok"])
+    clip = _mac_clip(
+        store, campaignId=CAMPAIGN, postOptions={**MINE, "brandContent": True, "campaign": CAMPAIGN_OPTIONS}
+    )
+    assert _claim_as(call, clip["clipId"], "1.3.0")[0] == 200
+    put_campaign(store, platformsPaid=["youtube", "tiktok"], state="ended")
+    assert _step(call, clip["clipId"], "pressing")[0] == 200
+    assert _step(call, clip["clipId"], "finding")[0] == 200
+    assert _step(call, clip["clipId"], "settings")[0] == 200  # after the press: a beat, never a stop
+    assert _raw_post(store, clip["clipId"])["macState"] == "working"
+
+
+def test_an_older_webs_upload_keeps_the_cards_label_on_the_mac_post(
+    call: Call, store: db.Store, table: FakeTable
+) -> None:
+    # No tiktokMac (a card read before the Mac went on): My settings, but the label the card ticked stays, the same
+    # one the clip keeps, so the Mac post and tiktokLabel always agree.
+    _connect(store, "tiktok")
+    _mac_on(call)
+    clip = seed_clip(store)
+    _upload(call, clip["clipId"], ["tiktok"], tiktok={**TIKTOK, "brandOrganic": True})
+    raw = _raw_tiktok(table, clip["clipId"])
+    assert raw is not None
+    assert raw["postOptions"] == {**MINE, "brandOrganic": True}
+    assert (table.raw(clip["pk"], clip["sk"]) or {})["tiktokLabel"] == {"brandContent": False, "brandOrganic": True}
+
+
+def test_content_rewards_counts_its_30_minutes_from_the_macs_press(
+    call: Call, store: db.Store, cr: Any, clock: Clock
+) -> None:
+    _mac_on(call)
+    clip = _cr_mac_clip(store)
+    assert _claim_as(call, clip["clipId"], "1.3.0")[0] == 200
+    pressed = NOW + timedelta(minutes=2)
+    clock.now = pressed
+    assert _step(call, clip["clipId"], "pressing")[0] == 200
+    clock.now = NOW + timedelta(minutes=9)  # the link was found in Studio a few minutes later
+    assert _done(call, clip["clipId"], LINK)[0] == 200
+    sub = _crsub(store, clip["clipId"])
+    assert sub is not None
+    assert (sub["postedAt"], sub["deadline"], sub["sendBy"]) == (
+        iso(pressed),
+        iso(pressed + timedelta(minutes=25)),
+        iso(pressed + timedelta(minutes=30)),
+    )

@@ -32,8 +32,8 @@ What stays for the owner:
   row's problem line says the server's words and nothing is saved). A toast says what happened ("Link saved! Clip
   Factory will count its views.", "Found it on your TikTok! …", or the answer's `note`). The clip page has the same field beside Refresh numbers, and its
   TikTok stack says "Posted by you. Add its TikTok link to count views." ("Posted by your Mac. …" for the Mac's).
-* **A campaign clip** never goes to his Mac (round 3, D1, §47.2): its row says "Campaign clips skip TikTok for now:
-  your Mac can't mark them as Branded content yet." with no button, and Review leaves TikTok unticked for it. The
+* **A campaign clip** goes to his Mac like any clip, with TikTok's Paid partnership label (§47.12, ADR-96): its row
+  is the not-yet or Mac row with " · Paid partnership label", and Review offers TikTok for it while the Mac is on. The
   inline Add link has **Find it for me** right beside its box (the `{since}` call), then **Paste** and **Save the
   link**; from a "Not sure it posted" row also **It's on TikTok, no link** behind its own question (`{noLink: true}`).
 * **Review** (TikTok ticked, TikTok not approved: `app_review` and `posting_audit` not both `ok`): one line just above

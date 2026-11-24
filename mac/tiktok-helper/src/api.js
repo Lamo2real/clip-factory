@@ -58,7 +58,16 @@ export function client(apiUrl, token, fetchImpl = fetch) {
     queue: () => call("GET", "/tiktok/mac"),
     autopost: () => call("GET", "/autopost"),
     ping: (body) => call("POST", "/tiktok/mac/ping", body),
-    claim: (clipId, device) => call("POST", `${clip(clipId)}/tiktok/mac/claim`, { device }),
+    // 1.3.0: the claim says this helper's version (MAC_BRAND_FROM: a post with TikTok's label is only for a helper
+    // that sets it). A Clip Factory from before that refuses the key (400): then once more without it.
+    claim: async (clipId, device) => {
+      try {
+        return await call("POST", `${clip(clipId)}/tiktok/mac/claim`, { device, version: VERSION });
+      } catch (e) {
+        if (!(e instanceof ApiError && e.status === 400)) throw e;
+        return call("POST", `${clip(clipId)}/tiktok/mac/claim`, { device });
+      }
+    },
     // ``attempt`` (the claim's number, MacJob.attempt) makes an older try of this Mac unable to write (§47.3).
     step: (clipId, device, step, attempt) =>
       call("POST", `${clip(clipId)}/tiktok/mac/step`, { device, step, ...withAttempt(attempt) }),

@@ -52,18 +52,25 @@ export const COMING_SOON = "Content Rewards is coming soon to Clip Factory.";
 /** What Home says for a pasted CR link when the API is from before §38 (404). */
 export const NOT_YET = "Clip Factory can't use Content Rewards links yet.";
 /**
- * Campaign clips skip TikTok for now (D1): the owner's Mac can't set TikTok's Branded content disclosure yet, and a
- * paid promotion without it breaks TikTok's rules. The API's tiktok_mac.CAMPAIGN_SKIPS, word for word.
+ * Until TikTok approves the app, a campaign clip's TikTok goes only through the owner's Mac (§47), which adds TikTok's
+ * Paid partnership label (Branded content). With Your Mac posts TikTok off, it can't go there: the way on. The API's
+ * tiktok_mac.CAMPAIGN_MAC_OFF (and gates.TIKTOK_MAC_OFF), word for word.
  */
-export const CAMPAIGN_TIKTOK_SKIPS = "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet.";
-export const TIKTOK_NOT_YET = `TikTok: not yet. ${CAMPAIGN_TIKTOK_SKIPS}`;
+export const CAMPAIGN_MAC_OFF = "Campaign clips go on TikTok from your Mac. Turn it on in Settings › Posting › Your Mac posts TikTok.";
+/** Try again of a campaign clip's TikTok through TikTok's API before its approval, while the Mac is on (tiktok_mac.CAMPAIGN_MAC_POSTS). */
+export const CAMPAIGN_MAC_POSTS = "Your Mac posts campaign clips on TikTok. Tap Post with my Mac.";
+/** The campaign finder's TikTok chip while TikTok can't take campaign clips (the server's `tiktokWaits`). */
+export const TIKTOK_NOT_YET = `TikTok: not yet. ${CAMPAIGN_MAC_OFF}`;
+/** A campaign's page while the Mac posts TikTok and the campaign pays for TikTok. */
+export const CAMPAIGN_TIKTOK_MAC = "TikTok: your Mac posts campaign clips with TikTok's Paid partnership label.";
 
 /**
- * A campaign clip's places on Review (D1): without TikTok until TikTok approved the app (tiktokAudited: App review and
- * the posting audit), so TikTok is never ticked or offered for one; Content Rewards' own list may name it before.
+ * A campaign clip's places on Review: TikTok only while it can go there (`tiktokGoes`: TikTok approved the app, or
+ * the owner's Mac posts TikTok, which adds TikTok's Paid partnership label), so TikTok is never ticked or offered for
+ * one that can't; Content Rewards' own list may name it before.
  */
-export function campaignPlaces(places: readonly Platform[], audited: boolean): Platform[] {
-  return audited ? [...places] : places.filter((p) => p !== "tiktok");
+export function campaignPlaces(places: readonly Platform[], tiktokGoes: boolean): Platform[] {
+  return tiktokGoes ? [...places] : places.filter((p) => p !== "tiktok");
 }
 
 // ---------- Money: formatted only ----------
@@ -508,7 +515,7 @@ export function stopText(code: StopCode, ctx: StopContext = {}): string {
     case "logo_missing":
       return "This campaign needs its logo on every clip. Add it below.";
     case "tiktok_only":
-      return `This campaign only pays for TikTok. ${CAMPAIGN_TIKTOK_SKIPS} Pick a campaign that pays for YouTube, Instagram, X or Facebook.`;
+      return `This campaign only pays for TikTok. ${CAMPAIGN_MAC_OFF} Or pick a campaign that pays for YouTube, Instagram, X or Facebook.`;
     case "no_place": {
       const paid: Platform[] = (ctx.platformsPaid ?? []).filter((p) => p !== "tiktok");
       const first = PLATFORM_ORDER.find((p) => paid.includes(p));
@@ -827,10 +834,13 @@ export function budgetChip(usedPct: number | null): string | null {
   return "Half used";
 }
 
-/** The lines under Upload to for a campaign clip (§38.5): TikTok skipped while it pays for TikTok but can't go (D1). */
-export function placesLines(c: Pick<Campaign, "platformsPaid" | "uploadPlaces">, audited: boolean): string[] {
+/**
+ * The lines under Upload to for a campaign clip (§38.5): while it pays for TikTok but TikTok can't go (`tiktokGoes`
+ * false: TikTok has not approved the app and Your Mac posts TikTok is off), the way on (CAMPAIGN_MAC_OFF).
+ */
+export function placesLines(c: Pick<Campaign, "platformsPaid">, tiktokGoes: boolean): string[] {
   const out = ["Only places this campaign pays for."];
-  if (c.platformsPaid.includes("tiktok") && !campaignPlaces(c.uploadPlaces, audited).includes("tiktok")) out.push(CAMPAIGN_TIKTOK_SKIPS);
+  if (c.platformsPaid.includes("tiktok") && !tiktokGoes) out.push(CAMPAIGN_MAC_OFF);
   return out;
 }
 

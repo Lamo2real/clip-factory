@@ -137,8 +137,9 @@ brands, CR's category names) is plain escaped text, at most 300 characters, neve
 
    Under the controls, fixed (not a control): "I skip campaigns that need their own sound or picture on the
    video." The TikTok chip, until TikTok's posting audit passes (§17.4 gate
-   `posting_audit: ok`): shown off and not tappable (`aria-disabled`), with the §38.4 line "TikTok: not yet. Campaign clips skip
-   TikTok for now: your Mac can't mark them as Branded content yet." A place not set up yet (not
+   `posting_audit: ok`): shown off and not tappable (`aria-disabled`), with the §38.4 line "TikTok: not yet. Campaign clips go on
+   TikTok from your Mac. Turn it on in Settings › Posting › Your Mac posts TikTok." (the server's `tiktokWaits`, which
+   still leaves TikTok out of the finder until TikTok's audit; §47.12) A place not set up yet (not
    `ready` in `GET /v1/setup`) is shown off and not tappable, with "Set it up first." under it (matching only ever uses
    ready places, §41.3); while any place but TikTok isn't ready, a quiet "Set up another place" sits under the chips
    (→ `/settings/posting/setup?back=/campaigns/find`). S sends `places: null` whenever the picked chips equal every

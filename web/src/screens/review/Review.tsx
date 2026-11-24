@@ -25,12 +25,11 @@ import {
   brandedBlocked,
   choicesReady,
   macCreator,
-  macPostsLine,
-  macTikTokHeld,
   macTikTokChoices,
   myTikTokChoices,
   NO_TIKTOK_CHOICES,
   PICK_WHOSE,
+  tiktokLabel,
   tiktokOptions,
   tooLongForTikTok,
   type TikTokChoices,
@@ -50,7 +49,7 @@ import { TIKTOK_PUBLIC_HINT, tiktokAudited } from "../../lib/tiktokYourself.ts";
 import { useAutoPost } from "../settings/AutoPostBranch.tsx";
 import { TikTokRowAction, TurnOnMac, useTikTokRowContext } from "../library/MacButtons.tsx";
 import { settingsPath } from "../../lib/settingsTree.ts";
-import { commercialRow, macOn, macUploadLine, rowNeedsMac, savedForSetup, tiktokFacts, tiktokRow, type TikTokRowContext } from "../../lib/tiktokMac.ts";
+import { MAC_LABEL_PAID, macOn, macUploadLine, rowNeedsMac, savedForSetup, tiktokFacts, tiktokRow, type TikTokRowContext } from "../../lib/tiktokMac.ts";
 import { autoPostOf, reviewLede, reviewLine, sentFirstLine } from "../../lib/autopost.ts";
 
 /**
@@ -67,8 +66,16 @@ interface CardStash {
   choices: TikTokChoices;
   applied: boolean;
   ttWanted: boolean;
+  /** Mac mode: TikTok's row holds the owner's own choices for this clip (not My settings). */
+  macOwn: boolean;
 }
 const stashed = new Map<string, CardStash>();
+/**
+ * Whether Your Mac posts TikTok was on when each campaign clip's fit was last read: TikTok is one of a campaign clip's
+ * places only while it is (§47.2 item 6), so a card that sees it changed (here, in Settings, or on another device)
+ * reads its fit and campaign again. Kept across visits, as the fits are.
+ */
+const fitMac = new Map<string, boolean>();
 
 /** A caption saved on a Review card: every remembered Review list holds it now (also after Review was left). */
 function savedCaptions(clips: Clip[], clipId: string, patch: Partial<Captions>): Clip[] {
@@ -245,19 +252,9 @@ export function Review({ jobId }: { jobId: string | null }) {
     audited: tiktokAudited(setup.data?.platforms),
     needsMac: macCards || keptFacts.some((f) => !!f && rowNeedsMac(f)),
   });
-  // Those uploaded with Commercial content on their card while the Mac posts TikTok (§47.9): the Mac can't add TikTok's
-  // label yet, so their row never offers Post with my Mac (commercialRow). Only this visit knows it.
-  const [commercialKept, setCommercialKept] = useState<ReadonlySet<string>>(() => new Set());
-  const kept = (clip: Clip, posts: Post[] = [], commercial = false) => {
+  const kept = (clip: Clip, posts: Post[] = []) => {
     setJustKept((k) => [clip, ...k.filter((c) => c.clipId !== clip.clipId)].slice(0, 5));
     setKeptPosts((all) => ({ ...all, [clip.clipId]: posts }));
-    setCommercialKept((all) => {
-      if (all.has(clip.clipId) === commercial) return all;
-      const next = new Set(all);
-      if (commercial) next.add(clip.clipId);
-      else next.delete(clip.clipId);
-      return next;
-    });
   };
   // Try again or Post with my Mac went through: the clip's posts as they are now (its card already left the list).
   const keptAgain = (clip: Clip, posts: Post[]) => setKeptPosts((all) => (all[clip.clipId] ? { ...all, [clip.clipId]: posts } : all));
@@ -396,8 +393,7 @@ export function Review({ jobId }: { jobId: string | null }) {
           <ul className="kept-now__list">
             {justKept.map((c, i) => {
               const facts = keptFacts[i];
-              const row = facts ? tiktokRow(facts, macCtx) : null;
-              const tiktok = commercialKept.has(c.clipId) ? commercialRow(row) : row;
+              const tiktok = facts ? tiktokRow(facts, macCtx) : null;
               const saved = savedOnly[i];
               return (
                 <li key={c.clipId} className="kept-now__item" data-kept={saved ? "saved" : undefined}>
@@ -408,8 +404,7 @@ export function Review({ jobId }: { jobId: string | null }) {
                     {tiktok ? (
                       <span className="kept-now__tiktok">
                         <span className="kept-now__mac small" data-mac="kept">
-                          {/* A campaign clip's line already says TikTok (D1). */}
-                          {tiktok.kind === "campaign" ? tiktok.words : `TikTok: ${tiktok.words}`}
+                          {`TikTok: ${tiktok.words}`}
                         </span>
                         {tiktok.url ? (
                           <a className="icon-btn kept-now__open" href={tiktok.url} target="_blank" rel="noreferrer noopener" aria-label="Open the TikTok post">
@@ -569,11 +564,8 @@ function ReviewCard({
   /** Just put back by Undo: the card plays its return (§20.7). */
   returning: boolean;
   onDone: (clipId: string) => void;
-  /**
-   * Uploaded: the list offers a link to the clip's numbers. `commercial`: uploaded with Commercial content on while the
-   * Mac posts TikTok (§47.9), so its row there never offers Post with my Mac.
-   */
-  onKept: (clip: Clip, posts?: Post[], commercial?: boolean) => void;
+  /** Uploaded: the list offers a link to the clip's numbers. */
+  onKept: (clip: Clip, posts?: Post[]) => void;
   onThrowAway: (clip: Clip) => void;
   /** Tells the list this card is leaving (or, after a failed Upload, staying after all). */
   onSettling: (clipId: string, on: boolean) => void;
@@ -597,10 +589,12 @@ function ReviewCard({
   // An API from before §39 (404) or Content Rewards switched off (503): nothing shows, the card is as before.
   const fitLoad = useClipFit(clip.clipId, cr.state !== "missing" && cr.state !== "soon");
   const clipFit = fitLoad.data;
-  // A campaign clip's places never hold TikTok until TikTok approved the app (D1): the fit's, the card's and the live
-  // fit's all read them from here (campaignPlaces).
+  // A campaign clip's places hold TikTok only while it can go there: TikTok approved the app, or the owner's Mac posts
+  // TikTok (with TikTok's Paid partnership label, §47). The fit's, the card's and the live fit's all read them from
+  // here (campaignPlaces).
+  const tiktokGoes = tiktokApproved || macOn(me?.settings);
   const servedFit = clipFit?.mode === "campaign" ? (clipFit.fits[0] ?? null) : null;
-  const ownFit = servedFit ? { ...servedFit, uploadPlaces: campaignPlaces(servedFit.uploadPlaces, tiktokApproved) } : null;
+  const ownFit = servedFit ? { ...servedFit, uploadPlaces: campaignPlaces(servedFit.uploadPlaces, tiktokGoes) } : null;
   const [campaign, setCampaign] = useState<Campaign | null>(null);
   const [campaignOff, setCampaignOff] = useState(false);
   // The campaign could not be read (a network error or a 5xx): say so, with Check again, never a skeleton for good.
@@ -635,16 +629,25 @@ function ReviewCard({
   }, [campaignId, linkedKey, summaryKey, campaignTry]);
   const isCampaign = !!campaign;
   const campaignWait = !!campaignId && !campaign && !campaignOff;
-  // Your Mac posts TikTok (§47): while it is on and TikTok has not approved the app, Upload hands a normal clip's TikTok
-  // to the owner's Mac, which posts it in TikTok Studio. TikTok's tap rule is for apps that post through its API, not
-  // for the Mac: then TikTok is on My settings like every other place, and Upload never waits for TikTok's answer. The
-  // Mac posts My settings whatever the card says (§47.9), so its row shows them read-only. A campaign clip never goes
-  // to the Mac (§47.2): it keeps its own way.
-  const macTikTok = macOn(me?.settings) && !tiktokApproved && !isCampaign && !campaignWait;
+  const macNow = macOn(me?.settings);
+  useEffect(() => {
+    if (!campaignId || !me || fitMac.get(clip.clipId) === macNow) return;
+    const seen = fitMac.has(clip.clipId);
+    fitMac.set(clip.clipId, macNow);
+    // The first read of this clip's fit already has it; a change since is read again.
+    if (!seen) return;
+    reloadFit(clip.clipId);
+    setCampaignTry((n) => n + 1);
+  }, [campaignId, clip.clipId, macNow, me]);
+  // Your Mac posts TikTok (§47): while it is on and TikTok has not approved the app, Upload hands the clip's TikTok to
+  // the owner's Mac, which posts it in TikTok Studio exactly as the card's TikTok row says, TikTok's label included.
+  // TikTok's tap rule is for apps that post through its API, not for the Mac: then TikTok starts on My settings like
+  // every other place (a campaign clip on Everyone with Branded content), and Upload never waits for TikTok's answer.
+  const macTikTok = macOn(me?.settings) && !tiktokApproved && !campaignWait;
   const macRef = useRef(macTikTok);
   macRef.current = macTikTok;
   // A campaign clip offers only the places its campaign pays for: the fit's (read again on setup news), else the card's.
-  const paidPlaces = ownFit?.uploadPlaces ?? (campaign ? campaignPlaces(campaign.uploadPlaces, tiktokApproved) : null);
+  const paidPlaces = ownFit?.uploadPlaces ?? (campaign ? campaignPlaces(campaign.uploadPlaces, tiktokGoes) : null);
   const placesReady: Platform[] | null = campaignWait ? null : ready && paidPlaces && (campaign || ownFit) ? ready.filter((p) => paidPlaces.includes(p)) : ready;
   // Where it goes (§33): the owner's taps on this card, else this device's last choice / Where clips go, minus
   // places that are not set up. A campaign clip starts with every place the campaign pays for.
@@ -693,6 +696,9 @@ function ReviewCard({
   // Use my settings was tapped on this card (TikTok's choices are the owner's own tap, never a default). Not needed
   // while the Mac posts TikTok.
   const [applied, setApplied] = useState(back?.applied ?? false);
+  // The Mac posts TikTok: the owner changed TikTok's row on this card, so it holds his own choices (`choices`), not My
+  // settings. Use my settings puts My settings back.
+  const [macOwn, setMacOwn] = useState(back?.macOwn ?? false);
   // The last ask (and so `creator`, or `ttError`) was the Mac mode's shared one (macCreatorInfo), not a fresh one.
   const macAsked = useRef(false);
   // My settings (§36), from the server. YouTube, Instagram and X use them from the start (no TikTok-style rule there);
@@ -703,10 +709,17 @@ function ReviewCard({
   presetRef.current = preset;
   const [own, setOwn] = useState<CardOptions | null>(back?.own ?? null);
   const opts: CardOptions = own ?? (isCampaign ? campaignCardOptions(preset) : cardOptionsFrom(preset, youtubePrivacy));
-  // What TikTok's row holds now. The Mac posts TikTok: My settings, always (Commercial content as ticked on this clip),
-  // and TikTok Studio's choices whatever TikTok's API answered, or if it did not.
-  const ttChoices: TikTokChoices = macTikTok ? macTikTokChoices(preset.tiktok, choices) : choices;
+  // What TikTok's row holds now. The Mac posts TikTok: TikTok Studio's choices whatever TikTok's API answered, or if it
+  // did not; the row starts on My settings (Commercial content as ticked on this clip), a campaign clip on Everyone with
+  // Branded content, until the owner changes the row (macOwn).
   const ttCreator: TikTokCreator | null = macTikTok ? macCreator(creator) : creator;
+  const ttChoices: TikTokChoices = !macTikTok
+    ? choices
+    : macOwn
+      ? choices
+      : isCampaign
+        ? campaignTikTokChoices(preset.tiktok, ttCreator!)
+        : macTikTokChoices(preset.tiktok, choices);
   // The owner changed something in a row after My settings went on: the button offers to put his settings back.
   const [changed, setChanged] = useState(back?.changed ?? false);
   function setOpt<K extends keyof CardOptions>(platform: K, patch: Partial<CardOptions[K]>) {
@@ -759,12 +772,20 @@ function ReviewCard({
   // answer is dropped and the card is back where TikTok's path starts. Use my settings asks TikTok again, fresh; an
   // open TikTok row asks at once, as opening it does.
   useEffect(() => {
-    if (macTikTok || !macAsked.current) return;
+    if (macTikTok) return;
+    // His own choices in Mac mode were TikTok Studio's: TikTok's API path starts unpicked again (Commercial content stays).
+    if (macOwn) {
+      setMacOwn(false);
+      setChoices((c) => ({ ...NO_TIKTOK_CHOICES, commercial: c.commercial, yourBrand: c.yourBrand, branded: c.branded }));
+    }
+    if (!macAsked.current) return;
     macAsked.current = false;
     setCreator(null);
     setTtError(null);
     if (rows.current?.isOpen("tiktok")) setTtAsk((n) => n + 1);
     else setTtWanted(false);
+    // Only the move between the two paths counts here.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [macTikTok]);
   const askAgain = () => {
     if (retryApplies.current) applyWhenAsked.current = true;
@@ -785,8 +806,12 @@ function ReviewCard({
   function useMySettings() {
     setOwn(null);
     setChanged(false);
-    // The Mac posts TikTok: its row is always on My settings, nothing to ask TikTok.
-    if (!tiktokOn || macTikTok) return;
+    // The Mac posts TikTok: its row goes back to My settings (Commercial content as ticked), nothing to ask TikTok.
+    if (macTikTok) {
+      setMacOwn(false);
+      return;
+    }
+    if (!tiktokOn) return;
     if (creator && !macAsked.current) return applyTikTok(creator);
     retryApplies.current = false;
     applyWhenAsked.current = true;
@@ -794,9 +819,7 @@ function ReviewCard({
   }
   const ttTooLong = !!creator && tooLongForTikTok(clip.durationSec, creator.maxDurationSec);
   const ttCampaignProblem = isCampaign ? campaignTikTokProblem(ttChoices) : null;
-  // The Mac posts TikTok and Commercial content is on: the Mac can't add TikTok's label yet (§47.9).
-  const ttMacHeld: string | null = macTikTok ? macTikTokHeld(ttChoices) : null;
-  const ttReady = !!ttCreator && choicesReady(ttChoices) && !ttTooLong && !ttCampaignProblem && !ttMacHeld;
+  const ttReady = !!ttCreator && choicesReady(ttChoices) && !ttTooLong && !ttCampaignProblem;
   // The settings are on: places other than TikTok use them from the start; TikTok needs the owner's tap, unless the
   // Mac posts it (then TikTok uses them from the start too).
   const settingsOn = !changed && (!tiktokOn || applied || macTikTok);
@@ -943,7 +966,15 @@ function ReviewCard({
         return;
       }
       keepAct.play();
-      await upload(tiktokOptions(ttChoices, ttCreator!));
+      // The Mac posts TikTok: `tiktokMac` says these are the card's own choices, which the Mac posts as they are.
+      await upload(tiktokOptions(ttChoices, ttCreator!), macTikTok);
+      return;
+    }
+    // TikTok unticked in Mac mode with Your brand or Branded content still ticked on its row: the clip keeps that label,
+    // so a later Post with my Mac or Send these to my Mac posts it with it (`tiktokMac`, Clip.tiktokLabel).
+    if (macTikTok && !isCampaign && !noneReady && tiktokLabel(ttChoices) && choicesReady(ttChoices)) {
+      keepAct.play();
+      await upload(tiktokOptions(ttChoices, ttCreator!), true);
       return;
     }
     // Nothing set up but TikTok connected (a step still waits): TikTok's own sheet asks first, as before §33.
@@ -968,7 +999,7 @@ function ReviewCard({
     await upload(haveTikTok ? lastTikTok.current : undefined);
   }
 
-  async function upload(tiktok?: TikTokPostOptions) {
+  async function upload(tiktok?: TikTokPostOptions, mac = false) {
     lastTikTok.current = tiktok;
     setBusy("confirm");
     setKeepNote("");
@@ -984,6 +1015,7 @@ function ReviewCard({
         tiktok,
         chosen.length ? chosen : undefined,
         chosen.length ? optionsFor(chosen, opts) : undefined,
+        mac,
       );
       // A Review card's own Upload never marks its clip `auto`: auto-posting sent it first (§46.13). It leaves Review
       // with a calm note; no burst, no "Uploading to…", and these places are not remembered as his pick.
@@ -991,7 +1023,7 @@ function ReviewCard({
       if (out.kind === "uploading" && sentFirst) {
         setSheet(false);
         toast.info(sentFirst);
-        onKept(out.clip, out.posts, !!ttMacHeld);
+        onKept(out.clip, out.posts);
         leave();
         return;
       }
@@ -1000,8 +1032,8 @@ function ReviewCard({
         setSheet(false);
         burst(centerOf(confirmRef.current), 120);
         toast.success(uploadedMessage(out.posts));
-        if (tiktok) toast.info("TikTok can take a few minutes to process your clip.");
-        onKept(out.clip, out.posts, !!ttMacHeld);
+        if (tiktok && chosen.includes("tiktok")) toast.info("TikTok can take a few minutes to process your clip.");
+        onKept(out.clip, out.posts);
         leave();
         return;
       }
@@ -1061,7 +1093,7 @@ function ReviewCard({
     const before = captions;
     try {
       const out = await api().crFitCaptions({ clipId: clip.clipId, campaignId: live.campaignId, captions: { ...captions } });
-      const places = campaignPlaces(live.uploadPlaces, tiktokApproved);
+      const places = campaignPlaces(live.uploadPlaces, tiktokGoes);
       const going = places.filter((p) => chosen.includes(p));
       const words = fixedWords(live, going.length ? going : places, captions);
       edit(out);
@@ -1092,6 +1124,12 @@ function ReviewCard({
 
   /** "Turn on Branded content" (TikTok's own words): his own tap puts the campaign's TikTok choices on (§17.8). */
   function turnOnBranded() {
+    // The Mac posts TikTok: a campaign clip's row starts on Everyone with Branded content, so that start goes back on.
+    if (macTikTok) {
+      setMacOwn(false);
+      toast.success("Branded content is on for TikTok.");
+      return;
+    }
     if (creator) {
       setChoices(campaignTikTokChoices(presetRef.current.tiktok, creator));
       setApplied(true);
@@ -1105,7 +1143,7 @@ function ReviewCard({
   function throwAway() {
     // What was typed within the save delay is saved, and the card is kept as it is now, for Undo.
     flush();
-    stashed.set(clip.clipId, { captions, dirty: dirtyRef.current, picked, own, changed, choices, applied, ttWanted });
+    stashed.set(clip.clipId, { captions, dirty: dirtyRef.current, picked, own, changed, choices, applied, ttWanted, macOwn });
     clearTimeout(timer.current);
     settled.current = true;
     setLeaving(true);
@@ -1113,9 +1151,8 @@ function ReviewCard({
   }
 
   const passed = clip.checklist.items.filter((i) => i.pass).length;
-  // Commercial content is on but says nothing about whose: TikTok's own words go on Upload's hover text and the line
-  // (not while the Mac posts TikTok: then the Mac's own words say what to do, ttMacHeld).
-  const ttNoWhose = !macTikTok && tiktokOn && !!ttCreator && ttChoices.commercial && !ttChoices.yourBrand && !ttChoices.branded;
+  // Commercial content is on but says nothing about whose: TikTok's own words go on Upload's hover text and the line.
+  const ttNoWhose = tiktokOn && !!ttCreator && ttChoices.commercial && !ttChoices.yourBrand && !ttChoices.branded;
   // §39.3: the fit again for what this card holds now (captions, places, TikTok's Branded content).
   const live = ownFit
     ? liveFit(ownFit, {
@@ -1145,18 +1182,18 @@ function ReviewCard({
           ? USE_MINE_FIRST
           : ttTooLong
             ? "This clip is too long for TikTok. Untick TikTok to upload it to the rest."
-            : ttMacHeld
-              ? ttMacHeld
-              : !ttChoices.privacy
+            : !ttChoices.privacy
               ? "Pick who can see it on TikTok first."
               : ttCampaignProblem
                 ? ttCampaignProblem
                 : ttNoWhose
-                ? `${PICK_WHOSE} Pick Your brand or Branded content on TikTok first.`
-                : (brandedBlocked(ttChoices.privacy) ?? "Pick Your brand or Branded content on TikTok first.");
+                  ? `${PICK_WHOSE} Pick Your brand or Branded content on TikTok first.`
+                  : (brandedBlocked(ttChoices.privacy) ?? "Pick Your brand or Branded content on TikTok first.");
   const uploadWhy: string | null = fitWhy ?? ttWhy;
   const placesShown = placesReady && !noneReady ? chosen : everyPlace;
-  const macLine = macUploadLine(macCtx, ttChoices.privacy === "PUBLIC_TO_EVERYONE");
+  // The line above Upload follows the card's own TikTok row: who sees it, and the label the Mac adds (every campaign clip
+  // is a paid partnership).
+  const macLine = macUploadLine(macCtx, ttChoices.privacy === "PUBLIC_TO_EVERYONE", tiktokLabel(ttChoices) ?? (isCampaign ? MAC_LABEL_PAID : null));
 
   return (
     <article
@@ -1288,7 +1325,7 @@ function ReviewCard({
             campaign={
               campaign
                 ? {
-                    lines: placesLines(campaign, tiktokApproved),
+                    lines: placesLines(campaign, tiktokGoes),
                     unlinked: unlinkedPlaces(campaign, cr.data?.connection),
                     onRelinked: relink,
                   }
@@ -1359,22 +1396,23 @@ function ReviewCard({
             onAskAgain: askAgain,
             choices: ttChoices,
             onChoices: (patch) => {
-              // The Mac posts TikTok: only Commercial content is this clip's own (the rest is My settings, read-only).
+              const settingsChanged = "privacy" in patch || "comments" in patch || "duet" in patch || "stitch" in patch;
+              // The Mac posts TikTok: the row starts on My settings; a change makes it this clip's own (Commercial content
+              // alone keeps a normal clip on My settings: it is about this clip only, never in My settings).
               if (macTikTok) {
-                setChoices((c) => {
-                  const { commercial, yourBrand, branded } = { ...c, ...patch };
-                  return { ...c, commercial, yourBrand, branded };
-                });
+                setChoices({ ...ttChoices, ...patch });
+                if (settingsChanged || isCampaign) setMacOwn(true);
+                if (settingsChanged) setChanged(true);
                 return;
               }
               setChoices((c) => ({ ...c, ...patch }));
               // Commercial content is about this clip only (never in My settings), so ticking it keeps "Your settings are on".
-              if (applied && ("privacy" in patch || "comments" in patch || "duet" in patch || "stitch" in patch)) setChanged(true);
+              if (applied && settingsChanged) setChanged(true);
             },
             durationSec: clip.durationSec,
             // The Mac posts TikTok: TikTok was asked already; opening the row asks again only after it did not answer.
             onOpen: () => (macTikTok && ttError ? askTikTok() : setTtWanted(true)),
-            mac: macTikTok ? { line: macPostsLine(preset.tiktok), settingsHref: settingsPath("posting", "my-settings"), held: ttMacHeld } : undefined,
+            mac: macTikTok,
           }}
         />
         </fieldset>
@@ -1417,9 +1455,8 @@ function ReviewCard({
           </p>
         ) : null}
         {/* Above TikTok's Music Usage line, which stays right above Upload (§17.8). */}
-        {/* While his Mac posts this clip's TikTok (§47.4) the line says so: "for everyone" only when My settings says
-            Everyone (§47.9). Off, the line says to turn it on (ADR-86). A campaign clip never goes to the Mac (§47.2):
-            with the switch on it has no line here. */}
+        {/* While his Mac posts this clip's TikTok (§47.4) the line says so: "for everyone" only when the card's own Who
+            can see it is Everyone, and the label the Mac adds (§47.9). Off, the line says to turn it on (ADR-86). */}
         {placesReady && !noneReady && tiktokOn && !tiktokApproved && !keepFailed ? (
           macTikTok ? (
             // What the Mac is doing now (never set up, needs him, paused, not seen lately), with its one fix (§47.4).

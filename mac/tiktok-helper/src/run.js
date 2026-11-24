@@ -500,6 +500,8 @@ async function doPost(lane, job, { fresh = false, fr, relogged = false, queue = 
   // baseline and step (claimFields).
   const tries = (fresh ? 0 : mine.tries || 0) + 1;
   lane.remember(job.clipId, claimFields({ device: state.device, tries, fresh, earlier: earlierIds(mine) }));
+  // 1.3.0: the privacy this job sets, so tidy() lets the kept video go once the post is up with it.
+  if (lane.kind === "clips") lane.remember(job.clipId, { privacy: job.privacy || "PUBLIC_TO_EVERYONE" });
   // The job's beat, from the claim until doPost returns (a logged-out try handed on to the next doPost keeps it).
   const beat =
     beats ||
@@ -698,6 +700,17 @@ async function doFind(lane, job, { relogged = false, fr = frame(), queue = [], b
   }
 }
 
+/**
+ * May a kept video go? Its clip's TikTok post is ``posted`` for everyone (the owner's It's on TikTok, or a public
+ * post), or with the privacy this Mac's job set (1.3.0: a clip's own choice, so Friends or Only you reads
+ * ``private``). ``entry.privacy`` is the job's, kept at the claim; a ledger entry from before 1.3.0 has none: Everyone.
+ */
+export function tidyGoes(entry, tiktok) {
+  if (!tiktok || tiktok.status !== "posted") return false;
+  const set = (entry?.privacy || "PUBLIC_TO_EVERYONE") === "PUBLIC_TO_EVERYONE" ? "public" : "private";
+  return tiktok.privacy === "public" || tiktok.privacy === set;
+}
+
 /** A video kept from a try that stopped: once that clip is on TikTok anyway (the owner's It's on TikTok, or a later
  * try), the helper's own file leaves Downloads. */
 async function tidy(lane, queue) {
@@ -707,7 +720,7 @@ async function tidy(lane, queue) {
     try {
       const { posts = [] } = (await lane.api.posts(clipId)) || {};
       const tiktok = posts.find((p) => p.platform === "tiktok");
-      if (tiktok && tiktok.status === "posted" && tiktok.privacy === "public") deleteVideo(lane, clipId);
+      if (tidyGoes(entry, tiktok)) deleteVideo(lane, clipId);
     } catch (e) {
       log("tidy.error", { clipId, error: words(e) });
     }

@@ -33,7 +33,8 @@ export function needsUploadAgain(clip: Clip, posts: Post[]): boolean {
 
 /**
  * Calls Confirm with the places picked (§33), and on a 409 works out what it meant: uploaded elsewhere (posts exist),
- * thrown away, or still finishing an earlier Upload. Any other failure is thrown as usual.
+ * thrown away, or still finishing an earlier Upload. Any other failure is thrown as usual. `tiktokMac`: the Review card
+ * is in Mac mode (§47.9), so `tiktok` is its own TikTok row and the server hands exactly that to the Mac.
  */
 export async function uploadClip(
   a: Api,
@@ -42,9 +43,13 @@ export async function uploadClip(
   tiktok?: TikTokPostOptions,
   platforms?: Platform[],
   options?: ClipPostOptions,
+  tiktokMac?: boolean,
 ): Promise<UploadOutcome> {
   try {
-    const { clip, posts } = await a.confirmClip(clipId, captions, tiktok, platforms, options);
+    // `tiktokMac` only when set, so an older caller's request stays exactly as it was.
+    const { clip, posts } = tiktokMac
+      ? await a.confirmClip(clipId, captions, tiktok, platforms, options, true)
+      : await a.confirmClip(clipId, captions, tiktok, platforms, options);
     return { kind: "uploading", clip, posts };
   } catch (e) {
     if (!(e instanceof ApiError) || e.status !== 409) throw e;

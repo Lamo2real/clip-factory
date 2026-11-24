@@ -137,10 +137,11 @@ export function httpApi({ baseUrl, auth, fetcher = (...a) => fetch(...a) }: Deps
     getClip: async (clipId) => (await call<{ clip: Clip }>("GET", `/clips/${id(clipId)}`)).clip,
     updateClip: async (clipId, captions) =>
       (await call<{ clip: Clip }>("PATCH", `/clips/${id(clipId)}`, { captions })).clip,
-    confirmClip: (clipId, captions, tiktok, platforms, options) =>
+    confirmClip: (clipId, captions, tiktok, platforms, options, tiktokMac) =>
       call("POST", `/clips/${id(clipId)}/confirm`, {
         ...(captions ? { captions } : {}),
         ...(tiktok ? { tiktok } : {}),
+        ...(tiktok && tiktokMac ? { tiktokMac: true } : {}),
         ...(platforms ? { platforms } : {}),
         ...(options && Object.keys(options).length ? { options } : {}),
       }),

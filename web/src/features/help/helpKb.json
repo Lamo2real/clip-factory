@@ -320,7 +320,7 @@
         "upload in one tap",
         "upload with my settings"
       ],
-      "answer": "Every ticked place starts on your saved choices (never made for kids), TikTok too while your Mac posts TikTok, and your Mac posts with them. Just tap **Upload**. A paid partnership can't go through your Mac yet: untick TikTok, then post it in the TikTok app with its label, never with **Post with my Mac** or **Send these to my Mac**. With **Your Mac posts TikTok** off, tap **Use my settings**.",
+      "answer": "Every ticked place starts on your saved choices (never made for kids), TikTok too while your Mac posts TikTok. Just tap **Upload**: your Mac posts TikTok as that clip's TikTok row says. Paid partnership? Tick **Branded content** in that row, and your Mac adds TikTok's label. Campaign clips have it ticked. With **Your Mac posts TikTok** off, tap **Use my settings**.",
       "steps": [
         "Tap **Review**.",
         "It says **Your settings are on**. If not, tap **Use my settings**.",
@@ -359,7 +359,7 @@
         "mark as paid partnership",
         "promotional"
       ],
-      "answer": "Each ticked place has a row under **Use my settings**: tap it to change it for this clip. For a paid partnership, open **TikTok**, turn on **Commercial content**, tick **Branded content**. While your Mac posts TikTok, the row shows what it uses. It can't add that label yet: untick TikTok, then post it in the TikTok app with its label, not with **Post with my Mac** or **Send these to my Mac**.",
+      "answer": "Each ticked place has a row under **Use my settings**: tap it to change it for this clip. For a paid partnership, open **TikTok**, turn on **Commercial content**, tick **Branded content**. While your Mac posts TikTok, it posts the clip that way, with TikTok's **Paid partnership** label. Branded content can't be **Only me**.",
       "steps": [
         "Tap **Review**.",
         "Tap a place's row, like **TikTok · caption and settings**.",
@@ -502,14 +502,15 @@
         "mac paused",
         "open the stopped clip",
         "let them go",
-        "held on your mac"
+        "held on your mac",
+        "campaign clips tiktok"
       ],
       "answer": "With **Your Mac posts TikTok** on, your Mac posts each TikTok clip for everyone. Each TikTok row in **Library** says what it does. **Didn't work**? Tap **Try again**. Not sure it posted? Look on your TikTok, then tap **It's on TikTok**. Paused? Tap **Start my Mac again**. Needs you? Tap **Open the stopped clip**. Holding clips? Tap **Let them go**. **Not on TikTok yet**? Tap **Post with my Mac**.",
       "steps": [
         "Tap **Settings**.",
         "Tap **Posting**, then **Your Mac posts TikTok**.",
         "Turn on **My Mac posts my TikTok clips**.",
-        "In **Library**, a clip says **Not on TikTok yet**? Tap **Post with my Mac**. Your Mac posts it right away.",
+        "In **Library**, a clip says **Not on TikTok yet**? Tap **Post with my Mac**. Your Mac posts it right away, a paid clip with TikTok's **Paid partnership** label.",
         "Many clips not on TikTok yet? Tap **Send these to my Mac** here. They go one at a time, oldest first, one after each auto-posting run.",
         "To stop it, turn the switch off. Your Mac stops at once."
       ],
@@ -3362,20 +3363,28 @@
       "id": "cr-tiktok",
       "route": "/campaigns",
       "where": "Your campaigns",
-      "title": "Why is TikTok left out for campaigns?",
+      "title": "Campaign clips on TikTok",
       "keywords": [
         "tiktok campaign",
         "tiktok left out",
         "tiktok private",
         "tiktok audit",
-        "tiktok not paid"
+        "tiktok not paid",
+        "campaign clips tiktok",
+        "campaign tiktok mac"
       ],
-      "answer": "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet. So campaign clips go to YouTube, Instagram, X and Facebook for now.",
+      "answer": "Campaign clips go to TikTok through your Mac, for everyone, with TikTok's **Paid partnership** label. Turn on **Your Mac posts TikTok** first. On **Review**, a campaign clip then has TikTok ticked with **Branded content**: just tap **Upload**.",
       "steps": [
-        "Set up YouTube, Instagram, X or Facebook.",
-        "Pick campaigns that pay for those places."
+        "Tap **Settings**, then **Posting**, then **Your Mac posts TikTok**. Turn it on.",
+        "Add your TikTok in Content Rewards too, under **Accounts**.",
+        "On **Review**, tap **Upload**. Your Mac posts it on TikTok with the label."
       ],
       "actions": [
+        {
+          "id": "cr-tiktok:mac",
+          "label": "Turn on your Mac",
+          "to": "/settings/posting/tiktok-mac"
+        },
         {
           "id": "cr-tiktok:open",
           "label": "Open your campaigns",

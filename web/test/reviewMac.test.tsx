@@ -1,10 +1,11 @@
 // A Review card's TikTok while the owner's Mac posts TikTok (docs/CONTRACTS.md §47), rendered on the mock API. With
 // Your Mac posts TikTok on (and TikTok not approving the app yet) a card with TikTok ticked starts on My settings like
 // every other place: Everyone, Comments, Duet and Stitch on, no tap before Upload, and TikTok's API answer (creator
-// info) asked in the background but never waited for. The Mac posts My settings whatever the card says, so its row
-// shows them read-only (§47.9), and a ticked Your brand or Branded content holds Upload for TikTok: the Mac can't add
-// TikTok's label yet. With the Mac off, TikTok's API rule stays exactly as it was: nothing picked, the switches off,
-// Upload held until the owner taps Use my settings, and every ask for creator info is the card's own.
+// info) asked in the background but never waited for. TikTok's row is the clip's own (§47.9, 24 Nov): Who can see it
+// (TikTok Studio's Everyone, Friends, Only me), the switches and Commercial content, and Upload sends exactly that with
+// `tiktokMac`, so the Mac posts it with TikTok's label; nothing holds Upload for a label any more. With the Mac off,
+// TikTok's API rule stays exactly as it was: nothing picked, the switches off, Upload held until the owner taps Use my
+// settings, and every ask for creator info is the card's own.
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -14,19 +15,10 @@ import { mockApi } from "../src/api/mock/index.ts";
 import type { Api, Platform, Settings, TikTokCreator, TikTokPostOptions } from "../src/api/types.ts";
 import { forgetLoaded } from "../src/lib/hooks.ts";
 import { DEFAULT_PRESET } from "../src/lib/preset.ts";
-import { commercialRow, MAC_HINT, MAC_ROW_COMMERCIAL, MAC_WHERE_LINE } from "../src/lib/tiktokMac.ts";
-import {
-  MAC_COMMERCIAL_HELD,
-  MAC_LABEL_HELD,
-  MAC_PRIVACY_OPTIONS,
-  macCreator,
-  macPostsLine,
-  macTikTokChoices,
-  macTikTokHeld,
-  NO_TIKTOK_CHOICES,
-  PICK_WHOSE,
-  tiktokOptions,
-} from "../src/lib/tiktokChoices.ts";
+import { MAC_HINT, MAC_WHERE_LINE } from "../src/lib/tiktokMac.ts";
+import * as tiktokMacLib from "../src/lib/tiktokMac.ts";
+import * as tiktokChoicesLib from "../src/lib/tiktokChoices.ts";
+import { BRANDED_PRIVATE_LINE, MAC_PRIVACY_OPTIONS, macCreator, macTikTokChoices, NO_TIKTOK_CHOICES, PICK_WHOSE, tiktokOptions } from "../src/lib/tiktokChoices.ts";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -47,13 +39,15 @@ const { Review } = await import("../src/screens/review/Review.tsx");
 
 type Knobs = {
   setup: { finish(p: Platform): void; setAudit(passed: boolean): void };
-  posting: { posts(clipId: string): { platform: string; status: string }[] };
-  mac: { queue(): { clipId: string; privacy: string; comment: boolean; duet: boolean; stitch: boolean }[]; ping(): { on: boolean } };
+  posting: { posts(clipId: string): { platform: string; status: string }[]; clip(clipId: string): { tiktokLabel?: { brandContent: boolean; brandOrganic: boolean } } };
+  mac: {
+    queue(): { clipId: string; privacy: string; comment: boolean; duet: boolean; stitch: boolean; brandContent: boolean; brandOrganic: boolean }[];
+    ping(): { on: boolean };
+  };
 };
 const knobs = () => (window as unknown as { __cfMock: Knobs }).__cfMock;
 
 const ASK = "Tap Use my settings first. TikTok needs your tap.";
-const MAC_LINE = "Your Mac posts it with My settings: Everyone · Comments on · Duet on · Stitch on";
 const EVERY = "Tap a place below to change it for this clip.";
 const OTHERS = "Tap this first. TikTok needs your tap.";
 
@@ -62,6 +56,9 @@ let app: HTMLElement;
 let creatorAsks = 0;
 let meAnswered = false;
 let sent: (TikTokPostOptions | undefined)[] = [];
+/** Each Upload's `tiktokMac` and places, as the body says them. */
+let sentMac: (boolean | undefined)[] = [];
+let sentPlaces: (Platform[] | undefined)[] = [];
 let session: ReturnType<typeof useSession> | null = null;
 /** Keeps the session in reach, to change a setting while the cards are open (another device, or Settings). */
 function Grab() {
@@ -89,6 +86,30 @@ const switchIn = (el: HTMLElement, label: string) =>
 const hasCheck = (el: HTMLElement, label: string) => Array.from(el.querySelectorAll<HTMLLabelElement>("label.check-chip")).some((l) => l.textContent?.includes(label));
 const checkIn = (el: HTMLElement, label: string) =>
   Array.from(el.querySelectorAll<HTMLLabelElement>("label.check-chip")).find((l) => l.textContent?.includes(label))!.querySelector<HTMLInputElement>("input")!;
+/** Who can see it, in TikTok's row: its choices as listed, and a pick. */
+const privacyButton = (row: HTMLElement) => row.querySelector<HTMLButtonElement>('.dropdown__button[aria-haspopup="listbox"]')!;
+async function privacyNames(row: HTMLElement): Promise<{ name: string; off: boolean; line: string }[]> {
+  await click(privacyButton(row));
+  const out = Array.from(row.querySelectorAll<HTMLElement>('[role="option"]')).map((o) => ({
+    name: o.querySelector(".dropdown__name")!.textContent ?? "",
+    off: o.getAttribute("aria-disabled") === "true",
+    line: o.querySelector(".dropdown__line")?.textContent ?? "",
+  }));
+  await click(privacyButton(row));
+  return out;
+}
+async function pickPrivacy(row: HTMLElement, name: string) {
+  await click(privacyButton(row));
+  const option = Array.from(row.querySelectorAll<HTMLElement>('[role="option"]')).find((o) => o.querySelector(".dropdown__name")!.textContent === name)!;
+  await click(option);
+}
+/** Opens TikTok's row and waits for its switches. */
+async function openTikTok(): Promise<HTMLElement> {
+  await click(inCard('[data-place="tiktok"] summary')!);
+  const row = tiktokRowOf();
+  await until(() => !!switchIn(row, "Commercial content") && !!privacyButton(row), "TikTok's row, open");
+  return row;
+}
 /** The "Upload to" chip of a place. */
 const chip = (name: string) => Array.from(card().querySelectorAll<HTMLButtonElement>(".upload-to button")).find((b) => b.textContent?.trim() === name)!;
 
@@ -135,9 +156,11 @@ async function mount({
       creatorAsks++;
       return askCreator();
     },
-    confirmClip: (clipId, captions, tiktok, platforms, options) => {
+    confirmClip: (clipId, captions, tiktok, platforms, options, tiktokMac) => {
       sent.push(tiktok);
-      return confirm(clipId, captions, tiktok, platforms, options);
+      sentMac.push(tiktokMac);
+      sentPlaces.push(platforms);
+      return confirm(clipId, captions, tiktok, platforms, options, tiktokMac);
     },
   };
   app = document.createElement("div");
@@ -168,6 +191,8 @@ beforeEach(() => {
   creatorAsks = 0;
   meAnswered = false;
   sent = [];
+  sentMac = [];
+  sentPlaces = [];
   session = null;
   vi.stubGlobal("matchMedia", (media: string) => ({ matches: false, media, addEventListener: () => undefined, removeEventListener: () => undefined }));
   (window as unknown as { __cfMockFaults?: { latencyMs?: number } }).__cfMockFaults = { latencyMs: 0 };
@@ -197,7 +222,8 @@ describe("the Mac's choices (pure)", () => {
     expect(macCreator(null)).toMatchObject({ nickname: "", privacyOptions: [...MAC_PRIVACY_OPTIONS], maxDurationSec: 0 });
   });
 
-  it("always My settings, as the Mac posts them: the saved privacy and switches, Commercial content as ticked on the clip", () => {
+  it("starts on My settings: the saved privacy (one of TikTok Studio's) and switches, Commercial content as ticked on the clip", () => {
+    expect(MAC_PRIVACY_OPTIONS).toEqual(["PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS", "SELF_ONLY"]);
     const start = macTikTokChoices(DEFAULT_PRESET.tiktok);
     expect(start).toEqual({ privacy: "PUBLIC_TO_EVERYONE", comments: true, duet: true, stitch: true, commercial: false, yourBrand: false, branded: false });
     expect(tiktokOptions(start, macCreator(null))).toEqual({
@@ -208,45 +234,22 @@ describe("the Mac's choices (pure)", () => {
       brandContent: false,
       brandOrganic: false,
     });
-    const followers = { privacy: "FOLLOWER_OF_CREATOR", comments: false, duet: true, stitch: false };
-    expect(macTikTokChoices(followers)).toMatchObject(followers);
-    // A ticked paid partnership stays ticked (it holds Upload for TikTok), and the privacy stays the one the Mac uses.
+    const friends = { privacy: "MUTUAL_FOLLOW_FRIENDS", comments: false, duet: true, stitch: false };
+    expect(macTikTokChoices(friends)).toMatchObject(friends);
+    // A ticked paid partnership stays ticked, and goes to the Mac as TikTok's label.
     const paid = { ...NO_TIKTOK_CHOICES, commercial: true, branded: true };
-    expect(macTikTokChoices(followers, paid)).toMatchObject({ ...followers, commercial: true, branded: true });
-    // What the card had for TikTok's API path never leaks in: only Commercial content is the clip's own.
+    expect(macTikTokChoices(friends, paid)).toMatchObject({ ...friends, commercial: true, branded: true });
+    expect(tiktokOptions(macTikTokChoices(friends, paid), macCreator(null))).toMatchObject({ privacyLevel: "MUTUAL_FOLLOW_FRIENDS", brandContent: true, brandOrganic: false });
+    // What the card had for TikTok's API path never leaks in: only Commercial content is the clip's own at the start.
     expect(macTikTokChoices(DEFAULT_PRESET.tiktok, { ...NO_TIKTOK_CHOICES, privacy: "SELF_ONLY", comments: false })).toEqual(start);
-    // Unset (an old preset) is Everyone, as the server's preset_options.
+    // Unset (an old preset), or Followers (TikTok Studio has no such choice), starts on Everyone.
     expect(macTikTokChoices({ ...DEFAULT_PRESET.tiktok, privacy: "" }).privacy).toBe("PUBLIC_TO_EVERYONE");
+    expect(macTikTokChoices({ ...DEFAULT_PRESET.tiktok, privacy: "FOLLOWER_OF_CREATOR" }).privacy).toBe("PUBLIC_TO_EVERYONE");
   });
 
-  it("the row's line is built from My settings' real values", () => {
-    expect(macPostsLine(DEFAULT_PRESET.tiktok)).toBe(MAC_LINE);
-    expect(macPostsLine({ privacy: "SELF_ONLY", comments: false, duet: true, stitch: false })).toBe(
-      "Your Mac posts it with My settings: Only me · Comments off · Duet on · Stitch off",
-    );
-    expect(macPostsLine({ ...DEFAULT_PRESET.tiktok, privacy: "" })).toBe(MAC_LINE);
-  });
-
-  it("Your brand or Branded content holds the Mac, and so does Commercial content with nothing ticked; off holds nothing", () => {
-    expect(macTikTokHeld(NO_TIKTOK_CHOICES)).toBeNull();
-    expect(macTikTokHeld({ ...NO_TIKTOK_CHOICES, commercial: true, yourBrand: true })).toBe(MAC_LABEL_HELD);
-    expect(macTikTokHeld({ ...NO_TIKTOK_CHOICES, commercial: true, branded: true })).toBe(MAC_LABEL_HELD);
-    expect(macTikTokHeld({ ...NO_TIKTOK_CHOICES, commercial: true, yourBrand: true, branded: true })).toBe(MAC_LABEL_HELD);
-    // TikTok's "Pick Your brand or Branded content" would go round in a circle: the way out is to turn it off.
-    expect(macTikTokHeld({ ...NO_TIKTOK_CHOICES, commercial: true })).toBe(MAC_COMMERCIAL_HELD);
-    // Ticked, then Commercial content turned off: nothing is labeled, nothing held.
-    expect(macTikTokHeld({ ...NO_TIKTOK_CHOICES, commercial: false, yourBrand: true, branded: true })).toBeNull();
-  });
-});
-
-describe("Uploaded just now after Commercial content (pure)", () => {
-  it("where the row would offer the Mac, it says to post it in the TikTok app with Add link; any other row stays", () => {
-    const commercial = { kind: "commercial", words: MAC_ROW_COMMERCIAL, button: "add_link" };
-    expect(commercialRow({ kind: "offer", words: "Not on TikTok yet", button: "post_with_mac" })).toEqual(commercial);
-    expect(commercialRow({ kind: "not_ready", words: "Your Mac isn't set up yet", button: "turn_on", href: "/x" })).toEqual(commercial);
-    const posted = { kind: "posted_you", words: "Posted by you · Everyone", button: null, url: "https://www.tiktok.com/@a/video/1" } as const;
-    expect(commercialRow(posted)).toBe(posted);
-    expect(commercialRow(null)).toBeNull();
+  it("the holds and the read-only row are gone", () => {
+    for (const gone of ["macPostsLine", "macTikTokHeld", "MAC_LABEL_HELD", "MAC_COMMERCIAL_HELD"]) expect(gone in tiktokChoicesLib, gone).toBe(false);
+    for (const gone of ["commercialRow", "MAC_ROW_COMMERCIAL", "MAC_ROW_CAMPAIGN"]) expect(gone in tiktokMacLib, gone).toBe(false);
   });
 });
 
@@ -271,6 +274,8 @@ describe("Review card while the Mac posts TikTok", () => {
     await click(upload());
     await until(() => sent.length === 1, "Upload sent the clip");
     expect(sent[0]).toEqual({ privacyLevel: "PUBLIC_TO_EVERYONE", disableComment: false, disableDuet: false, disableStitch: false, brandContent: false, brandOrganic: false });
+    // The card's own row, so the Mac posts exactly that.
+    expect(sentMac[0]).toBe(true);
     await until(() => knobs().posting.posts(clipId).length === 2, "its posts");
     const posts = knobs().posting.posts(clipId);
     expect(posts.find((p) => p.platform === "tiktok")?.status).toBe("mac");
@@ -288,12 +293,13 @@ describe("Review card while the Mac posts TikTok", () => {
     expect(buttonIn(card(), "Your settings are on")).toBeTruthy();
     expect(tiktokLine()).toBe("Who can see it: Everyone · Comments on · Duet on · Stitch on");
     expect(upload().getAttribute("aria-disabled")).toBeNull();
-    // Opening the row: the Mac's line, no name (Posting as is left out in this mode only), and TikTok is asked once more.
+    // Opening the row: its own choices (TikTok Studio's), no name (Posting as is left out in this mode only), and
+    // TikTok is asked once more.
     const asked = creatorAsks;
-    await click(inCard('[data-place="tiktok"] summary')!);
+    const row = await openTikTok();
     await until(() => creatorAsks === asked + 1, "opening the row asks TikTok again");
-    const row = tiktokRowOf();
-    expect(row.querySelector(".tt-mac-uses")!.textContent).toContain(MAC_LINE);
+    expect(privacyButton(row).textContent).toContain("Everyone");
+    expect(switchesIn(row)).toEqual(["Comments", "Duet", "Stitch", "Commercial content"]);
     expect(row.textContent).not.toContain("Posting as");
     expect(row.querySelector('[role="alert"]')).toBeNull();
 
@@ -336,104 +342,123 @@ describe("Review card's TikTok line when the Mac can't post yet (bug hunt, 23 No
   });
 });
 
-describe("Review card while the Mac posts TikTok: the row is read-only", () => {
-  it("shows what the Mac posts it with and Change My settings, with no per-clip privacy or switch; the Mac job gets the preset's privacy", async () => {
-    const clipId = await mount({ mac: true, tiktok: { privacy: "FOLLOWER_OF_CREATOR", stitch: false } });
+describe("Review card while the Mac posts TikTok: the row is the clip's own", () => {
+  it("Who can see it and the switches change this clip only; the Mac job gets them, and Use my settings puts My settings back", async () => {
+    const clipId = await mount({ mac: true });
     await until(() => tiktokLine().startsWith("Posting as "), "TikTok's answer");
-    await click(inCard('[data-place="tiktok"] summary')!);
-    const row = tiktokRowOf();
-    expect(row.querySelector(".tt-mac-uses")!.textContent).toContain("Your Mac posts it with My settings: Followers · Comments on · Duet on · Stitch off");
-    // The line above Upload never says "for everyone" while the Mac posts it for followers.
-    expect(inCard(".tt-yourself-hint")!.textContent).toBe(MAC_WHERE_LINE);
-    expect(card().textContent).not.toContain(MAC_HINT);
-    const change = Array.from(row.querySelectorAll<HTMLAnchorElement>("a")).find((a) => a.textContent?.trim() === "Change My settings")!;
-    expect(change.getAttribute("href")).toBe("/settings/posting/my-settings");
-    // Nothing that changes who sees it or the switches for this clip: no Who can see it dropdown, no Comments, Duet or Stitch.
-    expect(row.querySelector('[aria-haspopup="listbox"]')).toBeNull();
-    expect(switchesIn(row)).toEqual(["Commercial content"]);
+    const row = await openTikTok();
+    // TikTok Studio's choices, Everyone first; the closed line said My settings, and so does the open row.
+    expect((await privacyNames(row)).map((o) => o.name)).toEqual(["Everyone", "Friends", "Only me"]);
+    expect(privacyButton(row).textContent).toContain("Everyone");
+    expect(switchesIn(row)).toEqual(["Comments", "Duet", "Stitch", "Commercial content"]);
     expect(row.textContent).toContain("Posting as");
-    // Upload: the preset's privacy, as the Mac posts it.
+    await pickPrivacy(row, "Friends");
+    await click(switchIn(row, "Stitch"));
+    // A change on the card: Use my settings offers to put his settings back, and Upload still goes at once.
+    expect(buttonIn(card(), "Use my settings")).toBeTruthy();
+    expect(inCard(".my-settings__note")!.textContent).toBe("You changed some. Tap to put yours back.");
+    // The line above Upload follows the card: never "for everyone" while it is Friends.
+    expect(inCard(".tt-yourself-hint")!.textContent).toBe(MAC_WHERE_LINE);
+    expect(upload().getAttribute("aria-disabled")).toBeNull();
+    // Use my settings puts My settings back on TikTok's row too.
+    await click(buttonIn(card(), "Use my settings")!);
+    expect(privacyButton(row).textContent).toContain("Everyone");
+    expect(inCard(".tt-yourself-hint")!.textContent).toBe(MAC_HINT);
+    await pickPrivacy(row, "Friends");
+    await click(switchIn(row, "Comments"));
     await click(upload());
     await until(() => sent.length === 1, "Upload sent the clip");
-    expect(sent[0]).toEqual({ privacyLevel: "FOLLOWER_OF_CREATOR", disableComment: false, disableDuet: false, disableStitch: true, brandContent: false, brandOrganic: false });
+    expect(sent[0]).toEqual({ privacyLevel: "MUTUAL_FOLLOW_FRIENDS", disableComment: true, disableDuet: false, disableStitch: false, brandContent: false, brandOrganic: false });
+    expect(sentMac[0]).toBe(true);
     await until(() => !!knobs().mac.queue().find((j) => j.clipId === clipId), "the Mac's job");
-    expect(knobs().mac.queue().find((j) => j.clipId === clipId)).toMatchObject({ privacy: "FOLLOWER_OF_CREATOR", comment: true, duet: true, stitch: false });
+    expect(knobs().mac.queue().find((j) => j.clipId === clipId)).toMatchObject({ privacy: "MUTUAL_FOLLOW_FRIENDS", comment: false, duet: true, stitch: true, brandContent: false });
   });
 
-  it("Branded content holds Upload for TikTok with the Mac's words; unticking it, then Commercial content, lets the clip go", async () => {
-    await mount({ mac: true });
-    await click(inCard('[data-place="tiktok"] summary')!);
-    const row = tiktokRowOf();
-    // The row's Commercial content switch renders once the row has opened (later on a slow CI runner).
-    await until(() => !!switchIn(row, "Commercial content"), "the Commercial content switch");
+  it("My settings saved as Friends: the card starts there, and the line above Upload never says for everyone", async () => {
+    await mount({ mac: true, tiktok: { privacy: "MUTUAL_FOLLOW_FRIENDS", stitch: false } });
+    expect(tiktokLine()).toContain("Who can see it: Friends · Comments on · Duet on · Stitch off");
+    expect(inCard(".tt-yourself-hint")!.textContent).toBe(MAC_WHERE_LINE);
+    expect(card().textContent).not.toContain(MAC_HINT);
+    await click(upload());
+    await until(() => sent.length === 1, "Upload sent the clip");
+    expect(sent[0]).toMatchObject({ privacyLevel: "MUTUAL_FOLLOW_FRIENDS", disableStitch: true });
+  });
+
+  it("Branded content goes with the Mac: no hold, TikTok's label line, and the Mac job carries it", async () => {
+    const clipId = await mount({ mac: true });
+    const row = await openTikTok();
     await click(switchIn(row, "Commercial content"));
-    // On with nothing ticked: held, and the way out is never "pick one" (that holds the Mac too).
-    expect(inCard(".upload-going")!.textContent).toBe(MAC_COMMERCIAL_HELD);
-    expect(upload().getAttribute("title")).toBeNull();
-    expect(card().textContent).not.toContain(PICK_WHOSE);
-    expect(row.textContent).not.toContain("Pick Your brand");
+    // On with nothing ticked: TikTok's own rule, as on its API path (pick whose).
+    expect(inCard(".upload-going")!.textContent).toBe(`${PICK_WHOSE} Pick Your brand or Branded content on TikTok first.`);
+    expect(upload().getAttribute("aria-disabled")).toBe("true");
+    expect(upload().getAttribute("title")).toBe(PICK_WHOSE);
+    expect(row.textContent).toContain("Pick Your brand, Branded content, or both.");
     await until(() => hasCheck(row, "Branded content"), "the Branded content chip");
     await click(checkIn(row, "Branded content"));
-    expect(inCard(".upload-going")!.textContent).toBe(MAC_LABEL_HELD);
-    expect(upload().getAttribute("aria-disabled")).toBe("true");
-    expect(row.querySelector('[role="alert"]')!.textContent).toBe(MAC_LABEL_HELD);
-    // Nothing would add the label, so the row never says the video will be labeled.
-    expect(row.textContent).not.toContain("will be labeled");
+    // Nothing holds it: the row says the label TikTok shows, and the line above Upload says the Mac adds it.
+    expect(upload().getAttribute("aria-disabled")).toBeNull();
+    expect(inCard(".upload-going")!.textContent).toBe("Going to: YouTube · TikTok");
+    expect(row.querySelector('[role="alert"]')).toBeNull();
+    expect(row.textContent).toContain("Your video will be labeled as 'Paid partnership'.");
+    expect(inCard(".tt-yourself-hint")!.textContent).toBe("TikTok: your Mac posts it for everyone and adds TikTok's Paid partnership label.");
+    expect(tiktokLine()).toContain("· Paid partnership");
+    expect(inCard(".tt-legal")!.textContent).toContain("Branded Content Policy");
+    // TikTok's rule: Branded content can't be Only me (greyed, with TikTok's own words).
+    expect((await privacyNames(row)).find((o) => o.name === "Only me")).toEqual({ name: "Only me", off: true, line: BRANDED_PRIVATE_LINE });
     // Ticking it is about this clip only: his settings stay on.
     expect(buttonIn(card(), "Your settings are on")).toBeTruthy();
     await click(upload());
-    expect(sent).toEqual([]);
-    // Unticked: then Commercial content off, and TikTok goes again, with no label.
-    await until(() => hasCheck(row, "Branded content"), "the Branded content chip");
-    await click(checkIn(row, "Branded content"));
-    expect(inCard(".upload-going")!.textContent).toBe(MAC_COMMERCIAL_HELD);
-    expect(upload().getAttribute("aria-disabled")).toBe("true");
-    await click(switchIn(row, "Commercial content"));
-    expect(upload().getAttribute("aria-disabled")).toBeNull();
-    expect(row.querySelector('[role="alert"]')).toBeNull();
-    await click(upload());
     await until(() => sent.length === 1, "Upload sent the clip");
-    expect(sent[0]).toMatchObject({ privacyLevel: "PUBLIC_TO_EVERYONE", brandContent: false, brandOrganic: false });
+    expect(sent[0]).toMatchObject({ privacyLevel: "PUBLIC_TO_EVERYONE", brandContent: true, brandOrganic: false });
+    expect(sentMac[0]).toBe(true);
+    await until(() => !!knobs().mac.queue().find((j) => j.clipId === clipId), "the Mac's job");
+    expect(knobs().mac.queue().find((j) => j.clipId === clipId)).toMatchObject({ privacy: "PUBLIC_TO_EVERYONE", brandContent: true, brandOrganic: false });
+    expect(knobs().posting.clip(clipId).tiktokLabel).toEqual({ brandContent: true, brandOrganic: false });
+    // Uploaded just now: the Mac's row says the label.
+    await until(() => !!document.querySelector(".kept-now__item .kept-now__mac"), "Uploaded just now");
+    expect(document.querySelector(".kept-now__item .kept-now__mac")!.textContent).toMatch(/^TikTok: Waiting for your Mac.* · Paid partnership label$/);
   });
 
-  it("Your brand holds it too, and the other places still upload once TikTok is unticked", async () => {
+  it("TikTok unticked with Your brand still ticked: the other places go, and the clip keeps its label for Post with my Mac", async () => {
     const clipId = await mount({ mac: true });
-    await click(inCard('[data-place="tiktok"] summary')!);
-    const row = tiktokRowOf();
-    // The row's Commercial content switch renders once the row has opened (later on a slow CI runner).
-    await until(() => !!switchIn(row, "Commercial content"), "the Commercial content switch");
+    knobs().mac.ping();
+    const row = await openTikTok();
     await click(switchIn(row, "Commercial content"));
     await until(() => hasCheck(row, "Your brand"), "the Your brand chip");
     await click(checkIn(row, "Your brand"));
-    expect(inCard(".upload-going")!.textContent).toBe(MAC_LABEL_HELD);
-    expect(upload().getAttribute("aria-disabled")).toBe("true");
+    expect(upload().getAttribute("aria-disabled")).toBeNull();
     await click(chip("TikTok"));
     expect(inCard(".upload-going")!.textContent).toBe("Going to: YouTube");
-    expect(upload().getAttribute("aria-disabled")).toBeNull();
     await click(upload());
     await until(() => sent.length === 1, "Upload sent the clip");
-    expect(sent[0]).toBeUndefined();
+    // The row's choices go too (tiktokMac), with TikTok left out of the places.
+    expect(sent[0]).toMatchObject({ brandContent: false, brandOrganic: true });
+    expect(sentMac[0]).toBe(true);
+    expect(sentPlaces[0]).toEqual(["youtube"]);
     await until(() => knobs().posting.posts(clipId).length === 1, "its post");
     expect(knobs().posting.posts(clipId).map((p) => p.platform)).toEqual(["youtube"]);
-    // Uploaded just now: the Mac can't add the label, so the row says to post it in the TikTok app (Add link), and
-    // never offers Post with my Mac.
+    expect(knobs().posting.clip(clipId).tiktokLabel).toEqual({ brandContent: false, brandOrganic: true });
+    // Uploaded just now: Post with my Mac, which posts it with TikTok's label.
+    await until(() => !!document.querySelector(".kept-now__item"), "Uploaded just now");
     const kept = document.querySelector<HTMLElement>(".kept-now__item")!;
-    expect(kept.querySelector(".kept-now__mac")!.textContent).toBe(`TikTok: ${MAC_ROW_COMMERCIAL}`);
-    expect(buttonIn(kept, "Post with my Mac")).toBeUndefined();
-    expect(buttonIn(kept, "Save the link")).toBeTruthy();
+    await until(() => !!buttonIn(kept, "Post with my Mac"), "Post with my Mac");
+    expect(kept.querySelector(".kept-now__mac")!.textContent).toBe("TikTok: Not on TikTok yet · Promotional content label");
     expect(knobs().mac.queue().find((j) => j.clipId === clipId)).toBeUndefined();
   });
 
-  it("a clip uploaded without TikTok and no label ticked is still offered Post with my Mac", async () => {
+  it("a clip uploaded without TikTok and no label ticked is offered Post with my Mac, with no label and no TikTok in the body", async () => {
     const clipId = await mount({ mac: true });
     knobs().mac.ping();
     await click(chip("TikTok"));
     await click(upload());
     await until(() => knobs().posting.posts(clipId).length === 1, "its post");
+    expect(sent[0]).toBeUndefined();
+    expect(sentMac[0]).toBeUndefined();
     await until(() => !!document.querySelector(".kept-now__item"), "Uploaded just now");
     const kept = document.querySelector<HTMLElement>(".kept-now__item")!;
     await until(() => !!buttonIn(kept, "Post with my Mac"), "Post with my Mac");
     expect(kept.querySelector(".kept-now__mac")!.textContent).toBe("TikTok: Not on TikTok yet");
+    expect(knobs().posting.clip(clipId).tiktokLabel).toBeUndefined();
   });
 });
 
@@ -454,12 +479,13 @@ describe("Review card while TikTok's API posts it (unchanged, TikTok's rule)", (
     await click(buttonIn(card(), "Use my settings")!);
     await until(() => !!buttonIn(card(), "Your settings are on"), "his tap puts his settings on");
     expect(creatorAsks).toBe(1);
+    // TikTok's API path: never `tiktokMac` (the server asks TikTok's API, with its own rules).
+    expect(sentMac).toEqual([]);
     // Before TikTok approves the app, TikTok's API offers only Only me.
     expect(tiktokLine()).toContain("Who can see it: Only me");
     expect(inCard(".my-settings__note")!.textContent).toBe(EVERY);
-    // The row: TikTok's own privacy and switches, no Mac line.
+    // The row: TikTok's own privacy and switches.
     await click(inCard('[data-place="tiktok"] summary')!);
-    expect(tiktokRowOf().querySelector(".tt-mac-uses")).toBeNull();
     expect(tiktokRowOf().querySelector('[aria-haspopup="listbox"]')).toBeTruthy();
     expect(switchesIn(tiktokRowOf())).toEqual(["Comments", "Duet", "Stitch", "Commercial content"]);
   });
@@ -523,5 +549,20 @@ describe("Review card while TikTok's API posts it (unchanged, TikTok's rule)", (
     // Asked again, fresh: the shared answer (still under a minute old) was not used.
     expect(creatorAsks).toBe(2);
     expect(tiktokLine()).toContain("Who can see it: Only me");
+  });
+
+  it("a card changed in Mac mode that moves to TikTok's API path starts unpicked again, keeping Commercial content", async () => {
+    await mount({ mac: true });
+    const row = await openTikTok();
+    await pickPrivacy(row, "Friends");
+    await click(switchIn(row, "Commercial content"));
+    expect(tiktokLine()).not.toContain("Who can see it: not picked yet");
+    await act(async () => void (await session!.saveSettings({ tiktokMac: { on: false } })));
+    await until(() => tiktokRowOf().textContent?.includes("Asking TikTok") || !!tiktokRowOf().querySelector(".tt-sheet__who"), "TikTok's API path, asked again");
+    await until(() => !!privacyButton(tiktokRowOf()), "TikTok's own privacy");
+    expect(privacyButton(tiktokRowOf()).textContent).toContain("Pick who can see it");
+    expect(switchIn(tiktokRowOf(), "Commercial content").getAttribute("aria-checked")).toBe("true");
+    await click(upload());
+    expect(sent).toEqual([]);
   });
 });
