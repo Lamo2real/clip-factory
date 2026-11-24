@@ -139,14 +139,16 @@ describe("nothing fixed and coloured lies across the top, at the top of a page o
       if (/--(st-)?status-strip-veil|--status-bar-fade|statusStripVeil/.test(text)) bad.push(`${relative(SRC, f)}: the glass strip`);
     }
     for (const f of all) {
-      for (const [sel] of rules(readFileSync(f, "utf8")))
+      const sheet = readFileSync(f, "utf8");
+      for (const [sel] of rules(sheet))
         if (/(^|,|\s)(\.app|\.signin|\.st-frame)::(before|after)\b/.test(sel) || /(^|,)\s*\.stories-app::after\b/.test(sel)) bad.push(`${relative(SRC, f)}: ${sel}`);
       // The scrim is a number the shade is worked out from, never a layer of its own.
-      if (/var\(--(st-)?status-scrim/.test(strip(readFileSync(f, "utf8")))) bad.push(`${relative(SRC, f)}: draws the scrim`);
+      if (/var\(--(st-)?status-scrim/.test(strip(sheet))) bad.push(`${relative(SRC, f)}: draws the scrim`);
     }
     expect(bad).toEqual([]);
     expect(read("src", "main.tsx")).toMatch(/^installStatusBar\(\);$/m);
-  });
+    // It reads every source file: on a busy machine that runs past the 5 s default (as the other whole-tree checks do).
+  }, 30_000);
 
   it("only the backdrop reaches into the status bar: its cover and its shade, and the tokens", () => {
     const allowed = new Set([
@@ -206,6 +208,10 @@ describe("nothing fixed and coloured lies across the top, at the top of a page o
       "-webkit-mask-image: var(--status-cover-fade)",
       "mask-image: var(--status-cover-fade)",
     ]);
+    // While Clips Funded is on screen its backdrop is away, so it has no mask to work out; for the slide between the
+    // apps, when that backdrop is drawn again (app-slide.css), its fade is back.
+    expect(declarations(rule(css, ".backdrop-cover:has(> .backdrop--away:not([data-app-slide]))"))).toEqual(["-webkit-mask-image: none", "mask-image: none"]);
+    expect(read("src", "styles", "app-slide.css")).toMatch(/\.backdrop\.backdrop--away\[data-app-slide\],[\s\S]*?visibility: visible;/);
     // The backdrop in it lies in the page backdrop's own box (components/Backdrop.tsx sets it from the page's), and
     // its blobs are pictures of their own blurred glows: nothing in it is blurred again.
     expect(declarations(rule(css, ".backdrop.backdrop--cover"))).toEqual(["position: absolute", "inset: 0 0 auto 0", "z-index: 0", "height: 100vh"]);

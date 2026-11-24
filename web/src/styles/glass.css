@@ -156,6 +156,13 @@
   -webkit-mask-image: var(--status-cover-fade);
   mask-image: var(--status-cover-fade);
 }
+/* While Clips Funded is on screen the backdrop in it is away (not drawn), so the box has nothing to fade and no mask
+   to work out on any frame. For the slide between the apps the backdrop in it is drawn again (app-slide.css), and its
+   fade is back in the same frame. */
+.backdrop-cover:has(> .backdrop--away:not([data-app-slide])) {
+  -webkit-mask-image: none;
+  mask-image: none;
+}
 .backdrop.backdrop--cover {
   position: absolute;
   inset: 0 0 auto 0;
