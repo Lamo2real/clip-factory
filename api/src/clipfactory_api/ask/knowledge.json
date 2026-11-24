@@ -1,5 +1,5 @@
 {
- "version": "4fd7c35da6de",
+ "version": "613a42232c04",
  "parts": [
   {
    "id": "app-map",
@@ -99,7 +99,7 @@
    "id": "contracts-12",
    "title": "CONTRACTS: 12. Get the app, updates, and kid-proof UX (added by the owner after the first build)",
    "line": "12.1 \"Get the app\" (sidebar item; on phones a card in Settings plus a one-time banner on Home)",
-   "chars": 19219
+   "chars": 19659
   },
   {
    "id": "contracts-13",
@@ -297,7 +297,7 @@
    "id": "contracts-45",
    "title": "CONTRACTS: 45. Clips Funded: a second, separate workspace (owner request, 2026-11-21)",
    "line": "Planned: not in the app until the switch pull request turns it on (§45.21). Until then nothing of Clips Funded",
-   "chars": 253108
+   "chars": 293026
   },
   {
    "id": "contracts-46",
@@ -765,7 +765,7 @@
    "id": "adr-78",
    "title": "DECISIONS: ADR-78 Clips Funded's own agents, skills, chat and memory live in its runtime; actions wait for the owner's tap",
    "line": "Context. The second request asks for its own agents and agent configuration, skills (upload, versions,",
-   "chars": 1358
+   "chars": 1527
   },
   {
    "id": "adr-79",
@@ -820,6 +820,12 @@
    "title": "DECISIONS: ADR-87 The logic of light: the top layer is brighter, every lift is paid for, Reload is a colourless lens",
    "line": "Context. The owner (2026-11-23, with a screenshot of Library): \"can you use the logic of light on the ui,",
    "chars": 6906
+  },
+  {
+   "id": "adr-88",
+   "title": "DECISIONS: ADR-88 Reference videos from a link: Clips Funded's own pinned fetcher behind an egress guard, and one drop hook",
+   "line": "Amends ADR-78 (its \"Reference links to other people's videos are not downloaded\").",
+   "chars": 7054
   },
   {
    "id": "architecture-overview",

@@ -3,6 +3,7 @@
 import { useEffect, useId, useLayoutEffect, useMemo, useRef, useState, type FormEvent, type ReactNode, type RefObject } from "react";
 import { api, ApiError, friendlyMessage, type Skill, type SkillDetail, type SkillForm } from "../../api/index.ts";
 import { putFile } from "../../api/upload.ts";
+import { DropOverlay } from "../../components/DropOverlay.tsx";
 import { Icon } from "../../components/Icon.tsx";
 import { Sheet } from "../../components/Sheet.tsx";
 import { useToast } from "../../components/Toasts.tsx";
@@ -10,6 +11,7 @@ import { ActGlyph, Button, Empty, ErrorPanel, LinkButton, Progress, Skeleton } f
 import { burst, centerOf } from "../../lib/confetti.ts";
 import { useLoad } from "../../lib/hooks.ts";
 import { useAction } from "../../lib/motion.ts";
+import { useFileDrop } from "../../lib/useFileDrop.ts";
 import { drawBlocks, inlineText, parseMarkdown } from "../../lib/markdown.ts";
 import { clipsGoLater } from "../../app/shell.ts";
 import { navigate, setLeaveGuard, skillPath, SKILLS_PATH } from "../../lib/router.ts";
@@ -18,7 +20,7 @@ import { checkForm, cleanForm, DESCRIPTION_MAX, INSTRUCTIONS_MAX, nameTaken, slu
 import { sounds } from "../../lib/sounds.ts";
 import { Trail, usePickAction, type Crumb } from "./parts.tsx";
 import { deleteWithUndo, markNewSkill, useHiddenSkills, useUndoableDeletes } from "./skillDeletes.ts";
-import { SkillBadges, skillFileProblem, skillOrigin, uploadProblem } from "./SkillsSection.tsx";
+import { SKILL_DROP_WORDS, SkillBadges, skillDropCheck, skillFileProblem, skillOrigin, uploadProblem } from "./SkillsSection.tsx";
 import { SkillSectionOffer } from "./SkillSectionOffer.tsx";
 
 interface Place {
@@ -432,6 +434,14 @@ function ReplaceFile({
   const button = useRef<HTMLButtonElement>(null);
   const [progress, setProgress] = useState<number | null>(null);
   const pick = usePickAction("upload");
+  // A skill file dropped on this section replaces the skill like the picker's (§45.40); the page's text boxes keep
+  // their own text drops.
+  const drop = useFileDrop({
+    scope: "element",
+    checkFile: skillDropCheck,
+    onFiles: ([f]) => void upload(f!),
+    busy: progress !== null ? SKILL_DROP_WORDS.busy : null,
+  });
 
   async function upload(file: File) {
     pick.play();
@@ -455,7 +465,7 @@ function ReplaceFile({
   }
 
   return (
-    <section className="skill-replace glass" aria-labelledby="skill-replace">
+    <section className="skill-replace glass drop-host" aria-labelledby="skill-replace" {...drop.bind}>
       <h2 className="skill-when__title" id="skill-replace">
         Replace the whole file
       </h2>
@@ -487,6 +497,7 @@ function ReplaceFile({
         </Button>
       </div>
       {progress !== null ? <Progress value={progress} label="Skill upload progress" /> : null}
+      <DropOverlay drop={drop} scope="element" words={SKILL_DROP_WORDS} />
     </section>
   );
 }

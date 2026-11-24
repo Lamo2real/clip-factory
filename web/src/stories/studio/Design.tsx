@@ -5,9 +5,13 @@
 // likes and taps Save. The task is read every second with a line that names the model and the effort, and the button
 // has its own "Model and effort for this one" menu. On a saved character's page it redesigns that character
 // (`characterId`, §45.34): the agent keeps its name and changes only what the owner asks, and the page shows which
-// parts changed (RedesignCompare) before "Use this" puts the new version in the editor.
+// parts changed (RedesignCompare) before "Use this" puts the new version in the editor. A picture dropped on the open
+// panel is the picture to start from, as if picked (docs/CONTRACTS.md §45.40).
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { putFile } from "../../api/upload.ts";
+import { DropOverlay } from "../../components/DropOverlay.tsx";
+import { useFileDrop } from "../../lib/useFileDrop.ts";
+import { Icon } from "../chat/kit.tsx";
 import { storiesApi } from "../api/client.ts";
 import type { AiTask, CharacterInput, ModelOverride } from "../api/types.ts";
 import type { Expression } from "../engine/types.ts";
@@ -196,6 +200,16 @@ export function DesignPanel({
     celebrate(box.current, 90);
   }, () => design());
   const busy = run.phase === "working" || sending !== null;
+  // One picture dropped on the open panel; while one is being sent, the next waits.
+  const drop = useFileDrop({
+    scope: "element",
+    checkFile: fileProblem,
+    onFiles: ([f]) => {
+      if (f) void send(f);
+    },
+    enabled: open,
+    busy: sending !== null ? "Sending the picture…" : null,
+  });
 
   useEffect(() => {
     if (startOpen) box.current?.scrollIntoView?.({ block: "nearest" });
@@ -258,7 +272,8 @@ export function DesignPanel({
     );
 
   return (
-    <section className="st-s-design st-glass st-glass--hero" aria-labelledby="st-design-title" ref={box}>
+    <section className="st-s-design st-glass st-glass--hero st-drop-host" aria-labelledby="st-design-title" ref={box} {...drop.bind}>
+      <DropOverlay drop={drop} scope="element" look="stories" words={{ file: "Drop your picture here", busy: "Sending the picture…" }} icon={<Icon name="picture" size={40} />} />
       <h2 className="st-s-design__title" id="st-design-title">
         Design with AI
       </h2>
