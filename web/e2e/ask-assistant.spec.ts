@@ -231,6 +231,9 @@ test.describe("Ask as a full assistant", () => {
   test("files dropped on the launcher open Ask with them in the tray", async ({ page }) => {
     await page.goto("/");
     await settle(page);
+    // The launcher shows once Ask's first status check has answered (HelpLauncher.tsx), which on a slow machine (CI,
+    // or the mock loading its corpus) comes after the page has settled: drop on it once it is there, as a person would.
+    await expect(page.getByRole("button", { name: "Ask Clip Factory" })).toBeVisible();
     await dispatchFiles(page, ".help-launcher", "drop", [fileArg("report.pdf", "application/pdf", PDF)]);
     await expect(panel(page)).toBeVisible();
     await expect(panel(page).locator(".ask-file", { hasText: "report.pdf" })).toBeVisible();
