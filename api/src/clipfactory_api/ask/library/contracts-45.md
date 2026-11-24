@@ -4442,6 +4442,8 @@ These were tuned from the mood of the reference. They are our own tokens.
 | | rail | #6c6e60 | |
 | | railShadow | #444845 | |
 | | railPost | #3e4140 | |
+| | railBar | #5d6470 | night drive's guard rail: two slim bars with a gap, darker than the lane lines |
+| | railGlint | #8e99ab | its thin cool highlight along the top |
 | Lamps | pole | #364767 | sky-lit grey-blue |
 | | poleDark | #263248 | the shaded side |
 | | lampCore | #fffdf1 | |
@@ -4757,7 +4759,8 @@ Side view layers, back to front:
    - a head ellipse 30 × 9 in `lampCore`, with 3 halos;
    - a `cone` polygon at a 0.05 and a `pool` ellipse (rx 170, ry 26) on the road.
 6. **Far guard rail** at depth 0.85: a rail line (`rail`, w 10), a `railLit` top line and `railPost` posts every
-   180 px.
+   180 px. In night drive the rail is two slim `railBar` bars with the dark verge showing through the gap between
+   them and a thin `railGlint` highlight along the top, there and in every shot (the perspective rail too).
 7. **Ground** at depth 1:
    - `verge`;
    - `asphalt` with an `asphaltFar` band along its far edge;
@@ -4890,7 +4893,9 @@ The head sits low enough that a bubble fits above it under the 9:16 top tabs.
   - the road behind receding to the glass's centre;
   - the inner outline of the own car's rear window;
   - two headrest shapes at the bottom;
-  - the nearest car behind, drawn with its front view, scaled by its gap, with strong headlight bloom.
+  - the nearest car behind, drawn with its front view, scaled by its gap, with strong headlight bloom;
+  - night drive: the glass's sky fades from its own colour to the horizon's haze in 20 small even steps of colour
+    (never a flat light band over the ridge), and its street lamps stand on their poles on the verge.
 - **Its moves:** blink flares the bloom × 1.8; honk shows small sound arcs.
 
 | | mirror centre | size |
@@ -4910,7 +4915,8 @@ The head sits low enough that a bubble fits above it under the 9:16 top tabs.
   - a `bezel` ring with a `bezelLit` arc;
   - a `hub` with a ring;
   - a glow pool at the needle's tip.
-- **The needle:** `needle` w 0.016 S, with two glow lines.
+- **The needle:** `needle` w 0.016 S, with two glow lines (night drive: one long soft `glow` along it and a small
+  soft one at its tip, so no band or disc shows).
 - **The needle's value:** `rpm = 0.9 + 2.6·speed + 2.2·(speed_up rise) − 1.0·braking`, eased over 0.15 s. A stall
   shudders ±3° for 0.4 s, then falls to 0.
 - **9:16:** centre (0.56 W, 0.56 H), r 0.58 S, cropped by the left edge, with the edge of a second dial at the
@@ -5453,3 +5459,38 @@ Two judges scored round 1 8.5/10; the big lamp glow still showed faint oval ring
 - **Bright is byte-identical:** 7200 Bright frames and every Bright bubble match the build before prim by prim, the
   Bright still is the same PNG, and the Bright shapes and raster goldens are unchanged. The night golden
   (`stories-engine-night.json`) is written again, and `prims-glow` is a new raster golden.
+
+#### 45.45.22 Polish round 3 (24 Nov; wins over anything above in §45.45)
+
+Two judges scored round 2 8.5/10; the new lamp in Side window floated, its pole ending in a round tip over the hills
+above the rail. What changed (night drive only):
+
+- **No lamp's pole ends in the air**, in any shot or frame shape: through the side window the far row's poles run
+  down behind the guard rail, which is drawn over their feet (`perspective.ts sideLamps`, its `railY`); through the
+  rear window (Face up close) behind the window's lower edge (`lampsBehind`); in the mirror's glass the lamps stand
+  on poles on the verge (`glassPoles`); on the road every pole is drawn before the rails, as before.
+- **The guard rail** is two slim bars in a dark blue-grey (`ND.railBar`, darker than the lane lines) with the dark
+  verge in the gap between them and a thin cool highlight along the top (`ND.railGlint`): in perspective
+  (`RAIL_BARS`), side on (`art.ts railSide`: Side window, the side view, Face up close's slivers of side window) and
+  from the top. Bright keeps its flat rail.
+- **The far poles** fade into the horizon's haze with their depth, in five steps (`POLE_FADE`: nearer than 120, 180,
+  280 and 450 m, and beyond; more of the haze's colour and fainter each step, all but gone at the last), so the rows
+  never bunch into a fence and the vanishing point is the warm line of their lights.
+- **The rev needle's light** is one long soft `glow` along the needle and a small soft one at its tip
+  (`shots.ts needleGlow`): no band, ring or disc.
+- **The second dials** beside the rev counter have ticks and a needle (`sideGauge`): the speedometer, following the
+  own car's speed, and in the wider frames the fuel gauge on the left, its E tick red.
+- **The mirror's sky** fades from the glass's own colour to the horizon's haze in 20 small even steps of colour
+  (`glassSkyFade`), never a flat light band over the ridge.
+- **The pedal shoe** (`rig.ts footNight`) has a distinct dark sole band (`#2b2420`) along its outer side and round
+  the toe under a lit welt, a darker heel block (`#1f1a19`) at the back, and a soft contact shadow under it.
+- **Arms on a bust** (Face up close, Side window; `rig.ts bustArmsNight`): each upper arm hangs from a round shoulder,
+  its sleeve's edge one clean line from the shoulder's top round the armpit and down the arm, the chest beside it in
+  a narrow cel shadow and one cel fold across the sleeve; lines and shades only, so the shirt's pattern carries on.
+- **Not done:** a seeded dither on the sky and the vignette (it would have to be the same in `draw.ts` and
+  `raster.py`); the sky stays as round 2 left it.
+- **Speed** (`raster.py`, 1080 × 1920, best of 5): the sample's ten stills take 1.02 × what they took after round 2;
+  the sample's 240-frame clip 17.8 s (17.6 s after round 2).
+- **Bright is byte-identical:** 7200 Bright frames and every Bright bubble match the build before prim by prim, the
+  Bright still is the same PNG, and the Bright shapes and raster goldens are unchanged. Only the night golden
+  (`stories-engine-night.json`) is written again.

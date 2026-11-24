@@ -8,8 +8,8 @@
 import { fadeStops, ND, nightDrive } from "./art.ts";
 import { F } from "./frame.ts";
 import { ellipsePts, LAMP_GAP, lampPhase } from "./light.ts";
-import { rand, smoothstep } from "./math.ts";
-import { joinShapes, type Pen } from "./pen.ts";
+import { mix, rand, smoothstep } from "./math.ts";
+import { clipConvex, joinShapes, type Pen } from "./pen.ts";
 import { LAMP_GLOW, lampGlow, lampRing, ridgeFacets, ridgeTop, type RoadLook } from "./sets.ts";
 
 /** The focal length, design px: 0.9 of the short side. */
@@ -30,6 +30,22 @@ const FAR_GLOW = 6.5;
 /** Night drive: a lamp whose glow reaches this far (px on screen) or more is drawn on its own, in soft rings by its
  * size; the smaller ones share the far lamps' few polygons. */
 const NEAR_GLOW = 13.5;
+/** Night drive's guard rail (metres up): two slim bars with a gap between them, and its thin highlight along the top. */
+const RAIL_BARS: readonly (readonly [number, number])[] = [
+  [0.35, 0.49],
+  [0.59, 0.76],
+];
+const RAIL_GLINT: readonly [number, number] = [0.735, 0.765];
+/** Night drive: the far lamps' poles and arms fade into the horizon's haze with their depth, all but gone at the
+ * last ([nearer than this many m, how far towards the haze's colour], fainter by as much); the vanishing point is the
+ * warm line of their lights. */
+const POLE_FADE: readonly (readonly [number, number])[] = [
+  [120, 0.3],
+  [180, 0.55],
+  [280, 0.75],
+  [450, 0.88],
+  [Infinity, 0.95],
+];
 
 const mod = (a: number, n: number): number => ((a % n) + n) % n;
 
@@ -205,16 +221,18 @@ export function drawOutside(pen: Pen, c: Cam3, o: OutsideOpts): void {
     if (!o.simple) {
       for (const z of streamed(m, 6, zn, 36, back)) {
         const [x, y0] = project(c, rx, 0, z);
-        const [, y1] = project(c, rx, 0.75, z);
+        // night drive: the post's round top stays inside the upper bar
+        const [, y1] = project(c, rx, nd ? 0.7 : 0.75, z);
         pen.line([x, y0, x, y1], Math.max(1, pxPerM(c, z) * 0.12), ND.railPost);
       }
     }
     if (nd) {
-      // night drive: each length reaches a little into the next, and all the rail before all its lit top, so no
-      // hairline seam shows (a pole behind the rail, or the rail under its lit top)
+      // night drive: two slim blue-grey bars (RAIL_BARS) with the dark verge showing through the gap between them,
+      // and a thin cool highlight along the top; each length reaches a little into the next, and all the bars before
+      // all the highlight, so no hairline seam shows (a pole behind the rail, or a bar under its highlight)
       const z1 = (k: number) => (k + 2 < spans.length ? spans[k + 1]! * 1.04 : spans[k + 1]!);
-      for (let k = 0; k + 1 < spans.length; k += 1) pen.poly(wallQuad(c, rx, 0.38, 0.72, spans[k]!, z1(k)), ND.rail);
-      for (let k = 0; k + 1 < spans.length; k += 1) pen.poly(wallQuad(c, rx, 0.66, 0.78, spans[k]!, z1(k)), ND.railLit);
+      for (let k = 0; k + 1 < spans.length; k += 1) pen.poly(joinShapes(RAIL_BARS.map(([y0, y1]) => wallQuad(c, rx, y0, y1, spans[k]!, z1(k)))), ND.railBar);
+      for (let k = 0; k + 1 < spans.length; k += 1) pen.poly(wallQuad(c, rx, RAIL_GLINT[0], RAIL_GLINT[1], spans[k]!, z1(k)), ND.railGlint);
       continue;
     }
     for (let k = 0; k + 1 < spans.length; k += 1) {
@@ -326,11 +344,12 @@ function stick(x0: number, y0: number, x1: number, y1: number, w: number): numbe
 function lampPoles(pen: Pen, o: OutsideOpts, lamps: LampView[]): void {
   const pole = o.look.night ? ND.lampPole : o.look.pole;
   const dark = o.look.night ? ND.lampPoleDark : o.look.poleDark;
-  const far: number[][] = [];
+  const haze = o.look.sky[o.look.sky.length - 1]![1];
+  const far: number[][][] = POLE_FADE.map(() => []);
   for (const l of lamps) {
     if (!l.near) {
       if (!o.look.lit) continue;
-      far.push(stick(l.bx, l.by, l.tx, l.ty, Math.max(0.6, 0.22 * l.u)), stick(l.tx, l.ty, l.hX, l.hY, Math.max(0.5, 0.14 * l.u)));
+      far[POLE_FADE.findIndex(([z]) => l.z < z)]!.push(stick(l.bx, l.by, l.tx, l.ty, Math.max(0.6, 0.22 * l.u)), stick(l.tx, l.ty, l.hX, l.hY, Math.max(0.5, 0.14 * l.u)));
       continue;
     }
     const w = Math.max(1.2, 0.22 * l.u);
@@ -341,7 +360,11 @@ function lampPoles(pen: Pen, o: OutsideOpts, lamps: LampView[]): void {
     pen.line([l.tx, l.ty, l.hX, l.hY], Math.max(1, 0.14 * l.u), pole);
     pen.poly(stick(l.bx, l.by, l.bx, l.by - 0.5 * l.u, w * 1.7), dark);
   }
-  if (far.length) pen.poly(joinShapes(far), pole);
+  // the far ones in a few depths, each further one more of the horizon's haze and fainter, so the rows never bunch
+  // into a fence where they meet
+  POLE_FADE.forEach(([, k], i) => {
+    if (far[i]!.length) pen.poly(joinShapes(far[i]!), mix(pole, haze, k), 1 - 0.85 * k);
+  });
 }
 
 /** The lamps' light (after the rails): the far lamps first, each one soft gold glow and all their lenses one polygon
@@ -382,7 +405,7 @@ export function windowLamp(pen: Pen, bx: number, by: number, tx: number, ty: num
  * back from `c` (left and right swap), moving away as the road rolls, the nearest `most` whose heads show in the
  * window (x0, y0)-(x1, y1) and not behind `hide` (the head in front of the window, an ellipse), far to near. The
  * near ones glow at the window's top edge, the further ones above or beside the head, as through a real rear window
- * at night. */
+ * at night, their poles down behind the window's lower edge. */
 export function lampsBehind(pen: Pen, c: Cam3, plan: RoadPlan, m: number, x0: number, y0: number, x1: number, y1: number, hide: { x: number; y: number; rx: number; ry: number } | null, most = 2): void {
   const seen: { z: number; draw: () => void }[] = [];
   for (const L of plan.lamps) {
@@ -393,9 +416,12 @@ export function lampsBehind(pen: Pen, c: Cam3, plan: RoadPlan, m: number, x0: nu
       // its glow reaching into the glass: a near one shows at the top edge, its head under the roof
       if (hX + rx * 3 < x0 || hX - rx * 3 > x1 || hY + rx * 2 < y0 || hY > y1) continue;
       if (hide && ((hX - hide.x) / hide.rx) ** 2 + ((hY - hide.y) / hide.ry) ** 2 < 1) continue;
+      // the pole runs down behind the window's lower edge (the car's own boot hides the road behind), so its foot
+      // never ends in the air over the hills
       const [bx, by] = project(c, -L.x, 0, z);
       const [tx, ty] = project(c, -L.x, LAMP_H, z);
-      seen.push({ z, draw: () => windowLamp(pen, bx, by, tx, ty, hX, hY, rx, Math.max(0.9, rx * 0.29)) });
+      const foot = Math.max(by, y1 + 4);
+      seen.push({ z, draw: () => windowLamp(pen, bx, foot, tx, ty, hX, hY, rx, Math.max(0.9, rx * 0.29)) });
     }
   }
   seen.sort((a, b) => a.z - b.z);
@@ -406,11 +432,12 @@ export function lampsBehind(pen: Pen, c: Cam3, plan: RoadPlan, m: number, x0: nu
  * `m` streaming them by the way the scenery goes (`dir`): a row of small lamps on the far side of the road along the
  * horizon, about one a window apart and slow (far away), so one or two always show, and the near lamp passing fast
  * (`span` px a lamp gap, at the lamp pulse) on its pole, its head out over the road (`back`, the side the scenery goes
- * to). */
-export function sideLamps(pen: Pen, wx0: number, wx1: number, wy0: number, wh: number, m: number, dir: number, back: number, span: number): void {
+ * to). The far row's poles run down behind the guard rail, to `railY` (the rail and the verge under it, drawn after,
+ * hide their feet), so none ends in the air over the hills. */
+export function sideLamps(pen: Pen, wx0: number, wx1: number, wy0: number, wh: number, m: number, dir: number, back: number, span: number, railY: number): void {
   const ww = wx1 - wx0;
   const gap = ww * 0.92;
-  const foot = wy0 + wh * 0.66;
+  const foot = railY + 2;
   const top = wy0 + wh * 0.5;
   const rx = ww * 0.024;
   const shift = ((((-m * (gap / LAMP_GAP) * dir) % gap) + gap) % gap);
@@ -424,6 +451,22 @@ export function sideLamps(pen: Pen, wx0: number, wx1: number, wy0: number, wh: n
     const nrx = ww * 0.068;
     windowLamp(pen, lx, wy0 + wh + 20, lx, hy - nrx * 0.3, lx + nrx * 1.4 * back, hy, nrx, nrx * 0.29);
   }
+}
+
+/** The poles and arms of the street lamps in a mirror's glass (night drive), seen from `c`: each lamp `arm` m out
+ * over the road from its pole at x, z m away, standing on the verge; one shape of every pole clipped to the glass
+ * (convex), drawn before their lights (glassLamp). */
+export function glassPoles(pen: Pen, c: Cam3, lamps: { x: number; arm: number; z: number }[], glass: number[]): void {
+  const parts: number[][] = [];
+  for (const l of lamps) {
+    const u = pxPerM(c, l.z);
+    const [bx, by] = project(c, l.x, 0, l.z);
+    const [tx, ty] = project(c, l.x, LAMP_H, l.z);
+    const [hX, hY] = project(c, l.x + l.arm * LAMP_ARM, LAMP_H, l.z);
+    parts.push(clipConvex(stick(bx, by, tx, ty, Math.max(0.8, 0.22 * u)), glass), clipConvex(stick(tx, ty, hX, hY, Math.max(0.6, 0.14 * u)), glass));
+  }
+  const shape = joinShapes(parts.filter((p) => p.length >= 6));
+  if (shape.length) pen.poly(shape, ND.lampPole);
 }
 
 /** A far street lamp in a mirror's glass (night drive): a small warm glow, a little under the lamp (its light falls),

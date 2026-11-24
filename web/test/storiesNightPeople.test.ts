@@ -71,9 +71,11 @@ function primProblems(prims: Prim[]): string[] {
     if ("a" in p && p.a !== undefined && !(p.a >= 0 && p.a <= 1)) bad.push(`${at}: alpha ${p.a}`);
     const nums = Object.entries(p).filter(([k]) => k !== "k" && k !== "color" && k !== "stops");
     for (const [k, v] of nums) {
-      const vals = Array.isArray(v) ? v : [v];
+      // a glow's fade is [offset, alpha] pairs: every number in them is checked too
+      const vals = Array.isArray(v) ? v.flat() : [v];
       if (vals.some((x) => typeof x !== "number" || !Number.isFinite(x))) bad.push(`${at}: ${k} is not finite`);
     }
+    if (p.k === "glow" && p.fade.some(([o, v]) => !(o >= 0 && o <= 1 && v >= 0 && v <= 1))) bad.push(`${at}: fade stop out of 0..1`);
     if (p.k === "poly" && p.pts.length < 6) bad.push(`${at}: fewer than 3 points`);
     if (p.k === "line" && (p.pts.length < 4 || p.w <= 0)) bad.push(`${at}: line`);
     if ((p.k === "circle" && p.r <= 0) || (p.k === "ellipse" && (p.rx <= 0 || p.ry <= 0))) bad.push(`${at}: radius`);

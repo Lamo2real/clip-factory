@@ -317,8 +317,13 @@ the same prims for a missing `art` and for `"classic"`. `inFrame` puts the style
   * `perspective.ts`: the road ahead in perspective (`project`, 3.6 m lanes, lamps 10 m high every 40 m), streaming
     with the road's metres so it carries on across cuts. In night drive the lamps stand on poles all the way to the
     horizon, each smaller than the one before, so the two rows meet in a warm glowing line at the vanishing point:
-    the near ones each with their own soft rings, the far ones (glow under 13.5 px) sharing a few polygons; every pole
-    and arm is drawn before the rails, so a rail stands in front of a pole's flat foot; `shots.ts`: `shotAt`, each shot's world (who drives, the
+    the near ones each with their own soft rings, the far ones (glow under 13.5 px) sharing a few polygons, their
+    poles fading into the horizon's haze by depth (`POLE_FADE`), so the vanishing point is the warm line of their
+    lights; every pole and arm is drawn before the rails, so a rail stands in front of a pole's flat foot. Night
+    drive's rail is two slim blue-grey bars (`ND.railBar`, `RAIL_BARS`) with the dark verge in the gap and a thin cool
+    highlight (`ND.railGlint`), side on too (`art.ts railSide`). No lamp's pole ends in the air: through the side
+    window the far row's poles run down behind the rail, through the rear window behind its lower edge, and in the
+    mirror's glass they stand on the verge (`glassPoles`); `shots.ts`: `shotAt`, each shot's world (who drives, the
     other cars' gaps and lanes) and the eight shots, each filling the frame in every size; `camera.ts shotCamera`.
   * `sets.ts`: `highway_night`, the night recipe for `road_night` and the other places graded under their light.
 

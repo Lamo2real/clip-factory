@@ -6,16 +6,16 @@
 // lane dashes, posts and lamps stream on across cuts. Every shot fills the frame (no band, no letterbox) and is drawn
 // only with the engine's prims, so the preview and the final video are the same picture.
 
-import { grade, LIGHTS, lift, ND, nightDrive, softCount, softRings } from "./art.ts";
+import { fadeStops, grade, LIGHTS, lift, ND, nightDrive, railSide, softCount, softRings } from "./art.ts";
 import { layerMatrix, shotCamera, type Cam } from "./camera.ts";
 import type { CarDraw } from "./car.ts";
 import { drawPropView } from "./carView.ts";
 import { F } from "./frame.ts";
 import { drawLightSweep, lampPhase, lightFor, metres, type LightPart } from "./light.ts";
-import { DEG, clamp, clamp01, ease, hash, hex, lerp, mix, noise, rand, smoothstep } from "./math.ts";
+import { channels, DEG, clamp, clamp01, ease, hash, hex, lerp, mix, noise, rand, smoothstep, toHex } from "./math.ts";
 import type { ActorState } from "./motion.ts";
 import { arcPts, clipConvex, joinShapes, roundRectPts, type Pen } from "./pen.ts";
-import { depthAtRow, drawOutside, FOCAL, glassLamp, groundQuad, LANE_W, lampsBehind, project, pxPerM, roadPlan, sideLamps, type Cam3, type RoadPlan } from "./perspective.ts";
+import { depthAtRow, drawOutside, FOCAL, glassLamp, glassPoles, groundQuad, LANE_W, lampsBehind, project, pxPerM, roadPlan, sideLamps, type Cam3, type RoadPlan } from "./perspective.ts";
 import { drawProp, drawWeather, plainColor, type Occupants, type PropState } from "./props.ts";
 import { drawBust, drawFoot, drawWheelHands, type BustView, type Geo, type Pose } from "./rig.ts";
 import { lampGlow, ridgeTop, roadLook, setInfo, type RoadLook } from "./sets.ts";
@@ -693,8 +693,11 @@ function faceShot(pen: Pen, x: ShotInput, w: World, p: ShotPerson): void {
       pen.poly(p, w.look.verge);
       const ry = p[1]! + (p[5]! - p[1]!) * 0.42;
       const xs = p[0] === 0 ? [-40, p[4]! + 40] : [p[0]! + 40, p[4]! - 40];
-      pen.line([xs[0]!, ry, xs[1]!, ry], 6, ND.rail, 0.9);
-      pen.line([xs[0]!, ry - 5, xs[1]!, ry - 5], 2, ND.railLit, 0.9);
+      if (nightDrive()) railSide(pen, xs[0]!, xs[1]!, ry - 1.5, 10, 0.9);
+      else {
+        pen.line([xs[0]!, ry, xs[1]!, ry], 6, ND.rail, 0.9);
+        pen.line([xs[0]!, ry - 5, xs[1]!, ry - 5], 2, ND.railLit, 0.9);
+      }
       // the rail's posts streaming past, fast
       const x0 = Math.min(p[0]!, p[4]!);
       const sw = Math.abs(p[4]! - p[0]!);
@@ -807,8 +810,11 @@ function sideWindow(pen: Pen, x: ShotInput, w: World): void {
   // slow mountains, the rail streaming fast, a lamp passing at each pulse
   const mtn = ridgeTop(wx0 - 60, wx1 + 60, wy0 + wh * 0.62, wh * 0.45, -w.m * 6 * w.dir, x.seed, 14, w.look.ridge);
   pen.poly([...mtn, wx1 + 60, wy1 + 40, wx0 - 60, wy1 + 40], w.look.far);
-  // night drive: small lamps along the far side of the road always in the window, and the near one passing
-  if (w.look.lit && nightDrive()) sideLamps(pen, wx0, wx1, wy0, wh, w.m, w.dir, back, LAMP_SPAN);
+  // night drive: small lamps along the far side of the road always in the window, their poles down behind the rail,
+  // and the near one passing
+  const railY = wy0 + wh * 0.8;
+  const nd = nightDrive();
+  if (w.look.lit && nd) sideLamps(pen, wx0, wx1, wy0, wh, w.m, w.dir, back, LAMP_SPAN, railY);
   else if (w.look.lit) {
     const lx = (wx0 + wx1) / 2 - lampPhase(w.m) * LAMP_SPAN * w.dir;
     if (lx > wx0 - 120 && lx < wx1 + 120) {
@@ -816,14 +822,18 @@ function sideWindow(pen: Pen, x: ShotInput, w: World): void {
       lampGlow(pen, lx + 0.05 * S * back, wy0 + wh * 0.1, 0.022 * S, 0.035 * S, 0.01 * S);
     }
   }
-  const railY = wy0 + wh * 0.8;
   pen.rect(wx0 - 60, railY, ww + 120, wy1 - railY + 40, 0, w.look.verge);
   for (let i = 0; i < 8; i += 1) {
     const px = wx0 - 60 + ((((-w.m * 140 * w.dir + i * 0.09 * S) % (0.72 * S)) + 0.72 * S) % (0.72 * S)) * (ww + 120) / (0.72 * S);
-    pen.line([px, railY - wh * 0.02, px, railY + wh * 0.1], 5, ND.railPost);
+    // night drive: the post's round top inside the rail's upper bar
+    pen.line([px, railY - (nd ? 0.0085 * S : wh * 0.02), px, railY + wh * 0.1], 5, ND.railPost);
   }
-  pen.line([wx0 - 60, railY, wx1 + 60, railY], 0.022 * S, ND.rail);
-  pen.line([wx0 - 60, railY - 0.008 * S, wx1 + 60, railY - 0.008 * S], 3, ND.railLit);
+  // night drive: two slim bars with the dark verge between them and a thin cool highlight (art.ts railSide)
+  if (nd) railSide(pen, wx0 - 60, wx1 + 60, railY - 0.001 * S, 0.024 * S);
+  else {
+    pen.line([wx0 - 60, railY, wx1 + 60, railY], 0.022 * S, ND.rail);
+    pen.line([wx0 - 60, railY - 0.008 * S, wx1 + 60, railY - 0.008 * S], 3, ND.railLit);
+  }
   // a car in the other lane within 8 m, in its side view, scaled into the window
   const along = w.others.filter((o) => o.X !== 0 && Math.abs(o.ahead) <= 8).sort((a, c) => Math.abs(a.ahead) - Math.abs(c.ahead))[0];
   if (along) {
@@ -901,9 +911,15 @@ function mirrorShot(pen: Pen, x: ShotInput, w: World): void {
   pen.rect(hx0, hy0, mw + 0.07 * S, mh + 0.07 * S, mh * 0.38, ND.pillar);
   pen.rect(gx0 - 0.01 * S, gy0 - 0.01 * S, mw + 0.02 * S, mh + 0.02 * S, mh * 0.32, ND.mirrorHousing);
   const glassSky = w.look.sky[Math.floor((w.look.sky.length - 1) / 2)]![1];
-  if (nightDrive()) pen.poly(glass, glassSky);
-  else pen.rect(gx0, gy0, mw, mh, mh * 0.3, glassSky);
-  pen.poly(clip([gx0, ghor - mh * 0.12, gx0 + mw, ghor - mh * 0.12, gx0 + mw, ghor + 2, gx0, ghor + 2]), w.look.sky[w.look.sky.length - 1]![1]);
+  if (nightDrive()) {
+    // night drive: the glass's sky fades from its own colour under the rear window's top down to the horizon's haze,
+    // as the sky outside does, never a flat light band over the ridge
+    pen.poly(glass, glassSky);
+    glassSkyFade(pen, w.look.sky, Math.floor((w.look.sky.length - 1) / 2), cx - mw * 0.42, cx + mw * 0.42, gy0 + mh * 0.1 - 2, ghor + 2);
+  } else {
+    pen.rect(gx0, gy0, mw, mh, mh * 0.3, glassSky);
+    pen.poly(clip([gx0, ghor - mh * 0.12, gx0 + mw, ghor - mh * 0.12, gx0 + mw, ghor + 2, gx0, ghor + 2]), w.look.sky[w.look.sky.length - 1]![1]);
+  }
   const ridge = ridgeTop(gx0, gx0 + mw, ghor + 2, mh * 0.12, w.m * 2, x.seed + 9, 14, w.look.ridge);
   pen.poly(clip([...ridge, gx0 + mw, ghor + 4, gx0, ghor + 4]), w.look.far);
   pen.poly(clip([gx0, ghor + 2, gx0 + mw, ghor + 2, gx0 + mw, gy0 + mh, gx0, gy0 + mh]), w.look.verge);
@@ -915,6 +931,18 @@ function mirrorShot(pen: Pen, x: ShotInput, w: World): void {
     pen.poly(clip(groundQuad(gc, w.plan.dash - 0.1, w.plan.dash + 0.1, z, z + 3)), w.look.lane);
   }
   if (w.look.lit) {
+    // night drive: the lamps in the glass stand on their poles, down to the verge (one shape, under their lights)
+    if (nightDrive()) {
+      const seen: { x: number; arm: number; z: number }[] = [];
+      for (const L of w.plan.lamps) {
+        for (let k = 0; k < 4; k += 1) {
+          const z = ((w.m % 40) + 40) % 40 + k * 40 + 4;
+          const [lx, ly] = project(gc, L.x + L.arm * 2, 10, z);
+          if (lx > gx0 + 10 && lx < gx0 + mw - 10 && ly > gy0 + 10) seen.push({ x: L.x, arm: L.arm, z });
+        }
+      }
+      glassPoles(pen, gc, seen, glass);
+    }
     for (const L of w.plan.lamps) {
       for (let k = 0; k < 4; k += 1) {
         const z = ((w.m % 40) + 40) % 40 + k * 40 + 4;
@@ -959,6 +987,52 @@ function mirrorShot(pen: Pen, x: ShotInput, w: World): void {
   // the housing's lit top edge, along its top (a flat arc, not a circle through the sky)
   const hTop = gy0 - 0.035 * S;
   pen.line(arcPts(cx, hTop + mh * 0.38, mw * 0.5, mh * 0.38, 200, 340, 16), 4, ND.pillarLit, 0.6 + 0.3 * x.warm);
+}
+
+/** How many steps of colour the mirror's sky fades in (night drive): about 2 levels of 255 each. */
+const GLASS_SKY_STEPS = 20;
+
+/** Night drive's sky in the mirror's glass, x0..x1 from y0 down to y1 (the horizon): the sky's own stops from stop
+ * `from` (the glass's colour) to the last (the horizon's haze), in GLASS_SKY_STEPS stacked rects, each band the same
+ * small step of colour (so the bands are thin where the sky brightens fast, near the horizon) and each reaching a
+ * pixel into the next, so no seam shows. Inside the rear window's frame, which hides its ends. */
+function glassSkyFade(pen: Pen, sky: [number, string][], from: number, x0: number, x1: number, y0: number, y1: number): void {
+  const o0 = sky[from]![0];
+  const at = (t: number): [number, number, number] => {
+    const o = o0 + (1 - o0) * t;
+    let i = from;
+    while (i + 1 < sky.length - 1 && sky[i + 1]![0] < o) i += 1;
+    const [oa, ca] = sky[i]!;
+    const [ob, cb] = sky[Math.min(sky.length - 1, i + 1)]!;
+    return channels(mix(ca, cb, ob > oa ? (o - oa) / (ob - oa) : 1));
+  };
+  // the colour's change down the glass, finely sampled, so each band can take the same share of it
+  const K = 48;
+  const cum = [0];
+  let prev = at(0);
+  for (let i = 1; i <= K; i += 1) {
+    const c = at(i / K);
+    cum.push(cum[i - 1]! + Math.max(...c.map((v, j) => Math.abs(v - prev[j]!))));
+    prev = c;
+  }
+  const total = cum[K]!;
+  if (total <= 0) return;
+  // where (0..1 down the glass) the colour has changed by a part f of the whole
+  const where = (f: number): number => {
+    const goal = f * total;
+    let i = 1;
+    while (i < K && cum[i]! < goal) i += 1;
+    const a = cum[i - 1]!;
+    const b = cum[i]!;
+    return (i - 1 + (b > a ? (goal - a) / (b - a) : 0)) / K;
+  };
+  const h = y1 - y0;
+  for (let j = 1; j <= GLASS_SKY_STEPS; j += 1) {
+    const ya = y0 + h * where((j - 0.5) / GLASS_SKY_STEPS);
+    const yb = j === GLASS_SKY_STEPS ? y1 : y0 + h * where((j + 0.5) / GLASS_SKY_STEPS) + 1;
+    const [r, g, b] = at(where(j / GLASS_SKY_STEPS));
+    pen.rect(x0, ya, x1 - x0, yb - ya, 0, toHex(r, g, b));
+  }
 }
 
 /** A rounded rectangle's outline with each corner in 12 steps of 7.5° (pen.ts roundRectPts takes 30° steps, which
@@ -1038,6 +1112,18 @@ function keepInFrame(c: Cam, x0: number, y0: number, x1: number, y1: number, m: 
   return { ...c, zoom, cx: fit(c.cx, x0, x1, (F.w / 2 - m) / zoom), cy: fit(c.cy, y0, y1, (F.h / 2 - m) / zoom) };
 }
 
+/** Night drive's rev needle light, from its tail (bx, by) to its tip: one long soft glow along the needle and a small
+ * soft one at the tip (the `glow` prim, a true gradient, so no band, ring or disc shows), under the needle itself. */
+function needleGlow(pen: Pen, bx: number, by: number, tx: number, ty: number): void {
+  const len = Math.hypot(tx - bx, ty - by);
+  pen.save();
+  pen.translate((bx + tx) / 2, (by + ty) / 2);
+  pen.rotate(Math.atan2(ty - by, tx - bx) / DEG);
+  pen.glow(0, 0, len / 2 + 0.035 * S, 0.034 * S, ND.needleGlow1, fadeStops(0.7, 1.5));
+  pen.restore();
+  pen.glow(tx, ty, 0.03 * S, 0.03 * S, ND.needleGlow2, fadeStops(0.55, 2));
+}
+
 function speedDial(pen: Pen, x: ShotInput, w: World): void {
   const W = F.w;
   const H = F.h;
@@ -1064,7 +1150,8 @@ function speedDial(pen: Pen, x: ShotInput, w: World): void {
     const r2 = r * (tl ? (nd ? 0.7 : 0.62) : 0.74);
     pen.circle(ox, oy, r2 * 1.05, ND.bezel);
     pen.circle(ox, oy, r2, ND.dialFace);
-    pen.line(arcPts(ox, oy, r2 * 0.86, r2 * 0.86, 140, 270, roundSegs(pen, r2 * 0.86, 130, 12)), 4, ND.tick, 0.6);
+    if (nd) sideGauge(pen, x, w, ox, oy, r2, s < 0 ? "fuel" : "speed");
+    else pen.line(arcPts(ox, oy, r2 * 0.86, r2 * 0.86, 140, 270, roundSegs(pen, r2 * 0.86, 130, 12)), 4, ND.tick, 0.6);
     pen.line(arcPts(ox, oy, r2 * 1.03, r2 * 1.03, 200, 290, roundSegs(pen, r2 * 1.03, 90, 10)), 3, ND.bezelLit, 0.5);
   }
   // the dial: bezel with its lit arc, the face, ticks, the red zone and the numbers (night drive: the bezel's ring
@@ -1100,15 +1187,61 @@ function speedDial(pen: Pen, x: ShotInput, w: World): void {
   // the needle with its glow, a small warm glow at its tip, and the hub; its tail points straight back through the
   // hub's centre (180°: 16/3 of the 8 steps of 270°)
   const [bx, by] = pt(v + 16 / 3, r * 0.14);
-  pen.circle(tip[0], tip[1], 0.04 * S, ND.needleGlow2, 0.18);
-  pen.circle(tip[0], tip[1], 0.022 * S, ND.needleGlow1, 0.45);
-  pen.line([bx, by, tip[0], tip[1]], 0.05 * S, ND.needleGlow2, 0.12);
-  pen.line([bx, by, tip[0], tip[1]], 0.03 * S, ND.needleGlow1, 0.35);
+  if (nd) needleGlow(pen, bx, by, tip[0], tip[1]);
+  else {
+    pen.circle(tip[0], tip[1], 0.04 * S, ND.needleGlow2, 0.18);
+    pen.circle(tip[0], tip[1], 0.022 * S, ND.needleGlow1, 0.45);
+    pen.line([bx, by, tip[0], tip[1]], 0.05 * S, ND.needleGlow2, 0.12);
+    pen.line([bx, by, tip[0], tip[1]], 0.03 * S, ND.needleGlow1, 0.35);
+  }
   pen.line([bx, by, tip[0], tip[1]], 0.016 * S, ND.needle);
   pen.circle(cx, cy, 0.075 * S, ND.hub);
   pen.line(arcPts(cx, cy, 0.075 * S, 0.075 * S, 0, 360, roundSegs(pen, 0.075 * S, 360, 24)), 4, ND.bezel);
   pen.circle(cx - 0.02 * S, cy - 0.02 * S, 0.02 * S, ND.bezelLit, 0.35);
   arcLine(pen, cx, cy, r * 1.058, 0, 360, 3, ND.pillarInk, 0.8, 12, pieceSegs(pen, r * 1.058, 360, 12));
+}
+
+/** Night drive's second dials beside the rev counter, centred on (ox, oy) with face radius r2: the speedometer (its
+ * needle, 0 to 8 steps of 30 km/h over the rev counter's 270°, follows the own car's speed, so it shows about 100
+ * km/h at the top left, the part every frame shape keeps in view) or, left of the rev counter in the wider frames, the
+ * fuel gauge (E to F over 70° on its right, the side in view, the E tick red, about three quarters full). The ticks
+ * of a kind are one shape; the needle has a hub with a lit spot. */
+function sideGauge(pen: Pen, x: ShotInput, w: World, ox: number, oy: number, r2: number, kind: "speed" | "fuel"): void {
+  const speed = kind === "speed";
+  const a0 = speed ? 225 : -35;
+  const sweep = speed ? -270 : 70;
+  const steps = speed ? 8 : 4;
+  // a tick: a short bar with round ends, like the rev counter's round-capped ticks
+  const tick = (n: number, len: number, hw: number): number[] => {
+    const a = (a0 + (sweep * n) / steps) * DEG;
+    const pts: number[] = [];
+    for (const [rr, from] of [[r2 * 0.9 - hw, -90], [r2 * 0.9 - len + hw, 90]] as const) {
+      for (let i = 0; i <= 4; i += 1) {
+        const b = a + (from + (180 * i) / 4) * DEG;
+        pts.push(ox + Math.cos(a) * rr + Math.cos(b) * hw, oy - Math.sin(a) * rr - Math.sin(b) * hw);
+      }
+    }
+    return pts;
+  };
+  const majors: number[][] = [];
+  const minors: number[][] = [];
+  for (let n = speed ? 0 : 1; n <= steps; n += 1) majors.push(tick(n, r2 * 0.13, r2 * 0.017));
+  if (speed) for (let n = 0; n < steps; n += 1) minors.push(tick(n + 0.5, r2 * 0.07, r2 * 0.009));
+  else pen.poly(tick(0, r2 * 0.13, r2 * 0.017), ND.redZone);
+  pen.poly(joinShapes(majors), ND.tick);
+  if (minors.length) pen.poly(joinShapes(minors), ND.tick, 0.85);
+  // the needle: speed eased over 0.15 s like the rev counter, the fuel still
+  let v = 0.72 * steps;
+  if (speed) {
+    let sum = 0;
+    for (let i = 0; i < 4; i += 1) sum += w.own?.speedAt?.(x.t - (0.15 * i) / 3) ?? 0;
+    v = clamp((3.4 * sum) / 4, 0, steps);
+  }
+  const a = (a0 + (sweep * v) / steps) * DEG;
+  const [ux, uy] = [Math.cos(a), -Math.sin(a)];
+  pen.line([ox - ux * r2 * 0.16, oy - uy * r2 * 0.16, ox + ux * r2 * 0.78, oy + uy * r2 * 0.78], r2 * 0.032, ND.needle);
+  pen.circle(ox, oy, r2 * 0.11, ND.hub);
+  pen.circle(ox - r2 * 0.03, oy - r2 * 0.03, r2 * 0.03, ND.bezelLit, 0.35);
 }
 
 // ---- Feet on the pedals -------------------------------------------------------------------------------------------

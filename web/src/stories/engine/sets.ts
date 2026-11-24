@@ -11,7 +11,7 @@
 // rail or reflector posts and warm charcoal asphalt. Every other place keeps its own layout and palette row, passed
 // through the light it stands in (art.ts `grade`, the light scene.ts sets); in classic every colour is as before.
 
-import { fadeStops, grade, ND, nightDrive } from "./art.ts";
+import { fadeStops, grade, ND, nightDrive, railSide } from "./art.ts";
 import { F, X, Y } from "./frame.ts";
 import { mix, rand, shade } from "./math.ts";
 import type { Pen } from "./pen.ts";
@@ -822,8 +822,12 @@ function nightSide(highway: boolean, env: SetEnv): void {
   const railY = S.roadTop - 30;
   if (highway) {
     for (const x of repeat(180, mod(-env.scroll * 0.85, 180), -400, F.w + 400, 16 + more(180))) pen.rect(x - 5, railY - 4, 10, 36, 2, ND.railPost);
-    pen.line([-600, railY, F.w + 600, railY], 10, ND.rail);
-    pen.line([-600, railY - 4, F.w + 600, railY - 4], 3, ND.railLit);
+    // night drive: two slim bars with the dark verge between them and a thin cool highlight (art.ts railSide)
+    if (nd) railSide(pen, -600, F.w + 600, railY - 0.5, 14);
+    else {
+      pen.line([-600, railY, F.w + 600, railY], 10, ND.rail);
+      pen.line([-600, railY - 4, F.w + 600, railY - 4], 3, ND.railLit);
+    }
   } else {
     for (const x of repeat(260, mod(-env.scroll * 0.85, 260), -400, F.w + 400, 12 + more(260))) {
       pen.rect(x - 5, railY - 22, 10, 50, 3, ND.lane);
@@ -866,8 +870,9 @@ function nightTop(highway: boolean, env: SetEnv): void {
   // guard rails on both edges (reflector posts on the night road), and the lamps' pools of light every 520 px
   for (const x of [left - 52, right + 52]) {
     if (highway) {
-      pen.rect(x - 8, y0, 16, y1 - y0, 4, ND.rail);
-      pen.rect(x - 8, y0, 5, y1 - y0, 2, ND.railLit);
+      // night drive: the rail's top in its blue-grey with the thin cool highlight
+      pen.rect(x - 8, y0, 16, y1 - y0, 4, nightDrive() ? ND.railBar : ND.rail);
+      pen.rect(x - 8, y0, 5, y1 - y0, 2, nightDrive() ? ND.railGlint : ND.railLit);
     } else for (let i = 0; i < 8; i += 1) pen.rect(x - 7, mod(i * 300 + scroll, 2400) - 240, 14, 14, 3, ND.lane);
   }
   for (let i = 0; i < 5; i += 1) {

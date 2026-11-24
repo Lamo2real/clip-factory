@@ -6,7 +6,7 @@
 
 import { F, STUDIO_LIGHT } from "./frame.ts";
 import { channels, clamp, mix, toHex } from "./math.ts";
-import type { Pen } from "./pen.ts";
+import { joinShapes, type Pen } from "./pen.ts";
 import type { Hex } from "./types.ts";
 
 /** The light a part stands in. `grade` passes every own colour (a character's skin, a car's paint, a place's palette
@@ -73,6 +73,10 @@ export const ND = {
   rail: "#6c6e60",
   railShadow: "#444845",
   railPost: "#3e4140",
+  /** night drive's guard rail: two slim bars in a dark blue-grey (darker than the lane lines), a thin cool highlight
+   * along the top (railSide, perspective.ts RAIL_BARS) */
+  railBar: "#5d6470",
+  railGlint: "#8e99ab",
   // lamps
   pole: "#364767",
   poleDark: "#263248",
@@ -257,6 +261,20 @@ export function fadeStops(peak: number, power = 2): readonly (readonly [number, 
 
 /** How many soft rings a glow reaching `px` design px out on screen gets: one every 2.6 px, 3 to 20. */
 export const softCount = (px: number): number => clamp(Math.round(px / 2.6), 3, 20);
+
+/** Night drive's guard rail seen side on (the side window, the side view, the slivers of side window up close): from
+ * x0 to x1 along `y`, `h` high (pen px) from the top of its upper bar to the bottom of its lower one; two slim bars
+ * (ND.railBar) as one shape, the upper a little thicker, with a gap a fifth of `h` between them where the dark verge
+ * behind shows, and a thin cool highlight (ND.railGlint) along the top. Two prims, as Bright's rail and lit line. */
+export function railSide(pen: Pen, x0: number, x1: number, y: number, h: number, a = 1): void {
+  const top = y - h / 2;
+  const left = Math.min(x0, x1);
+  const w = Math.abs(x1 - x0);
+  pen.poly(joinShapes([rectPts(left, top, w, h * 0.42), rectPts(left, top + h * 0.62, w, h * 0.34)]), ND.railBar, a);
+  pen.poly(rectPts(left, top, w, Math.max(1.4, h * 0.08)), ND.railGlint, a);
+}
+
+const rectPts = (x: number, y: number, w: number, h: number): number[] => [x, y, x + w, y, x + w, y + h, x, y + h];
 
 /** A light: three stacked halos (r × 5, 3 and 1.6 at a 0.07, 0.16 and 0.38 × k, the biggest first) and the core on
  * top. Stacked circles, no gradient, so both drawers paint it the same. */

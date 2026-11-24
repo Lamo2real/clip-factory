@@ -2,11 +2,11 @@
 // turns them into the same shapes every time, so a character looks identical in every video by construction.
 // Local units: about 90 tall, feet at (0, 0), facing +x (the caller mirrors for facing left), y down.
 
-import { cel, grade, ink, inkPx, lift, lineUnits, ND, nightDrive } from "./art.ts";
+import { cel, fadeStops, grade, ink, inkPx, lift, lineUnits, ND, nightDrive } from "./art.ts";
 import { F } from "./frame.ts";
 import { DEG, clamp, clamp01, hex, luminance, mix, noise, shade, smoothstep } from "./math.ts";
 import type { Pen } from "./pen.ts";
-import { arcPts, clipConvex, inflate, quadPts, superellipse } from "./pen.ts";
+import { arcPts, clipConvex, inflate, quadPts, roundRectPts, superellipse } from "./pen.ts";
 import { drawFace, type FaceParams } from "./face.ts";
 import type { CharacterLook } from "./types.ts";
 
@@ -1291,11 +1291,14 @@ export function drawBust(pen: Pen, look: CharacterLook, g: Geo, pose: Pose, o: B
   const shadow = clipConvex(shirt, halfPlane(X(-rx * 0.52 * m), top, X(-rx * 0.74 * m), bottom, X(-rx * 3 * m), top));
   if (P.nd) pen.poly(shadow, ND.celDark, 0.22);
   else pen.poly(shadow, shade(P.top, -0.12));
-  // folds: where each upper arm meets the chest, and a crease from each armpit
+  // folds: where each upper arm meets the chest, and a crease from each armpit (night drive: the arms themselves)
   const fold = dk(P, P.top, 0.3);
-  for (const s of [-1, 1]) {
-    pen.line(quadPts(X(s * rx * 1.02), top + ry * 1.1, X(s * rx * 0.88), top + ry * 1.9, X(s * rx * 0.97), top + ry * 3, 6), P.thin, fold, 0.78);
-    pen.line(quadPts(X(s * rx * 0.9), top + ry * 1.45, X(s * rx * 0.72), top + ry * 1.55, X(s * rx * 0.56), top + ry * 1.95, 4), P.thin, fold, 0.72);
+  if (P.nd) bustArmsNight(pen, P, rx, ry, top, bottom, X);
+  else {
+    for (const s of [-1, 1]) {
+      pen.line(quadPts(X(s * rx * 1.02), top + ry * 1.1, X(s * rx * 0.88), top + ry * 1.9, X(s * rx * 0.97), top + ry * 3, 6), P.thin, fold, 0.78);
+      pen.line(quadPts(X(s * rx * 0.9), top + ry * 1.45, X(s * rx * 0.72), top + ry * 1.55, X(s * rx * 0.56), top + ry * 1.95, 4), P.thin, fold, 0.72);
+    }
   }
   // the neckline, the chin's shadow on the shirt and the rim light along the lamp-side shoulder
   pen.line(quadPts(X(-rx * 0.42), top + ry * 0.02, X(0), top + ry * 0.55, X(rx * 0.42), top + ry * 0.02, 8), P.ow, dk(P, P.top, 0.35));
@@ -1334,6 +1337,29 @@ export function drawBust(pen: Pen, look: CharacterLook, g: Geo, pose: Pose, o: B
       drawHeadAccessory(pen, g, look, P.accent, P.O, P.ow, { ...pose, turn });
     }
   });
+}
+
+/** Night drive's upper arms on a bust, in drawBust's rig units (X is its three-quarter squeeze): each hangs from a
+ * round shoulder down the side of the shirt. The sleeve's edge is one clean line from the top of the shoulder in round
+ * the armpit and down the inside of the arm, the chest beside it is in a narrow cel shadow (the arm stands in front of
+ * the body), and one cel fold crosses the sleeve from the armpit. Lines and shades only, so the shirt's pattern carries
+ * on over the arms. */
+function bustArmsNight(pen: Pen, P: Paint, rx: number, ry: number, top: number, bottom: number, X: (x: number) => number): void {
+  const pit = top + ry * 1.25;
+  for (const s of [-1, 1]) {
+    const at = (pts: number[]): number[] => pts.map((v, i) => (i % 2 === 0 ? X(s * v) : v));
+    // the seam bows in round the shoulder's cap, then runs down the arm's inside
+    const seam = [...quadPts(rx * 0.8, top + ry * 0.06, rx * 0.64, top + ry * 0.8, rx * 0.9, pit, 8), rx * 0.95, top + ry * 2.6, rx, bottom];
+    // the chest's shadow along the arm's inside, from just above the armpit (a point there) down
+    const edge = seam.slice(10);
+    const inner: number[] = [];
+    for (let i = edge.length - 2; i >= 0; i -= 2) inner.push(edge[i]! - rx * 0.15 * Math.min(1, i / 6), edge[i + 1]!);
+    pen.poly(at([...edge, ...inner]), ND.celDark, 0.26);
+    // the fold: a crease curving from the armpit down and out across the sleeve, tapered at both ends
+    const crease = [...quadPts(rx * 0.91, pit + ry * 0.12, rx * 1.1, pit + ry * 0.22, rx * 1.2, pit + ry * 0.7, 6), ...quadPts(rx * 1.2, pit + ry * 0.7, rx * 1.07, pit + ry * 0.42, rx * 0.92, pit + ry * 0.38, 6).slice(2)];
+    pen.poly(at(crease), ND.celDark, 0.24);
+    pen.line(at(seam), P.ow * 0.9, P.O, 0.9);
+  }
 }
 
 /** Mitt hands on a steering wheel's rim (§45.45 §5): at each grip (pen units) a hand of radius `r` (pen units) with the
@@ -1472,19 +1498,22 @@ function stripLine(c: number[], w: number[], f: number): number[] {
   return s.slice(0, s.length / 2);
 }
 
+/** Night drive's shoe sole and heel block: the same dark rubber on every shoe colour (final, not graded). */
+const SOLE = "#2b2420";
+const HEEL = "#1f1a19";
+
 /** Night drive's foot on a pedal, in drawFoot's frame (turned `angle`, the ball of the shoe at the origin, the toe
- * towards +y): a sneaker seen from above in the outfit's accent, on a dark sole that shows along its outer side and
- * round the toe, with a heel, a toe cap, a tongue and crossed laces; and the trouser leg from its cuff at the ankle up
- * through a bent knee to the thigh, which leaves the frame at the top right towards the seat, wider the nearer it
- * comes, so the foot always belongs to the driver. */
+ * towards +y): a sneaker seen from above in the outfit's accent, on a dark sole band (SOLE) that shows along its outer
+ * side and round the toe under a lit welt, with a darker heel block (HEEL) at the back, a soft contact shadow under
+ * it, a toe cap, a tongue and crossed laces; and the trouser leg from its cuff at the ankle up through a bent knee to
+ * the thigh, which leaves the frame at the top right towards the seat, wider the nearer it comes, so the foot always
+ * belongs to the driver. */
 function footNight(pen: Pen, look: CharacterLook, angle: number, p: number, L0: number, W0: number): void {
   // a little bigger than classic's, so the shoe's parts read on a phone
   const L = L0 * 1.2;
   const W = W0 * 1.2;
   const unit = L / 13.2;
   const P = paintOf(pen, look, -1, (unit * pen.unit()) / (F.k || 1), unit);
-  const soleC = mix(ND.ink, P.accent, 0.16);
-  const heelC = mix(soleC, ND.celDark, 0.45);
   const cy0 = 0.06 * L;
   // the shoe's last: a narrow heel, widest across the ball, a rounded toe, the arch curving in on the inner side (+x)
   const last: number[] = [];
@@ -1501,14 +1530,17 @@ function footNight(pen: Pen, look: CharacterLook, angle: number, p: number, L0: 
   pen.save();
   pen.translate(0, 18 * p);
   pen.scale(1, 1 - 0.07 * p);
-  // the heel under the back of the shoe, then the sole: it shows along the outer side and round the toe
-  const hx = 0.36 * W;
-  const hy = cy0 - 0.33 * L;
-  pen.ellipse(hx, hy, 0.18 * W + P.ow, 0.12 * L + P.ow, 0, P.O);
-  pen.ellipse(hx, hy, 0.18 * W, 0.12 * L, 0, heelC);
-  const sole = inflate(last, 0.06 * W).map((v, i) => v + (i % 2 === 0 ? 0.05 * W : 0.032 * L));
+  // the sole, a dark band along the outer side and round the toe; at the back a darker heel block standing proud of
+  // it, its front edge square across the band; and a lit welt where the upper meets the sole. A soft contact shadow
+  // under the sole keeps the band apart from the dark floor.
+  pen.glow(0.22 * W, cy0 + 0.22 * L, 0.72 * W, 0.46 * L, ND.ao, fadeStops(0.75, 1));
+  const sole = inflate(last, 0.065 * W).map((v, i) => v + (i % 2 === 0 ? 0.085 * W : 0.045 * L));
   pen.poly(inflate(sole, P.ow), P.O);
-  pen.poly(sole, soleC);
+  pen.poly(sole, SOLE);
+  const heel = roundRectPts(-0.2 * W, cy0 - 0.54 * L, 0.8 * W, 0.34 * L, 0.14 * W);
+  pen.poly(inflate(heel, P.ow), P.O);
+  pen.poly(heel, HEEL);
+  pen.poly(inflate(last, 0.014 * W).map((v, i) => v + (i % 2 === 0 ? 0.02 * W : 0.013 * L)), mix(SOLE, P.accent, 0.42));
   // the upper, its heel counter and toe cap in a darker tone of the accent, the shade along its outer side
   pen.poly(last, P.accent);
   pen.poly(clipConvex(last, lensClip(-W, cy0 - 0.27 * L, W, cy0 - 0.27 * L, 0, -L, 0.07 * L)), dk(P, P.accent, 0.2));

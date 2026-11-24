@@ -406,9 +406,12 @@ describe("the light and the finish", () => {
       expect(first(ND.lampLens), shot).toBeGreaterThan(-1);
       expect(first(ND.lampHousing), shot).toBeGreaterThan(-1);
       expect(first(ND.lampHead), shot).toBe(-1);
-      // every pole is drawn before the rails (so a rail stands in front of its foot), every lens after them
-      expect(last(ND.lampPole), shot).toBeLessThan(first(ND.rail));
-      expect(first(ND.lampLens), shot).toBeGreaterThan(last(ND.rail));
+      // every pole is drawn before the rails (so a rail stands in front of its foot), every lens after them; the rail
+      // is night drive's slim blue-grey bars, never Bright's flat pale one
+      expect(first(ND.railBar), shot).toBeGreaterThan(-1);
+      expect(last(ND.lampPole), shot).toBeLessThan(first(ND.railBar));
+      expect(first(ND.lampLens), shot).toBeGreaterThan(last(ND.railBar));
+      expect(first(ND.rail), shot).toBe(-1);
       // a near lamp's light is soft glows (a true gradient, so no ring edge shows however big it is): amber, gold and
       // warm white round its lens, never a stack of see-through ovals, each fading out to nothing at its edge
       const glows = prims.filter((p): p is Extract<Prim, { k: "glow" }> => p.k === "glow");
@@ -432,6 +435,64 @@ describe("the light and the finish", () => {
     const bright = drawFrame(valid(story([drive("highway_night", [{ at: 0.1, shot: "road_behind" }])], FORMATS[0], { art: "classic" })), 40);
     expect(bright.some((p) => "color" in p && p.color === ND.lampHead)).toBe(true);
     expect(bright.some((p) => "color" in p && p.color === ND.lampLens)).toBe(false);
+  });
+
+  it("night drive's guard rail is two slim bars, no lamp's pole ends in the air, and the needle's light and the mirror's sky are smooth", () => {
+    const shotPrims = (shot: ShotId, f: VideoFormat, fr: number, art: "night_drive" | "classic" = "night_drive") => drawFrame(valid(story([drive("highway_night", [{ at: 0.1, shot }])], f, { art })), fr);
+    const of = (prims: Prim[], c: string) => prims.filter((p) => "color" in p && p.color === c);
+    const rgb = (c: string) => [1, 3, 5].map((i) => parseInt(c.slice(i, i + 2), 16));
+    // a colour on the way from the lamps' pole colour to the horizon's haze
+    const [pole, haze] = [rgb(ND.lampPole), rgb(ND.skyHorizon)];
+    const hazy = (c: string) => c !== ND.lampPole && rgb(c).every((v, i) => v >= Math.min(pole[i]!, haze[i]!) - 1 && v <= Math.max(pole[i]!, haze[i]!) + 1);
+    for (const f of FORMATS) {
+      let glassPoles = 0;
+      for (const fr of FRAMES) {
+        // the side window: the rail's bars and its thin highlight, never Bright's flat pale slab, and every lamp's pole
+        // (the row along the far side and the near one passing) runs down behind the rail
+        const side = shotPrims("side_window", f, fr);
+        const where = `${f.resolution} frame ${fr}`;
+        const rail = colourBox(side, [ND.railBar]);
+        expect(rail, where).not.toBeNull();
+        expect(of(side, ND.railGlint).length, where).toBeGreaterThan(0);
+        expect([...of(side, ND.rail), ...of(side, ND.railLit)], where).toEqual([]);
+        for (const p of side) if (p.k === "poly" && p.color === ND.lampPole) expect(primBox(p)!.y1, where).toBeGreaterThan(rail!.y0);
+        // behind the car: the far poles fade into the haze in steps, the furthest all but gone
+        const behind = shotPrims("road_behind", f, fr);
+        const faded = behind.filter((p) => p.k === "poly" && hazy(p.color)).map((p) => (p as { a?: number }).a ?? 1);
+        expect(faded.length, where).toBeGreaterThanOrEqual(3);
+        faded.forEach((a, i) => i > 0 && expect(a, where).toBeLessThan(faded[i - 1]!));
+        expect(faded.at(-1)!, where).toBeLessThan(0.3);
+        // the rev needle's light: soft glows only (no stacked discs or bands), fading out to nothing
+        const dial = shotPrims("speed_dial", f, fr);
+        const needle = [...of(dial, ND.needleGlow1), ...of(dial, ND.needleGlow2)];
+        expect(needle.length, where).toBeGreaterThanOrEqual(2);
+        for (const p of needle) {
+          expect(p.k, where).toBe("glow");
+          if (p.k === "glow") expect(p.fade.at(-1)![1], where).toBe(0);
+        }
+        // the mirror: no flat band of the horizon's colour in the glass (only its last thin step), its sky fades in
+        // small steps of colour
+        const mirror = shotPrims("mirror", f, fr);
+        expect(of(mirror, ND.skyHorizon).filter((p) => (primBox(p)?.y1 ?? 0) - (primBox(p)?.y0 ?? 0) > 3), where).toEqual([]);
+        const glassSky = mirror
+          .filter((p): p is Extract<Prim, { k: "rect" }> => p.k === "rect")
+          .map((p) => p.color)
+          .filter((c) => c !== ND.skyHigh && rgb(c).every((v, i) => v >= rgb(ND.skyHigh)[i]! && v <= haze[i]!));
+        expect(glassSky.length, where).toBeGreaterThanOrEqual(12);
+        glassSky.forEach((c, i) => {
+          const prev = rgb(glassSky[i - 1] ?? ND.skyHigh);
+          expect(Math.max(...rgb(c).map((v, j) => Math.abs(v - prev[j]!))), where).toBeLessThanOrEqual(4);
+        });
+        glassPoles += of(mirror, ND.lampPole).length;
+      }
+      // the lamps in the mirror's glass stand on poles
+      expect(glassPoles, f.resolution).toBeGreaterThan(0);
+    }
+    // Bright keeps its rail, its needle and its mirror
+    const bright = shotPrims("side_window", FORMATS[0]!, 40, "classic");
+    expect(of(bright, ND.rail).length).toBeGreaterThan(0);
+    expect(of(bright, ND.railBar)).toEqual([]);
+    expect(of(shotPrims("speed_dial", FORMATS[0]!, 40, "classic"), ND.needleGlow1).every((p) => p.k !== "glow")).toBe(true);
   });
 
   it("a shot's camera never shows past the shot's 80 px margin, whatever it zooms into", () => {
