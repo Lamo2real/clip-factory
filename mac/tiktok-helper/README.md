@@ -82,8 +82,12 @@ screen) and right after `setup`; once that lane's Chrome reads exactly its own a
 the stopped clip carries on by itself (never another account, never a second press: a clip whose Post was pressed
 stays for the owner). TikTok's login on Studio, a puzzle or a code during the look keeps the hold. The looks end a
 lane's hold at most twice in a row; after that only the owner does (Try again, `setup`, Log in on my Mac), until the
-lane posts again. Only the Mac that stopped the clip looks (with two Macs the other one never does), one look per
-tick, and `node src/cli.js off` during a look still pauses the Mac before the resumed clip goes.
+lane posts again.
+
+1.2.3: only the Mac that stopped the clip looks (with two Macs the other one never does), one look per tick in all
+lanes, and `node src/cli.js off` wins whenever it lands before a claim: during a look, or after a lane decided (each
+lane's work reads the pause once more before anything is claimed or driven). Clip Factory keeps which Mac stopped
+(never shown), and a login hold from before it did still ends by itself.
 
 ## Stops instead of guessing
 

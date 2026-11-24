@@ -8,6 +8,9 @@
 // 1.2.2 (§47.11): a lane held only for a TikTok login (its stop carried code "login") looks, at most every 5 minutes,
 // whether its Chrome is logged in to exactly its account again (headless, nothing on screen); then the hold ends and
 // the stopped clip carries on by itself, as if the owner had tapped Try again (hold.js).
+//
+// 1.2.3: only the Mac that stopped a clip looks (triedHere), one look per tick in all lanes, and a pause wins whenever
+// it lands before a claim: during a look, or after the lane decided (pausedSince).
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -884,11 +887,23 @@ export function wsBeats(lanes) {
   };
 }
 
+/**
+ * A pause written since the lane decided (`cli.js off` takes no lock): the tick decided before another lane's look
+ * or its check-ins, so its find, resume or post is checked against settings.json once more before anything is
+ * claimed or driven (a paused Mac never posts, re-review 24 Nov). True when it waits.
+ */
+function pausedSince(fields) {
+  if (!loadSettings().paused) return false;
+  log("paused.before_work", fields);
+  return true;
+}
+
 /** C.2: a Clips Funded lane's find, resume or post (only in a tick where Clip Factory's lane has none). */
 async function wsWork(entry, what, api) {
   const { lane } = entry;
   if (what === "login") return wsLoginRequest(entry, api);
   const job = entry.action.job;
+  if (pausedSince({ account: lane.id, what, ...jobIds(lane, job) })) return;
   if (!lane.target(job)) {
     log("ws.no_account", { account: lane.id, ...jobIds(lane, job) });
     return;
@@ -916,6 +931,7 @@ async function wsWork(entry, what, api) {
 
 /** C.1: Clip Factory's post, resume or find, exactly as in 1.1.0. Returns the tick's answer. */
 async function clipsWork({ api, state, clips, action, queue, what }) {
+  if (pausedSince({ what, clipId: action.job.clipId })) return { action: "paused", reason: "Paused on your Mac." };
   if (what === "find") {
     await doFind(clips, action.job, { queue });
     return action;

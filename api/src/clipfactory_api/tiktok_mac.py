@@ -345,9 +345,10 @@ def ping(
     ``needs_you`` ping keeps them). Only a stop starts a hold (``stopped``): a ``needs_you`` ping on an item that
     isn't ``needs_you`` (the owner's Try again, or the helper's logged-in, ended the hold after the Mac read it,
     §47.11) checks in as ``ok`` without its reason, also when the hold ends between this read and this write; else it
-    would put back a hold with no clip and no code that nothing ends. The owner's pending requests (login, resume,
-    let go) stay until the helper says it handled that one (``login_done``, ``resume_done``, ``let_go_done`` = its
-    ``at``): a newer request meanwhile stays."""
+    would put back a hold with no clip and no code that nothing ends. That ``ok`` is written only while no hold is
+    there: a stop meanwhile (another Mac's) keeps its new hold as it wrote it. The owner's pending requests (login,
+    resume, let go) stay until the helper says it handled that one (``login_done``, ``resume_done``, ``let_go_done`` =
+    its ``at``): a newer request meanwhile stays."""
     current = helper_item(store, user_id)
     if state == "needs_you" and (current is None or current.get("state") != "needs_you"):
         state, reason = "ok", None
@@ -376,24 +377,17 @@ def ping(
         except db.ConditionFailed:
             if held is None:
                 raise
-            # The hold ended between the read and the write: the same check-in, as ok.
-            ping(
-                store,
-                user_id,
-                state="ok",
-                device=device,
-                reason=None,
-                version=version,
-                now=now,
-                login=login,
-                login_done=login_done,
-                backlog_at=backlog_at,
-                hold_before=hold_before,
-                backfill=backfill,
-                resume_done=resume_done,
-                let_go_done=let_go_done,
-            )
-            return
+            # The hold ended between the read and the write: the same check-in, as ok, only while no hold is there.
+            # A stop meanwhile (another Mac's) started a new one, which stays exactly as that stop wrote it.
+            fields.pop("reason", None)
+            with contextlib.suppress(db.ConditionFailed):
+                store.update(
+                    db.user_pk(user_id),
+                    HELPER_SK,
+                    {**fields, "state": "ok"},
+                    remove=sorted({*gone, "reason", "needsYouClipId", "needsYouCode", "needsYouDevice"}),
+                    expect_in={"state": [h for h in HELPER_STATES if h != "needs_you"]},
+                )
     for done, names in (
         (login_done, ("loginRequestAt", "loginRequestAction")),
         (resume_done, ("resumeRequestAt",)),
@@ -627,15 +621,24 @@ def stopped(
     return written
 
 
+def _stopper(item: Mapping[str, Any]) -> str:
+    """§47.11: the field that names the Mac that stopped. That is ``needsYouDevice`` (with two Macs the other one's
+    needs_you ping rewrites ``device`` every minute). A hold a stop wrote before the server kept it (before 24 Nov,
+    helper 1.2.2's first server) has none: then the Mac that last checked in (``device``), which with one Mac is the
+    one that stopped, while there is still no ``needsYouDevice`` (a stop meanwhile is ``CHANGED``). Else such a hold
+    would never end by itself (review, 24 Nov)."""
+    return "needsYouDevice" if item.get("needsYouDevice") is not None else "device"
+
+
 def _login_hold(item: Mapping[str, Any] | None, held_id: str, device: str) -> bool:
     """§47.11: the helper item holds for a TikTok login (``needsYouCode = login``) on this clip, stopped by this Mac
-    (``needsYouDevice``: with two Macs the other one's needs_you ping rewrites ``device`` every minute)."""
+    (``_stopper``: ``needsYouDevice``, or ``device`` on a hold from before it)."""
     return bool(
         item
         and item.get("state") == "needs_you"
         and item.get("needsYouCode") == "login"
         and item.get("needsYouClipId") == held_id
-        and item.get("needsYouDevice") == device
+        and item.get(_stopper(item)) == device
     )
 
 
@@ -643,8 +646,9 @@ def logged_in(store: db.Store, user_id: str, clip_id: str, device: str) -> tuple
     """The helper saw its Chrome logged in to Clip Factory's TikTok again while it was held for a TikTok login on
     this clip (§47.11): the hold ends by itself, as after the owner's Try again, and the clip waits for the Mac again.
     Only the device that stopped it (``needsYouDevice``: with two Macs the other one's needs_you ping rewrites
-    ``device`` every minute), only a login hold (``needsYouCode = login``) on this clip, else ``Refused``
-    (``NOT_LOGIN_HOLD``) and nothing is written. Returns the helper item and the outcome:
+    ``device`` every minute; on a hold from before that field, ``device``, ``_stopper``), only a login hold
+    (``needsYouCode = login``) on this clip, else ``Refused`` (``NOT_LOGIN_HOLD``) and nothing is written. Returns
+    the helper item and the outcome:
 
     * ``resumed``: a stopped Mac post of this device that never pressed Post waits again. It keeps its place
       (``since``), its ``source`` (an auto-posting clip still waits while auto-posting is off), its ``attempt``,
@@ -679,6 +683,7 @@ def logged_in(store: db.Store, user_id: str, clip_id: str, device: str) -> tuple
                     expect_absent=["macPressedAt"],
                 )
             )
+    stopper = _stopper(item)
     updates.append(
         db.update_request(
             pk,
@@ -689,8 +694,9 @@ def logged_in(store: db.Store, user_id: str, clip_id: str, device: str) -> tuple
                 "state": ["needs_you"],
                 "needsYouCode": ["login"],
                 "needsYouClipId": [clip_id],
-                "needsYouDevice": [device],
+                stopper: [device],
             },
+            expect_absent=[] if stopper == "needsYouDevice" else ["needsYouDevice"],
         )
     )
     try:

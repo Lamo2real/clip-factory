@@ -78,7 +78,8 @@ function clipFactory({ clipsQueue = [], wsQueue = [], clipsHelper = null, wsHelp
     clips: { helper: clipsHelper, queue: clipsQueue, stopped: { ...stopped } },
     ws: { helper: wsHelper, queue: wsQueue, stopped: { ...stopped } },
   };
-  const knobs = { failQueueAfterLoggedIn: false, loggedIn: false };
+  // onCall: something that happens on the Mac while a call is on its way (a `cli.js off`), before it is answered.
+  const knobs = { failQueueAfterLoggedIn: false, loggedIn: false, onCall: null };
   const idOf = (job) => job.publishingJobId || job.clipId;
   const claim = (lane, id) => {
     const job = lane.queue.find((j) => idOf(j) === id);
@@ -169,6 +170,7 @@ function clipFactory({ clipsQueue = [], wsQueue = [], clipsHelper = null, wsHelp
       call.status = 401;
       return Response.json({ message: "Unauthorized" }, { status: 401 });
     }
+    knobs.onCall?.(call);
     const answer = routes[call.route];
     if (!answer) {
       call.status = 404;
@@ -566,6 +568,48 @@ test("`cli.js off` while a Clips Funded look runs: the job the look resumed wait
   assert.ok(!routes.some((r) => r.endsWith("/claim")), routes.join(", "));
   assert.equal(pings(server.calls, `POST ${W}/tiktok/mac/ping`)[0].state, "paused");
   assert.deepEqual(mac.opened, [{ lane: "ws:stories", visible: false }]);
+});
+
+// Re-review, 24 Nov: each lane decides before the next lane's look and before its own check-in, so with two Clips
+// Funded workspaces a `cli.js off` during the second lane's look still let the first lane's post be claimed. The work
+// reads settings.json once more before anything is claimed or driven; here the pause lands with the lane's check-in.
+test("`cli.js off` after a Clips Funded lane decided to post: nothing is claimed or driven, and the next tick checks in paused", async (t) => {
+  freshMac({ ...CF_ACCOUNT, ws: { stories: { port: 9340, ledger: {}, posted: [], lastPressedAt: null, account: { handle: "@clips.funded", setUpAt: "2026-11-20T10:00:00.000Z" } } } });
+  t.mock.timers.enable({ apis: ["Date", "setTimeout", "setInterval"], now: START });
+  mac.account = { clips: { handle: "@lamo.clips", uid: "7001000001" }, "ws:stories": { handle: "@clips.funded", uid: "7002000002" } };
+  const server = clipFactory({ wsQueue: [{ ...wsJob }] });
+  server.knobs.onCall = (call) => {
+    if (call.route !== `POST ${W}/tiktok/mac/ping`) return;
+    server.knobs.onCall = null;
+    pauseOnDisk();
+  };
+  await onClock(t, tick);
+  const routes = routesOf(server.calls);
+  assert.ok(!routes.some((r) => r.endsWith("/claim") || r.endsWith("/step")), routes.join(", "));
+  assert.deepEqual([mac.opened, mac.windows], [[], []]);
+  assert.equal(server.lanes.ws.queue[0].state, "waiting");
+  t.mock.timers.tick(MIN);
+  await onClock(t, tick);
+  assert.equal(pings(server.calls, `POST ${W}/tiktok/mac/ping`).at(-1).state, "paused");
+  assert.ok(!routesOf(server.calls).some((r) => r.endsWith("/claim")));
+});
+
+test("`cli.js off` after Clip Factory's lane decided to post: nothing is claimed or driven", async (t) => {
+  freshMac({ ...CF_ACCOUNT });
+  t.mock.timers.enable({ apis: ["Date", "setTimeout", "setInterval"], now: START });
+  mac.account = { clips: { handle: "@lamo.clips", uid: "7001000001" } };
+  const server = clipFactory({ clipsQueue: [{ ...clipsJob }] });
+  server.knobs.onCall = (call) => {
+    if (call.route !== "POST /v1/tiktok/mac/ping") return;
+    server.knobs.onCall = null;
+    pauseOnDisk();
+  };
+  const result = await onClock(t, tick);
+  assert.equal(result.action, "paused");
+  const routes = routesOf(server.calls);
+  assert.ok(!routes.some((r) => r.endsWith("/claim") || r.endsWith("/step")), routes.join(", "));
+  assert.deepEqual([mac.opened, mac.windows], [[], []]);
+  assert.equal(server.lanes.clips.queue[0].state, "waiting");
 });
 
 test("both lanes held for a TikTok login: one look per tick in all, Clip Factory's first and Clips Funded's the tick after", async (t) => {

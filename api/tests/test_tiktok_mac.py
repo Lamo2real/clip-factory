@@ -2431,6 +2431,95 @@ def test_a_needs_you_ping_never_starts_a_hold(
     )
 
 
+def _as_before_needs_you_device(table: FakeTable) -> None:
+    """The hold as the server before ``needsYouDevice`` wrote it (main at 9cc32392, open when 1.2.3's server deploys)."""
+    table.items[(PK, "MACHELPER")].pop("needsYouDevice")
+
+
+def test_a_login_hold_from_before_needs_you_device_still_ends_by_itself(
+    call: Call, store: db.Store, table: FakeTable
+) -> None:
+    """Re-review, 24 Nov: a login hold the earlier server wrote has no ``needsYouDevice``, and logged-in needed it, so
+    such a hold never ended by itself (409, a look every 5 minutes for good). Then the Mac that last checked in
+    (``device``) is the one that stopped, as before."""
+    _mac_on(call)
+    clip = _mac_clip(store)
+    _login_stop(call, clip["clipId"])
+    _as_before_needs_you_device(table)
+    # The installed 1.2.2's tick repeats the hold it read: still no needsYouDevice.
+    assert call("POST", "/v1/tiktok/mac/ping", {"state": "needs_you", "reason": "x", "device": DEVICE})[0] == 200
+    assert "needsYouDevice" not in _helper_raw(table)
+    before = json.dumps(table.all(), sort_keys=True, default=str)
+    status, body = _logged_in(call, clip["clipId"], device="mac-mini-2")  # not the Mac that checked in
+    assert (status, _message(body)) == (409, tiktok_mac.NOT_LOGIN_HOLD)
+    assert json.dumps(table.all(), sort_keys=True, default=str) == before
+    status, body = _logged_in(call, clip["clipId"])
+    assert (status, body["outcome"]) == (200, "resumed"), body
+    assert _raw_post(store, clip["clipId"])["macState"] == "waiting"
+    helper = _helper_raw(table)
+    assert helper["state"] == "ok"
+    assert not {"reason", "needsYouClipId", "needsYouCode", "needsYouDevice"} & set(helper)
+
+
+def test_logged_in_on_a_hold_from_before_needs_you_device_loses_to_a_stop_meanwhile(
+    call: Call, store: db.Store, table: FakeTable, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The fallback on ``device`` holds only while there is still no ``needsYouDevice``: a stop that writes one between
+    the read and the write (another Mac's) makes it ``CHANGED``, and nothing is written."""
+    _mac_on(call)
+    clip = _mac_clip(store)
+    _login_stop(call, clip["clipId"])
+    _as_before_needs_you_device(table)
+    stale = _helper_raw(table)
+    store.update(PK, "MACHELPER", {"needsYouDevice": "mac-mini-2"})  # another Mac's stop, as the new server writes it
+    monkeypatch.setattr(tiktok_mac, "helper_item", lambda *_a: dict(stale))
+    before = json.dumps(table.all(), sort_keys=True, default=str)
+    status, body = _logged_in(call, clip["clipId"])
+    assert (status, _message(body)) == (409, tiktok_mac.CHANGED)
+    assert json.dumps(table.all(), sort_keys=True, default=str) == before
+
+
+def test_a_stale_needs_you_ping_never_drops_a_hold_a_stop_started_meanwhile(
+    call: Call, store: db.Store, table: FakeTable, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Re-review, 24 Nov: when its hold had ended, a needs_you ping wrote ok with no condition. Another Mac's stop
+    between that read and that write lost its hold (ok, with its clip and code left behind). The ok now needs no hold
+    there, and the new hold stays exactly as its stop wrote it."""
+    _mac_on(call)
+    clip = _mac_clip(store)
+    _login_stop(call, clip["clipId"])
+    read = _helper_raw(table)  # Mac A's tick reads the hold
+    assert call("POST", f"/v1/clips/{clip['clipId']}/tiktok/mac/retry", {})[0] == 200  # his Try again ends it
+    assert _claim(call, clip["clipId"], device="mac-mini-2")[0] == 200  # Mac B takes the clip
+    real_read, real_update = tiktok_mac.helper_item, store.update
+    reads = iter([dict(read)])
+    monkeypatch.setattr(tiktok_mac, "helper_item", lambda *a: next(reads, None) or real_read(*a))
+    stop = {"device": "mac-mini-2", "reason": "TikTok logged your other Mac out.", "needsYou": True, "code": "login"}
+    stopped: list[int] = []
+
+    def update(pk: str, sk: str, set_fields: dict[str, Any], **kw: Any) -> dict[str, Any]:
+        if sk == "MACHELPER" and set_fields.get("state") == "ok" and not stopped:
+            stopped.append(call("POST", f"/v1/clips/{clip['clipId']}/tiktok/mac/stopped", stop)[0])  # Mac B stops
+        return real_update(pk, sk, set_fields, **kw)
+
+    monkeypatch.setattr(store, "update", update)
+    stale = {"state": "needs_you", "reason": "TikTok logged your Mac out.", "device": DEVICE, "version": "1.2.2"}
+    assert call("POST", "/v1/tiktok/mac/ping", stale)[0] == 200  # Mac A's ping, from its stale read
+    monkeypatch.undo()
+    assert stopped == [200]
+    helper = _helper_raw(table)
+    assert (helper["state"], helper["needsYouClipId"], helper["needsYouCode"], helper["needsYouDevice"]) == (
+        "needs_you",
+        clip["clipId"],
+        "login",
+        "mac-mini-2",
+    )
+    assert (helper["reason"], helper["device"]) == (stop["reason"], "mac-mini-2")
+    # Mac B, whose stop it is, ends it once it is logged in again.
+    status, body = _logged_in(call, clip["clipId"], device="mac-mini-2")
+    assert (status, body["outcome"]) == (200, "resumed"), body
+
+
 def test_the_hold_codes_stay_one_line_for_the_helper_pin() -> None:
     import re
     from pathlib import Path
