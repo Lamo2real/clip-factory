@@ -75,7 +75,7 @@ PRESSED: Final = (
 WRONG_ACCOUNT: Final = "That post is on another TikTok account."
 BAD_LINK: Final = "Paste the video's full TikTok link: tiktok.com/@name/video/…"
 CHANGED: Final = "This post just changed. Try again."
-# Why the claim stopped a job (§5.4): the server's own reasons.
+# Why the claim stopped a job (§47.10.4, Claim): the server's own reasons.
 ACCOUNT_CHANGED: Final = "Clips Funded's TikTok is a different account now. Tap Try again."
 NOT_CONNECTED: Final = "Connect TikTok again in Social accounts. Then tap Try again."
 VIDEO_GONE: Final = "The video is gone. Make it again, then tap Try again."

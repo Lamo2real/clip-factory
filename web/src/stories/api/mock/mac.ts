@@ -148,7 +148,7 @@ function queueOf(store: MockStore, ws: string): WsMacJob[] {
     });
 }
 
-/** Turns a stored job into the Mac's, waiting (§2.1 item 1). */
+/** Turns a stored job into the Mac's, waiting (§47.10.3 item 1). */
 function makeMac(store: MockStore, j: PublishingJob, a: SocialAccount | undefined, before?: PublishingJob): void {
   const at = nowIso();
   Object.assign(j, {

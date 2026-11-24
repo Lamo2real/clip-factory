@@ -160,7 +160,7 @@ const LENS_TONE: Partial<Record<SocialAccount["connectionStatus"], CSSProperties
 
 /**
  * The connect button's words on a card: "Connect YouTube" before anything is connected, "Pick another channel" where
- * the platform asks which one (and for a connected YouTube, §45.13.5), else "Reconnect".
+ * the platform asks which one (and for a connected YouTube, §45.13.5), else "Connect again".
  */
 export function connectLabelOf(a: Pick<SocialAccount, "platform" | "connectionStatus">): string {
   const p = a.platform;
@@ -1428,7 +1428,7 @@ export function ConnectionsScreen({ ws, page }: StoriesScreenProps) {
           void reload();
         });
     } else {
-      // Said with the card as it is now: the button it names is the one the card shows (Connect, Reconnect, Pick
+      // Said with the card as it is now: the button it names is the one the card shows (Connect, Connect again, Pick
       // another channel), and keys that live in Clip Factory are sent there.
       const tell = (a?: SocialAccount) => {
         const r = resultSentence(result, platform, a);

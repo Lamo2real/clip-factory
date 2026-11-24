@@ -1,7 +1,7 @@
 // Clips Funded › My Mac posts TikTok (docs/CONTRACTS.md §47.10, §47.10.6): the switch and the Mac's status
 // in Social accounts › TikTok (every card state, and Log in on my Mac), Review › Post it's Mac mode (one read-only line,
 // no Who can see it and no Commercial content, Upload never held for TikTok's choices, the full public options sent,
-// the not-set-up line), every post row of §5.3, Review reading the posts every 10 seconds while the Mac has one, the
+// the not-set-up line), every post row of §47.10.6, Review reading the posts every 10 seconds while the Mac has one, the
 // Dashboard's Try again on a Mac post, and the mock's rules. MAC_WS_FROM is pinned to the API's own file. Rendered with
 // the mock (no wait, fake timers); nothing leaves the machine.
 import { readFileSync } from "node:fs";
@@ -192,7 +192,7 @@ describe("the version gate and the Mac's fixed settings", () => {
   });
 });
 
-// ---------- The post rows (§5.3) ----------
+// ---------- The post rows (§47.10.6) ----------
 
 function job(status: PublishingJob["publishingStatus"], extra: Partial<PublishingJob> = {}): PublishingJob {
   return {
@@ -234,7 +234,7 @@ const q = (id: string, state: "waiting" | "working", m: Partial<WsMacStatus["que
   ...m,
 });
 
-describe("each post row says what the Mac is doing (§5.3)", () => {
+describe("each post row says what the Mac is doing (§47.10.6)", () => {
   it("1, 2: posted by the Mac, or saved as on TikTok by the owner", () => {
     expect(macRow(job("posted", { via: "mac", url: "https://www.tiktok.com/@clips.funded/video/7400000000000000001" }), ctx())).toMatchObject({ chip: "Posted", line: "Posted by your Mac · Everyone", buttons: ["open"] });
     expect(macRow(job("posted", { by: "you" }), ctx())).toMatchObject({ chip: "Posted", line: "On your TikTok · no link", buttons: [] });
@@ -410,9 +410,9 @@ describe("a Mac post row's buttons", () => {
   });
 });
 
-// ---------- The TikTok card (§5.1) ----------
+// ---------- The TikTok card (§47.10.6) ----------
 
-describe("the TikTok card's states (§5.1)", () => {
+describe("the TikTok card's states (§47.10.6)", () => {
   const h = "@clips.funded";
   it("from not set up to logged in", () => {
     expect(cardState(null, h, NOW)).toMatchObject({ line: "Your Mac isn't set up yet.", steps: ["1. Ask for the helper update on your Mac.", "2. Tap Log in on my Mac.", "3. In the TikTok app, switch to @clips.funded, then scan the code."] });
@@ -529,7 +529,7 @@ describe("the TikTok card in Social accounts", () => {
   });
 });
 
-// ---------- Review › Post it in Mac mode (§5.2) ----------
+// ---------- Review › Post it in Mac mode (§47.10.6) ----------
 
 /** The sheet as Review holds it: the jobs it sent join the page's list. */
 function SheetPage({ config }: { config: { tiktokMac?: { on: boolean } } }) {

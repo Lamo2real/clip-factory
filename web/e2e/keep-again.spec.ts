@@ -88,7 +88,7 @@ test("review: once an Upload reached the server, Throw away goes and the card lo
   await expect(card.locator(".upload-to").getByRole("button", { name: "Facebook" })).toBeDisabled();
   await card.locator('[data-place="instagram"] summary').click();
   await expect(card.locator('[data-place="instagram"] textarea')).toBeDisabled();
-  await expect(card).not.toContainText("saved when you tap");
+  await expect(card).not.toContainText("Not saved yet");
   await card.getByRole("button", { name: "Try again", exact: true }).click();
   await expect(page.getByText(/^Uploading to/)).toBeVisible();
 });
