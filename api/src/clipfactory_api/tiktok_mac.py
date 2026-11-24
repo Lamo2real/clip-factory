@@ -10,8 +10,10 @@ claim, steps, stop and done, and the owner's Send these to my Mac, Try again and
   (``"sent"``, here; ``"upload"`` when the owner tapped Post with my Mac on one row, ``now: true``): a clip with no
   TikTok post gets a new one, a Clip Factory TikTok post that failed, waits for setup or went up privately is handed
   over in place (its fields kept in ``beforeMac``). A row's tap (``now: true``) on a Mac post that already waits makes
-  it an Upload tap's in place. A campaign clip never gets one (``CAMPAIGN_SKIPS``, ADR-86 round 3): the helper can't
-  mark a post as Branded content yet, and Content Rewards never receives what the Mac posts.
+  it an Upload tap's in place. A campaign clip gets one too, always for Everyone with TikTok's Branded content label
+  (``campaign_tiktok``), after Upload's campaign checks; a paid clip (``tiktokLabel``) keeps its label. The helper
+  sets the label from ``MAC_BRAND_FROM`` on (``tiktok_self.helper_brands``): an older one never claims a labelled
+  post. The Mac's done sends a campaign post to Content Rewards (``routes/clips.send_to_cr``).
 * ``waiting`` → the helper's claim (a conditional write: one Mac, one try at a time) → ``working`` with its steps
   (``pressing`` sets ``macPressedAt``: from then on it is never claimed again by itself; a re-sent step is the job's
   beat, ``macBeatAt``) → done, through ``tiktok_self.mark_posted`` (the post becomes ``posted``, ``by: "you"``,
@@ -35,7 +37,7 @@ from __future__ import annotations
 import contextlib
 import re
 import unicodedata
-from collections.abc import Iterable, Mapping
+from collections.abc import Callable, Iterable, Mapping
 from datetime import datetime, timedelta
 from typing import Any
 
@@ -85,15 +87,23 @@ MAY_HAVE_POSTED = "Your Mac may have posted it already. Check your TikTok first.
 PRESSED = "Your Mac pressed Post but couldn't confirm it. Look on your TikTok: if it's there, tap It's on TikTok."
 # Try again after Post was pressed waits for the end of the find window (``tiktok_self.MAC_FIND_WINDOW``).
 MAC_STILL_LOOKING = "Your Mac pressed Post less than 30 minutes ago. Look on your TikTok first, then try again later."
-# A campaign clip never gets a Mac post (D1): the helper can't set TikTok's Branded content disclosure yet, and the
-# Mac's done never reaches Content Rewards. The one source of these words (Upload, Try again, send, Content Rewards).
-CAMPAIGN_SKIPS = "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet."
+# Before TikTok approves the app only the owner's Mac posts a campaign clip on TikTok (TikTok's API would post it
+# privately, and private posts can't earn). The one source of these words (Upload, Try again, Content Rewards' card
+# and fit keep a copy that a test pins).
+CAMPAIGN_MAC_OFF = (
+    "Campaign clips go on TikTok from your Mac. Turn it on in Settings › Posting › Your Mac posts TikTok."
+)
+# Try again of a campaign clip's TikTok post through TikTok's API before the approval, while the Mac is on: the Mac
+# posts it instead (a row's Post with my Mac).
+CAMPAIGN_MAC_POSTS = "Your Mac posts campaign clips on TikTok. Tap Post with my Mac."
+# A labelled Mac post (Your brand, Branded content) and a helper older than MAC_BRAND_FROM: it would post the clip
+# without TikTok's label, so the claim is refused and nothing is written.
+MAC_NEEDS_UPDATE = "Your Mac needs an update to add TikTok's label to this clip. Set up your Mac again."
 MAC_OFF = "Your Mac posting is off. Turn it on in Settings › Posting › Your Mac posts TikTok."
 AUTO_OFF = "Auto-posting is off, so this one waits."
 # Send these to my Mac: why a clip did not go.
 NOT_FOUND = "We could not find that clip."
 SEND_NOT_UPLOADED = "Upload this clip first."
-SEND_CAMPAIGN = CAMPAIGN_SKIPS
 SEND_TEST = "This was a Private test, so it stays off TikTok."
 SEND_HAS_IT = "Your Mac already has this clip."
 SEND_YOURS = "You already posted this one on TikTok."
@@ -108,6 +118,12 @@ NOT_LOGIN_HOLD = "Your Mac isn't waiting for a TikTok login on this one."
 HANDED_OVER = (*tiktok_self.REPLACED, "postOptions", "publishHandle")
 # The Clip Factory TikTok posts Send these to my Mac hands over in place: waiting for setup, failed, or private.
 HANDABLE = ("pending_integration", "failed", "posted")
+EVERYONE = "PUBLIC_TO_EVERYONE"
+# TikTok's rule: Branded content (a paid partnership) is only for Everyone or Friends (routes/clips uses these too).
+BRANDED_PRIVACY = (EVERYONE, "MUTUAL_FOLLOW_FRIENDS")
+# TikTok's label (its commercial content disclosure, §47): Branded content ("Paid partnership", promoting someone
+# else: every campaign clip) and Your brand ("Promotional content").
+LABELS = ("brandContent", "brandOrganic")
 
 
 # --- the setting (Settings.tiktokMac, §47; validated and merged in settings.py) ---------------------------------
@@ -125,18 +141,67 @@ def auto_on(settings: Mapping[str, Any]) -> bool:
 
 def preset_options(settings: Mapping[str, Any]) -> Item:
     """My settings' TikTok choices (§36: Everyone, Comment, Duet and Stitch on) in the TikTok sheet's shape (§17.8):
-    what every Mac post asks the Mac to set. Never Branded content: no campaign clip gets a Mac post."""
+    what a Mac post asks the Mac to set when nothing else says (an older web's Upload, an auto-posting run, Send these
+    to my Mac). No label: ``campaign_tiktok`` and ``with_label`` add one."""
     raw = settings.get("postPreset")
     preset = raw.get("tiktok") if isinstance(raw, Mapping) else None
     tiktok = {**post_preset.DEFAULTS["tiktok"], **(preset if isinstance(preset, Mapping) else {})}
     return {
-        "privacyLevel": str(tiktok.get("privacy") or "PUBLIC_TO_EVERYONE"),
+        "privacyLevel": str(tiktok.get("privacy") or EVERYONE),
         "disableComment": tiktok.get("comments") is False,
         "disableDuet": tiktok.get("duet") is False,
         "disableStitch": tiktok.get("stitch") is False,
         "brandContent": False,
         "brandOrganic": False,
     }
+
+
+def label_of(options: Any) -> Item:
+    """``{brandContent, brandOrganic}`` of TikTok choices (a post's ``postOptions``, the clip's ``tiktokLabel``):
+    each true only when it says ``true``."""
+    found: Mapping[str, Any] = options if isinstance(options, Mapping) else {}
+    return {key: found.get(key) is True for key in LABELS}
+
+
+def labelled(options: Any) -> bool:
+    """The choices carry TikTok's label (Branded content or Your brand)."""
+    return any(label_of(options).values())
+
+
+def with_label(options: Mapping[str, Any], label: Mapping[str, Any]) -> Item:
+    """``options`` with ``label``'s Branded content and Your brand. Branded content is only for Everyone or Friends on
+    TikTok, so a label with Branded content and another privacy (Only me, Followers) goes Everyone."""
+    out: Item = {**options, **label_of(label)}
+    if out["brandContent"] and out.get("privacyLevel") not in BRANDED_PRIVACY:
+        out["privacyLevel"] = EVERYONE
+    return out
+
+
+def campaign_tiktok(options: Mapping[str, Any]) -> Item:
+    """A campaign clip's Mac choices (§38.14): ``options`` for Everyone with Branded content on (a paid partnership,
+    promoting the brand), whatever else they say."""
+    return {**options, "privacyLevel": EVERYONE, "brandContent": True}
+
+
+def clip_label(clip: Mapping[str, Any]) -> Item | None:
+    """The clip's ``tiktokLabel`` (Upload's TikTok choices had a label, §47) when it says one, else None."""
+    raw = clip.get("tiktokLabel")
+    return label_of(raw) if labelled(raw) else None
+
+
+def send_options(
+    settings: Mapping[str, Any], clip: Mapping[str, Any], row: Mapping[str, Any] | None, *, campaign: bool
+) -> Item:
+    """The Mac choices of a post Send these to my Mac (or a row's Post with my Mac) makes or hands over: My settings;
+    a campaign clip's with Everyone and Branded content (``campaign_tiktok``); else with the clip's own label
+    (``tiktokLabel``); else with the label of the Clip Factory post handed over (its ``postOptions``)."""
+    options = preset_options(settings)
+    if campaign:
+        return campaign_tiktok(options)
+    label = clip_label(clip)
+    if label is None and row is not None and labelled(row.get("postOptions")):
+        label = label_of(row.get("postOptions"))
+    return with_label(options, label) if label is not None else options
 
 
 def setup_audited(setup: Mapping[str, Any]) -> bool:
@@ -172,9 +237,22 @@ def caption(clip: Mapping[str, Any]) -> str:
     return unicodedata.normalize("NFC", mojibake.repair(text))
 
 
+def job_caption(post: Mapping[str, Any], clip: Mapping[str, Any]) -> str:
+    """The caption the Mac types: the clip's (``caption``); a campaign post's through ``campaign_caption`` as TikTok's
+    publisher sends it (the disclosure first, every required tag, inside TikTok's limit), so Content Rewards finds
+    what the campaign asks for."""
+    from .platforms.campaign_caption import campaign_caption
+
+    options = post.get("postOptions")
+    campaign = options.get("campaign") if isinstance(options, Mapping) else None
+    text = caption(clip)
+    return unicodedata.normalize("NFC", campaign_caption("tiktok", text, campaign)) if campaign else text
+
+
 def job(post: Mapping[str, Any], clip: Mapping[str, Any]) -> Item:
     """The ``MacJob`` the helper works from (§47.3), with its beat and, after a re-wait that followed a press, when
-    Post was pressed before and when the owner tried again (the helper's never-twice guard)."""
+    Post was pressed before and when the owner tried again (the helper's never-twice guard). ``brandContent`` and
+    ``brandOrganic`` are TikTok's label the Mac sets (false when the post's choices don't say it)."""
     options = post.get("postOptions")
     choices: Mapping[str, Any] = options if isinstance(options, Mapping) else {}
     mac = public_mac(post) or {}
@@ -182,12 +260,13 @@ def job(post: Mapping[str, Any], clip: Mapping[str, Any]) -> Item:
         "clipId": str(clip.get("clipId")),
         "postId": str(post.get("postId")),
         "hook": str(clip.get("hook") or ""),
-        "caption": caption(clip),
+        "caption": job_caption(post, clip),
         "fileName": video_file_name(str(clip.get("hook") or "")),
-        "privacy": str(choices.get("privacyLevel") or "PUBLIC_TO_EVERYONE"),
+        "privacy": str(choices.get("privacyLevel") or EVERYONE),
         "comment": choices.get("disableComment") is not True,
         "duet": choices.get("disableDuet") is not True,
         "stitch": choices.get("disableStitch") is not True,
+        **label_of(choices),
         "source": str(mac.get("source") or "upload"),
         "since": str(mac.get("since") or ""),
         "state": str(mac.get("state") or "waiting"),
@@ -447,22 +526,47 @@ def request(store: db.Store, user_id: str, action: str, now: datetime) -> Item:
         raise Refused(refusal) from None
 
 
-def claim(store: db.Store, clip: Mapping[str, Any], device: str, now: datetime, settings: Mapping[str, Any]) -> Item:
-    """The helper takes a Mac post: one conditional write, so one Mac and one try at a time. It takes a waiting post
-    that has no ``macPressedAt``, or a working one whose helper crashed (no beat for ``STALE_CLAIM``) and that never
-    pressed Post. A post whose helper pressed Post is never claimed again by itself, whatever its state: it waits for
-    the owner (never twice). A claim keeps ``macPressedBefore`` and ``macAgainAt`` for the helper's own guard."""
-    row, _rows = mac_row(store, clip)
-    if not is_on(settings):
-        raise Refused(MAC_OFF)
-    if row.get("macSource") == "auto" and not auto_on(settings):
-        raise Refused(AUTO_OFF)
-    condition = db.Condition(
+def _claimable(now: datetime) -> db.Condition:
+    """A post the helper may take: waiting without ``macPressedAt``, or working without it whose beat is
+    ``STALE_CLAIM`` old (its helper crashed)."""
+    return db.Condition(
         "(#mState = :mWaiting AND attribute_not_exists(#mPressed))"
         " OR (#mState = :mWorking AND attribute_not_exists(#mPressed) AND #mBeat < :mStale)",
         {"#mState": "macState", "#mPressed": "macPressedAt", "#mBeat": "macBeatAt"},
         {":mWaiting": "waiting", ":mWorking": "working", ":mStale": iso(now - STALE_CLAIM)},
     )
+
+
+def claim(
+    store: db.Store,
+    clip: Mapping[str, Any],
+    device: str,
+    now: datetime,
+    settings: Mapping[str, Any],
+    *,
+    version: str | None = None,
+    closed: str | None = None,
+) -> Item:
+    """The helper takes a Mac post: one conditional write, so one Mac and one try at a time. It takes a waiting post
+    that has no ``macPressedAt``, or a working one whose helper crashed (no beat for ``STALE_CLAIM``) and that never
+    pressed Post. A post whose helper pressed Post is never claimed again by itself, whatever its state: it waits for
+    the owner (never twice). A claim keeps ``macPressedBefore`` and ``macAgainAt`` for the helper's own guard.
+
+    ``closed`` is why the clip's campaign takes no clips now (``routes/clips._require_campaign_open``'s words), None
+    for an open campaign or a clip without one: the post is written ``stopped`` with those words, under the claim's
+    own condition (so it leaves the queue and the owner sees why; his Try again checks again), and the claim is
+    refused. A labelled post (``labelled``) is only claimed by a helper whose ``version`` sets TikTok's label
+    (``tiktok_self.helper_brands``); an older one is refused with ``MAC_NEEDS_UPDATE`` and nothing is written."""
+    row, _rows = mac_row(store, clip)
+    if not is_on(settings):
+        raise Refused(MAC_OFF)
+    if row.get("macSource") == "auto" and not auto_on(settings):
+        raise Refused(AUTO_OFF)
+    if closed:
+        _stop_closed(store, row, closed, now)
+    if labelled(row.get("postOptions")) and not tiktok_self.helper_brands(version):
+        raise Refused(MAC_NEEDS_UPDATE)
+    condition = _claimable(now)
     fields: Item = {
         "macState": "working",
         "macClaimedAt": iso(now),
@@ -483,6 +587,25 @@ def claim(store: db.Store, clip: Mapping[str, Any], device: str, now: datetime, 
         return _write(store, row, request)
     except db.ConditionFailed:
         raise Refused(MAC_TAKEN) from None
+
+
+def _stop_closed(store: db.Store, row: Mapping[str, Any], reason: str, now: datetime) -> None:
+    """A claim of a Mac post whose campaign takes no clips now: the post stops with ``reason`` (one write, only while
+    the claim itself could take it: never one the Mac works on or pressed Post for), then the claim is refused with
+    those words. Never posted for a closed campaign."""
+    request = db.update_request(
+        str(row["pk"]),
+        str(row["sk"]),
+        {"macState": "stopped", "macStoppedAt": iso(now), "macReason": _reason(reason)},
+        remove=[k for k in ("macStep",) if k in row],
+        expect_in={"status": [MAC_STATUS]},
+        also=_claimable(now),
+    )
+    try:
+        store.transact(updates=[request])
+    except db.ConditionFailed:
+        raise Refused(MAC_TAKEN) from None
+    raise Refused(reason)
 
 
 def _own(row: Mapping[str, Any], device: str, states: Iterable[str], attempt: int | None = None) -> None:
@@ -840,17 +963,23 @@ def send(
     settings: Mapping[str, Any],
     now: datetime,
     *,
-    is_campaign: bool,
     source: str = "sent",
+    campaign_id: str | None = None,
+    campaign_options: Mapping[str, Any] | None = None,
+    campaign_check: Callable[[Item], str | None] | None = None,
 ) -> str | None:
     """Send this clip to the Mac (Send these to my Mac): None when it went, else why not. It goes when it is not on
     TikTok yet (§42.1): uploaded, its TikTok not out for everyone, not by him, not uploading (``queued``) and not a
-    Mac post already; never a campaign clip (``is_campaign``: ``SEND_CAMPAIGN``, nothing written) or a Private test. A
-    clip without a TikTok post gets a new Mac post (``madeForMac``, its id in ``postIds`` and in the clip's
-    ``tiktokForMac``, written only while neither that mark nor ``tiktokByYou`` is there: two sends, or a send and his
-    It's on TikTok, never make two posts). A Clip Factory TikTok post that waits for setup, failed or went up
-    privately is handed over in place, its fields kept in ``beforeMac``. Its options are My settings' (Everyone,
-    Comment, Duet and Stitch on: ``preset_options``).
+    Mac post already; never a Private test. A clip without a TikTok post gets a new Mac post (``madeForMac``, its id
+    in ``postIds`` and in the clip's ``tiktokForMac``, written only while neither that mark nor ``tiktokByYou`` is
+    there: two sends, or a send and his It's on TikTok, never make two posts). A Clip Factory TikTok post that waits
+    for setup, failed or went up privately is handed over in place, its fields kept in ``beforeMac``. Its options are
+    ``send_options``: My settings', with TikTok's label for a paid clip.
+
+    A campaign clip (``campaign_id``, the route's ``routes/clips.campaign_clip``) goes for Everyone with Branded
+    content. Before anything is written ``campaign_check`` (Upload's campaign checks for TikTok with these Mac
+    choices) says why it can't go, and then nothing is written. A new post carries ``campaignId`` and
+    ``postOptions.campaign`` (``campaign_options``) like Upload's posts; a handed-over one keeps its own.
 
     ``source`` is the post's ``macSource``: ``sent`` (the backlog, one after each auto-posting run) or ``upload``
     (the owner's Post with my Mac on one row, ``now: true``: at once and first, as an Upload tap). With ``upload`` a
@@ -863,17 +992,28 @@ def send(
         return SEND_NOT_UPLOADED
     if not clip.get("postsCreated"):
         return tiktok_self.STILL_STARTING
-    if is_campaign:
-        return SEND_CAMPAIGN
     if clip.get("autoTest") == "private":
         return SEND_TEST
     clip_id = str(clip["clipId"])
     rows = posts_for_clip(store, user_id, clip_id, consistent=True)
     row = tiktok_self.tiktok_row(rows)
     at = iso(now)
-    options = preset_options(settings)
+    if row is not None and source == "upload" and row.get("status") == MAC_STATUS and row.get("macState") == "waiting":
+        try:
+            _go_now(store, row)
+        except db.ConditionFailed:
+            return CHANGED
+        return None
+    refusal = _not_handable(row) if row is not None else None
+    if refusal:
+        return refusal
+    options = send_options(settings, clip, row, campaign=campaign_id is not None)
+    refusal = campaign_check(options) if campaign_id is not None and campaign_check is not None else None
+    if refusal:
+        return refusal
     if row is None:
         post_id = ulid()
+        part = {"campaign": dict(campaign_options)} if campaign_id is not None and campaign_options is not None else {}
         item: Item = {
             "pk": db.user_pk(user_id),
             "sk": db.post_sk(post_id),
@@ -886,9 +1026,10 @@ def send(
             "postId": post_id,
             "clipId": clip_id,
             "platform": "tiktok",
+            **({"campaignId": campaign_id} if campaign_id is not None else {}),
             **new_mac_fields(source, at),
             "madeForMac": True,
-            "postOptions": options,
+            "postOptions": {**options, **part},
         }
         fields: Item = {
             "postIds": [*tiktok_self._post_ids(clip, rows), post_id],
@@ -907,17 +1048,13 @@ def send(
         except db.ConditionFailed:
             return CHANGED
         return None
-    if source == "upload" and row.get("status") == MAC_STATUS and row.get("macState") == "waiting":
-        try:
-            _go_now(store, row)
-        except db.ConditionFailed:
-            return CHANGED
-        return None
-    refusal = _not_handable(row)
-    if refusal:
-        return refusal
     before = {k: row[k] for k in HANDED_OVER if k in row}
-    handed = {**new_mac_fields(source, at), "beforeMac": before, "postOptions": options}
+    kept = row.get("postOptions")
+    frozen = kept.get("campaign") if isinstance(kept, Mapping) else None
+    if not isinstance(frozen, Mapping) and campaign_id is not None:
+        frozen = campaign_options
+    part = {"campaign": dict(frozen)} if isinstance(frozen, Mapping) else {}
+    handed = {**new_mac_fields(source, at), "beforeMac": before, "postOptions": {**options, **part}}
     remove = [k for k in HANDED_OVER if k in row and k not in handed]
     updates = [
         db.update_request(

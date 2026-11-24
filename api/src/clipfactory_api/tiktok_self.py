@@ -61,6 +61,10 @@ MAC_FIND_WINDOW = timedelta(minutes=30)
 # web's MAC_BEATS_FROM, web and helper tests pin them). An older helper sends no beat during its long waits, so for its
 # jobs only the claim's age counts (``MAC_CLAIM_MAX``): a healthy post is never called stuck while it is still on it.
 MAC_BEATS_FROM = "1.1.0"
+# The first helper version that sets TikTok's label (Disclose post content: Your brand, Branded content) on a Mac post
+# (its paths.js VERSION; the web's MAC_BRAND_FROM, web and helper tests pin them). An older helper would post a
+# labelled clip without its label, so it never claims one (``helper_brands``).
+MAC_BRAND_FROM = "1.3.0"
 # The internal fields that make a post a Mac post (§47): its state (public as ``mac``), who claimed it and its beat,
 # when an earlier try pressed Post and when the owner tried again after it (``macPressedBefore``, ``macAgainAt``: the
 # helper's never-twice guard reads them), what a Clip Factory post was before it was handed over (``beforeMac``), and
@@ -135,8 +139,8 @@ class MacDone:
 
 
 def mac_privacy(row: Mapping[str, Any]) -> str:
-    """What the Mac set: ``public`` only for Everyone (``PUBLIC_TO_EVERYONE``, every Mac post's choice), else
-    ``private``."""
+    """What the Mac set: ``public`` only for Everyone (``PUBLIC_TO_EVERYONE``, My settings' choice and every campaign
+    clip's), else ``private`` (Friends, Followers, Only me: the card's own choice)."""
     options = row.get("postOptions")
     level = options.get("privacyLevel") if isinstance(options, Mapping) else None
     return "public" if level in (None, "PUBLIC_TO_EVERYONE") else "private"
@@ -167,6 +171,13 @@ def helper_beats(item: Mapping[str, Any] | None) -> bool:
     ``MAC_BEATS_FROM`` (the helper on his Mac until it is installed again)."""
     said = _version(item.get("version")) if item else None
     return said is None or said >= (_version(MAC_BEATS_FROM) or ())
+
+
+def helper_brands(version: Any) -> bool:
+    """A helper that says this ``version`` sets TikTok's label (``MAC_BRAND_FROM`` or newer). No version (the helper
+    on his Mac until it is installed again sends none) or one that isn't a version counts as no."""
+    said = _version(version)
+    return said is not None and said >= (_version(MAC_BRAND_FROM) or ())
 
 
 def mac_stuck(row: Mapping[str, Any], now: datetime, *, beats: bool = True) -> bool:

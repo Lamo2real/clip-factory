@@ -13,11 +13,14 @@ The owner's Mac helper signs in as the owner (the same JWT) and uses the helper 
   an Upload tap (``macSource: "upload"``); without it every call is answered exactly as before.
 
 Nothing here calls TikTok's API. The logic and every conditional write live in ``tiktok_mac.py``; the Mac's done goes
-through ``tiktok_self.mark_posted``, the same write as the owner's It's on TikTok (one TikTok post per clip).
+through ``tiktok_self.mark_posted``, the same write as the owner's It's on TikTok (one TikTok post per clip), and then
+sends a campaign post that has its link to Content Rewards (``routes/clips.send_to_cr``). A campaign clip's claim,
+send and Try again run Upload's campaign checks (``routes/clips``) first.
 """
 
 from __future__ import annotations
 
+from functools import partial
 from typing import Any
 
 from .. import db, posts, settings, tiktok_mac, tiktok_self, validate
@@ -174,8 +177,9 @@ def send(app: App, req: Request) -> Response:
     Without ``now`` (Settings' Send these to my Mac) a clip waits as the backlog (``macSource: "sent"``): one after
     each auto-posting run. With ``now: true`` (a row's Post with my Mac) it goes at once and first, as an Upload tap
     (``"upload"``), and so does a Mac post that already waits (``sent`` or ``auto``: it becomes ``upload`` in place
-    and counts as sent). A campaign clip never goes (``SEND_CAMPAIGN``). Every other refusal is the same either
-    way."""
+    and counts as sent). Every refusal is the same either way. A campaign clip goes for Everyone with Branded content
+    once Upload's campaign checks pass for TikTok (``routes/clips.mac_campaign_refusal``: the campaign takes clips,
+    TikTok is one of its places, the fit), else its result says why and nothing is written."""
     body = req.json()
     validate.only_keys(body, {"clipIds", "now"})
     ids = body.get("clipIds")
@@ -194,11 +198,17 @@ def send(app: App, req: Request) -> Response:
     results: list[dict[str, Any]] = []
     for clip_id in dict.fromkeys(ids):
         clip = app.store.get(pk, db.clip_sk(clip_id)) if is_ulid(clip_id) else None
-        is_campaign = False
+        campaign: dict[str, Any] = {}
         if clip is not None:
             rows = posts.posts_for_clip(app.store, req.user_id, clip_id, consistent=True)
-            is_campaign = clip_routes.campaign_clip(app, req.user_id, clip, rows) is not None
-        reason = tiktok_mac.send(app.store, req.user_id, clip, current, now, is_campaign=is_campaign, source=source)
+            found = clip_routes.campaign_clip(app, req.user_id, clip, rows)
+            if found is not None:
+                campaign = {
+                    "campaign_id": found.campaign_id,
+                    "campaign_options": found.options,
+                    "campaign_check": partial(clip_routes.mac_campaign_refusal, app, req.user_id, clip, found),
+                }
+        reason = tiktok_mac.send(app.store, req.user_id, clip, current, now, source=source, **campaign)
         results.append({"clipId": clip_id, "sent": reason is None, **({"reason": reason} if reason else {})})
     log("info", "tiktok_mac.sent", sent=sum(1 for r in results if r["sent"]), asked=len(results), source=source)
     return ok({"results": results})
@@ -211,14 +221,23 @@ def _cr_time(app: App, req: Request) -> None:
 
 
 def claim(app: App, req: Request) -> Response:
-    """``POST /v1/clips/{clipId}/tiktok/mac/claim`` ``{device}`` → ``{job}`` (409 when another try has it)."""
+    """``POST /v1/clips/{clipId}/tiktok/mac/claim`` ``{device, version?}`` → ``{job}`` (409 when another try has it).
+    ``version`` (optional, additive) is the helper's: a labelled post (TikTok's Branded content or Your brand) is only
+    claimed by a helper that sets the label (``tiktok_self.MAC_BRAND_FROM``), else 409 and nothing is written. A
+    campaign clip whose campaign takes no clips now is stopped with the campaign's words (409)."""
     body = req.json()
-    validate.only_keys(body, {"device"})
+    validate.only_keys(body, {"device", "version"})
     device = _device(body)
+    version = validate.string(body, "version", required=False, max_len=VERSION_MAX)
     item = clip_routes._clip_or_404(app, req)
+    rows = posts.posts_for_clip(app.store, req.user_id, item["clipId"], consistent=True)
+    closed = clip_routes.campaign_closed(app, clip_routes.campaign_clip(app, req.user_id, item, rows))
+    current = settings.load(app.store, req.user_id)
     try:
-        row = tiktok_mac.claim(app.store, item, device, app.clock(), settings.load(app.store, req.user_id))
+        row = tiktok_mac.claim(app.store, item, device, app.clock(), current, version=version, closed=closed)
     except tiktok_self.Refused as e:
+        if closed and e.message == closed:
+            log("info", "tiktok_mac.campaign_stopped", clipId=item["clipId"])
         raise _refused(e) from e
     log("info", "tiktok_mac.claimed", clipId=item["clipId"], attempt=row.get("macAttempt"))
     return _job(app, req, row)
@@ -297,7 +316,7 @@ def done(app: App, req: Request) -> Response:
     Through ``tiktok_self.mark_posted`` (one TikTok post per clip). The link is read as the owner's It's on TikTok
     reads one; without one, the §42 finder looks from a minute before the claim, and it is saved without its link when
     nothing is found (``NOT_FOUND_YET``: the Mac knows it posted). A repeat is answered as the first (adding the
-    link)."""
+    link). A campaign post that now has its link goes to Content Rewards (``routes/clips.send_to_cr``)."""
     body = req.json()
     validate.only_keys(body, {"device", "link", "attempt"})
     device = _device(body)
@@ -333,6 +352,7 @@ def done(app: App, req: Request) -> Response:
     except db.ConditionFailed as e:
         raise conflict(tiktok_mac.CHANGED) from e
     log("info", "tiktok_mac.done", clipId=item["clipId"], link=video is not None, views=count_views)
+    clip_routes.send_to_cr(app, req, str(item["clipId"]))
     return clip_routes._with_posts(app, req, note=note)
 
 
@@ -341,18 +361,36 @@ def retry(app: App, req: Request) -> Response:
     again. With ``now: true`` the stopped post, or one that already waits, goes at once, as an Upload tap
     (``macSource: "upload"``). A stuck post (``tiktok_self.mac_stuck``: no beat for 5 minutes, or claimed 50 minutes
     ago) is taken back from that claim the same way, so the Mac claims it afresh. After Post was pressed only with
-    ``notOnTikTok`` and once the find window is over (``MAC_STILL_LOOKING``)."""
+    ``notOnTikTok`` and once the find window is over (``MAC_STILL_LOOKING``). A campaign clip's Mac post first
+    passes Upload's checks again: the campaign takes clips and the clip can earn on TikTok (409 with their words)."""
     body = req.json()
     validate.only_keys(body, {"notOnTikTok", "now"})
     not_on_tiktok = validate.boolean(body.get("notOnTikTok", False), "notOnTikTok")
     now_tap = validate.boolean(body.get("now", False), "now")
     item = clip_routes._clip_or_404(app, req)
+    _campaign_retry(app, req, item)
     try:
         tiktok_mac.retry(app.store, item, not_on_tiktok=not_on_tiktok, at=app.clock(), now=now_tap)
     except tiktok_self.Refused as e:
         raise _refused(e) from e
     log("info", "tiktok_mac.retry", clipId=item["clipId"], notOnTikTok=not_on_tiktok, now=now_tap)
     return clip_routes._with_posts(app, req)
+
+
+def _campaign_retry(app: App, req: Request, item: dict[str, Any]) -> None:
+    """Try again of a campaign clip's Mac post: ``_require_campaign_open`` and the fit with its own Mac choices."""
+    rows = posts.posts_for_clip(app.store, req.user_id, item["clipId"], consistent=True)
+    row = tiktok_self.tiktok_row(rows)
+    if row is None or row.get("status") != posts.MAC_STATUS:
+        return  # tiktok_mac.retry says MAC_NOT_POSTING
+    campaign = clip_routes.campaign_clip(app, req.user_id, item, rows)
+    if campaign is None:
+        return
+    options = row.get("postOptions")
+    clip_routes._require_campaign_open(app, campaign)
+    clip_routes._require_fit(
+        app, req.user_id, item, chosen=["tiktok"], tiktok=options if isinstance(options, dict) else None
+    )
 
 
 def take_back(app: App, req: Request) -> Response:

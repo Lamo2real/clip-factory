@@ -16,6 +16,7 @@ from .. import (
     posts,
     release,
     s3,
+    settings,
     tiktok_find,
     tiktok_link,
     tiktok_mac,
@@ -26,7 +27,7 @@ from .. import (
 )
 from ..app import App
 from ..clock import iso, parse
-from ..errors import bad_request, conflict, not_found
+from ..errors import ApiError, bad_request, conflict, not_found
 from ..http import Request, Response, no_content, ok
 from ..ids import is_ulid
 from ..log import log
@@ -100,7 +101,7 @@ def patch_clip(app: App, req: Request) -> Response:
 
 TIKTOK_PRIVACY = ("PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS", "FOLLOWER_OF_CREATOR", "SELF_ONLY")
 # TikTok's rule: branded content (a paid partnership) is only for Everyone or Friends.
-TIKTOK_BRANDED_PRIVACY = ("PUBLIC_TO_EVERYONE", "MUTUAL_FOLLOW_FRIENDS")
+TIKTOK_BRANDED_PRIVACY = tiktok_mac.BRANDED_PRIVACY
 TIKTOK_SWITCHES = ("disableComment", "disableDuet", "disableStitch", "brandContent", "brandOrganic")
 
 
@@ -227,14 +228,23 @@ def _require_campaign_open(app: App, campaign: CampaignClip) -> None:
 
 
 def _place_refusal(
-    platform: str, campaign: CampaignClip, setups: list[dict[str, Any]], linked: Any, *, try_again: bool = False
+    platform: str,
+    campaign: CampaignClip,
+    setups: list[dict[str, Any]],
+    linked: Any,
+    *,
+    try_again: bool = False,
+    mac_on: bool = False,
+    api: bool = False,
 ) -> str | None:
     """Why a campaign clip can't go to ``platform`` (None when it can): the §38.8 ``uploadPlaces`` rule, the
-    campaign's paid places ∩ places ready on Set up posting ∩ not refused by Content Rewards as unlinked, TikTok only
-    once TikTok approved the app (``app_review`` and ``posting_audit`` both ok, ``tiktok_mac.setup_audited``): before
-    that only the owner's Mac posts TikTok, and it can't mark a campaign clip as Branded content yet
-    (``tiktok_mac.CAMPAIGN_SKIPS``). Upload's sentences say to turn the place off; Try again's (Library, a clip's post
-    line: no switch and no Upload there) name the buttons those screens have."""
+    campaign's paid places ∩ places ready on Set up posting ∩ not refused by Content Rewards as unlinked, TikTok once
+    TikTok approved the app (``app_review`` and ``posting_audit`` both ok, ``tiktok_mac.setup_audited``) or while Your
+    Mac posts TikTok is on (``mac_on``: the owner's Mac posts it, for Everyone with Branded content). Before the
+    approval with the Mac off it says to turn the Mac on (``tiktok_mac.CAMPAIGN_MAC_OFF``); ``api`` (Try again through
+    TikTok's API) with the Mac on says the Mac posts it (``tiktok_mac.CAMPAIGN_MAC_POSTS``). Upload's sentences say to
+    turn the place off; Try again's (Library, a clip's post line: no switch and no Upload there) name the buttons
+    those screens have."""
     name = platform_label(platform)
     setup = next((s for s in setups if s.get("platform") == platform), {})
     if platform not in campaign.paid:
@@ -246,8 +256,11 @@ def _place_refusal(
             return f"{name} is not set up yet. Set it up in Settings › Posting › Set up posting, then tap Try again."
         return f"{name} is not set up yet. Turn it off, then tap Upload."
     if platform == "tiktok" and not tiktok_mac.setup_audited(setup):
-        then = TRY_ANOTHER if try_again else "Turn TikTok off, then tap Upload."
-        return f"{tiktok_mac.CAMPAIGN_SKIPS} {then}"
+        if not mac_on:
+            then = TRY_ANOTHER if try_again else "Or turn TikTok off, then tap Upload."
+            return f"{tiktok_mac.CAMPAIGN_MAC_OFF} {then}"
+        if api:
+            return tiktok_mac.CAMPAIGN_MAC_POSTS
     if isinstance(linked, Mapping) and linked.get(platform) is False:
         if try_again:
             return f"Add {name} in Content Rewards first, then tap Try again."
@@ -256,15 +269,52 @@ def _place_refusal(
 
 
 def _require_campaign_places(
-    app: App, user_id: str, campaign: CampaignClip, places: list[str], *, try_again: bool = False
+    app: App,
+    user_id: str,
+    campaign: CampaignClip,
+    places: list[str],
+    *,
+    try_again: bool = False,
+    mac_on: bool | None = None,
+    api: bool = False,
 ) -> None:
-    """400 with the reason when a place is not one of this campaign clip's places (``_place_refusal``)."""
+    """400 with the reason when a place is not one of this campaign clip's places (``_place_refusal``). ``mac_on``
+    is Your Mac posts TikTok (read from Settings when not given)."""
+    if mac_on is None:
+        mac_on = tiktok_mac.is_on(settings.load(app.store, user_id))
     setups = platform_setup.all_setups(app.store, user_id)
     linked = (app.store.get(db.user_pk(user_id), "CRCONN") or {}).get("crLinked")
     for platform in places:
-        refusal = _place_refusal(platform, campaign, setups, linked, try_again=try_again)
+        refusal = _place_refusal(platform, campaign, setups, linked, try_again=try_again, mac_on=mac_on, api=api)
         if refusal:
             raise bad_request(refusal)
+
+
+def mac_campaign_refusal(
+    app: App, user_id: str, clip: Mapping[str, Any], campaign: CampaignClip, tiktok: Mapping[str, Any]
+) -> str | None:
+    """Why the owner's Mac can't post this campaign clip on TikTok now (None when it can): Upload's checks for TikTok
+    with the Mac's own choices (Send these to my Mac, a row's Post with my Mac): the campaign takes clips
+    (``_require_campaign_open``), TikTok is one of its places while the Mac is on (``_require_campaign_places``) and
+    the clip can earn there (``_require_fit``)."""
+    try:
+        _require_campaign_open(app, campaign)
+        _require_campaign_places(app, user_id, campaign, ["tiktok"], try_again=True, mac_on=True)
+        _require_fit(app, user_id, clip, chosen=["tiktok"], tiktok=tiktok)
+    except ApiError as e:
+        return e.message
+    return None
+
+
+def campaign_closed(app: App, campaign: CampaignClip | None) -> str | None:
+    """Why the campaign takes no clips now (``_require_campaign_open``'s words), None when it does or there is none."""
+    if campaign is None:
+        return None
+    try:
+        _require_campaign_open(app, campaign)
+    except ApiError as e:
+        return e.message
+    return None
 
 
 def _require_campaign_tiktok(tiktok: Mapping[str, Any] | None) -> None:
@@ -322,19 +372,29 @@ def confirm(app: App, req: Request) -> Response:
     Try again) and the waiting posts to send now that their place is connected (Post now, §33.6). A campaign clip
     (§38.14) must name its places, only ones the campaign pays for, while the campaign takes clips, public and never
     made for kids; its posts carry ``campaignId`` and ``postOptions.campaign``. The upload itself is
-    ``uploads.upload_review_clip``, the code auto-posting sends its clips through too (§46.7)."""
+    ``uploads.upload_review_clip``, the code auto-posting sends its clips through too (§46.7). ``tiktokMac: true``
+    (optional, additive, §47) says the card is in Mac mode: ``tiktok`` holds its own TikTok row's choices, which the
+    Mac post keeps (without it an Upload's Mac post uses My settings, as before)."""
     body = req.json()
-    validate.only_keys(body, {"captions", "tiktok", "platforms", "options"})
+    validate.only_keys(body, {"captions", "tiktok", "platforms", "options", "tiktokMac"})
     patch = clips.caption_patch(body["captions"]) if body.get("captions") is not None else {}
     options = tiktok_options(body["tiktok"]) if body.get("tiktok") is not None else None
     chosen = upload_platforms(body["platforms"]) if body.get("platforms") is not None else None
     # Per-clip choices for YouTube, Instagram and X from the card's rows (§36.3); only the places that go keep theirs.
     per_clip = post_preset.clip_options(body["options"]) if body.get("options") is not None else {}
+    card_mac = validate.boolean(body.get("tiktokMac", False), "tiktokMac")
     item = _clip_or_404(app, req)
     if item.get("status") == "review":
         try:
             confirmed, created = uploads.upload_review_clip(
-                app, req.user_id, item, platforms=chosen, options=per_clip, tiktok=options, captions_patch=patch
+                app,
+                req.user_id,
+                item,
+                platforms=chosen,
+                options=per_clip,
+                tiktok=options,
+                captions_patch=patch,
+                mac_choices=card_mac,
             )
         except uploads.ClipTaken:
             # Another Confirm (or a Decline, or an auto-posting run) won the race: carry on from the clip's state.
@@ -390,7 +450,7 @@ def _try_again(
     if campaign is not None:
         going = [p for p in posts.UPLOAD_ORDER if any(r.get("platform") == p for r in [*failed, *waiting])]
         _require_campaign_open(app, campaign)
-        _require_campaign_places(app, clip["userId"], campaign, going, try_again=True)
+        _require_campaign_places(app, clip["userId"], campaign, going, try_again=True, api=True)
         _require_fit(app, clip["userId"], clip, chosen=going, tiktok=tiktok if "tiktok" in going else None)
         if tiktok is not None and "tiktok" in going:
             _require_campaign_tiktok(tiktok)
@@ -491,7 +551,55 @@ def tiktok_posted(app: App, req: Request) -> Response:
     except db.ConditionFailed as e:
         raise conflict("This clip just changed. Try again.") from e
     log("info", "clip.tiktok_by_you", clipId=item["clipId"], link=video is not None, views=count_views, noLink=no_link)
+    if video is not None:
+        send_to_cr(app, req, str(item["clipId"]))  # a campaign post the Mac posted gets its link only now
     return _with_posts(app, req, note=note)
+
+
+def send_to_cr(app: App, req: Request, clip_id: str) -> None:
+    """A campaign post the owner's Mac posted goes to Content Rewards once it has its link (§47.8): after the Mac's
+    done, and after his Add link / It's on TikTok gives a link to a post his Mac posted. Only for the clip's TikTok post
+    that is ``posted`` by the Mac (``via: "mac"``), public, for a campaign (``campaignId``), with its ``url``, while
+    Content Rewards is on, and only once (no ``CRSUB#{postId}`` yet): ``contentrewards.submit.send`` creates it, keeps
+    to CR's 30 minutes and never raises. A send CR asks to try again later (it can't see the post yet) waits for the
+    owner's Send, as the Send button's own route leaves it (``send_by_hand``). Never breaks the answer it follows."""
+    deps = getattr(app, "contentrewards", None)
+    if deps is None:
+        return
+    try:
+        rows = posts.posts_for_clip(app.store, req.user_id, clip_id, consistent=True)
+        row = tiktok_self.tiktok_row(rows)
+        if row is None or not _goes_to_cr(row):
+            return
+        from ..contentrewards import config as cr_config
+        from ..contentrewards import submissions, submit
+
+        post_id = str(row["postId"])
+        if deps.store.get(*submissions.key(req.user_id, post_id)) is not None:
+            return  # sent (or tried) already: CR's own reminders and the owner's Send take it from there
+        deps.for_request(req.started)
+        result = submit.send(deps, req.user_id, post_id, str(row["campaignId"]), timeout=cr_config.SUBMIT_TIMEOUT_API)
+        if result.get("pending"):
+            reason = {"code": "not_sent_by_app", "text": submissions.reason_text("not_sent_by_app", "tiktok")}
+            with contextlib.suppress(db.ConditionFailed):
+                deps.store.update(
+                    *submissions.key(req.user_id, post_id),
+                    {"state": "send_by_hand", "reason": reason, "updatedAt": iso(app.clock())},
+                    expect_in={"state": ["sending"]},
+                )
+        log("info", "clip.mac_cr_sent", clipId=clip_id, outcome=result.get("outcome"))
+    except Exception as e:  # the post is saved either way; CR's reminders still name it
+        log("error", "clip.mac_cr_failed", clipId=clip_id, error=type(e).__name__)
+
+
+def _goes_to_cr(row: Mapping[str, Any]) -> bool:
+    return (
+        row.get("via") == "mac"
+        and bool(row.get("campaignId"))
+        and row.get("status") == "posted"
+        and row.get("privacy") == "public"
+        and bool(row.get("url"))
+    )
 
 
 def _find(app: App, user_id: str, item: Mapping[str, Any], since: Any) -> tiktok_link.TikTokVideo:

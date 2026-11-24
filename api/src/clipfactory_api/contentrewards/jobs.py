@@ -57,7 +57,7 @@ def prepare(  # noqa: PLR0917 (one call site: the job route)
     campaigns.save(deps, user_id, item)
     view = campaigns.View(deps, user_id, now)
     places = view.places(item)
-    stops = gates.stops(item, view.conn, places, now)
+    stops = gates.stops(item, view.conn, places, now, tiktok_waits=view.waits(item))
     if item.get("rulesState") == "reading":
         raise _retry("Reading the rules… (about 30 seconds)")
     hard = [s for s in stops if s["hard"]]
