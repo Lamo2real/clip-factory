@@ -167,7 +167,7 @@ test.describe("Ask as a full assistant", () => {
     await expect(page.locator(".help-ring")).toBeVisible();
   });
 
-  test("Take key away asks nothing but waits for its Undo, like every other delete", async ({ page, browserName }) => {
+  test("Take key away asks nothing but waits for its Undo, like every other delete", async ({ page, browserName, isMobile }) => {
     await page.goto("/settings/app/ask");
     await settle(page);
     await page.getByRole("button", { name: "Take key away" }).click();
@@ -177,9 +177,10 @@ test.describe("Ask as a full assistant", () => {
     await expect(toast).toBeVisible();
     const undo = toast.getByRole("button", { name: "Undo" });
     // CI's Linux WebKit draws a phone's 3x page in software, seconds a frame: a tap waits for the button to stand still
-    // over two frames and outlasted the 8 s Undo (the toast went before the tap, run 45293069216). There the keyboard
-    // presses it (Enter on the focused Undo, a real way to use it), which waits for no frame; elsewhere it is tapped.
-    if (browserName === "webkit") await undo.press("Enter");
+    // over two frames and outlasted the 8 s Undo (the toast went before the tap, run 45293069216). On the WebKit phone
+    // the keyboard presses it (Enter on the focused Undo, a real way to use it), which waits for no frame; everywhere
+    // else, WebKit on a computer too (it tapped it in time on that run), it is tapped.
+    if (browserName === "webkit" && isMobile) await undo.press("Enter");
     else await undo.click();
     await expect(page.getByRole("button", { name: "Take key away" })).toBeVisible();
     await expect(page.locator('[data-help="ask-web-setup"]').getByText("On", { exact: true })).toBeVisible();

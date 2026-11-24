@@ -120,9 +120,33 @@ test("a phone (375 x 812): the Clips Funded mark on Clip Factory's toggle is war
   expectWarm(await markOf(page, "[data-app-pane]:not([hidden]) .ws-switch-host--topbar .ws-round__mark"), "Clip Factory's phone toggle again");
 });
 
+/**
+ * The dock's toggle stays mounted through a switch and swaps its mark by its class. Each swap is read the moment it
+ * happens: how many fades (of its tile, its "C" or its dot) it started. A fade there showed a bare "C" with no tile
+ * until a frame was drawn (base.css gives everything a 1 ms transition with less motion), which CI's slow frames held
+ * past every check.
+ */
+async function watchDockSwaps(page: Page) {
+  await page.addInitScript(() => {
+    const swaps: string[] = [];
+    (window as unknown as { __dockSwaps: string[] }).__dockSwaps = swaps;
+    new MutationObserver((records) => {
+      for (const r of records) {
+        const el = r.target as HTMLElement;
+        if (!el.classList?.contains("ws-round__mark") || !el.closest(".ws-dock")) continue;
+        void getComputedStyle(el).backgroundColor;
+        swaps.push(`${el.className}: ${el.getAnimations({ subtree: true }).length} fades`);
+      }
+    }).observe(document, { subtree: true, attributes: true, attributeFilter: ["class"] });
+  });
+}
+/** The swaps since the last call. */
+const dockSwaps = (page: Page) => page.evaluate(() => (window as unknown as { __dockSwaps: string[] }).__dockSwaps.splice(0));
+
 test("a computer, the sidebar folded (1440 x 900): the dock's round toggle is warm in Clip Factory and Clip Factory's real mark in Clips Funded", async ({ page }) => {
   await page.setViewportSize({ width: 1440, height: 900 });
   await on(page);
+  await watchDockSwaps(page);
   await page.goto("/");
   await settle(page);
   // Clip Factory's own brand in its open sidebar; then the sidebar folded with its own button, so the dock's switch is
@@ -134,17 +158,20 @@ test("a computer, the sidebar folded (1440 x 900): the dock's round toggle is wa
   const toggle = page.locator(".ws-dock .ws-round");
   await expect(toggle).toHaveAttribute("aria-label", "Go to Clips Funded");
   expectWarm(await markOf(page, ".ws-dock .ws-round__mark"), "the dock's toggle in Clip Factory");
+  await dockSwaps(page);
   await toggle.click();
   await page.waitForURL((u) => u.pathname.startsWith("/stories"), { timeout: 15_000 });
   await storiesReady(page);
   expectWarm(await markOf(page, ".st-rail .st-brand__mark"), "Clips Funded's own rail");
   await expect(page.locator(".ws-dock .ws-round")).toHaveAttribute("aria-label", "Go to Clip Factory");
   expectClipsMark(await markOf(page, ".ws-dock .ws-round__mark"), brand, "the dock's toggle in Clips Funded");
+  expect(await dockSwaps(page), "the dock's toggle took Clip Factory's mark once, at once").toEqual(["ws-clipmark ws-mark--sized ws-round__mark: 0 fades"]);
   // back in Clip Factory: the warm toggle again, and its own brand exactly as before once its sidebar is open again
   await page.locator(".ws-dock .ws-round").click();
   await page.waitForURL((u) => !u.pathname.startsWith("/stories"), { timeout: 15_000 });
   await settle(page);
   expectWarm(await markOf(page, ".ws-dock .ws-round__mark"), "the dock's toggle in Clip Factory again");
+  expect(await dockSwaps(page), "and the warm mark again, once, at once").toEqual(["ws-mark ws-mark--sized ws-round__mark: 0 fades"]);
   await page.getByRole("button", { name: "Expand menu" }).click();
   await page.waitForTimeout(400);
   expect(await clipsBrand(page)).toEqual(brand);
