@@ -433,9 +433,11 @@ test("the owner's flow: a car from 3 dropped photos, the main character and the 
 
   let seriesId = "";
   await test.step("a series “My first car” with the main character and the car", async () => {
-    // Make a new video still holds the cast picked above, with nothing made: leaving asks first (Leave without saving?).
+    // The cast picked on Make a new video is not saved, so leaving it asks first; Leave goes on to the series.
     await go(page, `/stories/series/${SEED_SERIES}`);
-    await page.getByRole("dialog", { name: "Leave without saving?" }).getByRole("button", { name: "Leave" }).click();
+    const leave = page.getByRole("dialog", { name: "Leave without saving?" });
+    await expect(leave).toBeVisible();
+    await leave.getByRole("button", { name: "Leave", exact: true }).click();
     await expect(page).toHaveURL(new RegExp(`/stories/series/${SEED_SERIES}$`));
     await settle(page);
     // The mock seeds a series with that name: deleting it keeps its videos, under No series.

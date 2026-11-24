@@ -141,7 +141,12 @@ export function IdeasScreen({ ws, page }: StoriesScreenProps) {
   const active = useAppActive();
 
   useEffect(() => {
-    if (new URLSearchParams(location.search).get("new") === "1") navigate(location.pathname + location.hash, { replace: true });
+    // Only ?new=1 goes from the address: the series it is in (?series=) stays.
+    const q = new URLSearchParams(location.search);
+    if (q.get("new") !== "1") return;
+    q.delete("new");
+    const rest = q.toString();
+    navigate(location.pathname + (rest ? `?${rest}` : "") + location.hash, { replace: true });
   }, []);
 
   useEffect(() => {

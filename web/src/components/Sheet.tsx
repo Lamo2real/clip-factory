@@ -36,11 +36,15 @@ const SECOND_CLICK_PX = 40;
 /**
  * A sheet closed by a tap is gone at once, so the second click of a double-click (a double tap) would land on what
  * was under it: another job's row, the next page. That one click, near the first and soon after it, is swallowed.
+ * Typing in between (a key, a paste) means the next tap is a new choice, not a double tap's second half: it goes
+ * through (Use the newest, a quick change to the words, then Save changes where the sheet's button was).
  */
 export function swallowSecondClick(tap: { x: number; y: number; at: number }): void {
   if (typeof document === "undefined" || performance.now() - tap.at > SECOND_CLICK_MS) return;
   const done = () => {
     document.removeEventListener("click", eat, true);
+    document.removeEventListener("keydown", done, true);
+    document.removeEventListener("input", done, true);
     clearTimeout(timer);
   };
   const eat = (e: MouseEvent) => {
@@ -51,6 +55,8 @@ export function swallowSecondClick(tap: { x: number; y: number; at: number }): v
     e.stopImmediatePropagation();
   };
   document.addEventListener("click", eat, true);
+  document.addEventListener("keydown", done, true);
+  document.addEventListener("input", done, true);
   const timer = setTimeout(done, SECOND_CLICK_MS);
 }
 
