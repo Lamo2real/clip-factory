@@ -277,12 +277,20 @@ def test_an_own_script_safety_story_needs_checked_advice_matched_from_its_scenes
     assert {"id": "skid-recovery"}.items() <= body["error"]["topics"][0].items()
 
 
-def test_a_matched_topic_is_kept_for_any_kind(call: Call, store: db.Store, s3_client: FakeS3, dash: str) -> None:
-    scenes = [_scene("Dash looks for his hat."), _scene("The fog rolls in and hides it.")]
+def test_a_matched_topic_is_kept_for_any_kind_whose_words_are_about_driving(
+    call: Call, store: db.Store, s3_client: FakeS3, dash: str
+) -> None:
+    scenes = [_scene("Dash drives out to look for his hat."), _scene("The fog rolls in and hides it.")]
     status, body = _create(call, [dash], scenes)
     assert (status, body["story"]["category"], body["story"]["safetyTopicId"]) == (201, "comedy", "fog-driving")
     plain = _create(call, [dash], [_scene("Dash looks for his hat."), _scene("It is on his head.")])[1]["story"]
     assert plain["safetyTopicId"] is None
+    # A joke whose words are not about driving gets no road rules it did not ask for (the re-review's puddle,
+    # matched to aquaplaning before: sources, "The rules" and an end card the kid never wrote).
+    puddle = [_scene("Dash finds a red car in the garage."), _scene("The car gets stuck in a big puddle.", "Splash!")]
+    assert _create(call, [dash], puddle)[1]["story"]["safetyTopicId"] is None
+    foggy = [_scene("Dash looks for his hat."), _scene("The fog rolls in and hides it.")]
+    assert _create(call, [dash], foggy)[1]["story"]["safetyTopicId"] is None
     # A kind that is not driving safety, with a matched topic, is never approved on a skipped fact check.
     skipped = {"topicId": None, "status": "skipped", "problems": [], "checkedScriptVersion": 1, "citations": []}
     story = _made_own(store, s3_client, [dash], safetyTopicId="fog-driving", safety=skipped)
@@ -438,6 +446,16 @@ def test_a_restaged_safety_story_needs_checked_advice_for_its_new_words(
     assert (status, body["story"]["safetyTopicId"]) == (200, "skid-recovery")
 
 
+def test_a_funny_script_changed_off_driving_loses_its_topic(
+    call: Call, store: db.Store, s3_client: FakeS3, dash: str
+) -> None:
+    own = {"scenes": [_full("s1", "Dash drives home."), _full("s2", "Thick fog rolls in.", "Slow down")]}
+    story = _made_own(store, s3_client, [dash], own=own, category="comedy", safetyTopicId="fog-driving")
+    off = {"scenes": [_full("s1", "Dash walks home."), _full("s2", "Thick fog rolls in.", "Slow down")]}
+    status, body = _patch(call, story, ownScript=off)
+    assert (status, body["story"]["safetyTopicId"]) == (200, None)
+
+
 def test_a_patch_of_an_own_script_needs_one(call: Call, store: db.Store, s3_client: FakeS3, dash: str) -> None:
     old = seed_story(store, s3_client, characterIds=[dash])
     status, body = _patch(call, old, ownScript=OWN)
@@ -505,6 +523,20 @@ def test_sets_match_the_engine_catalog() -> None:
     assert m
     assert list(catalog.SETS) == re.findall(r'id: "([^"]+)"', m.group(1))
     assert len(catalog.SETS) == 16
+
+
+def test_driving_words_match_the_web_and_the_agent() -> None:
+    text = (ROOT / "web" / "src" / "stories" / "studio" / "ownScript.ts").read_text()
+    m = re.search(r"export const DRIVING_WORDS = \[(.*?)\] as const;", text, re.S)
+    assert m
+    assert list(own_script.DRIVING_WORDS) == re.findall(r'"([^"]+)"', m.group(1))
+    agent = (ROOT / "stories" / "agent" / "src" / "lamostories_agent" / "own_script.py").read_text()
+    m = re.search(r"DRIVING_WORDS = \((.*?)\)  # fmt: skip", agent, re.S)
+    assert m
+    assert list(own_script.DRIVING_WORDS) == re.findall(r'"([^"]+)"', m.group(1))
+    assert own_script.about_driving({"scenes": [{"what": "Dash brakes at the crossing."}]})
+    assert own_script.about_driving({"scenes": [{"what": "Hi.", "caption": "Seat belt on!"}]})
+    assert not own_script.about_driving({"scenes": [{"what": "The car gets stuck in a big puddle."}]})
 
 
 # --- the reviewers' fixes (24 Nov) ---------------------------------------------------------------------------------

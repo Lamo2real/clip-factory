@@ -55,7 +55,7 @@ import { formatOf, formatWords, sameFormat, ShapePicker } from "../studio/shape.
 import { ArtPicker, artOf, artWords, storyArt } from "../studio/art.tsx";
 import { Busy, celebrate, Notice, Pick, ShowMore, Slider, Switch, Tag, TechDetails, TextField } from "../studio/kit.tsx";
 import { useLeaveGuard } from "../studio/leaveGuard.tsx";
-import { defaultLength, draftFromIdea, emptyDraft, fitTarget, hasCaption, lengthRange, namesIn, scriptProblem, stepLabel, toOwnScript, written, type ScriptDraft } from "../studio/ownScript.ts";
+import { defaultLength, draftFromIdea, emptyDraft, fitTarget, hasCaption, lengthRange, namesIn, saysCar, scriptProblem, stepLabel, toOwnScript, written, type ScriptDraft } from "../studio/ownScript.ts";
 import { ChangeScriptSheet, fixId, focusField, ScriptEditor } from "../studio/ScriptEditor.tsx";
 import { currentStep, nowLine, StepTrack, stepsOf } from "../studio/StepTrack.tsx";
 import { ago, CATEGORY_LABEL, helpersLine, isConflict, NO_GUIDANCE, notMadeYet, say, seconds, STATUS_TONE, statusLabel, STORAGE_WORDS } from "../studio/words.ts";
@@ -385,16 +385,26 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
   }
 
   // Write it myself: a character the words name comes into the cast by itself, while the owner has not picked the cast
-  // himself and the cast rule allows it (the people first, then a car); otherwise its scene asks.
+  // himself and the cast rule allows it (the people first, then a car); otherwise its scene asks. Words that put a car
+  // in a scene ("the car", "drives") bring the workspace's only car in too. The page says who joined this way, so a ✓
+  // the owner did not tap is never a surprise.
+  const [joined, setJoined] = useState<string[]>([]);
   useEffect(() => {
     if (source !== "script" || castPicked || !characters.length) return;
     const named = draft.scenes.flatMap((x) => namesIn(x.what, characters)).filter((c) => draft.answers[c.name.trim().toLowerCase()] !== "out");
+    const cars = characters.filter((c) => isCar(c));
+    const carWords = draft.scenes.some((x) => saysCar(x.what));
+    if (carWords && cars.length === 1 && !named.some((c) => isCar(c)) && !cast.some((id) => cars.some((c) => c.characterId === id))) named.push(cars[0]!);
     let next = cast;
     for (const c of [...named.filter((x) => !isCar(x)), ...named.filter((x) => isCar(x))]) if (!next.includes(c.characterId) && !castJoinWhy(c.characterId, next)) next = castOrder([...next, c.characterId], characters);
-    if (next.length !== cast.length) setCast(next);
+    if (next.length !== cast.length) {
+      setJoined((j) => [...new Set([...j, ...next.filter((id) => !cast.includes(id))])]);
+      setCast(next);
+    }
     // Reads the cast it changes; runs when the words change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft, source, castPicked, characters]);
+  const joinedNames = source === "script" ? joined.filter((id) => cast.includes(id)).map((id) => characters.find((c) => c.characterId === id)?.name).filter((n): n is string => !!n) : [];
 
   /** Write it myself from here: the scene list starts from the picked idea's steps when it is still empty. */
   function pickSource(v: "idea" | "own" | "script") {
@@ -638,7 +648,14 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
               <span className="st-s-num">2</span> The cast <span className="st-s-panel__hint">(1 to 3)</span>
             </h2>
             {characters.length ? (
-              <CastPicker characters={characters} value={cast} onChange={pickCast} />
+              <>
+                <CastPicker characters={characters} value={cast} onChange={pickCast} />
+                {joinedNames.length ? (
+                  <p className="st-s-field__hint st-sc-joined">
+                    {joinedNames.length === 1 ? `${joinedNames[0]} is` : `${joinedNames.slice(0, -1).join(", ")} and ${joinedNames[joinedNames.length - 1]} are`} in your scenes, so {joinedNames.length === 1 ? "it's" : "they're"} ticked already.
+                  </p>
+                ) : null}
+              </>
             ) : (
               <p className="st-s-field__hint">
                 No characters yet. <A href={storiesHref({ name: "character_new" })}>Make one first</A>.
@@ -650,13 +667,11 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
             <h2 className="st-s-panel__title" id="st-nv-3">
               <span className="st-s-num">3</span> How long
             </h2>
-            <Slider label="Length" min={15} max={90} step={5} value={lengthSec} onChange={setLength} words={seconds(lengthSec)} marks={{ from: 30, to: 60, label: "30 to 60 seconds works best." }} stepper />
+            {/* Write it myself: the length its scenes need is picked by itself; one line only when the pick can't be met */}
+            <Slider label="Length" min={15} max={90} step={5} value={lengthSec} onChange={setLength} words={seconds(lengthSec)} marks={source === "script" ? undefined : { from: 30, to: 60, label: "30 to 60 seconds works best." }} stepper />
             {length === null && ideaLength ? <p className="st-s-field__hint">The full idea was written for {seconds(ideaLength)}.</p> : null}
-            {source === "script" && range ? (
-              <p className="st-s-field__hint">
-                Your {ownWritten.length === 1 ? "1 scene" : `${ownWritten.length} scenes`}: {range.lo} to {range.hi} seconds.
-                {lengthSec < range.lo || lengthSec > range.hi ? ` It will be about ${Math.round(fitTarget(lengthSec, ownWritten))} seconds.` : ""}
-              </p>
+            {source === "script" && range && (lengthSec < range.lo || lengthSec > range.hi) ? (
+              <p className="st-s-field__hint">It will be about {Math.round(fitTarget(lengthSec, ownWritten))} seconds.</p>
             ) : null}
           </section>
 

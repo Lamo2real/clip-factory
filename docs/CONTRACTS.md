@@ -19175,11 +19175,12 @@ agent image gets one more font package, `fonts-symbola`, so the owner's emoji ar
 #### 45.46.2 The scene list (`studio/ScriptEditor.tsx`, the pure helpers in `studio/ownScript.ts`)
 
 * It starts with 2 empty scenes. Each scene: **What happens** (multiline, ≤ 160, required) and **Caption** (one line,
-  ≤ 60, optional, placeholder "Words on screen (you can skip this)"). The counters always show ("19/160", "6/60").
+  ≤ 60, optional, placeholder "Words on screen, or skip": it fits a 390 px phone's field). The counters always show
+  ("19/160", "6/60").
   Nothing is ever cut by itself: a field over its limit turns red with "Too long: 182 of 160 letters." (a polite
   live region says "Too long." once, never the count on every key). Letters are
   counted as the API counts them (an emoji is one letter). A caption keeps case, punctuation and emoji; only its ends
-  are trimmed. With an emoji the hint "Some emoji may not show." shows once.
+  are trimmed. There is no emoji hint: the agent's image ships an emoji font (Symbola).
 * ↑ ↓ ✕ per scene ("Move scene 2 up", "Move scene 2 down", "Take out scene 2"); an empty scene goes at once, a scene
   with words through `toast.undo("Scene 2 taken out.")`. "+ Add a scene" adds one at the end and focuses it; it hides
   at 12. One line under the list: "2 to 12 scenes."
@@ -19192,11 +19193,26 @@ agent image gets one more font package, `fonts-symbola`, so the owner's emoji ar
 * **Who.** `namesIn` matches every character's name (people and cars) as whole words, any case. A matched name in
   the cast is ticked in that scene's Who chips; one not in the cast joins the cast by itself while the owner has not
   picked the cast and the cast rule allows it (at most 3, at most one car, a car needs a person), otherwise the scene
-  asks "Rosa isn't in the cast. (Add Rosa) (Leave Rosa out)". No chip ticked: "Who: AI picks".
+  asks "Rosa isn't in the cast. (Add Rosa) (Leave Rosa out)". No chip ticked: "Who: AI picks". Read from the words
+  (re-review, 24 Nov): **the cast's one car** is ticked in every scene whose words put a car in it (`saysCar`: car,
+  truck, van, drive, drives, drove, driving, parks, parked, honk, brake, steer, engine, headlights, wheels, tyres,
+  seat belt, …), its name spelled or not ("The car gets stuck." is Rosso); words that **name nobody** keep the scene
+  before's Who ("He turns on the dipped headlights."). While the owner has not picked the cast, the workspace's only
+  car joins it by itself when the words say car words, and a line under The cast says why the tiles are ticked: "Dash
+  and Rosso are in your scenes, so they're ticked already." Under the preview, a cast member that no scene has (every
+  scene with its own Who) is told: "Rosso isn't in any scene. Tick Rosso in a scene's Who, or take Rosso out of the
+  cast." `castInNoScene` reads it.
 * **Unknown names.** A capitalised word that is not a common word (The, Then, He, She, Oh, Suddenly, Scene, …), not an
   everyday word (`EVERYDAY`: the days and months, the meals, Outside, Upstairs, Bedtime, Christmas, …; the agent's
   `own_script.EVERYDAY` is the same list), not a place word, not a cast name and not answered is asked about once, at
-  the first scene that names it: "Who is Max? (Dash) (Rosa) (Not a name) (Leave Max out)". A name at the start of a
+  the first scene that names it: "Who is Max? (It's Dash) (It's Rosa) (Not a name) (Leave Max out)" ("It's Dash"
+  reads as Max being Dash, never Max being with Dash); in words about a car ("Dash drives his Ferrari") the
+  workspace's cars not in the cast are answers too ("It's Rosso"), and picking one adds it to the cast. Never asked
+  (the agent's `unknown_name` reads them the same): a word in capitals ("FAST", "OMG", "DASH DRIVES"), a word ending in
+  "ing" that starts a sentence ("Driving home, …"), a cast name with an "s" ("Dashs", also read as Dash in Who), a
+  word after play ("plays Minecraft"), and the common words, which now also hold cheers (Hooray, Woohoo, Yippee,
+  Goodnight, Help), words a sentence starts with (Ready, Push, Get, Drive, Ignore, Red, Happy, Super, …), countries and
+  big cities (London, Paris, …) and games and apps (Minecraft, Roblox, YouTube, …). A name at the start of a
   sentence is asked about too ("Max drops every ball."): skipping it would let the AI give Max's part to someone in
   the cast. A person's word such as Mum is asked about (the cast may have no Mum to draw). Picking a cast member
   ticks them in every scene that names Max (the words stay "Max"); **Not a name** ("Cornflakes") ticks nobody and
@@ -19206,8 +19222,10 @@ agent image gets one more font package, `fonts-symbola`, so the owner's emoji ar
 * **Where.** `placeIn` matches the 16 set labels plus a few words (car park or parking, night with road, snow, ice or
   icy, rain, fog, motorway, town or street, lounge or sofa, work or desk). No match: "Where: AI picks"; tapping it
   opens a sheet of the 16 places plus "AI picks". An unknown place ("the beach") is never asked about: it is drawn
-  closest, with a note (§45.46.6). What the owner picked always wins: a chip changed by hand never follows the words
-  again.
+  closest, with a note (§45.46.6). Words that go on from the scene before (they name nobody and no place: "He turns on
+  the dipped headlights.") keep its Where; a scene that names its own people may be somewhere new, so the AI picks
+  there. What the owner picked always wins: a chip changed by hand never follows the words again, and "AI picks"
+  picked on purpose is never carried over.
 * **Your video**: under the list, one small glass tile per scene in order (number, place, who, the caption in quotes,
   "about 5 s"), an orange ring on a tile with an open question (outside the focus ring when the keyboard is on it),
   and a total line "4 scenes · about 30 seconds · 3 captions". It is built from the same state with no engine
@@ -19216,8 +19234,8 @@ agent image gets one more font package, `fonts-symbola`, so the owner's emoji ar
 #### 45.46.3 The other panels, the checks and the send
 
 * **The cast**: unchanged (the words can fill it). **How long**: the same slider; until touched it follows
-  `defaultLength` (§45.46.4), with "Your 4 scenes: 15 to 60 seconds." and, outside that range, "It will be about 60
-  seconds." **Words and music**: the Captions switch turns on by itself at the first caption unless the owner set it;
+  `defaultLength` (§45.46.4). One number only: no "30 to 60 seconds works best." mark and no range line; only a pick
+  outside what the scenes can give says "It will be about 60 seconds." **Words and music**: the Captions switch turns on by itself at the first caption unless the owner set it;
   off with captions: "Captions are off, so your words won't show." **Model and effort**: "The AI that sets up your
   scenes and checks them.", the usual model being `animation_plan`'s.
 * `check()` for Write it myself, in order, each focusing its field: "Give the video a title." · "Pick what kind of
@@ -19284,10 +19302,14 @@ agent image gets one more font package, `fonts-symbola`, so the owner's emoji ar
 * **POST /stories**: `STORY_KEYS` has `ownScript`. With it the brief needs only `title` and `category`; a missing or
   empty logline is scene 1's `what` on one line (≤ 280). With `ideaId` the title and kind come from the idea (`title`
   overrides) and the idea's concept is not copied into the brief: the owner's script wins. `who` is checked after the
-  `characterIds`. The topic is matched over the title, the logline, every `what` and every caption, for **every**
-  kind: `driving_safety` with no match is the 409 `NO_GUIDANCE` with the topics; for any other kind a match is kept as
-  `safetyTopicId`, so that story is fact checked against it even with the quality agent off. Started from an idea, the
-  idea's checked `safetyTopicId` breaks a tie or stands in when no word matches. `captionsOn`: as given,
+  `characterIds`. The topic is matched over the title, the logline, every `what` and every caption:
+  `driving_safety` with no match is the 409 `NO_GUIDANCE` with the topics; any other kind is matched only when the
+  owner's words are about driving (`own_script.about_driving`, the agent's `DRIVING_WORDS`; the web's `DRIVING_WORDS`
+  is the same list, a test compares the three), and then a match is kept as `safetyTopicId`, so that story is fact
+  checked against it even with the quality agent off. A joke about a puddle with no driving words gets no topic (no
+  sources, no rules and no "Check your local road rules." end card the kid did not write). Started from an idea, the
+  idea's checked `safetyTopicId` breaks a tie or stands in when no word matches (again only for words about driving
+  on another kind). `captionsOn`: as given,
   else on when a scene has a caption, else the workspace's. `durationSec`: as given, else `default_length`. The job's
   steps use the own labels.
 * **PATCH /stories/{id}** with `ownScript` (validated against the story's `characterIds`; refused while a job runs):
@@ -19301,6 +19323,7 @@ agent image gets one more font package, `fonts-symbola`, so the owner's emoji ar
     words, the current topic standing in, so it can only move to a topic the words name better.
   * **anything else** (order, what, who, place, leaveOut, a scene added or taken out): every step becomes stale, no
     script version is written, and the topic is matched plainly again (`driving_safety` with no match: the 409).
+    Either way a video of another kind whose words are no longer about driving has no topic.
   * **the mirror**: a `captions` patch (the CaptionEditor) on an owner's script copies each `w_sN` cue's text into
     scene N's caption, and a removed cue sets it to null, so both copies of the owner's words stay the same.
 * `request_changes` with a note on an owner's script: the 409 above. With `sceneIds` only (Remake this scene) it runs
@@ -19352,7 +19375,8 @@ agent image gets one more font package, `fonts-symbola`, so the owner's emoji ar
 * **Code builds the script** (`script_from_own`): the story's title; scenes in the owner's order, each made at least
   its reading time long before fitting, `Scene.title` the first words of `what` cut at a word to 40 with "…",
   `Scene.caption` null, `Scene.note` written by code ("Drawn a bit differently: “on the beach” is in the Park." /
-  "Not drawn: Max.", ≤ 200); the `w_sN` cues from §45.46.4, plus any cue the owner added in the CaptionEditor
+  "Not drawn: Max.", ≤ 480 UTF-16 units; §45.46.10 says what it must tell first); the `w_sN` cues from §45.46.4,
+  plus any cue the owner added in the CaptionEditor
   (`ownerEdits.captions`). Then `_prepare(fit_to=T)` as today: fitDuration moves the cues with their scenes and never
   changes text or order.
 * **The code check** (`own_problems`, after `_prepare`, `_repair_cast` and a take merge; `norm` = NFC, lower case,
@@ -19368,18 +19392,20 @@ agent image gets one more font package, `fonts-symbola`, so the owner's emoji ar
   words together are `norm(what)` (else `OWN_LOST`); each piece has a valid target or is `notShown`, and `notShown` is
   excused only when the piece is a left-out name and joining words (else `OWN_WHO` for a name nobody gave, or
   `OWN_NOT_SHOWN` with its words); a piece's non-filler beats are by who it names, or by their car or its rider (a
-  piece that names nobody may use anyone) → `OWN_EXTRA`; an event the piece's words (or its scene's caption) do not
-  say → `OWN_EXTRA` unless the piece has `closest`, and never two such in one piece: an event action (fall, slip,
-  jump, skid, spin, speed_up, tyre_burst, bump, honk, stall, wobble), an event sound (any but engine, footsteps, wind,
+  piece that names nobody may use anyone) → `OWN_EXTRA`; an event the piece's own words do not say (the caption never
+  says one: the adapter never reads it) → `OWN_EXTRA` unless the piece has `closest`, and never two such in one
+  piece, and never one the words say does not happen ("does not fall", "doesn't stop", even with `closest`): an event
+  action (fall, slip, jump, dance, skid, spin, speed_up, tyre_burst, bump, honk, stall, wobble), an event sound (any but engine, footsteps, wind,
   rain, snow_crunch, tick, whoosh, swoosh_up, click), an event prop (deer, phone, cross, check, exclamation, tyre,
   warning triangle, ice patch, a car or truck with `flat` or `brakes`), each with a short list of word stems that say
   it (`EVENT_ACTIONS`, `EVENT_SFX`, `EVENT_PROPS`, `EVENT_STATES`); a piece shown only by idle-like beats with no face,
   noise or bubble, by the place (its words not naming the set) or by the camera needs `closest` → `OWN_NOT_SHOWN`; the
   pieces' first event beats start in their order → `OWN_ORDER`; every unnamed beat a filler with at most an ambient
   sound, every prop beat named, every event prop named by a piece (else `OWN_EXTRA`), and no scene has fewer beats
-  after `_prepare` (`OWN_LOST`); (6) each captioned scene lasts at least 0.9 × its reading time (told to the model, shown to
-  the owner only as the last failure, `OWN_WORDS`). `FILLER`, `ACTIONS` and `PROP_ACTIONS` have a drift test against
-  `catalog.ts`.
+  after `_prepare` (`OWN_LOST`); (5b) the owner's own words, read by code (§45.46.10); (6) each captioned scene lasts at
+  least 0.9 × its reading time (told to the model, shown to the owner only as the last failure, `OWN_WORDS`).
+  `FILLER`, `ACTIONS` and `PROP_ACTIONS` have a drift test against `catalog.ts`. `norm` and the name match take out
+  invisible format characters (a pasted zero-width space) and read names in NFC.
 * **Retry, then an honest refusal**: on any engine error or problem the adapter is asked once more with the problems
   (`restage`), the cast repair runs if only faces or noises are left, and the check runs again. Still failing: the job
   stops with the first problem's owner sentence (only engine errors left: `OWN_LOST` for the scene the engine names,
@@ -19406,7 +19432,10 @@ agent image gets one more font package, `fonts-symbola`, so the owner's emoji ar
   flag is the AI's own staging: in a run that draws and animates the scenes again, those scenes are set up once more
   (`own_scenes`, the checker's problems as `factProblems` in the request, the faithful check run again; a staging
   fix, never a rewrite), then checked again; if that does not pass, the old staging stays and the problem is
-  reported. Problems left become `story.safety.problems`, for example "Your scene 2: The checked advice says to use
+  reported. A `beat:` problem whose beat draws an event the owner's words say (its action or its sound: "very fast"
+  is its speed_up; `own_script.owners_beat`) is the owner's, never the AI's staging: it is only reported, as "Your
+  scene 1, as drawn: …", and its scene is not set up again for it. A new take (this fix, and Remake this scene) keeps
+  every event of the words its scene drew, by the same cast member (`kept_problems` → `OWN_NOT_SHOWN`). Problems left become `story.safety.problems`, for example "Your scene 2: The checked advice says to use
   dipped headlights in fog." or "Your scene 2, as drawn: Steering away from the skid is wrong." The
   job ends `needs_check` with the video made, `approve` answers 409 "Fix the facts first: …" until a check passes, and
   on Review **Fix the words** opens Change my script at that scene (`^Your scene (\d+)`). The owner changes their own
@@ -19428,7 +19457,9 @@ agent image gets one more font package, `fonts-symbola`, so the owner's emoji ar
   words stay). **Remake the whole video**: "Clips Funded sets up your scenes again. Your words stay." The
   CaptionEditor stays, mirrored into the script by the API; on an owner's script it has no "Words on each scene"
   group (the owner's words are the Caption 1..N rows, one a scene). Make it again keeps the story it saved: a start
-  that fails after the save is retried with the saved version, never the old one (no 409).
+  that fails after the save is retried with the saved version, never the old one (no 409). Opened by **Fix the
+  words**, the sheet shows the fact check's problems about that scene at its top (`.st-sc-why`), so the reason stays
+  in view while the owner changes the words.
 
 #### 45.46.9 Look, mock and tests
 
@@ -19441,13 +19472,67 @@ agent image gets one more font package, `fonts-symbola`, so the owner's emoji ar
   the `w_sN` cues built word for word, runs the code check as a self-test on every staging, reports fog plus full beam
   as "Your scene N…" without rewriting, and has the PATCH paths, the mirror and the 409.
 * Tests: `web/test/storiesOwnScript.test.tsx`, `web/e2e/stories-own-script.spec.ts` (the last shard runs it),
-  `api/tests/test_ws_own_script.py`, `stories/agent/tests/test_own_script.py` (the real engine under Deno where it
+  `api/tests/test_ws_own_script.py`, `stories/agent/tests/test_own_script.py` and
+  `stories/agent/tests/test_own_script_rereview.py` (the re-review's attacks; the real engine under Deno where it
   needs it). The review round (24 Nov) changed existing tests only where the asked change says so: the pill's label
   (Type an idea), no chip over the steps, and the `known` the answered "Max" now sends.
-* Follow-ups: code proves order, cast, place, words, full coverage of the text, who does each event, their order and
-  that no event is added beyond what the words say, but not that a beat really "shows" its piece (the final look
-  could also read the owner's scenes, report only); any change to what happens stages every scene again; emoji are
-  burned in one colour (Symbola), and a joined emoji (a family, a flag) may show as its parts.
+* Follow-ups: code proves order, cast, place, words, full coverage of the text, the events the words say (owed, by
+  who, how many times, in order, never where they say it does not happen), the feelings and that no event is added
+  beyond what the words say; it does not prove that a beat really "shows" a piece whose words name no event (a hug,
+  juggling: the final look could also read the owner's scenes, report only). A pronoun two people could be is
+  allowed either way and told in the note; a character's description or the script's own "his"/"her" settles it.
+  Any change to what happens stages every scene again; emoji are burned in one colour (Symbola), and a joined emoji
+  (a family, a flag) may show as its parts; "London" is never asked about, but another place or brand name with a
+  capital still is (one tap: Not a name).
+
+#### 45.46.10 The re-review (24 Nov): the owner's words read by code (`lamostories_agent/own_words.py`)
+
+The re-review attacked the check with 30 new cases (24 got through at f8fa7bb8). The check no longer takes the
+adapter's pieces for what the owner wrote: `own_words.read` reads each scene's `what` itself (plain word rules, no
+model), and `own_script._owner_words` checks the answer against it:
+
+* **Clauses and who does what.** A sentence mark or a comma ends a clause, and so does a joining word ("and", "but",
+  "then", "while", "when", "after", …) once the clause has a word that is not a name ("Lamo and Rosa jump" stays one).
+  A clause's subject is the cast names at its start; a clause that starts with he, she, they or it is the person the
+  pronoun is (the one named before it whose he or she it is; the only one named; "it" a car); a clause that starts
+  with a joining word and names nobody before its event is the clause before's ("Lamo hugs Rosa and falls": Lamo
+  falls). Names after a preposition are never the doer ("skids past Bolt", "waves at Rosa"). He or she comes from a
+  character's description, personality or traits (`gender_of`: boy, girl, mum, dad, he, she, …, only when one side is
+  said) and from the script's own words (`learn_genders`: a sentence that names one person and says his or her).
+* **Owed events** (`FAMILIES`, strict words on purpose): a fall (falls, fell, trips, slips, tumbles, topples,
+  collapses; fall or slip draws it), a jump (jumps, leaps, hops; "jumps in the car" may be get_in), a dance, and for a
+  car or the person driving it a skid (skids, spins, slides, aquaplanes, loses control), speeding up (speeds, fast,
+  faster, zooms, races, accelerates), a burst tyre (with a tyre word; tyre_burst or a car in `flat`), a bump (crashes,
+  bumps, hits, collides; "hits the brakes" is none), a honk and a stall (stalls, won't start, breaks down). Not an
+  event: "falls asleep", "falls in love", "in the fall", "the snow falls", "fast asleep". Each owed event is drawn, by
+  who does it, as many times as the words say ("three times", "twice", "3 jumps"; at most 5) → `OWN_NOT_SHOWN`
+  ("scene s1: “Lamo falls over” says Lamo does it: draw it, a beat fall or slip by Lamo."), in the words' order (two
+  clauses joined by while, when, as, after, before, until, because, once or meanwhile may happen together or
+  reversed; 0.25 s of slack) → `OWN_ORDER`. It is owed only when who does it is drawn in the scene (a car's event: a
+  car of the scene). "nearly falls" may be drawn and is never owed; "The boy falls" (someone the words do not name)
+  is never owed.
+* **Never someone else's, never denied.** An event action drawn whose family the words say is by who they say does
+  it (one left out never; someone unnamed: anyone), and never where every use of its words is denied ("does not",
+  "doesn't", "never", "no", "without", "nobody", "avoids", "instead") → `OWN_EXTRA`. The same "not" rule holds for the
+  pieces' event stems (a "Don't trip!" never allows a fall, a "doesn't stop" never a brake squeal).
+* **Feelings.** A clause with happy words (happy, laughs, smiles, hugs, kisses, loves, cheers, celebrates, …) and none
+  sad, or the other way (sad, cries, angry, scared, worried, nervous, …), has no beat of its people, under the pieces
+  that cover it, that shows only the other feeling (happy: happy, laughing, proud or relieved faces, yay, laugh or
+  giggle, celebrate, dance, thumbs_up, a heart or music bubble, tada; the other: sad, angry, scared or worried faces,
+  sigh or yelp, cower, facepalm, an angry or sweat bubble, sad_trombone) → `OWN_EXTRA`. "is not happy" says neither.
+* **Away.** Someone the words say is not there ("Rosa is not at home", "isn't here", "is away", "has gone", "without
+  Rosa") is not wanted with no Who given, and drawn is `OWN_EXTRA`.
+* **The note says it all, first.** A rough piece's line names every event it draws that its words do not say and its
+  `closest` does not name ("“Lamo walks home.” is walking home through the park, with a fall"); a pronoun two people
+  could be says who was drawn ("“She trips and falls” is drawn with Lamo"); a place word with no set after in, at,
+  through, on, … ("through the forest", "at school"; `NOTE_PLACES`), with no place given and no piece saying how,
+  says where it is drawn ("“forest” is drawn in the kitchen"). Those lines come first, so a cut (at 480) never hides
+  them; a staging whose note would still be cut inside one is refused (`note_hides` → `OWN_EXTRA`). A `closest` that
+  says it is exact ("exactly as you wrote it") is refused (`OWN_NOT_SHOWN`).
+* The adapter's `RULES` say each of these, so the first staging is usually right; the retry carries the exact lines.
+* Web (§45.46.2): the car in Who, Who and Where carried over, the cast line, "It's Dash", the car answers, the
+  questions kids hit, the one-number length, the shorter placeholder, no emoji hint, the reason in Change my script.
+  API (§45.46.5): a topic for another kind only for words about driving.
 
 ## 46. Auto-posting: the oldest clips in Review go up by themselves, every X hours (owner request, 2026-11-22)
 

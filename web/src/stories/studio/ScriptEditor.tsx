@@ -9,21 +9,22 @@ import { useEffect, useId, useRef, useState } from "react";
 import { useToast } from "../../components/Toasts.tsx";
 import { useLoad } from "../../lib/hooks.ts";
 import { storiesApi } from "../api/client.ts";
-import type { Character, OwnScript, ProductionJob, Story, StoryScript } from "../api/types.ts";
+import { isCar, type Character, type OwnScript, type ProductionJob, type Story, type StoryScript } from "../api/types.ts";
 import { storiesReduceMotion } from "../prefs.ts";
 import { Busy, Chip, Notice, StSheet, TextField } from "./kit.tsx";
 import {
   OWN,
   PLACES,
+  castInNoScene,
   draftFromOwn,
   fitTarget,
-  hasEmoji,
   letters,
   names,
   newScene,
   openAsks,
   placeLabel,
   sameScript,
+  saysCar,
   sceneWho,
   scenePlace,
   scriptProblem,
@@ -244,9 +245,8 @@ export function ScriptEditor({ draft, update, characters, cast, onAddToCast, add
         {draft.scenes.map((s, i) => {
           const n = i + 1;
           const who = sceneWho(s, draft, cast, characters);
-          const place = scenePlace(s);
+          const place = scenePlace(s, draft, cast, characters);
           const mine = asks.filter((a) => a.scene === i);
-          const emoji = hasEmoji(s.caption);
           return (
             <li key={s.key} id={`${prefix}-scene-${s.key}`} className={`st-sc-scene${mine.length ? " is-asking" : ""}`}>
               <div className="st-sc-scene__head">
@@ -279,8 +279,7 @@ export function ScriptEditor({ draft, update, characters, cast, onAddToCast, add
                 label="Caption"
                 value={s.caption}
                 max={OWN.caption}
-                placeholder="Words on screen (you can skip this)"
-                hint={emoji ? "Some emoji may not show." : null}
+                placeholder="Words on screen, or skip"
                 onChange={(v) => setScene(s.key, (x) => ({ ...x, caption: v }))}
               />
               <div className="st-sc-scene__meta">
@@ -304,7 +303,21 @@ export function ScriptEditor({ draft, update, characters, cast, onAddToCast, add
                 </button>
               </div>
               {mine.map(({ ask }, k) => (
-                <AskRow key={ask.name} id={k === 0 ? `${prefix}-ask-${s.key}` : undefined} ask={ask} cast={castChars} onAnswer={(to) => answer(ask, to)} onAdd={onAddToCast} addWhy={addWhy} />
+                <AskRow
+                  key={ask.name}
+                  id={k === 0 ? `${prefix}-ask-${s.key}` : undefined}
+                  ask={ask}
+                  cast={castChars}
+                  // a car's own name in words about a car ("drives his Ferrari"): the workspace's cars may be it
+                  others={onAddToCast && saysCar(s.what) ? characters.filter((c) => isCar(c) && !cast.includes(c.characterId) && !addWhy?.(c.characterId)) : []}
+                  onAnswer={(to) => {
+                    // someone not in the cast yet joins it first, then is the answer
+                    if (!cast.includes(to) && onAddToCast) onAddToCast(to);
+                    answer(ask, to);
+                  }}
+                  onAdd={onAddToCast}
+                  addWhy={addWhy}
+                />
               ))}
             </li>
           );
@@ -324,6 +337,17 @@ export function ScriptEditor({ draft, update, characters, cast, onAddToCast, add
         <span className="st-s-field__hint">2 to 12 scenes.</span>
       </div>
       <ScriptPreview draft={draft} cast={cast} characters={characters} lengthSec={lengthSec} asking={new Set(asks.map((a) => a.scene))} prefix={prefix} />
+      {(() => {
+        // someone in the cast that no scene has: never drawn (a car the words never name, say), so the page says so
+        const idle = castInNoScene(draft, cast, characters)
+          .map((id) => characters.find((c) => c.characterId === id)?.name)
+          .filter((n): n is string => !!n);
+        return idle.length ? (
+          <p className="st-s-field__hint st-sc-idle" role="status">
+            {idle.join(" and ")} {idle.length === 1 ? "isn't" : "aren't"} in any scene. Tick {idle.length === 1 ? idle[0] : "them"} in a scene&apos;s Who, or take {idle.length === 1 ? idle[0] : "them"} out of the cast.
+          </p>
+        ) : null;
+      })()}
       {replaceAsk ? (
         <StSheet
           title="Replace your scenes?"
@@ -348,7 +372,7 @@ export function ScriptEditor({ draft, update, characters, cast, onAddToCast, add
         <StSheet title={`Where is scene ${placeNo}?`} onClose={() => setPlaceFor(null)}>
           <div className="st-s-chips st-sc-places" role="group" aria-label={`Where is scene ${placeNo}?`}>
             {[{ id: "ai" as const, label: "AI picks" }, ...PLACES].map((p) => {
-              const on = p.id === "ai" ? scenePlace(placeScene) === null : scenePlace(placeScene) === p.id;
+              const on = p.id === "ai" ? scenePlace(placeScene, draft, cast, characters) === null : scenePlace(placeScene, draft, cast, characters) === p.id;
               return (
                 <Chip
                   key={p.id}
@@ -369,8 +393,11 @@ export function ScriptEditor({ draft, update, characters, cast, onAddToCast, add
   );
 }
 
-/** A question about a name in a scene: who it is (one of the cast, not a name, or left out), or a character not in the cast. */
-function AskRow({ id, ask, cast, onAnswer, onAdd, addWhy }: { id?: string; ask: Ask; cast: Character[]; onAnswer: (to: string) => void; onAdd?: (characterId: string) => void; addWhy?: (characterId: string) => string | null }) {
+/**
+ * A question about a name in a scene: who it is ("It's Dash": one of the cast, or in words about a car one of the
+ * workspace's cars, which then joins the cast; Not a name; or left out), or a character not in the cast.
+ */
+function AskRow({ id, ask, cast, others = [], onAnswer, onAdd, addWhy }: { id?: string; ask: Ask; cast: Character[]; others?: Character[]; onAnswer: (to: string) => void; onAdd?: (characterId: string) => void; addWhy?: (characterId: string) => string | null }) {
   const why = ask.kind === "outside" && onAdd ? (addWhy?.(ask.characterId) ?? null) : null;
   const words = ask.kind === "who" ? `Who is ${ask.name}?` : `${ask.name} isn't in the cast.`;
   return (
@@ -378,9 +405,9 @@ function AskRow({ id, ask, cast, onAnswer, onAdd, addWhy }: { id?: string; ask: 
       <span className="st-sc-ask__q">{words}</span>
       <span className="st-sc-ask__answers">
         {ask.kind === "who"
-          ? cast.map((c) => (
+          ? [...cast, ...others].map((c) => (
               <button key={c.characterId} type="button" className="st-pill st-pill--small" onClick={() => onAnswer(c.characterId)}>
-                {c.name}
+                It&apos;s {c.name}
               </button>
             ))
           : onAdd ? (
@@ -488,7 +515,7 @@ export function ScriptPanel({ ws, own, script }: { ws: string; own: OwnScript; s
  * Change my script (§45.46.8): the same scene list, filled from the video's script, and Make it again (the changes saved,
  * then the steps they made out of date run). No note box: the AI never changes what happens. `focus` opens it at a scene.
  */
-export function ChangeScriptSheet({ ws, story, focus, onClose, onStarted }: { ws: string; story: Story; focus?: number | null; onClose: () => void; onStarted: (r: { story: Story; job: ProductionJob }) => void }) {
+export function ChangeScriptSheet({ ws, story, focus, why, onClose, onStarted }: { ws: string; story: Story; focus?: number | null; why?: string[]; onClose: () => void; onStarted: (r: { story: Story; job: ProductionJob }) => void }) {
   const toast = useToast();
   const chars = useLoad(() => storiesApi().listCharacters(ws), `${ws}:own-script-cast`);
   const characters = chars.data ?? null;
@@ -557,6 +584,16 @@ export function ChangeScriptSheet({ ws, story, focus, onClose, onStarted }: { ws
         </>
       }
     >
+      {why?.length ? (
+        // Fix the words: the reason stays in view while the owner changes the scene
+        <Notice tone="bad">
+          <ul className="st-s-list st-sc-why">
+            {why.map((w, i) => (
+              <li key={i}>{w}</li>
+            ))}
+          </ul>
+        </Notice>
+      ) : null}
       {chars.error && !characters ? (
         <Notice tone="bad" action={<button type="button" className="st-btn" onClick={() => void chars.reload()}>Try again</button>}>
           {chars.error}

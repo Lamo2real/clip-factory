@@ -235,6 +235,48 @@ def texts(own: Mapping[str, Any]) -> list[str]:
     return whats + [str(s["caption"]) for s in scenes if isinstance(s.get("caption"), str) and s["caption"]]
 
 
+# The owner's words that make a script driving content (the agent's own_script.DRIVING_WORDS and the web's
+# studio/ownScript.ts DRIVING_WORDS, kept the same by tests): only such a script is matched to a checked topic when
+# its kind is not driving safety (§45.46.5), so a joke about a puddle never gets road rules it did not ask for.
+DRIVING_WORDS: Final = (
+    "drive",
+    "driv",
+    "drove",
+    "brak",
+    "seatbelt",
+    "seat belt",
+    "steer",
+    "speed",
+    "motorway",
+    "highway",
+    "traffic",
+    "road",
+    "crossing",
+    "indicator",
+    "headlight",
+    "full beam",
+    "dipped",
+    "overtak",
+    "junction",
+    "roundabout",
+    "pedestrian",
+    "zebra",
+)
+
+
+def _words(text: str) -> str:
+    """Lower case, every character that is not a letter or digit a space (the agent's ``norm``)."""
+    clean = "".join(ch for ch in unicodedata.normalize("NFC", text) if unicodedata.category(ch) != "Cf")
+    return " ".join("".join(ch if ch.isalnum() else " " for ch in clean.lower()).split())
+
+
+def about_driving(own: Mapping[str, Any]) -> bool:
+    """True when the owner's words (any scene's what or caption) talk about driving or the road (a word that starts
+    with one of ``DRIVING_WORDS``, as the agent reads them)."""
+    flat = [f" {_words(t)}" for t in texts(own)]
+    return any(f" {w}" in t for t in flat for w in DRIVING_WORDS)
+
+
 def logline_of(own: Mapping[str, Any]) -> str:
     """A brief's line when none was given: scene 1's ``what`` on one line (at most 280 characters)."""
     scenes = _scenes(own)
