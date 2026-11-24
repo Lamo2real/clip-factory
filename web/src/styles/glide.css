@@ -153,7 +153,9 @@
   display: none;
 }
 @media (min-width: 768px) {
-  /* The left column (the sidebar's own box): the dock's parts are placed in it; the column itself takes no clicks. */
+  /* The left column (the sidebar's own box): the dock's parts are placed in it; the column itself takes no clicks. It
+     takes its folded or open width at once, as its parts below take their places (no transition, also under reduced
+     motion), and is measured for them right then (WorkspaceDock.tsx). */
   .ws-dock {
     display: block;
     position: fixed;
@@ -165,6 +167,7 @@
     pointer-events: none;
     font-family: var(--font-ui);
     line-height: 1.5;
+    transition: none;
   }
   .ws-dock.is-folded {
     width: var(--sidebar-w-collapsed);
