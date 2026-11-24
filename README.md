@@ -80,6 +80,8 @@ it in draw.io or at app.diagrams.net); [docs/ARCHITECTURE.md](docs/ARCHITECTURE.
 
 ## Documentation
 
+**Picking up the work in a new Claude session?** Start with [CLAUDE.md](CLAUDE.md) (the working rules) and [docs/HANDOFF.md](docs/HANDOFF.md) (where things stand, and how-tos).
+
 | Document | What it covers |
 |---|---|
 | [Set up posting](docs/SETUP_POSTING.md) | The step-by-step setup for YouTube, TikTok, Instagram, Facebook and X, the same steps the app shows, with the research sources |
