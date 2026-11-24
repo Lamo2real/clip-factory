@@ -1,5 +1,5 @@
 {
- "version": "e11d9096ed7d",
+ "version": "6cb6eff77d93",
  "parts": [
   {
    "id": "app-map",
@@ -195,7 +195,7 @@
    "id": "contracts-28",
    "title": "CONTRACTS: 28. Ask becomes a full assistant (owner request, 2026-11-19)",
    "line": "The owner: Ask should answer any question (Clip Factory, Terraform, food, a file he gives it), always knowing the",
-   "chars": 33717
+   "chars": 34016
   },
   {
    "id": "contracts-29",

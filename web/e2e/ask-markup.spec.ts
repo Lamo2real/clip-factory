@@ -117,6 +117,35 @@ test.describe("the markup editor on a desktop", () => {
     expect(await redInSent(page)).toBeGreaterThan(0.02);
   });
 
+  // The page under the editor rests (ask.css html.mk-open): on a computer that paints without a GPU (CI's Linux WebKit)
+  // a frame with the page's nine on-screen blurs as well took 1 to 4 s, so each tap waited seconds for its frames.
+  test("the page under the editor rests: only the dialog blurs, nothing under it loops, and both come back", async ({ page }) => {
+    await openWithPicture(page);
+    const look = () =>
+      page.evaluate(() => {
+        const blurs: string[] = [];
+        for (const el of Array.from(document.querySelectorAll("body *")))
+          for (const pseudo of [null, "::before", "::after"]) {
+            const s = getComputedStyle(el, pseudo);
+            const f = s.backdropFilter || s.getPropertyValue("-webkit-backdrop-filter");
+            if (f && f !== "none") blurs.push(`${String(el.getAttribute("class")).split(" ")[0]}${pseudo ?? ""}`);
+          }
+        const loops = document
+          .getAnimations()
+          .filter((a) => a.playState === "running" && a.effect?.getComputedTiming().iterations === Infinity)
+          .filter((a) => !((a.effect as KeyframeEffect).target as Element | null)?.closest(".backdrop")).length;
+        return { blurs, loops };
+      });
+    const before = await look();
+    expect(before.blurs.length).toBeGreaterThan(1);
+    expect(before.loops).toBeGreaterThan(0);
+    await openEditor(page);
+    expect(await look()).toEqual({ blurs: ["mk__dialog"], loops: 0 });
+    await page.keyboard.press("Escape");
+    await expect(editor(page)).toHaveCount(0);
+    expect(await look()).toEqual(before);
+  });
+
   test("keyboard only: arrow keys and Enter draw, Cmd/Ctrl+Enter saves", async ({ page }) => {
     await openWithPicture(page);
     await panel(page).getByRole("button", { name: /Mark picture 1/ }).focus();
