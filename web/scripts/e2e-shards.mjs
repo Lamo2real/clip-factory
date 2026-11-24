@@ -30,6 +30,10 @@ const TIMINGS = join(DIR, "timings.tsv");
 const CLI = join(web, "node_modules/@playwright/test/cli.js");
 const SEP = " › ";
 
+// Titles are compared in one Unicode form (NFC), so a title saved in another form (a "§" or "“" typed as two code
+// points, or from a log) still names the same test. The lists keep Playwright's own spelling, which it matches as is.
+const nfc = (s) => s.normalize("NFC");
+
 // The CI groups: each is one matrix job in ci.yml, run with these --project flags, in this many shards.
 export const GROUPS = {
   chromium: { projects: ["chromium", "screenshots"], shards: 7 },
@@ -90,7 +94,7 @@ function readList(path) {
     .forEach((raw, i) => {
       const line = raw.trim();
       if (!line || line.startsWith("#")) return;
-      const tokens = line.split("›").map((t) => t.trim());
+      const tokens = line.split("›").map((t) => nfc(t.trim()));
       const project = tokens[0]?.match(/^\[([^\]]+)\]$/)?.[1];
       if (!project || !/\.spec\.ts$/.test(tokens[1] ?? "")) fail(`${path}:${i + 1}: not "[project] › file.spec.ts[ › title]": ${line}`);
       entries.push({ line, project, file: tokens[1], titles: tokens.slice(2) });
@@ -114,7 +118,7 @@ export function shardArgs(group, shard, total, outDir, mode = "full") {
   const args = [...projects.map((p) => `--project=${p}`), ...(m.drop ? [`--grep-invert=@${m.drop}`] : [])];
   if (shard < total) return [...args, `--test-list=${listFile(group, shard)}`];
   const rest = join(outDir, `${group}-${mode}-rest.txt`);
-  writeFileSync(rest, numbers.map((n) => readFileSync(listFile(group, n), "utf8")).join("\n"));
+  writeFileSync(rest, numbers.map((n) => readFileSync(listFile(group, n), "utf8")).join("\n"), "utf8");
   return [...args, `--test-list-invert=${rest}`];
 }
 
@@ -126,6 +130,11 @@ function listTests(args) {
       env: { ...process.env, CI: process.env.CI || "1", FORCE_COLOR: "0" },
       stdio: ["ignore", "pipe", "pipe"],
     });
+    // Read as UTF-8 text, not chunk by chunk: `out += buffer` decodes each pipe chunk on its own, so a "§" whose two
+    // bytes fall in two chunks became "��" (CI run 45316501232: the full list's title no longer matched a shard's).
+    // Where a chunk ends depends on the runner, so it passed on a Mac and failed on Linux.
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
     let out = "";
     let err = "";
     child.stdout.on("data", (d) => (out += d));
@@ -143,12 +152,15 @@ function listTests(args) {
       const walk = (suite, titles) => {
         for (const spec of suite.specs ?? []) {
           for (const t of spec.tests) {
-            const all = [...titles, spec.title];
+            const raw = [...titles, spec.title];
+            const all = raw.map(nfc);
             tests.push({
               project: t.projectName,
               file: spec.file,
               titles: all,
               tags: spec.tags ?? [],
+              // Its line in a list, in Playwright's own spelling (what --test-list matches).
+              line: `[${t.projectName}]${SEP}${spec.file}${SEP}${raw.join(SEP)}`,
               key: `[${t.projectName}]${SEP}${spec.file}${SEP}${all.join(SEP)}`,
               id: `[${t.projectName}]${SEP}${spec.file}:${spec.line}:${spec.column}${SEP}${all.join(SEP)}`,
             });
@@ -157,6 +169,9 @@ function listTests(args) {
         for (const child of suite.suites ?? []) walk(child, [...titles, child.title]);
       };
       for (const file of report.suites ?? []) walk(file, []);
+      // A broken character means the output was not read as UTF-8: the titles would match nothing, so stop here.
+      const broken = tests.find((t) => t.key.includes("\uFFFD"));
+      if (broken) return no(new Error(`playwright test --list ${args.join(" ")} gave a title with a broken character (U+FFFD), so it was not read as UTF-8: ${broken.id}`));
       ok({ tests, projects: (report.config?.projects ?? []).map((p) => p.name) });
     });
   });
@@ -183,7 +198,7 @@ function readTimings() {
   for (const line of readFileSync(TIMINGS, "utf8").split("\n")) {
     if (!line || line.startsWith("#")) continue;
     const tab = line.indexOf("\t");
-    times.set(line.slice(tab + 1), Number(line.slice(0, tab)));
+    times.set(nfc(line.slice(tab + 1)), Number(line.slice(0, tab)));
   }
   return times;
 }
@@ -388,7 +403,7 @@ async function timings(files) {
         s = m[5] === "ms" ? v / 1000 : m[5] === "m" ? v * 60 : v;
       } else if ((m = line.match(skipped))) s = 0.2;
       else continue;
-      const key = `[${m[1]}]${SEP}${m[2]}${SEP}${m[3]}`;
+      const key = nfc(`[${m[1]}]${SEP}${m[2]}${SEP}${m[3]}`);
       seen.set(key, [...(seen.get(key) ?? []), s]);
     }
   }
@@ -400,7 +415,7 @@ async function timings(files) {
   for (const key of times.keys()) if (!now.has(key)) times.delete(key);
   const lines = [...times].sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0)).map(([k, s]) => `${s}\t${k}`);
   const head = "# Seconds per test (median of the CI logs given), written by: node scripts/e2e-shards.mjs timings <log>...";
-  writeFileSync(TIMINGS, `${head}\n${lines.join("\n")}\n`);
+  writeFileSync(TIMINGS, `${head}\n${lines.join("\n")}\n`, "utf8");
   console.log(`e2e/shards/timings.tsv: ${seen.size} tests from ${files.length} log(s), ${times.size} saved in all`);
 }
 
@@ -429,7 +444,7 @@ async function build() {
       else {
         for (const t of ts) {
           if (unlistable(t)) leftover[firstMode(t)] += estimate(t);
-          else units.push({ lines: [t.key], secs: estimate(t), mode: firstMode(t) });
+          else units.push({ lines: [t.line], secs: estimate(t), mode: firstMode(t) });
         }
       }
     }
@@ -459,7 +474,7 @@ async function build() {
         `# ${group} shard ${i + 1} of ${g.shards}: about ${per} worker-minutes (${b.lines.length} lines).`,
         "# Written by: node scripts/e2e-shards.mjs build (from timings.tsv). The last shard runs every test in no list.",
       ];
-      writeFileSync(listFile(group, i + 1), [...head, ...b.lines.sort()].join("\n") + "\n");
+      writeFileSync(listFile(group, i + 1), [...head, ...b.lines.sort()].join("\n") + "\n", "utf8");
     });
     for (const m of modes) {
       const mins = bins.map((b) => inMode(b, m).toFixed(1));
