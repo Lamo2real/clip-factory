@@ -54,28 +54,42 @@ test("the covers spring open on hover instead of jumping, and the finished deal 
   await pointerAway(page);
   await page.waitForTimeout(200);
   expect(await turn(page)).toBeCloseTo(7, 1);
-  await hover(page);
   // The hover starts a real transition (a jump starts none), and a quarter of the way in the cover is somewhere
-  // between resting and fanned. Holding the transition there keeps this true however slow the machine draws.
-  const quarter = await page.evaluate(() => {
+  // between resting and fanned. The watch starts before the pointer moves (every frame, and on the transition's own
+  // transitionrun), so a slow machine reading late can never miss the spring. The quarter is read from a copy of the
+  // spring (its own keyframes and timing, held at 130 ms on a hidden element of its own), which keeps it true however
+  // slow the machine draws; the cover's own spring is never paused or moved. Holding the cover's own spring and playing
+  // it again left it stuck where it was held in Linux WebKit (9.45 degrees, the 130 ms pose, for the whole poll below).
+  await page.evaluate(() => {
     const el = document.querySelectorAll(".cover-stack__item")[2]!;
-    return new Promise<{ duration: number; deg: number } | null>((done) => {
+    (window as unknown as { coverSpring: Promise<{ duration: number; deg: number } | null> }).coverSpring = new Promise((done) => {
       const t0 = performance.now();
+      let seen = false;
       const look = () => {
-        const spring = el.getAnimations().find((a) => a instanceof CSSTransition && a.transitionProperty === "transform");
+        if (seen) return;
+        const spring = el.getAnimations().find((a): a is CSSTransition => a instanceof CSSTransition && a.transitionProperty === "transform");
         if (spring) {
-          spring.pause();
-          spring.currentTime = 130;
-          const m = new DOMMatrix(getComputedStyle(el).transform);
-          const deg = (Math.atan2(m.b, m.a) * 180) / Math.PI;
-          spring.play();
-          done({ duration: Number(spring.effect?.getComputedTiming().duration), deg });
-        } else if (performance.now() - t0 > 2000) done(null);
+          seen = true;
+          const effect = spring.effect as KeyframeEffect;
+          const probe = document.createElement("div");
+          probe.style.cssText = "position: absolute; top: 0; left: 0; visibility: hidden; pointer-events: none";
+          document.body.append(probe);
+          const copy = probe.animate(effect.getKeyframes() as Keyframe[], { ...effect.getTiming(), fill: "both" });
+          copy.pause();
+          copy.currentTime = 130;
+          const m = new DOMMatrix(getComputedStyle(probe).transform);
+          copy.cancel();
+          probe.remove();
+          done({ duration: Number(effect.getComputedTiming().duration), deg: (Math.atan2(m.b, m.a) * 180) / Math.PI });
+        } else if (performance.now() - t0 > 5000) done(null);
         else requestAnimationFrame(look);
       };
-      look();
+      el.addEventListener("transitionrun", look);
+      requestAnimationFrame(look);
     });
   });
+  await hover(page);
+  const quarter = await page.evaluate(() => (window as unknown as { coverSpring: Promise<{ duration: number; deg: number } | null> }).coverSpring);
   expect(quarter, "a transition runs on the cover").not.toBeNull();
   expect(quarter!.duration).toBeGreaterThan(300);
   expect(quarter!.deg).toBeGreaterThan(7.2);

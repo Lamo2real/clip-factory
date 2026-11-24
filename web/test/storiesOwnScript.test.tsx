@@ -384,7 +384,8 @@ describe("Production › New: Write it myself", () => {
     const tiles = Array.from(document.querySelectorAll(".st-sc-tile"));
     expect(tiles).toHaveLength(3);
     expect(tiles[0]!.textContent).toBe("1KitchenDash“Oh no!!”about 5 s");
-    expect(tiles[1]!.textContent).toBe("2AI picksDashabout 5 s"); // names its own people: may be somewhere new
+    // Max is Dash: the same people as scene 1, so it goes on in the kitchen (round 1: was "AI picks")
+    expect(tiles[1]!.textContent).toBe("2KitchenDashabout 5 s");
     expect(tiles[2]!.textContent).toBe("3ParkDash, Bolt“We did it! 🎉”about 5 s");
     expect(document.querySelector(".st-sc-total")?.textContent).toBe("3 scenes · about 15 seconds · 2 captions");
     // the length part reads one number: the length its scenes need, picked by itself (no range, no "works best")
@@ -403,7 +404,7 @@ describe("Production › New: Write it myself", () => {
     expect(body.ownScript).toEqual({
       scenes: [
         { what: "Dash wakes up late in the kitchen.", caption: "Oh no!!", who: [C.dash], place: "kitchen" },
-        { what: "Max drops the balls.", who: [C.dash], known: ["Max"] }, // answered: never asked about again
+        { what: "Max drops the balls.", who: [C.dash], place: "kitchen", known: ["Max"] }, // answered: never asked about again; the kitchen goes on
         { what: "Dash and Bolt juggle in the park.", caption: "We did it! 🎉", who: [C.dash, C.bolt], place: "park" },
       ],
     });
@@ -770,12 +771,18 @@ describe("the reviewers' fixes", () => {
     await wait(50);
     const ask = document.querySelector<HTMLElement>(".st-sc-ask")!;
     expect(ask.textContent).toContain("Who is Cornflakes?");
-    expect(Array.from(ask.querySelectorAll("button")).map((b) => b.textContent)).toEqual(["It's Dash", "Not a name", "Leave Cornflakes out"]);
+    expect(Array.from(ask.querySelectorAll("button")).map((b) => b.textContent)).toEqual(["It's Dash", "Make Cornflakes", "Not a name", "Leave Cornflakes out"]);
     await click(control("Not a name", ask));
     expect(document.querySelector(".st-sc-ask")).toBeNull();
     const create = vi.spyOn(api, "createStory");
     await click(control("Make the video"), 1500);
     expect(create.mock.calls[0]![1].ownScript?.scenes[0]).toEqual({ what: "Dash eats Cornflakes in the kitchen.", who: [C.dash], place: "kitchen", known: ["Cornflakes"] });
+    // the answer is never a character: the cast stays Dash, the call is made and the page goes to the new video
+    expect(create.mock.calls[0]![1].characterIds).toEqual([C.dash]);
+    await expect(create.mock.results[0]!.value).resolves.toMatchObject({ story: { characterIds: [C.dash] } });
+    await wait(3000);
+    expect(location.pathname).toMatch(/^\/stories\/production\/[^/]+$/);
+    expect(location.pathname).not.toBe("/stories/production/new");
   });
 
   it("Type an idea says the AI writes the story; only Write it myself says you write it", async () => {
@@ -895,15 +902,22 @@ describe("the re-review: a car in the cast, who and where carried over, and the 
     expect(puddle.story.safetyTopicId ?? null).toBeNull();
   });
 
-  it("Who is Ferrari? in words about a car offers the workspace's car, who joins the cast", async () => {
+  it("a car's own name in words about a car offers the workspace's car, who joins the cast; his Ferrari asks nothing", async () => {
     await writeItMyself();
     type(field("Title"), "Dash's new car");
     await pick("What kind of video?", "Funny");
+    // round 1: "his Ferrari" is a thing (after "his"), never "Who is Ferrari?"; the words about a car bring Rosso in
     type(what(0), "Dash drives his Ferrari to the park.");
     type(what(1), "Dash waves.");
     await wait(50);
+    expect(document.querySelector(".st-sc-ask")).toBeNull();
+    expect(Array.from(document.querySelectorAll('.st-s-casttile[aria-pressed="true"]')).map((t) => t.textContent?.replace("✓", "")).sort()).toEqual(["Dash", "Rosso"]);
+    expect(document.querySelectorAll(".st-sc-tile")[0]!.textContent).toContain("Dash, Rosso");
+    // a car's own name ("Dash drives Speedy"): the workspace's cars are offered, and the answer is that car
+    type(what(0), "Dash drives Speedy to the park.");
+    await wait(50);
     const ask = document.querySelector<HTMLElement>(".st-sc-ask")!;
-    expect(ask.textContent).toContain("Who is Ferrari?");
+    expect(ask.textContent).toContain("Who is Speedy?");
     expect(Array.from(ask.querySelectorAll("button")).map((b) => b.textContent)).toContain("It's Rosso");
     await click(control("It's Rosso", ask));
     await wait(50);
@@ -923,9 +937,16 @@ describe("the re-review: a car in the cast, who and where carried over, and the 
     expect(document.querySelector(".st-sc-joined")?.textContent).toBe("Dash and Rosso are in your scenes, so they're ticked already.");
     const tiles = Array.from(document.querySelectorAll(".st-sc-tile")).map((t) => t.textContent);
     expect(tiles.every((t) => t?.includes("Dash, Rosso"))).toBe(true);
-    // the car's ✓ taken out of a scene by hand, and every scene with its own Who: the page says Rosso is in none
+    // round 1: the words no longer name the car, so the car that joined by itself leaves again (never a hint that it
+    // is in no scene beside one that says it is ticked)
     type(what(0), "Dash wakes up.");
     type(what(1), "Dash waves.");
+    await wait(50);
+    expect(Array.from(document.querySelectorAll('.st-s-casttile[aria-pressed="true"]')).map((t) => t.textContent?.replace("✓", ""))).toEqual(["Dash"]);
+    expect(document.querySelector(".st-sc-joined")?.textContent).toBe("Dash is in your scenes, so Dash is ticked already.");
+    expect(document.querySelector(".st-sc-idle")).toBeNull();
+    // a cast member picked by hand that no scene has: the page says so
+    await click(Array.from(document.querySelectorAll<HTMLElement>(".st-s-casttile")).find((t) => t.textContent?.includes("Rosso"))!);
     await wait(50);
     expect(document.querySelector(".st-sc-idle")?.textContent).toBe("Rosso isn't in any scene. Tick Rosso in a scene's Who, or take Rosso out of the cast.");
   });
@@ -939,7 +960,199 @@ describe("the re-review: a car in the cast, who and where carried over, and the 
     const sheet = dialog("Change my script")!;
     const why = sheet.querySelector(".st-sc-why")?.textContent ?? "";
     expect(why).toContain("Your scene 2");
+    // round 1: the reason sits inside scene 2, beside its words (the sheet scrolls there), never above the list
+    expect(scenes(sheet)[1]!.querySelector(".st-sc-why")).not.toBeNull();
+    expect(scenes(sheet)[0]!.querySelector(".st-sc-why")).toBeNull();
     expect(story.safety?.problems.filter((p) => p.startsWith("Your scene 2")).every((p) => why.includes(p))).toBe(true);
     vi.unstubAllGlobals();
+  });
+});
+
+describe("round 1 of the re-review: the answers, Make a friend, who and where, and the questions kids hit", () => {
+  const chars = [
+    { characterId: C.dash, name: "Dash" },
+    { characterId: C.nana, name: "Nana Rose", description: "A round, kind grandma." },
+    { characterId: C.bolt, name: "Bolt", description: "A quick boy in a cap." },
+    { characterId: ROSSO, name: "Rosso", kind: "car" as const },
+  ];
+  const draftOf = (...whats: string[]): ScriptDraft => ({ scenes: whats.map((w) => newScene(w)), answers: {} });
+  const ticked = () => Array.from(document.querySelectorAll('.st-s-casttile[aria-pressed="true"]')).map((t) => t.textContent?.replace("✓", "")).sort();
+
+  async function friendScript(name = "Zara") {
+    await writeItMyself();
+    type(field("Title"), "Dash's friend");
+    await pick("What kind of video?", "Funny");
+    type(what(0), `Dash meets his best friend ${name}.`);
+    type(what(1), "Dash waves.");
+    await wait(50);
+    return document.querySelector<HTMLElement>(".st-sc-ask")!;
+  }
+
+  it("Leave Zara out adds nobody to the cast: the video is made with Dash and the page goes to it", async () => {
+    const ask = await friendScript();
+    expect(ask.textContent).toContain("Who is Zara?");
+    await click(control("Leave Zara out", ask));
+    expect(document.querySelector(".st-sc-ask")).toBeNull();
+    expect(ticked()).toEqual(["Dash"]);
+    const create = vi.spyOn(api, "createStory");
+    await click(control("Make the video"), 1500);
+    expect(create.mock.calls[0]![1].characterIds).toEqual([C.dash]);
+    expect(create.mock.calls[0]![1].ownScript?.scenes[0]).toMatchObject({ who: [C.dash], leaveOut: ["Zara"] });
+    await expect(create.mock.results[0]!.value).resolves.toMatchObject({ story: { characterIds: [C.dash] } });
+    await wait(3000);
+    expect(location.pathname).toMatch(/^\/stories\/production\/[^/]+$/);
+    expect(location.pathname).not.toBe("/stories/production/new");
+  });
+
+  it("Make Zara makes her here, with the usual look, ticks her and keeps every word typed", async () => {
+    const ask = await friendScript();
+    const createCharacter = vi.spyOn(api, "createCharacter");
+    await click(control("Make Zara", ask), 1500);
+    expect(createCharacter).toHaveBeenCalledTimes(1);
+    expect(createCharacter.mock.calls[0]![1]).toMatchObject({ name: "Zara" });
+    expect(document.querySelector(".st-sc-ask")).toBeNull();
+    expect(ticked()).toEqual(["Dash", "Zara"]);
+    expect(what(0).value).toBe("Dash meets his best friend Zara.");
+    expect(text()).toContain("Say hi to Zara!");
+    const zara = store.characters.find((c) => c.name === "Zara")!;
+    const create = vi.spyOn(api, "createStory");
+    await click(control("Make the video"), 1500);
+    expect(create.mock.calls[0]![1].characterIds).toEqual([C.dash, zara.characterId]);
+    expect(create.mock.calls[0]![1].ownScript?.scenes[0]).toMatchObject({ who: [C.dash, zara.characterId] });
+  });
+
+  it("Make is told why it can't when the cast has 3, and a name typed over leaves the cast it joined by itself", async () => {
+    await writeItMyself();
+    type(field("Title"), "Park day");
+    await pick("What kind of video?", "Funny");
+    type(what(0), "Bolt runs to the park.");
+    type(what(1), "Dash waves.");
+    await wait(50);
+    expect(ticked()).toEqual(["Bolt", "Dash"]);
+    type(what(0), "Pip runs to the park.");
+    await wait(50);
+    // Bolt joined by himself and no scene names him now: he leaves, and the hints agree
+    expect(ticked()).toEqual(["Dash", "Pip"]);
+    expect(text()).not.toContain("Bolt isn't in any scene");
+    expect(document.querySelector(".st-sc-joined")?.textContent).toBe("Dash and Pip are in your scenes, so they're ticked already.");
+    type(what(1), "Dash and Nana Rose wave at Zara.");
+    await wait(50);
+    expect(ticked()).toEqual(["Dash", "Nana Rose", "Pip"]);
+    const ask = document.querySelector<HTMLElement>(".st-sc-ask")!;
+    const make = control("Make Zara", ask);
+    expect(make.getAttribute("aria-disabled")).toBe("true");
+    expect(ask.textContent).toContain("The cast has 3 already. Take someone out in The cast first.");
+  });
+
+  it("the words' own people: a name the words say is not there, a he carried over, they, Rose and will", () => {
+    const cast = [C.dash, C.nana, C.bolt];
+    const who = (d: ScriptDraft) => d.scenes.map((s) => sceneWho(s, d, cast, chars));
+    expect(who(draftOf("Nana Rose is not at home, so Dash is alone.", "Dash waves."))[0]).toEqual([C.dash]);
+    expect(who(draftOf("Dash and Bolt play.", "Without Bolt, Dash goes home."))[1]).toEqual([C.dash]);
+    // a he carried over is the scene before's he, when the characters say who that is
+    expect(who(draftOf("Nana Rose and Bolt play in the park.", "Later, he walks home alone."))[1]).toEqual([C.bolt]);
+    // words about more than one keep the scene before's people
+    expect(who(draftOf("Dash drives home with Nana Rose.", "Nana Rose says well done. They get home safe."))[1]).toEqual([C.nana, C.dash]);
+    expect(who(draftOf("Dash and Nana Rose walk.", "Dash falls over. They both laugh."))[1]).toEqual([C.dash, C.nana]);
+    expect(who(draftOf("Dash and Nana Rose walk.", "Dash and Bolt both jump."))[1]).toEqual([C.dash, C.bolt]);
+    // a longer name by its last word; an everyday word in lower case is the word
+    expect(namesIn("Rose hugs Dash.", chars).map((c) => c.name)).toEqual(["Nana Rose", "Dash"]);
+    expect(namesIn("The sun rose and Dash woke up.", chars).map((c) => c.name)).toEqual(["Dash"]);
+    const will = [...chars, { characterId: "will", name: "Will" }];
+    expect(namesIn("Dash will dance.", will).map((c) => c.name)).toEqual(["Dash"]);
+    expect(namesIn("dash and will dance.", will).map((c) => c.name)).toEqual(["Dash", "Will"]); // no capitals at all
+  });
+
+  it("Where goes on with the same people: the fog lesson stays foggy; ice cream is no icy road; at home is the living room", () => {
+    const cast = [C.dash, ROSSO];
+    const fog = draftOf("Dash drives Rosso on a foggy road.", "Dash turns on the dipped headlights.", "Dash slows down.", "Dash and Nana Rose wave.");
+    // the last scene names Nana Rose, who is not in this cast: someone new, so the AI picks
+    expect(fog.scenes.map((s) => scenePlace(s, fog, cast, chars))).toEqual(["foggy_road", "foggy_road", "foggy_road", null]);
+    const withNana = draftOf("Dash drives Rosso on a foggy road.", "Dash and Nana Rose wave.");
+    expect(scenePlace(withNana.scenes[1]!, withNana, [C.dash, C.nana, ROSSO], chars)).toBeNull(); // someone new: the AI picks
+    const kitchen = draftOf("Dash wakes up in the kitchen.", "Dash flips a pancake.");
+    expect(scenePlace(kitchen.scenes[1]!, kitchen, cast, chars)).toBe("kitchen");
+    expect(placeIn("Bolt eats an ice cream.")).toBeNull();
+    expect(placeIn("Bolt slips on the ice.")).toBe("icy_road");
+    expect(placeIn("Dash plays at home.")).toBe("living_room");
+    expect(placeIn("Dash parks at home safe.")).toBeNull();
+  });
+
+  it("never asks kids' everyday words, shops and things; a name in two words is asked once; his Mum still is", () => {
+    const known = [{ name: "Pip" }, { name: "Dash" }, { name: "Bolt" }, { name: "Rosso" }, { name: "Nana Rose" }];
+    for (const what of [
+      "Pip likes Pizza.",
+      "Dash eats Pizza.",
+      "Pip opens the Fridge.",
+      "Pip turns Left.",
+      "Pip is the Winner!",
+      "Dash and Pip play football. Goal!",
+      "Dash and his Dog play.",
+      "Dash sees a big Dinosaur.",
+      "Pip falls asleep. Zzz.",
+      "Pip and Dash go to Disneyland.",
+      "Rosso drives to Tesco.",
+      "Pip and Dash eat at McDonald's.",
+      "Pip watches Peppa Pig on TV.",
+      "Bolt sees a shiny Ferrari.",
+    ])
+      expect(unknownNames(what, known), what).toEqual([]);
+    expect(unknownNames("Peppa Pig waves at Dash.", known)).toEqual(["Peppa Pig"]);
+    expect(unknownNames("Rosso races Lightning McQueen.", known)).toEqual(["Lightning McQueen"]);
+    expect(unknownNames("Dash hugs his Mum.", known)).toEqual(["Mum"]);
+    expect(unknownNames("Dash meets his best friend Zara.", known)).toEqual(["Zara"]);
+    for (const w of ["Dash runs to the park and Max waves.", "Dash goes to the park. Max waves.", "At the park, Max waves."]) expect(unknownNames(w, known), w).toEqual(["Max"]);
+    expect(unknownNames("Pip waves at Grandma.", known)).toEqual(["Grandma"]);
+    // answering a name in two words answers each of its words
+    const d = draftOf("Peppa Pig waves at Dash.", "Dash waves.");
+    expect(openAsks(d, [C.dash], chars).map((a) => a.ask.name)).toEqual(["Peppa Pig"]);
+    d.answers = { "peppa pig": "seen", peppa: "seen", pig: "seen" };
+    expect(openAsks(d, [C.dash], chars)).toEqual([]);
+    expect(toOwnScript(d, [C.dash], chars).scenes[0]!.known).toEqual(["Peppa", "Pig"]);
+  });
+
+  it("the practice fact check never refuses the checked advice said with a no", async () => {
+    const base = { characterIds: [C.nana], durationSec: 30, brief: { title: "Fog", category: "driving_safety" as const } };
+    const right: OwnScript = {
+      scenes: [
+        { what: "Nana Rose drives into thick fog.", caption: "So foggy!" },
+        { what: "Nana Rose turns on the dipped headlights, not full beam.", caption: "Never use full beam in fog!" },
+      ],
+    };
+    const { story } = await made({ ...base, ownScript: right });
+    expect(story.safety?.problems ?? []).toEqual([]);
+    const wrong = await made({ ...base, ownScript: FOG });
+    expect(wrong.story.safety?.problems.some((p) => p.startsWith("Your scene 2"))).toBe(true);
+  });
+});
+
+// ---------- Round 2 of the re-review (24 Nov): Who carried over and the cast's car, only where the words put them ----------
+
+describe("round 2 of the re-review: a they that is some things, and a toy car or cars in general", () => {
+  const chars = [
+    { characterId: C.dash, name: "Dash", description: "A cheeky boy." },
+    { characterId: C.nana, name: "Nana Rose", description: "A round, kind grandma." },
+    { characterId: ROSSO, name: "Rosso", kind: "car" as const },
+  ];
+  const cast = [C.dash, C.nana, ROSSO];
+  const draftOf = (...whats: string[]): ScriptDraft => ({ scenes: whats.map((w) => newScene(w)), answers: {} });
+  const who = (d: ScriptDraft) => d.scenes.map((s) => sceneWho(s, d, cast, chars));
+
+  it("a they after some things it may be is never the scene before's people", () => {
+    expect(who(draftOf("Dash and Nana Rose play in the park.", "Dash sees some ducks. They swim in the pond."))[1]).toEqual([C.dash]);
+    expect(who(draftOf("Dash and Nana Rose play.", "Dash feeds the birds. They fly away."))[1]).toEqual([C.dash]);
+    // still carried: they with no things before it, both, everyone, together (and never "the bus" as things)
+    expect(who(draftOf("Dash and Nana Rose walk.", "Dash falls over. They both laugh."))[1]).toEqual([C.dash, C.nana]);
+    expect(who(draftOf("Dash and Nana Rose walk.", "Dash waves. They laugh."))[1]).toEqual([C.dash, C.nana]);
+    expect(who(draftOf("Dash and Nana Rose walk.", "Dash gets on the bus. They ride to school."))[1]).toEqual([C.dash, C.nana]);
+    expect(who(draftOf("Dash and Nana Rose walk.", "Dash sees some ducks. Everyone laughs."))[1]).toEqual([C.dash, C.nana]);
+  });
+
+  it("the cast's car is ticked for a car, never for a toy car or cars in general", () => {
+    expect(who(draftOf("Dash plays with his toy car in his bedroom.", "Dash waves."))[0]).toEqual([C.dash]);
+    expect(who(draftOf("Dash is scared of cars.", "Dash waves."))[0]).toEqual([C.dash]);
+    expect(who(draftOf("Dash finds a red car in the garage.", "Dash waves."))[0]).toEqual([C.dash, ROSSO]);
+    expect(who(draftOf("Dash plays with his toy car, then drives home.", "Dash waves."))[0]).toEqual([C.dash, ROSSO]);
+    expect(toOwnScript(draftOf("Dash plays with his toy car at home.", "Dash waves."), cast, chars).scenes[0]).toMatchObject({ who: [C.dash], place: "living_room" });
   });
 });

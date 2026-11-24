@@ -133,6 +133,26 @@ export function setSwitchBare(on: boolean): void {
   if (typeof document !== "undefined") document.documentElement.toggleAttribute("data-ws-bare", on);
 }
 
+// ---------- The dock's room over the rail's foot (Clips Funded's rail follows it in the same task) ----------
+
+const dockRoomListeners = new Set<() => void>();
+
+/**
+ * The shell's dock has just written the room its switch and Live chip take (html's --ws-dock-room, WorkspaceDock):
+ * whoever leaves that room free hears it at once, in the same task, before anything else reads the page or a frame is
+ * drawn. A ResizeObserver only hears it on the next frame drawn, which on a slow machine (CI's software paint) came
+ * hundreds of ms later.
+ */
+export function dockRoomChanged(): void {
+  for (const fn of [...dockRoomListeners]) fn();
+}
+
+/** Calls `fn` each time the shell's dock changes its room (Clips Funded's rail keeps its chosen page in view). */
+export function onDockRoom(fn: () => void): () => void {
+  dockRoomListeners.add(fn);
+  return () => void dockRoomListeners.delete(fn);
+}
+
 // ---------- Clip Factory's search, kept while it is hidden (§45.35 D18) ----------
 
 /** The search of Clip Factory's kept route, given by the shell around Clip Factory's pane (null: no pane around). */

@@ -317,10 +317,22 @@ export function ownFactProblems(own: OwnScript, topicId: string | null): string[
   const out: string[] = [];
   const advice = "the checked advice says to use dipped headlights in fog. (The Highway Code)";
   own.scenes.forEach((s, i) => {
-    if (/full beam|high beam/i.test(s.what)) out.push(`Your scene ${i + 1} (“${s.what}”): ${advice}`);
-    if (s.caption && /full beam|high beam/i.test(s.caption)) out.push(`Your scene ${i + 1}'s caption (“${s.caption}”): ${advice}`);
+    if (saysFullBeam(s.what)) out.push(`Your scene ${i + 1} (“${s.what}”): ${advice}`);
+    if (s.caption && saysFullBeam(s.caption)) out.push(`Your scene ${i + 1}'s caption (“${s.caption}”): ${advice}`);
   });
   return out;
+}
+
+/**
+ * True when words say to use full beam: "puts on full beam", never "not full beam", "Never use full beam in fog!" or
+ * "don't use full beam" (a no before it in its part of the sentence: that is the checked advice).
+ */
+export function saysFullBeam(text: string): boolean {
+  for (const m of text.matchAll(/full beam|high beam|main beam/gi)) {
+    const part = text.slice(0, m.index).split(/[.!?;:,]/).pop() ?? "";
+    if (!/(?<![\p{L}])(?:not|never|no|without|avoid|instead of|don['’]?t|doesn['’]?t|won['’]?t|isn['’]?t|aren['’]?t)(?![\p{L}])/iu.test(part)) return true;
+  }
+  return false;
 }
 
 // ---------- PATCH: Change my script, and the captions editor's mirror (§45.46.5) ----------

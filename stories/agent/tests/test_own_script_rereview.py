@@ -647,7 +647,8 @@ def test_the_owners_words_are_read_by_code_never_from_the_pieces() -> None:
         return [(m.family, m.doers and sorted(m.doers), m.denied, m.soft, m.count) for m in r.mentions]
 
     assert said("Lamo falls asleep.") == [] and said("Lamo watches the snow fall.") == []
-    assert said("In the fall, Lamo hits the brakes.") == []
+    # "hits the brakes" is no bump and "the fall" no fall; since round 1 it is a stop (a car's stop is owed too)
+    assert said("In the fall, Lamo hits the brakes.") == [("stop", ["c1"], False, False, 1)]
     assert said("Lamo nearly falls.") == [("fall", ["c1"], False, True, 1)]  # may be drawn, never owed
     assert said("Lamo doesn't fall but Rosa falls.") == [("fall", ["c1"], True, False, 1), ("fall", ["c2"], False,
                                                                                               False, 1)]  # fmt: skip
@@ -655,16 +656,21 @@ def test_the_owners_words_are_read_by_code_never_from_the_pieces() -> None:
     assert said("Lamo jumps twice and Rosa dances.") == [("jump", ["c1"], False, False, 2),
                                                         ("dance", ["c2"], False, False, 1)]  # fmt: skip
     assert own_words.read("Lamo jumps in the car.", names).mentions[0].also == {"get_in", "get_out"}
-    assert said("Lamo and Rosa jump.") == [("jump", ["c1", "c2"], False, False, 1)]
+    # each of them jumps (round 1: one of the two was enough)
+    assert said("Lamo and Rosa jump.") == [("jump", ["c1"], False, False, 1), ("jump", ["c2"], False, False, 1)]
     assert said("Lamo hugs Rosa and falls.") == [("fall", ["c1"], False, False, 1)]  # Lamo falls, not Rosa
     assert said("The boy falls.") == [("fall", None, False, False, 1)]  # someone: not owed by a cast member
-    assert said("Rosa trips Lamo.") == [("fall", ["c1", "c2"], False, False, 1)]  # the one tripped may fall
+    assert said("Rosa trips Lamo.") == [
+        ("fall", ["c1"], False, False, 1)
+    ]  # the one tripped falls (round 1: never Rosa)
     assert said("Rosso skids past Rosa.") == [("skid", ["c3"], False, False, 1)]  # never one after "past"
     assert own_words.tokens("fa\u200bll\u200bs") == ["falls"]
     assert own_words.read("Rosa isn't here, so Lamo plays.", names).absent == {"c2"}
     assert own_words.read("Rosa is not happy.", names).absent == set()
-    assert [(m.happy, sorted(m.who)) for m in own_words.read("Lamo hugs Rosa.", names).moods] == [(True, ["c1", "c2"])]
-    assert own_words.read("Lamo is not happy.", names).moods == []
+    # the one who hugs is happy; the one hugged may be crying ("Rosa hugs Lamo, who is crying": round 1)
+    assert [(m.happy, sorted(m.who)) for m in own_words.read("Lamo hugs Rosa.", names).moods] == [(True, ["c1"])]
+    # "not happy" is never drawn happy (round 1: it was no feeling at all)
+    assert [(m.happy, sorted(m.who)) for m in own_words.read("Lamo is not happy.", names).moods] == [(False, ["c1"])]
 
 
 def test_capitalised_words_kids_write_are_not_asked_about_as_names() -> None:

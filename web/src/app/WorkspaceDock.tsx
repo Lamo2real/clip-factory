@@ -44,7 +44,7 @@ import {
   switchTarget,
   wantedStoriesWorkspace,
 } from "../stories/workspace.ts";
-import { APP_SLIDE_MS, appSliding, prepareAppSlide, startAppSlide, storiesOnScreen, useAppActive, useStoriesWorkspaceShown, type AppName, type AppSlide } from "./shell.ts";
+import { APP_SLIDE_MS, appSliding, dockRoomChanged, prepareAppSlide, startAppSlide, storiesOnScreen, useAppActive, useStoriesWorkspaceShown, type AppName, type AppSlide } from "./shell.ts";
 
 // ---------- Where it sits on a computer: Clip Factory's sidebar, measured once into numbers ----------
 
@@ -779,6 +779,8 @@ export function WorkspaceDock() {
     // Beside the fold button (a folded sidebar in a short window) it is over the brand's name in Lamo Stories' rail.
     if (layout.mode === "top") root.style.setProperty("--ws-dock-name", "hidden");
     else root.style.removeProperty("--ws-dock-name");
+    // Lamo Stories' rail follows its new room in this same task (its chosen page stays in view; shell.ts onDockRoom).
+    dockRoomChanged();
   }, [layout.mode, layout.room]);
   useEffect(
     () => () => {
@@ -787,6 +789,7 @@ export function WorkspaceDock() {
       root.style.removeProperty("--ws-dock-room");
       root.style.removeProperty("--ws-dock-name");
       root.style.removeProperty("--ws-live-row");
+      dockRoomChanged();
     },
     [],
   );
