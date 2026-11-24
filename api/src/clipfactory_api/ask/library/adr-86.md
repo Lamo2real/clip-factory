@@ -44,7 +44,9 @@
   again does. Paused has no Start again (nothing asks the helper to go on), so the row says what comes next.
 - **Amended 2026-11-23 (round 3).** It replaces the amendment above in its campaign and 15-minute parts (D1 to D6, after
   a skeptical review of that amendment; CONTRACTS §42.2, §46, §47.1 to §47.6, §38):
-  - **D1, campaign clips skip TikTok for now.** No path (Upload with TikTok ticked, an auto-posting run, Post with my
+  - **D1, campaign clips skip TikTok for now.** *Replaced by [ADR-96](#adr-96-campaign-and-paid-clips-post-tiktok-through-the-mac-with-tiktoks-label)
+    (2026-11-24): the helper sets TikTok's label and the Mac's done reaches Content Rewards, so campaign clips go
+    through the Mac.* No path (Upload with TikTok ticked, an auto-posting run, Post with my
     Mac, Send these to my Mac) makes a campaign Mac post again. Reasons: the helper can't set TikTok's Branded content
     disclosure yet (a paid promotion without it breaks TikTok's rules and risks the account), and the Mac's done never
     sends the post to Content Rewards (only the clip flow's publish loop makes a submission), so it could not earn.

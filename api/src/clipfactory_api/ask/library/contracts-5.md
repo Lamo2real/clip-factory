@@ -39,10 +39,10 @@ try again in a minute, §17.4), `internal`.
 | DELETE `/v1/clips/{clipId}/tiktok/posted` | – | `{ "clip", "posts" }` (Undo of the above, §42; a post the owner's Mac made → 409, §47; kept, the web no longer calls it, ADR-86) |
 | GET `/v1/tiktok/mac` | – | `{ "on", "helper": MacHelper \| null, "queue": MacJob[] }` (the Mac helper's queue, §47) |
 | POST `/v1/tiktok/mac/ping` | `{ "state", "reason"?, "version"?, "device", "login"?, "loginDone"?, "backlogAt"?, "holdBefore"?, "backfill"?, "resumeDone"?, "letGoDone"? }` | `{ "on" }` (the Mac helper checks in, §47; `login` and `loginDone` §47.8; its plan and the owner's requests §47.3) |
-| POST `/v1/tiktok/mac/send` | `{ "clipIds": string[] (1–25), "now"?: boolean }` | `{ "results": [{ "clipId", "sent", "reason"? }] }` (Send these to my Mac, §47; in order, each id once; `now: true` is a row's Post with my Mac, `macSource: "upload"`, §47.2) |
+| POST `/v1/tiktok/mac/send` | `{ "clipIds": string[] (1–25), "now"?: boolean }` | `{ "results": [{ "clipId", "sent", "reason"? }] }` (Send these to my Mac, §47; in order, each id once; `now: true` is a row's Post with my Mac, `macSource: "upload"`, §47.2; a campaign or paid clip goes with TikTok's label, §47.12) |
 | POST `/v1/tiktok/mac/login` | `{ "action": "change" \| "forget" }` | `{ "helper": MacHelper }` (Change or Forget the TikTok login kept on the Mac; the Mac does it when it next checks in, §47.8) |
 | POST `/v1/tiktok/mac/request` | `{ "action": "resume" \| "let_go" }` | `{ "helper": MacHelper }` (Start my Mac again, Let them go; the Mac does it when it next checks in, §47.3) |
-| POST `/v1/clips/{clipId}/tiktok/mac/claim` | `{ "device" }` | `{ "job": MacJob }` (§47) |
+| POST `/v1/clips/{clipId}/tiktok/mac/claim` | `{ "device", "version"? }` | `{ "job": MacJob }` (§47; a post with TikTok's label only for `version` ≥ `MAC_BRAND_FROM`, §47.12) |
 | POST `/v1/clips/{clipId}/tiktok/mac/step` | `{ "device", "step", "attempt"? }` | `{ "job": MacJob }` (§47; the same step sent again is the job's beat) |
 | POST `/v1/clips/{clipId}/tiktok/mac/done` | `{ "device", "link"? }` | `{ "clip", "posts", "note"? }` (the Mac posted it, §47) |
 | POST `/v1/clips/{clipId}/tiktok/mac/stopped` | `{ "device", "reason", "needsYou"?, "attempt"?, "code"?: "login" }` | `{ "job": MacJob }` (§47; `code` §47.11) |

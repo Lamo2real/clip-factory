@@ -374,8 +374,9 @@ how to navigate it". ([the steps](SETUP_POSTING.md#content-rewards),
   back), plus "Turn on Branded content" only if he turned TikTok's switch off; a clip that can't earn can't go up this
   way (BR-28). Upload to offers only the places the campaign pays
   for that are set up and linked inside Content Rewards; campaign clips are public, never made for kids, and marked
-  as paid (YouTube Paid promotion, X Paid partnership, TikTok Branded content by the owner's own tap). TikTok is left
-  out until TikTok approves the app (round 3: his Mac can't mark a post as Branded content yet, BR-32 AC5).
+  as paid (YouTube Paid promotion, X Paid partnership, TikTok Branded content). Until TikTok approves the app, his
+  Mac posts TikTok with Branded content ticked already, which adds TikTok's Paid partnership label (ADR-96, BR-32
+  AC5); once TikTok's own API posts them, Branded content is the owner's own tap.
 - AC8: After each post, Clip Factory sends the clip to Content Rewards by itself within 30 minutes (0 steps), and its
   line shows Sending → Sent → Waiting for the brand → Approved or Not approved (with the brand's reason), the views
   and the money Content Rewards reports for it.
@@ -646,10 +647,19 @@ taps, and records "Posted by your Mac · Everyone" with the link.
   him: **Open the stopped clip**, where Try again and It's on TikTok are.
 - AC5: **He never posts by hand** (23 Nov 2026: "its always the automation that covers it weather its invoked by be
   clicking upload or if its the schedule"). Every clip that can go to TikTok goes through his Mac, Upload or the
-  schedule. **Campaign clips skip TikTok for now** (round 3, ADR-86): his Mac can't mark a post as Branded content
-  yet, and Content Rewards never receives what his Mac posts, so a campaign clip's TikTok is unticked in Review and
-  its row says "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet." Answering a
-  stopped post (**It's on TikTok** or **Try again**) lets a Mac that needed him go on.
+  schedule. **Campaign clips and paid clips go through his Mac with TikTok's label** (24 Nov 2026,
+  [ADR-96](DECISIONS.md#adr-96-campaign-and-paid-clips-post-tiktok-through-the-mac-with-tiktoks-label), amends ADR-86
+  round 3): his Mac sets TikTok's "Disclose post content" with Branded content (the "Paid partnership" label, every
+  campaign clip) or Your brand ("Promotional content"), reads it back before Post, or doesn't post. While **Your Mac
+  posts TikTok** is on, Review's TikTok row is the clip's own (Who can see it, Comments, Duet, Stitch, Commercial
+  content), starting on My settings with no tap, and ticking Branded content never holds Upload; a campaign clip gets
+  TikTok among its places, Everyone with Branded content ticked, and Clip Factory sends its link to Content Rewards
+  within its 30 minutes. **Post with my Mac** and **Send these to my Mac** post paid clips with their label too; the
+  row ends " · Paid partnership label" (or " · Promotional content label"). A labelled clip waiting on an older
+  helper reads "Waiting for your Mac · it needs an update to add TikTok's label", and nothing goes without its label.
+  With the switch off and TikTok not approved yet, a campaign clip's TikTok says "Campaign clips go on TikTok from
+  your Mac. Turn it on in Settings › Posting › Your Mac posts TikTok." Answering a stopped post (**It's on TikTok**
+  or **Try again**) lets a Mac that needed him go on.
 - AC6: **Find it for me never saves without a link** (round 3): nothing found → "Not found yet. Try again in a
   minute, or paste the link." and nothing changes. Saving it without a link is only **It's on TikTok, no link**, after
   its question.

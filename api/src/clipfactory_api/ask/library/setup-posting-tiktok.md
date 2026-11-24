@@ -14,8 +14,10 @@ about 20:30** for the first clip you sent), **Posting…**, then **Posted by you
 **Didn't work**? Tap **Try again**. **Not sure it posted**? Look on your TikTok: it's there? Tap **It's on TikTok**,
 then **Find it for me** (or paste its link; Find it for me saves nothing until it finds it, and **It's on TikTok, no
 link** saves it without one); it isn't? Once 30 minutes have passed since your Mac pressed Post, tap **Try again**,
-then **Yes, post it again**. **Not on TikTok yet**? Tap **Post with my Mac**. **Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet.** (that is the row of a campaign
-clip: nothing to do; Review leaves TikTok unticked for it). The row says your Mac is off? Tap **Turn on**. It hasn't
+then **Yes, post it again**. **Not on TikTok yet**? Tap **Post with my Mac**. Campaign clips and paid clips go
+through your Mac too, with TikTok's label: their row ends **· Paid partnership label** (or **· Promotional content
+label**). **Waiting for your Mac · it needs an update to add TikTok's label**? Set up the helper on your Mac again:
+nothing is posted without its label. The row says your Mac is off? Tap **Turn on**. It hasn't
 checked in? Tap **Open Your Mac posts TikTok**. It is paused? Tap **Start my Mac again**. It needs you? Tap **Open the
 stopped clip**: Try again and It's on TikTok are there. **Held on your Mac**? Tap **Post with my Mac**, or **Let them
 go** in Settings › Posting › Your Mac posts TikTok. **Everyone** needs a public TikTok account. While your
@@ -286,7 +288,9 @@ The answers, word for word. They are all true today: do not change them to sound
 | "The return address does not match. Copy it again in step 10." | Do step 10 again with the **Copy** button. |
 | "A permission box was not ticked. Connect again and tick every box." | Do step 12, then connect again and leave every switch on. |
 | "TikTok only takes Clip Factory's own uploads on a private account for now, so your Mac posts it for everyone." | Tap **Post with my Mac** on the clip's TikTok row (it says **Turn on** first while **Your Mac posts TikTok** is off). Keep your account public. |
-| "Campaign clips skip TikTok for now: your Mac can't mark them as Branded content yet." | Nothing to do: a campaign clip goes to YouTube, Instagram, X and Facebook. On Upload, turn TikTok off, then tap **Upload**. |
+| "Campaign clips go on TikTok from your Mac. Turn it on in Settings › Posting › Your Mac posts TikTok." (Upload adds "Or turn TikTok off, then tap Upload."; Try again and Send these to my Mac add "Tap Try again on another place.") | Turn on **Your Mac posts TikTok** in Settings › Posting. Or, on Upload, turn TikTok off, then tap **Upload**; on Try again, tap **Try again** on another place. |
+| "Your Mac posts campaign clips on TikTok. Tap Post with my Mac." | Tap **Post with my Mac** on the clip's TikTok row. |
+| "Your Mac needs an update to add TikTok's label to this clip. Set up your Mac again." | Set up the helper on your Mac again ([mac/tiktok-helper](../mac/tiktok-helper/README.md)). The clip waits, then goes with its label. |
 | "Your Mac pressed Post less than 30 minutes ago. Look on your TikTok first, then try again later." | Look on your TikTok. It's there? Tap **It's on TikTok**. It isn't? Tap **Try again** once 30 minutes have passed. |
 | "Not found yet. Try again in a minute, or paste the link." | Tap **Find it for me** again in a minute, or paste the post's link and tap **Save the link**. Nothing was saved. |
 | "Clip Factory can't look on your TikTok until TikTok is connected. Paste the link instead." | Paste the post's link and tap **Save the link**. |
@@ -294,13 +298,16 @@ The answers, word for word. They are all true today: do not change them to sound
 | "TikTok did not answer. Try again in a few minutes." | Wait, then press **Connect TikTok**. |
 | "Finish the TikTok review steps to post outside the Sandbox." | Do steps 21 to 23. |
 
-**While your Mac posts TikTok**, a clip with TikTok ticked starts on your saved choices like every other place
-(Everyone, with Comments, Duet and Stitch on, unless you changed them): just press **Upload**. Your Mac always posts
-TikTok with your saved choices: the **TikTok** row says so ("Your Mac posts it with My settings: …") and **Change My
-settings** takes you there. Paid partnerships can't go through your Mac yet: with **Your brand** or **Branded
-content** ticked, Upload waits; untick it, or untick TikTok for that clip, then post it in the TikTok app with its
-label. Don't use **Post with my Mac** or **Send these to my Mac** for that clip: your Mac would post it without the
-label. **While Your Mac posts TikTok is off**,
+**While your Mac posts TikTok**, the clip's **TikTok** row is its own, like every other place: Who can see it
+(Everyone, Friends, Only me), Comments, Duet, Stitch and Commercial content (Your brand, Branded content). It starts on
+My settings (Everyone, with Comments, Duet and Stitch on, unless you changed them), with no tap needed: just press
+**Upload**. Your Mac posts it the way the row says. A paid partnership? Tick **Branded content**: Upload still goes,
+and your Mac adds TikTok's **Paid partnership** label (**Your brand** adds **Promotional content**). It checks the
+label is on before it presses Post, or it doesn't post. Campaign clips have TikTok ticked already, with Everyone and
+Branded content. **Post with my Mac** in Library and **Send these to my Mac** in Settings post paid clips with their
+label too. In Settings › Posting › My settings, TikTok's fold **Paid partnership?** says the same: "Tick Branded content
+in that clip's TikTok row.", "Your Mac adds TikTok's Paid partnership label when it posts it.", "Campaign clips have it
+ticked already." **While Your Mac posts TikTok is off**,
 every clip with TikTok ticked waits for your tap: press **Use my settings** (it puts your saved TikTok choices on), or
 open the **TikTok** row and pick who can see it there (there is no default, TikTok's rule for apps that post through
 its API). The row also has the Comments, Duet and Stitch switches and Commercial content (tick **Branded content** for
