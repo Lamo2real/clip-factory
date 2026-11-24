@@ -11,6 +11,11 @@ order with source-over blending in sRGB (no linear-light conversion, exactly lik
   ``[offset, alpha]`` stops (offset 0 the centre, 1 the edge, linear between stops and the end stops' alphas past
   them), the browser's radial gradient in the ellipse's own frame; nothing past the edge (the engine ends every fade
   at alpha 0, so the edge needs no anti-aliasing);
+* a ``grad`` or ``glow`` with ``dither`` (night drive's sky and vignette) rounds the values it paints to whole levels
+  with a seeded threshold instead of to the nearest: ``floor(value + T(x, y, seed))``, ``T`` in 0..1 from
+  :func:`dither_thresholds` (the same hash as ``preview/draw.ts ditherAt``), so a slow fade never shows as 1-level
+  rings and every pixel stays within one level of its true value (a glow: the pixels inside its ellipse; the rest of
+  its box rounds to the nearest level, as the 8-bit canvas already holds it);
 * ``poly`` is a closed polygon of flattened curves with the non-zero winding rule: exact horizontal coverage and
   ``POLY_SAMPLES`` sample rows per pixel row, the winding summed per pixel and capped at 1 (exact inside, and on
   every edge pixel except where two opposite windings meet inside one pixel);
@@ -34,6 +39,7 @@ import numpy as np
 WIDTH = 1080
 HEIGHT = 1920
 POLY_SAMPLES = 16  # sample rows per pixel row in a polygon (horizontal coverage is exact)
+DITHERED = ("grad", "glow")  # the kinds that may carry ``dither`` (a seed, a whole number 0 .. 2^32 - 1)
 KINDS = ("fill", "grad", "rect", "circle", "ellipse", "glow", "poly", "line", "image")
 _HEX: dict[str, np.ndarray] = {}
 
@@ -71,7 +77,7 @@ def prim_problems(p: Any) -> list[str]:
     if k not in PRIM_FIELDS:
         return [f"unknown primitive kind {k!r}"]
     out: list[str] = []
-    allowed = {"k", "a", *PRIM_FIELDS[k]}
+    allowed = {"k", "a", *PRIM_FIELDS[k], *(("dither",) if k in DITHERED else ())}
     out += [f"{k}: unknown field {f!r}" for f in p if f not in allowed]
     for f in PRIM_FIELDS[k]:
         if f not in p:
@@ -102,6 +108,34 @@ def prim_problems(p: Any) -> list[str]:
             out.append(f"{k}: {f} must be a number")
     if "a" in p and not (_is_num(p["a"]) and 0 <= p["a"] <= 1):
         out.append(f"{k}: a must be 0..1")
+    if "dither" in p and k in DITHERED:
+        d = p["dither"]
+        if not (isinstance(d, int) and not isinstance(d, bool) and 0 <= d <= 0xFFFFFFFF):
+            out.append(f"{k}: dither must be a whole number 0..4294967295 (its seed)")
+    return out
+
+
+_THRESHOLDS: dict[tuple[int, int, int], np.ndarray] = {}
+
+
+def dither_thresholds(seed: int, width: int, height: int) -> np.ndarray:
+    """The dither's thresholds (height × width, float32, 0 ≤ T ≤ 1 − 2^-16) for ``seed``: per pixel (x, y) a 32-bit
+    integer hash, its top 16 bits over 2^16 (so a whole level plus T stays below the next one in float32). ``preview/draw.ts ditherAt`` is the same function, bit for bit (the engine README,
+    Dither). Kept for the last few sizes and seeds, since every frame of a story uses the same pattern."""
+    key = (seed & 0xFFFFFFFF, width, height)
+    hit = _THRESHOLDS.get(key)
+    if hit is not None:
+        return hit
+    x = np.arange(width, dtype=np.uint32)[None, :]
+    y = np.arange(height, dtype=np.uint32)[:, None]
+    h = x * np.uint32(0x9E3779B1) + y * np.uint32(0x85EBCA77) + np.uint32((key[0] * 0xC2B2AE3D) & 0xFFFFFFFF)
+    h = (h ^ (h >> np.uint32(15))) * np.uint32(0x2C1B3C6D)
+    h = (h ^ (h >> np.uint32(12))) * np.uint32(0x297A2D39)
+    h ^= h >> np.uint32(15)
+    out = (h >> np.uint32(16)).astype(np.float32) / np.float32(65536.0)
+    if len(_THRESHOLDS) >= 4:
+        _THRESHOLDS.pop(next(iter(_THRESHOLDS)))
+    _THRESHOLDS[key] = out
     return out
 
 
@@ -162,6 +196,14 @@ class Canvas:
         step *= k
         region += step
 
+    def _dither(self, p: Mapping[str, Any]) -> None:
+        """A dithered grad's whole frame to whole levels: ``floor(v + T)``."""
+        seed = p.get("dither")
+        if seed is None:
+            return
+        self.buf += dither_thresholds(int(seed), self.width, self.height)[..., None]
+        np.floor(self.buf, out=self.buf)
+
     # --- primitives ---------------------------------------------------------------------------------------------
 
     def fill(self, p: Mapping[str, Any]) -> None:
@@ -175,6 +217,7 @@ class Canvas:
         d2 = dx * dx + dy * dy
         if len(stops) == 1 or d2 < 1e-9:
             self.buf[:] = cols[-1] if d2 < 1e-9 else cols[0]
+            self._dither(p)
             return
 
         def colours(t: np.ndarray) -> np.ndarray:
@@ -183,12 +226,27 @@ class Canvas:
 
         tx = (self._xs[0] - float(p["x0"])) * (dx / d2)
         ty = (self._ys[:, 0] - float(p["y0"])) * (dy / d2)
+        seed = p.get("dither")
+        if abs(dx) < 1e-9 and seed is not None:
+            # vertical and dithered: rows past either end are a stop's own whole colour, which the dither keeps as it
+            # is, so only the rows inside the fade take floor(value + T), in one pass
+            rows = colours(ty)
+            inside = np.flatnonzero((ty > 0) & (ty < 1))
+            a, b = (int(inside[0]), int(inside[-1]) + 1) if inside.size else (0, 0)
+            self.buf[:a] = rows[:a, None, :]
+            self.buf[b:] = rows[b:, None, :]
+            if b > a:
+                t = dither_thresholds(int(seed), self.width, self.height)[a:b]
+                np.add(rows[a:b, None, :], t[:, :, None], out=self.buf[a:b])
+                np.floor(self.buf[a:b], out=self.buf[a:b])
+            return
         if abs(dx) < 1e-9:  # vertical: one colour per row
             self.buf[:] = colours(ty)[:, None, :]
         elif abs(dy) < 1e-9:  # horizontal: one colour per column
             self.buf[:] = colours(tx)[None, :, :]
         else:
             self.buf[:] = colours(ty[:, None] + tx[None, :])
+        self._dither(p)
 
     def rect(self, p: Mapping[str, Any]) -> None:
         x, y, w, h = (float(p[k]) for k in ("x", "y", "w", "h"))
@@ -287,8 +345,24 @@ class Canvas:
         offs = np.array([min(1.0, max(0.0, float(o))) for o, _ in fade], np.float64)
         alps = np.array([min(1.0, max(0.0, float(a))) for _, a in fade], np.float64)
         cov = np.interp(rho, offs, alps).astype(np.float32)
-        cov[rho >= 1.0] = 0.0
-        self._blend(ya, xa, cov, rgb(p["color"]), _alpha(p))
+        outside = rho >= 1.0
+        cov[outside] = 0.0
+        seed = p.get("dither")
+        if seed is None:
+            self._blend(ya, xa, cov, rgb(p["color"]), _alpha(p))
+            return
+        # dithered: source-over with the threshold added to the step, then floor (T, or 0.5 outside the ellipse, where
+        # the step is 0 and the pixel keeps its nearest level)
+        alpha = _alpha(p)
+        if alpha <= 0:
+            return
+        region = self.buf[ya:yb, xa:xb]
+        t = np.where(outside, np.float32(0.5), dither_thresholds(int(seed), self.width, self.height)[ya:yb, xa:xb])
+        step = np.subtract(rgb(p["color"]), region)
+        step *= (cov if alpha >= 1 else cov * np.float32(alpha))[..., None]
+        step += t[..., None]
+        region += step
+        np.floor(region, out=region)
 
     def poly(self, p: Mapping[str, Any]) -> None:
         pts = np.asarray(p["pts"], np.float64)

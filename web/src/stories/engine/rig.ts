@@ -1252,49 +1252,48 @@ export function drawBust(pen: Pen, look: CharacterLook, g: Geo, pose: Pose, o: B
   for (let i = right.length - 2; i >= 0; i -= 2) left.push(-right[i]!, right[i + 1]!);
   const raw = [...right, ...left];
   const shirt = raw.map((v, i) => (i % 2 === 0 ? X(v) : v));
-  pen.poly(inflate(shirt, P.ow), P.O);
-  pen.poly(shirt, P.top);
-  // the outfit's own pattern, so the character is the same up close
-  if (look.outfit.pattern === "stripes") {
-    for (const k of [1.35, 2.35, 3.35, 4.35]) {
-      const y0 = top + ry * k;
-      pen.poly(clipConvex([-rx * 3, y0, rx * 3, y0, rx * 3, y0 + ry * 0.36, -rx * 3, y0 + ry * 0.36], shirt), P.accent, 0.9);
-    }
-  } else if (look.outfit.pattern === "dots") {
-    const spots: [number, number][] = [
-      [-0.78, 1.5],
-      [0.62, 1.35],
-      [-0.15, 2.3],
-      [0.95, 2.6],
-      [-1.0, 3.1],
-      [0.35, 3.4],
-    ];
-    for (const [fx, fy] of spots) pen.circle(X(fx * rx), top + fy * ry, rx * 0.11, P.accent, 0.95);
-  }
-  // the lit shoulder on the key side, the cel shadow on the lamp side
-  const slope = [...quadPts(rx * 0.5, top, rx * 1.12, top + ry * 0.05, rx * 1.3, top + ry * 0.75, 6), rx * 1.33, top + ry * 1.1];
-  const band: number[] = [];
-  const inner: number[] = [];
-  for (let i = 0; i < slope.length; i += 2) {
-    const x = slope[i]!;
-    const y = slope[i + 1]!;
-    const k = Math.min(1, i / 6);
-    const dx = rx * 0.25 - x;
-    const dy = top + ry * 2.4 - y;
-    const l = Math.hypot(dx, dy) || 1;
-    const w = ry * 0.24 * k * (i >= slope.length - 2 ? 0.2 : 1);
-    band.push(X(-m * -x), y);
-    inner.push(X(-m * -(x + (dx / l) * w)), y + (dy / l) * w);
-  }
-  for (let i = inner.length - 2; i >= 0; i -= 2) band.push(inner[i]!, inner[i + 1]!);
-  pen.poly(band, lt(P, P.top, 0.08));
-  const shadow = clipConvex(shirt, halfPlane(X(-rx * 0.52 * m), top, X(-rx * 0.74 * m), bottom, X(-rx * 3 * m), top));
-  if (P.nd) pen.poly(shadow, ND.celDark, 0.22);
-  else pen.poly(shadow, shade(P.top, -0.12));
-  // folds: where each upper arm meets the chest, and a crease from each armpit (night drive: the arms themselves)
-  const fold = dk(P, P.top, 0.3);
-  if (P.nd) bustArmsNight(pen, P, rx, ry, top, bottom, X);
+  // night drive: the chest and each upper arm a shape of their own (bustBodyNight)
+  if (P.nd) bustBodyNight(pen, look, P, rx, ry, top, bottom, X);
   else {
+    pen.poly(inflate(shirt, P.ow), P.O);
+    pen.poly(shirt, P.top);
+    // the outfit's own pattern, so the character is the same up close
+    if (look.outfit.pattern === "stripes") {
+      for (const k of [1.35, 2.35, 3.35, 4.35]) {
+        const y0 = top + ry * k;
+        pen.poly(clipConvex([-rx * 3, y0, rx * 3, y0, rx * 3, y0 + ry * 0.36, -rx * 3, y0 + ry * 0.36], shirt), P.accent, 0.9);
+      }
+    } else if (look.outfit.pattern === "dots") {
+      const spots: [number, number][] = [
+        [-0.78, 1.5],
+        [0.62, 1.35],
+        [-0.15, 2.3],
+        [0.95, 2.6],
+        [-1.0, 3.1],
+        [0.35, 3.4],
+      ];
+      for (const [fx, fy] of spots) pen.circle(X(fx * rx), top + fy * ry, rx * 0.11, P.accent, 0.95);
+    }
+    // the lit shoulder on the key side, the cel shadow on the lamp side
+    const slope = [...quadPts(rx * 0.5, top, rx * 1.12, top + ry * 0.05, rx * 1.3, top + ry * 0.75, 6), rx * 1.33, top + ry * 1.1];
+    const band: number[] = [];
+    const inner: number[] = [];
+    for (let i = 0; i < slope.length; i += 2) {
+      const x = slope[i]!;
+      const y = slope[i + 1]!;
+      const k = Math.min(1, i / 6);
+      const dx = rx * 0.25 - x;
+      const dy = top + ry * 2.4 - y;
+      const l = Math.hypot(dx, dy) || 1;
+      const w = ry * 0.24 * k * (i >= slope.length - 2 ? 0.2 : 1);
+      band.push(X(-m * -x), y);
+      inner.push(X(-m * -(x + (dx / l) * w)), y + (dy / l) * w);
+    }
+    for (let i = inner.length - 2; i >= 0; i -= 2) band.push(inner[i]!, inner[i + 1]!);
+    pen.poly(band, lt(P, P.top, 0.08));
+    pen.poly(clipConvex(shirt, halfPlane(X(-rx * 0.52 * m), top, X(-rx * 0.74 * m), bottom, X(-rx * 3 * m), top)), shade(P.top, -0.12));
+    // folds: where each upper arm meets the chest, and a crease from each armpit
+    const fold = dk(P, P.top, 0.3);
     for (const s of [-1, 1]) {
       pen.line(quadPts(X(s * rx * 1.02), top + ry * 1.1, X(s * rx * 0.88), top + ry * 1.9, X(s * rx * 0.97), top + ry * 3, 6), P.thin, fold, 0.78);
       pen.line(quadPts(X(s * rx * 0.9), top + ry * 1.45, X(s * rx * 0.72), top + ry * 1.55, X(s * rx * 0.56), top + ry * 1.95, 4), P.thin, fold, 0.72);
@@ -1320,10 +1319,13 @@ export function drawBust(pen: Pen, look: CharacterLook, g: Geo, pose: Pose, o: B
     pen.line([X(-w), by - w * 0.55, X(-w), by + w * 0.55, X(0), by, X(w), by - w * 0.55, X(w), by + w * 0.55], P.ow, P.O, 0.7);
   }
   const chin = arcPts(turn * rx * 0.12, ry * 0.99, rx * 0.55, ry * 0.12, 0, 360, 16).slice(0, -2);
+  // (night drive's rim light is on the lamp side's sleeve, drawn with it)
   if (P.nd) pen.poly(clipConvex(chin, shirt), ND.ao, 0.4);
-  else pen.poly(clipConvex(chin, shirt), shade(P.top, -0.18));
-  const rimPts = quadPts(rx * 0.5, top + P.ow, rx * 1.1, top + ry * 0.06 + P.ow, rx * 1.26, top + ry * 0.75, 6);
-  pen.line(rimPts.map((v, i) => (i % 2 === 0 ? X(-m * v) : v)), P.ow, P.rim, P.rimA);
+  else {
+    pen.poly(clipConvex(chin, shirt), shade(P.top, -0.18));
+    const rimPts = quadPts(rx * 0.5, top + P.ow, rx * 1.1, top + ry * 0.06 + P.ow, rx * 1.26, top + ry * 0.75, 6);
+    pen.line(rimPts.map((v, i) => (i % 2 === 0 ? X(-m * v) : v)), P.ow, P.rim, P.rimA);
+  }
 
   // the head, through the same parts as drawCharacter
   const headPose = { turn, lookX: pose.lookX, lookY: pose.lookY, nod: pose.nod };
@@ -1339,27 +1341,127 @@ export function drawBust(pen: Pen, look: CharacterLook, g: Geo, pose: Pose, o: B
   });
 }
 
-/** Night drive's upper arms on a bust, in drawBust's rig units (X is its three-quarter squeeze): each hangs from a
- * round shoulder down the side of the shirt. The sleeve's edge is one clean line from the top of the shoulder in round
- * the armpit and down the inside of the arm, the chest beside it is in a narrow cel shadow (the arm stands in front of
- * the body), and one cel fold crosses the sleeve from the armpit. Lines and shades only, so the shirt's pattern carries
- * on over the arms. */
-function bustArmsNight(pen: Pen, P: Paint, rx: number, ry: number, top: number, bottom: number, X: (x: number) => number): void {
-  const pit = top + ry * 1.25;
-  for (const s of [-1, 1]) {
-    const at = (pts: number[]): number[] => pts.map((v, i) => (i % 2 === 0 ? X(s * v) : v));
-    // the seam bows in round the shoulder's cap, then runs down the arm's inside
-    const seam = [...quadPts(rx * 0.8, top + ry * 0.06, rx * 0.64, top + ry * 0.8, rx * 0.9, pit, 8), rx * 0.95, top + ry * 2.6, rx, bottom];
-    // the chest's shadow along the arm's inside, from just above the armpit (a point there) down
-    const edge = seam.slice(10);
-    const inner: number[] = [];
-    for (let i = edge.length - 2; i >= 0; i -= 2) inner.push(edge[i]! - rx * 0.15 * Math.min(1, i / 6), edge[i + 1]!);
-    pen.poly(at([...edge, ...inner]), ND.celDark, 0.26);
-    // the fold: a crease curving from the armpit down and out across the sleeve, tapered at both ends
-    const crease = [...quadPts(rx * 0.91, pit + ry * 0.12, rx * 1.1, pit + ry * 0.22, rx * 1.2, pit + ry * 0.7, 6), ...quadPts(rx * 1.2, pit + ry * 0.7, rx * 1.07, pit + ry * 0.42, rx * 0.92, pit + ry * 0.38, 6).slice(2)];
-    pen.poly(at(crease), ND.celDark, 0.24);
-    pen.line(at(seam), P.ow * 0.9, P.O, 0.9);
+/** A quadratic Bézier's points from parameter ta to tb, `segs` steps (quadPts is the whole curve, 0 to 1). */
+function quadSpan(x0: number, y0: number, cx: number, cy: number, x1: number, y1: number, ta: number, tb: number, segs: number): number[] {
+  const pts: number[] = [];
+  for (let i = 0; i <= segs; i += 1) {
+    const t = ta + ((tb - ta) * i) / segs;
+    const u = 1 - t;
+    pts.push(u * u * x0 + 2 * u * t * cx + t * t * x1, u * u * y0 + 2 * u * t * cy + t * t * y1);
   }
+  return pts;
+}
+
+/** Night drive's dots on a bust: x in headRX, y in headRY below the shoulders' top, and the part they are on (-1 and 1
+ * the sleeves, 0 the chest), each well inside it. */
+const BUST_DOTS: readonly (readonly [number, number, -1 | 0 | 1])[] = [
+  [0.5, 1.35, 0],
+  [-1.13, 1.6, -1],
+  [-0.55, 1.9, 0],
+  [1.18, 2.3, 1],
+  [0.1, 2.6, 0],
+  [-0.4, 3.3, 0],
+];
+
+/** Night drive's shirt on a bust, in drawBust's rig units (X is its three-quarter squeeze): the chest and each upper arm
+ * a shape of its own with its own outline all round. A sleeve starts with a round cap on the shoulder (classic's outer
+ * curve) whose front edge bows in round the shoulder to the armpit; below it the sleeve hangs a little away from the
+ * chest and tapers towards the elbow, so a narrow gap (the seat behind) opens between them. The outside silhouette is
+ * classic's down to the elbow. The far arm (-x) is drawn before the chest, which overlaps it, the near arm after.
+ * Each part carries the outfit's pattern and its cel shadow on the lamp side: the chest's back third, the sleeve's
+ * outside on the lamp side and its inside on the key side, a fold darting from each sleeve's shadow at the armpit (one
+ * shape with it). The key side's cap gets the lit shoulder band, the lamp side's the rim light. */
+function bustBodyNight(pen: Pen, look: CharacterLook, P: Paint, rx: number, ry: number, top: number, bottom: number, X: (x: number) => number): void {
+  const m = P.mx;
+  const Y = (k: number) => top + ry * k;
+  const sh = [rx * 0.46, top, rx * 1.12, Y(0.05), rx * 1.3, Y(0.75)] as const;
+  // the sleeve's cap: the shoulder's curve from where the cap starts, its front edge bowing in to the armpit
+  const cap = quadSpan(...sh, 0.27, 1, 6);
+  const pit = Y(1.25);
+  const fq = [cap[0]!, cap[1]!, rx * 0.63, Y(0.78), rx * 0.9, pit] as const;
+  const front = quadSpan(...fq, 0, 1, 8);
+  // straight below the armpit: the sleeve's outside and inside (tapering, hanging away) and the chest's side
+  const xo = (y: number) => rx * (1.3 + (0.048 * (y - Y(0.75))) / ry);
+  const xi = (y: number) => rx * (0.9 + (0.092 * (y - pit)) / ry);
+  const xc = (y: number) => rx * (0.9 - (0.03 * (y - pit)) / ry);
+  const arm = [...cap, xo(bottom), bottom, xi(bottom), bottom];
+  for (let i = front.length - 2; i >= 2; i -= 2) arm.push(front[i]!, front[i + 1]!);
+  const half = [...quadSpan(...sh, 0, 0.27, 3), ...front.slice(2), xc(bottom), bottom];
+  const chestRaw = [...half];
+  for (let i = half.length - 2; i >= 0; i -= 2) chestRaw.push(-half[i]!, half[i + 1]!);
+  const at = (s: number, pts: number[]) => pts.map((v, i) => (i % 2 === 0 ? X(s * v) : v));
+  const outline = (pts: number[]) => pen.line([...pts, pts[0]!, pts[1]!], P.ow * 2, P.O);
+  const pattern = (part: -1 | 0 | 1) => {
+    if (look.outfit.pattern === "stripes") {
+      // the four stripes as one shape between the part's two straight sides (the steps down one side between them
+      // and the way back up it cancel out)
+      const a = (y: number) => (part === 0 ? X(-xc(y)) : X(part * xi(y)));
+      const b = (y: number) => (part === 0 ? X(xc(y)) : X(part * xo(y)));
+      const pts: number[] = [];
+      for (const k of [1.35, 2.35, 3.35, 4.35]) {
+        const y0 = Y(k);
+        const y1 = y0 + ry * 0.36;
+        pts.push(a(y0), y0, b(y0), y0, b(y1), y1, a(y1), y1);
+      }
+      pen.poly(pts, P.accent, 0.9);
+    } else if (look.outfit.pattern === "dots") {
+      for (const [fx, fy, p] of BUST_DOTS) if (p === part) pen.circle(X(fx * rx), Y(fy), rx * 0.11, P.accent, 0.95);
+    }
+  };
+
+  // the lamp side's sleeve: its outside in shadow from low on the cap down, a fold darting up from it to the armpit
+  const oc = quadSpan(...sh, 0.7, 1, 3);
+  const W = rx * 0.13;
+  const wo = (y: number) => W * clamp01((y - oc[1]!) / (Y(0.75) - oc[1]!));
+  const lo = [xo(Y(1.9)) - W, Y(1.9)] as const;
+  const hi = [xo(Y(1.62)) - W, Y(1.62)] as const;
+  const tipO = [xi(Y(1.45)) + rx * 0.04, Y(1.45)] as const;
+  const outShade = [...oc, xo(Y(1)), Y(1), xo(bottom), bottom, xo(bottom) - W, bottom];
+  outShade.push(...quadPts(...lo, rx * 1.08, Y(1.7), ...tipO, 5), ...quadPts(...tipO, rx * 1.08, Y(1.64), ...hi, 5).slice(2), xo(Y(1)) - W, Y(1));
+  for (let i = oc.length - 2; i >= 2; i -= 2) outShade.push(oc[i]! - wo(oc[i + 1]!), oc[i + 1]!);
+  // the key side's sleeve: its inside in shadow from the cap's front edge down, a fold from the armpit across it
+  const ic = quadSpan(...fq, 0.5, 1, 4);
+  const W2 = rx * 0.11;
+  const iw = (y: number) => W2 * clamp01((y - ic[1]!) / (pit - ic[1]!));
+  const lo2 = [xi(Y(1.65)) + W2, Y(1.65)] as const;
+  const hi2 = [xi(Y(1.37)) + W2, Y(1.37)] as const;
+  const tipI = [rx * 1.2, Y(1.95)] as const;
+  const inShade = [...ic, xi(bottom), bottom, xi(bottom) + W2, bottom];
+  inShade.push(...quadPts(...lo2, rx * 1.07, Y(1.67), ...tipI, 5), ...quadPts(...tipI, rx * 1.1, Y(1.47), ...hi2, 5).slice(2));
+  for (let i = ic.length - 2; i >= 2; i -= 2) inShade.push(ic[i]! + iw(ic[i + 1]!), ic[i + 1]!);
+  // the lit band along the key side's cap, widening from its top and fading out down its outside
+  const bc = [...cap, xo(Y(1.1)), Y(1.1)];
+  const band: number[] = [];
+  const inner: number[] = [];
+  for (let i = 0; i < bc.length; i += 2) {
+    const x = bc[i]!;
+    const y = bc[i + 1]!;
+    const dx = rx * 0.85 - x;
+    const dy = Y(1) - y;
+    const l = Math.hypot(dx, dy) || 1;
+    const w = ry * 0.24 * Math.min(1, i / 6) * (i >= bc.length - 2 ? 0.2 : 1);
+    band.push(x, y);
+    inner.push(x + (dx / l) * w, y + (dy / l) * w);
+  }
+  for (let i = inner.length - 2; i >= 0; i -= 2) band.push(inner[i]!, inner[i + 1]!);
+  const rim = quadSpan(rx * 0.5, top + P.ow, rx * 1.1, Y(0.06) + P.ow, rx * 1.26, Y(0.75), 0.3, 1, 5);
+
+  const sleeve = (s: -1 | 1) => {
+    const pts = at(s, arm);
+    outline(pts);
+    pen.poly(pts, P.top);
+    pattern(s);
+    pen.poly(at(s, s === m ? inShade : outShade), ND.celDark, 0.26);
+    if (s === m) pen.poly(at(s, band), lt(P, P.top, 0.08));
+    else pen.line(at(s, rim), P.ow, P.rim, P.rimA);
+  };
+  sleeve(-1);
+  const chest = at(1, chestRaw);
+  outline(chest);
+  pen.poly(chest, P.top);
+  pattern(0);
+  pen.poly(clipConvex(chest, halfPlane(X(-rx * 0.52 * m), top, X(-rx * 0.74 * m), bottom, X(-rx * 3 * m), top)), ND.celDark, 0.22);
+  sleeve(1);
 }
 
 /** Mitt hands on a steering wheel's rim (§45.45 §5): at each grip (pen units) a hand of radius `r` (pen units) with the

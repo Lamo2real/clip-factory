@@ -14,7 +14,8 @@ import type { Beat, CarLook, Expression, Prim, PropAction, PropKind, SceneProp }
 
 const CL = CATALOG.carLooks;
 const ids = <T extends string>(list: { id: T }[]): T[] => list.map((e) => e.id);
-const ALLOWED = new Set(["rect", "circle", "ellipse", "poly", "line", "grad"]);
+// glow: night drive's soft lights (headlights, tail and brake lights, beams), the one prim kind it adds (§45.45.23)
+const ALLOWED = new Set(["rect", "circle", "ellipse", "poly", "line", "grad", "glow"]);
 const MOVERS = new Set<PropAction>(["move", "skid", "spin", "stop", "bump", "speed_up", "stall"]);
 const ACTIONS: (PropAction | null)[] = [null, ...ids(CATALOG.propActions)];
 const FRAME = { x0: -60, y0: -60, x1: 1140, y1: 1980 };
@@ -53,7 +54,7 @@ function numbers(p: Prim): number[] {
 /** The box a prim covers (circles and ellipses by their larger radius, lines with their width). */
 function extent(p: Prim): [number, number, number, number] | null {
   if (p.k === "circle") return [p.x - p.r, p.y - p.r, p.x + p.r, p.y + p.r];
-  if (p.k === "ellipse") {
+  if (p.k === "ellipse" || p.k === "glow") {
     const [rx, ry] = p.rot === 0 ? [p.rx, p.ry] : [Math.max(p.rx, p.ry), Math.max(p.rx, p.ry)];
     return [p.x - rx, p.y - ry, p.x + rx, p.y + ry];
   }

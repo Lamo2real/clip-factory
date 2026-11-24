@@ -2,11 +2,12 @@
 // three-quarter, inside) by drag and drop or "Add photos". Each goes the same way as today's "Add a picture": the same
 // type and size rules (References.fileProblem: PNG, JPEG or WebP, at most 10 MB), designUpload, then straight to
 // storage with a presigned PUT (ws/{u}/{w}/design/), at most 3 at once, with a thumbnail from the file itself. A photo
-// that did not send says "Tap to try again". The drop handler is local and small (useLocalDrop) until the shared
-// useFileDrop hook lands: swap that one function.
+// that did not send says "Tap to try again". Drops go through the shared drop hook (lib/useFileDrop.ts, §45.40.1), which
+// hands every dropped file to the same add() as "Add photos", so a drop and the picker say the same about each file.
 import "../styles/sd-cars.css";
-import { useEffect, useId, useRef, useState, type DragEvent } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { putFile } from "../../api/upload.ts";
+import { useFileDrop } from "../../lib/useFileDrop.ts";
 import { storiesApi } from "../api/client.ts";
 import { Notice, ProgressBar } from "./kit.tsx";
 import { fileProblem } from "./References.tsx";
@@ -25,59 +26,6 @@ const AT_ONCE = 3;
 /** The photos still on their way, by key (the asset id once sent, null when it did not): a panel closed while one
  * sends keeps it sending, and the panel opened again shows how it ended instead of sending it again. */
 const inflight = new Map<string, Promise<string | null>>();
-
-/** The files a drop carries (its files list, else its file items). */
-export function filesFrom(dt: DataTransfer | null | undefined): File[] {
-  if (!dt) return [];
-  if (dt.files && dt.files.length) return Array.from(dt.files);
-  const out: File[] = [];
-  for (const item of Array.from(dt.items ?? [])) {
-    const f = item.kind === "file" ? item.getAsFile() : null;
-    if (f) out.push(f);
-  }
-  return out;
-}
-
-const carriesFiles = (e: DragEvent) => Array.from(e.dataTransfer?.types ?? []).includes("Files");
-
-/** The small drop handler kept local until the shared useFileDrop hook lands (swap this one function). */
-export function useLocalDrop(onFiles: (files: File[]) => void): {
-  over: boolean;
-  props: { onDragEnter: (e: DragEvent) => void; onDragOver: (e: DragEvent) => void; onDragLeave: (e: DragEvent) => void; onDrop: (e: DragEvent) => void };
-} {
-  const [over, setOver] = useState(false);
-  const depth = useRef(0);
-  const cb = useRef(onFiles);
-  cb.current = onFiles;
-  return {
-    over,
-    props: {
-      onDragEnter: (e) => {
-        if (!carriesFiles(e)) return;
-        e.preventDefault();
-        depth.current += 1;
-        setOver(true);
-      },
-      onDragOver: (e) => {
-        if (!carriesFiles(e)) return;
-        e.preventDefault();
-        if (e.dataTransfer) e.dataTransfer.dropEffect = "copy";
-      },
-      onDragLeave: (e) => {
-        if (!carriesFiles(e)) return;
-        depth.current = Math.max(0, depth.current - 1);
-        if (!depth.current) setOver(false);
-      },
-      onDrop: (e) => {
-        e.preventDefault();
-        depth.current = 0;
-        setOver(false);
-        const files = filesFrom(e.dataTransfer);
-        if (files.length) cb.current(files);
-      },
-    },
-  };
-}
 
 let seq = 0;
 
@@ -206,14 +154,17 @@ export function Photos({ ws, max, photos, onChange, label, hint }: { ws: string;
     commit(list.current.filter((p) => p.key !== key));
   }
 
-  const drop = useLocalDrop(add);
+  // Every dropped file goes to add(), which takes the pictures that fit and says why any other cannot be a photo (the
+  // picker's own rules and words), so the drop zone checks nothing itself and never cuts a drop short.
+  const drop = useFileDrop({ scope: "element", checkFile: () => null, maxFiles: Number.POSITIVE_INFINITY, onFiles: add });
+  const shown = problem ?? drop.refused;
 
   return (
     <div className="st-s-field st-s-photos">
       <span className="st-s-field__label" id={`${id}-l`}>
         {label}
       </span>
-      <div className={`st-s-photos__zone${drop.over ? " is-over" : ""}`} role="group" aria-labelledby={`${id}-l`} aria-describedby={`${id}-h`} {...drop.props}>
+      <div className={`st-s-photos__zone${drop.over ? " is-over" : ""}`} role="group" aria-labelledby={`${id}-l`} aria-describedby={`${id}-h`} {...drop.bind}>
         {photos.length ? (
           <ul className="st-s-photos__list">
             {photos.map((p, i) => {
@@ -268,7 +219,7 @@ export function Photos({ ws, max, photos, onChange, label, hint }: { ws: string;
           {hint}
         </span>
       </div>
-      {problem ? <Notice tone="bad">{problem}</Notice> : null}
+      {shown ? <Notice tone="bad">{shown}</Notice> : null}
     </div>
   );
 }
