@@ -2,6 +2,7 @@ import type { CSSProperties } from "react";
 import { useSession } from "../app/session.tsx";
 import { useShellHosted } from "../app/shell.ts";
 import { Glide } from "./Glide.tsx";
+import { Roll } from "./Roll.tsx";
 import { setPrefs, usePrefs } from "../lib/prefs.ts";
 import { section, useRoute, type Route } from "../lib/router.ts";
 import { plural } from "../lib/format.ts";
@@ -51,7 +52,7 @@ function Badge({ n }: { n: number }) {
   if (n <= 0) return null;
   return (
     <span className="badge" aria-hidden="true">
-      {n > 99 ? "99+" : n}
+      <Roll n={n} text={n > 99 ? "99+" : String(n)} />
     </span>
   );
 }
@@ -121,7 +122,7 @@ export function Sidebar({ route }: { route?: Route } = {}) {
               <span className="sidebar__label">{item.label}</span>
               {!sidebarCollapsed && item.key === "review" && review > 0 ? (
                 <span className="sidebar__count" aria-label={`${plural(review, "clip")} waiting`}>
-                  {review}
+                  <Roll n={review} text={String(review)} />
                 </span>
               ) : null}
             </A>

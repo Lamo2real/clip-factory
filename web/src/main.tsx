@@ -18,6 +18,7 @@ import "./styles/money-dash.css";
 import "./styles/ask.css";
 import "./styles/setup-todo.css";
 import "./styles/glide.css";
+import "./styles/roll.css";
 import "./styles/drop.css";
 
 import { StrictMode } from "react";

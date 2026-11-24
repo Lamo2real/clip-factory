@@ -9,6 +9,7 @@ import { PLATFORM_LABEL } from "../lib/format.ts";
 import { useAction } from "../lib/motion.ts";
 import { CopyChip } from "../screens/settings/setup/bits.tsx";
 import { Icon } from "./Icon.tsx";
+import { Roll } from "./Roll.tsx";
 import { PlatformMark } from "./PlatformMark.tsx";
 import { useToast } from "./Toasts.tsx";
 import { Button, Pill } from "./ui.tsx";
@@ -100,7 +101,9 @@ function Revenue({ revenue }: { revenue: MoneyRevenue }) {
     <div className="money-revenue" data-money="revenue">
       <p className="money-revenue__line">
         <span className="money-revenue__lead">This month</span>
-        <strong className="money-revenue__num">{formatMoney(revenue.thisMonthMicros, revenue.currency)}</strong>
+        <strong className="money-revenue__num">
+          <Roll n={revenue.thisMonthMicros} text={formatMoney(revenue.thisMonthMicros, revenue.currency)} />
+        </strong>
         <span className="money-tag">{revenue.tag}</span>
       </p>
       <MoneySpark revenue={revenue} />
