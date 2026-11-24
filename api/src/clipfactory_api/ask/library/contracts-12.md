@@ -157,8 +157,12 @@ not, so the page said "This computer can't show see-through" on macOS 27 with Li
   less motion); it stays while the pointer holds still and goes on leaving the card or window, Escape or a drop.
   While an upload or a start runs it says "Upload still running" / "Starting your job…" and refuses the drop with a
   toast. A hidden status line says what each drop did ("Video picked: …", the error, "Link added. …") for screen
-  readers. A drop outside the card is still refused by Ask's window guard. The same form serves Use a video file
-  (`/?file=1&from=`). Covered by `web/test/drops.test.ts` and `web/e2e/drop-video.spec.ts`.
+  readers. A drop outside the card is refused by the window's drop guard (`web/src/lib/dropGuard.ts`, installed once
+  in `main.tsx` for the whole app, §45.40: a stray file never replaces the app, a stray link never navigates or opens
+  the system browser in the Mac app; Ask's own guard in `HelpLauncher.tsx` stays and is now redundant). The same form
+  serves Use a video file (`/?file=1&from=`). Covered by `web/test/drops.test.ts` and `web/e2e/drop-video.spec.ts`.
+  This card keeps its own drop code; every other upload site uses the shared hook `web/src/lib/useFileDrop.ts` and
+  its layer `web/src/components/DropOverlay.tsx` (§45.40.1).
 * **Jobs list on phones**: when a job started is never cut (the source part shortens with "…" instead), and a failed
   job's error is shown in full because its last sentence says how to fix it.
 * **No blank pages**: a malformed `#anchor` (`/jobs#100%`) is used as typed instead of throwing, and render errors
