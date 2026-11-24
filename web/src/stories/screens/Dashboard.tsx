@@ -122,7 +122,7 @@ function NeedsYou({ ws, items }: { ws: string; items: StoriesDashboard["needsYou
     try {
       // A Mac post (§47.10) waits for the Mac again; any other post is sent again.
       const body = confirmAccount ? { confirmAccount } : undefined;
-      const next = mac ? await storiesApi().macRetry(ws, id, body) : await storiesApi().retryPublishing(ws, id, body);
+      const next = mac ? await (body ? storiesApi().macRetry(ws, id, body) : storiesApi().macRetry(ws, id)) : await storiesApi().retryPublishing(ws, id, body);
       setAsk(null);
       const stuck = stillStuck(next);
       // Still stuck: its reason, never confetti (it did not work).

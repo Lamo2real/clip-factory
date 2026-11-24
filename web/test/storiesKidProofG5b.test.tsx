@@ -72,6 +72,10 @@ describe("Social accounts: picking Clip Factory's app is the choice", () => {
     );
     await settle();
     const card = () => host.querySelector<HTMLElement>('.st-conn[data-platform="youtube"]')!;
+    // The app still needs setting up: Set up the app opens the choice on the card (§45.16.7).
+    const setUp = Array.from(card().querySelectorAll("button")).find((b) => /^Set up the app/.test(b.textContent?.trim() ?? ""))!;
+    await act(async () => setUp.click());
+    await settle();
     const share = Array.from(card().querySelectorAll<HTMLElement>("[role=radio]")).find((b) => /Share Clip Factory's app/.test(b.textContent ?? ""))!;
     await act(async () => share.click());
     await settle(10);

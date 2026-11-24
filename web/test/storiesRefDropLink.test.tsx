@@ -8,6 +8,7 @@
 import { act, type ReactElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from "vitest";
+import { ToastProvider } from "../src/components/Toasts.tsx";
 import { setStoriesApi } from "../src/stories/api/client.ts";
 import * as references from "../src/stories/api/mock/references.ts";
 import { createStore, type MockStore } from "../src/stories/api/mock/store.ts";
@@ -532,7 +533,12 @@ describe("the studio's 'Pictures to aim for' (§45.40)", () => {
       referenceComplete: async () => character(1),
     } as unknown as StoriesApi);
     const changed = vi.fn();
-    await render(<References ws="stories" character={character(0)} onChange={changed} />);
+    // Under the app's toasts, as on its page (a picture's × says Undo in a toast).
+    await render(
+      <ToastProvider>
+        <References ws="stories" character={character(0)} onChange={changed} />
+      </ToastProvider>,
+    );
     const zone = $("section.st-s-refs")!;
     expect(zone.classList.contains("st-drop-host")).toBe(true);
     const wrong = await dropOn(zone, { files: [video()] });
@@ -546,7 +552,11 @@ describe("the studio's 'Pictures to aim for' (§45.40)", () => {
   it("with 8 pictures already, a drop says why and sends nothing", async () => {
     const upload = vi.fn();
     setStoriesApi({ referenceUpload: upload } as unknown as StoriesApi);
-    await render(<References ws="stories" character={character(8)} onChange={() => undefined} />);
+    await render(
+      <ToastProvider>
+        <References ws="stories" character={character(8)} onChange={() => undefined} />
+      </ToastProvider>,
+    );
     await act(async () => {
       $("section.st-s-refs")!.dispatchEvent(dragEvent("dragenter", { files: [png()] }));
     });
