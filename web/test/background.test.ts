@@ -775,9 +775,11 @@ describe("the living backdrop (the web and phone default): its lightest spot dec
     expect([matrix[4]! * 255, matrix[9]! * 255, matrix[14]! * 255]).toEqual([...BRAND_MESH.grain.colour]);
     expect(matrix[18]).toBe(BRAND_MESH.grain.alpha);
     expect(matrix.filter((_, i) => i !== 4 && i !== 9 && i !== 14 && i !== 18).every((v) => v === 0)).toBe(true);
-    // Backdrop.tsx draws the fifth blob in both meshes.
+    // Backdrop.tsx draws the fifth blob in both meshes (each blob a span, or in the cover under a phone's status bar a
+    // picture of its blurred glow: lib/blurredBlob.ts).
     const tsx = readFileSync(join(import.meta.dirname, "..", "src", "components", "Backdrop.tsx"), "utf8");
-    expect(tsx.match(/className="blob blob--e"/g)).toHaveLength(2);
+    expect(tsx.match(/\{\["a", "b", "c", "d", "e"\]\.map\(blob\)\}/g)).toHaveLength(2);
+    expect(tsx).toMatch(/<span key=\{name\} className=\{`blob blob--\$\{name\}`\} \/>/);
   });
 
   it("has no green page veil and no frost for Clear: the colours show at full strength between the panels", () => {

@@ -216,7 +216,7 @@
   /* The phone's own status bar (the clock, the Dynamic Island, the signal) alone: 0 everywhere else. An installed
      iPhone app runs edge to edge (index.html: black-translucent), so the page's backdrop shows under it, and nothing
      fixed and coloured lies across the top (§11.1). Each app draws its own backdrop once more over the page in it
-     alone (glass.css .backdrop--cover, Clips Funded's .stories-app::after), so what scrolls up to the clock fades into
+     alone (glass.css .backdrop-cover, Clips Funded's .st-cover), so what scrolls up to the clock fades into
      the backdrop; app/statusBar.ts follows its height. */
   --status-bar-h: env(safe-area-inset-top);
   /* That cover's mask: full under the clock and the icons (the bar's top 75 %), then easing out to nothing on the top

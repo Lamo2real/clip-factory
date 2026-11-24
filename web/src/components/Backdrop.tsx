@@ -1,6 +1,7 @@
-import { useLayoutEffect, useRef, type CSSProperties, type RefObject } from "react";
+import { useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode, type RefObject } from "react";
 import { usePictureTop, useStatusBar } from "../app/statusBar.ts";
 import type { Look } from "../lib/background.ts";
+import { BLOB_SHAPES, colourBlobShapes, coverBlobs, type BlobShape, type CoverBlobs } from "../lib/blurredBlob.ts";
 import { applyLook, useLook } from "../lib/look.ts";
 
 /** How far the owner's picture runs past the window on every side (glass.css .backdrop__image: inset -2 %). */
@@ -17,10 +18,12 @@ export const PICTURE_BLEED = 0.02;
  * Without it (always, while Clips Funded is switched off) the backdrop is exactly as it always was.
  *
  * Under a phone's status bar (app/statusBar.ts, §11.1) the same backdrop is drawn once more, over the page, in the
- * status bar alone (glass.css .backdrop--cover): what scrolls up to the clock fades into the backdrop, and nothing
+ * status bar alone (glass.css .backdrop-cover): what scrolls up to the clock fades into the backdrop, and nothing
  * fixed and coloured lies across the top. It is drawn with the backdrop, in the same frame, so their drift is one;
  * the shade under the clock (.backdrop__shade, only where the look's top edge is too light for the white clock) is
- * part of both.
+ * part of both. It costs a frame next to nothing: a box only as tall as the status bar and its top line's air, and
+ * its blobs are the page backdrop's own glows blurred once into small pictures (lib/blurredBlob.ts), which the
+ * compositor only moves with their drift, never blurs again.
  */
 export function Backdrop({ away = false }: { away?: boolean }) {
   const look = useLook();
@@ -31,21 +34,52 @@ export function Backdrop({ away = false }: { away?: boolean }) {
   const covered = bar.h > 0 && look.kind !== "window";
   const drawnRef = useRef<HTMLDivElement>(null);
   const coverRef = useRef<HTMLDivElement>(null);
-  // A cover that comes later than the backdrop (a phone turned upright) takes up its drift where the backdrop is.
+  // The cover's blobs, read from the page's backdrop where it lies (again when the window changes: a phone turned).
+  // (`look` is a new object on every render: its blobs follow what draws them.)
+  const [blobs, setBlobs] = useState<CoverBlobs | null>(null);
+  const kind = look.kind;
+  const colours = look.kind === "colours" ? look.colours.join(" ") : "";
+  useLayoutEffect(() => {
+    const backdrop = drawnRef.current;
+    setBlobs(covered && backdrop ? coverBlobs(backdrop, shapesOf(kind, colours)) : null);
+  }, [covered, kind, colours, bar.w, bar.vh]);
+  // A cover that comes later than the backdrop (a phone turned upright), or whose blobs are new, takes up its drift
+  // where the backdrop is.
   useLayoutEffect(() => {
     if (covered && drawnRef.current && coverRef.current) driftTogether(drawnRef.current, coverRef.current);
-  }, [covered]);
+  }, [covered, blobs]);
   return (
     <>
       {drawn(look, away, drawnRef, false)}
-      {covered ? drawn(look, away, coverRef, true) : null}
+      {covered ? (
+        <div className="backdrop-cover" aria-hidden="true">
+          {drawn(look, away, coverRef, blobs ?? true)}
+        </div>
+      ) : null}
     </>
   );
 }
 
-/** One backdrop: the page's (`cover` false), or its cover under the status bar. */
-function drawn(look: Look, away: boolean, ref: RefObject<HTMLDivElement | null>, cover: boolean) {
+/** The blobs' glows in a look of `kind` (`colours`: the Colours look's, space-separated; none in a picture or the window). */
+function shapesOf(kind: Look["kind"], colours: string): Partial<Record<string, BlobShape>> {
+  if (kind === "colours") return colourBlobShapes(colours.split(" "));
+  return kind === "picture" || kind === "window" ? {} : BLOB_SHAPES;
+}
+
+/**
+ * One backdrop: the page's (`cover` false), or its cover under the status bar (`cover` true, or its blobs' pictures
+ * and the page backdrop's box once they are read).
+ */
+function drawn(look: Look, away: boolean, ref: RefObject<HTMLDivElement | null>, cover: boolean | CoverBlobs) {
   const cls = (name: string) => `${name}${cover ? " backdrop--cover" : ""}${away ? " backdrop--away" : ""}`;
+  const read = typeof cover === "object" ? cover : null;
+  // The cover lies in the page backdrop's own box, so every layer in it is where the page's is.
+  const box: CSSProperties | undefined = read ? { width: read.w, height: read.h } : undefined;
+  const blob = (name: string): ReactNode => {
+    const b = read?.blobs[name];
+    if (!b) return <span key={name} className={`blob blob--${name}`} />;
+    return <img key={name} className={`blob blob--${name}`} src={b.src} alt="" decoding="sync" draggable={false} style={{ left: b.left, top: b.top, width: b.side, height: b.side }} />;
+  };
   if (look.kind === "window") {
     // The page is transparent. The veil here is empty for Clear and a light frost for Frosted; the tint that keeps
     // text readable sits on the panels (glass.css), so the desktop stays guessable between them.
@@ -57,7 +91,7 @@ function drawn(look: Look, away: boolean, ref: RefObject<HTMLDivElement | null>,
   }
   if (look.kind === "picture") {
     return (
-      <div ref={ref} className={cls("backdrop has-image")} aria-hidden="true">
+      <div ref={ref} className={cls("backdrop has-image")} style={box} aria-hidden="true">
         <div className="backdrop__image" style={{ backgroundImage: `url("${look.url}")` }} />
         <span className="backdrop__shade" />
       </div>
@@ -65,26 +99,18 @@ function drawn(look: Look, away: boolean, ref: RefObject<HTMLDivElement | null>,
   }
   if (look.kind === "colours") {
     const [c1, c2 = c1, c3 = c2] = look.colours;
-    const style = { "--c1": c1, "--c2": c2, "--c3": c3 } as CSSProperties;
+    const style = { ...box, "--c1": c1, "--c2": c2, "--c3": c3 } as CSSProperties;
     return (
       <div ref={ref} className={cls("backdrop backdrop--colours")} style={style} aria-hidden="true" data-colours={look.colours.join(" ")}>
-        <span className="blob blob--a" />
-        <span className="blob blob--b" />
-        <span className="blob blob--c" />
-        <span className="blob blob--d" />
-        <span className="blob blob--e" />
+        {["a", "b", "c", "d", "e"].map(blob)}
         <span className="backdrop__veil" />
         <span className="backdrop__shade" />
       </div>
     );
   }
   return (
-    <div ref={ref} className={cls(`backdrop${look.kind === "frosted" ? " backdrop--frosted" : ""}`)} aria-hidden="true">
-      <span className="blob blob--a" />
-      <span className="blob blob--b" />
-      <span className="blob blob--c" />
-      <span className="blob blob--d" />
-      <span className="blob blob--e" />
+    <div ref={ref} className={cls(`backdrop${look.kind === "frosted" ? " backdrop--frosted" : ""}`)} style={box} aria-hidden="true">
+      {["a", "b", "c", "d", "e"].map(blob)}
       {look.kind === "frosted" ? (
         <>
           <span className="backdrop__frost" />

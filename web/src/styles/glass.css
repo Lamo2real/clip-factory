@@ -141,13 +141,33 @@
    and shown in the status bar alone: held under the clock and the icons, easing out over the top line's air below the
    bar (--status-cover-fade), so a card or a button that scrolls up fades into the backdrop on its way and under the
    clock there is only the backdrop, never a card and never a strip of colour. At the top of a page nothing is there to
-   cover, so it is the backdrop exactly as it is drawn below it. Clear of every tap. */
-.backdrop.backdrop--cover {
+   cover, so it is the backdrop exactly as it is drawn below it. Clear of every tap.
+   It costs a frame next to nothing, on a phone and on a machine that draws without a GPU alike: its box is only the
+   status bar and the top line's air (so its fade is that small, and nothing of it is drawn below), the backdrop in it
+   lies in the page backdrop's own box (set from it), and its blobs are the page backdrop's glows blurred once into
+   small pictures (lib/blurredBlob.ts) that only move with their drift: nothing in it is blurred again on any frame. */
+.backdrop-cover {
+  position: fixed;
+  inset: 0 0 auto 0;
   z-index: 42;
+  height: calc(var(--status-bar-h) + 12px);
+  overflow: hidden;
   pointer-events: none;
   -webkit-mask-image: var(--status-cover-fade);
   mask-image: var(--status-cover-fade);
-  clip-path: inset(0 0 calc(100% - var(--status-bar-h) - 12px) 0);
+}
+.backdrop.backdrop--cover {
+  position: absolute;
+  inset: 0 0 auto 0;
+  z-index: 0;
+  height: 100vh;
+}
+.backdrop--cover img.blob {
+  display: block;
+  max-width: none;
+  border-radius: 0;
+  background: none;
+  filter: none;
 }
 
 /* ---------- Background modes (docs/CONTRACTS.md §22) ---------- */

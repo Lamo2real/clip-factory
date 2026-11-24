@@ -22,7 +22,7 @@ html[data-titlebar="overlay"] .titlebar-drag {
    clock and nothing fixed and coloured lies across the top, at the top of a page or scrolled (§11.1; the owner, 24 Nov:
    "remove the top green top fixed color at the top"). Every column starts on --top-line, and what scrolls up to the
    clock fades into the backdrop itself, drawn once more over the page in the status bar alone (glass.css
-   .backdrop--cover). The sign-in screen, drawn outside the app shell, has the same backdrop and the same cover. */
+   .backdrop-cover). The sign-in screen, drawn outside the app shell, has the same backdrop and the same cover. */
 .shell {
   min-height: 100vh;
   min-height: 100dvh;

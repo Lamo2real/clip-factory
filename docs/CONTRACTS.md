@@ -604,21 +604,30 @@ the traffic lights' band; nothing ever covers the traffic lights.
   its height with an unseen probe and puts `<html data-status-bar>` on while there is one (0 on a computer, in Safari
   and on a phone turned on its side).
   * **What scrolls up fades into the backdrop.** While there is a status bar each app draws its own backdrop once more,
-    over the page, in the status bar alone: Clip Factory's `.backdrop.backdrop--cover` (`components/Backdrop.tsx` draws
-    it after the backdrop, the same elements in the same frame, so their drift is one; a cover drawn later, a phone
-    turned upright, takes up the backdrop's drift where it is, `driftTogether`; it slides with Clip Factory's pane,
-    `ALSO_SLIDES`) at `z-index: 42`, over every page bar (the setup list's strip 39, the tab bar 40, Money's dock 41, an
-    open dropdown) and under the setup list, menus, sheets, scrims and toasts (44 and up), and Clips Funded's
-    `[data-status-bar] .stories-app::after`, its stage's very layers, at 50 (over its top bar and tab bar, under its
-    sheets at 60 and the workspace switch's list at 51, so a list opened while the top bar is partly under the clock
-    shows whole). Both are the backdrop's own box (`inset: 0`, so they line up to the pixel), clear of every tap, with
-    no colour, filter, opacity or motion of their own, masked by `--status-cover-fade`: full under the clock and the
-    icons (the bar's top 75 %), easing out in fifths (0.9, 0.65, 0.35, 0.1) to nothing on the top line, 12 px below the
-    bar, where nothing sits at the top of a page. So a card or a button that scrolls up fades into the backdrop on its
-    way, and under the clock there is only the backdrop, never a card and never a strip. No scroll listener, no fade in
-    or out (calm motion has nothing to calm). The scrolled glass strip (`.app::before`, `.st-frame::before`,
+    over the page, in the status bar alone: Clip Factory's `.backdrop.backdrop--cover` in its `.backdrop-cover`
+    (`components/Backdrop.tsx` draws it after the backdrop, the same layers in the same frame, so their drift is one; a
+    cover drawn later, a phone turned upright, takes up the backdrop's drift where it is, `driftTogether`; it slides
+    with Clip Factory's pane, `ALSO_SLIDES`) at `z-index: 42`, over every page bar (the setup list's strip 39, the tab
+    bar 40, Money's dock 41, an open dropdown) and under the setup list, menus, sheets, scrims and toasts (44 and up),
+    and Clips Funded's `.st-cover` (drawn by Stories' root, shown under `[data-status-bar]`), its stage drawn by the
+    stage's very rule (`.st-cover__stage`), at 50 (over its top bar and tab bar, under its sheets at 60 and the
+    workspace switch's list at 51, so a list opened while the top bar is partly under the clock shows whole). The
+    backdrop in each lies in the backdrop's own box (Clip Factory's set from its page backdrop's, Clips Funded's the
+    window's), so they line up to the pixel, clear of every tap, with no colour, opacity or motion of their own, masked
+    by `--status-cover-fade`. Each costs a frame next to nothing, on a phone and on a machine that draws without a GPU
+    alike: its box (`.backdrop-cover`, `.st-cover`) is only the status bar and the top line's air
+    (`calc(var(--status-bar-h) + 12px)`, overflow hidden), so its fade is that small and nothing of it is drawn below,
+    nothing in it is clipped or blurred on any frame, and Clip Factory's blobs in it are the page backdrop's own glows
+    blurred once into small pictures (`lib/blurredBlob.ts`: each blob's shape, `BLOB_SHAPES` / `colourBlobShapes`,
+    blurred as much as the page's blob, its computed filter, with a true Gaussian, three blurs past its box), which the
+    compositor only moves and scales with their drift. (Drawn as the page's are, a cover blurred five big glows again
+    on every frame and masked a whole screen.) The fade: full under the clock and the icons (the bar's top 75 %),
+    easing out in fifths (0.9, 0.65, 0.35, 0.1) to nothing on the top line, 12 px below the bar, where nothing sits at
+    the top of a page. So a card or a button that scrolls up fades into the backdrop on its way, and under the clock
+    there is only the backdrop, never a card and never a strip. No scroll listener, no fade in or out (calm motion has
+    nothing to calm). The scrolled glass strip (`.app::before`, `.st-frame::before`,
     `<html data-scrolled>`, `lib/pageScrolled.ts`) and the scrim (`.app::after`, `.signin::after`,
-    `.stories-app::after`'s old black) are gone. The content is not masked itself: a mask on the page would make it the
+    `.stories-app::after`'s black) are gone. The content is not masked itself: a mask on the page would make it the
     root every pane's `backdrop-filter` sees through (the glass would stop blurring the backdrop), and both apps scroll
     the window, so it would have to move with every scroll.
   * **The white clock keeps AA over the backdrop.** Where a look's top edge is too light for it, the backdrop itself is
@@ -660,10 +669,12 @@ the traffic lights' band; nothing ever covers the traffic lights.
     status bar and 375 x 812 with a 47 px one): at the top of Home, Settings and Clips Funded's Dashboard and at every
     scroll stop of Home, Library, the Content Rewards help (the owner's screenshot, every fold open) and Clips Funded's
     Dashboard and Ideas, every pixel under the clock and the icons is the backdrop as it is drawn alone and holds white
-    at AA; a cream bar fixed across the top of a page is masked under the clock and shows from the top line down; in
-    Safari no cover is drawn and the page runs to the top of its window; Cream's shade lifts with no edge (at most 0.05
-    of luminance a row) and Cream is untouched from the top line down; a picture with a dark top gets no shade and one
-    with a white top gets what AA needs. The unit test works the shade out row by row over Cream and white at both bar
+    at AA (and at three stops, with the cover taken away, a card or a control really is under the clock); each cover's
+    box is the status bar and the top line's air, with nothing in it blurred or clipped; a cream bar fixed across the
+    top of a page is masked under the clock and shows from the top line down; in Safari no cover is drawn and the page
+    runs to the top of its window; Cream's shade lifts with no edge (at most 0.05 of luminance a row) and Cream is
+    untouched from the top line down; a picture with a dark top gets no shade and one with a white top gets what AA
+    needs. The unit test works the shade out row by row over Cream and white at both bar
     heights, and holds the old-bar hint to the Home Screen app on a tall upright iPhone with no inset, once.
 * **Tests:** `e2e/top-line.spec.ts` (Chromium and WebKit): the simulated macOS window at 1000 x 650, 1200 x 820 (the
   pill) and 1440 x 900 on `/`, `/jobs`, `/review`, `/library`, `/settings` and a settings branch puts every column

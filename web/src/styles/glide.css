@@ -523,7 +523,7 @@ html[data-ws-bare] .ws-dock > .ws-dock__live > .live-dot {
    with a soft clear rim, and a soft neutral shadow under it (S5). */
 .ws-menu {
   position: absolute;
-  /* Over Clips Funded's cover under a phone's status bar (stories glass.css [data-status-bar] .stories-app::after, 50,
+  /* Over Clips Funded's cover under a phone's status bar (stories glass.css [data-status-bar] .st-cover, 50,
      in the same stacking context), so a list opened while the top bar is partly under the clock shows whole. */
   z-index: 51;
   bottom: calc(100% + 8px);

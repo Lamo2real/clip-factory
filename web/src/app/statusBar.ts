@@ -13,7 +13,7 @@
 //
 // Nothing fixed and coloured lies across the top (the owner, 24 Nov: "remove the top green top fixed color at the top,
 // it just takes space and is unncessary"): what scrolls up to the clock fades into each app's own backdrop, drawn once
-// more over the page in the status bar alone (Clip Factory's .backdrop--cover, Clips Funded's .stories-app::after).
+// more over the page in the status bar alone (Clip Factory's .backdrop-cover, Clips Funded's .st-cover).
 import { useEffect, useState, useSyncExternalStore } from "react";
 
 type Rgb = readonly [number, number, number];

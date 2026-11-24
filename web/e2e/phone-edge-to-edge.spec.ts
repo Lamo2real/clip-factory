@@ -7,7 +7,9 @@ import { stillBackdrop } from "./helpers.ts";
 // docs/CONTRACTS.md §11.1). The installed iPhone app's status bar is see-through (index.html: black-translucent,
 // viewport-fit=cover), so each app's own backdrop shows under the clock, never a solid #0F372B band, never a strip of
 // glass, and nothing of a page sits there: what scrolls up fades into the backdrop itself, drawn once more over the
-// page in the status bar alone (Clip Factory's .backdrop--cover, Clips Funded's .stories-app::after).
+// page in the status bar alone (Clip Factory's .backdrop--cover in its .backdrop-cover, Clips Funded's .st-cover). That
+// cover costs a frame next to nothing: its box is the status bar and the top line's air alone, and nothing in it is
+// blurred or clipped on any frame (Clip Factory's blobs are pictures of the backdrop's own blurred glows).
 // No test browser has a status bar or sets env(safe-area-inset-top), so one is simulated through the app's own hooks
 // (tokens.css): --top-safe, which every column starts below, and --status-bar-h, the status bar alone: 59 px (an iPhone
 // with a Dynamic Island, 390 x 844) and 47 px (one with a notch, 375 x 812). For the installed app (a status bar) and
@@ -144,7 +146,7 @@ async function rows(page: Page, y0: number, y1: number, fine = false): Promise<n
 async function backdropAlone(page: Page, stories: boolean): Promise<() => Promise<void>> {
   const tag = await page.addStyleTag({
     content: stories
-      ? "body * { visibility: hidden !important; } .stories-app { visibility: visible !important; } .stories-app::after { visibility: hidden !important; }"
+      ? "body * { visibility: hidden !important; } .stories-app { visibility: visible !important; }"
       : "body * { visibility: hidden !important; } .backdrop:not(.backdrop--cover), .backdrop:not(.backdrop--cover) * { visibility: visible !important; }",
   });
   const frames = () => page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
@@ -201,11 +203,34 @@ const leastWhite = (drawn: number[][][]) => Math.min(...drawn.flatMap((r) => r.m
 
 /** The cover each app draws in the status bar: Clip Factory's second backdrop, Clips Funded's stage once more. */
 async function covers(page: Page, stories: boolean): Promise<number> {
-  if (!stories) return page.locator(".backdrop.backdrop--cover").count();
-  return page.evaluate(() => {
-    const cs = getComputedStyle(document.querySelector(".stories-app")!, "::after");
-    return cs.content !== "none" && cs.position === "fixed" && /gradient/.test(cs.webkitMaskImage || cs.maskImage) ? 1 : 0;
-  });
+  return page.evaluate((stories) => {
+    return [...document.querySelectorAll(stories ? ".st-cover" : ".backdrop-cover")].filter((el) => {
+      const cs = getComputedStyle(el);
+      const inside = el.querySelectorAll(stories ? ".st-cover__stage" : ".backdrop.backdrop--cover").length === 1;
+      return inside && cs.display !== "none" && cs.position === "fixed" && /gradient/.test(cs.webkitMaskImage || cs.maskImage);
+    }).length;
+  }, stories);
+}
+
+/**
+ * What the cover costs a frame: its box (it is the status bar and the top line's air alone, so its fade is that small
+ * and nothing of it is drawn below), and what in it is blurred or clipped (nothing: a blur or a clip there is drawn
+ * again on every frame, by the phone's GPU, and in software on a machine without one).
+ */
+async function coverCost(page: Page, stories: boolean) {
+  return page.evaluate((stories) => {
+    const cover = document.querySelector<HTMLElement>(stories ? ".st-cover" : ".backdrop-cover")!;
+    const r = cover.getBoundingClientRect();
+    const all = [cover, ...cover.querySelectorAll<HTMLElement>("*")];
+    const style = (el: Element, pseudo?: string) => getComputedStyle(el, pseudo);
+    const every = all.flatMap((el) => [style(el), style(el, "::before"), style(el, "::after")]);
+    return {
+      top: r.top,
+      height: r.height,
+      blurred: every.filter((cs) => cs.filter !== "none" || (cs.backdropFilter || cs.getPropertyValue("-webkit-backdrop-filter") || "none") !== "none").length,
+      clipped: every.filter((cs) => cs.clipPath !== "none").length,
+    };
+  }, stories);
 }
 
 for (const size of SIZES) {
@@ -218,6 +243,7 @@ for (const size of SIZES) {
         await phone(page, size);
         await open(page, p.path, p.stories, size.inset);
         expect(await covers(page, p.stories), "the backdrop's cover in the status bar").toBe(1);
+        expect(await coverCost(page, p.stories), "the cover: the status bar and the top line's air, nothing blurred or clipped").toEqual({ top: 0, height: size.inset + 12, blurred: 0, clipped: 0 });
 
         // (b) Nothing to tap or read under the clock: every control on screen starts below the status bar.
         const tops = await controlTops(page);
@@ -263,6 +289,7 @@ for (const size of SIZES) {
         const failing: string[] = [];
         let stops = 0;
         let passedUnder = 0;
+        const frames = () => page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
         for (let y = 50; y <= Math.min(room, 2500); y += y < 400 ? 50 : 100) {
           await page.evaluate((y) => window.scrollTo({ top: y, behavior: "instant" as ScrollBehavior }), y);
           // Nothing comes or goes as the page moves: the cover is always there, so no wait for anything to fade in.
@@ -272,14 +299,17 @@ for (const size of SIZES) {
           if (d.mean > 3 || d.worst > 12) failing.push(`scrollY ${y}: ${d.mean.toFixed(2)} mean, ${d.worst} worst off the backdrop`);
           const least = leastWhite(drawn);
           if (least < 4.5) failing.push(`scrollY ${y}: white ${least.toFixed(2)}:1`);
-          // Something of the page really is under the clock here (it is there to be masked): without the cover the
-          // row in the middle of the status bar is not the backdrop.
-          const bare = await page.addStyleTag({ content: ".backdrop--cover, .stories-app::after { visibility: hidden !important; }" });
-          await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
-          const y0 = Math.floor(size.inset / 2);
-          if (apart(await rows(page, y0, y0), [alone[y0]!]).mean > 3) passedUnder++;
-          await bare.evaluate((el) => (el as Element).remove());
-          await page.evaluate(() => new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r))));
+          // Something of the page really is under the clock (it is there to be masked): without the cover the row in
+          // the middle of the status bar is not the backdrop. Seen at three stops, the check has made its point; the
+          // stops after it are checked as every stop is (above), without taking the cover away and back each time.
+          if (passedUnder < 3) {
+            const bare = await page.addStyleTag({ content: ".backdrop--cover, .st-cover { visibility: hidden !important; }" });
+            await frames();
+            const y0 = Math.floor(size.inset / 2);
+            if (apart(await rows(page, y0, y0), [alone[y0]!]).mean > 3) passedUnder++;
+            await bare.evaluate((el) => (el as Element).remove());
+            await frames();
+          }
           stops++;
         }
         expect(stops).toBeGreaterThan(4);

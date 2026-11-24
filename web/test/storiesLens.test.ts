@@ -17,7 +17,8 @@ const token = (name: string) => new RegExp(`${name}:\\s*([^;]+);`).exec(tokensCs
 
 describe("the stage", () => {
   it("glass.css draws exactly the lights look.ts works the veils out from", () => {
-    const rule = /\.stories-app::before\s*\{([^}]*)\}/.exec(glassCss)?.[1] ?? "";
+    // (The stage's cover under a phone's status bar, .st-cover__stage, is drawn by the very same rule.)
+    const rule = /\.stories-app::before,\s*\.st-cover__stage\s*\{([^}]*)\}/.exec(glassCss)?.[1] ?? "";
     const drawn = Array.from(rule.matchAll(/radial-gradient\(([\d.]+)(vmax|vmin|vw|vh) ([\d.]+)(vmax|vmin|vw|vh) at ([\d.-]+)% ([\d.-]+)%, rgb\(var\(--st-(stage-c2|stage-c3|shadow)-rgb\) \/ (var\(--[a-z0-9-]+\)|[\d.]+)\), transparent ([\d.]+)%\)/g)).map((m) => {
       const alpha = m[8]!.startsWith("var(") ? Number(token(/var\((--[a-z0-9-]+)\)/.exec(m[8]!)![1]!)) : Number(m[8]);
       return { tone: m[7] === "stage-c2" ? 2 : m[7] === "stage-c3" ? 3 : "shadow", alpha, rx: Number(m[1]), ux: m[2], ry: Number(m[3]), uy: m[4], x: Number(m[5]), y: Number(m[6]), stop: Number(m[9]) / 100 };

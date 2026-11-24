@@ -37,10 +37,14 @@
   inset: 0;
   z-index: var(--st-z-stage);
   pointer-events: none;
-  /* The warm room of the owner's reference, out of focus: a lamp's light strip at the right edge, amber high on the
-     right, copper low on the left, a darker corner behind the page heads, a warm haze over everything. These are
-     stories/look.ts STAGE_LIGHTS exactly (the veils are worked out from them; storiesGlass.test.tsx holds the two
-     together): change one, change both. The shade under a phone's clock lies over them all (below). */
+}
+/* The warm room of the owner's reference, out of focus: a lamp's light strip at the right edge, amber high on the
+   right, copper low on the left, a darker corner behind the page heads, a warm haze over everything. These are
+   stories/look.ts STAGE_LIGHTS exactly (the veils are worked out from them; storiesGlass.test.tsx holds the two
+   together): change one, change both. The shade under a phone's clock lies over them all (below). The stage's cover
+   under a phone's status bar (.st-cover, below) is drawn by the very same rule. */
+.stories-app::before,
+.st-cover__stage {
   background:
     var(--st-status-shade, none) 0 0 / 100% var(--status-shade-h, 0px) no-repeat,
     linear-gradient(rgb(var(--st-veil-rgb) / var(--st-veil-page)), rgb(var(--st-veil-rgb) / var(--st-veil-page))),
@@ -51,7 +55,8 @@
     radial-gradient(90vmax 64vmax at 56% 46%, rgb(var(--st-stage-c2-rgb) / 0.24), transparent 100%),
     var(--st-stage-c1);
 }
-.stories-app[data-look="picture"]::before {
+.stories-app[data-look="picture"]::before,
+.stories-app[data-look="picture"] .st-cover__stage {
   background:
     var(--st-status-shade, none) 0 0 / 100% var(--status-shade-h, 0px) no-repeat,
     linear-gradient(rgb(var(--st-veil-rgb) / var(--st-veil-page)), rgb(var(--st-veil-rgb) / var(--st-veil-page))),
@@ -73,41 +78,36 @@
    (--st-status-shade, stories/look.ts statusScrim, the shell's statusShade: held to 75 % of the bar, then lifting
    evenly to nothing on the top line, 12 px below the bar, in a box exactly that tall, --status-shade-h), so it has no
    edge and nothing of it lies on the page below the bar; over Ember, Rose and Lagoon it is "none": nothing is drawn.
-   The cover: while there is a status bar ([data-status-bar], the shell's), the stage is drawn once more, the same box
-   and the same layers, over the page but under the More sheet, Stories' sheets and toasts, and shown in the status
-   bar alone: held under the clock and the icons, easing out over the top line's air below the bar (the shell's
-   --status-cover-fade), so a card (a cream one too) that scrolls up fades into the stage on its way and under the
-   clock there is only the stage. At the top of a page it is the stage exactly as it is drawn below it. Clear of
-   every tap. */
-[data-status-bar] .stories-app::after {
-  content: "";
+   The cover: while there is a status bar ([data-status-bar], the shell's), the stage is drawn once more
+   (.st-cover__stage: the same box and the same layers, by the stage's own rule above), over the page but under the
+   More sheet, Stories' sheets and toasts, and shown in the status bar alone: held under the clock and the icons,
+   easing out over the top line's air below the bar (the shell's --status-cover-fade), so a card (a cream one too)
+   that scrolls up fades into the stage on its way and under the clock there is only the stage. At the top of a page it
+   is the stage exactly as it is drawn below it. Clear of every tap. It costs a frame next to nothing: its box
+   (.st-cover) is only the status bar and the top line's air, so its fade is that small and nothing of it is drawn
+   below; the stage in it keeps the window's size, so every layer lies where the stage's own does. */
+.st-cover {
+  display: none;
+}
+[data-status-bar] .st-cover {
+  display: block;
   position: fixed;
-  inset: 0;
+  inset: 0 0 auto 0;
   z-index: 50;
+  height: calc(var(--status-bar-h, 0px) + 12px);
+  overflow: hidden;
   pointer-events: none;
-  background:
-    var(--st-status-shade, none) 0 0 / 100% var(--status-shade-h, 0px) no-repeat,
-    linear-gradient(rgb(var(--st-veil-rgb) / var(--st-veil-page)), rgb(var(--st-veil-rgb) / var(--st-veil-page))),
-    radial-gradient(7vw 34vh at 100% 48%, rgb(var(--st-stage-c3-rgb) / 0.34), transparent 70%),
-    radial-gradient(46vmax 36vmax at 92% 2%, rgb(var(--st-stage-c3-rgb) / var(--st-stage-a3)), transparent 70%),
-    radial-gradient(50vmax 40vmax at 0% 104%, rgb(var(--st-stage-c2-rgb) / var(--st-stage-a2)), transparent 70%),
-    radial-gradient(56vmax 40vmax at 10% 8%, rgb(var(--st-shadow-rgb) / 0.5), transparent 70%),
-    radial-gradient(90vmax 64vmax at 56% 46%, rgb(var(--st-stage-c2-rgb) / 0.24), transparent 100%),
-    var(--st-stage-c1);
   -webkit-mask-image: var(--status-cover-fade);
   mask-image: var(--status-cover-fade);
-  clip-path: inset(0 0 calc(100% - var(--status-bar-h, 0px) - 12px) 0);
 }
-[data-status-bar] .stories-app[data-look="picture"]::after {
-  background:
-    var(--st-status-shade, none) 0 0 / 100% var(--status-shade-h, 0px) no-repeat,
-    linear-gradient(rgb(var(--st-veil-rgb) / var(--st-veil-page)), rgb(var(--st-veil-rgb) / var(--st-veil-page))),
-    var(--st-picture) center / cover no-repeat,
-    var(--st-base);
+.st-cover__stage {
+  position: absolute;
+  inset: 0 0 auto 0;
+  height: 100vh;
 }
 /* The desktop window has no status bar: nothing to cover. */
-[data-status-bar] .stories-app[data-look="window"]::after {
-  content: none;
+[data-status-bar] .stories-app[data-look="window"] .st-cover {
+  display: none;
 }
 
 /* ---------- The glass ---------- */
