@@ -17,7 +17,7 @@ from typing import Any, Final
 from .. import validate
 from ..errors import bad_request, conflict
 from ..ids import is_ulid
-from . import captions, catalog, overrides, shapes
+from . import captions, catalog, overrides, own_script, shapes
 from .ideas import LOGLINE_MAX, TITLE_MAX, character_ids
 from .jobs import valid_stale_scenes
 
@@ -122,6 +122,7 @@ STORY_KEYS: Final = (
     "format",
     "seriesId",
     "art",
+    "ownScript",
 )
 
 
@@ -134,10 +135,12 @@ def art_style(value: Any, field: str = "art") -> str:
 
 def story_input(body: Mapping[str, Any]) -> dict[str, Any]:
     """StoryInput (§45.6): an idea or a short brief, 1 to 3 characters, the length, captions and music, the reference
-    videos, the video's own model and effort (``ai``, kept), and ``override`` (the first job only, never kept)."""
+    videos, the video's own model and effort (``ai``, kept), and ``override`` (the first job only, never kept). With
+    the owner's own script (``ownScript``, §45.46) a brief needs no line: scene 1 gives it."""
     validate.only_keys(body, STORY_KEYS)
     out: dict[str, Any] = {}
     has_idea, has_brief = body.get("ideaId") is not None, body.get("brief") is not None
+    has_own = body.get("ownScript") is not None
     if has_idea == has_brief:
         raise bad_request("Pick an idea or type a short concept.")
     if has_idea:
@@ -151,7 +154,11 @@ def story_input(body: Mapping[str, Any]) -> dict[str, Any]:
             raise bad_request("brief.category must be driving_safety, everyday_skills, comedy or explainer.")
         out["brief"] = {
             "title": validate.required_string(brief, "title", max_len=TITLE_MAX),
-            "logline": validate.required_string(brief, "logline", max_len=LOGLINE_MAX),
+            "logline": (
+                validate.string(brief, "logline", required=False, max_len=LOGLINE_MAX)
+                if has_own
+                else validate.required_string(brief, "logline", max_len=LOGLINE_MAX)
+            ),
             "category": brief["category"],
         }
     if body.get("title") is not None:
@@ -160,6 +167,10 @@ def story_input(body: Mapping[str, Any]) -> dict[str, Any]:
     if not ids:
         raise bad_request("Pick at least one character.")
     out["characterIds"] = ids
+    if has_own:  # §45.46: who is in each scene is checked against the cast just picked
+        out["ownScript"] = own_script.own_script(body["ownScript"], ids)
+        if "brief" in out and not out["brief"]["logline"]:
+            out["brief"]["logline"] = own_script.logline_of(out["ownScript"])
     if body.get("durationSec") is not None:
         out["durationSec"] = validate.integer(body["durationSec"], "durationSec", lo=15, hi=90)
     if body.get("captionsOn") is not None:
@@ -431,9 +442,12 @@ def patch_input(body: Mapping[str, Any]) -> dict[str, Any]:
             "ai",
             "referenceIds",
             "format",
+            "ownScript",
         },
     )
     out: dict[str, Any] = {"version": validate.integer(body.get("version"), "version", lo=1, hi=10**9)}
+    if "ownScript" in body:  # checked in apply_patch, against the story's own cast (§45.46)
+        out["ownScript"] = body["ownScript"]
     if "title" in body:
         out["title"] = validate.required_string(body, "title", max_len=TITLE_MAX)
     if "postCaptions" in body:
@@ -506,7 +520,8 @@ def resizes(story: Mapping[str, Any], patch: Mapping[str, Any]) -> bool:
 
 
 def needs_script(story: Mapping[str, Any], patch: Mapping[str, Any]) -> bool:
-    return touches_script(patch) or resizes(story, patch)
+    """A new owner's script reads the storyboard too: a words-only change moves its caption cues (§45.46)."""
+    return touches_script(patch) or resizes(story, patch) or "ownScript" in patch
 
 
 def _remap(t: float, old: list[tuple[float, float]], new: list[tuple[float, float]]) -> float:
@@ -693,6 +708,35 @@ def _captions(edit: _Edit, new: dict[str, Any], given: list[dict[str, Any]], tot
         edit.stale.update(STALE_CAPTIONS)
 
 
+def _own_patch(
+    edit: _Edit, story: Mapping[str, Any], script: Mapping[str, Any] | None, patch: Mapping[str, Any]
+) -> Mapping[str, Any]:
+    """Write it myself (§45.46). A new owner's script that changes only captions is a captions edit of its ``w_sN``
+    cues (the patch returned carries them); any other change makes every step stale, so the video is staged again
+    from it. A captions edit (the CaptionEditor) on an owner's script is copied into it (the mirror)."""
+    stored = story.get("ownScript")
+    if "ownScript" in patch:
+        if not isinstance(stored, Mapping):
+            raise bad_request(own_script.NO_OWN_SCRIPT, "ownScript")
+        if "captions" in patch or "scenes" in patch:
+            raise bad_request(own_script.ONE_AT_A_TIME, "ownScript")
+        new_own = own_script.own_script(patch["ownScript"], [str(c) for c in story.get("characterIds") or []])
+        if new_own == own_script.public(stored):
+            return patch
+        edit.sets["ownScript"] = new_own
+        if script is not None and own_script.only_words(stored, new_own):
+            cues = own_script.word_cues(script, new_own)
+            if cues is not None:
+                return {**patch, "captions": cues}
+        edit.stale.update(shapes.STEP_ORDER)
+        return patch
+    if "captions" in patch and isinstance(stored, Mapping):
+        mirrored = own_script.mirrored(stored, patch["captions"])
+        if mirrored != own_script.public(stored):
+            edit.sets["ownScript"] = mirrored
+    return patch
+
+
 def apply_patch(
     story: Mapping[str, Any], script: Mapping[str, Any] | None, patch: Mapping[str, Any]
 ) -> tuple[dict[str, Any] | None, dict[str, Any], set[str], set[str], dict[str, list[str]]]:
@@ -700,6 +744,7 @@ def apply_patch(
     whose animation is stale, the owner's edited text ids)."""
     edit = _Edit()
     _story_fields(edit, story, patch)
+    patch = _own_patch(edit, story, script, patch)
     resize = "format" in edit.sets and has_script(story)
     if not touches_script(patch) and not resize:
         return None, edit.sets, edit.stale | edit.format_stale, edit.stale_scenes, edit.owner
@@ -736,6 +781,7 @@ def apply_patch(
             "ai",
             "referenceIds",
             "format",
+            "ownScript",
         }
     ):
         return None, edit.sets, edit.stale | edit.format_stale, edit.stale_scenes, edit.owner

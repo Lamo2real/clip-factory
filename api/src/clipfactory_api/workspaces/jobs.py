@@ -24,7 +24,7 @@ from typing import Any, Final
 from .. import db
 from ..clock import iso, parse
 from ..log import log
-from . import activity, shapes
+from . import activity, own_script, shapes
 from . import types as ws
 from .agent import new_session_id
 from .expr import Update
@@ -64,13 +64,19 @@ def story_sk(story_id: str) -> str:
     return f"{ws.STORY_SK}{story_id}"
 
 
-def story_steps(run: Iterable[str], done: Iterable[str]) -> list[Item]:
-    """All eight steps: the ``run`` ones pending, the others done (made before) or skipped (never made)."""
+def story_steps(run: Iterable[str], done: Iterable[str], own: Mapping[str, Any] | None = None) -> list[Item]:
+    """All eight steps: the ``run`` ones pending, the others done (made before) or skipped (never made). ``own``: the
+    story's own script (§45.46): its first step says "Your script", and "Add your words" when a scene has a caption."""
     run_set, done_set = set(run), set(done)
+    labels = dict(shapes.STEP_LABEL)
+    if isinstance(own, Mapping):
+        labels["storyboard"] = shapes.OWN_STEP_LABEL["storyboard"]
+        if own_script.has_words(own):
+            labels["captions"] = shapes.OWN_STEP_LABEL["captions"]
     steps = []
     for key in shapes.STEP_ORDER:
         status = "pending" if key in run_set else ("done" if key in done_set else "skipped")
-        steps.append({"key": key, "label": shapes.STEP_LABEL[key], "status": status})
+        steps.append({"key": key, "label": labels[key], "status": status})
     return steps
 
 

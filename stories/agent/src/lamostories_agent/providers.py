@@ -54,7 +54,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any, ClassVar, Protocol
 
-from . import audio, config, keys, proc, writer
+from . import audio, config, keys, own_script, proc, writer
 from . import hosts as keyed
 from .engine import Engine, frame_count, write_json
 from .models import unavailable
@@ -320,7 +320,9 @@ def _refused_model(e: BaseException) -> bool:
 class BedrockWriter(_Base):
     """The storyboard agent's script, on the owner's model and effort for the task (``storyboard`` for a whole
     story or a rewrite, ``scene_rewrite`` for named scenes, §45.25; ``animation_plan`` for the re-staging pass after
-    the engine refused the first staging, §45.37 G5: the same agent, the same schema, its own model and effort)."""
+    the engine refused the first staging, §45.37 G5: the same agent, the same schema, its own model and effort). An
+    owner's own script (modes ``own`` and ``own_scenes``, §45.46) is staged on ``animation_plan`` with the adapter's
+    rules and schema, never written."""
 
     kind, id, label = "writer", WRITER_ID, "Claude on Amazon Bedrock"
     state = "needs_setup"
@@ -330,6 +332,8 @@ class BedrockWriter(_Base):
         if self.ctx.ask is None:
             raise RuntimeError("the writer needs the job's model call")
         mode = str(brief.get("mode") or "full")
+        if mode.startswith("own"):
+            return await self._stage_own(brief, mode)
         schema = writer.storyboard_schema(
             brief.get("catalog") or {},
             brief.get("castIds") or [],
@@ -350,6 +354,41 @@ class BedrockWriter(_Base):
         reply = await self.ctx.ask(
             task=task,
             messages=[{"role": "user", "content": [{"text": prompt}, *writer.content(brief.get("request") or {})]}],
+            schema=schema,
+            max_tokens=32000,
+        )
+        data: dict[str, Any] = reply.data or {}
+        return data
+
+    async def _stage_own(self, brief: dict[str, Any], mode: str) -> dict[str, Any]:
+        """Write it myself (§45.46): the faithful adapter stages the owner's own script (``own``: all of it;
+        ``own_scenes``: a new take of some scenes) on the owner's model and effort for animation planning, with the
+        writer's system text, then the adapter's rules (they win) and the strict schema: no captions, one scene per
+        script scene, each piece of what happens tied to what shows it."""
+        assert self.ctx.ask is not None
+        request = brief.get("request") or {}
+        art = brief.get("art")
+        scene_ids = [str(s) for s in brief.get("sceneIds") or []]
+        schema = own_script.schema(
+            brief.get("catalog") or {},
+            brief.get("castIds") or [],
+            brief.get("carIds") or (),
+            scene_ids=scene_ids,
+            topic_ids=brief.get("topicIds") or [],
+            shown=brief.get("shownSteps") or [],
+            art=art,
+            mode=mode,
+        )
+        prompt = (
+            writer.system_for(art)
+            + "\n\n"
+            + own_script.RULES
+            + "\n\n"
+            + own_script.instructions(mode, scene_ids, request.get("problems"))
+        )
+        reply = await self.ctx.ask(
+            task="animation_plan",  # "Plan the animation": the adapter stages, it never writes the story
+            messages=[{"role": "user", "content": [{"text": prompt}, *writer.content(request)]}],
             schema=schema,
             max_tokens=32000,
         )

@@ -13576,7 +13576,7 @@ Lamo Clips' partition `USER#{userId}` gets **no new items**. Two new kinds of pa
 | Workspace | `USER#{userId}#WSREG` | `WS#{workspaceId}` | `type="workspace"`, `userId`, `workspaceId`, `workspaceName`, `workspaceType`, `configuration` (map, §45.6), `version`, `createdAt`, `updatedAt` |
 | Idea | `USER#{userId}#WS#{workspaceId}` | `IDEA#{ideaId}` | `type="ws_idea"`, `userId`, `workspaceId`, Idea fields (§45.7), `seriesId?` (§45.44) |
 | Character | same | `CHAR#{characterId}` | `type="ws_character"`, Character fields (§45.8), `kind` and `car` (§45.42; a missing kind is a person, a car's `look` is null), `version` |
-| Story | same | `STORY#{storyId}` | `type="ws_story"`, Story fields (§45.9), internal `scriptKey`, `videoKey`, `coverKey`, `stillKeys` (map sceneId → key), `statusBefore`, `run` (publishing run number), `version`, `seriesId?` (§45.44), `art?` (the drawing style; none means Bright, §45.45) |
+| Story | same | `STORY#{storyId}` | `type="ws_story"`, Story fields (§45.9), internal `scriptKey`, `videoKey`, `coverKey`, `stillKeys` (map sceneId → key), `statusBefore`, `run` (publishing run number), `version`, `seriesId?` (§45.44), `art?` (the drawing style; none means Bright, §45.45), `ownScript?` (the owner's own script with its scene ids; none means the AI wrote it, §45.46) |
 | Series | same | `SERIES#{seriesId}` | `type="ws_series"`, `userId`, `workspaceId`, `seriesId`, `name`, `line`, `castIds`, `cover`, `storySoFar`, `storySoFarBy`, `storySoFarAt`, `summaries` (the newest 50 `{storyId, summary, by, at}`), `recapTaskId`, `version`, `createdAt`, `updatedAt` (§45.44; episodes are worked out on each read, never stored) |
 | Production job | same | `PJOB#{jobId}` | `type="ws_pjob"`, ProductionJob fields (§45.10), internal `sessionId`, `heartbeatAt` |
 | Asset | same | `ASSET#{assetId}` | `type="ws_asset"`, Asset fields (§45.12), internal `key` |
@@ -13866,8 +13866,17 @@ type StoryStatus = "draft" | "producing" | "needs_check" | "review" | "approved"
 type StepKey = "storyboard" | "safety" | "scenes" | "animation" | "sound" | "captions" | "assemble" | "preview";
 // Labels: "Write the story", "Check the facts", "Draw the scenes", "Animate", "Add sounds and music", "Add captions",
 // "Put it together", "Ready to watch". A portrait job has one step of its own: { key: "portrait", label: "Draw the picture" }.
-interface StoryInput { ideaId?: string; brief?: { title: string; logline: string; category: IdeaCategory } /* "type a
-  concept": a short form; the writer expands it */; title?: string; characterIds: string[] /* 1..3 */;
+// A video made from the owner's own script (§45.46): storyboard says "Your script", and captions "Add your words" when a
+// scene has a caption; the other six as above.
+interface OwnScene { sceneId?: string /* "s1".."sN", given by the API by position on every save; ignored on input */;
+  what: string /* what happens, 1..160 letters, ends trimmed, never changed */; caption?: string | null /* the words on
+  screen, 1..60 letters, kept exactly as typed; null: none */; who?: string[] /* ≤ 4 of the story's characterIds;
+  []: the AI picks from the cast */; place?: string | null /* a catalog set id; null: the closest */;
+  leaveOut?: string[] /* ≤ 5 names, each ≤ 40, that are not drawn */ }
+interface OwnScript { scenes: OwnScene[] /* 2..12, in the owner's order */ }
+interface StoryInput { ideaId?: string; brief?: { title: string; logline?: string /* required unless ownScript */;
+  category: IdeaCategory } /* "type a concept": a short form; the writer expands it */; ownScript?: OwnScript /* Write it
+  myself (§45.46), with brief or ideaId: staged, never written */; title?: string; characterIds: string[] /* 1..3 */;
   durationSec?: number /* 15..90 */; captionsOn?: boolean; musicMood?: MusicMood;
   referenceIds?: string[] /* ≤ 3, §45.28 */; ai?: { model: string | null; effort: Effort | null } /* this video's own
   setting, kept (§45.25 level 2) */ }
@@ -13883,7 +13892,8 @@ interface Story { storyId: string; workspaceId: string; contentType: "animation"
   safetyTopicId: string | null; safety: StorySafety | null; reviewNote: string | null; currentJobId: string | null;
   ai: { model: string | null; effort: Effort | null }; referenceIds: string[];
   posted: { platform: Platform; url: string }[]; version: number; createdAt: string; updatedAt: string;
-  approvedAt?: string; publishedAt?: string }
+  approvedAt?: string; publishedAt?: string; seriesId?: string /* §45.44 */; ownScript?: OwnScript /* §45.46: only on a
+  video made from the owner's own script, every scene with all six keys */ }
 interface StorySafety { topicId: string | null /* null: no driving advice, only the "nothing dangerous" check */;
   status: "pending" | "ok" | "problems" | "skipped" /* skipped: the quality agent is off; never for driving safety */; problems: string[]; checkedScriptVersion: number | null;
   citations: { publisher: string; title: string; url: string; section?: string }[] }
@@ -13903,7 +13913,8 @@ interface SceneEdit { sceneId: string; caption?: string | null; durationSec?: nu
   sfx?: SfxCue[] /* replaces that scene's whole effects list: add, move, remove */ }
 interface StoryPatch { version: number; title?: string; postCaptions?: Partial<Captions>; captions?: CaptionCue[];
   musicMood?: MusicMood; captionsOn?: boolean; scenes?: SceneEdit[];
-  ai?: { model: string | null; effort: Effort | null }; referenceIds?: string[] }
+  ai?: { model: string | null; effort: Effort | null }; referenceIds?: string[];
+  ownScript?: OwnScript /* Change my script (§45.46); only on a story that has one, and alone */ }
 
 type AssetKind = "final_video" | "cover" | "storyboard" | "scene_clip" | "scene_still" | "character_ref"
   | "portrait" | "audio" | "captions" | "design_ref" /* a picture for "Design with AI"; the Library hides it */;
@@ -14259,7 +14270,8 @@ while the us-east-1 bucket is off) to the runtime. Clip Factory's `config/models
   `quality_assurance` agent, `task="fact_check"`) whether each caption, each scene caption and each beat that shows a driving action agrees with
   the topic and its caveats, and, for every story, that nothing shows a dangerous act as something to copy. The
   writer's own text is rewritten once on a disagreement; an owner's edited text is never rewritten (its problems are
-  shown to him). Problems left become `story.safety.problems`; the job ends `needs_check` with the video made, and the
+  shown to him). An owner's script (§45.46) is reported, never rewritten: its events (`own:sN`, "Your scene N"), its
+  captions and its beats are only reported, and only the AI's post captions are fixed. Problems left become `story.safety.problems`; the job ends `needs_check` with the video made, and the
   story cannot be approved until a check passes (`checkedScriptVersion`). The end card says "Based on {publisher}
   advice. Check your local road rules." and the post descriptions name the sources.
 
@@ -19052,6 +19064,256 @@ above the rail. What changed (night drive only):
 - **Bright is byte-identical:** 7200 Bright frames and every Bright bubble match the build before prim by prim, the
   Bright still is the same PNG, and the Bright shapes and raster goldens are unchanged. Only the night golden
   (`stories-engine-night.json`) is written again.
+
+### 45.46 Write it myself: the owner's own script (owner request, 2026-11-24; wins over anything above for a video made from it)
+
+The owner asked about Clips Funded: "i also want the option to write my own script ... of what happens". So there is
+one clear option next to the AI path: the owner writes what happens, scene by scene, with the words on screen, and
+the video is made from **their** script: their events in their order, their characters and cars from the cast
+(§45.43), their captions kept exactly as written (Clips Funded videos have captions and no voices), and the series'
+memory when the video is in a series (§45.44). The AI only fills the gaps the engine needs (camera, timing, poses,
+faces, the characters' own noises, sound effects, set dressing and night-drive cuts) and never changes what happens.
+The AI path ("Use an idea", "Type my own", the chat) stays exactly as it is and stays the default. ADR-95 records the
+decision.
+
+Nothing new in the infra: no new route, no new task kind, no new table or index, no Terraform change. `ownScript` is
+an optional field on POST and PATCH `/v1/workspaces/{ws}/stories…` and on the schemaless `STORY#` item (about 5 KB
+at most). A story without it is byte for byte what it was: the writer, its prompt, schema, fix and labels, Type my
+own, Ask for changes, and every old story and job.
+
+#### 45.46.1 Where the choice is (web)
+
+* **Production › New, panel 1 "The idea"**: the Pick has a third option, `Use an idea | Type my own | Write it
+  myself`. "Use an idea" stays the default ("Type my own" with no ideas saved, as today); Write it myself is never
+  picked by itself. Under the Pick, only while it is picked, one hint: "You write what happens. Clips Funded draws
+  it." "Type my own" keeps its label, fields and messages.
+* An idea's **Make the video** (Ideas, Series' "Make the next episode" and "Coming up", the Dashboard, the Library)
+  opens the same page, so the option is everywhere with no new route and no second button on a card. Tapping Write it
+  myself with the scene list still empty starts it from the idea: `concept.beats` become the scenes' "What happens"
+  in order, `concept.onScreenText[i]` becomes scene i's caption, the title and the kind come from the idea, and a hint
+  says "Started from your idea. Change anything."
+* Panel 1 then holds the Title (≤ 80), the four kind cards, "The story so far" (only in a series: the series'
+  `storySoFar`, read-only, so the owner can write the next episode) and the scene list.
+
+#### 45.46.2 The scene list (`studio/ScriptEditor.tsx`, the pure helpers in `studio/ownScript.ts`)
+
+* It starts with 2 empty scenes. Each scene: **What happens** (multiline, ≤ 160, required) and **Caption** (one line,
+  ≤ 60, optional, placeholder "Words on screen (you can skip this)"). The counters always show ("19/160", "6/60").
+  Nothing is ever cut by itself: a field over its limit turns red with "Too long: 182 of 160 letters." Letters are
+  counted as the API counts them (an emoji is one letter). A caption keeps case, punctuation and emoji; only its ends
+  are trimmed. With an emoji the hint "Some emoji may not show." shows once.
+* ↑ ↓ ✕ per scene ("Move scene 2 up", "Move scene 2 down", "Take out scene 2"); an empty scene goes at once, a scene
+  with words through `toast.undo("Scene 2 taken out.")`. "+ Add a scene" adds one at the end and focuses it; it hides
+  at 12. One line under the list: "2 to 12 scenes."
+* **Paste a script** opens a textarea and **Make scenes**. `splitScript` splits at `Scene N:` / `Shot N.` headings
+  (any case, `:`, `.` or `-`), else at blank lines, else one scene per line. A line starting `Caption:`, `Words:`,
+  `On screen:` or `Text:`, or a line that is only a quotation, becomes the caption (label or quotes removed); the
+  other lines, joined with one space, are What happens. Nothing is cut or dropped: a 13th scene or a long text fills
+  the list and shows its red limit ("Up to 12 scenes. Join some, or take some out."). With words already in the list
+  it asks first: "Replace your scenes?" (Replace / Keep mine).
+* **Who.** `namesIn` matches every character's name (people and cars) as whole words, any case. A matched name in
+  the cast is ticked in that scene's Who chips; one not in the cast joins the cast by itself while the owner has not
+  picked the cast and the cast rule allows it (at most 3, at most one car, a car needs a person), otherwise the scene
+  asks "Rosa isn't in the cast. (Add Rosa) (Leave Rosa out)". No chip ticked: "Who: AI picks".
+* **Unknown names.** A capitalised word that is not a common word (The, Then, He, She, Oh, Suddenly, Scene, …), not a
+  place word, not a cast name and not answered is asked about once, at the first scene that names it: "Who is Max?
+  (Dash) (Rosa) (Leave Max out)". Picking a cast member ticks them in every scene that names Max (the words stay
+  "Max"); Leave Max out adds Max to that scene's `leaveOut`. Famous characters get the same question: Clips Funded
+  never draws someone it was not given, and never copies characters.
+* **Where.** `placeIn` matches the 16 set labels plus a few words (car park or parking, night with road, snow, ice or
+  icy, rain, fog, motorway, town or street, lounge or sofa, work or desk). No match: "Where: AI picks"; tapping it
+  opens a sheet of the 16 places plus "AI picks". An unknown place ("the beach") is never asked about: it is drawn
+  closest, with a note (§45.46.6). What the owner picked always wins: a chip changed by hand never follows the words
+  again.
+* **Your video**: under the list, one small glass tile per scene in order (number, place, who, the caption in quotes,
+  "about 5 s"), an orange ring on a tile with an open question, and a total line "4 scenes · about 30 seconds · 3
+  captions". It is built from the same state with no engine drawing.
+
+#### 45.46.3 The other panels, the checks and the send
+
+* **The cast**: unchanged (the words can fill it). **How long**: the same slider; until touched it follows
+  `defaultLength` (§45.46.4), with "Your 4 scenes: 15 to 60 seconds." and, outside that range, "It will be about 60
+  seconds." **Words and music**: the Captions switch turns on by itself at the first caption unless the owner set it;
+  off with captions: "Captions are off, so your words won't show." **Model and effort**: "The AI that sets up your
+  scenes and checks them.", the usual model being `animation_plan`'s.
+* `check()` for Write it myself, in order, each focusing its field: "Give the video a title." · "Pick what kind of
+  video it is." · "Write at least 2 scenes." · "Scene 3 is empty. Write what happens, or take it out." · "Up to 12
+  scenes. Join some, or take some out." · "Scene 2 is too long. Use 160 letters or fewer." · "Scene 2's caption is too
+  long. Use 60 letters or fewer." · "Tell us who Max is, in scene 2." · then as today (the cast, castProblem,
+  NO_GUIDANCE). The leave guard counts any scene with words.
+* `make()` sends `ownScript` (the scenes up to the last written one, the words trimmed at the ends only, `who` only
+  from the picked cast) with `brief = {title, logline: scene 1's text, category}`, or with `ideaId` (plus `title` when
+  changed) when the list started from an idea whose kind was kept; a changed kind sends a brief, because the API takes
+  the kind from the idea.
+
+#### 45.46.4 The shared contract (web, mock, API and agent say exactly this)
+
+* Shapes: `OwnScene`, `OwnScript`, `StoryInput.ownScript`, `Story.ownScript`, `StoryPatch.ownScript` (§45.6).
+* Limits: 2 to 12 scenes; `what` 1..160; `caption` 1..60 or null (an empty caption is no caption); `who` ≤ 4, each in
+  the story's `characterIds` (repeats dropped); `place` one of the 16 catalog sets (`catalog.SETS`, a drift test
+  against `catalog.ts`); `leaveOut` ≤ 5 names, each ≤ 40 (repeats dropped); no control characters (a tab or a carriage
+  return included), a newline only in `what`; emoji joined by zero-width joiners stay. Letters are code points: an
+  emoji is one. A value over its limit is refused (400), never shortened.
+* Ids: scenes `s1..sN` by position, given by the API on create and on every ownScript PATCH (an input `sceneId` is
+  ignored). The owner's caption cue of scene `sN` is **`w_sN`**. The fact checker's ref for a scene's event text is
+  **`own:sN`**, where "Your scene N".
+* Reading time: `need` = with a caption `min(15, max(3, 2 + letters / 15))`, else 3. Default length:
+  `clamp(5 × ceil(max(Σneed, 5n) / 5), 15, min(90, 15n))` (Σ added left to right, as JavaScript does). The agent's
+  fit target: `T = clamp(durationSec, max(15, Σneed), min(89.5, 15n))`.
+* The owner's caption cues are built by code, never by a model: `{id: "w_sN", at: start + 0.25, dur: d − 0.5, text:
+  caption}` (plus `guidanceRef` when the adapter names a shown step of the topic). They are always built;
+  `captionsOn` decides whether they are burned in. `Scene.caption` is always null on an owner's script. The engine
+  counts a caption's and a title's length in letters too (code points, as the API does), so a 60-letter caption with
+  emoji is never refused by the engine.
+* Step labels: storyboard **"Your script"**, captions **"Add your words"** when a scene has a caption (API
+  `shapes.OWN_STEP_LABEL`, agent `keys.OWN_STEP_LABELS`, the mock). The web's running lines: "Setting up your scenes…"
+  and "Adding your words…" (`words.OWN_STEP_WORD`). The done message of Your script: "5 scenes, 32 s", plus " · 1
+  drawn a bit differently" when a scene has a closest note. Check the facts: "Checked" or "2 things to check in your
+  script". Old jobs read word for word as before.
+* API 400 sentences (`field` = `ownScript.scenes[i].what`, `.caption`, `.who`, `.place` or `.leaveOut`): "Write at
+  least 2 scenes." · "Up to 12 scenes." · "Scene {n} is empty. Write what happens." · "Scene {n} is too long. Use 160
+  letters or fewer." · "Scene {n}'s caption is too long. Use 60 letters or fewer." · "Scene {n} has someone who isn't
+  in the cast." · "Scene {n}'s place isn't one we can draw. Pick one from the list." · "Use plain letters in scene
+  {n}." (also any value of the wrong type) · "Scene {n} leaves out too many names. Keep 5 or fewer." · "Scene {n} has
+  a name that is too long. Use 40 letters or fewer." · "This video has no script of yours." (a PATCH on a story
+  without one) · "Change your script by itself, then the rest." (`ownScript` sent with `captions` or `scenes`).
+* API 409: "This video follows your script. Tap Change my script." (Ask for changes with a note).
+* Job errors (agent `keys.py`, the mock; `{words}` at most 40 letters plus "…", only in the message): `OWN_LOST`
+  "Scene {n} got lost while we set it up. Tap Try again." · `OWN_WORDS` "Scene {n}'s caption didn't stay as you wrote
+  it. Tap Try again." · `OWN_NOT_SHOWN` "Scene {n} didn't fit: we couldn't show “{words}”. Change scene {n}, then tap
+  Try again." · `OWN_WHO` "Scene {n} didn't fit: {name} isn't in your cast. Add {name} to the cast, or change scene
+  {n}." · `OWN_EXTRA` "Scene {n} got something you didn't write. Tap Try again." · `OWN_PLACE` "Scene {n} didn't stay
+  in the {place}. Tap Try again."
+
+#### 45.46.5 The API (`workspaces/own_script.py`, `stories.py`, `routes/core.py`, `shapes.py`, `jobs.py`)
+
+* **POST /stories**: `STORY_KEYS` has `ownScript`. With it the brief needs only `title` and `category`; a missing or
+  empty logline is scene 1's `what` on one line (≤ 280). With `ideaId` the title and kind come from the idea (`title`
+  overrides) and the idea's concept is not copied into the brief: the owner's script wins. `who` is checked after the
+  `characterIds`. The topic is matched over the title, the logline, every `what` and every caption, for **every**
+  kind: `driving_safety` with no match is the 409 `NO_GUIDANCE` with the topics; for any other kind a match is kept as
+  `safetyTopicId`, so that story is fact checked against it even with the quality agent off. `captionsOn`: as given,
+  else on when a scene has a caption, else the workspace's. `durationSec`: as given, else `default_length`. The job's
+  steps use the own labels.
+* **PATCH /stories/{id}** with `ownScript` (validated against the story's `characterIds`; refused while a job runs):
+  * **words only** (the same scenes, each with the same `what`, `who`, `place` and `leaveOut`): the script's `w_sN`
+    cues change (a changed text, a new cue at `start + 0.25` for `d − 0.5`, a cleared caption's cue removed), a new
+    script version is saved with `meta.by: "owner"`, the cue ids join `ownerEdits.captions`, and only `safety`,
+    `captions`, `assemble` and `preview` become stale. The topic is matched again over the title and the owner's
+    words, the current topic standing in, so it can only move to a topic the words name better.
+  * **anything else** (order, what, who, place, leaveOut, a scene added or taken out): every step becomes stale, no
+    script version is written, and the topic is matched plainly again (`driving_safety` with no match: the 409).
+  * **the mirror**: a `captions` patch (the CaptionEditor) on an owner's script copies each `w_sN` cue's text into
+    scene N's caption, and a removed cue sets it to null, so both copies of the owner's words stay the same.
+* `request_changes` with a note on an owner's script: the 409 above. With `sceneIds` only (Remake this scene) it runs
+  as today. `produce` is unchanged.
+* `public_story` shows `ownScript` only when the story has one, every scene with all six keys (the db layer drops
+  nulls inside maps, so the stored scenes may lack `caption` and `place`; every reader uses `.get`).
+
+#### 45.46.6 The agent: a faithful adapter, then a code check (`lamostories_agent/own_script.py`, `pipeline.py`)
+
+* `StoryJob.storyboard()` hands a story with `ownScript` to `_storyboard_own` (modes `own`: produce, Try again,
+  Remake the whole video; `own_scenes`: Remake this scene). The AI path below it is untouched; a note is ignored as a
+  defence. `BedrockWriter.write` has the own branch: task **`animation_plan`** ("Plan the animation"; no new task
+  kind), prompt `writer SYSTEM + own_script.RULES + instructions(mode)`, schema `own_script.schema`. `_plan_writer`
+  plans `animation_plan`, so the credit names the model that set up the scenes ("Scenes set up by"). The writer's
+  call budget is unchanged (3); the adapter uses at most 2.
+* The request: the scenes (`sceneId`, `what`, `hasCaption`, `who` as cast keys, a car as its `cars` key, `place`,
+  `leaveOut`, `minSec`), the cast brief (names, kinds, personality, faces and noises, never looks), the style lists,
+  `targetSec`, the captions switch, the music mood, the topic's shown guidance, the series' memory and the reference
+  videos. Never the caption words (code places them) and never the idea's concept (`_concept()` is `{title, category,
+  scenes}`).
+* `RULES` (it follows SYSTEM and wins over it): exactly one scene per script scene, same order, same sceneId, never
+  add, drop, merge, split or reorder; show what "what" says and only that, choosing only camera, view, positions,
+  timing, poses, faces, the characters' own noises, sound effects, props that set the scene and night-drive cuts;
+  never add an event, a character, a twist, a lesson or an ending; split each "what" into `shows` pieces that copy its
+  words exactly and in order, each naming its beats, effects, place or camera, else `closest` or `notShown` with
+  `why`; a beat no piece names may only be idle, look_left, look_right, nod or gesture, and every prop action belongs
+  to a piece; never draw anyone outside the cast; write no caption; the series memory only keeps things consistent;
+  reference videos lend timing and staging only, never characters or footage; stage driving exactly as written (the
+  fact check reports it), naming `guidanceRef` and `teachesSafety`.
+* The schema has no title, caption, note or captions list (the model cannot write words on screen), exactly one scene
+  per asked scene with `sceneId` an enum, `guidanceRef` limited to the topic's shown steps, `shows` ≤ 12 pieces
+  (`words`, `beats`, `sfx` as beat numbers whose effect shows it, `place`, `camera`, `closest`, `notShown`, `why`).
+* **Code builds the script** (`script_from_own`): the story's title; scenes in the owner's order, each made at least
+  its reading time long before fitting, `Scene.title` the first words of `what` cut at a word to 40 with "…",
+  `Scene.caption` null, `Scene.note` written by code ("Drawn a bit differently: “on the beach” is in the Park." /
+  "Not drawn: Max.", ≤ 200); the `w_sN` cues from §45.46.4, plus any cue the owner added in the CaptionEditor
+  (`ownerEdits.captions`). Then `_prepare(fit_to=T)` as today: fitDuration moves the cues with their scenes and never
+  changes text or order.
+* **The code check** (`own_problems`, after `_prepare`, `_repair_cast` and a take merge; `norm` = NFC, lower case,
+  anything but letters and digits a space, spaces collapsed, for the pieces of what happens): (1) the scene ids are
+  the script's, in order, no extras → `OWN_LOST`; (2) one `w_sN` cue per captioned scene whose text is the caption
+  exactly (`same_words`: case, punctuation and emoji count, only NFC and runs of spaces may differ), inside its scene's
+  window (0.05 s), no other cue but the owner's own, every `Scene.caption` null → `OWN_WORDS` (an extra cue or a scene
+  caption → `OWN_EXTRA`); (3) the scene's actors and car props are exactly `who` when given, else some of the cast,
+  and every cast name in a piece is the `who` of one of that piece's beats or its car prop → `OWN_NOT_SHOWN` with the
+  name (`OWN_WHO` only for a capitalised name not in the cast, `OWN_EXTRA` for someone added); (4) `set == place` when
+  given → `OWN_PLACE`; (5) on the answer: the pieces' words together are `norm(what)` (else `OWN_LOST`), each piece
+  has a valid target or is `notShown`, `notShown` only for a `leaveOut` name (else `OWN_NOT_SHOWN` with its words),
+  every unnamed beat a filler, every prop beat named (else `OWN_EXTRA`), and no scene has fewer beats after
+  `_prepare` (`OWN_LOST`); (6) each captioned scene lasts at least 0.9 × its reading time (told to the model, shown to
+  the owner only as the last failure, `OWN_WORDS`). `FILLER`, `ACTIONS` and `PROP_ACTIONS` have a drift test against
+  `catalog.ts`.
+* **Retry, then an honest refusal**: on any engine error or problem the adapter is asked once more with the problems
+  (`restage`), the cast repair runs if only faces or noises are left, and the check runs again. Still failing: the job
+  stops with the first problem's owner sentence (only engine errors left: `OWN_LOST` for the scene the engine names,
+  else the writer's failure sentence) and nothing is saved (no script version, no sidecar, no story field). The web
+  shows Try again and **Change my script**. Passing: the script is saved `by: "writer"`; the sidecar has `ownScript:
+  true` and only the post captions as the writer's texts.
+* The series recap (`tasks/series.py`) reads `episode.ownScript` (what and caption per scene) with one extra rule, so
+  the story so far tells the owner's events.
+
+#### 45.46.7 Check the facts on an owner's script (ADR-74 still holds)
+
+* It still runs, and `guarded()` is unchanged: a driving category, a topic (the API's match counts for every kind), the
+  adapter's `teachesSafety` or a car of the cast. So an owner's script that teaches safety is always checked, whatever
+  the quality agent's switch says.
+* `safety.items(…, own=)` adds one item per scene (`own:sN`, "Your scene N", its `what`); the cue `w_sN` reads "Your
+  scene N's caption “…”"; the checker's prompt gets one line: "Items with ref own:… are what happens in the owner's
+  own script."
+* **It reports and never rewrites the owner's story.** Every `caption:`, `scene:`, `beat:` and `own:` problem is only
+  reported; `_rewrite` (the writer's fix) never runs; only `post:` problems (the AI's post captions) are fixed, by
+  asking the captions task once more. Problems left become `story.safety.problems`, for example "Your scene 2 (“Dash
+  puts on full beam in the fog”): the checked advice says to use dipped headlights in fog. (The Highway Code)". The
+  job ends `needs_check` with the video made, `approve` answers 409 "Fix the facts first: …" until a check passes, and
+  on Review **Fix the words** opens Change my script at that scene (`^Your scene (\d+)`). The owner changes their own
+  words; the video is made and checked again. Unsafe advice can be made into a video so the owner can see it, never
+  approved or posted.
+* A non-driving owner's script that the adapter flags `teachesSafety` with no matched topic is held with `HELD_TOPIC`,
+  as today. The final look is unchanged and only reports.
+
+#### 45.46.8 The video's page and Review
+
+* A **"Your script"** chip (glass, round) above the step track on the video's page and in Review's header. The empty
+  filmstrip: "Setting up your scenes… they show up here soon." Production details: "Story: By you" and "Scenes set up
+  by: {model}" in place of the Writer row (old stories keep it word for word). A failed job adds Change my script.
+* Review: a **Your script** panel (each scene's number, what happens, caption in quotes, who, place and the agent's
+  note). **Change my script** replaces Ask for changes: a sheet with the same editor filled from `story.ownScript`, no
+  note box (a note would let the AI change what happens), and **Make it again**: PATCH the script when it changed,
+  then `produce` (the stale steps; `{from: "storyboard"}` when nothing is stale), then "Making it again!". Only
+  captions changed: only the cheap caption steps run. **Remake this scene** stays (a new take; the scene's events and
+  words stay). **Remake the whole video**: "Clips Funded sets up your scenes again. Your words stay." The
+  CaptionEditor stays, mirrored into the script by the API.
+
+#### 45.46.9 Look, mock and tests
+
+* `styles/sd-script.css`, imported by one line in `styles/studio.css` after sd-production: only `--st-*` tokens and
+  `--st-r-*` radii (scene rows and tiles the control radius, chips and pills round), Fraunces for "Scene 1" as the
+  panel titles, no motion, border or cursor of its own, a hover state and a focus ring on every control. Espresso,
+  cream and orange glass as the rest of Clips Funded; nothing in base.css or glass.css.
+* The mock (`api/mock/ownScript.ts`, small hooks in `mock/stories.ts`) checks scripts with the API's sentences,
+  matches the topic from the owner's words, stages one scene per script scene in order with who and where kept and
+  the `w_sN` cues built word for word, runs the code check as a self-test on every staging, reports fog plus full beam
+  as "Your scene N…" without rewriting, and has the PATCH paths, the mirror and the 409.
+* Tests: `web/test/storiesOwnScript.test.tsx`, `web/e2e/stories-own-script.spec.ts` (the last shard runs it),
+  `api/tests/test_ws_own_script.py`, `stories/agent/tests/test_own_script.py` (the real engine under Deno where it
+  needs it). No existing test was changed.
+* Follow-ups: code proves order, cast, place, words, full coverage of the text and nothing added beyond the fillers,
+  but not that a beat really "shows" its piece (the final look could also read the owner's scenes, report only); the
+  name guess can ask about "Monday" (Leave Monday out is harmless); any change to what happens stages every scene
+  again; `{`, `}` and `\` show as `(`, `)` and `/` in burned captions and some emoji have no glyph in Inter (the
+  script keeps the words as typed and the web hints about emoji).
 
 ## 46. Auto-posting: the oldest clips in Review go up by themselves, every X hours (owner request, 2026-11-22)
 

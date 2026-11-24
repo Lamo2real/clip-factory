@@ -1,8 +1,9 @@
 """The parts of the animation engine's vocabulary the API checks (docs/CONTRACTS.md §45.10).
 
 A mirror of ``web/src/stories/engine/catalog.ts`` and ``engine/types.ts`` for the fields the API validates (a
-character's look, faces, moves and sounds; a story edit's effects, captions and music). ``tests/test_ws_characters.py``
-compares these lists with the TypeScript files, so the two never drift.
+character's look, faces, moves and sounds; a story edit's effects, captions and music; the places of an owner's
+script). ``tests/test_ws_characters.py`` and ``tests/test_ws_own_script.py`` compare these lists with the TypeScript
+files, so the two never drift.
 """
 
 from __future__ import annotations
@@ -53,6 +54,25 @@ SFX: Final = (
     "tick",
 )
 MUSIC_MOODS: Final = ("none", "calm", "playful", "tense", "triumphant", "wonder", "comedic")
+# The places a scene can be drawn in (catalog.ts ``sets``): an owner's script names one per scene (§45.46).
+SETS: Final = (
+    "studio",
+    "road_day",
+    "road_night",
+    "icy_road",
+    "snowy_road",
+    "rainy_road",
+    "foggy_road",
+    "highway",
+    "country_road",
+    "city_street",
+    "parking_lot",
+    "kitchen",
+    "living_room",
+    "office",
+    "park",
+    "highway_night",
+)
 
 # CharacterLook (engine/types.ts): the rig's choices.
 LOOK_BODIES: Final = ("bean", "round", "tall", "square")

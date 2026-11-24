@@ -817,10 +817,33 @@ export type StoryStatus =
   | "published"
   | "failed";
 
+/** One scene of the owner's own script (§45.46): what happens and its words, kept exactly as written. */
+export interface OwnScene {
+  /** given by the API on every save: "s1", "s2", … in order; it is the storyboard's sceneId. Ignored on input. */
+  sceneId?: string;
+  /** what happens: 1..160 characters (ends trimmed), never changed */
+  what: string;
+  /** the words on screen: 1..60 characters (ends trimmed); null or left out: no caption in this scene */
+  caption?: string | null;
+  /** who is in it: some of the story's characterIds (people and its car); left out or []: the AI picks from the cast */
+  who?: string[];
+  /** the place: a set id from the catalog; null or left out: the AI picks the closest */
+  place?: string | null;
+  /** names in `what` the owner said are not drawn ("Leave Max out"): ≤ 5, each 1..40 */
+  leaveOut?: string[];
+}
+
+/** "Write it myself" (§45.46): 2..12 scenes in the owner's order. */
+export interface OwnScript {
+  scenes: OwnScene[];
+}
+
 export interface StoryInput {
   ideaId?: string;
-  /** "type a concept": a short form the writer expands */
-  brief?: { title: string; logline: string; category: IdeaCategory };
+  /** "type a concept": a short form the writer expands; with `ownScript` the logline may be left out */
+  brief?: { title: string; logline?: string; category: IdeaCategory };
+  /** the owner's own script (§45.46), with `brief` or `ideaId`: the video is staged from it, never written */
+  ownScript?: OwnScript;
   title?: string;
   /** 1..3 */
   characterIds: string[];
@@ -931,6 +954,8 @@ export interface Story {
   publishedAt?: string;
   /** the series it is filed in (§45.44); missing: No series */
   seriesId?: string;
+  /** only on a video made from the owner's own script (§45.46), with its sceneIds */
+  ownScript?: OwnScript;
 }
 
 /** A reference analysis job's own steps (CONTRACTS §45.34): Look at it, Listen, Write it up. */
@@ -1016,6 +1041,8 @@ export interface StoryPatch {
   scenes?: SceneEdit[];
   ai?: AiSetting;
   referenceIds?: string[];
+  /** "Change my script" (§45.46): only on a video made from the owner's own script */
+  ownScript?: OwnScript;
 }
 
 export type AssetKind =

@@ -10,6 +10,8 @@
 // video's page opens with its preview, hero glass holding the ArcDial (the render progress) and the video's MediaRow.
 // A cast may be people and one car (§45.43: CastPicker, the people first, then the car), and a video can be filed in a
 // series (§45.44): the list shows one series or all (`?series=`), a new video picks its series and starts with its cast.
+// Write it myself (§45.46): the idea's third choice, the owner's own scenes (ScriptEditor), staged and never rewritten;
+// its video's page shows the "Your script" chip and Change my script.
 import "../styles/studio.css";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { A } from "../../components/ui.tsx";
@@ -21,6 +23,7 @@ import { useLoad, usePoll } from "../../lib/hooks.ts";
 import { storiesApi } from "../api/client.ts";
 import { starBurst } from "../ui.tsx";
 import {
+  isCar,
   STEP_LABEL,
   STEP_ORDER,
   type AiSetting,
@@ -38,6 +41,7 @@ import {
   type StoryFormat,
   type StoryInput,
   type StoryScript,
+  type TaskKind,
 } from "../api/types.ts";
 import { CATALOG } from "../engine/catalog.ts";
 import { storiesHref } from "../routes.ts";
@@ -51,6 +55,8 @@ import { formatOf, formatWords, sameFormat, ShapePicker } from "../studio/shape.
 import { ArtPicker, artOf, artWords, storyArt } from "../studio/art.tsx";
 import { Busy, celebrate, Notice, Pick, ShowMore, Slider, Switch, Tag, TechDetails, TextField } from "../studio/kit.tsx";
 import { useLeaveGuard } from "../studio/leaveGuard.tsx";
+import { defaultLength, draftFromIdea, emptyDraft, fitTarget, hasCaption, lengthRange, namesIn, scriptProblem, stepLabel, toOwnScript, written, type ScriptDraft } from "../studio/ownScript.ts";
+import { ChangeScriptSheet, fixId, focusField, OwnChip, ScriptEditor } from "../studio/ScriptEditor.tsx";
 import { currentStep, nowLine, StepTrack, stepsOf } from "../studio/StepTrack.tsx";
 import { ago, CATEGORY_LABEL, helpersLine, isConflict, NO_GUIDANCE, notMadeYet, say, seconds, STATUS_TONE, statusLabel, STORAGE_WORDS } from "../studio/words.ts";
 import { KIND_OPTIONS } from "./Ideas.tsx";
@@ -229,7 +235,12 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
     ws,
   );
   const [topics, setTopics] = useState<GuidanceTopic[] | null>(null);
-  const [source, setSource] = useState<"idea" | "own">("idea");
+  const [source, setSource] = useState<"idea" | "own" | "script">("idea");
+  // Write it myself (§45.46): the owner's scenes, and the idea they started from (its steps), if any.
+  const [draft, setDraft] = useState<ScriptDraft>(() => emptyDraft());
+  const [fromIdea, setFromIdea] = useState<string | null>(null);
+  /** The field a problem with the scenes points at (check() sets it, showFix() focuses it). */
+  const scriptFix = useRef<string | null>(null);
   const [picked, setPicked] = useState<string>(ideaId ?? "");
   const [title, setTitle] = useState("");
   const [logline, setLogline] = useState("");
@@ -272,7 +283,8 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
     captions !== null ||
     mood !== null ||
     ai !== null ||
-    refIds.join(",") !== givenRefs.slice(0, 3).join(",");
+    refIds.join(",") !== givenRefs.slice(0, 3).join(",") ||
+    draft.scenes.some(written);
   const leave = useLeaveGuard(dirty && !busy);
 
   useEffect(() => {
@@ -338,16 +350,24 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
   }, [data.data]);
 
   const kind: IdeaCategory | "" = source === "idea" ? (idea?.category ?? "") : category;
-  // The length: the owner's, else the address's, else a picked idea's own (its full idea was written for it), else
-  // the workspace's default.
+  // The owner's scenes as they will be sent (Write it myself): the length and the captions follow them.
+  const ownScenes = useMemo(() => (source === "script" ? toOwnScript(draft, cast, characters).scenes : []), [source, draft, cast, characters]);
+  const ownWritten = ownScenes.filter((x) => x.what);
+  // The length: the owner's, else the address's, else what the owner's scenes need, else a picked idea's own (its full
+  // idea was written for it), else the workspace's default.
   const ideaLength = source === "idea" ? (idea?.concept?.durationSec ?? null) : null;
-  const lengthSec = Math.min(90, Math.max(15, length ?? ideaLength ?? cfg.defaultDurationSec ?? 45));
+  const scriptLength = ownWritten.length ? defaultLength(ownWritten) : null;
+  const lengthSec = Math.min(90, Math.max(15, length ?? scriptLength ?? ideaLength ?? cfg.defaultDurationSec ?? 45));
   const usualShape = formatOf(workspace ? cfg : null);
   const format = shape ?? usualShape;
   const usualArt = artOf(workspace ? cfg : null);
   const drawing = art ?? usualArt;
-  const captionsOn = captions ?? cfg.captionsOn ?? true;
+  // The owner's first caption turns the captions on, unless the owner set the switch himself.
+  const ownWords = source === "script" && hasCaption({ scenes: ownScenes });
+  const captionsOn = captions ?? (ownWords ? true : (cfg.captionsOn ?? true));
   const music: MusicMood = mood ?? (cfg.musicOn === false ? "none" : kind ? MOOD_FOR[kind] : "playful");
+  /** The task that makes the storyboard: the owner's script is staged with "Plan the animation" (§45.46). */
+  const writeTask: TaskKind = source === "script" ? "animation_plan" : "storyboard";
 
   function pickCast(ids: string[]) {
     castTouched.current = true;
@@ -356,10 +376,56 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
     setCast(ids.slice(0, 3));
   }
 
+  /** Why a character the words name can't join the cast now (at most 3, one car, a car needs a person), or null. */
+  function castJoinWhy(id: string, now: string[] = cast): string | null {
+    if (now.includes(id)) return null;
+    if (now.length >= 3) return "The cast has 3 already. Take someone out in The cast first.";
+    const next = castOrder([...now, id], characters).map((x) => characters.find((c) => c.characterId === x)).filter((c): c is Character => !!c);
+    return castProblem(next);
+  }
+
+  // Write it myself: a character the words name comes into the cast by itself, while the owner has not picked the cast
+  // himself and the cast rule allows it (the people first, then a car); otherwise its scene asks.
+  useEffect(() => {
+    if (source !== "script" || castPicked || !characters.length) return;
+    const named = draft.scenes.flatMap((x) => namesIn(x.what, characters)).filter((c) => draft.answers[c.name.trim().toLowerCase()] !== "out");
+    let next = cast;
+    for (const c of [...named.filter((x) => !isCar(x)), ...named.filter((x) => isCar(x))]) if (!next.includes(c.characterId) && !castJoinWhy(c.characterId, next)) next = castOrder([...next, c.characterId], characters);
+    if (next.length !== cast.length) setCast(next);
+    // Reads the cast it changes; runs when the words change.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [draft, source, castPicked, characters]);
+
+  /** Write it myself from here: the scene list starts from the picked idea's steps when it is still empty. */
+  function pickSource(v: "idea" | "own" | "script") {
+    setSource(v);
+    setProblem(null);
+    if (v !== "script" || draft.scenes.some(written) || !idea) return;
+    setDraft(draftFromIdea(idea));
+    setFromIdea(idea.ideaId);
+    setTitle(idea.title);
+    setCategory(idea.category);
+  }
+
   function check(): string | null {
+    scriptFix.current = null;
     if (source === "idea") {
       if (!idea) return "Pick an idea, or tap Type my own.";
       if (blockedIdea(idea)) return NO_GUIDANCE;
+    } else if (source === "script") {
+      if (!title.trim()) {
+        scriptFix.current = "st-sc-title";
+        return "Give the video a title.";
+      }
+      if (!category) {
+        scriptFix.current = "st-sc-kind";
+        return "Pick what kind of video it is.";
+      }
+      const bad = scriptProblem(draft, cast, characters);
+      if (bad) {
+        scriptFix.current = fixId("st-sc", draft, bad.fix);
+        return bad.text;
+      }
     } else {
       if (!title.trim()) return "Give the video a title.";
       if (!logline.trim()) return "Write one line about what happens.";
@@ -371,6 +437,8 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
 
   /** A missing pick: its part comes into view with the focus (on a phone it is far above the pinned button). */
   function showFix(why: string) {
+    // Write it myself: the field the problem names (its title, its kind, a scene's words or its question).
+    if (source === "script" && scriptFix.current && focusField(scriptFix.current)) return;
     const part = document.getElementById(why === "Pick at least one character." ? "st-nv-2" : "st-nv-1");
     const box = part?.closest("section");
     if (!part || !box) return;
@@ -390,7 +458,7 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
       return;
     }
     // A model picked on purpose that the studio knows cannot be used: ask first, never swap it by itself.
-    const ask = sure ? null : unusableAsk(info, usualFor(info, "storyboard"), pickNow);
+    const ask = sure ? null : unusableAsk(info, usualFor(info, writeTask), pickNow);
     if (ask) return setAsking(ask);
     setAsking(null);
     setBusy(true);
@@ -410,12 +478,20 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
     // uses the usual again once it works.
     const own = cleanPick(pickNow);
     if (own) body.ai = { model: own.model ?? null, effort: own.effort ?? null };
-    const stand = own?.model ? undefined : sendPick(info, usualFor(info, "storyboard"), pickNow);
+    const stand = own?.model ? undefined : sendPick(info, usualFor(info, writeTask), pickNow);
     if (stand?.model) body.override = stand;
     const usable = refIds.filter((id) => refs.data?.some((r) => r.refId === id));
     if (usable.length) body.referenceIds = usable;
     if (source === "idea" && idea) body.ideaId = idea.ideaId;
-    else body.brief = { title: title.trim(), logline: logline.trim(), category: category as IdeaCategory };
+    else if (source === "script") {
+      // The owner's scenes, the words exactly as typed (§45.46); the idea they started from, while its kind is kept.
+      body.ownScript = toOwnScript(draft, cast, characters);
+      const started = fromIdea ? ideas.find((i) => i.ideaId === fromIdea) : undefined;
+      if (started && started.category === category) {
+        body.ideaId = started.ideaId;
+        if (title.trim() !== started.title) body.title = title.trim();
+      } else body.brief = { title: title.trim(), logline: body.ownScript.scenes[0]?.what ?? "", category: category as IdeaCategory };
+    } else body.brief = { title: title.trim(), logline: logline.trim(), category: category as IdeaCategory };
     try {
       const { story } = await storiesApi().createStory(ws, body);
       celebrate(document.querySelector(".st-make"), 100);
@@ -439,6 +515,8 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
     );
 
   const blockedCount = ideas.filter(blockedIdea).length;
+  const storySoFar = series ? ((seriesList ?? []).find((x) => x.seriesId === series)?.storySoFar ?? "").trim() : "";
+  const range = ownWritten.length ? lengthRange(ownWritten) : null;
   return (
     <section className="st-page st-studio">
       <header className="st-s-head">
@@ -475,13 +553,38 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
               options={[
                 { value: "idea", label: "Use an idea" },
                 { value: "own", label: "Type my own" },
+                { value: "script", label: "Write it myself" },
               ]}
-              onChange={(v) => {
-                setSource(v);
-                setProblem(null);
-              }}
+              onChange={pickSource}
             />
-            {source === "idea" ? (
+            {source === "script" ? <p className="st-s-field__hint st-sc-lede">You write what happens. Clips Funded draws it.</p> : null}
+            {source === "script" ? (
+              <>
+                <TextField id="st-sc-title" label="Title" value={title} onChange={setTitle} max={80} placeholder="For example: Dash learns to juggle" />
+                <div id="st-sc-kind">
+                  <Pick label="What kind of video?" big value={category} options={KIND_OPTIONS} onChange={setCategory} />
+                </div>
+                {storySoFar ? (
+                  <details className="st-sc-sofar">
+                    <summary className="st-sc-sofar__sum">The story so far</summary>
+                    <p className="st-sc-sofar__text">{storySoFar}</p>
+                  </details>
+                ) : null}
+                <ScriptEditor
+                  draft={draft}
+                  update={(fn) => {
+                    setProblem(null);
+                    setDraft(fn);
+                  }}
+                  characters={characters}
+                  cast={castOrder(cast, characters)}
+                  onAddToCast={(id) => pickCast(castOrder([...cast, id], characters))}
+                  addWhy={(id) => castJoinWhy(id)}
+                  lengthSec={lengthSec}
+                  note={fromIdea && fromIdea === idea?.ideaId ? "Started from your idea. Change anything." : null}
+                />
+              </>
+            ) : source === "idea" ? (
               usable.length || idea ? (
                 <>
                   {idea && blockedIdea(idea) ? (
@@ -547,6 +650,12 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
             </h2>
             <Slider label="Length" min={15} max={90} step={5} value={lengthSec} onChange={setLength} words={seconds(lengthSec)} marks={{ from: 30, to: 60, label: "30 to 60 seconds works best." }} stepper />
             {length === null && ideaLength ? <p className="st-s-field__hint">The full idea was written for {seconds(ideaLength)}.</p> : null}
+            {source === "script" && range ? (
+              <p className="st-s-field__hint">
+                Your {ownWritten.length === 1 ? "1 scene" : `${ownWritten.length} scenes`}: {range.lo} to {range.hi} seconds.
+                {lengthSec < range.lo || lengthSec > range.hi ? ` It will be about ${Math.round(fitTarget(lengthSec, ownWritten))} seconds.` : ""}
+              </p>
+            ) : null}
           </section>
 
           <section className="st-s-panel st-glass" aria-labelledby="st-nv-shape">
@@ -562,6 +671,7 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
               <span className="st-s-num">5</span> Words and music
             </h2>
             <Switch label="Captions" line="Words on screen. The videos have no voices." checked={captionsOn} onChange={setCaptions} />
+            {ownWords && !captionsOn ? <p className="st-s-field__hint">Captions are off, so your words won&apos;t show.</p> : null}
             <Pick label="Music" value={music} options={CATALOG.musicMoods.map((m) => ({ value: m.id, label: m.id === "none" ? "No music" : m.label }))} onChange={setMood} />
           </section>
 
@@ -576,11 +686,11 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
             <h2 className="st-s-panel__title" id="st-nv-6">
               <span className="st-s-num">7</span> Model and effort for this video <span className="st-s-panel__hint">(you can skip this)</span>
             </h2>
-            <p className="st-s-field__hint">The AI that writes and checks it.</p>
+            <p className="st-s-field__hint">{source === "script" ? "The AI that sets up your scenes and checks them." : "The AI that writes and checks it."}</p>
             <div className="st-s-aiwho">
               <ModelMenu
                 info={info}
-                usual={usualFor(info, "storyboard")}
+                usual={usualFor(info, writeTask)}
                 value={ai}
                 onChange={setAi}
                 title="Model and effort for this video"
@@ -707,6 +817,8 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
   const [problem, setProblem] = useState<string | null>(null);
   const [pick, setPick] = useState<ModelOverride | null>(null);
   const [asking, setAsking] = useState<ReturnType<typeof unusableAsk>>(null);
+  /** Change my script (§45.46), open on a video made from the owner's own script. */
+  const [changing, setChanging] = useState(false);
   const info = useAiInfo(ws);
   const refs = useReferenceList(ws);
   const wasLive = useRef(false);
@@ -857,9 +969,14 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
                 <>
                   <ModelMenu info={info} usual={usual} value={pick} onChange={setPick} note="Just for this run. Your settings stay the same." />
                   <button type="button" className="st-btn st-btn--main" aria-disabled={busy !== "none" || undefined} onClick={() => busy === "none" && void again()}>
-                    {busy === "again" ? "Starting…" : story.status === "draft" && story.stale.length === STEP_ORDER.length ? "Make the video" : firstStale ? `Try again from “${STEP_LABEL[firstStale]}”` : "Try again"}
+                    {busy === "again" ? "Starting…" : story.status === "draft" && story.stale.length === STEP_ORDER.length ? "Make the video" : firstStale ? `Try again from “${stepLabel(firstStale, story.ownScript)}”` : "Try again"}
                   </button>
                   {job?.status === "failed" ? <SettingsFix sentence={job.error} /> : null}
+                  {job?.status === "failed" && story.ownScript ? (
+                    <button type="button" className="st-btn" onClick={() => setChanging(true)}>
+                      Change my script
+                    </button>
+                  ) : null}
                 </>
               ) : null}
             </div>
@@ -868,6 +985,7 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
       />
 
       <section className="st-s-panel st-glass" aria-label="The steps">
+        {story.ownScript ? <OwnChip /> : null}
         <StepTrack job={job} story={story} label={`Making ${story.title}`} bar={false} line={false} />
         {asking ? (
           <UnusableSheet
@@ -890,14 +1008,26 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
             <Filmstrip script={script} scenes={story.scenes} />
           </>
         ) : (
-          <p className="st-s-field__hint">{live ? "Writing the story… the scenes show up here soon." : "No storyboard yet."}</p>
+          <p className="st-s-field__hint">{live ? (story.ownScript ? "Setting up your scenes… they show up here soon." : "Writing the story… the scenes show up here soon.") : "No storyboard yet."}</p>
         )}
       </section>
 
       <details className="st-s-details st-glass">
         <summary className="st-s-details__sum">Production details</summary>
         <dl className="st-s-facts">
-          {writer ? (
+          {story.ownScript ? (
+            <>
+              {/* The owner's own script (§45.46): the story is theirs, the AI only set up the scenes. */}
+              <dt>Story</dt>
+              <dd>By you</dd>
+              {writer ? (
+                <>
+                  <dt>Scenes set up by</dt>
+                  <dd>{writer}</dd>
+                </>
+              ) : null}
+            </>
+          ) : writer ? (
             <>
               <dt>Writer</dt>
               <dd>{writer}</dd>
@@ -970,7 +1100,7 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
                   <Tag tone={j.status === "failed" ? "coral" : j.status === "ready" ? "mint" : j.status === "needs_check" ? "coral" : "plain"}>
                     {j.status === "ready" ? "Done" : j.status === "needs_check" ? "Facts to check" : j.status === "failed" ? "Stopped" : j.status === "canceled" ? "Cancelled" : "Working"}
                   </Tag>{" "}
-                  {j.jobType === "changes" ? (j.configuration.note ? "Changes" : "New take of a scene") : j.configuration.from ? `Again from “${STEP_LABEL[j.configuration.from as keyof typeof STEP_LABEL] ?? j.configuration.from}”` : "Made"} · {ago(j.createdAt)}
+                  {j.jobType === "changes" ? (j.configuration.note ? "Changes" : "New take of a scene") : j.configuration.from ? `Again from “${(j.configuration.from in STEP_LABEL ? stepLabel(j.configuration.from, story.ownScript) : null) ?? j.configuration.from}”` : "Made"} · {ago(j.createdAt)}
                   {j.meta.models.length ? <span className="st-s-jobs__models">{runModels(info, j)}</span> : null}
                 </li>
               ))}
@@ -978,6 +1108,17 @@ function StoryProduction({ ws, storyId }: { ws: string; storyId: string }) {
           </>
         ) : null}
       </details>
+      {changing && story.ownScript ? (
+        <ChangeScriptSheet
+          ws={ws}
+          story={story}
+          onClose={() => setChanging(false)}
+          onStarted={(r) => {
+            loaded.setData((d) => (d ? { ...d, story: r.story, job: r.job } : d));
+            void jobs.reload();
+          }}
+        />
+      ) : null}
     </section>
   );
 }
@@ -994,7 +1135,7 @@ function Preview({ story, job, actions, notice }: { story: Story; job: Productio
   const progress = job ? job.progress : steps.filter((s) => s.status === "done" || s.status === "skipped").length / steps.length;
   const pct = Math.round(Math.max(0, Math.min(1, progress)) * 100);
   const now = currentStep(steps);
-  const line = nowLine(job, steps, story.status);
+  const line = nowLine(job, steps, story.status, !!story.ownScript);
   const cover = story.coverUrl ?? story.scenes.find((sc) => sc.stillUrl)?.stillUrl ?? null;
   // The step working through the scenes ("scene 3 of 6") has its own bar in the row; otherwise the row's bar is the video's.
   const sceneBar = now?.status === "running" && now.n && now.n > 1 ? Math.min(1, (now.i ?? 0) / now.n) : null;

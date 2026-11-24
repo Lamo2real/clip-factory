@@ -1,0 +1,357 @@
+/* sd-script.css: "Write it myself", the owner's own scene list (docs/CONTRACTS.md §45.46.9), its "Your video" preview, the "Your script" chip and Review's "Your script" panel.
+   Only the contract's --st-* tokens and --st-r-* radii (GLASS-CONTRACT rules 1 to 4): scene rows and tiles are controls
+   (14), chips and pills round; the scene numbers in Fraunces. No motion of its own (calm motion owns motion), no
+   borders, no cursor; every control has its hover and its focus ring. */
+
+.st-sc {
+  display: grid;
+  gap: var(--st-space-4);
+  min-width: 0;
+}
+
+.st-sc-lede {
+  margin-top: calc(var(--st-space-2) * -1);
+}
+
+.st-sc-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--st-space-2);
+}
+
+.st-sc-head__title {
+  margin: 0;
+  color: var(--st-text-strong);
+  font-family: var(--st-font);
+  font-size: var(--st-fs-body);
+  font-weight: var(--st-weight-ui);
+  font-optical-sizing: auto;
+}
+
+.st-sc-paste {
+  display: grid;
+  gap: var(--st-space-3);
+}
+
+/* ---------- The scenes ---------- */
+
+.st-sc-list {
+  display: grid;
+  gap: var(--st-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.st-sc-scene {
+  display: grid;
+  gap: var(--st-space-3);
+  min-width: 0;
+  padding: var(--st-space-3) var(--st-space-4) var(--st-space-4);
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+}
+
+/* An open question in this scene ("Who is Max?"): the orange ring (a shape, never words). */
+.st-sc-scene.is-asking {
+  box-shadow: var(--st-sheen-control), 0 0 0 3px rgb(var(--st-accent-rgb) / 0.7);
+}
+
+.st-sc-scene__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--st-space-2);
+}
+
+.st-sc-scene__num {
+  margin: 0;
+  color: var(--st-text-strong);
+  font-family: var(--st-font);
+  font-size: var(--st-fs-body);
+  font-weight: var(--st-weight-ui);
+  font-optical-sizing: auto;
+  font-variation-settings: "SOFT" 0, "WONK" 0;
+}
+
+.st-sc-scene__tools {
+  display: inline-flex;
+  gap: var(--st-space-1);
+}
+
+.st-sc-tool {
+  font-family: var(--st-font);
+  font-size: var(--st-fs-body);
+  font-weight: var(--st-weight-ui);
+}
+
+.st-sc-tool[aria-disabled="true"] {
+  opacity: 0.55;
+}
+
+.st-sc-field {
+  min-width: 0;
+}
+
+.st-sc-field__label {
+  font-size: var(--st-fs-small);
+}
+
+.st-sc-count {
+  min-width: 7ch;
+  text-align: end;
+}
+
+.st-sc-scene__meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--st-space-2) var(--st-space-3);
+}
+
+.st-sc-who {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--st-space-2);
+  min-width: 0;
+}
+
+.st-sc-who__label {
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
+  font-weight: var(--st-weight-ui);
+}
+
+.st-sc-where {
+  max-width: 100%;
+}
+
+.st-sc-where:focus-visible,
+.st-sc-ask .st-pill:focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
+}
+
+/* A question about a name: on a deeper well, so its words keep 4.5:1 over any look. */
+.st-sc-ask {
+  display: grid;
+  gap: var(--st-space-2);
+  padding: var(--st-space-3);
+  border-radius: var(--st-r-inner);
+  background: linear-gradient(rgb(var(--st-amber-rgb) / 0.1), rgb(var(--st-amber-rgb) / 0.1)), var(--st-fill-well);
+}
+
+.st-sc-ask__q {
+  color: var(--st-text-amber);
+  font-weight: var(--st-weight-ui);
+  font-size: var(--st-fs-small);
+}
+
+.st-sc-ask__answers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--st-space-2);
+}
+
+.st-sc-ask .st-pill[aria-disabled="true"] {
+  opacity: 0.6;
+}
+
+.st-sc-over {
+  margin: 0;
+}
+
+.st-sc-addrow {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--st-space-3);
+}
+
+.st-sc-places {
+  gap: var(--st-space-2);
+}
+
+/* ---------- "Your video": one tile a scene, in order ---------- */
+
+.st-sc-preview {
+  display: grid;
+  gap: var(--st-space-3);
+  min-width: 0;
+}
+
+.st-sc-tiles {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+  gap: var(--st-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.st-sc-tile {
+  display: grid;
+  align-content: start;
+  gap: var(--st-space-1);
+  width: 100%;
+  min-height: var(--st-tap);
+  padding: var(--st-space-3);
+  border: 0;
+  border-radius: var(--st-r-control);
+  text-align: start;
+  color: var(--st-text);
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+  font: inherit;
+  transition:
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    color var(--st-dur-hover) var(--st-ease-out);
+}
+
+.st-sc-tile:hover {
+  color: var(--st-text-strong);
+  background: var(--st-fill-control-hover);
+}
+
+.st-sc-tile:focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
+}
+
+.st-sc-tile.is-asking {
+  box-shadow: var(--st-sheen-control), 0 0 0 3px rgb(var(--st-accent-rgb) / 0.7);
+}
+
+.st-sc-tile.is-empty {
+  opacity: 0.75;
+}
+
+.st-sc-tile__num {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  border-radius: var(--st-r-round);
+  color: var(--st-on-cream);
+  background: var(--st-cream);
+  font-family: var(--st-font);
+  font-size: var(--st-fs-chip);
+  font-weight: var(--st-weight-ui);
+}
+
+.st-sc-tile__place,
+.st-sc-tile__who {
+  font-size: var(--st-fs-small);
+  font-weight: var(--st-weight-ui);
+  overflow-wrap: anywhere;
+}
+
+.st-sc-tile__who,
+.st-sc-tile__time {
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-chip);
+}
+
+.st-sc-tile__words {
+  color: var(--st-text-amber);
+  font-size: var(--st-fs-small);
+  overflow-wrap: anywhere;
+}
+
+.st-sc-total {
+  font-weight: var(--st-weight-ui);
+}
+
+/* ---------- The story so far, the chip, and Review's "Your script" ---------- */
+
+.st-sc-sofar {
+  padding: var(--st-space-2) var(--st-space-3);
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-control);
+}
+
+.st-sc-sofar__sum {
+  min-height: var(--st-tap);
+  display: flex;
+  align-items: center;
+  color: var(--st-text);
+  font-weight: var(--st-weight-ui);
+}
+
+.st-sc-sofar__sum:hover {
+  color: var(--st-text-strong);
+}
+
+.st-sc-sofar__sum:focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
+  border-radius: var(--st-r-inner);
+}
+
+.st-sc-sofar__text {
+  margin: 0 0 var(--st-space-2);
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
+  line-height: var(--st-lh-body);
+  white-space: pre-line;
+}
+
+.st-sc-chip {
+  justify-self: start;
+  width: fit-content;
+}
+
+.st-sc-written {
+  display: grid;
+  gap: var(--st-space-3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.st-sc-written__scene {
+  display: grid;
+  gap: var(--st-space-1);
+  padding: var(--st-space-3) var(--st-space-4);
+  border-radius: var(--st-r-control);
+  background: var(--st-fill-control);
+}
+
+.st-sc-written__what {
+  color: var(--st-text);
+  line-height: var(--st-lh-body);
+  overflow-wrap: anywhere;
+  white-space: pre-line;
+}
+
+.st-sc-written__words {
+  color: var(--st-text-amber);
+  font-weight: var(--st-weight-ui);
+  overflow-wrap: anywhere;
+}
+
+.st-sc-written__meta {
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
+}
+
+@media (max-width: 767px), (pointer: coarse) {
+  .st-sc-tile,
+  .st-sc-sofar__sum {
+    min-height: var(--st-tap-phone);
+  }
+}
+
+@media (max-width: 420px) {
+  .st-sc-scene {
+    padding-inline: var(--st-space-3);
+  }
+
+  .st-sc-tiles {
+    grid-template-columns: repeat(auto-fill, minmax(128px, 1fr));
+  }
+}

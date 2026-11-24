@@ -43,6 +43,7 @@ import {
   type TaskKind,
 } from "../types.ts";
 import { callOf, checkOverride, citationsFor, effectiveFor, shownSteps, startMockTask, topicFor, writerOf } from "./ideas.ts";
+import { checkOwnScript, jobLabel, mirrorCaptions, OWN_WORDS, ownDefaults, ownFactProblems, OwnFailed, ownTopic, patchOwn, stageOwn } from "./ownScript.ts";
 import { seriesApproved, seriesExists, seriesForgetStory } from "./series.ts";
 import { delay, type MockStore } from "./store.ts";
 
@@ -774,10 +775,11 @@ function stepTask(job: ProductionJob, key: StepKey): TaskKind | null {
  * checks are skipped when it is switched off, except the fact check of a driving-safety story (§45.33).
  */
 function startModelStep(store: MockStore, job: ProductionJob, story: Story, key: StepKey, run: Run): string | null {
-  const kind = stepTask(job, key);
+  // an owner's script (§45.46) is staged with "Plan the animation", never written
+  const kind = key === "storyboard" && story.ownScript ? "animation_plan" : stepTask(job, key);
   if (!kind) return null;
   const e = effectiveFor(store, kind, { request: run.override, project: story.ai });
-  const mustCheck = kind === "fact_check" && story.category === "driving_safety";
+  const mustCheck = kind === "fact_check" && (story.category === "driving_safety" || (!!story.ownScript && !!story.safetyTopicId));
   if (e.off && kind !== "fact_check" && kind !== "final_review") return e.off;
   if (e.off && !mustCheck) return null;
   // Each record says exactly what was called (§45.35 D5): the task, the Bedrock model id or profile and the Region.
@@ -886,7 +888,9 @@ function finishStep(store: MockStore, job: ProductionJob, key: StepKey, run: Run
     const next =
       script && sceneIds?.length && !note
         ? retake(script, sceneIds, story.scriptVersion)
-        : writeScript(chars.length ? chars : [], extra.brief, { seed, topicId: story.safetyTopicId, captionsOn: story.captionsOn, musicMood: story.musicMood, durationSec: story.durationSec, note, format: story.format, art: story.art });
+        : story.ownScript
+          ? stageOwn(story.ownScript, chars, { title: story.title, seed, category: story.category, topicId: story.safetyTopicId, captionsOn: story.captionsOn, musicMood: story.musicMood, durationSec: story.durationSec, format: story.format, art: story.art, act: actionFor })
+          : writeScript(chars.length ? chars : [], extra.brief, { seed, topicId: story.safetyTopicId, captionsOn: story.captionsOn, musicMood: story.musicMood, durationSec: story.durationSec, note, format: story.format, art: story.art });
     story.scriptVersion += 1;
     store.scripts[story.storyId] = next;
     story.scenes = next.scenes.map((sc) => ({ sceneId: sc.sceneId, title: sc.title, durationSec: sc.durationSec }));
@@ -897,11 +901,12 @@ function finishStep(store: MockStore, job: ProductionJob, key: StepKey, run: Run
     job.meta.seed = next.seed;
     addAsset(store, story, "storyboard", `data:application/json;charset=utf-8,${encodeURIComponent(JSON.stringify(next))}`, "application/json", JSON.stringify(next).length);
   } else if (key === "safety" && script) {
-    const topicId = story.category === "driving_safety" ? story.safetyTopicId : null;
-    if (qualityOff(store) && story.category !== "driving_safety") {
+    // an owner's script keeps a matched topic for any kind, and is then always checked: reported, never rewritten
+    const topicId = story.category === "driving_safety" || story.ownScript ? story.safetyTopicId : null;
+    if (qualityOff(store) && story.category !== "driving_safety" && !(story.ownScript && topicId)) {
       story.safety = { topicId, status: "skipped", problems: [], checkedScriptVersion: story.scriptVersion, citations: [] };
     } else {
-      const problems = run.problems ?? problemsIn(script);
+      const problems = run.problems ?? (story.ownScript ? ownFactProblems(story.ownScript, topicId) : problemsIn(script));
       story.safety = { topicId, status: problems.length ? "problems" : "ok", problems, checkedScriptVersion: story.scriptVersion, citations: citationsFor(topicId) };
     }
   } else if (key === "scenes" && script) {
@@ -1010,8 +1015,8 @@ export function advanceJobs(store: MockStore, now = Date.now()): void {
       try {
         step.status = finishStep(store, job, key, run);
       } catch (e) {
-        console.warn(e);
-        failJob(store, job, key, now);
+        if (!(e instanceof OwnFailed)) console.warn(e);
+        failJob(store, job, key, now, e instanceof OwnFailed ? e.message : undefined);
         break;
       }
       if (n > 1) {
@@ -1067,7 +1072,7 @@ function startJob(
     contentId: story.storyId,
     jobType,
     status: "queued",
-    steps: STEP_ORDER.map((key) => ({ key, label: STEP_LABEL[key], status: run.includes(key) ? "pending" : "done" })),
+    steps: STEP_ORDER.map((key) => ({ key, label: jobLabel(key, story), status: run.includes(key) ? "pending" : "done" })),
     progress: 0,
     configuration: { run, ...conf },
     meta: {
@@ -1354,15 +1359,22 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       if (castWrong) fail(400, "bad_request", castWrong);
       const idea = body.ideaId ? store.ideas.find((i) => i.ideaId === body.ideaId && i.workspaceId === ws) : undefined;
       if (body.ideaId && !idea) fail(404, "not_found", "We could not find that idea. It may have been deleted.");
+      // the owner's own script (§45.46): checked against the cast, its ids given; its brief needs no line
+      const own = body.ownScript !== undefined ? checkOwnScript(body.ownScript, ids) : null;
       if (!idea) {
         const br = body.brief;
-        if (!br || !br.title?.trim() || !br.logline?.trim()) fail(400, "bad_request", "Pick an idea, or type a title and one line.");
-        if (br.title.length > 80 || br.logline.length > 280) fail(400, "bad_request", "Make the title or the line a little shorter.");
+        if (own) {
+          if (!br?.title?.trim()) fail(400, "bad_request", "Give the video a title.");
+          if (!br.category) fail(400, "bad_request", "Pick what kind of video it is.");
+        } else if (!br || !br.title?.trim() || !br.logline?.trim()) fail(400, "bad_request", "Pick an idea, or type a title and one line.");
+        if (br.title.length > 80 || (br.logline ?? "").length > 280) fail(400, "bad_request", "Make the title or the line a little shorter.");
       }
-      const brief: Brief = idea ? { title: idea.title, logline: idea.logline, category: idea.category } : { title: body.brief!.title.trim(), logline: body.brief!.logline.trim(), category: body.brief!.category };
-      const safetyTopicId = brief.category === "driving_safety" ? (idea ? idea.safetyTopicId : topicFor(`${brief.title} ${brief.logline}`)) : null;
+      const line = (body.brief?.logline ?? "").trim() || (own ? own.scenes[0]!.what.replace(/\s+/g, " ").slice(0, 280) : "");
+      const brief: Brief = idea ? { title: idea.title, logline: own ? own.scenes[0]!.what : idea.logline, category: idea.category } : { title: body.brief!.title.trim(), logline: line, category: body.brief!.category };
+      const safetyTopicId = own ? ownTopic((body.title ?? brief.title).trim(), brief.logline, own) : brief.category === "driving_safety" ? (idea ? idea.safetyTopicId : topicFor(`${brief.title} ${brief.logline}`)) : null;
       if (brief.category === "driving_safety" && !safetyTopicId) fail(409, "conflict", NO_GUIDANCE);
-      const durationSec = body.durationSec ?? cfg.defaultDurationSec ?? 45;
+      const ownDefault = own ? ownDefaults(own) : null;
+      const durationSec = body.durationSec ?? ownDefault?.durationSec ?? cfg.defaultDurationSec ?? 45;
       if (durationSec < 15 || durationSec > 90) fail(400, "bad_request", "Pick a length from 15 to 90 seconds.");
       const musicMood = body.musicMood ?? (cfg.musicOn === false ? "none" : "playful");
       if (!MOODS.has(musicMood)) fail(400, "bad_request", "Pick a music mood.");
@@ -1387,7 +1399,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
         characterIds: [...ids],
         durationSec,
         actualDurationSec: null,
-        captionsOn: body.captionsOn ?? cfg.captionsOn ?? true,
+        captionsOn: body.captionsOn ?? ownDefault?.captionsOn ?? cfg.captionsOn ?? true,
         musicMood,
         postCaptions: { ...EMPTY_CAPTIONS },
         scenes: [],
@@ -1406,6 +1418,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
         version: 1,
         createdAt: iso(now),
         updatedAt: iso(now),
+        ...(own ? { ownScript: own } : {}),
       };
       // the body's series, else the idea's; one that is gone is dropped (§45.44)
       const seriesId = body.seriesId === null ? null : (body.seriesId ?? idea?.seriesId); // null: No series, on purpose
@@ -1532,7 +1545,11 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
           }
           script.captions = [...patch.captions].sort((a, z) => a.at - z.at);
           mark("captions", "assemble", "preview", "safety");
+          // the owner's words in the captions editor are the script's words too (§45.46)
+          mirrorCaptions(story, script.captions);
         }
+        // Change my script (§45.46): only the words, or the scenes staged again
+        if (patch.ownScript !== undefined) mark(...patchOwn(story, script, patch.ownScript, extraOf(store, storyId).brief.logline));
         if (JSON.stringify(script) !== JSON.stringify(before)) {
           const r = validateScript(script);
           if (!r.ok) fail(400, "bad_request", "That change would break the video. Try a smaller change.");
@@ -1547,7 +1564,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
         }
       } else if (patch.captions || patch.scenes || patch.musicMood || patch.captionsOn !== undefined) {
         fail(409, "conflict", "This video has no storyboard yet. Tap Try again first.");
-      }
+      } else if (patch.ownScript !== undefined) mark(...patchOwn(story, undefined, patch.ownScript, extraOf(store, storyId).brief.logline));
       story.stale = order(stale);
       if (stale.has("safety") && story.safety) story.safety = { ...story.safety, status: "pending" };
       story.version += 1;
@@ -1640,6 +1657,8 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       const sceneIds = body.sceneIds?.length ? body.sceneIds : null;
       if (!note && !sceneIds) fail(400, "bad_request", "Say what to change, or pick a scene.");
       if (note && note.length > 500) fail(400, "bad_request", "Keep the note to 500 letters.");
+      // a note would let the AI change what happens: the owner changes their own script (§45.46)
+      if (note && story.ownScript) fail(409, "conflict", OWN_WORDS.follows);
       if (running(store, story)) fail(409, "conflict", "This video is being made right now. Wait until it is done.");
       if (!["review", "needs_check", "failed"].includes(story.status)) fail(409, "conflict", "This video can't be changed now.");
       if (!store.scripts[storyId]) fail(409, "conflict", "This video has no storyboard yet. Tap Try again first.");

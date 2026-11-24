@@ -5,7 +5,8 @@ step's final review of the finished video (§45.11.3). Both are the quality agen
 The checker has its own prompt and answers through the schema below. It reads every on-screen caption, every scene
 caption, every beat that shows a driving action and the post captions, against the topic's shown steps, donts and
 caveats (and the hidden steps, which must never appear), and, for every story, whether anything shows a dangerous act
-as something to copy. Code checks the guidance references first: a caption may only name a shown step or dont."""
+as something to copy. Code checks the guidance references first: a caption may only name a shown step or dont. On a
+video made from the owner's own script it also reads what happens in each scene, and it only reports (§45.46)."""
 
 from __future__ import annotations
 
@@ -66,6 +67,12 @@ A mistake that the story clearly shows as a mistake, followed by the safe way, i
 Each problem is one plain sentence a beginner understands, with the item's ref. Set ok to true only when there is no
 problem."""
 
+# Write it myself (§45.46): on an owner's own script the checker also reads what happens in each scene. It only
+# reports: the owner changes his own words, and nothing of his is ever rewritten (§45.11.5).
+OWN_REF = "own:"
+OWN_CUE = "w_"
+OWN_CHECK_LINE = "Items with ref own:… are what happens in the owner's own script."
+
 REVIEW_PROMPT = """You take the last look at one finished Clips Funded video before the owner sees it: its script and
 eight frames from the video, in order, with their times.
 
@@ -110,16 +117,28 @@ def shot_at(cuts: Sequence[dict[str, Any]], at: Any) -> str | None:
     return shot
 
 
-def items(script: dict[str, Any], post: dict[str, Any] | None) -> list[dict[str, Any]]:
-    """Every item the checker reads, with its ref and where it is (for the owner's sentences)."""
+def items(
+    script: dict[str, Any], post: dict[str, Any] | None, *, own: Sequence[dict[str, Any]] | None = None
+) -> list[dict[str, Any]]:
+    """Every item the checker reads, with its ref and where it is (for the owner's sentences). ``own``: the scenes of
+    the owner's own script (§45.46): each one's "What happens" is read too (``own:sN``, "Your scene N"), and the
+    owner's caption cue of a scene (``w_sN``) is "Your scene N's caption"."""
     cast = {k: str((v or {}).get("name") or k) for k, v in (script.get("cast") or {}).items()}
     cars = {k: str((v or {}).get("name") or k) for k, v in (script.get("cars") or {}).items()}
     out: list[dict[str, Any]] = []
+    numbers: dict[str, int] = {}
+    for i, s in enumerate(own or []):
+        numbers[str(s.get("sceneId"))] = i + 1
+        out.append(
+            {"ref": f"{OWN_REF}{s.get('sceneId')}", "where": f"Your scene {i + 1}", "text": str(s.get("what") or "")}
+        )
     for c in script.get("captions") or []:
+        cue = str(c.get("id"))
+        mine = numbers.get(cue.removeprefix(OWN_CUE)) if cue.startswith(OWN_CUE) else None
         out.append(
             {
                 "ref": f"caption:{c.get('id')}",
-                "where": f"Caption “{c.get('text')}”",
+                "where": f"Your scene {mine}'s caption “{c.get('text')}”" if mine else f"Caption “{c.get('text')}”",
                 "text": c.get("text"),
                 "at": c.get("at"),
                 "guidanceRef": c.get("guidanceRef"),
@@ -193,14 +212,22 @@ CAR_NOTE = (
 
 
 def request(
-    script: dict[str, Any], post: dict[str, Any] | None, topic: Topic | None, *, unchecked_advice: bool = False
+    script: dict[str, Any],
+    post: dict[str, Any] | None,
+    topic: Topic | None,
+    *,
+    unchecked_advice: bool = False,
+    own: Sequence[dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """The checker's input. ``unchecked_advice``: a story the writer flagged ``teachesSafety`` with no checked topic;
     any driving advice in it is a problem (§45.11.5: it is held until the owner picks a topic or takes the advice
-    out). A story with a car of the cast (``cars``) and no checked topic is read the same way (§45.43)."""
+    out). A story with a car of the cast (``cars``) and no checked topic is read the same way (§45.43). ``own``: the
+    owner's own script, whose events are items too (§45.46)."""
     body: dict[str, Any] = {
         "video": {"title": script.get("title"), "lengthSec": script.get("durationSec")},
-        "items": [{k: v for k, v in it.items() if k != "where" and v is not None} for it in items(script, post)],
+        "items": [
+            {k: v for k, v in it.items() if k != "where" and v is not None} for it in items(script, post, own=own)
+        ],
     }
     if topic is not None:
         body["guidance"] = {
