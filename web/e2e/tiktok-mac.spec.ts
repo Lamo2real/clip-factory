@@ -11,6 +11,7 @@
 // navigation.
 import { expect, test, type Page } from "@playwright/test";
 import { settle } from "./helpers.ts";
+import { clockWords } from "../src/lib/tiktokMac.ts";
 
 type Job = {
   clipId: string;
@@ -51,7 +52,7 @@ const MIN = 60_000;
 const NEXT = "Waiting for your Mac · next";
 const PRESSED = "Not sure it posted · look on your TikTok";
 /** Inside the 30-minute find window after Post: from when Try again comes. */
-const PRESSED_WAIT = /^Not sure it posted · look on your TikTok · Try again from (?:[A-Z][a-z]{2} )?\d\d:\d\d$/;
+const PRESSED_WAIT = /^Not sure it posted · look on your TikTok · Try again from (?:\w{3} )?\d\d:\d\d$/;
 const STOPPED_EARLY = "Your Mac stopped before it pressed Post";
 const AGAIN_ASK = "Post it again? Only if it's not on your TikTok.";
 const OPEN_MAC = "Open Your Mac posts TikTok";
@@ -102,9 +103,9 @@ const hm = (t: number) => {
   const d = new Date(t);
   return `${String(d.getHours()).padStart(2, "0")}:${String(d.getMinutes()).padStart(2, "0")}`;
 };
-/** The rows' clock words (clockWords): "14:05" today, "Mon 23:15" for another day (a run near midnight). */
-const clock = (t: number) =>
-  new Date(t).toDateString() === new Date().toDateString() ? hm(t) : `${new Date(t).toLocaleDateString("en-GB", { weekday: "short" })} ${hm(t)}`;
+/** The rows' own words for a time: "14:05" today, with the day in front once it is another day ("Tue 00:18"), as
+ * clockWords says it. A run near midnight crosses the day, and a bare clock time would then be wrong. */
+const rowTime = (t: number) => clockWords(t, Date.now());
 
 const SWITCH = "My Mac posts my TikTok clips";
 
@@ -444,7 +445,7 @@ test("library: inside the Mac's 30-minute find window after Post there is no Try
   await expect(status).toHaveText(PRESSED_WAIT);
   // From 30 minutes after Post (20 from now, give or take the minute it is).
   const said = (await status.innerText()).slice(-5);
-  expect([hm(Date.now() + 20 * MIN), hm(Date.now() + 19 * MIN), hm(Date.now() + 21 * MIN)]).toContain(said);
+  expect([rowTime(Date.now() + 20 * MIN), rowTime(Date.now() + 19 * MIN), rowTime(Date.now() + 21 * MIN)]).toContain(said);
   await expect(row.getByRole("button")).toHaveCount(1);
   await expect(row.getByRole("button", { name: "It's on TikTok", exact: true })).toBeVisible();
   await expect(row.getByRole("button", { name: "Try again, TikTok" })).toHaveCount(0);
@@ -552,7 +553,7 @@ test("library: the backlog's first clip says the Mac's own time; the rest their 
   expect(queue.length).toBeGreaterThan(1);
   await go(page, "/library");
   const first = tiktokRow(page, queue[0]!.clipId).locator(".post__status");
-  await expect(first).toHaveText(`Waiting for your Mac · goes at about ${clock(at)}`);
+  await expect(first).toHaveText(`Waiting for your Mac · goes at about ${rowTime(at)}`);
   // Never the same time on a later one: its place in the Mac's queue.
   await expect(tiktokRow(page, queue[1]!.clipId).locator(".post__status")).toHaveText("Waiting for your Mac · in line (1 before it)");
   await expect(page.locator(".post__status", { hasText: "goes at about" })).toHaveCount(1);
@@ -618,7 +619,7 @@ test("library: a post left Posting… once the switch went off says so; a Mac go
   await mac.seen(page, new Date(quiet).toISOString());
   await go(page, "/library");
   await refocus(page);
-  await expect(status).toHaveText(`Your Mac hasn't checked in since ${clock(quiet)}`);
+  await expect(status).toHaveText(`Your Mac hasn't checked in since ${rowTime(quiet)}`);
   await expect(row.locator(".spinner")).toHaveCount(0);
   await expect(row.getByRole("button")).toHaveCount(1);
   await expect(row.getByRole("button", { name: "Try again, TikTok" })).toBeVisible();
@@ -628,7 +629,7 @@ test("library: a post left Posting… once the switch went off says so; a Mac go
   await mac.beat(page, clipId, 12 * MIN);
   await mac.seen(page, new Date(quiet).toISOString());
   await refocus(page);
-  await expect(status).toHaveText(`Your Mac hasn't checked in since ${clock(quiet)}`);
+  await expect(status).toHaveText(`Your Mac hasn't checked in since ${rowTime(quiet)}`);
   await expect(row.getByRole("button", { name: "It's on TikTok", exact: true })).toBeVisible();
   await row.getByRole("button", { name: "Try again, TikTok" }).click();
   await expect(row.getByText(AGAIN_ASK)).toBeVisible();
@@ -699,7 +700,7 @@ test("library: an auto-posting clip the Mac holds says so, with Post with my Mac
   await mac.ping(page, "ok", undefined, { holdBefore: new Date(hold).toISOString() });
   await go(page, "/library");
   await refocus(page);
-  await expect(status).toHaveText(`Held on your Mac: made before ${clock(hold)}`);
+  await expect(status).toHaveText(`Held on your Mac: made before ${rowTime(hold)}`);
   await row.getByRole("button", { name: "Post with my Mac" }).click();
   await expect(page.getByText("Sent to your Mac! It posts it in a minute.")).toBeVisible();
   await expect(status).toHaveText(NEXT);
@@ -887,7 +888,7 @@ test("clip page: inside the find window it says from when Try again comes; a Mac
   await go(page, `/clips/${clipId}`);
   const stack = page.locator('[data-stack="tiktok"]');
   await expect(stack.locator(".pstack__chip")).toHaveText("Not sure it posted");
-  await expect(stack.locator(".pstack__calm-text")).toHaveText(/^Look on your TikTok · Try again from (?:[A-Z][a-z]{2} )?\d\d:\d\d$/);
+  await expect(stack.locator(".pstack__calm-text")).toHaveText(/^Look on your TikTok · Try again from (?:\w{3} )?\d\d:\d\d$/);
   const actions = page.locator(".perf__actions");
   await expect(actions.getByRole("button", { name: "It's on TikTok", exact: true })).toBeVisible();
   await expect(actions.getByRole("button", { name: "Try again, TikTok" })).toHaveCount(0);
@@ -904,7 +905,7 @@ test("clip page: inside the find window it says from when Try again comes; a Mac
   await mac.seen(page, new Date(quiet).toISOString());
   await go(page, `/clips/${other}`);
   await expect(stack.locator(".pstack__chip")).toHaveText("Not sure it posted");
-  await expect(stack.locator(".pstack__calm-text")).toHaveText(`Your Mac hasn't checked in since ${clock(quiet)}`);
+  await expect(stack.locator(".pstack__calm-text")).toHaveText(`Your Mac hasn't checked in since ${rowTime(quiet)}`);
   await expect(stack.getByText(/Not sure it posted/)).toHaveCount(1);
 });
 

@@ -626,7 +626,7 @@ function RefPicker({
                 </span>
                 <span className="st-s-reftile__text">
                   <span className="st-s-reftile__title">{r.title}</span>
-                  <span className="st-s-reftile__meta">{ready ? (r.durationSec ? seconds(r.durationSec) : "Studied") : r.status === "analyzing" ? "Being studied now" : "Not studied yet"}</span>
+                  <span className="st-s-reftile__meta">{ready ? (r.durationSec ? seconds(r.durationSec) : "Studied") : r.status === "analyzing" ? "Being studied now" : r.status === "fetching" ? "On its way" : r.status === "fetch_failed" ? "Didn't arrive" : "Not studied yet"}</span>
                 </span>
               </button>
               {!ready && r.status !== "analyzing" ? (

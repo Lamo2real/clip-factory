@@ -762,8 +762,12 @@ not, so the page said "This computer can't show see-through" on macOS 27 with Li
   less motion); it stays while the pointer holds still and goes on leaving the card or window, Escape or a drop.
   While an upload or a start runs it says "Upload still running" / "Starting your job…" and refuses the drop with a
   toast. A hidden status line says what each drop did ("Video picked: …", the error, "Link added. …") for screen
-  readers. A drop outside the card is still refused by Ask's window guard. The same form serves Use a video file
-  (`/?file=1&from=`). Covered by `web/test/drops.test.ts` and `web/e2e/drop-video.spec.ts`.
+  readers. A drop outside the card is refused by the window's drop guard (`web/src/lib/dropGuard.ts`, installed once
+  in `main.tsx` for the whole app, §45.40: a stray file never replaces the app, a stray link never navigates or opens
+  the system browser in the Mac app; Ask's own guard in `HelpLauncher.tsx` stays and is now redundant). The same form
+  serves Use a video file (`/?file=1&from=`). Covered by `web/test/drops.test.ts` and `web/e2e/drop-video.spec.ts`.
+  This card keeps its own drop code; every other upload site uses the shared hook `web/src/lib/useFileDrop.ts` and
+  its layer `web/src/components/DropOverlay.tsx` (§45.40.1).
 * **Kid-proof Home form** (`NewJobForm.tsx`, `web/e2e/home-jobs-guards.spec.ts`): the upload bar and **Cancel upload**
   show from the tap on Make clips; while the file goes up, leaving Home asks "Leave and stop the upload?" (**Stay**
   first and focused; the browser asks on a reload), never once the file is all up, never on the switch to Clips Funded
@@ -13493,7 +13497,7 @@ met; §45.23 and §45.32 list the evidence for each acceptance criterion.
 | agent | One of Clips Funded's five AI roles (creative director, video analysis, storyboard, character, quality assurance), each with its own instructions, model, effort and skills (§45.26). |
 | task | One kind of AI work (chat, brainstorm, storyboard, …) that an agent does; models and effort can be set per task (§45.25). |
 | skill | A Clips Funded `SKILL.md` assigned to agents (§45.26); Clip Factory's skills are separate and never used. |
-| reference video | A video the owner uploads so the video analysis agent can study its structure and timing (§45.28). |
+| reference video | A video the owner uploads (or drops, or pastes the link of: §45.40) so the video analysis agent can study its structure and timing (§45.28). |
 
 Workspace types live in one registry, `WORKSPACE_TYPES` (`api/src/clipfactory_api/workspaces/types.py`, mirrored in
 `web/src/stories/api/types.ts`): `clips` (built-in, exactly one, the existing app) and `stories`. A future brand is
@@ -13523,7 +13527,7 @@ Lamo Clips' partition `USER#{userId}` gets **no new items**. Two new kinds of pa
 | Conversation | same | `CONV#{convId}` | `type="ws_conv"`, Conversation fields (§45.27), internal `summary`, `summaryUpToMsgId` |
 | Message | same | `MSG#{convId}#{msgId}` | `type="ws_msg"`, Message fields (§45.27); assistant messages also internal `sessionId`, `heartbeatAt`, `requested` |
 | Memory | same | `MEM#{memId}` | `type="ws_mem"`, MemoryItem fields (§45.27) |
-| Reference video | same | `REFVID#{refId}` | `type="ws_refvid"`, ReferenceVideo fields (§45.28), internal `key`, `analysisKey` |
+| Reference video | same | `REFVID#{refId}` | `type="ws_refvid"`, ReferenceVideo fields (§45.28), internal `key`, `analysisKey`; from a link (§45.40) also `link`, `fetchedAt` and the internal `titleFromLink` |
 | Model status | same | `MODELSTATUS#{modelKey}` | `type="ws_modelstatus"`, `status`, `line`, `checkedAt` (§45.25; written only by the agent) |
 | Usage | same | `USAGE#{day}#{id}` | `type="ws_usage"`, `kind: "model" \| "provider"`, §45.25's usage fields (providers: `providerId`, `modelId`, `images` / `videoSec` / `renderSec`), `ttl` 400 days |
 | Onboarding | same | `ONBOARD` | `type="ws_onboard"`, `stepsDone`, `skipped`, `finishedAt` (§45.29) |
@@ -13567,7 +13571,7 @@ Lamo Clips' partition `USER#{userId}` gets **no new items**. Two new kinds of pa
 | `ws/{userId}/{workspaceId}/stories/{storyId}/audio/v{n}.m4a` | the sound effects, noises and music mix | kept |
 | `ws/{userId}/{workspaceId}/stories/{storyId}/captions/v{n}.ass` | the on-screen captions and bubble text | kept |
 | `ws/{userId}/{workspaceId}/stories/{storyId}/final/v{n}.mp4`, `cover-v{n}.jpg` | the finished 1080×1920 video and its cover | kept (old versions per the retention setting, §45.29) |
-| `ws/{userId}/{workspaceId}/references/{refId}/source.{mp4\|mov}`, `analysis.json`, `frames/` | reference videos and their analysis (§45.28) | kept until deleted |
+| `ws/{userId}/{workspaceId}/references/{refId}/source.{mp4\|mov}`, `analysis.json`, `frames/` | reference videos and their analysis (§45.28); for a link, `source.mp4` is written by Clips Funded's own runtime (§45.40) | kept until deleted |
 | `ws/{userId}/{workspaceId}/skills/{skillId}/{revisionId}/` | Clips Funded skills (§45.26) | the last 10 revisions kept |
 | `ws/{userId}/{workspaceId}/chat/{convId}/{fileId}.{ext}` | pictures attached in the chat | kept with the conversation |
 
@@ -13667,8 +13671,10 @@ Clips Funded first." Bodies are validated with `validate.py`; unknown keys are `
 | GET `/v1/workspaces/{ws}/references` **S** | – | `{ "references": ReferenceVideo[] }` |
 | POST `/v1/workspaces/{ws}/references` **S** | `{ "filename", "contentType": "video/mp4" \| "video/quicktime", "size" ≤ 2 GB, "title" }` | `201 { "reference", "upload": { "uploadId", "parts": { "partNumber", "url" }[] } }` (multipart, 100 MB parts) |
 | POST `/v1/workspaces/{ws}/references/{refId}/complete` **S** | `{ "parts": { "partNumber", "etag" }[] }` | `{ "reference" }` (ffprobe-checked by the agent on analyze; ≤ 10 minutes) |
-| POST `/v1/workspaces/{ws}/references/{refId}/analyze` **S** | `{ "override"?: ModelOverride }` | `202 { "reference", "job" }` |
-| GET / PATCH / DELETE `/v1/workspaces/{ws}/references/{refId}` **S** | PATCH: `{ "title" }` | `{ "reference", "analysis": ReferenceAnalysis \| null }` / `{ "reference" }` / `204` |
+| POST `/v1/workspaces/{ws}/references/{refId}/analyze` **S** | `{ "override"?: ModelOverride }` | `202 { "reference", "job" }` (409 while `fetching` or `fetch_failed`, §45.40) |
+| POST `/v1/workspaces/{ws}/references/link` **S** (§45.40) | `{ "url": string ≤ 2048 (share text is cleaned), "title"?: string ≤ 80 }` | `202 { "reference", "job" }` (status `fetching`, job `reference_fetch`) |
+| POST `/v1/workspaces/{ws}/references/{refId}/fetch` **S** (§45.40) | `{}` | `202 { "reference", "job" }` (only from `fetch_failed`: "Try again") |
+| GET / PATCH / DELETE `/v1/workspaces/{ws}/references/{refId}` **S** | PATCH: `{ "title" }` | `{ "reference", "analysis": ReferenceAnalysis \| null, "job", "fetchJob": ProductionJob \| null }` (§45.34, §45.40) / `{ "reference" }` / `204` |
 | GET / PATCH `/v1/workspaces/{ws}/onboarding` **S** | PATCH: `{ "step": OnboardStep, "done"?: boolean, "skipped"?: boolean }` or `{ "finish": true }` | `{ "onboarding": Onboarding }` |
 | PUT / DELETE `/v1/workspaces/{ws}/providers/{providerId}/key` **S** | PUT: `{ "key", "baseUrl"? }` (≤ 4 KB; `baseUrl` only for `openai_compatible`, §45.37 G4) | `{ "provider": ProviderStatus }` (never returns the key) / `204` |
 | GET `/v1/workspaces/{ws}/storage` **S** | – | `{ "storage": StorageSummary }` |
@@ -13751,8 +13757,10 @@ interface Message { msgId: string; convId: string; role: "user" | "assistant"; t
   actions: { kind: "make_video" | "remake_scene" | "analyze_reference" | "save_character" | "save_idea" | "open";
     label: string; payload: Record<string, unknown> }[]; error?: string; createdAt: string }
 interface MemoryItem { memId: string; text: string; source: "chat" | "owner"; createdAt: string; updatedAt: string }
-interface ReferenceVideo { refId: string; title: string; status: "uploading" | "ready" | "analyzing" | "analyzed"
-  | "failed"; durationSec: number | null; bytes: number; url?: string; currentJobId: string | null;
+interface ReferenceVideo { refId: string; title: string; status: "uploading" | "fetching" | "fetch_failed" | "ready"
+  | "analyzing" | "analyzed" | "failed" /* fetching, fetch_failed: from a link, §45.40; failed: only the study */;
+  durationSec: number | null; bytes: number; url?: string /* only ready, analyzing, analyzed, failed */;
+  link?: string | null /* the cleaned https link it came from (§45.40); null for an upload */; currentJobId: string | null;
   ai: { model: string | null; effort: Effort | null } /* this reference's own setting, §45.25 level 2 */;
   analyzedWith: { model: string; effort: Effort | null } | null; createdAt: string; updatedAt: string }
 interface ReferenceAnalysis { summary: string; hook: { atSec: number; what: string }; pacing: { cutsPer10s: number;
@@ -13819,8 +13827,8 @@ interface StorySafety { topicId: string | null /* null: no driving advice, only 
 interface StoryStep { key: StepKey | "portrait"; label: string; status: "pending" | "running" | "done" | "failed"
   | "skipped"; message?: string; startedAt?: string; finishedAt?: string; i?: number; n?: number }
 interface ProductionJob { jobId: string; workspaceId: string; contentType: "animation" | "character" | "reference";
-  contentId: string /* storyId, characterId (portrait) or refId (reference analysis) */;
-  jobType: "produce" | "changes" | "portrait" | "reference_analysis";
+  contentId: string /* storyId, characterId (portrait) or refId (reference analysis or fetch) */;
+  jobType: "produce" | "changes" | "portrait" | "reference_analysis" | "reference_fetch" /* §45.40: step "get" */;
   status: "queued" | "running" | "ready" | "needs_check" | "failed" | "canceled"; steps: StoryStep[];
   progress: number /* 0..1 */; configuration: { run: (StepKey | "portrait")[] /* the steps this job runs */;
   from: StepKey | null; sceneIds: string[] | null; note: string | null };
@@ -14088,12 +14096,15 @@ pipeline test and the image self-check use it.
 * **Its own project and image**: `stories/agent/` (uv project `lamostories-agent`, package `lamostories_agent`,
   Python 3.13, its own `Dockerfile`: python 3.13 slim, ffmpeg (Debian's, with libass), Inter, numpy, the Deno binary
   from its PyPI wheel, the engine folder copied to `/app/stories-engine/`, `stories/config/` and `stories/skills/`
-  copied in; no yt-dlp). It imports nothing from `clipfactory_agent` and runs in its own AgentCore runtime
+  copied in; yt-dlp pinned (`yt-dlp[default]==2026.10.26`) for reference links only, §45.40, run only through its
+  egress guard `netguard.py` with the allowed extractors). It imports nothing from `clipfactory_agent` and runs in its
+  own AgentCore runtime
   `cf_prod_story_agent` with its own role (§45.15). Clip Factory's `agent/` folder, image, runtime and server do not
   change.
 * Actions (`POST /invocations`, each answered `{ "accepted": true, "id" }` at once, the work runs in the background):
   `process_story { userId, workspaceId, storyId, jobId }`, `process_portrait { userId, workspaceId, characterId,
-  jobId }`, `process_reference { userId, workspaceId, refId, jobId }`, `run_task { userId, workspaceId, taskId }`,
+  jobId }`, `process_reference { userId, workspaceId, refId, jobId }`, `fetch_reference { userId, workspaceId,
+  refId, jobId }` (§45.40: a reference video from its link), `run_task { userId, workspaceId, taskId }`,
   `chat_turn { userId, workspaceId, convId, msgId }`, `check_models { userId, workspaceId, taskId }`, `cancel { id }`,
   `health`. `/ping` says `HealthyBusy` while anything runs; the lifespan shutdown cancels running work cleanly (a
   stopped job is `failed` by the API's fence and "Try again" resumes from its first unfinished step).
@@ -14459,6 +14470,10 @@ own code, never `routes/setup.py`'s.
 * The deploy's smoke job also sends a preflight to `/v1/workspaces/stories/dashboard` and checks the CORS answer.
 * The runtime's log group follows the clip runtime's pattern (`terraform_data` that creates it if missing, then sets
   30 days), tagged `stories_agent`.
+* Reference videos from a link (§45.40) change no Terraform: the two routes fall under `ANY /v1/workspaces/{proxy+}`,
+  and the stories runtime already has public egress and S3 on `ws/*`. Its plan shows only the in-place image update of
+  `cf_prod_story_agent` (the new image tag from `stories/**`); nothing is destroyed and nothing of Clip Factory
+  changes.
 
 ### 45.16 Web
 
@@ -14605,15 +14620,19 @@ only main button, and with exactly one place connected "Use my settings" picks i
 * Chat: §45.27 (conversation list, messages, the model and effort line above the box, "Just for this message",
   attachments, action buttons, Stop); the typed draft is kept per chat (sessionStorage) and cleared on send; under
   360 px the model and effort fold into one chip. References: §45.28 (upload with progress, Analyze with the model and
-  effort shown, the analysis, "Use in a video"); Talk about it in Chat makes one chat on a double tap ("Opening the
-  chat…"); right after Analyze only step 1 shows as running; a video that won't play says "This video would not
-  play." with Try again.
+  effort shown, the analysis, "Use in a video"), and §45.40 (a video dropped anywhere on the page, a link pasted in the
+  card's box or anywhere on the page, "Getting it…" until the video is here); Talk about it in Chat makes one chat on a
+  double tap ("Opening the chat…"); right after Analyze only step 1 shows as running; a video that won't play says
+  "This video would not play." with Try again.
 
 #### 45.16.8 Mock mode
 
 `web/src/stories/api/mock/` implements every route in memory (`index.ts` joins the parts, `store.ts` holds the shared
 seed; a production job walks its steps in about 10 s; the "final video" is the engine's live preview in mock mode), so
-every screen runs under `npm run dev:mock` and in Playwright.
+every screen runs under `npm run dev:mock` and in Playwright. References from a link (§45.40): `mock/references.ts`
+checks links with `refLinks.ts`, keeps the API's 100, duplicate and three-at-once refusals, and moves a fetch from
+`fetching` to `ready` after the knob `refFetchSeconds` (default 2; 24 MB, the length from `refUploadSeconds` or 42 s,
+the title left as it was); the knob `refFetchFail` makes the next fetch end `fetch_failed` with that sentence.
 
 ### 45.17 Changes to existing files (each one small, each with its proof)
 
@@ -14712,6 +14731,18 @@ nothing is renamed, the table, user pool, buckets, vectors and secrets are untou
   done without the owner's tap), the reference analysis on a short fixture video, an import scan (nothing from
   `clipfactory_agent`); web: the model and effort line in the chat, "Just for this message", every settings section,
   the onboarding (skip, resume, the ring), the Social accounts page details.
+* **Drop and link (§45.40)**: api `tests/test_ws_ref_links.py` (every fixture link, `only_keys`, the title, the 100,
+  duplicate and three-at-once refusals, one transaction, a start that fails, the stale fence, analyze refused while
+  `fetching` or `fetch_failed`, Try again only from `fetch_failed`, `fetchJob` in GET, no `url` while fetching, `link`
+  public and `titleFromLink` never, rename and delete); stories agent `test_reflinks.py`, `test_netguard.py` (no
+  loopback, private, link-local or `fd00:ec2::/32` address, no port but 443, no method but CONNECT, a rebinding answer
+  refused, the byte cap) and `test_reffetch.py` (the pinned yt-dlp arguments, an allowed extractor for every platform
+  shape, offline, each error sentence, Drive and Dropbox not shared, redirects and the cap, the fenced final write,
+  the key deleted when superseded); all three copies of the allowlist read
+  `stories/agent/tests/fixtures/reference_links.json`; web `test/useFileDrop.test.tsx`, `test/dropGuard.test.ts`,
+  `test/settingsDrops.test.tsx`, `test/storiesDrops.test.tsx`, `test/storiesRefDropLink.test.tsx`,
+  `test/storiesRefLinkApi.test.ts`; Playwright `e2e/drop-and-link.spec.ts` (Chromium, and its phone tests in
+  `webkit-phone`).
 
 ### 45.20 The owner's request, point by point
 
@@ -14971,8 +15002,10 @@ happens shot by shot, the hook and its timing, pacing (cuts per 10 s), the gags 
 words, sound design (effects, music, silence), caption style, what to borrow and what not to copy (no characters,
 logos or footage are copied; only ideas of structure and timing). Stored in S3 (`analysis.json`) and shown on the
 reference's page; an idea or story can **use** references (`referenceIds`, ≤ 3), whose analyses the storyboard agent
-reads. Links to other people's videos are not downloaded in this section (Clips Funded's agent has no downloader);
-the page says "Upload the video file."
+reads. A reference can also come from a pasted link to one video on YouTube, TikTok, Instagram, Facebook, X, Google
+Drive or Dropbox, which Clips Funded's own runtime fetches (`fetch_reference`, §45.40, ADR-88); a video can also be
+dropped anywhere on the References page. Every fetch that fails says why and leaves "Upload a video" and the page drop
+as the way forward.
 
 ### 45.29 Setup, onboarding and settings (Clips Funded's own)
 
@@ -15185,8 +15218,9 @@ is already built and only written down here.
   account shown and send the same request again with `confirmAccount`. Clips Funded asks once per TikTok identity
   (`SOCIAL#tiktok.notClipsConfirmed`).
 * **Reference videos** (api, web): `GET …/references/{refId}` answers `{ reference, analysis, job: ProductionJob |
-  null }` (the analysis job of `currentJobId`, else the latest one), so the page shows each step and the failure's own
-  reason. `StoryStep.key` also takes the analysis steps `"look" | "listen" | "write"` (Look at it, Listen, Write it
+  null }` (the analysis job of `currentJobId`, else the latest one; since §45.40 only a `reference_analysis` job, or
+  one with no `jobType` from before, and `fetchJob` beside it for a link's fetch), so the page shows each step and the
+  failure's own reason. `StoryStep.key` also takes the analysis steps `"look" | "listen" | "write"` (Look at it, Listen, Write it
   up). `StoriesApi.deleteReference(ws, refId)` is renamed `deleteReferenceVideo`; `deleteReference(ws, characterId,
   assetId)` stays the character's picture.
 * **From the chat to a new video** (web): Production › New reads `?idea=`, `?ref=` (repeatable, ≤ 3 reference ids),
@@ -15235,7 +15269,8 @@ behaviours an earlier step narrowed or left out)
   /v1/workspaces/{ws}/storage/cleanup` → `{ removed: { files, bytes } }` applies them (and `keepVersions`) now.
   `StorageSummary` gains `location: { region: string; folder: string }` ("Clips Funded's own folder in Clip Factory's
   media storage"), and storyboards and captions count under `scenes`. A reference video whose file was cleared shows
-  "The video was removed to save space. Its study stays."
+  "The video was removed to save space. Its study stays." A reference that is `uploading`, `fetching` (§45.40) or
+  `analyzing` is never cleared (the agent's `retention.BUSY`).
 * **Each character keeps its own faces and noises** (request 1 §5.C "Facial expressions", "look and behave
   consistently"; engine, agent): `CastMember` gains `expressions: Expression[]`; `validateScript` refuses a beat whose
   `face` is not in that character's list, or whose `noise` is not in its `voice.noises`; the writer's rules say so;
@@ -15741,6 +15776,398 @@ full rules are in `web/src/stories/styles/GLASS-CONTRACT.md` §10 and `glass-tok
   labels the list under it (Social accounts' "What TikTok allows for a second account").
 * **Replaces:** Playfair (OFL; everywhere in Clips Funded, chosen as a look-alike of the owner's Womack sample) and
   Jost (OFL; the caps captions), which Clips Funded used from 22 Nov until this change. Their files are gone.
+
+### 45.40 Reference videos from a link, and drag and drop (owner, 23 Nov 2026; wins over anything above)
+
+The owner (23 Nov), with a screenshot of Clips Funded › References, whose card had only **Upload a video** and the
+line "MP4 or MOV, up to 2 GB and 10 minutes. Found one online? Save it to your device first, then upload the video
+file.": (1) "i should be able to upload with drag and drop (which there isnt currently so fix that"; (2) "and i also
+want a feature to just paste a link instead of uploading a video directly". Decision record: ADR-88 (amends ADR-78).
+
+Done means, checked against the live app: on References, dragging a video file anywhere over the page shows one clear
+glass "Drop your video here", and dropping it starts the upload; pasting a TikTok, YouTube, Instagram, Facebook, X,
+Google Drive or Dropbox link into the card's box and tapping **Add** puts the video in the list ("Getting it…"), and
+when it arrives its page opens with **Analyze it**; a link pasted anywhere on the page, or dropped on it, fills the
+box; keyboard and click upload work as before; Ask still takes its own drops.
+
+#### 45.40.1 Drag and drop: one hook, one layer, one window guard
+
+Before this, RefList put its drag handlers on the card only: nothing on screen said a drop was possible, the highlight
+flickered on every child, a drop anywhere else was refused by Ask's window guard (or replaced the app when it opened
+straight into Clips Funded, where that guard is not mounted), and a dropped link was ignored (in the Mac app it opened
+the system browser).
+
+**`web/src/lib/useFileDrop.ts`**, the one hook every new zone uses (it imports `dragKind`, `dragMayHoldText` and
+`linkFrom` from `lib/drops.ts` and `filesFrom` from `features/help/pictures.ts`; `drops.ts` and `links.ts` are
+unchanged):
+
+```ts
+export type DropScope = "element" | "page";
+export type DropOver = "file" | "link" | "either" | "busy" | null;
+export interface FileDropOptions {
+  scope: DropScope;                         // "element": spread `bind` on the zone; "page": the window, while this app is on screen
+  checkFile?: (file: File) => string | null; // null takes the file, else the short refusal line; left out, no files are taken
+  maxFiles?: number; tooMany?: string;       // the most files one drop gives (default 1); extra ones are refused with tooMany
+  links?: boolean;                          // take a dropped link: a uri-list, or plain text that is one http(s) link
+  onFiles?: (files: File[]) => void; onLink?: (url: string) => void;
+  enabled?: boolean;                        // default true; false: no highlight, nothing taken, the window guard refuses
+  busy?: string | null;                     // while set, a drag shows this line and the drop is refused with it
+  wrongThing?: string;                      // default WRONG_THING = "That can't go here."
+}
+export interface FileDrop { over: DropOver; refused: string | null /* cleared after REFUSED_MS = 4000 or the next
+  dragenter */; refusals: number /* +1 per refusal: the key that restarts the shake */;
+  bind: Pick<DOMAttributes<HTMLElement>, "onDragEnter" | "onDragOver" | "onDragLeave" | "onDrop"> /* no-ops for page */ }
+export const OWN_DROP_SELECTOR = ".help-launcher, #help-panel, .mk, [data-own-drop]";
+```
+
+The same rules for both scopes:
+* **Counting.** A depth counter goes up on dragenter and down on dragleave; the highlight clears only at 0, so moving
+  over a zone's children never flickers. A window `drop` or `dragend`, or a `dragleave` with no `relatedTarget` whose
+  point is outside the window (Escape), also clears it. There is no idle timer: WebKit sends no dragover while the
+  pointer is held still. A target whose dragenter was skipped (another zone or Ask took it) has its dragleave skipped
+  too, so the count stays in step.
+* **Whose drag it is.** Ours when the zone takes files and the drag carries `Files`, or when it takes links and
+  `dragKind` is `link` or `either` or `dragMayHoldText` is true. A drag with no `Files` over an editable field (input,
+  textarea, contenteditable) is let through without `preventDefault`, so dragged text still lands in text boxes. A
+  drag that started inside the page itself (a `dragstart` on the document, cleared by its `dragend`, the window's
+  `drop` or the next pointer press) is no zone's unless it carries `Files`: a list row or selected words dragged and
+  dropped never fill the link box.
+* **dragover** calls `preventDefault()` and sets `dropEffect` to `"copy"` (`"none"` while busy).
+* **drop** calls `preventDefault()` and clears the highlight. Busy: refused with the busy line. Otherwise the files
+  that pass `checkFile`, up to `maxFiles` (more: `tooMany` as well); else a link calls `onLink(url)` (a thumbnail
+  dragged off a video page carries its picture and the page's link: the link is what was meant); else the first
+  file's own refusal line; else `wrongThing`.
+* **Page scope** listens on `document` (never window bubble listeners, which run after the guard), only while
+  `enabled && useAppActive()`, and skips an event, clearing its highlight, when it is `defaultPrevented` (an element
+  zone inside the page or Ask took it), when its target is inside `OWN_DROP_SELECTOR`, or while an
+  `[aria-modal="true"]` dialog is open. React's handlers at `#root` run before document listeners, so element zones
+  inside a page zone always win.
+
+**`web/src/components/DropOverlay.tsx`**: `DropOverlay({ drop, scope, words: { file, link?, either?, busy? }, look?:
+"clips" | "stories", icon?, host? })`. Nothing at rest. While dragging, a glass layer covers the zone (element: the
+zone has class `drop-host` or `st-drop-host`, `position: relative`; the layer is `absolute; inset: 0; border-radius:
+inherit; z-index: 3`) or the window (page: portalled to `host`, default `document.body`; Clips Funded passes its
+`.stories-app` root so its `--st-*` tokens apply; `fixed; inset: 0; z-index: 40`, below Ask's launcher 45, its panel
+60/70 and the toasts). The layer is `aria-hidden`, never takes the pointer and fades in over 160 ms. In its middle one
+glass pill holds a 40 px icon and the words: "Drop your video here", "Drop the link here" or "Drop it here" (a
+zone's own words for pictures and skills). A refusal keeps the pill 1.6 s (`REFUSED_SHOW_MS`) in refused mode: coral,
+an X and the one short line; it shakes three times (±6 px, 360 ms; not with reduced motion), then fades (`drop-out`).
+Each refusal re-mounts the layer (keyed on `refusals`), so the shake starts again. An sr-only `role="status"` line is
+always there and holds `drop.refused`. With no busy words of its own it says "Wait a moment." (`BUSY_WORDS`).
+
+**Styles.** `web/src/styles/drop.css` (imported in `main.tsx`): the layout, the keyframes `drop-in`, `drop-out` and
+`drop-shake`, reduced motion (the media query and `.reduce-motion`), reduced transparency, and Clip Factory's green
+glass (`drop-layer--clips`), with the existing glass tokens only and no new token. Clips Funded's look,
+`web/src/stories/styles/st-drop.css` (one `@import` at the end of `stories.css`): warm smoky glass with an amber glow
+inside its edge, a floating round pill with an orange icon and cream words, coral when refused, solid with reduced
+transparency or `data-glass="solid"`; `--st-*` tokens and `--st-r-*` radii only, no borders, no inset hairlines, no
+keyframes of its own (the motion is drop.css's). A skill button is too small for the pill, so there the pill floats
+just above it.
+
+**`web/src/lib/dropGuard.ts`**: `installDropGuard()`, called once in `main.tsx` right after `installInputModality()`,
+for the whole app from the start (Ask's guard lives in Clip Factory's shell and is missing when the app opens straight
+into Clips Funded). Window bubble listeners for `dragover` and `drop`: a `defaultPrevented` event is left alone (a
+zone took it), and so is a drag with no `Files` over an editable target; otherwise a drag carrying `Files` or
+`text/uri-list` is prevented and its dragover gets `dropEffect = "none"`. A stray file never replaces the app, and a
+stray link never navigates or opens the system browser. HelpLauncher's own guard stays (now redundant and harmless).
+
+#### 45.40.2 Which upload site gets which zone
+
+| Site | Zone | Takes |
+|---|---|---|
+| Clips Funded References list (`RefList.tsx`) | **page** | up to 5 videos (`videoProblem`; more: "Up to 5 videos at once. Drop the rest after.") and links (fill the box). The card's own handlers are gone; the file input stays inside `.st-ref-drop`. |
+| Clips Funded reference page (`RefPage.tsx`), only while `fetch_failed` | **page** | one video: it replaces the link reference (§45.40.9) |
+| Clips Funded director chat (`ConversationView.tsx`) | **page** | PNG, JPG or WebP ≤ 5 MB (`pictureProblem`), as many as the message has room for (4); more: "You can add up to 4 pictures to one message." On once the chat has loaded; the composer still takes dragged text. |
+| Clips Funded Settings › Look (`LookSection.tsx`) | **page**, whatever the mode | one picture (`lookPictureProblem`: "Pick a picture.", else the too-big line; the picker says the same); it becomes the background and Picture is chosen with it |
+| Clips Funded Skills (`settings/SkillsSection.tsx`) | **element**, each FilePick label | its skill file (`checkSkillFile`); busy with its own `off` line ("Uploading…") while an upload runs; the input carries its own `aria-label`, so the status line never joins its name |
+| Clips Funded Design with AI (`studio/Design.tsx`) | **element**, the open panel | one picture (`fileProblem`); busy "Sending the picture…" |
+| Clips Funded studio "Pictures to aim for" (`studio/References.tsx`) | **element**, `section.st-s-refs` | one picture (`fileProblem`); busy when full ("You have 8 pictures. Delete one first.") or while sending ("Wait a moment."); no link box |
+| Clip Factory Settings › Skills, add a skill (`screens/settings/SkillsSection.tsx`) | **element**, the add-skill panel | a SKILL.md or .zip (`skillDropCheck`); busy "Still uploading. Wait a moment." |
+| Clip Factory skill "Replace the whole file" (`SkillPages.tsx`) | **element**, that section | the same; the page's text editors keep their text drops |
+| Clip Factory YouTube cookies.txt (`branches.tsx`) | **element**, its panel | `.txt` or `text/plain` ≤ 1 MB (`cookiesDropCheck`), then checked like the picker's. Clip Factory's account only; Clips Funded never reads it. |
+| Clip Factory background picture (`branches.tsx` PictureApple) | **element**, the `.bg-picker` card | one picture (`pictureDropCheck`) |
+| Clip Factory new job (`NewJobForm.tsx`) | **unchanged** (§12.5) | its own video-or-link drop, locked by `e2e/drop-video.spec.ts` and the `/` pixel gate |
+| LogoBox, BankKeyBox, KeyForm, VerificationUpload, Ask's panel and launcher | **unchanged** | their own zone or field drops |
+
+Refusals reuse each picker's own sentences. On Clip Factory nothing shows at rest (the zones only gain `drop-host` and
+an empty off-screen status line), so `clips-unchanged.sh` keeps every pixel; the only new Clip Factory words show
+during a drag.
+
+#### 45.40.3 The card: paste a link (`RefList.tsx`, `RefLinkBox.tsx`, `ref-link.css`)
+
+* The card's line is "Drop a video or paste its link. Up to 10 minutes." (the lede and the empty state are the copy
+  PR's).
+* `RefLinkBox`: `<input type="url" inputMode="url" enterKeyHint="go" autoComplete="off">`, placeholder "Paste a video
+  link", sr-only label "Video link", the site's mark at its start (the shared `PlatformMark` for the five platforms,
+  simple drawn marks for Drive and Dropbox). One button at its end: **Paste** (quiet) while it is empty, hidden when
+  the browser has no clipboard API; **Add** (main) when it holds a supported link, and Enter does the same; no button
+  otherwise. Tapping **Paste** is the owner's own ask: a supported link it reads is added at once (no Add tap); any
+  other text only fills the box. When reading the clipboard fails, the line says how to paste by hand on this device
+  (`pasteHelp()`): "Press and hold in the box, then choose Paste." on a touch screen (`(pointer: coarse)`, iOS,
+  Android), "Click the box, then press ⌘V." on a Mac, "Click the box, then press Ctrl+V." elsewhere.
+* One main button at a time: **Upload a video** is main, except while Add is shown; then Upload is quiet.
+* Under them one status line (`role="status"`, `aria-live="polite"`). A link that can't come in says why only once it
+  is checked (pasted, dropped, Enter, or the box left), never letter by letter while it is typed; a good one shows its
+  line at once:
+
+  | Box holds | Line |
+  |---|---|
+  | a supported link | "{Site} video found." with the site's mark in the box |
+  | a link to another site | "We can't get videos from that site. Save the video, then upload it." |
+  | a supported site but not one video (a profile, a folder) | "That link isn't one video. Open the video, tap Share, then Copy link." |
+  | text that is no link (also schemes other than https and http) | "That isn't a link. Copy the video's link, then paste it here." |
+  | after Add | "Getting it…"; when the start failed, the job's own sentence |
+  | after Add, a refusal from the API | the API's sentence (the duplicate, three at once, the 100 limit) |
+  | a picked, pasted or dropped file that is no video | `videoProblem`'s line ("Pick an MP4 or MOV video.", "That video is too big. Pick one under 2 GB."); a refused drop's line stays here after its pill has gone, until the box changes |
+
+* Share text is cleaned with `extractLink` (`lib/links.ts`), then checked by `refLink()` (§45.40.4). After a good Add
+  the box clears and the new reference goes to the top of the list with the chip "Getting it…".
+* **A paste anywhere on the page** (`usePagePaste`, a `document` `paste` listener) is on only while the page is
+  shown and Clips Funded is on screen; it skips targets inside another editable field, inside `OWN_DROP_SELECTOR`,
+  and while a dialog is open. Clipboard videos start uploads (the same `videoProblem`); text with a link fills the box
+  and moves focus to Add, and is never added by itself. `preventDefault()` only when the paste was taken.
+* **A drop** of a link fills the box the same way; a dropped video starts its upload at once, exactly like picking
+  it. The picker goes through the same `videoProblem`; its refusal shows in the card's line instead of a failed upload
+  row (`startUpload` keeps its own check as a backstop).
+* On phones the box and Upload stack, each full width and 56 px tall. `ref-link.css` is imported by `RefLinkBox.tsx`;
+  `chat.css` is not edited.
+
+#### 45.40.4 Supported links: one allowlist, three copies, one shared fixture
+
+The copies: `api/src/clipfactory_api/workspaces/reflinks.py`, `stories/agent/src/lamostories_agent/reflinks.py` (a
+copy, never an import: the isolation test forbids `clipfactory_*`; an agent test checks it matches the API's copy line
+for line, reading the file as text) and `web/src/stories/api/refLinks.ts`. All three give the answers in
+`stories/agent/tests/fixtures/reference_links.json` (38 links taken, 34 refused), and all three suites read it. The
+text is parsed by hand the same way in each, never with a URL parser that would re-encode it: share text is cleaned
+to its first link; only `https`, `http` or no scheme (`https://` is put in front: only https is ever fetched); no user
+name or password; port 443 or none;
+at most 2048 characters; the host lower-cased (`tiktok.com` and `m.tiktok.com` become `www.tiktok.com`, the host
+yt-dlp's TikTok extractor takes); the path as given; only the kept query keys; no fragment.
+
+| site | Name shown | Hosts (exact) | Paths taken (anything else on these hosts: "not one video") | Kept query |
+|---|---|---|---|---|
+| `youtube` | YouTube | youtube.com, www.youtube.com, m.youtube.com, youtu.be | `/watch?v={11}`, `/shorts/{11}`, youtu.be `/{11}` | `v` |
+| `tiktok` | TikTok | tiktok.com, www.tiktok.com, m.tiktok.com, vm.tiktok.com, vt.tiktok.com | `/@{handle}/video/{digits}`, `/t/{code}`, vm/vt `/{code}` | none |
+| `instagram` | Instagram | instagram.com, www.instagram.com | `/reel/{code}`, `/reels/{code}`, `/p/{code}`, `/tv/{code}` | none |
+| `facebook` | Facebook | facebook.com, www.facebook.com, m.facebook.com; fb.watch | `/reel/{id}`, `/watch?v={id}` (also `/watch/?v=`), `/{page}/videos/{id}`; Share › Copy link: `/share/r/{code}`, `/share/v/{code}`, fb.watch `/{code}` | `v` |
+| `x` | X | x.com, www.x.com, mobile.x.com, twitter.com, www.twitter.com, mobile.twitter.com | `/{user}/status/{digits}` (an optional `/video/1` is kept) | none |
+| `drive` | Google Drive | drive.google.com | `/file/d/{id}/…`, `/open?id={id}`, `/uc?id={id}` (folders: not one video) | `id` |
+| `dropbox` | Dropbox | dropbox.com, www.dropbox.com | `/s/{code}/{name}`, `/scl/fi/{code}/{name}` (`/sh/` and `/scl/fo/` are folders) | `rlkey` |
+
+Facebook's own Share › Copy link (`/share/r/`, `/share/v/`) and `fb.watch` links match only yt-dlp's generic
+extractor, so they never go to yt-dlp: `is_share_link(url)` (in both Python copies) names them, and the agent opens
+one first through the guard (§45.40.6) and hands yt-dlp only the Facebook video link it leads to, checked again with
+`clean_link`. Every other platform shape in the fixture is matched by an allowed yt-dlp extractor (checked offline,
+§45.40.6); a shape no allowed extractor takes and no opening step leads from comes out of the table and never goes to
+`generic`. Not in v1: Vimeo, Snapchat, and plain https links to an `.mp4` on any host (each would be one
+row in the table, the fixture and the extractor list).
+
+Shapes: web `refLink(text): { ok: true; url; site: RefSite } | { ok: false; why: "empty" | "not_a_link" |
+"other_site" | "not_one_video" }`, `SITE_NAME`, `siteOf(url)`, `REF_LINK_REFUSED` (the sentences of §45.40.3, the
+API's too); Python `clean_link(text) -> (url, site)`, raising `LinkRefused(why)` with `.sentence`, which the API
+answers as a 400 with `field: "url"`.
+
+#### 45.40.5 Who fetches: Clips Funded's own runtime, with code copied from Clip Factory
+
+* The fetch runs on `cf_prod_story_agent` as the action `fetch_reference` (§45.11.1): that runtime already has public
+  egress, S3 on `ws/*`, the fenced job writes, heartbeats, ffmpeg and Deno. Not the API Lambda (29 s, no ffmpeg); not
+  Clip Factory's runtime or job flow (ADR-76, §45.1).
+* **Copied, never imported:** from `agent/src/clipfactory_agent/sources.py` the shape of the yt-dlp options, the
+  720p format string, the error kinds (rewritten as Clips Funded sentences) and the progress-line regex; from
+  `api/src/clipfactory_api/contentrewards/fetch.py` and `logo.py` the Drive and Dropbox handling (`/file/d/` →
+  `drive.usercontent.google.com/download?id=…&export=download&confirm=t`, Dropbox `dl=1`, the hop suffixes
+  `.googleusercontent.com` and `.dl.dropboxusercontent.com`, a sign-in redirect means not shared, at most 3
+  redirects).
+* **Never used:** Clip Factory's cookies (`private/{userId}/youtube-cookies.txt`), its proxy secret, its PO-token
+  server, its Mac fetch, the TikTok helper or any social OAuth token. IAM already keeps the stories role out of
+  `private/` and Clip Factory's secrets.
+* **Clips Funded's own PO-token sidecar for YouTube** (ADR-52's way, ADR-88): `lamostories_agent/pot.py`, a copy of
+  Clip Factory's `pot.py` (never imported), runs bgutil-ytdlp-pot-provider's server with the image's Deno on
+  `127.0.0.1:4416` in this runtime only (`--allow-env --allow-net`, read and FFI on its `node_modules` only, no write).
+  The image builds it from upstream's tag tarball pinned by sha256 (`BGUTIL_VERSION=2.0.2`, the plugin
+  `bgutil-ytdlp-pot-provider==2.0.2` in `pyproject.toml`; bump both together), with its own read-only Deno cache
+  (`CF_STORIES_POT_HOME=/opt/bgutil/server`, `CF_STORIES_POT_DENO_DIR=/opt/bgutil/deno-cache`). The app only
+  remembers it at start; the first YouTube link starts it (`pot.ready()`, ≤ 10 s), a supervisor restarts it with a
+  growing pause, and `CF_STORIES_POT=off` turns it off. YouTube calls add `--extractor-args
+  youtube:player_client=default,mweb` and the script mode's `server_home` (the backup while the server is down). The
+  plugin hands the server the fetch's own guard as its proxy, so its calls to YouTube go through the guard too. The
+  build runs `python -m lamostories_agent.pot` (both providers usable, `/ping` answers). No cookies.
+* `stories/agent/pyproject.toml` pins `yt-dlp[default]==2026.10.26` (Clip Factory's pin); `uv.lock` is refreshed with
+  a local `uv lock`. The Dockerfile's build check runs `yt-dlp --version` and imports both PO-token providers, and
+  `selfcheck.py` runs
+  `reffetch.extractors_ok()` (the extractor list resolves, without `generic`). `proc.run` takes an optional `env`
+  (added to the process's own environment) for the proxy variables.
+* No Terraform change (§45.15).
+
+#### 45.40.6 SSRF and limits (`netguard.py`, `reffetch.py`)
+
+**One egress guard for every byte of a fetch.** `netguard.Guard(*, cap, resolve, connect_timeout=10, idle_timeout=60,
+max_tunnels=16, opener)` is a CONNECT-only proxy on `127.0.0.1`, on a random port, started for one fetch and closed
+after it (`async with Guard(cap=…) as g`: `g.url`, `g.over`, `g.refused`).
+* Only `CONNECT host:443`. Any other method, an absolute-URI GET (plain http) or any other port: `405` and the
+  connection closes, so every fetch is https.
+* The host must pass `config.safe_host`; it is resolved off the event loop within 10 s, and every address must pass
+  `config.public_ip`: no loopback, private, link-local (169.254.0.0/16: 169.254.169.254 and 169.254.170.2),
+  `fd00:ec2::/32`, the old site-local `fec0::/10`, multicast, reserved or unspecified address. The tunnel connects to
+  the checked address itself, so DNS rebinding cannot reach a private one. Every redirect and CDN hop is a new
+  CONNECT, checked again.
+* All bytes coming in, across all tunnels, are counted; past `cap` every tunnel closes and `over` is set, so the size
+  limit holds while streaming even when Content-Length is wrong or missing.
+* A tunnel closes when neither way has moved for 60 s (one timestamp both ways share: the request side of a
+  download stays silent while its answer streams in, so a long download is never cut). At most 16 connections at
+  once, each counted from the moment it is accepted, so CONNECTs arriving together never pass the limit. Logs hold
+  host names and counts only, never paths or queries.
+
+**Platform links (yt-dlp).** Argument lists through `proc.run`, no shell; the env sets `HTTPS_PROXY`, `HTTP_PROXY` and
+`ALL_PROXY` to `g.url` as well.
+* Info: `yt-dlp --ignore-config --no-playlist --playlist-items 1 --no-cache-dir --use-extractors <EXTRACTORS> --proxy
+  <g.url> --socket-timeout 30 -f <FORMAT> -J -- <url>`, 120 s. A live or upcoming video is refused (LIVE), a
+  `duration` over 600.5 s (TOO_LONG) and an estimated size of the chosen format over the cap (TOO_BIG) before
+  anything is downloaded. It keeps `title` (whitespace collapsed, ≤ 80, data only, never the description).
+* Download: the same base flags plus `--no-mtime --retries 3 --fragment-retries 3 --match-filter "!is_live &
+  duration <=? 600.5" --max-filesize <cap> -f "bv*[height<=720][vcodec^=avc1]+ba[acodec^=mp4a]/bv*[height<=720]+ba/
+  b[height<=720]/b" --merge-output-format mp4 --remux-video mp4 --newline -o <work>/get/source.%(ext)s -- <url>`,
+  a 20 min limit and a 120 s stall check kept alive by the progress lines (which also drive the job's progress).
+* `EXTRACTORS` = `youtube`, `tiktok`, `vm\.tiktok`, `instagram`, `facebook`, `facebook:reel`, `twitter`: never
+  `generic`, so redirects and embeds cannot reach arbitrary pages. Never `--cookies`, `--cookies-from-browser`,
+  `--exec`, `--load-info-json` or a user-supplied `-o`. YouTube also gets the PO-token arguments of §45.40.5.
+* yt-dlp's own words reach the log only through `reffetch.quiet()`: every link becomes `<link>` and the post id after
+  `[extractor]` is dropped, so no post link or id is logged.
+
+**Facebook share links (`open_share`, before yt-dlp).** One GET at a time through the guard (`set_tunnel`, as for
+Drive), at most 3 redirects, each on Facebook's own hosts (facebook.com, www., m., web., fb.watch), https and port 443
+only. The first `Location` (or, on a 200 HTML answer, the page's own `og:url` or canonical address, from at most its
+first 1 MiB) that `clean_link` takes as a Facebook video link, never a share link again, is the one yt-dlp gets. A
+sign-in page or any other answer is "Facebook didn't let us get it. Save the video, then upload it."; 404 or 410 is
+GONE; 429 or 5xx is "We couldn't reach Facebook. Tap Try again."; another host or a fourth redirect is NO_VIDEO. The
+reference keeps the owner's own share link.
+
+**Drive and Dropbox (no yt-dlp).** `http.client.HTTPSConnection` through the guard (`set_tunnel(host, 443)`) in a
+worker thread; at most 3 redirects, each hop on the Drive or Dropbox hosts or their hop suffixes. A redirect to
+`accounts.google.com` or a Dropbox `/login`, a `text/html` answer, or a 401/403 is NOT_SHARED. It streams to disk in
+1 MiB reads (30 s per read, 20 min in all); a Content-Length over the cap stops it at once and the count while reading
+is capped too; the first bytes must be an MP4 or QuickTime `ftyp` (else NO_VIDEO); after 16 MiB ffprobe reads the
+partial file and stops one already over 600.5 s (TOO_LONG). The title comes from the Content-Disposition file name.
+
+**After either path:** ffprobe must find a video track of 600.5 s or less, the file is at most 2 GiB, it is remuxed
+with `ffmpeg -c copy -movflags +faststart` (5 min; the original is kept when that fails) and uploaded as the
+reference's own `source.mp4` (kept under `ws/`). **Disk:** `cap = min(2 GiB, (free − 512 MiB) / 2)` (video, audio and
+the merge can double the peak); a cap under 200 MiB is NO_ROOM.
+
+#### 45.40.7 States, data and the endpoints
+
+**REFVID# of a link:** `{ ...base_item, refId, title: given or "{Site} video", status: "fetching", link: "<cleaned
+https url>", titleFromLink: true (only when no title was given), bytes: 0, contentType: "video/mp4", key:
+"ws/{u}/{ws}/references/{refId}/source.mp4", ai: {model: null, effort: null}, currentJobId: J, createdAt, updatedAt
+}`. When the video is in: `status: "ready"`, `bytes`, `durationSec`, `fetchedAt`, and `title` (only while
+`titleFromLink` is set); `currentJobId` and `titleFromLink` are removed. A rename removes `titleFromLink`, so a fetch
+never writes over the owner's own name.
+
+**PJOB# of the fetch:** `{ jobType: "reference_fetch", contentType: "reference", contentId: refId, status: "queued",
+steps: [{key: "get", label: "Get the video", status: "pending"}], progress: 0, configuration: {run: ["get"], from:
+null, sceneIds: null, note: null, override: null}, meta: {providers: {}, models: []}, sessionId, heartbeatAt }`. The
+runtime payload is `{action: "fetch_reference", userId, workspaceId, refId, jobId}`, sent by
+`StoryAgent.start_reference_fetch(...)` (`workspaces/agent.py`).
+
+```
+POST /references/link ──▶ fetching ──(agent: file in)──▶ ready ──▶ analyzing ──▶ analyzed | failed   (unchanged)
+                              │
+                              ├─(agent error / start failed / stale fence / orphan)──▶ fetch_failed
+                              │                                                          │
+                              └──────────── POST /references/{refId}/fetch ◀──────────────┘
+upload: uploading ──▶ ready ...   (unchanged)
+```
+
+* `"failed"` still means only that the study failed. `STATUSES` gains `fetching` and `fetch_failed`.
+* `public()` adds `link` (null for uploads); `url` only for `ready | analyzing | analyzed | failed`, never while
+  `uploading`, `fetching` or `fetch_failed`. `titleFromLink` is never public (it is on the leak lists).
+* `public_job()` answers the item's own `jobType`.
+
+| Route (**S**, in `routes/ai.py` and `api/tests/ws_routes_ai.py`) | Body | Answer | Refusals |
+|---|---|---|---|
+| `POST /v1/workspaces/{ws}/references/link` | `{ "url": string (≤ 2048; share text is cleaned), "title"?: string (≤ 80) }`, `only_keys` | **202** `{ reference, job }` (`fetching`, `reference_fetch`) | 400 `url` (§45.40.3's sentences; empty: "Paste a video link."); 400 `title`; 409 "You have 100 reference videos already. Delete one first."; 409 "That video is in your list already." (the same cleaned `link`), or "That one didn't arrive. Tap it in your list, then Try again." when every reference with that link is `fetch_failed`; 409 "Three videos are on their way already. Wait for one to arrive." (≥ 3 `fetching` after `settle`) |
+| `POST /v1/workspaces/{ws}/references/{refId}/fetch` | `{}` | **202** `{ reference, job }` | 404; 409 "It is getting the video now." (`fetching`); 409 "This video is here already." (any status but `fetch_failed`); the three-at-once limit |
+| `GET /v1/workspaces/{ws}/references/{refId}` | | adds `fetchJob: ProductionJob \| null` (the newest `reference_fetch` job); `job` is the analysis job only (`reference_analysis`, or no `jobType` on old items) | |
+| `POST …/{refId}/analyze` | | | 409 "Wait until the video is here." (`fetching`); 409 "Get the video first. Tap Try again." (`fetch_failed`) |
+
+* The create and the fetch-again work like `analyze`: one `store.transact` puts the PJOB and the REFVID (the
+  fetch-again's update is conditioned on `status = fetch_failed` and no `currentJobId`), then
+  `runtime.start_reference_fetch` starts it inside `cfg.stops_last(app)`. The three-at-once and the same-link checks
+  read the list first and are soft limits: two adds at the very same moment may both pass (only the workspace's owner
+  can do that, behind the API's throttle). A start that fails gives `fetch_failed` with
+  "Getting the video did not start. Tap Try again."; with no runtime, the NOT_ON sentence.
+* `settle()` also fences `fetching` (the same 3 and 6 minute rules: "Getting the video stopped. Tap Try again.");
+  `after_failure(ref, job)` gives `fetch_failed` for a `reference_fetch` job; `_orphan()` sends `fetching` to
+  `fetch_failed`. Delete is unchanged: it cancels the job in `currentJobId` and deletes the prefix.
+* **The agent** (`reffetch.FetchJob`, `step_keys ("get",)`, registered as `fetch_reference`): re-reads the reference
+  and `currentJobId` (superseded: it stops), checks the link again with `reflinks.clean_link`, needs `key ==
+  reference_prefix(...) + "source.mp4"`, runs `get`, then one final write fenced on `currentJobId`. When that write is
+  refused (deleted, canceled) it deletes the uploaded key, unless a newer run owns the reference now. A failure sets
+  REFVID `fetch_failed`, removes `currentJobId`, and records the job `failed` with the sentence on the job and its
+  step. `retention.BUSY` gains `fetching`; in `chat/tools.py` `offer_analyze_reference` refuses `fetching` ("That
+  video is still on its way.") and `fetch_failed` ("That video didn't arrive. Open it and tap Try again.").
+* **Web API** (`types.ts`, `http.ts`): `ReferenceVideo.status` and `link` as in §45.6; `StoryStep.key` and
+  `configuration.run` take `"get"`; `ProductionJob.jobType` takes `"reference_fetch"`;
+  `createReferenceFromLink(ws, { url, title? })` → POST `/references/link`; `fetchReferenceAgain(ws, refId)` → POST
+  `/references/{refId}/fetch` with `{}`; both answer `{ reference, job }`; `getReference` gives `fetchJob` when the API
+  sends it (an older API sends none). The mock: §45.16.8.
+
+#### 45.40.8 Errors in kid words (each one names the fix)
+
+| Case | Sentence |
+|---|---|
+| private | "That video is private. Pick a public one, or save it and upload it." |
+| bot check, login required, 403/429, rate limit | "{Site} didn't let us get it. Save the video, then upload it." |
+| removed, 404, unavailable | "That video is gone. Check the link." |
+| live or upcoming | "That's a live video. Pick one that has finished." |
+| over 10 minutes | "This video is longer than 10 minutes. Pick a shorter one." |
+| over the cap, `g.over`, `--max-filesize` | "That video is bigger than 2 GB. Pick a shorter one." |
+| unsupported, no formats, not a video, an address the guard refused | "That link has no video we can get. Save the video, then upload it." |
+| Drive not shared | "That file isn't shared. In Google Drive tap Share, then Anyone with the link, then Try again." |
+| Dropbox not shared | "That file isn't shared. In Dropbox tap Share, then Copy link, then paste it again." |
+| timeout, DNS, reset | "We couldn't reach {Site}. Tap Try again." |
+| no disk | "Clips Funded is busy right now. Tap Try again in a few minutes." |
+| anything else | "We couldn't get that video. Tap Try again, or save it and upload it." |
+
+Every failure keeps **Upload a video** and the page drop as the way forward; the words are the same on a phone and
+a computer ("upload it", never "drop it here"). A Facebook share link that leads nowhere good: §45.40.6. Many
+platforms block downloads from cloud addresses (YouTube's bot check, Instagram's login wall), so some links will
+fail; the sentence says so plainly.
+
+#### 45.40.9 How the states show
+
+* `REF_STATUS` gains `fetching: "Getting it…"` (sky) and `fetch_failed: "Didn't arrive"` (coral). `statusOf(s)` falls
+  back to the `failed` chip for a status this bundle does not know, used in RefList and RefPage, so a cached old bundle
+  never crashes.
+* **List rows:** a link row's meta is "From {Site}" plus the usual length and size once known. The list checks every
+  3 s while any row is `fetching`. A row that turns `ready` cheers, calls `referencesChanged()` and opens its page
+  through `storiesGoLater`, the same as a finished upload; one added here that turns `fetch_failed` opens its page
+  the same way, with no cheer (the reason and the one thing to do are there, never a coral chip alone).
+* **Reference page while `fetching`:** the player says "The video is on its way."; the side block "Getting it from
+  {Site}…" shows `fetchJob`'s one step with the busy bar; the page checks every 2 s and cheers when the video arrives,
+  then shows the usual Analyze card. Only Delete stays in the lower actions.
+* **While `fetch_failed`:** the player says "The video didn't arrive."; "It didn't arrive", then `fetchJob`'s step
+  message or error, else "We couldn't get that video. Tap Try again, or save it and upload it."; **Try again**
+  (`fetchReferenceAgain`) and **Upload a video** (a hidden file input), one of them main: Try again when asking again
+  can work (`canTryAgain(reason)`: the reason names Try again: reached no one, no room, stopped, did not start, Drive
+  not shared yet, anything else), else Upload a video (private, gone, live, too long, too big, blocked, no video,
+  Dropbox not shared); picking or dropping a video deletes this link reference, starts `startUpload(ws,
+  file)` and goes to the list; Delete. The page drop zone is on only in this state. `removedState()`'s fallback is
+  `!["uploading", "fetching", "fetch_failed"].includes(status) && !url`.
+* Production's `RefPicker` shows "On its way" and "Didn't arrive" (only `analyzed` can be picked);
+  `chat/project.ts` leaves out `fetching` and `fetch_failed`.
+
+#### 45.40.10 Tests, and what the owner decides
+
+Tests: §45.19 ("Drop and link"). For the owner (in the PR): YouTube's, TikTok's, Meta's and X's terms forbid
+downloading or automated collection; the fetch uses no login, is for study only, and the files stay private under
+`ws/` with the keep settings applying. The host list (Vimeo or other sites?). Reliability from the cloud without a PO
+token was unknown, so YouTube gets Clips Funded's own PO-token sidecar from the start (§45.40.5; F1 done), and
+Facebook's share links are opened through the guard (§45.40.6; F3 done). Instagram may still ask for a login from
+the cloud; no cookies are ever used. Follow-up: F2, "Get it again" for a link reference whose file a keep setting
+cleared. After the merge and deploy, one public link per site (YouTube, a Short, TikTok, an Instagram reel, a Facebook
+reel and its share link, X, Drive, Dropbox) is tried on the live app with the owner's go-ahead, and the owner is told
+which sites arrive.
 
 ## 46. Auto-posting: the oldest clips in Review go up by themselves, every X hours (owner request, 2026-11-22)
 

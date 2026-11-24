@@ -6,6 +6,7 @@ import { friendlyMessage } from "../../api/errors.ts";
 import { putFile } from "../../api/upload.ts";
 import type { Platform } from "../../api/types.ts";
 import { useSession } from "../../app/session.tsx";
+import { BUSY_WORDS, DropOverlay } from "../../components/DropOverlay.tsx";
 import { GetAppPanel } from "../../components/GetApp.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { useToast } from "../../components/Toasts.tsx";
@@ -34,6 +35,7 @@ import { currentOs, oldAppDownloadUrl } from "../../lib/device.ts";
 import { CLIP_MODELS, currentClipModel } from "../../lib/models.ts";
 import { desktopAppCantUpdate, inDesktopApp, nativeGlass, oldDesktopApp } from "../../lib/look.ts";
 import { APP_VERSION, checkForUpdate, updateState } from "../../lib/update.ts";
+import { useFileDrop } from "../../lib/useFileDrop.ts";
 import { Apple, AppleSwitch, Panel, usePickAction } from "./parts.tsx";
 
 const PLATFORMS: readonly Platform[] = PLATFORM_ORDER;
@@ -116,6 +118,22 @@ function ModelPicks({ value, onChange }: { value: string; onChange: (key: string
   );
 }
 
+/** What a settings drop zone says while a file is dragged over it (§45.40). */
+const DROP_WORDS = { file: "Drop it here", busy: "Still uploading. Wait a moment." } as const;
+const COOKIES_TOO_BIG = "That file is too big to be cookies.txt. Export cookies.txt again and pick that file.";
+const NOT_A_PICTURE = "That is not a picture. Tap Choose a picture and pick a JPG or PNG.";
+
+/** A file dropped on the cookies panel: null to take it (its words are checked after), else why it is not cookies.txt. */
+export function cookiesDropCheck(f: File): string | null {
+  if (!/\.txt$/i.test(f.name) && f.type !== "text/plain") return COOKIES_WORDS.notCookies;
+  return f.size > 1024 ** 2 ? COOKIES_TOO_BIG : null;
+}
+
+/** A file dropped on the background picture card: null for a picture, else the line. */
+export function pictureDropCheck(f: File): string | null {
+  return f.type.startsWith("image/") ? null : NOT_A_PICTURE;
+}
+
 export function YoutubeBranch() {
   const { me, refresh } = useSession();
   const toast = useToast();
@@ -127,12 +145,15 @@ export function YoutubeBranch() {
   const removeAct = useAction("delete");
   const hasCookies = (me?.settings.hasYoutubeCookies ?? false) && !removing;
   const guideId = useId();
+  // A cookies.txt dropped anywhere on the panel is checked and saved like the picker's (§45.40). Clip Factory's own
+  // account only: Clips Funded never reads it.
+  const drop = useFileDrop({ scope: "element", checkFile: cookiesDropCheck, onFiles: ([f]) => void uploadCookies(f!), busy: busy ? DROP_WORDS.busy : null });
 
   async function uploadCookies(f: File) {
     pick.play();
     if (f.size > 1024 ** 2) {
       pick.fail({ sound: false });
-      return toast.error("That file is too big to be cookies.txt. Export cookies.txt again and pick that file.");
+      return toast.error(COOKIES_TOO_BIG);
     }
     // Checked here, in the browser, before upload (§29.6); the text is never logged or kept.
     const verdict = checkCookies(await f.text(), Date.now() / 1000);
@@ -174,7 +195,8 @@ export function YoutubeBranch() {
   }
 
   return (
-    <Panel>
+    // The panel (parts.tsx Panel's own markup) is the drop zone.
+    <div className="apple-panel glass drop-host" {...drop.bind}>
       <Apple id="youtube-cookies" aside={hasCookies ? <Pill tone="success" icon="check">Saved</Pill> : null}>
         <div className="row-actions">
           <input
@@ -210,7 +232,8 @@ export function YoutubeBranch() {
         </ol>
         <p className="cookie-guide__tip">{COOKIES_TIP}</p>
       </section>
-    </Panel>
+      <DropOverlay drop={drop} scope="element" words={DROP_WORDS} />
+    </div>
   );
 }
 
@@ -443,12 +466,14 @@ function PictureApple({ inUse, onPicked }: { inUse: boolean; onPicked: () => voi
   const pick = usePickAction("upload");
   // Kept here: "Remove picture" goes with the picture and comes back rewinding on Undo.
   const remove = useAction("undo");
+  // A picture dropped on the card is set like the picker's (§45.40).
+  const drop = useFileDrop({ scope: "element", checkFile: pictureDropCheck, onFiles: ([f]) => void pickBackground(f!), busy: busy ? BUSY_WORDS : null });
 
   async function pickBackground(f: File) {
     pick.play();
     if (!f.type.startsWith("image/")) {
       pick.fail({ sound: false });
-      return toast.error("That is not a picture. Tap Choose a picture and pick a JPG or PNG.");
+      return toast.error(NOT_A_PICTURE);
     }
     setBusy(true);
     try {
@@ -471,7 +496,7 @@ function PictureApple({ inUse, onPicked }: { inUse: boolean; onPicked: () => voi
 
   return (
     <Apple id="background-picture" wide aside={inUse ? <Pill tone="success">In use</Pill> : null}>
-      <div className="bg-picker">
+      <div className="bg-picker drop-host drop-host--round" {...drop.bind}>
         <span className="bg-picker__preview" aria-hidden="true">
           {prefs.background ? <img src={prefs.background} alt="" /> : <span className="bg-picker__mesh" />}
         </span>
@@ -515,6 +540,7 @@ function PictureApple({ inUse, onPicked }: { inUse: boolean; onPicked: () => voi
             ) : null}
           </div>
         </div>
+        <DropOverlay drop={drop} scope="element" words={{ file: DROP_WORDS.file }} icon={<Icon name="image" size={40} />} />
       </div>
     </Apple>
   );

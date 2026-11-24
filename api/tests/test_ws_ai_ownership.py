@@ -60,7 +60,8 @@ def wcall(app: App, runtime: FakeRuntime) -> WsCall:
 def test_every_route_is_listed_once() -> None:
     concrete = {(r.method, path_of(r, _ids(agentId="creative_director"))) for r in ai.ROUTES}
     assert concrete == ws_routes_ai.EXPECTED
-    assert len(ai.ROUTES) == len(ws_routes_ai.EXPECTED) == 43  # §45.37 G2: + PUT and DELETE …/makers/models/{key}
+    # §45.37 G2: + PUT and DELETE …/makers/models/{key}; §45.40: + POST …/references/link and …/references/{id}/fetch
+    assert len(ai.ROUTES) == len(ws_routes_ai.EXPECTED) == 45
     assert all(r.public is False for r in ai.ROUTES)  # JWT on every route
 
 

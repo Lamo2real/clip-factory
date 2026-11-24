@@ -3,8 +3,12 @@
 // See-through (the desktop through the window; Glass strength Clear or Frosted), Picture (one of yours, shrunk to fit
 // this device), Colours (the warm Ember preset is the default of the whole Look). Every choice shows what you get: a
 // little picture of it beside its name. The pick-one bars are Settings' own (SetPick: the sliding highlight, arrows,
-// never disabled).
+// never disabled). A picture dropped anywhere on the page becomes the background, with Picture chosen
+// (docs/CONTRACTS.md §45.40).
 import { useRef, useState, type ChangeEvent, type CSSProperties } from "react";
+import { DropOverlay } from "../../components/DropOverlay.tsx";
+import { useFileDrop } from "../../lib/useFileDrop.ts";
+import { Icon } from "../chat/kit.tsx";
 import { EMBER, nativeGlass, PRESETS, presetOf, setStoriesLook, setStoriesPicture, stageColours, useStoriesLook, type GlassStrength, type LookMode, type StoriesLook } from "../look.ts";
 import { Btn, SectionBar, SetCard, SetPick, type PickOption } from "./bits.tsx";
 
@@ -124,10 +128,7 @@ export function LookSection() {
     { value: "frosted", label: "Frosted" },
   ];
 
-  const pick = (e: ChangeEvent<HTMLInputElement>) => {
-    const f = e.target.files?.[0];
-    e.target.value = "";
-    if (!f) return;
+  const take = (f: File) => {
     const wrong = pickedProblem(f);
     if (wrong) {
       setProblem(wrong);
@@ -145,9 +146,24 @@ export function LookSection() {
       .catch((err: unknown) => setProblem(shrinkProblem(err)))
       .finally(() => setBusy(false));
   };
+  const pick = (e: ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    e.target.value = "";
+    if (f) take(f);
+  };
+  // A picture dropped anywhere on the page: it becomes the background and Picture is chosen (whatever was on).
+  const drop = useFileDrop({
+    scope: "page",
+    checkFile: pickedProblem,
+    onFiles: ([f]) => {
+      if (f) take(f);
+    },
+    busy: busy ? "Getting the picture ready…" : null,
+  });
 
   return (
     <>
+      <DropOverlay drop={drop} scope="page" look="stories" words={{ file: "Drop your picture here", busy: "Getting the picture ready…" }} icon={<Icon name="picture" size={40} />} host={document.querySelector(".stories-app")} />
       {/* Its own page, Settings › Look (/stories/settings/look): the note in the section head's plate, like every page's. */}
       <SectionBar>
         <p className="st-stg-small">Kept on this device. Clip Factory's own background stays as it is.</p>

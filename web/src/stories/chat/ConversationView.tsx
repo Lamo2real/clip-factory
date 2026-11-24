@@ -5,10 +5,13 @@
 // it was sent with, and Try again sends it with the same "just this message" choice (unless the owner picked another
 // since). The director's "Remake these scenes" and "Analyze this reference video" buttons start from the choice that
 // message was sent with. Each answer's exact model id and Region sit behind "Technical details" under its model line,
-// as production steps and AI tasks have them (§45.36 E8).
+// as production steps and AI tasks have them (§45.36 E8). Pictures dropped anywhere on the page go in the box, as if
+// picked (docs/CONTRACTS.md §45.40); dragged words still land in the box.
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
+import { DropOverlay } from "../../components/DropOverlay.tsx";
 import { A } from "../../components/ui.tsx";
 import { usePoll } from "../../lib/hooks.ts";
+import { useFileDrop } from "../../lib/useFileDrop.ts";
 import { storiesApi } from "../api/client.ts";
 import type { Conversation, Message, ModelOverride, ProjectRef } from "../api/types.ts";
 import { storiesHref } from "../routes.ts";
@@ -231,6 +234,19 @@ export function ConversationView({
     1000,
   );
 
+  // Pictures dropped anywhere on the page (§45.40): PNG, JPG or WebP up to 5 MB, at most 4 in one message.
+  const room = PICTURES_PER_MESSAGE - pictures.length;
+  const full = `You can add up to ${PICTURES_PER_MESSAGE} pictures to one message.`;
+  const drop = useFileDrop({
+    scope: "page",
+    checkFile: pictureProblem,
+    maxFiles: Math.max(1, room),
+    tooMany: full,
+    onFiles: (files) => void addPictureFiles(files),
+    enabled: !!conv,
+    busy: room <= 0 ? full : null,
+  });
+
   /** "Show earlier messages": the PAGE messages before the first one shown. */
   async function showEarlier() {
     const first = messages.find((m) => !m.msgId.startsWith(LOCAL));
@@ -433,10 +449,14 @@ export function ConversationView({
   }
 
   async function addPictures(files: FileList | null) {
-    if (!files || !conv) return;
-    const room = PICTURES_PER_MESSAGE - pictures.length;
-    const list = Array.from(files).slice(0, Math.max(0, room));
-    if (files.length > room) setWhyNot(`You can add up to ${PICTURES_PER_MESSAGE} pictures to one message.`);
+    if (files) await addPictureFiles(Array.from(files));
+  }
+
+  /** Pictures picked or dropped: each goes straight to storage, the ones past the 4 are left out. */
+  async function addPictureFiles(files: File[]) {
+    if (!files.length || !conv) return;
+    const list = files.slice(0, Math.max(0, room));
+    if (files.length > room) setWhyNot(full);
     for (const file of list) {
       localSeq += 1;
       const key = `pic-${localSeq}`;
@@ -523,6 +543,7 @@ export function ConversationView({
 
   return (
     <div className="st-chat-conv">
+      <DropOverlay drop={drop} scope="page" look="stories" words={{ file: "Drop your pictures here", busy: full }} icon={<Icon name="picture" size={40} />} host={document.querySelector(".stories-app")} />
       <header className="st-chat-conv__head st-plate">
         <A href={`${storiesHref({ name: "chat" })}?all=1`} className="st-chat-back">
           <Icon name="back" size={20} />

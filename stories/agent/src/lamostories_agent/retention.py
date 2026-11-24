@@ -32,7 +32,7 @@ CHAT_CHOICES = ("all", "days_30", "days_90")
 REMOVED_NOTE = "The video was removed to save space. Its study stays."
 REMOVED_NO_STUDY = "The video was removed to save space."
 KEEP_FILES = ("analysis.json",)  # a reference's study always stays
-BUSY = ("uploading", "analyzing")
+BUSY = ("uploading", "fetching", "analyzing")  # fetching: a link Clips Funded is still getting (§45.40)
 FILE_REMOVED = "fileRemovedAt"  # the mark's one name, written by the API and the agent (§45.35 D9)
 OLD_FILE_REMOVED = "sourceRemovedAt"  # the old name an earlier build of the API wrote; still read
 

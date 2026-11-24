@@ -24,15 +24,25 @@
 // web tells the mock the length it read on this device (mockVideoSeconds, a mock-only hook the HTTP client does not
 // have), else the knob refUploadSeconds, else 42 seconds.
 //
+// A reference can also come from a pasted link (§45.40): createReferenceFromLink checks it with the same allowlist as
+// the API (refLinks.ts) and the API's refusals (the 100 limit, the same link twice, three on their way at once), then a
+// pretend `reference_fetch` job (one step, "Get the video") moves it from `fetching` to `ready` (24 MB, the video's
+// length from refUploadSeconds or 42 seconds, the title left as it was), or to `fetch_failed` with the knob's
+// sentence; fetchReferenceAgain is its Try again. GET answers `fetchJob` (the newest reference_fetch job, null for an
+// upload) beside `job`, which is the analysis job only. `url` is only there once the file is here.
+//
 // Test knobs: refSeconds (how long an analysis takes, default 5), refFail (the next analysis fails with this sentence),
 // refJobInGet (kept for older tests: the job is always in the answer now), refNoJob (the answer leaves `job` out, as
-// the API did before §45.34, for the page's own fallback), refFileRemoved (refIds whose file was cleared).
+// the API did before §45.34, for the page's own fallback), refFileRemoved (refIds whose file was cleared),
+// refFetchSeconds (how long getting a linked video takes, default 2), refFetchFail (the next fetch ends fetch_failed
+// with this sentence).
 import { ApiError } from "../../../api/errors.ts";
 import type { AiSetting, ModelOverride, ProductionJob, ReferenceAnalysis, ReferenceVideo, StoriesApi, StoryStep } from "../types.ts";
+import { refLink, REF_LINK_REFUSED, SITE_NAME } from "../refLinks.ts";
 import { checkWs, lowerLevels, modelCall, MODELS, newId, resolve } from "./chat.ts";
 import { delay, type MockStore } from "./store.ts";
 
-export const KEYS = ["listReferences", "createReference", "completeReference", "analyzeReference", "getReference", "patchReference", "deleteReferenceVideo"] as const;
+export const KEYS = ["listReferences", "createReference", "completeReference", "analyzeReference", "createReferenceFromLink", "fetchReferenceAgain", "getReference", "patchReference", "deleteReferenceVideo"] as const;
 
 /** The mock-only hook the upload uses to say how long the video it sent is (the HTTP client has none). */
 export interface MockVideoSeconds {
@@ -43,6 +53,20 @@ const PART = 100 * 1024 * 1024;
 const MAX = 2 * 1024 * 1024 * 1024;
 const iso = (ms = Date.now()) => new Date(ms).toISOString();
 const bad = (message: string, field?: string) => new ApiError(400, "bad_request", message, field);
+
+/** The statuses that have a file to play (§45.40: never while uploading, fetching or after a fetch failed). */
+const HAS_FILE: ReferenceVideo["status"][] = ["ready", "analyzing", "analyzed", "failed"];
+/** The API's refusals for links (§45.40). */
+export const LINK_SENTENCES = {
+  full: "You have 100 reference videos already. Delete one first.",
+  twice: "That video is in your list already.",
+  missed: "That one didn't arrive. Tap it in your list, then Try again.",
+  three: "Three videos are on their way already. Wait for one to arrive.",
+  fetching: "It is getting the video now.",
+  here: "This video is here already.",
+  notHere: "Wait until the video is here.",
+  getFirst: "Get the video first. Tap Try again.",
+} as const;
 
 /** The analysis job's own steps (§45.28, §45.34: StoryStep.key look, listen, write). */
 export const REF_STEPS: { key: string; label: string }[] = [
@@ -60,13 +84,17 @@ interface RefState {
   cleared: Set<string>;
   /** The length of each uploaded video as the device read it (the agent reads it from the file). */
   seconds: Map<string, number>;
+  /** Getting a linked video (§45.40): the reference_fetch job id, when it started and the sentence it fails with. */
+  fetches: Map<string, { start: number; fail: string | null }>;
+  /** Link references still named "{Site} video" by the mock, not by the owner (the API's titleFromLink). */
+  titleFromLink: Set<string>;
 }
 
 const states = new WeakMap<MockStore, RefState>();
 function state(store: MockStore): RefState {
   let s = states.get(store);
   if (!s) {
-    s = { owner: new Map(), analyses: new Map(), uploads: new Map(), runs: new Map(), cleared: new Set(), seconds: new Map() };
+    s = { owner: new Map(), analyses: new Map(), uploads: new Map(), runs: new Map(), cleared: new Set(), seconds: new Map(), fetches: new Map(), titleFromLink: new Set() };
     states.set(store, s);
   }
   return s;
@@ -87,7 +115,7 @@ function isCleared(store: MockStore, refId: string): boolean {
 /** Clears a reference's file and keeps its study, as the keep setting `study_only` does (§45.34). */
 export function clearReferenceFile(store: MockStore, refId: string): boolean {
   const ref = store.references.find((r) => r.refId === refId);
-  if (!ref || ref.status === "uploading" || ref.currentJobId || isCleared(store, refId)) return false;
+  if (!ref || !HAS_FILE.includes(ref.status) || ref.currentJobId || isCleared(store, refId)) return false;
   state(store).cleared.add(refId);
   // The file is gone, so it no longer counts in Settings › Storage (the API sums bytes 0 for it).
   ref.bytes = 0;
@@ -118,12 +146,14 @@ export function clearByKeepSetting(store: MockStore, ws: string, keep: string | 
   return removed;
 }
 
-/** A reference as the API answers it: a link to the file once it is uploaded, none after the file was cleared. */
+/** A reference as the API answers it: a link to the file once it is here (uploaded or fetched), none after the file
+ * was cleared; `link`, the cleaned link it came from (null for an upload). */
 function pub(store: MockStore, ref: ReferenceVideo): ReferenceVideo {
   const out = structuredClone(ref);
   delete out.url;
+  out.link = ref.link ?? null;
   const cleared = isCleared(store, ref.refId);
-  if (ref.status !== "uploading" && !cleared) out.url = `data:text/plain;charset=utf-8,${encodeURIComponent(`Pretend reference video "${ref.title}" (mock mode plays nothing).`)}`;
+  if (HAS_FILE.includes(ref.status) && !cleared) out.url = `data:text/plain;charset=utf-8,${encodeURIComponent(`Pretend reference video "${ref.title}" (mock mode plays nothing).`)}`;
   // §45.35 D9: the mark the API reads (fileRemovedAt), and whether the study stays; a cleared file counts 0 bytes.
   out.fileRemoved = cleared;
   out.studyKept = cleared && state(store).analyses.has(ref.refId);
@@ -205,15 +235,65 @@ function find(store: MockStore, ws: string, refId: string): ReferenceVideo {
   return r;
 }
 
+/** The newest job of a link reference's fetch (§45.40), or null (an upload has none). */
+function fetchJobOf(store: MockStore, ref: ReferenceVideo): ProductionJob | null {
+  const mine = store.jobs.filter((j) => j.jobType === "reference_fetch" && j.contentId === ref.refId);
+  return mine.sort((a, b) => b.createdAt.localeCompare(a.createdAt) || b.jobId.localeCompare(a.jobId))[0] ?? null;
+}
+
 /** The analysis job of currentJobId, else the reference's latest one (§45.34). */
 function jobOf(store: MockStore, ref: ReferenceVideo): ProductionJob | null {
   const mine = store.jobs.filter((j) => j.jobType === "reference_analysis" && j.contentId === ref.refId);
   return mine.find((j) => j.jobId === ref.currentJobId) ?? mine.sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0] ?? null;
 }
 
+/** Moves every fetch of a linked video on (§45.40): `fetching` until refFetchSeconds have passed, then `ready` with its
+ * file, or `fetch_failed` with the knob's sentence. */
+function advanceFetches(store: MockStore, now: number): void {
+  const s = state(store);
+  const total = Number(store.knobs.refFetchSeconds ?? 2) * 1000;
+  for (const [jobId, run] of s.fetches) {
+    const job = store.jobs.find((j) => j.jobId === jobId);
+    const ref = job ? store.references.find((r) => r.refId === job.contentId) : undefined;
+    if (!job || !ref || (job.status !== "queued" && job.status !== "running") || ref.currentJobId !== jobId) {
+      s.fetches.delete(jobId);
+      continue;
+    }
+    const elapsed = now - run.start;
+    const step = job.steps[0];
+    job.status = "running";
+    job.progress = Math.max(job.progress, Math.min(0.97, total > 0 ? elapsed / total : 0.97));
+    job.updatedAt = iso(now);
+    if (step && step.status === "pending") {
+      step.status = "running";
+      step.startedAt = iso(run.start);
+    }
+    if (elapsed < total) continue;
+    if (run.fail) {
+      job.status = "failed";
+      job.error = run.fail;
+      if (step) Object.assign(step, { status: "failed", message: run.fail, finishedAt: iso(now) });
+      ref.status = "fetch_failed";
+    } else {
+      job.status = "ready";
+      job.progress = 1;
+      if (step) Object.assign(step, { status: "done", finishedAt: iso(now) });
+      const knob = Number(store.knobs.refUploadSeconds);
+      ref.status = "ready";
+      ref.bytes = 24 * 1024 * 1024;
+      ref.durationSec = Number.isFinite(knob) && knob > 0 ? knob : 42;
+      s.titleFromLink.delete(ref.refId);
+    }
+    ref.currentJobId = null;
+    ref.updatedAt = iso(now);
+    s.fetches.delete(jobId);
+  }
+}
+
 /** Moves every analysis on to where its time says it is (each read calls this). */
 export function advance(store: MockStore, now = Date.now()): void {
   const s = state(store);
+  advanceFetches(store, now);
   const total = Number(store.knobs.refSeconds ?? 5) * 1000;
   for (const [jobId, run] of s.runs) {
     const job = store.jobs.find((j) => j.jobId === jobId);
@@ -290,6 +370,30 @@ export function advance(store: MockStore, now = Date.now()): void {
 
 export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
   const s = state(store);
+  /** A `reference_fetch` job for a link reference (§45.40): one step, "Get the video". */
+  const startFetch = (ws: string, ref: ReferenceVideo, now: number): ProductionJob => {
+    const job: ProductionJob = {
+      jobId: newId(now),
+      workspaceId: ws,
+      contentType: "reference",
+      contentId: ref.refId,
+      jobType: "reference_fetch",
+      status: "queued",
+      steps: [{ key: "get", label: "Get the video", status: "pending" }],
+      progress: 0,
+      configuration: { run: ["get"], from: null, sceneIds: null, note: null },
+      meta: { writerModel: null, engineVersion: null, seed: null, scriptVersion: null, targetSec: null, actualSec: null, safetyTopicId: null, providers: {}, models: [] },
+      createdAt: iso(now),
+      updatedAt: iso(now),
+    };
+    store.jobs.push(job);
+    const fail = typeof store.knobs.refFetchFail === "string" ? store.knobs.refFetchFail : null;
+    if (fail) store.knobs.refFetchFail = null;
+    s.fetches.set(job.jobId, { start: now, fail });
+    ref.currentJobId = job.jobId;
+    ref.updatedAt = iso(now);
+    return job;
+  };
   const out = {
     async listReferences(ws: string) {
       await delay(120);
@@ -341,6 +445,8 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       const ref = find(store, ws, refId);
       advance(store);
       if (ref.status === "uploading") throw new ApiError(409, "conflict", "Wait until the video has finished uploading.");
+      if (ref.status === "fetching") throw new ApiError(409, "conflict", LINK_SENTENCES.notHere);
+      if (ref.status === "fetch_failed") throw new ApiError(409, "conflict", LINK_SENTENCES.getFirst);
       if (ref.status === "analyzing") throw new ApiError(409, "conflict", "It is being analyzed right now.");
       if (isCleared(store, refId)) throw new ApiError(409, "conflict", state(store).analyses.has(refId) ? FILE_REMOVED : REMOVED_NO_STUDY);
       if (override) for (const k of Object.keys(override)) if (!["model", "effort"].includes(k)) throw bad("Something in that request was not right.", "override");
@@ -383,13 +489,62 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       return { reference: pub(store, ref), job: structuredClone(job) };
     },
 
+    async createReferenceFromLink(ws: string, body: { url: string; title?: string }) {
+      await delay(150);
+      checkWs(store, ws);
+      advance(store);
+      for (const k of Object.keys(body ?? {})) if (!["url", "title"].includes(k)) throw bad("Something in that request was not right.", k);
+      const raw = body?.url;
+      if (typeof raw !== "string") throw bad(REF_LINK_REFUSED.empty, "url");
+      const got = refLink(raw);
+      if (!got.ok) throw bad(REF_LINK_REFUSED[got.why], "url");
+      let title = `${SITE_NAME[got.site]} video`;
+      if (body.title !== undefined) {
+        title = String(body.title ?? "").trim().replace(/\s+/g, " ");
+        if (!title) throw bad("Give the video a name.", "title");
+        if (title.length > 80) throw bad("The name is too long (at most 80 characters).", "title");
+      }
+      const mine = store.references.filter((r) => (s.owner.get(r.refId) ?? "stories") === ws);
+      if (mine.length >= 100) throw new ApiError(409, "conflict", LINK_SENTENCES.full);
+      const same = mine.filter((r) => r.link === got.url);
+      if (same.length) throw new ApiError(409, "conflict", same.every((r) => r.status === "fetch_failed") ? LINK_SENTENCES.missed : LINK_SENTENCES.twice);
+      if (mine.filter((r) => r.status === "fetching").length >= 3) throw new ApiError(409, "conflict", LINK_SENTENCES.three);
+      const now = Date.now();
+      const ref: ReferenceVideo = { refId: newId(now), title, status: "fetching", durationSec: null, bytes: 0, link: got.url, currentJobId: null, ai: { model: null, effort: null }, analyzedWith: null, createdAt: iso(now), updatedAt: iso(now) };
+      store.references.push(ref);
+      s.owner.set(ref.refId, ws);
+      if (body.title === undefined) s.titleFromLink.add(ref.refId);
+      const job = startFetch(ws, ref, now);
+      return { reference: pub(store, ref), job: structuredClone(job) };
+    },
+
+    async fetchReferenceAgain(ws: string, refId: string) {
+      await delay(150);
+      const ref = find(store, ws, refId);
+      advance(store);
+      if (ref.status === "fetching") throw new ApiError(409, "conflict", LINK_SENTENCES.fetching);
+      if (ref.status !== "fetch_failed") throw new ApiError(409, "conflict", LINK_SENTENCES.here);
+      const busy = store.references.filter((r) => (s.owner.get(r.refId) ?? "stories") === ws && r.status === "fetching").length;
+      if (busy >= 3) throw new ApiError(409, "conflict", LINK_SENTENCES.three);
+      const now = Date.now();
+      ref.status = "fetching";
+      const job = startFetch(ws, ref, now);
+      return { reference: pub(store, ref), job: structuredClone(job) };
+    },
+
     async getReference(ws: string, refId: string) {
       await delay(90);
       const ref = find(store, ws, refId);
       advance(store);
       const analysis = s.analyses.get(refId) ?? null;
       const job = jobOf(store, ref);
-      const out = { reference: pub(store, ref), analysis: analysis ? structuredClone(analysis) : null, job: job ? structuredClone(job) : null };
+      const fetchJob = fetchJobOf(store, ref);
+      const out = {
+        reference: pub(store, ref),
+        analysis: analysis ? structuredClone(analysis) : null,
+        job: job ? structuredClone(job) : null,
+        fetchJob: fetchJob ? structuredClone(fetchJob) : null,
+      };
       if (store.knobs.refNoJob === true && store.knobs.refJobInGet !== true) {
         const { job: _left, ...older } = out;
         return older as typeof out;
@@ -417,6 +572,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
         const r = resolve({ project: ai, task: low.task, agent: low.agent, ai: low.ai });
         if ("error" in r) throw bad(r.sentence, "ai");
       }
+      if (patch.title !== undefined) s.titleFromLink.delete(refId); // the owner's own name: a fetch never changes it
       ref.title = title;
       ref.ai = ai;
       ref.updatedAt = iso();
@@ -434,13 +590,19 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       await delay(120);
       find(store, ws, refId);
       store.references = store.references.filter((r) => r.refId !== refId);
-      for (const j of store.jobs) if (j.contentId === refId && j.jobType === "reference_analysis") s.runs.delete(j.jobId);
-      store.jobs = store.jobs.filter((j) => !(j.contentId === refId && j.jobType === "reference_analysis"));
+      const mine = (j: ProductionJob) => j.contentId === refId && (j.jobType === "reference_analysis" || j.jobType === "reference_fetch");
+      for (const j of store.jobs)
+        if (mine(j)) {
+          s.runs.delete(j.jobId);
+          s.fetches.delete(j.jobId);
+        }
+      store.jobs = store.jobs.filter((j) => !mine(j));
       s.analyses.delete(refId);
       s.uploads.delete(refId);
       s.owner.delete(refId);
       s.cleared.delete(refId);
       s.seconds.delete(refId);
+      s.titleFromLink.delete(refId);
     },
   };
   return out as unknown as Pick<StoriesApi, (typeof KEYS)[number]>;
