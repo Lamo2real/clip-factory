@@ -62,6 +62,19 @@ NO_SCRIPT: Final = "This story has no storyboard yet. Tap Remake the whole video
 WRITER_FAILED: Final = "The story writer's answer did not work. Tap Try again."
 IMAGES_OFF: Final = "AI pictures are off. Turn them on in Clips Funded › Settings."
 
+# Write it myself (§45.46): a video made from the owner's own script. Its steps say so (the API and the web use the
+# same labels: "Your script", and "Add your words" when a scene has words), and a staging that cannot keep the
+# script stops with one of these sentences, naming the scene ({words}: at most 40 characters, then "…").
+OWN_STEP_LABELS: Final = {"storyboard": "Your script", "captions": "Add your words"}
+OWN_LOST: Final = "Scene {n} got lost while we set it up. Tap Try again."
+OWN_WORDS: Final = "Scene {n}'s caption didn't stay as you wrote it. Tap Try again."
+OWN_NOT_SHOWN: Final = "Scene {n} didn't fit: we couldn't show “{words}”. Change scene {n}, then tap Try again."
+OWN_WHO: Final = "Scene {n} didn't fit: {name} isn't in your cast. Add {name} to the cast, or change scene {n}."
+OWN_EXTRA: Final = "Scene {n} got something you didn't write. Tap Try again."
+OWN_PLACE: Final = "Scene {n} didn't stay in the {place}. Tap Try again."
+OWN_ORDER: Final = "Scene {n} didn't keep what happens in your order. Tap Try again."
+OWN_GONE: Final = "Scene {n} didn't fit: someone in it isn't in your cast now. Change scene {n}, then tap Try again."
+
 
 def ws_pk(user_id: str, workspace_id: str) -> str:
     """The workspace's own partition. Never ``USER#{userId}``: that is Clip Factory's."""

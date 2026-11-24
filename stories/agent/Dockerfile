@@ -45,7 +45,8 @@ RUN npm ci --omit=dev --no-audit --no-fund \
 FROM --platform=linux/arm64 public.ecr.aws/docker/library/python:3.13-slim-bookworm
 SHELL ["/bin/bash", "-o", "pipefail", "-c"]
 RUN apt-get update \
- && apt-get install -y --no-install-recommends ffmpeg fonts-inter fonts-dejavu-core fontconfig ca-certificates \
+ && apt-get install -y --no-install-recommends ffmpeg fonts-inter fonts-dejavu-core fonts-symbola fontconfig \
+    ca-certificates \
  && apt-get clean \
  && rm -rf /var/lib/apt/lists/* \
  && fc-cache -f \

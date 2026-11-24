@@ -209,22 +209,25 @@ export function CaptionEditor({
           <button type="button" className="st-btn" onClick={addCue}>
             Add a caption
           </button>
-          <fieldset className="st-s-group">
-            <legend className="st-s-group__title">Words on each scene</legend>
-            {script.scenes.map((sc, i) => (
-              <TextField
-                key={sc.sceneId}
-                label={`Scene ${i + 1}: ${sc.title}`}
-                value={sceneWords[sc.sceneId] ?? ""}
-                max={60}
-                placeholder="No words on this scene"
-                onChange={(v) => {
-                  setProblem(null);
-                  setSceneWords((m) => ({ ...m, [sc.sceneId]: v }));
-                }}
-              />
-            ))}
-          </fieldset>
+          {/* A video made from the owner's own script (§45.46): its words are the captions above, one a scene. */}
+          {story.ownScript ? null : (
+            <fieldset className="st-s-group">
+              <legend className="st-s-group__title">Words on each scene</legend>
+              {script.scenes.map((sc, i) => (
+                <TextField
+                  key={sc.sceneId}
+                  label={`Scene ${i + 1}: ${sc.title}`}
+                  value={sceneWords[sc.sceneId] ?? ""}
+                  max={60}
+                  placeholder="No words on this scene"
+                  onChange={(v) => {
+                    setProblem(null);
+                    setSceneWords((m) => ({ ...m, [sc.sceneId]: v }));
+                  }}
+                />
+              ))}
+            </fieldset>
+          )}
           {problem ? <Notice tone="bad">{problem}</Notice> : null}
           <div className="st-s-actionbar">
             <button type="button" className={`st-btn${videoDirty ? " st-btn--main" : ""}`} aria-disabled={!videoDirty || saving || undefined} onClick={() => videoDirty && !saving && saveVideo()}>

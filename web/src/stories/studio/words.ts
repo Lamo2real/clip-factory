@@ -101,6 +101,12 @@ export const STEP_WORD: Record<StepKey, string> = {
   preview: "Getting it ready to watch",
 };
 
+/** A running step's "now doing" line on a video made from the owner's own script (§45.46): the rest as STEP_WORD. */
+export const OWN_STEP_WORD: Partial<Record<StepKey, string>> = {
+  storyboard: "Setting up your scenes",
+  captions: "Adding your words",
+};
+
 /** The sentence a safety idea or story shows when no checked advice covers it (CONTRACTS §45.11.5). */
 export const NO_GUIDANCE =
   "Clips Funded only makes driving-safety videos from checked advice, and this one isn't in the list yet.";

@@ -39,6 +39,7 @@ from ...workspaces import (
     makers,
     media,
     overrides,
+    own_script,
     provider_keys,
     providers,
     shapes,
@@ -1159,7 +1160,7 @@ def _story_job(
         content_id=str(story["storyId"]),
         job_type=job_type,
         run=run,
-        steps=jobs.story_steps(run, stories.done_steps(story)),
+        steps=jobs.story_steps(run, stories.done_steps(story), story.get("ownScript")),
         now=ctx.now,
         from_step=from_step,
         scene_ids=scene_ids,
@@ -1305,6 +1306,42 @@ def _refuse_not_ready(ctx: Ctx) -> None:
         raise conflict(sentence)
 
 
+def _new_topic(
+    g: guidance.Guidance, fields: Mapping[str, Any], idea: Item | None, brief: Mapping[str, Any], own: Item | None
+) -> str | None:
+    """The checked advice a new video is about. An owner's script (§45.46): its own words, for every kind (a match on
+    another kind is kept, so it is fact checked against it: a deterministic guard), the idea's checked topic breaking
+    a tie or standing in when no word matches. Else for driving safety: the idea's topic, then its words (the
+    concept's too: an Expand put them there), or the brief's words."""
+    if own is not None:
+        texts = [fields.get("title") or brief.get("title"), brief.get("logline"), *own_script.texts(own)]
+        picked = (idea or {}).get("safetyTopicId")
+        return guidance.match(g, [str(t) for t in texts if t], str(picked) if picked else None)
+    if idea is None:
+        return guidance.match(g, [brief["title"], brief["logline"]]) if brief["category"] == "driving_safety" else None
+    if idea.get("category") != "driving_safety":
+        return None
+    picked = idea.get("safetyTopicId")
+    return str(picked) if picked else guidance.match(g, ideas.idea_texts(idea))
+
+
+def _length_and_words(
+    fields: Mapping[str, Any], own: Item | None, concept: Mapping[str, Any], config: Mapping[str, Any]
+) -> tuple[int, bool]:
+    """A new video's length and captions switch: what the owner picked; else an owner's script's own length, with
+    captions on when it has words for the screen (§45.46); else the idea's length and the workspace's defaults."""
+    duration = (
+        fields.get("durationSec")
+        or (own_script.default_length(own) if own is not None else None)
+        or concept.get("durationSec")
+        or config["defaultDurationSec"]
+    )
+    captions_on = bool(fields.get("captionsOn", config.get("captionsOn", True)))
+    if own is not None and "captionsOn" not in fields and own_script.has_words(own):
+        captions_on = True
+    return int(duration), captions_on
+
+
 def create_story(app: App, req: Request) -> Response:
     ctx = _ctx(app, req)
     fields = stories.story_input(req.json())
@@ -1318,17 +1355,15 @@ def create_story(app: App, req: Request) -> Response:
     config = ctx.config
     g = guidance.load()
     idea: Item | None = None
+    own: Item | None = fields.get("ownScript")  # §45.46: the owner wrote what happens
     if "ideaId" in fields:
         idea = _get(ctx, ws.IDEA_SK, fields["ideaId"], ws.TYPE_IDEA, NO_IDEA)
         brief: Item = {"title": idea.get("title"), "logline": idea.get("logline"), "category": idea.get("category")}
-        if isinstance(idea.get("concept"), Mapping):
+        if isinstance(idea.get("concept"), Mapping) and own is None:  # the owner's script wins over the concept
             brief["concept"] = idea["concept"]
-        topic = idea.get("safetyTopicId") if idea.get("category") == "driving_safety" else None
     else:
         brief = dict(fields["brief"])
-        topic = guidance.match(g, [brief["title"], brief["logline"]]) if brief["category"] == "driving_safety" else None
-    if idea is not None and idea.get("category") == "driving_safety" and not topic:
-        topic = guidance.match(g, ideas.idea_texts(idea))  # the concept's words count too (an Expand put them there)
+    topic = _new_topic(g, fields, idea, brief, own)
     # null: No series on purpose; left out: the idea's series (§45.44)
     series_id = fields["seriesId"] if "seriesId" in fields else (idea or {}).get("seriesId")
     if series_id and not _series_exists(ctx, series_id):
@@ -1337,7 +1372,7 @@ def create_story(app: App, req: Request) -> Response:
     if category == "driving_safety" and not topic:
         raise ApiError(409, "conflict", guidance.NO_GUIDANCE, extra={"topics": guidance.topic_choices(g)})
     concept = brief.get("concept") if isinstance(brief.get("concept"), Mapping) else {}
-    duration = fields.get("durationSec") or (concept or {}).get("durationSec") or config["defaultDurationSec"]
+    duration, captions_on = _length_and_words(fields, own, concept or {}, config)
     mood = fields.get("musicMood") or (stories.DEFAULT_MOOD.get(category, "calm") if config.get("musicOn") else "none")
     story_id = ulid()
     story: Item = {
@@ -1353,8 +1388,8 @@ def create_story(app: App, req: Request) -> Response:
         "category": category,
         "ideaId": idea["ideaId"] if idea else None,
         "characterIds": [c["characterId"] for c in cast],
-        "durationSec": int(duration),
-        "captionsOn": fields.get("captionsOn", config.get("captionsOn", True)),
+        "durationSec": duration,
+        "captionsOn": captions_on,
         "musicMood": mood,
         "postCaptions": shapes.empty_captions(),
         "scenes": [],
@@ -1370,6 +1405,7 @@ def create_story(app: App, req: Request) -> Response:
         "version": 1,
         "createdAt": ctx.at(),
         "updatedAt": ctx.at(),
+        **({"ownScript": own} if own is not None else {}),  # §45.46: only on a video made from the owner's script
     }
     if series_id:
         story["seriesId"] = series_id
@@ -1451,6 +1487,8 @@ def patch_story(app: App, req: Request) -> Response:
         raise conflict("You can change a video once it is made and before it is approved.")
     script = _read_script(ctx, story, required=True) if stories.needs_script(story, patch) else None
     new_script, sets, stale_add, stale_scenes, owner = stories.apply_patch(story, script, patch)
+    if "ownScript" in sets:
+        _own_topic(story, sets, restage="storyboard" in stale_add)
     if not sets and new_script is None:
         return ok({"story": _public_story(ctx, story), "script": script or _read_script(ctx, story)})
     update = Update(ctx.pk, story["sk"], sets={**sets, "updatedAt": ctx.at()})
@@ -1484,6 +1522,20 @@ def patch_story(app: App, req: Request) -> Response:
             raise ApiError(503, "platform_down", "We could not save the change just now. Try again.") from e
         _register_script(ctx, story, key, int(item.get("scriptVersion") or 0), len(data))
     return ok({"story": _public_story(ctx, item), "script": new_script or script or _read_script(ctx, item)})
+
+
+def _own_topic(story: Mapping[str, Any], sets: Item, *, restage: bool) -> None:
+    """The topic of a changed owner's script, matched again on its words (§45.46). Staged again, a driving-safety
+    video needs checked advice for its new words (409 ``NO_GUIDANCE`` otherwise); after a words-only change the
+    current topic stays unless the words name another one better."""
+    g = guidance.load()
+    current = story.get("safetyTopicId") or None
+    texts = [sets.get("title") or story.get("title"), *own_script.texts(sets["ownScript"])]
+    topic = guidance.match(g, [str(t) for t in texts if t], None if restage else current)
+    if story.get("category") == "driving_safety" and not topic:
+        raise ApiError(409, "conflict", guidance.NO_GUIDANCE, extra={"topics": guidance.topic_choices(g)})
+    if topic != current:
+        sets["safetyTopicId"] = topic
 
 
 def _edit_bookkeeping(
@@ -1682,6 +1734,8 @@ def request_changes(app: App, req: Request) -> Response:
     with ctx.stops_last():  # the fence's stops wait: the start may need the whole 29 s
         story = _story(ctx)
         note, scene_ids, override = stories.changes_input(req.json(), story)
+        if note and isinstance(story.get("ownScript"), Mapping):  # §45.46: a note would let the AI change the story
+            raise conflict(own_script.FOLLOWS_SCRIPT)
         _refuse_not_ready(ctx)
         story, _ = _ready_to_remake(ctx, story)
         if not stories.has_script(story):

@@ -1,18 +1,22 @@
 // The eight production steps of a story (docs/CONTRACTS.md §45.9, §45.16.5): Write the story, Check the facts, Draw
 // the scenes, Animate, Add sounds and music, Add captions, Put it together, Ready to watch. Each shows done, now,
 // waiting, skipped or stopped, with "Scene 3 of 6" while a step works through the scenes, and the eased progress bar.
-import { STEP_LABEL, STEP_ORDER, type ProductionJob, type StepKey, type Story, type StoryStatus, type StoryStep } from "../api/types.ts";
+// A video made from the owner's own script (§45.46) says "Your script" and "Add your words" (the job's own labels, as
+// the API gives them) and "Setting up your scenes…" while it runs.
+import { STEP_ORDER, type ProductionJob, type StepKey, type Story, type StoryStatus, type StoryStep } from "../api/types.ts";
 import { ProgressBar } from "./kit.tsx";
-import { STEP_WORD } from "./words.ts";
+import { stepLabel } from "./ownScript.ts";
+import { OWN_STEP_WORD, STEP_WORD } from "./words.ts";
 
 /** The steps to draw: the job's own, else what the story says (stale steps still to make, the rest done). */
-export function stepsOf(job: ProductionJob | null, story: Pick<Story, "stale" | "status"> | null): StoryStep[] {
+export function stepsOf(job: ProductionJob | null, story: Pick<Story, "stale" | "status" | "ownScript"> | null): StoryStep[] {
+  const label = (key: StepKey) => stepLabel(key, story?.ownScript);
   if (job && job.contentType === "animation" && job.steps.length) {
     const byKey = new Map(job.steps.map((s) => [s.key, s]));
-    return STEP_ORDER.map((key) => byKey.get(key) ?? { key, label: STEP_LABEL[key], status: "pending" });
+    return STEP_ORDER.map((key) => byKey.get(key) ?? { key, label: label(key), status: "pending" });
   }
   const stale = new Set<StepKey>(story?.stale ?? STEP_ORDER);
-  return STEP_ORDER.map((key) => ({ key, label: STEP_LABEL[key], status: stale.has(key) ? "pending" : "done" }));
+  return STEP_ORDER.map((key) => ({ key, label: label(key), status: stale.has(key) ? "pending" : "done" }));
 }
 
 /** The step working now, or the one that stopped. */
@@ -20,8 +24,9 @@ export function currentStep(steps: StoryStep[]): StoryStep | null {
   return steps.find((s) => s.status === "running") ?? steps.find((s) => s.status === "failed") ?? null;
 }
 
-/** One plain line: what is happening now (a rejected video's last run is never "ready to watch"). */
-export function nowLine(job: ProductionJob | null, steps: StoryStep[], status?: StoryStatus): string {
+/** One plain line: what is happening now (a rejected video's last run is never "ready to watch"); `own`: a video made
+ * from the owner's own script ("Setting up your scenes…", "Adding your words…"). */
+export function nowLine(job: ProductionJob | null, steps: StoryStep[], status?: StoryStatus, own = false): string {
   if (!job) return "";
   if (status === "rejected") return "Not used. It won't be posted.";
   if (job.status === "queued") return "Getting ready to start…";
@@ -31,7 +36,7 @@ export function nowLine(job: ProductionJob | null, steps: StoryStep[], status?: 
   if (job.status === "needs_check") return "Made, but some facts need checking.";
   const now = currentStep(steps);
   if (!now) return "Working…";
-  const word = now.key === "portrait" ? "Drawing the picture" : (STEP_WORD[now.key as StepKey] ?? now.label);
+  const word = now.key === "portrait" ? "Drawing the picture" : ((own ? OWN_STEP_WORD[now.key as StepKey] : undefined) ?? STEP_WORD[now.key as StepKey] ?? now.label);
   return now.n && now.n > 1 ? `${word}: scene ${Math.min(now.n, (now.i ?? 0) + 1)} of ${now.n}` : `${word}…`;
 }
 
@@ -46,7 +51,7 @@ export function StepTrack({
   line = true,
 }: {
   job: ProductionJob | null;
-  story: Pick<Story, "stale" | "status"> | null;
+  story: Pick<Story, "stale" | "status" | "ownScript"> | null;
   compact?: boolean;
   label?: string;
   /** the eased progress bar (off where the page shows the progress itself: a video's preview dial) */
@@ -78,7 +83,7 @@ export function StepTrack({
         ))}
       </ol>
       {bar ? <ProgressBar value={progress} label={`${label}: ${Math.round(progress * 100)}% done`} /> : null}
-      {job && line ? <p className={`st-s-track__now${job.status === "failed" ? " is-bad" : ""}`}>{nowLine(job, steps, story?.status)}</p> : null}
+      {job && line ? <p className={`st-s-track__now${job.status === "failed" ? " is-bad" : ""}`}>{nowLine(job, steps, story?.status, !!story?.ownScript)}</p> : null}
     </div>
   );
 }
