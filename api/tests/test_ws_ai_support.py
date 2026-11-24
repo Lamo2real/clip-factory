@@ -77,6 +77,12 @@ class FakeRuntime:
             session_id=session_id,
         )
 
+    def start_reference_fetch(
+        self, *, user_id: str, workspace_id: str, ref_id: str, job_id: str, session_id: str
+    ) -> None:
+        self._record("fetch_reference", user_id=user_id, workspace_id=workspace_id, ref_id=ref_id, job_id=job_id,
+                     session_id=session_id)  # fmt: skip
+
     def start_story(self, *, user_id: str, workspace_id: str, story_id: str, job_id: str, session_id: str) -> None:
         self._record("process_story", user_id=user_id, workspace_id=workspace_id, story_id=story_id, job_id=job_id)
 
@@ -250,6 +256,7 @@ INTERNAL = (
     "lastLook",
     "fileRemovedAt",
     "sourceRemovedAt",
+    "titleFromLink",  # §45.40: a link reference's name is still the site's, so the fetch may set the video's own
     "picturesRemovedAt",
     "checkJobId",  # the "Try it" lock (``CHECKLOCK#``, §45.35 D2)
     # §45.37: a maker check's writer, a publishing job's raw wait (shown as ``waitingUntil``), the share counters

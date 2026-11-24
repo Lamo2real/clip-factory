@@ -465,7 +465,8 @@ describe("Characters", () => {
     await pick("Try a move", "Jump");
     expect(document.querySelector(".st-s-editor__now")?.textContent).toContain("Jump");
     await click(control("Next: Sounds"), 50);
-    await click(control(/Whoa/), 50);
+    // The Whoa chip itself, not its "Play Whoa" button beside it (§45.41).
+    await click(control(/^[+✓]\s*Whoa$/), 50);
     await click(control("Next: Name and personality"), 50);
     await click(control("Save character"), 50);
     expect(text()).toContain("Give your character a name.");

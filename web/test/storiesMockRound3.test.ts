@@ -15,7 +15,7 @@ import * as publishing from "../src/stories/api/mock/publishing.ts";
 import * as references from "../src/stories/api/mock/references.ts";
 import { createStore, type MockStore } from "../src/stories/api/mock/store.ts";
 import * as stories from "../src/stories/api/mock/stories.ts";
-import type { AiTask, SocialAccount, StoriesApi, StoriesConfig, Workspace } from "../src/stories/api/types.ts";
+import type { AiTask, PersonInput, SocialAccount, StoriesApi, StoriesConfig, Workspace } from "../src/stories/api/types.ts";
 import { accountOf } from "../src/stories/studio/words.ts";
 
 const WS: Workspace = {
@@ -207,8 +207,8 @@ describe("a redesign of a saved character", () => {
     const task = await settled(api.designCharacter("stories", { description: "Give Pip a big blue jumper", characterId: C.pip }));
     const draft = (task.result as { character: typeof pip }).character;
     expect(draft.name).toBe("Pip");
-    expect(draft.look.outfit.top).toBe("#62c6ff");
-    expect(draft.look.hair).toEqual(pip.look.hair);
+    expect((draft as PersonInput).look.outfit.top).toBe("#62c6ff");
+    expect((draft as PersonInput).look.hair).toEqual((pip as PersonInput).look.hair);
     expect(draft.movementStyle).toBe(pip.movementStyle);
     expect(draft.voice).toEqual(pip.voice);
     expect((await refused(api.designCharacter("stories", { description: "anything", characterId: "01JSTCHNOPE00000000000000" }))).status).toBe(404);

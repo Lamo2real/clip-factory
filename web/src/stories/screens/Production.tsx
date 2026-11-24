@@ -8,10 +8,13 @@
 // effort that made each step. A running job is checked every 2 seconds. On the warm liquid glass
 // (styles/GLASS-CONTRACT.md): the words loose on the page sit on a .st-plate, every panel and row is .st-glass, and a
 // video's page opens with its preview, hero glass holding the ArcDial (the render progress) and the video's MediaRow.
+// A cast may be people and one car (§45.43: CastPicker, the people first, then the car), and a video can be filed in a
+// series (§45.44): the list shows one series or all (`?series=`), a new video picks its series and starts with its cast.
 import "../styles/studio.css";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { A } from "../../components/ui.tsx";
 import { useToast } from "../../components/Toasts.tsx";
+import { navigate } from "../../lib/router.ts";
 import { storiesGoLater, useAppActive } from "../pane.tsx";
 import { useLoad, usePoll } from "../../lib/hooks.ts";
 import { storiesApi } from "../api/client.ts";
@@ -35,15 +38,15 @@ import {
   type StoryScript,
 } from "../api/types.ts";
 import { CATALOG } from "../engine/catalog.ts";
-import { CharacterPreview } from "../preview/CharacterPreview.tsx";
 import { storiesHref } from "../routes.ts";
 import { cleanPick, effortName, insteadPick, madeWith, ModelIdList, modelIdLine, ModelMenu, modelName, modelOf, ModelsUsed, NextRun, runTask, sendPick, SettingsFix, shortName, stoppedOn, StoryAi, storyUsual, UnusableSheet, unusableAsk, useAiInfo, usedOf, usualFor, type AiInfo } from "../studio/ai.tsx";
+import { CastPicker, castOrder, castProblem } from "../studio/CastPicker.tsx";
 import { Filmstrip } from "../studio/Filmstrip.tsx";
+import { filterOf, MoveToSeries, SeriesField, seriesQuery, SeriesSwitch, useSeriesList, type SeriesFilter } from "../studio/SeriesSwitch.tsx";
 import { ArcDial, MediaRow, StatNumeral } from "../glass/index.ts";
 import { usePaged, useReferenceList, useSameScript, useWorkspace } from "../studio/hooks.ts";
 import { formatOf, formatWords, sameFormat, ShapePicker } from "../studio/shape.tsx";
 import { Busy, celebrate, Notice, Pick, ShowMore, Slider, Switch, Tag, TechDetails, TextField } from "../studio/kit.tsx";
-import { showFace } from "../studio/looks.ts";
 import { currentStep, nowLine, StepTrack, stepsOf } from "../studio/StepTrack.tsx";
 import { ago, CATEGORY_LABEL, helpersLine, isConflict, NO_GUIDANCE, say, seconds, STATUS_LABEL, STATUS_TONE, STORAGE_WORDS } from "../studio/words.ts";
 import { KIND_OPTIONS } from "./Ideas.tsx";
@@ -54,11 +57,11 @@ export function ProductionScreen({ ws, page }: StoriesScreenProps) {
     const refIds = page.refIds ?? [];
     const castIds = page.castIds ?? [];
     // A new hand-over (another chat button, another reference video) starts the form again from its address.
-    const from = [page.ideaId ?? "", refIds.join(","), castIds.join(","), page.durationSec ?? ""].join("|");
-    return <NewVideo key={from} ws={ws} ideaId={page.ideaId} refIds={refIds} castIds={castIds} durationSec={page.durationSec ?? null} />;
+    const from = [page.ideaId ?? "", refIds.join(","), castIds.join(","), page.durationSec ?? "", page.seriesId ?? ""].join("|");
+    return <NewVideo key={from} ws={ws} ideaId={page.ideaId} refIds={refIds} castIds={castIds} durationSec={page.durationSec ?? null} seriesId={page.seriesId ?? null} />;
   }
   if (page.name === "production_story") return <StoryProduction ws={ws} storyId={page.storyId} />;
-  return <ProductionList ws={ws} />;
+  return <ProductionList ws={ws} filter={filterOf(page.name === "production" ? page : {})} />;
 }
 
 /** A driving-safety idea no checked advice covers: it cannot become a video (§45.11.5). */
@@ -73,9 +76,11 @@ export const MOOD_FOR: Record<IdeaCategory, MusicMood> = { driving_safety: "tens
 
 type Run = { story: Story; job: ProductionJob | null };
 
-/** One page of videos, each with its latest job when it is being made or stopped (for its step track). */
-async function runsPage(ws: string, cursor?: string): Promise<{ items: Run[]; nextCursor: string | null }> {
-  const { stories, nextCursor } = await storiesApi().listStories(ws, cursor ? { status: "all", limit: 50, cursor } : { status: "all", limit: 50 });
+/** One page of videos (of one series, or none, when `seriesId` is set), each with its latest job when it is being
+ * made or stopped (for its step track). */
+async function runsPage(ws: string, cursor?: string, seriesId?: string): Promise<{ items: Run[]; nextCursor: string | null }> {
+  const only = seriesId ? { seriesId } : {};
+  const { stories, nextCursor } = await storiesApi().listStories(ws, cursor ? { status: "all", limit: 50, cursor, ...only } : { status: "all", limit: 50, ...only });
   const items = await Promise.all(
     stories.map(async (story): Promise<Run> => {
       if (!(story.status === "producing" || story.status === "failed" || story.currentJobId)) return { story, job: null };
@@ -89,14 +94,17 @@ async function runsPage(ws: string, cursor?: string): Promise<{ items: Run[]; ne
   return { items, nextCursor };
 }
 
-function ProductionList({ ws }: { ws: string }) {
-  const list = usePaged((cursor) => runsPage(ws, cursor), ws, "st-production-runs", (r) => r.story.storyId);
+function ProductionList({ ws, filter }: { ws: string; filter: SeriesFilter }) {
+  const seriesId = seriesQuery(filter);
+  const list = usePaged((cursor) => runsPage(ws, cursor, seriesId), seriesId ? `${ws}:${seriesId}` : ws, "st-production-runs", (r) => r.story.storyId);
   const all = list.data ?? [];
   const making = all.filter((r) => r.story.status === "producing" || r.story.status === "draft" || r.story.status === "failed");
   const made = all.filter((r) => !making.includes(r));
   // Not while Clip Factory is on screen (this page stays kept behind it): coming back reads it again at once.
   const active = useAppActive();
   usePoll(() => list.reload(), active && making.some((r) => r.story.status === "producing"), 2000);
+  // inside one series, a new video is filed there and starts with its cast
+  const newVideo = storiesHref({ name: "production_new", ideaId: null, ...(seriesId && seriesId !== "none" ? { seriesId } : {}) });
 
   return (
     <section className="st-page st-studio">
@@ -105,7 +113,8 @@ function ProductionList({ ws }: { ws: string }) {
           <h1 className="st-s-head__title">Production</h1>
           <p className="st-s-head__lede">Every video you make shows up here.</p>
         </div>
-        <A href={storiesHref({ name: "production_new", ideaId: null })} className="st-btn st-btn--main">
+        <SeriesSwitch ws={ws} value={filter} onChange={(v) => navigate(storiesHref({ name: "production", ...(seriesQuery(v) ? { seriesId: seriesQuery(v) } : {}) }))} />
+        <A href={newVideo} className="st-btn st-btn--main">
           Make a new video
         </A>
       </header>
@@ -120,7 +129,7 @@ function ProductionList({ ws }: { ws: string }) {
           <span className="st-s-empty__film" aria-hidden="true" />
           <h2 className="st-s-empty__title">No videos yet</h2>
           <p className="st-s-empty__text">Pick an idea and a character. Clips Funded does the rest.</p>
-          <A href={storiesHref({ name: "production_new", ideaId: null })} className="st-btn st-btn--main">
+          <A href={newVideo} className="st-btn st-btn--main">
             Make your first video
           </A>
         </div>
@@ -131,7 +140,7 @@ function ProductionList({ ws }: { ws: string }) {
               <h2 className="st-s-section st-plate">Being made</h2>
               <ul className="st-s-runs">
                 {making.map((r) => (
-                  <RunRow key={r.story.storyId} story={r.story} job={r.job} />
+                  <RunRow key={r.story.storyId} ws={ws} story={r.story} job={r.job} onMoved={() => void list.reload()} />
                 ))}
               </ul>
             </>
@@ -141,7 +150,7 @@ function ProductionList({ ws }: { ws: string }) {
               <h2 className="st-s-section st-plate">Made</h2>
               <ul className="st-s-runs">
                 {made.map((r) => (
-                  <RunRow key={r.story.storyId} story={r.story} job={r.job} />
+                  <RunRow key={r.story.storyId} ws={ws} story={r.story} job={r.job} onMoved={() => void list.reload()} />
                 ))}
               </ul>
             </>
@@ -153,7 +162,7 @@ function ProductionList({ ws }: { ws: string }) {
   );
 }
 
-function RunRow({ story, job }: { story: Story; job: ProductionJob | null }) {
+function RunRow({ ws, story, job, onMoved }: { ws: string; story: Story; job: ProductionJob | null; onMoved: () => void }) {
   const href = storiesHref({ name: "production_story", storyId: story.storyId });
   const watch = ["review", "needs_check", "approved", "published"].includes(story.status);
   return (
@@ -174,6 +183,7 @@ function RunRow({ story, job }: { story: Story; job: ProductionJob | null }) {
         <StepTrack job={isLive(job) || story.status === "failed" ? job : null} story={story} compact label={`Making ${story.title}`} />
       </span>
       <span className="st-s-run__go">
+        <MoveToSeries ws={ws} kind="story" id={story.storyId} title={story.title} current={story.seriesId ?? null} onMoved={onMoved} />
         {watch ? (
           <A href={storiesHref({ name: "review_story", storyId: story.storyId })} className="st-btn">
             Watch it
@@ -190,7 +200,7 @@ function RunRow({ story, job }: { story: Story; job: ProductionJob | null }) {
 
 // ---------- Make a new video ----------
 
-function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec }: { ws: string; ideaId: string | null; refIds: string[]; castIds: string[]; durationSec: number | null }) {
+function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesId: givenSeries }: { ws: string; ideaId: string | null; refIds: string[]; castIds: string[]; durationSec: number | null; seriesId: string | null }) {
   const toast = useToast();
   const workspace = useWorkspace(ws);
   const cfg = (workspace?.configuration ?? {}) as Partial<StoriesConfig>;
@@ -210,6 +220,10 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec }: { ws:
   // The address may bring the cast, the length and the reference videos (the chat's or a reference video's hand-over).
   const [cast, setCast] = useState<string[]>(() => castIds.slice(0, 3));
   const castTouched = useRef(castIds.length > 0);
+  // The series it is filed in (§45.44): the address's, else a picked idea's, until the owner picks one himself.
+  const [series, setSeries] = useState<string | null>(givenSeries && givenSeries !== "none" ? givenSeries : null);
+  const seriesTouched = useRef(!!givenSeries);
+  const seriesList = useSeriesList(ws).list;
   const [length, setLength] = useState<number | null>(durationSec);
   const [shape, setShape] = useState<StoryFormat | null>(null);
   const [captions, setCaptions] = useState<boolean | null>(null);
@@ -239,8 +253,10 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec }: { ws:
 
   const ideas = useMemo(() => data.data?.ideas ?? [], [data.data]);
   const characters = useMemo(() => data.data?.characters ?? [], [data.data]);
-  const usable = ideas.filter((i) => !blockedIdea(i));
+  // The series' own ideas first.
+  const usable = ideas.filter((i) => !blockedIdea(i)).sort((a, b) => Number(!!series && b.seriesId === series) - Number(!!series && a.seriesId === series));
   const idea = ideas.find((i) => i.ideaId === picked) ?? null;
+  const known = (ids: string[]) => ids.filter((id) => characters.some((c) => c.characterId === id)).slice(0, 3);
 
   // With no ideas saved, the short form is the way in.
   useEffect(() => {
@@ -252,6 +268,18 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec }: { ws:
     if (castTouched.current || !idea?.characterIds?.length) return;
     setCast(idea.characterIds.filter((id) => characters.some((c) => c.characterId === id)).slice(0, 3));
   }, [idea, characters]);
+
+  // A picked idea files the video in its series, until the owner picks the series himself.
+  useEffect(() => {
+    if (!seriesTouched.current) setSeries(idea?.seriesId ?? null);
+  }, [idea]);
+
+  // The series' cast comes along while the cast is untouched and the idea brings none.
+  const seriesCast = useMemo(() => (seriesList ?? []).find((x) => x.seriesId === series)?.castIds ?? null, [seriesList, series]);
+  useEffect(() => {
+    if (castTouched.current || idea?.characterIds?.length || !seriesCast?.length || !data.data) return;
+    setCast(seriesCast.filter((id) => data.data!.characters.some((c) => c.characterId === id)).slice(0, 3));
+  }, [seriesCast, idea, data.data]);
 
   // Reference videos from the address keep only this workspace's own (a deleted one is dropped, so it never uses up
   // one of the 3 picks without a tile to unpick it). Only against the list read just now: a list remembered from an
@@ -284,10 +312,10 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec }: { ws:
   const captionsOn = captions ?? cfg.captionsOn ?? true;
   const music: MusicMood = mood ?? (cfg.musicOn === false ? "none" : kind ? MOOD_FOR[kind] : "playful");
 
-  function toggleCast(id: string) {
+  function pickCast(ids: string[]) {
     castTouched.current = true;
     setProblem(null);
-    setCast((c) => (c.includes(id) ? c.filter((x) => x !== id) : c.length >= 3 ? c : [...c, id]));
+    setCast(ids.slice(0, 3));
   }
 
   function check(): string | null {
@@ -300,7 +328,7 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec }: { ws:
       if (!category) return "Pick what kind of video it is.";
     }
     if (!cast.length) return "Pick at least one character.";
-    return null;
+    return castProblem(cast.map((id) => characters.find((c) => c.characterId === id)).filter((c): c is Character => !!c));
   }
 
   async function make(pickNow: ModelOverride | null = ai, sure = false) {
@@ -313,7 +341,11 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec }: { ws:
     setAsking(null);
     setBusy(true);
     setProblem(null);
-    const body: StoryInput = { characterIds: cast, durationSec: lengthSec, captionsOn, musicMood: music };
+    // The people in the order they were picked, then the car (§45.43); the series when one is picked, and null when the
+    // owner picked No series himself, so an idea's own series does not file it anyway (§45.44).
+    const body: StoryInput = { characterIds: castOrder(cast, characters), durationSec: lengthSec, captionsOn, musicMood: music };
+    if (series) body.seriesId = series;
+    else if (seriesTouched.current) body.seriesId = null;
     // This video's own shape, only when the owner picked one that is not the workspace's (§45.34). Nothing picked:
     // the API uses Settings › Video itself (also while it has not loaded here, or could not be read).
     if (shape && (!workspace || !sameFormat(shape, usualShape))) body.format = { ...shape };
@@ -366,6 +398,16 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec }: { ws:
         <Busy plate>Getting your ideas and characters…</Busy>
       ) : (
         <div className="st-s-newvideo">
+          <SeriesField
+            ws={ws}
+            value={series}
+            onChange={(id, s) => {
+              seriesTouched.current = true;
+              setSeries(id);
+              setProblem(null);
+              if (!castTouched.current && s?.castIds.length) setCast(known(s.castIds));
+            }}
+          />
           <section className="st-s-panel st-glass" aria-labelledby="st-nv-1">
             <h2 className="st-s-panel__title" id="st-nv-1">
               <span className="st-s-num">1</span> The idea
@@ -410,7 +452,15 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec }: { ws:
                 </>
               ) : (
                 <p className="st-s-field__hint">
-                  No ideas yet. Tap Type my own, or add some in <A href={storiesHref({ name: "ideas" })}>Ideas</A>.
+                  {series ? (
+                    <>
+                      No ideas yet. Tap Type my own, or <A href={storiesHref({ name: "ideas", seriesId: series, ask: true })}>ask for ideas</A> for this series.
+                    </>
+                  ) : (
+                    <>
+                      No ideas yet. Tap Type my own, or add some in <A href={storiesHref({ name: "ideas" })}>Ideas</A>.
+                    </>
+                  )}
                 </p>
               )
             ) : (
@@ -427,11 +477,7 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec }: { ws:
               <span className="st-s-num">2</span> The cast <span className="st-s-panel__hint">(1 to 3)</span>
             </h2>
             {characters.length ? (
-              <ul className="st-s-castpick">
-                {characters.map((c) => (
-                  <CastTile key={c.characterId} c={c} on={cast.includes(c.characterId)} full={cast.length >= 3} onToggle={() => toggleCast(c.characterId)} />
-                ))}
-              </ul>
+              <CastPicker characters={characters} value={cast} onChange={pickCast} />
             ) : (
               <p className="st-s-field__hint">
                 No characters yet. <A href={storiesHref({ name: "character_new" })}>Make one first</A>.
@@ -576,7 +622,7 @@ function RefPicker({
                 </span>
                 <span className="st-s-reftile__text">
                   <span className="st-s-reftile__title">{r.title}</span>
-                  <span className="st-s-reftile__meta">{ready ? (r.durationSec ? seconds(r.durationSec) : "Studied") : r.status === "analyzing" ? "Being studied now" : "Not studied yet"}</span>
+                  <span className="st-s-reftile__meta">{ready ? (r.durationSec ? seconds(r.durationSec) : "Studied") : r.status === "analyzing" ? "Being studied now" : r.status === "fetching" ? "On its way" : r.status === "fetch_failed" ? "Didn't arrive" : "Not studied yet"}</span>
                 </span>
               </button>
               {!ready && r.status !== "analyzing" ? (
@@ -589,28 +635,6 @@ function RefPicker({
         })}
       </ul>
     </>
-  );
-}
-
-function CastTile({ c, on, full, onToggle }: { c: Character; on: boolean; full: boolean; onToggle: () => void }) {
-  const off = !on && full;
-  return (
-    <li>
-      <button
-        type="button"
-        className={`st-s-casttile${on ? " is-on" : ""}`}
-        aria-pressed={on}
-        aria-disabled={off || undefined}
-        title={off ? "Pick up to 3 characters." : undefined}
-        onClick={() => !off && onToggle()}
-      >
-        <CharacterPreview look={c.look} movementStyle={c.movementStyle} expression={on ? showFace(c) : "neutral"} action={on ? "wave" : "idle"} size={88} playing={on} label={c.name} />
-        <span className="st-s-casttile__name">{c.name}</span>
-        <span className="st-s-casttile__tick" aria-hidden="true">
-          {on ? "✓" : "+"}
-        </span>
-      </button>
-    </li>
   );
 }
 

@@ -27,6 +27,7 @@ import type {
   PublishingJob,
   ReferenceAnalysis,
   ReferenceVideo,
+  Series,
   Skill,
   SocialAccount,
   StoriesAiConfig,
@@ -161,7 +162,10 @@ export function httpStoriesApi(deps: StoriesHttpDeps = {}): StoriesApi {
     designCharacter: async (ws, body) => (await call<{ task: AiTask }>("POST", w(ws, "/characters/design"), body)).task,
 
     listStories: async (ws, query = {}) => {
-      const r = await call<{ stories: Story[]; nextCursor?: string | null }>("GET", w(ws, `/stories${q({ status: query.status, limit: query.limit, cursor: query.cursor })}`));
+      const r = await call<{ stories: Story[]; nextCursor?: string | null }>(
+        "GET",
+        w(ws, `/stories${q({ status: query.status, limit: query.limit, cursor: query.cursor, seriesId: query.seriesId })}`),
+      );
       return { stories: r.stories, nextCursor: r.nextCursor ?? null };
     },
     createStory: (ws, body) => call<{ story: Story; job: ProductionJob }>("POST", w(ws, "/stories"), body),
@@ -194,10 +198,23 @@ export function httpStoriesApi(deps: StoriesHttpDeps = {}): StoriesApi {
     library: async (ws, query = {}) => {
       const r = await call<{ items: LibraryItem[]; nextCursor?: string | null }>(
         "GET",
-        w(ws, `/library${q({ kind: query.kind, storyId: query.storyId, characterId: query.characterId, limit: query.limit, cursor: query.cursor })}`),
+        w(
+          ws,
+          `/library${q({ kind: query.kind, storyId: query.storyId, characterId: query.characterId, limit: query.limit, cursor: query.cursor, seriesId: query.seriesId })}`,
+        ),
       );
       return { items: r.items, nextCursor: r.nextCursor ?? null };
     },
+
+    // Series (CONTRACTS §45.44): folders of story videos and their story so far.
+    listSeries: async (ws) => (await call<{ series: Series[] }>("GET", w(ws, "/series"))).series,
+    createSeries: async (ws, s) => (await call<{ series: Series }>("POST", w(ws, "/series"), s)).series,
+    getSeries: async (ws, seriesId) => (await call<{ series: Series }>("GET", w(ws, `/series/${id(seriesId)}`))).series,
+    patchSeries: async (ws, seriesId, patch) => (await call<{ series: Series }>("PATCH", w(ws, `/series/${id(seriesId)}`), patch)).series,
+    deleteSeries: (ws, seriesId) => call<void>("DELETE", w(ws, `/series/${id(seriesId)}`)),
+    moveStoryToSeries: async (ws, storyId, seriesId) =>
+      (await call<{ story: Story }>("PUT", w(ws, `/stories/${id(storyId)}/series`), { seriesId })).story,
+    recapEpisode: async (ws, seriesId, storyId) => (await call<{ task: AiTask }>("POST", w(ws, `/series/${id(seriesId)}/recap`), { storyId })).task,
     providers: async (ws) => (await call<{ providers: ProviderStatus[] }>("GET", w(ws, "/providers"))).providers,
     tryNovaReel: async (ws) => (await call<{ job: ProductionJob }>("POST", w(ws, "/providers/nova-reel/check"))).job,
     // §45.37: Try it moved to Luma AI Ray2 (Nova Reel was ended by Amazon); the same route shape, by provider id.
@@ -264,9 +281,13 @@ export function httpStoriesApi(deps: StoriesHttpDeps = {}): StoriesApi {
     completeReference: async (ws, refId, parts) => (await call<{ reference: ReferenceVideo }>("POST", w(ws, `/references/${id(refId)}/complete`), { parts })).reference,
     analyzeReference: (ws, refId, override) =>
       call<{ reference: ReferenceVideo; job: ProductionJob }>("POST", w(ws, `/references/${id(refId)}/analyze`), override ? { override } : {}),
+    // §45.40: a reference from a pasted link; Clips Funded's own runtime gets the video, "Try again" asks it again.
+    createReferenceFromLink: (ws, body) => call<{ reference: ReferenceVideo; job: ProductionJob }>("POST", w(ws, "/references/link"), body),
+    fetchReferenceAgain: (ws, refId) => call<{ reference: ReferenceVideo; job: ProductionJob }>("POST", w(ws, `/references/${id(refId)}/fetch`), {}),
     getReference: async (ws, refId) => {
-      const r = await call<{ reference: ReferenceVideo; analysis?: ReferenceAnalysis | null; job?: ProductionJob | null }>("GET", w(ws, `/references/${id(refId)}`));
-      return { reference: r.reference, analysis: r.analysis ?? null, job: r.job ?? null };
+      const r = await call<{ reference: ReferenceVideo; analysis?: ReferenceAnalysis | null; job?: ProductionJob | null; fetchJob?: ProductionJob | null }>("GET", w(ws, `/references/${id(refId)}`));
+      // fetchJob (§45.40) only when the API sent it: an older API has none, and the page then reads the reference alone.
+      return { reference: r.reference, analysis: r.analysis ?? null, job: r.job ?? null, ...(r.fetchJob !== undefined ? { fetchJob: r.fetchJob } : {}) };
     },
     patchReference: async (ws, refId, patch) => (await call<{ reference: ReferenceVideo }>("PATCH", w(ws, `/references/${id(refId)}`), patch)).reference,
     deleteReferenceVideo: (ws, refId) => call<void>("DELETE", w(ws, `/references/${id(refId)}`)),

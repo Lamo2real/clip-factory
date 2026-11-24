@@ -2035,7 +2035,8 @@ button there. Numbers come from the post found on the connected account (`video/
   reference videos are uploaded files analyzed from frames and sound.
 - **Consequences.** The owner sees and edits everything the agents remember; nothing is published or rendered
   without his tap; Clip Factory's skills rule is untouched. Reference links to other people's videos are not
-  downloaded (upload the file).
+  downloaded (upload the file). *Amended by ADR-88 (2026-11-23): a pasted link to one video on seven allowed sites
+  is fetched by Clips Funded's own runtime, behind its egress guard, for study only.*
 
 ## ADR-79 Developer apps: the owner picks Clips Funded's own or Clip Factory's, per platform, never silently
 
@@ -2444,6 +2445,141 @@ Amends ADR-45.
   look (the margins are 4.51 to 4.65 at the tight spots), `e2e/light.spec.ts` measures the steps in the render. The
   owner judges the real see-through window.
 
+## ADR-88 Reference videos from a link: Clips Funded's own pinned fetcher behind an egress guard, and one drop hook
+
+Amends ADR-78 (its "Reference links to other people's videos are not downloaded").
+
+- **Context.** The owner (2026-11-23, with a screenshot of Clips Funded › References, whose card had only "Upload a
+  video" and "Found one online? Save it to your device first, then upload the video file."): "i should be able to
+  upload with drag and drop (which there isnt currently so fix that" and "and i also want a feature to just paste a
+  link instead of uploading a video directly". Clips Funded's runtime had no downloader on purpose, and its drop was
+  one card's handlers: invisible, flickering on every child, refused everywhere else, and missing the window guard
+  when the app opened straight into Clips Funded. A fetch from a link the owner pastes is a server-side request to an
+  address someone else chose (SSRF): the runtime can reach the instance metadata service (169.254.169.254, the
+  container credentials at 169.254.170.2) and AWS's own addresses.
+- **Options.** Where to fetch: the API Lambda (29 s, no ffmpeg), Clip Factory's runtime and its job flow (its
+  cookies, proxy and PO tokens are already wired in), or Clips Funded's own runtime with its own pinned copy. How to
+  hold the fetch to the public internet: trust yt-dlp's own checks, an egress rule in the VPC (the runtime is on
+  AgentCore's public network: no security group to tighten without new infra), or a local proxy that every byte goes
+  through. Which links: any https link, or an allowlist of sites and URL shapes. Drag and drop: patch each upload
+  site, or one shared hook.
+- **Decision.** (CONTRACTS §45.40, §45.11.1, §12.5)
+  1. *Clips Funded's own fetcher.* The action `fetch_reference` on `cf_prod_story_agent`, a `reference_fetch` job
+     with one step ("Get the video"); its own pinned `yt-dlp[default]==2026.10.26` (Clip Factory's pin). Code shapes
+     are copied from Clip Factory (`sources.py`, `contentrewards/fetch.py`, `logo.py`), never imported (ADR-76).
+     Nothing of Clip Factory's cookies, PO tokens, proxy secret, Mac fetch, TikTok helper or social tokens is used;
+     IAM already keeps the stories role out of `private/` and Clip Factory's secrets. No Terraform change. YouTube
+     gets Clips Funded's own PO-token sidecar from the start (ADR-52's way: bgutil's server built into this image
+     from upstream, pinned by sha256, `player_client=default,mweb`, its calls through the fetch's guard; `pot.py` is a
+     copy of Clip Factory's, never an import), because ADR-52 and ADR-59 found YouTube blocks AWS addresses.
+  2. *One allowlist, three copies, one fixture.* Seven sites (YouTube, TikTok, Instagram, Facebook, X, Google Drive,
+     Dropbox), exact hosts and URL shapes, https or no scheme only, no user info, port 443 or none, ≤ 2048
+     characters, only the kept query keys, the same hand parser in the API, the agent and the web, all three tested
+     against `stories/agent/tests/fixtures/reference_links.json`. The API refuses anything else with a sentence before
+     any job exists; the agent checks the link again before it fetches.
+  3. *The egress guard (SSRF rules).* `netguard.Guard`, a CONNECT-only proxy on 127.0.0.1 started for one fetch,
+     carries every byte of it (yt-dlp gets `--proxy` and the proxy variables; Drive and Dropbox go through
+     `set_tunnel`): only `CONNECT host:443` (anything else, plain http included, is 405); the host must pass
+     `safe_host`; every resolved address must be public (no loopback, private, link-local 169.254.0.0/16,
+     `fd00:ec2::/32`, multicast, reserved or unspecified), and the tunnel connects to the checked address itself, so
+     DNS rebinding cannot reach a private one; every redirect and CDN hop is a new CONNECT, checked again; all
+     incoming bytes count against one cap (`min(2 GiB, (free − 512 MiB) / 2)`) and every tunnel closes past it; 60 s
+     idle, at most 16 tunnels; logs hold host names and counts only.
+  4. *yt-dlp held to the allowlist.* Argument lists only (no shell), `--ignore-config`, `--no-playlist`,
+     `--playlist-items 1`, `--no-cache-dir`, `--use-extractors` with exactly the seven platform extractors and never
+     `generic`, `--` before the URL, never `--cookies`, `--exec`, `--load-info-json` or a user-supplied `-o`; a test
+     checks offline that every platform shape in the fixture has an allowed extractor. A link shape only `generic`
+     takes and nothing leads from is out of the table. Facebook's own Share › Copy link (`/share/r/`, `/share/v/`)
+     and `fb.watch` are opened first through the guard (at most 3 redirects on Facebook's own hosts, or the page's
+     `og:url`), and only the Facebook video link they lead to, checked again with `clean_link`, goes to yt-dlp.
+     Live, over 10 minutes and over the cap are refused from `-J` before anything is downloaded; the download is
+     capped again (`--max-filesize`, the guard) and the file is probed (a video of ≤ 600.5 s, ≤ 2 GiB) before it is
+     stored.
+  5. *For study only, kept private.* The file becomes the reference's own `ws/…/references/{refId}/source.mp4`,
+     analyzed like an upload; the keep settings apply; nothing is published. The final write is fenced on
+     `currentJobId`, and a refused write deletes the uploaded file.
+  6. *The plain fallback.* Every failure says why in kid words ("upload it", the same on a phone) and keeps "Upload a
+     video" and the page drop; "Try again" asks once more (`POST …/references/{refId}/fetch`) and is the main button
+     only when asking again can work. A link added on the list that does not arrive opens its own page, like one that
+     arrives; the same link pasted again says where its Try again is.
+  7. *One drop hook.* `useFileDrop` (element or page zones, a counted highlight, text into text boxes untouched,
+     Ask's own drops never taken), `DropOverlay` (one glass layer and pill in each app's own glass, a shaking coral
+     refusal, an sr-only status line) and a window guard installed once in `main.tsx`; Clip Factory's new-job card
+     keeps its own drop code.
+- **Consequences.** A pasted link works without the owner saving the file first, and every upload site takes drops.
+  The runtime image gains yt-dlp (its build check runs it, and the self-check confirms the extractors without
+  `generic`). YouTube's, TikTok's, Meta's and X's terms forbid downloading or automated collection: the fetch uses no
+  login, is for study only and keeps the files private; the owner decides whether to keep it on. Many platforms block
+  downloads from cloud addresses, so some links will still fail and say so (the PO token raises YouTube's odds but
+  does not guarantee them; Instagram may want a login, and no cookies are used). The image grows by about 175 MB for
+  the PO-token server. Follow-ups: "Get it again" for a link reference whose file a keep setting cleared; Vimeo or
+  other sites as rows of the table; one public link per site tried on the live app after the deploy.
+
+## ADR-90 The sound samples are rendered ahead of time from the renderer's own synth
+
+- **Context.** The owner (2026-11-23), on a character's Sounds tab: "id like everything here to be in samples so i can
+  here what each sounds like". The videos' sounds come from one numpy synth in the stories agent
+  (`stories/agent/.../audio.py`, CONTRACTS §45.11.3), with no audio files; the web had nothing to play.
+- **Options.** (1) A TypeScript copy of the synth in the browser (Web Audio): two synths to keep equal, and what he
+  hears drifts from the videos. (2) An API route that renders on demand: new infra, a wait on every tap, and Lambda
+  time. (3) Render every sample ahead of time with the agent's own synth into small files the web serves.
+- **Decision.** (CONTRACTS §45.41) Option 3. `python -m lamostories_agent.samples` renders each effect and each noise
+  (both voices at all 31 pitch stops) as one event through `audio.mix`, the videos' chain without the final loudnorm,
+  then mono, the end silence trimmed, one library gain (2.28, the loudest at -1 dBFS, so the files keep the videos'
+  levels against each other) and a 64 kbps MP3: 705 files, 4.07 MB, under `web/public/sounds/stories/<recipe>/`.
+  `recipe` hashes the tokens of audio.py and samples.py (comments do not count; `ast.dump` was not used because its
+  text changes between Python versions) and the settings, so a changed synth is a new folder name that also gets past
+  the 1-hour browser cache. The web plays them with Web Audio, one at a time, from a play button beside each chip;
+  tapping a chip still only picks it.
+- **Consequences.** No infra and no API. The repo holds 4 MB of MP3s; the service worker never precaches
+  `public/sounds/`, so neither app's install grows. `test_sound_samples.py` fails while the files are stale (the
+  recipe, the file list, and PCM spot renders against the manifest), and ci.yml runs it when the files or
+  `samplesRoot.ts` change: after a change to audio.py, run the generator (it needs ffmpeg) and commit its output. The
+  samples are the built-in synth's; when the workspace picks another effects maker the part says "Effects may sound a
+  bit different in videos."
+
+## ADR-91 A car of the cast is a car prop with a castId, kept in its own `cars` map
+
+- **Context.** The owner (2026-11-23) wants a character that is a car, made in cartoon style from real photos, picked
+  among several generated cars, for a series "where its a guy buying a car and then driving it for the first time",
+  with the main character. The built-in animator had people only (`cast`), and cars only as plain props.
+- **Options.** (1) Make a car an actor in `cast`: every people part (geometry, motion, faces, bubbles, noises) would
+  branch on the kind. (2) Keep `cast` people only and put the cast's cars in a separate `script.cars` map; a car prop
+  with `castId` is drawn as that car, with its own `CarLook`. Also: (a) one model call per option, or (b) one call
+  that makes 3 options, so the photos are sent once.
+- **Decision.** (CONTRACTS §45.42, §45.43) Option 2, with (b). Two kinds: person and car ("an animal" and "a thing"
+  need rigs of their own and are follow-ups). A car is drawn by `engine/car.ts` in the side and top views (8 bodies,
+  paint patterns, windows with riders behind the glass, wheels, lights, optional eyes on the windscreen or in the
+  headlights, off by default) and moves by prop actions (the new speed_up, bounce, honk, blink and stall). Plates are
+  plain and badges never drawn: the engine has no text shapes, the prompt forbids makes and models, and the checker
+  strips a brand that gets through. A cast is 1 to 3, at most one car and someone to drive it.
+- **Consequences.** People code and old scripts are unchanged; the shape goldens keep every prim (only
+  `ENGINE_VERSION` goes 5 to 6). The writer and the idea agent get the car as a cast entry with words, never a look.
+  `CHAR#` gains `kind` and `car` (a missing kind is a person). A car design costs one call for 3 options, a person
+  design what it cost before. Cars have their own place in the rail, Cars, right under Characters (the owner asked
+  for it twice), and Characters shows the cars too, each with a Car tag. The rail's 12 pages keep 48, 44 or 40 px rows,
+  never lower than 40 (the first build's shared rows went down to 32 px); in a window too short for twelve 40 px rows
+  the rail's list scrolls.
+
+## ADR-92 A series' memory is data kept per series, written by a recap task after each approval
+
+- **Context.** The owner (2026-11-23): "Can you create a folder for each series i create so it is organized and if
+  you think it good maybe it could save context from previous videos if they are in the same folder".
+- **Options.** (1) Keep it in the workspace memory (MEM#): it would mix series, grow without a bound and fill the
+  owner's own memory. (2) Rebuild it from every earlier script for each new idea or video: large prompts and cost
+  that grows with each episode. (3) A `SERIES#` item per series with a short story so far and one summary per
+  episode, written by a task after each approval, and a bounded slice of it sent to the idea agent and the writer.
+- **Decision.** (CONTRACTS §45.44) Option 3. A series is a folder (a name, a line, a cast and a cover) and a place in
+  the rail, with an "All ▾" switch on Ideas, Production, Review and Library whose choice lives in the address
+  (`?series=`), never in a hidden filter. After an approval, a `series_recap` task (the creative director, routed as
+  `text_edit`) writes the episode's summary (≤ 400) and the story so far (≤ 1500, in Who, Places, Running jokes and
+  Where things stand), under a version condition; the owner can read and edit it. `series_context` sends the story so
+  far, the newest 5 summaries, up to 20 earlier titles and the cast, at most 8000 bytes.
+- **Consequences.** An approval never fails because of the recap (it is best effort, and the folder offers "Write it
+  again"). Episodes and their numbers are worked out on each read. Deleting a series never deletes a video: its
+  videos and ideas move to "No series". No infra: the same table partition, and API Gateway already proxies the
+  routes. The series memory never goes into MEM#.
+
 ## ADR-93 A skipped platform is hidden everywhere but Settings and Social accounts
 
 Supersedes §17.13's skipped rows on the floating setup list, §45.36 E15 for platform steps and §45.36 E18's card
@@ -2475,5 +2611,5 @@ columns on Clips Funded's Social accounts. The contract is CONTRACTS §48.
   ways to do one thing on one page.
 - **Consequences.** The owner's stored X skip takes effect on deploy, with no data rewritten. A skip never turns a
   posting switch off: in Clip Factory, "Your Mac posts TikTok" keeps posting if TikTok is skipped while it is on, and
-  the clip page's "Not posted here. Turn on X …" line can still name a skipped X (a follow-up). Each app's skips stay
-  its own.
+  the clip page's stack for a skipped X with no post says only "Not posted here." (no Set up or Where clips go link).
+  Whether a TikTok skip should also pause the Mac is left to the owner. Each app's skips stay its own.

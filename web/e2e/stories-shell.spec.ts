@@ -80,7 +80,7 @@ test.describe("switching", () => {
     await storiesReady(page);
     await expect(page.locator(".ws-dock .ws-switch__opt")).toHaveText(["Clip Factory", "Clips Funded"]);
     await expect(page.locator(".ws-dock .ws-switch__opt.is-on")).toHaveText("Clips Funded");
-    await expect(page.locator(".st-rail .st-rail__label")).toHaveText(["Dashboard", "Ideas", "Characters", "Production", "Review", "Chat", "References", "Library", "Social accounts", "Settings"]);
+    await expect(page.locator(".st-rail .st-rail__label")).toHaveText(["Dashboard", "Ideas", "Characters", "Cars", "Production", "Review", "Series", "Chat", "References", "Library", "Social accounts", "Settings"]);
     await page.locator(".st-rail").getByRole("link", { name: "Social accounts" }).click();
     await expect(page).toHaveURL(/\/stories\/connections$/);
     await storiesReady(page);
@@ -197,7 +197,7 @@ test.describe("switching", () => {
     await expect(page).toHaveURL(/\/stories$/);
     await storiesReady(page);
     await page.locator(".st-tabbar").getByRole("button", { name: "More pages" }).click();
-    await expect(page.locator(".st-more .st-more__item")).toHaveText(["Chat", "References", "Library", "Social accounts", "Settings"]);
+    await expect(page.locator(".st-more .st-more__item")).toHaveText(["Cars", "Series", "Chat", "References", "Library", "Social accounts", "Settings"]);
     await page.locator(".st-more").getByRole("link", { name: "Social accounts" }).click();
     await expect(page).toHaveURL(/\/stories\/connections$/);
     await storiesReady(page);

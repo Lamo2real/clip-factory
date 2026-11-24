@@ -1,5 +1,5 @@
 {
- "version": "f52914681f75",
+ "version": "b63430170c4c",
  "parts": [
   {
    "id": "app-map",
@@ -99,7 +99,7 @@
    "id": "contracts-12",
    "title": "CONTRACTS: 12. Get the app, updates, and kid-proof UX (added by the owner after the first build)",
    "line": "12.1 \"Get the app\" (sidebar item; on phones a card in Settings plus a one-time banner on Home)",
-   "chars": 19172
+   "chars": 19612
   },
   {
    "id": "contracts-13",
@@ -297,7 +297,7 @@
    "id": "contracts-45",
    "title": "CONTRACTS: 45. Clips Funded: a second, separate workspace (owner request, 2026-11-21)",
    "line": "Planned: not in the app until the switch pull request turns it on (§45.21). Until then nothing of Clips Funded",
-   "chars": 255770
+   "chars": 390248
   },
   {
    "id": "contracts-46",
@@ -771,7 +771,7 @@
    "id": "adr-78",
    "title": "DECISIONS: ADR-78 Clips Funded's own agents, skills, chat and memory live in its runtime; actions wait for the owner's tap",
    "line": "Context. The second request asks for its own agents and agent configuration, skills (upload, versions,",
-   "chars": 1358
+   "chars": 1527
   },
   {
    "id": "adr-79",
@@ -828,10 +828,34 @@
    "chars": 6906
   },
   {
+   "id": "adr-88",
+   "title": "DECISIONS: ADR-88 Reference videos from a link: Clips Funded's own pinned fetcher behind an egress guard, and one drop hook",
+   "line": "Amends ADR-78 (its \"Reference links to other people's videos are not downloaded\").",
+   "chars": 7054
+  },
+  {
+   "id": "adr-90",
+   "title": "DECISIONS: ADR-90 The sound samples are rendered ahead of time from the renderer's own synth",
+   "line": "Context. The owner (2026-11-23), on a character's Sounds tab: \"id like everything here to be in samples so i can",
+   "chars": 2184
+  },
+  {
+   "id": "adr-91",
+   "title": "DECISIONS: ADR-91 A car of the cast is a car prop with a castId, kept in its own `cars` map",
+   "line": "Context. The owner (2026-11-23) wants a character that is a car, made in cartoon style from real photos, picked",
+   "chars": 2218
+  },
+  {
+   "id": "adr-92",
+   "title": "DECISIONS: ADR-92 A series' memory is data kept per series, written by a recap task after each approval",
+   "line": "Context. The owner (2026-11-23): \"Can you create a folder for each series i create so it is organized and if",
+   "chars": 1826
+  },
+  {
    "id": "adr-93",
    "title": "DECISIONS: ADR-93 A skipped platform is hidden everywhere but Settings and Social accounts",
    "line": "Supersedes §17.13's skipped rows on the floating setup list, §45.36 E15 for platform steps and §45.36 E18's card",
-   "chars": 3103
+   "chars": 3195
   },
   {
    "id": "architecture-overview",

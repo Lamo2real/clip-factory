@@ -71,6 +71,14 @@ const CASES: Case[] = [
   ["writeCaptions", (a) => a.writeCaptions("stories", "s1", { override: { model: "haiku-5-5" } }), "POST", `${B}/stories/stories/s1/captions`, { override: { model: "haiku-5-5" } }, { task: 182 }, 182],
   ["download", (a) => a.download("stories", "s1"), "GET", `${B}/stories/stories/s1/download`, undefined, { url: "u", filename: "f.mp4" }, { url: "u", filename: "f.mp4" }],
   ["library", (a) => a.library("stories", { kind: "cover", storyId: "s1", limit: 10 }), "GET", `${B}/stories/library?kind=cover&storyId=s1&limit=10`, undefined, { items: [27], nextCursor: "n" }, { items: [27], nextCursor: "n" }],
+  // Series (§45.44): folders of story videos and their story so far.
+  ["listSeries", (a) => a.listSeries("stories"), "GET", `${B}/stories/series`, undefined, { series: [190] }, [190]],
+  ["createSeries", (a) => a.createSeries("stories", { name: "My first car", castIds: ["c1", "c2"] }), "POST", `${B}/stories/series`, { name: "My first car", castIds: ["c1", "c2"] }, { series: 191 }, 191],
+  ["getSeries", (a) => a.getSeries("stories", "sr1"), "GET", `${B}/stories/series/sr1`, undefined, { series: 192 }, 192],
+  ["patchSeries", (a) => a.patchSeries("stories", "sr1", { version: 2, storySoFar: "Who: Pip." }), "PATCH", `${B}/stories/series/sr1`, { version: 2, storySoFar: "Who: Pip." }, { series: 193 }, 193],
+  ["deleteSeries", (a) => a.deleteSeries("stories", "sr1"), "DELETE", `${B}/stories/series/sr1`, undefined, null, undefined],
+  ["moveStoryToSeries", (a) => a.moveStoryToSeries("stories", "s1", null), "PUT", `${B}/stories/stories/s1/series`, { seriesId: null }, { story: 194 }, 194],
+  ["recapEpisode", (a) => a.recapEpisode("stories", "sr1", "s1"), "POST", `${B}/stories/series/sr1/recap`, { storyId: "s1" }, { task: 195 }, 195],
   ["providers", (a) => a.providers("stories"), "GET", `${B}/stories/providers`, undefined, { providers: [28] }, [28]],
   // Nova Reel's Try it (§45.35 D2, builder W4b): one 6-second test shot, a provider_check job.
   ["tryNovaReel", (a) => a.tryNovaReel("stories"), "POST", `${B}/stories/providers/nova-reel/check`, undefined, { job: 28.5 }, 28.5],
@@ -144,6 +152,8 @@ const CASES: Case[] = [
   ["createReference", (a) => a.createReference("stories", { filename: "r.mp4", contentType: "video/mp4", size: 5, title: "Ref" }), "POST", `${B}/stories/references`, { filename: "r.mp4", contentType: "video/mp4", size: 5, title: "Ref" }, { reference: 1, upload: 2 }, { reference: 1, upload: 2 }],
   ["completeReference", (a) => a.completeReference("stories", "r1", [{ partNumber: 1, etag: "e" }]), "POST", `${B}/stories/references/r1/complete`, { parts: [{ partNumber: 1, etag: "e" }] }, { reference: 62 }, 62],
   ["analyzeReference", (a) => a.analyzeReference("stories", "r1", { effort: "max" }), "POST", `${B}/stories/references/r1/analyze`, { override: { effort: "max" } }, { reference: 1, job: 2 }, { reference: 1, job: 2 }],
+  ["createReferenceFromLink", (a) => a.createReferenceFromLink("stories", { url: "https://www.tiktok.com/@a/video/1", title: "Skid" }), "POST", `${B}/stories/references/link`, { url: "https://www.tiktok.com/@a/video/1", title: "Skid" }, { reference: 1, job: 2 }, { reference: 1, job: 2 }],
+  ["fetchReferenceAgain", (a) => a.fetchReferenceAgain("stories", "r1"), "POST", `${B}/stories/references/r1/fetch`, {}, { reference: 1, job: 2 }, { reference: 1, job: 2 }],
   ["getReference", (a) => a.getReference("stories", "r1"), "GET", `${B}/stories/references/r1`, undefined, { reference: 63 }, { reference: 63, analysis: null, job: null }],
   ["patchReference", (a) => a.patchReference("stories", "r1", { title: "New" }), "PATCH", `${B}/stories/references/r1`, { title: "New" }, { reference: 64 }, 64],
   ["deleteReferenceVideo", (a) => a.deleteReferenceVideo("stories", "r1"), "DELETE", `${B}/stories/references/r1`, undefined, null, undefined],
@@ -178,6 +188,22 @@ describe("every Lamo Stories route", () => {
     await api.checkModels("stories", ["opus-5-5"], ["polly-neural"]);
     await api.checkModels("stories");
     expect(calls.map((c) => c.body)).toEqual([{ makers: ["stable-image-core", "luma-ray2"] }, { models: ["opus-5-5"], makers: ["polly-neural"] }, {}]);
+  });
+
+  it("sends seriesId on the stories and the library only when it is set (§45.44)", async () => {
+    const { api, calls } = fake((c) => ({ status: 200, body: c.url.includes("/library") ? { items: [] } : { stories: [] } }));
+    await api.listStories("stories", { status: "review", seriesId: "sr1" });
+    await api.listStories("stories", { status: "review", seriesId: "none" });
+    await api.listStories("stories", { status: "review" });
+    await api.library("stories", { kind: "cover", seriesId: "sr1" });
+    await api.library("stories", { kind: "cover" });
+    expect(calls.map((c) => c.url)).toEqual([
+      `${B}/stories/stories?status=review&seriesId=sr1`,
+      `${B}/stories/stories?status=review&seriesId=none`,
+      `${B}/stories/stories?status=review`,
+      `${B}/stories/library?kind=cover&seriesId=sr1`,
+      `${B}/stories/library?kind=cover`,
+    ]);
   });
 
   for (const [name, run, method, url, body, answer, result] of CASES)
@@ -222,6 +248,14 @@ describe("every Lamo Stories route", () => {
       ["GET", "/stories/chat/v1?before=m1", undefined],
       ["GET", "/stories/chat/v1", undefined],
     ]);
+  });
+
+  it("getReference passes a link reference's fetch job through, and leaves it out when an older API sends none (§45.40)", async () => {
+    const fetchJob = { jobId: "f1", jobType: "reference_fetch", status: "failed", error: "That video is gone. Check the link." };
+    const { api } = fake((c) => ({ status: 200, body: c.url.endsWith("/r1") ? { reference: 1, analysis: null, job: null, fetchJob } : { reference: 2 } }));
+    await expect(api.getReference("stories", "r1")).resolves.toEqual({ reference: 1, analysis: null, job: null, fetchJob });
+    const older = await api.getReference("stories", "r2");
+    expect("fetchJob" in older).toBe(false);
   });
 
   it("getReference passes the analysis job through, and patchReference sends the video's own setting", async () => {

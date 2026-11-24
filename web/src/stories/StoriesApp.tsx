@@ -30,6 +30,7 @@ import { TAB_ORB } from "./glass/index.ts";
 import { followStoriesClicks, storiesReduceMotion } from "./prefs.ts";
 import type { StoriesApi, Workspace } from "./api/types.ts";
 import { storiesHref, type StoriesPage } from "./routes.ts";
+import { CarsScreen } from "./screens/Cars.tsx";
 import { CharactersScreen } from "./screens/Characters.tsx";
 import { ChatScreen } from "./screens/Chat.tsx";
 import { ConnectionsScreen } from "./screens/Connections.tsx";
@@ -40,6 +41,7 @@ import { LibraryScreen } from "./screens/Library.tsx";
 import { ProductionScreen } from "./screens/Production.tsx";
 import { ReferencesScreen } from "./screens/References.tsx";
 import { ReviewScreen } from "./screens/Review.tsx";
+import { SeriesScreen } from "./screens/Series.tsx";
 import { SettingsScreen } from "./screens/Settings.tsx";
 import { SetupScreen } from "./screens/Setup.tsx";
 import type { StoriesScreenProps } from "./screens/types.ts";
@@ -78,6 +80,8 @@ const NAV: NavItem[] = [
     page: { name: "characters" },
     match: ["characters", "character", "character_new"],
   },
+  // The cars' own place, right under Characters (§45.42.10, the owner: "where are cars? i need cars as well").
+  { label: "Cars", icon: "car", page: { name: "cars" }, match: ["cars", "car_new", "car"] },
   {
     label: "Production",
     icon: "clapper",
@@ -90,6 +94,7 @@ const NAV: NavItem[] = [
     page: { name: "review" },
     match: ["review", "review_story"],
   },
+  { label: "Series", icon: "folder", page: { name: "series" }, match: ["series", "series_one"] },
   {
     label: "Chat",
     icon: "chat",
@@ -141,9 +146,9 @@ export function opensSetup(
   return o.done === 0 && o.steps.every((s) => s.state === "todo");
 }
 
-/** On phones the bar has room for five pages and More; More holds the rest. */
-const TABS = NAV.slice(0, 5);
-const MORE = NAV.slice(5);
+/** On phones the bar has room for five pages and More; More holds the rest (Cars first). */
+const TABS = NAV.filter((n) => n.label !== "Cars").slice(0, 5);
+const MORE = NAV.filter((n) => !TABS.includes(n));
 
 
 /** Picks the workspace to show: a checked id from the server's own list, never one taken from the address alone. */
@@ -199,6 +204,10 @@ function Screen(props: StoriesScreenProps) {
     case "character":
     case "character_new":
       return <CharactersScreen {...props} />;
+    case "cars":
+    case "car_new":
+    case "car":
+      return <CarsScreen {...props} />;
     case "production":
     case "production_new":
     case "production_story":
@@ -208,6 +217,9 @@ function Screen(props: StoriesScreenProps) {
       return <ReviewScreen {...props} />;
     case "library":
       return <LibraryScreen {...props} />;
+    case "series":
+    case "series_one":
+      return <SeriesScreen {...props} />;
     case "connections":
       return <ConnectionsScreen {...props} />;
     case "connection":

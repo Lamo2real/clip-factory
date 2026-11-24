@@ -17,7 +17,7 @@ import * as library from "../src/stories/api/mock/library.ts";
 import * as publishing from "../src/stories/api/mock/publishing.ts";
 import { createStore, type MockStore } from "../src/stories/api/mock/store.ts";
 import * as stories from "../src/stories/api/mock/stories.ts";
-import type { CharacterInput, ModelInfo, ReferenceVideo, SocialAccount, StoriesApi, StoriesConfig, Story, TikTokCreator, Workspace } from "../src/stories/api/types.ts";
+import type { CharacterInput, ModelInfo, PersonInput, ReferenceVideo, SocialAccount, StoriesApi, StoriesConfig, Story, TikTokCreator, Workspace } from "../src/stories/api/types.ts";
 import { matchStories, storiesHref, type StoriesPage } from "../src/stories/routes.ts";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -590,8 +590,8 @@ describe("Characters (§45.34)", () => {
     const fresh = characters.designFromWords("A speedy robot called Zed with curly hair", false, 3);
     const next = characters.redesign(pip as CharacterInput, fresh, "Give Pip curly hair");
     expect(next.name).toBe("Pip");
-    expect(next.look.hair.style).toBe("curly");
-    expect(next.look.outfit).toEqual(pip.look.outfit);
+    expect((next as PersonInput).look.hair.style).toBe("curly");
+    expect((next as PersonInput).look.outfit).toEqual((pip as PersonInput).look.outfit);
     expect(next.movementStyle).toBe(pip.movementStyle);
     expect(changedParts(pip as CharacterInput, next).changed.map((c) => c.part)).toEqual(["looks"]);
   });

@@ -20,6 +20,7 @@ from . import keys
 from .data import AssetPut
 from .pipeline import Job, StoryFailed
 from .providers import ProviderContext, ProviderFailed, ProviderUnavailable, chosen, maker_model, provider_item
+from .tasks.characters import car_words
 from .util import JobSuperseded, log, now_iso
 
 SIZE = 1024
@@ -57,6 +58,12 @@ def colour_name(hex_color: Any) -> str:
 
 
 def portrait_prompt(ch: dict[str, Any]) -> str:
+    if ch.get("kind") == "car":  # §45.42: the car in words, never a make, a badge or a plate
+        words = car_words(ch.get("car") or {}).removeprefix("an ").removeprefix("a ")
+        return (
+            f"A friendly cartoon {words}, three-quarter view, bold clean outline, flat colours, plain soft background. "
+            "No logos, no badges, no text, no number plate."
+        )
     look = ch.get("look") or {}
     hair = look.get("hair") or {}
     eyes = look.get("eyes") or {}

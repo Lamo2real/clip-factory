@@ -29,5 +29,5 @@ columns on Clips Funded's Social accounts. The contract is CONTRACTS §48.
   ways to do one thing on one page.
 - **Consequences.** The owner's stored X skip takes effect on deploy, with no data rewritten. A skip never turns a
   posting switch off: in Clip Factory, "Your Mac posts TikTok" keeps posting if TikTok is skipped while it is on, and
-  the clip page's "Not posted here. Turn on X …" line can still name a skipped X (a follow-up). Each app's skips stay
-  its own.
+  the clip page's stack for a skipped X with no post says only "Not posted here." (no Set up or Where clips go link).
+  Whether a TikTok skip should also pause the Mac is left to the owner. Each app's skips stay its own.
