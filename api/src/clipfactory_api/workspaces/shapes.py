@@ -189,14 +189,15 @@ def public_character(
     for ref in item.get("references") or []:
         url = safe_url(presign, user_id, workspace_id, ref.get("key"))
         if url:
-            references.append(
-                {
-                    "assetId": str(ref["assetId"]),
-                    "url": url,
-                    "contentType": str(ref.get("contentType") or ""),
-                    "createdAt": str(ref.get("createdAt") or ""),
-                }
-            )
+            shown = {
+                "assetId": str(ref["assetId"]),
+                "url": url,
+                "contentType": str(ref.get("contentType") or ""),
+                "createdAt": str(ref.get("createdAt") or ""),
+            }
+            if ref.get("side") in ("outside", "inside"):  # §45.47: left out means outside
+                shown["side"] = str(ref["side"])
+            references.append(shown)
     portrait = None
     stored = item.get("portrait")
     if isinstance(stored, Mapping):
@@ -309,7 +310,39 @@ def public_story(item: Mapping[str, Any], presign: Presign, user_id: str, bucket
         out["seriesId"] = str(item["seriesId"])
     if isinstance(item.get("ownScript"), Mapping):  # §45.46: only a video made from the owner's own script
         out["ownScript"] = own_script.public(item["ownScript"])
+    roles = public_roles(item.get("roles"))
+    if roles:  # §45.47: left out on older videos and when nothing was picked
+        out["roles"] = roles
     return out
+
+
+def public_roles(value: Any) -> dict[str, str] | None:
+    """CastRoles ``{mainId, villainId?}`` (§45.47), or None."""
+    if not isinstance(value, Mapping) or not isinstance(value.get("mainId"), str) or not value["mainId"]:
+        return None
+    out = {"mainId": str(value["mainId"])}
+    if isinstance(value.get("villainId"), str) and value["villainId"]:
+        out["villainId"] = str(value["villainId"])
+    return out
+
+
+# --- video drafts (§45.47) ------------------------------------------------------------------------------------
+
+
+def public_video_draft(item: Mapping[str, Any]) -> dict[str, Any]:
+    """The public ``VideoDraft``: the owner's saved form as it was sent (checked loosely), its name and version."""
+    form = dict(item["form"]) if isinstance(item.get("form"), Mapping) else {}
+    if form.get("seriesId") == "":  # video_drafts.NO_SERIES_STORED: No series, picked on purpose
+        form["seriesId"] = None
+    return {
+        "draftId": str(item["draftId"]),
+        "workspaceId": str(item["workspaceId"]),
+        "name": str(item.get("name") or ""),
+        "form": form,
+        "version": int(item.get("version") or 1),
+        "createdAt": str(item.get("createdAt") or ""),
+        "updatedAt": str(item.get("updatedAt") or ""),
+    }
 
 
 def ai_setting(value: Any) -> dict[str, Any]:

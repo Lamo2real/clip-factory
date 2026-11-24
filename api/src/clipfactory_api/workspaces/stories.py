@@ -10,7 +10,7 @@ from __future__ import annotations
 
 import copy
 import math
-from collections.abc import Mapping
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Any, Final
 
@@ -18,7 +18,7 @@ from .. import validate
 from ..errors import bad_request, conflict
 from ..ids import is_ulid
 from . import captions, catalog, overrides, own_script, shapes
-from .ideas import LOGLINE_MAX, TITLE_MAX, character_ids
+from .ideas import LOGLINE_MAX, TITLE_MAX
 from .jobs import valid_stale_scenes
 
 REMAKE_STATUSES: Final = ("draft", "review", "needs_check", "failed")
@@ -42,6 +42,13 @@ BOARDING: Final = (0.8, 3.0)
 FORMAT_SET: Final = "The video's size is set once it is made. Make a new video for another size."
 MAX_SECONDS = 89.5  # Facebook Reels' 90 s limit, with room for the audio tail (§45.9)
 MAX_REFERENCES = 3  # reference videos per story (§45.28)
+# §45.47: a story's cast is at most 4: 3 people and 2 vehicles (``characters.cast_problem``). Series casts and ideas
+# stay at 3 (``ideas.MAX_CHARACTERS``), since they are only suggestions.
+MAX_CAST = 4
+MAX_PEOPLE = 3
+NO_MAIN = "Pick a main character."
+VILLAIN_IS_MAIN = "The villain can't be the main character."
+VILLAIN_NOT_CAST = "Pick the villain from the people in this video."
 MAX_CAPTIONS = 40
 MAX_SFX = 40
 NOTE_MAX = 500
@@ -123,6 +130,8 @@ STORY_KEYS: Final = (
     "seriesId",
     "art",
     "ownScript",
+    "roles",  # §45.47
+    "draftId",  # §45.47: the draft this video is made from; deleted in the same write
 )
 
 
@@ -133,8 +142,52 @@ def art_style(value: Any, field: str = "art") -> str:
     return str(value)
 
 
+def cast_ids(value: Any) -> list[str]:
+    """A story's ``characterIds`` (§45.47): 1 to 4 ids, each once, in the owner's order (people, then vehicles)."""
+    if not isinstance(value, list) or not all(isinstance(v, str) and is_ulid(v) for v in value):
+        raise bad_request("characterIds must be a list of character ids.")
+    ids = list(dict.fromkeys(value))
+    if len(ids) > MAX_CAST:
+        raise bad_request(f"Pick at most {MAX_CAST} characters.")
+    return ids
+
+
+def roles_input(value: Any) -> dict[str, str] | None:
+    """CastRoles ``{mainId, villainId?}`` (§45.47), its shape only; None when left out (the route checks the cast)."""
+    if value is None:
+        return None
+    body = validate.obj(value, "roles")
+    validate.only_keys(body, {"mainId", "villainId"})
+    main = body.get("mainId")
+    if not (isinstance(main, str) and is_ulid(main)):
+        raise bad_request(NO_MAIN, "roles")
+    out = {"mainId": main}
+    villain = body.get("villainId")
+    if villain is not None:
+        if not (isinstance(villain, str) and is_ulid(villain)):
+            raise bad_request(VILLAIN_NOT_CAST, "roles")
+        out["villainId"] = villain
+    return out
+
+
+def roles_problem(roles: Mapping[str, Any] | None, cast: Sequence[Mapping[str, Any]]) -> str | None:
+    """None when the roles fit the cast (§45.47): the main character is the first person in it, the villain another
+    person in it. No roles is always fine (the first person is the main character, as before)."""
+    if not roles:
+        return None
+    people = [str(c["characterId"]) for c in cast if (c.get("kind") or "person") != "car"]
+    if not people or roles.get("mainId") != people[0]:
+        return NO_MAIN
+    villain = roles.get("villainId")
+    if villain is None:
+        return None
+    if villain == roles["mainId"]:
+        return VILLAIN_IS_MAIN
+    return None if villain in people else VILLAIN_NOT_CAST
+
+
 def story_input(body: Mapping[str, Any]) -> dict[str, Any]:
-    """StoryInput (§45.6): an idea or a short brief, 1 to 3 characters, the length, captions and music, the reference
+    """StoryInput (§45.6): an idea or a short brief, 1 to 4 characters (§45.47), their roles, the length, captions and music, the reference
     videos, the video's own model and effort (``ai``, kept), and ``override`` (the first job only, never kept). With
     the owner's own script (``ownScript``, §45.46) a brief needs no line: scene 1 gives it."""
     validate.only_keys(body, STORY_KEYS)
@@ -163,7 +216,7 @@ def story_input(body: Mapping[str, Any]) -> dict[str, Any]:
         }
     if body.get("title") is not None:
         out["title"] = validate.required_string(body, "title", max_len=TITLE_MAX)
-    ids = character_ids(body.get("characterIds"))
+    ids = cast_ids(body.get("characterIds"))
     if not ids:
         raise bad_request("Pick at least one character.")
     out["characterIds"] = ids
@@ -192,6 +245,20 @@ def story_input(body: Mapping[str, Any]) -> dict[str, Any]:
         out["seriesId"] = body["seriesId"]
     elif "seriesId" in body:  # null: the owner picked No series himself, so an idea's own series is not used
         out["seriesId"] = None
+    out.update(_roles_and_draft(body))
+    return out
+
+
+def _roles_and_draft(body: Mapping[str, Any]) -> dict[str, Any]:
+    """§45.47: ``roles`` and ``draftId``, each left out when not sent."""
+    out: dict[str, Any] = {}
+    roles = roles_input(body.get("roles"))
+    if roles is not None:
+        out["roles"] = roles
+    if body.get("draftId") is not None:
+        if not (isinstance(body["draftId"], str) and is_ulid(body["draftId"])):
+            raise bad_request("draftId is not valid.", "draftId")
+        out["draftId"] = body["draftId"]
     return out
 
 

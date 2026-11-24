@@ -11,7 +11,7 @@ import pytest
 
 from clipfactory_api import db
 from clipfactory_api.app import App
-from clipfactory_api.workspaces import config, guidance, jobs, overrides
+from clipfactory_api.workspaces import config, guidance, jobs, overrides, stories
 from conftest import USER, Call
 from fakes import FakeAgentCore, FakeS3, FakeTable
 from ws_support import (
@@ -31,6 +31,7 @@ from ws_support import (
     seed_job,
     seed_refvid,
     seed_story,
+    seed_video_draft,
     story_key,
 )
 
@@ -169,6 +170,83 @@ def test_a_typed_concept_works_and_safety_needs_checked_advice(call: Call, hero:
 def test_bad_story_requests_are_400(call: Call, hero: dict[str, Any], body: dict[str, Any]) -> None:
     body = {"characterIds": [hero["characterId"]], **body}
     assert call("POST", f"{BASE}/stories", body)[0] == 400
+
+
+# --- §45.47: main and villain, up to 4 in the cast, made from a saved draft -----------------------------------------
+
+BRIEF = {"title": "The chase", "logline": "Lamo chases the van.", "category": "comedy"}
+
+
+def test_roles_are_kept_and_shown(call: Call, store: db.Store, hero: dict[str, Any]) -> None:
+    pip, zed = seed_character(store, name="Pip"), seed_character(store, name="Zed")
+    van = seed_character(store, name="Van", kind="car", look=None, car={"body": "van"})
+    cast = [hero["characterId"], pip["characterId"], zed["characterId"], van["characterId"]]
+    roles = {"mainId": hero["characterId"], "villainId": zed["characterId"]}
+    status, body = call("POST", f"{BASE}/stories", {"brief": BRIEF, "characterIds": cast, "roles": roles})
+    assert status == 201, body
+    assert body["story"]["characterIds"] == cast  # 3 people and a vehicle: 4 in all
+    assert body["story"]["roles"] == roles
+    assert _story(store, body["story"]["storyId"])["roles"] == roles
+    assert call("GET", f"{BASE}/stories/{body['story']['storyId']}")[1]["story"]["roles"] == roles
+    # only a main character: no villainId; no roles at all: nothing stored, nothing shown
+    status, body = call("POST", f"{BASE}/stories", {"brief": BRIEF, "characterIds": cast[:2],
+                                                    "roles": {"mainId": hero["characterId"]}})  # fmt: skip
+    assert body["story"]["roles"] == {"mainId": hero["characterId"]}
+    status, body = call("POST", f"{BASE}/stories", {"brief": BRIEF, "characterIds": cast[:2]})
+    assert status == 201
+    assert "roles" not in body["story"]
+    assert "roles" not in _story(store, body["story"]["storyId"])
+
+
+def test_the_roles_must_fit_the_cast(call: Call, store: db.Store, hero: dict[str, Any]) -> None:
+    pip = seed_character(store, name="Pip")
+    van = seed_character(store, name="Van", kind="car", look=None, car={"body": "van"})
+    other = seed_character(store, name="Other")
+    cast = [hero["characterId"], pip["characterId"], van["characterId"]]
+    cases = [
+        ({"mainId": pip["characterId"]}, "Pick a main character."),  # not the first person
+        ({"mainId": van["characterId"]}, "Pick a main character."),  # a vehicle
+        ({"mainId": "x"}, "Pick a main character."),
+        ({}, "Pick a main character."),
+        ({"mainId": hero["characterId"], "villainId": hero["characterId"]}, "The villain can't be the main character."),
+        ({"mainId": hero["characterId"], "villainId": van["characterId"]}, stories.VILLAIN_NOT_CAST),
+        ({"mainId": hero["characterId"], "villainId": other["characterId"]}, stories.VILLAIN_NOT_CAST),
+        ({"mainId": hero["characterId"], "hero": True}, "Unknown field: hero."),
+    ]
+    for roles, sentence in cases:
+        status, body = call("POST", f"{BASE}/stories", {"brief": BRIEF, "characterIds": cast, "roles": roles})
+        assert (status, body["error"]["message"]) == (400, sentence), roles
+    assert store.query_all(pk(), "STORY#") == []
+
+
+def test_a_story_cast_is_up_to_4(call: Call, store: db.Store, hero: dict[str, Any]) -> None:
+    people = [seed_character(store, name=n)["characterId"] for n in ("A", "B", "C")]
+    status, body = call("POST", f"{BASE}/stories", {"brief": BRIEF, "characterIds": [hero["characterId"], *people]})
+    assert (status, body["error"]["message"]) == (400, "Pick up to 3 people.")
+    five = [hero["characterId"], *people, "01J0000000000000000000000Z"]
+    status, body = call("POST", f"{BASE}/stories", {"brief": BRIEF, "characterIds": five})
+    assert (status, body["error"]["message"]) == (400, "Pick at most 4 characters.")
+
+
+def test_making_the_video_deletes_its_draft_in_the_same_write(
+    call: Call, store: db.Store, table: FakeTable, hero: dict[str, Any]
+) -> None:
+    draft = seed_video_draft(store, form={"title": "The chase"})
+    kept = seed_video_draft(store)
+    body = {"brief": BRIEF, "characterIds": [hero["characterId"]], "draftId": draft["draftId"]}
+    status, out = call("POST", f"{BASE}/stories", body)
+    assert status == 201, out
+    assert table.raw(pk(), draft["sk"]) is None
+    assert table.raw(pk(), kept["sk"]) is not None
+    writes = [c for c in table.calls if c[0] == "transact_write_items"]
+    actions = writes[-1][1]["TransactItems"]
+    assert {"Delete": {"TableName": table.name, "Key": {"pk": pk(), "sk": draft["sk"]}}} in actions
+    assert "draftId" not in _story(store, out["story"]["storyId"])
+    # a draft that is gone already is fine; a malformed id is 400 and makes nothing
+    status, out = call("POST", f"{BASE}/stories", body)
+    assert status == 201
+    status, out = call("POST", f"{BASE}/stories", {**body, "draftId": "nope"})
+    assert (status, out["error"]["field"]) == (400, "draftId")
 
 
 def test_without_the_agent_the_job_fails_at_once(

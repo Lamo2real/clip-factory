@@ -72,6 +72,9 @@ SETS: Final = (
     "office",
     "park",
     "highway_night",
+    # §45.47: where a plane or a boat goes (no road lanes)
+    "sky",
+    "sea",
 )
 
 # CharacterLook (engine/types.ts): the rig's choices.
@@ -89,7 +92,39 @@ VOICE_STYLES: Final = ("babble", "hum", "none")
 CHARACTER_KINDS: Final = ("person", "car")
 
 # CarLook (engine/types.ts, catalog.ts ``carLooks``): a car character's choices (§45.42).
-CAR_BODIES: Final = ("hatchback", "sedan", "estate", "suv", "pickup", "van", "sports", "compact")
+# §45.47: a vehicle is still kind "car"; the last four bodies are the other vehicles (VEHICLE_OF gives the family).
+CAR_BODIES: Final = (
+    "hatchback",
+    "sedan",
+    "estate",
+    "suv",
+    "pickup",
+    "van",
+    "sports",
+    "compact",
+    "bus",
+    "motorbike",
+    "plane",
+    "boat",
+)
+# §45.47 (engine/types.ts VehicleType, VEHICLE_OF): a vehicle's family, worked out from its body and never stored.
+VEHICLE_TYPES: Final = ("car", "truck", "bus", "motorbike", "plane", "boat")
+VEHICLE_OF: Final[dict[str, str]] = {
+    "hatchback": "car",
+    "sedan": "car",
+    "estate": "car",
+    "suv": "car",
+    "sports": "car",
+    "compact": "car",
+    "pickup": "truck",
+    "van": "truck",
+    "bus": "bus",
+    "motorbike": "motorbike",
+    "plane": "plane",
+    "boat": "boat",
+}
+# §45.47: which side of a vehicle a reference photo shows (left out: outside).
+PHOTO_SIDES: Final = ("outside", "inside")
 CAR_PATTERNS: Final = ("plain", "two_tone", "stripe", "racing_stripes")
 CAR_WINDOWS: Final = ("clear", "tinted", "dark")
 CAR_WHEELS: Final = ("steel", "hubcap", "alloy", "sport", "offroad")

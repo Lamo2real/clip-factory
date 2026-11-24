@@ -435,6 +435,27 @@ def seed_asset(
     return item
 
 
+def seed_video_draft(store: db.Store, user: str = USER, workspace_id: str = WS, **fields: Any) -> dict[str, Any]:
+    """A saved "Make a new video" form (§45.47), as ``routes/video_drafts.py`` writes it."""
+    draft_id = fields.pop("draftId", None) or ulid()
+    item = {
+        "pk": pk(user, workspace_id),
+        "sk": f"{ws.VIDEO_DRAFT_SK}{draft_id}",
+        "type": ws.TYPE_VIDEO_DRAFT,
+        "userId": user,
+        "workspaceId": workspace_id,
+        "draftId": draft_id,
+        "name": "Untitled video",
+        "form": {},
+        "version": 1,
+        "createdAt": AT,
+        "updatedAt": AT,
+        **fields,
+    }
+    store.put(item)
+    return item
+
+
 def seed_item(
     store: db.Store, sk: str, item_type: str, user: str = USER, workspace_id: str = WS, **fields: Any
 ) -> dict[str, Any]:
