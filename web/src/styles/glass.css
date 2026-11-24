@@ -117,6 +117,66 @@
   background: rgb(var(--green-rgb) / var(--backdrop-veil, 0));
 }
 
+/* ---------- Under the phone's status bar (docs/CONTRACTS.md §11.1) ---------- */
+
+/* An installed iPhone app runs edge to edge: iOS draws its clock and icons white over the backdrop, and nothing fixed
+   and coloured lies across the top (the owner, 24 Nov: "remove the top green top fixed color at the top, it just takes
+   space and is unncessary"). Where the look's top edge is too light for the white clock (a light Colours look, a
+   light top to the owner's picture, read from its own pixels there by app/statusBar.ts usePictureTop: lib/background.ts
+   statusBarUnder), the backdrop itself is shaded under the clock, as little as AA needs (--status-shade,
+   app/statusBar.ts statusShade: held to 75 % of the bar, then lifting evenly to nothing on the top line, 12 px below
+   the bar, in a box exactly that tall, --status-shade-h), so it has no edge, no colour of its own and nothing of it
+   lies on the page below the bar.
+   Over the dark looks it is "none": nothing is drawn. Above every layer of the backdrop, its page veil too. */
+.backdrop__shade {
+  position: absolute;
+  inset: 0 0 auto 0;
+  z-index: 1;
+  height: var(--status-shade-h);
+  background: var(--status-shade, none);
+  pointer-events: none;
+}
+/* The cover (components/Backdrop.tsx, only while there is a status bar, app/statusBar.ts): the same backdrop drawn once
+   more, the same box and the same drift (the two start together), over the page but under every sheet, menu and toast,
+   and shown in the status bar alone: held under the clock and the icons, easing out over the top line's air below the
+   bar (--status-cover-fade), so a card or a button that scrolls up fades into the backdrop on its way and under the
+   clock there is only the backdrop, never a card and never a strip of colour. At the top of a page nothing is there to
+   cover, so it is the backdrop exactly as it is drawn below it. Clear of every tap.
+   It costs a frame next to nothing, on a phone and on a machine that draws without a GPU alike: its box is only the
+   status bar and the top line's air (so its fade is that small, and nothing of it is drawn below), the backdrop in it
+   lies in the page backdrop's own box (set from it), and its blobs are the page backdrop's glows blurred once into
+   small pictures (lib/blurredBlob.ts) that only move with their drift: nothing in it is blurred again on any frame. */
+.backdrop-cover {
+  position: fixed;
+  inset: 0 0 auto 0;
+  z-index: 42;
+  height: calc(var(--status-bar-h) + 12px);
+  overflow: hidden;
+  pointer-events: none;
+  -webkit-mask-image: var(--status-cover-fade);
+  mask-image: var(--status-cover-fade);
+}
+/* While Clips Funded is on screen the backdrop in it is away (not drawn), so the box has nothing to fade and no mask
+   to work out on any frame. For the slide between the apps the backdrop in it is drawn again (app-slide.css), and its
+   fade is back in the same frame. */
+.backdrop-cover:has(> .backdrop--away:not([data-app-slide])) {
+  -webkit-mask-image: none;
+  mask-image: none;
+}
+.backdrop.backdrop--cover {
+  position: absolute;
+  inset: 0 0 auto 0;
+  z-index: 0;
+  height: 100vh;
+}
+.backdrop--cover img.blob {
+  display: block;
+  max-width: none;
+  border-radius: 0;
+  background: none;
+  filter: none;
+}
+
 /* ---------- Background modes (docs/CONTRACTS.md §22) ---------- */
 
 /* The tint that keeps every text colour at WCAG AA over whatever is behind (see lib/background.ts: its strength,

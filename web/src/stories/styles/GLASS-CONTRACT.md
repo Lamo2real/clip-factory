@@ -412,7 +412,10 @@ glass.css:
 - `.st-look`, `.st-look__picture`, `.st-look__art` (`--window`, `--picture`, `--colours`), `.st-look__pane`,
   `.st-look__swatches`, `.st-look__swatch`, `.st-look__thumb`, `.st-look__actions`, `.st-look__modes`: Settings › Look
   (foundation only).
-- The stage is `.stories-app::before` (foundation only; nobody else draws `::before` on `.stories-app`).
+- The stage is `.stories-app::before` (foundation only; nobody else draws `::before` on `.stories-app`). Its cover
+  under a phone's status bar is `.st-cover` with its `.st-cover__stage` (foundation only, drawn by StoriesApp: the same
+  stage, by the stage's very rule, over the page in the status bar alone, in a box only that tall, so what scrolls up
+  fades into it at next to no cost a frame; docs/CONTRACTS.md §11.1).
 
 glass-figures.css (the figures' own classes; screens place and size them, never restyle their inside):
 `.st-pill` `.st-pill--small` `.st-pill.is-on` `.st-pill__icon` · `.st-round-btn` `.st-round-btn--lg`

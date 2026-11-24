@@ -679,6 +679,11 @@ function StoriesShell({ page }: { page: StoriesPage }) {
           </div>
         </div>
       ) : null}
+      {/* The stage once more under a phone's status bar, over the page (glass.css .st-cover: drawn only while there is
+          one): what scrolls up to the clock fades into the stage. */}
+      <div className="st-cover" aria-hidden="true">
+        <div className="st-cover__stage" />
+      </div>
     </div>
   );
 }

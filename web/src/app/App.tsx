@@ -16,8 +16,9 @@ import { sounds } from "../lib/sounds.ts";
 import { GlassFilter } from "../components/Backdrop.tsx";
 import { ClipsBackdrop } from "./ClipsBackdrop.tsx";
 import { Sidebar, TabBar } from "../components/Nav.tsx";
-import { ToastProvider, ToastScope } from "../components/Toasts.tsx";
+import { ToastProvider, ToastScope, useToast } from "../components/Toasts.tsx";
 import { UpdateBar } from "../components/UpdateBar.tsx";
+import { useOldStatusBarHint } from "./statusBar.ts";
 import { GetAppPanel } from "../components/GetApp.tsx";
 import { LiveDot } from "../components/LiveDot.tsx";
 import { ClipMark } from "../components/ClipMark.tsx";
@@ -192,8 +193,19 @@ export function App() {
         </SessionProvider>
       )}
       {!bankDone && (boot.state === "ready" || boot.state === "signed_out") ? <UpdateBar /> : null}
+      {!bankDone && boot.state === "ready" ? <OldStatusBarHint /> : null}
     </ToastProvider>
   );
+}
+
+/**
+ * Once on this device: the Home Screen app still has the old opaque bar iOS kept from when it was added (a flat green
+ * band over the top of the screen, app/statusBar.ts oldStatusBar), so a toast says how to get the whole screen.
+ */
+function OldStatusBarHint() {
+  const toast = useToast();
+  useOldStatusBarHint(useCallback((text: string) => toast.info(text, { ms: 12_000, group: "old-status-bar" }), [toast]));
+  return null;
 }
 
 /**
@@ -264,8 +276,11 @@ const clipsCalm = () => getPrefs().reduceMotion;
 const clipsOnScreen = () => !storiesOnScreen();
 const clipsDenied = () => sounds.play("deny");
 
-/** Clip Factory's own backdrop (ClipsBackdrop, drawn outside both panes) slides with Clip Factory's pane. */
-const ALSO_SLIDES = { clips: () => document.querySelector<HTMLElement>(".backdrop") };
+/**
+ * Clip Factory's own backdrop (ClipsBackdrop, drawn outside both panes) slides with Clip Factory's pane, and so does its
+ * cover under a phone's status bar (components/Backdrop.tsx), the same backdrop over the page.
+ */
+const ALSO_SLIDES = { clips: () => [...document.querySelectorAll<HTMLElement>(".backdrop")] };
 
 /** A stored path's address parts: "/jobs?x=1#y" is ["/jobs", "?x=1"]. */
 function pathParts(path: string): [string, string] {

@@ -14,7 +14,9 @@
 //     writes, from the wish of the app on screen (each app states its own with setPageGlass, never the other's);
 //   - the sliding window between the two apps (the owner, 23 Nov: "id like the transission between clip factory and
 //     clips funded to be like a sliding window"): the workspace switch hands its tap to AppPanes, which slides both
-//     panes side by side (startAppSlide), and the page changes once they have landed.
+//     panes side by side (startAppSlide), and the page changes once they have landed;
+//   - the phone's status bar both apps run under, edge to edge (app/statusBar.ts, passed on here): how tall it is, the
+//     shade under its clock and the owner's picture's own pixels there.
 //
 // Everything here is a no-op while Lamo Stories is switched off: no pane is around anything, `active` is always true,
 // `hosted` always false, Clip Factory is always on screen, clipsGoLater is exactly navigate and html.see-through is
@@ -25,6 +27,8 @@ import { storiesEnabled } from "../stories/flag.ts";
 import { isStoriesPath } from "../stories/routes.ts";
 
 export type AppName = "clips" | "stories";
+
+export { statusShade, usePictureTop, useStatusBar } from "./statusBar.ts";
 
 export interface AppPane {
   /** This app is the one on screen (always true while Lamo Stories is switched off). */

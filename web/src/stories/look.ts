@@ -22,7 +22,7 @@
 // readers below are Stories' own copies, and See-through's transparent page is a wish Stories states to the shell
 // (app/shell.ts setPageGlass), which alone writes html.see-through, from the wish of the app on screen.
 import { useEffect, useLayoutEffect, useSyncExternalStore, type RefObject } from "react";
-import { setPageGlass } from "../app/shell.ts";
+import { setPageGlass, statusShade, usePictureTop } from "../app/shell.ts";
 import { LENS_BUDGET, watchLenses } from "./glass/lens.ts";
 import { onStoriesPrefs, setStoriesPref, storiesPrefs } from "./workspace.ts";
 
@@ -687,7 +687,7 @@ export { LENS_BUDGET };
 const rgbOf = (hex: string) => hexToRgb(hex).join(" ");
 
 /** The attributes and custom properties for .stories-app. */
-export function lookProps(value: StoriesLook, glass: string = nativeGlass(), tier: GlassTier = "simple"): { attrs: Record<string, string>; style: Record<string, string> } {
+export function lookProps(value: StoriesLook, glass: string = nativeGlass(), tier: GlassTier = "simple", pictureTop: Rgb | null = null): { attrs: Record<string, string>; style: Record<string, string> } {
   const kind = lookKind(value, glass);
   // Inline, so it beats every rule: solid glass must come from here (glass-tokens.css's @media is only the first paint).
   const v = veilsFor(value, glass, tier);
@@ -697,7 +697,13 @@ export function lookProps(value: StoriesLook, glass: string = nativeGlass(), tie
   style["--st-stage-c1"] = c1!;
   style["--st-stage-c2-rgb"] = rgbOf(c2!);
   style["--st-stage-c3-rgb"] = rgbOf(c3!);
-  style["--st-status-scrim"] = String(statusScrim(statusBarUnder(kind, stageColours(value), v.page)));
+  // The shade under the phone's clock (glass.css .stories-app::before's top layer): as little as the white clock needs
+  // over the stage's top strip, a picture's own pixels there once they are read (`pictureTop`), none over Ember.
+  const scrim = statusScrim(statusBarUnder(kind, stageColours(value), v.page, pictureTop));
+  // The number the shade is worked out from: no style sheet reads it, it is kept for the checks that read how strong
+  // the shade is (e2e/phone-edge-to-edge.spec.ts).
+  style["--st-status-scrim"] = String(scrim);
+  style["--st-status-shade"] = statusShade(scrim);
   return { attrs: { "data-look": kind, "data-strength": value.strength, "data-glass": tier }, style };
 }
 
@@ -725,39 +731,31 @@ export function stageTopLightest(colours: readonly string[]): Rgb {
 
 /**
  * The lightest thing under the phone's status bar, where iOS draws the clock and icons white (black-translucent): the
- * stage's top strip under the page veil; a picture planned for white; the desktop window (no status bar) black.
+ * stage's top strip under the page veil; a picture's own lightest pixel there (`pictureTop`, the shell's
+ * usePictureTop), planned for white until it is read; the desktop window (no status bar) black.
  */
-export function statusBarUnder(kind: LookKind, colours: readonly string[], pageVeil: number): Rgb {
+export function statusBarUnder(kind: LookKind, colours: readonly string[], pageVeil: number, pictureTop: Rgb | null = null): Rgb {
   if (kind === "window") return [0, 0, 0];
-  return mix(VEIL, kind === "picture" ? WHITE : stageTopLightest(colours), pageVeil);
-}
-
-/** The status bar's scrim (.stories-app::after): the least black (0.01 steps) that keeps the white clock at AA. */
-export function statusScrim(under: Rgb): number {
-  for (let a = 0; a < 100; a++) if (contrast(WHITE, mix([0, 0, 0], under, a / 100)) >= AA) return a / 100;
-  return 1;
+  return mix(VEIL, kind === "picture" ? (pictureTop ?? WHITE) : stageTopLightest(colours), pageVeil);
 }
 
 /**
- * The status bar's glass strip once the page has scrolled (glass.css .st-frame::before, glass-tokens.css
- * --st-status-strip-veil): the least espresso veil (0.01 steps) that keeps the white clock at AA over white, the
- * lightest thing a page can slide under the clock (a cream card too), one 8-bit rounding step lighter to spare. Its
- * filter dims nothing (DIM is 1 in every look) and saturate() keeps white white, so it is the same in every look, and
- * it holds where a browser draws no backdrop-filter at all.
+ * The shade under the status bar's clock (the stage's top layer, glass.css .stories-app::before): the least black
+ * (0.01 steps) that keeps the white clock at AA.
  */
-export function statusStripVeil(): number {
-  for (let a = 0; a < 100; a++) if (contrast(WHITE, mix(VEIL, WHITE, a / 100).map((c) => Math.min(255, c + 1)) as unknown as Rgb) >= AA) return a / 100;
+export function statusScrim(under: Rgb): number {
+  for (let a = 0; a < 100; a++) if (contrast(WHITE, mix([0, 0, 0], under, a / 100)) >= AA) return a / 100;
   return 1;
 }
 
 /** The theme colour of the window while Stories is on screen. */
 export const THEME_COLOUR = "#1C130E";
 
-const STYLE_KEYS = ["--st-veil-page", "--st-veil-card", "--st-veil-tinted", "--st-veil-hero", "--st-veil-rail", "--st-veil-bar", "--st-veil-float", "--st-veil-plate", "--st-stage-c1", "--st-stage-c2-rgb", "--st-stage-c3-rgb", "--st-picture", "--st-status-scrim"];
+const STYLE_KEYS = ["--st-veil-page", "--st-veil-card", "--st-veil-tinted", "--st-veil-hero", "--st-veil-rail", "--st-veil-bar", "--st-veil-float", "--st-veil-plate", "--st-stage-c1", "--st-stage-c2-rgb", "--st-stage-c3-rgb", "--st-picture", "--st-status-scrim", "--st-status-shade"];
 
 /** Writes the look onto .stories-app (attributes and custom properties only: React draws neither). */
-export function applyStoriesLook(el: HTMLElement, value: StoriesLook, glass: NativeGlass = nativeGlass(), tier: GlassTier = glassTier(readGlassEnv())): LookKind {
-  const { attrs, style } = lookProps(value, glass, tier);
+export function applyStoriesLook(el: HTMLElement, value: StoriesLook, glass: NativeGlass = nativeGlass(), tier: GlassTier = glassTier(readGlassEnv()), pictureTop: Rgb | null = null): LookKind {
+  const { attrs, style } = lookProps(value, glass, tier, pictureTop);
   for (const [k, v] of Object.entries(attrs)) el.setAttribute(k, v);
   for (const k of STYLE_KEYS) el.style.removeProperty(k);
   for (const [k, v] of Object.entries(style)) el.style.setProperty(k, v);
@@ -787,6 +785,8 @@ export function useReducedTransparency(): boolean {
 export function useStoriesBackground(root: RefObject<HTMLElement | null>, active: boolean): StoriesLook {
   const value = useStoriesLook();
   const lessTransparency = useReducedTransparency();
+  // The owner's picture under the phone's clock, read from its own pixels (it covers the window: no bleed).
+  const pictureTop = usePictureTop(value.mode === "picture" ? value.picture : null, 0);
   useLayoutEffect(() => {
     const el = root.current;
     if (!el) return;
@@ -794,8 +794,8 @@ export function useStoriesBackground(root: RefObject<HTMLElement | null>, active
     // The shell writes the class from the wish of the app it shows (app/shell.ts), so Stories never reads, keeps or
     // takes away Clip Factory's, and nothing of Clip Factory's is drawn under Stories (the shell draws Clip Factory's
     // backdrop only while Clip Factory is on screen, app/ClipsBackdrop.tsx).
-    setPageGlass("stories", applyStoriesLook(el, value) === "window");
-  }, [root, value, lessTransparency]);
+    setPageGlass("stories", applyStoriesLook(el, value, nativeGlass(), glassTier(readGlassEnv()), pictureTop) === "window");
+  }, [root, value, lessTransparency, pictureTop]);
   useLayoutEffect(() => () => setPageGlass("stories", false), []);
   // The liquid rim (glass/lens.ts): only while Stories is on screen, only where the glass is "liquid" (Chromium on a
   // capable device; the layout effect above has just put data-glass on the root), and never over the window's own
