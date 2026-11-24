@@ -78,7 +78,8 @@ function clipFactory({ clipsQueue = [], wsQueue = [], clipsHelper = null, wsHelp
     clips: { helper: clipsHelper, queue: clipsQueue, stopped: { ...stopped } },
     ws: { helper: wsHelper, queue: wsQueue, stopped: { ...stopped } },
   };
-  const knobs = { failQueueAfterLoggedIn: false, loggedIn: false };
+  // onCall: something that happens on the Mac while a call is on its way (a `cli.js off`), before it is answered.
+  const knobs = { failQueueAfterLoggedIn: false, loggedIn: false, onCall: null };
   const idOf = (job) => job.publishingJobId || job.clipId;
   const claim = (lane, id) => {
     const job = lane.queue.find((j) => idOf(j) === id);
@@ -169,6 +170,7 @@ function clipFactory({ clipsQueue = [], wsQueue = [], clipsHelper = null, wsHelp
       call.status = 401;
       return Response.json({ message: "Unauthorized" }, { status: 401 });
     }
+    knobs.onCall?.(call);
     const answer = routes[call.route];
     if (!answer) {
       call.status = 404;
@@ -292,11 +294,15 @@ const LOGIN_HOLD = { seenAt: "2026-11-24T02:59:00.000Z", state: "needs_you", rea
 const WS_LOGIN_HOLD = { seenAt: "2026-11-24T02:59:00.000Z", state: "needs_you", setUp: false, reason: WS_REASONS.login, needsYouCode: "login", needsYouJobId: "pj-1", needsYouStoryId: "s1" };
 const STOPPED = { c1: { ...clipsJob, state: "stopped", attempt: 1 }, "pj-1": { ...wsJob, state: "stopped", attempt: 1 } };
 const CF_ACCOUNT = { clipsAccount: { handle: "@lamo.clips", checkedAt: "2026-11-24T02:00:00.000Z" } };
+// This Mac's own try of the held clip / job (its claim wrote the ledger entry before the stop): only then it looks.
+const TRIED = { c1: { step: "stopped", device: "mac-tick-token", tries: 1 } };
+const WS_TRIED = { "pj-1": { step: "stopped", device: "mac-tick-token", tries: 1 } };
+const HELD = { ...CF_ACCOUNT, ledger: TRIED };
 const routesOf = (calls) => calls.map((c) => c.route);
 const pings = (calls, route = "POST /v1/tiktok/mac/ping") => calls.filter((c) => c.route === route).map((c) => c.body);
 
 test("held for a TikTok login, still logged out: one headless look, no route call, the login words, and no look again for 5 minutes", async (t) => {
-  freshMac({ ...CF_ACCOUNT });
+  freshMac(HELD);
   t.mock.timers.enable({ apis: ["Date", "setTimeout", "setInterval"], now: START });
   const server = clipFactory({ clipsHelper: { ...LOGIN_HOLD }, stopped: STOPPED });
   const result = await onClock(t, tick);
@@ -317,7 +323,7 @@ test("held for a TikTok login, still logged out: one headless look, no route cal
 });
 
 test("held for a TikTok login, now logged in as @lamo.clips: the route, a fresh read, an ok check-in, and the clip goes in the same tick", async (t) => {
-  freshMac({ ...CF_ACCOUNT, ledger: { c1: { step: "stopped", device: "mac-tick-token", tries: 1 } } });
+  freshMac(HELD);
   t.mock.timers.enable({ apis: ["Date", "setTimeout", "setInterval"], now: START });
   mac.account = { clips: { handle: "@lamo.clips", uid: "7001000001" } };
   const server = clipFactory({ clipsHelper: { ...LOGIN_HOLD }, stopped: STOPPED });
@@ -345,7 +351,7 @@ test("held for a TikTok login, now logged in as @lamo.clips: the route, a fresh 
 });
 
 test("held for a TikTok login, logged in as @clips.funded in Clip Factory's lane: no route call, and the check-in says it's the wrong account", async (t) => {
-  freshMac({ ...CF_ACCOUNT });
+  freshMac(HELD);
   t.mock.timers.enable({ apis: ["Date", "setTimeout", "setInterval"], now: START });
   mac.account = { clips: "@clips.funded" };
   const server = clipFactory({ clipsHelper: { ...LOGIN_HOLD }, stopped: STOPPED });
@@ -357,7 +363,7 @@ test("held for a TikTok login, logged in as @clips.funded in Clip Factory's lane
 });
 
 test("the route ended the hold but the second read fails: no check-in at all this tick (never a stale needs_you)", async (t) => {
-  freshMac({ ...CF_ACCOUNT });
+  freshMac(HELD);
   t.mock.timers.enable({ apis: ["Date", "setTimeout", "setInterval"], now: START });
   mac.account = { clips: { handle: "@lamo.clips", uid: "7001000001" } };
   const server = clipFactory({ clipsHelper: { ...LOGIN_HOLD }, stopped: STOPPED });
@@ -369,7 +375,7 @@ test("the route ended the hold but the second read fails: no check-in at all thi
 });
 
 test("its own account data says @lamo.clips but Studio shows TikTok's login: logged out, no resume and no window, tick after tick", async (t) => {
-  freshMac({ ...CF_ACCOUNT });
+  freshMac(HELD);
   t.mock.timers.enable({ apis: ["Date", "setTimeout", "setInterval"], now: START });
   mac.account = { clips: { handle: "@lamo.clips", uid: "7001000001" } };
   mac.text = "Log in to continue";
@@ -393,7 +399,7 @@ test("its own account data says @lamo.clips but Studio shows TikTok's login: log
 });
 
 test("a puzzle on Studio while the look reads @lamo.clips: nothing readable, no resume, the hold and its words stay", async (t) => {
-  freshMac({ ...CF_ACCOUNT });
+  freshMac(HELD);
   t.mock.timers.enable({ apis: ["Date", "setTimeout", "setInterval"], now: START });
   mac.account = { clips: { handle: "@lamo.clips", uid: "7001000001" } };
   mac.text = "Verify to continue";
@@ -406,7 +412,7 @@ test("a puzzle on Studio while the look reads @lamo.clips: nothing readable, no 
 
 test("a Clips Funded lane whose account data says @clips.funded while Studio shows TikTok's login: no resume, no QR window, no cookie cleared", async (t) => {
   t.mock.timers.enable({ apis: ["Date", "setTimeout", "setInterval"], now: START });
-  freshMac({ ...CF_ACCOUNT, ws: { stories: { port: 9340, ledger: {}, posted: [], lastPressedAt: null, account: { handle: "@clips.funded" } } } });
+  freshMac({ ...CF_ACCOUNT, ws: { stories: { port: 9340, ledger: WS_TRIED, posted: [], lastPressedAt: null, account: { handle: "@clips.funded" } } } });
   mac.account = { "ws:stories": { handle: "@clips.funded", uid: "7002000002" } };
   mac.text = "Log in to continue";
   const server = clipFactory({ wsHelper: { ...WS_LOGIN_HOLD }, stopped: STOPPED });
@@ -427,7 +433,7 @@ test("the owner taps Try again while the look runs: the tick reads again, never 
   // Logged out (the look ends at the cookie), logged in to @lamo.clips (the route then refuses: the hold is gone) and
   // logged in to @clips.funded (the wrong account's words): each time his answer wins.
   for (const account of [null, { handle: "@lamo.clips", uid: "7001000001" }, { handle: "@clips.funded" }]) {
-    freshMac({ ...CF_ACCOUNT, ledger: { c1: { step: "stopped", device: "mac-tick-token", tries: 1 } } });
+    freshMac(HELD);
     mac.account = account ? { clips: account } : null;
     const server = clipFactory({ clipsHelper: { ...LOGIN_HOLD }, stopped: STOPPED });
     mac.onOpen = () => {
@@ -450,7 +456,7 @@ test("the owner taps Try again while the look runs: the tick reads again, never 
 test("the owner taps Try again on a Clips Funded post while its look runs: no stale needs_you ping for that lane", async (t) => {
   t.mock.timers.enable({ apis: ["Date", "setTimeout", "setInterval"], now: START });
   const account = { handle: "@clips.funded", setUpAt: "2026-11-20T10:00:00.000Z" };
-  freshMac({ ...CF_ACCOUNT, ws: { stories: { port: 9340, ledger: {}, posted: [], lastPressedAt: null, account } } });
+  freshMac({ ...CF_ACCOUNT, ws: { stories: { port: 9340, ledger: WS_TRIED, posted: [], lastPressedAt: null, account } } });
   const server = clipFactory({ wsHelper: { ...WS_LOGIN_HOLD }, stopped: STOPPED });
   mac.onOpen = ({ lane }) => {
     if (lane !== "ws:stories") return;
@@ -472,7 +478,7 @@ test("a puzzle, a limit, an older helper's hold (no code), the switch off or the
     { ...LOGIN_HOLD, needsYouCode: undefined },
   ];
   for (const [helper, on, settings] of [...holds.map((h) => [h, true, {}]), [LOGIN_HOLD, false, {}], [LOGIN_HOLD, true, { paused: true }]]) {
-    freshMac({ ...CF_ACCOUNT }, settings);
+    freshMac(HELD, settings);
     mac.account = { clips: { handle: "@lamo.clips", uid: "7001000001" } };
     const server = clipFactory({ clipsHelper: { ...helper }, stopped: STOPPED, on });
     await onClock(t, tick);
@@ -483,7 +489,7 @@ test("a puzzle, a limit, an older helper's hold (no code), the switch off or the
 
 test("a Clips Funded login hold: no look while Clip Factory posts; when Clip Factory is idle, a look and the Clips Funded route", async (t) => {
   t.mock.timers.enable({ apis: ["Date", "setTimeout", "setInterval"], now: START });
-  const wsState = { ws: { stories: { port: 9340, ledger: {}, posted: [], lastPressedAt: null, account: { handle: "@clips.funded" } } } };
+  const wsState = { ws: { stories: { port: 9340, ledger: WS_TRIED, posted: [], lastPressedAt: null, account: { handle: "@clips.funded" } } } };
   freshMac({ ...CF_ACCOUNT, ...wsState });
   mac.account = { clips: { handle: "@lamo.clips", uid: "7001000001" }, "ws:stories": { handle: "@clips.funded", uid: "7002000002" } };
   let server = clipFactory({ clipsQueue: [{ ...clipsJob }], wsHelper: { ...WS_LOGIN_HOLD }, stopped: STOPPED });
@@ -513,13 +519,128 @@ test("a Clips Funded login hold: no look while Clip Factory posts; when Clip Fac
 
 test("a Clips Funded login hold logged in as Clip Factory's @lamo.clips: no route call, and its check-in says so", async (t) => {
   t.mock.timers.enable({ apis: ["Date", "setTimeout", "setInterval"], now: START });
-  freshMac({ ...CF_ACCOUNT, ws: { stories: { port: 9340, ledger: {}, posted: [], lastPressedAt: null, account: null } } });
+  freshMac({ ...CF_ACCOUNT, ws: { stories: { port: 9340, ledger: WS_TRIED, posted: [], lastPressedAt: null, account: null } } });
   mac.account = { "ws:stories": { handle: "@lamo.clips" } };
   const server = clipFactory({ wsHelper: { ...WS_LOGIN_HOLD }, stopped: STOPPED });
   await onClock(t, tick);
   assert.ok(!routesOf(server.calls).some((r) => r.endsWith("/logged-in")));
   const [ping] = pings(server.calls, `POST ${W}/tiktok/mac/ping`);
   assert.deepEqual([ping.state, ping.reason], ["needs_you", "Your Mac is logged in to TikTok as @lamo.clips, not @clips.funded. Nothing was posted."]);
+});
+
+// Review, 24 Nov: the tick read settings.json before the look and decided after it. `node src/cli.js off` takes no
+// lock, so a pause written while the look ran (10-30 s, up to ~100 s) must still stop the clip the look resumed.
+const pauseOnDisk = () => fs.writeFileSync(path.join(base, "settings.json"), JSON.stringify({ paused: true }));
+
+test("`cli.js off` while Clip Factory's look runs: the clip the look resumed waits, and the tick checks in paused", async (t) => {
+  freshMac(HELD);
+  t.mock.timers.enable({ apis: ["Date", "setTimeout", "setInterval"], now: START });
+  mac.account = { clips: { handle: "@lamo.clips", uid: "7001000001" } };
+  const server = clipFactory({ clipsHelper: { ...LOGIN_HOLD }, stopped: STOPPED });
+  mac.onOpen = ({ lane, visible }) => {
+    if (lane !== "clips" || visible) return;
+    mac.onOpen = null;
+    pauseOnDisk();
+  };
+  const result = await onClock(t, tick);
+  assert.equal(result.action, "paused");
+  const routes = routesOf(server.calls);
+  assert.ok(routes.includes("POST /v1/clips/c1/tiktok/mac/logged-in"), routes.join(", ")); // the look ended the hold
+  assert.ok(!routes.some((r) => r.endsWith("/claim")), routes.join(", "));
+  assert.equal(pings(server.calls)[0].state, "paused");
+  assert.deepEqual(mac.opened, [{ lane: "clips", visible: false }]); // the look only
+  assert.equal(server.lanes.clips.queue.find((j) => j.clipId === "c1")?.state, "waiting"); // it waits for "on"
+});
+
+test("`cli.js off` while a Clips Funded look runs: the job the look resumed waits, and that lane checks in paused", async (t) => {
+  freshMac({ ...CF_ACCOUNT, ws: { stories: { port: 9340, ledger: WS_TRIED, posted: [], lastPressedAt: null, account: { handle: "@clips.funded", setUpAt: "2026-11-20T10:00:00.000Z" } } } });
+  t.mock.timers.enable({ apis: ["Date", "setTimeout", "setInterval"], now: START });
+  mac.account = { clips: { handle: "@lamo.clips", uid: "7001000001" }, "ws:stories": { handle: "@clips.funded", uid: "7002000002" } };
+  const server = clipFactory({ wsHelper: { ...WS_LOGIN_HOLD }, stopped: STOPPED });
+  mac.onOpen = ({ lane, visible }) => {
+    if (lane !== "ws:stories" || visible) return;
+    mac.onOpen = null;
+    pauseOnDisk();
+  };
+  await onClock(t, tick);
+  const routes = routesOf(server.calls);
+  assert.ok(routes.includes(`POST ${W}/publishing/pj-1/mac/logged-in`), routes.join(", "));
+  assert.ok(!routes.some((r) => r.endsWith("/claim")), routes.join(", "));
+  assert.equal(pings(server.calls, `POST ${W}/tiktok/mac/ping`)[0].state, "paused");
+  assert.deepEqual(mac.opened, [{ lane: "ws:stories", visible: false }]);
+});
+
+// Re-review, 24 Nov: each lane decides before the next lane's look and before its own check-in, so with two Clips
+// Funded workspaces a `cli.js off` during the second lane's look still let the first lane's post be claimed. The work
+// reads settings.json once more before anything is claimed or driven; here the pause lands with the lane's check-in.
+test("`cli.js off` after a Clips Funded lane decided to post: nothing is claimed or driven, and the next tick checks in paused", async (t) => {
+  freshMac({ ...CF_ACCOUNT, ws: { stories: { port: 9340, ledger: {}, posted: [], lastPressedAt: null, account: { handle: "@clips.funded", setUpAt: "2026-11-20T10:00:00.000Z" } } } });
+  t.mock.timers.enable({ apis: ["Date", "setTimeout", "setInterval"], now: START });
+  mac.account = { clips: { handle: "@lamo.clips", uid: "7001000001" }, "ws:stories": { handle: "@clips.funded", uid: "7002000002" } };
+  const server = clipFactory({ wsQueue: [{ ...wsJob }] });
+  server.knobs.onCall = (call) => {
+    if (call.route !== `POST ${W}/tiktok/mac/ping`) return;
+    server.knobs.onCall = null;
+    pauseOnDisk();
+  };
+  await onClock(t, tick);
+  const routes = routesOf(server.calls);
+  assert.ok(!routes.some((r) => r.endsWith("/claim") || r.endsWith("/step")), routes.join(", "));
+  assert.deepEqual([mac.opened, mac.windows], [[], []]);
+  assert.equal(server.lanes.ws.queue[0].state, "waiting");
+  t.mock.timers.tick(MIN);
+  await onClock(t, tick);
+  assert.equal(pings(server.calls, `POST ${W}/tiktok/mac/ping`).at(-1).state, "paused");
+  assert.ok(!routesOf(server.calls).some((r) => r.endsWith("/claim")));
+});
+
+test("`cli.js off` after Clip Factory's lane decided to post: nothing is claimed or driven", async (t) => {
+  freshMac({ ...CF_ACCOUNT });
+  t.mock.timers.enable({ apis: ["Date", "setTimeout", "setInterval"], now: START });
+  mac.account = { clips: { handle: "@lamo.clips", uid: "7001000001" } };
+  const server = clipFactory({ clipsQueue: [{ ...clipsJob }] });
+  server.knobs.onCall = (call) => {
+    if (call.route !== "POST /v1/tiktok/mac/ping") return;
+    server.knobs.onCall = null;
+    pauseOnDisk();
+  };
+  const result = await onClock(t, tick);
+  assert.equal(result.action, "paused");
+  const routes = routesOf(server.calls);
+  assert.ok(!routes.some((r) => r.endsWith("/claim") || r.endsWith("/step")), routes.join(", "));
+  assert.deepEqual([mac.opened, mac.windows], [[], []]);
+  assert.equal(server.lanes.clips.queue[0].state, "waiting");
+});
+
+test("both lanes held for a TikTok login: one look per tick in all, Clip Factory's first and Clips Funded's the tick after", async (t) => {
+  freshMac({ ...HELD, ws: { stories: { port: 9340, ledger: WS_TRIED, posted: [], lastPressedAt: null, account: { handle: "@clips.funded" } } } });
+  t.mock.timers.enable({ apis: ["Date", "setTimeout", "setInterval"], now: START });
+  // Both profiles logged out: each look ends at the cookie and both holds stay.
+  const server = clipFactory({ clipsHelper: { ...LOGIN_HOLD }, wsHelper: { ...WS_LOGIN_HOLD }, stopped: STOPPED });
+  await onClock(t, tick);
+  assert.deepEqual(mac.opened, [{ lane: "clips", visible: false }]);
+  t.mock.timers.tick(MIN);
+  await onClock(t, tick);
+  assert.deepEqual(mac.opened, [
+    { lane: "clips", visible: false },
+    { lane: "ws:stories", visible: false },
+  ]);
+  for (const ping of [...pings(server.calls), ...pings(server.calls, `POST ${W}/tiktok/mac/ping`)]) assert.equal(ping.state, "needs_you");
+});
+
+test("a second Mac, whose ledger never tried the held clip or job: it never looks in either lane, and both holds stay for the Mac that stopped", async (t) => {
+  freshMac({ ...CF_ACCOUNT, ws: { stories: { port: 9340, ledger: {}, posted: [], lastPressedAt: null, account: { handle: "@clips.funded" } } } });
+  t.mock.timers.enable({ apis: ["Date", "setTimeout", "setInterval"], now: START });
+  mac.account = { clips: { handle: "@lamo.clips", uid: "7001000001" }, "ws:stories": { handle: "@clips.funded", uid: "7002000002" } };
+  const server = clipFactory({ clipsHelper: { ...LOGIN_HOLD }, wsHelper: { ...WS_LOGIN_HOLD }, stopped: STOPPED });
+  for (const wait of [0, 5, 5, 60]) {
+    t.mock.timers.tick(wait * MIN);
+    assert.equal((await onClock(t, tick)).action, "paused");
+  }
+  assert.deepEqual(mac.opened, []);
+  assert.ok(!routesOf(server.calls).some((r) => r.endsWith("/logged-in") || r.endsWith("/claim")));
+  assert.equal(pings(server.calls).length, 4);
+  for (const ping of [...pings(server.calls), ...pings(server.calls, `POST ${W}/tiktok/mac/ping`)]) assert.equal(ping.state, "needs_you");
 });
 
 test("logged out again right after the owner's login (24 Nov): the stop carries the login code, and the window closes 3 seconds after the session shows", async (t) => {

@@ -126,6 +126,8 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
   // The rest of the helper item (D4/D5): the clip it stopped on, its ping's extras, the owner's two requests.
   let needsYouClipId: string | undefined;
   let needsYouCode: "login" | undefined;
+  // §47.11: the Mac that stopped (needsYouDevice: no ping overwrites it, as another Mac's ping does `device`).
+  let needsYouDevice: string | undefined;
   let extras: Pick<MacHelper, "backlogAt" | "holdBefore" | "backfill"> = {};
   let resumeRequestAt: string | undefined;
   let letGoRequestAt: string | undefined;
@@ -262,6 +264,7 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
       if (state !== "needs_you") {
         needsYouClipId = undefined;
         needsYouCode = undefined;
+        needsYouDevice = undefined;
       }
       extras = {
         ...(extra.backlogAt ? { backlogAt: extra.backlogAt } : {}),
@@ -367,12 +370,13 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
         helper = { seenAt: iso(deps.now()), state: "needs_you", reason: said, ...(helper?.version ? { version: helper.version } : {}), device };
         needsYouClipId = clipId;
         needsYouCode = code; // a stop without one removes it
+        needsYouDevice = device;
       }
       deps.publishPost(p);
       return job(p);
     },
     loggedIn(clipId, device = "mock-mac") {
-      if (!(helper?.state === "needs_you" && needsYouCode === "login" && needsYouClipId === clipId && helper.device === device)) throw conflict(MAC_NOT_LOGIN_HOLD);
+      if (!(helper?.state === "needs_you" && needsYouCode === "login" && needsYouClipId === clipId && needsYouDevice === device)) throw conflict(MAC_NOT_LOGIN_HOLD);
       const p = tiktokOf(clipId);
       let outcome: "resumed" | "pressed" | "cleared" = "cleared";
       if (p && p.status === "mac" && p.mac) {
@@ -558,6 +562,7 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
     if (helper?.state === "needs_you") helper = { seenAt: helper.seenAt, state: "ok", device: helper.device, ...(helper.version ? { version: helper.version } : {}) };
     needsYouClipId = undefined;
     needsYouCode = undefined;
+    needsYouDevice = undefined;
   }
 
   /**

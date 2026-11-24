@@ -288,10 +288,17 @@ def ping(
 ) -> None:
     """The helper checks in for this workspace: when, how it is and why, its version and device, and whether its
     Chrome profile is logged in to this workspace's TikTok (``setUp``, the ``handle`` it read). ``needsYouJobId``,
-    ``needsYouStoryId`` and ``needsYouCode`` go with any ping whose state isn't ``needs_you``; the owner's Log in on my Mac and Start my
-    Mac again stay until the helper says it handled that one (``login_done`` / ``resume_done``: its ``at``)."""
+    ``needsYouStoryId``, ``needsYouCode`` and ``needsYouDevice`` go with any ping whose state isn't ``needs_you``. Only
+    a stop starts a hold (``stopped``): a ``needs_you`` ping on an item that isn't ``needs_you`` (the owner's Try again
+    or It's on TikTok, or the helper's logged-in, ended the hold after the Mac read it, §47.11) checks in as ``ok``
+    without its reason, also when the hold ends between this read and this write; else it would put back a hold with
+    no job and no code that nothing ends. That ``ok`` is written only while no hold is there: a stop meanwhile
+    (another Mac's) keeps its new hold as it wrote it. The owner's Log in on my Mac and Start my Mac again stay until
+    the helper says it handled that one (``login_done`` / ``resume_done``: its ``at``)."""
     pk = _pk(user_id, workspace_id)
     current = store.get(pk, ws.MACHELPER_SK)
+    if state == "needs_you" and (current is None or current.get("state") != "needs_you"):
+        state, reason = "ok", None
     fields: Item = {
         "type": ws.TYPE_MACHELPER,
         "userId": user_id,
@@ -311,8 +318,26 @@ def ping(
     else:
         gone = [k for k, given in (("reason", reason), ("handle", handle)) if not given]
         if state != "needs_you":
-            gone += ["needsYouJobId", "needsYouStoryId", "needsYouCode"]
-        store.update(pk, ws.MACHELPER_SK, fields, remove=[k for k in gone if k in current])
+            gone += ["needsYouJobId", "needsYouStoryId", "needsYouCode", "needsYouDevice"]
+        held = {"state": ["needs_you"]} if state == "needs_you" else None
+        try:
+            store.update(pk, ws.MACHELPER_SK, fields, remove=[k for k in gone if k in current], expect_in=held)
+        except db.ConditionFailed:
+            if held is None:
+                raise
+            # The hold ended between the read and the write: the same check-in, as ok, only while no hold is there.
+            # A stop meanwhile (another Mac's) started a new one, which stays exactly as that stop wrote it.
+            fields.pop("reason", None)
+            with contextlib.suppress(db.ConditionFailed):
+                store.update(
+                    pk,
+                    ws.MACHELPER_SK,
+                    {**fields, "state": "ok"},
+                    remove=sorted(
+                        {*gone, "reason", "needsYouJobId", "needsYouStoryId", "needsYouCode", "needsYouDevice"}
+                    ),
+                    expect_in={"state": [h for h in HELPER_STATES if h != "needs_you"]},
+                )
     for done, key in ((login_done, "loginRequestAt"), (resume_done, "resumeRequestAt")):
         if not done:
             continue
@@ -363,7 +388,7 @@ def clear_needs_you(store: db.Store, user_id: str, workspace_id: str, publishing
         store.update_expr(
             _pk(user_id, workspace_id),
             ws.MACHELPER_SK,
-            "SET #st = :ok REMOVE #re, #nj, #ns, #cd",
+            "SET #st = :ok REMOVE #re, #nj, #ns, #cd, #nd",
             condition="#st = :nu AND #nj = :id",
             names={
                 "#st": "state",
@@ -371,6 +396,7 @@ def clear_needs_you(store: db.Store, user_id: str, workspace_id: str, publishing
                 "#nj": "needsYouJobId",
                 "#ns": "needsYouStoryId",
                 "#cd": "needsYouCode",
+                "#nd": "needsYouDevice",
             },
             values={":ok": "ok", ":nu": "needs_you", ":id": publishing_job_id},
         )
@@ -606,8 +632,9 @@ def stopped(
 ) -> Item:
     """The helper stopped instead of guessing: the job says why (at most 200 characters; once Post was pressed
     always ``PRESSED``). ``needs_you`` puts this workspace's helper item in ``needs_you`` with the job and its story
-    (never Clip Factory's helper item), and why in ``needsYouCode`` (``code``, §47.11) in the same write; a needs-you
-    stop without a code removes it. A code without ``needs_you`` holds nothing, so it isn't stored."""
+    (never Clip Factory's helper item), and why in ``needsYouCode`` (``code``, §47.11) and which Mac stopped
+    (``needsYouDevice``, which no ping overwrites) in the same write; a needs-you stop without a code removes it. A
+    code without ``needs_you`` holds nothing, so it isn't stored."""
     row = _mac_row(store, user_id, workspace_id, publishing_job_id)
     if not owns(row, device, ("working", "stopped"), attempt):
         raise conflict(MAC_TAKEN)
@@ -634,7 +661,10 @@ def stopped(
             ":nj": publishing_job_id,
             ":ns": str(row.get("contentId") or ""),
         }
-        sets = "SET #st = :st, #re = :re, #se = :se, #de = :de, #ty = :ty, #us = :us, #ws = :ws, #nj = :nj, #ns = :ns"
+        sets = (
+            "SET #st = :st, #re = :re, #se = :se, #de = :de, #nd = :de, #ty = :ty, #us = :us, #ws = :ws, #nj = :nj,"
+            " #ns = :ns"
+        )
         if code in HOLD_CODES:
             values[":cd"] = code
             update = sets + ", #cd = :cd"
@@ -649,6 +679,7 @@ def stopped(
                 "#re": "reason",
                 "#se": "seenAt",
                 "#de": "device",
+                "#nd": "needsYouDevice",
                 "#ty": "type",
                 "#us": "userId",
                 "#ws": "workspaceId",
@@ -667,13 +698,15 @@ def logged_in(
 ) -> tuple[Item | None, str]:
     """The helper saw this workspace's Chrome profile logged in to the job's TikTok again while it was held for a
     TikTok login on this job (§47.11): the hold ends by itself, as after the owner's Try again, and the job waits for
-    the Mac again. Only the device that stopped it, only a login hold (``needsYouCode = login``) on this job, else
-    ``409 NOT_LOGIN_HOLD`` and nothing is written. Returns the workspace's helper item and the outcome: ``resumed``
-    (a stopped Mac job of this device that never pressed Post waits again, keeping its place, ``since``, its attempt,
-    ``macDevice``, ``macPressedBefore`` and ``macAgainAt``; no account confirm: the claim checks the destination),
-    ``pressed`` (Post was pressed: the job stays exactly as it is, never twice) or ``cleared`` (anything else, the
-    job gone too: only the hold ends). One transaction, conditional on both as read (``CHANGED`` when either moved).
-    Clip Factory's ``USER#{u}`` item is never read or written."""
+    the Mac again. Only the device that stopped it (``needsYouDevice``: with two Macs the other one's needs_you ping
+    rewrites ``device`` every minute; on a hold from before that field, ``device``), only a login hold
+    (``needsYouCode = login``) on this job, else ``409 NOT_LOGIN_HOLD`` and nothing is written. Returns the
+    workspace's helper item and the outcome: ``resumed`` (a stopped Mac job of this device that never pressed Post
+    waits again, keeping its place, ``since``, its attempt, ``macDevice``, ``macPressedBefore`` and ``macAgainAt``; no
+    account confirm: the claim checks the destination), ``pressed`` (Post was pressed: the job stays exactly as it
+    is, never twice) or ``cleared`` (anything else, the job gone too: only the hold ends). One transaction,
+    conditional on both as read (``CHANGED`` when either moved). Clip Factory's ``USER#{u}`` item is never read or
+    written."""
     pk = _pk(user_id, workspace_id)
     item = helper_item(store, user_id, workspace_id)
     if not (
@@ -681,8 +714,13 @@ def logged_in(
         and item.get("state") == "needs_you"
         and item.get("needsYouCode") == "login"
         and item.get("needsYouJobId") == publishing_job_id
-        and item.get("device") == device
     ):
+        raise conflict(NOT_LOGIN_HOLD)
+    # The Mac that stopped: ``needsYouDevice``, or on a hold a stop wrote before the server kept it (before 24 Nov)
+    # the Mac that last checked in (``device``, with one Mac the one that stopped) while there is still no
+    # ``needsYouDevice``. Else such a hold would never end by itself (review, 24 Nov).
+    stopper = "needsYouDevice" if item.get("needsYouDevice") is not None else "device"
+    if item.get(stopper) != device:
         raise conflict(NOT_LOGIN_HOLD)
     row = publish.job_item(store, user_id, workspace_id, publishing_job_id)
     outcome = "cleared"
@@ -713,13 +751,16 @@ def logged_in(
             pk,
             ws.MACHELPER_SK,
             {"state": "ok"},
-            remove=[k for k in ("reason", "needsYouJobId", "needsYouStoryId", "needsYouCode") if k in item],
+            remove=[
+                k for k in ("reason", "needsYouJobId", "needsYouStoryId", "needsYouCode", "needsYouDevice") if k in item
+            ],
             expect_in={
                 "state": ["needs_you"],
                 "needsYouCode": ["login"],
                 "needsYouJobId": [publishing_job_id],
-                "device": [device],
+                stopper: [device],
             },
+            expect_absent=[] if stopper == "needsYouDevice" else ["needsYouDevice"],
         )
     )
     try:

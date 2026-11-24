@@ -43,7 +43,7 @@ test("this helper's version is one Clips Funded hands its TikTok jobs to (MAC_WS
   const [mine, from] = [parts(VERSION), parts(found[1])];
   const cmp = mine.map((n, i) => n - (from[i] ?? 0)).find((d) => d !== 0) ?? 0;
   assert.ok(cmp >= 0, `VERSION ${VERSION} is at least ${found[1]}`);
-  assert.equal(VERSION, "1.2.2");
+  assert.equal(VERSION, "1.2.3");
 });
 
 test("package.json and its lockfile say the same version as the helper", () => {

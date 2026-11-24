@@ -261,6 +261,17 @@ export function loginHold(helper, kind) {
   return typeof id === "string" && id ? { id } : null;
 }
 
+/**
+ * Did this Mac try the held clip or job (§47.11)? Every try writes the lane's ledger entry at its claim, before
+ * anything can stop, so the Mac that stopped it always has one. A Mac without one (a second Mac, whose pings only
+ * repeat the hold) never looks: the server's logged-in route would refuse it anyway (``needsYouDevice``).
+ * @param {object} ledger the lane's ledger (state.ledger, state.ws[id].ledger)
+ * @param {{id: string}|null} hold loginHold
+ */
+export function triedHere(ledger, hold) {
+  return Boolean(hold && ledger && typeof ledger === "object" && Object.hasOwn(ledger, hold.id));
+}
+
 /** Is a look due? With no stamp, one 5 minutes old or more, or one in the future (the clock moved). */
 export function loginCheckDue(lastAt, now) {
   const last = lastAt ? Date.parse(lastAt) : NaN;
