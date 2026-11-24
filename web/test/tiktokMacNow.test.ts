@@ -159,6 +159,12 @@ describe("§47.11: the mock's logged-in rules (tiktok_mac.logged_in)", () => {
     knobs().stopped(a!.clipId, LOGGED_OUT, true, "mock-mac", "login");
     expect(() => knobs().loggedIn(b!.clipId)).toThrow(NOT_HELD); // another clip
     expect(() => knobs().loggedIn(a!.clipId, "mac-mini-2")).toThrow(NOT_HELD); // another Mac
+    // A second Mac's needs_you ping (every minute) never takes the hold from the Mac that stopped (review, 24 Nov).
+    knobs().ping("needs_you", LOGGED_OUT, "mac-mini-2");
+    expect(() => knobs().loggedIn(a!.clipId, "mac-mini-2")).toThrow(NOT_HELD);
+    expect(knobs().loggedIn(a!.clipId).outcome).toBe("resumed");
+    knobs().claim(a!.clipId);
+    knobs().stopped(a!.clipId, LOGGED_OUT, true, "mock-mac", "login");
     // A ping that isn't needs_you, and the owner's Try again, remove the code.
     knobs().ping("ok");
     expect(() => knobs().loggedIn(a!.clipId)).toThrow(NOT_HELD);

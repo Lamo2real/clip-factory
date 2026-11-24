@@ -8,6 +8,9 @@
 // 1.2.2 (§47.11): a lane held only for a TikTok login (its stop carried code "login") looks, at most every 5 minutes,
 // whether its Chrome is logged in to exactly its account again (headless, nothing on screen); then the hold ends and
 // the stopped clip carries on by itself, as if the owner had tapped Try again (hold.js).
+//
+// 1.2.3: only the Mac that stopped a clip looks (triedHere), one look per tick in all lanes, and a pause wins whenever
+// it lands before a claim: during a look, or after the lane decided (pausedSince).
 import { spawn } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -35,6 +38,7 @@ import {
   nextAction,
   pickWork,
   pingExtras,
+  triedHere,
   wsAction,
   wsPingBody,
 } from "./plan.js";
@@ -729,10 +733,11 @@ async function tidyWs({ lane, queue }) {
 /**
  * B. Each Clips Funded workspace's lane: its queue, what it would do, and its check-in. Read once per tick; a
  * failure to list the workspaces skips them all, and one lane's error skips only that lane. A lane held only for a
- * TikTok login looks whether it is logged in again (§47.11), at most one lane per tick and only while Clip Factory's
- * lane has nothing to do (``clipsBusy``): one thing per tick, Clip Factory first.
+ * TikTok login looks whether it is logged in again (§47.11): at most one look per tick in all (none when Clip
+ * Factory's lane looked, ``looked``), and only while Clip Factory's lane has nothing to do (``clipsBusy``): one thing
+ * per tick, Clip Factory first.
  */
-async function wsLanes({ api, state, settings: given, config, tokens, now, clipsBusy = false }) {
+async function wsLanes({ api, state, settings: given, config, tokens, now, clipsBusy = false, looked: clipsLooked = false }) {
   let settings = given;
   let list;
   try {
@@ -742,7 +747,7 @@ async function wsLanes({ api, state, settings: given, config, tokens, now, clips
     return [];
   }
   const out = [];
-  let looked = false;
+  let looked = clipsLooked;
   for (const w of list) {
     if (!w || w.workspaceType !== "stories" || !WS_ID.test(String(w.workspaceId || ""))) continue;
     try {
@@ -750,7 +755,8 @@ async function wsLanes({ api, state, settings: given, config, tokens, now, clips
       let status = (await lane.api.queue()) || {};
       const hold = loginHold(status.helper, "ws");
       let heldReason = null;
-      if (hold && !clipsBusy && !looked && status.on === true && !settings.paused && loginCheckDue(lane.store.loginCheckAt, Date.now())) {
+      const due = hold && !clipsBusy && !looked && status.on === true && !settings.paused && triedHere(lane.state.ledger, hold);
+      if (due && loginCheckDue(lane.store.loginCheckAt, Date.now())) {
         looked = true;
         lane.store.loginCheckAt = iso(); // before the look: a crash mid-look still waits 5 minutes
         lane.save();
@@ -758,7 +764,9 @@ async function wsLanes({ api, state, settings: given, config, tokens, now, clips
         const back = await loginBack(lane, hold, wsBack(lane, status.account?.handle));
         // Decide and check in on a fresh read only, whatever the look said (the hold ended, or the owner answered
         // while Chrome looked). A ping of the stale needs_you would put back a hold with no job and no code, which
-        // nothing could end; so when that read fails, no ping for this lane this tick.
+        // nothing could end; so when that read fails, no ping for this lane this tick. The local pause is read again
+        // too: `cli.js off` during the look (it takes no lock) means a paused Mac, so the job the look resumed waits.
+        settings = loadSettings();
         try {
           status = (await lane.api.queue()) || {};
         } catch (e) {
@@ -879,11 +887,23 @@ export function wsBeats(lanes) {
   };
 }
 
+/**
+ * A pause written since the lane decided (`cli.js off` takes no lock): the tick decided before another lane's look
+ * or its check-ins, so its find, resume or post is checked against settings.json once more before anything is
+ * claimed or driven (a paused Mac never posts, re-review 24 Nov). True when it waits.
+ */
+function pausedSince(fields) {
+  if (!loadSettings().paused) return false;
+  log("paused.before_work", fields);
+  return true;
+}
+
 /** C.2: a Clips Funded lane's find, resume or post (only in a tick where Clip Factory's lane has none). */
 async function wsWork(entry, what, api) {
   const { lane } = entry;
   if (what === "login") return wsLoginRequest(entry, api);
   const job = entry.action.job;
+  if (pausedSince({ account: lane.id, what, ...jobIds(lane, job) })) return;
   if (!lane.target(job)) {
     log("ws.no_account", { account: lane.id, ...jobIds(lane, job) });
     return;
@@ -911,6 +931,7 @@ async function wsWork(entry, what, api) {
 
 /** C.1: Clip Factory's post, resume or find, exactly as in 1.1.0. Returns the tick's answer. */
 async function clipsWork({ api, state, clips, action, queue, what }) {
+  if (pausedSince({ what, clipId: action.job.clipId })) return { action: "paused", reason: "Paused on your Mac." };
   if (what === "find") {
     await doFind(clips, action.job, { queue });
     return action;
@@ -976,15 +997,19 @@ export async function tick() {
     // §47.11: held only for a TikTok login, with the switch on and the Mac not paused: at most every 5 minutes a
     // headless look whether its Chrome is logged in to Clip Factory's TikTok again.
     let heldReason = null;
+    let looked = false;
     const hold = loginHold(helper, "clips");
-    if (hold && on === true && !settings.paused && loginCheckDue(state.loginCheckAt, Date.now())) {
+    if (hold && on === true && !settings.paused && triedHere(state.ledger, hold) && loginCheckDue(state.loginCheckAt, Date.now())) {
+      looked = true;
       state.loginCheckAt = iso(); // before the look: a crash mid-look still waits 5 minutes
       saveState(state);
       const back = await loginBack(clips, hold, await clipsBack(api, state, clips));
       // Decide and check in on a fresh read only, whatever the look said: the hold may have ended (the resumed clip
       // may go in this same tick), or the owner may have answered while Chrome looked (his Try again, 24 Nov). A ping
       // of the stale needs_you would put back a hold with no clip and no code, which nothing could end; so when that
-      // read fails, the tick ends here with no ping.
+      // read fails, the tick ends here with no ping. The local pause is read again too: `cli.js off` during the look
+      // (it takes no lock) means a paused Mac, so the clip the look resumed waits (review, 24 Nov).
+      settings = loadSettings();
       try {
         ({ on, helper, queue = [] } = await api.queue());
       } catch (e) {
@@ -1061,7 +1086,7 @@ export async function tick() {
     // B. Clips Funded's lanes: their queues and check-ins (never in the way of Clip Factory's).
     let lanes = [];
     try {
-      lanes = await wsLanes({ api, state, settings, config, tokens, now: new Date(), clipsBusy: ["post", "resume", "find"].includes(action.action) });
+      lanes = await wsLanes({ api, state, settings, config, tokens, now: new Date(), clipsBusy: ["post", "resume", "find"].includes(action.action), looked });
     } catch (e) {
       log("ws.error", { part: "lanes", error: words(e) });
     }

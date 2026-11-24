@@ -84,6 +84,11 @@ stays for the owner). TikTok's login on Studio, a puzzle or a code during the lo
 lane's hold at most twice in a row; after that only the owner does (Try again, `setup`, Log in on my Mac), until the
 lane posts again.
 
+1.2.3: only the Mac that stopped the clip looks (with two Macs the other one never does), one look per tick in all
+lanes, and `node src/cli.js off` wins whenever it lands before a claim: during a look, or after a lane decided (each
+lane's work reads the pause once more before anything is claimed or driven). Clip Factory keeps which Mac stopped
+(never shown), and a login hold from before it did still ends by itself.
+
 ## Stops instead of guessing
 
 It stops on any of these: a login page, a puzzle or code check, "Something went wrong", "Content may be restricted",
