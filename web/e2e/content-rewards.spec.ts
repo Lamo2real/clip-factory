@@ -699,7 +699,7 @@ test.describe("desktop journeys", () => {
     await cr(page, "sendFails", two[1]);
     // The waiting send comes first on the card, and its Copy and open is the screen's one vermilion (§38.6).
     const first = page.locator(".cr-send-first");
-    await expect(first).toContainText(/Send your clip now \(1[12] min left\)\. Then make more clips\./);
+    await expect(first).toContainText(/Send your clip now \(1[12] min left\)/);
     const line = first.locator("[data-state='send_by_hand']");
     await expect(line).toHaveCount(1);
     await expect(clips.locator("[data-state='send_by_hand']")).toHaveCount(0);
@@ -753,7 +753,7 @@ test.describe("desktop journeys", () => {
     await page.goto("/money#content-rewards");
     await settle(page);
     const part = page.locator("#content-rewards");
-    await expect(part).toContainText("Whop is the website where Content Rewards sends your money. From there it goes to your bank.");
+    await expect(part).toContainText("Content Rewards pays you on Whop. Then you move it to your bank.");
     await expect(part.locator("[data-tile='still']")).toContainText("$4.20");
     await expect(part.locator("[data-tile='still']")).toContainText("On Content Rewards: Queued and Arriving.");
     await expect(part.locator("[data-tile='way']")).toContainText("$0.00");
@@ -957,11 +957,14 @@ test.describe("phone: the main button stays pinned", () => {
 async function pinAtStepEnd(page: Page) {
   return page.evaluate(async () => {
     const step = document.querySelector("#step-ready-account")!;
+    // The hints sit in a shut "If you see…" fold: opened first, so they are really measured (a shut one has no box).
+    for (const fold of step.querySelectorAll<HTMLDetailsElement>("details.cr-fold:not([open])")) fold.open = true;
+    await new Promise((r) => setTimeout(r, 100));
     const rest = step.querySelector(".gstep__rest")!;
     scrollBy(0, rest.getBoundingClientRect().bottom - innerHeight * 0.4);
     await new Promise((r) => setTimeout(r, 200));
     const pin = step.querySelector(".cr-pin")!.getBoundingClientRect();
-    const hints = [...step.querySelectorAll(".gstep__hint")].map((h) => h.getBoundingClientRect());
+    const hints = [...step.querySelectorAll(".gstep__hint")].map((h) => h.getBoundingClientRect()).filter((h) => h.height > 0);
     return { hintsAbove: hints.length > 0 && hints.every((h) => h.bottom <= pin.top + 0.5), pinOnScreen: pin.top >= 0 && pin.bottom <= innerHeight };
   });
 }

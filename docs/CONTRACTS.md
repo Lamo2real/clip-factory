@@ -762,8 +762,7 @@ not, so the page said "This computer can't show see-through" on macOS 27 with Li
   (confirmed, publishing, posted, failed) opens `/clips/{clipId}`; a thrown-away one is not a link (it is listed
   nowhere else) and does not lift on hover like one.
 * **Empty Clips line** follows the job: working "Clips show up here as soon as they are made."; failed "No clips
-  yet. Fix the problem above, then tap Try again."; canceled "No clips yet. This job was stopped. Tap Try again to
-  start it again."; ready with none "This job made no clips. Go back to Home and try a different link."
+  yet. Fix the problem above, then tap Try again."; canceled "No clips yet. This job was stopped. Tap Try again."; ready with none "This job made no clips. Go back to Home and try a different link."
 * **Words** (§12.4): the job status pill says **Didn't work** (never "Failed"); the Home source switch is
   **Paste a link / Pick a video** (the help anchor stays `upload-video`).
 * **Drag and drop on the new-job card** (`web/src/lib/drops.ts`): a video dragged from Finder (or the desktop)
@@ -793,8 +792,7 @@ not, so the page said "This computer can't show see-through" on macOS 27 with Li
   fail with a server error). Covered by `web/e2e/audit-shell.spec.ts`.
 * **Review screen** (`web/src/screens/review/`):
   * A refused Upload (a caption too long for a chosen place) opens the first too-long place row, scrolls it into view,
-    focuses its box and names the platform: "Your X caption is longer than its platform allows. Make it shorter, then
-    tap Upload.". Every row whose caption is too long carries `.is-over` and "Too long. Make it shorter." so it shows
+    focuses its box and names the platform: "Your X caption is too long. Make it shorter, then tap Upload.". Every row whose caption is too long carries `.is-over` and "Too long. Make it shorter." so it shows
     even while the row is closed.
   * Place rows (§36.1): one closed row per chosen place, no tab bar. A closed TikTok row also names the account:
     "Posting as <nickname>" (TikTok's rules). Review's launcher keeps clear of the rows (`data-help-dodge`).
@@ -1341,7 +1339,7 @@ Branch routes are nested: `/settings/look-and-feel/sounds`. `/get-app` keeps wor
 * `/settings` (the field): a short search box "Find a setting" that searches every apple and leaf by name and jumps
   straight to it (highlights it on the panel's own lines for 2 s: the whole panel when the apple is alone in it, else
   its row from edge to edge between the dividers, with the panel's corners on the first and last row; never an outer
-  ring, and the apple's programmatic focus draws no second ring, `settings.css` `.apple::after`), then the four trees as big glass cards (icon, name, one line, how many apples).
+  ring, and the apple's programmatic focus draws no second ring, `settings.css` `.apple::after`), then the four trees as big glass cards (icon, name, one line, the names of its branches).
 * A tree page lists its branches as cards (icon, name, one line). A branch page shows its apples as rows grouped in
   glass panels, each with its leaf under it.
 * Breadcrumb on every level: `Settings › Look & feel › Sounds` (each part a link) plus a big Back button on phones.
@@ -1744,7 +1742,7 @@ does" → `/clips/{clipId}`; Back returns to where the owner came from (else `/l
    rounded glass frame, centred; width `min(180px, 56cqi)` in the trunk layout and `min(400px, 44vh) · 9/16`
    (≤ 225 px) in the rows and fan layouts, so the total and the first stacks stay on the first screen. No
    autoplay. No `videoUrl` → the cover image.
-3. Stat block beside/under the preview: big total views (display serif) with "views across platforms" and a small
+3. Stat block beside/under the preview: big total views (display serif) with "views on all apps" and a small
    "(each app counts views its own way)"; the **"Best this week" star** toggle (≥ 48 px, `aria-pressed`, green glass,
    not vermilion); the one vermilion **Refresh numbers** button (icon + word, spinner while any `started` post is still
    `refreshing`; when every platform is `too_soon`/`blocked` it reads "Next check in 4 min" and a tap plays the deny
@@ -1791,7 +1789,7 @@ rows (icon, label, value; labels wrap, values never cut) showing **only** that p
   25/50/75/100 % (only while present).
 Absent fields are not shown (no "0" rows). Then the sparkline (`Sparkline`, 120×32 SVG polyline of `series[platform]`,
 ≥ 2 points else hidden, `role="img"` `aria-label="Views went from 1.2K to 8.4K"`), "Updated 3 min ago" (fast) and,
-for slow groups, "Insights from 2 days ago" (`insightsUpdatedAt`); "Open on {Platform}" link (`url`, new tab,
+for slow groups, "Checked 2 days ago" (`insightsUpdatedAt`); "Open on {Platform}" link (`url`, new tab,
 `rel="noopener noreferrer"`); "Next check in 12 min" when `nextAllowedAt` is in the future.
 **Calm states** (no numbers, one plain line + one link button, never an error colour except Failed):
 * Waiting for connection: "Connect {Platform} in Settings › Posting › Set up posting." →
@@ -1819,8 +1817,8 @@ line and the "·" is visually hidden, still read by screen readers). Toggling is
 and saved by `PUT …/best` 800 ms after the last change (one request); a toast "Saved. Clip Factory will learn from your
 picks." Under the header a status line from `learnState`: learning → "Learning from your picks…" (spinner); done →
 the learning text in a glass quote with "Best of week" label; failed → "Could not learn this time. Change a pick to
-try again."; none/skipped → "Star the clips that did best this week." Empty week: "No clips this week yet. Make clips
-on Home." with a link. `week` events and `learning` upserts (kind `week`) update it live. The browser tab title follows the
+try again."; none/skipped → "Star the clips that did best this week." Empty week: the title "No clips this week yet",
+the line "Make clips on Home." and a link. `week` events and `learning` upserts (kind `week`) update it live. The browser tab title follows the
 heading: "This week · Library · Clip Factory" for the current week, "Week of 28 Sep–4 Oct · Library · Clip Factory"
 for any other (`weekTitle` in `WeekView.tsx`).
 
@@ -2031,8 +2029,8 @@ DELETE `/v1/lessons/{lessonId}`; a bad id is 404, any other body 400; 409 "That 
 the daily run changed the lesson twice while it was being turned off or on (every toggle write is conditional). Mock parity: `web/src/api/mock/lessons.ts`.
 
 **Web**: Settings › Clip making › **What it learned** (`/settings/clip-making/learned`, apple `what-it-learned`,
-between Skills and YouTube help). The top line: "Every day Clip Factory checks your clips 7 days after posting.
-Lessons it is sure about go to your skills as Prior learnings." Grouped by creator ("All creators" last): each
+between Skills and YouTube help). The top line: "Clip Factory checks each clip 7 days after posting.
+Lessons it is sure of join your skills as Prior learnings." Grouped by creator ("All creators" last): each
 lesson's text, a chip (Trying it, Using it, Turned off, Too old), the platform, "4 of 31 clips did much better than
 normal" ("… clips from all your creators …" for the All creators group), Too old lessons say "Too old to use. New clips can teach it again." and have only Delete, the winner clips as links, Turn off / Turn on and Delete (with "Delete this lesson?"). A creator without
 enough clips: "YouTube: Needs 12 more posted clips". Before the first run: "Nothing yet. …". Library's "What's working"
@@ -2080,8 +2078,8 @@ Order everywhere: **YouTube, TikTok, Instagram, Facebook, X** (`SETUP_ORDER = ST
   then (only what the step needs): **Open {site}** (opens the exact page in a new tab, `rel="noopener noreferrer"`),
   **Copy** chips (label + value in mono, one tap copies, leaf-green tick "Copied!", works without clipboard permission via a
   select-all fallback), **paste boxes** (with a Paste button, format check as you type, friendly error under the box),
-  an **upload box** (TikTok verification file), "**If you see** X, do Y" hints (for anything the research marks
-  uncertain), and **I did this** (green, ≥ 48 px). Auto steps (keys saved, connected, checked) tick themselves.
+  an **upload box** (TikTok verification file), "**If you see** X, do Y" hints in one shut "If you see…" fold (for anything
+  the research marks uncertain), and **I did this** (green, ≥ 48 px). Auto steps (keys saved, connected, checked) tick themselves.
 * **One main vermilion button per screen**: the current step's main action (its **Open** button, else **Save keys**, else
   **Connect {Platform}**, else **Connect again** when `needs_reconnect`). Everything else is green/glass.
 * **Connect** runs OAuth **in the same tab**: the page navigates to the platform, the owner approves, the hooks API
@@ -2653,7 +2651,7 @@ are shown and none is on by default; Commercial content is off until the creator
   With Branded content ticked, Only me and Followers stay in the list greyed (`DropdownOption.disabled`: skipped by
   the keys, a tap does nothing, `aria-disabled`) with TikTok's line "Branded content visibility cannot be set to
   private." When `SELF_ONLY` is the only option it is the one choice, and the line "TikTok keeps posts private until it
-  approves your app." shows under it. When Branded content leaves nothing: "Branded content can't be Only me. Turn off
+  approves Clip Factory." shows under it. When Branded content leaves nothing: "Branded content can't be Only me. Turn off
   Branded content." The sheet's hint reads "Pick who can see it to turn on Upload."
 * **Commercial content (TikTok's audit rules, 2026-11-21).** Shared by the sheet and the TikTok row
   (`screens/review/TikTokCommercial.tsx`). Under the two ticks one line says the label: nothing ticked "Pick Your
@@ -2682,8 +2680,8 @@ glass (`backdrop-filter`); a page keeps no transform of its own (pages have no e
 is a real modal: focus moves in once on open (typing in the caption never loses the caret), Tab and Shift+Tab wrap
 inside it, Escape closes it, and on close the focus goes back to the Upload that opened it. A clip longer than the
 creator's `maxDurationSec` (a limit of 0 means TikTok did not say: it does not block, the publisher checks again)
-or a creator-info error never leaves a dead end: the callout says what to do next ("… To upload it to your other
-places now, turn TikTok off above and tap Upload.", §33), and the error
+or a creator-info error never leaves a dead end: the callout says what to do next ("Too long for TikTok. To post it
+elsewhere, turn TikTok off above and tap Upload."; a creator-info error: "… Tap Ask TikTok again.", §33), and the error
 callout also has **Ask TikTok again**, which fetches the creator info again.
 
 ### 17.9 Infra (Terraform + scripts)
@@ -3253,7 +3251,7 @@ big Back on phones goes one level up):
 | Route | Page | Leaf |
 |---|---|---|
 | `/settings/clip-making/skills/new` | **Write a skill**: the three questions of §18.2 as big glass fields with their example under each (tap "Use the example" fills it), a live character count, one vermilion **Save skill**, a ghost **Cancel**. Errors sit under their field. Success: success sound, confetti, toast "Your skill is ready. Clip Factory will use it every time.", then the new skill's page. | "Clip Factory reads your skill every time it makes clips." |
-| `/settings/clip-making/skills/{skillId}` | **Skill page**: title, badges, "When it is used" (description), the rendered skill (§18.3); zips list their other files. Owner skills: vermilion **Edit**, ghost **Delete** (§18.5). Built-ins: no Edit or Delete. | owner: "Always used. Changes count from your next clips." built-in: "This skill comes with Clip Factory. It is always used. You can read it, but not change or delete it." |
+| `/settings/clip-making/skills/{skillId}` | **Skill page**: title, badges, "When it is used" (description), the rendered skill (§18.3); zips list their other files. Owner skills: vermilion **Edit**, ghost **Delete** (§18.5). Built-ins: no Edit or Delete. | owner: "Always used. Changes count from your next clips." built-in: "Comes with Clip Factory. Always used. You can read it, but not change or delete it." |
 | `/settings/clip-making/skills/{skillId}/edit` | the same form filled from `form`, vermilion **Save changes**; for a zip a ghost **Replace the whole file**; `formBlocked "too_long"` shows only the replace option; a built-in id redirects to its page with an info toast. Leaving with unsaved changes asks "Leave without saving?" (**Keep editing** / **Leave**); when browser Back asked, **Leave** finishes that Back (no extra history entry, so the next Back goes one more step, even when it is pressed at once, while the page change still fades). The description box grows with its words and has no drag grip (it never gets wider than the form). | "Change the words, then tap Save changes." |
 
 
@@ -5965,8 +5963,8 @@ never top left. The release label is "Money dashboard".
 
 The owner is paid per view, not by subscription, so "MRR" here is **the money the apps reported over a recent stretch
 of days**, built only from stored `REVENUE#{platform}#{day}` rows (§25). The screen keeps the MRR names with a plain
-line under each, and a "?" says: "MRR usually means subscriptions. Here it means the money YouTube (and other apps that
-share it) reported for your videos over that many days."
+line under each, and a "?" says: "Here MRR is the money the apps reported for your videos. A day can still change for a
+few days."
 
 * **`through`** (the end day): the newest stored row date of each counted app (`throughBy`, a $0 day counts as
   reported), and the **earliest** of those across the counted apps, so every app covers the same days. Every period
@@ -5979,8 +5977,8 @@ share it) reported for your videos over that many days."
   so 10 days of $1.00 read $1.00 a day, not $0.33. **Yearly MRR**: Monthly × 12 once 30 days are covered, Monthly ×
   360 ÷ `coveredDays` before that (`paceMicros`), always "At this pace for a year", never added to anything, worked out
   only on the server; "Last 365 days: $X" shows only when stored history covers every day of `[through−364, through]`
-  for every counted app. Under 30 covered days the sub-lines say so ("only 10 days so far", "average of 10 days",
-  "from 10 days so far").
+  for every counted app. The sub-lines are "Last 30 days", "Last 7 days", "An average day (last 30 days)" and "At this
+  pace for a year"; under 30 covered days they say so ("only 10 days so far", "last 10 days", "from 10 days so far").
 * A day between an app's first stored row (`historyFrom`) and `through` with no row counts as $0; a day before it is
   not covered. A comparison shows only when every counted app covers the whole previous period; otherwise the card
   says "Not enough days to compare yet".
@@ -6003,7 +6001,7 @@ share it) reported for your videos over that many days."
 | `lastError` on a counted app | Kept in with the rows it has; banner "Couldn't check YouTube today. Showing money up to Thu 14 Nov." (warn tone), naming only the apps in `errors`. |
 | One counted app's newest day older than today − 6 while another is up to date | That app is left out with reason `behind` ("Facebook hasn't sent money since Tue 27 Oct. Not counted for now.") and listed in `behind`, so it cannot pull every app's days back; the others keep current numbers. |
 | Every counted app older than today − 6 | They stay in; `stale: true`; the banner names the apps in `errors` ("Couldn't check …") and the other `behind` apps ("… hasn't sent new money lately."), then "Showing money up to …". |
-| Revised days in the 60 days shown | Grey line "YouTube changed 2 days after rechecking them." |
+| Revised days in the 60 days shown | Grey line "YouTube changed 2 days after a recheck." |
 | Two or more currencies | Each card stacks one line per currency; a Segmented currency picker (with Glide) above the chart; "Different money types are never added together." |
 | Nothing can be counted | "No money yet." with the nearest goal bar (`nearestGoal`, as on Home) and **See how close you are** (Settings › Posting › Money). No zeros, no chart. |
 | Only apps that never share | One card: "{App} doesn't share money with apps. Look in {paidWhere}." The clip list still shows views. |
@@ -6026,7 +6024,7 @@ Every amount carries its tag ("YouTube's estimate", "Meta's estimate", "Apps' es
   **All** at the right end). Tapping an app while All is on picks only it; turning the last one off is All; all five is
   All; All clears the rest. **Period** (Segmented with Glide): 7 days, 30 days, 90 days, Year (default 30). **Sort
   clips** (Segmented): Most money, Most views. The cards always use their fixed days; the period changes the chart and
-  the clip list ("Cards use fixed days. The picker changes the chart and the clip list.").
+  the clip list ("The days you pick change the chart and clips, not the cards.").
 * **Phones and touch tablets** (`(max-width: 767px), (pointer: coarse) and (max-width: 1194px)`): the controls sit in
   a glass **dock** (110 px, two rows, right-aligned) above the tab bar at the bottom right: the app chips on top, the
   period nearest the thumb. Nothing tappable in the top-left third of the page. Ask's home spot moves above the dock
@@ -6618,7 +6616,7 @@ other plain reason, the generic words. Every message names a real button ("Try a
 
 ### 29.6 The cookies file: guide and check
 
-- Settings › YouTube help shows "How to get cookies": open a private window in Chrome; allow Get cookies.txt LOCALLY
+- Settings › YouTube help has a shut "How to get cookies" fold: open a private window in Chrome; allow Get cookies.txt LOCALLY
   in private windows; sign in to YouTube there; in the same tab go to `youtube.com/robots.txt`; export; close the
   private window and don't open it again; tap Add cookies.txt. Tip: a spare Google account is safest.
 - Before upload the browser runs `checkCookies` (`web/src/lib/cookiesFile.ts`): Netscape lines of 7 tab-separated
@@ -7073,7 +7071,7 @@ Try again. The X tab showed the X mark and the letter "X" ("X X").
   ("Set up X to upload there too.", to `/settings/posting/setup/{first}`), hidden when all five are ready. With
   nothing set up, the row is a callout ("Nothing is set up yet. Upload saves it, and it goes up once you set up a
   place.") and Upload works the old way (no `platforms`). While the setup is still loading, or when the check
-  failed (callout "Could not check your places. Check again, then tap Upload." and a **Check again** button),
+  failed (callout "Couldn't check your places. Tap Check again." and a **Check again** button),
   `ready` is unknown: Upload stays off, so a failed check can never send the clip to places nobody picked.
 * **Which start on (per device):** the last Upload's choice in localStorage `cf-upload-to` (saved on Upload, not on
   each tap) minus places no longer ready; with none saved, Where clips go minus places not ready; if that leaves
@@ -7472,9 +7470,11 @@ Decision record: ADR-60 (which corrects ADR-57).
    They are the only place picker on the card.
 3. **Use my settings**: one big soft-fill button (`.my-settings__btn`, a glass button, full width). It puts My
    settings on every ticked place. Done state: bone fill, a check, **Your settings are on**. Under it one plain line:
-   "Your other places already use your settings. TikTok needs your tap each time." (before the tap, TikTok ticked),
-   "Every place uses your settings. Tap a place below to change it for this clip." (after, or with TikTok unticked),
-   "You changed some for this clip. Tap to put yours back." (after a change in a row). YouTube, Instagram, Facebook
+   "Tap this first. TikTok needs your tap." (before the tap, TikTok ticked: then **Use my settings** is the card's
+   vermilion and Upload is glass; the line above Upload keeps "Tap Use my settings first. TikTok needs your tap." for
+   screen readers only, so it is said once),
+   "Tap a place below to change it for this clip." (after, or with TikTok unticked; the button already says Your settings are on),
+   "You changed some. Tap to put yours back." (after a change in a row). YouTube, Instagram, Facebook
    and X use My settings from the start (nothing in their rules asks for a tap); TikTok's choices go on only with this
    tap (or picks in its row), because TikTok wants the creator's own action and no default. While his Mac posts TikTok,
    TikTok starts on My settings too, with no tap (§47.9). Ticking Commercial content
@@ -7493,7 +7493,7 @@ Decision record: ADR-60 (which corrects ADR-57).
      brand (Promotional content) / Branded content (Paid partnership). While his Mac posts TikTok, Who can see it and
      the three switches are one read-only line of what the Mac posts with, and a ticked label holds Upload (§47.9).
    * Instagram: Caption, Also show it in my feed (Reel).
-   * Facebook: Caption, "Goes up as a Reel on your Page. Everyone can see it." (Page Reels are public; nothing to pick).
+   * Facebook: Caption; the row's own line says "Reel on your Page · Everyone can see it", open or closed (Page Reels are public; nothing to pick).
    * X: Caption, Who can reply (the app's own dropdown: Everyone, People you follow, Only people you mention, Verified
      accounts).
    With nothing set up (or the check failed) the rows hold the words only. There is no caption tab bar and no second
@@ -7534,9 +7534,9 @@ never come from My settings**: `madeForKids` (or `selfDeclaredMadeForKids`, `for
 `settings.youtubePrivacy` (one field, shown in both places). TikTok's Commercial content is not in it either (per clip).
 
 **Settings › Posting › My settings** (`/settings/posting/my-settings`, `MySettingsBranch.tsx`): one section per
-platform, X included ("This is used once it is." while X is not set up), each saving as it changes. YouTube's section
-shows "Made for kids: No. My settings never mark a clip as made for kids." TikTok's says Commercial content is picked
-per clip.
+platform, X included (a "Not set up yet" chip while X is not set up; Facebook shows its leaf alone), each saving as it
+changes. YouTube's section shows "Made for kids: always No." TikTok's says "Commercial content: off." with a shut
+"Paid partnership?" fold.
 
 ### 34.3 Confirm sends each place's options (API, additive)
 
@@ -7573,7 +7573,7 @@ settings is kept in localStorage.
 The app's own dropdown (`components/Dropdown.tsx`: a soft-fill button that opens a solid list, keyboard arrows,
 Escape, never the OS list), labelled "Who can see it", with exactly `privacyOptions` (Only me and Followers greyed when branded, §17.8),
 Everyone first, and the placeholder "Pick who can see it" until the owner picks or taps Use my settings. When only
-`SELF_ONLY` is allowed: one choice and the line "TikTok keeps posts private until it approves your app." Used in the
+`SELF_ONLY` is allowed: one choice and the line "TikTok keeps posts private until it approves Clip Factory." Used in the
 TikTok row and on the Post to TikTok sheet (which still opens for Library's Try again, and on Upload while nothing is
 set up but TikTok is connected).
 
@@ -7755,8 +7755,8 @@ reference files are not in the API either.
   line, plain words ("Join", "Copy", "Paste", "Make clips", "Upload"), no jargon (never "MCP", "OAuth", "token",
   "scope", "CPM", "submission", "API"; say "sign in", "allow", "per 1,000 views", "clip", "sent"). The one exception is
   the body of the pilot email (§38.3), which is written for CR's support team: it sits under **Show more** and is
-  never the visible label of anything. Since §41 the same exception covers the finder's `ASK_MESSAGE` under **Show
-  more** "What it says" (§41.1 item 6), with the line "This is what Clip Factory sends to Content Rewards' team." above
+  never the visible label of anything. Since §41 the same exception covers the finder's `ASK_MESSAGE` under the fold
+  **See the message** (§41.1 item 6), with the line "This is what Clip Factory sends to Content Rewards' team." above
   it.
 * **Bold** inside the owner's words in this section = an exact label of the other site the step opens, word for word
   (CR's app code of 21 Nov 2026; Whop's, YouTube Studio's, Instagram's and Facebook's own words). Where CR's help pages
@@ -7941,8 +7941,8 @@ my Content Rewards account connect apps, so Clip Factory can send my own clips f
 Thank you! (For your team: MCP sign-in pilot, scope my_submissions:write.)"
 
 **When it's done** (`data-help="cr-ready"`): "Signed in to Content Rewards since 21 Nov.", then one line: connected
-"Clip Factory sends your campaign clips for you."; read-only "Clip Factory can see your campaigns and money. It can't
-send clips yet, so I remind you after each post." Buttons, all glass unless said: "Check it", "Connect again"
+"Clip Factory sends your campaign clips for you."; read-only "It can see your campaigns and money, but can't send clips
+yet. You get a reminder after each post." Buttons, all glass unless said: "Check it", "Connect again"
 (vermilion only when `needs_reconnect` and there is no calm card), "Disconnect" (8 s toast "Disconnecting Content
 Rewards… Undo"; the `DELETE` goes when the toast ends; afterwards the line "To remove Clip Factory on Content Rewards
 too: Settings, **Connected apps**, **Disconnect**."). From 7 days before `signInBy`: a calm card "Sign in to Content
@@ -8032,16 +8032,16 @@ top to bottom:
    from `postSubmissionRules`, `keepPublicDays`, `disclosure.spoken`, `audience`): "After 48 hours, send a screen
    recording of this clip's views. I'll remind you.", "Keep each clip up for 30 days. Don't delete it.", "Say “paid
    partnership” out loud in the first 10 seconds.", "Show the brand where your viewers live if it asks."
-   **I couldn't tell** (`uncertain`, a question mark each) under the line "I'm not sure about these. Read them on the
-   campaign page." Then the quiet link "Rules missing? On the campaign page, copy everything under **Brief** and
-   **Content requirements**. Paste it here, then tap Read these rules." (a text box, ≤ 8,000 characters, "Read these
+   **I couldn't tell** (`uncertain`, a question mark each) under the line "Read these on the campaign page." Then the
+   fold "Rules missing?" whose first line is "On the campaign page, copy everything under **Brief** and **Content
+   requirements**. Paste it here." (a text box, ≤ 8,000 characters, "Read these
    rules"). Open campaigns hide their rules until you join: "You'll see the rules once you join." (`rulesState:
    waiting_for_join`); Clip Factory reads them by itself when you're in. While reading: "Reading the rules… (about
    30 seconds)".
 5. **Logo** (only when `logo.needed`, `data-help="cr-logo"`). Before he is in: only "You can get the logo once you're
    in." After: one drop box "Drop the logo here, or paste a Google Drive or Dropbox link." with "Paste" and "Choose a
    file" (glass). "On the campaign page, open **Reference materials**. Tap the file with “logo” in its name. Download
-   it." "Tap Choose a file and pick it from Downloads. A Google Drive link works too: tap Paste." When the logo is the
+   it." "Tap Choose a file. Pick it from Downloads." (the drop box line already names Google Drive and Dropbox) When the logo is the
    next step, the vermilion is the next step's "Add the logo" (it opens the file picker). Ready: the logo on a soft
    tile, "Logo added ✓" and "Change" (glass). Errors: an SVG or other type → "Clip Factory needs a PNG, JPG or WebP
    picture. Save the logo as PNG and try again."; over 10 MB → "That picture is too big. Use one under 10 MB."; a
@@ -8158,8 +8158,7 @@ that is never "accepted": it just shows.
     "I linked it" (`PATCH /v1/contentrewards/connection {"relinked": "youtube"}`: back to unknown, so YouTube returns
     to the chips) and the second line "Then tap I linked it. The next clip will go."
   * **Use my settings** puts the campaign versions on: YouTube Who can see it **Everyone**, Made for kids **No**,
-    "Paid promotion: on" (the three are shown locked, with "Campaign clips are public, never made for kids, and
-    marked as paid."); Instagram and Facebook as My settings; X "Paid partnership: on"; TikTok (after the audit only)
+    "Paid promotion: on" (the row's line names the three; inside the row one locked line says "Campaign clips are public, never made for kids, and marked as paid."); Instagram and Facebook as My settings; X "Paid partnership: on"; TikTok (after the audit only)
     Everyone (`PUBLIC_TO_EVERYONE`: Use my settings picks it; the dropdown still lists TikTok's own options with no
     default, §17.8, and any other pick shows "Campaign clips must be public. Pick Everyone." under the row), Commercial
     content on with
@@ -8262,15 +8261,15 @@ platform estimates; it has its own part.
 `data-help="cr-money"`; Settings › Posting › Money gains the apple `money-contentrewards` with href
 `/money#content-rewards`):
 * Three tiles from `GET /v1/contentrewards/money` (all in USD cents as CR reports them, formatted only): "**Still
-  earning** $4.20" ("Clips still earning. The amount can still change. (On Content Rewards: **Queued** and
-  **Arriving**.)" = the sum of `pending` payouts), "**On its way** $0.00" ("Moving to your Whop balance." =
-  `withdrawal_pending`), "**Ready to move** $18.25" ("You can move this to Whop now. (On Content Rewards: **Balance**.)"
-  = `available`). When campaign clips wait for the brand: "3 clips are waiting for the brand. Their money shows here
-  after the brand says yes." (CR's pending amount is $0 until approval). Then "Content Rewards paid you $62.40 so far
+  earning** $4.20" ("Can still change. On Content Rewards: **Queued** and **Arriving**." = the sum of `pending`
+  payouts), "**On its way** $0.00" ("Moving to your Whop balance." =
+  `withdrawal_pending`), "**Ready to move** $18.25" ("Move it to Whop now. On Content Rewards: **Balance**." = `available`).
+  When campaign clips wait for the brand: "3 clips are waiting for the brand." (CR's pending amount is $0 until
+  approval). Then "Content Rewards paid you $62.40 so far
   · last money Tue 18 Nov" (`paidSoFarCents`, newest `paid_at`), a per-campaign list (name, paid, still earning), and
-  the grey line "Content Rewards' numbers · checked 20 min ago". Not connected: "Connect Content Rewards to see your
+  the grey line "Checked 20 min ago" (the part's head keeps the tag "Content Rewards' numbers"). Not connected: "Connect Content Rewards to see your
   campaign money." (→ setup page); `needs_reconnect`: "Sign in to Content Rewards again to see your money."; nothing
-  yet: "No campaign money yet. It shows here when the brand approves your clips."; `checking`: the tiles show and the
+  yet: "No campaign money yet. It comes when the brand says yes."; `checking`: the tiles show and the
   paid line says "Checking…".
 * "Ready to move" of $1.00 or more makes "Move your money to Whop" the part's vermilion step. When a move to Whop has
   just finished (`withdrawal_pending` went back to 0 after being above 0, `auto: money_moved`), the bank step is the
@@ -8287,8 +8286,8 @@ question first, asked once and kept (`CRCONN.finance`, `PATCH /v1/contentrewards
 "Do you see **Finance** in the Content Rewards menu?" as a `<Glide>` pick-one bar "Yes" / "No" (no main button on
 the part until it is answered; then the next money step's button is the vermilion one). "Yes" shows only the
 `finance: "yes"` steps, "No" only the `finance: "no"` steps; "Change my
-answer" (quiet) asks again. First line of the part: "Whop is the website where Content Rewards sends your money. From
-there it goes to your bank."
+answer" (quiet) asks again. First line of the part: "Content Rewards pays you on Whop. Then you move it to your
+bank."
 | id | for | title | essentials |
 |---|---|---|---|
 | `move-whop` | no | Link your Whop account | once; "I did this". "No Whop account? Tap **Open Whop** and make one with the same email." Open "Open Content Rewards settings" → `https://contentrewards.com/c/settings`. "Find Connect your Whop account and tap **Open Whop**." "Sign in to Whop and allow it. Then come back." If you see: can't find it → "Tap **Profile** and look again."; "Could not open Whop. Try again." → "Tap **Open Whop** again."; "already connected to another creator" → "Use your own Whop account, or ask Content Rewards support." |
@@ -9552,7 +9551,8 @@ The normal way gains 0 taps, 0 fields and 0 warnings: the tests of §39.5 fail i
 15. §38.5 places, §38.6 `not_sent` and §38.9's reason texts: "Link YouTube inside Content Rewards first." / green "I
     linked it" / "Then tap I linked it. The next clip will go." / "… tap **Accounts**, and connect it. Then tap I
     linked it." / "… Open Content Rewards settings, then tap I linked it." → "Add YouTube in Content Rewards first." /
-    "I added it" / "Then tap I added it. The next clip will go." / "… tap **Accounts**, and add it. Then tap I added
+    "I added it" (the Upload to block's second line "Then tap I added it. The next clip will go." is gone since 23 Nov
+    2026: its Open and I added it buttons say it) / "… tap **Accounts**, and add it. Then tap I added
     it." / "… Open Content Rewards settings, then tap I added it." (the same `relinked` PATCH).
 16. §38.5 captions: "the row shows "I put #Ad and the campaign's tags back when it uploads." (no block)" → the same, and
     the fit block's optional glass "Fix it for me" puts them back on the card at once.
@@ -9611,8 +9611,8 @@ Facebook "Look in Meta Business Suite, then Payouts." + "Open Meta Business Suit
 number only when CR reported it, none of them in the total:
 * "Right now (Content Rewards says, 2:10 pm): Still earning $4.20 · Ready to move to Whop $18.25 · On its way to Whop
   $0.00" (time = `asOf`; a number CR didn't report is left out of the line).
-* "Earned so far, since you started: $62.40" ("Checking…" until the paid list was read to its end).
-* "Paid out to your bank: not available from Content Rewards. Look on Whop: **Balances**."
+* "Earned since you started: $62.40" ("Checking…" until the paid list was read to its end).
+* "Paid to your bank: look on Whop, **Balances**."
 * the glass "See it all" (→ `#content-rewards`), only while the row has no button of its own.
 
 The owner's four words map to CR's: "earned so far" = the `paid` payouts ("The amount reached your balance", net of
@@ -9799,8 +9799,7 @@ the first one's text ("Half the money is used. Post soon.") · glass "Make a FaZ
 softCodes`: that tap is his acceptance, like "Make clips anyway") · quiet "Not now" (hides it for that clip on this
 device: `localStorage["cf-cr-not-now"]`, at most 200 clip ids, every read and write in try/catch). Upload stays the
 vermilion and the 2-tap upload is untouched. After the tap: "Making a FaZe Clips copy… It shows here in about 3
-minutes."; when the copy is in Review: "The FaZe Clips copy is ready, right below. Upload the copy to earn money. You
-can throw this one away." The clip page also has, closed by default and only when he is in a campaign, "Can it earn on
+minutes."; when the copy is in Review: "The FaZe Clips copy is ready, right below. Upload the copy to earn money." The clip page also has, closed by default and only when he is in a campaign, "Can it earn on
 your campaigns?" with one line per campaign (its headline and first reason). With no campaign, CR switched off (503) or
 an API before G (404), nothing shows: the card is origin/main's.
 
@@ -10133,8 +10132,10 @@ reading" and "the AdSense website" are the exceptions). Platform labels stay bol
    `cost`, "Steps checked on 21 Nov 2026"); the **status block** (`data-help="getpaid-status"`: the pill, the line,
    `missing` and `holds` lines, the reading chip (`readingChip`, YouTube and, while `WHOP_CONNECT` is on, Content
    Rewards), X's `warning`, and `next` as below); **Can you earn here?** (the guide's facts for his country from
-   `GET /v1/money`'s `country`, each short; one glass "Read YouTube's rules" per different official page; with no
-   country picked: "Pick your country in Money settings to see its rules." with a glass "Pick my country"
+   `GET /v1/money`'s `country`, each short: the first one (to join, or when it pays) on the card, the rest inside one
+   closed fold "See all the rules" with one glass "Read YouTube's
+   rules" per different official page; with no country picked: "Pick your country to see its rules." (above the fold)
+   with a glass "Pick my country"
    (→ `/settings/posting/money#money-country`) and the facts that hold everywhere); the **step cards** in time order;
    **What Clip Factory can see** (the server's `seen` lines); **Sent to your bank** (`data-help="getpaid-sent"`: the
    rows of §40.4); **When it's done** (glass "Check now" = `POST /v1/money/refresh` on YouTube and Content Rewards, the
@@ -11763,14 +11764,17 @@ answer 503 `unavailable` "Coming soon.").
 * Whop's sign-in is OAuth 2.1 + PKCE (S256) with public clients (`token_endpoint_auth_method` `none`) at
   `https://api.whop.com/oauth/`, and an app needs a `client_id` made in Whop's Developer Dashboard with exact redirect
   URIs. So, like every platform of §17, the owner makes his own Whop app once (no secret: a public client):
-  * step `whop-key` "Make your Whop key" (inside the card, not numbered; ticks itself when the key is saved): Open
+  * step `whop-key` "Make your Whop key" (inside the card, not numbered; ticks itself when the key is saved; the card's
+    lede is "Optional. See what Whop sent to your bank."), then "A grown-up does this once on the Mac.", then one
+    closed fold "How do I make it?" (`data-whop="how"`) holding everything up to the company hint, so the card stays
+    short (the owner, 23 Nov 2026); the "Whop key" box and "Save key" stay visible under it. In the fold: Open
     "Open Whop's developer page" → `https://whop.com/dashboard/developer`. "Tap **Create app**. Name it:" Copy chip
     "Clip Factory". "Find **OAuth**. Paste this in **Redirect URIs**:" Copy chip `GetPaid.connections.whop.redirectUri`
     (`{HOOKS_URL}/oauth/whop/callback`). "Tick **user:balance:read**, **payout:withdrawal:read**,
     **payout:destination:read** and **identity:read**." "Tap **Save**. Copy the **Client ID**. It starts with app_."
-    Paste box "Whop key" (`^app_[A-Za-z0-9]{4,64}$`, friendly 400 "Your Whop key starts with app_."), "Save key".
     "Whop may show this a little differently. Look for the same words." If you see: Whop asks for a company first →
-    "Make one. Any name is fine. It's free."
+    "Make one. Any name is fine. It's free." Under the fold: paste box "Whop key" (`^app_[A-Za-z0-9]{4,64}$`, friendly
+    400 "Your Whop key starts with app_."), "Save key".
   * then the card's "Connect Whop" (glass, except when the page's `next` is `null`, §40.1 item 2).
 * `PUT /v1/getpaid/whop/key {"clientId"}` → secret `cf-prod/platforms/whop/app` `{clientId, userId, savedAt}`;
   `PAYCONN#whop` `status "keys_saved"`, `keyHint` (first 6 + "…" + last 4). A different `clientId` while connected
@@ -12261,8 +12265,8 @@ brands, CR's category names) is plain escaped text, at most 300 characters, neve
    label wrapping inside its own half, so no choice sits alone on a second row; the 2 × 2 grid's track and `<Glide>`
    highlight turn into rounded rectangles to match.
 
-   Under the controls, fixed (not a control): "I skip campaigns Clip Factory can't make clips for, like ones that need
-   their own sound or picture on the video." The TikTok chip, until TikTok's posting audit passes (§17.4 gate
+   Under the controls, fixed (not a control): "I skip campaigns that need their own sound or picture on the
+   video." The TikTok chip, until TikTok's posting audit passes (§17.4 gate
    `posting_audit: ok`): shown off and not tappable (`aria-disabled`), with the §38.4 line "TikTok: not yet. Campaign clips skip
    TikTok for now: your Mac can't mark them as Branded content yet." A place not set up yet (not
    `ready` in `GET /v1/setup`) is shown off and not tappable, with "Set it up first." under it (matching only ever uses
@@ -12363,18 +12367,17 @@ brands, CR's category names) is plain escaped text, at most 300 characters, neve
      store's campaign events (`GET /v1/contentrewards/campaigns/{id}`, §38.8). The `cf-prod-stats` tick adds them the
      same way within 15 minutes when the page is closed (§41.5), and the owner gets §38.11's "You're in!"
      notification.
-4. Under the matches, quiet lines: "You join each campaign yourself on Content Rewards." Then, while `signedIn`: "Open
-   campaigns show their rules only after you join. I read them right after."; else: "Open campaigns show their rules
-   only after you join. Then I'll ask you to copy them here once." Then the fold **"Why not more?"**: "I looked at 154
+4. Under the matches, quiet lines: "You join each campaign yourself on Content Rewards." Then, while `signedIn`: "Rules
+   show after you join. I read them then."; else: "Rules show after you join. Then you copy them here once." Then the fold **"Why not more?"**: "I looked at 154
    campaigns. 6 match." and one line per reason with a count, most first (§41.3 `skipped`): "62 pay less than $1.00
    per 1,000 views.", "31 have only a little money left.", "12 don't pay for the places you post.", "9
    want you to apply first.", "5 need something Clip Factory can't make.", "3 you said Not for me." (+ the quiet "Bring
    them back", `{"unhideAll": true}`).
 5. Glass "Look on Content Rewards yourself" (→ `https://contentrewards.com/c/discover`, new tab).
 6. **Ask Content Rewards** (only while `signedIn`; `data-help="cr-finder-ask"`): a quiet card "Clip Factory can't join
-   for you" with the line "Content Rewards has no way yet for apps to join. You can ask them to add one." and the glass
+   for you" with the line "Content Rewards doesn't let apps join yet. You can ask them." and the glass
    "Ask Content Rewards" (one tap; `POST …/finder/ask`; toast "Sent. Thank you!"), then "You asked Content Rewards on
-   21 Nov." Under **Show more** "What it says": the line "This is what Clip Factory sends to Content Rewards' team."
+   21 Nov." Under the fold **See the message**: the line "This is what Clip Factory sends to Content Rewards' team."
    and the message (§41.5), never the visible label of anything (§38.1's exception, extended to it by §41.6 change
    12).
 7. The quiet "Stop finding campaigns" (`{"want": {"on": false}}`, 8 s toast with Undo); stopped, the page shows "You
@@ -12387,7 +12390,7 @@ brands, CR's category names) is plain escaped text, at most 300 characters, neve
 | `new` | the What you want card, open, defaults picked | "Find campaigns for me" |
 | `new` or `ok`, no place set up (`resolvedPlaces` empty) | "Set up a place to post first. Then I can find campaigns that pay for it." | "Set up YouTube" (→ `/settings/posting/setup/youtube?back=/campaigns/find`) |
 | `looking` (a look or a change is being worked on, ≤ 10 min) | "Looking at Content Rewards' campaigns… This takes a minute or two."; right after his own change to What you want (S knows it sent that `PATCH`): "Updating your matches…" (the old matches stay below, dimmed) | none |
-| `ok`, the first look not finished (`looked.pending > 0`) and no match yet | "No match yet. I've looked at 120 campaigns so far. I'll look at more later today." and, while `tellMe` is on, "You don't need to do anything. I'll tell you when one matches." | none |
+| `ok`, the first look not finished (`looked.pending > 0`) and no match yet | "No match yet. I've looked at 120 campaigns so far. I'll look at more later today." and, while `tellMe` is on, "I'll tell you when one matches." | none |
 | `ok`, no match | "No campaign matches right now. I look again 4 times a day." + glass "Change what you want" (opens the card) | none |
 | `ok`, with matches | the matches (and any "You're in!" rows) | the newest "You're in!" row's, else the open match's (not signed in, after Open: only once its rules box has text) |
 | `down` (Content Rewards' pages didn't answer; matches from the last good look, if any, stay) | "Content Rewards didn't answer. I'll try again in a few hours." | the open match's, else none |
@@ -14229,12 +14232,12 @@ items) with `userId`, `workspaceId`, `socialAccountId`, `appChoice` and `redirec
 * youtube: `prompt=select_account consent` (Google always shows its account and channel picker, Brand Accounts
   included);
 * tiktok: `disable_auto_auth=1` (as today: TikTok always shows its consent page, for the account signed in on
-  tiktok.com); the page says first "Sign in to your Clips Funded account on tiktok.com in this browser. TikTok
-  connects the account that is signed in.";
+  tiktok.com); the page says first "Sign in to your Clips Funded account on tiktok.com in this browser first." (why, in
+  the card's More fold: TikTok connects the account that is signed in);
 * instagram, facebook: Clips Funded's own Meta app and its Login configuration; the page says before the tap "Facebook
   will ask which Pages this app may use. Tick only your Clips Funded Page.";
-* x: as today; the page says "First sign in to your Clips Funded account on x.com in this browser. X connects the
-  account that is signed in."
+* x: as today; the page says "First sign in to your Clips Funded account on x.com in this browser." (why, in the card's
+  More fold: X connects the account that is signed in)
 
 #### 45.13.3 The callback: Clip Factory's callback only forwards; Clips Funded's own Lambda does the rest
 
@@ -14551,8 +14554,20 @@ each publishing job's status, account, link, numbers, its sentence and **Try aga
   name for that platform so the owner sees they differ.
 * Social accounts (the Connections page) also shows, per platform: the developer-app choice (§45.30) with its key
   form and **Check it**, the authorization status, **last checked** (`lastCheckedAt`, with **Check now**), Connect,
-  Reconnect and Disconnect; the publish sheet shows the exact account each video goes to, with **Check now**, before
-  **Upload**.
+  Connect again and Disconnect; the publish sheet shows the exact account each video goes to, with **Check now**, before
+  **Upload**. Kid-proof (the owner, 23 Nov 2026: "even an 8 year old should be able to use the app"): the card itself
+  shows only the logo and name, one status chip, the account (picture, name, handle), the new-account line (while an
+  account is still to connect, pick, connect again or replace, and while the card asks "Is this your Clips Funded
+  …?"; a connected account that is fine does not repeat it), what needs the owner (a warning, the list to pick from,
+  the sign-in tip, and in short who can see the posts, "Posts stay Only me for now.", and what can cost money, "This
+  can go over your monthly X limit.", while the platform's limits say so) and one main button (Set up the app /
+  Connect / Connect again / Pick another; the button says what the chip says). While the developer app still needs
+  setting up, **Set up the app** is the card's one main button and there is no Connect yet: it opens the app's choice
+  ("Pick the {platform} app", or "Set up the Meta app") on the card itself, never in a fold; in a setup step (§45.29)
+  it is open by itself, and each connect step starts fresh. Everything else (the authorization status, labelled
+  "Posting", last checked, the account id, Check now, Disconnect and its "Are you sure?", the ready developer app
+  with its keys and redirect URIs, Clip Factory's destination and the platform's limits minus the sentences the card
+  already says) is in one closed **More** fold per card; closing it drops a Disconnect still to answer.
 * Settings: §45.29's sections (AI, Agents, Skills, Memory, Social accounts, Video, Storage and production, Look), plus
   YouTube category and privacy and captions and music defaults.
 * Chat: §45.27 (conversation list, messages, the model and effort line above the box, "Just for this message",
@@ -15164,7 +15179,7 @@ is already built and only written down here.
   sceneIds, note? }` (a note or scene ids at least); `analyze_reference { refId }`; `save_character { character }`;
   `save_idea { idea }` or `{ ideaId, patch }`; `open { href }` (a Clips Funded address only).
 * **Chat pictures on Try again** (built): a retry uploads the pictures again; an `assetId` is used by one message only.
-* **The dashboard's account sentence** (api) says "Open Social accounts and tap Connect".
+* **The dashboard's account sentence** (api) says "Open Social accounts and tap Connect again".
 * **Approving a driving-safety story** (api): approve refuses a `safety.status` of `skipped` whenever the story has a
   `safetyTopicId`, whatever its category (a second guard; the agent never skips it).
 
@@ -15191,7 +15206,7 @@ behaviours an earlier step narrowed or left out)
   one video; `PATCH` may change it until the first run finishes). `StoryScript.width` and `height` are that size; the
   engine lays out sets, characters, cameras, bubbles, captions and the end card for each shape (positions stay 0..1
   of the frame, safe areas per shape), and the rasterizer, the ASS writer and ffmpeg use the script's size. 9:16
-  stays the default; the Settings cards say Shorts, Reels and TikTok want 9:16.
+  stays the default; the 9:16 option says For Shorts, Reels and TikTok.
 * **Output formats** (request 2 §6F; agent, api, web): every video is MP4 (H.264, AAC, faststart), which posting needs.
   `StoriesConfig.production.extraFormats: ("webm" | "mov")[]` (default none) also makes `final/v{n}.webm` (VP9, Opus)
   and `final/v{n}.mov` (ProRes 422 Proxy, PCM) after assembly, each an `ASSET#` of kind `video` with
@@ -15400,7 +15415,7 @@ its own `task`. The dashboard checks app keys only while its request has time (i
 * **E11.** Celebrate a post: the Post it sheet's "Posted!" gets Clips Funded's star burst and success sound (the same as Approve).
 * **E12.** A model the studio already knows is unusable (status denied, not_found or error) is never pre-picked: the pickers and chips show it with its status line, the usual choice skips it, and Make the video with it selected asks first ("{Model} has no access right now. Use {usual} instead?").
 * **E13.** One name on screen: Clips Funded's screens and the API's Clips Funded sentences call the other app "Clip Factory" everywhere (never "Lamo Clips"); sentences never read oddly when an account is itself named "Clips Funded" (say "this {Platform} account ({name})").
-* **E14.** Kid-proof first lines: developer-app terms (Valid OAuth Redirect URIs, Login configuration, App Review, Sandbox, inference profile, ARN) and raw ids (account ids, model ids, channel ids) sit behind a "Technical details" fold, with a plain first line ("Copy this address into your app's settings"); the facts stay one tap away.
+* **E14.** Kid-proof first lines: developer-app terms (Valid OAuth Redirect URIs, Login configuration, App Review, Sandbox, inference profile, ARN) and raw ids (account ids, model ids, channel ids) sit behind a "Technical details" fold (on Social accounts, inside the card's More fold), with a plain first line ("Copy this address into your app's settings"); the facts stay one tap away.
 * **E15.** After Finish with skipped steps, the dashboard keeps a small "Finish setting up: {n} left" card listing them, and Settings always has "Open setup again".
 * **E16.** Clips Funded's own switcher is always in view: in short desktop windows the rail's switcher is pinned (sticky at the bottom of the rail, or in the rail's top when the foot would scroll off); at 320 px Clip Factory's top-bar switch is at least 44 px in both directions (shrink or drop the brand text before the switch shrinks), with the flag-off app unchanged.
 * **E17.** Settings polish: Add a model starts with the maker's usual effort levels ticked when effort levels are on (Anthropic: all five, default its usual); the Added by you and status chips have the normal gap and the status sits at the right edge like other rows; status words are one set everywhere ("Works", "Not checked yet", "No access", "Not found", "Problem"); "More effort thinks longer" is hidden for a model with no effort setting; a sentence never tells the owner to go to the page he is on (say "Pick Built-in animation above").
@@ -15642,7 +15657,9 @@ re-staging pass after the engine refused the first staging; there is no two-call
   clears the status. Clip Factory's `ACCOUNT#` is read read-only, widened in place to `handle` (the API and the story
   flow) and `autoPost` (the story flow, its settings item), with the separation tests' allowed sets to match; Clip
   Factory's items and code are unchanged.
-* **Words.** Each Connect step and card: "Use a new account made for Clips Funded, not Clip Factory's." (the same
+* **Words.** Each Connect step and card whose next step is an account (to connect, pick, connect again or replace,
+  and while it asks "Is this your Clips Funded …?"; since 23 Nov a connected account that is fine does not repeat it,
+  the page's own line says it at the top): "Use a new account made for Clips Funded, not Clip Factory's." (the same
   on every platform; it once said "not lamo.clips", which is not Clip Factory's name on X); the
   same-as-Clips state: "This is Clip Factory's own account. Clips Funded needs its own separate account: sign
   in with a different one."; Clip Factory took it later: "This is Clip Factory's account now. Connect a different
@@ -17770,10 +17787,9 @@ toast "Saved.":
    posted place with **Open** (its live `url`); a run with nothing: "Sun 05:00 · Nothing in Review, so nothing posted.";
    practice: "Sun 05:00 · Practice: would post “hook” to YouTube, Instagram and Facebook."; private test: "Private test
    · “hook”: YouTube (only you) · Facebook (draft) · Instagram (checked, not published)".
-9. A fold **Test it first** (closed to start): the switch **Practice** (`autoPost.practice`, "Pick the clips on time,
-   but send nothing. The clips stay in Review."), **Practice run now** and **Private test run** (glass buttons; the
-   second's line: "Posts the next clip so only you can see it: YouTube as Only me, Facebook as a draft on your Page,
-   Instagram uploaded and checked but not published. It leaves Review."). After a tap the page reads the status again
+9. A fold **Test it first** (closed to start): the switch **Practice** (`autoPost.practice`, "Sends nothing. The
+   clips stay in Review."), **Practice run now** and **Private test run** (glass buttons; the second's line: "Posts the
+   next clip so only you see it: YouTube Only me, Facebook a draft, Instagram not published. It leaves Review."). After a tap the page reads the status again
    every 3 s for 30 s; the run shows in Recent.
 
 The page reads `GET /v1/autopost` on open, on focus, every 60 s while open, and after every change. Clip changes reach
@@ -18747,7 +18763,7 @@ TikTok. No API, table or infrastructure change.
    Duet and Stitch as saved (on by default), and Commercial content off. A campaign clip keeps its own path (Everyone
    with Branded content, §17.8; the Mac never takes one, §47.2).
    * No tap before Upload: the button reads **Your settings are on** from the start (`settingsOn` true), the line under
-     it reads "Every place uses your settings. Tap a place below to change it for this clip.", and TikTok's row line
+     it reads "Tap a place below to change it for this clip.", and TikTok's row line
      says "Who can see it: Everyone · …", never "not picked yet". Upload is never held with "Tap Use my settings
      first. TikTok needs your tap."
    * **TikTok's row is read-only for what the Mac uses** (decided for this release, 2026-11-23). The server asks the
@@ -18808,12 +18824,12 @@ TikTok. No API, table or infrastructure change.
    TikTok's demo video for its app review (`TIKTOK_DEMO_SHOTS`, §17) shows this path, so it is recorded with Your Mac
    posts TikTok off.
 3. **Words elsewhere:** Settings › Posting › My settings (`MySettingsBranch.tsx`) reads "Every clip on Review starts
-   on these, TikTok too, except campaign clips." at the top, and under TikTok "Commercial content is off. Your Mac
-   posts TikTok with these. Paid partnerships can't go through your Mac yet: untick TikTok for that clip, then post it
-   in the TikTok app with its label, not with Post with my Mac or Send these to my Mac." in item
-   1's mode; otherwise both keep today's words ("Tap Use my settings on a clip to put these on.", "Commercial content
-   is off. For a paid partnership, tick Branded content in the TikTok row of that clip. TikTok wants your own tap on
-   each clip, so tap Use my settings there."). The TikTok part's leaf (`settingsTree.ts`, `my-settings-tiktok`) reads
+   on these, TikTok too, except campaign clips." at the top, and under TikTok "Commercial content: off. Your Mac posts
+   TikTok with these." in item 1's mode, with a shut "Paid partnership?" fold: "Your Mac can't post those yet.", "Untick
+   TikTok on that clip.", "Post it in the TikTok app, with its label.", "Don't use Post with my Mac or Send these to my Mac
+   for it."; otherwise "Tap Use my settings on a clip to put these on." at the top, and "Commercial content: off. TikTok
+   wants your own tap, so tap Use my settings on each clip." with the fold's one line "Tick Branded content in that
+   clip's TikTok row.". The TikTok part's leaf (`settingsTree.ts`, `my-settings-tiktok`) reads
    "Everyone can see it; comments, Duet and Stitch on. Every clip starts on these while your Mac posts TikTok." in
    both modes. Ask's "Use my settings" guide (`helpKb.json`, `review-use-my-settings`, titled "Use my settings: your
    saved choices on every place", true in both modes) says every ticked place, TikTok included, starts on his settings

@@ -17,8 +17,9 @@ never touches the "2 of 5 ready" ring or the floating setup list.
 - **A place page** (`/settings/posting/getpaid/{place}`, `data-help="getpaid-place"`), top to bottom: the hero (mark,
   name, ring, "About 15 minutes · Free", "Steps checked on 21 Nov 2026"); the **status block**
   (`data-help="getpaid-status"`: the pill, the line, what is missing, holds, the reading chip "Clip Factory can see
-  payments: on" / "off", X's warning, and the next step as words); **Can you earn here?** (the place's rules for his
-  country, one glass "Read YouTube's rules" per official page, or "Pick your country in Money settings to see its
+  payments: on" / "off" (off is left out when a line above already says payments can't be seen), X's warning, and
+  the next step as words); **Can you earn here?** (the place's first rule for his country on the card, the rest and
+  one glass "Read YouTube's rules" per official page in a closed "See all the rules", or "Pick your country to see its
   rules." with a glass "Pick my country"); the step cards; **What Clip Factory can see** (at most 6 lines);
   **Sent to your bank** (`data-help="getpaid-sent"`); **When it's done** (glass "Check now", the connection's own
   buttons, the way back with `?back=`).

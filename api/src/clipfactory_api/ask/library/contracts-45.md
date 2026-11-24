@@ -835,12 +835,12 @@ items) with `userId`, `workspaceId`, `socialAccountId`, `appChoice` and `redirec
 * youtube: `prompt=select_account consent` (Google always shows its account and channel picker, Brand Accounts
   included);
 * tiktok: `disable_auto_auth=1` (as today: TikTok always shows its consent page, for the account signed in on
-  tiktok.com); the page says first "Sign in to your Clips Funded account on tiktok.com in this browser. TikTok
-  connects the account that is signed in.";
+  tiktok.com); the page says first "Sign in to your Clips Funded account on tiktok.com in this browser first." (why, in
+  the card's More fold: TikTok connects the account that is signed in);
 * instagram, facebook: Clips Funded's own Meta app and its Login configuration; the page says before the tap "Facebook
   will ask which Pages this app may use. Tick only your Clips Funded Page.";
-* x: as today; the page says "First sign in to your Clips Funded account on x.com in this browser. X connects the
-  account that is signed in."
+* x: as today; the page says "First sign in to your Clips Funded account on x.com in this browser." (why, in the card's
+  More fold: X connects the account that is signed in)
 
 #### 45.13.3 The callback: Clip Factory's callback only forwards; Clips Funded's own Lambda does the rest
 
@@ -1157,8 +1157,20 @@ each publishing job's status, account, link, numbers, its sentence and **Try aga
   name for that platform so the owner sees they differ.
 * Social accounts (the Connections page) also shows, per platform: the developer-app choice (§45.30) with its key
   form and **Check it**, the authorization status, **last checked** (`lastCheckedAt`, with **Check now**), Connect,
-  Reconnect and Disconnect; the publish sheet shows the exact account each video goes to, with **Check now**, before
-  **Upload**.
+  Connect again and Disconnect; the publish sheet shows the exact account each video goes to, with **Check now**, before
+  **Upload**. Kid-proof (the owner, 23 Nov 2026: "even an 8 year old should be able to use the app"): the card itself
+  shows only the logo and name, one status chip, the account (picture, name, handle), the new-account line (while an
+  account is still to connect, pick, connect again or replace, and while the card asks "Is this your Clips Funded
+  …?"; a connected account that is fine does not repeat it), what needs the owner (a warning, the list to pick from,
+  the sign-in tip, and in short who can see the posts, "Posts stay Only me for now.", and what can cost money, "This
+  can go over your monthly X limit.", while the platform's limits say so) and one main button (Set up the app /
+  Connect / Connect again / Pick another; the button says what the chip says). While the developer app still needs
+  setting up, **Set up the app** is the card's one main button and there is no Connect yet: it opens the app's choice
+  ("Pick the {platform} app", or "Set up the Meta app") on the card itself, never in a fold; in a setup step (§45.29)
+  it is open by itself, and each connect step starts fresh. Everything else (the authorization status, labelled
+  "Posting", last checked, the account id, Check now, Disconnect and its "Are you sure?", the ready developer app
+  with its keys and redirect URIs, Clip Factory's destination and the platform's limits minus the sentences the card
+  already says) is in one closed **More** fold per card; closing it drops a Disconnect still to answer.
 * Settings: §45.29's sections (AI, Agents, Skills, Memory, Social accounts, Video, Storage and production, Look), plus
   YouTube category and privacy and captions and music defaults.
 * Chat: §45.27 (conversation list, messages, the model and effort line above the box, "Just for this message",
@@ -1770,7 +1782,7 @@ is already built and only written down here.
   sceneIds, note? }` (a note or scene ids at least); `analyze_reference { refId }`; `save_character { character }`;
   `save_idea { idea }` or `{ ideaId, patch }`; `open { href }` (a Clips Funded address only).
 * **Chat pictures on Try again** (built): a retry uploads the pictures again; an `assetId` is used by one message only.
-* **The dashboard's account sentence** (api) says "Open Social accounts and tap Connect".
+* **The dashboard's account sentence** (api) says "Open Social accounts and tap Connect again".
 * **Approving a driving-safety story** (api): approve refuses a `safety.status` of `skipped` whenever the story has a
   `safetyTopicId`, whatever its category (a second guard; the agent never skips it).
 
@@ -1797,7 +1809,7 @@ behaviours an earlier step narrowed or left out)
   one video; `PATCH` may change it until the first run finishes). `StoryScript.width` and `height` are that size; the
   engine lays out sets, characters, cameras, bubbles, captions and the end card for each shape (positions stay 0..1
   of the frame, safe areas per shape), and the rasterizer, the ASS writer and ffmpeg use the script's size. 9:16
-  stays the default; the Settings cards say Shorts, Reels and TikTok want 9:16.
+  stays the default; the 9:16 option says For Shorts, Reels and TikTok.
 * **Output formats** (request 2 §6F; agent, api, web): every video is MP4 (H.264, AAC, faststart), which posting needs.
   `StoriesConfig.production.extraFormats: ("webm" | "mov")[]` (default none) also makes `final/v{n}.webm` (VP9, Opus)
   and `final/v{n}.mov` (ProRes 422 Proxy, PCM) after assembly, each an `ASSET#` of kind `video` with
@@ -2006,7 +2018,7 @@ its own `task`. The dashboard checks app keys only while its request has time (i
 * **E11.** Celebrate a post: the Post it sheet's "Posted!" gets Clips Funded's star burst and success sound (the same as Approve).
 * **E12.** A model the studio already knows is unusable (status denied, not_found or error) is never pre-picked: the pickers and chips show it with its status line, the usual choice skips it, and Make the video with it selected asks first ("{Model} has no access right now. Use {usual} instead?").
 * **E13.** One name on screen: Clips Funded's screens and the API's Clips Funded sentences call the other app "Clip Factory" everywhere (never "Lamo Clips"); sentences never read oddly when an account is itself named "Clips Funded" (say "this {Platform} account ({name})").
-* **E14.** Kid-proof first lines: developer-app terms (Valid OAuth Redirect URIs, Login configuration, App Review, Sandbox, inference profile, ARN) and raw ids (account ids, model ids, channel ids) sit behind a "Technical details" fold, with a plain first line ("Copy this address into your app's settings"); the facts stay one tap away.
+* **E14.** Kid-proof first lines: developer-app terms (Valid OAuth Redirect URIs, Login configuration, App Review, Sandbox, inference profile, ARN) and raw ids (account ids, model ids, channel ids) sit behind a "Technical details" fold (on Social accounts, inside the card's More fold), with a plain first line ("Copy this address into your app's settings"); the facts stay one tap away.
 * **E15.** After Finish with skipped steps, the dashboard keeps a small "Finish setting up: {n} left" card listing them, and Settings always has "Open setup again".
 * **E16.** Clips Funded's own switcher is always in view: in short desktop windows the rail's switcher is pinned (sticky at the bottom of the rail, or in the rail's top when the foot would scroll off); at 320 px Clip Factory's top-bar switch is at least 44 px in both directions (shrink or drop the brand text before the switch shrinks), with the flag-off app unchanged.
 * **E17.** Settings polish: Add a model starts with the maker's usual effort levels ticked when effort levels are on (Anthropic: all five, default its usual); the Added by you and status chips have the normal gap and the status sits at the right edge like other rows; status words are one set everywhere ("Works", "Not checked yet", "No access", "Not found", "Problem"); "More effort thinks longer" is hidden for a model with no effort setting; a sentence never tells the owner to go to the page he is on (say "Pick Built-in animation above").
@@ -2248,7 +2260,9 @@ re-staging pass after the engine refused the first staging; there is no two-call
   clears the status. Clip Factory's `ACCOUNT#` is read read-only, widened in place to `handle` (the API and the story
   flow) and `autoPost` (the story flow, its settings item), with the separation tests' allowed sets to match; Clip
   Factory's items and code are unchanged.
-* **Words.** Each Connect step and card: "Use a new account made for Clips Funded, not Clip Factory's." (the same
+* **Words.** Each Connect step and card whose next step is an account (to connect, pick, connect again or replace,
+  and while it asks "Is this your Clips Funded …?"; since 23 Nov a connected account that is fine does not repeat it,
+  the page's own line says it at the top): "Use a new account made for Clips Funded, not Clip Factory's." (the same
   on every platform; it once said "not lamo.clips", which is not Clip Factory's name on X); the
   same-as-Clips state: "This is Clip Factory's own account. Clips Funded needs its own separate account: sign
   in with a different one."; Clip Factory took it later: "This is Clip Factory's account now. Connect a different

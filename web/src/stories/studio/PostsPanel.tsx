@@ -126,9 +126,10 @@ export function PostRow({ job, onRetry, busy = false, mac }: { job: PublishingJo
             Open<span className="st-s-sr"> on {PLATFORM_LABEL[job.platform]}</span>
           </a>
         ) : null}
-        {stuck && accountProblem(job) ? <SocialAccountsLink /> : null}
+        {/* An account problem is fixed on Social accounts first: that is the main way out, Try again comes after. */}
+        {stuck && accountProblem(job) ? <SocialAccountsLink className="st-btn st-s-small st-btn--main" /> : null}
         {stuck ? (
-          <button type="button" className="st-btn st-s-small st-btn--main" aria-disabled={busy || undefined} onClick={() => !busy && onRetry(job)}>
+          <button type="button" className={`st-btn st-s-small${accountProblem(job) ? "" : " st-btn--main"}`} aria-disabled={busy || undefined} onClick={() => !busy && onRetry(job)}>
             {busy ? "Trying…" : "Try again"}
           </button>
         ) : null}

@@ -240,7 +240,8 @@ The normal way gains 0 taps, 0 fields and 0 warnings: the tests of §39.5 fail i
 15. §38.5 places, §38.6 `not_sent` and §38.9's reason texts: "Link YouTube inside Content Rewards first." / green "I
     linked it" / "Then tap I linked it. The next clip will go." / "… tap **Accounts**, and connect it. Then tap I
     linked it." / "… Open Content Rewards settings, then tap I linked it." → "Add YouTube in Content Rewards first." /
-    "I added it" / "Then tap I added it. The next clip will go." / "… tap **Accounts**, and add it. Then tap I added
+    "I added it" (the Upload to block's second line "Then tap I added it. The next clip will go." is gone since 23 Nov
+    2026: its Open and I added it buttons say it) / "… tap **Accounts**, and add it. Then tap I added
     it." / "… Open Content Rewards settings, then tap I added it." (the same `relinked` PATCH).
 16. §38.5 captions: "the row shows "I put #Ad and the campaign's tags back when it uploads." (no block)" → the same, and
     the fit block's optional glass "Fix it for me" puts them back on the card at once.
@@ -299,8 +300,8 @@ Facebook "Look in Meta Business Suite, then Payouts." + "Open Meta Business Suit
 number only when CR reported it, none of them in the total:
 * "Right now (Content Rewards says, 2:10 pm): Still earning $4.20 · Ready to move to Whop $18.25 · On its way to Whop
   $0.00" (time = `asOf`; a number CR didn't report is left out of the line).
-* "Earned so far, since you started: $62.40" ("Checking…" until the paid list was read to its end).
-* "Paid out to your bank: not available from Content Rewards. Look on Whop: **Balances**."
+* "Earned since you started: $62.40" ("Checking…" until the paid list was read to its end).
+* "Paid to your bank: look on Whop, **Balances**."
 * the glass "See it all" (→ `#content-rewards`), only while the row has no button of its own.
 
 The owner's four words map to CR's: "earned so far" = the `paid` payouts ("The amount reached your balance", net of
@@ -487,8 +488,7 @@ the first one's text ("Half the money is used. Post soon.") · glass "Make a FaZ
 softCodes`: that tap is his acceptance, like "Make clips anyway") · quiet "Not now" (hides it for that clip on this
 device: `localStorage["cf-cr-not-now"]`, at most 200 clip ids, every read and write in try/catch). Upload stays the
 vermilion and the 2-tap upload is untouched. After the tap: "Making a FaZe Clips copy… It shows here in about 3
-minutes."; when the copy is in Review: "The FaZe Clips copy is ready, right below. Upload the copy to earn money. You
-can throw this one away." The clip page also has, closed by default and only when he is in a campaign, "Can it earn on
+minutes."; when the copy is in Review: "The FaZe Clips copy is ready, right below. Upload the copy to earn money." The clip page also has, closed by default and only when he is in a campaign, "Can it earn on
 your campaigns?" with one line per campaign (its headline and first reason). With no campaign, CR switched off (503) or
 an API before G (404), nothing shows: the card is origin/main's.
 

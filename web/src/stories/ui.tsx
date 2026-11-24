@@ -533,16 +533,21 @@ export function forgetDashboards(): void {
 const SOCIAL_PAGE = String.raw`(?:(?:(?:Clip(?: Factory)?|Lamo) Stories|Funded Clips|Clips Funded)\s*›\s*)?Social accounts`;
 
 /**
- * A Needs you sentence shown on the Social accounts page it sends the owner to, without the trip (§45.36 E17): "Open
- * Lamo Stories › Social accounts, then tap Try again." reads "Fix it below, then tap Try again."; "Pick another in Lamo
- * Stories › Social accounts" reads "Pick another below". Anything else stays as the server said it.
+ * A Needs you sentence shown on the Social accounts page it sends the owner to, without the trip (§45.36 E17), in the
+ * card's own button words: "… needs connecting again. Open Lamo Stories › Social accounts, then tap Try again." reads
+ * "… needs connecting again. Tap Connect again below. Then tap Try again on the video." (this page has no Try again:
+ * that one is on the video); "Open Social accounts and tap Connect" reads "Tap Connect again below"; "Pick another in
+ * Lamo Stories › Social accounts" reads "Pick another below". Anything else stays as the server said it.
  */
 export function socialHere(sentence: string): string {
-  return sentence
-    .replace(new RegExp(String.raw`\bOpen ${SOCIAL_PAGE},? (?:and|then) tap (Connect|Reconnect)\b`, "g"), "Tap $1 below")
+  const here = sentence
+    .replace(new RegExp(String.raw`\bneeds connecting again\. Open ${SOCIAL_PAGE}, then\b`, "g"), "needs connecting again. Tap Connect again below, then")
+    .replace(new RegExp(String.raw`\bOpen ${SOCIAL_PAGE},? (?:and|then) tap (?:Connect|Reconnect)(?: again)?\b`, "g"), "Tap Connect again below")
     .replace(new RegExp(String.raw`\bOpen ${SOCIAL_PAGE}, connect it, then\b`, "g"), "Connect it below, then")
     .replace(new RegExp(String.raw`\bOpen ${SOCIAL_PAGE}, then\b`, "g"), "Fix it below, then")
     .replace(new RegExp(String.raw`\s+(?:in|on) ${SOCIAL_PAGE}(?![A-Za-z])`, "g"), " below");
+  // Only a sentence about this page: its Try again is on the video, so it says where.
+  return here === sentence ? sentence : here.replace(/,? then tap Try again\b(?! on)/g, ". Then tap Try again on the video");
 }
 
 /** The address's page, without its query or hash. */

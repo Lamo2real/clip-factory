@@ -17,11 +17,12 @@ import { EFFORT_LABEL } from "../api/types.ts";
 import { Btn, cheer, Chip, effortWord, Failed, Loading, madeBy, MODEL_STATUS, money, Note, Progress, refusedLine, SavedMark, SectionBar, SetCard, SetPick, SetSelect, SIcon, statusSuffix, useOnThisPage, useSaved, whenText } from "./bits.tsx";
 import { useAi, type AiData } from "./data.ts";
 import { OwnModels } from "./OwnModels.tsx";
-import { keepName, ProviderKeys, ProviderRow } from "./ProviderKeys.tsx";
+import { keepName, ProviderKeys, ProviderRow, takesKey } from "./ProviderKeys.tsx";
 import { UsageCard } from "./UsageCard.tsx";
+import { StIcon, StTech } from "../ui.tsx";
 
 const KIND_WORD: Record<ProviderStatus["kind"], string> = {
-  writer: "Thinks and writes (the AI models above)",
+  writer: "Thinks and writes",
   images: "Makes pictures",
   animation: "Makes the video",
   audio: "Makes sounds and music",
@@ -66,7 +67,7 @@ const CHECK_STOPPED = "The check stopped before it finished. Try again.";
  * Check models: one tiny real call per model (or only `only`), followed until it finishes. With `makers` (§45.37 G2) it
  * checks those picture, video and sound models instead: an access check that costs nothing.
  */
-export function CheckModels({ ws, count, onDone, only, makers }: { ws: string; count: number; onDone: () => Promise<void>; only?: string[]; makers?: string[] }) {
+export function CheckModels({ ws, count, onDone, only, makers, quiet = false }: { ws: string; count: number; onDone: () => Promise<void>; only?: string[]; makers?: string[]; /** a second button on its card: not the main one */ quiet?: boolean }) {
   const toast = useToast();
   const [task, setTask] = useState<AiTask | null>(null);
   const [anchor, setAnchor] = useState<HTMLElement | null>(null);
@@ -125,7 +126,7 @@ export function CheckModels({ ws, count, onDone, only, makers }: { ws: string; c
   return (
     <div className="st-stg-check">
       <Btn
-        main
+        main={!quiet}
         off={running ? "Checking…" : undefined}
         onClick={(e) => {
           const el = e.currentTarget;
@@ -143,7 +144,7 @@ export function CheckModels({ ws, count, onDone, only, makers }: { ws: string; c
         {running ? "Checking…" : "Check models"}
       </Btn>
       {running ? <Progress value={null} label={(makers ?? only) ? `Checking ${(makers ?? only)!.length === 1 ? "the model" : `${(makers ?? only)!.length} models`}` : `Checking ${count} models`} /> : null}
-      {running ? <span className="st-stg-small">{makers ? "It asks whether this account may use each model. Nothing is made, so it costs nothing." : "One tiny real call to each model. It takes a few seconds."}</span> : null}
+      {running ? <span className="st-stg-small">{makers ? "A free check. Nothing is made." : "One tiny test call to each model. A few seconds."}</span> : null}
     </div>
   );
 }
@@ -171,7 +172,7 @@ function DefaultModel({ data, pending, onPick, ws, reload }: { data: AiData; pen
     <SetCard
       title="Default model"
       icon="chip"
-      lede="The model every agent and task uses unless you give it its own. You can change it any time."
+      lede="Every agent and task uses it, unless you pick another."
       actions={<CheckModels ws={ws} count={data.models.length} onDone={reload} />}
     >
       <p className="st-stg-active" aria-live="polite">
@@ -209,7 +210,7 @@ function DefaultEffort({ data, pending, onPick }: { data: AiData; pending: strin
   const m = modelOf(data.models, pending ?? data.ai.defaultModel);
   const value = pending ? null : data.ai.defaultEffort;
   // "How hard it thinks" only for a model that has levels: one with none never hears about them (§45.36 E17).
-  const lede = m && !m.efforts.length ? "This model picks how hard it thinks by itself." : "How hard the model thinks. Higher is slower and costs more. Lower is quick.";
+  const lede = m && !m.efforts.length ? "This model picks how hard it thinks by itself." : "How hard it thinks. Higher is slower and costs more.";
   return (
     <SetCard title="Default effort" icon="ruler" lede={lede}>
       {!m ? null : !m.efforts.length ? (
@@ -227,10 +228,6 @@ function DefaultEffort({ data, pending, onPick }: { data: AiData; pending: strin
             onChange={onPick}
             options={m.efforts.map((e) => ({ value: e, label: EFFORT_LABEL[e], line: e === m.defaultEffort ? "The model's own level" : undefined }))}
           />
-          <p className="st-stg-small">
-            {m.label} offers {m.efforts.length === 5 ? "every level" : m.efforts.map((e) => EFFORT_LABEL[e]).join(", ")}
-            {m.defaultEffort ? `. Its own level is ${EFFORT_LABEL[m.defaultEffort]}.` : "."}
-          </p>
         </>
       )}
     </SetCard>
@@ -366,6 +363,8 @@ function Assignments({ data, saveAi, saveAgent }: { data: AiData; saveAi: (next:
     return m && !m.efforts.length ? m : null;
   };
   const { ai, models, agents, tasks } = data;
+  // The 12 tasks are needed only now and then: folded under the agents, open by itself once a task has its own pick.
+  const [tasksOpen, setTasksOpen] = useState(() => Object.keys(ai.tasks).length > 0 || tasks.some((t) => t.effective.from === "task"));
   const defText = "Workspace default";
   const defEffort = "Workspace default";
 
@@ -458,8 +457,11 @@ function Assignments({ data, saveAi, saveAgent }: { data: AiData; saveAi: (next:
     <SetCard
       title="Each agent and each task"
       icon="people"
-      lede="Give one agent or one task its own model or effort. A task first uses its own, then its agent's, then the workspace default."
+      lede="Give an agent or a task its own model or effort."
     >
+      <StTech className="st-stg-tech" label="More details">
+        <span>A task uses its own pick first, then its agent's, then the workspace default.</span>
+      </StTech>
       <div className="st-stg-assign__cols" aria-hidden="true">
         <span>Who</span>
         <span>Model</span>
@@ -470,10 +472,15 @@ function Assignments({ data, saveAi, saveAgent }: { data: AiData; saveAi: (next:
       <ul className="st-stg-assign" aria-label="Each agent's model and effort">
         {agentRows}
       </ul>
-      <h4 className="st-stg-subhead">Tasks</h4>
-      <ul className="st-stg-assign" aria-label="Each task's model and effort">
-        {taskRows}
-      </ul>
+      <details className="st-tech-fold st-stg-tech st-stg-tasks" open={tasksOpen} onToggle={(e) => setTasksOpen(e.currentTarget.open)}>
+        <summary className="st-tech-fold__sum">
+          <StIcon name="chevron" size={16} className="st-tech-fold__mark" />
+          Each task
+        </summary>
+        <ul className="st-stg-assign" aria-label="Each task's model and effort">
+          {taskRows}
+        </ul>
+      </details>
     </SetCard>
   );
 }
@@ -492,7 +499,6 @@ function PriceRow({ ws, m, onSaved }: { ws: string; m: ModelInfo; onSaved: (m: M
   const [currency, setCurrency] = useState(m.price?.currency ?? "USD");
   const [busy, setBusy] = useState(false);
   const owner = m.price?.source === "owner";
-  const here = useOnThisPage();
   const save = async (el: HTMLElement | null) => {
     const i = Number(input.replace(",", "."));
     const o = Number(output.replace(",", "."));
@@ -529,8 +535,7 @@ function PriceRow({ ws, m, onSaved }: { ws: string; m: ModelInfo; onSaved: (m: M
         <span className="st-stg-price__name">{m.label}</span>
         {m.price ? <Chip tone={owner ? "sky" : "mint"}>{owner ? "Your price" : "List price"}</Chip> : <Chip tone="sun">No price set.</Chip>}
       </div>
-      {m.price ? <p className="st-stg-price__text">{priceText(m.price)}</p> : <p className="st-stg-price__text">Tokens are counted, but no cost is worked out until you type its price.</p>}
-      {m.price && !owner ? <p className="st-stg-small">{here(m.price.note, "here")}</p> : null}
+      {m.price ? <p className="st-stg-price__text">{priceText(m.price)}</p> : <p className="st-stg-price__text">Type its price to see costs.</p>}
       {open ? (
         <form
           className="st-stg-price__form"
@@ -577,15 +582,34 @@ function PriceRow({ ws, m, onSaved }: { ws: string; m: ModelInfo; onSaved: (m: M
   );
 }
 
+/**
+ * Where the list prices come from, said once for the card: the API sends one note with each list price, mostly the
+ * same one ("Anthropic's own list price. …"), so it is one line; different notes name their models.
+ */
+export function priceNotes(models: ModelInfo[]): string[] {
+  const by = new Map<string, string[]>();
+  for (const m of models) if (m.price && m.price.source !== "owner" && m.price.note) by.set(m.price.note, [...(by.get(m.price.note) ?? []), m.label]);
+  return by.size === 1 ? [...by.keys()] : [...by].map(([note, names]) => `${names.join(", ")}: ${note}`);
+}
+
 function Prices({ ws, models, onSaved }: { ws: string; models: ModelInfo[]; onSaved: (m: ModelInfo) => void }) {
+  const here = useOnThisPage("Prices");
+  const notes = priceNotes(models);
   return (
-    <SetCard title="Prices" icon="coin" lede="What each model costs. Amazon Bedrock bills its own price, so you can type the one on your bill.">
+    <SetCard title="Prices" icon="coin" lede="What each model costs. Type yours if your bill differs.">
       <ul className="st-stg-prices" aria-label="Each model's price">
         {models.map((m) => (
           <PriceRow key={m.key} ws={ws} m={m} onSaved={onSaved} />
         ))}
       </ul>
-      <p className="st-stg-small">The picture and video makers' prices are in Settings › Video.</p>
+      {notes.length ? (
+        <StTech className="st-stg-tech" label="More details">
+          {notes.map((n) => (
+            <span key={n}>{here(n, "here")}</span>
+          ))}
+        </StTech>
+      ) : null}
+      <p className="st-stg-small">Picture and video prices are in Settings › Video.</p>
     </SetCard>
   );
 }
@@ -594,15 +618,30 @@ function Prices({ ws, models, onSaved }: { ws: string; models: ModelInfo[]; onSa
 
 function Providers({ ws, providers, error, onChange }: { ws: string; providers: ProviderStatus[] | null; error: string | null; onChange: (p: ProviderStatus) => void }) {
   return (
-    <SetCard title="Providers" icon="plug" lede="Who does each kind of work. The AI models think and write; pictures, video and sound have makers of their own (Settings › Video).">
+    <SetCard title="Providers" icon="plug" lede="Who does the work, and their keys.">
       {error && !providers ? <p className="st-stg-small">{error}</p> : null}
       {providers ? (
         <>
+          {/* A provider that takes a key is listed once, under Provider keys, with its state and its key. The picture,
+              video and sound makers have their own cards in Settings › Video: here they are one tap away. */}
           <ul className="st-stg-providers" aria-label="Providers">
-            {providers.map((p) => (
-              <ProviderRow key={`${p.kind}-${p.id}`} p={p} what={KIND_WORD[p.kind]} />
-            ))}
+            {providers
+              .filter((p) => !takesKey(p) && p.kind === "writer")
+              .map((p) => (
+                <ProviderRow key={`${p.kind}-${p.id}`} p={p} what={KIND_WORD[p.kind]} />
+              ))}
           </ul>
+          {providers.some((p) => !takesKey(p) && p.kind !== "writer") ? (
+            <StTech className="st-stg-tech" label="Picture, video and sound makers">
+              <ul className="st-stg-providers" aria-label="Picture, video and sound makers">
+                {providers
+                  .filter((p) => !takesKey(p) && p.kind !== "writer")
+                  .map((p) => (
+                    <ProviderRow key={`${p.kind}-${p.id}`} p={p} what={KIND_WORD[p.kind]} />
+                  ))}
+              </ul>
+            </StTech>
+          ) : null}
           <h4 className="st-stg-subhead">Provider keys</h4>
           <ProviderKeys ws={ws} providers={providers} onChange={onChange} />
         </>
@@ -647,7 +686,7 @@ export function AiSection({ ws }: { ws: string }) {
   return (
     <div className="st-stg-cards">
       <SectionBar>
-        <p className="st-stg-small">Clips Funded's own models. Clip Factory's model setting is separate and stays as it is.</p>
+        <p className="st-stg-small">Clips Funded's own models. Clip Factory's stay as they are.</p>
         <SavedMark saved={saved} busy={ai.busy} />
       </SectionBar>
       <DefaultModel data={data} pending={pending} onPick={pickModel} ws={ws} reload={ai.reload} />

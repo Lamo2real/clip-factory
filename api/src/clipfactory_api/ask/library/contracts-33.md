@@ -21,7 +21,7 @@ Try again. The X tab showed the X mark and the letter "X" ("X X").
   ("Set up X to upload there too.", to `/settings/posting/setup/{first}`), hidden when all five are ready. With
   nothing set up, the row is a callout ("Nothing is set up yet. Upload saves it, and it goes up once you set up a
   place.") and Upload works the old way (no `platforms`). While the setup is still loading, or when the check
-  failed (callout "Could not check your places. Check again, then tap Upload." and a **Check again** button),
+  failed (callout "Couldn't check your places. Tap Check again." and a **Check again** button),
   `ready` is unknown: Upload stays off, so a failed check can never send the clip to places nobody picked.
 * **Which start on (per device):** the last Upload's choice in localStorage `cf-upload-to` (saved on Upload, not on
   each tap) minus places no longer ready; with none saved, Where clips go minus places not ready; if that leaves

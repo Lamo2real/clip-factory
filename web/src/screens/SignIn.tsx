@@ -83,8 +83,8 @@ export function SignIn({ onDone, note }: { onDone: () => void; note?: string | n
         </h1>
         <p className="signin__lede">
           {step === "credentials"
-            ? "Sign in once and stay signed in. The app only asks again after a month away."
-            : "Your invitation password was temporary. Pick the one you will use from now on."}
+            ? "Sign in once. You stay signed in."
+            : "Your first password was just for now. Pick your own."}
         </p>
         {note ? (
           <p className="signin__note" role="status">

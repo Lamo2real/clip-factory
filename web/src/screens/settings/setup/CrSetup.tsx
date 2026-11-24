@@ -543,7 +543,7 @@ export function CrSetup() {
                       : "Sign in again in the Clip Factory app on your Mac."
                     : conn.status === "connected" && conn.canSubmit
                       ? "Clip Factory sends your campaign clips for you."
-                      : "Clip Factory can see your campaigns and money. It can't send clips yet, so I remind you after each post."}
+                      : "It can see your campaigns and money, but can't send clips yet. You get a reminder after each post."}
               </span>
             </div>
           </div>

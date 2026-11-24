@@ -82,7 +82,7 @@ function Gallery({ ws }: { ws: string }) {
       <header className="st-s-head">
         <div className="st-plate st-s-head__text">
           <h1 className="st-s-head__title">Characters</h1>
-          <p className="st-s-head__lede">Your cast. Each one looks and moves the same in every video.</p>
+          <p className="st-s-head__lede">Your cast. They look the same in every video.</p>
         </div>
         <div className="st-s-head__actions">
           <A href={`${storiesHref({ name: "character_new" })}#design`} className="st-btn">
@@ -105,7 +105,7 @@ function Gallery({ ws }: { ws: string }) {
         <Busy>Getting your cast…</Busy>
       ) : people.length === 0 ? (
         <EmptyCast title="No characters yet" action={<A href={storiesHref({ name: "character_new" })} className="st-btn st-btn--main">Make your first character</A>}>
-          Make a character once, and use it in all your videos.
+          Make one once. Use it in every video.
         </EmptyCast>
       ) : (
         <ul className="st-s-cast">
@@ -240,7 +240,7 @@ export function NewCharacter({ ws, kind: asked, place = "characters" }: { ws: st
           <BackToCast place={place} />
           <h1 className="st-s-head__title">{place === "cars" ? "New car" : "New character"}</h1>
           <p className="st-s-head__lede">
-            {car ? "Add photos of your car. Pick the cartoon car you like, then give it a name." : "Pick how they look, their faces, how they move and their sounds. Then give them a name."}
+            {car ? "Add photos of your car. Pick the cartoon car you like, then give it a name." : "Pick their looks, face, moves and sounds. Then name them."}
           </p>
         </div>
       </header>
@@ -400,7 +400,7 @@ export function CharacterPage({ ws, characterId, place = "characters" }: { ws: s
           <BackToCast place={home} />
           <h1 className="st-s-head__title">{c.name}</h1>
           <p className="st-s-head__lede">
-            In {count(c.storyCount, "video")}. Changes show in new videos and in a Remake the whole video, never in one already made.
+            In {count(c.storyCount, "video")}. Changes show in new videos and full remakes only.
           </p>
         </div>
         <GlassPill icon={<MakeIcon name="delete" size={18} />} onClick={() => setAsking(true)}>
@@ -457,7 +457,7 @@ export function CharacterPage({ ws, characterId, place = "characters" }: { ws: s
                 </button>
               }
             >
-              {c.name} was changed somewhere else. Tap Reload to get the newest version, then make your change again.
+              {c.name} was changed somewhere else. Tap Reload, then make your change again.
             </Notice>
           ) : problem ? (
             <Notice tone="bad">{problem}</Notice>

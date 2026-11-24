@@ -163,7 +163,7 @@ export function IdeasScreen({ ws, page }: StoriesScreenProps) {
       <header className="st-s-head">
         <div className="st-plate st-s-head__text">
           <h1 className="st-s-head__title">Ideas</h1>
-          <p className="st-s-head__lede">Keep ideas for videos here. Make one into a video when you are ready.</p>
+          <p className="st-s-head__lede">Save ideas here. Make one into a video.</p>
         </div>
         <div className="st-s-head__actions">
           <SeriesSwitch ws={ws} value={seriesFilter} onChange={(v) => navigate(storiesHref({ name: "ideas", ...(seriesQuery(v) ? { seriesId: seriesQuery(v) } : {}) }))} />
@@ -252,7 +252,7 @@ export function IdeasScreen({ ws, page }: StoriesScreenProps) {
         <Glass lens className="st-s-empty st-s-make-empty">
           <span className="st-s-empty__bulb" aria-hidden="true" />
           <h2 className="st-s-empty__title">{filter === "all" ? "No ideas yet" : filter === "saved" ? "No saved ideas waiting" : "No ideas made into videos yet"}</h2>
-          <p className="st-s-empty__text">Tap New idea to type one, or Ask for ideas to get a few to pick from.</p>
+          <p className="st-s-empty__text">Tap New idea, or Ask for ideas.</p>
         </Glass>
       ) : (
         <ul className="st-s-board">

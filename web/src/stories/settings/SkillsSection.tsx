@@ -272,7 +272,7 @@ function SkillDetail({ ws, skill, agents, onSaved, onAssign, onDelete }: { ws: s
       ) : null}
 
       {skill.builtin ? (
-        <Note tone="sky">This skill comes with Clips Funded, so its words can't be changed. You can switch it off, or take it off an agent.</Note>
+        <Note tone="sky">This one comes with Clips Funded, so its words can't change. You can still switch it off.</Note>
       ) : (
         <>
           <div className="st-stg-actions">
@@ -408,7 +408,7 @@ export function SkillsSection({ ws }: { ws: string }) {
 
   return (
     <div className="st-stg-cards">
-      <SetCard title="Add a skill" icon="plus" lede="Upload a SKILL.md (up to 1 MB) or a .zip with one inside (up to 20 MB), or write one here.">
+      <SetCard title="Add a skill" icon="plus" lede="Upload a SKILL.md (up to 1 MB) or .zip (up to 20 MB), or write one.">
         <div className="st-stg-actions">
           <FilePick label="Upload a file" off={add.progress !== null ? "Uploading…" : undefined} onFile={(f, el) => void add.upload(f, undefined, el)} />
           <Btn main off={writing ? "The form is open below" : undefined} onClick={() => setWriting(true)}>
@@ -430,7 +430,7 @@ export function SkillsSection({ ws }: { ws: string }) {
         ) : null}
       </SetCard>
 
-      <SetCard title="Your skills" icon="book" lede="Built-in skills come first. A skill that is off is skipped by every agent.">
+      <SetCard title="Your skills" icon="book" lede="Tap Open to see or change a skill.">
         {skills.error && !skills.data ? <Failed message={skills.error} onRetry={() => void skills.reload()} /> : null}
         {!skills.data && !skills.error ? <Loading label="Getting the skills…" /> : null}
         {skills.data && !list.length ? <Empty title="No skills yet">Upload one or write one above.</Empty> : null}

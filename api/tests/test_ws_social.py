@@ -1131,4 +1131,4 @@ def test_no_sentence_names_the_old_connections_page() -> None:
             assert "Connections" not in sentences.story_sentence(platform, kind, "Lamo"), (platform, kind)
     assert "Connections" not in social.TIKTOK_NOT_CONNECTED
     line = dashboard._account_sentence({"platform": "youtube", "connectionStatus": "needs_reconnect"})
-    assert line == "Clips Funded's YouTube needs connecting again. Open Social accounts and tap Connect."
+    assert line == "Clips Funded's YouTube needs connecting again. Open Social accounts and tap Connect again."

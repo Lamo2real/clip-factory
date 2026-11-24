@@ -30,6 +30,11 @@ export const NO_KEY: ReadonlySet<string> = new Set([
   "own-sound",
 ]);
 
+/** A key row's name: the provider's, without the word "API" ("Anthropic API" reads "Anthropic"). */
+export function keyName(label: string): string {
+  return label.replace(/\s+API$/, "") || label;
+}
+
 export function takesKey(p: ProviderStatus): boolean {
   if (p.key) return true;
   if (p.key === null) return false;
@@ -50,8 +55,7 @@ export function keepName(old: ProviderStatus, next: ProviderStatus): ProviderSta
 }
 
 /** An OpenAI-compatible key is for one address only (§45.37 G4): the one its models use, never sent anywhere else. */
-export const ONE_ADDRESS_LINE =
-  "This key is for one address only: the one your OpenAI-compatible models use. Clips Funded never sends it anywhere else. Add the model first, or type its address here.";
+export const ONE_ADDRESS_LINE = "This key only goes to one address. Add the model first, or type its address here.";
 
 function KeyForm({ ws, provider, onSaved }: { ws: string; provider: ProviderStatus; onSaved: (p: ProviderStatus) => void }) {
   const toast = useToast();
@@ -62,6 +66,9 @@ function KeyForm({ ws, provider, onSaved }: { ws: string; provider: ProviderStat
   const [busy, setBusy] = useState(false);
   const s = PROVIDER_STATE[provider.state];
   const here = useOnThisPage();
+  // The provider's name without "API" on the surface ("Anthropic", not "Anthropic API"): the same in its lines.
+  const shown = keyName(provider.label);
+  const words = (line: string) => here(line).split(provider.label).join(shown);
   const save = async (el: HTMLElement | null) => {
     if (busy) return;
     if (!text.trim()) {
@@ -77,7 +84,7 @@ function KeyForm({ ws, provider, onSaved }: { ws: string; provider: ProviderStat
       setOpen(false);
       onSaved(next);
       cheer(el);
-      toast.success(`${provider.label}'s key is saved. Only its last four characters are ever shown.`);
+      toast.success(`${provider.label}'s key is saved. Only its last 4 characters show.`);
     } catch (e) {
       toast.error(friendlyMessage(e));
     } finally {
@@ -102,11 +109,12 @@ function KeyForm({ ws, provider, onSaved }: { ws: string; provider: ProviderStat
       <div className="st-stg-keyrow__head">
         <span className="st-stg-keyrow__name">
           <SIcon name="key" size={20} />
-          {provider.label}
+          {shown}
         </span>
         <Chip tone={s.tone}>{s.label}</Chip>
       </div>
-      <p className="st-stg-small">{here(provider.line)}</p>
+      <p className="st-stg-small">{words(provider.line)}</p>
+      {provider.lastError && provider.lastError !== provider.line ? <p className="st-stg-provider__error">Last problem: {words(provider.lastError)}</p> : null}
       {provider.key?.saved && !provider.line.includes("Key saved") ? (
         <p className="st-stg-small">
           Key saved{provider.key.hint ? ` · ends ${provider.key.hint}` : ""}
@@ -123,7 +131,7 @@ function KeyForm({ ws, provider, onSaved }: { ws: string; provider: ProviderStat
           }}
         >
           <label className="st-stg-label" htmlFor={`key-${provider.id}`}>
-            {provider.label} key
+            {shown} key
           </label>
           <input
             id={`key-${provider.id}`}
@@ -166,7 +174,8 @@ function KeyForm({ ws, provider, onSaved }: { ws: string; provider: ProviderStat
         </form>
       ) : (
         <div className="st-stg-actions">
-          <Btn main onClick={() => setOpen(true)} label={`${provider.key?.saved ? "Paste a new key" : "Paste a key"} for ${provider.label}`}>
+          {/* Glass: the card's one orange button is its own main action (Check models, Add a model), never a key row's. */}
+          <Btn onClick={() => setOpen(true)} label={`${provider.key?.saved ? "Paste a new key" : "Paste a key"} for ${shown}`}>
             {provider.key?.saved ? "Paste a new key" : "Paste a key"}
           </Btn>
           {provider.key?.saved ? (
@@ -199,7 +208,7 @@ export function ProviderKeys({
   if (!list.length)
     return (
       <Note tone="sky" icon="key">
-        None of these providers needs a key: they run in Clips Funded's own AWS account. A provider that needs one shows its key form here.
+        None of these providers needs a key. Clips Funded's own account runs them.
       </Note>
     );
   return (

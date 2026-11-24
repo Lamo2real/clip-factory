@@ -18,9 +18,9 @@ import { Btn, cheer, Chip, Note, Progress, SIcon, useOnThisPage, whenText } from
 /** How often the row asks how the try is going (the shot takes a minute or two). */
 export const TRY_POLL_MS = 2500;
 
-export const TRY_LINE = "Try it makes one 5-second test shot to see if Luma AI Ray2 works for you. Amazon bills that one shot. Nothing is posted.";
+export const TRY_LINE = "Try it makes one 5-second test shot. Amazon bills that one shot. Nothing is posted.";
 /** It needs its storage in the US (Oregon), which only the owner can switch on (the lead's stories_video_west_bucket). */
-export const TRY_NEEDS = "A shot can only work once Luma AI Ray2's storage in the US (Oregon) is switched on and Amazon has turned the model on for your account.";
+export const TRY_NEEDS = "It works once its storage in the US (Oregon) is on and Amazon allows the model for your account.";
 const TRY_STOPPED = "Trying Luma AI Ray2 stopped. Tap Try it again.";
 
 /** The makers with a Try it (the API's providers.CHECKABLE): Luma AI Ray2, and the owner's own video model, whose shots go to the same storage. */
@@ -38,8 +38,8 @@ export const TRY_WORDS: Record<TryMaker, { name: string; line: string; needs: st
   },
   "own-video": {
     name: "your own video model",
-    line: "Try it makes one test shot with your own video model to see if it works for you. Amazon bills that one shot. Nothing is posted.",
-    needs: "A shot can only work once Clips Funded's storage in your model's Region (the US, Oregon) is switched on and Amazon has turned the model on for your account.",
+    line: "Try it makes one test shot. Amazon bills that one shot. Nothing is posted.",
+    needs: "It works once its storage in the US (Oregon) is on and Amazon allows the model for your account.",
     stopped: "Trying your own video model stopped. Tap Try it again.",
     busy: "Your own video model is being tried. Wait until it is done.",
     made: "It works! Your own video model made its test shot.",

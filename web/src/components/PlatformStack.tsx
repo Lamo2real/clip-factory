@@ -46,7 +46,7 @@ function Rows({ rows, reactions }: { rows: MetricRow[]; reactions?: Record<strin
 
 const insightsAgo = (iso: string, now: number) => {
   const a = ago(iso, now);
-  return a === "just now" ? "Insights just in" : `Insights from ${a}`;
+  return a === "just now" ? "Checked just now" : `Checked ${a}`;
 };
 
 export function PlatformStack({

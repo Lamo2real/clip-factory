@@ -47,9 +47,9 @@ import type { StoriesScreenProps } from "./types.ts";
 
 const ACCOUNT_WORDS: Record<StoriesDashboard["accounts"][number]["status"], { label: string; tone: StTone }> = {
   connected: { label: "Connected", tone: "mint" },
-  choose_account: { label: "Pick an account", tone: "sun" },
+  choose_account: { label: "Pick one", tone: "sun" },
   needs_reconnect: { label: "Connect again", tone: "coral" },
-  same_as_clips: { label: "Same as Clip Factory", tone: "coral" },
+  same_as_clips: { label: "Clip Factory's own", tone: "coral" },
   not_connected: { label: "Not connected", tone: "sky" },
 };
 
@@ -149,6 +149,8 @@ function NeedsYou({ ws, items }: { ws: string; items: StoriesDashboard["needsYou
                 {n.sentence}
               </p>
               <div className="st-needs-list__actions">
+                {/* An account problem is fixed on Social accounts first: its way there comes first, then Try again. */}
+                {n.href === "/stories/connections" ? <StLinkButton href={n.href}>Fix it</StLinkButton> : null}
                 {/* A Mac post that pressed Post may be on TikTok: only Open (its Review page) for it, never Try again. */}
                 {n.publishingJobId && !(n.publishingStatus === "mac" && n.mac?.pressedAt) ? (
                   <StButton
@@ -162,7 +164,7 @@ function NeedsYou({ ws, items }: { ws: string; items: StoriesDashboard["needsYou
                     Try again
                   </StButton>
                 ) : null}
-                <StLinkButton href={n.href}>Open</StLinkButton>
+                {n.href === "/stories/connections" ? null : <StLinkButton href={n.href}>Open</StLinkButton>}
               </div>
             </li>
           ))}
@@ -537,7 +539,7 @@ export function DashboardScreen({ ws }: StoriesScreenProps) {
           a picture or the desktop. */}
       <StPageHead
         title="Dashboard"
-        lede="Everything happening in your animation studio."
+        lede="What's happening in your studio."
         actions={
           <>
             <StLinkButton href="/stories/ideas">
@@ -560,7 +562,7 @@ export function DashboardScreen({ ws }: StoriesScreenProps) {
       ) : empty ? (
         <>
           <StEmpty title="Your studio is ready" action={<StLinkButton href="/stories/production/new" main={!settingUp}>Make your first video</StLinkButton>}>
-            Pick an idea and a character, and Clips Funded makes the cartoon.
+            Pick an idea and a character. Clips Funded draws it.
           </StEmpty>
           <div className="st-tiles st-tiles--start">
             <Accounts items={data.accounts} />

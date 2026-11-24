@@ -249,7 +249,7 @@ function WeekBody({ week, isCurrent }: { week: string; isCurrent: boolean }) {
             </LinkButton>
           }
         >
-          {isCurrent ? "No clips this week yet. Make clips on Home." : "Nothing was posted that week. Tap the arrows to look at another week."}
+          {isCurrent ? "Make clips on Home." : "Tap the arrows to see another week."}
         </Empty>
       ) : null}
       {data && data.clips.length > 0 ? (

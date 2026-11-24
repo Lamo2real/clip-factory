@@ -102,7 +102,7 @@
         "taking long",
         "not done"
       ],
-      "answer": "Every link or video you add is one job. **Jobs** shows each one being made, step by step.",
+      "answer": "Each link or video is one job. **Jobs** shows each one being made.",
       "steps": [
         "Tap **Jobs**.",
         "Tap a job to watch its steps.",
@@ -3074,7 +3074,7 @@
         "Open **Find campaigns**.",
         "Near the bottom, find the card Clip Factory can't join for you. It shows once Clip Factory is signed in to Content Rewards.",
         "Tap **Ask Content Rewards**. It sends one short note to their team.",
-        "To read the note first, tap **Show more**."
+        "To read the note first, tap **See the message**."
       ],
       "actions": [
         {
@@ -3878,7 +3878,7 @@
       "steps": [
         "Tap **Settings**, **Posting**, **Get paid**, then **Content Rewards**.",
         "Find **See your Whop payouts here**.",
-        "Tap **Open Whop's developer page**. Follow the card: **Create app**, then copy the **Client ID**.",
+        "Tap **How do I make it?**, then **Open Whop's developer page**. Follow the card: **Create app**, then copy the **Client ID**.",
         "Paste it in **Whop key**. Tap **Save key**.",
         "Tap **Connect Whop** and allow it on Whop.",
         "**Sent to your bank by Whop** counts all your Whop money, not only Content Rewards."

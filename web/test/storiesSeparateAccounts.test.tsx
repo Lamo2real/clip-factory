@@ -137,19 +137,38 @@ describe("no route or screen offers sharing an account (§45.37 G8 (d))", () => 
     expect(host.textContent).not.toMatch(/use it for both|Are you sure\?.*both post/i);
   });
 
-  it("every card says up front to use a new account made for Clips Funded", async () => {
+  it("every card whose next step is an account says up front to use a new account made for Clips Funded", async () => {
     await render();
-    for (const p of ["youtube", "tiktok", "instagram", "facebook", "x"]) {
+    // TikTok (connect again), Instagram (pick one), Facebook (not connected) and X (Clip Factory's own).
+    for (const p of ["tiktok", "instagram", "facebook", "x"]) {
       const first = card(p).querySelector(".st-conn__new");
       expect(first?.textContent, p).toBe(NEW_ACCOUNT_LINE);
       // Before the developer app and before any Connect button.
       expect(first!.compareDocumentPosition(card(p).querySelector(".st-app")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(first!.compareDocumentPosition(card(p).querySelector(".st-conn__actions")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     }
+    // A connected account that is fine does not say it again (the page's line says it once at the top).
+    expect(card("youtube").querySelector(".st-conn__new")).toBeNull();
     expect(NEW_ACCOUNT_LINE).toBe("Use a new account made for Clips Funded, not Clip Factory's.");
+  });
+
+  it("a brand-new studio says it on every card, before Set up the app", async () => {
+    await render({ fresh: true });
+    for (const p of ["youtube", "tiktok", "instagram", "facebook", "x"]) {
+      const first = card(p).querySelector(".st-conn__new");
+      expect(first?.textContent, p).toBe(NEW_ACCOUNT_LINE);
+      const setUp = buttons(card(p)).find((b) => /^Set up the app/.test(b.textContent ?? ""))!;
+      expect(first!.compareDocumentPosition(setUp) & Node.DOCUMENT_POSITION_FOLLOWING, p).toBeTruthy();
+    }
   });
 
   it("the shared developer app reads Share Clip Factory's app, Clip Factory first, still a different account; never quicker", async () => {
     await render({ fresh: true });
+    // Set up the app opens each card's choice.
+    for (const p of ["youtube", "tiktok", "instagram", "facebook", "x"]) {
+      const setUp = buttons(card(p)).find((b) => /^Set up the app/.test(b.textContent ?? ""))!;
+      await act(async () => setUp.click());
+    }
     for (const p of ["youtube", "tiktok", "x"]) {
       const share = buttons(card(p)).find((b) => b.getAttribute("role") === "radio" && /Share Clip Factory's app/.test(b.textContent ?? ""));
       expect(share, p).toBeTruthy();

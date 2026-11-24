@@ -101,7 +101,7 @@ export function AnalysisView({ analysis, durationSec, onSeek }: { analysis: Refe
           Sound
         </h2>
         <p>{analysis.sound}</p>
-        <p className="st-ref-small">Measured from how loud it is and where it goes quiet. The model cannot hear.</p>
+        <p className="st-ref-small">From the loud and quiet parts. The AI can't hear.</p>
       </Glass>
 
       <Glass as="section" className="st-ref-block st-ref-block--wide" aria-labelledby="st-ref-captions">

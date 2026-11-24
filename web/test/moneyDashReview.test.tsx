@@ -105,10 +105,10 @@ describe("the clip list after a filter change (review finding 3)", () => {
 
 describe("short history and the banner (review findings 1 and 5)", () => {
   it("says how many days the average and the pace come from", () => {
-    expect(kpiSub("daily", 10)).toBe("A normal day lately (average of 10 days)");
-    expect(kpiSub("monthly", 10)).toBe("Money in the last 30 days · only 10 days so far");
+    expect(kpiSub("daily", 10)).toBe("An average day (last 10 days)");
+    expect(kpiSub("monthly", 10)).toBe("Last 30 days · only 10 days so far");
     expect(kpiSub("yearly", 1)).toBe("At this pace for a year · from 1 day so far");
-    expect(kpiSub("daily", 30)).toBe("A normal day lately (average of 30 days)");
+    expect(kpiSub("daily", 30)).toBe("An average day (last 30 days)");
   });
 
   it("names only the apps whose check failed or that are behind", () => {

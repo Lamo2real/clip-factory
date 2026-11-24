@@ -132,7 +132,7 @@ test("enabled controls tap, switched-off controls deny, errors deny", async ({ p
   await card.getByLabel("X caption").fill("x".repeat(300));
   await page.evaluate(() => (window.__cfSoundLog = []));
   await card.getByRole("button", { name: /^Upload( to .+)?$/ }).click();
-  await expect(page.getByText(/longer than its platform allows/)).toBeVisible();
+  await expect(page.getByText(/Your X caption is too long\. Make it shorter/)).toBeVisible();
   await expect.poll(() => log(page)).toEqual(["tap", "deny"]);
 });
 

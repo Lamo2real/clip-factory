@@ -17,7 +17,7 @@ import { useToast } from "../../components/Toasts.tsx";
 import { useAppActive } from "../pane.tsx";
 import { useLoad, usePoll } from "../../lib/hooks.ts";
 import { storiesSound } from "../prefs.ts";
-import { starBurst } from "../ui.tsx";
+import { starBurst, StTech } from "../ui.tsx";
 import { storiesApi } from "../api/client.ts";
 import type { DownloadFormat, ErrorAccount, ModelOverride, Platform, PublishingJob, SocialAccount, StepKey, StoriesConfig, Story, StoryPatch, StoryStatus, TaskKind } from "../api/types.ts";
 import { navigate } from "../../lib/router.ts";
@@ -102,7 +102,7 @@ export function accountQuestion(sentence: string, account: SocialAccount): boole
 // ---------- The queue ----------
 
 const QUEUE: { title: string; statuses: StoryStatus[]; empty: string }[] = [
-  { title: "Waiting for you", statuses: ["needs_check", "review"], empty: "Nothing to watch right now. New videos show here when they are made." },
+  { title: "Waiting for you", statuses: ["needs_check", "review"], empty: "Nothing to watch yet. New videos show up here." },
   { title: "Approved, ready to post", statuses: ["approved"], empty: "" },
   { title: "Posted", statuses: ["published"], empty: "" },
 ];
@@ -127,7 +127,7 @@ function ReviewQueue({ ws, series }: { ws: string; series: SeriesFilter }) {
       <header className="st-s-head">
         <div className="st-plate">
           <h1 className="st-s-head__title">Review</h1>
-          <p className="st-s-head__lede">Watch each new video. Approve it, ask for changes, or make a scene again.</p>
+          <p className="st-s-head__lede">Watch each new video, then approve it or fix it.</p>
         </div>
         <div className="st-s-head__actions">
           <SeriesSwitch ws={ws} value={series} onChange={(v) => navigate(storiesHref({ name: "review", ...(seriesQuery(v) ? { seriesId: seriesQuery(v) } : {}) }))} />
@@ -401,7 +401,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
         onlyPostWords(r.story)
           ? `Saved. ${POST_WORDS_CHECK}`
           : r.story.status === "needs_check"
-            ? "Saved. Tap Check again to check the facts and update the video."
+            ? "Saved. Tap Check again."
             : "Saved. Tap Remake to put it in the video.",
       );
     } catch (e) {
@@ -525,7 +525,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
   // next remake starts at the first out-of-date step (the fact check after new post words or an outdated check), the
   // whole-video remake and Ask for changes at the storyboard.
   const nextTask = story.stale.length ? runTask(null, { stale: story.stale }) : outdated ? "fact_check" : "storyboard";
-  const menuFor = (task: TaskKind) => <ModelMenu info={info} usual={storyUsual(info, story, task)} value={pick} onChange={setPick} note="Just for the next remake. This video's own setting and yours stay the same." />;
+  const menuFor = (task: TaskKind) => <ModelMenu info={info} usual={storyUsual(info, story, task)} value={pick} onChange={setPick} note="Just for the next remake. Your settings stay the same." />;
   const remakeMenu = menuFor(nextTask);
   const changesTask = runTask("storyboard", { sceneIds: !note.trim() && picked.length > 0 });
   // Phones get a smaller player, so the decision is close below it.
@@ -620,7 +620,8 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                 </span>
               }
             >
-              {stopped ?? (checkAgain ? "Your fixes are saved. Tap Check again to check the facts and update the video." : "Your changes aren't in the video yet. Tap Remake to put them in.")}
+              {/* Its button is right beside it, and the reason under Approve says Tap Remake first. */}
+              {stopped ?? (checkAgain ? "Your fixes are saved. Tap Check again." : "Your changes aren't in the video yet.")}
             </Notice>
           ) : null}
           {outdated ? (
@@ -637,7 +638,8 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                 </button>
               }
             >
-              {OUTDATED_CHECK} It checks the words, then makes the video again from there.
+              {/* The whole reason (OUTDATED_CHECK) is under Approve, so it is not said twice. */}
+              The facts need checking again.
             </Notice>
           ) : null}
 
@@ -675,7 +677,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                 <span className="st-s-field__hint">Remakes use</span>
                 {remakeMenu}
               </div>
-              {!pick ? <NextRun info={info} story={story} /> : null}
+              {/* "Remakes use" above already names the model and effort: "Next run" is in How it was made. */}
               <div className="st-s-decide__more">
                 <button type="button" className="st-btn" aria-expanded={form === "changes"} onClick={() => setForm((f) => (f === "changes" ? "none" : "changes"))}>
                   Ask for changes
@@ -772,20 +774,28 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
           {citations.length ? (
             <section className="st-s-sources" aria-label="Where the advice comes from">
               <h2 className="st-s-sources__title">Based on</h2>
+              {/* The sources by name, each a link; the rules they say are one tap away (the owner, 23 Nov: less text). */}
               <ul>
-                {citations.map((c) => (
-                  <li key={c.url + (c.section ?? "")}>
-                    <a href={c.url} target="_blank" rel="noopener noreferrer">
-                      {c.publisher}
-                    </a>
-                    <span>
-                      {" "}
-                      · {c.title}
-                      {c.section ? ` (${c.section})` : ""}
-                    </span>
-                  </li>
-                ))}
+                {citations
+                  .filter((c, i) => citations.findIndex((d) => d.publisher === c.publisher) === i)
+                  .map((c) => (
+                    <li key={c.url + (c.section ?? "")}>
+                      <a href={c.url} target="_blank" rel="noopener noreferrer">
+                        {c.publisher}
+                      </a>
+                    </li>
+                  ))}
               </ul>
+              <StTech label="The rules">
+                <ul>
+                  {citations.map((c) => (
+                    <li key={c.url + (c.section ?? "")}>
+                      {c.title}
+                      {c.section ? ` (${c.section})` : ""}
+                    </li>
+                  ))}
+                </ul>
+              </StTech>
               <p className="st-s-field__hint">The video ends with “Check your local road rules.”</p>
             </section>
           ) : null}
@@ -837,7 +847,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
 
       {stale ? (
         <Notice tone="bad" action={<button type="button" className="st-btn" onClick={() => void loaded.reload().then(() => setStale(false))}>Reload</button>}>
-          This video changed while you were editing. Tap Reload to get the newest version, then make your change again.
+          This video changed while you were editing. Tap Reload, then make your change again.
         </Notice>
       ) : null}
 
@@ -857,7 +867,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
           </section>
         </>
       ) : done ? (
-        <p className="st-s-field__hint st-plate">An approved video can&apos;t be changed. Its captions and sounds stay as they are.</p>
+        <p className="st-s-field__hint st-plate">An approved video can&apos;t be changed.</p>
       ) : null}
 
       {unusable ? (
@@ -905,7 +915,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
             </>
           }
         >
-          <p>Clips Funded writes a new storyboard with your characters as they look now, then makes every step again. This one is kept in the Library.</p>
+          <p>It starts over with your characters as they look now. The old one stays in the Library.</p>
           <div className="st-s-decide__ai">
             <span className="st-s-field__hint">This remake uses</span>
             {menuFor("storyboard")}

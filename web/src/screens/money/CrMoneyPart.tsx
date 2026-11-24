@@ -261,7 +261,7 @@ export function CrMoneyPart() {
         </h2>
         <span className="money-tag">Content Rewards&apos; numbers</span>
       </div>
-      <p className="cr-money__lede">Whop is the website where Content Rewards sends your money. From there it goes to your bank.</p>
+      <p className="cr-money__lede">Content Rewards pays you on Whop. Then you move it to your bank.</p>
 
       {cr.state === "soon" ? (
         <p className="dash-grey">Content Rewards is coming soon to Clip Factory.</p>
@@ -280,7 +280,7 @@ export function CrMoneyPart() {
           </A>
         </p>
       ) : state === "none_yet" ? (
-        <p>No campaign money yet. It shows here when the brand approves your clips.</p>
+        <p>No campaign money yet. It comes when the brand says yes.</p>
       ) : state === "error" ? (
         <p className="dash-grey">{money?.error ?? "Content Rewards didn't answer. Try again in a few minutes."}</p>
       ) : null}
@@ -288,13 +288,13 @@ export function CrMoneyPart() {
       {showTiles && money ? (
         <>
           <div className="cr-tiles">
-            <Tile testid="still" title="Still earning" cents={money.stillEarningCents} hint="Clips still earning. The amount can still change. (On Content Rewards: **Queued** and **Arriving**.)" />
+            <Tile testid="still" title="Still earning" cents={money.stillEarningCents} hint="Can still change. On Content Rewards: **Queued** and **Arriving**." />
             <Tile testid="way" title="On its way" cents={money.onItsWayCents} hint="Moving to your Whop balance." />
-            <Tile testid="ready" title="Ready to move" cents={money.readyToMoveCents} hint="You can move this to Whop now. (On Content Rewards: **Balance**.)" />
+            <Tile testid="ready" title="Ready to move" cents={money.readyToMoveCents} hint="Move it to Whop now. On Content Rewards: **Balance**." />
           </div>
           {money.waitingForBrand > 0 ? (
             <p className="dash-grey">
-              {money.waitingForBrand === 1 ? "1 clip is" : `${money.waitingForBrand} clips are`} waiting for the brand. Their money shows here after the brand says yes.
+              {money.waitingForBrand === 1 ? "1 clip is" : `${money.waitingForBrand} clips are`} waiting for the brand.
             </p>
           ) : null}
           <p className="cr-money__paid" data-paid-line="">
@@ -319,7 +319,7 @@ export function CrMoneyPart() {
           ) : null}
         </>
       ) : null}
-      {money?.asOf ? <p className="dash-grey">Content Rewards&apos; numbers · checked {relative(money.asOf)}</p> : null}
+      {money?.asOf ? <p className="dash-grey">Checked {relative(money.asOf)}</p> : null}
       {conn && conn.status !== "not_connected" ? (
         <Button variant="glass" size="sm" icon="retry" act="retry" loading={checking} onClick={checkNow}>
           Check now

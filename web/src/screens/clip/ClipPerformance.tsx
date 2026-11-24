@@ -302,7 +302,7 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
       <header className="perf__head">
         <h1 className="perf__title user-text">{clip.hook}</h1>
         <p className="perf__meta">
-          {MOMENT_LABEL[clip.momentType]} · {plural(perf.totals.platformsPosted, "platform")} posted
+          {MOMENT_LABEL[clip.momentType]} · posted on {plural(perf.totals.platformsPosted, "app")}
         </p>
       </header>
 
@@ -378,7 +378,7 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
                 {compact(perf.totals.views)}
               </span>
               <span className="sr-only">{full(perf.totals.views)}</span>
-              <span className="perf__views-label">views across platforms</span>
+              <span className="perf__views-label">views on all apps</span>
             </p>
             <p className="perf__fine">(each app counts views its own way)</p>
             {best ? (

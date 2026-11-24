@@ -565,7 +565,7 @@ export function FindPage() {
             <span>{line}</span>
           </p>
           {data.state === "ok" && !noPlace && !list.length && data.looked.pending > 0 && want.tellMe ? (
-            <p className="finder-state__sub">You don&apos;t need to do anything. I&apos;ll tell you when one matches.</p>
+            <p className="finder-state__sub">I&apos;ll tell you when one matches.</p>
           ) : null}
           {data.state === "ok" && noPlace ? (
             <div className="finder-state__main">
@@ -651,9 +651,7 @@ export function FindPage() {
         <div className="finder-quiet">
           <p>You join each campaign yourself on Content Rewards.</p>
           <p>
-            {data.signedIn
-              ? "Open campaigns show their rules only after you join. I read them right after."
-              : "Open campaigns show their rules only after you join. Then I'll ask you to copy them here once."}
+            {data.signedIn ? "Rules show after you join. I read them then." : "Rules show after you join. Then you copy them here once."}
           </p>
           {data.skipped.length || data.looked.campaigns ? (
             <details className="cr-fold finder-why-not">
@@ -693,7 +691,7 @@ export function FindPage() {
           <h2 className="cr-section__title" id="finder-ask-title">
             Clip Factory can&apos;t join for you
           </h2>
-          <p>Content Rewards has no way yet for apps to join. You can ask them to add one.</p>
+          <p>Content Rewards doesn&apos;t let apps join yet. You can ask them.</p>
           {data.askedAt ? (
             <p className="finder-ask__done">
               <Icon name="checkCircle" size={18} />
@@ -707,11 +705,10 @@ export function FindPage() {
           <details className="cr-fold">
             <summary className="cr-fold__q">
               <Icon name="info" size={18} />
-              <span>Show more</span>
+              <span>See the message</span>
               <Icon name="chevronRight" size={18} className="icon cr-fold__chev act-turn" />
             </summary>
             <div className="cr-fold__body">
-              <p className="finder-ask__what">What it says</p>
               <p>This is what Clip Factory sends to Content Rewards&apos; team.</p>
               <blockquote className="finder-ask__msg">{ASK_MESSAGE}</blockquote>
             </div>

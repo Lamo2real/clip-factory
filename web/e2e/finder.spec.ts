@@ -491,7 +491,7 @@ test.describe("desktop journeys", () => {
     await firstLook(page);
     const ask = page.locator("[data-help='cr-finder-ask']");
     await expect(ask).toContainText("Clip Factory can't join for you");
-    await ask.locator("summary", { hasText: "Show more" }).click();
+    await ask.locator("summary", { hasText: "See the message" }).click();
     await expect(ask).toContainText("This is what Clip Factory sends to Content Rewards' team.");
     await ask.getByRole("button", { name: "Ask Content Rewards" }).click();
     await expect(page.locator(".toast", { hasText: "Sent. Thank you!" })).toBeVisible();

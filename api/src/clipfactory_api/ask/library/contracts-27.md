@@ -13,8 +13,8 @@ never top left. The release label is "Money dashboard".
 
 The owner is paid per view, not by subscription, so "MRR" here is **the money the apps reported over a recent stretch
 of days**, built only from stored `REVENUE#{platform}#{day}` rows (§25). The screen keeps the MRR names with a plain
-line under each, and a "?" says: "MRR usually means subscriptions. Here it means the money YouTube (and other apps that
-share it) reported for your videos over that many days."
+line under each, and a "?" says: "Here MRR is the money the apps reported for your videos. A day can still change for a
+few days."
 
 * **`through`** (the end day): the newest stored row date of each counted app (`throughBy`, a $0 day counts as
   reported), and the **earliest** of those across the counted apps, so every app covers the same days. Every period
@@ -27,8 +27,8 @@ share it) reported for your videos over that many days."
   so 10 days of $1.00 read $1.00 a day, not $0.33. **Yearly MRR**: Monthly × 12 once 30 days are covered, Monthly ×
   360 ÷ `coveredDays` before that (`paceMicros`), always "At this pace for a year", never added to anything, worked out
   only on the server; "Last 365 days: $X" shows only when stored history covers every day of `[through−364, through]`
-  for every counted app. Under 30 covered days the sub-lines say so ("only 10 days so far", "average of 10 days",
-  "from 10 days so far").
+  for every counted app. The sub-lines are "Last 30 days", "Last 7 days", "An average day (last 30 days)" and "At this
+  pace for a year"; under 30 covered days they say so ("only 10 days so far", "last 10 days", "from 10 days so far").
 * A day between an app's first stored row (`historyFrom`) and `through` with no row counts as $0; a day before it is
   not covered. A comparison shows only when every counted app covers the whole previous period; otherwise the card
   says "Not enough days to compare yet".
@@ -51,7 +51,7 @@ share it) reported for your videos over that many days."
 | `lastError` on a counted app | Kept in with the rows it has; banner "Couldn't check YouTube today. Showing money up to Thu 14 Nov." (warn tone), naming only the apps in `errors`. |
 | One counted app's newest day older than today − 6 while another is up to date | That app is left out with reason `behind` ("Facebook hasn't sent money since Tue 27 Oct. Not counted for now.") and listed in `behind`, so it cannot pull every app's days back; the others keep current numbers. |
 | Every counted app older than today − 6 | They stay in; `stale: true`; the banner names the apps in `errors` ("Couldn't check …") and the other `behind` apps ("… hasn't sent new money lately."), then "Showing money up to …". |
-| Revised days in the 60 days shown | Grey line "YouTube changed 2 days after rechecking them." |
+| Revised days in the 60 days shown | Grey line "YouTube changed 2 days after a recheck." |
 | Two or more currencies | Each card stacks one line per currency; a Segmented currency picker (with Glide) above the chart; "Different money types are never added together." |
 | Nothing can be counted | "No money yet." with the nearest goal bar (`nearestGoal`, as on Home) and **See how close you are** (Settings › Posting › Money). No zeros, no chart. |
 | Only apps that never share | One card: "{App} doesn't share money with apps. Look in {paidWhere}." The clip list still shows views. |
@@ -74,7 +74,7 @@ Every amount carries its tag ("YouTube's estimate", "Meta's estimate", "Apps' es
   **All** at the right end). Tapping an app while All is on picks only it; turning the last one off is All; all five is
   All; All clears the rest. **Period** (Segmented with Glide): 7 days, 30 days, 90 days, Year (default 30). **Sort
   clips** (Segmented): Most money, Most views. The cards always use their fixed days; the period changes the chart and
-  the clip list ("Cards use fixed days. The picker changes the chart and the clip list.").
+  the clip list ("The days you pick change the chart and clips, not the cards.").
 * **Phones and touch tablets** (`(max-width: 767px), (pointer: coarse) and (max-width: 1194px)`): the controls sit in
   a glass **dock** (110 px, two rows, right-aligned) above the tab bar at the bottom right: the app chips on top, the
   period nearest the thumb. Nothing tappable in the top-left third of the page. Ask's home spot moves above the dock

@@ -289,7 +289,7 @@ describe("the owner's own picture, video and sound models (§45.37 G2)", () => {
     await click(byText("button", /Add a model/, box()));
     const form = $<HTMLElement>('form[aria-label="Add a picture, video or sound model"]')!;
     await click(byText("[role=radio]", /^Sound/, form));
-    expect(form.textContent).toContain("Sound models make sound effects and music only. Clips Funded never asks them for a voice.");
+    expect(byText("[role=radio]", /^Sound/, form).textContent).toContain("Sound effects and music, never a voice");
     // Sound runs on ElevenLabs only (the owner's key): Amazon Bedrock has no sound or music model (the API's NO_BEDROCK_SOUND).
     expect($$("[role=radio]", $<HTMLElement>('[aria-label="Where it runs"]', form)!).map((r) => r.querySelector(".st-stg-pick__label")?.textContent)).toEqual(["ElevenLabs"]);
     expect($$("select", form).some((s) => s.getAttribute("aria-label") === "AWS Region")).toBe(false);
@@ -334,7 +334,7 @@ describe("where an added AI model runs (§45.37 G4)", () => {
     expect($$("[role=radio]", hosts).map((r) => r.querySelector(".st-stg-pick__label")?.textContent)).toEqual(["Amazon Bedrock", "Anthropic", "An OpenAI-compatible service"]);
     await click(byText("[role=radio]", /^Anthropic/, hosts));
     expect($$("select", form).some((s) => s.getAttribute("aria-label") === "AWS Region")).toBe(false);
-    expect(form.textContent).toContain("It uses your Anthropic API key, saved under Provider keys below. The key is never shown again.");
+    expect(form.textContent).toContain("It uses your Anthropic API key from Provider keys below.");
     fill(form, "Name", "Opus direct");
     fill(form, "Model name", "claude-opus-5-5");
     // Anthropic's usual levels start ticked (§45.36 E17): all five, its usual High the default.

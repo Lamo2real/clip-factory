@@ -83,7 +83,15 @@ export function SetupList() {
                   <ProgressRing value={progress.fraction} size={48} stroke={6} label={`${guide.name} progress`}>
                     {setup?.ready ? <Icon name="check" size={18} /> : null}
                   </ProgressRing>
-                  <Icon name="chevronRight" size={20} className="icon setup-card__go" />
+                  {/* What a tap does, in a word, while there is something to do (the whole card is the link). */}
+                  {setup?.ready || isSkipped ? (
+                    <Icon name="chevronRight" size={20} className="icon setup-card__go" />
+                  ) : (
+                    <span className="setup-card__go" style={{ display: "inline-flex", alignItems: "center", gap: 2, fontWeight: 700, whiteSpace: "nowrap" }}>
+                      Set up
+                      <Icon name="chevronRight" size={20} />
+                    </span>
+                  )}
                 </A>
               ) : (
                 <Skeleton className="setup-card-skel" />

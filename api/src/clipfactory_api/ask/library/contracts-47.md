@@ -599,7 +599,7 @@ TikTok. No API, table or infrastructure change.
    Duet and Stitch as saved (on by default), and Commercial content off. A campaign clip keeps its own path (Everyone
    with Branded content, §17.8; the Mac never takes one, §47.2).
    * No tap before Upload: the button reads **Your settings are on** from the start (`settingsOn` true), the line under
-     it reads "Every place uses your settings. Tap a place below to change it for this clip.", and TikTok's row line
+     it reads "Tap a place below to change it for this clip.", and TikTok's row line
      says "Who can see it: Everyone · …", never "not picked yet". Upload is never held with "Tap Use my settings
      first. TikTok needs your tap."
    * **TikTok's row is read-only for what the Mac uses** (decided for this release, 2026-11-23). The server asks the
@@ -660,12 +660,12 @@ TikTok. No API, table or infrastructure change.
    TikTok's demo video for its app review (`TIKTOK_DEMO_SHOTS`, §17) shows this path, so it is recorded with Your Mac
    posts TikTok off.
 3. **Words elsewhere:** Settings › Posting › My settings (`MySettingsBranch.tsx`) reads "Every clip on Review starts
-   on these, TikTok too, except campaign clips." at the top, and under TikTok "Commercial content is off. Your Mac
-   posts TikTok with these. Paid partnerships can't go through your Mac yet: untick TikTok for that clip, then post it
-   in the TikTok app with its label, not with Post with my Mac or Send these to my Mac." in item
-   1's mode; otherwise both keep today's words ("Tap Use my settings on a clip to put these on.", "Commercial content
-   is off. For a paid partnership, tick Branded content in the TikTok row of that clip. TikTok wants your own tap on
-   each clip, so tap Use my settings there."). The TikTok part's leaf (`settingsTree.ts`, `my-settings-tiktok`) reads
+   on these, TikTok too, except campaign clips." at the top, and under TikTok "Commercial content: off. Your Mac posts
+   TikTok with these." in item 1's mode, with a shut "Paid partnership?" fold: "Your Mac can't post those yet.", "Untick
+   TikTok on that clip.", "Post it in the TikTok app, with its label.", "Don't use Post with my Mac or Send these to my Mac
+   for it."; otherwise "Tap Use my settings on a clip to put these on." at the top, and "Commercial content: off. TikTok
+   wants your own tap, so tap Use my settings on each clip." with the fold's one line "Tick Branded content in that
+   clip's TikTok row.". The TikTok part's leaf (`settingsTree.ts`, `my-settings-tiktok`) reads
    "Everyone can see it; comments, Duet and Stitch on. Every clip starts on these while your Mac posts TikTok." in
    both modes. Ask's "Use my settings" guide (`helpKb.json`, `review-use-my-settings`, titled "Use my settings: your
    saved choices on every place", true in both modes) says every ticked place, TikTok included, starts on his settings

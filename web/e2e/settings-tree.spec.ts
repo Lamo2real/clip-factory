@@ -342,7 +342,9 @@ test.describe("on a desktop", () => {
     const trees = page.getByRole("list", { name: "Settings groups" }).getByRole("link");
     await expect(trees).toHaveCount(4);
     await expect(trees.nth(0)).toContainText("Clip making");
-    await expect(trees.nth(0)).toContainText("11 settings");
+    // Each card names what is inside, with no count.
+    await expect(trees.nth(0)).toContainText("Clips, Skills, What it learned");
+    await expect(trees.nth(0)).not.toContainText("11 settings");
 
     await trees.nth(3).click();
     await expect(page).toHaveURL(/\/settings\/app$/);
@@ -426,7 +428,7 @@ test.describe("layout details", () => {
       await page.goto(path);
       await settle(page);
       await page.evaluate(() => document.fonts.ready);
-      const found = await lonely(".tree-card__line, .branch-card__line, .tree-card__count, .branch-card__apples");
+      const found = await lonely(".tree-card__line, .branch-card__line, .tree-card__count");
       expect(found, `${path} at ${width}`).toEqual([]);
     }
   });

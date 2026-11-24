@@ -165,7 +165,7 @@ export function SfxEditor({ story, script, saving, onSave }: { story: Story; scr
       </ol>
       {problem ? <Notice tone="bad">{problem}</Notice> : null}
       <div className="st-s-actionbar">
-        <button type="button" className="st-btn st-btn--main" aria-disabled={!dirty || saving || undefined} onClick={() => dirty && !saving && save()}>
+        <button type="button" className={`st-btn${dirty ? " st-btn--main" : ""}`} aria-disabled={!dirty || saving || undefined} onClick={() => dirty && !saving && save()}>
           {saving ? "Saving…" : dirty ? "Save sounds" : "No changes yet"}
         </button>
       </div>

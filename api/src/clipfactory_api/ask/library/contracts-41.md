@@ -135,8 +135,8 @@ brands, CR's category names) is plain escaped text, at most 300 characters, neve
    label wrapping inside its own half, so no choice sits alone on a second row; the 2 × 2 grid's track and `<Glide>`
    highlight turn into rounded rectangles to match.
 
-   Under the controls, fixed (not a control): "I skip campaigns Clip Factory can't make clips for, like ones that need
-   their own sound or picture on the video." The TikTok chip, until TikTok's posting audit passes (§17.4 gate
+   Under the controls, fixed (not a control): "I skip campaigns that need their own sound or picture on the
+   video." The TikTok chip, until TikTok's posting audit passes (§17.4 gate
    `posting_audit: ok`): shown off and not tappable (`aria-disabled`), with the §38.4 line "TikTok: not yet. Campaign clips skip
    TikTok for now: your Mac can't mark them as Branded content yet." A place not set up yet (not
    `ready` in `GET /v1/setup`) is shown off and not tappable, with "Set it up first." under it (matching only ever uses
@@ -237,18 +237,17 @@ brands, CR's category names) is plain escaped text, at most 300 characters, neve
      store's campaign events (`GET /v1/contentrewards/campaigns/{id}`, §38.8). The `cf-prod-stats` tick adds them the
      same way within 15 minutes when the page is closed (§41.5), and the owner gets §38.11's "You're in!"
      notification.
-4. Under the matches, quiet lines: "You join each campaign yourself on Content Rewards." Then, while `signedIn`: "Open
-   campaigns show their rules only after you join. I read them right after."; else: "Open campaigns show their rules
-   only after you join. Then I'll ask you to copy them here once." Then the fold **"Why not more?"**: "I looked at 154
+4. Under the matches, quiet lines: "You join each campaign yourself on Content Rewards." Then, while `signedIn`: "Rules
+   show after you join. I read them then."; else: "Rules show after you join. Then you copy them here once." Then the fold **"Why not more?"**: "I looked at 154
    campaigns. 6 match." and one line per reason with a count, most first (§41.3 `skipped`): "62 pay less than $1.00
    per 1,000 views.", "31 have only a little money left.", "12 don't pay for the places you post.", "9
    want you to apply first.", "5 need something Clip Factory can't make.", "3 you said Not for me." (+ the quiet "Bring
    them back", `{"unhideAll": true}`).
 5. Glass "Look on Content Rewards yourself" (→ `https://contentrewards.com/c/discover`, new tab).
 6. **Ask Content Rewards** (only while `signedIn`; `data-help="cr-finder-ask"`): a quiet card "Clip Factory can't join
-   for you" with the line "Content Rewards has no way yet for apps to join. You can ask them to add one." and the glass
+   for you" with the line "Content Rewards doesn't let apps join yet. You can ask them." and the glass
    "Ask Content Rewards" (one tap; `POST …/finder/ask`; toast "Sent. Thank you!"), then "You asked Content Rewards on
-   21 Nov." Under **Show more** "What it says": the line "This is what Clip Factory sends to Content Rewards' team."
+   21 Nov." Under the fold **See the message**: the line "This is what Clip Factory sends to Content Rewards' team."
    and the message (§41.5), never the visible label of anything (§38.1's exception, extended to it by §41.6 change
    12).
 7. The quiet "Stop finding campaigns" (`{"want": {"on": false}}`, 8 s toast with Undo); stopped, the page shows "You
@@ -261,7 +260,7 @@ brands, CR's category names) is plain escaped text, at most 300 characters, neve
 | `new` | the What you want card, open, defaults picked | "Find campaigns for me" |
 | `new` or `ok`, no place set up (`resolvedPlaces` empty) | "Set up a place to post first. Then I can find campaigns that pay for it." | "Set up YouTube" (→ `/settings/posting/setup/youtube?back=/campaigns/find`) |
 | `looking` (a look or a change is being worked on, ≤ 10 min) | "Looking at Content Rewards' campaigns… This takes a minute or two."; right after his own change to What you want (S knows it sent that `PATCH`): "Updating your matches…" (the old matches stay below, dimmed) | none |
-| `ok`, the first look not finished (`looked.pending > 0`) and no match yet | "No match yet. I've looked at 120 campaigns so far. I'll look at more later today." and, while `tellMe` is on, "You don't need to do anything. I'll tell you when one matches." | none |
+| `ok`, the first look not finished (`looked.pending > 0`) and no match yet | "No match yet. I've looked at 120 campaigns so far. I'll look at more later today." and, while `tellMe` is on, "I'll tell you when one matches." | none |
 | `ok`, no match | "No campaign matches right now. I look again 4 times a day." + glass "Change what you want" (opens the card) | none |
 | `ok`, with matches | the matches (and any "You're in!" rows) | the newest "You're in!" row's, else the open match's (not signed in, after Open: only once its rules box has text) |
 | `down` (Content Rewards' pages didn't answer; matches from the last good look, if any, stay) | "Content Rewards didn't answer. I'll try again in a few hours." | the open match's, else none |

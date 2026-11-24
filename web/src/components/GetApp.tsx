@@ -101,7 +101,7 @@ export function GetAppPanel({
             {guess ? `Looks like you are on ${articleFor(os)}${OS_NAME[os]}. ` : ""}
             {plan.kind === "ios-steps" || plan.kind === "android-steps"
               ? "Put Clip Factory on your home screen in three taps."
-              : "Open Clip Factory like any other app, in its own window."}
+              : "It opens like any other app."}
           </p>
         </div>
       </div>
@@ -246,8 +246,7 @@ function PlanView({
             <p className="getapp__safari">
               <Icon name="compass" size={22} />
               <span>
-                <strong>Open this page in Safari first.</strong> Only Safari can put apps on the Home Screen. Copy the link,
-                open Safari, and paste it.
+                <strong>Open this page in Safari first.</strong> Copy the link, then paste it in Safari.
               </span>
             </p>
           ) : null}

@@ -144,8 +144,7 @@ not, so the page said "This computer can't show see-through" on macOS 27 with Li
   (confirmed, publishing, posted, failed) opens `/clips/{clipId}`; a thrown-away one is not a link (it is listed
   nowhere else) and does not lift on hover like one.
 * **Empty Clips line** follows the job: working "Clips show up here as soon as they are made."; failed "No clips
-  yet. Fix the problem above, then tap Try again."; canceled "No clips yet. This job was stopped. Tap Try again to
-  start it again."; ready with none "This job made no clips. Go back to Home and try a different link."
+  yet. Fix the problem above, then tap Try again."; canceled "No clips yet. This job was stopped. Tap Try again."; ready with none "This job made no clips. Go back to Home and try a different link."
 * **Words** (§12.4): the job status pill says **Didn't work** (never "Failed"); the Home source switch is
   **Paste a link / Pick a video** (the help anchor stays `upload-video`).
 * **Drag and drop on the new-job card** (`web/src/lib/drops.ts`): a video dragged from Finder (or the desktop)
@@ -175,8 +174,7 @@ not, so the page said "This computer can't show see-through" on macOS 27 with Li
   fail with a server error). Covered by `web/e2e/audit-shell.spec.ts`.
 * **Review screen** (`web/src/screens/review/`):
   * A refused Upload (a caption too long for a chosen place) opens the first too-long place row, scrolls it into view,
-    focuses its box and names the platform: "Your X caption is longer than its platform allows. Make it shorter, then
-    tap Upload.". Every row whose caption is too long carries `.is-over` and "Too long. Make it shorter." so it shows
+    focuses its box and names the platform: "Your X caption is too long. Make it shorter, then tap Upload.". Every row whose caption is too long carries `.is-over` and "Too long. Make it shorter." so it shows
     even while the row is closed.
   * Place rows (§36.1): one closed row per chosen place, no tab bar. A closed TikTok row also names the account:
     "Posting as <nickname>" (TikTok's rules). Review's launcher keeps clear of the rows (`data-help-dodge`).
