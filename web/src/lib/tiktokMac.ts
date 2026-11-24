@@ -620,7 +620,7 @@ export function sendLots(clipIds: readonly string[]): string[][] {
 }
 
 // §47.11: under "Your Mac needs you: …" while it stopped only for a TikTok login (needsYouCode "login").
-export const MAC_LOGIN_BACK_LINE = "Your Mac carries on by itself once it's logged in to your TikTok.";
+export const MAC_LOGIN_BACK_LINE = "Once you log in to your TikTok again, your Mac carries on by itself.";
 
 /** The quiet line under Settings' status line while the Mac is held only for a TikTok login (§47.11), else null. */
 export function loginBackLine(helper: MacHelper | null | undefined): string | null {

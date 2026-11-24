@@ -116,6 +116,14 @@ function clipFactory({ clipsQueue = [], wsQueue = [], clipsHelper = null, wsHelp
     knobs.loggedIn = true;
     return { helper: lane.helper, outcome: back ? "resumed" : "cleared" };
   };
+  /** The owner's Try again on a stopped clip or job: the hold ends and it waits for the Mac again. */
+  const tryAgain = (name, id) => {
+    const lane = lanes[name];
+    lane.helper = { seenAt: lane.helper?.seenAt, state: "ok", setUp: true };
+    const back = lane.stopped[id];
+    delete lane.stopped[id];
+    if (back) lane.queue.push({ ...back, state: "waiting" });
+  };
   const routes = {
     "GET /v1/tiktok/mac": () =>
       knobs.failQueueAfterLoggedIn && knobs.loggedIn
@@ -171,7 +179,7 @@ function clipFactory({ clipsQueue = [], wsQueue = [], clipsHelper = null, wsHelp
     call.status = status;
     return Response.json(status === 200 ? out : out.body, { status });
   };
-  return { issued, calls, lanes, knobs };
+  return { issued, calls, lanes, knobs, tryAgain };
 }
 
 /** Runs ``work`` on the faked clock, a second of it after each real millisecond (the Keychain tool runs for real). */
@@ -329,7 +337,8 @@ test("held for a TikTok login, now logged in as @lamo.clips: the route, a fresh 
   assert.deepEqual(stops.map((c) => [c.body.reason, c.body.code]), [[REASONS.noUpload, undefined]]);
   assert.ok(mac.opened.every((o) => !o.visible));
   const state = JSON.parse(fs.readFileSync(path.join(base, "state.json"), "utf8"));
-  assert.equal(state.ledger.c1.loginBacks.length, 1);
+  assert.equal(state.loginBacks.length, 1); // the lane's count (the try stopped again, so it stays)
+  assert.equal(state.ledger.c1.loginBacks, undefined);
   assert.equal(state.clipsAccount.uid, "7001000001"); // pinned on its first same
   const events = fs.readFileSync(path.join(base, "events.log"), "utf8");
   assert.match(events, /"kind":"login_back","account":"clips","clipId":"c1","outcome":"resumed"/);
@@ -357,6 +366,102 @@ test("the route ended the hold but the second read fails: no check-in at all thi
   assert.deepEqual(result, { action: "login_back", outcome: "resumed" });
   assert.deepEqual(pings(server.calls), []);
   assert.ok(!routesOf(server.calls).some((r) => r.endsWith("/claim")));
+});
+
+test("its own account data says @lamo.clips but Studio shows TikTok's login: logged out, no resume and no window, tick after tick", async (t) => {
+  freshMac({ ...CF_ACCOUNT });
+  t.mock.timers.enable({ apis: ["Date", "setTimeout", "setInterval"], now: START });
+  mac.account = { clips: { handle: "@lamo.clips", uid: "7001000001" } };
+  mac.text = "Log in to continue";
+  const server = clipFactory({ clipsHelper: { ...LOGIN_HOLD }, stopped: STOPPED });
+  // Every 5 minutes for half an hour, then the next day and the day after.
+  for (const wait of [0, 5, 5, 5, 5, 5, 5, 24 * 60, 24 * 60]) {
+    t.mock.timers.tick(wait * MIN);
+    const result = await onClock(t, tick);
+    assert.equal(result.action, "paused");
+  }
+  const routes = routesOf(server.calls);
+  assert.ok(!routes.some((r) => r.endsWith("/logged-in") || r.endsWith("/claim")), routes.join(", "));
+  assert.equal(mac.opened.length, 9); // one hidden look per due tick
+  assert.ok(mac.opened.every((o) => !o.visible));
+  assert.deepEqual(mac.windows, []);
+  assert.deepEqual(mac.clearedPorts, []);
+  for (const ping of pings(server.calls)) assert.deepEqual([ping.state, ping.reason], ["needs_you", REASONS.login]);
+  assert.equal(server.lanes.clips.helper.needsYouCode, "login"); // the right login still ends it
+  const state = JSON.parse(fs.readFileSync(path.join(base, "state.json"), "utf8"));
+  assert.equal(state.loginBacks, undefined);
+});
+
+test("a puzzle on Studio while the look reads @lamo.clips: nothing readable, no resume, the hold and its words stay", async (t) => {
+  freshMac({ ...CF_ACCOUNT });
+  t.mock.timers.enable({ apis: ["Date", "setTimeout", "setInterval"], now: START });
+  mac.account = { clips: { handle: "@lamo.clips", uid: "7001000001" } };
+  mac.text = "Verify to continue";
+  const server = clipFactory({ clipsHelper: { ...LOGIN_HOLD }, stopped: STOPPED });
+  assert.equal((await onClock(t, tick)).action, "paused");
+  assert.ok(!routesOf(server.calls).some((r) => r.endsWith("/logged-in") || r.endsWith("/claim")));
+  const [ping] = pings(server.calls);
+  assert.deepEqual([ping.state, ping.reason], ["needs_you", REASONS.login]);
+});
+
+test("a Clips Funded lane whose account data says @clips.funded while Studio shows TikTok's login: no resume, no QR window, no cookie cleared", async (t) => {
+  t.mock.timers.enable({ apis: ["Date", "setTimeout", "setInterval"], now: START });
+  freshMac({ ...CF_ACCOUNT, ws: { stories: { port: 9340, ledger: {}, posted: [], lastPressedAt: null, account: { handle: "@clips.funded" } } } });
+  mac.account = { "ws:stories": { handle: "@clips.funded", uid: "7002000002" } };
+  mac.text = "Log in to continue";
+  const server = clipFactory({ wsHelper: { ...WS_LOGIN_HOLD }, stopped: STOPPED });
+  for (const wait of [0, 5, 24 * 60]) {
+    t.mock.timers.tick(wait * MIN);
+    await onClock(t, tick);
+  }
+  const routes = routesOf(server.calls);
+  assert.ok(!routes.some((r) => r.endsWith("/logged-in") || r.endsWith("/claim")), routes.join(", "));
+  assert.deepEqual(mac.windows, []);
+  assert.deepEqual(mac.clearedPorts, []);
+  assert.ok(mac.opened.every((o) => !o.visible));
+  for (const ping of pings(server.calls, `POST ${W}/tiktok/mac/ping`)) assert.deepEqual([ping.state, ping.reason], ["needs_you", WS_REASONS.login]);
+});
+
+test("the owner taps Try again while the look runs: the tick reads again, never pings the old needs_you, and the clip goes", async (t) => {
+  t.mock.timers.enable({ apis: ["Date", "setTimeout", "setInterval"], now: START });
+  // Logged out (the look ends at the cookie), logged in to @lamo.clips (the route then refuses: the hold is gone) and
+  // logged in to @clips.funded (the wrong account's words): each time his answer wins.
+  for (const account of [null, { handle: "@lamo.clips", uid: "7001000001" }, { handle: "@clips.funded" }]) {
+    freshMac({ ...CF_ACCOUNT, ledger: { c1: { step: "stopped", device: "mac-tick-token", tries: 1 } } });
+    mac.account = account ? { clips: account } : null;
+    const server = clipFactory({ clipsHelper: { ...LOGIN_HOLD }, stopped: STOPPED });
+    mac.onOpen = () => {
+      mac.onOpen = null;
+      server.tryAgain("clips", "c1");
+    };
+    const result = await onClock(t, tick);
+    const label = JSON.stringify(account);
+    assert.equal(result.action, "post", label);
+    const all = pings(server.calls);
+    assert.ok(all.length >= 1, label);
+    assert.ok(all.every((p) => p.state !== "needs_you"), `${label} ${JSON.stringify(all)}`);
+    const routes = routesOf(server.calls);
+    const look = routes.indexOf("GET /v1/tiktok/mac", 1);
+    assert.ok(look > 0 && look < routes.indexOf("POST /v1/tiktok/mac/ping"), `${label}: read again before the check-in`);
+    assert.ok(routes.includes("POST /v1/clips/c1/tiktok/mac/claim"), label);
+  }
+});
+
+test("the owner taps Try again on a Clips Funded post while its look runs: no stale needs_you ping for that lane", async (t) => {
+  t.mock.timers.enable({ apis: ["Date", "setTimeout", "setInterval"], now: START });
+  const account = { handle: "@clips.funded", setUpAt: "2026-11-20T10:00:00.000Z" };
+  freshMac({ ...CF_ACCOUNT, ws: { stories: { port: 9340, ledger: {}, posted: [], lastPressedAt: null, account } } });
+  const server = clipFactory({ wsHelper: { ...WS_LOGIN_HOLD }, stopped: STOPPED });
+  mac.onOpen = ({ lane }) => {
+    if (lane !== "ws:stories") return;
+    mac.onOpen = null;
+    server.tryAgain("ws", "pj-1");
+  };
+  await onClock(t, tick);
+  const all = pings(server.calls, `POST ${W}/tiktok/mac/ping`);
+  assert.equal(all.length, 1);
+  assert.notEqual(all[0].state, "needs_you", JSON.stringify(all));
+  assert.ok(routesOf(server.calls).includes(`POST ${W}/publishing/pj-1/mac/claim`), JSON.stringify(routesOf(server.calls)));
 });
 
 test("a puzzle, a limit, an older helper's hold (no code), the switch off or the Mac paused: the helper never looks", async (t) => {

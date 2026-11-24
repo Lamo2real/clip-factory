@@ -26,10 +26,10 @@ export function needsYouWords(reason: string | undefined): string {
   return `Your Mac needs you: ${reason?.trim() || "look at your Mac."}`;
 }
 
-/** §47.11, under the needs-you line while the Mac stopped only for a TikTok login: "Your Mac carries on by itself
- * once it's logged in to @clips.funded." */
+/** §47.11, under the needs-you line while the Mac stopped only for a TikTok login: "Once you log in to
+ * @clips.funded again, your Mac carries on by itself." */
 export function loginBackWords(handle: string): string {
-  return `Your Mac carries on by itself once it's logged in to ${handle}.`;
+  return `Once you log in to ${handle} again, your Mac carries on by itself.`;
 }
 
 /** "Your Mac hasn't checked in since Sun 14:03." */

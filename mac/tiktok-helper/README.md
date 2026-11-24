@@ -80,7 +80,9 @@ Posting › Your Mac posts TikTok has Change TikTok login and Forget TikTok logi
 1.2.2 (§47.11): when a stop was only a TikTok login problem, the helper looks every 5 minutes (headless, nothing on
 screen) and right after `setup`; once that lane's Chrome reads exactly its own account, "Your Mac needs you" ends and
 the stopped clip carries on by itself (never another account, never a second press: a clip whose Post was pressed
-stays for the owner).
+stays for the owner). TikTok's login on Studio, a puzzle or a code during the look keeps the hold. The looks end a
+lane's hold at most twice in a row; after that only the owner does (Try again, `setup`, Log in on my Mac), until the
+lane posts again.
 
 ## Stops instead of guessing
 

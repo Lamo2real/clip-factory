@@ -7,10 +7,11 @@
 //   mac.text     what TikTok's page says (its visible text: "Verify to continue" is a puzzle).
 //   mac.ownerLogsInAfterMs  a visible window (the owner's) has the session this long after it opened; a hidden
 //                Chrome on the same profile still reads logged out (24 Nov 2026: the session wasn't kept).
-export const mac = { opened: [], windows: [], closedPorts: [], clearedPorts: [], quits: 0, quitsAt: [], visits: [], account: null, text: "", ownerLogsInAfterMs: null, sessionShownAt: null };
+//   mac.onOpen   called with {lane, visible} each time a Chrome opens (something the owner does meanwhile).
+export const mac = { opened: [], windows: [], closedPorts: [], clearedPorts: [], quits: 0, quitsAt: [], visits: [], account: null, text: "", ownerLogsInAfterMs: null, sessionShownAt: null, onOpen: null };
 
 export function resetMac() {
-  Object.assign(mac, { opened: [], windows: [], closedPorts: [], clearedPorts: [], quits: 0, quitsAt: [], visits: [], account: null, text: "", ownerLogsInAfterMs: null, sessionShownAt: null });
+  Object.assign(mac, { opened: [], windows: [], closedPorts: [], clearedPorts: [], quits: 0, quitsAt: [], visits: [], account: null, text: "", ownerLogsInAfterMs: null, sessionShownAt: null, onOpen: null });
 }
 
 const one = (a) => (!a ? null : typeof a === "string" ? { handle: a } : a);
@@ -85,6 +86,7 @@ function tiktokPage(laneId, visible) {
 // chrome.js
 export async function open(lane, { visible = false } = {}) {
   mac.opened.push({ lane: lane.id, visible });
+  mac.onOpen?.({ lane: lane.id, visible });
   return { browser: { lane: lane.id, visible }, page: tiktokPage(lane.id, visible) };
 }
 export async function quit(browser) {

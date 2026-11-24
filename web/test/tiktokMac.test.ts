@@ -1127,7 +1127,7 @@ describe("§47.11: a hold that is only a TikTok login", () => {
   const held = helper(at, { state: "needs_you", reason: "TikTok logged your Mac out. Log in to TikTok again on your Mac.", needsYouClipId: "c1", needsYouCode: "login" });
 
   it("the carry-on line comes only with needsYouCode login, under the needs-you status line", () => {
-    expect(MAC_LOGIN_BACK_LINE).toBe("Your Mac carries on by itself once it's logged in to your TikTok.");
+    expect(MAC_LOGIN_BACK_LINE).toBe("Once you log in to your TikTok again, your Mac carries on by itself.");
     expect(loginBackLine(held)).toBe(MAC_LOGIN_BACK_LINE);
     expect(helperLine(held, NOW)).toBe("Your Mac needs you: TikTok logged your Mac out. Log in to TikTok again on your Mac.");
     for (const other of [

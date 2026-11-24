@@ -20704,13 +20704,19 @@ frame, no Apple Events).
   Factory's `USER#{u}` item; it skips Try again's account confirm (the claim's `validate_destination` and handle check
   stop a changed account without posting).
 * **D3, the look** (helper 1.2.2). `lookLogin(lane)` (run.js): the lane's own profile, headless; no TikTok
-  `sessionid` cookie → `logged_out` with no TikTok page loaded; else Studio › Posts and `identify` as `lookHeadless`;
-  Chrome quits. `loginBack(lane, hold, d)` (`src/hold.js`, fakes in tests): (1) two resumes of this clip in 24 hours
-  (`MAX_LOGIN_BACKS = 2`, the ledger's `loginBacks`) → `too_many`, no Chrome; (2) no target → `no_account`, a target
+  `sessionid` cookie → `logged_out` with no TikTok page loaded; else Studio › Posts through `goto`, as a post opens it:
+  TikTok's login there → `logged_out` even when the profile's own account data still names the account (a post would
+  stop on that login again: review, 24 Nov); a puzzle, a code, any other stop or a page that didn't load → `unknown`;
+  only then `identify` as `lookHeadless`; Chrome quits. `loginBack(lane, hold, d)` (`src/hold.js`, fakes in tests):
+  (1) `MAX_LOGIN_BACKS = 2` holds ended by the lane's own looks in a row (the lane's `loginBacks`: `state.loginBacks`,
+  `state.ws[id].loginBacks`; every clip counted, no clock) → `too_many`, no Chrome, and only the owner ends it (Try
+  again, setup, Log in on my Mac); a post on TikTok (`finished`) and his own login (`afterLogin`, `setup --workspace`,
+  Log in on my Mac) start the count again; (2) no target → `no_account`, a target
   that is another lane's account → `wrong` in that refusal's words, no Chrome; (3) the look (`logged_out`); (4)
   `sameAccount(seen, target, pinnedUid, {notUid: others.uids})` and `lane.onWho` (Clip Factory pins its uid on its first
-  same; a Clips Funded lane is set up on same, not on wrong); (5) same → `loginBacks` += now (before the call), then
-  the route: its `outcome`, a 409 → `refused`, a 404 or any other failure → `failed` (the hold stays); (6) wrong →
+  same; a Clips Funded lane is set up on same, not on wrong); (5) same → `loginBacks` += now (before the call, taken
+  off again unless the hold ended), then the route: its `outcome`, a 409 → `refused`, a 404 or any other failure →
+  `failed` (the hold stays); (6) wrong →
   `wrong` (+ `wrong_account`), else `unknown`. Words (`heldWords`) only for wrong ("Your Mac is logged in to TikTok as
   {seen}, not {target}. Nothing was posted.") and logged_out (the lane's logged-out sentence). It clears no cookie,
   types no saved login, leaves `loginTries` / `loginRefused` alone, and shows nothing. Targets: Clip Factory's
@@ -20719,12 +20725,13 @@ frame, no Apple Events).
   kind)` → `{id}` only for `needs_you` + code login + an id; `LOGIN_CHECK_EVERY_MS = 5 minutes`; `loginCheckDue` with
   no stamp, a stamp 5 minutes old or more, or one in the future; the stamp (`state.loginCheckAt`,
   `state.ws[id].loginCheckAt`) is written before the look; never while the lane's switch is off or the Mac is paused.
-  **A** (Clip Factory): right after `applyRequests`; `resumed` / `pressed` / `cleared` → `GET /v1/tiktok/mac` again and
-  the tick decides and pings on that read (the resumed clip may go in the same tick); if that read fails, the tick
-  ends with no ping (a stale `needs_you` ping would put back a hold with no clip and no code); `wrong` / `logged_out`
-  → the needs-you ping carries the words (the code stays, so the right login still ends it). **B** (Clips Funded):
-  per lane before its `wsAction` and ping, only when A's action isn't post, resume or find, at most one lane per tick;
-  after a route answer that lane's queue is read again (a failed read skips the lane's ping). **C.3** (Log in on my
+  **A** (Clip Factory): right after `applyRequests`; after every look, whatever it said, `GET /v1/tiktok/mac` again
+  and the tick decides and pings on that read (the resumed clip may go in the same tick, and the owner's Try again
+  during the look wins); if that read fails, the tick ends with no ping (a stale `needs_you` ping would put back a hold
+  with no clip and no code); `wrong` / `logged_out` → the needs-you ping carries the words only while that read still
+  holds the same login hold (the code stays, so the right login still ends it). **B** (Clips Funded): per lane before
+  its `wsAction` and ping, only when A's action isn't post, resume or find, at most one lane per tick; after every
+  look that lane's queue is read again, the same way (a failed read skips the lane's ping). **C.3** (Log in on my
   Mac): reading the target while held for a login calls the job's route (not capped) before the existing
   `clearLogin` ping, which then never says `needs_you`. **After `cli.js setup`** (under run.lock, TikTok logged in and
   Clip Factory signed in): `afterLogin` reads `GET /v1/tiktok/mac` and runs `loginBack` at once (not capped), prints
@@ -20741,9 +20748,10 @@ frame, no Apple Events).
   `refused`, `failed` or `too_many`; `stopped` carries `code`. `VERSION = "1.2.2"`.
 * **D5, the web** (it never calls the route). Settings › Your Mac posts TikTok keeps "Your Mac needs you: {reason}" and
   **Open the stopped clip**; with `needsYouCode: "login"` one quiet line under the status line, `MAC_LOGIN_BACK_LINE`
-  "Your Mac carries on by itself once it's logged in to your TikTok." (`data-mac="login-back"`, `MacLoginBack`), for no
-  other hold. Clips Funded's card keeps its words and **Log in on my Mac**; `CardState.note` = `loginBackWords(handle)`
-  "Your Mac carries on by itself once it's logged in to {handle}." (never "Clip Factory"). After the helper's route,
+  "Once you log in to your TikTok again, your Mac carries on by itself." (`data-mac="login-back"`, `MacLoginBack`), for
+  no other hold: his own login is never capped, so it stays true after `too_many`. Clips Funded's card keeps its words
+  and **Log in on my Mac**; `CardState.note` = `loginBackWords(handle)` "Once you log in to {handle} again, your Mac
+  carries on by itself." (never "Clip Factory"). After the helper's route,
   the next read (every 60 s, on focus, and on the re-waited post's live event) shows the normal state; a pressed clip
   shows "Not sure it posted · look on your TikTok" with It's on TikTok; a wrong account shows its sentence with the
   same line. Mocks: Clip Factory's `stopped(clipId, reason, needsYou, device, code?)` and `loggedIn(clipId, device?)`;
@@ -20751,8 +20759,9 @@ frame, no Apple Events).
 * **D6, the relogin window waits 3 seconds.** At 08:28:36 he logged in in Clip Factory's relogin window and 7 seconds
   later the headless Chrome read the profile logged out: `relogin` quit the window the moment `sessionid` showed,
   while `loginWindow` waits 3 seconds. Now `relogin` waits `SESSION_SETTLE_MS = 3000` too, then closes the pop-up and
-  carries on (no new window). If the session is lost anyway, the second try's login stop carries the code, so the
-  hold ends as soon as the profile reads the account.
+  carries on (no new window), and so does `cli.js setup` when TikTok's login happened in its window (`afterLogin`
+  looks right after). If the session is lost anyway, the second try's login stop carries the code, so the hold ends as
+  soon as the profile reads the account.
 * **How each never holds.** Another hold: only a login Stop sends the code, a later needs-you stop without one removes
   it, the helper looks only for `loginHold`, and the route refuses unless the code is on this clip from this device.
   Another account: only `same` calls the route; a target that is another lane's is refused before any Chrome; every
@@ -20760,7 +20769,8 @@ frame, no Apple Events).
   post with no `macPressedAt`, in one conditional transaction, never moves `macPressedAt`, `macPressedBefore` or
   `macAgainAt` and never sets `now`; the claim still refuses a pressed post, and `neverTwice`, the ledger and
   `findExisting` are unchanged. The screen: headless only, under the tick's run.lock, only while the switch is on and
-  the Mac isn't paused; the cap bounds any loop.
+  the Mac isn't paused; TikTok's login on Studio is `logged_out`, and the cap (twice in a row per lane, then only the
+  owner) bounds any other mismatch between the look and the post.
 * **Edge cases.** Two Macs, or a reinstalled helper (a new device id): the route refuses, he taps Try again. A renamed
   account: Clips Funded's claim stops it with `ACCOUNT_CHANGED`; Clip Factory's target follows `GET /v1/accounts`. He
   answered first: no hold, no look. A clip deleted while held: `cleared`. A batch's `haltOnStop` paused the Mac: no
@@ -20769,7 +20779,10 @@ frame, no Apple Events).
   (every outcome, the cap, no ask/frame/login/cookie), `tick-token.test.js` (whole ticks: logged out, @lamo.clips
   resumed and claimed in the same tick, @clips.funded refused, no ping after a failed second read, no look for a
   puzzle/limit/old hold/switch off/paused, Clips Funded only while Clip Factory is idle, the code in both stop
-  branches and never on a puzzle, the 400 fallback, D6), `api.test.js`, `constants.test.js`, `words.test.js`; API
+  branches and never on a puzzle, the 400 fallback, D6; and from the review: account data naming the account while
+  Studio shows TikTok's login, in both lanes, over days → no resume, no window, no cookie cleared; a puzzle during the
+  look; the owner's Try again during the look → no stale `needs_you`), `api.test.js`, `constants.test.js`,
+  `words.test.js`; API
   `test_tiktok_mac.py`, `test_ws_tiktok_mac.py` (plus `test_http`, `ws_routes_mac.py`, `test_ws_separation`); web
   `tiktokMac.test.ts`, `storiesTikTokMac.test.tsx`, `tiktokMacNow.test.ts`.
 * **Rollout.** One PR (API, web, helper); every field and route is additive and an older helper sends no code, so

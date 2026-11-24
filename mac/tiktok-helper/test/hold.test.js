@@ -10,7 +10,7 @@ const base = fs.mkdtempSync(path.join(os.tmpdir(), "cf-hold-test-"));
 process.env.CF_TT_BASE = base;
 process.env.CF_TT_DOWNLOADS = path.join(base, "Downloads");
 
-const { BACK_LINES, MAX_LOGIN_BACKS, WS_BACK_LINES, backLine, heldWords, loginBack, sendBack } = await import("../src/hold.js");
+const { BACK_LINES, MAX_LOGIN_BACKS, WS_BACK_LINES, backLine, freshBacks, heldWords, lanesBacks, loginBack, sendBack } = await import("../src/hold.js");
 const { clipsLane, wsLane } = await import("../src/lanes.js");
 const { REASONS, WS_REASONS } = await import("../src/tiktok.js");
 const { ApiError } = await import("../src/api.js");
@@ -25,16 +25,17 @@ function clipsState() {
 }
 
 /** loginBack's world: a look that reads ``seen`` (or no session), a route that answers ``answer``, every call kept. */
-function world(lane, { seen = LAMO, loggedOut = false, answer = { outcome: "resumed" }, target = "@lamo.clips", pinnedUid = "7001", others = { handles: ["@clips.funded"], uids: ["7002"] }, now = NOW, capped } = {}) {
+function world(lane, { seen = LAMO, loggedOut = false, lookState, answer = { outcome: "resumed" }, target = "@lamo.clips", pinnedUid = "7001", others = { handles: ["@clips.funded"], uids: ["7002"] }, now = NOW, capped } = {}) {
   const seenCalls = { looks: 0, calls: [], events: [], backsAtCall: null };
   const d = {
     look: async () => {
       seenCalls.looks++;
+      if (lookState) return { state: lookState };
       return loggedOut ? { state: "logged_out" } : { state: "in", seen };
     },
     call: async (id) => {
       seenCalls.calls.push(id);
-      seenCalls.backsAtCall = [...(lane.state.ledger[id]?.loginBacks || [])];
+      seenCalls.backsAtCall = [...lanesBacks(lane)];
       if (answer instanceof Error) throw answer;
       return answer;
     },
@@ -48,7 +49,7 @@ function world(lane, { seen = LAMO, loggedOut = false, answer = { outcome: "resu
   return { d, seen: seenCalls };
 }
 
-test("logged in to exactly Clip Factory's TikTok: one route call for the held clip, counted in the ledger first", async () => {
+test("logged in to exactly Clip Factory's TikTok: one route call for the held clip, counted in the lane first", async () => {
   const state = clipsState();
   const lane = clipsLane(state, null);
   const { d, seen } = world(lane);
@@ -57,7 +58,8 @@ test("logged in to exactly Clip Factory's TikTok: one route call for the held cl
   assert.deepEqual(seen.calls, ["c1"]);
   assert.equal(seen.looks, 1);
   assert.deepEqual(seen.backsAtCall, [new Date(NOW).toISOString()]); // on disk before the call: a crash still counts
-  assert.equal(state.ledger.c1.step, "stopped"); // the never-twice ledger is untouched
+  assert.deepEqual(state.loginBacks, [new Date(NOW).toISOString()]); // the lane's count, not the clip's
+  assert.deepEqual(state.ledger.c1, { step: "stopped", device: "mac-1" }); // the never-twice ledger is untouched
   assert.deepEqual(seen.events, [{ kind: "login_back", clipId: "c1", outcome: "resumed" }]);
 });
 
@@ -112,6 +114,11 @@ test("no session, nobody readable, or no target: no call, and only logged out br
   const none = world(lane, { target: null });
   assert.deepEqual(await loginBack(lane, { id: "c1" }, none.d), { outcome: "no_account" });
   assert.equal(none.seen.looks, 0); // no Chrome at all
+  // The look saw TikTok stop on something that isn't its login (a puzzle, a code, a page that didn't load): no call.
+  const stopped = world(lane, { lookState: "unknown" });
+  assert.deepEqual(await loginBack(lane, { id: "c1" }, stopped.d), { outcome: "unknown" });
+  assert.deepEqual(stopped.seen.calls, []);
+  assert.equal(lane.state.loginBacks, undefined);
 });
 
 test("the server refuses (409) or doesn't know the route (404): the hold stays either way", async () => {
@@ -125,6 +132,8 @@ test("the server refuses (409) or doesn't know the route (404): the hold stays e
     const { d, seen } = world(lane, { answer });
     assert.deepEqual(await loginBack(lane, { id: "c1" }, d), { outcome });
     assert.deepEqual(seen.calls, ["c1"]);
+    assert.equal(seen.backsAtCall.length, 1); // counted while the call ran (a crash still counts)…
+    assert.deepEqual(lanesBacks(lane), []); // …and taken off again: a call that didn't end the hold never counts
   }
 });
 
@@ -136,26 +145,49 @@ test("pressed and cleared come back as the server said them", async () => {
   }
 });
 
-test("a tick resumes one clip at most twice in 24 hours: then no Chrome, until the oldest is a day old", async () => {
-  const state = clipsState();
+test("a lane's looks end its holds at most twice in a row, every clip counted and no clock: then no Chrome until it posts or he logs in", async () => {
+  const state = { ...clipsState(), ledger: { c1: { step: "stopped" }, c2: { step: "stopped" }, c3: { step: "stopped" } } };
   const lane = clipsLane(state, null);
   assert.equal(MAX_LOGIN_BACKS, 2);
-  for (const at of [NOW, NOW + HOUR]) {
+  // Two clips, one resume each: the lane's count is 2, whichever clip held it.
+  for (const [id, at] of [["c1", NOW], ["c2", NOW + HOUR]]) {
     const { d } = world(lane, { now: at });
-    assert.equal((await loginBack(lane, { id: "c1" }, d)).outcome, "resumed");
+    assert.equal((await loginBack(lane, { id }, d)).outcome, "resumed");
   }
-  assert.equal(state.ledger.c1.loginBacks.length, 2);
-  const held = world(lane, { now: NOW + 2 * HOUR });
-  assert.deepEqual(await loginBack(lane, { id: "c1" }, held.d), { outcome: "too_many" });
-  assert.equal(held.seen.looks, 0);
-  assert.deepEqual(held.seen.calls, []);
-  const later = world(lane, { now: NOW + 24 * HOUR + 60_000 });
-  assert.equal((await loginBack(lane, { id: "c1" }, later.d)).outcome, "resumed");
-  assert.equal(later.seen.looks, 1);
+  assert.equal(lanesBacks(lane).length, 2);
+  assert.equal(state.ledger.c1.loginBacks, undefined);
+  // A third clip, the next day, or the clock moved back: still too many, and no Chrome at all.
+  for (const at of [NOW + 2 * HOUR, NOW + 48 * HOUR, NOW - 5 * HOUR]) {
+    const held = world(lane, { now: at });
+    assert.deepEqual(await loginBack(lane, { id: "c3" }, held.d), { outcome: "too_many" });
+    assert.equal(held.seen.looks, 0);
+    assert.deepEqual(held.seen.calls, []);
+  }
   // The owner's own setup is never capped, and isn't counted.
-  const his = world(lane, { now: NOW + 24 * HOUR + 120_000, capped: false });
-  assert.equal((await loginBack(lane, { id: "c1" }, his.d)).outcome, "resumed");
-  assert.equal(state.ledger.c1.loginBacks.length, 2);
+  const his = world(lane, { now: NOW + 3 * HOUR, capped: false });
+  assert.equal((await loginBack(lane, { id: "c3" }, his.d)).outcome, "resumed");
+  assert.equal(lanesBacks(lane).length, 2);
+  // A post on TikTok (or his own login) starts the count again: the next look may end a hold again.
+  freshBacks(lane);
+  assert.equal(state.loginBacks, undefined);
+  const again = world(lane, { now: NOW + 4 * HOUR });
+  assert.equal((await loginBack(lane, { id: "c3" }, again.d)).outcome, "resumed");
+  assert.equal(again.seen.looks, 1);
+});
+
+test("a Clips Funded lane counts in its own store, apart from Clip Factory's", async () => {
+  const root = { device: "mac-1", ledger: {}, posted: [], clipsAccount: { handle: "@lamo.clips", uid: "7001" }, loginBacks: ["x", "y"] };
+  const lane = wsLane(root, "stories", null);
+  const others = { handles: ["@lamo.clips"], uids: ["7001"] };
+  for (const id of ["pj-1", "pj-2"]) {
+    const { d } = world(lane, { seen: FUNDED, target: "@clips.funded", pinnedUid: null, others });
+    assert.equal((await loginBack(lane, { id }, d)).outcome, "resumed");
+  }
+  const held = world(lane, { seen: FUNDED, target: "@clips.funded", pinnedUid: null, others });
+  assert.equal((await loginBack(lane, { id: "pj-3" }, held.d)).outcome, "too_many");
+  assert.equal(root.ws.stories.loginBacks.length, 2);
+  assert.deepEqual(root.loginBacks, ["x", "y"]); // Clip Factory's count is untouched
+  assert.equal(root.ws.stories.ledger["pj-1"], undefined);
 });
 
 test("a Clips Funded lane: its own target and pinned uid, set up on the right account, not set up on another", async () => {
@@ -227,4 +259,21 @@ test("hold.js never shows anything, types a login or clears a cookie", () => {
   for (const word of ["frame.js", "login.js", "cdp.js", "chrome.js", "ask(", "readLogin", "clearCookies", "countTry", "passwordLogin", "osascript", "loginRefused", "loginTries"]) {
     assert.ok(!text.includes(word), word);
   }
+});
+
+test("the lane's count starts again where a post goes on TikTok and where the owner logs in himself; setup waits for TikTok's session", () => {
+  const body = (file, name) => {
+    const text = fs.readFileSync(new URL(`../src/${file}`, import.meta.url), "utf8");
+    const start = text.indexOf(`function ${name}(`);
+    assert.ok(start >= 0, `${file} ${name}`);
+    const next = text.indexOf("\nfunction ", start + 1);
+    const nextAsync = text.indexOf("\nasync function ", start + 1);
+    const ends = [next, nextAsync, text.indexOf("\nexport ", start + 1)].filter((i) => i > 0);
+    return text.slice(start, Math.min(...ends, text.length));
+  };
+  assert.match(body("run.js", "finished"), /freshBacks\(lane\)/);
+  assert.match(body("run.js", "wsLoginRequest"), /if \(ok\) freshBacks\(lane\)/);
+  assert.match(body("cli.js", "afterLogin"), /freshBacks\(lane\)/);
+  assert.match(body("cli.js", "wsSetup"), /freshBacks\(lane\)/);
+  assert.match(body("cli.js", "setup"), /if \(tiktok && !wasIn\) await sleep\(SESSION_SETTLE_MS\);\s+await chrome\.quit\(browser\)/);
 });

@@ -24,7 +24,7 @@ import { frame, yourTurn } from "./frame.js";
 import { askAndSaveLogin, forgetLogin, hasLogin, loginWindow } from "./login.js";
 import { accessToken, appConfig, freshTokens, readRefreshToken, saveRefreshToken, tokenSource } from "./auth.js";
 import * as chrome from "./chrome.js";
-import { backLine, loginBack, sendBack } from "./hold.js";
+import { backLine, freshBacks, loginBack, sendBack } from "./hold.js";
 import { WS_ID, clipsLane, normalizeWsJob, wsFileName, wsLane } from "./lanes.js";
 import { event, log } from "./notify.js";
 import { APP_URL, BASE } from "./paths.js";
@@ -36,7 +36,7 @@ import { freeName } from "./match.js";
 import { DOWNLOADS } from "./paths.js";
 import { loggedIn, post } from "./tiktok.js";
 import { loginHold } from "./plan.js";
-import { clipsBack, clipsTarget, lookHeadless, tick, windowDeps, withLock, wsBack } from "./run.js";
+import { SESSION_SETTLE_MS, clipsBack, clipsTarget, lookHeadless, tick, windowDeps, withLock, wsBack } from "./run.js";
 import { at, sameAccount } from "./whoami.js";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
@@ -57,6 +57,7 @@ async function setup() {
   const { browser, page } = await chrome.open(clipsLane(loadState(), null), { visible: true });
   const context = page.context();
   let tiktok = await loggedIn(page);
+  const wasIn = tiktok;
   let signedIn = Boolean(await readRefreshToken());
   if (!tiktok) await page.goto("https://www.tiktok.com/login?lang=en");
   let app = null;
@@ -95,6 +96,9 @@ async function setup() {
   }
   if (tiktok) event("setup", { account: "clips", part: "tiktok" });
   console.log(`TikTok: ${tiktok ? "logged in" : "not yet"}. Clip Factory: ${signedIn ? "signed in" : "not yet"}.`);
+  // D6 (§47.11): a login that just happened here gets TikTok's own redirects and its kept session first, as the
+  // relogin window does, so afterLogin's hidden look right after reads it (24 Nov: logged out 7 seconds later).
+  if (tiktok && !wasIn) await sleep(SESSION_SETTLE_MS);
   await chrome.quit(browser);
   return tiktok && signedIn;
 }
@@ -112,6 +116,7 @@ async function afterLogin() {
     const lane = clipsLane(state, api);
     delete state.loginCheckAt; // the next tick looks at once
     saveState(state);
+    freshBacks(lane); // his own login: the tick's looks may end a login hold again
     const { helper } = (await api.queue()) || {};
     const hold = loginHold(helper, "clips");
     if (!hold) return true;
@@ -155,6 +160,7 @@ async function wsSetup(workspaceId) {
       // now, with no second look (his command: never capped).
       delete lane.store.loginCheckAt;
       lane.save();
+      freshBacks(lane);
       const hold = loginHold(status.helper, "ws");
       if (hold) {
         const line = backLine(lane, await sendBack(lane, hold, wsBack(lane, target, { capped: false })), target);

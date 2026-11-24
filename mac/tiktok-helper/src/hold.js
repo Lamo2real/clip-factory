@@ -12,13 +12,14 @@
 //   end), and nothing here touches the ledger's press, finding or baseline.
 // - Nothing on screen: a headless look only (no frame, no pop-up, no window, no Apple Events). No cookie is cleared,
 //   no saved login is typed, and loginTries / loginRefused stay as they are.
-// - A tick's own look resumes one clip at most MAX_LOGIN_BACKS times in 24 hours (its ledger's loginBacks), so a
-//   logout that keeps coming back can't loop; the owner's own setup is never capped.
+// - A tick's own looks end a lane's hold at most MAX_LOGIN_BACKS times in a row (the lane's loginBacks, every clip
+//   counted, no clock involved): then only the owner ends it (his Try again, setup, Log in on my Mac), so a look that
+//   reads the account while TikTok still wants a login can't loop. A post that goes on TikTok, or the owner's own
+//   login, starts the count again; his own setup is never capped. A failed or refused call isn't counted.
 import { REASONS, laneWords, refusedTarget } from "./tiktok.js";
 import { at, sameAccount } from "./whoami.js";
 
 export const MAX_LOGIN_BACKS = 2;
-const DAY = 24 * 60 * 60_000;
 /** What the server's logged-in route answers (the hold ended). */
 export const BACK_OUTCOMES = Object.freeze(["resumed", "pressed", "cleared"]);
 
@@ -37,26 +38,36 @@ export function heldWords(lane, outcome, { seen, target, words } = {}) {
 
 const idsOf = (lane, id) => (lane.kind === "ws" ? { publishingJobId: id } : { clipId: id });
 
-/** The resumes of this clip within the last 24 hours (its ledger's loginBacks), as ISO times. */
-function recentBacks(lane, id, now) {
-  const list = lane.state.ledger[id]?.loginBacks;
-  return (Array.isArray(list) ? list : []).filter((t) => {
-    const when = Date.parse(t);
-    return Number.isFinite(when) && when <= now && now - when < DAY;
-  });
+// The lane's own store: state.json itself for Clip Factory's lane, state.ws[id] for a Clips Funded lane.
+const home = (lane) => lane.store || lane.state;
+
+/** The holds a tick's own looks ended in this lane since its last post or the owner's own login (ISO times). */
+export function lanesBacks(lane) {
+  const list = home(lane).loginBacks;
+  return Array.isArray(list) ? list : [];
+}
+
+/** A post went on TikTok, or the owner logged in himself: the lane's count starts again. */
+export function freshBacks(lane) {
+  if (!("loginBacks" in home(lane))) return;
+  delete home(lane).loginBacks;
+  lane.save();
 }
 
 /**
  * The server call that ends the hold (step 5 of loginBack): the clip's loggedIn route. With ``d.capped`` (a tick's
- * own look) the resume is counted in the ledger first, so a crash still counts. A 409 is ``refused`` and anything
- * else that fails (a 404 from an older server) is ``failed``: the hold stays either way.
+ * own look) it is counted on disk first, so a crash still counts; a call that didn't end the hold is taken off again.
+ * A 409 is ``refused`` and anything else that fails (a 404 from an older server) is ``failed``: the hold stays either
+ * way. Without ``d.capped`` (the owner's own login) nothing is counted.
  * @returns {Promise<{outcome: string}>}
  */
 export async function sendBack(lane, hold, d) {
   const ids = idsOf(lane, hold.id);
-  if (d.capped !== false) {
-    const now = d.now();
-    lane.remember(hold.id, { loginBacks: [...recentBacks(lane, hold.id, now), new Date(now).toISOString()] });
+  const capped = d.capped !== false;
+  const stamp = new Date(d.now()).toISOString();
+  if (capped) {
+    home(lane).loginBacks = [...lanesBacks(lane), stamp];
+    lane.save();
   }
   let outcome;
   let error;
@@ -67,6 +78,13 @@ export async function sendBack(lane, hold, d) {
     outcome = e?.status === 409 ? "refused" : "failed";
     error = String(e?.message || e);
   }
+  if (capped && !BACK_OUTCOMES.includes(outcome)) {
+    const list = [...lanesBacks(lane)];
+    const i = list.lastIndexOf(stamp);
+    if (i >= 0) list.splice(i, 1);
+    home(lane).loginBacks = list;
+    lane.save();
+  }
   d.event("login_back", { ...ids, outcome, ...(error ? { error } : {}) });
   return { outcome };
 }
@@ -74,7 +92,8 @@ export async function sendBack(lane, hold, d) {
 /**
  * Is the held lane's Chrome logged in to exactly its account again? Then its hold ends (the server's logged-in
  * route). Everything this needs comes from ``d`` (run.js builds it; tests use fakes):
- *   look() → {state: "logged_out"} | {state: "in", seen} (a headless look of the lane's own profile),
+ *   look() → {state: "logged_out"} | {state: "unknown"} | {state: "in", seen} (a headless look of the lane's own
+ *   profile; ``unknown`` when TikTok showed anything but its rows: a puzzle, a code, a page that didn't load),
  *   call(id) → the route's answer {helper, outcome}, now() → ms, event(kind, fields),
  *   target ("@name"), pinnedUid, others {handles, uids} (every other lane's accounts), capped (default true).
  * @param {object} lane run.js's lane (clipsLane / wsLane)
@@ -88,8 +107,8 @@ export async function loginBack(lane, hold, d) {
     d.event("login_back", { ...ids, outcome, ...extra });
     return words ? { outcome, words } : { outcome };
   };
-  // 1. The cap, before any Chrome.
-  if (d.capped !== false && recentBacks(lane, hold.id, d.now()).length >= MAX_LOGIN_BACKS) return done("too_many");
+  // 1. The cap, before any Chrome: after MAX_LOGIN_BACKS in a row, only the owner ends the hold.
+  if (d.capped !== false && lanesBacks(lane).length >= MAX_LOGIN_BACKS) return done("too_many");
   // 2. The target: none (no Chrome, the words stay), or another lane's account (refused before any Chrome).
   const target = at(d.target);
   const others = d.others || { handles: [], uids: [] };
@@ -107,6 +126,7 @@ export async function loginBack(lane, hold, d) {
     return done("unknown", { error: String(e?.message || e) });
   }
   if (look?.state === "logged_out") return done("logged_out", {}, heldWords(lane, "logged_out"));
+  if (look?.state !== "in") return done("unknown");
   // 4. The account: the strict check a post uses.
   const res = sameAccount(look?.seen || {}, target, d.pinnedUid || null, { notUid: others.uids || [] });
   lane.onWho(res, target);

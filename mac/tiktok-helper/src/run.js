@@ -17,7 +17,7 @@ import { SignInNeeded, appConfig, freshTokens, tokenSource } from "./auth.js";
 import * as cdp from "./cdp.js";
 import * as chrome from "./chrome.js";
 import { ask, frame, yourTurn } from "./frame.js";
-import { BACK_OUTCOMES, loginBack, sendBack } from "./hold.js";
+import { BACK_OUTCOMES, freshBacks, loginBack, sendBack } from "./hold.js";
 import { WS_ID, clipsLane, helperPorts, jobIds, normalizeWsJob, otherAccounts, reasonFor, setUpFor, wsFileName, wsLane } from "./lanes.js";
 import { freeName } from "./match.js";
 import { event, log } from "./notify.js";
@@ -241,6 +241,7 @@ async function finished(lane, job, link, { counted }) {
     lane.save();
   }
   deleteVideo(lane, job.clipId);
+  freshBacks(lane); // §47.11: the lane posts again, so its looks may end a login hold again
   // Nothing on screen (the owner's rule): the clip's row in Clip Factory and events.log say it.
   lane.event("posted", { ...jobIds(lane, job), hook: job.hook, link, note: answer?.note });
   return true;
@@ -417,17 +418,27 @@ export async function lookHeadless(lane) {
 
 /**
  * §47.11: the cheap look while a lane is held for a TikTok login. Headless, on the lane's own profile: no TikTok
- * session cookie at all is ``logged_out`` (no TikTok page is loaded); else who it is logged in as, read as
- * lookHeadless reads it. Chrome quits either way. Nothing on screen, no cookie cleared, nothing typed.
- * @returns {Promise<{state: "logged_out"} | {state: "in", seen: object}>}
+ * session cookie at all is ``logged_out`` (no TikTok page is loaded). Else Studio › Posts as a post opens it: TikTok's
+ * login there is ``logged_out`` too, even when the profile's own account data still names the account (a post would
+ * stop on that login again); a puzzle, a code, any other stop or a page that didn't load is ``unknown``; only then who
+ * it is logged in as, read as lookHeadless reads it. Chrome quits either way. Nothing on screen, no cookie cleared,
+ * nothing typed.
+ * @returns {Promise<{state: "logged_out"} | {state: "unknown"} | {state: "in", seen: object}>}
  */
 export async function lookLogin(lane) {
   const { browser, page } = await chrome.open(lane);
   try {
     if (!(await loggedIn(page).catch(() => false))) return { state: "logged_out" };
+    const stop = await goto(page, "content").then(
+      () => null,
+      (e) => e
+    );
+    if (stop) {
+      log("login_back.look_stop", { account: lane.id, error: words(stop) });
+      return { state: isLogin(stop) ? "logged_out" : "unknown" };
+    }
     let seen = { handles: [], uids: [] };
     try {
-      await goto(page, "content").catch(() => {}); // a login page reads as nobody
       await page.locator('a[href*="/video/"]').first().waitFor({ timeout: 15_000 }).catch(() => {}); // the rows, if any
       seen = (await identify(page)).seen;
     } catch (e) {
@@ -745,16 +756,16 @@ async function wsLanes({ api, state, settings: given, config, tokens, now, clips
         lane.save();
         await clipsTarget(api, state); // Clip Factory's account, which this lane must never be
         const back = await loginBack(lane, hold, wsBack(lane, status.account?.handle));
-        if (BACK_OUTCOMES.includes(back.outcome)) {
-          // The hold ended: decide and check in on a fresh read only. A ping of the stale needs_you would put back a
-          // hold with no job and no code, which nothing could end; so when that read fails, no ping this tick.
-          try {
-            status = (await lane.api.queue()) || {};
-          } catch (e) {
-            log("ws.error", { account: lane.id, part: "login_back_read", error: words(e) });
-            continue;
-          }
-        } else if (back.words) heldReason = back.words;
+        // Decide and check in on a fresh read only, whatever the look said (the hold ended, or the owner answered
+        // while Chrome looked). A ping of the stale needs_you would put back a hold with no job and no code, which
+        // nothing could end; so when that read fails, no ping for this lane this tick.
+        try {
+          status = (await lane.api.queue()) || {};
+        } catch (e) {
+          log("ws.error", { account: lane.id, part: "login_back_read", error: words(e) });
+          continue;
+        }
+        if (back.words && loginHold(status.helper, "ws")?.id === hold.id) heldReason = back.words;
       }
       const queue = (Array.isArray(status.queue) ? status.queue : []).filter((j) => j && j.publishingJobId).map(normalizeWsJob);
       const target = at(status.account?.handle);
@@ -833,8 +844,9 @@ async function wsLoginRequest(entry, api) {
     lane.event("login_window", { outcome: "no_account" });
   }
   // §47.11: logged in as the target while held for a TikTok login: the stopped post carries on too (his own tap, so
-  // never capped). The ping below still ends a wrong-account hold he fixed, as before.
+  // never capped, and the lane's count starts again). The ping below still ends a wrong-account hold he fixed.
   let released = false;
+  if (ok) freshBacks(lane);
   const hold = ok ? loginHold(entry.helper, "ws") : null;
   if (hold) released = BACK_OUTCOMES.includes((await sendBack(lane, hold, wsBack(lane, target, { capped: false }))).outcome);
   await lane.api.ping(pingFor(entry, { loginDone: entry.loginRequest, clearLogin: ok, released }));
@@ -969,17 +981,18 @@ export async function tick() {
       state.loginCheckAt = iso(); // before the look: a crash mid-look still waits 5 minutes
       saveState(state);
       const back = await loginBack(clips, hold, await clipsBack(api, state, clips));
-      if (BACK_OUTCOMES.includes(back.outcome)) {
-        // The hold ended: decide and check in on a fresh read only (the resumed clip may go in this same tick). A
-        // ping of the stale needs_you would put back a hold with no clip and no code, which nothing could end; so
-        // when that read fails, the tick ends here with no ping.
-        try {
-          ({ on, helper, queue = [] } = await api.queue());
-        } catch (e) {
-          log("login_back.read_failed", { error: words(e) });
-          return { action: "login_back", outcome: back.outcome };
-        }
-      } else if (back.words) heldReason = back.words; // the hold and its code stay; the ping says why
+      // Decide and check in on a fresh read only, whatever the look said: the hold may have ended (the resumed clip
+      // may go in this same tick), or the owner may have answered while Chrome looked (his Try again, 24 Nov). A ping
+      // of the stale needs_you would put back a hold with no clip and no code, which nothing could end; so when that
+      // read fails, the tick ends here with no ping.
+      try {
+        ({ on, helper, queue = [] } = await api.queue());
+      } catch (e) {
+        log("login_back.read_failed", { error: words(e) });
+        return { action: "login_back", outcome: back.outcome };
+      }
+      // The look's words only while that same login hold is still there (its code stays; the ping says why).
+      if (back.words && loginHold(helper, "clips")?.id === hold.id) heldReason = back.words;
     }
     const needsYou = helper?.state === "needs_you";
     // Auto-posting's schedule, only needed while a backlog clip waits (it goes ~30 minutes after each run).

@@ -443,9 +443,9 @@ describe("§47.11: the card while the Mac is held only for a TikTok login", () =
   const h = "@clips.funded";
   const out = "TikTok logged your Mac out. Tap Log in on my Mac.";
   it("one quiet carry-on line under the needs-you line, only for a login code, never naming Clip Factory", () => {
-    expect(W.loginBackWords(h)).toBe("Your Mac carries on by itself once it's logged in to @clips.funded.");
+    expect(W.loginBackWords(h)).toBe("Once you log in to @clips.funded again, your Mac carries on by itself.");
     const held = cardState(helper({ state: "needs_you", reason: out, needsYouJobId: "J", needsYouStoryId: "S0", needsYouCode: "login" }), h, NOW);
-    expect(held).toMatchObject({ line: `Your Mac needs you: ${out}`, note: "Your Mac carries on by itself once it's logged in to @clips.funded.", button: "login" });
+    expect(held).toMatchObject({ line: `Your Mac needs you: ${out}`, note: "Once you log in to @clips.funded again, your Mac carries on by itself.", button: "login" });
     expect(`${held.line} ${held.note}`).not.toMatch(/clip factory/i);
     const wrong = "Your Mac is logged in to TikTok as @lamo.clips, not @clips.funded. Nothing was posted.";
     expect(cardState(helper({ state: "needs_you", reason: wrong, needsYouCode: "login" }), h, NOW)).toMatchObject({ note: W.loginBackWords(h), button: "login" });
@@ -490,7 +490,7 @@ describe("§47.11: the card while the Mac is held only for a TikTok login", () =
     const account = store.social.find((a) => a.platform === "tiktok")!;
     await show(<TikTokMac ws="stories" account={account} />);
     const c = document.querySelector<HTMLElement>("#tiktok-mac")!;
-    expect(c.querySelector('[data-mac="login-back"]')?.textContent).toMatch(/^Your Mac carries on by itself once it's logged in to @/);
+    expect(c.querySelector('[data-mac="login-back"]')?.textContent).toMatch(/^Once you log in to @[a-z.]+ again, your Mac carries on by itself\.$/);
     expect(has("Log in on my Mac", c)).toBe(true);
   });
 });
