@@ -238,6 +238,12 @@ main[tabindex="-1"]:focus-visible {
   text-decoration-color: currentColor;
 }
 
+/* Calm motion (the OS setting or Settings › Motion, docs/CONTRACTS.md §20.6): every transition and animation that
+   is there lasts 1 ms, so it still ends and its end event fires. The rules below add none: transition-property
+   defaults to all, so without them every style change on every element became a 1 ms transition, and a transition
+   lands only on the next frame drawn (hundreds of ms on a slow computer), so the page read the old value until then.
+   At specificity 0 (and 0,0,1 for ::before and ::after, which every rule styling a pseudo-element matches or beats
+   and follows), any element's own transition or transition-property still wins and keeps its 1 ms. */
 @media (prefers-reduced-motion: reduce) {
   *,
   *::before,
@@ -247,6 +253,11 @@ main[tabindex="-1"]:focus-visible {
     transition-duration: 1ms !important;
     scroll-behavior: auto !important;
   }
+  *,
+  *::before,
+  *::after {
+    transition-property: none;
+  }
 }
 .reduce-motion *,
 .reduce-motion *::before,
@@ -254,6 +265,11 @@ main[tabindex="-1"]:focus-visible {
   animation-duration: 1ms !important;
   animation-iteration-count: 1 !important;
   transition-duration: 1ms !important;
+}
+:where(.reduce-motion) *,
+:where(.reduce-motion) *::before,
+:where(.reduce-motion) *::after {
+  transition-property: none;
 }
 
 /* The cursor is always the plain arrow, everywhere (owner's rule). What can be pressed shows itself on hover
