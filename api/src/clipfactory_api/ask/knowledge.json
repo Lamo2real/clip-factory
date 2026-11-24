@@ -1,5 +1,5 @@
 {
- "version": "03f90706266c",
+ "version": "b50b80554c85",
  "parts": [
   {
    "id": "app-map",
@@ -316,6 +316,12 @@
    "title": "CONTRACTS: 48. A skipped platform shows only in Settings and Social accounts, and Clips Funded's Social accounts look like Set up posting (owner request, 2026-1",
    "line": "The owner's two asks (24 Nov, about 00:15 UTC):",
    "chars": 30726
+  },
+  {
+   "id": "contracts-49",
+   "title": "CONTRACTS: 49. Numbers roll when they change (owner request, 2026-11-24)",
+   "line": "The owner: \"make the numbers roll when they increase or decrease\".",
+   "chars": 1576
   },
   {
    "id": "adr-01",
@@ -1203,7 +1209,7 @@
    "id": "ux-motion-and-delight",
    "title": "UX_DESIGN_SYSTEM: Motion and delight",
    "line": "Durations: 120 ms (press), 200 ms (hover, toggle), 320 ms (sheets, page fade). Easing cubic-bezier(.2,.8,.2,1).",
-   "chars": 7843
+   "chars": 8166
   },
   {
    "id": "ux-overflow-rules-never-let-text-leave-its-box",
