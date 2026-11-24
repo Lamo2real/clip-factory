@@ -234,8 +234,9 @@ describe("references", () => {
     expect(started.reference.status).toBe("analyzing");
     await expect(api.analyzeReference("stories", id)).rejects.toMatchObject({ status: 409 });
     references.advance(store, Date.parse(started.job.createdAt) + 2000);
-    // The contract's answer (§45.34): { reference, analysis, job }, the job of currentJobId with each step's state.
-    expect(Object.keys(await api.getReference("stories", id)).sort()).toEqual(["analysis", "job", "reference"]);
+    // The contract's answer (§45.34): { reference, analysis, job }, the job of currentJobId with each step's state;
+    // since §45.40 also fetchJob (a link reference's fetch, null for this upload).
+    expect(Object.keys(await api.getReference("stories", id)).sort()).toEqual(["analysis", "fetchJob", "job", "reference"]);
     const mid = await api.getReference("stories", id);
     expect(mid.job?.jobId).toBe(started.job.jobId);
     expect(mid.job?.steps.map((s) => [s.key, s.status])).toEqual([

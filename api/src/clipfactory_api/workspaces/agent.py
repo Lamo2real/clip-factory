@@ -11,8 +11,9 @@ Best-effort calls (a stop after the fence, a cancel's ``cancel`` and stop) are m
 ``time_for_call`` says one more call still ends inside the request's 29 s: the item's new ``sessionId`` already fences
 the old run out, so a skipped or failed one changes nothing the owner sees.
 
-Actions (§45.11.1): ``process_story``, ``process_portrait``, ``process_reference``, ``run_task``, ``check_models``,
-``chat_turn``, ``provider_check`` (§45.35 D2: "Try it", one test call of a maker), ``cancel { id }``.
+Actions (§45.11.1): ``process_story``, ``process_portrait``, ``process_reference``, ``fetch_reference`` (§45.40: get a
+reference video from its link), ``run_task``, ``check_models``, ``chat_turn``, ``provider_check`` (§45.35 D2: "Try
+it", one test call of a maker), ``cancel { id }``.
 """
 
 from __future__ import annotations
@@ -174,6 +175,23 @@ class StoryAgent:
             session_id,
             {
                 "action": "process_reference",
+                "userId": user_id,
+                "workspaceId": workspace_id,
+                "refId": ref_id,
+                "jobId": job_id,
+            },
+        )
+
+    def start_reference_fetch(
+        self, *, user_id: str, workspace_id: str, ref_id: str, job_id: str, session_id: str
+    ) -> None:
+        """``fetch_reference`` (§45.40): the job's one step ``get`` fetches the reference's link (yt-dlp for the
+        platforms, plain HTTPS for Google Drive and Dropbox, every byte through the runtime's egress guard) and
+        writes the reference's own ``source.mp4``."""
+        self._start(
+            session_id,
+            {
+                "action": "fetch_reference",
                 "userId": user_id,
                 "workspaceId": workspace_id,
                 "refId": ref_id,

@@ -7,6 +7,7 @@ is ignored; ``cancel`` stops it (its Deno, rasterizer and ffmpeg processes die w
 stale-heartbeat fence and "Try again" resumes from its first unfinished step, because finished steps' files stay).
 
 ``register`` adds this builder's actions: ``process_story``, ``process_portrait``, ``process_reference``,
+``fetch_reference`` (§45.40: ``{userId, workspaceId, refId, jobId}``, a reference video from its link),
 ``provider_check`` (Try it, §45.35 D2, §45.37 G7: ``{userId, workspaceId, jobId, providerId?}``, ``providerId``
 ``luma-ray`` when left out) and ``cancel``. Each runs as the session AgentCore invoked it in (``sessionId``, from the session header): every write is
 fenced on it, so a start for a job that a newer run owns, or that already ended, does nothing."""
@@ -98,6 +99,7 @@ def register(actions: Any, runner: Any, services: Callable[[], Any]) -> None:
     from .pipeline import StoryJob, clean_work
     from .portrait import PortraitJob
     from .provider_check import PROVIDERS, ProviderCheckJob
+    from .reffetch import FetchJob
     from .refjob import ReferenceJob
 
     def starter(
@@ -141,6 +143,7 @@ def register(actions: Any, runner: Any, services: Callable[[], Any]) -> None:
     actions.register("process_story", starter(StoryJob, "storyId"))
     actions.register("process_portrait", starter(PortraitJob, "characterId"))
     actions.register("process_reference", starter(ReferenceJob, "refId"))
+    actions.register("fetch_reference", starter(FetchJob, "refId"))
     actions.register("provider_check", starter(ProviderCheckJob, "providerId", PROVIDERS[0]))
     actions.register("cancel", cancel)
     actions.busy_checks.append(runner.busy)
