@@ -11,9 +11,10 @@
 //
 // Also the small helpers the ideas and characters parts share (ids, errors, the workspace check, the seed ids).
 //
-// A cast may hold one car with the people who drive it (§45.43): the practice writer puts it in the script's `cars`,
-// stages it as a car prop with its castId (getting in, driving off, honking, stalling), and a video filed in a series
-// (§45.44) tells the series part when it is approved or deleted.
+// A cast may hold up to 2 vehicles with the people who drive them (§45.43, §45.47): the practice writer puts them in
+// the script's `cars` (it stages the first), keeps the video's roles (main and villain) and deletes the draft it was
+// made from. The writer stages the car as a car prop with its castId (getting in, driving off, honking, stalling), and
+// a video filed in a series (§45.44) tells the series part when it is approved or deleted.
 import { ApiError, type ErrorCode } from "../../../api/errors.ts";
 import { CATALOG, CUTS, drawFrame, ENGINE_VERSION, fitDuration, normalizeScript, scaleCuts, sceneFrames, validateScript } from "../../engine/engine.ts";
 import { BOARDING } from "../../engine/script.ts";
@@ -25,6 +26,7 @@ import {
   STEP_LABEL,
   STEP_ORDER,
   type Captions,
+  type CastRoles,
   type Character,
   type DownloadFormat,
   type Effective,
@@ -45,6 +47,7 @@ import {
 import { callOf, checkOverride, citationsFor, effectiveFor, shownSteps, startMockTask, topicFor, writerOf } from "./ideas.ts";
 import { aboutDriving } from "../../studio/ownScript.ts";
 import { checkOwnScript, jobLabel, mirrorCaptions, OWN_WORDS, ownDefaults, ownFactProblems, OwnFailed, ownTexts, ownTopic, patchOwn, saysFullBeam, stageOwn } from "./ownScript.ts";
+import { dropDraft } from "./drafts.ts";
 import { seriesApproved, seriesExists, seriesForgetStory } from "./series.ts";
 import { delay, type MockStore } from "./store.ts";
 
@@ -249,10 +252,23 @@ function castOf(chars: Character[]): { cast: Record<string, CastMember>; cars: R
 /** The API's own rule for a cast's kinds (characters.cast_problem, §45.43), in its sentences. */
 function castRule(chars: Character[]): string | null {
   const cars = chars.filter(isCar).length;
-  if (cars > 1) return "Pick one car.";
-  if (cars === 1 && cars === chars.length) return "Add someone to drive it.";
+  if (cars > 2) return "Pick up to 2 vehicles.";
+  if (cars > 0 && cars === chars.length) return "Add someone to drive it.";
   return null;
 }
+
+/** A video's roles (§45.47): the main character is the first person, the villain another person in the cast. */
+function rolesRule(chars: Character[], roles: CastRoles | undefined): string | null {
+  if (!roles) return null;
+  const people = chars.filter((c) => !isCar(c));
+  if (!roles.mainId || people[0]?.characterId !== roles.mainId) return "Pick a main character.";
+  if (roles.villainId === undefined) return null;
+  if (roles.villainId === roles.mainId) return "The villain can't be the main character.";
+  if (!people.some((c) => c.characterId === roles.villainId)) return VILLAIN_GONE;
+  return null;
+}
+
+const VILLAIN_GONE = "Pick the villain from the people in this video."; // the API's VILLAIN_NOT_CAST
 
 const TROUBLE: Record<string, { set: SetId; prop?: PropKind; carDo: PropAction; sfx: SfxId; face: Expression; top?: boolean }> = {
   "skid-recovery": { set: "icy_road", prop: "ice_patch", carDo: "skid", sfx: "skid", face: "shocked", top: true },
@@ -1353,11 +1369,16 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       guardWs(store, ws);
       const cfg = wsConfig(store, ws);
       const ids = body.characterIds ?? [];
-      if (ids.length < 1 || ids.length > 3) fail(400, "bad_request", "Pick 1 to 3 characters.");
+      // 1 to 4: at most 3 people and 2 vehicles, and a vehicle needs a person (§45.47)
+      if (ids.length < 1) fail(400, "bad_request", "Pick 1 to 4 characters.");
+      if (ids.length > 4) fail(400, "bad_request", "Pick at most 4 characters."); // the API's words (stories.cast_ids)
       const chars = ids.map((id) => store.characters.find((c) => c.characterId === id && c.workspaceId === ws));
       if (chars.some((c) => !c)) fail(404, "not_found", "We could not find one of those characters.");
       const castWrong = castRule(chars as Character[]);
       if (castWrong) fail(400, "bad_request", castWrong);
+      if ((chars as Character[]).filter((c) => !isCar(c)).length > 3) fail(400, "bad_request", "Pick up to 3 people.");
+      const rolesWrong = rolesRule(chars as Character[], body.roles);
+      if (rolesWrong) fail(400, "bad_request", rolesWrong);
       const idea = body.ideaId ? store.ideas.find((i) => i.ideaId === body.ideaId && i.workspaceId === ws) : undefined;
       if (body.ideaId && !idea) fail(404, "not_found", "We could not find that idea. It may have been deleted.");
       // the owner's own script (§45.46): checked against the cast, its ids given; its brief needs no line
@@ -1420,11 +1441,14 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
         createdAt: iso(now),
         updatedAt: iso(now),
         ...(own ? { ownScript: own } : {}),
+        ...(body.roles ? { roles: { mainId: body.roles.mainId, ...(body.roles.villainId ? { villainId: body.roles.villainId } : {}) } } : {}),
       };
       // the body's series, else the idea's; one that is gone is dropped (§45.44)
       const seriesId = body.seriesId === null ? null : (body.seriesId ?? idea?.seriesId); // null: No series, on purpose
       if (seriesId && seriesExists(store, ws, seriesId)) story.seriesId = seriesId;
       store.stories.push(story);
+      // the draft it was made from goes in the same write; one that is gone already is fine (§45.47)
+      dropDraft(store, ws, body.draftId);
       extraOf(store, storyId).brief = brief;
       if (idea) {
         idea.status = "used";

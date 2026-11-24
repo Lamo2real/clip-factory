@@ -103,6 +103,40 @@ describe("the stories route", () => {
   });
 });
 
+describe("Vehicles' addresses and a saved video draft (§45.47)", () => {
+  const ID = "01JSTCH0000000000000000005";
+
+  it("opens Vehicles at /stories/vehicles…, keeps /stories/cars… working, and always links to the Vehicles address", () => {
+    for (const [path, page] of [
+      ["/stories/vehicles", { name: "cars" }],
+      ["/stories/vehicles/new", { name: "car_new" }],
+      [`/stories/vehicles/${ID}`, { name: "car", characterId: ID }],
+    ] as const) {
+      expect(matchStories(path, "")).toEqual(page);
+      expect(matchStories(path.replace("/vehicles", "/cars"), "")).toEqual(page);
+      expect(storiesHref(page)).toBe(path);
+      expect(storiesHref(matchStories(path.replace("/vehicles", "/cars"), ""))).toBe(path);
+    }
+    expect(matchStories("/stories/vehicles/new/x", "").name).toBe("not_found");
+    expect(matchStories("/stories/vehicles/../x", "").name).toBe("not_found");
+    expect(match("/stories/vehicles")).toEqual({ name: "stories", page: { name: "cars" } });
+  });
+
+  it("titles the pages Vehicles, New vehicle and Vehicle", () => {
+    expect(storiesTitle({ name: "cars" })).toBe("Vehicles · Clips Funded");
+    expect(storiesTitle({ name: "car_new" })).toBe("New vehicle · Clips Funded");
+    expect(storiesTitle({ name: "car", characterId: ID })).toBe("Vehicle · Clips Funded");
+  });
+
+  it("reads ?draft= on Make a new video (an id only), and leaves the key out without one", () => {
+    expect(matchStories("/stories/production/new", "?draft=d1")).toEqual({ name: "production_new", ideaId: null, refIds: [], castIds: [], durationSec: null, draftId: "d1" });
+    expect(matchStories("/stories/production/new", "")).not.toHaveProperty("draftId");
+    expect(matchStories("/stories/production/new", "?draft=../x")).not.toHaveProperty("draftId");
+    expect(storiesHref({ name: "production_new", ideaId: null, draftId: "d1" })).toBe("/stories/production/new?draft=d1");
+    expect(storiesHref(matchStories("/stories/production/new", "?idea=i1&draft=d1"))).toBe("/stories/production/new?idea=i1&draft=d1");
+  });
+});
+
 describe("Social accounts and each platform's own page (CONTRACTS §45.16.2)", () => {
   it("opens a platform's own page at /stories/connections/<platform>, for each of the five", () => {
     for (const p of ["youtube", "tiktok", "instagram", "facebook", "x"] as const) {

@@ -18,6 +18,7 @@ from typing import Any
 from . import keys
 from .guidance import Topic
 from .series_memory import car_words
+from .vehicles import seats_of, vehicle_of
 
 POST_FIELDS = ("youtubeTitle", "youtubeDescription", "instagram", "facebook", "tiktok", "x")
 POST_LIMITS = {
@@ -125,9 +126,38 @@ def art_of(item: Any) -> str:
     return NIGHT if isinstance(item, dict) and item.get("art") == NIGHT else "classic"
 
 
-def system_for(art: str | None) -> str:
-    """The writer's system text: SYSTEM, and the night drive house rules after it for a night drive video."""
-    return SYSTEM + "\n\n" + NIGHT_RULES if art == NIGHT else SYSTEM
+# Main and villain, and vehicles (§45.47): more house rules after SYSTEM (which stays word for word), each one only
+# when the cast needs it, so a video with no villain and no vehicle gets the system text it always got.
+VILLAIN_RULE = """- A cast member with "villain": true is the villain: it causes the trouble in the story and loses kindly at the
+  end. Nobody is hurt, and nothing it does is shown as fun to copy."""
+VEHICLE_RULE = """- A car of the cast says what it is in "vehicle" (car, truck, bus, motorbike, plane or boat) and how many people
+  ride in it in "seats". It is still a car prop with its castId. A plane or a boat uses the sky or sea set while it
+  moves; it never drives on a road."""
+TWO_VEHICLES_RULE = (
+    """- With two cars in the cast, each one is its own car prop with its own castId; never swap them."""
+)
+
+
+def cast_rules(cast: Sequence[dict[str, Any]] | None) -> str:
+    """The house rules this cast needs (a ``cast_brief``): "" with no villain and no car."""
+    members = [c for c in cast or [] if isinstance(c, dict)]
+    lines = []
+    if any(c.get("villain") is True for c in members):
+        lines.append(VILLAIN_RULE)
+    cars = [c for c in members if c.get("kind") == "car"]
+    if any("vehicle" in c for c in cars):
+        lines.append(VEHICLE_RULE)
+    if len(cars) > 1:
+        lines.append(TWO_VEHICLES_RULE)
+    return "House rules for this cast:\n" + "\n".join(lines) if lines else ""
+
+
+def system_for(art: str | None, cast: Sequence[dict[str, Any]] | None = None) -> str:
+    """The writer's system text: SYSTEM, and the night drive house rules after it for a night drive video, then the
+    cast's own rules (``cast_rules``) when it has a villain or a car."""
+    text = SYSTEM + "\n\n" + NIGHT_RULES if art == NIGHT else SYSTEM
+    extra = cast_rules(cast)
+    return text + "\n\n" + extra if extra else text
 
 
 def styled_request(lists: dict[str, Any], rules: dict[str, Any], art: str | None) -> dict[str, Any]:
@@ -419,12 +449,19 @@ def cast_brief(
     cast: dict[str, dict[str, Any]],
     characters: dict[str, dict[str, Any]],
     cars: dict[str, dict[str, Any]] | None = None,
+    roles: Any = None,
 ) -> list[dict[str, Any]]:
     """What the writer may know of each cast member: never the look. Its faces and noises are the ones the script's
     cast carries (the character's own lists), the only ones it may make. People come first (``kind`` person, the first
-    one ``main``), then the cast's cars (§45.43): a car is a prop only, described in words."""
+    one ``main``), then the cast's cars (§45.43): a car is a prop only, described in words, with its ``vehicle`` and
+    ``seats`` (§45.47). ``roles`` (the story's ``{mainId, villainId?}``) marks the villain with ``"villain": true``;
+    with no roles and no cars the brief is the one it always was."""
+    villain_id = str(roles.get("villainId") or "") if isinstance(roles, dict) else ""
+    main_id = str(roles.get("mainId") or "") if isinstance(roles, dict) else ""
+    people_ids = [str(m.get("characterId") or "") for m in cast.values()]
+    main_at = people_ids.index(main_id) if main_id and main_id in people_ids else 0  # else the first person, as always
     out: list[dict[str, Any]] = []
-    for cid, member in cast.items():
+    for at, (cid, member) in enumerate(cast.items()):
         ch = characters.get(str(member.get("characterId"))) or {}
         voice = member.get("voice") or {}
         faces = member.get("expressions") if isinstance(member.get("expressions"), list) else ch.get("expressions")
@@ -440,9 +477,11 @@ def cast_brief(
                 "noises": voice.get("noises") or [],
                 "favouriteEffects": voice.get("sfx") or [],
                 "kind": "person",
-                "main": not out,
+                "main": at == main_at,
             }
         )
+        if villain_id and people_ids[at] == villain_id and at != main_at:
+            out[-1]["villain"] = True
     for cid, member in (cars or {}).items():
         ch = characters.get(str(member.get("characterId"))) or {}
         voice = member.get("voice") or {}
@@ -460,7 +499,8 @@ def cast_brief(
                 "faces": list(faces or ["neutral"]),
                 "favouriteEffects": voice.get("sfx") or [],
                 "car": car_words(member.get("car")),
-                "seats": CAR_SEATS,
+                "vehicle": vehicle_of(member.get("car")),
+                "seats": seats_of(member.get("car")),
                 "propOnly": True,
             }
         )

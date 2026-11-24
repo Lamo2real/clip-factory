@@ -1,7 +1,7 @@
 // The plain words the Lamo Stories studio screens show (docs/CONTRACTS.md §45.16.5, §45.16.6). Kid-proof: short
 // sentences, everyday words, one name for each thing.
 import { ApiError } from "../../api/errors.ts";
-import type { ErrorAccount, IdeaCategory, Platform, PublishingJob, StepKey, Story, StoryStatus, VideoConcept } from "../api/types.ts";
+import type { ErrorAccount, IdeaCategory, Platform, PublishingJob, StepKey, Story, StoryStatus, VehicleType, VideoConcept } from "../api/types.ts";
 
 export const CATEGORY_LABEL: Record<IdeaCategory, string> = {
   driving_safety: "Driving safety",
@@ -301,3 +301,24 @@ export function topicTitle(topics: readonly { id: string; title: string }[] | nu
   if (!id) return null;
   return topics?.find((t) => t.id === id)?.title ?? "Checked road advice";
 }
+
+// ---------- Video drafts and roles (§45.47) ----------
+
+/** A vehicle family's word on its tile (the same words as New vehicle's "What is it?"). */
+export const VEHICLE_WORD: Record<VehicleType, string> = { car: "Car", truck: "Truck", bus: "Bus", motorbike: "Motorbike", plane: "Plane", boat: "Boat" };
+
+/** Make a new video's draft words: the button, its toast, the one-word save state, the fold and the list's group. */
+export const DRAFT_WORDS = {
+  save: "Save draft",
+  saved: "Draft saved",
+  savedState: "Saved",
+  saving: "Saving…",
+  fold: (n: number) => `Your drafts (${n})`,
+  group: "Drafts",
+  open: "Open",
+  remove: "Delete",
+  deleted: (name: string) => `Deleted “${name}”.`,
+  gonePicks: "Some picks are gone. Pick again.",
+  gone: "That draft is gone. Start a new one.",
+  untitled: "Untitled video",
+} as const;

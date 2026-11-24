@@ -40,6 +40,7 @@ import type {
   TikTokCreator,
   Upload,
   UsageSummary,
+  VideoDraft,
   Workspace,
   WsMacHelper,
   WsMacStatus,
@@ -73,6 +74,9 @@ export function errorAccount(body: unknown): ErrorAccount | null {
   if (!externalAccountId) return null;
   return { externalAccountId, accountName: shortText(a.accountName, 200), handle: shortText(a.handle, 200) };
 }
+
+/** A draft route's answer: the draft itself (§45.6), or the same wrapped as `{ draft }`. */
+const oneDraft = (r: VideoDraft | { draft: VideoDraft }): VideoDraft => ("draft" in r && r.draft && typeof r.draft === "object" ? r.draft : (r as VideoDraft));
 
 export interface StoriesHttpDeps {
   /** The API's base, without /v1 (config().apiUrl by default, read at the first call). */
@@ -181,6 +185,12 @@ export function httpStoriesApi(deps: StoriesHttpDeps = {}): StoriesApi {
       return { story: r.story, script: r.script ?? null };
     },
     deleteStory: (ws, storyId) => call<void>("DELETE", w(ws, `/stories/${id(storyId)}`)),
+    // Saved "Make a new video" forms (§45.47): the draft itself comes back (a `{ draft }` wrapper is read too).
+    listVideoDrafts: async (ws) => ({ items: (await call<{ items?: VideoDraft[] }>("GET", w(ws, "/video-drafts"))).items ?? [] }),
+    getVideoDraft: async (ws, draftId) => oneDraft(await call<VideoDraft | { draft: VideoDraft }>("GET", w(ws, `/video-drafts/${id(draftId)}`))),
+    createVideoDraft: async (ws, body) => oneDraft(await call<VideoDraft | { draft: VideoDraft }>("POST", w(ws, "/video-drafts"), body)),
+    saveVideoDraft: async (ws, draftId, body) => oneDraft(await call<VideoDraft | { draft: VideoDraft }>("PUT", w(ws, `/video-drafts/${id(draftId)}`), body)),
+    deleteVideoDraft: (ws, draftId) => call<void>("DELETE", w(ws, `/video-drafts/${id(draftId)}`)),
     produce: (ws, storyId, body) => call<{ story: Story; job: ProductionJob }>("POST", w(ws, `/stories/${id(storyId)}/produce`), body ?? {}),
     cancelStory: async (ws, storyId) => {
       const r = await call<{ story: Story; job?: ProductionJob | null }>("POST", w(ws, `/stories/${id(storyId)}/cancel`));

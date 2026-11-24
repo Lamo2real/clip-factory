@@ -1,5 +1,5 @@
 {
- "version": "e17179364dbe",
+ "version": "b50b80554c85",
  "parts": [
   {
    "id": "app-map",
@@ -297,7 +297,7 @@
    "id": "contracts-45",
    "title": "CONTRACTS: 45. Clips Funded: a second, separate workspace (owner request, 2026-11-21)",
    "line": "Planned: not in the app until the switch pull request turns it on (§45.21). Until then nothing of Clips Funded",
-   "chars": 533756
+   "chars": 540371
   },
   {
    "id": "contracts-46",
@@ -886,6 +886,12 @@
    "title": "DECISIONS: ADR-96 Campaign and paid clips post TikTok through the Mac with TikTok's label",
    "line": "Context. Since ADR-86 round 3 (D1) a campaign clip never got a Mac post and a Review card with Your brand or",
    "chars": 2814
+  },
+  {
+   "id": "adr-97",
+   "title": "DECISIONS: ADR-97 Video drafts are their own item; vehicles are car bodies shown as Vehicles; roles are additive fields",
+   "line": "Context. The owner wants to save Make a new video before making it, a main character and a villain per video,",
+   "chars": 2050
   },
   {
    "id": "architecture-overview",

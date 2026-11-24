@@ -192,8 +192,12 @@ export function drawOutside(pen: Pen, c: Cam3, o: OutsideOpts): void {
   const zn = o.zNear;
   const back = !!o.back;
   pen.rect(o.x0 - 120, c.hor - 1, o.x1 - o.x0 + 240, Math.max(0, o.bottom - c.hor) + 40, 0, look.verge);
-  pen.poly(groundQuad(c, plan.left, plan.right, zn, Z_FAR), look.asphalt);
-  pen.poly(groundQuad(c, plan.left, plan.right, 110, Z_FAR), look.asphaltFar);
+  // §45.47: the sky and the sea have no road (no asphalt, no lanes)
+  const road = !look.open;
+  if (road) {
+    pen.poly(groundQuad(c, plan.left, plan.right, zn, Z_FAR), look.asphalt);
+    pen.poly(groundQuad(c, plan.left, plan.right, 110, Z_FAR), look.asphaltFar);
+  }
   // pools of lamp light on the road under each lamp
   // (not the nearest ones: a pool right under the camera would cover the frame and is faint anyway)
   const lampZs = look.lit && plan.lamps.length ? streamed(m, LAMP_GAP, Math.max(zn + 1, 9), LAMP_NEAR, back) : [];
@@ -219,7 +223,7 @@ export function drawOutside(pen: Pen, c: Cam3, o: OutsideOpts): void {
     for (const ex of [plan.left + 0.25, plan.right - 0.25]) for (let k = 0; k + 1 < spans.length; k += 1) pen.poly(groundQuad(c, ex - 0.08, ex + 0.08, spans[k]!, spans[k + 1]!), look.edge, 0.9);
   }
   // the dashed line between the lanes: 3 m dashes every 12 m
-  for (const z of streamed(m, 12, zn, 170, back)) {
+  for (const z of road ? streamed(m, 12, zn, 170, back) : []) {
     const z1 = back ? z - 3 : z + 3;
     if (Math.min(z, z1) <= zn) continue;
     pen.poly(groundQuad(c, plan.dash - 0.08, plan.dash + 0.08, z, z1), z > 60 ? look.laneFar : look.lane);

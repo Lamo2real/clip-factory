@@ -298,7 +298,12 @@ _BODY_WORDS = {
     "van": "van",
     "sports": "sports car",
     "compact": "tiny car",
+    "bus": "bus",
+    "motorbike": "motorbike",
+    "plane": "plane",
+    "boat": "boat",
 }
+_NO_WHEELS = frozenset({"plane", "boat"})  # words only: a plane's or a boat's wheels are not worth naming
 _WHEEL_WORDS = {
     "steel": "steel wheels",
     "hubcap": "hubcaps",
@@ -331,11 +336,20 @@ def car_words(car: Mapping[str, Any]) -> str:
     wheels = _WHEEL_WORDS.get(str((car.get("wheels") or {}).get("style")), "wheels")
     lights = f"{(car.get('lights') or {}).get('front') or 'round'} lights"
     eyes = _EYE_WORDS.get(str((car.get("face") or {}).get("eyes")))
+    if str(car.get("body")) in _NO_WHEELS:
+        return _no_wheels(head, lights, eyes)
     for words in (
         f"{head} with {wheels}, {lights} and {eyes}" if eyes else f"{head} with {wheels} and {lights}",
         f"{head} with {eyes}" if eyes else f"{head} with {wheels}",
         head,
     ):
+        if len(words) <= 80:
+            return words
+    return head[:80]
+
+
+def _no_wheels(head: str, lights: str, eyes: str | None) -> str:
+    for words in (f"{head} with {lights} and {eyes}" if eyes else f"{head} with {lights}", head):
         if len(words) <= 80:
             return words
     return head[:80]
@@ -349,12 +363,38 @@ def strip_brands(text: str) -> tuple[str, list[str]]:
     return _CAR_CAR.sub("car", " ".join(_BRAND.sub("car", text).split())), found  # "Toyota Corolla": one "car"
 
 
-def car_schema(cat: dict[str, Any]) -> dict[str, Any]:
+def car_bodies(cat: dict[str, Any], bodies: Iterable[str] | None = None) -> list[str]:
+    """The engine's bodies a car may use: all of them, or only ``bodies`` (a vehicle family, §45.47) in the engine's
+    order; all of them when none of ``bodies`` is the engine's."""
+    every = ids(cat, "carLooks", "body")
+    if bodies is None:
+        return every
+    keep = set(bodies)
+    return [b for b in every if b in keep] or every
+
+
+def _interior_schema() -> dict[str, Any]:
+    return {
+        "type": ["object", "null"],
+        "properties": {
+            "seat": _hex("the seats"),
+            "dash": _hex("the dashboard"),
+            "trim": {"type": ["string", "null"], "description": "the trim, a colour as #rrggbb, or null"},
+        },
+        "required": ["seat", "dash", "trim"],
+        "additionalProperties": False,
+        "description": "the inside's colours, only from photos marked (inside); else null",
+    }
+
+
+def car_schema(cat: dict[str, Any], *, bodies: Iterable[str] | None = None, interior: bool = False) -> dict[str, Any]:
     """The JSON schema of one car ``CharacterInput`` (kind "car") built from ``catalog.carLooks``; limits are in the
-    descriptions, as for people, and code checks them."""
+    descriptions, as for people, and code checks them. ``bodies`` limits the body to a vehicle family and
+    ``interior`` adds the inside's colours (only when there is an inside photo or a saved inside, §45.47); with
+    neither the schema is the one it always was."""
     car = _obj(
         {
-            "body": _enum(ids(cat, "carLooks", "body"), "the closest body to the real car"),
+            "body": _enum(car_bodies(cat, bodies), "the closest body to the real car"),
             "length": {"type": "number", "description": "0.85 to 1.15 (1 is the body's usual length)"},
             "height": {"type": "number", "description": "0.85 to 1.15 (1 is the body's usual height)"},
             "paint": _hex("the main body panels' colour"),
@@ -382,6 +422,9 @@ def car_schema(cat: dict[str, Any]) -> dict[str, Any]:
             "outline": _hex("outline (a dark colour)"),
         }
     )
+    if interior:
+        car["properties"]["interior"] = _interior_schema()
+        car["required"].append("interior")
     voice = _obj(
         {
             "style": _enum(["none"], "a car has no voice"),
@@ -413,12 +456,18 @@ def car_schema(cat: dict[str, Any]) -> dict[str, Any]:
 
 
 def check_car(
-    raw: Any, cat: dict[str, Any], *, taken_names: Iterable[str] = ()
+    raw: Any,
+    cat: dict[str, Any],
+    *,
+    taken_names: Iterable[str] = (),
+    bodies: Iterable[str] | None = None,
+    interior: bool = False,
 ) -> tuple[dict[str, Any] | None, list[str]]:
     """``(car CharacterInput, problems)``: the value is ``None`` when a choice is not the engine's, something required
     is missing or the name is taken; numbers are clamped, the voice is forced to none, a car with no eyes keeps only
     the neutral face, and a make in the words is replaced by "car" (and reported, so the first answer is asked
-    again)."""
+    again). ``bodies`` limits the body to a vehicle family; with ``interior`` the inside's colours are kept (left out
+    when null), else they are dropped (§45.47)."""
     if not isinstance(raw, dict):
         return None, ["each option must be one car object"]
     problems: list[str] = []
@@ -450,7 +499,7 @@ def check_car(
 
     name = words(raw.get("name"), NAME_MAX, "name", required=True)
     if name.lower() == "car" and brands:
-        name = "Car"
+        name = "Vehicle"
     if name and name.lower() in taken:
         problems.append(f"the name {name} is already used by another character; pick a new name")
     traits = [words(t, 10**6, "traits") for t in as_list(raw.get("traits")) if isinstance(t, str) and t.strip()]
@@ -466,7 +515,7 @@ def check_car(
     face = as_dict(body.get("face"))
     eyes = pick(face.get("eyes"), ids(cat, "carLooks", "eyes"), "car.face.eyes")
     car: dict[str, Any] = {
-        "body": pick(body.get("body"), ids(cat, "carLooks", "body"), "car.body"),
+        "body": pick(body.get("body"), car_bodies(cat, bodies), "car.body"),
         "length": _clamp(body.get("length"), 0.85, 1.15, 1.0),
         "height": _clamp(body.get("height"), 0.85, 1.15, 1.0),
         "paint": colour(body.get("paint"), "car.paint"),
@@ -490,6 +539,17 @@ def check_car(
         },
         "outline": colour(body.get("outline"), "car.outline"),
     }
+    inside = body.get("interior") if interior else None
+    if isinstance(inside, dict):
+        found: dict[str, str] = {
+            "seat": colour(inside.get("seat"), "car.interior.seat"),
+            "dash": colour(inside.get("dash"), "car.interior.dash"),
+        }
+        if inside.get("trim") is not None:
+            found["trim"] = colour(inside.get("trim"), "car.interior.trim")
+        car["interior"] = found
+    elif inside is not None:
+        problems.append("car.interior must be an object {seat, dash, trim} or null")
     faces_allowed = ids(cat, "expressions")
     if eyes == "none":
         faces = ["neutral"]

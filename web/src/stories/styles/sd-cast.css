@@ -1,4 +1,4 @@
-/* Clips Funded › the cast picker (docs/CONTRACTS.md §45.43): the People row, then the "Your cars" row. The tiles are the
+/* Clips Funded › the cast picker (docs/CONTRACTS.md §45.43, §45.47): the People row, then the "Vehicles" row. The tiles are the
    production's own cast tiles (sd-production.css); this file only adds the two row names and the car tiles' wider
    picture, on the same glass and type. */
 
@@ -7,7 +7,7 @@
   gap: var(--st-space-2);
 }
 
-/* A row's name ("People", "Your cars"): a short wide-tracked caps caption in Fraunces, like a scene's number. */
+/* A row's name ("People", "Vehicles"): a short wide-tracked caps caption in Fraunces, like a scene's number. */
 .st-cast__row {
   margin: var(--st-space-2) 0 0;
   color: var(--st-text-soft);
@@ -26,4 +26,25 @@
 /* A car is wider than it is tall: its tiles get a little more room. */
 .st-cast__cars {
   grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr));
+}
+
+/* §45.47: "(you can skip this)" after Vehicles: the soft hint, not caps. */
+.st-cast__skip {
+  font-family: var(--st-font);
+  font-size: 0.85em;
+  letter-spacing: normal;
+  text-transform: none;
+}
+
+/* A vehicle tile's kind (Car, Truck, Bus, Motorbike, Plane, Boat): one small soft word under its name. */
+.st-cast__kind::after {
+  content: attr(data-kind);
+  color: var(--st-text-soft);
+  font-size: 0.8em;
+  line-height: 1.2;
+}
+
+/* Main character and Villain: the pick-one bars under the people, a little apart from the tiles. */
+.st-cast__role {
+  margin-top: var(--st-space-2);
 }

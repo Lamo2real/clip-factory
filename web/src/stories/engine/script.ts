@@ -230,7 +230,7 @@ export function validateCharacter(input: unknown): { ok: true } | { ok: false; e
   }
   const kind = input.kind;
   if (kind !== undefined && kind !== "person" && kind !== "car") {
-    err(`${where}: Pick a person or a car.`);
+    err(`${where}: Pick a person or a vehicle.`);
     return { ok: false, errors };
   }
   const faces = input.expressions;

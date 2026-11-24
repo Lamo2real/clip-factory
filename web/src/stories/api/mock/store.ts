@@ -26,6 +26,7 @@ import type {
   StoriesAiConfig,
   StoriesApi,
   StoriesDashboard,
+  VideoDraft,
   Workspace,
 } from "../types.ts";
 import type { CharacterLook, StoryScript } from "../../engine/types.ts";
@@ -71,6 +72,8 @@ export interface MockStore {
   references: ReferenceVideo[];
   /** Series (§45.44), the series part's */
   series: StoredSeries[];
+  /** Saved "Make a new video" forms (VDRAFT#, §45.47), the drafts part's */
+  drafts: VideoDraft[];
   /** Lamo Clips' own destination per platform (names only), as GET …/social returns it. */
   clips: ClipsDestination[];
   /** ACT# items any part may add (approve, reject, changes, made, posted, failed); the dashboard shows the last 10. */
@@ -105,6 +108,7 @@ export function createStore(): MockStore {
     messages: [],
     references: [],
     series: [],
+    drafts: [],
     clips: [],
     activity: [],
     onboarding: { stepsDone: [], skipped: [], finishedAt: null, providersPickedAt: null },

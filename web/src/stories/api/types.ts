@@ -3,6 +3,8 @@
 import type {
   ArtStyle,
   CaptionCue,
+  CarBody,
+  CarInterior,
   CarLook,
   CharacterKind,
   CharacterLook,
@@ -10,11 +12,17 @@ import type {
   Expression,
   MovementStyle,
   MusicMood,
+  SetId,
   SfxCue,
   StoryScript,
+  VehicleType,
 } from "../engine/types.ts";
 
-export type { ArtStyle, CaptionCue, CarLook, CharacterKind, CharacterLook, CharacterVoice, Expression, MovementStyle, MusicMood, SfxCue, StoryScript };
+export type { ArtStyle, CaptionCue, CarBody, CarInterior, CarLook, CharacterKind, CharacterLook, CharacterVoice, Expression, MovementStyle, MusicMood, SfxCue, StoryScript, VehicleType };
+export { VEHICLE_OF } from "../engine/types.ts";
+
+/** Which side of a vehicle a photo shows (§45.47); left out = "outside". */
+export type PhotoSide = "outside" | "inside";
 
 export type Platform = "youtube" | "instagram" | "facebook" | "tiktok" | "x";
 export const STORIES_PLATFORMS: Platform[] = ["youtube", "tiktok", "instagram", "facebook", "x"];
@@ -726,7 +734,8 @@ export function isCar<T extends { kind?: CharacterKind }>(c: T): c is Extract<T,
 export interface CharacterSaved {
   characterId: string;
   workspaceId: string;
-  references: { assetId: string; url: string; contentType: string; createdAt: string }[];
+  /** side (§45.47): left out = "outside" */
+  references: { assetId: string; url: string; contentType: string; createdAt: string; side?: PhotoSide }[];
   portrait: { assetId: string; url: string } | null;
   storyCount: number;
   version: number;
@@ -740,8 +749,12 @@ export interface DesignBody {
   description?: string;
   /** the older single picture; still accepted (it goes first) */
   referenceAssetId?: string;
-  /** 1..6 photos (design_ref or character_ref assets of this workspace), in the owner's order */
+  /** 1..8 photos (design_ref or character_ref assets of this workspace), in the owner's order (§45.47: was 1..6) */
   referenceAssetIds?: string[];
+  /** §45.47: same length as referenceAssetIds; left out = all "outside" (at most 6 outside, 4 inside) */
+  referenceSides?: PhotoSide[];
+  /** §45.47: the family the owner picked; limits the bodies the agent may use; left out = "car" */
+  vehicle?: VehicleType;
   /** left out: the saved character's kind (characterId), else "person" */
   kind?: CharacterKind;
   /** 1..4; left out: 3 for a car, 1 for a person */
@@ -850,7 +863,7 @@ export interface StoryInput {
   /** the owner's own script (§45.46), with `brief` or `ideaId`: the video is staged from it, never written */
   ownScript?: OwnScript;
   title?: string;
-  /** 1..3 */
+  /** 1..4: at most 3 people and 2 vehicles, a vehicle needs a person (§45.47; was 1..3) */
   characterIds: string[];
   durationSec?: number;
   captionsOn?: boolean;
@@ -867,6 +880,54 @@ export interface StoryInput {
   override?: ModelOverride;
   /** the series it is filed in (§45.44); null: No series, picked on purpose; left out: the idea's, else No series */
   seriesId?: string | null;
+  /** §45.47: the main character (the first person in characterIds) and an optional villain; left out when empty */
+  roles?: CastRoles;
+  /** §45.47: the draft this video was made from; the API deletes it in the same write */
+  draftId?: string;
+}
+
+/** A video's roles (§45.47): mainId is the first person in characterIds; villainId another person in it. */
+export interface CastRoles {
+  mainId: string;
+  villainId?: string;
+}
+
+/** A saved "Make a new video" form (§45.47): checked loosely, since it may be unfinished. */
+export interface VideoDraftScene {
+  what: string;
+  caption?: string;
+  who?: string[];
+  /** the place picked by hand ("ai": AI picks, on purpose); left out: read from the words */
+  place?: SetId | "ai";
+}
+export interface VideoDraftForm {
+  source?: "idea" | "own" | "script";
+  ideaId?: string;
+  title?: string;
+  logline?: string;
+  category?: string;
+  script?: { scenes: VideoDraftScene[]; answers?: Record<string, string> };
+  /** ≤ 4; may point at characters that are gone (the form drops them on open) */
+  characterIds?: string[];
+  roles?: CastRoles;
+  seriesId?: string | null;
+  durationSec?: number;
+  format?: StoryFormat;
+  art?: ArtStyle;
+  captionsOn?: boolean;
+  musicMood?: string;
+  referenceIds?: string[];
+  ai?: ModelOverride;
+}
+export interface VideoDraft {
+  draftId: string;
+  workspaceId: string;
+  /** title, else the idea's title, else "Untitled video"; ≤ 60 */
+  name: string;
+  form: VideoDraftForm;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
 }
 
 /** A video's shape and size (CONTRACTS §45.34 "Video size and shape"); the size matches the aspect. */
@@ -961,6 +1022,8 @@ export interface Story {
   seriesId?: string;
   /** only on a video made from the owner's own script (§45.46), with its sceneIds */
   ownScript?: OwnScript;
+  /** §45.47: missing on older videos and when nothing was picked (the first person is the main character) */
+  roles?: CastRoles;
 }
 
 /** A reference analysis job's own steps (CONTRACTS §45.34): Look at it, Listen, Write it up. */
@@ -1408,7 +1471,8 @@ export interface StoriesApi {
   getCharacter(ws: string, characterId: string): Promise<Character>;
   putCharacter(ws: string, characterId: string, c: CharacterInput & { version: number }): Promise<Character>;
   deleteCharacter(ws: string, characterId: string): Promise<void>;
-  referenceUpload(ws: string, characterId: string, file: { filename: string; contentType: string; size: number }): Promise<Upload>;
+  /** side (§45.47): left out = "outside" */
+  referenceUpload(ws: string, characterId: string, file: { filename: string; contentType: string; size: number; side?: PhotoSide }): Promise<Upload>;
   referenceComplete(ws: string, characterId: string, assetId: string): Promise<Character>;
   deleteReference(ws: string, characterId: string, assetId: string): Promise<Character>;
   makePortrait(ws: string, characterId: string): Promise<ProductionJob>;
@@ -1427,6 +1491,14 @@ export interface StoriesApi {
   storyJobs(ws: string, storyId: string): Promise<ProductionJob[]>;
   patchStory(ws: string, storyId: string, patch: StoryPatch): Promise<{ story: Story; script: StoryScript | null }>;
   deleteStory(ws: string, storyId: string): Promise<void>;
+  /** Saved "Make a new video" forms (§45.47), most recently changed first; at most 50 */
+  listVideoDrafts(ws: string): Promise<{ items: VideoDraft[] }>;
+  getVideoDraft(ws: string, draftId: string): Promise<VideoDraft>;
+  /** 409 at 50 drafts */
+  createVideoDraft(ws: string, body: { form: VideoDraftForm }): Promise<VideoDraft>;
+  /** 409 when the version changed; 413 over 32 KB */
+  saveVideoDraft(ws: string, draftId: string, body: { form: VideoDraftForm; version: number }): Promise<VideoDraft>;
+  deleteVideoDraft(ws: string, draftId: string): Promise<void>;
   /** no `from`: runs exactly the story's stale steps ("Try again", "Check again", "Remake"); override: this job only */
   produce(ws: string, storyId: string, body?: { from?: StepKey; sceneIds?: string[]; override?: ModelOverride }): Promise<{ story: Story; job: ProductionJob }>;
   cancelStory(ws: string, storyId: string): Promise<{ story: Story; job: ProductionJob | null }>;

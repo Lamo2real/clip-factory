@@ -63,6 +63,12 @@ const CASES: Case[] = [
   ["storyJobs", (a) => a.storyJobs("stories", "s1"), "GET", `${B}/stories/stories/s1/jobs`, undefined, { jobs: [21] }, [21]],
   ["patchStory", (a) => a.patchStory("stories", "s1", { version: 3, title: "t" }), "PATCH", `${B}/stories/stories/s1`, { version: 3, title: "t" }, { story: 22, script: 23 }, { story: 22, script: 23 }],
   ["deleteStory", (a) => a.deleteStory("stories", "s1"), "DELETE", `${B}/stories/stories/s1`, undefined, null, undefined],
+  // Saved video drafts (§45.47): the draft itself comes back.
+  ["listVideoDrafts", (a) => a.listVideoDrafts("stories"), "GET", `${B}/stories/video-drafts`, undefined, { items: [91] }, { items: [91] }],
+  ["getVideoDraft", (a) => a.getVideoDraft("stories", "d1"), "GET", `${B}/stories/video-drafts/d1`, undefined, { draftId: "d1", version: 2 }, { draftId: "d1", version: 2 }],
+  ["createVideoDraft", (a) => a.createVideoDraft("stories", { form: { title: "t" } }), "POST", `${B}/stories/video-drafts`, { form: { title: "t" } }, { draftId: "d2", version: 1 }, { draftId: "d2", version: 1 }],
+  ["saveVideoDraft", (a) => a.saveVideoDraft("stories", "d1", { form: { title: "u" }, version: 2 }), "PUT", `${B}/stories/video-drafts/d1`, { form: { title: "u" }, version: 2 }, { draftId: "d1", version: 3 }, { draftId: "d1", version: 3 }],
+  ["deleteVideoDraft", (a) => a.deleteVideoDraft("stories", "d1"), "DELETE", `${B}/stories/video-drafts/d1`, undefined, null, undefined],
   ["produce", (a) => a.produce("stories", "s1", { from: "scenes", sceneIds: ["a"] }), "POST", `${B}/stories/stories/s1/produce`, { from: "scenes", sceneIds: ["a"] }, { story: 1, job: 2 }, { story: 1, job: 2 }],
   ["cancelStory", (a) => a.cancelStory("stories", "s1"), "POST", `${B}/stories/stories/s1/cancel`, undefined, { story: 24 }, { story: 24, job: null }],
   ["approve", (a) => a.approve("stories", "s1", 7), "POST", `${B}/stories/stories/s1/approve`, { version: 7 }, { story: 25 }, 25],
@@ -179,6 +185,13 @@ describe("every Lamo Stories route", () => {
   it("covers every method of StoriesApi", () => {
     const { api } = fake();
     expect(CASES.map((c) => c[0]).sort()).toEqual(Object.keys(api).sort());
+  });
+
+  it("reads a draft wrapped as { draft } too, and an empty draft list as none (§45.47)", async () => {
+    const { api } = fake((c) => ({ status: 200, body: c.method === "GET" && c.url.endsWith("/video-drafts") ? {} : { draft: { draftId: "d9", version: 4 } } }));
+    expect(await api.getVideoDraft("stories", "d9")).toEqual({ draftId: "d9", version: 4 });
+    expect(await api.saveVideoDraft("stories", "d9", { form: {}, version: 3 })).toEqual({ draftId: "d9", version: 4 });
+    expect(await api.listVideoDrafts("stories")).toEqual({ items: [] });
   });
 
   it("offers no way to share an account with Clip Factory (§45.37 G8, the owner's hard rule)", () => {

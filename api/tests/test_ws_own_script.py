@@ -522,7 +522,7 @@ def test_sets_match_the_engine_catalog() -> None:
     m = re.search(r"\n  sets: \[(.*?)\n  \],", text, re.S)
     assert m
     assert list(catalog.SETS) == re.findall(r'id: "([^"]+)"', m.group(1))
-    assert len(catalog.SETS) == 16
+    assert len(catalog.SETS) == 18  # §45.47: sky and sea (was 16)
 
 
 def test_driving_words_match_the_web_and_the_agent() -> None:

@@ -122,8 +122,8 @@ function checkCast(store: MockStore, ws: string, ids: string[] | undefined): str
   const chars = list.map((id) => store.characters.find((c) => c.characterId === id && c.workspaceId === ws));
   if (chars.some((c) => !c)) fail(400, "bad_request", "We could not find one of those characters. Pick them again.");
   const cars = chars.filter((c) => c?.kind === "car").length;
-  if (cars > 1) fail(400, "bad_request", "Pick one car.");
-  if (cars === 1 && cars === chars.length) fail(400, "bad_request", "Add someone to drive it.");
+  if (cars > 2) fail(400, "bad_request", "Pick up to 2 vehicles.");
+  if (cars > 0 && cars === chars.length) fail(400, "bad_request", "Add someone to drive it.");
   return list;
 }
 

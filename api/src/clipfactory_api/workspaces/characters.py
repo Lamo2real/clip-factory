@@ -2,8 +2,8 @@
 
 ``character_input`` checks a CharacterInput against the engine's vocabulary (``catalog.py``): a person (the default:
 an older item has no kind) or a car (§45.42), which has a CarLook instead of a person's look, no voice and no noises,
-only favourite effects, and only the neutral face unless it has eyes. ``cast_problem`` keeps a cast to at most one
-car, with someone to drive it (§45.43). The same rules are the engine's ``validateCharacter`` and the agent's
+only favourite effects, and only the neutral face unless it has eyes. ``cast_problem`` keeps a cast to at most two
+vehicles and three people, with someone to drive (§45.43.1, §45.47). A vehicle is still kind "car" (ADR-97). The same rules are the engine's ``validateCharacter`` and the agent's
 ``check_car``. Reference images are
 the owner's uploads (png, jpeg or webp, at most 10 MB, at most 8), kept under the character's own prefix
 ``ws/{userId}/{workspaceId}/characters/{characterId}/refs/{assetId}.{ext}``; they never change the rig.
@@ -33,13 +33,16 @@ PENDING_LIMIT = 8
 REFERENCE_TYPES: Final = {"image/png": "png", "image/jpeg": "jpg", "image/webp": "webp"}
 CHARACTER_KEYS: Final = shapes.CHARACTER_FIELDS
 _HEX = re.compile(r"^#[0-9a-fA-F]{6}$")
-NO_KIND = "Pick a person or a car."
+NO_KIND = "Pick a person or a vehicle."
 CAR_VOICE = "A car has no voice. Pick its sounds instead."
 CAR_FACES = "A car with no face keeps only the neutral face."
 FACES_RULE = "Pick at least 3 faces, and keep the neutral face."
 PERSON_CAR = "Only a car has a car look."
-ONE_CAR = "Pick one car."
+ONE_CAR = "Pick up to 2 vehicles."  # §45.47 (the name stays; it was "Pick one car.")
 NEEDS_DRIVER = "Add someone to drive it."
+MAX_VEHICLES = 2  # §45.47
+MAX_PEOPLE = 3
+TOO_MANY_PEOPLE = "Pick up to 3 people."
 
 
 def _choice(value: Any, field: str, options: tuple[str, ...]) -> str:
@@ -117,7 +120,7 @@ def car_look(value: Any) -> dict[str, Any]:
     validate.only_keys(
         body,
         {"body", "length", "height", "paint", "accent", "pattern", "windows", "wheels", "lights", "extra", "face",
-         "outline"},
+         "outline", "interior"},
     )  # fmt: skip
     wheels = validate.obj(body.get("wheels"), "car.wheels")
     validate.only_keys(wheels, {"style", "rim", "size"})
@@ -125,7 +128,7 @@ def car_look(value: Any) -> dict[str, Any]:
     validate.only_keys(lights, {"front", "rear"})
     face = validate.obj(body.get("face"), "car.face")
     validate.only_keys(face, {"eyes", "color", "mouth"})
-    return {
+    out: dict[str, Any] = {
         "body": _choice(body.get("body"), "car.body", catalog.CAR_BODIES),
         "length": _number(body.get("length"), "car.length", 0.85, 1.15),
         "height": _number(body.get("height"), "car.height", 0.85, 1.15),
@@ -150,6 +153,24 @@ def car_look(value: Any) -> dict[str, Any]:
         },
         "outline": _hex(body.get("outline"), "car.outline"),
     }
+    if body.get("interior") is not None:  # §45.47: from the inside photos; left out when there is none
+        out["interior"] = interior(body["interior"])
+    return out
+
+
+def interior(value: Any) -> dict[str, str]:
+    """A CarInterior (§45.47): ``{seat, dash, trim?}``, each #rrggbb."""
+    body = validate.obj(value, "car.interior")
+    validate.only_keys(body, {"seat", "dash", "trim"})
+    out = {"seat": _hex(body.get("seat"), "car.interior.seat"), "dash": _hex(body.get("dash"), "car.interior.dash")}
+    if body.get("trim") is not None:
+        out["trim"] = _hex(body["trim"], "car.interior.trim")
+    return out
+
+
+def vehicle_of(car: Mapping[str, Any] | None) -> str:
+    """A vehicle's family from its body (§45.47): never stored; an unknown or missing body is a car."""
+    return catalog.VEHICLE_OF.get(str((car or {}).get("body") or ""), "car")
 
 
 def kind_of(body: Mapping[str, Any]) -> str:
@@ -247,13 +268,16 @@ def character_input(body: Mapping[str, Any], *, extra: tuple[str, ...] = ()) -> 
 
 
 def cast_problem(items: Iterable[Mapping[str, Any]]) -> str | None:
-    """A story's or a series' cast (§45.43): at most one car, and someone to drive it. None when it is fine."""
+    """A story's or a series' cast (§45.43.1, §45.47): at most 2 vehicles and 3 people, and someone to drive when
+    there is a vehicle. None when it is fine."""
     kinds = [str(i.get("kind") or "person") for i in items]
     cars = kinds.count("car")
-    if cars >= 2:
+    if cars > MAX_VEHICLES:
         return ONE_CAR
-    if cars == 1 and len(kinds) == 1:
+    if cars and cars == len(kinds):
         return NEEDS_DRIVER
+    if len(kinds) - cars > MAX_PEOPLE:
+        return TOO_MANY_PEOPLE
     return None
 
 

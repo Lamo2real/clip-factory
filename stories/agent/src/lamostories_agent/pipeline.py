@@ -1250,7 +1250,8 @@ class StoryJob(Job):
 
     def _cast_now(self) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
         """(the cast's people, its cars) by cast id, in ``characterIds`` order: c1 is the main person (§45.43). A car
-        is never an actor: it goes in the script's ``cars``, drawn by a car prop that names it."""
+        is never an actor: it goes in the script's ``cars``, drawn by a car prop that names it. A story has up to 2
+        vehicles (§45.47), each its own ``cars`` entry; the villain is marked by ``cast_brief`` from ``roles``."""
         cast: dict[str, dict[str, Any]] = {}
         cars: dict[str, dict[str, Any]] = {}
         for i, cid in enumerate(self.story.get("characterIds") or []):
@@ -1281,6 +1282,12 @@ class StoryJob(Job):
             if isinstance(faces, list) and faces:  # each character keeps its own faces (§45.34)
                 cast[f"c{i + 1}"]["expressions"] = [str(f) for f in faces]
         return cast, cars
+
+    def _roles(self) -> dict[str, Any] | None:
+        """The story's ``roles`` (§45.47: ``{mainId, villainId?}``), or None for a story with none."""
+        story = getattr(self, "story", None)
+        roles = story.get("roles") if isinstance(story, dict) else None
+        return roles if isinstance(roles, dict) and roles else None
 
     async def _series(self) -> dict[str, Any] | None:
         """The story's series in DATA (§45.44): its bounded memory, so this episode follows on from the others; None
@@ -1462,7 +1469,7 @@ class StoryJob(Job):
         art = writer.art_of(old) if keep_cast and old is not None else writer.art_of(self.story)
         request: dict[str, Any] = {
             "story": await self._concept(),
-            "cast": writer.cast_brief(cast, self.characters, cars),
+            "cast": writer.cast_brief(cast, self.characters, cars, self._roles()),
             **writer.styled_request(self._lists(catalog), rules, art),
             "format": writer.format_of(size),
             "targetSec": target,
@@ -1589,7 +1596,7 @@ class StoryJob(Job):
         captions_on = bool(self.story.get("captionsOn", self.config.get("captionsOn", True)))
         request: dict[str, Any] = {
             "ownScript": {"title": self.story.get("title"), "scenes": own_script.request_scenes(own, castmap)},
-            "cast": writer.cast_brief(cast, self.characters, cars),
+            "cast": writer.cast_brief(cast, self.characters, cars, self._roles()),
             **writer.styled_request(lists, rules, art),
             "format": writer.format_of(size),
             "targetSec": target,
@@ -2074,7 +2081,7 @@ class StoryJob(Job):
         art = writer.art_of(script)  # the fix keeps the storyboard's drawing style (§45.45)
         request = {
             "story": await self._concept(),
-            "cast": writer.cast_brief(cast, self.characters, cars),
+            "cast": writer.cast_brief(cast, self.characters, cars, self._roles()),
             **writer.styled_request(self._lists(catalog), rules, art),
             "format": writer.format_of(size),
             "targetSec": float(script.get("durationSec") or 45),

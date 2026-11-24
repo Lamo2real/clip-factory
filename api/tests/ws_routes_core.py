@@ -9,6 +9,7 @@ CHAR = f"{W}/characters/01J0000000000000000000000B"
 STORY = f"{W}/stories/01J0000000000000000000000C"
 TASK = f"{W}/tasks/01J0000000000000000000000E"
 SERIES = f"{W}/series/01J0000000000000000000000F"
+DRAFT = f"{W}/video-drafts/01J0000000000000000000000G"
 
 EXPECTED: set[tuple[str, str]] = {
     ("GET", "/v1/workspaces"),
@@ -61,4 +62,10 @@ EXPECTED: set[tuple[str, str]] = {
     ("DELETE", SERIES),
     ("POST", f"{SERIES}/recap"),
     ("PUT", f"{STORY}/series"),
+    # §45.47: video drafts (routes/video_drafts.py)
+    ("GET", f"{W}/video-drafts"),
+    ("POST", f"{W}/video-drafts"),
+    ("GET", DRAFT),
+    ("PUT", DRAFT),
+    ("DELETE", DRAFT),
 }

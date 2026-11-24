@@ -1021,7 +1021,7 @@ describe("round 1 of the re-review: the answers, Make a friend, who and where, a
     expect(create.mock.calls[0]![1].ownScript?.scenes[0]).toMatchObject({ who: [C.dash, zara.characterId] });
   });
 
-  it("Make is told why it can't when the cast has 3, and a name typed over leaves the cast it joined by itself", async () => {
+  it("Make is told why it can't when 3 people are in it, and a name typed over leaves the cast it joined by itself", async () => {
     await writeItMyself();
     type(field("Title"), "Park day");
     await pick("What kind of video?", "Funny");
@@ -1041,7 +1041,7 @@ describe("round 1 of the re-review: the answers, Make a friend, who and where, a
     const ask = document.querySelector<HTMLElement>(".st-sc-ask")!;
     const make = control("Make Zara", ask);
     expect(make.getAttribute("aria-disabled")).toBe("true");
-    expect(ask.textContent).toContain("The cast has 3 already. Take someone out in The cast first.");
+    expect(ask.textContent).toContain("Who is in it is full. Take someone out first.");
   });
 
   it("the words' own people: a name the words say is not there, a he carried over, they, Rose and will", () => {

@@ -46,6 +46,7 @@ from ...workspaces import (
     social,
     stories,
     tasks,
+    video_drafts,
 )
 from ...workspaces import agent as story_agent
 from ...workspaces import agents as agents_mod
@@ -821,13 +822,41 @@ def _refs_update(ctx: Ctx, item: Mapping[str, Any]) -> Update:
     return update.missing_or_equals("refsVersion", 0) if current == 0 else update.equals("refsVersion", current)
 
 
+# §45.47: a vehicle's photos are outside (at most 6) or inside (at most 4); a person's are all outside.
+SIDE_LIMITS = {"outside": 6, "inside": 4}
+SIDE_FULL = {"outside": "Pick up to 6 photos.", "inside": "Pick up to 4 inside photos."}
+
+
+def _reference_side(body: Mapping[str, Any], item: Mapping[str, Any]) -> str | None:
+    """The upload's ``side`` (§45.47): None when left out (an outside photo, stored as before)."""
+    side = body.get("side")
+    if side is None:
+        return None
+    if side not in SIDE_LIMITS:
+        raise bad_request("side must be outside or inside.", "side")
+    if side == "inside" and (item.get("kind") or "person") != "car":
+        raise bad_request(design.INSIDE_CARS, "side")
+    return str(side)
+
+
+def _side_count(item: Mapping[str, Any], pending: Mapping[str, Any], side: str) -> int:
+    refs = [*(item.get("references") or []), *pending.values()]
+    return sum(1 for r in refs if isinstance(r, Mapping) and (r.get("side") or "outside") == side)
+
+
 def reference_upload(app: App, req: Request) -> Response:
     ctx = _ctx(app, req)
     item = _character(ctx)
-    content_type, size = _picture_body(req.json())
+    body = req.json()
+    content_type, size = _picture_body(body, sides=True)
+    side = _reference_side(body, item)
     pending = _pending(item, ctx.now)
     if len(item.get("references") or []) + len(pending) >= characters.MAX_REFERENCES:
         raise conflict("A character can have at most 8 pictures. Delete one first.")
+    if (item.get("kind") or "person") == "car":
+        wanted = side or "outside"
+        if _side_count(item, pending, wanted) >= SIDE_LIMITS[wanted]:
+            raise conflict(SIDE_FULL[wanted], "side")
     if len(pending) >= characters.PENDING_LIMIT:
         raise conflict("Wait for the pictures you are sending to finish first.")
     asset_id = ulid()
@@ -835,6 +864,8 @@ def reference_upload(app: App, req: Request) -> Response:
         shapes.character_prefix(ctx.user_id, ctx.ws_id, item["characterId"]), asset_id, content_type
     )
     pending[asset_id] = {"key": key, "contentType": content_type, "size": size, "startedAt": ctx.at()}
+    if side is not None:
+        pending[asset_id]["side"] = side
     update = _refs_update(ctx, item)
     update.sets["pendingRefs"] = pending
     try:
@@ -879,6 +910,8 @@ def reference_complete(app: App, req: Request) -> Response:
         app.media.delete(key)
         raise conflict("A character can have at most 8 pictures. Delete one first.")
     ref = {"assetId": asset_id, "key": key, "contentType": stored_type, "createdAt": ctx.at()}
+    if started.get("side") in SIDE_LIMITS:  # §45.47: left out means outside
+        ref["side"] = started["side"]
     pending.pop(asset_id)
     update = _refs_update(ctx, item)
     update.sets.update({"references": [*(item.get("references") or []), ref], "pendingRefs": pending})
@@ -984,9 +1017,10 @@ DESIGN_KINDS = ("design_ref", "character_ref")
 DESIGN_UNFINISHED = "The picture did not finish sending. Send it again."
 
 
-def _picture_body(body: Mapping[str, Any]) -> tuple[str, int]:
-    """``{ filename, contentType: png | jpeg | webp, size ≤ 10 MB }`` → (the type, the size)."""
-    validate.only_keys(body, {"filename", "contentType", "size"})
+def _picture_body(body: Mapping[str, Any], *, sides: bool = False) -> tuple[str, int]:
+    """``{ filename, contentType: png | jpeg | webp, size ≤ 10 MB }`` → (the type, the size). ``sides``: a character's
+    reference may also say which ``side`` of a vehicle it shows (§45.47; ``_reference_side`` reads it)."""
+    validate.only_keys(body, {"filename", "contentType", "size", *(("side",) if sides else ())})
     validate.required_string(body, "filename", max_len=255)
     content_type = str(body.get("contentType") or "").lower()
     if content_type not in characters.REFERENCE_TYPES:
@@ -1047,8 +1081,8 @@ def _design_picture(ctx: Ctx, asset_id: Any) -> Item:
 
 
 def design_character(app: App, req: Request) -> Response:
-    """The character agent suggests characters from words and/or photos: ``202 { task }`` (drafts). §45.34, §45.42:
-    up to 6 photos, a kind, and up to 4 options (3 for a car)."""
+    """The character agent suggests characters from words and/or photos: ``202 { task }`` (drafts). §45.34, §45.42,
+    §45.47: up to 8 photos (6 outside, 4 inside), a kind, a vehicle family, and up to 4 options (3 for a car)."""
     ctx = _ctx(app, req)
     ask = design.parse(req.json())
     current = _get(ctx, ws.CHAR_SK, ask.character_id, ws.TYPE_CHARACTER, NO_CHARACTER) if ask.character_id else None
@@ -1345,14 +1379,30 @@ def _length_and_words(
     return int(duration), captions_on
 
 
-def create_story(app: App, req: Request) -> Response:
-    ctx = _ctx(app, req)
-    fields = stories.story_input(req.json())
-    _refuse_not_ready(ctx)
+def _story_cast(ctx: Ctx, fields: Mapping[str, Any]) -> list[Item]:
+    """The new video's characters (each this workspace's), then the cast rules and the roles (§45.43.1, §45.47)."""
     cast = _check_characters(ctx, fields["characterIds"])
     problem = characters.cast_problem(cast)
     if problem:
         raise bad_request(problem, "characterIds")
+    problem = stories.roles_problem(fields.get("roles"), cast)
+    if problem:
+        raise bad_request(problem, "roles")
+    return cast
+
+
+def _draft_delete(ctx: Ctx, fields: Mapping[str, Any]) -> list[Item]:
+    """§45.47: the draft a video is made from goes in the same write, with no condition (a gone draft is fine)."""
+    if "draftId" not in fields:
+        return []
+    return [{"Key": {"pk": ctx.pk, "sk": video_drafts.draft_sk(fields["draftId"])}}]
+
+
+def create_story(app: App, req: Request) -> Response:
+    ctx = _ctx(app, req)
+    fields = stories.story_input(req.json())
+    _refuse_not_ready(ctx)
+    cast = _story_cast(ctx, fields)
     _check_references(ctx, fields["referenceIds"])
     _refuse_unusable(ctx, project=fields["ai"], field="ai")
     config = ctx.config
@@ -1409,6 +1459,7 @@ def create_story(app: App, req: Request) -> Response:
         "createdAt": ctx.at(),
         "updatedAt": ctx.at(),
         **({"ownScript": own} if own is not None else {}),  # §45.46: only on a video made from the owner's script
+        **({"roles": fields["roles"]} if fields.get("roles") else {}),  # §45.47: never written when empty
     }
     if series_id:
         story["seriesId"] = series_id
@@ -1434,7 +1485,7 @@ def create_story(app: App, req: Request) -> Response:
         use.adds["storyIds"] = {story_id}
         updates.append(use.equals("userId", ctx.user_id).request())
     try:
-        ctx.store.transact(puts=[story, job], updates=updates)
+        ctx.store.transact(puts=[story, job], updates=updates, deletes=_draft_delete(ctx, fields))
     except db.ConditionFailed as e:
         raise conflict("That idea changed meanwhile. Try again.") from e
     story, job = _start(ctx, story, job)

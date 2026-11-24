@@ -38,14 +38,14 @@ export function CarLooksPart({ car, onChange }: { car: CarLook; onChange: (patch
     <div className="st-s-editor__part" aria-label="Looks" tabIndex={-1}>
       <fieldset className="st-s-group">
         <legend className="st-s-group__title">Shape</legend>
-        <Pick label="Car shape" value={car.body} options={CAR_BODY} onChange={(body) => onChange({ body })} />
+        <Pick label="Shape" value={car.body} options={CAR_BODY} onChange={(body) => onChange({ body })} />
         <Slider label="Length" min={0.85} max={1.15} step={0.05} value={car.length} words={sizeWords(car.length, "Shorter", "Longer")} onChange={(length) => onChange({ length })} />
         <Slider label="Height" min={0.85} max={1.15} step={0.05} value={car.height} words={sizeWords(car.height, "Lower", "Taller")} onChange={(height) => onChange({ height })} />
       </fieldset>
       <fieldset className="st-s-group">
         <legend className="st-s-group__title">Paint</legend>
-        <Swatches label="Paint" value={car.paint} colors={withColour(PAINT, car.paint, "Your car's colour")} onChange={(paint) => onChange({ paint })} />
-        <Swatches label="Second colour" value={car.accent} colors={withColour(PAINT, car.accent, "Your car's second colour")} onChange={(accent) => onChange({ accent })} />
+        <Swatches label="Paint" value={car.paint} colors={withColour(PAINT, car.paint, "Your vehicle's colour")} onChange={(paint) => onChange({ paint })} />
+        <Swatches label="Second colour" value={car.accent} colors={withColour(PAINT, car.accent, "Your vehicle's second colour")} onChange={(accent) => onChange({ accent })} />
         <Pick label="Pattern" value={car.pattern} options={CAR_PATTERN} onChange={(pattern) => onChange({ pattern })} />
       </fieldset>
       <fieldset className="st-s-group">
@@ -55,7 +55,7 @@ export function CarLooksPart({ car, onChange }: { car: CarLook; onChange: (patch
       <fieldset className="st-s-group">
         <legend className="st-s-group__title">Wheels</legend>
         <Pick label="Wheels" value={car.wheels.style} options={CAR_WHEELS} onChange={(style) => onChange({ wheels: { ...car.wheels, style } })} />
-        <Swatches label="Rims" value={car.wheels.rim} colors={withColour(RIMS, car.wheels.rim, "Your car's rims")} onChange={(rim) => onChange({ wheels: { ...car.wheels, rim } })} />
+        <Swatches label="Rims" value={car.wheels.rim} colors={withColour(RIMS, car.wheels.rim, "Your vehicle's rims")} onChange={(rim) => onChange({ wheels: { ...car.wheels, rim } })} />
         <Slider label="Wheel size" min={0.85} max={1.2} step={0.05} value={car.wheels.size} words={sizeWords(car.wheels.size, "Smaller", "Bigger")} onChange={(size) => onChange({ wheels: { ...car.wheels, size } })} />
       </fieldset>
       <fieldset className="st-s-group">
@@ -66,7 +66,7 @@ export function CarLooksPart({ car, onChange }: { car: CarLook; onChange: (patch
       <fieldset className="st-s-group">
         <legend className="st-s-group__title">Extras</legend>
         <Pick label="On top" value={car.extra} options={CAR_EXTRA} onChange={(extra) => onChange({ extra })} />
-        <Swatches label="Outline" value={car.outline} colors={withColour(OUTLINES, car.outline, "Your car's outline")} onChange={(outline) => onChange({ outline })} />
+        <Swatches label="Outline" value={car.outline} colors={withColour(OUTLINES, car.outline, "Your vehicle's outline")} onChange={(outline) => onChange({ outline })} />
       </fieldset>
     </div>
   );
@@ -90,12 +90,12 @@ export function CarFacePart({ c, name, face, onTry, onChange }: { c: CarInput; n
   }
   return (
     <div className="st-s-editor__part" aria-label="Face" tabIndex={-1}>
-      <p className="st-s-editor__lede">Real cars have no face. Add one for fun.</p>
+      <p className="st-s-editor__lede">Real vehicles have no face. Add one for fun.</p>
       <Pick label="Face" value={eyes} options={CAR_EYES} onChange={setEyes} />
       {eyes !== "none" ? (
         <>
           <Pick label="Mouth" value={c.car.face.mouth} options={CAR_MOUTH} onChange={(mouth) => onChange({ ...c, car: { ...c.car, face: { ...c.car.face, mouth } } })} />
-          <Swatches label="Eye colour" value={c.car.face.color} colors={withColour(EYE_COLORS, c.car.face.color, "Your car's eye colour")} onChange={(color) => onChange({ ...c, car: { ...c.car, face: { ...c.car.face, color } } })} />
+          <Swatches label="Eye colour" value={c.car.face.color} colors={withColour(EYE_COLORS, c.car.face.color, "Your vehicle's eye colour")} onChange={(color) => onChange({ ...c, car: { ...c.car, face: { ...c.car.face, color } } })} />
           <ul className="st-s-faces">
             {CATALOG.expressions.map((e) => {
               const on = c.expressions.includes(e.id);

@@ -1,5 +1,5 @@
-"""Car characters (docs/CONTRACTS.md §45.42, §45.43): a car's own rules, one car with someone to drive it, and Design
-with AI from up to 6 photos with several options."""
+"""Car characters (docs/CONTRACTS.md §45.42, §45.43, §45.47): a car's own rules, up to 2 vehicles with someone to drive,
+and Design with AI from up to 8 photos (outside and inside) with several options. A vehicle is still kind "car"."""
 
 from __future__ import annotations
 
@@ -12,7 +12,7 @@ import pytest
 from clipfactory_api import db
 from clipfactory_api.app import App
 from clipfactory_api.errors import ApiError
-from clipfactory_api.workspaces import characters, design
+from clipfactory_api.workspaces import catalog, characters, design
 from conftest import Call
 from fakes import FakeAgentCore, FakeS3
 from ws_support import BASE, caller, character_body, install, pk, prefix, seed_character
@@ -156,8 +156,13 @@ def test_cast_problem() -> None:
     assert characters.cast_problem([person, car]) is None
     assert characters.cast_problem([car, person, {}]) is None
     assert characters.cast_problem([car]) == "Add someone to drive it."
-    assert characters.cast_problem([car, car]) == "Pick one car."
-    assert characters.cast_problem([person, car, car]) == "Pick one car."
+    # §45.47: up to 2 vehicles, at least 1 person with any vehicle, at most 3 people
+    assert characters.cast_problem([car, car]) == "Add someone to drive it."
+    assert characters.cast_problem([person, car, car]) is None
+    assert characters.cast_problem([person, person, person, car]) is None
+    assert characters.cast_problem([person, car, car, car]) == "Pick up to 2 vehicles."
+    assert characters.cast_problem([car, car, car]) == "Pick up to 2 vehicles."
+    assert characters.cast_problem([person, person, person, person]) == "Pick up to 3 people."
     assert characters.cast_problem([]) is None
 
 
@@ -179,8 +184,18 @@ def test_parse_merges_the_old_picture_first_and_keeps_the_owners_order() -> None
 @pytest.mark.parametrize(
     ("body", "status", "sentence"),
     [
-        ({"referenceAssetIds": ULIDS[:7]}, 400, design.TOO_MANY),
-        ({"referenceAssetId": ULIDS[0], "referenceAssetIds": ULIDS[1:7]}, 400, design.TOO_MANY),
+        ({"referenceAssetIds": ULIDS[:7]}, 400, design.TOO_MANY_OUTSIDE),
+        ({"referenceAssetId": ULIDS[0], "referenceAssetIds": ULIDS[1:7]}, 400, design.TOO_MANY_OUTSIDE),
+        ({"referenceAssetIds": ULIDS[:9], "referenceSides": ["outside"] * 5 + ["inside"] * 4}, 400, design.TOO_MANY),
+        (
+            {"referenceAssetIds": ULIDS[:7], "referenceSides": ["outside"] * 2 + ["inside"] * 5},
+            400,
+            design.TOO_MANY_INSIDE,
+        ),
+        ({"referenceAssetIds": ULIDS[:2], "referenceSides": ["outside"]}, 400, design.NOT_SIDES),
+        ({"referenceAssetIds": ULIDS[:1], "referenceSides": ["front"]}, 400, design.NOT_SIDES),
+        ({"referenceAssetIds": ULIDS[:1], "referenceSides": "inside"}, 400, design.NOT_SIDES),
+        ({"vehicle": "rocket"}, 400, design.NO_VEHICLE),
         ({"referenceAssetIds": ULIDS[0]}, 400, design.NOT_IDS),
         ({"referenceAssetIds": [1, 2]}, 400, design.NOT_IDS),
         ({"count": 0}, 400, design.BAD_COUNT),
@@ -222,7 +237,7 @@ def test_task_input_kinds_counts_and_sentences() -> None:
         design.task_input(design.parse({"kind": "person", "description": "x"}), [], saved)
     with pytest.raises(ApiError, match=re.escape("Keep the same kind: this character is a person.")):
         design.task_input(design.parse({"kind": "car", "description": "x"}), [], {"characterId": ULIDS[8]})
-    with pytest.raises(ApiError, match=re.escape("Add a photo of your car, or say what it is like.")):
+    with pytest.raises(ApiError, match=re.escape("Add a photo of your vehicle, or say what it is like.")):
         design.task_input(design.parse({"kind": "car"}), [], None)
     with pytest.raises(ApiError, match=re.escape("Describe the character, or add a picture of it.")):
         design.task_input(design.parse({}), [], None)
@@ -326,7 +341,7 @@ def test_design_refusals_start_no_task(call: Call, store: db.Store, s3_client: F
     assert body["error"]["message"] == "Pick up to 6 photos."
     status, body = call("POST", f"{BASE}/characters/design", {"kind": "car"})
     assert status == 400
-    assert body["error"]["message"] == "Add a photo of your car, or say what it is like."
+    assert body["error"]["message"] == "Add a photo of your vehicle, or say what it is like."
     assert call("POST", f"{BASE}/characters/design", {"kind": "car", "description": "x", "count": 9})[0] == 400
     assert call("POST", f"{BASE}/characters/design", {"description": "x", "avoid": [CAR]})[0] == 400
     gone = "01J0000000000000000000000Q"
@@ -358,3 +373,111 @@ def test_a_photo_from_another_workspace_is_404(call: Call, store: db.Store, s3_c
     assert status == 404
     assert body["error"]["message"] == "We could not find that picture."
     assert store.query_all(pk(), "TASK#") == []
+
+
+# --- §45.47: vehicles (still kind "car"), inside colours, photo sides, a vehicle family ----------------------------
+
+
+@pytest.mark.parametrize("body", ["bus", "motorbike", "plane", "boat", "pickup", "sedan"])
+def test_every_vehicle_body_is_a_car_look(call: Call, body: str) -> None:
+    status, out = call("POST", f"{BASE}/characters", car_body(f"V {body}", car={**CAR, "body": body}))
+    assert status == 201, out
+    assert (out["character"]["kind"], out["character"]["car"]["body"]) == ("car", body)
+    assert characters.vehicle_of(out["character"]["car"]) == catalog.VEHICLE_OF[body]
+
+
+def test_the_vehicle_families_cover_every_body() -> None:
+    assert set(catalog.VEHICLE_OF) == set(catalog.CAR_BODIES)
+    assert set(catalog.VEHICLE_OF.values()) == set(catalog.VEHICLE_TYPES)
+    assert [b for b in catalog.CAR_BODIES if catalog.VEHICLE_OF[b] == "truck"] == ["pickup", "van"]
+    assert characters.vehicle_of(None) == characters.vehicle_of({"body": "limo"}) == "car"
+
+
+def test_a_vehicle_keeps_its_inside_colours(call: Call, store: db.Store) -> None:
+    inside = {"seat": "#2B2B2B", "dash": "#111111", "trim": "#c0c0c0"}
+    status, out = call("POST", f"{BASE}/characters", car_body(car={**CAR, "interior": inside}))
+    assert status == 201
+    assert out["character"]["car"]["interior"] == {"seat": "#2b2b2b", "dash": "#111111", "trim": "#c0c0c0"}
+    status, out = call("POST", f"{BASE}/characters", car_body("Blue", car={**CAR, "interior": {"seat": "#000000",
+                                                                                                "dash": "#ffffff"}}))  # fmt: skip
+    assert status == 201
+    assert out["character"]["car"]["interior"] == {"seat": "#000000", "dash": "#ffffff"}
+    # left out: no interior key at all (older cars stay as they are)
+    status, out = call("POST", f"{BASE}/characters", car_body("Green"))
+    stored = store.get(pk(), f"CHAR#{out['character']['characterId']}")
+    assert stored is not None
+    assert "interior" not in stored["car"]
+
+
+@pytest.mark.parametrize(
+    "inside",
+    [{"seat": "black", "dash": "#111111"}, {"seat": "#000000"}, {"seat": "#000000", "dash": "#111111", "roof": "#fff"}],
+)
+def test_bad_inside_colours_are_refused(call: Call, inside: dict[str, Any]) -> None:
+    assert call("POST", f"{BASE}/characters", car_body(car={**CAR, "interior": inside}))[0] == 400
+
+
+def test_parse_lines_up_the_photo_sides() -> None:
+    ask = design.parse(
+        {"referenceAssetId": ULIDS[0], "referenceAssetIds": [ULIDS[1], ULIDS[2], ULIDS[1]],
+         "referenceSides": ["inside", "outside", "outside"], "vehicle": "plane"}
+    )  # fmt: skip
+    assert ask.asset_ids == [ULIDS[0], ULIDS[1], ULIDS[2]]
+    assert ask.sides == ["outside", "inside", "outside"]  # the old single picture is outside; a repeat keeps its first
+    assert ask.vehicle == "plane"
+    assert design.parse({"referenceAssetIds": ULIDS[:2]}).sides is None
+    eight = design.parse({"referenceAssetIds": ULIDS[:8], "referenceSides": ["outside"] * 6 + ["inside"] * 2})
+    assert len(eight.asset_ids) == 8
+
+
+def test_task_input_carries_the_sides_and_the_family() -> None:
+    photos = [{"assetId": ULIDS[n], "key": f"ws/u/w/design/{n}.png", "contentType": "image/png"} for n in range(2)]
+    ask = design.parse({"kind": "car", "referenceAssetIds": ULIDS[:2], "referenceSides": ["outside", "inside"],
+                        "vehicle": "boat"})  # fmt: skip
+    out = design.task_input(ask, photos, None)
+    assert [r["side"] for r in out["references"]] == ["outside", "inside"]
+    assert out["vehicle"] == "boat"
+    # a car family is left out, as before; a redesign takes the saved vehicle's family
+    assert "vehicle" not in design.task_input(design.parse({"kind": "car", "vehicle": "car", "description": "x"}), [],
+                                              None)  # fmt: skip
+    saved = {"characterId": ULIDS[9], "kind": "car", "car": {**CAR, "body": "motorbike"}}
+    assert design.task_input(design.parse({"description": "red"}), [], saved)["vehicle"] == "motorbike"
+    with pytest.raises(ApiError, match=re.escape(design.INSIDE_CARS)):
+        design.task_input(design.parse({"referenceAssetIds": ULIDS[:1], "referenceSides": ["inside"]}), photos[:1],
+                          None)  # fmt: skip
+    with pytest.raises(ApiError, match=re.escape(design.VEHICLE_CARS)):
+        design.task_input(design.parse({"description": "a cat", "vehicle": "plane"}), [], None)
+
+
+def test_a_vehicle_from_8_photos_outside_and_inside(call: Call, store: db.Store, s3_client: FakeS3) -> None:
+    photos = _photos(call, s3_client, 8)
+    sides = ["outside"] * 4 + ["inside"] * 4
+    body = {"kind": "car", "vehicle": "bus", "referenceAssetIds": [a for a, _ in photos], "referenceSides": sides}
+    status, out = call("POST", f"{BASE}/characters/design", body)
+    assert status == 202, out
+    stored = _task_input(store, out)
+    assert stored["vehicle"] == "bus"
+    assert stored["references"] == [
+        {"assetId": a, "key": k, "contentType": "image/jpeg", "side": s}
+        for (a, k), s in zip(photos, sides, strict=True)
+    ]
+    status, out = call("POST", f"{BASE}/characters/design", {**body, "referenceSides": ["outside"] * 8})
+    assert (status, out["error"]["message"]) == (400, "Pick up to 6 photos.")
+
+
+def test_a_story_has_up_to_2_vehicles_and_a_driver(call: Call, store: db.Store) -> None:
+    pip = seed_character(store, name="Pip")
+    rosso, blue, red = (
+        seed_character(store, name=n, kind="car", car={**CAR, "body": b}, look=None)
+        for n, b in (("Rosso", "plane"), ("Blue", "boat"), ("Red", "bus"))
+    )
+    brief = {"title": "Day one", "logline": "Pip flies and sails.", "category": "comedy"}
+    two = [pip["characterId"], rosso["characterId"], blue["characterId"]]
+    status, out = call("POST", f"{BASE}/stories", {"brief": brief, "characterIds": two})
+    assert status == 201, out
+    assert out["story"]["characterIds"] == two
+    three = [*two, red["characterId"]]
+    status, out = call("POST", f"{BASE}/stories", {"brief": brief, "characterIds": three})
+    assert (status, out["error"]["message"], out["error"]["field"]) == (400, "Pick up to 2 vehicles.", "characterIds")
+    status, out = call("POST", f"{BASE}/stories", {"brief": brief, "characterIds": two[1:]})
+    assert (status, out["error"]["message"]) == (400, "Add someone to drive it.")

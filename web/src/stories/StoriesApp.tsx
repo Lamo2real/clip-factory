@@ -81,8 +81,9 @@ const NAV: NavItem[] = [
     page: { name: "characters" },
     match: ["characters", "character", "character_new"],
   },
-  // The cars' own place, right under Characters (§45.42.10, the owner: "where are cars? i need cars as well").
-  { label: "Cars", icon: "car", page: { name: "cars" }, match: ["cars", "car_new", "car"] },
+  // The vehicles' own place, right under Characters (§45.42.10, the owner: "where are cars? i need cars as well";
+  // shown as Vehicles since §45.47, the page names stay).
+  { label: "Vehicles", icon: "car", page: { name: "cars" }, match: ["cars", "car_new", "car"] },
   {
     label: "Production",
     icon: "clapper",
@@ -147,8 +148,8 @@ export function opensSetup(
   return o.done === 0 && o.steps.every((s) => s.state === "todo");
 }
 
-/** On phones the bar has room for five pages and More; More holds the rest (Cars first). */
-const TABS = NAV.filter((n) => n.label !== "Cars").slice(0, 5);
+/** On phones the bar has room for five pages and More; More holds the rest (Vehicles first). By page name (§45.47). */
+const TABS = NAV.filter((n) => n.page.name !== "cars").slice(0, 5);
 const MORE = NAV.filter((n) => !TABS.includes(n));
 
 
