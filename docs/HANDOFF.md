@@ -5,7 +5,8 @@ This page lets any Claude session, on any account, pick up the work. The standin
 recurring jobs, and what was built this week. Written 24 Nov 2026, about 19:30 UTC.
 
 Private notes (which account owns what, the owner's Mac, session ids) are kept outside this public repo, on the
-owner's Mac. Ask the owner for them if you need them. Never copy them in here.
+owner's Mac, at `~/projects/clips/progress/HANDOFF-PRIVATE.md`. A session on that Mac can read them there; anywhere
+else, ask the owner for them. Never copy them in here.
 
 ## Where things stand
 
@@ -73,8 +74,14 @@ owner's Mac. Ask the owner for them if you need them. Never copy them in here.
 1. If the production keys differ from the sandbox ones, paste them in Set up posting, then Connect again.
 2. Ask to post publicly, using the answers in [SETUP_POSTING.md step 24](SETUP_POSTING.md#24-ask-to-post-publicly).
 3. Leave TikTok's tick boxes (the attestations) for the owner.
-4. If TikTok says no, tell the owner its comments in plain words. Don't build a cloud TikTok poster unless the owner
-  asks: the owner chose to keep the Mac.
+4. Ask the owner before turning **Your Mac posts TikTok** off and going back to the API. Until they say so, the Mac
+   keeps posting.
+5. The API path keeps TikTok's own rules
+   ([CONTRACTS §17.8](CONTRACTS.md#178-tiktok-post-to-tiktok-sheet-content-sharing-guidelines-web--api)): who can see
+   it is picked from a list with no default, and Comments, Duet and Stitch are shown and start off. That is unlike
+   the Mac path, which posts public by default. Don't carry the Mac's defaults over to the API.
+6. If TikTok says no, tell the owner its comments in plain words. Don't build a cloud TikTok poster unless the owner
+   asks: the owner chose to keep the Mac.
 
 ## Runbooks
 
@@ -84,8 +91,10 @@ The source is [mac/tiktok-helper/](../mac/tiktok-helper/README.md); the contract
 the owner's Mac every minute (launchd job `com.clipfactory.tiktok-helper`), in hidden headless Chrome, with nothing
 on screen. Only a real need of the owner (a TikTok code, a puzzle, a login it can't do) shows a frame and one pop-up.
 
-**Who installs it:** only the coordinator session, and only on the owner's command. The session that built the
-change never installs it. The helper is live, so tests use fakes only.
+**Who installs it:** the coordinator session. Routine updates after a merged fix are its job: once the deploy is
+green, it installs from main as below, without waiting to be asked, so a fix never sits uninstalled. The session
+that built the change never installs it. Only the first-time setup, the owner's logins and anything that shows on
+the screen wait for the owner's command. The helper is live, so tests use fakes only.
 
 **Update after a merged change to `mac/tiktok-helper/`:**
 
@@ -174,7 +183,7 @@ Never rebase or force-push. When GitHub says DIRTY:
    ```bash
    node scripts/help-corpus.mjs --write-docs && node scripts/ask-knowledge.mjs
    node scripts/help-corpus.mjs --check && node scripts/ask-knowledge.mjs --check
-   git add -A ../api/src/clipfactory_api/ask
+   git add -A ../api/src/clipfactory_api/ask src/features/help/help-corpus.json ../docs/HELP_ASSISTANT.md
    ```
    `ask-knowledge` prints "about N tokens". N must stay under 110,000 (`MAX_TOKENS` in `web/scripts/ask-knowledge.mjs`).
    CI's `web-checks` runs both checks. If it goes over, shorten owner-facing words; don't raise the cap.
@@ -277,6 +286,8 @@ CI is the full test run. Locally, run one targeted spec at most, and only when i
 - **One writer per PR branch.** Before adding a fixer, check that the original agent has really stopped.
 - **Watch your own PR** with `gh pr checks <N> --watch --interval 60`, then the deploy run on main. Silence is not
   success.
+- **The coordinator watches what nobody owns:** the nightly full run (02:17 UTC) and main's ci, deploy and desktop
+  runs. It fixes each failure itself or hands it to a session, and sees the fix to green and live.
 - **Models:** Opus for thinking and building; Sonnet for routine steps. If a Sonnet agent hits a CI failure it can't
   fix, hand it to Opus.
 

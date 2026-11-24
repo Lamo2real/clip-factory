@@ -2,7 +2,8 @@
 
 Read this at the start of every session. It holds the owner's standing rules and where things live. The fuller
 handoff (where things stand, open questions, how-to runbooks and this week's history) is
-[docs/HANDOFF.md](docs/HANDOFF.md). Read that next.
+[docs/HANDOFF.md](docs/HANDOFF.md). Read that next. Private notes (accounts, the owner's Mac) are outside the repo on
+the owner's Mac, at `~/projects/clips/progress/HANDOFF-PRIVATE.md`. Never copy them in here.
 
 ## What this is
 
@@ -10,8 +11,9 @@ handoff (where things stand, open questions, how-to runbooks and this week's his
   owner reviews them, the app posts them to YouTube, TikTok, Instagram, Facebook and X, and it learns from the
   numbers. It is serverless on AWS (region `eu-north-1`, name prefix `cf-prod`) with an agent on Bedrock AgentCore,
   and a React web app that also installs as a phone app and a desktop app. See [README.md](README.md).
-- **Clips Funded** is the second, separate workspace in the same app (the switch at the top: Clip Factory | Clips
-  Funded). It makes short animated stories. It has its own API Lambda, agent runtime, roles and social accounts
+- **Clips Funded** is the second, separate workspace in the same app. The switch (Clip Factory | Clips Funded) sits
+  in the left column right above the Live chip on a computer, and at the right end of the top bar on a phone. It
+  makes short animated stories. It has its own API Lambda, agent runtime, roles and social accounts
   ([CONTRACTS §45](docs/CONTRACTS.md#45-clips-funded-a-second-separate-workspace-owner-request-2026-11-21),
   [ADR-76](docs/DECISIONS.md#adr-76-clips-funded-is-its-own-application-its-own-api-lambda-agentcore-runtime-and-iam-roles)).
 - There is one owner and one user. The owner is not a developer, so everything they see must be kid-proof.
@@ -23,7 +25,7 @@ handoff (where things stand, open questions, how-to runbooks and this week's his
 | Folder | What |
 |---|---|
 | `web/` | The app (React 19, Vite, TypeScript). `web/src/stories/` is Clips Funded's part. |
-| `api/` | Python 3.13 Lambdas. `api/src/clipfactory_api/ask/` holds generated Ask files: never edit them by hand. |
+| `api/` | Python 3.13 Lambdas. In `api/src/clipfactory_api/ask/` (Ask's code), `knowledge.json` and `library/*.md` are generated: never edit those two by hand. |
 | `agent/`, `stories/agent/` | Clip Factory's and Clips Funded's AgentCore runtimes. |
 | `skills/`, `stories/skills/` | Built-in skills. |
 | `config/models.json` | The only place model ids live. `config/platforms.json` holds per-platform limits. |
@@ -62,6 +64,9 @@ The docs, linked here rather than copied:
 - **The cursor never changes.** Always the plain arrow. Never add `cursor:` CSS; hover styling shows what is pressable.
 - **Ask** uses its own AskMark (a chat bubble with a play button), never an AI sparkle.
 - **Pick-one bars** (tabs, segmented controls, the sidebar) slide their highlight (`<Glide>`).
+- **The workspace switch** is in exactly the same place, size and look in both apps. It is see-through glass with no
+  colour of its own (so is the update bar's Reload), and the change between the apps slides like a window, slow in
+  slow out ([CONTRACTS §45.38, S1 to S5](docs/CONTRACTS.md#4538-one-shell-switch-the-two-apps-kept-apart-2026-11-22-wins-over-anything-above)).
 - **Update bar labels** are 1 to 3 words naming the place ("Settings · Profile picture"), never sentences
   ([Area lines](docs/GIT_WORKFLOW.md#area-lines-what-the-update-bar-says)).
 - **Get the app** fits the device (Mac, Windows, iPhone, Android) and goes away once installed.
@@ -73,6 +78,10 @@ The docs, linked here rather than copied:
 
 - The most reach and money on every platform: public, comments, duets and stitches on, never "made for kids", and the
   paid or branded label only when a clip is paid (Content Rewards campaigns count as paid).
+- TikTok's own rules win on its API path (once TikTok approves the app): who can see it is picked from a list with no
+  default, and Comments, Duet and Stitch are shown and start off
+  ([CONTRACTS §17.8](docs/CONTRACTS.md#178-tiktok-post-to-tiktok-sheet-content-sharing-guidelines-web--api)). Only the
+  Mac path posts public by default.
 - Review has one **Use my settings** tap plus a **More details** fold. Only platforms that are set up are offered.
 - Nothing is posted without the owner's Confirm or Upload, or the auto-posting the owner set.
 - Never switch auto-posting on or off, or change its schedule, without the owner's say.
@@ -88,8 +97,9 @@ The docs, linked here rather than copied:
    reset connected platforms or saved data. Never replace or destroy the DynamoDB table, the Cognito user pool,
    Secrets Manager secrets or the media bucket. Stored shapes change by adding fields only, never renames without a
    migration. After every deploy, read the plan's replace and destroy list (see HANDOFF).
-3. **No AWS deploys from a laptop.** Deploys only run in GitHub Actions. Never run `terraform apply` or any AWS
-   write command locally. For production logs use the read-only `read-logs` workflow.
+3. **No AWS from a laptop.** Never run `aws` or `terraform` against AWS from the laptop, not even reads: its AWS
+   profiles are for other, unrelated accounts. Deploys only run in GitHub Actions. For production logs use the
+   read-only `read-logs` workflow.
 4. **Only the visible name is "Clips Funded".** Internal names stay as they are (the `stories` workspace type,
    `module.stories_agent`, secret paths, database keys): renaming them replaces live resources and loses data
    ([ADR-85](docs/DECISIONS.md#adr-85-the-second-app-is-called-clips-funded-on-screen-every-internal-name-stays)).
@@ -129,7 +139,8 @@ The docs, linked here rather than copied:
   test and the static checks (types, lint, ruff, mypy). At most one targeted browser spec, and only when it likely
   saves a failed CI run ([how](docs/HANDOFF.md#local-browser-tests)). Never run whole suites locally.
 - **Fix every failure you own:** your PR's red checks and clashes, and main's ci or deploy failures from your merges.
-  Find the real cause. A true flake gets one rerun, and you say so. If the owning session hasn't fixed a failure in
+  The coordinator owns what nobody else does: the nightly full run (02:17 UTC) and main's ci, deploy and desktop
+  runs. It fixes each failure there or hands it to a session. Find the real cause. A true flake gets one rerun, and you say so. If the owning session hasn't fixed a failure in
   about 15 minutes, take it over on its branch (merges only), see it to green and live, then hand it back.
 - **Keep what the owner asked for.** Every prompt to a helper agent says: "do not remove or replace owner-requested
   features; if something conflicts, keep it and report the conflict". Before calling anything live, compare what
@@ -162,7 +173,7 @@ The docs, linked here rather than copied:
 ```bash
 cd web && npm ci && npm run dev:mock      # the app on localhost:5173 with a fake API, no AWS needed
 cd web && npm run typecheck && npm run lint && npx vitest run test/<file>.test.ts
-cd api && uv sync && uv run ruff check && uv run mypy && uv run pytest -q tests/<file>.py
+cd api && uv sync && uv run ruff check && uv run ruff format --check && uv run mypy src && uv run pytest -q tests/<file>.py
 gh pr checks <N> --watch --interval 60    # watch your PR yourself; silence is not success
 gh workflow run read-logs.yml --ref main -f minutes=180   # read-only production logs
 ```
