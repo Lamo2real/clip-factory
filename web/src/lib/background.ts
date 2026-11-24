@@ -132,12 +132,24 @@ export function luminance([r, g, b]: Rgb): number {
   return 0.2126 * channel(r) + 0.7152 * channel(g) + 0.0722 * channel(b);
 }
 export function contrast(a: Rgb, b: Rgb): number {
-  const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x) as [number, number];
-  return (hi + 0.05) / (lo + 0.05);
+  return ratio(luminance(a), luminance(b));
+}
+/** The WCAG contrast of two relative luminances, the lighter over the darker. */
+function ratio(la: number, lb: number): number {
+  return la > lb ? (la + 0.05) / (lb + 0.05) : (lb + 0.05) / (la + 0.05);
+}
+/**
+ * Every text colour of `luminances` (`textLuminances`) reaches `target` on a background of luminance `lb`: the same
+ * test as `contrast(text, bg) >= target` for each, with the background's luminance worked out once (the veil searches
+ * run it over many thousand spots).
+ */
+function textsReach(luminances: readonly number[], lb: number, target = AA): boolean {
+  for (const lt of luminances) if (!(ratio(lt, lb) >= target)) return false;
+  return true;
 }
 /** `over` at `alpha` on top of `under`, the way browsers composite (in sRGB). */
 export function mix(over: Rgb, under: Rgb, alpha: number): Rgb {
-  return [0, 1, 2].map((i) => over[i]! * alpha + under[i]! * (1 - alpha)) as unknown as Rgb;
+  return [over[0] * alpha + under[0] * (1 - alpha), over[1] * alpha + under[1] * (1 - alpha), over[2] * alpha + under[2] * (1 - alpha)];
 }
 
 /** WCAG AA for body text. */
@@ -165,6 +177,13 @@ export const WINDOW_TEXT_TOKENS: Record<TextToken, string> = { ...TEXT_TOKENS };
 export const TEXT_COLOURS: readonly Rgb[] = Object.values(TEXT_TOKENS).map(hexToRgb);
 /** Every text colour of the window look (the same set). */
 export const TEXT_COLOURS_WINDOW: readonly Rgb[] = Object.values(WINDOW_TEXT_TOKENS).map(hexToRgb);
+/** Every text colour's luminance, worked out once: the veils and the ladder are checked over many thousand spots. */
+const TEXT_LUMINANCES: readonly number[] = TEXT_COLOURS.map(luminance);
+const TEXT_LUMINANCES_WINDOW: readonly number[] = TEXT_COLOURS_WINDOW.map(luminance);
+/** The luminances of `texts`: the two sets above from their lists, any other worked out here. */
+function textLuminances(texts: readonly Rgb[]): readonly number[] {
+  return texts === TEXT_COLOURS ? TEXT_LUMINANCES : texts === TEXT_COLOURS_WINDOW ? TEXT_LUMINANCES_WINDOW : texts.map(luminance);
+}
 /** The veil and the glass are Clip Factory bottle green. */
 export const VEIL: Rgb = hexToRgb("#0f372b");
 /** Bone: the selected pill, rings and hairlines. */
@@ -252,7 +271,7 @@ export function saturateRgb(c: Rgb, s: number): Rgb {
  */
 export function dimRgb(c: Rgb, b: number): Rgb {
   if (b >= 1) return c;
-  return c.map((v) => v * b) as unknown as Rgb;
+  return [c[0] * b, c[1] * b, c[2] * b];
 }
 
 /** W3C soft-light of `top` over `bottom`, one channel 0..255. */
@@ -660,7 +679,8 @@ export const TABBAR_LIGHT = 0.04;
  * veil laid over `under`.
  */
 export function minVeil(under: Rgb, texts: readonly Rgb[] = TEXT_COLOURS, veil: Rgb = VEIL, target = AA): number {
-  const holds = (step: number) => veilHolds(under, step / 100, texts, veil, target);
+  const lums = textLuminances(texts);
+  const holds = (step: number) => textsReach(lums, luminance(mix(veil, under, step / 100)), target);
   if (holds(0)) return 0;
   if (!holds(100)) return 1;
   // Luminance is convex along the mix and the veil itself holds, so the steps that hold run unbroken up to 100: the
@@ -675,8 +695,7 @@ export function minVeil(under: Rgb, texts: readonly Rgb[] = TEXT_COLOURS, veil: 
 }
 /** Every text colour reaches `target` on `alpha` of the veil over `under`. */
 function veilHolds(under: Rgb, alpha: number, texts: readonly Rgb[] = TEXT_COLOURS, veil: Rgb = VEIL, target = AA): boolean {
-  const bg = mix(veil, under, alpha);
-  return texts.every((t) => contrast(t, bg) >= target);
+  return textsReach(textLuminances(texts), luminance(mix(veil, under, alpha)), target);
 }
 
 export interface SeeThroughVeils {
@@ -808,7 +827,7 @@ export function coloursVeils(colours: readonly string[]): ColoursVeils {
   let panelVeil = need;
   if (need > MAX_COLOURS_PANEL_VEIL) {
     panelVeil = MAX_COLOURS_PANEL_VEIL;
-    const covered = (p: number) => spots.every((s) => TEXT_COLOURS.every((t) => contrast(t, mix(VEIL, dimRgb(mix(VEIL, s, p), brightness), panelVeil)) >= AA));
+    const covered = (p: number) => spots.every((s) => textsReach(TEXT_LUMINANCES, luminance(mix(VEIL, dimRgb(mix(VEIL, s, p), brightness), panelVeil))));
     let step = 0;
     while (step < 100 && !covered(step / 100)) step++;
     pageVeil = step / 100;
@@ -818,7 +837,7 @@ export function coloursVeils(colours: readonly string[]): ColoursVeils {
   // (`PLATE_WORDS_LIGHT`): over a dark mix at the floor, with nothing dimmed, that takes a step or two more green.
   const chip = pages.map((p) => dimRgb(p, brightness));
   let plateVeil = pageVeil ? veilOver(pages) : plate;
-  while (plateVeil < 1 && !chip.every((p) => TEXT_COLOURS.every((t) => contrast(t, lit(p, plateVeil, PLATE_WORDS_LIGHT)) >= AA))) plateVeil = round2(plateVeil + 0.01);
+  while (plateVeil < 1 && !chip.every((p) => textsReach(TEXT_LUMINANCES, luminance(lit(p, plateVeil, PLATE_WORDS_LIGHT))))) plateVeil = round2(plateVeil + 0.01);
   return { pageVeil, panelVeil, plateVeil, brightness };
 }
 
@@ -887,7 +906,7 @@ export function windowPlateVeil(glass: NativeGlass, scheme: Scheme, strength: Gl
   const under = mix(VEIL, glassCeiling(glass, scheme), v.page);
   const pay = platePay(lightPay({ kind: "window", pageVeil: v.page, panelVeil: v.panel, plateVeil: v.panel, brightness: WINDOW_BRIGHTNESS }));
   let veil = v.panel;
-  while (veil < 1 && !TEXT_COLOURS_WINDOW.every((t) => contrast(t, lit(under, veil + pay, PLATE_WORDS_LIGHT)) >= AA)) veil = round2(veil + 0.01);
+  while (veil < 1 && !textsReach(TEXT_LUMINANCES_WINDOW, luminance(lit(under, veil + pay, PLATE_WORDS_LIGHT)))) veil = round2(veil + 0.01);
   return veil;
 }
 
@@ -932,7 +951,7 @@ export function lit(under: Rgb, veil: number, lift: number): Rgb {
 
 /** How bright a colour looks: its OKLab lightness, 0 (black) to 1 (white). "The top layer is brighter" is measured in it. */
 export function oklabL(c: Rgb): number {
-  const [r, g, b] = c.map(linearChannel) as [number, number, number];
+  const [r, g, b] = [channel(c[0]), channel(c[1]), channel(c[2])];
   const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
   const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
   const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
@@ -1034,7 +1053,7 @@ export function plateWords(look: LightLook, behind: Rgb, pay = lightPay(look)): 
 
 /** OKLab a (green − / red +) of a colour. */
 export function oklabA(c: Rgb): number {
-  const [r, g, b] = c.map(linearChannel) as [number, number, number];
+  const [r, g, b] = [channel(c[0]), channel(c[1]), channel(c[2])];
   const l = Math.cbrt(0.4122214708 * r + 0.5363325363 * g + 0.0514459929 * b);
   const m = Math.cbrt(0.2119034982 * r + 0.6806995451 * g + 0.1073969566 * b);
   const s = Math.cbrt(0.0883024619 * r + 0.2817188376 * g + 0.6299787005 * b);
@@ -1053,7 +1072,10 @@ export const LADDER_RED_L = 0.38;
  * vermilion-red and brighter than `LADDER_RED_L`, or even `LADDER_ROOM` of bone over it takes a text colour under AA.
  */
 export function noRoom(under: Rgb): boolean {
-  const L = oklabL(under);
+  return noRoomAt(under, oklabL(under));
+}
+/** `noRoom` with the OKLab lightness of `under` (`L`) already worked out. */
+function noRoomAt(under: Rgb, L: number): boolean {
   return L > LADDER_ROOM_L || (L > LADDER_RED_L && oklabA(under) > LADDER_RED_A) || worstText(mix(BONE, under, LADDER_ROOM)) < AA;
 }
 
@@ -1077,8 +1099,6 @@ export function raised(parent: Rgb, depth = 1, state: LightState = "rest"): Rgb 
   return lit(under, veil, lift);
 }
 
-/** Every text colour's luminance, worked out once: the ladder is checked over many thousand spots. */
-const TEXT_LUMINANCES = TEXT_COLOURS.map(luminance);
 /** The lowest contrast any text colour gets on `bg` (only the two luminances count). */
 function worstText(bg: Rgb): number {
   const lb = luminance(bg);
@@ -1151,8 +1171,8 @@ export function ladderFaults(page: Rgb, panelVeil: number, pay: number, first = 
  * red pane at the AA cap); `ladderFaults` holds every other.
  */
 export function rowRoom(pane: Rgb): boolean {
-  const need = noRoom(pane) ? -LADDER_SLACK : LADDER_STEP;
   const L = oklabL(pane);
+  const need = noRoomAt(pane, L) ? -LADDER_SLACK : LADDER_STEP;
   return oklabL(raised(pane)) - L >= need && oklabL(raised(pane, 1, "ghost")) - L >= need;
 }
 
