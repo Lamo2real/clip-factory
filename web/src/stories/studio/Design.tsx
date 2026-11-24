@@ -8,16 +8,18 @@
 // parts changed (RedesignCompare) before "Use this" puts the new version in the editor. A picture dropped on the open
 // panel is the picture to start from, as if picked (docs/CONTRACTS.md §45.40).
 //
-// A car (§45.42, CarDesign): up to 6 real photos (Photos.tsx) and the owner's words go to the model on the chip in one
-// call that makes 3 cartoon cars to pick from ("Pick one", CarOptions.tsx); "Make more" asks for 3 more that look
-// different, and the picked one goes in the editor (or, for a saved car, into RedesignCompare).
+// A vehicle (§45.42, §45.47, CarDesign): real photos in two strips (Photos.tsx: "Outside", up to 6, and "Inside", up to
+// 4, 8 in all) and the owner's words go to the model on the chip in one call that makes 3 cartoon vehicles to pick
+// from ("Pick one", CarOptions.tsx), with each photo's side (`referenceSides`) and the kind picked in "What is it?"
+// (`vehicle`); "Make more" asks for 3 more that look different, and the picked one goes in the editor (or, for a saved
+// vehicle, into RedesignCompare).
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { putFile } from "../../api/upload.ts";
 import { DropOverlay } from "../../components/DropOverlay.tsx";
 import { useFileDrop } from "../../lib/useFileDrop.ts";
 import { Icon } from "../chat/kit.tsx";
 import { storiesApi } from "../api/client.ts";
-import { isCar, type AiTask, type CarInput, type CharacterInput, type DesignBody, type ModelOverride, type PersonInput } from "../api/types.ts";
+import { isCar, type AiTask, type CarInput, type CharacterInput, type DesignBody, type ModelOverride, type PersonInput, type PhotoSide, type VehicleType } from "../api/types.ts";
 import type { CarLook, Expression } from "../engine/types.ts";
 import { merged, ModelMenu, sendPick, TaskLine, useAiTask, usualFor, type AiInfo } from "./ai.tsx";
 import { CastPreview } from "../preview/CastPreview.tsx";
@@ -409,14 +411,25 @@ export function DesignPanel({
 
 /** How many cars one design makes (§45.42: one model call, the photos sent once). */
 const CARS_PER_DESIGN = 3;
-/** The most photos one design sends. */
-const MAX_PHOTOS = 6;
+/** The most photos one design sends (§45.47: 6 outside and 4 inside, 8 in all). */
+const MAX_PHOTOS = 8;
+const MAX_OUTSIDE = 6;
+const MAX_INSIDE = 4;
 /** The most looks "Make more" sends to stay away from (the API's limit). */
 const MAX_AVOID = 8;
 
-/** A saved picture of the car in the photo strip (already in storage: never sent again). */
-function savedPhoto(p: { assetId: string; url: string }): Photo {
-  return { key: `saved-${p.assetId}`, assetId: p.assetId, url: p.url, state: "ready", file: new File([], "photo") };
+/** A saved picture of the vehicle in its photo strip (already in storage: never sent again). */
+function savedPhoto(p: { assetId: string; url: string; side?: PhotoSide }): Photo {
+  return { key: `saved-${p.assetId}`, assetId: p.assetId, url: p.url, state: "ready", file: new File([], "photo"), ...(p.side === "inside" ? { side: "inside" as const } : {}) };
+}
+
+const inside = (p: Photo) => p.side === "inside";
+
+/** The photos, outside first then inside (the order they are sent in), within each side's limit and 8 in all. */
+function sorted(list: Photo[]): Photo[] {
+  const out = list.filter((p) => !inside(p)).slice(0, MAX_OUTSIDE);
+  const ins = list.filter(inside).slice(0, MAX_INSIDE);
+  return [...out, ...ins].slice(0, MAX_PHOTOS);
 }
 
 /**
@@ -434,23 +447,28 @@ export function CarDesign({
   name,
   characterId,
   onPhotos,
+  vehicle = "car",
 }: {
   ws: string;
   info: AiInfo;
   onDraft: (c: CarInput) => void;
   startOpen?: boolean;
-  /** the car's own pictures: they start the photo strip */
-  pictures?: { assetId: string; url: string }[];
+  /** the vehicle's own pictures (each with its side): they start the photo strips */
+  pictures?: { assetId: string; url: string; side?: PhotoSide }[];
   /** a saved car keeps its name */
   name?: string;
   /** a saved car to redesign (the agent starts from it, §45.34) */
   characterId?: string;
   /** told whenever the photos change (New character keeps them with the car once it is saved) */
   onPhotos?: (photos: Photo[]) => void;
+  /** the kind picked in "What is it?" (§45.47): the design keeps to its bodies; "car" is left out of the request */
+  vehicle?: VehicleType;
 }) {
   const [open, setOpen] = useState(startOpen);
   const [words, setWords] = useState("");
-  const [photos, setPhotos] = useState<Photo[]>(() => pictures.slice(0, MAX_PHOTOS).map(savedPhoto));
+  const [photos, setPhotos] = useState<Photo[]>(() => sorted(pictures.map(savedPhoto)));
+  /** the strip a paste anywhere on the page goes to: the one the owner last used */
+  const [pasteTo, setPasteTo] = useState<PhotoSide>("outside");
   const [problem, setProblem] = useState<string | null>(null);
   const [pick, setPick] = useState<ModelOverride | null>(null);
   const [options, setOptions] = useState<CarInput[]>([]);
@@ -509,6 +527,9 @@ export function CarDesign({
     if (count <= 0) return;
     const body: DesignBody = { kind: "car" };
     if (ready.length) body.referenceAssetIds = ready.map((p) => p.assetId!);
+    // Left out when every photo is an outside one, and for a car (the API's defaults), so older bodies stay the same.
+    if (ready.some(inside)) body.referenceSides = ready.map((p) => (inside(p) ? "inside" : "outside"));
+    if (vehicle !== "car") body.vehicle = vehicle;
     body.count = count;
     if (description) body.description = description;
     if (characterId) body.characterId = characterId;
@@ -534,7 +555,7 @@ export function CarDesign({
           <h2 className="st-s-design__title" id="st-design-title">
             Design with AI
           </h2>
-          <p className="st-s-design__lede">{name ? `Add photos of ${name}, or say what to change. You check it before saving.` : "Add photos of your car. You get cartoon cars to pick from."}</p>
+          <p className="st-s-design__lede">{name ? `Add photos of ${name}, or say what to change. You check it before saving.` : "Add photos of your vehicle. You get cartoon ones to pick from."}</p>
         </div>
         <button type="button" className="st-btn" onClick={() => setOpen(true)}>
           Design with AI
@@ -543,16 +564,53 @@ export function CarDesign({
     );
 
   const changed = madeFrom !== null && madeFrom !== photoKey;
+  const outs = photos.filter((p) => !inside(p));
+  const ins = photos.filter(inside);
+  // Each strip changes only its own photos; the list stays outside first, then inside.
+  const setOutside = (next: Photo[]) => setPhotos((now) => [...next, ...now.filter(inside)]);
+  const setInside = (next: Photo[]) => setPhotos((now) => [...now.filter((p) => !inside(p)), ...next]);
+  const outMax = Math.min(MAX_OUTSIDE, MAX_PHOTOS - ins.length);
+  const inMax = Math.min(MAX_INSIDE, MAX_PHOTOS - outs.length);
+  const full = (max: number, side: number, words: string) => (max < side ? `Up to ${MAX_PHOTOS} photos. Remove one first.` : words);
   return (
     <section className="st-s-design st-s-design--car st-glass st-glass--hero" aria-labelledby="st-design-title" ref={box}>
       <h2 className="st-s-design__title" id="st-design-title">
         Design with AI
       </h2>
       <div ref={strip}>
-        <Photos ws={ws} max={MAX_PHOTOS} photos={photos} onChange={setPhotos} label="Your car's photos" hint="Front, side, back. Up to 6." />
+        <div className="st-s-photosides">
+          <p className="st-s-photosides__hint">Drop, paste or pick photos.</p>
+          <div onPointerDown={() => setPasteTo("outside")} onFocus={() => setPasteTo("outside")}>
+            <Photos
+              ws={ws}
+              max={outMax}
+              photos={outs}
+              onChange={setOutside}
+              side="outside"
+              label="Outside"
+              hint="Front, side, back. Up to 6."
+              tooMany={full(outMax, MAX_OUTSIDE, "Up to 6 photos. Remove one first.")}
+              catchPaste={pasteTo === "outside"}
+            />
+          </div>
+          <div onPointerDown={() => setPasteTo("inside")} onFocus={() => setPasteTo("inside")}>
+            <Photos
+              ws={ws}
+              max={inMax}
+              photos={ins}
+              onChange={setInside}
+              side="inside"
+              noun="inside photo"
+              label="Inside"
+              hint="Seats and dashboard. Up to 4."
+              tooMany={full(inMax, MAX_INSIDE, "Up to 4 inside photos. Remove one first.")}
+              catchPaste={pasteTo === "inside"}
+            />
+          </div>
+        </div>
       </div>
       <TextField
-        label="What is your car like? (you can skip this)"
+        label="What is it like? (you can skip this)"
         multiline
         rows={2}
         value={words}
@@ -568,7 +626,7 @@ export function CarDesign({
         </button>
         <ModelMenu info={info} usual={usual} value={pick} onChange={setPick} />
         <button type="button" className="st-btn st-btn--main" aria-disabled={busy || sending || undefined} onClick={() => design(false)}>
-          {busy ? `Designing ${CARS_PER_DESIGN} cars…` : options.length && !changed ? "Design it again" : "Design it"}
+          {busy ? `Designing ${CARS_PER_DESIGN}…` : options.length && !changed ? "Design it again" : "Design it"}
         </button>
       </div>
       {options.length ? (

@@ -5,11 +5,13 @@
 // redesign of this character, §45.34: which parts change is shown before "Use this" puts only those parts into the
 // editor, on top of the changes not saved yet), the reference pictures, the AI picture when it is on (else the way to
 // Settings › Video › Picture maker), and Delete.
-// New character first asks "What are you making?" (§45.42): a person (as above) or a car, made from up to 6 real
-// photos into cartoon cars to pick from; a saved car keeps those photos as its pictures. A car is a character: the
-// gallery here shows the people and the cars (each car with its Car tag) and a "Make a car" next to New character.
-// Cars also have their own place in the rail, right under Characters (Cars, screens/Cars.tsx, which uses
-// NewCharacter and CharacterPage from here): a car's page always opens under Cars (/stories/cars/{id}).
+// New character first asks "What are you making?" (§45.42): a person (as above) or a vehicle (still kind "car",
+// §45.47): "What is it?" (Car, Truck, Bus, Motorbike, Plane, Boat), then its photos, outside and inside, made into
+// cartoon vehicles to pick from; a saved vehicle keeps those photos (each with its side) as its pictures. A vehicle is
+// a character: the gallery here shows the people and the vehicles (each with its Vehicle tag) and a "Make a vehicle"
+// next to New character. Vehicles also have their own place in the rail, right under Characters (Vehicles,
+// screens/Cars.tsx, which uses NewCharacter and CharacterPage from here): a vehicle's page always opens there
+// (/stories/vehicles/{id}).
 import "../styles/studio.css";
 import "../styles/sd-cars.css";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
@@ -18,7 +20,18 @@ import { A } from "../../components/ui.tsx";
 import { useToast } from "../../components/Toasts.tsx";
 import { useLoad } from "../../lib/hooks.ts";
 import { storiesApi } from "../api/client.ts";
-import { isCar, type CarLook, type Character, type CharacterInput, type CharacterKind, type CharacterLook, type StoriesConfig } from "../api/types.ts";
+import {
+  isCar,
+  VEHICLE_OF,
+  type CarInput,
+  type CarLook,
+  type Character,
+  type CharacterInput,
+  type CharacterKind,
+  type CharacterLook,
+  type StoriesConfig,
+  type VehicleType,
+} from "../api/types.ts";
 import { DEFAULT_CAR } from "../engine/car.ts";
 import { CATALOG } from "../engine/catalog.ts";
 import { Glass, GlassPill } from "../glass/index.ts";
@@ -35,6 +48,7 @@ import { Busy, celebrate, Notice, Pick, StSheet, Tag, type PickOption } from "..
 import { CAR_MOVE_LINE, CHAR_LIMITS, DEFAULT_LOOK, inputOf, MOVE_LINE, newCar, newCharacter } from "../studio/looks.ts";
 import type { Photo } from "../studio/Photos.tsx";
 import { Portrait, References } from "../studio/References.tsx";
+import { FIRST_BODY, VehicleKind } from "../studio/VehicleKind.tsx";
 import { count, isConflict, say } from "../studio/words.ts";
 import { StIcon } from "../ui.tsx";
 import { MakeIcon } from "./Ideas.tsx";
@@ -59,24 +73,24 @@ export function EmptyCast({ title, children, action }: { title: string; children
   );
 }
 
-/** Where a character's pages live: a person's under Characters, a car's under Cars (§45.42.10). */
+/** Where a character's pages live: a person's under Characters, a vehicle's under Vehicles (§45.42.10, §45.47). */
 export type CastPlace = "characters" | "cars";
 
 /** Back to the cast: the studio kit's back link with its round glass orb (the same as Production's and Review's). */
 function BackToCast({ place = "characters" }: { place?: CastPlace }) {
   return (
     <A href={storiesHref({ name: place })} className="st-s-back st-s-back--orb">
-      <span className="st-s-back__orb">‹</span> {place === "cars" ? "Cars" : "Characters"}
+      <span className="st-s-back__orb">‹</span> {place === "cars" ? "Vehicles" : "Characters"}
     </A>
   );
 }
 
-/** A character's own page: a car's is under Cars (/stories/cars/{id}). */
+/** A character's own page: a vehicle's is under Vehicles (/stories/vehicles/{id}). */
 export const characterHref = (c: { characterId: string; kind?: CharacterKind }) => storiesHref(c.kind === "car" ? { name: "car", characterId: c.characterId } : { name: "character", characterId: c.characterId });
 
 function Gallery({ ws }: { ws: string }) {
   const list = useLoad(() => storiesApi().listCharacters(ws), ws, "st-characters");
-  // The whole cast: the people, then the cars (each with its Car tag).
+  // The whole cast: the people, then the vehicles (each with its Vehicle tag).
   const people = list.data ? [...list.data.filter((c) => !isCar(c)), ...list.data.filter(isCar)] : null;
   return (
     <section className="st-page st-studio st-s-make">
@@ -91,7 +105,7 @@ function Gallery({ ws }: { ws: string }) {
           </A>
           <A href={storiesHref({ name: "car_new" })} className="st-btn st-s-makecar">
             <StIcon name="car" size={18} />
-            Make a car
+            Make a vehicle
           </A>
           <A href={storiesHref({ name: "character_new" })} className="st-btn st-btn--main">
             New character
@@ -119,7 +133,7 @@ function Gallery({ ws }: { ws: string }) {
                 <span className="st-s-cast__name">{c.name}</span>
                 <span className="st-s-cast__line">{c.personality || (isCar(c) ? c.description || CAR_MOVE_LINE[c.movementStyle] : MOVE_LINE[c.movementStyle])}</span>
                 <span className="st-s-cast__tags">
-                  {isCar(c) ? <Tag tone="coral">Car</Tag> : <Tag tone="sky">{CATALOG.movementStyles.find((m) => m.id === c.movementStyle)?.label ?? c.movementStyle}</Tag>}
+                  {isCar(c) ? <Tag tone="coral">Vehicle</Tag> : <Tag tone="sky">{CATALOG.movementStyles.find((m) => m.id === c.movementStyle)?.label ?? c.movementStyle}</Tag>}
                   <Tag>In {count(c.storyCount, "video")}</Tag>
                 </span>
               </A>
@@ -134,14 +148,14 @@ function Gallery({ ws }: { ws: string }) {
 /** What a new character can be (§45.42): two big tiles at first, a small pick-one bar once one is picked. */
 const KINDS: PickOption<CharacterKind>[] = [
   { value: "person", label: "A person" },
-  { value: "car", label: "A car" },
+  { value: "car", label: "A vehicle" },
 ];
 
 function kindArt(kind: CharacterKind) {
   return (
     <span className="st-s-kind__art" aria-hidden="true">
       {kind === "car" ? (
-        <CarPreview car={DEFAULT_CAR} movementStyle="calm" size={72} playing={false} label="A car" />
+        <CarPreview car={DEFAULT_CAR} movementStyle="calm" size={72} playing={false} label="A vehicle" />
       ) : (
         <CharacterPreview look={DEFAULT_LOOK} movementStyle="bouncy" expression="happy" size={72} playing={false} label="A person" />
       )}
@@ -156,7 +170,8 @@ async function keepPhotos(ws: string, characterId: string, photos: Photo[]): Pro
   let missed = 0;
   const one = async (p: Photo) => {
     try {
-      const target = await storiesApi().referenceUpload(ws, characterId, { filename: p.file.name, contentType: p.file.type, size: p.file.size });
+      // An inside photo keeps its side (§45.47); left out, a picture is an outside one.
+      const target = await storiesApi().referenceUpload(ws, characterId, { filename: p.file.name, contentType: p.file.type, size: p.file.size, ...(p.side === "inside" ? { side: "inside" as const } : {}) });
       await putFile({ key: target.assetId, uploadUrl: target.uploadUrl, headers: target.headers }, p.file);
       await storiesApi().referenceComplete(ws, characterId, target.assetId);
     } catch {
@@ -200,8 +215,9 @@ export function mergeRedesign(now: CharacterInput, before: CharacterInput, next:
 }
 
 /**
- * New character, or (place "cars", Make a car in Cars or Characters) a new car: then the kind is a car from the
- * start, so there are no kind tiles, and the page says "New car".
+ * New character, or (place "cars", Make a vehicle in Vehicles or Characters) a new vehicle: then the kind is a vehicle
+ * from the start, so there are no person-or-vehicle tiles, and the page says "New vehicle". A vehicle first asks "What
+ * is it?" (§45.47): the pick goes to the design, and an untouched editor starts as that kind's first body.
  */
 export function NewCharacter({ ws, kind: asked, place = "characters" }: { ws: string; kind?: CharacterKind; place?: CastPlace }) {
   const toast = useToast();
@@ -213,7 +229,11 @@ export function NewCharacter({ ws, kind: asked, place = "characters" }: { ws: st
   const [edited, setEdited] = useState(false);
   /** Nothing is saved yet: anything in the editor is unsaved (it asks before the page changes). One blank per kind. */
   const [blanks] = useState(() => ({ person: newCharacter(), car: newCar() }));
-  const blank: CharacterInput = kind === "car" ? blanks.car : blanks.person;
+  /** "What is it?" (§45.47); `startVehicle` is the kind the editor started as (it follows the pick until the owner changes something). */
+  const [vehicle, setVehicle] = useState<VehicleType>("car");
+  const [startVehicle, setStartVehicle] = useState<VehicleType>("car");
+  const carBlank: CarInput = startVehicle === "car" ? blanks.car : { ...blanks.car, car: { ...blanks.car.car, body: FIRST_BODY[startVehicle] } };
+  const blank: CharacterInput = kind === "car" ? carBlank : blanks.person;
   const [saving, setSaving] = useState(false);
   const [keeping, setKeeping] = useState(false);
   const [problem, setProblem] = useState<string | null>(null);
@@ -229,6 +249,12 @@ export function NewCharacter({ ws, kind: asked, place = "characters" }: { ws: st
   const onDraft = useCallback((input: CharacterInput) => setDraft((d) => ({ round: (d?.round ?? 0) + 1, input })), []);
   const car = kind === "car";
 
+  function pickVehicle(next: VehicleType) {
+    setVehicle(next);
+    // Nothing changed yet: the editor starts again as this kind. Otherwise the owner's changes stay as they are.
+    if (!edited && !draft) setStartVehicle(next);
+  }
+
   function startAs(next: CharacterKind) {
     setKind(next);
     setChosen(true);
@@ -236,6 +262,8 @@ export function NewCharacter({ ws, kind: asked, place = "characters" }: { ws: st
     setEdited(false);
     setDraft(null);
     setProblem(null);
+    setVehicle("car");
+    setStartVehicle("car");
     photos.current = [];
     setPhotoCount(0);
   }
@@ -256,7 +284,7 @@ export function NewCharacter({ ws, kind: asked, place = "characters" }: { ws: st
       if (isCar(c) && photos.current.some((p) => p.state === "ready")) {
         setKeeping(true);
         const missed = await keepPhotos(ws, made.characterId, photos.current);
-        if (missed) toast.info(missed === 1 ? "1 photo didn't stay. Add it on the car's page." : `${missed} photos didn't stay. Add them on the car's page.`);
+        if (missed) toast.info(missed === 1 ? "1 photo didn't stay. Add it on its page." : `${missed} photos didn't stay. Add them on its page.`);
       }
       // After the wait: never while Clip Factory is on screen (it happens once Clips Funded is back, §45.35 D17).
       storiesGoLater(characterHref(made), { replace: true });
@@ -271,13 +299,13 @@ export function NewCharacter({ ws, kind: asked, place = "characters" }: { ws: st
       <header className="st-s-head">
         <div className="st-plate st-s-head__text">
           <BackToCast place={place} />
-          <h1 className="st-s-head__title">{place === "cars" ? "New car" : "New character"}</h1>
+          <h1 className="st-s-head__title">{place === "cars" ? "New vehicle" : "New character"}</h1>
           <p className="st-s-head__lede">
-            {car ? "Add photos of your car. Pick a cartoon car, then name it." : "Pick their looks, face, moves and sounds. Then name them."}
+            {car ? "Pick what it is. Add photos, pick a cartoon one, then name it." : "Pick their looks, face, moves and sounds. Then name them."}
           </p>
         </div>
       </header>
-      {/* Loose on the page, so on a backing plate (glass in Picture and See-through). Under Cars it is a car. */}
+      {/* Loose on the page, so on a backing plate (glass in Picture and See-through). Under Vehicles it is a vehicle. */}
       {place === "cars" ? null : (
         <div className="st-plate st-s-kindbox">
           <Pick
@@ -290,13 +318,14 @@ export function NewCharacter({ ws, kind: asked, place = "characters" }: { ws: st
           />
         </div>
       )}
+      {car ? <VehicleKind value={vehicle} onChange={pickVehicle} /> : null}
       {car ? (
-        <CarDesign key="car" ws={ws} info={info} onDraft={onDraft} onPhotos={onPhotos} />
+        <CarDesign key="car" ws={ws} info={info} onDraft={onDraft} onPhotos={onPhotos} vehicle={vehicle} />
       ) : (
         <DesignPanel key="person" ws={ws} info={info} startOpen={design} onDraft={onDraft} />
       )}
       <CharacterEditor
-        key={`new:${kind}:${draft?.round ?? 0}`}
+        key={`new:${kind}:${startVehicle}:${draft?.round ?? 0}`}
         initial={draft?.input ?? blank}
         saved={blank}
         startPart={draft ? "name" : undefined}
@@ -308,7 +337,7 @@ export function NewCharacter({ ws, kind: asked, place = "characters" }: { ws: st
       />
       {asking ? (
         <StSheet
-          title={`Start again as ${asking === "car" ? "a car" : "a person"}?`}
+          title={`Start again as ${asking === "car" ? "a vehicle" : "a person"}?`}
           onClose={() => setAsking(null)}
           actions={
             <>
@@ -328,7 +357,7 @@ export function NewCharacter({ ws, kind: asked, place = "characters" }: { ws: st
   );
 }
 
-/** A character's own page. A car's lives under Cars: opened from /stories/characters/{id}, it moves there. */
+/** A character's own page. A vehicle's lives under Vehicles: opened from /stories/characters/{id}, it moves there. */
 export function CharacterPage({ ws, characterId, place = "characters" }: { ws: string; characterId: string; place?: CastPlace }) {
   const toast = useToast();
   const loaded = useLoad(() => storiesApi().getCharacter(ws, characterId), `${ws}:${characterId}`);
@@ -367,7 +396,7 @@ export function CharacterPage({ ws, characterId, place = "characters" }: { ws: s
   const wrongPlace = !!c && home !== place;
 
   useEffect(() => {
-    // An older link (the dashboard's Continue, the library, a chat card) to a car under Characters: the same page under Cars.
+    // An older link (the dashboard's Continue, the library, a chat card) to a vehicle under Characters: the same page under Vehicles.
     if (wrongPlace && c) storiesGoLater(characterHref(c), { replace: true });
   }, [wrongPlace, c]);
 
@@ -419,7 +448,7 @@ export function CharacterPage({ ws, characterId, place = "characters" }: { ws: s
   if (loaded.error && !c)
     return (
       <section className="st-page st-studio st-s-make">
-        <Notice tone="bad" action={<A href={storiesHref({ name: place })} className="st-btn">{place === "cars" ? "Back to Cars" : "Back to Characters"}</A>}>
+        <Notice tone="bad" action={<A href={storiesHref({ name: place })} className="st-btn">{place === "cars" ? "Back to Vehicles" : "Back to Characters"}</A>}>
           {loaded.error}
         </Notice>
       </section>
@@ -427,7 +456,7 @@ export function CharacterPage({ ws, characterId, place = "characters" }: { ws: s
   if (!c)
     return (
       <section className="st-page st-studio st-s-make">
-        <Busy>{place === "cars" ? "Getting the car…" : "Getting the character…"}</Busy>
+        <Busy>{place === "cars" ? "Getting the vehicle…" : "Getting the character…"}</Busy>
       </section>
     );
 
@@ -452,7 +481,8 @@ export function CharacterPage({ ws, characterId, place = "characters" }: { ws: s
           startOpen={false}
           name={c.name}
           characterId={c.characterId}
-          pictures={c.references.map((r) => ({ assetId: r.assetId, url: r.url }))}
+          pictures={c.references.map((r) => ({ assetId: r.assetId, url: r.url, ...(r.side ? { side: r.side } : {}) }))}
+          vehicle={VEHICLE_OF[c.car.body] ?? "car"}
           onDraft={(input) => setProposal(input)}
         />
       ) : (

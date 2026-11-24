@@ -1,4 +1,4 @@
-/* ---------- Car characters (docs/CONTRACTS.md §45.42): the kind tiles, the photo strip, "Pick one" and the car
+/* ---------- Vehicle characters (docs/CONTRACTS.md §45.42, §45.47): the kind tiles, What is it?, the photo strip, "Pick one" and the car
    editor's moves. Liquid glass from the tokens (styles/GLASS-CONTRACT.md): no borders, --st-r-* radii, words of
    0.78rem and up, AA contrast; headings in Fugaz One (--st-font-display), words in Fraunces (the body font). ---------- */
 
@@ -47,7 +47,70 @@
   display: block;
 }
 
-/* ---------- The photo strip (Photos.tsx): a glass well that takes dropped photos ---------- */
+/* What is it? (studio/VehicleKind.tsx, §45.47): six icon-and-word glass tiles, 3 across on phones, 6 on wide pages. */
+.st-s-vkind {
+  margin: 0;
+  container-type: inline-size;
+}
+
+.st-s-vkind .st-s-pick--big {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+}
+
+@container (min-width: 330px) {
+  .st-s-vkind .st-s-pick--big {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@container (min-width: 620px) {
+  .st-s-vkind .st-s-pick--big {
+    grid-template-columns: repeat(6, minmax(0, 1fr));
+  }
+}
+
+.st-s-vkind .st-s-pick__opt {
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--st-space-1);
+  min-height: 84px;
+  padding: 10px 6px;
+  text-align: center;
+}
+
+.st-s-vkind .st-s-pick__art {
+  display: grid;
+  place-items: center;
+  width: auto;
+  height: auto;
+  margin: 0;
+  color: var(--st-text-strong);
+}
+
+.st-s-vkind .st-s-pick__label {
+  font-weight: var(--st-weight-ui);
+  overflow-wrap: anywhere;
+}
+
+.st-s-vkind__icon {
+  display: block;
+}
+
+/* Outside and Inside (§45.47): two photo strips, one under the other, with the one hint above them. */
+.st-s-photosides {
+  display: grid;
+  gap: var(--st-space-3);
+}
+
+.st-s-photosides__hint {
+  margin: 0;
+  color: var(--st-text-soft);
+  font-weight: var(--st-weight-ui);
+}
+
+/* ---------- The photo strip (Photos.tsx): a glass well that takes dropped and pasted photos ---------- */
 .st-s-photos__zone {
   display: flex;
   flex-wrap: wrap;
@@ -234,7 +297,7 @@
   display: contents;
 }
 
-/* ---------- Cars (screens/Cars.tsx): the one big "Make a car", and Characters' Make a car ---------- */
+/* ---------- Vehicles (screens/Cars.tsx): the one big "Make a vehicle", and Characters' Make a vehicle ---------- */
 .st-s-makecar--big {
   min-height: 56px;
   padding: 0 var(--st-space-6);
