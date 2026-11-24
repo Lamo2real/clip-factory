@@ -156,7 +156,7 @@ def test_a_make_in_the_words_is_reported_then_replaced() -> None:
     value, problems = check_car(raw, cat)
     assert value is not None
     assert any("do not use car brand or model names" in p for p in problems)
-    assert value["name"] == "Car"
+    assert value["name"] == "Vehicle"  # §45.47: the visible word is Vehicle
     assert value["description"] == "A red car Golf, a bit old."
     assert value["traits"] == ["fast like a car", "loyal"]
     assert strip_brands("my land rover and a Mercedes-Benz") == ("my car and a car", ["land rover", "Mercedes-Benz"])
@@ -302,7 +302,7 @@ def test_photos_that_show_no_car_say_so(tmp_path: Path) -> None:
     svc, db, s3 = services(tmp_path, model)
     db.seed(car_task(seed_photos(db, s3, 2)))
     assert run(svc) == "failed"
-    assert db.get(PK, "TASK#T1")["error"] == "Those photos don't show a car. Try other photos."
+    assert db.get(PK, "TASK#T1")["error"] == "Those photos don't show a vehicle. Try other photos."
     assert len(model.calls) == 1
 
 
