@@ -150,6 +150,7 @@ function deleteVideo(lane, clipId) {
 function stayAwake() {
   try {
     const child = spawn("/usr/bin/caffeinate", ["-i", "-w", String(process.pid)], { stdio: "ignore", detached: false });
+    child.on("error", () => {}); // no caffeinate there (tick-token.test.js on Linux CI): the post goes on, never a crash
     return () => child.kill();
   } catch {
     return () => {};
