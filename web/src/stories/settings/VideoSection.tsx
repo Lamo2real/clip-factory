@@ -422,6 +422,16 @@ export function VideoSection({ ws }: { ws: string }) {
     flash();
     void reloadProviders();
   }, [savedCount, flash, reloadProviders]);
+  // A new drawing style reaches the open previews only once it is saved: a refused save puts the page back to the
+  // stored style, and the previews never left it.
+  const artPicked = useRef(false);
+  const artSaved = useRef(savedCount);
+  const shownArt = artOf(c);
+  useEffect(() => {
+    if (savedCount === artSaved.current) return;
+    artSaved.current = savedCount;
+    if (artPicked.current) sayArtPicked(ws, shownArt);
+  }, [savedCount, shownArt, ws]);
 
   if (!workspace.data) return workspace.error ? <Failed message={workspace.error} onRetry={() => void workspace.reload()} /> : <Loading label="Opening the video settings…" />;
   const p = providers.data;
@@ -484,8 +494,8 @@ export function VideoSection({ ws }: { ws: string }) {
           label="Drawing style of new videos"
           value={artOf(c)}
           onChange={(v) => {
+            artPicked.current = true;
             save({ video: { ...c.video, art: v } });
-            sayArtPicked(ws, v);
           }}
           options={ART_STYLES.map((a) => ({ value: a, label: ART_WORDS[a].label, line: ART_WORDS[a].line, pic: <ArtSample art={a} /> }))}
         />

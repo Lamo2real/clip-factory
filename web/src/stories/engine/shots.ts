@@ -64,10 +64,10 @@ export function nextCutAfter(scene: Pick<Scene, "cuts">, t: number): number {
  * writer's estimate (script.ts sceneShapes) reads it. */
 export const SHOT_SHAPES: Record<ShotId, number> = {
   scene: 0,
-  driver_view: 240,
+  driver_view: 260,
   face: 145,
   side_window: 165,
-  mirror: 160,
+  mirror: 185,
   speed_dial: 115,
   pedals: 60,
   road_behind: 200,
@@ -797,14 +797,16 @@ function mirrorShot(pen: Pen, x: ShotInput, w: World): void {
   const W = F.w;
   const H = F.h;
   const cx = W / 2;
-  const cy = P(0.42, 0.45) * H;
+  // in 9:16 the mirror sits high on the windscreen, so the road with its lane lines shows under it
+  const cy = P(0.3, 0.45) * H;
   const mw = P(1.12 * W, 0.7 * W);
   const mh = 0.42 * S;
   const behind = w.others.filter((o) => o.ahead < 0).sort((a, b) => a.gap - b.gap)[0];
   pen.setMatrix(layerMatrix(camFor(x, cx, cy), 1));
   // around it, the road ahead through the windscreen, simplified
   lightPart(x, "out");
-  const hor = P(0.36, 0.42) * H;
+  // the road's horizon just under the mirror in 9:16, so the far road, its lamps and the lane lines fill the windscreen
+  const hor = P(0.45, 0.42) * H;
   const c: Cam3 = { vpX: W / 2 + w.steer * 0.03 * W, hor, f: FOCAL, camX: -0.35, camH: 1.2 };
   drawOutside(pen, c, { look: w.look, plan: w.plan, m: w.m, t: x.t, seed: x.seed, sway: -(c.vpX - W / 2), x0: -80, x1: W + 80, top: 0, bottom: H + 80, zNear: 0.6, simple: true, warm: x.warm });
   lightPart(x, "cabin");
@@ -880,8 +882,9 @@ function mirrorShot(pen: Pen, x: ShotInput, w: World): void {
   for (let i = 0; i < 4; i += 1) pen.line([rw[i * 2]!, rw[i * 2 + 1]!, rw[((i + 1) % 4) * 2]!, rw[((i + 1) % 4) * 2 + 1]!], 3, ND.pillarInk, 0.9);
   for (const s of [-1, 1]) seatShape(pen, cx + s * mw * 0.2 - mh * 0.24, gy0 + mh * 0.68, mh * 0.48, mh * 0.27, mh * 0.12);
   pen.poly(clip([cx - mw * 0.3, gy0, cx - mw * 0.18, gy0, cx - mw * 0.36, gy0 + mh, cx - mw * 0.48, gy0 + mh]), "#ffffff", 0.06);
-  // the housing's lit top edge
-  arcLine(pen, cx, gy0 + mh * 0.3, mw * 0.5 + 0.02 * S, 196, 344, 4, ND.pillarLit, 0.6 + 0.3 * x.warm, 4);
+  // the housing's lit top edge, along its top (a flat arc, not a circle through the sky)
+  const hTop = gy0 - 0.035 * S;
+  pen.line(arcPts(cx, hTop + mh * 0.38, mw * 0.5, mh * 0.38, 200, 340, 16), 4, ND.pillarLit, 0.6 + 0.3 * x.warm);
 }
 
 // ---- Speed dial ---------------------------------------------------------------------------------------------------
@@ -973,7 +976,7 @@ function speedDial(pen: Pen, x: ShotInput, w: World): void {
   pen.line(red, 0.035 * S, ND.redZone);
   for (let n = 0; n <= 8; n += 1) {
     const [x0, y0] = pt(n, r * 0.95);
-    const [x1, y1] = pt(n, r * 0.95 - 0.07 * S);
+    const [x1, y1] = pt(n, r * 0.95 - 0.06 * S);
     pen.line([x0, y0, x1, y1], 0.012 * S, ND.tick);
     if (n < 8) {
       for (let k = 1; k <= 4; k += 1) {
@@ -983,12 +986,15 @@ function speedDial(pen: Pen, x: ShotInput, w: World): void {
         pen.line([a0, b0, a1, b1], 0.006 * S, ND.tick, 0.9);
       }
     }
-    const [nx, ny] = pt(n, r * 0.78);
+    // the numbers sit inside the ticks, clear of them
+    const [nx, ny] = pt(n, r * 0.7);
     digit(pen, String(n), nx, ny, 0.065 * S, n >= 7 ? ND.redZone : ND.tick);
   }
-  // the needle with its glow, a warm pool at its tip, and the hub
-  const [bx, by] = pt(v + 4, r * 0.14);
-  pen.circle(tip[0], tip[1], 0.06 * S, ND.needleGlow2, 0.25);
+  // the needle with its glow, a small warm glow at its tip, and the hub; its tail points straight back through the
+  // hub's centre (180°: 16/3 of the 8 steps of 270°)
+  const [bx, by] = pt(v + 16 / 3, r * 0.14);
+  pen.circle(tip[0], tip[1], 0.04 * S, ND.needleGlow2, 0.18);
+  pen.circle(tip[0], tip[1], 0.022 * S, ND.needleGlow1, 0.45);
   pen.line([bx, by, tip[0], tip[1]], 0.05 * S, ND.needleGlow2, 0.12);
   pen.line([bx, by, tip[0], tip[1]], 0.03 * S, ND.needleGlow1, 0.35);
   pen.line([bx, by, tip[0], tip[1]], 0.016 * S, ND.needle);
@@ -1089,7 +1095,9 @@ function roadWide(pen: Pen, x: ShotInput, w: World): void {
   const W = F.w;
   const H = F.h;
   const vpX = W * P(0.42, 0.45);
-  const hor = H * P(0.4, 0.42);
+  // in 9:16 the horizon is at the middle and the own car nearer (bigger and lower), so the road under it is not an
+  // empty half of the frame
+  const hor = H * P(0.5, 0.42);
   // the camera stands by the road's right edge, 1.2 m up, so the road takes the left of the frame and the rail, the
   // verge and the grass the right
   const c: Cam3 = { vpX, hor, f: FOCAL, camX: 1.2, camH: 1.2 };
@@ -1098,7 +1106,7 @@ function roadWide(pen: Pen, x: ShotInput, w: World): void {
   lightPart(x, "out");
   drawOutside(pen, c, { look: w.look, plan, m: w.m, t: x.t, seed: x.seed, sway: 0, x0: -80, x1: W + 80, top: 0, bottom: H + 80, zNear: 1, warm: x.warm });
   // every car by its gap and lane: the own car about 12 m ahead from behind, oncoming ones from the front
-  const OWN_Z = 12;
+  const OWN_Z = P(7, 12);
   const list: { car: ShotCar; X: number; Z: number; front: boolean; roll: number; jolt: number }[] = [];
   if (w.own) list.push({ car: w.own, X: 0, Z: OWN_Z, front: false, roll: 0, jolt: 0 });
   for (const o of w.others) list.push({ car: o.car, X: o.X, Z: OWN_Z + o.ahead, front: o.oncoming, roll: o.roll, jolt: o.jolt });

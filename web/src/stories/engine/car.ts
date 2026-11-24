@@ -392,13 +392,15 @@ export function lightGlow(pen: Pen, x: number, y: number, blink: number, k: numb
   if (blink > 0.04) pen.circle(x, y, 46 * k, nightDrive() ? ND.headBloom : "#fff3b0", 0.55 * blink);
 }
 
-/** Night drive: a headlight's bloom, the halos only (the lens is the core): r × 5, 3 and 1.6 at a 0.06, 0.16 and
- * 0.45 × k (§45.45 §3). Stacked circles, so both drawers paint it the same. */
+/** Night drive: a headlight's bloom, the halos only (the lens is the core): four halos with small alpha steps, r ×
+ * 3.6, 2.6, 1.8 and 1.3 at 0.04, 0.08, 0.16 and 0.34 × k (§45.45 §3), so it falls off softly like the street lamps.
+ * Stacked circles, so both drawers paint it the same. */
 export function bloom(pen: Pen, x: number, y: number, r: number, k: number): void {
   if (k <= 0.02) return;
-  pen.circle(x, y, r * 5, ND.headBloom, 0.06 * k);
-  pen.circle(x, y, r * 3, ND.headBloom, 0.16 * k);
-  pen.circle(x, y, r * 1.6, ND.headBloom, 0.45 * k);
+  pen.circle(x, y, r * 3.6, ND.headBloom, 0.04 * k);
+  pen.circle(x, y, r * 2.6, ND.headBloom, 0.08 * k);
+  pen.circle(x, y, r * 1.8, ND.headBloom, 0.16 * k);
+  pen.circle(x, y, r * 1.3, ND.headBloom, 0.34 * k);
 }
 
 // ---- the face ----------------------------------------------------------------------------------------------------

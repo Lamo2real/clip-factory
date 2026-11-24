@@ -214,7 +214,7 @@ export function drawOutside(pen: Pen, c: Cam3, o: OutsideOpts): void {
       }
     }
   }
-  // street lamps: near ones in full (pole, arm, head, halos, a soft cone), far ones as a dotted line of glows
+  // street lamps: near ones in full (pole, arm, cobra head, the soft bloom), far ones as a dotted line of glows
   for (const L of plan.lamps) {
     const zs = streamed(m, LAMP_GAP, zn + 1, o.simple ? LAMP_NEAR : LAMP_LAST, back);
     for (let i = zs.length - 1; i >= 0; i -= 1) {
@@ -225,7 +225,7 @@ export function drawOutside(pen: Pen, c: Cam3, o: OutsideOpts): void {
       if (z > LAMP_NEAR) {
         if (look.lit) {
           if (z < 240) pen.circle(hX, hY, Math.max(2.2, 0.5 * u) * 3, ND.halo1, 0.28);
-          pen.circle(hX, hY, Math.max(1.3, 0.3 * u), ND.lampCore);
+          pen.circle(hX, hY, Math.max(1.3, 0.3 * u), ND.lampHead);
         }
         continue;
       }
@@ -237,10 +237,8 @@ export function drawOutside(pen: Pen, c: Cam3, o: OutsideOpts): void {
       pen.line([tx, ty, hX, hY], Math.max(1, 0.14 * u), look.pole);
       const r = Math.max(1.6, 0.42 * u);
       if (look.lit) {
-        const [gx, gy] = project(c, hx, 0, z);
-        // the soft cone of light only on lamps a little way off (a near one's would cover the frame)
-        if (z > 18) pen.poly([hX - r * 0.8, hY, hX + r * 0.8, hY, gx + 2.6 * u, gy, gx - 2.6 * u, gy], ND.cone, 0.05);
-        lampGlow(pen, hX, hY, r, r * 1.3, Math.max(0.8, r * 0.38));
+        // the soft bloom and the pool on the road; no cone of light under it (that read as a spotlight)
+        lampGlow(pen, hX, hY, r, r * 1.3, Math.max(0.8, r * 0.38), 1, look.pole);
       } else pen.ellipse(hX, hY, r * 1.3, Math.max(0.8, r * 0.38), 0, "#e6ecf3");
     }
   }

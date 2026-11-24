@@ -19,7 +19,7 @@ import { F, inFrame, STUDIO_LIGHT, withArt } from "../src/stories/engine/frame.t
 import { Pen } from "../src/stories/engine/pen.ts";
 import { RULES } from "../src/stories/engine/rules.ts";
 import { PROP_SHAPES_ND } from "../src/stories/engine/props.ts";
-import { CUTS, SHAPES, SHAPES_ND, SHOT_CAR, SHOT_ESTIMATES } from "../src/stories/engine/script.ts";
+import { CUTS, LIMITS, SHAPES, SHAPES_ND, SHOT_CAR, SHOT_ESTIMATES } from "../src/stories/engine/script.ts";
 import { SET_SHAPES_ND } from "../src/stories/engine/sets.ts";
 import type { CarMember, Scene, ShotCue, StoryScript } from "../src/stories/engine/types.ts";
 
@@ -165,15 +165,39 @@ describe("cuts between shots inside a scene", () => {
     const s = normalizeScript(script({ durationSec: 10, cuts: [cut(0, "road_behind"), cut(2, "driver_view"), cut(3, "face"), cut(8, "road_wide")] }));
     const shorter = fitDuration(s, 5);
     expect(shorter.scenes[0]!.durationSec).toBe(5);
-    // 0, 1, 1.5 (only 0.5 s after 1: dropped), 4 (before 4.4, 0.6 s before the end: kept)
-    expect(shorter.scenes[0]!.cuts).toEqual([cut(0, "road_behind"), cut(1, "driver_view"), cut(4, "road_wide")]);
+    // 0, 1, 1.5 (only 0.5 s after 1: the later one is kept, it decides what shows from then on), 4 (before 4.4, 0.6 s
+    // before the end: kept)
+    expect(shorter.scenes[0]!.cuts).toEqual([cut(0, "road_behind"), cut(1.5, "face"), cut(4, "road_wide")]);
     expect(validateScript(shorter).ok).toBe(true);
     // a scene is at most 15 s: 10 s becomes 15, and its cuts 1.5 times later
     expect(fitDuration(s, 20).scenes[0]!.cuts).toEqual([cut(0, "road_behind"), cut(3, "driver_view"), cut(4.5, "face"), cut(12, "road_wide")]);
     // a cut that lands 0.6 s or less before the new end is dropped
     expect(fitDuration(normalizeScript(script({ durationSec: 10, cuts: [cut(9, "face")] })), 4).scenes[0]!.cuts).toEqual([]);
     expect("cuts" in fitDuration(normalizeScript(script()), 5).scenes[0]!).toBe(false);
-    expect(scaleCuts([cut(1, "face"), cut(1.4, "mirror"), cut(2, "pedals")], 1, 3)).toEqual([cut(1, "face"), cut(2, "pedals")]);
+    expect(scaleCuts([cut(1, "face"), cut(1.4, "mirror"), cut(2, "pedals")], 1, 3)).toEqual([cut(1.4, "mirror"), cut(2, "pedals")]);
+  });
+
+  it("a valid night script stays valid at every new length: a shot in the car never lands on getting in or out", () => {
+    // getting out at 5.5 s, with the cut back to the whole scene the checks ask for just before it
+    const out = script({ set: "highway_night", durationSec: 8, beats: [{ at: 5.5, dur: 1.5, who: "c1", do: "get_out" }], cuts: [cut(1, "road_behind"), cut(4.8, "driver_view"), cut(5.4, "scene")] });
+    // getting in at the start, the face right after it
+    const into = script({ set: "highway_night", durationSec: 8, beats: [{ at: 0, dur: 0.9, who: "c1", do: "get_in" }], cuts: [cut(1, "face"), cut(3, "driver_view"), cut(5, "mirror")] });
+    for (const s of [out, into]) {
+      expect(errorsOf(s)).toEqual([]);
+      for (const target of [3, 4.5, 6, 7.2, 7.6, 7.9, 8.5, 10, 12, 15]) {
+        const fit = fitDuration(normalizeScript(s), target);
+        expect(errorsOf(fit), `${s.scenes[0]!.beats[0]!.do} fitted to ${target} s`).toEqual([]);
+      }
+    }
+    // the cases that broke: 5 % shorter keeps the later cut back to the whole scene before getting out, and 75 %
+    // turns the face that would show while getting in back into the whole scene
+    expect(fitDuration(normalizeScript(out), 7.6).scenes[0]!.cuts).toEqual([cut(0.95, "road_behind"), cut(5.13, "scene")]);
+    expect(fitDuration(normalizeScript(into), 6).scenes[0]!.cuts).toEqual([cut(0.75, "scene"), cut(2.25, "driver_view"), cut(3.75, "mirror")]);
+    // the same with the scene given to scaleCuts directly (the mock's and the API's scene-length edits)
+    const sc = normalizeScript(into).scenes[0]!;
+    const beats = [{ ...sc.beats[0]!, dur: 0.8 }];
+    expect(scaleCuts(sc.cuts!, 0.75, 6, { ...sc, beats })).toEqual([cut(0.75, "scene"), cut(2.25, "driver_view"), cut(3.75, "mirror")]);
+    expect(scaleCuts(sc.cuts!, 0.75, 6)).toEqual([cut(0.75, "face"), cut(2.25, "driver_view"), cut(3.75, "mirror")]);
   });
 });
 
@@ -191,12 +215,33 @@ describe("sceneShapes in night drive", () => {
     expect(sceneShapes(traffic, "night_drive")).toBe(Math.max(whole + 5 * SHAPES_ND.props.car!, SHOT_ESTIMATES.driver_view + 4 * SHOT_CAR));
   });
 
-  it("validateScript holds a night drive scene to the same limit with the night estimates", () => {
+  it("validateScript holds a night drive scene to night drive's own limit (560) with the night estimates", () => {
     const crowd = { set: "highway_night" as const, actors: [], props: Array.from({ length: 9 }, (_, i) => ({ propId: `t${i}`, kind: "car" as const, x: 0.1 * i, y: 0.7, scale: 1, rot: 0 })) };
     expect(errorsOf(script(crowd, { art: "classic" }))).toEqual([]);
     const about = SET_SHAPES_ND.highway_night + 9 * PROP_SHAPES_ND.car;
-    expect(about).toBeGreaterThan(480);
-    expect(errorsOf(script(crowd)).join(" ")).toContain(`is too busy to draw quickly (about ${about} shapes at once; the most is 480). Use fewer cars or characters in it (a character is about 92 shapes, a car ${PROP_SHAPES_ND.car}, a small prop 14).`);
+    expect(LIMITS.shapesNight).toBe(560);
+    expect(about).toBeGreaterThan(LIMITS.shapesNight);
+    expect(errorsOf(script(crowd)).join(" ")).toContain(`is too busy to draw quickly (about ${about} shapes at once; the most is 560). Use fewer cars or characters in it (a character is about 92 shapes, a car ${PROP_SHAPES_ND.car}, a small prop 14).`);
+  });
+
+  it("the busy scenes Bright allows fit night drive too: traffic round the own car, four people, three people and two cars", () => {
+    const cast = { c1: clone(PIP), c3: { ...clone(PIP), name: "Ada" }, c4: { ...clone(PIP), name: "Bo" }, c5: { ...clone(PIP), name: "Cy" } };
+    const car = (propId: string, x: number) => ({ propId, kind: "car" as const, x, y: 0.7, scale: 1, rot: 0 });
+    const own = script().scenes[0]!.props[0]!;
+    const rider = (castId: string) => ({ castId, x: 0.5, y: 0.74, facing: "right" as const, inCar: "car1" });
+    const standing = (ids: string[]) => ids.map((castId, i) => ({ castId, x: 0.2 + i * 0.2, y: 0.8, facing: "right" as const }));
+    const scenes = [
+      // two kids in their car with two other cars on the highway at night (the reviewers' 488 of 480 before)
+      { set: "highway_night" as const, actors: [rider("c1"), rider("c3")], props: [own, car("t1", 0.15), car("t2", 0.85)] },
+      { set: "highway_night" as const, actors: standing(["c1", "c3", "c4", "c5"]), props: [] },
+      { set: "highway_night" as const, actors: standing(["c1", "c3", "c4"]), props: [car("t1", 0.15), car("t2", 0.85)] },
+    ];
+    for (const sc of scenes) {
+      const s = script(sc, { cast });
+      expect(sceneShapes(s.scenes[0]!, "night_drive"), sc.actors.map((a) => a.castId).join(" ")).toBeGreaterThan(LIMITS.shapes);
+      expect(errorsOf(s)).toEqual([]);
+      expect(errorsOf({ ...s, art: "classic" })).toEqual([]);
+    }
   });
 });
 

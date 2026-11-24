@@ -59,8 +59,8 @@ export function ProductionScreen({ ws, page }: StoriesScreenProps) {
     const refIds = page.refIds ?? [];
     const castIds = page.castIds ?? [];
     // A new hand-over (another chat button, another reference video) starts the form again from its address.
-    const from = [page.ideaId ?? "", refIds.join(","), castIds.join(","), page.durationSec ?? "", page.seriesId ?? ""].join("|");
-    return <NewVideo key={from} ws={ws} ideaId={page.ideaId} refIds={refIds} castIds={castIds} durationSec={page.durationSec ?? null} seriesId={page.seriesId ?? null} />;
+    const from = [page.ideaId ?? "", refIds.join(","), castIds.join(","), page.durationSec ?? "", page.seriesId ?? "", page.art ?? ""].join("|");
+    return <NewVideo key={from} ws={ws} ideaId={page.ideaId} refIds={refIds} castIds={castIds} durationSec={page.durationSec ?? null} seriesId={page.seriesId ?? null} givenArt={page.art ?? null} />;
   }
   if (page.name === "production_story") return <StoryProduction ws={ws} storyId={page.storyId} />;
   return <ProductionList ws={ws} filter={filterOf(page.name === "production" ? page : {})} />;
@@ -202,7 +202,7 @@ function RunRow({ ws, story, job, onMoved }: { ws: string; story: Story; job: Pr
 
 // ---------- Make a new video ----------
 
-function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesId: givenSeries }: { ws: string; ideaId: string | null; refIds: string[]; castIds: string[]; durationSec: number | null; seriesId: string | null }) {
+function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesId: givenSeries, givenArt }: { ws: string; ideaId: string | null; refIds: string[]; castIds: string[]; durationSec: number | null; seriesId: string | null; givenArt: ArtStyle | null }) {
   const toast = useToast();
   const workspace = useWorkspace(ws);
   const cfg = (workspace?.configuration ?? {}) as Partial<StoriesConfig>;
@@ -228,7 +228,8 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
   const seriesList = useSeriesList(ws).list;
   const [length, setLength] = useState<number | null>(durationSec);
   const [shape, setShape] = useState<StoryFormat | null>(null);
-  const [art, setArt] = useState<ArtStyle | null>(null);
+  // the drawing style the address carries (the chat's Make the video, §45.45), else the workspace's
+  const [art, setArt] = useState<ArtStyle | null>(givenArt);
   const [captions, setCaptions] = useState<boolean | null>(null);
   const [mood, setMood] = useState<MusicMood | null>(null);
   const [problem, setProblem] = useState<string | null>(null);

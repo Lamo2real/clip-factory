@@ -4,7 +4,7 @@
 
 import { cel, grade, ink, inkPx, lift, lineUnits, ND, nightDrive } from "./art.ts";
 import { F } from "./frame.ts";
-import { DEG, clamp, clamp01, hex, mix, noise, shade, smoothstep } from "./math.ts";
+import { DEG, clamp, clamp01, hex, luminance, mix, noise, shade, smoothstep } from "./math.ts";
 import type { Pen } from "./pen.ts";
 import { arcPts, clipConvex, inflate, quadPts, superellipse } from "./pen.ts";
 import { drawFace, type FaceParams } from "./face.ts";
@@ -1012,7 +1012,8 @@ function hairNight(pen: Pen, g: Geo, look: CharacterLook, P: Paint): void {
   const style = look.hair.style;
   if (style === "none") return;
   const c = P.hair;
-  const strand = mix(c, "#0f0b0a", 0.35);
+  // the strand groups: a lighter tone on dark hair (a darker one would not show), a darker one on light hair
+  const strand = luminance(c) < 0.3 ? lift(c, 0.18) : mix(c, "#0f0b0a", 0.35);
   const rx = g.headRX;
   const ry = g.headRY;
   const m = P.mx;
@@ -1061,11 +1062,15 @@ function hairNight(pen: Pen, g: Geo, look: CharacterLook, P: Paint): void {
       const bump = Math.sqrt(Math.abs(Math.sin((i / 8) * Math.PI))) * 4.2;
       pts.push(Math.cos(a) * (crx + bump), Math.sin(a) * (cry + bump));
     }
-    // a soft fringe of small curls
+    // a soft fringe of small curls, joined to each temple by a rounded curve (not a straight cut)
+    const fy = (x: number) => fringe + 2 + 0.12 * ry * (x / rx) ** 2;
+    const ty = pts[pts.length - 1]!;
+    pts.push(...quadPts(crx, ty, rx * 0.86, ty, rx * 0.86, fy(rx * 0.86), 5).slice(2, -2));
     for (let k = 1; k < 20; k += 1) {
       const x = rx * 0.86 - (rx * 1.72 * k) / 20;
-      pts.push(x, fringe + 2 + 0.12 * ry * (x / rx) ** 2 + 1.4 * Math.sin((Math.PI * (k % 4)) / 4));
+      pts.push(x, fy(x) + 1.4 * Math.sin((Math.PI * (k % 4)) / 4));
     }
+    pts.push(...quadPts(-rx * 0.86, fy(-rx * 0.86), -rx * 0.86, pts[1]!, pts[0]!, pts[1]!, 5).slice(2, -2));
     pen.poly(inflate(pts, P.ow), P.O);
     pen.poly(pts, c);
     // four small curls
@@ -1117,12 +1122,15 @@ function accessoryNight(pen: Pen, g: Geo, look: CharacterLook, P: Paint, pose: {
     const ey = -ry * 0.06 + pose.nod * 3;
     const r = 4.6;
     const lw = P.ow * 1.4;
+    // round rims (28 points, smooth up close), and the bridge from one rim's inner edge to the other's
+    const ex = (s: number) => fx + s * sp * (1 - 0.22 * Math.max(0, -s * turn));
     for (const s of [-1, 1]) {
-      const ex = fx + s * sp * (1 - 0.22 * Math.max(0, -s * turn));
-      pen.line(arcPts(ex, ey, r, r * 0.86, 0, 360, 16), lw, P.O);
-      pen.line(arcPts(ex, ey, r * 0.7, r * 0.6, 200, 250, 3), lw * 0.7, "#ffffff", 0.35);
+      pen.line(arcPts(ex(s), ey, r, r * 0.86, 0, 360, 28), lw, P.O);
+      pen.line(arcPts(ex(s), ey, r * 0.7, r * 0.6, 200, 250, 3), lw * 0.7, "#ffffff", 0.35);
     }
-    pen.line(quadPts(fx - sp + r, ey - 1, fx, ey - 2.4, fx + sp - r, ey - 1, 4), lw, P.O);
+    const bl = ex(-1) + r;
+    const br = ex(1) - r;
+    pen.line(quadPts(bl, ey - 1, (bl + br) / 2, ey - 2.4, br, ey - 1, 4), lw, P.O);
     return;
   }
   if (acc === "helmet") {
@@ -1165,6 +1173,19 @@ function rimNight(pen: Pen, g: Geo, look: CharacterLook, P: Paint): void {
   const inset = P.ow * 0.55;
   const a0 = P.mx > 0 ? 200 : -110;
   const a1 = P.mx > 0 ? 290 : -20;
+  if (style === "curly" && acc !== "helmet") {
+    // along the curls' own outer edge (hairNight's 7 bumps from 182° to 358°), never across them
+    const pts: number[] = [];
+    for (let i = 0; i <= 24; i += 1) {
+      const deg = a0 + ((a1 - a0) * i) / 24;
+      const along = ((((deg - 182) % 360) + 360) % 360) / 176;
+      const bump = Math.sqrt(Math.abs(Math.sin(along * 7 * Math.PI))) * 4.2;
+      const a = deg * DEG;
+      pts.push(Math.cos(a) * (g.headRX + 2 + bump - inset), Math.sin(a) * (g.headRY + 2 + bump - inset));
+    }
+    pen.line(pts, P.ow, P.rim, P.rimA);
+    return;
+  }
   pen.line(arcPts(0, cy, g.headRX + ex - inset, ry + (acc === "helmet" || style === "cap" ? 0 : ex) - inset, a0, a1, 10), P.ow, P.rim, P.rimA);
 }
 

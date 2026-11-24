@@ -16,6 +16,7 @@
 // (§45.44) tells the series part when it is approved or deleted.
 import { ApiError, type ErrorCode } from "../../../api/errors.ts";
 import { CATALOG, CUTS, drawFrame, ENGINE_VERSION, fitDuration, normalizeScript, scaleCuts, sceneFrames, validateScript } from "../../engine/engine.ts";
+import { BOARDING } from "../../engine/script.ts";
 import { setInfo } from "../../engine/sets.ts";
 import type { ActionId, ArtStyle, Beat, CameraId, CarMember, CastMember, Expression, NoiseId, PropAction, PropKind, Scene, SceneActor, SceneProp, SetId, SfxId, ShotCue, ShotId, StoryScript } from "../../engine/types.ts";
 import { drawPrims } from "../../preview/draw.ts";
@@ -1492,10 +1493,16 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
           if (edit.durationSec !== undefined && edit.durationSec !== sc.durationSec) {
             if (edit.durationSec < 2 || edit.durationSec > 15) fail(400, "bad_request", "A scene can be 2 to 15 seconds long.");
             const f = edit.durationSec / sc.durationSec;
-            sc.beats = sc.beats.map((bt) => ({ ...bt, at: r1(bt.at * f), dur: r1(bt.dur * f) }));
+            const len = edit.durationSec;
+            // getting in or out keeps to its 0.8 to 3 s (BOARDING), as fitDuration and the API's _scale_scene do
+            sc.beats = sc.beats.map((bt) => {
+              const at = r1(bt.at * f);
+              const dur = r1(bt.dur * f);
+              return bt.do === "get_in" || bt.do === "get_out" ? { ...bt, at, dur: Math.min(r1(len - at), Math.max(BOARDING.min, Math.min(BOARDING.max, dur))) } : { ...bt, at, dur };
+            });
             sc.sfx = sc.sfx.map((c) => ({ ...c, at: r1(Math.min(edit.durationSec!, c.at * f)) }));
             // its cuts between shots too, as the API's _scale_scene and the engine's fitDuration (§45.45)
-            if (sc.cuts) sc.cuts = scaleCuts(sc.cuts, f, edit.durationSec);
+            if (sc.cuts) sc.cuts = scaleCuts(sc.cuts, f, edit.durationSec, sc);
             sc.durationSec = edit.durationSec;
             mark("animation", "sound", "captions", "assemble", "preview");
           }

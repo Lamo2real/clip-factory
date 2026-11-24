@@ -16,6 +16,7 @@ import { afterId, askedBefore, mergeMessages, titleFrom } from "../src/stories/c
 import { effortProblem, fileModels, FILE_DEFAULT, modelLabel, projectEffective, statusWords, withOverride } from "../src/stories/chat/models.ts";
 import { blocks, ChatText } from "../src/stories/chat/text.tsx";
 import { partRange, pictureProblem, putParts, titleFromName, UploadFailed, UploadStopped, videoProblem, videoType, type PartPut } from "../src/stories/chat/upload.ts";
+import { matchStories, storiesHref } from "../src/stories/routes.ts";
 import { ApiError } from "../src/api/errors.ts";
 
 const msg = (id: string, role: Message["role"], status: Message["status"] = "done", text = ""): Message => ({
@@ -65,6 +66,23 @@ describe("the director's buttons", () => {
     expect(planFor(act("make_video", { brief: { title: "x", logline: "y", category: "horror" } })).kind).toBe("broken");
     expect(planFor(act("make_video", { characterIds: ["../../x"] })).kind).toBe("broken");
     expect(planFor(act("make_video", { story: { characterIds: ["c1"], durationSec: "long" } })).kind).toBe("broken");
+  });
+
+  it("Make the video keeps the drawing style the director offered (§45.45), and Production › New reads it", () => {
+    for (const art of ["classic", "night_drive"] as const) {
+      const plan = planFor(act("make_video", { story: { characterIds: ["01JSTCH0000000000000000001"], ideaId: "01JSTID0000000000000000001", durationSec: 45, art } }));
+      const href = `/stories/production/new?idea=01JSTID0000000000000000001&cast=01JSTCH0000000000000000001&sec=45&art=${art}`;
+      expect(plan).toEqual({ kind: "go", href });
+      const page = matchStories("/stories/production/new", `?${href.split("?")[1]}`);
+      expect(page).toMatchObject({ name: "production_new", art });
+      expect(storiesHref(page)).toBe(href);
+    }
+    // left out, or null: the workspace's own style, and the address has no art
+    expect(planFor(act("make_video", { story: { characterIds: ["c1"], art: null } }))).toEqual({ kind: "go", href: "/stories/production/new?cast=c1" });
+    expect(matchStories("/stories/production/new", "?cast=c1")).not.toHaveProperty("art");
+    expect(matchStories("/stories/production/new", "?art=noir")).not.toHaveProperty("art");
+    // any other style is a broken button
+    expect(planFor(act("make_video", { story: { characterIds: ["c1"], art: "noir" } })).kind).toBe("broken");
   });
 
   it("reads the agent's own payloads exactly as tools.py sends them", async () => {

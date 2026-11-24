@@ -354,7 +354,9 @@ function drawFaceNight(pen: Pen, rx: number, ry: number, look: CharacterLook, fa
   }
   if (face.red > 0.02) pen.ellipse(fx, -ry * 0.38, rx * 0.78, ry * 0.42, 0, ND.flush, 0.1 * face.red);
 
-  // eyes: tiny dots, no white
+  // eyes: tiny dots, no white, tinted with the picked eye colour (55 % of it in the place's light, so a dark pick
+  // stays a near-black dot and a bright one shows); big enough (6+ design px per unit), a dark pupil sits in the dot
+  const eyeC = mix(ND.eye, grade(hex(look.eyes.color, "#1c1842")), 0.55);
   const shape = look.eyes.shape;
   const [sw, sh] = shape === "oval" ? [0.88, 1.18] : [1, 1];
   const closedBy = face.eyes === "normal" || face.eyes === "lidded" ? blink(seed, t) : 0;
@@ -368,11 +370,11 @@ function drawFaceNight(pen: Pen, rx: number, ry: number, look: CharacterLook, fa
     const erx = 1.25 * sw * dot * (1 - 0.15 * far);
     const ery = 1.55 * sh * dot;
     if (face.eyes === "happy") {
-      pen.line(arcPts(ex, ey + 1.3, 2.3, 2, 200, 340, 6), arcW, ND.eye);
+      pen.line(arcPts(ex, ey + 1.3, 2.3, 2, 200, 340, 6), arcW, eyeC);
       continue;
     }
     if (face.eyes === "closed") {
-      pen.line(arcPts(ex, ey - 1, 2.1, 1.6, 20, 160, 6), arcW, ND.eye);
+      pen.line(arcPts(ex, ey - 1, 2.1, 1.6, 20, 160, 6), arcW, eyeC);
       continue;
     }
     if (face.eyes === "spiral") {
@@ -383,14 +385,14 @@ function drawFaceNight(pen: Pen, rx: number, ry: number, look: CharacterLook, fa
         const r = 0.3 + (i / 14) * 2.1;
         pts.push(ex + Math.cos(a) * r, ey + Math.sin(a) * r);
       }
-      pen.line(pts, 0.55, ND.eye);
+      pen.line(pts, 0.55, eyeC);
       continue;
     }
     const x = ex + lookX * rx * 0.06;
     const y = ey + lookY * ry * 0.05;
     if (closedBy > 0.55) {
       // a blink squashes the dot to a short line
-      pen.line([x - erx * 1.2, y + 0.3, x + erx * 1.2, y + 0.3], 0.75, ND.eye);
+      pen.line([x - erx * 1.2, y + 0.3, x + erx * 1.2, y + 0.3], 0.75, eyeC);
       continue;
     }
     const h = ery * (1 - closedBy * 0.8);
@@ -398,11 +400,12 @@ function drawFaceNight(pen: Pen, rx: number, ry: number, look: CharacterLook, fa
       // half-lidded: the dot under a flat lid line
       const edge = y - h + 2 * h * Math.min(0.85, lid);
       const eye = arcPts(x, y, erx, h, 0, 360, 14).slice(0, -2);
-      pen.poly(clipConvex(eye, [x - 9, edge, x + 9, edge, x + 9, y + 9, x - 9, y + 9]), ND.eye);
-      pen.line([x - erx * 1.55, edge, x + erx * 1.55, edge], 0.6, ND.eye);
+      pen.poly(clipConvex(eye, [x - 9, edge, x + 9, edge, x + 9, y + 9, x - 9, y + 9]), eyeC);
+      pen.line([x - erx * 1.55, edge, x + erx * 1.55, edge], 0.6, eyeC);
       continue;
     }
-    pen.ellipse(x, y, erx, h, 0, ND.eye);
+    pen.ellipse(x, y, erx, h, 0, eyeC);
+    if (u >= 6) pen.ellipse(x + lookX * erx * 0.12, y + h * 0.06, erx * 0.52, h * 0.52, 0, ND.eye);
     if (u >= 8) pen.circle(x - erx * 0.32, y - h * 0.36, 0.4, ND.glint);
   }
 

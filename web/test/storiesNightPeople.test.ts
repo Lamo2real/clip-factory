@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest";
 import { grade, ink, inkPx, LIGHTS, ND, withWarm } from "../src/stories/engine/art.ts";
 import { FACES, NOISE_MOUTH } from "../src/stories/engine/face.ts";
 import { F, inFrame, withArt } from "../src/stories/engine/frame.ts";
+import { mix } from "../src/stories/engine/math.ts";
 import { actorState, faceSince, restPose, shownExpression, STYLES } from "../src/stories/engine/motion.ts";
 import { Pen } from "../src/stories/engine/pen.ts";
 import { drawBust, drawCharacter, drawFoot, drawWheelHands, geometry, headTop, REST, type Pose } from "../src/stories/engine/rig.ts";
@@ -138,7 +139,31 @@ describe("classic draws exactly as before", () => {
     const night = lit("night_drive", "night", () => standing(l));
     expect(classic.some((p) => p.k === "ellipse" && p.color === "#ffffff")).toBe(true);
     expect(night.some((p) => (p.k === "ellipse" || p.k === "circle") && p.color === "#ffffff")).toBe(false);
-    expect(night.filter((p) => p.k === "ellipse" && p.color === ND.eye)).toHaveLength(2);
+    const dot = lit("night_drive", "night", () => mix(ND.eye, grade("#1c1842"), 0.55));
+    expect(night.filter((p) => p.k === "ellipse" && p.color === dot)).toHaveLength(2);
+  });
+});
+
+describe("the picked eye colour", () => {
+  it("tints night drive's dot eyes, standing and up close, and a pupil shows in the close-up", () => {
+    const navy = look();
+    const green = look({ eyes: { shape: "round", color: "#47d6a0" } });
+    expect(lit("night_drive", "night", () => standing(green))).not.toEqual(lit("night_drive", "night", () => standing(navy)));
+    const g = geometry(green);
+    const close = (l: CharacterLook) =>
+      lit("night_drive", "cabin", () => {
+        const pen = new Pen();
+        const s = (0.3 * 1080) / g.headRX;
+        pen.translate(540, 0.47 * 1920);
+        pen.scale(s, s);
+        drawBust(pen, l, g, { ...REST, turn: 0 }, { t: 1.3, seed: 4, face: FACES.neutral, inCar: true, view: "front" });
+        return pen.out;
+      });
+    const a = close(green);
+    expect(a).not.toEqual(close(navy));
+    const tint = lit("night_drive", "cabin", () => mix(ND.eye, grade("#47d6a0"), 0.55));
+    expect(a.filter((p) => p.k === "ellipse" && p.color === tint)).toHaveLength(2);
+    expect(a.filter((p) => p.k === "ellipse" && p.color === ND.eye)).toHaveLength(2);
   });
 });
 

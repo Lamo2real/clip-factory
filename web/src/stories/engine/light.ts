@@ -51,12 +51,14 @@ export function lightFor(set: SetId, part: LightPart, warm: number): Light {
 }
 
 /** The vignette's rings: the frame outside an ellipse (rx, ry as parts of half the frame) darkened by `a` at night.
- * Two gentle steps in the corners only: steps of 0.10 across the whole frame showed as rings in a flat night sky
- * and cost a full frame of rasterizing each; these darken the corners by about 0.19 and leave the middle of each edge
- * alone. */
+ * Four soft steps of 0.05, close together, in the corners only: steps of 0.10 showed as oval rings in a flat night
+ * sky, and rings across the whole frame cost a full frame of rasterizing each; these darken the corners by about 0.19
+ * with a gentle falloff and leave the middle of each edge alone. */
 const RINGS: [number, number, number][] = [
-  [1.25, 1.15, 0.1],
-  [1.14, 1.06, 0.1],
+  [1.27, 1.17, 0.05],
+  [1.21, 1.12, 0.05],
+  [1.15, 1.08, 0.05],
+  [1.1, 1.04, 0.05],
 ];
 const RING_SEGS = 36;
 

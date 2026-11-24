@@ -266,22 +266,33 @@ the same prims for a missing `art` and for `"classic"`. `inFrame` puts the style
   scene. Driver's eyes, Side window, Mirror, Speed dial, Feet on the pedals and Behind the car need someone sitting
   in a car or truck on a road place, never while that rider gets in or out; Down the road needs a road; Face up
   close needs a person (and, for a person in a car, what the car shots need). `normalizeScript` sorts them;
-  `fitDuration` (and the API's and the mock's scene-length edits, `scaleCuts`) scale them with their scene and drop
-  any cut that breaks the 0.6 s rules. `rules.ts` tells the writer as `shots` and `shot_world`.
+  `fitDuration` (and the API's and the mock's scene-length edits, `scaleCuts`) scale them with their scene: a cut
+  less than 0.6 s before the new end is dropped, of two cuts less than 0.6 s apart the later one is kept, and a shot
+  in the car that would now show its rider getting in or out goes back to the whole scene, so a valid script stays
+  valid at any length (getting in or out also keeps its 0.8 to 3 s). `rules.ts` tells the writer as `shots` and
+  `shot_world`.
 * **Shapes.** In night drive `sceneShapes(scene, "night_drive")` is the larger of the whole scene's estimate and
-  each cut's shot. The whole scene is its place's measured count (`sets.ts SET_SHAPES_ND`, e.g. 116 for
-  `highway_night` and 94 for `road_night`), 92 a character, the measured props (`props.ts PROP_SHAPES_ND`: 58 a car,
+  each cut's shot. The whole scene is its place's measured count (`sets.ts SET_SHAPES_ND`, e.g. 135 for
+  `highway_night` and 111 for `road_night`), 92 a character, the measured props (`props.ts PROP_SHAPES_ND`: 58 a car,
   60 a truck, 30 a deer), 72 a car of the cast (`car.ts CAR_CAST_SHAPES_ND`) and any other prop 2 more than in
   Bright. A shot is its measured count (`shots.ts SHOT_SHAPES`, its place, the inside of the car, the own car and the
-  driver) plus 34 (`car.ts CAR_VIEW_SHAPES`) for each other car or truck it may show, at most 4. The limit stays 480.
+  driver) plus 34 (`car.ts CAR_VIEW_SHAPES`) for each other car or truck it may show, at most 4. Night drive's limit
+  is `LIMITS.shapesNight`, 560 (Bright's stays 480): every night estimate is the busiest look, light and camera,
+  about a fifth over what a scene really draws, so two kids in their car with two other cars on the highway at
+  night, four people, or three people and two cars fit as they do in Bright.
 * **Where it is drawn.**
   * `art.ts`: the tokens (`ND`), the lights, `grade`, `cel`, `lift`, `ink`, `inkPx`, `lineUnits`, `glow`, `withWarm`.
   * `light.ts`: which light each part stands in (`lightFor`), the lamps' warm pulse that rolls with the road
-    (`lampWarm`, a lamp every 40 m), the vignette and the warm sweep over the dashboard and the face.
-  * `rig.ts`, `face.ts`: the night people (dot eyes, short thick brows, soft scalloped hair, cel shadows, rim light,
-    folds) and three new drawings for the shots, both styles: `drawBust` (front or three-quarter, from the head's
-    centre), `drawWheelHands` and `drawFoot`. `motion.ts` gives `faceSince`, so the brows overshoot a new face by 20%
-    for 0.12 s.
+    (`lampWarm`, a lamp every 40 m), the vignette (four soft steps of 0.05 in the corners) and the warm sweep over
+    the dashboard and the face.
+  * `sets.ts lampGlow`: a street lamp is a soft gold bloom (six stacked halos with small alpha steps, gold to orange,
+    at most r × 3.2) round a cobra head: a dark dome over a warm yellow lens (`ND.lampHead`) with a small white-hot
+    centre; no cone of light under it. Headlights bloom the same soft way (`car.ts bloom`, four halos).
+  * `rig.ts`, `face.ts`: the night people (dot eyes tinted with the picked eye colour, a pupil up close, short thick
+    brows, soft scalloped hair with strand groups, cel shadows, rim light along the hair's own edge, folds) and three
+    new drawings for the shots, both styles: `drawBust` (front or three-quarter, from the head's centre),
+    `drawWheelHands` and `drawFoot`. `motion.ts` gives `faceSince`, so the brows overshoot a new face by 20% for
+    0.12 s.
   * `car.ts`, `props.ts`: the night cars and props (three paint tones, door lines, handles, mirror, side marker, glass
     reflections, rims, headlight bloom, tail and brake glow, soft shadows); `carView.ts`: a car or truck from the
     back or the front (`drawCarView`, `drawPropView`), boxy with a side towards the vanishing point, for the shots.

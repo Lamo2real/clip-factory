@@ -159,13 +159,14 @@ def test_a_keyhole_polygon_leaves_its_hole_empty() -> None:
 
 
 # Night drive's four frames pinned prim by prim by the web's storiesEngineNight.test.ts (§45.45 §12): raster.py
-# draws them without a problem, and six places in them average within 6 of the palette's tokens, so the agent's
+# draws them without a problem, and seven places in them average within 6 of the palette's tokens, so the agent's
 # final video shows the colours the preview paints.
 NIGHT_GOLDEN = REPO / "web" / "test" / "fixtures" / "stories-engine-night.json"
 NIGHT_REGIONS: list[tuple[str, tuple[int, int, int, int], str, str]] = [
     ("scene", (500, 10, 580, 40), "#141f3d", "the top of the night sky (ND.skyTop)"),
     ("scene", (950, 950, 1000, 990), "#1d3339", "the far mountains (ND.mtnFar)"),
-    ("scene", (240, 868, 264, 874), "#fffdf1", "a street lamp's core (ND.lampCore)"),
+    ("scene", (245, 874, 261, 877), "#fffdf1", "a street lamp's white-hot centre (ND.lampCore)"),
+    ("scene", (228, 873, 236, 876), "#ffd47a", "the lamp's warm yellow lens round it (ND.lampHead)"),
     ("driver_view", (450, 1000, 650, 1040), "#2e2a20", "the road through the windscreen (ND.asphalt)"),
     ("driver_view", (900, 1150, 1000, 1200), "#46454b", "the dashboard's top (ND.dashTop)"),
     ("face", (350, 940, 600, 990), "#9c8270", "the sample's skin #f2c9a0 in the cabin light (art.ts grade)"),

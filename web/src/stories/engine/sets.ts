@@ -15,7 +15,7 @@ import { grade, ND, nightDrive } from "./art.ts";
 import { F, X, Y } from "./frame.ts";
 import { mix, rand, shade } from "./math.ts";
 import type { Pen } from "./pen.ts";
-import { starPts } from "./pen.ts";
+import { arcPts, starPts } from "./pen.ts";
 import { drawWeather } from "./props.ts";
 import type { SetId } from "./types.ts";
 
@@ -671,12 +671,31 @@ export const NIGHT_SKY: [number, string][] = [
   [1, ND.skyHorizon],
 ];
 
-/** A street lamp's light: three halos (r × 5, 3 and 1.6 at 0.07, 0.16 and 0.38) and the head. `k` dims the halos. */
-export function lampGlow(pen: Pick<Pen, "circle" | "ellipse">, x: number, y: number, r: number, rx: number, ry: number, k = 1): void {
-  pen.circle(x, y, r * 5, ND.halo3, 0.07 * k);
-  pen.circle(x, y, r * 3, ND.halo2, 0.16 * k);
-  pen.circle(x, y, r * 1.6, ND.halo1, 0.38 * k);
-  pen.ellipse(x, y, rx, ry, 0, ND.lampCore);
+/** A street lamp's bloom: six stacked halos with small alpha steps, so it falls off softly from gold near the head
+ * (ND.halo1) through ND.halo2 to an orange edge (ND.halo3) at r × 3.2. Stacked circles, no gradient, so both drawers
+ * paint it the same. */
+const LAMP_HALOS: readonly [number, "halo1" | "halo2" | "halo3", number][] = [
+  [3.2, "halo3", 0.035],
+  [2.6, "halo3", 0.05],
+  [2.1, "halo2", 0.07],
+  [1.7, "halo2", 0.11],
+  [1.4, "halo1", 0.2],
+  [1.15, "halo1", 0.42],
+];
+
+/** A street lamp's light (§45.45): the soft gold bloom (LAMP_HALOS, dimmed by `k`), then the head: given a `housing`
+ * colour, a cobra head (a dark dome over the lens, which glows on its underside only), else the whole lens; the lens
+ * is warm yellow (ND.lampHead) with a small white-hot centre (ND.lampCore). */
+export function lampGlow(pen: Pick<Pen, "circle" | "ellipse" | "poly">, x: number, y: number, r: number, rx: number, ry: number, k = 1, housing?: string): void {
+  for (const [m, c, a] of LAMP_HALOS) pen.circle(x, y, r * m, ND[c], a * k);
+  if (housing) {
+    pen.poly(arcPts(x, y + ry * 0.15, rx * 1.1, ry * 1.6, 180, 360, 10), housing);
+    pen.poly(arcPts(x, y, rx, ry, 0, 180, 10), ND.lampHead);
+    pen.ellipse(x, y + ry * 0.4, rx * 0.5, ry * 0.35, 0, ND.lampCore);
+    return;
+  }
+  pen.ellipse(x, y, rx, ry, 0, ND.lampHead);
+  pen.ellipse(x, y, rx * 0.5, ry * 0.45, 0, ND.lampCore);
 }
 
 const LAMP_EVERY = 520;
@@ -725,8 +744,8 @@ function nightSide(highway: boolean, env: SetEnv): void {
     pen.rect(x - 7, baseY - 330, 14, 330, 4, ND.pole);
     pen.rect(x + 1, baseY - 330, 6, 330, 3, ND.poleDark);
     pen.rect(x - 7, baseY - 334, 90, 11, 5, ND.pole);
-    pen.poly([x + 58, baseY - 318, x + 94, baseY - 318, x + 76 + 170, S.roadTop + 70 * S.sy, x + 76 - 170, S.roadTop + 70 * S.sy], ND.cone, 0.05);
-    lampGlow(pen, x + 76, baseY - 318, 30, 30, 9);
+    // no cone of light under it (that read as a spotlight): the soft bloom and the pool on the road
+    lampGlow(pen, x + 76, baseY - 318, 30, 30, 9, 1, ND.pole);
   }
   // the ground: the far verge, then the guard rail (or reflector posts) along it
   env.layer(1);
@@ -907,20 +926,20 @@ export function roadLook(set: SetId): RoadLook {
  * web/test/storiesNightShots.test.ts on every view, camera and size): the writer's estimate (script.ts sceneShapes)
  * can read it. */
 export const SET_SHAPES_ND: Record<SetId, number> = {
-  studio: 34,
-  road_day: 54,
-  road_night: 94,
-  icy_road: 70,
+  studio: 36,
+  road_day: 58,
+  road_night: 111,
+  icy_road: 76,
   snowy_road: 98,
   rainy_road: 106,
-  foggy_road: 44,
-  highway: 70,
-  country_road: 64,
-  city_street: 90,
-  parking_lot: 58,
-  kitchen: 38,
-  living_room: 34,
-  office: 41,
+  foggy_road: 46,
+  highway: 76,
+  country_road: 68,
+  city_street: 96,
+  parking_lot: 64,
+  kitchen: 40,
+  living_room: 36,
+  office: 43,
   park: 68,
-  highway_night: 116,
+  highway_night: 135,
 };

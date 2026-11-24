@@ -35,6 +35,10 @@ DEFAULT_MOOD: Final = {
 ASPECTS: Final = shapes.ASPECTS
 ARTS: Final = shapes.ARTS
 CUT_GAP: Final = 0.6  # cuts between shots stay this far apart and this far before the scene's end (§45.45)
+# The shots from inside or right behind the driver's car (§45.45): they need their rider sitting in it, never getting in
+# or out (the engine's CAR_SHOTS). Getting in or out takes 0.8 to 3 s (the engine's BOARDING).
+CAR_SHOTS: Final = frozenset({"driver_view", "side_window", "mirror", "speed_dial", "pedals", "road_behind"})
+BOARDING: Final = (0.8, 3.0)
 FORMAT_SET: Final = "The video's size is set once it is made. Make a new video for another size."
 MAX_SECONDS = 89.5  # Facebook Reels' 90 s limit, with room for the audio tail (§45.9)
 MAX_REFERENCES = 3  # reference videos per story (§45.28)
@@ -571,26 +575,34 @@ def _switches(edit: _Edit, new: dict[str, Any], patch: Mapping[str, Any]) -> Non
 
 
 def _scale_scene(scene: dict[str, Any], seconds: float) -> None:
-    """A new scene length: its beats, effects and cuts keep their place in it (as ``fitDuration`` scales them)."""
+    """A new scene length: its beats, effects and cuts keep their place in it (as ``fitDuration`` scales them). Getting
+    in or out of a car keeps to its 0.8 to 3 s, and the cuts are scaled after the beats, so a valid scene stays valid."""
     length = float(scene.get("durationSec") or 0)
     ratio = seconds / length if length > 0 else 1.0
     for beat in scene.get("beats") or []:
         if isinstance(beat, dict):
             beat["at"] = round(float(beat.get("at") or 0) * ratio, 3)
             beat["dur"] = round(float(beat.get("dur") or 0) * ratio, 3)
+            if beat.get("do") in ("get_in", "get_out"):
+                lo, hi = BOARDING
+                beat["dur"] = round(min(max(0.0, seconds - beat["at"]), hi, max(lo, beat["dur"])), 3)
     scene["sfx"] = [
         {**cue, "at": round(float(cue.get("at") or 0) * ratio, 3)}
         for cue in scene.get("sfx") or []
         if isinstance(cue, Mapping)
     ]
     if isinstance(scene.get("cuts"), list):
-        scene["cuts"] = scale_cuts(scene["cuts"], ratio, seconds)
+        scene["cuts"] = scale_cuts(scene["cuts"], ratio, seconds, scene)
     scene["durationSec"] = _int_or_float(seconds)
 
 
-def scale_cuts(cuts: list[Any], ratio: float, seconds: float) -> list[dict[str, Any]]:
+def scale_cuts(
+    cuts: list[Any], ratio: float, seconds: float, scene: Mapping[str, Any] | None = None
+) -> list[dict[str, Any]]:
     """A scene's cuts between shots (§45.45) scaled with it, as the engine's ``scaleCuts``: each ``at`` times
-    ``ratio``; a cut less than 0.6 s after the one kept before it, or less than 0.6 s before the new end, is dropped."""
+    ``ratio``; a cut less than 0.6 s before the new end is dropped, and of two cuts less than 0.6 s apart the later one
+    is kept (it decides what shows from then on). Given the scene (its beats already scaled), a shot in a car that
+    would now show while its rider gets in or out goes back to the whole scene."""
     out: list[dict[str, Any]] = []
     for cut in cuts:
         if not isinstance(cut, Mapping):
@@ -599,9 +611,44 @@ def scale_cuts(cuts: list[Any], ratio: float, seconds: float) -> list[dict[str, 
         if at >= seconds - CUT_GAP:
             continue
         if out and at - float(out[-1]["at"]) < CUT_GAP - 1e-9:
-            continue
+            out.pop()
         out.append({**cut, "at": _int_or_float(at)})
+    if scene is None:
+        return out
+    kinds = {p.get("propId"): p.get("kind") for p in scene.get("props") or [] if isinstance(p, Mapping)}
+    actors = [a for a in scene.get("actors") or [] if isinstance(a, Mapping)]
+    riders = [
+        a.get("castId") for a in actors if a.get("inCar") is not None and kinds.get(a.get("inCar")) in ("car", "truck")
+    ]
+    actor_ids = [a.get("castId") for a in actors]
+    boarding = [
+        b
+        for b in scene.get("beats") or []
+        if isinstance(b, Mapping)
+        and b.get("do") in ("get_in", "get_out")
+        and isinstance(b.get("at"), int | float)
+        and isinstance(b.get("dur"), int | float)
+    ]
+    for i, cut in enumerate(out):
+        until = float(out[i + 1]["at"]) if i + 1 < len(out) else seconds
+        rider = _seated_for(cut, riders, actor_ids)
+        at = float(cut["at"])
+        if rider is not None and any(
+            b.get("who") == rider and b["at"] < until - 1e-9 and b["at"] + b["dur"] > at + 1e-9 for b in boarding
+        ):
+            out[i] = {"at": cut["at"], "shot": "scene"}
     return out
+
+
+def _seated_for(cut: Mapping[str, Any], riders: list[Any], actor_ids: list[Any]) -> Any:
+    """The rider a cut's shot shows sitting in a car (the engine's checkCuts rule), or None."""
+    who = cut.get("who")
+    if cut.get("shot") == "face":
+        person = who if who is not None else (riders[0] if riders else (actor_ids[0] if actor_ids else None))
+        return person if person is not None and person in riders else None
+    if cut.get("shot") in CAR_SHOTS:
+        return who if who is not None and who in riders else (riders[0] if riders else None)
+    return None
 
 
 def _scene_edit(edit: _Edit, scene: dict[str, Any], change: Mapping[str, Any]) -> None:

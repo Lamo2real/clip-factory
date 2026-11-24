@@ -5276,3 +5276,74 @@ set estimates, and `SHAPES_ND.props` is `PROP_SHAPES_ND`. The writer's "too busy
 - `test_stories_raster.py`: the keyhole golden, and the four night golden frames rasterized through `raster.py` with
   no prim problems and six places (the sky's top, the far mountains, a lamp's core, the road, the dashboard's top, a
   face) within 6 of their colours.
+
+#### 45.45.19 What the review changed (24 Nov; wins over anything above in §45.45)
+
+Three reviews compared the build with the owner's reference and with every older feature. What they found, and what
+changed:
+
+- **Street lamps glow gold, not grey** (`sets.ts lampGlow`). The bloom is six stacked halos with small alpha steps:
+  r × 3.2, 2.6, 2.1, 1.7, 1.4 and 1.15 at 0.035, 0.05, 0.07, 0.11, 0.2 and 0.42, in `ND.halo3`, `halo3`, `halo2`,
+  `halo2`, `halo1` and `halo1`. The old three discs at r × 5 had hard rings and covered heads in the wide shots. The
+  head is a cobra head: a dark dome in the pole's colour, a warm yellow lens on its underside (new token
+  `ND.lampHead` `#ffd47a`) and a small white-hot centre (`ND.lampCore`). Lamps through a window keep the whole lens.
+  The cones of light under the lamps are gone, in the side view and in perspective, because they read as
+  spotlights. Far lamps are `ND.lampHead` dots. Headlights bloom the same soft way: `car.ts bloom` uses four halos,
+  r × 3.6, 2.6, 1.8 and 1.3 at 0.04, 0.08, 0.16 and 0.34 × k.
+- **The picked eye colour shows in night drive** (`face.ts drawFaceNight`). The dot eyes are `ND.eye` mixed 55 %
+  with the graded eye colour. From 6 design px per unit (the close-ups and the editor's preview) a dark `ND.eye`
+  pupil sits in the dot. Before this, the Characters editor's Eye colour pick did nothing in the default style.
+- **A valid script stays valid at any length** (`script.ts scaleCuts`, the API's `stories.py scale_cuts`).
+  `fitDuration`, the API's scene-length edit and the mock's all scale the beats first; getting in or out keeps its
+  0.8 to 3 s. Then they scale the cuts:
+  - A cut less than 0.6 s before the new end is dropped.
+  - Of two cuts less than 0.6 s apart, the later one is kept, because it decides what shows from then on.
+  - With the scene given, a shot in the car that would now show its rider getting in or out goes back to the whole
+    scene. The rider is read the same way as `checkCuts` reads it.
+- **The director's drawing style reaches Production › New.** `offer_make_video`'s `art` rides on the Make the video
+  button: `ProductionPrefill.art`, then `?art=` (`night_drive` or `classic`), then `StoriesPage.production_new.art`
+  (only when the address has a known style). New › starts on it, as "Just for this video". Any other value makes the
+  button broken.
+- **Night drive's own shape limit** is `LIMITS.shapesNight`, 560. Bright's `LIMITS.shapes` stays 480. The night
+  estimates are each the busiest look, light and camera, and they run about a fifth over what a scene draws. Measured:
+  two cars with two riders each on `highway_night` are estimated at 633 and draw at most 492. These scenes now fit, as
+  they do in Bright: two kids in their car with two other cars on the highway at night, four people standing, and
+  three people with two cars. The "300 random valid scenes" test still holds every night frame to 480 + 40.
+- **Drawing fixes:**
+  - The rim light on curly hair follows the curls' own outer edge, never across them.
+  - The curly cap meets the fringe with a rounded curve, not a straight cut.
+  - Strand groups on dark hair are a lighter tone (`lift(hair, 0.18)`), so they show.
+  - Glasses rims have 28 points, and the bridge runs from rim to rim.
+  - The speed dial's needle tail points straight back through the hub (v + 16/3). The numbers sit at 0.70 r, clear
+    of the 0.06 S major ticks. The tip glow is two small warm discs.
+  - The vignette has four soft steps of 0.05 (16 corner pieces), not two of 0.10, so no oval ring shows in a flat
+    night sky.
+  - In 9:16, Mirror sits high on the windscreen (0.30 H), with the road's horizon at 0.45 H under it, so the far
+    road, rails and lane lines fill the windscreen. Its lit top edge follows the housing, not a circle through the
+    sky.
+  - In 9:16, Down the road has its horizon at 0.5 H and the own car 7 m ahead (12 m in wider frames).
+- **Settings › Video** tells the open previews about a new drawing style only after the save succeeds. A refused
+  save puts the page back to the stored style, and the previews never left it.
+- **Measured budgets now:**
+  - `SET_SHAPES_ND`: studio 36, road_day 58, road_night 111, icy_road 76, snowy_road 98, rainy_road 106,
+    foggy_road 46, highway 76, country_road 68, city_street 96, parking_lot 64, kitchen 40, living_room 36, office 43,
+    park 68, highway_night 135.
+  - `SHOT_SHAPES`: driver_view 260 and mirror 185; the rest are unchanged.
+  - `ENGINE_VERSION` stays 7, because 7 has not shipped. The night golden is written again. The Bright golden is
+    byte-identical.
+- **Not changed, as follow-ups:**
+  - The sky gradient's 8-bit steps. A dither needs the same pattern in `draw.ts` and `raster.py`, and new raster
+    goldens.
+  - `raster.py`'s polygon fill speed (§45.45.18).
+  - `WorkspaceArt` reading the workspace once more.
+  - The sample video's overlap of a truck cab and a car's eyes. It did not reproduce with the night fixture: every
+    car's eyes and riders are drawn in its own depth slot.
+- **Tests:**
+  - `test_stories_raster.py` checks seven places now. A lamp's white-hot centre and its yellow lens replace the old
+    core.
+  - New tests:
+    - the picked eye colour (`storiesNightPeople`);
+    - valid scripts at every new length, and the busy scenes that now fit (`storiesNightScript`);
+    - the director's style through the address (`storiesChatParts`);
+    - the previews hearing a style only once it is saved (`storiesSettings`);
+    - the API's scene-length edit keeping boarding valid (`test_ws_story_art.py`).

@@ -77,6 +77,8 @@ export const ND = {
   pole: "#364767",
   poleDark: "#263248",
   lampCore: "#fffdf1",
+  /** the lamp's warm yellow lens around its small white-hot centre (lampCore) */
+  lampHead: "#ffd47a",
   halo1: "#ffcf7a",
   halo2: "#ffb35c",
   halo3: "#ff9a3c",

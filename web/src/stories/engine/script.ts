@@ -31,8 +31,11 @@ export const SCENE_MAX = 15;
 /** How many people sit in each vehicle (a driver and one passenger in a car, a driver in a truck's cab). */
 export const SEATS = { car: 2, truck: 1 } as const;
 
-/** Limits that keep every frame light enough for the agent's rasterizer; `cars` is the script's own cars (§45.43). */
-export const LIMITS = { scenes: 30, cast: 6, cars: 2, actors: 4, props: 12, beats: 40, sfx: 40, captions: 40, totalSec: 180, shapes: 480 };
+/** Limits that keep every frame light enough for the agent's rasterizer; `cars` is the script's own cars (§45.43).
+ * `shapesNight` is the night drive style's (§45.45): its estimates (SHAPES_ND, SET_SHAPES_ND, the shots) are each the
+ * busiest look, light and camera, about a fifth over what a scene really draws, so a night scene may be estimated at
+ * up to 560 and still draws about what a Bright scene at 480 does. */
+export const LIMITS = { scenes: 30, cast: 6, cars: 2, actors: 4, props: 12, beats: 40, sfx: 40, captions: 40, totalSec: 180, shapes: 480, shapesNight: 560 };
 
 /** About how many shapes (prims) each thing adds to a frame at its busiest (measured on the busiest sets, with every
  * action it can do); weather draws once however many of it there are. */
@@ -70,8 +73,9 @@ export const SHOT_ESTIMATES: Readonly<Record<ShotId, number>> = SHOT_SHAPES;
 export const SHOT_CAR = CAR_VIEW_SHAPES;
 export const SHOT_CARS = SHOT_CARS_MAX;
 
-/** A scene's busiest frame, roughly, in shapes: validateScript keeps it at most LIMITS.shapes. In night drive it is
- * the larger of the whole scene's estimate and each cut's shot (its own estimate plus the other cars it shows). */
+/** A scene's busiest frame, roughly, in shapes: validateScript keeps it at most LIMITS.shapes (shapesNight in night
+ * drive). In night drive it is the larger of the whole scene's estimate and each cut's shot (its own estimate plus the
+ * other cars it shows). */
 export function sceneShapes(scene: { set?: unknown; actors?: unknown; props?: unknown; cuts?: unknown }, art: ArtStyle = "classic"): number {
   if (art !== "night_drive") return classicShapes(scene);
   const night = scene.set === "road_night" || scene.set === "highway_night";
@@ -449,11 +453,12 @@ function checkScene(sc: unknown, i: number, castIds: string[], seenScenes: Set<s
 
   if (props && actors && props.length <= LIMITS.props && actors.length <= LIMITS.actors) {
     const shapes = sceneShapes(sc, art);
-    if (shapes > LIMITS.shapes) {
+    const nd = art === "night_drive";
+    const most = nd ? LIMITS.shapesNight : LIMITS.shapes;
+    if (shapes > most) {
       const plural: Record<string, string> = { car: "cars", truck: "trucks", deer: "deer" };
       const heavy = [...new Set(props.map((p) => plural[(isObj(p) && (p.kind as string)) || ""]).filter((v): v is string => !!v))];
-      const nd = art === "night_drive";
-      err(`${where}: is too busy to draw quickly (about ${shapes} shapes at once; the most is ${LIMITS.shapes}). Use fewer ${[...heavy, "characters"].join(", ").replace(/, ([^,]*)$/, " or $1")} in it (a character is about ${nd ? SHAPES_ND.actor : SHAPES.actor} shapes, a car ${nd ? SHAPES_ND.props.car : SHAPES.props.car}, a small prop ${nd ? SHAPES.prop + SHAPES_ND.prop : SHAPES.prop}).`);
+      err(`${where}: is too busy to draw quickly (about ${shapes} shapes at once; the most is ${most}). Use fewer ${[...heavy, "characters"].join(", ").replace(/, ([^,]*)$/, " or $1")} in it (a character is about ${nd ? SHAPES_ND.actor : SHAPES.actor} shapes, a car ${nd ? SHAPES_ND.props.car : SHAPES.props.car}, a small prop ${nd ? SHAPES.prop + SHAPES_ND.prop : SHAPES.prop}).`);
     }
   }
 
@@ -955,18 +960,20 @@ export function fitDuration(s: StoryScript, targetSec: number): StoryScript {
   const scenes: Scene[] = s.scenes.map((sc, i) => {
     const d = dur[i]!;
     const k = d / (old[i]! || 1);
+    const beats = sc.beats.map((bt) => {
+      const at = Math.min(ms(bt.at * k), ms(d - 0.05));
+      const dur = Math.max(0.05, Math.min(ms(bt.dur * k), ms(d - at)));
+      // getting in or out keeps to its 0.8 to 3 seconds (§45.43)
+      if (bt.do === "get_in" || bt.do === "get_out") return { ...bt, at, dur: Math.min(ms(d - at), clamp(dur, BOARDING.min, BOARDING.max)) };
+      return { ...bt, at, dur };
+    });
     return {
       ...sc,
       durationSec: d,
-      beats: sc.beats.map((bt) => {
-        const at = Math.min(ms(bt.at * k), ms(d - 0.05));
-        const dur = Math.max(0.05, Math.min(ms(bt.dur * k), ms(d - at)));
-        // getting in or out keeps to its 0.8 to 3 seconds (§45.43)
-        if (bt.do === "get_in" || bt.do === "get_out") return { ...bt, at, dur: Math.min(ms(d - at), clamp(dur, BOARDING.min, BOARDING.max)) };
-        return { ...bt, at, dur };
-      }),
+      beats,
       sfx: (sc.sfx ?? []).map((c) => ({ ...c, at: Math.min(ms(c.at * k), ms(d - 0.01)) })),
-      ...(Array.isArray(sc.cuts) ? { cuts: scaleCuts(sc.cuts, k, d) } : {}),
+      // after the boarding clamp above, so a shot in the car never lands on getting in or out
+      ...(Array.isArray(sc.cuts) ? { cuts: scaleCuts(sc.cuts, k, d, { ...sc, beats }) } : {}),
     };
   });
   const total = nt;
@@ -984,18 +991,42 @@ export function fitDuration(s: StoryScript, targetSec: number): StoryScript {
   return { ...s, scenes, captions, durationSec: Math.round(total * 10) / 10 };
 }
 
-/** A scene's cuts scaled with it (§45.45): each at × k, then any cut that comes less than 0.6 s after the one kept
- * before it, or less than 0.6 s before the scene's new end, is dropped. The API's _scale_scene does the same. */
-export function scaleCuts(cuts: ShotCue[], k: number, d: number): ShotCue[] {
+/** A scene's cuts scaled with it (§45.45): each at × k; a cut less than 0.6 s before the scene's new end is dropped,
+ * and of two cuts less than 0.6 s apart the later one is kept (it decides what shows from then on). Given the scene
+ * (its actors, props and its beats as they are now, after scaling), a shot in a car that would now show while its rider
+ * gets in or out goes back to the whole scene, so a script that was valid stays valid. The API's scale_cuts does the
+ * same. */
+export function scaleCuts(cuts: ShotCue[], k: number, d: number, scene?: Pick<Scene, "actors" | "props" | "beats">): ShotCue[] {
   const out: ShotCue[] = [];
   for (const c of cuts) {
     const at = ms(c.at * k);
     if (at >= d - CUTS.gap) continue;
     const last = out[out.length - 1];
-    if (last && at - last.at < CUTS.gap - 1e-9) continue;
+    if (last && at - last.at < CUTS.gap - 1e-9) out.pop();
     out.push({ ...c, at });
   }
-  return out;
+  if (!scene) return out;
+  const kinds = new Map(scene.props.map((p) => [p.propId, p.kind]));
+  const riders = scene.actors.filter((a) => a.inCar && (kinds.get(a.inCar) === "car" || kinds.get(a.inCar) === "truck")).map((a) => a.castId);
+  const actorIds = scene.actors.map((a) => a.castId);
+  const boarding = scene.beats.filter((b) => b.do === "get_in" || b.do === "get_out");
+  return out.map((c, i) => {
+    const until = out[i + 1]?.at ?? d;
+    const rider = seatedFor(c, riders, actorIds);
+    const clash = rider !== null && boarding.some((b) => b.who === rider && b.at < until - 1e-9 && b.at + b.dur > c.at + 1e-9);
+    return clash ? { at: c.at, shot: "scene" } : c;
+  });
+}
+
+/** The rider a cut's shot shows sitting in a car, as checkCuts reads it: the car shots' rider (its who, else the
+ * scene's first rider) and Face up close's person when that person rides; null when the shot needs nobody seated. */
+function seatedFor(c: ShotCue, riders: string[], actorIds: string[]): string | null {
+  if (c.shot === "face") {
+    const person = c.who ?? riders[0] ?? actorIds[0];
+    return person !== undefined && riders.includes(person) ? person : null;
+  }
+  if (CAR_SHOTS.has(c.shot)) return c.who !== undefined && riders.includes(c.who) ? c.who : (riders[0] ?? null);
+  return null;
 }
 
 export function frameCount(s: StoryScript): number {

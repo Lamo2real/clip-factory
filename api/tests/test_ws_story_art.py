@@ -110,8 +110,9 @@ def test_a_new_scene_length_scales_its_cuts_and_keeps_the_rules() -> None:
             {"at": 8, "shot": "road_wide"}]  # fmt: skip
     scene: dict[str, Any] = {"durationSec": 10, "beats": [], "sfx": [], "cuts": cuts}
     stories._scale_scene(scene, 5)
-    # 0, 1, 1.5 (only 0.5 s after 1: dropped), 4 (before 4.4, 0.6 s before the end: kept), as fitDuration does
-    assert scene["cuts"] == [{"at": 0, "shot": "road_behind"}, {"at": 1, "shot": "driver_view"},
+    # 0, 1, 1.5 (only 0.5 s after 1: the later one is kept, it decides what shows from then on), 4 (before 4.4, 0.6 s
+    # before the end: kept), as fitDuration does
+    assert scene["cuts"] == [{"at": 0, "shot": "road_behind"}, {"at": 1.5, "shot": "face", "who": "c1"},
                              {"at": 4, "shot": "road_wide"}]  # fmt: skip
     longer: dict[str, Any] = {"durationSec": 10, "beats": [], "sfx": [], "cuts": [dict(c) for c in cuts]}
     stories._scale_scene(longer, 15)
@@ -123,3 +124,37 @@ def test_a_new_scene_length_scales_its_cuts_and_keeps_the_rules() -> None:
     plain: dict[str, Any] = {"durationSec": 10, "beats": [], "sfx": []}
     stories._scale_scene(plain, 5)
     assert "cuts" not in plain
+
+
+def test_a_shorter_scene_never_shows_a_car_shot_while_its_rider_gets_in_or_out() -> None:
+    """The engine's checks refuse a shot in the car while its rider gets in or out (§45.45): a scene that was valid stays
+    valid at its new length, as the engine's fitDuration keeps it."""
+    actors = [{"castId": "c1", "x": 0.5, "y": 0.78, "facing": "right", "inCar": "car1"}]
+    props = [{"propId": "car1", "kind": "car", "x": 0.5, "y": 0.78, "scale": 1, "rot": 0}]
+    out: dict[str, Any] = {
+        "durationSec": 8,
+        "actors": actors,
+        "props": props,
+        "beats": [{"at": 5.5, "dur": 1.5, "who": "c1", "do": "get_out"}],
+        "sfx": [],
+        "cuts": [{"at": 1, "shot": "road_behind"}, {"at": 4.8, "shot": "driver_view"}, {"at": 5.4, "shot": "scene"}],
+    }
+    stories._scale_scene(out, 7.6)
+    # 4.56 and 5.13 are too close: the later cut back to the whole scene is kept, before getting out at 5.225 s
+    assert out["cuts"] == [{"at": 0.95, "shot": "road_behind"}, {"at": 5.13, "shot": "scene"}]
+    into: dict[str, Any] = {
+        "durationSec": 8,
+        "actors": actors,
+        "props": props,
+        "beats": [{"at": 0, "dur": 0.9, "who": "c1", "do": "get_in"}],
+        "sfx": [],
+        "cuts": [{"at": 1, "shot": "face"}, {"at": 3, "shot": "driver_view"}, {"at": 5, "shot": "mirror"}],
+    }
+    stories._scale_scene(into, 6)
+    # getting in keeps its 0.8 s, so the face at 0.75 s would show it: back to the whole scene
+    assert into["beats"][0]["dur"] == 0.8
+    assert into["cuts"] == [{"at": 0.75, "shot": "scene"}, {"at": 2.25, "shot": "driver_view"},
+                            {"at": 3.75, "shot": "mirror"}]  # fmt: skip
+    # without the scene, only the times change (the engine's scaleCuts without a scene)
+    cuts = [{"at": 1, "shot": "face"}, {"at": 3, "shot": "driver_view"}]
+    assert stories.scale_cuts(cuts, 0.75, 6) == [{"at": 0.75, "shot": "face"}, {"at": 2.25, "shot": "driver_view"}]

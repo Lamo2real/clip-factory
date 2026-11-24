@@ -310,10 +310,11 @@ describe("the light and the finish", () => {
     const s = valid(story([drive("highway_night", [])]));
     const isRing = (p: Prim) => p.k === "poly" && p.color === ND.vignette;
     const nd = drawFrame(s, 30);
-    // two rings, each drawn as four corner pieces: every corner is under both rings, the middle and the middle of
-    // each edge under none
+    // four soft rings (0.05 each, no hard oval edge in the sky), each drawn as four corner pieces: every corner is
+    // under all four rings, the middle and the middle of each edge under none
     const rings = nd.filter(isRing) as Extract<Prim, { k: "poly" }>[];
-    expect(rings.length).toBe(8);
+    expect(rings.length).toBe(16);
+    expect(rings.every((p) => p.a === 0.05)).toBe(true);
     const over = (x: number, y: number) => rings.filter((p) => winding(p.pts, x, y) !== 0).length;
     for (const [x, y] of [
       [3, 3],
@@ -321,7 +322,7 @@ describe("the light and the finish", () => {
       [3, 1917],
       [1077, 1917],
     ])
-      expect(over(x!, y!), `${x},${y}`).toBe(2);
+      expect(over(x!, y!), `${x},${y}`).toBe(4);
     for (const [x, y] of [
       [540, 960],
       [540, 3],
