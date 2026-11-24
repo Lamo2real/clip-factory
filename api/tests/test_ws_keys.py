@@ -34,6 +34,7 @@ def test_no_workspace_prefix_is_forwarded_by_a_stream() -> None:
     # Every *_SK constant of the module is in ITEM_PREFIXES (or is the registry's WS#), so none is forgotten.
     declared = {v for k, v in vars(ws).items() if k.endswith("_SK") and isinstance(v, str)}
     assert declared == {*ws.ITEM_PREFIXES, ws.WS_SK}
+    assert ws.MACHELPER_SK in ws.ITEM_PREFIXES  # §47.10: the workspace's own Mac helper item, never streamed
 
 
 def test_workspace_partitions_are_never_lamo_clips_partition() -> None:

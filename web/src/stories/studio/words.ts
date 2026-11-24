@@ -64,6 +64,8 @@ export const PUBLISH_LABEL: Record<PublishingJob["publishingStatus"], string> = 
   posted: "Posted",
   failed: "Did not post",
   needs_attention: "Needs you",
+  // §47.10: the owner's Mac posts it on TikTok (its row's chip is macChip's)
+  mac: "Your Mac",
 };
 
 export const PUBLISH_TONE: Record<PublishingJob["publishingStatus"], "sun" | "coral" | "mint" | "sky" | "plain"> = {
@@ -72,6 +74,7 @@ export const PUBLISH_TONE: Record<PublishingJob["publishingStatus"], "sun" | "co
   posted: "mint",
   failed: "coral",
   needs_attention: "coral",
+  mac: "sky",
 };
 
 /** A running production step, as a "now doing" line. */

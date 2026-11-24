@@ -15,6 +15,10 @@ owner sees. **No Terraform, table, index, secret or bucket change**: every route
 field is additive, and existing clips and posts read exactly as before. With the switch off, everything behaves
 exactly as before. Nothing here calls TikTok's posting API.
 
+**Both workspaces.** Since helper 1.2.0 the same Mac also posts Clips Funded's TikTok jobs, to Clips Funded's own
+TikTok only, through Clips Funded's own routes and partition (§47.10, ADR-89). §47.1 to §47.9 are Clip Factory's and
+stay as they are; the helper's handle check before every post (§47.10.5) applies to both.
+
 ### 47.1 Data
 
 * **Settings** `tiktokMac: { on: boolean }`, default `{on: false}`, merged on PUT like `autoPost` (§46.3). Unknown
@@ -689,3 +693,412 @@ TikTok. No API, table or infrastructure change.
 The helper itself (its own PR); that TikTok Studio keeps accepting a background Chrome's uploads, and the reach of
 script-posted videos (the 3-post trial compares 24-hour views with his phone posts, plan note §3); that `video/list`
 sees a post the Mac made (as §42.5).
+
+### 47.10 Clips Funded posts TikTok through the same Mac (owner request, 2026-11-23)
+
+The owner (2026-11-23, with a screenshot of Clips Funded › Social accounts › TikTok connected as @clips.funded through
+Clip Factory's shared TikTok app, still in Sandbox, so API posts can only be private): "btw i want the same way we
+upload to tiktok in clip factory for clips funded". Decision record: ADR-89.
+
+Clips Funded's TikTok posts use the same Mac helper as Clip Factory (helper **1.2.0**). They post in hidden headless
+Chrome, publicly, with the same claim, beats, never-twice rule, 30-minute find window, row states and "your Mac needs
+you" flows. Three things are new: a separate TikTok login per account, a check of the signed-in handle before every
+post (both workspaces), and TikTok's AI label on every Clips Funded post. Clip Factory's routes, server code and web
+(§47.1 to §47.9) are unchanged; its only change is in the helper (the handle check, the profile proof, setup holding
+run.lock). **No Terraform change**: every new route is under the existing `ANY /v1/workspaces/{proxy+}` on
+cf-prod-stories-api (the shared JWT authorizer, so the helper's Cognito token works there), and every key is in
+`USER#{u}#WS#{ws}` or `USER#{u}#WSREG`. No table, index, secret, bucket, stream prefix, env key or role changes.
+
+#### 47.10.1 Rules
+
+* **D1. Two lanes in one helper.** The *clips* lane (Clip Factory, @lamo.clips) is 1.1.0's code path, byte for byte on
+  the wire. A *ws:{workspaceId}* lane (one per Clips Funded workspace whose id matches `^[a-z0-9][a-z0-9-]{0,39}$` or
+  the server's generated `^[0-9A-HJKMNP-TV-Z]{26}$`) uses the new workspace routes. Each lane has its own Chrome profile, CDP port, ledger, pacing, needs-you and login.
+  The lanes share only the Cognito sign-in, `device`, `settings.paused` and run.lock.
+* **D2. Clip Factory first.** Each tick the clips lane decides and checks in first, exactly as 1.1.0. A ws lane posts,
+  looks or logs in only in a tick where the clips lane has nothing to post, resume or find. A ws error is caught,
+  logged (`ws.error`) and never reaches the clips lane. A ws post makes a Clip Factory job wait one tick at most
+  (usually 2–3 minutes; at worst about 40, when the ws post meets a logout: the owner's login window, up to 20
+  minutes, then the upload and the look for the link); Clip Factory's four auto-posting runs a day still post. While
+  the clips lane posts, resumes or looks, the ws lanes' pressed posts still get their "finding" beat (`wsBeats`), so
+  their rows don't go stuck meanwhile.
+* **D3. Never another account.** Each workspace's jobs go only to that workspace's TikTok. The helper reads the
+  signed-in handle in its own headless Chrome and refuses unless it equals the lane's target (the job's
+  `account.handle` for Clips Funded; `GET /v1/accounts`' TikTok handle for Clip Factory, also while its token needs
+  renewing, else the cached one, else the one account of the helper's own Clip Factory posts in `state.posted`, so a
+  1.1.0 Mac goes on as it did). Both ways, each lane also refuses every other lane's account by handle and uid
+  (`lanes.js otherAccounts`): a Clips Funded job never goes to Clip Factory's account, and a Clip Factory clip never
+  goes to a Clips Funded account (the account its workspace connected, `state.ws[id].connected`, and the one its
+  profile was set up as; never one a profile was only seen logged in to). Server side, the claim re-checks the open_id
+  and the stored handle, and done refuses a link on another account. A ws lane is never set up as Clip Factory's
+  handle or uid.
+* **D4. AI label.** Every Clips Funded job carries `aiLabel: true`; the ws lane always turns on TikTok Studio's
+  "AI-generated content" switch and reads it back, and stops before Post if it can't. Clips Funded posts are never
+  branded: "Disclose post content" stays off (read back), `brandContent`/`brandOrganic` are false, and
+  `publish.NEVER` still refuses `campaign`. Clip Factory's lane never touches either switch.
+* **D5. Version gate 1.2.0.** `workspaces/mac.py` holds the exact line `MAC_WS_FROM = "1.2.0"` (the helper and web
+  tests read it with `^MAC_WS_FROM = "(\d+\.\d+\.\d+)"$`). The ws queue is empty for `?version=` below it and a claim must
+  carry a `version` at or above it. Helper 1.1.0 never calls `/v1/workspaces`. Clips Funded jobs never enter Clip
+  Factory's `/v1/tiktok/mac` queue (another partition).
+* **D6. Login: no password anywhere.** One visible sign-in, the owner's turn, in the ws lane's own profile (§47.10.5).
+  Clips Funded has no Keychain TikTok login, so a later logout is his turn again.
+* **D7. Fixed public defaults.** A Clips Funded Mac post is always Everyone, Comments on, Duet and Stitch on (Reuse of
+  content), Audience control off, Disclose post content off and the AI label on, whatever the sheet sent. There is no
+  per-post choice, so the Post it sheet shows one read-only line.
+* **D8. The switch** `StoriesConfig.tiktokMac: {on: boolean}` (missing reads as off; no data reset), saved with the
+  existing `PATCH /v1/workspaces/{ws}`, shown in Clips Funded › Social accounts › TikTok as **My Mac posts TikTok**.
+  Clips Funded can't read Clip Factory's TikTok audit, so the Mac path is used while the switch is on.
+* **D9. No infra change** (above).
+* **D10. No Clip Factory web change.** Clips Funded's Mac status lives only in its own TikTok card; Clip Factory's
+  Settings › Posting › Your Mac posts TikTok is unchanged.
+
+The only ways to post in Clips Funded are Review › **Post it** and **Try again** (it has no auto-posting or scheduled
+posting), so every Clips Funded Mac job is `source: "upload"` and goes at once, after any Clip Factory job.
+
+#### 47.10.2 Data (Clips Funded's partitions only)
+
+* **The switch:** `USER#{u}#WSREG` / `WS#{ws}` › `configuration.tiktokMac = {on}`. `stories/config/workspace-
+  defaults.json` has `"tiktokMac": {"on": false}`. `_config_patch` takes `{on: boolean}` merged onto the current value
+  (`{}` keeps it); any other inner key is a 400 "tiktokMac has a setting Clips Funded does not know.".
+* **The Mac job is the story's TikTok `PUBJOB#`** with `publishingStatus: "mac"`. "mac" is in `publish.STATUSES` but
+  not in `IN_FLIGHT` or `RETRYABLE`, so the story flow, `settle_stuck` and the API retry never touch it, and the flow's
+  `load_jobs` skips it as a safety net.
+
+  | Field | Value |
+  |---|---|
+  | `postOptions` | always `MAC_OPTIONS = {privacyLevel: "PUBLIC_TO_EVERYONE", disableComment: false, disableDuet: false, disableStitch: false, brandContent: false, brandOrganic: false}` |
+  | `aiLabel` | always `true` |
+  | `handle` | the recorded `@username` (`MAC_HANDLE = ^@[A-Za-z0-9._]{2,30}$`, else publish answers 409 and writes nothing) |
+  | `externalAccountId` | the recorded open_id |
+  | `macState` `macStep` `macSince` `macSource` (`"upload"`) `macClaimedAt` `macPressedAt` `macStoppedAt` `macReason` `macBeatAt` `macDevice` `macAttempt` `macPressedBefore` `macAgainAt` | the same names and meanings as Clip Factory's (§47.1); all removed once posted |
+  | `beforeMac` | only after a hand-over in place: the Only me job's earlier fields |
+  | `via: "mac"` / `by: "you"` | once the Mac's done / the owner's It's on TikTok saved it |
+
+* **The workspace's helper item** `USER#{u}#WS#{ws}` / `MACHELPER` (`ws.MACHELPER_SK`, in `ITEM_PREFIXES`; type
+  `ws_machelper`; `userId` and `workspaceId` for `guard.owned`): `seenAt`, `state` (`ok` | `needs_you` | `paused`),
+  `reason?` (≤ 200 characters), `version`, `device`, `setUp` (the lane's profile is logged in to the target),
+  `handle?`, `needsYouJobId`/`needsYouStoryId` (a stop with `needsYou`; removed by any ping that isn't `needs_you` and
+  by the owner's Try again or It's on TikTok on that job), `loginRequestAt` (the owner's Log in on my Mac; removed by a
+  ping whose `loginDone` equals it, a conditional REMOVE), `resumeRequestAt` (the owner's Start my Mac again; removed
+  by a ping whose `resumeDone` equals it). It is never Clip Factory's `USER#{u}`/`MACHELPER`, so a
+  Clips Funded problem never pauses Clip Factory's posts and the other way round. `PUBJOB#` and `MACHELPER` are not
+  stream prefixes (`test_ws_keys` pins it), so the web polls.
+* **Timing:** `MAC_BEAT_STALE`, `MAC_CLAIM_MAX` and `MAC_FIND_WINDOW` are imported from `tiktok_self` (not edited);
+  `STALE_CLAIM` (15 minutes) is a one-line copy pinned equal to `tiktok_mac.STALE_CLAIM` by a test, because
+  `workspaces/mac.py` never imports `tiktok_mac` or `clipfactory_api.routes.*`.
+* **Story posted:** the story's posted list, `publishedAt`, `status: published` and the `ACT#` "posted" item are written
+  by `workspaces/story_posted.py` (`story_write`, `activity`), which both the flow and `workspaces/mac.py` use (the API
+  never imports the flow module). A Mac job handed over from Only me (`beforeMac.url`) replaces that private link in
+  the story's posted list (`story_write(..., replace=)`), so the story keeps one TikTok link.
+
+#### 47.10.3 Publishing with the switch on (`workspaces/publish.py`)
+
+1. **Post it, TikTok target:** every check runs as today (`clean_options` on the sheet's full options, `_check` with
+   `validate_destination`, the confirmAccount 409s and G8, then `_clash`). The job is then written as a Mac job
+   (`MAC_OPTIONS`, `aiLabel`, `macState "waiting"`, `macSince` now, `macSource "upload"`, `macAttempt 0`). No `@handle`
+   on the destination → 409 "Connect TikTok again in Social accounts, so your Mac knows the account." and nothing is
+   written. `starter.ready` is needed only when the body has a non-Mac target, and the flow starts only for those.
+2. **`_clash`:** "mac" counts as being posted ("This story is already being posted to TikTok."). One exception: a
+   TikTok job the API posted Only me (`postOptions.privacyLevel == "SELF_ONLY"`) is **handed over in place** in the
+   same transaction, conditional on `posted` and its `flowRun`: its fields go into `beforeMac`, `url`, `postedAt`,
+   `privacy`, `platformPostId`, `statsId`, `metrics`, `numbersAt` and `error` go, and it becomes the Mac job. The story
+   keeps one TikTok row.
+3. **API retry** of a `failed` or `needs_attention` TikTok job while the switch is on: the job becomes a Mac job in
+   place, conditional on its status and `flowRun`; no flow starts. Retry of a `mac` job → 409 "Your Mac posts this
+   one. Tap Try again on its row."
+4. **`PublishingJob`** gains `mac` (`PubJobMac`, only while the status is `mac`), `via`, `by`, and `onlyMe: true` on a
+   TikTok job posted Only me (the row's Post with my Mac).
+5. **Dashboard:** a stopped Mac job joins Needs you with its stored reason, `href` `/stories/review/{storyId}`,
+   `publishingStatus: "mac"` and `mac`.
+
+#### 47.10.4 Routes (JWT, all under `/v1/workspaces/{ws}`, stories workspaces only)
+
+Unknown body keys are a 400, Clip Factory's workspace id a 409, another owner's job a 404 "We could not find that
+post.". The logic and every conditional write live in `workspaces/mac.py`; the routes in `workspaces/routes/mac.py`.
+
+| Method and path | Body | 2xx |
+|---|---|---|
+| GET `/tiktok/mac` (`?version=` optional) | – | `WsMacStatus` |
+| POST `/tiktok/mac/ping` | `{state, reason?, version, device, setUp, handle?, loginDone?, resumeDone?}` | `{on}` |
+| POST `/tiktok/mac/login` | `{action: "sign_in"}` | `{helper}` |
+| POST `/tiktok/mac/request` | `{action: "resume"}` | `{helper}` (the owner's Start my Mac again) |
+| POST `/publishing/{id}/mac/claim` | `{device, version}` | `{job: WsMacJob}` |
+| POST `/publishing/{id}/mac/step` | `{device, step, attempt?}` | `{job: WsMacJob}` (a re-sent step is the beat) |
+| POST `/publishing/{id}/mac/done` | `{device, link, attempt?}` | `{job: PublishingJob}` |
+| POST `/publishing/{id}/mac/stopped` | `{device, reason, needsYou?, attempt?}` | `{job: WsMacJob}` |
+| POST `/publishing/{id}/mac/retry` | `{notOnTikTok?, confirmAccount?}` | `{job: PublishingJob}` (the owner's Try again) |
+| POST `/publishing/{id}/mac/posted` | `{link}` or `{noLink: true}` | `{job: PublishingJob}` (the owner's It's on TikTok) |
+
+The helper downloads with the existing `GET …/stories/{storyId}/download` → `{url}` (saved as `job.fileName`) and tidies
+with the existing `GET …/publishing`.
+
+* **GET /tiktok/mac:** `on` = `configuration.tiktokMac.on === true`; `account` = SOCIAL#tiktok's `{handle,
+  accountName, status}` or null; `queue` = the Mac jobs `waiting` or `working`, oldest `macSince` first, at most 50;
+  `[]` while the switch is off or when `?version=` is below `MAC_WS_FROM` or not a version. The web calls it without
+  `version`.
+* **Ping:** `state` one of the three; `device` required (≤ 100); `version` required (≤ 20); `setUp` a boolean
+  (required); `handle` `^@[A-Za-z0-9._]{1,30}$`; `loginDone` and `resumeDone` ≤ 40. A missing reason or handle
+  removes it.
+* **Login:** no helper item, or a version below `MAC_WS_FROM` → 409 "Update the helper on your Mac first."; another
+  action → 400 "Pick sign_in.". Otherwise `loginRequestAt = now`.
+* **Request** (Start my Mac again): the same 409 for no or an old helper; another action → 400 "Pick resume."; a helper
+  that isn't `paused` → 409 "Your Mac isn't paused." (one conditional write). Otherwise `resumeRequestAt = now`. The
+  helper ends this Mac's pause (`settings.paused`, the same one Clip Factory's Start my Mac again ends: every lane's)
+  and sends `resumeDone`.
+* **Claim**, in order: not a Mac job → 409 "Your Mac isn't posting this one."; switch off → 409 "My Mac posts TikTok
+  is off in Clips Funded."; version too old → 409 code `mac_old` "Update the helper on your Mac."; not claimable as read
+  (another device still holds it) → 409 "Another try already has this post." (never stopped); then
+  `validate_destination(..., at_tap=False)` and the stored handle equal to the job's (case-insensitive). A failure
+  stops the job in one conditional write and answers 409 with the reason: "Clips Funded's TikTok is a different
+  account now. Tap Try again.", "The video is gone. Make it again, then tap Try again.", "Connect TikTok again in Social
+  accounts. Then tap Try again.", or Clips Funded's own G8 / can't-tell-apart sentence. The claim's write is §47.3's:
+  waiting with no `macPressedAt`, or working with no `macPressedAt` and a beat older than `STALE_CLAIM`; it sets
+  working, `macClaimedAt`, `macDevice`, `macBeatAt`, step `video` and `macAttempt + 1`.
+* **Step, Stopped, Retry, It's on TikTok:** §47.3's rules with `source: "upload"`. The attempt is fenced and only
+  `macDevice` may step; the first `pressing` sets `macPressedAt`; the switch off before the press → 409, after it steps
+  go on; after a press the stopped reason is always PRESSED ("Your Mac pressed Post but couldn't confirm it. Look on
+  your TikTok: if it's there, tap It's on TikTok."); `needsYou` sets the **workspace** helper item to `needs_you`.
+  Retry: working and not stuck → 409 "Your Mac is posting it right now. Wait a minute."; pressed without
+  `notOnTikTok` → 409 "Your Mac may have posted it already. Check your TikTok first."; inside the find window → 409
+  "Your Mac pressed Post less than 30 minutes ago. …"; it runs the at-tap check (`publish._check`): a changed account
+  answers 409 with `error.account` until `confirmAccount` names it, and for the same open_id it refreshes `handle` and
+  `accountName`. On success the job waits again (keeping `macSince`), `macAgainAt` set and a press moved to
+  `macPressedBefore`; a stopped job keeps `macDevice`/`macBeatAt`, a stuck one loses them. It's on TikTok: allowed
+  while waiting or stopped, or working once stuck; without a link never on a working job that never pressed (409 "Your
+  Mac is posting it right now. Wait a minute." while its beat is fresh, else "Your Mac stopped before it pressed Post,
+  so it isn't on TikTok. Tap Try again."); with no link the story's posted entry has url "".
+* **Done** (and It's on TikTok with a link): a link that is not `^https://(www\.)?tiktok\.com/@name/video/{8–25
+  digits}` is a 400 "Paste the video's full TikTok link: tiktok.com/@name/video/…"; a link whose `@name` is not the
+  job's `handle` (case-insensitive) is a 409 code `wrong_account` "That post is on another TikTok account." with nothing
+  written. On success one transaction makes the job `posted` (`via "mac"`, or `by "you"`), the canonical url,
+  `postedAt`, `privacy: "public"`, the mac* fields gone, plus the STORY# update and the ACT#. A repeat is answered as
+  the first. No finder and no TikTok call: the stories Lambda can't use Clip Factory's token, and must not.
+* **Stuck:** no beat for 5 minutes, or a claim 50 minutes old (every 1.2.0 helper beats).
+
+```ts
+type MacStep = "video" | "opening" | "uploading" | "settings" | "pressing" | "finding";
+interface WsMacJob {
+  workspaceId: string; publishingJobId: string; storyId: string;
+  hook: string;                 // the story's title
+  caption: string;              // postCaptions.tiktok, else the title; mojibake-repaired, NFC
+  fileName: string;             // "clips-funded-{slug}.mp4"
+  account: { handle: string; openId: string };   // the ONLY account it may go to
+  aiLabel: true; privacy: "PUBLIC_TO_EVERYONE"; comment: true; duet: true; stitch: true;
+  source: "upload"; since: string; state: "waiting" | "working" | "stopped"; step?: MacStep;
+  claimedAt?: string; pressedAt?: string; beatAt?: string; attempt: number; pressedBefore?: string; againAt?: string;
+}
+interface WsMacHelper {
+  seenAt: string; state: "ok" | "needs_you" | "paused"; reason?: string; version?: string; setUp: boolean;
+  handle?: string; needsYouJobId?: string; needsYouStoryId?: string; loginRequest?: { at: string };
+  resumeRequest?: { at: string };  // never the device
+}
+interface WsMacStatus {
+  on: boolean; helper: WsMacHelper | null;
+  account: { handle: string | null; accountName: string | null; status: string } | null; queue: WsMacJob[];
+}
+interface PubJobMac { state: "waiting" | "working" | "stopped"; step?: MacStep; since: string; claimedAt?: string;
+  pressedAt?: string; stoppedAt?: string; reason?: string; beatAt?: string; pressedBefore?: string; againAt?: string }
+// PublishingJob: publishingStatus adds "mac"; mac?: PubJobMac; via?: "mac"; by?: "you"; onlyMe?: true.
+// StoriesApi: macStatus(ws), macLogin(ws), macResume(ws), macRetry(ws, id, {notOnTikTok?, confirmAccount?}),
+//   macPosted(ws, id, {link} | {noLink: true}). The web never calls the helper's own routes.
+```
+
+#### 47.10.5 The helper, 1.2.0 (`mac/tiktok-helper/**`)
+
+* `VERSION = "1.2.0"` in paths.js, package.json and package-lock.json. Clip Factory's ping says 1.2.0 (≥
+  `MAC_BEATS_FROM`, so beats keep counting) with the same keys as 1.1.0.
+* **Lanes** (`src/lanes.js`): `clipsLane` is 1.1.0's (profile `chrome/`, port 9339, Keychain items `tiktok-username`/
+  `tiktok-password`, the top-level ledger, pacing, trial and backfill). `wsLane` has profile `chrome-ws-{id}/`, the
+  lowest free port of 9340–9349 (kept in state.json), its own store `state.ws[id] = {port, ledger, posted,
+  lastPressedAt, connected (the workspace's TikTok @name, from its status), account: {handle, uid?, setUpAt?,
+  checkedAt}}` and no Keychain (`keychain: null`, so `readLogin` never
+  falls back to Clip Factory's items). A ws job is normalised to `clipId = publishingJobId` with the fixed public
+  options and the AI label, so plan.js, beats.js and the ledger run unchanged; that id only ever goes to
+  `wsClient`, which never builds a `/clips/` path. `client()` gains two reads: `GET /v1/accounts` and
+  `GET /v1/workspaces` (items with `workspaceType: "stories"`).
+* **Tick:** lock → settings, state, sign-in (a sign-in problem stops both lanes, as today) → **A** the clips lane as
+  1.1.0, plus its target (`GET /v1/accounts`' TikTok `@handle`, connected or needing renewal, cached in
+  `state.clipsAccount`; else the cache; else `postedHandle`: the one @name of the clips lane's own posted links, never a
+  Clips Funded account; with none of these a post, resume or find becomes wait and the ping says `paused` with "Your
+  Mac can't tell which TikTok is Clip Factory's. Connect TikTok in Settings › Posting.", never a silent stall) → **B**
+  one `GET /v1/workspaces`, then for each stories workspace its queue (`?version=1.2.0`), its `connected` account
+  kept, the owner's Start my Mac again (`helper.resumeRequest`: `settings.paused` false, `resumeDone` in the ping),
+  `wsAction` (`nextAction` on the lane's own view, with trial, backfill and hold cleared and its own needs-you; a new
+  post waits, "Not logged in to TikTok on this Mac yet.", until the lane is set up) and its ping → **C** one thing:
+  Clip Factory's post, resume or find (with `wsBeats` for the ws lanes' pressed posts); else the first ws
+  lane's find, then resume, then post; else a pending ws login request; else tidy (Clip Factory's, plus kept ws files
+  whose job `GET …/publishing` shows posted). Pacing (`lastBacklogAt`, `lastRunPressAt`, `backfillPosts`, the trial
+  count) and `haltOnStop` are the clips lane's only. `settings.paused` pauses every lane.
+* **Chrome** (`chrome.js`, `src/cdp.js`): per-lane `--user-data-dir` and `--remote-debugging-port`, still headless=new
+  and spawned directly (no window, no Dock icon, no focus). One helper Chrome at a time: other lanes' Chromes (9339 and
+  the ports in `state.ws`) close first. A Chrome already on the lane's port is reused only when
+  `<profile>/DevToolsActivePort` proves it (line 1 the port, line 2 the path of `/json/version`'s
+  `webSocketDebuggerUrl`); otherwise it is closed and a fresh one spawned. `cdp.js` speaks only to the browser target
+  (`Storage.getCookies`, `Storage.clearCookies`, `Browser.close`).
+* **Which account** (`src/whoami.js`, used in tiktok.js). Sources, each a pure parser: (1) the in-page
+  `/passport/web/account/info/?aid=1988` → `username`, `user_id_str`; (2) the `/@name/video/` links of Studio › Posts
+  (only on Studio: on www.tiktok.com's feed those links are other people's and are not read); (3)
+  `__UNIVERSAL_DATA_FOR_REHYDRATION__` › `webapp.app-context.user`. `sameAccount`: handles compared in lower case
+  without "@"; every readable handle must be the target and a readable uid the pinned one (and never another lane's
+  uid), else `wrong`; nothing readable → `unknown`; the account's own data (sources 1 and 3, `seen.own`) on the target
+  with a Studio row's link on another @name → `unknown` (no post, and no needs-you for a login that is right). Where it runs, in both lanes: after Studio opens and before Posts is read (falling back to
+  www.tiktok.com when Studio shows no handle); right before Post (the session cookie's hash, kept in memory only, is
+  unchanged, or source 1 positively reads the target); in `find()` before reading; and on the link in `finished()` (its
+  `@name` must be the target, or done is never sent). Wrong → a needs-you stop; unreadable with a TikTok session →
+  retried on later ticks (3 tries, then "Your Mac couldn't see which TikTok it's logged in to. …"); unreadable with no
+  session at all → the lane's logged-out flow; in a ws lane, nothing readable at all three times (a cookie but no
+  account: TikTok ended the session on its side) → the lane is no longer set up and stops with "Your Mac couldn't see
+  which TikTok it's logged in to. Nothing was posted. Tap Log in on my Mac.". A ws lane never runs caption matching
+  against older posts (`findExisting`): `find()` always uses the baseline saved at pressing. One exception: a job with
+  `pressedBefore` (the owner's Try again after a press) first looks, in `post()`, for a row with its caption that is
+  new since that first press (`ledger.earlier`, the Studio ids from before every earlier press, kept by a fresh
+  claim); if one is there, that link is done and nothing is posted again.
+* **Login window** (`login.js loginWindow`, for setup, Log in on my Mac, and a ws post that finds TikTok logged out):
+  every helper Chrome closes; the yellow frame and one pop-up, "Log in to TikTok as {target} in the window. Scan the
+  code with the TikTok app."; first the lane's cookies are cleared (`forget`: a session TikTok ended on its side,
+  its cookie still in the profile, would read as a login at once and the window would close by itself); then a
+  **visible** Chrome on the lane's profile and port at TikTok's QR-code login page
+  (`https://www.tiktok.com/login/qrcode`, in English) that Playwright never attaches to (no `--enable-automation`, no
+  page attached). Before it opens, its profile's Preferences turn off password saving, auto sign-in, autofill and
+  Chrome sign-in (`chrome.js hardenProfile`), and it runs with `--disable-sync`, so nothing he does there keeps a
+  password. Every 3 seconds `Storage.getCookies` looks for a `.tiktok.com` `sessionid` (never its value); 3 seconds
+  after it shows, the window closes and the headless Chrome reads the handle. The target (and not Clip Factory's
+  handle or uid) → any google/youtube cookies leave the profile, the account is pinned (`setUpAt`), the ping says
+  `setUp: true` and `handle`, and a login-type needs-you clears. Another account → that profile's cookies are cleared, the pop-up says
+  "That's {seen}. Log in as {target}." and the window opens once more. After 20 minutes the window closes; inside a post
+  the job stops with "TikTok logged your Mac out. Tap Log in on my Mac." and needs-you; after a request `loginDone` is
+  still sent. When the profile already reads the target nothing opens. Setup and every login window hold run.lock.
+* **AI label** (`tiktok.js`, ws lanes only, forced by the lane kind): the switch named "AI-generated content" or
+  "AI-generated" (under Show more) is set on and read back, and read again right before Post; absent, or locked off →
+  "Your Mac couldn't turn on TikTok's AI label, so it didn't post. Tap Try again."; locked on (TikTok's own label) is
+  fine. A dialog whose text matches /AI-generated/i may be confirmed with /^(turn on|confirm|ok|got it)$/i; any other
+  dialog still stops. "Disclose post content" is kept off and read back.
+* **Files, events, CLI:** `ownFile` also accepts `clips-funded-*.mp4` directly in Downloads. Every event carries
+  `account` (`"clips"` | `"ws:{id}"`); new kinds `wrong_account` and `login_window` `{account, outcome}`. CLI:
+  `setup --workspace <id>`, `whoami [--workspace <id>]` (handles, target and whether they match; never a cookie),
+  `probe --workspace <id> --story <storyId>` (up to Post, AI label included, saves `probe-ws-<id>.png`, posts nothing),
+  `status` (every lane). `install.sh` is unchanged (one launchd job serves every lane); `uninstall.sh --all` also
+  deletes the `tiktok-username`/`tiktok-password` Keychain items.
+* **Words** (ws lanes; Clip Factory's REASONS stay word for word): "TikTok logged your Mac out. Tap Log in on my Mac.";
+  "TikTok's upload page looks different. Your Mac's helper needs a fix. Then tap Try again."; "TikTok says it's
+  posting too much right now. The rest wait."; both lanes: "Your Mac is logged in to TikTok as {seen}, not {target}.
+  Nothing was posted." (needs you), "Your Mac couldn't see which TikTok it's logged in to. Nothing was posted. Tap Try
+  again.", "The post showed up on {seen}, not {target}. Look on your TikTok."; Clip Factory's lane: "That TikTok account
+  is your other workspace's. Nothing was posted. Connect TikTok again in Settings › Posting." (needs you); ws only:
+  "That TikTok account is your other workspace's. Nothing was posted. Connect TikTok again in Social accounts.", "Your
+  Mac couldn't see which TikTok it's logged in to. Nothing was posted. Tap Log in on my Mac.", the AI label sentence,
+  and "The video is gone. Make it again, then tap Try again." (download 404/409). A login reason (the card's Log in on
+  my Mac) is exactly the logged-out sentence, the nothing-readable sentence, or starts with "Your Mac is logged in to
+  TikTok as " (helper `loginReason`, web `loginReason`, pinned to each other).
+
+#### 47.10.6 What the owner sees (web, `web/src/stories/**` only)
+
+* **The TikTok card** (`studio/TikTokMac.tsx`, id `tiktok-mac`, in Social accounts › TikTok outside the setup steps,
+  once Clips Funded's TikTok is connected or while the switch is on; `GET …/tiktok/mac` every 60 s while on, every
+  10 s while a login or a start request waits):
+
+  | When | Says | Button |
+  |---|---|---|
+  | off | **My Mac posts TikTok** · "Off. Your Mac doesn't post TikTok." | the switch |
+  | on | "On. Post it hands TikTok to your Mac. It posts for everyone, with the AI label." | the switch |
+  | no 1.2.0 check-in | "Your Mac isn't set up yet." and the steps "1. Ask for the helper update on your Mac. 2. Tap Log in on my Mac. 3. In the TikTok app, switch to {handle}, then scan the code." | – |
+  | 1.2.0, not set up | "Your Mac isn't logged in to {handle} yet." and steps 2–3 | **Log in on my Mac** |
+  | asked | "Look at your Mac. A TikTok window opens within a minute." | – |
+  | set up | "Your Mac checked in {time} · logged in as {handle}." | **Log in on my Mac** (quiet) |
+  | needs you | "Your Mac needs you: {reason}" | **Log in on my Mac** for a login reason, else **Open the stopped post** |
+  | paused | "Paused on your Mac · your posts wait until it's started again." | **Start my Mac again** (`macResume`) |
+  | asked to start | "Your Mac starts again within a minute." | – |
+  | not seen for 30 minutes | "Your Mac hasn't checked in since {time}." | – |
+  | always while on | "To stop it, turn the switch off. Your Mac stops at once." | – |
+
+* **Post it** (`PublishSheet`, Mac mode while `config.tiktokMac?.on`): TikTok's part is read-only, "Your Mac posts it
+  for everyone, with the AI label." and "Comments, Duet and Stitch on."; no Who can see it and no Commercial content;
+  Upload never waits for creator info (still read for Posting as and the length limit); it sends `MAC_TIKTOK_OPTIONS`
+  plus confirmAccount. Not set up: "Your Mac isn't set up yet. It posts once it is." with **Set it up**.
+* **The TikTok row** (`studio/macRow.ts`, timing from `web/src/lib/tiktokMac.ts`, imported only):
+
+  | # | State | Chip | Row says | Button |
+  |---|---|---|---|---|
+  | 1 | posted, `via: "mac"` | Posted | "Posted by your Mac · Everyone" | **Open** |
+  | 2 | posted, `by: "you"` | Posted | "On your TikTok" (" · no link") | **Open** with a link |
+  | 3 | waiting, switch off | Waiting for your Mac | "My Mac posts TikTok is off" | **Turn on** |
+  | 4 | waiting, no 1.2.0 helper or not set up | Waiting for your Mac | "Your Mac isn't set up yet" | **Set it up** |
+  | 5 | waiting, not seen 30 minutes | Waiting for your Mac | "Your Mac hasn't checked in since {time}" | – |
+  | 6 | waiting, needs you on another post | Waiting for your Mac | "Your Mac needs you · look at your Mac" | **Open the stopped post** |
+  | 7 | waiting, paused | Waiting for your Mac | "Paused on your Mac" (" · starting again within a minute" once asked) | **Start my Mac again** (until asked) |
+  | 8 | waiting | Waiting for your Mac | "Waiting for your Mac · next" / "… · in line (N before it)" | – |
+  | 9 | working, not stuck | Posting… | "Posting…" with the spinner | – |
+  | 10 | working, stuck, no press | Didn't work | "Your Mac stopped before it pressed Post" | **Try again** |
+  | 11 | pressed (stuck or stopped) | Not sure it posted | "Not sure it posted · look on your TikTok" (" · Try again from {time}" inside the window) | **It's on TikTok** (link box, "It's on TikTok, no link"); after the window a quiet **Try again** that asks "Post it again? Only if it's not on your TikTok." and sends `notOnTikTok` |
+  | 12 | stopped | Didn't work | "Didn't work: {the reason's first sentence}" | **Try again** (and Open Social accounts when the reason names it, §45.36 E9; **Set it up**, to the card's Log in on my Mac, for a login reason) |
+  | 13 | posted `onlyMe`, switch on | Posted | "Only you can see it on TikTok" | **Post with my Mac** (Post it with only TikTok ticked) |
+
+  `PUBLISH_LABEL.mac` "Your Mac", tone sky. Review polls every 10 s while a Mac job waits or works and reads the Mac
+  every 60 s while one is shown; Try again calls `macRetry`, It's on TikTok `macPosted`. Dashboard's Try again on a Mac
+  item calls `macRetry`; a pressed one has only **Open**.
+* **Mock** (`api/mock/mac.ts`): the same rules with knobs `macOn`, `macHelper`, `macConnected` and
+  `window.__cfStoriesMock.mac` (`ping`, `claim`, `beat`, `step`, `done`, `stopped`, `age`, `helper`); a bad link is the
+  API's 400, another account's link its 409.
+
+#### 47.10.7 Clip Factory stays exactly as it is
+
+No edits to `api/src/clipfactory_api/{tiktok_mac.py, tiktok_self.py, posts.py, uploads.py, settings.py, routes/**,
+autopost/**}`, Clip Factory's web or `infra/**`. `/v1/tiktok/mac*` and `/v1/clips/{id}/tiktok/mac/*` carry the same
+bodies; the ping keeps its keys (`backlogAt`, `holdBefore`, `backfill`). The clips lane keeps its profile, port,
+Keychain items, ledger, pacing, trial, backlog slot, backfill, tidy and `deleteVideo`, and goes first every tick; it
+gains the handle check (and refuses a Clips Funded account), the profile proof and setup holding run.lock. **Go-live
+gate:** `whoami` must print @lamo.clips before 1.2.0 is started. If Clip Factory's stored TikTok handle is a nickname
+without a username, the clips lane takes the account of its own earlier posts (`state.posted`, all on @lamo.clips),
+so it goes on as 1.1.0 did; with neither, its ping says paused and why.
+
+#### 47.10.8 The owner's one-time step (after merge and deploy; every Mac step only on his command)
+
+1. A session runs, from a main checkout, `cd mac/tiktok-helper && ./install.sh --no-start`, then
+   `node "$HOME/Library/Application Support/Clip Factory TikTok/app/src/cli.js" whoami`. It must print @lamo.clips
+   and `"matches": true`; if not, nothing is started and 1.1.0 is reinstalled from the previous main commit. Then
+   `./install.sh`.
+2. In Clips Funded › Social accounts › TikTok he turns on **My Mac posts TikTok**, then taps **Log in on my Mac**.
+3. A TikTok window opens on the Mac with a code (yellow frame). On the phone: TikTok app → switch to @clips.funded
+   (add it once with Continue with Google, his Google account, if it isn't there yet) → scan the code → Log in. The
+   window closes by itself and the card says "logged in as @clips.funded". The code, not Google in the window: then
+   nothing is typed on the Mac.
+4. Optional, posts nothing: `node ".../cli.js" probe --workspace stories --story <an approved story>`.
+5. He is told: TikTok may link two automated accounts on one Mac and network, so an automation flag could hit both.
+
+No password goes into chat, logs, files or the server at any step: the QR code leaves only TikTok's session cookie in
+the `chrome-ws-stories/` profile. Should he use Google in the window anyway, that profile can't save a password
+(`hardenProfile`), and its Google cookies are deleted once TikTok's login is in.
+
+#### 47.10.9 Tests (targeted; CI is the full run)
+
+* **API:** `tests/test_ws_tiktok_mac.py` (publish to a Mac job with no flow, mixed targets, the missing handle, clash,
+  the Only me hand-over and `onlyMe`, the API retry in place and its 409 on a Mac job, the flow never sending a Mac job,
+  the queue off / old version / no version, ping and login, every claim refusal and the conditional rules, steps and
+  beats, needs-you only on the workspace item, the dashboard item, done and It's on TikTok with their link rules,
+  retry's window and confirmAccount, 400 on unknown keys and 404 for another owner on every route, no Clip Factory
+  partition write, Start my Mac again and its `resumeDone`, the handed-over post's one TikTok link on the story);
+  `ws_routes_mac.py` in `test_ws_http`'s union; `test_ws_separation`'s sweep; `test_ws_keys`
+  (`MACHELPER_SK`); `test_story_flow` (Mac jobs skipped, `story_posted` the same); `test_tiktok_mac.py` unchanged.
+* **Helper** (`node --test`): lanes, whoami (the parsers, `sameAccount`, links ignored off Studio), chrome (the
+  DevToolsActivePort proof, per-lane flags), plan (`wsAction`, `pickWork`, Clip Factory first), tick (whole ticks
+  against a fake server and Keychain: Clip Factory's check-in keys and order are 1.1.0's, a ws failure never stops
+  Clip Factory's claim, no @name in Settings → the account of its own posts, none at all → a paused ping with why,
+  Start my Mac again in Clips Funded, the ws pressed post's beat during Clip Factory's post), lanes (`otherAccounts`,
+  `refusedTarget` both ways, the generated id), api (wsClient paths, `version` on claim and queue, never `/clips/`),
+  files, constants (`MAC_WS_FROM` read from the API file), words, chrome (`hardenProfile`) and login (old cookies
+  cleared before the window, Google cookies after it); the 1.1.0 tests unchanged.
+* **Web:** `test/storiesTikTokMac.test.tsx` (every card state and row, the sheet's Mac mode, Review and Dashboard,
+  the mock's rules, `MAC_WS_FROM` and the logged-out words pinned to the API and helper files, no reversed name);
+  `e2e/stories-tiktok-mac.spec.ts` (turn on → Post it → Waiting → Posting… → Posted by your Mac · Everyone; stopped →
+  Try again; pressed and stopped → It's on TikTok with its link).
+
+#### 47.10.10 Not verified live (each one fails closed)
+
+Which handle sources TikTok really serves (none readable → nothing posts; `whoami` is the gate); the AI switch's name,
+place and dialog in Studio (`probe` checks it); the QR page in an unattached window, and that Chrome keeps the
+hardened Preferences; DevToolsActivePort in headless=new (missing → a fresh Chrome); that the
+`com.clipfactory.no-test-windows` guard leaves the helper's login window alone. The API path still labels only
+realistic makers. Follow-ups, to match Clip Factory fully: view numbers on Mac-posted Clips Funded videos (the video id
+from the link, read with the workspace token), Find it for me (It's on TikTok is paste-only), a "post these with my
+Mac" for stories already on @clips.funded as Only me (today one by one), and a line telling him the Only me copy of a
+handed-over story stays on TikTok (the story itself keeps one link).

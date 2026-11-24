@@ -81,6 +81,8 @@ MAKERSTATUS_SK: Final = "MAKERSTATUS#"
 SHAREUSE_SK: Final = "SHAREUSE#"
 # §45.44: a series, a folder of story videos with its story so far (SERIES#{seriesId}).
 SERIES_SK: Final = "SERIES#"
+# §47.10: the owner's Mac helper for this workspace (an exact sort key; Clip Factory's is USER#{u} / MACHELPER).
+MACHELPER_SK: Final = "MACHELPER"
 ITEM_PREFIXES: Final = (
     IDEA_SK,
     CHAR_SK,
@@ -109,6 +111,7 @@ ITEM_PREFIXES: Final = (
     MAKERSTATUS_SK,
     SHAREUSE_SK,
     SERIES_SK,
+    MACHELPER_SK,
 )
 
 # Item `type` values (never "job", "clip", "post", "account", "setup": Lamo Clips readers filter on those).
@@ -140,6 +143,7 @@ TYPE_MAKERDEF: Final = "ws_makerdef"
 TYPE_MAKERSTATUS: Final = "ws_makerstatus"
 TYPE_SHAREUSE: Final = "ws_shareuse"
 TYPE_SERIES: Final = "ws_series"
+TYPE_MACHELPER: Final = "ws_machelper"
 
 
 def registry_pk(user_id: str) -> str:

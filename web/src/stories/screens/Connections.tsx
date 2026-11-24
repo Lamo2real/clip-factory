@@ -35,6 +35,7 @@ import { storiesSound } from "../prefs.ts";
 import { storiesApi } from "../api/client.ts";
 import { SHARED_APP_PLATFORMS, type ClipsDestination, type KeyCheck, type Platform, type SocialAccount } from "../api/types.ts";
 import { ArcDial } from "../glass/index.ts";
+import { TikTokMac } from "../studio/TikTokMac.tsx";
 import {
   celebrate,
   centerOf,
@@ -1008,6 +1009,7 @@ export function PlatformCard({
         </div>
       )}
 
+      {p === "tiktok" && !inStep ? <TikTokMac ws={ws} account={a} /> : null}
       {a.limits.length ? <Limits name={name} limits={a.limits} /> : null}
       {a.connectedAt && a.connectionStatus !== "not_connected" ? <p className="st-conn__since">Connected {relative(a.connectedAt)}.</p> : null}
     </li>

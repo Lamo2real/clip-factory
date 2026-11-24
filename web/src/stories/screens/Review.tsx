@@ -8,6 +8,8 @@
 // whose Try again asks "Post to {name}?" when the API names a changed account (§45.34). Each queue group has Show more.
 // Series (§45.44): the queue's "All ▾" switch asks each group for one series (`?series=`); a video's page shows its
 // series with Move, and approving an episode says which episode it became.
+// While My Mac posts TikTok is on (§47.10) the TikTok row says what the owner's Mac is doing: the page reads the posts
+// every 10 seconds while the Mac has one waiting or working, and the Mac's status every minute while one is shown.
 import "../styles/studio.css";
 import { useEffect, useRef, useState } from "react";
 import { A } from "../../components/ui.tsx";
@@ -17,7 +19,7 @@ import { useLoad, usePoll } from "../../lib/hooks.ts";
 import { storiesSound } from "../prefs.ts";
 import { starBurst } from "../ui.tsx";
 import { storiesApi } from "../api/client.ts";
-import type { DownloadFormat, ErrorAccount, ModelOverride, PublishingJob, SocialAccount, StepKey, StoriesConfig, Story, StoryPatch, StoryStatus, TaskKind } from "../api/types.ts";
+import type { DownloadFormat, ErrorAccount, ModelOverride, Platform, PublishingJob, SocialAccount, StepKey, StoriesConfig, Story, StoryPatch, StoryStatus, TaskKind } from "../api/types.ts";
 import { navigate } from "../../lib/router.ts";
 import { storiesHref } from "../routes.ts";
 import { cleanPick, insteadPick, madeWith, ModelMenu, ModelsUsed, NextRun, runTask, sendPick, SettingsFix, StoryAi, storyUsual, UnusableSheet, unusableAsk, useAiInfo } from "../studio/ai.tsx";
@@ -26,9 +28,11 @@ import { Filmstrip } from "../studio/Filmstrip.tsx";
 import { usePaged, useSameScript, useWidth, useWorkspace } from "../studio/hooks.ts";
 import { Busy, celebrate, Chip, Notice, ShowMore, StSheet, Tag, TextField } from "../studio/kit.tsx";
 import { Player } from "../studio/Player.tsx";
-import { PostsPanel } from "../studio/PostsPanel.tsx";
+import { macInFlight } from "../studio/macRow.ts";
+import { PostsPanel, type PostMacProps } from "../studio/PostsPanel.tsx";
 import { filterOf, MoveToSeries, SeriesSwitch, seriesChanged, seriesQuery, useSeriesList, type SeriesFilter } from "../studio/SeriesSwitch.tsx";
 import { AccountCard, claimPostCheer, postToTitle, postYes, PublishSheet } from "../studio/PublishSheet.tsx";
+import { useMacStatus } from "../studio/TikTokMac.tsx";
 import { SfxEditor } from "../studio/SfxEditor.tsx";
 import { StepTrack } from "../studio/StepTrack.tsx";
 import { accountOf, CATEGORY_LABEL, isConflict, PLATFORM_LABEL, say, seconds, STATUS_LABEL, STATUS_TONE, thisAccount } from "../studio/words.ts";
@@ -223,7 +227,8 @@ function SeriesChip({ ws, story, onMoved }: { ws: string; story: Story; onMoved:
   );
 }
 
-type Confirm = { job: PublishingJob; account: ErrorAccount; message: string };
+/** `notOnTikTok`: a Mac post's Try again after "Post it again?" (§47.10), sent again with the yes. */
+type Confirm = { job: PublishingJob; account: ErrorAccount; message: string; notOnTikTok?: boolean };
 
 const FORMAT_NAME: Record<DownloadFormat, string> = { mp4: "MP4", webm: "WebM", mov: "MOV" };
 
@@ -256,6 +261,8 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
   const [problem, setProblem] = useState<string | null>(null);
   const [stale, setStale] = useState(false);
   const [posting, setPosting] = useState(false);
+  /** Post it opened by a row's Post with my Mac: only that place ticked. */
+  const [postOnly, setPostOnly] = useState<Platform | null>(null);
   const [confirm, setConfirm] = useState<Confirm | null>(null);
   const [retrying, setRetrying] = useState<string | null>(null);
   /** The model and effort for the next remake only (never saved). */
@@ -279,7 +286,11 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
   const runs = useLoad(() => storiesApi().storyJobs(ws, storyId), `${ws}:${storyId}:runs:${job?.jobId ?? ""}:${job?.status ?? ""}`);
   const script = useSameScript(loaded.data?.script ?? null);
   const live = (!!job && (job.status === "queued" || job.status === "running")) || story?.status === "producing";
-  const inFlight = (pubs.data ?? []).some((j) => j.publishingStatus === "queued" || j.publishingStatus === "publishing");
+  const inFlight = (pubs.data ?? []).some((j) => j.publishingStatus === "queued" || j.publishingStatus === "publishing" || macInFlight(j));
+  // My Mac posts TikTok (§47.10): the Mac's status, read every minute while a Mac post is shown.
+  const macOn = cfg.tiktokMac?.on === true;
+  const macShown = (pubs.data ?? []).some((j) => j.publishingStatus === "mac");
+  const macStatus = useMacStatus(ws, macOn && macShown);
 
   // Not while Clip Factory is on screen: a remake or a post that finished meanwhile is noticed, and celebrated, once
   // this page is back on screen (never confetti, a toast or the cheer over Clip Factory).
@@ -401,17 +412,22 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
     }
   }
 
-  async function retry(j: PublishingJob, confirmAccount?: string) {
+  async function retry(j: PublishingJob, confirmAccount?: string, notOnTikTok?: boolean) {
     setRetrying(j.publishingJobId);
     try {
-      const next = await storiesApi().retryPublishing(ws, j.publishingJobId, confirmAccount ? { confirmAccount } : undefined);
+      // A Mac post waits for the Mac again (§47.10); any other post is sent again.
+      const mac = j.publishingStatus === "mac";
+      const next = mac
+        ? await storiesApi().macRetry(ws, j.publishingJobId, { ...(notOnTikTok ? { notOnTikTok: true as const } : {}), ...(confirmAccount ? { confirmAccount } : {}) })
+        : await storiesApi().retryPublishing(ws, j.publishingJobId, confirmAccount ? { confirmAccount } : undefined);
       pubs.setData((list) => (list ? list.map((x) => (x.publishingJobId === next.publishingJobId ? next : x)) : [next]));
       setConfirm(null);
+      if (mac) void macStatus.reload();
     } catch (e) {
       // The API names the account it would send to now (error.account, §45.34): ask before sending there.
       const named = accountOf(e);
       if (named && named.externalAccountId !== confirmAccount) {
-        setConfirm({ job: j, account: named, message: say(e) });
+        setConfirm({ job: j, account: named, message: say(e), notOnTikTok });
         return;
       }
       if (isConflict(e) && !confirmAccount) {
@@ -420,7 +436,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
           const { accounts } = await storiesApi().social(ws);
           const account = accounts.find((a) => a.platform === j.platform);
           if (account && account.connectionStatus === "connected" && account.externalAccountId && accountQuestion(say(e), account)) {
-            setConfirm({ job: j, account: { externalAccountId: account.externalAccountId, accountName: account.accountName, handle: account.handle }, message: say(e) });
+            setConfirm({ job: j, account: { externalAccountId: account.externalAccountId, accountName: account.accountName, handle: account.handle }, message: say(e), notOnTikTok });
             return;
           }
         } catch {
@@ -432,6 +448,38 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
       setRetrying(null);
     }
   }
+
+  /** It's on TikTok on a Mac post (§47.10): its link, or none. Answers the problem to show, or null once saved. */
+  async function macPosted(j: PublishingJob, body: { link: string } | { noLink: true }): Promise<string | null> {
+    try {
+      const next = await storiesApi().macPosted(ws, j.publishingJobId, body);
+      pubs.setData((list) => (list ? list.map((x) => (x.publishingJobId === next.publishingJobId ? next : x)) : [next]));
+      void macStatus.reload();
+      return null;
+    } catch (e) {
+      return say(e);
+    }
+  }
+
+  const macRows: PostMacProps = {
+    on: macOn,
+    status: macStatus.data ?? null,
+    onRetry: (j, notOnTikTok) => void retry(j, undefined, notOnTikTok),
+    onPosted: macPosted,
+    onPostWithMac: (j) => {
+      setPostOnly(j.platform);
+      setPosting(true);
+    },
+    onResume: async () => {
+      try {
+        await storiesApi().macResume(ws);
+        void macStatus.reload();
+        return null;
+      } catch (e) {
+        return say(e);
+      }
+    },
+  };
 
   async function download(format?: DownloadFormat) {
     await act(format ? `download:${format}` : "download", async () => {
@@ -707,13 +755,20 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
 
           {done ? (
             <section className="st-s-panel st-s-decide st-glass" aria-label="Post it">
-              <button type="button" className="st-btn st-btn--main st-s-big st-postit" onClick={() => setPosting(true)}>
+              <button
+                type="button"
+                className="st-btn st-btn--main st-s-big st-postit"
+                onClick={() => {
+                  setPostOnly(null);
+                  setPosting(true);
+                }}
+              >
                 Post it
               </button>
               <p className="st-s-field__hint">Only to Clips Funded&apos;s own accounts. You pick each one.</p>
             </section>
           ) : null}
-          {done ? <PostsPanel jobs={pubs.data} onRetry={(j) => void retry(j)} busyId={retrying} /> : null}
+          {done ? <PostsPanel jobs={pubs.data} onRetry={(j) => void retry(j)} busyId={retrying} mac={macRows} /> : null}
           {citations.length ? (
             <section className="st-s-sources" aria-label="Where the advice comes from">
               <h2 className="st-s-sources__title">Based on</h2>
@@ -864,6 +919,8 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
           story={story}
           config={cfg}
           jobs={pubs.data ?? []}
+          mac={macRows}
+          only={postOnly ?? undefined}
           onClose={() => setPosting(false)}
           onRetry={(j) => void retry(j)}
           onSent={(made) => {
@@ -886,7 +943,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                 type="button"
                 className="st-btn st-btn--main"
                 aria-disabled={retrying !== null || undefined}
-                onClick={() => retrying === null && void retry(confirm.job, confirm.account.externalAccountId)}
+                onClick={() => retrying === null && void retry(confirm.job, confirm.account.externalAccountId, confirm.notOnTikTok)}
               >
                 {retrying ? "Trying…" : postYes(confirm.message)}
               </button>

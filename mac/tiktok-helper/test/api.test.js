@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 
-import { ApiError, client } from "../src/api.js";
+import { ApiError, client, wsClient } from "../src/api.js";
+import { VERSION } from "../src/paths.js";
 
 function fake(status = 200, body = {}) {
   const calls = [];
@@ -34,4 +35,69 @@ test("a refusal comes back as an ApiError with Clip Factory's own sentence", asy
   const { fetchImpl } = fake(409, { error: { code: "conflict", message: "Auto-posting is off, so this one waits." } });
   const api = client("https://api.example", "tok", fetchImpl);
   await assert.rejects(api.claim("c1", "mac-1"), (e) => e instanceof ApiError && e.status === 409 && /Auto-posting is off/.test(e.message));
+});
+
+test("Clip Factory's client is unchanged on the wire: the same paths and bodies as 1.1.0", async () => {
+  const { calls, fetchImpl } = fake();
+  const api = client("https://api.example", "tok", fetchImpl);
+  await api.queue();
+  await api.ping({ state: "ok", version: VERSION, device: "mac-1" });
+  await api.claim("c1", "mac-1");
+  await api.file("c1");
+  await api.posts("c1");
+  assert.deepEqual(
+    calls.map((c) => [c.method, c.url, c.body]),
+    [
+      ["GET", "https://api.example/v1/tiktok/mac", undefined],
+      ["POST", "https://api.example/v1/tiktok/mac/ping", { state: "ok", version: VERSION, device: "mac-1" }],
+      ["POST", "https://api.example/v1/clips/c1/tiktok/mac/claim", { device: "mac-1" }],
+      ["GET", "https://api.example/v1/clips/c1/file", undefined],
+      ["GET", "https://api.example/v1/posts?clipId=c1", undefined],
+    ]
+  );
+});
+
+test("a Clips Funded workspace's client: its own paths, the version in the queue and the claim, never /clips/", async () => {
+  const { calls, fetchImpl } = fake();
+  const api = wsClient("https://api.example", "tok", "stories", fetchImpl);
+  await api.queue();
+  await api.ping({ state: "ok", version: VERSION, device: "mac-1", setUp: true, handle: "@clips.funded" });
+  await api.login();
+  await api.claim("pj-1", "mac-1");
+  await api.step("pj-1", "mac-1", "uploading", 2);
+  await api.done("pj-1", "mac-1", "https://www.tiktok.com/@clips.funded/video/7710644811602169121", 2);
+  await api.stopped("pj-1", "mac-1", "Why.", true, 2);
+  await api.file({ clipId: "pj-1", publishingJobId: "pj-1", storyId: "s1" });
+  await api.story("s1");
+  await api.publishing();
+  const W = "https://api.example/v1/workspaces/stories";
+  assert.deepEqual(
+    calls.map((c) => [c.method, c.url, c.body]),
+    [
+      ["GET", `${W}/tiktok/mac?version=${VERSION}`, undefined],
+      ["POST", `${W}/tiktok/mac/ping`, { state: "ok", version: VERSION, device: "mac-1", setUp: true, handle: "@clips.funded" }],
+      ["POST", `${W}/tiktok/mac/login`, { action: "sign_in" }],
+      ["POST", `${W}/publishing/pj-1/mac/claim`, { device: "mac-1", version: VERSION }],
+      ["POST", `${W}/publishing/pj-1/mac/step`, { device: "mac-1", step: "uploading", attempt: 2 }],
+      ["POST", `${W}/publishing/pj-1/mac/done`, { device: "mac-1", link: "https://www.tiktok.com/@clips.funded/video/7710644811602169121", attempt: 2 }],
+      ["POST", `${W}/publishing/pj-1/mac/stopped`, { device: "mac-1", reason: "Why.", needsYou: true, attempt: 2 }],
+      ["GET", `${W}/stories/s1/download`, undefined],
+      ["GET", `${W}/stories/s1`, undefined],
+      ["GET", `${W}/publishing`, undefined],
+    ]
+  );
+  assert.ok(calls.every((c) => !c.url.includes("/clips/") && c.url.startsWith(`${W}/`)));
+  assert.ok(calls.every((c) => c.auth === "Bearer tok"));
+  // Its ids are escaped, so a job id can never reach another path.
+  await api.claim("../../clips/c1", "mac-1");
+  assert.equal(calls.at(-1).url, `${W}/publishing/..%2F..%2Fclips%2Fc1/mac/claim`);
+});
+
+test("a Clips Funded refusal comes back as an ApiError with its code", async () => {
+  const { fetchImpl } = fake(409, { error: { code: "wrong_account", message: "That post is on another TikTok account." } });
+  const api = wsClient("https://api.example", "tok", "stories", fetchImpl);
+  await assert.rejects(
+    api.done("pj-1", "mac-1", "https://www.tiktok.com/@x/video/7710644811602169121"),
+    (e) => e instanceof ApiError && e.status === 409 && e.code === "wrong_account"
+  );
 });

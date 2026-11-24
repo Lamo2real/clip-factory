@@ -22,3 +22,13 @@ test("the helper only ever reuses or deletes its own clip-factory videos, direct
   assert.equal(ownFile(null), false);
   assert.equal(ownFile(""), false);
 });
+
+test("Clips Funded's videos too: clips-funded-….mp4, directly in Downloads, and nothing else", () => {
+  assert.equal(ownFile(path.join(downloads, "clips-funded-the-heist.mp4")), true);
+  assert.equal(ownFile(path.join(downloads, "clips-funded-the-heist (2).mp4")), true);
+  assert.equal(ownFile(path.join(downloads, "clips-funded.mp4")), false);
+  assert.equal(ownFile(path.join(downloads, "Clips-Funded-x.mov")), false);
+  assert.equal(ownFile(path.join(downloads, "sub", "clips-funded-x.mp4")), false);
+  assert.equal(ownFile(path.join(downloads, "my-clips-funded-x.mp4")), false);
+  assert.equal(ownFile(path.join(os.homedir(), "Movies", "clips-funded-x.mp4")), false);
+});

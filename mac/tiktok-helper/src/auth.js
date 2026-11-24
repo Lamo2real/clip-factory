@@ -7,7 +7,7 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 
-import { APP_URL, KEYCHAIN_SERVICE } from "./paths.js";
+import { APP_URL, KEYCHAIN_SERVICE, SECURITY } from "./paths.js";
 
 const run = promisify(execFile);
 const ACCOUNT = "refresh-token";
@@ -30,7 +30,7 @@ export async function appConfig(fetchImpl = fetch) {
 
 export async function readRefreshToken() {
   try {
-    const { stdout } = await run("/usr/bin/security", ["find-generic-password", "-s", KEYCHAIN_SERVICE, "-a", ACCOUNT, "-w"]);
+    const { stdout } = await run(SECURITY, ["find-generic-password", "-s", KEYCHAIN_SERVICE, "-a", ACCOUNT, "-w"]);
     return stdout.trim() || null;
   } catch {
     return null;
@@ -38,12 +38,12 @@ export async function readRefreshToken() {
 }
 
 export async function saveRefreshToken(token) {
-  await run("/usr/bin/security", ["add-generic-password", "-U", "-s", KEYCHAIN_SERVICE, "-a", ACCOUNT, "-w", token]);
+  await run(SECURITY, ["add-generic-password", "-U", "-s", KEYCHAIN_SERVICE, "-a", ACCOUNT, "-w", token]);
 }
 
 export async function forgetRefreshToken() {
   try {
-    await run("/usr/bin/security", ["delete-generic-password", "-s", KEYCHAIN_SERVICE, "-a", ACCOUNT]);
+    await run(SECURITY, ["delete-generic-password", "-s", KEYCHAIN_SERVICE, "-a", ACCOUNT]);
   } catch {
     // nothing stored
   }
