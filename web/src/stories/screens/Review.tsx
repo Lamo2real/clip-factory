@@ -12,6 +12,9 @@
 // every 10 seconds while the Mac has one waiting or working, and the Mac's status every minute while one is shown.
 // Facts to fix have "Fix the words", which opens the caption to change; Reject asks first; saving the captions keeps
 // the sounds' changes not saved yet (and the other way round).
+// A video made from the owner's own script (§45.46) shows "Your script" (the scenes as written), Change my script in
+// place of Ask for changes (no note: the AI never changes what happens), and a fact about "Your scene N" opens Change
+// my script at that scene.
 import "../styles/studio.css";
 import { useEffect, useRef, useState } from "react";
 import { A } from "../../components/ui.tsx";
@@ -38,6 +41,8 @@ import { filterOf, MoveToSeries, SeriesSwitch, seriesChanged, seriesQuery, useSe
 import { AccountCard, claimPostCheer, postToTitle, postYes, PublishSheet } from "../studio/PublishSheet.tsx";
 import { useMacStatus } from "../studio/TikTokMac.tsx";
 import { SfxEditor } from "../studio/SfxEditor.tsx";
+import { sceneOfProblem } from "../studio/ownScript.ts";
+import { ChangeScriptSheet, OwnChip, ScriptPanel } from "../studio/ScriptEditor.tsx";
 import { StepTrack } from "../studio/StepTrack.tsx";
 import { accountOf, CATEGORY_LABEL, isConflict, PLATFORM_LABEL, say, seconds, STATUS_LABEL, STATUS_TONE, thisAccount } from "../studio/words.ts";
 import type { StoriesScreenProps } from "./types.ts";
@@ -288,6 +293,8 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
   const [changesProblem, setChangesProblem] = useState<string | null>(null);
   /** Reject asks first: it can't be undone. */
   const [sureReject, setSureReject] = useState(false);
+  /** Change my script (§45.46): open (at a scene, from 1, for Fix the words), or false. */
+  const [changing, setChanging] = useState<number | null | false>(false);
   const info = useAiInfo(ws);
   const [col, colWidth] = useWidth<HTMLDivElement>(300);
   const seen = useRef<Map<string, PublishingJob["publishingStatus"]> | null>(null);
@@ -545,6 +552,8 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
   const block = approveBlock(story);
   const done = story.status === "approved" || story.status === "published";
   const problems = story.safety?.status === "problems" ? story.safety.problems : [];
+  // A fact about the owner's own words ("Your scene 2 …"): Fix the words opens Change my script at that scene.
+  const ownFix = story.ownScript ? (problems.map(sceneOfProblem).find((n): n is number => n !== null) ?? null) : null;
   const citations = story.safety?.citations ?? [];
   const checkAgain = story.status === "needs_check";
   const outdated = !live && checkOutdated(story);
@@ -573,6 +582,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
             <Tag tone={STATUS_TONE[story.status]}>{STATUS_LABEL[story.status]}</Tag> {CATEGORY_LABEL[story.category]} · {seconds(story.actualDurationSec ?? story.durationSec)}
           </p>
           <SeriesChip ws={ws} story={story} onMoved={(seriesId) => setStory({ ...story, seriesId: seriesId ?? undefined, version: story.version + 1 })} />
+          {story.ownScript ? <OwnChip /> : null}
         </div>
       </header>
 
@@ -608,7 +618,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
               tone="bad"
               action={
                 editable ? (
-                  <button type="button" className="st-btn st-btn--main" onClick={() => fixWords(problems)}>
+                  <button type="button" className="st-btn st-btn--main" onClick={() => (ownFix !== null ? setChanging(ownFix) : fixWords(problems))}>
                     Fix the words
                   </button>
                 ) : undefined
@@ -620,7 +630,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                   <li key={i}>{p}</li>
                 ))}
               </ul>
-              {editable ? "Tap Fix the words, change them, then tap Save captions." : "Change the words, then save them."}
+              {ownFix !== null ? (editable ? "Tap Fix the words, change your words, then tap Make it again." : "Change your words, then make it again.") : editable ? "Tap Fix the words, change them, then tap Save captions." : "Change the words, then save them."}
             </Notice>
           ) : null}
 
@@ -718,17 +728,24 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
               </div>
               {/* "Remakes use" above already names the model and effort: "Next run" is in How it was made. */}
               <div className="st-s-decide__more">
-                <button
-                  type="button"
-                  className="st-btn"
-                  aria-expanded={form === "changes"}
-                  onClick={() => {
-                    setChangesProblem(null);
-                    setForm((f) => (f === "changes" ? "none" : "changes"));
-                  }}
-                >
-                  Ask for changes
-                </button>
+                {story.ownScript ? (
+                  // The owner's own script: they change their own words; no note lets the AI change what happens.
+                  <button type="button" className="st-btn" aria-haspopup="dialog" onClick={() => setChanging(null)}>
+                    Change my script
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className="st-btn"
+                    aria-expanded={form === "changes"}
+                    onClick={() => {
+                      setChangesProblem(null);
+                      setForm((f) => (f === "changes" ? "none" : "changes"));
+                    }}
+                  >
+                    Ask for changes
+                  </button>
+                )}
                 <button type="button" className="st-btn" onClick={() => setAsking("whole")}>
                   Remake the whole video
                 </button>
@@ -736,7 +753,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                   Reject
                 </button>
               </div>
-              {form === "changes" ? (
+              {form === "changes" && !story.ownScript ? (
                 <form
                   className="st-s-form"
                   aria-label="Ask for changes"
@@ -885,6 +902,8 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
         </div>
       </div>
 
+      {story.ownScript ? <ScriptPanel ws={ws} own={story.ownScript} script={script} /> : null}
+
       {story.scenes.length ? (
         <section className="st-s-panel st-glass" aria-labelledby="st-scenes-title">
           <h2 className="st-s-panel__title" id="st-scenes-title">
@@ -976,6 +995,18 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
           }}
         />
       ) : null}
+      {changing !== false && story.ownScript ? (
+        <ChangeScriptSheet
+          ws={ws}
+          story={story}
+          focus={changing}
+          onClose={() => setChanging(false)}
+          onStarted={(r) => {
+            startRun(r);
+            setStale(false);
+          }}
+        />
+      ) : null}
       {sureReject ? (
         <StSheet
           title="Reject this video?"
@@ -1033,7 +1064,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
             </>
           }
         >
-          <p>It starts over with your characters as they look now. The old one stays in the Library.</p>
+          <p>{story.ownScript ? "Clips Funded sets up your scenes again. Your words stay." : "It starts over with your characters as they look now. The old one stays in the Library."}</p>
           <div className="st-s-decide__ai">
             <span className="st-s-field__hint">This remake uses</span>
             {menuFor("storyboard")}

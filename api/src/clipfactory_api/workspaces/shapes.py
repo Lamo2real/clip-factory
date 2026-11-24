@@ -10,7 +10,7 @@ from __future__ import annotations
 from collections.abc import Callable, Iterable, Mapping
 from typing import Any, Final
 
-from . import captions, guard
+from . import captions, guard, own_script
 from . import types as ws
 
 STEP_ORDER: Final = ("storyboard", "safety", "scenes", "animation", "sound", "captions", "assemble", "preview")
@@ -26,6 +26,8 @@ STEP_LABEL: Final = {
     "portrait": "Draw the picture",
     "check": "Try it",  # a provider_check job's one step (§45.35 D2)
 }
+# A video made from the owner's own script (§45.46): its steps say what really happens (it stages their script).
+OWN_STEP_LABEL: Final = {"storyboard": "Your script", "captions": "Add your words"}
 STORY_STATUSES: Final = ("draft", "producing", "needs_check", "review", "approved", "rejected", "published", "failed")
 CATEGORIES: Final = ("driving_safety", "everyday_skills", "comedy", "explainer")
 ASSET_KINDS: Final = (
@@ -305,6 +307,8 @@ def public_story(item: Mapping[str, Any], presign: Presign, user_id: str, bucket
             out[key] = item[key]
     if item.get("seriesId"):  # §45.44: left out when the story is in no series
         out["seriesId"] = str(item["seriesId"])
+    if isinstance(item.get("ownScript"), Mapping):  # §45.46: only a video made from the owner's own script
+        out["ownScript"] = own_script.public(item["ownScript"])
     return out
 
 

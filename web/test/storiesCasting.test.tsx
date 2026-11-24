@@ -249,7 +249,7 @@ describe("CastPicker", () => {
 
 describe("Production › Make a new video with a car and a series", () => {
   async function ownIdea() {
-    await pick("Where the idea comes from", "Type my own");
+    await pick("Where the idea comes from", "Type an idea");
     type(field("Title"), "The first drive");
     type(field("What happens, in one line"), "Pip drives Rosso round the block.");
     await pick("What kind of video?", "Funny");

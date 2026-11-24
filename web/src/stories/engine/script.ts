@@ -133,6 +133,8 @@ const show = (v: unknown): string => {
   return s.length > 40 ? `${s.slice(0, 37)}...` : s;
 };
 const list = (ids: string[], max = 12): string => (ids.length > max ? `${ids.slice(0, max).join(", ")}, ...` : ids.join(", "));
+/** Text length in letters, as the API and the web count it (an emoji is one letter, not two UTF-16 units). */
+const letters = (t: string): number => [...t].length;
 
 const SETS = new Set(catalogIds("sets"));
 const ACTIONS = new Set(catalogIds("actions"));
@@ -374,7 +376,7 @@ function checkScene(sc: unknown, i: number, castIds: string[], seenScenes: Set<s
   if (!ID.test(sid)) err(`${where}: sceneId must be 1 to 40 letters, digits, "_" or "-".`);
   else if (seenScenes.has(sid)) err(`${where}: sceneId "${sid}" is used twice; every scene needs its own id.`);
   seenScenes.add(sid);
-  if (typeof sc.title !== "string" || sc.title.length > 40) err(`${where}: title must be text of at most 40 characters.`);
+  if (typeof sc.title !== "string" || letters(sc.title) > 40) err(`${where}: title must be text of at most 40 characters.`);
   const d = sc.durationSec;
   const dur = isNum(d) ? d : 0;
   if (!isNum(d) || d < SCENE_MIN || d > SCENE_MAX) err(`${where}: durationSec is ${show(d)}; a scene lasts ${SCENE_MIN} to ${SCENE_MAX} seconds.`);
@@ -382,7 +384,7 @@ function checkScene(sc: unknown, i: number, castIds: string[], seenScenes: Set<s
   if (!SETS.has(sc.set as string)) err(`${where}: set ${show(sc.set)} is not in the catalog; use one of ${list([...SETS], 15)}.`);
   if (sc.view !== "side" && sc.view !== "top") err(`${where}: view must be "side" or "top" (a road seen from above).`);
   if (!CAMERAS.has(sc.camera as string)) err(`${where}: camera ${show(sc.camera)} is not in the catalog; use one of ${list([...CAMERAS])}.`);
-  if (sc.caption !== undefined && sc.caption !== null && (typeof sc.caption !== "string" || sc.caption.length > 60)) err(`${where}: caption must be null or at most 60 characters.`);
+  if (sc.caption !== undefined && sc.caption !== null && (typeof sc.caption !== "string" || letters(sc.caption) > 60)) err(`${where}: caption must be null or at most 60 characters.`);
   if (sc.note !== undefined && sc.note !== null && (typeof sc.note !== "string" || sc.note.length > 500)) err(`${where}: note must be null or at most 500 characters.`);
 
   // props first: actors may sit in a car
@@ -703,7 +705,7 @@ export function validateScript(input: unknown): ValidateResult {
   if (s.art !== undefined && s.art !== "night_drive" && s.art !== "classic") err('art must be "night_drive" or "classic" (the drawing style).');
   const art: ArtStyle = s.art === "night_drive" ? "night_drive" : "classic";
   if (!isNum(s.durationSec) || s.durationSec <= 0 || s.durationSec > LIMITS.totalSec) err(`durationSec is ${show(s.durationSec)}; use the story's length in seconds (fitDuration brings it to at most ${MAX_SECONDS}).`);
-  if (typeof s.title !== "string" || !s.title.trim() || s.title.length > 100) err("title must be 1 to 100 characters.");
+  if (typeof s.title !== "string" || !s.title.trim() || letters(s.title) > 100) err("title must be 1 to 100 characters.");
   if (!isInt(s.seed) || s.seed < 0 || s.seed > 0xffffffff) err(`seed is ${show(s.seed)}; it must be a whole number from 0 to 4294967295.`);
   const castIds = checkCast(s.cast, err);
   const cars = checkCars(s.cars, castIds, err);
@@ -748,7 +750,7 @@ export function validateScript(input: unknown): ValidateResult {
         else if (total > 0 && c.at >= total) err(`${cw}: starts at ${c.at} s, after the story ends (${round(total)} s).`);
         if (!isNum(c.dur) || c.dur < 0.3) err(`${cw}: dur is ${show(c.dur)}; a caption shows for at least 0.3 s.`);
         else if (isNum(c.at) && total > 0 && c.at + c.dur > total + TOL) err(`${cw}: ends at ${round(c.at + c.dur)} s, after the story ends (${round(total)} s).`);
-        if (typeof c.text !== "string" || !c.text.trim() || c.text.length > 60) err(`${cw}: text must be 1 to 60 characters.`);
+        if (typeof c.text !== "string" || !c.text.trim() || letters(c.text) > 60) err(`${cw}: text must be 1 to 60 characters.`);
         if (c.guidanceRef !== undefined && (typeof c.guidanceRef !== "string" || !c.guidanceRef)) err(`${cw}: guidanceRef must be a guidance step id like "skid-recovery.2".`);
       });
     }

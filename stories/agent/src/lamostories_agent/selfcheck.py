@@ -3,8 +3,9 @@
 It fails the build, not the first story, when the engine folder, Deno, numpy, ffmpeg's encoders, libass with Inter
 or the loudness pass do not work together: the engine validates and normalizes its sample script, one frame of it is
 drawn by the rasterizer and encoded as a JPEG, one second of sound is synthesized and mastered as an m4a, a caption is
-burned in with libass (``ass`` filter, Inter), the bundled config and built-in skills load, and (§45.40) yt-dlp's
-allowed extractors for reference links resolve without ``generic``. Nothing here reaches the network."""
+burned in with libass (``ass`` filter, Inter), a font can draw the owner's emoji (§45.46: libass falls back to Symbola,
+in one colour, for a glyph Inter has not), the bundled config and built-in skills load, and (§45.40) yt-dlp's allowed
+extractors for reference links resolve without ``generic``. Nothing here reaches the network."""
 
 from __future__ import annotations
 
@@ -43,7 +44,7 @@ async def check(work: Path) -> None:
         raise SystemExit("the sound was not made")
     if not await media.has_filter("ass"):
         raise SystemExit("ffmpeg has no libass (the ass filter)")
-    events = [{"kind": "caption", "text": "Clips Funded ♥", "start": 0, "end": 1, "x": 540, "y": 1300,
+    events = [{"kind": "caption", "text": "Clips Funded ♥ 🎉", "start": 0, "end": 1, "x": 540, "y": 1300,
                "size": 64, "color": "#fff6e5"}]  # fmt: skip
     (work / "captions.ass").write_text(ass.build(events), "utf-8")
     burned = work / "burned.jpg"
@@ -54,6 +55,9 @@ async def check(work: Path) -> None:
     )
     if not burned.is_file() or burned.stat().st_size < 1000:
         raise SystemExit("the captions were not burned in")
+    emoji = await proc.run(["fc-list", ":charset=1f389", "family"], time_limit=30, cwd=work)
+    if not emoji.stdout.strip():  # the owner's words keep their emoji in the video (§45.46)
+        raise SystemExit("no font can draw emoji in the burned-in captions")
     if not config.models().get("models") or not config.agents().get("agents") or not config.guidance().get("topics"):
         raise SystemExit("Clips Funded's config files are missing")
     if len(agents.builtin_ids()) < 3:

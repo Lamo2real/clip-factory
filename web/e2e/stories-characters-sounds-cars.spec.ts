@@ -616,7 +616,7 @@ test.describe("a person and a car", () => {
       expect(await audit(page, `New video with a car ${w}`, touch && w < 768, false)).toEqual([]);
 
       // The idea, in a few words.
-      await page.locator(".st-s-pick__opt", { hasText: "Type my own" }).click();
+      await page.locator(".st-s-pick__opt", { hasText: "Type an idea" }).click();
       await page.getByRole("textbox", { name: "Title", exact: true }).fill("The first drive");
       await page.getByRole("textbox", { name: "What happens, in one line" }).fill("Pip drives Rosso round the block.");
       await page.locator(".st-s-pick__opt", { hasText: "Funny" }).click();

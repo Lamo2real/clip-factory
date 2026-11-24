@@ -32,7 +32,7 @@ for (const [w, h] of [
     const page = await ctx.newPage();
     await open(page, "/stories/production/new");
     await page.locator(".st-make").click();
-    const why = page.locator(".st-s-actionbar--pin .st-s-notice", { hasText: "Pick an idea, or tap Type my own." });
+    const why = page.locator(".st-s-actionbar--pin .st-s-notice", { hasText: "Pick an idea, or tap Type an idea." });
     await expect(why).toBeInViewport();
     await expect(page.locator(".st-make")).toBeInViewport();
     // The idea part comes into view, with the focus.

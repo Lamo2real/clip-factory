@@ -1,5 +1,5 @@
 {
- "version": "87d5a86530a0",
+ "version": "8a7b3890dc5d",
  "parts": [
   {
    "id": "app-map",
@@ -297,7 +297,7 @@
    "id": "contracts-45",
    "title": "CONTRACTS: 45. Clips Funded: a second, separate workspace (owner request, 2026-11-21)",
    "line": "Planned: not in the app until the switch pull request turns it on (§45.21). Until then nothing of Clips Funded",
-   "chars": 479339
+   "chars": 511322
   },
   {
    "id": "contracts-46",
@@ -868,6 +868,12 @@
    "title": "DECISIONS: ADR-94 A skipped platform is hidden everywhere but Settings and Social accounts",
    "line": "Supersedes §17.13's skipped rows on the floating setup list, §45.36 E15 for platform steps and §45.36 E18's card",
    "chars": 3195
+  },
+  {
+   "id": "adr-95",
+   "title": "DECISIONS: ADR-95 An owner's script is staged, never written: a faithful adapter, a code check and a report-only fact check",
+   "line": "Context. The owner (2026-11-24), about Clips Funded: \"i also want the option to write my own script ... of",
+   "chars": 4916
   },
   {
    "id": "architecture-overview",

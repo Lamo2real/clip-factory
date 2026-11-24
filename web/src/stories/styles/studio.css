@@ -4,6 +4,7 @@
 @import "./sd-ideas.css"; /* Ideas */
 @import "./sd-characters.css"; /* Characters */
 @import "./sd-production.css"; /* Production and the filmstrip */
+@import "./sd-script.css"; /* Write it myself: the owner's own scenes (§45.46) */
 @import "./sd-review.css"; /* Review and Posts */
 @import "./sd-sheet.css"; /* the sheet, model and effort, reference videos, design with AI, publish sheet, bottom bars */
 @import "./sd-end.css"; /* phones, less motion, rounds 3-5 */

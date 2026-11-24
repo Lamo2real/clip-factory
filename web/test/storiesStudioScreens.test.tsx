@@ -683,7 +683,7 @@ describe("Production", () => {
     expect(text()).toContain("only makes driving-safety videos from checked advice");
     await click(control("Make the video"), 50);
     expect(create).not.toHaveBeenCalled();
-    await pick("Where the idea comes from", "Type my own");
+    await pick("Where the idea comes from", "Type an idea");
     type(field("Title"), "Parking in a tiny space");
     type(field("What happens, in one line"), "Dash squeezes the car into a tiny gap.");
     await pick("What kind of video?", "Driving safety");
