@@ -6,6 +6,7 @@ import { join } from "node:path";
 import { describe, expect, it } from "vitest";
 import { CATALOG, drawFrame, LIMITS, normalizeScript, previewCharacter, sceneFrames, sceneShapes, SEATS, validateCharacter, validateScript } from "../src/stories/engine/engine.ts";
 import { prng } from "../src/stories/engine/math.ts";
+import { RULES } from "../src/stories/engine/rules.ts";
 import type { ActionId, CameraId, CharacterLook, PropAction, PropKind, Scene, SetId, StoryScript } from "../src/stories/engine/types.ts";
 
 const ENGINE = join(import.meta.dirname, "../src/stories/engine");
@@ -240,5 +241,15 @@ describe("each scene draws from its own time only", () => {
       const same = [from, Math.floor((from + to) / 2), to - 1].every((f) => JSON.stringify(drawFrame(a, f)) === JSON.stringify(drawFrame(b, f)));
       expect(same, sc.sceneId).toBe(sc.sceneId !== "s4");
     }
+  });
+});
+
+describe("the rules the writer reads (§45.43)", () => {
+  it("every rule has its own id, the car rules among them, and a script holds at most 2 cars", () => {
+    const ids = RULES.map((r) => r.id);
+    expect(new Set(ids).size).toBe(ids.length);
+    expect(ids).toEqual(["skid_dir", "spin_dir", "side_dir", "top_rot", "steering", "coordinates", "arrow_rot", "prop_state", "sounds", "own_faces", "car_cast", "get_in_out", "honk", "driver_wave", "frame_shape"]);
+    expect(LIMITS.cars).toBe(2);
+    expect(SEATS.car).toBe(2);
   });
 });

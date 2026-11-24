@@ -1,0 +1,29 @@
+/* Clips Funded › the cast picker (docs/CONTRACTS.md §45.43): the People row, then the "Your cars" row. The tiles are the
+   production's own cast tiles (sd-production.css); this file only adds the two row names and the car tiles' wider
+   picture, on the same glass and type. */
+
+.st-cast {
+  display: grid;
+  gap: var(--st-space-2);
+}
+
+/* A row's name ("People", "Your cars"): a short wide-tracked caps caption in Fraunces, like a scene's number. */
+.st-cast__row {
+  margin: var(--st-space-2) 0 0;
+  color: var(--st-text-soft);
+  font-family: var(--st-font-caps);
+  font-size: var(--st-fs-caps);
+  font-weight: 500;
+  letter-spacing: var(--st-track-caps);
+  line-height: 1.3;
+  text-transform: uppercase;
+}
+
+.st-cast__row:first-child {
+  margin-top: 0;
+}
+
+/* A car is wider than it is tall: its tiles get a little more room. */
+.st-cast__cars {
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 150px), 1fr));
+}

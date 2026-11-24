@@ -114,6 +114,7 @@ STORY_KEYS: Final = (
     "ai",
     "override",
     "format",
+    "seriesId",
 )
 
 
@@ -158,6 +159,12 @@ def story_input(body: Mapping[str, Any]) -> dict[str, Any]:
     out["override"] = overrides.model_override(body.get("override"))
     if body.get("format") is not None:
         out["format"] = video_format(body["format"])
+    if body.get("seriesId") is not None:  # §45.44: create_story keeps it only while the series exists
+        if not (isinstance(body["seriesId"], str) and is_ulid(body["seriesId"])):
+            raise bad_request("seriesId is not valid.", "seriesId")
+        out["seriesId"] = body["seriesId"]
+    elif "seriesId" in body:  # null: the owner picked No series himself, so an idea's own series is not used
+        out["seriesId"] = None
     return out
 
 

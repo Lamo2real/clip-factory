@@ -1,13 +1,16 @@
 // Lamo Stories engine: the story script's rules (CONTRACTS §45.10). validateScript explains every problem in a
 // sentence the writer can act on; normalizeScript moves beat effects into the scene lists and fills seeds;
 // fitDuration lands the story on its target length without breaking any scene rule; repairScript swaps a face or
-// drops a noise a character does not have, after the writer's last try (CONTRACTS §45.34).
+// drops a noise a character does not have, after the writer's last try (CONTRACTS §45.34). A car of the cast
+// (§45.43) lives in the script's own `cars` map and is drawn by the one car prop of a scene whose castId names it.
 
 import { sceneBeds } from "./ambience.ts";
+import { CAR_CAST_SHAPES, carHasFace, checkCarLook } from "./car.ts";
 import { CATALOG, catalogIds } from "./catalog.ts";
 import { formatOf, formatsSentence } from "./frame.ts";
 import { clamp, hash, isHex } from "./math.ts";
-import type { CaptionCue, Scene, ScriptRepair, SfxCue, StoryScript, ValidateResult } from "./types.ts";
+import { CARS } from "./props.ts";
+import type { CaptionCue, CarLook, Scene, ScriptRepair, SfxCue, StoryScript, ValidateResult } from "./types.ts";
 
 /** The default size (9:16); FORMATS (frame.ts) has all six. */
 export const WIDTH = 1080;
@@ -24,8 +27,8 @@ export const SCENE_MAX = 15;
 /** How many people sit in each vehicle (a driver and one passenger in a car, a driver in a truck's cab). */
 export const SEATS = { car: 2, truck: 1 } as const;
 
-/** Limits that keep every frame light enough for the agent's rasterizer. */
-export const LIMITS = { scenes: 30, cast: 6, actors: 4, props: 12, beats: 40, sfx: 40, captions: 40, totalSec: 180, shapes: 480 };
+/** Limits that keep every frame light enough for the agent's rasterizer; `cars` is the script's own cars (§45.43). */
+export const LIMITS = { scenes: 30, cast: 6, cars: 2, actors: 4, props: 12, beats: 40, sfx: 40, captions: 40, totalSec: 180, shapes: 480 };
 
 /** About how many shapes (prims) each thing adds to a frame at its busiest (measured on the busiest sets, with every
  * action it can do); weather draws once however many of it there are. */
@@ -35,6 +38,8 @@ export const SHAPES = {
   actor: 70,
   props: { car: 45, truck: 36, deer: 30, snow: 36, rain: 42, fog: 8, ice_patch: 15, tree: 15, sparkles: 15 } as Partial<Record<string, number>>,
   prop: 12,
+  /** a car prop with a castId: the cast's own car (§45.43), eyes and all */
+  carCast: CAR_CAST_SHAPES,
 } as const;
 const ONCE = new Set(["snow", "rain", "fog"]);
 
@@ -48,7 +53,7 @@ export function sceneShapes(scene: { set?: unknown; actors?: unknown; props?: un
       const kind = isObj(p) && typeof p.kind === "string" ? p.kind : "";
       if (ONCE.has(kind) && seen.has(kind)) continue;
       seen.add(kind);
-      n += SHAPES.props[kind] ?? SHAPES.prop;
+      n += kind === "car" && isObj(p) && typeof p.castId === "string" ? SHAPES.carCast : (SHAPES.props[kind] ?? SHAPES.prop);
     }
   }
   return n;
@@ -129,9 +134,19 @@ function checkVoice(v: unknown, where: string, err: (m: string) => void): void {
   if (!Array.isArray(v.sfx) || v.sfx.length > 8 || v.sfx.some((n) => !SFX.has(n as string))) err(`${where}: voice.sfx must be up to 8 known effects.`);
 }
 
+/** True when the faces are different known ones with neutral among them. */
+const knownFaces = (faces: unknown, min: number): boolean =>
+  Array.isArray(faces) && faces.length >= min && faces.every((f) => FACES.has(f as string)) && faces.includes("neutral") && new Set(faces).size === faces.length;
+
+/** Whether a car look (valid or not) has a face: eyes on the windscreen or in the headlights. */
+function carFaced(car: unknown): boolean {
+  return isObj(car) && isObj(car.face) && carHasFace(car as unknown as CarLook);
+}
+
 /** The character agent's answer, or a saved character: a CharacterInput (CONTRACTS §45.6, §45.33). Its look, movement
  * style and voice follow the same rules as a script's cast; its faces are at least 3 different known ones, neutral
- * among them; its name, description, personality and traits keep their lengths. */
+ * among them; its name, description, personality and traits keep their lengths. A car (`kind: "car"`, §45.42) has a
+ * car look instead of a person's, no voice (style "none", no noises) and, with no face, only the neutral face. */
 export function validateCharacter(input: unknown): { ok: true } | { ok: false; errors: string[] } {
   const errors: string[] = [];
   const err = (m: string) => {
@@ -148,11 +163,28 @@ export function validateCharacter(input: unknown): { ok: true } | { ok: false; e
   if (traits !== undefined && (!Array.isArray(traits) || traits.length > 8 || traits.some((x) => typeof x !== "string" || !x.trim() || x.length > 30))) {
     err(`${where}: traits must be up to 8 words or short phrases of at most 30 characters each.`);
   }
+  const kind = input.kind;
+  if (kind !== undefined && kind !== "person" && kind !== "car") {
+    err(`${where}: Pick a person or a car.`);
+    return { ok: false, errors };
+  }
+  const faces = input.expressions;
+  if (kind === "car") {
+    // a car's look is its car; a person's look, if any, is ignored
+    checkCarLook(input.car, where, err);
+    if (!STYLES.has(input.movementStyle as string)) err(`${where}: movementStyle is ${show(input.movementStyle)}; use one of ${list([...STYLES])}.`);
+    checkVoice(input.voice, where, err);
+    const v = isObj(input.voice) ? input.voice : null;
+    if (v && (v.style !== "none" || (Array.isArray(v.noises) && v.noises.length > 0))) err(`${where}: A car has no voice. Pick its sounds instead.`);
+    if (!carFaced(input.car)) {
+      if (!Array.isArray(faces) || faces.length !== 1 || faces[0] !== "neutral") err(`${where}: A car with no face keeps only the neutral face.`);
+    } else if (!knownFaces(faces, 3)) err(`${where}: expressions must be at least 3 different faces of ${list([...FACES], 14)}, with neutral among them.`);
+    return errors.length ? { ok: false, errors } : { ok: true };
+  }
   checkLook(input.look, where, err);
   if (!STYLES.has(input.movementStyle as string)) err(`${where}: movementStyle is ${show(input.movementStyle)}; use one of ${list([...STYLES])}.`);
   checkVoice(input.voice, where, err);
-  const faces = input.expressions;
-  if (!Array.isArray(faces) || faces.length < 3 || faces.some((f) => !FACES.has(f as string)) || !faces.includes("neutral") || new Set(faces).size !== faces.length) {
+  if (!knownFaces(faces, 3)) {
     err(`${where}: expressions must be at least 3 different faces of ${list([...FACES], 14)}, with neutral among them.`);
   }
   return errors.length ? { ok: false, errors } : { ok: true };
@@ -217,7 +249,59 @@ function checkCast(cast: unknown, err: (m: string) => void): string[] {
   return ids;
 }
 
-function checkScene(sc: unknown, i: number, castIds: string[], seenScenes: Set<string>, seenFx: Set<string>, err: (m: string) => void, own: Map<string, Own>): Obj | null {
+/** A car of the cast as the scene checks need it (§45.43): its name, whether it has a face, and its own faces. */
+interface CarInfo {
+  name: string;
+  face: boolean;
+  /** its own faces; null when the script carries none (any face of the catalog goes on a car with a face) */
+  faces: string[] | null;
+}
+
+/** The script's own cars (§45.43): each one a car look, no voice and its faces, under an id of its own. */
+function checkCars(cars: unknown, castIds: string[], err: (m: string) => void): Map<string, CarInfo> {
+  const out = new Map<string, CarInfo>();
+  if (cars === undefined) return out;
+  if (!isObj(cars)) {
+    err("cars must be an object { castId: { characterId, name, car, movementStyle, voice, expressions } } (it may be empty).");
+    return out;
+  }
+  const ids = Object.keys(cars);
+  if (ids.length > LIMITS.cars) err(`cars has ${ids.length} cars; the most is ${LIMITS.cars}.`);
+  for (const id of ids) {
+    const where = `cars.${id}`;
+    if (!ID.test(id)) err(`${where}: a car's id may use letters, digits, "_" and "-" only (1 to 40).`);
+    if (castIds.includes(id)) err(`${id} is both in cast and in cars; give the car its own id.`);
+    const m = cars[id];
+    if (!isObj(m)) {
+      err(`${where}: must be an object with characterId, name, car, movementStyle and voice.`);
+      continue;
+    }
+    if (typeof m.characterId !== "string" || !m.characterId) err(`${where}: characterId is missing.`);
+    if (typeof m.name !== "string" || !m.name.trim() || m.name.length > 30) err(`${where}: name must be 1 to 30 characters.`);
+    checkCarLook(m.car, where, err);
+    if (!STYLES.has(m.movementStyle as string)) err(`${where}: movementStyle is ${show(m.movementStyle)}; use one of ${list([...STYLES])}.`);
+    checkVoice(m.voice, where, err);
+    const v = isObj(m.voice) ? m.voice : null;
+    if (v && (v.style !== "none" || (Array.isArray(v.noises) && v.noises.length > 0))) err(`${where}: a car has no voice: its voice.style is "none" and its voice.noises is []. Copy the saved car's voice.`);
+    const face = carFaced(m.car);
+    const faces = m.expressions;
+    if (faces !== undefined) {
+      if (!face && (!Array.isArray(faces) || faces.length !== 1 || faces[0] !== "neutral")) err(`${where}: a car with no face keeps only the neutral face: expressions is ["neutral"].`);
+      else if (face && !knownFaces(faces, 3)) err(`${where}: expressions must be the car's own faces: at least 3 different faces of ${list([...FACES], 14)}, with neutral among them. Copy them from the saved car.`);
+    }
+    const name = typeof m.name === "string" && m.name.trim() ? m.name.trim() : "This car";
+    out.set(id, { name, face, faces: Array.isArray(faces) ? faces.filter((f): f is string => typeof f === "string") : null });
+  }
+  return out;
+}
+
+/** The actions that move a car (§45.43): always, or (stop, stall) only on the way to a `to` point. */
+const CAR_MOVES = new Set(["move", "speed_up", "skid", "spin", "bump"]);
+const movesCar = (b: Obj): boolean => CAR_MOVES.has(b.do as string) || ((b.do === "stop" || b.do === "stall") && b.to !== undefined);
+/** Getting in or out of a car takes 0.8 to 3 seconds; the car may start or stop moving within `slack` of it. */
+export const BOARDING = { min: 0.8, max: 3, slack: 0.1 } as const;
+
+function checkScene(sc: unknown, i: number, castIds: string[], seenScenes: Set<string>, seenFx: Set<string>, err: (m: string) => void, own: Map<string, Own>, cars: Map<string, CarInfo> = new Map()): Obj | null {
   if (!isObj(sc)) {
     err(`scene ${i + 1}: must be an object.`);
     return null;
@@ -241,6 +325,9 @@ function checkScene(sc: unknown, i: number, castIds: string[], seenScenes: Set<s
   // props first: actors may sit in a car
   const props = Array.isArray(sc.props) ? sc.props : null;
   const propKinds = new Map<string, string>();
+  /** prop id → the car of the cast it draws, and the other way round */
+  const propCar = new Map<string, string>();
+  const carProp = new Map<string, string>();
   if (!props) err(`${where}: props must be a list (it may be empty).`);
   else {
     if (props.length > LIMITS.props) err(`${where}: has ${props.length} props; the most is ${LIMITS.props}.`);
@@ -258,6 +345,17 @@ function checkScene(sc: unknown, i: number, castIds: string[], seenScenes: Set<s
       if (!isNum(p.rot)) err(`${pw}: rot must be a number of degrees.`);
       if (p.color !== undefined && !isHex(p.color)) err(`${pw}: color must be like "#ff6f61".`);
       if (p.state !== undefined && (typeof p.state !== "string" || p.state.length > 40)) err(`${pw}: state must be a short text.`);
+      if (p.castId !== undefined) {
+        const cid = typeof p.castId === "string" ? p.castId : show(p.castId);
+        const ids = [...cars.keys()];
+        if (p.kind !== "car") err(`${where}: prop ${pid} has castId ${cid}; only a prop of kind "car" can be a car of the cast.`);
+        else if (typeof p.castId !== "string" || !cars.has(p.castId)) err(`${where}: prop ${pid} has castId ${cid}, which is not one of the cars. ${ids.length ? `Use one of ${list(ids)}.` : "This story has no cars: leave castId out."}`);
+        else if (carProp.has(p.castId)) err(`${where}: ${p.castId} is in two props; a car of the cast is one prop per scene.`);
+        else {
+          carProp.set(p.castId, pid);
+          if (typeof pid === "string") propCar.set(pid, p.castId);
+        }
+      }
     });
   }
 
@@ -271,7 +369,8 @@ function checkScene(sc: unknown, i: number, castIds: string[], seenScenes: Set<s
       const aw = `${where} actor ${j + 1}`;
       if (!isObj(a)) return err(`${aw}: must be an object.`);
       const cid = a.castId as string;
-      if (!castIds.includes(cid)) err(`${aw}: castId ${show(cid)} is not in the cast (${list(castIds)}).`);
+      if (!castIds.includes(cid) && cars.has(cid)) err(`${where}: ${cid} (${cars.get(cid)!.name}) is a car. Put it in props as {kind: "car", castId: "${cid}"}, not in actors.`);
+      else if (!castIds.includes(cid)) err(`${aw}: castId ${show(cid)} is not in the cast (${list(castIds)}).`);
       else if (actorIds.includes(cid)) err(`${aw}: ${cid} is in this scene twice.`);
       actorIds.push(cid);
       for (const k of ["x", "y"]) if (!isNum(a[k]) || (a[k] as number) < 0 || (a[k] as number) > 1) err(`${aw}: ${k} is ${show(a[k])}; use 0 to 1 of the frame.`);
@@ -310,6 +409,7 @@ function checkScene(sc: unknown, i: number, castIds: string[], seenScenes: Set<s
       const isProp = propKinds.has(who);
       if (!isActor && !isProp) {
         if (castIds.includes(who)) err(`${bw}: ${who} is in the cast but not in this scene; add it to this scene's actors.`);
+        else if (cars.has(who)) err(`${bw}: ${who} (${cars.get(who)!.name}) is a car; ${carProp.has(who) ? `reach it by its prop id "${carProp.get(who)}"` : `add a car prop with castId "${who}" to this scene's props and reach it by that prop's id`}.`);
         else err(`${bw}: who ${show(who)} is not in this scene; use an actor (${list(actorIds) || "none"}) or a prop (${list([...propKinds.keys()]) || "none"}).`);
       }
       const act = b.do as string;
@@ -325,7 +425,13 @@ function checkScene(sc: unknown, i: number, castIds: string[], seenScenes: Set<s
       else if (isNum(d) && b.at >= dur) err(`${bw}: starts at ${b.at} s, but the scene is only ${dur} s long.`);
       if (!isNum(b.dur) || b.dur < 0.05) err(`${bw}: dur is ${show(b.dur)}; a beat lasts at least 0.05 s.`);
       else if (isNum(b.at) && isNum(d) && b.at + b.dur > dur + TOL) err(`${bw}: ends at ${round(b.at + b.dur)} s, after the scene ends (${dur} s). Shorten dur or start it earlier.`);
-      if (b.face !== undefined && (!isActor || !FACES.has(b.face as string))) err(`${bw}: face ${show(b.face)} ${isActor ? `is not in the catalog; use one of ${list([...FACES], 14)}` : "is for characters only"}.`);
+      const car = isProp ? cars.get(propCar.get(who) ?? "") : undefined;
+      if (b.face !== undefined && car) {
+        // a car of the cast makes faces only when it has one, and only its own (§45.43)
+        if (!FACES.has(b.face as string)) err(`${bw}: face ${show(b.face)} is not in the catalog; use one of ${list([...FACES], 14)}.`);
+        else if (!car.face) err(`${where}, beat ${j + 1}: ${car.name} has no face; leave face out.`);
+        else if (car.faces && !car.faces.includes(b.face as string)) err(`${where}, beat ${j + 1}: ${car.name} does not make the face "${b.face}"; its own faces are ${andList(car.faces)}. Use one of those, or leave face out.`);
+      } else if (b.face !== undefined && (!isActor || !FACES.has(b.face as string))) err(`${bw}: face ${show(b.face)} ${isActor ? `is not in the catalog; use one of ${list([...FACES], 14)}` : "is for characters only"}.`);
       else if (b.face !== undefined && own.has(who) && !own.get(who)!.faces.includes(b.face as string)) err(strayFace(bw, who, own.get(who)!, b.face as string));
       if (b.bubble !== undefined && (!isActor || !BUBBLES.has(b.bubble as string))) err(`${bw}: bubble ${show(b.bubble)} ${isActor ? `is not in the catalog; use one of ${list([...BUBBLES])}` : "is for characters only"}.`);
       if (b.noise !== undefined && (!isActor || !NOISES.has(b.noise as string))) err(`${bw}: noise ${show(b.noise)} ${isActor ? `is not in the catalog; use one of ${list([...NOISES])}` : "is for characters only"}.`);
@@ -339,6 +445,10 @@ function checkScene(sc: unknown, i: number, castIds: string[], seenScenes: Set<s
         if (!isObj(to) || !isNum(to.x) || !isNum(to.y) || to.x < lo || to.x > hi || to.y < lo || to.y > hi) err(`${bw}: to must be { x, y } from ${lo} to ${hi}.`);
       }
     });
+    if (actors) {
+      checkBoarding(where, actors, beats, err);
+      checkDriverWave(where, actors, beats, err);
+    }
   }
 
   const sfx = sc.sfx === undefined ? [] : Array.isArray(sc.sfx) ? sc.sfx : null;
@@ -362,6 +472,68 @@ function checkScene(sc: unknown, i: number, castIds: string[], seenScenes: Set<s
 
 const round = (v: number) => Math.round(v * 100) / 100;
 
+/** Getting in and out (§45.43): each needs inCar, lasts 0.8 to 3 s, at most one of each per character and scene,
+ * get_in before get_out, and the car stays where it is while it happens. */
+function checkBoarding(where: string, actors: unknown[], beats: unknown[], err: (m: string) => void): void {
+  const all = beats.filter(isObj);
+  for (const a of actors) {
+    if (!isObj(a) || typeof a.castId !== "string") continue;
+    const id = a.castId;
+    const own = all.filter((b) => b.who === id && (b.do === "get_in" || b.do === "get_out") && isNum(b.at) && isNum(b.dur));
+    if (!own.length) continue;
+    const gin = own.filter((b) => b.do === "get_in");
+    const gout = own.filter((b) => b.do === "get_out");
+    if (typeof a.inCar !== "string") {
+      const first = own[0]!;
+      err(`${where}: ${id} gets ${first.do === "get_in" ? "in" : "out"} at ${round(first.at as number)} s but has no inCar. Give ${id} inCar: the car's propId.`);
+      continue;
+    }
+    if (gin.length > 1) err(`${where}: ${id} gets in ${gin.length} times; a character gets in at most once a scene.`);
+    if (gout.length > 1) err(`${where}: ${id} gets out ${gout.length} times; a character gets out at most once a scene.`);
+    for (const b of own) {
+      const d = b.dur as number;
+      if (d < BOARDING.min || d > BOARDING.max) err(`${where}: ${id}'s ${b.do} lasts ${round(d)} s; getting in or out takes ${BOARDING.min} to ${BOARDING.max} seconds.`);
+    }
+    const gi = gin[0];
+    const go = gout[0];
+    if (gi && go && (go.at as number) < (gi.at as number) + (gi.dur as number)) err(`${where}: ${id} gets out at ${round(go.at as number)} s before getting in is done (${round((gi.at as number) + (gi.dur as number))} s); get_in comes first, then get_out.`);
+    const car = a.inCar;
+    for (const [b, word, fix] of [
+      [gi, "in", "Start the drive after get_in ends."],
+      [go, "out", "Stop the car before get_out starts."],
+    ] as const) {
+      if (!b) continue;
+      const from = b.at as number;
+      const end = from + (b.dur as number);
+      // a tenth of a second of slack, for a length fitDuration stretched to its 0.8 s
+      const moving = all.find((m) => m.who === car && isNum(m.at) && isNum(m.dur) && movesCar(m) && (m.at as number) < end - BOARDING.slack && (m.at as number) + (m.dur as number) > from + BOARDING.slack);
+      if (moving) err(`${where}: ${car} moves at ${round(moving.at as number)} s while ${id} is still getting ${word} (until ${round(end)} s). ${fix}`);
+    }
+  }
+}
+
+/** The driver (a car's first rider, §45.43) waves only while the car stands still: a wave while it is in the car may
+ * not overlap a beat that moves the car. A passenger may wave any time. */
+function checkDriverWave(where: string, actors: unknown[], beats: unknown[], err: (m: string) => void): void {
+  const all = beats.filter(isObj).filter((b) => isNum(b.at) && isNum(b.dur));
+  const drivers = new Map<string, string>();
+  for (const a of actors) if (isObj(a) && typeof a.castId === "string" && typeof a.inCar === "string" && !drivers.has(a.inCar)) drivers.set(a.inCar, a.castId);
+  for (const [car, id] of drivers) {
+    const own = all.filter((b) => b.who === id);
+    const gi = own.find((b) => b.do === "get_in");
+    const go = own.find((b) => b.do === "get_out");
+    const inFrom = gi ? (gi.at as number) + (gi.dur as number) : 0;
+    const inTo = go ? (go.at as number) : Infinity;
+    for (const w of own.filter((b) => b.do === "wave")) {
+      const from = Math.max(w.at as number, inFrom);
+      const to = Math.min((w.at as number) + (w.dur as number), inTo);
+      if (to - from <= BOARDING.slack) continue; // waving from outside the car
+      const moving = all.find((m) => m.who === car && movesCar(m) && (m.at as number) < to - BOARDING.slack && (m.at as number) + (m.dur as number) > from + BOARDING.slack);
+      if (moving) err(`${where}: ${id} drives ${car} and waves at ${round(w.at as number)} s while it moves (${round(moving.at as number)} to ${round((moving.at as number) + (moving.dur as number))} s). The driver waves only while the car is stopped: wave before it moves or after it stops, or let a passenger wave.`);
+    }
+  }
+}
+
 export function validateScript(input: unknown): ValidateResult {
   const errors: string[] = [];
   const err = (m: string) => {
@@ -382,6 +554,7 @@ export function validateScript(input: unknown): ValidateResult {
   if (typeof s.title !== "string" || !s.title.trim() || s.title.length > 100) err("title must be 1 to 100 characters.");
   if (!isInt(s.seed) || s.seed < 0 || s.seed > 0xffffffff) err(`seed is ${show(s.seed)}; it must be a whole number from 0 to 4294967295.`);
   const castIds = checkCast(s.cast, err);
+  const cars = checkCars(s.cars, castIds, err);
   const own = new Map<string, Own>();
   if (isObj(s.cast)) for (const id of castIds) {
     const o = ownOf(s.cast[id]);
@@ -400,7 +573,7 @@ export function validateScript(input: unknown): ValidateResult {
     const seenScenes = new Set<string>();
     const seenFx = new Set<string>();
     s.scenes.forEach((sc, i) => {
-      checkScene(sc, i, castIds, seenScenes, seenFx, err, own);
+      checkScene(sc, i, castIds, seenScenes, seenFx, err, own, cars);
       if (isObj(sc) && isNum(sc.durationSec)) total += sc.durationSec;
     });
     if (total > LIMITS.totalSec) err(`the scenes add up to ${round(total)} s; write at most ${LIMITS.totalSec} s (fitDuration then brings it to the target).`);
@@ -440,7 +613,8 @@ export function validateScript(input: unknown): ValidateResult {
 /** After the writer's last try (CONTRACTS §45.34): every beat's face that its character does not have becomes
  * neutral, and every noise it does not make is left out. Works on the raw script (anything else about it is left as
  * it was, valid or not) and says what it changed; only cast members that carry their own faces are touched, the
- * same ones validateScript holds to their lists. */
+ * same ones validateScript holds to their lists. A car of the cast (§45.43) with no face loses every face on its
+ * prop's beats; one with a face keeps only its own (another becomes neutral). */
 export function repairScript(input: unknown): { script: unknown; changes: ScriptRepair[] } {
   if (!isObj(input) || !isObj(input.cast) || !Array.isArray(input.scenes)) return { script: input, changes: [] };
   const own = new Map<string, Own>();
@@ -448,13 +622,36 @@ export function repairScript(input: unknown): { script: unknown; changes: Script
     const o = ownOf(m);
     if (o) own.set(id, o);
   }
+  const cars = new Map<string, CarInfo>();
+  if (isObj(input.cars))
+    for (const [id, m] of Object.entries(input.cars)) {
+      if (!isObj(m)) continue;
+      const name = typeof m.name === "string" && m.name.trim() ? m.name.trim() : "This car";
+      cars.set(id, { name, face: carFaced(m.car), faces: Array.isArray(m.expressions) ? m.expressions.filter((f): f is string => typeof f === "string") : null });
+    }
   const changes: ScriptRepair[] = [];
   const scenes = input.scenes.map((sc, i) => {
     if (!isObj(sc) || !Array.isArray(sc.beats)) return sc;
     const sceneId = typeof sc.sceneId === "string" ? sc.sceneId : `scene ${i + 1}`;
     const where = `scene ${i + 1}${typeof sc.sceneId === "string" ? ` (${sc.sceneId})` : ""}`;
+    // this scene's car props of the cast: prop id → the car's cast id
+    const propCar = new Map<string, string>();
+    for (const p of Array.isArray(sc.props) ? sc.props : []) if (isObj(p) && p.kind === "car" && typeof p.propId === "string" && typeof p.castId === "string" && cars.has(p.castId)) propCar.set(p.propId, p.castId);
     let changed = false;
     const beats = sc.beats.map((b, j) => {
+      if (isObj(b) && typeof b.who === "string" && typeof b.face === "string" && propCar.has(b.who)) {
+        const castId = propCar.get(b.who)!;
+        const car = cars.get(castId)!;
+        if (car.face && (!car.faces || car.faces.includes(b.face))) return b;
+        const next: Obj = { ...b };
+        const now = car.face && car.faces!.includes("neutral") ? "neutral" : null;
+        if (now) next.face = now;
+        else delete next.face;
+        const text = car.face ? `${where} beat ${j + 1}: ${car.name}'s face "${b.face}" is now ${now ? `"${now}"` : "left out"} (${car.name}'s own faces are ${andList(car.faces!)}).` : `${where} beat ${j + 1}: ${car.name} has no face, so its face "${b.face}" is left out.`;
+        changes.push({ sceneId, beat: j, castId, field: "face", was: b.face, now, text });
+        changed = true;
+        return next;
+      }
       if (!isObj(b) || typeof b.who !== "string" || !own.has(b.who)) return b;
       const o = own.get(b.who)!;
       const next: Obj = { ...b };
@@ -496,8 +693,8 @@ const byAt = <T extends { at: number }>(a: T, b: T) => a.at - b.at;
  * script's seed and the scene id), and sorts beats and effects by time. A new scene (one with no seed yet, or with
  * effects still on its beats: the writer's answer) also gets the sounds its place needs for the whole scene (ids
  * "{sceneId}.amb{k}": wind, rain, traffic, an engine hum while someone drives), unless its list already has that
- * sound; a scene normalized before is never given them again, so an effect the owner removed stays removed.
- * Idempotent. */
+ * sound, and a honk ("{sceneId}.fx{k}") for each honk beat of a car with no honk within 0.3 s of it; a scene
+ * normalized before is never given them again, so an effect the owner removed stays removed. Idempotent. */
 export function normalizeScript(s: StoryScript): StoryScript {
   const used = new Set<string>();
   for (const sc of s.scenes) for (const c of sc.sfx ?? []) used.add(c.id);
@@ -525,6 +722,13 @@ export function normalizeScript(s: StoryScript): StoryScript {
       return rest;
     });
     if (isNew) {
+      // a car's honk plays its sound by itself (§45.43), unless the scene already honks within 0.3 s of it
+      const carProps = new Set(sc.props.filter((p) => CARS.has(p.kind)).map((p) => p.propId));
+      for (const bt of beats) {
+        if (bt.do !== "honk" || !carProps.has(bt.who) || sfx.length >= LIMITS.sfx) continue;
+        if (sfx.some((c) => c.sfx === "honk" && Math.abs(c.at - bt.at) <= 0.3)) continue;
+        sfx.push({ id: fxId(), at: bt.at, sfx: "honk", volume: 0.8 });
+      }
       const ambId = fresh(`${sc.sceneId}.amb`);
       for (const bed of sceneBeds(sc)) {
         if (sfx.length >= LIMITS.sfx || sfx.some((c) => c.sfx === bed.sfx)) continue;
@@ -547,7 +751,8 @@ function stableSort<T>(items: T[], cmp: (a: T, b: T) => number): T[] {
 const ms = (v: number) => Math.round(v * 1000) / 1000;
 
 /** Scales every scene (its beats, effects and the captions over it too) so the total lands on the target (±10%, to
- * a tenth of a second when it can) and never above MAX_SECONDS; every scene stays 2 to 15 s. */
+ * a tenth of a second when it can) and never above MAX_SECONDS; every scene stays 2 to 15 s, and getting in or out of
+ * a car 0.8 to 3 s. */
 export function fitDuration(s: StoryScript, targetSec: number): StoryScript {
   const n = s.scenes.length;
   if (n === 0) return s;
@@ -606,7 +811,10 @@ export function fitDuration(s: StoryScript, targetSec: number): StoryScript {
       durationSec: d,
       beats: sc.beats.map((bt) => {
         const at = Math.min(ms(bt.at * k), ms(d - 0.05));
-        return { ...bt, at, dur: Math.max(0.05, Math.min(ms(bt.dur * k), ms(d - at))) };
+        const dur = Math.max(0.05, Math.min(ms(bt.dur * k), ms(d - at)));
+        // getting in or out keeps to its 0.8 to 3 seconds (§45.43)
+        if (bt.do === "get_in" || bt.do === "get_out") return { ...bt, at, dur: Math.min(ms(d - at), clamp(dur, BOARDING.min, BOARDING.max)) };
+        return { ...bt, at, dur };
       }),
       sfx: (sc.sfx ?? []).map((c) => ({ ...c, at: Math.min(ms(c.at * k), ms(d - 0.01)) })),
     };

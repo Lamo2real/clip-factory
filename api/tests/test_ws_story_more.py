@@ -397,7 +397,14 @@ def test_design_redesigns_one_character_of_this_workspace(
     assert status == 202, body
     stored = store.get(pk(), f"TASK#{body['task']['taskId']}")
     assert stored is not None
-    assert stored["input"] == {"characterId": hero["characterId"], "description": "Give him a hat."}
+    # §45.42: the input also names the kind (the saved character's), the count (1 for a person) and the photos (none)
+    assert stored["input"] == {
+        "characterId": hero["characterId"],
+        "description": "Give him a hat.",
+        "kind": "person",
+        "count": 1,
+        "references": [],
+    }
     assert agentcore.calls[-1]["payload"]["action"] == "run_task"
     theirs = seed_character(store, user=OTHER, name="Theirs")
     for character_id in (theirs["characterId"], "01J0000000000000000000000Z", "not-an-id", 5):

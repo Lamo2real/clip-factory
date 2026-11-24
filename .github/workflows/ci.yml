@@ -123,8 +123,9 @@ jobs:
           UNIT_ONLY='^web/test/|^desktop/src-tauri/src/'
           # The agent image's folders (deploy.yml: agent, skills, config) and what agent/tests reads from elsewhere.
           AGENT='^(agent|skills|config)/|^api/src/clipfactory_api/(jobs|creators)\.py$|^api/tests/fixtures/|^web/src/api/(types|mock/fixtures)\.ts$|^infra/modules/storage/variables\.tf$'
-          # Clips Funded's image (deploy.yml: stories, the engine) and the stream rules its isolation test reads.
-          STORIES='^stories/|^web/src/stories/engine/|^infra/modules/(realtime|notify)/main\.tf$'
+          # Clips Funded's image (deploy.yml: stories, the engine) and the stream rules its isolation test reads, and the
+          # sound samples its freshness test checks (test_sound_samples.py).
+          STORIES='^stories/|^web/src/stories/engine/|^infra/modules/(realtime|notify)/main\.tf$|^web/public/sounds/stories/|^web/src/stories/studio/samplesRoot\.ts$'
           # B3: what the whole contrast matrix guards. The styles (tokens.css and glass.css among them, and any other
           # stylesheet, the legal and about pages' public/legal/site.css too), the shared controls (ui.tsx), the
           # background, veil and look code (background.ts, look.ts), the glass stand-ins (e2e/glass.ts), the helpers

@@ -409,12 +409,19 @@
     height: max(0px, calc(var(--ws-dock-room, 0px) - 36px));
     transition: none;
   }
-  /* A short room: the rows are a little lower (40 px, a computer's pointer target) as soon as the ten pages
-     (StoriesApp's NAV) no longer fit at 48 px: 10 × 48 + 9 × 4 (--st-gap-control) = 516 px of the list's own room. So
-     all ten fit above the switch from 768 px high in a browser, and at every height where 48 px rows would not
-     (a window's title bar, a stacked switch); below 448 px of room the list scrolls and the chosen page is scrolled
-     into view (StoriesApp). */
-  @container st-rail-list (height < 516px) {
+  /* A short room: the rows are a little lower as soon as the twelve pages (StoriesApp's NAV) no longer fit at 48 px,
+     12 × 48 + 11 × 4 (--st-gap-control) = 620 px of the list's own room: 44 px (a touch target still) while twelve
+     fit at 44 (572 px of room, so a 900 px window keeps 44 px targets), else 40 px (a computer's pointer target, and
+     never lower). So all twelve fit above the switch wherever 40 px rows can (524 px of room), and at every height
+     where 48 px rows would not (a window's title bar, a stacked switch); below 524 px of room the list scrolls and
+     the chosen page is scrolled into view (StoriesApp). */
+  @container st-rail-list (height < 620px) {
+    .st-rail .st-rail__item {
+      min-height: 44px;
+      padding-block: 6px;
+    }
+  }
+  @container st-rail-list (height < 572px) {
     .st-rail .st-rail__item {
       min-height: 40px;
       padding-block: 4px;

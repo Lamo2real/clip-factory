@@ -8,7 +8,7 @@ status, so a task the API's fence already failed, or that a newer run owns, is n
 makes to other items (an idea's concept) go in the same transaction as its end.
 
 The task's inputs are read from the item's ``input`` map (``topic``, ``category``, ``count``, ``ideaId``,
-``durationSec``, ``description``, ``referenceAssetId``, ``storyId``, ``models``, ``characterId``), and, for any of these
+``durationSec``, ``description``, ``referenceAssetId``, ``storyId``, ``models``, ``characterId``, ``seriesId``), and, for any of these
 names it does not carry, from the item's top level.
 """
 
@@ -38,6 +38,7 @@ INPUT_KEYS = (
     "models",
     "characterId",
     "makers",
+    "seriesId",
 )
 KIND_AGENT = {
     "brainstorm": "creative_director",
@@ -46,6 +47,7 @@ KIND_AGENT = {
     "character_design": "character",
     "captions": "storyboard",
     "check_models": "creative_director",
+    "series_recap": "creative_director",  # the story so far of a series (§45.44), on the task text_edit's model
 }
 FAILURE = {
     "brainstorm": "The idea helper could not finish. Tap Try again.",
@@ -54,6 +56,7 @@ FAILURE = {
     "character_design": "The character helper could not finish. Tap Try again.",
     "captions": "The caption helper could not finish. Tap Try again.",
     "check_models": "Checking the models did not finish. Tap Try again.",
+    "series_recap": "Clips Funded could not write the story so far. Tap Write it again.",
 }
 UNKNOWN_KIND = "Clips Funded's agent does not know that kind of AI work yet."
 GONE = "What this was for was changed or deleted meanwhile. Tap Try again."
@@ -81,6 +84,7 @@ class Outcome:
     effort: str | None = None
     effort_applied: bool | None = None
     refused: str | None = None  # the sentence when another item in ``ops`` refused (it was deleted or changed)
+    again_if_refused: bool = False  # run the handler once more, from fresh reads, when another item in ``ops`` refused
 
 
 Handler = Callable[[TaskEnv], Outcome]
@@ -134,7 +138,7 @@ def _agent_name(agent_id: str) -> str:
 
 
 def handlers() -> dict[str, Handler]:
-    from . import captions, check, design, ideas
+    from . import captions, check, design, ideas, series
 
     return {
         "brainstorm": ideas.brainstorm,
@@ -143,6 +147,7 @@ def handlers() -> dict[str, Handler]:
         "character_design": design.character_design,
         "captions": captions.captions_again,
         "check_models": check.check_models,
+        "series_recap": series.recap,
     }
 
 
@@ -181,7 +186,14 @@ async def run_task(svc: Services, payload: dict[str, Any], *, kinds: tuple[str, 
         at = now_iso()
         await asyncio.to_thread(fence.write, {"status": "running", "heartbeatAt": at, "updatedAt": at})
         outcome = await run_with_heartbeat(fence, svc.heartbeat_s, lambda: handler(env))
-        await asyncio.to_thread(_finish, fence, outcome)
+        try:
+            await asyncio.to_thread(_finish, fence, outcome)
+        except TaskFailed as e:
+            if not (outcome.again_if_refused and isinstance(e.__cause__, Refused)):
+                raise
+            log("info", "stories.task_again_after_refused", task=task_id, kind=kind)
+            outcome = await run_with_heartbeat(fence, svc.heartbeat_s, lambda: handler(env))
+            await asyncio.to_thread(_finish, fence, outcome)
     except Superseded:
         log("info", "stories.task_superseded", task=task_id)
         return "superseded"

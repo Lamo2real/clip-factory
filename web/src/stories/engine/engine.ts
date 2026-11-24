@@ -5,34 +5,39 @@
 //
 // The pieces: script.ts (validate, normalize, fit, repair, frame maths), frame.ts (the six sizes and shapes),
 // scene.ts (one frame of a scene), rig.ts and face.ts (characters), motion.ts (actions and movement styles),
-// props.ts, sets.ts, camera.ts, bubbles.ts, text.ts and tracks.ts (text and audio), ambience.ts (the place's sounds
-// normalize lists), rules.ts (what the script's words mean, for the writer), commands.ts and cli.ts (the command
-// line), pen.ts (transforms into prims), math.ts.
+// props.ts, car.ts (a car of the cast, drawn from its own look), sets.ts, camera.ts, bubbles.ts, text.ts and
+// tracks.ts (text and audio), ambience.ts (the place's sounds normalize lists), rules.ts (what the script's words
+// mean, for the writer), commands.ts and cli.ts (the command line), pen.ts (transforms into prims), math.ts.
 
+import { CAR_CAST_SHAPES, CAR_SEATS, carHasFace, checkCarLook, DEFAULT_CAR, type CarDraw } from "./car.ts";
 import { CATALOG } from "./catalog.ts";
 import { FACES } from "./face.ts";
-import { DEFAULT_FORMAT, FORMATS, formatOf, sizeFor } from "./frame.ts";
+import { DEFAULT_FORMAT, F, FORMATS, formatOf, sizeFor } from "./frame.ts";
 import { hash } from "./math.ts";
 import { actorState, restPose, STYLES } from "./motion.ts";
 import { Pen } from "./pen.ts";
+import { drawProp, propState, type DriverInput } from "./props.ts";
 import { blendPose, drawCharacter, geometry } from "./rig.ts";
 import { drawExtras, drawSceneFrame } from "./scene.ts";
 import { fitDuration, FPS, frameCount, HEIGHT, LIMITS, locateFrame, MAX_SECONDS, normalizeScript, repairScript, sceneFrames, sceneList, sceneShapes, SEATS, SIZES_FROM_ENGINE, validateCharacter, validateScript, WIDTH } from "./script.ts";
 import { audioTrack, textTrack } from "./tracks.ts";
-import type { ActionId, Beat, CharacterLook, Expression, MovementStyle, Prim, StoryScript } from "./types.ts";
+import type { ActionId, Beat, CarLook, CharacterLook, Expression, MovementStyle, Prim, SceneProp, StoryScript } from "./types.ts";
 
 export { CATALOG };
 export type * from "./types.ts";
 export { prng } from "./math.ts";
 export { audioTrack, fitDuration, FPS, frameCount, HEIGHT, LIMITS, MAX_SECONDS, normalizeScript, repairScript, sceneFrames, sceneList, sceneShapes, SEATS, SIZES_FROM_ENGINE, textTrack, validateCharacter, validateScript, WIDTH };
 export { DEFAULT_FORMAT, FORMATS, formatOf, sizeFor };
+export { CAR_CAST_SHAPES, CAR_SEATS, carHasFace, checkCarLook, DEFAULT_CAR };
+export type { CarDraw };
 
 /** Bumps whenever drawing changes; stored on each job's meta (2: the full rig, sets, props and cameras; 3: a skid
  * slides the rear to its dir's side, cars turn smoothly, bubbles keep clear of the end card and use scene time; 4: a
  * side-view skid with a dir goes nose first, a humming voice keeps its lips closed, the place's sounds are listed;
  * 5: six sizes, 9:16, 1:1 and 16:9 at 1080 or 720 (the 1080 × 1920 frames are drawn as before), and a character
- * that carries its own faces shows only those, even the ones an action implies). */
-export const ENGINE_VERSION = 5;
+ * that carries its own faces shows only those, even the ones an action implies; 6: a car of the cast, drawn from its own
+ * look, the car moves speed_up, bounce, honk, blink and stall, and getting in and out: older scripts draw as before). */
+export const ENGINE_VERSION = 6;
 
 /** The draw list for one frame of the whole story (frames past the end show the last frame). */
 export function drawFrame(s: StoryScript, frame: number): Prim[] {
@@ -72,5 +77,53 @@ export function previewCharacter(look: CharacterLook, style: MovementStyle, expr
   drawCharacter(pen, look, g, pose, { t, seed, face: FACES[expression] ?? FACES.neutral, inCar: false });
   pen.restore();
   drawExtras(pen, state, seed, g, size / 2, y, px, t);
+  return pen.out;
+}
+
+/** What the Characters page's car editor tries (CONTRACTS §45.42). */
+export type CarMove = "idle" | "drive" | "speed_up" | "brake" | "turn" | "bounce" | "honk" | "blink" | "stall";
+
+/** How long a car move loops in the editor (seconds). */
+const CAR_LOOP = 2.4;
+
+/** The car's beats for each move, and how fast the road goes by (0..1 of a drive) at time t of the loop. */
+const CAR_MOVES: Record<CarMove, { beats: Omit<Beat, "who">[]; speed: (t: number) => number }> = {
+  idle: { beats: [], speed: () => 0 },
+  drive: { beats: [], speed: () => 1 },
+  speed_up: { beats: [{ at: 0.2, dur: 1.6, do: "speed_up" }], speed: (t) => 0.15 + 0.85 * Math.min(1, Math.max(0, (t - 0.2) / 1.6)) ** 2 },
+  brake: { beats: [{ at: 0.5, dur: 1.2, do: "stop" }], speed: (t) => (t < 0.5 ? 1 : 1 - Math.min(1, (t - 0.5) / 1.2) ** 0.5) },
+  turn: { beats: [], speed: () => 0.7 },
+  bounce: { beats: [{ at: 0.3, dur: 1.2, do: "bounce" }], speed: () => 0 },
+  honk: { beats: [{ at: 0.3, dur: 0.9, do: "honk" }], speed: () => 0 },
+  blink: { beats: [{ at: 0.3, dur: 1.4, do: "blink" }], speed: () => 0 },
+  stall: { beats: [{ at: 0.6, dur: 0.8, do: "stall" }], speed: (t) => (t < 0.6 ? 0.8 : 0.8 * (1 - Math.min(1, (t - 0.6) / 0.4))) },
+};
+
+/** A car of the cast on plain ground, drawn into a size × size box from (0, 0), looping the move over 2.4 s: the
+ * Characters page, the car options and every cast picker. "turn" shows the top view, nose left then right. */
+export function previewCar(car: CarLook, style: MovementStyle, expression: Expression, move: CarMove, t: number, size: number): Prim[] {
+  const spec = CAR_MOVES[move] ?? CAR_MOVES.idle;
+  const tt = ((t % CAR_LOOP) + CAR_LOOP) % CAR_LOOP;
+  const view = move === "turn" ? "top" : "side";
+  const prop: SceneProp = { propId: "me", kind: "car", x: 0.5, y: 0.72, scale: 1, rot: 0, castId: "me" };
+  const beats: Beat[] = spec.beats.map((b) => ({ ...b, who: "me" }));
+  const d: CarDraw = { car, style, seed: hash(car.paint, car.body, car.wheels.style, car.face.eyes) };
+  // the road's distance so far: the integral of the speed, summed in small steps so the wheels never jump
+  let rolled = 0;
+  for (let u = 0; u < tt; u += 0.05) rolled += spec.speed(u) * 0.05 * 700;
+  const driver: DriverInput = { braking: 0, steer: 0, rolled };
+  const st = propState(prop, beats, view, tt, driver, d);
+  st.speed = Math.max(st.speed, spec.speed(tt) * 0.32);
+  st.face = carHasFace(car) ? expression : null;
+  if (move === "turn") {
+    st.rot = -28 * Math.sin((Math.PI * 2 * tt) / CAR_LOOP);
+    st.wheelTurn = -32 * Math.cos((Math.PI * 2 * tt) / CAR_LOOP);
+  }
+  const pen = new Pen({ x0: -size * 0.1, y0: -size * 0.1, x1: size * 1.1, y1: size * 1.1 });
+  const s = size / (view === "top" ? 760 : 1120);
+  pen.translate(size / 2, view === "top" ? size / 2 : size * 0.7);
+  pen.scale(s, s);
+  pen.translate(-st.x * F.w, -st.y * F.h);
+  drawProp(pen, st, view, tt, d.seed, {}, false, d);
   return pen.out;
 }
