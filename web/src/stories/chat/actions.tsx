@@ -160,7 +160,7 @@ export function planFor(action: ChatAction): ActionPlan {
     }
     case "save_character": {
       const c = obj(p.character);
-      // A person has its look; a car (§45.41) its car look (the agent makes cars in Characters, so this is rare).
+      // A person has its look; a car (§45.42) its car look (the agent makes cars in Characters, so this is rare).
       if (!c || !text(c.name) || !(c.kind === "car" ? obj(c.car) : obj(c.look))) return { kind: "broken" };
       const character = c as unknown as CharacterInput;
       return {

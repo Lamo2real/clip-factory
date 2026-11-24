@@ -1,4 +1,4 @@
-"""The fact checker and a car of the cast (docs/CONTRACTS.md §45.42): a castId car's speed_up and stall are driving
+"""The fact checker and a car of the cast (docs/CONTRACTS.md §45.43): a castId car's speed_up and stall are driving
 items the checker reads, named by the car's own name; get_in and get_out are never driving actions."""
 
 from __future__ import annotations

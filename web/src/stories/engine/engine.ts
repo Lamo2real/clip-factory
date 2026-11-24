@@ -90,7 +90,7 @@ function drawPreviewCharacter(look: CharacterLook, style: MovementStyle, express
   return pen.out;
 }
 
-/** What the Characters page's car editor tries (CONTRACTS §45.41). */
+/** What the Characters page's car editor tries (CONTRACTS §45.42). */
 export type CarMove = "idle" | "drive" | "speed_up" | "brake" | "turn" | "bounce" | "honk" | "blink" | "stall";
 
 /** How long a car move loops in the editor (seconds). */

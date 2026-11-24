@@ -6,7 +6,7 @@
 // own small "Model and effort for this one" menu (never saved). A driving-safety idea shows the checked advice it is
 // based on, or "Needs checked advice" and then cannot become a video. Edit (§45.34) changes a saved idea's title, line
 // and kind, and the parts of its full idea (what it is about, the steps, the lesson, the ending, the feel, the length
-// and the words on screen), saved with PATCH …/ideas/{ideaId}. Series (§45.43): the head's "All ▾" switch shows one
+// and the words on screen), saved with PATCH …/ideas/{ideaId}. Series (§45.44): the head's "All ▾" switch shows one
 // series' ideas (the address holds it, `?series=`); inside a series New idea and Ask for ideas file the result there
 // with the series' cast, `?ask=1` opens Ask for ideas at once, and each card can Move to another series.
 import "../styles/studio.css";
@@ -55,7 +55,7 @@ export function draftsOf(task: AiTask): IdeaInput[] {
       if (d.characterIds?.length) out.characterIds = [...d.characterIds];
       if (d.parentIdeaId) out.parentIdeaId = d.parentIdeaId;
       if (d.concept) out.concept = d.concept;
-      if (d.seriesId) out.seriesId = d.seriesId; // the API files a series' drafts there (§45.43)
+      if (d.seriesId) out.seriesId = d.seriesId; // the API files a series' drafts there (§45.44)
       return out;
     });
 }

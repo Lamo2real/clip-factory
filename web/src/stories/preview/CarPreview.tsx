@@ -1,4 +1,4 @@
-// A car character drawn live by the engine (docs/CONTRACTS.md §45.41): the car editor, the "Pick one" options and
+// A car character drawn live by the engine (docs/CONTRACTS.md §45.42): the car editor, the "Pick one" options and
 // every cast picker. The same drawing as the videos (engine/car.ts through previewCar), looping its move.
 import { useEffect, useRef } from "react";
 import { previewCar, type CarMove } from "../engine/engine.ts";

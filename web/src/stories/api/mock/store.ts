@@ -31,7 +31,7 @@ import type {
 import type { CharacterLook, StoryScript } from "../../engine/types.ts";
 
 /**
- * A SERIES# item as the mock keeps it (§45.43): the owner's fields, the story so far and the episode summaries. Its
+ * A SERIES# item as the mock keeps it (§45.44): the owner's fields, the story so far and the episode summaries. Its
  * episodes, counts and cover are worked out on every read (series.ts), like the API.
  */
 export interface StoredSeries {
@@ -69,7 +69,7 @@ export interface MockStore {
   conversations: Conversation[];
   messages: Message[];
   references: ReferenceVideo[];
-  /** Series (§45.43), the series part's */
+  /** Series (§45.44), the series part's */
   series: StoredSeries[];
   /** Lamo Clips' own destination per platform (names only), as GET …/social returns it. */
   clips: ClipsDestination[];

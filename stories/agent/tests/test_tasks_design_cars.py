@@ -1,4 +1,4 @@
-"""Car characters from real photos (docs/CONTRACTS.md §45.41): several photos, several cartoon options in one call,
+"""Car characters from real photos (docs/CONTRACTS.md §45.42): several photos, several cartoon options in one call,
 no makes in the words, and the car's portrait prompt and chat refusal."""
 
 from __future__ import annotations

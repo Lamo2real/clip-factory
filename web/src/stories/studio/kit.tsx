@@ -3,7 +3,7 @@
 // progress bar. Styled by web/src/stories/styles/studio.css on the warm liquid glass (styles/GLASS-CONTRACT.md: the
 // switch is the contract's orange .st-toggle, a sheet is hero float glass, its × a round glass button). Sounds come
 // from the app's global click handler: a switched-off control carries aria-disabled (so it plays the deny sound) and
-// ignores the tap. A chip or a row may carry a play button (HearButton, §45.40) that plays its sound sample instead of
+// ignores the tap. A chip or a row may carry a play button (HearButton, §45.41) that plays its sound sample instead of
 // the click sound.
 import { useEffect, useId, useRef, type CSSProperties, type KeyboardEvent, type ReactNode } from "react";
 import { createPortal } from "react-dom";
@@ -360,7 +360,7 @@ export function Slider({
   );
 }
 
-/** A play button's sound (§45.40): what it plays, in words, and whether it can play now. */
+/** A play button's sound (§45.41): what it plays, in words, and whether it can play now. */
 export interface HearProp {
   /** what it plays, in words: "Gasp" */
   label: string;

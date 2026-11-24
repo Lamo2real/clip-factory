@@ -207,7 +207,7 @@ def scene_schema(
     art: str | None = None,
 ) -> dict[str, Any]:
     """One scene; with ``scene_ids`` (a remake of named scenes) its ``sceneId`` is one of exactly those. ``cast_ids``
-    are the people (the actors); ``car_ids`` the cast's cars (§45.42), reached only as a car prop's ``castId``: with
+    are the people (the actors); ``car_ids`` the cast's cars (§45.43), reached only as a car prop's ``castId``: with
     none, the schema is exactly what it was before cars. ``art`` ``night_drive`` adds the scene's ``cuts`` between
     shots (§45.45); in the Bright style the schema is what it was before them."""
     actions = catalog_ids(catalog, "actions") + catalog_ids(catalog, "propActions")
@@ -340,7 +340,7 @@ def storyboard_schema(
     car_ids: Sequence[str] = (),
     art: str | None = None,
 ) -> dict[str, Any]:
-    """The ``write_storyboard`` tool's input schema (``car_ids``: the cast's cars, §45.42; ``art``: the drawing style,
+    """The ``write_storyboard`` tool's input schema (``car_ids``: the cast's cars, §45.43; ``art``: the drawing style,
     night drive adds each scene's cuts, §45.45). ``full``: the whole story; ``scenes``: only the named scenes
     (``scene_ids``: each answer scene's id is one of them, and there are exactly as many scenes as asked, §45.34) and,
     if they change, the whole captions list; ``fix``: the whole story again with the facts fixed."""
@@ -422,7 +422,7 @@ def cast_brief(
 ) -> list[dict[str, Any]]:
     """What the writer may know of each cast member: never the look. Its faces and noises are the ones the script's
     cast carries (the character's own lists), the only ones it may make. People come first (``kind`` person, the first
-    one ``main``), then the cast's cars (§45.42): a car is a prop only, described in words."""
+    one ``main``), then the cast's cars (§45.43): a car is a prop only, described in words."""
     out: list[dict[str, Any]] = []
     for cid, member in cast.items():
         ch = characters.get(str(member.get("characterId"))) or {}
@@ -597,7 +597,7 @@ def script_from(
     art: str | None = None,
 ) -> dict[str, Any]:
     """A whole ``StoryScript`` from a ``full`` (or ``fix``) answer, at the story's own size; the cast's cars
-    (§45.42) are stored in ``cars`` only when there are any, so a people-only script is as before; ``art`` is written
+    (§45.43) are stored in ``cars`` only when there are any, so a people-only script is as before; ``art`` is written
     only for the night drive style (§45.45), so a Bright script is as before."""
     used: set[str] = set()
     scenes = [clean_scene(s, used, i) for i, s in enumerate(answer.get("scenes") or [])]

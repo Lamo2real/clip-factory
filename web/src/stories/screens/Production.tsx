@@ -8,8 +8,8 @@
 // effort that made each step. A running job is checked every 2 seconds. On the warm liquid glass
 // (styles/GLASS-CONTRACT.md): the words loose on the page sit on a .st-plate, every panel and row is .st-glass, and a
 // video's page opens with its preview, hero glass holding the ArcDial (the render progress) and the video's MediaRow.
-// A cast may be people and one car (§45.42: CastPicker, the people first, then the car), and a video can be filed in a
-// series (§45.43): the list shows one series or all (`?series=`), a new video picks its series and starts with its cast.
+// A cast may be people and one car (§45.43: CastPicker, the people first, then the car), and a video can be filed in a
+// series (§45.44): the list shows one series or all (`?series=`), a new video picks its series and starts with its cast.
 import "../styles/studio.css";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { A } from "../../components/ui.tsx";
@@ -222,7 +222,7 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
   // The address may bring the cast, the length and the reference videos (the chat's or a reference video's hand-over).
   const [cast, setCast] = useState<string[]>(() => castIds.slice(0, 3));
   const castTouched = useRef(castIds.length > 0);
-  // The series it is filed in (§45.43): the address's, else a picked idea's, until the owner picks one himself.
+  // The series it is filed in (§45.44): the address's, else a picked idea's, until the owner picks one himself.
   const [series, setSeries] = useState<string | null>(givenSeries && givenSeries !== "none" ? givenSeries : null);
   const seriesTouched = useRef(!!givenSeries);
   const seriesList = useSeriesList(ws).list;
@@ -346,8 +346,8 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
     setAsking(null);
     setBusy(true);
     setProblem(null);
-    // The people in the order they were picked, then the car (§45.42); the series when one is picked, and null when the
-    // owner picked No series himself, so an idea's own series does not file it anyway (§45.43).
+    // The people in the order they were picked, then the car (§45.43); the series when one is picked, and null when the
+    // owner picked No series himself, so an idea's own series does not file it anyway (§45.44).
     const body: StoryInput = { characterIds: castOrder(cast, characters), durationSec: lengthSec, captionsOn, musicMood: music };
     if (series) body.seriesId = series;
     else if (seriesTouched.current) body.seriesId = null;
@@ -630,7 +630,7 @@ function RefPicker({
                 </span>
                 <span className="st-s-reftile__text">
                   <span className="st-s-reftile__title">{r.title}</span>
-                  <span className="st-s-reftile__meta">{ready ? (r.durationSec ? seconds(r.durationSec) : "Studied") : r.status === "analyzing" ? "Being studied now" : "Not studied yet"}</span>
+                  <span className="st-s-reftile__meta">{ready ? (r.durationSec ? seconds(r.durationSec) : "Studied") : r.status === "analyzing" ? "Being studied now" : r.status === "fetching" ? "On its way" : r.status === "fetch_failed" ? "Didn't arrive" : "Not studied yet"}</span>
                 </span>
               </button>
               {!ready && r.status !== "analyzing" ? (

@@ -1,5 +1,5 @@
 """A series' bounded memory in the idea helper's and the story writer's prompts, and the cast fields for a person and
-a car in one story (docs/CONTRACTS.md §45.42, §45.43).
+a car in one story (docs/CONTRACTS.md §45.43, §45.44).
 
 The series context is at most 8000 bytes of JSON whatever the series holds: the story so far, the newest 5 episode
 summaries and up to 20 earlier titles. Brainstorm in a series carries it with the SERIES block; the story writer's

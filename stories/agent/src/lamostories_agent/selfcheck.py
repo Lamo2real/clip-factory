@@ -3,8 +3,8 @@
 It fails the build, not the first story, when the engine folder, Deno, numpy, ffmpeg's encoders, libass with Inter
 or the loudness pass do not work together: the engine validates and normalizes its sample script, one frame of it is
 drawn by the rasterizer and encoded as a JPEG, one second of sound is synthesized and mastered as an m4a, a caption is
-burned in with libass (``ass`` filter, Inter), and the bundled config and built-in skills load. Nothing here reaches
-the network."""
+burned in with libass (``ass`` filter, Inter), the bundled config and built-in skills load, and (§45.40) yt-dlp's
+allowed extractors for reference links resolve without ``generic``. Nothing here reaches the network."""
 
 from __future__ import annotations
 
@@ -15,7 +15,7 @@ import sys
 import tempfile
 from pathlib import Path
 
-from . import agents, ass, audio, config, media, proc
+from . import agents, ass, audio, config, media, proc, reffetch
 from .engine import Engine, find_engine_dir, write_json
 from .providers import render_still
 
@@ -58,6 +58,10 @@ async def check(work: Path) -> None:
         raise SystemExit("Clips Funded's config files are missing")
     if len(agents.builtin_ids()) < 3:
         raise SystemExit("Clips Funded's built-in skills are missing")
+    try:
+        reffetch.extractors_ok()
+    except Exception as e:
+        raise SystemExit(f"yt-dlp's extractors for reference links are not right: {e}") from e
 
 
 def main() -> int:

@@ -1,4 +1,4 @@
-// Clips Funded › Series (docs/CONTRACTS.md §45.43): a folder per series with its story so far, the "All ▾" switch,
+// Clips Funded › Series (docs/CONTRACTS.md §45.44): a folder per series with its story so far, the "All ▾" switch,
 // Move with its confirm, and Ideas inside a series. Rendered with the mock's ideas, characters, stories and series
 // parts (setStoriesApi); nothing leaves the machine.
 import { act, type ReactNode } from "react";

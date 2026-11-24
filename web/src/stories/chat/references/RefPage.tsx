@@ -13,11 +13,21 @@
 // `fileRemoved`, and leaves `url` out) says "The video was removed to save space. Its study stays." when its study is
 // kept (`studyKept`), else only "The video was removed to save space." (the 30- and 90-day rules also clear videos
 // that were never studied). It is not analyzed again (the API refuses it); a kept study and "Use in a video" stay.
-import { useCallback, useEffect, useRef, useState } from "react";
+//
+// A reference made from a link (§45.40) is `fetching` while Clips Funded's own runtime gets the video: "Getting it from
+// {Site}…" with its one step (GET answers `fetchJob`, the newest reference_fetch job), checked every 2 s, and a cheer
+// when it is here (then the usual Analyze card). One that did not arrive (`fetch_failed`) says the job's own reason,
+// with Try again (POST …/fetch) and "Upload a video" (a picked or dropped video takes this reference's place). Try
+// again is the main button only when asking again can work (the reason says "Try again"); for a private, gone, live,
+// too long or blocked video, "Upload a video" is.
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import { DropOverlay } from "../../../components/DropOverlay.tsx";
 import { A } from "../../../components/ui.tsx";
 import { usePoll } from "../../../lib/hooks.ts";
 import { navigate } from "../../../lib/router.ts";
+import { useFileDrop } from "../../../lib/useFileDrop.ts";
 import { storiesApi } from "../../api/client.ts";
+import { SITE_NAME, siteOf } from "../../api/refLinks.ts";
 import { cx } from "../../glass/index.ts";
 import { storiesGoLater } from "../../pane.tsx";
 import { REF_STEP_LABEL, REF_STEP_ORDER, type AiSetting, type ModelOverride, type ProductionJob, type ReferenceAnalysis, type ReferenceVideo, type StoryStep } from "../../api/types.ts";
@@ -35,13 +45,26 @@ import { TechDetails } from "../../studio/kit.tsx";
 import { scheduleDelete } from "../undo.ts";
 import { AnalysisView } from "./Analysis.tsx";
 import { RefPlayer } from "./Player.tsx";
-import { REF_STATUS } from "./RefList.tsx";
-import { localVideo } from "./uploads.ts";
+import { videoProblem } from "../upload.ts";
+import { statusOf } from "./RefList.tsx";
+import { localVideo, startUpload } from "./uploads.ts";
 
 /** The analysis job's own steps (§45.28, §45.34), used when the server's job is not in the answer. */
 export const REF_STEP_LABELS = REF_STEP_ORDER.map((k) => REF_STEP_LABEL[k]);
 
-type RefData = { reference: ReferenceVideo; analysis: ReferenceAnalysis | null; job?: ProductionJob | null };
+type RefData = { reference: ReferenceVideo; analysis: ReferenceAnalysis | null; job?: ProductionJob | null; fetchJob?: ProductionJob | null };
+
+/** A link reference whose video did not arrive, when its job says no reason of its own (§45.40.8, "anything else"). */
+export const FETCH_FAILED = "We couldn't get that video. Tap Try again, or save it and upload it.";
+
+/** True when asking again can work: every such reason (reached no one, no room, stopped, did not start, not shared
+ * yet, anything else) names Try again; a private, gone, live, too long, too big or blocked video never does. */
+export function canTryAgain(reason: string): boolean {
+  return /\bTry again\b/.test(reason);
+}
+
+/** Not a file yet: an upload on its way, or a link being fetched (or that did not arrive). */
+const NO_FILE_YET: ReferenceVideo["status"][] = ["uploading", "fetching", "fetch_failed"];
 
 /** A failure whose reason the page does not know (the contract's answer has no job). */
 export const ANALYSIS_FAILED = "The video analysis agent could not finish this one. Try again, or pick another model.";
@@ -60,7 +83,7 @@ export const FILE_REMOVED_NO_STUDY = "The video was removed to save space.";
  * has is the one kept.
  */
 export function removedState(ref: Pick<ReferenceVideo, "status" | "url" | "fileRemoved" | "studyKept">, analysis: ReferenceAnalysis | null | undefined): { removed: boolean; studyKept: boolean; line: string | null } {
-  const removed = typeof ref.fileRemoved === "boolean" ? ref.fileRemoved : ref.status !== "uploading" && !ref.url;
+  const removed = typeof ref.fileRemoved === "boolean" ? ref.fileRemoved : !NO_FILE_YET.includes(ref.status) && !ref.url;
   if (!removed) return { removed: false, studyKept: false, line: null };
   const studyKept = typeof ref.studyKept === "boolean" ? ref.studyKept : !!analysis;
   return { removed: true, studyKept, line: studyKept ? FILE_REMOVED : FILE_REMOVED_NO_STUDY };
@@ -100,6 +123,12 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
   const before = useRef<string | null | undefined>(undefined);
   /** How the last run this page followed ended, when it did not work. */
   const [failed, setFailed] = useState<string | null>(null);
+  const pageRef = useRef<HTMLElement>(null);
+  const fileInput = useRef<HTMLInputElement>(null);
+  /** Clips Funded's own root: the page's drop layer goes there, so its --st-* glass applies. */
+  const [layerHost, setLayerHost] = useState<Element | null>(null);
+  /** "Upload a video" in place of a link that did not arrive: on its way (the old reference is being deleted). */
+  const [replacing, setReplacing] = useState(false);
 
   const take = useCallback((r: RefData) => {
     setData(r);
@@ -111,6 +140,8 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
     if (status === "analyzing" && before.current === undefined) before.current = same(r.analysis);
     // A study that started or ended changes what Production can pick (§45.36 E2).
     if (was.current !== null && was.current !== status) referencesChanged();
+    // A link's video that just arrived: a cheer, then the usual Analyze card.
+    if (was.current === "fetching" && status === "ready") cheer(centerOf(analyzeBtn.current));
     if (was.current === "analyzing" && status !== "analyzing") {
       const old = before.current;
       before.current = undefined;
@@ -146,13 +177,40 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
     async () => {
       take((await storiesApi().getReference(ws, refId)) as RefData);
     },
-    data?.reference.status === "analyzing",
+    data?.reference.status === "analyzing" || data?.reference.status === "fetching",
     2000,
   );
 
+  useLayoutEffect(() => setLayerHost(pageRef.current?.closest(".stories-app") ?? null), []);
+
+  /**
+   * A video in place of a link that did not arrive: this reference goes, the video's own upload starts, and the list
+   * shows it on its way (then its page opens, as every finished upload does).
+   */
+  async function replaceWith(file: File) {
+    const r = data?.reference;
+    if (!r || r.status !== "fetch_failed" || replacing) return;
+    const bad = videoProblem(file);
+    if (bad) return setActionProblem(bad);
+    setReplacing(true);
+    setActionProblem(null);
+    try {
+      await storiesApi().deleteReferenceVideo(ws, r.refId);
+    } catch (e) {
+      setReplacing(false);
+      return setActionProblem(sentence(e, "That did not work. Try again."));
+    }
+    referencesChanged();
+    startUpload(ws, file);
+    storiesGoLater(storiesHref({ name: "references" }));
+  }
+
+  // Only while the link did not arrive: a video dropped anywhere on the page takes its place.
+  const drop = useFileDrop({ scope: "page", checkFile: videoProblem, onFiles: ([f]) => f && void replaceWith(f), enabled: data?.reference.status === "fetch_failed" && !replacing });
+
   if (problem)
     return (
-      <section className="st-page st-refs">
+      <section className="st-page st-refs" ref={pageRef}>
         <A href={storiesHref({ name: "references" })} className="st-chat-back st-chat-back--always">
           <Icon name="back" size={20} />
           All reference videos
@@ -176,7 +234,7 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
     );
   if (!data)
     return (
-      <section className="st-page st-refs">
+      <section className="st-page st-refs" ref={pageRef}>
         <h1 className="sr-only">Reference video</h1>
         <Waiting plate label="Opening the video…" />
       </section>
@@ -336,9 +394,32 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
   const stoppedSteps = !!job && job.status === "failed" && job.steps.length > 0;
   const kept = keptNow ?? ref.ai;
   const keepValues = { model: kept.model ?? DEFAULT, effort: kept.effort ?? DEFAULT };
+  // A reference from a link: its site, and its fetch while the video is on its way or did not arrive (§45.40).
+  const site = ref.link ? siteOf(ref.link) : null;
+  const fetchJob = data.fetchJob ?? null;
+  const fetchSteps: StoryStep[] = fetchJob?.steps.length ? fetchJob.steps : [{ key: "get", label: "Get the video", status: ref.status === "fetching" ? "running" : "failed" }];
+  const fetchProblem = fetchJob?.steps.find((st) => st.status === "failed" && st.message)?.message ?? fetchJob?.error ?? FETCH_FAILED;
+  const linkRef = ref.status === "fetching" || ref.status === "fetch_failed";
+  const retry = canTryAgain(fetchProblem);
+
+  async function fetchAgain() {
+    if (busy) return;
+    setBusy(true);
+    setActionProblem(null);
+    try {
+      const r = await storiesApi().fetchReferenceAgain(ws, ref.refId);
+      was.current = r.reference.status;
+      setData((d) => (d ? { ...d, reference: r.reference, fetchJob: r.job } : d));
+      referencesChanged();
+    } catch (e) {
+      setActionProblem(sentence(e, "That did not start. Try again."));
+    } finally {
+      setBusy(false);
+    }
+  }
 
   return (
-    <section className="st-page st-refs st-ref">
+    <section className="st-page st-refs st-ref" ref={pageRef}>
       <A href={storiesHref({ name: "references" })} className="st-chat-back st-chat-back--always">
         <Icon name="back" size={20} />
         All reference videos
@@ -382,7 +463,7 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
           </div>
         )}
         <p className="st-ref__meta">
-          <Chip tone={REF_STATUS[ref.status].tone}>{REF_STATUS[ref.status].text}</Chip>
+          <Chip tone={statusOf(ref.status).tone}>{statusOf(ref.status).text}</Chip>
           <span>{[ref.durationSec ? clock(ref.durationSec) : null, ref.bytes ? size(ref.bytes) : null].filter(Boolean).join(" · ")}</span>
         </p>
       </header>
@@ -394,7 +475,7 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
           ) : (
             <div className="st-ref-player__none">
               <Icon name="film" size={40} />
-              <span>{ref.status === "uploading" ? "The video is still on its way." : removed ? cleared.line : "The video plays here."}</span>
+              <span>{ref.status === "uploading" ? "The video is still on its way." : ref.status === "fetching" ? "The video is on its way." : ref.status === "fetch_failed" ? "The video didn't arrive." : removed ? cleared.line : "The video plays here."}</span>
             </div>
           )}
         </div>
@@ -404,6 +485,49 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
             <div className="st-ref-card2 st-glass">
               <h2 className="st-ref-block__title">Still uploading</h2>
               <p>This video did not finish uploading. If it was stopped, delete it and upload it again.</p>
+            </div>
+          ) : ref.status === "fetching" ? (
+            <div className="st-ref-card2 st-glass st-ref-fetch" aria-live="polite">
+              <h2 className="st-ref-block__title">{site ? `Getting it from ${SITE_NAME[site]}…` : "Getting it…"}</h2>
+              <ol className="st-ref-track" aria-label="Steps">
+                {fetchSteps.map((st, i) => (
+                  <li key={`${st.key}-${i}`} className={`st-ref-track__step is-${st.status}`}>
+                    <span className="st-ref-track__mark" aria-hidden="true">
+                      {st.status === "done" ? <Icon name="check" size={18} /> : i + 1}
+                    </span>
+                    <span className="st-ref-track__label">{st.label}</span>
+                    <span className="sr-only">{st.status === "done" ? "done" : st.status === "running" ? "working on it" : "next"}</span>
+                  </li>
+                ))}
+              </ol>
+              <div className="st-ref-busybar" aria-hidden="true" />
+            </div>
+          ) : ref.status === "fetch_failed" ? (
+            <div className="st-ref-card2 st-glass st-ref-fetch">
+              <h2 className="st-ref-block__title">It didn't arrive</h2>
+              <p className="st-chat-note st-chat-note--bad st-ref-failed" role="alert">
+                {fetchProblem}
+              </p>
+              <div className="st-ref-actions">
+                {/* One main button: Try again when asking again can work, else Upload a video. */}
+                <Btn main={retry} quiet={!retry} icon="retry" off={busy || replacing} onClick={() => void fetchAgain()}>
+                  {busy ? "Starting…" : "Try again"}
+                </Btn>
+                <Btn main={!retry} quiet={retry} icon="upload" off={replacing} onClick={() => fileInput.current?.click()}>
+                  {replacing ? "Uploading…" : "Upload a video"}
+                </Btn>
+                <input
+                  ref={fileInput}
+                  type="file"
+                  accept="video/mp4,video/quicktime,.mp4,.mov,.m4v"
+                  hidden
+                  onChange={(e) => {
+                    const f = e.target.files?.[0];
+                    e.target.value = "";
+                    if (f) void replaceWith(f);
+                  }}
+                />
+              </div>
             </div>
           ) : ref.status === "analyzing" ? (
             <div className="st-ref-card2 st-glass" aria-live="polite">
@@ -511,21 +635,25 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
             </div>
           ) : null}
           <div className="st-ref-actions st-ref-actions--more">
-            <button
-              type="button"
-              className={cx("st-chat-btn", ref.status === "analyzed" && "st-chat-btn--main")}
-              aria-disabled={ref.status !== "analyzed" || undefined}
-              onClick={() => {
-                if (ref.status !== "analyzed") return setWhyNot("Analyze it first, then use it in a video.");
-                navigate(productionNewHref({ referenceIds: [ref.refId] }));
-              }}
-            >
-              <Icon name="clapper" size={20} />
-              Use in a video
-            </button>
-            <Btn icon="chat" onClick={() => void talk()}>
-              Talk about it in Chat
-            </Btn>
+            {linkRef ? null : (
+              <>
+                <button
+                  type="button"
+                  className={cx("st-chat-btn", ref.status === "analyzed" && "st-chat-btn--main")}
+                  aria-disabled={ref.status !== "analyzed" || undefined}
+                  onClick={() => {
+                    if (ref.status !== "analyzed") return setWhyNot("Analyze it first, then use it in a video.");
+                    navigate(productionNewHref({ referenceIds: [ref.refId] }));
+                  }}
+                >
+                  <Icon name="clapper" size={20} />
+                  Use in a video
+                </button>
+                <Btn icon="chat" onClick={() => void talk()}>
+                  Talk about it in Chat
+                </Btn>
+              </>
+            )}
             <Btn danger icon="trash" onClick={remove}>
               Delete
             </Btn>
@@ -591,6 +719,7 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
           onClose={() => setSheet(false)}
         />
       ) : null}
+      <DropOverlay drop={drop} scope="page" look="stories" host={layerHost} words={{ file: "Drop your video here" }} />
     </section>
   );
 }

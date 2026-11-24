@@ -242,7 +242,7 @@ async function kindPage(ws: string, q: { kind: AssetKind; storyId?: string; limi
 function useFiles(ws: string, kinds: AssetKind[], storyId: string | null, seriesId?: string) {
   const [extra, setExtra] = useState<{ items: LibraryItem[]; cursors: (string | null)[] } | null>(null);
   const key = `${ws}|${kinds.join(",")}|${storyId ?? ""}${seriesId ? `|${seriesId}` : ""}`;
-  // §45.43: one series' files only when the page shows one (the key is left out otherwise)
+  // §45.44: one series' files only when the page shows one (the key is left out otherwise)
   const inSeries = seriesId ? { seriesId } : {};
   const loaded = useLoad(
     async () => {

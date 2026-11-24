@@ -1,4 +1,4 @@
-/* ---------- Car characters (docs/CONTRACTS.md §45.41): the kind tiles, the photo strip, "Pick one" and the car
+/* ---------- Car characters (docs/CONTRACTS.md §45.42): the kind tiles, the photo strip, "Pick one" and the car
    editor's moves. Liquid glass from the tokens (styles/GLASS-CONTRACT.md): no borders, --st-r-* radii, words of
    0.78rem and up, AA contrast; headings in Fugaz One (--st-font-display), words in Fraunces (the body font). ---------- */
 
@@ -234,7 +234,15 @@
   display: contents;
 }
 
-/* ---------- Cars (screens/Cars.tsx): the one big "Make a car", and Characters' way to the cars ---------- */
+/* ---------- Cars (screens/Cars.tsx): the one big "Make a car", and Characters' Make a car ---------- */
+.st-s-makecar--big {
+  min-height: 56px;
+  padding: 0 var(--st-space-6);
+  font-family: var(--st-font-display);
+  font-size: 1.15rem;
+  font-weight: 400;
+}
+
 .st-s-makecar .st-icon {
   flex: none;
 }

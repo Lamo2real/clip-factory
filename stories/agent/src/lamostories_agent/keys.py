@@ -101,7 +101,7 @@ def asset_sk(asset_id: str) -> str:
 
 
 def series_sk(series_id: str) -> str:
-    """A series (§45.43): a folder of story videos and its story so far."""
+    """A series (§45.44): a folder of story videos and its story so far."""
     return f"SERIES#{series_id}"
 
 

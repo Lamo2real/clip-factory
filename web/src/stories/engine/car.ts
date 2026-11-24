@@ -1,4 +1,4 @@
-// Clips Funded engine: a car character of the cast (CONTRACTS §45.41, ADR-89). A car of the cast is a car prop whose
+// Clips Funded engine: a car character of the cast (CONTRACTS §45.42, ADR-91). A car of the cast is a car prop whose
 // `castId` names it: it is drawn from its own CarLook, in the side and the top view, in the same frame as the plain
 // car of props.ts (origin on the ground at its centre, facing +x, px × k; top view: its centre, nose up). Cartoon
 // style: bold friendly shapes with the same outline weight as people. A plate is always one plain light rectangle and

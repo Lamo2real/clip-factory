@@ -286,6 +286,18 @@ def analyze_reference(app: App, req: Request) -> Response:
     return ok(references.analyze(app, user_id, ws_id, req.params["refId"], req.json(), now=now), 202)
 
 
+def create_reference_from_link(app: App, req: Request) -> Response:
+    """§45.40: a reference from a pasted link; Clips Funded's own runtime gets the video (``fetch_reference``)."""
+    user_id, ws_id, _, now = _open(app, req)
+    return ok(references.create_from_link(app, user_id, ws_id, req.json(), now=now), 202)
+
+
+def fetch_reference_again(app: App, req: Request) -> Response:
+    """§45.40: "Try again" on a link reference whose video did not arrive."""
+    user_id, ws_id, _, now = _open(app, req)
+    return ok(references.fetch_again(app, user_id, ws_id, req.params["refId"], req.json(), now=now), 202)
+
+
 def get_reference(app: App, req: Request) -> Response:
     user_id, ws_id, _, now = _open(app, req)
     return ok(references.get(app, user_id, ws_id, req.params["refId"], now))
@@ -391,6 +403,8 @@ ROUTES: list[Route] = [
     route("POST", f"{BASE}/references", create_reference),
     route("POST", f"{BASE}/references/{{refId}}/complete", complete_reference),
     route("POST", f"{BASE}/references/{{refId}}/analyze", analyze_reference),
+    route("POST", f"{BASE}/references/link", create_reference_from_link),
+    route("POST", f"{BASE}/references/{{refId}}/fetch", fetch_reference_again),
     route("GET", f"{BASE}/references/{{refId}}", get_reference),
     route("PATCH", f"{BASE}/references/{{refId}}", patch_reference),
     route("DELETE", f"{BASE}/references/{{refId}}", delete_reference),

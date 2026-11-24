@@ -1,4 +1,4 @@
-"""Clips Funded's sound samples (docs/CONTRACTS.md §45.40, ADR-88): every effect and every character noise, in both
+"""Clips Funded's sound samples (docs/CONTRACTS.md §45.41, ADR-90): every effect and every character noise, in both
 voices at every stop of the editor's pitch slider, rendered ahead of time by this agent's own synth (audio.py) into
 small MP3 files the web plays. What the owner hears in the character editor is the sound the videos use.
 
@@ -206,7 +206,7 @@ def repo_root() -> Path:
 def root_ts(rec: str) -> str:
     stops = ", ".join(f"{p:g}" for p in PITCHES)
     return (
-        "// Written by `python -m lamostories_agent.samples` (CONTRACTS §45.40). Do not edit.\n"
+        "// Written by `python -m lamostories_agent.samples` (CONTRACTS §45.41). Do not edit.\n"
         f'export const SAMPLE_ROOT = "{ROOT_URL}/{rec}";\n'
         f"export const SAMPLE_PITCHES: readonly number[] = [{stops}];\n"
     )

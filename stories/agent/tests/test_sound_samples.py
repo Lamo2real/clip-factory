@@ -1,4 +1,4 @@
-"""The character editor's sound samples are the synth's own sounds, and up to date (docs/CONTRACTS.md §45.40, ADR-88).
+"""The character editor's sound samples are the synth's own sounds, and up to date (docs/CONTRACTS.md §45.41, ADR-90).
 
 When this fails after a change to audio.py or samples.py, run ``uv run python -m lamostories_agent.samples`` from
 stories/agent (it needs ffmpeg) and commit web/public/sounds/stories and web/src/stories/studio/samplesRoot.ts."""

@@ -4,7 +4,7 @@
 // web/src/api/upload.ts plays out with progress); a portrait only when AI pictures are on in Settings; and "Design
 // with AI": a picture for it (designUpload, a design_ref the Library never lists) and the character agent's task that
 // suggests a whole CharacterInput from the owner's words and/or that picture (a draft: nothing is saved).
-// A car character (§45.41): the API's car rules mirrored (no voice, no face keeps only neutral), a design from up to 6
+// A car character (§45.42): the API's car rules mirrored (no voice, no face keeps only neutral), a design from up to 6
 // photos that suggests 3 cartoon cars to pick from (result.characters; result.character is the first), and Rosso,
 // the seeded red hatchback (SEED_CAR_ID, added once every part has seeded: afterSeed, or seedCar in a test).
 import { isCar, type CarInput, type Character, type CharacterInput, type LibraryItem, type PersonInput, type ProductionJob, type StoriesApi, type StoriesConfig } from "../types.ts";
@@ -118,7 +118,7 @@ function input(c: CharacterInput): CharacterInput {
       movementStyle: c.movementStyle,
       expressions: [...c.expressions],
       car: clone(c.car),
-      // A car's pitch is stored as 1 (§45.41).
+      // A car's pitch is stored as 1 (§45.42).
       voice: { ...clone(c.voice), pitch: 1 },
     };
   return {
@@ -344,7 +344,7 @@ export function redesign(current: CharacterInput, fresh: CharacterInput, words: 
   return { ...next, name: current.name };
 }
 
-// ---------- Design with AI for a car (the practice character agent, §45.41) ----------
+// ---------- Design with AI for a car (the practice character agent, §45.42) ----------
 
 const CAR_COLOR_WORDS: [RegExp, string][] = [
   [/\b(red|cherry)\b/i, "#d8352a"],
@@ -425,7 +425,7 @@ function carFromWords(t: string, base: CarLook): CarLook {
 }
 
 /**
- * The practice character agent's cartoon cars (§45.41): `count` options from the owner's words (and photos), each
+ * The practice character agent's cartoon cars (§45.42): `count` options from the owner's words (and photos), each
  * clearly different from the others and from `avoid`, the first the closest; their names are not taken. A redesign
  * starts from the saved car (`current`) and keeps its name.
  */
@@ -460,7 +460,7 @@ export function designCars(words: string, photos: number, salt: number, count: n
   return out;
 }
 
-/** Rosso, the seeded red hatchback (§45.41): added once, after every part has seeded. */
+/** Rosso, the seeded red hatchback (§45.42): added once, after every part has seeded. */
 export function seedCar(store: MockStore): void {
   if (store.characters.some((c) => c.characterId === SEED_CAR_ID)) return;
   const at = iso(Date.now() - 10 * 86_400_000);
@@ -680,7 +680,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       guardWs(store, ws);
       const words = (body.description ?? "").trim();
       if (words.length > 600) fail(400, "bad_request", "Keep the description to 600 letters.");
-      // The older single picture goes first (§45.41); up to 6, each once.
+      // The older single picture goes first (§45.42); up to 6, each once.
       const refs = [...new Set([...(body.referenceAssetId ? [body.referenceAssetId] : []), ...(body.referenceAssetIds ?? [])])];
       if (refs.length > 6) fail(400, "bad_request", "Pick up to 6 photos.");
       if (body.count !== undefined && (!Number.isInteger(body.count) || body.count < 1 || body.count > 4)) fail(400, "bad_request", "count must be 1 to 4.");

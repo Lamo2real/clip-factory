@@ -3,7 +3,7 @@
 import type { CharacterKind } from "./engine/types.ts";
 
 /**
- * `?series=` (CONTRACTS §45.43): a series id, or "none" (videos in no series). Each page key below that holds it is
+ * `?series=` (CONTRACTS §45.44): a series id, or "none" (videos in no series). Each page key below that holds it is
  * there only when the address has it, so the address alone says which series a page shows (no hidden filter).
  */
 export type StoriesPage =
@@ -11,10 +11,10 @@ export type StoriesPage =
   /** `?ask=1` opens Ask for ideas at once (a series' "Ask for ideas") */
   | { name: "ideas"; seriesId?: string; ask?: true }
   | { name: "characters" }
-  /** `?kind=car` starts on the car tile (§45.41) */
+  /** `?kind=car` starts on the car tile (§45.42) */
   | { name: "character_new"; kind?: CharacterKind }
   | { name: "character"; characterId: string }
-  /** Cars (§45.41): the car characters (the same characters, kind "car"), making one, and one car's page */
+  /** Cars (§45.42): the car characters (the same characters, kind "car"), making one, and one car's page */
   | { name: "cars" }
   | { name: "car_new" }
   | { name: "car"; characterId: string }
@@ -28,7 +28,7 @@ export type StoriesPage =
   | { name: "review"; seriesId?: string }
   | { name: "review_story"; storyId: string }
   | { name: "library"; kind: string | null; storyId: string | null; seriesId?: string }
-  /** Series (§45.43): the folders, and one folder */
+  /** Series (§45.44): the folders, and one folder */
   | { name: "series" }
   | { name: "series_one"; seriesId: string }
   | { name: "connections"; platform: string | null; result: string | null; ws: string | null }

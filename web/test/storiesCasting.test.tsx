@@ -1,4 +1,4 @@
-// A person and a car in one video (docs/CONTRACTS.md §45.42) and a video filed in a series (§45.43): the cast picker
+// A person and a car in one video (docs/CONTRACTS.md §45.43) and a video filed in a series (§45.44): the cast picker
 // (People, then the "Your cars" row; a car swaps for the car picked; up to 3), castProblem's sentences (the API's), castOrder
 // (the people as tapped, then the car), and what Production › Make a new video sends: the people first, `seriesId` only
 // when a series is picked, the series' cast to start with; the Production list asked for one series only when the

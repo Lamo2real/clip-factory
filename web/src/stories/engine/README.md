@@ -184,7 +184,7 @@ character agent's answer as a `CharacterInput` (CONTRACTS §45.6): its look, mov
 cast is checked; its `expressions` (required: at least 3 different known faces, `neutral` among them); and, when they
 are there, `name` (1 to 30), `description` and `personality` (at most 400 each) and `traits` (at most 8, each 1 to 30).
 
-## Cars of the cast (`car.ts`, CONTRACTS §45.41, §45.42)
+## Cars of the cast (`car.ts`, CONTRACTS §45.42, §45.43)
 
 A car character is never an actor. It is `script.cars[id]` (a `CarMember`: `characterId`, `name`, `car` (a `CarLook`),
 `movementStyle`, `voice` with style `none` and no noises, and `expressions`), with an id that is never a `cast` key.

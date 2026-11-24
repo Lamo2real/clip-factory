@@ -1,7 +1,7 @@
-// The character editor's Sounds part (docs/CONTRACTS.md §45.40): every sound can be heard before it is picked. A
+// The character editor's Sounds part (docs/CONTRACTS.md §45.41): every sound can be heard before it is picked. A
 // person picks a voice (a "Hear" row plays each one at the chosen pitch, and letting go of the pitch slider plays the
 // voice at the new pitch), its noises and its favourite effects, each chip with its own play button; a car has no
-// voice and picks its car sounds first (§45.41). The samples are the videos' own sounds (samples.ts). Tapping a chip
+// voice and picks its car sounds first (§45.42). The samples are the videos' own sounds (samples.ts). Tapping a chip
 // only picks it; its play button plays it, and a second tap stops it.
 import { useState } from "react";
 import { CATALOG } from "../engine/catalog.ts";

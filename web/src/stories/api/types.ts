@@ -560,10 +560,15 @@ export interface MemoryItem {
 export interface ReferenceVideo {
   refId: string;
   title: string;
-  status: "uploading" | "ready" | "analyzing" | "analyzed" | "failed";
+  /** fetching / fetch_failed: a reference made from a link while Clips Funded's own runtime gets the video, or after
+   * it could not (§45.40); "failed" still means only that the study failed */
+  status: "uploading" | "fetching" | "fetch_failed" | "ready" | "analyzing" | "analyzed" | "failed";
   durationSec: number | null;
   bytes: number;
+  /** the video file, only once it is here: ready, analyzing, analyzed or failed (never while uploading or fetching) */
   url?: string;
+  /** the cleaned https link the video came from (§45.40); null for an upload, missing from an older API */
+  link?: string | null;
   currentJobId: string | null;
   ai: AiSetting;
   analyzedWith: { model: string; effort: Effort | null } | null;
@@ -670,7 +675,7 @@ export interface IdeaInput {
   concept?: VideoConcept;
   source?: "manual" | "ai" | "variation";
   parentIdeaId?: string;
-  /** the series it is filed in (§45.43); null only in a patch, where it means "No series" */
+  /** the series it is filed in (§45.44); null only in a patch, where it means "No series" */
   seriesId?: string | null;
 }
 
@@ -702,7 +707,7 @@ export interface PersonInput extends CharacterBase {
   look: CharacterLook;
   car?: undefined;
 }
-/** A car (§45.41): no person look, no voice (style "none", noises []), favourite effects only. */
+/** A car (§45.42): no person look, no voice (style "none", noises []), favourite effects only. */
 export interface CarInput extends CharacterBase {
   kind: "car";
   car: CarLook;
@@ -724,7 +729,7 @@ export interface CharacterSaved {
 }
 export type Character = CharacterInput & CharacterSaved;
 
-/** POST …/characters/design (§45.41). */
+/** POST …/characters/design (§45.42). */
 export interface DesignBody {
   description?: string;
   /** the older single picture; still accepted (it goes first) */
@@ -746,7 +751,7 @@ export interface DesignResult {
   characters?: CharacterInput[];
 }
 
-/** A series: a folder of story videos (§45.43). */
+/** A series: a folder of story videos (§45.44). */
 export interface SeriesInput {
   name: string;
   line?: string | null;
@@ -826,7 +831,7 @@ export interface StoryInput {
   art?: ArtStyle;
   /** the first job's model and effort only, never kept (§45.5 POST /stories; the stand-in for a usual model the studio knows cannot be used, §45.36 E12) */
   override?: ModelOverride;
-  /** the series it is filed in (§45.43); null: No series, picked on purpose; left out: the idea's, else No series */
+  /** the series it is filed in (§45.44); null: No series, picked on purpose; left out: the idea's, else No series */
   seriesId?: string | null;
 }
 
@@ -918,7 +923,7 @@ export interface Story {
   updatedAt: string;
   approvedAt?: string;
   publishedAt?: string;
-  /** the series it is filed in (§45.43); missing: No series */
+  /** the series it is filed in (§45.44); missing: No series */
   seriesId?: string;
 }
 
@@ -928,8 +933,8 @@ export const REF_STEP_ORDER: RefStepKey[] = ["look", "listen", "write"];
 export const REF_STEP_LABEL: Record<RefStepKey, string> = { look: "Look at it", listen: "Listen", write: "Write it up" };
 
 export interface StoryStep {
-  /** a portrait job has one step of its own: { key: "portrait", label: "Draw the picture" }; a reference analysis has look, listen, write; Nova Reel's try has { key: "check", label: "Try it" } (§45.35 D2) */
-  key: StepKey | "portrait" | RefStepKey | "check";
+  /** a portrait job has one step of its own: { key: "portrait", label: "Draw the picture" }; a reference analysis has look, listen, write; Nova Reel's try has { key: "check", label: "Try it" } (§45.35 D2); a reference from a link has { key: "get", label: "Get the video" } (§45.40) */
+  key: StepKey | "portrait" | RefStepKey | "check" | "get";
   label: string;
   status: "pending" | "running" | "done" | "failed" | "skipped";
   message?: string;
@@ -946,12 +951,12 @@ export interface ProductionJob {
   contentType: "animation" | "character" | "reference" | "provider";
   /** storyId, characterId (portrait) or refId (reference analysis) */
   contentId: string;
-  /** provider_check: Nova Reel's "Try it" (one 6-second test shot, §45.35 D2) */
-  jobType: "produce" | "changes" | "portrait" | "reference_analysis" | "provider_check";
+  /** provider_check: Nova Reel's "Try it" (one 6-second test shot, §45.35 D2); reference_fetch: getting a reference video from its link (§45.40) */
+  jobType: "produce" | "changes" | "portrait" | "reference_analysis" | "reference_fetch" | "provider_check";
   status: "queued" | "running" | "ready" | "needs_check" | "failed" | "canceled";
   steps: StoryStep[];
   progress: number;
-  configuration: { run: (StepKey | "portrait" | RefStepKey | "check")[]; from: StepKey | null; sceneIds: string[] | null; note: string | null };
+  configuration: { run: (StepKey | "portrait" | RefStepKey | "check" | "get")[]; from: StepKey | null; sceneIds: string[] | null; note: string | null };
   meta: {
     writerModel: string | null;
     engineVersion: number | null;
@@ -1281,11 +1286,11 @@ export interface StoriesApi {
   designUpload(ws: string, file: { filename: string; contentType: string; size: number }): Promise<Upload>;
   /**
    * the character agent's suggested CharacterInput in result.character, and every option in result.characters (drafts,
-   * a DesignResult); with characterId it redesigns that character (CONTRACTS §45.34, §45.41)
+   * a DesignResult); with characterId it redesigns that character (CONTRACTS §45.34, §45.42)
    */
   designCharacter(ws: string, body: DesignBody): Promise<AiTask>;
 
-  /** seriesId: a series id, or "none" (no series, or one that is gone; §45.43) */
+  /** seriesId: a series id, or "none" (no series, or one that is gone; §45.44) */
   listStories(ws: string, q?: { status?: StoryStatus | "all"; limit?: number; cursor?: string; seriesId?: string }): Promise<{ stories: Story[]; nextCursor: string | null }>;
   createStory(ws: string, body: StoryInput): Promise<{ story: Story; job: ProductionJob }>;
   getStory(ws: string, storyId: string): Promise<{ story: Story; job: ProductionJob | null; script: StoryScript | null }>;
@@ -1304,10 +1309,10 @@ export interface StoriesApi {
   /** the MP4, or one of the extra copies the video has (CONTRACTS §45.34 "Output formats") */
   download(ws: string, storyId: string, body?: { format?: DownloadFormat }): Promise<{ url: string; filename: string }>;
 
-  /** seriesId: a series id, or "none" (§45.43); assets without a story show only under All */
+  /** seriesId: a series id, or "none" (§45.44); assets without a story show only under All */
   library(ws: string, q?: { kind?: AssetKind | "all"; storyId?: string; characterId?: string; limit?: number; cursor?: string; seriesId?: string }): Promise<{ items: LibraryItem[]; nextCursor: string | null }>;
 
-  /** Series (§45.43): folders of story videos, newest first */
+  /** Series (§45.44): folders of story videos, newest first */
   listSeries(ws: string): Promise<Series[]>;
   createSeries(ws: string, s: SeriesInput): Promise<Series>;
   getSeries(ws: string, seriesId: string): Promise<Series>;
@@ -1392,8 +1397,12 @@ export interface StoriesApi {
   createReference(ws: string, body: { filename: string; contentType: string; size: number; title: string }): Promise<{ reference: ReferenceVideo; upload: { uploadId: string; parts: { partNumber: number; url: string }[] } }>;
   completeReference(ws: string, refId: string, parts: { partNumber: number; etag: string }[]): Promise<ReferenceVideo>;
   analyzeReference(ws: string, refId: string, override?: ModelOverride): Promise<{ reference: ReferenceVideo; job: ProductionJob }>;
-  /** `job`: the analysis job of currentJobId, else the latest one (CONTRACTS §45.34) */
-  getReference(ws: string, refId: string): Promise<{ reference: ReferenceVideo; analysis: ReferenceAnalysis | null; job: ProductionJob | null }>;
+  /** a reference from a pasted link (§45.40): 202 with the reference `fetching` and its `reference_fetch` job; the API cleans share text and refuses links it can't get (400 field url) */
+  createReferenceFromLink(ws: string, body: { url: string; title?: string }): Promise<{ reference: ReferenceVideo; job: ProductionJob }>;
+  /** "Try again" on a link reference that is `fetch_failed` (§45.40) */
+  fetchReferenceAgain(ws: string, refId: string): Promise<{ reference: ReferenceVideo; job: ProductionJob }>;
+  /** `job`: the analysis job of currentJobId, else the latest one (CONTRACTS §45.34); `fetchJob`: the newest reference_fetch job of a link reference (§45.40), null for an upload, missing from an older API */
+  getReference(ws: string, refId: string): Promise<{ reference: ReferenceVideo; analysis: ReferenceAnalysis | null; job: ProductionJob | null; fetchJob?: ProductionJob | null }>;
   /** the title, and the video's own model and effort (`ai`, §45.25 level 2: "Keep with this video") */
   patchReference(ws: string, refId: string, patch: { title?: string; ai?: AiSetting }): Promise<ReferenceVideo>;
   /** a reference video (renamed from deleteReference(ws, refId), CONTRACTS §45.34; deleteReference is a character's picture) */

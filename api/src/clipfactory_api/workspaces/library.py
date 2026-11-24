@@ -78,7 +78,7 @@ def asset_filter(
     character_id: str | None,
     story_ids: frozenset[str] | None = None,
 ) -> Callable[[Item], bool]:
-    """``story_ids`` (§45.43, ``?seriesId=``): only the files of those stories; a file with no story is left out."""
+    """``story_ids`` (§45.44, ``?seriesId=``): only the files of those stories; a file with no story is left out."""
 
     def keep(item: Item) -> bool:
         if item.get("type") != ws.TYPE_ASSET or not guard.owned(item, user_id, workspace_id):

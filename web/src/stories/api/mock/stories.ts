@@ -11,9 +11,9 @@
 //
 // Also the small helpers the ideas and characters parts share (ids, errors, the workspace check, the seed ids).
 //
-// A cast may hold one car with the people who drive it (§45.42): the practice writer puts it in the script's `cars`,
+// A cast may hold one car with the people who drive it (§45.43): the practice writer puts it in the script's `cars`,
 // stages it as a car prop with its castId (getting in, driving off, honking, stalling), and a video filed in a series
-// (§45.43) tells the series part when it is approved or deleted.
+// (§45.44) tells the series part when it is approved or deleted.
 import { ApiError, type ErrorCode } from "../../../api/errors.ts";
 import { CATALOG, CUTS, drawFrame, ENGINE_VERSION, fitDuration, normalizeScript, scaleCuts, sceneFrames, validateScript } from "../../engine/engine.ts";
 import { setInfo } from "../../engine/sets.ts";
@@ -231,7 +231,7 @@ function noiseOf(c: Character | undefined, want: NoiseId): NoiseId | undefined {
 
 type Person = Extract<Character, { look: object }>;
 
-/** The people in their order, then the car (§45.42): ids c1, c2, … in that order, so c1 is the main character. */
+/** The people in their order, then the car (§45.43): ids c1, c2, … in that order, so c1 is the main character. */
 function castOf(chars: Character[]): { cast: Record<string, CastMember>; cars: Record<string, CarMember> } {
   const cast: Record<string, CastMember> = {};
   const cars: Record<string, CarMember> = {};
@@ -243,7 +243,7 @@ function castOf(chars: Character[]): { cast: Record<string, CastMember>; cars: R
   return { cast, cars };
 }
 
-/** The API's own rule for a cast's kinds (characters.cast_problem, §45.42), in its sentences. */
+/** The API's own rule for a cast's kinds (characters.cast_problem, §45.43), in its sentences. */
 function castRule(chars: Character[]): string | null {
   const cars = chars.filter(isCar).length;
   if (cars > 1) return "Pick one car.";
@@ -284,7 +284,7 @@ function drivingDrafts(chars: Person[], topicId: string, n: number, carId: strin
   const pal = chars[1];
   const steps = shownSteps(topicId).filter((s) => s.text.length <= 60);
   const teach = Math.max(1, n - 4);
-  // the cast's own car when it has one (§45.42), else a car in the lead's colour
+  // the cast's own car when it has one (§45.43), else a car in the lead's colour
   const car = (x: number): SceneProp => ({ propId: "car1", kind: "car", x, y: 0.72, scale: 1, rot: 0, ...(carId ? { castId: carId } : lead ? { color: lead.look.outfit.top } : {}) });
   const inCar = (x: number): SceneActor[] => [{ castId: "c1", x, y: 0.72, facing: "right", inCar: "car1" }];
   const out: Draft[] = [
@@ -398,7 +398,7 @@ function storyDrafts(chars: Person[], category: Exclude<IdeaCategory, "driving_s
   }));
 }
 
-/** A story with the cast's car (§45.42): the main character gets in, they drive off, honk and stop, then the car
+/** A story with the cast's car (§45.43): the main character gets in, they drive off, honk and stop, then the car
  * stalls and goes again. A longer video drives round the block in between. The lead is always the first person. */
 function carDrafts(people: Person[], carId: string, n: number, night = false): Draft[] {
   const lead = people[0];
@@ -1333,7 +1333,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       settle();
       await delay(120);
       const limit = Math.min(50, Math.max(1, q.limit ?? 20));
-      // seriesId: one series, or "none": no series, or one that is gone (§45.43)
+      // seriesId: one series, or "none": no series, or one that is gone (§45.44)
       const inSeries = (s: Story) => !q.seriesId || (q.seriesId === "none" ? !s.seriesId || !seriesExists(store, ws, s.seriesId) : s.seriesId === q.seriesId);
       const all = store.stories
         .filter((s) => s.workspaceId === ws && (!q.status || q.status === "all" || s.status === q.status) && inSeries(s))
@@ -1406,7 +1406,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
         createdAt: iso(now),
         updatedAt: iso(now),
       };
-      // the body's series, else the idea's; one that is gone is dropped (§45.43)
+      // the body's series, else the idea's; one that is gone is dropped (§45.44)
       const seriesId = body.seriesId === null ? null : (body.seriesId ?? idea?.seriesId); // null: No series, on purpose
       if (seriesId && seriesExists(store, ws, seriesId)) story.seriesId = seriesId;
       store.stories.push(story);
@@ -1606,7 +1606,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       story.version += 1;
       story.updatedAt = iso();
       addActivity(store, "approved", story);
-      // an episode of a series: its summary and the story so far (§45.43)
+      // an episode of a series: its summary and the story so far (§45.44)
       if (story.seriesId) seriesApproved(store, story);
       return storyOut(store, story);
     },

@@ -1,4 +1,4 @@
-// One member of the cast, a person or a car (docs/CONTRACTS.md §45.41, §45.42): the gallery, the cast pickers, the
+// One member of the cast, a person or a car (docs/CONTRACTS.md §45.42, §45.43): the gallery, the cast pickers, the
 // series' covers and the chat's cards. `on` is a picked tile: a person waves with its own happy face, a car bounces;
 // off is the plain, still pose; left out, the character's own face standing still (the gallery). Drawn in the nearest
 // ArtProvider's drawing style (§45.45), or `art`.

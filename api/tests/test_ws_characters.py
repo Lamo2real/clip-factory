@@ -343,7 +343,7 @@ def test_the_api_vocabulary_mirrors_the_engine() -> None:
 
 
 def _ts_car_ids(key: str) -> list[str]:
-    """One list of ``CATALOG.carLooks`` (catalog.ts, §45.41)."""
+    """One list of ``CATALOG.carLooks`` (catalog.ts, §45.42)."""
     text = (ENGINE / "catalog.ts").read_text()
     block = re.search(r"\n  carLooks: \{(.*?)\n  \},", text, re.S)
     assert block, "carLooks"
@@ -405,7 +405,7 @@ def test_design_with_ai_uploads_a_hidden_picture_and_asks_the_character_agent(
     assert stored is not None
     assert stored["agentId"] == "character"
     assert stored["input"] == {
-        "kind": "person",  # §45.41: a person, one option, the picture in the photo list too
+        "kind": "person",  # §45.42: a person, one option, the picture in the photo list too
         "count": 1,
         "description": "A tall orange cat in a raincoat",
         "references": [{"assetId": up["assetId"], "key": key, "contentType": "image/webp"}],

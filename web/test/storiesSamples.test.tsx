@@ -1,4 +1,4 @@
-// The character editor's sound samples (docs/CONTRACTS.md §45.40): every voice, noise and effect has its file, a play
+// The character editor's sound samples (docs/CONTRACTS.md §45.41): every voice, noise and effect has its file, a play
 // button plays it without picking the chip, one sample plays at a time, Clips Funded's Sounds switch and Quiet switch
 // the buttons off, letting go of the pitch slider plays the voice at the snapped pitch, a car hears its car sounds
 // first, and the play buttons never make the click sound. Rendered in jsdom (no Web Audio: the player only logs),

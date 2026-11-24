@@ -373,7 +373,8 @@ test("a reference video: upload in parts, analyze with a per-run model, the anal
   const input = page.locator('.st-ref-drop input[type="file"]');
   await input.setInputFiles({ name: "notes.txt", mimeType: "text/plain", buffer: Buffer.from("hello") });
   await expect(page.getByText("Pick an MP4 or MOV video.")).toBeVisible();
-  await page.getByRole("button", { name: "Hide notes" }).click();
+  // §45.40: the picker's refusal is the card's line, never a failed upload row.
+  await expect(page.locator(".st-ref-upload")).toHaveCount(0);
 
   // Upload: the progress, then its own page, ready to analyze.
   await page.evaluate(() => ((window as StoriesWindow).__cfSoundLog = []));

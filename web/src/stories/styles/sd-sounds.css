@@ -1,4 +1,4 @@
-/* The character editor's Sounds part (docs/CONTRACTS.md §45.40): a round glass play button before each chip, the
+/* The character editor's Sounds part (docs/CONTRACTS.md §45.41): a round glass play button before each chip, the
    "Hear" row of the two voices, and the one-line hints. No borders: fills and shadows; radii from --st-r-*. */
 
 /* A chip with its play button: the two sit together as one item of the chip row. */

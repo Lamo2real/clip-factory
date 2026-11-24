@@ -58,7 +58,7 @@ def colour_name(hex_color: Any) -> str:
 
 
 def portrait_prompt(ch: dict[str, Any]) -> str:
-    if ch.get("kind") == "car":  # §45.41: the car in words, never a make, a badge or a plate
+    if ch.get("kind") == "car":  # §45.42: the car in words, never a make, a badge or a plate
         words = car_words(ch.get("car") or {}).removeprefix("an ").removeprefix("a ")
         return (
             f"A friendly cartoon {words}, three-quarter view, bold clean outline, flat colours, plain soft background. "

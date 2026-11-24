@@ -1,4 +1,4 @@
-"""Series: a folder of story videos with a short running memory, the story so far (docs/CONTRACTS.md §45.43, ADR-90).
+"""Series: a folder of story videos with a short running memory, the story so far (docs/CONTRACTS.md §45.44, ADR-92).
 
 Pure: the rules of what the owner sends and the public ``Series`` shape. A ``SERIES#{seriesId}`` item keeps only the
 owner's fields, the story so far and the episode summaries (the newest 50, rewritten whole); its episodes, their

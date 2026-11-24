@@ -1,4 +1,4 @@
-// Clips Funded › Series (docs/CONTRACTS.md §45.43). A series is a folder of story videos with the same cast: its name,
+// Clips Funded › Series (docs/CONTRACTS.md §45.44). A series is a folder of story videos with the same cast: its name,
 // one line about it, its cast (the main character first, at most one car), and everything in it (ideas, videos being
 // made, waiting for review, and its episodes). Each folder keeps a short memory, the story so far, written by Clips
 // Funded after each approval (or by the owner, who can edit it), which the idea helper and the story writer read so the
@@ -37,7 +37,7 @@ export function seriesProblem(name: string, line: string, cast: Character[]): st
   return castProblem(cast);
 }
 
-/** Make the next episode (§45.43): a new video in the series with its cast, and the series' next saved idea already
+/** Make the next episode (§45.44): a new video in the series with its cast, and the series' next saved idea already
  * picked when it has one (with none, New video lists the other ideas, or asks for some in the series). */
 export function nextEpisodeHref(s: Pick<Series, "seriesId" | "castIds">, ideas: Pick<Idea, "ideaId">[]): string {
   return storiesHref({ name: "production_new", ideaId: ideas[0]?.ideaId ?? null, castIds: s.castIds, seriesId: s.seriesId });

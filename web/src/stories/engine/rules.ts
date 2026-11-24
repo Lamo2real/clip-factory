@@ -1,5 +1,5 @@
 // Lamo Stories engine: what the script's free words and numbers mean, in plain sentences for the story writer and the
-// fact checker (CONTRACTS §45.10, §45.11.2, §45.11.5, §45.34, §45.42, §45.45). `cli.ts catalog` gives them next to the
+// fact checker (CONTRACTS §45.10, §45.11.2, §45.11.5, §45.34, §45.43, §45.45). `cli.ts catalog` gives them next to the
 // catalog, the limits and the formats, so a writer never has to guess which way a skid slides, which faces a character
 // has or what shape the frame is. engine/README.md says the same at more length.
 

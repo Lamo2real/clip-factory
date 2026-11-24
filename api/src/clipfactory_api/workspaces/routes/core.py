@@ -432,7 +432,7 @@ def _check_characters(ctx: Ctx, ids: list[str]) -> list[Item]:
 
 
 def _series_item(ctx: Ctx, series_id: Any) -> Item | None:
-    """This workspace's series (§45.43), else None."""
+    """This workspace's series (§45.44), else None."""
     if not isinstance(series_id, str) or not is_ulid(series_id):
         return None
     return ctx.owned(ctx.store.get(ctx.pk, series_rules.series_sk(series_id)), ws.TYPE_SERIES)
@@ -461,7 +461,7 @@ def create_idea(app: App, req: Request) -> Response:
     ):
         fields.pop("parentIdeaId")  # the idea it came from is gone: keep the new one anyway
     if fields.get("seriesId") and not _series_exists(ctx, fields["seriesId"]):
-        fields.pop("seriesId")  # §45.43: the series is gone: keep the idea, under No series
+        fields.pop("seriesId")  # §45.44: the series is gone: keep the idea, under No series
     item = _idea_item(ctx, fields, guidance.load())
     ctx.store.put(item, if_absent=True)
     return ok({"idea": shapes.public_idea(item)}, 201)
@@ -473,7 +473,7 @@ def patch_idea(app: App, req: Request) -> Response:
     current = _get(ctx, ws.IDEA_SK, idea_id, ws.TYPE_IDEA, NO_IDEA)
     changes = ideas.idea_input(req.json(), partial=True)
     if changes.get("seriesId") and not _series_exists(ctx, changes["seriesId"]):
-        changes.pop("seriesId")  # §45.43: the series is gone: the idea stays where it is
+        changes.pop("seriesId")  # §45.44: the series is gone: the idea stays where it is
     if not changes:
         raise bad_request("Nothing to change.")
     _check_characters(ctx, changes.get("characterIds") or [])
@@ -622,7 +622,7 @@ def _task_result(ctx: Ctx, task: Item) -> Item:
 
 
 def _in_series(ctx: Ctx, drafts: list[Item], series: Mapping[str, Any]) -> list[Item]:
-    """Drafts of a series' ideas (§45.43): filed in it, the series' cast when a draft has none, and the main person
+    """Drafts of a series' ideas (§45.44): filed in it, the series' cast when a draft has none, and the main person
     first when a draft has only a car."""
     kinds = {str(c["characterId"]): c.get("kind") or "person" for c in _all(ctx, ws.CHAR_SK, ws.TYPE_CHARACTER)}
     cast = [c for c in series.get("castIds") or [] if c in kinds]
@@ -1034,7 +1034,7 @@ def _design_picture(ctx: Ctx, asset_id: Any) -> Item:
 
 
 def design_character(app: App, req: Request) -> Response:
-    """The character agent suggests characters from words and/or photos: ``202 { task }`` (drafts). §45.34, §45.41:
+    """The character agent suggests characters from words and/or photos: ``202 { task }`` (drafts). §45.34, §45.42:
     up to 6 photos, a kind, and up to 4 options (3 for a car)."""
     ctx = _ctx(app, req)
     ask = design.parse(req.json())
@@ -1225,7 +1225,7 @@ def _launch(ctx: Ctx, story: Item, job: Item, *, note: str | None = None) -> tup
 
 
 def _series_test(ctx: Ctx, wanted: str | None) -> Callable[[Mapping[str, Any]], bool]:
-    """``?seriesId=`` (§45.43): every item (absent), the items of one series (an id), or of none ("none": no
+    """``?seriesId=`` (§45.44): every item (absent), the items of one series (an id), or of none ("none": no
     ``seriesId``, or one whose series is gone)."""
     if wanted is None:
         return lambda _item: True
@@ -1317,10 +1317,10 @@ def create_story(app: App, req: Request) -> Response:
         topic = guidance.match(g, [brief["title"], brief["logline"]]) if brief["category"] == "driving_safety" else None
     if idea is not None and idea.get("category") == "driving_safety" and not topic:
         topic = guidance.match(g, ideas.idea_texts(idea))  # the concept's words count too (an Expand put them there)
-    # null: No series on purpose; left out: the idea's series (§45.43)
+    # null: No series on purpose; left out: the idea's series (§45.44)
     series_id = fields["seriesId"] if "seriesId" in fields else (idea or {}).get("seriesId")
     if series_id and not _series_exists(ctx, series_id):
-        series_id = None  # §45.43: the series is gone: the video is made anyway, under No series
+        series_id = None  # §45.44: the series is gone: the video is made anyway, under No series
     category = str(brief.get("category") or "explainer")
     if category == "driving_safety" and not topic:
         raise ApiError(409, "conflict", guidance.NO_GUIDANCE, extra={"topics": guidance.topic_choices(g)})

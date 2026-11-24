@@ -1,11 +1,14 @@
 // A character's reference pictures (docs/CONTRACTS.md §45.8, §45.5): up to 8 pictures of the look the owner is aiming
 // for, kept with the character and shown next to the rig (they never change the rig). Each goes straight to storage
 // with a presigned PUT and a progress bar; the server then checks its size and type. Also the AI picture button,
-// shown only when AI pictures are on in Lamo Stories › Settings › Video › Picture maker (§45.34).
+// shown only when AI pictures are on in Lamo Stories › Settings › Video › Picture maker (§45.34). A picture dropped on
+// the section is sent like a picked one (§45.40); while it is full or sending, a drop says why.
 import { useEffect, useRef, useState } from "react";
 import { putFile } from "../../api/upload.ts";
+import { DropOverlay } from "../../components/DropOverlay.tsx";
 import { A } from "../../components/ui.tsx";
 import { usePoll } from "../../lib/hooks.ts";
+import { useFileDrop } from "../../lib/useFileDrop.ts";
 import { storiesApi } from "../api/client.ts";
 import type { Character } from "../api/types.ts";
 import { storiesHref } from "../routes.ts";
@@ -30,6 +33,9 @@ export function References({ ws, character, onChange }: { ws: string; character:
   /** Pictures sent from this device, shown from the file itself until the server's own link loads. */
   const [local, setLocal] = useState<Record<string, string>>({});
   const full = character.references.length >= CHAR_LIMITS.refs;
+  /** Why a drop can't come in now (the drag shows it, the drop is refused with it). */
+  const busyLine = full ? `You have ${CHAR_LIMITS.refs} pictures. Delete one first.` : progress !== null ? "Wait a moment." : null;
+  const drop = useFileDrop({ scope: "element", checkFile: fileProblem, onFiles: ([f]) => f && void send(f), busy: busyLine });
 
   useEffect(
     () => () => {
@@ -69,7 +75,7 @@ export function References({ ws, character, onChange }: { ws: string; character:
   }
 
   return (
-    <section className="st-s-refs" aria-labelledby="st-refs-title">
+    <section className="st-s-refs st-drop-host" aria-labelledby="st-refs-title" {...drop.bind}>
       <h2 className="st-s-refs__title" id="st-refs-title">
         Pictures to aim for
       </h2>
@@ -112,6 +118,7 @@ export function References({ ws, character, onChange }: { ws: string; character:
         </span>
       )}
       {problem ? <Notice tone="bad">{problem}</Notice> : null}
+      <DropOverlay drop={drop} scope="element" look="stories" words={{ file: "Drop your picture here", busy: busyLine ?? undefined }} />
     </section>
   );
 }

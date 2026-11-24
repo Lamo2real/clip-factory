@@ -5,7 +5,7 @@ A character is a rig, so the agent picks from the catalog's look and voice choic
 and effects; colours are ``#rrggbb``; sizes and pitch are clamped into their ranges. The same check serves the
 "Design with AI" task and the chat's "Save this character" draft. Nothing is saved here: the owner saves the draft.
 
-A car character (§45.41) has a ``car`` look from ``catalog.carLooks`` instead of a person's look, no voice (style
+A car character (§45.42) has a ``car`` look from ``catalog.carLooks`` instead of a person's look, no voice (style
 ``none``, pitch 1, no noises) and only favourite effects; with no eyes it keeps only the neutral face. ``check_car``
 is the same rule set as the API's ``characters.character_input`` and the engine's ``validateCharacter``, and it keeps
 car makes out of the words (``BRANDS``): the animator draws no badges and only plain plates.
@@ -236,7 +236,7 @@ def check_character(
     return value, soft
 
 
-# --- cars (§45.41) -------------------------------------------------------------------------------------------------
+# --- cars (§45.42) -------------------------------------------------------------------------------------------------
 
 # Car makes, matched as whole words in any case: a car character is never named or described by its make. Common
 # English words that are also makes (mini, seat, smart, ram, lucid, alpine) are left out on purpose.

@@ -98,7 +98,7 @@ def idea_input(body: Mapping[str, Any], *, partial: bool = False) -> dict[str, A
         if parent is not None and not (isinstance(parent, str) and is_ulid(parent)):
             raise bad_request("parentIdeaId is not valid.")
         out["parentIdeaId"] = parent
-    if "seriesId" in body:  # §45.43: null (a patch) is No series; the route drops an id whose series is gone
+    if "seriesId" in body:  # §45.44: null (a patch) is No series; the route drops an id whose series is gone
         series_id = body["seriesId"]
         if series_id is not None and not (isinstance(series_id, str) and is_ulid(series_id)):
             raise bad_request("seriesId is not valid.", "seriesId")
@@ -135,7 +135,7 @@ def _category(value: Any) -> str:
 
 def generate_body(body: Mapping[str, Any]) -> tuple[dict[str, Any], dict[str, str] | None]:
     """``{ topic?, category?, count?: 1..6 (4), override?, seriesId? }`` → (the task's input, the override). The route
-    answers 404 when the series is gone (§45.43)."""
+    answers 404 when the series is gone (§45.44)."""
     validate.only_keys(body, {"topic", "category", "count", "override", "seriesId"})
     out: dict[str, Any] = {"count": validate.integer(body.get("count", 4), "count", lo=1, hi=6)}
     topic = validate.string(body, "topic", required=False, max_len=TOPIC_MAX)

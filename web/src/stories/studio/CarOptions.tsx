@@ -1,4 +1,4 @@
-// "Pick one" (docs/CONTRACTS.md §45.41): the cartoon cars one design made from the owner's photos, each driving
+// "Pick one" (docs/CONTRACTS.md §45.42): the cartoon cars one design made from the owner's photos, each driving
 // gently with its name under it. The picked one is in the editor (the sliding highlight sits on it); "Make more" asks
 // for 3 more that look different from these, up to 12; "Change photos" goes back to the photo strip.
 import "../styles/sd-cars.css";

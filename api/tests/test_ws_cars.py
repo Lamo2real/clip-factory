@@ -1,4 +1,4 @@
-"""Car characters (docs/CONTRACTS.md §45.41, §45.42): a car's own rules, one car with someone to drive it, and Design
+"""Car characters (docs/CONTRACTS.md §45.42, §45.43): a car's own rules, one car with someone to drive it, and Design
 with AI from up to 6 photos with several options."""
 
 from __future__ import annotations

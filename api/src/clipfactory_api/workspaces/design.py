@@ -1,4 +1,4 @@
-"""Design with AI's request (docs/CONTRACTS.md §45.34, §45.41): words and up to 6 photos, a kind, and up to 4 options.
+"""Design with AI's request (docs/CONTRACTS.md §45.34, §45.42): words and up to 6 photos, a kind, and up to 4 options.
 
 No I/O here. ``parse`` checks the body (unknown keys are 400, as on every route); the route reads each photo with
 ``_design_picture`` (a ``design_ref`` or ``character_ref`` asset of this workspace whose file has arrived) and the
@@ -88,7 +88,7 @@ def parse(body: Mapping[str, Any]) -> DesignAsk:
 
 
 def task_input(ask: DesignAsk, assets: list[Item], current: Item | None) -> Item:
-    """The ``character_design`` task's input (§45.41): ``{kind, count, description?, references, referenceAssetId?,
+    """The ``character_design`` task's input (§45.42): ``{kind, count, description?, references, referenceAssetId?,
     referenceKey?, referenceContentType?, characterId?, avoid?}``. ``assets`` are the checked photos in the owner's
     order; ``current`` is the saved character a redesign starts from (its kind is kept)."""
     saved = str(current.get("kind") or "person") if current is not None else None

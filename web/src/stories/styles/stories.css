@@ -16,3 +16,4 @@
 @import "./st-setup.css"; /* the progress ring and the setup */
 @import "./st-end.css"; /* phones 48 px, calm motion, toasts over sheets */
 @import "./st-settings-video.css"; /* Settings > Video > Nova Reel row */
+@import "./st-drop.css"; /* drag and drop: the drop layer's look (components/DropOverlay.tsx) */

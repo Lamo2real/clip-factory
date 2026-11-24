@@ -1,4 +1,4 @@
-// Clips Funded › the cast of a video or a series (docs/CONTRACTS.md §45.42): 1 to 3 characters, at most one car, and
+// Clips Funded › the cast of a video or a series (docs/CONTRACTS.md §45.43): 1 to 3 characters, at most one car, and
 // someone to drive it. People first, then the "Your cars" row (only when the workspace has a car); a car tile works
 // like a radio (tapping another car swaps it). The first person picked is the main character, and the order sent is always
 // the people in the order they were tapped, then the car (castOrder): the API never reorders.

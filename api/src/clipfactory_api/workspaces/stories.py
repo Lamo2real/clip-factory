@@ -171,7 +171,7 @@ def story_input(body: Mapping[str, Any]) -> dict[str, Any]:
         out["format"] = video_format(body["format"])
     if body.get("art") is not None:  # §45.45: kept apart from format; left out, the workspace's default
         out["art"] = art_style(body["art"])
-    if body.get("seriesId") is not None:  # §45.43: create_story keeps it only while the series exists
+    if body.get("seriesId") is not None:  # §45.44: create_story keeps it only while the series exists
         if not (isinstance(body["seriesId"], str) and is_ulid(body["seriesId"])):
             raise bad_request("seriesId is not valid.", "seriesId")
         out["seriesId"] = body["seriesId"]

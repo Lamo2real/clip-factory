@@ -55,7 +55,7 @@ describe("the stories route", () => {
     expect(matchStories("/stories/settings/look/", "")).toEqual({ name: "settings", section: "look" });
   });
 
-  it("has the series pages, ?series=, ?ask=1 and ?kind=car, each key left out when its query is (§45.43, §45.41)", () => {
+  it("has the series pages, ?series=, ?ask=1 and ?kind=car, each key left out when its query is (§45.44, §45.42)", () => {
     const ID = "01JSTSR0000000000000000001";
     expect(matchStories("/stories/series", "")).toEqual({ name: "series" });
     expect(matchStories(`/stories/series/${ID}`, "")).toEqual({ name: "series_one", seriesId: ID });

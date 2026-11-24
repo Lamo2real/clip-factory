@@ -1,6 +1,6 @@
 // Every choice a character's rig offers (docs/CONTRACTS.md §45.8, CharacterLook in engine/types.ts), in plain words,
 // plus the colour swatches and a fresh character to start from. The engine draws the same rig the same way every time,
-// so these few choices are what keeps a character looking the same in every video. A car character (§45.41) has its
+// so these few choices are what keeps a character looking the same in every video. A car character (§45.42) has its
 // own choices (CarLook, CATALOG.carLooks), its own swatches and a fresh car to start from.
 import { isCar, type CarInput, type CharacterInput } from "../api/types.ts";
 import { DEFAULT_CAR } from "../engine/car.ts";
@@ -180,7 +180,7 @@ export function characterProblem(c: CharacterInput): string | null {
   return null;
 }
 
-/** Why this car cannot be saved yet, or null (the API's rules, §45.41: no voice, and no face keeps only neutral). */
+/** Why this car cannot be saved yet, or null (the API's rules, §45.42: no voice, and no face keeps only neutral). */
 function carProblem(c: CarInput): string | null {
   if (!c.name.trim()) return "Give your car a name.";
   if (c.name.trim().length > CHAR_LIMITS.name) return `Keep the name to ${CHAR_LIMITS.name} letters.`;
@@ -230,14 +230,14 @@ export function inputOf(c: CharacterInput): CharacterInput {
  * smiling with a face it does not have.
  */
 export function showFace(c: { expressions: Expression[]; kind?: CharacterKind; car?: CarLook }): Expression {
-  // A car with no face has only neutral (§45.41).
+  // A car with no face has only neutral (§45.42).
   if (c.kind === "car" && c.car?.face?.eyes === "none") return "neutral";
   const faces = Array.isArray(c.expressions) ? c.expressions : [];
   if (faces.includes("happy")) return "happy";
   return faces.find((e) => e !== "neutral") ?? "neutral";
 }
 
-// ---------- A car character (§45.41) ----------
+// ---------- A car character (§45.42) ----------
 
 type CarOpt<K extends keyof typeof CATALOG.carLooks> = Opt<(typeof CATALOG.carLooks)[K][number]["id"]>;
 const carOpts = <K extends keyof typeof CATALOG.carLooks>(k: K): CarOpt<K>[] =>
@@ -288,7 +288,7 @@ export const CAR_MOVE_LINE: Record<MovementStyle, string> = {
   heavy: "Slow to start, dips when it brakes",
 };
 
-/** The moves a car can try in the editor (§45.41), in the editor's order; idle is the parked car. */
+/** The moves a car can try in the editor (§45.42), in the editor's order; idle is the parked car. */
 export const CAR_MOVES: Opt<Exclude<CarMove, "idle">>[] = [
   { value: "drive", label: "Drive" },
   { value: "speed_up", label: "Speed up" },
@@ -305,7 +305,7 @@ export function carMoveLabel(m: CarMove): string {
   return m === "idle" ? "Parked" : (CAR_MOVES.find((x) => x.value === m)?.label ?? m);
 }
 
-/** The faces a car gets when its eyes go on with fewer than 3 (§45.41). */
+/** The faces a car gets when its eyes go on with fewer than 3 (§45.42). */
 export const CAR_FACES_ON: Expression[] = ["neutral", "happy", "surprised"];
 
 export function newCar(): CarInput {

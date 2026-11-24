@@ -1,4 +1,4 @@
-// A car's photos for "Design with AI" (docs/CONTRACTS.md §45.41): up to 6 real photos (front, side, back,
+// A car's photos for "Design with AI" (docs/CONTRACTS.md §45.42): up to 6 real photos (front, side, back,
 // three-quarter, inside) by drag and drop or "Add photos". Each goes the same way as today's "Add a picture": the same
 // type and size rules (References.fileProblem: PNG, JPEG or WebP, at most 10 MB), designUpload, then straight to
 // storage with a presigned PUT (ws/{u}/{w}/design/), at most 3 at once, with a thumbnail from the file itself. A photo

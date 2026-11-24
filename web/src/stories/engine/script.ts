@@ -2,7 +2,7 @@
 // sentence the writer can act on; normalizeScript moves beat effects into the scene lists and fills seeds;
 // fitDuration lands the story on its target length without breaking any scene rule; repairScript swaps a face or
 // drops a noise a character does not have, after the writer's last try (CONTRACTS §45.34). A car of the cast
-// (§45.42) lives in the script's own `cars` map and is drawn by the one car prop of a scene whose castId names it.
+// (§45.43) lives in the script's own `cars` map and is drawn by the one car prop of a scene whose castId names it.
 // The drawing style (`art`) and the cuts between shots inside a scene (`cuts`) are §45.45: both are optional, and a
 // script without them is checked, normalized and fitted exactly as before.
 
@@ -31,7 +31,7 @@ export const SCENE_MAX = 15;
 /** How many people sit in each vehicle (a driver and one passenger in a car, a driver in a truck's cab). */
 export const SEATS = { car: 2, truck: 1 } as const;
 
-/** Limits that keep every frame light enough for the agent's rasterizer; `cars` is the script's own cars (§45.42). */
+/** Limits that keep every frame light enough for the agent's rasterizer; `cars` is the script's own cars (§45.43). */
 export const LIMITS = { scenes: 30, cast: 6, cars: 2, actors: 4, props: 12, beats: 40, sfx: 40, captions: 40, totalSec: 180, shapes: 480 };
 
 /** About how many shapes (prims) each thing adds to a frame at its busiest (measured on the busiest sets, with every
@@ -42,7 +42,7 @@ export const SHAPES = {
   actor: 70,
   props: { car: 45, truck: 36, deer: 30, snow: 36, rain: 42, fog: 8, ice_patch: 15, tree: 15, sparkles: 15 } as Partial<Record<string, number>>,
   prop: 12,
-  /** a car prop with a castId: the cast's own car (§45.42), eyes and all */
+  /** a car prop with a castId: the cast's own car (§45.43), eyes and all */
   carCast: CAR_CAST_SHAPES,
 } as const;
 const ONCE = new Set(["snow", "rain", "fog"]);
@@ -204,7 +204,7 @@ function carFaced(car: unknown): boolean {
 
 /** The character agent's answer, or a saved character: a CharacterInput (CONTRACTS §45.6, §45.33). Its look, movement
  * style and voice follow the same rules as a script's cast; its faces are at least 3 different known ones, neutral
- * among them; its name, description, personality and traits keep their lengths. A car (`kind: "car"`, §45.41) has a
+ * among them; its name, description, personality and traits keep their lengths. A car (`kind: "car"`, §45.42) has a
  * car look instead of a person's, no voice (style "none", no noises) and, with no face, only the neutral face. */
 export function validateCharacter(input: unknown): { ok: true } | { ok: false; errors: string[] } {
   const errors: string[] = [];
@@ -308,7 +308,7 @@ function checkCast(cast: unknown, err: (m: string) => void): string[] {
   return ids;
 }
 
-/** A car of the cast as the scene checks need it (§45.42): its name, whether it has a face, and its own faces. */
+/** A car of the cast as the scene checks need it (§45.43): its name, whether it has a face, and its own faces. */
 interface CarInfo {
   name: string;
   face: boolean;
@@ -316,7 +316,7 @@ interface CarInfo {
   faces: string[] | null;
 }
 
-/** The script's own cars (§45.42): each one a car look, no voice and its faces, under an id of its own. */
+/** The script's own cars (§45.43): each one a car look, no voice and its faces, under an id of its own. */
 function checkCars(cars: unknown, castIds: string[], err: (m: string) => void): Map<string, CarInfo> {
   const out = new Map<string, CarInfo>();
   if (cars === undefined) return out;
@@ -354,7 +354,7 @@ function checkCars(cars: unknown, castIds: string[], err: (m: string) => void): 
   return out;
 }
 
-/** The actions that move a car (§45.42): always, or (stop, stall) only on the way to a `to` point. */
+/** The actions that move a car (§45.43): always, or (stop, stall) only on the way to a `to` point. */
 const CAR_MOVES = new Set(["move", "speed_up", "skid", "spin", "bump"]);
 const movesCar = (b: Obj): boolean => CAR_MOVES.has(b.do as string) || ((b.do === "stop" || b.do === "stall") && b.to !== undefined);
 /** Getting in or out of a car takes 0.8 to 3 seconds; the car may start or stop moving within `slack` of it. */
@@ -487,7 +487,7 @@ function checkScene(sc: unknown, i: number, castIds: string[], seenScenes: Set<s
       else if (isNum(b.at) && isNum(d) && b.at + b.dur > dur + TOL) err(`${bw}: ends at ${round(b.at + b.dur)} s, after the scene ends (${dur} s). Shorten dur or start it earlier.`);
       const car = isProp ? cars.get(propCar.get(who) ?? "") : undefined;
       if (b.face !== undefined && car) {
-        // a car of the cast makes faces only when it has one, and only its own (§45.42)
+        // a car of the cast makes faces only when it has one, and only its own (§45.43)
         if (!FACES.has(b.face as string)) err(`${bw}: face ${show(b.face)} is not in the catalog; use one of ${list([...FACES], 14)}.`);
         else if (!car.face) err(`${where}, beat ${j + 1}: ${car.name} has no face; leave face out.`);
         else if (car.faces && !car.faces.includes(b.face as string)) err(`${where}, beat ${j + 1}: ${car.name} does not make the face "${b.face}"; its own faces are ${andList(car.faces)}. Use one of those, or leave face out.`);
@@ -533,7 +533,7 @@ function checkScene(sc: unknown, i: number, castIds: string[], seenScenes: Set<s
 
 const round = (v: number) => Math.round(v * 100) / 100;
 
-/** Getting in and out (§45.42): each needs inCar, lasts 0.8 to 3 s, at most one of each per character and scene,
+/** Getting in and out (§45.43): each needs inCar, lasts 0.8 to 3 s, at most one of each per character and scene,
  * get_in before get_out, and the car stays where it is while it happens. */
 function checkBoarding(where: string, actors: unknown[], beats: unknown[], err: (m: string) => void): void {
   const all = beats.filter(isObj);
@@ -573,7 +573,7 @@ function checkBoarding(where: string, actors: unknown[], beats: unknown[], err: 
   }
 }
 
-/** The driver (a car's first rider, §45.42) waves only while the car stands still: a wave while it is in the car may
+/** The driver (a car's first rider, §45.43) waves only while the car stands still: a wave while it is in the car may
  * not overlap a beat that moves the car. A passenger may wave any time. */
 function checkDriverWave(where: string, actors: unknown[], beats: unknown[], err: (m: string) => void): void {
   const all = beats.filter(isObj).filter((b) => isNum(b.at) && isNum(b.dur));
@@ -760,7 +760,7 @@ export function validateScript(input: unknown): ValidateResult {
 /** After the writer's last try (CONTRACTS §45.34): every beat's face that its character does not have becomes
  * neutral, and every noise it does not make is left out. Works on the raw script (anything else about it is left as
  * it was, valid or not) and says what it changed; only cast members that carry their own faces are touched, the
- * same ones validateScript holds to their lists. A car of the cast (§45.42) with no face loses every face on its
+ * same ones validateScript holds to their lists. A car of the cast (§45.43) with no face loses every face on its
  * prop's beats; one with a face keeps only its own (another becomes neutral). */
 export function repairScript(input: unknown): { script: unknown; changes: ScriptRepair[] } {
   if (!isObj(input) || !isObj(input.cast) || !Array.isArray(input.scenes)) return { script: input, changes: [] };
@@ -869,7 +869,7 @@ export function normalizeScript(s: StoryScript): StoryScript {
       return rest;
     });
     if (isNew) {
-      // a car's honk plays its sound by itself (§45.42), unless the scene already honks within 0.3 s of it
+      // a car's honk plays its sound by itself (§45.43), unless the scene already honks within 0.3 s of it
       const carProps = new Set(sc.props.filter((p) => CARS.has(p.kind)).map((p) => p.propId));
       for (const bt of beats) {
         if (bt.do !== "honk" || !carProps.has(bt.who) || sfx.length >= LIMITS.sfx) continue;
@@ -961,7 +961,7 @@ export function fitDuration(s: StoryScript, targetSec: number): StoryScript {
       beats: sc.beats.map((bt) => {
         const at = Math.min(ms(bt.at * k), ms(d - 0.05));
         const dur = Math.max(0.05, Math.min(ms(bt.dur * k), ms(d - at)));
-        // getting in or out keeps to its 0.8 to 3 seconds (§45.42)
+        // getting in or out keeps to its 0.8 to 3 seconds (§45.43)
         if (bt.do === "get_in" || bt.do === "get_out") return { ...bt, at, dur: Math.min(ms(d - at), clamp(dur, BOARDING.min, BOARDING.max)) };
         return { ...bt, at, dur };
       }),
