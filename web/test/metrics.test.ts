@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import type { PostMetrics } from "../src/api/types.ts";
 import {
+  SKIPPED_STACK,
   STATS_ORDER,
   YOUTUBE_ZERO_NOTE,
   ago,
@@ -133,6 +134,14 @@ describe("status and calm copy", () => {
       link: { href: "/settings/posting/where", label: "Open Where clips go" },
     });
     expect(calmCopy({ ...base, status: "posting" })).toEqual({ text: "Posting now…", spinner: true });
+    // A place he skipped (rule S, §48.3): with no post there, the stack only says so, never "Set up" or "Turn on".
+    expect(calmCopy({ ...base, status: "waiting_for_connection" }, null, { skipped: true })).toEqual({ text: "Not posted here." });
+    expect(calmCopy({ ...base, status: "not_posted" }, null, { skipped: true })).toEqual({ text: "Not posted here." });
+    expect(calmCopy({ ...base, status: "not_posted" }, null, { skipped: true })?.text).toBe(SKIPPED_STACK);
+    // A real post on a skipped place keeps its own words (numbers, a failure, posting now).
+    expect(calmCopy({ ...base, status: "posting" }, null, { skipped: true })).toEqual({ text: "Posting now…", spinner: true });
+    expect(calmCopy({ ...base, status: "failed", error: "The video was too long." }, null, { skipped: true })?.link).toEqual({ href: "/library", label: "Go to Library" });
+    expect(calmCopy({ ...base, status: "posted", metrics: m() }, null, { skipped: true })).toBeNull();
     expect(calmCopy({ ...base, platform: "tiktok", status: "posted_private" })?.text).toBe(
       "Uploaded privately. TikTok shows numbers after the app is approved.",
     );

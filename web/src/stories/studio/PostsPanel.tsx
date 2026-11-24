@@ -16,8 +16,8 @@ import { macRow, TIKTOK_LINK, type MacRow } from "./macRow.ts";
 import * as MW from "./macWords.ts";
 import { accountProblem, accountShown, ago, PLATFORM_LABEL, PUBLISH_LABEL, PUBLISH_TONE, shortNumber } from "./words.ts";
 
-/** The TikTok card in Social accounts, where My Mac posts TikTok is (§47.10). */
-export const MAC_CARD_HREF = `${storiesHref({ name: "connections", platform: null, result: null, ws: null })}#tiktok-mac`;
+/** The TikTok card on Social accounts' TikTok page, where My Mac posts TikTok is (§47.10). */
+export const MAC_CARD_HREF = `${storiesHref({ name: "connection", platform: "tiktok", result: null, ws: null })}#tiktok-mac`;
 
 /** What a post row needs to show a Mac post (§47.10); without it a Mac post reads as on, its Mac not known yet. */
 export interface PostMacProps {

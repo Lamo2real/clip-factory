@@ -58,6 +58,7 @@ export function PlatformStack({
   ref,
   auto,
   row,
+  skipped = false,
   context,
   action,
 }: {
@@ -71,6 +72,8 @@ export function PlatformStack({
   auto?: Clip["auto"];
   /** TikTok's row (lib/tiktokMac.ts tiktokRow): the calm line says its words; its button is on the page. */
   row?: TikTokRow | null;
+  /** The owner skipped this place (rule S, §48.3): with no post here, the stack never asks him to set it up. */
+  skipped?: boolean;
   /** What the clip page knows around this stack (Where clips go, a start that never happened, Try again here). */
   context?: CalmContext;
   /** This place's own button under its calm line (the clip page's Try again for a post that didn't work). */
@@ -79,7 +82,7 @@ export function PlatformStack({
   const name = PLATFORM_LABEL[perf.platform];
   const id = `stack-${perf.platform}`;
   const privateTest = isPrivateTest(perf.status, auto, perf.by);
-  const calm = privateTest ? null : calmCopy(perf, perf.platform === "tiktok" ? row : null, { ...context, now });
+  const calm = privateTest ? null : calmCopy(perf, perf.platform === "tiktok" ? row : null, { ...context, now, skipped: skipped || !!context?.skipped });
   const groups = !privateTest && !calm && perf.metrics ? metricGroups(perf.platform, perf.metrics) : null;
   const reactions = (perf.metrics?.extra as FacebookExtra | undefined)?.reactions;
   const wait = until(perf.nextAllowedAt, now);

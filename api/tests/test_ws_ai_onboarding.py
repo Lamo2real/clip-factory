@@ -291,7 +291,9 @@ def test_step_four_cannot_be_ticked_by_hand(wcall: WsCall, table: FakeTable) -> 
     assert (status, err["error"]["message"]) == (409, "This step ticks itself when you pick how videos are made.")
     assert _states(wcall)["video"] == "todo"
     assert table.raw(pk(), "ONBOARD") is None
-    assert wcall("PATCH", f"{BASE}/onboarding", {"step": "video", "skipped": True})[0] == 200  # it can be skipped
+    status, body = wcall("PATCH", f"{BASE}/onboarding", {"step": "video", "skipped": True})
+    assert status == 200  # it can be skipped
+    assert body["onboarding"]["total"] == 11  # a skipped step of another kind still counts
     assert _states(wcall)["video"] == "skipped"
 
 
@@ -299,10 +301,13 @@ def test_skip_resume_and_finish(wcall: WsCall, table: FakeTable) -> None:
     status, body = wcall("PATCH", f"{BASE}/onboarding", {"step": "instagram", "skipped": True})
     assert status == 200
     assert {s["step"]: s["state"] for s in body["onboarding"]["steps"]}["instagram"] == "skipped"
+    assert body["onboarding"]["total"] == 10  # a skipped platform is not counted (workspaces.skips)
     assert wcall("PATCH", f"{BASE}/onboarding", {"step": "agents", "done": True})[0] == 200
     states = _states(wcall)
     assert (states["agents"], states["video"], states["instagram"]) == ("done", "todo", "skipped")
-    assert wcall("PATCH", f"{BASE}/onboarding", {"step": "instagram", "skipped": False})[0] == 200
+    status, body = wcall("PATCH", f"{BASE}/onboarding", {"step": "instagram", "skipped": False})
+    assert status == 200
+    assert body["onboarding"]["total"] == 11
     assert _states(wcall)["instagram"] == "todo"
     status, body = wcall("PATCH", f"{BASE}/onboarding", {"finish": True})
     assert status == 200

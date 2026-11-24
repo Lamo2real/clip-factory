@@ -81,6 +81,7 @@ const account = (platform: SocialAccount["platform"], connectionStatus: SocialAc
   choices: null,
   limits: [],
   warning: null,
+  skipped: false,
 });
 
 const CREATOR: TikTokCreator = {

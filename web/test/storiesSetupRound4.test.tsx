@@ -131,3 +131,30 @@ describe("Lamo Clips' own account (§45.35 D11)", () => {
     expect($$(".st-steps__item").find((b) => b.textContent?.includes("Connect X"))!.className).toContain("is-done");
   });
 });
+
+describe("a platform the owner skipped (the owner, 24 Nov)", () => {
+  it("is not in What is left, even when its account is Clip Factory's own; its step says Skipped and offers Un-skip", async () => {
+    // The seed's X is Clip Factory's own (same_as_clips), and the owner skipped it.
+    await start({}, (s) => {
+      s.onboarding.skipped = ["x"];
+    });
+    expect(host.querySelector(".st-left__why")).toBeNull();
+    const x = stepItem("Connect X");
+    expect(x.className).toContain("is-skipped");
+    expect(x.querySelector(".st-steps__skipped")?.textContent).toBe("Skipped");
+    expect(host.querySelector(".st-setup__head .st-ring")?.getAttribute("aria-label")).toMatch(/ of 10 done/);
+    // It opens at the first step still to do, never on the skipped platform.
+    expect(host.querySelector("#st-setup-step")?.textContent).not.toBe("Connect X");
+    await click(x);
+    expect(host.querySelector(".st-setup__count .st-chip")?.textContent).toBe("Skipped");
+    const foot = () => $$("button", host.querySelector(".st-setup__foot")!).map((b) => b.textContent?.trim());
+    expect(foot()).toContain("Un-skip");
+    expect(foot()).not.toContain("Skip for now");
+    // Un-skip: it is back, with its line under What is left again.
+    await click($$("button", host.querySelector(".st-setup__foot")!).find((b) => b.textContent?.trim() === "Un-skip")!);
+    expect(store.onboarding.skipped).toEqual([]);
+    expect(host.querySelector(".st-left__why")?.textContent).toContain(sameAsClipsLine("x"));
+    expect(stepItem("Connect X").querySelector(".st-steps__skipped")).toBeNull();
+    expect(foot()).toContain("Skip for now");
+  });
+});

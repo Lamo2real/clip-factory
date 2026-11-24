@@ -123,6 +123,22 @@ export function followersTileLine(counts: FollowerCount[]): string {
   return "Your numbers show after the first daily check.";
 }
 
+/**
+ * The apps the tile names as not connected: a skipped one is left out (rule S: he chose to leave it out, so no
+ * reminder names it). In the server's order.
+ */
+export function notConnected(counts: readonly FollowerCount[], skipped: readonly Platform[] = []): Platform[] {
+  return counts.filter((c) => c.state === "not_connected" && !skipped.includes(c.platform)).map((c) => c.platform);
+}
+
+/**
+ * The Home tile has nothing to show: no app is connected and every one of them is skipped, so "Connect an app…" and
+ * its Set up posting button would only remind him of places he chose to leave out.
+ */
+export function followersTileEmpty(counts: readonly FollowerCount[], skipped: readonly Platform[] = []): boolean {
+  return counts.every((c) => c.state === "not_connected") && notConnected(counts, skipped).length === 0;
+}
+
 /** "TikTok, Facebook and X" for the one not-connected line. */
 export function joinNames(platforms: Platform[]): string {
   const names = platforms.map((p) => PLATFORM_LABEL[p]);

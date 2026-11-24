@@ -857,7 +857,9 @@ test("round 5: the play badge leaves a square video's caption clear; a full idea
   });
   const item = page.locator(".st-needs-list__item", { hasText: "needs connecting again. Open Clips Funded › Social accounts" }).first();
   await expect(item).toBeVisible({ timeout: 20_000 });
-  await expect(item.locator("a").last()).toHaveAttribute("href", "/stories/connections");
+  // that platform's own page on Social accounts
+  await expect(item.locator("a").last()).toHaveAttribute("href", "/stories/connections/tiktok");
+  await expect(item.locator("a").last()).toHaveText("Fix it");
   await ctx.close();
 });
 

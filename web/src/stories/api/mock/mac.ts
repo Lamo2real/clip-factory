@@ -467,8 +467,11 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
     async dashboard(ws): Promise<StoriesDashboard> {
       const d = await dash.dashboard(ws);
       const title = (id: string) => store.stories.find((s) => s.storyId === id)?.title ?? "A story";
+      // A skipped TikTok (rule S, §48.3: left out of the accounts) has no Needs you line, its Mac's stopped posts too,
+      // as the API's needs_you does.
+      const tiktokSkipped = !d.accounts.some((a) => a.platform === "tiktok");
       const stopped = macJobs(store, ws)
-        .filter((j) => j.mac?.state === "stopped")
+        .filter((j) => j.mac?.state === "stopped" && !tiktokSkipped)
         .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
         .map((j) => ({
           publishingJobId: j.publishingJobId,

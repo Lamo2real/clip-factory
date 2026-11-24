@@ -82,7 +82,8 @@ for (const [w, h] of [
   test(`${w}x${h}: the rail's pages end above the switch, every one can be reached, the chosen one is in view`, async ({ page }) => {
     await on(page);
     await page.setViewportSize({ width: w, height: h });
-    for (const path of ["/stories", "/stories/settings/ai", "/stories/connections"]) {
+    // Social accounts' list and a platform's own page (the rail marks Social accounts on both).
+    for (const path of ["/stories", "/stories/settings/ai", "/stories/connections", "/stories/connections/youtube"]) {
       await open(page, path);
       const r = await room(page);
       expect(r.bottom, `${path}: the list ends above the switch`).toBeLessThanOrEqual(r.dockTop);
@@ -129,7 +130,7 @@ for (const [w, h] of [
     await asMacWindow(page);
     await on(page);
     await page.setViewportSize({ width: w, height: h });
-    for (const path of ["/stories", "/stories/connections"]) {
+    for (const path of ["/stories", "/stories/connections", "/stories/connections/youtube"]) {
       await open(page, path);
       const r = await room(page);
       expect(r.bottom, `${path}: the list ends above the switch`).toBeLessThanOrEqual(r.dockTop);

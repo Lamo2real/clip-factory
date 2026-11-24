@@ -331,7 +331,7 @@ describe("a Mac post row's buttons", () => {
 
   it("Turn on and Set it up go to the TikTok card", async () => {
     const r = await row(macJob({}), props({ on: false }));
-    expect(control("Turn on", r).getAttribute("href")).toBe("/stories/connections#tiktok-mac");
+    expect(control("Turn on", r).getAttribute("href")).toBe("/stories/connections/tiktok#tiktok-mac");
   });
 
   it("Try again on a stopped post", async () => {
@@ -569,7 +569,7 @@ describe("Post it while the Mac posts TikTok", () => {
     await sheet({ tiktokMac: { on: true } });
     const tt = document.querySelector<HTMLElement>(".st-s-tiktok")!;
     expect(text(tt)).toContain("Your Mac isn't set up yet. It posts once it is.");
-    expect(control("Set it up", tt).getAttribute("href")).toBe("/stories/connections#tiktok-mac");
+    expect(control("Set it up", tt).getAttribute("href")).toBe("/stories/connections/tiktok#tiktok-mac");
   });
 
   it("with the switch off, TikTok's part is as before", async () => {
@@ -655,6 +655,21 @@ describe("the Dashboard's Needs you", () => {
     const item = await stopped(true);
     expect(has(/Try again/, item)).toBe(false);
     expect(control("Open", item).getAttribute("href")).toBe(`/stories/review/${S.approved}`);
+  });
+
+  it("a TikTok he skipped (and is not connected) has no Needs you line, its Mac's stopped post too (rule S, §48.3)", async () => {
+    start(READY);
+    await call(api.publish("stories", S.approved, [{ platform: "tiktok", socialAccountId: "stories.tiktok", options: { ...MAC_TIKTOK_OPTIONS } }]));
+    mac.claim();
+    mac.stopped("TikTok's upload page looks different. Your Mac's helper needs a fix. Then tap Try again.");
+    const mine = (d: Awaited<ReturnType<StoriesApi["dashboard"]>>) => d.needsYou.filter((n) => n.publishingStatus === "mac");
+    expect(mine(await call(api.dashboard("stories")))).toHaveLength(1);
+    store.social = store.social.map((a) => (a.platform === "tiktok" ? { ...a, connectionStatus: "not_connected" as const } : a));
+    store.onboarding.skipped = [...store.onboarding.skipped, "tiktok"];
+    const d = await call(api.dashboard("stories"));
+    expect(d.accounts.map((a) => a.platform)).not.toContain("tiktok");
+    expect(mine(d)).toHaveLength(0);
+    expect(d.needsYou.filter((n) => n.platform === "tiktok")).toHaveLength(0);
   });
 });
 

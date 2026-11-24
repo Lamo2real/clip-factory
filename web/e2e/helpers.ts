@@ -1,4 +1,4 @@
-import type { Locator, Page } from "@playwright/test";
+import { expect, type Locator, type Page } from "@playwright/test";
 import { settingsPath, TREES } from "../src/lib/settingsTree.ts";
 import { allSteps, GUIDES } from "../src/setup/index.ts";
 
@@ -676,13 +676,16 @@ export async function openTodo(page: Page) {
   return list;
 }
 
-/** The five kinds of row the setup list can show, each on one platform after `mixedSetup`. */
+/**
+ * The five states a platform can be in, each on one platform after `mixedSetup`. The floating list shows a row for
+ * each but the skipped one, which only Settings › Posting › Set up posting keeps (rule S): see `expectMixedList`.
+ */
 export const MIXED_SETUP = { youtube: "ready", tiktok: "skipped", instagram: "in_progress", facebook: "needs_you", x: "not_started" } as const;
 
 /**
- * Gives the setup list one row of every kind (`MIXED_SETUP`): YouTube ready, TikTok skipped, Instagram half done,
- * Facebook asking for the owner ("connect again"), X untouched. Call on a loaded page; the pretend server keeps it
- * in sessionStorage (§17.10), so the next page load shows it.
+ * Gives the setup list one row of every kind (`MIXED_SETUP`): YouTube ready, TikTok skipped (off the list), Instagram
+ * half done, Facebook asking for the owner ("connect again"), X untouched. Call on a loaded page; the pretend server
+ * keeps it in sessionStorage (§17.10), so the next page load shows it.
  */
 export async function mixedSetup(page: Page) {
   const step = allSteps(GUIDES.instagram).find((s) => !s.auto && !s.optional)!.id;
@@ -697,6 +700,19 @@ export async function mixedSetup(page: Page) {
     sessionStorage.setItem("cf-mock-setup", JSON.stringify(state));
     sessionStorage.setItem("cf-mock-setup-skipped", JSON.stringify(["tiktok"]));
   }, step);
+}
+
+/**
+ * The open floating list after `mixedSetup`: a row in its state for every platform of `MIXED_SETUP`, and none for the
+ * skipped one (rule S), in the setup order.
+ */
+export async function expectMixedList(list: Locator) {
+  for (const [platform, state] of Object.entries(MIXED_SETUP)) {
+    const row = list.locator(`.todo-row[data-platform='${platform}']`);
+    if (state === "skipped") await expect(row, `${platform} is skipped: not on the list`).toHaveCount(0);
+    else await expect(row, platform).toHaveAttribute("data-state", state);
+  }
+  await expect(list.locator(".todo-row")).toHaveCount(Object.values(MIXED_SETUP).filter((s) => s !== "skipped").length);
 }
 
 /**

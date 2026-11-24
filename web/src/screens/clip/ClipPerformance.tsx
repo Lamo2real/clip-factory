@@ -1,7 +1,7 @@
 // How one clip did on each platform (docs/CONTRACTS.md §16.8): the video on top, five smooth lines growing out of
 // it into five platform stacks, a crown on the best one, a "Best this week" star and one Refresh numbers button.
 // Numbers arrive live over the WebSocket; while it is down the page checks every minute.
-import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { ApiError, api, friendlyMessage } from "../../api/index.ts";
 import type { Clip, ClipPerformance as Perf, Platform, Post, RefreshResult } from "../../api/types.ts";
 import { Icon } from "../../components/Icon.tsx";
@@ -27,9 +27,10 @@ import { failedForPublicAccount, tiktokAudited } from "../../lib/tiktokYourself.
 import { TikTokRowAction, useTikTokRowContext } from "../library/MacButtons.tsx";
 import { rowNeedsMac, tiktokFactsFromStacks, tiktokRow } from "../../lib/tiktokMac.ts";
 import { useSetup } from "../settings/setup/useSetup.ts";
+import { useSessionIfAny } from "../../app/session.tsx";
+import { activeSkips } from "../../lib/setupTodo.ts";
 import { UploadAgain } from "../library/Library.tsx";
 import { needsUploadAgain, START_GRACE_MS } from "../../lib/upload.ts";
-import { useSession } from "../../app/session.tsx";
 
 /** Re-renders every `ms` so "3 min ago" and "Next check in 4 min" stay true. */
 export function useNow(ms = 15_000): number {
@@ -127,6 +128,10 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
   const inReview = waitingClip?.status === "review";
   // TikTok's row (§47.4): what the owner's Mac is doing, said in its stack, with its one button in the actions.
   const setup = useSetup();
+  // The places he skipped that are not set up (rule S, §48.3): no stack, fit line or campaign note asks him to set one up.
+  const session = useSessionIfAny();
+  const saved = session?.me?.settings.setupSkipped;
+  const skipped = useMemo(() => activeSkips(setup.data?.platforms, saved), [setup.data, saved]);
   const tiktokFacts = perf ? tiktokFactsFromStacks(perf.clip, perf.posts) : null;
   const macCtx = useTikTokRowContext({
     audited: tiktokAudited(setup.data?.platforms),
@@ -134,7 +139,7 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
   });
   const tiktok = tiktokFacts ? tiktokRow(tiktokFacts, macCtx) : null;
   // Where clips go (Settings): a stack says "Turn on" only for a place that is off there.
-  const whereOn = useSession().me?.settings.platforms;
+  const whereOn = session?.me?.settings.platforms;
   // Uploaded, but its posting never started (as on the Library card): once that lasts past the normal moment, the
   // page's main button is Try again.
   const stuck = useHeld(!!perf?.clip.startPending, START_GRACE_MS);
@@ -198,7 +203,7 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
       <div className="page perf">
         <h1 className="sr-only">{error.missing ? "No numbers for this clip" : "Could not load the numbers"}</h1>
         <BackRow />
-        {error.missing ? <WaitingClipFit clip={waitingClip} /> : null}
+        {error.missing ? <WaitingClipFit clip={waitingClip} skipped={skipped} /> : null}
         <Empty
           icon={error.missing ? "chart" : "alert"}
           title={error.missing ? "No numbers for this clip" : "Could not load the numbers"}
@@ -336,7 +341,7 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
         </p>
       </header>
 
-      <ClipFit clip={clip} data={fitPage.data} primary={fitMain} copy={fitPage.copy} />
+      <ClipFit clip={clip} data={fitPage.data} primary={fitMain} copy={fitPage.copy} skipped={skipped} />
 
       {/* From the send-now notification (?cr=), or while a post waits to be sent, the lines lead the page (§38.6). */}
       {crSubs.subs.length && crFirst ? <ClipOnContentRewards clipId={clipId} subs={crSubs} sendNow={sendNow} /> : null}
@@ -505,6 +510,7 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
                 now={now}
                 auto={perf.clip.auto}
                 row={platform === "tiktok" ? tiktok : null}
+                skipped={skipped.includes(platform)}
                 context={{ whereOn, notStarted, retryHere: retry, perfCheckAt: posts?.find((p) => p.platform === platform)?.perfCheckAt }}
                 action={retry ? <UploadAgain clip={clip} posts={posts ?? []} platform={platform} onKept={kept} /> : null}
               />
@@ -515,7 +521,7 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
       <ClipFollowers perf={perf} />
       {crSubs.subs.length && !crFirst ? <ClipOnContentRewards clipId={clipId} subs={crSubs} sendNow={false} /> : null}
       {/* §39.3: closed by default, at the end, so the video and its numbers still come first. */}
-      <CampaignsFold data={fitPage.data} />
+      <CampaignsFold data={fitPage.data} skipped={skipped} />
     </div>
   );
 }

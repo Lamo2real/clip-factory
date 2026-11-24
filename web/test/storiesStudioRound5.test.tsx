@@ -172,6 +172,7 @@ const account = (
   choices: null,
   limits: [],
   warning: null,
+  skipped: false,
   ...extra,
 });
 
@@ -741,7 +742,8 @@ describe("an account problem always has Open Social accounts (§45.36 E9)", () =
       .needsYou.filter((n) => n.publishingJobId);
     const tiktok = needs.find((n) => n.platform === "tiktok")!;
     const facebook = needs.find((n) => n.platform === "facebook")!;
-    expect(tiktok.href).toBe("/stories/connections");
+    // the platform's own page on Social accounts
+    expect(tiktok.href).toBe("/stories/connections/tiktok");
     expect(facebook.href).toBe(`/stories/review/${S.published}`);
     // Connected again: nothing is left to fix there, so the post's own Try again.
     store.social.find((a) => a.platform === "tiktok")!.connectionStatus = "connected";
@@ -749,6 +751,8 @@ describe("an account problem always has Open Social accounts (§45.36 E9)", () =
     expect(fixed.href).toBe(`/stories/review/${tiktok.storyId}`);
     expect(fixed.sentence).toBe(`TikTok is connected now. Tap Try again on “${tiktok.title}”.`);
     expect(dashboard.postHref("Pick another in Clips Funded › Social accounts, then tap Try again.", S.approved)).toBe("/stories/connections");
+    expect(dashboard.postHref("Pick another in Clips Funded › Social accounts, then tap Try again.", S.approved, "x")).toBe("/stories/connections/x");
+    expect(dashboard.postHref("Facebook did not answer. Tap Try again in a few minutes.", S.approved, "facebook")).toBe(`/stories/review/${S.approved}`);
   });
 });
 

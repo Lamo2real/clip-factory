@@ -1,5 +1,5 @@
 // Lamo Stories › Dashboard (docs/CONTRACTS.md §45.16.3): the tiles in the contract's order: Needs you, animations
-// made, waiting for review, published, being made now (each with its step), connected accounts (n of 5 with names
+// made, waiting for review, published, being made now (each with its step), connected accounts (n of m with names
 // and statuses), performance (views, likes, comments, shares; "No numbers yet"; numbers until 7 days after each post)
 // and recent activity (the last 10). Polled every 15 s with the Needs you bar (one shared call, §45.16.4). Until the
 // setup is finished, a card above the tiles shows its ring ("4 of 11 done") and what is left (§45.29). Above both,
@@ -23,6 +23,7 @@ import { storiesApi } from "../api/client.ts";
 import { STEP_LABEL, type ErrorAccount, type Onboarding, type ProjectRef, type StoriesApi, type StoriesDashboard, type StoryStatus } from "../api/types.ts";
 import { ArcDial, CreamCard, GlassToggle, MediaRow, StatNumeral } from "../glass/index.ts";
 import { useWorkspaceConfig } from "../settings/data.ts";
+import { isSocialHref, leftOf } from "../skips.ts";
 import { postToTitle, postYes } from "../studio/PublishSheet.tsx";
 import { accountOf } from "../studio/words.ts";
 import { currentChoice, rememberProject } from "../workspace.ts";
@@ -171,7 +172,7 @@ function NeedsYou({ ws, items }: { ws: string; items: StoriesDashboard["needsYou
               </p>
               <div className="st-needs-list__actions">
                 {/* An account problem is fixed on Social accounts first: its way there comes first, then Try again. */}
-                {n.href === "/stories/connections" ? <StLinkButton href={n.href}>Fix it</StLinkButton> : null}
+                {isSocialHref(n.href) ? <StLinkButton href={n.href}>Fix it</StLinkButton> : null}
                 {/* A Mac post that pressed Post may be on TikTok: only Open (its Review page) for it, never Try again. */}
                 {n.publishingJobId && !(n.publishingStatus === "mac" && n.mac?.pressedAt) ? (
                   <StButton
@@ -185,7 +186,7 @@ function NeedsYou({ ws, items }: { ws: string; items: StoriesDashboard["needsYou
                     Try again
                   </StButton>
                 ) : null}
-                {n.href === "/stories/connections" ? null : <StLinkButton href={n.href}>Open</StLinkButton>}
+                {isSocialHref(n.href) ? null : <StLinkButton href={n.href}>Open</StLinkButton>}
               </div>
               {/* The API asks first when the post would go to another account: the question under the row, full width. */}
               {ask && n.publishingJobId === ask.id && n.platform ? (
@@ -251,6 +252,7 @@ function Producing({ items }: { items: StoriesDashboard["producing"] }) {
   );
 }
 
+/** The accounts not skipped (the API leaves a skipped one out): "N of M" counts only these. */
 function Accounts({ items }: { items: StoriesDashboard["accounts"] }) {
   const connected = items.filter((a) => a.status === "connected").length;
   return (
@@ -259,9 +261,13 @@ function Accounts({ items }: { items: StoriesDashboard["accounts"] }) {
         <StIcon name="plug" size={22} />
         Connected accounts
       </h2>
-      <p className="st-tile__big st-stat__value">
-        <span className="st-stat__num">{connected}</span> <span className="st-stat__unit">of {items.length || 5}</span>
-      </p>
+      {items.length ? (
+        <p className="st-tile__big st-stat__value">
+          <span className="st-stat__num">{connected}</span> <span className="st-stat__unit">of {items.length}</span>
+        </p>
+      ) : (
+        <p className="st-tile__note">Nothing to connect.</p>
+      )}
       <ul className="st-accounts">
         {items.map((a) => (
           <li key={a.platform} className="st-accounts__row">
@@ -494,7 +500,10 @@ function ContinueCard({ ws }: { ws: string }) {
   );
 }
 
-/** The steps still left after Finish (skipped ones), as a short list with a way back to them (§45.36 E15). */
+/**
+ * The steps still left after Finish, as a short list with a way back to them (§45.36 E15). A platform the owner skipped
+ * is not one of them: it stays only on Social accounts and in the setup.
+ */
 function SetupLeft({ left }: { left: { step: string; label: string }[] }) {
   return (
     <section className="st-setupcard st-setupcard--left st-glass" aria-labelledby="st-setupleft-title">
@@ -530,7 +539,7 @@ function setupOpen(o: Onboarding | null): boolean {
  */
 function SetupCard({ data }: { data: Onboarding | null }) {
   if (!data) return null;
-  const left = data.steps.filter((s) => s.state !== "done" && s.step !== "done");
+  const left = leftOf(data);
   if (data.finishedAt) return left.length ? <SetupLeft left={left} /> : null;
   return (
     <section className="st-setupcard st-glass st-glass--hero st-lens" aria-labelledby="st-setupcard-title">

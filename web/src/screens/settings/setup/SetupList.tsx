@@ -1,6 +1,7 @@
 // Settings › Posting › Set up posting (docs/CONTRACTS.md §17.1): a big "2 of 5 ready" ring and a card per platform
 // with its own ring and one state line. Tapping a card opens that platform's steps. It is also the setup to-do list's
-// home (§17.13): every platform is always here, with Skip (asked first) or Un-skip inside its card.
+// home (§17.13): every platform is always here, with Skip (asked first) or Un-skip inside its card. A skipped one is
+// not counted ("2 of 4 ready"); with all five skipped the title is "All skipped", with no ring.
 import { useState } from "react";
 import type { Platform } from "../../../api/types.ts";
 import { useSession } from "../../../app/session.tsx";
@@ -11,7 +12,7 @@ import { SkipConfirm } from "../../../components/SkipConfirm.tsx";
 import { useToast } from "../../../components/Toasts.tsx";
 import { A, Button, ErrorPanel, Skeleton } from "../../../components/ui.tsx";
 import { progressOf, stateLine } from "../../../lib/setupProgress.ts";
-import { isFinished, skippedNote, todoCount, todoRows, todoVisible } from "../../../lib/setupTodo.ts";
+import { isFinished, listCount, skippedNote, todoRows, todoVisible } from "../../../lib/setupTodo.ts";
 import { GUIDES, SETUP_ORDER, timeLine } from "../../../setup/index.ts";
 import { Apple, Panel } from "../parts.tsx";
 import { CR_LOAD_FAILED, CR_SETUP_PATH, crCardLine, crSetupCount, crSnapshot, useCr } from "../../../lib/contentRewards.ts";
@@ -26,10 +27,13 @@ export function SetupList() {
   const { me } = useSession();
   const { skipped, skip, unskip } = useSkips();
   const [asking, setAsking] = useState<Platform | null>(null);
-  const ready = data?.ready ?? 0;
   // The same rows as the floating list (§17.13), so both always agree on what is skipped and what is done.
   const rows = data && me ? todoRows(data.platforms, skipped) : null;
-  const count = rows ? todoCount(rows) : null;
+  // Ready over the platforms that are not skipped (rule S): the same count as the floating list's.
+  const count = rows ? listCount(rows) : null;
+  const done = count?.ready ?? data?.ready ?? 0;
+  const total = count?.total ?? 5;
+  const allSkipped = count?.total === 0;
   const askingRow = asking ? rows?.find((r) => r.platform === asking) : undefined;
   // GET /v1/setup failed with nothing kept: only the error and its Try again, never a "Checking…" that never ends.
   const failed = !!error && !data;
@@ -40,11 +44,13 @@ export function SetupList() {
           <Apple
             id="setup-posting"
             wide
-            title={data ? `${ready} of 5 ready` : "Checking…"}
+            title={!data ? "Checking…" : allSkipped ? "All skipped" : `${done} of ${total} ready`}
             aside={
-              <ProgressRing value={ready / 5} size={58} label={`${ready} of 5 platforms ready`} className="setup-summary__ring">
-                {ready}/5
-              </ProgressRing>
+              allSkipped ? undefined : (
+                <ProgressRing value={done / total} size={58} label={`${done} of ${total} platforms ready`} className="setup-summary__ring">
+                  {done}/{total}
+                </ProgressRing>
+              )
             }
           />
         </Panel>
@@ -58,7 +64,7 @@ export function SetupList() {
               !rows || !count
                 ? "Checking…"
                 : todoVisible(rows)
-                  ? `On your screen: ${count.finished} of ${count.total} done`
+                  ? `On your screen: ${count.ready} of ${count.total} done`
                   : "All done: the list is gone"
             }
           />

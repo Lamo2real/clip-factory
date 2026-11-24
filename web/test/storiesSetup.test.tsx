@@ -13,7 +13,7 @@ import { forgetLoaded } from "../src/lib/hooks.ts";
 import { setStoriesApi } from "../src/stories/api/client.ts";
 import { mockStoriesApi } from "../src/stories/api/mock/index.ts";
 import { setMockLatency, type MockStore } from "../src/stories/api/mock/store.ts";
-import type { StoriesApi } from "../src/stories/api/types.ts";
+import type { Onboarding, OnboardStep, StoriesApi } from "../src/stories/api/types.ts";
 import { forgetDashboards, forgetOnboarding } from "../src/stories/ui.tsx";
 import { resetWorkspaceMemory } from "../src/stories/workspace.ts";
 
@@ -24,7 +24,7 @@ vi.mock("../src/lib/router.ts", async (orig) => {
   return { ...real, navigate: () => undefined };
 });
 
-const { SetupScreen } = await import("../src/stories/screens/Setup.tsx");
+const { SETUP_ORDER, SetupScreen, firstOpen, leftOf } = await import("../src/stories/screens/Setup.tsx");
 
 let host: HTMLElement;
 let root: Root;
@@ -296,5 +296,87 @@ describe("step 4 and the connect steps", () => {
     await click(button("Use this"));
     const body = calls.filter((c) => c.name === "patchWorkspace").at(-1)?.args[1] as { configuration: { providers: Record<string, unknown> } };
     expect(body.configuration.providers).toEqual({ video: "luma-ray", videoModel: null });
+  });
+});
+
+// ---------- A platform the owner skipped (the owner, 24 Nov: "if i skip on a platform setup then i dont want to see
+// it anywhere except in settings or social accounts tab") ----------
+
+const ob = (states: Partial<Record<OnboardStep, Onboarding["steps"][number]["state"]>>, finished = false): Onboarding => {
+  const steps = SETUP_ORDER.map((step) => ({ step, label: step, state: states[step] ?? (step === "done" && finished ? "done" : "todo") }));
+  return { steps, done: steps.filter((s) => s.state === "done").length, total: 11, finishedAt: finished ? "2026-11-24T00:00:00.000Z" : null };
+};
+
+describe("a platform the owner skipped", () => {
+  const allDone: Partial<Record<OnboardStep, "done">> = { ai: "done", model: "done", effort: "done", video: "done", agents: "done", instagram: "done", tiktok: "done", youtube: "done", facebook: "done", x: "done" };
+
+  it("leftOf leaves out a skipped platform but keeps a step skipped for later; firstOpen never lands on a skipped platform", () => {
+    const x = ob({ ...allDone, x: "skipped" }, true);
+    expect(leftOf(x)).toEqual([]);
+    expect(firstOpen(x)).toBe("done");
+    const both = ob({ ...allDone, tiktok: "skipped", video: "skipped" }, true);
+    expect(leftOf(both).map((s) => s.step)).toEqual(["video"]);
+    expect(firstOpen(both)).toBe("video");
+    // still to do comes first, a skipped platform never
+    const open = ob({ ai: "done", instagram: "skipped", tiktok: "skipped" });
+    expect(firstOpen(open)).toBe("model");
+    expect(leftOf(open).map((s) => s.step)).toEqual(["model", "effort", "video", "agents", "youtube", "facebook", "x"]);
+  });
+
+  it("Skip for now on a connect step says it stays in Social accounts; the step says Skipped and its foot has Un-skip", async () => {
+    await start({});
+    const total = () => Number(/of (\d+) done/.exec(ring() ?? "")?.[1]);
+    expect(total()).toBe(11);
+    await click(stepItem("Connect X"));
+    await click(button("Skip for now"));
+    expect(calls.filter((c) => c.name === "patchOnboarding").at(-1)?.args[1]).toEqual({ step: "x", skipped: true });
+    expect(document.body.textContent).toContain("Skipped. It stays in Social accounts.");
+    expect(stepItem("Connect X").querySelector(".st-steps__skipped")?.textContent).toBe("Skipped");
+    expect(stepItem("Connect X").className).toContain("is-skipped");
+    // a skipped platform is not counted
+    expect(total()).toBe(10);
+    expect($(".st-setup__intro")?.textContent).toMatch(/^\d+ of 10 done\./);
+    // back on its step: the chip says Skipped, and the foot has Un-skip instead of Skip for now
+    await click(stepItem("Connect X"));
+    expect($(".st-setup__count .st-chip")?.textContent).toBe("Skipped");
+    const foot = $(".st-setup__foot")!;
+    expect(() => button("Skip for now", foot)).toThrow();
+    const unskip = button("Un-skip", foot);
+    expect(unskip.disabled).toBe(false);
+    // Its way on is a quiet Next (Un-skip took Skip for now's place, so the step is never a dead end).
+    expect(button("Next", foot).classList.contains("st-btn--main")).toBe(false);
+    await click(unskip);
+    expect(calls.filter((c) => c.name === "patchOnboarding").at(-1)?.args[1]).toEqual({ step: "x", skipped: false });
+    expect(document.body.textContent).toContain("X is back.");
+    expect(total()).toBe(11);
+    expect(stepItem("Connect X").querySelector(".st-steps__skipped")).toBeNull();
+    expect(button("Skip for now", $(".st-setup__foot")!)).toBeTruthy();
+    expect(() => button("Un-skip", $(".st-setup__foot")!)).toThrow();
+    // To do again: Skip for now is its one way on, with no Next (the bug hunt's footer).
+    expect(() => button("Next", $(".st-setup__foot")!)).toThrow();
+  });
+
+  it("a step of another kind skipped still says Later and Skipped for now, and is still counted", async () => {
+    await start({});
+    await click(stepItem("Pick how videos are made"));
+    await click(button("Skip for now"));
+    expect(document.body.textContent).toContain("Skipped. It stays on the list for later.");
+    expect(stepItem("Pick how videos are made").querySelector(".st-steps__skipped")?.textContent).toBe("Later");
+    expect(ring()).toMatch(/ of 11 done$/);
+    await click(stepItem("Pick how videos are made"));
+    expect($(".st-setup__count .st-chip")?.textContent).toBe("Skipped for now");
+    expect(button("Skip for now", $(".st-setup__foot")!)).toBeTruthy();
+  });
+
+  it("the Done step's words count only what is left: never a skipped platform", async () => {
+    await start({}, async (api) => {
+      for (const step of ["tiktok", "facebook", "x"] as const) await api.patchOnboarding("stories", { step, skipped: true });
+    });
+    await click(stepItem("Done"));
+    const o = (await (await import("../src/stories/api/client.ts")).storiesApi().getOnboarding("stories"));
+    const left = leftOf(o);
+    expect(left.some((s) => ["tiktok", "facebook", "x"].includes(s.step))).toBe(false);
+    expect(left.length).toBeGreaterThan(1);
+    expect($(".st-setup__done")?.textContent).toBe(`You can make videos now. ${left.length} things are left: the dashboard keeps them for you.`);
   });
 });

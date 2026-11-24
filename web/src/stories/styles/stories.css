@@ -11,6 +11,7 @@
 @import "./st-controls.css"; /* pick one, tabs, switches */
 @import "./st-library.css"; /* the Library */
 @import "./st-connections.css"; /* Social accounts (Connections) */
+@import "./st-social-rows.css"; /* Social accounts: the header, progress card and rows, and a platform's own page */
 @import "./st-settings.css"; /* Settings (shell part) */
 @import "./st-social-auth.css"; /* Social accounts: authorization, the developer app, its keys */
 @import "./st-setup.css"; /* the progress ring and the setup */

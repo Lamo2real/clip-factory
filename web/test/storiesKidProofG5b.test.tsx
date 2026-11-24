@@ -26,7 +26,8 @@ vi.mock("../src/lib/router.ts", async (orig) => {
   return { ...real, navigate: () => undefined };
 });
 
-const { ConnectionsScreen } = await import("../src/stories/screens/Connections.tsx");
+// The cards are on each platform's own page under Social accounts (§48.4).
+const { ConnectionScreen } = await import("../src/stories/screens/SocialPlatform.tsx");
 const { ConversationView } = await import("../src/stories/chat/ConversationView.tsx");
 
 let host: HTMLElement;
@@ -66,7 +67,7 @@ describe("Social accounts: picking Clip Factory's app is the choice", () => {
     await act(async () =>
       root.render(
         <ToastProvider>
-          <ConnectionsScreen ws="stories" page={{ name: "connections", platform: null, result: null, ws: null }} />
+          <ConnectionScreen ws="stories" page={{ name: "connection", platform: "youtube", result: null, ws: null }} />
         </ToastProvider>,
       ),
     );
@@ -119,6 +120,10 @@ describe("Needs you after the account is fixed", () => {
   it("points at the post's Try again once the account is connected; until then, at Social accounts", () => {
     expect(afterFix(stuck, accounts("needs_reconnect"))).toBe(stuck);
     expect(afterFix(stuck, accounts("connected"))).toEqual({ ...stuck, href: "/stories/review/01JSTST0000000000000000003", sentence: "TikTok is connected now. Tap Try again on “Bolt ties his shoes”." });
+    // The same once Fix it names the platform's own page on Social accounts (§48).
+    const onPage = { ...stuck, href: "/stories/connections/tiktok" };
+    expect(afterFix(onPage, accounts("needs_reconnect"))).toBe(onPage);
+    expect(afterFix(onPage, accounts("connected"))).toEqual({ ...onPage, href: "/stories/review/01JSTST0000000000000000003", sentence: "TikTok is connected now. Tap Try again on “Bolt ties his shoes”." });
     // An account's own line (no post) stays as it is.
     const own = { ...stuck, publishingJobId: null, storyId: null };
     expect(afterFix(own, accounts("connected"))).toBe(own);

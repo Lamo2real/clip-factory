@@ -1,6 +1,7 @@
 import type { AnimationEvent } from "react";
 import { api } from "../../api/index.ts";
-import type { Clip, Job } from "../../api/types.ts";
+import type { Clip, Job, Platform } from "../../api/types.ts";
+import { useSessionIfAny } from "../../app/session.tsx";
 import { Icon } from "../../components/Icon.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { A, Button, ErrorPanel, LinkButton, Progress, Skeleton, Swash } from "../../components/ui.tsx";
@@ -17,6 +18,8 @@ import { StreamersRow } from "./StreamersRow.tsx";
 import { CampaignsRow } from "./CampaignsRow.tsx";
 import { LiveLine } from "../jobs/LiveLine.tsx";
 import { jobPercent, jobProgress } from "../../lib/jobProgress.ts";
+
+const NO_SKIPS: readonly Platform[] = [];
 
 /** The most review clips Home sends to its row; the row draws as many as fit across (screens.css, `.home-row__cards`). */
 export const TEASERS_MAX = 6;
@@ -52,6 +55,8 @@ export async function loadHome(): Promise<HomeData> {
 
 export function Home() {
   const { data, error, setData, reload } = useLoad(loadHome, "", "home");
+  // The skipped places (Settings.setupSkipped): the money and followers tiles never remind him of them (rule S).
+  const skipped = useSessionIfAny()?.me?.settings.setupSkipped ?? NO_SKIPS;
   // Nothing loaded and the last try failed: say so and offer Try again, instead of skeletons forever (§12.4).
   const failed = !data && error ? error : null;
   // Deleted jobs (and their Review clips, when those go too) leave at once; Undo brings them back (§34.5).
@@ -141,8 +146,8 @@ export function Home() {
         </div>
         <Stat views={data?.views ?? null} posts={data?.postsChecked ?? 0} unavailable={data !== null && data.views === null} />
       </section>
-      <MoneyTile />
-      <FollowersTile />
+      <MoneyTile skipped={skipped} />
+      <FollowersTile skipped={skipped} />
       <StreamersRow />
       <CampaignsRow />
     </div>

@@ -3,7 +3,8 @@
 // app never moves him): Check now is not on a card whose Page or account is still to be picked (the API answers 409
 // there); picking from the list says it once (the "Is this your Lamo Stories …?" question follows, and its Yes
 // cheers); a Connect whose sign-in page answers while Clip Factory is on screen waits for Lamo Stories to be back; and
-// an account Lamo Clips connected later reads as Clip Factory's own on the page and in the setup.
+// an account Lamo Clips connected later reads as Clip Factory's own on the page and in the setup. Each card is on its
+// platform's own page (/stories/connections/<p>): a case that reads several cards opens each page in turn.
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -26,32 +27,49 @@ vi.mock("../src/lib/router.ts", async (orig) => {
   return { ...real, navigate: (to: string) => void moves.push(to) };
 });
 
-const { ConnectionsScreen } = await import("../src/stories/screens/Connections.tsx");
+const { ConnectionScreen } = await import("../src/stories/screens/SocialPlatform.tsx");
 const { takeParkedStoriesGo } = await import("../src/stories/pane.tsx");
 
 let host: HTMLElement;
 let root: Root;
 let store: MockStore;
 let api: StoriesApi;
+/** The platform whose page is on screen. */
+let at: string | null = null;
 
-async function render(knobs: Record<string, unknown> = {}) {
+/** A fresh pretend API, then a platform's own page. */
+async function render(platform: string, knobs: Record<string, unknown> = {}) {
   (window as unknown as { __cfStoriesMock?: unknown }).__cfStoriesMock = { knobs };
   api = mockStoriesApi();
   store = (window as unknown as { __cfStoriesMock: { store: MockStore } }).__cfStoriesMock.store;
   setStoriesApi(api);
+  await show(platform);
+}
+/** Another platform's page, with the same pretend API. */
+async function show(platform: string) {
   await act(async () =>
     root.render(
       <ToastProvider>
-        <ConnectionsScreen ws="stories" page={{ name: "connections", platform: null, result: null, ws: null }} />
+        <ConnectionScreen ws="stories" page={{ name: "connection", platform: platform as never, result: null, ws: null }} />
       </ToastProvider>,
     ),
   );
   await settle();
+  at = platform;
 }
 async function settle(times = 5) {
   for (let i = 0; i < times; i++) await act(async () => await new Promise((r) => setTimeout(r, 0)));
 }
-const card = (platform: string) => host.querySelector<HTMLElement>(`.st-conn[data-platform="${platform}"]`)!;
+/** The card of the platform whose page is on screen. */
+const card = (platform: string) => {
+  expect(at, "that platform's page is on screen").toBe(platform);
+  return host.querySelector<HTMLElement>(`.st-conn[data-platform="${platform}"]`)!;
+};
+/** The platform's card on its own page (opened if another one is on screen). */
+const cardOf = async (platform: string) => {
+  if (at !== platform) await show(platform);
+  return card(platform);
+};
 const button = (el: ParentNode, name: string | RegExp) =>
   Array.from(el.querySelectorAll<HTMLButtonElement>("button")).find((b) => (typeof name === "string" ? b.textContent?.trim() === name : name.test(b.textContent ?? "")));
 const click = async (b: HTMLElement | undefined) => {
@@ -85,21 +103,21 @@ afterEach(() => {
 
 describe("Check now (§45.35 D21)", () => {
   it("is not on a card whose Page or account is still to be picked, and is on the others that are connected", async () => {
-    await render();
+    await render("instagram");
     expect(store.social.find((a) => a.platform === "instagram")?.connectionStatus).toBe("choose_account");
     expect(button(card("instagram"), /Check now/)).toBeUndefined();
     // The list and the other ways out are still there.
     expect(card("instagram").querySelector(".st-choose__list")).not.toBeNull();
     expect(button(card("instagram"), "Disconnect")).toBeTruthy();
     expect(button(card("instagram"), /Pick another/)).toBeTruthy();
-    for (const p of ["youtube", "tiktok", "x"]) expect(button(card(p), /Check now/), p).toBeTruthy();
-    expect(button(card("facebook"), /Check now/)).toBeUndefined();
+    for (const p of ["youtube", "tiktok", "x"]) expect(button(await cardOf(p), /Check now/), p).toBeTruthy();
+    expect(button(await cardOf("facebook"), /Check now/)).toBeUndefined();
   });
 });
 
 describe("one toast per pick (§45.35 D21)", () => {
   it("picking Lamo Stories' own account asks the question with no toast of its own; Yes says it once", async () => {
-    await render();
+    await render("instagram");
     await click(button(card("instagram"), /funded\.clips/));
     expect(toasts()).toEqual([]);
     const ask = card("instagram").querySelector<HTMLElement>(".st-intended")!;
@@ -109,7 +127,7 @@ describe("one toast per pick (§45.35 D21)", () => {
   });
 
   it("tapping Clip Factory's own place says why once, sends nothing and asks nothing (§45.37 G8)", async () => {
-    await render();
+    await render("instagram");
     await click(button(card("instagram"), /clipfactory\.gg/));
     expect(toasts()).toEqual(["This is Clip Factory's own account. Clips Funded needs its own separate account: sign in with a different one."]);
     expect(card("instagram").querySelector(".st-intended")).toBeNull();
@@ -120,7 +138,7 @@ describe("one toast per pick (§45.35 D21)", () => {
 describe("Connect while Clip Factory is on screen (§45.35 D17)", () => {
   it("a sign-in page that answers then waits for Lamo Stories to be back; it never moves the owner out of Clip Factory", async () => {
     localStorage.setItem("cf.storiesPreview", "1");
-    await render({ connectResult: "connected" });
+    await render("facebook", { connectResult: "connected" });
     // The owner taps Connect on Facebook, then switches to Clip Factory before the server answers.
     const connect = button(card("facebook"), "Connect Facebook");
     expect(connect).toBeTruthy();
@@ -143,7 +161,7 @@ describe("Connect while Clip Factory is on screen (§45.35 D17)", () => {
 
 describe("Lamo Clips' account found later (§45.35 D11)", () => {
   it("a stored connected account that is Lamo Clips' own reads as Clip Factory's on the page, and its setup step says why", async () => {
-    await render();
+    await render("x");
     // Lamo Clips connected the same X account after Lamo Stories did: the item still says connected.
     const x = store.social.find((a) => a.platform === "x")!;
     Object.assign(x, { connectionStatus: "connected", sharedWithClips: false });

@@ -17,6 +17,7 @@ import { MemorySection } from "../settings/MemorySection.tsx";
 import { SkillsSection } from "../settings/SkillsSection.tsx";
 import { StorageSection } from "../settings/StorageSection.tsx";
 import { VideoSection } from "../settings/VideoSection.tsx";
+import { leftOf } from "../skips.ts";
 import { StIcon, useOnboarding } from "../ui.tsx";
 import type { StoriesScreenProps } from "./types.ts";
 
@@ -39,10 +40,13 @@ function hrefOf(section: SettingsSection | "social"): string {
   return section === "social" ? storiesHref({ name: "connections", platform: null, result: null, ws: null }) : storiesHref({ name: "settings", section });
 }
 
-/** The first-time setup, always one tap away (§45.36 E15): with what is still left when steps were skipped. */
+/**
+ * The first-time setup, always one tap away (§45.36 E15): with what is still left when steps were skipped. A platform
+ * the owner skipped is not counted (it waits on Social accounts).
+ */
 function SetupAgain({ ws }: { ws: string }) {
   const { data } = useOnboarding(ws);
-  const left = data ? data.steps.filter((s) => s.state !== "done" && s.step !== "done").length : 0;
+  const left = data ? leftOf(data).length : 0;
   return (
     <p className="st-stg-head__setup">
       {/* The shared glass pill (.st-pill), on the hero like the section pills under it. */}

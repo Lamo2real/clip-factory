@@ -7,7 +7,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { api } from "../../api/index.ts";
 import { friendlyMessage } from "../../api/errors.ts";
-import type { Campaign, CampaignSummary, FinderMatch, FinderWant } from "../../api/types.ts";
+import type { Campaign, CampaignSummary, FinderMatch, FinderWant, Platform } from "../../api/types.ts";
 import { useSession } from "../../app/session.tsx";
 import { Icon } from "../../components/Icon.tsx";
 import { useToast } from "../../components/Toasts.tsx";
@@ -29,6 +29,7 @@ import {
   putFinder,
   readyPlaces,
   reloadFinder,
+  SETUP_LIST_PATH,
   setupPlaceHref,
   shownMatches,
   stateLine,
@@ -36,6 +37,7 @@ import {
   useWantSaver,
 } from "../../lib/finder.ts";
 import { PLATFORM_LABEL } from "../../lib/format.ts";
+import { activeSkips } from "../../lib/setupTodo.ts";
 import { useLiveEvents, useLivePoll } from "../../lib/live.ts";
 import { clipsGoLater } from "../../app/shell.ts";
 import { CR_DISCOVER } from "../../setup/contentrewards.ts";
@@ -55,6 +57,13 @@ export const READING = "Reading the rules… (about 30 seconds)";
 function useNewsOff(): boolean {
   const session = useSession();
   return session.me?.settings.notify?.contentRewards === false;
+}
+
+const NO_SKIPS: readonly Platform[] = [];
+
+/** The skipped places (Settings.setupSkipped, rule S): the page never asks him to set one up. */
+function useSkipped(): readonly Platform[] {
+  return useSession().me?.settings.setupSkipped ?? NO_SKIPS;
 }
 
 /** The row's fields a campaign's newer copy updates. */
@@ -116,6 +125,7 @@ export function FindPage() {
   const toast = useToast();
   const pin = true;
   const newsOff = useNewsOff();
+  const saved = useSkipped();
   const saver = useWantSaver((m) => toast.error(m));
   const now = useNow(true, 60_000);
 
@@ -286,6 +296,8 @@ export function FindPage() {
     [setup.data, data?.tiktokWaits, data?.resolvedPlaces],
   );
   const accountCopies = useMemo(() => accountLinks(setup.data?.platforms), [setup.data]);
+  // Skips of places that are not set up (a place that is set up is never skipped).
+  const skipped = useMemo(() => activeSkips(setup.data?.platforms, saved), [setup.data, saved]);
 
   if (f.state === "missing" || f.state === "soon")
     return (
@@ -323,7 +335,7 @@ export function FindPage() {
 
   const want: FinderWant = fresh ? { ...WANT_DEFAULTS, ...data.want, ...draft } : { ...data.want, ...saver.shown };
   const noPlace = (fresh && ready.length === 0) || (data.state === "ok" && data.resolvedPlaces.length === 0);
-  const setUpFirst = placeToSetUp(setup.data);
+  const setUpFirst = placeToSetUp(setup.data, skipped);
   const off = data.state === "off";
   const looking = data.state === "looking";
   const updating = looking && saver.sent;
@@ -575,8 +587,8 @@ export function FindPage() {
           ) : null}
           {data.state === "ok" && noPlace ? (
             <div className="finder-state__main">
-              <LinkButton href={setupPlaceHref(setUpFirst)} variant={main === "setup" ? "primary" : "glass"} size="lg" icon="link" data-help-clear={main === "setup" ? "" : undefined}>
-                Set up {PLATFORM_LABEL[setUpFirst]}
+              <LinkButton href={setUpFirst ? setupPlaceHref(setUpFirst) : SETUP_LIST_PATH} variant={main === "setup" ? "primary" : "glass"} size="lg" icon="link" data-help-clear={main === "setup" ? "" : undefined}>
+                {setUpFirst ? `Set up ${PLATFORM_LABEL[setUpFirst]}` : "Open Set up posting"}
               </LinkButton>
             </div>
           ) : null}
@@ -603,6 +615,7 @@ export function FindPage() {
         fresh={fresh}
         noPlace={noPlace}
         setUpFirst={setUpFirst}
+        skipped={skipped}
         main={main === "start" || (fresh && main === "setup")}
         pinned={pin}
         newsOff={newsOff}

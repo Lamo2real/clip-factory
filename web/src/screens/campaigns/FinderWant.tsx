@@ -1,7 +1,8 @@
 // What you want (docs/CONTRACTS.md §41.1): the owner's requirements for the campaign finder, set once. Open the first
 // time and after "Change"; else one summary line. Every change saves at once (the page debounces the PATCH); a glass
 // "Done" folds it. Never started, its vermilion "Find campaigns for me" sends the first PATCH (or, with no place set
-// up, "Set up YouTube"). Pick-one rows are <Glide> bars (Segmented); many-choice rows are toggle chips.
+// up, "Set up YouTube"). Pick-one rows are <Glide> bars (Segmented); many-choice rows are toggle chips. A skipped place
+// has no chip and is never named ("Set up another place" and "Set it up first." pass over it, rule S).
 import { useEffect, useId, useRef, type ReactNode } from "react";
 import type { Finder, FinderLanguage, FinderWant, Platform } from "../../api/types.ts";
 import { Icon } from "../../components/Icon.tsx";
@@ -15,6 +16,7 @@ import {
   NO_PLACE_LINE,
   PAY_CHOICES,
   pickedPlaces,
+  SETUP_LIST_PATH,
   setupPlaceHref,
   toggleIn,
   togglePlace,
@@ -22,6 +24,9 @@ import {
   wantSummary,
 } from "../../lib/finder.ts";
 import { PLATFORM_LABEL, PLATFORM_ORDER } from "../../lib/format.ts";
+import { withoutSkipped } from "../../lib/setupTodo.ts";
+
+const NO_SKIPS: readonly Platform[] = [];
 
 export const SKIP_LINE = "I skip campaigns that need their own sound or picture on the video.";
 export const NEWS_OFF = "Content Rewards news is off in Settings.";
@@ -79,6 +84,7 @@ export function FinderWant({
   onStart,
   onKeepOne,
   hideChange = false,
+  skipped = NO_SKIPS,
 }: {
   finder: Finder;
   /** The want as it shows now (the store's copy with the changes not saved yet over it). */
@@ -89,8 +95,8 @@ export function FinderWant({
   /** Never started: the changes wait for "Find campaigns for me". */
   fresh: boolean;
   noPlace: boolean;
-  /** The place the no-place vermilion sets up. */
-  setUpFirst: Platform;
+  /** The place the no-place vermilion sets up; null when only skipped places are left (it opens Set up posting). */
+  setUpFirst: Platform | null;
   /** This card holds the screen's vermilion. */
   main: boolean;
   pinned: boolean;
@@ -103,10 +109,13 @@ export function FinderWant({
   onKeepOne: () => void;
   /** The state box above already shows "Change what you want" (no match): the folded card's Change would be a twin. */
   hideChange?: boolean;
+  /** The skipped places that are not set up: no chip, and never named. */
+  skipped?: readonly Platform[];
 }) {
   const id = useId();
   const picked = pickedPlaces(want, ready);
-  const notSetUp = PLATFORM_ORDER.filter((p) => p !== "tiktok" && !ready.includes(p));
+  const notSetUp = withoutSkipped(PLATFORM_ORDER.filter((p) => p !== "tiktok" && !ready.includes(p)), skipped);
+  const chips = PLATFORM_ORDER.filter((p) => ready.includes(p) || !skipped.includes(p));
   const tiktokWaits = finder.tiktokWaits;
   // No place but TikTok is ready: "Set up a place" (there is no other one yet).
   const noneReady = !ready.some((p) => p !== "tiktok");
@@ -146,8 +155,8 @@ export function FinderWant({
 
   const mainEl = fresh ? (
     noPlace ? (
-      <LinkButton href={setupPlaceHref(setUpFirst)} variant={main ? "primary" : "glass"} size="lg" icon="link" data-help-clear={main ? "" : undefined}>
-        Set up {PLATFORM_LABEL[setUpFirst]}
+      <LinkButton href={setUpFirst ? setupPlaceHref(setUpFirst) : SETUP_LIST_PATH} variant={main ? "primary" : "glass"} size="lg" icon="link" data-help-clear={main ? "" : undefined}>
+        {setUpFirst ? `Set up ${PLATFORM_LABEL[setUpFirst]}` : "Open Set up posting"}
       </LinkButton>
     ) : (
       <Button variant={main ? "primary" : "glass"} size="lg" icon="search" loading={starting} data-help-clear={main ? "" : undefined} onClick={onStart}>
@@ -185,7 +194,7 @@ export function FinderWant({
 
       <Row label="Where you post" line={want.places === null ? "The places you set up." : undefined} id={`${id}-places`}>
         <ul className="finder-chips" aria-label="Where you post">
-          {PLATFORM_ORDER.map((p) => {
+          {chips.map((p) => {
             const waits = p === "tiktok" && tiktokWaits;
             const off = waits || !ready.includes(p);
             return (

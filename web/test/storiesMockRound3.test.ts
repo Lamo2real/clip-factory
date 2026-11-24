@@ -60,6 +60,7 @@ const social = (platform: SocialAccount["platform"], extra: Partial<SocialAccoun
   choices: null,
   limits: [],
   warning: null,
+  skipped: false,
   ...extra,
 });
 

@@ -19,7 +19,7 @@ import { StButton, StIcon, StLinkButton } from "../ui.tsx";
 import { loginReason, macHelperNew, macNotSeen } from "./macRow.ts";
 import * as W from "./macWords.ts";
 
-/** The card's id: the rows' Turn on and Set it up go here (/stories/connections#tiktok-mac). */
+/** The card's id: the rows' Turn on and Set it up go here (/stories/connections/tiktok#tiktok-mac). */
 export const MAC_CARD_ID = "tiktok-mac";
 
 /**

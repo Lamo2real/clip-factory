@@ -8,6 +8,7 @@ import { useToast } from "../../components/Toasts.tsx";
 import { A, Button, Empty, ErrorPanel, LinkButton, PageHeader, Pill, Skeleton } from "../../components/ui.tsx";
 import { burst, centerOf } from "../../lib/confetti.ts";
 import { MOMENT_LABEL, PLATFORM_ORDER, plural, timecode } from "../../lib/format.ts";
+import { withoutSkipped } from "../../lib/setupTodo.ts";
 import { ACT_REWIND_MS, useAction } from "../../lib/motion.ts";
 import { patchLoaded, useLoad } from "../../lib/hooks.ts";
 import { useLiveEvents } from "../../lib/live.ts";
@@ -900,6 +901,10 @@ function ReviewCard({
   // Nothing is set up yet: Upload saves the clip the old way, and it goes up once a place is set up (§33.1). Never for
   // a campaign clip: it needs its places (§38.14).
   const noneReady = !isCampaign && !!placesReady && placesReady.length === 0;
+  // Nothing set up (or not known yet): a caption row for every place he did not skip (rule S, §48.3). With none ready
+  // every skip counts; with all five skipped, all five rows stay, so the clip still has its captions.
+  const unskipped = withoutSkipped(PLATFORM_ORDER, me?.settings.setupSkipped);
+  const everyPlace = unskipped.length ? unskipped : PLATFORM_ORDER;
 
   async function confirm() {
     // A campaign clip goes up the campaign way only when it can earn (the API refuses it too, §39.3).
@@ -914,7 +919,7 @@ function ReviewCard({
       toast.error(isCampaign ? "Pick where it goes, then tap Upload." : "Pick at least one place to upload to.");
       return;
     }
-    if (captionsTooLong(captions, noneReady ? undefined : chosen)) {
+    if (captionsTooLong(captions, noneReady ? everyPlace : chosen)) {
       keepAct.fail({ sound: false });
       // Opens the too-long row (it may be scrolled out of sight) and names the platform.
       const name = rows.current?.showTooLong();
@@ -1150,7 +1155,7 @@ function ReviewCard({
                 ? `${PICK_WHOSE} Pick Your brand or Branded content on TikTok first.`
                 : (brandedBlocked(ttChoices.privacy) ?? "Pick Your brand or Branded content on TikTok first.");
   const uploadWhy: string | null = fitWhy ?? ttWhy;
-  const placesShown = placesReady && !noneReady ? chosen : PLATFORM_ORDER;
+  const placesShown = placesReady && !noneReady ? chosen : everyPlace;
   const macLine = macUploadLine(macCtx, ttChoices.privacy === "PUBLIC_TO_EVERYONE");
 
   return (
@@ -1170,6 +1175,7 @@ function ReviewCard({
           fixing={fixing}
           onBranded={turnOnBranded}
           onAdded={relink}
+          skipped={me?.settings.setupSkipped}
         />
       ) : campaign ? (
         <CampaignStrip campaign={campaign} />

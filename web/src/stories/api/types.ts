@@ -595,7 +595,8 @@ export interface Onboarding {
   /** `line`: why a step is still to do when the account is Lamo Clips' own (the same-as-Clips line, §45.34, §45.35 D11) */
   steps: { step: OnboardStep; label: string; state: "done" | "skipped" | "todo"; line?: string }[];
   done: number;
-  total: 11;
+  /** 11 minus the platform steps skipped: a skipped platform is not counted (`steps` still holds all 11) */
+  total: number;
   finishedAt: string | null;
 }
 
@@ -1124,6 +1125,11 @@ export interface SocialAccount {
   limits: string[];
   /** e.g. "Lamo Clips may have lost Facebook. …" */
   warning: string | null;
+  /**
+   * The owner skipped this platform in the setup (ONBOARD.skipped) and it is not connected: it shows only in Social
+   * accounts and the setup, never in a reminder, a count or a nudge. Connected wins (the skip is then dropped).
+   */
+  skipped: boolean;
 }
 
 /** Why an account needs the owner (§45.34): a code, never a sentence. */

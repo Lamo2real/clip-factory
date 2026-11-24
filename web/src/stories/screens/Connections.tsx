@@ -1,5 +1,8 @@
 // Lamo Stories › Social accounts (docs/CONTRACTS.md §45.13, §45.16.7, §45.30, §45.33): Lamo Stories' own social
-// accounts, separate from Clip Factory's. Five cards (YouTube, TikTok, Instagram, Facebook, X), kid-proof (the owner,
+// accounts, separate from Clip Factory's. The page is organized like Clip Factory's Set up posting (the owner, 24 Nov):
+// a header card, a progress card and one row per platform (SocialRows.tsx), each opening the platform's own page
+// (/stories/connections/<p>, SocialPlatform.tsx) with its card below. One card per platform (YouTube, TikTok,
+// Instagram, Facebook, X), kid-proof (the owner,
 // 23 Nov: "less text … even an 8 year old should be able to use the app"): on the card only the platform's logo mark
 // and name, one status chip, the account (picture, name and handle), the safety line while an account is still to
 // connect or fix, what needs the owner (the account's warning, the list to pick from, the sign-in tip, who can see the
@@ -27,7 +30,7 @@
 // also once the keys are saved. After a connect the page says "Connected as {name} ({handle})" and the card asks "Is
 // this your Lamo Stories {place}?" (Yes, or Pick another). An account's reason is a code (SocialReason), said in words.
 import "../styles/social.css";
-import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { useEffect, useId, useState, type CSSProperties, type ReactNode } from "react";
 import { friendlyMessage } from "../../api/errors.ts";
 import type { KeyName } from "../../api/types.ts";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
@@ -38,7 +41,6 @@ import { useLoad } from "../../lib/hooks.ts";
 import { KEY_LABEL, keyNames, keyProblem, normaliseKey } from "../../lib/keyFormats.ts";
 import { navigate } from "../../lib/router.ts";
 import { storiesAwayLater, storiesGoLater } from "../pane.tsx";
-import { storiesSound } from "../prefs.ts";
 import { storiesApi } from "../api/client.ts";
 import { SHARED_APP_PLATFORMS, type ClipsDestination, type KeyCheck, type Platform, type SocialAccount } from "../api/types.ts";
 import { ArcDial } from "../glass/index.ts";
@@ -54,7 +56,6 @@ import {
   StIcon,
   StLinkButton,
   StLoading,
-  StPageHead,
   StPick,
   StTech,
   plainFirst,
@@ -62,6 +63,10 @@ import {
   type StTone,
 } from "../ui.tsx";
 import type { StoriesScreenProps } from "./types.ts";
+import { appReady as isAppReady, SocialHead, SocialProgress, SocialRowList } from "./SocialRows.tsx";
+import { socialHref, useSkip } from "../skips.ts";
+
+export { appReady } from "./SocialRows.tsx";
 
 /** What one connection is on each platform: a channel, a Page or an account. */
 export const PLACE: Record<Platform, string> = { youtube: "channel", tiktok: "account", instagram: "account", facebook: "Page", x: "account" };
@@ -142,7 +147,8 @@ export function connectedAsSentence(a: Pick<SocialAccount, "accountName" | "hand
 }
 
 const STATUS: Record<SocialAccount["connectionStatus"], { label: string; tone: StTone; auth: string }> = {
-  connected: { label: "Connected", tone: "mint", auth: "Allowed: Clips Funded may post here." },
+  // "Ready", the same word as its row on Social accounts and the "N of M ready" card (§48.4: one word for one state).
+  connected: { label: "Ready", tone: "mint", auth: "Allowed: Clips Funded may post here." },
   choose_account: { label: "Pick one", tone: "sun", auth: "Allowed, but pick where Clips Funded posts first." },
   needs_reconnect: { label: "Connect again", tone: "coral", auth: "Stopped: the sign-in needs renewing. Tap Connect again." },
   same_as_clips: { label: "Clip Factory's own", tone: "coral", auth: "Stopped: Clips Funded never posts to Clip Factory's own account." },
@@ -769,6 +775,7 @@ export function PlatformCard({
   askIntended = false,
   onAnswered,
   inStep = false,
+  headingLevel = 2,
 }: {
   ws: string;
   a: SocialAccount;
@@ -782,6 +789,8 @@ export function PlatformCard({
   onAnswered?: () => void;
   /** inside a setup step: flat on the step's own glass panel, not a glass card of its own */
   inStep?: boolean;
+  /** 1 on the platform's own page, where the card's name is the page's heading */
+  headingLevel?: 1 | 2;
 }) {
   const toast = useToast();
   const [busy, setBusy] = useState<Busy>(null);
@@ -834,7 +843,7 @@ export function PlatformCard({
   };
 
   // Connect waits for the developer app: chosen, and (for its own app) its keys saved (§45.30: never a fallback).
-  const appReady = a.app.choice === "clips" || (a.app.choice === "own" && a.app.saved);
+  const appReady = isAppReady(a);
   // Until then the card's one main button is "Set up the app": it opens the app's choice on the card itself (never in
   // a fold). In a setup step the card is the step, so there it is open by itself, also when the app stops being ready
   // after the card is on screen (fresh data); closed by hand, it stays so.
@@ -880,7 +889,7 @@ export function PlatformCard({
         <span className={`st-conn__mark st-conn__mark--${p}`}>
           <PlatformMark platform={p} size={24} title={`${name} logo`} />
         </span>
-        <h2 className="st-conn__name st-display">{name}</h2>
+        {headingLevel === 1 ? <h1 className="st-conn__name st-display">{name}</h1> : <h2 className="st-conn__name st-display">{name}</h2>}
         <span className={`st-chip st-chip--${status.tone}`}>{status.label}</span>
       </header>
       {/* Up front while an account is still to connect, pick or fix, and while the card asks whether it is the right
@@ -1180,8 +1189,8 @@ function Limits({ name, limits }: { name: string; limits: string[] }) {
   );
 }
 
-/** The setup's place on this page: while it is not finished, a way back to it (the owner may come back from OAuth). */
-function SetupBack({ ws }: { ws: string }) {
+/** The setup's place on these pages: while it is not finished, a way back to it (the owner may come back from OAuth). */
+export function SetupBack({ ws }: { ws: string }) {
   const { data } = useOnboarding(ws);
   if (!data || data.finishedAt) return null;
   return (
@@ -1202,14 +1211,11 @@ function SetupBack({ ws }: { ws: string }) {
   );
 }
 
-// ---------- The cards in columns by their own height (§45.36 E18) ----------
+// ---------- The cards in columns by their own height (§45.36 E18: the list page has rows now; the pure helpers stay) ----------
 
 /** The narrowest a card's column gets, and the space between cards (both as in stories.css). */
 const CARD_MIN = 340;
 const CARD_GAP = 16;
-/** The grid's row step (px): each card spans as many of these as its height and the gap below it. */
-const ROW_STEP = 1;
-
 /** How many columns of at least CARD_MIN fit in `width` (as `repeat(auto-fill, minmax(340px, 1fr))` gives). */
 export function columnsFor(width: number): number {
   return Math.max(1, Math.floor((width + CARD_GAP) / (CARD_MIN + CARD_GAP)));
@@ -1297,190 +1303,45 @@ export function pickColumns(heightsAt: (columns: number) => number[], most: numb
   return { columns: best!.columns, at: best!.at };
 }
 
-/**
- * Lays the list's cards out in columns by their own height. Each card keeps its column while the page is open (a
- * card that grows, as Change app does, only pushes the cards under it in that column), and the columns are dealt
- * again only when the number of columns that fit changes or the cards do. The cards stay in page order, so Tab goes
- * as before.
- */
-function useCardColumns(list: { current: HTMLUListElement | null }, keys: string, on: boolean): void {
-  useLayoutEffect(() => {
-    const ul = list.current;
-    if (!on || !ul || typeof ResizeObserver === "undefined") return;
-    let dealt: { most: number; columns: number; at: number[] } | null = null;
-    let frame = 0;
-    const cards = () => Array.from(ul.children).filter((c): c is HTMLElement => c instanceof HTMLElement);
-    /** Each card's own height were it as wide as one of `columns` columns (measured, then put back). */
-    const heightsAt = (all: HTMLElement[], columns: number) => {
-      const w = (ul.clientWidth - CARD_GAP * (columns - 1)) / columns;
-      const was = all.map((c) => c.style.width);
-      for (const c of all) c.style.width = `${w}px`;
-      const heights = all.map((c) => c.getBoundingClientRect().height);
-      all.forEach((c, i) => (c.style.width = was[i]!));
-      return heights;
-    };
-    const layout = () => {
-      // Not while Lamo Stories is hidden behind Clip Factory (nothing has a size): it stays as it was for the way back.
-      if (!ul.clientWidth) return;
-      const all = cards();
-      const most = columnsFor(ul.clientWidth);
-      if (most < 2 || all.length < 2) {
-        delete ul.dataset.cols;
-        for (const c of all) c.style.removeProperty("--st-col");
-        dealt = null;
-        return;
-      }
-      if (!dealt || dealt.most !== most || dealt.at.length !== all.length) dealt = { most, ...pickColumns((k) => heightsAt(all, k), most) };
-      ul.dataset.cols = String(dealt.columns);
-      ul.style.setProperty("--st-cols", String(dealt.columns));
-      // Its own height at the width it has now (its rise-in animation only moves it, never sizes it).
-      const heights = all.map((c) => c.getBoundingClientRect().height);
-      all.forEach((c, i) => {
-        c.style.setProperty("--st-col", String(dealt!.at[i]! + 1));
-        c.style.setProperty("--st-span", String(Math.ceil((heights[i]! + CARD_GAP) / ROW_STEP)));
-      });
-    };
-    const soon = () => {
-      cancelAnimationFrame(frame);
-      frame = requestAnimationFrame(layout);
-    };
-    const ro = new ResizeObserver(soon);
-    ro.observe(ul);
-    for (const c of cards()) ro.observe(c);
-    layout();
-    // The page's own fonts arrive after the first paint and change the cards' heights: dealt again once.
-    let fresh = true;
-    const stopFresh = () => {
-      fresh = false;
-    };
-    ul.addEventListener("pointerdown", stopFresh, true);
-    ul.addEventListener("keydown", stopFresh, true);
-    void document.fonts?.ready?.then(() => {
-      if (!fresh) return;
-      dealt = null;
-      soon();
-    });
-    return () => {
-      cancelAnimationFrame(frame);
-      ro.disconnect();
-      ul.removeEventListener("pointerdown", stopFresh, true);
-      ul.removeEventListener("keydown", stopFresh, true);
-      delete ul.dataset.cols;
-      for (const c of cards()) {
-        c.style.removeProperty("--st-col");
-        c.style.removeProperty("--st-span");
-      }
-    };
-  }, [list, keys, on]);
-}
-
 /** The five cards and what they need, shared by this page and the setup's connect steps. */
 export function useSocial(ws: string) {
   return useLoad(() => storiesApi().social(ws), ws, "st-social");
 }
 
+/**
+ * Social accounts (`/stories/connections`): the header card, the way back to the setup, how many places are ready, and
+ * one row per platform, each opening its own page (SocialPlatform.tsx), with its Skip (asked first) or Un-skip.
+ */
 export function ConnectionsScreen({ ws, page }: StoriesScreenProps) {
-  const toast = useToast();
   const social = useSocial(ws);
-  const { reload, setData } = social;
-  const [gone, setGone] = useState<{ platform: Platform; choice: SocialAccount["app"]["choice"] } | null>(null);
-  // The platform just connected: its card asks whether this is the intended account (§45.34).
-  const [asking, setAsking] = useState<Platform | null>(null);
-  const shown = useRef<string | null>(null);
-  const cardList = useRef<HTMLUListElement | null>(null);
-  useCardColumns(cardList, social.data ? social.data.accounts.map((a) => a.platform).join(" ") : "", !!social.data);
-  const result = page.name === "connections" ? page.result : null;
-  const platform = page.name === "connections" ? page.platform : null;
-
-  // The callback's result, once, then the address goes back to plain Social accounts (a reload never repeats it). A
-  // connect is said with the account it connected ("Connected as {name} ({handle})"), read fresh from the server.
+  const skips = useSkip(ws, social.reload);
+  // A Social accounts page that still names a platform (only one built by hand: the router opens the platform's own
+  // page for the OAuth landing) goes to that page, with what it has to say.
+  let goTo: string | null = null;
+  if (page.name === "connections" && isPlatform(page.platform)) {
+    const q = new URLSearchParams();
+    if (page.result) q.set("result", page.result);
+    if (page.ws) q.set("ws", page.ws);
+    const qs = q.toString();
+    goTo = `${socialHref(page.platform)}${qs ? `?${qs}` : ""}`;
+  }
   useEffect(() => {
-    // Back on plain Social accounts: the next landing (a second Connect from this page) is shown again.
-    if (!result || !isPlatform(platform)) {
-      shown.current = null;
-      return;
-    }
-    const key = `${platform}|${result}`;
-    if (shown.current === key) return;
-    shown.current = key;
-    const { text, good } = resultSentence(result, platform);
-    const cheerUp = () => {
-      celebrate(undefined, false);
-      storiesSound("success", { onNextTap: true });
-    };
-    if (result === "connected" || result === "clips_meta_check") {
-      // Both are a connect (clips_meta_check also warns about Lamo Clips' own Meta connection): the card asks.
-      const said = () => (good ? toast.success(text) : toast.error(text));
-      void storiesApi()
-        .social(ws)
-        .then((fresh) => {
-          setData(() => fresh);
-          const a = fresh.accounts.find((x) => x.platform === platform);
-          if (a && a.connectionStatus === "connected" && (a.accountName || a.handle)) {
-            if (good) toast.success(`${connectedAsSentence(a)}.`);
-            else said();
-            setAsking(platform);
-          } else said();
-          if (good) cheerUp();
-        })
-        .catch(() => {
-          said();
-          void reload();
-        });
-    } else {
-      // Said with the card as it is now: the button it names is the one the card shows (Connect, Connect again, Pick
-      // another channel), and keys that live in Clip Factory are sent there.
-      const tell = (a?: SocialAccount) => {
-        const r = resultSentence(result, platform, a);
-        if (r.good) {
-          toast.success(r.text);
-          cheerUp();
-        } else toast.error(r.text);
-      };
-      void storiesApi()
-        .social(ws)
-        .then((fresh) => {
-          setData(() => fresh);
-          tell(fresh.accounts.find((x) => x.platform === platform));
-        })
-        .catch(() => {
-          tell();
-          void reload();
-        });
-    }
-    void refreshDashboard(ws).catch(() => undefined);
-    void refreshOnboarding(ws).catch(() => undefined);
-    navigate("/stories/connections", { replace: true });
-  }, [result, platform, toast, reload, setData, ws]);
+    if (goTo) navigate(goTo, { replace: true });
+  }, [goTo]);
 
   return (
-    <section className="st-page st-connections">
-      <StPageHead
-        title="Social accounts"
-        lede="Connect Clips Funded's own accounts here. Clip Factory's stay as they are."
-      />
+    <section className="st-page st-connections st-social">
+      <SocialHead />
       <SetupBack ws={ws} />
-      {gone ? <DisconnectedNote choice={gone.choice} onClose={() => setGone(null)} /> : null}
       {social.error && !social.data ? (
         <StError message={social.error} onRetry={() => void social.reload()} />
       ) : !social.data ? (
         <StLoading label="Checking the accounts…" />
       ) : (
-        <ul className="st-conns" ref={cardList}>
-          {social.data.accounts.map((a) => (
-            <PlatformCard
-              key={a.platform}
-              ws={ws}
-              a={a}
-              all={social.data!.accounts}
-              clips={social.data!.clips.find((c) => c.platform === a.platform)}
-              onChanged={social.reload}
-              onDisconnected={(p, choice) => setGone({ platform: p, choice })}
-              askIntended={asking === a.platform}
-              onAnswered={() => setAsking(null)}
-            />
-          ))}
-        </ul>
+        <>
+          <SocialProgress accounts={social.data.accounts} />
+          <SocialRowList accounts={social.data.accounts} busy={skips.busy !== null} onSkip={skips.skip} onUnskip={skips.unskip} />
+        </>
       )}
     </section>
   );

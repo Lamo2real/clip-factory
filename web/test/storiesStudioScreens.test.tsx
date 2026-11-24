@@ -70,6 +70,7 @@ const account = (platform: SocialAccount["platform"], connectionStatus: SocialAc
   choices: null,
   limits: [],
   warning: null,
+  skipped: false,
 });
 
 const CREATOR: TikTokCreator = {
@@ -986,7 +987,29 @@ describe("Post it", () => {
     expect(control(/^Upload/, dialog).getAttribute("aria-disabled")).toBe("true");
     const off = Array.from(dialog.querySelectorAll(".st-s-place--off"));
     expect(off.map((o) => o.querySelector(".st-s-place__platform")?.textContent)).toEqual(["Instagram", "Facebook", "X"]);
-    expect(off.every((o) => o.querySelector('a[href="/stories/connections"]'))).toBe(true);
+    // Each opens that platform's own page on Social accounts.
+    expect(off.map((o) => o.querySelector("a")?.getAttribute("href"))).toEqual(["/stories/connections/instagram", "/stories/connections/facebook", "/stories/connections/x"]);
+    expect(off.every((o) => o.querySelector("a")?.textContent === "Connect in Social accounts")).toBe(true);
+  });
+
+  it("never lists a place the owner skipped under Not ready to post (the owner, 24 Nov)", async () => {
+    for (const a of store.social) if (a.platform === "x" || a.platform === "facebook") a.skipped = true;
+    await show(<ReviewScreen {...page({ name: "review_story", storyId: S.approved })} />);
+    await click(control("Post it"));
+    const dialog = document.querySelector('[role="dialog"]')!;
+    const places = Array.from(dialog.querySelectorAll<HTMLButtonElement>("button.st-s-place"));
+    expect(places.map((p) => p.querySelector(".st-s-place__name")?.textContent)).toEqual(["Lamo Stories Channel", "Lamo Stories TikTok"]);
+    const off = Array.from(dialog.querySelectorAll(".st-s-place--off"));
+    expect(off.map((o) => o.querySelector(".st-s-place__platform")?.textContent)).toEqual(["Instagram"]);
+    expect(off.map((o) => o.querySelector("a")?.getAttribute("href"))).toEqual(["/stories/connections/instagram"]);
+    expect(dialog.textContent).not.toMatch(/\bX\b|Facebook/);
+    // Every place left out: the list is gone; the sheet's own line still says where to connect.
+    await act(async () => root.unmount());
+    host.remove();
+    for (const a of store.social) if (a.platform === "instagram") a.skipped = true;
+    await show(<ReviewScreen {...page({ name: "review_story", storyId: S.approved })} />);
+    await click(control("Post it"));
+    expect(document.querySelector('[role="dialog"] [aria-label="Not ready to post"]')).toBeNull();
   });
 
   it("TikTok: who can see it starts empty with TikTok's own choices; Comments, Duet and Stitch show and start off; Use my settings fills the preset", async () => {

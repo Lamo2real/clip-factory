@@ -56,7 +56,7 @@ from ..oauth import META, PKCE, STATE_SECONDS, OAuthEnv, formats, providers, set
 from ..oauth.providers import AppKeys, Linked
 from ..platforms import errors as platform_errors
 from ..platforms.base import NotConnectedError, ReconnectNeededError, RetryablePublishError, obj
-from . import apps
+from . import apps, skips
 from . import secrets as ws_secrets
 from . import types as ws
 from .apps import CLIPS, OWN, AppNotReady, CallbackOff, ChosenApp
@@ -702,8 +702,14 @@ def clips_destinations(store: db.Store, user_id: str) -> list[Item]:
 
 
 def list_accounts(scope: Scope, now: datetime) -> Item:
+    """Every platform's public account, each with ``skipped`` from one ``ONBOARD`` read (``skips.mark``, which also
+    drops the skips of the platforms connected now)."""
+    shown = [
+        _public_of(scope.store, scope.secrets, scope.user_id, scope.workspace_id, platform, now=now)
+        for platform in ws.PLATFORMS
+    ]
     return {
-        "accounts": [public_of(scope, platform, now) for platform in ws.PLATFORMS],
+        "accounts": skips.mark(scope.store, scope.user_id, scope.workspace_id, shown, now),
         "clips": clips_destinations(scope.store, scope.user_id),
     }
 
@@ -711,8 +717,9 @@ def list_accounts(scope: Scope, now: datetime) -> Item:
 def public_of(scope: Scope, platform: str, now: datetime) -> Item:
     """The public account, checked against the chosen app's current keys (a key change → ``needs_reconnect``). A
     status worked out here is also stored (``settle``), so every reader of ``SOCIAL#`` (the dashboard too) sees
-    what the Social accounts page shows."""
-    return _public_of(scope.store, scope.secrets, scope.user_id, scope.workspace_id, platform, now=now)
+    what the Social accounts page shows. ``skipped`` as ``skips.mark`` works it out (a skip dropped once connected)."""
+    shown = _public_of(scope.store, scope.secrets, scope.user_id, scope.workspace_id, platform, now=now)
+    return skips.mark(scope.store, scope.user_id, scope.workspace_id, [shown], now)[0]
 
 
 def _public_of(
@@ -764,7 +771,7 @@ def accounts_shown(
     identity still is. A secret that cannot be read just now never breaks or stalls the dashboard: after the first
     one that fails, and once the request (``started``, its ``time.monotonic()`` on arrival) has no room left for one
     more slow read, the remaining platforms are shown without the key check (the Social accounts page says the
-    rest)."""
+    rest). Each has ``skipped`` (``skips.mark``: one ``ONBOARD`` read, the skips of platforms connected now dropped)."""
     out: list[Item] = []
     keys = secrets
     for platform in ws.PLATFORMS:
@@ -779,7 +786,7 @@ def accounts_shown(
             log("warning", "ws_social.dashboard_keys_unread", platform=platform, error=type(e).__name__)
             keys = None  # Secrets Manager is failing or slow just now: no more waits on it for this answer
             out.append(_public_of(store, None, user_id, workspace_id, platform, now=now))
-    return out
+    return skips.mark(store, user_id, workspace_id, out, now)
 
 
 def settle(

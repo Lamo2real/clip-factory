@@ -1,0 +1,290 @@
+/* ---------- Social accounts, organized (SocialRows.tsx, SocialPlatform.tsx) on the liquid glass (GLASS-CONTRACT.md) ----------
+   Laid out like Clip Factory's Set up posting (the owner, 24 Nov): a header card (hero glass, its rim may bend), the
+   progress card ("4 of 4 ready" with the dial), then one glass row per platform in a grid (two columns from about
+   700 px, one on phones): the platform's logo on a tile, its name in Fugaz One, one status chip, one Fraunces line, a
+   check disc (the orange accent, a shape) or an empty ring (light, an inset glow), and the round way in. Under a
+   hairline of light, its Skip or Un-skip line. The platform's own page: a breadcrumb on a backing plate, then its one
+   card. Tokens only; radii from --st-r-* (the row's wrap a surface, its link a control, the logo tile an inner); light,
+   never a border; no cursor; hover on every control; the glass never moves on hover (the link's fill may). */
+
+/* ---------- The list page ---------- */
+
+/* The header card: a round glass puck with the plug, the page's title and one line, padded past the rim's band. */
+.st-social-head {
+  display: flex;
+  align-items: center;
+  gap: var(--st-space-3) var(--st-space-4);
+  min-width: 0;
+  padding: max(var(--st-inset), var(--st-lens-band));
+  animation: st-rise var(--st-dur-enter) var(--st-ease-out) backwards;
+}
+.st-social-head__puck {
+  color: var(--st-text-amber);
+}
+.st-social-head__text {
+  display: grid;
+  gap: var(--st-space-2);
+  min-width: 0;
+}
+.st-social-head__title {
+  color: var(--st-text-strong);
+  font-family: var(--st-font-display);
+  font-size: var(--st-fs-h1);
+  font-weight: 400;
+  line-height: var(--st-lh-head);
+  overflow-wrap: anywhere;
+}
+.st-social-head__lede {
+  max-width: 62ch;
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-body);
+}
+
+/* The progress card: the dial and "3 of 4 ready" with its one line. */
+.st-social-progress {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--st-space-3) var(--st-space-5);
+  min-width: 0;
+  padding: var(--st-inset);
+  animation: st-rise var(--st-dur-enter) var(--st-ease-out) backwards;
+}
+.st-social-progress__dial.st-dial {
+  width: 96px;
+}
+.st-social-progress__num {
+  color: var(--st-text-strong);
+  font-family: var(--st-font-display);
+  font-size: 1.75rem;
+  font-weight: 400;
+  font-variation-settings: normal;
+  line-height: 1;
+}
+.st-social-progress__of {
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-min);
+  font-weight: var(--st-weight-ui);
+  line-height: 1.2;
+  white-space: nowrap;
+}
+.st-social-progress__text {
+  display: grid;
+  flex: 1 1 200px;
+  gap: var(--st-space-1);
+  min-width: 0;
+}
+.st-social-progress__title {
+  color: var(--st-text-strong);
+  font-family: var(--st-font-display);
+  font-size: var(--st-fs-h2);
+  font-weight: 400;
+  line-height: var(--st-lh-head);
+  overflow-wrap: anywhere;
+}
+.st-social-progress__line {
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-body);
+}
+
+/* The rows: at least 340 px each, and never more than two side by side (each at least half the line), so two columns
+   from about 700 px and one on phones. Rows in one line are the same height. */
+.st-social-rows {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(max(min(100%, 340px), calc((100% - var(--st-space-4)) / 2)), 1fr));
+  gap: var(--st-space-4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+/* One glass row per platform (the <li>): the link, and under a hairline its Skip or Un-skip line. The link fills what
+   is left, so rows in one line are the same height whether or not they have that line. */
+.st-social-row-wrap {
+  display: grid;
+  grid-template-rows: 1fr auto;
+  min-width: 0;
+  padding: var(--st-gap-surface);
+  animation: st-rise var(--st-dur-enter) var(--st-ease-out) backwards;
+}
+/* The way in: the logo tile, the words, the circle and the round chevron. Its fill lifts on hover (the glass around it
+   stays where it is). */
+.st-social-row {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: var(--st-space-3);
+  min-width: 0;
+  min-height: 72px;
+  padding: var(--st-space-3);
+  border-radius: var(--st-r-control);
+  color: var(--st-text);
+  text-decoration: none;
+  transition:
+    background-color var(--st-dur-hover) var(--st-ease-out),
+    box-shadow var(--st-dur-hover) var(--st-ease-out);
+}
+.st-social-row:hover {
+  background-color: var(--st-fill-control-hover);
+  box-shadow: var(--st-sheen-control);
+}
+.st-social-row:active {
+  background-color: var(--st-fill-control);
+}
+/* The platform's logo on a tile (an inner inside the link's control). */
+.st-social-row__mark.st-conn__mark {
+  width: 52px;
+  height: 52px;
+  border-radius: var(--st-r-inner);
+}
+.st-social-row__text {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: var(--st-space-1);
+  min-width: 0;
+}
+/* The name and its status chip; on a narrow phone the chip goes under the name rather than cutting it. */
+.st-social-row__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--st-space-1) var(--st-space-2);
+  min-width: 0;
+}
+.st-social-row__name {
+  color: var(--st-text-strong);
+  font-family: var(--st-font-display);
+  font-size: var(--st-fs-h3);
+  font-weight: 400;
+  line-height: var(--st-lh-head);
+}
+/* Short by design; on a narrow phone it wraps rather than cutting off the account's handle. */
+.st-social-row__line {
+  min-width: 0;
+  color: var(--st-text-soft);
+  font-family: var(--st-font);
+  font-size: var(--st-fs-small);
+  overflow-wrap: anywhere;
+}
+/* Done: an orange disc (a shape) with an espresso check. To do: an empty ring of soft light, carved in (a glow, never a
+   hard line). */
+.st-social-row__done,
+.st-social-row__todo {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--st-r-round);
+}
+.st-social-row__done {
+  color: var(--st-on-accent);
+  background: var(--st-accent);
+  box-shadow: var(--st-glow-accent);
+}
+.st-social-row__todo {
+  background: var(--st-fill-well);
+  box-shadow:
+    inset 0 0 4px 2px var(--st-track),
+    inset 0 2px 6px rgb(var(--st-shadow-rgb) / 0.28);
+}
+/* The round way in (decoration: the whole row is the link), cream while the row is hovered. */
+.st-social-row__go.st-round-btn {
+  width: 36px;
+  height: 36px;
+  min-height: 0;
+}
+.st-social-row:hover .st-social-row__go {
+  background: var(--st-cream);
+  color: var(--st-on-cream);
+}
+/* Skip or Un-skip, under a hairline of light. */
+.st-social-row__skip {
+  position: relative;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--st-space-2) var(--st-space-3);
+  margin: 0;
+  padding: var(--st-space-2) var(--st-space-2) var(--st-space-1) var(--st-space-3);
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
+}
+.st-social-row__skip::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  right: var(--st-space-3);
+  left: var(--st-space-3);
+  height: 1px;
+  background: linear-gradient(90deg, transparent, var(--st-track) 14%, var(--st-track) 86%, transparent);
+  pointer-events: none;
+}
+.st-social-row__skip > span {
+  flex: 1 1 140px;
+  min-width: 0;
+}
+/* The question before a skip, inside the row's glass. */
+.st-social-row__sure {
+  margin-top: var(--st-space-2);
+}
+
+/* ---------- One platform's page ---------- */
+
+.st-social-one {
+  max-width: 46rem;
+}
+/* "Social accounts › YouTube": on a backing plate (rule 6), the way back a 44 px text link. */
+.st-crumbs {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-self: start;
+  gap: 0 var(--st-space-1);
+  min-width: 0;
+  max-width: 100%;
+  padding: 0 var(--st-space-3) 0 var(--st-space-1);
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
+}
+.st-crumbs__sep {
+  color: var(--st-text-soft);
+}
+.st-crumbs__here {
+  color: var(--st-text-strong);
+  font-weight: var(--st-weight-ui);
+  overflow-wrap: anywhere;
+}
+/* You skipped it: the line and Un-skip, side by side while they fit. */
+.st-social-one__skipped {
+  flex-wrap: wrap;
+  align-items: center;
+}
+.st-social-one__skipped-text {
+  flex: 1 1 220px;
+  min-width: 0;
+}
+
+/* ---------- Phones: 48 px targets, the rows a little tighter ---------- */
+
+@media (max-width: 767px) {
+  .st-social-row {
+    min-height: 76px;
+    gap: var(--st-space-2);
+    padding: var(--st-space-2);
+  }
+  .st-social-row__mark.st-conn__mark {
+    width: var(--st-tap-phone);
+    height: var(--st-tap-phone);
+  }
+  .st-social-row__done,
+  .st-social-row__todo {
+    width: 28px;
+    height: 28px;
+  }
+}
+@media (max-width: 359px) {
+  .st-social-head {
+    flex-wrap: wrap;
+  }
+}

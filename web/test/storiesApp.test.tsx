@@ -92,6 +92,8 @@ describe("the first-time setup", () => {
     expect(opensSetup({ name: "dashboard" }, "stories", null, [])).toBe(false);
     // An OAuth return or a link to another page is never taken away.
     expect(opensSetup({ name: "connections", platform: "x", result: "connected", ws: "stories" }, "stories", onboarding(0), [])).toBe(false);
+    // The OAuth return lands on the platform's own page now: never taken away either.
+    expect(opensSetup({ name: "connection", platform: "x", result: "connected", ws: "stories" }, "stories", onboarding(0), [])).toBe(false);
   });
 });
 

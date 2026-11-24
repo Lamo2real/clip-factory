@@ -1,5 +1,6 @@
 // Lamo Stories pages (docs/CONTRACTS.md §45.16.2). Every path under /stories is Lamo Stories; the main router
 // (web/src/lib/router.ts) hands those paths to matchStories() and everything else stays Lamo Clips.
+import type { Platform } from "./api/types.ts";
 import type { CharacterKind } from "./engine/types.ts";
 
 /**
@@ -32,6 +33,12 @@ export type StoriesPage =
   | { name: "series" }
   | { name: "series_one"; seriesId: string }
   | { name: "connections"; platform: string | null; result: string | null; ws: string | null }
+  /**
+   * One platform's own page under Social accounts (CONTRACTS §45.16.2): `/stories/connections/<platform>`. The OAuth
+   * callback's landing (`/stories/connections?platform=<p>&result=…&ws=…`, social_callback.landing) opens it too, with
+   * its `result` and `ws`.
+   */
+  | { name: "connection"; platform: Platform; result: string | null; ws: string | null }
   | { name: "settings"; section: SettingsSection }
   | { name: "chat" }
   | { name: "chat_conv"; convId: string }
@@ -44,6 +51,10 @@ export const SETTINGS_SECTIONS = ["ai", "agents", "skills", "memory", "video", "
 export type SettingsSection = (typeof SETTINGS_SECTIONS)[number];
 
 export const STORIES_ROOT = "/stories";
+
+/** The five platforms, each with its own page under Social accounts (`/stories/connections/<platform>`). */
+const PLATFORMS: readonly Platform[] = ["youtube", "tiktok", "instagram", "facebook", "x"];
+const isPlatformKey = (p: string | null | undefined): p is Platform => !!p && (PLATFORMS as readonly string[]).includes(p);
 
 const ID = /^[A-Za-z0-9_-]{1,64}$/;
 
@@ -110,8 +121,16 @@ export function matchStories(pathname: string, search: string): StoriesPage {
     if (b === undefined) return { name: "series" };
     if (ID.test(b) && b !== "none") return { name: "series_one", seriesId: b };
   }
-  if (a === "connections" && b === undefined)
-    return { name: "connections", platform: q.get("platform"), result: q.get("result"), ws: q.get("ws") };
+  if (a === "connections") {
+    if (b === undefined) {
+      // The OAuth landing names its platform: it opens that platform's own page, with the result to say.
+      const platform = q.get("platform");
+      if (isPlatformKey(platform)) return { name: "connection", platform, result: q.get("result"), ws: q.get("ws") };
+      return { name: "connections", platform, result: q.get("result"), ws: q.get("ws") };
+    }
+    if (isPlatformKey(b)) return { name: "connection", platform: b, result: q.get("result"), ws: q.get("ws") };
+    return { name: "not_found" };
+  }
   if (a === "settings") {
     if (b === undefined) return { name: "settings", section: "ai" };
     if ((SETTINGS_SECTIONS as readonly string[]).includes(b)) return { name: "settings", section: b as SettingsSection };
@@ -176,6 +195,9 @@ export function storiesHref(page: StoriesPage): string {
     }
     case "connections":
       return `${STORIES_ROOT}/connections`;
+    case "connection":
+      // Never with the landing's result or workspace: the address of the page itself.
+      return `${STORIES_ROOT}/connections/${page.platform}`;
     case "settings":
       return `${STORIES_ROOT}/settings/${page.section}`;
     case "chat_conv":

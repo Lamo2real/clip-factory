@@ -14,6 +14,7 @@ import { storiesApi } from "./api/client.ts";
 import { RoundGlassButton } from "./glass/index.ts";
 import { storiesBehind, useAppActive } from "./pane.tsx";
 import { storiesReduceMotion, storiesSound } from "./prefs.ts";
+import { isSocialHref } from "./skips.ts";
 import type { Onboarding, Platform, StoriesDashboard, Story, StoryStatus } from "./api/types.ts";
 
 // ---------- Buttons, cards, chips ----------
@@ -484,10 +485,13 @@ const dashFlight = new Map<string, Promise<void>>();
 const dashSubs = new Set<() => void>();
 const EMPTY: DashSnap = { data: null, error: null };
 
-/** Loads the dashboard of `ws` now (one call at a time, shared by everything that shows it). */
-export function refreshDashboard(ws: string): Promise<void> {
+/**
+ * Loads the dashboard of `ws` now (one call at a time, shared by everything that shows it). `fresh`: after a change
+ * (a skip, an Un-skip), a read already on its way may have left before it; wait for it, then read once more.
+ */
+export function refreshDashboard(ws: string, opts?: { fresh?: boolean }): Promise<void> {
   const flying = dashFlight.get(ws);
-  if (flying) return flying;
+  if (flying) return opts?.fresh ? flying.catch(() => undefined).then(() => refreshDashboard(ws)) : flying;
   const run = (async () => {
     try {
       const data = await storiesApi().dashboard(ws);
@@ -563,11 +567,12 @@ type NeedsItem = StoriesDashboard["needsYou"][number];
 
 /**
  * A stopped post whose account problem is fixed now (the account it names is connected again): it no longer sends
- * the owner to Social accounts, where nothing is left to fix, but to the post itself, to tap its Try again. The
+ * the owner to Social accounts (or that platform's page there), where nothing is left to fix, but to the post itself,
+ * to tap its Try again. The
  * server says so itself (dashboard._post_href); this reads an older answer the same way.
  */
 export function afterFix(item: NeedsItem, accounts: StoriesDashboard["accounts"] | undefined): NeedsItem {
-  if (!item.publishingJobId || !item.storyId || !item.platform || pathOf(item.href) !== "/stories/connections") return item;
+  if (!item.publishingJobId || !item.storyId || !item.platform || !isSocialHref(item.href)) return item;
   if (accounts?.find((a) => a.platform === item.platform)?.status !== "connected") return item;
   const title = item.title ? `“${item.title}”` : "the video";
   return { ...item, href: `/stories/review/${encodeURIComponent(item.storyId)}`, sentence: `${PLATFORM_NAME[item.platform]} is connected now. Tap Try again on ${title}.` };
@@ -594,7 +599,8 @@ export function NeedsYouBar({ ws, here }: { ws: string; here?: string }) {
   if (gone === key) return null;
   const more = (data?.needsYou.length ?? 1) - 1;
   const onIt = here !== undefined && pathOf(first.href) === pathOf(here);
-  const onSocial = onIt && pathOf(first.href) === "/stories/connections";
+  // Social accounts or one platform's page there: the item's own page shows its card (the platform's page).
+  const onSocial = onIt && isSocialHref(first.href);
   const sentence = onSocial ? socialHere(first.sentence) : first.sentence;
   const show = () => {
     const card = targetOn(first);

@@ -60,6 +60,37 @@ test.describe("Upload to many places", () => {
     await expect(card.locator(".upload-to")).not.toContainText("X X");
   });
 
+  test("the Set up hint never names a skipped place, and goes when only skipped places are missing", async ({ page }) => {
+    // YouTube, TikTok and Instagram set up; Facebook not; X skipped (as if confirmed on Set up posting).
+    await page.goto("/");
+    await settle(page);
+    await page.evaluate(() => {
+      localStorage.removeItem("cf-upload-to");
+      sessionStorage.setItem("cf-mock-setup-skipped", JSON.stringify(["x"]));
+      const s = (window as MockWindow).__cfMock!.setup;
+      for (const p of ["youtube", "tiktok", "instagram"]) s.finish(p);
+      s.setAudit(true);
+    });
+    await page.goto("/review");
+    await settle(page);
+    const card = page.locator(".review-card").first();
+    await expect(card.locator(".upload-chip")).toHaveText(["YouTube", "TikTok", "Instagram"]);
+    const hint = card.locator("a.upload-to__hint");
+    await expect(hint).toHaveText("Set up Facebook to upload there too.");
+    await expect(hint).toHaveAttribute("href", "/settings/posting/setup/facebook");
+    await expect(card.locator(".upload-to")).not.toContainText("Set up X");
+
+    // Facebook set up too: only the skipped X is missing, so there is no hint at all.
+    await page.evaluate(() => (window as MockWindow).__cfMock!.setup.finish("facebook"));
+    await page.reload();
+    await settle(page);
+    const next = page.locator(".review-card").first();
+    await expect(next.locator(".upload-chip")).toHaveText(["YouTube", "TikTok", "Instagram", "Facebook"]);
+    await expect(next.locator("a.upload-to__hint")).toHaveCount(0);
+    await expect(next.locator(".upload-to")).not.toContainText("to upload there too");
+    expect(await page.evaluate(() => sessionStorage.getItem("cf-mock-setup-skipped"))).toBe(JSON.stringify(["x"]));
+  });
+
   test("pick several: chips toggle, rows follow, the label counts, nothing picked turns Upload off", async ({ page }) => {
     await fourReady(page);
     const card = page.locator(".review-card").first();

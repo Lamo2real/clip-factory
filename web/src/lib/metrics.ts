@@ -254,6 +254,9 @@ export interface CalmCopy {
   spinner?: boolean;
 }
 
+/** A skipped place with no post of this clip: the stack only says so, with no setup nudge (rule S, §48.3). */
+export const SKIPPED_STACK = "Not posted here.";
+
 /** What the clip page knows around one stack, so its line gives advice that is true for this clip. */
 export interface CalmContext {
   /** Settings › Where clips go: "Turn on" is said only for a place that is off there. Absent: not known. */
@@ -265,13 +268,18 @@ export interface CalmContext {
   /** The post's perfCheckAt (§16.2): when its numbers come, said the way the Library row says it. */
   perfCheckAt?: string;
   now?: number;
+  /**
+   * The owner skipped this place (rule S, §48.3: an active skip, lib/setupTodo.ts activeSkips), so a stack with no
+   * post never asks him to set it up or turn it on.
+   */
+  skipped?: boolean;
 }
 
 /**
  * The one plain line (and link) a stack shows instead of numbers. Null when it has numbers to show. `row`: TikTok's row
  * (lib/tiktokMac.ts tiktokRow) while the clip page shows its one button: the stack then says the row's words, with no
  * link (Try again, Post with my Mac, Turn on or Add link is on the page itself). `ctx`: what the clip page knows
- * around the stack (CalmContext).
+ * around the stack (CalmContext); with `ctx.skipped` a stack with no post never asks him to set it up or turn it on.
  */
 export function calmCopy(
   p: Pick<PlatformPerformance, "platform" | "status" | "metrics" | "error"> & Partial<Pick<PlatformPerformance, "by" | "url" | "mac" | "via">>,
@@ -290,6 +298,8 @@ export function calmCopy(
     if (p.status === "posted_private") return { text: row.kind === "not_ready" ? `${PRIVATE_UPLOAD} ${row.words}.` : PRIVATE_UPLOAD };
     return row.spinner ? { text: row.words, spinner: true } : { text: row.words };
   }
+  // TikTok's row (above) still speaks for the Mac, whose switch a skip never turns off (§48.3).
+  if (ctx.skipped && (p.status === "not_posted" || p.status === "waiting_for_connection")) return { text: SKIPPED_STACK };
   switch (p.status) {
     case "mac": {
       // His Mac posts it on TikTok (§47.4): what it is doing. Try again is on the page, so no link.
