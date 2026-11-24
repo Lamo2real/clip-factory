@@ -392,15 +392,17 @@ export interface StoryScript {
  * order, source-over blending. */
 export type Prim =
   | { k: "fill"; color: Hex }
-  | { k: "grad"; x0: number; y0: number; x1: number; y1: number; stops: [number, Hex][] }
+  /** `dither` (night drive's sky): the seed of the 1-level dither each pixel's value is rounded with (engine README) */
+  | { k: "grad"; x0: number; y0: number; x1: number; y1: number; stops: [number, Hex][]; dither?: number }
   | { k: "rect"; x: number; y: number; w: number; h: number; r: number; color: Hex; a?: number }
   | { k: "circle"; x: number; y: number; r: number; color: Hex; a?: number }
   | { k: "ellipse"; x: number; y: number; rx: number; ry: number; rot: number; color: Hex; a?: number }
   | { k: "poly"; pts: number[]; color: Hex; a?: number }
   | { k: "line"; pts: number[]; w: number; color: Hex; a?: number }
   /** a soft light (night drive's lamp glows and passing light): the ellipse painted in one colour whose alpha fades
-   * with the distance from the centre, `fade` the [offset, alpha] stops along it (0 the centre, 1 the edge) */
-  | { k: "glow"; x: number; y: number; rx: number; ry: number; rot: number; color: Hex; fade: [number, number][]; a?: number }
+   * with the distance from the centre, `fade` the [offset, alpha] stops along it (0 the centre, 1 the edge); `dither`
+   * (the vignette): the seed of the 1-level dither the pixels inside it are rounded with (engine README) */
+  | { k: "glow"; x: number; y: number; rx: number; ry: number; rot: number; color: Hex; fade: [number, number][]; a?: number; dither?: number }
   | { k: "image"; asset: string; x: number; y: number; w: number; h: number; a?: number };
 
 /** Text drawn over the video (captions and bubble symbols): the browser draws it, the agent writes it as ASS. */

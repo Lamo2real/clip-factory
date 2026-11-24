@@ -1,5 +1,5 @@
 {
- "version": "3665abbd8419",
+ "version": "d8c4eeb5f29b",
  "parts": [
   {
    "id": "app-map",
@@ -297,7 +297,7 @@
    "id": "contracts-45",
    "title": "CONTRACTS: 45. Clips Funded: a second, separate workspace (owner request, 2026-11-21)",
    "line": "Planned: not in the app until the switch pull request turns it on (§45.21). Until then nothing of Clips Funded",
-   "chars": 473599
+   "chars": 479339
   },
   {
    "id": "contracts-46",

@@ -41,10 +41,19 @@ export function multiply(m: Mat, n: Mat): Mat {
   ];
 }
 
+/** A script's seed as the dither's seed (engine README, Dither): a whole number 0 .. 2^31 − 2. */
+export function ditherSeed(seed: number): number {
+  const n = Math.abs(Math.trunc(seed));
+  return Number.isFinite(n) ? n % 2147483647 : 0;
+}
+
 export class Pen {
   out: Prim[] = [];
   m: Mat = [...IDENTITY];
   alpha = 1;
+  /** Night drive: the seed of the 1-level dither on the sky's gradients and the vignette (engine README), null for no
+   * dither (Bright, and every preview without a scene) */
+  dither: number | null = null;
   private stack: { m: Mat; alpha: number }[] = [];
   private view: ViewBox;
   /** output px per drawing px (CONTRACTS §45.34): 1, or 2/3 for a 720 video, so it is the 1080 one scaled down */
@@ -126,7 +135,9 @@ export class Pen {
 
   grad(x0: number, y0: number, x1: number, y1: number, stops: [number, string][]): void {
     const k = this.k;
-    this.out.push({ k: "grad", x0: r1(x0 * k), y0: r1(y0 * k), x1: r1(x1 * k), y1: r1(y1 * k), stops: stops.map(([o, c]) => [r3(o), c]) });
+    const p: Extract<Prim, { k: "grad" }> = { k: "grad", x0: r1(x0 * k), y0: r1(y0 * k), x1: r1(x1 * k), y1: r1(y1 * k), stops: stops.map(([o, c]) => [r3(o), c]) };
+    if (this.dither !== null) p.dither = this.dither;
+    this.out.push(p);
   }
 
   circle(x: number, y: number, r: number, color: string, a = 1): void {
@@ -153,11 +164,14 @@ export class Pen {
 
   /** A soft light (night drive): the ellipse in `color`, its alpha fading from the centre out along `fade` ([offset,
    * alpha] stops, offset 0 the centre and 1 the edge, alpha × a); it ends at alpha 0, so its edge never shows. */
-  glow(x: number, y: number, rx: number, ry: number, color: string, fade: readonly (readonly [number, number])[], a = 1): void {
+  glow(x: number, y: number, rx: number, ry: number, color: string, fade: readonly (readonly [number, number])[], a = 1, dither = false): void {
     const al = this.a(a);
     if (al === null || rx <= 0 || ry <= 0 || fade.length === 0) return;
     const e = this.onScreen(x, y, rx, ry, 0);
-    if (e) this.push({ k: "glow", ...e, color, fade: fade.map(([o, v]) => [r3(o), r3(v)]) }, al);
+    if (!e) return;
+    const p: Extract<Prim, { k: "glow" }> = { k: "glow", ...e, color, fade: fade.map(([o, v]) => [r3(o), r3(v)]) };
+    if (dither && this.dither !== null) p.dither = this.dither;
+    this.push(p, al);
   }
 
   /** An ellipse (local centre, radii and rotation) on screen, rounded, or null when it is wholly outside the view. */
