@@ -44,7 +44,7 @@ import {
 } from "../types.ts";
 import { callOf, checkOverride, citationsFor, effectiveFor, shownSteps, startMockTask, topicFor, writerOf } from "./ideas.ts";
 import { aboutDriving } from "../../studio/ownScript.ts";
-import { checkOwnScript, jobLabel, mirrorCaptions, OWN_WORDS, ownDefaults, ownFactProblems, OwnFailed, ownTexts, ownTopic, patchOwn, stageOwn } from "./ownScript.ts";
+import { checkOwnScript, jobLabel, mirrorCaptions, OWN_WORDS, ownDefaults, ownFactProblems, OwnFailed, ownTexts, ownTopic, patchOwn, saysFullBeam, stageOwn } from "./ownScript.ts";
 import { seriesApproved, seriesExists, seriesForgetStory } from "./series.ts";
 import { delay, type MockStore } from "./store.ts";
 
@@ -671,7 +671,7 @@ function problemsIn(s: StoryScript): string[] {
   if (s.safety?.topicId !== "fog-driving") return [];
   const texts = [...s.captions.filter((c) => !c.guidanceRef).map((c) => c.text), ...s.scenes.map((sc) => sc.caption ?? "")];
   return texts
-    .filter((t) => /full beam|high beam/i.test(t))
+    .filter((t) => saysFullBeam(t))
     .map((t) => `“${t}” does not match the checked advice. In fog, use dipped headlights, not full beam.`);
 }
 

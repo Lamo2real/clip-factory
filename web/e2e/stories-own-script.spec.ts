@@ -160,8 +160,38 @@ test("a driving-safety script with full beam in fog is reported as written, held
   const sheet = page.getByRole("dialog", { name: "Change my script" });
   await expect(sheet.locator(".st-sc-scene").nth(1).getByRole("textbox", { name: "What happens" })).toBeFocused();
   await expect(sheet.locator(".st-sc-scene").nth(1).getByRole("textbox", { name: "What happens" })).toHaveValue("Nana Rose puts on full beam in the fog.");
+  // the reason sits in scene 2, beside its words, and stays in view (never scrolled away above the list)
+  await expect(sheet.locator(".st-sc-scene").nth(1).locator(".st-sc-why")).toContainText("Your scene 2");
+  await expect(sheet.locator(".st-sc-scene").nth(1).locator(".st-sc-why")).toBeInViewport();
   await ctx.close();
 });
+
+for (const [answer, w, h] of [
+  ["Not a name", 1280, 900],
+  ["Leave Zara out", 390, 844],
+  ["Make Zara", 390, 844],
+] as const) {
+  test(`Who is Zara?: ${answer} at ${w}, and the video is made with the cast it shows`, async ({ browser }) => {
+    test.setTimeout(60_000);
+    const ctx = await context(browser, w, h, w < 768);
+    const page = await ctx.newPage();
+    await writeItMyself(page, "Dash's friend", "Funny");
+    await whatBox(page, 0).fill("Dash meets his best friend Zara.");
+    await whatBox(page, 1).fill("Dash waves.");
+    const ask = page.getByRole("group", { name: "Who is Zara?" });
+    await expect(ask).toBeVisible();
+    await ask.getByRole("button", { name: answer, exact: true }).click();
+    await expect(ask).toHaveCount(0);
+    const cast = answer === "Make Zara" ? ["Dash", "Zara"] : ["Dash"];
+    for (const name of cast) await expect(page.locator('.st-s-casttile[aria-pressed="true"]', { hasText: name })).toHaveCount(1);
+    await expect(page.locator('.st-s-casttile[aria-pressed="true"]')).toHaveCount(cast.length);
+    await expect(whatBox(page, 0)).toHaveValue("Dash meets his best friend Zara.");
+    await page.locator(".st-make").click();
+    await expect(page).toHaveURL(/\/stories\/production\/[0-9A-Z]{26}$/);
+    await expect(page.getByText("We could not find one of those characters.")).toHaveCount(0);
+    await ctx.close();
+  });
+}
 
 test("a car in the cast is in every scene whose words say car or drive, on a phone, and the video has the car in each", async ({ browser }) => {
   test.setTimeout(90_000);

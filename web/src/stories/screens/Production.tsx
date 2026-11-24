@@ -55,6 +55,7 @@ import { formatOf, formatWords, sameFormat, ShapePicker } from "../studio/shape.
 import { ArtPicker, artOf, artWords, storyArt } from "../studio/art.tsx";
 import { Busy, celebrate, Notice, Pick, ShowMore, Slider, Switch, Tag, TechDetails, TextField } from "../studio/kit.tsx";
 import { useLeaveGuard } from "../studio/leaveGuard.tsx";
+import { newCharacter } from "../studio/looks.ts";
 import { defaultLength, draftFromIdea, emptyDraft, fitTarget, hasCaption, lengthRange, namesIn, saysCar, scriptProblem, stepLabel, toOwnScript, written, type ScriptDraft } from "../studio/ownScript.ts";
 import { ChangeScriptSheet, fixId, focusField, ScriptEditor } from "../studio/ScriptEditor.tsx";
 import { currentStep, nowLine, StepTrack, stepsOf } from "../studio/StepTrack.tsx";
@@ -387,23 +388,50 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
   // Write it myself: a character the words name comes into the cast by itself, while the owner has not picked the cast
   // himself and the cast rule allows it (the people first, then a car); otherwise its scene asks. Words that put a car
   // in a scene ("the car", "drives") bring the workspace's only car in too. The page says who joined this way, so a ✓
-  // the owner did not tap is never a surprise.
+  // the owner did not tap is never a surprise; and one who joined this way leaves again once no scene names them (a
+  // name typed over: "Bolt runs" changed to "Pip runs"), so the hints never disagree and the cast never fills up.
   const [joined, setJoined] = useState<string[]>([]);
   useEffect(() => {
     if (source !== "script" || castPicked || !characters.length) return;
     const named = draft.scenes.flatMap((x) => namesIn(x.what, characters)).filter((c) => draft.answers[c.name.trim().toLowerCase()] !== "out");
     const cars = characters.filter((c) => isCar(c));
     const carWords = draft.scenes.some((x) => saysCar(x.what));
+    const answered = new Set(Object.values(draft.answers));
+    const stays = (id: string) => named.some((c) => c.characterId === id) || answered.has(id) || (carWords && cars.length === 1 && cars[0]!.characterId === id);
+    const gone = joined.filter((id) => cast.includes(id) && !stays(id));
     if (carWords && cars.length === 1 && !named.some((c) => isCar(c)) && !cast.some((id) => cars.some((c) => c.characterId === id))) named.push(cars[0]!);
-    let next = cast;
+    let next = cast.filter((id) => !gone.includes(id));
     for (const c of [...named.filter((x) => !isCar(x)), ...named.filter((x) => isCar(x))]) if (!next.includes(c.characterId) && !castJoinWhy(c.characterId, next)) next = castOrder([...next, c.characterId], characters);
-    if (next.length !== cast.length) {
-      setJoined((j) => [...new Set([...j, ...next.filter((id) => !cast.includes(id))])]);
+    if (next.join() !== cast.join()) {
+      setJoined((j) => [...new Set([...j.filter((id) => !gone.includes(id)), ...next.filter((id) => !cast.includes(id))])]);
       setCast(next);
     }
     // Reads the cast it changes; runs when the words change.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [draft, source, castPicked, characters]);
+
+  /**
+   * "Make Zara" (Who is Zara?): a new character with that name and the usual look, made right here so the scenes stay as
+   * typed; it joins the cast as one the words brought in. Its look can be changed in Characters later.
+   */
+  async function makeNamed(name: string) {
+    const why = makeWhy();
+    if (why) return;
+    try {
+      const made = await storiesApi().createCharacter(ws, { ...newCharacter(), name: name.trim() });
+      data.setData((d) => (d ? { ...d, characters: [...d.characters, made] } : d));
+      setJoined((j) => [...new Set([...j, made.characterId])]);
+      setCast((c) => (c.includes(made.characterId) ? c : castOrder([...c, made.characterId], [...characters, made])));
+      toast.success(`Say hi to ${made.name}! Change how ${made.name} looks in Characters.`);
+    } catch (e) {
+      toast.error(say(e));
+    }
+  }
+
+  /** Why a new character can't join the cast now (at most 3), or null. */
+  function makeWhy(): string | null {
+    return cast.length >= 3 ? "The cast has 3 already. Take someone out in The cast first." : null;
+  }
   const joinedNames = source === "script" ? joined.filter((id) => cast.includes(id)).map((id) => characters.find((c) => c.characterId === id)?.name).filter((n): n is string => !!n) : [];
 
   /** Write it myself from here: the scene list starts from the picked idea's steps when it is still empty. */
@@ -592,6 +620,8 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
                   cast={castOrder(cast, characters)}
                   onAddToCast={(id) => pickCast(castOrder([...cast, id], characters))}
                   addWhy={(id) => castJoinWhy(id)}
+                  onMake={makeNamed}
+                  makeWhy={makeWhy}
                   lengthSec={lengthSec}
                   note={fromIdea && fromIdea === idea?.ideaId ? "Started from your idea. Change anything." : null}
                 />
@@ -652,7 +682,7 @@ function NewVideo({ ws, ideaId, refIds: givenRefs, castIds, durationSec, seriesI
                 <CastPicker characters={characters} value={cast} onChange={pickCast} />
                 {joinedNames.length ? (
                   <p className="st-s-field__hint st-sc-joined">
-                    {joinedNames.length === 1 ? `${joinedNames[0]} is` : `${joinedNames.slice(0, -1).join(", ")} and ${joinedNames[joinedNames.length - 1]} are`} in your scenes, so {joinedNames.length === 1 ? "it's" : "they're"} ticked already.
+                    {joinedNames.length === 1 ? `${joinedNames[0]} is` : `${joinedNames.slice(0, -1).join(", ")} and ${joinedNames[joinedNames.length - 1]} are`} in your scenes, so {joinedNames.length === 1 ? `${joinedNames[0]} is` : "they're"} ticked already.
                   </p>
                 ) : null}
               </>

@@ -135,30 +135,76 @@ export function splitScript(text: string): { what: string; caption: string | nul
 
 // ---------- Who and where, read from the words (§45.46.2) ----------
 
+const TOKEN = /[\p{L}][\p{L}\p{M}\p{N}'’-]*/gu;
+/**
+ * Invisible characters (a zero-width space, a combining grapheme joiner or a variation selector pasted inside a word):
+ * read as if they were not there.
+ */
+const FORMAT = /[\p{Cf}\p{Default_Ignorable_Code_Point}]/gu;
+
 const esc = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 /** A name as a whole word, ignoring case; "Dashs" (a possessive typed without its apostrophe) is Dash too. */
 const wholeWord = (w: string) => new RegExp(`(?<![\\p{L}\\p{N}])${esc(w)}${letters(w) >= 3 ? "s?" : ""}(?![\\p{L}\\p{N}])`, "iu");
 
-/** True when the words use this name as a whole word, ignoring case. */
-export function names(what: string, name: string): boolean {
-  return !!name.trim() && wholeWord(name.trim()).test(what);
+/**
+ * Names that are everyday words too ("Lamo will fall": not Will; "the sun rose": not Rose). Written in lower case by an
+ * owner who writes capitals, they are the word, not the name (an owner who writes no capitals at all is read in any
+ * case). The agent's own_words.NAME_WORDS is the same list (a test keeps them so).
+ */
+export const NAME_WORDS = new Set(
+  (
+    "will may mark rose bill pat sue grace joy hope faith ray jack frank rich dawn sky holly ivy lily daisy poppy ruby amber " +
+    "pearl honey sunny buddy dash bolt pip sandy art bob rob chip chase hunter summer autumn april june august robin jay wren " +
+    "rocky rusty sparky lucky max peg penny cherry berry ginger pepper sugar angel star storm river brook misty sage basil " +
+    "olive iris violet crystal diamond ace champ scout duke king prince queen princess captain doc kit kitty bunny bear teddy " +
+    "tiger fox wolf buzz flash speedy zippy turbo rocket jet blaze spark sparkle bubbles smudge patch spot socks muffin cookie " +
+    "biscuit peanut noodle pickle button nugget pumpkin pudding waffle mango apple plum lemon lime bean lightning red blue " +
+    "goldie snowy shadow dot pixie fairy bumble dusty zoom speed nana granny mum dad"
+  ).split(" "),
+);
+
+/** True when the owner writes capital letters (then a name that is an everyday word in lower case is the word). */
+const writesCapitals = (what: string) => /\p{Lu}/u.test(what);
+
+/** Where the words use this name as a whole word, ignoring case (-1: nowhere); an everyday word in lower case is skipped. */
+function nameAt(what: string, name: string, capitals: boolean): number {
+  const re = new RegExp(wholeWord(name).source, "giu");
+  for (const m of what.matchAll(re)) {
+    const first = m[0][0]!;
+    if (capitals && first === first.toLowerCase() && NAME_WORDS.has(name.toLowerCase())) continue;
+    return m.index;
+  }
+  return -1;
 }
 
-/** The words a character is called by: its name, and the first word of a longer name ("Nana" for Nana Rose). */
+/** True when the words use this name as a whole word, ignoring case. */
+export function names(what: string, name: string): boolean {
+  return !!name.trim() && nameAt(what, name.trim(), writesCapitals(what)) >= 0;
+}
+
+/**
+ * The words a character is called by: its name, and the first and the last word of a longer name ("Nana" and "Rose" for
+ * Nana Rose).
+ */
 function callNames(c: Pick<Character, "name">): string[] {
   const name = c.name.trim();
-  const first = name.split(/\s+/)[0] ?? "";
-  return first && first !== name && letters(first) > 1 ? [name, first] : name ? [name] : [];
+  if (!name) return [];
+  const parts = name.split(/\s+/);
+  const out = [name];
+  for (const w of [parts[0] ?? "", parts[parts.length - 1] ?? ""]) if (w && w !== name && letters(w) > 1 && !out.includes(w)) out.push(w);
+  return out;
 }
 
 /** Every character of the workspace (people and cars) the words name, as whole words, ignoring case, in text order. */
 export function namesIn<C extends Pick<Character, "characterId" | "name">>(what: string, characters: readonly C[]): C[] {
+  const text = what.normalize("NFC").replace(FORMAT, "");
+  const capitals = writesCapitals(text);
   const found: { c: C; at: number }[] = [];
   for (const c of characters) {
     let at = Infinity;
     for (const n of callNames(c)) {
-      const m = wholeWord(n).exec(what);
-      if (m && m.index < at) at = m.index;
+      const i = nameAt(text, n, capitals);
+      if (i >= 0 && i < at) at = i;
     }
     if (at < Infinity) found.push({ c, at });
   }
@@ -194,9 +240,25 @@ const COMMON = new Set(
     "bring give keep try hold listen remember red blue green yellow orange purple pink black white brown grey gray silver " +
     "gold super fast slow quick quickly slowly luckily sadly happily poor silly crazy funny scary cool awesome amazing best " +
     "tiny huge mr mrs ms dr london paris england france spain italy germany scotland wales ireland america usa uk australia " +
-    "canada india china japan africa europe asia minecraft fortnite roblox lego youtube tiktok xbox playstation nintendo ipad iphone"
+    "canada india china japan africa europe asia minecraft fortnite roblox lego youtube tiktok xbox playstation nintendo ipad iphone " +
+    // kids' everyday things, shops and car makes that start a sentence or get a capital (24 Nov, round 1)
+    "pizza pasta burger burgers chips fries cake cookies chocolate sweets candy popcorn sandwich toast cereal pancakes " +
+    "spaghetti noodles icecream left right winner goal goals score tesco asda aldi lidl sainsbury sainsburys waitrose " +
+    "morrisons mcdonald mcdonalds kfc disneyland disney legoland ikea starbucks costa primark argos amazon netflix " +
+    "spotify google ferrari lamborghini porsche tesla bmw audi mercedes toyota honda ford volkswagen nissan"
   ).split(/\s+/),
 );
+
+/** Words before a thing ("the Fridge", "a big Dinosaur", "his Dog"): what follows them is a thing, never a name. */
+const DETERMINERS = new Set("a an the his her my your our their its some this that these those every each".split(" "));
+/** A person's word: asked about even after "his" ("his Mum"): the cast may have no Mum to draw. */
+const PERSON_WORDS = new Set(
+  "mum mom mummy mommy mam dad daddy nana nan nanny granny grandma grandmother gran grandad granddad grandpa grandfather auntie aunt aunty uncle teacher friend brother sister baby cousin neighbour neighbor doctor nurse".split(
+    " ",
+  ),
+);
+/** A sound of one letter said long ("Zzz", "Brrr", "Hmmm", "Shhh", "Grrr"): never a name. */
+const SOUND = /^(?:z{2,}|br+|hm+|sh+|gr+|mm+|ah+|oh+|eh+)$/i;
 
 /** Place words: the catalog's places and the other words Where reads, never asked about as a name. */
 const PLACE_WORDS = new Set(
@@ -208,30 +270,55 @@ const PLACE_WORDS = new Set(
   ].filter(Boolean),
 );
 
-const TOKEN = /[\p{L}][\p{L}\p{M}\p{N}'’-]*/gu;
-/** Invisible format characters (a zero-width space pasted inside a word): read as if they were not there. */
-const FORMAT = /\p{Cf}/gu;
 
 /** The words of a text, each without a possessive or a trailing dash ("Dash's" → "Dash"). */
 function wordsOf(what: string): string[] {
   return (what.normalize("NFC").replace(FORMAT, "").match(TOKEN) ?? []).map((w) => w.replace(/['’]s$/i, "").replace(/[-'’]+$/, "")).filter(Boolean);
 }
 
-/** Each word with whether it starts a sentence and the word before it (lower case). */
-function wordsAt(what: string): { word: string; start: boolean; prev: string }[] {
+/**
+ * Each word with whether it starts a sentence, the word before it (lower case), the words before that (as written, the
+ * nearest first) and whether only a space is between it and the word before (a name in two words: "Peppa Pig").
+ */
+function wordsAt(what: string): { word: string; start: boolean; prev: string; before: string[]; joined: boolean }[] {
   const text = what.normalize("NFC").replace(FORMAT, "");
-  const out: { word: string; start: boolean; prev: string }[] = [];
+  const out: { word: string; start: boolean; prev: string; before: string[]; joined: boolean }[] = [];
   let prev = "";
+  let end = 0;
+  let seen: string[] = []; // the words just before, with only spaces between (a comma or a full stop starts again)
   for (const m of text.matchAll(TOKEN)) {
     const word = m[0].replace(/['’]s$/i, "").replace(/[-'’]+$/, "");
     const start = !prev || /[.!?;:\n…]\s*$/.test(text.slice(0, m.index));
-    if (word) out.push({ word, start, prev });
+    const joined = !!prev && /^ +$/.test(text.slice(end, m.index));
+    if (!joined) seen = [];
+    if (word) out.push({ word, start, prev, before: seen.slice(-3).reverse(), joined });
     prev = m[0].toLowerCase();
+    seen.push(m[0]);
+    end = m.index + m[0].length;
   }
   return out;
 }
 
-const PLAYED = new Set(["play", "plays", "played", "playing"]);
+const PLAYED = new Set(["play", "plays", "played", "playing", "watch", "watches", "watched", "watching"]);
+
+/** Words that end a thing's words ("the park and Max"): the name after them may be a name. */
+const NOT_A_THINGS_WORD = new Set("and or but then so to at in on with of for from by into onto over under near past is are was were".split(" "));
+/** A pet's word: the name after it is asked about ("his dog Rex"), as after a person's word ("my friend Zara"). */
+const PET_WORDS = new Set("dog dogs cat cats puppy kitten pet hamster rabbit bunny horse pony fish bird parrot teddy".split(" "));
+
+/**
+ * True when a word comes after "the", "a", "his" … with at most two small words between ("a big shiny Ferrari"), and
+ * none of them a person's or a pet's word ("his best friend Zara" is a name).
+ */
+function afterDeterminer(before: readonly string[]): boolean {
+  for (let i = 0; i < Math.min(3, before.length); i += 1) {
+    const w = before[i]!;
+    const low = w.toLowerCase();
+    if (DETERMINERS.has(low)) return true;
+    if (w[0] !== w[0]!.toLowerCase() || PERSON_WORDS.has(low) || PET_WORDS.has(low) || NOT_A_THINGS_WORD.has(low)) return false;
+  }
+  return false;
+}
 
 /**
  * The names the words use that the app does not know (§45.46.2): a word with a capital that is not a common word, not a
@@ -243,18 +330,40 @@ export function unknownNames(what: string, characters: readonly Pick<Character, 
   const known = new Set<string>([...answered].map((a) => a.toLowerCase()));
   for (const c of characters) for (const w of c.name.toLowerCase().split(/\s+/)) if (w) known.add(w);
   const out: string[] = [];
-  for (const { word: w, start, prev } of wordsAt(what)) {
+  let last: { at: number; word: string } | null = null; // the name before, when it ends just before this word
+  let title = -2; // the word a game or a show starts at ("plays Super Mario", "watches Peppa Pig")
+  const words = wordsAt(what);
+  words.forEach(({ word: w, start, prev, before, joined }, i) => {
     const first = w[0]!;
-    if (first === first.toLowerCase() || letters(w) < 2) continue;
+    if (first === first.toLowerCase() || letters(w) < 2) return;
     const low = w.toLowerCase();
-    if (COMMON.has(low) || COMMON.has(low.replace(/['’]/g, "'")) || PLACE_WORDS.has(low) || known.has(low)) continue;
-    if (low.endsWith("s") && letters(low) >= 4 && known.has(low.slice(0, -1))) continue; // "Dashs": Dash
-    if (w === w.toUpperCase()) continue; // in capitals: shouting, not a name
-    if (start && low.endsWith("ing") && letters(low) >= 5) continue; // "Driving home, …"
-    if (PLAYED.has(prev)) continue; // "plays Minecraft": a game
-    if (out.some((x) => x.toLowerCase() === low)) continue;
+    const after = last && last.at === i - 1 && joined ? last : null;
+    last = null;
+    if (title === i - 1 && joined) {
+      title = i; // the rest of the show's name ("Peppa Pig")
+      return;
+    }
+    if (COMMON.has(low) || COMMON.has(low.replace(/['’]/g, "'")) || PLACE_WORDS.has(low) || known.has(low)) return;
+    if (low.endsWith("s") && letters(low) >= 4 && known.has(low.slice(0, -1))) return; // "Dashs": Dash
+    if (w === w.toUpperCase()) return; // in capitals: shouting, not a name
+    if (start && low.endsWith("ing") && letters(low) >= 5) return; // "Driving home, …"
+    if (PLAYED.has(prev)) {
+      title = i; // "plays Minecraft", "watches Peppa Pig": a game, a show
+      return;
+    }
+    if (SOUND.test(low)) return; // "Zzz"
+    if (!after && afterDeterminer(before) && !PERSON_WORDS.has(low)) return; // "the Fridge", "a shiny Ferrari"
+    if (after) {
+      // "Peppa Pig", "Lightning McQueen": one name in two words, asked once
+      const k = out.findIndex((x) => x.toLowerCase() === after.word.toLowerCase());
+      if (k >= 0) out[k] = `${out[k]} ${w}`;
+      last = { at: i, word: k >= 0 ? out[k]! : w };
+      return;
+    }
+    if (out.some((x) => x.toLowerCase() === low)) return;
     out.push(w);
-  }
+    last = { at: i, word: w };
+  });
   return out;
 }
 
@@ -296,13 +405,15 @@ export function aboutDriving(texts: readonly string[]): boolean {
 
 /**
  * Words that put a car in a scene ("the car", "drives", "parks", "his headlights"): with one car in the cast, it is in
- * that scene's Who (the words rarely spell the car's name in every scene).
+ * that scene's Who (the words rarely spell the car's name in every scene). Never cars in general ("Lamo is scared of
+ * cars") nor a toy one ("plays with his toy car"): those are no car of the cast (round 2).
  */
-const CAR_WORDS = /(?<![\p{L}\p{N}])(?:cars?|truck|van|drives?|drove|driving|driver|parks|parked|parking|honks?|honked|brakes?|braked|braking|steers?|steering|engine|headlights?|wheels?|tyres?|tires?|seat ?belts?|zooms? off)(?![\p{L}\p{N}])/iu;
+const CAR_WORDS = /(?<![\p{L}\p{N}])(?:car|truck|van|drives?|drove|driving|driver|parks|parked|parking|honks?|honked|brakes?|braked|braking|steers?|steering|engine|headlights?|wheels?|tyres?|tires?|seat ?belts?|zooms? off)(?![\p{L}\p{N}])/iu;
+const TOY_CAR = /(?<![\p{L}\p{N}])(?:toy|model|lego|remote[ -]control(?:led)?)[ -](?:cars?|trucks?|vans?)(?![\p{L}\p{N}])/giu;
 
-/** True when the words put a car in the scene (CAR_WORDS). */
+/** True when the words put a car in the scene (CAR_WORDS; a toy car aside). */
 export function saysCar(what: string): boolean {
-  return CAR_WORDS.test(what.normalize("NFC").replace(FORMAT, ""));
+  return CAR_WORDS.test(what.normalize("NFC").replace(FORMAT, "").replace(TOY_CAR, " "));
 }
 
 /** The places Where can pick: the 16 sets of the catalog, by their labels. */
@@ -312,19 +423,24 @@ export function placeLabel(id: string | null | undefined): string | null {
   return PLACES.find((p) => p.id === id)?.label ?? null;
 }
 
-/** The place the words name (§45.46.2), in this order; null: none (the AI picks the closest). */
-const PLACE_RULES: [RegExp, SetId, RegExp?][] = [
+/**
+ * The place the words name (§45.46.2), in this order (a rule's second word must be there too, its third must not); null:
+ * none (the AI picks the closest).
+ */
+const PLACE_RULES: [RegExp, SetId, RegExp?, { test(what: string): boolean }?][] = [
   [/\b(highway|motorway)s?\b/i, "highway_night", /\bnight\b/i],
   [/\broads?\b/i, "road_night", /\bnight\b/i],
   [/\bcar park\b|\bparking\b/i, "parking_lot"],
   [/\bsnow(y|ing)?\b/i, "snowy_road"],
-  [/\bice\b|\bicy\b/i, "icy_road"],
+  [/\bice\b(?![\s-]*(?:creams?|lolly|lollies|lollys|pops?|cubes?|skat\w*|rink))|\bicy\b/i, "icy_road"],
   [/\brain(y|ing|s)?\b/i, "rainy_road"],
   [/\bfog(gy)?\b/i, "foggy_road"],
   [/\b(highway|motorway)s?\b/i, "highway"],
   [/\bcountry road\b/i, "country_road"],
   [/\bcity street\b|\btown\b|\bstreets?\b/i, "city_street"],
   [/\bliving room\b|\blounge\b|\bsofa\b/i, "living_room"],
+  // "at home" is the living room, unless a car is there ("Dash parks at home": outside, the AI picks)
+  [/\bat home\b|\bindoors\b/i, "living_room", undefined, { test: saysCar }],
   [/\bkitchen\b/i, "kitchen"],
   [/\boffice\b|\bwork\b|\bdesk\b/i, "office"],
   [/\broad by day\b/i, "road_day"],
@@ -333,7 +449,7 @@ const PLACE_RULES: [RegExp, SetId, RegExp?][] = [
 ];
 
 export function placeIn(what: string): SetId | null {
-  for (const [re, id, also] of PLACE_RULES) if (re.test(what) && (!also || also.test(what))) return id;
+  for (const [re, id, also, unless] of PLACE_RULES) if (re.test(what) && (!also || also.test(what)) && !unless?.test(what)) return id;
   return null;
 }
 
@@ -416,10 +532,66 @@ function onlyCar(cast: readonly string[], characters: readonly Who[]): string | 
   return cars.length === 1 ? cars[0]! : null;
 }
 
+/** He or she, when a character's own description, personality or traits say only one (the agent's own_words.gender_of). */
+const GENDER_WORDS: Record<"he" | "she", Set<string>> = {
+  he: new Set("he his him boy man dad father brother son grandpa grandad uncle king prince mr husband guy gentleman lad".split(" ")),
+  she: new Set("she her girl woman mum mom mother sister daughter grandma granny aunt queen princess mrs ms miss wife lady nana".split(" ")),
+};
+export function genderOf(c: Partial<Pick<Character, "description" | "personality" | "traits">> | undefined): "he" | "she" | null {
+  if (!c) return null;
+  const words = new Set(flatWords([c.description ?? "", c.personality ?? "", ...(c.traits ?? [])].join(" ")).trim().split(" "));
+  const said = (["he", "she"] as const).filter((g) => [...GENDER_WORDS[g]].some((w) => words.has(w)));
+  return said.length === 1 ? said[0]! : null;
+}
+
+/**
+ * The cast the words say are not there ("Rosa is not at home", "Rosa isn't here", "Rosa is away", "without Rosa"): never
+ * ticked by the words (the agent's own_words reads them the same).
+ */
+function awayIn(what: string, characters: readonly Who[]): Set<string> {
+  const text = what.normalize("NFC").replace(FORMAT, "");
+  const out = new Set<string>();
+  const here = "(?:at|here|there|home|around|anywhere)";
+  for (const c of characters) {
+    for (const n of callNames(c)) {
+      const name = esc(n);
+      const rules = [
+        `${name}\\s+(?:is|was|['’]s)\\s+(?:not|never)\\s+${here}`,
+        `${name}\\s+(?:is|was|['’]s)\\s+(?:away|gone|absent|missing)`,
+        `${name}\\s+(?:isn['’]?t|wasn['’]?t)\\s+${here}`,
+        `${name}\\s+(?:has|['’]s)\\s+(?:gone|left)`,
+        `\\bwithout\\s+(?:the\\s+)?${name}`,
+      ];
+      if (rules.some((r) => new RegExp(`(?<![\\p{L}\\p{N}])${r}(?![\\p{L}\\p{N}])`, "iu").test(text))) out.add(c.characterId);
+    }
+  }
+  return out;
+}
+
+/** Words that speak of more than one ("They get home safe.", "They both laugh.", "Everyone cheers."). */
+const MANY = /(?<![\p{L}\p{N}])(?:they|them|their|themselves|both|everyone|everybody|together)(?![\p{L}\p{N}])/iu;
+const THEY = /(?<![\p{L}\p{N}])(?:they|them|their|themselves)(?![\p{L}\p{N}])/iu;
+const ALL_OF = /(?<![\p{L}\p{N}])(?:both|everyone|everybody|together)(?![\p{L}\p{N}])/iu;
+/** Some things the words name before a "they" ("some ducks", "the birds", "two dogs"): they may be them (never "the bus"). */
+const THINGS = /(?<![\p{L}\p{N}])(?:some|the|two|three|four|five|six|many|few|lots of|all the|all)\s+(?:\p{L}+\s+)?\p{L}+[^\sus]s(?![\p{L}\p{N}])/iu;
+
+/**
+ * True when the words speak of more than the people they name: "both", "everyone", "together", or a "they" with no
+ * things named before it ("Lamo sees some ducks. They swim in the pond.": they are the ducks, not the people before).
+ */
+function aboutMore(text: string): boolean {
+  if (ALL_OF.test(text)) return true;
+  const they = THEY.exec(text);
+  return !!they && !THINGS.test(text.slice(0, they.index));
+}
+const HE_WORDS = /(?<![\p{L}\p{N}])(?:he|him|his|himself)(?![\p{L}\p{N}])/iu;
+const SHE_WORDS = /(?<![\p{L}\p{N}])(?:she|her|hers|herself)(?![\p{L}\p{N}])/iu;
+
 /** Who the words of a scene name themselves: the cast they name, and the names answered for them. */
 function namedWho(s: Pick<DraftScene, "what">, draft: Pick<ScriptDraft, "answers">, cast: readonly string[], characters: readonly Who[]): string[] {
   const out: string[] = [];
-  for (const c of namesIn(s.what, characters)) if (cast.includes(c.characterId) && !out.includes(c.characterId)) out.push(c.characterId);
+  const away = awayIn(s.what, characters);
+  for (const c of namesIn(s.what, characters)) if (cast.includes(c.characterId) && !out.includes(c.characterId) && !away.has(c.characterId)) out.push(c.characterId);
   for (const w of wordsOf(s.what)) {
     const to = draft.answers[w.toLowerCase()];
     if (to && to !== "out" && to !== "seen" && cast.includes(to) && !out.includes(to)) out.push(to);
@@ -429,15 +601,34 @@ function namedWho(s: Pick<DraftScene, "what">, draft: Pick<ScriptDraft, "answers
 
 /**
  * Who is in a scene: the Who chips picked by hand, else read from the words: the cast they name (and the names answered
- * for them); words that name nobody keep the scene before's Who ("He turns on the headlights."); and the cast's one car
- * is in every scene whose words say car, drive, park and the like ("The car gets stuck.": that car is Rosso).
+ * for them; never one the words say is not there); words that name nobody keep the scene before's Who ("He turns on the
+ * headlights.": only its he when the characters say who is a he); words about more than one keep it too ("They get home
+ * safe.", "They both laugh."); and the cast's one car is in every scene whose words say car, drive, park and the like
+ * ("The car gets stuck.": that car is Rosso).
  */
 export function sceneWho(s: DraftScene, draft: Pick<ScriptDraft, "answers"> & Partial<Pick<ScriptDraft, "scenes">>, cast: readonly string[], characters: readonly Who[]): string[] {
   if (s.who) return s.who.filter((id) => cast.includes(id));
-  let out = namedWho(s, draft, cast, characters);
+  const out = namedWho(s, draft, cast, characters);
   const scenes = draft.scenes ?? [];
   const at = scenes.findIndex((x) => x.key === s.key);
-  if (!out.length && at > 0 && s.what.trim()) out = sceneWho(scenes[at - 1]!, draft, cast, characters).slice();
+  const text = s.what.normalize("NFC").replace(FORMAT, "");
+  const isCarId = (id: string) => {
+    const c = characters.find((x) => x.characterId === id);
+    return !!c && (c.kind === "car" || !!c.car);
+  };
+  // "Pip falls over. They both laugh.": more than the one it names (two named are the "both" themselves)
+  const more = aboutMore(text) && out.filter((id) => !isCarId(id)).length < 2;
+  if (at > 0 && text.trim() && (!out.length || more)) {
+    const away = awayIn(text, characters);
+    let before = sceneWho(scenes[at - 1]!, draft, cast, characters).filter((id) => !away.has(id));
+    if (!out.length && !MANY.test(text)) {
+      // "He walks home alone.": only the scene before's he (or she), when the characters say who that is
+      const g = HE_WORDS.test(text) && !SHE_WORDS.test(text) ? "he" : SHE_WORDS.test(text) && !HE_WORDS.test(text) ? "she" : null;
+      const match = g ? before.filter((id) => !isCarId(id) && genderOf(characters.find((x) => x.characterId === id) as Character | undefined) === g) : [];
+      if (match.length) before = before.filter((id) => isCarId(id) || match.includes(id));
+    }
+    for (const id of before) if (!out.includes(id)) out.push(id);
+  }
   const car = onlyCar(cast, characters);
   if (car && !out.includes(car) && saysCar(s.what)) out.push(car);
   return out;
@@ -463,10 +654,16 @@ export function scenePlace(
   if (s.place) return s.place;
   const own = placeIn(s.what);
   if (own || !draft?.scenes || !s.what.trim() || namesPlace(s.what)) return own;
-  if (namesIn(s.what, characters).length || namedWho(s, draft, cast, characters).length || unknownNames(s.what, characters, Object.keys(draft.answers)).length) return null;
-  if (wordsOf(s.what).some((w) => draft.answers[w.toLowerCase()])) return null; // a name answered: someone of its own
   const at = draft.scenes.findIndex((x) => x.key === s.key);
-  return at > 0 ? scenePlace(draft.scenes[at - 1]!, draft, cast, characters) : null;
+  if (at <= 0 || unknownNames(s.what, characters, Object.keys(draft.answers)).length) return null;
+  // the same people as the scene before, or some of them ("Pip turns on the dipped headlights."): it goes on there; someone
+  // new may be somewhere new, so the AI picks
+  const before = draft.scenes[at - 1]!;
+  const here = sceneWho(draft.scenes[at]!, draft, cast, characters);
+  const there = sceneWho(before, draft, cast, characters);
+  const outside = namesIn(s.what, characters).some((c) => !cast.includes(c.characterId)) || wordsOf(s.what).some((w) => draft.answers[w.toLowerCase()] === "out");
+  if (outside || here.some((id) => !there.includes(id))) return null;
+  return scenePlace(before, draft, cast, characters);
 }
 
 /** The cast members no scene has in its Who (a car in the cast that is in no scene is never drawn). */
