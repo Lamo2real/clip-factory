@@ -1,4 +1,4 @@
-## ADR-93 A skipped platform is hidden everywhere but Settings and Social accounts
+## ADR-94 A skipped platform is hidden everywhere but Settings and Social accounts
 
 Supersedes §17.13's skipped rows on the floating setup list, §45.36 E15 for platform steps and §45.36 E18's card
 columns on Clips Funded's Social accounts. The contract is CONTRACTS §48.

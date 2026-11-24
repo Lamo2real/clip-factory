@@ -10,7 +10,7 @@ The owner's two asks (24 Nov, about 00:15 UTC):
    platform rows, each with its icon tile, name, status, "About N minutes · Free", a check or an empty circle and a
    chevron that opens the platform's own page).
 
-ADR-93 records the decision. It supersedes §17.13's skipped rows on the floating list, §45.36 E15 for platform steps
+ADR-94 records the decision. It supersedes §17.13's skipped rows on the floating list, §45.36 E15 for platform steps
 and §45.36 E18's card columns on Social accounts.
 
 ### 48.1 Rule S (both apps, one rule)
