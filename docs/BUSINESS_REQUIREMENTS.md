@@ -684,19 +684,10 @@ taps, and records "Posted by your Mac · Everyone" with the link.
   him: **Open the stopped clip**, where Try again and It's on TikTok are.
 - AC5: **He never posts by hand** (23 Nov 2026: "its always the automation that covers it weather its invoked by be
   clicking upload or if its the schedule"). Every clip that can go to TikTok goes through his Mac, Upload or the
-  schedule. **Campaign clips and paid clips go through his Mac with TikTok's label** (24 Nov 2026,
-  [ADR-96](DECISIONS.md#adr-96-campaign-and-paid-clips-post-tiktok-through-the-mac-with-tiktoks-label), amends ADR-86
-  round 3): his Mac sets TikTok's "Disclose post content" with Branded content (the "Paid partnership" label, every
-  campaign clip) or Your brand ("Promotional content"), reads it back before Post, or doesn't post. While **Your Mac
-  posts TikTok** is on, Review's TikTok row is the clip's own (Who can see it, Comments, Duet, Stitch, Commercial
-  content), starting on My settings with no tap, and ticking Branded content never holds Upload; a campaign clip gets
-  TikTok among its places, Everyone with Branded content ticked, and Clip Factory sends its link to Content Rewards
-  within its 30 minutes. **Post with my Mac** and **Send these to my Mac** post paid clips with their label too; the
-  row ends " · Paid partnership label" (or " · Promotional content label"). A labelled clip waiting on an older
-  helper reads "Waiting for your Mac · it needs an update to add TikTok's label", and nothing goes without its label.
-  With the switch off and TikTok not approved yet, a campaign clip's TikTok says "Campaign clips go on TikTok from
-  your Mac. Turn it on in Settings › Posting › Your Mac posts TikTok." Answering a stopped post (**It's on TikTok**
-  or **Try again**) lets a Mac that needed him go on.
+  schedule. **Campaign clips and paid clips go through his Mac with TikTok's label** (24 Nov 2026, ADR-96): Branded
+  content ("Paid partnership", every campaign clip) or Your brand, read back before Post, or it doesn't post; Clip
+  Factory sends a campaign post's link to Content Rewards. Answering a stopped post (**It's on TikTok** or **Try
+  again**) lets a Mac that needed him go on.
 - AC6: **Find it for me never saves without a link** (round 3): nothing found → "Not found yet. Try again in a
   minute, or paste the link." and nothing changes. Saving it without a link is only **It's on TikTok, no link**, after
   its question.
@@ -1216,7 +1207,7 @@ be able to do it." ([UX design system](UX_DESIGN_SYSTEM.md#set-up-posting))
 | I-42 | "3 steps, 5 at most" | 3 for each campaign as asked (join, copy the link, paste), at most 5 with the logo and "Yes, I applied" or "I'm in. Read these rules"; setup is 3 once; each video 3 and each clip 2 taps; checking a clip 0 (BR-25). | No. |
 | I-43 | "Checking if I am confirmed as a member of the campaign" | Clip Factory checks by itself (every 15 minutes for 7 days, then every 6 hours to day 30) and says "You're in!" with a notification; "Check now" is there but never needed. Pending applications are not visible to apps, so an application shows "Waiting for the brand" after "Yes, I applied". | No. |
 | I-44 | "Get paid for it" | The Money page shows Content Rewards' own numbers and the steps to move money to Whop and then the bank; Clip Factory never moves money itself. | No. |
-| I-45 | Campaigns that pay for TikTok | Done 24 Nov 2026 ([ADR-96](DECISIONS.md#adr-96-campaign-and-paid-clips-post-tiktok-through-the-mac-with-tiktoks-label)): campaign clips post through the Mac with Branded content (TikTok's Paid partnership label), which the helper reads back before Post or doesn't post, and Clip Factory sends each post's link to Content Rewards within its 30 minutes. Once TikTok approves Clip Factory's app (its app review and posting audit), TikTok's own API posts them with Branded content (BR-25 AC7, BR-32 AC5). | No. |
+| I-45 | Campaigns that pay for TikTok | Done 24 Nov 2026 (ADR-96): campaign clips post through the Mac with Branded content, and their links go to Content Rewards (BR-25 AC7, BR-32 AC5). | No. |
 | I-46 | "Set up in a chronological and structured manner" | The three Connect steps stay in the order they happen (account, accounts added inside Content Rewards, Connect), each with its answer button right under its Open button, a "Yes" shortcut for someone already set up, and a way back to where he came from (BR-26 AC4). Steps 1 and 2 are taps only he can make: Content Rewards' tools can't tell an app that he has an account or which accounts he added there. | No. |
 | I-47 | "Using either the content rewards way of videos or normal way we have done so far" | Two ways with their own names: "Make clips" (normal clips, exactly as before) and "Make campaign clips" (always started from a campaign). The choice is never a field on the normal form, so the normal way gains nothing (BR-26). | No. |
 | I-48 | "Track how much i earn from all platforms including contentrewards" | One "All your money" card: the money each place reports for the same 30 days and one total per currency. TikTok, Instagram and X report no money to apps, so they say "Not available" with where to look; Facebook waits until its numbers are checked; what left Content Rewards for Whop and the bank is not in its tools (BR-27). | Is 30 days the right period for the total? |

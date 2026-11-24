@@ -519,7 +519,7 @@ The answers, word for word. They are all true today: do not change them to sound
 | "The return address does not match. Copy it again in step 10." | Do step 10 again with the **Copy** button. |
 | "A permission box was not ticked. Connect again and tick every box." | Do step 12, then connect again and leave every switch on. |
 | "TikTok only takes Clip Factory's own uploads on a private account for now, so your Mac posts it for everyone." | Tap **Post with my Mac** on the clip's TikTok row (it says **Turn on** first while **Your Mac posts TikTok** is off). Keep your account public. |
-| "Campaign clips go on TikTok from your Mac. Turn it on in Settings › Posting › Your Mac posts TikTok." (Upload adds "Or turn TikTok off, then tap Upload."; Try again and Send these to my Mac add "Tap Try again on another place.") | Turn on **Your Mac posts TikTok** in Settings › Posting. Or, on Upload, turn TikTok off, then tap **Upload**; on Try again, tap **Try again** on another place. |
+| "Campaign clips go on TikTok from your Mac. Turn it on in Settings › Posting › Your Mac posts TikTok." | Turn it on. Or turn TikTok off, then tap **Upload**. |
 | "Your Mac posts campaign clips on TikTok. Tap Post with my Mac." | Tap **Post with my Mac** on the clip's TikTok row. |
 | "Your Mac needs an update to add TikTok's label to this clip. Set up your Mac again." | Set up the helper on your Mac again ([mac/tiktok-helper](../mac/tiktok-helper/README.md)). The clip waits, then goes with its label. |
 | "Your Mac pressed Post less than 30 minutes ago. Look on your TikTok first, then try again later." | Look on your TikTok. It's there? Tap **It's on TikTok**. It isn't? Tap **Try again** once 30 minutes have passed. |
@@ -532,13 +532,9 @@ The answers, word for word. They are all true today: do not change them to sound
 **While your Mac posts TikTok**, the clip's **TikTok** row is its own, like every other place: Who can see it
 (Everyone, Friends, Only me), Comments, Duet, Stitch and Commercial content (Your brand, Branded content). It starts on
 My settings (Everyone, with Comments, Duet and Stitch on, unless you changed them), with no tap needed: just press
-**Upload**. Your Mac posts it the way the row says. A paid partnership? Tick **Branded content**: Upload still goes,
-and your Mac adds TikTok's **Paid partnership** label (**Your brand** adds **Promotional content**). It checks the
-label is on before it presses Post, or it doesn't post. Campaign clips have TikTok ticked already, with Everyone and
-Branded content. **Post with my Mac** in Library and **Send these to my Mac** in Settings post paid clips with their
-label too. In Settings › Posting › My settings, TikTok's fold **Paid partnership?** says the same: "Tick Branded content
-in that clip's TikTok row.", "Your Mac adds TikTok's Paid partnership label when it posts it.", "Campaign clips have it
-ticked already." **While Your Mac posts TikTok is off**,
+**Upload**. A paid partnership? Tick **Branded content**: your Mac adds TikTok's **Paid partnership** label (**Your
+brand**: **Promotional content**), also from **Post with my Mac** and **Send these to my Mac**. Campaign clips have it
+ticked already. **While Your Mac posts TikTok is off**,
 every clip with TikTok ticked waits for your tap: press **Use my settings** (it puts your saved TikTok choices on), or
 open the **TikTok** row and pick who can see it there (there is no default, TikTok's rule for apps that post through
 its API). The row also has the Comments, Duet and Stitch switches and Commercial content (tick **Branded content** for
@@ -1199,10 +1195,7 @@ From top to bottom:
 - "Next step": the one thing to do, with the screen's only red button (on a phone it sits at the bottom right).
 - "Pay": Content Rewards' own rates, for example "$1.00 per 1,000 views · up to $200.00 a clip · a clip starts
   paying once it has earned $2.00", the money left ("Money left: $7,890 of $8,500"), and "Pays for: YouTube,
-  Instagram". These are the rates Content Rewards publishes, never a guess of what a clip will earn. A campaign that
-  pays for TikTok adds "TikTok: your Mac posts campaign clips with TikTok's Paid partnership label." (with Your Mac
-  posts TikTok off: "TikTok: not yet. Campaign clips go on TikTok from your Mac. Turn it on in Settings › Posting ›
-  Your Mac posts TikTok.").
+  Instagram". These are the rates Content Rewards publishes, never a guess of what a clip will earn.
 - "Rules I'll follow": what Clip Factory does on every clip, each with a tick (for example "Clips are 15 to 60
   seconds long.", "#Ad goes at the start of each caption.", "'Paid partnership' shows on the video for the first 3
   seconds.").
@@ -1298,9 +1291,8 @@ the red button is "Make clips anyway".
 - A strip at the top: "For **FaZe Clips** · Content Rewards" with ticks for "Paid partnership", "#Ad at the start"
   and "Logo on".
 - "Upload to" shows only the places this campaign pays for: "Only places this campaign pays for."
-- TikTok, while **Your Mac posts TikTok** is on: TikTok is among the places, set to **Everyone** with **Branded
-  content** ticked. Your Mac adds TikTok's Paid partnership label, and Clip Factory sends the post's link to Content
-  Rewards within 30 minutes. With it off, TikTok isn't among the places until you turn it on in Settings › Posting.
+- TikTok (while **Your Mac posts TikTok** is on): **Everyone** with **Branded content**; Clip Factory sends its link
+  to Content Rewards.
 - A place Content Rewards doesn't know yet: "Add YouTube in Content Rewards first." Tap "Open Content Rewards
   settings", add it, then tap "I added it". The next clip will go.
 - Tap "Use my settings". Campaign clips are public, never made for kids, and marked as paid. On YouTube that is Who can

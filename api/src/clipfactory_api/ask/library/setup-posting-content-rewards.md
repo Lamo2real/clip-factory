@@ -247,10 +247,7 @@ From top to bottom:
 - "Next step": the one thing to do, with the screen's only red button (on a phone it sits at the bottom right).
 - "Pay": Content Rewards' own rates, for example "$1.00 per 1,000 views · up to $200.00 a clip · a clip starts
   paying once it has earned $2.00", the money left ("Money left: $7,890 of $8,500"), and "Pays for: YouTube,
-  Instagram". These are the rates Content Rewards publishes, never a guess of what a clip will earn. A campaign that
-  pays for TikTok adds "TikTok: your Mac posts campaign clips with TikTok's Paid partnership label." (with Your Mac
-  posts TikTok off: "TikTok: not yet. Campaign clips go on TikTok from your Mac. Turn it on in Settings › Posting ›
-  Your Mac posts TikTok.").
+  Instagram". These are the rates Content Rewards publishes, never a guess of what a clip will earn.
 - "Rules I'll follow": what Clip Factory does on every clip, each with a tick (for example "Clips are 15 to 60
   seconds long.", "#Ad goes at the start of each caption.", "'Paid partnership' shows on the video for the first 3
   seconds.").
@@ -346,9 +343,8 @@ the red button is "Make clips anyway".
 - A strip at the top: "For **FaZe Clips** · Content Rewards" with ticks for "Paid partnership", "#Ad at the start"
   and "Logo on".
 - "Upload to" shows only the places this campaign pays for: "Only places this campaign pays for."
-- TikTok, while **Your Mac posts TikTok** is on: TikTok is among the places, set to **Everyone** with **Branded
-  content** ticked. Your Mac adds TikTok's Paid partnership label, and Clip Factory sends the post's link to Content
-  Rewards within 30 minutes. With it off, TikTok isn't among the places until you turn it on in Settings › Posting.
+- TikTok (while **Your Mac posts TikTok** is on): **Everyone** with **Branded content**; Clip Factory sends its link
+  to Content Rewards.
 - A place Content Rewards doesn't know yet: "Add YouTube in Content Rewards first." Tap "Open Content Rewards
   settings", add it, then tap "I added it". The next clip will go.
 - Tap "Use my settings". Campaign clips are public, never made for kids, and marked as paid. On YouTube that is Who can
