@@ -227,3 +227,49 @@ test("a TikTok token that needs renewing is still Clip Factory's account: its Ma
   assert.equal(await clipsTarget(api([{ platform: "tiktok", status: "connected", handle: "Lamo Clips" }]), state), "@lamo.clips");
   assert.equal(await clipsTarget(api([{ platform: "youtube", status: "connected", handle: "@lamo" }]), {}), null);
 });
+
+test("a tick that outlasts its token gets a fresh one for every call, Clip Factory's and Clips Funded's: no 401", async (t) => {
+  // 24 Nov 2026: tick() bound one 15-minute token to every client, so after a 20-minute TikTok login wait its beats
+  // and its stop got 401 and never reached Clip Factory. Here each call takes 16 minutes of a faked clock, so a token
+  // bound once, by tick() or by wsLanes(), is refused (as API Gateway's JWT authorizer does) from the next call on.
+  fs.rmSync(path.join(base, "state.json"), { force: true });
+  fs.writeFileSync(path.join(base, "settings.json"), JSON.stringify({}));
+  t.mock.timers.enable({ apis: ["Date"], now: Date.parse("2026-11-24T03:00:00Z") });
+  const routes = common([clipsJob], wsOn({ queue: [] }));
+  const issued = new Map(); // each access token, and when Cognito gave it
+  const calls = [];
+  globalThis.fetch = async (url, init = {}) => {
+    const method = init.method || "GET";
+    if (String(url) === "https://app.example/config.json") {
+      return Response.json({ region: "eu-west-1", userPoolClientId: "client", apiUrl: API });
+    }
+    if (String(url).startsWith("https://cognito-idp.")) {
+      const token = `tok-${issued.size + 1}`;
+      issued.set(token, Date.now());
+      return Response.json({ AuthenticationResult: { AccessToken: token, ExpiresIn: 900 } });
+    }
+    const token = init.headers.Authorization.replace(/^Bearer /, "");
+    const fresh = Date.now() - issued.get(token) < 15 * 60_000;
+    calls.push({ method, url: String(url), token, status: fresh ? 200 : 401 });
+    t.mock.timers.tick(16 * 60_000);
+    if (!fresh) return Response.json({ message: "Unauthorized" }, { status: 401 });
+    const hit = routes[`${method} ${url}`];
+    if (hit === undefined) return Response.json({ error: { message: "not here" } }, { status: 404 });
+    const { status = 200, body = hit } = hit && hit.status ? hit : {};
+    return Response.json(body, { status });
+  };
+  const result = await tick();
+  assert.equal(result.action, "claim_refused");
+  assert.deepEqual(paths(calls), [
+    "GET /v1/tiktok/mac",
+    "GET /v1/accounts",
+    "POST /v1/tiktok/mac/ping",
+    "GET /v1/workspaces",
+    `GET /v1/workspaces/stories/tiktok/mac?version=${VERSION}`,
+    "POST /v1/workspaces/stories/tiktok/mac/ping",
+    "POST /v1/clips/c1/tiktok/mac/claim",
+  ]);
+  assert.deepEqual(calls.filter((c) => c.status === 401), []);
+  // Every call came 16 minutes after the one before, so each went with its own token, renewed before it ran out.
+  assert.equal(new Set(calls.map((c) => c.token)).size, calls.length);
+});

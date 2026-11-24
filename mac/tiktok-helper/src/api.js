@@ -35,7 +35,11 @@ function caller(apiUrl, token, fetchImpl, app) {
       });
     const bearer = source ? await source.get() : token;
     let res = await send(bearer);
-    if (res.status === 401 && source) res = await send(await source.renew(bearer));
+    if (res.status === 401 && source) {
+      // Let go of the refused answer first, so its connection isn't held until garbage collection.
+      await res.body?.cancel().catch(() => {});
+      res = await send(await source.renew(bearer));
+    }
     if (res.status === 204) return null;
     const data = await res.json().catch(() => ({}));
     if (!res.ok) {
