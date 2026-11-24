@@ -345,6 +345,16 @@ jobs:
         env:
           CACHED: ${{ steps.browser.outputs.cache-hit }}
         run: |
+          # Ubuntu's packages from Azure's mirror, as most runners already have it (about 30 s). Some runners list an EC2
+          # mirror instead (us-east-2.ec2.archive.ubuntu.com), which sent WebKit's 126 MB at 61 kB/s on 24 Nov: 34
+          # minutes, so shard 5 ran out of time with its tests half run (and runs before it took 25 to 36 minutes here).
+          # Only that one line of the runner's mirror list changes; apt still falls back to the list's next mirror.
+          for f in /etc/apt/apt-mirrors.txt /etc/apt/sources.list /etc/apt/sources.list.d/*.sources /etc/apt/sources.list.d/*.list; do
+            if [ -f "$f" ] && grep -qE '[a-z0-9-]+\.ec2\.archive\.ubuntu\.com' "$f"; then
+              echo "apt: $f named an EC2 mirror; Azure's instead"
+              sudo sed -i -E 's#https?://[a-z0-9-]+\.ec2\.archive\.ubuntu\.com/ubuntu/?#http://azure.archive.ubuntu.com/ubuntu/#g' "$f" || true
+            fi
+          done
           if [ "$CACHED" = "true" ]; then npx playwright install-deps webkit; else npx playwright install --with-deps webkit; fi
       - name: Playwright (mock mode, WebKit desktop and iPhone), shard ${{ matrix.shard }} of ${{ strategy.job-total }}
         env:
