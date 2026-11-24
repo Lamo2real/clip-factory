@@ -24,10 +24,11 @@
    and Clip Factory's own (ws-clipmark: .brand__mark's bone tile and green "C", .brand__dot's vermilion) on the toggle
    that goes back to Clip Factory, in either app.
    The dock's toggle stays mounted through a switch and swaps one colouring for the other by its class, at once: the
-   mark and its dot never fade. With less motion, base.css gives every element a 1 ms transition of every property
-   (transition-property is `all` unless set), so the tile faded from the warm mark's clear background colour, and a
-   transition only starts once a frame is drawn: while a switch's frames came slowly (CI's software paint) the toggle
-   showed a bare "C" with no tile (e2e/workspace-mark.spec.ts read rgba(0, 0, 0, 0) there). */
+   mark and its dot never fade. They have no transition, and calm motion adds none (base.css, CONTRACTS §20.6). When it
+   gave every element a 1 ms transition of every property (transition-property is `all` unless set), the tile faded
+   from the warm mark's clear background colour, and a transition only starts once a frame is drawn: while a switch's
+   frames came slowly (CI's software paint) the toggle showed a bare "C" with no tile (e2e/workspace-mark.spec.ts read
+   rgba(0, 0, 0, 0) there). */
 .ws-mark.ws-mark--sized,
 .ws-clipmark.ws-mark--sized {
   position: relative;
@@ -42,7 +43,6 @@
   font-style: italic;
   font-size: calc(var(--ws-mark-size) * 0.67);
   line-height: 1;
-  transition-property: none;
 }
 .ws-mark--sized > .ws-mark__dot {
   position: absolute;
@@ -51,7 +51,6 @@
   width: calc(var(--ws-mark-size) * 0.18);
   height: calc(var(--ws-mark-size) * 0.18);
   border-radius: 50%;
-  transition-property: none;
 }
 .ws-mark.ws-mark--sized {
   color: var(--ws-mark-letter, #2a160b);
