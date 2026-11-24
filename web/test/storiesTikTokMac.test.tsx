@@ -331,7 +331,7 @@ describe("a Mac post row's buttons", () => {
 
   it("Turn on and Set it up go to the TikTok card", async () => {
     const r = await row(macJob({}), props({ on: false }));
-    expect(control("Turn on", r).getAttribute("href")).toBe("/stories/connections#tiktok-mac");
+    expect(control("Turn on", r).getAttribute("href")).toBe("/stories/connections/tiktok#tiktok-mac");
   });
 
   it("Try again on a stopped post", async () => {
@@ -569,7 +569,7 @@ describe("Post it while the Mac posts TikTok", () => {
     await sheet({ tiktokMac: { on: true } });
     const tt = document.querySelector<HTMLElement>(".st-s-tiktok")!;
     expect(text(tt)).toContain("Your Mac isn't set up yet. It posts once it is.");
-    expect(control("Set it up", tt).getAttribute("href")).toBe("/stories/connections#tiktok-mac");
+    expect(control("Set it up", tt).getAttribute("href")).toBe("/stories/connections/tiktok#tiktok-mac");
   });
 
   it("with the switch off, TikTok's part is as before", async () => {

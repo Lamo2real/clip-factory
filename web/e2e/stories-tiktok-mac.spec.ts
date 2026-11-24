@@ -69,7 +69,7 @@ test("turn it on, Post it, and the TikTok row follows the Mac to Posted by your 
   test.setTimeout(120_000);
   await start(page, { macConnected: true, macHelper: true });
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto("/stories/connections");
+  await page.goto("/stories/connections/tiktok");
   const card = page.locator("#tiktok-mac");
   await expect(card).toContainText("Off. Your Mac doesn't post TikTok.", { timeout: 20_000 });
   await card.getByRole("switch", { name: "My Mac posts TikTok" }).click();
