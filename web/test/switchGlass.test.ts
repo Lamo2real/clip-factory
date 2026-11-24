@@ -274,6 +274,25 @@ describe("the workspace switch is see-through, colour-free glass (§45.38 S5)", 
     for (const selector of [".ws-switch", ".ws-round", ".ws-menu", LIVE]) expect(decls(body(selector)).get("transition"), selector).toMatch(/opacity 200ms ease/);
   });
 
+  it("the dock's placed parts land at once, also under reduced motion: the switch's host and the Live chip's row never transition", () => {
+    // Under reduced motion base.css gives every element a 1 ms transition of every property (transition-property is
+    // `all` unless a rule says otherwise). A 1 ms move of the dock's host still waits for the next animation frame, and
+    // on CI's runner that frame came over a second late in the Colours look: the switch was read at the place it was
+    // first given (over Get the app and the jobs line) and pictured at its real one, so its words read 1.17:1 against
+    // Get the app's own white words (PR #186; e2e/switch-glass.spec.ts holds the same in real pixels, every frame held).
+    const reduced = ruleList(sheet(STYLES, "base.css")).filter(([sel, rule]) => sel === "*, *::before, *::after" && decls(rule).has("transition-duration"));
+    expect(reduced, "base.css's reduced-motion rule").toHaveLength(1);
+    expect(decls(reduced[0]![1]).get("transition-duration")).toBe("1ms !important");
+    expect(decls(body(".ws-dock > .ws-switch-host, .ws-dock > .ws-dock__live")).get("transition")).toBe("none");
+    // No later rule of glide.css hands either part a transition back.
+    const placed = ruleList(glide).filter(([sel]) => sel.split(",").some((one) => /^\.ws-dock(?:\.[a-z-]+|:[a-z-]+\([^)]*\))* > (?:\.ws-switch-host|\.ws-dock__live|\.sidebar__live)$/.test(one.trim())));
+    expect(placed.length).toBeGreaterThan(1);
+    const handedBack = placed.flatMap(([sel, rule]) =>
+      [...decls(rule)].filter(([prop, value]) => prop.startsWith("transition") && !(prop === "transition" && value === "none")).map(([prop, value]) => `${sel} { ${prop}: ${value} }`),
+    );
+    expect(handedBack).toEqual([]);
+  });
+
   it("the track, the round toggle and the menu blur what is behind them and take back a little light, its colours kept", () => {
     for (const selector of [".ws-switch", ".ws-round", ".ws-menu"]) {
       const d = decls(body(selector));

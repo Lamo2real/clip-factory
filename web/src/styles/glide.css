@@ -172,10 +172,15 @@
   .ws-dock[hidden] {
     display: none;
   }
+  /* Placed in numbers (WorkspaceDock.tsx), so each lands at once: no transition. Under reduced motion base.css gives
+     every element a 1 ms transition of every property, and a 1 ms move still waits for the next animation frame; on a
+     busy computer that frame can come a second or more late, and the switch and the Live chip stayed where they were
+     first placed (over Get the app) while the page under them had moved on. */
   .ws-dock > .ws-switch-host,
   .ws-dock > .ws-dock__live {
     position: absolute;
     pointer-events: auto;
+    transition: none;
   }
   /* The switch over the Live chip's row (a toggle beside the chip sits in that row); the row itself takes no clicks
      beyond the chip. */
