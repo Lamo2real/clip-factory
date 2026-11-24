@@ -150,15 +150,19 @@ def test_names_are_unique_and_there_are_at_most_50(call: Call, store: db.Store) 
 
 def test_the_cast_is_checked_with_the_car_rules(call: Call, store: db.Store) -> None:
     pip = seed_character(store, name="Pip")
-    rosso, blue = seed_car(store), seed_car(store, "Blue")
+    rosso, blue, red = seed_car(store), seed_car(store, "Blue"), seed_car(store, "Red")
     status, body = call("POST", f"{BASE}/series", {"name": "Alone", "castIds": [rosso["characterId"]]})
     assert (status, body["error"]["message"], body["error"].get("field")) == (
         400,
         "Add someone to drive it.",
         "castIds",
     )
+    # §45.47: up to 2 vehicles (was one car)
     two = [pip["characterId"], rosso["characterId"], blue["characterId"]]
-    assert call("POST", f"{BASE}/series", {"name": "Two", "castIds": two})[1]["error"]["message"] == "Pick one car."
+    assert call("POST", f"{BASE}/series", {"name": "Two", "castIds": two})[0] == 201
+    three = [rosso["characterId"], blue["characterId"], red["characterId"]]
+    status, body = call("POST", f"{BASE}/series", {"name": "Three", "castIds": three})
+    assert (status, body["error"]["message"]) == (400, "Pick up to 2 vehicles.")
     status, body = call("POST", f"{BASE}/series", {"name": "Ghost", "castIds": [ulid()]})
     assert status == 400
     assert body["error"]["field"] == "castIds"
@@ -510,6 +514,7 @@ def test_a_story_is_filed_from_the_body_or_its_idea(call: Call, store: db.Store)
 
 def test_a_story_cast_follows_the_car_rules(call: Call, store: db.Store) -> None:
     rosso, blue, pip = seed_car(store), seed_car(store, "Blue"), seed_character(store, name="Pip")
+    red = seed_car(store, "Red")
     brief = {"title": "Day one", "logline": "Pip gets a car.", "category": "comedy"}
     status, body = call("POST", f"{BASE}/stories", {"brief": brief, "characterIds": [rosso["characterId"]]})
     assert (status, body["error"]["message"], body["error"]["field"]) == (
@@ -517,11 +522,11 @@ def test_a_story_cast_follows_the_car_rules(call: Call, store: db.Store) -> None
         "Add someone to drive it.",
         "characterIds",
     )
-    both = [pip["characterId"], rosso["characterId"], blue["characterId"]]
+    three = [pip["characterId"], rosso["characterId"], blue["characterId"], red["characterId"]]
     assert (
-        call("POST", f"{BASE}/stories", {"brief": brief, "characterIds": both})[1]["error"]["message"]
-        == "Pick one car."
-    )
+        call("POST", f"{BASE}/stories", {"brief": brief, "characterIds": three})[1]["error"]["message"]
+        == "Pick up to 2 vehicles."
+    )  # §45.47: up to 2 vehicles (was one car)
     ok = call("POST", f"{BASE}/stories", {"brief": brief, "characterIds": [pip["characterId"], rosso["characterId"]]})
     assert ok[0] == 201
 

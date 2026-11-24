@@ -173,6 +173,51 @@ def test_reference_rules(call: Call, s3_client: FakeS3) -> None:
     assert "at most 8" in body["error"]["message"]
 
 
+def test_a_vehicles_photos_say_outside_or_inside(call: Call, s3_client: FakeS3, table: FakeTable) -> None:
+    """§45.47: each reference keeps its ``side`` (left out means outside); a vehicle has at most 6 outside and 4
+    inside, a person's photos are all outside."""
+    car = {**character_body("Rosso"), "kind": "car", "expressions": ["neutral"], "look": None}
+    car["voice"] = {"style": "none", "pitch": 1, "noises": [], "sfx": ["engine"]}
+    car["car"] = {
+        "body": "plane", "length": 1, "height": 1, "paint": "#d8352a", "accent": "#f4f1ea", "pattern": "plain",
+        "windows": "clear", "wheels": {"style": "alloy", "rim": "#c9ccd2", "size": 1},
+        "lights": {"front": "round", "rear": "bar"}, "extra": "none",
+        "face": {"eyes": "none", "color": "#1c1842", "mouth": "none"}, "outline": "#1c1842",
+    }  # fmt: skip
+    status, made = call("POST", f"{BASE}/characters", car)
+    assert status == 201, made
+    cid = made["character"]["characterId"]
+    url = f"{BASE}/characters/{cid}/references"
+    photo = {"filename": "seat.png", "contentType": "image/png", "size": 10}
+    status, up = call("POST", url, {**photo, "side": "inside"})
+    assert status == 200
+    key = f"{prefix()}characters/{cid}/refs/{up['assetId']}.png"
+    s3_client.objects[key] = b"\0" * 10
+    status, body = call("POST", f"{url}/{up['assetId']}/complete")
+    assert status == 200
+    assert body["character"]["references"][0]["side"] == "inside"
+    stored = table.raw(pk(), f"CHAR#{cid}")
+    assert stored is not None
+    assert stored["references"][0]["side"] == "inside"
+    assert call("POST", url, {**photo, "side": "top"})[0] == 400
+    for _ in range(3):
+        assert call("POST", url, {**photo, "side": "inside"})[0] == 200
+    status, body = call("POST", url, {**photo, "side": "inside"})
+    assert (status, body["error"]["message"]) == (409, "Pick up to 4 inside photos.")
+    for _ in range(4):  # no side: outside, as before
+        assert call("POST", url, photo)[0] == 200
+    status, body = call("POST", url, {**photo, "side": "outside"})
+    assert status == 409  # 8 in all
+    # A person: no inside photos, and an outside one is stored as before (no side).
+    pid = call("POST", f"{BASE}/characters", character_body("Pip"))[1]["character"]["characterId"]
+    status, body = call("POST", f"{BASE}/characters/{pid}/references", {**photo, "side": "inside"})
+    assert (status, body["error"]["message"]) == (400, "Inside photos are for a vehicle only.")
+    status, up = call("POST", f"{BASE}/characters/{pid}/references", photo)
+    s3_client.objects[f"{prefix()}characters/{pid}/refs/{up['assetId']}.png"] = b"\0" * 10
+    refs = call("POST", f"{BASE}/characters/{pid}/references/{up['assetId']}/complete")[1]["character"]["references"]
+    assert "side" not in refs[0]
+
+
 def test_portrait_needs_ai_pictures_on(call: Call, agentcore: FakeAgentCore, table: FakeTable) -> None:
     cid = call("POST", f"{BASE}/characters", character_body())[1]["character"]["characterId"]
     status, body = call("POST", f"{BASE}/characters/{cid}/portrait")
@@ -353,8 +398,8 @@ def _ts_car_ids(key: str) -> list[str]:
 
 
 def _ts_type(name: str) -> list[str]:
-    """The strings of ``export type {name} = "a" | "b" …;`` in types.ts."""
-    text = (ENGINE / "types.ts").read_text()
+    """The strings of ``export type {name} = "a" | "b" …;`` in types.ts (its ``//`` comment lines left out)."""
+    text = re.sub(r"\n\s*//[^\n]*", "", (ENGINE / "types.ts").read_text())
     m = re.search(r"export type " + name + r' =((?:\s*\|?\s*"[^"]+")+);', text)
     assert m, name
     return re.findall(r'"([^"]+)"', m.group(1))
@@ -371,6 +416,15 @@ def test_the_api_car_vocabulary_mirrors_the_engine() -> None:
     assert list(catalog.CAR_EYES) == _ts_car_ids("eyes")
     assert list(catalog.CAR_MOUTHS) == _ts_car_ids("mouth")
     assert list(catalog.CHARACTER_KINDS) == _ts_type("CharacterKind")
+
+
+def test_the_api_vehicle_families_mirror_the_engine() -> None:
+    """§45.47: ``VehicleType`` and the ``VEHICLE_OF`` table of engine/types.ts."""
+    assert list(catalog.VEHICLE_TYPES) == _ts_type("VehicleType")
+    text = (ENGINE / "types.ts").read_text()
+    m = re.search(r"export const VEHICLE_OF: Record<CarBody, VehicleType> = \{(.*?)\};", text, re.S)
+    assert m
+    assert dict(re.findall(r"(\w+): \"(\w+)\"", m.group(1))) == catalog.VEHICLE_OF
 
 
 # --- "Design with AI" (§45.5): a picture, then a task of the character agent ------------------------------------

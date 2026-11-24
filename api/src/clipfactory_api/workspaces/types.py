@@ -83,6 +83,8 @@ SHAREUSE_SK: Final = "SHAREUSE#"
 SERIES_SK: Final = "SERIES#"
 # §47.10: the owner's Mac helper for this workspace (an exact sort key; Clip Factory's is USER#{u} / MACHELPER).
 MACHELPER_SK: Final = "MACHELPER"
+# §45.47: a saved "Make a new video" form (VDRAFT#{draftId}); not a stream prefix.
+VIDEO_DRAFT_SK: Final = "VDRAFT#"
 ITEM_PREFIXES: Final = (
     IDEA_SK,
     CHAR_SK,
@@ -112,6 +114,7 @@ ITEM_PREFIXES: Final = (
     SHAREUSE_SK,
     SERIES_SK,
     MACHELPER_SK,
+    VIDEO_DRAFT_SK,
 )
 
 # Item `type` values (never "job", "clip", "post", "account", "setup": Lamo Clips readers filter on those).
@@ -144,6 +147,7 @@ TYPE_MAKERSTATUS: Final = "ws_makerstatus"
 TYPE_SHAREUSE: Final = "ws_shareuse"
 TYPE_SERIES: Final = "ws_series"
 TYPE_MACHELPER: Final = "ws_machelper"
+TYPE_VIDEO_DRAFT: Final = "ws_video_draft"
 
 
 def registry_pk(user_id: str) -> str:
