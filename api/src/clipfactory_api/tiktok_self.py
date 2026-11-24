@@ -204,16 +204,16 @@ def window_over(row: Mapping[str, Any], now: datetime) -> bool:
 
 
 def clear_needs_you(store: db.Store, user_id: str) -> None:
-    """The helper item goes back to ``ok`` (without its reason and ``needsYouClipId``) when it was ``needs_you``: the
-    owner answered the stopped post (Try again, or It's on TikTok), so the Mac goes on. Nothing changes when it did not
-    need him."""
+    """The helper item goes back to ``ok`` (without its reason, ``needsYouClipId`` and ``needsYouCode``) when it was
+    ``needs_you``: the owner answered the stopped post (Try again, or It's on TikTok), so the Mac goes on. Nothing
+    changes when it did not need him."""
     with contextlib.suppress(db.ConditionFailed):
         store.update_expr(
             db.user_pk(user_id),
             HELPER_SK,
-            "SET #st = :ok REMOVE #re, #nc",
+            "SET #st = :ok REMOVE #re, #nc, #cd",
             condition="#st = :nu",
-            names={"#st": "state", "#re": "reason", "#nc": "needsYouClipId"},
+            names={"#st": "state", "#re": "reason", "#nc": "needsYouClipId", "#cd": "needsYouCode"},
             values={":ok": "ok", ":nu": "needs_you"},
         )
 

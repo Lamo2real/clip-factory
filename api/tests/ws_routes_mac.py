@@ -14,6 +14,7 @@ EXPECTED: set[tuple[str, str]] = {
     ("POST", f"{JOB}/step"),
     ("POST", f"{JOB}/done"),
     ("POST", f"{JOB}/stopped"),
+    ("POST", f"{JOB}/logged-in"),
     ("POST", f"{JOB}/retry"),
     ("POST", f"{JOB}/posted"),
 }

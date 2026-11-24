@@ -124,6 +124,65 @@ describe("the mock's now rules", () => {
   });
 });
 
+describe("§47.11: the mock's logged-in rules (tiktok_mac.logged_in)", () => {
+  const LOGGED_OUT = "TikTok logged your Mac out. Log in to TikTok again on your Mac.";
+  const NOT_HELD = "Your Mac isn't waiting for a TikTok login on this one.";
+
+  it("resumes a stopped clip of this Mac held only for a login: it waits again, keeping its place and its source", async () => {
+    const { api, sendable } = await start();
+    const c = sendable[0]!;
+    await api.sendToMac([c.clipId]);
+    const since = knobs().post(c.clipId)!.mac!.since;
+    knobs().claim(c.clipId);
+    knobs().stopped(c.clipId, LOGGED_OUT, true, "mock-mac", "login");
+    expect((await api.tiktokMacStatus()).helper).toMatchObject({ state: "needs_you", needsYouClipId: c.clipId, needsYouCode: "login" });
+    const answer = knobs().loggedIn(c.clipId);
+    expect(answer.outcome).toBe("resumed");
+    expect(answer.helper).toMatchObject({ state: "ok" });
+    expect(answer.helper).not.toHaveProperty("needsYouCode");
+    expect(knobs().post(c.clipId)?.mac).toMatchObject({ state: "waiting", since, source: "sent" }); // never an Upload tap's
+    expect(knobs().post(c.clipId)?.mac).not.toHaveProperty("reason");
+    const status = await api.tiktokMacStatus();
+    expect(status.helper).not.toHaveProperty("needsYouClipId");
+    expect(status.queue.find((j) => j.clipId === c.clipId)).toMatchObject({ state: "waiting" });
+    expect(status.queue.find((j) => j.clipId === c.clipId)).not.toHaveProperty("againAt");
+  });
+
+  it("is refused without a login hold on this clip from this Mac; a pressed clip only has its hold end; a gone one is cleared", async () => {
+    const { store, api, sendable } = await start();
+    const [a, b] = sendable;
+    await api.sendToMac([a!.clipId, b!.clipId]);
+    knobs().claim(a!.clipId);
+    knobs().stopped(a!.clipId, "TikTok wants a check (a puzzle or a code). Do it on your Mac, then tap Try again.", true);
+    expect(() => knobs().loggedIn(a!.clipId)).toThrow(NOT_HELD); // a puzzle: never
+    expect((await api.tiktokMacStatus()).helper).not.toHaveProperty("needsYouCode");
+    knobs().stopped(a!.clipId, LOGGED_OUT, true, "mock-mac", "login");
+    expect(() => knobs().loggedIn(b!.clipId)).toThrow(NOT_HELD); // another clip
+    expect(() => knobs().loggedIn(a!.clipId, "mac-mini-2")).toThrow(NOT_HELD); // another Mac
+    // A ping that isn't needs_you, and the owner's Try again, remove the code.
+    knobs().ping("ok");
+    expect(() => knobs().loggedIn(a!.clipId)).toThrow(NOT_HELD);
+    knobs().stopped(a!.clipId, LOGGED_OUT, true, "mock-mac", "login");
+    await api.retryMac(a!.clipId);
+    expect((await api.tiktokMacStatus()).helper).not.toHaveProperty("needsYouCode");
+    // Pressed: the hold ends, the post stays exactly as it is (never twice).
+    knobs().claim(b!.clipId);
+    knobs().step(b!.clipId, "pressing");
+    knobs().stopped(b!.clipId, LOGGED_OUT, true, "mock-mac", "login");
+    const pressed = knobs().post(b!.clipId);
+    expect(knobs().loggedIn(b!.clipId).outcome).toBe("pressed");
+    expect(knobs().post(b!.clipId)).toEqual(pressed);
+    expect((await api.tiktokMacStatus()).helper?.state).toBe("ok");
+    // Gone (no longer a Mac post): only the hold ends.
+    knobs().claim(a!.clipId);
+    knobs().stopped(a!.clipId, LOGGED_OUT, true, "mock-mac", "login");
+    const p = store.posts.find((x) => x.clipId === a!.clipId && x.platform === "tiktok")!;
+    p.status = "posted";
+    expect(knobs().loggedIn(a!.clipId).outcome).toBe("cleared");
+    expect(() => knobs().stopped(b!.clipId, "x", true, "mock-mac", "captcha" as never)).toThrow("code must be login.");
+  });
+});
+
 describe("the http bodies", () => {
   function client() {
     const fetcher = vi.fn(async (url: string) =>

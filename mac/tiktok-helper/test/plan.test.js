@@ -3,11 +3,14 @@ import { test } from "node:test";
 
 import {
   FIND_FOR_MS,
+  LOGIN_CHECK_EVERY_MS,
   applyRequests,
   backlogAt,
   beatTargets,
   claimFields,
   earlierIds,
+  loginCheckDue,
+  loginHold,
   neverTwice,
   nextAction,
   pickWork,
@@ -540,4 +543,46 @@ test("a Clips Funded check-in says when the owner's Start my Mac again was done"
   const body = wsPingBody({ version: "1.2.0", device, action: { action: "idle" }, needsYou: false, setUp: true, resumeDone: "2026-11-23T21:00:00Z" });
   assert.equal(body.resumeDone, "2026-11-23T21:00:00Z");
   assert.equal(wsPingBody({ version: "1.2.0", device, action: { action: "idle" }, needsYou: false, setUp: true }).resumeDone, undefined);
+});
+
+// --- §47.11: a hold that is only a TikTok login ---------------------------------------------------------------------
+
+test("loginHold: only a needs-you whose code is login, with the id of its own lane", () => {
+  const clips = { seenAt: "2026-11-24T08:28:43Z", state: "needs_you", reason: "TikTok logged your Mac out.", needsYouCode: "login", needsYouClipId: "c1" };
+  const ws = { seenAt: "2026-11-24T08:28:43Z", state: "needs_you", setUp: false, needsYouCode: "login", needsYouJobId: "pj-1", needsYouStoryId: "s1" };
+  assert.deepEqual(loginHold(clips, "clips"), { id: "c1" });
+  assert.deepEqual(loginHold(ws, "ws"), { id: "pj-1" });
+  assert.equal(loginHold(clips, "ws"), null); // no job id: never another lane's id
+  assert.equal(loginHold(ws, "clips"), null);
+  // A puzzle or a code, a limit, an older helper's hold (no code), a pause, ok: never.
+  for (const helper of [
+    { ...clips, needsYouCode: undefined, reason: "TikTok wants a check (a puzzle or a code). Do it on your Mac, then tap Try again." },
+    { ...clips, needsYouCode: undefined, reason: "TikTok says it's posting too much right now. The rest wait; Clip Factory tells you." },
+    { ...clips, needsYouCode: undefined },
+    { ...clips, needsYouCode: "captcha" },
+    { ...clips, state: "paused" },
+    { ...clips, state: "ok" },
+    { ...clips, needsYouClipId: undefined },
+    null,
+  ]) {
+    assert.equal(loginHold(helper, "clips"), null, JSON.stringify(helper));
+  }
+});
+
+test("loginCheckDue: no stamp, 5 minutes or more, or a stamp in the future", () => {
+  const at = Date.parse("2026-11-24T09:00:00Z");
+  const stamp = new Date(at).toISOString();
+  assert.equal(LOGIN_CHECK_EVERY_MS, 5 * 60_000);
+  assert.equal(loginCheckDue(undefined, at), true);
+  assert.equal(loginCheckDue("not a time", at), true);
+  assert.equal(loginCheckDue(stamp, at + 4 * 60_000 + 59_000), false); // 4:59
+  assert.equal(loginCheckDue(stamp, at + 5 * 60_000), true); // 5:00
+  assert.equal(loginCheckDue(stamp, new Date(at + 5 * 60_000)), true);
+  assert.equal(loginCheckDue(stamp, at - 60_000), true); // the clock moved back
+});
+
+test("pickWork is the same with a login hold: Clip Factory first, one thing per tick", () => {
+  const lanes = [{ id: "ws:stories", action: { action: "paused" }, loginRequest: null }];
+  assert.deepEqual(pickWork({ clips: { action: "post" }, lanes }), { lane: "clips", what: "post" });
+  assert.deepEqual(pickWork({ clips: { action: "paused" }, lanes }), { lane: "clips", what: "tidy" });
 });

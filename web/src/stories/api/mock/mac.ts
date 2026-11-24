@@ -37,6 +37,7 @@ export const NOT_PRESSED = "Your Mac stopped before it pressed Post, so it isn't
 export const PRESSED = "Your Mac pressed Post but couldn't confirm it. Look on your TikTok: if it's there, tap It's on TikTok.";
 export const UPDATE_FIRST = "Update the helper on your Mac first.";
 export const NOT_PAUSED = "Your Mac isn't paused.";
+export const NOT_LOGIN_HOLD = "Your Mac isn't waiting for a TikTok login on this one.";
 
 const HANDLE = /^@[A-Za-z0-9._]{2,30}$/;
 const LINK = /^https:\/\/(www\.)?tiktok\.com\/@([A-Za-z0-9._]{2,30})\/video\/(\d{8,25})/;
@@ -218,6 +219,7 @@ function clearNeedsYou(store: MockStore, ws: string, jobId: string): void {
   if (h?.needsYouJobId === jobId) {
     delete h.needsYouJobId;
     delete h.needsYouStoryId;
+    delete h.needsYouCode;
     if (h.state === "needs_you") {
       h.state = "ok";
       delete h.reason;
@@ -252,6 +254,7 @@ export function macKnobs(store: MockStore, ws = "stories") {
       if (h.state !== "needs_you") {
         delete h.needsYouJobId;
         delete h.needsYouStoryId;
+        delete h.needsYouCode;
         if (!rest.reason) delete h.reason;
       }
       if (loginDone && h.loginRequest?.at === loginDone) delete h.loginRequest;
@@ -302,18 +305,40 @@ export function macKnobs(store: MockStore, ws = "stories") {
       clearNeedsYou(store, ws, j.publishingJobId);
       return copy(j);
     },
-    /** Stopped: after a press the reason is PRESSED; `needsYou` also sets the workspace's Mac to needs_you. */
-    stopped(reason: string, needsYou = false, id?: string): PublishingJob {
+    /** Stopped: after a press the reason is PRESSED; `needsYou` also sets the workspace's Mac to needs_you, with `code`
+     * "login" when it was only a TikTok login problem (§47.11; a stop without it removes it). */
+    stopped(reason: string, needsYou = false, id?: string, code?: "login"): PublishingJob {
       const j = pick(id, ["working", "waiting"]);
       const m = j.mac!;
       const at = nowIso();
       Object.assign(m, { state: "stopped", stoppedAt: at, reason: m.pressedAt ? PRESSED : reason });
       if (needsYou) {
-        const h = mockOf(store).helpers.get(ws) ?? { seenAt: at, state: "ok", setUp: true, version: MAC_WS_FROM };
-        mockOf(store).helpers.set(ws, { ...h, state: "needs_you", reason, needsYouJobId: j.publishingJobId, needsYouStoryId: j.contentId });
+        const { needsYouCode: _old, ...h } = mockOf(store).helpers.get(ws) ?? { seenAt: at, state: "ok" as const, setUp: true, version: MAC_WS_FROM };
+        mockOf(store).helpers.set(ws, { ...h, state: "needs_you", reason, needsYouJobId: j.publishingJobId, needsYouStoryId: j.contentId, ...(code === "login" ? { needsYouCode: "login" as const } : {}) });
       }
       touch(j);
       return copy(j);
+    },
+    /**
+     * §47.11 (POST …/publishing/{id}/mac/logged-in): the Mac is logged in to this workspace's TikTok again. Only a login
+     * hold on this job, else 409. A stopped job that never pressed Post waits again (`resumed`, keeping its place); a
+     * pressed one is left as it is (`pressed`); anything else, a job that is gone too, only ends the hold (`cleared`).
+     */
+    loggedIn(id: string): { helper: WsMacHelper | null; outcome: "resumed" | "pressed" | "cleared" } {
+      const h = mockOf(store).helpers.get(ws);
+      if (!(h?.state === "needs_you" && h.needsYouCode === "login" && h.needsYouJobId === id)) throw conflict(NOT_LOGIN_HOLD);
+      const j = store.publishing.find((p) => p.publishingJobId === id && p.workspaceId === ws);
+      const m = j?.publishingStatus === "mac" ? j.mac : undefined;
+      let outcome: "resumed" | "pressed" | "cleared" = "cleared";
+      if (j && m?.pressedAt) outcome = "pressed";
+      else if (j && m?.state === "stopped") {
+        const { step: _s, claimedAt: _c, stoppedAt: _t, reason: _r, ...rest } = m;
+        j.mac = { ...rest, state: "waiting" };
+        touch(j);
+        outcome = "resumed";
+      }
+      clearNeedsYou(store, ws, id);
+      return { helper: copy(mockOf(store).helpers.get(ws) ?? null), outcome };
     },
     /** Moves the post's times `ms` into the past (a stuck claim, a find window that is over). */
     age(ms: number, id?: string): PublishingJob {

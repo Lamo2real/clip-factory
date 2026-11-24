@@ -10,6 +10,7 @@ ping's plan keys and the owner's requests. Offline: in-memory items and fakes on
 
 from __future__ import annotations
 
+import json
 from datetime import timedelta
 from types import SimpleNamespace
 from typing import Any
@@ -2130,3 +2131,235 @@ def test_the_server_words_name_only_buttons_the_owner_has() -> None:
         for text in said:
             assert "post it yourself" not in text.lower(), (module.__name__, text)
             assert "i posted it" not in text.lower(), (module.__name__, text)
+
+
+# --- §47.11: a TikTok login hold ends by itself once the Mac is logged in again ----------------------------------
+
+
+def _login_stop(call: Call, clip_id: str, *, code: str | None = "login", pressed: bool = False) -> None:
+    """The Mac claims the clip (and presses Post), then stops for a TikTok login (``code``) and asks for the owner."""
+    assert _claim(call, clip_id)[0] == 200
+    if pressed:
+        assert _step(call, clip_id, "pressing")[0] == 200
+    body: dict[str, Any] = {"device": DEVICE, "reason": "TikTok logged your Mac out.", "needsYou": True}
+    if code is not None:
+        body["code"] = code
+    assert call("POST", f"/v1/clips/{clip_id}/tiktok/mac/stopped", body)[0] == 200
+
+
+def _logged_in(call: Call, clip_id: str, device: str = DEVICE, **extra: Any) -> tuple[int, Any]:
+    return call("POST", f"/v1/clips/{clip_id}/tiktok/mac/logged-in", {"device": device, **extra})
+
+
+def _helper_raw(table: FakeTable) -> dict[str, Any]:
+    found = table.raw(PK, "MACHELPER")
+    assert found is not None
+    return found
+
+
+def test_a_login_stop_stores_its_code_only_with_needs_you(call: Call, store: db.Store, table: FakeTable) -> None:
+    _mac_on(call)
+    clip = _mac_clip(store)
+    _login_stop(call, clip["clipId"])
+    helper = call("GET", "/v1/tiktok/mac")[1]["helper"]
+    assert (helper["state"], helper["needsYouClipId"], helper["needsYouCode"]) == ("needs_you", clip["clipId"], "login")
+    # A later needs-you stop without a code (a puzzle) never inherits "login".
+    other = _mac_clip(store)
+    assert _claim(call, other["clipId"])[0] == 200
+    body = {"device": DEVICE, "reason": "TikTok wants a check.", "needsYou": True}
+    assert call("POST", f"/v1/clips/{other['clipId']}/tiktok/mac/stopped", body)[0] == 200
+    assert "needsYouCode" not in _helper_raw(table)
+    assert "needsYouCode" not in call("GET", "/v1/tiktok/mac")[1]["helper"]
+    # A code without needsYou holds nothing, so it isn't stored.
+    third = _mac_clip(store)
+    assert _claim(call, third["clipId"])[0] == 200
+    body = {"device": DEVICE, "reason": "Slow.", "code": "login"}
+    assert call("POST", f"/v1/clips/{third['clipId']}/tiktok/mac/stopped", body)[0] == 200
+    assert "needsYouCode" not in _helper_raw(table)
+
+
+@pytest.mark.parametrize("code", ["captcha", "", 1, True])
+def test_a_stop_with_another_code_is_refused(call: Call, store: db.Store, code: Any) -> None:
+    _mac_on(call)
+    clip = _mac_clip(store)
+    assert _claim(call, clip["clipId"])[0] == 200
+    body = {"device": DEVICE, "reason": "x", "needsYou": True, "code": code}
+    status, out = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/mac/stopped", body)
+    assert (status, _message(out)) == (400, "code must be login.")
+    assert _raw_post(store, clip["clipId"])["macState"] == "working"
+
+
+def test_the_login_code_goes_with_an_ok_ping_try_again_and_its_on_tiktok(
+    call: Call, store: db.Store, table: FakeTable
+) -> None:
+    _mac_on(call)
+    clip = _mac_clip(store)
+    _login_stop(call, clip["clipId"])
+    assert call("POST", "/v1/tiktok/mac/ping", {"state": "needs_you", "reason": "x", "device": DEVICE})[0] == 200
+    assert _helper_raw(table)["needsYouCode"] == "login"  # a needs_you ping keeps it
+    assert call("POST", "/v1/tiktok/mac/ping", {"state": "paused", "reason": "x", "device": DEVICE})[0] == 200
+    assert "needsYouCode" not in _helper_raw(table)
+    # The owner's Try again, and his It's on TikTok, remove it with the hold.
+    again = _mac_clip(store)
+    _login_stop(call, again["clipId"])
+    assert call("POST", f"/v1/clips/{again['clipId']}/tiktok/mac/retry", {})[0] == 200
+    assert not {"needsYouCode", "needsYouClipId"} & set(_helper_raw(table))
+    marked = _mac_clip(store)
+    _login_stop(call, marked["clipId"])
+    assert call("POST", f"/v1/clips/{marked['clipId']}/tiktok/posted", {"link": LINK})[0] == 200
+    assert not {"needsYouCode", "needsYouClipId"} & set(_helper_raw(table))
+    assert _helper_raw(table)["state"] == "ok"
+
+
+def test_the_helper_shows_its_code_only_while_it_needs_the_owner() -> None:
+    held = {"seenAt": iso(NOW), "state": "needs_you", "needsYouCode": "login", "needsYouClipId": "c1"}
+    assert (tiktok_mac.public_helper(held) or {})["needsYouCode"] == "login"
+    for item in ({**held, "state": "ok"}, {**held, "needsYouCode": "captcha"}, {**held, "needsYouCode": None}):
+        assert "needsYouCode" not in (tiktok_mac.public_helper(item) or {})
+
+
+def test_logged_in_puts_the_stopped_clip_back_in_line_and_ends_the_hold(
+    call: Call, store: db.Store, table: FakeTable, clock: Clock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    from clipfactory_api.routes import tiktok_mac as routes
+
+    logged: list[tuple[str, dict[str, Any]]] = []
+    monkeypatch.setattr(routes, "log", lambda _level, event, **k: logged.append((event, k)))
+    _mac_on(call)
+    # A backlog clip ("sent") re-waited after an earlier press: its never-twice fields must stay as they are.
+    before = {"macPressedBefore": "2026-11-15T10:00:00.000Z", "macAgainAt": "2026-11-15T10:40:00.000Z"}
+    clip = _mac_clip(store, source="sent", **before)
+    _login_stop(call, clip["clipId"])
+    clock.now = NOW + timedelta(minutes=9)
+    status, body = _logged_in(call, clip["clipId"])
+    assert status == 200, body
+    assert body["outcome"] == "resumed"
+    assert body["helper"]["state"] == "ok"
+    assert not {"reason", "needsYouClipId", "needsYouCode"} & set(body["helper"])
+    raw = _raw_post(store, clip["clipId"])
+    assert raw["macState"] == "waiting"
+    assert (raw["macSince"], raw["macSource"], raw["macAttempt"], raw["macDevice"]) == (
+        "2026-11-15T11:00:00.000Z",
+        "sent",  # never an Upload tap's: the owner's pacing stays
+        1,
+        DEVICE,
+    )
+    assert {k: raw[k] for k in before} == before  # never moved
+    assert not {"macStep", "macClaimedAt", "macStoppedAt", "macReason", "macPressedAt"} & set(raw)
+    assert not {"reason", "needsYouClipId", "needsYouCode"} & set(_helper_raw(table))
+    assert ("tiktok_mac.logged_in", {"clipId": clip["clipId"], "outcome": "resumed"}) in logged
+    # The Mac claims it afresh, as after Try again.
+    status, body = _claim(call, clip["clipId"])
+    assert status == 200, body
+    assert (body["job"]["attempt"], body["job"]["pressedBefore"], body["job"]["againAt"]) == (
+        2,
+        before["macPressedBefore"],
+        before["macAgainAt"],
+    )
+    # A second call finds no hold any more.
+    status, body = _logged_in(call, clip["clipId"])
+    assert (status, _message(body)) == (409, tiktok_mac.NOT_LOGIN_HOLD)
+
+
+def test_logged_in_after_post_was_pressed_ends_the_hold_and_leaves_the_clip_for_the_owner(
+    call: Call, store: db.Store, table: FakeTable
+) -> None:
+    _mac_on(call)
+    clip = _mac_clip(store)
+    _login_stop(call, clip["clipId"], pressed=True)
+    post_before = _raw_post(store, clip["clipId"])
+    status, body = _logged_in(call, clip["clipId"])
+    assert (status, body["outcome"], body["helper"]["state"]) == (200, "pressed", "ok")
+    assert _raw_post(store, clip["clipId"]) == post_before  # untouched: never twice
+    assert post_before["macReason"] == tiktok_mac.PRESSED
+    assert _claim(call, clip["clipId"])[0] == 409  # still never claimed again by itself
+
+
+def test_logged_in_on_a_clip_that_is_gone_or_no_longer_a_mac_post_only_ends_the_hold(
+    call: Call, store: db.Store, table: FakeTable
+) -> None:
+    _mac_on(call)
+    gone = _mac_clip(store)
+    _login_stop(call, gone["clipId"])
+    post = _raw_post(store, gone["clipId"])
+    store.delete(str(post["pk"]), str(post["sk"]))
+    store.delete(gone["pk"], gone["sk"])
+    status, body = _logged_in(call, gone["clipId"])
+    assert (status, body["outcome"], body["helper"]["state"]) == (200, "cleared", "ok")
+    elsewhere = _mac_clip(store)
+    _login_stop(call, elsewhere["clipId"])
+    post = _raw_post(store, elsewhere["clipId"])
+    store.update(str(post["pk"]), str(post["sk"]), {"status": "posted"})
+    status, body = _logged_in(call, elsewhere["clipId"])
+    assert (status, body["outcome"]) == (200, "cleared")
+    assert _raw_post(store, elsewhere["clipId"])["status"] == "posted"
+    assert _helper_raw(table)["state"] == "ok"
+
+
+def test_logged_in_is_refused_unless_this_mac_holds_this_clip_for_a_login(
+    call: Call, store: db.Store, table: FakeTable
+) -> None:
+    _mac_on(call)
+    clip = _mac_clip(store)
+    status, body = _logged_in(call, clip["clipId"])  # no helper item at all
+    assert (status, _message(body)) == (409, tiktok_mac.NOT_LOGIN_HOLD)
+    _login_stop(call, clip["clipId"], code=None)  # a hold without the code (a puzzle, or an older helper)
+    assert _logged_in(call, clip["clipId"])[0] == 409
+    other = _mac_clip(store)
+    _login_stop(call, other["clipId"])
+    assert _logged_in(call, clip["clipId"])[0] == 409  # the hold is on another clip
+    assert _logged_in(call, other["clipId"], device="mac-mini-2")[0] == 409  # another Mac
+    post = _raw_post(store, other["clipId"])
+    store.update(str(post["pk"]), str(post["sk"]), {"macDevice": "mac-mini-2"})
+    before = json.dumps(table.all(), sort_keys=True, default=str)
+    status, body = _logged_in(call, other["clipId"])  # the post is another Mac's
+    assert (status, _message(body)) == (409, tiktok_mac.NOT_LOGIN_HOLD)
+    assert json.dumps(table.all(), sort_keys=True, default=str) == before
+    assert _helper_raw(table)["state"] == "needs_you"
+
+
+@pytest.mark.parametrize("body", [{"device": DEVICE, "now": True}, {}, {"device": 5}, {"device": "x" * 101}])
+def test_logged_in_takes_only_a_device(call: Call, store: db.Store, table: FakeTable, body: dict[str, Any]) -> None:
+    _mac_on(call)
+    clip = _mac_clip(store)
+    _login_stop(call, clip["clipId"])
+    status, _out = call("POST", f"/v1/clips/{clip['clipId']}/tiktok/mac/logged-in", body)
+    assert status == 400
+    assert _helper_raw(table)["state"] == "needs_you"
+
+
+def test_logged_in_loses_to_a_change_of_the_hold_or_the_post(
+    call: Call, store: db.Store, table: FakeTable, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    _mac_on(call)
+    clip = _mac_clip(store)
+    _login_stop(call, clip["clipId"])
+    stale_helper = _helper_raw(table)
+    # The owner answered meanwhile (his Try again cleared the hold): the write needs the hold as read.
+    assert call("POST", f"/v1/clips/{clip['clipId']}/tiktok/mac/retry", {})[0] == 200
+    monkeypatch.setattr(tiktok_mac, "helper_item", lambda *_a: stale_helper)
+    before = json.dumps(table.all(), sort_keys=True, default=str)
+    status, body = _logged_in(call, clip["clipId"])
+    assert (status, _message(body)) == (409, tiktok_mac.CHANGED)
+    assert json.dumps(table.all(), sort_keys=True, default=str) == before
+    monkeypatch.undo()
+    # The post moved meanwhile (claimed again by another try): nothing is written, the hold stays.
+    again = _mac_clip(store)
+    _login_stop(call, again["clipId"])
+    stale_post = _raw_post(store, again["clipId"])
+    store.update(str(stale_post["pk"]), str(stale_post["sk"]), {"macState": "working"})
+    monkeypatch.setattr(tiktok_mac, "posts_for_clip", lambda *_a, **_k: [stale_post])
+    status, body = _logged_in(call, again["clipId"])
+    assert (status, _message(body)) == (409, tiktok_mac.CHANGED)
+    monkeypatch.undo()
+    assert _helper_raw(table)["state"] == "needs_you"
+    assert _raw_post(store, again["clipId"])["macState"] == "working"
+
+
+def test_the_hold_codes_stay_one_line_for_the_helper_pin() -> None:
+    import re
+    from pathlib import Path
+
+    text = Path(tiktok_mac.__file__).read_text(encoding="utf-8")
+    assert re.findall(r"^HOLD_CODES = \(([^)]*)\)$", text, re.M) == ['"login",']
+    assert tiktok_mac.HOLD_CODES == ("login",)

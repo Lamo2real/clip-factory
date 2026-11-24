@@ -46,6 +46,8 @@ function nowKey(now: unknown): boolean {
 export const MAC_STALE_CLAIM_MS = 15 * 60_000;
 export const MAC_QUEUE_MAX = 50;
 const ANOTHER_TRY = "Another try already has this clip.";
+/** tiktok_mac.NOT_LOGIN_HOLD (§47.11). */
+const MAC_NOT_LOGIN_HOLD = "Your Mac isn't waiting for a TikTok login on this one.";
 const MAC_OFF = "Your Mac posting is off. Turn it on in Settings › Posting › Your Mac posts TikTok.";
 const STEPS: readonly MacStep[] = ["video", "opening", "uploading", "settings", "pressing", "finding"];
 
@@ -86,8 +88,15 @@ export interface TikTokMacControls {
   /** The job's last beat was `agoMs` ago (5 minutes or more: stuck). */
   beat(clipId: string, agoMs?: number): MacJob;
   done(clipId: string, link?: string, device?: string): { clip: Clip; posts: Post[] };
-  /** `needsYou`: the Mac needs him (a login, a code), and says which clip it stopped on. */
-  stopped(clipId: string, reason: string, needsYou?: boolean, device?: string): MacJob;
+  /** `needsYou`: the Mac needs him (a login, a code), and says which clip it stopped on; `code` "login" (§47.11): only
+   * a TikTok login problem, so the hold may end by itself. */
+  stopped(clipId: string, reason: string, needsYou?: boolean, device?: string, code?: "login"): MacJob;
+  /**
+   * §47.11 (POST …/tiktok/mac/logged-in): the Mac is logged in to the right TikTok again. Only this device's login hold
+   * on this clip, else 409. A stopped post that never pressed Post waits again (`resumed`, keeping its place and
+   * source); a pressed one is left as it is (`pressed`); anything else only ends the hold (`cleared`).
+   */
+  loggedIn(clipId: string, device?: string): { helper: MacHelper | null; outcome: "resumed" | "pressed" | "cleared" };
   queue(): MacJob[];
   /** The clip's TikTok post, as the server holds it. */
   post(clipId: string): Post | null;
@@ -116,6 +125,7 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
   let loginRequest: MacHelper["loginRequest"];
   // The rest of the helper item (D4/D5): the clip it stopped on, its ping's extras, the owner's two requests.
   let needsYouClipId: string | undefined;
+  let needsYouCode: "login" | undefined;
   let extras: Pick<MacHelper, "backlogAt" | "holdBefore" | "backfill"> = {};
   let resumeRequestAt: string | undefined;
   let letGoRequestAt: string | undefined;
@@ -233,6 +243,7 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
       ...(login ? { login } : {}),
       ...(loginRequest ? { loginRequest } : {}),
       ...(needsYouClipId && helper.state === "needs_you" ? { needsYouClipId } : {}),
+      ...(needsYouCode && helper.state === "needs_you" ? { needsYouCode } : {}),
       ...extras,
       ...(resumeRequestAt ? { resumeRequest: { at: resumeRequestAt } } : {}),
       ...(letGoRequestAt ? { letGoRequest: { at: letGoRequestAt } } : {}),
@@ -248,7 +259,10 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
     ping(state = "ok", reason, device = "mock-mac", extra = {}) {
       helper = { seenAt: iso(deps.now()), state, ...(reason ? { reason: reason.trim().slice(0, 200) } : {}), version: "1.1.0", device };
       // Absent keys go; only a needs-you ping keeps the clip it stopped on; a done request goes only while it is the same.
-      if (state !== "needs_you") needsYouClipId = undefined;
+      if (state !== "needs_you") {
+        needsYouClipId = undefined;
+        needsYouCode = undefined;
+      }
       extras = {
         ...(extra.backlogAt ? { backlogAt: extra.backlogAt } : {}),
         ...(extra.holdBefore ? { holdBefore: extra.holdBefore } : {}),
@@ -343,7 +357,8 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
       settle(c, true);
       return answer(c);
     },
-    stopped(clipId, reason, needsYou = false, device = "mock-mac") {
+    stopped(clipId, reason, needsYou = false, device = "mock-mac", code) {
+      if (code !== undefined && code !== "login") throw bad("code must be login.");
       const p = macOf(clipId);
       fromDevice(p, device, ["working", "stopped"]);
       const said = reason.trim().slice(0, 200);
@@ -351,9 +366,29 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
       if (needsYou) {
         helper = { seenAt: iso(deps.now()), state: "needs_you", reason: said, ...(helper?.version ? { version: helper.version } : {}), device };
         needsYouClipId = clipId;
+        needsYouCode = code; // a stop without one removes it
       }
       deps.publishPost(p);
       return job(p);
+    },
+    loggedIn(clipId, device = "mock-mac") {
+      if (!(helper?.state === "needs_you" && needsYouCode === "login" && needsYouClipId === clipId && helper.device === device)) throw conflict(MAC_NOT_LOGIN_HOLD);
+      const p = tiktokOf(clipId);
+      let outcome: "resumed" | "pressed" | "cleared" = "cleared";
+      if (p && p.status === "mac" && p.mac) {
+        const claim = claims.get(p.postId);
+        if (claim && claim.device !== device) throw conflict(MAC_NOT_LOGIN_HOLD);
+        if (p.mac.pressedAt) outcome = "pressed";
+        else if (p.mac.state === "stopped" && claim?.device === device) {
+          // As Try again, but never an Upload tap's (its source stays) and never a new againAt.
+          const { step: _s, claimedAt: _c, stoppedAt: _t, reason: _r, ...rest } = p.mac;
+          p.mac = { ...rest, state: "waiting" };
+          outcome = "resumed";
+          deps.publishPost(p);
+        }
+      }
+      clearNeedsYou();
+      return { helper: structuredClone(publicHelper()), outcome };
     },
     queue,
     post(clipId) {
@@ -522,6 +557,7 @@ export function tiktokMacMock(deps: TikTokMacDeps) {
   function clearNeedsYou() {
     if (helper?.state === "needs_you") helper = { seenAt: helper.seenAt, state: "ok", device: helper.device, ...(helper.version ? { version: helper.version } : {}) };
     needsYouClipId = undefined;
+    needsYouCode = undefined;
   }
 
   /**

@@ -43,7 +43,7 @@ test("this helper's version is one Clips Funded hands its TikTok jobs to (MAC_WS
   const [mine, from] = [parts(VERSION), parts(found[1])];
   const cmp = mine.map((n, i) => n - (from[i] ?? 0)).find((d) => d !== 0) ?? 0;
   assert.ok(cmp >= 0, `VERSION ${VERSION} is at least ${found[1]}`);
-  assert.equal(VERSION, "1.2.1");
+  assert.equal(VERSION, "1.2.2");
 });
 
 test("package.json and its lockfile say the same version as the helper", () => {
@@ -52,4 +52,17 @@ test("package.json and its lockfile say the same version as the helper", () => {
   assert.equal(pkg.version, VERSION);
   assert.equal(lock.version, VERSION);
   assert.equal(lock.packages[""].version, VERSION);
+});
+
+test("§47.11: the stop's code is one both servers know (HOLD_CODES, read from both API files)", () => {
+  const CLIPS = new URL("../../../api/src/clipfactory_api/tiktok_mac.py", import.meta.url);
+  for (const [file, pattern] of [
+    [CLIPS, /^HOLD_CODES = \(([^)]*)\)$/m],
+    [WS_SERVER, /^HOLD_CODES: Final = \(([^)]*)\)$/m],
+  ]) {
+    const found = fs.readFileSync(file, "utf8").match(pattern);
+    assert.ok(found, `HOLD_CODES is in ${file.pathname}`);
+    const codes = [...found[1].matchAll(/"([a-z_]+)"/g)].map((m) => m[1]);
+    assert.deepEqual(codes, ["login"]);
+  }
 });

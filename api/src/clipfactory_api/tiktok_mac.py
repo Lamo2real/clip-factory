@@ -23,8 +23,10 @@ Items: the post's internal ``mac*`` fields (``tiktok_self.MAC_FIELDS``; public a
 ``tiktokForMac`` mark (a send made its post, ``tiktok_self.MAC_MARK``), and the helper item ``USER#{id}`` /
 ``MACHELPER`` (``seenAt``, ``state``, ``reason``, ``version``, ``device``, ``login``, ``backlogAt``, ``holdBefore``,
 ``backfill``), written by its ping, plus what the server writes on it: ``needsYouClipId`` (the stop that needs the
-owner) and the owner's requests (``loginRequest*``, ``resumeRequestAt``, ``letGoRequestAt``), each removed when the
-helper says it did that one. No table, index or infrastructure change: every route is under ``ANY /v1/{proxy+}``.
+owner), ``needsYouCode`` (why, when the helper said: ``login``, a TikTok login problem and nothing else, §47.11) and
+the owner's requests (``loginRequest*``, ``resumeRequestAt``, ``letGoRequestAt``), each removed when the helper says
+it did that one. A login hold ends when the helper sees its Chrome logged in to the right TikTok again
+(``logged_in``, §47.11). No table, index or infrastructure change: every route is under ``ANY /v1/{proxy+}``.
 """
 
 from __future__ import annotations
@@ -95,6 +97,11 @@ SEND_TEST = "This was a Private test, so it stays off TikTok."
 SEND_HAS_IT = "Your Mac already has this clip."
 SEND_YOURS = "You already posted this one on TikTok."
 CHANGED = "This clip just changed. Try again."
+# §47.11: why a needs-you stop needs the owner, when the helper says (``code``): only a TikTok login problem (logged
+# out, a login needed, the saved login refused). Only such a hold may end by itself once the Mac is logged in again.
+HOLD_CODES = ("login",)
+BAD_CODE = "code must be login."
+NOT_LOGIN_HOLD = "Your Mac isn't waiting for a TikTok login on this one."
 
 # A Clip Factory TikTok post's fields that a hand-over to the Mac replaces (kept in ``beforeMac`` for Take it back).
 HANDED_OVER = (*tiktok_self.REPLACED, "postOptions", "publishHandle")
@@ -202,13 +209,16 @@ def _attempt(post: Mapping[str, Any]) -> int:
 
 def public_helper(item: Mapping[str, Any] | None) -> Item | None:
     """``MacHelper``: when the helper last checked in and how it is (never its device id), the clip a needs-you stop
-    is on, what its plan says (``backlogAt``, ``holdBefore``, ``backfill``) and the owner's pending requests."""
+    is on and why (``needsYouCode``, only while it needs him), what its plan says (``backlogAt``, ``holdBefore``,
+    ``backfill``) and the owner's pending requests."""
     if not item or not item.get("seenAt"):
         return None
     out: Item = {"seenAt": str(item["seenAt"]), "state": str(item.get("state") or "ok")}
     for key in ("reason", "version", "needsYouClipId", "backlogAt", "holdBefore"):
         if item.get(key):
             out[key] = str(item[key])
+    if out["state"] == "needs_you" and item.get("needsYouCode") in HOLD_CODES:
+        out["needsYouCode"] = str(item["needsYouCode"])
     if item.get("backfill") is True:
         out["backfill"] = True
     if item.get("login") in LOGIN_STATES:
@@ -330,7 +340,8 @@ def ping(
     whether a TikTok login is kept in the Mac's Keychain (``login``: ``saved`` | ``none``, §47.8), and what its plan
     says (§47.3): when the first backlog clip goes (``backlog_at``), the auto-posting clips it holds (made before
     ``hold_before``) and a backfill (``backfill``). Each of those three is removed by a ping without it, and
-    ``needsYouClipId`` by a ping whose state is not ``needs_you``. The owner's pending requests (login, resume, let go)
+    ``needsYouClipId`` and ``needsYouCode`` by a ping whose state is not ``needs_you`` (a ``needs_you`` ping keeps
+    both). The owner's pending requests (login, resume, let go)
     stay until the helper says it handled that one (``login_done``, ``resume_done``, ``let_go_done`` = its ``at``): a
     newer request meanwhile stays."""
     current = helper_item(store, user_id)
@@ -350,7 +361,7 @@ def ping(
         if not reason:
             gone.append("reason")
         if state != "needs_you":
-            gone.append("needsYouClipId")
+            gone += ["needsYouClipId", "needsYouCode"]
         store.update(db.user_pk(user_id), HELPER_SK, fields, remove=[k for k in gone if k in current])
     for done, names in (
         (login_done, ("loginRequestAt", "loginRequestAction")),
@@ -522,10 +533,14 @@ def stopped(
     *,
     needs_you: bool = False,
     attempt: int | None = None,
+    code: str | None = None,
 ) -> Item:
     """The helper stopped instead of guessing. The post says why (at most 200 characters); once it pressed Post the
     reason is always ``PRESSED`` (only the owner knows whether it is on TikTok). ``needs_you`` also puts the helper
-    item in ``needs_you`` with that reason and this clip (``needsYouClipId``: Settings and the rows link to it)."""
+    item in ``needs_you`` with that reason and this clip (``needsYouClipId``: Settings and the rows link to it), and
+    why in ``needsYouCode`` (§47.11: ``code``, one of ``HOLD_CODES``) in the same write; a needs-you stop without a
+    code removes it, so a puzzle after a login never reads as a login. A code without ``needs_you`` holds nothing, so
+    it isn't stored."""
     row, _rows = mac_row(store, clip)
     _own(row, device, ("working", "stopped"), attempt)
     said = _reason(reason)
@@ -545,10 +560,25 @@ def stopped(
     except db.ConditionFailed:
         raise Refused(MAC_TAKEN) from None
     if needs_you:
+        values: Item = {
+            ":st": "needs_you",
+            ":re": said,
+            ":se": iso(now),
+            ":de": device,
+            ":ty": "machelper",
+            ":us": str(clip["userId"]),
+            ":nc": str(clip["clipId"]),
+        }
+        sets = "SET #st = :st, #re = :re, #se = :se, #de = :de, #ty = :ty, #us = :us, #nc = :nc"
+        if code in HOLD_CODES:
+            values[":cd"] = code
+            update = sets + ", #cd = :cd"
+        else:
+            update = sets + " REMOVE #cd"
         store.update_expr(
             db.user_pk(str(clip["userId"])),
             HELPER_SK,
-            "SET #st = :st, #re = :re, #se = :se, #de = :de, #ty = :ty, #us = :us, #nc = :nc",
+            update,
             names={
                 "#st": "state",
                 "#re": "reason",
@@ -557,18 +587,82 @@ def stopped(
                 "#ty": "type",
                 "#us": "userId",
                 "#nc": "needsYouClipId",
+                "#cd": "needsYouCode",
             },
-            values={
-                ":st": "needs_you",
-                ":re": said,
-                ":se": iso(now),
-                ":de": device,
-                ":ty": "machelper",
-                ":us": str(clip["userId"]),
-                ":nc": str(clip["clipId"]),
-            },
+            values=values,
         )
     return written
+
+
+def _login_hold(item: Mapping[str, Any] | None, held_id: str, device: str, key: str = "needsYouClipId") -> bool:
+    """§47.11: the helper item holds for a TikTok login (``needsYouCode = login``) on this clip, from this Mac."""
+    return bool(
+        item
+        and item.get("state") == "needs_you"
+        and item.get("needsYouCode") == "login"
+        and item.get(key) == held_id
+        and item.get("device") == device
+    )
+
+
+def logged_in(store: db.Store, user_id: str, clip_id: str, device: str) -> tuple[Item | None, str]:
+    """The helper saw its Chrome logged in to Clip Factory's TikTok again while it was held for a TikTok login on
+    this clip (§47.11): the hold ends by itself, as after the owner's Try again, and the clip waits for the Mac again.
+    Only the device that stopped it, only a login hold (``needsYouCode = login``) on this clip, else ``Refused``
+    (``NOT_LOGIN_HOLD``) and nothing is written. Returns the helper item and the outcome:
+
+    * ``resumed``: a stopped Mac post of this device that never pressed Post waits again. It keeps its place
+      (``since``), its ``source`` (an auto-posting clip still waits while auto-posting is off), its ``attempt``,
+      ``macDevice``, ``macPressedBefore`` and ``macAgainAt``; ``macAgainAt`` and ``macSource`` are never written here.
+    * ``pressed``: Post was pressed (``macPressedAt``): the post stays exactly as it is (never twice: only the owner
+      knows whether it is on TikTok); only the hold ends.
+    * ``cleared``: anything else (the clip gone, no longer a Mac post, waiting or working): only the hold ends.
+
+    The re-wait and the clear are one transaction, conditional on both as read: a change meanwhile is ``CHANGED``."""
+    pk = db.user_pk(user_id)
+    item = helper_item(store, user_id)
+    if item is None or not _login_hold(item, clip_id, device):
+        raise Refused(NOT_LOGIN_HOLD)
+    rows = posts_for_clip(store, user_id, clip_id, consistent=True)
+    row = tiktok_self.tiktok_row(rows)
+    outcome = "cleared"
+    updates: list[Item] = []
+    if row is not None and row.get("status") == MAC_STATUS:
+        if row.get("macDevice") and row.get("macDevice") != device:
+            raise Refused(NOT_LOGIN_HOLD)
+        if row.get("macPressedAt"):
+            outcome = "pressed"
+        elif row.get("macState") == "stopped" and row.get("macDevice") == device:
+            outcome = "resumed"
+            updates.append(
+                db.update_request(
+                    str(row["pk"]),
+                    str(row["sk"]),
+                    {"macState": "waiting"},
+                    remove=[k for k in ("macStep", "macClaimedAt", "macStoppedAt", "macReason") if k in row],
+                    expect_in={"status": [MAC_STATUS], "macState": ["stopped"], "macDevice": [device]},
+                    expect_absent=["macPressedAt"],
+                )
+            )
+    updates.append(
+        db.update_request(
+            pk,
+            HELPER_SK,
+            {"state": "ok"},
+            remove=[k for k in ("reason", "needsYouClipId", "needsYouCode") if k in item],
+            expect_in={
+                "state": ["needs_you"],
+                "needsYouCode": ["login"],
+                "needsYouClipId": [clip_id],
+                "device": [device],
+            },
+        )
+    )
+    try:
+        store.transact(updates=updates)
+    except db.ConditionFailed:
+        raise Refused(CHANGED) from None
+    return helper_item(store, user_id), outcome
 
 
 # --- the owner's routes (§47.2) -----------------------------------------------------------------------------------
