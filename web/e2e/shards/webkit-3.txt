@@ -1,49 +1,55 @@
-# webkit shard 3 of 5: about 22.2 core, 22.2 style, 22.2 full worker-minutes (47 lines).
+# webkit shard 3 of 5: about 22.7 core, 22.7 style, 22.7 full worker-minutes (53 lines).
 # Written by: node scripts/e2e-shards.mjs build (from timings.tsv). The last shard runs every test in no list.
-[webkit-phone] › ask-assistant.spec.ts › Ask as a full assistant › paste: a picture, long text as a TXT file, short text as words
-[webkit-phone] › ask-assistant.spec.ts › Ask assistant at phone-375 › screenshots in dark
-[webkit-phone] › ask-assistant.spec.ts › Ask assistant at phone-390 › screenshots in dark
+[webkit-phone] › ask-assistant.spec.ts › Ask as a full assistant › an open question with no way to reach Ask gets no canned topic
+[webkit-phone] › ask-assistant.spec.ts › Ask as a full assistant › falls back to the plain answer when the assistant is off
+[webkit-phone] › ask-assistant.spec.ts › Ask as a full assistant › streams an app answer: status, words before done, sources, then Open buttons with the spotlight
+[webkit-phone] › getpaid.spec.ts › axe AA contrast, dark, owner: phone 375x812
 [webkit-phone] › getpaid.spec.ts › kid-proof Get paid › Sent to your bank's Allow payment reading: every tap goes to the step, and ?back= stays
 [webkit-phone] › getpaid.spec.ts › phone › Allow payment reading's results say their sentences, word for word
-[webkit-phone] › getpaid.spec.ts › phone › Facebook: 4 taps, then 2 after Instagram (one Meta tick); X: 5 taps, Premium never the vermilion
-[webkit-phone] › getpaid.spec.ts › phone › TikTok and Instagram: 4 taps each, the Opens open the apps
-[webkit-phone] › help-pictures.spec.ts › Ask pictures at 1440x900 › take away leaves 3 and moves the focus on
+[webkit-phone] › help-pictures.spec.ts › Ask pictures at 1440x900 › Start over empties the tray and the chat
+[webkit-phone] › help-pictures.spec.ts › Ask pictures at 1440x900 › Tab stays inside the picture view
+[webkit-phone] › help-pictures.spec.ts › Ask pictures at 1440x900 › a note floats: the field and the tray do not move when it comes and goes
+[webkit-phone] › help-pictures.spec.ts › Ask pictures at 1440x900 › a question that could not go gives its pictures and words back
+[webkit-phone] › help-pictures.spec.ts › Ask pictures at 1440x900 › no edges, no side scroll, and every picture control is 44 px or more
+[webkit-phone] › help-pictures.spec.ts › Ask pictures at 1440x900 › send with no words: small clean JPEGs reach the API, the bubble shows them, the follow-up carries seen
+[webkit-phone] › help-pictures.spec.ts › Ask pictures at 1440x900 › the viewer opens bigger, steps with the arrows and closes with Escape
 [webkit-phone] › help-pictures.spec.ts › Ask pictures at 390x844 › a picture that was not read says so
-[webkit-phone] › help-pictures.spec.ts › Ask pictures at 390x844 › attach, paste and drop each add a picture; the drop layer comes and goes
-[webkit-phone] › help-pictures.spec.ts › Ask pictures at 390x844 › five pictures: four tiles and a note; a text file is not a picture
-[webkit-phone] › help-pictures.spec.ts › Ask pictures at 390x844 › the viewer opens bigger, steps with the arrows and closes with Escape
-[webkit] › ask-assistant.spec.ts › Ask as a full assistant › a general question: a code block with Copy, and a table
-[webkit] › ask-assistant.spec.ts › Ask as a full assistant › falls back to the plain answer when the assistant is off
-[webkit] › ask-assistant.spec.ts › Ask as a full assistant › files dropped on the launcher open Ask with them in the tray
-[webkit] › ask-assistant.spec.ts › Ask as a full assistant › the setup question uses his setup and a web source; links go live only when done
-[webkit] › ask-assistant.spec.ts › Ask assistant at desktop-1920 › thumb zone, no overflow, no edges
+[webkit-phone] › help-pictures.spec.ts › Ask pictures at 390x844 › the take-away button's focus glow is not cut off
+[webkit] › ask-assistant.spec.ts › Ask as a full assistant › an open question with no way to reach Ask gets no canned topic
+[webkit] › ask-assistant.spec.ts › Ask assistant at desktop-1920 › screenshots in light
+[webkit] › ask-assistant.spec.ts › Ask assistant at phone-390 › screenshots in light
+[webkit] › ask-assistant.spec.ts › Ask assistant at phone-390 › thumb zone, no overflow, no edges
+[webkit] › ask-assistant.spec.ts › Ask assistant at tablet-768 › thumb zone, no overflow, no edges
 [webkit] › ask-markup.spec.ts › the markup editor at desktop-1920 › fits, and Save and Undo sit in the thumb zone on phones and tablets
-[webkit] › ask-markup.spec.ts › the markup editor at phone-375 › fits, and Save and Undo sit in the thumb zone on phones and tablets
-[webkit] › drop-video.spec.ts › a .mov from Finder with no type is picked and uploads as a video
-[webkit] › drop-video.spec.ts › a drag that ends or leaves the window without the card hearing it still clears the highlight
-[webkit] › drop-video.spec.ts › a file that is not a video says so in plain words
+[webkit] › drop-video.spec.ts › a dropped thing with no type and no video name (like a folder) is not a video
+[webkit] › drop-video.spec.ts › a link dragged from a browser switches to Paste a link and is checked
+[webkit] › drop-video.spec.ts › dragged text that is a link shows the link highlight away from the text boxes
 [webkit] › drop-video.spec.ts › drop highlight 1000x650 light › screenshot drop highlight 1000x650 light
-[webkit] › drop-video.spec.ts › drop highlight 390x844 dark › screenshot drop highlight 390x844 dark
-[webkit] › drop-video.spec.ts › while a job is starting, a drag says so and the drop is refused with plain words
-[webkit] › getpaid.spec.ts › axe AA contrast, dark, hold: phone 375x812
+[webkit] › drop-video.spec.ts › drop highlight 1440x900 light › screenshot drop highlight 1440x900 light
+[webkit] › drop-video.spec.ts › drop highlight 768x1024 light › screenshot drop highlight 768x1024 light
+[webkit] › drop-video.spec.ts › several files: the first video is taken and the toast says one per job
+[webkit] › getpaid.spec.ts › axe AA contrast, dark, hold: desktop 1440x900
+[webkit] › getpaid.spec.ts › axe AA contrast, dark, owner: desktop 1440x900
 [webkit] › getpaid.spec.ts › axe AA contrast, dark, owner: phone 375x812
 [webkit] › getpaid.spec.ts › desktop › TikTok and Instagram: 2 taps each, no Open on a computer
+[webkit] › getpaid.spec.ts › desktop › YouTube: Clip Factory's taps are 15 (Partner Program, the reading step, five payout steps)
+[webkit] › getpaid.spec.ts › desktop › computer, first visit: the first step not done is brought into view, so the one vermilion is on screen
+[webkit] › getpaid.spec.ts › desktop › the list, the place pages and Money's card: no sideways scroll, no edges, big targets, arrow cursor, one vermilion at most
 [webkit] › getpaid.spec.ts › desktop › the ways in: 4 taps from Settings, 2 from Money, 1 from a setup page
-[webkit] › getpaid.spec.ts › kid-proof Get paid › Sent to your bank's Allow payment reading: every tap goes to the step, and ?back= stays
-[webkit] › getpaid.spec.ts › no sideways scroll at 1024 px on every Get paid screen (unread) desktop
+[webkit] › getpaid.spec.ts › kid-proof Get paid › Do you see Finance: after the answer and after Change my answer, the focus stays on the question
+[webkit] › getpaid.spec.ts › no sideways scroll at 320 px on every Get paid screen (hold)
 [webkit] › getpaid.spec.ts › no sideways scroll at 390 px on every Get paid screen (hold)
-[webkit] › getpaid.spec.ts › no sideways scroll at 390 px on every Get paid screen (unread)
+[webkit] › getpaid.spec.ts › no sideways scroll at 390 px on every Get paid screen (owner)
+[webkit] › getpaid.spec.ts › no sideways scroll at 768 px on every Get paid screen (unread)
 [webkit] › getpaid.spec.ts › phone › Allow payment reading's results say their sentences, word for word
-[webkit] › getpaid.spec.ts › phone › the list, the place pages and Money's card: no sideways scroll, no edges, big targets, arrow cursor, one vermilion at most
-[webkit] › help-pictures.spec.ts › Ask pictures at 1440x900 › Tab stays inside the picture view
-[webkit] › help-pictures.spec.ts › Ask pictures at 1440x900 › a question that could not go gives its pictures and words back
-[webkit] › help-pictures.spec.ts › Ask pictures at 1440x900 › reduced motion: pictures only fade
-[webkit] › help-pictures.spec.ts › Ask pictures at 1440x900 › the take-away button's focus glow is not cut off
+[webkit] › getpaid.spec.ts › phone › Facebook: 4 taps, then 2 after Instagram (one Meta tick); X: 5 taps, Premium never the vermilion
+[webkit] › getpaid.spec.ts › phone › phone: the next step's main button sits at the bottom right from page open, and Ask is never over it
+[webkit] › getpaid.spec.ts › the server's Finance link brings the question into view at 390x844
+[webkit] › help-pictures.spec.ts › Ask pictures at 1440x900 › the viewer opens bigger, steps with the arrows and closes with Escape
 [webkit] › help-pictures.spec.ts › Ask pictures at 390x844 › Start over empties the tray and the chat
-[webkit] › help-pictures.spec.ts › Ask pictures at 390x844 › a picture that was not read says so
-[webkit] › help-pictures.spec.ts › Ask pictures at 390x844 › pictures off: no picture button, and a pasted picture gets a note
-[webkit] › help-pictures.spec.ts › Ask pictures at 390x844 › the take-away button's focus glow is not cut off
-[webkit] › help-pictures.spec.ts › screenshots for the owner, phone
-[webkit] › page-still.spec.ts › a page change keeps the window still › a wide browser window (1440 x 900)
+[webkit] › help-pictures.spec.ts › Ask pictures at 390x844 › Tab stays inside the picture view
 [webkit] › page-still.spec.ts › a page change keeps the window still › the macOS desktop window over light glass (1000 x 650)
-[webkit] › top-line.spec.ts › a browser at 820 x 1180: one top line
+[webkit] › top-line.spec.ts › a browser at 1000 x 650: one top line
+[webkit] › top-line.spec.ts › a browser at 390 x 844: one top line
+[webkit] › top-line.spec.ts › the macOS desktop window at 1000 x 650: one top line below the traffic lights
+[webkit] › top-line.spec.ts › the macOS desktop window: a control scrolled up just under the title bar still takes its click
