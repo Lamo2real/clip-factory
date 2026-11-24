@@ -103,6 +103,8 @@ export function applyLook(look: Look, root: HTMLElement = document.documentEleme
   // The phone's status bar runs over the backdrop: its shade under the clock, only as strong as the white clock needs
   // over the look's top edge (a picture's own pixels there once they are read), and none over the dark looks.
   const scrim = statusScrim(statusBarUnder(look, pictureTop));
+  // The number the shade is worked out from: no style sheet reads it (test/edgeToEdge.test.ts forbids that), it is
+  // kept on the page for the checks that read how strong the shade is (e2e/phone-edge-to-edge.spec.ts).
   root.style.setProperty("--status-scrim", String(scrim));
   root.style.setProperty("--status-shade", statusShade(scrim));
 }

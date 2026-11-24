@@ -16,8 +16,9 @@ import { sounds } from "../lib/sounds.ts";
 import { GlassFilter } from "../components/Backdrop.tsx";
 import { ClipsBackdrop } from "./ClipsBackdrop.tsx";
 import { Sidebar, TabBar } from "../components/Nav.tsx";
-import { ToastProvider, ToastScope } from "../components/Toasts.tsx";
+import { ToastProvider, ToastScope, useToast } from "../components/Toasts.tsx";
 import { UpdateBar } from "../components/UpdateBar.tsx";
+import { useOldStatusBarHint } from "./statusBar.ts";
 import { GetAppPanel } from "../components/GetApp.tsx";
 import { LiveDot } from "../components/LiveDot.tsx";
 import { ClipMark } from "../components/ClipMark.tsx";
@@ -192,8 +193,19 @@ export function App() {
         </SessionProvider>
       )}
       {!bankDone && (boot.state === "ready" || boot.state === "signed_out") ? <UpdateBar /> : null}
+      {!bankDone && boot.state === "ready" ? <OldStatusBarHint /> : null}
     </ToastProvider>
   );
+}
+
+/**
+ * Once on this device: the Home Screen app still has the old opaque bar iOS kept from when it was added (a flat green
+ * band over the top of the screen, app/statusBar.ts oldStatusBar), so a toast says how to get the whole screen.
+ */
+function OldStatusBarHint() {
+  const toast = useToast();
+  useOldStatusBarHint(useCallback((text: string) => toast.info(text, { ms: 12_000, group: "old-status-bar" }), [toast]));
+  return null;
 }
 
 /**

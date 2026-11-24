@@ -124,14 +124,15 @@
    space and is unncessary"). Where the look's top edge is too light for the white clock (a light Colours look, a
    light top to the owner's picture, read from its own pixels there by app/statusBar.ts usePictureTop: lib/background.ts
    statusBarUnder), the backdrop itself is shaded under the clock, as little as AA needs (--status-shade,
-   app/statusBar.ts statusShade: held to 75 % of the bar, then easing out to nothing a bar's height below it), so it
-   has no edge and no colour of its own.
+   app/statusBar.ts statusShade: held to 75 % of the bar, then lifting evenly to nothing on the top line, 12 px below
+   the bar, in a box exactly that tall, --status-shade-h), so it has no edge, no colour of its own and nothing of it
+   lies on the page below the bar.
    Over the dark looks it is "none": nothing is drawn. Above every layer of the backdrop, its page veil too. */
 .backdrop__shade {
   position: absolute;
   inset: 0 0 auto 0;
   z-index: 1;
-  height: calc(var(--status-bar-h) * 2);
+  height: var(--status-shade-h);
   background: var(--status-shade, none);
   pointer-events: none;
 }

@@ -50,7 +50,9 @@
 .dash-band {
   position: sticky;
   z-index: 30;
-  top: calc(var(--top-safe) + 8px + var(--todo-bar-h, 0px));
+  /* Under a status bar (an installed iPad app) it stops on the top line, where the backdrop's cover has faded out
+     (--status-shade-h: the bar + 12 px, 0 everywhere else), so none of it fades into the cover (§11.1). */
+  top: calc(max(var(--top-safe) + 8px, var(--status-shade-h)) + var(--todo-bar-h, 0px));
   display: flex;
   justify-content: flex-end;
   padding: 6px;

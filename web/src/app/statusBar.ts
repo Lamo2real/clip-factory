@@ -8,6 +8,8 @@
 //     clock (statusShade): part of the backdrop, never a strip over the page;
 //   - the lightest pixel of the owner's own picture where it lies under the clock (usePictureTop), so a picture gets
 //     only the shade it needs (none at all when its top is dark), not one planned for white.
+//   - a one-time hint when the Home Screen app still has the old opaque bar iOS kept from when it was added
+//     (useOldStatusBarHint): remove it from the Home Screen and add it again.
 //
 // Nothing fixed and coloured lies across the top (the owner, 24 Nov: "remove the top green top fixed color at the top,
 // it just takes space and is unncessary"): what scrolls up to the clock fades into each app's own backdrop, drawn once
@@ -80,16 +82,92 @@ export function useStatusBar(): StatusBar {
   return useSyncExternalStore(subscribe, statusBar, () => NONE);
 }
 
+// ---------- A Home Screen app added before it ran edge to edge ----------
+
+/**
+ * iOS keeps a Home Screen app's status-bar style from when it was added: one added before 24 Nov still has the old
+ * opaque "black" bar (iOS fills it with theme-color, the flat band of the owner's screenshot, and lays the page below
+ * it), whatever index.html asks for now, until it is removed from the Home Screen and added again. Under
+ * black-translucent an iPhone with a notch or a Dynamic Island (812 pt tall and up) held upright always has a top
+ * inset (47 or 59 px), so an inset of 0 there means the old bar is still on.
+ */
+export interface OldBarInput {
+  /** The page runs as the Home Screen app (display-mode standalone, or navigator.standalone). */
+  standalone: boolean;
+  userAgent: string;
+  /** The screen's long side (CSS px). */
+  screenH: number;
+  /** Held upright (portrait). */
+  upright: boolean;
+  /** The status bar's height the page reads (statusBar().h). */
+  inset: number;
+}
+
+export function oldStatusBar(i: OldBarInput): boolean {
+  return i.standalone && /iPhone/.test(i.userAgent) && i.upright && i.screenH >= 812 && i.inset === 0;
+}
+
+/** What the hint says: the one thing to do, in plain words. */
+export const OLD_BAR_HINT = "To use the whole screen, remove Clip Factory from your Home Screen and add it again from Safari.";
+/** Shown once on this device (localStorage). */
+export const OLD_BAR_SEEN = "cf.oldStatusBarHint";
+/** How long after the app opens it looks (the inset has long settled by then). */
+export const OLD_BAR_DELAY = 1500;
+
+function oldBarNow(win: Window = window): boolean {
+  const nav = win.navigator as Navigator & { standalone?: boolean };
+  const matches = (q: string) => typeof win.matchMedia === "function" && win.matchMedia(q).matches;
+  return oldStatusBar({
+    standalone: matches("(display-mode: standalone)") || nav.standalone === true,
+    userAgent: nav.userAgent,
+    screenH: Math.max(win.screen?.height ?? 0, win.screen?.width ?? 0),
+    upright: matches("(orientation: portrait)"),
+    inset: statusBar().h,
+  });
+}
+
+/**
+ * Once on this device, when the Home Screen app still has the old opaque bar (oldStatusBar): `say` tells the owner how
+ * to get the whole screen (App.tsx shows it as a toast). `say` should keep its identity (a new one starts the wait
+ * again).
+ */
+export function useOldStatusBarHint(say: (text: string) => void) {
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      if (!oldBarNow()) return;
+      try {
+        if (localStorage.getItem(OLD_BAR_SEEN)) return;
+        localStorage.setItem(OLD_BAR_SEEN, "1");
+      } catch {
+        return;
+      }
+      say(OLD_BAR_HINT);
+    }, OLD_BAR_DELAY);
+    return () => clearTimeout(timer);
+  }, [say]);
+}
+
 // ---------- The shade under the clock ----------
 
 /**
- * How the shade falls off (each app's backdrop draws it over a box twice the status bar's height, from the top): held
- * at its full strength under the clock and the icons (the bar's top 75 %: 37.5 % of the box), then easing out
- * (smoothstep, in eighths) to nothing a status bar's height below the bar, so it reads as the backdrop's own light
- * falling off, never as a band with an edge.
+ * How the shade falls off (each app's backdrop draws it in a box from the top of the screen to the top line, the bar
+ * and the 12 px of air below it: `--status-shade-h`, tokens.css): held at its full strength under the clock and the
+ * icons (the bar's top 75 %, as the cover's own mask, `--status-cover-fade`), then lifting to nothing on the top line,
+ * the same span the cover fades over, so nothing of it lies on the page below the bar. It lifts evenly in light, in
+ * eighths: each row a little lighter than the one above by about the same amount (on Cream about 0.03 of luminance a
+ * row; an edge would be a step of 0.5), so it reads as the backdrop's own light falling off, never as a band.
  */
-export const SHADE_HOLD = 37.5;
+export const SHADE_HOLD = 0.75;
+export const SHADE_AIR = 12;
 export const SHADE_STEPS = 8;
+
+/** sRGB's own curve (0 to 1), both ways: compositing is in sRGB, light is linear. */
+const toLight = (s: number) => (s <= 0.03928 ? s / 12.92 : ((s + 0.055) / 1.055) ** 2.4);
+const fromLight = (l: number) => (l <= 0.03928 / 12.92 ? l * 12.92 : 1.055 * l ** (1 / 2.4) - 0.055);
+
+/** Where stop `t` (0: the end of the hold, 1: the top line) lies, from the top of the screen. */
+const shadeAt = (t: number) => `calc(var(--status-bar-h) * ${exact(SHADE_HOLD + (1 - SHADE_HOLD) * t)}${t > 0 ? ` + ${exact(SHADE_AIR * t)}px` : ""})`;
+const exact = (n: number) => Math.round(n * 1e5) / 1e5;
 
 /**
  * The shade's gradient for a scrim of `alpha` black (each app's own statusScrim: the least that keeps the white clock
@@ -97,12 +175,14 @@ export const SHADE_STEPS = 8;
  */
 export function statusShade(alpha: number): string {
   if (!(alpha > 0)) return "none";
-  const stops = [`rgb(0 0 0 / ${round(alpha)}) ${SHADE_HOLD}%`];
+  const a = Math.min(1, alpha);
+  const held = toLight(1 - a);
+  const stops = [`rgb(0 0 0 / ${round(a)}) ${shadeAt(0)}`];
   for (let i = 1; i < SHADE_STEPS; i++) {
     const t = i / SHADE_STEPS;
-    stops.push(`rgb(0 0 0 / ${round(alpha * (1 - t * t * (3 - 2 * t)))}) ${round(SHADE_HOLD + (100 - SHADE_HOLD) * t)}%`);
+    stops.push(`rgb(0 0 0 / ${round(1 - fromLight(held + (1 - held) * t))}) ${shadeAt(t)}`);
   }
-  stops.push("transparent");
+  stops.push(`transparent ${shadeAt(1)}`);
   return `linear-gradient(${stops.join(", ")})`;
 }
 

@@ -42,7 +42,7 @@
      stories/look.ts STAGE_LIGHTS exactly (the veils are worked out from them; storiesGlass.test.tsx holds the two
      together): change one, change both. The shade under a phone's clock lies over them all (below). */
   background:
-    var(--st-status-shade, none) 0 0 / 100% calc(var(--status-bar-h, 0px) * 2) no-repeat,
+    var(--st-status-shade, none) 0 0 / 100% var(--status-shade-h, 0px) no-repeat,
     linear-gradient(rgb(var(--st-veil-rgb) / var(--st-veil-page)), rgb(var(--st-veil-rgb) / var(--st-veil-page))),
     radial-gradient(7vw 34vh at 100% 48%, rgb(var(--st-stage-c3-rgb) / 0.34), transparent 70%),
     radial-gradient(46vmax 36vmax at 92% 2%, rgb(var(--st-stage-c3-rgb) / var(--st-stage-a3)), transparent 70%),
@@ -53,7 +53,7 @@
 }
 .stories-app[data-look="picture"]::before {
   background:
-    var(--st-status-shade, none) 0 0 / 100% calc(var(--status-bar-h, 0px) * 2) no-repeat,
+    var(--st-status-shade, none) 0 0 / 100% var(--status-shade-h, 0px) no-repeat,
     linear-gradient(rgb(var(--st-veil-rgb) / var(--st-veil-page)), rgb(var(--st-veil-rgb) / var(--st-veil-page))),
     var(--st-picture) center / cover no-repeat,
     var(--st-base);
@@ -70,8 +70,9 @@
    and is unncessary"). Every column starts on --top-line.
    The shade: where the stage's top strip is too light for iOS's white clock (light colours, a light top to the owner's
    picture, read from its own pixels), the stage's top layer above is a soft black, as little as AA needs
-   (--st-status-shade, stories/look.ts statusScrim, the shell's statusShade: held to 75 % of the bar, then easing out to
-   nothing a bar's height below it), so it has no edge; over Ember, Rose and Lagoon it is "none": nothing is drawn.
+   (--st-status-shade, stories/look.ts statusScrim, the shell's statusShade: held to 75 % of the bar, then lifting
+   evenly to nothing on the top line, 12 px below the bar, in a box exactly that tall, --status-shade-h), so it has no
+   edge and nothing of it lies on the page below the bar; over Ember, Rose and Lagoon it is "none": nothing is drawn.
    The cover: while there is a status bar ([data-status-bar], the shell's), the stage is drawn once more, the same box
    and the same layers, over the page but under the More sheet, Stories' sheets and toasts, and shown in the status
    bar alone: held under the clock and the icons, easing out over the top line's air below the bar (the shell's
@@ -85,7 +86,7 @@
   z-index: 50;
   pointer-events: none;
   background:
-    var(--st-status-shade, none) 0 0 / 100% calc(var(--status-bar-h, 0px) * 2) no-repeat,
+    var(--st-status-shade, none) 0 0 / 100% var(--status-shade-h, 0px) no-repeat,
     linear-gradient(rgb(var(--st-veil-rgb) / var(--st-veil-page)), rgb(var(--st-veil-rgb) / var(--st-veil-page))),
     radial-gradient(7vw 34vh at 100% 48%, rgb(var(--st-stage-c3-rgb) / 0.34), transparent 70%),
     radial-gradient(46vmax 36vmax at 92% 2%, rgb(var(--st-stage-c3-rgb) / var(--st-stage-a3)), transparent 70%),
@@ -99,7 +100,7 @@
 }
 [data-status-bar] .stories-app[data-look="picture"]::after {
   background:
-    var(--st-status-shade, none) 0 0 / 100% calc(var(--status-bar-h, 0px) * 2) no-repeat,
+    var(--st-status-shade, none) 0 0 / 100% var(--status-shade-h, 0px) no-repeat,
     linear-gradient(rgb(var(--st-veil-rgb) / var(--st-veil-page)), rgb(var(--st-veil-rgb) / var(--st-veil-page))),
     var(--st-picture) center / cover no-repeat,
     var(--st-base);

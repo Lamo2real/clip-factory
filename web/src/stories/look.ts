@@ -700,6 +700,8 @@ export function lookProps(value: StoriesLook, glass: string = nativeGlass(), tie
   // The shade under the phone's clock (glass.css .stories-app::before's top layer): as little as the white clock needs
   // over the stage's top strip, a picture's own pixels there once they are read (`pictureTop`), none over Ember.
   const scrim = statusScrim(statusBarUnder(kind, stageColours(value), v.page, pictureTop));
+  // The number the shade is worked out from: no style sheet reads it, it is kept for the checks that read how strong
+  // the shade is (e2e/phone-edge-to-edge.spec.ts).
   style["--st-status-scrim"] = String(scrim);
   style["--st-status-shade"] = statusShade(scrim);
   return { attrs: { "data-look": kind, "data-strength": value.strength, "data-glass": tier }, style };

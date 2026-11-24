@@ -610,7 +610,8 @@ the traffic lights' band; nothing ever covers the traffic lights.
     `ALSO_SLIDES`) at `z-index: 42`, over every page bar (the setup list's strip 39, the tab bar 40, Money's dock 41, an
     open dropdown) and under the setup list, menus, sheets, scrims and toasts (44 and up), and Clips Funded's
     `[data-status-bar] .stories-app::after`, its stage's very layers, at 50 (over its top bar and tab bar, under its
-    sheets at 60). Both are the backdrop's own box (`inset: 0`, so they line up to the pixel), clear of every tap, with
+    sheets at 60 and the workspace switch's list at 51, so a list opened while the top bar is partly under the clock
+    shows whole). Both are the backdrop's own box (`inset: 0`, so they line up to the pixel), clear of every tap, with
     no colour, filter, opacity or motion of their own, masked by `--status-cover-fade`: full under the clock and the
     icons (the bar's top 75 %), easing out in fifths (0.9, 0.65, 0.35, 0.1) to nothing on the top line, 12 px below the
     bar, where nothing sits at the top of a page. So a card or a button that scrolls up fades into the backdrop on its
@@ -623,9 +624,11 @@ the traffic lights' band; nothing ever covers the traffic lights.
   * **The white clock keeps AA over the backdrop.** Where a look's top edge is too light for it, the backdrop itself is
     shaded under the clock, as little as AA needs (`statusScrim` in `lib/background.ts` and `stories/look.ts`, worked
     over `statusBarUnder`): `--status-shade` / `--st-status-shade`, built by the shell's `statusShade` (held at full
-    strength to 75 % of the bar, then easing out, smoothstep in eighths, to nothing a bar's height below the bar), so it
-    has no edge and no colour of its own. Clip Factory draws it as `.backdrop__shade` (the last layer of its backdrop
-    and of the cover, `z-index: 1`, twice the bar tall), Clips Funded as its stage's top background layer. It is `none`
+    strength to 75 % of the bar, then lifting evenly in light, in eighths, to nothing on the top line, 12 px below the
+    bar: the cover's own span), so it has no edge, no colour of its own, and nothing of it lies on the page below the
+    bar. It is drawn in a box exactly that tall, `--status-shade-h` (`calc(var(--status-bar-h) + 12px)` under
+    `html[data-status-bar]`, 0 everywhere else): Clip Factory's `.backdrop__shade` (the last layer of its backdrop and
+    of the cover, `z-index: 1`), Clips Funded's stage's top background layer. It is `none`
     (nothing is drawn) over the living backdrop, Ember, Rose, Lagoon and dark colours, and over Clips Funded's light
     colours too (their page veil already holds the clock); about 0.5 over Cream. Over the owner's own picture it is read
     from the picture's own pixels where it lies under the clock (`usePictureTop`: the strip `background-size: cover`
@@ -636,9 +639,21 @@ the traffic lights' band; nothing ever covers the traffic lights.
     `#13483C` (Clip Factory's top edge, close to its average; the manifest's `theme_color` too, which Android's
     installed app gives its status bar) and Clips Funded's stage colour `#1C130E` while it is on screen. `theme-color`
     stays because under `black-translucent` iOS fills nothing in the installed app: it only filled the bar (the old
-    band) under `black` or `default`. The body under the backdrop is the backdrop's own top edge (`#0f3d31`). An
-    installed iPhone app picks a new status-bar style up when it is closed and opened again (at worst, removed and added
-    to the Home Screen again).
+    band) under `black` or `default`. The body under the backdrop is the backdrop's own top edge (`#0f3d31`).
+  * **A Home Screen app added before this keeps the old bar.** iOS keeps a Home Screen app's status-bar style from when
+    it was added, so one added under `black` still gets iOS's own opaque band over the top (filled from `theme-color`,
+    the page laid out below it) whatever `index.html` says now, until it is removed from the Home Screen and added
+    again from Safari. The app tells the owner once (`app/statusBar.ts` `oldStatusBar` and `useOldStatusBarHint`,
+    shown by `App.tsx` as a toast for 12 s, `localStorage["cf.oldStatusBarHint"]`): in the Home Screen app
+    (`display-mode: standalone` or `navigator.standalone`) on an iPhone at least 812 pt tall, held upright, whose top
+    inset reads 0 1.5 s after it opens (under `black-translucent` it is 47 or 59 px): "To use the whole screen, remove
+    Clip Factory from your Home Screen and add it again from Safari."
+  * Money's band on wide screens sticks at `max(--top-safe + 8px, --status-shade-h)`, so in an installed iPad app it
+    stops on the top line, below the cover's fade.
+  * **Open, for the owner to decide:** while the setup list's pill shows (§17.13, an earlier request of the owner's),
+    its glass bar (`.setup-todo-bar`, the pill's strip) still lies across the top of a scrolled page, from under the
+    clock (where the cover hides it) down to about `--top-safe` + 88 px. It stays as it is until the owner says
+    otherwise; the owner's own setup is finished, so he has no pill.
   * Clips Funded's sticky panels (the chat list, a review's player, the character stage, an idea's basics) stop below
     `--top-safe` too, for an installed iPad app.
   * Tests: `test/edgeToEdge.test.ts`; `e2e/phone-edge-to-edge.spec.ts` (Chromium and WebKit; 390 x 844 with a 59 px
@@ -646,8 +661,10 @@ the traffic lights' band; nothing ever covers the traffic lights.
     scroll stop of Home, Library, the Content Rewards help (the owner's screenshot, every fold open) and Clips Funded's
     Dashboard and Ideas, every pixel under the clock and the icons is the backdrop as it is drawn alone and holds white
     at AA; a cream bar fixed across the top of a page is masked under the clock and shows from the top line down; in
-    Safari no cover is drawn and the page runs to the top of its window; Cream's shade eases with no edge; a picture
-    with a dark top gets no shade and one with a white top gets what AA needs.
+    Safari no cover is drawn and the page runs to the top of its window; Cream's shade lifts with no edge (at most 0.05
+    of luminance a row) and Cream is untouched from the top line down; a picture with a dark top gets no shade and one
+    with a white top gets what AA needs. The unit test works the shade out row by row over Cream and white at both bar
+    heights, and holds the old-bar hint to the Home Screen app on a tall upright iPhone with no inset, once.
 * **Tests:** `e2e/top-line.spec.ts` (Chromium and WebKit): the simulated macOS window at 1000 x 650, 1200 x 820 (the
   pill) and 1440 x 900 on `/`, `/jobs`, `/review`, `/library`, `/settings` and a settings branch puts every column
   within 1 px of the line (42 px), keeps the 80 x 28 traffic-light corner clear and checks the 28 px drag strip; a tab

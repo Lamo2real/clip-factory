@@ -17,7 +17,8 @@ import { stillBackdrop } from "./helpers.ts";
 //   (b) every control on screen, the first one included, starts at or below the status bar;
 //   (c) a bright bar fixed across the top of a page is masked under the clock, and shows from the top line down;
 //   (d) over a light look (Cream, a light stage) and over the owner's own picture, the backdrop's own shade keeps the
-//       white clock at AA, as little as that pixel needs (none over a dark top), easing out with no edge.
+//       white clock at AA, as little as that pixel needs (none over a dark top), lifting with no edge and gone on the
+//       top line (12 px below the bar): nothing of it lies on the page below.
 // Run in WebKit too (playwright.config.ts, projects "webkit" and "webkit-phone"): the iPhone app is WebKit.
 
 const SIZES = [
@@ -101,27 +102,39 @@ async function open(page: Page, path: string, stories: boolean, inset: number) {
   await expect.poll(() => page.evaluate(() => document.documentElement.hasAttribute("data-status-bar"))).toBe(inset > 0);
 }
 
-/** The RGB of every pixel in rows y0..y1 (CSS px, the page drawn at 1x), row by row. */
-async function rows(page: Page, y0: number, y1: number): Promise<number[][][]> {
+/**
+ * The RGB of every pixel in rows y0..y1 (CSS px), row by row: the page drawn at 1x, or with `fine`, drawn at the
+ * screen's own pixels and each CSS pixel the mean of its device pixels, so a smooth gradient is read as the light it
+ * really gives each row (WebKit's 1x capture is drawn again at 1x, with its gradient's dither landing on whole rows).
+ */
+async function rows(page: Page, y0: number, y1: number, fine = false): Promise<number[][][]> {
   const width = page.viewportSize()!.width;
-  const png = (await page.screenshot({ clip: { x: 0, y: y0, width, height: y1 - y0 + 1 }, scale: "css" })).toString("base64");
-  return page.evaluate(async (png) => {
-    const bytes = Uint8Array.from(atob(png), (ch) => ch.charCodeAt(0));
-    const bmp = await createImageBitmap(new Blob([bytes], { type: "image/png" }));
-    const cv = document.createElement("canvas");
-    cv.width = bmp.width;
-    cv.height = bmp.height;
-    const ctx = cv.getContext("2d")!;
-    ctx.drawImage(bmp, 0, 0);
-    const d = ctx.getImageData(0, 0, bmp.width, bmp.height).data;
-    const out: number[][][] = [];
-    for (let y = 0; y < bmp.height; y++) {
-      const row: number[][] = [];
-      for (let x = 0; x < bmp.width; x++) row.push([d[(y * bmp.width + x) * 4]!, d[(y * bmp.width + x) * 4 + 1]!, d[(y * bmp.width + x) * 4 + 2]!]);
-      out.push(row);
-    }
-    return out;
-  }, png);
+  const png = (await page.screenshot({ clip: { x: 0, y: y0, width, height: y1 - y0 + 1 }, scale: fine ? "device" : "css" })).toString("base64");
+  return page.evaluate(
+    async ({ png, w, h }) => {
+      const bytes = Uint8Array.from(atob(png), (ch) => ch.charCodeAt(0));
+      const bmp = await createImageBitmap(new Blob([bytes], { type: "image/png" }));
+      const cv = document.createElement("canvas");
+      cv.width = bmp.width;
+      cv.height = bmp.height;
+      const ctx = cv.getContext("2d")!;
+      ctx.drawImage(bmp, 0, 0);
+      const d = ctx.getImageData(0, 0, bmp.width, bmp.height).data;
+      const k = Math.max(1, Math.round(bmp.width / w));
+      const out: number[][][] = [];
+      for (let y = 0; y < Math.min(h, Math.floor(bmp.height / k)); y++) {
+        const row: number[][] = [];
+        for (let x = 0; x < Math.floor(bmp.width / k); x++) {
+          const px = [0, 0, 0];
+          for (let dy = 0; dy < k; dy++) for (let dx = 0; dx < k; dx++) for (let c = 0; c < 3; c++) px[c]! += d[((y * k + dy) * bmp.width + x * k + dx) * 4 + c]!;
+          row.push(px.map((v) => Math.round(v / (k * k))));
+        }
+        out.push(row);
+      }
+      return out;
+    },
+    { png, w: width, h: y1 - y0 + 1 },
+  );
 }
 
 /**
@@ -377,19 +390,24 @@ for (const size of SIZES) {
           expect(Number(await page.locator(".stories-app").evaluate((el) => (el as HTMLElement).style.getPropertyValue("--st-veil-page")))).toBeGreaterThan(0.5);
         }
         // It is the backdrop's own: under the clock the page is the backdrop drawn alone (its shade too), at AA.
-        const drawn = await rows(page, 0, 2 * size.inset + 8);
+        const end = size.inset + 40;
+        const drawn = await rows(page, 0, end, true);
         const back = await backdropAlone(page, l.stories);
-        const alone = await rows(page, 0, 2 * size.inset + 8);
+        const alone = await rows(page, 0, end, true);
         await back();
         expect(apart(drawn.slice(0, top + 1), alone.slice(0, top + 1)).mean).toBeLessThanOrEqual(3);
         expect(leastWhite(drawn.slice(0, top + 1)), "white over the shaded backdrop, under the clock").toBeGreaterThanOrEqual(4.5);
-        // It eases out over a bar's height below the bar, row by row (no edge), and leaves Cream untouched beyond that.
+        // It lifts row by row (no edge) and is gone on the top line, 12 px below the bar: from there down Cream is
+        // untouched, as it is further down the page.
         if (l.shaded) {
           const lum = alone.map((r) => r.reduce((s, px) => s + luminance(px), 0) / r.length);
           for (let y = 1; y < lum.length; y++) expect(lum[y]! - lum[y - 1]!, `row ${y}`).toBeGreaterThanOrEqual(-0.004);
-          // (smoothstep over a bar's height: about 0.03 a row at its steepest; an edge would be a step of 0.5)
+          // (even in light over the cover's own span: about 0.03 a row at most; an edge would be a step of 0.5)
           for (let y = 1; y < lum.length; y++) expect(lum[y]! - lum[y - 1]!, `row ${y}`).toBeLessThanOrEqual(0.05);
-          expect(lum[2 * size.inset + 4]!, "Cream a bar's height below the bar").toBeGreaterThan(0.6);
+          for (let y = size.inset + 12; y <= end; y++) {
+            expect(Math.min(...alone[y]!.map(luminance)), `Cream on row ${y}, the top line and below`).toBeGreaterThan(0.6);
+            expect(apart([alone[y]!], [alone[end]!]).worst, `row ${y} against Cream lower down`).toBeLessThanOrEqual(2);
+          }
         }
       });
     }

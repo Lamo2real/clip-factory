@@ -13,8 +13,8 @@ import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { act, createElement } from "react";
 import { createRoot, type Root } from "react-dom/client";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { installStatusBar, lightestPixel, pictureStrip, SHADE_HOLD, SHADE_STEPS, statusBar, statusShade } from "../src/app/statusBar.ts";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { installStatusBar, lightestPixel, OLD_BAR_DELAY, OLD_BAR_HINT, OLD_BAR_SEEN, oldStatusBar, pictureStrip, SHADE_AIR, SHADE_HOLD, SHADE_STEPS, statusBar, statusShade, useOldStatusBarHint } from "../src/app/statusBar.ts";
 import { Backdrop, driftTogether, PICTURE_BLEED } from "../src/components/Backdrop.tsx";
 import { AA, contrast, hexToRgb, mix, resolveLook, statusBarUnder, statusScrim, VEIL, type LookInput, type Rgb } from "../src/lib/background.ts";
 import { applyLook } from "../src/lib/look.ts";
@@ -147,6 +147,7 @@ describe("nothing fixed and coloured lies across the top, at the top of a page o
   it("only the backdrop reaches into the status bar: its cover and its shade, and the tokens", () => {
     const allowed = new Set([
       ":root",
+      "html[data-status-bar]",
       ".backdrop__shade",
       ".backdrop.backdrop--cover",
       ".stories-app::before",
@@ -154,10 +155,13 @@ describe("nothing fixed and coloured lies across the top, at the top of a page o
       "[data-status-bar] .stories-app::after",
       '[data-status-bar] .stories-app[data-look="picture"]::after',
     ]);
+    // Money's band on wide screens (an installed iPad app) reads the shade's box only to stop below it, on the top line.
+    const below = new Set([".dash-band"]);
     const readers: string[] = [];
-    for (const f of all) for (const [sel, body] of rules(readFileSync(f, "utf8"))) if (/var\(--status-bar-h\b|var\(--status-cover-fade\b/.test(body)) readers.push(sel);
-    expect(readers.filter((s) => !allowed.has(s))).toEqual([]);
-    expect(new Set(readers)).toEqual(allowed);
+    for (const f of all) for (const [sel, body] of rules(readFileSync(f, "utf8"))) if (/var\(--status-bar-h\b|var\(--status-cover-fade\b|var\(--status-shade-h\b/.test(body)) readers.push(sel);
+    expect(readers.filter((s) => !allowed.has(s) && !below.has(s))).toEqual([]);
+    expect(new Set(readers.filter((s) => !below.has(s)))).toEqual(allowed);
+    expect(strip(read("src", "styles", "money-dash.css"))).toMatch(/top: calc\(max\(var\(--top-safe\) \+ 8px, var\(--status-shade-h\)\) \+ var\(--todo-bar-h, 0px\)\);/);
   });
 
   it("the cover's mask: full under the clock and the icons, easing out with no edge to nothing on the top line", () => {
@@ -248,6 +252,8 @@ describe("nothing fixed and coloured lies across the top, at the top of a page o
     expect(rule(read("src", "stories", "styles", "st-frame.css"), ".st-top")).toMatch(/z-index: calc\(var\(--st-z-nav\) - 1\);/);
     expect(z("nav")).toBeLessThan(50);
     expect(z("float")).toBeGreaterThan(50);
+    // The workspace switch's list at a phone's top bar shares its stacking context: it shows whole over the cover.
+    expect(zOf("glide.css", ".ws-menu")).toBeGreaterThan(50);
     expect(z("burst")).toBeGreaterThan(50);
     expect(z("stage")).toBeLessThan(0);
   });
@@ -350,31 +356,81 @@ describe("the cover is drawn only under a status bar, with the backdrop, the sam
 });
 
 describe("the shade under the clock: part of the backdrop, only what the white clock needs, with no edge", () => {
-  it("is nothing at all when no shade is needed, else held under the clock and easing out in even, small steps", () => {
+  /** The shade's stops for a `h` px bar: [alpha, px from the top of the screen]. */
+  const shadeStops = (g: string, h: number) =>
+    [...g.matchAll(/(rgb\(0 0 0 \/ ([\d.]+)\)|transparent) calc\(var\(--status-bar-h\) \* ([\d.]+)(?: \+ ([\d.]+)px)?\)/g)].map(
+      (m) => [m[1] === "transparent" ? 0 : Number(m[2]), h * Number(m[3]) + Number(m[4] ?? 0)] as const,
+    );
+  /** The shade's alpha at `y` (px), as a browser draws the gradient: linear between its stops, nothing past the last. */
+  const alphaAt = (stops: readonly (readonly [number, number])[], y: number) => {
+    if (y <= stops[0]![1]) return stops[0]![0];
+    for (let i = 1; i < stops.length; i++) {
+      const [a1, y1] = stops[i]!;
+      const [a0, y0] = stops[i - 1]!;
+      if (y <= y1) return a0 + ((a1 - a0) * (y - y0)) / (y1 - y0);
+    }
+    return 0;
+  };
+  const luminance = ([r, g, b]: Rgb) => {
+    const f = (c: number) => ((c /= 255) <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+    return 0.2126 * f(r) + 0.7152 * f(g) + 0.0722 * f(b);
+  };
+
+  it("is nothing at all when no shade is needed, else held under the clock and gone on the top line, in eighths", () => {
     expect(statusShade(0)).toBe("none");
-    expect(SHADE_HOLD).toBe(37.5); // 75 % of the bar, in a box two bars tall
+    expect([SHADE_HOLD, SHADE_AIR, SHADE_STEPS]).toEqual([0.75, 12, 8]); // the cover's own span: 75 % of the bar to the top line
     for (const a of [0.08, 0.42, 0.61]) {
       const g = statusShade(a);
-      const stops = [...g.matchAll(/rgb\(0 0 0 \/ ([\d.]+)\) ([\d.]+)%/g)].map((m) => [Number(m[1]), Number(m[2])] as const);
-      expect(g.startsWith(`linear-gradient(rgb(0 0 0 / ${a}) 37.5%, `)).toBe(true);
-      expect(g.endsWith(", transparent)")).toBe(true);
-      expect(stops).toHaveLength(SHADE_STEPS);
-      const alphas = [...stops.map((s) => s[0]), 0];
-      for (let i = 1; i < alphas.length; i++) {
-        expect(alphas[i]!).toBeLessThan(alphas[i - 1]!);
-        // smoothstep in eighths: no step more than 19 % of the whole shade
-        expect(alphas[i - 1]! - alphas[i]!).toBeLessThanOrEqual(a * 0.19 + 0.001);
+      expect(g.startsWith(`linear-gradient(rgb(0 0 0 / ${a}) calc(var(--status-bar-h) * 0.75), `)).toBe(true);
+      expect(g.endsWith(", transparent calc(var(--status-bar-h) * 1 + 12px))")).toBe(true);
+      for (const h of [59, 47]) {
+        const stops = shadeStops(g, h);
+        expect(stops).toHaveLength(SHADE_STEPS + 1);
+        // Where each stop lies: from 75 % of the bar to the top line (the bar + 12 px), in even eighths.
+        stops.forEach(([, y], i) => expect(y).toBeCloseTo(h * 0.75 + ((h + 12 - h * 0.75) * i) / SHADE_STEPS, 6));
+        // Each step lighter than the one above, never a jump.
+        for (let i = 1; i < stops.length; i++) {
+          expect(stops[i]![0]).toBeLessThan(stops[i - 1]![0]);
+          expect(stops[i - 1]![0] - stops[i]![0]).toBeLessThanOrEqual(a * 0.25 + 0.001);
+        }
       }
-      for (let i = 1; i < stops.length; i++) expect(stops[i]![1]).toBeCloseTo(SHADE_HOLD + ((100 - SHADE_HOLD) * i) / SHADE_STEPS, 2);
     }
   });
 
-  it("Clip Factory draws it in its backdrop, above every layer of it, twice the bar tall, clear of taps", () => {
+  it("lifts evenly in light, with no edge, and leaves the page below the bar untouched (Cream, a white picture top)", () => {
+    for (const under of [hexToRgb("#f7f5ef"), WHITE]) {
+      const a = statusScrim(under);
+      expect(a).toBeGreaterThan(0.4);
+      const g = statusShade(a);
+      for (const h of [59, 47]) {
+        const stops = shadeStops(g, h);
+        // Each row as the screen draws it: black at the shade's alpha over the backdrop, at the row's middle.
+        const row = (y: number) => luminance(mix(BLACK, under, alphaAt(stops, y + 0.5)).map(Math.round) as unknown as Rgb);
+        // Under the clock and the icons (the bar's top 75 %): the full shade, so the white clock keeps AA.
+        for (let y = 0; y < Math.floor(h * 0.75); y++) expect(contrast(WHITE, mix(BLACK, under, alphaAt(stops, y + 0.5))), `row ${y}`).toBeGreaterThanOrEqual(AA);
+        // Below that, each row a little lighter than the one above, never a step: about 0.03 at most (an edge is 0.5).
+        for (let y = 1; y < h + 24; y++) {
+          expect(row(y) - row(y - 1), `${h} px bar, row ${y}`).toBeGreaterThanOrEqual(-0.004);
+          expect(row(y) - row(y - 1), `${h} px bar, row ${y}`).toBeLessThanOrEqual(0.05);
+        }
+        // From the top line (the bar + 12 px) down: untouched.
+        for (let y = h + 12; y < h + 24; y++) expect(alphaAt(stops, y + 0.5), `${h} px bar, row ${y}`).toBe(0);
+      }
+    }
+  });
+
+  it("lies in a box from the top of the screen to the top line while there is a status bar, else none at all", () => {
+    const tokens = strip(read("src", "styles", "tokens.css"));
+    expect(tokens.match(/--status-shade-h:[^;]+;/g)).toEqual(["--status-shade-h: 0px;", "--status-shade-h: calc(var(--status-bar-h) + 12px);"]);
+    expect(declarations(rule(tokens, "html[data-status-bar]"))).toEqual(["--status-shade-h: calc(var(--status-bar-h) + 12px)"]);
+  });
+
+  it("Clip Factory draws it in its backdrop, above every layer of it, to the top line, clear of taps", () => {
     expect(declarations(rule(read("src", "styles", "glass.css"), ".backdrop__shade"))).toEqual([
       "position: absolute",
       "inset: 0 0 auto 0",
       "z-index: 1",
-      "height: calc(var(--status-bar-h) * 2)",
+      "height: var(--status-shade-h)",
       "background: var(--status-shade, none)",
       "pointer-events: none",
     ]);
@@ -383,7 +439,7 @@ describe("the shade under the clock: part of the backdrop, only what the white c
   it("Clips Funded draws it as its stage's top layer, over the colours and over a picture", () => {
     const css = read("src", "stories", "styles", "glass.css");
     for (const sel of [".stories-app::before", '.stories-app[data-look="picture"]::before'])
-      expect(rule(css, sel)).toMatch(/background:\s*var\(--st-status-shade, none\) 0 0 \/ 100% calc\(var\(--status-bar-h, 0px\) \* 2\) no-repeat,\s*linear-gradient\(rgb\(var\(--st-veil-rgb\) \/ var\(--st-veil-page\)\)/);
+      expect(rule(css, sel)).toMatch(/background:\s*var\(--st-status-shade, none\) 0 0 \/ 100% var\(--status-shade-h, 0px\) no-repeat,\s*linear-gradient\(rgb\(var\(--st-veil-rgb\) \/ var\(--st-veil-page\)\)/);
   });
 
   it("is 0 over Clip Factory's living backdrop (clear and frosted) and its dark colours", () => {
@@ -513,5 +569,79 @@ describe("Clips Funded's sticky panels stop below the status bar (an installed i
     expect(sticky("sd-ideas.css", ".st-s-ideaedit:has(> .st-s-ideaedit__full) > .st-s-ideaedit__basics")).toMatch(/top: calc\(var\(--top-safe, 0px\) \+ var\(--st-space-4\)\);/);
     // The chat list it holds stays within the window below it.
     expect(rule(read("src", "stories", "styles", "chat.css"), ".st-chat-side > .st-chat-list")).toMatch(/max-height: calc\(100vh - 36px - var\(--top-safe, 0px\)\);/);
+  });
+});
+
+describe("a Home Screen app added before it ran edge to edge: told once how to get the whole screen", () => {
+  const IPHONE = "Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148";
+  const IPAD = "Mozilla/5.0 (iPad; CPU OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148";
+  const old = { standalone: true, userAgent: IPHONE, screenH: 844, upright: true, inset: 0 };
+
+  it("is the old opaque bar only in the Home Screen app on a tall iPhone held upright with no top inset", () => {
+    expect(oldStatusBar(old)).toBe(true);
+    expect(oldStatusBar({ ...old, screenH: 812 })).toBe(true);
+    // black-translucent: the bar is see-through and the page runs under it (59 px, 47 px).
+    expect(oldStatusBar({ ...old, inset: 59 })).toBe(false);
+    expect(oldStatusBar({ ...old, inset: 47 })).toBe(false);
+    // Safari draws its own bar above the page; a phone on its side has no inset; an iPhone SE, an iPad, a computer.
+    expect(oldStatusBar({ ...old, standalone: false })).toBe(false);
+    expect(oldStatusBar({ ...old, upright: false })).toBe(false);
+    expect(oldStatusBar({ ...old, screenH: 667 })).toBe(false);
+    expect(oldStatusBar({ ...old, userAgent: IPAD })).toBe(false);
+    expect(oldStatusBar({ ...old, userAgent: "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)" })).toBe(false);
+  });
+
+  it("says the one thing to do, in plain words, once on this device", () => {
+    expect(OLD_BAR_HINT).toBe("To use the whole screen, remove Clip Factory from your Home Screen and add it again from Safari.");
+    expect(read("src", "app", "App.tsx")).toMatch(/useOldStatusBarHint\(useCallback\(\(text: string\) => toast\.info\(text, \{ ms: 12_000, group: "old-status-bar" \}\), \[toast\]\)\);/);
+
+    const said: string[] = [];
+    const say = (t: string) => void said.push(t);
+    const host = document.createElement("div");
+    document.body.append(host);
+    const root = createRoot(host);
+    const Probe = () => {
+      useOldStatusBarHint(say);
+      return null;
+    };
+    const page = (standalone: boolean) => {
+      vi.spyOn(window.navigator, "userAgent", "get").mockReturnValue(IPHONE);
+      vi.spyOn(window.screen, "height", "get").mockReturnValue(844);
+      vi.spyOn(window.screen, "width", "get").mockReturnValue(390);
+      window.matchMedia = ((q: string) => ({ matches: q === "(orientation: portrait)" || (standalone && q === "(display-mode: standalone)") })) as unknown as typeof window.matchMedia;
+    };
+    const open = () => {
+      act(() => root.render(createElement(Probe, { key: Math.random() })));
+      act(() => void vi.advanceTimersByTime(OLD_BAR_DELAY));
+    };
+    const matchMedia = window.matchMedia;
+    vi.useFakeTimers();
+    try {
+      localStorage.clear();
+      // In Safari: nothing.
+      page(false);
+      open();
+      expect(said).toEqual([]);
+      // The Home Screen app with the old bar (no status bar inset): once, and never again on this device.
+      page(true);
+      open();
+      expect(said).toEqual([OLD_BAR_HINT]);
+      expect(localStorage.getItem(OLD_BAR_SEEN)).toBe("1");
+      open();
+      expect(said).toEqual([OLD_BAR_HINT]);
+      // Added again (black-translucent: a status bar of 59 px): nothing.
+      localStorage.clear();
+      const stop = installStatusBar(document.documentElement, window, () => 59);
+      open();
+      stop();
+      expect(said).toEqual([OLD_BAR_HINT]);
+    } finally {
+      act(() => root.unmount());
+      host.remove();
+      vi.useRealTimers();
+      vi.restoreAllMocks();
+      window.matchMedia = matchMedia;
+      localStorage.clear();
+    }
   });
 });
