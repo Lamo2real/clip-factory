@@ -65,7 +65,7 @@ export async function projectChoices(ws: string, kind: ProjectRef["kind"]): Prom
     if (kind === "idea") items = (await api.listIdeas(ws, "all")).map((i) => ({ ref: { kind, id: i.ideaId }, name: i.title, line: i.logline }));
     else if (kind === "story") items = (await api.listStories(ws, { status: "all", limit: 50 })).stories.map((s) => ({ ref: { kind, id: s.storyId }, name: s.title, line: "" }));
     else if (kind === "character") items = (await api.listCharacters(ws)).map((c) => ({ ref: { kind, id: c.characterId }, name: c.name, line: c.description }));
-    else items = (await api.listReferences(ws)).filter((r) => r.status !== "uploading").map((r) => ({ ref: { kind, id: r.refId }, name: r.title, line: "" }));
+    else items = (await api.listReferences(ws)).filter((r) => r.status !== "uploading" && r.status !== "fetching" && r.status !== "fetch_failed").map((r) => ({ ref: { kind, id: r.refId }, name: r.title, line: "" }));
     for (const it of items) rememberProjectName(it.ref, it.name);
     return { items, failed: false };
   } catch {

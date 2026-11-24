@@ -16,7 +16,7 @@ field is additive, and existing clips and posts read exactly as before. With the
 exactly as before. Nothing here calls TikTok's posting API.
 
 **Both workspaces.** Since helper 1.2.0 the same Mac also posts Clips Funded's TikTok jobs, to Clips Funded's own
-TikTok only, through Clips Funded's own routes and partition (§47.10, ADR-88). §47.1 to §47.9 are Clip Factory's and
+TikTok only, through Clips Funded's own routes and partition (§47.10, ADR-89). §47.1 to §47.9 are Clip Factory's and
 stay as they are; the helper's handle check before every post (§47.10.5) applies to both.
 
 ### 47.1 Data
@@ -698,7 +698,7 @@ sees a post the Mac made (as §42.5).
 
 The owner (2026-11-23, with a screenshot of Clips Funded › Social accounts › TikTok connected as @clips.funded through
 Clip Factory's shared TikTok app, still in Sandbox, so API posts can only be private): "btw i want the same way we
-upload to tiktok in clip factory for clips funded". Decision record: ADR-88.
+upload to tiktok in clip factory for clips funded". Decision record: ADR-89.
 
 Clips Funded's TikTok posts use the same Mac helper as Clip Factory (helper **1.2.0**). They post in hidden headless
 Chrome, publicly, with the same claim, beats, never-twice rule, 30-minute find window, row states and "your Mac needs

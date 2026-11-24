@@ -1,4 +1,4 @@
-"""My Mac posts TikTok for Clips Funded (docs/CONTRACTS.md §47.10, ADR-88): publish and retry write a Mac job, the
+"""My Mac posts TikTok for Clips Funded (docs/CONTRACTS.md §47.10, ADR-89): publish and retry write a Mac job, the
 helper's queue, claim, steps, stop and done, the owner's Try again and It's on TikTok, the switch and the dashboard.
 Fakes only: nothing calls TikTok, and Clip Factory's ``USER#{u}`` items are never written."""
 

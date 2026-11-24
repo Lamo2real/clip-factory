@@ -555,10 +555,15 @@ export interface MemoryItem {
 export interface ReferenceVideo {
   refId: string;
   title: string;
-  status: "uploading" | "ready" | "analyzing" | "analyzed" | "failed";
+  /** fetching / fetch_failed: a reference made from a link while Clips Funded's own runtime gets the video, or after
+   * it could not (§45.40); "failed" still means only that the study failed */
+  status: "uploading" | "fetching" | "fetch_failed" | "ready" | "analyzing" | "analyzed" | "failed";
   durationSec: number | null;
   bytes: number;
+  /** the video file, only once it is here: ready, analyzing, analyzed or failed (never while uploading or fetching) */
   url?: string;
+  /** the cleaned https link the video came from (§45.40); null for an upload, missing from an older API */
+  link?: string | null;
   currentJobId: string | null;
   ai: AiSetting;
   analyzedWith: { model: string; effort: Effort | null } | null;
@@ -824,8 +829,8 @@ export const REF_STEP_ORDER: RefStepKey[] = ["look", "listen", "write"];
 export const REF_STEP_LABEL: Record<RefStepKey, string> = { look: "Look at it", listen: "Listen", write: "Write it up" };
 
 export interface StoryStep {
-  /** a portrait job has one step of its own: { key: "portrait", label: "Draw the picture" }; a reference analysis has look, listen, write; Nova Reel's try has { key: "check", label: "Try it" } (§45.35 D2) */
-  key: StepKey | "portrait" | RefStepKey | "check";
+  /** a portrait job has one step of its own: { key: "portrait", label: "Draw the picture" }; a reference analysis has look, listen, write; Nova Reel's try has { key: "check", label: "Try it" } (§45.35 D2); a reference from a link has { key: "get", label: "Get the video" } (§45.40) */
+  key: StepKey | "portrait" | RefStepKey | "check" | "get";
   label: string;
   status: "pending" | "running" | "done" | "failed" | "skipped";
   message?: string;
@@ -842,12 +847,12 @@ export interface ProductionJob {
   contentType: "animation" | "character" | "reference" | "provider";
   /** storyId, characterId (portrait) or refId (reference analysis) */
   contentId: string;
-  /** provider_check: Nova Reel's "Try it" (one 6-second test shot, §45.35 D2) */
-  jobType: "produce" | "changes" | "portrait" | "reference_analysis" | "provider_check";
+  /** provider_check: Nova Reel's "Try it" (one 6-second test shot, §45.35 D2); reference_fetch: getting a reference video from its link (§45.40) */
+  jobType: "produce" | "changes" | "portrait" | "reference_analysis" | "reference_fetch" | "provider_check";
   status: "queued" | "running" | "ready" | "needs_check" | "failed" | "canceled";
   steps: StoryStep[];
   progress: number;
-  configuration: { run: (StepKey | "portrait" | RefStepKey | "check")[]; from: StepKey | null; sceneIds: string[] | null; note: string | null };
+  configuration: { run: (StepKey | "portrait" | RefStepKey | "check" | "get")[]; from: StepKey | null; sceneIds: string[] | null; note: string | null };
   meta: {
     writerModel: string | null;
     engineVersion: number | null;
@@ -1354,8 +1359,12 @@ export interface StoriesApi {
   createReference(ws: string, body: { filename: string; contentType: string; size: number; title: string }): Promise<{ reference: ReferenceVideo; upload: { uploadId: string; parts: { partNumber: number; url: string }[] } }>;
   completeReference(ws: string, refId: string, parts: { partNumber: number; etag: string }[]): Promise<ReferenceVideo>;
   analyzeReference(ws: string, refId: string, override?: ModelOverride): Promise<{ reference: ReferenceVideo; job: ProductionJob }>;
-  /** `job`: the analysis job of currentJobId, else the latest one (CONTRACTS §45.34) */
-  getReference(ws: string, refId: string): Promise<{ reference: ReferenceVideo; analysis: ReferenceAnalysis | null; job: ProductionJob | null }>;
+  /** a reference from a pasted link (§45.40): 202 with the reference `fetching` and its `reference_fetch` job; the API cleans share text and refuses links it can't get (400 field url) */
+  createReferenceFromLink(ws: string, body: { url: string; title?: string }): Promise<{ reference: ReferenceVideo; job: ProductionJob }>;
+  /** "Try again" on a link reference that is `fetch_failed` (§45.40) */
+  fetchReferenceAgain(ws: string, refId: string): Promise<{ reference: ReferenceVideo; job: ProductionJob }>;
+  /** `job`: the analysis job of currentJobId, else the latest one (CONTRACTS §45.34); `fetchJob`: the newest reference_fetch job of a link reference (§45.40), null for an upload, missing from an older API */
+  getReference(ws: string, refId: string): Promise<{ reference: ReferenceVideo; analysis: ReferenceAnalysis | null; job: ProductionJob | null; fetchJob?: ProductionJob | null }>;
   /** the title, and the video's own model and effort (`ai`, §45.25 level 2: "Keep with this video") */
   patchReference(ws: string, refId: string, patch: { title?: string; ai?: AiSetting }): Promise<ReferenceVideo>;
   /** a reference video (renamed from deleteReference(ws, refId), CONTRACTS §45.34; deleteReference is a character's picture) */

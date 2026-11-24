@@ -12,7 +12,7 @@ import json
 import os
 import re
 import signal
-from collections.abc import Callable, Sequence
+from collections.abc import Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -78,15 +78,18 @@ async def run(
     on_out_line: Callable[[str], None] | None = None,
     cwd: Path | None = None,
     stdin: bytes | None = None,
+    env: Mapping[str, str] | None = None,
 ) -> Result:
     """Runs a command; raises CommandError on a non-zero exit. ``time_limit`` is required: nothing runs unbounded.
-    stdout lines go to ``on_out_line`` as they arrive (and are not kept) when it is given."""
+    stdout lines go to ``on_out_line`` as they arrive (and are not kept) when it is given. ``env`` is added to this
+    process's own environment (a reference fetch's proxy settings, §45.40)."""
     proc = await asyncio.create_subprocess_exec(
         *oom_first(args),
         stdout=asyncio.subprocess.PIPE,
         stderr=asyncio.subprocess.PIPE,
         stdin=asyncio.subprocess.PIPE if stdin is not None else asyncio.subprocess.DEVNULL,
         cwd=str(cwd) if cwd else None,
+        env={**os.environ, **env} if env is not None else None,
         start_new_session=True,
     )
     err_lines: list[str] = []

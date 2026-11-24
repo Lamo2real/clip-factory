@@ -1,4 +1,4 @@
-"""My Mac posts TikTok for Clips Funded (docs/CONTRACTS.md §47.10, ADR-88): the owner's Mac helper posts a story's
+"""My Mac posts TikTok for Clips Funded (docs/CONTRACTS.md §47.10, ADR-89): the owner's Mac helper posts a story's
 TikTok job the way it posts Clip Factory's (§47), to Clips Funded's own TikTok only.
 
 * A Mac job is the story's TikTok ``PUBJOB#`` with ``publishingStatus: "mac"`` (written by ``workspaces.publish``):

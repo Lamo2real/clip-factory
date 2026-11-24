@@ -41,6 +41,8 @@ EXPECTED: set[tuple[str, str]] = {
     ("POST", f"{_B}/references"),
     ("POST", f"{_B}/references/{_ID}/complete"),
     ("POST", f"{_B}/references/{_ID}/analyze"),
+    ("POST", f"{_B}/references/link"),  # §45.40: a reference from a pasted link
+    ("POST", f"{_B}/references/{_ID}/fetch"),  # §45.40: its Try again
     ("GET", f"{_B}/references/{_ID}"),
     ("PATCH", f"{_B}/references/{_ID}"),
     ("DELETE", f"{_B}/references/{_ID}"),

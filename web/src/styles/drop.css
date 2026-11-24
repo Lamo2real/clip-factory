@@ -1,0 +1,135 @@
+/* Drag and drop (docs/CONTRACTS.md §45.40.1, components/DropOverlay.tsx): nothing at rest. While something is
+   dragged over a zone, a glass layer covers it (an element zone, the `drop-host`) or the window (a page zone), with
+   one glass pill in its middle: a 40 px icon and the words. A refused drop: the pill turns coral with an X, shakes
+   three times (not with reduced motion) and fades after 1.6 s. The layer never takes the pointer. This file is the
+   layout and the motion for both apps, and Clip Factory's look (drop-layer--clips); Clips Funded's look is
+   stories/styles/st-drop.css (st-drop). */
+.drop-host {
+  position: relative;
+}
+/* A zone with no corners of its own (a card's contents): the layer is rounded anyway. Nothing shows at rest. */
+.drop-host--round {
+  border-radius: var(--r-lg);
+}
+.drop-layer {
+  display: grid;
+  place-items: center;
+  padding: 16px;
+  pointer-events: none;
+  text-align: center;
+  color: var(--ink);
+  animation: drop-in 160ms var(--ease-out) both;
+}
+.drop-layer--element {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border-radius: inherit;
+}
+/* Below Ask's launcher (45), its panel (60/70) and the toasts. */
+.drop-layer--page {
+  position: fixed;
+  inset: 0;
+  z-index: 40;
+}
+.drop-layer__pill {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  max-width: min(100%, 34rem);
+  padding: 14px 24px 14px 18px;
+  border-radius: var(--r-pill);
+}
+.drop-layer__icon {
+  display: grid;
+  flex: none;
+}
+.drop-layer__icon > svg {
+  width: 40px;
+  height: 40px;
+}
+.drop-layer__words {
+  font-size: 1.15rem;
+  font-weight: 700;
+  line-height: 1.3;
+  text-align: start;
+  text-wrap: balance;
+}
+.drop-layer.is-refused {
+  animation: drop-out 240ms var(--ease-out) 1360ms forwards;
+}
+.drop-layer.is-refused .drop-layer__pill {
+  animation: drop-shake 360ms var(--ease-out) both;
+}
+.drop-layer.is-refused .drop-layer__words {
+  font-size: 1rem;
+}
+@keyframes drop-in {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes drop-out {
+  to {
+    opacity: 0;
+  }
+}
+/* Three times, ±6 px. */
+@keyframes drop-shake {
+  0%,
+  100% {
+    transform: none;
+  }
+  8.33%,
+  41.67%,
+  75% {
+    transform: translateX(-6px);
+  }
+  25%,
+  58.33%,
+  91.67% {
+    transform: translateX(6px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .drop-layer.is-refused .drop-layer__pill {
+    animation: none;
+  }
+}
+.reduce-motion .drop-layer.is-refused .drop-layer__pill {
+  animation: none;
+}
+
+/* Clip Factory's look: the page's own green glass over the zone, a soft leaf glow inside its edge, and the pill on
+   the sheet's tint (AA for bone words over anything behind it). */
+.drop-layer--clips {
+  background: linear-gradient(rgb(var(--green-rgb) / 0.45), rgb(var(--green-rgb) / 0.45));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  box-shadow: inset 0 0 48px rgb(var(--green-leaf-rgb) / 0.5);
+}
+.drop-layer--clips .drop-layer__pill {
+  background: var(--glass-tint-overlay);
+  box-shadow:
+    var(--light-rim-3),
+    var(--shadow-2);
+}
+.drop-layer--clips.is-busy .drop-layer__icon {
+  opacity: 0.6;
+}
+.drop-layer--clips.is-refused .drop-layer__pill {
+  background:
+    linear-gradient(rgb(var(--vermilion-rgb) / 0.3), rgb(var(--vermilion-rgb) / 0.3)),
+    var(--glass-tint-overlay);
+}
+.drop-layer--clips.is-refused .drop-layer__icon {
+  color: var(--vermilion-ink);
+}
+/* Nothing to see through: the layer is solid green. */
+@media (prefers-reduced-transparency: reduce) {
+  .drop-layer--clips {
+    -webkit-backdrop-filter: none;
+    backdrop-filter: none;
+    background: linear-gradient(rgb(var(--green-rgb) / 0.92), rgb(var(--green-rgb) / 0.92));
+  }
+}

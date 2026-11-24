@@ -144,6 +144,8 @@ const CASES: Case[] = [
   ["createReference", (a) => a.createReference("stories", { filename: "r.mp4", contentType: "video/mp4", size: 5, title: "Ref" }), "POST", `${B}/stories/references`, { filename: "r.mp4", contentType: "video/mp4", size: 5, title: "Ref" }, { reference: 1, upload: 2 }, { reference: 1, upload: 2 }],
   ["completeReference", (a) => a.completeReference("stories", "r1", [{ partNumber: 1, etag: "e" }]), "POST", `${B}/stories/references/r1/complete`, { parts: [{ partNumber: 1, etag: "e" }] }, { reference: 62 }, 62],
   ["analyzeReference", (a) => a.analyzeReference("stories", "r1", { effort: "max" }), "POST", `${B}/stories/references/r1/analyze`, { override: { effort: "max" } }, { reference: 1, job: 2 }, { reference: 1, job: 2 }],
+  ["createReferenceFromLink", (a) => a.createReferenceFromLink("stories", { url: "https://www.tiktok.com/@a/video/1", title: "Skid" }), "POST", `${B}/stories/references/link`, { url: "https://www.tiktok.com/@a/video/1", title: "Skid" }, { reference: 1, job: 2 }, { reference: 1, job: 2 }],
+  ["fetchReferenceAgain", (a) => a.fetchReferenceAgain("stories", "r1"), "POST", `${B}/stories/references/r1/fetch`, {}, { reference: 1, job: 2 }, { reference: 1, job: 2 }],
   ["getReference", (a) => a.getReference("stories", "r1"), "GET", `${B}/stories/references/r1`, undefined, { reference: 63 }, { reference: 63, analysis: null, job: null }],
   ["patchReference", (a) => a.patchReference("stories", "r1", { title: "New" }), "PATCH", `${B}/stories/references/r1`, { title: "New" }, { reference: 64 }, 64],
   ["deleteReferenceVideo", (a) => a.deleteReferenceVideo("stories", "r1"), "DELETE", `${B}/stories/references/r1`, undefined, null, undefined],
@@ -228,6 +230,14 @@ describe("every Lamo Stories route", () => {
       ["GET", "/stories/chat/v1?before=m1", undefined],
       ["GET", "/stories/chat/v1", undefined],
     ]);
+  });
+
+  it("getReference passes a link reference's fetch job through, and leaves it out when an older API sends none (§45.40)", async () => {
+    const fetchJob = { jobId: "f1", jobType: "reference_fetch", status: "failed", error: "That video is gone. Check the link." };
+    const { api } = fake((c) => ({ status: 200, body: c.url.endsWith("/r1") ? { reference: 1, analysis: null, job: null, fetchJob } : { reference: 2 } }));
+    await expect(api.getReference("stories", "r1")).resolves.toEqual({ reference: 1, analysis: null, job: null, fetchJob });
+    const older = await api.getReference("stories", "r2");
+    expect("fetchJob" in older).toBe(false);
   });
 
   it("getReference passes the analysis job through, and patchReference sends the video's own setting", async () => {

@@ -108,10 +108,17 @@ def build_app() -> Starlette:
     register_all(actions, runner)
     app = create_app(actions)
 
+    from . import pot
+
     @asynccontextmanager
     async def lifespan(_: Starlette) -> AsyncIterator[None]:
-        yield
-        await runner.shutdown()
+        # Only remembers how to run the PO token sidecar: it starts the first time a YouTube link is fetched (§45.40).
+        pot.configure()
+        try:
+            yield
+            await runner.shutdown()
+        finally:
+            await pot.stop()
 
     app.router.lifespan_context = lifespan
     return app

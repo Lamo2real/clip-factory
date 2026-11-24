@@ -300,7 +300,7 @@ class Recorder:
         return status, got
 
 
-def _ai_flow(call: Recorder, s3: RecordingS3) -> None:
+def _ai_flow(call: Recorder, s3: RecordingS3, runtime: FakeRuntime) -> None:
     """A real run through every AI route (the sweep below covers everybody's routes again)."""
 
     def ok(method: str, path: str, body: Any = None, expect: int = 200) -> Any:
@@ -359,6 +359,11 @@ def _ai_flow(call: Recorder, s3: RecordingS3) -> None:
     ok("GET", "/references")
     ok("GET", f"/references/{ref_id}")
     ok("PATCH", f"/references/{ref_id}", {"title": "B", "ai": {"model": "fable-5-1", "effort": None}})
+    # §45.40: a reference from a link (Clips Funded's own runtime gets it); a start that fails, then its Try again
+    runtime.fail = True
+    linked = ok("POST", "/references/link", {"url": "https://youtu.be/dQw4w9WgXcQ"}, 202)["reference"]
+    runtime.fail = False
+    ok("POST", f"/references/{linked['refId']}/fetch", {}, 202)
     ok("GET", "/onboarding")
     ok("PATCH", "/onboarding", {"step": "agents", "done": True})
     ok("PATCH", "/onboarding", {"step": "instagram", "skipped": True})
@@ -438,6 +443,8 @@ def _sample_bodies(r: Route, ids: dict[str, str]) -> list[Any]:
         ("POST", "/characters", character),
         ("PUT", "/characters/(?P<characterId>[^/]+)", {**character, "version": 1}),
         ("POST", "/characters/(?P<characterId>[^/]+)/references", picture),
+        ("POST", "/references/link", {"url": "https://www.tiktok.com/@a/video/1"}),
+        ("POST", "/references/(?P<refId>[^/]+)/fetch", {}),
         ("POST", "/design/uploads", picture),
         ("POST", "/design", {"description": "A tall driver."}),
         ("POST", "/design", {"description": "Taller.", "characterId": ids["characterId"]}),
@@ -515,7 +522,7 @@ def test_every_lamo_stories_route_stays_in_its_own_namespaces(
     secrets_client.calls.clear()
     s3_client.touched.clear()
 
-    _ai_flow(call, s3_client)
+    _ai_flow(call, s3_client, runtime)
     flow = list(call.responses)
     hit = {
         (r.method, r.pattern.pattern)
@@ -523,7 +530,7 @@ def test_every_lamo_stories_route_stays_in_its_own_namespaces(
         for m, p, s, _ in flow
         if m == r.method and r.pattern.match(p) and s < 300
     }
-    assert len(hit) == len(ai_routes.ROUTES) == 43  # the real flow answered every AI route
+    assert len(hit) == len(ai_routes.ROUTES) == 45  # the real flow answered every AI route
 
     # every route of Lamo Stories' own table, with every id a seeded or a made-up one, writes and reads first
     values = {"ws": "stories", "platform": "youtube", "agentId": "creative_director", "modelKey": "custom-sweep",
