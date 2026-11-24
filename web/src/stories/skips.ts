@@ -67,7 +67,7 @@ export function useSkip(
       const next = await storiesApi().patchOnboarding(ws, { step: p, skipped });
       setOnboarding(ws, next);
       toast.success(skipped ? "Skipped. You can un-skip it here." : `${PLATFORM_NAME[p]} is back.`);
-      await Promise.all([refreshDashboard(ws).catch(() => undefined), Promise.resolve().then(() => after?.()).catch(() => undefined)]);
+      await Promise.all([refreshDashboard(ws, { fresh: true }).catch(() => undefined), Promise.resolve().then(() => after?.()).catch(() => undefined)]);
       return true;
     } catch (e) {
       toast.error(friendlyMessage(e));

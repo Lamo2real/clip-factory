@@ -96,6 +96,10 @@ describe("the generated corpus (§19.2)", () => {
     }
     expect(suggestionsFor({ page: "settings" })[1]).toBe("Where do I change my click sound?");
     expect(suggestionsFor({ page: "clip" })[1]).toBe("Why is my clip private on TikTok?");
+    // TikTok skipped (rule S, §48.3): no chip names it; the clip page asks what Upload does instead.
+    expect(suggestionsFor({ page: "clip" }, ["tiktok"])).toEqual(["How do I make clips from a Twitch link?", "What does Upload do?", "How many views did my best clip get this week?"]);
+    expect(suggestionsFor({ page: "clip" }, ["x"])[1]).toBe("Why is my clip private on TikTok?");
+    for (const page of ["home", "settings", "clip"] as const) expect(suggestionsFor({ page }, ["tiktok"]).join(" "), page).not.toMatch(/TikTok/);
   });
 });
 

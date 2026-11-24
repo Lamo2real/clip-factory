@@ -235,7 +235,7 @@ test("after Disconnect, an own Meta app gets the Lamo Stories line, Clip Factory
   await fb.getByRole("button", { name: "Connect Facebook" }).click();
   await expect(page).toHaveURL(/\/stories\/connections\/facebook$/);
   await fb.getByRole("button", { name: /^Clips Funded/ }).click();
-  await expect(fb.locator(".st-chip").first()).toHaveText("Connected");
+  await expect(fb.locator(".st-chip").first()).toHaveText("Ready");
   // Picked from the list: the card asks first whether this is the Lamo Stories Page (§45.34).
   await fb.getByRole("group", { name: "Is this your Clips Funded Page?" }).getByRole("button", { name: "Yes, that's it" }).click();
   await moreOf(fb).click();
@@ -387,7 +387,7 @@ test("round 5: reconnecting clears the old warning (§45.36 E18)", async ({ page
   const tiktok = cardOf(page, "TikTok");
   await expect(tiktok).toContainText("The TikTok app keys changed. Connect again.");
   await tiktok.getByRole("button", { name: "Connect again" }).click();
-  await expect(tiktok.locator(".st-chip").first()).toHaveText("Connected");
+  await expect(tiktok.locator(".st-chip").first()).toHaveText("Ready");
   await expect(tiktok).not.toContainText("app keys changed");
 });
 

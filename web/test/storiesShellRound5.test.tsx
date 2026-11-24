@@ -470,7 +470,7 @@ describe("Social accounts (§45.36 E13, E14, E18)", () => {
     forgetLoaded();
     await render("tiktok");
     expect((await card("tiktok")).querySelector(".st-chip")?.textContent).toBe(
-      "Connected",
+      "Ready",
     );
     expect((await card("tiktok")).textContent).not.toContain("app keys changed");
   });

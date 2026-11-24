@@ -243,8 +243,10 @@ describe("the Social accounts page: a header, the progress card and five rows", 
     expect(row("facebook").dataset.state).toBe("skipped");
     expect(row("facebook").querySelector(".st-chip")?.textContent).toBe("Skipped");
     expect(row("facebook").querySelector(".st-social-row__line")?.textContent).toBe("You won't post here.");
+    // Said once: the row's line says it, and under the hairline there is only the way back.
+    expect(row("facebook").textContent?.match(/post/g)).toHaveLength(1);
     const back = row("facebook").querySelector<HTMLElement>('[data-skipped="facebook"]')!;
-    expect(back.textContent).toContain("You won't post to Facebook until you set it up.");
+    expect(back.textContent?.trim()).toBe("Un-skip");
     expect(byLabel(back, "Un-skip Facebook")?.textContent?.trim()).toBe("Un-skip");
     // Focus stays on the row: on its way back.
     expect(document.activeElement).toBe(byLabel(back, "Un-skip Facebook"));
@@ -310,15 +312,21 @@ describe("a platform's own page", () => {
       s.onboarding.skipped = [...s.onboarding.skipped, "facebook"];
     });
     const note = host.querySelector<HTMLElement>(".st-social-one__skipped")!;
-    expect(note.getAttribute("role")).toBe("status");
+    // Not a live region: its Un-skip button never sits inside one.
+    expect(note.getAttribute("role")).toBeNull();
+    expect(note.querySelector('[role="status"], [aria-live]')).toBeNull();
     expect(note.textContent).toContain("You skipped Facebook. You won't post there until you set it up.");
     // Its card is all there: Connect, and the More fold.
     const card = host.querySelector<HTMLElement>('.st-conn[data-platform="facebook"]')!;
     expect(byText(card, "Connect Facebook")).toBeTruthy();
     expect(card.querySelector("details.st-conn__more")).not.toBeNull();
-    await click(byLabel(note, "Un-skip Facebook"));
+    const unskip = byLabel(note, "Un-skip Facebook")!;
+    unskip.focus();
+    await click(unskip);
     expect(patches()).toEqual([["stories", { step: "facebook", skipped: false }]]);
     expect(host.querySelector(".st-social-one__skipped")).toBeNull();
     expect(toasts()).toContain("Facebook is back.");
+    // The button went with its note: the keyboard's place is the card's name, not the page behind it.
+    expect(document.activeElement).toBe(host.querySelector('.st-conn[data-platform="facebook"] h1.st-conn__name'));
   });
 });

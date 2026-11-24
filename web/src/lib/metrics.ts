@@ -254,14 +254,19 @@ export interface CalmCopy {
   spinner?: boolean;
 }
 
+/** A skipped place with no post of this clip: the stack only says so, with no setup nudge (rule S, §48.3). */
+export const SKIPPED_STACK = "Not posted here.";
+
 /**
  * The one plain line (and link) a stack shows instead of numbers. Null when it has numbers to show. `row`: TikTok's row
  * (lib/tiktokMac.ts tiktokRow) while the clip page shows its one button: the stack then says the row's words, with no
- * link (Try again, Post with my Mac, Turn on or Add link is on the page itself).
+ * link (Try again, Post with my Mac, Turn on or Add link is on the page itself). `skipped`: the owner skipped this place
+ * (an active skip, lib/setupTodo.ts activeSkips), so a stack with no post never asks him to set it up or turn it on.
  */
 export function calmCopy(
   p: Pick<PlatformPerformance, "platform" | "status" | "metrics" | "error"> & Partial<Pick<PlatformPerformance, "by" | "url" | "mac" | "via">>,
   row?: TikTokRow | null,
+  skipped = false,
 ): CalmCopy | null {
   const name = PLATFORM_LABEL[p.platform];
   // Its chip says "Not sure it posted" (macChip): the line only says where to look (and from when Try again comes),
@@ -275,6 +280,8 @@ export function calmCopy(
     if (p.status === "posted_private") return { text: row.kind === "not_ready" ? `${PRIVATE_UPLOAD} ${row.words}.` : PRIVATE_UPLOAD };
     return row.spinner ? { text: row.words, spinner: true } : { text: row.words };
   }
+  // TikTok's row (above) still speaks for the Mac, whose switch a skip never turns off (§48.3).
+  if (skipped && (p.status === "not_posted" || p.status === "waiting_for_connection")) return { text: SKIPPED_STACK };
   switch (p.status) {
     case "mac": {
       // His Mac posts it on TikTok (§47.4): what it is doing. Try again is on the page, so no link.

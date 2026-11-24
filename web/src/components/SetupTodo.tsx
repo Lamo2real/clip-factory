@@ -198,7 +198,11 @@ export function SetupTodo() {
     (p: Platform) => {
       setAsking(null);
       leftRow.current = p;
-      return skip(p);
+      // A skip that did not save took no row away: nothing to move the focus for later.
+      return skip(p).then((ok) => {
+        if (!ok && leftRow.current === p) leftRow.current = null;
+        return ok;
+      });
     },
     [skip],
   );

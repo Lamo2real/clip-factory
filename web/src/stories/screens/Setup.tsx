@@ -21,7 +21,7 @@ import { useToast } from "../../components/Toasts.tsx";
 import { Glide } from "../../components/Glide.tsx";
 import { storiesGoLater } from "../pane.tsx";
 import { useLoad } from "../../lib/hooks.ts";
-import { storiesSound } from "../prefs.ts";
+import { storiesDeniedSound, storiesSound } from "../prefs.ts";
 import { storiesApi } from "../api/client.ts";
 import { EFFORT_LABEL, type Effort, type ModelInfo, type Onboarding, type OnboardStep, type Platform, type SocialAccount, type StoriesAiConfig, type StoriesConfig } from "../api/types.ts";
 import { madeBy, MODEL_STATUS } from "../settings/bits.tsx";
@@ -108,7 +108,7 @@ function Foot({
       ) : null}
       {onUnskip ? (
         // Kid-proof: never disabled; a tap while it is saving plays the deny sound.
-        <StButton quiet aria-disabled={busy || undefined} onClick={() => !busy && onUnskip()}>
+        <StButton quiet aria-disabled={busy || undefined} onClick={() => (busy ? storiesDeniedSound() : onUnskip())}>
           Un-skip
         </StButton>
       ) : onSkip ? (

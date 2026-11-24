@@ -146,7 +146,8 @@ export function connectedAsSentence(a: Pick<SocialAccount, "accountName" | "hand
 }
 
 const STATUS: Record<SocialAccount["connectionStatus"], { label: string; tone: StTone; auth: string }> = {
-  connected: { label: "Connected", tone: "mint", auth: "Allowed: Clips Funded may post here." },
+  // "Ready", the same word as its row on Social accounts and the "N of M ready" card (§48.4: one word for one state).
+  connected: { label: "Ready", tone: "mint", auth: "Allowed: Clips Funded may post here." },
   choose_account: { label: "Pick one", tone: "sun", auth: "Allowed, but pick where Clips Funded posts first." },
   needs_reconnect: { label: "Connect again", tone: "coral", auth: "Stopped: the sign-in needs renewing. Tap Connect again." },
   same_as_clips: { label: "Clip Factory's own", tone: "coral", auth: "Stopped: Clips Funded never posts to Clip Factory's own account." },

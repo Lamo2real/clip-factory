@@ -478,10 +478,13 @@ const dashFlight = new Map<string, Promise<void>>();
 const dashSubs = new Set<() => void>();
 const EMPTY: DashSnap = { data: null, error: null };
 
-/** Loads the dashboard of `ws` now (one call at a time, shared by everything that shows it). */
-export function refreshDashboard(ws: string): Promise<void> {
+/**
+ * Loads the dashboard of `ws` now (one call at a time, shared by everything that shows it). `fresh`: after a change
+ * (a skip, an Un-skip), a read already on its way may have left before it; wait for it, then read once more.
+ */
+export function refreshDashboard(ws: string, opts?: { fresh?: boolean }): Promise<void> {
   const flying = dashFlight.get(ws);
-  if (flying) return flying;
+  if (flying) return opts?.fresh ? flying.catch(() => undefined).then(() => refreshDashboard(ws)) : flying;
   const run = (async () => {
     try {
       const data = await storiesApi().dashboard(ws);

@@ -34,6 +34,7 @@ import {
 } from "../src/lib/crFit.ts";
 import { CampaignFit as Block, KEEP_IT_HERE, READ_THEM, withoutSkippedNotes } from "../src/screens/review/CampaignFit.tsx";
 import { FitSuggestion, copyWords } from "../src/screens/review/FitSuggestion.tsx";
+import { fitSummary } from "../src/screens/clip/ClipFit.tsx";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -632,6 +633,15 @@ describe("a skipped place's note leaves the fit block; the campaign's own blocke
     const only = fit([todo, ...OK_ITEMS], { uploadPlaces: [] });
     expect(withoutSkippedNotes(only, ["youtube", "tiktok", "instagram", "facebook", "x"]).items).toContain(todo);
     expect(fitMain(withoutSkippedNotes(only, ["youtube"]))?.text).toBe("Set up YouTube first. FaZe Clips pays for YouTube.");
+  });
+
+  it("the clip page's one line per campaign never names a skipped place's Set it up note", () => {
+    const f = fit([x, goes, ...OK_ITEMS], { uploadPlaces: ["youtube"] });
+    expect(fitSummary(f)).toBe(`${f.headline}. X pays too. Set it up to earn there as well.`);
+    expect(fitSummary(f, ["x"])).not.toContain("X pays too");
+    expect(fitSummary(f, ["x"])).toBe(fitSummary(withoutSkippedNotes(f, ["x"])));
+    // Another place's skip changes nothing.
+    expect(fitSummary(f, ["instagram"])).toBe(fitSummary(f));
   });
 
   it("drawn: See what's right leaves the skipped place's note out, and keeps the other", async () => {

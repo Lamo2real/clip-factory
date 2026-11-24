@@ -221,3 +221,53 @@ describe("the Dashboard's glass", () => {
     expect(row?.querySelector(".st-media [role='progressbar']")?.getAttribute("aria-label")).toMatch(/: /);
   });
 });
+
+describe("refreshDashboard after a skip or an Un-skip", () => {
+  afterEach(() => {
+    forgetDashboards();
+    setStoriesApi(null);
+  });
+
+  it("fresh waits for a read already on its way (it may have left before the change), then reads once more", async () => {
+    forgetDashboards();
+    setMockLatency(0);
+    const real = mockStoriesApi();
+    const open: (() => void)[] = [];
+    let reads = 0;
+    setStoriesApi({
+      ...real,
+      dashboard: (ws: string) => {
+        reads++;
+        return new Promise<StoriesDashboard>((resolve, reject) => open.push(() => void real.dashboard(ws).then(resolve, reject)));
+      },
+    });
+    const poll = refreshDashboard("stories");
+    // Without `fresh`, a second call joins the read on its way.
+    expect(refreshDashboard("stories")).toBe(poll);
+    expect(reads).toBe(1);
+    let done = false;
+    const after = refreshDashboard("stories", { fresh: true }).then(() => {
+      done = true;
+    });
+    expect(reads).toBe(1);
+    open.shift()!();
+    await poll;
+    // The old read is in; one more starts and the change waits for it.
+    await vi.waitFor(() => expect(reads).toBe(2));
+    expect(done).toBe(false);
+    open.shift()!();
+    await after;
+    expect(done).toBe(true);
+    expect(reads).toBe(2);
+  });
+
+  it("fresh with nothing on its way is a plain read", async () => {
+    forgetDashboards();
+    setMockLatency(0);
+    const real = mockStoriesApi();
+    let reads = 0;
+    setStoriesApi({ ...real, dashboard: (ws: string) => (reads++, real.dashboard(ws)) });
+    await refreshDashboard("stories", { fresh: true });
+    expect(reads).toBe(1);
+  });
+});

@@ -883,7 +883,7 @@ test.describe("the pages", () => {
     await expect(page.locator(".toast").filter({ hasText: "Now pick the Facebook Page Clips Funded posts to." })).toBeVisible();
     await expect(fb.getByRole("button", { name: /Clip Factory's own/ })).toHaveAttribute("aria-disabled", "true");
     await fb.getByRole("button", { name: /^Clips Funded/ }).click();
-    await expect(fb.locator(".st-chip").first()).toHaveText("Connected");
+    await expect(fb.locator(".st-chip").first()).toHaveText("Ready");
     await expect(fb.locator(".st-who__id code")).toHaveText("109876543210987");
   });
 
@@ -961,7 +961,7 @@ test.describe("the pages", () => {
     await x.getByRole("button", { name: "Share Clip Factory's app" }).click();
     await expect(x.locator(".st-app")).toContainText("Shares Clip Factory's X app, on purpose. Clip Factory's posts always go first. Clips Funded uses what's left.");
     await x.getByRole("button", { name: "Connect X" }).click();
-    await expect(x.locator(".st-chip").first()).toHaveText("Connected");
+    await expect(x.locator(".st-chip").first()).toHaveText("Ready");
 
     // YouTube's own app: the redirect URI to copy (Lamo Stories' own callback), the keys form, Check it.
     await backToList(page);

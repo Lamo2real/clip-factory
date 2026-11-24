@@ -1,5 +1,5 @@
 import { expect, test, type Page } from "@playwright/test";
-import { openTodo, settle } from "./helpers.ts";
+import { CLIPS, openClip, openTodo, settle } from "./helpers.ts";
 
 // Rule S (docs/CONTRACTS.md §48; the owner, 24 Nov: "if i skip on a platform setup then i dont want to see it anywhere
 // except in settings or social accounts tab"), in both apps of the mock build. A platform the owner skipped leaves
@@ -64,6 +64,16 @@ test("Clip Factory: skip X, and X leaves the list, its count, Home and Review; S
   const hint = page.locator(".review-card").first().locator("a.upload-to__hint");
   await expect(hint).toHaveText("Set up TikTok, Instagram and Facebook to upload there too.");
   await expect(page.locator(".review-card").first().locator(".upload-to")).not.toContainText("Set up X");
+
+  // A clip's page: X's stack (no post there) says only that, with no way to set X up or turn it on. Instagram, not
+  // skipped, still has its nudge.
+  await openClip(page, CLIPS.mixed);
+  const xStack = page.locator('[data-stack="x"]');
+  await expect(xStack.locator(".pstack__calm-text")).toHaveText("Not posted here.");
+  await expect(xStack.getByRole("link")).toHaveCount(0);
+  await expect(page.locator(".perf")).not.toContainText("Turn on X");
+  await expect(page.locator(".perf")).not.toContainText("Set up X");
+  await expect(page.locator('[data-stack="instagram"]').getByRole("link", { name: "Set up Instagram" })).toBeVisible();
 
   // Settings › Posting › Set up posting: all five cards; X's says Skipped, with Un-skip, and the count leaves it out.
   await page.goto("/settings/posting/setup");
@@ -165,7 +175,9 @@ test("Clips Funded, the owner's case: X skipped in the setup leaves the dashboar
   const x = page.locator(".st-social-row-wrap[data-platform='x']");
   await expect(x).toHaveAttribute("data-state", "skipped");
   await expect(x.locator(".st-chip")).toHaveText("Skipped");
-  await expect(x.locator("[data-skipped='x']")).toContainText("You won't post to X until you set it up.");
+  // Said once: the row's line, and under its hairline only the way back.
+  await expect(x.locator(".st-social-row__line")).toHaveText("You won't post here.");
+  await expect(x.locator("[data-skipped='x']")).toHaveText("Un-skip");
   await expect(page.locator(".st-social-progress h2")).toHaveText("4 of 4 ready");
   await expect(page.locator(".st-social-progress")).toContainText("Every place is ready.");
   // Its own page says so too.

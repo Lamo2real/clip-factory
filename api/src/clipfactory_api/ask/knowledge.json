@@ -1,5 +1,5 @@
 {
- "version": "5fbc5054b6ee",
+ "version": "f52914681f75",
  "parts": [
   {
    "id": "app-map",
@@ -315,7 +315,7 @@
    "id": "contracts-48",
    "title": "CONTRACTS: 48. A skipped platform shows only in Settings and Social accounts, and Clips Funded's Social accounts look like Set up posting (owner request, 2026-1",
    "line": "The owner's two asks (24 Nov, about 00:15 UTC):",
-   "chars": 27450
+   "chars": 30406
   },
   {
    "id": "adr-01",

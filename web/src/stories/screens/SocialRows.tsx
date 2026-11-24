@@ -11,7 +11,7 @@ import { PlatformMark } from "../../components/PlatformMark.tsx";
 import type { Platform, SocialAccount } from "../api/types.ts";
 import { ArcDial } from "../glass/index.ts";
 import { storiesDeniedSound } from "../prefs.ts";
-import { skippedLine, skipQuestion, socialHref } from "../skips.ts";
+import { skipQuestion, socialHref } from "../skips.ts";
 import { PLATFORM_NAME, StButton, StIcon, type StTone } from "../ui.tsx";
 
 /** The rows' order, as Clip Factory's Set up posting lists them. */
@@ -226,8 +226,8 @@ function RowItem({ a, busy, onSkip, onUnskip }: { a: SocialAccount; busy: boolea
           </div>
         </div>
       ) : row.state === "skipped" ? (
+        // The row already says "You won't post here.": under the hairline, only the way back (said once, §48.4).
         <p className="st-social-row__skip" data-skipped={p} ref={skipLine}>
-          <span>{skippedLine(p)}</span>
           <StButton quiet aria-label={`Un-skip ${name}`} aria-disabled={busy || undefined} onClick={whileBusy(busy, () => void onUnskip(p))}>
             Un-skip
           </StButton>

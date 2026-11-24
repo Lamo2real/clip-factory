@@ -83,8 +83,27 @@ function PlatformPage({ ws, platform, result }: { ws: string; platform: Platform
 
   const a = social.data?.accounts.find((x) => x.platform === platform);
   const busy = skips.busy !== null;
+  const here = useRef<HTMLElement>(null);
+  // Un-skip takes its note (and the button with it) away: the keyboard's place moves to the card's name, never lost.
+  // Set before the save, since the page may show the platform back before the save's promise settles.
+  const focusCard = useRef(false);
+  const skippedNow = !!a?.skipped;
+  useEffect(() => {
+    if (skippedNow || !focusCard.current) return;
+    focusCard.current = false;
+    const now = document.activeElement;
+    if (now && now !== document.body && now.isConnected) return;
+    const heading = here.current?.querySelector<HTMLElement>(".st-conn__name");
+    if (!heading) return;
+    heading.tabIndex = -1;
+    heading.focus({ preventScroll: true });
+  }, [skippedNow]);
+  const unskip = async () => {
+    focusCard.current = true;
+    if (!(await skips.unskip(platform))) focusCard.current = false;
+  };
   return (
-    <section className="st-page st-connections st-social-one" data-platform={platform}>
+    <section className="st-page st-connections st-social-one" data-platform={platform} ref={here}>
       <nav aria-label="Breadcrumb" className="st-crumbs st-plate">
         <A href="/stories/connections" className="st-textlink st-crumbs__link">
           Social accounts
@@ -98,7 +117,8 @@ function PlatformPage({ ws, platform, result }: { ws: string; platform: Platform
       </nav>
       <SetupBack ws={ws} />
       {a?.skipped ? (
-        <p className="st-note st-note--sky st-social-one__skipped" role="status">
+        // Not a live region: it is there when the page opens, and its Un-skip button must not sit inside one.
+        <p className="st-note st-note--sky st-social-one__skipped">
           <StIcon name="bulb" size={18} />
           <span className="st-social-one__skipped-text">
             You skipped {name}. You won't post there until you set it up.
@@ -109,7 +129,7 @@ function PlatformPage({ ws, platform, result }: { ws: string; platform: Platform
             onClick={() => {
               // Kid-proof: never disabled; a tap while it saves only says no.
               if (busy) return storiesDeniedSound();
-              void skips.unskip(platform);
+              void unskip();
             }}
           >
             Un-skip
@@ -117,6 +137,8 @@ function PlatformPage({ ws, platform, result }: { ws: string; platform: Platform
         </p>
       ) : null}
       {gone ? <DisconnectedNote choice={gone.choice} onClose={() => setGone(null)} /> : null}
+      {/* The card's name is the page's h1; until the card shows, the page still has one. */}
+      {!a ? <h1 className="sr-only">{name}</h1> : null}
       {social.error && !social.data ? (
         <StError message={social.error} onRetry={() => void social.reload()} />
       ) : !social.data ? (
