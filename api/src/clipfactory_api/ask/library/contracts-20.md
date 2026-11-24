@@ -246,7 +246,12 @@ way.
   Animations keep their 1 ms and their end events; this rule is about transitions only.
 * A part that has a transition of its own still swaps one frame late under calm motion (its 1 ms starts on the next
   frame). A check that reads such a part right after a change waits for it (`expect.poll`, `toHaveCSS`, a read in the
-  same task as the change as `e2e/send-fade.spec.ts` does), never on a fixed delay.
+  same task as the change as `e2e/send-fade.spec.ts` does), never on a fixed delay. Checked on 24 Nov: every
+  calm-motion spec (50 files, 1,387 tests in Chromium, no retries) was also run against a build in which every
+  transition under calm motion started 600 ms late (`transition-delay: 600ms !important`, CI's slow frames on purpose):
+  all passed but a Mac-only hover check that fails on main as well (`bank.spec.ts` "the ways in", phone) and one edge
+  scan that read a box-shadow inside the delayed 1 ms itself (it passed again twice, and cannot happen without the
+  delay).
 
 ### 20.7 Undo and the rewind
 
