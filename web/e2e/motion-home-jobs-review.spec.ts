@@ -65,6 +65,9 @@ test.describe("motion: Home (APPLY a)", () => {
     await expect(page.getByLabel("YouTube, Twitch or Kick link")).toHaveValue("https://youtu.be/dQw4w9WgXcQ");
     const clear = page.getByRole("button", { name: "Clear link" });
     await expect(clear).toHaveAttribute("data-act", "clear");
+    // A tap on Clear within 400 ms of it taking Paste's place is a double tap's second half and is ignored
+    // (NewJobForm.tsx SWAP_MS, home-jobs-guards.spec.ts); this is a tap of its own, a moment later.
+    await page.waitForTimeout(500);
     await clear.click();
     await expect(page.getByLabel("YouTube, Twitch or Kick link")).toHaveValue("");
   });
