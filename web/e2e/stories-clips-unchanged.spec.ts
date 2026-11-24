@@ -9,7 +9,8 @@ import { settle } from "./helpers.ts";
 // Live chip in the sidebar's foot (or a round toggle beside or above it, or a slim one between the menu and the foot,
 // or, in a folded sidebar too short for that, a slim one beside the fold button) and, on a phone, in the top bar
 // between the brand and the Live chip, never covering or pushing anything (on the smallest phones, 320 px, the brand
-// drops its name, §45.36 E16). Pixel before/after shots against main are taken on one machine (web/scripts/clips-unchanged.sh).
+// drops its name, §45.36 E16). The Live chip keeps its box; switched on, it is the switch's see-through glass (§45.38 S5).
+// Pixel before/after shots against main are taken on one machine (web/scripts/clips-unchanged.sh).
 
 const ITEMS = [
   ["home", "/", "Home"],
@@ -215,10 +216,14 @@ test.describe("with Lamo Stories switched on", () => {
       expect(after.tabs).toEqual(before.tabs);
       expect(after.tabbar).toEqual(before.tabbar);
       expect(after.foot).toEqual(before.foot);
-      // The Live chip is drawn as before too, not only in its old place: on a computer the shell's chip lies over the
-      // sidebar where the sidebar's own was, raised on it as that one was (glass.css), never a pane of its own over it.
+      // The Live chip keeps its old box (foot.live above, top.live below). Its look is the shell's now: the workspace
+      // switch's own see-through glass, one family with it (the owner, 23 Nov: "the live indicator should be one
+      // glasssy liquyid theme as well"; glide.css, §45.38 S5), white words on a blur of its own.
       expect(before.liveLook, "the Live chip is on screen").not.toBeNull();
-      expect(after.liveLook, "the Live chip is drawn as before").toEqual(before.liveLook);
+      expect(after.liveLook, "the shell's Live chip is on screen").not.toBeNull();
+      expect(after.liveLook!.backdropFilter, "the switch's own glass").toBe("blur(14px) brightness(0.9)");
+      expect(after.liveLook!.color, "white words, as the switch's").toBe("rgb(255, 255, 255)");
+      expect(after.liveLook!.opacity).toBe(before.liveLook!.opacity);
       // On the smallest phones (320 px) the brand drops its name so the switch stays a full 48 px (§45.36 E16): its
       // mark stays where it was; the live dot and the bar do not move. Everywhere else the top bar is as before.
       const squeezed = after.switcher.some((sw) => sw.place === "topbar" && sw.squeeze);

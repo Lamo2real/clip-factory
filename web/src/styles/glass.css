@@ -1,7 +1,8 @@
-/* Liquid glass (ADR-45). Every surface is a see-through bottle-green tint with blur + saturation and, in Chromium, a
-   refraction filter that bends the backdrop. No drawn edges anywhere: a pane shows by its blur, tint and shadow.
-   The tint is as light as WCAG AA allows over the lightest spot each look can really show: the app's own living
-   backdrop (worked out over every blob subset, lib/background.ts), a white desktop, or the owner's own picture. */
+/* Liquid glass (ADR-45). Every surface is a see-through bottle-green tint with blur, saturation and a dimming of what
+   it sees (brightness()) and, in Chromium, a refraction filter that bends the backdrop. No drawn edges anywhere: a
+   pane shows by its blur, tint and shadow. The tint is as light as WCAG AA allows over the lightest spot each look can
+   really show, as the pane's own filter sees it: the app's own living backdrop (worked out over every blob subset,
+   lib/background.ts), the owner's own picture or colours, or a white desktop (which no web filter can dim). */
 
 .backdrop {
   position: fixed;
@@ -236,15 +237,18 @@ html[data-strength="frosted"] .backdrop__frost {
 /* The logic of light (ADR-87, docs/CONTRACTS.md §22.7): one key light above. A pane is bottle green with a soft bone
    light that is brightest at its top and gone by 65 % of its height, a catch light at the top centre (inside the top
    padding, never under words), a blurred top glow, a soft shade at the bottom and a drop below. Every bone lift is
-   paid for with a step more green (--light-pay), so the words keep AA (lib/background.ts works out every number). */
+   paid for with a step more green (--light-pay), so the words keep AA (lib/background.ts works out every number).
+   Liquid (owner, 2026-11-23: "everything more see through in a liquid glassy style"): its own filter blurs, saturates
+   and dims what it sees (--glass-brightness, each look's own; 1 in the window look), so the green is thin and most of
+   the backdrop shows through. Never transitioned or animated. */
 .glass {
   --glass-tint: var(--glass-tint-panel);
   --glass-light: var(--glass-light-panel);
   position: relative;
   isolation: isolate;
   background: var(--glass-light), var(--glass-tint);
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
   border: 1px solid transparent;
   border-radius: var(--r-lg);
   box-shadow: var(--glass-shadow-panel);
@@ -311,10 +315,18 @@ html[data-strength="frosted"] .backdrop__frost {
 
 /* ---------- The window look and the picture look: tints (docs/CONTRACTS.md §22.3) ---------- */
 
-/* Where white can be behind (a white desktop, a white photo) the panels already carry 0.73 green; the ladder's pay on
-   top of it (LIGHT_PAY_WHITE, Clear and Picture over white) until lib/look.ts sets each look's own on <html>. */
+/* Where white can be behind (a white desktop, a white photo), the ladder's pay on top of the panel veil
+   (LIGHT_PAY_WHITE, Clear and Picture over white) until lib/look.ts sets each look's own on <html> (a photo's panes,
+   dimmed to half, then pay 0.10: lib/background.ts mostPay): over white a pane at the AA floor leaves the levels above
+   it no room to read brighter, so the pay lowers it a step. */
 html:is(.see-through, [data-backdrop="picture"]) {
   --light-pay: 0.05; /* LIGHT_PAY_WHITE */
+}
+/* Over the owner's photo the glass blurs as much as it did before the see-through pass (18px, and 14px where it bends),
+   so the shapes of the photo still read through it: the stronger blur only ever showed over the smooth meshes. */
+html[data-backdrop="picture"] {
+  --glass-blur: 18px;
+  --glass-refract-blur: 14px;
 }
 /* --panel-veil (lib/background.ts) is the least bottle green that keeps every text colour of this look (tokens.css)
    at WCAG AA over the lightest thing behind (a white desktop, a white photo); the panel tint adds the light's pay to
@@ -325,17 +337,27 @@ html:is(.see-through, [data-backdrop="picture"]) {
 :where(html.see-through) :is(.glass, .glass--clear):where(:not(.glass--green)) {
   --glass-tint: var(--glass-tint-panel);
 }
+/* Two small surfaces whose words start inside their top light, as a plate's do, carry the plate's tint in every look
+   (lib/background.ts PLATE_WORDS_LIGHT; it covers their light, and in the looks that dim, their own filter dims under
+   it too): a phone's top bar (a narrow window) Live chip, beside the brand's plate, its words about 6 px down; and the
+   "All set!" card in a phone's pill strip, which keeps 8 px above its words to stay inside the bar, its words about
+   9 px down in its lead light. */
+html :is(.topbar .live-dot, .setup-todo--done[data-mode="pill"]) {
+  --glass-tint: var(--glass-tint-plate);
+}
 /* Nothing that holds words is weaker than the panel tint: what can sit straight on the window carries at least
    that much, with the tab bar's own step on top. */
 html.see-through .tabbar {
   --glass-tint: linear-gradient(180deg, rgb(var(--green-rgb) / min(1, max(var(--tabbar-veil), var(--panel-veil)) + var(--light-tabbar-pay))), rgb(var(--green-rgb) / min(1, max(var(--tabbar-veil), var(--panel-veil)) + var(--light-tabbar-pay))));
 }
 /* Text that sits straight on the window, the picture or the frosted colours (page titles and their line, breadcrumbs,
-   headings and lines between panels) sits on a plate that is a pane like any other (E1: the panel tint, its light
-   from above and its soft shadow). Frosted needs it for the moving caustics, which lighten the mesh where they cross
-   a blob (test/background.test.ts works out the worst spot). The room around the words is real padding, never a
-   spread shadow: a plate starts at the page edge like a panel, its words start where a panel's words start
-   (--loose-x, layout.css), and nothing hugs or cuts a letter. */
+   headings and lines between panels) sits on a plate that is a pane like any other (E1: its light from above and its
+   soft shadow). A plate draws no filter of its own (the title plates stay out of the blur and refraction budget), so
+   nothing dims the backdrop under its words: it carries the plate veil (--glass-tint-plate), what the backdrop needs
+   as it is. Frosted needs it for the moving caustics, which lighten the mesh where they cross a blob
+   (test/background.test.ts works out the worst spot). The room around the words is real padding, never a spread
+   shadow: a plate starts at the page edge like a panel, its words start where a panel's words start (--loose-x,
+   layout.css), and nothing hugs or cuts a letter. */
 html:is(.see-through, [data-backdrop])
   :is(
     .page-head__text,
@@ -357,7 +379,7 @@ html:is(.see-through, [data-backdrop])
     :is(.money-dash, .dash-body) > .dash-grey
   ) {
   border-radius: var(--r-md);
-  background: var(--glass-light-panel), var(--glass-tint-panel);
+  background: var(--glass-light-panel), var(--glass-tint-plate);
   box-shadow: var(--glass-shadow-panel);
   padding-block: 8px;
 }
@@ -406,8 +428,8 @@ html:is(.see-through, [data-backdrop]) .perf__updated > span {
 }
 /* Pick-one tracks: a raised groove, one step brighter than what they sit on (a bone lift over a step more green), so
    the labels on them stay at AA even when the track sits straight on the window. On the page that is TRACK_LIFT over
-   TRACK_EXTRA_VEIL; inside a lit surface the relative raise (lib/background.ts works out the contrast for every
-   glass). */
+   the plate veil and TRACK_EXTRA_VEIL (a track draws no filter, so nothing dims under it); inside a lit surface the
+   relative raise (lib/background.ts works out the contrast for every glass). */
 :is(.segmented, .tabs, .bg-modes, .model-picks) {
   background-color: rgb(var(--green-rgb) / min(1, var(--light-raise-veil)));
   background-image: linear-gradient(rgb(var(--bone-rgb) / var(--light-raise-lift)), rgb(var(--bone-rgb) / var(--light-raise-lift)));
@@ -431,19 +453,6 @@ html:is(.see-through, [data-backdrop]) .perf__updated > span {
   backdrop-filter: none;
   box-shadow: var(--glass-shadow-raise);
 }
-/* The shell's Live chip (app/WorkspaceDock.tsx, while Clips Funded is switched on) is drawn over Clip Factory's
-   sidebar, in the place of the sidebar's own chip. While Clip Factory is on screen it is that chip: raised on the
-   sidebar exactly as nested glass just above (the same declarations, as light, right after it; test/background.test.ts
-   holds them equal), so Clip Factory looks exactly as with Clips Funded off (the pixel check, §45.19). Over Clips
-   Funded it stays as it was. */
-:where([data-app-pane="clips"]:not([hidden]) ~ .ws-dock > .ws-dock__live) > .glass {
-  --glass-tint: linear-gradient(rgb(var(--green-rgb) / var(--light-raise-veil)), rgb(var(--green-rgb) / var(--light-raise-veil)));
-  --glass-light: linear-gradient(rgb(var(--bone-rgb) / var(--light-raise-lift)), rgb(var(--bone-rgb) / var(--light-raise-lift)));
-  -webkit-backdrop-filter: none;
-  backdrop-filter: none;
-  box-shadow: var(--glass-shadow-raise);
-}
-
 /* Comfort only, never counted toward AA: a soft green halo behind words on glass and on the page. Bone and
    vermilion fills (the CTA, the selected pill, badges) draw their words without it. */
 :where(.glass, .page-head, .crumbs, .brand__name) {
@@ -458,15 +467,16 @@ html:is(.see-through, [data-backdrop]) .perf__updated > span {
 /* Chromium: bend the backdrop as well as blurring it (see the #cf-refract filter), on the hero surfaces only: at most
    three on any screen (the sidebar or tab bar, the setup rail and one more; e2e/refract.spec.ts counts them at 1440
    and 390). The blur comes first: with the url() first Chromium leaves what is behind sharp, so words scrolled under
-   the tab bar would read through it (e2e/refract.spec.ts). Never animated. The page title plates hold their words
-   with their tint alone (worked out without any blur), so they draw no filter at all. */
+   the tab bar would read through it (e2e/refract.spec.ts). The look's dimming comes last, as on every pane. Never
+   animated. The page title plates hold their words with their tint alone (worked out without any blur), so they draw
+   no filter at all. */
 .refract .glass--refract {
-  backdrop-filter: blur(14px) url(#cf-refract) saturate(1.75);
+  backdrop-filter: blur(var(--glass-refract-blur)) url(#cf-refract) saturate(1.75) brightness(var(--glass-brightness));
 }
 /* Money has its dock as well as the menu and the setup rail: its band keeps the plain glass blur, without the bend. */
 .refract .dash-band.glass--refract {
-  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
-  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
+  backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
 }
 
 /* Browsers without backdrop-filter get a denser tint so text stays readable; the light still applies. */
@@ -488,6 +498,7 @@ html:is(.see-through, [data-backdrop]) .perf__updated > span {
   html.see-through,
   html[data-backdrop="picture"] {
     --panel-veil: 0.92 !important;
+    --plate-veil: 0.92 !important; /* nothing blurs or dims here, so a plate is a pane */
     /* The tab bar and the floating layers set their tint from these, so they go almost solid too. */
     --tabbar-veil: 0.92 !important;
     --float-veil: 0.92 !important;

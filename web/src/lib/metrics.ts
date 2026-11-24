@@ -314,8 +314,21 @@ export function calmCopy(
           ? { text: `${who} Add its TikTok link to count views.` }
           : { text: `${who} Add its TikTok link in Library to count views.`, link: { href: "/library", label: "Go to Library" } };
       }
-      return p.metrics ? null : { text: "Numbers are on the way. Check back in a few minutes." };
+      if (p.metrics) return null;
+      // A read that failed says why (its stored statsError, §16.5), so a platform that never answers is not hidden
+      // behind "on the way".
+      return { text: p.error || "Numbers are on the way. Check back in a few minutes." };
   }
+}
+
+/** The hint under a YouTube Short whose own count still says 0 hours after posting (§16.8): the 0 is YouTube's. */
+export const YOUTUBE_ZERO_NOTE = "That's YouTube's own count: it hasn't shown this Short to viewers yet.";
+const YOUTUBE_ZERO_AFTER_MS = 6 * 60 * 60 * 1000;
+
+export function zeroViewsNote(p: Pick<PlatformPerformance, "platform" | "status" | "metrics" | "postedAt">, now: number): string | null {
+  if (p.platform !== "youtube" || p.status !== "posted" || p.metrics?.views !== 0) return null;
+  const posted = p.postedAt ? Date.parse(p.postedAt) : Number.NaN;
+  return Number.isFinite(posted) && now - posted >= YOUTUBE_ZERO_AFTER_MS ? YOUTUBE_ZERO_NOTE : null;
 }
 
 /** The Post → stack status rule of §16.2 (first match wins). */

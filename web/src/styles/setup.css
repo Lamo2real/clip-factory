@@ -970,6 +970,7 @@
   /* A tall sheet scrolls with its backdrop, not inside itself. An overlay (SHEET_VEIL and up, so bone reads on it even
      over white), lit from above, with the deepest shadow. */
   --glass-tint: var(--glass-tint-overlay);
+  --glass-brightness: 1; /* planned for white as it is: its filter dims nothing (SHEET_VEIL) */
   --glass-light: var(--glass-light-overlay);
   --glass-blur: 28px;
   box-shadow: var(--glass-shadow-overlay);

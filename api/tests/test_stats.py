@@ -129,7 +129,7 @@ def test_config_validates_the_repo_file() -> None:
         "youtube": (15, (15, 30, 120), 5, 50),
         "tiktok": (15, (15, 30, 120), 5, 20),
         "instagram": (30, (30, 60, 360), 30, 50),
-        "facebook": (30, (30, 60, 360), 30, 50),
+        "facebook": (30, (30, 60, 360), 30, 10),
         "x": (15, (15, 30, 120), 5, 100),
     }
     for name, (minimum, tiers, cooldown, ids) in expected.items():

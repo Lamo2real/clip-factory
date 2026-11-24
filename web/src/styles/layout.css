@@ -132,6 +132,7 @@ html[data-titlebar="overlay"] .titlebar-drag {
   /* A floating shell piece (ADR-87): flat green planned for white under it (TABBAR_VEIL + TABBAR_EXTRA_VEIL), a soft
      light from above, the float's top glow, bottom shade and drop. */
   --glass-tint: var(--glass-tint-tabbar);
+  --glass-brightness: 1; /* planned for white as it is: its filter dims nothing (TABBAR_VEIL) */
   --glass-light: var(--glass-light-tabbar);
   --glass-blur: 28px;
   box-shadow: var(--glass-shadow-float);

@@ -42,7 +42,7 @@
     "facebook": {
       "label": "Facebook", "viewsField": "fb_reels_total_plays",
       "minIntervalMinutes": 30, "tierIntervalsMinutes": [30, 60, 360], "manualCooldownMinutes": 30,
-      "slowNote": "Can take 2 days", "idsPerRequest": 50,
+      "slowNote": "Can take 2 days", "idsPerRequest": 10,
       "scopes": ["pages_show_list", "pages_read_engagement", "pages_manage_posts", "pages_manage_engagement", "read_insights",
                  "business_management"],
       "moneyScopes": [],

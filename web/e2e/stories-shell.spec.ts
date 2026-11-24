@@ -607,6 +607,8 @@ test.describe("Lamo Stories kept behind Clip Factory stays quiet (§45.34)", () 
     await expect(page.locator(".st-chat-row", { hasText: "Winter ideas for Pip" })).toHaveCount(0);
 
     await toClips(page);
+    // The page changes once the sliding window has landed (stories/pane.tsx AppPanes): Clip Factory's address first.
+    await expect(page, "back on Clip Factory's page").not.toHaveURL(/\/stories(\/|\?|$)/);
     await settle(page);
     const at = page.url();
     // The Undo window (6 s) ends behind Clip Factory and the chat list loads again there.
@@ -683,6 +685,9 @@ test.describe("Lamo Stories kept behind Clip Factory stays quiet (§45.34)", () 
     await toStories(page);
     await storiesReady(page);
     await toClips(page);
+    // The page changes once the sliding window has landed (stories/pane.tsx AppPanes; on CI's runners more than
+    // settle's wait after the tap, 23 Nov): the way back opens the campaign picked, nothing else on the way.
+    await expect.poll(() => new URL(page.url()).pathname, { message: "back on Clip Factory's Home" }).toBe("/");
     await settle(page);
     expect(new URL(page.url()).search).toBe(picked);
     await expect(page.locator(".cr-for").getByRole("radio", { name: otherName })).toBeChecked();
