@@ -405,13 +405,15 @@ export function aboutDriving(texts: readonly string[]): boolean {
 
 /**
  * Words that put a car in a scene ("the car", "drives", "parks", "his headlights"): with one car in the cast, it is in
- * that scene's Who (the words rarely spell the car's name in every scene).
+ * that scene's Who (the words rarely spell the car's name in every scene). Never cars in general ("Lamo is scared of
+ * cars") nor a toy one ("plays with his toy car"): those are no car of the cast (round 2).
  */
-const CAR_WORDS = /(?<![\p{L}\p{N}])(?:cars?|truck|van|drives?|drove|driving|driver|parks|parked|parking|honks?|honked|brakes?|braked|braking|steers?|steering|engine|headlights?|wheels?|tyres?|tires?|seat ?belts?|zooms? off)(?![\p{L}\p{N}])/iu;
+const CAR_WORDS = /(?<![\p{L}\p{N}])(?:car|truck|van|drives?|drove|driving|driver|parks|parked|parking|honks?|honked|brakes?|braked|braking|steers?|steering|engine|headlights?|wheels?|tyres?|tires?|seat ?belts?|zooms? off)(?![\p{L}\p{N}])/iu;
+const TOY_CAR = /(?<![\p{L}\p{N}])(?:toy|model|lego|remote[ -]control(?:led)?)[ -](?:cars?|trucks?|vans?)(?![\p{L}\p{N}])/giu;
 
-/** True when the words put a car in the scene (CAR_WORDS). */
+/** True when the words put a car in the scene (CAR_WORDS; a toy car aside). */
 export function saysCar(what: string): boolean {
-  return CAR_WORDS.test(what.normalize("NFC").replace(FORMAT, ""));
+  return CAR_WORDS.test(what.normalize("NFC").replace(FORMAT, "").replace(TOY_CAR, " "));
 }
 
 /** The places Where can pick: the 16 sets of the catalog, by their labels. */
@@ -425,7 +427,7 @@ export function placeLabel(id: string | null | undefined): string | null {
  * The place the words name (§45.46.2), in this order (a rule's second word must be there too, its third must not); null:
  * none (the AI picks the closest).
  */
-const PLACE_RULES: [RegExp, SetId, RegExp?, RegExp?][] = [
+const PLACE_RULES: [RegExp, SetId, RegExp?, { test(what: string): boolean }?][] = [
   [/\b(highway|motorway)s?\b/i, "highway_night", /\bnight\b/i],
   [/\broads?\b/i, "road_night", /\bnight\b/i],
   [/\bcar park\b|\bparking\b/i, "parking_lot"],
@@ -438,7 +440,7 @@ const PLACE_RULES: [RegExp, SetId, RegExp?, RegExp?][] = [
   [/\bcity street\b|\btown\b|\bstreets?\b/i, "city_street"],
   [/\bliving room\b|\blounge\b|\bsofa\b/i, "living_room"],
   // "at home" is the living room, unless a car is there ("Dash parks at home": outside, the AI picks)
-  [/\bat home\b|\bindoors\b/i, "living_room", undefined, CAR_WORDS],
+  [/\bat home\b|\bindoors\b/i, "living_room", undefined, { test: saysCar }],
   [/\bkitchen\b/i, "kitchen"],
   [/\boffice\b|\bwork\b|\bdesk\b/i, "office"],
   [/\broad by day\b/i, "road_day"],
@@ -568,6 +570,20 @@ function awayIn(what: string, characters: readonly Who[]): Set<string> {
 
 /** Words that speak of more than one ("They get home safe.", "They both laugh.", "Everyone cheers."). */
 const MANY = /(?<![\p{L}\p{N}])(?:they|them|their|themselves|both|everyone|everybody|together)(?![\p{L}\p{N}])/iu;
+const THEY = /(?<![\p{L}\p{N}])(?:they|them|their|themselves)(?![\p{L}\p{N}])/iu;
+const ALL_OF = /(?<![\p{L}\p{N}])(?:both|everyone|everybody|together)(?![\p{L}\p{N}])/iu;
+/** Some things the words name before a "they" ("some ducks", "the birds", "two dogs"): they may be them (never "the bus"). */
+const THINGS = /(?<![\p{L}\p{N}])(?:some|the|two|three|four|five|six|many|few|lots of|all the|all)\s+(?:\p{L}+\s+)?\p{L}+[^\sus]s(?![\p{L}\p{N}])/iu;
+
+/**
+ * True when the words speak of more than the people they name: "both", "everyone", "together", or a "they" with no
+ * things named before it ("Lamo sees some ducks. They swim in the pond.": they are the ducks, not the people before).
+ */
+function aboutMore(text: string): boolean {
+  if (ALL_OF.test(text)) return true;
+  const they = THEY.exec(text);
+  return !!they && !THINGS.test(text.slice(0, they.index));
+}
 const HE_WORDS = /(?<![\p{L}\p{N}])(?:he|him|his|himself)(?![\p{L}\p{N}])/iu;
 const SHE_WORDS = /(?<![\p{L}\p{N}])(?:she|her|hers|herself)(?![\p{L}\p{N}])/iu;
 
@@ -601,7 +617,7 @@ export function sceneWho(s: DraftScene, draft: Pick<ScriptDraft, "answers"> & Pa
     return !!c && (c.kind === "car" || !!c.car);
   };
   // "Pip falls over. They both laugh.": more than the one it names (two named are the "both" themselves)
-  const more = MANY.test(text) && out.filter((id) => !isCarId(id)).length < 2;
+  const more = aboutMore(text) && out.filter((id) => !isCarId(id)).length < 2;
   if (at > 0 && text.trim() && (!out.length || more)) {
     const away = awayIn(text, characters);
     let before = sceneWho(scenes[at - 1]!, draft, cast, characters).filter((id) => !away.has(id));

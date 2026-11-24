@@ -1,12 +1,14 @@
-"""Write it myself: the owner's own words, read by code (docs/CONTRACTS.md §45.46.6, ADR-95).
+"""Write it myself: the owner's own words, read by code (docs/CONTRACTS.md §45.46.6, §45.46.10-12, ADR-95).
 
 The faithful check (``own_script.own_problems``) never takes the adapter's word for what the owner wrote. Here, from
-the owner's own "What happens" (never from the adapter's pieces), code reads which events it says, who does each one,
-in which order and how many times, what it says does NOT happen, what it only mentions (a fear, a wish, an "if", a
-warning, something said in quotes: it may be drawn, it is never owed), how someone feels, who is away, and the places
-it names. Plain word rules, kept small on purpose: an event is read only from clear words ("falls", "jumps three
-times", "Rosso skids"), and where the words are unclear (a pronoun two people could be) the check lets either be drawn
-and the scene's note says who was. Pure: no I/O and no model."""
+the owner's own "What happens" (never from the adapter's pieces), code reads which events it says (and the plain
+actions the engine has: "nods", "sits down", "waves"), who does each one, in which order and how many times, what it
+says does NOT happen (a no is about the word it comes before: "Rosa doesn't see Lamo slip" says he slips), what it only
+mentions (a fear, a wish, an "if", a warning, something said in quotes: it may be drawn, it is never owed), how
+someone feels (a feeling the words say is owed too), who is away, someone the cast does not have ("A man falls over":
+never drawn, the note says so), and the places it names. Plain word rules, kept small on purpose: an event is read
+only from clear words ("falls", "jumps three times", "Rosso skids"), and where the words are unclear (a pronoun two
+people could be) the check lets either be drawn and the scene's note says who was. Pure: no I/O and no model."""
 
 from __future__ import annotations
 
@@ -22,19 +24,25 @@ _IGNORABLE = re.compile(
     "[\u00ad\u034f\u061c\u115f\u1160\u17b4\u17b5\u180b-\u180f\u200b-\u200f\u202a-\u202e\u2060-\u206f\u3164"
     "\ufe00-\ufe0f\ufeff\uffa0\ufff0-\ufff8\U0001bca0-\U0001bca3\U0001d173-\U0001d17a\U000e0000-\U000e0fff]"
 )
-# Letters of another script that look like Latin ones (a Cyrillic "а" in "fаlls"): inside a word that has Latin
-# letters, read as the Latin letter (a word all in another script stays as it is).
+# Letters of another script that look like Latin ones (a Cyrillic "а" in "fаlls", a Latin alpha "ɑ", a dotless "ı"):
+# inside a word that has Latin letters, read as the Latin letter (a word all in another script stays as it is).
 _LOOKALIKE = str.maketrans(
-    "аеорсухіјѕԁһӏԛԝɡАВЕКМНОРСТХУІЈЅαονρτυικχεΑΒΕΖΗΙΚΜΝΟΡΤΥΧ",
-    "aeopcyxijsdhlqwgABEKMHOPCTXYIJSaovptuikxeABEZHIKMNOPTYX",
+    "аеорсухіјѕԁһӏԛԝɡАВЕКМНОРСТХУІЈЅαονρτυικχεΑΒΕΖΗΙΚΜΝΟΡΤΥΧɑıɩȷ",
+    "aeopcyxijsdhlqwgABEKMHOPCTXYIJSaovptuikxeABEZHIKMNOPTYXaiij",
 )
 _LATIN = re.compile(r"[A-Za-z]")
 _LETTER_RUN = re.compile(r"[^\W\d_]+")
+_ONE_WORD = re.compile(r"[^\W_]+")
 
 
 def _latin(m: re.Match[str]) -> str:
+    """One run of letters as it shows: its compatibility form (math-bold letters, a roman numeral "ⅼ", full-width
+    letters: NFKC, only when it stays one word), then a look-alike of another script inside a Latin word."""
     word = m.group(0)
-    return word.translate(_LOOKALIKE) if _LATIN.search(word) else word
+    folded = unicodedata.normalize("NFKC", word)
+    if folded != word and _ONE_WORD.fullmatch(folded) is None:
+        folded = word  # never split a word: the words' places must stay as typed
+    return folded.translate(_LOOKALIKE) if _LATIN.search(folded) else folded
 
 
 def clean(value: Any) -> str:
@@ -55,8 +63,10 @@ def as_shown(value: Any) -> str:
 _ALNUM = re.compile(r"[^\W_]+")  # letters and digits (str.isalnum), as own_script.norm keeps them
 _STOP = re.compile(r"[.!?;:\n…]")  # a sentence ends
 _PAUSE = re.compile(r"[,()\[\]–—]")  # a clause ends inside a sentence
-_OPEN_QUOTE = "“„«"
-_CLOSE_QUOTE = "”»"
+# A quotation mark and the marks that close it ("…", “…”, „…“, «…», ‘…’, '…'): a mark that is never closed is no
+# quote (a forgotten closing mark never hides the rest of the scene).
+_QUOTES = {'"': '"', "“": "”“", "„": "“”", "«": "»", "»": "«", "‹": "›", "‘": "’", "'": "'"}
+_SINGLE = frozenset("‘'")
 
 
 def tokens(value: Any) -> list[str]:
@@ -77,7 +87,12 @@ REVERSED = frozenset({"after", "because", "once", "since"})
 _PAIRS = frozenset({("up", "down"), ("down", "up"), ("back", "forth"), ("in", "out"), ("round", "round"),
                     ("over", "over"), ("on", "off"), ("to", "fro"), ("left", "right"), ("again", "again")})  # fmt: skip
 _NUMBERS = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8, "nine": 9,
-            "ten": 10, "eleven": 11, "twelve": 12, "twice": 2, "thrice": 3}  # fmt: skip
+            "ten": 10, "eleven": 11, "twelve": 12, "thirteen": 13, "fourteen": 14, "fifteen": 15, "sixteen": 16,
+            "seventeen": 17, "eighteen": 18, "nineteen": 19, "twenty": 20, "thirty": 30, "forty": 40, "fifty": 50,
+            "sixty": 60, "seventy": 70, "eighty": 80, "ninety": 90, "hundred": 100, "thousand": 1000,
+            "million": 1000000, "dozen": 12, "couple": 2, "twice": 2, "thrice": 3}  # fmt: skip
+# Words for "more than once" with no number ("a few times", "lots of times"): owed at least twice, never exactly.
+_SOME = frozenset({"few", "several", "many", "lots", "loads", "hundreds", "thousands", "millions", "dozens"})
 # Little words skipped when the subject of a clause is read ("Then suddenly Lamo falls", "Three times, Lamo jumps").
 SKIP = frozenset(
     {"and", "then", "so", "but", "the", "a", "an", "also", "too", "now", "next", "later", "suddenly", "finally",
@@ -105,27 +120,76 @@ MODALS = frozenset({"will", "would", "can", "could", "might", "may", "must", "sh
 HARD_NO = frozenset(
     {"not", "never", "no", "t", "without", "nobody", "nothing", "neither", "nor", "dont", "doesnt", "didnt", "wont",
      "cant", "cannot", "isnt", "wasnt", "arent", "werent", "couldnt", "wouldnt", "shouldnt", "avoid", "avoids",
-     "avoided", "avoiding", "instead"}
+     "avoided", "avoiding", "instead", "refuse", "refuses", "refused", "refusing"}
 )  # fmt: skip
 # "can't stop laughing", "doesn't stop jumping": a no before these says the event goes on.
 _GOES_ON = frozenset({"stop", "stops", "stopped", "stopping", "help", "helps", "helped", "quit", "quits"})
+# A no is about the word it comes before, never about what someone sees, hears or knows happen after it: "Rosa doesn't
+# see Lamo slip" (he slips), "Nobody notices Lamo fall", "Rosa can't believe that Lamo jumps so high".
+_NO_ENDS = frozenset(
+    {"that", "who", "which", "whether", "how", "what", "where", "why", "see", "sees", "saw", "seen", "seeing",
+     "notice", "notices", "noticed", "noticing", "watch", "watches", "watched", "watching", "hear", "hears", "heard",
+     "hearing", "spot", "spots", "spotted", "spotting", "believe", "believes", "believed", "know", "knows", "knew",
+     "known", "realise", "realises", "realised", "realize", "realizes", "realized", "expect", "expects", "expected",
+     "mind", "minds", "minded", "care", "cares", "cared", "understand", "understands", "understood"}
+)  # fmt: skip
 # "nearly falls": it may be drawn (a slip), but it is not owed.
 SOFT_NO = frozenset({"almost", "nearly"})
-# Words before an event that only mention it (a wish, a fear, a warning, an "if", a future, something said): it may be
-# drawn, it is never owed ("Lamo is afraid of falling", "If Lamo falls, …", "Lamo hopes Rosa will dance").
-MAYBE = frozenset(
-    {"if", "unless", "case", "might", "may", "could", "would", "should", "will", "ll", "shall", "must", "can",
-     "want", "wants", "wanted", "wanting", "hope", "hopes", "hoped", "hoping", "wish", "wishes", "wished",
-     "wishing", "afraid", "scared", "frightened", "terrified", "worried", "worries", "worry", "fear", "fears",
-     "feared", "nervous", "try", "tries", "tried", "trying", "forget", "forgets", "forgot", "forgotten", "pretend",
-     "pretends", "pretended", "dream", "dreams", "dreamt", "dreamed", "imagine", "imagines", "imagined", "think",
-     "thinks", "thought", "remember", "remembers", "remembered", "tell", "tells", "told", "ask", "asks", "asked",
-     "warn", "warns", "warned", "say", "says", "said", "shout", "shouts", "shouted", "yell", "yells", "yelled",
-     "whisper", "whispers", "whispered", "plan", "plans", "planned"}
+
+
+def denies(low: Sequence[str], j: int, at: int) -> bool:
+    """True when the no at word ``j`` says the event at word ``at`` does not happen: nothing between says it goes on
+    ("can't stop jumping") or starts what the no is about ("doesn't see Lamo slip": he slips)."""
+    return j < at and not any(w in _GOES_ON or w in _NO_ENDS for w in low[j + 1 : at])
+
+
+# Words that only mention an event (a wish, a fear, a warning, an "if", a future, something said): it may be drawn, it
+# is never owed ("Lamo is afraid of falling", "If Lamo falls, …", "Lamo hopes Rosa will dance"). Each only reaches
+# the event it is about (``_governs``): "Lamo is so scared he jumps!" and "Rosa's loud shout makes Lamo jump" happen.
+_IF = frozenset({"if", "unless", "case"})
+_FUTURE = frozenset({"might", "may", "could", "would", "should", "will", "ll", "shall", "must", "can"})
+_SAY = frozenset(
+    {"tell", "tells", "told", "ask", "asks", "asked", "warn", "warns", "warned", "say", "says", "said", "shout",
+     "shouts", "shouted", "yell", "yells", "yelled", "whisper", "whispers", "whispered", "call", "calls", "called"}
 )  # fmt: skip
+_MIND = frozenset(
+    {"hope", "hopes", "hoped", "hoping", "wish", "wishes", "wished", "wishing", "forget", "forgets", "forgot",
+     "forgotten", "pretend", "pretends", "pretended", "dream", "dreams", "dreamt", "dreamed", "imagine", "imagines",
+     "imagined", "think", "thinks", "thought", "remember", "remembers", "remembered", "plan", "plans", "planned"}
+)  # fmt: skip
+# A fear, a want or a try reaches only the event right after it ("afraid of falling", "wants to jump"), never one
+# someone else (or he) does after it ("so scared he jumps").
+_FEAR = frozenset(
+    {"want", "wants", "wanted", "wanting", "afraid", "scared", "frightened", "terrified", "worried", "worries",
+     "worry", "fear", "fears", "feared", "nervous", "try", "tries", "tried", "trying"}
+)  # fmt: skip
+MAYBE = _IF | _FUTURE | _SAY | _MIND | _FEAR
+# "… to jump" is only mentioned after one of these ("tries to jump", "tells Lamo to stop", "is going to dance", "knows
+# how to dance"); else it happens ("climbs the tree to jump into the pool", "take turns to jump", "starts to dance").
+_TO_GOVERNORS = (_SAY | _MIND | _FEAR | {"going", "about", "need", "needs", "needed", "has", "have", "had", "ready",
+                 "promise", "promises", "promised", "wait", "waits", "waited", "waiting", "dare", "dares", "dared",
+                 "how", "like", "likes", "love", "loves", "hate", "hates", "allowed", "supposed", "learn", "learns",
+                 "learning"}) - {"remember", "remembers", "remembered"}  # fmt: skip
+_REMEMBER = frozenset({"remember", "remembers", "remembered"})
+# Words between a maybe word and its event that still join them ("tells Lamo to stop", "afraid of falling").
+_BRIDGE = frozenset({"to", "that", "not", "be", "being", "get", "getting", "going", "t", "out", "loud", "aloud",
+                     "of", "about", "at", "with", "for"})  # fmt: skip
 # Words that put an event at another time than the scene ("Lamo fell off his bike yesterday"): never owed.
 _ANOTHER_TIME = frozenset({"yesterday", "ago", "tomorrow"})
 _LAST = frozenset({"week", "night", "year", "time", "summer", "winter", "month", "weekend", "holiday", "holidays"})
+# Someone the cast never has, right before an event ("A man falls over", "the dog jumps"): not drawn, and the note says
+# so (a girl, a boy, a kid or someone may be one of the cast: never these).
+OTHER_PEOPLE = frozenset(
+    {"man", "men", "woman", "women", "lady", "ladies", "gentleman", "stranger", "strangers", "policeman",
+     "policewoman", "police", "officer", "postman", "postwoman", "farmer", "teacher", "doctor", "nurse", "waiter",
+     "chef", "giant", "monster", "dragon", "ghost", "alien", "robot", "clown", "pirate", "wizard", "witch", "dog",
+     "dogs", "cat", "cats", "puppy", "kitten", "bird", "birds", "duck", "ducks", "horse", "pony", "cow", "cows",
+     "sheep", "pig", "pigs", "monkey", "bear", "rabbit", "mouse", "mice", "fox", "frog", "squirrel", "lion",
+     "tiger", "elephant", "dinosaur", "goat", "chicken", "hen", "owl", "fish", "shark", "snake", "spider", "bee",
+     "butterfly", "crowd", "audience"}
+)  # fmt: skip
+_A_OR_THE = frozenset({"a", "an", "the", "some", "another"})
+_WITH = frozenset({"dance", "jump", "walk", "run"})  # "Lamo dances with Rosa", "walks with Rosa": both do it
 # "Rosa trips Lamo", "Rosa topples Lamo": the one after it falls.
 _TRIPS_SOMEONE = frozenset({"trips", "tripped", "tripping", "trip", "topples", "toppled", "toppling", "topple"})
 # "starts to dance": it happens.
@@ -161,22 +225,44 @@ class Family:
     vehicle: bool = False
     needs: frozenset[str] = frozenset()  # a word the clause must also have ("tyre" for a burst)
     in_car: bool = False  # only with a car in the clause's words ("gets out of the car", "gets into Rosso")
+    plain: bool = False  # a plain action ("nods", "sits down"): owed by who does it, never refused as someone else's
+    moves: bool = False  # moving about ("walks", "runs", "sits"): never owed by someone sitting in a car
+
+
+def _forms(base: str, *rest: str) -> tuple[str, ...]:
+    """A verb's forms with the words after it ("lands on ~ bottom": lands, landed, landing, land on ~ bottom)."""
+    return tuple(f"{form} {' '.join(rest)}".strip() for form in base.split("|"))
+
+
+_LANDS = tuple(s for part in ("bottom$", "bum$", "back$", "face$", "head$", "bottom", "behind$")
+               for s in _forms("land|lands|landed|landing", "on", "~", part))  # fmt: skip
 
 
 # Strict words on purpose: an event the words say is owed (it must be drawn, by who does it), so only clear verbs
-# count. Each stem is words in ``tokens`` form; the last one is a word start unless it ends with "$" (the whole word).
+# count. Each stem is words in ``tokens`` form; the last one is a word start unless it ends with "$" (the whole word);
+# "~" is any of his, her, their, its, my, your, our, the, a.
 FAMILIES: dict[str, Family] = {
     "fall": Family(
         ("fall$", "falls$", "fell$", "falling$", "fallen$", "tumbl", "toppl", "collaps", "trips$", "tripped$",
-         "tripping$", "trip over", "trip up", "slip$", "slips$", "slipped$", "slipping$", "stumbl"),
+         "tripping$", "trip over", "trip up", "slip$", "slips$", "slipped$", "slipping$", "stumbl",
+         *_forms("crash|crashes|crashed|crashing", "to", "~", "ground$"), *_forms("crash|crashes|crashed", "to", "~",
+                                                                                  "floor$"),
+         *_forms("lose|loses|lost|losing", "~", "balanc"), *_forms("lose|loses|lost|losing", "balanc"),
+         *_forms("keel|keels|keeled|keeling", "over$"), *_forms("wipe|wipes|wiped|wiping", "out$"), "wipeout",
+         *_LANDS, *_forms("go|goes|went|going|gone|sent", "flying$"), "faceplant", "face plant",
+         *_forms("tip|tips|tipped|tipping", "over$"), *_forms("drop|drops|dropped|dropping", "to", "~", "ground$"),
+         *_forms("drop|drops|dropped|dropping", "to", "~", "floor$")),
         frozenset({"fall", "slip"}),
     ),
     "jump": Family(
         ("jump$", "jumps$", "jumped$", "jumping$", "leap$", "leaps$", "leapt$", "leaped$", "leaping$", "hop$", "hops$",
-         "hopped$", "hopping$"),
+         "hopped$", "hopping$", "bounce$", "bounces$", "bounced$", "bouncing$", "springs$", "sprang$", "springing$",
+         "spring up", "spring into"),
         frozenset({"jump"}),
     ),
-    "dance": Family(("dance$", "dances$", "danced$", "dancing$", "boogie"), frozenset({"dance"})),
+    "dance": Family(("dance$", "dances$", "danced$", "dancing$", "boogie", "groove$", "grooves$", "grooved$",
+                     "grooving$", "jig$", "jigs$", "jigged$", "jigging$", "shimmy", "shimmies", "shimmied"),
+                    frozenset({"dance"})),
     "skid": Family(
         ("skid$", "skids$", "skidded$", "skidding$", "aquaplan", "spins$", "spun$", "spinning$", "spin out",
          "slides$", "slid$", "sliding$", "loses control", "lose control", "lost control"),
@@ -185,11 +271,13 @@ FAMILIES: dict[str, Family] = {
     "speed": Family(
         ("speeds$", "sped$", "speeding$", "speed up", "fast$", "faster$", "fastest$", "zoom$", "zooms$", "zoomed$",
          "zooming$", "races$", "raced$", "accelerat", "floor it", "floors it", "zips$", "zipped$", "zipping$",
-         "whizz"),
+         "whizz", "rush$", "rushes$", "rushed$", "rushing$", "hurries$", "hurried$", "hurrying$", "quickly$",
+         "quicker$", "rapidly$"),
         frozenset({"speed_up"}), vehicle=True,
     ),
     "burst": Family(
-        ("punctur", "blowout", "blow out", "blows out", "burst", "pops$", "popped$", "goes flat", "flat$"),
+        ("punctur", "blowout", "blow out", "blows out", "burst", "pops$", "popped$", "goes flat", "flat$",
+         *_forms("go|goes|went|going", "bang$"), *_forms("go|goes|went|going", "pop$")),
         frozenset({"tyre_burst"}), sfx=frozenset({"tyre_burst"}), states=frozenset({"flat"}), vehicle=True,
         needs=frozenset({"tyre", "tire", "tyres", "tires", "wheel", "wheels", "puncture", "punctured", "blowout",
                          "flat"}),
@@ -200,17 +288,20 @@ FAMILIES: dict[str, Family] = {
          "slams into", "slammed into", "slam into", "slamming into", "ram$", "rams$", "rammed$", "ramming$",
          "ploughs into", "ploughed into", "plough into", "plows into", "plowed into", "plow into", "smacks into",
          "smacked into", "smack into", "bashes into", "bashed into", "rear ends",
-         "rear ended", "rear end", "thumps into", "thumped into"),
+         "rear ended", "rear end", "thumps into", "thumped into", *_forms("bang|bangs|banged|banging", "into$"),
+         *_forms("knock|knocks|knocked|knocking", "into$"), *_forms("drive|drives|drove|driven|driving", "into$")),
         frozenset({"bump"}), sfx=frozenset({"bump", "thud"}), vehicle=True,
     ),
     "honk": Family(
-        ("honk$", "honks$", "honked$", "honking$", "toot$", "toots$", "tooted$", "tooting$", "sounds the horn",
-         "beeps the horn"),
+        ("honk$", "honks$", "honked$", "honking$", "toot$", "toots$", "tooted$", "tooting$", "beep$", "beeps$",
+         "beeped$", "beeping$", *_forms("sound|sounds|sounded|sounding", "~", "horn"),
+         *_forms("blow|blows|blew|blowing", "~", "horn"), *_forms("press|presses|pressed|pressing", "~", "horn")),
         frozenset({"honk"}), sfx=frozenset({"honk", "beep"}), vehicle=True,
     ),
     "stall": Family(
         ("stall$", "stalls$", "stalled$", "stalling$", "won t start", "doesn t start", "does not start",
-         "will not start", "wont start", "doesnt start", "breaks down", "broke down", "broken down", "conks out"),
+         "will not start", "wont start", "doesnt start", "breaks down", "broke down", "broken down", "conks out",
+         *_forms("run|runs|ran|running", "out", "of$")),
         frozenset({"stall"}), vehicle=True,
     ),
     # a car that stops or brakes ("stops at the red light", "slams on the brakes", "screeches to a halt"); the brakes
@@ -233,6 +324,25 @@ FAMILIES: dict[str, Family] = {
          "stepped out", "step out"),
         frozenset({"get_out"}), in_car=True,
     ),
+    # plain actions the engine has (round 2): "Lamo nods" is a nod, never a head shake; "sits down" never a run
+    "walk": Family(("walk$", "walks$", "walked$", "walking$", "stroll$", "strolls$", "strolled$", "strolling$"),
+                   frozenset({"walk"}), plain=True, moves=True),
+    "run": Family(("run$", "runs$", "ran$", "running$", "sprint$", "sprints$", "sprinted$", "sprinting$", "jog$",
+                   "jogs$", "jogged$", "jogging$", "dashes$", "dashed$", "dashing$"),
+                  frozenset({"run"}), plain=True, moves=True),
+    "sit": Family(("sit$", "sits$", "sat$", "sitting$", *_forms("take|takes|took|taking", "a", "seat$")),
+                  frozenset({"sit"}), plain=True, moves=True),
+    "get_up": Family((*_forms("get|gets|got|getting", "up$"), *_forms("get|gets|got|getting", "back", "up$"),
+                      *_forms("stand|stands|stood|standing", "up$"), *_forms("pick|picks|picked", "himself", "up$"),
+                      *_forms("pick|picks|picked", "herself", "up$")),
+                     frozenset({"get_up"}), plain=True, moves=True),
+    "wave": Family(("wave$", "waves$", "waved$", "waving$"), frozenset({"wave"}), plain=True),
+    "point": Family(("point$", "points$", "pointed$", "pointing$"), frozenset({"point"}), plain=True),
+    "nod": Family(("nod$", "nods$", "nodded$", "nodding$"), frozenset({"nod"}), plain=True),
+    "shake_head": Family(_forms("shake|shakes|shook|shaking", "~", "head$"), frozenset({"shake_head"}), plain=True),
+    "thumbs_up": Family(("thumbs up", "thumb up", "thumbsup"), frozenset({"thumbs_up"}), plain=True),
+    "shrug": Family(("shrug$", "shrugs$", "shrugged$", "shrugging$"), frozenset({"shrug"}), plain=True),
+    "facepalm": Family(("facepalm", "face palm"), frozenset({"facepalm"}), plain=True),
 }  # fmt: skip
 # The engine action -> the family it draws (a beat doing one is an event of that family).
 ACTION_FAMILY = {a: name for name, fam in FAMILIES.items() for a in fam.actions}
@@ -252,17 +362,37 @@ _THINGS = frozenset(
 # How someone feels: a clause that says it, and what draws the other feeling (never drawn under its words).
 HAPPY_WORDS = (
     "happy", "happi", "glad", "joy", "laugh", "giggl", "smile", "smiling", "grin", "cheer", "celebrat", "hug$",
-    "hugs$", "hugged$", "hugging$", "kiss", "love", "loves$", "loved$", "proud", "excited", "delighted", "thrilled",
+    "hugs$", "hugged$", "hugging$", "kiss", "love", "loves$", "loved$", "proud", "excited", "delight", "thrilled",
     "yay$", "hooray", "hurray", "enjoy", "high five", "chuckl", "overjoyed", "beam$", "beams$", "beamed$",
-    "beaming$", "jolly", "glee", "chuffed", "ecstatic", "relie",
+    "beaming$", "jolly", "glee", "chuffed", "ecstatic", "relie", "cackl", "chortl", "guffaw", "snicker", "snigger",
+    "titter", "hee hee", "ha ha", "haha", "hehe", "tee hee", "win$", "wins$", "won$", "winning$",
 )  # fmt: skip
 SAD_WORDS = (
     "sad$", "sadly", "cry$", "cries$", "cried$", "crying$", "tears", "sob$", "sobs$", "sobbing", "upset", "unhappy",
     "angry", "angrily", "mad$", "furious", "scared", "afraid", "frightened", "terrified", "worried", "nervous",
     "grumpy", "sulk", "miserable", "lonely", "scream", "weep", "wept$", "sigh$", "sighs$", "sighed$", "sighing$",
     "frown", "cross$", "gloomy", "glum", "heartbroken", "whimper", "sniffl", "moan", "groan", "grumbl", "pout",
-    "disappointed", "jealous", "annoyed", "tearful",
+    "disappointed", "jealous", "annoyed", "tearful", "boo hoo", "boohoo", "wail", "bawl", "whine$", "whines$",
+    "whined$", "whining$", "blubber", "teary", "distraught", "devastated", "scowl",
 )  # fmt: skip
+# The feeling words that say the feeling itself: it is owed (a face, a noise or a move of who feels it shows it), as an
+# event is. Never the ones that are something done ("hugs", "kisses", "cheers", "wins"): they only never show the
+# other feeling.
+OWED_HAPPY = (
+    "happy", "happi", "glad", "joy", "laugh", "giggl", "smile", "smiling", "grin", "proud", "excited", "delight",
+    "thrilled", "chuckl", "overjoyed", "beam$", "beams$", "beamed$", "beaming$", "jolly", "glee", "chuffed",
+    "ecstatic", "cackl", "chortl", "guffaw", "snicker", "snigger", "titter", "hee hee", "ha ha", "haha", "hehe",
+    "tee hee",
+)  # fmt: skip
+OWED_SAD = (
+    "sad$", "sadly", "cry$", "cries$", "cried$", "crying$", "tears", "sob$", "sobs$", "sobbing", "upset", "unhappy",
+    "angry", "angrily", "mad$", "furious", "scared", "afraid", "frightened", "terrified", "worried", "nervous",
+    "grumpy", "sulk", "miserable", "weep", "wept$", "heartbroken", "whimper", "tearful", "boo hoo", "boohoo", "wail",
+    "bawl", "whine$", "whines$", "whined$", "whining$", "blubber", "teary", "distraught", "devastated", "gloomy",
+    "glum",
+)  # fmt: skip
+_CONTESTS = frozenset({"race", "races", "game", "games", "match", "contest", "competition", "final", "cup", "battle",
+                       "prize", "quiz", "bet"})  # fmt: skip
 _NOT_A_BEAM_AFTER = frozenset({"high", "full", "main", "dipped", "low", "light", "lights", "headlight", "headlights",
                                "the", "a", "his", "her", "its", "their", "s", "laser", "sun", "wooden"})  # fmt: skip
 _CROSS_AFTER = frozenset({"is", "was", "are", "were", "gets", "got", "get", "feels", "felt", "feel", "looks",
@@ -289,6 +419,9 @@ _ALONE = frozenset({"alone"})
 _OWN_ALONE = (("on", "his", "own"), ("on", "her", "own"), ("by", "himself"), ("by", "herself"))
 
 
+_ANY_OWNER = frozenset({"his", "her", "their", "its", "my", "your", "our", "the", "a"})  # a stem's "~"
+
+
 def _stem_at(toks: Sequence[str], i: int, stem: str) -> int:
     """The number of words of ``stem`` that match at word ``i`` (0: none)."""
     parts = stem.split()
@@ -297,7 +430,10 @@ def _stem_at(toks: Sequence[str], i: int, stem: str) -> int:
     for k, part in enumerate(parts):
         word = toks[i + k]
         last = k == len(parts) - 1
-        if part.endswith("$"):
+        if part == "~":
+            if word not in _ANY_OWNER:
+                return 0
+        elif part.endswith("$"):
             if word != part[:-1]:
                 return 0
         elif last:
@@ -348,6 +484,8 @@ class Mention:
     said_count: int = 1  # the count the words give ("ten times": 10)
     exact: bool = False  # the words give a count ("twice", "once", "three times"): exactly that many
     again: bool = False  # "falls again": one more, never the one before
+    by_word: str = ""  # who does it when nobody of the cast does, as written ("A man", "the Grinch"): never drawn
+    car_owner: bool = False  # the doers are whose car it is ("Max's car honks"), not who sits in it
 
 
 @dataclass
@@ -355,6 +493,8 @@ class Mood:
     clause: int
     happy: bool  # True: a happy clause; False: a sad, scared or angry one (or "not happy")
     who: frozenset[str]
+    owed: bool = False  # a feeling word that says it ("laughs", "cries", "is sad"): it must show, by who feels it
+    ambiguous: bool = False  # a pronoun two people could be: one of them shows it
 
 
 @dataclass
@@ -381,15 +521,12 @@ def _scan(text: str) -> tuple[list[str], list[str], list[int], list[str], list[b
     gap: list[str] = []
     quoted: list[bool] = []
     last, s, inside = 0, 0, False
+    marks = _quote_marks(text)
     for m in _ALNUM.finditer(text):
         between = text[last : m.start()]
-        for ch in between:
-            if ch == '"':
+        for k in range(last, m.start()):
+            if k in marks:
                 inside = not inside
-            elif ch in _OPEN_QUOTE:
-                inside = True
-            elif ch in _CLOSE_QUOTE:
-                inside = False
         if low and _STOP.search(between):
             s += 1
             gap.append(".")
@@ -403,6 +540,32 @@ def _scan(text: str) -> tuple[list[str], list[str], list[int], list[str], list[b
         quoted.append(inside)
         last = m.end()
     return low, raw, sentence, gap, quoted
+
+
+def _quote_marks(text: str) -> set[int]:
+    """The places of the quotation marks that open or close a quote, in pairs: a mark that is never closed is none
+    ('Rosa shouts "Watch out! Lamo trips.': the trip is not said). A single mark opens only before a letter, after a
+    space or the start ('Jump!'), and closes only where no letter follows (an apostrophe, "Lamo's", is never one)."""
+    marks: set[int] = set()
+    i, size = 0, len(text)
+
+    def opens(k: int) -> bool:
+        return (k == 0 or not text[k - 1].isalnum()) and k + 1 < size and text[k + 1].isalnum()
+
+    def closes(k: int) -> bool:
+        return not text[k - 1].isspace() and not (k + 1 < size and text[k + 1].isalnum())
+
+    while i < size:
+        ch = text[i]
+        if ch in _QUOTES and (ch not in _SINGLE or opens(i)):
+            j = next((k for k in range(i + 1, size)
+                      if text[k] in _QUOTES[ch] and (text[k] not in "’'" or closes(k))), -1)  # fmt: skip
+            if j != -1:
+                marks |= {i, j}
+                i = j + 1
+                continue
+        i += 1
+    return marks
 
 
 def _split(text: str) -> tuple[list[str], list[str], list[int], list[str]]:
@@ -486,20 +649,29 @@ def _clauses(low: Sequence[str], sentence: Sequence[int], gap: Sequence[str], na
         out.append(Clause(start, len(low), sentence[start], lead))
     merged: list[Clause] = []
     carry: Clause | None = None
+
+    def close(rest: Clause) -> None:
+        """Only little words at the end of a sentence ("Lamo hops, three times!"): they go on the clause before."""
+        if merged and merged[-1].sentence == rest.sentence:
+            last = merged[-1]
+            merged[-1] = Clause(last.start, rest.end, last.sentence, last.lead)
+        else:
+            merged.append(rest)
+
     for part in out:
         c = part
         if carry is not None:
             if carry.sentence == c.sentence:
                 c = Clause(carry.start, c.end, c.sentence, carry.lead)
             else:
-                merged.append(carry)
+                close(carry)
             carry = None
         if not any(_content(low[k], k, names_at, outside_at) for k in range(c.start, c.end)):
             carry = c  # only names (and little words): it joins the next clause
             continue
         merged.append(c)
     if carry is not None:
-        merged.append(carry)
+        close(carry)
     return merged
 
 
@@ -606,6 +778,7 @@ def read(
     reading = Reading(low, raw, names_at=names_at)
     reading.clauses = _clauses(low, sentence, gap, names_at, outside_at)
     sexes = dict(genders or {})
+    persons = set(names_at) | outside_at
 
     def everyone() -> frozenset[str]:
         return frozenset(here_people or sorted(people))
@@ -631,8 +804,8 @@ def read(
                 continue
             match = [p for p in here if sexes.get(p) == want]
             unknown += [p for p in here if sexes.get(p) is None and p not in unknown]
-            if match:
-                cands = list(dict.fromkeys([*match[:1], *unknown]))
+            if match:  # two boys in that sentence ("Lamo waves at Max. He trips."): either may be it
+                cands = list(dict.fromkeys([*match, *unknown]))
                 return frozenset(cands), len(cands) > 1
         if unknown:
             return frozenset(unknown), len(unknown) > 1
@@ -696,12 +869,15 @@ def read(
                 return None
         return None
 
-    def doers_of(name: str, fam: Family, c: Clause, at: int, n: int) -> tuple[frozenset[str] | None, bool, bool, bool]:
-        """(who does it, a pronoun two people could be, someone not drawn, each of them: "Lamo and Rosa jump")."""
+    def doers_of(
+        name: str, fam: Family, c: Clause, at: int, n: int
+    ) -> tuple[frozenset[str] | None, bool, bool, bool, str, bool]:
+        """(who does it, a pronoun two people could be, someone not drawn, each of them: "Lamo and Rosa jump", who
+        does it as written when it is nobody of the cast: "A man", "the Grinch", whose car it is: "Max's car")."""
         keys, pronoun = run_before(c, at)
         each = len(keys) > 1 and "or" not in low[c.start : at]
         doers: frozenset[str] | None = None
-        ambiguous = outside_doer = False
+        ambiguous = outside_doer = car_owner = False
         head = at - 1
         while head >= c.start and (low[head] in SKIP or low[head] in MODALS) and head not in names_at:
             head -= 1
@@ -720,6 +896,17 @@ def read(
                     doers, ambiguous = owner
             elif fam.vehicle:
                 doers, ambiguous = owner if owner is not None else (frozenset({CAR}), False)
+                car_owner = owner is not None
+        elif head >= c.start and head not in names_at and head not in outside_at and _someone_else(head):
+            if not _leading(low, c, at, names_at, outside_at, poss)[0]:  # "Lamo and the dog jump": Lamo jumps too
+                if head - 2 >= c.start and head - 2 in poss:
+                    them = f"{raw[head - 2]}’s {raw[head]}"  # "Lamo's dog jumps"
+                elif head - 1 >= c.start and low[head - 1] in _A_OR_THE:
+                    them = f"{raw[head - 1]} {raw[head]}"  # "A man", "the Grinch"
+                else:
+                    them = f"the {raw[head]}"
+                return frozenset(), False, True, False, them, False
+            doers = frozenset(_leading(low, c, at, names_at, outside_at, poss)[0])
         elif head >= c.start and owner_of(head + 1, c) is not None and head not in names_at:
             doers = None  # "Lamo's ice cream falls": a thing of his, not Lamo
         else:
@@ -729,17 +916,17 @@ def read(
             elif c.subject is not None and (lead_pronoun is not None or _only_little(low, c.start, at)):
                 doers, ambiguous = c.subject, c.ambiguous
             elif out or (c.outside and _only_little(low, c.start, at)):
-                return frozenset(), False, True, False
+                return frozenset(), False, True, False, "", False
         nxt_at = at + n
         if doers is not None and nxt_at < c.end and nxt_at in names_at:
             if name == "fall":
                 if n == 1 and low[at] in _TRIPS_SOMEONE:  # "Rosa trips Lamo": Lamo falls ("trips over Rosa": Lamo)
                     doers = None if nxt_at in poss else frozenset({names_at[nxt_at]})
                     each = False
-            else:  # "Rosso hits Bolt": either may show it
+            elif not fam.plain:  # "Rosso hits Bolt": either may show it ("Lamo waves Rosa off": Lamo waves)
                 doers = doers | {names_at[nxt_at]}
                 each = False
-        if doers is not None and name in ("dance", "jump") and nxt_at < c.end and low[nxt_at] == "with":
+        if doers is not None and name in _WITH and nxt_at < c.end and low[nxt_at] == "with":
             more = []
             j = nxt_at + 1
             while j < c.end and (j in names_at or low[j] in SKIP):
@@ -752,7 +939,16 @@ def read(
             doers = frozenset({CAR})  # "Suddenly a tyre bursts": a car of the scene
         if not fam.vehicle and doers is not None and doers <= {CAR}:
             doers = None  # "It falls": a thing, not a cast member
-        return doers, ambiguous, outside_doer, each
+        return doers, ambiguous, outside_doer, each, "", car_owner
+
+    def _someone_else(head: int) -> bool:
+        """The word right before an event is someone the cast does not have: a person's or an animal's word ("A man
+        falls", "the dog jumps"), or a capitalised word after "the" or "a" that is no one asked about ("The Grinch
+        falls down the chimney")."""
+        if low[head] in OTHER_PEOPLE:
+            return True
+        return (raw[head][:1].isupper() and head - 1 >= 0 and low[head - 1] in _A_OR_THE
+                and sentence[head - 1] == sentence[head])  # fmt: skip
 
     for k, c in enumerate(reading.clauses):
         toks = low[c.start : c.end]
@@ -769,18 +965,19 @@ def read(
                 continue
             for i, n in find(toks, fam.stems):
                 at = c.start + i
-                if quoted[at] or _not_an_event(name, low, at, n):
+                if quoted[at] or _not_an_event(name, low, at, n, c.start, names_at):
                     continue  # something said ('Rosa shouts "Jump!"'), or no event at all
-                doers, ambiguous, outside_doer, each = doers_of(name, fam, c, at, n)
+                doers, ambiguous, outside_doer, each, by_word, car_owner = doers_of(name, fam, c, at, n)
                 nxt = low[at + n] if at + n < len(low) else ""
                 also = frozenset({"get_in", "get_out"}) if name == "jump" and nxt in _SAME_TIME else frozenset()
                 said_count, exact = _count(low, at, n, c)
-                mention = Mention(name, at, k, doers, ambiguous=ambiguous, outside=outside_doer, also=also)
+                mention = Mention(name, at, k, doers, ambiguous=ambiguous, outside=outside_doer, also=also,
+                                  by_word=by_word, car_owner=car_owner)  # fmt: skip
                 # a no before the event says it does not happen ("doesn't start" is its own words: never before them);
-                # "can't stop jumping" says it goes on
-                mention.denied = any(j < at and not any(w in _GOES_ON for w in low[j + 1 : at]) for j in hard)
+                # "can't stop jumping" says it goes on, "doesn't see Lamo slip" that he slips
+                mention.denied = any(denies(low, j, at) for j in hard)
                 mention.soft = any(j < at for j in soft)
-                mention.maybe = another_time or _only_mentioned(low, c, at)
+                mention.maybe = another_time or _only_mentioned(low, reading.clauses, k, at, n, persons)
                 mention.said_count, mention.exact = said_count, exact
                 mention.count = max(1, min(MAX_COUNT, said_count))
                 rest = low[at + n : c.end]
@@ -789,7 +986,11 @@ def read(
                     reading.mentions += [replace(mention, doers=frozenset({d})) for d in sorted(doers)]
                 else:
                     reading.mentions.append(mention)
-        reading.moods += _moods(low, c, k, hard, names_at, people, poss, run_before, resolve, everyone)
+
+        def happens(at: int, k: int = k, later: bool = another_time) -> bool:  # never quoted, wished or another time
+            return not (quoted[at] or later or _only_mentioned(low, reading.clauses, k, at, 1, persons))
+
+        reading.moods += _moods(low, c, k, hard, names_at, people, poss, run_before, resolve, everyone, happens)
     reading.mentions.sort(key=lambda m: m.at)
     reading.absent = _absent(low, names_at, people)
     reading.absent |= _alone(low, reading, names_at, people, here_people, run_before, quoted)
@@ -799,32 +1000,65 @@ def read(
     return reading
 
 
-def _only_mentioned(low: Sequence[str], c: Clause, at: int) -> bool:
-    """True when the words before an event only mention it: a fear, a wish, an "if", a future, a warning or something
-    said ("afraid of falling", "wants to jump", "If Lamo falls", "will dance", "tells Lamo to slow down or he will
-    crash"), "to" before it ("tries to jump"; "starts to dance" happens), or a preposition before its "-ing"."""
-    before = low[c.start : at]
-    if any(w in MAYBE and low[c.start + i + 1 : c.start + i + 2] != ["t"] for i, w in enumerate(before)):
-        return True  # ("can't" is a no, never a maybe: "can't stop jumping" says he jumps)
+def _only_mentioned(low: Sequence[str], clauses: Sequence[Clause], k: int, at: int, n: int, persons: set[int]) -> bool:
+    """True when the words only mention an event: an "if" in its clause, before or after it ("If Lamo falls", "Lamo
+    falls if he runs too fast"), or starting the next clause of its sentence; a fear, a wish, a future, a warning or
+    something said that is about it (``_governs``: "afraid of falling", "will dance", "tells Lamo to slow down or he
+    will crash"; never "so scared he jumps" or "Rosa's loud shout makes Lamo jump"); "to" before it after a word that
+    only means it ("tries to jump", "tells Lamo to stop"; "climbs the tree to jump into the pool" and "starts to
+    dance" happen); or a preposition before its "-ing"."""
+    c = clauses[k]
+    for i in range(c.start, at):
+        w = low[i]
+        if w in _IF:
+            return True
+        if w in _REMEMBER and low[at - 1] == "to":
+            continue  # "remembers to stop": he stops
+        if w in MAYBE and not (i + 1 < len(low) and low[i + 1] == "t") and _governs(low, i, at, persons):
+            return True  # ("can't" is a no, never a maybe: "can't stop jumping" says he jumps)
+    if any(w in ("if", "unless") for w in low[at + n : c.end]):
+        return True
+    nxt = clauses[k + 1] if k + 1 < len(clauses) else None
+    if nxt is not None and nxt.sentence == c.sentence and low[nxt.start] in ("if", "unless"):
+        return True
     prev = low[at - 1] if at - 1 >= c.start else ""
-    if prev == "to" and not (at - 2 >= c.start and low[at - 2] in _STARTS):
+    if (prev == "to" and not (at - 2 >= c.start and low[at - 2] in _STARTS)
+            and any(w in _TO_GOVERNORS for w in low[c.start : at - 1])):  # fmt: skip
         return True
     return low[at].endswith("ing") and prev in ("of", "about", "from", "for")
 
 
+def _governs(low: Sequence[str], w: int, at: int, persons: set[int]) -> bool:
+    """True when the maybe word at ``w`` is about the event at ``at``: only little words, joining words ("to", "of",
+    "that") and, but for a fear, a want or a try, names and pronouns are between them."""
+    people = low[w] not in _FEAR
+    for k in range(w + 1, at):
+        x = low[k]
+        if x in SKIP or x in MODALS or x in _BRIDGE or x in PREPOSITIONS or x in HARD_NO:
+            continue
+        if people and (k in persons or x in PRONOUNS or x in EVERYONE):
+            continue
+        return False
+    return True
+
+
 def _moods(
     low: Sequence[str], c: Clause, k: int, hard: Sequence[int], names_at: Mapping[int, str], people: set[str],
-    poss: set[int], run_before: Any, resolve: Any, everyone: Any,
+    poss: set[int], run_before: Any, resolve: Any, everyone: Any, happens: Any = None,
 ) -> list[Mood]:  # fmt: skip
     """How someone feels in a clause: who feels it is who the words put right before the feeling word ("Rosa hugs
     Lamo": Rosa; "makes Lamo laugh": Lamo), else the clause's subject; a no before a happy word ("is not happy",
-    "doesn't smile") is a sad one (never drawn happy); a no before a sad word says nothing."""
+    "doesn't smile") is a sad one (never drawn happy); a no before a sad word says nothing. A feeling word that says
+    the feeling (``OWED_HAPPY``, ``OWED_SAD``: "laughs", "cries", "is sad"; never "hugs" or "wins") is owed: it must
+    show, unless it is only mentioned (``happens``: an "if", a wish, something said, another time)."""
     toks = low[c.start : c.end]
     happy_at = [c.start + i for i, _n in find(toks, HAPPY_WORDS) if _a_feeling(low, c.start + i)]
     sad_at = [c.start + i for i, _n in find(toks, SAD_WORDS) if _a_feeling(low, c.start + i)]
+    sad_at += [c.start + i for i in range(len(toks)) if _lost_a_game(toks, i)]
+    owed_at = {c.start + i for i, _n in find(toks, (*OWED_HAPPY, *OWED_SAD))}
 
     def negated(at: int) -> bool:
-        return any(j < at and not any(w in _GOES_ON for w in low[j + 1 : at]) for j in hard)
+        return any(denies(low, j, at) for j in hard)
 
     pos_happy = [i for i in happy_at if not negated(i)]
     not_happy = [i for i in happy_at if negated(i)]
@@ -838,19 +1072,32 @@ def _moods(
     else:
         return []
     who: set[str] = set()
+    ambiguous = False
     for at in at_words:
         keys, pronoun = run_before(c, at)
         found = set(keys)
         if pronoun is not None:
-            found |= set(resolve(low[pronoun], pronoun)[0] or ())
+            them, open_ = resolve(low[pronoun], pronoun)
+            found |= set(them or ())
+            ambiguous = ambiguous or open_
         if not found:
             found = {names_at[i] for i in range(c.start, at) if i in names_at and i not in poss
                      and not (i > c.start and low[i - 1] in PREPOSITIONS)}  # fmt: skip
         if not found and c.subject:
             found = set(c.subject)
+            ambiguous = ambiguous or c.ambiguous
         who |= found
     who = {p for p in who if p in people}
-    return [Mood(k, happy, frozenset(who))] if who else []
+    owed = any(at in owed_at and (happens is None or happens(at)) for at in at_words if not negated(at))
+    return [Mood(k, happy, frozenset(who), owed=owed, ambiguous=ambiguous)] if who else []
+
+
+def _lost_a_game(toks: Sequence[str], i: int) -> bool:
+    """ "Lamo loses the race", "lost the game": a sad clause (never "loses his balance" or "loses control")."""
+    if toks[i] not in ("lose", "loses", "lost", "losing"):
+        return False
+    rest = [w for w in toks[i + 1 : i + 4] if w not in ("the", "a", "his", "her", "their", "big", "final")]
+    return bool(rest) and rest[0] in _CONTESTS
 
 
 def _a_feeling(low: Sequence[str], at: int) -> bool:
@@ -860,6 +1107,8 @@ def _a_feeling(low: Sequence[str], at: int) -> bool:
         return prev not in _NOT_A_BEAM_AFTER
     if low[at] == "cross":
         return prev in _CROSS_AFTER
+    if low[at] == "won":
+        return not (at + 1 < len(low) and low[at + 1] == "t")  # "won't": no win
     return True
 
 
@@ -890,9 +1139,12 @@ def _alone(
     return out
 
 
-def _not_an_event(name: str, low: Sequence[str], at: int, n: int) -> bool:
+def _not_an_event(name: str, low: Sequence[str], at: int, n: int, start: int = 0,
+                  named: Iterable[int] = ()) -> bool:  # fmt: skip
     """Words that look like an event and are not one: "falls asleep", "in the fall", "the snow falls", "fast
-    asleep", "hits the brakes" (a stop, not a bump), "the stop sign", "the brakes fail"."""
+    asleep", "hits the brakes" (a stop, not a bump), "the stop sign", "the brakes fail" ("slams the brakes" is a
+    stop), "drives into the car park" (no bump: only into a thing it hits), "runs out of the house" (no stall),
+    "quickly" with no going or driving before it, "the waves", "the point", "the bouncing ball"."""
     nxt = low[at + n] if at + n < len(low) else ""
     after = low[at + n + 1] if at + n + 1 < len(low) else ""
     prev = low[at - 1] if at > 0 else ""
@@ -903,8 +1155,36 @@ def _not_an_event(name: str, low: Sequence[str], at: int, n: int) -> bool:
             return True
     if name in ("fall", "jump") and prev in _THINGS:
         return True  # the snow falls, the ball falls: a thing's, not a cast member's
+    if n == 1 and low[at].endswith("ing") and (nxt in _THINGS or nxt in ("castle", "board")):
+        return True  # "the bouncing ball", "a jumping castle", "the running water": a thing
+    if name == "jump" and low[at] == "springs" and prev in _ANY_OWNER:
+        return True  # "the springs of the bed"
     if name == "speed" and nxt == "asleep":
         return True
+    if name == "speed" and low[at] in ("quickly", "quicker", "rapidly"):
+        return not any(
+            w in _GO_VERBS for w in low[start:at]
+        )  # "Rosso goes really quickly" (never "Lamo quickly hides")
+    if name == "bump" and low[at] in _DRIVES:
+        # "drives into a tree", "into Max's car", "into Bolt" (never "into the car park" or "into the garage")
+        names = set(named)
+        k = at + n
+        while k < len(low) and (low[k] in _ANY_OWNER or low[k] in ("big", "little", "s", "old", "red", "parked")
+                                or k in names):  # fmt: skip
+            k += 1
+        thing = k
+        while k < len(low) and low[k] not in PREPOSITIONS and low[k] not in BREAKERS and k - thing < 2:
+            k += 1
+        last = k - 1
+        return not ((last >= thing and low[last] in _OBSTACLES) or (last < thing and thing - 1 in names))
+    if name == "stall" and list(low[at + 1 : at + 3]) == ["out", "of"]:
+        return nxt not in _FUEL  # "runs out of petrol" (never "runs out of the house")
+    if name == "run" and nxt == "out" and after == "of" and (low[at + 3] if at + 3 < len(low) else "") in _FUEL:
+        return True  # "Lamo runs out of petrol": the car stalls, nobody runs
+    if name == "wave" and prev in _NOT_A_WAVE_AFTER:
+        return True  # "the waves", "a big wave"
+    if name == "point" and (prev in ("the", "this", "that", "no", "a", "what", "s") or nxt == "of"):
+        return True  # "at this point", "the point of"
     if name == "stop" and n == 1:
         if low[at] in ("stop", "stops") and nxt in _NOT_A_STOP_NEXT:
             return True  # the stop sign, the stop light
@@ -913,13 +1193,36 @@ def _not_an_event(name: str, low: Sequence[str], at: int, n: int) -> bool:
             low[at] in ("stop", "brake", "brakes")
             and prev in _NOT_A_STOP_AFTER
             and not (prev == "a" and before2 == "to")
+            and not (
+                low[at] in ("brake", "brakes") and prev in ("the", "his", "her", "its", "their") and before2 in _PRESS
+            )
         ):
-            return True  # the bus stop, the brakes as a thing ("comes to a stop" is one)
+            return True  # the bus stop, the brakes as a thing ("comes to a stop", "slams the brakes" are one)
     return (
         name == "bump"
         and low[at] in ("hits", "hit")
-        and (nxt in ("brakes", "brake") or (nxt == "the" and after in ("brakes", "brake", "road", "gas")))
+        and (
+            nxt in ("brakes", "brake", "horn") or (nxt == "the" and after in ("brakes", "brake", "road", "gas", "horn"))
+        )
     )
+
+
+_GO_VERBS = frozenset({"go", "goes", "went", "going", "gone", "drive", "drives", "drove", "driving", "driven", "move",
+                       "moves", "moved", "moving", "ride", "rides", "rode", "riding"})  # fmt: skip
+_DRIVES = frozenset({"drive", "drives", "drove", "driven", "driving"})
+_OBSTACLES = frozenset(
+    {"tree", "trees", "wall", "walls", "bin", "bins", "pole", "post", "lamppost", "lamp", "fence", "hedge", "gate",
+     "car", "cars", "bus", "truck", "van", "lorry", "taxi", "tractor", "sign", "rock", "bollard", "bush", "barrier",
+     "house", "bike", "cone", "cones", "back", "side", "front", "postbox", "letterbox", "door", "shop", "window",
+     "statue", "fountain", "snowman", "it", "him", "her", "them"}
+)  # fmt: skip
+_FUEL = frozenset({"petrol", "gas", "fuel", "diesel", "battery", "power", "charge", "juice", "electricity"})
+_PRESS = frozenset(
+    {"slam", "slams", "slammed", "slamming", "hitting", "pressed", "pressing", "stamp", "stamps", "stamped",
+     "stamping", "jam", "jams", "jammed", "jamming", "apply", "applied", "applying", "stomp", "stomps", "stomped", "stomping", "pump", "pumps", "pumped", "use", "uses", "used", "using",
+     "push", "pushes", "pushed", "pushing"}
+)  # fmt: skip
+_NOT_A_WAVE_AFTER = frozenset({"the", "big", "huge", "giant", "sea", "ocean", "tidal", "heat", "radio", "a", "new"})
 
 
 def _count(low: Sequence[str], at: int, n: int, c: Clause) -> tuple[int, bool]:
@@ -928,17 +1231,21 @@ def _count(low: Sequence[str], at: int, n: int, c: Clause) -> tuple[int, bool]:
     when they don't say."""
 
     def number(word: str) -> int | None:
-        return _NUMBERS.get(word) or (int(word) if word.isdigit() and len(word) < 3 else None)
+        if word.isdigit() and word.isascii():
+            return min(int(word[:7]), 1000000)
+        return _NUMBERS.get(word)
 
-    def times_at(k: int) -> int | None:
+    def times_at(k: int) -> tuple[int, bool] | None:
         w = low[k]
         if w in ("twice", "thrice"):
-            return _NUMBERS[w]
+            return _NUMBERS[w], True
         num = number(w)
-        if num and k + 1 < c.end and low[k + 1] == "times":
-            return num
-        if w in ("few", "several", "many", "lots") and "times" in low[k + 1 : min(c.end, k + 3)]:
-            return 2
+        # "fifteen times", "100 times", "a hundred times", "a couple of times"
+        if num and "times" in low[k + 1 : min(c.end, k + 3)] and all(x in ("of", "times") for x in
+                                                                       low[k + 1 : low.index("times", k + 1)]):  # fmt: skip
+            return num, True
+        if w in _SOME and "times" in low[k + 1 : min(c.end, k + 3)]:
+            return 2, False  # "a few times", "lots of times": at least twice
         return None
 
     for k in range(at + n, c.end):
@@ -946,11 +1253,11 @@ def _count(low: Sequence[str], at: int, n: int, c: Clause) -> tuple[int, bool]:
             return 1, True
         got = times_at(k)
         if got:
-            return got, True
+            return got
     for k in range(c.start, at):
         got = times_at(k)
         if got:
-            return got, True
+            return got
     if at - 1 >= c.start:
         num = number(low[at - 1])
         if num and num > 1 and low[at].endswith("s"):

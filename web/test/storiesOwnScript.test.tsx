@@ -1125,3 +1125,34 @@ describe("round 1 of the re-review: the answers, Make a friend, who and where, a
     expect(wrong.story.safety?.problems.some((p) => p.startsWith("Your scene 2"))).toBe(true);
   });
 });
+
+// ---------- Round 2 of the re-review (24 Nov): Who carried over and the cast's car, only where the words put them ----------
+
+describe("round 2 of the re-review: a they that is some things, and a toy car or cars in general", () => {
+  const chars = [
+    { characterId: C.dash, name: "Dash", description: "A cheeky boy." },
+    { characterId: C.nana, name: "Nana Rose", description: "A round, kind grandma." },
+    { characterId: ROSSO, name: "Rosso", kind: "car" as const },
+  ];
+  const cast = [C.dash, C.nana, ROSSO];
+  const draftOf = (...whats: string[]): ScriptDraft => ({ scenes: whats.map((w) => newScene(w)), answers: {} });
+  const who = (d: ScriptDraft) => d.scenes.map((s) => sceneWho(s, d, cast, chars));
+
+  it("a they after some things it may be is never the scene before's people", () => {
+    expect(who(draftOf("Dash and Nana Rose play in the park.", "Dash sees some ducks. They swim in the pond."))[1]).toEqual([C.dash]);
+    expect(who(draftOf("Dash and Nana Rose play.", "Dash feeds the birds. They fly away."))[1]).toEqual([C.dash]);
+    // still carried: they with no things before it, both, everyone, together (and never "the bus" as things)
+    expect(who(draftOf("Dash and Nana Rose walk.", "Dash falls over. They both laugh."))[1]).toEqual([C.dash, C.nana]);
+    expect(who(draftOf("Dash and Nana Rose walk.", "Dash waves. They laugh."))[1]).toEqual([C.dash, C.nana]);
+    expect(who(draftOf("Dash and Nana Rose walk.", "Dash gets on the bus. They ride to school."))[1]).toEqual([C.dash, C.nana]);
+    expect(who(draftOf("Dash and Nana Rose walk.", "Dash sees some ducks. Everyone laughs."))[1]).toEqual([C.dash, C.nana]);
+  });
+
+  it("the cast's car is ticked for a car, never for a toy car or cars in general", () => {
+    expect(who(draftOf("Dash plays with his toy car in his bedroom.", "Dash waves."))[0]).toEqual([C.dash]);
+    expect(who(draftOf("Dash is scared of cars.", "Dash waves."))[0]).toEqual([C.dash]);
+    expect(who(draftOf("Dash finds a red car in the garage.", "Dash waves."))[0]).toEqual([C.dash, ROSSO]);
+    expect(who(draftOf("Dash plays with his toy car, then drives home.", "Dash waves."))[0]).toEqual([C.dash, ROSSO]);
+    expect(toOwnScript(draftOf("Dash plays with his toy car at home.", "Dash waves."), cast, chars).scenes[0]).toMatchObject({ who: [C.dash], place: "living_room" });
+  });
+});
