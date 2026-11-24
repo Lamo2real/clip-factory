@@ -9,6 +9,8 @@
 //   connect and before every post, also when Clip Factory connects it later (then the card says why);
 // - the shared app's choice reads "Share Clip Factory's app" with "Clip Factory's posts always go first. Clips Funded
 //   uses what's left." (never "quicker"), and a post with no room left waits with its time and goes out after the reset.
+// Each card is on its platform's own page (/stories/connections/<p>): a case that reads several cards opens each page in
+// turn.
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -32,12 +34,14 @@ vi.mock("../src/lib/router.ts", async (orig) => {
   return { ...real, navigate: () => undefined };
 });
 
-const { ConnectionsScreen } = await import("../src/stories/screens/Connections.tsx");
+const { ConnectionScreen } = await import("../src/stories/screens/SocialPlatform.tsx");
 
 let host: HTMLElement;
 let root: Root;
 let store: MockStore;
 let api: StoriesApi;
+/** The platform whose page is on screen. */
+let at: string | null = null;
 
 /** The Clips Funded accounts the pretend platforms sign in with (mock/social.ts STORIES_IDENTITY). */
 const STORIES: Record<Platform, { id: string; handle: string; name: string }> = {
@@ -58,21 +62,36 @@ function start(knobs: Record<string, unknown> = {}) {
 function clipsHas(platform: Platform, who: { id?: string; handle?: string }) {
   store.knobs.clipsIdentity = { ...((store.knobs.clipsIdentity as object | undefined) ?? {}), [platform]: who };
 }
-async function render(knobs: Record<string, unknown> = {}) {
+/** A fresh pretend API, then a platform's own page. */
+async function render(platform: Platform, knobs: Record<string, unknown> = {}) {
   start(knobs);
+  await show(platform);
+}
+/** A platform's own page, with the same pretend API (the landing's result, if any). */
+async function show(platform: Platform, result: string | null = null) {
   await act(async () =>
     root.render(
       <ToastProvider>
-        <ConnectionsScreen ws="stories" page={{ name: "connections", platform: null, result: null, ws: null }} />
+        <ConnectionScreen ws="stories" page={{ name: "connection", platform, result, ws: null }} />
       </ToastProvider>,
     ),
   );
   await settle();
+  at = platform;
 }
 async function settle(times = 5) {
   for (let i = 0; i < times; i++) await act(async () => await new Promise((r) => setTimeout(r, 0)));
 }
-const card = (platform: string) => host.querySelector<HTMLElement>(`.st-conn[data-platform="${platform}"]`)!;
+/** The card of the platform whose page is on screen. */
+const card = (platform: string) => {
+  expect(at, "that platform's page is on screen").toBe(platform);
+  return host.querySelector<HTMLElement>(`.st-conn[data-platform="${platform}"]`)!;
+};
+/** The platform's card on its own page (opened if another one is on screen). */
+const cardOf = async (platform: Platform) => {
+  if (at !== platform) await show(platform);
+  return card(platform);
+};
 const buttons = (el: ParentNode = host) => Array.from(el.querySelectorAll<HTMLButtonElement>("button, [role=radio]"));
 const status = async (p: Platform) => (await api.social("stories")).accounts.find((a) => a.platform === p)!;
 
@@ -123,7 +142,7 @@ afterEach(() => {
 
 describe("no route or screen offers sharing an account (§45.37 G8 (d))", () => {
   it("the API has no share call, and no card has Use it for both, not even Clip Factory's own account", async () => {
-    await render();
+    await render("x");
     expect(Object.keys(api)).not.toContain("shareWithClips");
     expect(Object.keys(api).filter((k) => /share/i.test(k))).toEqual([]);
     // The seed's X is Clip Factory's own: it says why, offers a different account, and nothing to share it.
@@ -135,27 +154,33 @@ describe("no route or screen offers sharing an account (§45.37 G8 (d))", () => 
     expect(buttons(card("x")).map((b) => b.textContent?.trim())).toContain("Pick another account");
     for (const b of buttons()) expect(b.textContent ?? "").not.toMatch(/for both/i);
     expect(host.textContent).not.toMatch(/use it for both|Are you sure\?.*both post/i);
+    // Nor on any other platform's page.
+    for (const p of ["youtube", "tiktok", "instagram", "facebook"] as const) {
+      await cardOf(p);
+      for (const b of buttons()) expect(b.textContent ?? "", p).not.toMatch(/for both/i);
+      expect(host.textContent, p).not.toMatch(/use it for both|Are you sure\?.*both post/i);
+    }
   });
 
   it("every card whose next step is an account says up front to use a new account made for Clips Funded", async () => {
-    await render();
+    await render("tiktok");
     // TikTok (connect again), Instagram (pick one), Facebook (not connected) and X (Clip Factory's own).
-    for (const p of ["tiktok", "instagram", "facebook", "x"]) {
-      const first = card(p).querySelector(".st-conn__new");
+    for (const p of ["tiktok", "instagram", "facebook", "x"] as const) {
+      const first = (await cardOf(p)).querySelector(".st-conn__new");
       expect(first?.textContent, p).toBe(NEW_ACCOUNT_LINE);
       // Before the developer app and before any Connect button.
       expect(first!.compareDocumentPosition(card(p).querySelector(".st-app")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       expect(first!.compareDocumentPosition(card(p).querySelector(".st-conn__actions")!) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     }
     // A connected account that is fine does not say it again (the page's line says it once at the top).
-    expect(card("youtube").querySelector(".st-conn__new")).toBeNull();
+    expect((await cardOf("youtube")).querySelector(".st-conn__new")).toBeNull();
     expect(NEW_ACCOUNT_LINE).toBe("Use a new account made for Clips Funded, not Clip Factory's.");
   });
 
   it("a brand-new studio says it on every card, before Set up the app", async () => {
-    await render({ fresh: true });
-    for (const p of ["youtube", "tiktok", "instagram", "facebook", "x"]) {
-      const first = card(p).querySelector(".st-conn__new");
+    await render("youtube", { fresh: true });
+    for (const p of ["youtube", "tiktok", "instagram", "facebook", "x"] as const) {
+      const first = (await cardOf(p)).querySelector(".st-conn__new");
       expect(first?.textContent, p).toBe(NEW_ACCOUNT_LINE);
       const setUp = buttons(card(p)).find((b) => /^Set up the app/.test(b.textContent ?? ""))!;
       expect(first!.compareDocumentPosition(setUp) & Node.DOCUMENT_POSITION_FOLLOWING, p).toBeTruthy();
@@ -163,14 +188,15 @@ describe("no route or screen offers sharing an account (§45.37 G8 (d))", () => 
   });
 
   it("the shared developer app reads Share Clip Factory's app, Clip Factory first, still a different account; never quicker", async () => {
-    await render({ fresh: true });
-    // Set up the app opens each card's choice.
-    for (const p of ["youtube", "tiktok", "instagram", "facebook", "x"]) {
-      const setUp = buttons(card(p)).find((b) => /^Set up the app/.test(b.textContent ?? ""))!;
+    await render("youtube", { fresh: true });
+    // Set up the app opens each card's choice (on each platform's own page).
+    const opened = async (p: Platform) => {
+      const setUp = buttons(await cardOf(p)).find((b) => /^Set up the app/.test(b.textContent ?? ""))!;
       await act(async () => setUp.click());
-    }
-    for (const p of ["youtube", "tiktok", "x"]) {
-      const share = buttons(card(p)).find((b) => b.getAttribute("role") === "radio" && /Share Clip Factory's app/.test(b.textContent ?? ""));
+      return card(p);
+    };
+    for (const p of ["youtube", "tiktok", "x"] as const) {
+      const share = buttons(await opened(p)).find((b) => b.getAttribute("role") === "radio" && /Share Clip Factory's app/.test(b.textContent ?? ""));
       expect(share, p).toBeTruthy();
       expect(share!.textContent).toContain(SHARED_APP_LINE);
       expect(share!.textContent).toContain(SHARED_APP_ACCOUNT_LINE);
@@ -178,12 +204,15 @@ describe("no route or screen offers sharing an account (§45.37 G8 (d))", () => 
     expect(SHARED_APP_LINE).toBe("Clip Factory's posts always go first. Clips Funded uses what's left.");
     expect(SHARED_APP_ACCOUNT_LINE).toBe("Even with Clip Factory's app, sign in with a different account made for Clips Funded.");
     // Meta never shares Clip Factory's app.
-    for (const p of ["instagram", "facebook"]) expect(card(p).textContent).not.toContain("Share Clip Factory's app");
+    for (const p of ["instagram", "facebook"] as const) {
+      expect((await opened(p)).textContent).not.toContain("Share Clip Factory's app");
+      expect(host.textContent, p).not.toMatch(/quicker/i);
+    }
     expect(host.textContent).not.toMatch(/quicker/i);
   });
 
   it("with Clip Factory's app picked, the card still says Clip Factory goes first and to sign in with a different account", async () => {
-    await render();
+    await render("youtube");
     const yt = card("youtube");
     expect(yt.querySelector(".st-app__now")?.textContent).toContain(SHARED_APP_LINE);
     expect(yt.querySelector(".st-app__now")?.textContent).toContain(SHARED_APP_ACCOUNT_LINE);
@@ -218,7 +247,7 @@ describe("the same account as Clip Factory's, by any identity, is refused (§45.
     });
 
     it(`${p} by ${what}: blocked before the upload once Clip Factory connects it later, and the card says why`, async () => {
-      await render({ publishMs: 20 });
+      await render(p, { publishMs: 20 });
       await appReady(p);
       expect(await connect(p)).toBe("connected");
       // A post asked for while it was still Clips Funded's own...
@@ -235,14 +264,8 @@ describe("the same account as Clip Factory's, by any identity, is refused (§45.
       expect((await postTo(p)).publishingStatus).toBe("needs_attention");
       // The page says it is Clip Factory's account now, with a way to a different one.
       await act(async () => root.render(<ToastProvider>{null}</ToastProvider>));
-      await act(async () =>
-        root.render(
-          <ToastProvider>
-            <ConnectionsScreen ws="stories" page={{ name: "connections", platform: null, result: null, ws: null }} />
-          </ToastProvider>,
-        ),
-      );
-      await settle(6);
+      await show(p);
+      await settle();
       expect(card(p).textContent).toContain(CLIPS_LATER_LINE);
       expect(card(p).textContent).toContain("Clip Factory's own");
       // Said once: the server's warning is the card's line, never a second, different explanation.
@@ -268,14 +291,8 @@ describe("the same account as Clip Factory's, by any identity, is refused (§45.
 
   it("the callback's same_as_clips result says Clips Funded needs its own separate account", async () => {
     start({ connectResult: "same_as_clips" });
-    await act(async () =>
-      root.render(
-        <ToastProvider>
-          <ConnectionsScreen ws="stories" page={{ name: "connections", platform: "tiktok", result: "same_as_clips", ws: null }} />
-        </ToastProvider>,
-      ),
-    );
-    await settle(6);
+    await show("tiktok", "same_as_clips");
+    await settle();
     expect(document.body.textContent).toContain("This is Clip Factory's own account. Clips Funded needs its own separate account: sign in with a different one.");
     expect(document.body.textContent).not.toMatch(/use it for both/i);
   });

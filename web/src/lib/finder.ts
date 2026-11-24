@@ -468,11 +468,19 @@ export function stateLine(f: Pick<Finder, "state" | "matches" | "looked" | "want
 /** The no-place line (state `new` or `ok` with `resolvedPlaces` empty). */
 export const NO_PLACE_LINE = "Set up a place to post first. Then I can find campaigns that pay for it.";
 
-/** The first place to set up for the no-place state: YouTube first, never TikTok. */
-export function placeToSetUp(setup: SetupOverview | null | undefined): Platform {
+/**
+ * The first place to set up for the no-place state: YouTube first, never TikTok, never a skipped place (rule S).
+ * null: every place left to set up is skipped, so the page offers "Open Set up posting" instead of naming one.
+ */
+export function placeToSetUp(setup: SetupOverview | null | undefined, skipped: readonly Platform[] = []): Platform | null {
   const ready = new Set((setup?.platforms ?? []).filter((p) => p.ready).map((p) => p.platform));
-  return PLATFORM_ORDER.find((p) => p !== "tiktok" && !ready.has(p)) ?? "youtube";
+  const left = PLATFORM_ORDER.filter((p) => p !== "tiktok" && !ready.has(p));
+  if (!left.length) return "youtube";
+  return left.find((p) => !skipped.includes(p)) ?? null;
 }
+
+/** Where "Open Set up posting" goes when only skipped places are left to set up. */
+export const SETUP_LIST_PATH = "/settings/posting/setup";
 
 /** "I looked at 154 campaigns. 6 match." */
 export function lookedLine(f: Pick<Finder, "looked" | "matches">): string {

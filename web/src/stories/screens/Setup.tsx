@@ -44,8 +44,11 @@ import {
   useOnboarding,
   type StIconName,
 } from "../ui.tsx";
+import { isSkippedPlatform, leftOf, useSkip } from "../skips.ts";
 import { DisconnectedNote, isPlatform, PlatformCard, useSocial } from "./Connections.tsx";
 import type { StoriesScreenProps } from "./types.ts";
+
+export { leftOf };
 
 export const SETUP_ORDER: OnboardStep[] = ["ai", "model", "effort", "video", "agents", "instagram", "tiktok", "youtube", "facebook", "x", "done"];
 
@@ -63,9 +66,12 @@ const ICON: Record<OnboardStep, StIconName> = {
   done: "check",
 };
 
-/** Where the setup starts: the first step not done yet (skipped ones count as still to do), else the last. */
+/**
+ * Where the setup starts: the first step still to do, else the first one skipped for later (never a platform the owner
+ * skipped: that one waits on Social accounts), else the last.
+ */
 export function firstOpen(o: Onboarding): OnboardStep {
-  return o.steps.find((s) => s.state === "todo")?.step ?? o.steps.find((s) => s.state !== "done")?.step ?? "done";
+  return o.steps.find((s) => s.state === "todo")?.step ?? o.steps.find((s) => s.state !== "done" && !isSkippedPlatform(s))?.step ?? "done";
 }
 
 /** The step after `step` (Done is last). */
@@ -74,13 +80,25 @@ export function nextStep(step: OnboardStep): OnboardStep {
   return SETUP_ORDER[Math.min(SETUP_ORDER.length - 1, i + 1)]!;
 }
 
-/** What is left: every step not done, in order (Done itself is not a task). */
-export function leftOf(o: Onboarding): Onboarding["steps"] {
-  return o.steps.filter((s) => s.state !== "done" && s.step !== "done");
-}
-
-/** The step's own buttons at its foot: Back, Skip for now, and its main action (or Next). */
-function Foot({ step, busy, onBack, onSkip, children }: { step: OnboardStep; busy: boolean; onBack: (() => void) | null; onSkip: (() => void) | null; children?: ReactNode }) {
+/**
+ * The step's own buttons at its foot: Back, Skip for now (Un-skip on a platform the owner skipped), and its main
+ * action (or Next).
+ */
+function Foot({
+  step,
+  busy,
+  onBack,
+  onSkip,
+  onUnskip = null,
+  children,
+}: {
+  step: OnboardStep;
+  busy: boolean;
+  onBack: (() => void) | null;
+  onSkip: (() => void) | null;
+  onUnskip?: (() => void) | null;
+  children?: ReactNode;
+}) {
   return (
     <div className="st-setup__foot" data-step={step}>
       {onBack ? (
@@ -88,7 +106,12 @@ function Foot({ step, busy, onBack, onSkip, children }: { step: OnboardStep; bus
           Back
         </StButton>
       ) : null}
-      {onSkip ? (
+      {onUnskip ? (
+        // Kid-proof: never disabled; a tap while it is saving plays the deny sound.
+        <StButton quiet aria-disabled={busy || undefined} onClick={() => !busy && onUnskip()}>
+          Un-skip
+        </StButton>
+      ) : onSkip ? (
         <StButton quiet disabled={busy} onClick={onSkip}>
           Skip for now
         </StButton>
@@ -550,6 +573,8 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
   const [held, setHeld] = useState<string | null>(null);
   const panel = useRef<HTMLDivElement>(null);
   const data = ob.data;
+  // Un-skip a platform the owner skipped: one tap, the setup and the dashboard follow (skips.ts).
+  const platformSkip = useSkip(ws);
 
   // Open at the first step still to do, once the server said where things are.
   useEffect(() => {
@@ -575,7 +600,11 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
     setBusy(true);
     try {
       await patch({ step, skipped: true });
-      toast.success("Skipped. It stays on the list for later.");
+      // A platform skipped leaves every reminder: it stays only on Social accounts (and here).
+      if (isPlatform(step)) {
+        toast.success("Skipped. It stays in Social accounts.");
+        void refreshDashboard(ws).catch(() => undefined);
+      } else toast.success("Skipped. It stays on the list for later.");
       go(nextStep(step));
     } catch (e) {
       toast.error(friendlyMessage(e));
@@ -623,6 +652,8 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
   const i = SETUP_ORDER.indexOf(step);
   const back = i > 0 ? () => go(SETUP_ORDER[i - 1]!) : null;
   const skipFn = step === "done" || state === "done" ? null : () => void skip();
+  const unskipFn = isPlatform(step) && state === "skipped" ? () => void platformSkip.unskip(step) : null;
+  const skippedPlatform = unskipFn !== null;
 
   let body: ReactNode;
   let foot: ReactNode;
@@ -775,7 +806,7 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
                   </span>
                   <span className="st-steps__label">{s.label}</span>
                   <span className="sr-only">{s.state === "done" ? " (done)" : s.state === "skipped" ? " (skipped)" : ""}</span>
-                  {s.state === "skipped" ? <span className="st-steps__skipped">Later</span> : null}
+                  {s.state === "skipped" ? <span className="st-steps__skipped">{isSkippedPlatform(s) ? "Skipped" : "Later"}</span> : null}
                 </button>
               </li>
             ))}
@@ -789,6 +820,8 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
             </span>
             {state === "done" ? (
               <span className="st-chip st-chip--mint">Done</span>
+            ) : skippedPlatform ? (
+              <span className="st-chip">Skipped</span>
             ) : state === "skipped" ? (
               <span className="st-chip st-chip--sun">Skipped for now</span>
             ) : null}
@@ -801,12 +834,13 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
           </h2>
           <p className="st-setup__lede">{WORDS[step].lede}</p>
           <div className="st-setup__body">{body}</div>
-          <Foot step={step} busy={busy} onBack={back} onSkip={skipFn}>
+          <Foot step={step} busy={busy || platformSkip.busy !== null} onBack={back} onSkip={skipFn} onUnskip={unskipFn}>
             {foot}
           </Foot>
         </div>
 
-        {/* What is left is the step list itself (each step says Later when skipped): only why a platform is still to do
+        {/* What is left is the step list itself (a step skipped for later says Later, a platform skipped says Skipped:
+            it is not counted and waits on Social accounts): only why a platform is still to do
             when its account is Lamo Clips' own is said here, named, in the server's words (§45.35 D11). */}
         {left.some((s) => s.line) ? (
           <section className="st-left st-glass" aria-label="Why a step is still to do">

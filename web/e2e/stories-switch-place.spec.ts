@@ -8,12 +8,13 @@ import { settle } from "./helpers.ts";
 // and look whichever app is open (docs/CONTRACTS.md §45.38; the owner, 22 Nov: "keep that for both when I switch to
 // Lamo Stories and back to Clip Factory", "That should be in the same place no matter what. Even if we're in Lamo
 // Stories or if we're in Clip Factory."). Measured here in Clip Factory (/, /library, /settings) and on every Lamo
-// Stories page the owner named (the dashboard, Setup, Ideas, Production, Settings, Social accounts), at four window
+// Stories page the owner named (the dashboard, Setup, Ideas, Production, Settings, Social accounts and a platform's own
+// page there), at four window
 // sizes and with Clip Factory's sidebar folded, and required to be the same within half a pixel. A picture of each
 // is kept under test-results/switch-place.
 
 const CLIPS = ["/", "/library", "/settings"];
-const STORIES = ["/stories", "/stories/setup", "/stories/ideas", "/stories/production", "/stories/settings", "/stories/connections"];
+const STORIES = ["/stories", "/stories/setup", "/stories/ideas", "/stories/production", "/stories/settings", "/stories/connections", "/stories/connections/youtube"];
 const SIZES: { w: number; h: number; folded?: boolean; window?: "mac" | "windows"; picture?: boolean }[] = [
   { w: 1440, h: 900 },
   { w: 1280, h: 800 },

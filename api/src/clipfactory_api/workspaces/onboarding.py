@@ -21,6 +21,10 @@ real state and cannot be ticked by hand (§45.34 "Setup steps 1–3", "Onboardin
   workspace secrets only while the request has time for one more slow read, as the dashboard does.
 
 Only 5 and 11 are ticked by hand. The ``ONBOARD`` item keeps only the hand ticks, the skips and ``finishedAt``.
+
+A skipped platform step (``skips``: skipped and not connected; connected wins) keeps its ``skipped`` state in
+``steps`` but is not counted: ``total`` is 11 minus those steps, so a platform the owner left out never shows as
+something still to do. A skipped step of any other kind still counts ("later").
 """
 
 from __future__ import annotations
@@ -169,10 +173,11 @@ def state(
     for step in steps:
         if step["step"] in PLATFORM_STEPS and platform_status[str(step["step"])] == "same_as_clips":
             step["line"] = same_as_clips_line(str(step["step"]))
+    left_out = sum(1 for s in steps if s["step"] in PLATFORM_STEPS and s["state"] == "skipped")
     return {
         "steps": steps,
         "done": sum(1 for s in steps if s["state"] == "done"),
-        "total": len(STEPS),
+        "total": len(STEPS) - left_out,
         "finishedAt": item.get("finishedAt") or None,
     }
 

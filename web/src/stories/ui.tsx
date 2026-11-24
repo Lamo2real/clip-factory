@@ -14,6 +14,7 @@ import { storiesApi } from "./api/client.ts";
 import { RoundGlassButton } from "./glass/index.ts";
 import { storiesBehind, useAppActive } from "./pane.tsx";
 import { storiesReduceMotion, storiesSound } from "./prefs.ts";
+import { isSocialHref } from "./skips.ts";
 import type { Onboarding, Platform, StoriesDashboard, StoryStatus } from "./api/types.ts";
 
 // ---------- Buttons, cards, chips ----------
@@ -572,7 +573,8 @@ export function NeedsYouBar({ ws, here }: { ws: string; here?: string }) {
   if (gone === key) return null;
   const more = (data?.needsYou.length ?? 1) - 1;
   const onIt = here !== undefined && pathOf(first.href) === pathOf(here);
-  const onSocial = onIt && pathOf(first.href) === "/stories/connections";
+  // Social accounts or one platform's page there: the item's own page shows its card (the platform's page).
+  const onSocial = onIt && isSocialHref(first.href);
   const sentence = onSocial ? socialHere(first.sentence) : first.sentence;
   const show = () => {
     const card = targetOn(first);

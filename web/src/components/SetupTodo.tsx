@@ -1,6 +1,7 @@
 // The floating "Set up posting" to-do list (docs/CONTRACTS.md §17.13), mounted once in the signed-in shell. One row
-// per platform with Set up and Skip. It stays on screen until every platform is ready or skipped (and confirmed),
-// then celebrates and slides away; it comes back when a platform needs the owner again.
+// per platform that is not skipped, with Set up and Skip. A confirmed skip takes its row off the list and out of the
+// count at once ("0/4"); only Settings › Posting › Set up posting keeps it, with Un-skip. It stays on screen until
+// every platform is ready or skipped, then celebrates and slides away; it comes back when a platform needs the owner.
 //
 // Where it sits: wide screens (1440 px and up, where every page still has the room its layout was made for) keep it
 // open in a column of its own at the top right, which the page leaves free, so it never covers anything. Smaller
@@ -16,13 +17,13 @@ import { prefersReducedMotion } from "../lib/prefs.ts";
 import { useRoute } from "../lib/router.ts";
 import {
   doneLine,
-  isFinished,
+  listCount,
+  listRows,
   staleSkips,
   TODO_CELEBRATE_MS,
   TODO_COLLAPSED_KEY,
   TODO_RAIL_QUERY,
   TODO_SEEN_KEY,
-  todoCount,
   todoHiddenOn,
   todoNoRailOn,
   todoRows,
@@ -30,7 +31,7 @@ import {
   type TodoRow,
 } from "../lib/setupTodo.ts";
 import { sounds } from "../lib/sounds.ts";
-import { GUIDES } from "../setup/index.ts";
+import { GUIDES, SETUP_ORDER } from "../setup/index.ts";
 import { useSetup } from "../screens/settings/setup/useSetup.ts";
 import { useSkips } from "../screens/settings/setup/useSkips.ts";
 import { Icon } from "./Icon.tsx";
@@ -69,7 +70,7 @@ const inTodo = (el: Element | null) => !!el?.closest(".setup-todo, .setup-todo-s
 export function SetupTodo() {
   const { data, error, reload } = useSetup();
   const { me } = useSession();
-  const { skipped, skip, unskip, drop } = useSkips();
+  const { skipped, skip, drop } = useSkips();
   const route = useRoute();
   const wide = useMedia(TODO_RAIL_QUERY);
   // Only once both the setups and the settings are known: deciding early would flash the list or celebrate wrongly.
@@ -89,6 +90,8 @@ export function SetupTodo() {
   const [decided, setDecided] = useState(false);
   const shown = useRef(false);
   const keepFocus = useRef(false);
+  // The platform of the skip just confirmed: its row leaves the list, and the keyboard's place (its Skip) with it.
+  const leftRow = useRef<Platform | null>(null);
   const card = useRef<HTMLElement>(null);
   const pill = useRef<HTMLButtonElement>(null);
   const path = typeof location === "undefined" ? "" : location.pathname;
@@ -114,7 +117,8 @@ export function SetupTodo() {
     if (shown.current || store.get(TODO_SEEN_KEY) === "1") {
       shown.current = false;
       store.set(TODO_SEEN_KEY, null);
-      keepFocus.current = inTodo(document.activeElement);
+      keepFocus.current = inTodo(document.activeElement) || leftRow.current !== null;
+      leftRow.current = null;
       setOpenOn(null);
       setAsking(null);
       setPhase("celebrate");
@@ -146,6 +150,19 @@ export function SetupTodo() {
     );
     return () => clearTimeout(t);
   }, [phase]);
+
+  // A confirmed skip took its row away, and with it the button the question gives the focus back to: the keyboard's
+  // place moves to the next row's Set up (the last row's, after the last one), never to the page behind the list.
+  useEffect(() => {
+    const p = leftRow.current;
+    if (!p || !rows || !visible) return;
+    leftRow.current = null;
+    const now = document.activeElement;
+    if (now && now !== document.body && now.isConnected) return;
+    const left = Array.from(document.querySelectorAll<HTMLElement>(".setup-todo--rail .todo-row, .setup-todo-panel .todo-row"));
+    const after = left.find((r) => SETUP_ORDER.indexOf(r.dataset.platform as Platform) > SETUP_ORDER.indexOf(p)) ?? left.at(-1);
+    after?.querySelector<HTMLElement>(".todo-row__go")?.focus({ preventScroll: true });
+  }, [rows, visible]);
 
   // A skipped platform that is ready now is no longer skipped (so if it stops being ready, its row comes back).
   const stale = rows ? staleSkips(rows, skipped).join(",") : "";
@@ -180,6 +197,7 @@ export function SetupTodo() {
   const confirmSkip = useCallback(
     (p: Platform) => {
       setAsking(null);
+      leftRow.current = p;
       return skip(p);
     },
     [skip],
@@ -192,7 +210,8 @@ export function SetupTodo() {
   if (phase === "gone") return null;
   if (phase === "list" && hiddenHere) return null;
 
-  const { finished, total } = todoCount(rows);
+  // Skipped platforms are not counted: "0/4" with one skipped (rule S, the same count as Set up posting's).
+  const { ready: finished, total } = listCount(rows);
   // The bar is the strip that takes the taps; its glass is a child that runs on a little below it and melts into the
   // page there, so the soft edge never takes a tap meant for what shows through it.
   const bar = (
@@ -227,7 +246,7 @@ export function SetupTodo() {
     );
   }
 
-  const list = <TodoList rows={rows} onSkip={setAsking} onUnskip={unskip} />;
+  const list = <TodoList rows={listRows(rows)} onSkip={setAsking} />;
   const askingRow = asking ? rows.find((r) => r.platform === asking) : undefined;
   const confirm = asking ? (
     <SkipConfirm platform={asking} connected={!!askingRow?.connected} onKeep={() => setAsking(null)} onSkip={() => confirmSkip(asking)} />
@@ -269,7 +288,7 @@ export function SetupTodo() {
           }}
         >
           <span aria-hidden="true" className="setup-todo__pill-ring">
-            <ProgressRing value={finished / total} size={30} stroke={4} label={`${finished} of ${total} done`} />
+            <ProgressRing value={finished / Math.max(1, total)} size={30} stroke={4} label={`${finished} of ${total} done`} />
           </span>
           <span className="setup-todo__pill-word" aria-hidden="true">
             Set up posting
@@ -292,7 +311,7 @@ export function SetupTodo() {
 function TodoHead({ finished, total, titleId, children }: { finished: number; total: number; titleId: string; children?: ReactNode }) {
   return (
     <div className="setup-todo__head">
-      <ProgressRing value={finished / total} size={46} stroke={6} label={`${finished} of ${total} done`}>
+      <ProgressRing value={finished / Math.max(1, total)} size={46} stroke={6} label={`${finished} of ${total} done`}>
         {finished}/{total}
       </ProgressRing>
       <div className="setup-todo__titles">
@@ -390,7 +409,8 @@ function TodoPanel({ onClose, finished, total, children }: { onClose: () => void
   );
 }
 
-function TodoList({ rows, onSkip, onUnskip }: { rows: TodoRow[]; onSkip: (p: Platform) => void; onUnskip: (p: Platform) => Promise<boolean> }) {
+/** The rows that are not skipped (a skipped one is only in Settings, where Un-skip is). */
+function TodoList({ rows, onSkip }: { rows: TodoRow[]; onSkip: (p: Platform) => void }) {
   // The Content Rewards pages (§38.1) and the Get paid pages (§40.1, Your bank's too, §40.5.2) have their own one
   // vermilion button: there the list's Set up is glass.
   const route = useRoute();
@@ -400,7 +420,6 @@ function TodoList({ rows, onSkip, onUnskip }: { rows: TodoRow[]; onSkip: (p: Pla
     <ul className="setup-todo__rows" aria-label="Places to set up">
       {rows.map((row) => {
         const name = GUIDES[row.platform].name;
-        const finished = isFinished(row);
         return (
           <li key={row.platform} className={`todo-row is-${row.state}`} data-platform={row.platform} data-state={row.state}>
             <span className={`todo-row__mark is-${row.platform}`} aria-hidden="true">
@@ -420,15 +439,9 @@ function TodoList({ rows, onSkip, onUnskip }: { rows: TodoRow[]; onSkip: (p: Pla
                 <LinkButton href={`/settings/posting/setup/${row.platform}`} size="sm" variant={quietGo ? "glass" : "action"} className="todo-row__go" aria-label={`Set up ${name}`}>
                   Set up
                 </LinkButton>
-                {finished ? (
-                  <Button size="sm" variant="ghost" act="undo" className="todo-row__unskip" aria-label={`Un-skip ${name}`} onClick={() => onUnskip(row.platform)}>
-                    Un-skip
-                  </Button>
-                ) : (
-                  <Button size="sm" variant="ghost" className="todo-row__skip" aria-label={`Skip ${name}`} onClick={() => onSkip(row.platform)}>
-                    Skip
-                  </Button>
-                )}
+                <Button size="sm" variant="ghost" className="todo-row__skip" aria-label={`Skip ${name}`} onClick={() => onSkip(row.platform)}>
+                  Skip
+                </Button>
               </span>
             )}
           </li>

@@ -1024,6 +1024,7 @@ function ReviewCard({
           fixing={fixing}
           onBranded={turnOnBranded}
           onAdded={relink}
+          skipped={me?.settings.setupSkipped}
         />
       ) : campaign ? (
         <CampaignStrip campaign={campaign} />

@@ -9,7 +9,7 @@ import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { MockStore } from "../src/stories/api/mock/store.ts";
-import type { ProviderStatus, StoriesApi, StoriesConfig, Workspace } from "../src/stories/api/types.ts";
+import type { Onboarding, OnboardStep, ProviderStatus, StoriesApi, StoriesConfig, Workspace } from "../src/stories/api/types.ts";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
 
@@ -26,6 +26,7 @@ const { ToastProvider } = await import("../src/components/Toasts.tsx");
 const { SettingsScreen } = await import("../src/stories/screens/Settings.tsx");
 const { DEFAULTS } = await import("../src/stories/settings/data.ts");
 const { ApiError } = await import("../src/api/errors.ts");
+const { forgetOnboarding } = await import("../src/stories/ui.tsx");
 
 let root: Root;
 let host: HTMLElement;
@@ -34,6 +35,8 @@ let workspace: Workspace;
 let providers: ProviderStatus[];
 /** A test where no maker takes a key (the ElevenLabs row is left out). */
 let noKeyedMakers = false;
+/** The setup a test answers (none: GET …/onboarding is not in the test, as before). */
+let onboarding: Onboarding | null = null;
 let calls: { name: string; args: unknown[] }[];
 /** Holds the next answers of a route until the test lets them go (a slow connection). */
 const gates = new Map<string, Promise<void>>();
@@ -100,6 +103,7 @@ function fakeApi(): StoriesApi {
     },
     providers: async () => structuredClone([...makers(), ...providers]),
     getTask: async (_ws, id) => structuredClone(store.tasks.find((t) => t.taskId === id)!),
+    getOnboarding: async () => (onboarding ? structuredClone(onboarding) : Promise.reject(new Error("not in this test: getOnboarding"))),
   };
   const all = { ...parts, ...own } as unknown as Record<string, (...a: unknown[]) => Promise<unknown>>;
   return new Proxy(all, {
@@ -206,6 +210,33 @@ describe("the page", () => {
     expect($$(".st-stg-section .st-plate")).toEqual([head]);
     await open("skills");
     expect($(".st-stg-section__head .st-stg-bar")).toBeNull();
+  });
+
+  it("Open setup again counts the steps left, never a platform the owner skipped (the owner, 24 Nov)", async () => {
+    const steps = (states: Partial<Record<OnboardStep, "done" | "skipped" | "todo">>): Onboarding => {
+      const all: OnboardStep[] = ["ai", "model", "effort", "video", "agents", "instagram", "tiktok", "youtube", "facebook", "x", "done"];
+      const list = all.map((step) => ({ step, label: step, state: states[step] ?? ("done" as const) }));
+      return { steps: list, done: list.filter((s) => s.state === "done").length, total: 11, finishedAt: "2026-11-24T00:00:00.000Z" };
+    };
+    const left = async (o: Onboarding) => {
+      onboarding = o;
+      forgetOnboarding();
+      // a fresh page each time, so the setup is read again
+      act(() => root.unmount());
+      root = createRoot(host);
+      await open("ai");
+      return $(".st-stg-head__setup-left")?.textContent ?? null;
+    };
+    try {
+      // The owner's case: only X was left, and he skipped it: nothing is left.
+      expect(await left(steps({ x: "skipped" }))).toBeNull();
+      expect(await left(steps({ x: "skipped", tiktok: "skipped", video: "skipped" }))).toBe("1 step left");
+      expect(await left(steps({ x: "todo", tiktok: "skipped", video: "skipped" }))).toBe("2 steps left");
+      expect($("a.st-pill.st-stg-head__setup-go")?.getAttribute("href")).toBe("/stories/setup");
+    } finally {
+      onboarding = null;
+      forgetOnboarding();
+    }
   });
 
   it("gives Look its own page: the three backgrounds under their own pill and head, no longer at the end of Storage", async () => {

@@ -8,12 +8,43 @@ import { findOverflow, settle, WIDTHS } from "./helpers.ts";
 // Stories"; switching both ways goes back to the exact page left (Clip Factory's at its scroll position, Ask with
 // its conversation and an answer still streaming in); the choice survives a reload; the app opened at "/" with Lamo
 // Stories last goes to the last Lamo Stories page; the first time, the setup opens by itself (11 skippable steps,
-// the ring, what is left, the dashboard card until finished); Social accounts has each platform's developer-app
-// choice, keys, Check it, the authorization status and Check now; and every page of the shell keeps the owner's
+// the ring, what is left, the dashboard card until finished; a platform skipped leaves every reminder); Social accounts
+// is a row per platform, each opening the platform's own page with its developer-app choice, keys, Check it, the
+// authorization status and Check now; and every page of the shell keeps the owner's
 // rules: nothing overflows from 320 to 1920 px, the arrow cursor only, AA contrast, no visible edges, targets of
 // 44 px (48 on phones). Lamo Stories is switched on here with cf.storiesPreview = 1.
 
-const PAGES = ["/stories", "/stories/library", "/stories/library?kind=videos", "/stories/connections", "/stories/setup"];
+const PAGES = [
+  "/stories",
+  "/stories/library",
+  "/stories/library?kind=videos",
+  "/stories/connections",
+  // Each platform's own page (its card was on Social accounts before).
+  "/stories/connections/youtube",
+  "/stories/connections/tiktok",
+  "/stories/connections/instagram",
+  "/stories/connections/facebook",
+  "/stories/connections/x",
+  "/stories/setup",
+];
+
+/** A platform's card on its own page (opened from its row on Social accounts, so the pretend app keeps what it holds). */
+async function platformCard(page: Page, name: string) {
+  const slug = name.toLowerCase();
+  if (!/\/stories\/connections$/.test(new URL(page.url()).pathname)) {
+    await page.goto("/stories/connections");
+    await storiesReady(page);
+  }
+  await page.locator(`.st-social-row-wrap[data-platform="${slug}"] a.st-social-row`).click();
+  await expect(page).toHaveURL(new RegExp(`/stories/connections/${slug}$`));
+  await storiesReady(page);
+  return page.locator(".st-conn").filter({ has: page.getByRole("heading", { name, exact: true }) });
+}
+/** Back to Social accounts' list, by its breadcrumb. */
+async function backToList(page: Page) {
+  await page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "Social accounts" }).click();
+  await expect(page).toHaveURL(/\/stories\/connections$/);
+}
 
 async function on(page: Page, extra?: () => void) {
   await page.addInitScript(() => localStorage.setItem("cf.storiesPreview", "1"));
@@ -814,10 +845,17 @@ test.describe("the pages", () => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto("/stories/connections");
     await storiesReady(page);
-    const cards = page.locator(".st-conn");
-    await expect(cards).toHaveCount(5);
-    for (const name of ["YouTube", "TikTok", "Instagram", "Facebook", "X"]) await expect(cards.filter({ has: page.getByRole("heading", { name, exact: true }) }).locator(".st-conn__mark svg")).toBeVisible();
-    const yt = cards.filter({ has: page.getByRole("heading", { name: "YouTube" }) });
+    // The list: each platform's logo and name on its row.
+    const rows = page.locator(".st-social-rows > .st-social-row-wrap");
+    await expect(rows).toHaveCount(5);
+    for (const name of ["YouTube", "TikTok", "Instagram", "Facebook", "X"]) await expect(rows.filter({ has: page.locator(".st-social-row__name", { hasText: new RegExp(`^${name}$`) }) }).locator(".st-social-row__mark svg")).toBeVisible();
+    // Each card on its platform's page, with its logo.
+    for (const name of ["TikTok", "Instagram", "X"]) {
+      await expect((await platformCard(page, name)).locator(".st-conn__mark svg"), name).toBeVisible();
+      await backToList(page);
+    }
+    const yt = await platformCard(page, "YouTube");
+    await expect(yt.locator(".st-conn__mark svg")).toBeVisible();
     await expect(yt.locator(".st-who")).toContainText("Clips Funded");
     await expect(yt.locator(".st-who__id code")).toHaveText(/^UC/);
     await expect(yt.locator(".st-auth")).toContainText("Allowed: Clips Funded may post here.");
@@ -830,16 +868,18 @@ test.describe("the pages", () => {
     await yt.getByRole("button", { name: "Check now" }).click();
     await expect(page.locator(".toast").filter({ hasText: "YouTube answered. All good." })).toBeVisible();
     await expect(yt.locator(".st-auth")).toContainText(/Last checked\s*(just now|now|\d+ s ago|seconds? ago|a moment ago)/i);
-    const tiktok = cards.filter({ has: page.getByRole("heading", { name: "TikTok" }) });
+    await backToList(page);
+    const tiktok = await platformCard(page, "TikTok");
     await expect(tiktok).toContainText("Sign in to your Clips Funded account on tiktok.com in this browser first.");
     await expect(tiktok.getByRole("button", { name: "Connect again" })).toBeVisible();
-    const fb = cards.filter({ has: page.getByRole("heading", { name: "Facebook" }) });
+    await backToList(page);
+    const fb = await platformCard(page, "Facebook");
     await expect(fb).toContainText("Facebook will ask which Pages this app may use. Tick only your Clips Funded Page.");
     await expect(fb.locator(".st-app")).toContainText("Uses its own Meta app");
 
-    // Connect Facebook: the pretend platform sends the owner back with a list of Pages to pick from.
+    // Connect Facebook: the pretend platform sends the owner back, to Facebook's page, with a list of Pages to pick from.
     await fb.getByRole("button", { name: "Connect Facebook" }).click();
-    await expect(page).toHaveURL(/\/stories\/connections$/);
+    await expect(page).toHaveURL(/\/stories\/connections\/facebook$/);
     await expect(page.locator(".toast").filter({ hasText: "Now pick the Facebook Page Clips Funded posts to." })).toBeVisible();
     await expect(fb.getByRole("button", { name: /Clip Factory's own/ })).toHaveAttribute("aria-disabled", "true");
     await fb.getByRole("button", { name: /^Clips Funded/ }).click();
@@ -852,19 +892,32 @@ test.describe("the pages", () => {
     await page.setViewportSize({ width: 1280, height: 900 });
     await page.goto("/stories/connections");
     await storiesReady(page);
+    // No way to use it for both on the list either; its row says it is Clip Factory's account.
+    await expect(page.getByRole("button", { name: /for both/i })).toHaveCount(0);
+    await expect(page.getByText(/use it for both/i)).toHaveCount(0);
+    await expect(page.locator('.st-social-row-wrap[data-platform="x"] .st-social-row__line')).toHaveText("That's Clip Factory's account.");
     // Up front on every card whose next step is an account: a new account made for Clips Funded (the connected YouTube
     // that is fine does not say it again).
-    await expect(page.locator(".st-conn .st-conn__new")).toHaveText(Array(4).fill("Use a new account made for Clips Funded, not Clip Factory's."));
-    const x = page.locator(".st-conn").filter({ has: page.getByRole("heading", { name: "X" }) });
+    for (const name of ["TikTok", "Instagram", "Facebook"]) {
+      const card = await platformCard(page, name);
+      await expect(card.locator(".st-conn__new"), name).toHaveText("Use a new account made for Clips Funded, not Clip Factory's.");
+      await expect(page.getByRole("button", { name: /for both/i }), name).toHaveCount(0);
+      await expect(page.getByText(/use it for both/i), name).toHaveCount(0);
+      await backToList(page);
+    }
+    const x = await platformCard(page, "X");
+    await expect(x.locator(".st-conn__new")).toHaveText("Use a new account made for Clips Funded, not Clip Factory's.");
     await expect(x).toContainText("This is Clip Factory's own account. Clips Funded needs its own separate account: sign in with a different one.");
     await expect(x.locator(".st-chip").first()).toHaveText("Clip Factory's own");
     // No way to use it for both, anywhere on the page.
     await expect(page.getByRole("button", { name: /for both/i })).toHaveCount(0);
     await expect(page.getByText(/use it for both/i)).toHaveCount(0);
     await expect(x.getByRole("button", { name: "Pick another account" })).toBeVisible();
+    await backToList(page);
 
     // Disconnect asks first, and then says where the app can be removed by hand (nothing is revoked).
-    const yt = page.locator(".st-conn").filter({ has: page.getByRole("heading", { name: "YouTube" }) });
+    const yt = await platformCard(page, "YouTube");
+    await expect(yt.locator(".st-conn__new")).toHaveCount(0);
     await yt.locator(".st-conn__more > summary").click();
     await yt.getByRole("button", { name: "Disconnect" }).click();
     await yt.getByRole("button", { name: "Yes, disconnect" }).click();
@@ -877,7 +930,12 @@ test.describe("the pages", () => {
     await page.goto("/stories/connections?platform=youtube&result=denied&ws=stories");
     await storiesReady(page);
     await expect(page.locator(".toast").filter({ hasText: "You pressed cancel. Tap Connect YouTube to try again." })).toBeVisible();
-    await expect(page).toHaveURL(/\/stories\/connections$/);
+    // It landed on YouTube's own page, whose address is its own now (a reload never says it again).
+    await expect(page).toHaveURL(/\/stories\/connections\/youtube$/);
+    await expect(page.locator('section.st-social-one[data-platform="youtube"]')).toBeVisible();
+    await page.reload();
+    await storiesReady(page);
+    await expect(page.locator(".toast").filter({ hasText: "You pressed cancel." })).toHaveCount(0);
   });
 
   test("Social accounts: each platform asks which developer app before the first Connect, never silently", async ({ page }) => {
@@ -887,9 +945,9 @@ test.describe("the pages", () => {
     await storiesReady(page);
     const card = (name: string) => page.locator(".st-conn").filter({ has: page.getByRole("heading", { name, exact: true }) });
 
-    // X: the choice comes first: Set up the app is the card's one main button and opens it on the card; Connect comes
+    // X (on its own page): the choice comes first: Set up the app is the card's one main button and opens it on the card; Connect comes
     // once an app is picked.
-    const x = card("X");
+    const x = await platformCard(page, "X");
     await expect(x.locator(".st-conn__more > summary")).toHaveText("More for X");
     await expect(x.getByRole("button", { name: "Connect X" })).toHaveCount(0);
     await expect(x.getByRole("button", { name: "Set up the app for X" })).toHaveClass(/st-btn--main/);
@@ -906,7 +964,8 @@ test.describe("the pages", () => {
     await expect(x.locator(".st-chip").first()).toHaveText("Connected");
 
     // YouTube's own app: the redirect URI to copy (Lamo Stories' own callback), the keys form, Check it.
-    const yt = card("YouTube");
+    await backToList(page);
+    const yt = await platformCard(page, "YouTube");
     await yt.getByRole("button", { name: "Set up the app for YouTube" }).click();
     await yt.getByRole("radio", { name: /A separate app for Clips Funded/ }).click();
     await expect(yt.locator(".st-copy__value")).toHaveText(/\/v1\/stories-oauth\/youtube\/callback$/);
@@ -926,7 +985,8 @@ test.describe("the pages", () => {
     await expect(yt).toContainText("Your keys work. Now press Connect YouTube.");
 
     // Meta: no Clip Factory choice at all; one Meta app's keys, entered once, serve Instagram and Facebook.
-    const fb = card("Facebook");
+    await backToList(page);
+    const fb = await platformCard(page, "Facebook");
     await fb.getByRole("button", { name: "Set up the app for Facebook" }).click();
     await expect(fb.getByRole("radio")).toHaveCount(0);
     await expect(fb).toContainText("Facebook always uses Clips Funded's own Meta app");
@@ -935,6 +995,10 @@ test.describe("the pages", () => {
     await fb.getByLabel("Configuration ID").fill("https://www.facebook.com/v27.0/dialog/oauth?config_id=9876543210987654&x=1");
     await fb.getByRole("button", { name: "Save the keys" }).click();
     await expect(page.locator(".toast").filter({ hasText: "The Meta app keys are saved for Instagram and Facebook." })).toBeVisible();
+    await backToList(page);
+    await platformCard(page, "Instagram");
+    // Instagram's app is ready too: its More fold holds the saved Meta app.
+    await card("Instagram").locator(".st-conn__more > summary").click();
     await expect(card("Instagram").locator(".st-app")).toContainText("Uses its own Meta app");
     await expect(card("Instagram").locator(".st-app")).toContainText("…7654");
   });
@@ -984,8 +1048,11 @@ test.describe("the pages", () => {
     await expect(page.locator("#st-setup-step")).toHaveText("Connect Instagram");
     await expect(page.locator(".st-conn[data-platform=instagram]")).toBeVisible();
     await page.getByRole("button", { name: "Skip for now" }).click();
+    await expect(page.locator(".toast").filter({ hasText: "Skipped. It stays in Social accounts." })).toBeVisible();
     await expect(page.locator(".st-steps__item.is-skipped")).toHaveCount(1);
-    await expect(page.locator(".st-steps__item.is-skipped").filter({ hasText: "Connect Instagram" })).toContainText("Later");
+    // A platform skipped says Skipped (it waits on Social accounts), never Later.
+    await expect(page.locator(".st-steps__item.is-skipped").filter({ hasText: "Connect Instagram" })).toContainText("Skipped");
+    await expect(page.locator(".st-steps__item.is-skipped").filter({ hasText: "Connect Instagram" })).not.toContainText("Later");
 
     // Later: the dashboard keeps a card with the ring and what is left, and the setup carries on from there.
     await page.getByRole("link", { name: "Do this later" }).click();
@@ -993,8 +1060,10 @@ test.describe("the pages", () => {
     await storiesReady(page);
     await expect(page.locator(".st-rail")).toBeVisible();
     const card = page.locator(".st-setupcard");
-    await expect(card).toContainText("Set up Clips Funded: 5 of 11 done");
-    await expect(card).toContainText("Still to do: Connect Instagram, Connect TikTok, Connect YouTube and 2 more.");
+    // Instagram, skipped, is not counted and not on the list: 5 of the 10 steps left to count are done.
+    await expect(card).toContainText("Set up Clips Funded: 5 of 10 done");
+    await expect(card).toContainText("Still to do: Connect TikTok, Connect YouTube, Connect Facebook and 1 more.");
+    await expect(card).not.toContainText("Instagram");
     // Only once per studio on this device: after a reload (the pretend server starts over at 0 of 11) the
     // dashboard stays, with the card.
     await page.reload();
@@ -1092,15 +1161,23 @@ test.describe("every page keeps the owner's rules", () => {
   test("every control shows itself on hover", async ({ page }) => {
     await on(page);
     await page.setViewportSize({ width: 1440, height: 900 });
-    await page.goto("/stories/connections");
-    await storiesReady(page);
-    for (const sel of [".st-rail__item:not(.is-active)", ".st-btn:not(.st-btn--main)", ".st-btn--main", ".ws-switch__opt:not(.is-on)", ".st-setupback__go"]) {
-      const el = page.locator(sel).first();
-      const before = await el.evaluate((e) => getComputedStyle(e).backgroundColor);
-      await el.hover();
-      // The hover's colour eases in; a slow frame (a busy machine) must not read it before its first step.
-      await expect.poll(() => el.evaluate((e) => getComputedStyle(e).backgroundColor), { message: sel, timeout: 3000 }).not.toBe(before);
-      await page.mouse.move(0, 0);
+    // Social accounts' list (a row's link too; the list has no main button: the rows are the way on), then a platform's
+    // own page, whose card has the one main button.
+    for (const [path, sels] of [
+      ["/stories/connections", [".st-rail__item:not(.is-active)", ".st-btn:not(.st-btn--main)", ".ws-switch__opt:not(.is-on)", ".st-setupback__go", "a.st-social-row"]],
+      ["/stories/connections/facebook", [".st-btn:not(.st-btn--main)", ".st-btn--main", ".st-crumbs__link"]],
+    ] as const) {
+      await page.goto(path);
+      await storiesReady(page);
+      if (path === "/stories/connections") await expect(page.locator(".st-connections .st-btn--main")).toHaveCount(0);
+      for (const sel of sels) {
+        const el = page.locator(sel).first();
+        const before = await el.evaluate((e) => getComputedStyle(e).backgroundColor);
+        await el.hover();
+        // The hover's colour eases in; a slow frame (a busy machine) must not read it before its first step.
+        await expect.poll(() => el.evaluate((e) => getComputedStyle(e).backgroundColor), { message: `${path} ${sel}`, timeout: 3000 }).not.toBe(before);
+        await page.mouse.move(0, 0);
+      }
     }
   });
 });
@@ -1257,6 +1334,9 @@ test.describe("round 4: the two apps stay apart and quiet (§45.35)", () => {
     await storiesReady(page);
     await page.locator(".st-rail").getByRole("link", { name: "Social accounts" }).click();
     await storiesReady(page);
+    await page.locator('.st-social-row-wrap[data-platform="facebook"] a.st-social-row').click();
+    await expect(page).toHaveURL(/\/stories\/connections\/facebook$/);
+    await storiesReady(page);
     const fb = page.locator('.st-conn[data-platform="facebook"]');
     await fb.getByRole("button", { name: "Connect Facebook" }).click();
     await toClips(page);
@@ -1267,7 +1347,7 @@ test.describe("round 4: the two apps stay apart and quiet (§45.35)", () => {
     await expect(page.locator('[data-app-pane="clips"]')).toBeVisible();
     await toStories(page);
     await expect(page.locator(".toast__text").filter({ hasText: "Connected as Clips Funded" })).toBeVisible({ timeout: 8000 });
-    await expect(page).toHaveURL(/\/stories\/connections$/);
+    await expect(page).toHaveURL(/\/stories\/connections\/facebook$/);
   });
 
   test("D17: a video playing in Clip Factory is paused when Lamo Stories is opened", async ({ page }) => {

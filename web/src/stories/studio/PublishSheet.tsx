@@ -36,7 +36,7 @@ import {
 } from "../../lib/tiktokChoices.ts";
 import { storiesApi } from "../api/client.ts";
 import { STORIES_PLATFORMS, type ErrorAccount, type Platform, type PublishOptions, type PublishingJob, type PublishTarget, type SocialAccount, type StoriesConfig, type Story, type TikTokCreator } from "../api/types.ts";
-import { storiesHref } from "../routes.ts";
+import { socialHref } from "../skips.ts";
 import { Busy, celebrate, Notice, Pick, StSheet, Switch, TechDetails } from "./kit.tsx";
 import { PostRow, SocialAccountsLink, waitingLine } from "./PostsPanel.tsx";
 import { accountOf, accountProblem, accountShown, ago, PLATFORM_LABEL, say, thisAccount } from "./words.ts";
@@ -233,7 +233,8 @@ export function PublishSheet({
 
   const byPlatform = useMemo(() => new Map((accounts ?? []).map((a) => [a.platform, a])), [accounts]);
   const connected = STORIES_PLATFORMS.map((p) => byPlatform.get(p)).filter((a): a is SocialAccount => !!a && a.connectionStatus === "connected");
-  const others = STORIES_PLATFORMS.map((p) => byPlatform.get(p)).filter((a): a is SocialAccount => !!a && a.connectionStatus !== "connected");
+  // Not ready to post: never a place the owner skipped (it shows only on Social accounts and in the setup).
+  const others = STORIES_PLATFORMS.map((p) => byPlatform.get(p)).filter((a): a is SocialAccount => !!a && a.connectionStatus !== "connected" && !a.skipped);
   const tiktokOn = chosen.includes("tiktok");
 
   // TikTok's rules: this account's current choices are read every time the TikTok part opens.
@@ -439,7 +440,7 @@ export function PublishSheet({
                     <span className="st-s-place__platform">{PLATFORM_LABEL[a.platform]}</span>
                     <span className="st-s-place__name">{accountState(a)}</span>
                   </span>
-                  <A href={storiesHref({ name: "connections", platform: null, result: null, ws: null })} className="st-btn st-s-small">
+                  <A href={socialHref(a.platform)} className="st-btn st-s-small">
                     Connect in Social accounts
                   </A>
                 </li>

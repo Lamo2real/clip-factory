@@ -66,6 +66,11 @@ export function useSession(): Session {
   return s;
 }
 
+/** The session, or null outside SessionProvider (a part of a screen drawn on its own, as its unit tests do). */
+export function useSessionIfAny(): Session | null {
+  return useContext(Ctx);
+}
+
 /** The values `patch` is about to change, as they are now, so a failed save can put them back. */
 function before<T extends object>(now: T, patch: Partial<T>): Partial<T> {
   const out: Partial<T> = {};

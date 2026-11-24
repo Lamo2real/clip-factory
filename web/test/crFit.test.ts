@@ -32,7 +32,7 @@ import {
   uploadOffWords,
   verdictOf,
 } from "../src/lib/crFit.ts";
-import { CampaignFit as Block, KEEP_IT_HERE, READ_THEM } from "../src/screens/review/CampaignFit.tsx";
+import { CampaignFit as Block, KEEP_IT_HERE, READ_THEM, withoutSkippedNotes } from "../src/screens/review/CampaignFit.tsx";
 import { FitSuggestion, copyWords } from "../src/screens/review/FitSuggestion.tsx";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -600,5 +600,49 @@ describe("the could-earn line (FitSuggestion.tsx)", () => {
     await draw(createElement(FitSuggestion, { clipId: "c1", fit: suggested, onCopy: () => undefined, copy: "ready" }));
     expect(host.textContent).toContain("The FaZe Clips copy is ready, right below. Upload the copy to earn money.");
     expect(buttons()).toEqual([]);
+  });
+});
+
+describe("a skipped place's note leaves the fit block; the campaign's own blocker stays (rule S)", () => {
+  const setUp = (p: "instagram" | "facebook" | "x", name: string) =>
+    it_("places", "note", `${name} pays too. Set it up to earn there as well.`, { kind: "open", label: `Set up ${name}`, href: `/settings/posting/setup/${p}` }, p);
+  const ig = setUp("instagram", "Instagram");
+  const x = setUp("x", "X");
+  const goes = it_("places", "ok", "Goes to YouTube. FaZe Clips pays for it.");
+  const turnOn = it_("places", "note", "Instagram pays too. Turn it on to earn there as well.", null, "instagram");
+
+  it("hides only the Set it up notes of skipped places that are not set up", () => {
+    const f = fit([goes, ig, x, SEND, ...OK_ITEMS], { uploadPlaces: ["youtube"] });
+    expect(withoutSkippedNotes(f, []).items).toEqual(f.items);
+    expect(withoutSkippedNotes(f, []).items).toContain(ig);
+    const out = withoutSkippedNotes(f, ["x"]);
+    expect(out.items).not.toContain(x);
+    expect(out.items).toContain(ig);
+    expect(out.items).toHaveLength(f.items.length - 1);
+    expect(withoutSkippedNotes(f, ["instagram", "x"]).items.filter((i) => i.rule === "places")).toEqual([goes]);
+    // The verdict and the headline are the server's, never changed by it.
+    expect(out.verdict).toBe(f.verdict);
+    expect(out.headline).toBe(f.headline);
+  });
+
+  it("a place that is set up keeps its Turn it on note, and a todo or a no stays whatever is skipped", () => {
+    const set = fit([goes, turnOn, SEND, ...OK_ITEMS], { uploadPlaces: ["youtube", "instagram"] });
+    expect(withoutSkippedNotes(set, ["instagram"]).items).toContain(turnOn);
+    const todo = it_("places", "todo", "Set up YouTube first. FaZe Clips pays for YouTube.", { kind: "open", label: "Set up YouTube", href: "/settings/posting/setup/youtube" });
+    const only = fit([todo, ...OK_ITEMS], { uploadPlaces: [] });
+    expect(withoutSkippedNotes(only, ["youtube", "tiktok", "instagram", "facebook", "x"]).items).toContain(todo);
+    expect(fitMain(withoutSkippedNotes(only, ["youtube"]))?.text).toBe("Set up YouTube first. FaZe Clips pays for YouTube.");
+  });
+
+  it("drawn: See what's right leaves the skipped place's note out, and keeps the other", async () => {
+    const f = fit([goes, ig, x, SEND, ...OK_ITEMS], { uploadPlaces: ["youtube"] });
+    await draw(createElement(Block, { clipId: "c1", fit: f, primary: true }));
+    expect(host.textContent).toContain("X pays too. Set it up to earn there as well.");
+    const before = host.querySelectorAll(".cr-fit__fold li").length;
+    await draw(createElement(Block, { clipId: "c1", fit: f, primary: true, skipped: ["x"] }));
+    expect(host.textContent).not.toContain("X pays too.");
+    expect(host.textContent).toContain("Instagram pays too. Set it up to earn there as well.");
+    expect(host.querySelectorAll(".cr-fit__fold li")).toHaveLength(before - 1);
+    expect(host.textContent).toContain("Can earn on FaZe Clips");
   });
 });

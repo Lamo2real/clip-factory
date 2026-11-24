@@ -1,8 +1,11 @@
 // Lamo Stories routing behind its switch (docs/CONTRACTS.md §45.1, §45.17): with the switch off, /stories is
 // "not found" like any unknown page and every Lamo Clips path parses exactly as before.
+import { readFileSync } from "node:fs";
+import { join } from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
 import { match } from "../src/lib/router.ts";
 import { matchStories, storiesHref } from "../src/stories/routes.ts";
+import { storiesTitle } from "../src/stories/workspace.ts";
 
 const CLIPS_PATHS = [
   "/",
@@ -55,3 +58,43 @@ describe("the stories route", () => {
     expect(matchStories("/stories/settings/look/", "")).toEqual({ name: "settings", section: "look" });
   });
 });
+
+describe("Social accounts and each platform's own page (CONTRACTS §45.16.2)", () => {
+  it("opens a platform's own page at /stories/connections/<platform>, for each of the five", () => {
+    for (const p of ["youtube", "tiktok", "instagram", "facebook", "x"] as const) {
+      expect(matchStories(`/stories/connections/${p}`, "")).toEqual({ name: "connection", platform: p, result: null, ws: null });
+      expect(matchStories(`/stories/connections/${p}/`, "")).toEqual({ name: "connection", platform: p, result: null, ws: null });
+      expect(storiesHref(matchStories(`/stories/connections/${p}`, ""))).toBe(`/stories/connections/${p}`);
+    }
+    // The list page itself is as before.
+    expect(matchStories("/stories/connections", "")).toEqual({ name: "connections", platform: null, result: null, ws: null });
+    expect(storiesHref(matchStories("/stories/connections", ""))).toBe("/stories/connections");
+  });
+
+  it("lands the OAuth return on the platform's own page, with its result and workspace", () => {
+    expect(matchStories("/stories/connections", "?platform=youtube&result=connected&ws=stories")).toEqual({ name: "connection", platform: "youtube", result: "connected", ws: "stories" });
+    expect(matchStories("/stories/connections", "?platform=facebook&result=choose&ws=stories")).toEqual({ name: "connection", platform: "facebook", result: "choose", ws: "stories" });
+    expect(matchStories("/stories/connections/x", "?result=denied&ws=st-2")).toEqual({ name: "connection", platform: "x", result: "denied", ws: "st-2" });
+    // A platform it does not know stays the list page, as before.
+    expect(matchStories("/stories/connections", "?platform=myspace&result=connected")).toEqual({ name: "connections", platform: "myspace", result: "connected", ws: null });
+  });
+
+  it("an unknown platform's page is not found, and the page's address never keeps the result or the workspace", () => {
+    expect(matchStories("/stories/connections/myspace", "").name).toBe("not_found");
+    expect(matchStories("/stories/connections/YouTube", "").name).toBe("not_found");
+    expect(matchStories("/stories/connections/youtube/more", "").name).toBe("not_found");
+    expect(storiesHref({ name: "connection", platform: "tiktok", result: "connected", ws: "stories" })).toBe("/stories/connections/tiktok");
+    expect(storiesHref(matchStories("/stories/connections", "?platform=tiktok&result=connected&ws=stories"))).toBe("/stories/connections/tiktok");
+  });
+
+  it("titles the platform's page Social accounts, and the rail marks Social accounts there", () => {
+    expect(storiesTitle({ name: "connection", platform: "youtube", result: null, ws: null })).toBe("Social accounts · Clips Funded");
+    expect(storiesTitle({ name: "connections", platform: null, result: null, ws: null })).toBe("Social accounts · Clips Funded");
+    const app = readFileSync(join(import.meta.dirname, "..", "src", "stories", "StoriesApp.tsx"), "utf8");
+    expect(app).toMatch(/label: "Social accounts",[\s\S]{0,160}match: \["connections", "connection"\]/);
+    expect(app).toContain('case "connection":\n      return <ConnectionScreen {...props} />;');
+    // The OAuth return's workspace is read on both pages.
+    expect(app).toContain('const fromAddress = page.name === "connections" || page.name === "connection" ? page.ws : null;');
+  });
+});
+

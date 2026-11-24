@@ -1,5 +1,5 @@
 {
- "version": "ba90e9d1e575",
+ "version": "5fbc5054b6ee",
  "parts": [
   {
    "id": "app-map",
@@ -129,7 +129,7 @@
    "id": "contracts-17",
    "title": "CONTRACTS: 17. Posting setup: a setup list per platform, real Connect, real posting (owner request, 2026-11-16)",
    "line": "The owner's words: \"Facebook, Instagram, YouTube, TikTok and X should each be a step to connect to in order for this",
-   "chars": 106186
+   "chars": 106444
   },
   {
    "id": "contracts-18",
@@ -297,7 +297,7 @@
    "id": "contracts-45",
    "title": "CONTRACTS: 45. Clips Funded: a second, separate workspace (owner request, 2026-11-21)",
    "line": "Planned: not in the app until the switch pull request turns it on (§45.21). Until then nothing of Clips Funded",
-   "chars": 254942
+   "chars": 255770
   },
   {
    "id": "contracts-46",
@@ -310,6 +310,12 @@
    "title": "CONTRACTS: 47. Your Mac posts it on TikTok (owner request, 2026-11-22)",
    "line": "The owner (2026-11-22, verbatim): \"can you create a automation for my mac so everytime the clip factory wants upload to",
    "chars": 72498
+  },
+  {
+   "id": "contracts-48",
+   "title": "CONTRACTS: 48. A skipped platform shows only in Settings and Social accounts, and Clips Funded's Social accounts look like Set up posting (owner request, 2026-1",
+   "line": "The owner's two asks (24 Nov, about 00:15 UTC):",
+   "chars": 27450
   },
   {
    "id": "adr-01",
@@ -820,6 +826,12 @@
    "title": "DECISIONS: ADR-87 The logic of light: the top layer is brighter, every lift is paid for, Reload is a colourless lens",
    "line": "Context. The owner (2026-11-23, with a screenshot of Library): \"can you use the logic of light on the ui,",
    "chars": 6906
+  },
+  {
+   "id": "adr-93",
+   "title": "DECISIONS: ADR-93 A skipped platform is hidden everywhere but Settings and Social accounts",
+   "line": "Supersedes §17.13's skipped rows on the floating setup list, §45.36 E15 for platform steps and §45.36 E18's card",
+   "chars": 3103
   },
   {
    "id": "architecture-overview",

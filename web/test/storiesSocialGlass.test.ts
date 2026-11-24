@@ -36,7 +36,7 @@ const toHex = (c: Rgb) => `#${c.map((v) => Math.round(v).toString(16).padStart(2
 const WHITE: Rgb = [255, 255, 255];
 
 const DIR = join(import.meta.dirname, "..", "src", "stories", "styles");
-const FILES = ["social.css", "st-connections.css", "st-social-auth.css", "st-setup.css"] as const;
+const FILES = ["social.css", "st-connections.css", "st-social-rows.css", "st-social-auth.css", "st-setup.css"] as const;
 const read = (f: string) => readFileSync(join(DIR, f), "utf8").replace(/\/\*[\s\S]*?\*\//g, "");
 const css = Object.fromEntries(FILES.map((f) => [f, read(f)])) as Record<(typeof FILES)[number], string>;
 const tokensCss = read("glass-tokens.css");
@@ -78,6 +78,32 @@ describe("the social screens' styles keep the contract", () => {
       expect(css[f].match(/#[0-9a-f]{3,8}\b|rgba?\(\s*\d/gi) ?? [], `${f}: colours written out`).toEqual([]);
       expect(css[f].match(/(^|[{;\s])--st-[a-z0-9-]+\s*:/g) ?? [], `${f}: tokens defined outside glass-tokens.css`).toEqual([]);
     }
+  });
+
+  it("colour Social accounts' rows and their platform page with the contract's inks: the orange accent only as a shape", () => {
+    const inks = /^var\(--st-(text-strong|text|text-soft|text-amber|coral-ink|mint-ink|sky-ink|on-cream|on-accent)\)$/;
+    const off: string[] = [];
+    for (const r of rules(css["st-social-rows.css"])) {
+      const c = decl(r.body, "color");
+      if (c !== undefined && !inks.test(c)) off.push(`${r.selector} { color: ${c} }`);
+    }
+    expect(off).toEqual([]);
+    // The done disc is the accent with an espresso glyph; the way in turns cream with espresso words on a hover.
+    const done = rules(css["st-social-rows.css"]).find((r) => r.selector === ".st-social-row__done")!;
+    expect(decl(done.body, "background")).toBe("var(--st-accent)");
+    expect(decl(done.body, "color")).toBe("var(--st-on-accent)");
+    const go = rules(css["st-social-rows.css"]).find((r) => r.selector === ".st-social-row:hover .st-social-row__go")!;
+    expect([decl(go.body, "background"), decl(go.body, "color")]).toEqual(["var(--st-cream)", "var(--st-on-cream)"]);
+    // Two rows a line at most (each at least half the line), one on a phone; the radii by kind: surface, control, inner.
+    const list = rules(css["st-social-rows.css"]).find((r) => r.selector === ".st-social-rows")!;
+    expect(decl(list.body, "grid-template-columns")).toBe("repeat(auto-fill, minmax(max(min(100%, 340px), calc((100% - var(--st-space-4)) / 2)), 1fr))");
+    const radius = (sel: string) => decl(rules(css["st-social-rows.css"]).find((r) => r.selector === sel)!.body, "border-radius");
+    expect([radius(".st-social-row"), radius(".st-social-row__mark.st-conn__mark")]).toEqual(["var(--st-r-control)", "var(--st-r-inner)"]);
+    // The wrap is a glass surface (glass.css rounds it), and no glass moves on hover: only the link's fill changes.
+    const hovers = rules(css["st-social-rows.css"]).filter((r) => /:hover/.test(r.selector));
+    expect(hovers.length).toBeGreaterThanOrEqual(2);
+    for (const r of hovers) expect(decl(r.body, "transform"), r.selector).toBeUndefined();
+    expect(css["st-social-rows.css"]).not.toMatch(/\.st-social-row-wrap[^{]*:hover/);
   });
 
   it("round every corner from the one --st-r-* scale", () => {

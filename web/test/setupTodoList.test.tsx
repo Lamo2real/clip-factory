@@ -1,7 +1,8 @@
 // The floating setup to-do list as a component (docs/CONTRACTS.md §17.13): the room it keeps while the setups load,
-// what happens when they cannot be read, the skip question and the panel as a real dialog. The window here is never
-// 1440 px wide, so the list is the pill (the open column is covered end to end, e2e/setup-todo.spec.ts).
-import { act } from "react";
+// what happens when they cannot be read, the skip question and the panel as a real dialog. A confirmed skip takes the
+// row off the list and out of the count; Settings › Posting › Set up posting keeps it, with Un-skip (rule S). The window
+// here is never 1440 px wide, so the list is the pill (the open column is covered end to end, e2e/setup-todo.spec.ts).
+import { act, type ReactNode } from "react";
 import { createRoot, type Root } from "react-dom/client";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ApiError } from "../src/api/errors.ts";
@@ -21,11 +22,14 @@ vi.mock("../src/lib/live.ts", () => ({
   stopLive: () => undefined,
   useLiveEvents: () => undefined,
   useLivePoll: () => undefined,
+  // Set up posting's Content Rewards card listens for its own live news.
+  onLiveSignal: () => () => undefined,
 }));
 
 const { SessionProvider } = await import("../src/app/session.tsx");
 const { ToastProvider } = await import("../src/components/Toasts.tsx");
 const { SetupTodo } = await import("../src/components/SetupTodo.tsx");
+const { SetupList } = await import("../src/screens/settings/setup/SetupList.tsx");
 
 let root: Root;
 let app: HTMLElement;
@@ -40,7 +44,7 @@ const button = (name: string) => all("button, a").find((b) => (b.getAttribute("a
 const click = (el: HTMLElement) => act(async () => el.click());
 
 /** The signed-in shell, as far as the list needs it: a page beside the list, inside `.app`. */
-async function mount() {
+async function mount(page: ReactNode = <button type="button">On the page</button>) {
   app = document.createElement("div");
   app.className = "app";
   document.body.append(app);
@@ -51,7 +55,7 @@ async function mount() {
         <SessionProvider onSignOut={() => undefined}>
           <div className="shell">
             <main id="main" tabIndex={-1}>
-              <button type="button">On the page</button>
+              {page}
             </main>
           </div>
           <SetupTodo />
@@ -169,7 +173,7 @@ describe("the panel and the skip question", () => {
     expect(document.querySelectorAll("[inert]")).toHaveLength(0);
   });
 
-  it("Skip asks first; Keep it saves nothing; only the confirmed answer is saved, and Un-skip takes it back", async () => {
+  it("Skip asks first; Keep it saves nothing; the confirmed skip takes the row off the list, and Un-skip in Settings brings it back", async () => {
     const put = vi.spyOn(current, "putSettings");
     await click(q(".setup-todo__pill")!);
     await click(button("Skip TikTok"));
@@ -190,16 +194,67 @@ describe("the panel and the skip question", () => {
     expect(put).not.toHaveBeenCalled();
     expect(q(".todo-row[data-platform='tiktok']")!.dataset.state).toBe("not_started");
 
+    // From the keyboard this time: the question gives the focus back to the row's Skip, which goes with the row.
+    button("Skip TikTok").focus();
     await click(button("Skip TikTok"));
     await click(all(".sheet__actions .btn")[1]!);
     expect(q(".sheet")).toBeNull();
-    // On screen at once, and saved.
-    expect(q(".todo-row[data-platform='tiktok']")!.dataset.state).toBe("skipped");
+    // Off the list at once (no Un-skip there: only Settings has it), out of the count, and saved.
+    expect(q(".todo-row[data-platform='tiktok']")).toBeNull();
+    expect(all(".setup-todo-panel .todo-row").map((r) => r.dataset.platform)).toEqual(["youtube", "instagram", "facebook", "x"]);
+    expect(all(".setup-todo-panel .todo-row").some((r) => r.dataset.state === "skipped")).toBe(false);
+    expect(q("[aria-label='Un-skip TikTok']")).toBeNull();
     expect(put).toHaveBeenCalledWith({ setupSkipped: ["tiktok"] });
-    expect(q(".setup-todo__pill")!.getAttribute("aria-label")).toBe("Set up posting: 1 of 5 done");
+    expect(q(".setup-todo__pill")!.getAttribute("aria-label")).toBe("Set up posting: 0 of 4 done");
+    expect(q(".setup-todo-panel .setup-todo__head")!.textContent).toContain("0/4");
+    // The keyboard's place moved to the next row, never to the page behind the list.
+    expect(document.activeElement).toBe(button("Set up Instagram"));
 
+    // Un-skip lives in Settings › Posting › Set up posting: the TikTok card says Skipped, and one tap brings it back.
+    act(() => root.unmount());
+    document.body.innerHTML = "";
+    put.mockClear();
+    await mount(<SetupList />);
+    await until(() => !!q("[data-skipped='tiktok']") && !!q(".setup-todo__pill"), "Settings and the pill show");
+    expect(q(".setup-card[data-platform='tiktok'] .setup-card__state")!.textContent).toBe("Skipped");
+    expect(q("[data-skipped='tiktok']")!.textContent).toContain("You won't post to TikTok until you set it up.");
+    expect(q(".setup-todo__pill")!.getAttribute("aria-label")).toBe("Set up posting: 0 of 4 done");
     await click(button("Un-skip TikTok"));
-    expect(q(".todo-row[data-platform='tiktok']")!.dataset.state).toBe("not_started");
-    expect(put).toHaveBeenLastCalledWith({ setupSkipped: [] });
+    expect(put).toHaveBeenCalledWith({ setupSkipped: [] });
+    expect(q("[data-skipped='tiktok']")).toBeNull();
+    expect(q(".setup-card[data-platform='tiktok'] .setup-card__state")!.textContent).toBe("Not started");
+    expect(q(".setup-todo__pill")!.getAttribute("aria-label")).toBe("Set up posting: 0 of 5 done");
+    await click(q(".setup-todo__pill")!);
+    expect(all(".setup-todo-panel .todo-row").map((r) => r.dataset.platform)).toEqual(["youtube", "tiktok", "instagram", "facebook", "x"]);
+    expect(q(".setup-todo-panel .todo-row[data-platform='tiktok']")!.dataset.state).toBe("not_started");
+  });
+});
+
+describe("Settings › Posting › Set up posting counts only what is not skipped (rule S)", () => {
+  const title = () => q("#setup-posting-name")!.textContent;
+
+  it("with TikTok skipped: 0 of 4 ready, and all five cards are still there", async () => {
+    await current.putSettings({ setupSkipped: ["tiktok"] });
+    await mount(<SetupList />);
+    await until(() => !!q("[data-skipped='tiktok']"), "the skipped card shows");
+    expect(title()).toBe("0 of 4 ready");
+    expect(q(".setup-summary__ring")!.textContent).toBe("0/4");
+    expect(q("#setup-todo-name")!.textContent).toBe("On your screen: 0 of 4 done");
+    expect(all("ul[aria-label='The five platforms'] .setup-card").map((c) => c.dataset.platform)).toEqual(["youtube", "tiktok", "instagram", "facebook", "x"]);
+    expect(all("[data-skip]").map((p) => p.dataset.skip)).toEqual(["youtube", "instagram", "facebook", "x"]);
+    expect(button("Un-skip TikTok")).toBeTruthy();
+  });
+
+  it("with all five skipped: All skipped, no ring, every card with Un-skip, and no floating list", async () => {
+    await current.putSettings({ setupSkipped: ["youtube", "tiktok", "instagram", "facebook", "x"] });
+    await mount(<SetupList />);
+    await until(() => all("[data-skipped]").length === 5, "every card says Skipped");
+    expect(title()).toBe("All skipped");
+    expect(q(".setup-summary__ring")).toBeNull();
+    expect(q("#setup-todo-name")!.textContent).toBe("All done: the list is gone");
+    expect(all(".setup-card__state").slice(0, 5).map((s) => s.textContent)).toEqual(["Skipped", "Skipped", "Skipped", "Skipped", "Skipped"]);
+    for (const name of ["YouTube", "TikTok", "Instagram", "Facebook", "X"]) expect(button(`Un-skip ${name}`), name).toBeTruthy();
+    await flush(300);
+    expect(q(".setup-todo")).toBeNull();
   });
 });

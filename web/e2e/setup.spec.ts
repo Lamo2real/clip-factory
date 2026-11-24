@@ -329,6 +329,43 @@ for (const size of SIZES) {
       await expect(page.getByText("5 of 5 ready")).toBeVisible();
       await expect(page.locator(".setup-card.is-ready")).toHaveCount(5);
     });
+
+    test("a skip takes the platform off the floating list and its count; Settings keeps it, Skipped, with Un-skip", async ({ page }) => {
+      await page.goto("/");
+      await settle(page);
+      await expect(page.locator(".setup-todo")).toContainText("0/5");
+      const todo = await openTodo(page);
+      await expect(todo.locator(".todo-row")).toHaveCount(5);
+      // Skip asks first; only the confirmed answer takes TikTok away.
+      await todo.getByRole("button", { name: "Skip TikTok", exact: true }).click();
+      const sheet = page.getByRole("dialog", { name: "Skip TikTok?" });
+      await sheet.getByRole("button", { name: "Skip TikTok", exact: true }).click();
+      await expect(sheet).toHaveCount(0);
+      await expect(todo.locator(".todo-row[data-platform='tiktok']")).toHaveCount(0);
+      await expect(todo.locator(".todo-row")).toHaveCount(4);
+      await expect(page.locator(".setup-todo")).toContainText("0/4");
+      await expect(page.locator(".setup-todo")).not.toContainText("TikTok");
+      // Saved on the (pretend) server before the next page load.
+      await page.waitForFunction(() => sessionStorage.getItem("cf-mock-setup-skipped") === JSON.stringify(["tiktok"]));
+
+      // Settings › Set up posting: still all five cards, TikTok's says Skipped, and the count leaves it out.
+      await page.goto("/settings/posting/setup");
+      await settle(page);
+      await expect(page.locator(".setup-card[data-platform]")).toHaveCount(5);
+      await expect(page.locator(".setup-card[data-platform='tiktok'] .setup-card__state")).toHaveText("Skipped");
+      await expect(page.locator("[data-skipped='tiktok']")).toContainText("You won't post to TikTok until you set it up.");
+      await expect(page.getByText("0 of 4 ready")).toBeVisible();
+      await page.getByRole("button", { name: "Un-skip TikTok" }).click();
+      await expect(page.locator("[data-skipped='tiktok']")).toHaveCount(0);
+      await expect(page.getByText("0 of 5 ready")).toBeVisible();
+      await page.waitForFunction(() => sessionStorage.getItem("cf-mock-setup-skipped") === "[]");
+
+      // Back on the list, and in its count.
+      await page.goto("/");
+      await settle(page);
+      await expect(page.locator(".setup-todo")).toContainText("0/5");
+      await expect((await openTodo(page)).locator(".todo-row[data-platform='tiktok']")).toHaveAttribute("data-state", "not_started");
+    });
   });
 }
 

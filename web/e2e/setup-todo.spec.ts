@@ -1,12 +1,13 @@
 import { expect, test, type Page } from "@playwright/test";
 import type { Platform } from "../src/api/types.ts";
 import { GUIDES, SETUP_ORDER } from "../src/setup/index.ts";
-import { animationsDone, CLIPS, findOverflow, launcherSettled, MIXED_SETUP, mixedSetup, openClip, openTodo, settle } from "./helpers.ts";
+import { animationsDone, CLIPS, expectMixedList, findOverflow, launcherSettled, mixedSetup, openClip, openTodo, settle } from "./helpers.ts";
 
 // The floating "Set up posting" to-do list (docs/CONTRACTS.md §17.13): on every signed-in page, Set up and Skip
-// (with a confirm) on every row that is not ready, un-skip, gone with a celebration when everything is ready or
-// skipped, back when a platform needs the owner again, the same after a reload, Skip and Un-skip in Settings too, an
-// open column from 1440 px, below that a pill on a glass bar (always on screen) and a panel, and never on top of a
+// (with a confirm) on every row that is not ready; a confirmed skip takes the row off the list and out of its count
+// (rule S, 24 Nov: only Settings keeps a skipped platform, with Un-skip); gone with a celebration when everything is
+// ready or skipped, back when a platform needs the owner again, the same after a reload, Skip and Un-skip in Settings,
+// an open column from 1440 px, below that a pill on a glass bar (always on screen) and a panel, and never on top of a
 // control.
 
 type MockWindow = Window & {
@@ -193,6 +194,7 @@ test.describe("the floating setup list at 1440 px", () => {
   });
 
   test("Skip asks first; only a confirmed skip counts; it lasts after a reload; un-skip brings it back", async ({ page }) => {
+    // Rule S (24 Nov): the confirmed skip takes the row off the list; Un-skip is in Settings › Set up posting.
     await page.goto("/");
     await settle(page);
     const tiktok = row(page, "tiktok");
@@ -222,20 +224,28 @@ test.describe("the floating setup list at 1440 px", () => {
     expect(await savedSkips(page)).toEqual([]);
 
     await skip(page, "tiktok");
-    await expect(tiktok).toHaveAttribute("data-state", "skipped");
-    await expect(tiktok).toContainText("Skipped");
-    await expect(page.locator(".setup-todo")).toContainText("1/5");
+    // Off the list and out of its count at once: the list has no Un-skip (only Settings keeps a skipped platform).
+    await expect(tiktok).toHaveCount(0);
+    await expect(page.locator(".setup-todo--rail .todo-row")).toHaveCount(4);
+    await expect(page.locator(".setup-todo")).toContainText("0/4");
+    await expect(page.locator(".setup-todo").getByRole("button", { name: "Un-skip TikTok" })).toHaveCount(0);
+    await expect(page.locator(".setup-todo")).not.toContainText("TikTok");
 
     // Saved on the server: the same after a reload.
     await page.reload();
     await settle(page);
-    await expect(row(page, "tiktok")).toHaveAttribute("data-state", "skipped");
+    await expect(row(page, "tiktok")).toHaveCount(0);
+    await expect(page.locator(".setup-todo")).toContainText("0/4");
 
-    // Un-skip from the list.
-    await row(page, "tiktok").getByRole("button", { name: "Un-skip TikTok" }).click();
+    // Un-skip in Settings › Set up posting: the row is back in the list, and in the count.
+    await page.goto("/settings/posting/setup");
+    await settle(page);
+    await page.getByRole("button", { name: "Un-skip TikTok" }).click();
+    await expect.poll(() => savedSkips(page)).not.toContain("tiktok");
+    await page.goto("/");
+    await settle(page);
     await expect(row(page, "tiktok")).toHaveAttribute("data-state", "not_started");
     await expect(page.locator(".setup-todo")).toContainText("0/5");
-    await expect.poll(() => savedSkips(page)).not.toContain("tiktok");
   });
 
   test("a platform that needs you can be skipped too, so skipping every one always ends the list; once ready, its skip is dropped", async ({ page }) => {
@@ -254,10 +264,11 @@ test.describe("the floating setup list at 1440 px", () => {
     // X is connected, so the question does not promise that nothing posts there.
     await expect(sheet).toContainText("X is connected but needs one more step. Skip only takes it off this list.");
     await sheet.getByRole("button", { name: "Skip X" }).click();
-    await expect(row(page, "x")).toHaveAttribute("data-state", "skipped");
-    await expect(row(page, "x").getByRole("button", { name: "Skip X", exact: true })).toHaveCount(0);
-    await expect(row(page, "x").getByRole("button", { name: "Un-skip X", exact: true })).toBeVisible();
-    await expect(page.locator(".setup-todo")).toContainText("1/5");
+    // X leaves the list with its buttons, and the count: none of the four left is ready.
+    await expect(row(page, "x")).toHaveCount(0);
+    await expect(page.locator(".setup-todo").getByRole("button", { name: "Skip X", exact: true })).toHaveCount(0);
+    await expect(page.locator(".setup-todo").getByRole("button", { name: "Un-skip X", exact: true })).toHaveCount(0);
+    await expect(page.locator(".setup-todo")).toContainText("0/4");
     await expect.poll(() => savedSkips(page)).toContain("x");
 
     for (const p of ["youtube", "tiktok", "instagram", "facebook"] as const) await skip(page, p);
@@ -274,7 +285,9 @@ test.describe("the floating setup list at 1440 px", () => {
     await page.evaluate(() => (window as MockWindow).__cfMock!.setup.setCreditsEmpty(true));
     await expect(page.locator(".setup-todo--rail")).toBeVisible();
     await expect(row(page, "x")).toHaveAttribute("data-state", "needs_you");
-    await expect(page.locator(".setup-todo")).toContainText("4/5");
+    // The four still skipped stay off the list and out of the count: X is the only row, and it needs the owner.
+    await expect(page.locator(".setup-todo--rail .todo-row")).toHaveCount(1);
+    await expect(page.locator(".setup-todo")).toContainText("0/1");
   });
 
   test("ready and skipped: it celebrates, slides away, stays gone, and comes back when a platform needs you", async ({ page }) => {
@@ -284,6 +297,8 @@ test.describe("the floating setup list at 1440 px", () => {
     await expect(row(page, "instagram")).toHaveAttribute("data-state", "ready");
     await expect(page.locator(".setup-todo")).toContainText("3/5");
     await skip(page, "facebook");
+    await expect(page.locator(".setup-todo")).toContainText("3/4");
+    await expect(row(page, "facebook")).toHaveCount(0);
     await page.evaluate(() => ((window as MockWindow).__cfSoundLog = []));
     await skip(page, "x");
 
@@ -314,7 +329,9 @@ test.describe("the floating setup list at 1440 px", () => {
     await expect(page.locator(".setup-todo--rail")).toBeVisible();
     await expect(row(page, "youtube")).toHaveAttribute("data-state", "needs_you");
     await expect(row(page, "youtube")).toContainText("Needs you: connect again");
-    await expect(page.locator(".setup-todo")).toContainText("4/5");
+    // Facebook and X stay skipped: three rows, two of them ready.
+    await expect(page.locator(".setup-todo--rail .todo-row")).toHaveCount(3);
+    await expect(page.locator(".setup-todo")).toContainText("2/3");
   });
 
   test('all five ready: "Every place is ready."', async ({ page }) => {
@@ -379,26 +396,32 @@ test.describe("the floating setup list at 1440 px", () => {
     await sheet.getByRole("button", { name: "Skip TikTok" }).click();
     await expect(page.locator("[data-skipped='tiktok']")).toContainText("You won't post to TikTok until you set it up.");
     await expect(page.locator(".setup-card[data-platform='tiktok'] .setup-card__state")).toHaveText("Skipped");
-    await expect(page.locator("#setup-todo")).toContainText("On your screen: 1 of 5 done");
+    // Skipped ones are not counted: 0 of the 4 left.
+    await expect(page.locator("#setup-posting")).toContainText("0 of 4 ready");
+    await expect(page.locator("#setup-todo")).toContainText("On your screen: 0 of 4 done");
     await expect.poll(() => savedSkips(page)).toEqual(["tiktok"]);
     // Ready platforms have nothing to skip.
     await finish(page, ["youtube"]);
     await expect(page.locator(".setup-card[data-platform='youtube'] .setup-card__state")).toHaveText("Ready");
     await expect(page.locator("[data-skip='youtube'], [data-skipped='youtube']")).toHaveCount(0);
 
-    // The floating list agrees, and Un-skip in Settings puts it back.
+    await expect(page.locator("#setup-posting")).toContainText("1 of 4 ready");
+    // The floating list agrees (TikTok is not on it), and Un-skip in Settings puts it back.
     await page.goto("/");
     await settle(page);
-    await expect(row(page, "tiktok")).toHaveAttribute("data-state", "skipped");
+    await expect(row(page, "tiktok")).toHaveCount(0);
+    await expect(page.locator(".setup-todo")).toContainText("1/4");
     await page.goto("/settings/posting/setup");
     await settle(page);
     await page.getByRole("button", { name: "Un-skip TikTok" }).click();
     await expect(page.locator("[data-skipped='tiktok']")).toHaveCount(0);
     await expect(page.locator(".setup-card[data-platform='tiktok'] .setup-card__state")).toHaveText("Not started");
     await expect.poll(() => savedSkips(page)).not.toContain("tiktok");
+    await expect(page.locator("#setup-posting")).toContainText("1 of 5 ready");
     await page.goto("/");
     await settle(page);
     await expect(row(page, "tiktok")).toHaveAttribute("data-state", "not_started");
+    await expect(page.locator(".setup-todo")).toContainText("1/5");
   });
 
   test("on short screens every row and its buttons still show without scrolling; a very short one fades the bottom", async ({ page }) => {
@@ -712,10 +735,14 @@ test.describe("the floating setup list on a phone", () => {
     await page.goto("/review");
     await settle(page);
     await skip(page, "x");
-    await expect(row(page, "x")).toHaveAttribute("data-state", "skipped");
+    // Off the open panel's list at once, and out of the count.
+    await expect(row(page, "x")).toHaveCount(0);
+    await expect(page.locator(".setup-todo-panel .todo-row")).toHaveCount(4);
+    await expect(page.locator(".setup-todo-panel .setup-todo__head")).toContainText("0/4");
     await page.reload();
     await settle(page);
-    await expect(page.locator(".setup-todo__pill")).toContainText("1/5");
+    await expect(page.locator(".setup-todo__pill")).toContainText("0/4");
+    await expect(page.locator(".setup-todo__pill")).toHaveAttribute("aria-label", "Set up posting: 0 of 4 done");
   });
 
   test("the pill stays on screen all the way down every page: the page slides under a glass bar", async ({ page }) => {
@@ -844,13 +871,14 @@ for (const width of [320, 375, 768, 1024, 1280, 1440, 1920] as const) {
       const overflowing = await list.evaluate((el) => Array.from(el.querySelectorAll<HTMLElement>(".todo-row *")).filter((c) => c.scrollWidth > c.clientWidth + 1 && getComputedStyle(c).display !== "inline").map((c) => c.className));
       for (const o of overflowing) failures.push(`open list: ${o} overflows`);
 
-      // The same with one row of every kind (a ready row's tick, "In progress: 1 of 23", "Needs you: connect again", Un-skip).
+      // The same with one row of every kind (a ready row's tick, "In progress: 1 of 23", "Needs you: connect again";
+      // the skipped platform is not on the list).
       await mixedSetup(page);
       await page.goto("/");
       await settle(page);
       const mixed = await openTodo(page);
       await landed(page);
-      for (const [platform, state] of Object.entries(MIXED_SETUP)) await expect(mixed.locator(`.todo-row[data-platform='${platform}']`)).toHaveAttribute("data-state", state);
+      await expectMixedList(mixed);
       const m = await findOverflow(page);
       for (const o of m.items) failures.push(`open list, every kind of row: ${o.selector} "${o.text}" ${o.scrollWidth} > ${o.clientWidth}`);
       if (m.page > m.viewport) failures.push(`open list, every kind of row: page scrolls sideways`);

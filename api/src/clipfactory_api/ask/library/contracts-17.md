@@ -781,7 +781,7 @@ Facebook, X (`SETUP_ORDER`), each with its mark, name and one state, checked in 
 | State | When | Line | Actions |
 |---|---|---|---|
 | `ready` | `computeReady(setup)` (§17.4); wins over a skip | "Ready" (leaf-green tick on the mark) | none |
-| `skipped` | in `setupSkipped` and not ready, whatever else it is waiting for | "Skipped" | **Set up**, **Un-skip** |
+| `skipped` | in `setupSkipped` and not ready, whatever else it is waiting for | "Skipped" (only on Settings › Set up posting: the floating list leaves the row out, §48) | **Set up**, **Un-skip** (in Settings) |
 | `needs_you` | an account exists but is not ready (`needs_reconnect`, `choose_account`, or connected with a gate in `action`) | "Needs you: connect again" / "Needs you: pick an account" / "Needs you: one more step" | **Set up**, **Skip** |
 | `not_started` | `notStarted(setup)` (§17.1) | "Not started" | **Set up**, **Skip** |
 | `in_progress` | anything else | "In progress: n of m" (`progressOf` counted steps) | **Set up**, **Skip** |
@@ -796,8 +796,9 @@ Facebook, X (`SETUP_ORDER`), each with its mark, name and one state, checked in 
   connected but needs one more step. Skip only takes it off this list. You can finish it later in Settings."), buttons
   **Keep it** (first, focused, the vermilion `primary`: the safe answer is the strong one; Escape and a tap outside also
   mean Keep it) and **Skip {Platform}** (glass, no `act`: opting out is quiet, §20.1). Only the confirmed answer saves
-  `setupSkipped` (`withSkip`); asking changes nothing. **Un-skip** (`act="undo"`) saves `withoutSkip`, from the list
-  while it shows and from Settings.
+  `setupSkipped` (`withSkip`); asking changes nothing. **Un-skip** (`act="undo"`) saves `withoutSkip`, from Settings
+  (since §48 the floating list has no skipped rows: a skipped row leaves it as soon as the skip is confirmed, and the
+  pill and head count only the platforms not skipped, `listRows` and `listCount`).
 * **Saving**: every change to `setupSkipped` goes through `screens/settings/setup/useSkips.ts`, which calls
   `saveSettings(updater)` (`app/session.tsx`): the new list is built from the newest settings on screen, saves still on
   their way included, never from a copy a component read earlier, so a skip, an un-skip and a dropped stale skip sent

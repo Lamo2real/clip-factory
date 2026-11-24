@@ -168,5 +168,6 @@ def test_the_posting_sentences_still_send_account_problems_to_social_accounts() 
             text = sentences.story_sentence(platform, kind, "Lamo Stories")
             assert sentences.CONNECTIONS in text, (platform, kind)
             job = {"error": text, "platform": platform}
-            assert dashboard._post_href(job, "01J0000000000000000000ST1") == dashboard.SOCIAL_ACCOUNTS
+            # that platform's own page on Social accounts
+            assert dashboard._post_href(job, "01J0000000000000000000ST1") == f"{dashboard.SOCIAL_ACCOUNTS}/{platform}"
     assert ws.PLATFORMS == PLATFORMS

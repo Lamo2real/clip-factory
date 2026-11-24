@@ -2,11 +2,13 @@
 // call, the way the API reads its items: so whatever another part changes (a story made, approved or posted, an
 // account connected) shows on the dashboard and in the Needs you bar at the next poll. A post that stopped on an
 // account problem (its sentence names Lamo Stories › Social accounts) has Fix it go to Social accounts, as the API's
-// _post_href does (§45.35 D11, §45.36 E9); an account is named by its place first ("this TikTok account (Lamo
-// Stories)"), so the line reads right when the account is itself called Lamo Stories (§45.36 E13).
+// _post_href does (§45.35 D11, §45.36 E9), on that platform's own page; an account is named by its place first ("this
+// TikTok account (Lamo Stories)"), so the line reads right when the account is itself called Lamo Stories (§45.36
+// E13). A platform the owner skipped in the setup (and has not connected) is left out of the accounts and of Needs
+// you, as the API does: it shows only on Social accounts and in the setup.
 import { ApiError } from "../../../api/errors.ts";
 import { STORIES_PLATFORMS, STEP_ORDER, type Platform, type StepKey, type StoriesApi, type StoriesDashboard } from "../types.ts";
-import { PLATFORM_NAME } from "./social.ts";
+import { markSkips, PLATFORM_NAME } from "./social.ts";
 import { DAY, delay, type MockStore } from "./store.ts";
 import { storiesWorkspace } from "./workspace.ts";
 
@@ -19,9 +21,15 @@ type Activity = StoriesDashboard["activity"][number];
 /** The page an account problem's sentence names (the API's sentences.CONNECTIONS). */
 const CONNECTIONS = "Clips Funded › Social accounts";
 
-/** Fix it for a stopped post: Social accounts when it stopped on an account problem, else the video's Review page. */
-export function postHref(error: string | null | undefined, storyId: string): string {
-  if ((error ?? "").includes(CONNECTIONS)) return "/stories/connections";
+/** A platform's own page under Social accounts (plain Social accounts when there is no platform). */
+const socialPage = (platform?: Platform | null) => (platform ? `/stories/connections/${platform}` : "/stories/connections");
+
+/**
+ * Fix it for a stopped post: the platform's page on Social accounts when it stopped on an account problem, else the
+ * video's Review page.
+ */
+export function postHref(error: string | null | undefined, storyId: string, platform?: Platform | null): string {
+  if ((error ?? "").includes(CONNECTIONS)) return socialPage(platform);
   return storyId ? `/stories/review/${encodeURIComponent(storyId)}` : "/stories";
 }
 
@@ -29,15 +37,20 @@ export function postHref(error: string | null | undefined, storyId: string): str
 export function dashboardOf(store: MockStore, ws: string): StoriesDashboard {
   const stories = store.stories.filter((s) => s.workspaceId === ws);
   const jobs = store.publishing.filter((p) => p.workspaceId === ws);
-  const accounts = STORIES_PLATFORMS.map(
-    (p) => store.social.find((a) => a.workspaceId === ws && a.platform === p) ?? { platform: p, connectionStatus: "not_connected" as const, accountName: null, warning: null, reason: null },
+  // Each marked skipped as the API's skips.mark does (a stale skip dropped); a skipped one is left out below.
+  const every = markSkips(
+    store,
+    STORIES_PLATFORMS.map((p) => store.social.find((a) => a.workspaceId === ws && a.platform === p) ?? { platform: p, connectionStatus: "not_connected" as const, accountName: null, warning: null, reason: null }),
   );
+  const skipped = new Set(every.filter((a) => a.skipped).map((a) => a.platform));
+  const accounts = every.filter((a) => !a.skipped);
   const title = (id: string) => stories.find((s) => s.storyId === id)?.title ?? "A story";
 
   const needsYou: StoriesDashboard["needsYou"] = [];
   // A stuck post counts until a later post of the same story on the same app went through.
   for (const j of jobs) {
     if (j.publishingStatus !== "needs_attention" && j.publishingStatus !== "failed") continue;
+    if (skipped.has(j.platform)) continue;
     const later = jobs.some((o) => o.contentId === j.contentId && o.platform === j.platform && o.publishingStatus === "posted" && o.createdAt > j.createdAt);
     if (later) continue;
     needsYou.push({
@@ -46,7 +59,7 @@ export function dashboardOf(store: MockStore, ws: string): StoriesDashboard {
       title: title(j.contentId),
       platform: j.platform,
       sentence: j.error ?? `Posting “${title(j.contentId)}” to ${PLATFORM_NAME[j.platform]} stopped. Tap Try again.`,
-      href: postHref(j.error, j.contentId),
+      href: postHref(j.error, j.contentId, j.platform),
     });
   }
   // One line per account, as the API words it (its reason is a code, never shown as it is): connect again, else
@@ -57,7 +70,7 @@ export function dashboardOf(store: MockStore, ws: string): StoriesDashboard {
       a.connectionStatus === "needs_reconnect"
         ? `This ${name} account${a.accountName ? ` (${a.accountName})` : ""} needs connecting again. Open Social accounts and tap Connect again.`
         : a.warning?.trim() || null;
-    if (sentence) needsYou.push({ publishingJobId: null, storyId: null, title: name, platform: a.platform as Platform, sentence, href: "/stories/connections" });
+    if (sentence) needsYou.push({ publishingJobId: null, storyId: null, title: name, platform: a.platform as Platform, sentence, href: socialPage(a.platform as Platform) });
   }
   for (const s of stories)
     if (s.status === "needs_check")

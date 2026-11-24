@@ -12,7 +12,7 @@ import { setStoriesApi } from "../src/stories/api/client.ts";
 import { mockStoriesApi } from "../src/stories/api/mock/index.ts";
 import { setMockLatency } from "../src/stories/api/mock/store.ts";
 import type { StoriesApi, StoriesDashboard } from "../src/stories/api/types.ts";
-import { forgetDashboards, forgetOnboarding } from "../src/stories/ui.tsx";
+import { forgetDashboards, forgetOnboarding, refreshDashboard, refreshOnboarding } from "../src/stories/ui.tsx";
 import { resetWorkspaceMemory } from "../src/stories/workspace.ts";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -168,6 +168,50 @@ describe("the Dashboard's glass", () => {
     for (const r of shown) expect(r.classList.contains("st-activity__row--made")).toBe(true);
     await act(async () => pills[0]!.click());
     expect($$(".st-activity__row")).toHaveLength(all);
+  });
+
+  /** The Connected accounts tile, after the dashboard and the setup were read again. */
+  const accountsTile = async () => {
+    await act(async () => {
+      await refreshDashboard("stories");
+      await refreshOnboarding("stories");
+    });
+    await settle();
+    return $$(".st-tile").find((t) => t.querySelector("h2")?.textContent?.includes("Connected accounts"))!;
+  };
+
+  it("counts only the platforms not skipped: X skipped is gone from the tile, its line and the setup's list (the owner, 24 Nov)", async () => {
+    const before = await accountsTile();
+    expect(before.querySelector(".st-tile__big")?.textContent).toMatch(/^\d+ of 5$/);
+    expect($$(".st-accounts__row")).toHaveLength(5);
+    await api.patchOnboarding("stories", { step: "x", skipped: true });
+    const tile = await accountsTile();
+    const connected = (await api.social("stories")).accounts.filter((a) => a.connectionStatus === "connected" && !a.skipped).length;
+    expect(tile.querySelector(".st-tile__big")?.textContent).toBe(`${connected} of 4`);
+    expect($$(".st-accounts__row")).toHaveLength(4);
+    expect($$(".st-accounts__row .sr-only").map((n) => n.textContent)).toEqual(["YouTube: ", "TikTok: ", "Instagram: ", "Facebook: "]);
+    // Nothing on the dashboard asks for X any more: not Needs you, not the setup card's "Still to do".
+    expect($$(".st-needs-list__item").some((i) => i.querySelector(".st-needs-list__mark")?.getAttribute("title") === "X")).toBe(false);
+    expect($(".st-setupcard")?.textContent).not.toContain("Connect X");
+    const o = await api.getOnboarding("stories");
+    const left = o.steps.filter((s) => s.state !== "done" && s.step !== "done" && s.step !== "x");
+    expect(o.steps.find((s) => s.step === "x")?.state).toBe("skipped");
+    expect(left.length).toBeGreaterThan(3);
+    expect($(".st-setupcard__left")?.textContent).toBe(`Still to do: ${left.slice(0, 3).map((s) => s.label).join(", ")} and ${left.length - 3} more. You can make videos already.`);
+    expect(o.total).toBe(10);
+    expect($(".st-setupcard h2")?.textContent).toContain(`${o.done} of 10 done`);
+  });
+
+  it("says Nothing to connect, with no number, when every platform is skipped", async () => {
+    await api.disconnectSocial("stories", "youtube");
+    for (const step of ["youtube", "tiktok", "instagram", "facebook", "x"] as const) await api.patchOnboarding("stories", { step, skipped: true });
+    const tile = await accountsTile();
+    expect(tile.querySelector(".st-tile__big")).toBeNull();
+    expect(tile.querySelector(".st-tile__note")?.textContent).toBe("Nothing to connect.");
+    expect(tile.querySelectorAll(".st-accounts__row")).toHaveLength(0);
+    expect(tile.querySelector("a")?.getAttribute("href")).toBe("/stories/connections");
+    expect(tile.querySelector("a")?.textContent).toBe("Open Social accounts");
+    expect(tile.textContent).not.toMatch(/of 0|of 5/);
   });
 
   it("is kid-proof: nothing on it is ever disabled, and the videos being made are media rows that open the studio", () => {

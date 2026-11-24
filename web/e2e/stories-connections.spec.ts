@@ -7,7 +7,9 @@ import { findOverflow, WIDTHS } from "./helpers.ts";
 // Pick another; the line after Disconnect follows the app the account used. Less text (the owner, 23 Nov): each card
 // shows its account, its safety line while an account is still to connect or fix, and one main button (Set up the app
 // while the developer app is not ready); the rest is in one More fold (opened here where a test needs what is in it).
-// Lamo Stories is switched on with cf.storiesPreview = 1.
+// Organized (the owner, 24 Nov: like Clip Factory's Set up posting): Social accounts is a header, a progress card and
+// one row per platform; each row opens the platform's own page (/stories/connections/<p>) with its card, and the OAuth
+// return lands there. Lamo Stories is switched on with cf.storiesPreview = 1.
 
 async function on(page: Page) {
   await page.addInitScript(() => localStorage.setItem("cf.storiesPreview", "1"));
@@ -20,16 +22,60 @@ async function ready(page: Page) {
   await page.waitForTimeout(400);
 }
 
+const NAMES = ["YouTube", "TikTok", "Instagram", "Facebook", "X"] as const;
+type Name = (typeof NAMES)[number];
+const SLUG: Record<Name, string> = { YouTube: "youtube", TikTok: "tiktok", Instagram: "instagram", Facebook: "facebook", X: "x" };
+
+/** A platform's own page, opened from its address. */
+async function openPage(page: Page, name: Name) {
+  await page.goto(`/stories/connections/${SLUG[name]}`);
+  await ready(page);
+  await expect(page.locator("section.st-social-one")).toHaveAttribute("data-platform", SLUG[name]);
+}
+/** A platform's own page, opened from its row on Social accounts (no reload: the pretend app keeps what it holds). */
+async function openRow(page: Page, name: Name) {
+  if (!/\/stories\/connections$/.test(new URL(page.url()).pathname)) {
+    await page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "Social accounts" }).click();
+    await expect(page).toHaveURL(/\/stories\/connections$/);
+  }
+  await rowOf(page, name).locator("a.st-social-row").click();
+  await expect(page).toHaveURL(new RegExp(`/stories/connections/${SLUG[name]}$`));
+  await expect(page.locator("section.st-social-one")).toHaveAttribute("data-platform", SLUG[name]);
+}
+
 const cardOf = (page: Page, name: string) => page.locator(".st-conn").filter({ has: page.getByRole("heading", { name, exact: true }) });
+const rowOf = (page: Page, name: Name) => page.locator(`.st-social-row-wrap[data-platform="${SLUG[name]}"]`);
 /** A card's one More fold (its line). */
 const moreOf = (card: ReturnType<typeof cardOf>) => card.locator(".st-conn__more > summary");
 
-test("less text: each card shows its account, its safety line while one is to fix, and one main button; More opens with the keyboard", async ({ page }) => {
+test("the list: a header, the count, and five rows in order, each opening its platform's own page", async ({ page }) => {
   await on(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/stories/connections");
   await ready(page);
-  for (const name of ["YouTube", "TikTok", "Instagram", "Facebook", "X"]) {
+  await expect(page.locator("header.st-social-head h1")).toHaveText("Social accounts");
+  await expect(page.locator(".st-social-progress h2")).toHaveText("1 of 5 ready");
+  await expect(page.locator(".st-social-rows > li")).toHaveCount(5);
+  expect(await page.locator(".st-social-rows > li").evaluateAll((els) => els.map((e) => (e as HTMLElement).dataset.platform))).toEqual(["youtube", "tiktok", "instagram", "facebook", "x"]);
+  // No card on the list: the rows are the way on, and there is no orange main button.
+  await expect(page.locator(".st-conn")).toHaveCount(0);
+  await expect(page.locator(".st-connections .st-btn--main")).toHaveCount(0);
+  await expect(rowOf(page, "YouTube")).toHaveAttribute("data-state", "ready");
+  await expect(rowOf(page, "YouTube").locator(".st-chip")).toHaveText("Ready");
+  await expect(rowOf(page, "TikTok").locator(".st-social-row__line")).toHaveText("Connect again.");
+  await openRow(page, "TikTok");
+  await expect(cardOf(page, "TikTok")).toBeVisible();
+  await expect(page.getByRole("navigation", { name: "Breadcrumb" })).toHaveText("Social accounts › TikTok");
+  const o = await findOverflow(page);
+  expect(o.page, "@390: the page scrolls sideways").toBeLessThanOrEqual(o.viewport);
+  expect(o.items, "@390").toEqual([]);
+});
+
+test("less text: each card shows its account, its safety line while one is to fix, and one main button; More opens with the keyboard", async ({ page }) => {
+  await on(page);
+  await page.setViewportSize({ width: 390, height: 844 });
+  for (const name of NAMES) {
+    await openPage(page, name);
     const card = cardOf(page, name);
     // The connected YouTube is fine: it does not say the safety line again (the page's own line says it at the top).
     if (name === "YouTube") await expect(card.locator(".st-conn__new")).toHaveCount(0);
@@ -39,6 +85,7 @@ test("less text: each card shows its account, its safety line while one is to fi
     expect(await card.locator(".st-btn--main:visible").count(), name).toBeLessThanOrEqual(1);
     await expect(card.getByRole("button", { name: "Disconnect" })).toHaveCount(0);
   }
+  await openPage(page, "YouTube");
   const yt = cardOf(page, "YouTube");
   await expect(yt.locator(".st-who")).toContainText("@fundedclips");
   await expect(yt.getByRole("button", { name: "Pick another channel" })).toBeVisible();
@@ -59,9 +106,14 @@ test("less text, a brand-new studio: Set up the app is each card's one main butt
   await on(page);
   await page.addInitScript(() => ((window as unknown as { __cfStoriesMock?: unknown }).__cfStoriesMock = { knobs: { fresh: true } }));
   await page.setViewportSize({ width: 390, height: 844 });
+  // The list: nothing is set up yet, so every row says how long it takes.
   await page.goto("/stories/connections");
   await ready(page);
-  for (const name of ["YouTube", "TikTok", "Instagram", "Facebook", "X"]) {
+  await expect(page.locator(".st-social-progress h2")).toHaveText("0 of 5 ready");
+  await expect(rowOf(page, "X").locator(".st-social-row__line")).toHaveText("About 15 minutes · Costs a little");
+  for (const name of NAMES) await expect(rowOf(page, name), name).toHaveAttribute("data-state", "not_started");
+  for (const name of NAMES) {
+    await openPage(page, name);
     const card = cardOf(page, name);
     await expect(card.locator(".st-conn__more")).not.toHaveAttribute("open", "");
     await expect(moreOf(card)).toHaveText(`More for ${name}`);
@@ -71,6 +123,7 @@ test("less text, a brand-new studio: Set up the app is each card's one main butt
     await expect(card.getByRole("button", { name: `Set up the app for ${name}` })).toHaveClass(/st-btn--main/);
     expect(await card.locator(".st-btn--main:visible").count(), name).toBe(1);
   }
+  await openPage(page, "YouTube");
   const yt = cardOf(page, "YouTube");
   await expect(yt.getByRole("radiogroup", { name: "Which YouTube app Clips Funded uses" })).toHaveCount(0);
   // Centred first, so the phone's tab bar is not the thing under the tap.
@@ -90,9 +143,8 @@ test("less text, a brand-new studio: Set up the app is each card's one main butt
 test("both Meta cards show both redirect URIs to copy, also once the keys are saved, and nothing overflows", async ({ page }) => {
   await on(page);
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto("/stories/connections");
-  await ready(page);
-  for (const name of ["Instagram", "Facebook"]) {
+  for (const name of ["Instagram", "Facebook"] as const) {
+    await openPage(page, name);
     const card = cardOf(page, name);
     await moreOf(card).click();
     await expect(card.locator(".st-app")).toContainText("Uses its own Meta app");
@@ -101,23 +153,33 @@ test("both Meta cards show both redirect URIs to copy, also once the keys are sa
     await expect(card.getByRole("button", { name: "Copy Facebook's redirect URI" })).toBeVisible();
     await expect(card).toContainText("Valid OAuth Redirect URIs");
   }
-  for (const width of WIDTHS) {
-    await page.setViewportSize({ width, height: 900 });
-    await page.waitForTimeout(200);
-    const o = await findOverflow(page);
-    expect(o.page, `@${width}: the page scrolls sideways`).toBeLessThanOrEqual(o.viewport);
-    expect(o.items, `@${width}`).toEqual([]);
+  // The platform's page with its fold open, then the list.
+  for (const where of ["Facebook's page", "the list"]) {
+    if (where === "the list") {
+      await page.goto("/stories/connections");
+      await ready(page);
+    }
+    for (const width of WIDTHS) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.waitForTimeout(200);
+      const o = await findOverflow(page);
+      expect(o.page, `${where} @${width}: the page scrolls sideways`).toBeLessThanOrEqual(o.viewport);
+      expect(o.items, `${where} @${width}`).toEqual([]);
+    }
   }
 });
 
-test("after a connect: Connected as {name} ({handle}), and the card asks whether it is the Lamo Stories channel", async ({ page }) => {
+test("after a connect: the return lands on the platform's page, Connected as {name} ({handle}), and the card asks whether it is the Lamo Stories channel", async ({ page }) => {
   await on(page);
   await page.setViewportSize({ width: 390, height: 844 });
   await page.goto("/stories/connections");
   await ready(page);
+  await openRow(page, "YouTube");
   const yt = cardOf(page, "YouTube");
   await yt.getByRole("button", { name: "Pick another channel" }).click();
-  await expect(page).toHaveURL(/\/stories\/connections$/);
+  // The OAuth return (/stories/connections?platform=youtube&result=connected…) opens YouTube's page, whose address is
+  // its own once the result is said.
+  await expect(page).toHaveURL(/\/stories\/connections\/youtube$/);
   await expect(page.locator(".toast").filter({ hasText: "Connected as Clips Funded (@fundedclips)." })).toBeVisible();
   const ask = yt.getByRole("group", { name: "Is this your Clips Funded channel?" });
   await expect(ask).toBeVisible();
@@ -127,17 +189,29 @@ test("after a connect: Connected as {name} ({handle}), and the card asks whether
   await ask.getByRole("button", { name: "Pick another channel" }).click();
   await expect(page.locator(".toast").filter({ hasText: "Connected as Clips Funded (@fundedclips)." }).first()).toBeVisible();
   await expect(yt.getByRole("group", { name: "Is this your Clips Funded channel?" })).toBeVisible();
+  await expect(page).toHaveURL(/\/stories\/connections\/youtube$/);
   await yt.getByRole("button", { name: "Yes, that's it" }).click();
   await expect(page.locator(".toast").filter({ hasText: "Great! Clips Funded posts to this YouTube channel (Clips Funded)." })).toBeVisible();
   await expect(yt.locator(".st-intended")).toHaveCount(0);
   await expect(page.locator("canvas.confetti").first()).toBeAttached();
 });
 
+test("the OAuth landing address opens the platform's page and says the result once", async ({ page }) => {
+  await on(page);
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/stories/connections?platform=tiktok&result=denied&ws=stories");
+  await ready(page);
+  await expect(page).toHaveURL(/\/stories\/connections\/tiktok$/);
+  await expect(page.locator("section.st-social-one")).toHaveAttribute("data-platform", "tiktok");
+  await expect(page.locator(".toast").filter({ hasText: "You pressed cancel. Tap Connect TikTok to try again." })).toBeVisible();
+  // The rail marks Social accounts on the platform's page.
+  await expect(page.locator(".st-rail .st-rail__item", { hasText: "Social accounts" })).toHaveAttribute("aria-current", "page");
+});
+
 test("a connect finished by picking the Instagram account from the list asks whether it is the Lamo Stories account", async ({ page }) => {
   await on(page);
   await page.setViewportSize({ width: 320, height: 800 });
-  await page.goto("/stories/connections");
-  await ready(page);
+  await openPage(page, "Instagram");
   const ig = cardOf(page, "Instagram");
   await ig.locator(".st-choose").getByRole("button", { name: /funded\.clips/ }).click();
   const ask = ig.getByRole("group", { name: "Is this your Clips Funded account?" });
@@ -156,9 +230,10 @@ test("after Disconnect, an own Meta app gets the Lamo Stories line, Clip Factory
   await page.setViewportSize({ width: 1280, height: 900 });
   await page.goto("/stories/connections");
   await ready(page);
+  await openRow(page, "Facebook");
   const fb = cardOf(page, "Facebook");
   await fb.getByRole("button", { name: "Connect Facebook" }).click();
-  await expect(page).toHaveURL(/\/stories\/connections$/);
+  await expect(page).toHaveURL(/\/stories\/connections\/facebook$/);
   await fb.getByRole("button", { name: /^Clips Funded/ }).click();
   await expect(fb.locator(".st-chip").first()).toHaveText("Connected");
   // Picked from the list: the card asks first whether this is the Lamo Stories Page (§45.34).
@@ -168,6 +243,7 @@ test("after Disconnect, an own Meta app gets the Lamo Stories line, Clip Factory
   await fb.getByRole("button", { name: "Yes, disconnect" }).click();
   await expect(page.getByText("To remove Clips Funded completely, remove your Clips Funded app in the account's own settings. Clip Factory is not affected.")).toBeVisible();
   await page.getByRole("button", { name: "Hide this note" }).click();
+  await openRow(page, "YouTube");
   const yt = cardOf(page, "YouTube");
   await moreOf(yt).click();
   await yt.getByRole("button", { name: "Disconnect" }).click();
@@ -178,16 +254,16 @@ test("after Disconnect, an own Meta app gets the Lamo Stories line, Clip Factory
 test("round 4: no Check now while the account is still to be picked, and one toast per pick (§45.35 D21)", async ({ page }) => {
   await on(page);
   await page.setViewportSize({ width: 390, height: 844 });
-  await page.goto("/stories/connections");
-  await ready(page);
+  await openPage(page, "YouTube");
+  await moreOf(cardOf(page, "YouTube")).click();
+  await expect(cardOf(page, "YouTube").getByRole("button", { name: /Check now/ })).toBeVisible();
+  await openRow(page, "Instagram");
   const ig = cardOf(page, "Instagram");
   await expect(ig.locator(".st-choose")).toBeVisible();
   // (Check now is in each card's More fold.)
   await moreOf(ig).click();
   await expect(ig.getByRole("button", { name: "Disconnect" })).toBeVisible();
   await expect(ig.getByRole("button", { name: /Check now/ })).toHaveCount(0);
-  await moreOf(cardOf(page, "YouTube")).click();
-  await expect(cardOf(page, "YouTube").getByRole("button", { name: /Check now/ })).toBeVisible();
   // Every toast from here on.
   await page.evaluate(() => {
     const w = window as unknown as { __toasts: string[] };
@@ -206,104 +282,100 @@ test("round 4: no Check now while the account is still to be picked, and one toa
   await expect(ig.getByRole("button", { name: /Check now/ })).toBeVisible();
 });
 
-test("round 5: one name for the other app, ids and developer words one tap away, cards that flow by their height (§45.36 E13, E14, E18)", async ({ page }) => {
+test("round 5: one name for the other app, ids and developer words one tap away, rows in two columns (§45.36 E13, E14, E18)", async ({ page }) => {
   await on(page);
   await page.setViewportSize({ width: 1440, height: 900 });
   await page.goto("/stories/connections");
   await ready(page);
-  // E13: "Clip Factory" everywhere, never "Lamo Clips".
+  // E13: "Clip Factory" everywhere, never "Lamo Clips": on the list and on every platform's page.
   const words = await page.locator(".st-connections").evaluate((el) => (el as HTMLElement).innerText);
   expect(words).toContain("Clip Factory");
   expect(words).not.toContain("Lamo Clips");
-  // E18: in each column every card starts right under the one above it (16 px apart), never under an empty area and
-  // never over the card above it.
-  const columnsNow = async () => {
-    const boxes = await page.locator(".st-conns > .st-conn").evaluateAll((els) => els.map((e) => e.getBoundingClientRect()).map((r) => ({ x: Math.round(r.x), top: r.top, bottom: r.bottom })));
-    const columns = new Map<number, { top: number; bottom: number }[]>();
-    for (const b of boxes) columns.set(b.x, [...(columns.get(b.x) ?? []), b]);
-    for (const col of columns.values()) col.sort((a, b) => a.top - b.top);
-    return [...columns.values()];
-  };
-  const gapsOf = (columns: { top: number; bottom: number }[][]) => columns.flatMap((col) => col.slice(1).map((c, i) => c.top - col[i]!.bottom));
-  /** The E18 checks on the cards as they are now; returns the empty area under the shortest column. */
-  const flowsByHeight = async (when: string) => {
-    const columns = await columnsNow();
-    expect(columns.length, `${when}: the cards sit in more than one column at 1440`).toBeGreaterThan(1);
-    for (const gap of gapsOf(columns)) {
-      expect(gap, `${when}: the gap above a card`).toBeLessThanOrEqual(17);
-      expect(gap, `${when}: a card never over the one above it`).toBeGreaterThanOrEqual(15);
-    }
-    // Each card went into the shortest column: the empty area under the shortest column is never taller than the last
-    // card of the tallest one (that card could not have gone anywhere shorter).
-    const ends = columns.map((col) => ({ bottom: col.at(-1)!.bottom, last: col.at(-1)!.bottom - col.at(-1)!.top }));
-    const tallest = ends.reduce((a, b) => (b.bottom > a.bottom ? b : a));
-    const shortest = Math.min(...ends.map((e) => e.bottom));
-    expect(tallest.bottom - shortest, `${when}: the empty area under the shortest column`).toBeLessThanOrEqual(tallest.last + 16);
-    return tallest.bottom - shortest;
-  };
-  // The deal itself, as the page dealt the cards: less empty than before, when Instagram stood alone 721 px short.
-  // Measured before E14 below opens YouTube's More fold: that card then grows and keeps its column
-  // by design (the next test), so the empty area grows by as much. Measured after it, this check raced the page's next
-  // frame: it held only while the cards under the grown one were not laid out again yet, which a page busy with Clip
-  // Factory's hidden backdrop still drifting under Clips Funded made likely; settled, the same layout leaves 724 px.
-  // (Measured once the cards' rise-in has ended, so no card is caught on its way up.)
-  await page.locator(".st-conns > .st-conn").evaluateAll((els) => Promise.all(els.flatMap((e) => e.getAnimations()).filter((a) => a.effect?.getComputedTiming().iterations !== Infinity).map((a) => a.finished.catch(() => undefined))));
-  expect(await flowsByHeight("as dealt"), "less empty than the columns left before").toBeLessThan(700);
+  // E18, now rows: two a line at 1440, in order, the rows of one line the same height, 16 px between them. (Measured
+  // once the rows' rise-in has ended, so no row is caught on its way up.)
+  await page.locator(".st-social-rows > li").evaluateAll((els) => Promise.all(els.flatMap((e) => e.getAnimations()).filter((a) => a.effect?.getComputedTiming().iterations !== Infinity).map((a) => a.finished.catch(() => undefined))));
+  const boxes = await page.locator(".st-social-rows > li").evaluateAll((els) => els.map((e) => e.getBoundingClientRect()).map((r) => ({ x: Math.round(r.x), top: Math.round(r.top), height: Math.round(r.height), bottom: r.bottom })));
+  expect(new Set(boxes.map((b) => b.x)).size, "two columns at 1440").toBe(2);
+  for (let i = 0; i + 1 < boxes.length; i += 2) {
+    expect(boxes[i]!.top, `line ${i / 2 + 1}: side by side`).toBe(boxes[i + 1]!.top);
+    expect(Math.abs(boxes[i]!.height - boxes[i + 1]!.height), `line ${i / 2 + 1}: the same height`).toBeLessThanOrEqual(1);
+  }
+  for (let i = 2; i < boxes.length; i++) {
+    const gap = boxes[i]!.top - boxes[i - 2]!.bottom;
+    expect(gap, "the gap above a row").toBeLessThanOrEqual(17);
+    expect(gap, "a row never over the one above it").toBeGreaterThanOrEqual(15);
+  }
+  for (const name of NAMES) {
+    await openRow(page, name);
+    const text = await page.locator(".st-connections").evaluate((el) => (el as HTMLElement).innerText);
+    expect(text, name).not.toContain("Lamo Clips");
+  }
   // E14: the account's id is not on screen until the card's More fold is opened; then it is, one tap away.
+  await openRow(page, "YouTube");
   const yt = cardOf(page, "YouTube");
   await expect(yt.locator(".st-who__id")).toBeHidden();
   await moreOf(yt).click();
   await expect(yt.locator(".st-who__id code")).toBeVisible();
   await expect(yt.locator(".st-who__id code")).toHaveText(/^UC/);
   // The Meta card's More fold says what to do in plain words first; Facebook Login's own words are folded again.
+  await openRow(page, "Instagram");
   const insta = cardOf(page, "Instagram");
   await expect(insta.getByText("Copy these two addresses into your Meta app's settings", { exact: false })).toBeHidden();
   await moreOf(insta).click();
   await expect(insta.getByText("Copy these two addresses into your Meta app's settings", { exact: false })).toBeVisible();
   await expect(insta.getByText("Valid OAuth Redirect URIs", { exact: false })).toBeHidden();
+  await openRow(page, "TikTok");
   const tiktok = cardOf(page, "TikTok");
   await expect(tiktok.getByText("Sandbox", { exact: false })).toBeHidden();
-  // YouTube's and Instagram's cards have grown: the cards under them move down with them (never left under them), and
-  // E18 holds again.
-  await expect.poll(async () => Math.min(...gapsOf(await columnsNow())), { message: "the cards under the grown cards move down with them" }).toBeGreaterThanOrEqual(15);
-  await flowsByHeight("after YouTube's and Instagram's cards grew");
-  for (const width of [320, 768, 1024, 1920]) {
-    await page.setViewportSize({ width, height: 900 });
-    await page.waitForTimeout(200);
-    const o = await findOverflow(page);
-    expect(o.page, `@${width}: the page scrolls sideways`).toBeLessThanOrEqual(o.viewport);
-    expect(o.items, `@${width}`).toEqual([]);
+  for (const where of ["TikTok's page", "the list"]) {
+    if (where === "the list") await page.getByRole("navigation", { name: "Breadcrumb" }).getByRole("link", { name: "Social accounts" }).click();
+    for (const width of [320, 768, 1024, 1920]) {
+      await page.setViewportSize({ width, height: 900 });
+      await page.waitForTimeout(200);
+      const o = await findOverflow(page);
+      expect(o.page, `${where} @${width}: the page scrolls sideways`).toBeLessThanOrEqual(o.viewport);
+      expect(o.items, `${where} @${width}`).toEqual([]);
+    }
   }
 });
 
-test("round 5: a card that grows never moves another card to another column (§45.36 E18)", async ({ page }) => {
+test("round 5: a row or a card that grows never moves another one to another column (§45.36 E18)", async ({ page }) => {
   await on(page);
   for (const width of [1100, 1280, 1440]) {
     await page.setViewportSize({ width, height: 900 });
     await page.goto("/stories/connections");
     await ready(page);
-    const xs = () => page.locator(".st-conns > .st-conn").evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().x)));
+    const xs = () => page.locator(".st-social-rows > li").evaluateAll((els) => els.map((e) => Math.round(e.getBoundingClientRect().x)));
     const before = await xs();
+    // A row grows while it asks whether to skip: the others keep their column, and its line stays the same height.
+    for (const name of ["TikTok", "Instagram", "Facebook", "X"] as const) {
+      await rowOf(page, name).getByRole("button", { name: `Skip ${name}`, exact: true }).click();
+      await expect(rowOf(page, name).getByRole("group", { name: `Skip ${name}?` })).toBeVisible();
+      await page.waitForTimeout(250);
+      expect(await xs(), `@${width}: Skip on ${name}`).toEqual(before);
+      const heights = await page.locator(".st-social-rows > li").evaluateAll((els) => els.map((e) => e.getBoundingClientRect()).map((r) => ({ top: Math.round(r.top), height: Math.round(r.height) })));
+      for (let i = 0; i + 1 < heights.length; i += 2)
+        if (heights[i]!.top === heights[i + 1]!.top) expect(Math.abs(heights[i]!.height - heights[i + 1]!.height), `@${width}: line ${i / 2 + 1} after ${name} grew`).toBeLessThanOrEqual(1);
+      await page.keyboard.press("Escape");
+      await expect(rowOf(page, name).getByRole("group", { name: `Skip ${name}?` })).toHaveCount(0);
+    }
+    // A card that grows (Change app, in its More fold) stays one column on its own page, and nothing goes sideways.
     for (const [name, button] of [
       ["YouTube", "Change app"],
       ["TikTok", "Change app"],
       ["Instagram", "New keys"],
       ["X", "Change app"],
     ] as const) {
+      await openRow(page, name);
       const card = cardOf(page, name);
-      // (Change app is in the card's More fold: opening it grows the card too.)
+      const x = await card.evaluate((el) => Math.round(el.getBoundingClientRect().x));
       await moreOf(card).click();
       await card.getByRole("button", { name: button, exact: true }).click();
       await page.waitForTimeout(250);
-      expect(await xs(), `@${width}: Change app on ${name}`).toEqual(before);
-      // Every card still starts right under the one above it in its column.
-      const boxes = await page.locator(".st-conns > .st-conn").evaluateAll((els) => els.map((e) => e.getBoundingClientRect()).map((r) => ({ x: Math.round(r.x), top: r.top, bottom: r.bottom })));
-      for (const x of new Set(boxes.map((b) => b.x))) {
-        const col = boxes.filter((b) => b.x === x).sort((a, b) => a.top - b.top);
-        for (let i = 1; i < col.length; i++) expect(col[i]!.top - col[i - 1]!.bottom, `@${width}: the gap above a card after ${name} grew`).toBeLessThanOrEqual(17);
-      }
-      await page.goto("/stories/connections");
-      await ready(page);
+      expect(await card.evaluate((el) => Math.round(el.getBoundingClientRect().x)), `@${width}: Change app on ${name}`).toBe(x);
+      const o = await findOverflow(page);
+      expect(o.page, `@${width}: ${name}'s page scrolls sideways`).toBeLessThanOrEqual(o.viewport);
+      expect(o.items, `@${width}: ${name}`).toEqual([]);
     }
   }
 });
@@ -311,8 +383,7 @@ test("round 5: a card that grows never moves another card to another column (§4
 test("round 5: reconnecting clears the old warning (§45.36 E18)", async ({ page }) => {
   await on(page);
   await page.setViewportSize({ width: 1280, height: 900 });
-  await page.goto("/stories/connections");
-  await ready(page);
+  await openPage(page, "TikTok");
   const tiktok = cardOf(page, "TikTok");
   await expect(tiktok).toContainText("The TikTok app keys changed. Connect again.");
   await tiktok.getByRole("button", { name: "Connect again" }).click();
@@ -320,9 +391,37 @@ test("round 5: reconnecting clears the old warning (§45.36 E18)", async ({ page
   await expect(tiktok).not.toContainText("app keys changed");
 });
 
-test("round 5: on Social accounts the Needs you bar never sends the owner there again; Show me brings the card into view (§45.36 E17)", async ({ page }) => {
+test("skip from a row asks first, and the skipped platform stays here with Un-skip", async ({ page }) => {
   await on(page);
-  await page.setViewportSize({ width: 1280, height: 720 });
+  await page.setViewportSize({ width: 1280, height: 900 });
+  await page.goto("/stories/connections");
+  await ready(page);
+  const x = rowOf(page, "X");
+  await x.getByRole("button", { name: "Skip X", exact: true }).click();
+  const ask = x.getByRole("group", { name: "Skip X?" });
+  await expect(ask).toBeVisible();
+  // Keep it is the first answer and has focus.
+  await expect(ask.getByRole("button", { name: "Keep it" })).toBeFocused();
+  await ask.getByRole("button", { name: "Keep it" }).click();
+  await expect(ask).toHaveCount(0);
+  await expect(x).toHaveAttribute("data-state", "needs_you");
+  await x.getByRole("button", { name: "Skip X", exact: true }).click();
+  await x.getByRole("group", { name: "Skip X?" }).getByRole("button", { name: "Skip X" }).click();
+  await expect(x).toHaveAttribute("data-state", "skipped");
+  await expect(x.locator(".st-chip")).toHaveText("Skipped");
+  await expect(page.locator(".st-social-progress h2")).toHaveText("1 of 4 ready");
+  await expect(page.locator(".toast").filter({ hasText: "Skipped. You can un-skip it here." })).toBeVisible();
+  // Its own page says so, with Un-skip.
+  await openRow(page, "X");
+  await expect(page.locator(".st-social-one__skipped")).toContainText("You skipped X. You won't post there until you set it up.");
+  await page.getByRole("button", { name: "Un-skip X" }).click();
+  await expect(page.locator(".st-social-one__skipped")).toHaveCount(0);
+  await expect(page.locator(".toast").filter({ hasText: "X is back." })).toBeVisible();
+});
+
+test("round 5: on a platform's page the Needs you bar never sends the owner there again; Show me brings the card into view (§45.36 E17)", async ({ page }) => {
+  await on(page);
+  await page.setViewportSize({ width: 1280, height: 600 });
   await page.goto("/stories/ideas");
   await ready(page);
   // Only the account problems are left (no stuck post), so the first thing that needs him is TikTok's sign-in.
@@ -334,20 +433,23 @@ test("round 5: on Social accounts the Needs you bar never sends the owner there 
   await page.locator(".st-rail .st-rail__item", { hasText: "Dashboard" }).click();
   const bar = page.getByRole("complementary", { name: "Needs you" });
   await expect(bar).toContainText("TikTok");
-  // Elsewhere: Fix it opens Social accounts.
-  await expect(bar.getByRole("link", { name: "Fix it" })).toHaveAttribute("href", "/stories/connections");
+  // Elsewhere: Fix it opens TikTok's own page on Social accounts.
+  await expect(bar.getByRole("link", { name: "Fix it" })).toHaveAttribute("href", "/stories/connections/tiktok");
+  // On Social accounts' list: Fix it still opens TikTok's page (the list has rows, its card is on its page).
   await page.locator(".st-rail .st-rail__item", { hasText: "Social accounts" }).click();
   await expect(page).toHaveURL(/\/stories\/connections$/);
+  await expect(bar.getByRole("link", { name: "Fix it" })).toHaveAttribute("href", "/stories/connections/tiktok");
+  await bar.getByRole("link", { name: "Fix it" }).click();
+  await expect(page).toHaveURL(/\/stories\/connections\/tiktok$/);
   await expect(bar).toContainText("below");
   expect(await bar.evaluate((el) => (el as HTMLElement).innerText)).not.toContain("Social accounts");
   await expect(bar.getByRole("link", { name: "Fix it" })).toHaveCount(0);
   const tiktok = cardOf(page, "TikTok");
   await expect(tiktok).toBeAttached();
-  // (Away from it: TikTok's card is at the top of its column now, so the page goes to the bottom. The cards are short
-  // with their More folds closed: opened, they make the page long enough to leave TikTok's card behind.)
-  for (const name of ["YouTube", "TikTok", "Instagram", "Facebook", "X"]) await moreOf(cardOf(page, name)).click();
+  // (Away from it: with its More fold open the card is long, so at the bottom of the page its top is out of view.)
+  await moreOf(tiktok).click();
   await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
-  await expect(tiktok).not.toBeInViewport();
+  await expect.poll(() => tiktok.evaluate((el) => Math.round(el.getBoundingClientRect().top)), { timeout: 6000 }).toBeLessThan(0);
   await bar.getByRole("button", { name: "Show me" }).click();
   // (It glides there.)
   await expect.poll(() => tiktok.evaluate((el) => Math.round(el.getBoundingClientRect().top)), { timeout: 6000 }).toBeGreaterThanOrEqual(0);

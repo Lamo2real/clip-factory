@@ -4,7 +4,9 @@ the numbers and recent activity, all from this workspace's partition.
 ``SOCIAL#`` and ``PUBJOB#`` items are builder B's and are only read here. The accounts are the public ones the Social
 accounts page shows (``social.accounts_shown``, settled the same way, §45.35 D11), so a key change or Clip Factory
 connecting the same account later shows here too. A post that stopped on an account problem (its sentence sends the
-owner to Social accounts) has its Fix it open Social accounts; Try again stays on the video's Review page.
+owner to Social accounts) has its Fix it open that platform's page on Social accounts; Try again stays on the video's
+Review page. A platform the owner skipped (``SocialAccount.skipped``, ``skips``) is left out of the accounts and of
+Needs you (its own line and a stopped post there): it shows only on Social accounts and in the setup.
 """
 
 from __future__ import annotations
@@ -14,7 +16,7 @@ from datetime import timedelta
 from typing import Any, Final
 
 from ..clock import iso, parse
-from . import activity, sentences, shapes
+from . import activity, sentences, shapes, skips
 from . import types as ws
 
 PLATFORM_NAMES: Final = {
@@ -28,15 +30,20 @@ METRICS: Final = ("views", "likes", "comments", "shares")
 NUMBERS_FOR = timedelta(days=7)
 ACTIVITY_SHOWN = 10
 CHECK_FACTS = "Check the facts in this video before you approve it."
-SOCIAL_ACCOUNTS: Final = "/stories/connections"  # Lamo Stories › Social accounts
+SOCIAL_ACCOUNTS: Final = skips.SOCIAL_ACCOUNTS  # Clips Funded › Social accounts
 
 
 def _post_href(job: Mapping[str, Any], story_id: str) -> str:
-    """Fix it: Social accounts when the post stopped on an account problem (needs connecting again, not connected,
-    keys changed, Clip Factory's own account: its sentence names that page), else the video's Review page."""
+    """Fix it: the platform's page on Social accounts when the post stopped on an account problem (needs connecting
+    again, not connected, keys changed, Clip Factory's own account: its sentence names that page), else the video's
+    Review page."""
     if sentences.CONNECTIONS in str(job.get("error") or ""):
-        return SOCIAL_ACCOUNTS
+        return skips.social_href(str(job.get("platform") or "") or None)
     return f"/stories/review/{story_id}" if story_id else "/stories"
+
+
+def _skipped(socials: Sequence[Mapping[str, Any]]) -> frozenset[str]:
+    return frozenset(str(a.get("platform")) for a in socials if a.get("skipped") is True)
 
 
 def _post_sentence(job: Mapping[str, Any]) -> str:
@@ -66,6 +73,7 @@ def needs_you(
     stories: Sequence[Mapping[str, Any]], pubjobs: Sequence[Mapping[str, Any]], socials: Sequence[Mapping[str, Any]]
 ) -> list[dict[str, Any]]:
     titles = {str(s.get("storyId")): str(s.get("title") or "") for s in stories}
+    skipped = _skipped(socials)
     out: list[dict[str, Any]] = []
     latest_posted: dict[tuple[str, str], str] = {}
     for job in pubjobs:
@@ -75,6 +83,8 @@ def needs_you(
     for job in sorted(pubjobs, key=lambda j: str(j.get("createdAt") or ""), reverse=True):
         if job.get("publishingStatus") not in {"needs_attention", "failed"}:
             continue
+        if str(job.get("platform")) in skipped:
+            continue  # a skipped platform shows only on Social accounts and in the setup
         key = (str(job.get("contentId")), str(job.get("platform")))
         if latest_posted.get(key, "") > str(job.get("createdAt") or ""):
             continue
@@ -92,6 +102,8 @@ def needs_you(
     for account in sorted(
         socials, key=lambda a: ws.PLATFORMS.index(a["platform"]) if a.get("platform") in ws.PLATFORMS else 9
     ):
+        if str(account.get("platform")) in skipped:
+            continue
         sentence = _account_sentence(account)
         if sentence:
             out.append(
@@ -101,7 +113,7 @@ def needs_you(
                     "title": str(account.get("accountName") or PLATFORM_NAMES.get(str(account.get("platform")), "")),
                     "platform": account.get("platform") if account.get("platform") in ws.PLATFORMS else None,
                     "sentence": sentence,
-                    "href": "/stories/connections",
+                    "href": skips.social_href(str(account.get("platform") or "") or None),
                 }
             )
     for story in stories:
@@ -141,9 +153,13 @@ def _producing(stories: Sequence[Mapping[str, Any]], jobs: Mapping[str, Mapping[
 
 
 def _accounts(socials: Sequence[Mapping[str, Any]]) -> list[dict[str, Any]]:
+    """Every platform's account, in order, except the ones the owner skipped (the tile counts "N of M" over these)."""
     by_platform = {str(a.get("platform")): a for a in socials}
+    skipped = _skipped(socials)
     out = []
     for platform in ws.PLATFORMS:
+        if platform in skipped:
+            continue
         account = by_platform.get(platform) or {}
         out.append(
             {
