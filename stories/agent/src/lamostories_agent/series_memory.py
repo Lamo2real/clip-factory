@@ -1,4 +1,4 @@
-"""A series' bounded memory for the idea helper and the story writer (docs/CONTRACTS.md §45.43, ADR-90).
+"""A series' bounded memory for the idea helper and the story writer (docs/CONTRACTS.md §45.44, ADR-92).
 
 A series (``SERIES#{seriesId}``) keeps its story so far (≤ 1500 characters, written by the recap task after each
 approval or edited by the owner) and a short summary per episode. What a prompt gets of it is bounded: the story so
@@ -34,7 +34,7 @@ def _keep_lines(value: Any, limit: int) -> str:
 
 
 def episodes(series_id: str, stories: Sequence[Mapping[str, Any]]) -> list[Mapping[str, Any]]:
-    """The series' approved and published stories in the order of approval, as the API numbers them (§45.43)."""
+    """The series' approved and published stories in the order of approval, as the API numbers them (§45.44)."""
     found = [s for s in stories if s.get("seriesId") == series_id and s.get("status") in EPISODE_STATUSES]
     return sorted(found, key=lambda s: (str(s.get("approvedAt") or s.get("updatedAt") or ""), str(s.get("storyId"))))
 

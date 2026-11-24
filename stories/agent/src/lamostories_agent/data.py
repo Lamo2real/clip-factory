@@ -269,7 +269,7 @@ class StoryData:
         return self._owned(item, user_id, workspace_id)
 
     async def series(self, user_id: str, workspace_id: str, series_id: str) -> dict[str, Any] | None:
-        """A series of the workspace (§45.43), or None."""
+        """A series of the workspace (§45.44), or None."""
         item = await self.get(keys.ws_pk(user_id, workspace_id), keys.series_sk(series_id))
         found = self._owned(item, user_id, workspace_id)
         return found if found is not None and found.get("type") == keys.TYPE_SERIES else None

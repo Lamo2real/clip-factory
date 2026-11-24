@@ -178,7 +178,7 @@ def scene_hash(script: dict[str, Any], scene: dict[str, Any], engine: int | None
         "scene": scene,
         "cast": cast,
     }
-    # A car of the cast (§45.42) is drawn from its own look by the car prop that names it: its look and style count
+    # A car of the cast (§45.43) is drawn from its own look by the car prop that names it: its look and style count
     # too. A people-only scene hashes exactly as before.
     drawn = {p.get("castId") for p in scene.get("props") or [] if isinstance(p, dict) and p.get("castId")}
     cars = {
@@ -803,7 +803,7 @@ class StoryJob(Job):
 
     async def guarded(self) -> bool:
         """Driving content, whatever its category: a driving-safety story, one with a checked topic, one the writer
-        flagged ``teachesSafety``, or one with a car of the cast (its script's ``cars``, §45.42). Its fact check runs
+        flagged ``teachesSafety``, or one with a car of the cast (its script's ``cars``, §45.43). Its fact check runs
         whatever the quality agent's switch says and is never recorded as skipped (§45.26, §45.33)."""
         return (
             self.driving
@@ -1216,7 +1216,7 @@ class StoryJob(Job):
     # --- storyboard ---------------------------------------------------------------------------------------------
 
     def _cast_now(self) -> tuple[dict[str, dict[str, Any]], dict[str, dict[str, Any]]]:
-        """(the cast's people, its cars) by cast id, in ``characterIds`` order: c1 is the main person (§45.42). A car
+        """(the cast's people, its cars) by cast id, in ``characterIds`` order: c1 is the main person (§45.43). A car
         is never an actor: it goes in the script's ``cars``, drawn by a car prop that names it."""
         cast: dict[str, dict[str, Any]] = {}
         cars: dict[str, dict[str, Any]] = {}
@@ -1250,7 +1250,7 @@ class StoryJob(Job):
         return cast, cars
 
     async def _series(self) -> dict[str, Any] | None:
-        """The story's series in DATA (§45.43): its bounded memory, so this episode follows on from the others; None
+        """The story's series in DATA (§45.44): its bounded memory, so this episode follows on from the others; None
         when the story is in no series or the series is gone. Never stops the storyboard."""
         series_id = self.story.get("seriesId")
         if not isinstance(series_id, str) or not series_id:
@@ -1343,7 +1343,7 @@ class StoryJob(Job):
             "mode": mode,
             "catalog": catalog,
             "castIds": people,
-            "carIds": cars,  # the cast's cars (§45.42): a car prop's castId, never an actor
+            "carIds": cars,  # the cast's cars (§45.43): a car prop's castId, never an actor
             "topicIds": list(self.svc.guidance.topics),
             "request": request,
             "note": note,

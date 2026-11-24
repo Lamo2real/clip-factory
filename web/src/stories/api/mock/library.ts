@@ -3,7 +3,7 @@
 // Once every part has seeded, the stories that have a video and the characters get their files (whoever seeded
 // them), as the agent's jobs and the owner's uploads would have made them. In mock mode every file is a small
 // picture or a placeholder written in the page itself (no network). `?seriesId=` keeps the files of one series'
-// stories ("none": of the stories in no series, §45.43); a file with no story shows only under All.
+// stories ("none": of the stories in no series, §45.44); a file with no story shows only under All.
 import { ApiError } from "../../../api/errors.ts";
 import { isCar, type AssetKind, type Character, type LibraryItem, type StoriesApi, type Story } from "../types.ts";
 import { ago, delay, HOUR, mockId, type MockStore } from "./store.ts";
@@ -34,7 +34,7 @@ export function stillSvg(n: number, wide = false): string {
   );
 }
 
-/** A car's picture (§45.41): a cartoon hatchback in its own paint, on the same backdrop. */
+/** A car's picture (§45.42): a cartoon hatchback in its own paint, on the same backdrop. */
 function carSvg(paint: string, sketch: boolean): string {
   const svg =
     `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200"><rect width="200" height="200" fill="${sketch ? "#FFF6E5" : "#26205A"}"/>` +

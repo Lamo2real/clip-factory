@@ -1,9 +1,9 @@
 """Characters: rigs that look and move the same in every video (docs/CONTRACTS.md §45.8).
 
 ``character_input`` checks a CharacterInput against the engine's vocabulary (``catalog.py``): a person (the default:
-an older item has no kind) or a car (§45.41), which has a CarLook instead of a person's look, no voice and no noises,
+an older item has no kind) or a car (§45.42), which has a CarLook instead of a person's look, no voice and no noises,
 only favourite effects, and only the neutral face unless it has eyes. ``cast_problem`` keeps a cast to at most one
-car, with someone to drive it (§45.42). The same rules are the engine's ``validateCharacter`` and the agent's
+car, with someone to drive it (§45.43). The same rules are the engine's ``validateCharacter`` and the agent's
 ``check_car``. Reference images are
 the owner's uploads (png, jpeg or webp, at most 10 MB, at most 8), kept under the character's own prefix
 ``ws/{userId}/{workspaceId}/characters/{characterId}/refs/{assetId}.{ext}``; they never change the rig.
@@ -112,7 +112,7 @@ def look(value: Any) -> dict[str, Any]:
 
 
 def car_look(value: Any) -> dict[str, Any]:
-    """A CarLook (§45.41): catalog choices, #rrggbb colours and numbers in range; unknown keys are 400."""
+    """A CarLook (§45.42): catalog choices, #rrggbb colours and numbers in range; unknown keys are 400."""
     body = validate.obj(value, "car")
     validate.only_keys(
         body,
@@ -201,7 +201,7 @@ def _car_voice(value: Any) -> dict[str, Any]:
 
 
 def character_input(body: Mapping[str, Any], *, extra: tuple[str, ...] = ()) -> dict[str, Any]:
-    """CharacterInput (§45.6, §45.41), checked; unknown keys are 400. It has every key of ``shapes.CHARACTER_FIELDS``:
+    """CharacterInput (§45.6, §45.42), checked; unknown keys are 400. It has every key of ``shapes.CHARACTER_FIELDS``:
     a person's ``car`` is None, and a car's ``look`` is None (whatever was sent)."""
     validate.only_keys(body, (*CHARACTER_KEYS, *extra))
     kind = kind_of(body)
@@ -247,7 +247,7 @@ def character_input(body: Mapping[str, Any], *, extra: tuple[str, ...] = ()) -> 
 
 
 def cast_problem(items: Iterable[Mapping[str, Any]]) -> str | None:
-    """A story's or a series' cast (§45.42): at most one car, and someone to drive it. None when it is fine."""
+    """A story's or a series' cast (§45.43): at most one car, and someone to drive it. None when it is fine."""
     kinds = [str(i.get("kind") or "person") for i in items]
     cars = kinds.count("car")
     if cars >= 2:

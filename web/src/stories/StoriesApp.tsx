@@ -79,7 +79,7 @@ const NAV: NavItem[] = [
     page: { name: "characters" },
     match: ["characters", "character", "character_new"],
   },
-  // The cars' own place, right under Characters (§45.41.10, the owner: "where are cars? i need cars as well").
+  // The cars' own place, right under Characters (§45.42.10, the owner: "where are cars? i need cars as well").
   { label: "Cars", icon: "car", page: { name: "cars" }, match: ["cars", "car_new", "car"] },
   {
     label: "Production",

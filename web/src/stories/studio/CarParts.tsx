@@ -1,4 +1,4 @@
-// A car character's parts in the editor (docs/CONTRACTS.md §45.41): Looks (shape, paint, windows, wheels, lights,
+// A car character's parts in the editor (docs/CONTRACTS.md §45.42): Looks (shape, paint, windows, wheels, lights,
 // extras), Face (none by default: a real-looking car; eyes on the windscreen or in the headlights for fun) and Moves
 // (how it drives, and each move to try on the preview: "Honk" plays the honk itself). Sounds is SoundsPart.
 import "../styles/sd-cars.css";
@@ -74,7 +74,7 @@ export function CarLooksPart({ car, onChange }: { car: CarLook; onChange: (patch
 
 /**
  * A car's face: none to start (a real car). Eyes on gives neutral, happy and surprised when it had fewer than 3 faces;
- * eyes off keeps only neutral (§45.41). With eyes, the mouth, the eye colour and the faces, each tried on the car.
+ * eyes off keeps only neutral (§45.42). With eyes, the mouth, the eye colour and the faces, each tried on the car.
  */
 export function CarFacePart({ c, name, face, onTry, onChange }: { c: CarInput; name: string; face: Expression; onTry: (e: Expression) => void; onChange: (next: CarInput) => void }) {
   const eyes = c.car.face.eyes;

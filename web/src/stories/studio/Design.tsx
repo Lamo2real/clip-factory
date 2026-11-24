@@ -5,13 +5,17 @@
 // likes and taps Save. The task is read every second with a line that names the model and the effort, and the button
 // has its own "Model and effort for this one" menu. On a saved character's page it redesigns that character
 // (`characterId`, §45.34): the agent keeps its name and changes only what the owner asks, and the page shows which
-// parts changed (RedesignCompare) before "Use this" puts the new version in the editor.
+// parts changed (RedesignCompare) before "Use this" puts the new version in the editor. A picture dropped on the open
+// panel is the picture to start from, as if picked (docs/CONTRACTS.md §45.40).
 //
-// A car (§45.41, CarDesign): up to 6 real photos (Photos.tsx) and the owner's words go to the model on the chip in one
+// A car (§45.42, CarDesign): up to 6 real photos (Photos.tsx) and the owner's words go to the model on the chip in one
 // call that makes 3 cartoon cars to pick from ("Pick one", CarOptions.tsx); "Make more" asks for 3 more that look
 // different, and the picked one goes in the editor (or, for a saved car, into RedesignCompare).
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { putFile } from "../../api/upload.ts";
+import { DropOverlay } from "../../components/DropOverlay.tsx";
+import { useFileDrop } from "../../lib/useFileDrop.ts";
+import { Icon } from "../chat/kit.tsx";
 import { storiesApi } from "../api/client.ts";
 import { isCar, type AiTask, type CarInput, type CharacterInput, type DesignBody, type ModelOverride, type PersonInput } from "../api/types.ts";
 import type { CarLook, Expression } from "../engine/types.ts";
@@ -33,7 +37,7 @@ const text = (raw: Record<string, unknown>) => ({
   traits: Array.isArray(raw.traits) ? raw.traits.filter((t): t is string => typeof t === "string" && !!t.trim()).map((t) => t.slice(0, 30)).slice(0, 8) : [],
 });
 
-/** A suggested car, filled out to a whole CarInput (no voice, the faces rule of §45.41) so the editor can draw it. */
+/** A suggested car, filled out to a whole CarInput (no voice, the faces rule of §45.42) so the editor can draw it. */
 function carOf(raw: Record<string, unknown>): CarInput {
   const base = newCar();
   const car = isObj(raw.car) ? raw.car : {};
@@ -259,6 +263,16 @@ export function DesignPanel({
     celebrate(box.current, 90);
   }, () => design());
   const busy = run.phase === "working" || sending !== null;
+  // One picture dropped on the open panel; while one is being sent, the next waits.
+  const drop = useFileDrop({
+    scope: "element",
+    checkFile: fileProblem,
+    onFiles: ([f]) => {
+      if (f) void send(f);
+    },
+    enabled: open,
+    busy: sending !== null ? "Sending the picture…" : null,
+  });
 
   useEffect(() => {
     if (startOpen) box.current?.scrollIntoView?.({ block: "nearest" });
@@ -321,7 +335,8 @@ export function DesignPanel({
     );
 
   return (
-    <section className="st-s-design st-glass st-glass--hero" aria-labelledby="st-design-title" ref={box}>
+    <section className="st-s-design st-glass st-glass--hero st-drop-host" aria-labelledby="st-design-title" ref={box} {...drop.bind}>
+      <DropOverlay drop={drop} scope="element" look="stories" words={{ file: "Drop your picture here", busy: "Sending the picture…" }} icon={<Icon name="picture" size={40} />} />
       <h2 className="st-s-design__title" id="st-design-title">
         Design with AI
       </h2>
@@ -392,7 +407,7 @@ export function DesignPanel({
   );
 }
 
-/** How many cars one design makes (§45.41: one model call, the photos sent once). */
+/** How many cars one design makes (§45.42: one model call, the photos sent once). */
 const CARS_PER_DESIGN = 3;
 /** The most photos one design sends. */
 const MAX_PHOTOS = 6;
@@ -405,7 +420,7 @@ function savedPhoto(p: { assetId: string; url: string }): Photo {
 }
 
 /**
- * "Design with AI" for a car (§45.41): the photo strip, the words, the model chip and Design it, which sends
+ * "Design with AI" for a car (§45.42): the photo strip, the words, the model chip and Design it, which sends
  * `{kind: "car", referenceAssetIds, count: 3}` and shows the 3 cars to pick from. The first opens in the editor at once
  * (`onDraft`); tapping another puts that one there. On a saved car's page its own pictures start the strip, and the
  * agent keeps its name (the page shows what changes before Use this).

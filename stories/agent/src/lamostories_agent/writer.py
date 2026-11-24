@@ -153,7 +153,7 @@ def scene_schema(
     car_ids: Sequence[str] = (),
 ) -> dict[str, Any]:
     """One scene; with ``scene_ids`` (a remake of named scenes) its ``sceneId`` is one of exactly those. ``cast_ids``
-    are the people (the actors); ``car_ids`` the cast's cars (§45.42), reached only as a car prop's ``castId``: with
+    are the people (the actors); ``car_ids`` the cast's cars (§45.43), reached only as a car prop's ``castId``: with
     none, the schema is exactly what it was before cars."""
     actions = catalog_ids(catalog, "actions") + catalog_ids(catalog, "propActions")
     point = {
@@ -266,7 +266,7 @@ def storyboard_schema(
     scene_ids: Sequence[str] | None = None,
     car_ids: Sequence[str] = (),
 ) -> dict[str, Any]:
-    """The ``write_storyboard`` tool's input schema (``car_ids``: the cast's cars, §45.42). ``full``: the whole story; ``scenes``: only the named scenes
+    """The ``write_storyboard`` tool's input schema (``car_ids``: the cast's cars, §45.43). ``full``: the whole story; ``scenes``: only the named scenes
     (``scene_ids``: each answer scene's id is one of them, and there are exactly as many scenes as asked, §45.34) and,
     if they change, the whole captions list; ``fix``: the whole story again with the facts fixed."""
     asked = list(dict.fromkeys(str(s) for s in scene_ids or [])) if mode == "scenes" else []
@@ -347,7 +347,7 @@ def cast_brief(
 ) -> list[dict[str, Any]]:
     """What the writer may know of each cast member: never the look. Its faces and noises are the ones the script's
     cast carries (the character's own lists), the only ones it may make. People come first (``kind`` person, the first
-    one ``main``), then the cast's cars (§45.42): a car is a prop only, described in words."""
+    one ``main``), then the cast's cars (§45.43): a car is a prop only, described in words."""
     out: list[dict[str, Any]] = []
     for cid, member in cast.items():
         ch = characters.get(str(member.get("characterId"))) or {}
@@ -521,7 +521,7 @@ def script_from(
     cars: dict[str, dict[str, Any]] | None = None,
 ) -> dict[str, Any]:
     """A whole ``StoryScript`` from a ``full`` (or ``fix``) answer, at the story's own size; the cast's cars
-    (§45.42) are stored in ``cars`` only when there are any, so a people-only script is as before."""
+    (§45.43) are stored in ``cars`` only when there are any, so a people-only script is as before."""
     used: set[str] = set()
     scenes = [clean_scene(s, used, i) for i, s in enumerate(answer.get("scenes") or [])]
     width, height = size if size in SIZES else DEFAULT_SIZE

@@ -1,4 +1,4 @@
-"""The story so far of a series: the recap task the API starts after an approval (docs/CONTRACTS.md §45.43, ADR-90).
+"""The story so far of a series: the recap task the API starts after an approval (docs/CONTRACTS.md §45.44, ADR-92).
 
 The creative director reads the series (its story so far and the episodes before), and the episode that was just
 approved (its scenes, captions and beats), and writes two things: a short summary of that episode and the whole
@@ -132,7 +132,7 @@ def recap(env: TaskEnv) -> Outcome:
     found, reply = ask_json(
         env.svc,
         env.ctx,
-        task="text_edit",  # the owner's "Small text edits" choice (§45.43)
+        task="text_edit",  # the owner's "Small text edits" choice (§45.44)
         messages=[user(*blocks, "DATA as JSON:\n" + json.dumps(data, ensure_ascii=False))],
         schema=SCHEMA,
         check=lambda p, final: check_recap(p, final=final),

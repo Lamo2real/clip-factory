@@ -244,7 +244,7 @@ describe("each scene draws from its own time only", () => {
   });
 });
 
-describe("the rules the writer reads (§45.42)", () => {
+describe("the rules the writer reads (§45.43)", () => {
   it("every rule has its own id, the car rules among them, and a script holds at most 2 cars", () => {
     const ids = RULES.map((r) => r.id);
     expect(new Set(ids).size).toBe(ids.length);

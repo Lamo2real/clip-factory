@@ -1,4 +1,4 @@
-// A car character of the cast (CONTRACTS §45.41): its look's check, its rig in both views, the car moves and the
+// A car character of the cast (CONTRACTS §45.42): its look's check, its rig in both views, the car moves and the
 // editor's preview. The busiest frame it draws is CAR_CAST_SHAPES, which a scene's shape budget counts.
 import { describe, expect, it } from "vitest";
 import { CAR_CAST_SHAPES, carHasFace, carSide, checkCarLook, DEFAULT_CAR, type CarDraw } from "../src/stories/engine/car.ts";

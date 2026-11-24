@@ -1,4 +1,4 @@
-"""The story so far of a series: the recap task after an approval (docs/CONTRACTS.md §45.43, ADR-90).
+"""The story so far of a series: the recap task after an approval (docs/CONTRACTS.md §45.44, ADR-92).
 
 The creative director reads the series and the approved episode and writes the episode's summary and the whole story
 so far, on the owner's "Small text edits" model (the task ``text_edit``). The SERIES# item is written with the task's

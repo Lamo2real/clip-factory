@@ -1,7 +1,7 @@
 // The in-memory Lamo Stories API for mock mode and Playwright (docs/CONTRACTS.md §45.16.8): one shared store, one
 // part per area. Every part seeds, then the shell's stand-in seed fills in when no part seeded any story, then each
 // part that hangs things off another part's items finishes its seed (afterSeed). Builder F owns this file; F2 owns
-// ai, skills, memory; G ideas, characters, stories; H chat, references; series (§45.43) comes after stories.
+// ai, skills, memory; G ideas, characters, stories; H chat, references; series (§45.44) comes after stories.
 import type { StoriesApi, StoriesConfig } from "../types.ts";
 import * as ai from "./ai.ts";
 import * as characters from "./characters.ts";

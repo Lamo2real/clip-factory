@@ -1,15 +1,15 @@
-// Clips Funded's characters, sounds, cars and series in mock mode (docs/CONTRACTS.md §45.40 to §45.43), one spec for
+// Clips Funded's characters, sounds, cars and series in mock mode (docs/CONTRACTS.md §45.41 to §45.44), one spec for
 // the owner's six asks of 23 Nov:
-// * Sounds (§45.40): every voice, noise and effect has a play button that plays the synth's own sample (Web Audio is
+// * Sounds (§45.41): every voice, noise and effect has a play button that plays the synth's own sample (Web Audio is
 //   watched: each source started names its file), one at a time, a second tap stops it, a play button never picks its
 //   chip and never makes the click sound, a car hears its car sounds, and the part keeps 44 px targets (48 on phones).
-// * Cars (§45.41): the rail's Cars, right under Characters, › Make a car opens the car flow; New character › A car
+// * Cars (§45.42): the rail's Cars, right under Characters, › Make a car opens the car flow; New character › A car
 //   takes photos by drag and drop (3 dropped photos, 3 thumbnails); Design it makes 3 cartoon cars to pick from; the
 //   picked one saves as a car in Cars, and Characters shows it too with its Car tag; the car pages keep the studio's
 //   rules.
-// * A person and a car (§45.42): Production's cast picker takes the main character plus a car, and the practice
+// * A person and a car (§45.43): Production's cast picker takes the main character plus a car, and the practice
 //   writer's car scenes draw.
-// * Series (§45.43): "My first car" made with the main character and the car, an idea filed in it, the "All ▾" switch,
+// * Series (§45.44): "My first car" made with the main character and the car, an idea filed in it, the "All ▾" switch,
 //   an approved episode and its story so far; the kid path on a phone; a moved video becomes episode 2.
 // Lamo Stories is switched on with cf.storiesPreview = 1; nothing leaves the machine. The mock's store lives in the
 // page, so a flow moves inside the app (taps, or history.pushState) and never reloads.
@@ -212,7 +212,7 @@ const artInside = (opts: Locator, min: number) =>
     min,
   );
 
-// ---------- A. Sound samples (§45.40) ----------
+// ---------- A. Sound samples (§45.41) ----------
 
 test.describe("sounds", () => {
   test("every play button plays its own sample through Web Audio, one at a time, and a second tap stops it", async ({ browser }) => {
@@ -515,7 +515,7 @@ async function rail(page: Page, word: string) {
   await settle(page);
 }
 
-// ---------- B. Cars (§45.41) ----------
+// ---------- B. Cars (§45.42) ----------
 
 test.describe("cars", () => {
   for (const [w, h, touch] of [
@@ -585,7 +585,7 @@ test.describe("cars", () => {
   });
 });
 
-// ---------- C. A person and a car in one story (§45.42) ----------
+// ---------- C. A person and a car in one story (§45.43) ----------
 
 test.describe("a person and a car", () => {
   for (const [w, h, touch] of [
@@ -644,7 +644,7 @@ test.describe("a person and a car", () => {
     });
 });
 
-// ---------- D. Series (§45.43) ----------
+// ---------- D. Series (§45.44) ----------
 
 test.describe("series", () => {
   test("the kid path: a series and its next episode in 8 taps from the rail, 9 on a phone", async ({ browser }) => {
@@ -683,7 +683,7 @@ test.describe("series", () => {
     await tap(page.locator(".st-s-ideapick .st-s-pick__opt").first());
     await tap(page.getByRole("button", { name: "Make the video", exact: true }));
     await expect(page).toHaveURL(/\/stories\/production\/[0-9A-Z]{26}$/, { timeout: 20_000 });
-    expect(taps).toBeLessThanOrEqual(9); // the rail's 8 (CONTRACTS §45.43) and the phone's More
+    expect(taps).toBeLessThanOrEqual(9); // the rail's 8 (CONTRACTS §45.44) and the phone's More
 
     const made = await page.evaluate((id) => {
       const s = (window as MockWindow).__cfStoriesMock?.store;

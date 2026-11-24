@@ -227,7 +227,7 @@ export function actionPose(id: ActionId, from: Pose, c: Ctx, restAfter: () => Po
     }
     case "wave": {
       const sw = osc(c, 2.6);
-      // in a car's seat the hand waves by the cheek, so it stays inside the window (§45.42); standing, beside the head
+      // in a car's seat the hand waves by the cheek, so it stays inside the window (§45.43); standing, beside the head
       const f = c.inCar ? armTo(g, 1, g.headRX * 0.75 + 3 * sw, g.headY + g.headRY * 0.45, -1) : armTo(g, 1, g.headRX + 8 + 5 * sw, g.headY - g.headRY * 0.25 + 2 * Math.abs(sw), -1);
       return { ...q, aF: f.a, eF: f.e, lenF: f.len, handF: "open", overFace: 1, head: q.head + 5, lean: q.lean - 2, turn: 0.45 };
     }
@@ -385,7 +385,7 @@ export function actionPose(id: ActionId, from: Pose, c: Ctx, restAfter: () => Po
     }
     case "get_in":
     case "get_out": {
-      // stepping into (or out of) the car: a little squash and a lean towards the door, a knee up (§45.42)
+      // stepping into (or out of) the car: a little squash and a lean towards the door, a knee up (§45.43)
       const k = Math.sin(Math.PI * clamp01(p));
       const into = id === "get_in" ? 1 : -1;
       return {
@@ -416,7 +416,7 @@ export function actionPose(id: ActionId, from: Pose, c: Ctx, restAfter: () => Po
   return q;
 }
 
-// ---- getting in and out of a car (§45.42) -------------------------------------------------------------------
+// ---- getting in and out of a car (§45.43) -------------------------------------------------------------------
 
 /** A rider's get_in and get_out in one scene (at most one of each, get_in first): when each starts and ends. A missing
  * one is -Infinity (get_in: seated from the start) or Infinity (get_out: seated to the end). */

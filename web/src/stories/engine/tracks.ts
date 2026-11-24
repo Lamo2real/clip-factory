@@ -78,7 +78,7 @@ const LOOPS: Set<SfxId> = new Set(["engine", "wind", "rain"]);
 const REPEATS: Set<SfxId> = new Set(["footsteps", "heartbeat", "tick", "snow_crunch"]);
 
 /** -1 (left) .. 1 (right) from where the sound's maker stands: a rider from its car, one still outside it (before
- * getting in, or after getting out, §45.42) from where it walks. */
+ * getting in, or after getting out, §45.43) from where it walks. */
 function panOf(s: StoryScript, scene: Scene, who: string | undefined, at: number): number {
   if (!who) return 0;
   const actor = scene.actors.find((a) => a.castId === who);

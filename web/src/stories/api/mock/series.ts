@@ -1,4 +1,4 @@
-// Lamo Stories mock: the series part (docs/CONTRACTS.md §45.43, §45.16.8). A series is a folder of story videos with
+// Lamo Stories mock: the series part (docs/CONTRACTS.md §45.44, §45.16.8). A series is a folder of story videos with
 // a short running memory, the story so far. Like the API, a series keeps only the owner's fields, the story so far and
 // the episode summaries; its episodes (approved and published stories, numbered in the order of approval), the counts
 // and the cover are worked out on every read. An approval in a series writes the episode's summary and the story so

@@ -1,4 +1,4 @@
-// The character editor's sound samples (docs/CONTRACTS.md §45.40, ADR-88): every effect and every character noise,
+// The character editor's sound samples (docs/CONTRACTS.md §45.41, ADR-90): every effect and every character noise,
 // in both voices at every pitch stop, rendered ahead of time by the agent's own synth (stories/agent/.../samples.py)
 // into the small MP3 files under web/public/sounds/stories/<recipe>/. What the owner hears here is the sound the videos
 // use. They play through one AudioContext of this file's own, made and resumed inside the tap (iOS needs that), so they
@@ -17,7 +17,7 @@ export type SampleRef = { kind: "sfx"; id: SfxId } | { kind: "noise"; id: NoiseI
 /** ok: it plays; off: Clips Funded's Sounds switch is off; behind: Clip Factory is on screen. */
 export type HearState = "ok" | "off" | "behind";
 
-/** The effects a car picks from, first in its Sounds part (§45.41). */
+/** The effects a car picks from, first in its Sounds part (§45.42). */
 export const CAR_SFX: readonly SfxId[] = ["engine", "honk", "brake_squeal", "skid", "screech", "tyre_burst", "beep", "click"];
 
 export const SAMPLE_WORDS = {

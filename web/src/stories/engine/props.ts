@@ -1,7 +1,7 @@
 // Lamo Stories engine: props. Each PropKind has a side view and a top-down view (a road seen from above, for showing
 // how a car moves). Prop actions (move, skid, spin, stop, bump, tyre_burst, appear, vanish, wobble, flash, and the car
 // moves speed_up, bounce, honk, blink and stall) change a prop's state over time; cars leave skid marks and motion
-// lines so a phone viewer can follow what happened. A car of the cast (a car prop with a castId, CONTRACTS §45.41) is
+// lines so a phone viewer can follow what happened. A car of the cast (a car prop with a castId, CONTRACTS §45.42) is
 // drawn by car.ts from its own look; given no CarDraw, everything draws exactly as before.
 
 import { burst, drawCarLookSide, drawCarLookTop, exhaust, honkWaves, impact, lightGlow, type CarDraw } from "./car.ts";

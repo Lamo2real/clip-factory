@@ -20,7 +20,7 @@ What the agent reads from ``input`` (an internal attribute, by kind):
 * ``captions``: ``{storyId, scriptVersion}`` → ``result.postCaptions`` (Captions, a draft the web saves through
   ``StoryPatch.postCaptions``) and ``result.storyId``;
 * ``check_models`` (builder A2's route): ``{models?}``;
-* ``series_recap`` (§45.43): ``{seriesId, storyId}`` → ``result {seriesId, storyId, episodeSummary, storySoFar}``;
+* ``series_recap`` (§45.44): ``{seriesId, storyId}`` → ``result {seriesId, storyId, episodeSummary, storySoFar}``;
   the agent writes the SERIES# item itself, in the task's end ops, under the version it read.
 """
 

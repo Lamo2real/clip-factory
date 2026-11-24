@@ -342,14 +342,14 @@ function matchSafety(idea: Pick<Idea, "title" | "logline" | "category">): { safe
   return { safetyTopicId: id, needsGuidance: !id };
 }
 
-/** The idea's lead: its first person (a car never stars alone, §45.42), else the workspace's first person. */
+/** The idea's lead: its first person (a car never stars alone, §45.43), else the workspace's first person. */
 function leadName(store: MockStore, ws: string, idea?: Pick<IdeaInput, "characterIds">): string {
   const chars = store.characters.filter((c) => c.workspaceId === ws && c.kind !== "car");
   const picked = idea?.characterIds?.map((id) => chars.find((c) => c.characterId === id)).find(Boolean);
   return picked?.name ?? chars[0]?.name ?? "Pip";
 }
 
-/** A series' drafts (§45.43): filed in it, with its cast when a draft has none (the API's _task_result). */
+/** A series' drafts (§45.44): filed in it, with its cast when a draft has none (the API's _task_result). */
 function inSeries(store: MockStore, ws: string, seriesId: string | undefined, drafts: IdeaInput[]): IdeaInput[] {
   const series = seriesId ? store.series.find((x) => x.seriesId === seriesId && x.workspaceId === ws) : undefined;
   if (!series) return drafts;
@@ -498,7 +498,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       guardWs(store, ws);
       checkInput(input, true);
       await delay(160);
-      // a series that is gone is dropped: the idea is kept, under No series (§45.43)
+      // a series that is gone is dropped: the idea is kept, under No series (§45.44)
       const filed = input.seriesId && !seriesExists(store, ws, input.seriesId) ? { ...input, seriesId: undefined } : input;
       const idea = make(store, ws, filed, Date.now());
       store.ideas.push(idea);
@@ -511,7 +511,7 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       const idea = find(store, ws, ideaId);
       const { seriesId, ...rest } = clone(patch);
       Object.assign(idea, rest);
-      // null: No series; a series that is gone leaves the idea where it is (§45.43)
+      // null: No series; a series that is gone leaves the idea where it is (§45.44)
       if (seriesId === null) delete idea.seriesId;
       else if (seriesId && seriesExists(store, ws, seriesId)) idea.seriesId = seriesId;
       Object.assign(idea, matchSafety(idea), { updatedAt: iso() });

@@ -10,7 +10,7 @@ through builder E's picture helper before the model sees them, each labelled "Ph
 against the engine's catalog; nothing is saved (``result.character`` is a draft the owner saves, ``result.characters``
 every option).
 
-A car (``kind: "car"``, §45.41) turns real photos into ``count`` (3 by default) cartoon car characters in ONE call, so
+A car (``kind: "car"``, §45.42) turns real photos into ``count`` (3 by default) cartoon car characters in ONE call, so
 the photos are sent once: each option is checked by ``check_car`` (no makes in the words, no voice), and "Make more"
 sends the looks already shown as ``avoid``. A person still makes one character, as before.
 """
@@ -235,7 +235,7 @@ def design_schema(cat: dict[str, Any], count: int) -> dict[str, Any]:
 
 
 def car_design(env: TaskEnv) -> Outcome:
-    """``count`` cartoon car characters from the photos and the words, in one call (§45.41)."""
+    """``count`` cartoon car characters from the photos and the words, in one call (§45.42)."""
     description = clip(env.input.get("description"), 600)
     asset_ids = _photo_ids(env)
     character_id = str(env.input.get("characterId") or "")

@@ -1,4 +1,4 @@
-"""Series routes (docs/CONTRACTS.md §45.43): folders of story videos and their story so far.
+"""Series routes (docs/CONTRACTS.md §45.44): folders of story videos and their story so far.
 
 Every route reads the workspace first (``core._ctx``: another owner's workspace is a 404, Lamo Clips a 409), builds
 keys from the JWT's ``sub`` and the path's workspace id only, and checks each item again with ``guard.owned``. A series
@@ -27,7 +27,7 @@ from . import core
 
 Item = dict[str, Any]
 Ctx = core.Ctx
-# The recap is the creative director's "Small text edits" work (§45.43): that task kind names the agent whose switch
+# The recap is the creative director's "Small text edits" work (§45.44): that task kind names the agent whose switch
 # stops it (``series_recap`` itself is no task of agents.json, so Settings › Agents lists no raw id).
 RECAP_SWITCH = "text_edit"
 

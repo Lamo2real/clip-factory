@@ -6,7 +6,7 @@
 // again") and the sound effects editor, which model and effort made each step, Download (the MP4 and each extra copy
 // the video has), Post it (the publish sheet, with the exact account each platform sends to) and the Posts panel,
 // whose Try again asks "Post to {name}?" when the API names a changed account (§45.34). Each queue group has Show more.
-// Series (§45.43): the queue's "All ▾" switch asks each group for one series (`?series=`); a video's page shows its
+// Series (§45.44): the queue's "All ▾" switch asks each group for one series (`?series=`); a video's page shows its
 // series with Move, and approving an episode says which episode it became.
 import "../styles/studio.css";
 import { useEffect, useRef, useState } from "react";
@@ -193,7 +193,7 @@ function QueueGroup({ ws, group, series }: { ws: string; group: (typeof QUEUE)[n
 
 // ---------- One video ----------
 
-/** "Added to {name} as episode {n}." after an approval in a series (§45.43), else null (no series, or not read). */
+/** "Added to {name} as episode {n}." after an approval in a series (§45.44), else null (no series, or not read). */
 async function episodeWords(ws: string, story: Story): Promise<string | null> {
   if (!story.seriesId) return null;
   try {

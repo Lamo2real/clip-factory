@@ -1,4 +1,4 @@
-"""``/v1/workspaces`` routes (docs/CONTRACTS.md §45.5): core (builder A), series (§45.43), AI and the creative tools
+"""``/v1/workspaces`` routes (docs/CONTRACTS.md §45.5): core (builder A), series (§45.44), AI and the creative tools
 (builder A2), and social and publishing (builder B). Served only by Lamo Stories' own Lambda (``workspaces/http.py``). This package lives
 outside Clip Factory's ``routes`` package, so importing it never loads Clip Factory's route table.
 """

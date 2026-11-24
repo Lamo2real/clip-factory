@@ -1,4 +1,4 @@
-## ADR-89 A car of the cast is a car prop with a castId, kept in its own `cars` map
+## ADR-91 A car of the cast is a car prop with a castId, kept in its own `cars` map
 
 - **Context.** The owner (2026-11-23) wants a character that is a car, made in cartoon style from real photos, picked
   among several generated cars, for a series "where its a guy buying a car and then driving it for the first time",
@@ -7,7 +7,7 @@
   branch on the kind. (2) Keep `cast` people only and put the cast's cars in a separate `script.cars` map; a car prop
   with `castId` is drawn as that car, with its own `CarLook`. Also: (a) one model call per option, or (b) one call
   that makes 3 options, so the photos are sent once.
-- **Decision.** (CONTRACTS §45.41, §45.42) Option 2, with (b). Two kinds: person and car ("an animal" and "a thing"
+- **Decision.** (CONTRACTS §45.42, §45.43) Option 2, with (b). Two kinds: person and car ("an animal" and "a thing"
   need rigs of their own and are follow-ups). A car is drawn by `engine/car.ts` in the side and top views (8 bodies,
   paint patterns, windows with riders behind the glass, wheels, lights, optional eyes on the windscreen or in the
   headlights, off by default) and moves by prop actions (the new speed_up, bounce, honk, blink and stall). Plates are

@@ -47,7 +47,7 @@ KIND_AGENT = {
     "character_design": "character",
     "captions": "storyboard",
     "check_models": "creative_director",
-    "series_recap": "creative_director",  # the story so far of a series (§45.43), on the task text_edit's model
+    "series_recap": "creative_director",  # the story so far of a series (§45.44), on the task text_edit's model
 }
 FAILURE = {
     "brainstorm": "The idea helper could not finish. Tap Try again.",

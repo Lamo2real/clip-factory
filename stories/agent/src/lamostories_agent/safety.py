@@ -17,7 +17,7 @@ from .guidance import Topic
 from .writer import DRIVING_ACTIONS, POST_FIELDS, VEHICLES
 from .writer import VEHICLE_ACTIONS as WRITER_VEHICLE_ACTIONS
 
-# §45.42: a car's speed_up and stall are driving moves the checker reads too (a car of the cast, a car prop with a
+# §45.43: a car's speed_up and stall are driving moves the checker reads too (a car of the cast, a car prop with a
 # castId, included). get_in and get_out are a character's actions, never driving ones.
 VEHICLE_ACTIONS = WRITER_VEHICLE_ACTIONS | frozenset({"speed_up", "stall"})
 
@@ -119,7 +119,7 @@ def items(script: dict[str, Any], post: dict[str, Any] | None) -> list[dict[str,
         if s.get("caption"):
             out.append({"ref": f"scene:{sid}", "where": f"Scene “{title}”", "text": s["caption"]})
         props = {str(p.get("propId")): p for p in s.get("props") or []}
-        drivers: dict[str, str] = {}  # a car's first rider drives it (§45.42)
+        drivers: dict[str, str] = {}  # a car's first rider drives it (§45.43)
         for a in s.get("actors") or []:
             if isinstance(a, dict) and isinstance(a.get("inCar"), str) and isinstance(a.get("castId"), str):
                 drivers.setdefault(a["inCar"], a["castId"])
@@ -180,7 +180,7 @@ def request(
 ) -> dict[str, Any]:
     """The checker's input. ``unchecked_advice``: a story the writer flagged ``teachesSafety`` with no checked topic;
     any driving advice in it is a problem (§45.11.5: it is held until the owner picks a topic or takes the advice
-    out). A story with a car of the cast (``cars``) and no checked topic is read the same way (§45.42)."""
+    out). A story with a car of the cast (``cars``) and no checked topic is read the same way (§45.43)."""
     body: dict[str, Any] = {
         "video": {"title": script.get("title"), "lengthSec": script.get("durationSec")},
         "items": [{k: v for k, v in it.items() if k != "where" and v is not None} for it in items(script, post)],

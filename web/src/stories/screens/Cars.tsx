@@ -1,4 +1,4 @@
-// Clips Funded › Cars (docs/CONTRACTS.md §45.41.10): the car characters in their own place in the rail, right under
+// Clips Funded › Cars (docs/CONTRACTS.md §45.42.10): the car characters in their own place in the rail, right under
 // Characters (the owner: "where are cars? i need cars as well"). The same characters as Characters (kind "car"), so
 // a car made anywhere is here: the cars as cards (each driving its own drawing), a big "Make a car"
 // (/stories/cars/new: drop the car's photos, the model on the chip, the cartoon cars to pick from, then a name) and

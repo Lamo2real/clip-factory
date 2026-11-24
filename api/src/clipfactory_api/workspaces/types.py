@@ -79,7 +79,7 @@ MAKERDEF_SK: Final = "MAKERDEF#"
 MAKERSTATUS_SK: Final = "MAKERSTATUS#"
 # §45.37 G6: what Lamo Stories used of Clip Factory's shared developer app, per platform and window (its own counters).
 SHAREUSE_SK: Final = "SHAREUSE#"
-# §45.43: a series, a folder of story videos with its story so far (SERIES#{seriesId}).
+# §45.44: a series, a folder of story videos with its story so far (SERIES#{seriesId}).
 SERIES_SK: Final = "SERIES#"
 ITEM_PREFIXES: Final = (
     IDEA_SK,

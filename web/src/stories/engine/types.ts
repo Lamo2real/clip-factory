@@ -43,7 +43,7 @@ export type CharacterKind = "person" | "car";
 
 export type CarBody = "hatchback" | "sedan" | "estate" | "suv" | "pickup" | "van" | "sports" | "compact";
 
-/** A car character's look (CONTRACTS §45.41): drawn by engine/car.ts in the side and the top view. */
+/** A car character's look (CONTRACTS §45.42): drawn by engine/car.ts in the side and the top view. */
 export interface CarLook {
   body: CarBody;
   /** 0.85..1.15 */
@@ -213,7 +213,7 @@ export interface CastMember {
   expressions?: Expression[];
 }
 
-/** A car of the cast (§45.42): never an actor; a car prop whose castId names it is drawn as it. */
+/** A car of the cast (§45.43): never an actor; a car prop whose castId names it is drawn as it. */
 export interface CarMember {
   characterId: string;
   name: string;

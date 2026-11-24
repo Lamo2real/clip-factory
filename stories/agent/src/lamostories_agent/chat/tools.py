@@ -581,7 +581,7 @@ class Toolbox:
 
     def propose_character(self, args: dict[str, Any]) -> dict[str, Any]:
         draft = args.get("character")
-        if isinstance(draft, dict) and draft.get("kind") == "car":  # §45.41: a car is made from its photos
+        if isinstance(draft, dict) and draft.get("kind") == "car":  # §45.42: a car is made from its photos
             raise ToolError(CARS_IN_CHARACTERS)
         if self.catalog is None:
             raise ToolError("Characters can't be drafted right now.")
@@ -647,6 +647,10 @@ class Toolbox:
         r = self._get(f"REFVID#{args.get('refId')}", "There is no reference video with that id.")
         if r.get("status") in ("uploading", "analyzing"):
             raise ToolError("That video is still uploading or being analyzed.")
+        if r.get("status") == "fetching":  # a link Clips Funded is still getting (§45.40)
+            raise ToolError("That video is still on its way.")
+        if r.get("status") == "fetch_failed":
+            raise ToolError("That video didn't arrive. Open it and tap Try again.")
         return self.offer("analyze_reference", "Analyze this video", {"refId": r["refId"]})
 
     def offer_open(self, args: dict[str, Any]) -> dict[str, Any]:

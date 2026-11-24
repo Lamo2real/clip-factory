@@ -1,4 +1,4 @@
-"""Series: folders of story videos and their story so far (docs/CONTRACTS.md §45.43, ADR-90).
+"""Series: folders of story videos and their story so far (docs/CONTRACTS.md §45.44, ADR-92).
 
 A series is a ``SERIES#`` item of the workspace: a name, a line, a cast and the story so far. Its episodes, their
 numbers, the counts and the cover are worked out on every read. Deleting a series never deletes a video; moving a

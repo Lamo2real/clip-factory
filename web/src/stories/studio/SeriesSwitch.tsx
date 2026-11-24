@@ -1,4 +1,4 @@
-// Clips Funded › series pieces the screens share (docs/CONTRACTS.md §45.43): the "All ▾" switch at the head of Ideas,
+// Clips Funded › series pieces the screens share (docs/CONTRACTS.md §45.44): the "All ▾" switch at the head of Ideas,
 // Production, Review and Library (which series a page shows: the address holds it, `?series=`, so nothing is ever
 // hidden by a remembered filter), the "Series:" field of Make a new video, and the Move button (a sheet with each
 // series and No series, then one confirm). The list of series is read once per workspace and shared by every piece on

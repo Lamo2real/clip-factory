@@ -1,4 +1,4 @@
-// Clips Funded car characters on the web (docs/CONTRACTS.md §45.41): New character asks "What are you making?" (two
+// Clips Funded car characters on the web (docs/CONTRACTS.md §45.42): New character asks "What are you making?" (two
 // tiles, ?kind=car picks the car), the car's photos (up to 6, drag and drop, Remove, one design upload and one PUT
 // each), Design it sends the photos as one 3-car design and "Pick one" shows the cars (tapping another puts it in the
 // editor, Make more sends the looks to stay away from), the car's own Looks, Face (none to start) and Moves, its

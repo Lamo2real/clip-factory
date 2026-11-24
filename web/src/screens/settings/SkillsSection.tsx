@@ -5,12 +5,14 @@ import { api } from "../../api/index.ts";
 import { ApiError, friendlyMessage } from "../../api/errors.ts";
 import { putFile } from "../../api/upload.ts";
 import type { Skill } from "../../api/types.ts";
+import { DropOverlay } from "../../components/DropOverlay.tsx";
 import { Icon } from "../../components/Icon.tsx";
 import { useToast } from "../../components/Toasts.tsx";
 import { A, Button, ErrorPanel, LinkButton, Pill, Progress, Skeleton } from "../../components/ui.tsx";
 import { burst, centerOf } from "../../lib/confetti.ts";
 import { shortDate } from "../../lib/format.ts";
 import { useLoad } from "../../lib/hooks.ts";
+import { useFileDrop } from "../../lib/useFileDrop.ts";
 import { skillPath } from "../../lib/router.ts";
 import { slug, uploadNameTaken } from "../../lib/skillName.ts";
 import { Apple, Panel, usePickAction } from "./parts.tsx";
@@ -34,6 +36,15 @@ export function skillFileProblem(file: File): { ext: "md" | "zip" } | { problem:
     return { problem: ext === "md" ? "That skill file is too big. Pick one under 1 MB." : "That .zip is too big. Pick one under 20 MB." };
   return { ext };
 }
+
+/** A skill file dropped on an upload panel (§45.40): null to take it, else why it is not a skill. */
+export function skillDropCheck(file: File): string | null {
+  const check = skillFileProblem(file);
+  return "problem" in check ? check.problem : null;
+}
+
+/** What a skill upload panel says while a file is dragged over it. */
+export const SKILL_DROP_WORDS = { file: "Drop it here", busy: "Still uploading. Wait a moment." } as const;
 
 /**
  * Where the skill came from and when it last changed, in words (no ".md" or "KB"): "Written by you · Changed 13 Nov",
@@ -89,6 +100,14 @@ export function SkillsSection() {
       }),
     );
 
+  // A SKILL.md or a .zip dropped anywhere on the panel is uploaded like the picker's (§45.40).
+  const drop = useFileDrop({
+    scope: "element",
+    checkFile: skillDropCheck,
+    onFiles: ([f]) => void upload(f!),
+    busy: progress !== null ? SKILL_DROP_WORDS.busy : null,
+  });
+
   async function upload(file: File) {
     pick.play();
     const check = skillFileProblem(file);
@@ -139,7 +158,8 @@ export function SkillsSection() {
           ) : null}
         </Apple>
       </Panel>
-      <Panel>
+      {/* The panel (parts.tsx Panel's own markup) is the drop zone. */}
+      <div className="apple-panel glass drop-host" {...drop.bind}>
         <Apple id="add-skill" wide>
           <input
             ref={input}
@@ -164,7 +184,8 @@ export function SkillsSection() {
           </div>
           {progress !== null ? <Progress value={progress} label="Skill upload progress" /> : null}
         </Apple>
-      </Panel>
+        <DropOverlay drop={drop} scope="element" words={SKILL_DROP_WORDS} />
+      </div>
     </>
   );
 }

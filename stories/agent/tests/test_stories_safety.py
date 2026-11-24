@@ -387,7 +387,7 @@ def test_the_last_look_s_problems_stand_until_a_new_look_and_are_never_added_twi
 
 @needs_deno
 def test_a_car_comedy_is_always_checked_for_driving_advice(tmp_path: Path) -> None:
-    """A comedy with a car of the cast (§45.42), no topic and the quality agent off: the fact check still runs, the
+    """A comedy with a car of the cast (§45.43), no topic and the quality agent off: the fact check still runs, the
     checker is told to report any driving advice (none of it is checked), and a caption that gives some holds the
     story until it is taken out or a checked topic is picked."""
     from lamostories_agent.safety import CAR_NOTE

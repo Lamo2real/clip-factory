@@ -4,7 +4,7 @@
 // version (a 409 means it changed elsewhere: a friendly Reload), Design with AI from words or its own pictures (a
 // redesign of this character, §45.34: which parts change is shown before "Use this" puts it in the editor), the
 // reference pictures, the AI picture when it is on (else the way to Settings › Video › Picture maker), and Delete.
-// New character first asks "What are you making?" (§45.41): a person (as above) or a car, made from up to 6 real
+// New character first asks "What are you making?" (§45.42): a person (as above) or a car, made from up to 6 real
 // photos into cartoon cars to pick from; a saved car keeps those photos as its pictures. A car is a character: the
 // gallery here shows the people and the cars (each car with its Car tag) and a "Make a car" next to New character.
 // Cars also have their own place in the rail, right under Characters (Cars, screens/Cars.tsx, which uses
@@ -58,7 +58,7 @@ export function EmptyCast({ title, children, action }: { title: string; children
   );
 }
 
-/** Where a character's pages live: a person's under Characters, a car's under Cars (§45.41.10). */
+/** Where a character's pages live: a person's under Characters, a car's under Cars (§45.42.10). */
 export type CastPlace = "characters" | "cars";
 
 /** Back to the cast: the studio kit's back link with its round glass orb (the same as Production's and Review's). */
@@ -130,7 +130,7 @@ function Gallery({ ws }: { ws: string }) {
   );
 }
 
-/** What a new character can be (§45.41): two big tiles at first, a small pick-one bar once one is picked. */
+/** What a new character can be (§45.42): two big tiles at first, a small pick-one bar once one is picked. */
 const KINDS: PickOption<CharacterKind>[] = [
   { value: "person", label: "A person" },
   { value: "car", label: "A car" },
@@ -148,7 +148,7 @@ function kindArt(kind: CharacterKind) {
   );
 }
 
-/** A saved car keeps the photos it was made from as its pictures (§45.41), best effort, up to the pictures limit, 3
+/** A saved car keeps the photos it was made from as its pictures (§45.42), best effort, up to the pictures limit, 3
  * at a time (as the photos box sends them). Gives how many did not stay. */
 async function keepPhotos(ws: string, characterId: string, photos: Photo[]): Promise<number> {
   const todo = photos.filter((x) => x.state === "ready" && x.file.size > 0).slice(0, CHAR_LIMITS.refs);
@@ -309,7 +309,7 @@ export function CharacterPage({ ws, characterId, place = "characters" }: { ws: s
   const aiOn = pictures === "stability" || pictures === "own-images";
   // An older pick of Amazon Nova Canvas reads ended, with one tap to Stability AI's pictures (§45.37 G7).
   const pictureEnded = pictures === "nova-canvas";
-  // The effects in videos come from another maker than the samples (§45.40): known only once the workspace is in.
+  // The effects in videos come from another maker than the samples (§45.41): known only once the workspace is in.
   const audio = ((workspace?.configuration ?? {}) as Partial<StoriesConfig>).providers?.audio;
   const otherMaker = workspace && audio ? audio !== "builtin-synth" : undefined;
   const useStability = async () => {

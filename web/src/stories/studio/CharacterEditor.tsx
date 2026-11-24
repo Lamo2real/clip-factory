@@ -1,8 +1,8 @@
 // Making and changing a character (docs/CONTRACTS.md §45.8, §45.16.5): a stepper of five parts (Looks, Face, Moves,
 // Sounds, Name and personality) beside a live preview drawn by the same engine as the videos. Every look choice the
-// rig has is here; each face and each move can be tried on the preview. Save stays at the bottom right. A car (§45.41)
+// rig has is here; each face and each move can be tried on the preview. Save stays at the bottom right. A car (§45.42)
 // has the same five parts and stepper with its own Looks, Face and Moves (CarParts.tsx) and a car preview; Sounds is
-// SoundsPart for both, where every sound can be heard first (§45.40).
+// SoundsPart for both, where every sound can be heard first (§45.41).
 import { useState, type ReactNode } from "react";
 import { isCar, type CarInput, type CharacterInput, type PersonInput } from "../api/types.ts";
 import { CATALOG } from "../engine/catalog.ts";

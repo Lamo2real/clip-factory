@@ -142,7 +142,7 @@ def characters(env: TaskEnv) -> list[dict[str, Any]]:
 
 def _cast_data(chars: Sequence[dict[str, Any]], first: Sequence[str] = ()) -> list[dict[str, Any]]:
     """The characters for DATA: ``first`` (an idea's or a series' cast) in its order, then the rest by name, the
-    people before the cars within each group, so the main person leads (§45.42). A car is described in words."""
+    people before the cars within each group, so the main person leads (§45.43). A car is described in words."""
     order = {str(c): n for n, c in enumerate(first)}
 
     def rank(c: dict[str, Any]) -> tuple[int, int, int, str]:
@@ -165,7 +165,7 @@ def _cast_data(chars: Sequence[dict[str, Any]], first: Sequence[str] = ()) -> li
 
 
 def load_series(env: TaskEnv, series_id: Any) -> dict[str, Any] | None:
-    """The series the ideas are for (§45.43), or None (no series, or it is gone)."""
+    """The series the ideas are for (§45.44), or None (no series, or it is gone)."""
     if not isinstance(series_id, str) or not series_id:
         return None
     item = env.svc.store.get(env.pk, f"SERIES#{series_id}")

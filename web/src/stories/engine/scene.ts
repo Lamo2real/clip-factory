@@ -1,7 +1,7 @@
 // Lamo Stories engine: one frame of one scene. Works out where every character and prop is, what the camera sees,
 // then draws the place, the props and characters in depth order, the weather and the bubbles. It works in the
 // frame's design px (frame.ts: the short side is 1080, positions 0..1 of the frame); the pen scales the result to
-// the script's own size. A car of the cast (§45.42) is a car prop with a castId, drawn as that car; a rider can get in
+// the script's own size. A car of the cast (§45.43) is a car prop with a castId, drawn as that car; a rider can get in
 // (walk to the door, step in, fade into the seat) and get out again.
 
 import { BUBBLE_R, bubbleSpan, drawBubble, type Bubble } from "./bubbles.ts";
@@ -120,7 +120,7 @@ interface SceneRT {
   seed: number;
   actors: ActorRT[];
   props: PropState[];
-  /** the cast's own cars by prop id (§45.42) */
+  /** the cast's own cars by prop id (§45.43) */
   carDraws: Map<string, CarDraw>;
   occupants: Map<string, ActorRT[]>;
   steering: Map<string, number>;
@@ -146,7 +146,7 @@ function beatsOf(scene: Scene, who: string): Beat[] {
 
 const MOVERS = new Set<PropAction>(["move", "skid", "spin", "stop", "bump", "speed_up", "stall"]);
 
-/** When the road may roll by a car (§45.42): from the moment its last rider is in (the last get_in's end) until the
+/** When the road may roll by a car (§45.43): from the moment its last rider is in (the last get_in's end) until the
  * first one starts getting out. With nobody getting in or out it is the whole scene. */
 interface RollWindow {
   from: number;
@@ -227,7 +227,7 @@ function doorOf(car: PropState, view: "side" | "top", seat: number, draw: CarDra
   return { door, seat: { x: seatX, y: Math.min(1, car.y + 0.004) }, away: { x: clamp(door.x - f * 0.08, 0.04, 0.96), y: door.y }, facing: f > 0 ? "left" : "right" };
 }
 
-/** A rider's beats split by where it is (§45.42): outside before it has got in, in its seat between, and outside again
+/** A rider's beats split by where it is (§45.43): outside before it has got in, in its seat between, and outside again
  * once it starts getting out. Getting in is a walk to the door over its first 60%, then a step into the seat; getting
  * out is a step out to the door over its first 40%, then a walk 0.08 away. Each part keeps the face it had. */
 function boardingBeats(beats: Beat[], b: Boarding, spots: { inDoor: ReturnType<typeof doorOf> | null; outDoor: ReturnType<typeof doorOf> | null }): { before: Beat[]; seated: Beat[]; after: Beat[] } {
@@ -279,7 +279,7 @@ export function sceneRuntime(s: StoryScript, prep: Prepared, index: number, t: n
     const beats = beatsOf(scene, actor.castId);
     pending.push({ actor, member, beats, geo, style: STYLES[member.movementStyle] ?? STYLES.bouncy, seed: hash(seed, actor.castId), board: actor.inCar ? boardingOf(beats) : null });
   }
-  // a car of the cast is drawn as its own car (§45.42)
+  // a car of the cast is drawn as its own car (§45.43)
   const carDraws = new Map<string, CarDraw>();
   for (const prop of scene.props) {
     const m = prop.kind === "car" && prop.castId ? s.cars?.[prop.castId] : undefined;
@@ -338,7 +338,7 @@ export function sceneRuntime(s: StoryScript, prep: Prepared, index: number, t: n
     const base = { actor: p.actor, member: p.member, geo: p.geo, style: p.style, seed: p.seed };
     let rt: ActorRT;
     if (car && p.board) {
-      // getting in or out (§45.42): outside, then in the seat, then outside again, cross-faded
+      // getting in or out (§45.43): outside, then in the seat, then outside again, cross-faded
       const carBeats = beatsOf(scene, car.prop.propId);
       const draw = carDraws.get(car.prop.propId);
       const seatNo = Math.max(0, pending.filter((q) => q.actor.inCar === p.actor.inCar).indexOf(p));

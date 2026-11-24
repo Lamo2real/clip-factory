@@ -53,7 +53,7 @@ EXPECTED: set[tuple[str, str]] = {
     ("GET", f"{W}/providers"),
     ("POST", f"{W}/providers/luma-ray/check"),  # §45.37 G7: Try it moved from Nova Reel (ended) to Luma AI Ray2
     ("GET", f"{W}/guidance"),
-    # §45.43: series (routes/series.py)
+    # §45.44: series (routes/series.py)
     ("GET", f"{W}/series"),
     ("POST", f"{W}/series"),
     ("GET", SERIES),

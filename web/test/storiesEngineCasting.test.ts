@@ -1,4 +1,4 @@
-// A person and a car in one story (docs/CONTRACTS.md §45.42): the script's own `cars`, drawn by the one car prop of a
+// A person and a car in one story (docs/CONTRACTS.md §45.43): the script's own `cars`, drawn by the one car prop of a
 // scene whose castId names it; the sentences validateScript gives the writer; getting in and out (outside, then in the
 // seat, the road still meanwhile); a honk's own sound; the shape budget; repairScript and a car's faces; a car
 // character's check; a seated rider's wave inside the window; and every car draft of the practice writer.
@@ -69,7 +69,7 @@ const boarding = (more: Beat[] = []): StoryScript =>
     beats: [{ at: 0.5, dur: 1.5, who: "c1", do: "get_in" }, { at: 2.4, dur: 1.2, who: "car1", do: "speed_up" }, ...more],
   });
 
-describe("the script's own cars (§45.42)", () => {
+describe("the script's own cars (§45.43)", () => {
   it("a person and a car of the cast validate, draw, and the car shows in its own paint", () => {
     const s = valid(boarding());
     expect(s.cars?.c2?.name).toBe("Rosso");
@@ -154,7 +154,7 @@ describe("the script's own cars (§45.42)", () => {
   });
 });
 
-describe("getting in and out (§45.42)", () => {
+describe("getting in and out (§45.43)", () => {
   const rt = (s: StoryScript, t: number) => inFrame(s, () => sceneRuntime(s, prepare(s), 0, t));
 
   it("get_in and get_out need inCar", () => {
@@ -340,7 +340,7 @@ describe("sounds and rules", () => {
   });
 });
 
-describe("a car character's check (§45.41)", () => {
+describe("a car character's check (§45.42)", () => {
   const car = () => ({ kind: "car", name: "Rosso", description: "A small red hatchback.", personality: "Eager.", traits: ["quick"], car: clone(DEFAULT_CAR), movementStyle: "zippy", voice: { style: "none", pitch: 1, noises: [], sfx: ["engine", "honk"] }, expressions: ["neutral"] });
   const sentence = (input: unknown): string => {
     const r = validateCharacter(input);

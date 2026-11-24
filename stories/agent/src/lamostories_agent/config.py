@@ -270,8 +270,10 @@ def public_ip(address: str) -> bool:
         return False
     if isinstance(ip, ipaddress.IPv6Address) and ip.ipv4_mapped is not None:
         ip = ip.ipv4_mapped
-    if isinstance(ip, ipaddress.IPv6Address) and ip in ipaddress.ip_network("fd00:ec2::/32"):
-        return False
+    if isinstance(ip, ipaddress.IPv6Address) and any(
+        ip in ipaddress.ip_network(n) for n in ("fd00:ec2::/32", "fec0::/10")
+    ):
+        return False  # the metadata service's IPv6 address, and the old site-local range (``is_global`` lets it by)
     return ip.is_global and not (ip.is_multicast or ip.is_reserved or ip.is_unspecified or ip.is_loopback)
 
 
