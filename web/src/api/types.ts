@@ -351,6 +351,9 @@ export interface MacHelper {
   loginRequest?: { action: MacLoginAction; at: string };
   /** While it needs him: the clip it stopped on (its Try again and It's on TikTok are there). */
   needsYouClipId?: string;
+  /** §47.11, only while it needs him: why, when the helper said. "login": a TikTok login problem and nothing else, so
+   * the Mac carries on by itself once it is logged in to the right TikTok again. */
+  needsYouCode?: "login";
   /** The first backlog clip's time, as the Mac's plan.js picks it (absent: not known, or none). */
   backlogAt?: string;
   /** The Mac holds auto-posting clips made before this time (its holdAutoBefore). */

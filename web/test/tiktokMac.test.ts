@@ -18,6 +18,7 @@ import {
   heldWords,
   helperLine,
   holdLine,
+  loginBackLine,
   inLineWords,
   loginLine,
   loginRequestLine,
@@ -33,6 +34,7 @@ import {
   MAC_LET_GO_PENDING,
   MAC_LET_GO_TOAST,
   MAC_LINK_EMPTY,
+  MAC_LOGIN_BACK_LINE,
   MAC_MAY_HAVE_POSTED,
   MAC_NO_LINK_BUTTON,
   MAC_NO_LINK_CONFIRM,
@@ -1117,5 +1119,38 @@ describe("when the Mac posts (the owner, 22 Nov: TikTok follows auto-posting)", 
     expect(whenLine(true, "2026-11-22T21:00:00Z", 14, now)).toMatch(/^Posts with auto-posting · next \S+ \d\d:\d\d · 14 waiting$/);
     expect(whenLine(true, null, 2, now)).toBe("Posts with auto-posting · 2 waiting");
     expect(whenLine(false, "2026-11-22T21:00:00Z", 0, now)).toBe("Posts when you tap Upload · 0 waiting");
+  });
+});
+
+describe("§47.11: a hold that is only a TikTok login", () => {
+  const at = "2026-11-24T08:28:43.000Z";
+  const held = helper(at, { state: "needs_you", reason: "TikTok logged your Mac out. Log in to TikTok again on your Mac.", needsYouClipId: "c1", needsYouCode: "login" });
+
+  it("the carry-on line comes only with needsYouCode login, under the needs-you status line", () => {
+    expect(MAC_LOGIN_BACK_LINE).toBe("Once you log in to your TikTok again, your Mac carries on by itself.");
+    expect(loginBackLine(held)).toBe(MAC_LOGIN_BACK_LINE);
+    expect(helperLine(held, NOW)).toBe("Your Mac needs you: TikTok logged your Mac out. Log in to TikTok again on your Mac.");
+    for (const other of [
+      { ...held, needsYouCode: undefined },
+      { ...held, needsYouCode: undefined, reason: "TikTok wants a check (a puzzle or a code). Do it on your Mac, then tap Try again." },
+      { ...held, state: "ok" as const },
+      { ...held, state: "paused" as const },
+    ]) {
+      expect(loginBackLine(other)).toBeNull();
+    }
+    expect(loginBackLine(null)).toBeNull();
+    expect(MAC_LOGIN_BACK_LINE).not.toMatch(/\b(API|cookie|session|handle|uid|Keychain|code)\b/i);
+  });
+
+  it("Settings' panel shows the line for a login hold and nothing for any other hold", async () => {
+    const { MacLoginBack } = await import("../src/screens/settings/TikTokMacBranch.tsx");
+    const { createElement } = await import("react");
+    const { renderToStaticMarkup } = await import("react-dom/server");
+    expect(renderToStaticMarkup(createElement(MacLoginBack, { helper: held }))).toBe(
+      `<p class="autopost__line" data-mac="login-back">${MAC_LOGIN_BACK_LINE.replace("'", "&#x27;")}</p>`,
+    );
+    for (const other of [{ ...held, needsYouCode: undefined }, { ...held, state: "ok" as const }, null]) {
+      expect(renderToStaticMarkup(createElement(MacLoginBack, { helper: other }))).toBe("");
+    }
   });
 });

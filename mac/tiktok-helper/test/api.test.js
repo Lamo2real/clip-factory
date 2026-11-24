@@ -139,3 +139,25 @@ test("the tick's token source renews before the token runs out, once at a time, 
   assert.equal(await tokens.renew("t2"), "t3"); // a 401 on the current one: refreshed
   assert.equal(n, 3);
 });
+
+test("§47.11: a login stop carries code login (only when given), and both lanes' logged-in calls their own path", async () => {
+  const { calls, fetchImpl } = fake();
+  const api = client("https://api.example", "tok", fetchImpl);
+  const ws = wsClient("https://api.example", "tok", "stories", fetchImpl);
+  await api.stopped("c1", "mac-1", "Out.", true, 2, "login");
+  await api.stopped("c1", "mac-1", "A puzzle.", true, 2);
+  await api.loggedIn("c1", "mac-1");
+  await ws.stopped("pj-1", "mac-1", "Out.", true, 2, "login");
+  await ws.loggedIn("pj-1", "mac-1");
+  const W = "https://api.example/v1/workspaces/stories";
+  assert.deepEqual(
+    calls.map((c) => [c.method, c.url, c.body]),
+    [
+      ["POST", "https://api.example/v1/clips/c1/tiktok/mac/stopped", { device: "mac-1", reason: "Out.", needsYou: true, attempt: 2, code: "login" }],
+      ["POST", "https://api.example/v1/clips/c1/tiktok/mac/stopped", { device: "mac-1", reason: "A puzzle.", needsYou: true, attempt: 2 }],
+      ["POST", "https://api.example/v1/clips/c1/tiktok/mac/logged-in", { device: "mac-1" }],
+      ["POST", `${W}/publishing/pj-1/mac/stopped`, { device: "mac-1", reason: "Out.", needsYou: true, attempt: 2, code: "login" }],
+      ["POST", `${W}/publishing/pj-1/mac/logged-in`, { device: "mac-1" }],
+    ]
+  );
+});

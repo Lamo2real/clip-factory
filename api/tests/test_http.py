@@ -296,6 +296,7 @@ def test_every_contract_route_is_registered() -> None:
         ("POST", "/v1/clips/X/tiktok/mac/step"),
         ("POST", "/v1/clips/X/tiktok/mac/done"),
         ("POST", "/v1/clips/X/tiktok/mac/stopped"),
+        ("POST", "/v1/clips/X/tiktok/mac/logged-in"),
         ("POST", "/v1/clips/X/tiktok/mac/retry"),
         ("DELETE", "/v1/clips/X/tiktok/mac"),
     }
