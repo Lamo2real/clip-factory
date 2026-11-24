@@ -9,7 +9,7 @@ import fs from "node:fs";
 import path from "node:path";
 
 import { ApiError, client, wsClient } from "./api.js";
-import { SignInNeeded, accessToken, appConfig } from "./auth.js";
+import { SignInNeeded, appConfig, freshTokens, tokenSource } from "./auth.js";
 import * as cdp from "./cdp.js";
 import * as chrome from "./chrome.js";
 import { ask, frame, yourTurn } from "./frame.js";
@@ -640,7 +640,7 @@ async function tidyWs({ lane, queue }) {
  * B. Each Clips Funded workspace's lane: its queue, what it would do, and its check-in. Read once per tick; a
  * failure to list the workspaces skips them all, and one lane's error skips only that lane.
  */
-async function wsLanes({ api, state, settings: given, config, token, now }) {
+async function wsLanes({ api, state, settings: given, config, tokens, now }) {
   let settings = given;
   let list;
   try {
@@ -653,7 +653,7 @@ async function wsLanes({ api, state, settings: given, config, token, now }) {
   for (const w of list) {
     if (!w || w.workspaceType !== "stories" || !WS_ID.test(String(w.workspaceId || ""))) continue;
     try {
-      const lane = wsLane(state, w.workspaceId, wsClient(config.apiUrl, token, w.workspaceId));
+      const lane = wsLane(state, w.workspaceId, wsClient(config.apiUrl, tokens, w.workspaceId));
       const status = (await lane.api.queue()) || {};
       const queue = (Array.isArray(status.queue) ? status.queue : []).filter((j) => j && j.publishingJobId).map(normalizeWsJob);
       const target = at(status.account?.handle);
@@ -822,9 +822,11 @@ export async function tick() {
     let settings = loadSettings();
     const state = loadState();
     const config = await appConfig();
-    let token;
+    // One token source for the whole tick: a login wait (20 minutes) outlasts an access token (15), so every call
+    // gets a fresh one when it needs it (24 Nov 2026: the beats and the stop of a tick that waited sent 401s).
+    const tokens = tokenSource(() => freshTokens(config));
     try {
-      token = await accessToken(config);
+      await tokens.get();
     } catch (e) {
       if (e instanceof SignInNeeded) {
         if (state.lastSignInNotice !== new Date().toISOString().slice(0, 10)) {
@@ -837,7 +839,7 @@ export async function tick() {
       }
       throw e;
     }
-    const api = client(config.apiUrl, token);
+    const api = client(config.apiUrl, tokens);
     const clips = clipsLane(state, api);
     // A. Clip Factory's lane, as in 1.1.0.
     const { on, helper, queue = [] } = await api.queue();
@@ -917,7 +919,7 @@ export async function tick() {
     // B. Clips Funded's lanes: their queues and check-ins (never in the way of Clip Factory's).
     let lanes = [];
     try {
-      lanes = await wsLanes({ api, state, settings, config, token, now: new Date() });
+      lanes = await wsLanes({ api, state, settings, config, tokens, now: new Date() });
     } catch (e) {
       log("ws.error", { part: "lanes", error: words(e) });
     }

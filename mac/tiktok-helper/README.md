@@ -163,8 +163,9 @@ Change both together.
 
 `setup` shows the helper's Chrome window, the only time it is shown. In it he logs in to TikTok (the phone's QR code
 is easiest) and signs in to Clip Factory. The helper keeps that Clip Factory sign-in in the login keychain
-("Clip Factory TikTok helper") and refreshes it itself. `setup` waits for a running tick and holds `run.lock`, so a
-tick never touches the window.
+("Clip Factory TikTok helper") and refreshes it itself: since 1.2.1 every call gets a fresh access token when it needs
+one (they last 15 minutes, a login wait up to 20), so the stop after a long wait still reaches Clip Factory. `setup`
+waits for a running tick and holds `run.lock`, so a tick never touches the window.
 
 ## Clips Funded (1.2.0, §47.10)
 

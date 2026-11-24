@@ -21,7 +21,7 @@
 import { client, wsClient } from "./api.js";
 import { frame, yourTurn } from "./frame.js";
 import { askAndSaveLogin, forgetLogin, hasLogin, loginWindow } from "./login.js";
-import { accessToken, appConfig, readRefreshToken, saveRefreshToken } from "./auth.js";
+import { accessToken, appConfig, freshTokens, readRefreshToken, saveRefreshToken, tokenSource } from "./auth.js";
 import * as chrome from "./chrome.js";
 import { WS_ID, clipsLane, normalizeWsJob, wsFileName, wsLane } from "./lanes.js";
 import { event, log } from "./notify.js";
@@ -37,6 +37,16 @@ import { clipsTarget, lookHeadless, tick, windowDeps, withLock } from "./run.js"
 import { at, sameAccount } from "./whoami.js";
 
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
+/**
+ * The Clip Factory sign-in for a command: every call gets a fresh token when it needs one (auth.js tokenSource), since
+ * setup --workspace can wait 20 minutes for a login, longer than one access token (15). The first token is fetched
+ * here, so a sign-in problem shows at once, as before.
+ */
+async function signIn(config) {
+  const tokens = tokenSource(() => freshTokens(config));
+  await tokens.get();
+  return tokens;
+}
 
 async function setup() {
   const config = await appConfig();
@@ -90,10 +100,10 @@ async function setup() {
 async function wsContext(workspaceId) {
   if (!WS_ID.test(String(workspaceId || ""))) throw new Error("--workspace takes a Clips Funded workspace id (like stories).");
   const config = await appConfig();
-  const token = await accessToken(config);
-  const api = client(config.apiUrl, token);
+  const tokens = await signIn(config);
+  const api = client(config.apiUrl, tokens);
   const state = loadState();
-  const lane = wsLane(state, workspaceId, wsClient(config.apiUrl, token, workspaceId));
+  const lane = wsLane(state, workspaceId, wsClient(config.apiUrl, tokens, workspaceId));
   const status = (await lane.api.queue()) || {};
   return { api, state, lane, status, target: at(status.account?.handle) };
 }
@@ -123,7 +133,7 @@ async function whoami(workspaceId) {
       ({ lane, target } = await wsContext(workspaceId));
     } else {
       const config = await appConfig();
-      const api = client(config.apiUrl, await accessToken(config));
+      const api = client(config.apiUrl, await signIn(config));
       const state = loadState();
       lane = clipsLane(state, api);
       target = await clipsTarget(api, state);
@@ -199,7 +209,7 @@ async function probe(clipId) {
 
 async function clipsProbe(clipId) {
   const config = await appConfig();
-  const api = client(config.apiUrl, await accessToken(config));
+  const api = client(config.apiUrl, await signIn(config));
   const state = loadState();
   const lane = clipsLane(state, api);
   const target = await clipsTarget(api, state);
@@ -264,8 +274,8 @@ async function status() {
   if (out.signedIn) {
     try {
       const config = await appConfig();
-      const token = await accessToken(config);
-      const api = client(config.apiUrl, token);
+      const tokens = await signIn(config);
+      const api = client(config.apiUrl, tokens);
       const q = await api.queue();
       out.on = q.on;
       out.helper = q.helper;
@@ -282,7 +292,7 @@ async function status() {
           .filter(([, v]) => v.step !== "done")
           .map(([publishingJobId, v]) => ({ publishingJobId, ...v, baseline: undefined }));
         try {
-          const s = await wsClient(config.apiUrl, token, w.workspaceId).queue();
+          const s = await wsClient(config.apiUrl, tokens, w.workspaceId).queue();
           lane.on = s.on;
           lane.helper = s.helper;
           lane.target = s.account?.handle ?? null;

@@ -12,7 +12,9 @@ const { LOGIN_WINDOW_MS, MAX_TRIES_PER_DAY, QR_URL, countTry, loginOutcome, logi
 );
 const { wsLane } = await import("../src/lanes.js");
 const { addSecret, event, holdsSecret, log, scrub } = await import("../src/notify.js");
-const { ApiError, client } = await import("../src/api.js");
+const { ApiError, client, wsClient } = await import("../src/api.js");
+const { tokenSource } = await import("../src/auth.js");
+const { startBeats } = await import("../src/beats.js");
 
 const NOW = Date.parse("2026-11-22T20:00:00Z");
 const ago = (h) => new Date(NOW - h * 3600_000).toISOString();
@@ -212,6 +214,56 @@ test("no login within 20 minutes, or the window closed: nothing pinned, the wind
   const none = fakeMac();
   assert.deepEqual(await loginWindow(lane(), null, none.d), { ok: false, outcome: "no_account" });
   assert.equal(none.log.opened.length, 0);
+});
+
+test("a 20-minute login wait outlasts its 15-minute token: every beat and the needs-you stop go with a renewed one", async (t) => {
+  // 24 Nov 2026: one token per tick sent 401s from minute 15, so the stop never reached Clip Factory, the job stayed
+  // the Mac's, and the next tick opened the login window again, every ~21 minutes all night. The clock is faked.
+  t.mock.timers.enable({ apis: ["Date", "setInterval"], now: 0 });
+  const { d } = fakeMac({ logins: ["none"] }); // he never logs in
+  d.now = () => Date.now();
+  d.sleep = async (ms) => t.mock.timers.tick(ms);
+  // Cognito: each refresh gives a new access token, good for 15 minutes (infra/modules/auth access_token_validity).
+  const issued = new Map();
+  const tokens = tokenSource(async () => {
+    const token = `access-${issued.size + 1}`;
+    issued.set(token, Date.now());
+    return { token, expiresIn: 900 };
+  });
+  // API Gateway's JWT authorizer: a token 15 minutes old is refused with 401 before Clip Factory sees the call.
+  const calls = [];
+  const fetchImpl = async (url, init) => {
+    const token = init.headers.Authorization.slice("Bearer ".length);
+    const ok = issued.has(token) && Date.now() - issued.get(token) < 15 * 60_000;
+    calls.push({ at: Date.now(), path: new URL(url).pathname, token, status: ok ? 200 : 401, body: init.body ? JSON.parse(init.body) : undefined });
+    return { status: ok ? 200 : 401, ok, json: async () => (ok ? { job: {} } : { message: "Unauthorized" }) };
+  };
+  const api = wsClient("https://api.example", tokens, "stories", fetchImpl);
+  const first = await tokens.get(); // the tick's sign-in, at minute 0
+  const state = { device: "mac-1", ledger: { "pj-1": { sentStep: "opening" } } };
+  const beat = startBeats({ api, state, job: { clipId: "pj-1", attempt: 1 }, queue: [], log: () => {}, record: () => {} });
+  const result = await loginWindow(lane(), "@clips.funded", d);
+  await beat.stop();
+  assert.deepEqual([result.ok, result.outcome], [false, "timeout"]);
+  assert.ok(Date.now() >= LOGIN_WINDOW_MS);
+  // run.js stopped(): the job stops with needs-you, so the next tick holds it instead of opening the window again.
+  await api.stopped("pj-1", "mac-1", "TikTok logged your Mac out. Tap Log in on my Mac.", true, 1);
+  const stop = calls.at(-1);
+  assert.equal(stop.path, "/v1/workspaces/stories/publishing/pj-1/mac/stopped");
+  assert.deepEqual([stop.status, stop.body.needsYou, stop.body.attempt], [200, true, 1]);
+  assert.notEqual(stop.token, first);
+  assert.ok(issued.get(stop.token) >= 13 * 60_000, "renewed 2 minutes before the first one ran out");
+  // Every minute's beat got through as well: nothing was refused, and the token was renewed once.
+  const beats = calls.filter((c) => c.path.endsWith("/mac/step"));
+  assert.ok(beats.length >= 19, `${beats.length} beats`);
+  assert.ok(beats.some((c) => c.at > 15 * 60_000));
+  assert.deepEqual(calls.filter((c) => c.status !== 200), []);
+  assert.equal(issued.size, 2);
+  // 1.2.0's one token for the whole tick: that same stop was refused.
+  const before = await wsClient("https://api.example", first, "stories", fetchImpl)
+    .stopped("pj-1", "mac-1", "TikTok logged your Mac out. Tap Log in on my Mac.", true, 1)
+    .catch((e) => e);
+  assert.deepEqual([before instanceof ApiError, before.status], [true, 401]);
 });
 
 test("a Clips Funded lane has no saved password: none is read, none is asked for", async () => {
