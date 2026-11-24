@@ -40,8 +40,8 @@ Order everywhere: **YouTube, TikTok, Instagram, Facebook, X** (`SETUP_ORDER = ST
   then (only what the step needs): **Open {site}** (opens the exact page in a new tab, `rel="noopener noreferrer"`),
   **Copy** chips (label + value in mono, one tap copies, leaf-green tick "Copied!", works without clipboard permission via a
   select-all fallback), **paste boxes** (with a Paste button, format check as you type, friendly error under the box),
-  an **upload box** (TikTok verification file), "**If you see** X, do Y" hints (for anything the research marks
-  uncertain), and **I did this** (green, ≥ 48 px). Auto steps (keys saved, connected, checked) tick themselves.
+  an **upload box** (TikTok verification file), "**If you see** X, do Y" hints in one shut "If you see…" fold (for anything
+  the research marks uncertain), and **I did this** (green, ≥ 48 px). Auto steps (keys saved, connected, checked) tick themselves.
 * **One main vermilion button per screen**: the current step's main action (its **Open** button, else **Save keys**, else
   **Connect {Platform}**, else **Connect again** when `needs_reconnect`). Everything else is green/glass.
 * **Connect** runs OAuth **in the same tab**: the page navigates to the platform, the owner approves, the hooks API
@@ -53,9 +53,19 @@ Order everywhere: **YouTube, TikTok, Instagram, Facebook, X** (`SETUP_ORDER = ST
   (`useConnecting.ts`) stops by itself once the platform page has opened: when the account changes (live `setup`
   event), when the owner comes back to the window, or when the page is shown again from the browser's cache (Back).
   While the platform address is still being fetched only an error or an account change stops it.
+  A Connect again that comes back cancelled while the account is still connected shows the calm card "Still
+  connected as {name}. Nothing changed." (`stillConnectedLine`), with no "Not connected yet" and no "Go to step". A
+  page that needs reconnecting scrolls to When it's done and focuses Connect again. Typed keys live on the platform
+  page (one draft each), so folding the step keeps them until Save keys. When it's done says when posts stay private
+  (`doneLine`): Facebook "Works now, posts stay private."; TikTok names Your Mac posts TikTok, with a glass **Open
+  Your Mac posts TikTok** while it is off. A TikTok verification file renamed by a second download ("tiktokX (1).txt",
+  "TikTokX.TXT") is uploaded under its real name; other renamed copies are told to download it again without renaming.
 * **Choose** (Meta with several Pages / Instagram accounts): a picker of big avatar cards; tapping one connects it.
 * **Disconnect**: tapping shows an 8 s toast "Disconnecting YouTube… Undo"; the `DELETE` is sent only when the toast
-  ends (§12.4: undo instead of a scary dialog). **Connect again** keeps the keys.
+  ends (§12.4: undo instead of a scary dialog). **Connect again** keeps the keys. The pending disconnect is kept per
+  platform outside the page: coming back during the Undo still says "Disconnecting…" with Disconnect off, and the page
+  reads its setup again when the disconnect ends or is undone. When the setup list fails with nothing kept, only the
+  error and Try again show (no "Checking…" cards).
 * ~~**Home card** "Set up posting · 2 of 5 ready"~~: replaced by the floating setup to-do list (§17.13), which shows
   on every signed-in page, so the owner never sees two competing lists. `screens/home/SetupCard.tsx` is removed.
 * **Review › Upload** with TikTok chosen: the **Post to TikTok** sheet (§17.8) must be filled before Upload is enabled.
@@ -613,7 +623,7 @@ are shown and none is on by default; Commercial content is off until the creator
   With Branded content ticked, Only me and Followers stay in the list greyed (`DropdownOption.disabled`: skipped by
   the keys, a tap does nothing, `aria-disabled`) with TikTok's line "Branded content visibility cannot be set to
   private." When `SELF_ONLY` is the only option it is the one choice, and the line "TikTok keeps posts private until it
-  approves your app." shows under it. When Branded content leaves nothing: "Branded content can't be Only me. Turn off
+  approves Clip Factory." shows under it. When Branded content leaves nothing: "Branded content can't be Only me. Turn off
   Branded content." The sheet's hint reads "Pick who can see it to turn on Upload."
 * **Commercial content (TikTok's audit rules, 2026-11-21).** Shared by the sheet and the TikTok row
   (`screens/review/TikTokCommercial.tsx`). Under the two ticks one line says the label: nothing ticked "Pick Your
@@ -640,10 +650,12 @@ so its backdrop covers the whole screen (tab bar, sidebar and Ask included; toas
 error shows) even though the card that opens it is
 glass (`backdrop-filter`); a page keeps no transform of its own (pages have no entrance, §20.16). It
 is a real modal: focus moves in once on open (typing in the caption never loses the caret), Tab and Shift+Tab wrap
-inside it, Escape closes it, and on close the focus goes back to the Upload that opened it. A clip longer than the
+inside it, Escape closes it, and on close the focus goes back to the Upload that opened it. After a `Sheet` closes,
+the next click within 500 ms and 40 px of the closing tap is swallowed (a double tap never lands on what was under
+the button); keyboard closes and clicks elsewhere go through. A clip longer than the
 creator's `maxDurationSec` (a limit of 0 means TikTok did not say: it does not block, the publisher checks again)
-or a creator-info error never leaves a dead end: the callout says what to do next ("… To upload it to your other
-places now, turn TikTok off above and tap Upload.", §33), and the error
+or a creator-info error never leaves a dead end: the callout says what to do next ("Too long for TikTok. To post it
+elsewhere, turn TikTok off above and tap Upload."; a creator-info error: "… Tap Ask TikTok again.", §33), and the error
 callout also has **Ask TikTok again**, which fetches the creator info again.
 
 ### 17.9 Infra (Terraform + scripts)

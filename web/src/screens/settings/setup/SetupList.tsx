@@ -31,82 +31,98 @@ export function SetupList() {
   const rows = data && me ? todoRows(data.platforms, skipped) : null;
   const count = rows ? todoCount(rows) : null;
   const askingRow = asking ? rows?.find((r) => r.platform === asking) : undefined;
+  // GET /v1/setup failed with nothing kept: only the error and its Try again, never a "Checking…" that never ends.
+  const failed = !!error && !data;
   return (
     <>
-      <Panel className="setup-summary">
-        <Apple
-          id="setup-posting"
-          wide
-          title={data ? `${ready} of 5 ready` : "Checking…"}
-          aside={
-            <ProgressRing value={ready / 5} size={58} label={`${ready} of 5 platforms ready`} className="setup-summary__ring">
-              {ready}/5
-            </ProgressRing>
-          }
-        />
-      </Panel>
-      <Panel className="setup-todo-apple">
-        <Apple
-          id="setup-todo"
-          wide
-          title={
-            !rows || !count
-              ? "Checking…"
-              : todoVisible(rows)
-                ? `On your screen: ${count.finished} of ${count.total} done`
-                : "All done: the list is gone"
-          }
-        />
-      </Panel>
-      {error && !data ? <ErrorPanel message={error} onRetry={() => void reload()} /> : null}
-      <ul className="setup-cards" aria-label="The five platforms">
-        {SETUP_ORDER.map((p) => {
-          const guide = GUIDES[p];
-          const setup = data?.platforms.find((x) => x.platform === p);
-          const progress = progressOf(guide, setup);
-          const row = rows?.find((r) => r.platform === p);
-          const isSkipped = row?.state === "skipped";
-          return (
-            // One glass card per platform: the link, and under a hairline its Skip or Un-skip line (§17.13).
-            <li key={p} className={`setup-card-wrap${data ? " glass" : ""}`}>
-              {data ? (
-                <A href={setupPath(p)} className={`setup-card${setup?.ready ? " is-ready" : ""}${isSkipped ? " is-skipped" : ""}`} data-platform={p} data-help={`setup-${p}`}>
-                  <span className={`setup-card__mark is-${p}`}>
-                    <PlatformMark platform={p} size={28} />
-                  </span>
-                  <span className="setup-card__text">
-                    <span className="setup-card__name">{guide.name}</span>
-                    {/* Skipped says so here too, the same word as the floating list. */}
-                    <span className="setup-card__state">{isSkipped && row ? row.line : stateLine(guide, setup)}</span>
-                    <span className="setup-card__time">{timeLine(guide)}</span>
-                  </span>
-                  <ProgressRing value={progress.fraction} size={48} stroke={6} label={`${guide.name} progress`}>
-                    {setup?.ready ? <Icon name="check" size={18} /> : null}
-                  </ProgressRing>
-                  <Icon name="chevronRight" size={20} className="icon setup-card__go" />
-                </A>
-              ) : (
-                <Skeleton className="setup-card-skel" />
-              )}
-              {row && isSkipped ? (
-                <p className="setup-card__skip" data-skipped={p}>
-                  <span>{skippedNote(p, row.connected)}</span>
-                  <Button size="sm" variant="glass" act="undo" aria-label={`Un-skip ${guide.name}`} onClick={() => unskip(p)}>
-                    Un-skip
-                  </Button>
-                </p>
-              ) : row && !isFinished(row) ? (
-                <p className="setup-card__skip" data-skip={p}>
-                  <span>Want to do it later?</span>
-                  <Button size="sm" variant="ghost" aria-label={`Skip ${guide.name}`} onClick={() => setAsking(p)}>
-                    Skip
-                  </Button>
-                </p>
-              ) : null}
-            </li>
-          );
-        })}
-      </ul>
+      {failed ? null : (
+        <Panel className="setup-summary">
+          <Apple
+            id="setup-posting"
+            wide
+            title={data ? `${ready} of 5 ready` : "Checking…"}
+            aside={
+              <ProgressRing value={ready / 5} size={58} label={`${ready} of 5 platforms ready`} className="setup-summary__ring">
+                {ready}/5
+              </ProgressRing>
+            }
+          />
+        </Panel>
+      )}
+      {failed ? null : (
+        <Panel className="setup-todo-apple">
+          <Apple
+            id="setup-todo"
+            wide
+            title={
+              !rows || !count
+                ? "Checking…"
+                : todoVisible(rows)
+                  ? `On your screen: ${count.finished} of ${count.total} done`
+                  : "All done: the list is gone"
+            }
+          />
+        </Panel>
+      )}
+      {failed && error ? <ErrorPanel message={error} onRetry={() => void reload()} /> : null}
+      {failed ? null : (
+        <ul className="setup-cards" aria-label="The five platforms">
+          {SETUP_ORDER.map((p) => {
+            const guide = GUIDES[p];
+            const setup = data?.platforms.find((x) => x.platform === p);
+            const progress = progressOf(guide, setup);
+            const row = rows?.find((r) => r.platform === p);
+            const isSkipped = row?.state === "skipped";
+            return (
+              // One glass card per platform: the link, and under a hairline its Skip or Un-skip line (§17.13).
+              <li key={p} className={`setup-card-wrap${data ? " glass" : ""}`}>
+                {data ? (
+                  <A href={setupPath(p)} className={`setup-card${setup?.ready ? " is-ready" : ""}${isSkipped ? " is-skipped" : ""}`} data-platform={p} data-help={`setup-${p}`}>
+                    <span className={`setup-card__mark is-${p}`}>
+                      <PlatformMark platform={p} size={28} />
+                    </span>
+                    <span className="setup-card__text">
+                      <span className="setup-card__name">{guide.name}</span>
+                      {/* Skipped says so here too, the same word as the floating list. */}
+                      <span className="setup-card__state">{isSkipped && row ? row.line : stateLine(guide, setup)}</span>
+                      <span className="setup-card__time">{timeLine(guide)}</span>
+                    </span>
+                    <ProgressRing value={progress.fraction} size={48} stroke={6} label={`${guide.name} progress`}>
+                      {setup?.ready ? <Icon name="check" size={18} /> : null}
+                    </ProgressRing>
+                    {/* What a tap does, in a word, while there is something to do (the whole card is the link). */}
+                    {setup?.ready || isSkipped ? (
+                      <Icon name="chevronRight" size={20} className="icon setup-card__go" />
+                    ) : (
+                      <span className="setup-card__go" style={{ display: "inline-flex", alignItems: "center", gap: 2, fontWeight: 700, whiteSpace: "nowrap" }}>
+                        Set up
+                        <Icon name="chevronRight" size={20} />
+                      </span>
+                    )}
+                  </A>
+                ) : (
+                  <Skeleton className="setup-card-skel" />
+                )}
+                {row && isSkipped ? (
+                  <p className="setup-card__skip" data-skipped={p}>
+                    <span>{skippedNote(p, row.connected)}</span>
+                    <Button size="sm" variant="glass" act="undo" aria-label={`Un-skip ${guide.name}`} onClick={() => unskip(p)}>
+                      Un-skip
+                    </Button>
+                  </p>
+                ) : row && !isFinished(row) ? (
+                  <p className="setup-card__skip" data-skip={p}>
+                    <span>Want to do it later?</span>
+                    <Button size="sm" variant="ghost" aria-label={`Skip ${guide.name}`} onClick={() => setAsking(p)}>
+                      Skip
+                    </Button>
+                  </p>
+                ) : null}
+              </li>
+            );
+          })}
+        </ul>
+      )}
       <CrCardPart />
       {asking ? (
         <SkipConfirm

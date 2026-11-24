@@ -20,7 +20,7 @@ export const KEEP_IT_HERE = "Keep it here. Upload turns on by itself when it can
 export const COULDNT_CHECK = "I couldn't check these:";
 export const READ_THEM = "I read them. They're OK";
 export const making = (name: string) => `Making a ${name} copy… It shows here in about 3 minutes.`;
-export const copyReady = (name: string) => `The ${name} copy is ready, right below. Upload the copy to earn money. You can throw this one away.`;
+export const copyReady = (name: string) => `The ${name} copy is ready, right below. Upload the copy to earn money.`;
 export const copyDone = (name: string) => `The ${name} copy is uploaded. You can throw this one away.`;
 
 /** The copy's line (null when there is none to show). */

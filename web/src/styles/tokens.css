@@ -213,6 +213,18 @@
      each one reads this token and none adds its own number, so their top edges stay on one horizontal line. */
   --titlebar-h: 0px;
   --top-safe: max(env(safe-area-inset-top), var(--titlebar-h));
+  /* The phone's own status bar (the clock, the Dynamic Island, the signal) alone: 0 everywhere else. An installed
+     iPhone app runs edge to edge (index.html: black-translucent), so the page's backdrop shows under it and only the
+     status bar's scrim and glass strip (layout.css .app::after and ::before, Clips Funded's .stories-app::after and
+     .st-frame::before) are as tall as this. */
+  --status-bar-h: env(safe-area-inset-top);
+  /* What lies in the status bar (its scrim, its glass strip) is held under the clock and eases out over the bar's last
+     quarter, so it has no edge to see: a mask, over a fill and a blur alike. */
+  --status-bar-fade: linear-gradient(#000 75%, rgb(0 0 0 / 0.9) 80%, rgb(0 0 0 / 0.65) 85%, rgb(0 0 0 / 0.35) 90%, rgb(0 0 0 / 0.1) 95%, transparent);
+  /* Once the page has scrolled, a strip of the app's glass lies in the status bar (layout.css .app::before): what
+     slides up under the white clock is blurred and veiled green as if it were white, the lightest thing a page can put
+     there, so the clock keeps AA over any card or button, in every look (lib/background.ts statusStripVeil). */
+  --status-strip-veil: 0.66;
   --top-line: calc(var(--top-safe) + 12px);
 
   /* The older names: a panel's drop and a floating layer's drop, from the light above (ADR-87). */

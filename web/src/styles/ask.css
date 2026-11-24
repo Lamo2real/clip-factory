@@ -475,6 +475,8 @@
   display: grid;
   place-items: center;
   padding: 24px;
+  /* Below the phone's status bar (the page runs under it): its clock never lies over the editor's head. */
+  padding-top: max(24px, calc(var(--top-safe) + 8px));
   background: rgb(var(--shadow-rgb) / 0.62);
   animation: mk-in 220ms var(--ease-out) both;
 }

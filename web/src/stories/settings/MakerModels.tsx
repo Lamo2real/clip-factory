@@ -15,6 +15,7 @@ import { CUSTOM_MODEL_KEY, HOST_LABEL, keySavedFor, MAKER_HOSTS, MAX_CUSTOM_MAKE
 import { CheckModels } from "./AiSection.tsx";
 import { Btn, cheer, Chip, makerWho, MODEL_STATUS, money, Note, SetCard, SetPick, SetSelect, SetSwitch, SIcon, whenText } from "./bits.tsx";
 import { regionWords } from "./makerFile.ts";
+import { StTech } from "../ui.tsx";
 import { DEFAULT_REGION, keyFor, modelIdProblem, regionProblem, REGIONS } from "./OwnModels.tsx";
 
 const KINDS: { value: MakerKind; label: string; line: string }[] = [
@@ -237,7 +238,6 @@ function MakerForm({ ws, start, kind, taken, onSaved, onCancel }: { ws: string; 
           />
         )}
       </span>
-      {d.kind === "audio" ? <Note tone="sky">Sound models make sound effects and music only. Clips Funded never asks them for a voice.</Note> : null}
       <span className="st-stg-field">
         <span className="st-stg-label">Where it runs</span>
         <SetPick<MakerHost>
@@ -272,9 +272,9 @@ function MakerForm({ ws, start, kind, taken, onSaved, onCancel }: { ws: string; 
           ) : null}
         </span>
       ) : (
-        <p className="st-stg-small">It uses your {HOST_LABEL[d.host]} key, saved under Prices and keys below. The key is never shown again.</p>
+        <p className="st-stg-small">It uses your {HOST_LABEL[d.host]} key from Prices and keys below.</p>
       )}
-      <SetSwitch label="I know its price" description="Without a price, its use is counted but no cost is worked out." checked={d.priced} onChange={(v) => set({ priced: v })} />
+      <SetSwitch label="I know its price" description="Without one, no cost is shown." checked={d.priced} onChange={(v) => set({ priced: v })} />
       {d.priced ? (
         <div className="st-stg-price__form">
           <Field id={`${id}-price`} label={`Price for ${UNIT_OF[d.kind].per}`}>
@@ -340,7 +340,7 @@ function MakerRow({ ws, m, keySaved, onChanged, onEdit }: { ws: string; m: Maker
       </div>
       <p className="st-stg-small">
         Made by {makerWho(m)}
-        {regionWords(m.region) ? ` · ${regionWords(m.region)}` : ""} · <code className="st-stg-code">{m.modelId}</code>
+        {regionWords(m.region) ? ` · ${regionWords(m.region)}` : ""}
       </p>
       {m.price ? (
         <p className="st-stg-small">
@@ -356,6 +356,12 @@ function MakerRow({ ws, m, keySaved, onChanged, onEdit }: { ws: string; m: Maker
         {m.statusLine}
         {m.checkedAt ? ` (${whenText(m.checkedAt)})` : ""}
       </p>
+      {/* Its exact ID, one tap away (§45.36 E14). */}
+      <StTech className="st-stg-tech">
+        <span>
+          {keyed ? "Model name" : "Model ID"} <code className="st-stg-code">{m.modelId}</code>
+        </span>
+      </StTech>
       {refused ? (
         <Note tone="coral" role="alert">
           {refused}
@@ -431,7 +437,7 @@ export function MakerModels({
       title="Add a picture, video or sound model"
       icon="plus"
       id="add-a-maker-model"
-      lede="Use another picture, video or sound model, with no new version of the app: from Amazon Bedrock, an OpenAI-compatible service (pictures) or ElevenLabs (sound). Then check that this account may use it."
+      lede="Use another picture, video or sound model. Add it, then check it."
       actions={
         open === null ? (
           <>
@@ -439,7 +445,7 @@ export function MakerModels({
               <SIcon name="plus" size={20} />
               Add a model
             </Btn>
-            {checkable.length ? <CheckModels ws={ws} count={checkable.length} makers={checkable} onDone={onChanged} /> : null}
+            {checkable.length ? <CheckModels ws={ws} count={checkable.length} makers={checkable} onDone={onChanged} quiet /> : null}
           </>
         ) : undefined
       }
@@ -447,7 +453,7 @@ export function MakerModels({
       {just && just.status === "not_checked" ? (
         <div className="st-stg-suggest" role="status">
           <Note tone="sun" icon="retry">
-            {just.label} is listed, but it has not been checked yet. Check it now: it asks whether this account may use it, and costs nothing.
+            {just.label} is listed, but it has not been checked yet. Check it now. It is free.
           </Note>
           <CheckModels ws={ws} count={1} makers={[just.key]} onDone={onChanged} />
         </div>
@@ -490,7 +496,7 @@ export function MakerModels({
           )}
         </ul>
       ) : open === null ? (
-        <p className="st-stg-small">No models added yet. The makers above come with Clips Funded; add any other picture, video or sound model here.</p>
+        <p className="st-stg-small">No models added yet.</p>
       ) : null}
     </SetCard>
   );

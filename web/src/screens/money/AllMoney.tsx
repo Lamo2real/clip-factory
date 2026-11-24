@@ -14,18 +14,19 @@ import type { MoneyEverywhere, MoneyPlace, SentLine } from "../../api/types.ts";
 import { Icon } from "../../components/Icon.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { Button, LinkButton } from "../../components/ui.tsx";
-import { usd } from "../../lib/contentRewards.ts";
+import { CR_MONEY_PATH, usd } from "../../lib/contentRewards.ts";
 import { bankView, useBank } from "../../lib/bank.ts";
 import { onLiveSignal } from "../../lib/live.ts";
 import { formatMoney } from "../../lib/money.ts";
 import { OpenButton } from "../campaigns/bits.tsx";
 import { Rich } from "../settings/setup/bits.tsx";
 import { ReachedBlock } from "../getpaid/bank/BankMoney.tsx";
+import { showCrMoney } from "./CrMoneyPart.tsx";
 
 export const ALL_MONEY_TITLE = "All your money";
 export const NOTHING_TO_ADD = "Nothing to add up yet.";
 export const TWO_MONIES = "Different money, like dollars and euros, is never added together.";
-export const PAID_OUT = "Paid out to your bank: not available from Content Rewards. Look on Whop: **Balances**.";
+export const PAID_OUT = "Paid to your bank: look on Whop, **Balances**.";
 /** The block under the total (§40.4). */
 export const SENT_TITLE = "Sent to your bank, so far";
 export const SENT_TWO_MONIES = "Different money, like dollars and kronor, is never added together.";
@@ -84,7 +85,7 @@ export function clockTime(iso: string | undefined): string {
  * A row's one small grey sent line (§40.4): "Sent to your bank by Google: kr 2 468,00 so far · YouTube says", or the
  * place's not-available line. Amounts are only formatted, one per currency, never added across.
  */
-export function sentText(sent: SentLine): string {
+export function sentText(sent: SentLine, said?: string): string {
   // The server's headlines and tags have no full stop: one goes in before the next sentence.
   const dot = (s: string) => (/[.!?…]$/.test(s) ? s : `${s}.`);
   const more = (text: string) => (sent.button || sent.where?.button ? `${dot(text)} ${MORE_IN_GETPAID}` : text);
@@ -94,7 +95,18 @@ export function sentText(sent: SentLine): string {
   }
   const where = sent.where?.text;
   const label = /sent to your bank/i.test(sent.headline) ? "" : `${SENT_LABEL} `;
-  return more(`${label}${where ? `${dot(sent.headline)} ${where}` : sent.headline}`);
+  // The row already says it ("Not available from TikTok"): only where to look.
+  const head = where && said && sent.headline.trim().toLowerCase() === said.trim().toLowerCase() ? "" : `${dot(sent.headline)} `;
+  return more(`${label}${where ? `${head}${where}` : sent.headline}`);
+}
+
+/** The row's own where line, unless its sent line's says the same and more ("…Balance, then Transactions…"). */
+export function rowWhere(p: Pick<MoneyPlace, "where" | "sent">): string | null {
+  const own = p.where?.text ?? null;
+  const sentWhere = p.sent && p.sent.state !== "number" ? p.sent.where?.text : undefined;
+  if (!own || !sentWhere) return own;
+  const bare = (t: string) => t.trim().replace(/[.!]+$/, "");
+  return bare(sentWhere).startsWith(bare(own)) ? null : own;
 }
 
 /** The Content Rewards row's small lines, in money's time order; each number only when Content Rewards reported it.
@@ -108,7 +120,7 @@ export function crLines(cr: NonNullable<MoneyPlace["cr"]>, withSent = false): st
   const at = clockTime(cr.asOf);
   return [
     ...(now.length ? [`Right now (Content Rewards says${at ? `, ${at}` : ""}): ${now.join(" · ")}`] : []),
-    `Earned so far, since you started: ${cr.paidSoFarCents == null ? "Checking…" : usd(cr.paidSoFarCents)}`,
+    `Earned since you started: ${cr.paidSoFarCents == null ? "Checking…" : usd(cr.paidSoFarCents)}`,
     ...(withSent ? [] : [PAID_OUT]),
   ];
 }
@@ -135,7 +147,17 @@ function RowButton({ p }: { p: MoneyPlace }) {
   if (p.where?.button) return <OpenButton label={p.where.button.label} href={p.where.button.url} size="sm" />;
   if (p.place === "contentrewards" && p.state !== "not_set_up")
     return (
-      <LinkButton href="/money#content-rewards" variant="glass" size="sm" iconAfter="chevronRight">
+      <LinkButton
+        href={CR_MONEY_PATH}
+        variant="glass"
+        size="sm"
+        iconAfter="chevronRight"
+        onClick={(e) => {
+          // Money's own Content Rewards part is on this page: scroll there on every tap (the router does nothing for
+          // the address it is already on, and opens a new one at its top).
+          if (showCrMoney()) e.preventDefault();
+        }}
+      >
         See it all
       </LinkButton>
     );
@@ -160,7 +182,7 @@ function Row({ p }: { p: MoneyPlace }) {
         {number && p.tag ? <p className="cr-all__tag money-tag">{p.tag}</p> : null}
         {p.why ? <p className="cr-all__why">{p.why}</p> : null}
         {p.note ? <p className="cr-all__note">{p.note}</p> : null}
-        {p.where ? <p className="cr-all__where">{p.where.text}</p> : null}
+        {rowWhere(p) ? <p className="cr-all__where">{rowWhere(p)}</p> : null}
         {p.cr && p.state !== "not_set_up" ? (
           <ul className="cr-all__cr">
             {crLines(p.cr, !!p.sent).map((l) => (
@@ -172,7 +194,7 @@ function Row({ p }: { p: MoneyPlace }) {
         ) : null}
         {p.sent ? (
           <p className="cr-all__sent" data-sent={p.sent.state}>
-            <Rich text={sentText(p.sent)} />
+            <Rich text={sentText(p.sent, p.headline)} />
           </p>
         ) : null}
       </div>
@@ -226,11 +248,7 @@ export function AllMoney({ load }: { load: EverywhereLoad & { reload: () => void
           {m.lagNote ? ` · ${m.lagNote}` : ""}
         </p>
       </div>
-      <ul className="cr-all__rows" aria-label="Every place">
-        {m.places.map((p) => (
-          <Row key={p.place} p={p} />
-        ))}
-      </ul>
+      {/* The answer first: the total, then each place. */}
       <div className="cr-all__total" data-total={m.totals.length ? "yes" : "none"}>
         {m.totals.length ? (
           m.totals.map((t) => (
@@ -251,6 +269,11 @@ export function AllMoney({ load }: { load: EverywhereLoad & { reload: () => void
         {m.totals.length > 1 ? <p className="cr-all__why">{TWO_MONIES}</p> : null}
         {m.notCountedText ? <p className="cr-all__why">{m.notCountedText}</p> : null}
       </div>
+      <ul className="cr-all__rows" aria-label="Every place">
+        {m.places.map((p) => (
+          <Row key={p.place} p={p} />
+        ))}
+      </ul>
       {m.sent ? <SentSoFar sent={m.sent} bankLine={bankLine} /> : null}
       {reached ? <ReachedBlock view={reached} /> : null}
     </section>

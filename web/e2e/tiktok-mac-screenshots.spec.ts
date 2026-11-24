@@ -265,7 +265,7 @@ for (const width of [375, 1440]) {
       await go(page, "/settings/posting/tiktok-mac");
       await page.getByRole("button", { name: "Send these to my Mac" }).click();
       await page.getByRole("button", { name: "Yes, send them" }).click();
-      await expect(page.getByText(/^Sent \d+ clips? to your Mac\.$/)).toBeVisible();
+      await expect(page.getByText(/^Sent \d+ clips? to your Mac\./)).toBeVisible();
       await mac(page, "ping", "ok", undefined, undefined, { backlogAt: new Date(Date.now() + 45 * MIN).toISOString() });
       await go(page, "/library");
       await refocus(page);

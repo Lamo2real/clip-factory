@@ -41,7 +41,7 @@ describe("What it learned: the words (§16.12)", () => {
 
   it("has the one-line explanation at the top", () => {
     expect(LEARNED_INTRO).toBe(
-      "Every day Clip Factory checks your clips 7 days after posting. Lessons it is sure about go to your skills as Prior learnings.",
+      "Clip Factory checks each clip 7 days after posting. Lessons it is sure of join your skills as Prior learnings.",
     );
   });
 

@@ -7,6 +7,7 @@ from typing import Any
 
 import ws_routes_ai
 import ws_routes_core
+import ws_routes_mac
 import ws_routes_social
 from clipfactory_api.routes import ROUTES as CLIPS_ROUTES
 from clipfactory_api.workspaces import http as ws_http
@@ -15,7 +16,7 @@ from conftest import make_event
 
 
 def test_every_workspace_route_is_registered_and_nothing_else() -> None:
-    expected = ws_routes_core.EXPECTED | ws_routes_social.EXPECTED | ws_routes_ai.EXPECTED
+    expected = ws_routes_core.EXPECTED | ws_routes_social.EXPECTED | ws_routes_ai.EXPECTED | ws_routes_mac.EXPECTED
     for method, path in expected:
         assert path.startswith("/v1/workspaces"), path
         assert any(r.method == method and r.pattern.match(path) for r in ROUTES), (method, path)

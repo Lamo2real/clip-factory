@@ -133,7 +133,7 @@ const isNameTaken = (e: unknown) => e instanceof ApiError && (e.field === "title
 // ---------- Read ----------
 
 const OWNER_LEAF = "Always used. Changes count from your next clips.";
-const BUILTIN_LEAF = "This skill comes with Clip Factory. It is always used. You can read it, but not change or delete it.";
+const BUILTIN_LEAF = "Comes with Clip Factory. Always used. You can read it, but not change or delete it.";
 
 function ReadPage({ tree, branch, skillId }: Place & { skillId: string }) {
   const { data, error, missing, reload } = useLoad(() => api().getSkill(skillId), skillId);
@@ -469,7 +469,7 @@ function ReplaceFile({
       <h2 className="skill-when__title" id="skill-replace">
         Replace the whole file
       </h2>
-      <p className="field__hint">Pick a skill file from your computer. It takes the place of this skill.</p>
+      <p className="field__hint">Pick a skill file. It replaces this skill.</p>
       <input
         ref={input}
         type="file"

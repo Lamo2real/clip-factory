@@ -9,7 +9,7 @@
   "display": "standalone",
   "orientation": "any",
   "background_color": "#0F372B",
-  "theme_color": "#0F372B",
+  "theme_color": "#13483C",
   "categories": ["productivity", "entertainment"],
   "icons": [
     { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },

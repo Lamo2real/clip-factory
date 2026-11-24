@@ -254,14 +254,29 @@ export interface CalmCopy {
   spinner?: boolean;
 }
 
+/** What the clip page knows around one stack, so its line gives advice that is true for this clip. */
+export interface CalmContext {
+  /** Settings › Where clips go: "Turn on" is said only for a place that is off there. Absent: not known. */
+  whereOn?: readonly Platform[];
+  /** The clip's posting never started (needsUploadAgain, or a start still pending): Try again is on the page. */
+  notStarted?: boolean;
+  /** This place's Try again sits in its stack (the clip page): no trip to the Library for it. */
+  retryHere?: boolean;
+  /** The post's perfCheckAt (§16.2): when its numbers come, said the way the Library row says it. */
+  perfCheckAt?: string;
+  now?: number;
+}
+
 /**
  * The one plain line (and link) a stack shows instead of numbers. Null when it has numbers to show. `row`: TikTok's row
  * (lib/tiktokMac.ts tiktokRow) while the clip page shows its one button: the stack then says the row's words, with no
- * link (Try again, Post with my Mac, Turn on or Add link is on the page itself).
+ * link (Try again, Post with my Mac, Turn on or Add link is on the page itself). `ctx`: what the clip page knows
+ * around the stack (CalmContext).
  */
 export function calmCopy(
   p: Pick<PlatformPerformance, "platform" | "status" | "metrics" | "error"> & Partial<Pick<PlatformPerformance, "by" | "url" | "mac" | "via">>,
   row?: TikTokRow | null,
+  ctx: CalmContext = {},
 ): CalmCopy | null {
   const name = PLATFORM_LABEL[p.platform];
   // Its chip says "Not sure it posted" (macChip): the line only says where to look (and from when Try again comes),
@@ -292,6 +307,10 @@ export function calmCopy(
         link: { href: `/settings/posting/setup/${p.platform}`, label: `Set up ${name}` },
       };
     case "not_posted":
+      // Its posting never started: every place waits for the page's Try again, whatever Where clips go says.
+      if (ctx.notStarted) return { text: "Not sent yet. Tap Try again." };
+      // On in Where clips go already: turning it on would change nothing for this clip.
+      if (ctx.whereOn?.includes(p.platform)) return { text: `This clip was not sent to ${name}.` };
       return {
         text: `Not posted here. Turn on ${name} in Settings › Posting › Where clips go.`,
         link: { href: "/settings/posting/where", label: "Open Where clips go" },
@@ -304,6 +323,8 @@ export function calmCopy(
       // TikTok refused it because the account is public (§42): his Mac posts it, not Try again.
       if (failedForPublicAccount({ platform: p.platform, status: "failed", error: p.error })) return { text: postError(p.error!) };
       const why = (p.error ?? "something went wrong").replace(/[.!\s]+$/, "");
+      // The clip page shows this place's Try again in the stack itself.
+      if (ctx.retryHere) return { text: `${why}. Tap Try again.` };
       return { text: `${why}. Go to Library and tap Try again.`, link: { href: "/library", label: "Go to Library" } };
     }
     case "posted":
@@ -316,9 +337,17 @@ export function calmCopy(
       }
       if (p.metrics) return null;
       // A read that failed says why (its stored statsError, §16.5), so a platform that never answers is not hidden
-      // behind "on the way".
-      return { text: p.error || "Numbers are on the way. Check back in a few minutes." };
+      // behind "on the way". Else the same time the Library row says ("Uploaded · numbers tomorrow"); a time already
+      // past says "a few minutes".
+      return { text: p.error || numbersComing(ctx.perfCheckAt, ctx.now) || "Numbers are on the way. Check back in a few minutes." };
   }
+}
+
+/** "Numbers come tomorrow." from a post's perfCheckAt still ahead; null when absent or already past. */
+export function numbersComing(perfCheckAt: string | undefined, now = Date.now()): string | null {
+  if (!perfCheckAt || !(Date.parse(perfCheckAt) > now)) return null;
+  const when = relative(perfCheckAt, now);
+  return when && when !== "just now" ? `Numbers come ${when}.` : null;
 }
 
 /** The hint under a YouTube Short whose own count still says 0 hours after posting (§16.8): the 0 is YouTube's. */

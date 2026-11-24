@@ -125,7 +125,7 @@ for (const size of [
       const card = page.locator(".review-card").first();
       const row = card.locator('[data-place="tiktok"]');
       await row.locator("summary").click();
-      await expect(row.getByText("TikTok keeps posts private until it approves your app.")).toBeVisible();
+      await expect(row.getByText("TikTok keeps posts private until it approves Clip Factory.")).toBeVisible();
       expect(await choices(row)).toEqual(["Only me"]);
       // Still the owner's own tap: nothing picked yet.
       await expect(dropdown(row)).toHaveText("Pick who can see it");

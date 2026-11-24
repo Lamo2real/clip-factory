@@ -211,6 +211,38 @@ When Settings › Look & feel › Motion › Reduce motion is on **or** the OS r
 * The CSS guards both ways: `@media (prefers-reduced-motion: reduce)` and `.reduce-motion` select the fade keyframes,
   so even a stale `phase` can never move anything.
 
+**The global 1 ms rule and what it adds (audit, 24 Nov).** Calm motion (`base.css`: the media query and
+`.reduce-motion`) sets `transition-duration: 1ms !important` and `animation-duration: 1ms !important` on every element
+and pseudo-element, so every transition and animation still ends (its end event fires) at once. `transition-property`
+is `all` unless an element sets it, so the rule also gives a 1 ms transition of every property to elements that have
+none of their own at normal motion, and a transition, even one of 1 ms, starts only on the next frame drawn; until then
+`getComputedStyle` and the boxes read the old value. `visibility` is animatable too: a swap to `hidden` reads `visible`,
+and a swap back reads `hidden`, until that frame. Where frames come slowly (CI's Linux software paint under a frosted
+page, any busy computer) that is hundreds of ms. It has bitten four times, each fixed where it was, with
+`transition: none` (or `transition-property: none`) on a part that is never transitioned at normal motion: the dock's
+`.ws-switch-host` and `.ws-dock__live` (`glide.css`, §45.38), the rail foot (`st-frame.css`), the warm mark's tile
+(`.ws-mark--sized`, `ws-mark.css`), and Clip Factory's backdrop with everything in it (`glass.css`: `.backdrop--away`'s
+`visibility: hidden` landed a frame late both ways, `e2e/stories-see-through-own.spec.ts`; proven with Chromium's
+animation clock stopped: a running CSSTransition of `visibility` on the backdrop and on each blob and veil inheriting
+it, five in all, at currentTime 0). A part that never transitions at normal motion takes `transition: none` in its own
+rule, with the reason.
+
+* What is left (the same check, the animation clock stopped, over a switch between the apps both ways and a page change
+  in each, at 1440, 1024 and 375 px): one, `.st-head__lede`'s `max-width: 62ch`, which follows Clips Funded's own fonts
+  as they arrive (layout, a frame late; no check measures it).
+* Every end listener has a way on without the event: `WorkspaceDock` (`ws-dock-unfold`, an animation; a 1 s timer),
+  `features/help/dodge.ts` (`transitionend` and `animationend` only ask for a measure; its observers and its frame
+  check ask too), Home's covers (`deal`, an animation; nothing waits on it) and Clips Funded's sheet lift
+  (`animationend`, with a MutationObserver).
+* Known follow-up: the rule could stop adding transitions altogether with `transition-property: none` at specificity 0
+  (`*, *::before, *::after` in the media query, `:where(.reduce-motion) *` for the setting), which every element's own
+  `transition` or `transition-property` still beats, so a transition it has keeps its 1 ms and its end event. The
+  checks so far say it is safe: no rule sets a transition at specificity 0, no rule sets only a duration and leans on
+  `all` (`.btn:active` and Clips Funded's `.st-pill` pair theirs with the property list), nothing sets one from script,
+  and no listener waits on a transition the element only has under calm motion. It is not made yet: it changes every
+  page under calm motion, so it waits until every calm-motion spec (46 files, 1,281 tests in Chromium, the WebKit and
+  WebKit phone ones) has run green with it, outside a release.
+
 ### 20.7 Undo and the rewind
 
 Throw away, Stop job, skill Delete, cookies Remove, Remove picture, verification-file Remove and Disconnect only

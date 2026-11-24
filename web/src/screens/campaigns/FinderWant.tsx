@@ -2,7 +2,7 @@
 // time and after "Change"; else one summary line. Every change saves at once (the page debounces the PATCH); a glass
 // "Done" folds it. Never started, its vermilion "Find campaigns for me" sends the first PATCH (or, with no place set
 // up, "Set up YouTube"). Pick-one rows are <Glide> bars (Segmented); many-choice rows are toggle chips.
-import { useId, type ReactNode } from "react";
+import { useEffect, useId, useRef, type ReactNode } from "react";
 import type { Finder, FinderLanguage, FinderWant, Platform } from "../../api/types.ts";
 import { Icon } from "../../components/Icon.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
@@ -23,8 +23,10 @@ import {
 } from "../../lib/finder.ts";
 import { PLATFORM_LABEL, PLATFORM_ORDER } from "../../lib/format.ts";
 
-export const SKIP_LINE = "I skip campaigns Clip Factory can't make clips for, like ones that need their own sound or picture on the video.";
+export const SKIP_LINE = "I skip campaigns that need their own sound or picture on the video.";
 export const NEWS_OFF = "Content Rewards news is off in Settings.";
+/** The first thing Tab would land on in the card: a choice (the checked one of a bar), a chip, a switch or a button. */
+const FIRST_CONTROL = "input:checked:not([disabled]), button:not([disabled]):not([tabindex='-1']), input:not([type='radio']):not([disabled]), a[href]";
 
 /** `even`: a pick-one bar whose choices take even halves on phones (finder.css), never one alone on a second row. */
 function Row({ label, line, children, id, even }: { label: string; line?: string; children: ReactNode; id: string; even?: boolean }) {
@@ -108,10 +110,19 @@ export function FinderWant({
   const tiktokWaits = finder.tiktokWaits;
   // No place but TikTok is ready: "Set up a place" (there is no other one yet).
   const noneReady = !ready.some((p) => p !== "tiktok");
+  // Change opens the card and Done folds it: the tapped button goes, so the focus moves to the card's first control
+  // (or back to Change), never to the page.
+  const box = useRef<HTMLElement>(null);
+  const focusAfter = useRef(false);
+  useEffect(() => {
+    if (!focusAfter.current) return;
+    focusAfter.current = false;
+    box.current?.querySelector<HTMLElement>(FIRST_CONTROL)?.focus({ preventScroll: true });
+  }, [open]);
 
   if (!open)
     return (
-      <section className="finder-want finder-want--folded glass" id="want" data-help="cr-finder-want" aria-labelledby={`${id}-title`}>
+      <section ref={box} className="finder-want finder-want--folded glass" id="want" data-help="cr-finder-want" aria-labelledby={`${id}-title`}>
         <div className="finder-want__fold">
           <h2 className="cr-section__title" id={`${id}-title`}>
             What you want
@@ -119,7 +130,14 @@ export function FinderWant({
           <p className="finder-want__summary">{wantSummary(want, finder.resolvedPlaces, finder.categories)}</p>
         </div>
         {hideChange ? null : (
-          <Button variant="glass" icon="sliders" onClick={onOpen}>
+          <Button
+            variant="glass"
+            icon="sliders"
+            onClick={() => {
+              focusAfter.current = true;
+              onOpen();
+            }}
+          >
             Change
           </Button>
         )}
@@ -145,7 +163,7 @@ export function FinderWant({
   };
 
   return (
-    <section className={`finder-want glass${pinned && mainEl ? " has-pin" : ""}`} id="want" data-help="cr-finder-want" aria-labelledby={`${id}-title`}>
+    <section ref={box} className={`finder-want glass${pinned && mainEl ? " has-pin" : ""}`} id="want" data-help="cr-finder-want" aria-labelledby={`${id}-title`}>
       <h2 className="cr-section__title" id={`${id}-title`}>
         What you want
       </h2>
@@ -257,7 +275,14 @@ export function FinderWant({
         <div className={pinned ? "finder-want__main cr-pin" : "finder-want__main"}>{mainEl}</div>
       ) : (
         <div className="finder-want__main">
-          <Button variant="glass" icon="check" onClick={onDone}>
+          <Button
+            variant="glass"
+            icon="check"
+            onClick={() => {
+              focusAfter.current = true;
+              onDone();
+            }}
+          >
             Done
           </Button>
         </div>

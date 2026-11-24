@@ -166,7 +166,7 @@ export function Sidebar({ route }: { route?: Route } = {}) {
 export function TabBar({ route }: { route?: Route } = {}) {
   const { active, review, accessible } = useNavState(route);
   return (
-    <nav className="tabbar glass glass--refract" aria-label="Main">
+    <nav className="tabbar glass glass--refract" aria-label="Main" data-bottom-bar="">
       <ul className="tabbar__list">
         <Glide active=".tabbar__item.is-active" className="glide--tabbar" as="li" />
         {ITEMS.map((item) => (

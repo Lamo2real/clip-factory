@@ -1,7 +1,7 @@
 // One platform's setup page (docs/CONTRACTS.md §17.1): Get ready, Make your {Platform} key, Connect, Go public,
 // each a checklist of big numbered steps that reopens at the first step not done; then "When it's done".
 // Connect runs in the same tab and comes back here with ?result=…, read once and removed from the address.
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { api } from "../../../api/index.ts";
 import { friendlyMessage } from "../../../api/errors.ts";
 import type { ConnectResult, Platform, ReviewState, YoutubePrivacy } from "../../../api/types.ts";
@@ -13,12 +13,15 @@ import { useToast } from "../../../components/Toasts.tsx";
 import { Button, ErrorPanel, LinkButton, Segmented, Skeleton } from "../../../components/ui.tsx";
 import { backLabel, backLink, parseBack, type BackLink } from "../../../lib/backLink.ts";
 import { burst } from "../../../lib/confetti.ts";
+import { useCr } from "../../../lib/contentRewards.ts";
 import { useAction } from "../../../lib/motion.ts";
 import { config } from "../../../lib/config.ts";
 import { X_MONTHLY_USD } from "../../../lib/metrics.ts";
 import { prefersReducedMotion } from "../../../lib/prefs.ts";
 import { useHash } from "../../../lib/router.ts";
-import { progressOf, stepDone } from "../../../lib/setupProgress.ts";
+import { doneLine, postsPrivate, progressOf, stepDone, stillConnectedLine } from "../../../lib/setupProgress.ts";
+import { settingsPath } from "../../../lib/settingsTree.ts";
+import { MAC_OPEN_BUTTON, macOn } from "../../../lib/tiktokMac.ts";
 import { cheerOnNextTap } from "../../../lib/sound.ts";
 import { sounds } from "../../../lib/sounds.ts";
 import {
@@ -37,11 +40,14 @@ import {
 } from "../../../setup/index.ts";
 import { Rich } from "./bits.tsx";
 import { ChooseAccount } from "./ChooseAccount.tsx";
-import { CheckIt, KeyForm } from "./KeyForm.tsx";
+import { CheckIt, KeyForm, NO_DRAFT, type KeyDraft } from "./KeyForm.tsx";
 import { StepCard } from "./StepCard.tsx";
 import { useConnecting } from "./useConnecting.ts";
 import { useSetup } from "./useSetup.ts";
 import { VerificationUpload } from "./VerificationUpload.tsx";
+
+/** When it's done's id: a logged-out platform opens here, on Connect again. */
+const DONE_ID = "setup-done";
 
 /** The X leaf (§16.8): what X costs, from the shared constant mirroring platforms.json. */
 const xLeaf = `X charges a little for every number check. Clip Factory stops at $${X_MONTHLY_USD} a month.`;
@@ -76,6 +82,28 @@ function takeBack(platform: Platform): BackLink | null {
   return here;
 }
 
+/**
+ * Disconnects waiting for their 8-second Undo, by platform. Kept outside the page, so leaving and opening the platform
+ * again within the Undo still says "Disconnecting…" (and Disconnect stays off) until it commits or is undone.
+ */
+const disconnecting = new Set<Platform>();
+const disconnectingListeners = new Set<() => void>();
+function setDisconnecting(platform: Platform, on: boolean) {
+  if (on) disconnecting.add(platform);
+  else disconnecting.delete(platform);
+  for (const fn of disconnectingListeners) fn();
+}
+function useDisconnecting(platform: Platform): boolean {
+  return useSyncExternalStore(
+    (fn) => {
+      disconnectingListeners.add(fn);
+      return () => disconnectingListeners.delete(fn);
+    },
+    () => disconnecting.has(platform),
+    () => false,
+  );
+}
+
 export function SetupPlatform({ platform }: { platform: Platform }) {
   const [back] = useState(() => takeBack(platform));
   const guide = GUIDES[platform];
@@ -96,7 +124,9 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
   const [opened, setOpened] = useState<Set<string>>(new Set());
   const [closed, setClosed] = useState<Set<string>>(new Set());
   const [busyStep, setBusyStep] = useState<string | null>(null);
-  const [leaving, setLeaving] = useState(false);
+  const leaving = useDisconnecting(platform);
+  // What is typed in the key boxes: kept here, so folding the step (or Change keys) never empties them.
+  const [keyDraft, setKeyDraft] = useState<KeyDraft>(NO_DRAFT);
   const [review, setReview] = useState<ReviewState | null>(null);
   const celebrated = useRef(false);
   const cancelCheer = useRef<(() => void) | null>(null);
@@ -112,7 +142,17 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
   // The step whose main action is the vermilion button: the current one, unless the account needs connecting again.
   // With a way back (§39.1), once the platform is connected the back button is the next step.
   const backMain = !!back && setup?.account.status === "connected";
+  // A campaign's Set it up (§39.1): "Back to Pixel Pals", by the campaign's own name once Content Rewards is read.
+  const cr = useCr();
+  const backName = back?.campaignId ? (cr.data?.campaigns.find((c) => c.campaignId === back.campaignId)?.name ?? null) : null;
   const mainStep = reconnect || choosing || backMain ? null : (progress.current?.id ?? null);
+
+  // A disconnect that started before this page opened ends (committed or undone): read the setup again.
+  const wasLeaving = useRef(leaving);
+  useEffect(() => {
+    if (wasLeaving.current && !leaving) void reload();
+    wasLeaving.current = leaving;
+  }, [leaving, reload]);
 
   // ?result= from the platform: read once on arrival.
   useEffect(() => {
@@ -157,17 +197,25 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
   const stepAnchor = hash?.startsWith("step-") && guide && allSteps(guide).some((s) => `step-${s.id}` === hash) ? hash.slice(5) : null;
   useEffect(() => {
     if (!setup || result) return;
-    // A fresh page stays at the top, so the owner sees which platform this is and how long it takes.
+    // A fresh page stays at the top, so the owner sees which platform this is and how long it takes. Logged out
+    // (needs_reconnect): the Connect step stays folded, so When it's done, with its Connect again, comes into view.
     const target =
-      hash && (["youtube-privacy", "x-cost"].includes(hash) || stepAnchor) ? hash : currentId && progress.done > 0 ? `step-${currentId}` : null;
+      hash && (["youtube-privacy", "x-cost"].includes(hash) || stepAnchor)
+        ? hash
+        : reconnect
+          ? DONE_ID
+          : currentId && progress.done > 0
+            ? `step-${currentId}`
+            : null;
     if (!target || scrolledTo.current === target) return;
     // Marked as done only when the scroll really runs: a refetch inside the delay must not cancel it for good.
     const t = setTimeout(() => {
       scrolledTo.current = target;
       document.getElementById(target)?.scrollIntoView({ block: "center", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+      if (target === DONE_ID) document.querySelector<HTMLElement>(`#${DONE_ID} [data-setup="connect-again"]`)?.focus({ preventScroll: true });
     }, 160);
     return () => clearTimeout(t);
-  }, [setup, currentId, hash, result, progress.done, stepAnchor]);
+  }, [setup, currentId, hash, result, progress.done, stepAnchor, reconnect]);
 
   // An anchor (#youtube-privacy, #x-cost, or #step-{id} from an Ask button) opens the step that holds it.
   const anchorStep = hash === "youtube-privacy" ? "public-privacy" : hash === "x-cost" ? "ready-card" : stepAnchor;
@@ -256,10 +304,11 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
   }
 
   function disconnect() {
-    setLeaving(true);
+    if (disconnecting.has(platform)) return;
+    setDisconnecting(platform, true);
     toast.undo(`Disconnecting ${guide.name}…`, {
       onUndo: () => {
-        setLeaving(false);
+        setDisconnecting(platform, false);
         disconnectAct.rewind();
       },
       onCommit: () => {
@@ -267,7 +316,7 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
           .disconnectAccount(platform)
           .then(() => reload())
           .catch((e) => toast.error(`${friendlyMessage(e)} ${guide.name} is still connected.`))
-          .finally(() => setLeaving(false));
+          .finally(() => setDisconnecting(platform, false));
       },
     });
   }
@@ -291,7 +340,9 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
     if (!setup) return null;
     const out = [];
     if (step.paste)
-      out.push(<KeyForm key="keys" platform={platform} setup={setup} primary={primary} onSaved={(s) => stayOpen(step.id, s)} />);
+      out.push(
+        <KeyForm key="keys" platform={platform} setup={setup} primary={primary} draft={keyDraft} onDraft={setKeyDraft} onSaved={(s) => stayOpen(step.id, s)} />,
+      );
     if (step.upload) out.push(<VerificationUpload key="upload" setup={setup} onChange={(s) => stayOpen(step.id, s)} reload={reload} />);
     if (step.auto === "connected")
       out.push(
@@ -308,7 +359,7 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
             {`Connect ${guide.name}`}
           </Button>
           {!setup.keys.saved ? (
-            <p className="gstep__note">Paste your keys first (step {stepNumber(guide, "key-paste")}). Then this button works.</p>
+            <p className="gstep__note">Paste your keys first (step {stepNumber(guide, "key-paste")}).</p>
           ) : setup.account.status === "connected" ? (
             <p className="gstep__note is-ok">
               <Icon name="checkCircle" size={18} />
@@ -374,6 +425,9 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
 
   const name = setup?.account.handle ?? setup?.account.name;
   const copy = resultCopy(platform);
+  // Connect again was cancelled or failed, but the account still works: nothing changed, nothing to fix.
+  const stillConnected = !!result && result !== "connected" && setup?.account.status === "connected";
+  const fixStep = result && !stillConnected ? resultStep(platform, result) : null;
 
   return (
     <div className="setup-page">
@@ -410,18 +464,26 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
               <h2 className="result-card__title">
                 Connected as <strong className="user-text">{name ?? guide.name}</strong>
               </h2>
-              <p>{copy.connected} Clip Factory can post there now.</p>
+              {/* The title says connected, and the toast says it too: the line only says what it means. */}
+              <p>Clip Factory can post there now.</p>
             </div>
           </section>
-        ) : result === "choose" && choosing ? null : (
+        ) : result === "choose" && choosing ? null : stillConnected ? (
+          <section className="result-card result-card--ok glass" role="status" data-result="still-connected">
+            <Icon name="checkCircle" size={28} />
+            <div className="result-card__text">
+              <h2 className="result-card__title">{stillConnectedLine(name ?? guide.name)}</h2>
+            </div>
+          </section>
+        ) : (
           <section className="result-card glass" role="alert">
             <Icon name="info" size={28} />
             <div className="result-card__text">
               <h2 className="result-card__title">Not connected yet</h2>
               <p>{copy[result]}</p>
-              {resultStep(platform, result) ? (
-                <Button size="sm" icon="chevronRight" onClick={() => goToStep(resultStep(platform, result)!)}>
-                  {`Go to step ${stepNumber(guide, resultStep(platform, result)!)}`}
+              {fixStep ? (
+                <Button size="sm" icon="chevronRight" onClick={() => goToStep(fixStep)}>
+                  {`Go to step ${stepNumber(guide, fixStep)}`}
                 </Button>
               ) : null}
             </div>
@@ -485,7 +547,7 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
       )}
 
       {setup && (setup.account.status === "connected" || reconnect) ? (
-        <section className="done-panel glass" aria-labelledby="done-title">
+        <section className="done-panel glass" id={DONE_ID} aria-labelledby="done-title">
           <h2 className="done-panel__title" id="done-title">
             When it&apos;s done
           </h2>
@@ -494,10 +556,17 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
             <div className="done-panel__who">
               <span className="done-panel__name user-text" title={name ?? guide.name}>{name ?? guide.name}</span>
               <span className={`done-panel__state${reconnect ? " is-bad" : ""}`}>
-                {leaving ? "Disconnecting…" : reconnect ? `${guide.name} logged Clip Factory out. Press Connect again.` : setup.ready ? "Ready. Clip Factory posts here by itself." : "Connected."}
+                {doneLine(guide.name, setup, { leaving, macOn: macOn(me?.settings) })}
               </span>
             </div>
           </div>
+          {platform === "tiktok" && !leaving && postsPrivate(setup) && !macOn(me?.settings) ? (
+            <div className="done-panel__actions">
+              <LinkButton href={settingsPath("posting", "tiktok-mac")} variant="glass" iconAfter="chevronRight" data-setup="tiktok-mac">
+                {MAC_OPEN_BUTTON}
+              </LinkButton>
+            </div>
+          ) : null}
           {setup.account.reason === "expires_soon" && setup.account.reconnectBy ? (
             <p className="callout callout--info">
               <Icon name="info" size={18} />
@@ -524,12 +593,12 @@ export function SetupPlatform({ platform }: { platform: Platform }) {
           {backMain && back ? (
             <div className="done-panel__actions">
               <LinkButton href={back.href} variant="primary" size="lg" icon="chevronLeft" data-help-clear="" data-setup="back">
-                {backLabel(back)}
+                {backLabel(back, backName)}
               </LinkButton>
             </div>
           ) : null}
           <div className="done-panel__actions">
-            <Button variant={reconnect ? "primary" : "glass"} icon="link" act="connect" loading={connecting} disabled={leaving} onClick={() => connect()}>
+            <Button variant={reconnect ? "primary" : "glass"} icon="link" act="connect" loading={connecting} disabled={leaving} onClick={() => connect()} data-setup="connect-again">
               Connect again
             </Button>
             <CheckIt platform={platform} check={setup.keys.check} onChecked={put} />

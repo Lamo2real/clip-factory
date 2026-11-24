@@ -51,7 +51,7 @@ test("the arrows go to earlier weeks; the later arrow is off on the current week
   await page.getByRole("link", { name: "Earlier week" }).click();
   await settle(page);
   await expect(page.getByRole("heading", { name: "No clips that week" })).toBeVisible();
-  await expect(page.getByText("Nothing was posted that week. Tap the arrows to look at another week.")).toBeVisible();
+  await expect(page.getByText("Tap the arrows to see another week.")).toBeVisible();
   await expect(page.getByRole("link", { name: "Make clips" })).toHaveAttribute("href", "/");
 
   await later.click();

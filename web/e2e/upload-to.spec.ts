@@ -15,7 +15,7 @@ type MockWindow = Window & {
       settleWithOneFailed(clipId: string, platform: string, reason?: string): void;
     };
   };
-  __cfMockFaults?: { keepStopsAfterSave: number; setupFails?: number; resumeAfterMs?: number; startFails?: boolean };
+  __cfMockFaults?: { keepStopsAfterSave: number; setupFails?: number; resumeAfterMs?: number; startFails?: boolean; confirmFails?: ("network" | "refused")[] };
 };
 
 /** YouTube, TikTok, Instagram and Facebook set up; X not started (the owner's own setup, 2026-11-20). */
@@ -89,7 +89,7 @@ test.describe("Upload to many places", () => {
     await card.locator(".upload-chip", { hasText: "TikTok" }).click();
     await expect(card.locator('[data-place="instagram"]')).toHaveCount(0);
     await card.getByRole("button", { name: UPLOAD }).click();
-    await expect(page.getByText(/longer than its platform allows/)).toHaveCount(0);
+    await expect(page.getByText(/caption is too long/)).toHaveCount(0);
     await expect(page.getByText("Uploading to 2 places!")).toBeVisible();
   });
 
@@ -251,12 +251,12 @@ test.describe("Upload to many places", () => {
     await page.goto("/review");
     await settle(page);
     const card = page.locator(".review-card").first();
-    await expect(card.getByText("Could not check your places. Check again, then tap Upload.")).toBeVisible();
+    await expect(card.getByText("Couldn't check your places. Tap Check again.")).toBeVisible();
     await expect(card.getByText("Nothing is set up yet")).toHaveCount(0);
     await expect(card.getByRole("button", { name: UPLOAD })).toHaveAttribute("aria-disabled", "true");
     // Check again while the server is still failing: still no guess.
     await card.getByRole("button", { name: "Check again" }).click();
-    await expect(card.getByText("Could not check your places. Check again, then tap Upload.")).toBeVisible();
+    await expect(card.getByText("Couldn't check your places. Tap Check again.")).toBeVisible();
     // The server answers again: the places come back (live setup news or Check again).
     await page.evaluate(() => {
       const w = window as MockWindow;
@@ -271,7 +271,9 @@ test.describe("Upload to many places", () => {
     await fourReady(page);
     const card = page.locator(".review-card").first();
     await card.locator(".upload-chip", { hasText: "TikTok" }).click();
-    await page.evaluate(() => ((window as MockWindow).__cfMockFaults!.keepStopsAfterSave = 1));
+    // An Upload the server refuses (it took nothing, so the card can still change). One that lost its connection may
+    // have reached the server: that card locks and Try again finishes it as it was (keep-again.spec.ts).
+    await page.evaluate(() => ((window as MockWindow).__cfMockFaults!.confirmFails = ["refused"]));
     await card.getByRole("button", { name: UPLOAD }).click();
     await expect(card.getByRole("button", { name: "Try again", exact: true })).toBeVisible();
     // All places off: Try again is off, it never falls back to Where clips go.

@@ -67,7 +67,9 @@ cannot show one again. Why not a server-side soft delete: ADR-58.
 * **Next to the sidebar** (768–959 px) a row keeps its phone layout, so its words keep their room. **Select** (next to Make clips) turns each row into one big tick box (`role="checkbox"`,
   Space or Enter toggles it) and shows a bar at the bottom of the screen: "N jobs picked" (or "Tap the jobs to
   delete"), **Cancel**, **Pick all failed (N)** (the failed jobs on screen) and **Delete N** (danger, at the bottom
-  right). Escape leaves Select.
+  right). Escape leaves Select. While selecting, a second **Cancel** (×) sits where Select was (so Make clips never moves; a
+  second tap within 400 ms of Select does nothing) and ends Select like the bar's Cancel, never reading like a confirm
+  that would delete. After either Cancel, Escape or a delete the focus goes back to Select; Stop job moves the focus to its "Stopping…" note.
 * **Job page:** **Delete job** (ghost, bin) first in the actions, so Try again or Check these clips keep the corner.
   After the question the page goes back to All jobs, where the Undo toast is.
 * **The question** (`DeleteJobsSheet`, a `Sheet`): "Delete this job?" / "Delete 3 jobs?", then what happens:

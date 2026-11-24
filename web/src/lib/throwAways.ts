@@ -11,6 +11,11 @@ import { AUTO_ALREADY_SENT } from "./autopost.ts";
 
 /** Shown when the decline finds the clip already kept or thrown away somewhere else. */
 export const ALREADY_DECIDED = "This clip was already uploaded or thrown away somewhere else, so there is nothing more to do.";
+/** Shown instead of "Clip thrown away." when the server already holds the clip as uploaded (Upload went through). */
+export const ALREADY_UPLOADING = "This clip is already uploading, so it can't be thrown away.";
+
+/** The clip statuses that mean Upload went through: it can't be thrown away any more. */
+const UPLOADED = new Set<Clip["status"]>(["confirmed", "publishing", "posted", "failed"]);
 
 const hidden = new Set<string>();
 const listeners = new Set<() => void>();
@@ -70,11 +75,14 @@ function attempt<T>(call: () => Promise<T>): Promise<T> {
   }
 }
 
-/** Whether auto-posting already sent the clip (read again after a refused decline; unknown → no). */
-const sentByAutoPosting = (clipId: string): Promise<boolean> =>
+/**
+ * Why the server refused to hold or decline the clip, read again: auto-posting sent it, Upload went through ("uploading"),
+ * or something else (thrown away somewhere else, gone, or the read failed).
+ */
+const decidedHow = (clipId: string): Promise<"auto" | "uploading" | "other"> =>
   attempt(() => api().getClip(clipId)).then(
-    (c) => !!c.auto,
-    () => false,
+    (c) => (c.auto ? "auto" : UPLOADED.has(c.status) ? "uploading" : "other"),
+    () => "other" as const,
   );
 
 /**
@@ -87,6 +95,10 @@ const sentByAutoPosting = (clipId: string): Promise<boolean> =>
  * stops its timer) still finds it held. Undo lets it go again (DELETE /hold, sent only after the hold's own answer, so
  * it always lands last). When a run already sent it, the hold says so: the clip stays out of Review, the Undo toast
  * goes, no decline is sent, and "Auto-posting already sent this clip."
+ *
+ * A hold (or decline) refused because Upload already went through (the clip is confirmed, publishing, posted or
+ * failed): the Undo toast goes, nothing is declined, and it says "This clip is already uploading" (never "somewhere
+ * else" about this very tap).
  */
 export function throwAwayWithUndo(clip: Clip, toast: Toaster, onDeclined?: () => void): void {
   const { clipId } = clip;
@@ -94,7 +106,8 @@ export function throwAwayWithUndo(clip: Clip, toast: Toaster, onDeclined?: () =>
   changed();
   let sentByAuto = false;
   const closeUndo = new AbortController();
-  const alreadySent = () => {
+  /** The clip is out of Review for good (sent by a run, or uploading): no Undo, no decline, one calm note. */
+  const alreadySent = (note: string = AUTO_ALREADY_SENT) => {
     if (sentByAuto) return;
     sentByAuto = true;
     if (!hidden.has(clipId)) {
@@ -102,12 +115,17 @@ export function throwAwayWithUndo(clip: Clip, toast: Toaster, onDeclined?: () =>
       changed();
     }
     closeUndo.abort();
-    toast.info(AUTO_ALREADY_SENT);
+    toast.info(note);
   };
   const held = attempt(() => api().holdClip(clipId)).then(
     () => undefined,
-    (e: unknown) => {
-      if (e instanceof ApiError && e.status === 409 && e.message === AUTO_ALREADY_SENT) alreadySent();
+    async (e: unknown) => {
+      if (!(e instanceof ApiError) || e.status !== 409) return;
+      if (e.message === AUTO_ALREADY_SENT) return alreadySent();
+      // Upload already went through (this card's own Upload that did not finish, or another device's).
+      const how = await decidedHow(clipId);
+      if (how === "auto") alreadySent();
+      else if (how === "uploading") alreadySent(ALREADY_UPLOADING);
       // Anything else (decided somewhere else, an api without holds, no connection): the decline decides, as before.
     },
   );
@@ -133,8 +151,8 @@ export function throwAwayWithUndo(clip: Clip, toast: Toaster, onDeclined?: () =>
             if (e instanceof ApiError && (e.status === 409 || e.status === 404)) {
               // Already decided (kept or thrown away on another screen or device, or sent by auto-posting): not a
               // failure, nothing to do.
-              const auto = await sentByAutoPosting(clipId);
-              if (!sentByAuto) toast.info(auto ? AUTO_ALREADY_SENT : ALREADY_DECIDED);
+              const how = await decidedHow(clipId);
+              if (!sentByAuto) toast.info(how === "auto" ? AUTO_ALREADY_SENT : how === "uploading" ? ALREADY_UPLOADING : ALREADY_DECIDED);
               return;
             }
             // Back in his list: auto-posting may take it again too.

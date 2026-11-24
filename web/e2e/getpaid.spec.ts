@@ -286,7 +286,7 @@ for (const [name, use] of [
       expect(t.count).toBe(3);
     });
 
-    test("Connect Whop: Coming soon while off; on, 6 taps with the Whop key", async ({ page }) => {
+    test("Connect Whop: Coming soon while off; on, 7 taps with the Whop key (the how-to is one fold)", async ({ page }) => {
       await start(page, "/settings/posting/getpaid/contentrewards");
       const card = page.locator("[data-help='getpaid-whop']");
       await expect(card).toContainText("Coming soon: your Whop payouts here.");
@@ -295,7 +295,8 @@ for (const [name, use] of [
       await page.reload();
       await settle(page);
       await expect(card.locator(".btn--primary")).toHaveCount(0);
-      const t = tap(6);
+      const t = tap(7);
+      await t.tap(card.locator("summary", { hasText: "How do I make it?" }));
       await t.tap(card.getByRole("link", { name: /Open Whop's developer page/ }));
       await t.tap(card.getByRole("button", { name: "Copy App name" }));
       await t.tap(card.getByRole("button", { name: "Copy Redirect URI" }));
@@ -313,7 +314,7 @@ for (const [name, use] of [
       await expect(page).toHaveURL(/\/settings\/posting\/getpaid\/contentrewards#whop$/);
       await settle(page);
       await expect(card.locator(".gp-result")).toHaveText("Clip Factory can see your Whop payouts now (@faze).");
-      expect(t.count).toBe(6);
+      expect(t.count).toBe(7);
       await expect(card.getByRole("button", { name: "Stop reading Whop" })).toBeVisible();
     });
 
@@ -527,4 +528,44 @@ test("the server's Finance link brings the question into view at 390x844", async
   }
   expect(new URL(page.url()).hash).toBe("");
   await ctx.close();
+});
+
+// Kid-proof (an 8-year-old must never get stuck): a button to a step on the same page goes there on every tap and keeps
+// the way back; an answered Finance question keeps the keyboard's focus.
+test.describe("kid-proof Get paid", () => {
+  test.use(DESKTOP);
+
+  test("Sent to your bank's Allow payment reading: every tap goes to the step, and ?back= stays", async ({ page }) => {
+    await start(page, "/settings/posting/getpaid/youtube?back=/money", "fresh", ["youtube"]);
+    const sent = page.locator("[data-help='getpaid-sent']");
+    const go = sent.getByRole("button", { name: "Allow payment reading" });
+    await go.click();
+    await expect(page).toHaveURL(/\/settings\/posting\/getpaid\/youtube\?back=\/money#yt-reading$/);
+    await expect(step(page, "yt-reading")).toBeInViewport();
+    // The open step is taller than the screen: its head, where the focus goes, is all in sight (never its middle in the
+    // middle with the head above the screen).
+    const head = step(page, "yt-reading").locator(".gstep__head");
+    await expect(head).toBeFocused();
+    await expect(head).toBeInViewport({ ratio: 1 });
+    // A second tap (from further down, the focus elsewhere) goes there again.
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+    await go.focus();
+    await go.click();
+    await expect(head).toBeFocused();
+    await expect(head).toBeInViewport({ ratio: 1 });
+    await expect(page).toHaveURL(/\?back=\/money#yt-reading$/);
+  });
+
+  test("Do you see Finance: after the answer and after Change my answer, the focus stays on the question", async ({ page }) => {
+    await start(page, "/settings/posting/getpaid/contentrewards");
+    const q = page.locator("#cr-finance");
+    await q.getByRole("radio", { name: "Yes" }).focus();
+    await page.keyboard.press("Space");
+    await expect(q.getByRole("button", { name: "Change my answer" })).toBeVisible();
+    await expect(q).toBeFocused();
+    await q.getByRole("button", { name: "Change my answer" }).focus();
+    await page.keyboard.press("Enter");
+    await expect(q.getByRole("radio", { name: "Yes" })).toBeAttached();
+    await expect(q).toBeFocused();
+  });
 });

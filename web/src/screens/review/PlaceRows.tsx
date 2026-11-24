@@ -277,20 +277,12 @@ export function PlaceRows({
                   {field("youtubeTitle", "Title", 1, true)}
                   {field("youtubeDescription", "Description", 4)}
                   {campaign ? (
+                    // The row's own line already says "Everyone · Made for kids: No · Paid promotion": one locked line.
                     <div className="cr-locked">
                       <p className="place-row__fixed">
                         <Icon name="lock" size={16} />
-                        <span>Who can see it: Everyone</span>
+                        <span>{CAMPAIGN_LOCKED}</span>
                       </p>
-                      <p className="place-row__fixed">
-                        <Icon name="lock" size={16} />
-                        <span>Made for kids: No</span>
-                      </p>
-                      <p className="place-row__fixed">
-                        <Icon name="lock" size={16} />
-                        <span>Paid promotion: on</span>
-                      </p>
-                      <p className="small">{CAMPAIGN_LOCKED}</p>
                     </div>
                   ) : (
                     <div className="field">
@@ -319,7 +311,7 @@ export function PlaceRows({
                     {campaign ? null : (
                       <Toggle
                         label="Made for kids"
-                        description={options.youtube.madeForKids ? "Yes: YouTube turns off comments and some ads." : "No. Turn on only if this clip is made for kids."}
+                        description={options.youtube.madeForKids ? "Yes: YouTube turns off comments and some ads." : "Turn on only if it's made for kids."}
                         checked={options.youtube.madeForKids}
                         onChange={(v) => onOptions("youtube", { madeForKids: v })}
                       />
@@ -339,11 +331,8 @@ export function PlaceRows({
                 </>
               ) : p === "facebook" ? (
                 <>
+                  {/* "Reel on your Page · Everyone can see it" is the row's own line, open or closed. */}
                   {field("facebook", "Facebook caption", 5)}
-                  <p className="place-row__fixed">
-                    <Icon name="check" size={16} />
-                    <span>Goes up as a Reel on your Page. Everyone can see it.</span>
-                  </p>
                   {campaign ? <p className="small">{META_PAID_LINE("Facebook")}</p> : null}
                 </>
               ) : (
@@ -470,7 +459,7 @@ function TikTokFields({ row, field, campaign = false }: { row: TikTokRow; field:
       {tooLong ? (
         <p className="callout callout--bad" role="alert">
           <Icon name="alert" size={18} />
-          <span>This clip is longer than TikTok allows for you. Untick TikTok above to upload it to your other places.</span>
+          <span>Too long for TikTok. Untick TikTok above to upload the rest.</span>
         </p>
       ) : null}
     </>

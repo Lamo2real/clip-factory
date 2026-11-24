@@ -12,8 +12,12 @@
 // `confirmAccount` for that place. After Upload, the sheet shows each publishing job's status, its sentence and Try
 // again, and "Posted!" gets Lamo Stories' star burst and success cheer, as Approve does (§45.36 E11). Account ids sit
 // behind "Technical details" (§45.36 E14); an account problem offers "Open Social accounts" (§45.36 E9); the other
-// app is always "Clip Factory" (§45.36 E13).
-import { useEffect, useId, useMemo, useState } from "react";
+// app is always "Clip Factory" (§45.36 E13). Upload is the sheet's one main button: tapped before a place is picked, it
+// says which place to tap (by the buttons) and points at the places; "Use my settings" picks the place too when only
+// one is connected. While My Mac posts TikTok is on (§47.10) TikTok's part is one read-only line (the Mac posts it for
+// everyone, with the AI label; Comments, Duet and Stitch on): no Who can see it and no Commercial content, and Upload
+// never waits for TikTok's choices (still asked, for Posting as and the length limit).
+import { useEffect, useId, useMemo, useRef, useState } from "react";
 import { Dropdown } from "../../components/Dropdown.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { A } from "../../components/ui.tsx";
@@ -35,10 +39,12 @@ import {
   type TikTokChoices,
 } from "../../lib/tiktokChoices.ts";
 import { storiesApi } from "../api/client.ts";
-import { STORIES_PLATFORMS, type ErrorAccount, type Platform, type PublishOptions, type PublishingJob, type PublishTarget, type SocialAccount, type StoriesConfig, type Story, type TikTokCreator } from "../api/types.ts";
+import { STORIES_PLATFORMS, type ErrorAccount, type Platform, type PublishOptions, type PublishingJob, type PublishTarget, type SocialAccount, type StoriesConfig, type Story, type TikTokCreator, type WsMacStatus } from "../api/types.ts";
 import { storiesHref } from "../routes.ts";
 import { Busy, celebrate, Notice, Pick, StSheet, Switch, TechDetails } from "./kit.tsx";
-import { PostRow, SocialAccountsLink, waitingLine } from "./PostsPanel.tsx";
+import { MAC_TIKTOK_OPTIONS, macSetUp } from "./macRow.ts";
+import * as MW from "./macWords.ts";
+import { MAC_CARD_HREF, PostRow, SocialAccountsLink, waitingLine, type PostMacProps } from "./PostsPanel.tsx";
 import { accountOf, accountProblem, accountShown, ago, PLATFORM_LABEL, say, thisAccount } from "./words.ts";
 
 type YouTubeOptions = { privacy: "public" | "unlisted" | "private"; category: string; notifySubscribers: boolean };
@@ -171,9 +177,20 @@ export function postYes(message: string | null | undefined): string {
 /** The Clip Factory-shaped creator the shared TikTok rules read (the same fields, §17.4). */
 const asClips = (c: TikTokCreator): ClipsTikTokCreator => ({ ...c, avatarUrl: c.avatarUrl ?? undefined });
 
-/** The flat options each target carries (§45.6 PublishOptions; the server allow-lists them). */
-export function optionsFor(p: Platform, yt: YouTubeOptions, shareToFeed: boolean, tt: TikTokChoices, creator: TikTokCreator | null): PublishOptions | undefined {
+/** What Upload says before a place is picked: the place to tap, by its name. */
+export function pickPlaceFirst(connected: Pick<SocialAccount, "platform">[]): string {
+  const first = connected[0];
+  if (!first) return "Connect an account in Social accounts first.";
+  return connected.length === 1 ? `Tap ${PLATFORM_LABEL[first.platform]} first.` : `Tap ${PLATFORM_LABEL[first.platform]} (or another place) first.`;
+}
+
+/**
+ * The flat options each target carries (§45.6 PublishOptions; the server allow-lists them). While the Mac posts TikTok
+ * (`mac`) TikTok's are My settings in full (everyone, Comments, Duet and Stitch on, never branded): the Mac's own.
+ */
+export function optionsFor(p: Platform, yt: YouTubeOptions, shareToFeed: boolean, tt: TikTokChoices, creator: TikTokCreator | null, mac = false): PublishOptions | undefined {
   if (p === "youtube") return { privacy: yt.privacy, category: yt.category, notifySubscribers: yt.notifySubscribers };
+  if (p === "tiktok" && mac) return { ...MAC_TIKTOK_OPTIONS };
   if (p === "tiktok" && creator) return tiktokOptions(tt, asClips(creator));
   if (p === "instagram") return { shareToFeed };
   return undefined;
@@ -187,6 +204,8 @@ export function PublishSheet({
   onSent,
   onRetry,
   onClose,
+  mac,
+  only,
 }: {
   ws: string;
   story: Story;
@@ -196,11 +215,15 @@ export function PublishSheet({
   onSent: (jobs: PublishingJob[]) => void;
   onRetry: (job: PublishingJob) => void;
   onClose: () => void;
+  /** the Mac posts' rows after Upload (§47.10) */
+  mac?: PostMacProps;
+  /** opened ticked for this one place only (a row's Post with my Mac) */
+  only?: Platform;
 }) {
   const id = useId();
   const [accounts, setAccounts] = useState<SocialAccount[] | null>(null);
   const [loadProblem, setLoadProblem] = useState<string | null>(null);
-  const [chosen, setChosen] = useState<Platform[]>([]);
+  const [chosen, setChosen] = useState<Platform[]>(only ? [only] : []);
   const [more, setMore] = useState(false);
   const [yt, setYt] = useState<YouTubeOptions>({ privacy: config.youtubePrivacy ?? "public", category: config.youtubeCategory ?? "27", notifySubscribers: true });
   const [shareToFeed, setShareToFeed] = useState(true);
@@ -219,6 +242,9 @@ export function PublishSheet({
   /** The accounts the owner said yes to after a 409 named them (sent as confirmAccount), and the one being asked. */
   const [confirms, setConfirms] = useState<Partial<Record<Platform, string>>>({});
   const [ask, setAsk] = useState<{ platform: Platform; account: ErrorAccount; message: string } | null>(null);
+  /** Upload was tapped while something is missing: the reason shows by the buttons. */
+  const [nudged, setNudged] = useState(false);
+  const places = useRef<HTMLUListElement>(null);
 
   useEffect(() => {
     let live = true;
@@ -235,6 +261,20 @@ export function PublishSheet({
   const connected = STORIES_PLATFORMS.map((p) => byPlatform.get(p)).filter((a): a is SocialAccount => !!a && a.connectionStatus === "connected");
   const others = STORIES_PLATFORMS.map((p) => byPlatform.get(p)).filter((a): a is SocialAccount => !!a && a.connectionStatus !== "connected");
   const tiktokOn = chosen.includes("tiktok");
+  // My Mac posts TikTok (§47.10): TikTok goes to the owner's Mac, for everyone.
+  const macMode = config.tiktokMac?.on === true;
+  const [macStatus, setMacStatus] = useState<WsMacStatus | null>(null);
+  useEffect(() => {
+    if (!tiktokOn || !macMode) return;
+    let live = true;
+    storiesApi()
+      .macStatus(ws)
+      .then((r) => live && setMacStatus(r))
+      .catch(() => undefined);
+    return () => {
+      live = false;
+    };
+  }, [tiktokOn, macMode, ws]);
 
   // TikTok's rules: this account's current choices are read every time the TikTok part opens.
   useEffect(() => {
@@ -259,6 +299,7 @@ export function PublishSheet({
 
   function toggle(p: Platform) {
     setProblem(null);
+    setNudged(false);
     setChosen((c) => (c.includes(p) ? c.filter((x) => x !== p) : [...c, p]));
   }
 
@@ -293,6 +334,9 @@ export function PublishSheet({
 
   function useMine() {
     setMine(true);
+    setNudged(false);
+    // Only one place to post to: my settings are for it.
+    if (!chosen.length && connected.length === 1) setChosen([connected[0]!.platform]);
     setYt({ privacy: "public", category: config.youtubeCategory ?? "27", notifySubscribers: true });
     setShareToFeed(true);
     if (creator) setTt((now) => myTikTokChoices(MY_TIKTOK, asClips(creator), now));
@@ -301,17 +345,23 @@ export function PublishSheet({
   const length = story.actualDurationSec ?? story.durationSec;
   const ttTooLong = !!creator && tooLongForTikTok(length, creator.maxDurationSec);
   const ttReady = !tiktokOn || (!!creator && !ttTooLong && choicesReady(tt));
+  const tooLong = "This video is longer than TikTok allows for this account. Tap TikTok to leave it out.";
   const why = !chosen.length
-    ? "Tap the places to post to."
-    : tiktokOn && !creator
-      ? "Waiting for TikTok's choices."
-      : tiktokOn && ttTooLong
-        ? "This video is longer than TikTok allows for this account. Tap TikTok to leave it out."
-        : tiktokOn && !tt.privacy
-          ? "Pick who can see it on TikTok."
-          : tiktokOn && !ttReady
-            ? `${PICK_WHOSE} Pick Your brand or Branded content.`
-            : null;
+    ? pickPlaceFirst(connected)
+    : tiktokOn && macMode
+      ? // The Mac's settings are fixed: Upload never waits for TikTok's choices, only TikTok's length limit counts.
+        ttTooLong
+        ? tooLong
+        : null
+      : tiktokOn && !creator
+        ? "Waiting for TikTok's choices."
+        : tiktokOn && ttTooLong
+          ? tooLong
+          : tiktokOn && !tt.privacy
+            ? "Pick who can see it on TikTok."
+            : tiktokOn && !ttReady
+              ? `${PICK_WHOSE} Pick Your brand or Branded content.`
+              : null;
 
   async function post(yes: Partial<Record<Platform, string>> = confirms) {
     if (why || sending) return;
@@ -327,7 +377,7 @@ export function PublishSheet({
       }
       const targets: PublishTarget[] = chosen.map((p) => {
         const account = byPlatform.get(p)!;
-        const options = optionsFor(p, yt, shareToFeed, tt, creator);
+        const options = optionsFor(p, yt, shareToFeed, tt, creator, macMode);
         const t: PublishTarget = options ? { platform: p, socialAccountId: account.socialAccountId, options } : { platform: p, socialAccountId: account.socialAccountId };
         if (yes[p]) t.confirmAccount = yes[p];
         return t;
@@ -346,6 +396,14 @@ export function PublishSheet({
     }
   }
 
+  /** Upload: the post, or, while something is missing, what it is (by the buttons), with the places pointed at. */
+  function upload() {
+    if (checking.length || sending) return;
+    if (!why) return void post();
+    setNudged(true);
+    if (!chosen.length) places.current?.querySelector<HTMLElement>("button.st-s-place")?.focus();
+  }
+
   function sayYes() {
     if (!ask) return;
     const next = { ...confirms, [ask.platform]: ask.account.externalAccountId };
@@ -356,7 +414,7 @@ export function PublishSheet({
 
   if (sentIds) {
     const sent = sentIds.map((jid) => jobs.find((j) => j.publishingJobId === jid)).filter((j): j is PublishingJob => !!j);
-    return <SentSheet sent={sent} onClose={onClose} onRetry={onRetry} />;
+    return <SentSheet sent={sent} onClose={onClose} onRetry={onRetry} mac={mac} />;
   }
 
   const ttPrivacy = creator ? privacyChoices(creator.privacyOptions, tt.commercial && tt.branded) : [];
@@ -370,10 +428,15 @@ export function PublishSheet({
       wide
       actions={
         <>
+          {nudged && why ? (
+            <p className="st-s-sheet__why" role="alert">
+              {why}
+            </p>
+          ) : null}
           <button type="button" className="st-btn" onClick={onClose}>
             Not now
           </button>
-          <button type="button" className="st-btn st-btn--main st-s-big st-s-upload" aria-disabled={!!why || sending || checking.length > 0 || undefined} title={why ?? undefined} onClick={() => checking.length === 0 && void post()}>
+          <button type="button" className="st-btn st-btn--main st-s-big st-s-upload" aria-disabled={!!why || sending || checking.length > 0 || undefined} title={why ?? undefined} onClick={upload}>
             {sending ? "Checking and sending…" : chosen.length > 1 ? `Upload to ${chosen.length} places` : "Upload"}
           </button>
         </>
@@ -387,7 +450,7 @@ export function PublishSheet({
         <>
           <p className="st-s-field__hint">Only Clips Funded&apos;s own accounts are here. Tap each place to post “{story.title}” to.</p>
           {connected.length ? (
-            <ul className="st-s-places" aria-label="Where to post">
+            <ul className={`st-s-places${nudged && !chosen.length ? " is-nudged" : ""}`} aria-label="Where to post" ref={places}>
               {connected.map((a) => {
                 const on = chosen.includes(a.platform);
                 const busy = checking.includes(a.platform);
@@ -449,7 +512,8 @@ export function PublishSheet({
 
           {connected.length ? (
             <div className="st-s-presets">
-              <button type="button" className={`st-btn${mine ? "" : " st-btn--main"}`} onClick={useMine}>
+              {/* Upload is the one main button: this one is plain. */}
+              <button type="button" className="st-btn" onClick={useMine}>
                 {mine ? "✓ Using my settings" : "Use my settings"}
               </button>
               <button type="button" className="st-btn" aria-expanded={more} aria-controls={`${id}-more`} onClick={() => setMore((m) => !m)}>
@@ -459,7 +523,33 @@ export function PublishSheet({
           ) : null}
           {mine ? <p className="st-s-field__hint">My settings: everyone can see it, comments, duets and stitches on, not made for kids.</p> : null}
 
-          {tiktokOn ? (
+          {tiktokOn && macMode ? (
+            <fieldset className="st-s-group st-s-tiktok st-s-tiktok--mac">
+              <legend className="st-s-group__title">TikTok</legend>
+              {creator ? (
+                <p className="st-s-field__hint">
+                  Posting as <strong>{creator.nickname}</strong> (@{creator.username})
+                </p>
+              ) : null}
+              <p className="st-s-mac-line">
+                <strong>{MW.MAC_SHEET_LINE}</strong>
+              </p>
+              <p className="st-s-field__hint">{MW.MAC_SHEET_SMALL}</p>
+              {macStatus && !macSetUp(macStatus.helper) ? (
+                <Notice
+                  tone="info"
+                  action={
+                    <A href={MAC_CARD_HREF} className="st-btn">
+                      {MW.MAC_SET_IT_UP}
+                    </A>
+                  }
+                >
+                  {MW.MAC_SHEET_NOT_SET_UP}
+                </Notice>
+              ) : null}
+              {ttTooLong ? <Notice tone="bad">This video is longer than TikTok allows for this account. Tap TikTok above to leave it out.</Notice> : null}
+            </fieldset>
+          ) : tiktokOn ? (
             <fieldset className="st-s-group st-s-tiktok">
               <legend className="st-s-group__title">TikTok</legend>
               {creatorProblem ? (
@@ -559,7 +649,7 @@ export function PublishSheet({
             </div>
           ) : null}
 
-          {why && chosen.length ? <p className="st-s-field__hint st-s-why">{why}</p> : null}
+          {why && chosen.length && !nudged ? <p className="st-s-field__hint st-s-why">{why}</p> : null}
           {problem ? (
             <Notice tone="bad" action={accountProblem(problem) ? <SocialAccountsLink className="st-btn" /> : undefined}>
               {problem}
@@ -604,7 +694,7 @@ export function claimPostCheer(publishingJobId: string): boolean {
  * After Upload: each place as it goes; "Posted!" once every one is up. Each place that goes up gets the star burst and
  * the cheer, as Approve does (§45.36 E11), also when another place stops.
  */
-function SentSheet({ sent, onClose, onRetry }: { sent: PublishingJob[]; onClose: () => void; onRetry: (job: PublishingJob) => void }) {
+function SentSheet({ sent, onClose, onRetry, mac }: { sent: PublishingJob[]; onClose: () => void; onRetry: (job: PublishingJob) => void; mac?: PostMacProps }) {
   const done = sent.length > 0 && sent.every((j) => j.publishingStatus === "posted");
   const states = sent.map((j) => `${j.publishingJobId}:${j.publishingStatus}`).join(",");
   useEffect(() => {
@@ -636,7 +726,7 @@ function SentSheet({ sent, onClose, onRetry }: { sent: PublishingJob[]; onClose:
       </p>
       <ul className="st-s-posts">
         {sent.map((j) => (
-          <PostRow key={j.publishingJobId} job={j} onRetry={onRetry} />
+          <PostRow key={j.publishingJobId} job={j} onRetry={onRetry} mac={mac} />
         ))}
       </ul>
     </StSheet>

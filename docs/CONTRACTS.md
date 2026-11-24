@@ -540,9 +540,15 @@ AgentCore runtime's `/aws/bedrock-agentcore/runtimes/<runtime id>-DEFAULT`, whic
   setup. Posts once these accounts are connected.", except one whose place is set up now: it gets its own row
   "Ready to post" with **Post now** (§33.6). A clip whose posting did not start (`startPending` for more than 4 s,
   `START_GRACE_MS`: the start after a Try again, Post now or connect did not go through) shows "This clip has not started
-  uploading yet. Tap Try again." with the big **Try again**, which sends Confirm and starts it (§14.5). The "Show" filter's empty list says why it is empty: no kept
-  clips at all → "Nothing kept yet" + Go to Review; "Not posted yet" with every kept clip posted → "Everything is
-  posted!" + Show all; "Posted" with kept clips still on their way → "Nothing posted yet" + Show all.
+  uploading yet. Tap Try again." with the big **Try again**, which sends Confirm and starts it (§14.5); its pill reads
+  "Not started" (warn, not the green "Uploading"), and "Waiting for setup" when every post waits for its account. A
+  card's views are the sum of its posts' views whenever any post has numbers. The "Show" filter lives in the address
+  (`?show=waiting|posted`, changed with replace and the scroll kept), so Back and a reload keep it. The "Show" filter's empty list says why it is empty: no kept
+  clips at all → "Nothing kept yet" + Go to Review, first on the page (no totals, no filter; the learnings box only
+  when there are learnings); "Not posted yet" with every kept clip posted → "Everything is
+  posted!" + Show all; "Posted" with kept clips still on their way → "Nothing posted yet" + Show all. Only a failed
+  clip list is a page error: failed posts or insights show their own error panel with Try again in the totals area.
+  This week's stars are saved at once when the page is hidden or closed (`keepalive`), not only after 800 ms.
 * Installable PWA (manifest + service worker) on phone and desktop.
 
 ### 11.1 One top line (owner request, 2026-11-19)
@@ -579,7 +585,30 @@ the traffic lights' band; nothing ever covers the traffic lights.
   `z-index: 45`, transparent, no border, rim or shadow. Pressing it moves the window; a double click zooms it.
 * **Phones** keep their own top bar under the pill strip (top bar at `--top-line + --todo-top`).
 * **Also on the token:** `html { scroll-padding-top }`, the skip link, the sign-in screen, the small question sheet's
-  scrim, the phone Ask sheet and the setup list's glass bar all clear `--top-safe`.
+  scrim, the phone Ask sheet and the setup list's glass bar all clear `--top-safe`; so do the markup editor, the
+  Post to TikTok sheet and Clips Funded's sheets.
+* **Edge to edge on a phone (owner request, 2026-11-23: "remove the entire green top bar").** `index.html` asks for
+  `apple-mobile-web-app-status-bar-style: black-translucent` with `viewport-fit=cover`, so an installed iPhone app has
+  no solid band at the top: each app's own backdrop (Clip Factory's `.backdrop`, Clips Funded's `.stories-app::before`,
+  both `position: fixed; inset: 0`) shows under the clock, the Dynamic Island and the signal. Nothing of a page sits
+  there: every column still starts on `--top-line`. `--status-bar-h` (`env(safe-area-inset-top)`, in `tokens.css`) is
+  the status bar alone; only the status-bar scrim and glass strip are that tall. The scrim (`.app::after`,
+  `.stories-app::after`): black, held under the clock to 75 % and easing out over the bar's last quarter
+  (`--status-bar-fade`, a mask), exactly as strong as the white clock needs for AA over the look's top edge
+  (`statusScrim` in `lib/background.ts` and `stories/look.ts`: 0 over the living backdrop, Ember, Rose, Lagoon and
+  dark colours, so nothing is drawn; about 0.5 over Cream or a picture, planned for white). Once the page has scrolled
+  (`<html data-scrolled>`, `lib/pageScrolled.ts`) cards and buttons slide up under the clock, so a strip of each app's
+  own glass lies there (`.app::before`, Clips Funded's `.st-frame::before`): its blur and saturation and its veil
+  planned for white (`--status-strip-veil` 0.66 green, `--st-status-strip-veil` 0.59 espresso: `statusStripVeil`), so
+  the white clock keeps AA over anything, even where no backdrop-filter is drawn; it masks with the same fade and
+  comes and goes on its opacity alone (never a filter transition). At the top of a page it is not drawn. Clips Funded's
+  sticky panels (the chat list, a review's player, the character stage, an idea's basics) stop below `--top-safe`
+  too, for an installed iPad app. The body under the backdrop is the backdrop's own top edge (`#0f3d31`), and
+  `theme-color` is its average (`#13483C`): Android's installed app and browsers that tint their bars keep a coloured
+  status bar (no web page can make it see-through there), now the backdrop's own top colour. An installed iPhone app
+  picks the new style up when it is closed and opened again (at worst, removed and added to the Home Screen again).
+  Tests: `test/edgeToEdge.test.ts`, `e2e/phone-edge-to-edge.spec.ts` (also scrolled: Home, Library, Clips Funded's
+  Dashboard and Ideas keep the clock's and icons' zones at AA at every scroll stop).
 * **Tests:** `e2e/top-line.spec.ts` (Chromium and WebKit): the simulated macOS window at 1000 x 650, 1200 x 820 (the
   pill) and 1440 x 900 on `/`, `/jobs`, `/review`, `/library`, `/settings` and a settings branch puts every column
   within 1 px of the line (42 px), keeps the 80 x 28 traffic-light corner clear and checks the 28 px drag strip; a tab
@@ -630,6 +659,9 @@ the traffic lights' band; nothing ever covers the traffic lights.
   fast middle, slow end), holds/creeps while the new service worker installs and activates (`skipWaiting` via
   postMessage) and fresh assets are fetched, then eases to 100 %, a small sparkle/confetti, then `location.reload()`.
   Cap at 10 s, then reload anyway. Reduced motion → simple fill.
+* Settings › Updates' **Check for updates** (`checkForUpdate` answers `'newer' | 'current' | 'failed'`): a newer
+  version → "A new version is ready. Tap Reload at the bottom of the screen."; a check that got no answer → "Couldn't
+  check. Check your internet and tap Check for updates again." (never "newest"); else "You have the newest version.".
 
 ### 12.3 Desktop wrapper (`desktop/`, Tauri v2)
 * A thin native window that loads `app_url` (no bundled UI), window title "Clip Factory", the app icon, minimum size
@@ -739,8 +771,7 @@ not, so the page said "This computer can't show see-through" on macOS 27 with Li
   (confirmed, publishing, posted, failed) opens `/clips/{clipId}`; a thrown-away one is not a link (it is listed
   nowhere else) and does not lift on hover like one.
 * **Empty Clips line** follows the job: working "Clips show up here as soon as they are made."; failed "No clips
-  yet. Fix the problem above, then tap Try again."; canceled "No clips yet. This job was stopped. Tap Try again to
-  start it again."; ready with none "This job made no clips. Go back to Home and try a different link."
+  yet. Fix the problem above, then tap Try again."; canceled "No clips yet. This job was stopped. Tap Try again."; ready with none "This job made no clips. Go back to Home and try a different link."
 * **Words** (§12.4): the job status pill says **Didn't work** (never "Failed"); the Home source switch is
   **Paste a link / Pick a video** (the help anchor stays `upload-video`).
 * **Drag and drop on the new-job card** (`web/src/lib/drops.ts`): a video dragged from Finder (or the desktop)
@@ -759,6 +790,17 @@ not, so the page said "This computer can't show see-through" on macOS 27 with Li
   serves Use a video file (`/?file=1&from=`). Covered by `web/test/drops.test.ts` and `web/e2e/drop-video.spec.ts`.
   This card keeps its own drop code; every other upload site uses the shared hook `web/src/lib/useFileDrop.ts` and
   its layer `web/src/components/DropOverlay.tsx` (§45.40.1).
+* **Kid-proof Home form** (`NewJobForm.tsx`, `web/e2e/home-jobs-guards.spec.ts`): the upload bar and **Cancel upload**
+  show from the tap on Make clips; while the file goes up, leaving Home asks "Leave and stop the upload?" (**Stay**
+  first and focused; the browser asks on a reload), never once the file is all up, never on the switch to Clips Funded
+  (Home keeps going behind it). During the upload the file can't change ("The upload is still running. Tap Cancel upload
+  first."); notes and clip count are read when the upload ends; a Make clips that fails after the upload tries again
+  without sending the file twice. The unsent link, notes and count are kept while the app stays open (not over a
+  reload) and cleared once the job starts. A tap within 400 ms after Paste and Clear swapped places is ignored. A
+  link that turns good scrolls Make clips into view above the tab bar. Paste's fallback says "Click in the box and
+  press ⌘V." (Ctrl+V off a Mac) with a mouse and "Press and hold…" only on touch screens. A Twitch or Kick Videos or
+  Clips tab says "That's a list of videos. Open one video, then copy its link." (or the clips version). Use a video
+  file from a failed job scrolls to the form, focuses the file box and says "For {job title}".
 * **Jobs list on phones**: when a job started is never cut (the source part shortens with "…" instead), and a failed
   job's error is shown in full because its last sentence says how to fix it.
 * **No blank pages**: a malformed `#anchor` (`/jobs#100%`) is used as typed instead of throwing, and render errors
@@ -770,8 +812,7 @@ not, so the page said "This computer can't show see-through" on macOS 27 with Li
   fail with a server error). Covered by `web/e2e/audit-shell.spec.ts`.
 * **Review screen** (`web/src/screens/review/`):
   * A refused Upload (a caption too long for a chosen place) opens the first too-long place row, scrolls it into view,
-    focuses its box and names the platform: "Your X caption is longer than its platform allows. Make it shorter, then
-    tap Upload.". Every row whose caption is too long carries `.is-over` and "Too long. Make it shorter." so it shows
+    focuses its box and names the platform: "Your X caption is too long. Make it shorter, then tap Upload.". Every row whose caption is too long carries `.is-over` and "Too long. Make it shorter." so it shows
     even while the row is closed.
   * Place rows (§36.1): one closed row per chosen place, no tab bar. A closed TikTok row also names the account:
     "Posting as <nickname>" (TikTok's rules). Review's launcher keeps clear of the rows (`data-help-dodge`).
@@ -786,7 +827,21 @@ not, so the page said "This computer can't show see-through" on macOS 27 with Li
     Undo brings it back on whichever Review is on screen. A decline answered 409/404 (already kept or thrown away
     somewhere else) leaves the clip gone and shows a calm note instead of an error ("This clip was already kept or
     thrown away somewhere else, so there is nothing more to do."); any other failure brings it back with "… The
-    clip is back in your list.".
+    clip is back in your list.". A 409 for a clip that is confirmed, publishing, posted or failed closes the Undo
+    toast and says "This clip is already uploading, so it can't be thrown away." (`ALREADY_UPLOADING`). Throw away
+    first saves the words typed in the save delay, and the card's state (captions, edits, places, options, TikTok
+    choices) is kept by clip id, so Undo or a failed decline brings the card back exactly as it was.
+  * After an Upload the server took (held as confirmed with no posts, or a network or 5xx answer), the card is
+    `sent`: Throw away is hidden, Try again is the only button, and the chips, Use my settings and the place rows are
+    locked (`<fieldset disabled>`, "It's already sent, so you can't change it now."). A 4xx answer (the server never took
+    that Upload) opens the card again, even on a Try again after a lost connection, and the button says "Try again". Every autosave patches the lists on screen and remembered (`patchLoaded`), and
+    Upload sends only the captions changed on the card.
+  * Before Upload, a card whose TikTok goes through the Mac says what the Mac is doing (`macUploadLine`: not set up,
+    needs you, paused, or not checked in since a time) with that row's one button. After Upload, a clip where every
+    place waits for setup reads "Saved, waiting for set up" with one **Set up posting** link.
+  * A job's Review with nothing left: other clips wait → "This job is done!" / "N more clips are waiting." with **Show
+    every job**; an unknown job id → "This job isn't here" with the same button; only when nothing waits anywhere
+    "All done!" with Make clips.
   * Arriving from a clip link (`/review#clip-…`) scrolls to that clip once per arrival; later list changes never
     jump back to it.
   * When a card leaves while it holds the focus (Keep, Throw away), the focus moves to the next card's title (or
@@ -1153,7 +1208,7 @@ Replaces the publish queue, DLQ, publisher, Scheduler group/role and perf-check.
   itself; `similarity = round(1 - distance, 2)`; BatchGetItem the hits' Clip items (drop missing/declined) to add a
   presigned `coverUrl`; return at most 5 as `SimilarClip[]` sorted by similarity. Vector errors → `{"clips": []}` + log.
 * **Web:** Review and Library show a "Like clips that did well" strip (cover, hook, views) under the clip, hidden when
-  empty; mock mode has fixtures.
+  empty; each tile is a link to `/clips/{clipId}`; mock mode has fixtures.
 
 ### 14.7 Decision: OpenSearch is not deployed
 
@@ -1318,7 +1373,7 @@ Branch routes are nested: `/settings/look-and-feel/sounds`. `/get-app` keeps wor
 * `/settings` (the field): a short search box "Find a setting" that searches every apple and leaf by name and jumps
   straight to it (highlights it on the panel's own lines for 2 s: the whole panel when the apple is alone in it, else
   its row from edge to edge between the dividers, with the panel's corners on the first and last row; never an outer
-  ring, and the apple's programmatic focus draws no second ring, `settings.css` `.apple::after`), then the four trees as big glass cards (icon, name, one line, how many apples).
+  ring, and the apple's programmatic focus draws no second ring, `settings.css` `.apple::after`), then the four trees as big glass cards (icon, name, one line, the names of its branches).
 * A tree page lists its branches as cards (icon, name, one line). A branch page shows its apples as rows grouped in
   glass panels, each with its leaf under it.
 * Breadcrumb on every level: `Settings › Look & feel › Sounds` (each part a link) plus a big Back button on phones.
@@ -1721,7 +1776,7 @@ does" → `/clips/{clipId}`; Back returns to where the owner came from (else `/l
    rounded glass frame, centred; width `min(180px, 56cqi)` in the trunk layout and `min(400px, 44vh) · 9/16`
    (≤ 225 px) in the rows and fan layouts, so the total and the first stacks stay on the first screen. No
    autoplay. No `videoUrl` → the cover image.
-3. Stat block beside/under the preview: big total views (display serif) with "views across platforms" and a small
+3. Stat block beside/under the preview: big total views (display serif) with "views on all apps" and a small
    "(each app counts views its own way)"; the **"Best this week" star** toggle (≥ 48 px, `aria-pressed`, green glass,
    not vermilion); the one vermilion **Refresh numbers** button (icon + word, spinner while any `started` post is still
    `refreshing`; when every platform is `too_soon`/`blocked` it reads "Next check in 4 min" and a tap plays the deny
@@ -1768,7 +1823,7 @@ rows (icon, label, value; labels wrap, values never cut) showing **only** that p
   25/50/75/100 % (only while present).
 Absent fields are not shown (no "0" rows). Then the sparkline (`Sparkline`, 120×32 SVG polyline of `series[platform]`,
 ≥ 2 points else hidden, `role="img"` `aria-label="Views went from 1.2K to 8.4K"`), "Updated 3 min ago" (fast) and,
-for slow groups, "Insights from 2 days ago" (`insightsUpdatedAt`); "Open on {Platform}" link (`url`, new tab,
+for slow groups, "Checked 2 days ago" (`insightsUpdatedAt`); "Open on {Platform}" link (`url`, new tab,
 `rel="noopener noreferrer"`); "Next check in 12 min" when `nextAllowedAt` is in the future.
 **Calm states** (no numbers, one plain line + one link button, never an error colour except Failed):
 * Waiting for connection: "Connect {Platform} in Settings › Posting › Set up posting." →
@@ -1777,9 +1832,15 @@ for slow groups, "Insights from 2 days ago" (`insightsUpdatedAt`); "Open on {Pla
   `/settings/posting/where`.
 * Posting: "Posting now…" with a small spinner.
 * Posted privately (TikTok): "Posted privately. TikTok shows numbers after the app is approved."
-* Posted, no metrics yet: "Numbers are on the way. Check back in a few minutes."; when the last read failed, its
-  `statsError` sentence instead (`error` of the stack, e.g. "Facebook did not answer. We will try again soon.").
-* Failed: "Posting failed: {error}. Go to Library and press Try again."
+* Posted, no metrics yet: when the last read failed, its `statsError` sentence (`error` of the stack, e.g. "Facebook
+  did not answer. We will try again soon."); else the post's `perfCheckAt` in the Library's words (`numbersComing`):
+  "Numbers come tomorrow." (Library: "· numbers tomorrow"), else "Numbers are on the way. Check back in a few
+  minutes." (also when that time has passed).
+* Not sent yet (posting never started, or the start is stuck past `START_GRACE_MS`): "Not sent yet. Tap Try again.";
+  the Library's line and its **Try again** (`UploadAgain`) lead the page's actions as its one red button; "This clip
+  was not sent to {Platform}." when the place is on in Where clips go (no wrong "Turn on" link).
+* Failed: "{why}. Tap Try again." with that platform's own **Try again** inside its stack (not TikTok while it has
+  its Mac row, and not TikTok's public-account refusal).
 * YouTube, `views` 0 at least 6 h after `postedAt`: under the top number "That's YouTube's own count: it hasn't shown
   this Short to viewers yet." (the 0 is what YouTube reports, not a failed read).
 
@@ -1796,8 +1857,8 @@ line and the "·" is visually hidden, still read by screen readers). Toggling is
 and saved by `PUT …/best` 800 ms after the last change (one request); a toast "Saved. Clip Factory will learn from your
 picks." Under the header a status line from `learnState`: learning → "Learning from your picks…" (spinner); done →
 the learning text in a glass quote with "Best of week" label; failed → "Could not learn this time. Change a pick to
-try again."; none/skipped → "Star the clips that did best this week." Empty week: "No clips this week yet. Make clips
-on Home." with a link. `week` events and `learning` upserts (kind `week`) update it live. The browser tab title follows the
+try again."; none/skipped → "Star the clips that did best this week." Empty week: the title "No clips this week yet",
+the line "Make clips on Home." and a link. `week` events and `learning` upserts (kind `week`) update it live. The browser tab title follows the
 heading: "This week · Library · Clip Factory" for the current week, "Week of 28 Sep–4 Oct · Library · Clip Factory"
 for any other (`weekTitle` in `WeekView.tsx`).
 
@@ -2008,8 +2069,8 @@ DELETE `/v1/lessons/{lessonId}`; a bad id is 404, any other body 400; 409 "That 
 the daily run changed the lesson twice while it was being turned off or on (every toggle write is conditional). Mock parity: `web/src/api/mock/lessons.ts`.
 
 **Web**: Settings › Clip making › **What it learned** (`/settings/clip-making/learned`, apple `what-it-learned`,
-between Skills and YouTube help). The top line: "Every day Clip Factory checks your clips 7 days after posting.
-Lessons it is sure about go to your skills as Prior learnings." Grouped by creator ("All creators" last): each
+between Skills and YouTube help). The top line: "Clip Factory checks each clip 7 days after posting.
+Lessons it is sure of join your skills as Prior learnings." Grouped by creator ("All creators" last): each
 lesson's text, a chip (Trying it, Using it, Turned off, Too old), the platform, "4 of 31 clips did much better than
 normal" ("… clips from all your creators …" for the All creators group), Too old lessons say "Too old to use. New clips can teach it again." and have only Delete, the winner clips as links, Turn off / Turn on and Delete (with "Delete this lesson?"). A creator without
 enough clips: "YouTube: Needs 12 more posted clips". Before the first run: "Nothing yet. …". Library's "What's working"
@@ -2057,8 +2118,8 @@ Order everywhere: **YouTube, TikTok, Instagram, Facebook, X** (`SETUP_ORDER = ST
   then (only what the step needs): **Open {site}** (opens the exact page in a new tab, `rel="noopener noreferrer"`),
   **Copy** chips (label + value in mono, one tap copies, leaf-green tick "Copied!", works without clipboard permission via a
   select-all fallback), **paste boxes** (with a Paste button, format check as you type, friendly error under the box),
-  an **upload box** (TikTok verification file), "**If you see** X, do Y" hints (for anything the research marks
-  uncertain), and **I did this** (green, ≥ 48 px). Auto steps (keys saved, connected, checked) tick themselves.
+  an **upload box** (TikTok verification file), "**If you see** X, do Y" hints in one shut "If you see…" fold (for anything
+  the research marks uncertain), and **I did this** (green, ≥ 48 px). Auto steps (keys saved, connected, checked) tick themselves.
 * **One main vermilion button per screen**: the current step's main action (its **Open** button, else **Save keys**, else
   **Connect {Platform}**, else **Connect again** when `needs_reconnect`). Everything else is green/glass.
 * **Connect** runs OAuth **in the same tab**: the page navigates to the platform, the owner approves, the hooks API
@@ -2070,9 +2131,19 @@ Order everywhere: **YouTube, TikTok, Instagram, Facebook, X** (`SETUP_ORDER = ST
   (`useConnecting.ts`) stops by itself once the platform page has opened: when the account changes (live `setup`
   event), when the owner comes back to the window, or when the page is shown again from the browser's cache (Back).
   While the platform address is still being fetched only an error or an account change stops it.
+  A Connect again that comes back cancelled while the account is still connected shows the calm card "Still
+  connected as {name}. Nothing changed." (`stillConnectedLine`), with no "Not connected yet" and no "Go to step". A
+  page that needs reconnecting scrolls to When it's done and focuses Connect again. Typed keys live on the platform
+  page (one draft each), so folding the step keeps them until Save keys. When it's done says when posts stay private
+  (`doneLine`): Facebook "Works now, posts stay private."; TikTok names Your Mac posts TikTok, with a glass **Open
+  Your Mac posts TikTok** while it is off. A TikTok verification file renamed by a second download ("tiktokX (1).txt",
+  "TikTokX.TXT") is uploaded under its real name; other renamed copies are told to download it again without renaming.
 * **Choose** (Meta with several Pages / Instagram accounts): a picker of big avatar cards; tapping one connects it.
 * **Disconnect**: tapping shows an 8 s toast "Disconnecting YouTube… Undo"; the `DELETE` is sent only when the toast
-  ends (§12.4: undo instead of a scary dialog). **Connect again** keeps the keys.
+  ends (§12.4: undo instead of a scary dialog). **Connect again** keeps the keys. The pending disconnect is kept per
+  platform outside the page: coming back during the Undo still says "Disconnecting…" with Disconnect off, and the page
+  reads its setup again when the disconnect ends or is undone. When the setup list fails with nothing kept, only the
+  error and Try again show (no "Checking…" cards).
 * ~~**Home card** "Set up posting · 2 of 5 ready"~~: replaced by the floating setup to-do list (§17.13), which shows
   on every signed-in page, so the owner never sees two competing lists. `screens/home/SetupCard.tsx` is removed.
 * **Review › Upload** with TikTok chosen: the **Post to TikTok** sheet (§17.8) must be filled before Upload is enabled.
@@ -2630,7 +2701,7 @@ are shown and none is on by default; Commercial content is off until the creator
   With Branded content ticked, Only me and Followers stay in the list greyed (`DropdownOption.disabled`: skipped by
   the keys, a tap does nothing, `aria-disabled`) with TikTok's line "Branded content visibility cannot be set to
   private." When `SELF_ONLY` is the only option it is the one choice, and the line "TikTok keeps posts private until it
-  approves your app." shows under it. When Branded content leaves nothing: "Branded content can't be Only me. Turn off
+  approves Clip Factory." shows under it. When Branded content leaves nothing: "Branded content can't be Only me. Turn off
   Branded content." The sheet's hint reads "Pick who can see it to turn on Upload."
 * **Commercial content (TikTok's audit rules, 2026-11-21).** Shared by the sheet and the TikTok row
   (`screens/review/TikTokCommercial.tsx`). Under the two ticks one line says the label: nothing ticked "Pick Your
@@ -2657,10 +2728,12 @@ so its backdrop covers the whole screen (tab bar, sidebar and Ask included; toas
 error shows) even though the card that opens it is
 glass (`backdrop-filter`); a page keeps no transform of its own (pages have no entrance, §20.16). It
 is a real modal: focus moves in once on open (typing in the caption never loses the caret), Tab and Shift+Tab wrap
-inside it, Escape closes it, and on close the focus goes back to the Upload that opened it. A clip longer than the
+inside it, Escape closes it, and on close the focus goes back to the Upload that opened it. After a `Sheet` closes,
+the next click within 500 ms and 40 px of the closing tap is swallowed (a double tap never lands on what was under
+the button); keyboard closes and clicks elsewhere go through. A clip longer than the
 creator's `maxDurationSec` (a limit of 0 means TikTok did not say: it does not block, the publisher checks again)
-or a creator-info error never leaves a dead end: the callout says what to do next ("… To upload it to your other
-places now, turn TikTok off above and tap Upload.", §33), and the error
+or a creator-info error never leaves a dead end: the callout says what to do next ("Too long for TikTok. To post it
+elsewhere, turn TikTok off above and tap Upload."; a creator-info error: "… Tap Ask TikTok again.", §33), and the error
 callout also has **Ask TikTok again**, which fetches the creator info again.
 
 ### 17.9 Infra (Terraform + scripts)
@@ -3230,7 +3303,7 @@ big Back on phones goes one level up):
 | Route | Page | Leaf |
 |---|---|---|
 | `/settings/clip-making/skills/new` | **Write a skill**: the three questions of §18.2 as big glass fields with their example under each (tap "Use the example" fills it), a live character count, one vermilion **Save skill**, a ghost **Cancel**. Errors sit under their field. Success: success sound, confetti, toast "Your skill is ready. Clip Factory will use it every time.", then the new skill's page. | "Clip Factory reads your skill every time it makes clips." |
-| `/settings/clip-making/skills/{skillId}` | **Skill page**: title, badges, "When it is used" (description), the rendered skill (§18.3); zips list their other files. Owner skills: vermilion **Edit**, ghost **Delete** (§18.5). Built-ins: no Edit or Delete. | owner: "Always used. Changes count from your next clips." built-in: "This skill comes with Clip Factory. It is always used. You can read it, but not change or delete it." |
+| `/settings/clip-making/skills/{skillId}` | **Skill page**: title, badges, "When it is used" (description), the rendered skill (§18.3); zips list their other files. Owner skills: vermilion **Edit**, ghost **Delete** (§18.5). Built-ins: no Edit or Delete. | owner: "Always used. Changes count from your next clips." built-in: "Comes with Clip Factory. Always used. You can read it, but not change or delete it." |
 | `/settings/clip-making/skills/{skillId}/edit` | the same form filled from `form`, vermilion **Save changes**; for a zip a ghost **Replace the whole file**; `formBlocked "too_long"` shows only the replace option; a built-in id redirects to its page with an info toast. Leaving with unsaved changes asks "Leave without saving?" (**Keep editing** / **Leave**); when browser Back asked, **Leave** finishes that Back (no extra history entry, so the next Back goes one more step, even when it is pressed at once, while the page change still fades). The description box grows with its words and has no drag grip (it never gets wider than the form). | "Change the words, then tap Save changes." |
 
 
@@ -4090,6 +4163,38 @@ When Settings › Look & feel › Motion › Reduce motion is on **or** the OS r
   touched here.
 * The CSS guards both ways: `@media (prefers-reduced-motion: reduce)` and `.reduce-motion` select the fade keyframes,
   so even a stale `phase` can never move anything.
+
+**The global 1 ms rule and what it adds (audit, 24 Nov).** Calm motion (`base.css`: the media query and
+`.reduce-motion`) sets `transition-duration: 1ms !important` and `animation-duration: 1ms !important` on every element
+and pseudo-element, so every transition and animation still ends (its end event fires) at once. `transition-property`
+is `all` unless an element sets it, so the rule also gives a 1 ms transition of every property to elements that have
+none of their own at normal motion, and a transition, even one of 1 ms, starts only on the next frame drawn; until then
+`getComputedStyle` and the boxes read the old value. `visibility` is animatable too: a swap to `hidden` reads `visible`,
+and a swap back reads `hidden`, until that frame. Where frames come slowly (CI's Linux software paint under a frosted
+page, any busy computer) that is hundreds of ms. It has bitten four times, each fixed where it was, with
+`transition: none` (or `transition-property: none`) on a part that is never transitioned at normal motion: the dock's
+`.ws-switch-host` and `.ws-dock__live` (`glide.css`, §45.38), the rail foot (`st-frame.css`), the warm mark's tile
+(`.ws-mark--sized`, `ws-mark.css`), and Clip Factory's backdrop with everything in it (`glass.css`: `.backdrop--away`'s
+`visibility: hidden` landed a frame late both ways, `e2e/stories-see-through-own.spec.ts`; proven with Chromium's
+animation clock stopped: a running CSSTransition of `visibility` on the backdrop and on each blob and veil inheriting
+it, five in all, at currentTime 0). A part that never transitions at normal motion takes `transition: none` in its own
+rule, with the reason.
+
+* What is left (the same check, the animation clock stopped, over a switch between the apps both ways and a page change
+  in each, at 1440, 1024 and 375 px): one, `.st-head__lede`'s `max-width: 62ch`, which follows Clips Funded's own fonts
+  as they arrive (layout, a frame late; no check measures it).
+* Every end listener has a way on without the event: `WorkspaceDock` (`ws-dock-unfold`, an animation; a 1 s timer),
+  `features/help/dodge.ts` (`transitionend` and `animationend` only ask for a measure; its observers and its frame
+  check ask too), Home's covers (`deal`, an animation; nothing waits on it) and Clips Funded's sheet lift
+  (`animationend`, with a MutationObserver).
+* Known follow-up: the rule could stop adding transitions altogether with `transition-property: none` at specificity 0
+  (`*, *::before, *::after` in the media query, `:where(.reduce-motion) *` for the setting), which every element's own
+  `transition` or `transition-property` still beats, so a transition it has keeps its 1 ms and its end event. The
+  checks so far say it is safe: no rule sets a transition at specificity 0, no rule sets only a duration and leans on
+  `all` (`.btn:active` and Clips Funded's `.st-pill` pair theirs with the property list), nothing sets one from script,
+  and no listener waits on a transition the element only has under calm motion. It is not made yet: it changes every
+  page under calm motion, so it waits until every calm-motion spec (46 files, 1,281 tests in Chromium, the WebKit and
+  WebKit phone ones) has run green with it, outside a release.
 
 ### 20.7 Undo and the rewind
 
@@ -5942,8 +6047,8 @@ never top left. The release label is "Money dashboard".
 
 The owner is paid per view, not by subscription, so "MRR" here is **the money the apps reported over a recent stretch
 of days**, built only from stored `REVENUE#{platform}#{day}` rows (§25). The screen keeps the MRR names with a plain
-line under each, and a "?" says: "MRR usually means subscriptions. Here it means the money YouTube (and other apps that
-share it) reported for your videos over that many days."
+line under each, and a "?" says: "Here MRR is the money the apps reported for your videos. A day can still change for a
+few days."
 
 * **`through`** (the end day): the newest stored row date of each counted app (`throughBy`, a $0 day counts as
   reported), and the **earliest** of those across the counted apps, so every app covers the same days. Every period
@@ -5956,8 +6061,8 @@ share it) reported for your videos over that many days."
   so 10 days of $1.00 read $1.00 a day, not $0.33. **Yearly MRR**: Monthly × 12 once 30 days are covered, Monthly ×
   360 ÷ `coveredDays` before that (`paceMicros`), always "At this pace for a year", never added to anything, worked out
   only on the server; "Last 365 days: $X" shows only when stored history covers every day of `[through−364, through]`
-  for every counted app. Under 30 covered days the sub-lines say so ("only 10 days so far", "average of 10 days",
-  "from 10 days so far").
+  for every counted app. The sub-lines are "Last 30 days", "Last 7 days", "An average day (last 30 days)" and "At this
+  pace for a year"; under 30 covered days they say so ("only 10 days so far", "last 10 days", "from 10 days so far").
 * A day between an app's first stored row (`historyFrom`) and `through` with no row counts as $0; a day before it is
   not covered. A comparison shows only when every counted app covers the whole previous period; otherwise the card
   says "Not enough days to compare yet".
@@ -5980,7 +6085,7 @@ share it) reported for your videos over that many days."
 | `lastError` on a counted app | Kept in with the rows it has; banner "Couldn't check YouTube today. Showing money up to Thu 14 Nov." (warn tone), naming only the apps in `errors`. |
 | One counted app's newest day older than today − 6 while another is up to date | That app is left out with reason `behind` ("Facebook hasn't sent money since Tue 27 Oct. Not counted for now.") and listed in `behind`, so it cannot pull every app's days back; the others keep current numbers. |
 | Every counted app older than today − 6 | They stay in; `stale: true`; the banner names the apps in `errors` ("Couldn't check …") and the other `behind` apps ("… hasn't sent new money lately."), then "Showing money up to …". |
-| Revised days in the 60 days shown | Grey line "YouTube changed 2 days after rechecking them." |
+| Revised days in the 60 days shown | Grey line "YouTube changed 2 days after a recheck." |
 | Two or more currencies | Each card stacks one line per currency; a Segmented currency picker (with Glide) above the chart; "Different money types are never added together." |
 | Nothing can be counted | "No money yet." with the nearest goal bar (`nearestGoal`, as on Home) and **See how close you are** (Settings › Posting › Money). No zeros, no chart. |
 | Only apps that never share | One card: "{App} doesn't share money with apps. Look in {paidWhere}." The clip list still shows views. |
@@ -6003,7 +6108,7 @@ Every amount carries its tag ("YouTube's estimate", "Meta's estimate", "Apps' es
   **All** at the right end). Tapping an app while All is on picks only it; turning the last one off is All; all five is
   All; All clears the rest. **Period** (Segmented with Glide): 7 days, 30 days, 90 days, Year (default 30). **Sort
   clips** (Segmented): Most money, Most views. The cards always use their fixed days; the period changes the chart and
-  the clip list ("Cards use fixed days. The picker changes the chart and the clip list.").
+  the clip list ("The days you pick change the chart and clips, not the cards.").
 * **Phones and touch tablets** (`(max-width: 767px), (pointer: coarse) and (max-width: 1194px)`): the controls sit in
   a glass **dock** (110 px, two rows, right-aligned) above the tab bar at the bottom right: the app chips on top, the
   period nearest the thumb. Nothing tappable in the top-left third of the page. Ask's home spot moves above the dock
@@ -6271,7 +6376,9 @@ reads the official pages first and mentions the key at most once, at the end.
   `ask.done` carries `webMissing` and the panel shows **Turn on web search** once per chat.
 * Owner card: Settings › App & account › **Ask** (apples `ask-web-setup` and `ask-status`): the steps (make a free
   account and pick **Search**, copy the key, paste it and tap **Save key**) with **Get a search key** as a glass
-  button (≥ 48 px, external icon) under them, not a link inside a sentence; **Take key away**.
+  button (≥ 48 px, external icon) under them, not a link inside a sentence; **Take key away** (an 8 s Undo toast
+  "Search key removed."; the card shows web search off at once, the `DELETE` goes when the toast ends or the page
+  closes, saving a new key first sends it; a failed delete says "… Your key is still saved.").
 * Caps per answer: `web_search` 6, `web_fetch` 6; past a cap the tool says "limit reached, answer with what you have".
 
 ### 28.4 The other tools (all read only)
@@ -6595,7 +6702,7 @@ other plain reason, the generic words. Every message names a real button ("Try a
 
 ### 29.6 The cookies file: guide and check
 
-- Settings › YouTube help shows "How to get cookies": open a private window in Chrome; allow Get cookies.txt LOCALLY
+- Settings › YouTube help has a shut "How to get cookies" fold: open a private window in Chrome; allow Get cookies.txt LOCALLY
   in private windows; sign in to YouTube there; in the same tab go to `youtube.com/robots.txt`; export; close the
   private window and don't open it again; tap Add cookies.txt. Tip: a spare Google account is safest.
 - Before upload the browser runs `checkCookies` (`web/src/lib/cookiesFile.ts`): Netscape lines of 7 tab-separated
@@ -7050,7 +7157,7 @@ Try again. The X tab showed the X mark and the letter "X" ("X X").
   ("Set up X to upload there too.", to `/settings/posting/setup/{first}`), hidden when all five are ready. With
   nothing set up, the row is a callout ("Nothing is set up yet. Upload saves it, and it goes up once you set up a
   place.") and Upload works the old way (no `platforms`). While the setup is still loading, or when the check
-  failed (callout "Could not check your places. Check again, then tap Upload." and a **Check again** button),
+  failed (callout "Couldn't check your places. Tap Check again." and a **Check again** button),
   `ready` is unknown: Upload stays off, so a failed check can never send the clip to places nobody picked.
 * **Which start on (per device):** the last Upload's choice in localStorage `cf-upload-to` (saved on Upload, not on
   each tap) minus places no longer ready; with none saved, Where clips go minus places not ready; if that leaves
@@ -7323,8 +7430,8 @@ the app itself is (no Apple certificates, §12.3).
   right after the new job is made (the process group stops, `<app data>/fetch/<jobId>/` is removed). Any other window
   with the app hears it from the job's stop (the live event, the 30 s list, or 409 on its next report) and cancels the
   same way (§35.3). No desktop release is needed.
-* Words: the old job's page shows the info callout "Replaced by your video file." with **Open the new job**. Try again
-  on it forgets `replacedBy`.
+* Words: the old job's page shows the info callout "Replaced by your video file." and its one main button is **Open the
+  new job**; Try again and Use a video file are hidden there (Try again would make the video twice).
 * Tests: `api/tests/test_mac_fetch.py` (replace while sending, again, the Mac finishing first, the flow moving the job at
   the same moment, the flow not going on, only waiting jobs, the checks, Try again); e2e `mac-fetch.spec.ts` (the button
   flow in the desktop window: the app's cancel, the replaced job).
@@ -7399,7 +7506,9 @@ cannot show one again. Why not a server-side soft delete: ADR-58.
 * **Next to the sidebar** (768–959 px) a row keeps its phone layout, so its words keep their room. **Select** (next to Make clips) turns each row into one big tick box (`role="checkbox"`,
   Space or Enter toggles it) and shows a bar at the bottom of the screen: "N jobs picked" (or "Tap the jobs to
   delete"), **Cancel**, **Pick all failed (N)** (the failed jobs on screen) and **Delete N** (danger, at the bottom
-  right). Escape leaves Select.
+  right). Escape leaves Select. While selecting, a second **Cancel** (×) sits where Select was (so Make clips never moves; a
+  second tap within 400 ms of Select does nothing) and ends Select like the bar's Cancel, never reading like a confirm
+  that would delete. After either Cancel, Escape or a delete the focus goes back to Select; Stop job moves the focus to its "Stopping…" note.
 * **Job page:** **Delete job** (ghost, bin) first in the actions, so Try again or Check these clips keep the corner.
   After the question the page goes back to All jobs, where the Undo toast is.
 * **The question** (`DeleteJobsSheet`, a `Sheet`): "Delete this job?" / "Delete 3 jobs?", then what happens:
@@ -7449,9 +7558,11 @@ Decision record: ADR-60 (which corrects ADR-57).
    They are the only place picker on the card.
 3. **Use my settings**: one big soft-fill button (`.my-settings__btn`, a glass button, full width). It puts My
    settings on every ticked place. Done state: bone fill, a check, **Your settings are on**. Under it one plain line:
-   "Your other places already use your settings. TikTok needs your tap each time." (before the tap, TikTok ticked),
-   "Every place uses your settings. Tap a place below to change it for this clip." (after, or with TikTok unticked),
-   "You changed some for this clip. Tap to put yours back." (after a change in a row). YouTube, Instagram, Facebook
+   "Tap this first. TikTok needs your tap." (before the tap, TikTok ticked: then **Use my settings** is the card's
+   vermilion and Upload is glass; the line above Upload keeps "Tap Use my settings first. TikTok needs your tap." for
+   screen readers only, so it is said once),
+   "Tap a place below to change it for this clip." (after, or with TikTok unticked; the button already says Your settings are on),
+   "You changed some. Tap to put yours back." (after a change in a row). YouTube, Instagram, Facebook
    and X use My settings from the start (nothing in their rules asks for a tap); TikTok's choices go on only with this
    tap (or picks in its row), because TikTok wants the creator's own action and no default. While his Mac posts TikTok,
    TikTok starts on My settings too, with no tap (§47.9). Ticking Commercial content
@@ -7470,7 +7581,7 @@ Decision record: ADR-60 (which corrects ADR-57).
      brand (Promotional content) / Branded content (Paid partnership). While his Mac posts TikTok, Who can see it and
      the three switches are one read-only line of what the Mac posts with, and a ticked label holds Upload (§47.9).
    * Instagram: Caption, Also show it in my feed (Reel).
-   * Facebook: Caption, "Goes up as a Reel on your Page. Everyone can see it." (Page Reels are public; nothing to pick).
+   * Facebook: Caption; the row's own line says "Reel on your Page · Everyone can see it", open or closed (Page Reels are public; nothing to pick).
    * X: Caption, Who can reply (the app's own dropdown: Everyone, People you follow, Only people you mention, Verified
      accounts).
    With nothing set up (or the check failed) the rows hold the words only. There is no caption tab bar and no second
@@ -7511,9 +7622,9 @@ never come from My settings**: `madeForKids` (or `selfDeclaredMadeForKids`, `for
 `settings.youtubePrivacy` (one field, shown in both places). TikTok's Commercial content is not in it either (per clip).
 
 **Settings › Posting › My settings** (`/settings/posting/my-settings`, `MySettingsBranch.tsx`): one section per
-platform, X included ("This is used once it is." while X is not set up), each saving as it changes. YouTube's section
-shows "Made for kids: No. My settings never mark a clip as made for kids." TikTok's says Commercial content is picked
-per clip.
+platform, X included (a "Not set up yet" chip while X is not set up; Facebook shows its leaf alone), each saving as it
+changes. YouTube's section shows "Made for kids: always No." TikTok's says "Commercial content: off." with a shut
+"Paid partnership?" fold.
 
 ### 34.3 Confirm sends each place's options (API, additive)
 
@@ -7548,9 +7659,11 @@ settings is kept in localStorage.
 ### 34.5 TikTok's "Who can see it"
 
 The app's own dropdown (`components/Dropdown.tsx`: a soft-fill button that opens a solid list, keyboard arrows,
-Escape, never the OS list), labelled "Who can see it", with exactly `privacyOptions` (Only me and Followers greyed when branded, §17.8),
+Escape, never the OS list; an open list measures itself against the phone tab bar or the screen's bottom and opens
+upward when there is room above, else scrolls into view, and the arrow, Home and End keys keep the chosen option in
+view), labelled "Who can see it", with exactly `privacyOptions` (Only me and Followers greyed when branded, §17.8),
 Everyone first, and the placeholder "Pick who can see it" until the owner picks or taps Use my settings. When only
-`SELF_ONLY` is allowed: one choice and the line "TikTok keeps posts private until it approves your app." Used in the
+`SELF_ONLY` is allowed: one choice and the line "TikTok keeps posts private until it approves Clip Factory." Used in the
 TikTok row and on the Post to TikTok sheet (which still opens for Library's Try again, and on Upload while nothing is
 set up but TikTok is connected).
 
@@ -7732,8 +7845,8 @@ reference files are not in the API either.
   line, plain words ("Join", "Copy", "Paste", "Make clips", "Upload"), no jargon (never "MCP", "OAuth", "token",
   "scope", "CPM", "submission", "API"; say "sign in", "allow", "per 1,000 views", "clip", "sent"). The one exception is
   the body of the pilot email (§38.3), which is written for CR's support team: it sits under **Show more** and is
-  never the visible label of anything. Since §41 the same exception covers the finder's `ASK_MESSAGE` under **Show
-  more** "What it says" (§41.1 item 6), with the line "This is what Clip Factory sends to Content Rewards' team." above
+  never the visible label of anything. Since §41 the same exception covers the finder's `ASK_MESSAGE` under the fold
+  **See the message** (§41.1 item 6), with the line "This is what Clip Factory sends to Content Rewards' team." above
   it.
 * **Bold** inside the owner's words in this section = an exact label of the other site the step opens, word for word
   (CR's app code of 21 Nov 2026; Whop's, YouTube Studio's, Instagram's and Facebook's own words). Where CR's help pages
@@ -7918,8 +8031,8 @@ my Content Rewards account connect apps, so Clip Factory can send my own clips f
 Thank you! (For your team: MCP sign-in pilot, scope my_submissions:write.)"
 
 **When it's done** (`data-help="cr-ready"`): "Signed in to Content Rewards since 21 Nov.", then one line: connected
-"Clip Factory sends your campaign clips for you."; read-only "Clip Factory can see your campaigns and money. It can't
-send clips yet, so I remind you after each post." Buttons, all glass unless said: "Check it", "Connect again"
+"Clip Factory sends your campaign clips for you."; read-only "It can see your campaigns and money, but can't send clips
+yet. You get a reminder after each post." Buttons, all glass unless said: "Check it", "Connect again"
 (vermilion only when `needs_reconnect` and there is no calm card), "Disconnect" (8 s toast "Disconnecting Content
 Rewards… Undo"; the `DELETE` goes when the toast ends; afterwards the line "To remove Clip Factory on Content Rewards
 too: Settings, **Connected apps**, **Disconnect**."). From 7 days before `signInBy`: a calm card "Sign in to Content
@@ -8009,16 +8122,16 @@ top to bottom:
    from `postSubmissionRules`, `keepPublicDays`, `disclosure.spoken`, `audience`): "After 48 hours, send a screen
    recording of this clip's views. I'll remind you.", "Keep each clip up for 30 days. Don't delete it.", "Say “paid
    partnership” out loud in the first 10 seconds.", "Show the brand where your viewers live if it asks."
-   **I couldn't tell** (`uncertain`, a question mark each) under the line "I'm not sure about these. Read them on the
-   campaign page." Then the quiet link "Rules missing? On the campaign page, copy everything under **Brief** and
-   **Content requirements**. Paste it here, then tap Read these rules." (a text box, ≤ 8,000 characters, "Read these
+   **I couldn't tell** (`uncertain`, a question mark each) under the line "Read these on the campaign page." Then the
+   fold "Rules missing?" whose first line is "On the campaign page, copy everything under **Brief** and **Content
+   requirements**. Paste it here." (a text box, ≤ 8,000 characters, "Read these
    rules"). Open campaigns hide their rules until you join: "You'll see the rules once you join." (`rulesState:
    waiting_for_join`); Clip Factory reads them by itself when you're in. While reading: "Reading the rules… (about
    30 seconds)".
 5. **Logo** (only when `logo.needed`, `data-help="cr-logo"`). Before he is in: only "You can get the logo once you're
    in." After: one drop box "Drop the logo here, or paste a Google Drive or Dropbox link." with "Paste" and "Choose a
    file" (glass). "On the campaign page, open **Reference materials**. Tap the file with “logo” in its name. Download
-   it." "Tap Choose a file and pick it from Downloads. A Google Drive link works too: tap Paste." When the logo is the
+   it." "Tap Choose a file. Pick it from Downloads." (the drop box line already names Google Drive and Dropbox) When the logo is the
    next step, the vermilion is the next step's "Add the logo" (it opens the file picker). Ready: the logo on a soft
    tile, "Logo added ✓" and "Change" (glass). Errors: an SVG or other type → "Clip Factory needs a PNG, JPG or WebP
    picture. Save the logo as PNG and try again."; over 10 MB → "That picture is too big. Use one under 10 MB."; a
@@ -8030,14 +8143,18 @@ top to bottom:
    row per link, all buttons glass: YouTube, Twitch and Kick links get "Make clips from this" (starts Home with the
    link and the campaign picked); Drive or Dropbox footage gets "Open" and "Download it, then tap Use a video file on
    Home."; any other link is plain text. One chip per channel the brief allows, "Open FaZe's YouTube" (→ the channel's
-   videos page, §38.10), with "Pick a video there. Copy its link. Come back and tap Paste." When the brief allows only
+   videos page, §38.10), with "Pick a video there. Copy its link. Come back and tap Paste." and the section's own
+   **Make clips for this campaign** (the line then says "Then tap Make clips for this campaign."; vermilion only when
+   nothing else on the page is). When the brief allows only
    its own videos, the next step is `pick_video` ("Pick a video below.") and the first row's "Make clips from this"
    is the vermilion one.
 7. **Your clips for this campaign** (`data-help="cr-campaign-clips"`, from `GET /v1/contentrewards/submissions?
    campaignId=`; only once there is one): "3 approved · 2 waiting · 1 not approved" (`Campaign.clipCounts`), then one
    `CrPostLine` (§38.6) per post, newest first, 10 then **Show more**.
 8. Footer: "Remove from Clip Factory" (quiet; 8 s toast "Removing FaZe Clips… Undo"; it never touches Content Rewards,
-   your posts or what was sent).
+   your posts or what was sent). The campaign is hidden from every list while the Undo counts (live refreshes
+   included) and after, until the server's list drops it; its own page, if open then, goes to /campaigns. Text pasted
+   into either rules box is kept per campaign (sessionStorage) until the rules are read.
 
 **Membership and the next step** (`Campaign.membership`, read from `list_my_campaigns`, §38.9; a campaign is "in" when
 CR lists it for you; `said` is the owner's own answer, kept per campaign, every answer undoable with an 8 s toast and
@@ -8135,8 +8252,7 @@ that is never "accepted": it just shows.
     "I linked it" (`PATCH /v1/contentrewards/connection {"relinked": "youtube"}`: back to unknown, so YouTube returns
     to the chips) and the second line "Then tap I linked it. The next clip will go."
   * **Use my settings** puts the campaign versions on: YouTube Who can see it **Everyone**, Made for kids **No**,
-    "Paid promotion: on" (the three are shown locked, with "Campaign clips are public, never made for kids, and
-    marked as paid."); Instagram and Facebook as My settings; X "Paid partnership: on"; TikTok (after the audit only)
+    "Paid promotion: on" (the row's line names the three; inside the row one locked line says "Campaign clips are public, never made for kids, and marked as paid."); Instagram and Facebook as My settings; X "Paid partnership: on"; TikTok (after the audit only)
     Everyone (`PUBLIC_TO_EVERYONE`: Use my settings picks it; the dropdown still lists TikTok's own options with no
     default, §17.8, and any other pick shows "Campaign clips must be public. Pick Everyone." under the row), Commercial
     content on with
@@ -8239,15 +8355,15 @@ platform estimates; it has its own part.
 `data-help="cr-money"`; Settings › Posting › Money gains the apple `money-contentrewards` with href
 `/money#content-rewards`):
 * Three tiles from `GET /v1/contentrewards/money` (all in USD cents as CR reports them, formatted only): "**Still
-  earning** $4.20" ("Clips still earning. The amount can still change. (On Content Rewards: **Queued** and
-  **Arriving**.)" = the sum of `pending` payouts), "**On its way** $0.00" ("Moving to your Whop balance." =
-  `withdrawal_pending`), "**Ready to move** $18.25" ("You can move this to Whop now. (On Content Rewards: **Balance**.)"
-  = `available`). When campaign clips wait for the brand: "3 clips are waiting for the brand. Their money shows here
-  after the brand says yes." (CR's pending amount is $0 until approval). Then "Content Rewards paid you $62.40 so far
+  earning** $4.20" ("Can still change. On Content Rewards: **Queued** and **Arriving**." = the sum of `pending`
+  payouts), "**On its way** $0.00" ("Moving to your Whop balance." =
+  `withdrawal_pending`), "**Ready to move** $18.25" ("Move it to Whop now. On Content Rewards: **Balance**." = `available`).
+  When campaign clips wait for the brand: "3 clips are waiting for the brand." (CR's pending amount is $0 until
+  approval). Then "Content Rewards paid you $62.40 so far
   · last money Tue 18 Nov" (`paidSoFarCents`, newest `paid_at`), a per-campaign list (name, paid, still earning), and
-  the grey line "Content Rewards' numbers · checked 20 min ago". Not connected: "Connect Content Rewards to see your
+  the grey line "Checked 20 min ago" (the part's head keeps the tag "Content Rewards' numbers"). Not connected: "Connect Content Rewards to see your
   campaign money." (→ setup page); `needs_reconnect`: "Sign in to Content Rewards again to see your money."; nothing
-  yet: "No campaign money yet. It shows here when the brand approves your clips."; `checking`: the tiles show and the
+  yet: "No campaign money yet. It comes when the brand says yes."; `checking`: the tiles show and the
   paid line says "Checking…".
 * "Ready to move" of $1.00 or more makes "Move your money to Whop" the part's vermilion step. When a move to Whop has
   just finished (`withdrawal_pending` went back to 0 after being above 0, `auto: money_moved`), the bank step is the
@@ -8264,8 +8380,8 @@ question first, asked once and kept (`CRCONN.finance`, `PATCH /v1/contentrewards
 "Do you see **Finance** in the Content Rewards menu?" as a `<Glide>` pick-one bar "Yes" / "No" (no main button on
 the part until it is answered; then the next money step's button is the vermilion one). "Yes" shows only the
 `finance: "yes"` steps, "No" only the `finance: "no"` steps; "Change my
-answer" (quiet) asks again. First line of the part: "Whop is the website where Content Rewards sends your money. From
-there it goes to your bank."
+answer" (quiet) asks again. First line of the part: "Content Rewards pays you on Whop. Then you move it to your
+bank."
 | id | for | title | essentials |
 |---|---|---|---|
 | `move-whop` | no | Link your Whop account | once; "I did this". "No Whop account? Tap **Open Whop** and make one with the same email." Open "Open Content Rewards settings" → `https://contentrewards.com/c/settings`. "Find Connect your Whop account and tap **Open Whop**." "Sign in to Whop and allow it. Then come back." If you see: can't find it → "Tap **Profile** and look again."; "Could not open Whop. Try again." → "Tap **Open Whop** again."; "already connected to another creator" → "Use your own Whop account, or ask Content Rewards support." |
@@ -9390,7 +9506,9 @@ shapes count, anything else (another origin, `//`, a scheme, other paths, extra 
 `/review`, `/review?job={uuid}` and `/clips/{uuid}` → "Back to your clip", `/money` → "Back to Money". A platform's setup
 page (`SetupPlatform.tsx`) reads it the same way: once that platform is connected, its "When it's done" vermilion is
 the back button. Every link of §39 to a setup page adds the `?back=` of the page it is on (the server's hrefs never
-carry one, except the campaign card's, below).
+carry one, except the campaign card's, below, and `no_place`'s Set it up, `gates.place_setup_href`; the campaign's
+NextStep adds it to any `/settings/posting/setup/` link). Money's not-connected note has a glass **Set up {Platform}**
+(`/settings/posting/setup/{p}?back=/money`).
 
 | Way in | Taps to reach the page |
 |---|---|
@@ -9529,7 +9647,8 @@ The normal way gains 0 taps, 0 fields and 0 warnings: the tests of §39.5 fail i
 15. §38.5 places, §38.6 `not_sent` and §38.9's reason texts: "Link YouTube inside Content Rewards first." / green "I
     linked it" / "Then tap I linked it. The next clip will go." / "… tap **Accounts**, and connect it. Then tap I
     linked it." / "… Open Content Rewards settings, then tap I linked it." → "Add YouTube in Content Rewards first." /
-    "I added it" / "Then tap I added it. The next clip will go." / "… tap **Accounts**, and add it. Then tap I added
+    "I added it" (the Upload to block's second line "Then tap I added it. The next clip will go." is gone since 23 Nov
+    2026: its Open and I added it buttons say it) / "… tap **Accounts**, and add it. Then tap I added
     it." / "… Open Content Rewards settings, then tap I added it." (the same `relinked` PATCH).
 16. §38.5 captions: "the row shows "I put #Ad and the campaign's tags back when it uploads." (no block)" → the same, and
     the fit block's optional glass "Fix it for me" puts them back on the card at once.
@@ -9588,9 +9707,11 @@ Facebook "Look in Meta Business Suite, then Payouts." + "Open Meta Business Suit
 number only when CR reported it, none of them in the total:
 * "Right now (Content Rewards says, 2:10 pm): Still earning $4.20 · Ready to move to Whop $18.25 · On its way to Whop
   $0.00" (time = `asOf`; a number CR didn't report is left out of the line).
-* "Earned so far, since you started: $62.40" ("Checking…" until the paid list was read to its end).
-* "Paid out to your bank: not available from Content Rewards. Look on Whop: **Balances**."
-* the glass "See it all" (→ `#content-rewards`), only while the row has no button of its own.
+* "Earned since you started: $62.40" ("Checking…" until the paid list was read to its end).
+* "Paid to your bank: look on Whop, **Balances**."
+* the glass "See it all" (→ `#content-rewards`), only while the row has no button of its own. The part reacts to
+  `#content-rewards` (also on /money itself, on every tap): once drawn it scrolls into view and focuses its heading,
+  and scrolls again while the page above still fills in, unless the owner scrolls or types.
 
 The owner's four words map to CR's: "earned so far" = the `paid` payouts ("The amount reached your balance", net of
 all fees: §38.7's "paid you … so far"), "on its way" = `withdrawal_pending`, "ready to move" = `available`; "paid out"
@@ -9776,8 +9897,7 @@ the first one's text ("Half the money is used. Post soon.") · glass "Make a FaZ
 softCodes`: that tap is his acceptance, like "Make clips anyway") · quiet "Not now" (hides it for that clip on this
 device: `localStorage["cf-cr-not-now"]`, at most 200 clip ids, every read and write in try/catch). Upload stays the
 vermilion and the 2-tap upload is untouched. After the tap: "Making a FaZe Clips copy… It shows here in about 3
-minutes."; when the copy is in Review: "The FaZe Clips copy is ready, right below. Upload the copy to earn money. You
-can throw this one away." The clip page also has, closed by default and only when he is in a campaign, "Can it earn on
+minutes."; when the copy is in Review: "The FaZe Clips copy is ready, right below. Upload the copy to earn money." The clip page also has, closed by default and only when he is in a campaign, "Can it earn on
 your campaigns?" with one line per campaign (its headline and first reason). With no campaign, CR switched off (503) or
 an API before G (404), nothing shows: the card is origin/main's.
 
@@ -10110,8 +10230,10 @@ reading" and "the AdSense website" are the exceptions). Platform labels stay bol
    `cost`, "Steps checked on 21 Nov 2026"); the **status block** (`data-help="getpaid-status"`: the pill, the line,
    `missing` and `holds` lines, the reading chip (`readingChip`, YouTube and, while `WHOP_CONNECT` is on, Content
    Rewards), X's `warning`, and `next` as below); **Can you earn here?** (the guide's facts for his country from
-   `GET /v1/money`'s `country`, each short; one glass "Read YouTube's rules" per different official page; with no
-   country picked: "Pick your country in Money settings to see its rules." with a glass "Pick my country"
+   `GET /v1/money`'s `country`, each short: the first one (to join, or when it pays) on the card, the rest inside one
+   closed fold "See all the rules" with one glass "Read YouTube's
+   rules" per different official page; with no country picked: "Pick your country to see its rules." (above the fold)
+   with a glass "Pick my country"
    (→ `/settings/posting/money#money-country`) and the facts that hold everywhere); the **step cards** in time order;
    **What Clip Factory can see** (the server's `seen` lines); **Sent to your bank** (`data-help="getpaid-sent"`: the
    rows of §40.4); **When it's done** (glass "Check now" = `POST /v1/money/refresh` on YouTube and Content Rewards, the
@@ -11740,14 +11862,17 @@ answer 503 `unavailable` "Coming soon.").
 * Whop's sign-in is OAuth 2.1 + PKCE (S256) with public clients (`token_endpoint_auth_method` `none`) at
   `https://api.whop.com/oauth/`, and an app needs a `client_id` made in Whop's Developer Dashboard with exact redirect
   URIs. So, like every platform of §17, the owner makes his own Whop app once (no secret: a public client):
-  * step `whop-key` "Make your Whop key" (inside the card, not numbered; ticks itself when the key is saved): Open
+  * step `whop-key` "Make your Whop key" (inside the card, not numbered; ticks itself when the key is saved; the card's
+    lede is "Optional. See what Whop sent to your bank."), then "A grown-up does this once on the Mac.", then one
+    closed fold "How do I make it?" (`data-whop="how"`) holding everything up to the company hint, so the card stays
+    short (the owner, 23 Nov 2026); the "Whop key" box and "Save key" stay visible under it. In the fold: Open
     "Open Whop's developer page" → `https://whop.com/dashboard/developer`. "Tap **Create app**. Name it:" Copy chip
     "Clip Factory". "Find **OAuth**. Paste this in **Redirect URIs**:" Copy chip `GetPaid.connections.whop.redirectUri`
     (`{HOOKS_URL}/oauth/whop/callback`). "Tick **user:balance:read**, **payout:withdrawal:read**,
     **payout:destination:read** and **identity:read**." "Tap **Save**. Copy the **Client ID**. It starts with app_."
-    Paste box "Whop key" (`^app_[A-Za-z0-9]{4,64}$`, friendly 400 "Your Whop key starts with app_."), "Save key".
     "Whop may show this a little differently. Look for the same words." If you see: Whop asks for a company first →
-    "Make one. Any name is fine. It's free."
+    "Make one. Any name is fine. It's free." Under the fold: paste box "Whop key" (`^app_[A-Za-z0-9]{4,64}$`, friendly
+    400 "Your Whop key starts with app_."), "Save key".
   * then the card's "Connect Whop" (glass, except when the page's `next` is `null`, §40.1 item 2).
 * `PUT /v1/getpaid/whop/key {"clientId"}` → secret `cf-prod/platforms/whop/app` `{clientId, userId, savedAt}`;
   `PAYCONN#whop` `status "keys_saved"`, `keyHint` (first 6 + "…" + last 4). A different `clientId` while connected
@@ -12238,8 +12363,8 @@ brands, CR's category names) is plain escaped text, at most 300 characters, neve
    label wrapping inside its own half, so no choice sits alone on a second row; the 2 × 2 grid's track and `<Glide>`
    highlight turn into rounded rectangles to match.
 
-   Under the controls, fixed (not a control): "I skip campaigns Clip Factory can't make clips for, like ones that need
-   their own sound or picture on the video." The TikTok chip, until TikTok's posting audit passes (§17.4 gate
+   Under the controls, fixed (not a control): "I skip campaigns that need their own sound or picture on the
+   video." The TikTok chip, until TikTok's posting audit passes (§17.4 gate
    `posting_audit: ok`): shown off and not tappable (`aria-disabled`), with the §38.4 line "TikTok: not yet. Campaign clips skip
    TikTok for now: your Mac can't mark them as Branded content yet." A place not set up yet (not
    `ready` in `GET /v1/setup`) is shown off and not tappable, with "Set it up first." under it (matching only ever uses
@@ -12340,18 +12465,17 @@ brands, CR's category names) is plain escaped text, at most 300 characters, neve
      store's campaign events (`GET /v1/contentrewards/campaigns/{id}`, §38.8). The `cf-prod-stats` tick adds them the
      same way within 15 minutes when the page is closed (§41.5), and the owner gets §38.11's "You're in!"
      notification.
-4. Under the matches, quiet lines: "You join each campaign yourself on Content Rewards." Then, while `signedIn`: "Open
-   campaigns show their rules only after you join. I read them right after."; else: "Open campaigns show their rules
-   only after you join. Then I'll ask you to copy them here once." Then the fold **"Why not more?"**: "I looked at 154
+4. Under the matches, quiet lines: "You join each campaign yourself on Content Rewards." Then, while `signedIn`: "Rules
+   show after you join. I read them then."; else: "Rules show after you join. Then you copy them here once." Then the fold **"Why not more?"**: "I looked at 154
    campaigns. 6 match." and one line per reason with a count, most first (§41.3 `skipped`): "62 pay less than $1.00
    per 1,000 views.", "31 have only a little money left.", "12 don't pay for the places you post.", "9
    want you to apply first.", "5 need something Clip Factory can't make.", "3 you said Not for me." (+ the quiet "Bring
    them back", `{"unhideAll": true}`).
 5. Glass "Look on Content Rewards yourself" (→ `https://contentrewards.com/c/discover`, new tab).
 6. **Ask Content Rewards** (only while `signedIn`; `data-help="cr-finder-ask"`): a quiet card "Clip Factory can't join
-   for you" with the line "Content Rewards has no way yet for apps to join. You can ask them to add one." and the glass
+   for you" with the line "Content Rewards doesn't let apps join yet. You can ask them." and the glass
    "Ask Content Rewards" (one tap; `POST …/finder/ask`; toast "Sent. Thank you!"), then "You asked Content Rewards on
-   21 Nov." Under **Show more** "What it says": the line "This is what Clip Factory sends to Content Rewards' team."
+   21 Nov." Under the fold **See the message**: the line "This is what Clip Factory sends to Content Rewards' team."
    and the message (§41.5), never the visible label of anything (§38.1's exception, extended to it by §41.6 change
    12).
 7. The quiet "Stop finding campaigns" (`{"want": {"on": false}}`, 8 s toast with Undo); stopped, the page shows "You
@@ -12364,7 +12488,7 @@ brands, CR's category names) is plain escaped text, at most 300 characters, neve
 | `new` | the What you want card, open, defaults picked | "Find campaigns for me" |
 | `new` or `ok`, no place set up (`resolvedPlaces` empty) | "Set up a place to post first. Then I can find campaigns that pay for it." | "Set up YouTube" (→ `/settings/posting/setup/youtube?back=/campaigns/find`) |
 | `looking` (a look or a change is being worked on, ≤ 10 min) | "Looking at Content Rewards' campaigns… This takes a minute or two."; right after his own change to What you want (S knows it sent that `PATCH`): "Updating your matches…" (the old matches stay below, dimmed) | none |
-| `ok`, the first look not finished (`looked.pending > 0`) and no match yet | "No match yet. I've looked at 120 campaigns so far. I'll look at more later today." and, while `tellMe` is on, "You don't need to do anything. I'll tell you when one matches." | none |
+| `ok`, the first look not finished (`looked.pending > 0`) and no match yet | "No match yet. I've looked at 120 campaigns so far. I'll look at more later today." and, while `tellMe` is on, "I'll tell you when one matches." | none |
 | `ok`, no match | "No campaign matches right now. I look again 4 times a day." + glass "Change what you want" (opens the card) | none |
 | `ok`, with matches | the matches (and any "You're in!" rows) | the newest "You're in!" row's, else the open match's (not signed in, after Open: only once its rules box has text) |
 | `down` (Content Rewards' pages didn't answer; matches from the last good look, if any, stay) | "Content Rewards didn't answer. I'll try again in a few hours." | the open match's, else none |
@@ -14206,12 +14330,12 @@ items) with `userId`, `workspaceId`, `socialAccountId`, `appChoice` and `redirec
 * youtube: `prompt=select_account consent` (Google always shows its account and channel picker, Brand Accounts
   included);
 * tiktok: `disable_auto_auth=1` (as today: TikTok always shows its consent page, for the account signed in on
-  tiktok.com); the page says first "Sign in to your Clips Funded account on tiktok.com in this browser. TikTok
-  connects the account that is signed in.";
+  tiktok.com); the page says first "Sign in to your Clips Funded account on tiktok.com in this browser first." (why, in
+  the card's More fold: TikTok connects the account that is signed in);
 * instagram, facebook: Clips Funded's own Meta app and its Login configuration; the page says before the tap "Facebook
   will ask which Pages this app may use. Tick only your Clips Funded Page.";
-* x: as today; the page says "First sign in to your Clips Funded account on x.com in this browser. X connects the
-  account that is signed in."
+* x: as today; the page says "First sign in to your Clips Funded account on x.com in this browser." (why, in the card's
+  More fold: X connects the account that is signed in)
 
 #### 45.13.3 The callback: Clip Factory's callback only forwards; Clips Funded's own Lambda does the rest
 
@@ -14346,6 +14470,14 @@ own code, never `routes/setup.py`'s.
   whose job used a realistic generator (`nova-reel`) is posted only through Clips Funded's own thin publisher wrappers
   that set YouTube's `containsSyntheticMedia: true` and TikTok's `is_aigc: true` (subclasses in `workspaces/`, the
   shared publisher code unchanged); a platform where no label can be set refuses it with a plain sentence.
+* **My Mac posts TikTok** (§47.10, ADR-89). While `StoriesConfig.tiktokMac.on` is true, a TikTok target is checked
+  exactly as above (`clean_options`, `validate_destination`, the confirmAccount 409s, G8, `_clash`) and then written as
+  a Mac job (`publishingStatus: "mac"`) that the owner's Mac helper posts, never the story flow. This amends "TikTok has
+  no defaults" and the TikTok sheet's rules above for the Mac path only: its options are fixed (`MAC_OPTIONS`:
+  Everyone, Comments, Duet and Stitch on, never branded), `aiLabel` is always true and the helper turns on TikTok's
+  "AI-generated content" label for every such post, and the sheet shows one read-only line. A TikTok post the API made
+  Only me is handed over in place (`onlyMe`), a failed TikTok job's retry becomes a Mac job in place, and the flow
+  starts only for the other targets.
 * Lamo Clips' `POST /v1/clips/{clipId}/confirm`, its posts, the clip flow and the release keep reading only
   `ACCOUNT#` and `cf-prod/platforms/*`: they cannot reach a Clips Funded account.
 
@@ -14490,14 +14622,25 @@ publishing every 10 s while one is in flight. No WebSocket filter changes (§45.
 
 * Ideas: a board of idea cards (saved and used), **New idea** (manual), **Ask for ideas** (topic + category →
   drafts with Save), each card **Make it a full idea** (expand), **More like this** (variations), **Make the video**
-  (→ Production › New with it), Delete with Undo. Safety ideas show their guidance source or "Needs checked advice".
+  (→ Production › New with it), Delete with Undo. Safety ideas show their guidance source or "Needs checked advice";
+  a "Needs checked advice" idea has a quiet Make the video, More like this off, and an **Edit it** button ("Tap Edit
+  it to make it another kind of video, or pick another idea."). Save idea, Save changes, Get ideas and a draft's Save
+  run once on a double tap. Unsaved New idea or Edit typing asks before closing ("Throw away this idea?") and before
+  leaving ("Leave without saving?"; not for the switch to Clip Factory, which keeps the page). The Dashboard's New idea
+  opens `/stories/ideas?new=1` with the form open.
 * Characters: a cast gallery (each rig animated idle), **New character** (a stepper: looks, face, moves, sounds,
   name and personality), the live preview with every face and action button, reference uploads, a portrait button
-  when AI pictures are on, Save.
+  when AI pictures are on, Save. Unsaved changes ask "Leave without saving?" (**Keep editing** / **Leave**,
+  `studio/leaveGuard.tsx`); Next and Back scroll to the new step and focus it; Try on a face and Try a move bring the
+  preview into view; a redesign's "Use this" keeps the editor's own changes and takes only what the redesign changed;
+  × on a picture hides it with Undo and deletes it when the Undo ends.
 * Production › New: an idea or the short concept form, cast (1–3), length (15–90 s slider, default 45, 30–60 marked),
-  captions on/off, music mood, **Make the video**. Production list: every story being made or made, its step track
-  (the eight steps) and progress. A story's production page: the storyboard as a filmstrip of scenes with the live
-  engine preview of each and the finished stills, the step track, Cancel, Try again.
+  captions on/off, music mood, **Make the video**. A missing pick says so in the pinned bar next to the button and
+  scrolls to and focuses that part (the idea, the cast or the Title). Production list: every story being made or
+  made, its step track (the eight steps) and progress; a cancelled or never-started draft (and a failed video) reads
+  "Not made yet" in its own group with **Make it**; a rejected video reads "Not used. It won't be posted.". A
+  story's production page: the storyboard as a filmstrip of scenes with the live engine preview of each and the
+  finished stills, the step track, Cancel, Try again.
 
 #### 45.16.6 Review
 
@@ -14509,6 +14652,13 @@ add, move, remove), **Remake** when anything is stale, **Check again** after fix
 after approval **Post it** (the publish sheet: only this workspace's connected accounts, each with its name; nothing
 chosen without a tap; the TikTok rules; "Use my settings"), and a **Posts** panel on approved and published stories:
 each publishing job's status, account, link, numbers, its sentence and **Try again**.
+Kid-proof rules (round G5): **Reject** asks "Reject this video?" (**Keep it** / **Reject it**). The facts notice has
+**Fix the words**, which opens "On the video", scrolls to the caption the problem quotes and focuses it ("Tap Fix the
+words, change them, then tap Save captions."; under Approve: "Fix the facts first: tap Fix the words."). The captions
+and sounds editors each keep their own unsaved changes when the other saves, and ask "Leave without saving?". An empty
+Ask for changes says so in the form and focuses "What should change?". Post it's Upload with nothing picked says
+"Tap YouTube (or another place) first." by the buttons, rings the place rows and focuses the first; Upload is the
+only main button, and with exactly one place connected "Use my settings" picks it.
 
 #### 45.16.7 Library, Connections, Settings
 
@@ -14520,14 +14670,40 @@ each publishing job's status, account, link, numbers, its sentence and **Try aga
   name for that platform so the owner sees they differ.
 * Social accounts (the Connections page) also shows, per platform: the developer-app choice (§45.30) with its key
   form and **Check it**, the authorization status, **last checked** (`lastCheckedAt`, with **Check now**), Connect,
-  Reconnect and Disconnect; the publish sheet shows the exact account each video goes to, with **Check now**, before
-  **Upload**.
+  Connect again and Disconnect; the publish sheet shows the exact account each video goes to, with **Check now**, before
+  **Upload**. Kid-proof (the owner, 23 Nov 2026: "even an 8 year old should be able to use the app"): the card itself
+  shows only the logo and name, one status chip, the account (picture, name, handle), the new-account line (while an
+  account is still to connect, pick, connect again or replace, and while the card asks "Is this your Clips Funded
+  …?"; a connected account that is fine does not repeat it), what needs the owner (a warning, the list to pick from,
+  the sign-in tip, and in short who can see the posts, "Posts stay Only me for now.", and what can cost money, "This
+  can go over your monthly X limit.", while the platform's limits say so) and one main button (Set up the app /
+  Connect / Connect again / Pick another; the button says what the chip says). While the developer app still needs
+  setting up, **Set up the app** is the card's one main button and there is no Connect yet: it opens the app's choice
+  ("Pick the {platform} app", or "Set up the Meta app") on the card itself, never in a fold; in a setup step (§45.29)
+  it is open by itself, and each connect step starts fresh. Everything else (the authorization status, labelled
+  "Posting", last checked, the account id, Check now, Disconnect and its "Are you sure?", the ready developer app
+  with its keys and redirect URIs, Clip Factory's destination and the platform's limits minus the sentences the card
+  already says) is in one closed **More** fold per card; closing it drops a Disconnect still to answer.
+  Picking "Share Clip Factory's app" saves the choice at once; only a switch away from a connected own app asks, with
+  **Yes, switch apps** after the warning. A connect result names the button the card shows (`connectLabelOf`: Connect
+  X, Connect again or Pick another channel); with the shared app, wrong keys or a wrong return address point to Clip
+  Factory. A Needs you item whose account is connected again reads "TikTok is connected now. Tap Try again on
+  “title”." and Fix it opens `/stories/review/{id}`; the Dashboard's Try again on a stuck post that stays stuck shows
+  its own reason (no confetti), and the server's account question shows Yes / Not now under the item.
 * Settings: §45.29's sections (AI, Agents, Skills, Memory, Social accounts, Video, Storage and production, Look), plus
-  YouTube category and privacy and captions and music defaults.
+  YouTube category and privacy and captions and music defaults. Prices and the video makers that fail to load show the
+  Failed card with Try again (one card when both fail). Look › Picture says "Pick a photo (JPG or PNG)." for another
+  file and "That picture would not open. Pick another one." for a broken one.
+* Setup: each step change scrolls its title into view and focuses it; a save only moves on if the owner is still on
+  that step; a done step's save is quiet and Next is the main button (until the pick changes); connect steps show
+  "Skip for now" until connected, then Next.
 * Chat: §45.27 (conversation list, messages, the model and effort line above the box, "Just for this message",
-  attachments, action buttons, Stop); References: §45.28 (upload with progress, Analyze with the model and effort
-  shown, the analysis, "Use in a video"), and §45.40 (a video dropped anywhere on the page, a link pasted in the
-  card's box or anywhere on the page, "Getting it…" until the video is here).
+  attachments, action buttons, Stop); the typed draft is kept per chat (sessionStorage) and cleared on send; under
+  360 px the model and effort fold into one chip. References: §45.28 (upload with progress, Analyze with the model and
+  effort shown, the analysis, "Use in a video"), and §45.40 (a video dropped anywhere on the page, a link pasted in the
+  card's box or anywhere on the page, "Getting it…" until the video is here); Talk about it in Chat makes one chat on
+  a double tap ("Opening the chat…"); right after Analyze only step 1 shows as running; a video that won't play says
+  "This video would not play." with Try again.
 
 #### 45.16.8 Mock mode
 
@@ -15096,7 +15272,8 @@ is already built and only written down here.
   The agent writes `USAGE#` items with `kind: "provider"`, `provider`, `units`, `unit`; `usage.summary` sums them.
   Settings › Video shows render minutes per day and each provider's units and cost (or "No price yet: add one").
 * **`ProviderStatus.key`** (api, web): `key?: { saved: boolean; hint: string | null; savedAt: string | null } | null`,
-  present only for a provider that takes a key; the key card shows "Remove the saved key" only when `saved`.
+  present only for a provider that takes a key; the key card shows "Remove the saved key" only when `saved`, and it
+  asks "Are you sure?" first (**Yes, remove the key** / **No, keep it**).
 * **A provider that is not ready** (api, agent): a story's create, produce and changes answer `409` with the
   provider's own line when `configuration.providers.video` (or `images`) names a provider whose state is not `on`
   ("Amazon Nova Reel is not ready yet: {what is missing}. Pick Built-in animation in Settings › Video, or finish its
@@ -15133,7 +15310,7 @@ is already built and only written down here.
   sceneIds, note? }` (a note or scene ids at least); `analyze_reference { refId }`; `save_character { character }`;
   `save_idea { idea }` or `{ ideaId, patch }`; `open { href }` (a Clips Funded address only).
 * **Chat pictures on Try again** (built): a retry uploads the pictures again; an `assetId` is used by one message only.
-* **The dashboard's account sentence** (api) says "Open Social accounts and tap Connect".
+* **The dashboard's account sentence** (api) says "Open Social accounts and tap Connect again".
 * **Approving a driving-safety story** (api): approve refuses a `safety.status` of `skipped` whenever the story has a
   `safetyTopicId`, whatever its category (a second guard; the agent never skips it).
 
@@ -15160,7 +15337,7 @@ behaviours an earlier step narrowed or left out)
   one video; `PATCH` may change it until the first run finishes). `StoryScript.width` and `height` are that size; the
   engine lays out sets, characters, cameras, bubbles, captions and the end card for each shape (positions stay 0..1
   of the frame, safe areas per shape), and the rasterizer, the ASS writer and ffmpeg use the script's size. 9:16
-  stays the default; the Settings cards say Shorts, Reels and TikTok want 9:16.
+  stays the default; the 9:16 option says For Shorts, Reels and TikTok.
 * **Output formats** (request 2 §6F; agent, api, web): every video is MP4 (H.264, AAC, faststart), which posting needs.
   `StoriesConfig.production.extraFormats: ("webm" | "mov")[]` (default none) also makes `final/v{n}.webm` (VP9, Opus)
   and `final/v{n}.mov` (ProRes 422 Proxy, PCM) after assembly, each an `ASSET#` of kind `video` with
@@ -15369,7 +15546,7 @@ its own `task`. The dashboard checks app keys only while its request has time (i
 * **E11.** Celebrate a post: the Post it sheet's "Posted!" gets Clips Funded's star burst and success sound (the same as Approve).
 * **E12.** A model the studio already knows is unusable (status denied, not_found or error) is never pre-picked: the pickers and chips show it with its status line, the usual choice skips it, and Make the video with it selected asks first ("{Model} has no access right now. Use {usual} instead?").
 * **E13.** One name on screen: Clips Funded's screens and the API's Clips Funded sentences call the other app "Clip Factory" everywhere (never "Lamo Clips"); sentences never read oddly when an account is itself named "Clips Funded" (say "this {Platform} account ({name})").
-* **E14.** Kid-proof first lines: developer-app terms (Valid OAuth Redirect URIs, Login configuration, App Review, Sandbox, inference profile, ARN) and raw ids (account ids, model ids, channel ids) sit behind a "Technical details" fold, with a plain first line ("Copy this address into your app's settings"); the facts stay one tap away.
+* **E14.** Kid-proof first lines: developer-app terms (Valid OAuth Redirect URIs, Login configuration, App Review, Sandbox, inference profile, ARN) and raw ids (account ids, model ids, channel ids) sit behind a "Technical details" fold (on Social accounts, inside the card's More fold), with a plain first line ("Copy this address into your app's settings"); the facts stay one tap away.
 * **E15.** After Finish with skipped steps, the dashboard keeps a small "Finish setting up: {n} left" card listing them, and Settings always has "Open setup again".
 * **E16.** Clips Funded's own switcher is always in view: in short desktop windows the rail's switcher is pinned (sticky at the bottom of the rail, or in the rail's top when the foot would scroll off); at 320 px Clip Factory's top-bar switch is at least 44 px in both directions (shrink or drop the brand text before the switch shrinks), with the flag-off app unchanged.
 * **E17.** Settings polish: Add a model starts with the maker's usual effort levels ticked when effort levels are on (Anthropic: all five, default its usual); the Added by you and status chips have the normal gap and the status sits at the right edge like other rows; status words are one set everywhere ("Works", "Not checked yet", "No access", "Not found", "Problem"); "More effort thinks longer" is hidden for a model with no effort setting; a sentence never tells the owner to go to the page he is on (say "Pick Built-in animation above").
@@ -15611,7 +15788,9 @@ re-staging pass after the engine refused the first staging; there is no two-call
   clears the status. Clip Factory's `ACCOUNT#` is read read-only, widened in place to `handle` (the API and the story
   flow) and `autoPost` (the story flow, its settings item), with the separation tests' allowed sets to match; Clip
   Factory's items and code are unchanged.
-* **Words.** Each Connect step and card: "Use a new account made for Clips Funded, not Clip Factory's." (the same
+* **Words.** Each Connect step and card whose next step is an account (to connect, pick, connect again or replace,
+  and while it asks "Is this your Clips Funded …?"; since 23 Nov a connected account that is fine does not repeat it,
+  the page's own line says it at the top): "Use a new account made for Clips Funded, not Clip Factory's." (the same
   on every platform; it once said "not lamo.clips", which is not Clip Factory's name on X); the
   same-as-Clips state: "This is Clip Factory's own account. Clips Funded needs its own separate account: sign
   in with a different one."; Clip Factory took it later: "This is Clip Factory's account now. Connect a different
@@ -15625,7 +15804,7 @@ The owner (22 Nov, 18:01, with screenshots): "just like you have in the top or i
 
 * **S1. One element.** The workspace switch and the Live chip under it are one element of the application shell (`web/src/app/WorkspaceDock.tsx`), only while Clips Funded is switched on, with the same place, size and look (the shell's own clear glass and words, never one app's style, S5) in both apps, on every page: every Clips Funded page (Setup the first time included, which keeps the left column free on a computer), Clip Factory with its sidebar open or folded (the folded form shows in both apps), every Look, and the Mac and Windows windows. Clips Funded' rail and top bar no longer draw a switch of their own; the round toggle at the top right of Clips Funded' Setup is gone on a computer.
 * **S2. Where.** On a computer the shell draws it outside both panes, fixed over the left column where Clip Factory's sidebar foot has always had it: the bar right above the Live chip, with Get the app and the jobs line under them (in a short window: a round toggle beside or above the chip, a slim one between the menu and the foot, a slim one beside the fold button of a folded sidebar, or one in the strip between an open sidebar and the page). Its place is worked out once from the window and Clip Factory's sidebar (`dockLayout`), never from the app on screen, so both apps always agree; Clip Factory's foot keeps the chip's row (`.sidebar__live-room`) so nothing in it moves, and Clips Funded' rail stops its list of pages above the dock (`--ws-dock-room`). On a phone it is the round toggle (48 px; 44 by 48 below 360 px) with the Live chip 4 px after it at the right end of each app's own top bar (one component, `TopBarSwitch`, in both); an app's brand drops its name only when it would come closer than 4 px (320 px). Known limit: on a phone, while Clip Factory's own "Set up posting" pill sits above Clip Factory's page, Clip Factory's whole top bar (its toggle with it) is that much lower than Clips Funded'; side, size and its place in the bar stay the same.
-* **S3. The slide, and the sliding window (the owner, 2026-11-23: "id like the transission between clip factory and clips funded to be like a sliding window", then "make sure the switch between clip factory and clips funded uses slow in slow out effect when switching between them").** The bar's highlight (the lens) slides from one choice to the other on the tap's own frame (Glide, transform only); the switch stays mounted across the change, and the page changes once the slide has landed, so no page is built or laid out during it. A choice of the other app slides the whole app with it, like a sliding window, from the same tap (`web/src/stories/pane.tsx` AppPanes runs it, `web/src/app/shell.ts` `startAppSlide` hands it the tap, `web/src/styles/app-slide.css` gives the panes their boxes): Clip Factory sits on the left and Clips Funded on the right, so going to Clips Funded, Clip Factory's pane (with its own backdrop) slides out to the left while Clips Funded's slides in from the right, and back the other way. Both panes are boxes the size of the window only while they slide, each showing its page where it is scrolled to (the one going out where the window was, the one coming in at its kept place), moved by `translateX` alone in one Web Animation each (id `app-slide`, will-change only then, nothing laid out again meanwhile, neither takes a tap); the shell's dock (the switch and the Live chip) is outside both panes and does not move. Slow in, slow out: both panes' slide, in both directions, and the switch's lens (`.glide--ws` sets `--glide-ease`, which Glide reads for that one glide; the bar's and the list's) move on one symmetric curve, `--ease-in-out: cubic-bezier(0.65, 0, 0.35, 1)` in `web/src/styles/tokens.css` (beside `--ease-out`): it starts gently, speeds up in the middle and settles gently. The lens slides exactly as long as the panes (`APP_SLIDE_MS`, 450 ms) and starts on the same tap, so they read as one move: the panes and the lens take one start time (`AppSlide.join`), on the frame after the first one drawn after the tap, so a slow first frame (the page coming in being painted) delays the start instead of skipping the slow start; every other glide keeps its own 360 ms ease-out. The pane coming in is mounted (hidden) as soon as the pointer or the keyboard comes to its choice, at its kept page, so the tap finds it ready; one that is not ready yet is mounted on the tap and slides in as its loading card. Mounted ahead, it puts nothing on the page that would draw the app on screen again: Clips Funded's own fonts go on with its first slide in (`whenAppSlidesIn`, `web/src/app/shell.ts`), never while the pointer only rests on the choice. Coming back, Clip Factory's sidebar and tab bar slide in with its kept page already lit (Shell gives them its kept page; the address changes only on landing). Tapped back during the slide, the panes and the lens both slide back from where they are drawn, together, on the same curve, and nothing changes; tapped forth again while they slide back, they slide on from where they are, so a child's quick forth, back and forth again slides every time and never cuts over. The page changes once the panes have landed, and everything is back at rest in that same task (no slide mark, no will-change, the page's own height, the window at the page's own place, focus on the new page, both ways, an app's first slide in included). Another workspace of the same app moves the lens only. Clips Funded's code is fetched while the browser is idle and again the moment the pointer or the keyboard comes to a way there. Calm motion (the app on screen's own setting, or the device's) moves the lens at once and switches at once: the panes never slide (no crossfade either). A page asking "Leave without saving?" asks first; the highlight moves only if the page really changes, and the switch is then at once, with no slide. `e2e/stories-switch-slide.spec.ts` checks, both ways: the lens's animation runs its whole length to its end in Chromium and WebKit, with no main-thread task over 50 ms and no frame later than the machine's own at rest (in Chromium on a Mac's GPU over the real blurred backdrop; it is drawn flat only where the browser draws in software: headless WebKit and the Linux runners); the panes' and the lens's animations report the slow-in slow-out curve and the same 450 ms; the panes move on transform only, from the tap with the lens, to their end, the dock still, each page where it was, Clip Factory's page lit in its sidebar all the way in, focus on the new page, at rest after; the pointer resting on the choice adds none of Clips Funded's fonts; a tap forth, back and forth again slides the third time too, to its end, before the page changes; and calm motion never slides them. `test/switchGlass.test.ts` holds the token, the lens's curve and length. Known limit (23 Nov): in headless WebKit on a Mac the first frame of each slide, which paints the page coming in, takes 90 to 165 ms (the frames after it 16 to 17 ms), so the frame check's WebKit run fails there (Chromium on the Mac's GPU passes; CI times no frames); the slide starts once that frame is drawn, so its slow start is never skipped. The follow-up paints the pane mounted ahead before the tap.
+* **S3. The slide, and the sliding window (the owner, 2026-11-23: "id like the transission between clip factory and clips funded to be like a sliding window", then "make sure the switch between clip factory and clips funded uses slow in slow out effect when switching between them").** The bar's highlight (the lens) slides from one choice to the other on the tap's own frame (Glide, transform only); the switch stays mounted across the change, and the page changes once the slide has landed, so no page is built or laid out during it. A choice of the other app slides the whole app with it, like a sliding window, from the same tap (`web/src/stories/pane.tsx` AppPanes runs it, `web/src/app/shell.ts` `startAppSlide` hands it the tap, `web/src/styles/app-slide.css` gives the panes their boxes): Clip Factory sits on the left and Clips Funded on the right, so going to Clips Funded, Clip Factory's pane (with its own backdrop) slides out to the left while Clips Funded's slides in from the right, and back the other way. Both panes are boxes the size of the window only while they slide, each showing its page where it is scrolled to (the one going out where the window was, the one coming in at its kept place), moved by `translateX` alone in one Web Animation each (id `app-slide`, will-change only then, nothing laid out again meanwhile, neither takes a tap); the shell's dock (the switch and the Live chip) is outside both panes and does not move. Slow in, slow out: both panes' slide, in both directions, and the switch's lens (`.glide--ws` sets `--glide-ease`, which Glide reads for that one glide; the bar's and the list's) move on one symmetric curve, `--ease-in-out: cubic-bezier(0.65, 0, 0.35, 1)` in `web/src/styles/tokens.css` (beside `--ease-out`): it starts gently, speeds up in the middle and settles gently. The lens slides exactly as long as the panes (`APP_SLIDE_MS`, 450 ms) and starts on the same tap, so they read as one move: the panes and the lens take one start time (`AppSlide.join`), on the frame after the first one drawn after the tap, so a slow first frame (the page coming in being painted) delays the start instead of skipping the slow start; every other glide keeps its own 360 ms ease-out. The pane coming in is mounted (hidden) as soon as the pointer or the keyboard comes to its choice, at its kept page, so the tap finds it ready; one that is not ready yet is mounted on the tap and slides in as its loading card. Mounted ahead, it puts nothing on the page that would draw the app on screen again: Clips Funded's own fonts go on with its first slide in (`whenAppSlidesIn`, `web/src/app/shell.ts`), never while the pointer only rests on the choice. Coming back, Clip Factory's sidebar and tab bar slide in with its kept page already lit (Shell gives them its kept page; the address changes only on landing). Tapped back during the slide, the panes and the lens both slide back from where they are drawn, together, on the same curve, and nothing changes; tapped forth again while they slide back, they slide on from where they are, so a child's quick forth, back and forth again slides every time and never cuts over. The page changes once the panes have landed, and everything is back at rest in that same task (no slide mark, no will-change, the page's own height, the window at the page's own place, focus on the new page, both ways, an app's first slide in included). Another workspace of the same app moves the lens only. Clips Funded's code is fetched while the browser is idle and again the moment the pointer or the keyboard comes to a way there. Calm motion (the app on screen's own setting, or the device's) moves the lens at once and switches at once: the panes never slide (no crossfade either). A page asking "Leave without saving?" asks first; the highlight moves only if the page really changes, and the switch is then at once, with no slide. Clips Funded's editors (Ideas, characters, captions, sounds) and Home's running upload never ask on the switch itself: the other app keeps them exactly as they are behind it (§45.34), a page kept behind never holds the app on screen, and a guard that would never hold the switch never stops the slide either. `e2e/stories-switch-slide.spec.ts` checks, both ways: the lens's animation runs its whole length to its end in Chromium and WebKit, with no main-thread task over 50 ms and no frame later than the machine's own at rest (in Chromium on a Mac's GPU over the real blurred backdrop; it is drawn flat only where the browser draws in software: headless WebKit and the Linux runners); the panes' and the lens's animations report the slow-in slow-out curve and the same 450 ms; the panes move on transform only, from the tap with the lens, to their end, the dock still, each page where it was, Clip Factory's page lit in its sidebar all the way in, focus on the new page, at rest after; the pointer resting on the choice adds none of Clips Funded's fonts; a tap forth, back and forth again slides the third time too, to its end, before the page changes; and calm motion never slides them. `test/switchGlass.test.ts` holds the token, the lens's curve and length. Known limit (23 Nov): in headless WebKit on a Mac the first frame of each slide, which paints the page coming in, takes 90 to 165 ms (the frames after it 16 to 17 ms), so the frame check's WebKit run fails there (Chromium on the Mac's GPU passes; CI times no frames); the slide starts once that frame is drawn, so its slow start is never skipped. The follow-up paints the pane mounted ahead before the tap.
 * **A1. Clip Factory waits behind Clips Funded.** A Clip Factory page change that comes after a wait (a campaign added, a skill saved) goes through `clipsGoLater` (`web/src/app/shell.ts`), the mirror of Clips Funded' `storiesGoLater`: while a Clips Funded page is on screen it is held, and it happens the moment Clip Factory's pane is on screen again (replacing the entry it asked to replace, past its own "Leave without saving?" only where it asked to). The owner is never moved out of Clips Funded by it, Clips Funded' history entry and its own guard are never touched, and `cf.workspace` keeps saying Clips Funded. While Clips Funded is off it is exactly `navigate`. Clip Factory's own sounds (`lib/sounds.ts`) and confetti are quiet while a Clips Funded page is on screen.
 * **A2. Nothing of one app inside the other.** Clips Funded draws nothing of Clip Factory's own: no Content Rewards "Send … now" banner, no app badge or Mac download host (the shell draws those once, for both). Each pane has its own toasts (`ToastScope`): a toast its app raises while hidden waits until that app is on screen again, or is dropped once older than its own time on screen; each app's error toast plays its own error sound; the shell's own toasts stay global. Clips Funded' sounds and motion (`cf.stories.prefs`: `sound.enabled`, `sound.click`, `sound.deny`, `motion.reduce`) have Clips Funded' own defaults (sounds on, its usual click and error sounds, motion as the device asks) and never fall back to Clip Factory's `cf.prefs`; its Settings card has its own Error sound.
 * **A3. No imports across.** No Clip Factory file imports `web/src/stories/`: what both need (which app is on screen, the pane, the kept search, `clipsGoLater`) is the shell's (`web/src/app/shell.ts`), which both import. The shell's own files (`web/src/app/`) and the one router both apps go through (`web/src/lib/router.ts`, which hands /stories addresses to Clips Funded' route table) are the only ones that read Clips Funded' code; `test/shellApart.test.tsx` scans for it.
@@ -15781,7 +15960,7 @@ stray link never navigates or opens the system browser. HelpLauncher's own guard
 | Clips Funded References list (`RefList.tsx`) | **page** | up to 5 videos (`videoProblem`; more: "Up to 5 videos at once. Drop the rest after.") and links (fill the box). The card's own handlers are gone; the file input stays inside `.st-ref-drop`. |
 | Clips Funded reference page (`RefPage.tsx`), only while `fetch_failed` | **page** | one video: it replaces the link reference (§45.40.9) |
 | Clips Funded director chat (`ConversationView.tsx`) | **page** | PNG, JPG or WebP ≤ 5 MB (`pictureProblem`), as many as the message has room for (4); more: "You can add up to 4 pictures to one message." On once the chat has loaded; the composer still takes dragged text. |
-| Clips Funded Settings › Look (`LookSection.tsx`) | **page**, whatever the mode | one picture (`lookPictureProblem`: "Pick a picture.", else the too-big line; the picker says the same); it becomes the background and Picture is chosen with it |
+| Clips Funded Settings › Look (`LookSection.tsx`) | **page**, whatever the mode | one picture (`lookPictureProblem`: "Pick a photo (JPG or PNG).", else the too-big line; the picker says the same); it becomes the background and Picture is chosen with it |
 | Clips Funded Skills (`settings/SkillsSection.tsx`) | **element**, each FilePick label | its skill file (`checkSkillFile`); busy with its own `off` line ("Uploading…") while an upload runs; the input carries its own `aria-label`, so the status line never joins its name |
 | Clips Funded Design with AI (`studio/Design.tsx`) | **element**, the open panel | one picture (`fileProblem`); busy "Sending the picture…" |
 | Clips Funded studio "Pictures to aim for" (`studio/References.tsx`) | **element**, `section.st-s-refs` | one picture (`fileProblem`); busy when full ("You have 8 pictures. Delete one first.") or while sending ("Wait a moment."); no link box |
@@ -17739,10 +17918,9 @@ toast "Saved.":
    posted place with **Open** (its live `url`); a run with nothing: "Sun 05:00 · Nothing in Review, so nothing posted.";
    practice: "Sun 05:00 · Practice: would post “hook” to YouTube, Instagram and Facebook."; private test: "Private test
    · “hook”: YouTube (only you) · Facebook (draft) · Instagram (checked, not published)".
-9. A fold **Test it first** (closed to start): the switch **Practice** (`autoPost.practice`, "Pick the clips on time,
-   but send nothing. The clips stay in Review."), **Practice run now** and **Private test run** (glass buttons; the
-   second's line: "Posts the next clip so only you can see it: YouTube as Only me, Facebook as a draft on your Page,
-   Instagram uploaded and checked but not published. It leaves Review."). After a tap the page reads the status again
+9. A fold **Test it first** (closed to start): the switch **Practice** (`autoPost.practice`, "Sends nothing. The
+   clips stay in Review."), **Practice run now** and **Private test run** (glass buttons; the second's line: "Posts the
+   next clip so only you see it: YouTube Only me, Facebook a draft, Instagram not published. It leaves Review."). After a tap the page reads the status again
    every 3 s for 30 s; the run shows in Recent.
 
 The page reads `GET /v1/autopost` on open, on focus, every 60 s while open, and after every change. Clip changes reach
@@ -18132,6 +18310,10 @@ owner sees. **No Terraform, table, index, secret or bucket change**: every route
 field is additive, and existing clips and posts read exactly as before. With the switch off, everything behaves
 exactly as before. Nothing here calls TikTok's posting API.
 
+**Both workspaces.** Since helper 1.2.0 the same Mac also posts Clips Funded's TikTok jobs, to Clips Funded's own
+TikTok only, through Clips Funded's own routes and partition (§47.10, ADR-89). §47.1 to §47.9 are Clip Factory's and
+stay as they are; the helper's handle check before every post (§47.10.5) applies to both.
+
 ### 47.1 Data
 
 * **Settings** `tiktokMac: { on: boolean }`, default `{on: false}`, merged on PUT like `autoPost` (§46.3). Unknown
@@ -18430,7 +18612,7 @@ there is no manual TikTok sheet, so every TikTok row says only what the Mac is d
     `holdBefore`) → "Held on your Mac: made before {time}" with **Post with my Mac**; else the queue words below.
 
   The not-yet rows (`notReady`): switch off → "Your Mac posts TikTok is off" with **Turn on**; never checked in →
-  "Your Mac isn't set up yet" with **Turn on**; not seen for 30 minutes → "Your Mac hasn't checked in since {time}"
+  "Your Mac isn't set up yet" with **Open Your Mac posts TikTok** (the setup steps are there); not seen for 30 minutes → "Your Mac hasn't checked in since {time}"
   with **Open Your Mac posts TikTok** (the switch is already on); (not a stopped row) `needs_you` → "Your Mac needs
   you: {short reason} · look at your Mac" with **Open the stopped clip** (→ `/clips/{needsYouClipId}`; Open Your Mac
   posts TikTok when there is none or it is this clip); paused → the paused words with **Start my Mac again** (a
@@ -18520,8 +18702,11 @@ there is no manual TikTok sheet, so every TikTok row says only what the Mac is d
   clips."; on: "On. Upload and auto-posting hand TikTok to your Mac."); the status line "Your Mac checked in {Sun
   14:03}.", "Your Mac hasn't checked in yet. Set it up on your Mac.", "Your Mac needs you: {reason}", or paused with
   what comes next ("Paused after the 3 trial posts. Your Mac goes on once their views are checked.", else "Paused on
-  your Mac. Your clips wait until it's started again."); while on, "{n} waiting for your Mac" and **Send these to my Mac** for the clips that aren't on TikTok yet
-  ("3 clips aren't on TikTok yet."; its confirm line: "They go one at a time, oldest first."), sent without `now`, so
+  your Mac. Your clips wait until it's started again."); while the Mac has never checked in, the three setup steps of
+  `mac/tiktok-helper/README.md` (`MAC_SETUP_STEPS`); while on, "{n} waiting for your Mac" and **Send these to my Mac** for the clips that aren't on TikTok yet
+  ("3 clips aren't on TikTok yet."; with clips already waiting `sendableLine` says "2 clips already wait for your
+  Mac."; its confirm line: "They go one at a time, oldest first.", plus "They wait until your Mac checks in." while it
+  never has), sent without `now`, so
   one goes after each auto-posting run (§47.8), never a campaign clip (`canSendToMac`); and one quiet line: "To stop
   it, turn the switch off. Your Mac stops at once." Round 3 (D5), inside the status panel under the status line:
   paused → **Start my Mac again** (once asked: "Your Mac starts again the next time it checks in, within a minute.");
@@ -18712,7 +18897,7 @@ TikTok. No API, table or infrastructure change.
    Duet and Stitch as saved (on by default), and Commercial content off. A campaign clip keeps its own path (Everyone
    with Branded content, §17.8; the Mac never takes one, §47.2).
    * No tap before Upload: the button reads **Your settings are on** from the start (`settingsOn` true), the line under
-     it reads "Every place uses your settings. Tap a place below to change it for this clip.", and TikTok's row line
+     it reads "Tap a place below to change it for this clip.", and TikTok's row line
      says "Who can see it: Everyone · …", never "not picked yet". Upload is never held with "Tap Use my settings
      first. TikTok needs your tap."
    * **TikTok's row is read-only for what the Mac uses** (decided for this release, 2026-11-23). The server asks the
@@ -18773,12 +18958,12 @@ TikTok. No API, table or infrastructure change.
    TikTok's demo video for its app review (`TIKTOK_DEMO_SHOTS`, §17) shows this path, so it is recorded with Your Mac
    posts TikTok off.
 3. **Words elsewhere:** Settings › Posting › My settings (`MySettingsBranch.tsx`) reads "Every clip on Review starts
-   on these, TikTok too, except campaign clips." at the top, and under TikTok "Commercial content is off. Your Mac
-   posts TikTok with these. Paid partnerships can't go through your Mac yet: untick TikTok for that clip, then post it
-   in the TikTok app with its label, not with Post with my Mac or Send these to my Mac." in item
-   1's mode; otherwise both keep today's words ("Tap Use my settings on a clip to put these on.", "Commercial content
-   is off. For a paid partnership, tick Branded content in the TikTok row of that clip. TikTok wants your own tap on
-   each clip, so tap Use my settings there."). The TikTok part's leaf (`settingsTree.ts`, `my-settings-tiktok`) reads
+   on these, TikTok too, except campaign clips." at the top, and under TikTok "Commercial content: off. Your Mac posts
+   TikTok with these." in item 1's mode, with a shut "Paid partnership?" fold: "Your Mac can't post those yet.", "Untick
+   TikTok on that clip.", "Post it in the TikTok app, with its label.", "Don't use Post with my Mac or Send these to my Mac
+   for it."; otherwise "Tap Use my settings on a clip to put these on." at the top, and "Commercial content: off. TikTok
+   wants your own tap, so tap Use my settings on each clip." with the fold's one line "Tick Branded content in that
+   clip's TikTok row.". The TikTok part's leaf (`settingsTree.ts`, `my-settings-tiktok`) reads
    "Everyone can see it; comments, Duet and Stitch on. Every clip starts on these while your Mac posts TikTok." in
    both modes. Ask's "Use my settings" guide (`helpKb.json`, `review-use-my-settings`, titled "Use my settings: your
    saved choices on every place", true in both modes) says every ticked place, TikTok included, starts on his settings
@@ -18806,3 +18991,412 @@ TikTok. No API, table or infrastructure change.
 The helper itself (its own PR); that TikTok Studio keeps accepting a background Chrome's uploads, and the reach of
 script-posted videos (the 3-post trial compares 24-hour views with his phone posts, plan note §3); that `video/list`
 sees a post the Mac made (as §42.5).
+
+### 47.10 Clips Funded posts TikTok through the same Mac (owner request, 2026-11-23)
+
+The owner (2026-11-23, with a screenshot of Clips Funded › Social accounts › TikTok connected as @clips.funded through
+Clip Factory's shared TikTok app, still in Sandbox, so API posts can only be private): "btw i want the same way we
+upload to tiktok in clip factory for clips funded". Decision record: ADR-89.
+
+Clips Funded's TikTok posts use the same Mac helper as Clip Factory (helper **1.2.0**). They post in hidden headless
+Chrome, publicly, with the same claim, beats, never-twice rule, 30-minute find window, row states and "your Mac needs
+you" flows. Three things are new: a separate TikTok login per account, a check of the signed-in handle before every
+post (both workspaces), and TikTok's AI label on every Clips Funded post. Clip Factory's routes, server code and web
+(§47.1 to §47.9) are unchanged; its only change is in the helper (the handle check, the profile proof, setup holding
+run.lock). **No Terraform change**: every new route is under the existing `ANY /v1/workspaces/{proxy+}` on
+cf-prod-stories-api (the shared JWT authorizer, so the helper's Cognito token works there), and every key is in
+`USER#{u}#WS#{ws}` or `USER#{u}#WSREG`. No table, index, secret, bucket, stream prefix, env key or role changes.
+
+#### 47.10.1 Rules
+
+* **D1. Two lanes in one helper.** The *clips* lane (Clip Factory, @lamo.clips) is 1.1.0's code path, byte for byte on
+  the wire. A *ws:{workspaceId}* lane (one per Clips Funded workspace whose id matches `^[a-z0-9][a-z0-9-]{0,39}$` or
+  the server's generated `^[0-9A-HJKMNP-TV-Z]{26}$`) uses the new workspace routes. Each lane has its own Chrome profile, CDP port, ledger, pacing, needs-you and login.
+  The lanes share only the Cognito sign-in, `device`, `settings.paused` and run.lock.
+* **D2. Clip Factory first.** Each tick the clips lane decides and checks in first, exactly as 1.1.0. A ws lane posts,
+  looks or logs in only in a tick where the clips lane has nothing to post, resume or find. A ws error is caught,
+  logged (`ws.error`) and never reaches the clips lane. A ws post makes a Clip Factory job wait one tick at most
+  (usually 2–3 minutes; at worst about 40, when the ws post meets a logout: the owner's login window, up to 20
+  minutes, then the upload and the look for the link); Clip Factory's four auto-posting runs a day still post. While
+  the clips lane posts, resumes or looks, the ws lanes' pressed posts still get their "finding" beat (`wsBeats`), so
+  their rows don't go stuck meanwhile.
+* **D3. Never another account.** Each workspace's jobs go only to that workspace's TikTok. The helper reads the
+  signed-in handle in its own headless Chrome and refuses unless it equals the lane's target (the job's
+  `account.handle` for Clips Funded; `GET /v1/accounts`' TikTok handle for Clip Factory, also while its token needs
+  renewing, else the cached one, else the one account of the helper's own Clip Factory posts in `state.posted`, so a
+  1.1.0 Mac goes on as it did). Both ways, each lane also refuses every other lane's account by handle and uid
+  (`lanes.js otherAccounts`): a Clips Funded job never goes to Clip Factory's account, and a Clip Factory clip never
+  goes to a Clips Funded account (the account its workspace connected, `state.ws[id].connected`, and the one its
+  profile was set up as; never one a profile was only seen logged in to). Server side, the claim re-checks the open_id
+  and the stored handle, and done refuses a link on another account. A ws lane is never set up as Clip Factory's
+  handle or uid.
+* **D4. AI label.** Every Clips Funded job carries `aiLabel: true`; the ws lane always turns on TikTok Studio's
+  "AI-generated content" switch and reads it back, and stops before Post if it can't. Clips Funded posts are never
+  branded: "Disclose post content" stays off (read back), `brandContent`/`brandOrganic` are false, and
+  `publish.NEVER` still refuses `campaign`. Clip Factory's lane never touches either switch.
+* **D5. Version gate 1.2.0.** `workspaces/mac.py` holds the exact line `MAC_WS_FROM = "1.2.0"` (the helper and web
+  tests read it with `^MAC_WS_FROM = "(\d+\.\d+\.\d+)"$`). The ws queue is empty for `?version=` below it and a claim must
+  carry a `version` at or above it. Helper 1.1.0 never calls `/v1/workspaces`. Clips Funded jobs never enter Clip
+  Factory's `/v1/tiktok/mac` queue (another partition).
+* **D6. Login: no password anywhere.** One visible sign-in, the owner's turn, in the ws lane's own profile (§47.10.5).
+  Clips Funded has no Keychain TikTok login, so a later logout is his turn again.
+* **D7. Fixed public defaults.** A Clips Funded Mac post is always Everyone, Comments on, Duet and Stitch on (Reuse of
+  content), Audience control off, Disclose post content off and the AI label on, whatever the sheet sent. There is no
+  per-post choice, so the Post it sheet shows one read-only line.
+* **D8. The switch** `StoriesConfig.tiktokMac: {on: boolean}` (missing reads as off; no data reset), saved with the
+  existing `PATCH /v1/workspaces/{ws}`, shown in Clips Funded › Social accounts › TikTok as **My Mac posts TikTok**.
+  Clips Funded can't read Clip Factory's TikTok audit, so the Mac path is used while the switch is on.
+* **D9. No infra change** (above).
+* **D10. No Clip Factory web change.** Clips Funded's Mac status lives only in its own TikTok card; Clip Factory's
+  Settings › Posting › Your Mac posts TikTok is unchanged.
+
+The only ways to post in Clips Funded are Review › **Post it** and **Try again** (it has no auto-posting or scheduled
+posting), so every Clips Funded Mac job is `source: "upload"` and goes at once, after any Clip Factory job.
+
+#### 47.10.2 Data (Clips Funded's partitions only)
+
+* **The switch:** `USER#{u}#WSREG` / `WS#{ws}` › `configuration.tiktokMac = {on}`. `stories/config/workspace-
+  defaults.json` has `"tiktokMac": {"on": false}`. `_config_patch` takes `{on: boolean}` merged onto the current value
+  (`{}` keeps it); any other inner key is a 400 "tiktokMac has a setting Clips Funded does not know.".
+* **The Mac job is the story's TikTok `PUBJOB#`** with `publishingStatus: "mac"`. "mac" is in `publish.STATUSES` but
+  not in `IN_FLIGHT` or `RETRYABLE`, so the story flow, `settle_stuck` and the API retry never touch it, and the flow's
+  `load_jobs` skips it as a safety net.
+
+  | Field | Value |
+  |---|---|
+  | `postOptions` | always `MAC_OPTIONS = {privacyLevel: "PUBLIC_TO_EVERYONE", disableComment: false, disableDuet: false, disableStitch: false, brandContent: false, brandOrganic: false}` |
+  | `aiLabel` | always `true` |
+  | `handle` | the recorded `@username` (`MAC_HANDLE = ^@[A-Za-z0-9._]{2,30}$`, else publish answers 409 and writes nothing) |
+  | `externalAccountId` | the recorded open_id |
+  | `macState` `macStep` `macSince` `macSource` (`"upload"`) `macClaimedAt` `macPressedAt` `macStoppedAt` `macReason` `macBeatAt` `macDevice` `macAttempt` `macPressedBefore` `macAgainAt` | the same names and meanings as Clip Factory's (§47.1); all removed once posted |
+  | `beforeMac` | only after a hand-over in place: the Only me job's earlier fields |
+  | `via: "mac"` / `by: "you"` | once the Mac's done / the owner's It's on TikTok saved it |
+
+* **The workspace's helper item** `USER#{u}#WS#{ws}` / `MACHELPER` (`ws.MACHELPER_SK`, in `ITEM_PREFIXES`; type
+  `ws_machelper`; `userId` and `workspaceId` for `guard.owned`): `seenAt`, `state` (`ok` | `needs_you` | `paused`),
+  `reason?` (≤ 200 characters), `version`, `device`, `setUp` (the lane's profile is logged in to the target),
+  `handle?`, `needsYouJobId`/`needsYouStoryId` (a stop with `needsYou`; removed by any ping that isn't `needs_you` and
+  by the owner's Try again or It's on TikTok on that job), `loginRequestAt` (the owner's Log in on my Mac; removed by a
+  ping whose `loginDone` equals it, a conditional REMOVE), `resumeRequestAt` (the owner's Start my Mac again; removed
+  by a ping whose `resumeDone` equals it). It is never Clip Factory's `USER#{u}`/`MACHELPER`, so a
+  Clips Funded problem never pauses Clip Factory's posts and the other way round. `PUBJOB#` and `MACHELPER` are not
+  stream prefixes (`test_ws_keys` pins it), so the web polls.
+* **Timing:** `MAC_BEAT_STALE`, `MAC_CLAIM_MAX` and `MAC_FIND_WINDOW` are imported from `tiktok_self` (not edited);
+  `STALE_CLAIM` (15 minutes) is a one-line copy pinned equal to `tiktok_mac.STALE_CLAIM` by a test, because
+  `workspaces/mac.py` never imports `tiktok_mac` or `clipfactory_api.routes.*`.
+* **Story posted:** the story's posted list, `publishedAt`, `status: published` and the `ACT#` "posted" item are written
+  by `workspaces/story_posted.py` (`story_write`, `activity`), which both the flow and `workspaces/mac.py` use (the API
+  never imports the flow module). A Mac job handed over from Only me (`beforeMac.url`) replaces that private link in
+  the story's posted list (`story_write(..., replace=)`), so the story keeps one TikTok link.
+
+#### 47.10.3 Publishing with the switch on (`workspaces/publish.py`)
+
+1. **Post it, TikTok target:** every check runs as today (`clean_options` on the sheet's full options, `_check` with
+   `validate_destination`, the confirmAccount 409s and G8, then `_clash`). The job is then written as a Mac job
+   (`MAC_OPTIONS`, `aiLabel`, `macState "waiting"`, `macSince` now, `macSource "upload"`, `macAttempt 0`). No `@handle`
+   on the destination → 409 "Connect TikTok again in Social accounts, so your Mac knows the account." and nothing is
+   written. `starter.ready` is needed only when the body has a non-Mac target, and the flow starts only for those.
+2. **`_clash`:** "mac" counts as being posted ("This story is already being posted to TikTok."). One exception: a
+   TikTok job the API posted Only me (`postOptions.privacyLevel == "SELF_ONLY"`) is **handed over in place** in the
+   same transaction, conditional on `posted` and its `flowRun`: its fields go into `beforeMac`, `url`, `postedAt`,
+   `privacy`, `platformPostId`, `statsId`, `metrics`, `numbersAt` and `error` go, and it becomes the Mac job. The story
+   keeps one TikTok row.
+3. **API retry** of a `failed` or `needs_attention` TikTok job while the switch is on: the job becomes a Mac job in
+   place, conditional on its status and `flowRun`; no flow starts. Retry of a `mac` job → 409 "Your Mac posts this
+   one. Tap Try again on its row."
+4. **`PublishingJob`** gains `mac` (`PubJobMac`, only while the status is `mac`), `via`, `by`, and `onlyMe: true` on a
+   TikTok job posted Only me (the row's Post with my Mac).
+5. **Dashboard:** a stopped Mac job joins Needs you with its stored reason, `href` `/stories/review/{storyId}`,
+   `publishingStatus: "mac"` and `mac`.
+
+#### 47.10.4 Routes (JWT, all under `/v1/workspaces/{ws}`, stories workspaces only)
+
+Unknown body keys are a 400, Clip Factory's workspace id a 409, another owner's job a 404 "We could not find that
+post.". The logic and every conditional write live in `workspaces/mac.py`; the routes in `workspaces/routes/mac.py`.
+
+| Method and path | Body | 2xx |
+|---|---|---|
+| GET `/tiktok/mac` (`?version=` optional) | – | `WsMacStatus` |
+| POST `/tiktok/mac/ping` | `{state, reason?, version, device, setUp, handle?, loginDone?, resumeDone?}` | `{on}` |
+| POST `/tiktok/mac/login` | `{action: "sign_in"}` | `{helper}` |
+| POST `/tiktok/mac/request` | `{action: "resume"}` | `{helper}` (the owner's Start my Mac again) |
+| POST `/publishing/{id}/mac/claim` | `{device, version}` | `{job: WsMacJob}` |
+| POST `/publishing/{id}/mac/step` | `{device, step, attempt?}` | `{job: WsMacJob}` (a re-sent step is the beat) |
+| POST `/publishing/{id}/mac/done` | `{device, link, attempt?}` | `{job: PublishingJob}` |
+| POST `/publishing/{id}/mac/stopped` | `{device, reason, needsYou?, attempt?}` | `{job: WsMacJob}` |
+| POST `/publishing/{id}/mac/retry` | `{notOnTikTok?, confirmAccount?}` | `{job: PublishingJob}` (the owner's Try again) |
+| POST `/publishing/{id}/mac/posted` | `{link}` or `{noLink: true}` | `{job: PublishingJob}` (the owner's It's on TikTok) |
+
+The helper downloads with the existing `GET …/stories/{storyId}/download` → `{url}` (saved as `job.fileName`) and tidies
+with the existing `GET …/publishing`.
+
+* **GET /tiktok/mac:** `on` = `configuration.tiktokMac.on === true`; `account` = SOCIAL#tiktok's `{handle,
+  accountName, status}` or null; `queue` = the Mac jobs `waiting` or `working`, oldest `macSince` first, at most 50;
+  `[]` while the switch is off or when `?version=` is below `MAC_WS_FROM` or not a version. The web calls it without
+  `version`.
+* **Ping:** `state` one of the three; `device` required (≤ 100); `version` required (≤ 20); `setUp` a boolean
+  (required); `handle` `^@[A-Za-z0-9._]{1,30}$`; `loginDone` and `resumeDone` ≤ 40. A missing reason or handle
+  removes it.
+* **Login:** no helper item, or a version below `MAC_WS_FROM` → 409 "Update the helper on your Mac first."; another
+  action → 400 "Pick sign_in.". Otherwise `loginRequestAt = now`.
+* **Request** (Start my Mac again): the same 409 for no or an old helper; another action → 400 "Pick resume."; a helper
+  that isn't `paused` → 409 "Your Mac isn't paused." (one conditional write). Otherwise `resumeRequestAt = now`. The
+  helper ends this Mac's pause (`settings.paused`, the same one Clip Factory's Start my Mac again ends: every lane's)
+  and sends `resumeDone`.
+* **Claim**, in order: not a Mac job → 409 "Your Mac isn't posting this one."; switch off → 409 "My Mac posts TikTok
+  is off in Clips Funded."; version too old → 409 code `mac_old` "Update the helper on your Mac."; not claimable as read
+  (another device still holds it) → 409 "Another try already has this post." (never stopped); then
+  `validate_destination(..., at_tap=False)` and the stored handle equal to the job's (case-insensitive). A failure
+  stops the job in one conditional write and answers 409 with the reason: "Clips Funded's TikTok is a different
+  account now. Tap Try again.", "The video is gone. Make it again, then tap Try again.", "Connect TikTok again in Social
+  accounts. Then tap Try again.", or Clips Funded's own G8 / can't-tell-apart sentence. The claim's write is §47.3's:
+  waiting with no `macPressedAt`, or working with no `macPressedAt` and a beat older than `STALE_CLAIM`; it sets
+  working, `macClaimedAt`, `macDevice`, `macBeatAt`, step `video` and `macAttempt + 1`.
+* **Step, Stopped, Retry, It's on TikTok:** §47.3's rules with `source: "upload"`. The attempt is fenced and only
+  `macDevice` may step; the first `pressing` sets `macPressedAt`; the switch off before the press → 409, after it steps
+  go on; after a press the stopped reason is always PRESSED ("Your Mac pressed Post but couldn't confirm it. Look on
+  your TikTok: if it's there, tap It's on TikTok."); `needsYou` sets the **workspace** helper item to `needs_you`.
+  Retry: working and not stuck → 409 "Your Mac is posting it right now. Wait a minute."; pressed without
+  `notOnTikTok` → 409 "Your Mac may have posted it already. Check your TikTok first."; inside the find window → 409
+  "Your Mac pressed Post less than 30 minutes ago. …"; it runs the at-tap check (`publish._check`): a changed account
+  answers 409 with `error.account` until `confirmAccount` names it, and for the same open_id it refreshes `handle` and
+  `accountName`. On success the job waits again (keeping `macSince`), `macAgainAt` set and a press moved to
+  `macPressedBefore`; a stopped job keeps `macDevice`/`macBeatAt`, a stuck one loses them. It's on TikTok: allowed
+  while waiting or stopped, or working once stuck; without a link never on a working job that never pressed (409 "Your
+  Mac is posting it right now. Wait a minute." while its beat is fresh, else "Your Mac stopped before it pressed Post,
+  so it isn't on TikTok. Tap Try again."); with no link the story's posted entry has url "".
+* **Done** (and It's on TikTok with a link): a link that is not `^https://(www\.)?tiktok\.com/@name/video/{8–25
+  digits}` is a 400 "Paste the video's full TikTok link: tiktok.com/@name/video/…"; a link whose `@name` is not the
+  job's `handle` (case-insensitive) is a 409 code `wrong_account` "That post is on another TikTok account." with nothing
+  written. On success one transaction makes the job `posted` (`via "mac"`, or `by "you"`), the canonical url,
+  `postedAt`, `privacy: "public"`, the mac* fields gone, plus the STORY# update and the ACT#. A repeat is answered as
+  the first. No finder and no TikTok call: the stories Lambda can't use Clip Factory's token, and must not.
+* **Stuck:** no beat for 5 minutes, or a claim 50 minutes old (every 1.2.0 helper beats).
+
+```ts
+type MacStep = "video" | "opening" | "uploading" | "settings" | "pressing" | "finding";
+interface WsMacJob {
+  workspaceId: string; publishingJobId: string; storyId: string;
+  hook: string;                 // the story's title
+  caption: string;              // postCaptions.tiktok, else the title; mojibake-repaired, NFC
+  fileName: string;             // "clips-funded-{slug}.mp4"
+  account: { handle: string; openId: string };   // the ONLY account it may go to
+  aiLabel: true; privacy: "PUBLIC_TO_EVERYONE"; comment: true; duet: true; stitch: true;
+  source: "upload"; since: string; state: "waiting" | "working" | "stopped"; step?: MacStep;
+  claimedAt?: string; pressedAt?: string; beatAt?: string; attempt: number; pressedBefore?: string; againAt?: string;
+}
+interface WsMacHelper {
+  seenAt: string; state: "ok" | "needs_you" | "paused"; reason?: string; version?: string; setUp: boolean;
+  handle?: string; needsYouJobId?: string; needsYouStoryId?: string; loginRequest?: { at: string };
+  resumeRequest?: { at: string };  // never the device
+}
+interface WsMacStatus {
+  on: boolean; helper: WsMacHelper | null;
+  account: { handle: string | null; accountName: string | null; status: string } | null; queue: WsMacJob[];
+}
+interface PubJobMac { state: "waiting" | "working" | "stopped"; step?: MacStep; since: string; claimedAt?: string;
+  pressedAt?: string; stoppedAt?: string; reason?: string; beatAt?: string; pressedBefore?: string; againAt?: string }
+// PublishingJob: publishingStatus adds "mac"; mac?: PubJobMac; via?: "mac"; by?: "you"; onlyMe?: true.
+// StoriesApi: macStatus(ws), macLogin(ws), macResume(ws), macRetry(ws, id, {notOnTikTok?, confirmAccount?}),
+//   macPosted(ws, id, {link} | {noLink: true}). The web never calls the helper's own routes.
+```
+
+#### 47.10.5 The helper, 1.2.0 (`mac/tiktok-helper/**`)
+
+* `VERSION = "1.2.0"` in paths.js, package.json and package-lock.json. Clip Factory's ping says 1.2.0 (≥
+  `MAC_BEATS_FROM`, so beats keep counting) with the same keys as 1.1.0.
+* **Lanes** (`src/lanes.js`): `clipsLane` is 1.1.0's (profile `chrome/`, port 9339, Keychain items `tiktok-username`/
+  `tiktok-password`, the top-level ledger, pacing, trial and backfill). `wsLane` has profile `chrome-ws-{id}/`, the
+  lowest free port of 9340–9349 (kept in state.json), its own store `state.ws[id] = {port, ledger, posted,
+  lastPressedAt, connected (the workspace's TikTok @name, from its status), account: {handle, uid?, setUpAt?,
+  checkedAt}}` and no Keychain (`keychain: null`, so `readLogin` never
+  falls back to Clip Factory's items). A ws job is normalised to `clipId = publishingJobId` with the fixed public
+  options and the AI label, so plan.js, beats.js and the ledger run unchanged; that id only ever goes to
+  `wsClient`, which never builds a `/clips/` path. `client()` gains two reads: `GET /v1/accounts` and
+  `GET /v1/workspaces` (items with `workspaceType: "stories"`).
+* **Tick:** lock → settings, state, sign-in (a sign-in problem stops both lanes, as today) → **A** the clips lane as
+  1.1.0, plus its target (`GET /v1/accounts`' TikTok `@handle`, connected or needing renewal, cached in
+  `state.clipsAccount`; else the cache; else `postedHandle`: the one @name of the clips lane's own posted links, never a
+  Clips Funded account; with none of these a post, resume or find becomes wait and the ping says `paused` with "Your
+  Mac can't tell which TikTok is Clip Factory's. Connect TikTok in Settings › Posting.", never a silent stall) → **B**
+  one `GET /v1/workspaces`, then for each stories workspace its queue (`?version=1.2.0`), its `connected` account
+  kept, the owner's Start my Mac again (`helper.resumeRequest`: `settings.paused` false, `resumeDone` in the ping),
+  `wsAction` (`nextAction` on the lane's own view, with trial, backfill and hold cleared and its own needs-you; a new
+  post waits, "Not logged in to TikTok on this Mac yet.", until the lane is set up) and its ping → **C** one thing:
+  Clip Factory's post, resume or find (with `wsBeats` for the ws lanes' pressed posts); else the first ws
+  lane's find, then resume, then post; else a pending ws login request; else tidy (Clip Factory's, plus kept ws files
+  whose job `GET …/publishing` shows posted). Pacing (`lastBacklogAt`, `lastRunPressAt`, `backfillPosts`, the trial
+  count) and `haltOnStop` are the clips lane's only. `settings.paused` pauses every lane.
+* **Chrome** (`chrome.js`, `src/cdp.js`): per-lane `--user-data-dir` and `--remote-debugging-port`, still headless=new
+  and spawned directly (no window, no Dock icon, no focus). One helper Chrome at a time: other lanes' Chromes (9339 and
+  the ports in `state.ws`) close first. A Chrome already on the lane's port is reused only when
+  `<profile>/DevToolsActivePort` proves it (line 1 the port, line 2 the path of `/json/version`'s
+  `webSocketDebuggerUrl`); otherwise it is closed and a fresh one spawned. `cdp.js` speaks only to the browser target
+  (`Storage.getCookies`, `Storage.clearCookies`, `Browser.close`).
+* **Which account** (`src/whoami.js`, used in tiktok.js). Sources, each a pure parser: (1) the in-page
+  `/passport/web/account/info/?aid=1988` → `username`, `user_id_str`; (2) the `/@name/video/` links of Studio › Posts
+  (only on Studio: on www.tiktok.com's feed those links are other people's and are not read); (3)
+  `__UNIVERSAL_DATA_FOR_REHYDRATION__` › `webapp.app-context.user`. `sameAccount`: handles compared in lower case
+  without "@"; every readable handle must be the target and a readable uid the pinned one (and never another lane's
+  uid), else `wrong`; nothing readable → `unknown`; the account's own data (sources 1 and 3, `seen.own`) on the target
+  with a Studio row's link on another @name → `unknown` (no post, and no needs-you for a login that is right). Where it runs, in both lanes: after Studio opens and before Posts is read (falling back to
+  www.tiktok.com when Studio shows no handle); right before Post (the session cookie's hash, kept in memory only, is
+  unchanged, or source 1 positively reads the target); in `find()` before reading; and on the link in `finished()` (its
+  `@name` must be the target, or done is never sent). Wrong → a needs-you stop; unreadable with a TikTok session →
+  retried on later ticks (3 tries, then "Your Mac couldn't see which TikTok it's logged in to. …"); unreadable with no
+  session at all → the lane's logged-out flow; in a ws lane, nothing readable at all three times (a cookie but no
+  account: TikTok ended the session on its side) → the lane is no longer set up and stops with "Your Mac couldn't see
+  which TikTok it's logged in to. Nothing was posted. Tap Log in on my Mac.". A ws lane never runs caption matching
+  against older posts (`findExisting`): `find()` always uses the baseline saved at pressing. One exception: a job with
+  `pressedBefore` (the owner's Try again after a press) first looks, in `post()`, for a row with its caption that is
+  new since that first press (`ledger.earlier`, the Studio ids from before every earlier press, kept by a fresh
+  claim); if one is there, that link is done and nothing is posted again.
+* **Login window** (`login.js loginWindow`, for setup, Log in on my Mac, and a ws post that finds TikTok logged out):
+  every helper Chrome closes; the yellow frame and one pop-up, "Log in to TikTok as {target} in the window. Scan the
+  code with the TikTok app."; first the lane's cookies are cleared (`forget`: a session TikTok ended on its side,
+  its cookie still in the profile, would read as a login at once and the window would close by itself); then a
+  **visible** Chrome on the lane's profile and port at TikTok's QR-code login page
+  (`https://www.tiktok.com/login/qrcode`, in English) that Playwright never attaches to (no `--enable-automation`, no
+  page attached). Before it opens, its profile's Preferences turn off password saving, auto sign-in, autofill and
+  Chrome sign-in (`chrome.js hardenProfile`), and it runs with `--disable-sync`, so nothing he does there keeps a
+  password. Every 3 seconds `Storage.getCookies` looks for a `.tiktok.com` `sessionid` (never its value); 3 seconds
+  after it shows, the window closes and the headless Chrome reads the handle. The target (and not Clip Factory's
+  handle or uid) → any google/youtube cookies leave the profile, the account is pinned (`setUpAt`), the ping says
+  `setUp: true` and `handle`, and a login-type needs-you clears. Another account → that profile's cookies are cleared, the pop-up says
+  "That's {seen}. Log in as {target}." and the window opens once more. After 20 minutes the window closes; inside a post
+  the job stops with "TikTok logged your Mac out. Tap Log in on my Mac." and needs-you; after a request `loginDone` is
+  still sent. When the profile already reads the target nothing opens. Setup and every login window hold run.lock.
+* **AI label** (`tiktok.js`, ws lanes only, forced by the lane kind): the switch named "AI-generated content" or
+  "AI-generated" (under Show more) is set on and read back, and read again right before Post; absent, or locked off →
+  "Your Mac couldn't turn on TikTok's AI label, so it didn't post. Tap Try again."; locked on (TikTok's own label) is
+  fine. A dialog whose text matches /AI-generated/i may be confirmed with /^(turn on|confirm|ok|got it)$/i; any other
+  dialog still stops. "Disclose post content" is kept off and read back.
+* **Files, events, CLI:** `ownFile` also accepts `clips-funded-*.mp4` directly in Downloads. Every event carries
+  `account` (`"clips"` | `"ws:{id}"`); new kinds `wrong_account` and `login_window` `{account, outcome}`. CLI:
+  `setup --workspace <id>`, `whoami [--workspace <id>]` (handles, target and whether they match; never a cookie),
+  `probe --workspace <id> --story <storyId>` (up to Post, AI label included, saves `probe-ws-<id>.png`, posts nothing),
+  `status` (every lane). `install.sh` is unchanged (one launchd job serves every lane); `uninstall.sh --all` also
+  deletes the `tiktok-username`/`tiktok-password` Keychain items.
+* **Words** (ws lanes; Clip Factory's REASONS stay word for word): "TikTok logged your Mac out. Tap Log in on my Mac.";
+  "TikTok's upload page looks different. Your Mac's helper needs a fix. Then tap Try again."; "TikTok says it's
+  posting too much right now. The rest wait."; both lanes: "Your Mac is logged in to TikTok as {seen}, not {target}.
+  Nothing was posted." (needs you), "Your Mac couldn't see which TikTok it's logged in to. Nothing was posted. Tap Try
+  again.", "The post showed up on {seen}, not {target}. Look on your TikTok."; Clip Factory's lane: "That TikTok account
+  is your other workspace's. Nothing was posted. Connect TikTok again in Settings › Posting." (needs you); ws only:
+  "That TikTok account is your other workspace's. Nothing was posted. Connect TikTok again in Social accounts.", "Your
+  Mac couldn't see which TikTok it's logged in to. Nothing was posted. Tap Log in on my Mac.", the AI label sentence,
+  and "The video is gone. Make it again, then tap Try again." (download 404/409). A login reason (the card's Log in on
+  my Mac) is exactly the logged-out sentence, the nothing-readable sentence, or starts with "Your Mac is logged in to
+  TikTok as " (helper `loginReason`, web `loginReason`, pinned to each other).
+
+#### 47.10.6 What the owner sees (web, `web/src/stories/**` only)
+
+* **The TikTok card** (`studio/TikTokMac.tsx`, id `tiktok-mac`, in Social accounts › TikTok outside the setup steps,
+  once Clips Funded's TikTok is connected or while the switch is on; `GET …/tiktok/mac` every 60 s while on, every
+  10 s while a login or a start request waits):
+
+  | When | Says | Button |
+  |---|---|---|
+  | off | **My Mac posts TikTok** · "Off. Your Mac doesn't post TikTok." | the switch |
+  | on | "On. Post it hands TikTok to your Mac. It posts for everyone, with the AI label." | the switch |
+  | no 1.2.0 check-in | "Your Mac isn't set up yet." and the steps "1. Ask for the helper update on your Mac. 2. Tap Log in on my Mac. 3. In the TikTok app, switch to {handle}, then scan the code." | – |
+  | 1.2.0, not set up | "Your Mac isn't logged in to {handle} yet." and steps 2–3 | **Log in on my Mac** |
+  | asked | "Look at your Mac. A TikTok window opens within a minute." | – |
+  | set up | "Your Mac checked in {time} · logged in as {handle}." | **Log in on my Mac** (quiet) |
+  | needs you | "Your Mac needs you: {reason}" | **Log in on my Mac** for a login reason, else **Open the stopped post** |
+  | paused | "Paused on your Mac · your posts wait until it's started again." | **Start my Mac again** (`macResume`) |
+  | asked to start | "Your Mac starts again within a minute." | – |
+  | not seen for 30 minutes | "Your Mac hasn't checked in since {time}." | – |
+  | always while on | "To stop it, turn the switch off. Your Mac stops at once." | – |
+
+* **Post it** (`PublishSheet`, Mac mode while `config.tiktokMac?.on`): TikTok's part is read-only, "Your Mac posts it
+  for everyone, with the AI label." and "Comments, Duet and Stitch on."; no Who can see it and no Commercial content;
+  Upload never waits for creator info (still read for Posting as and the length limit); it sends `MAC_TIKTOK_OPTIONS`
+  plus confirmAccount. Not set up: "Your Mac isn't set up yet. It posts once it is." with **Set it up**.
+* **The TikTok row** (`studio/macRow.ts`, timing from `web/src/lib/tiktokMac.ts`, imported only):
+
+  | # | State | Chip | Row says | Button |
+  |---|---|---|---|---|
+  | 1 | posted, `via: "mac"` | Posted | "Posted by your Mac · Everyone" | **Open** |
+  | 2 | posted, `by: "you"` | Posted | "On your TikTok" (" · no link") | **Open** with a link |
+  | 3 | waiting, switch off | Waiting for your Mac | "My Mac posts TikTok is off" | **Turn on** |
+  | 4 | waiting, no 1.2.0 helper or not set up | Waiting for your Mac | "Your Mac isn't set up yet" | **Set it up** |
+  | 5 | waiting, not seen 30 minutes | Waiting for your Mac | "Your Mac hasn't checked in since {time}" | – |
+  | 6 | waiting, needs you on another post | Waiting for your Mac | "Your Mac needs you · look at your Mac" | **Open the stopped post** |
+  | 7 | waiting, paused | Waiting for your Mac | "Paused on your Mac" (" · starting again within a minute" once asked) | **Start my Mac again** (until asked) |
+  | 8 | waiting | Waiting for your Mac | "Waiting for your Mac · next" / "… · in line (N before it)" | – |
+  | 9 | working, not stuck | Posting… | "Posting…" with the spinner | – |
+  | 10 | working, stuck, no press | Didn't work | "Your Mac stopped before it pressed Post" | **Try again** |
+  | 11 | pressed (stuck or stopped) | Not sure it posted | "Not sure it posted · look on your TikTok" (" · Try again from {time}" inside the window) | **It's on TikTok** (link box, "It's on TikTok, no link"); after the window a quiet **Try again** that asks "Post it again? Only if it's not on your TikTok." and sends `notOnTikTok` |
+  | 12 | stopped | Didn't work | "Didn't work: {the reason's first sentence}" | **Try again** (and Open Social accounts when the reason names it, §45.36 E9; **Set it up**, to the card's Log in on my Mac, for a login reason) |
+  | 13 | posted `onlyMe`, switch on | Posted | "Only you can see it on TikTok" | **Post with my Mac** (Post it with only TikTok ticked) |
+
+  `PUBLISH_LABEL.mac` "Your Mac", tone sky. Review polls every 10 s while a Mac job waits or works and reads the Mac
+  every 60 s while one is shown; Try again calls `macRetry`, It's on TikTok `macPosted`. Dashboard's Try again on a Mac
+  item calls `macRetry`; a pressed one has only **Open**.
+* **Mock** (`api/mock/mac.ts`): the same rules with knobs `macOn`, `macHelper`, `macConnected` and
+  `window.__cfStoriesMock.mac` (`ping`, `claim`, `beat`, `step`, `done`, `stopped`, `age`, `helper`); a bad link is the
+  API's 400, another account's link its 409.
+
+#### 47.10.7 Clip Factory stays exactly as it is
+
+No edits to `api/src/clipfactory_api/{tiktok_mac.py, tiktok_self.py, posts.py, uploads.py, settings.py, routes/**,
+autopost/**}`, Clip Factory's web or `infra/**`. `/v1/tiktok/mac*` and `/v1/clips/{id}/tiktok/mac/*` carry the same
+bodies; the ping keeps its keys (`backlogAt`, `holdBefore`, `backfill`). The clips lane keeps its profile, port,
+Keychain items, ledger, pacing, trial, backlog slot, backfill, tidy and `deleteVideo`, and goes first every tick; it
+gains the handle check (and refuses a Clips Funded account), the profile proof and setup holding run.lock. **Go-live
+gate:** `whoami` must print @lamo.clips before 1.2.0 is started. If Clip Factory's stored TikTok handle is a nickname
+without a username, the clips lane takes the account of its own earlier posts (`state.posted`, all on @lamo.clips),
+so it goes on as 1.1.0 did; with neither, its ping says paused and why.
+
+#### 47.10.8 The owner's one-time step (after merge and deploy; every Mac step only on his command)
+
+1. A session runs, from a main checkout, `cd mac/tiktok-helper && ./install.sh --no-start`, then
+   `node "$HOME/Library/Application Support/Clip Factory TikTok/app/src/cli.js" whoami`. It must print @lamo.clips
+   and `"matches": true`; if not, nothing is started and 1.1.0 is reinstalled from the previous main commit. Then
+   `./install.sh`.
+2. In Clips Funded › Social accounts › TikTok he turns on **My Mac posts TikTok**, then taps **Log in on my Mac**.
+3. A TikTok window opens on the Mac with a code (yellow frame). On the phone: TikTok app → switch to @clips.funded
+   (add it once with Continue with Google, his Google account, if it isn't there yet) → scan the code → Log in. The
+   window closes by itself and the card says "logged in as @clips.funded". The code, not Google in the window: then
+   nothing is typed on the Mac.
+4. Optional, posts nothing: `node ".../cli.js" probe --workspace stories --story <an approved story>`.
+5. He is told: TikTok may link two automated accounts on one Mac and network, so an automation flag could hit both.
+
+No password goes into chat, logs, files or the server at any step: the QR code leaves only TikTok's session cookie in
+the `chrome-ws-stories/` profile. Should he use Google in the window anyway, that profile can't save a password
+(`hardenProfile`), and its Google cookies are deleted once TikTok's login is in.
+
+#### 47.10.9 Tests (targeted; CI is the full run)
+
+* **API:** `tests/test_ws_tiktok_mac.py` (publish to a Mac job with no flow, mixed targets, the missing handle, clash,
+  the Only me hand-over and `onlyMe`, the API retry in place and its 409 on a Mac job, the flow never sending a Mac job,
+  the queue off / old version / no version, ping and login, every claim refusal and the conditional rules, steps and
+  beats, needs-you only on the workspace item, the dashboard item, done and It's on TikTok with their link rules,
+  retry's window and confirmAccount, 400 on unknown keys and 404 for another owner on every route, no Clip Factory
+  partition write, Start my Mac again and its `resumeDone`, the handed-over post's one TikTok link on the story);
+  `ws_routes_mac.py` in `test_ws_http`'s union; `test_ws_separation`'s sweep; `test_ws_keys`
+  (`MACHELPER_SK`); `test_story_flow` (Mac jobs skipped, `story_posted` the same); `test_tiktok_mac.py` unchanged.
+* **Helper** (`node --test`): lanes, whoami (the parsers, `sameAccount`, links ignored off Studio), chrome (the
+  DevToolsActivePort proof, per-lane flags), plan (`wsAction`, `pickWork`, Clip Factory first), tick (whole ticks
+  against a fake server and Keychain: Clip Factory's check-in keys and order are 1.1.0's, a ws failure never stops
+  Clip Factory's claim, no @name in Settings → the account of its own posts, none at all → a paused ping with why,
+  Start my Mac again in Clips Funded, the ws pressed post's beat during Clip Factory's post), lanes (`otherAccounts`,
+  `refusedTarget` both ways, the generated id), api (wsClient paths, `version` on claim and queue, never `/clips/`),
+  files, constants (`MAC_WS_FROM` read from the API file), words, chrome (`hardenProfile`) and login (old cookies
+  cleared before the window, Google cookies after it); the 1.1.0 tests unchanged.
+* **Web:** `test/storiesTikTokMac.test.tsx` (every card state and row, the sheet's Mac mode, Review and Dashboard,
+  the mock's rules, `MAC_WS_FROM` and the logged-out words pinned to the API and helper files, no reversed name);
+  `e2e/stories-tiktok-mac.spec.ts` (turn on → Post it → Waiting → Posting… → Posted by your Mac · Everyone; stopped →
+  Try again; pressed and stopped → It's on TikTok with its link).
+
+#### 47.10.10 Not verified live (each one fails closed)
+
+Which handle sources TikTok really serves (none readable → nothing posts; `whoami` is the gate); the AI switch's name,
+place and dialog in Studio (`probe` checks it); the QR page in an unattached window, and that Chrome keeps the
+hardened Preferences; DevToolsActivePort in headless=new (missing → a fresh Chrome); that the
+`com.clipfactory.no-test-windows` guard leaves the helper's login window alone. The API path still labels only
+realistic makers. Follow-ups, to match Clip Factory fully: view numbers on Mac-posted Clips Funded videos (the video id
+from the link, read with the workspace token), Find it for me (It's on TikTok is paste-only), a "post these with my
+Mac" for stories already on @clips.funded as Only me (today one by one), and a line telling him the Only me copy of a
+handed-over story stays on TikTok (the story itself keeps one link).

@@ -23,6 +23,7 @@ import {
   chipFor,
   chipSentence,
   choiceSearch,
+  DASH_PATH,
   isAll,
   PERIOD_LABEL,
   PERIODS,
@@ -35,6 +36,7 @@ import {
   type DashChoice,
 } from "../../lib/moneyDash.ts";
 import { useAction } from "../../lib/motion.ts";
+import { withBack } from "../../lib/backLink.ts";
 import { prefersReducedMotion } from "../../lib/prefs.ts";
 import { MoneyChart } from "./MoneyChart.tsx";
 import { MoneyClipList } from "./MoneyClipList.tsx";
@@ -143,9 +145,9 @@ function Amount({ micros, currency, count = false }: { micros: number; currency:
 type Kpi = "monthly" | "weekly" | "daily" | "yearly";
 
 const KPI_TEXT: Record<Kpi, { label: string; sub: string; days: number }> = {
-  monthly: { label: "Monthly MRR", sub: "Money in the last 30 days", days: 30 },
+  monthly: { label: "Monthly MRR", sub: "Last 30 days", days: 30 },
   weekly: { label: "Weekly MRR", sub: "Last 7 days", days: 7 },
-  daily: { label: "Daily MRR", sub: "A normal day lately (average of 30 days)", days: 30 },
+  daily: { label: "Daily MRR", sub: "An average day (last 30 days)", days: 30 },
   yearly: { label: "Yearly MRR", sub: "At this pace for a year", days: 365 },
 };
 
@@ -186,8 +188,8 @@ function noCompare(c: MoneyCurrencySummary, kind: Kpi): boolean {
 export function kpiSub(kind: Kpi, coveredDays: number): string {
   if (coveredDays >= 30) return KPI_TEXT[kind].sub;
   const n = coveredDays === 1 ? "1 day" : `${coveredDays} days`;
-  if (kind === "monthly") return `Money in the last 30 days · only ${n} so far`;
-  if (kind === "daily") return `A normal day lately (average of ${n})`;
+  if (kind === "monthly") return `Last 30 days · only ${n} so far`;
+  if (kind === "daily") return `An average day (last ${n})`;
   if (kind === "yearly") return `At this pace for a year · from ${n} so far`;
   return KPI_TEXT[kind].sub;
 }
@@ -240,7 +242,7 @@ function WhatIsMrr() {
         ?
       </button>
       <p className="dash-why__text" id={id} hidden={!open}>
-        MRR usually means subscriptions. Here it means the money YouTube (and other apps that share it) reported for your videos over that many days. Days can change for a few days after, and at month end.
+        Here MRR is the money the apps reported for your videos. A day can still change for a few days.
       </p>
     </>
   );
@@ -294,6 +296,10 @@ function Notes({ excluded }: { excluded: MoneyExcluded[] }) {
           {e.reason === "needs_permission" ? (
             <LinkButton href={`${MONEY_PATH}#money-youtube`} variant="action" size="md" icon="key">
               Allow money reading
+            </LinkButton>
+          ) : e.reason === "not_connected" ? (
+            <LinkButton href={withBack(`/settings/posting/setup/${e.platform}`, DASH_PATH)} variant="glass" size="md" icon="link" data-note="set-up">
+              {`Set up ${PLATFORM_LABEL[e.platform]}`}
             </LinkButton>
           ) : null}
         </div>
@@ -573,7 +579,7 @@ export function MoneyDashboard() {
           </div>
           {data.revised.days > 0 ? (
             <p className="dash-grey">
-              {names(data.revised.platforms)} changed {data.revised.days === 1 ? "1 day" : `${data.revised.days} days`} after rechecking them. Apps can change a day for a while, and at month end.
+              {names(data.revised.platforms)} changed {data.revised.days === 1 ? "1 day" : `${data.revised.days} days`} after a recheck.
             </p>
           ) : null}
           {onlyNotShared ? null : <Notes excluded={data.excluded} />}
@@ -588,7 +594,7 @@ export function MoneyDashboard() {
               </div>
               <CurrencyPick currencies={data.currencies} value={shown.currency} onChange={setCurrency} />
               <MoneyChart summary={data} entry={shown} />
-              <p className="dash-grey">Cards use fixed days. The picker changes the chart and the clip list.</p>
+              <p className="dash-grey">The days you pick change the chart and clips, not the cards.</p>
               <HistoryNote summary={data} entry={shown} thisYear={thisYear} />
             </section>
           ) : null}

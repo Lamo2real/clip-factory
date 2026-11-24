@@ -187,6 +187,7 @@ function run(store: MockStore, id: string): void {
         j.publishingStatus = "posted";
         j.postedAt = new Date().toISOString();
         j.url = POST_URL[j.platform](j.publishingJobId);
+        if (j.platform === "tiktok") j.onlyMe = true; // the mock's TikTok offers only Only me (Sandbox, §47.10)
         delete j.error;
         const story = store.stories.find((s) => s.storyId === j.contentId);
         if (story && (story.status === "approved" || story.status === "published")) {

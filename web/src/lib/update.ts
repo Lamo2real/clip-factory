@@ -180,7 +180,7 @@ declare global {
     /** Mock and dev builds only: pretend a new version is out (true, or a list of areas). */
     __cfFakeUpdate?: FakeFlag;
     /** Runs an update check now (used by tests). */
-    __cfCheckForUpdate?: () => Promise<void>;
+    __cfCheckForUpdate?: () => Promise<UpdateCheck>;
   }
 }
 
@@ -225,24 +225,35 @@ export function updateState(): UpdateState {
   return state;
 }
 
-let checking: Promise<void> | null = null;
+/** What one check found: a newer build (the bar shows), this build is the newest, or the check itself failed. */
+export type UpdateCheck = "newer" | "current" | "failed";
 
-/** Fetches /version.json and shows the bar when it names a different build. Never throws. */
-export function checkForUpdate(fetcher: typeof fetch = fetch): Promise<void> {
+let checking: Promise<UpdateCheck> | null = null;
+
+/** Fetches /version.json and shows the bar when it names a different build. Never throws: a failed check says "failed". */
+export function checkForUpdate(fetcher: typeof fetch = fetch): Promise<UpdateCheck> {
   const fake = fakeUpdate();
   if (fake) {
     offerUpdate(fake);
-    return Promise.resolve();
+    return Promise.resolve("newer");
   }
-  if (APP_VERSION === "dev") return Promise.resolve();
-  checking ??= (async () => {
+  // A test build never asks to update: it is always the newest one.
+  if (APP_VERSION === "dev") return Promise.resolve("current");
+  checking ??= (async (): Promise<UpdateCheck> => {
     try {
       const res = await fetcher(`/version.json?t=${Date.now()}`, { cache: "no-store" });
-      if (!res.ok) return;
+      if (!res.ok) return "failed";
       const info = parseVersionInfo(await res.json());
-      if (info && isNewer(APP_VERSION, info.version) && !justReloadedFor(info.version)) offerUpdate(info);
+      // A file without a version is not an answer.
+      if (!info) return "failed";
+      if (isNewer(APP_VERSION, info.version) && !justReloadedFor(info.version)) {
+        offerUpdate(info);
+        return "newer";
+      }
+      return "current";
     } catch {
       // Offline or the file is missing: try again on the next check.
+      return "failed";
     } finally {
       checking = null;
     }

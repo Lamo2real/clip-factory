@@ -1,6 +1,6 @@
 import { readFileSync } from "node:fs";
 import { join } from "node:path";
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   areaForPath,
   areasForPaths,
@@ -157,5 +157,46 @@ describe("update offer", () => {
     const next = { ...first, version: "c0ffee1" };
     offerUpdate(next);
     expect(updateState().available).toBe(next);
+  });
+});
+
+describe("Check for updates' answer", () => {
+  afterEach(() => {
+    vi.unstubAllEnvs();
+    vi.resetModules();
+  });
+
+  /** update.ts as a real build loads it: its version baked in. */
+  async function built(version: string) {
+    vi.resetModules();
+    vi.stubEnv("VITE_APP_VERSION", version);
+    return import("../src/lib/update.ts");
+  }
+  const answer = (status: number, body: unknown) => async () => new Response(JSON.stringify(body), { status });
+
+  it("says the check failed when it got no answer, so Settings never says newest after an offline check", async () => {
+    const { checkForUpdate } = await built("abc1234");
+    const offline = async (): Promise<Response> => {
+      throw new TypeError("Failed to fetch");
+    };
+    expect(await checkForUpdate(offline)).toBe("failed");
+    expect(await checkForUpdate(answer(500, { error: "down" }))).toBe("failed");
+    // A file without a version is no answer either.
+    expect(await checkForUpdate(answer(200, { builtAt: "2026-11-23T00:00:00Z" }))).toBe("failed");
+  });
+
+  it("says current for this build, newer (and shows the bar) for another one", async () => {
+    const { checkForUpdate, updateState } = await built("abc1234");
+    expect(await checkForUpdate(answer(200, { version: "abc1234", builtAt: "2026-11-23T00:00:00Z" }))).toBe("current");
+    expect(updateState().available).toBeNull();
+    expect(await checkForUpdate(answer(200, { version: "def5678", builtAt: "2026-11-23T00:00:00Z" }))).toBe("newer");
+    expect(updateState().available?.version).toBe("def5678");
+  });
+
+  it("a test build is always the newest, without asking", async () => {
+    const { checkForUpdate } = await built("");
+    const never = vi.fn();
+    expect(await checkForUpdate(never)).toBe("current");
+    expect(never).not.toHaveBeenCalled();
   });
 });

@@ -685,6 +685,14 @@
   font-size: 1rem;
   color: var(--ink);
 }
+/* While its file goes up the box can't change (a tap says to cancel the upload first). */
+.dropzone.is-locked {
+  cursor: default;
+}
+/* Home's Make clips, scrolled into view once a link is good: clear of the phone's tab bar. */
+.newjob__actions {
+  scroll-margin-bottom: calc(var(--tabbar-h) + env(safe-area-inset-bottom) + 16px);
+}
 .upload-progress {
   display: flex;
   flex-wrap: wrap;
@@ -787,6 +795,10 @@
     background-color var(--dur-2) var(--ease-out),
     color var(--dur-2),
     box-shadow var(--dur-2);
+}
+/* "Pick for me (5–10)" breaks between words on a narrow phone, never inside its range ("(5–" / "10)"). */
+.count-row .segmented__opt {
+  text-wrap: balance;
 }
 .segmented__opt input {
   position: absolute;

@@ -359,6 +359,23 @@ function inSeries(store: MockStore, ws: string, seriesId: string | undefined, dr
 
 const cap = (s: string) => (s ? s[0]!.toUpperCase() + s.slice(1) : s);
 
+/**
+ * A driving-safety draft about one checked topic, in words the topic match finds again once it is saved (so an offered
+ * draft can become a video): the short title, and when that alone does not match, one of the topic's own keywords
+ * in the line. Null when no wording matches (the topic is then not offered).
+ */
+function drivingDraft(topicId: string, lead: string): IdeaInput | null {
+  const title = shortTopicTitle(topicId);
+  const first = shownSteps(topicId)[0]?.text ?? "Stay calm.";
+  const keywords = [...(TOPICS.find((t) => t.id === topicId)?.keywords ?? [])].sort((a, b) => b.length - a.length);
+  const lines = [`${lead} learns what to do. ${first}`, ...keywords.map((k) => `${lead} learns what to do about ${k}. ${first}`)];
+  for (const line of lines) {
+    const logline = line.slice(0, 280);
+    if (topicFor(`${title} ${logline}`) === topicId) return { title, logline, category: "driving_safety", source: "ai" };
+  }
+  return null;
+}
+
 /** The "idea helper" in the practice app: plain drafts from a topic and a kind, no network. */
 function draftsFor(store: MockStore, ws: string, topic: string, category: IdeaCategory | undefined, count: number, castIds?: string[]): IdeaInput[] {
   const lead = leadName(store, ws, castIds ? { characterIds: castIds } : undefined);
@@ -370,15 +387,15 @@ function draftsFor(store: MockStore, ws: string, topic: string, category: IdeaCa
     const rest = TOPICS.map((x) => x.id).filter((id) => id !== matched);
     return matched ? [matched, ...rest] : rest;
   })();
+  const driving = safetyTopics.map((id) => drivingDraft(id, lead)).filter((d): d is IdeaInput => !!d);
   let s = 0;
-  for (let i = 0; out.length < count; i += 1) {
+  for (let i = 0; out.length < count && i < count * 8; i += 1) {
     const kind = kinds[i % kinds.length]!;
     const n = Math.floor(i / kinds.length);
     if (kind === "driving_safety") {
-      const id = safetyTopics[s % safetyTopics.length]!;
+      const d = driving[s % Math.max(1, driving.length)];
       s += 1;
-      const first = shownSteps(id)[0]?.text ?? "Stay calm.";
-      out.push({ title: shortTopicTitle(id), logline: `${lead} learns what to do. ${first}`.slice(0, 280), category: kind, source: "ai" });
+      if (d) out.push({ ...d });
       continue;
     }
     const subject = t || ["a picnic", "a rainy day", "a new bike", "a lost sock", "a birthday cake", "a big move"][(i + n) % 6]!;
@@ -582,14 +599,18 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
             ] as const);
       const base = clone(idea);
       return startMockTask(store, ws, "variations", body?.override, () => ({
-        drafts: twists.slice(0, count).map(([t, line]) => ({
-          title: `${base.title}: ${t}`.slice(0, 80),
-          logline: `${line} ${base.logline}`.slice(0, 280),
-          category: base.category,
-          ...(base.characterIds ? { characterIds: [...base.characterIds] } : {}),
-          source: "variation" as const,
-          parentIdeaId: base.ideaId,
-        })),
+        drafts: twists.slice(0, count).map(([t, line]) => {
+          const draft = {
+            title: `${base.title}: ${t}`.slice(0, 80),
+            logline: `${line} ${base.logline}`.slice(0, 280),
+            category: base.category,
+            ...(base.characterIds ? { characterIds: [...base.characterIds] } : {}),
+            source: "variation" as const,
+            parentIdeaId: base.ideaId,
+          };
+          // A driving draft that no checked advice matches says so before Save (it would save as Needs checked advice).
+          return matchSafety(draft).needsGuidance ? { ...draft, needsGuidance: true } : draft;
+        }),
       }));
     },
     async getTask(ws, taskId) {

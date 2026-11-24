@@ -131,13 +131,14 @@ export function PostWithMyMac({ clip, onKept, size = "sm" }: { clip: Pick<Clip, 
 
 /**
  * Turn on: to Settings › Posting › Your Mac posts TikTok, where the switch is. With `open` (the Mac needs him, or is
- * paused) it reads Open Your Mac posts TikTok, on a line of its own under the row's words (it is long).
+ * paused) it reads Open Your Mac posts TikTok, on a line of its own under the row's words (it is long). `label`: the
+ * words for a Turn on that stands away from TikTok's row (the clip page's actions), so it says what it turns on.
  */
-export function TurnOnMac({ href, size = "sm", open = false }: { href: string; size?: Size; open?: boolean }) {
+export function TurnOnMac({ href, size = "sm", open = false, label = "Turn on" }: { href: string; size?: Size; open?: boolean; label?: string }) {
   return (
     <span className={open ? "post__retry post__retry--wide" : "post__retry"}>
       <LinkButton href={href} size={size} variant="glass" icon="monitor" iconAfter="chevronRight">
-        {open ? MAC_OPEN_BUTTON : "Turn on"}
+        {open ? MAC_OPEN_BUTTON : label}
       </LinkButton>
     </span>
   );
@@ -468,12 +469,15 @@ export function TikTokRowAction({
   mac,
   onKept,
   size = "sm",
+  turnOnLabel,
 }: {
   clip: Pick<Clip, "clipId">;
   row: TikTokRow | null;
   mac?: Pick<PostMac, "pressedAt">;
   onKept: Kept;
   size?: Size;
+  /** Turn on's words where the button stands away from TikTok's row (the clip page): "Turn on TikTok on my Mac". */
+  turnOnLabel?: string;
 }) {
   if (!row?.button) return null;
   switch (row.button) {
@@ -484,7 +488,7 @@ export function TikTokRowAction({
     case "post_with_mac":
       return <PostWithMyMac clip={clip} onKept={onKept} size={size} />;
     case "turn_on":
-      return row.href ? <TurnOnMac href={row.href} size={size} /> : null;
+      return row.href ? <TurnOnMac href={row.href} size={size} label={turnOnLabel} /> : null;
     case "open_mac":
       return row.href ? <TurnOnMac href={row.href} size={size} open /> : null;
     case "open_stopped":

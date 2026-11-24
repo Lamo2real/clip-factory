@@ -105,7 +105,7 @@ see why."). Turn it off with **Money on hold or sent to your bank** in Settings 
 Top to bottom: the place's mark, name and ring ("About 15 minutes · Free", "Steps checked on 21 Nov 2026"); the
 **status** (the card's words, what is missing, any hold, and for YouTube the chip "Clip Factory can see payments: on"
 or "off"); **Can you earn here?** (the place's rules for your country, picked in Money settings; with no country:
-"Pick your country in Money settings to see its rules."); the **step cards**; **What Clip Factory can see** (for
+"Pick your country to see its rules."; the rules sit in the fold "See the rules"); the **step cards**; **What Clip Factory can see** (for
 example "Instagram says you have 312 followers." and "Meta doesn't tell apps how it pays you."); **Sent to your
 bank**; and **When it's done** ("Check now", the connection buttons, and the way back).
 
@@ -487,7 +487,9 @@ here." with no button.
 
 Like every place in Set up posting, you make your own Whop app once (it has no secret):
 
-**Make your Whop key** (inside the card, not numbered; it ticks itself when the key is saved)
+**Make your Whop key** (inside the card, not numbered; it ticks itself when the key is saved). The card says "A grown-up
+does this once on the Mac." The steps below sit in the fold "How do I make it?": tap it first. The "Whop key" box stays
+under the fold.
 - Tap "Open Whop's developer page" (`https://whop.com/dashboard/developer`). Tap **Create app**. Name it with the
   Copy chip "Clip Factory".
 - Find **OAuth**. Paste the return address from the Copy chip in **Redirect URIs** (`{hooks}/oauth/whop/callback`).
@@ -526,7 +528,7 @@ every other tap is on the place's own pages.
 | Facebook | **25** (4) | **8** (2) after Instagram, because the Meta payout step is shared. |
 | X | **23** (5) | |
 | Content Rewards | **18** (5); **15** (3) with **Finance** | About 5 more only if Whop asks (**Set up Whop Payments**, the tax question). Each payout 12. |
-| See your Whop payouts here | **18** (6) | Optional. About 2 more if Whop asks for a company first. |
+| See your Whop payouts here | **19** (7) | Optional. One of the 7 opens "How do I make it?". About 2 more if Whop asks for a company first. |
 
 The places wait for you between steps (YouTube's review, the PIN letter, the test payment, Meta's first $25), so it
 is spread over weeks. Clip Factory tells you when a place needs you again.

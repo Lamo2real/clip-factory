@@ -26,7 +26,7 @@ Branch routes are nested: `/settings/look-and-feel/sounds`. `/get-app` keeps wor
 * `/settings` (the field): a short search box "Find a setting" that searches every apple and leaf by name and jumps
   straight to it (highlights it on the panel's own lines for 2 s: the whole panel when the apple is alone in it, else
   its row from edge to edge between the dividers, with the panel's corners on the first and last row; never an outer
-  ring, and the apple's programmatic focus draws no second ring, `settings.css` `.apple::after`), then the four trees as big glass cards (icon, name, one line, how many apples).
+  ring, and the apple's programmatic focus draws no second ring, `settings.css` `.apple::after`), then the four trees as big glass cards (icon, name, one line, the names of its branches).
 * A tree page lists its branches as cards (icon, name, one line). A branch page shows its apples as rows grouped in
   glass panels, each with its leaf under it.
 * Breadcrumb on every level: `Settings › Look & feel › Sounds` (each part a link) plus a big Back button on phones.

@@ -14,7 +14,7 @@ import { storiesApi } from "./api/client.ts";
 import { RoundGlassButton } from "./glass/index.ts";
 import { storiesBehind, useAppActive } from "./pane.tsx";
 import { storiesReduceMotion, storiesSound } from "./prefs.ts";
-import type { Onboarding, Platform, StoriesDashboard, StoryStatus } from "./api/types.ts";
+import type { Onboarding, Platform, StoriesDashboard, Story, StoryStatus } from "./api/types.ts";
 
 // ---------- Buttons, cards, chips ----------
 
@@ -465,6 +465,12 @@ export const STATUS_WORDS: Record<StoryStatus, { label: string; tone: StTone }> 
   failed: { label: "Stopped", tone: "coral" },
 };
 
+/** A story's state in words: a draft nothing is making (never started, or stopped with Cancel) is "Not made yet". */
+export function statusWords(story: Pick<Story, "status" | "currentJobId">): { label: string; tone: StTone } {
+  if (story.status === "draft" && !story.currentJobId) return { label: "Not made yet", tone: "sky" };
+  return STATUS_WORDS[story.status];
+}
+
 // ---------- The dashboard, shared by the Dashboard page and the Needs you bar ----------
 
 interface DashSnap {
@@ -533,20 +539,39 @@ export function forgetDashboards(): void {
 const SOCIAL_PAGE = String.raw`(?:(?:(?:Clip(?: Factory)?|Lamo) Stories|Funded Clips|Clips Funded)\s*›\s*)?Social accounts`;
 
 /**
- * A Needs you sentence shown on the Social accounts page it sends the owner to, without the trip (§45.36 E17): "Open
- * Lamo Stories › Social accounts, then tap Try again." reads "Fix it below, then tap Try again."; "Pick another in Lamo
- * Stories › Social accounts" reads "Pick another below". Anything else stays as the server said it.
+ * A Needs you sentence shown on the Social accounts page it sends the owner to, without the trip (§45.36 E17), in the
+ * card's own button words: "… needs connecting again. Open Lamo Stories › Social accounts, then tap Try again." reads
+ * "… needs connecting again. Tap Connect again below. Then tap Try again on the video." (this page has no Try again:
+ * that one is on the video); "Open Social accounts and tap Connect" reads "Tap Connect again below"; "Pick another in
+ * Lamo Stories › Social accounts" reads "Pick another below". Anything else stays as the server said it.
  */
 export function socialHere(sentence: string): string {
-  return sentence
-    .replace(new RegExp(String.raw`\bOpen ${SOCIAL_PAGE},? (?:and|then) tap (Connect|Reconnect)\b`, "g"), "Tap $1 below")
+  const here = sentence
+    .replace(new RegExp(String.raw`\bneeds connecting again\. Open ${SOCIAL_PAGE}, then\b`, "g"), "needs connecting again. Tap Connect again below, then")
+    .replace(new RegExp(String.raw`\bOpen ${SOCIAL_PAGE},? (?:and|then) tap (?:Connect|Reconnect)(?: again)?\b`, "g"), "Tap Connect again below")
     .replace(new RegExp(String.raw`\bOpen ${SOCIAL_PAGE}, connect it, then\b`, "g"), "Connect it below, then")
     .replace(new RegExp(String.raw`\bOpen ${SOCIAL_PAGE}, then\b`, "g"), "Fix it below, then")
     .replace(new RegExp(String.raw`\s+(?:in|on) ${SOCIAL_PAGE}(?![A-Za-z])`, "g"), " below");
+  // Only a sentence about this page: its Try again is on the video, so it says where.
+  return here === sentence ? sentence : here.replace(/,? then tap Try again\b(?! on)/g, ". Then tap Try again on the video");
 }
 
 /** The address's page, without its query or hash. */
 const pathOf = (href: string) => href.replace(/[?#].*$/, "").replace(/\/+$/, "") || "/";
+
+type NeedsItem = StoriesDashboard["needsYou"][number];
+
+/**
+ * A stopped post whose account problem is fixed now (the account it names is connected again): it no longer sends
+ * the owner to Social accounts, where nothing is left to fix, but to the post itself, to tap its Try again. The
+ * server says so itself (dashboard._post_href); this reads an older answer the same way.
+ */
+export function afterFix(item: NeedsItem, accounts: StoriesDashboard["accounts"] | undefined): NeedsItem {
+  if (!item.publishingJobId || !item.storyId || !item.platform || pathOf(item.href) !== "/stories/connections") return item;
+  if (accounts?.find((a) => a.platform === item.platform)?.status !== "connected") return item;
+  const title = item.title ? `“${item.title}”` : "the video";
+  return { ...item, href: `/stories/review/${encodeURIComponent(item.storyId)}`, sentence: `${PLATFORM_NAME[item.platform]} is connected now. Tap Try again on ${title}.` };
+}
 
 /** On the page a Needs you item points to: where on it to look (the platform's card on Social accounts), else null. */
 function targetOn(item: StoriesDashboard["needsYou"][number]): HTMLElement | null {
@@ -562,8 +587,9 @@ function targetOn(item: StoriesDashboard["needsYou"][number]): HTMLElement | nul
 export function NeedsYouBar({ ws, here }: { ws: string; here?: string }) {
   const { data } = useDashboard(ws);
   const [gone, setGone] = useState<string | null>(null);
-  const first = data?.needsYou[0];
-  if (!first) return null;
+  const top = data?.needsYou[0];
+  if (!top) return null;
+  const first = afterFix(top, data?.accounts);
   const key = `${first.href}|${first.sentence}`;
   if (gone === key) return null;
   const more = (data?.needsYou.length ?? 1) - 1;

@@ -25,6 +25,7 @@ import type {
 } from "../api/types.ts";
 import { CR_DISCOVER, CR_PILOT_EMAIL, CR_SETTINGS, CR_SUBMISSIONS, isGmail, pilotGmail, pilotMailto } from "../setup/contentrewards.ts";
 import { withBack } from "./backLink.ts";
+import { isTouchDevice } from "./crConnect.ts";
 import { PLATFORM_LABEL, PLATFORM_ORDER, count } from "./format.ts";
 import { onLiveSignal } from "./live.ts";
 
@@ -35,6 +36,14 @@ export const FIND_PATH = "/campaigns/find";
 export const campaignPath = (campaignId: string) => `/campaigns/${encodeURIComponent(campaignId)}`;
 export const makeClipsPath = (campaignId: string) => `/?campaign=${encodeURIComponent(campaignId)}`;
 export const CR_MONEY_PATH = "/money#content-rewards";
+
+/**
+ * The paste box's fallback when the browser won't share what was copied: hold-and-Paste on a touch screen; on a
+ * computer, the keyboard. `box` names the box ("the box", "the link box").
+ */
+export function pasteByHand(box = "the box", touch = isTouchDevice()): string {
+  return touch ? `Press and hold in ${box}, then choose Paste.` : `Click in ${box} and press ⌘V (Ctrl+V on Windows).`;
+}
 /** The setup page with the way back to this campaign's card (§39.1 `?back=`, as the API's gates.next_step makes it). */
 export const crSetupFor = (campaignId: string) => withBack(CR_SETUP_PATH, campaignPath(campaignId));
 
@@ -101,16 +110,56 @@ export type CrState =
   | { state: "error"; data: CrOverview | null; error: string }
   | { state: "ok"; data: CrOverview };
 
-let snapshot: CrState = { state: "loading", data: null };
+/** What the server last said; `snapshot` is it without the campaigns being removed (their Undo still counting). */
+let raw: CrState = { state: "loading", data: null };
+let snapshot: CrState = raw;
 let started = false;
 let inFlight: Promise<void> | null = null;
 let again = false;
 const listeners = new Set<() => void>();
 let unlisten: (() => void) | null = null;
+const removing = new Set<string>();
+/** Removed for good (the DELETE answered): hidden until the server's own list no longer has them. */
+const removed = new Set<string>();
+
+function withoutRemoving(s: CrState): CrState {
+  if (!removing.size || !s.data || !s.data.campaigns.some((c) => removing.has(c.campaignId))) return s;
+  return { ...s, data: { ...s.data, campaigns: s.data.campaigns.filter((c) => !removing.has(c.campaignId)) } } as CrState;
+}
 
 function set(next: CrState) {
-  snapshot = next;
+  raw = next;
+  for (const id of removed)
+    if (next.data && !next.data.campaigns.some((c) => c.campaignId === id)) {
+      removed.delete(id);
+      removing.delete(id);
+    }
+  snapshot = withoutRemoving(next);
   for (const fn of listeners) fn();
+}
+
+/**
+ * Remove from Clip Factory (§38.4): while its 8-second Undo counts down the campaign leaves every list at once (it can
+ * no longer be opened from Your campaigns), and Undo brings it back. `false` brings it back too.
+ */
+export function hideCampaign(campaignId: string, hidden = true): void {
+  if (hidden) removing.add(campaignId);
+  else {
+    removing.delete(campaignId);
+    removed.delete(campaignId);
+  }
+  set(raw);
+}
+
+/** The removal went through: the campaign stays hidden until a fresh overview leaves it out (then it may be added again). */
+export function campaignRemoved(campaignId: string): void {
+  removed.add(campaignId);
+  set(raw);
+}
+
+/** A campaign being removed right now (its Undo still counting). */
+export function campaignHidden(campaignId: string): boolean {
+  return removing.has(campaignId);
 }
 
 /** Reads GET /v1/contentrewards (one call at a time; a call asked for meanwhile runs once after it). */
@@ -127,7 +176,7 @@ export function reloadCr(): Promise<void> {
       const kind = crAvailability(e);
       if (kind === "missing") set({ state: "missing", data: null });
       else if (kind === "soon") set({ state: "soon", data: null });
-      else set({ state: "error", data: snapshot.data, error: friendlyMessage(e) });
+      else set({ state: "error", data: raw.data, error: friendlyMessage(e) });
     } finally {
       inFlight = null;
       if (again) {
@@ -150,7 +199,7 @@ function ensureStarted() {
 
 /** Puts a newer copy in the store straight away (after a PATCH answered), without a round trip. */
 export function patchCr(fn: (d: CrOverview) => CrOverview): void {
-  if (snapshot.data) set({ ...snapshot, data: fn(snapshot.data) } as CrState);
+  if (raw.data) set({ ...raw, data: fn(raw.data) } as CrState);
 }
 
 /** The store as it is right now (after an await, before React draws it). */
@@ -165,7 +214,10 @@ export function resetCr(): void {
   started = false;
   inFlight = null;
   again = false;
-  snapshot = { state: "loading", data: null };
+  removing.clear();
+  removed.clear();
+  raw = { state: "loading", data: null };
+  snapshot = raw;
   for (const fn of listeners) fn();
 }
 

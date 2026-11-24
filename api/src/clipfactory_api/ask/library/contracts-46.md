@@ -92,10 +92,9 @@ toast "Saved.":
    posted place with **Open** (its live `url`); a run with nothing: "Sun 05:00 · Nothing in Review, so nothing posted.";
    practice: "Sun 05:00 · Practice: would post “hook” to YouTube, Instagram and Facebook."; private test: "Private test
    · “hook”: YouTube (only you) · Facebook (draft) · Instagram (checked, not published)".
-9. A fold **Test it first** (closed to start): the switch **Practice** (`autoPost.practice`, "Pick the clips on time,
-   but send nothing. The clips stay in Review."), **Practice run now** and **Private test run** (glass buttons; the
-   second's line: "Posts the next clip so only you can see it: YouTube as Only me, Facebook as a draft on your Page,
-   Instagram uploaded and checked but not published. It leaves Review."). After a tap the page reads the status again
+9. A fold **Test it first** (closed to start): the switch **Practice** (`autoPost.practice`, "Sends nothing. The
+   clips stay in Review."), **Practice run now** and **Private test run** (glass buttons; the second's line: "Posts the
+   next clip so only you see it: YouTube Only me, Facebook a draft, Instagram not published. It leaves Review."). After a tap the page reads the status again
    every 3 s for 30 s; the run shows in Recent.
 
 The page reads `GET /v1/autopost` on open, on focus, every 60 s while open, and after every change. Clip changes reach

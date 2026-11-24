@@ -6,6 +6,7 @@
 import { useEffect, useRef, useState } from "react";
 import { putFile } from "../../api/upload.ts";
 import { DropOverlay } from "../../components/DropOverlay.tsx";
+import { useToast } from "../../components/Toasts.tsx";
 import { A } from "../../components/ui.tsx";
 import { usePoll } from "../../lib/hooks.ts";
 import { useFileDrop } from "../../lib/useFileDrop.ts";
@@ -32,7 +33,11 @@ export function References({ ws, character, onChange }: { ws: string; character:
   const [problem, setProblem] = useState<string | null>(null);
   /** Pictures sent from this device, shown from the file itself until the server's own link loads. */
   const [local, setLocal] = useState<Record<string, string>>({});
-  const full = character.references.length >= CHAR_LIMITS.refs;
+  /** Pictures the owner took out: gone from the list at once, deleted once Undo's time is up. */
+  const [hidden, setHidden] = useState<ReadonlySet<string>>(() => new Set());
+  const toast = useToast();
+  const shown = character.references.filter((r) => !hidden.has(r.assetId));
+  const full = shown.length >= CHAR_LIMITS.refs;
   /** Why a drop can't come in now (the drag shows it, the drop is refused with it). */
   const busyLine = full ? `You have ${CHAR_LIMITS.refs} pictures. Delete one first.` : progress !== null ? "Wait a moment." : null;
   const drop = useFileDrop({ scope: "element", checkFile: fileProblem, onFiles: ([f]) => f && void send(f), busy: busyLine });
@@ -65,13 +70,31 @@ export function References({ ws, character, onChange }: { ws: string; character:
     }
   }
 
-  async function remove(assetId: string) {
+  /** × takes the picture out at once, with Undo; it is really deleted when Undo's time is up. */
+  function remove(assetId: string) {
     setProblem(null);
-    try {
-      onChange(await storiesApi().deleteReference(ws, character.characterId, assetId));
-    } catch (e) {
-      setProblem(say(e));
-    }
+    setHidden((h) => new Set(h).add(assetId));
+    const back = () =>
+      setHidden((h) => {
+        const n = new Set(h);
+        n.delete(assetId);
+        return n;
+      });
+    toast.undo("Picture removed.", {
+      onUndo: back,
+      onCommit: () => {
+        storiesApi()
+          .deleteReference(ws, character.characterId, assetId)
+          .then((next) => {
+            onChange(next);
+            back();
+          })
+          .catch((e) => {
+            back();
+            setProblem(say(e));
+          });
+      },
+    });
   }
 
   return (
@@ -80,12 +103,12 @@ export function References({ ws, character, onChange }: { ws: string; character:
         Pictures to aim for
       </h2>
       <p className="st-s-refs__lede">Add up to {CHAR_LIMITS.refs} pictures of the look you want. They stay with {character.name} and never change the drawing.</p>
-      {character.references.length ? (
+      {shown.length ? (
         <ul className="st-s-refs__list">
-          {character.references.map((r, i) => (
+          {shown.map((r, i) => (
             <li key={r.assetId} className="st-s-refs__item">
               <img src={local[r.assetId] ?? r.url} alt={`Picture ${i + 1} for ${character.name}`} width={88} height={88} />
-              <button type="button" className="st-s-iconbtn st-s-refs__remove" aria-label={`Remove picture ${i + 1}`} onClick={() => void remove(r.assetId)}>
+              <button type="button" className="st-s-iconbtn st-s-refs__remove" aria-label={`Remove picture ${i + 1}`} onClick={() => remove(r.assetId)}>
                 <span aria-hidden="true">×</span>
               </button>
             </li>

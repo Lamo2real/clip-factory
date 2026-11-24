@@ -5,18 +5,32 @@
 //   stops the try (Stop) before Post is pressed. No puzzle solving, no anti-detection tricks, no typed passwords.
 // - Every setting is read back before Post. TikTok carries the last post's privacy over, so it is set every time.
 // - Success is a new row in Studio › Posts with this caption, never just a redirect.
+// - 1.2.0 (§47.10, D3, D4): before Studio › Posts is read, right before Post and before every look for a link, the
+//   signed-in account must be the lane's target (whoami.js). A Clips Funded post also turns on TikTok's
+//   "AI-generated content" label and keeps "Disclose post content" off, or it doesn't post.
 import { loginOutcome } from "./login.js";
 import { captionMatches, findExisting, findNewPost, normalize, postLink, videoId } from "./match.js";
+import { accountInfo, at, bare, mergeSeen, sameAccount, sessionHash, whoAmI } from "./whoami.js";
 
 export const STUDIO = "https://www.tiktok.com/tiktokstudio";
+export const HOME_URL = "https://www.tiktok.com/?lang=en";
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 export class Stop extends Error {
-  /** @param {string} reason plain words for the owner @param {{needsYou?: boolean}} [opts] */
-  constructor(reason, { needsYou = false } = {}) {
+  /**
+   * @param {string} reason plain words for the owner
+   * @param {{needsYou?: boolean, wrongAccount?: boolean, seen?: string, unknown?: boolean, blank?: boolean}} [opts]
+   *   ``wrongAccount``: TikTok is logged in as another account (``seen``); ``unknown``: the account couldn't be read
+   *   (``blank``: nothing at all was readable, as when TikTok ended the session but its cookie stayed)
+   */
+  constructor(reason, { needsYou = false, wrongAccount = false, seen, unknown = false, blank = false } = {}) {
     super(reason);
     this.reason = reason;
     this.needsYou = needsYou;
+    if (wrongAccount) this.wrongAccount = true;
+    if (seen) this.seen = seen;
+    if (unknown) this.unknown = true;
+    if (blank) this.blank = true;
   }
 }
 
@@ -36,7 +50,44 @@ export const REASONS = {
   noPost: "TikTok's Post button didn't work. Tap Try again.",
   noLoginPage: "TikTok's login page looks different. Log in on your Mac.",
   limit: "TikTok says it's posting too much right now. The rest wait; Clip Factory tells you.",
+  // 1.2.0, both lanes (§47.10.5).
+  wrongAccount: (seen, target) => `Your Mac is logged in to TikTok as ${seen}, not ${target}. Nothing was posted.`,
+  whoUnknown: "Your Mac couldn't see which TikTok it's logged in to. Nothing was posted. Tap Try again.",
+  linkElsewhere: (seen, target) => `The post showed up on ${seen}, not ${target}. Look on your TikTok.`,
+  // Clip Factory's lane: its TikTok in Settings is a Clips Funded account (rule 1: never cross accounts).
+  otherWorkspaceClips: "That TikTok account is your other workspace's. Nothing was posted. Connect TikTok again in Settings › Posting.",
+  // Clips Funded only.
+  otherWorkspace: "That TikTok account is your other workspace's. Nothing was posted. Connect TikTok again in Social accounts.",
+  aiLabel: "Your Mac couldn't turn on TikTok's AI label, so it didn't post. Tap Try again.",
+  videoGone: "The video is gone. Make it again, then tap Try again.",
 };
+
+/**
+ * A Clips Funded lane's words: the same as Clip Factory's, except where those name the app or the Keychain login
+ * (§47.10.5). Never "Clip Factory" here.
+ */
+export const WS_REASONS = Object.freeze({
+  ...REASONS,
+  login: "TikTok logged your Mac out. Tap Log in on my Mac.",
+  // Nothing readable three times (TikTok may have ended the session on its side): a new login fixes it.
+  nobody: "Your Mac couldn't see which TikTok it's logged in to. Nothing was posted. Tap Log in on my Mac.",
+  noUpload: "TikTok's upload page looks different. Your Mac's helper needs a fix. Then tap Try again.",
+  limit: "TikTok says it's posting too much right now. The rest wait.",
+});
+
+/** A stop reason in the lane's words: Clip Factory's texts that name the app or the login become the lane's. */
+export function laneWords(kind, reason) {
+  if (kind !== "ws") return reason;
+  for (const key of ["login", "noUpload", "limit", "noLoginPage"]) {
+    if (reason === REASONS[key]) return key === "noLoginPage" ? WS_REASONS.login : WS_REASONS[key];
+  }
+  return reason;
+}
+
+/** Is this stop reason one the owner fixes with Log in on my Mac? (the card's button, §47.10.6) */
+export function loginReason(reason) {
+  return reason === WS_REASONS.login || reason === WS_REASONS.nobody || /^Your Mac is logged in to TikTok as /.test(String(reason || ""));
+}
 
 const PRIVACY_WORDS = {
   PUBLIC_TO_EVERYONE: "Everyone",
@@ -154,10 +205,19 @@ export async function loggedIn(page) {
 // ---------------------------------------------------------------------------------------------------------------
 // Studio › Posts
 
-/** The rows of Studio › Posts: each video's id, link and the text around it (its caption). */
-export async function listPosts(page) {
+/** Opens Studio › Posts and waits for its rows (none at all on a new account). */
+async function openPosts(page) {
   await goto(page, "content");
   await page.locator('a[href*="/video/"]').first().waitFor({ timeout: 30_000 }).catch(() => {});
+}
+
+/** The rows of Studio › Posts: each video's id, link and the text around it (its caption). */
+export async function listPosts(page) {
+  await openPosts(page);
+  return readPosts(page);
+}
+
+async function readPosts(page) {
   const rows = await page.$$eval('a[href*="/video/"]', (anchors) => {
     const out = [];
     for (const a of anchors) {
@@ -183,6 +243,90 @@ export async function listPosts(page) {
     if (!prev || r.text.length > prev.text.length) seen.set(r.id, r);
   }
   return [...seen.values()];
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Which account (D3)
+
+/**
+ * Who the open page says is logged in. When the Studio page shows no handle (a new account without posts, and the
+ * passport answer unreadable), www.tiktok.com is read too; ``moved`` says the page left Studio.
+ */
+export async function identify(page) {
+  let seen = await whoAmI(page);
+  let moved = false;
+  if (!seen.handles.length) {
+    moved = true;
+    await page.goto(HOME_URL, { waitUntil: "domcontentloaded", timeout: 60_000 }).catch(() => {});
+    await page.waitForLoadState("networkidle", { timeout: 15_000 }).catch(() => {});
+    await sleep(1500);
+    // The feed's video links are other people's: only the account's own data counts there (sources 1 and 3).
+    seen = mergeSeen(seen, await whoAmI(page, { links: false }));
+  }
+  return { seen, moved };
+}
+
+/** The accounts this post must never go to (another lane's: rule 1), as lists: ``notHandles``/``notUids`` and the
+ * single ``notHandle``/``notUid`` the check run still passes. */
+export function never(opts = {}) {
+  const list = (many, one) => [...(Array.isArray(many) ? many : []), ...(one ? [one] : [])].filter(Boolean).map(String);
+  return { handles: list(opts.notHandles, opts.notHandle), uids: list(opts.notUids, opts.notUid) };
+}
+
+/**
+ * Before anything is read: the stop for a target that may never be posted to here (none, or another lane's account:
+ * a Clips Funded job never to Clip Factory's, a Clip Factory clip never to Clips Funded's), or null.
+ */
+export function refusedTarget(opts = {}) {
+  const target = at(opts.target);
+  if (!target) return new Stop(REASONS.whoUnknown, { unknown: true });
+  if (never(opts).handles.some((h) => bare(h) === bare(target))) {
+    return new Stop(opts.kind === "ws" ? REASONS.otherWorkspace : REASONS.otherWorkspaceClips, { needsYou: true, wrongAccount: true, seen: target });
+  }
+  return null;
+}
+
+/**
+ * Refuses unless the logged-in account is ``opts.target`` (and its pinned uid, and never another lane's handle or
+ * uid). Wrong: a needs-you stop (nothing was posted); unreadable: a plain stop. ``opts.onWho(result)`` records what
+ * was read.
+ * @returns {Promise<{moved: boolean}>}
+ */
+async function checkAccount(page, opts) {
+  const target = at(opts.target);
+  const refused = refusedTarget(opts);
+  if (refused) {
+    if (refused.wrongAccount) opts.onWho?.({ verdict: "wrong", seen: target });
+    throw refused;
+  }
+  const not = never(opts);
+  const { seen, moved } = await identify(page);
+  const res = sameAccount(seen, target, opts.uid || null, { notUid: not.uids });
+  opts.onWho?.(res);
+  if (res.verdict === "wrong") throw new Stop(REASONS.wrongAccount(res.seen, target), { needsYou: true, wrongAccount: true, seen: res.seen });
+  // Nobody readable and no TikTok session at all: logged out (the lane's login flow, as 1.1.0 had it at upload).
+  if (res.verdict !== "same" && !(await loggedIn(page).catch(() => true))) throw new Stop(REASONS.login, { needsYou: true });
+  const blank = !(seen.handles || []).length && !(seen.uids || []).length;
+  if (res.verdict !== "same") throw new Stop(REASONS.whoUnknown, { unknown: true, blank });
+  return { moved };
+}
+
+/**
+ * Right before Post (no navigation): source 1, when readable, still says the target (and its uid); and the TikTok
+ * session is the one of the first check, unless source 1 itself confirms the target.
+ */
+async function recheckAccount(page, opts, session) {
+  const target = at(opts.target);
+  const now = await sessionHash(page);
+  const info = await accountInfo(page);
+  const nameOff = Boolean(info.handle) && bare(info.handle) !== bare(target);
+  const uidOff = Boolean(info.uid) && ((opts.uid && info.uid !== String(opts.uid)) || never(opts).uids.includes(String(info.uid)));
+  const confirmed = Boolean(info.handle) && !nameOff && !uidOff;
+  if (nameOff || uidOff || (now !== session && !confirmed)) {
+    const seen = nameOff ? at(info.handle) : "another account";
+    opts.onWho?.({ verdict: "wrong", seen });
+    throw new Stop(REASONS.wrongAccount(seen, target), { needsYou: true, wrongAccount: true, seen });
+  }
 }
 
 // ---------------------------------------------------------------------------------------------------------------
@@ -351,8 +495,80 @@ async function setToggle(page, name, on) {
   return true;
 }
 
-/** Comment, Duet and Stitch as the job says. Studio now has one "Reuse of content" switch for Duet and Stitch. */
-async function setInteractions(page, job) {
+/** The switch named one of ``names`` (Show more opened first when it is not in view), or null. */
+async function findSwitch(page, names) {
+  for (const name of names) {
+    const id = await switchId(page, name);
+    if (id) return page.locator(`[id="${id}"]`);
+  }
+  const more = page.getByText("Show more", { exact: true }).first();
+  if (await more.isVisible().catch(() => false)) {
+    await more.click();
+    await sleep(800);
+  }
+  for (const name of names) {
+    const id = await switchId(page, name);
+    if (id) return page.locator(`[id="${id}"]`);
+  }
+  return null;
+}
+
+const switchOn = async (box) => box.isChecked().catch(async () => (await box.getAttribute("aria-checked").catch(() => null)) === "true");
+
+export const AI_LABEL_NAMES = ["AI-generated content", "AI-generated"];
+// A dialog TikTok may show when the AI label is turned on; only these buttons are pressed in it, and only here.
+const AI_DIALOG = /AI-generated/i;
+const AI_DIALOG_BUTTON = /^(turn on|confirm|ok|got it)$/i;
+
+async function confirmAiDialog(page) {
+  const box = page.getByRole("dialog").filter({ hasText: AI_DIALOG }).first();
+  if (!(await box.isVisible().catch(() => false))) return;
+  const btn = box.getByRole("button", { name: AI_DIALOG_BUTTON }).first();
+  if (await btn.isVisible().catch(() => false)) {
+    await btn.click({ timeout: 3000 }).catch(() => {});
+    await sleep(600);
+  }
+}
+
+/** D4: TikTok's "AI-generated content" label on, read back; else no post. A label TikTok set itself (on, locked) is fine. */
+async function setAiLabel(page) {
+  const box = await findSwitch(page, AI_LABEL_NAMES);
+  if (!box) throw new Stop(REASONS.aiLabel);
+  if (await box.isDisabled().catch(() => false)) {
+    if (await switchOn(box)) return;
+    throw new Stop(REASONS.aiLabel);
+  }
+  if (!(await switchOn(box))) {
+    await box.click({ force: true });
+    await sleep(600);
+    await confirmAiDialog(page);
+  }
+  if (!(await switchOn(box))) throw new Stop(REASONS.aiLabel);
+}
+
+async function aiLabelOn(page) {
+  const box = await findSwitch(page, AI_LABEL_NAMES);
+  return Boolean(box) && (await switchOn(box));
+}
+
+/** D4: never a branded post. "Disclose post content" stays off (read back); a page without it is fine. */
+async function keepDiscloseOff(page) {
+  const name = "Disclose post content";
+  const box = await findSwitch(page, [name]);
+  if (!box) return;
+  if ((await switchOn(box)) && !(await box.isDisabled().catch(() => false))) {
+    await box.click({ force: true });
+    await sleep(400);
+  }
+  if (await switchOn(box)) throw new Stop(REASONS.toggle(name));
+}
+
+/**
+ * Comment, Duet and Stitch as the job says. Studio now has one "Reuse of content" switch for Duet and Stitch.
+ * A Clips Funded lane (``kind`` "ws", whatever the job says) then turns on the AI label and keeps Disclose post
+ * content off; Clip Factory's lane never touches either.
+ */
+async function setInteractions(page, job, kind = "clips") {
   if (!(await setToggle(page, "Comment", job.comment !== false))) throw new Stop(REASONS.noUpload);
   const reuse = job.duet !== false || job.stitch !== false;
   if (!(await setToggle(page, "Reuse of content", reuse))) {
@@ -362,18 +578,41 @@ async function setInteractions(page, job) {
   }
   // Never limit who can see it (the owner's most reach): Audience control (18+) stays off.
   await setToggle(page, "Audience control", false);
+  if (kind === "ws") {
+    await setAiLabel(page);
+    await keepDiscloseOff(page);
+  }
 }
 
 /**
  * Uploads one clip and presses Post. ``onStep(step)`` is called before each stage; it must have recorded "pressing"
  * (on disk and on the server) before it returns for that step, because pressing is the point of no return.
+ * ``opts``: ``target`` (the account it may post to, "@name"), ``uid`` (its pinned uid), ``notHandles`` / ``notUids``
+ * (every other lane's accounts; ``notHandle`` / ``notUid`` for one), ``kind`` ("clips" | "ws"), ``earlier`` (a Clips
+ * Funded post tried again after a press: the Studio ids from before that press), ``onWho(result)``, ``dryRun``.
  * @returns {Promise<{link: string|null, sure: boolean}>} ``sure`` = TikTok said it posted or the new row was found.
  */
-export async function post(page, job, file, onStep, { dryRun = false } = {}) {
+export async function post(page, job, file, onStep, opts = {}) {
+  const { dryRun = false, kind = "clips" } = opts;
   await onStep("opening");
-  const before = await listPosts(page);
-  const existing = findExisting(before, job.caption);
-  if (existing) return { link: postLink(existing.href), sure: true, existing: true };
+  // D3: the account first, before Studio › Posts is read.
+  await openPosts(page);
+  const { moved } = await checkAccount(page, opts);
+  const session = await sessionHash(page);
+  const before = moved ? await listPosts(page) : await readPosts(page);
+  if (kind !== "ws") {
+    // A Clips Funded lane never matches older posts by caption (an older story's post could look like this one);
+    // it relies on the server's never-twice rule and the baseline saved at pressing.
+    const existing = findExisting(before, job.caption);
+    if (existing) return { link: postLink(existing.href), sure: true, existing: true };
+  } else if (Array.isArray(opts.earlier) && opts.earlier.length) {
+    // The owner's Try again after a press ("Post it again? Only if it's not on your TikTok"): a row with this
+    // caption that is new since that first press is that first post, so it is on TikTok already and nothing is
+    // posted again. The Only me copy and older stories were there before the first press, so they never count.
+    const earlier = new Set(opts.earlier);
+    const first = findExisting(before.filter((r) => !earlier.has(r.id)), job.caption);
+    if (first) return { link: postLink(first.href), sure: true, existing: true };
+  }
   const baseline = before.map((r) => r.id);
 
   await goto(page, "upload");
@@ -391,12 +630,15 @@ export async function post(page, job, file, onStep, { dryRun = false } = {}) {
   await dismissHarmless(page);
   await setCaption(page, job.caption);
   await setPrivacy(page, job.privacy);
-  await setInteractions(page, job);
+  await setInteractions(page, job, kind);
   await check(page);
   const dialog = await openDialogText(page);
   if (dialog) throw new Stop(REASONS.popup(dialog));
   const button = postButton(page);
   if (!(await button.isEnabled().catch(() => false))) throw new Stop(REASONS.noPost);
+  // Right before Post: the AI label is still on (Clips Funded), and it is still the same account.
+  if (kind === "ws" && !(await aiLabelOn(page))) throw new Stop(REASONS.aiLabel);
+  await recheckAccount(page, opts, session);
   if (dryRun) {
     // A check run: everything up to Post, then nothing. Quitting Chrome afterwards throws the upload away.
     return { dryRun: true, link: null, sure: false, posts: before.length, baseline };
@@ -429,10 +671,16 @@ export async function post(page, job, file, onStep, { dryRun = false } = {}) {
   return { link: null, sure: said };
 }
 
-/** After a crash once Post was pressed: look for the post, never post again. */
-export async function find(page, job, sinceIds = []) {
-  const rows = await listPosts(page);
-  const found = sinceIds.length ? findNewPost(rows, job.caption, sinceIds) : findExisting(rows, job.caption);
+/**
+ * After a crash once Post was pressed: look for the post, never post again. The account is checked first (D3). A
+ * Clips Funded lane always uses the baseline saved at pressing (an empty one too), never an older caption match.
+ */
+export async function find(page, job, sinceIds = [], opts = {}) {
+  await openPosts(page);
+  const { moved } = await checkAccount(page, opts);
+  const rows = moved ? await listPosts(page) : await readPosts(page);
+  const found =
+    sinceIds.length || opts.kind === "ws" ? findNewPost(rows, job.caption, sinceIds) : findExisting(rows, job.caption);
   return found ? postLink(found.href) : null;
 }
 

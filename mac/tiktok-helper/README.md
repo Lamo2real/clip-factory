@@ -7,6 +7,10 @@ wants the same when he taps **Upload** with TikTok ticked. Contract: `docs/CONTR
 Clip Factory can't post publicly to TikTok through TikTok's API until TikTok approves the app (§42). So the cloud
 marks the clip's TikTok post "waiting for your Mac", and this helper posts it from the owner's Mac.
 
+On 23 Nov 2026 the owner asked for the same in Clips Funded: "btw i want the same way we upload to tiktok in clip
+factory for clips funded". Since 1.2.0 the helper also posts Clips Funded's TikTok jobs, to @clips.funded only
+(§47.10, "Clips Funded" below).
+
 ## What it does
 
 Every minute, launchd runs `src/cli.js run`, which:
@@ -142,7 +146,8 @@ slowly if the read-back is off. The video goes into TikTok's upload box by its p
 - **Clip Factory › Settings › Posting › Your Mac posts TikTok**: the switch. Off = nothing is handed to the Mac, and
   the helper does nothing.
 - On this Mac only: `node src/cli.js off` (and `on`).
-- Remove it: `./uninstall.sh` (keeps the TikTok login), or `./uninstall.sh --all`.
+- Remove it: `./uninstall.sh` (keeps the TikTok logins), or `./uninstall.sh --all` (also every profile and the
+  keychain items).
 
 ## Setup (the owner's own steps, on his command)
 
@@ -152,15 +157,104 @@ node "$HOME/Library/Application Support/Clip Factory TikTok/app/src/cli.js" setu
 ./install.sh
 ```
 
+Clip Factory's Settings › Posting › Your Mac posts TikTok shows these same three steps while the Mac has never
+checked in (`MAC_SETUP_STEPS` in `web/src/screens/settings/TikTokMacBranch.tsx`), so that page is never a dead end.
+Change both together.
+
 `setup` shows the helper's Chrome window, the only time it is shown. In it he logs in to TikTok (the phone's QR code
 is easiest) and signs in to Clip Factory. The helper keeps that Clip Factory sign-in in the login keychain
-("Clip Factory TikTok helper") and refreshes it itself.
+("Clip Factory TikTok helper") and refreshes it itself. `setup` waits for a running tick and holds `run.lock`, so a
+tick never touches the window.
+
+## Clips Funded (1.2.0, §47.10)
+
+Clips Funded's Review › Post it (and Try again) hands its TikTok job to this Mac while Clips Funded › Social accounts
+› TikTok › **My Mac posts TikTok** is on. The helper posts it the way it posts Clip Factory's clips: hidden headless
+Chrome, the same claim, beats, never-twice rule, 30-minute find window, row states and "your Mac needs you". The
+differences:
+
+- **Lanes.** Clip Factory's lane (`clips`) is 1.1.0's: `chrome/`, port 9339, its Keychain login, the top-level
+  ledger, pacing, trial and backfill. Each Clips Funded workspace has a lane `ws:{id}`: its own profile
+  `chrome-ws-{id}/`, its own port (the lowest free of 9340–9349, kept in `state.json`), its own ledger and pacing in
+  `state.ws[id]`, its own needs-you, and no Keychain login. Only one helper Chrome runs at a time.
+- **Clip Factory first.** Each tick Clip Factory's lane decides and checks in first, as in 1.1.0. Then each
+  Clips Funded lane reads `GET /v1/workspaces/{ws}/tiktok/mac?version=1.2.0` and checks in
+  (`POST …/tiktok/mac/ping`: `state`, `reason`, `version`, `device`, `setUp`, `handle`, `loginDone`, `resumeDone`). A
+  Clips Funded post, look or login happens only in a tick where Clip Factory's lane has nothing to post, resume or look
+  for; meanwhile its pressed posts still get their "finding" beat. Its errors go to `helper.log` (`ws.error`) and
+  never reach Clip Factory's lane.
+- **Start my Mac again** in Clips Funded (a paused Mac) ends this Mac's pause, the same one Clip Factory's button
+  ends (`settings.paused`, every lane's); the ping's `resumeDone` clears the request.
+- **The right account, every time (both lanes).** Before Studio › Posts is read, right before Post, before every
+  look for a link, and on the link itself, the helper reads which TikTok its Chrome is logged in to (`src/whoami.js`)
+  and refuses unless it is the target: @lamo.clips for Clip Factory (`GET /v1/accounts`' TikTok; when that has no
+  @name, the account of the helper's own Clip Factory posts in `state.json`, so a 1.1.0 Mac goes on as it did), the
+  job's `account.handle` for Clips Funded. Another account: "Your Mac is logged in to TikTok as …, not …" and
+  needs-you; unreadable: a plain stop (a Studio row's link on another @name, while the account's own data reads the
+  target, is unreadable, not another account). Nothing is posted either way. Each lane also refuses every other
+  lane's account by handle and uid: a Clips Funded job never goes to Clip Factory's account, and a Clip Factory clip
+  never goes to a Clips Funded account (if Clip Factory's TikTok in Settings ever becomes @clips.funded, its clips
+  stop with "That TikTok account is your other workspace's…" and needs-you). A Clips Funded lane is never set up as
+  Clip Factory's account. With no account known at all, Clip Factory's ping says paused, with why.
+- **AI label.** Every Clips Funded post turns on TikTok Studio's "AI-generated content" switch and reads it back
+  (again right before Post), or it doesn't post. "Disclose post content" stays off. Clip Factory's posts never touch
+  either switch.
+- **Fixed public defaults.** Everyone, Comments on, Reuse of content (Duet and Stitch) on, Audience control off,
+  whatever the job says.
+- **No caption matching with older posts.** A Clips Funded lane relies on the server's never-twice rule and the
+  baseline saved at pressing, never on an older post with a similar caption. One exception: a post the owner tried
+  again after a press ("Post it again? Only if it's not on your TikTok") first looks for a row with its caption that
+  is new since that first press (the Only me copy and older stories were there before it); if one is there, that
+  link is taken and nothing is posted again.
+- **Files.** Its videos are saved as `clips-funded-….mp4` in Downloads and deleted once the post's link is found
+  (or once `GET …/publishing` shows the job posted).
+- **Login: no password anywhere.** The owner taps **Log in on my Mac** in Clips Funded. If the lane's profile already
+  reads @clips.funded nothing opens. Otherwise the lane's old cookies are cleared first (a session TikTok ended on its
+  side would read as a login at once), then a TikTok window opens on the Mac at the QR code (yellow frame, one
+  pop-up: "Log in to TikTok as @clips.funded in the window. Scan the code with the TikTok app."). The window's
+  profile never saves a password and never signs Chrome in (its Preferences: password saving, auto sign-in, autofill
+  and browser sign-in off; `--disable-sync`); any Google cookies leave the profile once TikTok's login is in. The
+  helper never attaches to that window's page; it only watches for TikTok's session cookie (never its value), closes
+  the window, and reads the handle in the hidden Chrome. Another account is wiped from that profile and the window
+  opens once more. After 20 minutes without a login the window closes. Until the lane reads @clips.funded, new posts
+  wait ("Your Mac isn't set up yet" on the row). A post that finds TikTok logged out opens the same window once, then
+  stops with "TikTok logged your Mac out. Tap Log in on my Mac." A lane that can't read any account three times
+  (a TikTok cookie but no account) is no longer set up and stops with "… Tap Log in on my Mac." That login window,
+  inside a post, holds the tick: Clip Factory's next clip can wait up to about 40 minutes (20 for the window, then
+  the upload and the look for the link).
+- **Events** carry `account` (`clips` or `ws:{id}`); new kinds `wrong_account` and `login_window`.
+
+### The owner's one-time step (after merge and deploy, on his command)
+
+1. Update the helper, from a main checkout:
+   ```
+   cd mac/tiktok-helper && ./install.sh --no-start
+   node "$HOME/Library/Application Support/Clip Factory TikTok/app/src/cli.js" whoami
+   ```
+   It must print `"loggedInAs": ["@lamo.clips"]` and `"matches": true`. If not, nothing is started: reinstall
+   1.1.0 from the previous main commit. Then `./install.sh`.
+2. In Clips Funded › Social accounts › TikTok: turn on **My Mac posts TikTok**, then tap **Log in on my Mac**.
+3. A TikTok window opens on the Mac with a code. On the phone: TikTok app → switch to @clips.funded (add it once
+   with Continue with Google, his Google account, if it isn't there yet) → scan the code → Log in. The window closes
+   by itself and the card says "logged in as @clips.funded". Use the code, not Google in the window: nothing is typed
+   on the Mac then.
+4. Optional check, which posts nothing:
+   `node ".../cli.js" probe --workspace stories --story <an approved story>`. It fills in TikTok Studio, AI label
+   included, stops before Post and saves `probe-ws-stories.png`.
+
+`node ".../cli.js" setup --workspace stories` opens the same login window from the Mac. `whoami --workspace stories`
+prints which TikTok that lane is logged in to. `status` shows every lane.
+
+TikTok may link two automated accounts on one Mac and network, so an automation flag could hit both. The owner
+accepted the automation risk for @lamo.clips on 22 Nov; this adds @clips.funded.
 
 ## Files
 
 `~/Library/Application Support/Clip Factory TikTok/` holds:
-- `chrome/`: the profile with the TikTok login;
-- `state.json`;
+- `chrome/`: Clip Factory's profile with the @lamo.clips TikTok login;
+- `chrome-ws-{workspaceId}/` (1.2.0): one profile per Clips Funded workspace, with its own TikTok login
+  (`chrome-ws-stories/` for @clips.funded);
+- `state.json` (Clips Funded's lanes are in `ws`, Clip Factory's account in `clipsAccount`; nothing older moved);
 - `settings.json`;
 - `helper.log`;
 - `events.log`;

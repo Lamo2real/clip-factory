@@ -448,6 +448,46 @@ test("unfolding Clip Factory's sidebar, the switch keeps its blur and light (its
   await ctx.close();
 });
 
+// The dock's parts are placed in numbers (WorkspaceDock.tsx) and land at once (glide.css), also under reduced motion,
+// whose 1 ms transitions of every property (base.css) would keep them where they were first placed until the next
+// animation frame. On CI's runner that frame came over a second late in the Colours look: the switch was read where it
+// was first placed, over Get the app and the jobs line, and pictured where it really was, so its words read 1.17:1
+// against Get the app's own white words (PR #186). Here Chromium's animation clock is stopped from the first paint on:
+// only a part that never transitions stands where the dock placed it.
+test("the switch and the Live chip stand where the dock places them at once, with no animation frame to come (reduced motion)", async ({ browser }) => {
+  const ctx = await browser.newContext({ viewport: { width: 1440, height: 900 }, reducedMotion: "reduce" });
+  const page = await ctx.newPage();
+  const cdp = await ctx.newCDPSession(page);
+  await cdp.send("Animation.enable");
+  await cdp.send("Animation.setPlaybackRate", { playbackRate: 0 });
+  await useLook(page, LOOKS.find((l) => l.name === "Colours")!);
+  await open(page, "/");
+  // The rows under the dock are in (the session's jobs line, Get the app), so the dock has moved from where it was
+  // first placed: a part that waited for a frame would still be there.
+  await expect(page.locator(".sidebar a.sidebar__status")).toBeVisible();
+  const parts = await page.evaluate(() => {
+    const frame = document.querySelector<HTMLElement>(".ws-dock")!.getBoundingClientRect();
+    return [".ws-dock > .ws-switch-host", ".ws-dock > .ws-switch-host > .ws-switch", ".ws-dock > .ws-dock__live"].map((sel) => {
+      const el = document.querySelector<HTMLElement>(sel)!;
+      // The bar fills its host: it is placed where its host is.
+      const placedBy = sel.endsWith(".ws-switch") ? el.parentElement! : el;
+      const r = el.getBoundingClientRect();
+      return {
+        sel,
+        placed: { top: parseFloat(placedBy.style.top), height: placedBy.style.height ? parseFloat(placedBy.style.height) : null },
+        drawn: { top: r.top - frame.top, height: r.height },
+      };
+    });
+  });
+  test.info().annotations.push({ type: "placed", description: JSON.stringify(parts) });
+  const off = parts.flatMap((p) => [
+    ...(Math.abs(p.drawn.top - p.placed.top) > 0.5 ? [`${p.sel}: drawn ${p.drawn.top.toFixed(2)} px down the dock, placed at ${p.placed.top.toFixed(2)}`] : []),
+    ...(p.placed.height !== null && Math.abs(p.drawn.height - p.placed.height) > 0.5 ? [`${p.sel}: drawn ${p.drawn.height.toFixed(2)} px tall, placed ${p.placed.height.toFixed(2)}`] : []),
+  ]);
+  expect(off).toEqual([]);
+  await ctx.close();
+});
+
 // scanText and looseText (e2e/helpers.ts, every contrast and see-through check) read the switch over the panel its
 // dock is drawn over, and stay strict: over a white desktop the switch's faint glass alone could never hold white
 // words, so passing there means the panel was read under them; and dimmed words must still fail.

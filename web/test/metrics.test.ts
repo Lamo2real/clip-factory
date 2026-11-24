@@ -10,11 +10,13 @@ import {
   metricGroups,
   perfStatus,
   pickBest,
+  postNumbersNote,
   reactionParts,
   until,
   watchTotal,
   zeroViewsNote,
 } from "../src/lib/metrics.ts";
+import { relative } from "../src/lib/format.ts";
 
 const at = "2026-11-16T10:00:00Z";
 const m = (over: Partial<PostMetrics> = {}): PostMetrics => ({
@@ -140,6 +142,33 @@ describe("status and calm copy", () => {
       text: "The video was too long. Go to Library and tap Try again.",
       link: { href: "/library", label: "Go to Library" },
     });
+  });
+
+  it("on the clip page the line fits this clip: Try again here, Turn on only when it is off, numbers when they come", () => {
+    const x = { platform: "x" as const, metrics: null };
+    // Posting never started: the page's Try again sends it everywhere, so no stack says Turn on (all five are on).
+    expect(calmCopy({ ...x, status: "not_posted" }, null, { notStarted: true, whereOn: STATS_ORDER })).toEqual({ text: "Not sent yet. Tap Try again." });
+    // On in Where clips go already: Turn on would change nothing, so it is never said.
+    expect(calmCopy({ ...x, status: "not_posted" }, null, { whereOn: ["youtube", "x"] })).toEqual({ text: "This clip was not sent to X." });
+    // Really off there: Turn on, with the way to it.
+    expect(calmCopy({ ...x, status: "not_posted" }, null, { whereOn: ["youtube"] })).toEqual({
+      text: "Not posted here. Turn on X in Settings › Posting › Where clips go.",
+      link: { href: "/settings/posting/where", label: "Open Where clips go" },
+    });
+    // Didn't work, with its Try again in the stack: no trip to the top of the Library.
+    expect(calmCopy({ platform: "facebook", metrics: null, status: "failed", error: "The video was too long." }, null, { retryHere: true })).toEqual({
+      text: "The video was too long. Tap Try again.",
+    });
+    // Uploaded, numbers not in yet: when they come, the way the Library row says it.
+    const now = Date.parse("2026-11-23T10:00:00Z");
+    const tomorrow = "2026-11-24T20:00:00Z";
+    expect(calmCopy({ ...x, status: "posted" }, null, { perfCheckAt: tomorrow, now })).toEqual({ text: "Numbers come tomorrow." });
+    expect(postNumbersNote({ status: "posted", perfCheckAt: tomorrow }, (iso) => relative(iso, now))).toBe(" · numbers tomorrow");
+    expect(calmCopy({ ...x, status: "posted" }, null, { perfCheckAt: "2026-11-23T15:00:00Z", now })?.text).toBe("Numbers come in 5 h.");
+    // A time already past (or none) never reads "Numbers come 3 h ago".
+    expect(calmCopy({ ...x, status: "posted" }, null, { perfCheckAt: "2026-11-23T07:00:00Z", now })?.text).toBe(
+      "Numbers are on the way. Check back in a few minutes.",
+    );
   });
 
   it("a posted stack whose numbers could not be read says why, not that they are on the way", () => {

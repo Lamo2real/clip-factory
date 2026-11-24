@@ -125,7 +125,7 @@ export function TikTokSheet({
           <div className="tt-sheet__stuck">
             <p className="callout callout--bad" role="alert">
               <Icon name="alert" size={18} />
-              <span>{error} Tap Ask TikTok again. To upload it to your other places now, turn TikTok off above and tap Upload.</span>
+              <span>{error} Tap Ask TikTok again.</span>
             </p>
             <div className="tt-sheet__stuck-actions">
               <Button icon="retry" act="retry" onClick={askAgain}>
@@ -171,10 +171,7 @@ export function TikTokSheet({
               <div className="tt-sheet__stuck">
                 <p className="callout callout--bad" role="alert">
                   <Icon name="alert" size={18} />
-                  <span>
-                    This clip is longer than TikTok allows for you, so it cannot go to TikTok. To upload it to your other places now, turn TikTok
-                    off above and tap Upload.
-                  </span>
+                  <span>Too long for TikTok. To post it elsewhere, turn TikTok off above and tap Upload.</span>
                 </p>
               </div>
             ) : null}

@@ -44,11 +44,11 @@ import { CrStepCard, OpenButton } from "../campaigns/bits.tsx";
 import { Rich } from "../settings/setup/bits.tsx";
 import { PlaceMark, ringLabel } from "./GetPaidList.tsx";
 import { GetPaidStep, MainAction, whoSaid, type StepState } from "./GetPaidStep.tsx";
-import { SentRows } from "./SentRows.tsx";
+import { intoView, SentRows } from "./SentRows.tsx";
 import { StatusPill } from "./StatusPill.tsx";
 import { startWhop, WhopCard } from "./WhopCard.tsx";
 
-export const PICK_COUNTRY = "Pick your country in Money settings to see its rules.";
+export const PICK_COUNTRY = "Pick your country to see its rules.";
 /** The Finance question's id: the server's link to it (getpaid/status.py's FINANCE) ends in `#cr-finance`. */
 export const CR_FINANCE = "cr-finance";
 export const READING_GONE = "Clip Factory can't see YouTube payments anymore. Tap Allow payment reading again.";
@@ -150,11 +150,13 @@ export function GetPaidPage({ place }: { place: GetPaidPlace }) {
     const to = anchor ?? (result && (result in WHOP_RESULTS) ? "whop" : result ? "step-yt-reading" : current ? `step-${current}` : null);
     if (!to || scrolled.current === to) return;
     // The current step moves only as far as it must (the status block stays on screen when there is room); a link or a
-    // result goes to the middle.
-    const block = !anchor && !result ? "nearest" : "center";
+    // result goes to the middle, or to its start when it is taller than the screen (its head stays in sight).
     const t = setTimeout(() => {
       scrolled.current = to;
-      document.getElementById(to)?.scrollIntoView?.({ block, behavior: prefersReducedMotion() ? "auto" : "smooth" });
+      const el = document.getElementById(to);
+      if (!el) return;
+      if (!anchor && !result) el.scrollIntoView?.({ block: "nearest", behavior: prefersReducedMotion() ? "auto" : "smooth" });
+      else intoView(el);
     }, 160);
     return () => clearTimeout(t);
   }, [card, anchor, current, result]);
@@ -242,6 +244,8 @@ export function GetPaidPage({ place }: { place: GetPaidPlace }) {
       const connection = await api().crPatchConnection({ finance: v });
       patchCr((o) => ({ ...o, connection }));
       scheduleGetPaid(0);
+      // The answer (or the question again) takes the tapped control's place: the focus stays on the question.
+      setTimeout(() => document.getElementById(CR_FINANCE)?.focus({ preventScroll: true }), 0);
       return true;
     } catch (e) {
       toast.error(friendlyMessage(e));
@@ -372,6 +376,9 @@ export function GetPaidPage({ place }: { place: GetPaidPlace }) {
   const lineHasNext = !!next?.text && card.line.includes(next.text.trim());
   const facts = factsFor(guide ? guide.facts : CR_GETPAID.facts, country);
   const groups = factGroups(facts);
+  // The one rule people act on first (to join, or when it pays): on the card; the rest, and the links, in the fold.
+  const lead = groups[0]?.texts[0] ?? null;
+  const restGroups = groups.map((g, i) => (i === 0 ? { ...g, texts: g.texts.slice(1) } : g));
   const readingGone = place === "youtube" && adsense?.status === "needs_reconnect";
 
   // ---------- the step cards ----------
@@ -474,7 +481,8 @@ export function GetPaidPage({ place }: { place: GetPaidPlace }) {
         ))}
         {card.holds.length ? <Holds holds={card.holds} /> : null}
         {readingGone ? <p className="gp-status__small">{READING_GONE}</p> : null}
-        {card.readingChip ? (
+        {/* Off and a line above already says payments can't be seen: said once. */}
+        {card.readingChip && !(!card.readingChip.endsWith("on") && card.missing.some((m) => /can't see .*(payments|payouts)/i.test(m))) ? (
           <p className="gp-chip" data-chip={card.readingChip.endsWith("on") ? "on" : "off"}>
             <Icon name="eye" size={16} />
             <span>{card.readingChip}</span>
@@ -513,20 +521,35 @@ export function GetPaidPage({ place }: { place: GetPaidPlace }) {
             </LinkButton>
           </div>
         ) : null}
-        {groups.map((g, i) => (
-          <div key={g.source} className="gp-facts__group">
-            <ul className="gp-facts__list">
-              {g.texts.map((t) => (
-                <li key={t}>{t}</li>
+        {lead ? <p className="gp-facts__lead">{lead}</p> : null}
+        {/* The other rules are long and needed only now and then: folded, one tap away. */}
+        {groups.length ? (
+          <details className="cr-fold gp-facts__fold">
+            <summary className="cr-fold__q">
+              <Icon name="info" size={18} />
+              <span>See all the rules</span>
+              <Icon name="chevronRight" size={18} className="icon cr-fold__chev act-turn" />
+            </summary>
+            <div className="cr-fold__body">
+              {restGroups.map((g, i) => (
+                <div key={g.source} className="gp-facts__group">
+                  {g.texts.length ? (
+                    <ul className="gp-facts__list">
+                      {g.texts.map((t) => (
+                        <li key={t}>{t}</li>
+                      ))}
+                    </ul>
+                  ) : null}
+                  <a className="btn btn--glass btn--sm cr-open" href={g.source} target="_blank" rel="noopener noreferrer">
+                    <Icon name="external" size={18} />
+                    <span className="btn__label">{rulesLabel(place, g.source)}</span>
+                    <span className="sr-only">{` (page ${i + 1} of ${groups.length}, opens in a new tab)`}</span>
+                  </a>
+                </div>
               ))}
-            </ul>
-            <a className="btn btn--glass btn--sm cr-open" href={g.source} target="_blank" rel="noopener noreferrer">
-              <Icon name="external" size={18} />
-              <span className="btn__label">{rulesLabel(place, g.source)}</span>
-              <span className="sr-only">{` (page ${i + 1} of ${groups.length}, opens in a new tab)`}</span>
-            </a>
-          </div>
-        ))}
+            </div>
+          </details>
+        ) : null}
       </section>
 
       {guide ? (

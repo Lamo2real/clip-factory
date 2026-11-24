@@ -155,7 +155,9 @@ def test_an_account_named_lamo_stories_reads_plainly() -> None:
     line = dashboard._account_sentence(
         {"platform": "tiktok", "connectionStatus": "needs_reconnect", "accountName": "Lamo Stories"}
     )
-    assert line == "This TikTok account (Lamo Stories) needs connecting again. Open Social accounts and tap Connect."
+    assert line == (
+        "This TikTok account (Lamo Stories) needs connecting again. Open Social accounts and tap Connect again."
+    )
 
 
 def test_the_posting_sentences_still_send_account_problems_to_social_accounts() -> None:

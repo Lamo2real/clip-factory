@@ -179,9 +179,26 @@ export function beatTargets({ queue, state, device, current }) {
   return out;
 }
 
-/** The ledger fields a claim writes. A fresh claim (a new attempt) forgets the last try's press, baseline and step. */
-export function claimFields({ device, tries, fresh }) {
-  return { device, step: "claimed", tries, ...(fresh ? { pressedAt: null, baseline: null, sentStep: null } : {}) };
+/**
+ * The ledger fields a claim writes. A fresh claim (a new attempt) forgets the last try's press, baseline and step;
+ * the Studio ids from before an earlier press stay (``earlier``), so a Clips Funded post tried again after a press
+ * can still find that first post (tiktok.js post).
+ */
+export function claimFields({ device, tries, fresh, earlier = null }) {
+  return {
+    device,
+    step: "claimed",
+    tries,
+    ...(fresh ? { pressedAt: null, baseline: null, sentStep: null } : {}),
+    ...(fresh && Array.isArray(earlier) && earlier.length ? { earlier } : {}),
+  };
+}
+
+/** The Studio ids from before every press of this job so far (its ledger entry): what ``earlier`` keeps. */
+export function earlierIds(entry) {
+  const ids = [...(Array.isArray(entry?.earlier) ? entry.earlier : [])];
+  if (entry?.pressedAt && Array.isArray(entry.baseline)) for (const id of entry.baseline) if (!ids.includes(id)) ids.push(id);
+  return ids.slice(-500);
 }
 
 const trialHolds = (settings, state) =>
@@ -264,4 +281,69 @@ export function backfillAction({ backlog, state, settings, now, autopost }) {
   if (next !== null && when > next - quiet && when < next + quiet) when = next + quiet;
   if (when <= t) return { action: "post", job: backlog };
   return { action: "wait", job: backlog, reason: "Backfill: one every 2 hours.", until: new Date(when).toISOString() };
+}
+
+// ---------------------------------------------------------------------------------------------------------------
+// Clips Funded's lanes (§47.10, D1, D2): the same rules, each lane on its own, Clip Factory first.
+
+/** A ws lane's settings: the shared pause, spacing and nothing of Clip Factory's trial, backfill or hold. */
+export function wsSettings(settings) {
+  return { ...settings, trialLimit: null, backfill: null, holdAutoBefore: null };
+}
+
+export const NOT_SET_UP = "Not logged in to TikTok on this Mac yet.";
+
+/**
+ * What a ws lane would do now: nextAction on its own view (its ledger, its last press), with the same never-twice,
+ * find, resume and post rules. Its own needs-you pauses only this lane; settings.paused pauses every lane. A new
+ * post waits while the lane's profile isn't logged in to the workspace's TikTok (``setUp`` false: the row says "Your
+ * Mac isn't set up yet" until the owner's Log in on my Mac); a post already under way is still finished or looked for.
+ * @param {{on: boolean, helper: object|null, queue: Array<object>, view: object, settings: object, device: string,
+ *   now: Date, setUp?: boolean}} args
+ */
+export function wsAction({ on, helper, queue, view, settings, device, now, setUp = true }) {
+  if (helper?.state === "needs_you") return { action: "paused", reason: helper.reason || "Your Mac needs you." };
+  const action = nextAction({ on, queue, state: view, settings: wsSettings(settings), device, now, autopost: null });
+  if (action.action === "post" && !setUp) return { ...action, action: "wait", reason: NOT_SET_UP };
+  return action;
+}
+
+/**
+ * A ws lane's check-in (POST /v1/workspaces/{ws}/tiktok/mac/ping): exactly these keys (the server refuses others).
+ * ``resumeDone``: the owner's Start my Mac again (helper.resumeRequest) was carried out.
+ * @returns {{state: "ok"|"needs_you"|"paused", reason?: string, version: string, device: string, setUp: boolean,
+ *   handle?: string, loginDone?: string, resumeDone?: string}}
+ */
+export function wsPingBody({ action, needsYou, version, device, setUp, handle, loginDone, resumeDone }) {
+  const state = needsYou ? "needs_you" : action?.action === "paused" ? "paused" : "ok";
+  const reason = state !== "ok" && action?.reason ? String(action.reason).slice(0, 200) : null;
+  return {
+    state,
+    ...(reason ? { reason } : {}),
+    version,
+    device,
+    setUp: setUp === true,
+    ...(handle && /^@[A-Za-z0-9._]{1,30}$/.test(handle) ? { handle } : {}),
+    ...(loginDone ? { loginDone: String(loginDone).slice(0, 40) } : {}),
+    ...(resumeDone ? { resumeDone: String(resumeDone).slice(0, 40) } : {}),
+  };
+}
+
+const MAC_WORK = ["post", "resume", "find"];
+
+/**
+ * The one thing a tick does (D2): Clip Factory's post, resume or find first, exactly as in 1.1.0; else the first ws
+ * lane (in workspace order) with a find, then a resume, then a post; else a ws lane's pending login request; else
+ * tidying. ``lanes``: [{id, action, loginRequest}] in workspace order.
+ * @returns {{lane: "clips"|string, what: "post"|"resume"|"find"|"login"|"tidy", index?: number}}
+ */
+export function pickWork({ clips, lanes = [] }) {
+  if (MAC_WORK.includes(clips?.action)) return { lane: "clips", what: clips.action };
+  for (const what of ["find", "resume", "post"]) {
+    const index = lanes.findIndex((l) => l.action?.action === what);
+    if (index >= 0) return { lane: lanes[index].id, what, index };
+  }
+  const index = lanes.findIndex((l) => l.loginRequest);
+  if (index >= 0) return { lane: lanes[index].id, what: "login", index };
+  return { lane: "clips", what: "tidy" };
 }

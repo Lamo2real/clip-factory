@@ -2,10 +2,10 @@
 // only the fields that platform really gives, a sparkline, how fresh the numbers are, and a link to the post.
 // A platform with nothing to show gets one calm line and one link instead of a wall of dashes. TikTok's stack says what
 // the owner's Mac is doing (§47.4) when the page passes its row: its one button sits in the page's actions.
-import type { Ref } from "react";
+import type { ReactNode, Ref } from "react";
 import type { PlatformPerformance, SeriesPoint } from "../api/types.ts";
 import { PLATFORM_LABEL } from "../lib/format.ts";
-import { STATUS_LABEL, ago, calmCopy, metricGroups, reactionParts, until, zeroViewsNote, type MetricRow } from "../lib/metrics.ts";
+import { STATUS_LABEL, ago, calmCopy, metricGroups, reactionParts, until, zeroViewsNote, type CalmContext, type MetricRow } from "../lib/metrics.ts";
 import type { FacebookExtra } from "../api/types.ts";
 import { Icon } from "./Icon.tsx";
 import { PlatformMark } from "./PlatformMark.tsx";
@@ -46,7 +46,7 @@ function Rows({ rows, reactions }: { rows: MetricRow[]; reactions?: Record<strin
 
 const insightsAgo = (iso: string, now: number) => {
   const a = ago(iso, now);
-  return a === "just now" ? "Insights just in" : `Insights from ${a}`;
+  return a === "just now" ? "Checked just now" : `Checked ${a}`;
 };
 
 export function PlatformStack({
@@ -58,6 +58,8 @@ export function PlatformStack({
   ref,
   auto,
   row,
+  context,
+  action,
 }: {
   perf: PlatformPerformance;
   series?: SeriesPoint[];
@@ -69,11 +71,15 @@ export function PlatformStack({
   auto?: Clip["auto"];
   /** TikTok's row (lib/tiktokMac.ts tiktokRow): the calm line says its words; its button is on the page. */
   row?: TikTokRow | null;
+  /** What the clip page knows around this stack (Where clips go, a start that never happened, Try again here). */
+  context?: CalmContext;
+  /** This place's own button under its calm line (the clip page's Try again for a post that didn't work). */
+  action?: ReactNode;
 }) {
   const name = PLATFORM_LABEL[perf.platform];
   const id = `stack-${perf.platform}`;
   const privateTest = isPrivateTest(perf.status, auto, perf.by);
-  const calm = privateTest ? null : calmCopy(perf, perf.platform === "tiktok" ? row : null);
+  const calm = privateTest ? null : calmCopy(perf, perf.platform === "tiktok" ? row : null, { ...context, now });
   const groups = !privateTest && !calm && perf.metrics ? metricGroups(perf.platform, perf.metrics) : null;
   const reactions = (perf.metrics?.extra as FacebookExtra | undefined)?.reactions;
   const wait = until(perf.nextAllowedAt, now);
@@ -122,6 +128,7 @@ export function PlatformStack({
                 {calm.link.label}
               </LinkButton>
             ) : null}
+            {action}
           </div>
         ) : groups ? (
           <>

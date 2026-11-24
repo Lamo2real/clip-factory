@@ -10,6 +10,10 @@
 // as PUT …/ai `picked`), 4 when a video provider is picked, 6 to 10 when that platform is connected (an account that
 // is Lamo Clips' own is not); only 5 and 11 are ticked here by hand. Step 2 never saves an effort the owner did not
 // pick: a model that does not offer the current effort is held until he picks one in step 3, then both are saved.
+//
+// Kid-proof words (the owner, 23 Nov: "less text … even an 8 year old should be able to use the app"): each step a
+// short title, one plain line, at most a few short sentences, and its one main button; nothing said twice (the ring
+// already says how far, a connect step's card already says to use Clips Funded's own account).
 import "../styles/social.css";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { friendlyMessage } from "../../api/errors.ts";
@@ -17,12 +21,12 @@ import { useToast } from "../../components/Toasts.tsx";
 import { Glide } from "../../components/Glide.tsx";
 import { storiesGoLater } from "../pane.tsx";
 import { useLoad } from "../../lib/hooks.ts";
-import { storiesSound } from "../prefs.ts";
+import { storiesReduceMotion, storiesSound } from "../prefs.ts";
 import { storiesApi } from "../api/client.ts";
 import { EFFORT_LABEL, type Effort, type ModelInfo, type Onboarding, type OnboardStep, type Platform, type SocialAccount, type StoriesAiConfig, type StoriesConfig } from "../api/types.ts";
 import { madeBy, MODEL_STATUS } from "../settings/bits.tsx";
 import { aiBody } from "../settings/data.ts";
-import { ArcDial, GlassPill } from "../glass/index.ts";
+import { ArcDial } from "../glass/index.ts";
 import {
   celebrate,
   centerOf,
@@ -40,7 +44,7 @@ import {
   useOnboarding,
   type StIconName,
 } from "../ui.tsx";
-import { DisconnectedNote, PlatformCard, useSocial } from "./Connections.tsx";
+import { DisconnectedNote, isPlatform, PlatformCard, useSocial } from "./Connections.tsx";
 import type { StoriesScreenProps } from "./types.ts";
 
 export const SETUP_ORDER: OnboardStep[] = ["ai", "model", "effort", "video", "agents", "instagram", "tiktok", "youtube", "facebook", "x", "done"];
@@ -96,9 +100,11 @@ function Foot({ step, busy, onBack, onSkip, children }: { step: OnboardStep; bus
 
 type Ai = { ai: StoriesAiConfig; models: ModelInfo[] };
 
-export function modelLine(m: ModelInfo): string {
+export function modelLine(m: ModelInfo, chip = false): string {
   // Who makes it and who runs it ("Anthropic on Amazon Bedrock", §45.35 D8).
   const who = `${madeBy(m)}${m.custom ? " · Added by you" : ""}`;
+  // Beside its chip (Works, Not checked yet) the line does not say the state again; a problem keeps its words and fix.
+  if (chip && (m.status === "ok" || m.status === "not_checked")) return who;
   if (m.status === "ok") return `${who} · Works: it answered.`;
   if (m.status === "not_checked") return `${who} · Not checked yet.`;
   return `${who} · ${m.statusLine}`;
@@ -139,7 +145,7 @@ function CheckRow({ checking, busy, onCheck }: { checking: boolean; busy: boolea
         <StIcon name="retry" size={18} />
         {checking ? "Checking every model…" : "Check models"}
       </StButton>
-      <span className="st-setup__hint">One tiny real call per model, so you see which ones answer.</span>
+      <span className="st-setup__hint">Sends each model one tiny real question.</span>
     </div>
   );
 }
@@ -148,41 +154,49 @@ function CheckRow({ checking, busy, onCheck }: { checking: boolean; busy: boolea
 const STATE_CHIP: Record<ModelInfo["status"], { label: string; tone: string }> = MODEL_STATUS;
 
 /** Step 1: what Lamo Stories uses, the models and their state, Check models, and "These look right" (§45.34). */
-function EnvironmentStep({ ws, ai, onSaved, onChecked, busy, setBusy }: { ws: string; ai: Ai; onSaved: (next: StoriesAiConfig) => void; onChecked: (models: ModelInfo[]) => void; busy: boolean; setBusy: (b: boolean) => void }) {
+/** What every step that saves gets: `done` (it was saved before: its save is then not the orange one) and `onChanged`. */
+type StepDone = { done?: boolean; onChanged?: (changed: boolean) => void };
+
+/** Tells the setup whether the open step holds a pick that is not saved yet (its save is then the orange one). */
+function useChanged(changed: boolean, onChanged?: (changed: boolean) => void) {
+  useEffect(() => {
+    onChanged?.(changed);
+  }, [changed, onChanged]);
+}
+
+function EnvironmentStep({ ws, ai, onSaved, onChecked, busy, setBusy, done = false }: { ws: string; ai: Ai; onSaved: (next: StoriesAiConfig) => void; onChecked: (models: ModelInfo[]) => void; busy: boolean; setBusy: (b: boolean) => void } & StepDone) {
   const toast = useToast();
   const { checking, models, check } = useCheckModels(ws, ai.models, onChecked);
   return (
     <>
-      <p className="st-setup__text">
-        Clips Funded is its own studio next to Clip Factory, with its own AI helpers, its own settings and its own social accounts. Nothing you set here
-        changes Clip Factory.
-      </p>
+      <p className="st-setup__text">Clips Funded is its own studio. Nothing you set here changes Clip Factory.</p>
       <ul className="st-setup__facts">
         <li>
           <StIcon name="bulb" size={20} />
-          An AI model writes each story, gives ideas and checks driving-safety facts against checked advice.
+          An AI model writes each story and checks the safety facts.
         </li>
         <li>
-          <StIcon name="clapper" size={20} />A video maker draws and animates it. That is a separate choice.
+          <StIcon name="clapper" size={20} />A video maker draws and moves it. You pick that later.
         </li>
         <li>
           <StIcon name="sliders" size={20} />
-          You pick the model and how hard it thinks. Nothing is swapped behind your back.
+          You pick the model and how hard it thinks. Nothing swaps by itself.
         </li>
       </ul>
-      <h3 className="st-setup__sub">The AI models Clips Funded can use</h3>
+      <h3 className="st-setup__sub">Your AI models</h3>
       <ul className="st-setup__models" aria-label="The AI models and their state">
         {models.map((m) => (
           <li key={m.key} className="st-setup__model" data-status={m.status}>
             <span className="st-setup__model-name">{m.label}</span>
             <span className={`st-chip st-chip--${STATE_CHIP[m.status].tone}`}>{STATE_CHIP[m.status].label}</span>
-            <span className="st-setup__model-line">{modelLine(m)}</span>
+            <span className="st-setup__model-line">{modelLine(m, true)}</span>
           </li>
         ))}
       </ul>
       <CheckRow checking={checking} busy={busy} onCheck={() => void check()} />
       <SaveBar
         busy={busy}
+        quiet={done}
         label="These look right"
         onSave={async (el) => {
           setBusy(true);
@@ -211,6 +225,8 @@ function ModelStep({
   onChecked,
   busy,
   setBusy,
+  done = false,
+  onChanged,
 }: {
   ws: string;
   ai: Ai;
@@ -220,12 +236,14 @@ function ModelStep({
   onChecked: (models: ModelInfo[]) => void;
   busy: boolean;
   setBusy: (b: boolean) => void;
-}) {
+} & StepDone) {
   const toast = useToast();
   const [pick, setPick] = useState(ai.ai.defaultModel);
   const { checking, models, check } = useCheckModels(ws, ai.models, onChecked);
   const chosen = models.find((m) => m.key === pick);
   const needsLevel = !!chosen && chosen.efforts.length > 0 && !chosen.efforts.includes(ai.ai.defaultEffort);
+  const changed = !!chosen && chosen.key !== ai.ai.defaultModel;
+  useChanged(changed, onChanged);
 
   const save = async (el: HTMLElement) => {
     if (!chosen) return;
@@ -249,10 +267,7 @@ function ModelStep({
 
   return (
     <>
-      <p className="st-setup__text">
-        This model writes the stories, gives ideas and checks the facts, unless you pick another one for a task or an agent later. It is only for
-        Clips Funded: Clip Factory keeps its own.
-      </p>
+      <p className="st-setup__text">It also checks the facts. Clip Factory keeps its own model.</p>
       <StPick<string>
         label="Clips Funded's default model"
         stack
@@ -269,22 +284,25 @@ function ModelStep({
       {needsLevel ? (
         <p className="st-note st-note--sun" role="note">
           <StIcon name="sliders" size={18} />
-          {chosen.label} does not offer {EFFORT_LABEL[ai.ai.defaultEffort]}. Next you pick its level, then both are saved together.
+          {chosen.label} does not offer {EFFORT_LABEL[ai.ai.defaultEffort]}.
         </p>
       ) : null}
       <CheckRow checking={checking} busy={busy} onCheck={() => void check()} />
-      <SaveBar busy={busy} label={chosen ? (needsLevel ? `Use ${chosen.label}: pick its level next` : `Use ${chosen.label}`) : "Use this model"} onSave={save} />
+      <SaveBar busy={busy} quiet={done && !changed} label={chosen ? (needsLevel ? `Use ${chosen.label}: pick its level next` : `Use ${chosen.label}`) : "Use this model"} onSave={save} />
     </>
   );
 }
 
 /** Step 3: the default effort (`picked: ["effort"]`), or the held model with the level the owner picks for it. */
-function EffortStep({ ws, ai, held, onSaved, busy, setBusy }: { ws: string; ai: Ai; held: string | null; onSaved: (next: StoriesAiConfig) => void; busy: boolean; setBusy: (b: boolean) => void }) {
+function EffortStep({ ws, ai, held, onSaved, busy, setBusy, done = false, onChanged }: { ws: string; ai: Ai; held: string | null; onSaved: (next: StoriesAiConfig) => void; busy: boolean; setBusy: (b: boolean) => void } & StepDone) {
   const toast = useToast();
   const model = ai.models.find((m) => m.key === (held ?? ai.ai.defaultModel));
   const offers = model?.efforts ?? [];
   // A held model starts with nothing picked: the owner chooses its level himself.
   const [pick, setPick] = useState<Effort | null>(held ? null : offers.includes(ai.ai.defaultEffort) ? ai.ai.defaultEffort : (model?.defaultEffort ?? offers[0] ?? "high"));
+  // A held model is always a change (it is saved only with its level); else a level other than the saved one.
+  const changed = offers.length > 0 && (!!held || (!!pick && pick !== ai.ai.defaultEffort));
+  useChanged(changed, onChanged);
   if (!offers.length)
     return (
       <>
@@ -294,6 +312,7 @@ function EffortStep({ ws, ai, held, onSaved, busy, setBusy }: { ws: string; ai: 
         </p>
         <SaveBar
           busy={busy}
+          quiet={done}
           label="Use its own level"
           onSave={async (el) => {
             setBusy(true);
@@ -315,13 +334,10 @@ function EffortStep({ ws, ai, held, onSaved, busy, setBusy }: { ws: string; ai: 
       {held && model ? (
         <p className="st-note st-note--sun" role="note">
           <StIcon name="sliders" size={18} />
-          {model.label} does not offer {EFFORT_LABEL[ai.ai.defaultEffort]}. Pick its level: then {model.label} and that level are saved together.
+          {model.label} does not offer {EFFORT_LABEL[ai.ai.defaultEffort]}. Pick its level, then both are saved.
         </p>
       ) : null}
-      <p className="st-setup__text">
-        How hard {model?.label ?? "the model"} thinks before it answers. Higher is slower and costs more, and is best for storyboards and fact checks.
-        You can pick a different level per task later.
-      </p>
+      <p className="st-setup__text">Higher is slower and costs more. It is best for storyboards and fact checks.</p>
       <StPick<Effort>
         label="Clips Funded's default effort"
         value={(pick ?? "") as Effort}
@@ -330,6 +346,7 @@ function EffortStep({ ws, ai, held, onSaved, busy, setBusy }: { ws: string; ai: 
       />
       <SaveBar
         busy={busy}
+        quiet={done && !changed}
         label={pick ? `Use ${EFFORT_LABEL[pick]}` : "Pick a level first"}
         off={!pick}
         onSave={async (el) => {
@@ -354,11 +371,12 @@ function EffortStep({ ws, ai, held, onSaved, busy, setBusy }: { ws: string; ai: 
   );
 }
 
-function SaveBar({ busy, label, onSave, off = false }: { busy: boolean; label: string; onSave: (el: HTMLElement) => void | Promise<void>; off?: boolean }) {
+/** A step's save. `quiet`: the step is done and nothing changed, so Next is the one orange button (one main action). */
+function SaveBar({ busy, label, onSave, off = false, quiet = false }: { busy: boolean; label: string; onSave: (el: HTMLElement) => void | Promise<void>; off?: boolean; quiet?: boolean }) {
   return (
     <div className="st-setup__save">
       <StButton
-        main
+        main={!quiet}
         disabled={busy}
         aria-disabled={off || undefined}
         onClick={(e) => {
@@ -377,25 +395,23 @@ function SaveBar({ busy, label, onSave, off = false }: { busy: boolean; label: s
 export const BUILTIN_LINE = "On. Cartoons drawn right here, tall, square or wide, 30 frames a second.";
 
 /** Step 4: how videos are made (the video provider, §45.31), saved in the workspace's own settings. */
-function VideoStep({ ws, onSaved, busy, setBusy }: { ws: string; onSaved: () => void; busy: boolean; setBusy: (b: boolean) => void }) {
+function VideoStep({ ws, onSaved, busy, setBusy, done = false, onChanged }: { ws: string; onSaved: () => void; busy: boolean; setBusy: (b: boolean) => void } & StepDone) {
   const toast = useToast();
   const w = useLoad(() => storiesApi().getWorkspace(ws), ws, "st-setup-ws");
   const providers = useLoad(() => storiesApi().providers(ws).catch(() => []), ws, "st-setup-providers");
   const config = (w.data?.configuration ?? null) as StoriesConfig | null;
   const [pick, setPick] = useState<StoriesConfig["providers"]["video"] | null>(null);
   const value = pick ?? config?.providers.video ?? "builtin-2d";
-  const reel = providers.data?.find((p) => p.id === "nova-reel");
   // §45.37 G7: Amazon ended Nova Reel on 30 Sep 2026, so it is never offered; Luma AI Ray2 makes the AI cut-aways.
   const luma = providers.data?.find((p) => p.id === "luma-ray");
   const ended = value === "nova-reel";
+  const changed = !!config && pick !== null && pick !== config.providers.video;
+  useChanged(changed, onChanged);
   if (w.error && !w.data) return <StError message={w.error} onRetry={() => void w.reload()} />;
   if (!config) return <StLoading label="Reading the video settings…" />;
   return (
     <>
-      <p className="st-setup__text">
-        The AI models only write the story. The pictures and the movement are made by a video maker: the built-in animator draws your characters
-        the same way in every video.
-      </p>
+      <p className="st-setup__text">The AI writes the story. The video maker draws and moves it.</p>
       <StPick<StoriesConfig["providers"]["video"]>
         label="How videos are made"
         stack
@@ -406,29 +422,20 @@ function VideoStep({ ws, onSaved, busy, setBusy }: { ws: string; onSaved: () => 
         ]}
         onChange={setPick}
       />
-      {value === "nova-reel" && reel?.state === "needs_setup" ? (
-        <p className="st-note st-note--sun" role="note">
-          <StIcon name="alert" size={18} />
-          Nova Reel is not ready yet. Until it is, new videos, remakes and changes stop and say what is missing: nothing switches to the built-in
-          animation by itself. Pick Built-in animation above to keep making videos. To make it ready, tap Try it in Settings › Video: it makes one 6-second
-          test shot. Posts made with Nova Reel get the platforms' AI labels.
-        </p>
-      ) : null}
+      {/* An older Nova Reel pick: the ended note below says it all (it never gets ready again, §45.37 G7). */}
       {value === "luma-ray" && luma?.state !== "on" ? (
         <p className="st-note st-note--sun" role="note">
           <StIcon name="alert" size={18} />
           {luma?.line && /\bis not ready yet\b/.test(luma.line) ? `${luma.line} ` : "Luma AI Ray2 is not ready yet. "}
-          Until it is, new videos, remakes and changes stop and say what is missing: nothing switches to the built-in animation by itself. Pick Built-in
-          animation above to keep making videos. To make it ready, tap Try it in Settings › Video: it makes one 5-second test shot. Posts made with Luma
-          AI Ray2 get the platforms' AI labels.
+          Until then, new videos, remakes and changes stop. Nothing switches by itself. Pick Built-in animation above to keep making videos. To make it
+          ready, tap Try it in Settings › Video: it makes one 5-second test shot. Its posts get the platforms' AI labels.
         </p>
       ) : null}
       {ended ? (
         <div role="status">
           <p className="st-note st-note--coral">
             <StIcon name="alert" size={18} />
-            Amazon Nova Reel: Ended by Amazon on 30 Sep 2026. It cannot make anything any more, so new videos stop until you pick another way. Nothing
-            switches by itself.
+            Amazon Nova Reel: Ended by Amazon on 30 Sep 2026. It cannot make videos any more. Pick another way below: nothing switches by itself.
           </p>
           <div className="st-setup__row">
             <StButton main onClick={() => setPick("luma-ray")}>
@@ -442,11 +449,12 @@ function VideoStep({ ws, onSaved, busy, setBusy }: { ws: string; onSaved: () => 
       ) : null}
       <SaveBar
         busy={busy}
+        quiet={done && !changed && !ended}
         label="Use this"
         onSave={async (el) => {
           // An ended maker is never saved again: the API would keep an older pick, and nothing could make a video.
           if (ended) {
-            toast.error("Amazon Nova Reel was ended by Amazon on 30 Sep 2026. Pick another video maker in Clips Funded › Settings › Video.");
+            toast.error("Amazon Nova Reel has ended. Pick another video maker above.");
             return;
           }
           setBusy(true);
@@ -477,7 +485,7 @@ function AgentsStep({ ws }: { ws: string }) {
   const name = (key: string | null) => (key ? (ai.data!.models.find((m) => m.key === key)?.label ?? key) : "the default model");
   return (
     <>
-      <p className="st-setup__text">Five helpers work on every video. Each has its own instructions, model, effort and skills. You can change any of them in Settings › Agents.</p>
+      <p className="st-setup__text">They work on every video. Change them in Settings › Agents.</p>
       <ul className="st-agents">
         {ai.data.agents.map((a) => (
           <li key={a.agentId} className={`st-agent${a.active ? "" : " is-off"}`}>
@@ -518,11 +526,8 @@ function ConnectStep({ ws, platform, line }: { ws: string; platform: Platform; l
   return (
     <>
       {/* The card below says up front to use a new account, never Clip Factory's (§45.37 G8), and why an account that
-          is Clip Factory's own is stopped: each once, so the step does not say them again. */}
-      <p className="st-setup__text">
-        Connect the {PLATFORM_NAME[platform]} account that gets Clips Funded's videos. It stays separate from Clip Factory's. You can skip this and
-        connect it later.
-      </p>
+          is Clip Factory's own is stopped; the step's foot has Skip for now: each once, so the step does not say them
+          again. */}
       {gone ? <DisconnectedNote choice={gone.choice} onClose={() => setGone(null)} /> : null}
       {line && a.connectionStatus !== "same_as_clips" ? (
         <p className="st-note st-note--coral" role="note">
@@ -547,7 +552,7 @@ function ConnectStep({ ws, platform, line }: { ws: string; platform: Platform; l
 
 const WORDS: Record<OnboardStep, { title: string; lede: string }> = {
   ai: { title: "Set up the AI", lede: "What Clips Funded uses, and why." },
-  model: { title: "Pick your default model", lede: "The AI model Clips Funded uses unless you say otherwise." },
+  model: { title: "Pick your default model", lede: "The AI that writes your stories." },
   effort: { title: "Pick your default effort", lede: "How hard the model thinks." },
   video: { title: "Pick how videos are made", lede: "The video maker, apart from the AI models." },
   agents: { title: "Meet your agents and skills", lede: "The five helpers of your studio." },
@@ -567,12 +572,21 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
   const [busy, setBusy] = useState(false);
   // Step 2's model, waiting for the owner's own effort in step 3 (nothing is saved until then).
   const [held, setHeld] = useState<string | null>(null);
+  // The open step holds a pick that is not saved yet: its save is the orange button, not Next.
+  const [changed, setChanged] = useState(false);
   const panel = useRef<HTMLDivElement>(null);
+  // The step on screen right now (set at once on every tap): a save that ends after the child opened another step
+  // never pulls them away from it.
+  const open = useRef<OnboardStep | null>(null);
   const data = ob.data;
 
   // Open at the first step still to do, once the server said where things are.
   useEffect(() => {
-    if (data && at === null) setAt(firstOpen(data));
+    if (data && at === null) {
+      const first = firstOpen(data);
+      open.current = first;
+      setAt(first);
+    }
   }, [data, at]);
 
   const step = at ?? "ai";
@@ -580,8 +594,20 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
   const left = useMemo(() => (data ? leftOf(data) : []), [data]);
 
   const go = (to: OnboardStep) => {
+    open.current = to;
+    setChanged(false);
     setAt(to);
-    requestAnimationFrame(() => panel.current?.focus({ preventScroll: false }));
+    requestAnimationFrame(() => {
+      const el = panel.current;
+      if (!el) return;
+      // On a phone the step list and the last step's buttons sit above: the new step's title comes into view first.
+      if (!inView(el.querySelector("#st-setup-step") ?? el)) el.scrollIntoView?.({ block: "start", behavior: storiesReduceMotion() ? "auto" : "smooth" });
+      el.focus({ preventScroll: true });
+    });
+  };
+  /** After a save or a skip of `from`: on to the next step, only while the child is still on `from`. */
+  const onFrom = (from: OnboardStep) => {
+    if ((open.current ?? "ai") === from) go(nextStep(from));
   };
 
   const patch = async (body: Parameters<ReturnType<typeof storiesApi>["patchOnboarding"]>[1]) => {
@@ -591,11 +617,12 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
   };
 
   const skip = async () => {
+    const from = step;
     setBusy(true);
     try {
-      await patch({ step, skipped: true });
+      await patch({ step: from, skipped: true });
       toast.success("Skipped. It stays on the list for later.");
-      go(nextStep(step));
+      onFrom(from);
     } catch (e) {
       toast.error(friendlyMessage(e));
     } finally {
@@ -604,10 +631,11 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
   };
 
   const afterSave = async () => {
+    const from = step;
     await ob.reload();
     void ai.reload();
     void refreshDashboard(ws).catch(() => undefined);
-    go(nextStep(step));
+    onFrom(from);
   };
   // Steps 2 and 3: the saved AI setup (with its new version) is what the next step starts from at once, never the one
   // from before the save while the reload is on its way (a stale version would be refused).
@@ -655,7 +683,7 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
         ) : !ai.data ? (
           <StLoading label="Reading the models…" />
         ) : step === "ai" ? (
-          <EnvironmentStep key={`a${ai.data.ai.version}`} ws={ws} ai={ai.data} busy={busy} setBusy={setBusy} onSaved={afterAiSave} onChecked={afterCheck} />
+          <EnvironmentStep key={`a${ai.data.ai.version}`} ws={ws} ai={ai.data} busy={busy} setBusy={setBusy} done={state === "done"} onSaved={afterAiSave} onChecked={afterCheck} />
         ) : step === "model" ? (
           <ModelStep
             key={`m${ai.data.ai.version}`}
@@ -663,6 +691,8 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
             ai={ai.data}
             busy={busy}
             setBusy={setBusy}
+            done={state === "done"}
+            onChanged={setChanged}
             onSaved={afterAiSave}
             onChecked={afterCheck}
             onHold={(key) => {
@@ -671,13 +701,13 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
             }}
           />
         ) : (
-          <EffortStep key={`e${ai.data.ai.version}${held ?? ""}`} ws={ws} ai={ai.data} held={held} busy={busy} setBusy={setBusy} onSaved={afterAiSave} />
+          <EffortStep key={`e${ai.data.ai.version}${held ?? ""}`} ws={ws} ai={ai.data} held={held} busy={busy} setBusy={setBusy} done={state === "done"} onChanged={setChanged} onSaved={afterAiSave} />
         );
-      foot = state === "done" ? <NextButton onClick={() => go(nextStep(step))} /> : null;
+      foot = state === "done" ? <NextButton main={!changed} onClick={() => go(nextStep(step))} /> : null;
       break;
     case "video":
-      body = <VideoStep ws={ws} busy={busy} setBusy={setBusy} onSaved={() => void afterSave()} />;
-      foot = state === "done" ? <NextButton onClick={() => go(nextStep(step))} /> : null;
+      body = <VideoStep ws={ws} busy={busy} setBusy={setBusy} done={state === "done"} onChanged={setChanged} onSaved={() => void afterSave()} />;
+      foot = state === "done" ? <NextButton main={!changed} onClick={() => go(nextStep(step))} /> : null;
       break;
     case "agents":
       body = <AgentsStep ws={ws} />;
@@ -693,7 +723,7 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
                 await patch({ step: "agents", done: true });
                 celebrate(centerOf(el));
               }
-              go(nextStep(step));
+              onFrom("agents");
             } catch (err) {
               toast.error(friendlyMessage(err));
             } finally {
@@ -717,7 +747,7 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
           <StMascot mood="cheer" size={120} tone="mint" />
           <p className="st-setup__text">
             {left.length
-              ? `You can start making videos now. ${left.length === 1 ? "One thing is" : `${left.length} things are`} still on the list; the dashboard keeps it for you, also after you finish.`
+              ? `You can make videos now. ${left.length === 1 ? "One thing is left" : `${left.length} things are left`}: the dashboard keeps ${left.length === 1 ? "it" : "them"} for you.`
               : "Everything is set up. Tap Finish!"}
           </p>
         </div>
@@ -754,8 +784,10 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
       );
       break;
     default:
-      body = <ConnectStep ws={ws} platform={step as Platform} line={data.steps.find((s) => s.step === step)?.line} />;
-      foot = <NextButton onClick={() => go(nextStep(step))} main={state === "done"} />;
+      // A key per platform: each connect step starts fresh (its folds, its questions), never carried from the last one.
+      body = <ConnectStep key={step} ws={ws} platform={step as Platform} line={data.steps.find((s) => s.step === step)?.line} />;
+      // One way on: Skip for now while it is to do, Next once it is connected.
+      foot = state === "done" ? <NextButton onClick={() => go(nextStep(step))} /> : null;
   }
 
   return (
@@ -769,7 +801,7 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
         </ArcDial>
         <h1 className="st-head__title st-setup__heading st-display">Set up Clips Funded</h1>
         <p className="st-head__lede st-setup__intro">
-          {data.done} of {data.total} done. Skip anything you do not need yet: making videos never waits for it.
+          {data.done} of {data.total} done. Skip any step: videos never wait for it.
         </p>
         <StLinkButton href="/stories" className="st-setup__later">
           Do this later
@@ -824,45 +856,32 @@ export function SetupScreen({ ws }: StoriesScreenProps) {
           </Foot>
         </div>
 
-        {/* What is left: glass pills, one tap back to each step (in the grid, under the steps). None is cream: the step
-            list already marks the open step, so one choice has one cream marker. */}
-        {left.length ? (
-          <section className="st-left st-glass" aria-labelledby="st-left-title">
-            <h2 className="st-left__title st-display" id="st-left-title">
-              What is left
-            </h2>
-            <ul className="st-left__list">
-              {left.map((s) => (
-                <li key={s.step}>
-                  <GlassPill
-                    className="st-left__item"
-                    icon={<StIcon name={ICON[s.step]} size={18} />}
-                    onClick={() => go(s.step)}
-                  >
-                    <span className="st-left__label">{s.label}</span>
-                    {s.state === "skipped" ? <span className="st-left__tag">skipped</span> : null}
-                  </GlassPill>
-                </li>
-              ))}
+        {/* What is left is the step list itself (each step says Later when skipped): only why a platform is still to do
+            when its account is Lamo Clips' own is said here, named, in the server's words (§45.35 D11). */}
+        {left.some((s) => s.line) ? (
+          <section className="st-left st-glass" aria-label="Why a step is still to do">
+            <ul className="st-left__why">
+              {left
+                .filter((s) => s.line)
+                .map((s) => (
+                  <li key={s.step} className="st-note st-note--coral">
+                    <StIcon name="alert" size={18} />
+                    {isPlatform(s.step) ? `${PLATFORM_NAME[s.step]}: ${s.line}` : s.line}
+                  </li>
+                ))}
             </ul>
-            {/* A platform held because its account is Lamo Clips' own says why, in the server's words (§45.35 D11). */}
-            {left.some((s) => s.line) ? (
-              <ul className="st-left__why">
-                {left
-                  .filter((s) => s.line)
-                  .map((s) => (
-                    <li key={s.step} className="st-note st-note--coral">
-                      <StIcon name="alert" size={18} />
-                      {s.line}
-                    </li>
-                  ))}
-              </ul>
-            ) : null}
           </section>
         ) : null}
       </div>
     </section>
   );
+}
+
+/** True when the element's top is on screen (not above it, nor in the lower part a thumb covers). */
+function inView(el: Element): boolean {
+  if (typeof window === "undefined") return true;
+  const r = el.getBoundingClientRect();
+  return r.top >= 0 && r.bottom <= window.innerHeight * 0.6;
 }
 
 function NextButton({ onClick, main = true }: { onClick: () => void; main?: boolean }) {

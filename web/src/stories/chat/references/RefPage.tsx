@@ -66,6 +66,14 @@ export function canTryAgain(reason: string): boolean {
 /** Not a file yet: an upload on its way, or a link being fetched (or that did not arrive). */
 const NO_FILE_YET: ReferenceVideo["status"][] = ["uploading", "fetching", "fetch_failed"];
 
+/**
+ * The steps drawn before the job's own answer: while it is being analyzed only the first one runs (the job then says
+ * where it is); else all wait.
+ */
+export function waitingSteps(analyzing: boolean): StoryStep[] {
+  return REF_STEP_ORDER.map((key, i) => ({ key, label: REF_STEP_LABEL[key], status: analyzing && i === 0 ? "running" : "pending" }));
+}
+
 /** A failure whose reason the page does not know (the contract's answer has no job). */
 export const ANALYSIS_FAILED = "The video analysis agent could not finish this one. Try again, or pick another model.";
 /** A re-run that ended with the last analysis kept. */
@@ -112,6 +120,9 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
   const [keptNow, setKeptNow] = useState<AiSetting | null>(null);
   const keeping = useRef<{ picked: AiSetting | null; sent: number; saved: number; answer: ReferenceVideo | null }>({ picked: null, sent: 0, saved: 0, answer: null });
   const [busy, setBusy] = useState(false);
+  // Talk about it in Chat on its way (a double tap reads the same render, so the ref stops the second chat).
+  const [talking, setTalking] = useState(false);
+  const talkingRef = useRef(false);
   const [actionProblem, setActionProblem] = useState<string | null>(null);
   const [renaming, setRenaming] = useState<string | null>(null);
   const [renameProblem, setRenameProblem] = useState<string | null>(null);
@@ -311,6 +322,9 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
   }
 
   async function talk() {
+    if (talkingRef.current) return;
+    talkingRef.current = true;
+    setTalking(true);
     setActionProblem(null);
     try {
       const c = await storiesApi().createConversation(ws, { title: `About ${ref.title}`.slice(0, 80), projectRef: { kind: "reference", id: ref.refId } });
@@ -319,6 +333,9 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
       storiesGoLater(storiesHref({ name: "chat_conv", convId: c.convId }));
     } catch (e) {
       setActionProblem(sentence(e, "The chat did not start. Try again."));
+    } finally {
+      talkingRef.current = false;
+      setTalking(false);
     }
   }
 
@@ -386,7 +403,7 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
   const steps: StoryStep[] =
     job && job.steps.length
       ? job.steps.map((st) => ({ ...st, label: st.label || REF_STEP_LABEL[st.key as keyof typeof REF_STEP_LABEL] || st.key }))
-      : REF_STEP_ORDER.map((key) => ({ key, label: REF_STEP_LABEL[key], status: ref.status === "analyzing" ? "running" : "pending" }));
+      : waitingSteps(ref.status === "analyzing");
   // The run that just stopped (followed here), else what the job in the answer says (after a reload too).
   const jobFailed = job && job.status === "failed" ? job.error || ANALYSIS_FAILED : null;
   const rerunStopped = jobFailed ? (jobFailed === ANALYSIS_FAILED ? RERUN_FAILED : `${RERUN_LEAD} ${jobFailed}`) : null;
@@ -471,7 +488,7 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
       <div className="st-ref-layout">
         <div className={cx("st-ref-player st-glass st-glass--hero st-lens", !src && "st-ref-player--empty")}>
           {src ? (
-            <RefPlayer videoRef={player} src={src} title={ref.title} />
+            <RefPlayer videoRef={player} src={src} title={ref.title} onRetry={() => setRound((n) => n + 1)} />
           ) : (
             <div className="st-ref-player__none">
               <Icon name="film" size={40} />
@@ -484,7 +501,7 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
           {ref.status === "uploading" ? (
             <div className="st-ref-card2 st-glass">
               <h2 className="st-ref-block__title">Still uploading</h2>
-              <p>This video did not finish uploading. If it was stopped, delete it and upload it again.</p>
+              <p>If it stopped, delete it and upload it again.</p>
             </div>
           ) : ref.status === "fetching" ? (
             <div className="st-ref-card2 st-glass st-ref-fetch" aria-live="polite">
@@ -532,7 +549,7 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
           ) : ref.status === "analyzing" ? (
             <div className="st-ref-card2 st-glass" aria-live="polite">
               <h2 className="st-ref-block__title">Analyzing…</h2>
-              <p>The video analysis agent is looking at every shot. It takes a few minutes for a long video. You can look at other pages meanwhile.</p>
+              <p>A long video takes a few minutes. You can leave this page.</p>
               <div className={cx("st-ref-run", job && "st-ref-run--dial")}>
                 <ol className="st-ref-track" aria-label="Steps">
                   {steps.map((s, i) => (
@@ -584,7 +601,7 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
                 </ol>
               ) : null}
               <h2 className="st-ref-block__title">{ref.status === "analyzed" ? "Analyze it again" : "Analyze it"}</h2>
-              <p>The video analysis agent looks at the shots, the timing, the jokes and the sound. Your videos borrow the ideas, never the characters or the footage.</p>
+              <p>We learn its shots, timing, jokes and sound. We never copy its characters or footage.</p>
               {removed ? (
                 <p className="st-chat-note st-ref-removed" role="status">
                   {ref.status === "analyzed" ? "The video file is gone, so it cannot be analyzed again." : "The video file is gone, so it cannot be analyzed."}
@@ -649,8 +666,8 @@ export function RefPage({ ws, refId }: { ws: string; refId: string }) {
                   <Icon name="clapper" size={20} />
                   Use in a video
                 </button>
-                <Btn icon="chat" onClick={() => void talk()}>
-                  Talk about it in Chat
+                <Btn icon="chat" off={talking} aria-busy={talking || undefined} onClick={() => void talk()}>
+                  {talking ? "Opening the chat…" : "Talk about it in Chat"}
                 </Btn>
               </>
             )}

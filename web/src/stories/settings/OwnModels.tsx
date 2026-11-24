@@ -450,7 +450,7 @@ function ModelForm({ start, editing, taken, onSaved, onCancel, ws }: { start: Mo
           />
         </Field>
       )}
-      {host !== "bedrock" ? <p className="st-stg-small">It uses your {HOST_LABEL[host]} key, saved under Provider keys below. The key is never shown again.</p> : null}
+      {host !== "bedrock" ? <p className="st-stg-small">It uses your {HOST_LABEL[host]} key from Provider keys below.</p> : null}
       {host === "bedrock" ? <span className="st-stg-region">
         <SetSelect label="AWS Region" value={d.region} options={[...REGIONS, { value: ANOTHER_REGION, label: "Another Region: type its code" }]} onChange={(v) => set({ region: v })} />
         {d.region === ANOTHER_REGION ? (
@@ -473,8 +473,8 @@ function ModelForm({ start, editing, taken, onSaved, onCancel, ws }: { start: Mo
         <span className="st-stg-label">How Clips Funded talks to it</span>
         <span className="st-stg-small">
           {d.ownCalling
-            ? `Change these only if ${HOST_LABEL[host]} says the model does not take them.`
-            : `These start right for ${host === "bedrock" ? `${makerOf(d) || "its maker"}'s models` : HOST_LABEL[host]}. Change one only if ${HOST_LABEL[host]} says the model does not take it.`}
+            ? `Change these only if ${HOST_LABEL[host]} refuses them.`
+            : `These start right for ${host === "bedrock" ? `${makerOf(d) || "its maker"}'s models` : HOST_LABEL[host]}. Change one only if ${HOST_LABEL[host]} refuses it.`}
         </span>
       </span>
       <SetSwitch
@@ -483,8 +483,8 @@ function ModelForm({ start, editing, taken, onSaved, onCancel, ws }: { start: Mo
           d.effortField === "none"
             ? "It runs at its own level. Clips Funded never sends it one."
             : d.effortField === "reasoning_effort"
-              ? "Clips Funded sends the level you pick in reasoning_effort, the way OpenAI-compatible services take it."
-              : "Clips Funded sends the level you pick, the way Claude models take it."
+              ? "It gets the level you pick, the OpenAI way."
+              : "It gets the level you pick, the Claude way."
         }
         checked={d.effortField !== "none"}
         onChange={(v) =>
@@ -509,7 +509,7 @@ function ModelForm({ start, editing, taken, onSaved, onCancel, ws }: { start: Mo
               </button>
             ))}
           </span>
-          <span className="st-stg-small">{d.efforts.length ? "Only these levels are ever sent to it." : "Tick the levels it accepts. Only those are ever sent to it."}</span>
+          <span className="st-stg-small">{d.efforts.length ? "Only these levels are ever sent to it." : "Tick the levels it accepts."}</span>
         </span>
       ) : null}
       {d.effortField !== "none" && d.efforts.length ? (
@@ -521,7 +521,7 @@ function ModelForm({ start, editing, taken, onSaved, onCancel, ws }: { start: Mo
       <SetSwitch
         label="It can use tools"
         description={
-          d.tools ? "In the chat it can do things for you, like starting a video. Answers come back in a tidy shape." : "It only talks: in the chat it cannot start things, and Clips Funded asks it for tidy answers as text."
+          d.tools ? "In the chat it can do things, like start a video." : "It only talks: in the chat it cannot start things."
         }
         checked={d.tools}
         onChange={(v) => set({ tools: v, ownCalling: true })}
@@ -531,17 +531,17 @@ function ModelForm({ start, editing, taken, onSaved, onCancel, ws }: { start: Mo
         <SetSwitch
           label="It can reuse its instructions"
           description={
-            d.cache ? `${HOST_LABEL[host]} keeps the long instructions for a few minutes (its prompt cache), so answers come faster and cost less.` : "Every answer reads the whole instructions again. Fine for a model that has no prompt cache."
+            d.cache ? `${HOST_LABEL[host]} keeps its instructions a few minutes, so it is faster and costs less.` : "It reads all its instructions every time."
           }
           checked={d.cache}
           onChange={(v) => set({ cache: v, ownCalling: true })}
         />
       ) : null}
-      <SetSwitch label="It can look at pictures" description="On for models that read pictures, like chat photos and reference videos." checked={d.vision} onChange={(v) => set({ vision: v })} />
+      <SetSwitch label="It can look at pictures" description="Turn on if it can read pictures." checked={d.vision} onChange={(v) => set({ vision: v })} />
       <Field id={`${id}-max`} label="Most tokens it may write in one answer" hint="Its maker's page says this. 16,000 suits most stories.">
         <input id={`${id}-max`} className="st-stg-input" inputMode="numeric" value={d.maxTokens} onChange={(e) => set({ maxTokens: e.target.value })} />
       </Field>
-      <SetSwitch label="I know its price" description="Without a price, its tokens are counted but no cost is worked out." checked={d.priced} onChange={(v) => set({ priced: v })} />
+      <SetSwitch label="I know its price" description="Without one, no cost is shown." checked={d.priced} onChange={(v) => set({ priced: v })} />
       {d.priced ? (
         <div className="st-stg-price__form">
           <Field id={`${id}-in`} label="Reading, per million tokens">
@@ -627,26 +627,27 @@ function OwnRow({
         Made by {m.provider} · on {hostName(m.host ?? "Amazon Bedrock", m.baseUrl, m.hostId)}
         {m.region && hostIdOf(m.hostId ?? m.host) === "bedrock" ? ` in ${m.region}` : ""}
       </p>
-      {/* Its exact ID, one tap away (§45.36 E14): a Bedrock model ID, or the model's name on a keyed host. */}
-      <StTech className="st-stg-tech">
-        <span>
-          {hostIdOf(m.hostId ?? m.host) === "bedrock" ? "Model ID" : "Model name"} <code className="st-stg-code">{m.modelId}</code>
-        </span>
-      </StTech>
       {keySaved === false ? (
         <Note tone="sun" icon="key">
           Paste your {HOST_LABEL[hostIdOf(m.hostId ?? m.host)]} key in Provider keys below, then tap Check models.
         </Note>
       ) : null}
       <p className="st-stg-small">
-        {m.efforts.length ? `Levels: ${m.efforts.map((e) => EFFORT_LABEL[e]).join(", ")}. Its own: ${m.defaultEffort ? EFFORT_LABEL[m.defaultEffort] : "none"}.` : "No effort setting: it runs at its own level."}
-        {m.vision ? " Looks at pictures." : " Words only."}
-      </p>
-      <p className="st-stg-small">{callingWords(callingOf(m))}.</p>
-      <p className="st-stg-small">
-        {stale ? "Changed since its last check. Check it again: tap Check models above to see if it answers now." : here(m.statusLine)}
+        {stale ? "Changed since its last check. Check it again." : here(m.statusLine)}
         {!stale && m.checkedAt ? ` (${whenText(m.checkedAt)})` : ""}
       </p>
+      {/* Its exact ID (§45.36 E14: a Bedrock model ID, or the model's name on a keyed host), its levels and how it is
+          called: one tap away. */}
+      <StTech className="st-stg-tech">
+        <span>
+          {hostIdOf(m.hostId ?? m.host) === "bedrock" ? "Model ID" : "Model name"} <code className="st-stg-code">{m.modelId}</code>
+        </span>
+        <span>
+          {m.efforts.length ? `Levels: ${m.efforts.map((e) => EFFORT_LABEL[e]).join(", ")}. Its own: ${m.defaultEffort ? EFFORT_LABEL[m.defaultEffort] : "none"}.` : "No effort setting: it runs at its own level."}
+          {m.vision ? " Looks at pictures." : " Words only."}
+        </span>
+        <span>{callingWords(callingOf(m))}.</span>
+      </StTech>
       {refused ? (
         <Note tone="coral" role="alert">
           {here(refused)}
@@ -740,7 +741,7 @@ export function OwnModels({
       title="Add a model"
       icon="plus"
       id="add-a-model"
-      lede="Use another AI model from Amazon Bedrock, the Anthropic API or an OpenAI-compatible service, with no new version of the app. Paste its ID, then check that it answers."
+      lede="Use another AI model. Add it, then check it answers."
       actions={
         open === null ? (
           <Btn main off={full ? `You can add up to ${MAX_CUSTOM_MODELS} models. Remove one first.` : undefined} onClick={() => setOpen("new")}>
@@ -754,8 +755,8 @@ export function OwnModels({
         <div className="st-stg-suggest" role="status">
           <Note tone="sun" icon="retry">
             {stale
-              ? `${just.label} is changed, so its last check no longer counts. Check it again: Amazon Bedrock says whether this account may use it.`
-              : `${just.label} is listed, but it has not answered yet. Check it now: Amazon Bedrock says whether this account may use it.`}
+              ? `${just.label} is changed, so its last check no longer counts. Check it again.`
+              : `${just.label} is listed, but it has not answered yet. Check it now.`}
           </Note>
           {check(just.key)}
         </div>
@@ -804,7 +805,7 @@ export function OwnModels({
           )}
         </ul>
       ) : open === null ? (
-        <p className="st-stg-small">No models added yet. The ones above come with Clips Funded; add any other model here.</p>
+        <p className="st-stg-small">No models added yet.</p>
       ) : null}
     </SetCard>
   );

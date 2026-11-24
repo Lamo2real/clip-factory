@@ -371,7 +371,7 @@ does" → `/clips/{clipId}`; Back returns to where the owner came from (else `/l
    rounded glass frame, centred; width `min(180px, 56cqi)` in the trunk layout and `min(400px, 44vh) · 9/16`
    (≤ 225 px) in the rows and fan layouts, so the total and the first stacks stay on the first screen. No
    autoplay. No `videoUrl` → the cover image.
-3. Stat block beside/under the preview: big total views (display serif) with "views across platforms" and a small
+3. Stat block beside/under the preview: big total views (display serif) with "views on all apps" and a small
    "(each app counts views its own way)"; the **"Best this week" star** toggle (≥ 48 px, `aria-pressed`, green glass,
    not vermilion); the one vermilion **Refresh numbers** button (icon + word, spinner while any `started` post is still
    `refreshing`; when every platform is `too_soon`/`blocked` it reads "Next check in 4 min" and a tap plays the deny
@@ -418,7 +418,7 @@ rows (icon, label, value; labels wrap, values never cut) showing **only** that p
   25/50/75/100 % (only while present).
 Absent fields are not shown (no "0" rows). Then the sparkline (`Sparkline`, 120×32 SVG polyline of `series[platform]`,
 ≥ 2 points else hidden, `role="img"` `aria-label="Views went from 1.2K to 8.4K"`), "Updated 3 min ago" (fast) and,
-for slow groups, "Insights from 2 days ago" (`insightsUpdatedAt`); "Open on {Platform}" link (`url`, new tab,
+for slow groups, "Checked 2 days ago" (`insightsUpdatedAt`); "Open on {Platform}" link (`url`, new tab,
 `rel="noopener noreferrer"`); "Next check in 12 min" when `nextAllowedAt` is in the future.
 **Calm states** (no numbers, one plain line + one link button, never an error colour except Failed):
 * Waiting for connection: "Connect {Platform} in Settings › Posting › Set up posting." →
@@ -427,9 +427,15 @@ for slow groups, "Insights from 2 days ago" (`insightsUpdatedAt`); "Open on {Pla
   `/settings/posting/where`.
 * Posting: "Posting now…" with a small spinner.
 * Posted privately (TikTok): "Posted privately. TikTok shows numbers after the app is approved."
-* Posted, no metrics yet: "Numbers are on the way. Check back in a few minutes."; when the last read failed, its
-  `statsError` sentence instead (`error` of the stack, e.g. "Facebook did not answer. We will try again soon.").
-* Failed: "Posting failed: {error}. Go to Library and press Try again."
+* Posted, no metrics yet: when the last read failed, its `statsError` sentence (`error` of the stack, e.g. "Facebook
+  did not answer. We will try again soon."); else the post's `perfCheckAt` in the Library's words (`numbersComing`):
+  "Numbers come tomorrow." (Library: "· numbers tomorrow"), else "Numbers are on the way. Check back in a few
+  minutes." (also when that time has passed).
+* Not sent yet (posting never started, or the start is stuck past `START_GRACE_MS`): "Not sent yet. Tap Try again.";
+  the Library's line and its **Try again** (`UploadAgain`) lead the page's actions as its one red button; "This clip
+  was not sent to {Platform}." when the place is on in Where clips go (no wrong "Turn on" link).
+* Failed: "{why}. Tap Try again." with that platform's own **Try again** inside its stack (not TikTok while it has
+  its Mac row, and not TikTok's public-account refusal).
 * YouTube, `views` 0 at least 6 h after `postedAt`: under the top number "That's YouTube's own count: it hasn't shown
   this Short to viewers yet." (the 0 is what YouTube reports, not a failed read).
 
@@ -446,8 +452,8 @@ line and the "·" is visually hidden, still read by screen readers). Toggling is
 and saved by `PUT …/best` 800 ms after the last change (one request); a toast "Saved. Clip Factory will learn from your
 picks." Under the header a status line from `learnState`: learning → "Learning from your picks…" (spinner); done →
 the learning text in a glass quote with "Best of week" label; failed → "Could not learn this time. Change a pick to
-try again."; none/skipped → "Star the clips that did best this week." Empty week: "No clips this week yet. Make clips
-on Home." with a link. `week` events and `learning` upserts (kind `week`) update it live. The browser tab title follows the
+try again."; none/skipped → "Star the clips that did best this week." Empty week: the title "No clips this week yet",
+the line "Make clips on Home." and a link. `week` events and `learning` upserts (kind `week`) update it live. The browser tab title follows the
 heading: "This week · Library · Clip Factory" for the current week, "Week of 28 Sep–4 Oct · Library · Clip Factory"
 for any other (`weekTitle` in `WeekView.tsx`).
 
@@ -658,8 +664,8 @@ DELETE `/v1/lessons/{lessonId}`; a bad id is 404, any other body 400; 409 "That 
 the daily run changed the lesson twice while it was being turned off or on (every toggle write is conditional). Mock parity: `web/src/api/mock/lessons.ts`.
 
 **Web**: Settings › Clip making › **What it learned** (`/settings/clip-making/learned`, apple `what-it-learned`,
-between Skills and YouTube help). The top line: "Every day Clip Factory checks your clips 7 days after posting.
-Lessons it is sure about go to your skills as Prior learnings." Grouped by creator ("All creators" last): each
+between Skills and YouTube help). The top line: "Clip Factory checks each clip 7 days after posting.
+Lessons it is sure of join your skills as Prior learnings." Grouped by creator ("All creators" last): each
 lesson's text, a chip (Trying it, Using it, Turned off, Too old), the platform, "4 of 31 clips did much better than
 normal" ("… clips from all your creators …" for the All creators group), Too old lessons say "Too old to use. New clips can teach it again." and have only Delete, the winner clips as links, Turn off / Turn on and Delete (with "Delete this lesson?"). A creator without
 enough clips: "YouTube: Needs 12 more posted clips". Before the first run: "Nothing yet. …". Library's "What's working"

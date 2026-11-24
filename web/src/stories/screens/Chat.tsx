@@ -104,7 +104,7 @@ export function ChatScreen({ ws, page }: StoriesScreenProps) {
       <header className="st-chat-head st-plate">
         <div className="st-chat-head__text">
           <h1 className="st-chat-head__title st-display">Chat</h1>
-          <p className="st-chat-head__lede">Talk ideas through with your creative director. Nothing is made until you tap a button.</p>
+          <p className="st-chat-head__lede">Chat with your director. Nothing is made until you tap a button.</p>
         </div>
         <Btn main icon="plus" off={creating} onClick={() => void startChat()}>
           New chat

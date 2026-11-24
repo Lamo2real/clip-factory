@@ -491,7 +491,7 @@ test.describe("desktop journeys", () => {
     await firstLook(page);
     const ask = page.locator("[data-help='cr-finder-ask']");
     await expect(ask).toContainText("Clip Factory can't join for you");
-    await ask.locator("summary", { hasText: "Show more" }).click();
+    await ask.locator("summary", { hasText: "See the message" }).click();
     await expect(ask).toContainText("This is what Clip Factory sends to Content Rewards' team.");
     await ask.getByRole("button", { name: "Ask Content Rewards" }).click();
     await expect(page.locator(".toast", { hasText: "Sent. Thank you!" })).toBeVisible();
@@ -768,4 +768,27 @@ test("no sideways scroll from 320 to 1920 on the Find page", async ({ page }) =>
     }
   }
   expect(failures).toEqual([]);
+});
+
+// Kid-proof (keyboard): Not for me, Change and Done take a card away; the focus goes to the next sensible control.
+test.describe("kid-proof finder focus", () => {
+  test.use(DESKTOP);
+
+  test("Not for me moves the focus to the next match; Change to the first choice; Done back to Change", async ({ page }) => {
+    await start(page);
+    await fourPlaces(page);
+    await firstLook(page);
+    await page.locator(".finder-match").first().getByRole("button", { name: "Not for me" }).focus();
+    await page.keyboard.press("Enter");
+    await expect(names(page).first()).toHaveText(DEFAULT_ORDER[1]!);
+    await expect(page.locator(".finder-match").first().locator(".finder-match__head")).toBeFocused();
+    const want = page.locator("[data-help='cr-finder-want']");
+    await want.getByRole("button", { name: "Change" }).focus();
+    await page.keyboard.press("Enter");
+    await expect(want.getByRole("button", { name: "Done" })).toBeVisible();
+    expect(await page.evaluate(() => document.activeElement !== document.body && !!document.activeElement?.closest("[data-help='cr-finder-want']"))).toBe(true);
+    await want.getByRole("button", { name: "Done" }).focus();
+    await page.keyboard.press("Enter");
+    await expect(want.getByRole("button", { name: "Change" })).toBeFocused();
+  });
 });

@@ -8,8 +8,9 @@ import { settle } from "./helpers.ts";
 
 type MockWindow = Window & {
   __cfMock?: {
-    setup: { finish(p: string): void; setAudit(passed: boolean): void };
+    setup: { finish(p: string): void; setAudit(passed: boolean): void; reset(): void };
     posting: {
+      clip(clipId: string): { status: string; captions: Record<string, string> };
       posts(clipId: string): { postId: string; platform: string; status: string }[];
       options(postId: string): Record<string, unknown> | null;
       clipOptions(postId: string): Record<string, unknown> | null;
@@ -45,7 +46,10 @@ test.describe("the simple Review card", () => {
     // TikTok needs the owner's own tap: Upload waits, and says why in plain words.
     await expect(upload).toHaveAttribute("aria-disabled", "true");
     await expect(card.locator(".upload-going")).toHaveText("Tap Use my settings first. TikTok needs your tap.");
-    await expect(card.getByText("Your other places already use your settings. TikTok needs your tap each time.")).toBeVisible();
+    // Said once, under the button, which is the card's main (red) one until it is tapped.
+    await expect(card.getByText("Tap this first. TikTok needs your tap.", { exact: true })).toBeVisible();
+    await expect(card.getByRole("button", { name: "Use my settings" })).toHaveClass(/btn--primary/);
+    await expect(upload).not.toHaveClass(/btn--primary/);
 
     // Tap 1.
     await card.getByRole("button", { name: "Use my settings" }).click();
@@ -104,7 +108,7 @@ test.describe("the simple Review card", () => {
     // A change for this clip only: the summary says it, and the button offers the owner's settings back.
     await yt.getByRole("radiogroup", { name: "Who can see it on YouTube" }).getByRole("radio", { name: "Link only" }).check();
     await expect(yt.locator("summary")).toContainText("Who can see it: Link only");
-    await expect(card.getByText("You changed some for this clip. Tap to put yours back.")).toBeVisible();
+    await expect(card.getByText("You changed some. Tap to put yours back.")).toBeVisible();
 
     const tt = card.locator('[data-place="tiktok"]');
     await tt.locator("summary").click();
@@ -119,7 +123,7 @@ test.describe("the simple Review card", () => {
     const fb = card.locator('[data-place="facebook"]');
     await fb.locator("summary").click();
     await expect(fb.getByLabel("Facebook caption")).toBeVisible();
-    await expect(fb).toContainText("Everyone can see it.");
+    await expect(fb).toContainText("Reel on your Page · Everyone can see it");
   });
 
   test("a paid partnership is one tick in the TikTok row and keeps the settings on", async ({ page }) => {
@@ -166,7 +170,7 @@ test.describe("the simple Review card", () => {
     await page.goto("/settings/posting/my-settings");
     await settle(page);
     for (const id of ["youtube", "tiktok", "instagram", "facebook", "x"]) await expect(page.locator(`#my-settings-${id}`)).toBeVisible();
-    await expect(page.getByText("Made for kids: No. My settings never mark a clip as made for kids.")).toBeVisible();
+    await expect(page.getByText("Made for kids: always No.")).toBeVisible();
     await page.locator("#my-settings-tiktok").getByRole("switch", { name: "Duet" }).click();
     await expect(page.locator("#my-settings-tiktok").getByRole("switch", { name: "Duet" })).toHaveAttribute("aria-checked", "false");
     // In-app navigation: a reload would start the in-memory mock over.
@@ -250,3 +254,183 @@ test("a campaign clip (§38.5, §39.3): the fit block, only the paid places, You
   await card.getByRole("button", { name: "Upload to 2" }).click();
   await expect(page.getByText("Uploading to 2 places!")).toBeVisible();
 });
+
+// The bug hunt (23 Nov: "even an 8 year old should be able to use the app"): Undo, the phone's tab bar, and what a
+// card says once it left.
+test.describe("the Review card keeps the child's work", () => {
+  test.use({ viewport: { width: 1440, height: 900 } });
+
+  test("Undo after Throw away brings the card back exactly as it was, and what was typed is saved", async ({ page }) => {
+    await fourReady(page);
+    const card = page.locator(".review-card").first();
+    const clipId = (await card.locator("..").getAttribute("id"))!.replace("clip-", "");
+    await card.getByRole("button", { name: "Use my settings" }).click();
+    const chips = card.locator(".upload-to");
+    await chips.getByRole("button", { name: "Facebook" }).click();
+    await chips.getByRole("button", { name: "TikTok" }).click();
+    await expect(card.getByRole("button", { name: UPLOAD })).toHaveText("Upload to 2");
+    await card.locator('[data-place="youtube"] summary').click();
+    await card.locator('[data-place="youtube"]').getByRole("radio", { name: "Link only" }).check();
+    await card.locator('[data-place="instagram"] summary').click();
+    const words = "My own words for Instagram";
+    await card.locator('[data-place="instagram"] textarea').fill(words);
+    // At once, inside the save delay.
+    await card.getByRole("button", { name: "Throw away" }).click();
+    await page.getByRole("button", { name: "Undo" }).click();
+
+    const back = page.locator(`[id="clip-${clipId}"] .review-card`);
+    await expect(back.getByRole("button", { name: UPLOAD })).toHaveText("Upload to 2");
+    await expect(back.locator(".upload-to").getByRole("button", { name: "Facebook" })).toHaveAttribute("aria-pressed", "false");
+    await expect(back.locator(".upload-to").getByRole("button", { name: "TikTok" })).toHaveAttribute("aria-pressed", "false");
+    await expect(back.locator('[data-place="youtube"] .place-row__now')).toContainText("Who can see it: Link only");
+    await back.locator('[data-place="instagram"] summary').click();
+    await expect(back.locator('[data-place="instagram"] textarea')).toHaveValue(words);
+    // Saved when Throw away was tapped.
+    await expect.poll(() => page.evaluate((id) => (window as MockWindow).__cfMock!.posting.clip(id).captions.instagram, clipId)).toBe(words);
+
+    // Upload goes only to the places left on.
+    await back.getByRole("button", { name: "Upload to 2" }).click();
+    await expect(page.getByText("Uploading to 2 places!")).toBeVisible();
+    const posts = await page.evaluate((id) => (window as MockWindow).__cfMock!.posting.posts(id), clipId);
+    expect(posts.map((p) => p.platform).sort()).toEqual(["instagram", "youtube"]);
+  });
+
+  test("a caption typed just before leaving Review is there on coming back, and Upload never sends older words", async ({ page }) => {
+    await fourReady(page);
+    const card = page.locator(".review-card").first();
+    const clipId = (await card.locator("..").getAttribute("id"))!.replace("clip-", "");
+    await card.locator('[data-place="instagram"] summary').click();
+    const words = "QUICK EDIT then leave";
+    await card.locator('[data-place="instagram"] textarea').fill(words);
+    await card.getByRole("link", { name: "See the job this clip came from" }).click();
+    await expect(page).toHaveURL(/\/jobs\//);
+    await expect.poll(() => page.evaluate((id) => (window as MockWindow).__cfMock!.posting.clip(id).captions.instagram, clipId)).toBe(words);
+    await page.goBack();
+    const again = page.locator(`[id="clip-${clipId}"] .review-card`);
+    await again.locator('[data-place="instagram"] summary').click();
+    await expect(again.locator('[data-place="instagram"] textarea')).toHaveValue(words);
+    await again.getByRole("button", { name: "Use my settings" }).click();
+    await again.getByRole("button", { name: UPLOAD }).click();
+    await expect(page.getByText(/^Uploading to/)).toBeVisible();
+    expect(await page.evaluate((id) => (window as MockWindow).__cfMock!.posting.clip(id).captions.instagram, clipId)).toBe(words);
+  });
+
+  test("with nothing set up, a saved clip is listed as saved, with Set up posting and no TikTok row", async ({ page }) => {
+    await page.goto("/");
+    await settle(page);
+    await page.evaluate(() => (window as MockWindow).__cfMock!.setup.reset());
+    await page.goto("/review");
+    await settle(page);
+    await page.locator(".review-card").first().getByRole("button", { name: UPLOAD }).click();
+    await expect(page.getByText("Saved! It uploads as soon as your accounts are set up.")).toBeVisible();
+    const kept = page.locator(".kept-now");
+    await expect(kept.locator(".kept-now__title")).toHaveText("Saved, waiting for set up");
+    await expect(kept.getByRole("link", { name: "Set up posting" })).toHaveAttribute("href", "/settings/posting/setup");
+    await expect(kept).not.toContainText("TikTok");
+    await expect(kept.getByRole("link", { name: "Turn on" })).toHaveCount(0);
+  });
+});
+
+test("a job's Review with nothing left says what else waits, and an unknown job says so; focus lands on the way on", async ({ page }) => {
+  await page.goto("/review");
+  await settle(page);
+  const href = (await page.locator(".review-card").first().getByRole("link", { name: "See the job this clip came from" }).getAttribute("href"))!;
+  const jobId = href.replace("/jobs/", "");
+  const all = await page.locator(".review-card").count();
+  // In the app (the pretend app keeps its clips in this page only).
+  await page.evaluate((to) => {
+    history.pushState({}, "", to);
+    dispatchEvent(new PopStateEvent("popstate"));
+  }, `/review?job=${jobId}`);
+  await settle(page);
+  const cards = page.locator(".review-card");
+  const mine = await cards.count();
+  expect(mine).toBeLessThan(all);
+  // Every card of this job thrown away with the keyboard.
+  for (let i = 0; i < mine; i++) {
+    await cards.first().getByRole("button", { name: "Throw away" }).focus();
+    await page.keyboard.press("Enter");
+    await expect(cards).toHaveCount(mine - i - 1);
+  }
+  const empty = page.locator(".review-empty");
+  await expect(empty.locator(".empty__title")).toHaveText("This job is done!");
+  await expect(empty).toContainText(`${all - mine} more clip${all - mine === 1 ? " is" : "s are"} waiting.`);
+  await expect(empty.getByRole("link", { name: "Make clips" })).toHaveCount(0);
+  const every = empty.getByRole("link", { name: "Show every job" });
+  await expect(every).toHaveAttribute("href", "/review");
+  await expect(every).toBeFocused();
+
+  await page.goto("/review?job=garbage");
+  await settle(page);
+  await expect(page.locator(".review-empty .empty__title")).toHaveText("This job isn't here");
+  await expect(page.locator(".review-empty").getByRole("link", { name: "Show every job" })).toBeVisible();
+});
+
+test("the last card leaving with the keyboard puts the focus on Make clips", async ({ page }) => {
+  await page.goto("/review");
+  await settle(page);
+  const cards = page.locator(".review-card");
+  const n = await cards.count();
+  for (let i = 0; i < n; i++) {
+    await cards.first().getByRole("button", { name: "Throw away" }).focus();
+    await page.keyboard.press("Enter");
+    await expect(cards).toHaveCount(n - i - 1);
+  }
+  await expect(page.locator(".review-empty").getByRole("link", { name: "Make clips" })).toBeFocused();
+});
+
+for (const size of [
+  { width: 390, height: 844 },
+  { width: 320, height: 640 },
+]) {
+  test(`on a phone (${size.width}x${size.height}) a place row's list opens in full above the tab bar, and arrow keys keep the choice in sight`, async ({ page }) => {
+    await page.setViewportSize(size);
+    await fourReady(page);
+    const card = page.locator(".review-card").first();
+    await card.locator('[data-place="youtube"] summary').click();
+    const button = card.locator('[data-place="youtube"] [aria-haspopup="listbox"]');
+    // Category sits just above the tab bar.
+    await button.evaluate((el) => {
+      el.scrollIntoView({ block: "start" });
+      const bar = document.querySelector(".tabbar")!.getBoundingClientRect();
+      window.scrollBy(0, el.getBoundingClientRect().bottom - (bar.top - 4));
+    });
+    await expect.poll(() => button.evaluate((el) => document.querySelector(".tabbar")!.getBoundingClientRect().top - el.getBoundingClientRect().bottom)).toBeLessThan(10);
+    await button.click();
+    const list = card.locator('[data-place="youtube"] [role="listbox"]');
+    await expect(list).toBeVisible();
+    const inSight = () =>
+      list.evaluate((el) => {
+        const r = el.getBoundingClientRect();
+        const bar = document.querySelector(".tabbar")!.getBoundingClientRect();
+        return r.top >= 0 && r.bottom <= bar.top;
+      });
+    await expect.poll(inSight).toBe(true);
+    await page.keyboard.press("End");
+    const last = list.locator('[role="option"]').last();
+    await expect(last).toHaveClass(/is-at/);
+    await expect
+      .poll(() => last.evaluate((el) => el.getBoundingClientRect().bottom <= document.querySelector(".tabbar")!.getBoundingClientRect().top))
+      .toBe(true);
+  });
+
+  test(`on a phone (${size.width}x${size.height}) the keyboard's focus on the Review card never hides under the tab bar`, async ({ page }) => {
+    await page.setViewportSize(size);
+    await fourReady(page);
+    await page.locator(".review-card").first().locator(".review-card__hook").focus();
+    const under: string[] = [];
+    for (let i = 0; i < 40; i++) {
+      await page.keyboard.press("Tab");
+      const hidden = await page.evaluate(() => {
+        const el = document.activeElement as HTMLElement | null;
+        if (!el || !el.closest(".review-list__item:first-child")) return null;
+        const r = el.getBoundingClientRect();
+        const bar = document.querySelector(".tabbar")!.getBoundingClientRect();
+        return r.bottom > bar.top + 1 ? `${el.tagName} ${el.textContent?.trim().slice(0, 40)}` : "";
+      });
+      if (hidden === null) break;
+      if (hidden) under.push(hidden);
+    }
+    expect(under).toEqual([]);
+  });
+}

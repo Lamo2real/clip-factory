@@ -455,12 +455,12 @@ function AutoChoices() {
         <Pill tone="bone" icon="clock">
           Coming soon
         </Pill>
-        <span>For now Clip Factory shows when a stream ends or a new video comes out. Your choices here are saved for when it makes clips by itself.</span>
+        <span>Your picks are saved until then.</span>
       </p>
       <Toggle label="Stop all automatic clips" description="Nothing is made by itself while this is on." checked={!!s.followPaused} onChange={(on) => void saveSettings({ followPaused: on })} />
       <Toggle
         label="Limit how many a day"
-        description={limited ? "Clip Factory stops after this many videos in a day." : "No limit. Each video costs the same as one you paste."}
+        description={limited ? "It stops after this many videos a day." : "No limit."}
         checked={limited}
         onChange={(on) => {
           if (!on) setLastLimit(daily || lastLimit);
@@ -484,7 +484,7 @@ function AutoChoices() {
           onChange={(v) => void saveSettings({ followMinMinutes: Number(v) })}
         />
       </div>
-      <p className="follow-auto__note muted">Only the first {s.maxSourceHours} hours of a long stream are used. Clips from someone else's video always wait in Review, so you can check them before posting.</p>
+      <p className="follow-auto__note muted">Only the first {s.maxSourceHours} hours of a stream are used. These clips always wait in Review for you to check.</p>
     </div>
   );
 }
@@ -496,7 +496,7 @@ function KeySlots({ view, used, onView }: { view: FollowsView; used: Set<FollowP
   const nothing = !slots.some((k) => k.platform !== "youtube-read");
   return (
     <div className="follow-keys">
-      {nothing ? <p className="muted">Nothing to do. YouTube works without keys. Twitch and Kick show up here after you follow someone there.</p> : null}
+      {nothing ? <p className="muted">Nothing to do yet. Twitch and Kick show up here once you follow someone there.</p> : null}
       {slots.map((slot) => (
         <KeySlot key={slot.platform} slot={slot} kickWebhookUrl={view.kickWebhookUrl} onView={onView} />
       ))}
@@ -621,7 +621,7 @@ function KeySlot({ slot, kickWebhookUrl, onView }: { slot: FollowKeySlot; kickWe
         </>
       ) : (
         <>
-          <p className="follow-key__ask">{optional ? "It shows when YouTube streamers are live. Without it, Clip Factory still sees new videos." : `Ask a grown-up to finish ${label} setup. It takes about 5 minutes, once.`}</p>
+          <p className="follow-key__ask">{optional ? "Shows when YouTube streamers are live. New videos show without it." : `Ask a grown-up to finish ${label} setup. It takes about 5 minutes, once.`}</p>
           <Button size="sm" variant={optional ? "glass" : "action"} icon={open ? "chevronDown" : "key"} aria-expanded={open} aria-controls={`${id}-form`} onClick={() => setOpen((v) => !v)}>
             {open ? "Hide the steps" : optional ? "Add a YouTube key" : "I am the grown-up"}
           </Button>

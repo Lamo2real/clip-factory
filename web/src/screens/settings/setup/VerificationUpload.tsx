@@ -12,6 +12,28 @@ import { usePickAction } from "../parts.tsx";
 
 const NAME = /^tiktok[A-Za-z0-9_-]{4,64}\.txt$/;
 
+/**
+ * TikTok's own name for a picked file, or null. A browser that downloads it twice saves "tiktokAbC (1).txt", and a
+ * renamed copy may read "TikTokAbC.TXT": the " (1)" goes and "tiktok" and ".txt" are made lowercase (the code in the
+ * middle is kept as it is, since TikTok checks it letter for letter).
+ */
+export function tiktokFileName(picked: string): string | null {
+  const m = /^tiktok([A-Za-z0-9_-]{4,64}) ?(?:\(\d{1,3}\))?\.txt$/i.exec(picked.trim());
+  if (!m) return null;
+  const name = `tiktok${m[1]}.txt`;
+  return NAME.test(name) ? name : null;
+}
+
+/** Why a picked file is not TikTok's, and what to do instead. */
+export function fileProblem(picked: string, size: number): string | null {
+  if (!tiktokFileName(picked))
+    return /^tiktok.*\.txt$/i.test(picked.trim())
+      ? "This file's name was changed. Download it again from TikTok and pick it without renaming it."
+      : "That is not TikTok's file. Pick the tiktok….txt file TikTok gave you.";
+  if (size > 4096) return "That file is too big to be TikTok's. Download it again from TikTok.";
+  return null;
+}
+
 export function VerificationUpload({
   setup,
   onChange,
@@ -34,18 +56,16 @@ export function VerificationUpload({
 
   async function send(f: File) {
     pick.play();
-    const problem = !NAME.test(f.name)
-      ? "That is not TikTok's file. Its name starts with tiktok and ends with .txt."
-      : f.size > 4096
-        ? "That file is too big to be TikTok's. Download it again from TikTok."
-        : null;
-    if (problem) {
+    const problem = fileProblem(f.name, f.size);
+    const name = tiktokFileName(f.name);
+    if (problem || !name) {
       pick.fail({ sound: false });
-      return toast.error(problem);
+      return toast.error(problem ?? "That is not TikTok's file.");
     }
     setBusy(true);
     try {
-      onChange(await api().uploadVerificationFile(f.name, await f.text()));
+      // Put online under TikTok's own name, whatever the browser called the copy.
+      onChange(await api().uploadVerificationFile(name, await f.text()));
       toast.success("File is online. Now press Verify on TikTok.");
     } catch (e) {
       pick.fail({ sound: false });

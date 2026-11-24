@@ -710,10 +710,15 @@ describe("colours", () => {
           const cs = [...new Set([grid[i]!, grid[j]!, grid[k]!])];
           const v = coloursVeils(cs);
           n++;
-          expect(v.panelVeil).toBeLessThanOrEqual(MAX_COLOURS_PANEL_VEIL);
-          expect(v.panelVeil).toBeGreaterThanOrEqual(PANEL_VEIL_FLOOR);
-          expect(v.brightness).toBeGreaterThanOrEqual(MIN_GLASS_BRIGHTNESS);
-          expect(v.brightness).toBeLessThanOrEqual(1);
+          // The bounds go in the one list with the AA checks below, one expect() at the end rather than four per mix
+          // (178,000 in all). `!(a <= b)` fails a NaN too, as toBeLessThanOrEqual does.
+          if (!(v.panelVeil <= MAX_COLOURS_PANEL_VEIL)) fails.push(`panel veil ${v.panelVeil} over ${MAX_COLOURS_PANEL_VEIL}: ${cs.join(" ")}`);
+          if (!(v.panelVeil >= PANEL_VEIL_FLOOR)) fails.push(`panel veil ${v.panelVeil} under ${PANEL_VEIL_FLOOR}: ${cs.join(" ")}`);
+          if (!(v.brightness >= MIN_GLASS_BRIGHTNESS)) fails.push(`brightness ${v.brightness} under ${MIN_GLASS_BRIGHTNESS}: ${cs.join(" ")}`);
+          if (!(v.brightness <= 1)) fails.push(`brightness ${v.brightness} over 1: ${cs.join(" ")}`);
+          // The look and its pay once per mix (each level's own default, `lightPay(look)`, is this same number).
+          const look: LightLook = { kind: "colours", ...v };
+          const pay = lightPay(look);
           // The worst spot as seen bare and through every saturate() the CSS uses: dimmed under a pane, as it is under
           // a plate.
           for (const spot of coloursMeshSpots(cs)) {
@@ -724,12 +729,11 @@ describe("colours", () => {
             if (worst(mix(BONE, mix(VEIL, page, Math.min(1, v.plateVeil + TRACK_EXTRA_VEIL)), TRACK_LIFT)) < AA) fails.push(`track: ${cs.join(" ")} over rgb(${spot.map(Math.round).join(" ")})`);
             // The lit levels (ADR-87): the top of a panel and of the lead panel, a row on it on hover, the deepest
             // raise on hover, and a control on the page on hover (the tightest of each kind).
-            const look: LightLook = { kind: "colours", ...v };
-            const e1 = panelWords(look, spot);
+            const e1 = panelWords(look, spot, false, pay);
             const levels: [string, Rgb][] = [
               ["E1", e1],
-              ["the lead panel", panelWords(look, spot, true)],
-              ["a plate", plateWords(look, spot)],
+              ["the lead panel", panelWords(look, spot, true, pay)],
+              ["a plate", plateWords(look, spot, pay)],
               ["E2 hover", raised(e1, 1, "hover")],
               ["E4 hover", raised(e1, 3, "hover")],
               ["a control on the page, hover", onPage(look, spot, "hover")],

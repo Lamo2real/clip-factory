@@ -106,7 +106,7 @@ export function CampaignsPage() {
   const another = finderHref(CR_DISCOVER, !!finder);
   return (
     <div className="page page--narrow cr-campaigns">
-      <PageHeader title="Your campaigns" lede="Join a campaign on Content Rewards. Paste its link here. I check the rules and if you're in." />
+      <PageHeader title="Your campaigns" lede="Join a campaign on Content Rewards. Paste its link here." />
       {finder ? <FinderEntry summary={finder} primary={findFirst} /> : null}
       {/* None yet: the three join steps come first, so step 1's Open Content Rewards is on the first screen. */}
       {setupFirst ? (
@@ -114,7 +114,7 @@ export function CampaignsPage() {
           <h2 className="cr-section__title" id="cr-setup-first-title">
             First, set up Content Rewards
           </h2>
-          <p>Connect Content Rewards so I can see if you&apos;re in.</p>
+          <p>Then I can see if you&apos;re in.</p>
           <LinkButton
             href={withBack(CR_SETUP_PATH, "/campaigns")}
             variant={!typed && !group ? "primary" : "glass"}

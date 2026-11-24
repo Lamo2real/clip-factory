@@ -85,6 +85,7 @@ import {
   type MacQueueJob,
   type TikTokRowContext,
 } from "../src/lib/tiktokMac.ts";
+import { MAC_HINT, MAC_SENT_WAITS, MAC_WHERE_LINE, macUploadLine, savedForSetup, sentLine } from "../src/lib/tiktokMac.ts";
 import * as tiktokMacLib from "../src/lib/tiktokMac.ts";
 import { canPostYourself, tiktokState, TIKTOK_PRIVATE_ONLY } from "../src/lib/tiktokYourself.ts";
 import { timeWords } from "../src/lib/autopost.ts";
@@ -333,10 +334,12 @@ describe("the TikTok row (§47.4)", () => {
     });
   });
 
-  it("the Mac can't post: switch off or never set up (Turn on), not seen for 30 minutes (Open Your Mac posts TikTok)", () => {
+  it("the Mac can't post: switch off (Turn on), never set up or not seen for 30 minutes (Open Your Mac posts TikTok)", () => {
     for (const posts of [[], [macPost()], [macPost({ state: "stopped", reason: "Timed out." })]]) {
       expect(rowOf(posts, ready({ macOn: false }))).toEqual(turnOn("Your Mac posts TikTok is off"));
-      expect(rowOf(posts, ready({ helper: null }))).toEqual(turnOn("Your Mac isn't set up yet"));
+      // The switch is on, the Mac never checked in: Turn on would open a switch that is already on (bug hunt, 23 Nov).
+      expect(rowOf(posts, ready({ helper: null }))).toEqual(openMac("Your Mac isn't set up yet"));
+      expect(rowOf(posts, ready({ macOn: undefined, helper: null }))).toEqual(openMac("Your Mac isn't set up yet"));
       // The switch is already on: open its page, where the status line says the rest.
       const old = NOW - MAC_STALE_MS;
       expect(rowOf(posts, ready({ helper: helper(iso(old)) }))).toEqual(openMac(`Your Mac hasn't checked in since ${hm(old)}`));
@@ -514,6 +517,35 @@ describe("the TikTok row (§47.4)", () => {
   });
 });
 
+describe("Review's line above Upload while the Mac posts this clip's TikTok (bug hunt, 23 Nov)", () => {
+  it("says what the Mac is doing now, with its one fix; the plain line only once it can post (or while not known)", () => {
+    expect(macUploadLine(ready(), true)).toEqual({ words: MAC_HINT, row: null });
+    expect(macUploadLine(ready(), false)).toEqual({ words: MAC_WHERE_LINE, row: null });
+    // Not known yet: never a wrong warning.
+    expect(macUploadLine(ready({ helper: undefined }), true)).toEqual({ words: MAC_HINT, row: null });
+    // Never checked in: not set up, with Open Your Mac posts TikTok (never Turn on: the switch is on).
+    expect(macUploadLine(ready({ helper: null }), true)).toEqual({ words: "TikTok: Your Mac isn't set up yet", row: openMac("Your Mac isn't set up yet") });
+    // Needs him, paused, not seen for 3 hours.
+    const needs = macUploadLine(ready({ helper: helper(iso(NOW - MIN), { state: "needs_you", reason: "TikTok wants a code." }) }), true);
+    expect(needs).toEqual({ words: "TikTok: Your Mac needs you: TikTok wants a code · look at your Mac", row: openMac("Your Mac needs you: TikTok wants a code · look at your Mac") });
+    const paused = macUploadLine(ready({ helper: helper(iso(NOW - MIN), { state: "paused" }) }), true);
+    expect(paused.words).toBe("TikTok: Paused on your Mac · your clips wait until it's started again");
+    expect(paused.row?.button).toBe("resume");
+    const old = NOW - 3 * 60 * MIN;
+    expect(macUploadLine(ready({ helper: helper(iso(old)) }), true)).toEqual({
+      words: `TikTok: Your Mac hasn't checked in since ${hm(old)}`,
+      row: openMac(`Your Mac hasn't checked in since ${hm(old)}`),
+    });
+  });
+
+  it("a clip Upload only saved (every place waits for set up) is not uploading", () => {
+    const waits = (platform: Post["platform"]): Post => ({ postId: platform, clipId: "c1", platform, status: "pending_integration" });
+    expect(savedForSetup([waits("youtube"), waits("tiktok")])).toBe(true);
+    expect(savedForSetup([waits("youtube"), { ...waits("tiktok"), status: "queued" }])).toBe(false);
+    expect(savedForSetup([])).toBe(false);
+  });
+});
+
 describe("a waiting clip's place in the Mac's queue (D4, counted the way plan.js picks)", () => {
   it("null when the queue is not known or the clip is not waiting in it", () => {
     expect(macPlace(null, "c1", null, NOW)).toBeNull();
@@ -616,6 +648,15 @@ describe("Settings' lines", () => {
     expect(waitingLine(3)).toBe("3 waiting for your Mac");
     expect(sendableLine(1)).toBe("1 clip isn't on TikTok yet.");
     expect(sendableLine(4)).toBe("4 clips aren't on TikTok yet.");
+    // Just sent: never "0 clips aren't on TikTok yet." and nothing else (bug hunt, 23 Nov).
+    expect(sendableLine(0, 2)).toBe("2 clips already wait for your Mac.");
+    expect(sendableLine(0, 1)).toBe("1 clip already waits for your Mac.");
+    expect(sendableLine(3, 1)).toBe("3 clips aren't on TikTok yet. 1 clip already waits for your Mac.");
+    expect(sendableLine(0)).toBe("0 clips aren't on TikTok yet.");
+    // Sent while the Mac never checked in: they wait for it.
+    expect(sentLine(2)).toBe("Sent 2 clips to your Mac.");
+    expect(sentLine(1, true)).toBe(`Sent 1 clip to your Mac. ${MAC_SENT_WAITS}`);
+    expect(MAC_SENT_WAITS).toBe("They wait until your Mac checks in.");
     expect(MAC_OFF_LINE).toBe("Off. Your Mac doesn't post your TikTok clips.");
     for (const line of [MAC_OFF_LINE, sendableLine(2)]) expect(line).not.toMatch(/yourself/i);
   });

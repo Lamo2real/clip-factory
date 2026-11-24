@@ -229,7 +229,8 @@ export function httpApi({ baseUrl, auth, fetcher = (...a) => fetch(...a) }: Deps
     checkFollowKeys: (platform) => call("POST", `/follows/keys/${id(platform)}/check`),
     getWeek: async (week, from, to) => (await call<{ week: WeekView }>("GET", `/weeks/${id(week)}${q({ from, to })}`)).week,
     saveWeekBest: async (week, body) => {
-      const out = (await call<{ week: WeekView | string }>("PUT", `/weeks/${id(week)}/best`, body)).week;
+      // keepalive: stars tapped just before the page closes are saved as it goes (WeekView saves on pagehide).
+      const out = (await call<{ week: WeekView | string }>("PUT", `/weeks/${id(week)}/best`, body, true)).week;
       // "Nothing changed" may answer with just the week id: read the week as it stands.
       if (typeof out === "string" || !out || !Array.isArray(out.clips))
         return (await call<{ week: WeekView }>("GET", `/weeks/${id(week)}${q({ from: body.from, to: body.to })}`)).week;

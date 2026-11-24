@@ -56,6 +56,66 @@ for (const width of [320, 375, 768]) {
   });
 }
 
+for (const size of [
+  { width: 390, height: 844 },
+  { width: 320, height: 640 },
+]) {
+  test(`a new owner's empty Library starts with its one next step, Go to Review, at ${size.width}px`, async ({ page }) => {
+    await page.setViewportSize(size);
+    await page.addInitScript(() => sessionStorage.setItem("cf-mock-empty", "1"));
+    await page.goto("/library");
+    await settle(page);
+    const go = page.getByRole("link", { name: "Go to Review" });
+    await expect(go).toBeInViewport();
+    // No zero totals and no filter above it.
+    await expect(page.locator(".totals")).toHaveCount(0);
+    await expect(page.getByRole("radiogroup", { name: "Show" })).toHaveCount(0);
+    await go.click();
+    await expect(page).toHaveURL(/\/review/);
+  });
+}
+
+test("the Library's filter stays after opening a clip and going Back, and after a reload", async ({ page }) => {
+  await page.goto("/library");
+  await settle(page);
+  const show = page.getByRole("radiogroup", { name: "Show" });
+  await show.getByRole("radio", { name: "Not posted yet" }).check();
+  await expect(page).toHaveURL(/\/library\?show=waiting$/);
+  const waiting = await page.locator(".lib-card").count();
+  expect(waiting).toBeGreaterThan(0);
+  await page.locator(".lib-card__link").first().click();
+  await page.waitForURL(/\/clips\/[A-Z0-9]+$/);
+  await page.getByRole("button", { name: "Back" }).click();
+  await expect(page).toHaveURL(/\/library\?show=waiting$/);
+  await settle(page);
+  await expect(show.getByRole("radio", { name: "Not posted yet" })).toBeChecked();
+  await expect(page.locator(".lib-card")).toHaveCount(waiting);
+  await page.reload();
+  await settle(page);
+  await expect(page.getByRole("radiogroup", { name: "Show" }).getByRole("radio", { name: "Not posted yet" })).toBeChecked();
+  // The All clips tab is the whole list again.
+  await page.getByRole("link", { name: "All clips" }).click();
+  await expect(page.getByRole("radiogroup", { name: "Show" }).getByRole("radio", { name: "All" })).toBeChecked();
+});
+
+test("a 'Like clips that did well' tile opens that clip, from a tap or the keyboard", async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 });
+  await page.goto("/library");
+  await settle(page);
+  // A strip loads once its card is near the screen: the cards start below the totals on a phone.
+  await page.locator(".lib-card").first().scrollIntoViewIfNeeded();
+  const tile = page.locator(".similar__item").first();
+  await tile.scrollIntoViewIfNeeded();
+  await expect(tile).toBeVisible();
+  const href = await tile.getAttribute("href");
+  expect(href).toMatch(/^\/clips\/[A-Z0-9]+$/);
+  await tile.focus();
+  await expect(tile).toBeFocused();
+  await tile.click();
+  await expect(page).toHaveURL(new RegExp(`${href}$`));
+  await page.locator("[data-stack]").nth(4).waitFor();
+});
+
 test("This week at 320px: the hook keeps its width, views stay on one line, no hanging dot (F036, F065)", async ({ page }) => {
   await page.setViewportSize({ width: 320, height: 900 });
   await page.goto("/library?view=week");

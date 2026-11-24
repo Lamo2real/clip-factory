@@ -174,8 +174,8 @@ the app itself is (no Apple certificates, §12.3).
   right after the new job is made (the process group stops, `<app data>/fetch/<jobId>/` is removed). Any other window
   with the app hears it from the job's stop (the live event, the 30 s list, or 409 on its next report) and cancels the
   same way (§35.3). No desktop release is needed.
-* Words: the old job's page shows the info callout "Replaced by your video file." with **Open the new job**. Try again
-  on it forgets `replacedBy`.
+* Words: the old job's page shows the info callout "Replaced by your video file." and its one main button is **Open the
+  new job**; Try again and Use a video file are hidden there (Try again would make the video twice).
 * Tests: `api/tests/test_mac_fetch.py` (replace while sending, again, the Mac finishing first, the flow moving the job at
   the same moment, the flow not going on, only waiting jobs, the checks, Try again); e2e `mac-fetch.spec.ts` (the button
   flow in the desktop window: the app's cancel, the replaced job).

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { PlatformSetup } from "../src/api/types.ts";
-import { computeReady, notStarted, progressOf, stateLine, stepDone } from "../src/lib/setupProgress.ts";
+import { computeReady, doneLine, notStarted, progressOf, stateLine, stepDone, stillConnectedLine } from "../src/lib/setupProgress.ts";
 import { allSteps, GUIDES } from "../src/setup/index.ts";
 
 const blank = (patch: Partial<PlatformSetup> = {}): PlatformSetup => ({
@@ -81,5 +81,21 @@ describe("setup progress (§17.1)", () => {
     expect(stateLine(yt, s)).toBe("Needs you: connect again");
     expect(notStarted(s)).toBe(false);
     expect(notStarted(blank())).toBe(true);
+  });
+
+  it("When it's done says what the platform card says: private posts, and TikTok's Mac", () => {
+    const connected = { status: "connected" as const };
+    const tiktok = blank({ platform: "tiktok", ready: true, account: { platform: "tiktok", ...connected }, gates: [{ key: "posting_audit", state: "limited" }] });
+    expect(stateLine(GUIDES.tiktok, tiktok)).toBe("Works now, posts stay private");
+    expect(doneLine("TikTok", tiktok)).toBe("Works now, posts stay private. To post for everyone, turn on Your Mac posts TikTok.");
+    expect(doneLine("TikTok", tiktok, { macOn: true })).toBe("Works now, posts stay private. Your Mac posts TikTok for everyone.");
+    const facebook = blank({ platform: "facebook", ready: true, account: { platform: "facebook", ...connected }, gates: [{ key: "app_live", state: "limited" }] });
+    expect(doneLine("Facebook", facebook)).toBe("Works now, posts stay private.");
+    const x = blank({ platform: "x", ready: true, account: { platform: "x", ...connected }, gates: [] });
+    expect(doneLine("X", x)).toBe("Ready. Clip Factory posts here by itself.");
+    expect(doneLine("X", x, { leaving: true })).toBe("Disconnecting…");
+    expect(doneLine("X", { ...x, ready: false })).toBe("Connected.");
+    expect(doneLine("X", { ...x, ready: false, account: { platform: "x", status: "needs_reconnect" } })).toBe("X logged Clip Factory out. Press Connect again.");
+    expect(stillConnectedLine("@lamo")).toBe("Still connected as @lamo. Nothing changed.");
   });
 });

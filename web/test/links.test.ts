@@ -50,6 +50,16 @@ describe("checkLink", () => {
     expect(r.state === "error" && r.message).toMatch(/Open the video or the channel and copy its link\.$/);
   });
 
+  it.each([
+    ["https://www.twitch.tv/lamo/videos", "twitch", "That's a list of videos. Open one video, then copy its link."],
+    ["https://www.twitch.tv/lamo/videos?filter=archives", "twitch", "That's a list of videos. Open one video, then copy its link."],
+    ["https://www.twitch.tv/lamo/clips", "twitch", "That's a list of clips. Open one clip, then copy its link."],
+    ["https://kick.com/lamo/videos", "kick", "That's a list of videos. Open one video, then copy its link."],
+    ["https://kick.com/lamo/clips", "kick", "That's a list of clips. Open one clip, then copy its link."],
+  ])("says how to get one video from the channel's list %s", (url, platform, message) => {
+    expect(checkLink(url)).toEqual({ state: "error", platform, message });
+  });
+
   it("explains a YouTube link that is not a video", () => {
     expect(checkLink("https://www.youtube.com/@channel")).toMatchObject({ state: "error", platform: "youtube" });
     expect(checkLink("https://youtu.be/short")).toMatchObject({ state: "error", platform: "youtube" });
