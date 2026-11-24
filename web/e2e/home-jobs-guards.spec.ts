@@ -129,13 +129,16 @@ test("Leave in the question stops the upload and goes where the owner tapped", a
   await page.goto("/");
   await settle(page);
   await pickVideo(page);
-  await slow(page, 3000);
+  // The question goes once the file is all up (the job then starts anyway), so the upload's address is held 8 s: 3 s
+  // plus the mock's sub-second upload was not always enough on CI for the sheet to open and its Leave to stand still.
+  await slow(page, 8000);
   await form(page).getByRole("button", { name: "Make clips" }).click();
   await expect(form(page)).toContainText(/Uploading… \d+%/);
   await nav(page).locator('a[href="/jobs"]').first().click();
   await page.getByRole("dialog", { name: "Leave and stop the upload?" }).getByRole("button", { name: "Leave" }).click();
   await expect(page).toHaveURL(/\/jobs$/);
-  await expect(page.locator(".toast", { hasText: "Upload stopped" })).toBeVisible();
+  // It stops once that held answer comes (at most 8 s after the tap).
+  await expect(page.locator(".toast", { hasText: "Upload stopped" })).toBeVisible({ timeout: 12_000 });
   await page.waitForTimeout(4000);
   expect(await calls(page, "createJob")).toBe(0);
   await expect(page).toHaveURL(/\/jobs$/);

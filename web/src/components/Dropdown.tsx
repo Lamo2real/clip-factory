@@ -71,9 +71,10 @@ export function Dropdown({
     if (!el || !btn) return;
     const box = btn.getBoundingClientRect();
     const height = el.getBoundingClientRect().height;
-    // The phone's tab bar of the app on screen (Clip Factory's or Clips Funded's; fixed, so read by its box: the hidden
-    // app's bar and a wide screen's have none).
-    const bar = Array.from(document.querySelectorAll<HTMLElement>(".tabbar, .st-tabbar"))
+    // The phone's tab bar of the app on screen (fixed, so read by its box: the hidden app's bar and a wide screen's have
+    // none). Each app's bottom tab bar carries data-bottom-bar, so this shared component names neither app's classes
+    // (and Clips Funded's stay out of Clip Factory's main bundle, CONTRACTS §45.17).
+    const bar = Array.from(document.querySelectorAll<HTMLElement>("[data-bottom-bar]"))
       .map((b) => b.getBoundingClientRect())
       .find((r) => r.height > 0);
     const barTop = bar ? bar.top : window.innerHeight;

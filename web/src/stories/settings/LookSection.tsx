@@ -157,7 +157,7 @@ export function LookSection() {
   // A picture dropped anywhere on the page: it becomes the background and Picture is chosen (whatever was on).
   const drop = useFileDrop({
     scope: "page",
-    checkFile: lookPictureProblem,
+    checkFile: pickedProblem,
     onFiles: ([f]) => {
       if (f) take(f);
     },
