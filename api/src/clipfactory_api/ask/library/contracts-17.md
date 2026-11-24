@@ -854,8 +854,8 @@ over the page:
   `.shell`'s top padding, so at the top of every page nothing is under it (phones: above the brand row and Live dot;
   the tab bar is at the bottom). Behind the pill is `.setup-todo-bar`, a band of the panels' liquid glass (the
   `.glass` tint and blur) over that strip (`--todo-bar-h`: 66 / 76 px; from 768 px it starts right of the sidebar)
-  with **no edges**: no border, rim, hairline, highlight line or shadow; it runs off the top of the screen under the
-  status bar, and its bottom melts into the page over `--todo-feather` (22 px, a `mask-image` fade of the tint and
+  with **no edges**: no border, rim, hairline, highlight line or shadow; it runs off the top of the screen (on a phone
+  the backdrop's cover lies over it under the status bar, §11.1), and its bottom melts into the page over `--todo-feather` (22 px, a `mask-image` fade of the tint and
   blur together; from 768 px its left side melts in over 24 px too), so no line shows where it ends. The strip
   itself (`.setup-todo-bar`, `--todo-bar-h` tall) takes the taps; its glass (`.setup-todo-bar__glass`) runs on
   below it into the fade, which takes no taps. Invisible at the

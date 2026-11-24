@@ -214,17 +214,22 @@
   --titlebar-h: 0px;
   --top-safe: max(env(safe-area-inset-top), var(--titlebar-h));
   /* The phone's own status bar (the clock, the Dynamic Island, the signal) alone: 0 everywhere else. An installed
-     iPhone app runs edge to edge (index.html: black-translucent), so the page's backdrop shows under it and only the
-     status bar's scrim and glass strip (layout.css .app::after and ::before, Clips Funded's .stories-app::after and
-     .st-frame::before) are as tall as this. */
+     iPhone app runs edge to edge (index.html: black-translucent), so the page's backdrop shows under it, and nothing
+     fixed and coloured lies across the top (§11.1). Each app draws its own backdrop once more over the page in it
+     alone (glass.css .backdrop--cover, Clips Funded's .stories-app::after), so what scrolls up to the clock fades into
+     the backdrop; app/statusBar.ts follows its height. */
   --status-bar-h: env(safe-area-inset-top);
-  /* What lies in the status bar (its scrim, its glass strip) is held under the clock and eases out over the bar's last
-     quarter, so it has no edge to see: a mask, over a fill and a blur alike. */
-  --status-bar-fade: linear-gradient(#000 75%, rgb(0 0 0 / 0.9) 80%, rgb(0 0 0 / 0.65) 85%, rgb(0 0 0 / 0.35) 90%, rgb(0 0 0 / 0.1) 95%, transparent);
-  /* Once the page has scrolled, a strip of the app's glass lies in the status bar (layout.css .app::before): what
-     slides up under the white clock is blurred and veiled green as if it were white, the lightest thing a page can put
-     there, so the clock keeps AA over any card or button, in every look (lib/background.ts statusStripVeil). */
-  --status-strip-veil: 0.66;
+  /* That cover's mask: full under the clock and the icons (the bar's top 75 %), then easing out to nothing on the top
+     line's 12 px of air below the bar, where at the top of a page nothing sits yet, so what scrolls up fades out on its
+     way under the clock and nothing has an edge there. The same ease in fifths as ever (0.9, 0.65, 0.35, 0.1). */
+  --status-cover-fade: linear-gradient(
+    #000 calc(var(--status-bar-h) * 0.75),
+    rgb(0 0 0 / 0.9) calc(var(--status-bar-h) * 0.8 + 2.4px),
+    rgb(0 0 0 / 0.65) calc(var(--status-bar-h) * 0.85 + 4.8px),
+    rgb(0 0 0 / 0.35) calc(var(--status-bar-h) * 0.9 + 7.2px),
+    rgb(0 0 0 / 0.1) calc(var(--status-bar-h) * 0.95 + 9.6px),
+    transparent calc(var(--status-bar-h) + 12px)
+  );
   --top-line: calc(var(--top-safe) + 12px);
 
   /* The older names: a panel's drop and a floating layer's drop, from the light above (ADR-87). */

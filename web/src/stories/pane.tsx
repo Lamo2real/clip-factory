@@ -211,8 +211,9 @@ interface Running {
  * Both apps, each in its pane: `on` is the one on screen. An app is mounted from the first time it is shown, and then
  * stays (unless it was hidden with a dialog open, or `fresh` names it: then it opens fresh next time). An app can also
  * be mounted a moment before it is shown (the pointer came to the switch's way there), so a slide finds it ready.
- * `alsoSlides` names what an app draws outside its pane that slides with it (Clip Factory's own backdrop: each app
- * slides with its own background, and it is drawn for the slide even while Clips Funded is on screen).
+ * `alsoSlides` names what an app draws outside its pane that slides with it (Clip Factory's own backdrop and, under a
+ * phone's status bar, its cover: each app slides with its own background, and it is drawn for the slide even while
+ * Clips Funded is on screen).
  */
 export function AppPanes({
   on,
@@ -225,7 +226,7 @@ export function AppPanes({
   clips: ReactNode;
   stories: ReactNode;
   fresh?: AppName | null;
-  alsoSlides?: Partial<Record<AppName, () => HTMLElement | null>>;
+  alsoSlides?: Partial<Record<AppName, () => HTMLElement | readonly HTMLElement[] | null>>;
 }) {
   const [shown, setShown] = useState<Record<AppName, boolean>>(() => ({ clips: on === "clips", stories: on === "stories" }));
   /** The app a slide is on its way to (mounted for it, though not on screen yet). */
@@ -424,9 +425,11 @@ export function AppPanes({
           toY = keptScroll(to, path);
           const height = root.scrollHeight;
           for (const app of [from, to]) {
-            const el = now.current.alsoSlides?.[app]?.();
-            if (!el || out.contains(el) || inn.contains(el)) continue;
-            parts.push(app === from ? { el, from: 0, to: step } : { el, from: -step, to: 0 });
+            const also = now.current.alsoSlides?.[app]?.() ?? [];
+            for (const el of Array.isArray(also) ? also : [also]) {
+              if (out.contains(el) || inn.contains(el)) continue;
+              parts.push(app === from ? { el, from: 0, to: step } : { el, from: -step, to: 0 });
+            }
           }
           play(true, true);
           // The app coming in is drawn from this frame on: what it puts on the page only once it is seen (Clips

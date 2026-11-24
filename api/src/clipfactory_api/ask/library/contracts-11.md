@@ -79,31 +79,66 @@ the traffic lights' band; nothing ever covers the traffic lights.
 * **Also on the token:** `html { scroll-padding-top }`, the skip link, the sign-in screen, the small question sheet's
   scrim, the phone Ask sheet and the setup list's glass bar all clear `--top-safe`; so do the markup editor, the
   Post to TikTok sheet and Clips Funded's sheets.
-* **Edge to edge on a phone (owner request, 2026-11-23: "remove the entire green top bar").** `index.html` asks for
-  `apple-mobile-web-app-status-bar-style: black-translucent` with `viewport-fit=cover`, so an installed iPhone app has
-  no solid band at the top: each app's own backdrop (Clip Factory's `.backdrop`, Clips Funded's `.stories-app::before`,
-  both `position: fixed; inset: 0`) shows under the clock, the Dynamic Island and the signal. Nothing of a page sits
-  there: every column still starts on `--top-line`, and nothing passes through it on the way in either: the setup
-  list's pill (`todo-in`) and, on a phone, its panel (`todo-drop`) drop into place from at most the room between
-  `--top-safe` and the line: 12 px on a phone, so the pill starts on the status bar's edge, never under the clock (a
-  computer keeps their 14 and 16 px). `--status-bar-h` (`env(safe-area-inset-top)`, in `tokens.css`) is
-  the status bar alone; only the status-bar scrim and glass strip are that tall. The scrim (`.app::after`,
-  `.stories-app::after`): black, held under the clock to 75 % and easing out over the bar's last quarter
-  (`--status-bar-fade`, a mask), exactly as strong as the white clock needs for AA over the look's top edge
-  (`statusScrim` in `lib/background.ts` and `stories/look.ts`: 0 over the living backdrop, Ember, Rose, Lagoon and
-  dark colours, so nothing is drawn; about 0.5 over Cream or a picture, planned for white). Once the page has scrolled
-  (`<html data-scrolled>`, `lib/pageScrolled.ts`) cards and buttons slide up under the clock, so a strip of each app's
-  own glass lies there (`.app::before`, Clips Funded's `.st-frame::before`): its blur and saturation and its veil
-  planned for white (`--status-strip-veil` 0.66 green, `--st-status-strip-veil` 0.59 espresso: `statusStripVeil`), so
-  the white clock keeps AA over anything, even where no backdrop-filter is drawn; it masks with the same fade and
-  comes and goes on its opacity alone (never a filter transition). At the top of a page it is not drawn. Clips Funded's
-  sticky panels (the chat list, a review's player, the character stage, an idea's basics) stop below `--top-safe`
-  too, for an installed iPad app. The body under the backdrop is the backdrop's own top edge (`#0f3d31`), and
-  `theme-color` is its average (`#13483C`): Android's installed app and browsers that tint their bars keep a coloured
-  status bar (no web page can make it see-through there), now the backdrop's own top colour. An installed iPhone app
-  picks the new style up when it is closed and opened again (at worst, removed and added to the Home Screen again).
-  Tests: `test/edgeToEdge.test.ts`, `e2e/phone-edge-to-edge.spec.ts` (also scrolled: Home, Library, Clips Funded's
-  Dashboard and Ideas keep the clock's and icons' zones at AA at every scroll stop).
+* **Edge to edge on a phone (owner requests, 2026-11-23: "remove the entire green top bar"; 2026-11-24: "remove the
+  top green top fixed color at the top, it just takes space and is unncessary").** Nothing fixed and coloured lies
+  across the top, in either app, at the top of a page or scrolled: the page and its backdrop run right up under the
+  clock. `index.html` asks for `apple-mobile-web-app-status-bar-style: black-translucent` with `viewport-fit=cover`, so
+  an installed iPhone app has no solid band at the top: each app's own backdrop (Clip Factory's `.backdrop`, Clips
+  Funded's `.stories-app::before`, both `position: fixed; inset: 0`) shows under the clock, the Dynamic Island and the
+  signal. (The owner's 24 Nov screenshot, 22:30 on 23 Nov, is from before this: its band is one flat `#0F372B` with a
+  hard edge, which iOS itself filled from `theme-color` under the old `black` style, with the page laid out below it.)
+  Nothing of a page sits there at the top of a page: every column starts on `--top-line`, and nothing passes through
+  it on the way in either: the setup list's pill (`todo-in`) and, on a phone, its panel (`todo-drop`) drop into place
+  from at most the room between `--top-safe` and the line: 12 px on a phone, so the pill starts on the status bar's
+  edge, never under the clock (a computer keeps their 14 and 16 px). `--status-bar-h` (`env(safe-area-inset-top)`, in
+  `tokens.css`) is the status bar alone; `web/src/app/statusBar.ts` (the application shell's, for both apps) follows
+  its height with an unseen probe and puts `<html data-status-bar>` on while there is one (0 on a computer, in Safari
+  and on a phone turned on its side).
+  * **What scrolls up fades into the backdrop.** While there is a status bar each app draws its own backdrop once more,
+    over the page, in the status bar alone: Clip Factory's `.backdrop.backdrop--cover` (`components/Backdrop.tsx` draws
+    it after the backdrop, the same elements in the same frame, so their drift is one; a cover drawn later, a phone
+    turned upright, takes up the backdrop's drift where it is, `driftTogether`; it slides with Clip Factory's pane,
+    `ALSO_SLIDES`) at `z-index: 42`, over every page bar (the setup list's strip 39, the tab bar 40, Money's dock 41, an
+    open dropdown) and under the setup list, menus, sheets, scrims and toasts (44 and up), and Clips Funded's
+    `[data-status-bar] .stories-app::after`, its stage's very layers, at 50 (over its top bar and tab bar, under its
+    sheets at 60). Both are the backdrop's own box (`inset: 0`, so they line up to the pixel), clear of every tap, with
+    no colour, filter, opacity or motion of their own, masked by `--status-cover-fade`: full under the clock and the
+    icons (the bar's top 75 %), easing out in fifths (0.9, 0.65, 0.35, 0.1) to nothing on the top line, 12 px below the
+    bar, where nothing sits at the top of a page. So a card or a button that scrolls up fades into the backdrop on its
+    way, and under the clock there is only the backdrop, never a card and never a strip. No scroll listener, no fade in
+    or out (calm motion has nothing to calm). The scrolled glass strip (`.app::before`, `.st-frame::before`,
+    `<html data-scrolled>`, `lib/pageScrolled.ts`) and the scrim (`.app::after`, `.signin::after`,
+    `.stories-app::after`'s old black) are gone. The content is not masked itself: a mask on the page would make it the
+    root every pane's `backdrop-filter` sees through (the glass would stop blurring the backdrop), and both apps scroll
+    the window, so it would have to move with every scroll.
+  * **The white clock keeps AA over the backdrop.** Where a look's top edge is too light for it, the backdrop itself is
+    shaded under the clock, as little as AA needs (`statusScrim` in `lib/background.ts` and `stories/look.ts`, worked
+    over `statusBarUnder`): `--status-shade` / `--st-status-shade`, built by the shell's `statusShade` (held at full
+    strength to 75 % of the bar, then easing out, smoothstep in eighths, to nothing a bar's height below the bar), so it
+    has no edge and no colour of its own. Clip Factory draws it as `.backdrop__shade` (the last layer of its backdrop
+    and of the cover, `z-index: 1`, twice the bar tall), Clips Funded as its stage's top background layer. It is `none`
+    (nothing is drawn) over the living backdrop, Ember, Rose, Lagoon and dark colours, and over Clips Funded's light
+    colours too (their page veil already holds the clock); about 0.5 over Cream. Over the owner's own picture it is read
+    from the picture's own pixels where it lies under the clock (`usePictureTop`: the strip `background-size: cover`
+    puts there, Clip Factory's with its 2 % bleed, its lightest pixel), so a dark-topped picture gets none at all; until
+    the picture is read it is planned for white.
+  * **Safari** (not the Home Screen app) draws its own bar above the page: no page can show its backdrop there, so the
+    page draws no cover (no status bar inset), and Safari tints its bar from `theme-color`, the backdrop's own colour:
+    `#13483C` (Clip Factory's top edge, close to its average; the manifest's `theme_color` too, which Android's
+    installed app gives its status bar) and Clips Funded's stage colour `#1C130E` while it is on screen. `theme-color`
+    stays because under `black-translucent` iOS fills nothing in the installed app: it only filled the bar (the old
+    band) under `black` or `default`. The body under the backdrop is the backdrop's own top edge (`#0f3d31`). An
+    installed iPhone app picks a new status-bar style up when it is closed and opened again (at worst, removed and added
+    to the Home Screen again).
+  * Clips Funded's sticky panels (the chat list, a review's player, the character stage, an idea's basics) stop below
+    `--top-safe` too, for an installed iPad app.
+  * Tests: `test/edgeToEdge.test.ts`; `e2e/phone-edge-to-edge.spec.ts` (Chromium and WebKit; 390 x 844 with a 59 px
+    status bar and 375 x 812 with a 47 px one): at the top of Home, Settings and Clips Funded's Dashboard and at every
+    scroll stop of Home, Library, the Content Rewards help (the owner's screenshot, every fold open) and Clips Funded's
+    Dashboard and Ideas, every pixel under the clock and the icons is the backdrop as it is drawn alone and holds white
+    at AA; a cream bar fixed across the top of a page is masked under the clock and shows from the top line down; in
+    Safari no cover is drawn and the page runs to the top of its window; Cream's shade eases with no edge; a picture
+    with a dark top gets no shade and one with a white top gets what AA needs.
 * **Tests:** `e2e/top-line.spec.ts` (Chromium and WebKit): the simulated macOS window at 1000 x 650, 1200 x 820 (the
   pill) and 1440 x 900 on `/`, `/jobs`, `/review`, `/library`, `/settings` and a settings branch puts every column
   within 1 px of the line (42 px), keeps the 80 x 28 traffic-light corner clear and checks the 28 px drag strip; a tab

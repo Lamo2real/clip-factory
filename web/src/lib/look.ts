@@ -1,9 +1,10 @@
 // Puts the background choice (§22) on the page: which backdrop to draw, and the <html> class and veil strength the
 // CSS reads. Runs once before the first paint (main.tsx) and again whenever the choice or the system scheme changes.
 import { useSyncExternalStore } from "react";
-import { cantSelfUpdate, glassOf, isOldDesktopApp, lightPay, readDesktopVersion, readNativeGlass, resolveLook, statusBarUnder, statusScrim, type Look, type NativeGlass, type Scheme } from "./background.ts";
+import { cantSelfUpdate, glassOf, isOldDesktopApp, lightPay, readDesktopVersion, readNativeGlass, resolveLook, statusBarUnder, statusScrim, type Look, type NativeGlass, type Rgb, type Scheme } from "./background.ts";
 import { getPrefs, usePrefs, type Prefs } from "./prefs.ts";
 import { setPageGlass } from "../app/shell.ts";
+import { statusShade } from "../app/statusBar.ts";
 
 /** The desktop wrapper sets these before the page loads (desktop/src-tauri/src/init.js). */
 type DesktopWindow = Window & {
@@ -83,7 +84,7 @@ export function useLook(): Look {
  * brighter). All are worked out here at read time from what is saved, which is never rewritten. Reduced transparency
  * overrides the veils and the pay in glass.css (!important).
  */
-export function applyLook(look: Look, root: HTMLElement = document.documentElement) {
+export function applyLook(look: Look, root: HTMLElement = document.documentElement, pictureTop: Rgb | null = null) {
   // (the class is the shell's: it is Clip Factory's wish, on the page whenever Clip Factory is, app/shell.ts)
   setPageGlass("clips", look.kind === "window", root);
   root.dataset.backdrop = look.kind;
@@ -99,8 +100,11 @@ export function applyLook(look: Look, root: HTMLElement = document.documentEleme
   root.style.setProperty("--plate-veil", String(glass.plateVeil));
   root.style.setProperty("--glass-brightness", String(glass.brightness));
   root.style.setProperty("--light-pay", String(lightPay({ ...look, ...glass })));
-  // The phone's status bar runs over the backdrop: its scrim, only as strong as the white clock needs (layout.css).
-  root.style.setProperty("--status-scrim", String(statusScrim(statusBarUnder(look))));
+  // The phone's status bar runs over the backdrop: its shade under the clock, only as strong as the white clock needs
+  // over the look's top edge (a picture's own pixels there once they are read), and none over the dark looks.
+  const scrim = statusScrim(statusBarUnder(look, pictureTop));
+  root.style.setProperty("--status-scrim", String(scrim));
+  root.style.setProperty("--status-shade", statusShade(scrim));
 }
 
 /**

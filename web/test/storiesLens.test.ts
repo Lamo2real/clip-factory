@@ -24,9 +24,10 @@ describe("the stage", () => {
     });
     const model = STAGE_LIGHTS.map((l) => ({ tone: l.tone, alpha: l.alpha, rx: l.rx, ux: l.ux ?? "vmax", ry: l.ry, uy: l.uy ?? "vmax", x: l.x, y: l.y, stop: l.stop ?? 0.7 }));
     expect(drawn).toEqual(model);
-    // and it paints the first colour under them, the page veil over them
+    // and it paints the first colour under them, the page veil over them, and over all of it only the shade under a
+    // phone's clock (none over Ember: test/edgeToEdge.test.ts)
     expect(rule).toMatch(/var\(--st-stage-c1\);?\s*$/);
-    expect(rule).toMatch(/background:\s*linear-gradient\(rgb\(var\(--st-veil-rgb\) \/ var\(--st-veil-page\)\)/);
+    expect(rule).toMatch(/background:\s*var\(--st-status-shade, none\) 0 0 \/ 100% calc\(var\(--status-bar-h, 0px\) \* 2\) no-repeat,\s*linear-gradient\(rgb\(var\(--st-veil-rgb\) \/ var\(--st-veil-page\)\)/);
   });
 
   it("Ember's colours are the tokens' (the default the page shows before look.ts runs)", () => {

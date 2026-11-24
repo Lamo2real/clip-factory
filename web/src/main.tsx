@@ -30,7 +30,7 @@ import { initPwa } from "./lib/pwa.ts";
 import { startUpdateChecks } from "./lib/update.ts";
 import { applyLookNow } from "./lib/look.ts";
 import { installInputModality } from "./lib/inputModality.ts";
-import { installPageScrolled } from "./lib/pageScrolled.ts";
+import { installStatusBar } from "./app/statusBar.ts";
 import { installDropGuard } from "./lib/dropGuard.ts";
 
 // Refraction inside backdrop-filter only works in Chromium; elsewhere the glass falls back to blur and saturation.
@@ -41,8 +41,9 @@ if (brands?.some((b) => b.brand === "Chromium")) document.documentElement.classL
 applyLookNow();
 
 installInputModality();
-// The phone's status bar: a glass strip under the clock once the page has scrolled (layout.css .app::before).
-installPageScrolled();
+// The phone's status bar: how tall it is, so each app draws its own backdrop under the clock, over the page, from its
+// very first frame (app/statusBar.ts).
+installStatusBar();
 // A file or a link dropped where no drop zone took it never replaces the app or opens a page (§12.5, §45.40).
 installDropGuard();
 installClickSounds(sounds);

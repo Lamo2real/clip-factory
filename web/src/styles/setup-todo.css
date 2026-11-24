@@ -65,10 +65,12 @@ html:has(.setup-todo[data-mode="pill"]) {
 /* The glass bar behind the pill: the same tint and blur as every panel (`.glass`), as one smooth band of liquid glass.
    `.setup-todo-bar` is the strip itself (the pill and a little air under it), which takes the taps once the page has
    scrolled; its glass (`.setup-todo-bar__glass`) runs on --todo-feather further down and melts into the page there.
-   No rim, no hairline, no highlight lines and no shadow: it runs off the top of the screen (under the status bar) and
-   its bottom fades out (a mask over the tint and the blur together), so it has no edge to see, and the fade takes no
-   taps. Clear at the top of the page (nothing is under it), there once the page scrolls, so the page passes under
-   glass and the pill stays put. Under the sidebar, over the page. */
+   No rim, no hairline, no highlight lines and no shadow: it runs off the top of the screen and its bottom fades out (a
+   mask over the tint and the blur together), so it has no edge to see, and the fade takes no taps. On a phone the
+   backdrop's cover lies over its top under the status bar (glass.css .backdrop--cover: z-index 42, over this 39), so
+   under the clock there is the backdrop, never this glass, and it fades in over the top line's air (§11.1). Clear at
+   the top of the page (nothing is under it), there once the page scrolls, so the page passes under glass and the pill
+   stays put. Under the sidebar, over the page. */
 .setup-todo-bar {
   position: fixed;
   z-index: 39;

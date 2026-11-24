@@ -264,8 +264,11 @@ const clipsCalm = () => getPrefs().reduceMotion;
 const clipsOnScreen = () => !storiesOnScreen();
 const clipsDenied = () => sounds.play("deny");
 
-/** Clip Factory's own backdrop (ClipsBackdrop, drawn outside both panes) slides with Clip Factory's pane. */
-const ALSO_SLIDES = { clips: () => document.querySelector<HTMLElement>(".backdrop") };
+/**
+ * Clip Factory's own backdrop (ClipsBackdrop, drawn outside both panes) slides with Clip Factory's pane, and so does its
+ * cover under a phone's status bar (components/Backdrop.tsx), the same backdrop over the page.
+ */
+const ALSO_SLIDES = { clips: () => [...document.querySelectorAll<HTMLElement>(".backdrop")] };
 
 /** A stored path's address parts: "/jobs?x=1#y" is ["/jobs", "?x=1"]. */
 function pathParts(path: string): [string, string] {
