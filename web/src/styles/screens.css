@@ -2592,23 +2592,13 @@ html:where(.see-through, [data-backdrop]) .btn.post__again {
   width: auto;
   min-height: 44px;
   gap: 8px;
-  padding: 8px 10px;
-  background: transparent;
-  box-shadow: none;
-  border-radius: var(--r-md);
-}
-.dropdown--sort .dropdown__button:where(:not(.is-picked)):hover,
-.dropdown--sort .dropdown__button:where(:not(.is-picked)):active {
-  background: rgb(var(--bone-rgb) / 0.07);
-  box-shadow: none;
+  padding: 8px 16px;
+  /* The track of the filter bar next to it (glass.css gives it the same groove in every state). */
+  border-radius: var(--r-pill);
 }
 .dropdown--sort .dropdown__button.is-picked {
-  background: transparent;
-  box-shadow: none;
   color: inherit;
-}
-.dropdown--sort .dropdown__button:focus-visible {
-  box-shadow: var(--focus);
+  text-shadow: none;
 }
 .dropdown--sort .dropdown__cap {
   font-size: var(--fs-small);
@@ -2622,8 +2612,8 @@ html:where(.see-through, [data-backdrop]) .btn.post__again {
 .dropdown--sort .dropdown__button::after {
   content: "";
   position: absolute;
-  inset-inline: 10px;
-  bottom: 6px;
+  inset-inline: 16px;
+  bottom: 7px;
   height: 1px;
   background: currentColor;
   opacity: 0.5;
