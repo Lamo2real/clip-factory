@@ -4,7 +4,8 @@
 // inside the shape budget, the hair stays close under the camera's headroom, every hand shape has its mitt, a look saved
 // before this change draws, and classic never changes.
 import { describe, expect, it } from "vitest";
-import { LIGHTS, lit as tone, ND } from "../src/stories/engine/art.ts";
+import { grade, LIGHTS, lit as tone, ND } from "../src/stories/engine/art.ts";
+import { mix } from "../src/stories/engine/math.ts";
 import { FACES } from "../src/stories/engine/face.ts";
 import { F, inFrame } from "../src/stories/engine/frame.ts";
 import { restPose, STYLES } from "../src/stories/engine/motion.ts";
@@ -221,14 +222,21 @@ describe("the chunky people", () => {
     expect(seen.size).toBe(4);
   });
 
-  it("every face and eye shape reads: the eyes are one white shape, one iris shape and one sparkle shape", () => {
+  it("every eye shape draws the classic dot eyes: two dots tinted with the picked colour, no white and no sparkle", () => {
     for (const shape of ["round", "oval", "sleepy"] as const) {
       const l = look({ eyes: { shape, color: "#47d6a0" } });
-      const a = inFrame({ width: 1080, height: 1920, art: "night_drive" }, () => {
+      const a = draw(l, undefined, "neutral");
+      const dot = inFrame({ width: 1080, height: 1920, art: "night_drive" }, () => {
         F.light = LIGHTS.studio;
-        return draw(l, undefined, "happy");
+        return mix(ND.eye, grade("#47d6a0"), 0.55);
       });
-      expect(a.filter((p) => p.k === "poly" && p.color === "#47d6a0"), shape).toHaveLength(1);
+      // (a sleepy eye rests under its lid: the dot is clipped, so a polygon, as in the old look)
+      const dots = a.filter((p) => (shape === "sleepy" ? p.k === "poly" : p.k === "ellipse") && "color" in p && p.color === dot);
+      expect(dots, shape).toHaveLength(2);
+      // small: under 3 units wide and 4 tall at 5 design px a unit
+      for (const d of dots) if (d.k === "ellipse") expect(d.rx < 3 * 5 && d.ry < 4 * 5).toBe(true);
+      // (the hair keeps its gloss streak; only the eyes lose their white and sparkle)
+      expect(a.some((p) => "color" in p && p.color === ND.eyeWhite)).toBe(false);
     }
   });
 

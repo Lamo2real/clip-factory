@@ -1,5 +1,5 @@
 {
- "version": "06a114d43c2a",
+ "version": "331a172f6562",
  "parts": [
   {
    "id": "app-map",
@@ -297,7 +297,7 @@
    "id": "contracts-45",
    "title": "CONTRACTS: 45. Clips Funded: a second, separate workspace (owner request, 2026-11-21)",
    "line": "Planned: not in the app until the switch pull request turns it on (§45.21). Until then nothing of Clips Funded",
-   "chars": 549404
+   "chars": 549400
   },
   {
    "id": "contracts-46",
@@ -903,7 +903,7 @@
    "id": "adr-99",
    "title": "DECISIONS: ADR-99 Night drive's people are chunky",
    "line": "Context. More shape for the owner's character, still cartoon (CONTRACTS §45.49). Poses, the camera and every",
-   "chars": 1077
+   "chars": 1137
   },
   {
    "id": "architecture-overview",

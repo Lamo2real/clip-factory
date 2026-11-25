@@ -1,9 +1,9 @@
 // Lamo Stories engine: faces. Every Expression is a set of eye, brow and mouth choices plus a few extras (sweat drops,
 // dizzy stars, an angry mark), so a face reads clearly on a phone. Blinks are seeded per character.
 
-import { cel, grade, inkPx, lift, lineUnits, lit, ND, nightDrive } from "./art.ts";
+import { cel, grade, inkPx, lineUnits, ND, nightDrive } from "./art.ts";
 import { F } from "./frame.ts";
-import { DEG, clamp, hex, luminance, mix, rand, shade } from "./math.ts";
+import { DEG, clamp, hex, mix, rand, shade } from "./math.ts";
 import type { Pen } from "./pen.ts";
 import { arcPts, capsulePts, clipConvex, dropPts, ellipsePts, joinShapes, quadPts, ribbonPts, starPts } from "./pen.ts";
 import type { CharacterLook, Expression, NoiseId } from "./types.ts";
@@ -332,11 +332,10 @@ function drawExtra(pen: Pen, x: Extra, rx: number, ry: number, t: number, seed: 
   }
 }
 
-// ---- night drive (CONTRACTS §45.45 §5), the chunky look: big glossy eyes (a warm white, an iris in the picked
-// colour, a dark pupil and two sparkles under a thick lid line), short thick blocks for brows, a tiny nose, round
+// ---- night drive (CONTRACTS §45.45 §5), the chunky look with the classic dot eyes (small plain dark dots, no white
+// and no sparkle; §45.49), short thick blocks for brows, a tiny nose, round
 // cheeks and a big friendly mouth. The FACES data, blinks, the hum and the noise mouths are the same as classic's;
-// only the drawing changes. Shapes that share a colour are one polygon (pen.ts joinShapes): both whites, both irises,
-// both lids and pupils, all four sparkles, both brows, both cheeks; so a face is 8 to 14 prims.
+// only the drawing changes. Shapes that share a colour are one polygon (pen.ts joinShapes): both brows, both cheeks.
 
 /** Where a night face's parts sit in the head frame: the face's middle `fx` (it slides with the turn), the eye line
  * `ey` (it drops with a nod), how far a turned-away eye is squeezed (`far`, 0..1) and each eye's x (`s` -1 the back
@@ -390,92 +389,63 @@ function drawFaceNight(pen: Pen, rx: number, ry: number, look: CharacterLook, fa
   }
   if (face.red > 0.02) pen.ellipse(fx, ey + 3.5, rx * 0.8, ry * 0.36, 0, ND.flush, 0.16 * face.red);
 
-  // eyes: the white, the iris in the picked colour, the pupil and the lid line (one dark shape), the sparkles
-  const [bw, bh] = eyeSize(look.eyes.shape);
-  const closedBy = face.eyes === "normal" || face.eyes === "lidded" ? blink(seed, t) : 0;
-  // a sleepy eye's lid rests on the top third of the eye, no more (a friendly drowsy look, never a grumpy one); only
-  // the proud face lowers a lid further, and even that one leaves a clear slice of eye
-  const sleepyLid = look.eyes.shape === "sleepy" ? clamp(0.22 - (face.open - 1) * 1, 0, 0.25) : 0;
-  const proudLid = face.eyes === "lidded" ? face.lid * 0.62 : 0;
-  const lid = Math.max(proudLid, sleepyLid);
-  // a sleepy lid is a soft arc that droops at its outer end; a proud one is nearly straight
-  const soft = sleepyLid >= proudLid;
-  const sag = soft ? 1.1 : 0.3;
-  const droop = soft ? 0.45 : 0;
+  // eyes: the classic simple dot eyes (the owner asked for the old character's eyes, 2026-11-25): small plain dark dots,
+  // no white and no sparkle, tinted with the picked eye colour (55 % of it in the place's light, so a dark pick stays
+  // a near-black dot and a bright one shows). From 6 design px per unit a dark pupil sits in the dot. Same size and
+  // spacing as the old night look; the face around them (brows, nose, mouth, cheeks, glasses) is the chunky one's.
+  const [, bh] = eyeSize(look.eyes.shape);
   const open = clamp(face.open, 0.6, 1.4);
-  const whites: number[][] = [];
-  const irises: number[][] = [];
-  const darks: number[][] = [];
-  const sparks: number[][] = [];
-  const spirals: number[][] = [];
+  const eyeC = mix(ND.eye, grade(hex(look.eyes.color, "#1c1842")), 0.55);
+  const shape = look.eyes.shape;
+  const [sw, sh] = shape === "oval" ? [0.88, 1.18] : [1, 1];
+  const closedBy = face.eyes === "normal" || face.eyes === "lidded" ? blink(seed, t) : 0;
+  const sleepyLid = shape === "sleepy" ? clamp(0.42 - (face.open - 1) * 1.2, 0, 0.5) : 0;
+  const lid = Math.max(face.eyes === "lidded" ? face.lid : 0, sleepyLid);
+  const dot = (0.85 + 0.15 * face.open) * Math.sqrt(Math.max(0.05, face.pupil));
+  const arcW = 0.9;
   for (const s of [-1, 1]) {
-    const ex = eyeX(s);
-    const ew = bw * (1 - 0.2 * far(s)) * (1 + 0.1 * (open - 1));
-    const eh = bh * Math.pow(open, 0.9);
+    const far = s * turn < 0 ? Math.abs(turn) : 0;
+    const ex = fx + s * rx * 0.44 * (1 - 0.22 * far);
+    const erx = 1.25 * sw * dot * (1 - 0.15 * far);
+    const ery = 1.55 * sh * dot;
     if (face.eyes === "happy") {
-      // a happy eye: a thick arch, thinner at its ends
-      darks.push(ribbonPts(arcPts(ex, ey + eh * 0.5, ew * 1.16, eh * 0.86, 204, 336, 6 * fk), taper(6 * fk + 1, 1.75), 2));
+      pen.line(arcPts(ex, ey + 1.3, 2.3, 2, 200, 340, 6), arcW, eyeC);
       continue;
     }
-    if (face.eyes === "closed" || closedBy > 0.6) {
-      // a closed eye (resting, or the middle of a blink): the lid's line, curving down
-      darks.push(ribbonPts(arcPts(ex, ey - eh * 0.12, ew * 1.12, eh * 0.6, 22, 158, 6 * fk), taper(6 * fk + 1, 1.85), 2));
+    if (face.eyes === "closed") {
+      pen.line(arcPts(ex, ey - 1, 2.1, 1.6, 20, 160, 6), arcW, eyeC);
       continue;
     }
-    const h = eh * (1 - 0.85 * closedBy);
-    const white = ellipsePts(ex, ey, ew, h, 12 * fk);
     if (face.eyes === "spiral") {
-      whites.push(white);
       const pts: number[] = [];
       const spin = t * 400 * s;
-      for (let i = 0; i <= 16; i += 1) {
-        const a = (spin + i * 42) * DEG;
-        const r = 0.25 + (i / 16) * Math.min(ew, h) * 0.8;
+      for (let i = 0; i <= 14; i += 1) {
+        const a = (spin + i * 44) * DEG;
+        const r = 0.3 + (i / 14) * 2.1;
         pts.push(ex + Math.cos(a) * r, ey + Math.sin(a) * r);
       }
-      spirals.push(pts);
+      pen.line(pts, 0.55, eyeC);
       continue;
     }
-    // a lowered lid (proud, sleepy eyes) hides everything of the eye above its edge
-    const edge = lid > 0.02 ? ey - h + 2 * h * Math.min(0.85, lid) : ey - h * 2;
-    const lidY = (tt: number): number => edge + sag * (tt * tt - 0.3) + droop * s * tt;
-    const below: number[] = [];
-    for (let i = -4; i <= 4; i += 1) below.push(ex + (i / 4) * 1.5 * ew, lidY((i / 4) * 1.5));
-    below.push(ex + 1.5 * ew, ey + 30, ex - 1.5 * ew, ey + 30);
-    const shown = (pts: number[]): number[] => (lid > 0.02 ? clipConvex(pts, below) : pts);
-    whites.push(shown(white));
-    // (a frightened eye's iris is clearly smaller in its white)
-    const ir = ew * (0.2 + 0.6 * clamp(face.pupil, 0.3, 1)) * (look.eyes.shape === "sleepy" ? 1.1 : 1);
-    const iry = Math.min(ir * 1.16, h * 0.97);
-    const ix = ex + lookX * ew * 0.4;
-    // under a lowered lid the iris sits low enough that most of it shows
-    const iy = Math.max(ey + h * 0.05 + lookY * h * 0.3, lid > 0.02 ? edge + iry * 0.3 : -1e9);
-    irises.push(shown(clipConvex(ellipsePts(ix, iy, ir, iry, 10 * fk), white)));
-    darks.push(shown(clipConvex(ellipsePts(ix + lookX * ir * 0.1, iy + lookY * ir * 0.08, ir * 0.52, iry * 0.52, 8 * fk), white)));
-    if (lid > 0.02) {
-      // the lid's edge: a thick line across the eye, a little past it each side
-      const tw = Math.sqrt(Math.max(0.05, 1 - ((edge - ey) / h) ** 2)) + 0.7 / ew;
-      const c: number[] = [];
-      for (let i = -3; i <= 3; i += 1) c.push(ex + (i / 3) * tw * ew, lidY((i / 3) * tw));
-      darks.push(ribbonPts(c, soft ? 0.7 : 1.15, 2));
-    } else {
-      // the upper lid: a dark crescent along the top of the white, thickest in the middle
-      const out = arcPts(ex, ey - 0.05, ew + 0.3, h + 0.75, 198, 342, 6 * fk);
-      const back = arcPts(ex, ey, ew, h, 342, 198, 6 * fk);
-      darks.push([...out, ...back]);
+    const x = ex + lookX * rx * 0.06;
+    const y = ey + lookY * ry * 0.05;
+    if (closedBy > 0.55) {
+      // a blink squashes the dot to a short line
+      pen.line([x - erx * 1.2, y + 0.3, x + erx * 1.2, y + 0.3], 0.75, eyeC);
+      continue;
     }
-    const sr = Math.max(0.62, ir * 0.36);
-    sparks.push(shown(ellipsePts(ix - ir * 0.4, iy - iry * 0.42, sr, sr, 8 * fk)));
-    // the small second sparkle only shows from a bust's size up
-    if (u >= 6 && ir > 1.5) sparks.push(shown(ellipsePts(ix + ir * 0.42, iy + iry * 0.46, ir * 0.18, ir * 0.18, 6)));
+    const h = ery * (1 - closedBy * 0.8);
+    if (lid > 0.02) {
+      // half-lidded: the dot under a flat lid line
+      const edge = y - h + 2 * h * Math.min(0.85, lid);
+      const eye = arcPts(x, y, erx, h, 0, 360, 14).slice(0, -2);
+      pen.poly(clipConvex(eye, [x - 9, edge, x + 9, edge, x + 9, y + 9, x - 9, y + 9]), eyeC);
+      pen.line([x - erx * 1.55, edge, x + erx * 1.55, edge], 0.6, eyeC);
+      continue;
+    }
+    pen.ellipse(x, y, erx, h, 0, eyeC);
+    if (u >= 6) pen.ellipse(x + lookX * erx * 0.12, y + h * 0.06, erx * 0.52, h * 0.52, 0, ND.eye);
   }
-  pen.poly(joinShapes(whites), lit(ND.eyeWhite, 0.5));
-  // a very dark eye colour is lifted a step, so a ring of colour shows round the pupil
-  const irisC = grade(hex(look.eyes.color, "#1c1842"));
-  pen.poly(joinShapes(irises), luminance(irisC) < 0.1 ? lift(irisC, 0.09) : irisC);
-  for (const sp of spirals) pen.line(sp, 0.8, ND.eye);
-  pen.poly(joinShapes(darks), ND.eye);
-  pen.poly(joinShapes(sparks), ND.glint);
 
   // brows: short thick rounded blocks; their tilt and height carry the feeling
   const hairBase = look.hair.style === "none" ? cel(skin, 0.55) : grade(hex(look.hair.color, "#3b2a1a"));
@@ -516,13 +486,6 @@ function drawFaceNight(pen: Pen, rx: number, ry: number, look: CharacterLook, fa
 
   // extras, in night colours
   for (const x of face.extras) extraNight(pen, x, rx, ry, t, seed, fx, ey);
-}
-
-/** A stroke's widths along `n` points: `w` in the middle, a third of it at both ends. */
-function taper(n: number, w: number): number[] {
-  const out: number[] = [];
-  for (let i = 0; i < n; i += 1) out.push(w * (0.34 + 0.66 * Math.max(0, Math.sin((Math.PI * i) / (n - 1))) ** 0.7));
-  return out;
 }
 
 /** An open mouth: a half moon (its top edge sagging by `sag`, its round bottom `bottom` deep) in the dark red inside

@@ -325,7 +325,7 @@ describe("a plain car draws as before", () => {
     expect(honk.out.length).toBe(quiet.out.length + 3);
   });
 
-  it("the engine is version 8", () => {
-    expect(ENGINE_VERSION).toBe(8);
+  it("the engine is version 9", () => {
+    expect(ENGINE_VERSION).toBe(9);
   });
 });
