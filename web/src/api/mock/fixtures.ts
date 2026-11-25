@@ -232,6 +232,21 @@ export function seed(): Store {
       notes: "#gtarp",
       clipCount: 7,
       model: "fable-5-1",
+      // What its AI cost (§51). The kick job below is "from before", so it has none.
+      aiCost: {
+        v: 1,
+        models: [
+          { key: "fable-5-1", label: "Claude Fable 5.1", calls: 38, inputTokens: 1_284_311, outputTokens: 96_204, cacheReadTokens: 2_140_000, cacheWriteTokens: 150_000, tokens: 3_670_515, dollars: 11.42, estimated: false },
+          { key: "nova-2-lite", label: "Amazon Nova 2 Lite", calls: 56, inputTokens: 1_902_117, outputTokens: 41_880, cacheReadTokens: 0, cacheWriteTokens: 0, tokens: 1_943_997, dollars: 0.64, estimated: false },
+          { key: "embedding", label: "Amazon Titan Text Embeddings V2", calls: 9, inputTokens: 3_104, outputTokens: 0, cacheReadTokens: 0, cacheWriteTokens: 0, tokens: 3_104, dollars: 0.0001, estimated: false },
+        ],
+        transcribe: { seconds: 16_800, minutes: 280, dollars: 1.68, estimated: false },
+        totalTokens: 5_617_616,
+        totalCalls: 103,
+        totalDollars: 13.74,
+        estimated: false,
+        pricesChecked: "2026-11-25",
+      },
     },
     26 * HOUR,
     STEP_KEYS.length,

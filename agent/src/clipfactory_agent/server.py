@@ -28,6 +28,7 @@ from starlette.requests import Request
 from starlette.responses import JSONResponse
 from starlette.routing import Route
 
+from . import usage as usage_mod
 from .callback import DurableCallback
 from .callback import report as report_outcome
 from .heartbeat import Liveness, keep_ticking
@@ -207,6 +208,14 @@ def make_run(
             liveness = Liveness()
             ticker = asyncio.create_task(keep_ticking(liveness), name=f"tick-{job_id}")
             tracker = make_tracker(store, user_id, job_id, session_id=session_id, resume=job)
+            # What this job's AI costs (§51): every model answer, Transcribe's minutes and the embeddings of this run
+            # (and of earlier runs of the same job, from the saved ``aiCost``) land in one meter.
+            meter = usage_mod.Meter(
+                usage_mod.Prices.load(Path(os.environ.get("CF_CONFIG_DIR", "/app/config"))),
+                (job or {}).get("aiCost"),
+            )
+            usage_mod.bind(meter)
+            tracker.cost = meter.summary
             if cb:
                 cb.start_heartbeat(liveness)
             try:

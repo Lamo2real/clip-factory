@@ -18,6 +18,7 @@ from typing import Any, Final
 from . import chat as chat_mod
 from . import loudness, transcript
 from . import signals as signals_mod
+from . import usage as usage_mod
 from .bedrock import Bedrock, ModelError
 from .campaign import Campaign
 from .learnings import Learnings, with_prior
@@ -423,6 +424,8 @@ async def find_with_sdk(
 
     try:
         async for msg in query(prompt=prompt(), options=options):
+            if isinstance(msg, ResultMessage):
+                usage_mod.record_sdk_result(msg, model_id)  # what the run cost, whether or not it succeeded
             if isinstance(msg, ResultMessage) and (msg.subtype != "success" or getattr(msg, "is_error", False)):
                 raise ModelError(f"agent run ended with {msg.subtype}: {str(msg.result or '')[:300]}")
     except Exception as e:

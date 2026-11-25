@@ -14,6 +14,7 @@ from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import Any
 
+from . import usage as usage_mod
 from .retry import retry
 from .util import log
 
@@ -204,7 +205,9 @@ class Vectors:
             accept="application/json",
         )
         raw = r["body"].read() if hasattr(r["body"], "read") else r["body"]
-        embedding = json.loads(raw).get("embedding")
+        body_json = json.loads(raw)
+        usage_mod.record(usage_mod.EMBEDDING, input=body_json.get("inputTextTokenCount") or 0)
+        embedding = body_json.get("embedding")
         if not isinstance(embedding, list) or len(embedding) != DIMENSIONS:
             raise ValueError("Titan returned no embedding of the expected size.")
         return [float(x) for x in embedding]

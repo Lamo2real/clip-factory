@@ -81,6 +81,35 @@ export interface ClipTarget {
   max: number;
 }
 
+/** One model's share of a job's AI cost (CONTRACTS §51). Tokens are exact; `dollars` is absent when the price is not confirmed. */
+export interface AiCostModel {
+  key: string;
+  label: string;
+  calls: number;
+  inputTokens: number;
+  outputTokens: number;
+  cacheReadTokens: number;
+  cacheWriteTokens: number;
+  tokens: number;
+  dollars?: number;
+  /** The dollars are a guess (a price line is missing). */
+  estimated: boolean;
+}
+
+/** What a job's AI cost so far or in the end. Absent on jobs from before it; never zeros. */
+export interface AiCost {
+  v: number;
+  models: AiCostModel[];
+  transcribe?: { seconds: number; minutes: number; dollars?: number; estimated: boolean };
+  totalTokens: number;
+  totalCalls: number;
+  totalDollars: number;
+  /** Some line is an estimate or has no price: the total is "about" (at least). */
+  estimated: boolean;
+  /** The day the price list was checked against the providers' own pages (YYYY-MM-DD). */
+  pricesChecked?: string;
+}
+
 export interface Job {
   jobId: string;
   status: JobStatus;
@@ -113,6 +142,8 @@ export interface Job {
   remakeOf?: { clipId: string; jobId: string };
   /** The language the video speaks, BCP 47 from Transcribe ("en-US", §39.3). */
   sourceLanguage?: string;
+  /** What the job's AI cost: tokens and US dollars, per model (CONTRACTS §51). */
+  aiCost?: AiCost;
   createdAt: string;
   updatedAt: string;
 }

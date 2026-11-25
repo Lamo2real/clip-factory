@@ -52,5 +52,20 @@
     "label": "Amazon Titan Text Embeddings V2",
     "modelId": "amazon.titan-embed-text-v2:0",
     "dimensions": 1024
+  },
+  "pricing": {
+    "$comment": "The only place prices live (docs/CONTRACTS.md §51, ADR-103). US dollars per million tokens, as AWS publishes them for eu-north-1 on Amazon Bedrock (the AWS price list files; Anthropic's pricing page agrees on every global Claude price). A model called through the global profile gets the global price; one called through the eu profile (profilePrefix eu) gets AWS's regional price, 10 percent higher. cacheWritePerMTok is the 5-minute cache write. A line whose price could not be confirmed has confirmed:false and no numbers: the job shows its tokens and 'price not known' and the total as 'about', never an invented price. approximate:true means the price depends on the request (Haiku 5.5 costs more above 100,000 prompt tokens), so the line shows as 'about'. Change a price only from the provider's own page and move checkedOn.",
+    "currency": "USD",
+    "checkedOn": "2026-11-25",
+    "models": {
+      "fable-5-2": {"inputPerMTok": 8.0, "outputPerMTok": 40.0, "cacheReadPerMTok": 0.2, "cacheWritePerMTok": 10.0, "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonBedrockFoundationModels/current/index.json (global); https://platform.claude.com/docs/en/about-claude/pricing", "confirmed": true},
+      "fable-5-1": {"inputPerMTok": 10.0, "outputPerMTok": 50.0, "cacheReadPerMTok": 0.25, "cacheWritePerMTok": 12.5, "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonBedrockFoundationModels/current/index.json (global); https://platform.claude.com/docs/en/about-claude/pricing", "confirmed": true},
+      "opus-5-5": {"inputPerMTok": 4.0, "outputPerMTok": 20.0, "cacheReadPerMTok": 0.2, "cacheWritePerMTok": 5.0, "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonBedrockFoundationModels/current/index.json (global); https://platform.claude.com/docs/en/about-claude/pricing", "confirmed": true},
+      "sonnet-5-5": {"inputPerMTok": 2.0, "outputPerMTok": 10.0, "cacheReadPerMTok": 0.1, "cacheWritePerMTok": 2.5, "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonBedrockFoundationModels/current/index.json (global); https://platform.claude.com/docs/en/about-claude/pricing", "confirmed": true},
+      "haiku-5-5": {"inputPerMTok": 0.11, "outputPerMTok": 0.55, "cacheReadPerMTok": 0.011, "cacheWritePerMTok": 0.1375, "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonBedrockFoundationModels/current/index.json (EU regional, prompts up to 100,000 tokens; above that 0.55 in and 2.75 out)", "confirmed": true, "approximate": true},
+      "nova-2-lite": {"inputPerMTok": 0.363, "outputPerMTok": 2.992, "cacheReadPerMTok": 0.09075, "cacheWritePerMTok": 0.0, "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonBedrock/current/index.json (EU regional; video is billed as ordinary input tokens, AWS lists no video line)", "confirmed": true}
+    },
+    "embedding": {"inputPerMTok": 0.021, "outputPerMTok": 0.0, "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonBedrockFoundationModels/current/index.json (eu-north-1)", "confirmed": true},
+    "transcribe": {"perMinute": 0.006, "source": "https://aws.amazon.com/transcribe/pricing/ and https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/transcribe/current/index.json (eu-north-1, $0.0001 per second, one-second steps, speaker labels and language identification included)", "confirmed": true}
   }
 }

@@ -27,6 +27,7 @@ from dataclasses import dataclass
 from typing import Any
 
 from . import livestatus
+from . import usage as usage_mod
 from .retry import retry
 from .schema import check
 from .skills import SkillsBlock, compose_system
@@ -202,6 +203,13 @@ class Bedrock:
     def _log_usage(self, tool: str, r: dict[str, Any]) -> None:
         usage = r.get("usage") or {}
         if usage:
+            usage_mod.record(
+                self.model_id,
+                input=usage.get("inputTokens") or 0,
+                output=usage.get("outputTokens") or 0,
+                cache_read=usage.get("cacheReadInputTokens") or 0,
+                cache_write=usage.get("cacheWriteInputTokens") or 0,
+            )
             log(
                 "info",
                 "bedrock.usage",

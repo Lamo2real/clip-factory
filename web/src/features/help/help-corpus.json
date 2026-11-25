@@ -1,5 +1,5 @@
 {
-  "version": "1e235d83486c",
+  "version": "2724769273bf",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -28,6 +28,7 @@
     "src/screens/home/MoneyTile.tsx",
     "src/screens/home/NewJobForm.tsx",
     "src/screens/home/StreamersRow.tsx",
+    "src/screens/jobs/AiCost.tsx",
     "src/screens/jobs/DeleteJobsSheet.tsx",
     "src/screens/jobs/JobDetail.tsx",
     "src/screens/jobs/JobNote.tsx",
@@ -4647,6 +4648,7 @@
         "not",
         "done",
         "yet",
+        "cost",
         "keep",
         "loading",
         "progress",
@@ -4657,8 +4659,7 @@
         "use",
         "video",
         "file",
-        "check",
-        "gone"
+        "check"
       ],
       "answer": "A job's page shows each step as your clips are made. Tap a job in Jobs to open it.",
       "steps": [
