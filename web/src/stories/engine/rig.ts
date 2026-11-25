@@ -2,12 +2,12 @@
 // turns them into the same shapes every time, so a character looks identical in every video by construction.
 // Local units: about 90 tall, feet at (0, 0), facing +x (the caller mirrors for facing left), y down.
 
-import { cel, fadeStops, grade, ink, inkPx, lift, lineUnits, ND, nightDrive } from "./art.ts";
+import { cel, fadeStops, grade, ink, inkPx, lift, lineUnits, lit, ND, nightDrive } from "./art.ts";
 import { F } from "./frame.ts";
-import { DEG, clamp, clamp01, hex, luminance, mix, noise, shade, smoothstep } from "./math.ts";
+import { DEG, channels, clamp, clamp01, hex, luminance, mix, noise, shade, smoothstep, toHex } from "./math.ts";
 import type { Pen } from "./pen.ts";
-import { arcPts, clipConvex, inflate, quadPts, roundRectPts, superellipse } from "./pen.ts";
-import { drawFace, type FaceParams } from "./face.ts";
+import { arcPts, capsulePts, clipConvex, ellipsePts, inflate, joinShapes, placePts, quadPts, ribbonPts, roundRectPts, smoothPts, superellipse } from "./pen.ts";
+import { drawFace, eyeSize, faceSpots, type FaceParams } from "./face.ts";
 import type { CharacterLook } from "./types.ts";
 
 export type Hand = "open" | "fist" | "thumb" | "point";
@@ -608,12 +608,15 @@ export function headTop(pen: Pen, look: CharacterLook, x: number, y: number, r: 
 }
 
 
-// ---- night drive (CONTRACTS §45.45): the same parts and proportions, drawn with soft thin lines and cel shading ----
-// Nothing here changes a character's geometry (the BODY table, the joints, the head shape stay), so layout, seats and
-// bubbles are the same in both styles. Own colours pass through the scene's light (art.ts grade); the outline is the
-// owner's pick half way to a soft brown ink and about 2.3 px wide on a standing character. The lamps light the back
-// of the character (-x in rig units, which the caller mirrors for facing left) with the rim light, and a key light
-// from the upper front leaves a cel shadow on the lower back of each part.
+// ---- night drive (CONTRACTS §45.45), the chunky look: bold toy-like shapes on the same rig ------------------------
+// Nothing here changes a character's geometry (the BODY table, the joints, the head's radii stay), so layout, seats
+// and bubbles are the same in both styles. What changes is what is drawn on the joints: a rounded-square head with one
+// sculpted hairdo, thick tapered arms and legs, big mitts, big shoes on a thick pale sole, a jumper with rounded-box shoulders,
+// a thick roll collar and a ribbed hem band. Own colours pass through the scene's light (art.ts grade); the outline is the owner's
+// pick half way to a soft brown ink and about 2.3 px wide on a standing character. The lamps light the back of the
+// character (-x in rig units, which the caller mirrors for facing left) with the rim light, and a key light from the
+// upper front leaves one crisp cel shadow on the lower back of each part. Shapes of one colour at one depth are one
+// polygon (pen.ts joinShapes), so the new detail fits the same shape budget (script.ts SHAPES_ND.actor).
 
 /** The colours and line widths one person is drawn with: night drive's, or classic's for the shots' close-ups. */
 interface Paint {
@@ -740,26 +743,99 @@ function overshoot(face: FaceParams, t: number, since: number | undefined): Face
   return { ...face, brow: face.brow * k, browUp: face.browUp * k, browAsym: face.browAsym * k };
 }
 
-/** Soft ambient occlusion under the feet, on the ground (local units, before the pose moves the body). */
+type Pt = [number, number];
+
+/** The sizes a chunky person is drawn with (rig units): thick tapered limbs, big mitts and big shoes. The joints stay
+ * geometry()'s; a slimmer or a wider body (its BODY row, the width slider) has slimmer or thicker limbs. */
+interface Chunk {
+  /** the arm's width at the shoulder, the elbow and the wrist */
+  arm: readonly [number, number, number];
+  /** the leg's width at the hip, the knee and the ankle */
+  leg: readonly [number, number, number];
+  /** the mitt's radius */
+  hand: number;
+  /** the shoe's size against the bean body's */
+  shoe: number;
+}
+
+function chunkOf(g: Geo): Chunk {
+  const k = clamp(g.a / 16, 0.86, 1.14);
+  // a clear taper: a round shoulder down to a slim wrist, a thick thigh down to a slim ankle (the cuff and the hem flare)
+  return { arm: [9.6 * k, 8.3 * k, 6.6 * k], leg: [10.8 * k, 9.5 * k, 7.8 * k], hand: 4.6 + 0.7 * k, shoe: 0.86 + 0.12 * k };
+}
+
+/** How many times the usual points a night person's curves are drawn with: 1 at a standing character's size, 2 from
+ * 6 design px per rig unit and 3 from 10 (the shots' close-ups, where a few long straight edges show). */
+function fine(P: Paint): number {
+  return P.u >= 10 ? 3 : P.u >= 6 ? 2 : 1;
+}
+
+/** A limb's tube: two tapered capsules that share the joint's circle (shoulder, elbow, wrist; hip, knee, ankle), each
+ * `grow` wider all round (its outline). Joined they are one shape with a round elbow or knee at any bend. */
+function tube(a: Pt, b: Pt, c: Pt, w: readonly [number, number, number], grow: number, segs: number): number[][] {
+  return [capsulePts(a[0], a[1], w[0] / 2 + grow, b[0], b[1], w[1] / 2 + grow, segs), capsulePts(b[0], b[1], w[1] / 2 + grow, c[0], c[1], w[2] / 2 + grow, segs)];
+}
+
+/** A band across a limb (a cuff, a turned-up hem): a rounded rectangle centred on (cx, cy), `len` along the limb's
+ * unit direction (vx, vy) and `wid` across it. */
+function bandPts(cx: number, cy: number, vx: number, vy: number, len: number, wid: number, r: number): number[] {
+  const pts = roundRectPts(-len / 2, -wid / 2, len, wid, Math.min(r, len / 2, wid / 2));
+  for (let i = 0; i < pts.length; i += 2) {
+    const along = pts[i]!;
+    const across = pts[i + 1]!;
+    pts[i] = cx + along * vx - across * vy;
+    pts[i + 1] = cy + along * vy + across * vx;
+  }
+  return pts;
+}
+
+/** Soft ambient occlusion under the feet, on the ground (local units, before the pose moves the body): one glow. */
 function footShadow(pen: Pen, pose: Pose): void {
   const up = Math.max(0, -pose.dy);
   const k = 1 - Math.min(0.5, up / 40);
   const lie = smoothstep(30, 70, -pose.rot);
-  const x = pose.dx - 40 * lie;
-  pen.ellipse(x, 1.5, (38 + 34 * lie) * k, 8 * k, 0, ND.ao, 0.12 * k);
-  pen.ellipse(x, 1, (26 + 30 * lie) * k, 5 * k, 0, ND.ao, 0.32 * k);
+  const x = pose.dx - 40 * lie + 1.5;
+  // a wide soft glow, and a flat darker core that shows past the big shoes on light ground and on the dark road
+  pen.glow(x, 1.8, (42 + 34 * lie) * k, 8.5 * k, ND.ao, fadeStops(0.5 * k, 1));
+  pen.ellipse(x, 1.3, (25 + 30 * lie) * k, 4.6 * k, 0, ND.ao, 0.34 * k);
+}
+
+/** The rim light down the back edge of a limb: a thin lit strip just inside its outline on the lamps' side. `c` is the
+ * limb's joints (x, y pairs), `w` its width at each. */
+function rimLimb(pen: Pen, P: Paint, c: number[], w: readonly number[]): void {
+  const n = c.length >> 1;
+  const out: number[] = [];
+  for (let i = 0; i < n; i += 1) {
+    const i0 = Math.max(0, i - 1);
+    const i1 = Math.min(n - 1, i + 1);
+    const dx = c[i1 * 2]! - c[i0 * 2]!;
+    const dy = c[i1 * 2 + 1]! - c[i0 * 2 + 1]!;
+    const len = Math.hypot(dx, dy) || 1;
+    // the normal that faces the lamps (-x × mx)
+    let nx = -dy / len;
+    let ny = dx / len;
+    if (nx * -P.mx + ny * -0.2 < 0) {
+      nx = -nx;
+      ny = -ny;
+    }
+    const h = Math.max(0, w[i]! / 2 - P.ow * 0.6);
+    out.push(c[i * 2]! + nx * h, c[i * 2 + 1]! + ny * h);
+  }
+  pen.line(out, P.ow * 1.1, P.rim, P.rimA * 0.85);
+}
+
+/** The stool a sitting character sits on outside a car: its two legs (one shape), the seat and the seat's lit top. */
+function stoolNight(pen: Pen, g: Geo, k: number): void {
+  const y = -g.shin + 3.5;
+  const wood = grade("#7a4a2a");
+  pen.poly(joinShapes([capsulePts(-10, y + 3, 1.4, -12, 0, 1.3, 3), capsulePts(10, y + 3, 1.4, 12, 0, 1.3, 3)]), wood, k);
+  pen.rect(-15, y - 1, 30, 5.5, 2.5, grade("#a8683a"), k);
+  pen.rect(-15, y - 1, 30, 1.8, 0.9, lift(grade("#a8683a"), 0.16), k);
 }
 
 function drawCharacterNight(pen: Pen, look: CharacterLook, g: Geo, pose: Pose, o: DrawOpts): void {
   if (!o.inCar) footShadow(pen, pose);
-  if (pose.seat > 0.3 && !o.inCar) {
-    const k = smoothstep(0.3, 0.9, pose.seat);
-    const y = -g.shin + 3.5;
-    pen.line([-10, y + 3, -12, 0], 2.6, grade("#7a4a2a"), k);
-    pen.line([10, y + 3, 12, 0], 2.6, grade("#7a4a2a"), k);
-    pen.rect(-15, y - 1, 30, 5.5, 2.5, grade("#a8683a"), k);
-    pen.rect(-15, y - 1, 30, 1.6, 0.8, lift(grade("#a8683a"), 0.15), k);
-  }
+  if (pose.seat > 0.3 && !o.inCar) stoolNight(pen, g, smoothstep(0.3, 0.9, pose.seat));
 
   pen.save();
   const jitter = pose.tremble > 0 ? noise(o.seed + 11, o.t * 28) * 0.9 * pose.tremble : 0;
@@ -767,15 +843,16 @@ function drawCharacterNight(pen: Pen, look: CharacterLook, g: Geo, pose: Pose, o
   pen.rotate(pose.rot);
   pen.scale(pose.sx, pose.sy);
   const P = paintOf(pen, look, -1);
+  const C = chunkOf(g);
   const face = overshoot(o.face, o.t, o.faceSince);
 
-  const hipL: [number, number] = [-g.hipX, g.hipY];
-  const hipR: [number, number] = [g.hipX, g.hipY];
-  const leg = (hip: [number, number], h: number, k: number) => {
+  const hipL: Pt = [-g.hipX, g.hipY];
+  const hipR: Pt = [g.hipX, g.hipY];
+  const leg = (hip: Pt, h: number, k: number) => {
     const [ux, uy] = dir(h);
-    const knee: [number, number] = [hip[0] + ux * g.thigh, hip[1] + uy * g.thigh];
+    const knee: Pt = [hip[0] + ux * g.thigh, hip[1] + uy * g.thigh];
     const [vx, vy] = dir(h + k);
-    const foot: [number, number] = [knee[0] + vx * g.shin, knee[1] + vy * g.shin];
+    const foot: Pt = [knee[0] + vx * g.shin, knee[1] + vy * g.shin];
     return { knee, foot, shinAngle: h + k };
   };
   const legB = leg(hipL, pose.hB, pose.kB);
@@ -789,159 +866,304 @@ function drawCharacterNight(pen: Pen, look: CharacterLook, g: Geo, pose: Pose, o
     pen.restore();
   }
 
-  const sleeveB = dk(P, P.top, 0.12);
-  const skinB = dk(P, P.skin, 0.06);
+  // the back arm and leg are a tone darker: they are further from the key light
+  const sleeveB = cel(P.top, 0.12);
+  const skinB = cel(P.skin, 0.06);
   const armsInFront = pose.armsFront > 0.5 || pose.wheel > 0.5;
+  // hands that hold the wheel close round it (a little smaller); hands up at the face (a gasp) rest on the cheeks
+  const grip = pose.wheel > 0.5 ? 0.86 : 1;
+  const cheeks = pose.overFace > 0.5;
   if (!armsInFront) {
     pen.save();
     leanFrame(pen, g, pose);
-    armNight(pen, g, P, -g.shoulderX, pose.aB, pose.eB, pose.lenB, pose.handB, sleeveB, skinB);
+    armNight(pen, g, P, C, -g.shoulderX, pose.aB, pose.eB, pose.lenB, pose.handB, sleeveB, skinB, 1, cheeks);
     pen.restore();
   }
 
   if (!o.inCar) {
-    legNight(pen, g, P, hipL, legB.knee, legB.foot, legB.shinAngle, dk(P, P.bottom, 0.1), dk(P, P.accent, 0.1));
-    legNight(pen, g, P, hipR, legF.knee, legF.foot, legF.shinAngle, P.bottom, P.accent);
+    const sole = soleOf(P);
+    legNight(pen, g, P, C, hipL, legB.knee, legB.foot, legB.shinAngle, cel(P.bottom, 0.1), cel(P.accent, 0.1), cel(sole, 0.1), false);
+    legNight(pen, g, P, C, hipR, legF.knee, legF.foot, legF.shinAngle, P.bottom, P.accent, sole, true);
   }
 
   pen.save();
   leanFrame(pen, g, pose);
   torsoNight(pen, g, look, P);
-  if (look.accessory === "scarf") drawScarf(pen, g, P.accent, P.O, P.ow, o.t);
-  if (look.accessory === "bowtie") drawBowtie(pen, g, P.accent, P.O);
+  if (look.accessory === "scarf") scarfNight(pen, g, P, o.t);
+  if (look.accessory === "bowtie") bowtieNight(pen, g, P);
   if (pose.wheel > 0.02) wheelNight(pen, g, pose, P);
-  if (armsInFront) armNight(pen, g, P, -g.shoulderX, pose.aB, pose.eB, pose.lenB, pose.handB, sleeveB, skinB);
-  if (pose.overFace < 0.5) armNight(pen, g, P, g.shoulderX, pose.aF, pose.eF, pose.lenF, pose.handF, P.top, P.skin);
+  if (armsInFront) armNight(pen, g, P, C, -g.shoulderX, pose.aB, pose.eB, pose.lenB, pose.handB, sleeveB, skinB, grip, cheeks);
+  if (pose.overFace < 0.5) armNight(pen, g, P, C, g.shoulderX, pose.aF, pose.eF, pose.lenF, pose.handF, P.top, P.skin, grip, false);
 
   pen.save();
   headFrame(pen, g, pose);
   headNight(pen, g, look, P, face, pose, o.t, o.seed);
   pen.restore();
 
-  if (pose.overFace >= 0.5) armNight(pen, g, P, g.shoulderX, pose.aF, pose.eF, pose.lenF, pose.handF, P.top, P.skin);
+  if (pose.overFace >= 0.5) armNight(pen, g, P, C, g.shoulderX, pose.aF, pose.eF, pose.lenF, pose.handF, P.top, P.skin, grip, true);
   pen.restore();
   pen.restore();
 }
 
-/** The head in its frame (origin at its centre): ears, head, hair, face, the head accessory and the rim light. */
-function headNight(pen: Pen, g: Geo, look: CharacterLook, P: Paint, face: FaceParams, pose: { turn: number; lookX: number; lookY: number; nod: number }, t: number, seed: number, farEar = 0): void {
+/** The head in its frame (origin at its centre): ears, head, hair, face, the head accessory and the rim light. `hs` -1
+ * mirrors the hairdo (a three-quarter bust looks the other way, and its quiff with it). */
+function headNight(pen: Pen, g: Geo, look: CharacterLook, P: Paint, face: FaceParams, pose: { turn: number; lookX: number; lookY: number; nod: number }, t: number, seed: number, farEar = 0, hs: 1 | -1 = 1): void {
   headShapeNight(pen, g, look, P, farEar);
-  hairNight(pen, g, look, P);
+  const top = hairNight(pen, g, look, P, hs);
   drawFace(pen, g.headRX, g.headRY, look, face, pose, t, seed);
-  accessoryNight(pen, g, look, P, pose);
-  rimNight(pen, g, look, P);
+  const over = accessoryNight(pen, g, look, P, pose, top);
+  // (curls under a headphone band get no rim light: it would cross the band)
+  if (!(look.accessory === "headphones" && look.hair.style === "curly")) rimNight(pen, g, P, over ?? top, hs);
 }
 
-function legNight(pen: Pen, g: Geo, P: Paint, hip: [number, number], knee: [number, number], foot: [number, number], shinAngle: number, pants: string, shoe: string): void {
-  const pts = [hip[0], hip[1], knee[0], knee[1], foot[0], foot[1]];
-  pen.line(pts, g.legW + P.ow * 2, P.O);
-  pen.line(pts, g.legW, pants);
-  celLine(pen, pts, g.legW, cel(pants), P.mx);
-  const rot = clamp(-shinAngle * 0.6, -60, 60);
-  const cx = foot[0] + Math.cos(rot * DEG) * 2.4;
-  const cy = foot[1] - 1.2 + Math.sin(rot * DEG) * 2.4;
-  pen.ellipse(cx, cy, 6.6 + P.ow, 3.9 + P.ow, rot, P.O);
-  pen.ellipse(cx, cy, 6.6, 3.9, rot, shoe);
-  // a dark sole along the bottom of the shoe (the pedals' close-up shoe's sole colour), so it reads as a shoe
-  pen.save();
-  pen.translate(cx, cy);
-  pen.rotate(rot);
-  pen.poly(clipConvex(arcPts(0, 0, 6.6, 3.9, 0, 360, 32).slice(0, -2), [-8, 2.1, 8, 2.1, 8, 5, -8, 5]), mix(ND.ink, shoe, 0.2));
-  pen.restore();
-  // a small highlight on the toe cap
-  pen.ellipse(cx + Math.cos(rot * DEG) * 2.6 + Math.sin(rot * DEG) * 1.3, cy + Math.sin(rot * DEG) * 2.6 - Math.cos(rot * DEG) * 1.3, 2.2, 0.9, rot, lift(shoe, 0.3), 0.7);
+// ---- the body ------------------------------------------------------------------------------------------------------
+
+/** A fist's thumb: one fat oval on the side the arm's front faces (forward when the arm hangs, up when it is held
+ * out), a third of it over the mitt: its centre, its radii along and across the forearm and its turn in degrees. */
+function thumbOf(H: Pt, vx: number, vy: number, r: number): { x: number; y: number; rx: number; ry: number; rot: number } {
+  return { x: H[0] + (vx * 0.2 + vy * 0.74) * r, y: H[1] + (vy * 0.2 - vx * 0.74) * r, rx: r * 0.5, ry: r * 0.34, rot: Math.atan2(vy, vx) / DEG };
 }
 
-function armNight(pen: Pen, g: Geo, P: Paint, sx: number, a: number, e: number, len: number, hand: Hand, sleeve: string, skin: string): void {
-  const sy = g.shoulderY;
+/** A mitt's shapes, each `grow` bigger all round (its outline): one clean round mitt at H and, by `hand`, a fist's
+ * thumb oval (fist, point), three equal fat finger lobes in an even fan with the thumb set lower and apart (open), the
+ * thumb standing up the screen (thumb) or a finger out along the arm (point). (vx, vy) is the forearm's unit
+ * direction. */
+function mittShapes(H: Pt, vx: number, vy: number, r: number, hand: Hand, grow: number, n: number): number[][] {
+  const at = (along: number, across: number): Pt => [H[0] + (vx * along + vy * across) * r, H[1] + (vy * along - vx * across) * r];
+  const palm = hand === "open" ? r * 0.94 : r;
+  const out = [ellipsePts(H[0], H[1], palm + grow, palm + grow, n > 1 ? 12 * n : 10)];
+  if (hand === "open") {
+    // three fat fingers in an even fan, and the thumb: shorter, set back towards the wrist and well apart from them
+    const ray = (ang: number, d0: number, d1: number, r0: number, r1: number): number[] => {
+      const a = at(d0 * Math.cos(ang), d0 * Math.sin(ang));
+      const b = at(d1 * Math.cos(ang), d1 * Math.sin(ang));
+      return capsulePts(a[0], a[1], r * r0 + grow, b[0], b[1], r * r1 + grow, 3 * n);
+    };
+    for (const i of [-1, 0, 1]) out.push(ray(i * 0.6 - 0.12, 0.5, 1.1, 0.4, 0.36));
+    out.push(ray(2.05, 0.3, 0.98, 0.4, 0.34));
+  } else if (hand === "thumb") {
+    out.push(capsulePts(H[0], H[1] - r * 0.4, r * 0.46 + grow, H[0], H[1] - r - 3.4, r * 0.38 + grow, 2 * n + 1));
+  } else {
+    if (hand === "point") {
+      const tip = at(1 + 4.4 / r, 0);
+      const root = at(0.4, 0);
+      out.push(capsulePts(root[0], root[1], r * 0.4 + grow, tip[0], tip[1], r * 0.33 + grow, 2 * n + 1));
+    }
+    const th = thumbOf(H, vx, vy, r);
+    out.push(ellipsePts(th.x, th.y, th.rx + grow, th.ry + grow, n > 1 ? 8 * n : 6, th.rot));
+  }
+  return out;
+}
+
+/** An arm on its joints: the tapered sleeve, its flared cuff and the mitt. `rk` scales the mitt (0.86 round a wheel);
+ * `cheeks` rests a hand that is up beside the head on the head's edge (a gasp), so it never hovers next to it. */
+function armNight(pen: Pen, g: Geo, P: Paint, C: Chunk, sx: number, a: number, e: number, len: number, hand: Hand, sleeve: string, skin: string, rk = 1, cheeks = false): void {
   const k = clamp(len || 1, 0.6, 1.6);
   const [ux, uy] = dir(a);
-  const ex = sx + ux * g.upper * k;
-  const ey = sy + uy * g.upper * k;
-  const [vx, vy] = dir(a + e);
-  const hx = ex + vx * g.fore * k;
-  const hy = ey + vy * g.fore * k;
-  const pts = [sx, sy, ex, ey, hx, hy];
-  pen.line(pts, g.armW + P.ow * 2, P.O);
-  pen.line(pts, g.armW, sleeve);
-  celLine(pen, pts, g.armW, cel(sleeve), P.mx);
-  if (hand === "thumb" || hand === "point") {
-    const [px, py] = hand === "thumb" ? [0, -1] : [vx, vy];
-    const fx = hx + px * (g.handR + 3.6);
-    const fy = hy + py * (g.handR + 3.6);
-    pen.line([hx, hy, fx, fy], 3.2 + P.ow * 2, P.O);
-    pen.line([hx, hy, fx, fy], 3.2, skin);
-  }
-  const r = hand === "open" ? g.handR * 1.12 : g.handR;
-  pen.circle(hx, hy, r + P.ow, P.O);
-  pen.circle(hx, hy, r, skin);
-  if (hand === "open") {
-    for (let i = -1; i <= 1; i += 1) {
-      const ang = Math.atan2(vy, vx) + i * 0.55;
-      pen.circle(hx + Math.cos(ang) * r * 0.95, hy + Math.sin(ang) * r * 0.95, 1.7, skin);
+  const S: Pt = [sx, g.shoulderY];
+  const E: Pt = [sx + ux * g.upper * k, g.shoulderY + uy * g.upper * k];
+  let [vx, vy] = dir(a + e);
+  const H: Pt = [E[0] + vx * g.fore * k, E[1] + vy * g.fore * k];
+  const r = C.hand * rk;
+  const n = fine(P);
+  // the tubes' round ends: 3 steps at a standing character's size (a facet there is under a phone pixel), more up close
+  const ts = n > 1 ? 4 * n : 3;
+  if (cheeks) {
+    // the head's half width at the hand's height (the head upright): the hand's centre comes in to just outside it
+    const v = (H[1] - g.headY) / g.headRY;
+    if (Math.abs(v) < 0.92) {
+      const f = headForm(g);
+      const edge = g.headRX * (1 + f.taper * v) * Math.pow(1 - Math.pow(Math.abs(v), f.n), 1 / f.n);
+      const lim = edge + r * 0.35;
+      if (Math.abs(H[0]) > lim) {
+        H[0] = Math.sign(H[0]) * Math.max(lim, Math.abs(H[0]) - 4.5);
+        const d = Math.hypot(H[0] - E[0], H[1] - E[1]) || 1;
+        vx = (H[0] - E[0]) / d;
+        vy = (H[1] - E[1]) / d;
+      }
     }
-  } else {
-    // the knuckles' soft shade on the fist's lower side
-    pen.ellipse(hx - P.mx * r * 0.2, hy + r * 0.38, r * 0.7, r * 0.42, 0, cel(skin, 0.14));
   }
+  // the sleeve ends in a ribbed cuff at the wrist, a little wider than the wrist, its end inside the mitt
+  const W: Pt = [H[0] - vx * r * 0.6, H[1] - vy * r * 0.6];
+  const cuff = (grow: number): number[] => bandPts(W[0] - vx * 1.6, W[1] - vy * 1.6, vx, vy, 2.9 + grow * 2, C.arm[2] + 2.3 + grow * 2, n > 1 ? 1 + grow : 0);
+  pen.poly(joinShapes([...tube(S, E, W, C.arm, P.ow, ts), cuff(P.ow), ...mittShapes(H, vx, vy, r, hand, P.ow, n)]), P.O);
+  pen.poly(joinShapes(tube(S, E, W, C.arm, 0, ts)), sleeve);
+  celLine(pen, [S[0], S[1], E[0], E[1], W[0], W[1]], C.arm[2], cel(sleeve), P.mx);
+  pen.poly(cuff(0), lift(sleeve, 0.24));
+  pen.poly(joinShapes(mittShapes(H, vx, vy, r, hand, 0, n)), skin);
+  // the mitt's lower back in shadow: one crescent along its edge
+  const sa = Math.atan2(0.8, -0.6 * P.mx) / DEG;
+  pen.poly(streak(arcPts(H[0], H[1], r * 0.7, r * 0.7, sa - 78, sa + 78, 4 * n), r * 0.62), cel(skin, 0.14));
+  if (hand === "fist" || hand === "point") {
+    // a short ink arc where the thumb lies over the mitt
+    const th = thumbOf(H, vx, vy, r);
+    pen.line(placePts(arcPts(0, 0, th.rx, th.ry, 12, 168, 5 * n), th.x, th.y, th.rot), P.ow * 1.3, P.O, 0.85);
+  }
+}
+
+/** A shoe's sole and toe cap: pale rubber in the place's light, or a darker gum sole under a pale shoe (so a white
+ * shoe still has a sole). */
+function soleOf(P: Paint): string {
+  return luminance(P.accent) > 0.5 ? lit(ND.soleGum) : lit(ND.sole);
+}
+
+/** The chunky shoe, side on, in its own frame: the foot joint at the origin, the toe towards +x, the ground 3.5
+ * below (× q). `all` is the whole shoe (drawn in the sole's rubber), `upper` the part in the shoe's colour (above the
+ * thick sole, behind the rounded toe cap), `heel` its back third (the cel shadow) and `gloss` a streak on the instep. */
+interface Shoe {
+  all: number[];
+  upper: number[];
+  heel: number[];
+  gloss: number[];
+}
+
+const SHOE = [-4.9, 3.5, -5.9, 1.1, -5.5, -2.6, -3.4, -5.4, 0.8, -5.6, 3.9, -4.3, 6.6, -3.2, 9, -2.2, 10.2, 0.4, 9.6, 2.8, 8.2, 3.5] as const;
+const SHOES = new Map<string, Shoe>();
+
+function shoeOf(q: number, n: number): Shoe {
+  const key = `${q.toFixed(3)} ${n}`;
+  const hit = SHOES.get(key);
+  if (hit) return hit;
+  const all = smoothPts(SHOE.map((v) => v * q), true, 2 * n, [0, 10]);
+  const overSole = clipConvex(all, [-30 * q, -30 * q, 30 * q, -30 * q, 30 * q, 1.1 * q, -30 * q, 1.1 * q]);
+  const upper = clipConvex(overSole, halfPlane(7.1 * q, -4 * q, 7.8 * q, 1.2 * q, -5 * q, 0));
+  const heel = clipConvex(upper, lensClip(-1.2 * q, -9 * q, -3.4 * q, 4 * q, -30 * q, -2 * q, 1.1 * q, 32));
+  const gloss = ribbonPts([1.9 * q, -3.85 * q, 4.1 * q, -2.95 * q, 6.1 * q, -2.15 * q], [0.45 * q, 1.15 * q, 0.45 * q], 1);
+  const shoe = { all, upper, heel, gloss };
+  SHOES.set(key, shoe);
+  return shoe;
+}
+
+function legNight(pen: Pen, g: Geo, P: Paint, C: Chunk, hip: Pt, knee: Pt, foot: Pt, shinAngle: number, pants: string, shoe: string, sole: string, front: boolean): void {
+  const [vx, vy] = dir(shinAngle);
+  const q = C.shoe;
+  const n = fine(P);
+  const ts = n > 1 ? 4 * n : 3;
+  // the trouser leg ends at the ankle, inside the shoe's collar; its turned-up hem lies over the shoe's top
+  const A: Pt = [foot[0] - vx * 3 * q, foot[1] - vy * 3 * q];
+  const S = shoeOf(q, n);
+  const rot = clamp(-shinAngle * 0.6, -60, 60);
+  const put = (pts: number[]): number[] => placePts(pts, foot[0], foot[1], rot);
+  const hem = (grow: number): number[] => bandPts(A[0] - vx * 1.7 * q, A[1] - vy * 1.7 * q, vx, vy, 3 * q + grow * 2, C.leg[2] + 2.4 + grow * 2, n > 1 ? 1 + grow : 0);
+  pen.poly(joinShapes([...tube(hip, knee, A, C.leg, P.ow, ts), put(inflate(S.all, P.ow)), hem(P.ow)]), P.O);
+  pen.poly(joinShapes(tube(hip, knee, A, C.leg, 0, ts)), pants);
+  celLine(pen, [hip[0], hip[1], knee[0], knee[1], A[0], A[1]], C.leg[2], cel(pants), P.mx);
+  // the back leg's outer edge catches the lamps, so dark trousers still end somewhere on a dark road
+  if (!front) rimLimb(pen, P, [knee[0] - (knee[0] - hip[0]) * 0.45, knee[1] - (knee[1] - hip[1]) * 0.45, knee[0], knee[1], A[0], A[1]], [C.leg[0] * 0.55 + C.leg[1] * 0.45, C.leg[1], C.leg[2]]);
+  pen.poly(put(S.all), sole);
+  pen.poly(put(S.upper), shoe);
+  pen.poly(put(S.heel), ND.celDark, 0.2);
+  pen.poly(hem(0), lift(pants, 0.14));
+  if (front) pen.poly(put(S.gloss), lift(shoe, 0.45));
+}
+
+/** A convex clip that keeps what is above a line across the body at `y` that sags `sag` in the middle (a hem that
+ * wraps round a rounded body): `w` each side of the middle. */
+function aboveSag(y: number, sag: number, w: number): number[] {
+  const pts: number[] = [];
+  for (let i = 0; i <= 8; i += 1) {
+    const x = -w + (2 * w * i) / 8;
+    pts.push(x, y + sag * (1 - (x / w) ** 2));
+  }
+  pts.push(w, y - 400, -w, y - 400);
+  return pts;
+}
+
+/** The point of the chunky torso's outline at `deg` (0 the front at the waistline, 90 the bottom, 270 the top), `inset`
+ * in from it: geometry()'s superellipse below its middle; above it a squarer one that hardly narrows, so the jumper
+ * has rounded-box shoulders beside the head instead of a dome under it. */
+function torsoAt(g: Geo, deg: number, inset = 0): Pt {
+  const c = Math.cos(deg * DEG);
+  const sn = Math.sin(deg * DEG);
+  const up = sn < 0;
+  const n = up ? g.n + 1.5 : g.n;
+  const y = (g.b - inset) * Math.sign(sn) * Math.pow(Math.abs(sn), 2 / n);
+  const x = (g.a - inset) * (1 + ((up ? g.taper * 0.3 : g.taper) * y) / g.b) * Math.sign(c) * Math.pow(Math.abs(c), 2 / n);
+  return [x, g.cy + y];
 }
 
 function torsoNight(pen: Pen, g: Geo, look: CharacterLook, P: Paint): void {
-  const pts = superellipse(0, g.cy, g.a, g.b, g.n, g.taper, 30);
+  const n = fine(P);
+  const pts: number[] = [];
+  for (let i = 0; i < 26 * n; i += 1) pts.push(...torsoAt(g, (360 * i) / (26 * n)));
   pen.poly(inflate(pts, P.ow), P.O);
   pen.poly(pts, P.bottom);
-  const upperBox = [-g.a * 2, g.cy - g.b * 2, g.a * 2, g.cy - g.b * 2, g.a * 2, g.waistY, -g.a * 2, g.waistY];
-  const shirt = clipConvex(pts, upperBox);
-  pen.poly(shirt, P.top);
   const topY = g.cy - g.b;
-  const span = g.waistY - topY;
+  const chinY = g.headY + g.headRY;
+  // the jumper down to the waist, its last 2.2 units a ribbed hem band (the cuffs' tone) that wraps round the body
+  const hemH = 2.2;
+  const wide = g.a * 1.4;
+  const trim = lift(P.top, 0.24);
+  const jumper = clipConvex(pts, aboveSag(g.waistY, 1.3, wide));
+  const body = clipConvex(pts, aboveSag(g.waistY - hemH, 1.3, wide));
+  pen.poly(jumper, trim);
+  pen.poly(body, P.top);
+  // what shows of the jumper: from under the collar to the hem
+  const y0 = chinY + 0.8;
+  const y1 = g.waistY - hemH;
+  const span = y1 - y0;
   if (look.outfit.pattern === "stripes") {
-    for (let k = 0; k < 3; k += 1) {
-      const y0 = topY + span * (0.3 + k * 0.24);
-      const band = [-g.a * 2, y0, g.a * 2, y0, g.a * 2, y0 + span * 0.1, -g.a * 2, y0 + span * 0.1];
-      pen.poly(clipConvex(band, shirt), P.accent, 0.9);
+    // two or three bold stripes, one shape
+    const count = span > 11 ? 3 : 2;
+    const h = (span / (count * 2 + 0.6)) * 1.1;
+    const bands: number[][] = [];
+    for (let k = 0; k < count; k += 1) {
+      const ys = y0 + (span * (k + 0.38)) / count;
+      bands.push(clipConvex([-g.a * 2, ys, g.a * 2, ys, g.a * 2, ys + h, -g.a * 2, ys + h], body));
     }
+    pen.poly(joinShapes(bands), P.accent, 0.92);
   } else if (look.outfit.pattern === "dots") {
+    // five fat dots, one shape
     const spots: [number, number][] = [
-      [-0.45, 0.38],
-      [0.4, 0.33],
-      [0.05, 0.62],
-      [-0.3, 0.86],
-      [0.5, 0.8],
+      [-0.5, 0.2],
+      [0.38, 0.12],
+      [-0.02, 0.5],
+      [-0.58, 0.82],
+      [0.56, 0.74],
     ];
-    for (const [fx, fy] of spots) {
-      const y = topY + span * fy;
-      const w = halfWidth(g, y);
-      pen.circle(fx * w * 0.85, y, Math.min(2.3, span * 0.09), P.accent, 0.95);
-    }
+    const r = clamp(span * 0.13, 1.5, 2.4);
+    pen.poly(joinShapes(spots.map(([fx, fy]) => ellipsePts(fx * halfWidth(g, y0 + span * fy) * 0.9, y0 + span * fy, r, r, 8 * n))), P.accent, 0.95);
   }
-  // the belt line, then the cel shadow over the back third (shirt, pattern and trousers alike)
-  const wy = halfWidth(g, g.waistY);
-  pen.line([-wy + 1.5, g.waistY, wy - 1.5, g.waistY], 1.4, cel(P.bottom, 0.3), 0.7);
+  // (a plain jumper stays plain: the little of it that shows between the collar and the hem reads as one clean shape)
+  // the thick roll collar the head sits in: a filled ring in the trim's lit tone, tucked under the chin so only its
+  // front half shows
+  const cw = Math.min(g.a * 0.6, g.headRX * 0.4);
+  pen.ellipse(0, chinY + 0.3, cw + P.ow, 4.3 + P.ow, 0, P.O);
+  pen.ellipse(0, chinY + 0.3, cw, 4.3, 0, trim);
+  // the chin's shadow on the collar
+  pen.ellipse(0, chinY + 0.5, cw * 0.86, 1.5, 0, cel(trim, 0.2));
+  // the cel shadow over the back third (jumper, pattern and trousers alike)
   const back = lensClip(-g.a * 0.3 * P.mx, topY - 2, -g.a * 0.42 * P.mx, g.cy + g.b + 2, -g.a * 3 * P.mx, g.cy, g.b * 0.16);
   pen.poly(clipConvex(pts, back), ND.celDark, 0.22);
-  // two fabric folds: under the front arm and above the waist
-  const fold = cel(P.top, 0.3);
-  const sY = g.shoulderY;
-  pen.line(quadPts(g.a * 0.58 * P.mx, sY + 2.5, g.a * 0.62 * P.mx, sY + 7, g.a * 0.36 * P.mx, sY + 9.5, 5), P.thin, fold, 0.75);
-  pen.line(quadPts(-g.a * 0.5 * P.mx, g.waistY - 4.5, -g.a * 0.05 * P.mx, g.waistY - 1.8, g.a * 0.34 * P.mx, g.waistY - 4, 5), P.thin, fold, 0.75);
-  // the chin's soft shadow on the shirt top (instead of the classic collar)
-  const chin = arcPts(0, g.headY + g.headRY * 0.97, g.headRX * 0.55, g.headRY * 0.12, 0, 360, 16);
-  pen.poly(clipConvex(chin.slice(0, -2), shirt), ND.ao, 0.4);
-  // the rim light along the back shoulder
-  const n = g.n;
+  // the rim light down the back edge of the jumper
   const arc: number[] = [];
-  const ia = g.a - P.ow * 0.6;
-  const ib = g.b - P.ow * 0.6;
   for (let i = 0; i <= 6; i += 1) {
-    const t = (198 + (42 * i) / 6) * DEG;
-    const c = Math.cos(t);
-    const sn = Math.sin(t);
-    const y = ib * Math.sign(sn) * Math.pow(Math.abs(sn), 2 / n);
-    const x = ia * (1 + (g.taper * y) / ib) * Math.sign(c) * Math.pow(Math.abs(c), 2 / n);
-    arc.push(x * P.mx, g.cy + y);
+    const p = torsoAt(g, 164 + (36 * i) / 6, P.ow * 0.6);
+    arc.push((p[0] - 0) * P.mx, p[1]);
   }
   pen.line(arc, P.ow, P.rim, P.rimA);
+}
+
+/** A chunky scarf: a fat band round the collar and one end hanging down the front, swaying. */
+function scarfNight(pen: Pen, g: Geo, P: Paint, t: number): void {
+  const y = g.headY + g.headRY + 1.6;
+  const w = Math.min(halfWidth(g, y + 2) - 0.5, g.headRX * 0.56);
+  const sway = Math.sin(t * 3.2) * 1.5;
+  const band = (grow: number): number[] => capsulePts(-w, y, 3.1 + grow, w, y, 3.1 + grow, 5);
+  const tail = (grow: number): number[] => capsulePts(w * 0.5, y + 2, 2.9 + grow, w * 0.5 + 0.8 + sway, y + 12.5, 3.2 + grow, 4);
+  pen.poly(joinShapes([band(P.ow), tail(P.ow)]), P.O);
+  pen.poly(tail(0), cel(P.accent, 0.16));
+  pen.poly(band(0), P.accent);
+  pen.line([-w * 0.9, y + 1.4, w * 0.9, y + 1.4], P.ow, cel(P.accent, 0.3), 0.6);
+}
+
+/** A chunky bow tie on the collar: two rounded wings (one shape) and the knot. */
+function bowtieNight(pen: Pen, g: Geo, P: Paint): void {
+  const y = g.headY + g.headRY + 3.6;
+  const wing = (s: number, grow: number): number[] => capsulePts(s * 1.2, y, 1.5 + grow, s * 6.6, y, 3.5 + grow, 5);
+  pen.poly(joinShapes([wing(-1, P.ow), wing(1, P.ow)]), P.O);
+  pen.poly(joinShapes([wing(-1, 0), wing(1, 0)]), P.accent);
+  pen.circle(0, y, 2.3, cel(P.accent, 0.24));
 }
 
 function wheelNight(pen: Pen, g: Geo, pose: Pose, P: Paint): void {
@@ -949,261 +1171,481 @@ function wheelNight(pen: Pen, g: Geo, pose: Pose, P: Paint): void {
   const cx = g.shoulderX + 7;
   const cy = g.shoulderY + 9;
   const r = 8.5;
-  const ring = arcPts(cx, cy, r, r * 0.9, 0, 360, 18);
-  pen.line(ring, 2.6 + P.ow * 2, P.O, k);
-  pen.line(ring, 2.6, ND.wheel, k);
-  pen.line(arcPts(cx, cy, r, r * 0.9, 205, 335, 8), 1.1, ND.wheelLit, k);
+  // drawn a tenth bigger than the grips' circle, with a lit upper arc, so a clear ring shows either side of the hands
+  const ring = arcPts(cx, cy, r * 1.1, r * 0.99, 0, 360, 18);
+  pen.line(ring, 2.8 + P.ow * 2, P.O, k);
+  pen.line(ring, 2.8, ND.wheelLit, k);
+  pen.line(arcPts(cx, cy, r * 1.1 + 0.5, r * 0.99 + 0.5, 195, 345, 8), 1, lift(ND.wheelLit, 0.3), k);
+  // the three spokes are one stroke out and back from the hub
   const sp = pose.wheelRot * DEG;
-  for (const off of [0, (2 * Math.PI) / 3, (4 * Math.PI) / 3]) {
-    pen.line([cx, cy, cx + Math.sin(sp + off) * r * 0.9, cy - Math.cos(sp + off) * r * 0.8], 1.8, ND.wheel, k);
-  }
-  pen.circle(cx, cy, 2.2, ND.wheelHub, k);
+  const spokes: number[] = [];
+  for (const off of [0, (2 * Math.PI) / 3, (4 * Math.PI) / 3]) spokes.push(cx, cy, cx + Math.sin(sp + off) * r * 0.9, cy - Math.cos(sp + off) * r * 0.8);
+  spokes.push(cx, cy);
+  pen.line(spokes, 1.9, ND.wheel, k);
+  pen.circle(cx, cy, 2.3, ND.wheelHub, k);
 }
 
-/** How many times the usual points a night head and its hair are drawn with: 1 at a standing character's size, 2
- * from 6 design px per rig unit and 3 from 10 (the shots' close-ups, where a few long straight edges show). */
-function fine(P: Paint): number {
-  return P.u >= 10 ? 3 : P.u >= 6 ? 2 : 1;
+// ---- the head ------------------------------------------------------------------------------------------------------
+
+/** The head's rounded square ("gumdrop"): a superellipse inside the head's radii, flatter on top and at the sides than
+ * an ellipse, its jaw a little wider than its crown. The square body's head is squarer still. */
+function headForm(g: Geo): { n: number; taper: number } {
+  return { n: g.headN > 2.2 ? 3.7 : 2.75, taper: 0.045 };
 }
 
-/** The head's points: its superellipse, or the ellipse as a polygon (k times the usual points, `fine`). */
+/** The head's points (k times the usual points, `fine`). */
 function headPts(g: Geo, k = 1): number[] {
-  return g.headN > 2.2 ? superellipse(0, 0, g.headRX, g.headRY, g.headN, 0, 28 * k) : arcPts(0, 0, g.headRX, g.headRY, 0, 360, 32 * k).slice(0, -2);
+  const f = headForm(g);
+  return superellipse(0, 0, g.headRX, g.headRY, f.n, f.taper, 36 * k);
+}
+
+/** The point of the head's outline at `deg` (its superellipse's own angle: 180 the back of the head at -x, 270 the
+ * crown, 360 the front), `out` units further from the head's centre. Hair, hats and the rim light are built on it, so
+ * they fit every head shape. */
+function skull(g: Geo, deg: number, out = 0): Pt {
+  const f = headForm(g);
+  const c = Math.cos(deg * DEG);
+  const s = Math.sin(deg * DEG);
+  const y = g.headRY * Math.sign(s) * Math.pow(Math.abs(s), 2 / f.n);
+  const x = g.headRX * (1 + (f.taper * y) / g.headRY) * Math.sign(c) * Math.pow(Math.abs(c), 2 / f.n);
+  const k = 1 + out / (Math.hypot(x, y) || 1);
+  return [x * k, y * k];
+}
+
+/** A smooth curve through a table of [angle, value] rows, flat before the first and after the last: how far a hairdo
+ * stands off the head round its top. */
+function profile(rows: readonly (readonly [number, number])[]): (deg: number) => number {
+  const n = rows.length;
+  const slope = (i: number): number => {
+    const a = rows[Math.max(0, i - 1)]!;
+    const b = rows[Math.min(n - 1, i + 1)]!;
+    return (b[1] - a[1]) / (b[0] - a[0] || 1);
+  };
+  return (deg) => {
+    if (deg <= rows[0]![0]) return rows[0]![1];
+    if (deg >= rows[n - 1]![0]) return rows[n - 1]![1];
+    let i = 0;
+    while (i < n - 2 && deg > rows[i + 1]![0]) i += 1;
+    const [x0, y0] = rows[i]!;
+    const [x1, y1] = rows[i + 1]!;
+    const h = x1 - x0;
+    const t = (deg - x0) / h;
+    const t2 = t * t;
+    const t3 = t2 * t;
+    return (2 * t3 - 3 * t2 + 1) * y0 + (t3 - 2 * t2 + t) * h * slope(i) + (-2 * t3 + 3 * t2) * y1 + (t3 - t2) * h * slope(i + 1);
+  };
+}
+
+/** The edge that stands `out(deg) - inset` off the head, from `from` to `to` degrees, a point every `step` degrees. */
+function crest(g: Geo, out: (deg: number) => number, from: number, to: number, step: number, inset = 0): number[] {
+  const pts: number[] = [];
+  const n = Math.max(1, Math.round(Math.abs(to - from) / step));
+  for (let i = 0; i <= n; i += 1) {
+    const d = from + ((to - from) * i) / n;
+    const p = skull(g, d, out(d) - inset);
+    pts.push(p[0], p[1]);
+  }
+  return pts;
+}
+
+/** A stroke that is `w` wide in its middle and comes to a soft point at both ends (a glossy streak), along `c`. */
+function streak(c: number[], w: number): number[] {
+  const n = c.length >> 1;
+  const widths: number[] = [];
+  for (let i = 0; i < n; i += 1) widths.push(w * (0.16 + 0.84 * Math.max(0, Math.sin((Math.PI * i) / (n - 1))) ** 0.8));
+  return ribbonPts(c, widths, 1);
 }
 
 function headShapeNight(pen: Pen, g: Geo, look: CharacterLook, P: Paint, farEar = 0): void {
   const rx = g.headRX;
   const ry = g.headRY;
   const earsHidden = look.hair.style === "long" || look.accessory === "headphones" || look.accessory === "helmet";
+  const n = fine(P);
   if (!earsHidden) {
+    // small round ears, low on the head, each with a darker hollow (plain ellipses: they cost the drawers least)
+    const ey = ry * 0.22;
     for (const s of [-1, 1]) {
       if (s === farEar) continue;
-      const ex = s * rx * 0.97;
-      pen.circle(ex, 2, 5 + P.ow, P.O);
-      pen.circle(ex, 2, 5, mix(P.skin, dk(P, P.skin), 0.3));
-      pen.line(arcPts(ex + s * 0.5, 2.2, 2.3, 2.8, s > 0 ? -75 : 105, s > 0 ? 75 : 255, 6), P.ow * 0.7, dk(P, P.skin, 0.4), 0.8);
+      pen.ellipse(s * rx * 0.985, ey, 4.1 + P.ow, 4.4 + P.ow, 0, P.O);
+      pen.ellipse(s * rx * 0.985, ey, 4.1, 4.4, 0, mix(P.skin, cel(P.skin), 0.3));
+      pen.ellipse(s * (rx * 0.985 + 1), ey + 0.3, 1.7, 2.3, 0, cel(P.skin, 0.36));
     }
   }
-  const k = fine(P);
-  const pts = headPts(g, k);
-  if (g.headN > 2.2) pen.poly(inflate(pts, P.ow), P.O);
-  else pen.ellipse(0, 0, rx + P.ow, ry + P.ow, 0, P.O);
-  if (g.headN > 2.2) pen.poly(pts, P.skin);
-  else pen.ellipse(0, 0, rx, ry, 0, P.skin);
-  // the cel shadow on the lower back quarter, away from the key light
+  const pts = headPts(g, n);
+  pen.poly(inflate(pts, P.ow), P.O);
+  pen.poly(pts, P.skin);
+  // the cel shadow on the lower back of the head, away from the key light: it stops well short of the near eye
   const m = P.mx;
-  const ax = Math.cos(190 * DEG) * rx * m;
-  const ay = Math.sin(190 * DEG) * ry;
-  const bx = Math.cos(112 * DEG) * rx * m;
-  const by = Math.sin(112 * DEG) * ry;
-  pen.poly(clipConvex(pts, lensClip(ax, ay, bx, by, -rx * m, ry, Math.hypot(bx - ax, by - ay) * 0.12, 48 * k)), dk(P, P.skin));
-  if (look.hair.style === "none" && look.accessory !== "helmet") pen.ellipse(rx * 0.3 * m, -ry * 0.64, 6, 2.8, 20 * m, lt(P, P.skin, 0.16), 0.8);
+  const a = skull(g, 186);
+  const b = skull(g, 126);
+  pen.poly(clipConvex(pts, lensClip(a[0] * m, a[1], b[0] * m, b[1], -rx * m, ry, Math.hypot(b[0] - a[0], b[1] - a[1]) * 0.04, 40 * n)), cel(P.skin));
 }
 
-/** The scalloped fringe cap (short, long and bun): the top of the head and a soft edge of 7 scallops across the
- * forehead at -0.50 × headRY, a little lower at the temples. */
-function scallopCapPts(g: Geo, fk = 1): number[] {
-  const rx = g.headRX + 1.2;
-  const ry = g.headRY + 1.2;
-  const pts: number[] = [];
-  for (let i = 0; i <= 16 * fk; i += 1) {
-    const a = (186 + (168 * i) / (16 * fk)) * DEG;
-    pts.push(Math.cos(a) * rx, Math.sin(a) * ry);
-  }
-  const x0 = g.headRX * 0.86;
-  const base = (x: number) => -g.headRY * 0.5 + 0.1 * g.headRY * (x / g.headRX) ** 2;
-  const per = 4 * fk;
-  const steps = 7 * per;
-  for (let k = 0; k <= steps; k += 1) {
-    const x = x0 - (2 * x0 * k) / steps;
-    pts.push(x, base(x) + 1.6 * Math.sin((Math.PI * (k % per)) / per));
-  }
-  return pts;
+/** What sits on top of a head, for what comes after it: how far its top edge stands off the skull at each angle (the
+ * rim light runs along it, the headphones' band goes over it), or the rim light's own path when the edge is not that
+ * simple (spikes, a bun). Both in the hairdo's own frame, before `hs` mirrors it. */
+interface Top {
+  out: (deg: number) => number;
+  rim?: (lamps: number, inset: number) => number[];
 }
 
-function hairNight(pen: Pen, g: Geo, look: CharacterLook, P: Paint): void {
+const BARE: Top = { out: () => 0 };
+
+/** The quiff's height off the head: low at the back, rising to its peak over the front of the crown, then down the
+ * front temple to a short sideburn. */
+const QUIFF = [[190, 1.2], [208, 1.8], [232, 2.3], [252, 2.6], [268, 3.4], [284, 4.6], [300, 5.3], [316, 5.1], [330, 4.4], [340, 3.4], [348, 1.6]] as const;
+/** Long hair's cap and a bun's: close to the head, a little fuller on top. */
+const SLEEK = [[186, 3], [220, 4.2], [250, 5], [280, 5.4], [310, 4.8], [340, 3.6], [354, 2.6]] as const;
+const TIDY = [[186, 1.2], [215, 1.9], [250, 2.4], [285, 2.6], [320, 2.2], [345, 1.5], [354, 1]] as const;
+/** Spiky hair's valleys and tips: five big spikes that lean forward. */
+const SPIKES = [[188, 1.4], [203, 7], [219, 2], [243, 9.2], [259, 2.6], [281, 10.4], [297, 2.8], [318, 9], [333, 2.4], [347, 5.2], [356, 0.6]] as const;
+/** The cap's dome. */
+const DOME = [[188, 2.6], [230, 3.2], [270, 3.6], [310, 3.4], [352, 2.8]] as const;
+
+/** The hair, in the head's frame: one bold sculpted mass per style (its outline one closed line under it), a darker
+ * plane, and a glossy streak on the side the key light comes from. Under a helmet every style lies flat. Returns what
+ * the rim light and the headphones need to know about its top. */
+function hairNight(pen: Pen, g: Geo, look: CharacterLook, P: Paint, hs: 1 | -1): Top {
   const style = look.hair.style;
-  if (style === "none") return;
-  const c = P.hair;
-  // the strand groups: a lighter tone on dark hair (a darker one would not show), a darker one on light hair
-  const strand = luminance(c) < 0.3 ? lift(c, 0.18) : mix(c, "#0f0b0a", 0.35);
   const rx = g.headRX;
   const ry = g.headRY;
-  const m = P.mx;
-  const fringe = -ry * 0.56;
-  const lw = Math.max(P.thin, P.ow * 0.5);
-  const fk = fine(P);
-  if (style === "short" || style === "long" || style === "bun") {
-    const pts = scallopCapPts(g, fk);
-    pen.poly(inflate(pts, P.ow), P.O);
-    pen.poly(pts, c);
-    // three strand groups sweeping from the crown to the fringe, and a highlight on the lit side
-    for (const i of [-1, 0, 1]) {
-      const x = i * 0.36 * rx;
-      pen.line(quadPts(x - 0.12 * rx, -ry * 0.98, x + 0.16 * rx, -ry * 0.86, x + 0.24 * rx, -ry * 0.62, 5), lw, strand, 0.75);
-    }
-    pen.line(arcPts(0, 0, (rx + 1.2) * 0.8, (ry + 1.2) * 0.86, m > 0 ? 284 : 216, m > 0 ? 324 : 256, 6 * fk), P.ow * 2, mix(c, "#c9b8a0", 0.25), 0.35);
-    if (style === "bun") {
-      const by = -ry - 4;
-      pen.circle(0, by, 7.5 + P.ow, P.O);
-      pen.circle(0, by, 7.5, c);
-      pen.line(arcPts(0, by, 5.2, 4.2, 200, 340, 6 * fk), lw, strand, 0.8);
-      pen.ellipse(0, by + 6, 4.2, 1.8, 0, P.accent);
-    }
-    return;
+  const n = fine(P);
+  const flat = look.accessory === "helmet";
+  // under a headphone band tall hair (spikes, curls) is pressed lower, so the band sits on it
+  const pressed = look.accessory === "headphones";
+  // the lamps' side in the hairdo's own frame: 1 when they light its back (-x), the usual
+  const lamps = P.mx * hs;
+  const put = (pts: number[]): number[] => (hs < 0 ? pts.map((v, i) => (i % 2 === 0 ? -v : v)) : pts);
+  const at = (fx: number, fy: number): Pt => [fx * rx, fy * ry];
+  const outline = (pts: number[]): void => pen.line(put([...pts, pts[0]!, pts[1]!]), P.ow * 2, P.O);
+  // a glossy streak along the top edge on the key light's side, `inset` in from it
+  const shine = (out: (deg: number) => number, a0: number, a1: number, inset: number, w: number): number[] => streak(crest(g, out, lamps > 0 ? a0 : 540 - a0, lamps > 0 ? a1 : 540 - a1, 10 / n, inset), w);
+  if (style === "none") {
+    // a bare head: a glossy streak on the top of the head
+    if (!flat) pen.poly(put(shine(BARE.out, 286, 322, 3.4, 2.6)), lift(P.skin, 0.16));
+    return BARE;
   }
+  const c = P.hair;
+  // two planes (the picked colour, and a darker one behind it) and a glossy streak in the hair's own hue
+  const under = cel(c, luminance(c) < 0.1 ? 0.36 : 0.27);
+  const gloss = glossOf(c);
+  // the plane on the lamps' side of a hairdo that has none of its own: its back third
+  const backThird = (pts: number[]): number[] => clipConvex(pts, lensClip(-rx * 0.2 * lamps, -ry * 1.5, -rx * 0.46 * lamps, ry, -rx * 4 * lamps, 0, ry * 0.2, 48 * n));
+
+  if (style === "short") {
+    // a kid's quiff: one mass that rises over the front of the crown, a fringe of three big uneven tufts across the
+    // forehead (the deepest notch is the side parting), a short rounded sideburn each side that ends at brow height,
+    // and one loose cowlick at the crown
+    const out = profile(flat ? QUIFF.map(([d, v]) => [d, Math.min(v, 2.3)] as const) : QUIFF);
+    const k = 2 * n;
+    const d0 = 194;
+    const d1 = 345;
+    const step = n > 1 ? 7 / n : 10;
+    // (no cowlick: the quiff's own peak is the one lift on top, so the silhouette has no stray tuft)
+    const flick: number[] = [];
+    const rear = crest(g, out, d0, 266, step);
+    const fore = crest(g, out, 266, d1, step);
+    const top = [...rear, ...flick.slice(2, -2), ...fore];
+    // the hairline from the front temple round to the back one, in three runs: the front sideburn, the two big tufts,
+    // and the small tuft behind the parting with the back sideburn
+    const burnF = smoothPts([...skull(g, d1, out(d1)), ...at(0.985, -0.3), ...at(0.9, -0.36), ...at(0.8, -0.5), ...at(0.73, -0.67)], false, k);
+    const tufts = smoothPts([...at(0.73, -0.67), ...at(0.58, -0.53), ...at(0.4, -0.48), ...at(0.2, -0.56), ...at(0.12, -0.7), ...at(0, -0.52), ...at(-0.2, -0.46), ...at(-0.38, -0.56), ...at(-0.44, -0.76)], false, k, [4]);
+    const burnB = smoothPts([...at(-0.44, -0.76), ...at(-0.55, -0.56), ...at(-0.7, -0.5), ...at(-0.82, -0.54), ...at(-0.9, -0.4), ...at(-0.975, -0.3), ...skull(g, d0, out(d0))], false, k, [3]);
+    const line = [...burnF, ...tufts.slice(2), ...burnB.slice(2)];
+    const pts = [...top, ...line.slice(2, -2)];
+    // the hair's soft shadow on the forehead, under the fringe
+    pen.line(put(tufts.map((v, i) => (i % 2 === 0 ? v : v + 1.1))), 2.6, cel(P.skin, 0.17));
+    outline(pts);
+    pen.poly(put(pts), c);
+    // the darker plane: the side hair behind the parting (up to the cowlick), and the sideburn under the quiff's front
+    const cut = rear.length + Math.max(0, flick.length - 4);
+    const sweep = smoothPts([top[cut]!, top[cut + 1]!, ...at(-0.5, -1.0), ...at(-0.42, -0.88), ...at(-0.44, -0.76)], false, k);
+    const side = [...burnB, ...top.slice(0, cut + 2), ...sweep.slice(2, -2)];
+    const f0 = Math.round((fore.length / 2) * 0.86) * 2;
+    const front = [...fore.slice(f0), ...burnF.slice(2)];
+    pen.poly(joinShapes([put(side), put(front)]), under);
+    // one glossy streak along the quiff, and a short one on the front tuft
+    if (!flat) pen.poly(joinShapes([put(shine(out, 268, 320, 2.9, 2)), put(streak([...at(0.5, -0.62), ...at(0.34, -0.6), ...at(0.2, -0.64)], 1.2))]), gloss);
+    return { out };
+  }
+
   if (style === "spiky") {
-    const pts = capPts(g, 5, fringe, 7);
-    pen.poly(inflate(pts, P.ow), P.O);
-    pen.poly(pts, c);
-    // one line per spike, from its tip in towards the crown
-    for (let i = 1; i < 11; i += 2) {
-      const a = (186 + (168 * i) / 10) * DEG;
-      const tx = Math.cos(a) * (rx + 1.2 + 7);
-      const ty = Math.sin(a) * (ry + 1.2 + 7);
-      pen.line([tx * 0.86, ty * 0.86, tx * 0.6, ty * 0.6 + 1], lw, strand, 0.75);
+    // five big chunky spikes with straight edges, and a zigzag fringe
+    const rows = flat || pressed ? SPIKES.map(([d, v]) => [d, Math.min(v, flat ? 2.2 : 4.4)] as const) : SPIKES;
+    const tips = rows.map(([d, v]) => skull(g, d, v));
+    const fringe = [at(0.6, -0.5), at(0.42, -0.3), at(0.16, -0.56), at(-0.02, -0.33), at(-0.3, -0.54), at(-0.5, -0.28), at(-0.74, -0.42), at(-0.95, 0.04)];
+    // each spike's edges bulge a little, so it is a chunky tuft, not a thorn
+    const edges: number[] = [];
+    tips.forEach((p, i) => {
+      edges.push(p[0], p[1]);
+      const q = tips[i + 1];
+      if (!q) return;
+      const mx = (p[0] + q[0]) / 2;
+      const my = (p[1] + q[1]) / 2;
+      const len = Math.hypot(q[0] - p[0], q[1] - p[1]) || 1;
+      let nx = (q[1] - p[1]) / len;
+      let ny = -(q[0] - p[0]) / len;
+      if (nx * mx + ny * my < 0) {
+        nx = -nx;
+        ny = -ny;
+      }
+      edges.push(mx + nx * 0.9, my + ny * 0.9);
+    });
+    const even = tips.map((_, i) => i * 2);
+    const pts = [...smoothPts(edges, false, 2 * n, even), ...fringe.flat()];
+    outline(pts);
+    pen.poly(put(pts), c);
+    // each spike's face away from the key light is a darker facet (one shape), and the tallest two get a streak
+    const facets: number[][] = [];
+    const shines: number[][] = [];
+    for (let i = 1; i < tips.length - 1; i += 2) {
+      const tip = tips[i]!;
+      const dark = tips[lamps > 0 ? i - 1 : i + 1]!;
+      const lit0 = tips[lamps > 0 ? i + 1 : i - 1]!;
+      const root = skull(g, rows[i]![0], -2.6);
+      facets.push([dark[0], dark[1], tip[0], tip[1], root[0], root[1]]);
+      if (!flat && (i === 3 || i === 5)) {
+        const on = (k: number): Pt => [tip[0] + (lit0[0] - tip[0]) * k + (root[0] - tip[0]) * 0.2, tip[1] + (lit0[1] - tip[1]) * k + (root[1] - tip[1]) * 0.2];
+        shines.push(put(streak([...on(0.16), ...on(0.42), ...on(0.7)], 1.5)));
+      }
     }
-    pen.line(arcPts(0, 0, (rx + 1.2) * 0.82, (ry + 1.2) * 0.84, m > 0 ? 288 : 212, m > 0 ? 326 : 252, 6 * fk), P.ow * 2, mix(c, "#c9b8a0", 0.25), 0.35);
-    return;
+    pen.poly(joinShapes(facets.map(put)), under);
+    pen.poly(joinShapes(shines), gloss);
+    // the rim light runs up the back edge of the spikes on the lamps' side
+    const rim = (side: number, inset: number): number[] => {
+      const edge = side > 0 ? tips.slice(0, 6) : tips.slice(5).reverse();
+      return edge.flatMap((p) => {
+        const k = 1 - inset / (Math.hypot(p[0], p[1]) || 1);
+        return [p[0] * k, p[1] * k];
+      });
+    };
+    return { out: profile(rows), rim };
   }
+
   if (style === "curly") {
-    const pts: number[] = [];
-    const crx = rx + 2;
-    const cry = ry + 2;
-    const bumps = 7;
-    const per = 8 * fk;
-    for (let i = 0; i <= bumps * per; i += 1) {
-      const a = (182 + (176 * i) / (bumps * per)) * DEG;
-      const bump = Math.sqrt(Math.abs(Math.sin((i / per) * Math.PI))) * 4.2;
-      pts.push(Math.cos(a) * (crx + bump), Math.sin(a) * (cry + bump));
-    }
-    // a soft fringe of small curls, joined to each temple by a rounded curve (not a straight cut)
-    const fy = (x: number) => fringe + 2 + 0.12 * ry * (x / rx) ** 2;
-    const ty = pts[pts.length - 1]!;
-    pts.push(...quadPts(crx, ty, rx * 0.86, ty, rx * 0.86, fy(rx * 0.86), 5 * fk).slice(2, -2));
-    const fp = 4 * fk;
-    for (let k = 1; k < 5 * fp; k += 1) {
-      const x = rx * 0.86 - (rx * 1.72 * k) / (5 * fp);
-      pts.push(x, fy(x) + 1.4 * Math.sin((Math.PI * (k % fp)) / fp));
-    }
-    pts.push(...quadPts(-rx * 0.86, fy(-rx * 0.86), -rx * 0.86, pts[1]!, pts[0]!, pts[1]!, 5 * fk).slice(2, -2));
-    pen.poly(inflate(pts, P.ow), P.O);
-    pen.poly(pts, c);
-    // four small curls
-    const curls: [number, number][] = [
-      [-0.5, -0.78],
-      [-0.12, -0.95],
-      [0.28, -0.84],
-      [0.6, -0.62],
-    ];
-    for (const [fx, fy] of curls) pen.line(arcPts(fx * rx, fy * ry, 2.6, 2.2, 140, 400, 7 * fk), lw, strand, 0.75);
-    return;
+    // a cloud of big round curls of mixed sizes (never a matching pair on top): seven round the top of the head, a
+    // small one over each ear, and five across the forehead; their outer arcs are one round outline
+    const low = flat ? 0 : pressed ? 0.45 : 1;
+    const top7: readonly (readonly [number, number, number])[] = [[186, 0.4, 5], [212, 1, 6.4], [240, 1.6, 8.4], [268, 1, 6.8], [298, 2, 8.8], [328, 1.2, 6.6], [354, 0.4, 5]];
+    const rings: [number, number, number][] = top7.map(([d, o, r], i) => {
+      const small = i === 0 || i === 6;
+      const p = skull(g, d, small ? o : o * low);
+      return [p[0], p[1], small ? (flat ? 3.8 : r) : 4.2 + (r - 4.2) * low];
+    });
+    const top = rings.length;
+    for (const [fx, fy, r] of [[0.78, -0.44, 4.6], [0.42, -0.68, 5.8], [-0.04, -0.74, 6.2], [-0.48, -0.66, 5.4], [-0.8, -0.42, 4.4]] as const) rings.push([fx * rx, fy * ry, r]);
+    const count = rings.length;
+    // where a curl's arc meets the next one's: their crossing on the outside (the far side from the head's centre for
+    // the top curls, the near side for the fringe), or the points that face each other when they do not touch
+    const meet = (i: number): [Pt, Pt] => {
+      const a = rings[i]!;
+      const b = rings[(i + 1) % count]!;
+      const dx = b[0] - a[0];
+      const dy = b[1] - a[1];
+      const d = Math.hypot(dx, dy) || 1;
+      if (d >= a[2] + b[2]) return [[a[0] + (dx / d) * a[2], a[1] + (dy / d) * a[2]], [b[0] - (dx / d) * b[2], b[1] - (dy / d) * b[2]]];
+      const along = (a[2] * a[2] - b[2] * b[2] + d * d) / (2 * d);
+      const h = Math.sqrt(Math.max(0, a[2] * a[2] - along * along));
+      const px = a[0] + (dx / d) * along;
+      const py = a[1] + (dy / d) * along;
+      const c1: Pt = [px - (dy / d) * h, py + (dx / d) * h];
+      const c2: Pt = [px + (dy / d) * h, py - (dx / d) * h];
+      const far = Math.hypot(c1[0], c1[1]) > Math.hypot(c2[0], c2[1]);
+      const outer = i < top - 1 === far ? c1 : c2;
+      return [outer, outer];
+    };
+    const joins = rings.map((_, i) => meet(i));
+    const arc = (i: number, shrink = 0): number[] => {
+      const o = rings[i]!;
+      const from = joins[(i + count - 1) % count]![1];
+      const to = joins[i]![0];
+      const a0 = Math.atan2(from[1] - o[1], from[0] - o[0]) / DEG;
+      let a1 = Math.atan2(to[1] - o[1], to[0] - o[0]) / DEG;
+      while (a1 <= a0) a1 += 360;
+      // a point every 22 degrees or so: a round curl, not a faceted one
+      return arcPts(o[0], o[1], o[2] - shrink, o[2] - shrink, a0, a1, Math.max(3, Math.round(((a1 - a0) / 22) * n)));
+    };
+    const pts = rings.flatMap((_, i) => arc(i));
+    outline(pts);
+    pen.poly(put(pts), c);
+    // the back third a plane darker, and a fat glossy crescent on each of the three biggest curls the key light reaches
+    pen.poly(put(backThird(pts)), under);
+    const lit3 = lamps > 0 ? [2, 4, 5] : [4, 2, 1];
+    if (!flat) pen.poly(joinShapes(lit3.map((i) => put(streak(arcPts(rings[i]![0], rings[i]![1], rings[i]![2] - 2.6, rings[i]![2] - 2.6, lamps > 0 ? 250 : 215, lamps > 0 ? 325 : 290, 5 * n), 2.1)))), gloss);
+    // the rim light runs along the curls' own arcs on the lamps' side
+    const rim = (side: number, inset: number): number[] => (side > 0 ? [1, 2, 3] : [3, 4, 5]).flatMap((i) => arc(i, inset));
+    return { out: () => (flat ? 4 : pressed ? 7.2 : 10.4), rim };
   }
-  if (style === "cap") {
-    pen.ellipse(-rx * 0.9, -ry * 0.22, 3, 4.4, 0, c);
-    pen.ellipse(rx * 0.9, -ry * 0.22, 3, 4.4, 0, c);
-    const dome = arcPts(0, -ry * 0.28, rx + 1.5, ry * 0.82, 180, 360, 14 * fk);
-    pen.poly(inflate(dome, P.ow), P.O);
-    pen.poly(dome, P.accent);
-    // the seam over the dome, and the brim's shadow on the forehead
-    pen.line(arcPts(0, -ry * 0.28, rx * 0.35, ry * 0.8, 200, 270, 6), lw, cel(P.accent, 0.35), 0.8);
-    pen.ellipse(rx * 0.45, -ry * 0.1, rx * 0.5, 2.4, 4, ND.ao, 0.3);
-    const brim = [rx * 0.1, -ry * 0.3, rx + 12, -ry * 0.22, rx + 11, -ry * 0.08, rx * 0.1, -ry * 0.14];
-    pen.poly(inflate(brim, P.ow), P.O);
-    pen.poly(brim, cel(P.accent, 0.15));
-    pen.circle(0, -ry * 1.08, 2, cel(P.accent, 0.3));
+
+  if (style === "long") {
+    // long hair: one heavy mass, wider than the skull: a full cap, a fringe of three big scallops, and a fat solid lock
+    // down each side of the face that ends in a round tip (the heavy back is drawn behind)
+    const out = profile(SLEEK);
+    const top = crest(g, out, 186, 354, 6 / n);
+    const rest = smoothPts(
+      [...skull(g, 354, out(354)), ...at(1.1, 0.1), ...at(1.19, 0.5), ...at(1.15, 0.93), ...at(1.0, 1.04), ...at(0.92, 0.82), ...at(0.92, 0.3), ...at(0.88, -0.1), ...at(0.8, -0.34), ...at(0.55, -0.42), ...at(0.28, -0.68), ...at(0.02, -0.44), ...at(-0.26, -0.66), ...at(-0.54, -0.42), ...at(-0.8, -0.34), ...at(-0.88, -0.1), ...at(-0.92, 0.3), ...at(-0.92, 0.82), ...at(-1.0, 1.04), ...at(-1.15, 0.93), ...at(-1.19, 0.5), ...at(-1.1, 0.1)],
+      false,
+      2 * n,
+    );
+    const pts = [...top, ...rest.slice(2)];
+    outline(pts);
+    pen.poly(put(pts), c);
+    // the lamps' third a plane darker, one gloss streak along the crown and one down the key side's lock
+    pen.poly(put(backThird(pts)), under);
+    const sd = lamps > 0 ? 1 : -1;
+    pen.poly(joinShapes([put(shine(out, 268, 326, 1.8, 1.9)), put(streak(smoothPts([sd * rx * 1.05, ry * 0.22, sd * rx * 1.1, ry * 0.52, sd * rx * 1.06, ry * 0.8], false, 3), 2))]), gloss);
+    return { out };
   }
+
+  if (style === "bun") {
+    // a tidy cap with a middle parting, and a big bun high on the back of the head
+    const out = profile(TIDY);
+    const top = crest(g, out, 186, 354, 6 / n);
+    const rest = smoothPts([...skull(g, 354, out(354)), ...at(0.95, -0.02), ...at(0.84, -0.2), ...at(0.62, -0.44), ...at(0.3, -0.56), ...at(0.06, -0.66), ...at(-0.22, -0.56), ...at(-0.56, -0.42), ...at(-0.82, -0.18), ...at(-0.955, 0.03)], false, 3 * n, [1, 5]);
+    const pts = [...top, ...rest.slice(2)];
+    const B = skull(g, 256, 5.4);
+    const br = 8.2;
+    if (!flat) {
+      pen.circle(hs * B[0], B[1], br + P.ow, P.O);
+      pen.circle(hs * B[0], B[1], br, c);
+    }
+    outline(pts);
+    pen.poly(put(pts), c);
+    const shade = [put(backThird(pts))];
+    const shines = [put(shine(out, 274, 326, 1.4, 1.6))];
+    if (!flat) {
+      // the bun's shadow side, its band in the outfit's accent and its own small shine
+      const disc = ellipsePts(B[0], B[1], br, br, 16 * n);
+      shade.push(put(clipConvex(disc, lensClip(B[0] - 2 * lamps, B[1] - br, B[0] - 5 * lamps, B[1] + br, B[0] - 40 * lamps, B[1], 1.6, 32))));
+      shines.push(put(streak(arcPts(B[0], B[1], br - 2.6, br - 2.6, lamps > 0 ? 285 : 255, lamps > 0 ? 330 : 210, 4 * n), 1.4)));
+    }
+    pen.poly(joinShapes(shade), under);
+    if (!flat) {
+      const root = skull(g, 256, out(256) + 0.4);
+      pen.ellipse(hs * root[0], root[1], 4.6, 1.9, hs * -12, P.accent);
+    }
+    pen.poly(joinShapes(shines), gloss);
+    const rim = (side: number, inset: number): number[] => {
+      if (flat) return crest(g, out, side > 0 ? 198 : 342, side > 0 ? 272 : 268, 6 / n, inset);
+      // up the cap to the bun, then round the bun's own edge on the lamps' side
+      return side > 0 ? [...crest(g, out, 198, 226, 7 / n, inset), ...arcPts(B[0], B[1], br - inset, br - inset, 168, 262, 6 * n)] : [...arcPts(B[0], B[1], br - inset, br - inset, 278, 372, 6 * n), ...crest(g, out, 300, 342, 7 / n, inset)];
+    };
+    return { out, rim };
+  }
+
+  // a cap in the outfit's accent: a chunky dome with a button on top and a thick rounded brim to the front, the hair
+  // showing as a tuft in front of each ear
+  const out = profile(DOME);
+  const tuft = (s: number, grow: number): number[] => ellipsePts(s * rx * 0.93, -ry * 0.08, 3 + grow, 5.4 + grow, 10 * n);
+  pen.poly(joinShapes([put(tuft(-1, P.ow)), put(tuft(1, P.ow))]), P.O);
+  pen.poly(joinShapes([put(tuft(-1, 0)), put(tuft(1, 0))]), c);
+  const top = crest(g, out, 188, 352, 6 / n);
+  // the dome's lower edge wraps round the forehead
+  const edge = quadPts(top[top.length - 2]!, top[top.length - 1]!, 0, -ry * 0.21, top[0]!, top[1]!, 6 * n);
+  const dome = [...top, ...edge.slice(2, -2)];
+  const peak = skull(g, 270, out(270) + 0.7);
+  const brim = (grow: number): number[] => capsulePts(rx * 0.16, -ry * 0.25 - 1.5, 2.5 + grow, rx + 7, -ry * 0.17 - 1.5, 2 + grow, 4 * n);
+  const button = (grow: number): number[] => ellipsePts(peak[0], peak[1], 2.2 + grow, 1.7 + grow, 8 * n);
+  const trim = cel(P.accent, 0.17);
+  // (under a helmet the cap has no brim to stick out)
+  pen.poly(joinShapes(flat ? [put(inflate(dome, P.ow)), put(button(P.ow))] : [put(inflate(dome, P.ow)), put(brim(P.ow)), put(button(P.ow))]), P.O);
+  pen.poly(put(dome), P.accent);
+  pen.poly(put(backThird(dome)), ND.celDark, 0.2);
+  // the brim's shadow on the forehead, then the brim and the button (one shape)
+  if (!flat) pen.ellipse(hs * rx * 0.44, -ry * 0.1 - 1.2, rx * 0.5, 2.6, hs * 3, ND.ao, 0.28);
+  pen.poly(joinShapes(flat ? [put(button(0))] : [put(brim(0)), put(button(0))]), trim);
+  if (!flat) pen.poly(put(shine(out, 274, 328, 2.2, 1.9)), lift(P.accent, 0.42));
+  return { out };
 }
 
+/** Long hair's heavy back, behind the body: one rounded bell from the crown down past the shoulders. */
 function longHairBackNight(pen: Pen, g: Geo, P: Paint): void {
   const rx = g.headRX;
   const ry = g.headRY;
-  const pts = [...arcPts(0, 0, rx + 3, ry + 3, 180, 360, 12 * fine(P)), rx + 4, ry * 1.25, rx * 0.6, ry * 1.55, -rx * 0.6, ry * 1.55, -rx - 4, ry * 1.25];
-  const c = mix(P.hair, cel(P.hair), 0.4);
-  pen.poly(inflate(pts, P.ow), P.O);
+  const n = fine(P);
+  const out = profile(SLEEK);
+  const top = crest(g, (d) => out(d) - 0.5, 196, 344, 8 / n);
+  // each side lock ends in a rounded curl that turns in at the shoulder
+  const rest = smoothPts([top[top.length - 2]!, top[top.length - 1]!, rx * 1.17, ry * 0.3, rx * 1.24, ry * 1.02, rx * 1.1, ry * 1.5, rx * 0.8, ry * 1.6, rx * 0.56, ry * 1.4, rx * 0.3, ry * 1.34, -rx * 0.3, ry * 1.34, -rx * 0.56, ry * 1.4, -rx * 0.8, ry * 1.6, -rx * 1.1, ry * 1.5, -rx * 1.24, ry * 1.02, -rx * 1.17, ry * 0.3, top[0]!, top[1]!], false, 2 * n);
+  const pts = [...top, ...rest.slice(2, -2)];
+  // the hair's own lit tone (so it never melts into a dark place), the lamps' side of it a plane darker
+  const c = P.hair;
+  pen.line([...pts, pts[0]!, pts[1]!], P.ow * 2, P.O);
   pen.poly(pts, c);
-  const strand = mix(P.hair, "#0f0b0a", 0.35);
-  const lw = Math.max(P.thin, P.ow * 0.5);
-  for (const s of [-1, 1]) pen.line(quadPts(s * (rx + 1), ry * 0.2, s * (rx + 2.5), ry * 0.85, s * rx * 0.7, ry * 1.45, 5), lw, strand, 0.75);
+  pen.poly(clipConvex(pts, lensClip(-rx * 0.5 * P.mx, -ry * 1.4, -rx * 0.66 * P.mx, ry * 1.8, -rx * 4 * P.mx, 0, ry * 0.2, 48 * n)), cel(c, luminance(c) < 0.1 ? 0.36 : 0.27));
+  // one long glossy streak down each side lock
+  const lock = (sd: number): number[] => streak(smoothPts([sd * rx * 1.1, ry * 0.36, sd * rx * 1.15, ry * 0.8, sd * rx * 1.09, ry * 1.2, sd * rx * 0.94, ry * 1.44], false, 2), 2.2);
+  pen.poly(joinShapes([lock(-1), lock(1)]), glossOf(c));
 }
 
-function accessoryNight(pen: Pen, g: Geo, look: CharacterLook, P: Paint, pose: { turn: number; nod: number }): void {
+/** A glossy streak's colour on hair of colour `c`: brighter, in the hair's own hue. */
+function glossOf(c: string): string {
+  const [hr, hg, hb] = channels(c);
+  return lift(toHex(hr * 1.7 + 34, hg * 1.7 + 30, hb * 1.7 + 26), 0.06);
+}
+
+/** The head's accessory: glasses, a helmet or headphones (the scarf and the bow tie are on the body). Returns the top
+ * of a helmet, which the rim light then runs along. */
+function accessoryNight(pen: Pen, g: Geo, look: CharacterLook, P: Paint, pose: { turn: number; nod: number }, top: Top): Top | null {
   const acc = look.accessory;
   const rx = g.headRX;
   const ry = g.headRY;
+  const n = fine(P);
   if (acc === "glasses") {
-    const turn = clamp(pose.turn, -1, 1);
-    const fx = turn * rx * 0.3;
-    const sp = rx * 0.44;
-    const ey = -ry * 0.06 + pose.nod * 3;
-    const r = 4.6;
-    const lw = P.ow * 1.4;
-    // round rims (28 points, smooth up close), and the bridge from one rim's inner edge to the other's
-    const ex = (s: number) => fx + s * sp * (1 - 0.22 * Math.max(0, -s * turn));
-    for (const s of [-1, 1]) {
-      pen.line(arcPts(ex(s), ey, r, r * 0.86, 0, 360, 28), lw, P.O);
-      pen.line(arcPts(ex(s), ey, r * 0.7, r * 0.6, 200, 250, 3), lw * 0.7, "#ffffff", 0.35);
-    }
-    const bl = ex(-1) + r;
-    const br = ex(1) - r;
-    pen.line(quadPts(bl, ey - 1, (bl + br) / 2, ey - 2.4, br, ey - 1, 4), lw, P.O);
-    return;
+    // big round frames round the eyes: both rims and the bridge are one stroke, the two glints one shape
+    const { ey, far, eyeX } = faceSpots(rx, ry, pose);
+    const [bw, bh] = eyeSize(look.eyes.shape);
+    const rim = (s: number, a0: number): number[] => arcPts(eyeX(s), ey - 0.2, (bw + 2.5) * (1 - 0.2 * far(s)), bh + 2.1, a0, a0 + 360, 20 * n);
+    const left = rim(-1, 0);
+    const right = rim(1, 180);
+    const bridge = quadPts(left[0]!, left[1]!, (left[0]! + right[0]!) / 2, ey - 2, right[0]!, right[1]!, 4);
+    pen.line([...left, ...bridge.slice(2, -2), ...right], Math.max(P.ow * 1.8, 0.8), P.O);
+    const glint = (s: number): number[] => streak(arcPts(eyeX(s), ey - 0.2, (bw + 1.1) * (1 - 0.2 * far(s)), bh + 0.8, 205, 250, 4 * n), 0.9);
+    pen.poly(joinShapes([glint(-1), glint(1)]), ND.glint, 0.5);
+    return null;
   }
   if (acc === "helmet") {
-    const dome = arcPts(0, -ry * 0.18, rx + 3.5, ry * 0.98, 180, 360, 16 * fine(P));
+    // a chunky dome down to the brow line, a thick band round its edge and a glossy streak
+    const out = (): number => 4.2;
+    const dome = crest(g, out, 187, 353, 6 / n);
+    const y = dome[1]!;
     pen.poly(inflate(dome, P.ow), P.O);
     pen.poly(dome, P.accent);
-    pen.poly(clipConvex(dome, halfPlane(-rx * 0.2 * P.mx, -ry, -rx * 0.9 * P.mx, -ry * 0.2, -rx * 2 * P.mx, 0)), ND.celDark, 0.2);
-    pen.line(arcPts(0, -ry * 0.18, rx * 0.6, ry * 0.8, P.mx > 0 ? 250 : 230, P.mx > 0 ? 310 : 290, 6), 2.2, lift(P.accent, 0.4), 0.6);
-    pen.rect(-rx - 3.5, -ry * 0.24, (rx + 3.5) * 2, 3.5, 1.7, cel(P.accent, 0.25));
-    return;
+    pen.poly(clipConvex(dome, lensClip(-rx * 0.2 * P.mx, -ry * 1.5, -rx * 0.5 * P.mx, ry, -rx * 4 * P.mx, 0, ry * 0.2, 48 * n)), ND.celDark, 0.2);
+    const hw = 0.9 - dome[0]!;
+    pen.rect(-hw, y - 2.2, hw * 2, 4.2, 2, P.O);
+    pen.rect(-hw + P.ow, y - 2.2 + P.ow, (hw - P.ow) * 2, 4.2 - P.ow * 2, 1.6, cel(P.accent, 0.26));
+    pen.poly(streak(crest(g, out, P.mx > 0 ? 280 : 260, P.mx > 0 ? 328 : 212, 7 / n, 2.8), 2), lift(P.accent, 0.45));
+    // a strap down each side in front of the ear, so it reads as a helmet and not a beanie
+    for (const sd of [-1, 1]) {
+      const sx = sd * (rx * 0.9) - 1.7;
+      pen.rect(sx - P.ow, y + 1.5, 3.4 + P.ow * 2, 8 + P.ow, 1.6, P.O);
+      pen.rect(sx, y + 1.5, 3.4, 8, 1.4, cel(P.accent, 0.26));
+    }
+    return { out };
   }
   if (acc === "headphones") {
-    pen.line(arcPts(0, -2, rx + 2.5, ry + 3.5, 190, 350, 12 * fine(P)), 2 + P.ow * 2, P.O);
-    pen.line(arcPts(0, -2, rx + 2.5, ry + 3.5, 190, 350, 12 * fine(P)), 2, cel(P.accent, 0.2));
-    for (const s of [-1, 1]) {
-      pen.ellipse(s * (rx + 0.5), 1, 4.8 + P.ow, 7 + P.ow, 0, P.O);
-      pen.ellipse(s * (rx + 0.5), 1, 4.8, 7, 0, P.accent);
-      pen.ellipse(s * (rx + 0.5) - P.mx * 1.2, 2, 2.6, 5, 0, cel(P.accent, 0.25));
-    }
+    // a thick band over whatever is on the head, and a big padded cup on each ear
+    let lift0 = 2.2;
+    for (let d = 210; d <= 330; d += 5) lift0 = Math.max(lift0, top.out(d) + 1);
+    const band = arcPts(0, 1.5, rx + 3.6, ry + lift0 + 1.5, 192, 348, 12 * n);
+    pen.line(band, 3 + P.ow * 2, P.O);
+    pen.line(band, 3, cel(P.accent, 0.2));
+    const cup = (s: number, grow: number): number[] => superellipse(s * (rx + 1), ry * 0.16, 5.4 + grow, 7.6 + grow, 2.8, 0, 14 * n);
+    pen.poly(joinShapes([cup(-1, P.ow), cup(1, P.ow)]), P.O);
+    pen.poly(joinShapes([cup(-1, 0), cup(1, 0)]), P.accent);
+    pen.poly(joinShapes([-1, 1].map((s) => ellipsePts(s * (rx + 1) - P.mx * 1.3, ry * 0.16 + 0.9, 2.8, 5.2, 10 * n))), ND.celDark, 0.24);
   }
+  return null;
 }
 
-/** The rim light along the top back of the head's silhouette (its hair, cap or helmet). */
-function rimNight(pen: Pen, g: Geo, look: CharacterLook, P: Paint): void {
-  const style = look.hair.style;
-  const acc = look.accessory;
-  let ex = 0;
-  let cy = 0;
-  let ry = g.headRY;
-  if (acc === "helmet") {
-    ex = 3.5;
-    cy = -g.headRY * 0.18;
-    ry = g.headRY * 0.98;
-  } else if (style === "curly") ex = 3.6;
-  else if (style === "cap") {
-    ex = 1.5;
-    cy = -g.headRY * 0.28;
-    ry = g.headRY * 0.82;
-  } else if (style !== "none") ex = 1.2;
-  const inset = P.ow * 0.55;
-  const a0 = P.mx > 0 ? 200 : -110;
-  const a1 = P.mx > 0 ? 290 : -20;
-  if (style === "curly" && acc !== "helmet") {
-    // along the curls' own outer edge (hairNight's 7 bumps from 182° to 358°), never across them
-    const pts: number[] = [];
-    const n = 24 * fine(P);
-    for (let i = 0; i <= n; i += 1) {
-      const deg = a0 + ((a1 - a0) * i) / n;
-      const along = ((((deg - 182) % 360) + 360) % 360) / 176;
-      const bump = Math.sqrt(Math.abs(Math.sin(along * 7 * Math.PI))) * 4.2;
-      const a = deg * DEG;
-      pts.push(Math.cos(a) * (g.headRX + 2 + bump - inset), Math.sin(a) * (g.headRY + 2 + bump - inset));
-    }
-    pen.line(pts, P.ow, P.rim, P.rimA);
-    return;
-  }
-  pen.line(arcPts(0, cy, g.headRX + ex - inset, ry + (acc === "helmet" || style === "cap" ? 0 : ex) - inset, a0, a1, 10 * fine(P)), P.ow, P.rim, P.rimA);
+/** The rim light along the top back of the head's silhouette (its hair, cap or helmet), on the lamps' side. */
+function rimNight(pen: Pen, g: Geo, P: Paint, top: Top, hs: 1 | -1): void {
+  // a helmet covers a mirrored hairdo too: it is the same either way round
+  const side = P.mx * hs;
+  const inset = P.ow * 0.6;
+  const pts = top.rim ? top.rim(side, inset) : crest(g, top.out, side > 0 ? 198 : 342, side > 0 ? 272 : 268, 9 / fine(P), inset);
+  pen.line(hs < 0 ? pts.map((v, i) => (i % 2 === 0 ? -v : v)) : pts, P.ow * 1.25, P.rim, Math.min(1, P.rimA * 1.15));
 }
 
 // ---- the shots' close-ups (§45.45): busts, hands on the wheel and a foot on a pedal -------------------------------
@@ -1300,7 +1742,11 @@ export function drawBust(pen: Pen, look: CharacterLook, g: Geo, pose: Pose, o: B
     }
   }
   // the neckline, the chin's shadow on the shirt and the rim light along the lamp-side shoulder
-  pen.line(quadPts(X(-rx * 0.42), top + ry * 0.02, X(0), top + ry * 0.55, X(rx * 0.42), top + ry * 0.02, 8), P.ow, dk(P, P.top, 0.35));
+  if (P.nd) {
+    // night drive: the thick collar ring the head sits in
+    pen.ellipse(X(0), top + ry * 0.16, rx * 0.58 + P.ow, ry * 0.34 + P.ow, 0, P.O);
+    pen.ellipse(X(0), top + ry * 0.16, rx * 0.58, ry * 0.34, 0, lift(P.top, 0.24));
+  } else pen.line(quadPts(X(-rx * 0.42), top + ry * 0.02, X(0), top + ry * 0.55, X(rx * 0.42), top + ry * 0.02, 8), P.ow, dk(P, P.top, 0.35));
   if (look.accessory === "scarf") {
     // the scarf round the neck, its end hanging down the key side
     const band = [X(-rx * 0.66), ry * 0.9, X(rx * 0.66), ry * 0.9, X(rx * 0.7), ry * 1.26, X(-rx * 0.7), ry * 1.26];
@@ -1331,7 +1777,9 @@ export function drawBust(pen: Pen, look: CharacterLook, g: Geo, pose: Pose, o: B
   const headPose = { turn, lookX: pose.lookX, lookY: pose.lookY, nod: pose.nod };
   tilt(() => {
     // at three quarters the ear on the side the face turns to is hidden behind the cheek
-    if (P.nd) headNight(pen, g, look, P, face, headPose, o.t, o.seed, q && turn <= -0.35 ? -1 : q && turn >= 0.35 ? 1 : 0);
+    // ... and the hairdo turns with the head: its quiff and parting face the way the face does
+    // (the dark close-up grade muddies skin: lift it a step so the face stays warm)
+    if (P.nd) headNight(pen, g, look, { ...P, skin: lift(P.skin, 0.1) }, face, headPose, o.t, o.seed, q && turn <= -0.35 ? -1 : q && turn >= 0.35 ? 1 : 0, q && turn < -0.3 ? -1 : 1);
     else {
       drawHead(pen, g, look, P.skin, P.O, P.ow);
       drawHairFront(pen, g, look, P.O, P.ow);
@@ -1374,14 +1822,15 @@ const BUST_DOTS: readonly (readonly [number, number, -1 | 0 | 1])[] = [
 function bustBodyNight(pen: Pen, look: CharacterLook, P: Paint, rx: number, ry: number, top: number, bottom: number, X: (x: number) => number): void {
   const m = P.mx;
   const Y = (k: number) => top + ry * k;
-  const sh = [rx * 0.46, top, rx * 1.12, Y(0.05), rx * 1.3, Y(0.75)] as const;
+  // (squarer, a little narrower shoulders than the classic bust, to go with the chunky head)
+  const sh = [rx * 0.46, top, rx * 1.2, Y(0.0), rx * 1.27, Y(0.7)] as const;
   // the sleeve's cap: the shoulder's curve from where the cap starts, its front edge bowing in to the armpit
   const cap = quadSpan(...sh, 0.27, 1, 6);
   const pit = Y(1.25);
   const fq = [cap[0]!, cap[1]!, rx * 0.63, Y(0.78), rx * 0.9, pit] as const;
   const front = quadSpan(...fq, 0, 1, 8);
   // straight below the armpit: the sleeve's outside and inside (tapering, hanging away) and the chest's side
-  const xo = (y: number) => rx * (1.3 + (0.048 * (y - Y(0.75))) / ry);
+  const xo = (y: number) => rx * (1.27 + (0.048 * (y - Y(0.7))) / ry);
   const xi = (y: number) => rx * (0.9 + (0.092 * (y - pit)) / ry);
   const xc = (y: number) => rx * (0.9 - (0.03 * (y - pit)) / ry);
   const arm = [...cap, xo(bottom), bottom, xi(bottom), bottom];
@@ -1412,7 +1861,7 @@ function bustBodyNight(pen: Pen, look: CharacterLook, P: Paint, rx: number, ry: 
   // the lamp side's sleeve: its outside in shadow from low on the cap down, a fold darting up from it to the armpit
   const oc = quadSpan(...sh, 0.7, 1, 3);
   const W = rx * 0.13;
-  const wo = (y: number) => W * clamp01((y - oc[1]!) / (Y(0.75) - oc[1]!));
+  const wo = (y: number) => W * clamp01((y - oc[1]!) / (Y(0.7) - oc[1]!));
   const lo = [xo(Y(1.9)) - W, Y(1.9)] as const;
   const hi = [xo(Y(1.62)) - W, Y(1.62)] as const;
   const tipO = [xi(Y(1.45)) + rx * 0.04, Y(1.45)] as const;
@@ -1444,7 +1893,7 @@ function bustBodyNight(pen: Pen, look: CharacterLook, P: Paint, rx: number, ry: 
     inner.push(x + (dx / l) * w, y + (dy / l) * w);
   }
   for (let i = inner.length - 2; i >= 0; i -= 2) band.push(inner[i]!, inner[i + 1]!);
-  const rim = quadSpan(rx * 0.5, top + P.ow, rx * 1.1, Y(0.06) + P.ow, rx * 1.26, Y(0.75), 0.3, 1, 5);
+  const rim = quadSpan(rx * 0.5, top + P.ow, rx * 1.18, Y(0.02) + P.ow, rx * 1.23, Y(0.7), 0.3, 1, 5);
 
   const sleeve = (s: -1 | 1) => {
     const pts = at(s, arm);
@@ -1492,7 +1941,7 @@ export function drawWheelHands(pen: Pen, look: CharacterLook, grips: [number, nu
     pen.line(sl, w + P.ow * 2, P.O);
     pen.line(sl, w, P.top);
     celLine(pen, sl, w, dk(P, P.top), s >= 0 ? -1 : 1);
-    pen.line([gx + s * 0.3 * r, gy + 1.2 * r, gx + s * 0.55 * r, gy + 2.2 * r], w * 0.98, dk(P, P.top, 0.12));
+    pen.line([gx + s * 0.3 * r, gy + 1.2 * r, gx + s * 0.55 * r, gy + 2.2 * r], w * 0.98, P.nd ? lift(P.top, 0.24) : dk(P, P.top, 0.12));
   }
   for (const [gx, gy] of grips) {
     const s = side(gx);
@@ -1600,13 +2049,9 @@ function stripLine(c: number[], w: number[], f: number): number[] {
   return s.slice(0, s.length / 2);
 }
 
-/** Night drive's shoe sole and heel block: the same dark rubber on every shoe colour (final, not graded). */
-const SOLE = "#2b2420";
-const HEEL = "#1f1a19";
-
 /** Night drive's foot on a pedal, in drawFoot's frame (turned `angle`, the ball of the shoe at the origin, the toe
- * towards +y): a sneaker seen from above in the outfit's accent, on a dark sole band (SOLE) that shows along its outer
- * side and round the toe under a lit welt, with a darker heel block (HEEL) at the back, a soft contact shadow under
+ * towards +y): a sneaker seen from above in the outfit's accent, on the shoe's pale rubber sole (soleOf) that shows along its outer
+ * side and round the toe under a lit welt, with a darker heel block at the back, a soft contact shadow under
  * it, a toe cap, a tongue and crossed laces; and the trouser leg from its cuff at the ankle up through a bent knee to
  * the thigh, which leaves the frame at the top right towards the seat, wider the nearer it comes, so the foot always
  * belongs to the driver. */
@@ -1638,11 +2083,12 @@ function footNight(pen: Pen, look: CharacterLook, angle: number, p: number, L0: 
   pen.glow(0.22 * W, cy0 + 0.22 * L, 0.72 * W, 0.46 * L, ND.ao, fadeStops(0.75, 1));
   const sole = inflate(last, 0.065 * W).map((v, i) => v + (i % 2 === 0 ? 0.085 * W : 0.045 * L));
   pen.poly(inflate(sole, P.ow), P.O);
-  pen.poly(sole, SOLE);
+  const rubber = soleOf(P);
+  pen.poly(sole, rubber);
   const heel = roundRectPts(-0.2 * W, cy0 - 0.54 * L, 0.8 * W, 0.34 * L, 0.14 * W);
   pen.poly(inflate(heel, P.ow), P.O);
-  pen.poly(heel, HEEL);
-  pen.poly(inflate(last, 0.014 * W).map((v, i) => v + (i % 2 === 0 ? 0.02 * W : 0.013 * L)), mix(SOLE, P.accent, 0.42));
+  pen.poly(heel, cel(rubber, 0.3));
+  pen.poly(inflate(last, 0.014 * W).map((v, i) => v + (i % 2 === 0 ? 0.02 * W : 0.013 * L)), mix(rubber, P.accent, 0.42));
   // the upper, its heel counter and toe cap in a darker tone of the accent, the shade along its outer side
   pen.poly(last, P.accent);
   pen.poly(clipConvex(last, lensClip(-W, cy0 - 0.27 * L, W, cy0 - 0.27 * L, 0, -L, 0.07 * L)), dk(P, P.accent, 0.2));

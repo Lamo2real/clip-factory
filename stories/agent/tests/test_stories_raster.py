@@ -191,7 +191,14 @@ NIGHT_REGIONS: list[tuple[str, tuple[int, int, int, int], str, str]] = [
     ("scene", (238, 867, 268, 869), "#34373e", "the lamp's thin dark grey head over it (ND.lampHousing)"),
     ("driver_view", (450, 1000, 650, 1040), "#2e2a20", "the road through the windscreen (ND.asphalt)"),
     ("driver_view", (900, 1150, 1000, 1200), "#46454b", "the dashboard's top (ND.dashTop)"),
-    ("face", (350, 940, 600, 990), "#9c8270", "the sample's skin #f2c9a0 in the cabin light (art.ts grade)"),
+    # (the close-up lifts the cabin-graded skin #9c8270 a step, 10% towards white, so the face stays warm; this patch is
+    # the chunky head's cheek and jaw, clear of the eyes, the brows and the hair)
+    (
+        "face",
+        (310, 1220, 560, 1270),
+        "#a9917e",
+        "the sample's skin #f2c9a0 in the cabin light (art.ts grade), lifted a step in the close-up",
+    ),
 ]
 
 

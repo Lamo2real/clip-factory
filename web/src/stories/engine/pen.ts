@@ -449,3 +449,141 @@ export function inflate(pts: number[], d: number): number[] {
   }
   return out;
 }
+
+// ---- more shape generators (night drive's people, rig.ts and face.ts) --------------------------------------------
+
+/** A whole ellipse as a closed polygon of `segs` points (arcPts without its repeated end point), turned `rot`
+ * degrees clockwise on screen. */
+export function ellipsePts(cx: number, cy: number, rx: number, ry: number, segs = 16, rot = 0): number[] {
+  const pts: number[] = [];
+  const cr = Math.cos(rot * DEG);
+  const sr = Math.sin(rot * DEG);
+  for (let i = 0; i < segs; i += 1) {
+    const a = (i / segs) * Math.PI * 2;
+    const x = Math.cos(a) * rx;
+    const y = Math.sin(a) * ry;
+    pts.push(cx + x * cr - y * sr, cy + x * sr + y * cr);
+  }
+  return pts;
+}
+
+/** A tapered capsule: the convex shape round a circle of radius r0 at (x0, y0) and one of radius r1 at (x1, y1), each
+ * end cap `segs` steps (a limb's bone, a finger, a thick stroke that narrows). */
+export function capsulePts(x0: number, y0: number, r0: number, x1: number, y1: number, r1: number, segs = 6): number[] {
+  const dx = x1 - x0;
+  const dy = y1 - y0;
+  const d = Math.hypot(dx, dy);
+  // one circle inside the other: the bigger one alone
+  if (d + r1 <= r0 + 1e-6) return ellipsePts(x0, y0, r0, r0, segs * 2);
+  if (d + r0 <= r1 + 1e-6) return ellipsePts(x1, y1, r1, r1, segs * 2);
+  const th = Math.atan2(dy, dx);
+  const phi = Math.acos(Math.max(-1, Math.min(1, (r0 - r1) / d)));
+  const pts: number[] = [];
+  for (let i = 0; i <= segs; i += 1) {
+    const a = th + phi + ((2 * Math.PI - 2 * phi) * i) / segs;
+    pts.push(x0 + Math.cos(a) * r0, y0 + Math.sin(a) * r0);
+  }
+  for (let i = 0; i <= segs; i += 1) {
+    const a = th - phi + (2 * phi * i) / segs;
+    pts.push(x1 + Math.cos(a) * r1, y1 + Math.sin(a) * r1);
+  }
+  return pts;
+}
+
+/** A smooth curve through the points `p` (x, y pairs): a Catmull-Rom spline by chord length, `segs` steps between two
+ * points, closed (back to the first point) or open. The points listed in `sharp` (their indexes) are corners: the
+ * curve arrives and leaves straight along its chords there. A few well placed points give a clean bold outline. */
+export function smoothPts(p: number[], closed = true, segs = 4, sharp: readonly number[] = []): number[] {
+  const n = p.length >> 1;
+  if (n < 3) return p.slice();
+  const at = (i: number): [number, number] => {
+    const k = ((i % n) + n) % n;
+    return [p[k * 2]!, p[k * 2 + 1]!];
+  };
+  const corner = (i: number): boolean => (!closed && (i <= 0 || i >= n - 1)) || sharp.includes(((i % n) + n) % n);
+  // the curve's direction at point i per unit of chord: `side` 1 leaving it, -1 arriving at it
+  const tangent = (i: number, side: 1 | -1): [number, number] => {
+    const [x, y] = at(i);
+    const [px, py] = at(i - 1);
+    const [nx, ny] = at(i + 1);
+    const da = Math.hypot(x - px, y - py) || 1;
+    const db = Math.hypot(nx - x, ny - y) || 1;
+    if (corner(i)) return side > 0 ? [(nx - x) / db, (ny - y) / db] : [(x - px) / da, (y - py) / da];
+    return [(((x - px) / da) * db + ((nx - x) / db) * da) / (da + db), (((y - py) / da) * db + ((ny - y) / db) * da) / (da + db)];
+  };
+  const out: number[] = [];
+  const last = closed ? n : n - 1;
+  for (let i = 0; i < last; i += 1) {
+    const [x0, y0] = at(i);
+    const [x1, y1] = at(i + 1);
+    const d = Math.hypot(x1 - x0, y1 - y0);
+    const [ax, ay] = tangent(i, 1);
+    const [bx, by] = tangent(i + 1, -1);
+    for (let s = 0; s < segs; s += 1) {
+      const t = s / segs;
+      const t2 = t * t;
+      const t3 = t2 * t;
+      const h00 = 2 * t3 - 3 * t2 + 1;
+      const h10 = (t3 - 2 * t2 + t) * d;
+      const h01 = -2 * t3 + 3 * t2;
+      const h11 = (t3 - t2) * d;
+      out.push(h00 * x0 + h10 * ax + h01 * x1 + h11 * bx, h00 * y0 + h10 * ay + h01 * y1 + h11 * by);
+    }
+  }
+  if (!closed) out.push(p[n * 2 - 2]!, p[n * 2 - 1]!);
+  return out;
+}
+
+/** A band along the centre line `c` (x, y pairs) as a closed polygon: `w` is its width, one for the whole line or one
+ * per point (a 0 at an end tapers it to a tip). `cap` > 0 rounds each end that has a width with that many points. */
+export function ribbonPts(c: number[], w: number | readonly number[], cap = 0): number[] {
+  const n = c.length >> 1;
+  if (n < 2) return [];
+  const half = (i: number): number => (typeof w === "number" ? w : (w[Math.min(i, w.length - 1)] ?? 0)) / 2;
+  const left: number[] = [];
+  const right: number[] = [];
+  const dirs: [number, number][] = [];
+  for (let i = 0; i < n; i += 1) {
+    const i0 = Math.max(0, i - 1);
+    const i1 = Math.min(n - 1, i + 1);
+    const dx = c[i1 * 2]! - c[i0 * 2]!;
+    const dy = c[i1 * 2 + 1]! - c[i0 * 2 + 1]!;
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len;
+    const uy = dy / len;
+    dirs.push([ux, uy]);
+    const h = half(i);
+    left.push(c[i * 2]! + uy * h, c[i * 2 + 1]! - ux * h);
+    right.push(c[i * 2]! - uy * h, c[i * 2 + 1]! + ux * h);
+  }
+  const out = [...left];
+  const round = (i: number, sign: 1 | -1): void => {
+    const h = half(i);
+    if (cap <= 0 || h <= 0) return;
+    const [ux, uy] = dirs[i]!;
+    for (let k = 1; k <= cap; k += 1) {
+      const a = (Math.PI * k) / (cap + 1);
+      // from the left side round the tip to the right side (the end), or from the right back to the left (the start)
+      const across = Math.cos(a) * h * sign;
+      const along = Math.sin(a) * h * sign;
+      out.push(c[i * 2]! + uy * across + ux * along, c[i * 2 + 1]! - ux * across + uy * along);
+    }
+  };
+  round(n - 1, 1);
+  for (let i = n - 1; i >= 0; i -= 1) out.push(right[i * 2]!, right[i * 2 + 1]!);
+  round(0, -1);
+  return out;
+}
+
+/** A point list turned `rot` degrees clockwise on screen about the origin, then moved to (x, y): a part built in its
+ * own frame, placed in another's (so both can be one shape). */
+export function placePts(pts: number[], x: number, y: number, rot = 0): number[] {
+  const cr = Math.cos(rot * DEG);
+  const sr = Math.sin(rot * DEG);
+  const out: number[] = new Array(pts.length);
+  for (let i = 0; i + 1 < pts.length; i += 2) {
+    out[i] = x + pts[i]! * cr - pts[i + 1]! * sr;
+    out[i + 1] = y + pts[i]! * sr + pts[i + 1]! * cr;
+  }
+  return out;
+}
