@@ -769,25 +769,31 @@ test.describe("the floating setup list on a phone", () => {
     await settle(page);
     const under = await page.evaluate(async () => {
       // Only controls Tab can reach (a card's cover link is tabindex -1 and would be skipped).
-      const tabbable = () => Array.from(document.querySelectorAll<HTMLElement>("main a[href], main button")).filter((e) => e.getBoundingClientRect().height > 0 && e.tabIndex >= 0);
-      // Cards and their pictures settle in (a tile's link has no height until its picture is laid out): the list is read
-      // once it stops changing, so the control before the target really is the one Tab leaves from.
-      let all = tabbable();
-      for (let i = 0, same = 0; i < 40 && same < 3; i++) {
-        await new Promise((r) => setTimeout(r, 100));
-        const now = tabbable();
-        same = now.length === all.length ? same + 1 : 0;
-        all = now;
-      }
-      const target = all[Math.floor(all.length / 2)]!;
-      // Cards may still be settling in: put it 20 px from the top until it stays there.
-      for (let i = 0; i < 20 && Math.abs(target.getBoundingClientRect().top - 20) > 1; i++) {
-        window.scrollBy(0, target.getBoundingClientRect().top - 20);
-        await new Promise((r) => setTimeout(r, 100));
+      const reach = () => Array.from(document.querySelectorAll<HTMLElement>("main a[href], main button")).filter((e) => e.tabIndex >= 0);
+      const boxed = (e: HTMLElement) => e.getBoundingClientRect().height > 0;
+      let target!: HTMLElement;
+      let before!: HTMLElement;
+      // A pair of neighbours in the middle of the page. A card brings its "like clips that did well" tiles when it comes
+      // near (and a control not drawn yet is skipped by Tab), so the pair is checked again once the page has been scrolled
+      // to it, and picked again if something has come in between them.
+      for (let attempt = 0; attempt < 8; attempt++) {
+        const full = reach();
+        const mid = Math.floor(full.length / 2);
+        let at = -1;
+        for (let d = 0; d < full.length && at < 0; d++) at = [mid + d, mid - d].find((i) => i > 0 && i < full.length && boxed(full[i]!) && boxed(full[i - 1]!)) ?? -1;
+        target = full[at]!;
+        before = full[at - 1]!;
+        // Cards may still be settling in: put it 20 px from the top until it stays there.
+        for (let i = 0; i < 20 && Math.abs(target.getBoundingClientRect().top - 20) > 1; i++) {
+          window.scrollBy(0, target.getBoundingClientRect().top - 20);
+          await new Promise((r) => setTimeout(r, 100));
+        }
+        await new Promise((r) => setTimeout(r, 400));
+        const now = reach();
+        if (now.indexOf(target) - now.indexOf(before) === 1 && boxed(target) && boxed(before)) break;
       }
       target.setAttribute("data-tab-target", "");
-      all = tabbable();
-      all[all.indexOf(target) - 1]!.focus({ preventScroll: true });
+      before.focus({ preventScroll: true });
       return target.getBoundingClientRect().top;
     });
     const bar = (await page.locator(".setup-todo-bar").boundingBox())!;
