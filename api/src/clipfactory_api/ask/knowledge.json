@@ -1,5 +1,5 @@
 {
- "version": "5f084069ae5e",
+ "version": "53b1c6bd9eb8",
  "parts": [
   {
    "id": "app-map",
@@ -322,6 +322,12 @@
    "title": "CONTRACTS: 49. Numbers roll when they change (owner request, 2026-11-24)",
    "line": "The owner: \"make the numbers roll when they increase or decrease\".",
    "chars": 1576
+  },
+  {
+   "id": "contracts-50",
+   "title": "CONTRACTS: 50. What a job's AI cost (owner request, 2026-11-25)",
+   "line": "The owner: \"when a job is finished, I want to know the exact amount that Fable cost me, and the entire process in terms",
+   "chars": 2879
   },
   {
    "id": "adr-01",
@@ -916,6 +922,12 @@
    "title": "DECISIONS: ADR-101 Vehicle designs are drafts",
    "line": "Context. §45.51. The design ran as a task, but nothing stored remembered it.",
    "chars": 1379
+  },
+  {
+   "id": "adr-102",
+   "title": "DECISIONS: ADR-102 A job counts its own AI usage; dollars come from one price list in config/models.json",
+   "line": "Context. §50. The owner wants the exact AI cost of every finished job, per model, in tokens and dollars.",
+   "chars": 1312
   },
   {
    "id": "architecture-overview",

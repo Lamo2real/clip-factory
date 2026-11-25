@@ -175,6 +175,9 @@ class Tracker:
         if live is None and callable(put_live):
             live = livestatus.LiveStatus(functools.partial(put_live, user_id), job_id, session_id)
         self.live = live
+        # What the job's AI has cost so far (usage.Meter.summary): written to the Job item as ``aiCost`` with every
+        # write once there is something to show, so a failed or stopped job still shows what it spent.
+        self.cost: Callable[[], dict[str, Any] | None] | None = None
         if live is not None:
             live.on_emit = self._touch
         self._live_token: Any = None
@@ -208,10 +211,17 @@ class Tracker:
             if self.superseded:
                 raise JobSuperseded()
             try:
+                cost = self.cost() if self.cost else None
                 ok = await self.store.update_job(
                     self.user_id,
                     self.job_id,
-                    {"steps": self.steps, "progress": self.progress, "heartbeatAt": now_iso(), **fields},
+                    {
+                        "steps": self.steps,
+                        "progress": self.progress,
+                        "heartbeatAt": now_iso(),
+                        **({"aiCost": cost} if cost else {}),
+                        **fields,
+                    },
                     unless_canceled=unless_canceled,
                     session_id=self.session_id,
                     remove=remove,

@@ -7,6 +7,7 @@ import { friendlyMessage } from "../../api/errors.ts";
 import type { Clip, ClipStatus, Job } from "../../api/types.ts";
 import { useSession } from "../../app/session.tsx";
 import { Icon } from "../../components/Icon.tsx";
+import { AiCostBlock } from "./AiCost.tsx";
 import { LiveLine } from "./LiveLine.tsx";
 import { MacWait } from "./MacWait.tsx";
 import { wantsMac } from "../../lib/macFetch.ts";
@@ -321,6 +322,8 @@ export function JobDetail({ jobId }: { jobId: string }) {
           ) : null}
         </section>
       </div>
+
+      <AiCostBlock job={job} />
 
       {job.campaignId ? <JobCampaignStrip campaignId={job.campaignId} note={job.campaignNote} clipIds={data.clips.map((c) => c.clipId)} /> : null}
 

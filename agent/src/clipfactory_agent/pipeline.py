@@ -34,6 +34,7 @@ from . import chat as chat_mod
 from . import chatfetch, chatscreen, learnings, livestatus, loudness, nova, pot, proc, sources, verify, watch
 from . import picture as picture_mod
 from . import signals as signals_mod
+from . import usage as usage_mod
 from . import vectors as vectors_mod
 from .agent import Brief, find_moments
 from .bedrock import Bedrock, Facecam, FrameLayout, ModelError, model_unavailable
@@ -1095,6 +1096,7 @@ class Pipeline:
             except BaseException:
                 await self.transcriber.stop(name)
                 raise
+            usage_mod.record_transcribe(seconds)  # billed per audio second (the minutes the owner sees)
             await self.store.tag_temporary(out_key)  # Transcribe cannot tag its own output (docs/CONTRACTS.md §7)
             doc = await self.store.get_json(out_key)
             return parse_items(doc, offset), job, parse_speakers(doc, offset)

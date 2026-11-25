@@ -11,6 +11,7 @@ import { deleteWithUndo, useDeletedJobs } from "../../lib/jobDeletes.ts";
 import { DeleteJobsSheet, isWorking } from "./DeleteJobsSheet.tsx";
 import { burst } from "../../lib/confetti.ts";
 import { useAction } from "../../lib/motion.ts";
+import { aiCostOf, listCost } from "../../lib/aiCost.ts";
 import { plural, relative } from "../../lib/format.ts";
 import { useLoad } from "../../lib/hooks.ts";
 import { useLiveEvents, useLivePoll } from "../../lib/live.ts";
@@ -330,6 +331,7 @@ function RowParts({ job }: { job: Job }) {
       <span className="job-row__side">
         <JobStatusPill status={job.status} />
         {job.status === "ready" ? <span className="job-row__count">{plural(job.clipCount, "clip")}</span> : null}
+        {job.status === "ready" && aiCostOf(job) ? <span className="job-row__cost">{listCost(aiCostOf(job)!)}</span> : null}
       </span>
     </>
   );

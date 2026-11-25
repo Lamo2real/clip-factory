@@ -933,3 +933,12 @@ def test_post_jobs_never_takes_a_copys_fields(call: Call) -> None:
     for name in ("remake", "remakeOf", "sourceLanguage"):
         body = {"source": {"type": "link", "url": "https://youtu.be/abc"}, name: {}}
         assert call("POST", "/v1/jobs", body)[0] == 400
+
+
+def test_a_jobs_ai_cost_goes_out_as_stored_and_a_retry_keeps_it() -> None:
+    """docs/CONTRACTS.md §50: ``aiCost`` is public and additive; Try again never resets it, so it adds up."""
+    cost = {"v": 1, "models": [{"key": "fable-5-1", "tokens": 5}], "totalTokens": 5, "totalDollars": 0.01}
+    item = {"jobId": "j1", "status": "failed", "aiCost": cost, "sessionId": "s"}
+    assert jobs.public_job(item)["aiCost"] == cost
+    assert "aiCost" not in jobs.public_job({"jobId": "j2", "status": "ready"})
+    assert "aiCost" not in jobs.restart_fields("job-0000000000000000000000000001", "2026-11-25T10:00:00Z", 1)

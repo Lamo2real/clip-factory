@@ -2871,3 +2871,18 @@ WebView2's budget. Nothing stored changes.
   redesign read as before. The 3-at-once check is not atomic, so two creates in one moment could briefly make 4. Counts use a strongly consistent read, and deleting a designing draft still counts against the 3 (its task keeps running): both are known soft limits.
   Amends [ADR-97](#adr-97-video-drafts-are-their-own-item-vehicles-are-car-bodies-shown-as-vehicles-roles-are-additive-fields)
   only for where a vehicle design waits.
+
+## ADR-102 A job counts its own AI usage; dollars come from one price list in config/models.json
+
+- **Context.** §50. The owner wants the exact AI cost of every finished job, per model, in tokens and dollars.
+- **Options.** (1) Read the AWS bill or Cost Explorer: delayed, per account, not per job. (2) Count in each Lambda and
+  the agent from the model's own answer, and store it on the job. (3) The Agent SDK's `total_cost_usd`: its price
+  table does not know every Bedrock model.
+- **Decision.** Option 2. One meter per job run (a context variable, so the shared model clients need no job id)
+  records each answer's reported usage and Transcribe's audio seconds. Dollars are tokens times the price in
+  `config/models.json` `pricing`, which holds the source and date of every price; an unconfirmed price is never
+  invented and shows as "about". The result is the additive field `Job.aiCost`, written with the job's own writes so a
+  failed job keeps what it spent and a retry adds to it.
+- **Consequences.** No new AWS resource and no extra model call. The agent image carries the price list already
+  (`/app/config`). Prices change only by editing that file from the provider's own page. Work done by the API
+  Lambdas outside a job (Ask, weekly learning, lessons, rules, distil) is not in a job's cost.
