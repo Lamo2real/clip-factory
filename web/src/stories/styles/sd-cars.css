@@ -86,7 +86,8 @@
   width: auto;
   height: auto;
   margin: 0;
-  color: var(--st-text-strong);
+  /* The icon follows its tile's word: light on the dark tiles, dark on the cream one that is picked. */
+  color: inherit;
 }
 
 .st-s-vkind .st-s-pick__label {
