@@ -376,6 +376,8 @@ describe("Review card while the Mac posts TikTok: the row is the clip's own", ()
 
   it("My settings saved as Friends: the card starts there, and the line above Upload never says for everyone", async () => {
     await mount({ mac: true, tiktok: { privacy: "MUTUAL_FOLLOW_FRIENDS", stitch: false } });
+    // The saved settings reach the card a moment after it mounts (a slow machine shows "not picked yet" first).
+    await until(() => tiktokLine().includes("Who can see it: Friends"), "the card starts on the saved Friends setting");
     expect(tiktokLine()).toContain("Who can see it: Friends · Comments on · Duet on · Stitch off");
     expect(inCard(".tt-yourself-hint")!.textContent).toBe(MAC_WHERE_LINE);
     expect(card().textContent).not.toContain(MAC_HINT);
