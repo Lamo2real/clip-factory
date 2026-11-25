@@ -4,10 +4,10 @@
 // its own geometry, faces and colours (lit, never swapped), and the shots get a bust, hands on the wheel and a foot on
 // a pedal in both styles. Also: motion.ts says when the face last changed (faceSince) for the brows' small overshoot.
 import { describe, expect, it } from "vitest";
-import { grade, ink, inkPx, lift, lit as tone, LIGHTS, ND, withWarm } from "../src/stories/engine/art.ts";
+import { grade, ink, inkPx, lit as tone, LIGHTS, ND, withWarm } from "../src/stories/engine/art.ts";
 import { FACES, NOISE_MOUTH } from "../src/stories/engine/face.ts";
 import { F, inFrame, withArt } from "../src/stories/engine/frame.ts";
-import { luminance, mix } from "../src/stories/engine/math.ts";
+import { mix } from "../src/stories/engine/math.ts";
 import { actorState, faceSince, restPose, shownExpression, STYLES } from "../src/stories/engine/motion.ts";
 import { Pen } from "../src/stories/engine/pen.ts";
 import { drawBust, drawCharacter, drawFoot, drawWheelHands, geometry, headTop, REST, type Pose } from "../src/stories/engine/rig.ts";
@@ -135,27 +135,23 @@ describe("classic draws exactly as before", () => {
     }
   });
 
-  it("a classic face keeps its pure white eyes; night drive's eyes are big glossy shapes with a warm white, an iris and a sparkle", () => {
+  it("a classic face keeps its white eyes and irises; night drive's are plain dark dots with no white and no sparkle", () => {
     const l = look();
     const classic = standing(l);
     const night = lit("night_drive", "night", () => standing(l));
     expect(classic.some((p) => p.k === "ellipse" && p.color === "#ffffff")).toBe(true);
-    // night never uses the pure white of classic: the white is a warm tone, dimmed by the place's light
     expect(night.some((p) => (p.k === "ellipse" || p.k === "circle") && p.color === "#ffffff")).toBe(false);
+    // no warm white either, and no sparkle: the eyes are the classic dots (CONTRACTS 45.49, the owner's request)
     const white = lit("night_drive", "night", () => tone(ND.eyeWhite, 0.5));
-    expect(night.filter((p) => p.k === "poly" && p.color === white)).toHaveLength(1);
-    // both irises are one shape in the picked colour (a very dark colour is lifted one small step), both sparkles one shape
-    const iris = lit("night_drive", "night", () => {
-      const c = grade("#1c1842");
-      return luminance(c) < 0.1 ? lift(c, 0.09) : c;
-    });
-    expect(night.filter((p) => p.k === "poly" && p.color === iris)).toHaveLength(1);
-    expect(night.filter((p) => p.k === "poly" && p.color === ND.glint)).toHaveLength(1);
+    expect(night.some((p) => "color" in p && p.color === white)).toBe(false);
+    expect(night.some((p) => "color" in p && p.color === ND.glint)).toBe(false);
+    const dot = lit("night_drive", "night", () => mix(ND.eye, grade("#1c1842"), 0.55));
+    expect(night.filter((p) => p.k === "ellipse" && p.color === dot)).toHaveLength(2);
   });
 });
 
 describe("the picked eye colour", () => {
-  it("tints night drive's irises, standing and up close, and a pupil shows in the close-up", () => {
+  it("tints night drive's dot eyes, standing and up close, and a pupil shows in the close-up", () => {
     const navy = look();
     const green = look({ eyes: { shape: "round", color: "#47d6a0" } });
     expect(lit("night_drive", "night", () => standing(green))).not.toEqual(lit("night_drive", "night", () => standing(navy)));
@@ -171,10 +167,9 @@ describe("the picked eye colour", () => {
       });
     const a = close(green);
     expect(a).not.toEqual(close(navy));
-    // the irises are one shape in the picked colour, and the pupils and the lid lines one dark shape
-    const tint = lit("night_drive", "cabin", () => grade("#47d6a0"));
-    expect(a.filter((p) => p.k === "poly" && p.color === tint)).toHaveLength(1);
-    expect(a.filter((p) => p.k === "poly" && p.color === ND.eye).length).toBeGreaterThanOrEqual(1);
+    const tint = lit("night_drive", "cabin", () => mix(ND.eye, grade("#47d6a0"), 0.55));
+    expect(a.filter((p) => p.k === "ellipse" && p.color === tint)).toHaveLength(2);
+    expect(a.filter((p) => p.k === "ellipse" && p.color === ND.eye)).toHaveLength(2);
   });
 });
 
