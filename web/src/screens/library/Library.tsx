@@ -299,11 +299,11 @@ function AllClips() {
 }
 
 
-/** What's working: the newest learning in three lines, See more for all of them in full, and the way to the whole list. */
+/** What's working: the newest learning in two lines, See more for all of them in full, and the way to the whole list. */
 export function Learnings({ learnings }: { learnings: Learning[] }) {
   const [open, setOpen] = useState(false);
   const shown = open ? learnings : learnings.slice(0, 1);
-  const hasMore = learnings.length > 1 || (learnings[0]?.text.length ?? 0) > 150;
+  const hasMore = learnings.length > 1 || (learnings[0]?.text.length ?? 0) > 110;
   return (
     <div className="learnings glass glass--green">
       <h2 className="display-3" id="learn-title">

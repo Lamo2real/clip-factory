@@ -1,4 +1,4 @@
-// Library › What's working: the newest learning in three lines, See more shows every learning in full, See less puts it
+// Library › What's working: the newest learning in two lines, See more shows every learning in full, See less puts it
 // back, and a short single learning has nothing to expand.
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";

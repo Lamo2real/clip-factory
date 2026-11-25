@@ -2127,12 +2127,12 @@ html:where(.see-through, [data-backdrop]) .btn.post__again {
   gap: 0 20px;
   font-size: var(--fs-small);
 }
-/* The brief: the newest learning in three lines; See more shows every learning in full. */
+/* The brief: the newest learning in two lines; See more shows every learning in full. */
 .learnings__brief {
   display: -webkit-box;
   -webkit-box-orient: vertical;
-  -webkit-line-clamp: 3;
-  line-clamp: 3;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
   overflow: hidden;
 }
 .learnings__more a {
