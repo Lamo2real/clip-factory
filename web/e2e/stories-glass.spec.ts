@@ -200,7 +200,7 @@ test("the stage is drawn exactly as look.ts works the veils out (its lightest pi
   expect(Math.abs(drawn - modelled), `drawn ${drawn.toFixed(4)}, modelled ${modelled.toFixed(4)}`).toBeLessThan(0.006);
 });
 
-test("the liquid rim bends at most three heroes, each with a filter of its own size", async ({ page }) => {
+test("the liquid rim bends at most six cards, each with a filter of its own size", async ({ page }) => {
   // The rim is only for a capable device (look.ts readGlassEnv: more than 4 cores and 4 GB, no Save-Data); the Linux
   // CI runner has 4 cores and rightly gets the plain light. The device is set here, so it is liquid on every machine.
   await page.addInitScript(() => {
@@ -218,15 +218,20 @@ test("the liquid rim bends at most three heroes, each with a filter of its own s
       main.prepend(h);
     }
   });
-  await expect(page.locator(".st-lens.is-liquid")).toHaveCount(3);
-  const lenses = await page.evaluate(() =>
-    Array.from(document.querySelectorAll<HTMLElement>(".st-lens.is-liquid")).map((el) => {
-      const url = el.style.getPropertyValue("--st-lens-url");
-      const f = document.querySelector(url.slice(4, -1));
-      const r = el.getBoundingClientRect();
-      return { bf: getComputedStyle(el).backdropFilter, w: Math.round(r.width), h: Math.round(r.height), fw: Number(f?.getAttribute("width")), fh: Number(f?.getAttribute("height")), maps: f?.querySelectorAll("feImage").length, moves: f?.querySelectorAll("animate, animateTransform").length };
-    }),
-  );
+  await expect(page.locator(".st-lens.is-liquid")).toHaveCount(6);
+  const measure = () =>
+    page.evaluate(() =>
+      Array.from(document.querySelectorAll<HTMLElement>(".st-lens.is-liquid")).map((el) => {
+        const url = el.style.getPropertyValue("--st-lens-url");
+        const f = document.querySelector(url.slice(4, -1));
+        const r = el.getBoundingClientRect();
+        return { bf: getComputedStyle(el).backdropFilter, w: Math.round(r.width), h: Math.round(r.height), fw: Number(f?.getAttribute("width")), fh: Number(f?.getAttribute("height")), maps: f?.querySelectorAll("feImage").length, moves: f?.querySelectorAll("animate, animateTransform").length };
+      }),
+    );
+  // A page card can still change size a moment after its rim was drawn (a font arrives); the rim is redrawn to the new
+  // size, so wait until every rim has the size of its own card.
+  await expect.poll(async () => (await measure()).every((l) => l.fw === l.w && l.fh === l.h)).toBe(true);
+  const lenses = await measure();
   for (const l of lenses) {
     // The rim's own map, after the glass's dim (brightness(), look.ts DIM: 1 in every look), never animated.
     expect(l.bf).toMatch(/^blur\(1px\) brightness\((?:1|0?\.\d+)\) url\("?#st-lens-\d+"?\) saturate\(1\.5\)$/);

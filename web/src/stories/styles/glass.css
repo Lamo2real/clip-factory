@@ -48,6 +48,7 @@
   background:
     var(--st-status-shade, none) 0 0 / 100% var(--status-shade-h, 0px) no-repeat,
     linear-gradient(rgb(var(--st-veil-rgb) / var(--st-veil-page)), rgb(var(--st-veil-rgb) / var(--st-veil-page))),
+    var(--st-silk),
     radial-gradient(7vw 34vh at 100% 48%, rgb(var(--st-stage-c3-rgb) / 0.34), transparent 70%),
     radial-gradient(46vmax 36vmax at 92% 2%, rgb(var(--st-stage-c3-rgb) / var(--st-stage-a3)), transparent 70%),
     radial-gradient(50vmax 40vmax at 0% 104%, rgb(var(--st-stage-c2-rgb) / var(--st-stage-a2)), transparent 70%),

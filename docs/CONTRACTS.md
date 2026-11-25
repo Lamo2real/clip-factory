@@ -19887,6 +19887,20 @@ engine; the owner picked **Chunky**. ADR-99.
 - **Tests.** `storiesChunkyPeople` (new `pen.ts` generators, tokens, every hair, accessory, body, hand and eye shape,
   a saved look), `storiesNightPeople`, the goldens, `storiesCarLegacy` and the agent's `test_stories_raster.py`.
 
+### 45.50 Real glass: a lit bevel on every surface, a bending rim on the big cards (owner request, 2026-11-25; wins over §45.38 for how Clips Funded's glass is drawn)
+
+Owner, with a picture of a flat card beside a real-glass one: "Make clips funded entire UI more glassy like this (not
+changing the color)". ADR-100. Only light, shade and rim change; every colour, word and size stays.
+
+- **Bevel.** Every glass surface gets a thick lit edge, bright top left and warm bottom right (`--st-bevel-card`,
+  `-hero`, `-control` in each `--st-sheen*`); the thin edge is brighter, 1.5 px. Box-shadows only.
+- **Silk.** Dark folds over the stage's own lights (`--st-silk`, colours look only): shade, never a new colour or a
+  lighter spot, so every contrast measure holds.
+- **Rim.** `glass/lens.ts` gives `.st-lens` to big glass cards (not controls, bars, sheets, tinted tiles or cards in
+  cards, and none without room for the rim inside their padding) after the marked ones, in document order, up to
+  `LENS_BUDGET` 6 (was 3). Scrolling never changes which cards bend.
+- **Tests.** `storiesLens` (budget 6, auto rims, no room, rewritten class, no scroll listener), `stories-glass.spec.ts`.
+
 ### 45.51 Vehicle designs run on their own and wait in Vehicles as drafts (owner request, 2026-11-25; wins over §45.42/§45.47 for where Design with AI keeps its work)
 
 Owner: "also when i click design on this i should be able to go into elsewhere in the app and the car process should

@@ -1,10 +1,11 @@
-// The liquid rim of a few hero surfaces (.st-lens): Chromium bends what is behind them with an SVG filter inside
+// The liquid rim of the big glass surfaces (.st-lens, and the cards this code gives it to, AUTO_LENS): Chromium bends what is behind them with an SVG filter inside
 // backdrop-filter. Each hero gets its own filter, its displacement map drawn at the hero's exact pixel size and
 // corner radius (a stretched map would make the rim uneven), rebuilt only when that size changes. The map bends the
 // backdrop inwards in a band at the rim and is neutral (128, 128) everywhere else, so nothing under the words moves;
 // the middle is frosted inside the same filter (the blur the hero would have had anyway).
 //
-// Budget (the Windows app's WebView2): at most LENS_BUDGET per screen, none over 1 MP or half the window, never
+// Budget (the Windows app's WebView2): at most LENS_BUDGET per screen, in document order (never by scroll: a card's
+// filter does not change while the owner scrolls), none over 1 MP or half the window, never
 // animated (the map is a still picture; nothing here runs per frame). WebKit ignores url() in backdrop-filter, so
 // useStoriesBackground starts this only for data-glass="liquid" (Chromium, a capable device, no reduced
 // transparency); everywhere else the hero keeps its plain CSS light (glass.css --st-edge-hero, --st-sheen-hero).
@@ -20,7 +21,7 @@ export interface LensShape {
 }
 
 /** At most this many liquid rims on one screen (WebView2's budget); the rest keep the plain CSS light. */
-export const LENS_BUDGET = 3;
+export const LENS_BUDGET = 6;
 /** A hero bigger than this (px²), or than half the window, stays flat: the plain CSS light only. */
 export const LENS_MAX_AREA = 1_000_000;
 /** How far the light moves at the very rim, px (--st-lens-depth). */
@@ -165,6 +166,15 @@ export function pickLenses<T>(items: readonly { el: T; w: number; h: number }[],
     .map(({ el }) => el);
 }
 
+/**
+ * Every big glass card on screen may bend its rim, not only the ones a screen marked `.st-lens` (the owner: the whole UI
+ * as real glass). These are the cards the lens code adds `.st-lens` to itself, after the marked ones, while the budget
+ * lasts: not a control, a bar, a sheet or a tinted tile, and never one inside another glass (its parent's filter has
+ * already bent what is behind both).
+ */
+export const AUTO_LENS_KIND = ".st-glass:not(.st-glass--control, .st-glass--bar, .st-glass--float, .st-glass--tinted)";
+export const AUTO_LENS = ".st-glass:not(.st-lens, .st-glass--control, .st-glass--bar, .st-glass--float, .st-glass--tinted)";
+
 const NS = "http://www.w3.org/2000/svg";
 const LIQUID = "is-liquid";
 let lensIds = 0;
@@ -194,6 +204,8 @@ export function watchLenses(
   document.body.append(defs);
   const built = new Map<HTMLElement, Built>();
   const sizes = new Map<HTMLElement, { w: number; h: number }>();
+  /** the cards this code gave `.st-lens` itself (a screen's own marks are never taken away) */
+  const given = new Set<HTMLElement>();
 
   const drop = (el: HTMLElement) => {
     const b = built.get(el);
@@ -211,14 +223,35 @@ export function watchLenses(
     };
     // The rim stays inside the padding (never under words), and never bends so far that it folds.
     const pad = Math.min(parseFloat(cs.paddingTop) || 0, parseFloat(cs.paddingLeft) || 0, parseFloat(cs.paddingRight) || 0, parseFloat(cs.paddingBottom) || 0);
-    const rimBand = Math.max(10, Math.min(num("--st-lens-band", band), pad - 2, Math.floor(Math.min(w, h) / 2) - 2));
+    // Room for the rim: the card's own padding, or (a link or row card whose padding is inside its children) how far
+    // its nearest words, icons or buttons sit from its edge (a picture may lie over the rim).
+    let inset = pad;
+    if (pad < 12) {
+      const box = el.getBoundingClientRect();
+      let near = Number.POSITIVE_INFINITY;
+      let seen = 0;
+      for (const node of Array.from(el.querySelectorAll<HTMLElement>("*"))) {
+        if (++seen > 300) break;
+        const hasWords = Array.from(node.childNodes).some((c) => c.nodeType === 3 && (c.textContent ?? "").trim() !== "");
+        if (!hasWords && !node.matches("svg, button, input, [role='button']")) continue;
+        const q = node.getBoundingClientRect();
+        if (q.width > 0 && q.height > 0) near = Math.min(near, q.left - box.left, box.right - q.right, q.top - box.top, box.bottom - q.bottom);
+      }
+      if (Number.isFinite(near)) inset = Math.max(pad, near);
+    }
+    const rimBand = Math.min(num("--st-lens-band", band), inset - 2, Math.floor(Math.min(w, h) / 2) - 2);
+    // A card with no room for a rim keeps the painted bevel: the rim must never reach words.
+    if (rimBand < 8) return drop(el);
     const rimDepth = Math.min(num("--st-lens-depth", depth), rimBand * LENS_FOLD);
     const radius = parseFloat(cs.borderTopLeftRadius) || 20;
     const veil = middleVeil(num("--st-veil-hero", 0.76), num("--st-veil-lens-rim", 0.36));
     const blur = num("--st-blur", 28);
     const key = `${w}x${h}|${radius}|${rimBand}|${rimDepth}|${veil}|${blur}`;
     const had = built.get(el);
-    if (had?.key === key) return;
+    if (had?.key === key) {
+      if (!el.classList.contains(LIQUID)) el.classList.add(LIQUID);
+      return;
+    }
     const url = makeMap({ w, h, radius, band: rimBand });
     if (!url) return drop(el);
     const filter = had?.filter ?? (document.createElementNS(NS, "filter") as SVGFilterElement);
@@ -249,7 +282,20 @@ export function watchLenses(
   });
   const settle = () => {
     frame = 0;
-    const heroes = Array.from(root.querySelectorAll<HTMLElement>(".st-lens"));
+    const marked = Array.from(root.querySelectorAll<HTMLElement>(".st-lens")).filter((el) => !given.has(el));
+    const auto = Array.from(root.querySelectorAll<HTMLElement>(`${AUTO_LENS}, .st-lens`)).filter(
+      (el) => (given.has(el) ? el.matches(AUTO_LENS_KIND) : !el.classList.contains("st-lens")) && !el.parentElement?.closest(".st-glass"),
+    );
+    for (const el of Array.from(given)) if (!auto.includes(el)) {
+      given.delete(el);
+      el.classList.remove("st-lens");
+    }
+    for (const el of auto) {
+      given.add(el);
+      // (re-added where a re-render rewrote the card's class)
+      if (!el.classList.contains("st-lens")) el.classList.add("st-lens");
+    }
+    const heroes = [...marked, ...auto];
     for (const el of heroes) if (!sizes.has(el)) sizer.observe(el);
     for (const el of Array.from(sizes.keys()))
       if (!heroes.includes(el) || !el.isConnected) {
@@ -279,6 +325,8 @@ export function watchLenses(
     sizer.disconnect();
     removeEventListener("resize", schedule);
     for (const el of Array.from(built.keys())) drop(el);
+    for (const el of Array.from(given)) el.classList.remove("st-lens");
+    given.clear();
     defs.remove();
   };
 }

@@ -208,7 +208,9 @@ broke AA on a sheet's control or the light's order over white (test/storiesLight
 | `--st-dim`, `--st-dim-over` (1 in every look) | how far a glass's filter dims what it sees (`brightness()`; look.ts `DIM`, `filtered`): `--st-dim` cards, heroes (the liquid rim too), tinted tiles, the rail; `--st-dim-over` bars, plates, sheets. A dim showed less of the backdrop, not more (4), so none dims |
 | `--st-filter-glass` (none over the colours: nothing to blur, and WebView2 pays per filter; a picture and the desktop turn it on), `--st-filter-bar`, `--st-filter-float` | the backdrop filters: `blur() brightness() saturate()`, dimmed before saturated so no channel clips first. Only the top level of glass: glass inside glass (a `.st-glass` in a `.st-glass`, or in a plate where a plate has a filter of its own, a picture or the desktop; but a bar or a sheet) has none (glass.css), so what is drawn is what look.ts works out, and WebView2 pays for one filter, not two. Never animated, never changed on hover |
 | `--st-raised-cover` 0.6 | over the colours a card inside a card covers this much more of what the hero's veil lets through (`--st-shade-raised`, look.ts `RAISED_COVER`), so the card's light under it never stacks past a sheet's |
-| `--st-edge-width` 1.25px, `--st-edge`, `--st-edge-hero`, `--st-edge-cream` | the thin light edge (a masked gradient ring, never a border) |
+| `--st-edge-width` 1.5px, `--st-edge`, `--st-edge-hero`, `--st-edge-cream` | the thin light edge (a masked gradient ring, never a border) |
+| `--st-bevel-card`, `--st-bevel-hero`, `--st-bevel-control` | the curved, thick lit edge of real glass (§45.50): offset inner glows, bright top left and warm bottom right, laid into each level's `--st-sheen*`; box-shadows only |
+| `--st-silk` | soft dark folds over the colours stage's own lights (§45.50): shade only, never a new colour or a lighter spot; the default look only (picture and window draw their own backdrop) |
 | `--st-sheen-soft` | the soft inner top highlight alone |
 | `--st-sheen-panel` (1), `--st-sheen` (2), `--st-sheen-hero`, `--st-sheen-raised` (3), `--st-sheen-control` (4), `--st-sheen-float` (5), `--st-sheen-cream` | each level's bright top rim (`--st-rim-N`) in front of the soft inner top highlight |
 | `--st-rim-light` | a hero's thick edge catching light, painted (all a WebKit hero has; under a liquid rim it softens it) |
@@ -279,12 +281,12 @@ url() saturate()`, dimmed first as every hero), `--st-lens-band` 26px (how wide 
 the lens code never makes it wider than the hero's own padding, so it never reaches words), `--st-lens-depth` 12px
 (how far light moves at the very edge; never over 0.48 of the band, so the picture never folds), `--st-saturate-lens`
 1.5. How it works (glass/lens.ts, started by `useStoriesBackground` only for `data-glass="liquid"` while Stories is on
-screen, and never in `data-look="window"`, where the desktop is not part of the page): each `.st-lens` gets its own
+screen, and never in `data-look="window"`, where the desktop is not part of the page): each `.st-lens` (a screen's mark, or one the lens code gives to every big glass card that has room for the rim inside its padding, §45.50; never by scroll) gets its own
 SVG filter in `svg.st-lens__defs` (put on `body`, taken away when Stories goes off screen), its displacement map drawn
 on a canvas at the hero's exact size and corner radius (a ResizeObserver rebuilds it only when that size changes). In
 the band the backdrop is read from further in, most at the very edge (t²); the middle is still (128, 128) and frosted
 inside the filter (`--st-blur`) under the rest of the hero's veil, so words keep exactly `--st-veil-hero`. One
-displacement pass, no `<animate>`, never a filter transition. At most `LENS_BUDGET` (3) per screen in document order,
+displacement pass, no `<animate>`, never a filter transition. At most `LENS_BUDGET` (6, §45.50) per screen in document order,
 none over 1 MP or half the window (`LENS_MAX_AREA`, `pickLenses`). Chromium only (`html.refract`); WebKit (the Mac
 app, Safari, iPhone) ignores `url()` there and keeps the plain CSS light (`--st-edge-hero`, `--st-sheen-hero`,
 `--st-rim-light`). Reduced transparency: no lens, solid veils.

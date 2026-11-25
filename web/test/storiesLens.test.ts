@@ -153,7 +153,7 @@ describe("the liquid rim's filter", () => {
 
 describe("the budget", () => {
   it("bends at most LENS_BUDGET heroes, none over 1 MP or half the window", () => {
-    expect(LENS_BUDGET).toBe(3);
+    expect(LENS_BUDGET).toBe(6);
     expect(LOOK_LENS_BUDGET).toBe(LENS_BUDGET);
     const view = { w: 1440, h: 900 };
     const items = [
@@ -164,7 +164,7 @@ describe("the budget", () => {
       { el: "c", w: 200, h: 200 },
       { el: "d", w: 300, h: 300 },
     ];
-    expect(pickLenses(items, view)).toEqual(["a", "b", "c"]);
+    expect(pickLenses(items, view)).toEqual(["a", "b", "c", "d"]);
     expect(pickLenses([{ el: "half", w: 1000, h: 700 }], view)).toEqual([]);
   });
 });
@@ -197,7 +197,7 @@ describe("the watcher", () => {
     vi.stubGlobal("cancelAnimationFrame", (id: number) => clearTimeout(id));
     const root = document.createElement("div");
     root.className = "stories-app";
-    for (let i = 0; i < 5; i++) {
+    for (let i = 0; i < 8; i++) {
       const h = document.createElement("section");
       h.className = "st-glass st-glass--hero st-lens";
       h.style.padding = "24px";
@@ -207,17 +207,81 @@ describe("the watcher", () => {
     stop = watchLenses(root, { makeMap: () => "data:image/png;base64,AA" });
     await new Promise((r) => setTimeout(r, 20));
     const heroes = Array.from(root.querySelectorAll<HTMLElement>(".st-lens"));
-    expect(observed.length).toBe(5);
-    expect(heroes.map((h) => h.classList.contains("is-liquid"))).toEqual([true, true, true, false, false]);
+    expect(observed.length).toBe(8);
+    expect(heroes.map((h) => h.classList.contains("is-liquid"))).toEqual([true, true, true, true, true, true, false, false]);
     const url = heroes[0]!.style.getPropertyValue("--st-lens-url");
     expect(url).toMatch(/^url\(#st-lens-\d+\)$/);
     const defs = document.querySelector("svg.st-lens__defs")!;
-    expect(defs.querySelectorAll("filter")).toHaveLength(3);
+    expect(defs.querySelectorAll("filter")).toHaveLength(6);
     expect(defs.querySelector(`filter${url.slice(4, -1)}`)?.getAttribute("width")).toBe("320");
     stop();
     stop = null;
     expect(document.querySelector("svg.st-lens__defs")).toBeNull();
     expect(heroes.some((h) => h.classList.contains("is-liquid") || h.style.getPropertyValue("--st-lens-url"))).toBe(false);
+  });
+
+  it("gives every big glass card a rim that bends, after the marked ones, and takes it away again", async () => {
+    class FakeResize {
+      constructor(private cb: ResizeObserverCallback) {}
+      observe(el: Element) {
+        this.cb([{ target: el, borderBoxSize: [{ inlineSize: 320, blockSize: 180 }] } as unknown as ResizeObserverEntry], this as unknown as ResizeObserver);
+      }
+      unobserve() {}
+      disconnect() {}
+    }
+    vi.stubGlobal("ResizeObserver", FakeResize);
+    vi.stubGlobal("requestAnimationFrame", (fn: FrameRequestCallback) => setTimeout(() => fn(0), 0) as unknown as number);
+    vi.stubGlobal("cancelAnimationFrame", (id: number) => clearTimeout(id));
+    const root = document.createElement("div");
+    root.innerHTML = `
+      <section class="st-glass" id="plain" style="padding:24px"></section>
+      <section class="st-glass st-lens" id="marked" style="padding:24px"></section>
+      <button class="st-glass st-glass--control" id="control"></button>
+      <header class="st-glass st-glass--bar" id="bar"></header>
+      <section class="st-glass" id="outer" style="padding:24px"><section class="st-glass" id="inner" style="padding:24px"></section></section>`;
+    document.body.append(root);
+    stop = watchLenses(root, { makeMap: () => "data:image/png;base64,AA" });
+    await new Promise((r) => setTimeout(r, 20));
+    const el = (id: string) => root.querySelector<HTMLElement>(`#${id}`)!;
+    expect(el("plain").classList.contains("is-liquid")).toBe(true);
+    expect(el("marked").classList.contains("is-liquid")).toBe(true);
+    expect(el("outer").classList.contains("is-liquid")).toBe(true);
+    for (const id of ["control", "bar", "inner"]) expect(el(id).classList.contains("is-liquid")).toBe(false);
+    stop();
+    stop = null;
+    expect(el("plain").classList.contains("st-lens")).toBe(false);
+    expect(el("marked").classList.contains("st-lens")).toBe(true);
+  });
+
+  it("keeps the painted bevel where a card has no room for the rim, and gives a rewritten card its rim back", async () => {
+    class FakeResize {
+      constructor(private cb: ResizeObserverCallback) {}
+      observe(el: Element) {
+        this.cb([{ target: el, borderBoxSize: [{ inlineSize: 320, blockSize: 180 }] } as unknown as ResizeObserverEntry], this as unknown as ResizeObserver);
+      }
+      unobserve() {}
+      disconnect() {}
+    }
+    vi.stubGlobal("ResizeObserver", FakeResize);
+    vi.stubGlobal("requestAnimationFrame", (fn: FrameRequestCallback) => setTimeout(() => fn(0), 0) as unknown as number);
+    vi.stubGlobal("cancelAnimationFrame", (id: number) => clearTimeout(id));
+    const root = document.createElement("div");
+    root.innerHTML = '<section class="st-glass" id="tight" style="padding:6px"></section><section class="st-glass" id="roomy" style="padding:24px"></section>';
+    document.body.append(root);
+    const addScroll = vi.spyOn(window, "addEventListener");
+    stop = watchLenses(root, { makeMap: () => "data:image/png;base64,AA" });
+    await new Promise((r) => setTimeout(r, 20));
+    const el = (id: string) => root.querySelector<HTMLElement>(`#${id}`)!;
+    expect(el("tight").classList.contains("is-liquid")).toBe(false);
+    expect(el("roomy").classList.contains("is-liquid")).toBe(true);
+    // scrolling never changes which cards bend: nothing listens to it
+    expect(addScroll.mock.calls.some(([type]) => type === "scroll")).toBe(false);
+    addScroll.mockRestore();
+    // a re-render rewrites the class: both marks come back
+    el("roomy").className = "st-glass";
+    await new Promise((r) => setTimeout(r, 20));
+    expect(el("roomy").classList.contains("st-lens")).toBe(true);
+    expect(el("roomy").classList.contains("is-liquid")).toBe(true);
   });
 
   it("does nothing where the browser cannot watch sizes", () => {
