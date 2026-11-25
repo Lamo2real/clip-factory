@@ -1,6 +1,7 @@
 // The engine's command line (docs/CONTRACTS.md §45.10) without Deno: cli.ts hands it the arguments, a file reader
 // and stdout, so the very same commands run under vitest. Every problem is one sentence for stderr and exit code 2.
 
+import { CAR_DETAIL, CAR_DETAIL_V, CAR_DETAIL_WHOLE, PRESET, PRESET_PARTS } from "./carDetail.ts";
 import { CATALOG } from "./catalog.ts";
 import { drawFrame, ENGINE_VERSION } from "./engine.ts";
 import { FORMATS } from "./frame.ts";
@@ -25,8 +26,17 @@ function fail(message: string): never {
 
 /** What `catalog` prints: the vocabulary, the limits, what the free words and numbers mean, and the six sizes a video
  * can have (`formats`, CONTRACTS §45.34; the first is the default). */
-export function catalogOutput(): { engine: number; catalog: typeof CATALOG; limits: typeof LIMITS & { seats: typeof SEATS }; rules: typeof RULES; propStates: typeof PROP_STATES; formats: typeof FORMATS } {
-  return { engine: ENGINE_VERSION, catalog: CATALOG, limits: { ...LIMITS, seats: SEATS }, rules: RULES, propStates: PROP_STATES, formats: FORMATS };
+export function catalogOutput(): { engine: number; catalog: typeof CATALOG; limits: typeof LIMITS & { seats: typeof SEATS }; rules: typeof RULES; propStates: typeof PROP_STATES; formats: typeof FORMATS; carDetail: CarDetailCatalog } {
+  return { engine: ENGINE_VERSION, catalog: CATALOG, limits: { ...LIMITS, seats: SEATS }, rules: RULES, propStates: PROP_STATES, formats: FORMATS, carDetail: { v: CAR_DETAIL_V, rules: CAR_DETAIL, whole: CAR_DETAIL_WHOLE, presets: { profile: PRESET, parts: PRESET_PARTS } } };
+}
+
+/** What `catalog` prints about a vehicle's `detail` (CONTRACTS §45.48): the rules the agent reads live, so the engine,
+ * the API and the agent never disagree on what a detail may hold. */
+export interface CarDetailCatalog {
+  v: number;
+  rules: typeof CAR_DETAIL;
+  whole: string[];
+  presets: { profile: typeof PRESET; parts: typeof PRESET_PARTS };
 }
 
 function readJson(io: CliIO, path: string | undefined, what: string): unknown {

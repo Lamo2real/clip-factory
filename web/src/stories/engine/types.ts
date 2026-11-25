@@ -2,6 +2,8 @@
 // Imported by the browser (live previews) and run by the agent with Deno (final frames), so this folder must stay
 // free of DOM, npm and network imports: relative ".ts" imports only.
 
+import type { CarDetail } from "./carDetail.ts";
+
 export type Hex = string; // "#rrggbb"
 
 export type Expression =
@@ -102,6 +104,9 @@ export interface CarLook {
   outline: Hex;
   /** from the inside photos (§45.47); left out: the cabin's usual colours */
   interior?: CarInterior;
+  /** "Realistic vehicles" (CONTRACTS §45.48): a measured outline and named parts; left out, the vehicle draws exactly
+   * as it always did */
+  detail?: CarDetail;
 }
 
 export type ActionId =
@@ -529,3 +534,5 @@ export interface Catalog {
 }
 
 export type ValidateResult = { ok: true; script: StoryScript } | { ok: false; errors: string[] };
+
+export type { CarDetail, CarExhaust, CarExtra, CarFrontLight, CarGrille, CarIntake, CarProfile, CarRearLight, CarRoof, CarSpoiler, CarStripe, CarWheelShape, CarDrl } from "./carDetail.ts";

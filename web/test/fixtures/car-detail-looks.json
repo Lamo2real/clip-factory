@@ -1,0 +1,4512 @@
+{
+ "note": "valid: every look must be accepted; invalid: every look must be refused (engine, API) or repaired (agent); path is the dotted name inside detail the message names (empty: the whole detail)",
+ "valid": [
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "toon": 30,
+    "profile": {
+     "body": "sports",
+     "lh": 379,
+     "wh": 162,
+     "tipH": 30,
+     "noseX": 3,
+     "noseH": 42,
+     "noseR": 20,
+     "chinH": 9,
+     "cowlX": 33,
+     "cowlH": 71,
+     "bonnet": 55,
+     "headX": 46,
+     "headH": 100,
+     "peakX": 50,
+     "roofX": 62,
+     "roofH": 97,
+     "deckX": 80,
+     "deckH": 84,
+     "tailX": 97,
+     "tailH": 81,
+     "rumpH": 15,
+     "sillH": 10,
+     "axF": 23,
+     "axR": 81,
+     "wheelD": 57,
+     "archGap": 9,
+     "beltH": 72,
+     "beltRise": 2,
+     "soft": 55,
+     "pillarX": 60,
+     "glassX": 62,
+     "panes": 1,
+     "roofW": 62,
+     "taperF": 22,
+     "taperR": 8
+    },
+    "roof": {
+     "type": "open",
+     "hoops": "twin"
+    },
+    "wheels": {
+     "shape": "split",
+     "spokes": 5,
+     "tyre": 22,
+     "lip": 10
+    },
+    "brakes": {
+     "disc": "ceramic",
+     "caliper": "#ffd21f"
+    },
+    "lights": {
+     "front": {
+      "shape": "swept",
+      "drl": "line"
+     },
+     "rear": {
+      "shape": "round"
+     }
+    },
+    "front": {
+     "grille": "none",
+     "intake": "split3",
+     "splitter": "blade",
+     "bumper": "body"
+    },
+    "bonnet": {
+     "vent": "duct"
+    },
+    "side": {
+     "intake": "scoop",
+     "intakeX": 66,
+     "skirts": "lip",
+     "doors": 1,
+     "handles": "flush",
+     "crease": "wedge",
+     "mirror": "stalk"
+    },
+    "rear": {
+     "diffuser": "fins",
+     "exhaust": "high",
+     "spoiler": "ducktail"
+    },
+    "stripe": {
+     "layout": "centre",
+     "color": "#111111",
+     "width": 60
+    },
+    "finish": "satin",
+    "cabin": {
+     "rows": 1,
+     "seat": "#1b1b1d",
+     "dial": "#ffd21f",
+     "wheel": "flat"
+    }
+   }
+  },
+  {
+   "body": "suv",
+   "length": 1,
+   "height": 1,
+   "paint": "#c9c2ae",
+   "accent": "#1c1d20",
+   "pattern": "plain",
+   "windows": "tinted",
+   "wheels": {
+    "style": "offroad",
+    "rim": "#2a2c30",
+    "size": 1
+   },
+   "lights": {
+    "front": "round",
+    "rear": "square"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#17181b",
+   "detail": {
+    "v": 1,
+    "toon": 30,
+    "profile": {
+     "body": "suv",
+     "lh": 245,
+     "wh": 98,
+     "tipH": 40,
+     "noseX": 1,
+     "noseH": 59,
+     "noseR": 8,
+     "chinH": 22,
+     "cowlX": 30,
+     "cowlH": 63,
+     "bonnet": 6,
+     "headX": 37,
+     "headH": 99,
+     "peakX": 60,
+     "roofX": 96,
+     "roofH": 99,
+     "deckX": 97,
+     "deckH": 62,
+     "tailX": 99,
+     "tailH": 60,
+     "rumpH": 23,
+     "sillH": 23,
+     "axF": 17,
+     "axR": 76,
+     "wheelD": 40,
+     "archGap": 22,
+     "beltH": 63,
+     "beltRise": 0,
+     "soft": 12,
+     "pillarX": 52,
+     "glassX": 92,
+     "panes": 3,
+     "roofW": 92,
+     "taperF": 4,
+     "taperR": 2
+    },
+    "roof": {
+     "type": "closed",
+     "rails": true
+    },
+    "wheels": {
+     "shape": "split",
+     "spokes": 5,
+     "tyre": 34,
+     "lip": 20
+    },
+    "brakes": {
+     "disc": "plain",
+     "caliper": "#c8102e"
+    },
+    "lights": {
+     "front": {
+      "shape": "round",
+      "drl": "ring"
+     },
+     "rear": {
+      "shape": "tall"
+     }
+    },
+    "front": {
+     "grille": "bars",
+     "intake": "none",
+     "splitter": "none",
+     "bumper": "black"
+    },
+    "side": {
+     "intake": "none",
+     "skirts": "boards",
+     "doors": 2,
+     "handles": "chrome",
+     "crease": "none",
+     "mirror": "square",
+     "rubStrip": true
+    },
+    "rear": {
+     "diffuser": "none",
+     "exhaust": "side",
+     "spoiler": "none",
+     "bumper": "black"
+    },
+    "arches": "square",
+    "extras": [
+     "spare_wheel",
+     "bull_bar",
+     "wing_lamps"
+    ],
+    "finish": "gloss",
+    "cabin": {
+     "rows": 2
+    }
+   }
+  },
+  {
+   "body": "compact",
+   "length": 1,
+   "height": 1,
+   "paint": "#b3202a",
+   "accent": "#f4f1ea",
+   "pattern": "two_tone",
+   "windows": "clear",
+   "wheels": {
+    "style": "alloy",
+    "rim": "#e6e8ec",
+    "size": 1
+   },
+   "lights": {
+    "front": "round",
+    "rear": "square"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#221a1a",
+   "detail": {
+    "v": 1,
+    "toon": 30,
+    "profile": {
+     "body": "compact",
+     "lh": 227,
+     "wh": 105,
+     "tipH": 40,
+     "noseX": 2,
+     "noseH": 55,
+     "noseR": 55,
+     "chinH": 17,
+     "cowlX": 27,
+     "cowlH": 63,
+     "bonnet": 30,
+     "headX": 36,
+     "headH": 96,
+     "peakX": 55,
+     "roofX": 84,
+     "roofH": 95,
+     "deckX": 93,
+     "deckH": 64,
+     "tailX": 98,
+     "tailH": 60,
+     "rumpH": 18,
+     "sillH": 15,
+     "axF": 16,
+     "axR": 82,
+     "wheelD": 36,
+     "archGap": 14,
+     "beltH": 63,
+     "beltRise": 0,
+     "soft": 60,
+     "pillarX": 60,
+     "glassX": 82,
+     "panes": 2,
+     "roofW": 80,
+     "taperF": 6,
+     "taperR": 6
+    },
+    "roof": {
+     "type": "closed",
+     "color": "#f4f1ea"
+    },
+    "wheels": {
+     "shape": "straight",
+     "spokes": 8,
+     "tyre": 42,
+     "lip": 60
+    },
+    "lights": {
+     "front": {
+      "shape": "round"
+     },
+     "rear": {
+      "shape": "rect"
+     }
+    },
+    "front": {
+     "grille": "oval",
+     "bumper": "chrome"
+    },
+    "side": {
+     "doors": 1,
+     "handles": "chrome",
+     "mirror": "ear"
+    },
+    "rear": {
+     "exhaust": "single",
+     "bumper": "chrome"
+    },
+    "arches": "flare",
+    "stripe": {
+     "layout": "twin",
+     "color": "#f4f1ea",
+     "width": 50
+    },
+    "twoTone": "roof",
+    "extras": [
+     "antenna"
+    ],
+    "finish": "gloss",
+    "cabin": {
+     "rows": 2
+    }
+   }
+  },
+  {
+   "body": "van",
+   "length": 1,
+   "height": 1,
+   "paint": "#6fb7c9",
+   "accent": "#f4f1ea",
+   "pattern": "two_tone",
+   "windows": "clear",
+   "wheels": {
+    "style": "hubcap",
+    "rim": "#6fb7c9",
+    "size": 1
+   },
+   "lights": {
+    "front": "round",
+    "rear": "round"
+   },
+   "extra": "roof_rack",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#1c2b33",
+   "detail": {
+    "v": 1,
+    "toon": 30,
+    "profile": {
+     "body": "van",
+     "lh": 221,
+     "wh": 89,
+     "tipH": 45,
+     "noseX": 1,
+     "noseH": 56,
+     "noseR": 70,
+     "chinH": 16,
+     "cowlX": 4,
+     "cowlH": 57,
+     "bonnet": 0,
+     "headX": 13,
+     "headH": 96,
+     "peakX": 50,
+     "roofX": 95,
+     "roofH": 96,
+     "deckX": 98,
+     "deckH": 58,
+     "tailX": 99,
+     "tailH": 50,
+     "rumpH": 17,
+     "sillH": 14,
+     "axF": 25,
+     "axR": 80,
+     "wheelD": 33,
+     "archGap": 14,
+     "beltH": 57,
+     "beltRise": 0,
+     "soft": 80,
+     "pillarX": 34,
+     "glassX": 90,
+     "panes": 4,
+     "roofW": 90,
+     "taperF": 8,
+     "taperR": 4
+    },
+    "roof": {
+     "type": "closed"
+    },
+    "twoTone": "split",
+    "wheels": {
+     "shape": "cap",
+     "tyre": 38,
+     "wall": "white",
+     "hub": "#e9ecef"
+    },
+    "brakes": {
+     "disc": "none"
+    },
+    "lights": {
+     "front": {
+      "shape": "round",
+      "h": 47
+     },
+     "rear": {
+      "shape": "round"
+     }
+    },
+    "front": {
+     "grille": "none",
+     "intake": "none",
+     "splitter": "none",
+     "bumper": "chrome"
+    },
+    "side": {
+     "intake": "slats",
+     "skirts": "none",
+     "doors": 2,
+     "handles": "chrome",
+     "crease": "none",
+     "mirror": "ear"
+    },
+    "rear": {
+     "diffuser": "none",
+     "exhaust": "single",
+     "spoiler": "none"
+    },
+    "arches": "round",
+    "extras": [],
+    "finish": "gloss",
+    "cabin": {
+     "rows": 2
+    }
+   }
+  },
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1
+   }
+  },
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "roof": {},
+    "wheels": {},
+    "lights": {
+     "front": {},
+     "rear": {}
+    },
+    "stripe": {},
+    "cabin": {}
+   }
+  },
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414"
+  },
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "profile": {
+     "body": "sports",
+     "lh": 150,
+     "wh": 60,
+     "tipH": 10,
+     "noseX": 0,
+     "noseH": 15,
+     "noseR": 0,
+     "chinH": 3,
+     "cowlX": 1,
+     "cowlH": 30,
+     "bonnet": 0,
+     "headX": 4,
+     "headH": 40,
+     "peakX": 4,
+     "roofX": 12,
+     "roofH": 40,
+     "deckX": 20,
+     "deckH": 20,
+     "tailX": 86,
+     "tailH": 15,
+     "rumpH": 3,
+     "sillH": 4,
+     "axF": 8,
+     "axR": 55,
+     "wheelD": 20,
+     "archGap": 0,
+     "beltH": 30,
+     "beltRise": -10,
+     "soft": 0,
+     "pillarX": 10,
+     "glassX": 20,
+     "panes": 1,
+     "roofW": 40,
+     "taperF": 0,
+     "taperR": 0
+    }
+   }
+  },
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "profile": {
+     "body": "sports",
+     "lh": 520,
+     "wh": 220,
+     "tipH": 85,
+     "noseX": 14,
+     "noseH": 92,
+     "noseR": 100,
+     "chinH": 40,
+     "cowlX": 55,
+     "cowlH": 90,
+     "bonnet": 100,
+     "headX": 72,
+     "headH": 100,
+     "peakX": 100,
+     "roofX": 100,
+     "roofH": 100,
+     "deckX": 100,
+     "deckH": 98,
+     "tailX": 100,
+     "tailH": 98,
+     "rumpH": 45,
+     "sillH": 40,
+     "axF": 40,
+     "axR": 94,
+     "wheelD": 72,
+     "archGap": 45,
+     "beltH": 88,
+     "beltRise": 20,
+     "soft": 100,
+     "pillarX": 96,
+     "glassX": 99,
+     "panes": 5,
+     "roofW": 100,
+     "taperF": 40,
+     "taperR": 40
+    }
+   }
+  },
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "profile": {
+     "body": "van",
+     "lh": 379,
+     "wh": 162,
+     "tipH": 30,
+     "noseX": 3,
+     "noseH": 42,
+     "noseR": 20,
+     "chinH": 9,
+     "cowlX": 33,
+     "cowlH": 71,
+     "bonnet": 55,
+     "headX": 46,
+     "headH": 100,
+     "peakX": 50,
+     "roofX": 62,
+     "roofH": 97,
+     "deckX": 80,
+     "deckH": 84,
+     "tailX": 97,
+     "tailH": 81,
+     "rumpH": 15,
+     "sillH": 10,
+     "axF": 23,
+     "axR": 81,
+     "wheelD": 57,
+     "archGap": 9,
+     "beltH": 72,
+     "beltRise": 2,
+     "soft": 55,
+     "pillarX": 60,
+     "glassX": 62,
+     "panes": 1,
+     "roofW": 62,
+     "taperF": 22,
+     "taperR": 8
+    }
+   }
+  },
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "toon": 0
+   }
+  },
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "toon": 100
+   }
+  },
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "wheels": {
+     "shape": "steel",
+     "spokes": 3,
+     "tyre": 12,
+     "lip": 0,
+     "dish": 0,
+     "wall": "black",
+     "hub": "#000000",
+     "rearD": 20
+    }
+   }
+  },
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "wheels": {
+     "shape": "block",
+     "spokes": 24,
+     "tyre": 60,
+     "lip": 100,
+     "dish": 100,
+     "wall": "white",
+     "hub": "#ffffff",
+     "rearD": 72
+    }
+   }
+  },
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "lights": {
+     "front": {
+      "shape": "strip",
+      "drl": "brow",
+      "h": 10,
+      "lens": "smoked"
+     },
+     "rear": {
+      "shape": "c_shape",
+      "h": 10,
+      "lens": "clear"
+     }
+    }
+   }
+  },
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "lights": {
+     "front": {
+      "shape": "pop_up",
+      "drl": "none",
+      "h": 92,
+      "lens": "yellow"
+     },
+     "rear": {
+      "shape": "wedge",
+      "h": 92,
+      "lens": "smoked"
+     }
+    }
+   }
+  },
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "side": {
+     "intake": "duct",
+     "intakeX": 20,
+     "skirts": "boards",
+     "doors": 0,
+     "handles": "none",
+     "crease": "double",
+     "mirror": "none",
+     "rubStrip": false,
+     "fuelCap": false
+    }
+   }
+  },
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "side": {
+     "intake": "slats",
+     "intakeX": 95,
+     "skirts": "deep",
+     "doors": 3,
+     "handles": "chrome",
+     "crease": "level",
+     "mirror": "square",
+     "rubStrip": true,
+     "fuelCap": true
+    }
+   }
+  },
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "stripe": {
+     "layout": "pin",
+     "color": "#000000",
+     "width": 0
+    }
+   }
+  },
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "stripe": {
+     "layout": "offset",
+     "color": "#ffffff",
+     "width": 100
+    }
+   }
+  },
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "cabin": {
+     "rows": 1,
+     "seat": "#101010",
+     "dial": "#ff0000",
+     "wheel": "flat"
+    }
+   }
+  },
+  {
+   "body": "bus",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "cabin": {
+     "rows": 3,
+     "wheel": "round"
+    }
+   }
+  },
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "extras": [
+     "bull_bar",
+     "spare_wheel",
+     "roof_rails",
+     "antenna",
+     "shark_fin",
+     "snorkel"
+    ]
+   }
+  },
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "extras": [
+     "light_bar",
+     "mudflaps",
+     "roof_scoop",
+     "tow_hook",
+     "ladder",
+     "wing_lamps"
+    ]
+   }
+  },
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "extras": []
+   }
+  },
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "roof": {
+     "type": "targa",
+     "color": "#222222",
+     "hoops": "bar",
+     "rails": true
+    }
+   }
+  },
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "roof": {
+     "type": "soft_top",
+     "hoops": "none",
+     "rails": false
+    }
+   }
+  },
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "roof": {
+     "type": "sunroof"
+    }
+   }
+  },
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "roof": {
+     "type": "glass"
+    }
+   }
+  },
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "front": {
+     "grille": "twin",
+     "intake": "smile",
+     "splitter": "blade",
+     "bumper": "chrome",
+     "fog": true
+    },
+    "bonnet": {
+     "vent": "vents"
+    }
+   }
+  },
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "front": {
+     "grille": "none",
+     "intake": "none",
+     "splitter": "none",
+     "bumper": "body",
+     "fog": false
+    },
+    "bonnet": {
+     "vent": "none"
+    }
+   }
+  },
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "rear": {
+     "diffuser": "deep",
+     "exhaust": "quad",
+     "spoiler": "big_wing",
+     "bumper": "black"
+    }
+   }
+  },
+  {
+   "body": "bus",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "rear": {
+     "exhaust": "stack",
+     "spoiler": "roof"
+    }
+   }
+  },
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "finish": "metallic",
+    "twoTone": "lower",
+    "trim": "#1a1a1a",
+    "mirrorColor": "#aa0000",
+    "arches": "clad"
+   }
+  },
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "finish": "matte",
+    "twoTone": "bonnet",
+    "arches": "flare"
+   }
+  },
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "finish": "satin",
+    "twoTone": "split",
+    "arches": "square"
+   }
+  },
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "brakes": {
+     "disc": "drilled",
+     "caliper": "#c8102e"
+    }
+   }
+  },
+  {
+   "body": "motorbike",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "wheels": {
+     "shape": "wire",
+     "spokes": 16
+    },
+    "brakes": {
+     "disc": "plain"
+    },
+    "extras": [
+     "antenna"
+    ]
+   }
+  },
+  {
+   "body": "plane",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "stripe": {
+     "layout": "side"
+    },
+    "finish": "gloss"
+   }
+  },
+  {
+   "body": "boat",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "roof": {
+     "type": "open"
+    },
+    "extras": [
+     "ladder"
+    ],
+    "cabin": {
+     "rows": 2
+    }
+   }
+  },
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "roof": {
+     "type": "closed",
+     "hoops": "none"
+    },
+    "wheels": {
+     "shape": "steel",
+     "wall": "black"
+    },
+    "brakes": {
+     "disc": "none"
+    },
+    "lights": {
+     "front": {
+      "shape": "round",
+      "drl": "none",
+      "lens": "clear"
+     },
+     "rear": {
+      "shape": "round",
+      "lens": "red"
+     }
+    },
+    "front": {
+     "grille": "none",
+     "intake": "none",
+     "splitter": "none",
+     "bumper": "body"
+    },
+    "bonnet": {
+     "vent": "none"
+    },
+    "side": {
+     "intake": "none",
+     "skirts": "none",
+     "handles": "none",
+     "crease": "none",
+     "mirror": "none"
+    },
+    "rear": {
+     "diffuser": "none",
+     "exhaust": "none",
+     "spoiler": "none",
+     "bumper": "body"
+    },
+    "arches": "round",
+    "stripe": {
+     "layout": "none"
+    },
+    "twoTone": "roof",
+    "finish": "gloss",
+    "cabin": {
+     "wheel": "round"
+    }
+   }
+  },
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "roof": {
+     "type": "open",
+     "hoops": "twin"
+    },
+    "wheels": {
+     "shape": "cap",
+     "wall": "white"
+    },
+    "brakes": {
+     "disc": "plain"
+    },
+    "lights": {
+     "front": {
+      "shape": "twin_round",
+      "drl": "line",
+      "lens": "yellow"
+     },
+     "rear": {
+      "shape": "twin_round",
+      "lens": "clear"
+     }
+    },
+    "front": {
+     "grille": "slot",
+     "intake": "wide",
+     "splitter": "lip",
+     "bumper": "black"
+    },
+    "bonnet": {
+     "vent": "scoop"
+    },
+    "side": {
+     "intake": "scoop",
+     "skirts": "lip",
+     "handles": "bar",
+     "crease": "level",
+     "mirror": "ear"
+    },
+    "rear": {
+     "diffuser": "fins",
+     "exhaust": "single",
+     "spoiler": "lip",
+     "bumper": "black"
+    },
+    "arches": "square",
+    "stripe": {
+     "layout": "centre"
+    },
+    "twoTone": "split",
+    "finish": "satin",
+    "cabin": {
+     "wheel": "flat"
+    }
+   }
+  },
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "roof": {
+     "type": "targa",
+     "hoops": "bar"
+    },
+    "wheels": {
+     "shape": "straight",
+     "wall": "black"
+    },
+    "brakes": {
+     "disc": "drilled"
+    },
+    "lights": {
+     "front": {
+      "shape": "oval",
+      "drl": "hook",
+      "lens": "smoked"
+     },
+     "rear": {
+      "shape": "square",
+      "lens": "smoked"
+     }
+    },
+    "front": {
+     "grille": "bars",
+     "intake": "split3",
+     "splitter": "blade",
+     "bumper": "chrome"
+    },
+    "bonnet": {
+     "vent": "bulge"
+    },
+    "side": {
+     "intake": "gill",
+     "skirts": "deep",
+     "handles": "flush",
+     "crease": "wedge",
+     "mirror": "stalk"
+    },
+    "rear": {
+     "diffuser": "deep",
+     "exhaust": "twin",
+     "spoiler": "ducktail",
+     "bumper": "chrome"
+    },
+    "arches": "flare",
+    "stripe": {
+     "layout": "twin"
+    },
+    "twoTone": "lower",
+    "finish": "matte",
+    "cabin": {
+     "wheel": "round"
+    }
+   }
+  },
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "roof": {
+     "type": "soft_top",
+     "hoops": "none"
+    },
+    "wheels": {
+     "shape": "split",
+     "wall": "white"
+    },
+    "brakes": {
+     "disc": "ceramic"
+    },
+    "lights": {
+     "front": {
+      "shape": "square",
+      "drl": "ring",
+      "lens": "clear"
+     },
+     "rear": {
+      "shape": "rect",
+      "lens": "red"
+     }
+    },
+    "front": {
+     "grille": "slats",
+     "intake": "twin",
+     "splitter": "none",
+     "bumper": "body"
+    },
+    "bonnet": {
+     "vent": "vents"
+    },
+    "side": {
+     "intake": "slats",
+     "skirts": "boards",
+     "handles": "chrome",
+     "crease": "double",
+     "mirror": "square"
+    },
+    "rear": {
+     "diffuser": "none",
+     "exhaust": "quad",
+     "spoiler": "wing",
+     "bumper": "body"
+    },
+    "arches": "clad",
+    "stripe": {
+     "layout": "offset"
+    },
+    "twoTone": "bonnet",
+    "finish": "metallic",
+    "cabin": {
+     "wheel": "flat"
+    }
+   }
+  },
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "roof": {
+     "type": "sunroof",
+     "hoops": "twin"
+    },
+    "wheels": {
+     "shape": "y",
+     "wall": "black"
+    },
+    "brakes": {
+     "disc": "none"
+    },
+    "lights": {
+     "front": {
+      "shape": "rect",
+      "drl": "dots",
+      "lens": "yellow"
+     },
+     "rear": {
+      "shape": "tall",
+      "lens": "clear"
+     }
+    },
+    "front": {
+     "grille": "mesh",
+     "intake": "smile",
+     "splitter": "lip",
+     "bumper": "black"
+    },
+    "bonnet": {
+     "vent": "duct"
+    },
+    "side": {
+     "intake": "duct",
+     "skirts": "none",
+     "handles": "none",
+     "crease": "none",
+     "mirror": "none"
+    },
+    "rear": {
+     "diffuser": "fins",
+     "exhaust": "centre",
+     "spoiler": "big_wing",
+     "bumper": "black"
+    },
+    "arches": "round",
+    "stripe": {
+     "layout": "side"
+    },
+    "twoTone": "roof",
+    "finish": "gloss",
+    "cabin": {
+     "wheel": "round"
+    }
+   }
+  },
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "roof": {
+     "type": "glass",
+     "hoops": "bar"
+    },
+    "wheels": {
+     "shape": "star",
+     "wall": "white"
+    },
+    "brakes": {
+     "disc": "plain"
+    },
+    "lights": {
+     "front": {
+      "shape": "slim",
+      "drl": "brow",
+      "lens": "smoked"
+     },
+     "rear": {
+      "shape": "slim",
+      "lens": "smoked"
+     }
+    },
+    "front": {
+     "grille": "oval",
+     "intake": "none",
+     "splitter": "blade",
+     "bumper": "chrome"
+    },
+    "bonnet": {
+     "vent": "none"
+    },
+    "side": {
+     "intake": "none",
+     "skirts": "lip",
+     "handles": "bar",
+     "crease": "level",
+     "mirror": "ear"
+    },
+    "rear": {
+     "diffuser": "deep",
+     "exhaust": "high",
+     "spoiler": "roof",
+     "bumper": "chrome"
+    },
+    "arches": "square",
+    "stripe": {
+     "layout": "sill"
+    },
+    "twoTone": "split",
+    "finish": "satin",
+    "cabin": {
+     "wheel": "flat"
+    }
+   }
+  },
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "roof": {
+     "type": "closed",
+     "hoops": "none"
+    },
+    "wheels": {
+     "shape": "mesh",
+     "wall": "black"
+    },
+    "brakes": {
+     "disc": "drilled"
+    },
+    "lights": {
+     "front": {
+      "shape": "swept",
+      "drl": "none",
+      "lens": "clear"
+     },
+     "rear": {
+      "shape": "bar",
+      "lens": "red"
+     }
+    },
+    "front": {
+     "grille": "tall",
+     "intake": "wide",
+     "splitter": "none",
+     "bumper": "body"
+    },
+    "bonnet": {
+     "vent": "scoop"
+    },
+    "side": {
+     "intake": "scoop",
+     "skirts": "deep",
+     "handles": "flush",
+     "crease": "wedge",
+     "mirror": "stalk"
+    },
+    "rear": {
+     "diffuser": "none",
+     "exhaust": "side",
+     "spoiler": "none",
+     "bumper": "body"
+    },
+    "arches": "flare",
+    "stripe": {
+     "layout": "pin"
+    },
+    "twoTone": "lower",
+    "finish": "matte",
+    "cabin": {
+     "wheel": "round"
+    }
+   }
+  },
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "roof": {
+     "type": "open",
+     "hoops": "twin"
+    },
+    "wheels": {
+     "shape": "turbine",
+     "wall": "white"
+    },
+    "brakes": {
+     "disc": "ceramic"
+    },
+    "lights": {
+     "front": {
+      "shape": "angled",
+      "drl": "line",
+      "lens": "yellow"
+     },
+     "rear": {
+      "shape": "split_bar",
+      "lens": "clear"
+     }
+    },
+    "front": {
+     "grille": "twin",
+     "intake": "split3",
+     "splitter": "lip",
+     "bumper": "black"
+    },
+    "bonnet": {
+     "vent": "bulge"
+    },
+    "side": {
+     "intake": "gill",
+     "skirts": "boards",
+     "handles": "chrome",
+     "crease": "double",
+     "mirror": "square"
+    },
+    "rear": {
+     "diffuser": "fins",
+     "exhaust": "stack",
+     "spoiler": "lip",
+     "bumper": "black"
+    },
+    "arches": "clad",
+    "stripe": {
+     "layout": "none"
+    },
+    "twoTone": "bonnet",
+    "finish": "metallic",
+    "cabin": {
+     "wheel": "flat"
+    }
+   }
+  },
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "roof": {
+     "type": "targa",
+     "hoops": "bar"
+    },
+    "wheels": {
+     "shape": "dish",
+     "wall": "black"
+    },
+    "brakes": {
+     "disc": "none"
+    },
+    "lights": {
+     "front": {
+      "shape": "stacked",
+      "drl": "hook",
+      "lens": "smoked"
+     },
+     "rear": {
+      "shape": "wedge",
+      "lens": "smoked"
+     }
+    },
+    "front": {
+     "grille": "none",
+     "intake": "twin",
+     "splitter": "blade",
+     "bumper": "chrome"
+    },
+    "bonnet": {
+     "vent": "vents"
+    },
+    "side": {
+     "intake": "slats",
+     "skirts": "none",
+     "handles": "none",
+     "crease": "none",
+     "mirror": "none"
+    },
+    "rear": {
+     "diffuser": "deep",
+     "exhaust": "none",
+     "spoiler": "ducktail",
+     "bumper": "chrome"
+    },
+    "arches": "round",
+    "stripe": {
+     "layout": "centre"
+    },
+    "twoTone": "roof",
+    "finish": "gloss",
+    "cabin": {
+     "wheel": "round"
+    }
+   }
+  },
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "roof": {
+     "type": "soft_top",
+     "hoops": "none"
+    },
+    "wheels": {
+     "shape": "wire",
+     "wall": "white"
+    },
+    "brakes": {
+     "disc": "plain"
+    },
+    "lights": {
+     "front": {
+      "shape": "pop_up",
+      "drl": "ring",
+      "lens": "clear"
+     },
+     "rear": {
+      "shape": "c_shape",
+      "lens": "red"
+     }
+    },
+    "front": {
+     "grille": "slot",
+     "intake": "smile",
+     "splitter": "none",
+     "bumper": "body"
+    },
+    "bonnet": {
+     "vent": "duct"
+    },
+    "side": {
+     "intake": "duct",
+     "skirts": "lip",
+     "handles": "bar",
+     "crease": "level",
+     "mirror": "ear"
+    },
+    "rear": {
+     "diffuser": "none",
+     "exhaust": "single",
+     "spoiler": "wing",
+     "bumper": "body"
+    },
+    "arches": "square",
+    "stripe": {
+     "layout": "twin"
+    },
+    "twoTone": "split",
+    "finish": "satin",
+    "cabin": {
+     "wheel": "flat"
+    }
+   }
+  },
+  {
+   "body": "sports",
+   "length": 1,
+   "height": 1,
+   "paint": "#55575a",
+   "accent": "#111111",
+   "pattern": "racing_stripes",
+   "windows": "clear",
+   "wheels": {
+    "style": "sport",
+    "rim": "#1a1a1a",
+    "size": 1
+   },
+   "lights": {
+    "front": "slim",
+    "rear": "round"
+   },
+   "extra": "none",
+   "face": {
+    "eyes": "none",
+    "color": "#1c1842",
+    "mouth": "none"
+   },
+   "outline": "#141414",
+   "detail": {
+    "v": 1,
+    "roof": {
+     "type": "sunroof",
+     "hoops": "twin"
+    },
+    "wheels": {
+     "shape": "block",
+     "wall": "black"
+    },
+    "brakes": {
+     "disc": "drilled"
+    },
+    "lights": {
+     "front": {
+      "shape": "strip",
+      "drl": "dots",
+      "lens": "yellow"
+     },
+     "rear": {
+      "shape": "round",
+      "lens": "clear"
+     }
+    },
+    "front": {
+     "grille": "bars",
+     "intake": "none",
+     "splitter": "lip",
+     "bumper": "black"
+    },
+    "bonnet": {
+     "vent": "none"
+    },
+    "side": {
+     "intake": "none",
+     "skirts": "deep",
+     "handles": "flush",
+     "crease": "wedge",
+     "mirror": "stalk"
+    },
+    "rear": {
+     "diffuser": "fins",
+     "exhaust": "twin",
+     "spoiler": "big_wing",
+     "bumper": "black"
+    },
+    "arches": "flare",
+    "stripe": {
+     "layout": "offset"
+    },
+    "twoTone": "lower",
+    "finish": "matte",
+    "cabin": {
+     "wheel": "round"
+    }
+   }
+  }
+ ],
+ "invalid": [
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": "not an object"
+   },
+   "path": ""
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": [
+     "v",
+     1
+    ]
+   },
+   "path": ""
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {}
+   },
+   "path": "v"
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {
+     "v": 0
+    }
+   },
+   "path": "v"
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {
+     "v": 1.5
+    }
+   },
+   "path": "v"
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {
+     "v": "1"
+    }
+   },
+   "path": "v"
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {
+     "v": 1,
+     "colour": "#ffffff"
+    }
+   },
+   "path": "colour"
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {
+     "v": 1,
+     "roof": {
+      "glow": true
+     }
+    }
+   },
+   "path": "roof.glow"
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {
+     "v": 1,
+     "roof": {
+      "type": "convertible"
+     }
+    }
+   },
+   "path": "roof.type"
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {
+     "v": 1,
+     "roof": {
+      "type": "Open"
+     }
+    }
+   },
+   "path": "roof.type"
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {
+     "v": 1,
+     "roof": {
+      "type": 5
+     }
+    }
+   },
+   "path": "roof.type"
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {
+     "v": 1,
+     "roof": "open"
+    }
+   },
+   "path": "roof"
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {
+     "v": 1,
+     "lights": {
+      "front": "round"
+     }
+    }
+   },
+   "path": "lights.front"
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {
+     "v": 1,
+     "toon": 30.5
+    }
+   },
+   "path": "toon"
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {
+     "v": 1,
+     "toon": 101
+    }
+   },
+   "path": "toon"
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {
+     "v": 1,
+     "toon": -1
+    }
+   },
+   "path": "toon"
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {
+     "v": 1,
+     "toon": "30"
+    }
+   },
+   "path": "toon"
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {
+     "v": 1,
+     "wheels": {
+      "spokes": 2
+     }
+    }
+   },
+   "path": "wheels.spokes"
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {
+     "v": 1,
+     "wheels": {
+      "spokes": 25
+     }
+    }
+   },
+   "path": "wheels.spokes"
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {
+     "v": 1,
+     "wheels": {
+      "tyre": null
+     }
+    }
+   },
+   "path": "wheels.tyre"
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {
+     "v": 1,
+     "wheels": {
+      "rearD": 19
+     }
+    }
+   },
+   "path": "wheels.rearD"
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {
+     "v": 1,
+     "wheels": {
+      "hub": "#FFD21F"
+     }
+    }
+   },
+   "path": "wheels.hub"
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {
+     "v": 1,
+     "brakes": {
+      "caliper": "#fff"
+     }
+    }
+   },
+   "path": "brakes.caliper"
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {
+     "v": 1,
+     "brakes": {
+      "caliper": 5
+     }
+    }
+   },
+   "path": "brakes.caliper"
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {
+     "v": 1,
+     "trim": "red"
+    }
+   },
+   "path": "trim"
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {
+     "v": 1,
+     "front": {
+      "fog": "yes"
+     }
+    }
+   },
+   "path": "front.fog"
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {
+     "v": 1,
+     "side": {
+      "rubStrip": 1
+     }
+    }
+   },
+   "path": "side.rubStrip"
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {
+     "v": 1,
+     "side": {
+      "doors": 4
+     }
+    }
+   },
+   "path": "side.doors"
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {
+     "v": 1,
+     "side": {
+      "intakeX": 19
+     }
+    }
+   },
+   "path": "side.intakeX"
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {
+     "v": 1,
+     "stripe": {
+      "width": 101
+     }
+    }
+   },
+   "path": "stripe.width"
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {
+     "v": 1,
+     "cabin": {
+      "rows": 0
+     }
+    }
+   },
+   "path": "cabin.rows"
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {
+     "v": 1,
+     "extras": [
+      "antenna",
+      "bull_bar",
+      "spare_wheel",
+      "roof_rails",
+      "shark_fin",
+      "snorkel",
+      "light_bar"
+     ]
+    }
+   },
+   "path": "extras"
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {
+     "v": 1,
+     "extras": [
+      "antenna",
+      "antenna"
+     ]
+    }
+   },
+   "path": "extras"
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {
+     "v": 1,
+     "extras": [
+      "rocket"
+     ]
+    }
+   },
+   "path": "extras"
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {
+     "v": 1,
+     "extras": "antenna"
+    }
+   },
+   "path": "extras"
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {
+     "v": 1,
+     "profile": {
+      "body": "sports",
+      "wh": 162,
+      "tipH": 30,
+      "noseX": 3,
+      "noseH": 42,
+      "noseR": 20,
+      "chinH": 9,
+      "cowlX": 33,
+      "cowlH": 71,
+      "bonnet": 55,
+      "headX": 46,
+      "headH": 100,
+      "peakX": 50,
+      "roofX": 62,
+      "roofH": 97,
+      "deckX": 80,
+      "deckH": 84,
+      "tailX": 97,
+      "tailH": 81,
+      "rumpH": 15,
+      "sillH": 10,
+      "axF": 23,
+      "axR": 81,
+      "wheelD": 57,
+      "archGap": 9,
+      "beltH": 72,
+      "beltRise": 2,
+      "soft": 55,
+      "pillarX": 60,
+      "glassX": 62,
+      "panes": 1,
+      "roofW": 62,
+      "taperF": 22,
+      "taperR": 8
+     }
+    }
+   },
+   "path": "profile"
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {
+     "v": 1,
+     "profile": {
+      "body": "sports"
+     }
+    }
+   },
+   "path": "profile"
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {
+     "v": 1,
+     "profile": 5
+    }
+   },
+   "path": "profile"
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {
+     "v": 1,
+     "profile": {
+      "body": "sports",
+      "lh": 149,
+      "wh": 162,
+      "tipH": 30,
+      "noseX": 3,
+      "noseH": 42,
+      "noseR": 20,
+      "chinH": 9,
+      "cowlX": 33,
+      "cowlH": 71,
+      "bonnet": 55,
+      "headX": 46,
+      "headH": 100,
+      "peakX": 50,
+      "roofX": 62,
+      "roofH": 97,
+      "deckX": 80,
+      "deckH": 84,
+      "tailX": 97,
+      "tailH": 81,
+      "rumpH": 15,
+      "sillH": 10,
+      "axF": 23,
+      "axR": 81,
+      "wheelD": 57,
+      "archGap": 9,
+      "beltH": 72,
+      "beltRise": 2,
+      "soft": 55,
+      "pillarX": 60,
+      "glassX": 62,
+      "panes": 1,
+      "roofW": 62,
+      "taperF": 22,
+      "taperR": 8
+     }
+    }
+   },
+   "path": "profile.lh"
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {
+     "v": 1,
+     "profile": {
+      "body": "sports",
+      "lh": 379,
+      "wh": 162,
+      "tipH": 30.5,
+      "noseX": 3,
+      "noseH": 42,
+      "noseR": 20,
+      "chinH": 9,
+      "cowlX": 33,
+      "cowlH": 71,
+      "bonnet": 55,
+      "headX": 46,
+      "headH": 100,
+      "peakX": 50,
+      "roofX": 62,
+      "roofH": 97,
+      "deckX": 80,
+      "deckH": 84,
+      "tailX": 97,
+      "tailH": 81,
+      "rumpH": 15,
+      "sillH": 10,
+      "axF": 23,
+      "axR": 81,
+      "wheelD": 57,
+      "archGap": 9,
+      "beltH": 72,
+      "beltRise": 2,
+      "soft": 55,
+      "pillarX": 60,
+      "glassX": 62,
+      "panes": 1,
+      "roofW": 62,
+      "taperF": 22,
+      "taperR": 8
+     }
+    }
+   },
+   "path": "profile.tipH"
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {
+     "v": 1,
+     "profile": {
+      "body": "sports",
+      "lh": 379,
+      "wh": 162,
+      "tipH": 30,
+      "noseX": 3,
+      "noseH": 42,
+      "noseR": 20,
+      "chinH": 9,
+      "cowlX": 33,
+      "cowlH": 71,
+      "bonnet": 55,
+      "headX": 46,
+      "headH": 100,
+      "peakX": 50,
+      "roofX": 62,
+      "roofH": 97,
+      "deckX": 80,
+      "deckH": 84,
+      "tailX": 97,
+      "tailH": 81,
+      "rumpH": 15,
+      "sillH": 10,
+      "axF": 23,
+      "axR": 81,
+      "wheelD": 57,
+      "archGap": 9,
+      "beltH": 72,
+      "beltRise": 2,
+      "soft": 55,
+      "pillarX": 60,
+      "glassX": 62,
+      "panes": 6,
+      "roofW": 62,
+      "taperF": 22,
+      "taperR": 8
+     }
+    }
+   },
+   "path": "profile.panes"
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {
+     "v": 1,
+     "profile": {
+      "body": "sports",
+      "lh": 379,
+      "wh": 162,
+      "tipH": 30,
+      "noseX": 3,
+      "noseH": 42,
+      "noseR": 20,
+      "chinH": 9,
+      "cowlX": 33,
+      "cowlH": 71,
+      "bonnet": 55,
+      "headX": 46,
+      "headH": 100,
+      "peakX": 50,
+      "roofX": 62,
+      "roofH": 97,
+      "deckX": 80,
+      "deckH": 84,
+      "tailX": 97,
+      "tailH": 81,
+      "rumpH": 15,
+      "sillH": 10,
+      "axF": 23,
+      "axR": 81,
+      "wheelD": 57,
+      "archGap": 9,
+      "beltH": 72,
+      "beltRise": -11,
+      "soft": 55,
+      "pillarX": 60,
+      "glassX": 62,
+      "panes": 1,
+      "roofW": 62,
+      "taperF": 22,
+      "taperR": 8
+     }
+    }
+   },
+   "path": "profile.beltRise"
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {
+     "v": 1,
+     "profile": {
+      "body": "tank",
+      "lh": 379,
+      "wh": 162,
+      "tipH": 30,
+      "noseX": 3,
+      "noseH": 42,
+      "noseR": 20,
+      "chinH": 9,
+      "cowlX": 33,
+      "cowlH": 71,
+      "bonnet": 55,
+      "headX": 46,
+      "headH": 100,
+      "peakX": 50,
+      "roofX": 62,
+      "roofH": 97,
+      "deckX": 80,
+      "deckH": 84,
+      "tailX": 97,
+      "tailH": 81,
+      "rumpH": 15,
+      "sillH": 10,
+      "axF": 23,
+      "axR": 81,
+      "wheelD": 57,
+      "archGap": 9,
+      "beltH": 72,
+      "beltRise": 2,
+      "soft": 55,
+      "pillarX": 60,
+      "glassX": 62,
+      "panes": 1,
+      "roofW": 62,
+      "taperF": 22,
+      "taperR": 8
+     }
+    }
+   },
+   "path": "profile.body"
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {
+     "v": 1,
+     "profile": {
+      "body": "sports",
+      "lh": 379,
+      "wh": 162,
+      "tipH": 30,
+      "noseX": 3,
+      "noseH": 42,
+      "noseR": 20,
+      "chinH": 9,
+      "cowlX": 33,
+      "cowlH": 71,
+      "bonnet": 55,
+      "headX": 46,
+      "headH": 100,
+      "peakX": 50,
+      "roofX": 62,
+      "roofH": 97,
+      "deckX": 80,
+      "deckH": 84,
+      "tailX": 97,
+      "tailH": 81,
+      "rumpH": 15,
+      "sillH": 10,
+      "axF": 23,
+      "axR": 81,
+      "wheelD": 57,
+      "archGap": 9,
+      "beltH": 72,
+      "beltRise": 2,
+      "soft": 55,
+      "pillarX": 60,
+      "glassX": 62,
+      "panes": 1,
+      "roofW": 62,
+      "taperF": 22,
+      "taperR": 8,
+      "extra": 1
+     }
+    }
+   },
+   "path": "profile.extra"
+  },
+  {
+   "look": {
+    "body": "sports",
+    "length": 1,
+    "height": 1,
+    "paint": "#55575a",
+    "accent": "#111111",
+    "pattern": "racing_stripes",
+    "windows": "clear",
+    "wheels": {
+     "style": "sport",
+     "rim": "#1a1a1a",
+     "size": 1
+    },
+    "lights": {
+     "front": "slim",
+     "rear": "round"
+    },
+    "extra": "none",
+    "face": {
+     "eyes": "none",
+     "color": "#1c1842",
+     "mouth": "none"
+    },
+    "outline": "#141414",
+    "detail": {
+     "v": 1,
+     "toon": 30,
+     "profile": {
+      "body": "sports",
+      "lh": 379,
+      "wh": 162,
+      "tipH": 30,
+      "noseX": 3,
+      "noseH": 42,
+      "noseR": 20,
+      "chinH": 9,
+      "cowlX": 33,
+      "cowlH": 71,
+      "bonnet": 55,
+      "headX": 46,
+      "headH": 100,
+      "peakX": 50,
+      "roofX": 62,
+      "roofH": 97,
+      "deckX": 80,
+      "deckH": 84,
+      "tailX": 97,
+      "tailH": 81,
+      "rumpH": 15,
+      "sillH": 10,
+      "axF": 23,
+      "axR": 81,
+      "wheelD": 57,
+      "archGap": 9,
+      "beltH": 72,
+      "beltRise": 2,
+      "soft": 55,
+      "pillarX": 60,
+      "glassX": 62,
+      "panes": 1,
+      "roofW": 62,
+      "taperF": 22,
+      "taperR": 8
+     },
+     "roof": {
+      "type": "open",
+      "hoops": "twin"
+     },
+     "wheels": {
+      "shape": "split",
+      "spokes": 5,
+      "tyre": 22,
+      "lip": 10
+     },
+     "brakes": {
+      "disc": "ceramic",
+      "caliper": "#ffd21f"
+     },
+     "lights": {
+      "front": {
+       "shape": "swept",
+       "drl": "line"
+      },
+      "rear": {
+       "shape": "round"
+      }
+     },
+     "front": {
+      "grille": "none",
+      "intake": "split3",
+      "splitter": "blade",
+      "bumper": "body"
+     },
+     "bonnet": {
+      "vent": "duct"
+     },
+     "side": {
+      "intake": "scoop",
+      "intakeX": 66,
+      "skirts": "lip",
+      "doors": 1,
+      "handles": "flush",
+      "crease": "wedge",
+      "mirror": "stalk"
+     },
+     "rear": {
+      "diffuser": "fins",
+      "exhaust": "high",
+      "spoiler": "ducktail"
+     },
+     "stripe": {
+      "layout": "centre",
+      "color": "#111111",
+      "width": 60
+     },
+     "finish": "satin",
+     "cabin": {
+      "rows": 1,
+      "seat": "#1b1b1d",
+      "dial": "#ffd21f",
+      "wheel": "flat"
+     },
+     "pad": "yyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyyy"
+    }
+   },
+   "path": ""
+  }
+ ]
+}

@@ -25,6 +25,7 @@ import {
   type VehicleType,
 } from "../types.ts";
 import { DEFAULT_CAR } from "../../engine/car.ts";
+import { checkCarDetail } from "../../engine/carDetail.ts";
 import { CATALOG } from "../../engine/catalog.ts";
 import type { CarBody, CarLook, CharacterLook, Expression, MovementStyle, NoiseId, SfxId } from "../../engine/types.ts";
 import { startMockTask } from "./ideas.ts";
@@ -81,11 +82,16 @@ const HEX = /^#[0-9a-f]{6}$/i;
 const ids = (list: { id: string }[]) => list.map((e) => e.id);
 
 /** Why this car look is not one the engine draws (the API's car_look), or null. */
+const CAR_KEYS = ["body", "length", "height", "paint", "accent", "pattern", "windows", "wheels", "lights", "extra", "face", "outline", "interior", "detail"];
+
 function carLookProblem(car: unknown): string | null {
   const k = CATALOG.carLooks;
   const c = car as Partial<CarLook> | null;
   if (!c || typeof c !== "object") return "Pick how the car looks.";
   const inRange = (n: unknown, lo: number, hi: number) => typeof n === "number" && n >= lo && n <= hi;
+  // Unknown keys are 400 here as in the API ("Unknown field: car.x.").
+  const unknown = Object.keys(c).filter((key) => !CAR_KEYS.includes(key)).sort()[0];
+  if (unknown !== undefined) return `Unknown field: car.${unknown}.`;
   // Every body the engine knows (§45.47: the new vehicles too), the same list as the API's CAR_BODIES.
   if (!Object.keys(VEHICLE_OF).includes(c.body as string)) return "Pick the car's shape.";
   if (!inRange(c.length, 0.85, 1.15) || !inRange(c.height, 0.85, 1.15)) return "Keep the car's length and height in range.";
@@ -98,6 +104,12 @@ function carLookProblem(car: unknown): string | null {
   if (c.interior !== undefined) {
     const i = c.interior as Partial<NonNullable<CarLook["interior"]>> | null;
     if (!i || typeof i !== "object" || ![i.seat, i.dash, ...(i.trim === undefined ? [] : [i.trim])].every((h) => typeof h === "string" && HEX.test(h))) return "Pick the car's colours.";
+  }
+  // §45.48: the realistic drawing's parts, checked by the engine's own rules (the API's, word for word)
+  if (c.detail !== undefined) {
+    let first: string | null = null;
+    checkCarDetail(c.detail, "car", (m) => (first ??= m.replace(/^car: /, "").replace(/^(car\.detail\.\S+) is not a known detail\.$/, "Unknown field: $1.")));
+    if (first) return first;
   }
   return null;
 }
@@ -396,6 +408,7 @@ const PAINT_NAME: Record<string, string> = {
   "#f4f1ea": "white",
   "#c9ccd2": "silver",
   "#7a7f88": "grey",
+  "#55575a": "grey",
   "#1c1c22": "black",
 };
 
@@ -484,12 +497,19 @@ export function designCars(
   for (let i = 0; i < count; i += 1) {
     const v = avoid.length + i + (current ? 1 : 0);
     const tweak = CAR_VARIANTS[v % CAR_VARIANTS.length]!(start);
-    const car: CarLook = { ...start, ...tweak, wheels: { ...start.wheels, ...(tweak.wheels ?? {}) }, face: { ...start.face, ...(tweak.face ?? {}) } };
+    let car: CarLook = { ...start, ...tweak, wheels: { ...start.wheels, ...(tweak.wheels ?? {}) }, face: { ...start.face, ...(tweak.face ?? {}) } };
     if (v >= CAR_VARIANTS.length) car.paint = shade(car.paint, v % 2 ? 24 : -24);
+    // §45.48: the first try from photos alone is the owner's own kind of vehicle, drawn the realistic way
+    // (the real agent measures the photos; the practice one has the one look it knows). Words, a redesign and
+    // "Make more" keep what they said.
+    const measured = i === 0 && avoid.length === 0 && !current && photos > 0 && !t && (vehicle === undefined || vehicle === "car");
+    if (measured) {
+      car = { ...structuredClone(OPEN_TWO_SEATER), ...(insidePhotos > 0 ? { interior: { ...MOCK_INTERIOR } } : {}) };
+    }
     const name = current ? current.name : (CAR_NAMES.map((_, k) => CAR_NAMES[(salt + v + k) % CAR_NAMES.length]!).find((n) => !names.has(n.toLowerCase())) ?? `Car ${salt + v}`);
     names.add(name.toLowerCase());
     const eyes = car.face.eyes !== "none";
-    const colour = PAINT_NAME[start.paint] ?? "bright";
+    const colour = (measured ? PAINT_NAME[car.paint] : PAINT_NAME[start.paint]) ?? "bright";
     const shape = CATALOG.carLooks.body.find((b) => b.id === car.body)?.label.toLowerCase() ?? (VEHICLE_OF[car.body] === "car" ? "car" : car.body);
     out.push({
       kind: "car",
@@ -505,6 +525,44 @@ export function designCars(
   }
   return out;
 }
+
+/**
+ * The practice agent's one measured vehicle (§45.48): a grey open two-seater with a centre stripe, five double
+ * spokes, yellow calipers, a low wedge nose and side scoops. Made up for the tests: no make, no model, no badge.
+ */
+export const OPEN_TWO_SEATER: CarLook = {
+  body: "sports",
+  length: 1,
+  height: 1,
+  paint: "#55575a",
+  accent: "#111111",
+  pattern: "racing_stripes",
+  windows: "clear",
+  wheels: { style: "sport", rim: "#1a1a1a", size: 1 },
+  lights: { front: "slim", rear: "round" },
+  extra: "none",
+  face: { eyes: "none", color: "#1c1842", mouth: "none" },
+  outline: "#141414",
+  detail: {
+    v: 1,
+    toon: 30,
+    profile: {
+      body: "sports", lh: 379, wh: 162, tipH: 30, noseX: 3, noseH: 42, noseR: 20, chinH: 9, cowlX: 33, cowlH: 71, bonnet: 55, headX: 46, headH: 100, peakX: 50, roofX: 62, roofH: 97, deckX: 80,
+      deckH: 84, tailX: 97, tailH: 81, rumpH: 15, sillH: 10, axF: 23, axR: 81, wheelD: 57, archGap: 9, beltH: 72, beltRise: 2, soft: 55, pillarX: 60, glassX: 62, panes: 1, roofW: 62, taperF: 22, taperR: 8,
+    },
+    roof: { type: "open", hoops: "twin" },
+    wheels: { shape: "split", spokes: 5, tyre: 22, lip: 10 },
+    brakes: { disc: "ceramic", caliper: "#ffd21f" },
+    lights: { front: { shape: "swept", drl: "line" }, rear: { shape: "round" } },
+    front: { grille: "none", intake: "split3", splitter: "blade", bumper: "body" },
+    bonnet: { vent: "duct" },
+    side: { intake: "scoop", intakeX: 66, skirts: "lip", doors: 1, handles: "flush", crease: "wedge", mirror: "stalk" },
+    rear: { diffuser: "fins", exhaust: "high", spoiler: "ducktail" },
+    stripe: { layout: "centre", color: "#111111", width: 60 },
+    finish: "satin",
+    cabin: { rows: 1, seat: "#1b1b1d", dial: "#ffd21f", wheel: "flat" },
+  },
+};
 
 /** Rosso, the seeded red hatchback (§45.42): added once, after every part has seeded. */
 export function seedCar(store: MockStore): void {

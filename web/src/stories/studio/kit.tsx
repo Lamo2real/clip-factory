@@ -581,12 +581,12 @@ export function ShowMore({ list, what }: { list: { hasMore: boolean; busy: boole
 
 /**
  * "Technical details" (§45.35 D21): the exact folder, the seed and the version numbers, folded away so the page itself
- * says everything in plain words. Closed to start.
+ * says everything in plain words. Closed to start. `label` names another fold the same way ("More details", §45.48).
  */
-export function TechDetails({ children, className = "" }: { children: ReactNode; className?: string }) {
+export function TechDetails({ children, className = "", label = "Technical details" }: { children: ReactNode; className?: string; label?: string }) {
   return (
     <details className={`st-s-tech${className ? ` ${className}` : ""}`}>
-      <summary className="st-s-tech__sum">Technical details</summary>
+      <summary className="st-s-tech__sum">{label}</summary>
       <div className="st-s-tech__body">{children}</div>
     </details>
   );

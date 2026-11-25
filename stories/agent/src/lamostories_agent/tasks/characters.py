@@ -13,10 +13,14 @@ car makes out of the words (``BRANDS``): the animator draws no badges and only p
 
 from __future__ import annotations
 
+import copy
+import json
 import math
 import re
 from collections.abc import Iterable, Mapping
 from typing import Any
+
+from lamostories_agent.vehicles import VEHICLE_OF
 
 from .catalog import ids
 from .common import as_dict, as_list
@@ -272,7 +276,8 @@ _CAR_CAR = re.compile(r"\bcar(?: car)+\b")
 NO_BRANDS = "do not use car brand or model names"
 CAR_FACES_ON = ("happy", "surprised")
 
-# The 14 plain colour words a car's paint is called by (image models and writers read words better than hex).
+# The 15 plain colour words a car's paint is called by (image models and writers read words better than hex). A
+# dark or mid grey is "grey", not brown or black: a graphite car must not be described as a brown one (§45.48).
 CAR_COLOURS: dict[str, tuple[int, int, int]] = {
     "red": (216, 53, 42),
     "orange": (255, 140, 40),
@@ -286,6 +291,7 @@ CAR_COLOURS: dict[str, tuple[int, int, int]] = {
     "brown": (110, 70, 40),
     "beige": (225, 205, 170),
     "white": (244, 241, 234),
+    "grey": (100, 103, 108),
     "silver": (170, 175, 182),
     "black": (28, 28, 34),
 }
@@ -315,7 +321,7 @@ _EYE_WORDS = {"windscreen": "eyes on its windscreen", "headlights": "headlight e
 
 
 def car_colour(hex_color: Any) -> str:
-    """The nearest of the 14 plain colour words for ``#rrggbb``."""
+    """The nearest of the 15 plain colour words for ``#rrggbb``."""
     try:
         r, g, b = (int(str(hex_color)[i : i + 2], 16) for i in (1, 3, 5))
     except ValueError:
@@ -323,26 +329,47 @@ def car_colour(hex_color: Any) -> str:
     return min(CAR_COLOURS, key=lambda n: sum((x - y) ** 2 for x, y in zip(CAR_COLOURS[n], (r, g, b), strict=True)))
 
 
+_OPEN_ROOFS = frozenset({"open", "targa", "soft_top"})
+
+
+def _detail_words(car: Mapping[str, Any]) -> tuple[str, str | None]:
+    """The two words a detail may add (§45.48): "open-top" before the body and "yellow brakes" in the parts."""
+    detail = as_dict(car.get("detail"))
+    roof = "open-top " if as_dict(detail.get("roof")).get("type") in _OPEN_ROOFS else ""
+    caliper = as_dict(detail.get("brakes")).get("caliper")
+    brakes = f"{car_colour(caliper)} brakes" if isinstance(caliper, str) and HEX.match(caliper) else None
+    return roof, brakes
+
+
+def _join(items: list[str]) -> str:
+    return items[0] if len(items) == 1 else ", ".join(items[:-1]) + " and " + items[-1]
+
+
 def car_words(car: Mapping[str, Any]) -> str:
-    """The car in plain words, at most 80 characters: "a small red hatchback with alloy wheels and round lights"."""
+    """The car in plain words, at most 80 characters: "a small red hatchback with alloy wheels and round lights".
+    A detailed look may add at most two words: "open-top" and its brake colour ("a grey open-top sports car with
+    split wheels, yellow brakes and slim lights")."""
     try:
         length = float(car.get("length") or 1)
     except (TypeError, ValueError):
         length = 1.0
     size = "small " if length < 0.95 else "long " if length > 1.05 else ""
     body = _BODY_WORDS.get(str(car.get("body")), "car")
-    head = f"{size}{car_colour(car.get('paint'))} {body}"
+    no_wheels = str(car.get("body")) in _NO_WHEELS
+    roof, brakes = _detail_words(car) if not no_wheels else ("", None)
+    head = f"{size}{car_colour(car.get('paint'))} {roof}{body}"
     head = ("an " if head[0] in "aeiou" else "a ") + head
     wheels = _WHEEL_WORDS.get(str((car.get("wheels") or {}).get("style")), "wheels")
     lights = f"{(car.get('lights') or {}).get('front') or 'round'} lights"
     eyes = _EYE_WORDS.get(str((car.get("face") or {}).get("eyes")))
-    if str(car.get("body")) in _NO_WHEELS:
+    if no_wheels:
         return _no_wheels(head, lights, eyes)
-    for words in (
-        f"{head} with {wheels}, {lights} and {eyes}" if eyes else f"{head} with {wheels} and {lights}",
-        f"{head} with {eyes}" if eyes else f"{head} with {wheels}",
-        head,
-    ):
+    full = [wheels, lights, *([eyes] if eyes else [])]
+    options = [f"{head} with {_join(full)}"]
+    if brakes:
+        options.insert(0, f"{head} with {_join([wheels, brakes, *full[1:]])}")
+    options += [f"{head} with {eyes}" if eyes else f"{head} with {wheels}", head]
+    for words in options:
         if len(words) <= 80:
             return words
     return head[:80]
@@ -387,6 +414,237 @@ def _interior_schema() -> dict[str, Any]:
     }
 
 
+# --- a vehicle's detail (CONTRACTS §45.48) -------------------------------------------------------------------------
+# The rules are read live from the engine's catalog (``catalog.carDetail.rules``), never copied here: the engine, the
+# API and this check are the same table. A detail is repaired, never refused: the owner never sees a detail error.
+
+DETAIL_MAX_CHARS = 2400  # the engine's CAR_DETAIL_MAX_CHARS: JSON.stringify(detail).length
+PROFILE = "profile"
+# Only a car, truck or bus has a measured outline; a motorbike, plane or boat keeps its own art (parts only).
+PROFILE_FAMILIES = frozenset({"car", "truck", "bus"})
+# When a detail is too long these go first, in this order (the fine keys), then the rest as a last resort.
+DETAIL_DROP_FIRST = ("extras", "trim", "mirrorColor", "cabin")
+DETAIL_DROP_LAST = ("arches", "twoTone", "finish", "bonnet", "side", "rear", "front", "lights", "brakes", "wheels",
+                    "roof", "stripe", "toon")  # fmt: skip
+_HINTS = {"toon": "0 real proportions to 100 as chunky as a toy"}
+_STUDY_SHOWS = ("side", "front_34", "rear_34", "front", "rear", "top", "inside", "closeup", "none")
+
+
+def detail_rules(cat: dict[str, Any]) -> dict[str, Any] | None:
+    """The engine's detail rules (``{dotted.path: rule}``), or None for an engine that has none yet."""
+    found = as_dict(cat.get("carDetail")).get("rules")
+    return found if isinstance(found, dict) and found else None
+
+
+def has_profile(body: Any) -> bool:
+    """True for a body that has a measured outline (the car, truck and bus families)."""
+    return VEHICLE_OF.get(str(body)) in PROFILE_FAMILIES
+
+
+def _rule_kind(rule: Any) -> str:
+    return next((k for k in ("e", "n", "c", "b", "l") if isinstance(rule, dict) and k in rule), "")
+
+
+def _leaf_schema(path: str, rule: dict[str, Any], *, nullable: bool) -> dict[str, Any]:
+    kind = _rule_kind(rule)
+    null = ["null"] if nullable else []
+    if kind == "e":
+        values: list[Any] = [str(v) for v in rule["e"]]
+        return {"type": ["string", *null], "enum": [*values, *([None] if nullable else [])]}
+    if kind == "n":
+        lo, hi = rule["n"]
+        hint = _HINTS.get(path)
+        return {"type": ["integer", *null], "description": f"{lo} to {hi}" + (f", {hint}" if hint else "")}
+    if kind == "c":
+        return {"type": ["string", *null], "description": "a colour as #rrggbb"}
+    if kind == "b":
+        return {"type": ["boolean", *null]}
+    items = {"type": "string", "enum": [str(v) for v in rule.get("l") or []]}
+    return {"type": ["array", *null], "items": items, "maxItems": int(rule.get("max") or 6),
+            "description": f"up to {int(rule.get('max') or 6)}, no repeats"}  # fmt: skip
+
+
+def detail_schema(rules: dict[str, Any], *, profile: bool = True) -> dict[str, Any]:
+    """The JSON schema of ``car.detail`` built from the engine's rules (house rules: every property required, every
+    optional one nullable, ``additionalProperties`` false, ranges in the descriptions, no numeric keywords).
+    ``profile=False`` (a motorbike, plane or boat) leaves out ``profile`` and ``toon``."""
+    tree: dict[str, Any] = {}
+    for path, rule in rules.items():
+        parts = path.split(".")
+        if not profile and parts[0] in (PROFILE, "toon"):
+            continue
+        node = tree
+        for part in parts[:-1]:
+            node = node.setdefault(part, {})
+        node[parts[-1]] = (path, rule)
+
+    def build(branch: dict[str, Any], *, inside_profile: bool) -> dict[str, Any]:
+        props: dict[str, Any] = {}
+        for key, sub in branch.items():
+            if isinstance(sub, tuple):  # a leaf; inside the profile every number is required (all together)
+                props[key] = _leaf_schema(sub[0], sub[1], nullable=not inside_profile)
+                continue
+            whole = key == PROFILE and not inside_profile
+            child = build(sub, inside_profile=inside_profile or whole)
+            child["type"] = ["object", "null"]
+            if whole:
+                child["description"] = "all its numbers together, or null only when the shape can't be told"
+            props[key] = child
+        return _obj(props)
+
+    top = build(tree, inside_profile=False)
+    top["properties"] = {"v": {"type": "integer", "enum": [1]}, **top["properties"]}
+    top["required"] = list(top["properties"])
+    top["type"] = ["object", "null"]
+    top["description"] = "the vehicle's measured shape and named parts (null: leave it plain)"
+    return top
+
+
+def _whole(value: Any) -> int | None:
+    if isinstance(value, bool) or not isinstance(value, (int, float)):
+        return None
+    if not math.isfinite(value):
+        return None
+    return math.floor(value + 0.5)
+
+
+def _detail_leaf(rule: Any, value: Any) -> Any:
+    """The value cleaned by its rule, or None to drop it."""
+    kind = _rule_kind(rule)
+    if kind == "e":
+        return value if isinstance(value, str) and value in rule["e"] else None
+    if kind == "n":
+        n = _whole(value)
+        return None if n is None else min(int(rule["n"][1]), max(int(rule["n"][0]), n))
+    if kind == "c":
+        return value.strip().lower() if isinstance(value, str) and HEX.match(value.strip()) else None
+    if kind == "b":
+        return value if isinstance(value, bool) else None
+    if kind == "l" and isinstance(value, list):
+        kept = [v for v in dict.fromkeys(v for v in value if isinstance(v, str)) if v in rule["l"]]
+        return kept[: int(rule.get("max") or 6)] or None
+    return None
+
+
+def _walk_detail(raw: Mapping[str, Any], rules: dict[str, Any], prefix: str) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for key, value in raw.items():
+        path = f"{prefix}{key}"
+        if value is None or not isinstance(key, str):
+            continue
+        if path in rules:
+            cleaned = _detail_leaf(rules[path], value)
+            if cleaned is not None:
+                out[key] = cleaned
+        elif any(p.startswith(path + ".") for p in rules) and isinstance(value, dict):
+            inner = _walk_detail(value, rules, path + ".")
+            if inner:
+                out[key] = inner
+    return out
+
+
+def fit_detail_size(detail: dict[str, Any]) -> dict[str, Any]:
+    """The detail cut to ``DETAIL_MAX_CHARS`` as JSON.stringify counts them: fine keys first, then the rest."""
+    for key in (*DETAIL_DROP_FIRST, *DETAIL_DROP_LAST):
+        if len(json.dumps(detail, separators=(",", ":"))) <= DETAIL_MAX_CHARS:
+            break
+        detail.pop(key, None)
+    return detail
+
+
+def check_detail(
+    raw: Any, rules: dict[str, Any], presets: Mapping[str, Any] | None = None, *, body: str | None = None
+) -> dict[str, Any] | None:
+    """The repaired ``car.detail``, or None when there is none (``raw`` is not an object). Silent, never refuses:
+    a number out of range is clamped and rounded; an unknown key, id or bad colour is dropped; nulls and empty
+    objects are dropped; a profile with missing numbers is filled from the body's preset (its ``body`` is the car's);
+    a motorbike, plane or boat loses ``profile`` and ``toon``; ``extras`` are de-duplicated and cut; an over-long
+    detail loses its fine keys. A detail with nothing left is ``{"v": 1}``."""
+    if not isinstance(raw, dict):
+        return None
+    detail = _walk_detail({k: v for k, v in raw.items() if k != "v"}, rules, "")
+    profile = detail.get(PROFILE)
+    if body is not None and not has_profile(body):
+        detail.pop(PROFILE, None)
+        detail.pop("toon", None)
+    elif isinstance(profile, dict):
+        wanted = [p.split(".", 1)[1] for p in rules if p.startswith(PROFILE + ".")]
+        base_name = (
+            body
+            if body in (presets or {})
+            else (profile.get("body") if profile.get("body") in (presets or {}) else None)
+        )
+        base = as_dict((presets or {}).get(base_name)) if base_name else {}
+        if base:
+            filled = {k: profile.get(k, base.get(k)) for k in wanted}
+            filled["body"] = body if body is not None and has_profile(body) else base_name
+            detail[PROFILE] = {k: filled[k] for k in wanted if filled.get(k) is not None}
+        if len(as_dict(detail.get(PROFILE))) < len(wanted):
+            detail.pop(PROFILE, None)
+    return fit_detail_size({"v": 1, **detail})
+
+
+def share_profile(cars: list[dict[str, Any]]) -> None:
+    """Every option is the SAME vehicle (§45.48): each car takes option 1's body and ``detail.profile`` (or none of
+    them has one when option 1 has none), with the classic sliders at 1. Each keeps its own ``toon`` and parts."""
+    if len(cars) < 2:
+        return
+    first = cars[0]
+    shared = as_dict(first.get("detail")).get(PROFILE)
+    for car in cars[1:]:
+        detail = car.get("detail")
+        if not isinstance(shared, dict):
+            if isinstance(detail, dict):
+                detail.pop(PROFILE, None)
+            continue
+        if not isinstance(detail, dict):
+            detail = car["detail"] = {"v": 1}
+        car["body"] = first["body"]
+        car["length"] = car["height"] = 1.0
+        car["wheels"]["size"] = 1.0
+        detail[PROFILE] = copy.deepcopy(shared)
+        fit_detail_size(detail)
+
+
+def study_schema() -> dict[str, Any]:
+    """The ``study`` step the model writes before any look (§45.48): what each photo shows and which is most side-on.
+    It is read, brand-stripped and logged; never stored."""
+    return _obj(
+        {
+            "photos": {
+                "type": "array",
+                "items": _obj(
+                    {
+                        "n": {"type": "integer", "description": "the photo's number"},
+                        "shows": _enum(list(_STUDY_SHOWS)),
+                    }
+                ),
+                "description": "one entry per photo",
+            },
+            "best_side": {"type": ["integer", "null"], "description": "the number of the most side-on photo, or null"},
+            "notes": {
+                "type": "array",
+                "items": {"type": "string"},
+                "maxItems": 3,
+                "description": "at most 3 short notes about what is hard to see; never a make or model",
+            },
+        },
+        "what each photo shows, written first",
+    )
+
+
+def read_study(value: Any) -> dict[str, Any]:
+    """The study as plain data (``photos`` kept to the known words, ``notes`` brand-stripped and cut to 3)."""
+    raw = as_dict(value)
+    photos = [
+        {"n": n, "shows": p.get("shows")}
+        for p in as_list(raw.get("photos"))
+        if isinstance(p, dict) and (n := _whole(p.get("n"))) is not None and p.get("shows") in _STUDY_SHOWS
+    ]
+    notes = [strip_brands(n.strip())[0][:200] for n in as_list(raw.get("notes")) if isinstance(n, str) and n.strip()]
+    return {"photos": photos, "best_side": _whole(raw.get("best_side")), "notes": notes[:3]}
+
+
 def car_schema(cat: dict[str, Any], *, bodies: Iterable[str] | None = None, interior: bool = False) -> dict[str, Any]:
     """The JSON schema of one car ``CharacterInput`` (kind "car") built from ``catalog.carLooks``; limits are in the
     descriptions, as for people, and code checks them. ``bodies`` limits the body to a vehicle family and
@@ -425,6 +683,10 @@ def car_schema(cat: dict[str, Any], *, bodies: Iterable[str] | None = None, inte
     if interior:
         car["properties"]["interior"] = _interior_schema()
         car["required"].append("interior")
+    rules = detail_rules(cat)
+    if rules:  # an engine that knows a detail (§45.48); an older one gets the schema it always had
+        car["properties"]["detail"] = detail_schema(rules, profile=any(has_profile(b) for b in car_bodies(cat, bodies)))
+        car["required"].append("detail")
     voice = _obj(
         {
             "style": _enum(["none"], "a car has no voice"),
@@ -539,6 +801,15 @@ def check_car(
         },
         "outline": colour(body.get("outline"), "car.outline"),
     }
+    rules = detail_rules(cat)
+    if rules and isinstance(body.get("detail"), dict):
+        presets = as_dict(as_dict(cat.get("carDetail")).get("presets")).get("profile")
+        detail = check_detail(body["detail"], rules, presets if isinstance(presets, dict) else None, body=car["body"])
+        if detail is not None:
+            car["detail"] = detail
+            if "profile" in detail:  # the measured outline carries the size: the classic sliders sit at 1
+                car["length"] = car["height"] = 1.0
+                car["wheels"]["size"] = 1.0
     inside = body.get("interior") if interior else None
     if isinstance(inside, dict):
         found: dict[str, str] = {

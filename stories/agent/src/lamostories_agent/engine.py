@@ -11,7 +11,9 @@ from __future__ import annotations
 import json
 import os
 import shutil
+import subprocess
 import sys
+import tempfile
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import Any
@@ -108,6 +110,11 @@ class Engine:
         errors = got.get("errors") if isinstance(got, dict) else None
         return [str(e) for e in errors] if isinstance(errors, list) and errors else ["The script did not validate."]
 
+    async def character(self, character_path: Path) -> list[str]:
+        """The engine's own check of one character (``cli.ts character``, its ``validateCharacter``): the problems, or
+        an empty list when it passes."""
+        return _character_problems(await self._json("character", str(character_path)))
+
     async def normalize(self, script_path: Path) -> dict[str, Any]:
         return self._dict(await self._json("normalize", str(script_path)), "normalize")
 
@@ -151,6 +158,35 @@ class Engine:
         if not isinstance(got, dict):
             raise EngineError(f"engine {what} is not an object")
         return got
+
+
+def _character_problems(got: Any) -> list[str]:
+    if isinstance(got, dict) and got.get("ok") is True:
+        return []
+    errors = got.get("errors") if isinstance(got, dict) else None
+    return [str(e) for e in errors] if isinstance(errors, list) and errors else ["The character did not validate."]
+
+
+def character_errors(character: dict[str, Any], *, engine_dir: Path | None = None, seconds: float = 60.0) -> list[str]:
+    """The engine's own ``validateCharacter`` on one character, run now (a design's check is synchronous): the problems,
+    or an empty list when it passes. When the engine cannot be run at all the answer is "no problems" and the cause
+    is logged: this is the last guard for a vehicle's detail (CONTRACTS §45.48), never a reason to fail a design."""
+    cli = find_engine_dir(engine_dir) / "cli.ts"
+    env = {**os.environ, "DENO_NO_UPDATE_CHECK": "1", "DENO_NO_PROMPT": "1"}
+    try:
+        with tempfile.TemporaryDirectory(prefix="character-check-") as folder:
+            path = write_json(Path(folder) / "character.json", character)
+            done = subprocess.run(
+                [deno_binary(), "run", "--allow-read", "--no-config", "--no-lock", "--quiet", str(cli), "character",
+                 str(path)],
+                capture_output=True, text=True, timeout=seconds, env=env, check=False,
+            )  # fmt: skip
+        if done.returncode != 0:
+            raise EngineError(f"engine character failed: {done.stderr.strip()[:300]}")
+        return _character_problems(json.loads(done.stdout or "null"))
+    except (OSError, ValueError, subprocess.SubprocessError, EngineError) as e:
+        log("warn", "stories.engine_character_unavailable", detail=str(e)[:200])
+        return []
 
 
 def write_json(path: Path, value: Any) -> Path:

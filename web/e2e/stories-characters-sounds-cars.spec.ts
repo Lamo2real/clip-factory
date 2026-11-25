@@ -579,10 +579,14 @@ test.describe("cars", () => {
     });
 
   test("Make a vehicle (/stories/vehicles/new) and the car editor's parts keep the studio's rules", async ({ browser }) => {
-    test.setTimeout(90_000);
+    test.setTimeout(180_000);
+    // 320 to 1920 wide (§45.48): the Looks part also with the Realistic drawing, its Roof, Cartoon and Brakes picks and the
+    // "More details" fold open; Moves also with Front and Rear (the nose and the tail head on) tried.
     for (const [w, h, touch] of [
       [320, 640, true],
+      [768, 1024, false],
       [1280, 800, false],
+      [1920, 1080, false],
     ] as const) {
       const ctx = await context(browser, w, h, touch);
       const page = await ctx.newPage();
@@ -591,6 +595,27 @@ test.describe("cars", () => {
         await page.locator(".st-s-editor__parts .st-s-pick__opt", { hasText: part }).click();
         if (part === "Face") await page.locator(".st-s-pick__opt", { hasText: "Headlight eyes" }).click();
         expect(await audit(page, `The car's ${part} ${w}`, touch && w < 768)).toEqual([]);
+        if (part === "Looks") {
+          await page.locator(".st-s-pick__opt", { hasText: /^Realistic$/ }).click();
+          for (const [group, option] of [
+            ["Roof", "Open top"],
+            ["Cartoon", "A lot"],
+            ["Brakes", "Coloured"],
+          ] as const) {
+            await page.getByRole("radiogroup", { name: group, exact: true }).locator(".st-s-pick__opt", { hasText: option }).click();
+          }
+          await expect(page.getByRole("radiogroup", { name: "Brake colour", exact: true })).toBeVisible();
+          await expect(page.locator(".st-s-editor__seen")).toContainText("Open top");
+          await page.locator("details.st-s-tech summary", { hasText: "More details" }).click();
+          expect(await audit(page, `The car's Looks, realistic, more details ${w}`, touch && w < 768)).toEqual([]);
+        }
+        if (part === "Moves") {
+          for (const view of ["Front", "Rear"]) {
+            await page.locator(".st-s-moves .st-s-pick__opt", { hasText: new RegExp(`^${view}$`) }).click();
+            await expect(page.locator(".st-s-editor__now")).toContainText(view);
+            expect(await audit(page, `The car's Moves, ${view} ${w}`, touch && w < 768)).toEqual([]);
+          }
+        }
       }
       await ctx.close();
     }

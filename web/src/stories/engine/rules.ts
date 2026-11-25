@@ -80,7 +80,7 @@ export const RULES: { id: string; text: string }[] = [
     id: "car_cast",
     text:
       "A car of the cast is never an actor: it is a car prop with its castId. People ride in it with inCar set to " +
-      "that prop's propId.",
+      "that prop's propId. A detailed vehicle can be a fifth longer than a plain one.",
   },
   {
     id: "get_in_out",

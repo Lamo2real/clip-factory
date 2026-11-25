@@ -17,7 +17,7 @@ from lamostories_agent.tasks import design
 from lamostories_agent.tasks.catalog import engine_catalog, ids
 from lamostories_agent.tasks.characters import car_schema, car_words, check_car
 from lamostories_agent.tasks.work import run_task
-from test_tasks_design_cars import CAR, SizedImages, a_car, answer, car_task, seed_photos
+from test_tasks_design_cars import CAR, SizedImages, a_car, answer, car_task, data_of, seed_photos
 from test_tasks_support import PK, USER, WS, FakeModel, character_item, services, task_item
 
 PAYLOAD = {"userId": USER, "workspaceId": WS, "taskId": "T1"}
@@ -224,7 +224,7 @@ def test_eight_photos_are_sent_and_a_ninth_is_not(tmp_path: Path) -> None:
     assert run(svc) == "done"
     labels = [t for t in texts(model) if t.startswith("Photo ")]
     assert len(labels) == 8 and labels[-1] == "Photo 8 of 8 (inside):"
-    assert [edge for _, edge in images.calls] == [1024] * 8
+    assert [edge for _, edge in images.calls] == [1280] * 8  # five or more photos: 1280 px (§45.48)
 
 
 @pytest.mark.parametrize("bad", ["sideways", None, 3])
@@ -234,3 +234,72 @@ def test_an_unknown_side_counts_as_outside(tmp_path: Path, bad: Any) -> None:
     db.seed(sided_task(seed_photos(db, s3, 2), ["inside", bad], count=1))
     assert run(svc) == "done"
     assert [t for t in texts(model) if t.startswith("Photo ")] == ["Photo 1 of 2 (inside):", "Photo 2 of 2 (outside):"]
+
+
+# --- likeness by family (docs/CONTRACTS.md §45.48) ----------------------------------------------------------------
+
+
+def detail_props(model: FakeModel, n: int = 0) -> dict[str, Any]:
+    props: dict[str, Any] = car_props(model, n)["properties"]["detail"]["properties"]
+    return props
+
+
+@pytest.mark.parametrize("vehicle", ["motorbike", "plane", "boat"])
+def test_a_bike_plane_or_boat_has_parts_but_no_outline_in_its_schema_brief_and_data(
+    tmp_path: Path, vehicle: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(design, "character_errors", lambda value: [])
+    answer_car = a_car("Rosso")
+    answer_car["car"]["body"] = vehicle
+    model = FakeModel(answer(answer_car))
+    svc, db, s3 = vehicle_services(tmp_path, model)
+    db.seed(car_task(seed_photos(db, s3, 1), count=1, vehicle=vehicle))
+    assert run(svc) == "done"
+    props = detail_props(model)
+    assert "profile" not in props and "toon" not in props
+    assert {"wheels", "lights", "stripe", "finish", "extras"} <= set(props)
+    blocks = texts(model)
+    assert design.DETAIL_PARTS_BRIEF in blocks and design.DETAIL_BRIEF not in blocks
+    assert "no measured outline" not in " ".join(blocks)
+    detail = data_of(model)["detail"]
+    assert set(detail) == {"rules"} and not any(p.split(".")[0] in ("profile", "toon") for p in detail["rules"])
+    assert "study" in model.calls[0]["schema"]["properties"]
+
+
+@pytest.mark.parametrize(
+    ("vehicle", "bodies"),
+    [
+        ("truck", {"pickup", "van"}),
+        ("bus", {"bus"}),
+        ("car", {"hatchback", "sedan", "estate", "suv", "sports", "compact"}),
+    ],
+)
+def test_a_car_truck_or_bus_has_an_outline_in_its_schema_brief_and_data(
+    tmp_path: Path, vehicle: str, bodies: set[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(design, "character_errors", lambda value: [])
+    chosen = sorted(bodies)[0]
+    answer_car = a_car("Rosso")
+    answer_car["car"]["body"] = chosen
+    model = FakeModel(answer(answer_car))
+    svc, db, s3 = vehicle_services(tmp_path, model)
+    db.seed(car_task(seed_photos(db, s3, 1), count=1, vehicle=vehicle))
+    assert run(svc) == "done"
+    props = detail_props(model)
+    assert len(props["profile"]["properties"]) == 35 and "toon" in props
+    assert design.DETAIL_BRIEF in texts(model) and design.DETAIL_PARTS_BRIEF not in texts(model)
+    detail = data_of(model)["detail"]
+    assert set(detail["preset"]) == bodies and len(detail["examples"]) == 4
+
+
+def test_a_plane_or_boat_loses_a_profile_the_model_gave_it_and_keeps_its_parts() -> None:
+    cat = with_vehicles()
+    for body in ("plane", "boat", "motorbike"):
+        raw = a_car()
+        raw["car"].update({"body": body, "length": 0.9})
+        raw["car"]["detail"] = {"v": 1, "toon": 40, "profile": dict(design.DETAIL_EXAMPLES[0]["profile"]),
+                                "stripe": {"layout": "centre", "color": "#111111"}, "finish": "satin"}  # fmt: skip
+        value, problems = check_car(raw, cat, bodies=[body])
+        assert problems == [] and value is not None
+        assert value["car"]["detail"] == {"v": 1, "stripe": {"layout": "centre", "color": "#111111"}, "finish": "satin"}
+        assert value["car"]["length"] == 0.9  # no outline: the sliders are the answer's own

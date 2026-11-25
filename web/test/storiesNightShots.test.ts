@@ -8,6 +8,7 @@ import { describe, expect, it } from "vitest";
 import { grade, LIGHTS, ND, softRings } from "../src/stories/engine/art.ts";
 import { shotCamera } from "../src/stories/engine/camera.ts";
 import { CAR_VIEW_SHAPES } from "../src/stories/engine/car.ts";
+import { PRESET } from "../src/stories/engine/carDetail.ts";
 import { audioTrack, CATALOG, drawFrame, ENGINE_VERSION, FORMATS, normalizeScript, textTrack, validateScript } from "../src/stories/engine/engine.ts";
 import { F, inFrame } from "../src/stories/engine/frame.ts";
 import { ellipsePts, keyhole, lampWarm, lightFor } from "../src/stories/engine/light.ts";
@@ -15,7 +16,7 @@ import { ditherSeed } from "../src/stories/engine/pen.ts";
 import { prepare } from "../src/stories/engine/scene.ts";
 import { NIGHT_SKY, SET_SHAPES_ND, setInfo } from "../src/stories/engine/sets.ts";
 import { nextCutAfter, SHOT_SHAPES, shotAt } from "../src/stories/engine/shots.ts";
-import type { CameraId, CarMember, CastMember, CharacterLook, Prim, Scene, SetId, ShotCue, ShotId, StoryScript, VideoFormat } from "../src/stories/engine/types.ts";
+import type { CameraId, CarDetail, CarMember, CastMember, CharacterLook, Prim, Scene, SetId, ShotCue, ShotId, StoryScript, VideoFormat } from "../src/stories/engine/types.ts";
 
 // ---- our own test characters (marked colours nothing else uses, so their prims can be picked out) ---------------
 
@@ -681,5 +682,106 @@ describe("bubbles and the end card in shots", () => {
         expect(hair.y1).toBeLessThanOrEqual(f.height);
       }
     }
+  });
+});
+
+// ---- a detailed own car in the inside views (CONTRACTS §45.48 section 2.9) -------------------------------------------
+
+const withDetail = (detail?: CarDetail): CarMember => ({ ...ownCar, car: { ...ownCar.car, body: "sports", ...(detail ? { detail } : {}) } });
+const detailStory = (shot: Exclude<ShotId, "scene">, detail?: CarDetail, f: Pick<VideoFormat, "width" | "height"> = FORMATS[0]!, art: "night_drive" | "classic" = "classic"): StoryScript =>
+  valid(story([drive("highway_night", [{ at: 0.1, shot }])], f, { art, cars: { k1: withDetail(detail) } }));
+const countColour = (prims: Prim[], c: string): number => prims.filter((p) => "color" in p && p.color === c).length;
+
+describe("the inside views of a detailed own car", () => {
+  const OPEN: CarDetail = { v: 1, roof: { type: "open", hoops: "twin" }, cabin: { rows: 1 } };
+
+  it("an open car has no roof band in Driver's eyes (a slim header instead), a closed one and a classic one keep it", () => {
+    for (const art of ["night_drive", "classic"] as const) {
+      for (const f of FORMATS) {
+        const where = `${art} ${f.resolution}`;
+        const open = drawFrame(detailStory("driver_view", OPEN, f, art), 75);
+        expect(countColour(open, ND.cabinRoof), where).toBe(0);
+        expect(countColour(drawFrame(detailStory("driver_view", { v: 1 }, f, art), 75), ND.cabinRoof), where).toBeGreaterThan(0);
+        expect(countColour(drawFrame(detailStory("driver_view", undefined, f, art), 75), ND.cabinRoof), where).toBeGreaterThan(0);
+        // the mirror still hangs from the header
+        expect(countColour(open, ND.mirrorHousing), where).toBeGreaterThan(0);
+      }
+    }
+  });
+
+  it("one row of seats draws no rear seats in Face up close, two rows draw them", () => {
+    const two = countColour(drawFrame(detailStory("face", { v: 1, cabin: { rows: 2 } }), 75), ND.seat);
+    const one = countColour(drawFrame(detailStory("face", { v: 1, cabin: { rows: 1 } }), 75), ND.seat);
+    expect(two - one).toBe(4);
+    expect(one).toBeGreaterThan(0); // the driver's own seat stays
+  });
+
+  it("an open car in Face up close has sky all round: no roof frame, its roll hoops behind", () => {
+    const closed = drawFrame(detailStory("face", { v: 1 }), 75);
+    const open = drawFrame(detailStory("face", OPEN), 75);
+    expect(countColour(closed, ND.cabinRoof)).toBeGreaterThan(0);
+    expect(countColour(open, ND.cabinRoof)).toBe(0);
+    const bar = drawFrame(detailStory("face", { ...OPEN, roof: { type: "open", hoops: "bar" } }), 75);
+    const none = drawFrame(detailStory("face", { ...OPEN, roof: { type: "open", hoops: "none" } }), 75);
+    expect(open.length - none.length).toBe(2);
+    expect(bar.length - none.length).toBe(1);
+  });
+
+  it("an open car has no upper frame in the Side window and no rear window frame in the Mirror", () => {
+    const sideClosed = drawFrame(detailStory("side_window", { v: 1 }), 75);
+    const sideOpen = drawFrame(detailStory("side_window", OPEN), 75);
+    expect(sideOpen.length).toBeLessThan(sideClosed.length);
+    const mirClosed = drawFrame(detailStory("mirror", { v: 1, cabin: { rows: 2 } }), 75);
+    const mirOpen = drawFrame(detailStory("mirror", { v: 1, roof: { type: "open" }, cabin: { rows: 2 } }), 75);
+    expect(mirClosed.length - mirOpen.length).toBe(8); // four panes of frame and its four edges
+    const mirOne = drawFrame(detailStory("mirror", { v: 1, cabin: { rows: 1 } }), 75);
+    expect(countColour(mirClosed, ND.seat) - countColour(mirOne, ND.seat)).toBe(2);
+  });
+
+  it("the bonnet follows the nose in Driver's eyes: a stripe rides on it, a flat wheel adds a bar, a dial takes its colour", () => {
+    const base = drawFrame(detailStory("driver_view", { v: 1 }), 75);
+    const centre = drawFrame(detailStory("driver_view", { v: 1, stripe: { layout: "centre", color: "#ffee00" } }), 75);
+    expect(centre.length - base.length).toBe(1);
+    expect(countColour(centre, "#ffee00")).toBe(1);
+    const twin = drawFrame(detailStory("driver_view", { v: 1, stripe: { layout: "twin", color: "#ffee00" } }), 75);
+    expect(twin.length - base.length).toBe(2);
+    const flat = drawFrame(detailStory("driver_view", { v: 1, cabin: { wheel: "flat" } }), 75);
+    expect(flat.length - base.length).toBe(2);
+    // a low wedge nose is a thin sliver, a tall one a deep sliver; wings standing over the bonnet add humps, no prims
+    const nose = (noseH: number, cowlH: number) => drawFrame(detailStory("driver_view", { v: 1, profile: { ...PRESET.sports, noseH, cowlH } }), 75);
+    const lowNose = nose(30, 40);
+    const highNose = nose(70, 80);
+    const wings = nose(30, 70);
+    expect(lowNose.length).toBe(highNose.length);
+    expect(wings.length).toBe(lowNose.length);
+    expect(lowNose).not.toEqual(highNose);
+    expect(wings).not.toEqual(lowNose);
+    const dial = drawFrame(detailStory("speed_dial", { v: 1, cabin: { dial: "#f2c500" } }), 75);
+    expect(countColour(dial, "#f2c500")).toBeGreaterThan(0);
+    expect(countColour(drawFrame(detailStory("speed_dial", { v: 1 }), 75), "#f2c500")).toBe(0);
+  });
+
+  it("every shot of a detailed own car stays under its shape budgets, in every size and both styles, the same every time", () => {
+    for (const f of FORMATS) {
+      for (const art of ["night_drive", "classic"] as const) {
+        for (const shot of SHOTS) {
+          const s = detailStory(shot, { v: 1, roof: { type: "open", hoops: "twin" }, stripe: { layout: "twin", color: "#222222" }, cabin: { rows: 1, wheel: "flat", dial: "#f2c500" } }, f, art);
+          const where = `${f.resolution} ${art} ${shot}`;
+          for (const fr of FRAMES) {
+            const prims = drawFrame(s, fr);
+            expect(prims.length, where).toBeLessThanOrEqual(400);
+            expect(prims.length, where).toBeLessThanOrEqual(SHOT_SHAPES[shot] + 3 * CAR_VIEW_SHAPES + 6);
+            expect(finite(prims, f.width, f.height), where).toEqual([]);
+          }
+          expect(drawFrame(s, 40), where).toEqual(drawFrame(s, 40));
+        }
+      }
+    }
+  });
+
+  it("the cabin's colours do not change with a detail (the detail's seat colour only counts without inside photos)", () => {
+    const a = drawFrame(detailStory("face", { v: 1, cabin: { rows: 2 } }), 75);
+    const b = drawFrame(detailStory("face", undefined), 75);
+    expect(a.length).toBe(b.length);
   });
 });

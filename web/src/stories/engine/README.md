@@ -222,6 +222,12 @@ noises) never sees a car, and `prepare()` makes no geometry for one. A script ma
   windows (clear, tinted, dark), wheels (steel, hubcaps, alloy, sporty, off-road; a rim colour; size 0.85 to 1.2),
   front lights (round, square, slim), back lights (round, a long bar, square), one thing on top (nothing, a roof rack,
   a spoiler, a roof box) and a face. `DEFAULT_CAR` is a red hatchback with alloy wheels and no face.
+* **A realistic look** (`detail`, `carDetail.ts`, CONTRACTS §45.48): an optional `CarLook.detail` holds a measured outline
+  (`profile`, 35 whole numbers: nose, windscreen, roof, deck, tail, axles, belt) and named parts (roof, wheel design,
+  brakes, lamps, intakes, stripes, finish, extras) plus `toon`, how cartoony it is. Without it the look draws exactly as
+  the next bullet says; with it a second drawer (`resolveDetail` then `fitProfile`, which makes any in-range numbers
+  drawable) draws the whole vehicle. `CAR_DETAIL` is the one rules table (the API reads a generated JSON copy); the
+  nine body presets are frozen under `v` 1; there is no badge or mark, the hub is a flat disc.
 * **The drawing** works in the same frame as the plain car: origin on the ground at its centre, facing +x (top view:
   its centre, nose up), px × k. Each body is one silhouette polygon (bonnet, windscreen rake, roof, back) scaled by its
   body's length and height factors times `length` and `height`, with an outline of the people's weight. The riders sit
@@ -255,6 +261,9 @@ noises) never sees a car, and `prepare()` makes no geometry for one. A script ma
   car, or that is not one of the cars; one car in two props of a scene; a face the car does not make (`repairScript`
   takes it out, as for people); getting in or out without `inCar`, too short or too long, or out of order; and the car
   moving while someone is still getting in.
+* **Shapes (detailed).** A look with `detail` is measured by drawing it (`carShapes`, `carViewShapes` in `carBudget.ts`): at
+  most 88 prims in Bright, 112 in night drive, 64 in its front or back view; a look without `detail` stays at 56, 72
+  and 34, so no stored script is re-priced. Parts fade in with size (alpha times a smoothstep), never pop.
 * **Shapes.** A car of the cast is at most `CAR_CAST_SHAPES` (56) prims at its busiest, with eyes on
   (`web/test/storiesEngineCars.test.ts` measures every choice, every prop action and both views); `sceneShapes`
   counts it so.

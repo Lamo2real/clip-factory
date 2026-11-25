@@ -1,5 +1,5 @@
 {
- "version": "b50b80554c85",
+ "version": "cf0eebd34338",
  "parts": [
   {
    "id": "app-map",
@@ -297,7 +297,7 @@
    "id": "contracts-45",
    "title": "CONTRACTS: 45. Clips Funded: a second, separate workspace (owner request, 2026-11-21)",
    "line": "Planned: not in the app until the switch pull request turns it on (§45.21). Until then nothing of Clips Funded",
-   "chars": 540371
+   "chars": 546822
   },
   {
    "id": "contracts-46",
@@ -892,6 +892,12 @@
    "title": "DECISIONS: ADR-97 Video drafts are their own item; vehicles are car bodies shown as Vehicles; roles are additive fields",
    "line": "Context. The owner wants to save Make a new video before making it, a main character and a villain per video,",
    "chars": 2050
+  },
+  {
+   "id": "adr-98",
+   "title": "DECISIONS: ADR-98 A vehicle's likeness is a measured outline plus named parts in one optional `detail` object",
+   "line": "Context. The owner wants the cartoon vehicle to be recognisable as the real model in the photos, \"overboard",
+   "chars": 1678
   },
   {
    "id": "architecture-overview",

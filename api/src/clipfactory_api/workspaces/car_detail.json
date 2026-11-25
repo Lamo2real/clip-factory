@@ -1,0 +1,1049 @@
+{
+ "v": 1,
+ "maxChars": 2400,
+ "rules": {
+  "toon": {
+   "n": [
+    0,
+    100
+   ]
+  },
+  "profile.body": {
+   "e": [
+    "hatchback",
+    "sedan",
+    "estate",
+    "suv",
+    "sports",
+    "compact",
+    "pickup",
+    "van",
+    "bus",
+    "motorbike",
+    "plane",
+    "boat"
+   ]
+  },
+  "profile.lh": {
+   "n": [
+    150,
+    520
+   ]
+  },
+  "profile.wh": {
+   "n": [
+    60,
+    220
+   ]
+  },
+  "profile.tipH": {
+   "n": [
+    10,
+    85
+   ]
+  },
+  "profile.noseX": {
+   "n": [
+    0,
+    14
+   ]
+  },
+  "profile.noseH": {
+   "n": [
+    15,
+    92
+   ]
+  },
+  "profile.noseR": {
+   "n": [
+    0,
+    100
+   ]
+  },
+  "profile.chinH": {
+   "n": [
+    3,
+    40
+   ]
+  },
+  "profile.cowlX": {
+   "n": [
+    1,
+    55
+   ]
+  },
+  "profile.cowlH": {
+   "n": [
+    30,
+    90
+   ]
+  },
+  "profile.bonnet": {
+   "n": [
+    0,
+    100
+   ]
+  },
+  "profile.headX": {
+   "n": [
+    4,
+    72
+   ]
+  },
+  "profile.headH": {
+   "n": [
+    40,
+    100
+   ]
+  },
+  "profile.peakX": {
+   "n": [
+    4,
+    100
+   ]
+  },
+  "profile.roofX": {
+   "n": [
+    12,
+    100
+   ]
+  },
+  "profile.roofH": {
+   "n": [
+    40,
+    100
+   ]
+  },
+  "profile.deckX": {
+   "n": [
+    20,
+    100
+   ]
+  },
+  "profile.deckH": {
+   "n": [
+    20,
+    98
+   ]
+  },
+  "profile.tailX": {
+   "n": [
+    86,
+    100
+   ]
+  },
+  "profile.tailH": {
+   "n": [
+    15,
+    98
+   ]
+  },
+  "profile.rumpH": {
+   "n": [
+    3,
+    45
+   ]
+  },
+  "profile.sillH": {
+   "n": [
+    4,
+    40
+   ]
+  },
+  "profile.axF": {
+   "n": [
+    8,
+    40
+   ]
+  },
+  "profile.axR": {
+   "n": [
+    55,
+    94
+   ]
+  },
+  "profile.wheelD": {
+   "n": [
+    20,
+    72
+   ]
+  },
+  "profile.archGap": {
+   "n": [
+    0,
+    45
+   ]
+  },
+  "profile.beltH": {
+   "n": [
+    30,
+    88
+   ]
+  },
+  "profile.beltRise": {
+   "n": [
+    -10,
+    20
+   ]
+  },
+  "profile.soft": {
+   "n": [
+    0,
+    100
+   ]
+  },
+  "profile.pillarX": {
+   "n": [
+    10,
+    96
+   ]
+  },
+  "profile.glassX": {
+   "n": [
+    20,
+    99
+   ]
+  },
+  "profile.panes": {
+   "n": [
+    1,
+    5
+   ]
+  },
+  "profile.roofW": {
+   "n": [
+    40,
+    100
+   ]
+  },
+  "profile.taperF": {
+   "n": [
+    0,
+    40
+   ]
+  },
+  "profile.taperR": {
+   "n": [
+    0,
+    40
+   ]
+  },
+  "roof.type": {
+   "e": [
+    "closed",
+    "open",
+    "targa",
+    "soft_top",
+    "sunroof",
+    "glass"
+   ],
+   "label": {
+    "closed": "Closed",
+    "open": "Open top",
+    "targa": "Targa",
+    "soft_top": "Soft top",
+    "sunroof": "Sunroof",
+    "glass": "Glass roof"
+   },
+   "draws": {
+    "closed": "a solid roof over the cabin",
+    "open": "no roof: a windscreen in its frame, the riders in the open air",
+    "targa": "no roof panel, a bar behind the seats, open sky above them",
+    "soft_top": "a fabric roof in its own colour, one window, two seams",
+    "sunroof": "a closed roof with a small dark glass panel",
+    "glass": "a closed roof that is mostly dark glass"
+   }
+  },
+  "roof.color": {
+   "c": true
+  },
+  "roof.hoops": {
+   "e": [
+    "none",
+    "twin",
+    "bar"
+   ],
+   "label": {
+    "none": "None",
+    "twin": "Two hoops",
+    "bar": "One bar"
+   },
+   "draws": {
+    "none": "no bars behind the seats",
+    "twin": "two round hoops standing up behind the seats",
+    "bar": "one flat bar across behind the seats"
+   }
+  },
+  "roof.rails": {
+   "b": true
+  },
+  "wheels.shape": {
+   "e": [
+    "steel",
+    "cap",
+    "straight",
+    "split",
+    "y",
+    "star",
+    "mesh",
+    "turbine",
+    "dish",
+    "wire",
+    "block"
+   ],
+   "label": {
+    "steel": "Steel",
+    "cap": "Hubcap",
+    "straight": "Straight",
+    "split": "Split",
+    "y": "Y spokes",
+    "star": "Star",
+    "mesh": "Mesh",
+    "turbine": "Turbine",
+    "dish": "Dish",
+    "wire": "Wire",
+    "block": "Chunky"
+   },
+   "draws": {
+    "steel": "a plain disc with eight round holes",
+    "cap": "a dished hubcap with a shine arc",
+    "straight": "tapered spokes that run straight out from the hub",
+    "split": "pairs of thin spokes, each pair a slim V",
+    "y": "spokes that fork in two near the rim",
+    "star": "wide blades that end in a point",
+    "mesh": "twice as many thin crossing spokes as the count",
+    "turbine": "swept blades that look like a fan",
+    "dish": "a deep plain dish with a wide polished lip and small slots",
+    "wire": "hair-thin spokes and a small bright hub",
+    "block": "a small rim and chunky blocks of tread on the tyre"
+   }
+  },
+  "wheels.spokes": {
+   "n": [
+    3,
+    24
+   ]
+  },
+  "wheels.tyre": {
+   "n": [
+    12,
+    60
+   ]
+  },
+  "wheels.lip": {
+   "n": [
+    0,
+    100
+   ]
+  },
+  "wheels.dish": {
+   "n": [
+    0,
+    100
+   ]
+  },
+  "wheels.wall": {
+   "e": [
+    "black",
+    "white"
+   ],
+   "label": {
+    "black": "Black",
+    "white": "White"
+   },
+   "draws": {
+    "black": "an all black tyre",
+    "white": "a white ring on the side of the tyre"
+   }
+  },
+  "wheels.hub": {
+   "c": true
+  },
+  "wheels.rearD": {
+   "n": [
+    20,
+    72
+   ]
+  },
+  "brakes.disc": {
+   "e": [
+    "none",
+    "plain",
+    "drilled",
+    "ceramic"
+   ],
+   "label": {
+    "none": "None",
+    "plain": "Plain",
+    "drilled": "Drilled",
+    "ceramic": "Dark"
+   },
+   "draws": {
+    "none": "no disc: the dark barrel of the wheel shows",
+    "plain": "a plain grey disc behind the spokes",
+    "drilled": "a grey disc with a ring of small holes",
+    "ceramic": "a dark charcoal disc"
+   }
+  },
+  "brakes.caliper": {
+   "c": true
+  },
+  "lights.front.shape": {
+   "e": [
+    "round",
+    "twin_round",
+    "oval",
+    "square",
+    "rect",
+    "slim",
+    "swept",
+    "angled",
+    "stacked",
+    "pop_up",
+    "strip"
+   ],
+   "label": {
+    "round": "Round",
+    "twin_round": "Two round",
+    "oval": "Oval",
+    "square": "Square",
+    "rect": "Wide",
+    "slim": "Slim",
+    "swept": "Swept",
+    "angled": "Angled",
+    "stacked": "Stacked",
+    "pop_up": "Pop-up",
+    "strip": "Strip"
+   },
+   "draws": {
+    "round": "one round lamp in a bezel",
+    "twin_round": "two round lamps side by side",
+    "oval": "one oval lamp",
+    "square": "a square block at the corner of the nose",
+    "rect": "a wide low block at the corner of the nose",
+    "slim": "a thin bar under the bonnet's edge",
+    "swept": "a teardrop that runs back along the wing",
+    "angled": "a wedge that slants down towards the grille",
+    "stacked": "two small blocks, one over the other",
+    "pop_up": "a closed flap line by day, a raised block when the lights are on",
+    "strip": "one thin bar across the whole nose"
+   }
+  },
+  "lights.front.drl": {
+   "e": [
+    "none",
+    "line",
+    "hook",
+    "ring",
+    "dots",
+    "brow"
+   ],
+   "label": {
+    "none": "None",
+    "line": "Line",
+    "hook": "Hook",
+    "ring": "Ring",
+    "dots": "Dots",
+    "brow": "Brow"
+   },
+   "draws": {
+    "none": "no daytime light",
+    "line": "a thin line along the lamp's lower edge",
+    "hook": "an L shaped line round the lamp's corner",
+    "ring": "a ring round a round lamp",
+    "dots": "three small dots by the lamp",
+    "brow": "a line along the lamp's top edge"
+   }
+  },
+  "lights.front.h": {
+   "n": [
+    10,
+    92
+   ]
+  },
+  "lights.front.lens": {
+   "e": [
+    "clear",
+    "yellow",
+    "smoked"
+   ],
+   "label": {
+    "clear": "Clear",
+    "yellow": "Yellow",
+    "smoked": "Smoked"
+   },
+   "draws": {
+    "clear": "a clear glass lens",
+    "yellow": "a yellow tinted lens",
+    "smoked": "a dark smoked lens"
+   }
+  },
+  "lights.rear.shape": {
+   "e": [
+    "round",
+    "twin_round",
+    "square",
+    "rect",
+    "tall",
+    "slim",
+    "bar",
+    "split_bar",
+    "wedge",
+    "c_shape"
+   ],
+   "label": {
+    "round": "Round",
+    "twin_round": "Two round",
+    "square": "Square",
+    "rect": "Wide",
+    "tall": "Tall",
+    "slim": "Slim",
+    "bar": "Bar",
+    "split_bar": "Split bar",
+    "wedge": "Wedge",
+    "c_shape": "C shape"
+   },
+   "draws": {
+    "round": "one round lamp",
+    "twin_round": "two round lamps, one over the other",
+    "square": "a square lamp",
+    "rect": "a wide low lamp",
+    "tall": "a narrow upright lamp",
+    "slim": "a thin lamp",
+    "bar": "one bar across the full width of the tail",
+    "split_bar": "a bar across the tail with a gap for the plate",
+    "wedge": "a lamp that wraps round the corner of the tail",
+    "c_shape": "a bracket shaped lamp"
+   }
+  },
+  "lights.rear.h": {
+   "n": [
+    10,
+    92
+   ]
+  },
+  "lights.rear.lens": {
+   "e": [
+    "red",
+    "clear",
+    "smoked"
+   ],
+   "label": {
+    "red": "Red",
+    "clear": "Clear",
+    "smoked": "Smoked"
+   },
+   "draws": {
+    "red": "a red lens",
+    "clear": "a clear lens with a red bulb",
+    "smoked": "a dark smoked lens"
+   }
+  },
+  "front.grille": {
+   "e": [
+    "none",
+    "slot",
+    "bars",
+    "slats",
+    "mesh",
+    "oval",
+    "tall",
+    "twin"
+   ],
+   "label": {
+    "none": "None",
+    "slot": "Slot",
+    "bars": "Bars",
+    "slats": "Slats",
+    "mesh": "Mesh",
+    "oval": "Oval",
+    "tall": "Tall",
+    "twin": "Two"
+   },
+   "draws": {
+    "none": "a smooth nose with no grille",
+    "slot": "a thin dark slit",
+    "bars": "a dark box with one bright bar",
+    "slats": "upright slats in a box",
+    "mesh": "a dark mesh box",
+    "oval": "an oval mouth",
+    "tall": "an upright box up to the bonnet",
+    "twin": "two openings side by side"
+   }
+  },
+  "front.intake": {
+   "e": [
+    "none",
+    "wide",
+    "split3",
+    "twin",
+    "smile"
+   ],
+   "label": {
+    "none": "None",
+    "wide": "Wide",
+    "split3": "Three",
+    "twin": "Corners",
+    "smile": "Smile"
+   },
+   "draws": {
+    "none": "no low mouth",
+    "wide": "one wide low mouth",
+    "split3": "a low mouth in three parts",
+    "twin": "two mouths, one at each corner",
+    "smile": "a curved low mouth"
+   }
+  },
+  "front.splitter": {
+   "e": [
+    "none",
+    "lip",
+    "blade"
+   ],
+   "label": {
+    "none": "None",
+    "lip": "Lip",
+    "blade": "Blade"
+   },
+   "draws": {
+    "none": "no splitter",
+    "lip": "a thin dark edge along the bottom of the nose",
+    "blade": "a dark blade standing out in front of the nose"
+   }
+  },
+  "front.bumper": {
+   "e": [
+    "body",
+    "black",
+    "chrome"
+   ],
+   "label": {
+    "body": "Body",
+    "black": "Black",
+    "chrome": "Chrome"
+   },
+   "draws": {
+    "body": "nothing extra: the front bumper is part of the body",
+    "black": "a dark bar across the front",
+    "chrome": "a bright metal bar across the front"
+   }
+  },
+  "front.fog": {
+   "b": true
+  },
+  "bonnet.vent": {
+   "e": [
+    "none",
+    "scoop",
+    "bulge",
+    "vents",
+    "duct"
+   ],
+   "label": {
+    "none": "None",
+    "scoop": "Scoop",
+    "bulge": "Bulge",
+    "vents": "Vents",
+    "duct": "Duct"
+   },
+   "draws": {
+    "none": "a smooth bonnet",
+    "scoop": "a raised scoop on the bonnet",
+    "bulge": "a long hump line down the bonnet",
+    "vents": "two slats in the bonnet",
+    "duct": "a wide dark outlet ahead of the windscreen"
+   }
+  },
+  "side.intake": {
+   "e": [
+    "none",
+    "scoop",
+    "gill",
+    "slats",
+    "duct"
+   ],
+   "label": {
+    "none": "None",
+    "scoop": "Scoop",
+    "gill": "Gills",
+    "slats": "Slats",
+    "duct": "Duct"
+   },
+   "draws": {
+    "none": "a plain side",
+    "scoop": "a slash shaped dark scoop ahead of the rear wheel with a lit edge",
+    "gill": "three slanted gills behind the front wheel",
+    "slats": "four slats on the rear quarter",
+    "duct": "a low dark slot in the sill"
+   }
+  },
+  "side.intakeX": {
+   "n": [
+    20,
+    95
+   ]
+  },
+  "side.skirts": {
+   "e": [
+    "none",
+    "lip",
+    "deep",
+    "boards"
+   ],
+   "label": {
+    "none": "None",
+    "lip": "Lip",
+    "deep": "Deep",
+    "boards": "Boards"
+   },
+   "draws": {
+    "none": "no skirts",
+    "lip": "a thin dark skirt between the wheels",
+    "deep": "a deep dark skirt between the wheels",
+    "boards": "a bright running board between the wheels"
+   }
+  },
+  "side.doors": {
+   "n": [
+    0,
+    3
+   ]
+  },
+  "side.handles": {
+   "e": [
+    "none",
+    "bar",
+    "flush",
+    "chrome"
+   ],
+   "label": {
+    "none": "None",
+    "bar": "Bar",
+    "flush": "Flush",
+    "chrome": "Chrome"
+   },
+   "draws": {
+    "none": "no handles",
+    "bar": "a small bar handle on each door",
+    "flush": "a tiny flat handle on each door",
+    "chrome": "a bright handle on each door"
+   }
+  },
+  "side.crease": {
+   "e": [
+    "none",
+    "level",
+    "wedge",
+    "double"
+   ],
+   "label": {
+    "none": "None",
+    "level": "Level",
+    "wedge": "Wedge",
+    "double": "Double"
+   },
+   "draws": {
+    "none": "a smooth side",
+    "level": "a lit line level along the side",
+    "wedge": "a lit line that rises towards the tail",
+    "double": "two lit lines along the side"
+   }
+  },
+  "side.mirror": {
+   "e": [
+    "none",
+    "ear",
+    "stalk",
+    "square"
+   ],
+   "label": {
+    "none": "None",
+    "ear": "Ear",
+    "stalk": "Stalk",
+    "square": "Square"
+   },
+   "draws": {
+    "none": "no mirror",
+    "ear": "a small cap at the foot of the windscreen",
+    "stalk": "a mirror on a short arm",
+    "square": "a tall square truck mirror"
+   }
+  },
+  "side.rubStrip": {
+   "b": true
+  },
+  "side.fuelCap": {
+   "b": true
+  },
+  "rear.diffuser": {
+   "e": [
+    "none",
+    "fins",
+    "deep"
+   ],
+   "label": {
+    "none": "None",
+    "fins": "Fins",
+    "deep": "Deep"
+   },
+   "draws": {
+    "none": "a plain underside at the tail",
+    "fins": "a dark raked underside with fins",
+    "deep": "a deep dark raked underside"
+   }
+  },
+  "rear.exhaust": {
+   "e": [
+    "none",
+    "single",
+    "twin",
+    "quad",
+    "centre",
+    "high",
+    "side",
+    "stack"
+   ],
+   "label": {
+    "none": "None",
+    "single": "One",
+    "twin": "Two",
+    "quad": "Four",
+    "centre": "Centre",
+    "high": "High",
+    "side": "Side",
+    "stack": "Stack"
+   },
+   "draws": {
+    "none": "no exhaust pipe",
+    "single": "one pipe low at one side",
+    "twin": "two pipes low, side by side",
+    "quad": "four pipes in a row",
+    "centre": "one pipe in the middle",
+    "high": "two pipes at mid height, either side of the plate",
+    "side": "a pipe under the door",
+    "stack": "an upright pipe behind the cab"
+   }
+  },
+  "rear.spoiler": {
+   "e": [
+    "none",
+    "lip",
+    "ducktail",
+    "wing",
+    "big_wing",
+    "roof"
+   ],
+   "label": {
+    "none": "None",
+    "lip": "Lip",
+    "ducktail": "Ducktail",
+    "wing": "Wing",
+    "big_wing": "Big wing",
+    "roof": "Roof"
+   },
+   "draws": {
+    "none": "no spoiler",
+    "lip": "a thin lip on the tail's edge",
+    "ducktail": "a short raised kick on the tail's edge",
+    "wing": "a wing on two short stalks",
+    "big_wing": "a tall wing on two tall stalks",
+    "roof": "a small wing at the roof's rear end"
+   }
+  },
+  "rear.bumper": {
+   "e": [
+    "body",
+    "black",
+    "chrome"
+   ],
+   "label": {
+    "body": "Body",
+    "black": "Black",
+    "chrome": "Chrome"
+   },
+   "draws": {
+    "body": "nothing extra: the rear bumper is part of the body",
+    "black": "a dark bar across the rear",
+    "chrome": "a bright metal bar across the rear"
+   }
+  },
+  "arches": {
+   "e": [
+    "round",
+    "square",
+    "flare",
+    "clad"
+   ],
+   "label": {
+    "round": "Round",
+    "square": "Square",
+    "flare": "Flared",
+    "clad": "Clad"
+   },
+   "draws": {
+    "round": "round wheel openings",
+    "square": "square wheel openings",
+    "flare": "a ring of darker paint round each wheel opening",
+    "clad": "a ring of dark trim round each wheel opening"
+   }
+  },
+  "stripe.layout": {
+   "e": [
+    "none",
+    "centre",
+    "twin",
+    "offset",
+    "side",
+    "sill",
+    "pin"
+   ],
+   "label": {
+    "none": "None",
+    "centre": "Centre",
+    "twin": "Twin",
+    "offset": "Offset",
+    "side": "Side",
+    "sill": "Sill",
+    "pin": "Pin"
+   },
+   "draws": {
+    "none": "no stripe",
+    "centre": "one wide stripe over the bonnet, roof and tail",
+    "twin": "two thin stripes over the bonnet, roof and tail",
+    "offset": "one wide stripe a little off the middle",
+    "side": "a band along the doors",
+    "sill": "a band low along the sill",
+    "pin": "a hairline under the windows"
+   }
+  },
+  "stripe.color": {
+   "c": true
+  },
+  "stripe.width": {
+   "n": [
+    0,
+    100
+   ]
+  },
+  "twoTone": {
+   "e": [
+    "roof",
+    "split",
+    "lower",
+    "bonnet"
+   ],
+   "label": {
+    "roof": "Roof",
+    "split": "Split",
+    "lower": "Lower",
+    "bonnet": "Bonnet"
+   },
+   "draws": {
+    "roof": "the roof in the second colour",
+    "split": "everything above the windows' bottom edge in the second colour",
+    "lower": "the lower body in the second colour",
+    "bonnet": "the bonnet in the second colour"
+   }
+  },
+  "trim": {
+   "c": true
+  },
+  "mirrorColor": {
+   "c": true
+  },
+  "finish": {
+   "e": [
+    "gloss",
+    "satin",
+    "matte",
+    "metallic"
+   ],
+   "label": {
+    "gloss": "Gloss",
+    "satin": "Satin",
+    "matte": "Matte",
+    "metallic": "Metallic"
+   },
+   "draws": {
+    "gloss": "bright paint with a clear shine",
+    "satin": "paint with a soft low shine",
+    "matte": "flat paint with almost no shine",
+    "metallic": "bright paint with a second thin shine line"
+   }
+  },
+  "extras": {
+   "l": [
+    "bull_bar",
+    "spare_wheel",
+    "roof_rails",
+    "antenna",
+    "shark_fin",
+    "snorkel",
+    "light_bar",
+    "mudflaps",
+    "roof_scoop",
+    "tow_hook",
+    "ladder",
+    "wing_lamps"
+   ],
+   "max": 6,
+   "label": {
+    "bull_bar": "Bull bar",
+    "spare_wheel": "Spare wheel",
+    "roof_rails": "Roof rails",
+    "antenna": "Antenna",
+    "shark_fin": "Fin",
+    "snorkel": "Snorkel",
+    "light_bar": "Light bar",
+    "mudflaps": "Mudflaps",
+    "roof_scoop": "Roof scoop",
+    "tow_hook": "Tow hook",
+    "ladder": "Ladder",
+    "wing_lamps": "Wing lamps"
+   },
+   "draws": {
+    "bull_bar": "a dark bar guard across the front of the nose",
+    "spare_wheel": "a spare wheel on the back",
+    "roof_rails": "two rails along the roof",
+    "antenna": "a thin mast on the roof's rear",
+    "shark_fin": "a small fin on the roof's rear",
+    "snorkel": "an upright pipe up the side of the windscreen",
+    "light_bar": "a bar of lamps across the roof's front",
+    "mudflaps": "a flap behind each wheel",
+    "roof_scoop": "a small scoop on the roof",
+    "tow_hook": "a small hook under the nose",
+    "ladder": "a ladder up the back",
+    "wing_lamps": "small lamps on top of the front wings"
+   }
+  },
+  "cabin.rows": {
+   "n": [
+    1,
+    3
+   ]
+  },
+  "cabin.seat": {
+   "c": true
+  },
+  "cabin.dial": {
+   "c": true
+  },
+  "cabin.wheel": {
+   "e": [
+    "round",
+    "flat"
+   ],
+   "label": {
+    "round": "Round",
+    "flat": "Flat"
+   },
+   "draws": {
+    "round": "a round steering wheel",
+    "flat": "a steering wheel with a flat bottom"
+   }
+  }
+ },
+ "whole": [
+  "profile"
+ ]
+}

@@ -153,6 +153,12 @@ Still open in phase 2:
 
 ## Later
 
+- **Realistic vehicles, the rest** ([CONTRACTS.md §45.48](CONTRACTS.md#4548-realistic-vehicles-the-photos-own-shape-owner-request-2026-11-25-wins-over-anything-above-for-how-a-vehicle-is-drawn-designed-and-edited),
+  [ADR-98](DECISIONS.md#adr-98-a-vehicles-likeness-is-a-measured-outline-plus-named-parts-in-one-optional-detail-object)):
+  the car, pickup, van and bus take the photo's own measured outline and named parts. Still to do: a measured outline
+  for the motorbike, plane and boat from their own photos, riders seen head on, a second look (the best option sent
+  back beside the photo for corrected numbers) if the likeness is not enough, and redrawing old looks' defects
+  (needs the owner's yes and an engine-version bump).
 - **Scheduled posting**: choose when each clip goes out (best time per platform from the learnings). Auto-posting
   every X hours, oldest first, is built ([CONTRACTS.md §46](CONTRACTS.md#46-auto-posting-the-oldest-clips-in-review-go-up-by-themselves-every-x-hours-owner-request-2026-11-22));
   picking the best time per platform is not.

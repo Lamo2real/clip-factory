@@ -14058,6 +14058,7 @@ type VehicleType = "car" | "truck" | "bus" | "motorbike" | "plane" | "boat"; typ
 // CarLook gains interior?: { seat: Hex; dash: Hex; trim?: Hex }; SetId gains "sky" | "sea";
 // CharacterSaved.references[] gains side?: PhotoSide; Story gains roles?: CastRoles;
 // DesignBody gains referenceSides?: PhotoSide[] /* same length as referenceAssetIds (now ≤ 8) */; vehicle?: VehicleType
+// §45.48 (additive): CarLook gains detail?: CarDetail /* { v: 1; toon?; profile?; roof?; wheels?; … }, engine/carDetail.ts; absent draws as before */
 interface CastRoles { mainId: string /* the first person in characterIds */; villainId?: string /* another person */ }
 interface VideoDraftForm { source?: "idea" | "own" | "script"; ideaId?: string; title?: string; logline?: string;
   category?: string; script?: { scenes: { what: string; caption?: string; who?: string[];
@@ -19795,6 +19796,66 @@ additive; internal names stay (`kind:"car"`, `script.cars`, `CHAR#`, `STORY#`, t
   "Those photos don't show a vehicle. Try other photos." · "Add a photo of your vehicle, or say what it is like." ·
   "You have 50 drafts. Delete one first."
 - **Later:** cockpit, handlebar and helm shots; photo-real vehicles (photos still give a cartoon vehicle).
+
+### 45.48 Realistic vehicles: the photo's own shape (owner request, 2026-11-25; wins over anything above for how a vehicle is drawn, designed and edited)
+
+Owner: "I should know it is [the real model] when I see it … go overboard with the realistic part, it should still be
+cartoon and animated." (The model's make is left out here and everywhere in the code, the labels, the prompts and the
+tests: §45.42.6 still says no make, no badge and no logo, ever.) ADR-98. All additive.
+
+- **One optional key.** `CarLook.detail?: CarDetail`. A look without it draws, checks, saves and prices exactly as
+  before, byte for byte (the `storiesCarLegacy` golden is the proof and is not changed). A look with it is drawn by a
+  second, "detailed" drawer. `detail: {v: 1}` alone means "this body, drawn the detailed way, with the body's preset".
+  The classic fields (`body`, `paint`, `accent`, `outline`, `windows`, `length`, `height`, `wheels.rim`, `wheels.size`,
+  `face`, `interior`) keep their meaning, and the AI still fills the classic ones with the nearest classic value.
+- **What it holds.** A measured outline (`profile`: 35 whole numbers, positions as percent of the length and the height:
+  nose, windscreen foot and top, roof, deck, tail, axles, wheel size, belt line, pillars, panes) plus named parts, each
+  one pick from a list: roof (closed, open, targa, soft top, sunroof, glass), wheel design (spokes, tyre, lip, dish, hub
+  disc), brakes (disc, caliper colour), front and back lamps and their lens, grille, intakes, splitter, bumpers, bonnet
+  vent, side intake, skirts, doors, handles, crease, mirror, exhaust, spoiler, diffuser, arches, stripes, two-tone,
+  trim colour, finish (gloss, satin, matte, metallic), up to 6 extras and the cabin. `toon` 0 to 100 (default 30) is how
+  cartoony it is: 0 real proportions, 100 as chunky as the classic drawing.
+- **One rules table.** `web/src/stories/engine/carDetail.ts` holds every range, list, colour rule and one-line "draws"
+  (`CAR_DETAIL`), the nine frozen body presets (`PRESET`, `PRESET_PARTS`) and `resolveDetail`. Every number is a whole
+  number; every colour is lower case `#rrggbb`; there is no free text anywhere; `JSON.stringify(detail)` is at most
+  2,400 characters. A key's rule is checked alone; everything that depends on other keys lives in one engine function
+  (`fitProfile`), which makes any in-range numbers drawable, so a wrong answer is never a refusal. The engine checks it
+  strictly for `v` 1 and leniently for a newer `v` (unknown keys skipped), the API strictly (400, one sentence), the
+  agent by repairing silently (an option is never dropped), the mock like the API. The API reads a JSON copy of the
+  table that the web test writes, and one shared fixture runs through the engine, the API and the agent.
+- **Saved vehicles draw as before.** A saved vehicle changes only when the owner redesigns it (its page, Design with AI,
+  Design it, Pick one, "What changes: Looks details", Use this, Save changes). New hand-made vehicles start "Simple";
+  an AI design always returns `detail`. `ENGINE_VERSION` stays 7.
+- **Presets are frozen.** After this change `PRESET` and `PRESET_PARTS` change only under a new `detail.v`; a test holds
+  their hash.
+- **Pick one (replaces "clearly different" in §45.42.6, for vehicles).** The options of a design are the SAME vehicle
+  (same `profile`, roof, wheels, lamps, intakes, stripes and colours) at different cartoon levels: option 1 `toon` 30,
+  option 2 `toon` 60, option 3 `toon` 0, then 45, 15, 80 and another finish. "Pick one" and "Make more" stay, and
+  "Make more" differs from what was shown the same way.
+- **The AI's brief.** `CAR_BRIEF` keeps its first sentence; likeness is the job and wins over "capture the feel, never a
+  copy" for a vehicle. A new `DETAIL_BRIEF` is appended for car, pickup, van and bus, and `detail` carries the live
+  rules and four example profiles (a wedge sports car, a boxy off-roader, a small hatchback, a one-box camper). The
+  answer first sorts the photos (`study`, not stored). Photos go up to 1568 px (1280 from 5 photos), and `max_tokens`
+  is `min(48000, 16000 + 8000 × photos)`. `CAR_REDESIGN` adds `detail` to a vehicle that has none and keeps its name.
+- **What fits which kind.** `profile` and `toon` apply to car, pickup, van and bus only. A motorbike, plane or boat is
+  drawn as today plus the shared shading, real wheels and calipers on the bike, and the engine fixes today's defects
+  (floating lamps, car parts in the front and back views) for detailed looks only; old looks keep them.
+- **The editor** says "Drawing" (Simple, Realistic), "Roof" (Closed, Open top, Targa, Soft top), "Cartoon" (A little,
+  Medium, A lot), "Brakes" (Plain, Coloured) with "Brake colour", and one folded "More details" with every pick. No
+  number is ever shown. A classic control (Wheels, Pattern, lights, On top) clears the `detail` key it would hide, so
+  every tap shows. Shape never touches `detail`; while the Shape differs from the photo's shape a line says "Photo
+  shape: {label}. Tap it to get it back." One soft line under the name says what was seen. "Try a move" gains "Front"
+  and "Rear". Redesign's "What changes" can say "Looks details" and "Looks inside". The writer is told that a detailed
+  vehicle can be up to 20% longer than its classic body.
+- **Budget.** Measured by drawing, never a flat guess: a detailed look is at most 88 prims (Bright) or 112 (night
+  drive), its front or back view at most 64 (`carShapes`, `carViewShapes`, in `carBudget.ts`). A look without `detail`
+  prices exactly as before (56, 72, 34), so no stored script is re-priced. `LIMITS` are unchanged.
+- **Never.** No badge, logo, make or model name, ever, and no colour of a mark: the hub is a flat disc. A model known
+  only by its badge reads as "that kind of car" by its shape, stripes, wheels and lamps (§45.42.6 stays).
+- **Later.** A measured outline for the motorbike, plane and boat from their own photos (today they become the generic
+  one, with parts and shading); riders seen head on in open cars and on bikes; a second look (the picture of the best
+  option sent back beside the photo for corrected numbers) if the likeness is not enough; fixing the old looks'
+  defects, which needs the owner's yes and an engine-version bump.
 
 ## 46. Auto-posting: the oldest clips in Review go up by themselves, every X hours (owner request, 2026-11-22)
 
