@@ -1,5 +1,5 @@
 {
- "version": "06a114d43c2a",
+ "version": "cfc892ec6379",
  "parts": [
   {
    "id": "app-map",
@@ -297,7 +297,7 @@
    "id": "contracts-45",
    "title": "CONTRACTS: 45. Clips Funded: a second, separate workspace (owner request, 2026-11-21)",
    "line": "Planned: not in the app until the switch pull request turns it on (§45.21). Until then nothing of Clips Funded",
-   "chars": 549404
+   "chars": 551416
   },
   {
    "id": "contracts-46",
@@ -904,6 +904,12 @@
    "title": "DECISIONS: ADR-99 Night drive's people are chunky",
    "line": "Context. More shape for the owner's character, still cartoon (CONTRACTS §45.49). Poses, the camera and every",
    "chars": 1077
+  },
+  {
+   "id": "adr-100",
+   "title": "DECISIONS: ADR-100 Real glass is a lit bevel everywhere plus a bending rim on the big cards, never a new colour",
+   "line": "Context. The owner showed a flat frosted card next to one with a thick, bent, lit rim and asked for the whole of",
+   "chars": 1271
   },
   {
    "id": "architecture-overview",

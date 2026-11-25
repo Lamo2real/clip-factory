@@ -19884,6 +19884,27 @@ engine; the owner picked **Chunky**. ADR-99.
 - **Tests.** `storiesChunkyPeople` (new `pen.ts` generators, tokens, every hair, accessory, body, hand and eye shape,
   a saved look), `storiesNightPeople`, the goldens, `storiesCarLegacy` and the agent's `test_stories_raster.py`.
 
+### 45.50 Real glass: a thick lit edge on every surface and a bending rim on the big cards (owner request, 2026-11-25; wins over §45.38 for how Clips Funded's glass is drawn)
+
+Owner, with a picture of two glass cards (one flat and frosted, one with a thick bent rim): "Make clips funded entire UI
+more glassy like this (not changing the color)". ADR-100. Only light, shade and rim change; every colour, word, size
+and position stays, so the palette is exactly the espresso, amber and copper it was.
+
+- **The bevel.** Every glass surface gets the curved, thick edge of real glass: light gathers along the rim (bright at
+  the top left, warm at the bottom right), a soft glow just inside it and a hairline under it (`--st-bevel-card`,
+  `-hero`, `-control`, laid into each level's `--st-sheen*`). The thin light edge is brighter and 1.5 px. Box-shadows
+  only: no filter, nothing animated.
+- **Silk.** Soft dark folds laid over the stage's own warm lights (`--st-silk`, in `glass.css`'s stage rule), so glass
+  has something to bend (the default colours look; a picture or the desktop is its own backdrop). Shade only, never a new colour or a lighter spot, so the stage is no lighter than `look.ts`
+  `STAGE_LIGHTS` works out and every contrast measure holds.
+- **Bending rim on every big card.** `glass/lens.ts` gives `.st-lens` itself to the big glass cards on screen (not a
+  control, bar, sheet or tinted tile, none inside another glass, and none without room for the rim inside its padding),
+  after the ones a screen marked, in document order while the budget lasts. `LENS_BUDGET` is 6 (was 3); the size limits,
+  the band and the depth are as before. Scrolling never changes which cards bend.
+  Chromium on a capable device only; elsewhere the bevel is the whole effect, and reduced transparency stays solid.
+- **Tests.** `storiesLens` (the budget of 6, eight heroes, and a new test for the cards given a rim and taken away
+  again), `storiesGlass`, `storiesLight` and `storiesStyles` unchanged and green.
+
 ## 46. Auto-posting: the oldest clips in Review go up by themselves, every X hours (owner request, 2026-11-22)
 
 Decision record: ADR-81. Builders: §46.16. Everything here is additive: no table, index, secret, bucket, Cognito or

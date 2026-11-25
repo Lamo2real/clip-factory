@@ -2846,3 +2846,20 @@ columns on Clips Funded's Social accounts. The contract is CONTRACTS §48.
   body and wheel hands are partly today's drawing (§45.49). Amends
   [ADR-93](#adr-93-night-drive-is-a-drawing-style-in-the-one-engine-an-art-field-cuts-between-shots-surface-drawing-only)
   only for how a person is drawn.
+
+## ADR-100 Real glass is a lit bevel everywhere plus a bending rim on the big cards, never a new colour
+
+**Context.** The owner showed a flat frosted card next to one with a thick, bent, lit rim and asked for the whole of
+Clips Funded to look like the second, without changing colours. Clips Funded already bent the rim of up to three hero
+cards; everything else was a smoky tint with a thin edge over a stage with little to bend.
+
+**Decision.** (1) A painted bevel on every level of glass, from box-shadows in the existing sheen tokens. (2) Dark silk
+folds over the stage's own lights, so there is structure to bend while the stage stays no lighter than `look.ts`
+works it out. (3) The lens code gives the bending rim to every big glass card on screen, up to `LENS_BUDGET` 6.
+
+**Why.** The bevel is free on every device and carries the look where the bending rim cannot run (WebKit, low power).
+Shade-only folds keep every contrast measure true without touching `look.ts`. Six rims is double the old budget, still
+within what the Windows app's WebView2 draws; the lens stays still, never animated.
+
+**Consequences.** `LENS_BUDGET` is 6 in `lens.ts` and `look.ts`. Nothing stored changes. Cards inside cards, controls,
+bars and sheets keep one filter or none, as before.

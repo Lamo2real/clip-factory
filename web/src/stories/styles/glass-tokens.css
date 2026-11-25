@@ -36,6 +36,13 @@
   --st-stage-c1: #1c130e;
   --st-stage-c2-rgb: 226 98 31;
   --st-stage-c3-rgb: 255 154 69;
+  /* Silk: soft dark folds laid over the stage's own warm lights (the same colours: only shade, never a new colour or a
+     lighter spot, so the stage stays at most as light as look.ts STAGE_LIGHTS works it out). Glass has something to
+     bend, and the rims show it. Static: painted once, nothing animated. */
+  --st-silk:
+    radial-gradient(130vmax 80vmax at 112% 64%, transparent 0 34%, rgb(var(--st-shadow-rgb) / 0.62) 40%, transparent 47%, transparent 54%, rgb(var(--st-shadow-rgb) / 0.56) 60%, transparent 68%, transparent 76%, rgb(var(--st-shadow-rgb) / 0.5) 82%, transparent 90%),
+    radial-gradient(110vmax 70vmax at -12% 108%, transparent 0 30%, rgb(var(--st-shadow-rgb) / 0.56) 37%, transparent 45%, transparent 55%, rgb(var(--st-shadow-rgb) / 0.5) 62%, transparent 72%),
+    radial-gradient(80vmax 50vmax at 70% -14%, transparent 0 36%, rgb(var(--st-shadow-rgb) / 0.5) 44%, transparent 54%);
   --st-stage-a2: 0.46; /* how strong the copper light is (stories/look.ts GLOW_ALPHA, STAGE_LIGHTS) */
   --st-stage-a3: 0.3; /* how strong the amber light is */
   --st-picture: none; /* Picture: url(the owner's picture), set by look.ts */
@@ -276,18 +283,24 @@
   --st-filter-bar: blur(var(--st-blur)) brightness(var(--st-dim-over)) saturate(var(--st-saturate));
   --st-filter-float: blur(var(--st-blur-float)) brightness(var(--st-dim-over)) saturate(var(--st-saturate));
 
-  --st-edge-width: 1.25px;
-  --st-edge: linear-gradient(160deg, rgb(255 246 234 / 0.56), rgb(255 246 234 / 0.14) 20%, rgb(255 246 234 / 0) 40%, rgb(255 246 234 / 0) 68%, rgb(255 196 130 / 0.28));
+  --st-edge-width: 1.5px;
+  --st-edge: linear-gradient(160deg, rgb(255 246 234 / 0.78), rgb(255 246 234 / 0.22) 20%, rgb(255 246 234 / 0.04) 40%, rgb(255 246 234 / 0.04) 62%, rgb(255 196 130 / 0.46));
   --st-edge-hero: linear-gradient(160deg, rgb(255 250 240 / 0.92), rgb(255 246 234 / 0.26) 20%, rgb(255 246 234 / 0.03) 44%, rgb(255 246 234 / 0.06) 66%, rgb(255 186 110 / 0.75));
   --st-edge-cream: linear-gradient(160deg, rgb(255 255 255 / 0.9), rgb(255 255 255 / 0) 40%, rgb(255 210 160 / 0.5));
+  /* The bevel: the curved, thick edge of real glass. Light gathers along the rim (bright at the top left, warm at the
+     bottom right) and a soft glow just inside it, so a surface reads as a slab of glass with
+     thickness, not a flat tint. Box-shadows only: no filter, nothing animated, free on every device. */
+  --st-bevel-card: inset 5px 6px 9px -6px rgb(255 248 238 / 0.42), inset -5px -6px 9px -6px rgb(255 190 120 / 0.34), inset 0 0 20px -8px rgb(255 238 214 / 0.2);
+  --st-bevel-hero: inset 7px 8px 12px -7px rgb(255 250 240 / 0.55), inset -7px -8px 12px -7px rgb(255 186 110 / 0.5), inset 0 0 28px -8px rgb(255 238 214 / 0.26);
+  --st-bevel-control: inset 3px 4px 6px -4px rgb(255 250 240 / 0.5), inset -3px -4px 6px -4px rgb(255 190 120 / 0.38), inset 0 0 12px -5px rgb(255 238 214 / 0.2);
   /* the soft inner top highlight, with each level's bright top rim in front (5a) */
   --st-sheen-soft: inset 0 14px 22px -18px rgb(255 240 220 / 0.36), inset 0 -18px 26px -22px rgb(var(--st-amber-rgb) / 0.2);
-  --st-sheen-panel: var(--st-rim-1), var(--st-sheen-soft); /* level 1: the rail, a plate */
-  --st-sheen: var(--st-rim-2), var(--st-sheen-soft); /* level 2: a card */
-  --st-sheen-hero: var(--st-rim-3), inset 0 18px 28px -20px rgb(255 240 220 / 0.5), inset 0 -26px 34px -26px rgb(var(--st-amber-rgb) / 0.45); /* level 3 */
-  --st-sheen-raised: var(--st-rim-3), var(--st-sheen-soft); /* level 3: a bar, a card inside a card */
-  --st-sheen-control: var(--st-rim-4), inset 0 10px 14px -12px rgb(255 240 220 / 0.32); /* level 4 */
-  --st-sheen-float: var(--st-rim-5), inset 0 16px 24px -18px rgb(255 240 220 / 0.42), inset 0 -18px 26px -22px rgb(var(--st-amber-rgb) / 0.2); /* level 5 */
+  --st-sheen-panel: var(--st-rim-1), var(--st-bevel-card), var(--st-sheen-soft); /* level 1: the rail, a plate */
+  --st-sheen: var(--st-rim-2), var(--st-bevel-card), var(--st-sheen-soft); /* level 2: a card */
+  --st-sheen-hero: var(--st-rim-3), var(--st-bevel-hero), inset 0 18px 28px -20px rgb(255 240 220 / 0.5), inset 0 -26px 34px -26px rgb(var(--st-amber-rgb) / 0.45); /* level 3 */
+  --st-sheen-raised: var(--st-rim-3), var(--st-bevel-card), var(--st-sheen-soft); /* level 3: a bar, a card inside a card */
+  --st-sheen-control: var(--st-rim-4), var(--st-bevel-control), inset 0 10px 14px -12px rgb(255 240 220 / 0.32); /* level 4 */
+  --st-sheen-float: var(--st-rim-5), var(--st-bevel-hero), inset 0 16px 24px -18px rgb(255 240 220 / 0.42), inset 0 -18px 26px -22px rgb(var(--st-amber-rgb) / 0.2); /* level 5 */
   --st-rim-light: inset 0 0 26px -12px rgb(255 238 214 / 0.3); /* a hero's thick edge catching light, painted (all a
                                                                   WebKit hero has; under a liquid rim it softens it) */
   --st-sheen-cream: inset 0 -10px 18px -14px rgb(var(--st-copper-rgb) / 0.35);
@@ -307,10 +320,10 @@
   --st-glow-sun: var(--st-glow-action);
   --st-glow-sun-hover: var(--st-glow-action-hover);
 
-  /* ========== 6. Liquid: the rim of a few hero surfaces (.st-lens.is-liquid) ==========
+  /* ========== 6. Liquid: the rim of the big glass surfaces (.st-lens.is-liquid) ==========
      Chromium: backdrop-filter: blur(1px) url(#its own filter) saturate(): an feImage displacement map made at the
      hero's exact pixel size (ResizeObserver), bending inwards at the rim, still in the middle so nothing under the
-     words moves. At most three per screen (look.ts LENS_BUDGET), none over 1 MP or half the window, never animated.
+     words moves. At most six per screen, in document order (look.ts LENS_BUDGET, §45.50), none over 1 MP or half the window, never animated.
      WebKit (the Mac app, Safari, iPhone) ignores url() there: it gets the plain CSS light (edge-hero, sheen-hero). */
   --st-lens-url: none;
   --st-lens-band: 26px; /* how wide the bending rim is: inside the hero's padding, so it never reaches words */
