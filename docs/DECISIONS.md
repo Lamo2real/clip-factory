@@ -2842,7 +2842,7 @@ columns on Clips Funded's Social accounts. The contract is CONTRACTS §48.
   and Chunky (bold toy-like shapes, joints unchanged). Reviewers scored appeal, phone readability and animation safety.
 - **Decision.** Chunky, picked by the owner. Only night drive's drawing changes; `geometry()`, `motion.ts`, `scene.ts`,
   `shots.ts` and `CharacterLook` stay; joined same-colour shapes pay for the detail inside the same budgets.
-- **Consequences.** `ENGINE_VERSION` 8 and new goldens; Bright and old scripts without `art` are unchanged; the bust
+- **Consequences.** The owner then asked for the old dot eyes only (version 9). `ENGINE_VERSION` 8 and new goldens; Bright and old scripts without `art` are unchanged; the bust
   body and wheel hands are partly today's drawing (§45.49). Amends
   [ADR-93](#adr-93-night-drive-is-a-drawing-style-in-the-one-engine-an-art-field-cuts-between-shots-surface-drawing-only)
   only for how a person is drawn.

@@ -44,7 +44,7 @@ export type { CarDraw };
  * look, the car moves speed_up, bounce, honk, blink and stall, and getting in and out: older scripts draw as before;
  * 7: the night drive drawing style (script.art), cuts between shots inside a scene and the highway at night: older
  * scripts draw as before). */
-export const ENGINE_VERSION = 8;
+export const ENGINE_VERSION = 9;
 
 /** The draw list for one frame of the whole story (frames past the end show the last frame). */
 export function drawFrame(s: StoryScript, frame: number): Prim[] {

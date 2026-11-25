@@ -6291,15 +6291,14 @@ engine; the owner picked **Chunky**. ADR-99.
 - **Only drawing changes, only in night drive.** Bright (`classic`) and every script without `art` draw exactly as
   before. `geometry()`, poses, the camera, seats and the stored `CharacterLook` are unchanged (no field added, renamed or
   removed), so every saved character and story draws, in the new look in night drive.
-- **Head and face.** A rounded-square head under the soft ink outline. Big glossy eyes: a warm white (`ND.eyeWhite`,
-  dimmed by the light with `lit()`), an iris in the picked colour, a dark pupil with the lid line and a sparkle. Thick
-  rounded brows (tilt, height and the 20% overshoot as before), round pink cheeks (`ND.cheek`), all 12 mouths and 8
+- **Head and face.** A rounded-square head under the soft ink outline. The eyes are the old character's plain dark
+  dots (§45.45.5: no white, no sparkle; the owner's change of 2026-11-25, `ENGINE_VERSION` 9). Thick rounded brows (tilt, height and the 20% overshoot as before), round pink cheeks (`ND.cheek`), all 12 mouths and 8
   extras redrawn thicker. Scared now has small irises and chattering teeth. Same-colour parts are one polygon.
 - **Hair and body.** Hair is built on the skull's own outline: a kid's quiff, spiky, curly, long, bun and cap, at most
   12 rig units above `g.top`. A squarer jumper with a roll collar, hem and cuffs, bold stripes or dots, thick tapered
   arms and legs, mitts with thumbs, big sneakers on a pale sole, one soft ground glow. Accessories keep the same weight.
 - **Budget.** At most 92 prims a person (79 measured at rest, 78 in action), 90 a bust, 24 a foot; `LIMITS` and
-  `SHAPES_ND` unchanged. `ENGINE_VERSION` is 8 (§45.48's "stays 7" was true for vehicles only); the shape and night
+  `SHAPES_ND` unchanged. `ENGINE_VERSION` is 9 (8 for the chunky look; §45.48's "stays 7" was for vehicles only); the shape and night
   goldens are written again, the vehicles' legacy golden keeps its classic half and rewrites only `shotsNight`.
 - **Known gaps.** The bust's body and the wheel hands keep today's sleeves and mitt under the new head, the pedal shoe
   is today's with the new sole, and a three-quarter bust mirrors the hairdo instead of turning it.
