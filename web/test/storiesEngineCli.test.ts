@@ -121,7 +121,7 @@ describe("cli.ts catalog tells the writer what the script's words mean", () => {
   const rule = (id: string) => out.rules.find((r) => r.id === id)?.text ?? "";
 
   it("carries the engine version, the catalog, the limits, the rules and the prop states", () => {
-    expect(Object.keys(out)).toEqual(["engine", "catalog", "limits", "rules", "propStates", "formats"]);
+    expect(Object.keys(out)).toEqual(["engine", "catalog", "limits", "rules", "propStates", "formats", "carDetail"]);
     expect(out.engine).toBe(ENGINE_VERSION);
     expect(out.catalog).toEqual(CATALOG);
     expect(out.limits).toEqual({ ...LIMITS, seats: { car: 2, truck: 1 } });

@@ -333,7 +333,7 @@ describe("sounds and rules", () => {
 
   it("the writer reads the car rules", () => {
     const rule = (id: string) => RULES.find((r) => r.id === id)?.text;
-    expect(rule("car_cast")).toBe("A car of the cast is never an actor: it is a car prop with its castId. People ride in it with inCar set to that prop's propId.");
+    expect(rule("car_cast")).toBe("A car of the cast is never an actor: it is a car prop with its castId. People ride in it with inCar set to that prop's propId. A detailed vehicle can be a fifth longer than a plain one.");
     expect(rule("get_in_out")).toBe("get_in and get_out need inCar, last 0.8 to 3 seconds, and happen while the car is parked. The car moves only after get_in ends.");
     expect(rule("honk")).toBe("honk adds the honk sound by itself.");
     expect(rule("driver_wave")).toBe("The driver waves only while the car is stopped; a passenger may wave any time.");

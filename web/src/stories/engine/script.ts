@@ -7,7 +7,7 @@
 // script without them is checked, normalized and fitted exactly as before.
 
 import { sceneBeds } from "./ambience.ts";
-import { CAR_CAST_SHAPES, CAR_CAST_SHAPES_ND, CAR_VIEW_SHAPES, carHasFace, checkCarLook } from "./car.ts";
+import { CAR_CAST_SHAPES, CAR_CAST_SHAPES_ND, CAR_VIEW_SHAPES, carHasFace, checkCarLook, carShapes, carViewShapes } from "./car.ts";
 import { CATALOG, catalogIds } from "./catalog.ts";
 import { formatOf, formatsSentence } from "./frame.ts";
 import { clamp, hash, isHex } from "./math.ts";
@@ -76,8 +76,9 @@ export const SHOT_CARS = SHOT_CARS_MAX;
 /** A scene's busiest frame, roughly, in shapes: validateScript keeps it at most LIMITS.shapes (shapesNight in night
  * drive). In night drive it is the larger of the whole scene's estimate and each cut's shot (its own estimate plus the
  * other cars it shows). */
-export function sceneShapes(scene: { set?: unknown; actors?: unknown; props?: unknown; cuts?: unknown }, art: ArtStyle = "classic"): number {
-  if (art !== "night_drive") return classicShapes(scene);
+export function sceneShapes(scene: { set?: unknown; actors?: unknown; props?: unknown; cuts?: unknown }, art: ArtStyle = "classic", cars?: ReadonlyMap<string, Pick<CarInfo, "look">>): number {
+  const detailed = detailedLooks(scene, cars);
+  if (art !== "night_drive") return classicShapes(scene) + detailed.reduce((n, l) => n + Math.max(0, carShapes(l, "classic") - SHAPES.carCast), 0);
   const night = scene.set === "road_night" || scene.set === "highway_night";
   const wet = scene.set === "snowy_road" || scene.set === "rainy_road";
   const measured = typeof scene.set === "string" ? SET_SHAPES_ND[scene.set as SetId] : undefined;
@@ -91,20 +92,39 @@ export function sceneShapes(scene: { set?: unknown; actors?: unknown; props?: un
       if (kind === "car" || kind === "truck") vehicles += 1;
       if (ONCE.has(kind) && seen.has(kind)) continue;
       seen.add(kind);
-      if (kind === "car" && isObj(p) && typeof p.castId === "string") n += SHAPES_ND.carCast;
+      if (kind === "car" && isObj(p) && typeof p.castId === "string") n += SHAPES_ND.carCast + Math.max(0, carShapes(cars?.get(p.castId)?.look ?? NO_LOOK, "night_drive") - SHAPES_ND.carCast);
       else n += SHAPES_ND.props[kind] ?? (SHAPES.props[kind] ?? SHAPES.prop) + SHAPES_ND.prop;
     }
   }
   if (Array.isArray(scene.cuts)) {
     // the own car is in the shot's estimate; every other car or truck it may show adds its own
     const others = Math.min(SHOT_CARS, Math.max(0, vehicles - 1)) * SHOT_CAR;
+    // §45.48: a detailed cast car draws more in its front and back views and in the side window than a plain one
+    const view = detailed.reduce((a, l) => a + Math.max(0, carViewShapes(l) - SHOT_CAR), 0);
+    const side = detailed.reduce((a, l) => a + Math.max(0, carShapes(l, "night_drive") - SHAPES_ND.carCast), 0);
     for (const c of scene.cuts) {
-      const shot = isObj(c) && typeof c.shot === "string" ? SHOT_ESTIMATES[c.shot as ShotId] : undefined;
-      if (shot) n = Math.max(n, shot + others);
+      const id = isObj(c) && typeof c.shot === "string" ? (c.shot as ShotId) : undefined;
+      const shot = id ? SHOT_ESTIMATES[id] : undefined;
+      if (shot && id) n = Math.max(n, shot + others + (id === "side_window" ? side : id === "face" || id === "pedals" || id === "speed_dial" ? 0 : view));
     }
   }
   return n;
 }
+
+/** The looks with a `detail` among the cast cars a scene's props name (none: the old, flat price). */
+function detailedLooks(scene: { props?: unknown }, cars?: ReadonlyMap<string, Pick<CarInfo, "look">>): CarLook[] {
+  const out: CarLook[] = [];
+  if (!cars || !Array.isArray(scene.props)) return out;
+  for (const p of scene.props) {
+    if (!isObj(p) || p.kind !== "car" || typeof p.castId !== "string") continue;
+    const look = cars.get(p.castId)?.look;
+    if (look && isObj(look) && look.detail !== undefined) out.push(look);
+  }
+  return out;
+}
+
+/** A look without `detail`: what the price of a plain car of the cast is measured on. */
+const NO_LOOK = { detail: undefined } as unknown as CarLook;
 
 function classicShapes(scene: { set?: unknown; actors?: unknown; props?: unknown }): number {
   let n = scene.set === "snowy_road" || scene.set === "rainy_road" ? SHAPES.wetSet : SHAPES.set;
@@ -315,9 +335,11 @@ function checkCast(cast: unknown, err: (m: string) => void): string[] {
 }
 
 /** A car of the cast as the scene checks need it (§45.43): its name, whether it has a face, and its own faces. */
-interface CarInfo {
+export interface CarInfo {
   name: string;
   face: boolean;
+  /** §45.48: the car's look, kept so a detailed one is priced by what it draws (carBudget.ts); absent: the plain price */
+  look?: CarLook;
   /** its own faces; null when the script carries none (any face of the catalog goes on a car with a face) */
   faces: string[] | null;
 }
@@ -355,7 +377,7 @@ function checkCars(cars: unknown, castIds: string[], err: (m: string) => void): 
       else if (face && !knownFaces(faces, 3)) err(`${where}: expressions must be the car's own faces: at least 3 different faces of ${list([...FACES], 14)}, with neutral among them. Copy them from the saved car.`);
     }
     const name = typeof m.name === "string" && m.name.trim() ? m.name.trim() : "This car";
-    out.set(id, { name, face, faces: Array.isArray(faces) ? faces.filter((f): f is string => typeof f === "string") : null });
+    out.set(id, { name, face, look: isObj(m.car) ? (m.car as unknown as CarLook) : undefined, faces: Array.isArray(faces) ? faces.filter((f): f is string => typeof f === "string") : null });
   }
   return out;
 }
@@ -454,7 +476,7 @@ function checkScene(sc: unknown, i: number, castIds: string[], seenScenes: Set<s
   }
 
   if (props && actors && props.length <= LIMITS.props && actors.length <= LIMITS.actors) {
-    const shapes = sceneShapes(sc, art);
+    const shapes = sceneShapes(sc, art, cars);
     const nd = art === "night_drive";
     const most = nd ? LIMITS.shapesNight : LIMITS.shapes;
     if (shapes > most) {

@@ -51,6 +51,8 @@ function carOf(raw: Record<string, unknown>): CarInput {
     lights: { ...base.car.lights, ...(isObj(car.lights) ? car.lights : {}) },
     face: { ...base.car.face, ...(isObj(car.face) ? car.face : {}) },
   } as CarLook;
+  // §45.48: a `detail` that is not an object is no detail (the vehicle draws the classic way)
+  if (look.detail !== undefined && !isObj(look.detail)) delete look.detail;
   const faces = Array.isArray(raw.expressions) ? (raw.expressions.filter((e) => typeof e === "string") as Expression[]) : [];
   return {
     kind: "car",
@@ -160,6 +162,9 @@ function lookChanges(now: CharacterInput, next: CharacterInput): string[] {
     if (a.extra !== b.extra) looks.push("extra");
     if (!same(a.face, b.face)) looks.push("face");
     if (a.outline !== b.outline) looks.push("outline");
+    // §45.48: the realistic drawing's parts, and the colours seen inside (the inside photos)
+    if (!same(a.detail, b.detail)) looks.push("details");
+    if (!same(a.interior, b.interior)) looks.push("inside");
     return looks;
   }
   const a = now.look;

@@ -31,6 +31,7 @@ import * as ideas from "../src/stories/api/mock/ideas.ts";
 import { createStore, type MockStore } from "../src/stories/api/mock/store.ts";
 import * as stories from "../src/stories/api/mock/stories.ts";
 import type { AiTask, CarInput, CharacterInput, ModelInfo, StoriesApi, StoriesConfig, Workspace } from "../src/stories/api/types.ts";
+import type { CarDetail, CarLook } from "../src/stories/engine/types.ts";
 import { matchStories, storiesHref, type StoriesPage } from "../src/stories/routes.ts";
 
 (globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true;
@@ -40,7 +41,10 @@ const { CharactersScreen } = await import("../src/stories/screens/Characters.tsx
 const { CarsScreen } = await import("../src/stories/screens/Cars.tsx");
 const { LISTED_INFO } = await import("../src/stories/studio/ai.tsx");
 const { designOf, designsOf } = await import("../src/stories/studio/Design.tsx");
-const { characterProblem, newCar, showFace } = await import("../src/stories/studio/looks.ts");
+const { characterProblem, newCar, showFace, seenLine, setDetail, setDetails, toonStep, classicTap, photoShape, CAR_BODY, CAR_WHEELS, CAR_FRONT_LIGHTS, CAR_PATTERN, CAR_EXTRA, PLAIN_CALIPER } = await import("../src/stories/studio/looks.ts");
+const { changedParts } = await import("../src/stories/studio/Design.tsx");
+const { mergeRedesign } = await import("../src/stories/screens/Characters.tsx");
+const { resolveDetail, checkCarDetail } = await import("../src/stories/engine/carDetail.ts");
 
 const C = stories.SEED_IDS.characters;
 
@@ -705,5 +709,344 @@ describe("the car's words and checks", () => {
     const made = await settle(api.createCharacter("stories", car));
     expect(made).toMatchObject({ kind: "car", name: "Zippy", voice: { style: "none", pitch: 1 } });
     expect(made.look).toBeUndefined();
+  });
+});
+
+// ---------- Realistic vehicles (CONTRACTS §45.48): the editor's Drawing tiles, Roof, Cartoon, Brakes, More details ----------
+
+describe("Realistic vehicles in the editor (§45.48)", () => {
+  const OPEN_TWO_SEATER = characters.OPEN_TWO_SEATER;
+  const label = (list: { value: string; label: string }[], id: string) => list.find((o) => o.value === id)!.label;
+  /** The seeded vehicle, made the owner's measured one (a saved vehicle with `detail`), or a plain one. */
+  function rosso(car?: CarLook): string {
+    const c = store.characters.find((x) => x.characterId === characters.SEED_CAR_ID)!;
+    if (car) c.car = structuredClone(car);
+    return c.characterId;
+  }
+  /** Opens the vehicle's page and returns what "Save changes" sends. */
+  async function open(characterId = characters.SEED_CAR_ID) {
+    const put = vi.spyOn(api, "putCharacter");
+    await show(<CharactersScreen {...page({ name: "character", characterId })} />);
+    const saved = async () => {
+      await click(control("Save changes"), 1500);
+      return put.mock.calls.at(-1)![2] as CarInput;
+    };
+    return { put, saved };
+  }
+  const groups = () => Array.from(document.querySelectorAll<HTMLElement>('[role="radiogroup"]')).map((r) => document.getElementById(r.getAttribute("aria-labelledby") ?? "")?.textContent?.trim());
+  const fold = () => Array.from(document.querySelectorAll<HTMLDetailsElement>("details.st-s-tech")).find((d) => d.querySelector("summary")?.textContent === "More details");
+
+  it("an old vehicle shows only the Drawing tiles and today's controls, and opening then saving adds no key", async () => {
+    rosso();
+    const { saved } = await open();
+    expect(chosen("Drawing")).toBe("Simple");
+    expect(Array.from(group("Drawing").querySelectorAll(".st-s-pick__label")).map((l) => l.textContent)).toEqual(["Simple", "Realistic"]);
+    for (const g of ["Roof", "Cartoon", "Brakes", "Brake colour"]) expect(groups()).not.toContain(g);
+    expect(fold()).toBeUndefined();
+    expect(document.querySelector(".st-s-editor__seen")).toBeNull();
+    for (const g of ["Shape", "Pattern", "Windows", "Wheels", "Rims", "Front lights", "Back lights", "On top", "Outline"]) expect(groups()).toContain(g);
+    const sent = await saved();
+    expect("detail" in sent.car).toBe(false);
+  });
+
+  it("Realistic writes {v:1} and shows Roof, Cartoon, Brakes and one closed More details; Roof writes one key", async () => {
+    rosso();
+    const { saved } = await open();
+    await pick("Drawing", "Realistic");
+    expect(chosen("Drawing")).toBe("Realistic");
+    expect(chosen("Roof")).toBe("Closed");
+    expect(Array.from(group("Roof").querySelectorAll(".st-s-pick__label")).map((l) => l.textContent)).toEqual(["Closed", "Open top", "Targa", "Soft top"]);
+    expect(Array.from(group("Cartoon").querySelectorAll(".st-s-pick__label")).map((l) => l.textContent)).toEqual(["A little", "Medium", "A lot"]);
+    expect(chosen("Cartoon")).toBe("Medium");
+    expect(chosen("Brakes")).toBe("Plain");
+    expect(groups()).not.toContain("Brake colour");
+    expect(fold()).toBeDefined();
+    expect(fold()!.open).toBe(false);
+    expect(document.querySelectorAll("details.st-s-tech summary")).toHaveLength(1);
+    // nothing written by showing it: the switch alone
+    expect((await saved()).car.detail).toEqual({ v: 1 });
+    await pick("Roof", "Open top");
+    expect(chosen("Roof")).toBe("Open top");
+    expect((await saved()).car.detail).toEqual({ v: 1, roof: { type: "open" } });
+    await pick("Cartoon", "A lot");
+    expect((await saved()).car.detail).toEqual({ v: 1, roof: { type: "open" }, toon: 70 });
+  });
+
+  it("the Roof pick is for the bodies that can open up: not a van or a bus, and a boat only has Open top", async () => {
+    rosso({ ...newCar().car, body: "van", detail: { v: 1 } });
+    await open();
+    expect(groups()).not.toContain("Roof");
+    expect(groups()).toContain("Cartoon");
+    await act(async () => root.unmount());
+    host.remove();
+    rosso({ ...newCar().car, body: "bus", detail: { v: 1 } });
+    await open();
+    expect(groups()).not.toContain("Roof");
+    await act(async () => root.unmount());
+    host.remove();
+    rosso({ ...newCar().car, body: "boat", detail: { v: 1 } });
+    await open();
+    expect(Array.from(group("Roof").querySelectorAll(".st-s-pick__label")).map((l) => l.textContent)).toEqual(["Closed", "Open top"]);
+    expect(groups()).not.toContain("Cartoon");
+    expect(groups()).not.toContain("Brakes");
+  });
+
+  it("a classic tap clears the detail key that would hide it, and only that one", async () => {
+    rosso(OPEN_TWO_SEATER);
+    const { saved } = await open();
+    const was = structuredClone(OPEN_TWO_SEATER.detail!);
+    await pick("Wheels", label(CAR_WHEELS, "steel"));
+    let d = (await saved()).car.detail!;
+    expect(d.wheels).toEqual({ tyre: 22, lip: 10 });
+    await pick("Front lights", label(CAR_FRONT_LIGHTS, "round"));
+    d = (await saved()).car.detail!;
+    expect(d.lights).toEqual({ front: { drl: "line" }, rear: { shape: "round" } });
+    await pick("Pattern", label(CAR_PATTERN, "plain"));
+    d = (await saved()).car.detail!;
+    expect(d.stripe).toEqual({ color: "#111111", width: 60 });
+    await pick("On top", label(CAR_EXTRA, "spoiler"));
+    d = (await saved()).car.detail!;
+    expect(d.rear).toEqual({ diffuser: "fins", exhaust: "high" });
+    // nothing else moved
+    expect(d.profile).toEqual(was.profile);
+    expect(d.roof).toEqual(was.roof);
+    expect(d.brakes).toEqual(was.brakes);
+    // Length, Height and Wheel size multiply and clear nothing
+    const range = document.querySelector<HTMLInputElement>('input[type="range"]')!;
+    expect(range).not.toBeNull();
+    expect((await saved()).car.detail).toEqual(d);
+  });
+
+  it("Shape keeps the photo's outline in detail, says so under the pick, and tapping the photo shape brings it back", async () => {
+    rosso(OPEN_TWO_SEATER);
+    const { saved } = await open();
+    expect(text()).not.toContain("Photo shape:");
+    await pick("Shape", label(CAR_BODY, "van"));
+    expect(text()).toContain(`Photo shape: ${label(CAR_BODY, "sports")}. Tap it to get it back.`);
+    const d = (await saved()).car;
+    expect(d.body).toBe("van");
+    expect(d.detail).toEqual(OPEN_TWO_SEATER.detail);
+    await pick("Shape", label(CAR_BODY, "sports"));
+    expect(text()).not.toContain("Photo shape:");
+    expect((await saved()).car.body).toBe("sports");
+    expect(photoShape({ ...OPEN_TWO_SEATER, body: "suv" })).toBe(label(CAR_BODY, "sports"));
+    expect(photoShape(OPEN_TWO_SEATER)).toBeNull();
+    expect(photoShape(newCar().car)).toBeNull();
+  });
+
+  it("Simple takes the detail off and Realistic gives it back, while the editor is open", async () => {
+    rosso(OPEN_TWO_SEATER);
+    const { saved } = await open();
+    await pick("Drawing", "Simple");
+    expect(groups()).not.toContain("Roof");
+    expect(document.querySelector(".st-s-editor__seen")).toBeNull();
+    const plain = (await saved()).car;
+    expect("detail" in plain).toBe(false);
+    await pick("Drawing", "Realistic");
+    expect(chosen("Roof")).toBe("Open top");
+    expect((await saved()).car.detail).toEqual(OPEN_TWO_SEATER.detail);
+  });
+
+  it("Brakes: Plain or Coloured, with a Brake colour that starts on the vehicle's own", async () => {
+    rosso(OPEN_TWO_SEATER);
+    const { saved } = await open();
+    expect(chosen("Brakes")).toBe("Coloured");
+    expect(group("Brake colour").querySelector<HTMLInputElement>("input:checked")?.value).toBe("#ffd21f");
+    expect(Array.from(group("Brake colour").querySelectorAll(".st-s-sr")).map((x) => x.textContent).filter(Boolean)).toEqual(["Red", "Yellow", "Blue", "Silver", "Black"]);
+    await click(group("Brake colour").querySelector<HTMLInputElement>('input[value="#2f6fb5"]')!, 50);
+    expect((await saved()).car.detail!.brakes).toEqual({ disc: "ceramic", caliper: "#2f6fb5" });
+    await pick("Brakes", "Plain");
+    expect(groups()).not.toContain("Brake colour");
+    expect((await saved()).car.detail!.brakes).toEqual({ disc: "ceramic", caliper: PLAIN_CALIPER });
+    await pick("Brakes", "Coloured");
+    expect(group("Brake colour").querySelector<HTMLInputElement>("input:checked")?.value).toBe("#c8102e");
+    expect((await saved()).car.detail!.brakes).toEqual({ disc: "ceramic", caliper: "#c8102e" });
+  });
+
+  it("a plain hatchback starts on Plain brakes; Plain on it writes nothing it does not need", async () => {
+    rosso({ ...newCar().car, detail: { v: 1 } });
+    const { saved } = await open();
+    expect(chosen("Brakes")).toBe("Plain");
+    await pick("Brakes", "Coloured");
+    expect((await saved()).car.detail!.brakes).toEqual({ caliper: "#c8102e" });
+    await pick("Brakes", "Plain");
+    expect((await saved()).car.detail).toEqual({ v: 1 });
+  });
+
+  it("More details has the nine picks with the words of the rules table, and each writes its own key", async () => {
+    rosso(OPEN_TWO_SEATER);
+    const { saved } = await open();
+    const inside = Array.from(fold()!.querySelectorAll<HTMLElement>('[role="radiogroup"]')).map((r) => document.getElementById(r.getAttribute("aria-labelledby") ?? "")?.textContent?.trim());
+    expect(inside).toEqual(["Wheel design", "Front lamp", "Rear lamp", "Nose", "Sides", "Tail", "Stripes", "Finish"]);
+    expect(fold()!.textContent).toContain("Extras");
+    expect(chosen("Finish")).toBe("Satin");
+    await pick("Finish", "Matte");
+    await pick("Wheel design", "Mesh");
+    await pick("Tail", "Four");
+    await pick("Stripes", "Twin");
+    await pick("Sides", "Gills");
+    await pick("Nose", "Mesh");
+    await pick("Front lamp", "Stacked");
+    await pick("Rear lamp", "Wide");
+    const d = (await saved()).car.detail!;
+    expect(d.finish).toBe("matte");
+    expect(d.wheels).toMatchObject({ shape: "mesh", spokes: 5 });
+    expect(d.rear).toMatchObject({ exhaust: "quad" });
+    expect(d.stripe).toMatchObject({ layout: "twin" });
+    expect(d.side).toMatchObject({ intake: "gill" });
+    expect(d.front).toMatchObject({ grille: "mesh" });
+    expect(d.lights).toMatchObject({ front: { shape: "stacked" }, rear: { shape: "rect" } });
+    const problems: string[] = [];
+    checkCarDetail(d, "car", (m) => problems.push(m));
+    expect(problems).toEqual([]);
+  });
+
+  it("Extras are chips, up to 6; a seventh waits until one is turned off", async () => {
+    const six = ["bull_bar", "spare_wheel", "roof_rails", "antenna", "snorkel", "light_bar"] as const;
+    rosso({ ...newCar().car, body: "suv", detail: { v: 1, extras: [...six] } });
+    const { saved } = await open();
+    const chips = () => Array.from(fold()!.querySelectorAll<HTMLButtonElement>(".st-s-chips button"));
+    expect(chips().filter((b) => b.getAttribute("aria-pressed") === "true")).toHaveLength(6);
+    const seventh = chips().find((b) => b.textContent === "Mudflaps")!;
+    expect(seventh.getAttribute("aria-disabled")).toBe("true");
+    await click(seventh, 50);
+    expect(seventh.getAttribute("aria-pressed")).toBe("false");
+    await click(chips().find((b) => b.textContent === "Antenna")!, 50);
+    await click(chips().find((b) => b.textContent === "Mudflaps")!, 50);
+    expect((await saved()).car.detail!.extras).toEqual(["bull_bar", "spare_wheel", "roof_rails", "snorkel", "light_bar", "mudflaps"]);
+  });
+
+  it("says what it saw in one soft line under the name: labels only, four items at most", async () => {
+    rosso(OPEN_TWO_SEATER);
+    await open();
+    expect(document.querySelector(".st-s-editor__seen")?.textContent).toBe("Open top · Centre stripe · Yellow brakes · 5 double spokes");
+    expect(seenLine(OPEN_TWO_SEATER)).toBe("Open top · Centre stripe · Yellow brakes · 5 double spokes");
+    expect(seenLine(newCar().car)).toBe("");
+    expect(seenLine({ ...newCar().car, detail: { v: 1 } })).toBe("5 spokes");
+    const busy: CarDetail = { v: 1, roof: { type: "targa" }, stripe: { layout: "side" }, brakes: { caliper: "#c8102e" }, wheels: { shape: "turbine", spokes: 9 }, lights: { front: { shape: "swept" } }, finish: "matte", rear: { spoiler: "wing" } };
+    expect(seenLine({ ...newCar().car, detail: busy }).split(" · ")).toEqual(["Targa", "Side stripe", "Red brakes", "9 fan blades"]);
+    // labels and colour names only: plain words, and a number only for the spokes
+    expect(seenLine(OPEN_TWO_SEATER).split(" · ").every((item) => /^(\d+ )?[A-Za-z ]+$/.test(item))).toBe(true);
+  });
+
+  it("Try a move has Front and Rear after the moves, and each shows on the stage", async () => {
+    rosso();
+    await open();
+    await click(control("Next: Face"), 50);
+    await click(control("Next: Moves"), 50);
+    const labels = Array.from(group("Try a move").querySelectorAll(".st-s-pick__label")).map((l) => l.textContent);
+    expect(labels.slice(-3)).toEqual(["Stall", "Front", "Rear"]);
+    expect(labels).not.toContain("Back");
+    await pick("Try a move", "Front");
+    expect(document.querySelector(".st-s-editor__now")?.textContent).toContain("Front");
+    expect(document.querySelector("canvas.st-car-preview[role='img']")?.getAttribute("aria-label")).toBe("Rosso, Front");
+    await pick("Try a move", "Rear");
+    expect(document.querySelector("canvas.st-car-preview[role='img']")?.getAttribute("aria-label")).toBe("Rosso, Rear");
+    await pick("Try a move", "Drive");
+    expect(document.querySelector("canvas.st-car-preview[role='img']")?.getAttribute("aria-label")).toBe("Rosso, Drive");
+  });
+
+  it("a redesign says Looks details and Looks inside, and Use this takes the new detail whole", () => {
+    const now = { ...newCar(), name: "Rosso" };
+    const next: CarInput = { ...now, car: { ...now.car, detail: OPEN_TWO_SEATER.detail, interior: { seat: "#3a3f4b", dash: "#23262e" } } };
+    const { changed } = changedParts(now, next);
+    expect(changed.find((c) => c.part === "looks")?.detail).toBe("details, inside");
+    expect(changedParts(now, now).changed).toEqual([]);
+    expect(changedParts(next, { ...next, car: { ...next.car, detail: { ...OPEN_TWO_SEATER.detail!, finish: "matte" as const } } }).changed[0]!.detail).toBe("details");
+    // the owner's own unsaved paint stays; the detail goes in whole
+    const mine: CarInput = { ...now, car: { ...now.car, paint: "#2f6fb5" } };
+    const merged = mergeRedesign(mine, now, next) as CarInput;
+    expect(merged.car.paint).toBe("#2f6fb5");
+    expect(merged.car.detail).toEqual(OPEN_TWO_SEATER.detail);
+    // a redesign that drops the detail takes the key away (not leaves it empty)
+    const back = mergeRedesign(merged, next, now) as CarInput;
+    expect("detail" in back.car).toBe(false);
+    // a redesign that changes nothing in detail leaves the owner's detail alone
+    const kept: CarInput = { ...next, car: { ...next.car, detail: { ...OPEN_TWO_SEATER.detail!, finish: "gloss" as const } } };
+    expect((mergeRedesign(kept, next, { ...next, car: { ...next.car, paint: "#d8352a" } }) as CarInput).car.detail!.finish).toBe("gloss");
+  });
+
+  it("the practice design: photos alone give the measured vehicle first, words and Make more do not", async () => {
+    const [first, second] = characters.designCars("", 3, 0, 3, [], []);
+    expect(first!.car).toEqual(OPEN_TWO_SEATER);
+    expect(second!.car.detail).toBeUndefined();
+    expect(characters.designCars("my red hatchback", 1, 0, 3, [], [])[0]!.car.detail).toBeUndefined();
+    expect(characters.designCars("", 3, 0, 3, [first!.car], [])[0]!.car.detail).toBeUndefined();
+    expect(characters.designCars("", 0, 0, 3, [], [])[0]!.car.detail).toBeUndefined();
+    expect(characters.designCars("", 3, 0, 3, [], [], null, "bus")[0]!.car.detail).toBeUndefined();
+    const mine = { ...newCar(), name: "Rosso" };
+    expect(characters.designCars("", 3, 0, 3, [], [], mine).every((c) => c.car.detail === undefined)).toBe(true);
+    expect(first!.description).toBe("A grey sports car.");
+    // Rosso, the seeded vehicle, stays without one
+    expect(store.characters.find((c) => c.characterId === characters.SEED_CAR_ID)!.car!.detail).toBeUndefined();
+    // a designed vehicle with detail is one the mock accepts, and its sentence reads fine in the editor
+    const problems: string[] = [];
+    checkCarDetail(first!.car.detail, "car", (m) => problems.push(m));
+    expect(problems).toEqual([]);
+    expect(resolveDetail(first!.car).open).toBe(true);
+  });
+
+  it("the pure helpers: setDetail prunes empty groups, toonStep is the nearest step, classicTap leaves a plain vehicle alone", () => {
+    const d: CarDetail = { v: 1, wheels: { shape: "y", spokes: 7 }, stripe: { layout: "centre" } };
+    expect(setDetail(d, "wheels.shape", undefined)).toEqual({ v: 1, wheels: { spokes: 7 }, stripe: { layout: "centre" } });
+    expect(setDetails(d, [["wheels.shape", undefined], ["wheels.spokes", undefined]])).toEqual({ v: 1, stripe: { layout: "centre" } });
+    expect(setDetail({ v: 1 }, "lights.front.shape", "swept")).toEqual({ v: 1, lights: { front: { shape: "swept" } } });
+    expect(setDetail({ v: 1 }, "lights.front.shape", undefined)).toEqual({ v: 1 });
+    expect(setDetail(d, "toon", 70)).toEqual({ ...d, toon: 70 });
+    expect(d).toEqual({ v: 1, wheels: { shape: "y", spokes: 7 }, stripe: { layout: "centre" } });
+    expect([0, 10, 14, 16, 30, 49, 51, 70, 100].map(toonStep)).toEqual(["little", "little", "little", "medium", "medium", "medium", "lot", "lot", "lot"]);
+    const plain = newCar().car;
+    expect(classicTap(plain, { extra: "spoiler" }, ["rear.spoiler"])).toEqual({ extra: "spoiler" });
+    expect("detail" in classicTap(plain, { extra: "spoiler" }, ["rear.spoiler"])).toBe(false);
+    // the dull grey the Plain brakes write is the engine's own default
+    expect(resolveDetail({ ...plain, detail: { v: 1 } }).brakes.caliper).toBe(PLAIN_CALIPER);
+  });
+
+  it("the mock refuses what the API refuses about detail: an unknown key, a float, a half profile, a seventh extra", async () => {
+    const settle = async <T,>(p: Promise<T>): Promise<T> => {
+      const out = p.then((v) => ({ v }), (e: unknown) => ({ e }));
+      await vi.advanceTimersByTimeAsync(1000);
+      const r = await out;
+      if ("e" in r) throw r.e;
+      return r.v;
+    };
+    let n = 0;
+    const message = async (car: unknown) => {
+      try {
+        await settle(api.createCharacter("stories", { ...newCar(), name: `Zippy ${(n += 1)}`, car } as CharacterInput));
+      } catch (e) {
+        return (e as { status: number; message: string }).message;
+      }
+      return "accepted";
+    };
+    const base = newCar().car;
+    expect(await message({ ...base, detail: OPEN_TWO_SEATER.detail })).toBe("accepted");
+    expect(await message({ ...base, detail: { v: 1 } })).toBe("accepted");
+    expect(await message({ ...base, wings: 2 })).toBe("Unknown field: car.wings.");
+    expect(await message({ ...base, detail: { v: 1, horn: "loud" } })).toBe("Unknown field: car.detail.horn.");
+    expect(await message({ ...base, detail: { v: 1, toon: 1.5 } })).toMatch(/^car\.detail\.toon is 1\.5; use a whole number from 0 to 100\.$/);
+    expect(await message({ ...base, detail: { v: 2 } })).toBe("accepted");
+    expect(await message({ ...base, detail: { v: 1, profile: { body: "sports", lh: 379 } } })).toMatch(/needs all of its numbers/);
+    expect(await message({ ...base, detail: { v: 1, extras: ["antenna", "antenna"] } })).toMatch(/^car\.detail\.extras is /);
+    expect(await message({ ...base, detail: { v: 1, finish: "shiny" } })).toMatch(/^car\.detail\.finish is "shiny"; use one of /);
+    expect(await message({ ...base, detail: { v: 1, stripe: { color: "#FFAA00" } } })).toMatch(/^car\.detail\.stripe\.color is /);
+  });
+
+  it("a new vehicle starts Simple, and Design it's detailed first option opens Realistic with its seen line", async () => {
+    await show(<CharactersScreen {...page({ name: "character_new", kind: "car" })} />);
+    expect(chosen("Drawing")).toBe("Simple");
+    await addFiles([png("front.png"), png("side.png")]);
+    await wait(4000);
+    await click(control("Design it"), 250);
+    await untilTask();
+    // the editor opens on the name to check; Looks has the new drawing
+    await pick("Make your vehicle", "Looks");
+    expect(chosen("Drawing")).toBe("Realistic");
+    expect(chosen("Roof")).toBe("Open top");
+    expect(document.querySelector(".st-s-editor__seen")?.textContent).toBe("Open top · Centre stripe · Yellow brakes · 5 double spokes");
+    // the second option is a plain one: tapping it takes the detail away
+    await click(cards()[1]!.querySelector("input") as HTMLElement, 50);
+    await pick("Make your vehicle", "Looks");
+    expect(chosen("Drawing")).toBe("Simple");
   });
 });

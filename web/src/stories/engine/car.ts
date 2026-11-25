@@ -8,6 +8,11 @@
 // front and back views of the shots are carView.ts. A script without `art` draws exactly as before.
 
 import { cel, fadeStops, grade, haloStops, ink, lift, lineUnits, ND, nightDrive } from "./art.ts";
+import { carShapes, carViewShapes } from "./carBudget.ts";
+import { checkCarDetail } from "./carDetail.ts";
+import { sideShape } from "./carShape.ts";
+import { drawCarLookSide2 } from "./carSide2.ts";
+import { drawCarLookTop2 } from "./carTop2.ts";
 import { CATALOG } from "./catalog.ts";
 import { blink as blinkAt, FACES, type FaceParams, type Mouth } from "./face.ts";
 import { F } from "./frame.ts";
@@ -43,6 +48,17 @@ export const CAR_CAST_SHAPES_ND = 72;
 /** The busiest front or back view of any car (carView.ts: a car of the cast with eyes, a plain car or a truck, at
  * night with its lights on), measured by web/test/storiesNightCars.test.ts: the shots count it per car they show. */
 export const CAR_VIEW_SHAPES = 34;
+/** §45.48: the budget of a detailed look is measured by carBudget.ts (a look without `detail` is exactly the three
+ * numbers above); re-exported so old imports keep working. */
+export { carShapes, carViewShapes };
+
+/** The same look without its `detail`: what the classic drawer draws (the detailed drawers' stand-ins use it until they
+ * draw for themselves). */
+export function classicLook(car: CarLook): CarLook {
+  if (car.detail === undefined) return car;
+  const { detail: _detail, ...rest } = car;
+  return rest;
+}
 
 export function carHasFace(car: CarLook): boolean {
   return car.face.eyes !== "none";
@@ -93,6 +109,8 @@ export function checkCarLook(look: unknown, where: string, err: (m: string) => v
   if (inside !== undefined && (!isObj(inside) || !isHex(inside.seat) || !isHex(inside.dash) || (inside.trim !== undefined && !isHex(inside.trim)))) {
     err(`${where}: car.interior needs a seat and a dash colour like "#2d2d2f" (and a trim colour, if any).`);
   }
+  // §45.48: the optional measured outline and parts; a look without it is checked exactly as before
+  if (look.detail !== undefined) checkCarDetail(look.detail, where, err);
 }
 
 // ---- geometry ----------------------------------------------------------------------------------------------------
@@ -158,7 +176,7 @@ const LV_B = 1.06;
 const LV_T = 1.88;
 const INSET = 16;
 const GAP = 9;
-const GLASS: Record<CarLook["windows"], { glass: string; tint: string; a: number; roof: string }> = {
+export const GLASS: Record<CarLook["windows"], { glass: string; tint: string; a: number; roof: string }> = {
   clear: { glass: "#bfe3f2", tint: "#bfe9ff", a: 0.22, roof: "#2d3a55" },
   tinted: { glass: "#5f7a8c", tint: "#5f7a8c", a: 0.25, roof: "#26323f" },
   dark: { glass: "#2b3440", tint: "#2b3440", a: 0.4, roof: "#1b222b" },
@@ -167,11 +185,11 @@ export const PLATE = "#f4f1ea";
 export const GRILLE = "#2a2d36";
 export const TRIM = "#3d4250";
 export const MOUTH_DARK = "#4a1830";
-const TYRE = "#2b2b36";
+export const TYRE = "#2b2b36";
 /** Night drive's glass (graded in the light), tyre and sidewall (§45.45 §6). */
 export const GLASS_ND: Record<CarLook["windows"], string> = { clear: "#3e6e7f", tinted: "#2c4a57", dark: "#1c2830" };
 export const TYRE_ND = "#1b1a1d";
-const SIDEWALL_ND = "#2b2a2e";
+export const SIDEWALL_ND = "#2b2a2e";
 /** A lens that is off (by day), before the light grades it. */
 export const LENS_OFF = "#ece6d2";
 export const TAIL_OFF = "#b3262d";
@@ -186,7 +204,7 @@ export function tone(c: string): string {
 }
 
 /** The x part along a chain of `top` points (from → to) at a level, held at its ends. */
-function chainX(top: Pt[], from: number, to: number, lv: number): number {
+export function chainX(top: Pt[], from: number, to: number, lv: number): number {
   const chain: Pt[] = [];
   const step = to >= from ? 1 : -1;
   for (let i = from; i !== to + step; i += step) chain.push(top[i]!);
@@ -250,7 +268,7 @@ export function outlined(pts: number[], d: number): number[] {
   return out;
 }
 
-interface Side {
+export interface Side {
   spec: Spec;
   hl: number;
   sill: number;
@@ -275,6 +293,7 @@ interface Side {
 
 /** The side view's shapes of a car look (px at k = 1, facing +x). */
 export function carSide(car: CarLook): Side {
+  if (car.detail !== undefined) return sideShape(car);
   const spec = BODIES[car.body] ?? BODIES.hatchback;
   const hl = 292 * spec.len * clamp(car.length, 0.85, 1.15);
   const H = spec.hgt * clamp(car.height, 0.85, 1.15);
@@ -445,7 +464,7 @@ export function beamGlow(pen: Pen, x: number, y: number, reach: number, spread: 
 }
 
 /** Where frontLight puts a headlight's lens (the point its glows centre on), without drawing it. */
-function frontLightAt(g: Side, car: CarLook): [number, number] {
+export function frontLightAt(g: Side, car: CarLook): [number, number] {
   const s = g.lowH / 136;
   return [g.hl - (car.lights.front === "square" ? 19 : car.lights.front === "slim" ? 24 : 20) * s, g.y(0.72)];
 }
@@ -453,7 +472,7 @@ function frontLightAt(g: Side, car: CarLook): [number, number] {
 // ---- the face ----------------------------------------------------------------------------------------------------
 
 /** How much a movement style changes the drawing (never the timing). */
-function styleOf(style: MovementStyle): { bob: number; sway: number; wobble: number; lines: number } {
+export function styleOf(style: MovementStyle): { bob: number; sway: number; wobble: number; lines: number } {
   switch (style) {
     case "bouncy":
       return { bob: 1.6, sway: 1.4, wobble: 0, lines: 1 };
@@ -475,7 +494,7 @@ export function carFace(face: Expression | null, car: CarLook): FaceParams | nul
   return FACES[(face ?? "neutral") as Expression] ?? FACES.neutral;
 }
 
-function faceOf(st: PropState, car: CarLook): FaceParams | null {
+export function faceOf(st: PropState, car: CarLook): FaceParams | null {
   return carFace(st.face, car);
 }
 
@@ -535,31 +554,31 @@ export function carBrows(pen: Pen, xs: [number, number], y: number, rx: number, 
 // ---- the other vehicles' parts (§45.47) --------------------------------------------------------------------------
 
 /** A plane's wing in the side view: a swept slab across the fuselage's lower half. */
-function wingSide(g: Side): number[] {
+export function wingSide(g: Side): number[] {
   return [g.X(0.34), g.y(0.8), g.X(0.04), g.y(0.8), g.X(-0.32), g.y(0.2), g.X(-0.12), g.y(0.2)];
 }
 
 /** A boat on the water: the waterline along its hull, and foam at the bow while it moves. */
-function waterSide(pen: Pen, g: Side, moving: boolean): void {
+export function waterSide(pen: Pen, g: Side, moving: boolean): void {
   pen.line([-g.hl - 24, -4, g.X(0.42) + 34, -4], 9, tone("#e9f6ff"), 0.75);
   if (moving) pen.ellipse(g.X(0.42) + 14, -8, 38, 11, 0, tone("#ffffff"), 0.7);
 }
 
 /** The wheels a vehicle shows from above: a car's four, a bike's two in line, none on a plane or a boat. */
-function topWheels(spec: Spec, Wd: number, wy: number): [number, number, boolean][] {
+export function topWheels(spec: Spec, Wd: number, wy: number): [number, number, boolean][] {
   if (spec.form === "bike") return [[0, -wy, true], [0, wy, false]];
   if (spec.form) return [];
   return [[-Wd / 2 + 2, -wy, true], [Wd / 2 - 2, -wy, true], [-Wd / 2 + 2, wy, false], [Wd / 2 - 2, wy, false]];
 }
 
 /** The body seen from above: a rounded box, or a boat's hull with a pointed bow. */
-function topShape(spec: Spec, L: number, Wd: number): number[] {
+export function topShape(spec: Spec, L: number, Wd: number): number[] {
   if (spec.form === "boat") return rounded([[0, -L / 2], [Wd / 2, -L / 5], [Wd / 2, L / 2], [-Wd / 2, L / 2], [-Wd / 2, -L / 5]], 40);
   return roundRectPts(-Wd / 2, -L / 2, Wd, L, Math.min(spec.round, Wd / 2 - 1));
 }
 
 /** A bike's parts in the side view: the fork, the handlebar, the seat, the engine, the exhaust and the rear mudguard. */
-function bikeSide(pen: Pen, g: Side, paint: string, dark: string, chrome: string): void {
+export function bikeSide(pen: Pen, g: Side, paint: string, dark: string, chrome: string): void {
   pen.line([g.ax, -g.wr, g.X(0.8), g.y(1.5)], 10, chrome);
   pen.line([g.X(0.8) - 10, g.y(1.5), g.X(0.7), g.y(1.75)], 9, dark);
   pen.rect(g.X(-0.6), g.y(1.08) - 16, g.X(0.6), 18, 9, dark);
@@ -569,7 +588,7 @@ function bikeSide(pen: Pen, g: Side, paint: string, dark: string, chrome: string
 }
 
 /** A boat's parts in the side view: a stripe along the hull, three portholes, a lifebuoy, the deck rail and a flag. */
-function boatSide(pen: Pen, g: Side, accent: string, dark: string, glass: string, chrome: string): void {
+export function boatSide(pen: Pen, g: Side, accent: string, dark: string, glass: string, chrome: string): void {
   pen.line([g.X(-1) + 6, g.y(0.3), g.X(0.5), g.y(0.3)], 8, dark);
   for (const fx of [-0.6, -0.3, 0]) pen.circle(g.X(fx), g.y(0.66), 10, glass);
   pen.circle(g.X(-0.8), g.y(0.72), 16, tone("#ff6f61"));
@@ -581,7 +600,7 @@ function boatSide(pen: Pen, g: Side, accent: string, dark: string, glass: string
 
 /** The other vehicles' parts from above (§45.47): a plane's engines and tail fin, a boat's rails and swim platform, a
  * bike's handlebar, front mudguard and exhaust. */
-function formTop(pen: Pen, spec: Spec, L: number, Wd: number, dark: string, chrome: string): void {
+export function formTop(pen: Pen, spec: Spec, L: number, Wd: number, dark: string, chrome: string): void {
   if (spec.form === "plane") {
     for (const s of [-1, 1]) pen.ellipse(s * Wd * 0.95, -0.02 * L, 22, 46, 0, dark);
     pen.line([0, L * 0.3, 0, L / 2 - 6], 14, dark);
@@ -596,19 +615,19 @@ function formTop(pen: Pen, spec: Spec, L: number, Wd: number, dark: string, chro
 }
 
 /** A boat's wake from above: two foam lines spreading out behind it. */
-function wakeTop(pen: Pen, L: number, Wd: number): void {
+export function wakeTop(pen: Pen, L: number, Wd: number): void {
   for (const s of [-1, 1]) pen.line([s * Wd * 0.3, L / 2 - 10, s * Wd * 0.85, L / 2 + 150], 12, tone("#ffffff"), 0.5);
 }
 
 /** A plane's wings and tailplane from above, under its fuselage. */
-function wingsTop(pen: Pen, L: number, Wd: number, colour: string): void {
+export function wingsTop(pen: Pen, L: number, Wd: number, colour: string): void {
   pen.rect(-1.55 * Wd, -0.05 * L, 3.1 * Wd, 0.16 * L, 22, colour);
   pen.rect(-0.75 * Wd, 0.34 * L, 1.5 * Wd, 0.1 * L, 14, colour);
 }
 
 // ---- side view ---------------------------------------------------------------------------------------------------
 
-function wheelSide(pen: Pen, x: number, y: number, r: number, spin: number, flat: boolean, car: CarLook, ink: string): void {
+export function wheelSide(pen: Pen, x: number, y: number, r: number, spin: number, flat: boolean, car: CarLook, ink: string): void {
   const style = car.wheels.style;
   const rim = hex(car.wheels.rim, "#c9ccd2");
   const sq = flat ? 0.72 : 1;
@@ -664,7 +683,7 @@ function wheelSide(pen: Pen, x: number, y: number, r: number, spin: number, flat
   }
 }
 
-function frontLight(pen: Pen, g: Side, car: CarLook, colour: string): [number, number] {
+export function frontLight(pen: Pen, g: Side, car: CarLook, colour: string): [number, number] {
   const s = g.lowH / 136;
   const x = g.hl;
   const y = g.y(0.72);
@@ -681,7 +700,7 @@ function frontLight(pen: Pen, g: Side, car: CarLook, colour: string): [number, n
   }
 }
 
-function rearLight(pen: Pen, g: Side, car: CarLook, colour: string): [number, number] {
+export function rearLight(pen: Pen, g: Side, car: CarLook, colour: string): [number, number] {
   const s = g.lowH / 136;
   const x = -g.hl;
   const y = g.y(0.72);
@@ -698,7 +717,7 @@ function rearLight(pen: Pen, g: Side, car: CarLook, colour: string): [number, nu
   }
 }
 
-function extraSide(pen: Pen, g: Side, car: CarLook, ink: string): void {
+export function extraSide(pen: Pen, g: Side, car: CarLook, ink: string): void {
   const spec = g.spec;
   const roofY = g.y(2);
   const r0 = g.X(spec.top[spec.ws[1]]![0]);
@@ -721,6 +740,7 @@ function extraSide(pen: Pen, g: Side, car: CarLook, ink: string): void {
 
 /** Side view car of the cast, facing +x before the facing mirror; origin on the ground between the wheels. */
 export function drawCarLookSide(pen: Pen, st: PropState, k: number, t: number, d: CarDraw, occ: Occupants, night: boolean): void {
+  if (d.car.detail !== undefined) return drawCarLookSide2(pen, st, k, t, d, occ, night);
   if (nightDrive()) return drawCarLookSideND(pen, st, k, t, d, occ, night);
   const car = d.car;
   const g = carSide(car);
@@ -870,7 +890,7 @@ export function drawCarLookSide(pen: Pen, st: PropState, k: number, t: number, d
 
 // ---- top view ----------------------------------------------------------------------------------------------------
 
-interface Top {
+export interface Top {
   spec: Spec;
   L: number;
   Wd: number;
@@ -880,7 +900,7 @@ interface Top {
   backFoot: number;
 }
 
-function carTop(car: CarLook): Top {
+export function carTop(car: CarLook): Top {
   const spec = BODIES[car.body] ?? BODIES.hatchback;
   const L = 350 * spec.len * clamp(car.length, 0.85, 1.15);
   const at = (i: number) => -spec.top[i]![0] * (L / 2);
@@ -889,6 +909,7 @@ function carTop(car: CarLook): Top {
 
 /** Top-down car of the cast: nose up before its heading; origin at its centre. */
 export function drawCarLookTop(pen: Pen, st: PropState, k: number, t: number, d: CarDraw, occ: Occupants, night: boolean): void {
+  if (d.car.detail !== undefined) return drawCarLookTop2(pen, st, k, t, d, occ, night);
   if (nightDrive()) return drawCarLookTopND(pen, st, k, t, d, occ, night);
   const car = d.car;
   const g = carTop(car);
@@ -1027,7 +1048,7 @@ export function drawCarLookTop(pen: Pen, st: PropState, k: number, t: number, d:
 }
 
 /** A small eye seen from above on the windscreen: a white and a pupil, or an arc. */
-function topEye(pen: Pen, x: number, y: number, r: number, f: FaceParams, closedBy: number, iris: string, ink: string, white = "#ffffff"): void {
+export function topEye(pen: Pen, x: number, y: number, r: number, f: FaceParams, closedBy: number, iris: string, ink: string, white = "#ffffff"): void {
   const open = f.open * (1 - closedBy);
   if (f.eyes === "happy" || f.eyes === "closed" || open < 0.16) {
     pen.line(arcPts(x, y, r, r * 0.6, f.eyes === "happy" ? 200 : 20, f.eyes === "happy" ? 340 : 160, 6), Math.max(2, r * 0.3), ink);
@@ -1041,7 +1062,7 @@ function topEye(pen: Pen, x: number, y: number, r: number, f: FaceParams, closed
 
 /** A wheel in night drive: the tyre (its own dark edge is the outline), a sidewall ring, the rim in its own style and
  * colour (graded) and an inner rim shadow under the arch. */
-function wheelSideND(pen: Pen, x: number, y: number, r: number, spin: number, flat: boolean, car: CarLook, ow: number): void {
+export function wheelSideND(pen: Pen, x: number, y: number, r: number, spin: number, flat: boolean, car: CarLook, ow: number): void {
   const style = car.wheels.style;
   const rim = grade(hex(car.wheels.rim, "#c9ccd2"));
   const sq = flat ? 0.72 : 1;

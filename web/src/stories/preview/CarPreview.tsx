@@ -20,9 +20,13 @@ export interface CarPreviewProps {
   label: string;
   /** the drawing style (§45.45); left out, the nearest ArtProvider's (Bright with none) */
   art?: ArtStyle;
+  /** §45.48: scale the vehicle to its own length and draw all of it (a long realistic one is not cut off) */
+  fit?: boolean;
+  /** §45.48: the nose ("front") or the tail ("back") head on, on plain ground; left out, the side */
+  view?: "side" | "front" | "back";
 }
 
-export function CarPreview({ car, movementStyle, expression = "neutral", move = "idle", size, playing = true, label, art }: CarPreviewProps) {
+export function CarPreview({ car, movementStyle, expression = "neutral", move = "idle", size, playing = true, label, art, fit, view }: CarPreviewProps) {
   const ref = useRef<HTMLCanvasElement | null>(null);
   const shared = useArt();
   const style = art ?? shared;
@@ -46,12 +50,12 @@ export function CarPreview({ car, movementStyle, expression = "neutral", move = 
       if (t !== last) {
         last = t;
         ctx.clearRect(0, 0, canvas.width, canvas.height);
-        drawPrims(ctx, previewCar(car, movementStyle, expression, move, t, canvas.width, style), 1);
+        drawPrims(ctx, previewCar(car, movementStyle, expression, move, t, canvas.width, style, fit || view ? { ...(fit ? { fit } : {}), ...(view ? { view } : {}) } : undefined), 1);
       }
       if (!still) raf = requestAnimationFrame(frame);
     };
     raf = requestAnimationFrame(frame);
     return () => cancelAnimationFrame(raf);
-  }, [car, movementStyle, expression, move, size, playing, active, style]);
+  }, [car, movementStyle, expression, move, size, playing, active, style, fit, view]);
   return <canvas ref={ref} className="st-character-preview st-car-preview" style={{ width: size, height: size }} role="img" aria-label={label} />;
 }

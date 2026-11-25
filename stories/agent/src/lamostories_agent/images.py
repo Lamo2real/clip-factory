@@ -1,8 +1,8 @@
 """Every picture sent to a model goes through here (docs/CONTRACTS.md §45.33): chat attachments, design references,
 reference-video frames, the final review's frames and portraits.
 
-The picture is scaled so its long edge is at most 1568 px (or a smaller ``long_edge``: a car design's 4 to 6 photos go
-at 1024 px), re-encoded to JPEG at about quality 85 (which also drops
+The picture is scaled so its long edge is at most 1568 px (or a smaller ``long_edge``: a person design's 4 to 6 photos go
+at 1024 px, a vehicle design's 5 to 8 at 1280 px), re-encoded to JPEG at about quality 85 (which also drops
 EXIF and GPS), and stepped down until it is at most 3.5 MB. A picture ffmpeg cannot open fails with the owner's
 sentence."""
 

@@ -11,9 +11,11 @@ the owner's uploads (png, jpeg or webp, at most 10 MB, at most 8), kept under th
 
 from __future__ import annotations
 
+import json
 import math
 import re
 from collections.abc import Iterable, Mapping
+from pathlib import Path
 from typing import Any, Final
 
 from .. import validate
@@ -120,7 +122,7 @@ def car_look(value: Any) -> dict[str, Any]:
     validate.only_keys(
         body,
         {"body", "length", "height", "paint", "accent", "pattern", "windows", "wheels", "lights", "extra", "face",
-         "outline", "interior"},
+         "outline", "interior", "detail"},
     )  # fmt: skip
     wheels = validate.obj(body.get("wheels"), "car.wheels")
     validate.only_keys(wheels, {"style", "rim", "size"})
@@ -155,6 +157,97 @@ def car_look(value: Any) -> dict[str, Any]:
     }
     if body.get("interior") is not None:  # §45.47: from the inside photos; left out when there is none
         out["interior"] = interior(body["interior"])
+    if (
+        body.get("detail") is not None
+    ):  # §45.48: the detailed look; left out when there is none, so old looks are unchanged
+        out["detail"] = car_detail(body["detail"])
+    return out
+
+
+# --- car.detail (§45.48) -----------------------------------------------------------------------------------------
+# The rules are the engine's (web/src/stories/engine/carDetail.ts). The web test storiesCarDetailRules writes them to
+# car_detail.json next to this file (it ships in the Lambda package with the rest of clipfactory_api); this module only
+# reads them, so the API can never disagree with the engine on a range or a choice.
+
+CAR_DETAIL_V: Final = 1
+CAR_DETAIL_MAX_CHARS: Final = 2400
+_HEX_LOWER = re.compile(r"^#[0-9a-f]{6}$")
+
+
+def _load_detail_rules() -> tuple[dict[str, dict[str, Any]], tuple[str, ...]]:
+    data = json.loads(Path(__file__).with_name("car_detail.json").read_text(encoding="utf-8"))
+    return data["rules"], tuple(data["whole"])
+
+
+_DETAIL_RULES, _DETAIL_WHOLE = _load_detail_rules()
+_DETAIL_PREFIXES: Final = frozenset(
+    ".".join(path.split(".")[:i]) for path in _DETAIL_RULES for i in range(1, len(path.split(".")))
+)
+
+
+def _detail_leaf(value: Any, path: str, rule: Mapping[str, Any]) -> Any:
+    """One leaf of ``car.detail`` against its rule (``n`` whole number in a range, ``e`` one id, ``c`` a lower case
+    colour, ``b`` true or false, ``l`` a list of distinct ids with a ``max``). Returns the value to store."""
+    field = f"car.detail.{path}"
+    if "n" in rule:
+        lo, hi = rule["n"]
+        whole = validate.whole_number(value)
+        if whole is None or not lo <= whole <= hi:
+            raise bad_request(f"{field} must be a whole number from {lo} to {hi}.", field)
+        return whole
+    if "e" in rule:
+        if not isinstance(value, str) or value not in rule["e"]:
+            raise bad_request(f"{field} must be one of: {', '.join(rule['e'])}.", field)
+        return value
+    if "c" in rule:
+        if not isinstance(value, str) or not _HEX_LOWER.match(value):
+            raise bad_request(f"{field} must be a colour like #ffc94a, in lower case.", field)
+        return value
+    if "b" in rule:
+        if not isinstance(value, bool):
+            raise bad_request(f"{field} must be true or false.", field)
+        return value
+    ids, most = rule["l"], int(rule["max"])
+    if not isinstance(value, list) or not all(isinstance(v, str) and v in ids for v in value):
+        raise bad_request(f"{field} must be a list of: {', '.join(ids)}.", field)
+    if len(set(value)) != len(value):
+        raise bad_request(f"{field} has a repeat.", field)
+    if len(value) > most:
+        raise bad_request(f"{field} can hold at most {most}.", field)
+    return list(value)
+
+
+def _detail_walk(value: Mapping[str, Any], prefix: str) -> dict[str, Any]:
+    out: dict[str, Any] = {}
+    for key, item in value.items():
+        path = f"{prefix}.{key}" if prefix else key
+        if path in _DETAIL_RULES:
+            out[key] = _detail_leaf(item, path, _DETAIL_RULES[path])
+        elif path in _DETAIL_PREFIXES:
+            if not isinstance(item, dict):
+                raise bad_request(f"car.detail.{path} must be an object.", f"car.detail.{path}")
+            out[key] = _detail_walk(item, path)
+        else:
+            raise bad_request(f"Unknown field: car.detail.{path}.", f"car.detail.{path}")
+    return out
+
+
+def car_detail(value: Any) -> dict[str, Any]:
+    """``car.detail`` (§45.48), strict: ``v`` is 1; every other key is a known detail in its range or list (no nulls, no
+    floats, colours lower case); ``profile`` has all of its numbers or is left out; at most 2,400 characters. Unknown
+    keys and bad values are 400. ``{"v": 1}`` alone is valid. The result is a copy, in the order it was sent."""
+    if not isinstance(value, dict):
+        raise bad_request("car.detail must be an object.", "car.detail")
+    if validate.whole_number(value.get("v")) != CAR_DETAIL_V:
+        raise bad_request(f"car.detail.v must be {CAR_DETAIL_V}.", "car.detail.v")
+    out: dict[str, Any] = {"v": CAR_DETAIL_V, **_detail_walk({k: v for k, v in value.items() if k != "v"}, "")}
+    for whole in _DETAIL_WHOLE:
+        got = out.get(whole)
+        need = sum(1 for p in _DETAIL_RULES if p.startswith(f"{whole}."))
+        if got is not None and len(got) != need:
+            raise bad_request(f"car.detail.{whole} needs all of its numbers.", f"car.detail.{whole}")
+    if len(json.dumps(out, separators=(",", ":"), ensure_ascii=False)) > CAR_DETAIL_MAX_CHARS:
+        raise bad_request("car.detail is too long.", "car.detail")
     return out
 
 

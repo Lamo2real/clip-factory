@@ -7,8 +7,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import { isCar, type CarInput, type CharacterInput, type PersonInput } from "../api/types.ts";
 import { CATALOG } from "../engine/catalog.ts";
-import type { CarMove } from "../engine/engine.ts";
-import type { ActionId, CarLook, CharacterLook, Expression } from "../engine/types.ts";
+import type { ActionId, CarDetail, CarLook, CharacterLook, Expression } from "../engine/types.ts";
 import { CarPreview } from "../preview/CarPreview.tsx";
 import { CharacterPreview } from "../preview/CharacterPreview.tsx";
 import { CarFacePart, CarLooksPart, CarMovesPart } from "./CarParts.tsx";
@@ -23,6 +22,8 @@ import {
   CHAR_LIMITS,
   characterProblem,
   carMoveLabel,
+  seenLine,
+  type CarTry,
   CLOTHES,
   EYE_COLORS,
   EYES,
@@ -119,11 +120,14 @@ export function CharacterEditor({
   // The preview opens on the character's own face (happy if it has it, else its first face that is not neutral).
   const [face, setFace] = useState<Expression>(() => showFace(initial));
   const [move, setMove] = useState<ActionId>("idle");
-  const [carMove, setCarMove] = useState<CarMove>("idle");
+  const [carMove, setCarMove] = useState<CarTry | "idle">("idle");
+  /** what "Simple" took off the vehicle, so "Realistic" gives it back while the editor is open (§45.48) */
+  const detailMemory = useRef<CarDetail | undefined>(undefined);
   const [problem, setProblem] = useState<string | null>(null);
   const [trait, setTrait] = useState("");
   const [box, width] = useWidth<HTMLDivElement>(220);
-  const size = Math.max(140, Math.min(260, width - 24));
+  // a vehicle is long and low: its stage may be a little bigger (§45.48)
+  const size = Math.max(140, Math.min(isCar(initial) ? 320 : 260, width - 24));
   const preview = useRef<HTMLDivElement>(null);
   const panel = useRef<HTMLDivElement>(null);
   /** Set by Next and Back: the part they open comes into view at its top, with the focus. */
@@ -166,7 +170,14 @@ export function CharacterEditor({
   };
   const set = (patch: Partial<Common>) => update((prev) => ({ ...prev, ...patch }) as CharacterInput);
   const setLook = (patch: Partial<CharacterLook>) => update((prev) => (isCar(prev) ? prev : { ...prev, look: { ...prev.look, ...patch } }));
-  const setCar = (patch: Partial<CarLook>) => update((prev) => (isCar(prev) ? { ...prev, car: { ...prev.car, ...patch } } : prev));
+  const setCar = (patch: Partial<CarLook>) =>
+    update((prev) => {
+      if (!isCar(prev)) return prev;
+      const next: CarLook = { ...prev.car, ...patch };
+      // "Simple" takes `detail` off; the key goes too, so a plain vehicle never carries one
+      if (next.detail === undefined) delete next.detail;
+      return { ...prev, car: next };
+    });
   const car: CarInput | null = isCar(c) ? c : null;
   const person: PersonInput | null = isCar(c) ? null : c;
   const at = PARTS.findIndex((p) => p.value === part);
@@ -199,6 +210,7 @@ export function CharacterEditor({
 
   const name = c.name.trim() || (car ? "Your vehicle" : "Your character");
   const faceLabel = CATALOG.expressions.find((e) => e.id === face)?.label ?? face;
+  const seen = car ? seenLine(car.car) : "";
   const moveLabel = car ? carMoveLabel(carMove) : (CATALOG.actions.find((a) => a.id === move)?.label ?? move);
 
   return (
@@ -207,13 +219,23 @@ export function CharacterEditor({
         {/* The editor's hero: its rim may bend (glass/lens.ts decides). */}
         <div className="st-s-editor__preview st-lens" ref={preview}>
           {car ? (
-            <CarPreview car={car.car} movementStyle={car.movementStyle} expression={face} move={carMove} size={size} label={car.car.face.eyes === "none" ? `${name}, ${moveLabel}` : `${name}, ${faceLabel} face, ${moveLabel}`} />
+            <CarPreview
+              car={car.car}
+              movementStyle={car.movementStyle}
+              expression={face}
+              move={carMove === "front" || carMove === "rear" ? "idle" : carMove}
+              view={carMove === "front" ? "front" : carMove === "rear" ? "back" : undefined}
+              fit={car.car.detail !== undefined}
+              size={size}
+              label={car.car.face.eyes === "none" ? `${name}, ${moveLabel}` : `${name}, ${faceLabel} face, ${moveLabel}`}
+            />
           ) : person ? (
             <CharacterPreview look={person.look} movementStyle={person.movementStyle} expression={face} action={move} size={size} label={`${name}, ${faceLabel} face, ${moveLabel}`} />
           ) : null}
           <p className="st-s-editor__now">
             <strong>{name}</strong>
             <span>{car && car.car.face.eyes === "none" ? moveLabel : `${faceLabel} · ${moveLabel}`}</span>
+            {seen ? <span className="st-s-editor__seen">{seen}</span> : null}
           </p>
         </div>
         {aside}
@@ -222,7 +244,7 @@ export function CharacterEditor({
       <div className="st-s-editor__panel" ref={panel}>
         <Pick label={car ? "Make your vehicle" : "Make your character"} hideLabel value={part} options={PARTS} onChange={setPart} className="st-s-editor__parts" />
 
-        {car && part === "looks" ? <CarLooksPart car={car.car} onChange={setCar} /> : null}
+        {car && part === "looks" ? <CarLooksPart car={car.car} onChange={setCar} style={car.movementStyle} memory={detailMemory} /> : null}
         {car && part === "face" ? (
           <CarFacePart
             c={car}

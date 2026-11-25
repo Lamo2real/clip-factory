@@ -8,6 +8,7 @@
 
 import { cel, grade, haloStops, ink, lineUnits, ND, nightDrive, type Light } from "./art.ts";
 import { carBrows, carEye, carFace, carSpec, DEFAULT_CAR, GLASS_ND, GRILLE, LENS_OFF, MOUTH_CURVE, MOUTH_DARK, outlined, PLATE, rounded, TAIL_OFF, TRIM, TYRE_ND, type CarDraw } from "./car.ts";
+import { drawCarView2 } from "./carView2.ts";
 import { blink as blinkAt, type FaceParams } from "./face.ts";
 import { clamp, hex, mix } from "./math.ts";
 import type { Pen } from "./pen.ts";
@@ -83,7 +84,8 @@ export function drawPropView(pen: Pen, st: PropState, view: "back" | "front", o:
   drawCarView(pen, look, view, { ...o, braking: st.braking, lights: st.lights, blink: st.blink, face: car && !truck ? st.face : null, truck, seed: car?.seed ?? o.seed });
 }
 
-function carView(pen: Pen, car: CarLook, view: "back" | "front", o: CarViewOpts): void {
+export function carView(pen: Pen, car: CarLook, view: "back" | "front", o: CarViewOpts): void {
+  if (car.detail !== undefined) return drawCarView2(pen, car, view, o);
   const L = o.light;
   const g = (c: string) => grade(c, L);
   const up = (c: string, k: number) => mix(mix(c, "#ffffff", k), "#ffcf8a", L.warm * 0.12);

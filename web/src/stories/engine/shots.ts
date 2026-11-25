@@ -9,6 +9,7 @@
 import { fadeStops, grade, haloStops, LIGHTS, lift, ND, nightDrive, railSide } from "./art.ts";
 import { layerMatrix, shotCamera, type Cam } from "./camera.ts";
 import type { CarDraw } from "./car.ts";
+import { resolveDetail, type Resolved } from "./carDetail.ts";
 import { drawPropView } from "./carView.ts";
 import { F } from "./frame.ts";
 import { drawLightSweep, lampPhase, lightFor, metres, type LightPart } from "./light.ts";
@@ -285,6 +286,51 @@ function paintOf(car: ShotCar): Hex {
   return car.draw && !car.truck ? hex(car.draw.car.paint, "#c9a227") : plainColor(car.st.prop, nightDrive());
 }
 
+/** What a car of the cast with a `detail` decided (§45.48), or null: a plain car, a truck and a classic look draw the
+ * inside views exactly as they always did. */
+function detailOf(car: ShotCar | null | undefined): Resolved | null {
+  const look = car && car.draw && !car.truck ? car.draw.car : undefined;
+  return look && look.detail !== undefined ? resolveDetail(look) : null;
+}
+
+/** The bonnet sliver's top line in Driver's eyes (flat x, y pairs, left to right) for a detailed car: the classic
+ * five-point arch, its height following the nose (a low wedge nose is a thin sliver), and with the wings standing
+ * above the bonnet (`wings`) two humps at 22% and 78% of the width with the bonnet dipping between them. */
+function bonnetLine(W: number, H: number, dashY: number, noseH: number, wings: boolean): number[] {
+  const h = clamp(0.026 * (noseH / 55), 0.008, 0.03) * H;
+  const arch = (u: number): number => h * (0.308 + 0.692 * (1 - (2 * u - 1) ** 2));
+  const pts: number[] = [];
+  const n = 12;
+  for (let i = 0; i <= n; i += 1) {
+    const u = i / n;
+    const hump = wings ? Math.exp(-(((u - 0.22) / 0.1) ** 2)) + Math.exp(-(((u - 0.78) / 0.1) ** 2)) : 0;
+    const dip = wings ? Math.exp(-(((u - 0.5) / 0.16) ** 2)) * 0.18 : 0;
+    pts.push(lerp(-80, W + 80, u), dashY - Math.max(0.004 * H, arch(u) * (1 - dip) + h * 0.5 * hump));
+  }
+  return pts;
+}
+
+/** A `centre` or `twin` stripe over the bonnet sliver (one or two prims), widening towards the driver as a stripe on a
+ * bonnet does in perspective; any other layout leaves the sliver alone. */
+function bonnetStripe(pen: Pen, line: number[], W: number, dashY: number, det: Resolved): void {
+  const { layout, color, width } = det.stripe;
+  if (layout !== "centre" && layout !== "twin") return;
+  const yOn = (x: number): number => {
+    const u = clamp01((x + 80) / (W + 160)) * (line.length / 2 - 1);
+    const i = Math.min(Math.floor(u), line.length / 2 - 2);
+    return lerp(line[i * 2 + 1]!, line[i * 2 + 3]!, u - i);
+  };
+  const wd = clamp01(width / 100);
+  const ink = grade(hex(color, "#ffffff"));
+  const bar = (cx: number, hw: number): void => {
+    const xl = cx - hw;
+    const xr = cx + hw;
+    pen.poly([xl, yOn(xl), xr, yOn(xr), cx + hw * 1.6, dashY + 8, cx - hw * 1.6, dashY + 8], ink);
+  };
+  if (layout === "centre") bar(W / 2, W * (0.018 + 0.05 * wd));
+  else for (const s of [-1, 1]) bar(W / 2 + s * W * (0.03 + 0.03 * wd), W * (0.006 + 0.014 * wd));
+}
+
 /** A car's front or back view (carView.ts) with its moves: brake lights, blinking headlights, a face, a roll and a
  * jolt. The origin is the ground at the car's centre on screen; `w` its width; `side` (-1..1) how much of its right
  * side shows (a car left of the vanishing point shows its right side). */
@@ -476,7 +522,9 @@ function driverView(pen: Pen, x: ShotInput, w: World): void {
   const H = F.h;
   const hor = P(0.335, 0.4) * H;
   const dashY = P(0.585, 0.7) * H;
-  const top = 0.03 * H;
+  // a detailed car's own parts (§45.48 section 2.9); an open one has no roof, only a slim header over the screen
+  const det = detailOf(w.own);
+  const top = (det?.open ? 0.014 : 0.03) * H;
   const vpX = W / 2 + w.steer * 0.03 * W;
   const c: Cam3 = { vpX, hor, f: FOCAL, camX: -0.35, camH: 1.2 };
   pen.setMatrix(layerMatrix(camFor(x, vpX, hor), 1));
@@ -491,8 +539,11 @@ function driverView(pen: Pen, x: ShotInput, w: World): void {
   weatherOver(pen, x, w);
   // a sliver of the own car's bonnet under the windscreen, in its paint with a lit edge
   const paint = grade(paintOf(w.own!));
-  const bonnetTop = [-80, dashY - 0.008 * H, W * 0.25, dashY - 0.02 * H, W * 0.5, dashY - 0.026 * H, W * 0.75, dashY - 0.02 * H, W + 80, dashY - 0.008 * H];
+  const bonnetTop = det
+    ? bonnetLine(W, H, dashY, det.profile.noseH, det.profile.cowlH - det.profile.noseH > 20)
+    : [-80, dashY - 0.008 * H, W * 0.25, dashY - 0.02 * H, W * 0.5, dashY - 0.026 * H, W * 0.75, dashY - 0.02 * H, W + 80, dashY - 0.008 * H];
   pen.poly([...bonnetTop, W + 80, dashY + 8, -80, dashY + 8], paint);
+  if (det) bonnetStripe(pen, bonnetTop, W, dashY, det);
   pen.line(bonnetTop, 3, lift(paint, 0.25), 0.8);
   lightPart(x, "cabin");
   cabinFront(pen, x, w, top, dashY);
@@ -532,6 +583,8 @@ function cabinFront(pen: Pen, x: ShotInput, w: World, top: number, dashY: number
   const W = F.w;
   const H = F.h;
   const cab = cabinColours(w.own);
+  const det = detailOf(w.own);
+  const open = det?.open === true;
   const tl = tall();
   const pin = tl ? [0.12, 0.05] : [0.16, 0.08];
   // the A pillars either side of the windscreen (the roof and the dash cover the rest); in the wider frames a side
@@ -540,14 +593,15 @@ function cabinFront(pen: Pen, x: ShotInput, w: World, top: number, dashY: number
   const pillar = tl
     ? [-90, top - 2, W * pin[0]!, top - 2, W * pin[1]!, dashY + 4, -90, dashY + 4]
     : [-90, top - 2, W * pin[0]!, top - 2, W * pin[1]!, dashY + 4, W * (pin[1]! - 0.06), dashY + 4, W * (pin[0]! - 0.065), top + 1, 0, top + 0.07 * H, -90, top + 0.07 * H];
-  if (!tl) {
+  if (!tl && !open) {
     const side = [0, top + 0.07 * H, W * (pin[0]! - 0.065), top, W * (pin[1]! - 0.06), dashY, 0, dashY];
     pen.poly(side, ND.glassIn, 0.18);
     pen.poly(mirrorX(side), ND.glassIn, 0.18);
   }
   pen.poly(pillar, cab.pillar);
   pen.poly(mirrorX(pillar), cab.pillar);
-  pen.rect(-90, -90, W + 180, top + 90, 0, cab.roof);
+  // an open car has no roof band, only the slim header the screen's frame and the mirror hang from
+  pen.rect(-90, -90, W + 180, top + 90, 0, open ? cab.pillar : cab.roof);
   // the pillars' soft ink edges and the lamps' light along them
   for (const s of [1, -1]) {
     const ex0 = s > 0 ? W * pin[0]! : W * (1 - pin[0]!);
@@ -649,13 +703,26 @@ function cabinFront(pen: Pen, x: ShotInput, w: World, top: number, dashY: number
   }
   // the wheel: rim, a lit top arc that follows the lamps, three spokes and the hub, turning with the steering
   const rot = w.steer * 35;
-  const wSegs = pieceSegs(pen, wr + rim / 2, 360, 10);
-  arcLine(pen, wx, wy, wr, 0, 360, rim + 5, ND.pillarInk, 1, 10, wSegs);
-  arcLine(pen, wx, wy, wr, 0, 360, rim, ND.wheel, 1, 10, wSegs);
+  // a flat-bottomed wheel (`cabin.wheel` flat): the rim's lowest 76 degrees are a straight bar instead of an arc
+  const flat = det?.cabin.wheel === "flat";
+  const FLAT = 38;
+  const a0 = flat ? 90 + FLAT + rot : 0;
+  const a1 = flat ? 90 - FLAT + rot + 360 : 360;
+  const pieces = flat ? 8 : 10;
+  const wSegs = pieceSegs(pen, wr + rim / 2, a1 - a0, pieces);
+  arcLine(pen, wx, wy, wr, a0, a1, rim + 5, ND.pillarInk, 1, pieces, wSegs);
+  arcLine(pen, wx, wy, wr, a0, a1, rim, ND.wheel, 1, pieces, wSegs);
+  const chord = flat ? [wx + Math.cos((a0 * DEG)) * wr, wy + Math.sin(a0 * DEG) * wr, wx + Math.cos(a1 * DEG) * wr, wy + Math.sin(a1 * DEG) * wr] : null;
+  if (chord) {
+    pen.line(chord, rim + 5, ND.pillarInk);
+    pen.line(chord, rim, ND.wheel);
+  }
   arcLine(pen, wx, wy, wr - rim * 0.16, -140 + rot, -40 + rot, rim * 0.26, ND.wheelLit, 0.45 + 0.45 * x.warm, 3, pieceSegs(pen, wr, 100, 3));
   for (const a of [180, 0, 90]) {
     const r0 = (a + rot) * DEG;
-    pen.line([wx + Math.cos(r0) * 0.1 * S, wy + Math.sin(r0) * 0.1 * S, wx + Math.cos(r0) * (wr - rim * 0.3), wy + Math.sin(r0) * (wr - rim * 0.3)], rim * 0.8, ND.wheel);
+    // the lower spoke ends at the flat bar
+    const reach = flat && a === 90 ? wr * Math.cos(FLAT * DEG) - rim * 0.3 : wr - rim * 0.3;
+    pen.line([wx + Math.cos(r0) * 0.1 * S, wy + Math.sin(r0) * 0.1 * S, wx + Math.cos(r0) * reach, wy + Math.sin(r0) * reach], rim * 0.8, ND.wheel);
   }
   pen.circle(wx, wy, 0.13 * S, ND.pillarInk);
   pen.circle(wx, wy, 0.125 * S, ND.wheelHub);
@@ -689,6 +756,9 @@ function faceShot(pen: Pen, x: ShotInput, w: World, p: ShotPerson): void {
   pen.setMatrix(layerMatrix(camFor(x, b.hx, b.hy), 1));
   const car = p.car ? x.cars.find((c) => c.st.prop.propId === p.car) : undefined;
   const lampSide: 1 | -1 = w.dir > 0 ? -1 : 1;
+  // a detailed car (§45.48): an open one has sky all round (no roof frame) and its roll hoops; one row has no rear seats
+  const det = detailOf(car);
+  const open = det?.open === true;
   if (car) {
     lightPart(x, "out");
     const winTop = P(0.045, 0.05) * H;
@@ -696,8 +766,11 @@ function faceShot(pen: Pen, x: ShotInput, w: World, p: ShotPerson): void {
     pen.grad(0, winTop, 0, winBot, w.look.sky);
     // slow mountains through the rear window (they drift the other way to the road)
     const horizon = P(0.36, 0.4) * H;
-    const ridge = ridgeTop(W * 0.06, W * 0.94, horizon, 0.17 * S, w.m * 3 * w.dir, x.seed, 18, w.look.ridge);
-    pen.poly([...ridge, W * 0.94, winBot + 40, W * 0.06, winBot + 40], w.look.far);
+    // (an open car shows the scenery across the whole frame)
+    const rx0 = open ? -60 : W * 0.06;
+    const rx1 = open ? W + 60 : W * 0.94;
+    const ridge = ridgeTop(rx0, rx1, horizon, 0.17 * S, w.m * 3 * w.dir, x.seed, 18, w.look.ridge);
+    pen.poly([...ridge, rx1, winBot + 40, rx0, winBot + 40], w.look.far);
     pen.line(ridge, 2.4, w.look.rim ?? w.look.farLit, 0.5);
     if (w.look.lit && nightDrive()) {
       // night drive: the road's lamps behind the car glowing through the rear window, the near ones at its top edge,
@@ -705,22 +778,27 @@ function faceShot(pen: Pen, x: ShotInput, w: World, p: ShotPerson): void {
       const hu = b.rx / p.geo.headRX;
       const hair = HAIR_UP * hu * 0.5;
       const head = { x: b.hx, y: b.hy - hair, rx: b.rx * 1.12, ry: p.geo.headRY * hu + hair };
-      lampsBehind(pen, { vpX: b.hx + P(0, 0.27) * W, hor: horizon, f: FOCAL * 0.7, camX: 0, camH: 1.2 }, w.plan, w.m, W * 0.1, winTop, W * 0.9, winBot, head);
+      lampsBehind(pen, { vpX: b.hx + P(0, 0.27) * W, hor: horizon, f: FOCAL * 0.7, camX: 0, camH: 1.2 }, w.plan, w.m, open ? 0 : W * 0.1, winTop, open ? W : W * 0.9, winBot, head);
     } else if (w.look.lit) {
       // one lamp's glow crossing the rear window at each lamp passing
       const lx = W / 2 + lampPhase(w.m) * W * 4 * w.dir;
       if (lx > W * 0.05 && lx < W * 0.95) lampGlow(pen, lx, winTop + 0.07 * H, 0.012 * S, 0.02 * S, 0.006 * S);
     }
     // slivers of side window at the edges with the rail lines streaming past
-    const slivers = [
-      [0, P(0.4, 0.45) * H, W * 0.07, P(0.38, 0.43) * H, W * 0.07, P(0.62, 0.7) * H, 0, P(0.64, 0.72) * H],
-      [W, P(0.4, 0.45) * H, W, P(0.64, 0.72) * H, W * 0.93, P(0.62, 0.7) * H, W * 0.93, P(0.38, 0.43) * H],
-    ];
+    // (an open car has one strip of verge and rail across behind it, under its sky)
+    const slivers = open
+      ? [[0, P(0.4, 0.45) * H, W, P(0.4, 0.45) * H, W, P(0.62, 0.7) * H, 0, P(0.62, 0.7) * H]]
+      : [
+          [0, P(0.4, 0.45) * H, W * 0.07, P(0.38, 0.43) * H, W * 0.07, P(0.62, 0.7) * H, 0, P(0.64, 0.72) * H],
+          [W, P(0.4, 0.45) * H, W, P(0.64, 0.72) * H, W * 0.93, P(0.62, 0.7) * H, W * 0.93, P(0.38, 0.43) * H],
+        ];
     lightPart(x, "cabin");
     const wr = 0.06 * S;
     const sl = slivers.map((p) => [...p]);
-    frameRound(pen, -90, -90, W + 90, H + 90, W * 0.1, winTop, W * 0.9, winBot, [wr, wr, wr, wr], ND.cabinRoof);
-    pen.line([W * 0.1 + wr, winTop, W * 0.9 - wr, winTop], 3, ND.pillarInk, 0.9);
+    if (!open) {
+      frameRound(pen, -90, -90, W + 90, H + 90, W * 0.1, winTop, W * 0.9, winBot, [wr, wr, wr, wr], ND.cabinRoof);
+      pen.line([W * 0.1 + wr, winTop, W * 0.9 - wr, winTop], 3, ND.pillarInk, 0.9);
+    }
     // the side windows' slivers show through the cabin at the edges
     for (const p of sl) {
       pen.poly(p, w.look.verge);
@@ -741,7 +819,17 @@ function faceShot(pen: Pen, x: ShotInput, w: World, p: ShotPerson): void {
     }
     // the rear seats' backs and headrests, then the driver's own seat behind the head, in the car's seat colour
     const cab = cabinColours(car);
-    for (const s of [-1, 1]) {
+    if (open) {
+      // the deck behind the seats and the roll hoops standing up behind the heads (none, one bar over, or two)
+      const deck = P(0.62, 0.7) * H;
+      pen.rect(-90, deck, W + 180, H + 90 - deck, 0, cab.pillar);
+      pen.line([-90, deck, W + 90, deck], 3, ND.pillarInk, 0.9);
+      const up = P(0.2, 0.2) * H;
+      const bar = 0.035 * S;
+      if (det!.roof.hoops === "bar") pen.line([W * 0.1, deck, W * 0.14, up, W * 0.86, up, W * 0.9, deck], bar, cab.pillar);
+      else if (det!.roof.hoops === "twin") for (const s of [-1, 1]) pen.line([W / 2 + s * W * 0.4, deck, W / 2 + s * W * 0.36, up], bar, cab.pillar);
+    }
+    for (const s of det && det.cabin.rows === 1 ? [] : [-1, 1]) {
       const cx = W / 2 + s * W * 0.37;
       seatShape(pen, cx - 0.17 * S, P(0.4, 0.46) * H, 0.34 * S, H, 0.09 * S, cab);
       seatShape(pen, cx - 0.085 * S, P(0.355, 0.39) * H, 0.17 * S, 0.08 * S, 0.04 * S, cab);
@@ -839,34 +927,39 @@ function sideWindow(pen: Pen, x: ShotInput, w: World): void {
   // the window: a rounded top corner at its back (the side the scenery streams to)
   const back = -w.dir;
   const r = 0.18 * S;
+  // an open detailed car (§45.48) has no upper frame: the scenery runs across the whole frame under open sky
+  const open = detailOf(w.own)?.open === true;
+  const ex0 = open ? -0.1 * W : wx0;
+  const ex1 = open ? W * 1.1 : wx1;
+  const ew = ex1 - ex0;
   lightPart(x, "out");
   pen.grad(0, wy0, 0, wy1, w.look.sky);
   // slow mountains, the rail streaming fast, a lamp passing at each pulse
-  const mtn = ridgeTop(wx0 - 60, wx1 + 60, wy0 + wh * 0.62, wh * 0.45, -w.m * 6 * w.dir, x.seed, 14, w.look.ridge);
-  pen.poly([...mtn, wx1 + 60, wy1 + 40, wx0 - 60, wy1 + 40], w.look.far);
+  const mtn = ridgeTop(ex0 - 60, ex1 + 60, wy0 + wh * 0.62, wh * 0.45, -w.m * 6 * w.dir, x.seed, 14, w.look.ridge);
+  pen.poly([...mtn, ex1 + 60, wy1 + 40, ex0 - 60, wy1 + 40], w.look.far);
   // night drive: small lamps along the far side of the road always in the window, their poles down behind the rail,
   // and the near one passing
   const railY = wy0 + wh * 0.8;
   const nd = nightDrive();
-  if (w.look.lit && nd) sideLamps(pen, wx0, wx1, wy0, wh, w.m, w.dir, back, LAMP_SPAN, railY);
+  if (w.look.lit && nd) sideLamps(pen, ex0, ex1, wy0, wh, w.m, w.dir, back, LAMP_SPAN, railY);
   else if (w.look.lit) {
-    const lx = (wx0 + wx1) / 2 - lampPhase(w.m) * LAMP_SPAN * w.dir;
-    if (lx > wx0 - 120 && lx < wx1 + 120) {
+    const lx = (ex0 + ex1) / 2 - lampPhase(w.m) * LAMP_SPAN * w.dir;
+    if (lx > ex0 - 120 && lx < ex1 + 120) {
       pen.line([lx, wy1 + 20, lx, wy0 + wh * 0.12], 0.02 * S, w.look.pole);
       lampGlow(pen, lx + 0.05 * S * back, wy0 + wh * 0.1, 0.022 * S, 0.035 * S, 0.01 * S);
     }
   }
-  pen.rect(wx0 - 60, railY, ww + 120, wy1 - railY + 40, 0, w.look.verge);
+  pen.rect(ex0 - 60, railY, ew + 120, wy1 - railY + 40, 0, w.look.verge);
   for (let i = 0; i < 8; i += 1) {
-    const px = wx0 - 60 + ((((-w.m * 140 * w.dir + i * 0.09 * S) % (0.72 * S)) + 0.72 * S) % (0.72 * S)) * (ww + 120) / (0.72 * S);
+    const px = ex0 - 60 + ((((-w.m * 140 * w.dir + i * 0.09 * S) % (0.72 * S)) + 0.72 * S) % (0.72 * S)) * (ew + 120) / (0.72 * S);
     // night drive: the post's round top inside the rail's upper bar
     pen.line([px, railY - (nd ? 0.0085 * S : wh * 0.02), px, railY + wh * 0.1], 5, ND.railPost);
   }
   // night drive: two slim bars with the dark verge between them and a thin cool highlight (art.ts railSide)
-  if (nd) railSide(pen, wx0 - 60, wx1 + 60, railY - 0.001 * S, 0.024 * S);
+  if (nd) railSide(pen, ex0 - 60, ex1 + 60, railY - 0.001 * S, 0.024 * S);
   else {
-    pen.line([wx0 - 60, railY, wx1 + 60, railY], 0.022 * S, ND.rail);
-    pen.line([wx0 - 60, railY - 0.008 * S, wx1 + 60, railY - 0.008 * S], 3, ND.railLit);
+    pen.line([ex0 - 60, railY, ex1 + 60, railY], 0.022 * S, ND.rail);
+    pen.line([ex0 - 60, railY - 0.008 * S, ex1 + 60, railY - 0.008 * S], 3, ND.railLit);
   }
   // a car in the other lane within 8 m, in its side view, scaled into the window
   const along = w.others.filter((o) => o.X !== 0 && Math.abs(o.ahead) <= 8).sort((a, c) => Math.abs(a.ahead) - Math.abs(c.ahead))[0];
@@ -882,9 +975,12 @@ function sideWindow(pen: Pen, x: ShotInput, w: World): void {
   }
   lightPart(x, "cabin");
   // the car's inside around the window, the door panel under the sill with its armrest and handle
-  frameRound(pen, -90, -90, W + 90, H + 90, wx0, wy0, wx1, wy1, back < 0 ? [r, 0, 0, 0] : [0, r, 0, 0], ND.cabinRoof);
-  pen.line(back < 0 ? [wx0 + r, wy0, wx1, wy0] : [wx0, wy0, wx1 - r, wy0], 3, ND.pillarInk, 0.9);
-  pen.line([wx0 + 6, wy1 + 4, wx1 - 6, wy1 + 4], 4, ND.pillarLit, 0.5 + 0.3 * x.warm);
+  if (open) pen.rect(-90, wy1, W + 180, H + 90 - wy1, 0, ND.cabinRoof);
+  else {
+    frameRound(pen, -90, -90, W + 90, H + 90, wx0, wy0, wx1, wy1, back < 0 ? [r, 0, 0, 0] : [0, r, 0, 0], ND.cabinRoof);
+    pen.line(back < 0 ? [wx0 + r, wy0, wx1, wy0] : [wx0, wy0, wx1 - r, wy0], 3, ND.pillarInk, 0.9);
+  }
+  pen.line([ex0 + 6, wy1 + 4, ex1 - 6, wy1 + 4], 4, ND.pillarLit, 0.5 + 0.3 * x.warm);
   pen.rect(wx0 - 0.08 * S, wy1 + 0.02 * S, ww + 0.2 * S, H, 0.03 * S, ND.pillar);
   pen.line([wx0 - 0.04 * S, wy1 + 0.13 * S, wx1 + 0.1 * S, wy1 + 0.11 * S], 0.03 * S, ND.seatInk);
   pen.line([wx0 - 0.04 * S, wy1 + 0.12 * S, wx1 + 0.1 * S, wy1 + 0.1 * S], 3, ND.pillarLit, 0.5);
@@ -1002,7 +1098,9 @@ function mirrorShot(pen: Pen, x: ShotInput, w: World): void {
     }
   }
   lightPart(x, "cabin");
-  // the own car's rear window frame, the two rear headrests, a glint across the glass
+  // the own car's rear window frame, the two rear headrests, a glint across the glass (a detailed open car has no
+  // rear window, so no frame; one with a single row has no rear headrests)
+  const det = detailOf(w.own);
   const rwTop = gy0 + mh * 0.1;
   const rwBot = gy0 + mh * 0.74;
   const rw = [cx - mw * 0.34, rwTop, cx + mw * 0.34, rwTop, cx + mw * 0.41, rwBot, cx - mw * 0.41, rwBot];
@@ -1012,12 +1110,14 @@ function mirrorShot(pen: Pen, x: ShotInput, w: World): void {
     [gx0, rwTop, rw[0]!, rwTop, rw[6]!, rwBot, gx0, rwBot],
     [rw[2]!, rwTop, gx0 + mw, rwTop, gx0 + mw, rwBot, rw[4]!, rwBot],
   ];
-  for (const f of frame) pen.poly(clip(f), ND.cabinRoof);
-  for (let i = 0; i < 4; i += 1) pen.line([rw[i * 2]!, rw[i * 2 + 1]!, rw[((i + 1) % 4) * 2]!, rw[((i + 1) % 4) * 2 + 1]!], 3, ND.pillarInk, 0.9);
-  for (const s of [-1, 1]) seatShape(pen, cx + s * mw * 0.2 - mh * 0.24, gy0 + mh * 0.68, mh * 0.48, mh * 0.27, mh * 0.12);
+  if (det?.open !== true) {
+    for (const f of frame) pen.poly(clip(f), ND.cabinRoof);
+    for (let i = 0; i < 4; i += 1) pen.line([rw[i * 2]!, rw[i * 2 + 1]!, rw[((i + 1) % 4) * 2]!, rw[((i + 1) % 4) * 2 + 1]!], 3, ND.pillarInk, 0.9);
+  }
+  for (const s of det?.cabin.rows === 1 ? [] : [-1, 1]) seatShape(pen, cx + s * mw * 0.2 - mh * 0.24, gy0 + mh * 0.68, mh * 0.48, mh * 0.27, mh * 0.12);
   // the glint: night drive keeps it on the rear window's glass, off the car's dark frame round it
   const glint = clip([cx - mw * 0.3, gy0, cx - mw * 0.18, gy0, cx - mw * 0.36, gy0 + mh, cx - mw * 0.48, gy0 + mh]);
-  pen.poly(nightDrive() ? clipConvex(glint, rw) : glint, "#ffffff", 0.06);
+  pen.poly(nightDrive() && det?.open !== true ? clipConvex(glint, rw) : glint, "#ffffff", 0.06);
   // the housing's lit top edge, along its top (a flat arc, not a circle through the sky)
   const hTop = gy0 - 0.035 * S;
   pen.line(arcPts(cx, hTop + mh * 0.38, mw * 0.5, mh * 0.38, 200, 340, 16), 4, ND.pillarLit, 0.6 + 0.3 * x.warm);
@@ -1163,6 +1263,10 @@ function speedDial(pen: Pen, x: ShotInput, w: World): void {
   const H = F.h;
   const tl = tall();
   const nd = nightDrive();
+  // `cabin.dial` (§45.48) colours the rev counter's face; its ticks and numbers turn dark on a light face
+  const dialColour = detailOf(w.own)?.cabin.dial ?? null;
+  const face = dialColour ? grade(hex(dialColour, ND.dialFace)) : ND.dialFace;
+  const tickInk = dialColour && channels(face).reduce((a, c, i) => a + c * [0.3, 0.59, 0.11][i]!, 0) > 140 ? "#1b1a1f" : ND.tick;
   // night drive: a dial small enough that its whole ring, 0 to 8 and the red zone, is always in the frame
   const cx = W * P(nd ? 0.5 : 0.56, 0.5);
   const cy = H * P(nd ? 0.52 : 0.56, 0.58);
@@ -1192,9 +1296,9 @@ function speedDial(pen: Pen, x: ShotInput, w: World): void {
   // as two true circles, so its edges stay round however close the camera comes)
   if (nd) {
     pen.circle(cx, cy, r * 1.035 + 0.02 * S, ND.bezel);
-    pen.circle(cx, cy, r * 1.035 - 0.02 * S, ND.dialFace);
+    pen.circle(cx, cy, r * 1.035 - 0.02 * S, face);
   } else {
-    pen.circle(cx, cy, r * 1.02, ND.dialFace);
+    pen.circle(cx, cy, r * 1.02, face);
     arcLine(pen, cx, cy, r * 1.035, 0, 360, 0.04 * S, ND.bezel, 1, 12);
   }
   arcLine(pen, cx, cy, r * 1.04, 200, 300, 0.014 * S, ND.bezelLit, 0.6, 4, pieceSegs(pen, r * 1.04, 100, 4));
@@ -1205,18 +1309,18 @@ function speedDial(pen: Pen, x: ShotInput, w: World): void {
   for (let n = 0; n <= 8; n += 1) {
     const [x0, y0] = pt(n, r * 0.95);
     const [x1, y1] = pt(n, r * 0.95 - 0.06 * S);
-    pen.line([x0, y0, x1, y1], 0.012 * S, ND.tick);
+    pen.line([x0, y0, x1, y1], 0.012 * S, tickInk);
     if (n < 8) {
       for (let k = 1; k <= 4; k += 1) {
         const m = n + k / 5;
         const [a0, b0] = pt(m, r * 0.95);
         const [a1, b1] = pt(m, r * 0.95 - 0.035 * S);
-        pen.line([a0, b0, a1, b1], 0.006 * S, ND.tick, 0.9);
+        pen.line([a0, b0, a1, b1], 0.006 * S, tickInk, 0.9);
       }
     }
     // the numbers sit inside the ticks, clear of them
     const [nx, ny] = pt(n, r * 0.7);
-    digit(pen, String(n), nx, ny, 0.065 * S, n >= 7 ? ND.redZone : ND.tick);
+    digit(pen, String(n), nx, ny, 0.065 * S, n >= 7 ? ND.redZone : tickInk);
   }
   // the needle with its glow, a small warm glow at its tip, and the hub; its tail points straight back through the
   // hub's centre (180°: 16/3 of the 8 steps of 270°)

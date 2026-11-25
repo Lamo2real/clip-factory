@@ -4,9 +4,11 @@
 // own choices (CarLook, CATALOG.carLooks), its own swatches and a fresh car to start from.
 import { isCar, type CarInput, type CharacterInput } from "../api/types.ts";
 import { DEFAULT_CAR } from "../engine/car.ts";
+import { CAR_DETAIL, FAMILY_FIT, resolveDetail } from "../engine/carDetail.ts";
 import { CATALOG } from "../engine/catalog.ts";
 import type { CarMove } from "../engine/engine.ts";
-import type { CarLook, CharacterKind, CharacterLook, CharacterVoice, Expression, MovementStyle } from "../engine/types.ts";
+import type { CarDetail, CarLook, CarWheelShape, CharacterKind, CharacterLook, CharacterVoice, Expression, MovementStyle } from "../engine/types.ts";
+import { VEHICLE_OF } from "../engine/types.ts";
 
 type Opt<T extends string> = { value: T; label: string };
 
@@ -300,9 +302,15 @@ export const CAR_MOVES: Opt<Exclude<CarMove, "idle">>[] = [
   { value: "stall", label: "Stall" },
 ];
 
+/** What the editor's "Try a move" can show: a move, or the vehicle's nose ("front") or tail ("rear") head on (§45.48). */
+export type CarTry = Exclude<CarMove, "idle"> | "front" | "rear";
+
+/** The moves, then the two views. "Rear" (never "Back": Back is the editor's own button). */
+export const CAR_TRIES: Opt<CarTry>[] = [...CAR_MOVES, { value: "front", label: "Front" }, { value: "rear", label: "Rear" }];
+
 /** A move's label, with "Parked" for the car standing still. */
-export function carMoveLabel(m: CarMove): string {
-  return m === "idle" ? "Parked" : (CAR_MOVES.find((x) => x.value === m)?.label ?? m);
+export function carMoveLabel(m: CarMove | CarTry): string {
+  return m === "idle" ? "Parked" : (CAR_TRIES.find((x) => x.value === m)?.label ?? m);
 }
 
 /** The faces a car gets when its eyes go on with fewer than 3 (§45.42). */
@@ -326,3 +334,163 @@ export function newCar(): CarInput {
 export function withColour(colors: { hex: string; name: string }[], hex: string, name: string): { hex: string; name: string }[] {
   return colors.some((c) => c.hex.toLowerCase() === hex.toLowerCase()) ? colors : [{ hex, name }, ...colors];
 }
+
+// ---------- Realistic vehicles (§45.48): the editor's words and the one place a `detail` key is written ----------
+
+const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
+
+/** The choices of one enum rule of the detail schema, with the words the editor shows (`only` keeps some, in this order). */
+export function detailOpts<T extends string = string>(path: string, only?: readonly string[]): Opt<T>[] {
+  const rule = CAR_DETAIL[path];
+  if (!rule || !("e" in rule)) return [];
+  const ids = only ? only.filter((id) => rule.e.includes(id)) : rule.e;
+  return ids.map((id) => ({ value: id as T, label: rule.label?.[id] ?? id }));
+}
+
+/** Roof: the four a kid can tell apart (the other two, a sunroof and a glass roof, stay with the AI). */
+export const CAR_ROOF = detailOpts<"closed" | "open" | "targa" | "soft_top">("roof.type", ["closed", "open", "targa", "soft_top"]);
+
+/** How cartoony: the three steps, as the number each writes (0 real proportions, 70 chunky). */
+export const CAR_TOON: (Opt<"little" | "medium" | "lot"> & { toon: number })[] = [
+  { value: "little", label: "A little", toon: 0 },
+  { value: "medium", label: "Medium", toon: 30 },
+  { value: "lot", label: "A lot", toon: 70 },
+];
+
+/** The step nearest to a `toon` number. */
+export function toonStep(toon: number): "little" | "medium" | "lot" {
+  return CAR_TOON.reduce((best, t) => (Math.abs(t.toon - toon) < Math.abs(best.toon - toon) ? t : best)).value;
+}
+
+/** Brakes: plain (the dull grey calipers) or coloured. */
+export const CAR_BRAKES: Opt<"plain" | "coloured">[] = [
+  { value: "plain", label: "Plain" },
+  { value: "coloured", label: "Coloured" },
+];
+
+/** The brake colours; the first is the one "Coloured" starts with. */
+export const BRAKE_COLOURS = [
+  { hex: "#c8102e", name: "Red" },
+  { hex: "#ffd21f", name: "Yellow" },
+  { hex: "#2f6fb5", name: "Blue" },
+  { hex: "#c9ccd2", name: "Silver" },
+  { hex: "#1c1c22", name: "Black" },
+];
+
+/** The caliper colour of plain brakes (a dull grey: the engine's own default when nothing else says). */
+export const PLAIN_CALIPER = "#5a5f68";
+
+/** The picks of "More details" in the editor's order: the label shown, the key it writes and whether the family can use it. */
+export const DETAIL_PICKS: { label: string; path: string; fit: "wheels" | "frontLight" | "rearLight" | "front" | "side" | "rear" | "always" }[] = [
+  { label: "Wheel design", path: "wheels.shape", fit: "wheels" },
+  { label: "Front lamp", path: "lights.front.shape", fit: "frontLight" },
+  { label: "Rear lamp", path: "lights.rear.shape", fit: "rearLight" },
+  { label: "Nose", path: "front.grille", fit: "front" },
+  { label: "Sides", path: "side.intake", fit: "side" },
+  { label: "Tail", path: "rear.exhaust", fit: "rear" },
+  { label: "Stripes", path: "stripe.layout", fit: "always" },
+  { label: "Finish", path: "finish", fit: "always" },
+];
+
+/** A copy of the detail with one key written (`undefined` removes it, and an object left empty goes with it). */
+export function setDetail(detail: CarDetail, path: string, value: unknown): CarDetail {
+  return setDetails(detail, [[path, value]]);
+}
+
+/** Several keys at once, in order. */
+export function setDetails(detail: CarDetail, entries: [string, unknown][]): CarDetail {
+  const out = structuredClone(detail) as unknown as Record<string, unknown>;
+  for (const [path, value] of entries) {
+    const keys = path.split(".");
+    const last = keys[keys.length - 1]!;
+    const parents: [Record<string, unknown>, string][] = [];
+    let cur = out;
+    let reached = true;
+    for (const k of keys.slice(0, -1)) {
+      let next = cur[k];
+      if (!isObj(next)) {
+        if (value === undefined) {
+          reached = false;
+          break;
+        }
+        next = {};
+        cur[k] = next;
+      }
+      parents.push([cur, k]);
+      cur = next as Record<string, unknown>;
+    }
+    if (!reached) continue;
+    if (value === undefined) delete cur[last];
+    else cur[last] = value;
+    for (let i = parents.length - 1; i >= 0; i -= 1) {
+      const [parent, k] = parents[i]!;
+      if (isObj(parent[k]) && Object.keys(parent[k]).length === 0) delete parent[k];
+      else break;
+    }
+  }
+  return out as unknown as CarDetail;
+}
+
+/** The detail with the keys a classic control's tap would otherwise hide removed (so every tap shows). */
+export const CLASSIC_CLEARS = {
+  wheels: ["wheels.shape", "wheels.spokes"],
+  front: ["lights.front.shape"],
+  rear: ["lights.rear.shape"],
+  pattern: ["stripe.layout", "twoTone"],
+  extra: ["rear.spoiler"],
+} as const;
+
+/** What a classic control's tap writes: the patch, and (for a detailed vehicle) the detail without the keys it hides. */
+export function classicTap(car: CarLook, patch: Partial<CarLook>, clears: readonly string[]): Partial<CarLook> {
+  if (car.detail === undefined) return patch;
+  return { ...patch, detail: setDetails(car.detail, clears.map((p) => [p, undefined] as [string, unknown])) };
+}
+
+/** What the "Photo shape" line is about: the body the AI measured, while the picked Shape is another (else null). */
+export function photoShape(car: CarLook): string | null {
+  const p = car.detail?.profile;
+  if (!p || p.body === car.body) return null;
+  return CAR_BODY.find((b) => b.value === p.body)?.label ?? null;
+}
+
+const SPOKE_WORDS: Partial<Record<CarWheelShape, string>> = { straight: "spokes", split: "double spokes", y: "forked spokes", star: "blade spokes", turbine: "fan blades" };
+const WHEEL_WORDS: Partial<Record<CarWheelShape, string>> = { steel: "Steel wheels", cap: "Hubcap wheels", mesh: "Mesh wheels", dish: "Dish wheels", wire: "Wire wheels", block: "Chunky wheels" };
+
+/**
+ * What the editor saw, in a few words under the vehicle's name ("Open top · Centre stripe · Yellow brakes · 5 double
+ * spokes"): labels and colour names only, at most four items, and nothing for a vehicle with no `detail`.
+ */
+export function seenLine(car: CarLook): string {
+  if (car.detail === undefined) return "";
+  const R = resolveDetail(car);
+  const d = car.detail;
+  const items: string[] = [];
+  const label = (path: string, id: string) => {
+    const rule = CAR_DETAIL[path];
+    return rule && "e" in rule ? (rule.label?.[id] ?? id) : id;
+  };
+  if (R.roof.type !== "closed") items.push(label("roof.type", R.roof.type));
+  if (R.stripe.layout !== "none") items.push(`${label("stripe.layout", R.stripe.layout)} stripe`);
+  if (R.fits.brakes && R.brakes.disc !== "none" && R.brakes.caliper.toLowerCase() !== PLAIN_CALIPER) {
+    items.push(`${BRAKE_COLOURS.find((c) => c.hex === R.brakes.caliper.toLowerCase())?.name ?? "Coloured"} brakes`);
+  }
+  if (R.fits.wheels) {
+    const spoke = SPOKE_WORDS[R.wheels.shape];
+    items.push(spoke ? `${R.wheels.spokes} ${spoke}` : (WHEEL_WORDS[R.wheels.shape] ?? "Wheels"));
+  }
+  if (d.lights?.front?.shape !== undefined && R.fits.frontLight) items.push(`${label("lights.front.shape", R.lights.front.shape)} lamps`);
+  if (R.rear.spoiler !== "none" && R.fits.rear) items.push(label("rear.spoiler", R.rear.spoiler));
+  if (R.finish !== "gloss") items.push(`${label("finish", R.finish)} finish`);
+  return items.slice(0, 4).join(" · ");
+}
+
+/** The extras this vehicle's family can carry, with their labels (chips, up to 6). */
+export function extraOpts(car: CarLook): Opt<string>[] {
+  const rule = CAR_DETAIL["extras"];
+  if (!rule || !("l" in rule)) return [];
+  const fit = FAMILY_FIT[VEHICLE_OF[car.body] ?? "car"].extras;
+  return rule.l.filter((id) => (fit as string[]).includes(id)).map((id) => ({ value: id, label: rule.label?.[id] ?? id }));
+}
+
+/** The most extras a vehicle may have. */
+export const MAX_EXTRAS = CAR_DETAIL["extras"] && "l" in CAR_DETAIL["extras"] ? CAR_DETAIL["extras"].max : 6;

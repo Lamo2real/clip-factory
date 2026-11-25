@@ -341,6 +341,11 @@ export interface Occupants {
   side?: (pen: Pen, seats: { x: number; beltY: number; topY: number }[]) => void;
   /** draws the tops of their heads (top view, origin at the car's centre, nose up) */
   top?: (pen: Pen, seats: { x: number; y: number; r: number }[]) => void;
+  /** §45.48: draws the heads of a detailed open car's or bike's riders seen from the front (the front view's frame:
+   * origin on the ground under the car's centre, px) */
+  front?: (pen: Pen, seats: { x: number; y: number; r: number }[]) => void;
+  /** the same seen from behind */
+  back?: (pen: Pen, seats: { x: number; y: number; r: number }[]) => void;
 }
 
 const INK = "#1c1842";

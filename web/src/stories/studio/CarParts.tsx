@@ -5,19 +5,34 @@ import "../styles/sd-cars.css";
 import { useEffect, useRef } from "react";
 import type { CarInput } from "../api/types.ts";
 import { CATALOG } from "../engine/catalog.ts";
-import type { CarMove } from "../engine/engine.ts";
-import type { CarLook, Expression, MovementStyle } from "../engine/types.ts";
+import { CAR_DETAIL, FAMILY_FIT, resolveDetail } from "../engine/carDetail.ts";
+import type { CarDetail, CarExtra, CarLook, Expression, MovementStyle } from "../engine/types.ts";
 import { CarPreview } from "../preview/CarPreview.tsx";
-import { Chip, Pick, Slider, Swatches } from "./kit.tsx";
+import { Chip, Pick, Slider, Swatches, TechDetails, type PickOption } from "./kit.tsx";
 import {
+  BRAKE_COLOURS,
   CAR_BODY,
+  CAR_BRAKES,
+  CAR_ROOF,
+  CAR_TOON,
+  CAR_TRIES,
+  CLASSIC_CLEARS,
+  DETAIL_PICKS,
+  MAX_EXTRAS,
+  PLAIN_CALIPER,
+  classicTap,
+  detailOpts,
+  extraOpts,
+  photoShape,
+  setDetail,
+  toonStep,
+  type CarTry,
   CAR_EXTRA,
   CAR_EYES,
   CAR_FACES_ON,
   CAR_FRONT_LIGHTS,
   CAR_MOUTH,
   CAR_MOVE_LINE,
-  CAR_MOVES,
   CAR_PATTERN,
   CAR_REAR_LIGHTS,
   CAR_WHEELS,
@@ -33,12 +48,60 @@ import { hearState, playSample, stopSample } from "./samples.ts";
 
 const sizeWords = (n: number, small: string, big: string) => (n < 0.95 ? small : n > 1.05 ? big : "Just right");
 
-export function CarLooksPart({ car, onChange }: { car: CarLook; onChange: (patch: Partial<CarLook>) => void }) {
+/** The two "Drawing" tiles: the same vehicle drawn the plain classic way, and the realistic way (§45.48). */
+function drawingOptions(car: CarLook, style: MovementStyle): PickOption<"simple" | "realistic">[] {
+  const { detail: _own, ...plain } = car;
+  const tile = (look: CarLook, label: string) => <CarPreview car={look} movementStyle={style} size={64} playing={false} label={label} />;
+  return [
+    { value: "simple", label: "Simple", art: tile(plain as CarLook, "Drawn simple") },
+    { value: "realistic", label: "Realistic", art: tile({ ...plain, detail: car.detail ?? { v: 1 } } as CarLook, "Drawn realistic") },
+  ];
+}
+
+export function CarLooksPart({
+  car,
+  onChange,
+  style = "calm",
+  memory,
+}: {
+  car: CarLook;
+  onChange: (patch: Partial<CarLook>) => void;
+  /** how it drives (only for the Drawing tiles' small pictures) */
+  style?: MovementStyle;
+  /** where "Simple" keeps the detail until the editor closes, so "Realistic" gets it back */
+  memory?: { current: CarDetail | undefined };
+}) {
+  const own = useRef<CarDetail | undefined>(undefined);
+  const kept = memory ?? own;
+  const detail = car.detail;
+  const R = detail ? resolveDetail(car) : null;
+  /** One tap writes one key of the detail (nothing else). */
+  const write = (path: string, value: unknown) => detail && onChange({ detail: setDetail(detail, path, value) });
+  const roofs = R && car.body !== "van" ? CAR_ROOF.filter((o) => FAMILY_FIT[R.family].roofs.includes(o.value)) : [];
+  const photo = photoShape(car);
+  const coloured = !!R && R.brakes.disc !== "none" && R.brakes.caliper.toLowerCase() !== PLAIN_CALIPER;
+  const extras = R ? extraOpts(car) : [];
+  const picks = R ? DETAIL_PICKS.filter((p) => p.fit === "always" || R.fits[p.fit]) : [];
   return (
     <div className="st-s-editor__part" aria-label="Looks" tabIndex={-1}>
+      <Pick
+        label="Drawing"
+        big
+        value={detail ? "realistic" : "simple"}
+        options={drawingOptions(car, style)}
+        onChange={(v) => {
+          if (v === "simple") {
+            if (detail) kept.current = detail;
+            onChange({ detail: undefined });
+          } else onChange({ detail: kept.current ?? { v: 1 } });
+        }}
+      />
       <fieldset className="st-s-group">
         <legend className="st-s-group__title">Shape</legend>
         <Pick label="Shape" value={car.body} options={CAR_BODY} onChange={(body) => onChange({ body })} />
+        {photo ? <p className="st-s-field__hint">Photo shape: {photo}. Tap it to get it back.</p> : null}
+        {roofs.length > 1 ? <Pick label="Roof" value={roofs.some((o) => o.value === R!.roof.type) ? R!.roof.type : "closed"} options={roofs} onChange={(type) => write("roof.type", type)} /> : null}
+        {R?.fits.profile ? <Pick label="Cartoon" value={toonStep(R.toon)} options={CAR_TOON} onChange={(v) => write("toon", CAR_TOON.find((t) => t.value === v)!.toon)} /> : null}
         <Slider label="Length" min={0.85} max={1.15} step={0.05} value={car.length} words={sizeWords(car.length, "Shorter", "Longer")} onChange={(length) => onChange({ length })} />
         <Slider label="Height" min={0.85} max={1.15} step={0.05} value={car.height} words={sizeWords(car.height, "Lower", "Taller")} onChange={(height) => onChange({ height })} />
       </fieldset>
@@ -46,7 +109,7 @@ export function CarLooksPart({ car, onChange }: { car: CarLook; onChange: (patch
         <legend className="st-s-group__title">Paint</legend>
         <Swatches label="Paint" value={car.paint} colors={withColour(PAINT, car.paint, "Your vehicle's colour")} onChange={(paint) => onChange({ paint })} />
         <Swatches label="Second colour" value={car.accent} colors={withColour(PAINT, car.accent, "Your vehicle's second colour")} onChange={(accent) => onChange({ accent })} />
-        <Pick label="Pattern" value={car.pattern} options={CAR_PATTERN} onChange={(pattern) => onChange({ pattern })} />
+        <Pick label="Pattern" value={car.pattern} options={CAR_PATTERN} onChange={(pattern) => onChange(classicTap(car, { pattern }, CLASSIC_CLEARS.pattern))} />
       </fieldset>
       <fieldset className="st-s-group">
         <legend className="st-s-group__title">Windows</legend>
@@ -54,20 +117,77 @@ export function CarLooksPart({ car, onChange }: { car: CarLook; onChange: (patch
       </fieldset>
       <fieldset className="st-s-group">
         <legend className="st-s-group__title">Wheels</legend>
-        <Pick label="Wheels" value={car.wheels.style} options={CAR_WHEELS} onChange={(style) => onChange({ wheels: { ...car.wheels, style } })} />
+        <Pick label="Wheels" value={car.wheels.style} options={CAR_WHEELS} onChange={(style) => onChange(classicTap(car, { wheels: { ...car.wheels, style } }, CLASSIC_CLEARS.wheels))} />
         <Swatches label="Rims" value={car.wheels.rim} colors={withColour(RIMS, car.wheels.rim, "Your vehicle's rims")} onChange={(rim) => onChange({ wheels: { ...car.wheels, rim } })} />
         <Slider label="Wheel size" min={0.85} max={1.2} step={0.05} value={car.wheels.size} words={sizeWords(car.wheels.size, "Smaller", "Bigger")} onChange={(size) => onChange({ wheels: { ...car.wheels, size } })} />
+        {R?.fits.brakes ? (
+          <Pick
+            label="Brakes"
+            value={coloured ? "coloured" : "plain"}
+            options={CAR_BRAKES}
+            onChange={(v) => {
+              if (!detail) return;
+              if (v === "coloured") {
+                // the colour the vehicle's own brakes had, else red; a vehicle with no discs gets plain ones to colour
+                const next = setDetail(detail, "brakes.caliper", BRAKE_COLOURS[0]!.hex);
+                onChange({ detail: R.brakes.disc === "none" ? setDetail(next, "brakes.disc", "plain") : next });
+              } else {
+                // plain: the dull grey (the key goes when nothing else would give that grey)
+                const bare = setDetail(detail, "brakes.caliper", undefined);
+                const dull = resolveDetail({ ...car, detail: bare }).brakes.caliper.toLowerCase() === PLAIN_CALIPER;
+                onChange({ detail: dull ? bare : setDetail(detail, "brakes.caliper", PLAIN_CALIPER) });
+              }
+            }}
+          />
+        ) : null}
+        {R?.fits.brakes && coloured ? (
+          <Swatches label="Brake colour" value={R.brakes.caliper} colors={withColour(BRAKE_COLOURS, R.brakes.caliper, "Your vehicle's brakes")} onChange={(hex) => write("brakes.caliper", hex)} />
+        ) : null}
       </fieldset>
       <fieldset className="st-s-group">
         <legend className="st-s-group__title">Lights</legend>
-        <Pick label="Front lights" value={car.lights.front} options={CAR_FRONT_LIGHTS} onChange={(front) => onChange({ lights: { ...car.lights, front } })} />
-        <Pick label="Back lights" value={car.lights.rear} options={CAR_REAR_LIGHTS} onChange={(rear) => onChange({ lights: { ...car.lights, rear } })} />
+        <Pick label="Front lights" value={car.lights.front} options={CAR_FRONT_LIGHTS} onChange={(front) => onChange(classicTap(car, { lights: { ...car.lights, front } }, CLASSIC_CLEARS.front))} />
+        <Pick label="Back lights" value={car.lights.rear} options={CAR_REAR_LIGHTS} onChange={(rear) => onChange(classicTap(car, { lights: { ...car.lights, rear } }, CLASSIC_CLEARS.rear))} />
       </fieldset>
       <fieldset className="st-s-group">
         <legend className="st-s-group__title">Extras</legend>
-        <Pick label="On top" value={car.extra} options={CAR_EXTRA} onChange={(extra) => onChange({ extra })} />
+        <Pick label="On top" value={car.extra} options={CAR_EXTRA} onChange={(extra) => onChange(classicTap(car, { extra }, CLASSIC_CLEARS.extra))} />
         <Swatches label="Outline" value={car.outline} colors={withColour(OUTLINES, car.outline, "Your vehicle's outline")} onChange={(outline) => onChange({ outline })} />
       </fieldset>
+      {R ? (
+        <TechDetails label="More details">
+          {picks.map((p) => {
+            const rule = CAR_DETAIL[p.path];
+            const here = p.path.split(".").reduce<unknown>((o, k) => (o as Record<string, unknown>)[k], R);
+            return <Pick key={p.path} label={p.label} value={String(here)} options={detailOpts(p.path, rule && "e" in rule ? rule.e : undefined)} onChange={(v) => write(p.path, v)} />;
+          })}
+          {extras.length ? (
+            <div className="st-s-field">
+              <span className="st-s-field__label">Extras</span>
+              <ul className="st-s-chips">
+                {extras.map((o) => {
+                  const on = R.extras.includes(o.value as CarExtra);
+                  const full = !on && R.extras.length >= MAX_EXTRAS;
+                  return (
+                    <li key={o.value}>
+                      <button
+                        type="button"
+                        className={`st-s-chipbtn${on ? " is-on" : ""}`}
+                        aria-pressed={on}
+                        aria-disabled={full || undefined}
+                        title={full ? `Up to ${MAX_EXTRAS}. Turn one off first.` : undefined}
+                        onClick={() => !full && write("extras", on ? R.extras.filter((x) => x !== o.value) : [...R.extras, o.value])}
+                      >
+                        {o.label}
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            </div>
+          ) : null}
+        </TechDetails>
+      ) : null}
     </div>
   );
 }
@@ -125,7 +245,7 @@ export function CarFacePart({ c, name, face, onTry, onChange }: { c: CarInput; n
 }
 
 /** How the car drives, and each move to try on the preview. "Honk" plays the honk itself (no tap sound over it). */
-export function CarMovesPart({ name, style, move, onStyle, onMove }: { name: string; style: MovementStyle; move: CarMove; onStyle: (s: MovementStyle) => void; onMove: (m: CarMove) => void }) {
+export function CarMovesPart({ name, style, move, onStyle, onMove }: { name: string; style: MovementStyle; move: CarTry | "idle"; onStyle: (s: MovementStyle) => void; onMove: (m: CarTry) => void }) {
   const bar = useRef<HTMLDivElement>(null);
   // The Honk choice plays its own sound: with sounds on, the app's tap click stays out of its way (data-sound="off").
   useEffect(() => {
@@ -151,7 +271,7 @@ export function CarMovesPart({ name, style, move, onStyle, onMove }: { name: str
           if (e.target instanceof HTMLInputElement && e.target.value === "honk") playSample({ kind: "sfx", id: "honk" });
         }}
       >
-        <Pick label="Try a move" value={move === "idle" ? "" : move} options={CAR_MOVES} onChange={onMove} className="st-s-moves" />
+        <Pick label="Try a move" value={move === "idle" ? "" : move} options={CAR_TRIES} onChange={onMove} className="st-s-moves" />
       </div>
     </div>
   );

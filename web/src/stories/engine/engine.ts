@@ -11,7 +11,8 @@
 // art.ts (the night drive drawing style's palette, light and shading, §45.45).
 
 import { nightDrive } from "./art.ts";
-import { CAR_CAST_SHAPES, CAR_SEATS, carHasFace, checkCarLook, DEFAULT_CAR, type CarDraw } from "./car.ts";
+import { CAR_CAST_SHAPES, CAR_SEATS, carHasFace, carSide, checkCarLook, DEFAULT_CAR, type CarDraw } from "./car.ts";
+import { drawCarView } from "./carView.ts";
 import { CATALOG } from "./catalog.ts";
 import { FACES } from "./face.ts";
 import { artOf, DEFAULT_FORMAT, F, FORMATS, formatOf, sizeFor, withArt } from "./frame.ts";
@@ -31,6 +32,8 @@ export { prng } from "./math.ts";
 export { audioTrack, CUTS, fitDuration, FPS, frameCount, HEIGHT, LIMITS, MAX_SECONDS, normalizeScript, repairScript, scaleCuts, sceneFrames, sceneList, sceneShapes, SEATS, SIZES_FROM_ENGINE, textTrack, validateCharacter, validateScript, WIDTH };
 export { artOf, DEFAULT_FORMAT, FORMATS, formatOf, sizeFor, withArt };
 export { CAR_CAST_SHAPES, CAR_SEATS, carHasFace, checkCarLook, DEFAULT_CAR };
+export { carShapes, carViewShapes } from "./car.ts";
+export { CAR_DETAIL, CAR_DETAIL_MAX_CHARS, CAR_DETAIL_V, CAR_DETAIL_WHOLE, checkCarDetail, PRESET, PRESET_PARTS, resolveDetail } from "./carDetail.ts";
 export type { CarDraw };
 
 /** Bumps whenever drawing changes; stored on each job's meta (2: the full rig, sets, props and cameras; 3: a skid
@@ -112,11 +115,18 @@ const CAR_MOVES: Record<CarMove, { beats: Omit<Beat, "who">[]; speed: (t: number
 /** A car of the cast on plain ground, drawn into a size × size box from (0, 0), looping the move over 2.4 s: the
  * Characters page, the car options and every cast picker. "turn" shows the top view, nose left then right. `art` is
  * the drawing style (§45.45; classic when left out), in the studio light. */
-export function previewCar(car: CarLook, style: MovementStyle, expression: Expression, move: CarMove, t: number, size: number, art: ArtStyle = "classic"): Prim[] {
-  return withArt(artOf(art), () => drawPreviewCar(car, style, expression, move, t, size));
+export function previewCar(car: CarLook, style: MovementStyle, expression: Expression, move: CarMove, t: number, size: number, art: ArtStyle = "classic", opts?: PreviewCarOpts): Prim[] {
+  return withArt(artOf(art), () => drawPreviewCar(car, style, expression, move, t, size, opts));
 }
 
-function drawPreviewCar(car: CarLook, style: MovementStyle, expression: Expression, move: CarMove, t: number, size: number): Prim[] {
+/** §45.48: `fit` scales the vehicle to its own length (a long one is not cut off) and draws all of it; `view` shows the
+ * nose ("front") or the tail ("back") on plain ground instead of the side. Left out: the preview is drawn as before. */
+export interface PreviewCarOpts {
+  fit?: boolean;
+  view?: "side" | "front" | "back";
+}
+
+function drawPreviewCar(car: CarLook, style: MovementStyle, expression: Expression, move: CarMove, t: number, size: number, opts?: PreviewCarOpts): Prim[] {
   const spec = CAR_MOVES[move] ?? CAR_MOVES.idle;
   const tt = ((t % CAR_LOOP) + CAR_LOOP) % CAR_LOOP;
   const view = move === "turn" ? "top" : "side";
@@ -135,7 +145,12 @@ function drawPreviewCar(car: CarLook, style: MovementStyle, expression: Expressi
     st.wheelTurn = -32 * Math.cos((Math.PI * 2 * tt) / CAR_LOOP);
   }
   const pen = new Pen({ x0: -size * 0.1, y0: -size * 0.1, x1: size * 1.1, y1: size * 1.1 });
-  const s = size / (view === "top" ? 760 : 1120);
+  if (opts?.view === "front" || opts?.view === "back") {
+    // the nose or the tail head on, on plain ground (the same 70 % ground line as the side view)
+    drawCarView(pen, car, opts.view, { x: size / 2, y: size * 0.7, w: size * 0.6, side: 0.3, light: F.light, braking: 0, lights: false, blink: 0, face: carHasFace(car) ? expression : null, t: tt, seed: d.seed });
+    return pen.out;
+  }
+  const s = opts?.fit && view !== "top" ? Math.min((size / 1120) * 1.45, (size * 0.86) / (2 * carSide(car).hl + 190)) : size / (view === "top" ? 760 : 1120);
   pen.translate(size / 2, view === "top" ? size / 2 : size * 0.7);
   pen.scale(s, s);
   pen.translate(-st.x * F.w, -st.y * F.h);

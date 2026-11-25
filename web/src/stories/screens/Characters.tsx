@@ -187,8 +187,8 @@ async function keepPhotos(ws: string, characterId: string, photos: Photo[]): Pro
 
 /** The look's parts a redesign changes as one ("body" is its shape, height and width; "face shape" its eyes to mouth). */
 const LOOK_GROUPS: (keyof CharacterLook)[][] = [["body", "height", "width"], ["skin"], ["hair"], ["eyes", "brows", "nose", "mouth"], ["outfit"], ["accessory"], ["outline"]];
-/** A car's parts the same way (§45.42), as the redesign's "What changes" names them (shape, paint, windows, …). */
-const CAR_GROUPS: (keyof CarLook)[][] = [["body", "length", "height"], ["paint", "accent", "pattern"], ["windows"], ["wheels"], ["lights"], ["extra"], ["face"], ["outline"]];
+/** A car's parts the same way (§45.42; `detail` whole, §45.48; `interior`, §45.47), as the redesign's "What changes" names them (shape, paint, windows, …). */
+const CAR_GROUPS: (keyof CarLook)[][] = [["body", "length", "height"], ["paint", "accent", "pattern"], ["windows"], ["wheels"], ["lights"], ["extra"], ["face"], ["outline"], ["detail"], ["interior"]];
 const OTHER_PARTS = ["expressions", "movementStyle", "voice", "name", "description", "personality", "traits"] as const;
 const same = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
 
@@ -208,7 +208,13 @@ export function mergeRedesign(now: CharacterInput, before: CharacterInput, next:
   const base: string[][] = isCar(out) ? CAR_GROUPS : LOOK_GROUPS;
   const grouped = new Set<string>(base.flat());
   const groups: string[][] = [...base, ...Object.keys(to).filter((k) => !grouped.has(k)).map((k) => [k])];
-  for (const g of groups) if (g.some((k) => !same(was[k], to[k]))) for (const k of g) look[k] = structuredClone(to[k]);
+  for (const g of groups) {
+    if (!g.some((k) => !same(was[k], to[k]))) continue;
+    for (const k of g) {
+      if (to[k] === undefined) delete look[k];
+      else look[k] = structuredClone(to[k]);
+    }
+  }
   const all = out as unknown as Record<string, unknown>;
   for (const k of OTHER_PARTS) if (!same(before[k], next[k])) all[k] = structuredClone(next[k]);
   return out;
