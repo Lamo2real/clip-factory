@@ -299,8 +299,11 @@ function AllClips() {
 }
 
 
-/** What's working: the learnings from the owner's best clips, and the way to all of them. */
-function Learnings({ learnings }: { learnings: Learning[] }) {
+/** What's working: the newest learning in two lines, See more for all of them in full, and the way to the whole list. */
+export function Learnings({ learnings }: { learnings: Learning[] }) {
+  const [open, setOpen] = useState(false);
+  const shown = open ? learnings : learnings.slice(0, 1);
+  const hasMore = learnings.length > 1 || (learnings[0]?.text.length ?? 0) > 110;
   return (
     <div className="learnings glass glass--green">
       <h2 className="display-3" id="learn-title">
@@ -308,9 +311,9 @@ function Learnings({ learnings }: { learnings: Learning[] }) {
       </h2>
       {learnings.length ? (
         <ul className="learnings__list">
-          {learnings.map((l) => (
+          {shown.map((l) => (
             <li key={l.learningId}>
-              <p className="user-text">{l.text}</p>
+              <p className={open ? "user-text" : "user-text learnings__brief"}>{l.text}</p>
               <span className="learnings__meta">
                 {l.kind === "week" ? "" : "Older note · "}
                 {relative(l.createdAt)} · from {plural(l.postIds.length, "post")}
@@ -321,9 +324,14 @@ function Learnings({ learnings }: { learnings: Learning[] }) {
       ) : (
         <p className="muted">Star your best clips in This week, and Clip Factory learns from them.</p>
       )}
-      <p className="learnings__more">
+      <div className="learnings__more">
+        {hasMore ? (
+          <button type="button" className="text-link learnings__toggle" aria-expanded={open} onClick={() => setOpen((o) => !o)}>
+            {open ? "See less" : "See more"}
+          </button>
+        ) : null}
         <A href={settingsPath("clip-making", "learned")}>See what it learned from your best clips</A>
-      </p>
+      </div>
     </div>
   );
 }
