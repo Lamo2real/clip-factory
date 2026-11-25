@@ -1,5 +1,5 @@
 {
- "version": "53b1c6bd9eb8",
+ "version": "77a85f1660d4",
  "parts": [
   {
    "id": "app-map",
@@ -325,7 +325,13 @@
   },
   {
    "id": "contracts-50",
-   "title": "CONTRACTS: 50. What a job's AI cost (owner request, 2026-11-25)",
+   "title": "CONTRACTS: 50. Library: sort the clips (owner request, 2026-11-25)",
+   "line": "Owner: \"filter or sort the videos by something ... most relevant or most popular or from low to high in views or from",
+   "chars": 1383
+  },
+  {
+   "id": "contracts-51",
+   "title": "CONTRACTS: 51. What a job's AI cost (owner request, 2026-11-25)",
    "line": "The owner: \"when a job is finished, I want to know the exact amount that Fable cost me, and the entire process in terms",
    "chars": 2879
   },
@@ -925,8 +931,14 @@
   },
   {
    "id": "adr-102",
-   "title": "DECISIONS: ADR-102 A job counts its own AI usage; dollars come from one price list in config/models.json",
-   "line": "Context. §50. The owner wants the exact AI cost of every finished job, per model, in tokens and dollars.",
+   "title": "DECISIONS: ADR-102 Library's sort is a quiet dropdown on the shared Dropdown, kept in the address",
+   "line": "Decision. Dropdown gets variant=\"sort\" (a caption line, not a button, and a list that unfolds and folds on one",
+   "chars": 505
+  },
+  {
+   "id": "adr-103",
+   "title": "DECISIONS: ADR-103 A job counts its own AI usage; dollars come from one price list in config/models.json",
+   "line": "Context. §51. The owner wants the exact AI cost of every finished job, per model, in tokens and dollars.",
    "chars": 1312
   },
   {

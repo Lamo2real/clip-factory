@@ -504,6 +504,20 @@ html:is(.see-through, [data-backdrop]) .perf__updated > span {
   box-shadow: var(--light-rim-2), var(--light-shade-2);
 }
 
+/* Library's Sort by line is the same groove as the filter bar beside it, in every state (the dropdown's own picked and
+   hover fills would otherwise put cream under its light words). */
+.dropdown--sort .dropdown__button,
+.dropdown--sort .dropdown__button.is-picked,
+.dropdown--sort .dropdown__button:where(:not(.is-picked)):hover,
+.dropdown--sort .dropdown__button:where(:not(.is-picked)):active {
+  background-color: rgb(var(--green-rgb) / min(1, var(--light-raise-veil)));
+  background-image: linear-gradient(rgb(var(--bone-rgb) / var(--light-raise-lift)), rgb(var(--bone-rgb) / var(--light-raise-lift)));
+  box-shadow: var(--light-rim-2), var(--light-shade-2);
+}
+.dropdown--sort .dropdown__button:focus-visible {
+  box-shadow: var(--focus), var(--light-rim-2);
+}
+
 /* The setup bar's strip (the glass the page scrolls under, behind the setup pill) holds no words of its own: the pill
    on it is a floating pane with its own tint and its own ladder. So the strip carries the plain panel veil without the
    ladder's pay, and still melts into the page across its feather (e2e/edges.spec.ts). */

@@ -2589,6 +2589,121 @@ html:where(.see-through, [data-backdrop]) .btn.post__again {
     transition: none;
   }
 }
+/* ---------- Sort by (Library): a quiet line, not a button, that unfolds a glass list ---------- */
+.toolbar__sort {
+  display: flex;
+  align-items: center;
+  margin-inline-start: auto;
+}
+.dropdown--sort {
+  width: auto;
+  max-width: none;
+}
+.dropdown--sort .dropdown__button {
+  position: relative;
+  width: auto;
+  min-height: 44px;
+  gap: 8px;
+  padding: 8px 16px;
+  /* The track of the filter bar next to it (glass.css gives it the same groove in every state). */
+  border-radius: var(--r-pill);
+}
+.dropdown--sort .dropdown__button.is-picked {
+  color: inherit;
+  text-shadow: none;
+}
+.dropdown--sort .dropdown__cap {
+  font-size: var(--fs-small);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.dropdown--sort .dropdown__value {
+  font-weight: 700;
+}
+/* A hairline under the pick that grows from its middle on hover and while open: the only sign it can be pressed. */
+.dropdown--sort .dropdown__button::after {
+  content: "";
+  position: absolute;
+  inset-inline: 16px;
+  bottom: 7px;
+  height: 1px;
+  background: currentColor;
+  opacity: 0.5;
+  transform: scaleX(0);
+  transition: transform var(--dur-2) var(--ease-unfold);
+}
+.dropdown--sort .dropdown__button:hover::after,
+.dropdown--sort.is-open .dropdown__button::after {
+  transform: scaleX(1);
+}
+.dropdown--sort .dropdown__chev {
+  transition: transform var(--dur-unfold-in) var(--ease-unfold);
+}
+.dropdown--sort .dropdown__list {
+  inset-inline: auto 0;
+  min-width: min(280px, calc(100vw - 32px));
+  /* Folded: no height at the top edge (the shadow's room stays at the sides); open: all of it, shadow too. */
+  clip-path: inset(0 -48px 100% -48px);
+  opacity: 0;
+  transform: translateY(-10px);
+  transition:
+    clip-path var(--dur-unfold-out) var(--ease-unfold),
+    transform var(--dur-unfold-out) var(--ease-unfold),
+    opacity var(--dur-unfold-out) var(--ease-unfold);
+  pointer-events: none;
+}
+.dropdown--sort .dropdown__list[data-up] {
+  clip-path: inset(100% -48px 0 -48px);
+  transform: translateY(10px);
+}
+.dropdown--sort .dropdown__list[data-state="open"] {
+  clip-path: inset(-48px);
+  opacity: 1;
+  transform: none;
+  pointer-events: auto;
+  transition-duration: var(--dur-unfold-in);
+}
+/* The choices come one after another once the list is nearly open, and leave together. */
+.dropdown--sort .dropdown__opt {
+  opacity: 0;
+  transform: translateY(-6px);
+  transition:
+    opacity var(--dur-unfold-out) var(--ease-unfold),
+    transform var(--dur-unfold-out) var(--ease-unfold),
+    background-color var(--dur-1) var(--ease-out);
+}
+.dropdown--sort .dropdown__list[data-state="open"] .dropdown__opt {
+  opacity: 1;
+  transform: none;
+  transition-duration: var(--dur-unfold-in), var(--dur-unfold-in), var(--dur-1);
+  transition-delay: calc(var(--i, 0) * 34ms + 90ms), calc(var(--i, 0) * 34ms + 90ms), 0ms;
+}
+/* A phone: the line sits at the left of its own row, and the list opens from its left edge. */
+@media (max-width: 640px) {
+  .toolbar__sort {
+    margin-inline-start: 0;
+    width: 100%;
+  }
+  .dropdown--sort .dropdown__list {
+    inset-inline: 0 auto;
+  }
+}
+/* Calm motion: no travel, the list just appears and goes (the choices too). */
+.reduce-motion .dropdown--sort .dropdown__list,
+.reduce-motion .dropdown--sort .dropdown__opt,
+.reduce-motion .dropdown--sort .dropdown__button::after {
+  transition: none;
+  transition-delay: 0ms;
+}
+@media (prefers-reduced-motion: reduce) {
+  .dropdown--sort .dropdown__list,
+  .dropdown--sort .dropdown__opt,
+  .dropdown--sort .dropdown__button::after {
+    transition: none;
+    transition-delay: 0ms;
+  }
+}
+
 /* A dropdown inside a Review place row may open over the rows below it. */
 .place-row:has(.dropdown.is-open) {
   position: relative;
@@ -2618,7 +2733,7 @@ html:where(.see-through, [data-backdrop]) .btn.post__again {
   gap: 4px;
 }
 
-/* What a job's AI cost (docs/CONTRACTS.md §50). */
+/* What a job's AI cost (docs/CONTRACTS.md §51). */
 .job-row__cost {
   font-size: var(--fs-small);
   color: var(--ink-3);

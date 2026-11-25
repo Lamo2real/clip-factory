@@ -81,7 +81,7 @@ export interface ClipTarget {
   max: number;
 }
 
-/** One model's share of a job's AI cost (CONTRACTS §50). Tokens are exact; `dollars` is absent when the price is not confirmed. */
+/** One model's share of a job's AI cost (CONTRACTS §51). Tokens are exact; `dollars` is absent when the price is not confirmed. */
 export interface AiCostModel {
   key: string;
   label: string;
@@ -142,7 +142,7 @@ export interface Job {
   remakeOf?: { clipId: string; jobId: string };
   /** The language the video speaks, BCP 47 from Transcribe ("en-US", §39.3). */
   sourceLanguage?: string;
-  /** What the job's AI cost: tokens and US dollars, per model (CONTRACTS §50). */
+  /** What the job's AI cost: tokens and US dollars, per model (CONTRACTS §51). */
   aiCost?: AiCost;
   createdAt: string;
   updatedAt: string;

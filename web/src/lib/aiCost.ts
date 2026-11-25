@@ -1,4 +1,4 @@
-// What a job's AI cost (docs/CONTRACTS.md §50): only formatting. Tokens are shown exactly, money to the cent.
+// What a job's AI cost (docs/CONTRACTS.md §51): only formatting. Tokens are shown exactly, money to the cent.
 import type { AiCost, Job } from "../api/types.ts";
 import { formatMoney } from "./money.ts";
 

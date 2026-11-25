@@ -232,7 +232,7 @@ export function seed(): Store {
       notes: "#gtarp",
       clipCount: 7,
       model: "fable-5-1",
-      // What its AI cost (§50). The kick job below is "from before", so it has none.
+      // What its AI cost (§51). The kick job below is "from before", so it has none.
       aiCost: {
         v: 1,
         models: [

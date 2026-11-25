@@ -208,7 +208,7 @@ def make_run(
             liveness = Liveness()
             ticker = asyncio.create_task(keep_ticking(liveness), name=f"tick-{job_id}")
             tracker = make_tracker(store, user_id, job_id, session_id=session_id, resume=job)
-            # What this job's AI costs (§50): every model answer, Transcribe's minutes and the embeddings of this run
+            # What this job's AI costs (§51): every model answer, Transcribe's minutes and the embeddings of this run
             # (and of earlier runs of the same job, from the saved ``aiCost``) land in one meter.
             meter = usage_mod.Meter(
                 usage_mod.Prices.load(Path(os.environ.get("CF_CONFIG_DIR", "/app/config"))),

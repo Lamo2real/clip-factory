@@ -936,7 +936,7 @@ def test_post_jobs_never_takes_a_copys_fields(call: Call) -> None:
 
 
 def test_a_jobs_ai_cost_goes_out_as_stored_and_a_retry_keeps_it() -> None:
-    """docs/CONTRACTS.md §50: ``aiCost`` is public and additive; Try again never resets it, so it adds up."""
+    """docs/CONTRACTS.md §51: ``aiCost`` is public and additive; Try again never resets it, so it adds up."""
     cost = {"v": 1, "models": [{"key": "fable-5-1", "tokens": 5}], "totalTokens": 5, "totalDollars": 0.01}
     item = {"jobId": "j1", "status": "failed", "aiCost": cost, "sessionId": "s"}
     assert jobs.public_job(item)["aiCost"] == cost

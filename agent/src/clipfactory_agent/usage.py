@@ -1,4 +1,4 @@
-"""What a job's AI really cost (docs/CONTRACTS.md §50): the tokens every model answered with, the minutes Transcribe
+"""What a job's AI really cost (docs/CONTRACTS.md §51): the tokens every model answered with, the minutes Transcribe
 heard, and the dollars they come to, kept on the Job item as ``aiCost``.
 
 Every place that calls a model records what the answer itself reported (Bedrock Converse ``usage``, the Agent SDK

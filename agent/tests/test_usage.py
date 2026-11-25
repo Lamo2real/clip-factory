@@ -1,4 +1,4 @@
-"""What a job's AI cost (docs/CONTRACTS.md §50): usage capture, the price maths and the stored shape."""
+"""What a job's AI cost (docs/CONTRACTS.md §51): usage capture, the price maths and the stored shape."""
 
 from __future__ import annotations
 

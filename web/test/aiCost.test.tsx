@@ -1,4 +1,4 @@
-// What a job's AI cost (docs/CONTRACTS.md §50): old jobs show nothing, a finished job shows the total, the tokens
+// What a job's AI cost (docs/CONTRACTS.md §51): old jobs show nothing, a finished job shows the total, the tokens
 // and a fold with a row per model, a failed job says "so far", an estimate says "about".
 import { act } from "react";
 import { createRoot, type Root } from "react-dom/client";

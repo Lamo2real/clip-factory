@@ -1,4 +1,4 @@
-// "What this cost" (docs/CONTRACTS.md §50): the AI's bill for one job, in one small block. The total is big, the tokens
+// "What this cost" (docs/CONTRACTS.md §51): the AI's bill for one job, in one small block. The total is big, the tokens
 // sit under it, and one fold lists each model. Numbers roll when they change (a running job's cost keeps growing). A
 // failed or stopped job shows what it spent so far. Old jobs have no cost: nothing is drawn.
 import type { Job } from "../../api/types.ts";
