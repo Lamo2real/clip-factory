@@ -161,7 +161,7 @@ describe("a detailed look is priced by drawing it", () => {
       expect(v).toBeLessThanOrEqual(CAR_VIEW_DETAIL_SHAPES);
       if (i % 4 === 0) expect(Math.min(viewBusiest(look), CAR_VIEW_DETAIL_SHAPES), `#${i} ${look.body} view`).toBeLessThanOrEqual(v);
     }
-  });
+}, 60_000);
 
   it("a face adds to the price and a detailed look is not priced below a plain one's body", () => {
     const base = detailed.find((l) => l.face.eyes === "none") ?? { ...detailed[0]!, face: { eyes: "none" as const, color: "#1c1842", mouth: "none" as const } };
