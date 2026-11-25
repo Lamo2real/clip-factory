@@ -1,7 +1,12 @@
 // The app's own dropdown (never the OS list): a soft-fill button that opens a glass list of choices. Used where a
 // platform's rules ask for a dropdown (TikTok's "Who can see it", §17.8) (and wherever a long pick-one list needs one). `value` "" shows the
 // placeholder: nothing is picked until the owner picks.
-import { useEffect, useId, useLayoutEffect, useRef, useState, type KeyboardEvent } from "react";
+//
+// variant "sort" (Library's Sort by): not a button but a quiet line (a small caption, the pick and a chevron) that
+// unfolds a glass list. The list opens and closes on one slow-in, fast-middle, slow-out curve (--ease-unfold): it unfolds
+// from its top edge, the choices follow one after another. It stays mounted while it closes, so it folds away as
+// smoothly as it opened.
+import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties, type KeyboardEvent } from "react";
 import { Icon } from "./Icon.tsx";
 
 export interface DropdownOption {
@@ -13,6 +18,9 @@ export interface DropdownOption {
   disabled?: boolean;
 }
 
+/** How long the list takes to fold away (screens.css --dur-unfold-out): it is unmounted when it has. */
+const UNFOLD_MS = 340;
+
 export function Dropdown({
   label,
   labelledBy,
@@ -22,6 +30,8 @@ export function Dropdown({
   onChange,
   disabled = false,
   describedBy,
+  variant,
+  caption,
 }: {
   /** Read by screen readers when there is no visible label to point at. */
   label?: string;
@@ -33,6 +43,10 @@ export function Dropdown({
   onChange: (value: string) => void;
   disabled?: boolean;
   describedBy?: string;
+  /** "sort": the quiet line and the unfolding list (see above). Absent: the soft-fill button as before. */
+  variant?: "sort";
+  /** variant "sort": the small word before the pick ("Sort by"). */
+  caption?: string;
 }) {
   const id = useId();
   const [open, setOpen] = useState(false);
@@ -43,6 +57,29 @@ export function Dropdown({
   const list = useRef<HTMLUListElement>(null);
   const root = useRef<HTMLDivElement>(null);
   const picked = options.find((o) => o.value === value);
+  // variant "sort": the list is drawn while it folds away too, and "entered" is set a frame after it mounts so the
+  // unfolding has a start to move from.
+  const animated = variant === "sort";
+  const [closing, setClosing] = useState(false);
+  const [entered, setEntered] = useState(false);
+  const rendered = open || closing;
+  const wasOpen = useRef(false);
+  useEffect(() => {
+    if (!animated) return;
+    // Only a list that was open folds away: a list that never opened is never drawn.
+    const was = wasOpen.current;
+    wasOpen.current = open;
+    if (open) {
+      setClosing(false);
+      const frame = requestAnimationFrame(() => requestAnimationFrame(() => setEntered(true)));
+      return () => cancelAnimationFrame(frame);
+    }
+    setEntered(false);
+    if (!was) return;
+    setClosing(true);
+    const done = setTimeout(() => setClosing(false), UNFOLD_MS);
+    return () => clearTimeout(done);
+  }, [open, animated]);
 
   // A tap anywhere else closes the list.
   useEffect(() => {
@@ -142,7 +179,7 @@ export function Dropdown({
   }
 
   return (
-    <div className={`dropdown${open ? " is-open" : ""}`} ref={root}>
+    <div className={`dropdown${animated ? " dropdown--sort" : ""}${open ? " is-open" : ""}`} ref={root}>
       <button
         ref={button}
         type="button"
@@ -159,16 +196,18 @@ export function Dropdown({
         onClick={() => (open ? setOpen(false) : show())}
         onKeyDown={onButtonKey}
       >
+        {animated && caption ? <span className="dropdown__cap">{caption}</span> : null}
         <span className={`dropdown__value${picked ? "" : " is-empty"}`}>{picked ? picked.label : placeholder}</span>
         <Icon name="chevronDown" size={18} className="icon dropdown__chev" />
       </button>
-      {open ? (
+      {(animated ? rendered : open) ? (
         <ul
           ref={list}
           id={`${id}-list`}
           className="dropdown__list"
           style={up ? { top: "auto", bottom: "calc(100% + 6px)" } : undefined}
           data-up={up || undefined}
+          data-state={animated ? (open && entered ? "open" : "closed") : undefined}
           role="listbox"
           tabIndex={-1}
           aria-labelledby={labelledBy}
@@ -183,6 +222,7 @@ export function Dropdown({
               role="option"
               aria-selected={o.value === value}
               aria-disabled={o.disabled || undefined}
+              style={animated ? ({ "--i": i } as CSSProperties) : undefined}
               className={`dropdown__opt${i === at ? " is-at" : ""}${o.value === value ? " is-on" : ""}${o.disabled ? " is-disabled" : ""}`}
               onPointerEnter={() => !o.disabled && setAt(i)}
               onClick={() => pick(i)}

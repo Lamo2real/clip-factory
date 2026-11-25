@@ -1,5 +1,5 @@
 {
-  "version": "b112b0fd90bd",
+  "version": "1e235d83486c",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -4756,6 +4756,7 @@
         "review",
         "show",
         "views",
+        "sort",
         "post",
         "mac",
         "paste",
@@ -4763,8 +4764,7 @@
         "yes",
         "tiktok",
         "add",
-        "make",
-        "earlier"
+        "make"
       ],
       "answer": "Library has every clip you uploaded.",
       "steps": [

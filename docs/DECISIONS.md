@@ -2871,3 +2871,12 @@ WebView2's budget. Nothing stored changes.
   redesign read as before. The 3-at-once check is not atomic, so two creates in one moment could briefly make 4. Counts use a strongly consistent read, and deleting a designing draft still counts against the 3 (its task keeps running): both are known soft limits.
   Amends [ADR-97](#adr-97-video-drafts-are-their-own-item-vehicles-are-car-bodies-shown-as-vehicles-roles-are-additive-fields)
   only for where a vehicle design waits.
+
+## ADR-102 Library's sort is a quiet dropdown on the shared Dropdown, kept in the address
+
+**Decision.** `Dropdown` gets `variant="sort"` (a caption line, not a button, and a list that unfolds and folds on one
+`--ease-unfold` curve); the other dropdowns are unchanged. The sort is `?sort=` beside `?show=`. "Most popular" is
+likes, comments and shares; views are their own two choices.
+
+**Why.** TikTok's dropdown rules and Clips Funded's uses stay byte for byte; the address keeps Back and reload right.
+
