@@ -4700,6 +4700,9 @@ Checked results:
 
 #### 45.45.5 People (characters builder)
 
+> Amended by §45.49 (2026-11-25): night drive's people are now the chunky look. The eyes, brows, hair, hands, shoes and
+> clothes below are what they were drawn like before that; §45.49 wins for how they are drawn now.
+
 The parts and proportions do not change. `geometry()` and the BODY table stay, so the big head (about half the body)
 and the chunky body stay. Each body keeps its own head shape, so a character is still the same character. Night drive
 changes only the surface drawing. All of it sits behind `nightDrive()`, so the classic path is byte-identical.
@@ -6274,3 +6277,27 @@ tests: §45.42.6 still says no make, no badge and no logo, ever.) ADR-98. All ad
   one, with parts and shading); riders seen head on in open cars and on bikes; a second look (the picture of the best
   option sent back beside the photo for corrected numbers) if the likeness is not enough; fixing the old looks'
   defects, which needs the owner's yes and an engine-version bump.
+
+### 45.49 Chunky people: a bit more shape, still cartoon (owner request, 2026-11-25; wins over §45.45.5 for how a person is drawn in night drive)
+
+Owner, with a picture of his character: "can you be more creative but still keep him cartoon i'd like to change his
+look and style a bit just adding a bit more shape but still aniated and cartoon". Three looks were drawn from the real
+engine; the owner picked **Chunky**. ADR-99.
+
+- **Only drawing changes, only in night drive.** Bright (`classic`) and every script without `art` draw exactly as
+  before. `geometry()`, poses, the camera, seats and the stored `CharacterLook` are unchanged (no field added, renamed or
+  removed), so every saved character and story draws, in the new look in night drive.
+- **Head and face.** A rounded-square head under the soft ink outline. Big glossy eyes: a warm white (`ND.eyeWhite`,
+  dimmed by the light with `lit()`), an iris in the picked colour, a dark pupil with the lid line and a sparkle. Thick
+  rounded brows (tilt, height and the 20% overshoot as before), round pink cheeks (`ND.cheek`), all 12 mouths and 8
+  extras redrawn thicker. Scared now has small irises and chattering teeth. Same-colour parts are one polygon.
+- **Hair and body.** Hair is built on the skull's own outline: a kid's quiff, spiky, curly, long, bun and cap, at most
+  12 rig units above `g.top`. A squarer jumper with a roll collar, hem and cuffs, bold stripes or dots, thick tapered
+  arms and legs, mitts with thumbs, big sneakers on a pale sole, one soft ground glow. Accessories keep the same weight.
+- **Budget.** At most 92 prims a person (79 measured at rest, 78 in action), 90 a bust, 24 a foot; `LIMITS` and
+  `SHAPES_ND` unchanged. `ENGINE_VERSION` is 8 (§45.48's "stays 7" was true for vehicles only); the shape and night
+  goldens are written again, the vehicles' legacy golden keeps its classic half and rewrites only `shotsNight`.
+- **Known gaps.** The bust's body and the wheel hands keep today's sleeves and mitt under the new head, the pedal shoe
+  is today's with the new sole, and a three-quarter bust mirrors the hairdo instead of turning it.
+- **Tests.** `storiesChunkyPeople` (new `pen.ts` generators, tokens, every hair, accessory, body, hand and eye shape,
+  a saved look), `storiesNightPeople`, the goldens, `storiesCarLegacy` and the agent's `test_stories_raster.py`.

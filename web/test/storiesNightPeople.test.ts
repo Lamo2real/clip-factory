@@ -1,13 +1,13 @@
 // Night drive people (docs/design-night-style.md §5, CONTRACTS §45.45): the same characters, drawn with soft thin
-// outlines, cel shading, rim light and soft shadows, tiny dot eyes and short thick brows that carry the feeling, in the
-// place's light. Classic draws exactly as before (every older story and golden stays the same), each character keeps
+// outlines, cel shading, rim light and soft shadows, big glossy eyes and short thick brows that carry the feeling, in the
+// place's light (the chunky look, CONTRACTS §45.49). Classic draws exactly as before (every older story and golden stays the same), each character keeps
 // its own geometry, faces and colours (lit, never swapped), and the shots get a bust, hands on the wheel and a foot on
 // a pedal in both styles. Also: motion.ts says when the face last changed (faceSince) for the brows' small overshoot.
 import { describe, expect, it } from "vitest";
-import { grade, ink, inkPx, LIGHTS, ND, withWarm } from "../src/stories/engine/art.ts";
+import { grade, ink, inkPx, lift, lit as tone, LIGHTS, ND, withWarm } from "../src/stories/engine/art.ts";
 import { FACES, NOISE_MOUTH } from "../src/stories/engine/face.ts";
 import { F, inFrame, withArt } from "../src/stories/engine/frame.ts";
-import { mix } from "../src/stories/engine/math.ts";
+import { luminance, mix } from "../src/stories/engine/math.ts";
 import { actorState, faceSince, restPose, shownExpression, STYLES } from "../src/stories/engine/motion.ts";
 import { Pen } from "../src/stories/engine/pen.ts";
 import { drawBust, drawCharacter, drawFoot, drawWheelHands, geometry, headTop, REST, type Pose } from "../src/stories/engine/rig.ts";
@@ -135,19 +135,27 @@ describe("classic draws exactly as before", () => {
     }
   });
 
-  it("a classic face keeps its white eyes and irises; night drive's are dots with no white", () => {
+  it("a classic face keeps its pure white eyes; night drive's eyes are big glossy shapes with a warm white, an iris and a sparkle", () => {
     const l = look();
     const classic = standing(l);
     const night = lit("night_drive", "night", () => standing(l));
     expect(classic.some((p) => p.k === "ellipse" && p.color === "#ffffff")).toBe(true);
+    // night never uses the pure white of classic: the white is a warm tone, dimmed by the place's light
     expect(night.some((p) => (p.k === "ellipse" || p.k === "circle") && p.color === "#ffffff")).toBe(false);
-    const dot = lit("night_drive", "night", () => mix(ND.eye, grade("#1c1842"), 0.55));
-    expect(night.filter((p) => p.k === "ellipse" && p.color === dot)).toHaveLength(2);
+    const white = lit("night_drive", "night", () => tone(ND.eyeWhite, 0.5));
+    expect(night.filter((p) => p.k === "poly" && p.color === white)).toHaveLength(1);
+    // both irises are one shape in the picked colour (a very dark colour is lifted one small step), both sparkles one shape
+    const iris = lit("night_drive", "night", () => {
+      const c = grade("#1c1842");
+      return luminance(c) < 0.1 ? lift(c, 0.09) : c;
+    });
+    expect(night.filter((p) => p.k === "poly" && p.color === iris)).toHaveLength(1);
+    expect(night.filter((p) => p.k === "poly" && p.color === ND.glint)).toHaveLength(1);
   });
 });
 
 describe("the picked eye colour", () => {
-  it("tints night drive's dot eyes, standing and up close, and a pupil shows in the close-up", () => {
+  it("tints night drive's irises, standing and up close, and a pupil shows in the close-up", () => {
     const navy = look();
     const green = look({ eyes: { shape: "round", color: "#47d6a0" } });
     expect(lit("night_drive", "night", () => standing(green))).not.toEqual(lit("night_drive", "night", () => standing(navy)));
@@ -163,9 +171,10 @@ describe("the picked eye colour", () => {
       });
     const a = close(green);
     expect(a).not.toEqual(close(navy));
-    const tint = lit("night_drive", "cabin", () => mix(ND.eye, grade("#47d6a0"), 0.55));
-    expect(a.filter((p) => p.k === "ellipse" && p.color === tint)).toHaveLength(2);
-    expect(a.filter((p) => p.k === "ellipse" && p.color === ND.eye)).toHaveLength(2);
+    // the irises are one shape in the picked colour, and the pupils and the lid lines one dark shape
+    const tint = lit("night_drive", "cabin", () => grade("#47d6a0"));
+    expect(a.filter((p) => p.k === "poly" && p.color === tint)).toHaveLength(1);
+    expect(a.filter((p) => p.k === "poly" && p.color === ND.eye).length).toBeGreaterThanOrEqual(1);
   });
 });
 
@@ -199,13 +208,20 @@ describe("night drive people", () => {
     const g = geometry(l);
     const night = lit("night_drive", "night", () => standing(l));
     const skin = lit("night_drive", "night", () => grade("#e8b58f"));
-    const head = night.filter((p): p is Extract<Prim, { k: "ellipse" }> => p.k === "ellipse" && Math.abs(p.rx - g.headRX * 5) < 3.5);
-    const fill = head.find((p) => p.color === skin)!;
-    const line = head.find((p) => p.color === ink("#1c1842"))!;
+    const edge = lit("night_drive", "night", () => ink("#1c1842"));
+    // the head is a rounded square: a skin polygon on an ink polygon of the same points, a little bigger all round
+    const width = (p: Extract<Prim, { k: "poly" }>) => {
+      const xs = p.pts.filter((_, i) => i % 2 === 0);
+      return Math.max(...xs) - Math.min(...xs);
+    };
+    const polys = night.filter((p): p is Extract<Prim, { k: "poly" }> => p.k === "poly" && Math.abs(width(p) - g.headRX * 10) < g.headRX * 10 * 0.12);
+    const fill = polys.find((p) => p.color === skin)!;
+    const line = polys.find((p) => p.color === edge && fill && p.pts.length === fill.pts.length)!;
     expect(fill).toBeDefined();
     expect(line).toBeDefined();
-    expect(line.rx - fill.rx).toBeCloseTo(inkPx(5), 0);
-    expect(line.rx - fill.rx).toBeLessThan(3);
+    const grow = (width(line) - width(fill)) / 2;
+    expect(grow).toBeCloseTo(inkPx(5), 0);
+    expect(grow).toBeLessThan(3);
     // classic: 1.7 units, 8.5 px at this size
     const classic = standing(l).filter((p): p is Extract<Prim, { k: "ellipse" }> => p.k === "ellipse" && p.color === "#1c1842" && Math.abs(p.rx - g.headRX * 5) < 10);
     expect(classic[0]!.rx - g.headRX * 5).toBeCloseTo(8.5, 0);
@@ -232,21 +248,24 @@ describe("night drive people", () => {
   it("the lamps' rim light and the soft shadows (cel, chin and feet) are drawn", () => {
     const night = lit("night_drive", "night", () => standing(look()), 0.5);
     const rim = withWarm(LIGHTS.night, 0.5);
-    expect(night.filter((p) => p.k === "line" && p.color === rim.rim && Math.abs((p.a ?? 1) - rim.rimA) < 0.002).length).toBeGreaterThanOrEqual(2);
-    expect(night.filter((p) => "color" in p && p.color === ND.ao).length).toBeGreaterThanOrEqual(3);
+    // (the body, the back leg and the hair each get a rim at their own strength)
+    expect(night.filter((p) => p.k === "line" && p.color === rim.rim && (p.a ?? 1) > 0 && (p.a ?? 1) <= rim.rimA + 0.2).length).toBeGreaterThanOrEqual(3);
+    expect(night.filter((p) => "color" in p && p.color === ND.ao).length).toBeGreaterThanOrEqual(2);
     expect(night.some((p) => p.k === "poly" && p.color === ND.celDark)).toBe(true);
     // in a car the feet are hidden: no shadow under them
     const inCar = lit("night_drive", "night", () => standing(look(), "neutral", { inCar: true }));
     expect(inCar.filter((p) => p.k === "ellipse" && p.color === ND.ao)).toHaveLength(0);
   });
 
-  it("each face reads: brows are tapered 9-point strokes, open mouths are dark red, gritted teeth and a humming mouth stay closed", () => {
+  it("each face reads: both brows are one joined shape, open mouths are dark red, gritted teeth and a humming mouth stay closed", () => {
     const l = look();
-    const brows = (face: Expression) => lit("night_drive", "night", () => standing(l, face)).filter((p) => p.k === "poly" && p.pts.length === 18);
-    for (const face of EXPRESSIONS) expect(brows(face).length, face).toBeGreaterThanOrEqual(2);
+    const browC = lit("night_drive", "night", () => mix(grade("#3b2a1a"), ND.eye, 0.5));
+    const brows = (face: Expression) => lit("night_drive", "night", () => standing(l, face)).filter((p) => p.k === "poly" && p.color === browC);
+    for (const face of EXPRESSIONS) expect(brows(face), face).toHaveLength(1);
     const prims = (face: Expression) => lit("night_drive", "night", () => standing(l, face));
-    for (const face of ["happy", "laughing", "surprised", "shocked"] as Expression[]) expect(prims(face).some((p) => p.k === "poly" && p.color === ND.mouthInside), face).toBe(true);
-    for (const face of ["neutral", "worried", "sad", "determined", "thinking", "proud", "scared", "relieved"] as Expression[]) expect(prims(face).some((p) => "color" in p && p.color === ND.mouthInside), face).toBe(false);
+    // (an "o" mouth is an ellipse, the bigger open mouths are polygons; scared's chattering mouth is open, worried keeps its wavy line)
+    for (const face of ["happy", "laughing", "surprised", "shocked", "scared"] as Expression[]) expect(prims(face).some((p) => (p.k === "poly" || p.k === "ellipse") && p.color === ND.mouthInside), face).toBe(true);
+    for (const face of ["neutral", "worried", "sad", "determined", "thinking", "proud", "relieved"] as Expression[]) expect(prims(face).some((p) => "color" in p && p.color === ND.mouthInside), face).toBe(false);
     expect(prims("angry").some((p) => "color" in p && p.color === ND.teeth)).toBe(true);
     // a shout while a noise plays opens the angry mouth; a humming voice keeps it closed
     const shout = { ...FACES.angry, mouth: NOISE_MOUTH.yelp.mouth, mouthOpen: 1 };
@@ -282,8 +301,11 @@ describe("night drive people", () => {
       };
       const c = bounds(standing(l));
       const n = bounds(lit("night_drive", "night", () => standing(l)));
-      expect(Math.abs(n.top - c.top), `${l.body} ${l.hair.style}`).toBeLessThan(12);
-      expect(Math.abs(n.bottom - c.bottom), `${l.body} ${l.hair.style}`).toBeLessThan(12);
+      // (the chunky hairdo stands up a little: the hair stays within 24 px of classic's at this size)
+      expect(Math.abs(n.top - c.top), `${l.body} ${l.hair.style}`).toBeLessThan(24);
+      // the shoes' soles reach the ground line, never lower than classic's heavy outline does
+      expect(n.bottom, `${l.body} ${l.hair.style}`).toBeLessThanOrEqual(c.bottom + 2);
+      expect(c.bottom - n.bottom, `${l.body} ${l.hair.style}`).toBeLessThan(20);
       expect(g.headRX).toBeGreaterThan(0);
     }
   });

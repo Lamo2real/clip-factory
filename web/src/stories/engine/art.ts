@@ -148,6 +148,14 @@ export const ND = {
   teeth: "#efe9dc",
   blush: "#c0756a",
   flush: "#a33a2a",
+  /** the chunky people (rig.ts, face.ts): the warm white of an eye, the pink of a round cheek, the pale rubber of a
+   * shoe's sole and toe cap, the darker gum sole under a pale shoe, and the warm white of a glossy streak. The eye
+   * white and the rubber stand in the place's light (art.ts `lit`), so they never glow at night. */
+  eyeWhite: "#fbf5ea",
+  cheek: "#e8776c",
+  sole: "#f1e7d6",
+  soleGum: "#8a6a4f",
+  gloss: "#fff3dc",
   // shading
   celDark: "#141018",
   ao: "#0b0a10",
@@ -183,6 +191,12 @@ export function grade(c: Hex, L: Readonly<Light> = F.light): Hex {
   g = mix(g, ND.celDark, L.dark);
   if (L.warm > 0) g = mix(g, mul(c, "#ffc07a"), 0.3 * L.warm);
   return g;
+}
+
+/** A pale token (an eye's white, a shoe's rubber sole) as it looks in the light: `k` of the way to its graded tone, so
+ * it dims with the night but stays the brightest thing on a face. The studio light gives it back unchanged. */
+export function lit(c: Hex, k = 0.7): Hex {
+  return mix(c, grade(c), k);
 }
 
 /** The cel shadow of a colour: k of the way to ND.celDark. */

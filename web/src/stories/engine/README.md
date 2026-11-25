@@ -339,8 +339,10 @@ the same prims for a missing `art` and for `"classic"`. `inFrame` puts the style
     gold bloom round a cobra head (`ND.lampHead`, `ND.lampCore`). Headlights
     and tail lights fade the same soft way, each one glow (`car.ts bloom`, `tailGlow`, `beamGlow` and `lightGlow`,
     `carView.ts headBloom`, `softPair`, `softBar`), the glow under a lens in the front and back views.
-  * `rig.ts`, `face.ts`: the night people (dot eyes tinted with the picked eye colour, a pupil up close, short thick
-    brows, soft scalloped hair with strand groups, cel shadows, rim light along the hair's own edge, folds) and three
+  * `rig.ts`, `face.ts`: the night people, the chunky look (CONTRACTS §45.49: a rounded-square head, big glossy eyes
+    with a warm white, an iris in the picked eye colour and a sparkle, short thick brows, a sculpted quiff and five other
+    hairdos built on the skull's own outline, a jumper with a roll collar and hem, thick tapered limbs, mitts with thumbs,
+    big sneakers, cel shadows and rim light; same joints as Bright) and three
     new drawings for the shots, both styles: `drawBust` (front or three-quarter, from the head's centre),
     `drawWheelHands` and `drawFoot`. `motion.ts` gives `faceSince`, so the brows overshoot a new face by 20% for
     0.12 s.

@@ -40,7 +40,7 @@ describe("the new vehicles", () => {
     for (const b of CATALOG.carLooks.body) expect(VEHICLE_OF[b.id as CarBody], b.id).toBeDefined();
     expect(CATALOG.props.find((p) => p.id === "car")?.label).toBe("Vehicle");
     // the engine itself is unchanged in its version: the new bodies and places are additive
-    expect(ENGINE_VERSION).toBe(7);
+    expect(ENGINE_VERSION).toBe(8);
   });
 
   it("pass the look check, an interior too; a bad interior says what to fix in one sentence", () => {

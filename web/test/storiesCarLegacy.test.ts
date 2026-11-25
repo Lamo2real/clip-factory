@@ -1,7 +1,8 @@
 // The legacy golden (the "Realistic vehicles" work, WP-0). A vehicle look WITHOUT `detail` must draw byte for byte as
 // it did before that work, in every view and both styles. This file was written from the untouched engine and its
 // fixture (fixtures/stories-car-legacy.json) holds one sha256 per group of draw lists. It is never rewritten
-// afterwards: a changed hash means the classic drawing changed. (STORIES_GOLDENS=write only makes the fixture when it
+// afterwards: a changed hash means the classic drawing changed (the one exception is shotsNight: night drive's people
+// changed with the chunky look, CONTRACTS §45.49). (STORIES_GOLDENS=write only makes the fixture when it
 // does not exist yet, on the untouched code.)
 import { createHash } from "node:crypto";
 import { existsSync, readFileSync, writeFileSync } from "node:fs";
@@ -191,9 +192,11 @@ function story(art: ArtStyle, cuts: ShotCue[], car: CarLook = CLASSIC_OWN): Stor
   return normalizeScript(r.script);
 }
 
-function shotsHash(): string {
+/** The shots in one style: a frame with no shot cue and a frame of every shot. Night drive's people are the chunky
+ * look (CONTRACTS §45.49), so only the classic half stays frozen; the night half is written again with the engine. */
+function shotsHash(styles: ArtStyle[]): string {
   const h = createHash("sha256");
-  for (const art of ["night_drive", "classic"] as ArtStyle[]) {
+  for (const art of styles) {
     h.update(JSON.stringify(drawFrame(story(art, []), 40)));
     for (const shot of SHOTS) {
       for (const fr of [40, 100]) h.update(JSON.stringify(drawFrame(story(art, [{ at: 0.1, shot }]), fr)));
@@ -246,7 +249,8 @@ function compute(): Record<string, string | number> {
     out[`sideTop/${name}`] = sideTopHash(cars);
     out[`endViews/${name}`] = endViewHash(cars);
   }
-  out.shots = shotsHash();
+  out.shotsClassic = shotsHash(["classic"]);
+  out.shotsNight = shotsHash(["night_drive"]);
   out.previews = previewHash();
   out.plainViews = plainViewHash();
   for (const [k, v] of Object.entries(budgetNumbers())) out[`budget/${k}`] = v;

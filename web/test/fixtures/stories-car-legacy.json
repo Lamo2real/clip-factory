@@ -1,5 +1,5 @@
 {
-  "note": "sha256 of the classic vehicle draw lists; written once from the untouched engine; never rewrite",
+  "note": "sha256 of the classic vehicle draw lists; written once from the untouched engine; never rewrite; only shotsNight (the night frames, with their people) was written again for the chunky people, CONTRACTS §45.49, and shotsClassic is the old engine's",
   "golden": {
     "sideTop/withEyes": "5f6545edb5c8b82f880b3fc6154701ff64363f179e585aea7c83443a0e00868a",
     "endViews/withEyes": "1eb531fff92384e581189f3429d85e1b036c369a2fdec1cb47bf86d85881650a",
@@ -9,7 +9,8 @@
     "endViews/default": "855d6856c312bdd4b4a3f12f2e06da1ea67e559f18c7940a64740d75111c6fc2",
     "sideTop/bodies": "a16fd20da6c6a53a9c35c1f2ac693d0ce416e67393b4a953bbdccf38a8d00c9f",
     "endViews/bodies": "2a17b672aa9d3d8d040ae3bf7460b2424ea5a2d292533f68584bc96fe15b5e06",
-    "shots": "52fcadd89888a61b5f5d7aa6d6bd5b1adc353cd39532ca0f330217e18c669b67",
+    "shotsClassic": "9aae6d3e9b2d89662e1662fca046037d06474d991db3137858db0c2f6826c715",
+    "shotsNight": "81e2a97ab5dccf6e7caccc6319c1e184ed94496c6ca0849ff68807b210ef52f5",
     "previews": "b98c52281a8f36aa33370e0cdbec1af80b219de651f2447cf8150df1d845f6d4",
     "plainViews": "11821d07c2c8dc9994c7a3328b2c66aa4b38c281b15aab6243429576a786520a",
     "budget/CAR_CAST_SHAPES": 56,
