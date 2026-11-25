@@ -33,8 +33,11 @@ const REDESIGN_KEYS = new Set(["more", "override"]);
 
 /** How long a practice run takes: the knob, else 20 to 40 seconds (a little different each time). */
 export function runSeconds(store: MockStore): number {
-  const knob = Number(store.knobs.vehicleSeconds);
-  if (Number.isFinite(knob) && knob > 0) return knob;
+  // vehicleSeconds, else the other practice tasks' knob (taskSeconds), so the browser tests that speed those up speed this up.
+  for (const k of [store.knobs.vehicleSeconds, store.knobs.taskSeconds]) {
+    const n = Number(k);
+    if (k !== undefined && k !== null && Number.isFinite(n) && n > 0) return n;
+  }
   return 20 + ((store.vehicleDrafts.length * 7 + store.tasks.length * 3) % 21);
 }
 
