@@ -769,7 +769,16 @@ test.describe("the floating setup list on a phone", () => {
     await settle(page);
     const under = await page.evaluate(async () => {
       // Only controls Tab can reach (a card's cover link is tabindex -1 and would be skipped).
-      const all = Array.from(document.querySelectorAll<HTMLElement>("main a[href], main button")).filter((e) => e.getBoundingClientRect().height > 0 && e.tabIndex >= 0);
+      const tabbable = () => Array.from(document.querySelectorAll<HTMLElement>("main a[href], main button")).filter((e) => e.getBoundingClientRect().height > 0 && e.tabIndex >= 0);
+      // Cards and their pictures settle in (a tile's link has no height until its picture is laid out): the list is read
+      // once it stops changing, so the control before the target really is the one Tab leaves from.
+      let all = tabbable();
+      for (let i = 0, same = 0; i < 40 && same < 3; i++) {
+        await new Promise((r) => setTimeout(r, 100));
+        const now = tabbable();
+        same = now.length === all.length ? same + 1 : 0;
+        all = now;
+      }
       const target = all[Math.floor(all.length / 2)]!;
       // Cards may still be settling in: put it 20 px from the top until it stays there.
       for (let i = 0; i < 20 && Math.abs(target.getBoundingClientRect().top - 20) > 1; i++) {
@@ -777,6 +786,7 @@ test.describe("the floating setup list on a phone", () => {
         await new Promise((r) => setTimeout(r, 100));
       }
       target.setAttribute("data-tab-target", "");
+      all = tabbable();
       all[all.indexOf(target) - 1]!.focus({ preventScroll: true });
       return target.getBoundingClientRect().top;
     });
