@@ -301,7 +301,7 @@ describe("the catalog and the rules", () => {
       "road_wide: Down the road",
     ]);
     expect(CATALOG.sets.at(-1)).toEqual({ id: "highway_night", label: "Highway at night" });
-    expect(ENGINE_VERSION).toBe(8);
+    expect(ENGINE_VERSION).toBe(9);
   });
 
   it("the writer reads what a cut is and what the shots show", () => {
