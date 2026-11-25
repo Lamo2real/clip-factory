@@ -1263,7 +1263,7 @@ stands.*
   money run and grows from there, so comparisons and "Last 365 days" appear only once enough days are covered. The
   daily money run makes 3 more Analytics report sets. No infra changes; the Terraform plan is code updates only.
 
-## ADR-51 Ask becomes a full assistant: Opus 5.5 on Bedrock Mantle in-Region, client-side web tools, HTTP start + WebSocket stream, files via a 1-day S3 prefix deleted after each answer
+## ADR-51 Ask becomes a full assistant on Bedrock Mantle
 
 - **Context.** The owner (2026-11-19) wants Ask to answer any question, on any topic, while always knowing his app and
   his own setup, to check today's platform steps on the web, and to take files (drop, paste, attach) and pictures he
@@ -1635,7 +1635,7 @@ Two taps for a standard upload; each platform's options in its own row; TikTok's
   `campaigns/`, runtime secrets, one new Lambda `cf-prod-campaigns`, two widened stream filters; nothing that holds
   the owner's data is replaced. One signed desktop release ("Restart now").
 
-## ADR-63 Content Rewards follow-ups: one fit check in the API, a new copy instead of turning a normal clip into a campaign clip, one 30-day total that includes Content Rewards
+## ADR-63 Content Rewards follow-ups: one fit check, a new copy, one 30-day total
 
 - **Context.** After approving §38 the owner asked (2026-11-21) for three things: the Connect steps checked so they are
   very simple and in time order, with a pleasant choice between campaign clips and the normal clips he makes today;
@@ -2235,7 +2235,7 @@ button there. Numbers come from the post found on the connected account (`video/
   `notOnTikTok` once Post was pressed, after the row told him to look on his TikTok first). Take it back stays in the
   API, unused by the web.
 
-## ADR-84 Stories makers are lists of checked models, keyed hosts carry the owner's own keys, Clip Factory's app is shared only behind its reserve, and no account is ever shared
+## ADR-84 Stories makers are lists of checked models; no account is shared
 
 - **Context.** The owner asked to pick picture, video and sound models independently and to add models and providers
   without a rebuild, gave suggested efforts for small text edits (Low) and animation planning (High), kept the shared
@@ -2856,3 +2856,18 @@ worst case); the lens code gives the bending rim to every big card with room for
 
 **Why.** The bevel is free everywhere, shade-only silk keeps every contrast measure true, six rims stay within
 WebView2's budget. Nothing stored changes.
+
+## ADR-101 Vehicle designs are drafts
+
+- **Context.** §45.51. The design ran as a task, but nothing stored remembered it.
+- **Options.** (1) The task id in the browser: lost on another device. (2) A new queue or worker: new AWS resources.
+  (3) A stored `VDESIGN#` item that claims the task and mirrors its state.
+- **Decision.** Option 3, in the same table. The draft is settled on every read from the existing task (heartbeat,
+  15 minute limit, missing task), so a state is right with no screen open. The web polls (2 s while designing, else
+  20 s) because Clips Funded has no WebSocket. A finished design is never saved by itself: the owner checks it, then
+  Save makes the vehicle and deletes the draft. One design per draft is a conditional write that claims the task id
+  first; there are at most 3 designing and 20 drafts.
+- **Consequences.** No new AWS resource; the agent and Terraform do not change; old vehicles and the saved-vehicle
+  redesign read as before. The 3-at-once check is not atomic, so two creates in one moment could briefly make 4. Counts use a strongly consistent read, and deleting a designing draft still counts against the 3 (its task keeps running): both are known soft limits.
+  Amends [ADR-97](#adr-97-video-drafts-are-their-own-item-vehicles-are-car-bodies-shown-as-vehicles-roles-are-additive-fields)
+  only for where a vehicle design waits.

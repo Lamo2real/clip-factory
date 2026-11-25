@@ -558,6 +558,7 @@ const TITLES: Record<StoriesPage["name"], string> = {
   cars: "Vehicles",
   car_new: "New vehicle",
   car: "Vehicle",
+  car_draft: "New vehicle",
   production: "Production",
   production_new: "Make a video",
   production_story: "Making a video",

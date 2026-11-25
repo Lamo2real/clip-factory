@@ -10,6 +10,7 @@ STORY = f"{W}/stories/01J0000000000000000000000C"
 TASK = f"{W}/tasks/01J0000000000000000000000E"
 SERIES = f"{W}/series/01J0000000000000000000000F"
 DRAFT = f"{W}/video-drafts/01J0000000000000000000000G"
+VEHICLE = f"{W}/vehicle-drafts/01J0000000000000000000000H"
 
 EXPECTED: set[tuple[str, str]] = {
     ("GET", "/v1/workspaces"),
@@ -68,4 +69,10 @@ EXPECTED: set[tuple[str, str]] = {
     ("GET", DRAFT),
     ("PUT", DRAFT),
     ("DELETE", DRAFT),
+    # vehicle drafts: a vehicle being designed with AI (routes/vehicle_drafts.py)
+    ("GET", f"{W}/vehicle-drafts"),
+    ("POST", f"{W}/vehicle-drafts"),
+    ("GET", VEHICLE),
+    ("POST", f"{VEHICLE}/design"),
+    ("DELETE", VEHICLE),
 }

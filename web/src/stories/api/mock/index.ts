@@ -20,6 +20,7 @@ import * as series from "./series.ts";
 import * as skills from "./skills.ts";
 import * as social from "./social.ts";
 import * as stories from "./stories.ts";
+import * as vehicleDrafts from "./vehicleDrafts.ts";
 import { createStore, isNotBuilt, seedShellDemo, type MockStore } from "./store.ts";
 import * as workspace from "./workspace.ts";
 
@@ -30,7 +31,7 @@ interface Part {
 }
 
 // mac after publishing and dashboard: it hands TikTok to the owner's Mac while My Mac posts TikTok is on (§47.10).
-const PARTS: Part[] = [workspace, dashboard, library, social, publishing, onboarding, ai, skills, memory, ideas, characters, stories, drafts, series, chat, references, mac];
+const PARTS: Part[] = [workspace, dashboard, library, social, publishing, onboarding, ai, skills, memory, ideas, characters, stories, drafts, vehicleDrafts, series, chat, references, mac];
 
 /**
  * Knobs a test sets before the app loads (page.addInitScript: window.__cfStoriesMock = { knobs: { fresh: true } }).

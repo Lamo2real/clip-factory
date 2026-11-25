@@ -398,7 +398,7 @@ how to navigate it". ([the steps](SETUP_POSTING.md#content-rewards),
 chronological and structured manner so the UX is better and the user has a better and pleasant experience on the app
 using eaither the content rewards way of videos or normal way we have done so far". ([CONTRACTS.md
 §39.1](CONTRACTS.md#391-connect-in-time-order-and-the-two-ways),
-[ADR-63](DECISIONS.md#adr-63-content-rewards-follow-ups-one-fit-check-in-the-api-a-new-copy-instead-of-turning-a-normal-clip-into-a-campaign-clip-one-30-day-total-that-includes-content-rewards),
+[ADR-63](DECISIONS.md#adr-63-content-rewards-follow-ups-one-fit-check-a-new-copy-one-30-day-total),
 [UX_DESIGN_SYSTEM.md](UX_DESIGN_SYSTEM.md#the-two-ways))
 - AC1: **The normal way is frozen.** Home at `/` keeps exactly the form it had before Content Rewards (Paste a link or
   Pick a video, the link box with Paste and Clear, How many clips, Notes, "Make clips", "Nothing gets posted until you
@@ -434,7 +434,7 @@ using eaither the content rewards way of videos or normal way we have done so fa
 ### BR-27 All your money in one place
 "i also need to track how much i earn from all platforms including contentrewards". ([CONTRACTS.md
 §39.2](CONTRACTS.md#392-all-your-money-in-one-place),
-[ADR-63](DECISIONS.md#adr-63-content-rewards-follow-ups-one-fit-check-in-the-api-a-new-copy-instead-of-turning-a-normal-clip-into-a-campaign-clip-one-30-day-total-that-includes-content-rewards))
+[ADR-63](DECISIONS.md#adr-63-content-rewards-follow-ups-one-fit-check-a-new-copy-one-30-day-total))
 - AC1: The Money page opens with **All your money**: one row per place (YouTube, TikTok, Instagram, Facebook, X, then
   Content Rewards while it is switched on), one period for the whole card (the same 30 days as the Monthly card), and
   under the rows one **Total** per currency with the places in it and whose numbers they are ("YouTube's estimate +
@@ -459,7 +459,7 @@ using eaither the content rewards way of videos or normal way we have done so fa
 "btw i would like to know if the content i upload is compati ble with the content rewards campaigns so i can get paid
 instead of me selecting the content rewards way of uploading but arent compatible, so please make sure thats in place
 as well". ([CONTRACTS.md §39.3](CONTRACTS.md#393-does-this-clip-fit-the-campaign-the-fit-check),
-[ADR-63](DECISIONS.md#adr-63-content-rewards-follow-ups-one-fit-check-in-the-api-a-new-copy-instead-of-turning-a-normal-clip-into-a-campaign-clip-one-30-day-total-that-includes-content-rewards))
+[ADR-63](DECISIONS.md#adr-63-content-rewards-follow-ups-one-fit-check-a-new-copy-one-30-day-total))
 - AC1: Every campaign clip on Review, and on its own page while it waits, shows "Campaign clip · {name}" and one
   headline: "Can earn on {name}", "Almost ready for {name}", "{name} needs a copy of this clip", "One thing first for
   {name}", "Wait a little for {name}", "This clip can't earn on {name}" or "Check 2 things, then upload", then the

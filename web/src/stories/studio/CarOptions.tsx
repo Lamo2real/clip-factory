@@ -18,17 +18,21 @@ export function CarOptions({
   onMore,
   onPhotos,
   busy,
+  max = MAX_CAR_OPTIONS,
 }: {
   options: CarInput[];
   picked: number;
   onPick: (i: number) => void;
   onMore: () => void;
-  onPhotos: () => void;
+  /** left out where the photos cannot change (a vehicle draft's): there is no "Change photos" then */
+  onPhotos?: () => void;
+  /** the most options there can be (a vehicle draft keeps up to 4) */
+  max?: number;
   /** a design is running: Make more waits */
   busy: boolean;
 }) {
   const [box, width] = useWidth<HTMLElement>(600);
-  const full = options.length >= MAX_CAR_OPTIONS;
+  const full = options.length >= max;
   // 3 across, 2 on phones; the car fills its card less its padding.
   const cols = width >= 520 ? 3 : 2;
   const size = Math.max(96, Math.min(170, Math.floor((width - (cols - 1) * 10) / cols) - 36));
@@ -51,11 +55,13 @@ export function CarOptions({
         }))}
         onChange={(v) => onPick(Number(v))}
       />
-      {full ? <p className="st-s-field__hint">That&apos;s plenty. Pick one, or change the photos.</p> : null}
+      {full ? <p className="st-s-field__hint">That&apos;s plenty. Pick one{onPhotos ? ", or change the photos" : ""}.</p> : null}
       <div className="st-s-actionbar st-s-caropts__bar">
-        <button type="button" className="st-btn" onClick={onPhotos}>
-          Change photos
-        </button>
+        {onPhotos ? (
+          <button type="button" className="st-btn" onClick={onPhotos}>
+            Change photos
+          </button>
+        ) : null}
         <button type="button" className="st-btn" aria-disabled={busy || full || undefined} onClick={() => !busy && !full && onMore()}>
           Make more
         </button>

@@ -165,7 +165,7 @@ function kindArt(kind: CharacterKind) {
 
 /** A saved car keeps the photos it was made from as its pictures (§45.42), best effort, up to the pictures limit, 3
  * at a time (as the photos box sends them). Gives how many did not stay. */
-async function keepPhotos(ws: string, characterId: string, photos: Photo[]): Promise<number> {
+export async function keepPhotos(ws: string, characterId: string, photos: Photo[]): Promise<number> {
   const todo = photos.filter((x) => x.state === "ready" && x.file.size > 0).slice(0, CHAR_LIMITS.refs);
   let missed = 0;
   const one = async (p: Photo) => {
@@ -326,7 +326,7 @@ export function NewCharacter({ ws, kind: asked, place = "characters" }: { ws: st
       )}
       {car ? <VehicleKind value={vehicle} onChange={pickVehicle} /> : null}
       {car ? (
-        <CarDesign key="car" ws={ws} info={info} onDraft={onDraft} onPhotos={onPhotos} vehicle={vehicle} />
+        <CarDesign key="car" ws={ws} info={info} onDraft={onDraft} onPhotos={onPhotos} vehicle={vehicle} asDraft />
       ) : (
         <DesignPanel key="person" ws={ws} info={info} startOpen={design} onDraft={onDraft} />
       )}

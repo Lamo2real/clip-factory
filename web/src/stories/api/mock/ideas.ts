@@ -252,17 +252,26 @@ const TASK_FAILED: Partial<Record<TaskKind, string>> = {
  * `finish()`'s result (worked out at the end, as the agent writes it) or failed with its sentence. Other parts may
  * start their own tasks with it, and GET …/tasks/{id} (getTask) reads every task in the store.
  */
-export function startMockTask(store: MockStore, ws: string, kind: TaskKind | "check_models", override: ModelOverride | undefined, finish: () => Record<string, unknown>, project?: Level): AiTask {
+export function startMockTask(
+  store: MockStore,
+  ws: string,
+  kind: TaskKind | "check_models",
+  override: ModelOverride | undefined,
+  finish: () => Record<string, unknown>,
+  project?: Level,
+  /** a longer (or shorter) run than the usual, and a failure of its own (the vehicle drafts' practice runs) */
+  opts: { seconds?: number; fail?: string | null } = {},
+): AiTask {
   checkOverride(override, store);
   const eff = effectiveFor(store, kind === "check_models" ? "chat" : kind, { request: override, project });
   const now = Date.now();
-  const secs = Number(store.knobs.taskSeconds);
+  const secs = opts.seconds ?? Number(store.knobs.taskSeconds);
   const total = Number.isFinite(secs) && secs > 0 ? secs * 1000 : 2500;
-  const knob = store.knobs.taskFail;
+  const knob = opts.fail ?? store.knobs.taskFail;
   let fails: string | null = eff.off ?? eff.problem;
   if (!fails && knob) {
     fails = typeof knob === "string" ? knob : (TASK_FAILED[kind as TaskKind] ?? "The helper stopped. Tap Try again.");
-    store.knobs.taskFail = null;
+    if (opts.fail === undefined || opts.fail === null) store.knobs.taskFail = null;
   }
   // TASK# keeps exactly what was called (§45.35 D5); Check models has no single model.
   const call = kind === "check_models" ? null : callOf(store, eff.model);
