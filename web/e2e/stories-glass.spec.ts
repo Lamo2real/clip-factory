@@ -200,7 +200,7 @@ test("the stage is drawn exactly as look.ts works the veils out (its lightest pi
   expect(Math.abs(drawn - modelled), `drawn ${drawn.toFixed(4)}, modelled ${modelled.toFixed(4)}`).toBeLessThan(0.006);
 });
 
-test("the liquid rim bends at most three heroes, each with a filter of its own size", async ({ page }) => {
+test("the liquid rim bends at most six cards, each with a filter of its own size", async ({ page }) => {
   // The rim is only for a capable device (look.ts readGlassEnv: more than 4 cores and 4 GB, no Save-Data); the Linux
   // CI runner has 4 cores and rightly gets the plain light. The device is set here, so it is liquid on every machine.
   await page.addInitScript(() => {
@@ -218,7 +218,7 @@ test("the liquid rim bends at most three heroes, each with a filter of its own s
       main.prepend(h);
     }
   });
-  await expect(page.locator(".st-lens.is-liquid")).toHaveCount(3);
+  await expect(page.locator(".st-lens.is-liquid")).toHaveCount(6);
   const lenses = await page.evaluate(() =>
     Array.from(document.querySelectorAll<HTMLElement>(".st-lens.is-liquid")).map((el) => {
       const url = el.style.getPropertyValue("--st-lens-url");

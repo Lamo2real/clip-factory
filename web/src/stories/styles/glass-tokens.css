@@ -300,7 +300,7 @@
   --st-sheen-hero: var(--st-rim-3), var(--st-bevel-hero), inset 0 18px 28px -20px rgb(255 240 220 / 0.5), inset 0 -26px 34px -26px rgb(var(--st-amber-rgb) / 0.45); /* level 3 */
   --st-sheen-raised: var(--st-rim-3), var(--st-bevel-card), var(--st-sheen-soft); /* level 3: a bar, a card inside a card */
   --st-sheen-control: var(--st-rim-4), var(--st-bevel-control), inset 0 10px 14px -12px rgb(255 240 220 / 0.32); /* level 4 */
-  --st-sheen-float: var(--st-rim-5), var(--st-bevel-hero), inset 0 16px 24px -18px rgb(255 240 220 / 0.42), inset 0 -18px 26px -22px rgb(var(--st-amber-rgb) / 0.2); /* level 5 */
+  --st-sheen-float: var(--st-rim-5), var(--st-bevel-card), inset 0 16px 24px -18px rgb(255 240 220 / 0.42), inset 0 -18px 26px -22px rgb(var(--st-amber-rgb) / 0.2); /* level 5 */
   --st-rim-light: inset 0 0 26px -12px rgb(255 238 214 / 0.3); /* a hero's thick edge catching light, painted (all a
                                                                   WebKit hero has; under a liquid rim it softens it) */
   --st-sheen-cream: inset 0 -10px 18px -14px rgb(var(--st-copper-rgb) / 0.35);
