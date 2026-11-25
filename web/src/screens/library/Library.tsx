@@ -9,6 +9,7 @@ import type { Clip, Learning, Platform, Post, TikTokPostOptions, CrSubmission } 
 import { Icon } from "../../components/Icon.tsx";
 import { PlatformMark } from "../../components/PlatformMark.tsx";
 import { useToast } from "../../components/Toasts.tsx";
+import { Dropdown } from "../../components/Dropdown.tsx";
 import { A, Button, Empty, ErrorPanel, LinkButton, PageHeader, Pill, Segmented, Skeleton, type Tone } from "../../components/ui.tsx";
 import { compact, postNumbersNote, postStatusLabel, STATUS_LABEL } from "../../lib/metrics.ts";
 import { autoPostLabel } from "../../lib/autopost.ts";
@@ -70,15 +71,51 @@ export function filterFrom(search: string): Filter {
   return show === "waiting" || show === "posted" ? show : "all";
 }
 
-/** The Library's address for a filter. */
-export function filterHref(filter: Filter): string {
-  return filter === "all" ? "/library" : `/library?show=${filter}`;
+/** How the Library's clips are ordered: as before (newest first), by reactions, or by views, most or fewest first. */
+export type Sort = "relevant" | "popular" | "most" | "least";
+export const SORTS: { value: Sort; label: string; line?: string }[] = [
+  { value: "relevant", label: "Most relevant" },
+  { value: "popular", label: "Most popular", line: "Likes, comments and shares" },
+  { value: "most", label: "Views: high to low" },
+  { value: "least", label: "Views: low to high" },
+];
+
+/** The Library's sort, read from its address (?sort=), next to the filter. */
+export function sortFrom(search: string): Sort {
+  const sort = new URLSearchParams(search).get("sort");
+  return sort === "popular" || sort === "most" || sort === "least" ? sort : "relevant";
+}
+
+/** The Library's address for a filter (and a sort; "relevant" is the plain address). */
+export function filterHref(filter: Filter, sort: Sort = "relevant"): string {
+  const q = new URLSearchParams();
+  if (filter !== "all") q.set("show", filter);
+  if (sort !== "relevant") q.set("sort", sort);
+  const text = q.toString();
+  return text ? `/library?${text}` : "/library";
 }
 
 /** A card's views: its posts' own numbers whenever one has them (live news keeps those fresh), else the clip's total. */
 export function cardViews(clip: Pick<Clip, "totalViews">, posts: Pick<Post, "metrics">[]): number {
   if (posts.some((p) => p.metrics)) return posts.reduce((n, p) => n + (p.metrics?.views ?? 0), 0);
   return clip.totalViews ?? 0;
+}
+
+/** A card's reactions: its posts' likes, comments and shares (a platform that does not say counts as none). */
+export function cardReactions(posts: Pick<Post, "metrics">[]): number {
+  return posts.reduce((n, p) => n + (p.metrics?.likes ?? 0) + (p.metrics?.comments ?? 0) + (p.metrics?.shares ?? 0), 0);
+}
+
+/** The clips in the order picked. "Most relevant" keeps the list as it came; every other order is stable, so ties keep it. */
+export function sortClips(clips: Clip[], posts: Pick<Post, "clipId" | "metrics">[], sort: Sort): Clip[] {
+  if (sort === "relevant") return clips;
+  const byClip = new Map<string, Pick<Post, "clipId" | "metrics">[]>();
+  for (const p of posts) byClip.set(p.clipId, [...(byClip.get(p.clipId) ?? []), p]);
+  const views = (c: Clip) => cardViews(c, byClip.get(c.clipId) ?? []);
+  const reactions = (c: Clip) => cardReactions(byClip.get(c.clipId) ?? []);
+  const order = (a: Clip, b: Clip) =>
+    sort === "popular" ? reactions(b) - reactions(a) || views(b) - views(a) : sort === "most" ? views(b) - views(a) : views(a) - views(b);
+  return [...clips].sort(order);
 }
 
 /**
@@ -148,14 +185,21 @@ function AllClips() {
     );
   // The filter lives in the address (?show=), so opening a clip and going Back, or a reload, keeps it.
   const [, redraw] = useState(0);
-  const filter = filterFrom(typeof location === "undefined" ? "" : location.search);
-  const setFilter = (next: Filter) => {
-    if (next === filter) return;
-    // Only the address changes: the list stays where it is on screen (navigate scrolls a new page to the top).
+  const search = typeof location === "undefined" ? "" : location.search;
+  const filter = filterFrom(search);
+  const sort = sortFrom(search);
+  // Only the address changes: the list stays where it is on screen (navigate scrolls a new page to the top).
+  const go = (href: string) => {
     const y = window.scrollY;
-    navigate(filterHref(next), { replace: true });
+    navigate(href, { replace: true });
     window.scrollTo({ top: y });
     redraw((n) => n + 1);
+  };
+  const setFilter = (next: Filter) => {
+    if (next !== filter) go(filterHref(next, sort));
+  };
+  const setSort = (next: Sort) => {
+    if (next !== sort) go(filterHref(filter, next));
   };
   // The places that are set up (GET /v1/setup, kept fresh by live setup news, as on Review): a post still waiting
   // for one of them gets its own Post now. Unknown (loading, or the check failed): every waiting post stays grouped.
@@ -187,10 +231,13 @@ function AllClips() {
     () => void reload(),
   );
 
-  const clips =
+  const clips = sortClips(
     data?.clips.filter((c) =>
       filter === "all" ? true : filter === "posted" ? c.status === "posted" : c.status !== "posted",
-    ) ?? [];
+    ) ?? [],
+    data?.posts ?? [],
+    sort,
+  );
   const totals = (data?.posts ?? []).reduce(
     (t, p) => {
       if (!p.metrics) return t;
@@ -270,6 +317,17 @@ function AllClips() {
                 { value: "posted", label: "Posted" },
               ]}
             />
+            <div className="toolbar__sort">
+              <Dropdown
+                variant="sort"
+                caption="Sort by"
+                label="Sort clips"
+                value={sort}
+                options={SORTS}
+                placeholder="Most relevant"
+                onChange={(v) => setSort(v as Sort)}
+              />
+            </div>
           </div>
 
           {clips.length === 0 ? (

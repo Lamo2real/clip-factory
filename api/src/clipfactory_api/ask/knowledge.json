@@ -1,5 +1,5 @@
 {
- "version": "5f084069ae5e",
+ "version": "af2d46a8af2b",
  "parts": [
   {
    "id": "app-map",
@@ -322,6 +322,12 @@
    "title": "CONTRACTS: 49. Numbers roll when they change (owner request, 2026-11-24)",
    "line": "The owner: \"make the numbers roll when they increase or decrease\".",
    "chars": 1576
+  },
+  {
+   "id": "contracts-50",
+   "title": "CONTRACTS: 50. Library: sort the clips (owner request, 2026-11-25)",
+   "line": "Owner: \"filter or sort the videos by something ... most relevant or most popular or from low to high in views or from",
+   "chars": 1383
   },
   {
    "id": "adr-01",
@@ -916,6 +922,12 @@
    "title": "DECISIONS: ADR-101 Vehicle designs are drafts",
    "line": "Context. §45.51. The design ran as a task, but nothing stored remembered it.",
    "chars": 1379
+  },
+  {
+   "id": "adr-102",
+   "title": "DECISIONS: ADR-102 Library's sort is a quiet dropdown on the shared Dropdown, kept in the address",
+   "line": "Decision. Dropdown gets variant=\"sort\" (a caption line, not a button, and a list that unfolds and folds on one",
+   "chars": 505
   },
   {
    "id": "architecture-overview",
