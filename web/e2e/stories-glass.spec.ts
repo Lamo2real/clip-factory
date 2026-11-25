@@ -219,14 +219,19 @@ test("the liquid rim bends at most six cards, each with a filter of its own size
     }
   });
   await expect(page.locator(".st-lens.is-liquid")).toHaveCount(6);
-  const lenses = await page.evaluate(() =>
-    Array.from(document.querySelectorAll<HTMLElement>(".st-lens.is-liquid")).map((el) => {
-      const url = el.style.getPropertyValue("--st-lens-url");
-      const f = document.querySelector(url.slice(4, -1));
-      const r = el.getBoundingClientRect();
-      return { bf: getComputedStyle(el).backdropFilter, w: Math.round(r.width), h: Math.round(r.height), fw: Number(f?.getAttribute("width")), fh: Number(f?.getAttribute("height")), maps: f?.querySelectorAll("feImage").length, moves: f?.querySelectorAll("animate, animateTransform").length };
-    }),
-  );
+  const measure = () =>
+    page.evaluate(() =>
+      Array.from(document.querySelectorAll<HTMLElement>(".st-lens.is-liquid")).map((el) => {
+        const url = el.style.getPropertyValue("--st-lens-url");
+        const f = document.querySelector(url.slice(4, -1));
+        const r = el.getBoundingClientRect();
+        return { bf: getComputedStyle(el).backdropFilter, w: Math.round(r.width), h: Math.round(r.height), fw: Number(f?.getAttribute("width")), fh: Number(f?.getAttribute("height")), maps: f?.querySelectorAll("feImage").length, moves: f?.querySelectorAll("animate, animateTransform").length };
+      }),
+    );
+  // A page card can still change size a moment after its rim was drawn (a font arrives); the rim is redrawn to the new
+  // size, so wait until every rim has the size of its own card.
+  await expect.poll(async () => (await measure()).every((l) => l.fw === l.w && l.fh === l.h)).toBe(true);
+  const lenses = await measure();
   for (const l of lenses) {
     // The rim's own map, after the glass's dim (brightness(), look.ts DIM: 1 in every look), never animated.
     expect(l.bf).toMatch(/^blur\(1px\) brightness\((?:1|0?\.\d+)\) url\("?#st-lens-\d+"?\) saturate\(1\.5\)$/);
