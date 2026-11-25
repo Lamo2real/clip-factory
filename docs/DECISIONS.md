@@ -2846,3 +2846,13 @@ columns on Clips Funded's Social accounts. The contract is CONTRACTS §48.
   body and wheel hands are partly today's drawing (§45.49). Amends
   [ADR-93](#adr-93-night-drive-is-a-drawing-style-in-the-one-engine-an-art-field-cuts-between-shots-surface-drawing-only)
   only for how a person is drawn.
+
+## ADR-100 Real glass is a lit bevel everywhere and a bending rim on the big cards, never a new colour
+
+**Context.** The owner wanted all of Clips Funded to look like real glass, same colours. Only three hero cards bent.
+
+**Decision.** A painted bevel in every sheen token; shade-only silk folds on the stage (so `look.ts`'s lights stay the
+worst case); the lens code gives the bending rim to every big card with room for it, `LENS_BUDGET` 6, by document order.
+
+**Why.** The bevel is free everywhere, shade-only silk keeps every contrast measure true, six rims stay within
+WebView2's budget. Nothing stored changes.
