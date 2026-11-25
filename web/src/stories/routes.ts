@@ -23,6 +23,8 @@ export type StoriesPage =
   | { name: "cars" }
   | { name: "car_new" }
   | { name: "car"; characterId: string }
+  /** One vehicle draft's page (a "Design with AI" run kept on the server): `/stories/vehicles/draft/{draftId}` */
+  | { name: "car_draft"; draftId: string }
   | { name: "production"; seriesId?: string }
   /**
    * Make a new video, filled in from the address (CONTRACTS §45.34): `?idea=`, `?ref=` (repeatable, up to 3 reference
@@ -100,6 +102,8 @@ export function matchStories(pathname: string, search: string): StoriesPage {
   const q = new URLSearchParams(search);
   const parts = pathname.replace(/\/+$/, "").split("/").slice(2); // drop "" and "stories"
   const [a, b, ...rest] = parts;
+  // A vehicle draft: `/stories/vehicles/draft/{draftId}` (the one address with three parts).
+  if ((a === "vehicles" || a === "cars") && b === "draft" && rest.length === 1) return ID.test(rest[0]!) ? { name: "car_draft", draftId: rest[0]! } : { name: "not_found" };
   if (rest.length) return { name: "not_found" };
   if (a === undefined) return { name: "dashboard" };
   if (a === "ideas" && b === undefined) return { name: "ideas", ...seriesOf(q), ...(q.get("ask") === "1" ? { ask: true as const } : {}) };
@@ -182,6 +186,8 @@ export function storiesHref(page: StoriesPage): string {
       return `${STORIES_ROOT}/vehicles/new`;
     case "car":
       return `${STORIES_ROOT}/vehicles/${encodeURIComponent(page.characterId)}`;
+    case "car_draft":
+      return `${STORIES_ROOT}/vehicles/draft/${encodeURIComponent(page.draftId)}`;
     case "ideas": {
       const q = new URLSearchParams();
       if (page.seriesId) q.set("series", page.seriesId);

@@ -1,4 +1,4 @@
-## ADR-51 Ask becomes a full assistant: Opus 5.5 on Bedrock Mantle in-Region, client-side web tools, HTTP start + WebSocket stream, files via a 1-day S3 prefix deleted after each answer
+## ADR-51 Ask becomes a full assistant on Bedrock Mantle
 
 - **Context.** The owner (2026-11-19) wants Ask to answer any question, on any topic, while always knowing his app and
   his own setup, to check today's platform steps on the web, and to take files (drop, paste, attach) and pictures he

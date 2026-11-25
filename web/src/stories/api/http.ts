@@ -40,6 +40,7 @@ import type {
   TikTokCreator,
   Upload,
   UsageSummary,
+  VehicleDraft,
   VideoDraft,
   Workspace,
   WsMacHelper,
@@ -191,6 +192,12 @@ export function httpStoriesApi(deps: StoriesHttpDeps = {}): StoriesApi {
     createVideoDraft: async (ws, body) => oneDraft(await call<VideoDraft | { draft: VideoDraft }>("POST", w(ws, "/video-drafts"), body)),
     saveVideoDraft: async (ws, draftId, body) => oneDraft(await call<VideoDraft | { draft: VideoDraft }>("PUT", w(ws, `/video-drafts/${id(draftId)}`), body)),
     deleteVideoDraft: (ws, draftId) => call<void>("DELETE", w(ws, `/video-drafts/${id(draftId)}`)),
+    // Vehicle drafts (VDESIGN#): one "Design with AI" run kept on the server (the draft itself comes back).
+    listVehicleDrafts: async (ws) => ({ items: (await call<{ items?: VehicleDraft[] }>("GET", w(ws, "/vehicle-drafts"))).items ?? [] }),
+    getVehicleDraft: (ws, draftId) => call<VehicleDraft>("GET", w(ws, `/vehicle-drafts/${id(draftId)}`)),
+    createVehicleDraft: (ws, body) => call<VehicleDraft>("POST", w(ws, "/vehicle-drafts"), body),
+    redesignVehicleDraft: (ws, draftId, body) => call<VehicleDraft>("POST", w(ws, `/vehicle-drafts/${id(draftId)}/design`), body ?? {}),
+    deleteVehicleDraft: (ws, draftId) => call<void>("DELETE", w(ws, `/vehicle-drafts/${id(draftId)}`)),
     produce: (ws, storyId, body) => call<{ story: Story; job: ProductionJob }>("POST", w(ws, `/stories/${id(storyId)}/produce`), body ?? {}),
     cancelStory: async (ws, storyId) => {
       const r = await call<{ story: Story; job?: ProductionJob | null }>("POST", w(ws, `/stories/${id(storyId)}/cancel`));

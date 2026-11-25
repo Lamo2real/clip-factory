@@ -30,6 +30,7 @@ import * as characters from "../src/stories/api/mock/characters.ts";
 import * as ideas from "../src/stories/api/mock/ideas.ts";
 import { createStore, type MockStore } from "../src/stories/api/mock/store.ts";
 import * as stories from "../src/stories/api/mock/stories.ts";
+import * as vehicleDrafts from "../src/stories/api/mock/vehicleDrafts.ts";
 import type { AiTask, CarInput, CharacterInput, ModelInfo, StoriesApi, StoriesConfig, Workspace } from "../src/stories/api/types.ts";
 import type { CarDetail, CarLook } from "../src/stories/engine/types.ts";
 import { matchStories, storiesHref, type StoriesPage } from "../src/stories/routes.ts";
@@ -76,7 +77,7 @@ let host: HTMLElement;
 
 function start() {
   store = createStore();
-  store.knobs = {};
+  store.knobs = { vehicleSeconds: 3 };
   store.workspaces.push(structuredClone(WS));
   ideas.seed(store);
   characters.seed(store);
@@ -86,6 +87,7 @@ function start() {
     ...ideas.api(store),
     ...characters.api(store),
     ...stories.api(store),
+    ...vehicleDrafts.api(store),
     listWorkspaces: async () => store.workspaces,
     getWorkspace: async () => store.workspaces[0]!,
     getAi: async () => ({ ai: { defaultModel: "opus-5-5", defaultEffort: "high", tasks: {}, prices: {}, version: 1 }, models: structuredClone(MODELS), agents: [], tasks: structuredClone(LISTED_INFO.tasks) }),
@@ -181,6 +183,16 @@ async function addFiles(files: File[]) {
   const input = document.querySelector<HTMLInputElement>('.st-s-photos input[type="file"]')!;
   Object.defineProperty(input, "files", { value: files, configurable: true });
   await act(async () => input.dispatchEvent(new Event("change", { bubbles: true })));
+}
+
+/** Design it on a new vehicle starts a draft and moves on: this opens that draft's own page once its run is over. */
+async function toDraft(seconds = 5) {
+  const d = store.vehicleDrafts.at(-1)!;
+  await untilTask(seconds);
+  await act(async () => root.unmount());
+  host.remove();
+  await show(<CarsScreen {...page({ name: "car_draft", draftId: d.draftId })} />);
+  return d;
 }
 
 const thumbs = () => document.querySelectorAll(".st-s-photos__item");
@@ -310,7 +322,7 @@ describe("Vehicles: What is it?, outside and inside photos, and paste (§45.47)"
   }
 
   it("asks What is it? with six kinds, Car picked; the pick goes to the design as vehicle, and a car leaves it out", async () => {
-    const design = vi.spyOn(api, "designCharacter");
+    const design = vi.spyOn(api, "createVehicleDraft");
     await show(<CarsScreen {...page({ name: "car_new" })} />);
     expect(Array.from(group("What is it?").querySelectorAll(".st-s-pick__label")).map((l) => l.textContent)).toEqual(["Car", "Truck", "Bus", "Motorbike", "Plane", "Boat"]);
     expect(group("What is it?").querySelectorAll("svg")).toHaveLength(6);
@@ -318,14 +330,18 @@ describe("Vehicles: What is it?, outside and inside photos, and paste (§45.47)"
     expect(text()).toContain("Drop, paste or pick photos.");
     type(field(/^What is it like\?/), "a red one");
     await click(control("Design it"), 250);
-    expect(design.mock.calls[0]![1]).toEqual({ kind: "car", count: 3, description: "a red one" });
-    await untilTask();
+    expect(design.mock.calls[0]![1]).toEqual({ design: { kind: "car", count: 3, description: "a red one" } });
+    await toDraft();
+    expect(cards()).toHaveLength(3);
+    // another new vehicle, this time a plane
+    await act(async () => root.unmount());
+    host.remove();
+    await show(<CarsScreen {...page({ name: "car_new" })} />);
     await pick("What is it?", "Plane");
     expect(chosen("What is it?")).toBe("Plane");
-    await click(control("Design it again"), 250);
-    expect(design.mock.calls[1]![1]).toEqual({ kind: "car", count: 3, description: "a red one", vehicle: "plane" });
-    await untilTask();
-    expect(cards()).toHaveLength(3);
+    type(field(/^What is it like\?/), "a red one");
+    await click(control("Design it"), 250);
+    expect(design.mock.calls[1]![1]).toEqual({ design: { kind: "car", count: 3, description: "a red one", vehicle: "plane" } });
   });
 
   it("an untouched editor starts as the picked kind's first body; a changed one stays as the owner left it", async () => {
@@ -346,7 +362,7 @@ describe("Vehicles: What is it?, outside and inside photos, and paste (§45.47)"
   });
 
   it("has an Outside strip (up to 6) and an Inside strip (up to 4), 8 in all, and sends each photo's side", async () => {
-    const design = vi.spyOn(api, "designCharacter");
+    const design = vi.spyOn(api, "createVehicleDraft");
     await show(<CarsScreen {...page({ name: "car_new" })} />);
     expect(text()).toContain("Seats and dashboard. Up to 4.");
     await addTo("Inside", Array.from({ length: 5 }, (_, i) => png(`seat-${i + 1}.png`)));
@@ -362,11 +378,11 @@ describe("Vehicles: What is it?, outside and inside photos, and paste (§45.47)"
     await click(control("Remove inside photo 1"), 50);
     expect(stripThumbs("Inside")).toHaveLength(2);
     await click(control("Design it"), 250);
-    const body = design.mock.calls[0]![1];
+    const body = design.mock.calls[0]![1].design;
     expect(body.referenceAssetIds).toHaveLength(6);
     // Outside first, then inside, in the same order as the ids.
     expect(body.referenceSides).toEqual(["outside", "outside", "outside", "outside", "inside", "inside"]);
-    await untilTask();
+    await toDraft();
     expect(cards()).toHaveLength(3);
   });
 
@@ -396,7 +412,7 @@ describe("Vehicles: What is it?, outside and inside photos, and paste (§45.47)"
     await addTo("Inside", [png("seats.png")]);
     await wait(4000);
     await click(control("Design it"), 250);
-    await untilTask();
+    await toDraft();
     await click(control("Save vehicle"), 3000);
     await wait(4000);
     expect(upload.mock.calls.map((c) => c[2])).toEqual([
@@ -417,7 +433,8 @@ describe("Vehicles: What is it?, outside and inside photos, and paste (§45.47)"
 
 describe("Design it: 3 cars to pick from", () => {
   it("sends the photos as one 3-car design, shows the cars, puts the picked one in the editor, and Make more sends avoid", async () => {
-    const design = vi.spyOn(api, "designCharacter");
+    const design = vi.spyOn(api, "createVehicleDraft");
+    const more = vi.spyOn(api, "redesignVehicleDraft");
     await show(<CharactersScreen {...page({ name: "character_new", kind: "car" })} />);
     await click(control("Design it"), 50);
     expect(text()).toContain("Add a photo of your vehicle, or say what it is like.");
@@ -428,12 +445,14 @@ describe("Design it: 3 cars to pick from", () => {
     expect(ids).toHaveLength(3);
     await click(control("Design it"), 250);
     expect(design).toHaveBeenCalledTimes(1);
-    const body = design.mock.calls[0]![1];
+    const body = design.mock.calls[0]![1].design;
     expect(Object.keys(body).sort()).toEqual(["count", "kind", "referenceAssetIds"]);
     expect(body).toEqual({ kind: "car", referenceAssetIds: expect.arrayContaining([expect.any(String)]), count: 3 });
     expect(body.referenceAssetIds).toHaveLength(3);
-    expect(control("Designing 3…")).toBeTruthy();
-    await untilTask();
+    // a second tap in the same moment never starts a second one
+    await click(control(/^(Starting…|Design it)$/), 50);
+    expect(design).toHaveBeenCalledTimes(1);
+    await toDraft();
     expect(cards()).toHaveLength(3);
     expect(text()).toContain("Pick one");
     expect(cards()[0]!.textContent).toContain("Picked");
@@ -444,18 +463,16 @@ describe("Design it: 3 cars to pick from", () => {
     expect(field("Name").value).toBe(names[1]);
     expect(cards()[1]!.textContent).toContain("Picked");
     await click(control("Make more"), 250);
-    const more = design.mock.calls[1]![1];
-    expect(more).toMatchObject({ kind: "car", referenceAssetIds: body.referenceAssetIds, count: 3 });
-    expect(more.avoid).toHaveLength(3);
-    expect(more.avoid![0]).toMatchObject({ body: expect.any(String), paint: expect.stringMatching(/^#/) });
+    expect(more.mock.calls[0]![2]).toEqual({ more: true });
+    // the draft keeps up to 4: the 3 and 1 more
     await untilTask();
-    expect(cards()).toHaveLength(6);
+    expect(cards()).toHaveLength(4);
     // The picked one stays in the editor.
     expect(field("Name").value).toBe(names[1]);
   });
 
   it("the owner's words go too, and Save car makes a car that keeps its photos", async () => {
-    const design = vi.spyOn(api, "designCharacter");
+    const design = vi.spyOn(api, "createVehicleDraft");
     const create = vi.spyOn(api, "createCharacter");
     const keep = vi.spyOn(api, "referenceComplete");
     await show(<CharactersScreen {...page({ name: "character_new", kind: "car" })} />);
@@ -463,9 +480,11 @@ describe("Design it: 3 cars to pick from", () => {
     await wait(3000);
     type(field(/^What is it like\?/), "my red hatchback, a bit old");
     await click(control("Design it"), 250);
-    expect(design.mock.calls[0]![1]).toEqual({ kind: "car", referenceAssetIds: [expect.any(String)], count: 3, description: "my red hatchback, a bit old" });
-    await untilTask();
+    expect(design.mock.calls[0]![1].design).toEqual({ kind: "car", referenceAssetIds: [expect.any(String)], count: 3, description: "my red hatchback, a bit old" });
+    await toDraft();
     await click(control("Save vehicle"), 3000);
+    // its draft goes with the save
+    expect(store.vehicleDrafts).toHaveLength(0);
     expect(create).toHaveBeenCalledTimes(1);
     const sent = create.mock.calls[0]![1] as CarInput;
     expect(sent.kind).toBe("car");
@@ -623,7 +642,7 @@ describe("Vehicles: the vehicles' own place, and the vehicles in Characters", ()
     await addFiles([png("front.png")]);
     await wait(3000);
     await click(control("Design it"), 250);
-    await untilTask();
+    await toDraft();
     expect(cards()).toHaveLength(3);
     await click(control("Save vehicle"), 3000);
     expect(create.mock.calls[0]![1]).toMatchObject({ kind: "car" });
@@ -1038,7 +1057,7 @@ describe("Realistic vehicles in the editor (§45.48)", () => {
     await addFiles([png("front.png"), png("side.png")]);
     await wait(4000);
     await click(control("Design it"), 250);
-    await untilTask();
+    await toDraft();
     // the editor opens on the name to check; Looks has the new drawing
     await pick("Make your vehicle", "Looks");
     expect(chosen("Drawing")).toBe("Realistic");

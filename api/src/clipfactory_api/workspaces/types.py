@@ -85,6 +85,8 @@ SERIES_SK: Final = "SERIES#"
 MACHELPER_SK: Final = "MACHELPER"
 # §45.47: a saved "Make a new video" form (VDRAFT#{draftId}); not a stream prefix.
 VIDEO_DRAFT_SK: Final = "VDRAFT#"
+# A vehicle being designed with AI (VDESIGN#{draftId}): owns the character_design task and mirrors its state.
+VEHICLE_DRAFT_SK: Final = "VDESIGN#"
 ITEM_PREFIXES: Final = (
     IDEA_SK,
     CHAR_SK,
@@ -115,6 +117,7 @@ ITEM_PREFIXES: Final = (
     SERIES_SK,
     MACHELPER_SK,
     VIDEO_DRAFT_SK,
+    VEHICLE_DRAFT_SK,
 )
 
 # Item `type` values (never "job", "clip", "post", "account", "setup": Lamo Clips readers filter on those).
@@ -148,6 +151,7 @@ TYPE_SHAREUSE: Final = "ws_shareuse"
 TYPE_SERIES: Final = "ws_series"
 TYPE_MACHELPER: Final = "ws_machelper"
 TYPE_VIDEO_DRAFT: Final = "ws_video_draft"
+TYPE_VEHICLE_DRAFT: Final = "ws_vehicle_draft"
 
 
 def registry_pk(user_id: str) -> str:

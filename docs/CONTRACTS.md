@@ -13662,6 +13662,7 @@ Lamo Clips' partition `USER#{userId}` gets **no new items**. Two new kinds of pa
 | Story | same | `STORY#{storyId}` | `type="ws_story"`, Story fields (§45.9), internal `scriptKey`, `videoKey`, `coverKey`, `stillKeys` (map sceneId → key), `statusBefore`, `run` (publishing run number), `version`, `seriesId?` (§45.44), `art?` (the drawing style; none means Bright, §45.45), `ownScript?` (the owner's own script with its scene ids; none means the AI wrote it, §45.46), `roles?` (§45.47) |
 | Series | same | `SERIES#{seriesId}` | `type="ws_series"`, `userId`, `workspaceId`, `seriesId`, `name`, `line`, `castIds`, `cover`, `storySoFar`, `storySoFarBy`, `storySoFarAt`, `summaries` (the newest 50 `{storyId, summary, by, at}`), `recapTaskId`, `version`, `createdAt`, `updatedAt` (§45.44; episodes are worked out on each read, never stored) |
 | Video draft | same | `VDRAFT#{draftId}` | `type="ws_video_draft"`, `userId`, `workspaceId`, `draftId`, `name`, `form`, `version`, `createdAt`, `updatedAt` (§45.47; at most 50, 32 KB each; not a stream prefix) |
+| Vehicle draft | same | `VDESIGN#{draftId}` | `type="ws_vehicle_draft"`, `draftId`, `name`, `vehicle`, `design`, `photos`, `status`, `taskId`, `more`, `options`, `version`, timestamps (§45.51) |
 | Production job | same | `PJOB#{jobId}` | `type="ws_pjob"`, ProductionJob fields (§45.10), internal `sessionId`, `heartbeatAt` |
 | Asset | same | `ASSET#{assetId}` | `type="ws_asset"`, Asset fields (§45.12), internal `key` |
 | Social account | same | `SOCIAL#{platform}` | `type="ws_social"`, SocialAccount fields (§45.13), internal `refreshLeaseUntil`, `appClientId`, `sharedExternalAccountId`, `choicesExpireAt`, `lastResult` |
@@ -13780,6 +13781,9 @@ Clips Funded first." Bodies are validated with `validate.py`; unknown keys are `
 | GET `/v1/workspaces/{ws}/video-drafts` **S** (§45.47) | – | `{ "items": VideoDraft[] }` most recently changed first |
 | POST `/v1/workspaces/{ws}/video-drafts` **S** (§45.47) | `{ "form": VideoDraftForm }` | `201` VideoDraft; `409` at 50 ("You have 50 drafts. Delete one first.") |
 | GET / PUT / DELETE `/v1/workspaces/{ws}/video-drafts/{draftId}` **S** (§45.47) | PUT: `{ "form", "version" }` | VideoDraft (404 when gone) / VideoDraft (`409` stale version, `413` over 32 KB) / `204` |
+| GET / POST `/v1/workspaces/{ws}/vehicle-drafts` **S** (§45.51) | POST: `{ "design", "name"? }` | `{ "items": VehicleDraft[] }` newest first; POST `201` VehicleDraft (designing; `409` at 3 designing or 20 drafts) |
+| GET / DELETE `/v1/workspaces/{ws}/vehicle-drafts/{draftId}` **S** (§45.51) | – | VehicleDraft (settled); DELETE `204` always |
+| POST `/v1/workspaces/{ws}/vehicle-drafts/{draftId}/design` **S** (§45.51) | `{ "more"?, "override"? }` | `202` VehicleDraft (`409` "It is still designing. Wait for it.") |
 | GET `/v1/workspaces/{ws}/library` **S** | query `kind?` (an AssetKind or `all`), `storyId?`, `characterId?`, `limit` ≤ 100, `cursor` | `{ "items": LibraryItem[], "nextCursor" }` |
 | GET `/v1/workspaces/{ws}/providers` **S** | – | `{ "providers": ProviderStatus[] }` (§45.11.6) |
 | POST `/v1/workspaces/{ws}/providers/nova-reel/check` **S** | – | `202 { "job": ProductionJob }` (jobType `provider_check`, one step "Try it"; never behind the not-ready guard; §45.35 D2). Since §45.37 G7: `409` with Nova Reel's ended sentence |
@@ -19883,6 +19887,60 @@ engine; the owner picked **Chunky**. ADR-99.
   is today's with the new sole, and a three-quarter bust mirrors the hairdo instead of turning it.
 - **Tests.** `storiesChunkyPeople` (new `pen.ts` generators, tokens, every hair, accessory, body, hand and eye shape,
   a saved look), `storiesNightPeople`, the goldens, `storiesCarLegacy` and the agent's `test_stories_raster.py`.
+
+### 45.51 Vehicle designs run on their own and wait in Vehicles as drafts (owner request, 2026-11-25; wins over §45.42/§45.47 for where Design with AI keeps its work)
+
+Owner: "also when i click design on this i should be able to go into elsewhere in the app and the car process should
+still be running under viachles as a draft until its either successful or failed." ADR-101. Additive: no new AWS
+resource, the stories agent and Terraform do not change, and nothing is charged or posted.
+
+- **What was wrong.** Design with AI already ran as a server task (`character_design`, §45.42; the agent beats a
+  heartbeat and `jobs.settle_task` fails a stale task on read), but nothing stored remembered the task, so leaving the
+  screen lost it. A **vehicle draft** now owns the task and mirrors its state.
+- **Item.** `VDESIGN#{draftId}` in the workspace's own partition (sk constant `VEHICLE_DRAFT_SK`, `type="ws_vehicle_draft"`,
+  in `ITEM_PREFIXES`, so retention and workspace delete cover it). Fields: `userId`, `workspaceId`, `draftId`, `name`
+  (may be ""), `vehicle` (default `car`), `design` (the checked request: description, referenceAssetIds,
+  referenceSides, vehicle, count, override; never a `characterId`), `photos` [{assetId, side, key}] (the key is never
+  shown), `status` `designing`/`ready`/`failed`, `taskId`, `more`, `model`, `effort`, `message`, `options` (cars),
+  `startedAt`, `finishedAt`, `version` (bumped on every write), `createdAt`, `updatedAt`.
+- **Public VehicleDraft.** `{draftId, workspaceId, name, vehicle, words (string|null), photos:[{assetId,url,side}]
+  (presigned GET urls; missing ones skipped), status, taskId, model, effort, message, options: CharacterInput[],
+  startedAt, finishedAt, version, createdAt, updatedAt}`. A failed draft keeps the options it had (a failed Make more).
+- **Routes** (workspace prefix, same guards as video drafts, unknown keys 400): `GET /vehicle-drafts` (newest first,
+  each designing draft settled on read, so the state is right with no screen open) · `POST /vehicle-drafts` `{design,
+  name? <=60}`, where `design` is the body of `POST /characters/design` with `kind` `car` or absent and no
+  `characterId`; 201, status designing, needs a photo or words · `GET /vehicle-drafts/{draftId}` (settled) ·
+  `POST /vehicle-drafts/{draftId}/design` `{more?, override?}` (Try again, Design it again, Make more) 202 · `DELETE
+  /vehicle-drafts/{draftId}` 204 always, leaves its task alone. Create and redo check the photos, that the agent is on
+  and that a usable model is picked, exactly like the task route. Make more asks for `min(3, 4 - options)` cars,
+  avoiding the last 8 options' looks, and appends (4 at most); otherwise options are replaced.
+- **Safe rules.** (1) One design per draft: starting is a conditional write (status not designing and version as
+  read) that claims a pre-made task id before the task exists (`new_task` takes an optional `task_id`); a lost race
+  or a second press never makes a second task. (2) At most 3 designing per workspace. (3) At most 20 drafts.
+  (4) Settle: a task with no heartbeat fails ("The helper stopped."); so does a task item that is still missing
+  60 seconds after `startedAt`, or one still queued or running after 15 minutes; then a conditional write (still
+  designing, same `taskId`) sets ready (cars from `result.characters`, else `result.character`; a nameless draft takes
+  its first option's name) or failed (`task.error`, else "The helper stopped. Tap Try again."). Settling twice, or
+  from two readers, gives the same result. A draft deleted meanwhile is a 404 on get and left out of the list. A task finished with no vehicle fails with "The helper made no vehicle. Tap
+  Try again." (4b) The caps (3 designing, 20 drafts) count a strongly consistent read but are soft under true concurrency (two creates in one moment can briefly make 4), and deleting a designing draft still counts against the 3 until its task ends. A redo clears the old `model`, `effort` and `message`. (5) An agent that refuses to start fails the draft at once with that sentence. (6) Never auto-saved:
+  Save is the existing `POST /characters`, then the web deletes the draft ("You check it before saving").
+- **Rule texts** (API, web and mock say exactly these): "It is still designing. Wait for it." · "3 vehicles are being
+  designed. Wait for one to finish." · "You have 20 vehicle drafts. Delete one first." · "You have 4 designs already.
+  Pick one."
+- **What the owner sees.** New vehicle, **Design it**: the same screen moves to `/stories/vehicles/draft/{id}` (a
+  second press in the same moment makes one draft). The page shows the photos and words read-only, the same task line,
+  "You can leave. It keeps going in Vehicles.", Close, the model picker and the main button (Designing…, Try again,
+  Design it again); when ready, the cartoon options and the full editor, Make more (up to 4) and Save (creates the
+  vehicle, keeps the photos, deletes the draft, opens the vehicle). On **Vehicles**, drafts come first as glass
+  cards: the name or "New vehicle", the kind, up to 3 photos; designing shows one word, an eased bar that stays under
+  100% and the seconds since `startedAt`; ready celebrates once if it turns ready while watched; stopped shows one
+  line, Try again and Delete. A ready draft with options asks before Delete; others delete at once. A draft counts as
+  "not empty". A saved vehicle's redesign keeps the old task path.
+- **Polling.** The web asks every 2 s while any draft is designing, else every 20 s, and when the tab becomes visible
+  (Clips Funded has no WebSocket). **Mock:** `dev:mock` runs the flow with a 20 to 40 s wait (`vehicleSeconds`;
+  `vehicleFail` fails the next run once).
+- **Not done.** Drafts are not in the dashboard's "Needs you" or under Characters.
+- **Tests.** `test_ws_vehicle_drafts.py`, `ws_routes_core.py` `EXPECTED`, `storiesVehicleDrafts.test.tsx`.
 
 ## 46. Auto-posting: the oldest clips in Review go up by themselves, every X hours (owner request, 2026-11-22)
 

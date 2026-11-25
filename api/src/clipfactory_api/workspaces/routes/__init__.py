@@ -7,11 +7,20 @@ loads Clip Factory's route table.
 from __future__ import annotations
 
 from ...http import Route
-from . import ai, core, mac, series, social, video_drafts
+from . import ai, core, mac, series, social, vehicle_drafts, video_drafts
 from .scope import scoped
 
 # Each request starts and ends with no workspace's added models bound (§45.34: the resolver's scope is per request,
 # never carried into the next call a warm Lambda serves); ``guard.require_workspace`` binds the caller's own.
 ROUTES: list[Route] = [
-    scoped(r) for r in (*core.ROUTES, *series.ROUTES, *video_drafts.ROUTES, *ai.ROUTES, *social.ROUTES, *mac.ROUTES)
+    scoped(r)
+    for r in (
+        *core.ROUTES,
+        *series.ROUTES,
+        *video_drafts.ROUTES,
+        *vehicle_drafts.ROUTES,
+        *ai.ROUTES,
+        *social.ROUTES,
+        *mac.ROUTES,
+    )
 ]

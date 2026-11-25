@@ -72,10 +72,11 @@ def new_task(
     task_input: Mapping[str, Any],
     override: Mapping[str, Any] | None,
     now: datetime,
+    task_id: str | None = None,
 ) -> Item:
     if kind not in KINDS:
         raise ValueError(f"unknown task kind: {kind}")
-    task_id = ulid()
+    task_id = task_id or ulid()
     at = iso(now)
     item: Item = {
         "pk": ws.workspace_pk(user_id, workspace_id),

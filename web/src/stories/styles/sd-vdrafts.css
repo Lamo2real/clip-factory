@@ -1,0 +1,144 @@
+/* ---------- Vehicle drafts: a design run kept on the server, shown first on the Vehicles list ---------- */
+
+/* The drafts sit above the vehicles as glass cards, one to a row (a card has a photo strip, words and a bar). */
+.st-vdc-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 320px), 1fr));
+  gap: var(--st-gap);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.st-vdc {
+  display: grid;
+  gap: var(--st-space-3);
+  padding: var(--st-space-4);
+  color: var(--st-text);
+}
+
+.st-vdc__main {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  gap: var(--st-space-3);
+  align-items: start;
+  color: inherit;
+  text-decoration: none;
+  border-radius: var(--st-r-inner);
+}
+
+.st-vdc__main:hover .st-vdc__name {
+  color: var(--st-text-strong);
+  text-decoration: underline;
+}
+
+.st-vdc__main:focus-visible {
+  outline: none;
+  box-shadow: var(--st-focus-ring);
+}
+
+.st-vdc__photos {
+  display: flex;
+  gap: 4px;
+  max-width: 120px;
+}
+
+.st-vdc__photos img,
+.st-vdc__blank {
+  width: 56px;
+  height: 56px;
+  border-radius: var(--st-r-control);
+  object-fit: cover;
+  background: var(--st-fill-control);
+  box-shadow: var(--st-sheen-control);
+}
+
+.st-vdc__photos img + img {
+  margin-left: -28px;
+}
+
+.st-vdc__blank {
+  display: block;
+}
+
+.st-vdc__body {
+  display: grid;
+  gap: var(--st-space-2);
+  min-width: 0;
+}
+
+.st-vdc__name {
+  color: var(--st-text-strong);
+  font-family: var(--st-font-display);
+  font-size: var(--st-fs-h3);
+  font-weight: 400;
+  line-height: var(--st-lh-head);
+  overflow-wrap: anywhere;
+}
+
+.st-vdc__tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--st-space-2);
+}
+
+.st-vdc__wait {
+  display: grid;
+  gap: var(--st-space-2);
+}
+
+.st-vdc__line {
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
+  overflow-wrap: anywhere;
+}
+
+.st-vdc__line--bad {
+  color: var(--st-coral-ink);
+}
+
+.st-vdc__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--st-space-2);
+  justify-content: flex-end;
+}
+
+.st-vdc__actions .st-btn {
+  min-height: var(--st-tap);
+}
+
+/* A draft's own page: the photos it was made from, read only. */
+.st-vdp__photos {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--st-space-2);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.st-vdp__photos img {
+  width: 88px;
+  height: 88px;
+  border-radius: var(--st-r-control);
+  object-fit: cover;
+  box-shadow: var(--st-sheen-control);
+}
+
+.st-vdp__photos figcaption,
+.st-vdp__side {
+  color: var(--st-text-soft);
+  font-size: var(--st-fs-small);
+}
+
+.st-vdp__words {
+  margin: 0;
+  color: var(--st-text);
+  overflow-wrap: anywhere;
+}
+
+.st-vdp__calm {
+  margin: 0;
+  color: var(--st-text-soft);
+}

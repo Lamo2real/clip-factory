@@ -1,4 +1,4 @@
-## ADR-84 Stories makers are lists of checked models, keyed hosts carry the owner's own keys, Clip Factory's app is shared only behind its reserve, and no account is ever shared
+## ADR-84 Stories makers are lists of checked models; no account is shared
 
 - **Context.** The owner asked to pick picture, video and sound models independently and to add models and providers
   without a rebuild, gave suggested efforts for small text edits (Low) and animation planning (High), kept the shared

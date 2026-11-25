@@ -1,4 +1,4 @@
-## ADR-63 Content Rewards follow-ups: one fit check in the API, a new copy instead of turning a normal clip into a campaign clip, one 30-day total that includes Content Rewards
+## ADR-63 Content Rewards follow-ups: one fit check, a new copy, one 30-day total
 
 - **Context.** After approving §38 the owner asked (2026-11-21) for three things: the Connect steps checked so they are
   very simple and in time order, with a pleasant choice between campaign clips and the normal clips he makes today;

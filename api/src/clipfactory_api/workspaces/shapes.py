@@ -345,6 +345,40 @@ def public_video_draft(item: Mapping[str, Any]) -> dict[str, Any]:
     }
 
 
+def public_vehicle_draft(item: Mapping[str, Any], presign: Presign, user_id: str) -> dict[str, Any]:
+    """The public ``VehicleDraft``: a vehicle being designed with AI (or done, or failed). The stored ``design``, the
+    photos' keys and the claim fields stay in; ``words`` is what the owner typed."""
+    workspace_id = str(item["workspaceId"])
+    stored = item.get("design")
+    design: Mapping[str, Any] = stored if isinstance(stored, Mapping) else {}
+    photos = []
+    for photo in item.get("photos") or []:
+        url = safe_url(presign, user_id, workspace_id, photo.get("key"))
+        if url:
+            photos.append({"assetId": str(photo["assetId"]), "url": url, "side": str(photo.get("side") or "outside")})
+    status = item.get("status")
+    options = [dict(o) for o in item.get("options") or [] if isinstance(o, Mapping)]
+    return {
+        "draftId": str(item["draftId"]),
+        "workspaceId": workspace_id,
+        "name": str(item.get("name") or ""),
+        "vehicle": str(item.get("vehicle") or "car"),
+        "words": str(design.get("description")) if design.get("description") else None,
+        "photos": photos,
+        "status": status if status in ("designing", "ready", "failed") else "failed",
+        "taskId": str(item.get("taskId") or ""),
+        "model": item.get("model") if isinstance(item.get("model"), str) else None,
+        "effort": item.get("effort") if isinstance(item.get("effort"), str) else None,
+        "message": str(item["message"]) if item.get("message") else None,
+        "options": options,
+        "startedAt": str(item.get("startedAt") or ""),
+        "finishedAt": str(item["finishedAt"]) if item.get("finishedAt") else None,
+        "version": int(item.get("version") or 1),
+        "createdAt": str(item.get("createdAt") or ""),
+        "updatedAt": str(item.get("updatedAt") or ""),
+    }
+
+
 def ai_setting(value: Any) -> dict[str, Any]:
     """A video's own model and effort (``Story.ai``), ``{model: null, effort: null}`` when it has none."""
     stored = value if isinstance(value, Mapping) else {}

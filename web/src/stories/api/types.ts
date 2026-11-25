@@ -930,6 +930,41 @@ export interface VideoDraft {
   updatedAt: string;
 }
 
+/**
+ * A vehicle draft (VDESIGN#): one "Design with AI" run for a new vehicle, kept on the server so the owner can leave the
+ * screen and come back. It owns the design task and mirrors its state; nothing is saved as a vehicle until the owner
+ * taps Save. Its options are the cartoon vehicles the run made (a failed "make more" keeps the earlier ones).
+ */
+export interface VehicleDraft {
+  draftId: string;
+  workspaceId: string;
+  /** may be "" (the card then says "New vehicle") */
+  name: string;
+  vehicle: VehicleType;
+  /** the owner's words, null when there were none */
+  words: string | null;
+  photos: { assetId: string; url: string; side: PhotoSide }[];
+  status: "designing" | "ready" | "failed";
+  taskId: string;
+  model: string | null;
+  effort: string | null;
+  /** the plain sentence of a failed draft, else null */
+  message: string | null;
+  options: CharacterInput[];
+  startedAt: string;
+  finishedAt: string | null;
+  version: number;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/** The body of POST …/vehicle-drafts: a design body for a vehicle (kind "car" or left out, never a characterId). */
+export interface VehicleDraftBody {
+  design: Omit<DesignBody, "characterId">;
+  /** ≤ 60 */
+  name?: string;
+}
+
 /** A video's shape and size (CONTRACTS §45.34 "Video size and shape"); the size matches the aspect. */
 export interface StoryFormat {
   aspect: "9:16" | "1:1" | "16:9";
@@ -1499,6 +1534,15 @@ export interface StoriesApi {
   /** 409 when the version changed; 413 over 32 KB */
   saveVideoDraft(ws: string, draftId: string, body: { form: VideoDraftForm; version: number }): Promise<VideoDraft>;
   deleteVideoDraft(ws: string, draftId: string): Promise<void>;
+  /** Vehicle drafts (VDESIGN#): newest first; each designing one is settled on read */
+  listVehicleDrafts(ws: string): Promise<{ items: VehicleDraft[] }>;
+  getVehicleDraft(ws: string, draftId: string): Promise<VehicleDraft>;
+  /** starts the design (one task per draft); 409 at 3 designing, at 20 drafts */
+  createVehicleDraft(ws: string, body: VehicleDraftBody): Promise<VehicleDraft>;
+  /** Try again / Design it again / Make more (`more`: 3 more, up to 4 in all); 409 while it is still designing */
+  redesignVehicleDraft(ws: string, draftId: string, body?: { more?: boolean; override?: ModelOverride }): Promise<VehicleDraft>;
+  /** always works (it leaves the task alone) */
+  deleteVehicleDraft(ws: string, draftId: string): Promise<void>;
   /** no `from`: runs exactly the story's stale steps ("Try again", "Check again", "Remake"); override: this job only */
   produce(ws: string, storyId: string, body?: { from?: StepKey; sceneIds?: string[]; override?: ModelOverride }): Promise<{ story: Story; job: ProductionJob }>;
   cancelStory(ws: string, storyId: string): Promise<{ story: Story; job: ProductionJob | null }>;

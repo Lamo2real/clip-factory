@@ -1222,7 +1222,7 @@ CR or any platform.
 The owner's follow-up the same day: Connect in time order, a pleasant choice between campaign clips and normal clips,
 all his money in one place, and knowing before an upload whether a clip can earn on a campaign
 ([CONTRACTS.md §39](CONTRACTS.md#39-content-rewards-the-two-ways-all-your-money-and-does-this-clip-fit-owner-request-2026-11-21),
-[ADR-63](DECISIONS.md#adr-63-content-rewards-follow-ups-one-fit-check-in-the-api-a-new-copy-instead-of-turning-a-normal-clip-into-a-campaign-clip-one-30-day-total-that-includes-content-rewards)).
+[ADR-63](DECISIONS.md#adr-63-content-rewards-follow-ups-one-fit-check-a-new-copy-one-30-day-total)).
 No new Lambda, table, index, bucket or secret: three routes under `/v1/contentrewards`, one under `/v1/money`, new
 attributes and one api setting. It is part of **13** in the diagram.
 

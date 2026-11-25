@@ -83,7 +83,7 @@ const NAV: NavItem[] = [
   },
   // The vehicles' own place, right under Characters (§45.42.10, the owner: "where are cars? i need cars as well";
   // shown as Vehicles since §45.47, the page names stay).
-  { label: "Vehicles", icon: "car", page: { name: "cars" }, match: ["cars", "car_new", "car"] },
+  { label: "Vehicles", icon: "car", page: { name: "cars" }, match: ["cars", "car_new", "car", "car_draft"] },
   {
     label: "Production",
     icon: "clapper",
@@ -209,6 +209,7 @@ function Screen(props: StoriesScreenProps) {
     case "cars":
     case "car_new":
     case "car":
+    case "car_draft":
       return <CarsScreen {...props} />;
     case "production":
     case "production_new":

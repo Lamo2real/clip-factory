@@ -16,6 +16,7 @@ import {
   type CarInput,
   type Character,
   type CharacterInput,
+  type DesignBody,
   type LibraryItem,
   type PersonInput,
   type PhotoSide,
@@ -790,6 +791,18 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
       return { assetId, uploadUrl: `mock://stories/design/${assetId}`, headers: { "Content-Type": file.contentType } };
     },
     async designCharacter(ws, body) {
+      return designTask(store, ws, body);
+    },
+  };
+}
+
+/**
+ * "Design with AI": the checks of POST …/characters/design and the character agent's task. The vehicle drafts (their
+ * own part) start the same task with their own length and failure (`opts`), so a draft's run is a real wait.
+ */
+export async function designTask(store: MockStore, ws: string, body: DesignBody, opts: { seconds?: number; fail?: string | null } = {}) {
+  {
+    {
       guardWs(store, ws);
       const words = (body.description ?? "").trim();
       if (words.length > 600) fail(400, "bad_request", "Keep the description to 600 letters.");
@@ -833,8 +846,8 @@ export function api(store: MockStore): Pick<StoriesApi, (typeof KEYS)[number]> {
         const fresh = designFromWords(words, refs.length > 0, salt);
         const character = current ? redesign(input(current), fresh, words) : fresh;
         return { character, characters: [character] };
-      });
-    },
-  };
+      }, undefined, opts);
+    }
+  }
 }
 

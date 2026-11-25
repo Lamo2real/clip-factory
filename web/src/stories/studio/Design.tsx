@@ -29,6 +29,9 @@ import { DEFAULT_LOOK, DEFAULT_VOICE, newCar, newCharacter } from "./looks.ts";
 import { Photos, type Photo } from "./Photos.tsx";
 import { fileProblem } from "./References.tsx";
 import { say } from "./words.ts";
+import { storiesGoLater } from "../pane.tsx";
+import { storiesHref } from "../routes.ts";
+import { rememberPhotos } from "./VehicleDrafts.tsx";
 
 const isObj = (v: unknown): v is Record<string, unknown> => !!v && typeof v === "object" && !Array.isArray(v);
 const str = (v: unknown, fallback: string) => (typeof v === "string" ? v : fallback);
@@ -453,6 +456,7 @@ export function CarDesign({
   characterId,
   onPhotos,
   vehicle = "car",
+  asDraft = false,
 }: {
   ws: string;
   info: AiInfo;
@@ -468,9 +472,18 @@ export function CarDesign({
   onPhotos?: (photos: Photo[]) => void;
   /** the kind picked in "What is it?" (§45.47): the design keeps to its bodies; "car" is left out of the request */
   vehicle?: VehicleType;
+  /**
+   * A NEW vehicle: Design it starts a vehicle draft kept on the server and moves this screen to the draft's own page,
+   * so the owner can go elsewhere in the app while it runs (it shows under Vehicles until it is ready or stopped).
+   * A saved vehicle's redesign keeps the task on this screen.
+   */
+  asDraft?: boolean;
 }) {
   const [open, setOpen] = useState(startOpen);
   const [words, setWords] = useState("");
+  const [starting, setStarting] = useState(false);
+  /** set at once when a draft starts: a double tap (or Enter twice) in the same moment starts one */
+  const startedRef = useRef(false);
   const [photos, setPhotos] = useState<Photo[]>(() => sorted(pictures.map(savedPhoto)));
   /** the strip a paste anywhere on the page goes to: the one the owner last used */
   const [pasteTo, setPasteTo] = useState<PhotoSide>("outside");
@@ -509,7 +522,7 @@ export function CarDesign({
     },
     () => design(more.current),
   );
-  const busy = run.phase === "working";
+  const busy = run.phase === "working" || starting;
 
   useEffect(() => {
     onPhotos?.(photos);
@@ -541,6 +554,24 @@ export function CarDesign({
     if (again) body.avoid = options.slice(-MAX_AVOID).map((o) => o.car);
     const override = sendPick(info, usual, pick);
     if (override) body.override = override;
+    if (asDraft && !characterId) {
+      if (startedRef.current) return;
+      startedRef.current = true;
+      setStarting(true);
+      const kept = ready;
+      storiesApi()
+        .createVehicleDraft(ws, { design: body })
+        .then((d) => {
+          rememberPhotos(d.draftId, kept);
+          storiesGoLater(storiesHref({ name: "car_draft", draftId: d.draftId }), { replace: true });
+        })
+        .catch((e) => {
+          startedRef.current = false;
+          setStarting(false);
+          setProblem(say(e, "The helper is busy. Try again in a minute."));
+        });
+      return;
+    }
     more.current = again;
     if (!again) setMadeFrom(photoKey);
     void run.start(() => storiesApi().designCharacter(ws, body));
@@ -631,7 +662,7 @@ export function CarDesign({
         </button>
         <ModelMenu info={info} usual={usual} value={pick} onChange={setPick} />
         <button type="button" className="st-btn st-btn--main" aria-disabled={busy || sending || undefined} onClick={() => design(false)}>
-          {busy ? `Designing ${CARS_PER_DESIGN}…` : options.length && !changed ? "Design it again" : "Design it"}
+          {starting ? "Starting…" : busy ? `Designing ${CARS_PER_DESIGN}…` : options.length && !changed ? "Design it again" : "Design it"}
         </button>
       </div>
       {options.length ? (

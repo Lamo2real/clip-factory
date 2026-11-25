@@ -159,6 +159,9 @@ Still open in phase 2:
   for the motorbike, plane and boat from their own photos, riders seen head on, a second look (the best option sent
   back beside the photo for corrected numbers) if the likeness is not enough, and redrawing old looks' defects
   (needs the owner's yes and an engine-version bump).
+- **Vehicle designs as drafts, the rest** ([CONTRACTS.md §45.51](CONTRACTS.md#4551-vehicle-designs-run-on-their-own-and-wait-in-vehicles-as-drafts-owner-request-2026-11-25-wins-over-4542-4547-for-where-design-with-ai-keeps-its-work),
+  [ADR-101](DECISIONS.md#adr-101-vehicle-designs-are-drafts)): built. Still to do: show
+  designing drafts in the dashboard's "Needs you" and under Characters.
 - **Scheduled posting**: choose when each clip goes out (best time per platform from the learnings). Auto-posting
   every X hours, oldest first, is built ([CONTRACTS.md §46](CONTRACTS.md#46-auto-posting-the-oldest-clips-in-review-go-up-by-themselves-every-x-hours-owner-request-2026-11-22));
   picking the best time per platform is not.

@@ -26,6 +26,7 @@ import type {
   StoriesAiConfig,
   StoriesApi,
   StoriesDashboard,
+  VehicleDraft,
   VideoDraft,
   Workspace,
 } from "../types.ts";
@@ -52,6 +53,15 @@ export interface StoredSeries {
   updatedAt: string;
 }
 
+/** A vehicle draft as the practice app keeps it (VDESIGN#): the design it was started with, and what the run says. */
+export interface StoredVehicleDraft extends Omit<VehicleDraft, "words"> {
+  design: import("../types.ts").DesignBody;
+  /** this run adds to the options (Make more) instead of replacing them */
+  more: boolean;
+  /** a design is being started (claimed, its task not made yet): reads leave it alone */
+  starting?: boolean;
+}
+
 export interface MockStore {
   workspaces: Workspace[];
   ideas: Idea[];
@@ -74,6 +84,8 @@ export interface MockStore {
   series: StoredSeries[];
   /** Saved "Make a new video" forms (VDRAFT#, §45.47), the drafts part's */
   drafts: VideoDraft[];
+  /** Vehicle drafts (VDESIGN#): the vehicle drafts part's */
+  vehicleDrafts: StoredVehicleDraft[];
   /** Lamo Clips' own destination per platform (names only), as GET …/social returns it. */
   clips: ClipsDestination[];
   /** ACT# items any part may add (approve, reject, changes, made, posted, failed); the dashboard shows the last 10. */
@@ -109,6 +121,7 @@ export function createStore(): MockStore {
     references: [],
     series: [],
     drafts: [],
+    vehicleDrafts: [],
     clips: [],
     activity: [],
     onboarding: { stepsDone: [], skipped: [], finishedAt: null, providersPickedAt: null },
