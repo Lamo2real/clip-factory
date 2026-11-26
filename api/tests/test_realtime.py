@@ -699,3 +699,32 @@ def test_broadcast_never_sends_crstate_or_crowners(
     ]
     broadcast.process({"Records": records}, bc_deps)
     assert management.sent == []
+
+
+def test_ws_builds_its_clients_at_import_not_inside_the_call(monkeypatch: pytest.MonkeyPatch) -> None:
+    """At 128 MB the lazy setup took more than 10 s and every call timed out (CONTRACTS §14.2, 26 Nov 2026)."""
+    built: list[str] = []
+    monkeypatch.setattr(ws, "_deps", None)
+    monkeypatch.setattr(ws, "get_deps", lambda *a, **k: built.append("x"))
+    monkeypatch.delenv("TABLE_NAME", raising=False)
+    ws.warm()
+    assert built == []  # no env (tests, tooling): nothing is built
+    monkeypatch.setenv("TABLE_NAME", "t")
+    monkeypatch.setenv("WS_ENDPOINT", "https://x.execute-api.eu-north-1.amazonaws.com/live")
+    ws.warm()
+    assert built == ["x"]
+
+    def boom(*a: Any, **k: Any) -> None:
+        raise RuntimeError("no network")
+
+    monkeypatch.setattr(ws, "get_deps", boom)
+    ws.warm()  # a failure at init is logged, never raised: the first call retries
+
+
+def test_handler_cancels_its_hang_dump(monkeypatch: pytest.MonkeyPatch, ws_deps: ws.WsDeps) -> None:
+    calls: list[str] = []
+    monkeypatch.setattr(ws.faulthandler, "dump_traceback_later", lambda *a, **k: calls.append("arm"))
+    monkeypatch.setattr(ws.faulthandler, "cancel_dump_traceback_later", lambda: calls.append("cancel"))
+    monkeypatch.setattr(ws, "get_deps", lambda *a, **k: ws_deps)
+    assert ws.handler(_ws_event("$default", body='{"action":"ping"}')) == {"statusCode": 200}
+    assert calls == ["arm", "cancel"]

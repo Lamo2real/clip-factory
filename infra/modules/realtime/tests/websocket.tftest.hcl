@@ -180,9 +180,9 @@ run "functions_and_permissions" {
 
   assert {
     condition = (aws_lambda_function.fn["ws-authorizer"].memory_size == 128 && aws_lambda_function.fn["ws-authorizer"].timeout == 10 &&
-      aws_lambda_function.fn["ws"].memory_size == 128 && aws_lambda_function.fn["ws"].timeout == 10 &&
+      aws_lambda_function.fn["ws"].memory_size == 256 && aws_lambda_function.fn["ws"].timeout == 10 &&
     aws_lambda_function.fn["broadcast"].memory_size == 256 && aws_lambda_function.fn["broadcast"].timeout == 60)
-    error_message = "Sizes: authorizer 128 MB/10 s, ws 128 MB/10 s, broadcast 256 MB/60 s."
+    error_message = "Sizes: authorizer 128 MB/10 s, ws 256 MB/10 s, broadcast 256 MB/60 s."
   }
 
   assert {

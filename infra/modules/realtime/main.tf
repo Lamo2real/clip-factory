@@ -37,7 +37,7 @@ locals {
     }
     ws = {
       handler = "clipfactory_api.realtime.ws.handler"
-      memory  = 128
+      memory  = 256
       timeout = 10
       env = {
         TABLE_NAME       = var.table_name

@@ -1,5 +1,5 @@
 {
- "version": "8d8bc6ca8cb2",
+ "version": "913e2c0d0863",
  "parts": [
   {
    "id": "app-map",
@@ -111,7 +111,7 @@
    "id": "contracts-14",
    "title": "CONTRACTS: 14. Serverless expansion: WebSocket API, REST API, durable functions, S3 Vectors",
    "line": "Everything stays serverless and in eu-north-1: CloudFront + S3 (web), S3 (media), S3 Vectors, DynamoDB, three API",
-   "chars": 45157
+   "chars": 45909
   },
   {
    "id": "contracts-15",
