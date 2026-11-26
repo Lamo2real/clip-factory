@@ -1,5 +1,5 @@
 {
- "version": "227e86d61a6f",
+ "version": "651fc7c6f133",
  "parts": [
   {
    "id": "app-map",
@@ -981,7 +981,7 @@
    "id": "adr-107",
    "title": "DECISIONS: ADR-107 Pictures on a CR clip are a list of layers next to the old single logo",
    "line": "Context. §54. The owner wants several pictures on one clip. §53 stored one overlay.logo; clips are already edited.",
-   "chars": 726
+   "chars": 355
   },
   {
    "id": "adr-108",
