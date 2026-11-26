@@ -395,6 +395,7 @@ button.cr-logo__pick:hover {
 }
 .cr-chip.is-on .cr-chip__pick {
   color: var(--on-bone);
+  text-shadow: none;
 }
 .cr-chip__pick img {
   display: block;
@@ -420,6 +421,7 @@ button.cr-logo__pick:hover {
 }
 .cr-chip.is-on .cr-chip__x {
   color: var(--on-bone);
+  text-shadow: none;
 }
 .cr-chip__x:hover {
   background: var(--fill-hover);
