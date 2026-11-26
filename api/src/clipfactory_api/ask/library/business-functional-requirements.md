@@ -690,3 +690,11 @@ and that they want to add logos and text to clips and keep the logos to use agai
 - AC4: **Campaign.** Picking a campaign picks its logo and hashtags.
 - AC5: **Posting.** The edited clip posts like any other; the original is kept and Reset brings it back.
 - AC6: **Warning.** One short line when the logo covers the captions or the facecam.
+
+### BR-35 CR active: several pictures on one clip
+The owner said on 26 Nov 2026: "i should be able to add multiple images to campaign active videos."
+([CONTRACTS.md §54](CONTRACTS.md#54-cr-active-more-than-one-picture-on-a-clip-owner-request-2026-11-26),
+[ADR-107](DECISIONS.md#adr-107-pictures-on-a-cr-clip-are-a-list-of-layers-next-to-the-old-single-logo))
+- AC1: **Add.** Tapping a library logo adds another picture, up to 4, each with its own place, size and time.
+- AC2: **List.** A chip per picture lets the owner pick, move, resize or remove it.
+- AC3: **Old edits.** A clip edited with one logo still opens and posts as before.

@@ -2,6 +2,7 @@
 // the editor and the logo library share. Pure, so the tests read them directly.
 import type { Clip, Logo, OverlayBody } from "../api/types.ts";
 import { filesFrom } from "../features/help/pictures.ts";
+import { L, MAX_LAYERS } from "./crLayers.ts";
 import { bytes } from "./format.ts";
 
 // ---------- Words (C7) ----------
@@ -109,13 +110,23 @@ export function withOverlay<T extends Clip>(clips: T[], fresh: Clip): T[] {
   });
 }
 
-/** True when the edit has something to draw and its numbers are in range (what Make it checks before it sends). */
-export function bodyProblem(body: OverlayBody, durationSec: number): string | null {
-  if (!body.logo && !body.text) return "Add a logo or some words first.";
-  if (body.text && (!body.text.text.trim() || Array.from(body.text.text).length > TEXT_MAX)) return `Words: 1 to ${TEXT_MAX} letters.`;
-  const t = body.timing;
+/** The one sentence for a time that is not inside the clip, or null. */
+export function timingProblem(t: { startSec: number; endSec: number } | undefined, durationSec: number): string | null {
   if (t && !(t.startSec >= 0 && t.endSec > t.startSec && t.endSec <= durationSec + 0.05)) return "Pick a start before the end, inside the clip.";
   return null;
+}
+
+/** True when the edit has something to draw and its numbers are in range (what Make it checks before it sends). */
+export function bodyProblem(body: OverlayBody, durationSec: number): string | null {
+  const layers = body.logos ?? [];
+  if (!body.logo && !layers.length && !body.text) return "Add a logo or some words first.";
+  if (layers.length > MAX_LAYERS) return L.tooMany;
+  if (body.text && (!body.text.text.trim() || Array.from(body.text.text).length > TEXT_MAX)) return `Words: 1 to ${TEXT_MAX} letters.`;
+  for (const layer of layers) {
+    const bad = timingProblem(layer.timing, durationSec);
+    if (bad) return bad;
+  }
+  return timingProblem(body.timing, durationSec);
 }
 
 /** Hashtags to put in the text line: the campaign's required ones that are not there yet, at most `max` letters in all. */

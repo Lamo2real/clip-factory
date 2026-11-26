@@ -9,6 +9,7 @@ import { putFile } from "../../api/upload.ts";
 import { Icon } from "../../components/Icon.tsx";
 import { useToast } from "../../components/Toasts.tsx";
 import { Progress, Skeleton } from "../../components/ui.tsx";
+import { L } from "../../lib/crLayers.ts";
 import { LOGO_ACCEPT, LOGO_UNDO_MS, logoName, logoRefusal, logoType, putLogoBack, takeLogo, W } from "../../lib/crOverlay.ts";
 
 export interface UploadingLogo {
@@ -175,8 +176,12 @@ export function useLogos({ onAdded, onRemoved }: Hooks = {}): Logos {
   return { logos, error, uploading, add, remove, put, reload };
 }
 
-/** The tiles: pick one (tap it again to let go), delete one, or add one. */
-export function LogoLibrary({ lib, picked, onPick }: { lib: Logos; picked: string | null; onPick: (logoId: string | null) => void }) {
+/**
+ * The tiles: tap one to put it on the clip as another picture (§54 L1; tap it again for another copy), delete one, or add
+ * one. `used`: the logos that are on the clip now (their tiles are lit). `full`: the clip has all its pictures, so the
+ * tiles stop adding and one line says why (L2).
+ */
+export function LogoLibrary({ lib, used, full, onPick }: { lib: Logos; used: ReadonlySet<string>; full: boolean; onPick: (logoId: string) => void }) {
   const id = useId();
   const input = useRef<HTMLInputElement>(null);
   return (
@@ -184,6 +189,9 @@ export function LogoLibrary({ lib, picked, onPick }: { lib: Logos; picked: strin
       <span className="field__label" id={`${id}-l`}>
         {W.logo}
       </span>
+      <p className={`cr-logos__cap${full ? "" : " cr-logos__cap--none"}`} role="status" data-edit-cap="">
+        {full ? L.cap : ""}
+      </p>
       {lib.error ? (
         <p className="callout callout--bad" role="alert">
           <Icon name="alert" size={18} />
@@ -197,7 +205,7 @@ export function LogoLibrary({ lib, picked, onPick }: { lib: Logos; picked: strin
       <ul className="cr-logos__grid" aria-labelledby={`${id}-l`}>
         {(lib.logos ?? []).map((l) => (
           <li key={l.logoId} className="cr-logo">
-            <button type="button" className={`cr-logo__pick${picked === l.logoId ? " is-on" : ""}`} aria-pressed={picked === l.logoId} aria-label={l.name} onClick={() => onPick(picked === l.logoId ? null : l.logoId)}>
+            <button type="button" className={`cr-logo__pick${used.has(l.logoId) ? " is-on" : ""}`} aria-label={l.name} aria-disabled={full || undefined} onClick={() => (full ? undefined : onPick(l.logoId))}>
               <img src={l.url} alt="" draggable={false} />
             </button>
             <button type="button" className="icon-btn cr-logo__remove" aria-label={`Delete ${l.name}`} onClick={() => lib.remove(l.logoId)}>
@@ -227,7 +235,7 @@ export function LogoLibrary({ lib, picked, onPick }: { lib: Logos; picked: strin
               }}
             />
             <Icon name="plus" size={22} />
-            <span className="cr-logo__add-title">{W.addLogo}</span>
+            <span className="cr-logo__add-title">{L.add}</span>
             <span className="cr-logo__add-hint">{W.dropPastePick}</span>
           </label>
         </li>

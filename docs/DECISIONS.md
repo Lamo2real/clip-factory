@@ -2933,3 +2933,12 @@ likes, comments and shares; views are their own two choices.
 - **Context.** The owner's Review card showed only Facebook ticked with four places set up: the device pick saved after an earlier Upload (or Where clips go) beat the most-reach default.
 - **Decision.** `defaultUploadTo(ready)` returns every ready place (a campaign clip: the places it pays for). Taps change that one card only. `cf-upload-to` is neither read nor written. Where clips go stays in Settings and for the server, unchanged; auto-posting is untouched (§46).
 - **Consequences.** No stored data changes; an old `cf-upload-to` value is simply ignored.
+
+## ADR-107 Pictures on a CR clip are a list of layers next to the old single logo
+
+- **Context.** §54. The owner wants several pictures on one clip. §53 stored one `overlay.logo`; clips are already edited.
+- **Options.** (1) Replace `logo` with `logos`: breaks reads of edited clips and needs a migration. (2) Add `logos` and
+  keep `logo` readable. (3) One stored layer list for logos and text: a bigger rewrite of the text path.
+- **Decision.** Option 2. New edits write `logos`; code reads `logos`, else `logo` as one layer. The soft cap of 4 keeps
+  the render one ffmpeg run and the sheet small. No new resource.
+- **Consequences.** Old edited clips keep working untouched; the cap is one constant, raised by editing it.

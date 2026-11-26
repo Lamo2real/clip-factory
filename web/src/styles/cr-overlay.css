@@ -128,6 +128,10 @@
 .cr-ed__item:focus-visible {
   outline-color: rgb(var(--bone-rgb) / 0.85);
 }
+/* The chosen picture or words: a soft light around them, never a line (§54 L2). */
+.cr-ed__item.is-chosen {
+  box-shadow: 0 0 14px rgb(var(--bone-rgb) / 0.5);
+}
 /* A box that sits on the captions or the facecam turns vermilion. */
 .cr-ed__item.is-warn {
   box-shadow: 0 0 14px rgb(var(--vermilion-rgb) / 0.55);
@@ -333,4 +337,117 @@ button.cr-logo__pick:hover {
 .cr-logo__add-hint {
   font-size: 0.78rem;
   color: var(--ink-2);
+}
+
+/* ---------- The chips under the preview (§54 L2): one per picture, then the words ---------- */
+.cr-chips {
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 6px;
+  max-width: 100%;
+  padding: 4px;
+  border-radius: var(--r-pill);
+}
+.cr-chips__glide {
+  background: var(--selected);
+  border-radius: var(--r-pill);
+}
+.cr-chip {
+  position: relative;
+  z-index: 1;
+  display: inline-flex;
+  align-items: center;
+  min-height: 40px;
+  border-radius: var(--r-pill);
+  transition:
+    background-color var(--dur-2) var(--ease-out),
+    box-shadow var(--dur-2) var(--ease-out);
+}
+.cr-chip:not(.is-on):hover {
+  background: var(--fill-hover);
+  box-shadow: var(--light-rim-sm);
+}
+/* The chosen chip is bone. Until the glide has measured it paints its own bone; after, the glide carries it. */
+.cr-chip.is-on {
+  background: var(--selected);
+  box-shadow: var(--light-shade-2), var(--light-shadow-2);
+}
+.cr-chips.has-glide > .cr-chip.is-on {
+  background: transparent;
+  box-shadow: none;
+}
+.cr-chip__pick {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  height: 40px;
+  padding: 4px 6px 4px 10px;
+  border-radius: var(--r-pill);
+  font-weight: 650;
+  font-size: 0.9rem;
+  color: var(--ink-2);
+  transition: color var(--dur-2) var(--ease-out);
+}
+.cr-chip.is-on .cr-chip__pick {
+  color: var(--on-bone);
+  text-shadow: none;
+}
+.cr-chip__pick img {
+  display: block;
+  width: 28px;
+  height: 28px;
+  object-fit: contain;
+  pointer-events: none;
+}
+.cr-chip--text .cr-chip__pick {
+  padding-inline: 14px 6px;
+}
+.cr-chip__x {
+  display: inline-grid;
+  place-items: center;
+  width: 28px;
+  height: 28px;
+  margin-right: 6px;
+  border-radius: var(--r-pill);
+  color: var(--ink-2);
+  transition:
+    background-color var(--dur-1) var(--ease-out),
+    color var(--dur-1) var(--ease-out);
+}
+.cr-chip.is-on .cr-chip__x {
+  color: var(--on-bone);
+  text-shadow: none;
+}
+.cr-chip__x:hover {
+  background: var(--fill-hover);
+}
+.cr-chip__x:active {
+  background: var(--fill-press);
+}
+/* A covered picture: a small vermilion dot on its chip. */
+.cr-chip__dot {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+  background: var(--vermilion);
+  box-shadow: 0 0 6px rgb(var(--vermilion-rgb) / 0.6);
+}
+
+/* The line at four pictures (§54 L2); empty it takes no room but stays a live region. */
+.cr-logos__cap {
+  margin: 0;
+  font-size: var(--fs-small);
+  font-weight: 600;
+  color: var(--ink-2);
+}
+.cr-logos__cap--none {
+  margin-top: -8px;
 }
