@@ -86,37 +86,10 @@ export function placeList(chosen: readonly Platform[]): string {
   return names.length > 1 ? `${names.slice(0, -1).join(", ")} and ${names[names.length - 1]}` : (names[0] ?? "");
 }
 
-/** localStorage key: the places picked on this device's last Upload (§33). */
-export const UPLOAD_TO_KEY = "cf-upload-to";
-
 /**
- * Which places start switched on (§33): this device's last choice, minus places no longer set up; with none saved,
- * Where clips go minus places not set up; when that leaves nothing, every place that is set up.
+ * Which places start switched on (§36.1): every place that is set up, always. Taps on a card change that clip only;
+ * the old device pick (localStorage `cf-upload-to`) and Where clips go are not read here.
  */
-export function defaultUploadTo(ready: readonly Platform[], saved: readonly Platform[] | null, settings: readonly Platform[] | undefined): Platform[] {
-  const pick = (list: readonly Platform[]) => PLATFORM_ORDER.filter((p) => ready.includes(p) && list.includes(p));
-  if (saved) {
-    const kept = pick(saved);
-    if (kept.length) return kept;
-  }
-  const fromSettings = settings ? pick(settings) : [];
-  return fromSettings.length ? fromSettings : PLATFORM_ORDER.filter((p) => ready.includes(p));
-}
-
-export function readUploadTo(): Platform[] | null {
-  try {
-    const raw = localStorage.getItem(UPLOAD_TO_KEY);
-    const list: unknown = raw ? JSON.parse(raw) : null;
-    return Array.isArray(list) ? PLATFORM_ORDER.filter((p) => list.includes(p)) : null;
-  } catch {
-    return null;
-  }
-}
-
-export function saveUploadTo(chosen: readonly Platform[]): void {
-  try {
-    localStorage.setItem(UPLOAD_TO_KEY, JSON.stringify(chosen));
-  } catch {
-    // Private window or blocked storage: the choice is simply not remembered.
-  }
+export function defaultUploadTo(ready: readonly Platform[]): Platform[] {
+  return PLATFORM_ORDER.filter((p) => ready.includes(p));
 }

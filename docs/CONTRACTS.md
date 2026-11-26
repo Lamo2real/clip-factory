@@ -7252,9 +7252,9 @@ Try again. The X tab showed the X mark and the letter "X" ("X X").
   place.") and Upload works the old way (no `platforms`). While the setup is still loading, or when the check
   failed (callout "Couldn't check your places. Tap Check again." and a **Check again** button),
   `ready` is unknown: Upload stays off, so a failed check can never send the clip to places nobody picked.
-* **Which start on (per device):** the last Upload's choice in localStorage `cf-upload-to` (saved on Upload, not on
-  each tap) minus places no longer ready; with none saved, Where clips go minus places not ready; if that leaves
-  nothing, every ready place.
+* **Which start on:** every ready place, always (changed 2026-11-26, [ADR-106](DECISIONS.md)). The old per-device pick
+  (localStorage `cf-upload-to`, saved on Upload) is no longer read or written; a stale key is ignored. Settings ›
+  Where clips go (`settings.platforms`) stays but does not set the card's start.
 * **Caption tabs** (replaced by one row per place, §36.1) showed only the chosen places. A place turned off keeps its
   text. Limits unchanged; the too-long check (`captionsTooLong` / `tabsTooLong`) counts
   only chosen places. The tab shows its mark, and its name only when open; X's name is screen-reader only (its mark
@@ -7647,7 +7647,7 @@ Decision record: ADR-60 (which corrects ADR-57).
 ### 34.1 The card, top to bottom
 
 1. Clip info, video and Checks before posting, as before.
-2. **Upload to** chips (§33.2, unchanged): only places that are set up, all ticked to start, remembered per device.
+2. **Upload to** chips (§33.2, unchanged): only places that are set up, all ticked to start, nothing remembered between clips (§33.2).
    They are the only place picker on the card.
 3. **Use my settings**: one big soft-fill button (`.my-settings__btn`, a glass button, full width). It puts My
    settings on every ticked place. Done state: bone fill, a check, **Your settings are on**. Under it one plain line:
