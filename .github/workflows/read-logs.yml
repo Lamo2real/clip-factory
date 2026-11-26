@@ -77,7 +77,7 @@ jobs:
                           code, platform, result, reason, starts, sent, type, stopped, started, superseded, seconds, free, height, estBytes,
                           owners, days, rules, jsonrpc, signedIn, membership, runId, slot, mode, clips, note, ran,
                           clipId, clipIds,
-                          record: ((.record // null) | if type == "object" then ({status, errorType} | with_entries(select(.value != null))) else null end),
+                          record: ((.record // null) | if type == "object" then ({status, errorType, metrics: (.metrics // null | if type == "object" then {durationMs, initDurationMs, billedDurationMs, maxMemoryUsedMB, memorySizeMB} | with_entries(select(.value != null)) else null end)} | with_entries(select(.value != null))) else null end),
                           errorMessage: ((.errorMessage // null) | if . then .[0:300] else null end),
                           detail: ((.detail // null) | if . then .[0:300] else null end)} | with_entries(select(.value != null)) | tojson)
               else ($m | gsub("\n"; " ") | .[0:400]) end'
@@ -142,7 +142,7 @@ jobs:
             echo "no log group $ws"
           else
             query "$ws" "fields @timestamp, @logStream, @message
-              | filter @message like /(?i)error|exception|traceback|timeout|timed out|connect|disconnect|message|route|gone|stale|throttl|ws\\.|event\\W{1,8}(cr|campaigns|autopost)\\./
+              | filter @message like /(?i)error|exception|traceback|timeout|timed out|connect|disconnect|message|route|gone|stale|throttl|platform\\.(report|initReport)|ws\\.|event\\W{1,8}(cr|campaigns|autopost)\\./
               | sort @timestamp asc | limit 2000"
           fi
           echo "::endgroup::"
