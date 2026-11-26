@@ -624,7 +624,9 @@ class Pipeline:
         for c in await self.store.job_clips(st.job_id):
             if c.get("status") == "review" and c.get("userId") == st.user_id:
                 await self.store.delete_item(c["pk"], c["sk"], fence=st.fence)
-                await self.store.delete_keys([k for k in (c.get("videoKey"), c.get("coverKey")) if k])
+                # a Review overlay edit (§53) leaves the edited file in videoKey and the original in origVideoKey
+                keys = (c.get("videoKey"), c.get("coverKey"), c.get("editKey"), c.get("origVideoKey"))
+                await self.store.delete_keys(list(dict.fromkeys(k for k in keys if k)))
 
     async def _resolve_link(self, st: JobState, tr: Tracker) -> None:
         url = str(st.source.get("url") or "")

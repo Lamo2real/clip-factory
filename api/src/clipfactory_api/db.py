@@ -129,6 +129,14 @@ def crsub_sk(post_id: str) -> str:
     return f"{CRSUB_PREFIX}{post_id}"
 
 
+# The owner's logo library (docs/CONTRACTS.md §53 C4): additive items under the owner.
+LOGO_PREFIX = "LOGO#"
+
+
+def logo_sk(logo_id: str) -> str:
+    return f"{LOGO_PREFIX}{logo_id}"
+
+
 # --- number conversion ----------------------------------------------------------------------------------------
 
 
@@ -391,11 +399,13 @@ class Store:
         expect_in: Mapping[str, Iterable[Any]] | None = None,
         expect_absent: Iterable[str] = (),
         expect_present: Iterable[str] = (),
+        also: Condition | None = None,
     ) -> Item:
         """Sets and removes top-level fields on an existing item and returns the new item.
 
         ``expect_in`` makes the write conditional: each named field must hold one of the given values.
-        ``expect_absent`` names fields that must not exist yet; ``expect_present`` names fields that must exist.
+        ``expect_absent`` names fields that must not exist yet; ``expect_present`` names fields that must exist;
+        ``also`` is one more explicit condition (``update_request``).
         """
         kwargs = update_request(
             pk,
@@ -405,6 +415,7 @@ class Store:
             expect_in=expect_in,
             expect_absent=expect_absent,
             expect_present=expect_present,
+            also=also,
         )
         kwargs["ReturnValues"] = "ALL_NEW"
         out = self._call(self._table.update_item, **kwargs)

@@ -1,9 +1,10 @@
 {
-  "version": "8fdb9f3477b7",
+  "version": "4a2294547f3c",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
     "src/components/CrPostLine.tsx",
+    "src/components/DropOverlay.tsx",
     "src/components/Dropdown.tsx",
     "src/components/GetApp.tsx",
     "src/components/Glide.tsx",
@@ -41,9 +42,12 @@
     "src/screens/library/Library.tsx",
     "src/screens/library/MacButtons.tsx",
     "src/screens/library/WeekView.tsx",
+    "src/screens/review/CampaignEdit.tsx",
     "src/screens/review/CampaignFit.tsx",
     "src/screens/review/CampaignStrip.tsx",
+    "src/screens/review/CrSwitch.tsx",
     "src/screens/review/FitSuggestion.tsx",
+    "src/screens/review/LogoLibrary.tsx",
     "src/screens/review/PlaceRows.tsx",
     "src/screens/review/Review.tsx",
     "src/screens/review/TikTokCommercial.tsx",
@@ -587,6 +591,49 @@
           "to": "/review",
           "highlight": [
             "use-my-settings"
+          ]
+        }
+      ],
+      "suggest": true
+    },
+    {
+      "id": "review-cr-active",
+      "kind": "guide",
+      "route": "/review",
+      "where": "Review › a clip › CR active",
+      "title": "Put a campaign's logo and words on a clip",
+      "keywords": [
+        "cr active",
+        "cr inactive",
+        "edit for campaign",
+        "put a logo on a clip",
+        "add a logo",
+        "logo on my clip",
+        "add text to a clip",
+        "words on a clip",
+        "hashtags on screen",
+        "campaign logo",
+        "logo library",
+        "show the logo the whole clip",
+        "reset the edit",
+        "logo and text"
+      ],
+      "answer": "Under **Checks before posting**, switch a clip to **CR active**, then tap **Edit for campaign**. Pick a logo (drop, paste or pick one, they are kept for next time), type a few words, drag them where you want them, and tap **Make it**. The edit takes a moment, then the clip shows the logo and words for the whole clip. **Reset** puts the original back. Posting is the same as before.",
+      "steps": [
+        "Tap **Review**.",
+        "On the clip, tap **CR active**.",
+        "Tap **Edit for campaign**.",
+        "Pick or add a logo, and type the words.",
+        "Tap **Make it**."
+      ],
+      "actions": [
+        {
+          "id": "review-cr-active:review",
+          "label": "Open Review",
+          "to": "/review",
+          "highlight": [
+            "cr-switch",
+            "cr-edit"
           ]
         }
       ],
@@ -4696,7 +4743,14 @@
         "yes",
         "tiktok",
         "add",
+        "close",
+        "logo",
+        "size",
+        "text",
         "fix",
+        "campaign",
+        "edit",
+        "ready",
         "ask",
         "made",
         "kids",
@@ -4706,14 +4760,7 @@
         "duet",
         "stitch",
         "commercial",
-        "content",
-        "show",
-        "every",
-        "set",
-        "up",
-        "posting",
-        "make",
-        "check"
+        "content"
       ],
       "answer": "These clips all come from one job. Upload or throw away each one.",
       "steps": [

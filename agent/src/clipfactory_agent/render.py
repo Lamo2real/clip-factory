@@ -40,6 +40,13 @@ DISCLOSURE_FADE_MS = 300
 DISCLOSURE_FIT = 16  # characters that fit at full size beside the widest logo; longer words are set smaller
 CAP_BOTTOM = SAFE[3] - 60  # the captions' last line ends here and longer captions grow up
 TEXT_MARGIN_L, TEXT_MARGIN_R = SAFE[0], W - SAFE[2] + 10  # libass wraps text between these
+# The areas a Review overlay (logo or text, §53 C3) is warned about, as (left, top, right, bottom) in the 1080 × 1920
+# frame; the web copies them in web/src/lib/overlayAreas.ts and a test pins both. The captions (82 px, up to two
+# lines of about 100 px each) stand on CAP_BOTTOM and grow up; the facecam picture of a ``facecam_top`` clip fills the
+# full width between the hook band and the gameplay.
+CAPTION_LINE_H, CAPTION_LINES = 100, 2
+CAPTION_BAND = (TEXT_MARGIN_L, CAP_BOTTOM - CAPTION_LINES * CAPTION_LINE_H, W - TEXT_MARGIN_R, CAP_BOTTOM)
+FACECAM_BAND = (0, BAND, W, BAND + CAM_H)
 # The punch-in on the face at the peak: up to 120%, eased in over 0.4 s, held, eased out over 0.6 s. It zooms toward a
 # point a little above the middle of the camera picture, where a webcam's face sits, so the face is never cut off.
 PUNCH_ZOOM = 1.2
@@ -385,15 +392,10 @@ def filter_graph(
     return ";".join(chains)
 
 
-def encode_args(total: float, has_audio: bool, *, silent_input: int = 1) -> list[str]:
-    """The output options. Without sound the clip takes its silence from input ``silent_input`` (``anullsrc``)."""
-    audio = ["-map", "[aout]"] if has_audio else ["-map", f"{silent_input}:a"]
+def video_encode_args() -> list[str]:
+    """The video encoder settings every clip uses (``encode_args``); a Review overlay edit (overlay.py, §53) re-encodes
+    with exactly these, so it adds no extra loss."""
     return [
-        "-map",
-        "[vout]",
-        *audio,
-        "-t",
-        f"{total:.3f}",
         "-c:v",
         "libx264",
         "-preset",
@@ -408,6 +410,19 @@ def encode_args(total: float, has_audio: bool, *, silent_input: int = 1) -> list
         "yuv420p",
         "-r",
         str(FPS),
+    ]
+
+
+def encode_args(total: float, has_audio: bool, *, silent_input: int = 1) -> list[str]:
+    """The output options. Without sound the clip takes its silence from input ``silent_input`` (``anullsrc``)."""
+    audio = ["-map", "[aout]"] if has_audio else ["-map", f"{silent_input}:a"]
+    return [
+        "-map",
+        "[vout]",
+        *audio,
+        "-t",
+        f"{total:.3f}",
+        *video_encode_args(),
         "-c:a",
         "aac",
         "-b:a",

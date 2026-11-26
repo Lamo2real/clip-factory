@@ -327,6 +327,86 @@ class Store:
                 raise RuntimeError("DynamoDB left clip keys unprocessed.")
         return out
 
+    async def get_item(self, pk: str, sk: str) -> dict[str, Any] | None:
+        r = await self._call("ddb.get_item", self.table.get_item, Key={"pk": pk, "sk": sk}, ConsistentRead=True)
+        item = r.get("Item")
+        return from_ddb(item) if item else None
+
+    async def get_clip(self, user_id: str, clip_id: str) -> dict[str, Any] | None:
+        return await self.get_item(user_pk(user_id), f"CLIP#{clip_id}")
+
+    async def finish_overlay(self, user_id: str, clip_id: str, rev: int, edit_key: str, orig_key: str) -> bool:
+        """The one write that ends a Review overlay edit (§53 C5): only while the clip is still in review and its
+        ``overlay.rev`` is still ``rev``, it sets ``origVideoKey`` (only when not set yet), ``editKey``, ``videoKey`` (the
+        edited file) and ``overlay.status`` ``ready``. False (nothing written) when the condition fails."""
+        from botocore.exceptions import ClientError
+
+        kwargs: dict[str, Any] = {
+            "Key": {"pk": user_pk(user_id), "sk": f"CLIP#{clip_id}"},
+            "UpdateExpression": (
+                "SET #ov.#os = :ready, #ek = :edit, #vk = :edit, #ok = if_not_exists(#ok, :orig), #ua = :now "
+                "REMOVE #ov.#err"
+            ),
+            "ConditionExpression": "attribute_exists(pk) AND #st = :review AND #ov.#rev = :rev",
+            "ExpressionAttributeNames": {
+                "#ov": "overlay",
+                "#os": "status",
+                "#err": "error",
+                "#rev": "rev",
+                "#st": "status",
+                "#ek": "editKey",
+                "#vk": "videoKey",
+                "#ok": "origVideoKey",
+                "#ua": "updatedAt",
+            },
+            "ExpressionAttributeValues": {
+                ":ready": "ready",
+                ":edit": edit_key,
+                ":orig": orig_key,
+                ":review": "review",
+                ":rev": rev,
+                ":now": now_iso(),
+            },
+        }
+        try:
+            await self._call("ddb.finish_overlay", self.table.update_item, **kwargs)
+        except ClientError as e:
+            if e.response.get("Error", {}).get("Code") != "ConditionalCheckFailedException":
+                raise
+            return False
+        return True
+
+    async def fail_overlay(self, user_id: str, clip_id: str, rev: int, message: str) -> bool:
+        """Marks the edit ``rev`` failed with one plain sentence; only while ``overlay.rev`` is still ``rev``."""
+        from botocore.exceptions import ClientError
+
+        kwargs: dict[str, Any] = {
+            "Key": {"pk": user_pk(user_id), "sk": f"CLIP#{clip_id}"},
+            "UpdateExpression": "SET #ov.#os = :failed, #ov.#err = :msg, #ua = :now",
+            "ConditionExpression": "attribute_exists(pk) AND #ov.#rev = :rev AND #ov.#os <> :ready",
+            "ExpressionAttributeNames": {
+                "#ov": "overlay",
+                "#os": "status",
+                "#err": "error",
+                "#rev": "rev",
+                "#ua": "updatedAt",
+            },
+            "ExpressionAttributeValues": {
+                ":failed": "failed",
+                ":ready": "ready",
+                ":msg": message,
+                ":rev": rev,
+                ":now": now_iso(),
+            },
+        }
+        try:
+            await self._call("ddb.fail_overlay", self.table.update_item, **kwargs)
+        except ClientError as e:
+            if e.response.get("Error", {}).get("Code") != "ConditionalCheckFailedException":
+                raise
+            return False
+        return True
+
     async def put_clip(self, item: dict[str, Any], *, fence: Fence | None = None) -> None:
         if fence is None:
             await self._call("ddb.put_clip", self.table.put_item, Item=to_ddb(item))

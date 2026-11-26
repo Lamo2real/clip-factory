@@ -22,6 +22,7 @@ import type {
   Finder,
   Follow,
   Lesson,
+  Logo,
   MacHelper,
   MacSendResult,
   MacUploadParts,
@@ -315,5 +316,14 @@ export function httpApi({ baseUrl, auth, fetcher = (...a) => fetch(...a) }: Deps
         ...(now ? { now: true } : {}),
       }),
     takeBackFromMac: (clipId) => call<{ clip: Clip; posts: Post[] }>("DELETE", `/clips/${id(clipId)}/tiktok/mac`),
+    // §53: CR active, a logo and text on a clip in Review.
+    listLogos: async () => (await call<{ logos: Logo[] }>("GET", "/logos")).logos,
+    createLogoUpload: (body) => call("POST", "/logos", body),
+    completeLogo: async (logoId) => (await call<{ logo: Logo }>("POST", `/logos/${id(logoId)}/complete`)).logo,
+    logoFromCampaign: async (campaignId) => (await call<{ logo: Logo }>("POST", "/logos/from-campaign", { campaignId })).logo,
+    deleteLogo: (logoId) => call<void>("DELETE", `/logos/${id(logoId)}`),
+    setClipCr: async (clipId, body) => (await call<{ clip: Clip }>("PUT", `/clips/${id(clipId)}/cr`, body)).clip,
+    makeOverlay: async (clipId, body) => (await call<{ clip: Clip }>("PUT", `/clips/${id(clipId)}/overlay`, body)).clip,
+    resetOverlay: async (clipId) => (await call<{ clip: Clip }>("DELETE", `/clips/${id(clipId)}/overlay`)).clip,
   };
 }

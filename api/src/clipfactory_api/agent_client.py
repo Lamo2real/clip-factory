@@ -81,6 +81,15 @@ class AgentClient:
         if reply.get("accepted") is not True:
             raise AgentError("the agent did not accept the job")
 
+    def overlay(self, user_id: str, clip_id: str, job_id: str, rev: int) -> None:
+        """Asks the runtime to draw the clip's logo and text (docs/CONTRACTS.md §53 C5). Each ask gets its own fresh
+        session (``cfjob-<clipId>-<8 random chars>``, 41 characters). The agent answers at once and works in the
+        background; what it writes (or why it failed) is on the clip. A refusal raises ``AgentError``."""
+        payload = {"action": "overlay", "userId": user_id, "clipId": clip_id, "jobId": job_id, "rev": rev}
+        reply = self._invoke(new_session_id(clip_id), payload)
+        if reply.get("accepted") is False or reply.get("error"):
+            raise AgentError("the agent did not accept the edit")
+
     def cancel_job(self, job_id: str, session_id: str) -> None:
         self._invoke(session_id, {"action": "cancel", "jobId": job_id})
 

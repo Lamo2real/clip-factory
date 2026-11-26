@@ -18,6 +18,7 @@ import { followersApi } from "./followers.ts";
 import { dashData, mockMoneyGrant, moneyApi } from "./money.ts";
 import { pushApi } from "./push.ts";
 import { crMockApi } from "./contentrewards.ts";
+import { crOverlayApi } from "./crOverlay.ts";
 import { catalogOf, finderMockApi, type FinderMock } from "./finder.ts";
 import { clipFit, fitOne, remakeRefusal, sourceKept, uploadRefusal, type FitInputs } from "./fit.ts";
 import { everywhere, MONETARY_SCOPE } from "./moneyEverywhere.ts";
@@ -685,6 +686,13 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     if (!c) throw notFound("clip");
     return c;
   };
+  // CR active (§53): the logo library, the switch and Make it. The campaign is read through Content Rewards' own mock.
+  const crOverlay = crOverlayApi({
+    delay: (a, b) => delay(a, b),
+    clip,
+    publishClip: (c) => publishClip(c),
+    campaign: (id) => cr.api.crCampaign(id).then((c) => c, () => null),
+  });
   /** Deletes one job like the API (§34): thrown-away clips always, Review clips only with "delete", never others. */
   const removeJob = (jobId: string, clips: JobDeleteClips): JobDeleted => {
     const j = store.jobs.find((x) => x.jobId === jobId);
@@ -751,7 +759,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
   if (typeof window !== "undefined") {
     // Merge, never replace: posting (above) and setup (mock/setup.ts) keep their knobs on the same object.
     const w = window as unknown as { __cfMock?: Record<string, unknown> & Partial<MockSkillControls> };
-    w.__cfMock = Object.assign(w.__cfMock ?? {}, skills.controls, { follows: follows.controls, money: money.controls, getpaid: getpaid.controls, bank: bank.controls, followers: followers.controls });
+    w.__cfMock = Object.assign(w.__cfMock ?? {}, skills.controls, { crOverlay: crOverlay.controls, follows: follows.controls, money: money.controls, getpaid: getpaid.controls, bank: bank.controls, followers: followers.controls });
   }
 
   /**
@@ -1293,6 +1301,8 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       if (fail === "network") throw networkError();
       if (fail === "refused") throw bad("Pick who can see it on TikTok.");
       if (tiktokMac !== undefined && typeof tiktokMac !== "boolean") throw bad("tiktokMac must be true or false.");
+      // §53 C5: a clip whose edit is still being made cannot be uploaded.
+      if (clip(clipId).overlay?.status === "working") throw conflict("The edit is still being made.");
       lastConfirm = { clipId, ...(tiktok ? { tiktok: clone(tiktok) } : {}), ...(platforms ? { platforms: [...platforms] } : {}), ...(tiktokMac ? { tiktokMac: true } : {}) };
       return confirmNow(clipId, captions, tiktok, platforms, options, undefined, tiktokMac === true);
     },
@@ -1406,6 +1416,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     ...skills.api,
     ...lessons,
     ...follows.api,
+    ...crOverlay.api,
     ...money.api,
     ...followers.api,
     ...pushApi(),

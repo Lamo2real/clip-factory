@@ -11,11 +11,11 @@ from __future__ import annotations
 from collections.abc import Mapping
 from typing import Any
 
-from . import clips, db, posts, release, settings
+from . import clip_overlay, clips, db, posts, release, settings
 from . import tiktok_mac as mac_posts
 from .app import App
 from .clock import iso
-from .errors import ApiError, bad_request
+from .errors import ApiError, bad_request, conflict
 from .log import log
 
 Item = dict[str, Any]
@@ -27,7 +27,7 @@ class ClipTaken(Exception):
     The caller reads the clip again."""
 
 
-def upload_review_clip(
+def upload_review_clip(  # noqa: PLR0915 (Upload's whole write, in one place on purpose)
     app: App,
     user_id: str,
     item: Item,
@@ -66,6 +66,8 @@ def upload_review_clip(
     path, in the same transaction as the other posts. Otherwise TikTok's rule is exactly as before."""
     from .routes import clips as checks  # Upload's and Try again's shared checks (§33, §38.14)
 
+    if clip_overlay.is_working(item, app.clock()):  # §53 C5: its logo and text are still being drawn
+        raise conflict(clip_overlay.STILL_MAKING)
     patch = dict(captions_patch or {})
     chosen = platforms
     per_clip: dict[str, dict[str, Any]] = {p: dict(o) for p, o in (options or {}).items()}

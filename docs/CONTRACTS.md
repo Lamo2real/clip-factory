@@ -22368,7 +22368,8 @@ posting. BR-34, ADR-105.
   it). A campaign's own logo (§38) is offered too: picking a campaign (C6) copies its logo into the library once.
   - `GET /v1/logos` → `{logos: [{logoId, name, url, width, height, campaignId?, createdAt}]}` (`url` presigned, 1 h).
   - `POST /v1/logos` `{filename, contentType, size}` → 201 `{logoId, uploadUrl}`: a presigned PUT; the item is
-    `LOGO#{logoId}` `{status: "uploading"}`. 400 on a type other than png, jpeg, webp or a size over 10 MB.
+    `LOGO#{logoId}` `{status: "uploading"}`. Also `headers` (the `Content-Type` the PUT must send). 400 on a type other than
+    png, jpeg, webp or a size over 10 MB; 409 at 60 logos.
   - `POST /v1/logos/{logoId}/complete` → `{logo}`: reads the object's first bytes and size, reads width and height,
     sets `status: "ready"`; else deletes it, 400 with one sentence ("Use a PNG, JPG or WebP picture under 10 MB.").
   - `POST /v1/logos/from-campaign` `{campaignId}` → `{logo}`: copies that campaign's ready logo (once; asked again it
@@ -22376,7 +22377,7 @@ posting. BR-34, ADR-105.
   - `DELETE /v1/logos/{logoId}` → 204 (item and file).
 - **C5. The edit (additive clip fields).** `overlay` `{rev, status: "working"|"ready"|"failed", error?, logo?, text?,
   timing?}` with `logo` `{logoId, x, y, size}`, `text` `{text, x, y, size: "s"|"m"|"l"}` and `timing`
-  `{startSec, endSec}` (absent = the whole clip). Internal: `origVideoKey` (the untouched file), `editKey`.
+  `{startSec, endSec}` (absent = the whole clip). Internal: `origVideoKey` (the untouched file), `editKey`, `overlay.startedAt`, `overlay.logo.key`.
   - `PUT /v1/clips/{clipId}/cr` `{active, campaignId?}` → `{clip}`. Only while `status == "review"` (else 409 as
     Confirm). `active: false` also does C5's reset. `campaignId` must be one of the owner's campaigns (404 otherwise).
   - `PUT /v1/clips/{clipId}/overlay` `{logo?, text?, timing?}` (at least one of logo and text; `cr.active` required,

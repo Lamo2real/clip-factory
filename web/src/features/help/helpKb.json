@@ -339,6 +339,48 @@
       "suggest": true
     },
     {
+      "id": "review-cr-active",
+      "route": "/review",
+      "where": "Review › a clip › CR active",
+      "title": "Put a campaign's logo and words on a clip",
+      "keywords": [
+        "cr active",
+        "cr inactive",
+        "edit for campaign",
+        "put a logo on a clip",
+        "add a logo",
+        "logo on my clip",
+        "add text to a clip",
+        "words on a clip",
+        "hashtags on screen",
+        "campaign logo",
+        "logo library",
+        "show the logo the whole clip",
+        "reset the edit",
+        "logo and text"
+      ],
+      "answer": "Under **Checks before posting**, switch a clip to **CR active**, then tap **Edit for campaign**. Pick a logo (drop, paste or pick one, they are kept for next time), type a few words, drag them where you want them, and tap **Make it**. The edit takes a moment, then the clip shows the logo and words for the whole clip. **Reset** puts the original back. Posting is the same as before.",
+      "steps": [
+        "Tap **Review**.",
+        "On the clip, tap **CR active**.",
+        "Tap **Edit for campaign**.",
+        "Pick or add a logo, and type the words.",
+        "Tap **Make it**."
+      ],
+      "actions": [
+        {
+          "id": "review-cr-active:review",
+          "label": "Open Review",
+          "to": "/review",
+          "highlight": [
+            "cr-switch",
+            "cr-edit"
+          ]
+        }
+      ],
+      "suggest": true
+    },
+    {
       "id": "review-place-rows",
       "route": "/review",
       "where": "Review › a clip › a place's row",

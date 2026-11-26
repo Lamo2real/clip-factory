@@ -6,7 +6,7 @@ from collections.abc import Mapping
 from datetime import datetime, timedelta
 from typing import Any
 
-from . import db, mojibake, s3
+from . import clip_overlay, db, mojibake, s3
 from .clock import iso
 from .errors import bad_request
 
@@ -51,6 +51,10 @@ INTERNAL_FIELDS = (
     "holdUntil",
     # §47: a Send these to my Mac made the clip's TikTok post (its id), so two sends never make two.
     "tiktokForMac",
+    # §53 C5: the untouched file and the edited one (``videoKey`` is the edited file while an edit is on).
+    "origVideoKey",
+    "editKey",
+    "overlayRev",  # the edit counter: it keeps growing across a Reset so a stale render never matches a new edit
 )
 PUBLISH_PENDING = "pending"
 PUBLISH_STARTED = "started"
@@ -76,14 +80,18 @@ def public_clip(
     *,
     posts: list[Item] | None = None,
     video: bool = True,
+    now: datetime | None = None,
 ) -> Item:
     """The Clip shape of §5. With ``media`` it carries 1-hour ``coverUrl`` (and, unless ``video=False``,
     ``videoUrl``) links; without (the live WebSocket events) it carries none, and the web keeps the links it already
     has. With the clip's ``posts`` it carries ``totalViews`` (absent when nothing was measured). ``startPending: true``
     when the clip was uploaded but its flow has not started (``publishState: pending``, §14.5). ``auto`` when an
-    auto-posting run uploaded it (§46.9)."""
+    auto-posting run uploaded it (§46.9). ``cr`` and ``overlay`` (§53) are public without their internal parts; with
+    ``now`` an edit that has been ``working`` for more than 5 minutes reads as ``failed``."""
     clip = db.strip_keys(item, INTERNAL_FIELDS)
     clip.pop("totalViews", None)
+    if isinstance(item.get("overlay"), dict):
+        clip["overlay"] = clip_overlay.public_overlay(item["overlay"], now)
     if "captions" in clip:
         # A caption saved garbled from a Mac clipboard shows (and is copied) as it was written (mojibake.py).
         clip["captions"] = mojibake.repair_captions(clip["captions"])
