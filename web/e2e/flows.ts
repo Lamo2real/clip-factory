@@ -28,6 +28,7 @@ export const NORMAL_HOME_CONTROLS = {
     "radio:Pick for me (5–10)",
     "radio:Exactly",
     "textbox:Notes for Clip Factory you can skip this",
+    "file:",
     "button:Make clips",
   ],
   /** With a link in the box: Clear instead of Paste. */
@@ -39,6 +40,7 @@ export const NORMAL_HOME_CONTROLS = {
     "radio:Pick for me (5–10)",
     "radio:Exactly",
     "textbox:Notes for Clip Factory you can skip this",
+    "file:",
     "button:Make clips",
   ],
 } as const;

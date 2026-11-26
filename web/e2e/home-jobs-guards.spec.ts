@@ -24,7 +24,7 @@ const asksOnUnload = (page: Page) =>
 
 async function pickVideo(page: Page, name = "clip.mp4") {
   await page.getByRole("radio", { name: "Pick a video" }).check({ force: true });
-  await form(page).locator('input[type="file"]').setInputFiles({ name, mimeType: "video/mp4", buffer: Buffer.alloc(2048) });
+  await form(page).locator('.dropzone input[type="file"]').setInputFiles({ name, mimeType: "video/mp4", buffer: Buffer.alloc(2048) });
   await expect(form(page)).toContainText(name);
 }
 
@@ -165,7 +165,7 @@ test("while the file goes up the video box can't change, says why, and the job i
   await slow(page, 1500);
   await form(page).getByRole("button", { name: "Make clips" }).click();
   await expect(form(page)).toContainText(/Uploading… \d+%/);
-  await expect(form(page).locator('input[type="file"]')).toBeDisabled();
+  await expect(form(page).locator('.dropzone input[type="file"]')).toBeDisabled();
   // The box's own file input is off, so the tap reaches only the box (force: Playwright calls such a label disabled).
   await form(page).locator(".dropzone").click({ force: true });
   await expect(page.locator(".toast", { hasText: "The upload is still running. Tap Cancel upload first." })).toBeVisible();
