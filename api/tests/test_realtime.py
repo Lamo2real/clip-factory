@@ -287,6 +287,28 @@ def test_ping_to_a_gone_connection_is_fine(ws_deps: ws.WsDeps, management: FakeM
     assert ws.handle(_ws_event("$default", body='{"action":"ping"}'), ws_deps) == {"statusCode": 200}
 
 
+def test_ping_reply_that_hangs_is_logged_not_a_lambda_timeout(ws_deps: ws.WsDeps, management: FakeManagement) -> None:
+    """A slow PostToConnection must surface as a handled warning: the Lambda's 10 s limit is an alarm (§14.2)."""
+
+    def hang(**_: Any) -> None:
+        raise TimeoutError("read timeout")
+
+    management.post_to_connection = hang  # type: ignore[method-assign]
+    assert ws.handle(_ws_event("$default", body='{"action":"ping"}'), ws_deps) == {"statusCode": 200}
+
+
+def test_ws_reply_client_gives_up_well_before_the_lambda_does(monkeypatch: pytest.MonkeyPatch) -> None:
+    seen: dict[str, Any] = {}
+    monkeypatch.setattr(ws, "management_client", lambda endpoint, **kw: seen.update(kw) or object())
+    monkeypatch.setenv("TABLE_NAME", "t")
+    monkeypatch.setenv("WS_ENDPOINT", "https://x.execute-api.eu-north-1.amazonaws.com/live")
+    monkeypatch.setattr("clipfactory_api.app.table", lambda name: object())
+    ws._from_env()
+    # one try, connect (2 s) + read stay under the 10 s Lambda timeout
+    assert seen == {"read_timeout": ws.REPLY_READ_TIMEOUT_SECONDS, "max_attempts": 1}
+    assert 2 + ws.REPLY_READ_TIMEOUT_SECONDS < 10
+
+
 # --- cf-prod-broadcast ---------------------------------------------------------------------------------------------
 
 

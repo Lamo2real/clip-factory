@@ -12,14 +12,16 @@ from typing import Any
 MAX_EVENT_BYTES = 24 * 1024  # the WebSocket frame limit is 32 KB; larger events are sent as "partial"
 
 
-def management_client(endpoint: str) -> Any:
+def management_client(endpoint: str, *, read_timeout: int = 5, max_attempts: int = 2) -> Any:
     """The ``@connections`` client for ``https://{api-id}.execute-api.{region}.amazonaws.com/live``."""
     import boto3
     from botocore.config import Config
 
     from ..app import region
 
-    config = Config(retries={"mode": "standard", "max_attempts": 2}, connect_timeout=2, read_timeout=5)
+    config = Config(
+        retries={"mode": "standard", "max_attempts": max_attempts}, connect_timeout=2, read_timeout=read_timeout
+    )
     return boto3.client("apigatewaymanagementapi", endpoint_url=endpoint, region_name=region(), config=config)
 
 
