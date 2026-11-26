@@ -1,49 +1,56 @@
-# webkit shard 2 of 5: about 22.7 core, 22.7 style, 22.7 full worker-minutes (47 lines).
+# webkit shard 2 of 5: about 24.1 core, 24.1 style, 24.1 full worker-minutes (54 lines).
 # Written by: node scripts/e2e-shards.mjs build (from timings.tsv). The last shard runs every test in no list.
 [webkit-phone] › ask-assistant.spec.ts › Ask as a full assistant › Take key away asks nothing but waits for its Undo, like every other delete
-[webkit-phone] › ask-assistant.spec.ts › Ask as a full assistant › a general question: a code block with Copy, and a table
-[webkit-phone] › ask-assistant.spec.ts › Ask as a full assistant › the search key card saves and takes away a key without showing it again
 [webkit-phone] › ask-assistant.spec.ts › Ask as a full assistant › the setup question uses his setup and a web source; links go live only when done
 [webkit-phone] › ask-assistant.spec.ts › Ask assistant at phone-390 › screenshots in dark
+[webkit-phone] › ask-assistant.spec.ts › Ask assistant at phone-390 › screenshots in light
 [webkit-phone] › ask-assistant.spec.ts › Ask assistant at phone-390 › thumb zone, no overflow, no edges
-[webkit-phone] › getpaid.spec.ts › axe AA contrast, light, hold: phone 375x812
+[webkit-phone] › getpaid.spec.ts › axe AA contrast, dark, owner: phone 375x812
 [webkit-phone] › getpaid.spec.ts › axe AA contrast, light, owner: phone 375x812
 [webkit-phone] › getpaid.spec.ts › no sideways scroll at 390 px on every Get paid screen (unread)
-[webkit-phone] › getpaid.spec.ts › no sideways scroll at 768 px on every Get paid screen (hold)
 [webkit-phone] › getpaid.spec.ts › phone › Content Rewards: 5 taps without Finance, 3 with it; §38.7's words and ticks
 [webkit-phone] › getpaid.spec.ts › phone › TikTok and Instagram: 4 taps each, the Opens open the apps
 [webkit-phone] › getpaid.spec.ts › phone › YouTube: Clip Factory's taps are 15 (Partner Program, the reading step, five payout steps)
-[webkit-phone] › getpaid.spec.ts › phone › the ways in: 4 taps from Settings, 2 from Money, 1 from a setup page
-[webkit-phone] › help-pictures.spec.ts › Ask pictures at 390x844 › no edges, no side scroll, and every picture control is 44 px or more
-[webkit-phone] › help-pictures.spec.ts › Ask pictures at 390x844 › pictures off: no picture button, and a pasted picture gets a note
+[webkit-phone] › getpaid.spec.ts › phone › phone: the next step's main button sits at the bottom right from page open, and Ask is never over it
+[webkit-phone] › help-pictures.spec.ts › Ask pictures at 1440x900 › no edges, no side scroll, and every picture control is 44 px or more
+[webkit-phone] › help-pictures.spec.ts › Ask pictures at 1440x900 › send with no words: small clean JPEGs reach the API, the bubble shows them, the follow-up carries seen
+[webkit-phone] › help-pictures.spec.ts › Ask pictures at 1440x900 › the viewer opens bigger, steps with the arrows and closes with Escape
+[webkit-phone] › help-pictures.spec.ts › Ask pictures at 390x844 › attach, paste and drop each add a picture; the drop layer comes and goes
 [webkit-phone] › help-pictures.spec.ts › Ask pictures at 390x844 › take away leaves 3 and moves the focus on
-[webkit] › ask-assistant.spec.ts › Ask as a full assistant › files dropped on the launcher open Ask with them in the tray
-[webkit] › ask-assistant.spec.ts › Ask assistant at desktop-1440 › screenshots in light
+[webkit] › ask-assistant.spec.ts › Ask as a full assistant › can't reach Ask: says so plainly, keeps the picture and the words, and Try again sends them
+[webkit] › ask-assistant.spec.ts › Ask assistant at desktop-1440 › screenshots in dark
 [webkit] › ask-assistant.spec.ts › Ask assistant at phone-375 › screenshots in light
-[webkit] › ask-markup.spec.ts › the markup editor at phone-375 › fits, and Save and Undo sit in the thumb zone on phones and tablets
-[webkit] › ask-markup.spec.ts › the markup editor at phone-390 › fits, and Save and Undo sit in the thumb zone on phones and tablets
+[webkit] › ask-assistant.spec.ts › Ask assistant at phone-390 › thumb zone, no overflow, no edges
+[webkit] › ask-assistant.spec.ts › Ask with less motion › nothing moves while an answer streams
 [webkit] › drop-video.spec.ts › a .mov from Finder with no type is picked and uploads as a video
-[webkit] › drop-video.spec.ts › a file that is not a video says so in plain words
-[webkit] › drop-video.spec.ts › a uri-list with comments and several links takes the first link
-[webkit] › drop-video.spec.ts › drop highlight 1024x768 light › screenshot drop highlight 1024x768 light
-[webkit] › drop-video.spec.ts › drop highlight 390x844 light › screenshot drop highlight 390x844 light
+[webkit] › drop-video.spec.ts › a dropped thing with no type and no video name (like a folder) is not a video
+[webkit] › drop-video.spec.ts › dragging files over the card shows one soft highlight that goes on leave, without flicker
+[webkit] › drop-video.spec.ts › drop highlight 1000x650 light › screenshot drop highlight 1000x650 light
+[webkit] › drop-video.spec.ts › drop highlight 1440x900 light › screenshot drop highlight 1440x900 light
 [webkit] › drop-video.spec.ts › holding still over the card, then moving across the fields, never drops the highlight
-[webkit] › drop-video.spec.ts › while a job is starting, a drag says so and the drop is refused with plain words
+[webkit] › drop-video.spec.ts › several files: the first video is taken and the toast says one per job
+[webkit] › drop-video.spec.ts › the file box stays a labelled file input for keyboards and screen readers
+[webkit] › getpaid.spec.ts › axe AA contrast, light, owner: desktop 1440x900
 [webkit] › getpaid.spec.ts › desktop › Facebook: 4 taps, then 2 after Instagram (one Meta tick); X: 5 taps, Premium never the vermilion
-[webkit] › getpaid.spec.ts › kid-proof Get paid › Sent to your bank's Allow payment reading: every tap goes to the step, and ?back= stays
-[webkit] › getpaid.spec.ts › no sideways scroll at 1024 px on every Get paid screen (hold) desktop
-[webkit] › getpaid.spec.ts › no sideways scroll at 320 px on every Get paid screen (unread)
-[webkit] › getpaid.spec.ts › no sideways scroll at 768 px on every Get paid screen (owner)
-[webkit] › getpaid.spec.ts › phone › the list, the place pages and Money's card: no sideways scroll, no edges, big targets, arrow cursor, one vermilion at most
-[webkit] › help-pictures.spec.ts › Ask pictures at 1440x900 › Start over empties the tray and the chat
+[webkit] › getpaid.spec.ts › desktop › computer, first visit: the first step not done is brought into view, so the one vermilion is on screen
+[webkit] › getpaid.spec.ts › no sideways scroll at 1024 px on every Get paid screen (owner) desktop
+[webkit] › getpaid.spec.ts › no sideways scroll at 320 px on every Get paid screen (owner)
+[webkit] › getpaid.spec.ts › no sideways scroll at 390 px on every Get paid screen (owner)
+[webkit] › getpaid.spec.ts › phone › Allow payment reading's results say their sentences, word for word
+[webkit] › getpaid.spec.ts › phone › Facebook: 4 taps, then 2 after Instagram (one Meta tick); X: 5 taps, Premium never the vermilion
+[webkit] › getpaid.spec.ts › phone › TikTok and Instagram: 4 taps each, the Opens open the apps
+[webkit] › help-pictures.spec.ts › Ask pictures at 1440x900 › Tab stays inside the picture view
 [webkit] › help-pictures.spec.ts › Ask pictures at 1440x900 › a question that could not go gives its pictures and words back
-[webkit] › help-pictures.spec.ts › Ask pictures at 1440x900 › five pictures: four tiles and a note; a text file is not a picture
-[webkit] › help-pictures.spec.ts › Ask pictures at 1440x900 › reduced motion: pictures only fade
-[webkit] › help-pictures.spec.ts › Ask pictures at 390x844 › a picture that was not read says so
-[webkit] › help-pictures.spec.ts › Ask pictures at 390x844 › pictures off: no picture button, and a pasted picture gets a note
-[webkit] › help-pictures.spec.ts › Ask pictures at 390x844 › send with no words: small clean JPEGs reach the API, the bubble shows them, the follow-up carries seen
-[webkit] › help-pictures.spec.ts › Ask pictures at 390x844 › take away leaves 3 and moves the focus on
-[webkit] › help-pictures.spec.ts › screenshots for the owner, phone
+[webkit] › help-pictures.spec.ts › Ask pictures at 1440x900 › no edges, no side scroll, and every picture control is 44 px or more
+[webkit] › help-pictures.spec.ts › Ask pictures at 390x844 › attach, paste and drop each add a picture; the drop layer comes and goes
+[webkit] › help-pictures.spec.ts › Ask pictures at 390x844 › five pictures: four tiles and a note; a text file is not a picture
+[webkit] › help-pictures.spec.ts › screenshots for the owner, desktop
 [webkit] › home-fan.spec.ts
-[webkit] › stories-switch-slide.spec.ts
-[webkit] › top-line.spec.ts › a browser at 1280 x 800: one top line
+[webkit] › home-fit.spec.ts
+[webkit] › page-still.spec.ts › a page change keeps the window still › the macOS desktop window over light glass (1000 x 650)
+[webkit] › phone-edge-to-edge.spec.ts › Safari at 390x844: its own bar above the page, nothing of the page's over it › Clip Factory: no cover, the page runs to the top of its window, theme-color is the backdrop's own
+[webkit] › phone-edge-to-edge.spec.ts › over a light look at 390x844 with a 59 px status bar: the white clock keeps AA over the backdrop's own top, shaded only if it must be › Clips Funded on a light stage: its page veil holds the clock, no shade
+[webkit] › phone-edge-to-edge.spec.ts › the installed app at 375x812 with a 47 px status bar: the backdrop runs up under the clock › Clip Factory Home, at the top of the page
+[webkit] › phone-edge-to-edge.spec.ts › the installed app at 375x812 with a 47 px status bar: the backdrop runs up under the clock › Clip Factory: a bright bar fixed across the top of a page is masked under the clock, and shows from the top line down
+[webkit] › phone-edge-to-edge.spec.ts › the installed app at 390x844 with a 59 px status bar: the backdrop runs up under the clock › Clip Factory Home, at the top of the page
+[webkit] › phone-edge-to-edge.spec.ts › the installed app at 390x844 with a 59 px status bar: the backdrop runs up under the clock › Clip Factory: a bright bar fixed across the top of a page is masked under the clock, and shows from the top line down

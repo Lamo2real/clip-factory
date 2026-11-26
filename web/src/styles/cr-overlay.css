@@ -1,0 +1,336 @@
+/* CR active (docs/CONTRACTS.md §53): the switch on a Review card, the "Edit for campaign" sheet and the logo library.
+   Glass like the rest: raised things are one step brighter than what they sit on, nothing sets a cursor, and every
+   transition names its properties. The sheet itself is the Post to TikTok sheet's glass (tt-sheet). */
+
+/* ---------- The switch on the card ---------- */
+.cr-switch {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.cr-switch__body {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.cr-switch__tags {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.cr-switch__working {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 650;
+}
+.cr-switch__bad {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-basis: 100%;
+  font-size: var(--fs-small);
+  font-weight: 600;
+  color: var(--vermilion-ink);
+}
+.cr-switch__bad .icon {
+  color: var(--vermilion-light);
+}
+
+/* ---------- The editor sheet ---------- */
+.cr-ed {
+  width: min(100%, 880px);
+  /* A tall sheet scrolls with its backdrop (tt-sheet-backdrop), so nothing here scrolls inside itself. */
+}
+.cr-ed__grid {
+  display: grid;
+  gap: 16px;
+  min-width: 0;
+}
+.cr-ed__side {
+  display: grid;
+  gap: 6px;
+  justify-items: center;
+  min-width: 0;
+  /* On a phone the preview stays in view while the controls scroll under it (a see-through strip over them). */
+  position: sticky;
+  top: 4px;
+  z-index: 2;
+  padding: 6px;
+  border-radius: var(--r-md);
+  background: rgb(var(--green-deep-rgb) / 0.94);
+}
+@media (min-width: 760px) {
+  .cr-ed__grid {
+    grid-template-columns: minmax(200px, 300px) minmax(0, 1fr);
+    align-items: start;
+  }
+  .cr-ed__side {
+    top: 0;
+    padding: 0;
+    background: none;
+  }
+}
+.cr-ed__controls {
+  display: grid;
+  gap: 14px;
+  min-width: 0;
+}
+
+/* The cover as a 9:16 frame. Its own width is its height times 9/16, and its text is sized in container units so the
+   words are the same share of the picture at any size (1080 px is the frame the renderer draws). */
+.cr-ed__preview {
+  position: relative;
+  height: min(34vh, 300px);
+  aspect-ratio: 9 / 16;
+  max-width: 100%;
+  container-type: inline-size;
+  overflow: hidden;
+  border-radius: var(--r-md);
+  background: rgb(var(--green-deep-rgb) / 0.6);
+  box-shadow: var(--glass-shadow-raise);
+  touch-action: none;
+  user-select: none;
+}
+@media (min-width: 760px) {
+  .cr-ed__preview {
+    height: min(58vh, 520px);
+  }
+}
+.cr-ed__cover {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  pointer-events: none;
+}
+/* Where the renderer draws the captions and the facecam: a faint outline, so a warning is easy to see. */
+.cr-ed__zone {
+  position: absolute;
+  background: rgb(var(--bone-rgb) / 0.12);
+  border-radius: var(--r-xs);
+  pointer-events: none;
+}
+.cr-ed__item {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  touch-action: none;
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+  border-radius: var(--r-xs);
+  transition:
+    outline-color var(--dur-1) var(--ease-out),
+    box-shadow var(--dur-1) var(--ease-out);
+}
+.cr-ed__item:hover,
+.cr-ed__item:focus-visible {
+  outline-color: rgb(var(--bone-rgb) / 0.85);
+}
+/* A box that sits on the captions or the facecam turns vermilion. */
+.cr-ed__item.is-warn {
+  box-shadow: 0 0 14px rgb(var(--vermilion-rgb) / 0.55);
+}
+.cr-ed__logo img {
+  display: block;
+  width: 100%;
+  height: auto;
+  pointer-events: none;
+}
+.cr-ed__text {
+  white-space: nowrap;
+  font-weight: 800;
+  line-height: 1.4;
+  color: #fff;
+  /* White with a dark edge, like the renderer's. */
+  -webkit-text-stroke: 0.12em rgb(0 0 0 / 0.85);
+  paint-order: stroke fill;
+  text-shadow: 0 0.04em 0.1em rgb(0 0 0 / 0.6);
+}
+.cr-ed__warn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 1.5em;
+  font-size: var(--fs-small);
+  font-weight: 650;
+  color: var(--vermilion-ink);
+}
+.cr-ed__warn .icon {
+  color: var(--vermilion-light);
+}
+.cr-ed__warn--none {
+  min-height: 0;
+}
+
+.cr-ed__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px 16px;
+}
+.cr-ed__size {
+  display: grid;
+  gap: 4px;
+  flex: 1 1 160px;
+  min-width: 0;
+}
+.cr-ed__size input[type="range"] {
+  width: 100%;
+  accent-color: var(--vermilion);
+}
+.cr-ed__whole {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 650;
+}
+.cr-ed__times {
+  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+}
+.cr-ed__times label {
+  display: grid;
+  gap: 4px;
+}
+.cr-ed__actions {
+  justify-content: flex-end;
+}
+
+/* The four corner buttons: a tiny frame, the chosen corner lit. */
+.cr-corners {
+  display: grid;
+  grid-template-columns: repeat(2, var(--tap));
+  gap: 6px;
+}
+.cr-corner {
+  display: grid;
+  width: var(--tap);
+  height: var(--tap);
+  padding: 8px;
+  border-radius: var(--r-xs);
+  background: var(--fill-control);
+  box-shadow: var(--glass-shadow-raise);
+  transition:
+    background-color var(--dur-1) var(--ease-out),
+    box-shadow var(--dur-1) var(--ease-out);
+}
+.cr-corner:hover {
+  background: var(--fill-hover);
+  box-shadow: var(--glass-shadow-raise-hover);
+}
+.cr-corner:active {
+  background: var(--fill-press);
+  box-shadow: var(--glass-shadow-press);
+}
+.cr-corner > span {
+  width: 9px;
+  height: 9px;
+  border-radius: 3px;
+  background: var(--bone);
+}
+.cr-corner--tl > span {
+  place-self: start;
+}
+.cr-corner--tr > span {
+  place-self: start end;
+}
+.cr-corner--bl > span {
+  place-self: end start;
+}
+.cr-corner--br > span {
+  place-self: end;
+}
+
+/* ---------- The logo library ---------- */
+.cr-logos {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.cr-logos__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  gap: 10px;
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.cr-logo {
+  position: relative;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.cr-logo__pick {
+  display: grid;
+  place-items: center;
+  aspect-ratio: 1;
+  padding: 10px;
+  border-radius: var(--r-md);
+  background: var(--fill);
+  box-shadow: var(--glass-shadow-raise);
+  transition:
+    background-color var(--dur-1) var(--ease-out),
+    box-shadow var(--dur-1) var(--ease-out);
+}
+button.cr-logo__pick:hover {
+  background: var(--fill-hover);
+  box-shadow: var(--glass-shadow-raise-hover);
+}
+.cr-logo__pick.is-on {
+  background: linear-gradient(var(--tint-leaf), var(--tint-leaf)), var(--fill-hover);
+  box-shadow: var(--glass-shadow-raise);
+}
+.cr-logo__pick img {
+  max-width: 100%;
+  max-height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+.cr-logo__remove {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  width: 32px;
+  height: 32px;
+}
+.cr-logo--up .cr-logo__pick {
+  opacity: 0.8;
+}
+.cr-logo__add {
+  display: grid;
+  place-items: center;
+  align-content: center;
+  gap: 2px;
+  aspect-ratio: 1;
+  padding: 8px;
+  border-radius: var(--r-md);
+  text-align: center;
+  background: var(--fill-control);
+  box-shadow: var(--glass-shadow-raise);
+  transition:
+    background-color var(--dur-1) var(--ease-out),
+    box-shadow var(--dur-1) var(--ease-out);
+}
+.cr-logo__add:hover {
+  background: var(--fill-hover);
+  box-shadow: var(--glass-shadow-raise-hover);
+}
+.cr-logo__add:active {
+  background: var(--fill-press);
+  box-shadow: var(--glass-shadow-press);
+}
+.cr-logo__add:focus-within {
+  box-shadow:
+    var(--glass-shadow-raise),
+    0 0 0 3px rgb(var(--vermilion-rgb) / 0.3);
+}
+.cr-logo__add-title {
+  font-weight: 650;
+  font-size: 0.9rem;
+}
+.cr-logo__add-hint {
+  font-size: 0.78rem;
+  color: var(--ink-2);
+}

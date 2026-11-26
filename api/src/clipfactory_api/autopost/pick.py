@@ -7,6 +7,8 @@ this order; then it **waits** for the owner, with the reason he sees:
 1. Its job exists and is not ``ready``.
 2. It has no video.
 3. An important check failed (one the agent drops clips for, §8; mostly ``campaign_rules`` that could not be checked).
+   Its logo and text are still being drawn (§53, ``overlay.status`` ``working``): it waits ("The edit is still being
+   made."), the same as a clip whose job is not ready, and the next clip takes its turn.
 4. It is for a campaign, and Content Rewards can't take it from Clip Factory by itself (§38.6): it goes only when
    Content Rewards is on and connected, the owner is ``in`` the campaign (not ``manual``), the campaign takes clips,
    it has places and the fit check passes; then it goes the campaign way (§38.14).
@@ -27,7 +29,7 @@ from dataclasses import dataclass, field
 from datetime import datetime, timedelta
 from typing import Any
 
-from .. import clips, db
+from .. import clip_overlay, clips, db
 from ..app import App
 from ..clock import parse
 from ..errors import ApiError
@@ -125,13 +127,15 @@ def busy(store: db.Store, user_id: str, now: datetime) -> set[str]:
     return out
 
 
-def _plain_reason(clip: Item) -> str | None:
+def _plain_reason(clip: Item, now: datetime) -> str | None:
     """Rules 1 to 3."""
     job = clip.get("_job")
     if isinstance(job, Mapping) and job.get("status") != "ready":
         return STILL_MAKING
     if not clip.get("videoKey"):
         return NO_VIDEO
+    if clip_overlay.is_working(clip, now):
+        return clip_overlay.STILL_MAKING
     checklist = clip.get("checklist")
     items = checklist.get("items") if isinstance(checklist, Mapping) else None
     for check in items or []:
@@ -209,7 +213,7 @@ def pick(
         if limit is not None and len(out.taken) >= limit:
             break
         plain = {k: v for k, v in clip.items() if k != "_job"}
-        reason = _plain_reason(clip)
+        reason = _plain_reason(clip, now)
         is_campaign, places = False, normal
         if reason is None:
             is_campaign, reason, places = _campaign(ctx, clip)

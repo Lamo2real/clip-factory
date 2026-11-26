@@ -213,6 +213,60 @@ export interface Clip {
    * Absent when neither was ticked.
    */
   tiktokLabel?: { brandContent: boolean; brandOrganic: boolean };
+  /** The CR switch (§53 C1): absent on old clips (= inactive). `campaignId`: the campaign picked in the editor (C6). */
+  cr?: ClipCr;
+  /** The logo and text drawn on the clip in Review (§53 C5). Absent until an edit was made, and again after Reset. */
+  overlay?: ClipOverlay;
+}
+
+/** The CR switch of a Review card (§53 C1). */
+export interface ClipCr {
+  active: boolean;
+  campaignId?: string;
+}
+/** The logo of an edit: `x`, `y` are the logo's centre as fractions (0 to 1) of the frame's width and height, `size` its width as a fraction of the width (0.08 to 0.5). */
+export interface OverlayLogo {
+  logoId: string;
+  x: number;
+  y: number;
+  size: number;
+}
+export type OverlayTextSize = "s" | "m" | "l";
+/** The words of an edit: one short line (80 characters at most), the same centre fractions. */
+export interface OverlayText {
+  text: string;
+  x: number;
+  y: number;
+  size: OverlayTextSize;
+}
+/** Only part of the clip: from and to, in seconds of the clip. Absent: the whole clip. */
+export interface OverlayTiming {
+  startSec: number;
+  endSec: number;
+}
+/** What Make it sends (PUT /v1/clips/{clipId}/overlay): at least one of `logo` and `text`. */
+export interface OverlayBody {
+  logo?: OverlayLogo;
+  text?: OverlayText;
+  timing?: OverlayTiming;
+}
+/** The edit on a clip (§53 C5). The keys of the files stay on the server. */
+export interface ClipOverlay extends OverlayBody {
+  rev: number;
+  status: "working" | "ready" | "failed";
+  /** One plain sentence when `status` is "failed". */
+  error?: string;
+}
+/** A logo of the owner's library (§53 C4). `url` is presigned for an hour. */
+export interface Logo {
+  logoId: string;
+  name: string;
+  url: string;
+  width: number;
+  height: number;
+  /** The campaign it was copied from (C6). */
+  campaignId?: string;
+  createdAt: string;
 }
 
 /** One skill (docs/CONTRACTS.md §5, §18). Every skill is always used: there is no on/off switch. */
@@ -2556,4 +2610,21 @@ export interface Api {
   retryMac(clipId: string, notOnTikTok?: boolean, now?: boolean): Promise<{ clip: Clip; posts: Post[] }>;
   /** DELETE /v1/clips/{clipId}/tiktok/mac: take it back from the Mac (§47.3). Kept; the web no longer calls it (ADR-86). */
   takeBackFromMac(clipId: string): Promise<{ clip: Clip; posts: Post[] }>;
+  // CR active: a logo and text on a clip in Review (§53). An api from before it answers 404.
+  /** GET /v1/logos: the logo library. */
+  listLogos(): Promise<Logo[]>;
+  /** POST /v1/logos `{ filename, contentType, size }` (201): a presigned PUT for the picture; 400 on another kind or over 10 MB. */
+  createLogoUpload(body: { filename: string; contentType: string; size: number }): Promise<{ logoId: string; uploadUrl: string; headers?: Record<string, string> }>;
+  /** POST /v1/logos/{logoId}/complete: the server checks the file; 400 with one sentence when it is not a PNG, JPEG or WebP. */
+  completeLogo(logoId: string): Promise<Logo>;
+  /** POST /v1/logos/from-campaign `{ campaignId }`: the campaign's own logo, copied once; 404 when it has none. */
+  logoFromCampaign(campaignId: string): Promise<Logo>;
+  /** DELETE /v1/logos/{logoId} (204): the item and its file. An edited clip keeps its copy. */
+  deleteLogo(logoId: string): Promise<void>;
+  /** PUT /v1/clips/{clipId}/cr `{ active, campaignId? }`: only while the clip waits in Review; `active: false` puts the original back. */
+  setClipCr(clipId: string, body: { active: boolean; campaignId?: string }): Promise<Clip>;
+  /** PUT /v1/clips/{clipId}/overlay: Make it. The clip comes back with `overlay.status` "working". */
+  makeOverlay(clipId: string, body: OverlayBody): Promise<Clip>;
+  /** DELETE /v1/clips/{clipId}/overlay: Reset, the original back. */
+  resetOverlay(clipId: string): Promise<Clip>;
 }

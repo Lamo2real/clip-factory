@@ -20,6 +20,7 @@ import "./styles/setup-todo.css";
 import "./styles/glide.css";
 import "./styles/roll.css";
 import "./styles/drop.css";
+import "./styles/cr-overlay.css";
 
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";

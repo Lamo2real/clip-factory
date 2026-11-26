@@ -787,6 +787,22 @@ run "content_rewards_on" {
   }
 }
 
+# docs/CONTRACTS.md §53 C4: the logo library. One more object prefix on the api's existing media grant (an in-place
+# policy change): get, put and delete by name, never listed.
+run "logo_library_prefix" {
+  command = plan
+
+  assert {
+    condition     = contains(one([for s in jsondecode(aws_iam_role_policy.fn["api"].policy).Statement : s.Resource if try(s.Sid, "") == "MediaObjects"]), "arn:aws:s3:::cf-test-media/logos/*")
+    error_message = "The api reads, writes and deletes the owner's logos under logos/."
+  }
+
+  assert {
+    condition     = !contains(one([for s in jsondecode(aws_iam_role_policy.fn["api"].policy).Statement : s.Condition.StringLike["s3:prefix"] if try(s.Sid, "") == "MediaList"]), "logos/*")
+    error_message = "The api never lists logos/: the library is the LOGO# items."
+  }
+}
+
 # docs/CONTRACTS.md §39.3: the campaign copy of a clip waits behind CR_REMAKE, off by default; the switch is an
 # in-place environment change (no new grant, nothing replaced).
 run "cr_remake_off_by_default" {

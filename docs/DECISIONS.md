@@ -2911,3 +2911,19 @@ likes, comments and shares; views are their own two choices.
 - **Consequences.** Attachments vanish after 14 days with the upload. Word, Excel and similar files are saved but not
   read. Their text, image and PDF tokens appear in the job's AI cost (§51) like any other input.
 
+## ADR-105 The campaign logo and text are drawn after the clip exists, in Review, by the agent on the original file
+
+- **Context.** §53. Campaigns want a logo and words on screen for the whole clip. The owner let us pick: before
+  clipping or after.
+- **Options.** (1) Before: put the overlay in the clip job's render. It would re-cut every clip of a job, cost a new
+  job per change, and a wrong placement needs a whole re-run (the §39 copy already works this way, at that price).
+  (2) After, on the finished clip, in Review. (3) After, in the browser, by canvas recording: unreliable, slow on
+  phones, no audio guarantee.
+- **Decision.** Option 2. The agent runtime already has ffmpeg and bucket access; the API asks it for one small
+  `overlay` action and the agent draws on the original file, which is kept (`origVideoKey`) so Reset is instant. The
+  result replaces `videoKey`, so every posting path (flows, the Mac helper, download, auto-posting) works unchanged
+  and no clipping code changes. The logo library is a new bucket prefix `logos/` (no expiry, unlike `uploads/`) plus
+  `LOGO#` items; fields are added only. Auto-posting only skips a clip while its edit is still being made.
+- **Consequences.** An edit costs one re-encode (seconds to a minute). The quality is one more generation of the
+  video, so the render uses the same encoder settings as clipping. One API role policy grows by a prefix (in place).
+  No table, pool, secret or bucket is touched.

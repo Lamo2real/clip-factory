@@ -40,6 +40,8 @@ import { campaignTikTokChoices, campaignTikTokProblem } from "../../lib/tiktokCh
 import { CampaignStrip } from "./CampaignStrip.tsx";
 import { CampaignFit, copyLine } from "./CampaignFit.tsx";
 import { FitSuggestion } from "./FitSuggestion.tsx";
+import { CrSwitch } from "./CrSwitch.tsx";
+import { isWorking, WORKING_LINE, withOverlay } from "../../lib/crOverlay.ts";
 import { fitMain, fixedWords, liveFit, reloadFit, uploadOffWords, useClipFit, useCopy } from "../../lib/crFit.ts";
 import { canMacFetch } from "../../lib/macFetch.ts";
 import { TikTokLegal } from "./TikTokCommercial.tsx";
@@ -334,6 +336,12 @@ export function Review({ jobId }: { jobId: string | null }) {
     patchLoaded<Clip[]>("review", (list) => savedCaptions(list, clipId, patch));
   };
 
+  // The CR switch or the logo and text edit changed (§53): the list and the remembered lists hold the new clip.
+  const crChanged = (fresh: Clip) => {
+    setData((d) => (d ? withOverlay(d, fresh) : d));
+    patchLoaded<Clip[]>("review", (list) => withOverlay(list, fresh));
+  };
+
   // A job's Review with nothing left (§34): what else waits, from every job's list, and whether the job is there at all,
   // so it never says "All done!" while other clips wait, nor about a job that does not exist.
   const empty = !!visible && visible.length === 0;
@@ -495,6 +503,7 @@ export function Review({ jobId }: { jobId: string | null }) {
                   autoLine={autoLine(c.clipId)}
                   macCtx={macCtx}
                   onSaved={captionsSaved}
+                  onCr={crChanged}
                 />
               </li>
             ))}
@@ -542,8 +551,11 @@ function ReviewCard({
   autoLine = null,
   macCtx,
   onSaved,
+  onCr,
 }: {
   clip: Clip;
+  /** The CR switch or the edit changed (§53): the fresh clip. */
+  onCr: (clip: Clip) => void;
   /** What the TikTok rows read about the owner's Mac (§47.4): the card's line above Upload says what it is doing. */
   macCtx: TikTokRowContext;
   /** A caption edit was saved on the server (the list and the remembered list hold it from now on). */
@@ -930,6 +942,12 @@ function ReviewCard({
   const everyPlace = unskipped.length ? unskipped : PLATFORM_ORDER;
 
   async function confirm() {
+    // The logo and text are still being drawn (§53 C5): the file is not final yet.
+    if (isWorking(clip)) {
+      keepAct.fail({ sound: false });
+      toast.error(WORKING_LINE);
+      return;
+    }
     // A campaign clip goes up the campaign way only when it can earn (the API refuses it too, §39.3).
     if (fitWhy && !keepFailed) {
       keepAct.fail({ sound: false });
@@ -1189,7 +1207,8 @@ function ReviewCard({
                 : ttNoWhose
                   ? `${PICK_WHOSE} Pick Your brand or Branded content on TikTok first.`
                   : (brandedBlocked(ttChoices.privacy) ?? "Pick Your brand or Branded content on TikTok first.");
-  const uploadWhy: string | null = fitWhy ?? ttWhy;
+  // §53 C5: Upload waits while the logo and text are being drawn.
+  const uploadWhy: string | null = fitWhy ?? ttWhy ?? (isWorking(clip) ? WORKING_LINE : null);
   const placesShown = placesReady && !noneReady ? chosen : everyPlace;
   // The line above Upload follows the card's own TikTok row: who sees it, and the label the Mac adds (every campaign clip
   // is a paid partnership).
@@ -1309,6 +1328,8 @@ function ReviewCard({
             </div>
           ) : null}
         </details>
+
+        <CrSwitch clip={clip} onClip={onCr} />
 
         {suggested ? (
           <FitSuggestion clipId={clip.clipId} fit={suggested} copy={copyState} onCopy={(anyway) => makeCopy(suggested.campaignId, anyway)} busy={copyBusy} />

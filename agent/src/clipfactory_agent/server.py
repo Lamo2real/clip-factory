@@ -1,7 +1,8 @@
 """The AgentCore Runtime container: plain HTTP on port 8080 (docs/CONTRACTS.md §8).
 
 GET /ping answers Healthy, or HealthyBusy while a job runs so AgentCore keeps the session alive.
-POST /invocations takes ``process_job`` (accepted at once, runs in the background), ``cancel`` and ``health``.
+POST /invocations takes ``process_job`` (accepted at once, runs in the background), ``overlay`` (a logo and text drawn
+on a clip in Review, also accepted at once and run in the background: overlay.py, §53), ``cancel`` and ``health``.
 ``process_job`` comes from the durable job flow ``cf-prod-job-flow`` with a ``callbackId``: the run heartbeats to it
 and ends by sending success or failure (docs/CONTRACTS.md §14.4). Without ``callbackId`` (local runs, tests) no
 callback is sent.
@@ -45,6 +46,28 @@ _CALLBACK = re.compile(r"^[\x21-\x7e]{1,2048}$")  # printable ASCII, no spaces; 
 SESSION_HEADER = "x-amzn-bedrock-agentcore-runtime-session-id"
 
 
+class OverlayHost(Protocol):
+    """Runs Review overlay edits (overlay.OverlayRunner): a runner of its own, so a job's cancel never reaches one."""
+
+    @property
+    def busy(self) -> bool: ...
+
+    async def shutdown(self, within: float = 20.0) -> None: ...
+
+    def submit(self, user_id: str, clip_id: str, job_id: str, rev: int) -> bool: ...
+
+
+def overlay_rev(value: Any) -> int | None:
+    """The edit's revision: a whole number from 0 up (a digit string is taken too); None for anything else."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value if 0 <= value < 2**53 else None
+    if isinstance(value, str) and value.isascii() and value.isdigit() and len(value) <= 15:
+        return int(value)
+    return None
+
+
 class Runner(Protocol):
     @property
     def busy(self) -> bool: ...
@@ -58,12 +81,15 @@ class Runner(Protocol):
     def cancel(self, job_id: str, session_id: str | None = None) -> bool: ...
 
 
-def create_app(runner: Runner, lifespan: Any = None) -> Starlette:
+def create_app(runner: Runner, lifespan: Any = None, overlays: OverlayHost | None = None) -> Starlette:
     state = {"last_update": int(time.time())}
 
     async def ping(_: Request) -> JSONResponse:
         return JSONResponse(
-            {"status": "HealthyBusy" if runner.busy else "Healthy", "time_of_last_update": state["last_update"]}
+            {
+                "status": "HealthyBusy" if runner.busy or (overlays is not None and overlays.busy) else "Healthy",
+                "time_of_last_update": state["last_update"],
+            }
         )
 
     def bad(message: str) -> JSONResponse:
@@ -99,6 +125,21 @@ def create_app(runner: Runner, lifespan: Any = None) -> Starlette:
             started = runner.submit(job_id, user_id, session_id, callback_id)
             log("info", "job.accepted", job=job_id, session=session_id, started=started)
             return JSONResponse({"accepted": True, "jobId": job_id})
+        if action == "overlay":
+            user_id = inv.get("userId")
+            clip_id = inv.get("clipId")
+            rev = overlay_rev(inv.get("rev"))
+            if not isinstance(user_id, str) or not _ID.match(user_id):
+                return bad("userId is missing or invalid.")
+            if not isinstance(clip_id, str) or not _ID.match(clip_id):
+                return bad("clipId is missing or invalid.")
+            if rev is None:
+                return bad("rev is missing or invalid.")
+            if overlays is None:
+                return bad("Unknown action.")
+            started = overlays.submit(user_id, clip_id, job_id, rev)
+            log("info", "overlay.accepted", clip=clip_id, job=job_id, rev=rev, started=started)
+            return JSONResponse({"accepted": True, "clipId": clip_id, "rev": rev})
         if action == "cancel":
             stopped = runner.cancel(job_id, session_id)
             log("info", "job.cancel", job=job_id, stopped=stopped)
@@ -247,6 +288,7 @@ def build_app(env: Mapping[str, str] | None = None) -> Starlette:
     from .callback import lambda_client
     from .config import load_config
     from .jobs import JobRunner
+    from .overlay import OverlayRunner, make_overlay_run
     from .pipeline import Pipeline
     from .store import Store
     from .transcribe import Transcriber
@@ -291,11 +333,12 @@ def build_app(env: Mapping[str, str] | None = None) -> Starlette:
         watchModel=cfg.watch_model_id if watcher else None,
     )
     runner = JobRunner(make_run(store, pipeline, cfg.work_root, new_callback), cfg.work_root)
-    return create_app(runner, app_lifespan(runner, env))
+    overlays = OverlayRunner(make_overlay_run(store, cfg.work_root))
+    return create_app(runner, app_lifespan(runner, env, overlays), overlays)
 
 
 def app_lifespan(
-    runner: Runner | None = None, env: Mapping[str, str] | None = None
+    runner: Runner | None = None, env: Mapping[str, str] | None = None, overlays: OverlayHost | None = None
 ) -> Callable[[Starlette], AbstractAsyncContextManager[None]]:
     """What the app does when it starts and stops.
 
@@ -316,6 +359,11 @@ def app_lifespan(
             if runner is not None:
                 try:
                     await runner.shutdown()
+                except Exception as e:
+                    log("warn", "runtime.shutdown_failed", error=type(e).__name__)
+            if overlays is not None:
+                try:
+                    await overlays.shutdown()
                 except Exception as e:
                     log("warn", "runtime.shutdown_failed", error=type(e).__name__)
             await pot.stop()

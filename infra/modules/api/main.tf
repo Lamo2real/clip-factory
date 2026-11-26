@@ -17,7 +17,8 @@ locals {
   media_prefixes = ["uploads", "jobs", "skills", "private", "ask"]
   # "campaigns": a Content Rewards campaign's logo and brand picture (§38.11, §38.16): get, put and delete only, no
   # listing (removing a campaign deletes its files by name). The logo copy into jobs/* uses the jobs prefix above.
-  object_prefixes = concat(local.media_prefixes, ["campaigns"])
+  # "logos": the owner's logo library (§53 C4): get, put and delete by name, no listing (a list is the LOGO# items).
+  object_prefixes = concat(local.media_prefixes, ["campaigns", "logos"])
 
   # Content Rewards (docs/CONTRACTS.md §38.8, §38.16): every /v1/contentrewards route answers 503 until
   # CONTENT_REWARDS=on (and the names below are set). The stats invoke ({"action": "contentrewards"}) uses the

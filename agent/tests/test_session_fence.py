@@ -286,6 +286,22 @@ async def test_clearing_old_clips_removes_files_only_after_the_fenced_delete() -
     assert store.deleted_keys == ["jobs/J/clips/A/clip.mp4", "jobs/J/clips/A/cover.jpg"]
 
 
+async def test_clearing_an_edited_clip_removes_its_original_and_edit_files_too() -> None:
+    edited = {
+        **review_clip("A"),
+        "videoKey": "jobs/J/clips/A/edit-1.mp4",
+        "editKey": "jobs/J/clips/A/edit-1.mp4",
+        "origVideoKey": "jobs/J/clips/A/clip.mp4",
+    }
+    store = FakePipelineStore([edited])
+    await pipeline(store)._clear_previous_clips(job_state())
+    assert sorted(store.deleted_keys) == [
+        "jobs/J/clips/A/clip.mp4",
+        "jobs/J/clips/A/cover.jpg",
+        "jobs/J/clips/A/edit-1.mp4",
+    ]
+
+
 async def test_a_stale_run_never_removes_the_newer_runs_review_clips() -> None:
     store = FakePipelineStore([review_clip("NEW")])
     store.superseded = True

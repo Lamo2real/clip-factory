@@ -9,8 +9,10 @@ from datetime import datetime, timedelta
 from typing import Any
 
 from .. import (
+    clip_overlay,
     clips,
     db,
+    logos,
     mojibake,
     post_preset,
     posts,
@@ -70,13 +72,14 @@ def list_clips(app: App, req: Request) -> Response:
     if wanted is not None:
         items = [c for c in items if c.get("status") in wanted]
     by_clip = clips.posts_by_clip(posts.all_posts(app.store, req.user_id)) if items else {}
-    return ok({"clips": [clips.public_clip(c, app.media, posts=by_clip.get(c["clipId"], [])) for c in items]})
+    now = app.clock()
+    return ok({"clips": [clips.public_clip(c, app.media, posts=by_clip.get(c["clipId"], []), now=now) for c in items]})
 
 
 def get_clip(app: App, req: Request) -> Response:
     item = _clip_or_404(app, req)
     found = posts.posts_for_clip(app.store, req.user_id, item["clipId"])
-    return ok({"clip": clips.public_clip(item, app.media, posts=found)})
+    return ok({"clip": clips.public_clip(item, app.media, posts=found, now=app.clock())})
 
 
 def patch_clip(app: App, req: Request) -> Response:
@@ -698,7 +701,7 @@ def decline(app: App, req: Request) -> Response:
             item["pk"],
             item["sk"],
             {"status": "declined", "decidedAt": now},
-            remove=["videoKey", "coverKey"],
+            remove=["videoKey", "coverKey", "editKey", "origVideoKey"],
             expect_in={"status": ["review"]},
         )
     except db.ConditionFailed as e:
@@ -707,6 +710,161 @@ def decline(app: App, req: Request) -> Response:
     _delete_vector(app, req.user_id, item["clipId"])
     log("info", "clip.declined", clipId=item["clipId"])
     return ok({"clip": clips.public_clip(updated, app.media)})
+
+
+# --- CR active: a logo and text on the clip (§53 C1, C5, C6) ---------------------------------------------------------
+
+NO_CAMPAIGN = "We could not find that campaign."
+OVERLAY_TRIES = 3
+
+
+def _overlay_write(
+    app: App, req: Request, build: Any, *, only_when_changed: bool = False
+) -> tuple[dict[str, Any], dict[str, Any], str | None]:
+    """Reads the clip, asks ``build(item)`` for ``(fields to set, fields to remove, a file to delete afterwards)``
+    and writes them only while the clip is still in Review with the very ``overlay`` that was read; if a render
+    finished (or another change came) meanwhile, reads again, up to 3 times. Returns ``(the clip as written, the
+    clip read, the file to delete)``; ``only_when_changed`` returns the clip untouched when ``build`` has nothing."""
+    for attempt in range(OVERLAY_TRIES):
+        item = _clip_or_404(app, req)
+        _require_review(item)
+        set_fields, remove, gone = build(item)
+        if only_when_changed and not set_fields and not remove:
+            return item, item, None
+        absent, also = clip_overlay.same_overlay(item)
+        try:
+            updated = app.store.update(
+                item["pk"],
+                item["sk"],
+                set_fields,
+                remove=remove,
+                expect_in={"status": ["review"]},
+                expect_absent=absent,
+                also=also,
+            )
+        except db.ConditionFailed:
+            if attempt == OVERLAY_TRIES - 1:
+                raise conflict("This clip just changed. Try again.") from None
+            continue
+        return updated, item, gone
+    raise conflict("This clip just changed. Try again.")  # pragma: no cover (the loop always returns or raises)
+
+
+def _delete_edit(app: App, key: str | None) -> None:
+    if key:
+        try:
+            app.media.delete(key)
+        except Exception as e:  # the clip is back to its original either way; a stray file is never linked
+            log("error", "clip.edit_delete_failed", error=type(e).__name__)
+
+
+def _own_campaign(app: App, user_id: str, raw: Any) -> str:
+    """The owner's campaign id (lower case), else 404: ``campaignId`` must be one of the owner's campaigns."""
+    from ..contentrewards import links
+
+    text = raw.strip().lower() if isinstance(raw, str) else ""
+    found = app.store.get(db.user_pk(user_id), db.campaign_sk(text)) if links.UUID.match(text) else None
+    if found is None or found.get("type") != "campaign":
+        raise not_found(NO_CAMPAIGN)
+    return text
+
+
+def put_cr(app: App, req: Request) -> Response:
+    """``PUT /v1/clips/{clipId}/cr`` ``{active, campaignId?}`` → ``{clip}`` (§53 C1, C5). Only while the clip is in
+    Review. Switching on stores ``cr`` and nothing else; switching off also puts the original back."""
+    body = req.json()
+    validate.only_keys(body, {"active", "campaignId"})
+    if "active" not in body:
+        raise bad_request("active is required.")
+    active = validate.boolean(body["active"], "active")
+    campaign = _own_campaign(app, req.user_id, body["campaignId"]) if active and body.get("campaignId") else None
+
+    def build(item: dict[str, Any]) -> tuple[dict[str, Any], list[str], str | None]:
+        if active:
+            return {"cr": {"active": True, **({"campaignId": campaign} if campaign else {})}}, [], None
+        set_fields, remove, gone = clip_overlay.reset_writes(item)
+        return {**set_fields, "cr": {"active": False}}, remove, gone
+
+    updated, _before, gone = _overlay_write(app, req, build)
+    _delete_edit(app, gone)
+    log("info", "clip.cr", clipId=updated["clipId"], active=active)
+    return ok({"clip": clips.public_clip(updated, app.media, now=app.clock())})
+
+
+def put_overlay(app: App, req: Request) -> Response:
+    """``PUT /v1/clips/{clipId}/overlay`` ``{logo?, text?, timing?}`` → ``{clip}`` with ``overlay.status: "working"``
+    (§53 C5). At least one of logo and text; ``cr.active`` is required (409). The agent draws on the original file and
+    sets ``videoKey`` to the edited one when it is done; this route only writes ``working`` and asks it."""
+    body = req.json()
+    validate.only_keys(body, {"logo", "text", "timing"})
+    if body.get("logo") is None and body.get("text") is None:
+        raise bad_request(clip_overlay.NEED_ONE)
+    logo = clip_overlay.logo_part(body["logo"]) if body.get("logo") is not None else None
+    text = clip_overlay.text_part(body["text"]) if body.get("text") is not None else None
+    item = _clip_or_404(app, req)
+    _require_review(item)
+    if not (item.get("cr") or {}).get("active"):
+        raise conflict(clip_overlay.TURN_ON)
+    timing = (
+        clip_overlay.timing_part(body["timing"], item.get("durationSec")) if body.get("timing") is not None else None
+    )
+    if logo is not None:
+        found = logos.get_item(app.store, req.user_id, logo["logoId"])
+        if found is None or found.get("status") != "ready":
+            raise not_found("We could not find that logo.")
+        logo["key"] = str(found["key"])  # internal: the agent reads the picture by it (never public)
+    now = app.clock()
+    started = iso(now)
+
+    def build(current: dict[str, Any]) -> tuple[dict[str, Any], list[str], str | None]:
+        if not (current.get("cr") or {}).get("active"):
+            raise conflict(clip_overlay.TURN_ON)
+        fresh = clip_overlay.working(current, started, logo=logo, text=text, timing=timing)
+        return {"overlay": fresh, "overlayRev": fresh["rev"]}, [], None
+
+    updated, _before, _gone = _overlay_write(app, req, build)
+    rev = int(updated["overlay"]["rev"])
+    try:
+        app.agent.overlay(req.user_id, str(updated["clipId"]), str(updated["jobId"]), rev)
+    except Exception as e:  # the agent could not be reached or refused: the clip says so, the owner taps Make it again
+        log("error", "clip.overlay_start_failed", clipId=updated["clipId"], error=type(e).__name__)
+        updated = _overlay_failed(app, updated, clip_overlay.COULD_NOT_START)
+    else:
+        log("info", "clip.overlay_started", clipId=updated["clipId"], rev=rev)
+    return ok({"clip": clips.public_clip(updated, app.media, now=app.clock())})
+
+
+def _overlay_failed(app: App, item: dict[str, Any], sentence: str) -> dict[str, Any]:
+    """``failed`` with one sentence, only while the clip still has the very ``overlay`` that was just written."""
+    failed = {**{k: v for k, v in item["overlay"].items() if k != "error"}, "status": "failed", "error": sentence}
+    absent, also = clip_overlay.same_overlay(item)
+    try:
+        return app.store.update(
+            item["pk"],
+            item["sk"],
+            {"overlay": failed},
+            expect_in={"status": ["review"]},
+            expect_absent=absent,
+            also=also,
+        )
+    except db.ConditionFailed:  # changed meanwhile (a reset, a newer edit): that newer state stands
+        return app.store.get(item["pk"], item["sk"]) or item
+
+
+def delete_overlay(app: App, req: Request) -> Response:
+    """``DELETE /v1/clips/{clipId}/overlay`` → ``{clip}`` (Reset, §53 C5): ``videoKey`` back to the original, the edited
+    file deleted, ``overlay``, ``editKey`` and ``origVideoKey`` removed; ``cr`` stays. Safe to repeat."""
+    item = _clip_or_404(app, req)
+    if not any(name in item for name in ("overlay", "editKey", "origVideoKey")):
+        return ok({"clip": clips.public_clip(item, app.media, now=app.clock())})
+
+    def build(current: dict[str, Any]) -> tuple[dict[str, Any], list[str], str | None]:
+        return clip_overlay.reset_writes(current)
+
+    updated, _before, gone = _overlay_write(app, req, build, only_when_changed=True)
+    _delete_edit(app, gone)
+    log("info", "clip.overlay_reset", clipId=updated["clipId"])
+    return ok({"clip": clips.public_clip(updated, app.media, now=app.clock())})
 
 
 def hold(app: App, req: Request) -> Response:
@@ -805,7 +963,7 @@ def _delete_files(app: App, item: dict[str, Any]) -> None:
     try:
         app.media.delete_prefix(s3.clip_prefix(item["jobId"], item["clipId"]))
         # Keys normally live under the clip's prefix; delete them by name too in case the agent stored them elsewhere.
-        for field in ("videoKey", "coverKey"):
+        for field in ("videoKey", "coverKey", "editKey", "origVideoKey"):
             key = item.get(field)
             if isinstance(key, str) and s3.is_safe_key(key) and key.startswith(f"jobs/{item['jobId']}/"):
                 app.media.delete(key)
