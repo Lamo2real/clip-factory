@@ -806,13 +806,19 @@ export function vermilionOf(step: NextStep, boxText = ""): string | null {
 // ---------- Pay, budget and the places it pays for ----------
 
 /** One row per platform the campaign pays on (CR's published rates, never a guess of what a clip earns). */
+type CountryRate = NonNullable<Campaign["pay"][number]["countryRates"]>[number];
 export function payLine(p: Campaign["pay"][number], type: Campaign["type"]): string {
   if (type === "pool") return "Shares the prize money";
   if (type === "retainer") return "Pays picked creators each month";
   if (p.perPostCents != null && p.per1kCents == null)
     return `${usd(p.perPostCents)} for each approved post${p.minViews ? ` · needs ${p.minViews.toLocaleString("en-US")} views` : ""}`;
   const parts: string[] = [];
-  if (p.per1kCents != null) parts.push(`${usd(p.per1kCents)} per 1,000 views`);
+  // The headline is the best rate: a base of $0.00 (other countries) must never hide a paying tier 1 (§38).
+  const best = (p.countryRates ?? []).reduce<CountryRate | null>((a, r) => (!a || r.per1kCents > a.per1kCents ? r : a), null);
+  if (best && best.per1kCents > (p.per1kCents ?? 0)) {
+    const where = best.countries.length ? ` in ${best.countries.join(", ")}` : "";
+    parts.push(`${usd(best.per1kCents)} per 1,000 views${where}`);
+  } else if (p.per1kCents != null) parts.push(`${usd(p.per1kCents)} per 1,000 views`);
   if (p.maxPayoutCents != null) parts.push(`up to ${usd(p.maxPayoutCents)} a clip`);
   if (p.minPayoutCents != null) parts.push(`a clip starts paying once it has earned ${usd(p.minPayoutCents)}`);
   return parts.join(" · ") || "Pay not shown yet";
@@ -820,6 +826,9 @@ export function payLine(p: Campaign["pay"][number], type: Campaign["type"]): str
 
 /** "US & UK: $2.00 per 1,000 views", "Other countries: $0.20", "Unknown country: $0.10". */
 export function countryLines(p: Campaign["pay"][number]): string[] {
+  return [...new Set(countryLinesOf(p))];
+}
+function countryLinesOf(p: Campaign["pay"][number]): string[] {
   const out = (p.countryRates ?? []).map((r) => `${r.name}: ${usd(r.per1kCents)} per 1,000 views`);
   if (p.otherCountriesPer1kCents != null) out.push(`Other countries: ${usd(p.otherCountriesPer1kCents)}`);
   if (p.unknownCountryPer1kCents != null) out.push(`Unknown country: ${usd(p.unknownCountryPer1kCents)}`);

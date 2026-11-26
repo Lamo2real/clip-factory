@@ -22,6 +22,7 @@ import {
   forDevice,
   nextStepFor,
   payLine,
+  countryLines,
   placesLines,
   reasonText,
   rejectHint,
@@ -309,6 +310,9 @@ describe("places, connection and money", () => {
     expect(payLine({ platform: "youtube", per1kCents: 100, perPostCents: null, minPayoutCents: 200, maxPayoutCents: 20_000, minViews: null }, "cpm")).toBe(
       "$1.00 per 1,000 views · up to $200.00 a clip · a clip starts paying once it has earned $2.00",
     );
+    const tiered = { platform: "youtube" as const, per1kCents: 0, perPostCents: null, minPayoutCents: null, maxPayoutCents: null, minViews: null, countryRates: [{ name: "Tier 1", per1kCents: 25, countries: ["US", "UK", "Canada", "Australia"] }], otherCountriesPer1kCents: 0 };
+    expect(payLine(tiered, "cpm")).toBe("$0.25 per 1,000 views in US, UK, Canada, Australia");
+    expect(countryLines(tiered)).toEqual(countryLines({ ...tiered, platform: "tiktok" as const }));
     expect(payLine({ platform: "youtube", per1kCents: null, perPostCents: 500, minPayoutCents: null, maxPayoutCents: null, minViews: 1000 }, "per_post")).toBe(
       "$5.00 for each approved post · needs 1,000 views",
     );

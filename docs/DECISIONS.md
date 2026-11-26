@@ -2942,3 +2942,12 @@ likes, comments and shares; views are their own two choices.
 - **Decision.** Option 2. New edits write `logos`; code reads `logos`, else `logo` as one layer. The soft cap of 4 keeps
   the render one ffmpeg run and the sheet small. No new resource.
 - **Consequences.** Old edited clips keep working untouched; the cap is one constant, raised by editing it.
+
+## ADR-108 The rules schema carries no union types
+
+- **Context.** Every "Read these rules" failed with a Bedrock `ValidationException`: structured output allows at most
+  16 union (`anyOf`) types and the rules schema had about 20 nullable fields.
+- **Options.** (1) Drop optional fields: loses rules. (2) Two model calls: slower, dearer. (3) Plain types with "not
+  stated" as `""` or `0`; the existing checker already turns both into null.
+- **Decision.** Option 3, plus a unit test that the schema has no unions, and the real Bedrock message in the log.
+- **Consequences.** No stored shape changes. A new field must stay union-free.

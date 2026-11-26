@@ -12,6 +12,7 @@ the sentence); nothing raises to Lambda.
 from __future__ import annotations
 
 import os
+import re
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from typing import Any
@@ -75,6 +76,14 @@ def find(event: Mapping[str, Any], deps: CampaignsDeps) -> dict[str, Any]:
     return finder_run.run(deps, user_id, str(why), deps.clock())
 
 
+def _why(e: BaseException) -> str:
+    """Bedrock's own error message (what it refused), cut to 300 characters with ids and long numbers/urls taken out;
+    never the pasted rules (the message does not carry them, and Python errors of ours are only the class)."""
+    msg = str(getattr(e, "response", {}).get("Error", {}).get("Message") or "") if hasattr(e, "response") else ""
+    msg = re.sub(r"https?://\S+|arn:\S+|[0-9a-fA-F-]{16,}|\d{6,}", "…", " ".join(msg.split()))
+    return msg[:300]
+
+
 def read(deps: CampaignsDeps, user_id: str, item: Item) -> str:
     """The rules read: the item's own text only (brief, public, pasted rules) and up to 3 public Google Docs.
 
@@ -94,7 +103,7 @@ def read(deps: CampaignsDeps, user_id: str, item: Item) -> str:
         checked = rules.validate(raw, corpus, rules.toggles(item.get("public")), follows)
         checked["uncertain"] = (doc_doubts + checked["uncertain"])[: rules.MAX_LIST]
     except Exception as e:
-        log("warning", "campaigns.read_failed", error=type(e).__name__)
+        log("warning", "campaigns.read_failed", error=type(e).__name__, message=_why(e))
         try:
             deps.store.update(pk, sk, {"rulesState": "failed"}, remove=["readPending"], expect_in=same)
         except db.ConditionFailed:

@@ -8834,6 +8834,12 @@ This is checked at the first Connect (and logged once as `cr.typeid_verified` or
 
 ### 38.10 Reading a campaign
 
+* **2026-11-26 fix (ADR-108).** The rules schema has no `anyOf` (Bedrock's structured output allows 16 unions, and ~20
+  nullable fields made every read a `ValidationException`): "not stated" is `""` / `0`, checked to null. The failure
+  log adds `message` (Bedrock's text, ids cut). A read that ends `failed` shows a toast on the card. The Pay headline is
+  the best rate ("$0.25 per 1,000 views in US, UK, Canada, Australia"), never the $0.00 base; the country fold lists
+  each line once.
+
 * **Preview (public, only for the card, only when the owner acts).** `GET
   https://contentrewards.com/api/campaign/campaigns/{uuid}` (public, undocumented, and robots.txt disallows `/api/` for
   crawlers, so it is never read on a schedule; `Accept: application/json`, `User-Agent: ClipFactory/1`, 6 s, ≤ 512 KB,

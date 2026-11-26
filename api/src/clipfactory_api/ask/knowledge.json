@@ -1,5 +1,5 @@
 {
- "version": "95dfe743c8a9",
+ "version": "27e6c34fddd8",
  "parts": [
   {
    "id": "app-map",
@@ -255,7 +255,7 @@
    "id": "contracts-38",
    "title": "CONTRACTS: 38. Content Rewards campaigns (owner request, 2026-11-21)",
    "line": "The owner's words: \"browse Content Rewards, join a campaign there, then paste the campaign URL into Clip Factory. Clip",
-   "chars": 177477
+   "chars": 177970
   },
   {
    "id": "contracts-39",
@@ -982,6 +982,12 @@
    "title": "DECISIONS: ADR-107 Pictures on a CR clip are a list of layers next to the old single logo",
    "line": "Context. §54. The owner wants several pictures on one clip. §53 stored one overlay.logo; clips are already edited.",
    "chars": 726
+  },
+  {
+   "id": "adr-108",
+   "title": "DECISIONS: ADR-108 The rules schema carries no union types",
+   "line": "Context. Every \"Read these rules\" failed with a Bedrock ValidationException: structured output allows at most",
+   "chars": 636
   },
   {
    "id": "architecture-overview",

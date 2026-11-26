@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import json
-from typing import Any
+from typing import Any, ClassVar
 
 import pytest
 
@@ -634,3 +634,47 @@ def test_an_open_graph_answer_keeps_the_full_public_copy() -> None:
     assert rules.toggles(item["public"])["logoRequired"] is True
     assert item["access"] == "application"
     assert item["name"] == "$8,500 FaZe Tournament Clipping Campaign"
+
+
+def _unions(node: object) -> int:
+    if isinstance(node, dict):
+        return int("anyOf" in node or "oneOf" in node) + sum(_unions(v) for v in node.values())
+    if isinstance(node, list):
+        return sum(_unions(v) for v in node)
+    return 0
+
+
+def test_schema_fits_bedrocks_structured_output_limits() -> None:
+    """Bedrock refused the read with a ValidationException on every try: the schema had ~20 nullable (anyOf) fields
+    and structured output allows 16 unions at most. None are left; "not stated" is "" and 0."""
+    schema = json.loads(rules.output_config()["textFormat"]["structure"]["jsonSchema"]["schema"])
+    assert _unions(schema) == 0
+
+
+def test_validate_treats_not_stated_zero_and_empty_as_null() -> None:
+    raw = {
+        **rules.empty(),
+        "lengthMinSec": 0,
+        "lengthMaxSec": 0,
+        "layoutNotes": "",
+        "keepPublicDays": 0,
+        "clipUntil": "",
+    }
+    checked = rules.validate(raw, "", rules.toggles(None), [])
+    for field in ("lengthMinSec", "lengthMaxSec", "layoutNotes", "keepPublicDays", "clipUntil"):
+        assert checked[field] is None
+    assert checked["uncertain"] == []
+
+
+def test_read_failure_logs_the_models_message_without_ids() -> None:
+    from clipfactory_api.contentrewards import handler
+
+    class Refused(Exception):
+        response: ClassVar[dict[str, Any]] = {
+            "Error": {"Code": "ValidationException", "Message": "Too many union types (20) in 1234567890 arn:aws:x:y"}
+        }
+
+    msg = handler._why(Refused())
+    assert "Too many union types" in msg
+    assert "1234567890" not in msg
+    assert "arn:" not in msg
