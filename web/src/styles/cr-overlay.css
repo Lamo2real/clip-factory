@@ -109,7 +109,7 @@
 /* Where the renderer draws the captions and the facecam: a faint outline, so a warning is easy to see. */
 .cr-ed__zone {
   position: absolute;
-  border: 1px dashed rgb(var(--bone-rgb) / 0.45);
+  background: rgb(var(--bone-rgb) / 0.12);
   border-radius: var(--r-xs);
   pointer-events: none;
 }
@@ -130,7 +130,6 @@
 }
 /* A box that sits on the captions or the facecam turns vermilion. */
 .cr-ed__item.is-warn {
-  outline-color: var(--vermilion);
   box-shadow: 0 0 14px rgb(var(--vermilion-rgb) / 0.55);
 }
 .cr-ed__logo img {
@@ -281,9 +280,7 @@ button.cr-logo__pick:hover {
 }
 .cr-logo__pick.is-on {
   background: linear-gradient(var(--tint-leaf), var(--tint-leaf)), var(--fill-hover);
-  box-shadow:
-    var(--glass-shadow-raise),
-    0 0 0 2px var(--bone);
+  box-shadow: var(--glass-shadow-raise);
 }
 .cr-logo__pick img {
   max-width: 100%;
