@@ -73,7 +73,8 @@ def test_parse_spec_clamps_and_cleans() -> None:
             "timing": {"startSec": 2, "endSec": 1},
         }
     )
-    assert spec.logo == ov.LogoSpec("LG1", 1.0, 0.0, ov.SIZE_MAX)
+    assert spec.logo == ov.LogoSpec("LG1", 1.0, 0.0, ov.SIZE_MAX, start=2.0, end=None)  # §53: the one picture's time
+    assert spec.logos == (spec.logo,)
     assert spec.text is not None and len(spec.text.text) <= ov.MAX_TEXT and spec.text.size == "m"
     assert "{" not in spec.text.text and "\n" not in spec.text.text and "\\" not in spec.text.text
     assert (spec.start, spec.end) == (2.0, None)  # a backwards window: from 2 s to the end
@@ -84,31 +85,116 @@ def test_parse_spec_clamps_and_cleans() -> None:
 
 
 def test_parse_spec_needs_a_logo_or_words() -> None:
-    for bad in ({}, {"text": {"text": "  ", "x": 0, "y": 0, "size": "s"}}, {"logo": {"logoId": "../x"}}):
+    for bad in (
+        {},
+        {"text": {"text": "  ", "x": 0, "y": 0, "size": "s"}},
+        {"logo": {"logoId": "../x"}},
+        {"logos": [{"logoId": "../x"}, "nope", None]},
+    ):
         with pytest.raises(ov.OverlayFailed):
             ov.parse_spec(bad)
 
 
+def layer(n: int, **kw: Any) -> dict[str, Any]:
+    return {"layerId": f"L{n}", "logoId": f"LG{n}", "x": 0.1 * n, "y": 0.2, "size": 0.2, **kw}
+
+
+def test_parse_spec_reads_the_layers_in_order_with_their_own_timing() -> None:
+    spec = ov.parse_spec(
+        {
+            "logos": [layer(1, key="logos/u/LG1.png"), layer(2, timing={"startSec": 1, "endSec": 4}), layer(3)],
+            "logo": {"logoId": "OLD", "x": 0.5, "y": 0.5, "size": 0.3},  # ignored when there are layers
+            "timing": {"startSec": 9, "endSec": 12},  # the text's time only
+            "text": {"text": "hi", "x": 0.5, "y": 0.5, "size": "s"},
+        }
+    )
+    assert [lg.logo_id for lg in spec.logos] == ["LG1", "LG2", "LG3"]
+    assert [lg.layer_id for lg in spec.logos] == ["L1", "L2", "L3"]
+    assert spec.logos[0].key == "logos/u/LG1.png" and spec.logos[1].key is None
+    assert [(lg.start, lg.end) for lg in spec.logos] == [(None, None), (1.0, 4.0), (None, None)]
+    assert (spec.start, spec.end) == (9.0, 12.0)
+
+
+def test_parse_spec_caps_the_layers_at_four_and_skips_unusable_ones() -> None:
+    raw = [layer(n) for n in range(1, 8)]
+    raw.insert(1, {"logoId": "../bad"})
+    spec = ov.parse_spec({"logos": raw})
+    assert ov.MAX_LAYERS == 4 and [lg.logo_id for lg in spec.logos] == ["LG1", "LG2", "LG3", "LG4"]
+
+
+def test_a_stored_one_picture_edit_still_reads_as_one_layer_with_the_overall_time() -> None:
+    legacy = ov.parse_spec({**overlay_map(), "timing": {"startSec": 2, "endSec": 5}})
+    assert len(legacy.logos) == 1 and legacy.logo == legacy.logos[0]
+    assert legacy.logo is not None and (legacy.logo.start, legacy.logo.end) == (2.0, 5.0)
+    assert ov.parse_spec({"logos": [], "logo": overlay_map()["logo"]}).logo is not None  # an empty list falls back
+
+
 def test_graph_places_the_logo_inside_the_frame_and_keeps_the_picture_format() -> None:
     spec = ov.parse_spec(overlay_map())
-    graph = ov.overlay_graph(spec, 1080, 1920, Path("/tmp/cf-work/overlay-C-3/overlay.ass"), 0, 30)
-    assert "[1:v]scale=216:1920:force_original_aspect_ratio=decrease,format=rgba[lg]" in graph
-    assert "[0:v][lg]overlay=x='min(max(0.8000*W-w/2,0),W-w)':y='min(max(0.1000*H-h/2,0),H-h)'[o1]" in graph
+    graph = ov.overlay_graph(spec, 1080, 1920, Path("/tmp/cf-work/overlay-C-3/overlay.ass"), 30)
+    assert "[1:v]scale=216:1920:force_original_aspect_ratio=decrease,format=rgba[lg1]" in graph
+    assert "[0:v][lg1]overlay=x='min(max(0.8000*W-w/2,0),W-w)':y='min(max(0.1000*H-h/2,0),H-h)'[o1]" in graph
     assert "enable=" not in graph  # the whole clip
-    assert "[o1]ass=filename=/tmp/cf-work/overlay-C-3/overlay.ass[o2]" in graph
-    assert graph.endswith("[o2]format=yuv420p[vout]")
+    assert "[o1]ass=filename=/tmp/cf-work/overlay-C-3/overlay.ass[ot]" in graph
+    assert graph.endswith("[ot]format=yuv420p[vout]")
 
 
 def test_graph_with_a_window_and_only_text_or_only_a_logo() -> None:
     spec = ov.parse_spec({**overlay_map(), "timing": {"startSec": 2, "endSec": 5.5}})
-    graph = ov.overlay_graph(spec, 1080, 1920, Path("/tmp/a.ass"), 2, 5.5)
-    assert "overlay=x=" in graph and ":enable='between(t,2.000,5.500)'[o1]" in graph
-    only_text = ov.overlay_graph(ov.parse_spec({"text": overlay_map()["text"]}), 1080, 1920, Path("/tmp/a.ass"), 0, 9)
-    assert only_text == "[0:v]ass=filename=/tmp/a.ass[o2];[o2]format=yuv420p[vout]"
-    only_logo = ov.overlay_graph(ov.parse_spec({"logo": overlay_map()["logo"]}), 1080, 1920, Path("/x/a.ass"), 0, 9)
+    graph = ov.overlay_graph(spec, 1080, 1920, Path("/tmp/a.ass"), 20)
+    assert "overlay=x=" in graph and ":enable='between(t,2.000,5.500)'[o1]" in graph  # the one picture, as in §53
+    only_text = ov.overlay_graph(ov.parse_spec({"text": overlay_map()["text"]}), 1080, 1920, Path("/tmp/a.ass"), 9)
+    assert only_text == "[0:v]ass=filename=/tmp/a.ass[ot];[ot]format=yuv420p[vout]"
+    only_logo = ov.overlay_graph(ov.parse_spec({"logo": overlay_map()["logo"]}), 1080, 1920, Path("/x/a.ass"), 9)
     assert "ass=" not in only_logo and only_logo.endswith("[o1]format=yuv420p[vout]")
     with pytest.raises(ValueError):
-        ov.overlay_graph(spec, 1080, 1920, Path("/tmp/it's.ass"), 0, 1)
+        ov.overlay_graph(spec, 1080, 1920, Path("/tmp/it's.ass"), 20)
+
+
+def test_graph_with_two_layers_stacks_them_in_order_each_with_its_own_time() -> None:
+    spec = ov.parse_spec(
+        {
+            "logos": [layer(1), layer(2, x=0.25, y=0.75, size=0.4, timing={"startSec": 3, "endSec": 8})],
+            "text": {"text": "hi", "x": 0.5, "y": 0.9, "size": "m"},
+        }
+    )
+    graph = ov.overlay_graph(spec, 1080, 1920, Path("/w/o.ass"), 20)
+    assert graph.split(";") == [
+        "[1:v]scale=216:1920:force_original_aspect_ratio=decrease,format=rgba[lg1]",
+        "[0:v][lg1]overlay=x='min(max(0.1000*W-w/2,0),W-w)':y='min(max(0.2000*H-h/2,0),H-h)'[o1]",
+        "[2:v]scale=432:1920:force_original_aspect_ratio=decrease,format=rgba[lg2]",
+        "[o1][lg2]overlay=x='min(max(0.2500*W-w/2,0),W-w)':y='min(max(0.7500*H-h/2,0),H-h)'"
+        ":enable='between(t,3.000,8.000)'[o2]",
+        "[o2]ass=filename=/w/o.ass[ot]",
+        "[ot]format=yuv420p[vout]",
+    ]
+
+
+def test_graph_with_four_layers_has_one_input_and_one_overlay_per_layer_and_text_last() -> None:
+    timings = [None, {"startSec": 1, "endSec": 2}, {"startSec": 5}, {"endSec": 7}]
+    spec = ov.parse_spec(
+        {
+            "logos": [layer(n + 1, **({"timing": t} if t else {})) for n, t in enumerate(timings)],
+            "text": {"text": "hi", "x": 0.5, "y": 0.9, "size": "m"},
+        }
+    )
+    graph = ov.overlay_graph(spec, 1080, 1920, Path("/w/o.ass"), 10)
+    parts = graph.split(";")
+    assert len(parts) == 4 * 2 + 2  # a scale and an overlay each, then the text and the final format
+    for n in range(1, 5):
+        assert f"[{n}:v]scale=" in graph and f"[lg{n}]overlay=" in graph and f"[o{n}]" in graph
+    assert "[5:v]" not in graph
+    assert "between(t,1.000,2.000)" in graph and "between(t,5.000,10.000)" in graph  # to the clip's end
+    assert "between(t,0.000,7.000)" in graph  # no start = from the first frame
+    assert graph.count("enable=") == 3  # the first layer is on the whole clip
+    assert parts[-2] == "[o4]ass=filename=/w/o.ass[ot]" and parts[-1] == "[ot]format=yuv420p[vout]"
+
+
+def test_a_layer_whose_time_falls_outside_the_clip_is_left_out() -> None:
+    spec = ov.parse_spec({"logos": [layer(1), layer(2, timing={"startSec": 40, "endSec": 50}), layer(3)]})
+    assert [lg.logo_id for lg, _, _ in ov.visible_layers(spec, 20)] == ["LG1", "LG3"]
+    graph = ov.overlay_graph(spec, 1080, 1920, Path("/w/o.ass"), 20)
+    assert "[3:v]" not in graph and "[o2]" in graph
 
 
 def test_ass_is_one_centred_line_in_the_hook_font_with_a_dark_edge() -> None:
@@ -143,12 +229,16 @@ def test_the_text_cannot_inject_ass_or_filter_syntax() -> None:
 
 
 def test_ffmpeg_args_copy_the_audio_and_reuse_the_clip_encoder() -> None:
-    args = ov.ffmpeg_args(Path("/w/orig.mp4"), Path("/w/logo.png"), "G", 30.0, Path("/w/edit.mp4"))
+    args = ov.ffmpeg_args(Path("/w/orig.mp4"), [Path("/w/logo.png")], "G", 30.0, Path("/w/edit.mp4"))
     joined = " ".join(args)
     assert "-c:a copy" in joined and "-map 0:a?" in joined and "-map [vout]" in joined
     assert " ".join(render.video_encode_args()) in joined
     assert "-loop 1 -t 31.000 -i /w/logo.png" in joined and joined.endswith("-movflags +faststart /w/edit.mp4")
-    assert "-i /w/logo.png" not in " ".join(ov.ffmpeg_args(Path("/w/o.mp4"), None, "G", 3, Path("/w/e.mp4")))
+    assert "-i /w/logo.png" not in " ".join(ov.ffmpeg_args(Path("/w/o.mp4"), [], "G", 3, Path("/w/e.mp4")))
+    many = ov.ffmpeg_args(Path("/w/o.mp4"), [Path("/w/a.png"), Path("/w/b.jpg")], "G", 3, Path("/w/e.mp4"))
+    assert " ".join(many).startswith(
+        "ffmpeg -v error -y -filter_complex_threads 1 -i /w/o.mp4 -loop 1 -t 4.000 -i /w/a.png -loop 1 -t 4.000 -i /w/b.jpg"
+    )
     # the clip render's own options still carry the same video settings
     assert " ".join(render.video_encode_args()) in " ".join(render.encode_args(10, True))
 
@@ -313,6 +403,70 @@ async def test_a_good_edit_goes_live_with_one_write(tmp_path: Path, monkeypatch:
     (cmd,) = ff.commands
     assert cmd[0] == "ffmpeg" and "copy" in cmd and cmd[cmd.index("-c:a") + 1] == "copy"
     assert not (tmp_path / f"overlay-{CLIP}-3").exists()  # the work folder is gone
+
+
+async def test_the_legacy_single_logo_renders_as_one_layer(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    store, ff = FakeStore(clip_item()), FakeFfmpeg(monkeypatch)  # overlay_map() has `logo` and no `logos`
+    assert await ov.run_overlay(store, tmp_path, U, CLIP, JOB, 3) == "ready"
+    (cmd,) = ff.commands
+    assert cmd.count("-loop") == 1 and sum(1 for a in cmd if a == "-i") == 2  # the clip and the one logo
+    graph = cmd[cmd.index("-filter_complex") + 1]
+    assert "[0:v][lg1]overlay=" in graph and "[o1]ass=filename=" in graph and "[lg2]" not in graph
+
+
+async def test_layers_are_fetched_once_per_distinct_logo_and_drawn_in_one_run(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    layers = [
+        layer(1, logoId="LG1"),
+        layer(2, logoId="LG2", timing={"startSec": 2, "endSec": 6}),
+        layer(3, logoId="LG1", x=0.9),  # the same picture again: a second copy
+        layer(4, logoId="LG2"),
+        layer(5, logoId="LG1"),  # a fifth: ignored
+    ]
+    clip = clip_item(overlay=overlay_map(logo=None, logos=layers))
+    del clip["overlay"]["logo"]
+    store, ff = FakeStore(clip), FakeFfmpeg(monkeypatch)
+    store.objects["logos/user-1/LG2.png"] = png_bytes(6, 3)
+    downloads: list[str] = []
+    real = store.download
+
+    async def spy(key: str, path: Path) -> None:
+        downloads.append(key)
+        await real(key, path)
+
+    store.download = spy  # type: ignore[method-assign]
+    assert await ov.run_overlay(store, tmp_path, U, CLIP, JOB, 3) == "ready"
+    assert sorted(k for k in downloads if k.startswith("logos/")) == ["logos/user-1/LG1.png", "logos/user-1/LG2.png"]
+    (cmd,) = ff.commands  # one ffmpeg run for every layer and the text
+    inputs = [cmd[i + 1] for i, a in enumerate(cmd) if a == "-i"]
+    assert len(inputs) == 1 + 4 and inputs[1] == inputs[3] and inputs[2] == inputs[4] and inputs[1] != inputs[2]
+    graph = cmd[cmd.index("-filter_complex") + 1]
+    assert graph.count("overlay=") == 4 and "between(t,2.000,6.000)" in graph and "[5:v]" not in graph
+    assert graph.index("[o4]ass=") > graph.index("[o3][lg4]overlay=")  # the text on top of every picture
+    assert store.finished and store.failed == []
+
+
+async def test_a_layers_own_key_is_used_when_it_is_in_the_owners_folder(tmp_path: Path) -> None:
+    store = FakeStore(clip_item())
+    store.objects = {"logos/user-1/LG1.jpg": b"x", "logos/user-1/LG1.png": png_bytes()}
+    got = await ov.fetch_logo(store, U, "LG1", tmp_path, hint="logos/user-1/LG1.png", stem="logo-2")
+    assert got.name == "logo-2.png"
+    store.objects = {"logos/user-1/LG1.webp": b"RIFF\0\0\0\0WEBPVP8X" + b"\0" * 20, "other/LG1.png": png_bytes()}
+    got = await ov.fetch_logo(store, U, "LG1", tmp_path, hint="other/LG1.png")  # a foreign key is ignored
+    assert got.name == "logo.webp"
+
+
+async def test_every_layer_outside_the_clip_with_no_text_says_so(
+    tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    clip = clip_item(
+        overlay={"rev": 3, "status": "working", "logos": [layer(1, timing={"startSec": 40, "endSec": 50})]}
+    )
+    store = FakeStore(clip)
+    FakeFfmpeg(monkeypatch)
+    assert await ov.run_overlay(store, tmp_path, U, CLIP, JOB, 3) == "failed"
+    assert store.failed == [(3, "Those times are outside the clip.")]
 
 
 async def test_an_earlier_edit_is_redrawn_on_the_original(tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -626,8 +780,8 @@ async def test_a_real_logo_render_keeps_size_fps_and_audio(tmp_path: Path) -> No
         {"logo": {"logoId": "LG1", "x": 0.5, "y": 0.5, "size": 0.3}, "timing": {"startSec": 0.5, "endSec": 1.5}}
     )
     out = tmp_path / "out.mp4"
-    graph = ov.overlay_graph(spec, 270, 480, tmp_path / "x.ass", 0.5, 1.5)
-    await proc.run(ov.ffmpeg_args(src, logo, graph, 2.0, out), time_limit=120)
+    graph = ov.overlay_graph(spec, 270, 480, tmp_path / "x.ass", 2.0)
+    await proc.run(ov.ffmpeg_args(src, [logo], graph, 2.0, out), time_limit=120)
     info = await proc.probe(str(out))
     assert (info.width, info.height, info.has_audio) == (270, 480, True) and info.fps == 30
     assert 1.8 <= info.duration <= 2.2
@@ -654,9 +808,44 @@ async def test_a_real_text_render(tmp_path: Path) -> None:
     ass = tmp_path / "overlay.ass"
     ass.write_text(ov.overlay_ass(spec.text, 540, 960, 0, 2) if spec.text else "", "utf-8")
     out = tmp_path / "out.mp4"
-    await proc.run(ov.ffmpeg_args(src, None, ov.overlay_graph(spec, 540, 960, ass, 0, 2), 2.0, out), time_limit=120)
+    await proc.run(ov.ffmpeg_args(src, [], ov.overlay_graph(spec, 540, 960, ass, 2.0), 2.0, out), time_limit=120)
     raw = subprocess.run(
         ["ffmpeg", "-v", "error", "-ss", "1", "-i", str(out), "-frames:v", "1", "-vf", "format=gray", "-f", "rawvideo", "-"],
         capture_output=True, check=True,
     ).stdout  # fmt: skip
     assert any(b > 200 for b in raw)  # white letters on the black picture
+
+
+@pytest.mark.skipif(not _has_filters("overlay"), reason="ffmpeg is not installed")
+async def test_a_real_two_layer_render_shows_each_picture_in_its_own_window(tmp_path: Path) -> None:
+    src = tmp_path / "in.mp4"
+    subprocess.run(
+        ["ffmpeg", "-v", "error", "-y", "-f", "lavfi", "-i", "color=c=gray:s=270x480:r=30:d=3", "-c:v", "libx264",
+         "-pix_fmt", "yuv420p", str(src)],
+        check=True,
+    )  # fmt: skip
+    logo = tmp_path / "logo.png"
+    logo.write_bytes(png_bytes(40, 20))
+    spec = ov.parse_spec(
+        {
+            "logos": [
+                {"logoId": "A", "x": 0.25, "y": 0.25, "size": 0.3, "timing": {"startSec": 0.0, "endSec": 1.0}},
+                {"logoId": "B", "x": 0.75, "y": 0.75, "size": 0.3, "timing": {"startSec": 2.0, "endSec": 3.0}},
+            ]
+        }
+    )
+    out = tmp_path / "out.mp4"
+    graph = ov.overlay_graph(spec, 270, 480, tmp_path / "x.ass", 3.0)
+    await proc.run(ov.ffmpeg_args(src, [logo, logo], graph, 3.0, out), time_limit=120)
+
+    def red(at: float, x: int, y: int) -> int:
+        raw = subprocess.run(
+            ["ffmpeg", "-v", "error", "-ss", str(at), "-i", str(out), "-frames:v", "1", "-vf", f"crop=1:1:{x}:{y},format=rgb24",
+             "-f", "rawvideo", "-"],
+            capture_output=True, check=True,
+        ).stdout  # fmt: skip
+        return raw[0]
+
+    assert red(0.5, 67, 120) > 150 and red(0.5, 202, 360) < 150  # the first picture only
+    assert red(1.5, 67, 120) < 150 and red(1.5, 202, 360) < 150  # neither
+    assert red(2.5, 67, 120) < 150 and red(2.5, 202, 360) > 150  # the second only

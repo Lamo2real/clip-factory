@@ -1,8 +1,10 @@
-// CR active (docs/CONTRACTS.md §53) in memory: the logo library (C4), the CR switch and Make it / Reset (C5), with the
+// CR active (docs/CONTRACTS.md §53, §54) in memory: the logo library (C4), the CR switch and Make it / Reset (C5, pictures as
+// `logos` up to 4 and the old single `logo`, L3, L4), with the
 // API's rules and sentences. A render becomes ready after about 1.5 s and keeps the clip's video link (the mock has
 // one picture for every clip). Test knobs: window.__cfMock.crOverlay.
 import { ApiError } from "../errors.ts";
-import type { Api, Campaign, Clip, Logo, OverlayBody } from "../types.ts";
+import type { Api, Campaign, Clip, Logo, OverlayBody, OverlayLogo } from "../types.ts";
+import { L, MAX_LAYERS } from "../../lib/crLayers.ts";
 import { FAILED_LINE, LOGO_MAX_BYTES, LOGO_MAX_COUNT, LOGO_REFUSE, LOGO_SIZE_MAX, LOGO_SIZE_MIN, LOGO_TYPES, TEXT_MAX, WORKING_LINE } from "../../lib/crOverlay.ts";
 import { ulid } from "./fixtures.ts";
 
@@ -64,16 +66,30 @@ export function crOverlayApi({ delay, clip, publishClip, campaign }: Deps): { ap
     delete c.overlay;
   };
 
-  /** The API's checks on a logo's and a text's numbers (C2). */
+  /** The API's checks on the pictures' and the text's numbers (§53 C2, §54 L4). */
   function checkBody(body: OverlayBody, c: Clip) {
     const num = (v: unknown) => typeof v === "number" && Number.isFinite(v);
     const unit = (v: unknown) => num(v) && (v as number) >= 0 && (v as number) <= 1;
-    if (!body.logo && !body.text) throw bad("Add a logo or some words first.");
-    if (body.logo) {
-      const l = body.logo;
+    const layers = body.logos ?? [];
+    if (!body.logo && !layers.length && !body.text) throw bad("Add a logo or some words first.");
+    if (layers.length > MAX_LAYERS) throw bad(L.tooMany);
+    const timed = (t: OverlayBody["timing"]) => {
+      if (!t) return;
+      const { startSec, endSec } = t;
+      if (!num(startSec) || !num(endSec) || startSec < 0 || endSec <= startSec || endSec > c.durationSec + 0.05) throw bad("Pick a start before the end, inside the clip.");
+    };
+    const picture = (l: OverlayLogo) => {
       if (!logos.some((x) => x.logoId === l.logoId)) throw notFound(NO_LOGO);
       if (!unit(l.x) || !unit(l.y)) throw bad("The logo has to stay inside the picture.");
       if (!num(l.size) || l.size < LOGO_SIZE_MIN - 1e-9 || l.size > LOGO_SIZE_MAX + 1e-9) throw bad("The logo can be 8% to 50% of the width.");
+    };
+    if (body.logo) picture(body.logo);
+    const ids = new Set<string>();
+    for (const l of layers) {
+      if (typeof l.layerId !== "string" || !l.layerId || ids.has(l.layerId)) throw bad("Each picture needs its own id.");
+      ids.add(l.layerId);
+      picture(l);
+      timed(l.timing);
     }
     if (body.text) {
       const t = body.text;
@@ -81,10 +97,7 @@ export function crOverlayApi({ delay, clip, publishClip, campaign }: Deps): { ap
       if (!unit(t.x) || !unit(t.y)) throw bad("The words have to stay inside the picture.");
       if (!["s", "m", "l"].includes(t.size)) throw bad("Pick Small, Medium or Large.");
     }
-    if (body.timing) {
-      const { startSec, endSec } = body.timing;
-      if (!num(startSec) || !num(endSec) || startSec < 0 || endSec <= startSec || endSec > c.durationSec + 0.05) throw bad("Pick a start before the end, inside the clip.");
-    }
+    timed(body.timing);
   }
 
   const api: CrOverlayApi = {
@@ -151,7 +164,7 @@ export function crOverlayApi({ delay, clip, publishClip, campaign }: Deps): { ap
       checkBody(body, c);
       if (!originals.has(clipId)) originals.set(clipId, c.videoUrl);
       const rev = (c.overlay?.rev ?? 0) + 1;
-      c.overlay = { rev, status: "working", ...(body.logo ? { logo: { ...body.logo } } : {}), ...(body.text ? { text: { ...body.text } } : {}), ...(body.timing ? { timing: { ...body.timing } } : {}) };
+      c.overlay = { rev, status: "working", ...(body.logo ? { logo: { ...body.logo } } : {}), ...(body.logos?.length ? { logos: structuredClone(body.logos) } : {}), ...(body.text ? { text: { ...body.text } } : {}), ...(body.timing ? { timing: { ...body.timing } } : {}) };
       publishClip(c);
       const fail = failNext;
       failNext = false;

@@ -9,6 +9,7 @@ import { Icon } from "../../components/Icon.tsx";
 import { useToast } from "../../components/Toasts.tsx";
 import { Button, Pill, Segmented } from "../../components/ui.tsx";
 import { burst, centerOf } from "../../lib/confetti.ts";
+import { pictureCount } from "../../lib/crLayers.ts";
 import { FAILED_LINE, isCrActive, OVERLAY_POLL_MS, W } from "../../lib/crOverlay.ts";
 import { CampaignEdit } from "./CampaignEdit.tsx";
 
@@ -23,6 +24,8 @@ export function CrSwitch({ clip, onClip }: { clip: Clip; onClip: (c: Clip) => vo
   const active = want ?? isCrActive(clip);
   const overlay = clip.overlay;
   const status = overlay?.status;
+  // One or more pictures (a §53 edit has one `logo`, a §54 edit has `logos`).
+  const pictures = pictureCount(overlay);
   const editButton = useRef<HTMLButtonElement>(null);
   const alive = useRef(true);
   const onClipRef = useRef(onClip);
@@ -116,9 +119,9 @@ export function CrSwitch({ clip, onClip }: { clip: Clip; onClip: (c: Clip) => vo
               </Button>
               {status === "ready" ? (
                 <span className="cr-switch__tags">
-                  {overlay?.logo ? (
+                  {pictures ? (
                     <Pill tone="success" icon="image">
-                      {W.logo}
+                      {pictures > 1 ? `${W.logo} × ${pictures}` : W.logo}
                     </Pill>
                   ) : null}
                   {overlay?.text ? <Pill tone="success">{W.text}</Pill> : null}

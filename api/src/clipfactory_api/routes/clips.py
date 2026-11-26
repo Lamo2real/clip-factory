@@ -792,34 +792,45 @@ def put_cr(app: App, req: Request) -> Response:
 
 
 def put_overlay(app: App, req: Request) -> Response:
-    """``PUT /v1/clips/{clipId}/overlay`` ``{logo?, text?, timing?}`` → ``{clip}`` with ``overlay.status: "working"``
-    (§53 C5). At least one of logo and text; ``cr.active`` is required (409). The agent draws on the original file and
+    """``PUT /v1/clips/{clipId}/overlay`` ``{logos?, logo?, text?, timing?}`` → ``{clip}`` with
+    ``overlay.status: "working"`` (§53 C5, §54 L4: up to 4 picture layers; ``logo`` is one layer; the edit is stored as
+    ``logos``). At least one picture or the text; ``cr.active`` is required (409). The agent draws on the original file and
     sets ``videoKey`` to the edited one when it is done; this route only writes ``working`` and asks it."""
     body = req.json()
-    validate.only_keys(body, {"logo", "text", "timing"})
-    if body.get("logo") is None and body.get("text") is None:
-        raise bad_request(clip_overlay.NEED_ONE)
+    validate.only_keys(body, {"logo", "logos", "text", "timing"})
+    if body.get("logo") is not None and body.get("logos"):
+        raise bad_request(clip_overlay.ONE_KIND)
     logo = clip_overlay.logo_part(body["logo"]) if body.get("logo") is not None else None
+    layers = clip_overlay.layers_part(body["logos"]) if body.get("logos") is not None else []
     text = clip_overlay.text_part(body["text"]) if body.get("text") is not None else None
+    if logo is None and not layers and text is None:
+        raise bad_request(clip_overlay.NEED_ONE)
     item = _clip_or_404(app, req)
     _require_review(item)
     if not (item.get("cr") or {}).get("active"):
         raise conflict(clip_overlay.TURN_ON)
-    timing = (
-        clip_overlay.timing_part(body["timing"], item.get("durationSec")) if body.get("timing") is not None else None
-    )
-    if logo is not None:
-        found = logos.get_item(app.store, req.user_id, logo["logoId"])
-        if found is None or found.get("status") != "ready":
-            raise not_found("We could not find that logo.")
-        logo["key"] = str(found["key"])  # internal: the agent reads the picture by it (never public)
+    duration = item.get("durationSec")
+    timing = clip_overlay.timing_part(body["timing"], duration) if body.get("timing") is not None else None
+    if layers:
+        layers = clip_overlay.layers_part(body["logos"], duration)  # again, now with the clip's length
+    elif logo is not None:  # §53's one picture is one layer; it keeps the shared timing
+        layers = [clip_overlay.one_layer(logo, timing)]
+    keys: dict[str, str] = {}
+    for layer in layers:
+        logo_id = layer["logoId"]
+        if logo_id not in keys:
+            found = logos.get_item(app.store, req.user_id, logo_id)
+            if found is None or found.get("status") != "ready":
+                raise not_found("We could not find that logo.")
+            keys[logo_id] = str(found["key"])
+        layer["key"] = keys[logo_id]  # internal: the agent reads the picture by it (never public)
     now = app.clock()
     started = iso(now)
 
     def build(current: dict[str, Any]) -> tuple[dict[str, Any], list[str], str | None]:
         if not (current.get("cr") or {}).get("active"):
             raise conflict(clip_overlay.TURN_ON)
-        fresh = clip_overlay.working(current, started, logo=logo, text=text, timing=timing)
+        fresh = clip_overlay.working(current, started, logos=layers, text=text, timing=timing)
         return {"overlay": fresh, "overlayRev": fresh["rev"]}, [], None
 
     updated, _before, _gone = _overlay_write(app, req, build)

@@ -231,6 +231,12 @@ export interface OverlayLogo {
   y: number;
   size: number;
 }
+/** One picture of an edit (§54 L3): the logo's numbers plus its own id and time. `timing` absent = the whole clip. */
+export interface OverlayLayer extends OverlayLogo {
+  /** A short id the web makes, unique in the list. */
+  layerId: string;
+  timing?: OverlayTiming;
+}
 export type OverlayTextSize = "s" | "m" | "l";
 /** The words of an edit: one short line (80 characters at most), the same centre fractions. */
 export interface OverlayText {
@@ -244,9 +250,14 @@ export interface OverlayTiming {
   startSec: number;
   endSec: number;
 }
-/** What Make it sends (PUT /v1/clips/{clipId}/overlay): at least one of `logo` and `text`. */
+/**
+ * What Make it sends (PUT /v1/clips/{clipId}/overlay): at least one picture or the text. `logos` are the pictures (up to
+ * 4, §54); `logo` is the old single picture of a §53 edit, still readable (one layer) and never written by the web now.
+ * `timing` is the text's time (and the one `logo`'s, when that has none of its own).
+ */
 export interface OverlayBody {
   logo?: OverlayLogo;
+  logos?: OverlayLayer[];
   text?: OverlayText;
   timing?: OverlayTiming;
 }

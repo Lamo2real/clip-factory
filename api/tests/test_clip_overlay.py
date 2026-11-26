@@ -164,7 +164,7 @@ def test_make_it_writes_working_and_asks_the_agent_once(
     assert shown["overlay"] == {
         "rev": 1,
         "status": "working",
-        "logo": LOGO,
+        "logos": [{"layerId": "l1", **LOGO, "timing": {"startSec": 2.0, "endSec": 12.5}}],  # §54: one layer
         "text": TEXT,
         "timing": {"startSec": 2.0, "endSec": 12.5},
     }
@@ -172,7 +172,7 @@ def test_make_it_writes_working_and_asks_the_agent_once(
     assert shown["videoUrl"].endswith(f"{clip['videoKey']}?op=get_object&X-Amz-Signature=fake")  # still the original
     for hidden in INTERNAL:
         assert hidden not in shown
-    assert "key" not in shown["overlay"]["logo"]
+    assert "key" not in shown["overlay"]["logos"][0]
     (call_made,) = agentcore.calls
     assert call_made["payload"] == {
         "action": "overlay",
@@ -185,7 +185,8 @@ def test_make_it_writes_working_and_asks_the_agent_once(
     assert len(call_made["runtimeSessionId"]) >= 33
     stored = raw(table, clip["clipId"])["overlay"]
     assert stored["startedAt"] == iso(NOW)
-    assert stored["logo"]["key"] == f"logos/{USER}/L0001.png"  # internal, for the agent
+    assert stored["logos"][0]["key"] == f"logos/{USER}/L0001.png"  # internal, for the agent
+    assert "logo" not in stored  # new edits write logos only
     assert stored["status"] == "working"
     assert raw(table, clip["clipId"])["videoKey"] == clip["videoKey"]  # the agent sets the edited file, not the API
 
@@ -281,6 +282,7 @@ def test_the_text_is_one_clean_line_and_the_whole_clip_is_the_default(
     assert shown["text"]["text"] == "Win $50 with #brand"
     assert "timing" not in shown
     assert "logo" not in shown
+    assert "logos" not in shown
     exact = {"text": {**messy, "text": "x" * 80}}
     assert put_overlay(call, clip["clipId"], exact)[0] == 200
 
@@ -508,6 +510,136 @@ def test_the_keys_never_leave_the_api(call: Call, store: db.Store, s3_client: Fa
         assert shown["overlay"]["status"] == "ready"
         assert shown["videoUrl"].endswith("edit-1.mp4?op=get_object&X-Amz-Signature=fake")
         assert "key" not in shown["overlay"]["logo"]
+
+
+# --- more than one picture (§54 L3, L4) ---------------------------------------------------------------------------
+
+
+def layer(layer_id: str, logo_id: str = "L0001", **fields: Any) -> dict[str, Any]:
+    return {"layerId": layer_id, "logoId": logo_id, "x": 0.2, "y": 0.3, "size": 0.2, **fields}
+
+
+def test_several_pictures_are_stored_as_layers_with_their_keys_and_shown_without(
+    call: Call, store: db.Store, table: FakeTable, s3_client: FakeS3, agentcore: FakeAgentCore
+) -> None:
+    seed_logo(store)
+    seed_logo(store, "L0002")
+    clip = active_clip(store, s3_client, durationSec=30)
+    layers = [
+        layer("a"),
+        layer("b", "L0002", timing={"startSec": 1, "endSec": 5}),
+        layer("c"),  # the same picture again is another layer
+    ]
+    body = {"logos": layers, "text": TEXT, "timing": {"startSec": 0, "endSec": 3}}
+    status, out = put_overlay(call, clip["clipId"], body)
+    assert status == 200
+    shown = out["clip"]["overlay"]
+    assert [x["layerId"] for x in shown["logos"]] == ["a", "b", "c"]
+    assert shown["logos"][1]["timing"] == {"startSec": 1.0, "endSec": 5.0}
+    assert "timing" not in shown["logos"][0]
+    assert all("key" not in x for x in shown["logos"])
+    assert shown["timing"] == {"startSec": 0.0, "endSec": 3.0}  # the text's time
+    assert "logo" not in shown
+    stored = raw(table, clip["clipId"])["overlay"]
+    assert [x["key"] for x in stored["logos"]] == [f"logos/{USER}/{n}.png" for n in ("L0001", "L0002", "L0001")]
+    assert "logo" not in stored
+    assert len(agentcore.calls) == 1
+    again = call("GET", f"/v1/clips/{clip['clipId']}")[1]["clip"]["overlay"]
+    assert all("key" not in x for x in again["logos"])
+
+
+def test_pictures_alone_are_enough_and_an_empty_list_is_nothing(call: Call, store: db.Store, s3_client: FakeS3) -> None:
+    seed_logo(store)
+    clip = active_clip(store, s3_client)
+    assert put_overlay(call, clip["clipId"], {"logos": [layer("a")]})[0] == 200
+    status, body = put_overlay(call, clip["clipId"], {"logos": []})
+    assert (status, body["error"]["message"]) == (400, "Add a logo or some words first.")
+    assert put_overlay(call, clip["clipId"], {"logos": [], "text": TEXT})[0] == 200
+
+
+def test_four_pictures_are_the_most(call: Call, store: db.Store, s3_client: FakeS3) -> None:
+    seed_logo(store)
+    clip = active_clip(store, s3_client)
+    four = [layer(n) for n in "abcd"]
+    assert put_overlay(call, clip["clipId"], {"logos": four})[0] == 200
+    status, body = put_overlay(call, clip["clipId"], {"logos": [*four, layer("e")]})
+    assert (status, body["error"]["message"]) == (400, "Up to 4 pictures.")
+
+
+@pytest.mark.parametrize(
+    "logos",
+    [
+        "L0001",
+        [layer("a"), layer("a")],
+        [layer("")],
+        [layer("x" * 25)],
+        [layer("a b")],
+        [layer(1)],
+        [{k: v for k, v in layer("a").items() if k != "layerId"}],
+        ["L0001"],
+        [layer("a", size=0.07)],
+        [layer("a", size=0.51)],
+        [layer("a", x=1.2)],
+        [layer("a", y=-0.1)],
+        [layer("a", timing={"startSec": 5, "endSec": 5})],
+        [layer("a", timing={"startSec": 1})],
+        [layer("a", timing={"startSec": 0, "endSec": 99})],
+        [layer("a", extra=1)],
+    ],
+)
+def test_a_bad_layer_is_a_400_and_writes_nothing(
+    call: Call, store: db.Store, table: FakeTable, s3_client: FakeS3, agentcore: FakeAgentCore, logos: Any
+) -> None:
+    seed_logo(store)
+    clip = active_clip(store, s3_client, durationSec=30)
+    status, out = put_overlay(call, clip["clipId"], {"logos": logos})
+    assert (status, out["error"]["code"]) == (400, "bad_request")
+    assert "overlay" not in raw(table, clip["clipId"])
+    assert agentcore.calls == []
+
+
+def test_logo_and_logos_together_are_refused(call: Call, store: db.Store, s3_client: FakeS3) -> None:
+    seed_logo(store)
+    clip = active_clip(store, s3_client)
+    assert put_overlay(call, clip["clipId"], {"logo": LOGO, "logos": [layer("a")]})[0] == 400
+
+
+def test_every_layer_must_be_a_ready_logo_of_the_owner(
+    call: Call, store: db.Store, table: FakeTable, s3_client: FakeS3
+) -> None:
+    seed_logo(store)
+    seed_logo(store, "LTHEIRS", user=OTHER)
+    seed_logo(store, "LWAIT", status="uploading")
+    clip = active_clip(store, s3_client)
+    for logo_id in ("LTHEIRS", "LWAIT", "LNONE"):
+        status, body = put_overlay(call, clip["clipId"], {"logos": [layer("a"), layer("b", logo_id)]})
+        assert (status, body["error"]["message"]) == (404, "We could not find that logo.")
+    assert "overlay" not in raw(table, clip["clipId"])
+
+
+def test_layers_need_cr_active_and_a_clip_in_review(call: Call, store: db.Store, s3_client: FakeS3) -> None:
+    seed_logo(store)
+    plain = seed_clip(store, s3_client)
+    assert put_overlay(call, plain["clipId"], {"logos": [layer("a")]})[0] == 409
+    posted = active_clip(store, s3_client, status="posted")
+    assert put_overlay(call, posted["clipId"], {"logos": [layer("a")]})[0] == 409
+
+
+def test_a_clip_edited_with_one_logo_keeps_working_and_a_new_edit_moves_to_layers(
+    call: Call, store: db.Store, table: FakeTable, s3_client: FakeS3
+) -> None:
+    seed_logo(store)
+    clip = edited_clip(store, s3_client)
+    shown = call("GET", f"/v1/clips/{clip['clipId']}")[1]["clip"]["overlay"]
+    assert shown["logo"] == LOGO  # §53 shape, still readable
+    assert "logos" not in shown
+    status, _out = put_overlay(call, clip["clipId"], {"logos": [layer("a"), layer("b")]})
+    assert status == 200
+    stored = raw(table, clip["clipId"])
+    assert "logo" not in stored["overlay"]
+    assert len(stored["overlay"]["logos"]) == 2
+    assert stored["videoKey"] == clip["videoKey"]  # still the edited file until the agent answers
+    assert call("DELETE", f"/v1/clips/{clip['clipId']}/overlay")[0] == 200
 
 
 # --- auto-posting (C5) -------------------------------------------------------------------------------------------

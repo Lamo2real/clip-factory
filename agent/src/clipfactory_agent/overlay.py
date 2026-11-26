@@ -1,9 +1,11 @@
-"""A Review overlay: a logo and one line of text drawn on a finished clip (docs/CONTRACTS.md §53 C5, ADR-105).
+"""A Review overlay: pictures (up to 4 layers) and one line of text drawn on a finished clip (docs/CONTRACTS.md §53 C5
+and §54 L3/L5, ADR-105, ADR-107).
 
 The API asks for ``{"action": "overlay", userId, clipId, jobId, rev}`` and gets "accepted" at once. This module then
-draws on the clip's **original** file (``origVideoKey`` when an earlier edit kept it, else ``videoKey``): the logo
-(scaled to a fraction of the width, centred where the owner dragged it, always inside the frame) with ffmpeg's
-``overlay`` and the text with libass, the same way and with the same font as the hook and the captions (render.py).
+draws on the clip's **original** file (``origVideoKey`` when an earlier edit kept it, else ``videoKey``): every picture
+layer in list order (later on top; each scaled to a fraction of the width, centred where the owner dragged it, always
+inside the frame, shown between its own start and end) with ffmpeg's ``overlay``, in ONE filter graph, and then the text
+(on top) with libass, the same way and with the same font as the hook and the captions (render.py).
 Nothing is cut: same size, same frame rate, the audio copied untouched, the video encoded with exactly the settings the
 clip render uses (``render.video_encode_args``). The result is ``jobs/{jobId}/clips/{clipId}/edit-{rev}.mp4`` and ONE
 conditional write puts it live (``Store.finish_overlay``): only while the clip is still in review and ``overlay.rev``
@@ -21,7 +23,7 @@ import contextlib
 import math
 import re
 import shutil
-from collections.abc import Awaitable, Callable, Mapping
+from collections.abc import Awaitable, Callable, Mapping, Sequence
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any, Protocol
@@ -43,6 +45,7 @@ LOGO_EXTS = ("png", "jpg", "webp", "jpeg")  # the library's convention: logos/{u
 KIND_EXT = {"png": "png", "jpeg": "jpg", "webp": "webp"}
 RENDER_LIMIT = 15 * 60  # seconds one ffmpeg run may take
 MIN_VISIBLE = 0.05  # seconds: a "from" this close to the end shows nothing
+MAX_LAYERS = 4  # pictures on one clip (§54 L1); any more in the stored list are ignored
 
 FAILED = "The edit could not be made. Try again."
 ID_RE = re.compile(r"^[A-Za-z0-9_-]{1,128}$")
@@ -54,10 +57,20 @@ class OverlayFailed(Exception):
 
 @dataclass(frozen=True)
 class LogoSpec:
+    """One picture layer. ``start``/``end`` are its own times in clip seconds (both None = the whole clip)."""
+
     logo_id: str
     x: float
     y: float
     size: float
+    layer_id: str | None = None
+    key: str | None = None  # the internal bucket key the API stored on the layer (never shown)
+    start: float | None = None
+    end: float | None = None
+
+    @property
+    def whole(self) -> bool:
+        return self.start is None and self.end is None
 
 
 @dataclass(frozen=True)
@@ -70,14 +83,19 @@ class TextSpec:
 
 @dataclass(frozen=True)
 class OverlaySpec:
-    logo: LogoSpec | None
+    logos: tuple[LogoSpec, ...]  # at most MAX_LAYERS, in list order (later on top)
     text: TextSpec | None
-    start: float | None = None  # clip seconds; None for both = the whole clip
+    start: float | None = None  # the text's times in clip seconds; None for both = the whole clip
     end: float | None = None
 
     @property
     def whole(self) -> bool:
         return self.start is None and self.end is None
+
+    @property
+    def logo(self) -> LogoSpec | None:
+        """The first picture (the one-picture view a §53 edit has)."""
+        return self.logos[0] if self.logos else None
 
 
 def _num(value: Any, default: float) -> float:
@@ -90,14 +108,50 @@ def _unit(value: Any, default: float = 0.5) -> float:
     return min(1.0, max(0.0, _num(value, default)))
 
 
+def _timing(raw: Any) -> tuple[float | None, float | None]:
+    """(start, end) from a ``{startSec, endSec}`` map; (None, None) = the whole clip."""
+    if not (isinstance(raw, Mapping) and (raw.get("startSec") is not None or raw.get("endSec") is not None)):
+        return None, None
+    start = max(0.0, _num(raw.get("startSec"), 0.0))
+    end_raw = raw.get("endSec")
+    end = _num(end_raw, 0.0) if end_raw is not None else None
+    if end is not None and end <= start:
+        end = None  # an empty or backwards window: from "start" to the end
+    return start, end
+
+
+def _layer(raw: Any, start: float | None = None, end: float | None = None, own_timing: bool = True) -> LogoSpec | None:
+    """One picture layer from a stored ``{logoId, x, y, size, ...}`` map (None when it has no usable ``logoId``).
+    ``own_timing`` False (the §53 single ``logo``) takes ``start``/``end`` from the caller instead of the map."""
+    if not (isinstance(raw, Mapping) and isinstance(raw.get("logoId"), str) and ID_RE.match(raw["logoId"])):
+        return None
+    if own_timing:
+        start, end = _timing(raw.get("timing"))
+    size = min(SIZE_MAX, max(SIZE_MIN, _num(raw.get("size"), SIZE_DEFAULT)))
+    layer_id = raw.get("layerId") if isinstance(raw.get("layerId"), str) else None
+    key = raw.get("key") if isinstance(raw.get("key"), str) else None
+    return LogoSpec(raw["logoId"], _unit(raw.get("x")), _unit(raw.get("y")), size, layer_id, key, start, end)
+
+
 def parse_spec(overlay: Mapping[str, Any]) -> OverlaySpec:
-    """The spec from the clip's ``overlay`` map. Values are clamped (placement 0 to 1, logo size 8% to 50%, text size
-    one of s, m, l, text 80 characters on one line); raises OverlayFailed when there is neither a logo nor any words."""
-    logo: LogoSpec | None = None
-    raw_logo = overlay.get("logo")
-    if isinstance(raw_logo, Mapping) and isinstance(raw_logo.get("logoId"), str) and ID_RE.match(raw_logo["logoId"]):
-        size = min(SIZE_MAX, max(SIZE_MIN, _num(raw_logo.get("size"), SIZE_DEFAULT)))
-        logo = LogoSpec(raw_logo["logoId"], _unit(raw_logo.get("x")), _unit(raw_logo.get("y")), size)
+    """The spec from the clip's ``overlay`` map. ``logos`` (the layers, §54 L3) wins, at most ``MAX_LAYERS`` (extra
+    ones are ignored); a clip edited under §53 has only ``logo``, read as one layer that shows during ``overlay.timing``
+    (a layer's own ``timing`` is its own; none = the whole clip). Values are clamped (placement 0 to 1, logo size 8% to
+    50%, text size one of s, m, l, text 80 characters on one line); raises OverlayFailed when there is neither a picture
+    nor any words."""
+    start, end = _timing(overlay.get("timing"))  # the text's time (and a §53 single logo's)
+    layers: list[LogoSpec] = []
+    raw_logos = overlay.get("logos")
+    if isinstance(raw_logos, list | tuple):
+        for raw in raw_logos:
+            layer = _layer(raw)
+            if layer is not None:
+                layers.append(layer)
+    layers = layers[:MAX_LAYERS]
+    if not layers:
+        single = _layer(overlay.get("logo"), start, end, own_timing=False)
+        if single is not None:
+            layers.append(single)
     text: TextSpec | None = None
     raw_text = overlay.get("text")
     if isinstance(raw_text, Mapping) and isinstance(raw_text.get("text"), str):
@@ -105,24 +159,37 @@ def parse_spec(overlay: Mapping[str, Any]) -> OverlaySpec:
         if words:
             key = raw_text.get("size") if raw_text.get("size") in TEXT_SIZES else "m"
             text = TextSpec(words, _unit(raw_text.get("x")), _unit(raw_text.get("y")), str(key))
-    if logo is None and text is None:
+    if not layers and text is None:
         raise OverlayFailed("There is no logo or text to add.")
-    start = end = None
-    timing = overlay.get("timing")
-    if isinstance(timing, Mapping) and (timing.get("startSec") is not None or timing.get("endSec") is not None):
-        start = max(0.0, _num(timing.get("startSec"), 0.0))
-        end_raw = timing.get("endSec")
-        end = _num(end_raw, 0.0) if end_raw is not None else None
-        if end is not None and end <= start:
-            end = None  # an empty or backwards window: from "start" to the end
-    return OverlaySpec(logo, text, start, end)
+    return OverlaySpec(tuple(layers), text, start, end)
+
+
+def span(start: float | None, end: float | None, duration: float) -> tuple[float, float]:
+    """(from, to) in clip seconds: the whole clip, or the owner's window inside it."""
+    return (0.0 if start is None else start), (duration if end is None else min(end, duration))
 
 
 def window(spec: OverlaySpec, duration: float) -> tuple[float, float]:
-    """(from, to) in clip seconds that the logo and text show: the whole clip, or the owner's window inside it."""
-    start = 0.0 if spec.start is None else spec.start
-    end = duration if spec.end is None else min(spec.end, duration)
-    return start, end
+    """(from, to) in clip seconds that the text shows."""
+    return span(spec.start, spec.end, duration)
+
+
+def visible_layers(spec: OverlaySpec, duration: float) -> list[tuple[LogoSpec, float, float]]:
+    """The picture layers that show at all, in list order, each with its (from, to); a layer whose window falls outside
+    the clip is left out."""
+    out = []
+    for lg in spec.logos:
+        a, b = span(lg.start, lg.end, duration)
+        if b - a >= MIN_VISIBLE:
+            out.append((lg, a, b))
+    return out
+
+
+def text_visible(spec: OverlaySpec, duration: float) -> bool:
+    if spec.text is None:
+        return False
+    a, b = window(spec, duration)
+    return b - a >= MIN_VISIBLE
 
 
 def text_layout(text: TextSpec, w: int, h: int) -> tuple[int, int, int]:
@@ -160,35 +227,37 @@ def overlay_ass(text: TextSpec, w: int, h: int, start: float, end: float) -> str
     )
 
 
-def overlay_graph(spec: OverlaySpec, w: int, h: int, ass_file: Path, start: float, end: float) -> str:
-    """The filter graph: ``[0:v]`` is the clip, ``[1:v]`` the logo (when there is one). The logo is scaled to its
-    fraction of the width (never larger than the frame), centred on its point and pulled in so it stays inside the
-    frame, over the whole clip or between ``start`` and ``end``; the text comes from the ASS file (its own times)."""
+def overlay_graph(spec: OverlaySpec, w: int, h: int, ass_file: Path, duration: float) -> str:
+    """The filter graph: ``[0:v]`` is the clip, ``[1:v]`` to ``[n:v]`` the pictures (one input per visible layer, in list
+    order). Each picture is scaled to its fraction of the width (never larger than the frame), centred on its point and
+    pulled in so it stays inside the frame, over the whole clip or between its own start and end; later layers go on top.
+    The text comes last, from the ASS file (its own times)."""
     chains: list[str] = []
     cur = "[0:v]"
-    if spec.logo is not None:
-        lg = spec.logo
+    for i, (lg, start, end) in enumerate(visible_layers(spec, duration), 1):
         lw = render_mod.even(w * lg.size)
-        window_on = "" if spec.whole else f":enable='between(t,{start:.3f},{end:.3f})'"
-        chains.append(f"[1:v]scale={lw}:{h}:force_original_aspect_ratio=decrease,format=rgba[lg]")
+        window_on = "" if lg.whole else f":enable='between(t,{start:.3f},{end:.3f})'"
+        chains.append(f"[{i}:v]scale={lw}:{h}:force_original_aspect_ratio=decrease,format=rgba[lg{i}]")
         chains.append(
-            f"{cur}[lg]overlay=x='min(max({lg.x:.4f}*W-w/2,0),W-w)':y='min(max({lg.y:.4f}*H-h/2,0),H-h)'{window_on}[o1]"
+            f"{cur}[lg{i}]overlay=x='min(max({lg.x:.4f}*W-w/2,0),W-w)':y='min(max({lg.y:.4f}*H-h/2,0),H-h)'"
+            f"{window_on}[o{i}]"
         )
-        cur = "[o1]"
-    if spec.text is not None:
+        cur = f"[o{i}]"
+    if text_visible(spec, duration):
         if not render_mod._SAFE_PATH.match(str(ass_file)):
             raise ValueError(f"unsafe subtitle path: {ass_file}")
-        chains.append(f"{cur}ass=filename={ass_file}[o2]")
-        cur = "[o2]"
+        chains.append(f"{cur}ass=filename={ass_file}[ot]")
+        cur = "[ot]"
     chains.append(f"{cur}format=yuv420p[vout]")
     return ";".join(chains)
 
 
-def ffmpeg_args(src: Path, logo: Path | None, graph: str, duration: float, out: Path) -> list[str]:
+def ffmpeg_args(src: Path, logos: Sequence[Path], graph: str, duration: float, out: Path) -> list[str]:
     """The whole command: video re-encoded with the clip render's settings, audio copied (``-c:a copy``), same size and
-    frame rate (nothing scales the clip; ``-r`` is the render's)."""
+    frame rate (nothing scales the clip; ``-r`` is the render's). ``logos`` are the picture files, one input per visible
+    layer in the graph's order (the same file twice when a picture is used twice)."""
     inputs = ["-i", str(src)]
-    if logo is not None:
+    for logo in logos:
         inputs += ["-loop", "1", "-t", f"{duration + 1:.3f}", "-i", str(logo)]
     return [
         "ffmpeg",
@@ -233,29 +302,37 @@ class OverlayStore(Protocol):
     async def fail_overlay(self, user_id: str, clip_id: str, rev: int, message: str) -> bool: ...
 
 
-async def fetch_logo(store: OverlayStore, user_id: str, logo_id: str, workdir: Path) -> Path:
-    """The logo file from the library (``LOGO#{logoId}``'s own key, else the ``logos/{userId}/{logoId}.{ext}``
-    convention), checked from its first bytes (PNG, JPEG or WebP; never anything ffmpeg could follow) and renamed to
-    its real extension."""
-    item = await store.get_item(user_pk(user_id), f"LOGO#{logo_id}")
+async def fetch_logo(
+    store: OverlayStore, user_id: str, logo_id: str, workdir: Path, hint: str | None = None, stem: str = "logo"
+) -> Path:
+    """The logo file from the library (the layer's own ``key`` when it is this logo's, else ``LOGO#{logoId}``'s key,
+    else the ``logos/{userId}/{logoId}.{ext}`` convention), checked from its first bytes (PNG, JPEG or WebP; never
+    anything ffmpeg could follow) and renamed to ``{stem}.{its real extension}``."""
     prefix = f"logos/{user_id}/{logo_id}."
-    key = item.get("key") if item else None
-    if not (isinstance(key, str) and key.startswith(prefix) and "/" not in key[len(prefix) :]):
-        key = None
+
+    def own(key: Any) -> bool:
+        return isinstance(key, str) and key.startswith(prefix) and "/" not in key[len(prefix) :]
+
+    key = hint if own(hint) else None
+    if key is None:
+        item = await store.get_item(user_pk(user_id), f"LOGO#{logo_id}")
+        found_key = item.get("key") if item else None
+        key = found_key if own(found_key) else None
+    if key is None:
         for ext in LOGO_EXTS:
             if await store.exists(f"{prefix}{ext}"):
                 key = f"{prefix}{ext}"
                 break
     if key is None:
         raise OverlayFailed("The logo could not be found. Pick it again.")
-    raw = workdir / "logo.download"
+    raw = workdir / f"{stem}.download"
     await store.download(key, raw)
     if raw.stat().st_size > render_mod.LOGO_BYTES_MAX:
         raise OverlayFailed("That logo is too big. Use a smaller picture.")
     found = render_mod.image_size(raw.read_bytes())
     if found is None or found[1] <= 0 or found[2] <= 0 or found[1] * found[2] > render_mod.LOGO_PIXELS_MAX:
         raise OverlayFailed("That logo could not be read. Use a PNG, JPG or WebP picture.")
-    dest = workdir / f"logo.{KIND_EXT[found[0]]}"
+    dest = workdir / f"{stem}.{KIND_EXT[found[0]]}"
     raw.replace(dest)
     return dest
 
@@ -294,16 +371,25 @@ async def run_overlay(store: OverlayStore, work_root: Path, user_id: str, clip_i
         info = await proc.probe(str(src))
         if not info.has_video or info.width <= 0 or info.height <= 0 or info.duration <= 0:
             raise OverlayFailed("The clip's video could not be read.")
-        start, end = window(spec, info.duration)
-        if end - start < MIN_VISIBLE:
+        layers = visible_layers(spec, info.duration)
+        if not layers and not text_visible(spec, info.duration):
             raise OverlayFailed("Those times are outside the clip.")
-        logo = await fetch_logo(store, user_id, spec.logo.logo_id, workdir) if spec.logo else None
+        files: dict[str, Path] = {}  # each distinct picture is fetched once, however many layers use it
+        for lg, _, _ in layers:
+            if lg.logo_id not in files:
+                files[lg.logo_id] = await fetch_logo(
+                    store, user_id, lg.logo_id, workdir, hint=lg.key, stem=f"logo-{len(files)}"
+                )
         ass_file = workdir / "overlay.ass"
-        if spec.text is not None:
+        if spec.text is not None and text_visible(spec, info.duration):
+            start, end = window(spec, info.duration)
             ass_file.write_text(overlay_ass(spec.text, info.width, info.height, start, end), "utf-8")
-        graph = overlay_graph(spec, info.width, info.height, ass_file, start, end)
+        graph = overlay_graph(spec, info.width, info.height, ass_file, info.duration)
         out = workdir / "edit.mp4"
-        await proc.run(ffmpeg_args(src, logo, graph, info.duration, out), time_limit=RENDER_LIMIT)
+        await proc.run(
+            ffmpeg_args(src, [files[lg.logo_id] for lg, _, _ in layers], graph, info.duration, out),
+            time_limit=RENDER_LIMIT,
+        )
         if not out.is_file() or out.stat().st_size == 0:
             raise OverlayFailed(FAILED)
         await store.upload(out, edit_key, "video/mp4")
