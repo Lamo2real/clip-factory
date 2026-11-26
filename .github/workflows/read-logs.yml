@@ -77,6 +77,8 @@ jobs:
                           code, platform, result, reason, starts, sent, type, stopped, started, superseded, seconds, free, height, estBytes,
                           owners, days, rules, jsonrpc, signedIn, membership, runId, slot, mode, clips, note, ran,
                           clipId, clipIds,
+                          record: ((.record // null) | if type == "object" then ({status, errorType} | with_entries(select(.value != null))) else null end),
+                          errorMessage: ((.errorMessage // null) | if . then .[0:300] else null end),
                           detail: ((.detail // null) | if . then .[0:300] else null end)} | with_entries(select(.value != null)) | tojson)
               else ($m | gsub("\n"; " ") | .[0:400]) end'
 
