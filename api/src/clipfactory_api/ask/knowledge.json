@@ -1,5 +1,5 @@
 {
- "version": "95dfe743c8a9",
+ "version": "25ee8eb0486c",
  "parts": [
   {
    "id": "app-map",
@@ -255,7 +255,7 @@
    "id": "contracts-38",
    "title": "CONTRACTS: 38. Content Rewards campaigns (owner request, 2026-11-21)",
    "line": "The owner's words: \"browse Content Rewards, join a campaign there, then paste the campaign URL into Clip Factory. Clip",
-   "chars": 177477
+   "chars": 177418
   },
   {
    "id": "contracts-39",
@@ -979,9 +979,15 @@
   },
   {
    "id": "adr-107",
-   "title": "DECISIONS: ADR-107 Pictures on a CR clip are a list of layers next to the old single logo",
-   "line": "Context. §54. The owner wants several pictures on one clip. §53 stored one overlay.logo; clips are already edited.",
-   "chars": 726
+   "title": "DECISIONS: ADR-107 CR clip pictures: layer list",
+   "line": "Context. §54: several pictures on a clip; §53 stored one overlay.logo.",
+   "chars": 198
+  },
+  {
+   "id": "adr-108",
+   "title": "DECISIONS: ADR-108 No schema unions",
+   "line": "Decision. Bedrock allows 16 anyOf; now \"\"/0 mean not stated.",
+   "chars": 102
   },
   {
    "id": "architecture-overview",

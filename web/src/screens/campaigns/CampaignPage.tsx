@@ -295,7 +295,7 @@ function ClipLines({ subs, onChange }: { subs: Parameters<typeof CrPostLines>[0]
 
 function PaySection({ c }: { c: Campaign }) {
   const me = useSessionIfAny()?.me;
-  const countries = c.pay.flatMap((p) => countryLines(p));
+  const countries = [...new Set(c.pay.flatMap((p) => countryLines(p)))]; // each once when the places match
   const chip = budgetChip(c.budget.usedPct);
   const paidHere = c.platformsPaid.filter((p) => p !== "tiktok");
   return (
@@ -343,6 +343,13 @@ function RulesSection({ c, onCampaign }: { c: Campaign; onCampaign: (c: Campaign
   const [text, setText] = useKeptRules(`rules:${c.campaignId}`);
   const [open, setOpen] = useState(() => text.length > 0);
   const [busy, setBusy] = useState(false);
+  // The read runs on its own for about 30 seconds: when it ends in "failed", say so (the card used to stay silent).
+  const lastState = useRef(c.rulesState);
+  useEffect(() => {
+    if (lastState.current === "reading" && c.rulesState === "failed")
+      toast.error("I couldn't read those rules. Tap Read these rules to try again, or paste them again.");
+    lastState.current = c.rulesState;
+  }, [c.rulesState, toast]);
   async function read() {
     if (!text.trim()) {
       toast.info("Paste the rules in the box first.");

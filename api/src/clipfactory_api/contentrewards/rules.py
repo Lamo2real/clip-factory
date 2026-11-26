@@ -47,8 +47,10 @@ SOURCE_KINDS = ("video_file", "google_drive", "dropbox", "youtube", "twitch", "k
 _INVISIBLE = re.compile("[\u0000-\u001f\u007f-\u009f\u200b-\u200f\u202a-\u202e\u2060-\u2064\u2066-\u2069\ufeff]")
 
 _str = {"type": "string"}
-_null_str: Item = {"anyOf": [{"type": "string"}, {"type": "null"}]}
-_null_int: Item = {"anyOf": [{"type": "integer"}, {"type": "null"}]}
+# Bedrock's JSON-schema output allows at most 16 union (anyOf) types in a schema and this one has about 20 nullable
+# fields, so "not stated" is "" and 0 (the check below turns both into null); never a union (§38.10).
+_null_str: Item = {"type": "string", "description": 'Empty string "" when not stated.'}
+_null_int: Item = {"type": "integer", "description": "0 when not stated."}
 _str_list = {"type": "array", "items": _str}
 _source = {
     "type": "object",
@@ -379,8 +381,11 @@ def validate(  # noqa: PLR0915 (every rule of §38.10, in order)
         doubt(item)
 
     # 6. lengths
-    lo, hi = _int(src.get("lengthMinSec"), 1, 600), _int(src.get("lengthMaxSec"), 1, 600)
-    bad = (src.get("lengthMinSec") is not None and lo is None) or (src.get("lengthMaxSec") is not None and hi is None)
+    raw_lo, raw_hi = (
+        None if src.get(k) == 0 else src.get(k) for k in ("lengthMinSec", "lengthMaxSec")
+    )  # 0 = not stated
+    lo, hi = _int(raw_lo, 1, 600), _int(raw_hi, 1, 600)
+    bad = (raw_lo is not None and lo is None) or (raw_hi is not None and hi is None)
     if bad or (lo is not None and hi is not None and lo > hi):
         doubt(f"Clip length: {src.get('lengthMinSec')} to {src.get('lengthMaxSec')} seconds")
     else:

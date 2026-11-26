@@ -934,11 +934,10 @@ This is checked at the first Connect (and logged once as `cr.typeid_verified` or
 ### 38.10 Reading a campaign
 
 * **Preview (public, only for the card, only when the owner acts).** `GET
-  https://contentrewards.com/api/campaign/campaigns/{uuid}` (public, undocumented, and robots.txt disallows `/api/` for
-  crawlers, so it is never read on a schedule; `Accept: application/json`, `User-Agent: ClipFactory/1`, 6 s, ≤ 512 KB,
+  https://contentrewards.com/api/campaign/campaigns/{uuid}` (public, undocumented; robots.txt disallows `/api/`, so never read on a schedule; `Accept: application/json`, `User-Agent: ClipFactory/1`, 6 s, ≤ 512 KB,
   no cookies, redirects followed only to `contentrewards.com`). Read only on the owner's own add, Check now, opening a
   card whose copy is older than 10 minutes, and a job's start; cached on the item (`publicAt`); at most 6 public reads
-  a minute per container. Never used to submit. A `404` JSON (`{error:{code:NOT_FOUND}}`) → `ended` ("That campaign is
+  a minute per container. Never used to submit. A `404` → `ended` ("That campaign is
   gone from Content Rewards."). Fields used: `name`, `organization.name` / `logoUrl`, `organizationId`, `status`,
   `statusReason`, `requiresApplication`, `private`, `type`, `description`, `configuration.payoutModel[]` {`platform`,
   `rate`, `minPayout`, `maxPayout`} (cents), `configuration.geoRates`, `configuration.budget`,
