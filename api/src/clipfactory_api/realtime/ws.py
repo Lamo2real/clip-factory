@@ -20,6 +20,9 @@ from ..log import log
 from . import encode, is_gone, management_client
 
 DEFAULT_TTL_SECONDS = 7200
+# The pong is optional (the ping itself keeps the connection alive) and the Lambda stops at 10 s: one try of at most
+# 4 s, so a slow reply is logged as ws.reply_failed instead of timing the whole invocation out (CONTRACTS §14.2).
+REPLY_READ_TIMEOUT_SECONDS = 4
 MAX_MESSAGE_BYTES = 4096
 OK = {"statusCode": 200}
 
@@ -125,7 +128,7 @@ def _from_env() -> WsDeps:
     env = os.environ
     return WsDeps(
         store=db.Store(table(env["TABLE_NAME"])),
-        management=management_client(env["WS_ENDPOINT"]),
+        management=management_client(env["WS_ENDPOINT"], read_timeout=REPLY_READ_TIMEOUT_SECONDS, max_attempts=1),
         ttl_seconds=int(env.get("CONN_TTL_SECONDS") or DEFAULT_TTL_SECONDS),
     )
 
