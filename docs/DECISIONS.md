@@ -2934,12 +2934,11 @@ likes, comments and shares; views are their own two choices.
 - **Decision.** `defaultUploadTo(ready)` returns every ready place (a campaign clip: the places it pays for). Taps change that one card only. `cf-upload-to` is neither read nor written. Where clips go stays in Settings and for the server, unchanged; auto-posting is untouched (§46).
 - **Consequences.** No stored data changes; an old `cf-upload-to` value is simply ignored.
 
-## ADR-107 Pictures on a CR clip are a list of layers next to the old single logo
+## ADR-107 CR clip pictures: layer list
 
-- **Context.** §54. The owner wants several pictures on one clip. §53 stored one `overlay.logo`; clips are already edited.
-- **Decision.** Add `logos` and keep `logo` readable (no migration): code reads `logos`, else `logo` as one layer. Soft
-  cap of 4. No new resource.
+- **Context.** §54: several pictures on a clip; §53 stored one `overlay.logo`.
+- **Decision.** Add `logos`, keep `logo` readable (no migration); soft cap 4.
 
-## ADR-108 No unions in the rules schema
+## ADR-108 No schema unions
 
-- **Decision.** Bedrock allows 16 `anyOf`, the schema had ~20: now `""`/`0` mean not stated.
+- **Decision.** Bedrock allows 16 `anyOf`; now `""`/`0` mean not stated.
