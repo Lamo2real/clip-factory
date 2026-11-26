@@ -1,8 +1,8 @@
-import { useEffect, useId, useMemo, useRef, useState, type DragEvent, type FormEvent } from "react";
+import { useEffect, useId, useMemo, useRef, useState, type ClipboardEvent, type DragEvent, type FormEvent } from "react";
 import { api } from "../../api/index.ts";
 import { friendlyMessage } from "../../api/errors.ts";
 import { putFile } from "../../api/upload.ts";
-import type { ClipTarget, NewJobSource } from "../../api/types.ts";
+import type { ClipTarget, JobAttachment, NewJobSource } from "../../api/types.ts";
 import { useSession } from "../../app/session.tsx";
 import { homeHint } from "../../lib/autopost.ts";
 import { Icon } from "../../components/Icon.tsx";
@@ -30,31 +30,39 @@ import { jobTitle } from "../../components/JobBits.tsx";
 import { isTouchDevice } from "../../lib/crConnect.ts";
 import { setLeaveGuard } from "../../lib/router.ts";
 import { prefersReducedMotion } from "../../lib/prefs.ts";
+import { filesFrom } from "../../features/help/pictures.ts";
+import { anyAttachable, attachmentsPayload, dragHasVideo, failedChips, failedLine, keptChips, nonVideoFiles, notesOver, pastedFiles, uploadingChips, videoFiles, type Chip } from "../../lib/attachments.ts";
+import { NotesAttach, useAttachments } from "./NotesAttach.tsx";
 
 const MAX_UPLOAD = 5 * 1024 ** 3;
 /** Paste and Clear take turns in one spot: a tap this soon after they swapped is the second half of a double tap. */
 const SWAP_MS = 400;
 
 type Mode = "link" | "upload";
-/** The highlight over the card while something is dragged over it (§12.5); "busy" while an upload or a start runs. */
-type Over = Exclude<DragKind, null> | "busy" | null;
+/** The highlight over the card while something is dragged over it (§12.5); "busy" while an upload or a start runs;
+ * "note" while files are held over the notes box (it lights up on its own, §52 F5). */
+type Over = Exclude<DragKind, null> | "busy" | "note" | null;
 type Count = "range" | "exact";
 
 /**
  * Home's unsent link, notes and clip count: kept while the app stays open (leaving Home for Jobs and coming back keeps
  * them), gone on a reload or once the job started.
  */
-export type Draft = { link: string; notes: string; count: Count; exact: number };
+export type Draft = { link: string; notes: string; count: Count; exact: number; attachments?: JobAttachment[] };
 let draftKept: Draft | null = null;
 
 export function readDraft(): Draft | null {
-  return draftKept ? { ...draftKept } : null;
+  if (!draftKept) return null;
+  const { attachments, ...rest } = draftKept;
+  return { ...rest, ...(attachments ? { attachments: attachments.map((a) => ({ ...a })) } : {}) };
 }
 
 /** Keeps the draft (an untouched form keeps nothing). */
 export function saveDraft(d: Draft): void {
-  const empty = !d.link.trim() && !d.notes.trim() && d.count === "range" && d.exact === 6;
-  draftKept = empty ? null : { ...d };
+  const empty = !d.link.trim() && !d.notes.trim() && d.count === "range" && d.exact === 6 && !d.attachments?.length;
+  const { attachments, ...rest } = d;
+  // Only files that are all up are kept (as {key, name, type, size}, §52 F7).
+  draftKept = empty ? null : { ...rest, ...(attachments?.length ? { attachments: attachments.map((a) => ({ ...a })) } : {}) };
 }
 
 export function clearDraft(): void {
@@ -178,6 +186,21 @@ function JobForm() {
   // The file can't change while it goes up (or while the job it is for starts).
   const fileLocked = busy || progress !== null;
   const active = useAppActive();
+  // Files and pictures for the notes (§52): they go up as soon as they are added.
+  const attach = useAttachments(draft?.attachments, (t) => say(t));
+  // A failed file Make clips has told about (pressed again, it goes on without it), and the wait for files going up.
+  const [failedSaid, setFailedSaid] = useState<string | null>(null);
+  const [waitingFiles, setWaitingFiles] = useState(false);
+  const failedNow = failedChips(attach.chips);
+  const failedSig = failedNow.map((c) => c.id).join(",");
+  // A file told about that is tried again (or taken away) is a new story: a fresh failure asks again.
+  useEffect(() => {
+    if (failedSaid !== null && failedSig !== failedSaid) setFailedSaid(null);
+  }, [failedSig, failedSaid]);
+  // Files can be added until the job itself starts: also while the video goes up, and while Make clips waits for the
+  // files (those are waited for and sent too). Only the last step, making the job, holds them.
+  const addLocked = busy && !uploading && !waitingFiles;
+  const keptSig = JSON.stringify(keptChips(attach.chips));
 
   // While a file goes up, leaving Home asks first (Stay is the safe answer), and a reload or closing the tab lets the
   // browser ask.
@@ -211,8 +234,10 @@ function JobForm() {
 
   // The unsent draft is kept while the app stays open.
   useEffect(() => {
-    if (keepsDraft) saveDraft({ link, notes, count, exact });
-  }, [keepsDraft, link, notes, count, exact]);
+    // keptSig is the finished files as text (keptFiles is a new array on every render).
+    const files = JSON.parse(keptSig) as JobAttachment[];
+    if (keepsDraft) saveDraft({ link, notes, count, exact, ...(files.length ? { attachments: files } : {}) });
+  }, [keepsDraft, link, notes, count, exact, keptSig]);
 
   // Leaving Home stops a running upload: it has no progress or Cancel anywhere else, and must not pull the owner
   // back to a job page later from whatever screen they moved on to.
@@ -417,6 +442,11 @@ function JobForm() {
     return performance.now() - swappedAt.current < SWAP_MS;
   }
 
+  /** Adding a file during the very last step (the job being made): wait a moment, never "cancel the upload". */
+  function startingJob() {
+    toast.info("Clip Factory is starting your job. Add it in a moment.");
+  }
+
   function stillUploading() {
     toast.info(progress !== null ? "The upload is still running. Tap Cancel upload first." : "Clip Factory is starting your job. Wait a moment.");
   }
@@ -463,6 +493,8 @@ function JobForm() {
     const t = e.target as HTMLElement | null;
     if (!kind && t?.closest?.("input, textarea")) return null;
     if (kind === "link" && t?.closest?.("textarea")) return null;
+    // Files held over the notes box can be added while the video still goes up (they upload on their own).
+    if (!addLocked && notesOver(kind, !!t?.closest?.("[data-notes-drop]"), dragHasVideo(e.dataTransfer))) return "note";
     if (progress !== null || busy) return "busy";
     return kind ?? "link";
   }
@@ -506,7 +538,44 @@ function JobForm() {
       return;
     }
     const dropped = classifyDrop(e.dataTransfer);
+    const all = filesFrom(e.dataTransfer);
+    const extra = nonVideoFiles(all);
+    // A video still goes in Pick a video; a picture or file that came with it is added to the notes, and "One video
+    // per job" counts only the other videos.
+    if (dropped.kind === "video") {
+      if (extra.length) attach.add(extra);
+      takeDrop({ ...dropped, others: videoFiles(all).length - 1 });
+      return;
+    }
+    // A link drop (also a thumbnail with its page's link) fills the link bar, as before, wherever it lands.
+    if (dropped.kind === "link") return takeDrop(dropped);
+    // Files on the notes box, or files that are not a video anywhere on the card, are added to the notes (§52 F5). A
+    // thing that can't be added still says it is not a video.
+    if ((o === "note" && extra.length) || (dropped.kind === "other" && anyAttachable(extra))) {
+      attach.add(extra);
+      return;
+    }
     if (dropped.kind !== "none") takeDrop(dropped);
+  }
+
+  /** A pasted picture or file (Cmd or Ctrl+V anywhere on the card) is added to the notes; a text paste types as usual. */
+  function paste(e: ClipboardEvent<HTMLFormElement>) {
+    const files = pastedFiles(e.clipboardData);
+    if (!files.length) return;
+    e.preventDefault();
+    if (addLocked) return startingJob();
+    attach.add(files);
+  }
+
+  /** Make clips with a file that did not go up: the first time it says so and stops; pressed again it goes on. */
+  function stopForFailed(failed: Chip[]): boolean {
+    if (!failed.length) return false;
+    const sig = failed.map((c) => c.id).join(",");
+    if (sig === failedSaid) return false;
+    setFailedSaid(sig);
+    send.fail({ sound: false });
+    say(failedLine(failed.length));
+    return true;
   }
 
   /** A dropped video is picked like the file picker's; a dropped link is pasted like Paste's. Both switch the bar. */
@@ -556,6 +625,7 @@ function JobForm() {
       return;
     }
     if (!ready || busy) return;
+    if (stopForFailed(failedChips(attach.current()))) return;
     setBusy(true);
     try {
       let source: NewJobSource;
@@ -581,6 +651,15 @@ function JobForm() {
         }
       }
       if (!mounted.current) return;
+      // Files for the notes still going up: they finish first (their chips show it), then only the ones all up go.
+      if (uploadingChips(attach.current()).length) {
+        setWaitingFiles(true);
+        await attach.settle();
+        if (!mounted.current) return;
+        setWaitingFiles(false);
+        if (stopForFailed(failedChips(attach.current()))) return;
+      }
+      const attachments = attachmentsPayload(attach.current());
       // In the desktop app a YouTube link is fetched by this computer from the start (§35.1): no cloud block to hit.
       const macFirst = source.type === "link" && check.state === "ok" && check.platform === "youtube" && canMacFetch();
       // The count and notes on screen now: they may have changed while the file went up.
@@ -589,6 +668,7 @@ function JobForm() {
         source,
         clipTarget: now.target,
         ...(now.notes.trim() ? { notes: now.notes.trim() } : {}),
+        ...(attachments.length ? { attachments } : {}),
         ...(macFirst ? { macFetch: true } : {}),
         // From a link job (Use a video file): this file replaces it, so its wait for the Mac ends (§35.8).
         ...(source.type === "upload" && start.from ? { replaces: start.from } : {}),
@@ -631,6 +711,7 @@ function JobForm() {
     } finally {
       setBusy(false);
       setProgress(null);
+      setWaitingFiles(false);
       abort.current = null;
     }
   }
@@ -648,6 +729,7 @@ function JobForm() {
       onDragOver={dragOver}
       onDragLeave={dragLeave}
       onDrop={drop}
+      onPaste={paste}
     >
       <h2 className="sr-only" id={`${id}-h`}>
         {campaignWay ? "Make campaign clips" : "Make new clips"}
@@ -882,7 +964,7 @@ function JobForm() {
         </div>
       </fieldset>
 
-      <div className="field">
+      <div className={`field notes-field${over === "note" ? " is-over" : ""}`} data-notes-drop="">
         <label className="field__label" htmlFor={`${id}-notes`}>
           Notes for Clip Factory <span className="field__optional">you can skip this</span>
         </label>
@@ -895,6 +977,14 @@ function JobForm() {
           value={notes}
           onChange={(e) => setNotes(e.target.value)}
         />
+        <NotesAttach attach={attach} hintId={`${id}-ah`} locked={addLocked} onLocked={startingJob} />
+        {/* Pointer-only, like the card's own drop words: the button above is the way in for keyboards. */}
+        <div className="notes-field__drop" aria-hidden="true">
+          <span>
+            <Icon name="paperclip" size={20} />
+            Drop to add
+          </span>
+        </div>
       </div>
 
       <div className="newjob__actions" ref={actions}>
@@ -916,6 +1006,17 @@ function JobForm() {
         >
           {isCampaignLink && crOn ? "Add campaign" : homeWords && !crError ? homeWords.short : campaignWay ? "Make campaign clips" : "Make clips"}
         </Button>
+        {waitingFiles ? (
+          <p className="field__status" aria-live="polite">
+            <Icon name="clock" size={18} />
+            <span>Adding your files…</span>
+          </p>
+        ) : failedNow.length && failedSig === failedSaid ? (
+          <p className="field__status is-bad" role="alert">
+            <Icon name="alert" size={18} />
+            <span>{failedLine(failedNow.length)}</span>
+          </p>
+        ) : null}
         {crDown && !crError && !isCampaignLink ? (
           <>
             <p className="field__status is-bad" role="alert">
@@ -947,7 +1048,7 @@ function JobForm() {
       <p className="sr-only" role="status">
         {said}
       </p>
-      {over ? (
+      {over && over !== "note" ? (
         // Pointer-only: the file box stays a labelled file input and the link box a labelled text box for keyboards.
         <div className={`newjob__drop${over === "busy" ? " is-busy" : ""}`} aria-hidden="true">
           <div className="newjob__drop-say">

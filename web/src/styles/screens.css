@@ -280,6 +280,202 @@
   flex: 1 1 180px;
 }
 
+/* ---------- Home › Files and pictures for the notes (§52) ---------- */
+/* The whole notes box takes a drop. Its glass sits flush at rest (the padding is given back by the margin) and lights
+   up one clear step while a file is held over it: brighter fill, a leaf glow, "Drop to add". Eased in and out. */
+.notes-field {
+  position: relative;
+  margin: -8px;
+  padding: 8px;
+  border-radius: var(--r-md);
+  transition:
+    background-color var(--dur-2) var(--ease-in-out),
+    box-shadow var(--dur-2) var(--ease-in-out);
+}
+.notes-field.is-over {
+  background: linear-gradient(var(--tint-leaf), var(--tint-leaf)), var(--fill-hover);
+  box-shadow:
+    var(--glass-shadow-raise-hover),
+    0 0 0 3px rgb(var(--green-leaf-rgb) / 0.45),
+    0 0 28px rgb(var(--green-leaf-rgb) / 0.35);
+}
+.notes-field__drop {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  display: grid;
+  place-items: center;
+  border-radius: inherit;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity var(--dur-2) var(--ease-in-out);
+}
+.notes-field__drop > span {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  border-radius: var(--r-pill);
+  font-weight: 700;
+  color: var(--ink);
+  background: var(--fill);
+  box-shadow: var(--glass-shadow-float);
+  transform: translateY(4px);
+  transition: transform var(--dur-2) var(--ease-in-out);
+}
+.notes-field.is-over .notes-field__drop {
+  opacity: 1;
+}
+.notes-field.is-over .notes-field__drop > span {
+  transform: none;
+}
+@media (prefers-reduced-motion: reduce) {
+  .notes-field__drop > span {
+    transform: none;
+    transition: none;
+  }
+}
+.reduce-motion .notes-field__drop > span {
+  transform: none;
+  transition: none;
+}
+.notes-attach {
+  display: grid;
+  gap: 10px;
+}
+.notes-attach__row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+.notes-attach__add {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  min-height: var(--tap);
+  padding: 6px 16px 6px 12px;
+  border-radius: var(--r-pill);
+  font-weight: 600;
+  font-size: 0.95rem;
+  color: var(--ink);
+  background: var(--fill-control);
+  box-shadow: var(--glass-shadow-raise);
+  transition:
+    background-color var(--dur-1) var(--ease-out),
+    box-shadow var(--dur-1) var(--ease-out);
+}
+.notes-attach__add:hover {
+  background: var(--fill-hover);
+  box-shadow: var(--glass-shadow-raise-hover);
+}
+.notes-attach__add:active {
+  background: var(--fill-press);
+  box-shadow: var(--glass-shadow-press);
+}
+.notes-attach__add:focus-within {
+  box-shadow:
+    var(--glass-shadow-raise),
+    0 0 0 3px rgb(var(--vermilion-rgb) / 0.3);
+}
+.notes-attach__hint {
+  flex: 1 1 200px;
+  font-size: var(--fs-small);
+  color: var(--ink-2);
+}
+.attach-chips {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 240px), 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.attach-chip {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+  padding: 6px 4px 6px 6px;
+  border-radius: var(--r-md);
+  background: var(--fill-control);
+  box-shadow: var(--glass-shadow-raise);
+  animation: attach-chip-in var(--dur-2) var(--ease-out) both;
+}
+.attach-chip.is-failed {
+  background: linear-gradient(var(--tint-vermilion), var(--tint-vermilion)), var(--fill-control);
+}
+.attach-chip__pic {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 44px;
+  height: 44px;
+  overflow: hidden;
+  border-radius: calc(var(--r-md) - 4px);
+  background: var(--fill-sunk);
+  color: var(--ink-2);
+}
+.attach-chip__pic img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.attach-chip__text {
+  display: grid;
+  gap: 4px;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.attach-chip__name {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  font-weight: 600;
+  font-size: 0.95rem;
+}
+.attach-chip__line {
+  font-size: var(--fs-small);
+  color: var(--ink-2);
+}
+.attach-chip__line.is-bad {
+  color: var(--vermilion-ink);
+}
+.attach-chip .progress {
+  max-width: 220px;
+}
+/* Slow start and slow end. */
+.attach-chip .progress__fill {
+  transition-timing-function: var(--ease-in-out);
+}
+.attach-chip__retry {
+  flex: none;
+}
+.attach-chip__remove {
+  flex: none;
+  min-width: 44px;
+  min-height: 44px;
+}
+@keyframes attach-chip-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .attach-chip {
+    animation-name: attach-chip-fade;
+  }
+}
+.reduce-motion .attach-chip {
+  animation-name: attach-chip-fade;
+}
+@keyframes attach-chip-fade {
+  from {
+    opacity: 0;
+  }
+}
+
 .working {
   display: grid;
   gap: 14px;

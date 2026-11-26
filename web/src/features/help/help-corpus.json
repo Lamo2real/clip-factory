@@ -1,5 +1,5 @@
 {
-  "version": "2724769273bf",
+  "version": "8fdb9f3477b7",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -27,6 +27,7 @@
     "src/screens/home/Home.tsx",
     "src/screens/home/MoneyTile.tsx",
     "src/screens/home/NewJobForm.tsx",
+    "src/screens/home/NotesAttach.tsx",
     "src/screens/home/StreamersRow.tsx",
     "src/screens/jobs/AiCost.tsx",
     "src/screens/jobs/DeleteJobsSheet.tsx",

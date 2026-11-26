@@ -6,7 +6,7 @@ import re
 from datetime import timedelta
 from typing import Any
 
-from .. import db, learn, posts, s3, settings, validate
+from .. import attachments, db, learn, posts, s3, settings, validate
 from ..app import App
 from ..clock import iso, parse
 from ..errors import ApiError, bad_request, conflict
@@ -58,8 +58,12 @@ def me(app: App, req: Request) -> Response:
 
 def create_upload(app: App, req: Request) -> Response:
     body = req.json()
-    validate.only_keys(body, {"filename", "contentType", "size"})
+    validate.only_keys(body, {"filename", "contentType", "size", "purpose"})
     filename = validate.required_string(body, "filename", max_len=255)
+    if "purpose" in body:
+        if body["purpose"] != attachments.PURPOSE:
+            raise bad_request('purpose must be "attachment".')
+        return _attachment_upload(app, req, filename, body)
     content_type = validate.required_string(body, "contentType", max_len=80).lower()
     if not VIDEO_TYPE.match(content_type):
         raise bad_request("Only video files can be uploaded.")
@@ -74,6 +78,23 @@ def create_upload(app: App, req: Request) -> Response:
             "uploadId": upload_id,
             "key": key,
             "uploadUrl": app.media.presign_put(key, content_type),
+            "headers": {"Content-Type": content_type},
+        }
+    )
+
+
+def _attachment_upload(app: App, req: Request, filename: str, body: dict[str, Any]) -> Response:
+    """A file for the job's notes (§52): an allowed type, at most 20 MB, the length signed into the URL so S3 takes
+    nothing bigger. Same ``uploads/`` key as a video, so the 14-day lifecycle cleans it up."""
+    content_type = validate.required_string(body, "contentType", max_len=120).lower()
+    size = attachments.check_upload(content_type, body.get("size"))
+    upload_id = ulid()
+    key = s3.upload_key(req.user_id, upload_id, filename)
+    return ok(
+        {
+            "uploadId": upload_id,
+            "key": key,
+            "uploadUrl": app.media.presign_put_sized(key, content_type, size),
             "headers": {"Content-Type": content_type},
         }
     )

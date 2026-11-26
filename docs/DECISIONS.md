@@ -2894,3 +2894,20 @@ likes, comments and shares; views are their own two choices.
 - **Consequences.** No new AWS resource and no extra model call. The agent image carries the price list already
   (`/app/config`). Prices change only by editing that file from the provider's own page. Work done by the API
   Lambdas outside a job (Ask, weekly learning, lessons, rules, distil) is not in a job's cost.
+
+## ADR-104 Notes attachments go straight to S3 under uploads/, are added as optional fields, and reach the agent as bounded context
+
+- **Context.** §52. The owner wants to attach, paste, drop and delete files and images in the notes box.
+- **Options.** (1) Send the files through the API Lambda: size limits and cost. (2) A new bucket or prefix with its own
+  lifecycle: new infrastructure. (3) The existing presigned PUT under `uploads/`, marked `purpose: "attachment"`.
+- **Decision.** Option 3. The 14-day `uploads/` lifecycle already cleans up, so there is no infra change and no
+  deletion code; removing a chip only forgets the upload. Both API changes are additive optional fields (`purpose`,
+  `attachments`), so old clients, old jobs and retries behave as before. The server re-checks every key, size and type at
+  job create, because the browser's word is not enough. The agent reads attachments inside the prompts that already carry
+  the notes: no new model calls, with named character, page and block limits per prompt, and images and PDFs on two calls
+  only, so their cost does not grow with the video (the text repeats in each prompt with the notes). A bad file is
+  skipped, never fatal. In the app each file is a chip that uploads at once and has an Undo toast instead of a
+  "Are you sure?" question, so a slip costs one tap and nothing is lost.
+- **Consequences.** Attachments vanish after 14 days with the upload. Word, Excel and similar files are saved but not
+  read. Their text, image and PDF tokens appear in the job's AI cost (§51) like any other input.
+

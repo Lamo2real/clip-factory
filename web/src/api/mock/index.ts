@@ -1,6 +1,7 @@
 // The whole HTTP API in memory, with fake latency, so the UI runs with no backend (npm run dev:mock, Playwright).
 import { ApiError, networkError } from "../errors.ts";
-import type { Api, Campaign, Captions, Clip, ClipPostOptions, Job, JobDeleteClips, JobDeleted, Platform, Post, Settings, SimilarClip, TikTokPostOptions } from "../types.ts";
+import type { Api, Campaign, Captions, Clip, ClipPostOptions, Job, JobAttachment, JobDeleteClips, JobDeleted, NewJob, Platform, Post, Settings, SimilarClip, TikTokPostOptions } from "../types.ts";
+import { canAttach, MAX_ATTACHMENT_BYTES, MAX_ATTACHMENTS, REFUSE } from "../../lib/attachments.ts";
 import { clipOptionsProblem, presetOf, presetProblem } from "../../lib/preset.ts";
 import { TIKTOK_PICK_AGAIN } from "../../lib/upload.ts";
 import { videoFileName } from "../../lib/tiktokYourself.ts";
@@ -59,6 +60,27 @@ function delay(min = 160, max = 420): Promise<void> {
 const notFound = (what: string) => new ApiError(404, "not_found", `That ${what} no longer exists.`);
 const conflict = (msg: string) => new ApiError(409, "conflict", msg);
 const bad = (msg: string) => new ApiError(400, "bad_request", msg);
+
+/** Like the API (§52 F3), with its sentences: at most 6, each one of the owner's uploads, an allowed kind, up to 20 MB, no key twice. */
+function checkAttachments(list: NewJob["attachments"]): JobAttachment[] {
+  if (list === undefined) return [];
+  if (!Array.isArray(list)) throw bad("attachments must be a list.");
+  if (list.length > MAX_ATTACHMENTS) throw bad(REFUSE.full);
+  const seen = new Set<string>();
+  return list.map((a) => {
+    const keys = Object.keys(a ?? {});
+    if (!a || !keys.every((k) => ["key", "name", "type", "size"].includes(k)) || typeof a.name !== "string" || !a.name || a.name.length > 255 || typeof a.size !== "number")
+      throw bad("A file for the notes could not be added. Remove it and add it again.");
+    if (typeof a.key !== "string" || !a.key.startsWith("uploads/mock-owner/") || a.key.includes("..")) throw bad("That file does not belong to you.");
+    if (seen.has(a.key)) throw bad("That file was added twice.");
+    // The API also takes "text/rtf" (the web sends it as application/rtf).
+    if (!canAttach(a.type) && a.type !== "text/rtf") throw bad(REFUSE.kind);
+    if (a.size > MAX_ATTACHMENT_BYTES) throw new ApiError(413, "too_large", REFUSE.big);
+    if (a.size < 1) throw bad("A file for the notes could not be added. Remove it and add it again.");
+    seen.add(a.key);
+    return { key: a.key, name: a.name, type: a.type, size: a.size };
+  });
+}
 const ALREADY_DECIDED = "This clip has already been confirmed or declined.";
 
 /**
@@ -1043,10 +1065,16 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
         },
       };
     },
-    async createUpload({ filename, contentType, size }) {
+    async createUpload({ filename, contentType, size, purpose }) {
       await delay();
-      if (!contentType.startsWith("video/")) throw bad("Pick a video file, like an MP4 or MOV.");
-      if (size > 5 * 1024 ** 3) throw new ApiError(413, "too_large", "Videos can be up to 5 GB.");
+      if (purpose === "attachment") {
+        // A file for the notes (§52): the allowed kinds, up to 20 MB, under the same uploads/ prefix.
+        if (!canAttach(contentType) && contentType !== "text/rtf") throw bad(REFUSE.kind);
+        if (size > MAX_ATTACHMENT_BYTES) throw new ApiError(413, "too_large", REFUSE.big);
+      } else {
+        if (!contentType.startsWith("video/")) throw bad("Pick a video file, like an MP4 or MOV.");
+        if (size > 5 * 1024 ** 3) throw new ApiError(413, "too_large", "Videos can be up to 5 GB.");
+      }
       const uploadId = ulid();
       return {
         uploadId,
@@ -1063,6 +1091,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       }
       // A campaign job (§38.5): the campaign is checked again; a hard stop or a soft one not accepted is refused.
       if (body.campaignId) await cr.jobCheck(body.campaignId, body.campaignAnyway ?? []);
+      const attachments = checkAttachments(body.attachments);
       const now = new Date().toISOString();
       const isLink = body.source.type === "link";
       const url = isLink ? (body.source as { url: string }).url : undefined;
@@ -1093,6 +1122,8 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
         clipCount: 0,
         notes: body.notes,
         ...(body.campaignId ? { campaignId: body.campaignId } : {}),
+        // Kept only when there are some (§52).
+        ...(attachments.length ? { attachments } : {}),
         // Like the agent (ADR-42): the job is made with the model picked in Settings at the time.
         model: currentClipModel(store.settings.clipModel),
         createdAt: now,

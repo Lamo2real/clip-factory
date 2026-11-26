@@ -134,7 +134,7 @@ test("several files: the first video is taken and the toast says one per job", a
 
 test("a file that is not a video says so in plain words", async ({ page }) => {
   await page.evaluate(() => (window.__cfSoundLog = []));
-  await dragDrop(page, "form.newjob", { files: [{ name: "notes.txt", type: "text/plain" }] });
+  await dragDrop(page, "form.newjob", { files: [{ name: "setup.exe", type: "application/x-msdownload" }] });
   await expect(sourceTab(page, "Pick a video")).toHaveClass(/is-on/);
   await expect(page.locator(".dropzone.is-bad")).toBeVisible();
   await expect(page.locator(".field__status.is-bad")).toHaveText("That is not a video. Drop an MP4, MOV or WebM video.");

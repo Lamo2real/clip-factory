@@ -144,6 +144,8 @@ export interface Job {
   sourceLanguage?: string;
   /** What the job's AI cost: tokens and US dollars, per model (CONTRACTS §51). */
   aiCost?: AiCost;
+  /** Files and pictures added to the notes (CONTRACTS §52). Absent on jobs without any. */
+  attachments?: JobAttachment[];
   createdAt: string;
   updatedAt: string;
 }
@@ -1181,6 +1183,14 @@ export interface PresignedPut {
   headers: Record<string, string>;
 }
 
+/** A file or picture added to a job's notes (CONTRACTS §52): where it went up, its name, kind and size in bytes. */
+export interface JobAttachment {
+  key: string;
+  name: string;
+  type: string;
+  size: number;
+}
+
 export type NewJobSource = { type: "link"; url: string } | { type: "upload"; key: string; filename: string };
 
 export interface NewJob {
@@ -1195,6 +1205,8 @@ export interface NewJob {
   campaignId?: string;
   /** The soft stops the owner accepted with "Make clips anyway". */
   campaignAnyway?: StopCode[];
+  /** Files and pictures for the notes (CONTRACTS §52), at most 6, each already up. */
+  attachments?: JobAttachment[];
 }
 
 // ---------- Real earnings (docs/CONTRACTS.md §25) ----------
@@ -2251,7 +2263,8 @@ export type BankTickId = "bank-ask" | "bank-account" | "bank-app" | "bank-detail
 export interface Api {
   health(): Promise<{ ok: boolean; version: string }>;
   me(): Promise<Me>;
-  createUpload(body: { filename: string; contentType: string; size: number }): Promise<PresignedPut & { uploadId: string }>;
+  /** `purpose: "attachment"`: a file for the notes (CONTRACTS §52) instead of the video. */
+  createUpload(body: { filename: string; contentType: string; size: number; purpose?: "attachment" }): Promise<PresignedPut & { uploadId: string }>;
   createJob(body: NewJob): Promise<Job>;
   listJobs(query?: { limit?: number; cursor?: string | null }): Promise<{ jobs: Job[]; nextCursor: string | null }>;
   getJob(jobId: string): Promise<{ job: Job; clips: Clip[] }>;

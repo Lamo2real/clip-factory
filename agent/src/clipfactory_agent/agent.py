@@ -19,6 +19,7 @@ from . import chat as chat_mod
 from . import loudness, transcript
 from . import signals as signals_mod
 from . import usage as usage_mod
+from .attachments import Attachments
 from .bedrock import Bedrock, ModelError
 from .campaign import Campaign
 from .learnings import Learnings, with_prior
@@ -62,10 +63,22 @@ class Brief:
     chat: chat_mod.ChatSignal | None = None
     # A Content Rewards campaign (§38.13): None for every other job, whose prompts stay exactly as they were.
     campaign: Campaign | None = None
+    # The files the owner added with the notes (§52): None or empty for most jobs, whose prompts stay as they were.
+    attachments: Attachments | None = None
 
     @property
     def wanted(self) -> int:
         return self.clip_max + spare_count(self.clip_max)
+
+    @property
+    def owner_notes(self) -> str:
+        """The notes as the prompts show them: the typed notes, then the text of the attached files."""
+        return self.attachments.notes(self.notes) if self.attachments is not None else self.notes
+
+    @property
+    def files(self) -> list[dict[str, Any]]:
+        """The attached images and PDFs, for the Converse calls that carry them."""
+        return self.attachments.blocks if self.attachments is not None else []
 
 
 OPEN_RULE = "- Never open on silence or mumbling: the first words heard must grab attention."
@@ -134,7 +147,7 @@ def brief_json(b: Brief) -> dict[str, Any]:
     out: dict[str, Any] = {
         "video": {"title": b.title, "channel": b.channel, "platform": b.platform, "length": hms(b.duration)},
         "language": b.language,
-        "ownerNotes": b.notes or "(none)",
+        "ownerNotes": b.owner_notes or "(none)",
         "clips": {"min": b.clip_min, "max": b.clip_max, "candidatesWanted": b.wanted},
         "clipLengthSeconds": {"min": b.length[0], "max": b.length[1]},
         "transcriptWindows": [{"start": round(s), "end": round(e), "label": f"{hms(s)}–{hms(e)}"} for s, e in wins],
@@ -453,15 +466,19 @@ async def find_with_converse(
     found: list[Moment] = []
     answered = 0
     errors: list[Exception] = []
+    # The owner's images and PDFs go with the first window that runs only, so their cost does not grow with the
+    # video's length (§52 F4); every window still gets the notes and their text files.
+    files_left = bool(b.files)
 
     async def one(start: float, end: float) -> None:
-        nonlocal done, answered
+        nonlocal done, answered, files_left
         text = signals_mod.timeline(b, start, end)
         if worth_reading(b, start, end, transcript.lines(b.words, start, end, b.speakers)):
             async with sem:
+                files, files_left = (b.files if files_left else []), False
                 prompt = (
                     f"Video: {b.title!r} by {b.channel or 'unknown'} ({b.platform}). This part covers "
-                    f"{hms(start)}–{hms(end)} of {hms(b.duration)}.\nOwner's notes: {b.notes or '(none)'}\n"
+                    f"{hms(start)}–{hms(end)} of {hms(b.duration)}.\nOwner's notes: {b.owner_notes or '(none)'}\n"
                     f"{hints(b, start, end)}\n\nReturn the best 0–6 moments in this part; quality beats quantity."
                     f"\n\n<transcript>\n{text}\n</transcript>"
                 )
@@ -474,6 +491,7 @@ async def find_with_converse(
                         tool="submit_moments",
                         description="Submit the best clip moments in this part of the video.",
                         schema=CANDIDATES_SCHEMA,
+                        files=files,
                     )
                 except JobCanceled:
                     raise

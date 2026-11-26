@@ -5,7 +5,7 @@ from __future__ import annotations
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
-from .. import clips, db, job_delete, jobs, macfetch, s3, settings, validate
+from .. import attachments, clips, db, job_delete, jobs, macfetch, s3, settings, validate
 from ..agent_client import AgentError, new_session_id
 from ..app import App
 from ..clock import iso
@@ -59,7 +59,9 @@ def _job_or_404(app: App, req: Request) -> dict[str, Any]:
 
 def create(app: App, req: Request) -> Response:
     body = req.json()
-    validate.only_keys(body, {"source", "clipTarget", "notes", "macFetch", "replaces", "campaignId", "campaignAnyway"})
+    validate.only_keys(
+        body, {"source", "clipTarget", "notes", "attachments", "macFetch", "replaces", "campaignId", "campaignAnyway"}
+    )
     # Started from the desktop app (§35.1): a YouTube link is fetched by the owner's Mac from the start.
     mac_up = validate.boolean(body["macFetch"], "macFetch") if "macFetch" in body else False
     user_settings = settings.load(app.store, req.user_id)
@@ -67,6 +69,7 @@ def create(app: App, req: Request) -> Response:
     replaces = _replaces(body, source)
     target = _clip_target(body.get("clipTarget"), user_settings)
     notes = validate.string(body, "notes", required=False, max_len=MAX_NOTES)
+    files = attachments.parse(app.media, req.user_id, body.get("attachments"))
     now = iso(app.clock())
     job_id = ulid()
     campaign = _campaign(app, req, body, source, job_id) if "campaignId" in body else None
@@ -81,6 +84,7 @@ def create(app: App, req: Request) -> Response:
         mac_up=mac_up,
         campaign=campaign,
         replaces=replaces,
+        extra={"attachments": files} if files else None,
     )
     return ok({"job": jobs.public_job(job)}, 201)
 
