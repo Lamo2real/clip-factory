@@ -319,7 +319,7 @@
   border-radius: var(--r-pill);
   font-weight: 700;
   color: var(--ink);
-  background: color-mix(in srgb, var(--fill) 55%, var(--surface-solid, #0d2a1f));
+  background: var(--fill);
   box-shadow: var(--glass-shadow-float);
   transform: translateY(4px);
   transition: transform var(--dur-2) var(--ease-in-out);
