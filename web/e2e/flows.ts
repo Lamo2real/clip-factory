@@ -53,6 +53,9 @@ export const NORMAL_HOME_CONTROLS = {
 export const NORMAL_REVIEW_CONTROLS: readonly string[] = [
   "link:From {t} to {t} in the source (opens in a new tab)",
   "summary:Checks before posting{n} of {n} passed",
+  // §53 C1: the CR switch (owner request, 2026-11-26) sits under Checks; it is not part of the 5 taps.
+  "radio:CR inactive",
+  "radio:CR active",
   "button:YouTube",
   "button:Instagram",
   "link:Set up TikTok, Facebook and X to upload there too.",
