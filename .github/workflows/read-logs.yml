@@ -79,6 +79,7 @@ jobs:
                           clipId, clipIds,
                           record: ((.record // null) | if type == "object" then ({status, errorType, metrics: (.metrics // null | if type == "object" then {durationMs, initDurationMs, billedDurationMs, maxMemoryUsedMB, memorySizeMB} | with_entries(select(.value != null)) else null end)} | with_entries(select(.value != null))) else null end),
                           errorMessage: ((.errorMessage // null) | if . then .[0:300] else null end),
+                          eventType, routeKey, integrationError, authorizerError,
                           detail: ((.detail // null) | if . then .[0:300] else null end)} | with_entries(select(.value != null)) | tojson)
               else ($m | gsub("\n"; " ") | .[0:400]) end'
 
@@ -144,6 +145,20 @@ jobs:
             query "$ws" "fields @timestamp, @logStream, @message
               | filter @message like /(?i)error|exception|traceback|timeout|timed out|connect|disconnect|message|route|gone|stale|throttl|platform\\.(report|initReport)|ws\\.|event\\W{1,8}(cr|campaigns|autopost)\\./
               | sort @timestamp asc | limit 2000"
+          fi
+          echo "::endgroup::"
+
+          # The WebSocket stage access log (CONTRACTS §14.2: requestId, connectionId, eventType, routeKey, status,
+          # integrationError, authorizerError; never the token). Every line has the key integrationError, so all events match; read it with a short window.
+          gw=/aws/apigateway/cf-prod-ws
+          echo "::group::$gw: route, status, integration and authorizer errors"
+          if [ -z "$(aws logs describe-log-groups --log-group-name-prefix "$gw" \
+                --query "logGroups[?logGroupName=='$gw'].logGroupName" --output text)" ]; then
+            echo "no log group $gw"
+          else
+            query "$gw" "fields @timestamp, @logStream, @message
+              | filter @message like /(?i)error|exception|traceback|timeout|timed out|job_flow\\.|clip_flow\\.|publish\\.|oauth\\.|hooks\\.|secrets\\.|callback|heartbeat|retry|event\\W{1,8}(cr|campaigns|autopost)\\./
+              | sort @timestamp asc | limit 500"
           fi
           echo "::endgroup::"
 
