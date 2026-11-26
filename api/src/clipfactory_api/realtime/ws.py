@@ -8,6 +8,7 @@ connection, §28.5); anything else gets ``{"type": "error", "code": "bad_request
 
 from __future__ import annotations
 
+import faulthandler
 import json
 import os
 from collections.abc import Callable, Mapping
@@ -140,5 +141,25 @@ def get_deps(factory: Callable[[], WsDeps] = _from_env) -> WsDeps:
     return _deps
 
 
+def warm() -> None:
+    """Build the clients while Lambda is still initialising (full CPU, its own time budget), not inside the 10 s call."""
+    if not (os.environ.get("TABLE_NAME") and os.environ.get("WS_ENDPOINT")):
+        return
+    try:
+        get_deps()
+    except Exception as e:  # the first call tries again and reports it
+        log("error", "ws.init_failed", error=type(e).__name__)
+
+
+warm()
+
+HANG_DUMP_SECONDS = 8
+
+
 def handler(event: dict[str, Any], _context: Any = None) -> dict[str, Any]:
-    return handle(event, get_deps())
+    # A call still running at 8 s (the limit is 10) writes its stack to the log: the next hang names its own line.
+    faulthandler.dump_traceback_later(HANG_DUMP_SECONDS, exit=False)
+    try:
+        return handle(event, get_deps())
+    finally:
+        faulthandler.cancel_dump_traceback_later()

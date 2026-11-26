@@ -56,7 +56,7 @@ token until `exp`. Result: `{ "principalId": sub, "policyDocument": { "Version":
 "Action": "execute-api:Invoke", "Effect": "Allow", "Resource": event["methodArn"] }] }, "context": { "sub": sub } }`.
 Missing/invalid token: `raise Exception("Unauthorized")` (API Gateway answers 401). No AWS permissions beyond logs.
 
-**`cf-prod-ws`** (`clipfactory_api/realtime/ws.py`, 128 MB, 10 s), dispatch on `requestContext.routeKey`:
+**`cf-prod-ws`** (`clipfactory_api/realtime/ws.py`, **256 MB**, 10 s), dispatch on `requestContext.routeKey`:
 * `$connect`: `sub = requestContext.authorizer.sub`; PutItem Connection `{pk: USER#{sub}, sk: CONN#{connectionId},
   gsi1pk: CONN#{connectionId}, gsi1sk: "CONN", type: "conn", userId, connectionId, connectedAt, ttl: now + 7200}`;
   return `{"statusCode": 200}`.
@@ -68,6 +68,13 @@ Missing/invalid token: `raise Exception("Unauthorized")` (API Gateway answers 40
   `connect_timeout` 2 s and `read_timeout` 4 s: a slow or hung PostToConnection is logged `ws.reply_failed` (warning, with
   the error type) and the route still answers 200. It must never run into the 10 s Lambda limit, which raises the
   `cf-prod-ws-errors` alarm (26 Nov 2026: every ping hung for the full 10 s). `cf-prod-broadcast` keeps 2 tries, 5 s.
+  **Setup happens at init, never inside the 10 s handler.** `ws.py` builds its DynamoDB and management clients when the
+  module is imported (Lambda's init phase has its own time and full CPU) when `TABLE_NAME` and `WS_ENDPOINT` are set; a
+  failure there is only logged `ws.init_failed` and the first call retries. Reason: on 26 Nov 2026 at 128 MB, lazily
+  importing and creating boto clients inside the handler took more than 10 s, every call then timed out, and a killed
+  runtime starts cold again, so it never recovered (no new connections, the Live chip stuck). The handler also arms
+  `faulthandler.dump_traceback_later(8)`: a call still running after 8 s writes its stack to the log (`File "..."` lines)
+  so the next hang names its line.
 * IAM: `dynamodb:PutItem`, `dynamodb:DeleteItem`, `dynamodb:Query` on the table and `index/*`;
   `execute-api:ManageConnections` on `arn:aws:execute-api:{region}:{acct}:{wsApiId}/live/POST/@connections/*`.
 

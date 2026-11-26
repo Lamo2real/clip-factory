@@ -143,7 +143,7 @@ jobs:
             echo "no log group $ws"
           else
             query "$ws" "fields @timestamp, @logStream, @message
-              | filter @message like /(?i)error|exception|traceback|timeout|timed out|connect|disconnect|message|route|gone|stale|throttl|platform\\.(report|initReport)|ws\\.|event\\W{1,8}(cr|campaigns|autopost)\\./
+              | filter @message like /(?i)error|exception|traceback|timeout|timed out|connect|disconnect|message|route|gone|stale|throttl|platform\\.(report|initReport)|most recent call|line [0-9]+ in |ws\\.|event\\W{1,8}(cr|campaigns|autopost)\\./
               | sort @timestamp asc | limit 2000"
           fi
           echo "::endgroup::"
