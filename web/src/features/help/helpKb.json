@@ -1805,7 +1805,7 @@
         "platforms",
         "where posted"
       ],
-      "answer": "In **Where clips go** you pick the places that start switched on for new clips. On each clip you can still turn places on or off under **Upload to**.",
+      "answer": "In **Where clips go** you pick the places clips are posted to when nothing else says. On a Review card, **Upload to** starts with every place that is set up. Turn places off on a clip there.",
       "steps": [
         "Tap **Settings**.",
         "Tap **Posting**, then **Where clips go**.",

@@ -10,7 +10,7 @@ Decision record: ADR-60 (which corrects ADR-57).
 ### 34.1 The card, top to bottom
 
 1. Clip info, video and Checks before posting, as before.
-2. **Upload to** chips (§33.2, unchanged): only places that are set up, all ticked to start, remembered per device.
+2. **Upload to** chips (§33.2, unchanged): only places that are set up, all ticked to start, nothing remembered between clips (§33.2).
    They are the only place picker on the card.
 3. **Use my settings**: one big soft-fill button (`.my-settings__btn`, a glass button, full width). It puts My
    settings on every ticked place. Done state: bone fill, a check, **Your settings are on**. Under it one plain line:

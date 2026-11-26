@@ -14,7 +14,7 @@ import { patchLoaded, useLoad } from "../../lib/hooks.ts";
 import { useLiveEvents } from "../../lib/live.ts";
 import { applyClipEvent, applyPostEvent, withMedia } from "../../lib/liveCache.ts";
 import { SimilarClips } from "../../components/SimilarClips.tsx";
-import { defaultUploadTo, readUploadTo, saveUploadTo, STILL_WORKING, uploadClip, uploadedMessage, uploadLabel } from "../../lib/upload.ts";
+import { defaultUploadTo, STILL_WORKING, uploadClip, uploadedMessage, uploadLabel } from "../../lib/upload.ts";
 import { useSetup } from "../settings/setup/useSetup.ts";
 import { goingToLine, UploadToChips } from "./UploadTo.tsx";
 import { onClipBack, throwAwayWithUndo, useThrownAway } from "../../lib/throwAways.ts";
@@ -661,15 +661,15 @@ function ReviewCard({
   // A campaign clip offers only the places its campaign pays for: the fit's (read again on setup news), else the card's.
   const paidPlaces = ownFit?.uploadPlaces ?? (campaign ? campaignPlaces(campaign.uploadPlaces, tiktokGoes) : null);
   const placesReady: Platform[] | null = campaignWait ? null : ready && paidPlaces && (campaign || ownFit) ? ready.filter((p) => paidPlaces.includes(p)) : ready;
-  // Where it goes (§33): the owner's taps on this card, else this device's last choice / Where clips go, minus
-  // places that are not set up. A campaign clip starts with every place the campaign pays for.
+  // Where it goes (§33): the owner's taps on this card, else every place that is set up (a campaign clip: every
+  // place its campaign pays for). Nothing is remembered between clips.
   const [picked, setPicked] = useState<Platform[] | null>(back?.picked ?? null);
   const chosen: Platform[] = placesReady
     ? picked
       ? picked.filter((p) => placesReady.includes(p))
       : isCampaign
         ? placesReady
-        : defaultUploadTo(placesReady, readUploadTo(), me?.settings.platforms)
+        : defaultUploadTo(placesReady)
     : [];
   function toggle(p: Platform) {
     setPicked(chosen.includes(p) ? chosen.filter((x) => x !== p) : [...chosen, p]);
@@ -1046,7 +1046,6 @@ function ReviewCard({
         return;
       }
       if (out.kind === "uploading") {
-        if (chosen.length) saveUploadTo(chosen);
         setSheet(false);
         burst(centerOf(confirmRef.current), 120);
         toast.success(uploadedMessage(out.posts));
