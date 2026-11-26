@@ -150,15 +150,11 @@ describe("copy", () => {
 });
 
 describe("which places start on (§33)", () => {
-  const ready = ["youtube", "tiktok", "instagram", "facebook"] as const;
-  it("all ready places when nothing is saved and Where clips go has them all", () => {
-    expect(defaultUploadTo([...ready], null, ["youtube", "instagram", "facebook", "tiktok", "x"])).toEqual(["youtube", "tiktok", "instagram", "facebook"]);
+  it("starts with every ready place, in order", () => {
+    expect(defaultUploadTo(["facebook", "youtube", "instagram", "tiktok"])).toEqual(["youtube", "tiktok", "instagram", "facebook"]);
   });
-  it("this device's last choice, minus places no longer set up", () => {
-    expect(defaultUploadTo([...ready], ["x", "tiktok"], undefined)).toEqual(["tiktok"]);
-  });
-  it("every ready place when the saved choice and Where clips go leave nothing", () => {
-    expect(defaultUploadTo(["youtube"], ["x"], ["x"])).toEqual(["youtube"]);
+  it("nothing ready, nothing on", () => {
+    expect(defaultUploadTo([])).toEqual([]);
   });
 });
 

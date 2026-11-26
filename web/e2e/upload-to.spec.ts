@@ -254,7 +254,7 @@ test.describe("Upload to many places", () => {
     expect(after.filter((p) => p.platform === "instagram" || p.platform === "facebook").map((p) => p.status)).toEqual(["queued", "queued"]);
   });
 
-  test("the last choice is remembered on this device, minus places no longer set up", async ({ page }) => {
+  test("an earlier Upload to one place does not change the next card: every set-up place starts on", async ({ page }) => {
     await fourReady(page);
     const card = page.locator(".review-card").first();
     for (const name of ["TikTok", "Instagram", "Facebook"]) await card.locator(".upload-chip", { hasText: name }).click();
@@ -263,7 +263,7 @@ test.describe("Upload to many places", () => {
     await page.reload();
     await settle(page);
     const next = page.locator(".review-card").first();
-    await expect(next.locator('.upload-chip[aria-pressed="true"]')).toHaveText(["YouTube"]);
+    await expect(next.locator('.upload-chip[aria-pressed="true"]')).toHaveText(["YouTube", "TikTok", "Instagram", "Facebook"]);
   });
 
   test("a setup check that fails leaves Upload off and sends nothing; Check again brings the chips back", async ({ page }) => {
