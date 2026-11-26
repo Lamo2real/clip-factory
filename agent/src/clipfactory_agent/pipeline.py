@@ -29,6 +29,7 @@ from typing import Any
 
 from botocore.exceptions import ClientError
 
+from . import attachments as attachments_mod
 from . import captions as captions_mod
 from . import chat as chat_mod
 from . import chatfetch, chatscreen, learnings, livestatus, loudness, nova, pot, proc, sources, verify, watch
@@ -348,10 +349,20 @@ class JobState:
     # which then runs exactly as before.
     remake: Remake | None = None
     copy_layout: FrameLayout | None = None
+    # The files the owner added with the notes (§52), read in analyze. None or empty for most jobs: their prompts
+    # are then exactly what they were.
+    attachments: attachments_mod.Attachments | None = None
 
     @property
     def notes(self) -> str:
+        """The typed notes only: the clip length, required tags and "what worked before" read these, never the
+        attached files' text."""
         return str(self.job.get("notes") or "")
+
+    @property
+    def owner_notes(self) -> str:
+        """The notes as the prompts show them: the typed notes, then the text of the attached files."""
+        return self.attachments.notes(self.notes) if self.attachments is not None else self.notes
 
     @property
     def length(self) -> tuple[float, float]:
@@ -1171,6 +1182,7 @@ class Pipeline:
         )
         st.skills_block = skills_block(st.skills.docs, where="agent.job")
         await self.check_model(st)
+        st.attachments = await attachments_mod.load(self.store, st.user_id, st.job)
         taught = await learnings.load(self.store, st.user_id, creator_keys(st.source), datetime.now(UTC))
         st.week_learnings, st.prior = taught.week, taught.prior
         st.similar = await self._similar(st)
@@ -1206,6 +1218,7 @@ class Pipeline:
         )
         st.skills_block = skills_block(st.skills.docs, where="agent.job")
         await self.check_model(st)
+        st.attachments = await attachments_mod.load(self.store, st.user_id, st.job)
         taught = await learnings.load(self.store, st.user_id, creator_keys(st.source), datetime.now(UTC))
         st.week_learnings, st.prior = taught.week, taught.prior
         log("info", "analyze.copy", job=st.job_id, skills=len(st.skills.docs), learnings=len(taught), loud=len(st.loud))
@@ -1518,6 +1531,7 @@ class Pipeline:
             speakers=st.speakers,
             chat=st.chat,
             campaign=st.campaign,
+            attachments=st.attachments,
         )
 
     def _moments_hash(self, st: JobState) -> str:
@@ -1529,6 +1543,9 @@ class Pipeline:
         }
         if st.campaign is not None:
             basis["campaign"] = [st.campaign.campaign_id, st.campaign.rules_version]
+        files = attachments_mod.listed(st.job)
+        if files:  # only then: a job without files keeps the hash its saved picks were stored under
+            basis["attachments"] = [str(f["key"]) for f in files]
         return hashlib.sha256(json.dumps(basis, sort_keys=True).encode()).hexdigest()[:16]
 
     async def _saved_moments(self, st: JobState) -> tuple[list[Moment], list[Moment]] | None:
@@ -2212,7 +2229,7 @@ class Pipeline:
                             "text": review_prompt(
                                 c.moment,
                                 c.render,
-                                st.notes,
+                                st.owner_notes,
                                 seen=signals_mod.seen_block(st.signals, c.moment.start, c.moment.end),
                                 campaign=st.campaign,
                             )
@@ -2612,6 +2629,7 @@ class Pipeline:
                     system=learnings.with_prior(st.prior, "You write social captions for short clips."),
                     answer_seconds=CAPTIONS_SECONDS,
                     campaign=st.campaign,
+                    attachments=st.attachments,
                 )
         rows = [
             {

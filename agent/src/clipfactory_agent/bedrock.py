@@ -257,13 +257,17 @@ class Bedrock:
         description: str,
         schema: dict[str, Any],
         max_tokens: int = 16000,
+        files: list[dict[str, Any]] | None = None,
     ) -> dict[str, Any]:
         """The model's answer as a dict that fits ``schema``, delivered through the tool ``tool``. ``skills`` goes
-        first in the system prompt, then ``system``."""
+        first in the system prompt, then ``system``. ``files`` are the owner's attached images and PDFs
+        (attachments.py, §52): they follow ``content``, and when Bedrock refuses them the same request is sent once
+        more without them, so a file never fails the call."""
         from botocore.exceptions import ClientError
 
         nudge = f"\n\nAnswer only by calling the {tool} tool once, with every required field."
-        messages: list[dict[str, Any]] = [{"role": "user", "content": [*content, {"text": nudge.strip()}]}]
+        extra = list(files or [])
+        messages: list[dict[str, Any]] = [{"role": "user", "content": [*content, *extra, {"text": nudge.strip()}]}]
         tool_config: dict[str, Any] = {
             "tools": [{"toolSpec": {"name": tool, "description": description, "inputSchema": {"json": schema}}}]
         }
@@ -301,6 +305,12 @@ class Bedrock:
                 ):
                     log("info", "bedrock.forced_tool_choice_off", model=self.model_id)
                     self.forced_tool_choice = False
+                    attempt -= 1
+                    continue
+                if invalid and extra and attempt == 0:
+                    log("warn", "bedrock.files_refused", model=self.model_id, files=len(extra), detail=msg[:300])
+                    messages = [{"role": "user", "content": [*content, {"text": nudge.strip()}]}]
+                    extra = []
                     attempt -= 1
                     continue
                 raise

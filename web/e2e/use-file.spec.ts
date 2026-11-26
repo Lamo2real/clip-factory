@@ -14,7 +14,7 @@ test("a failed link job offers Use a video file, which opens the file picker for
   await settle(page);
   await expect(page).toHaveURL(/\/\?file=1&from=/);
   await expect(page.getByText("Tap to choose a video")).toBeVisible();
-  await expect(page.locator('form.newjob input[type="file"]')).toHaveCount(1);
+  await expect(page.locator('form.newjob .dropzone input[type="file"]')).toHaveCount(1);
 });
 
 test("a job that worked has no Use a video file button", async ({ page }) => {
@@ -39,7 +39,7 @@ for (const viewport of [
     await page.getByRole("link", { name: "Use a video file" }).click();
     await expect(page).toHaveURL(/\/\?file=1&from=/);
     await settle(page);
-    const input = page.locator('form.newjob input[type="file"]');
+    const input = page.locator('form.newjob .dropzone input[type="file"]');
     await expect(input).toBeFocused();
     const box = (await page.locator("form.newjob .dropzone").boundingBox())!;
     const bar = (await page.locator("nav.tabbar").boundingBox())!;

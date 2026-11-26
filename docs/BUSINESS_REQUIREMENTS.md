@@ -702,6 +702,20 @@ taps, and records "Posted by your Mac · Everyone" with the link.
 
 ---
 
+### BR-33 Attach files and images to a job's notes
+The owner said on 26 Nov 2026: "i should be able to attach and paste images or files in general and if i want to drag
+and drop it will highlight it a bit more when I hold the file and hover over the dropbox, also i should be able to
+delete it." ([CONTRACTS.md §52](CONTRACTS.md#52-attach-files-and-images-to-a-jobs-notes-owner-request-2026-11-26),
+[ADR-104](DECISIONS.md#adr-104-notes-attachments-go-straight-to-s3-under-uploads-are-added-as-optional-fields-and-reach-the-agent-as-bounded-context))
+- AC1: **Add.** The notes box has **Add files or images**, paste and drop. Up to 6 files, 20 MB each; images, PDF, text
+  and common documents; videos and other kinds are refused with one short sentence.
+- AC2: **Drag highlight.** A file held over the notes box lights it up more, with "Drop to add".
+- AC3: **Delete.** Each file is a chip with a remove button; Undo shows for about 6 seconds.
+- AC4: **Used.** Clip Factory reads images, PDFs and text-like files with the notes, at no extra model call; other
+  documents are saved and the chip says it can't read them. A bad file never fails the job.
+- AC5: **Nothing lost.** A failed file keeps the other chips and the notes; Make clips waits for uploads and goes on
+  without a failed one.
+
 ## Non-functional requirements
 
 ### NFR-01 Everything runs on AWS

@@ -11,6 +11,7 @@ import re
 from dataclasses import dataclass
 from typing import Any
 
+from .attachments import Attachments
 from .bedrock import Bedrock, ModelError
 from .campaign import Campaign, block_json
 from .moments import Moment
@@ -272,23 +273,28 @@ async def write_captions(
     system: str,
     answer_seconds: float | None = None,
     campaign: Campaign | None = None,
+    attachments: Attachments | None = None,
 ) -> dict[str, dict[str, str]]:
     """Captions per clip id. Clips Claude leaves out (or all, if it fails or gives no answer within ``answer_seconds``
     seconds) get the template. ``skills`` goes first in the system prompt; ``skills_text`` is every skill's full
-    (uncut) text, read for required tags. A ``campaign`` adds its items and its disclosure first (§38.13)."""
+    (uncut) text, read for required tags. A ``campaign`` adds its items and its disclosure first (§38.13). The
+    owner's ``attachments`` (§52) ride in the same call: their text after the notes, their images and PDFs as blocks;
+    required tags still come from the typed notes and the skills only."""
     required = required_tags(notes, skills_text, campaign)
     disclosure = campaign.disclosure_caption if campaign is not None else None
     by_id: dict[str, dict[str, Any]] = {}
+    shown = attachments.notes(notes) if attachments is not None else notes
     if clips:
         try:
             r = await asyncio.wait_for(
                 bedrock.structured(
                     system=system,
                     skills=skills,
-                    content=[{"text": prompt(clips, notes, campaign)}],
+                    content=[{"text": prompt(clips, shown, campaign)}],
                     tool="submit_captions",
                     description="Submit the captions for every clip.",
                     schema=CAPTIONS_SCHEMA,
+                    files=attachments.blocks if attachments is not None else [],
                 ),
                 answer_seconds,
             )

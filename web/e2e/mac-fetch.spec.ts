@@ -107,7 +107,7 @@ test("a video file used on a job the Mac is getting stops the Mac and replaces t
   await page.getByRole("link", { name: "Use a video file" }).click();
   await expect(page).toHaveURL(new RegExp(`/\\?file=1&from=${oldId}$`));
   await settle(page);
-  await page.locator('form.newjob input[type="file"]').setInputFiles({ name: "match.mp4", mimeType: "video/mp4", buffer: Buffer.alloc(2048) });
+  await page.locator('form.newjob .dropzone input[type="file"]').setInputFiles({ name: "match.mp4", mimeType: "video/mp4", buffer: Buffer.alloc(2048) });
   await page.getByRole("button", { name: "Make clips" }).click();
   await expect(page).toHaveURL(/\/jobs\/[0-9A-Z]{26}$/, { timeout: 20_000 });
   expect(page.url()).not.toContain(oldId);

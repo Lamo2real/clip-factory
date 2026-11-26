@@ -799,13 +799,19 @@ def remake_clip(app: App, req: Request) -> Response:
             notes=str(original.get("notes") or "") or None,
             mac_up=mac_up,
             campaign=prepared,
-            extra=remake.fields(clip, original, key),
+            # The copy reads the same notes and files as its original (§52); a file the lifecycle removed is skipped.
+            extra={**remake.fields(clip, original, key), **_attachments_of(original)},
         )
     except Exception:
         remake.free(deps.store, req.user_id, clip_id, campaign_id, job_id)
         raise
     log("info", "cr.remake_started", clipId=clip_id, jobId=job_id)
     return ok({"job": jobs.public_job(job)}, 202)
+
+
+def _attachments_of(original: dict[str, Any]) -> dict[str, Any]:
+    files = original.get("attachments")
+    return {"attachments": files} if isinstance(files, list) and files else {}
 
 
 def _named_job(deps: Any, user_id: str, job_id: str) -> dict[str, Any]:

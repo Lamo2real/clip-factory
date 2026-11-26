@@ -38,9 +38,9 @@ describe("the taps (§39.1)", () => {
     expect(CAMPAIGN_WAY_TAPS - NORMAL_WAY_TAPS).toBe(1);
   });
 
-  it("Home's normal form keeps origin/main's controls, with no campaign field", () => {
+  it("Home's normal form keeps origin/main's controls plus the notes' file input (§52), with no campaign field", () => {
     for (const list of [NORMAL_HOME_CONTROLS.empty, NORMAL_HOME_CONTROLS.withLink]) {
-      expect(list).toHaveLength(8);
+      expect(list).toHaveLength(9);
       expect(list.join(" ").toLowerCase()).not.toContain("campaign");
     }
   });

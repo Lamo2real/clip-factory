@@ -61,3 +61,13 @@ internal `job.remake {clipId, jobId, sourceStart, sourceEnd, layout, momentType,
 **A job without `remake` is byte for byte today's**: the same prompts, tool descriptions, briefs and files (a test).
 The copy has its own api switch, `CR_REMAKE` (Terraform `cr_remake_enabled`): it shipped off and is on in prod since its
 switch PR #93 (21 Nov 2026); before that, no job ever carried `remake`.
+
+### Attachments
+
+A job may carry up to 6 owner attachments ([CONTRACTS §52](CONTRACTS.md#52-attach-files-and-images-to-a-jobs-notes-owner-request-2026-11-26)).
+The agent loads the readable ones (png, jpeg, webp, gif, PDF, text, Markdown, CSV, JSON) from the media bucket and adds
+them to the prompts that already carry the owner's notes, as data that never changes the task (every `<` and `>` in a
+file's text is neutralised). No new model calls. Named constants bound the cost: 20,000 characters per text file and
+60,000 across files in each prompt with the notes; images up to 3.75 MB, PDFs up to 4.5 MB and 20 pages (an unknown
+count is skipped); at most 4 such blocks, only on the first Converse moment window and the captions call. A missing or
+unreadable file is logged and skipped; the job never fails for it.
