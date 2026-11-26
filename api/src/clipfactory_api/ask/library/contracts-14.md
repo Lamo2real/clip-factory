@@ -64,6 +64,10 @@ Missing/invalid token: `raise Exception("Unauthorized")` (API Gateway answers 40
   DeleteItem; always 200.
 * `$default`: body `{"action": "ping"}` → PostToConnection `{"type": "pong", "at": "<ISO>"}`; anything else →
   `{"type": "error", "code": "bad_request"}`; always 200.
+  The reply is optional (the ping alone keeps the connection alive), so its management client makes **one** try with
+  `connect_timeout` 2 s and `read_timeout` 4 s: a slow or hung PostToConnection is logged `ws.reply_failed` (warning, with
+  the error type) and the route still answers 200. It must never run into the 10 s Lambda limit, which raises the
+  `cf-prod-ws-errors` alarm (26 Nov 2026: every ping hung for the full 10 s). `cf-prod-broadcast` keeps 2 tries, 5 s.
 * IAM: `dynamodb:PutItem`, `dynamodb:DeleteItem`, `dynamodb:Query` on the table and `index/*`;
   `execute-api:ManageConnections` on `arn:aws:execute-api:{region}:{acct}:{wsApiId}/live/POST/@connections/*`.
 
