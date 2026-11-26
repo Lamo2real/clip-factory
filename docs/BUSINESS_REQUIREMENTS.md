@@ -716,6 +716,18 @@ delete it." ([CONTRACTS.md §52](CONTRACTS.md#52-attach-files-and-images-to-a-jo
 - AC5: **Nothing lost.** A failed file keeps the other chips and the notes; Make clips waits for uploads and goes on
   without a failed one.
 
+### BR-34 CR active: put the campaign's logo and text on a clip
+The owner said on 26 Nov 2026 that Content Rewards campaigns need "the logo on screen for the whole clip" and set text,
+and that they want to add logos and text to clips and keep the logos to use again.
+([CONTRACTS.md §53](CONTRACTS.md#53-cr-active-add-a-logo-and-text-to-a-clip-in-review-owner-request-2026-11-26),
+[ADR-105](DECISIONS.md#adr-105-the-campaign-logo-and-text-are-drawn-after-the-clip-exists-in-review-by-the-agent-on-the-original-file))
+- AC1: **Switch.** Every Review clip has CR inactive (default) or CR active. Inactive changes nothing.
+- AC2: **Edit.** Only when active: add a logo and a line of text, in a corner or dragged, sized, for the whole clip by default.
+- AC3: **Logos kept.** Add a logo once (drop, paste or pick), use it on any clip, delete it.
+- AC4: **Campaign.** Picking a campaign picks its logo and hashtags.
+- AC5: **Posting.** The edited clip posts like any other; the original is kept and Reset brings it back.
+- AC6: **Warning.** One short line when the logo covers the captions or the facecam.
+
 ## Non-functional requirements
 
 ### NFR-01 Everything runs on AWS
