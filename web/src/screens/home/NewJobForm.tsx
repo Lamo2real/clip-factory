@@ -971,7 +971,7 @@ function JobForm() {
         <textarea
           id={`${id}-notes`}
           className="input textarea"
-          rows={2}
+          rows={3}
           maxLength={1000}
           placeholder="Campaign tags like #gta6, names to mention, moments to skip"
           value={notes}
