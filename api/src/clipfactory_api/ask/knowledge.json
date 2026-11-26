@@ -1,5 +1,5 @@
 {
- "version": "27e6c34fddd8",
+ "version": "227e86d61a6f",
  "parts": [
   {
    "id": "app-map",
@@ -255,7 +255,7 @@
    "id": "contracts-38",
    "title": "CONTRACTS: 38. Content Rewards campaigns (owner request, 2026-11-21)",
    "line": "The owner's words: \"browse Content Rewards, join a campaign there, then paste the campaign URL into Clip Factory. Clip",
-   "chars": 177970
+   "chars": 177418
   },
   {
    "id": "contracts-39",
@@ -985,9 +985,9 @@
   },
   {
    "id": "adr-108",
-   "title": "DECISIONS: ADR-108 The rules schema carries no union types",
-   "line": "Context. Every \"Read these rules\" failed with a Bedrock ValidationException: structured output allows at most",
-   "chars": 636
+   "title": "DECISIONS: ADR-108 No unions in the rules schema",
+   "line": "Decision. Bedrock allows 16 anyOf, the schema had ~20: now \"\"/0 mean not stated.",
+   "chars": 135
   },
   {
    "id": "architecture-overview",
