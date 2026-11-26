@@ -296,8 +296,8 @@
   background: linear-gradient(var(--tint-leaf), var(--tint-leaf)), var(--fill-hover);
   box-shadow:
     var(--glass-shadow-raise-hover),
-    0 0 0 4px rgb(var(--green-leaf-rgb) / 0.6),
-    0 0 28px rgb(var(--green-leaf-rgb) / 0.35);
+    0 0 24px 6px rgb(var(--green-leaf-rgb) / 0.5),
+    0 0 48px rgb(var(--green-leaf-rgb) / 0.3);
 }
 .notes-field__drop {
   position: absolute;
