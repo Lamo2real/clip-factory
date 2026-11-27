@@ -109,7 +109,7 @@ def test_youtube_insights_request_and_mapping() -> None:
         "&metrics=views,engagedViews,estimatedMinutesWatched,averageViewDuration,averageViewPercentage,likes,comments,"
         "shares,subscribersGained&dimensions=video&filters=video==dQw4w9WgXcQ"
     )
-    assert http.urls[2] == (  # §55: one video per request (the API refuses a list)
+    assert http.urls[2] == (  # §56: one video per request (the API refuses a list)
         "https://youtubeanalytics.googleapis.com/v2/reports?ids=channel==MINE&startDate=2026-11-13&endDate=2026-11-16"
         "&metrics=audienceWatchRatio&dimensions=elapsedVideoTimeRatio&filters=video==dQw4w9WgXcQ"
     )
@@ -145,7 +145,7 @@ def test_youtube_insights_request_and_mapping() -> None:
     ],
 )
 def test_youtube_retention_is_guarded(answer: Any) -> None:
-    """§55: an error, no rows or a single point leaves ``retention`` out; the report's numbers stand."""
+    """§56: an error, no rows or a single point leaves ``retention`` out; the report's numbers stand."""
     a = post("youtube", "dQw4w9WgXcQ", age=timedelta(days=3))
     http = FakeHttp((200, "youtube_videos_list"), (200, "youtube_analytics_report"), answer)
     batch = YouTubeAdapter(tokens=tokens).fetch_stats([a], ACCOUNT, now=NOW, want_insights=True, http=http)
@@ -452,7 +452,7 @@ def test_facebook_reach_is_guarded() -> None:
     http = FakeHttp((200, "facebook_video_insights"), (400, gone), (400, gone))
     batch = FacebookAdapter(tokens=tokens).fetch_stats([a], ACCOUNT, now=NOW, want_insights=False, http=http)
     assert "reachUnique" not in batch.insights[a["postId"]]["extra"]
-    assert "retention" not in batch.insights[a["postId"]]  # §55: a graph error is guarded the same way
+    assert "retention" not in batch.insights[a["postId"]]  # §56: a graph error is guarded the same way
     assert batch.insights[a["postId"]]["views"] == 6900
     assert batch.meta.error_code is None  # a reach error never blocks the platform
 

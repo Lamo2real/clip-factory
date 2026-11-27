@@ -110,7 +110,9 @@ interface Clip { clipId: string; jobId: string; rank: number; status: ClipStatus
                  best?: boolean /* starred "Best this week" (§16) */; bestWeek?: string /* "yyyy-Www" */;
                  totalViews?: number /* sum of Post.metrics.views over posted posts; absent when none measured */;
                  startPending?: true /* uploaded, but its flow has not started (internal publishState "pending" on a
-                                        confirmed, publishing or posted clip, §14.5): Confirm starts it */ }
+                                        confirmed, publishing or posted clip, §14.5): Confirm starts it */;
+                 take?: string /* §55: the clip's "Your take" line; absent when it has none and on older clips */;
+                 takeSpoken?: true /* §55: a voice reads the take in the clip */ }
 interface Skill { skillId: string; name: string /* frontmatter slug */; title: string /* shown name, §18.2 */;
                   description: string; builtin: boolean; source: "builtin" | "written" | "upload";
                   format: "md" | "zip"; size: number; createdAt: string; updatedAt: string;
@@ -123,7 +125,9 @@ interface Settings { clipMin: number /* 1..10, default 5 */; clipMax: number /* 
                      clickSound: number /* 1..30, default 6 "Water drop" (§15) */;
                      errorSound: number /* 1..30, default 5 "Nope nope nope" (§15) */;
                      setupSkipped: Platform[] /* default [], confirmed skips on the setup to-do list (§17.13) */;
-                     clipModel: string /* §23: a key of clipModels in config/models.json, default agentModel "fable-5-1" */ }
+                     clipModel: string /* §23: a key of clipModels in config/models.json, default agentModel "fable-5-1" */;
+                     takeOn: boolean /* §55, default true */; takeVoice: boolean /* §55, default true */;
+                     takeStyle: string /* §55: how the owner talks, at most 120 characters, default "" */ }
 type Platform = "youtube" | "instagram" | "facebook" | "tiktok" | "x";
 // Account: superseded by §17.4 (adds "choose_account", name, avatarUrl, connectedAt, missing, reason, reconnectBy, choices)
 interface Account { platform: Platform; status: "not_connected" | "connected" | "needs_reconnect" | "choose_account"; handle?: string }

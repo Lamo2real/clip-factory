@@ -1,5 +1,5 @@
 // "What this cost" (docs/CONTRACTS.md §51): the AI's bill for one job, in one small block. The total is big, the tokens
-// sit under it, and one fold lists each model. Numbers roll when they change (a running job's cost keeps growing). A
+// sit under it, and one fold lists each model, Transcribe and the voice of the takes (§55). Numbers roll when they change (a running job's cost keeps growing). A
 // failed or stopped job shows what it spent so far. Old jobs have no cost: nothing is drawn.
 import type { Job } from "../../api/types.ts";
 import { Icon } from "../../components/Icon.tsx";
@@ -52,6 +52,15 @@ export function AiCostBlock({ job }: { job: Job }) {
                   {cost.transcribe.dollars === undefined ? "price not known" : dollars(cost.transcribe.dollars)}
                 </span>
                 <span className="ai-cost__small">{minutes(cost.transcribe.minutes)} of sound</span>
+              </li>
+            ) : null}
+            {cost.voice ? (
+              <li className="ai-cost__row">
+                <span className="ai-cost__name">Voice (Amazon Polly)</span>
+                <span className="ai-cost__money">{cost.voice.dollars === undefined ? "price not known" : dollars(cost.voice.dollars)}</span>
+                <span className="ai-cost__small">
+                  {`${cost.voice.calls} ${cost.voice.calls === 1 ? "take" : "takes"} read · ${tokens(cost.voice.characters)} letters`}
+                </span>
               </li>
             ) : null}
           </ul>

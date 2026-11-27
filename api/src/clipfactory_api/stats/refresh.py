@@ -78,7 +78,7 @@ def merge_metrics(old: Item | None, fast: Item | None, slow: Item | None, now: d
     ``views`` stamps it, whichever part that is (YouTube, TikTok and X read views with the counts; Instagram and
     Facebook only with the slow insights). A refresh that did not read views keeps the old stamp.
 
-    ``retention`` (the watch graph, docs/CONTRACTS.md §55) is replaced whole by a part that carries one; otherwise the
+    ``retention`` (the watch graph, docs/CONTRACTS.md §56) is replaced whole by a part that carries one; otherwise the
     stored one is kept. Snapshots never copy it."""
     old = dict(old or {})
     out: Item = {k: old.get(k) for k in COMMON}

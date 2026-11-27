@@ -1,34 +1,41 @@
-## 55. Engagement and watch graph (owner request, 2026-11-27)
+## 55. Your take: every clip gets a short comment of its own (owner request, 2026-11-27)
 
-BR-36, ADR-111. The owner: count
-engagement "as professionals do it", show how people watch from start to end,
-"across all platforms", and "filter for each social media platform".
+Platforms show plain re-uploads to fewer people, so each clip carries the channel's own comment. BR-36, ADR-111.
 
-- **E1. The score.** Engagement rate by views, the way social media analysts count it: **(likes + comments + shares +
-  saves) ÷ views × 100**, one decimal ("4.7%"), with one word: under 1 % Low, 1–3 OK, 3–6 Good, 6–10 Great, 10+
-  Amazing. Per platform, only the numbers it really gives: YouTube likes + comments + shares; TikTok likes + comments +
-  shares; Instagram likes + comments + shares + saves; Facebook reactions + comments-and-shares (one Meta number); X
-  likes + replies + reposts + quotes + bookmarks. A missing number counts 0; a platform with no views is left out.
-  **All** = every platform's interactions ÷ every platform's views (weighted by views). The parts sit in a fold with
-  how it is counted. Nothing is weighted by kind: the plain sum is what published benchmarks use.
-- **E2. The watch graph.** "How long people watch": the percent of viewers still watching from 0:00 to the clip's end.
-  **All** averages the real curves, each resampled to 0–100 % of the clip and weighted by that platform's views. The
-  steepest 5 % fall is marked "Most leave here · m:ss". YouTube can go above 100 % (rewatches); it is shown as given.
-- **E3. Only real data.** A curve exists only where the platform sends one:
-  - YouTube: Analytics `audienceWatchRatio` by `elapsedVideoTimeRatio`, one request per video with the 6-hourly
-    insights (its own quota, not the Data API budget). The `yt-analytics.readonly` scope is already granted: **no
-    reconnect.**
-  - Facebook Reels: `video_insights.metric(post_video_retention_graph)`, a separate guarded request like reach (a
-    refusal never breaks the other numbers). Same Page token: **no reconnect.**
-  - Instagram: no curve in its API. Shown as markers: the average watch, and a dot at 3 s from the skip rate.
-  - TikTok: no watch data in the Display API. One line says so. X: dots at 25/50/75/100 % from its playback counts.
-  Platforms with no curve are never put in the All curve, and the line under the graph names the sources.
-- **E4. The bar.** A pick-one bar (`<Glide>`): All, then the clip's platforms that have numbers, in STATS_ORDER. It
-  filters the score and the graph. Hidden when there is only one platform.
-- **E5. Stored, additive.** `Post.metrics.retention` `{points: [[x, y]...], readAt, source}`: x = percent of the clip
-  (0–100), y = percent still watching, at most 101 points, sorted by x. Absent = no curve. A refresh that reads a curve
-  replaces it; one that does not keeps the stored one. STAT# snapshots never carry it. `GET /v1/clips/{id}/performance`
-  and the live post events pass it through `PostMetrics`. The score is worked out in the web (`lib/engagement.ts`).
-- **E6. Where.** A glass section on the clip page, under the platform stacks: title, the big score and its word, the
-  bar, the graph, one short line and the fold. Edge to edge on a phone; the line draws in eased (none with reduced
-  motion).
+- **T1. The field.** The model writes `take` with each moment: one sentence in the clip's language, 5 to 14 words, at
+  most 90 characters. It is the channel's opinion, verdict or context: something the viewer cannot see. It never
+  describes the picture, repeats the hook or spoils the payoff; no emoji, hashtags, @handles or all caps; honest, never
+  cruel, no claims about real people beyond the clip. Code (`moments.clean_take`, `take_problem`) strips emoji and
+  control characters, collapses spaces, and refuses a take outside 4 to 16 words, over 90 characters, with `#` or `@`,
+  or in all caps: the take is blanked and the moment is always kept (the agent's tool also tells the model why, so it can
+  send the moment again with a better take). `MOMENTS_VERSION` stays 1: a
+  saved moment without `take` reads as none.
+- **T2. Settings (additive).** `takeOn` (default true), `takeVoice` (default true), `takeStyle` (default `""`; mojibake
+  repaired, unseen characters dropped, spaces collapsed; over 120 characters is a 400; a non-boolean switch is a 400).
+  The agent reads all three (`store.SETTINGS_DEFAULTS`). `takeStyle` reaches the model inside `<owner_style>`, as
+  style, never as instructions.
+- **T3. No take.** When `takeOn` is false, on a campaign job and on a campaign copy: none is asked for, drawn, spoken
+  or stored. The campaign picture of §53 and §54 is unchanged.
+- **T4. On screen.** One extra ASS event in `render.build_ass`, style `Take`: Inter Bold 46 (smaller over 54
+  characters, never under 30), white on a 60% black box, at most 2 lines between x = 60 and x = 908, its bottom on
+  y = 1168 (above the caption band, below the facecam). It shows from 0.4 s after the tease for
+  max(4 s, voice + 0.8 s), never past 0.2 s before the end; with under 1.5 s of room it is left out. Hook and captions
+  are unchanged, and a clip without a take renders byte for byte as before.
+- **T5. Spoken.** With `takeVoice` on, `voice.py` asks Amazon Polly (`SynthesizeSpeech`) for an mp3, with the engine,
+  voice and region from `takeVoice` in `config/models.json` (neural, Matthew, `eu-west-1`: `eu-north-1` has no neural
+  voice). The voice starts with the text; the clip's own sound drops to about 30% under it, with short fades, and the
+  loudness pass (§8) levels the result. Matthew speaks English, so a clip in another or an unknown language gets the
+  text only. **Any voice failure (refused, region, timeout, empty sound, a mix ffmpeg rejects) never fails the job:**
+  it is logged and the clip is made with the text only. One Polly call per take per job. Its letters and dollars are
+  in the job's cost (`aiCost.voice`, §51) at the confirmed price, so the cost stays exact.
+- **T6. Stored.** Clip fields `take` (only when not empty) and `takeSpoken: true` (only when the voice is in the
+  file), both public. The IAM statement `SpokenTake` on Clip Factory's agent role allows `polly:SynthesizeSpeech` in
+  `eu-west-1` only.
+- **T7. Post text.** The captions prompt is given the take and told not to repeat it.
+- **T8. Review.** Under the hook, one quiet read-only line: the small label "Your take" and the text (`user-text`).
+  Nothing when the clip has none. It cannot be edited per clip yet.
+- **T9. Settings › Clip making › Clips.** Three apples after `ai-model`: `your-take` (switch, "Your take"),
+  `take-voice` (switch, "Say it out loud") and `take-style` (one line, "How you talk", 120 at most, saved on blur and
+  0.8 s after typing stops; a save that fails leaves the typed words in the field). The last two are hidden while Your take is off.
+- **T10. Tests.** `agent/tests/test_take.py`, `test_voice.py`; `api/tests/test_settings_and_system.py`,
+  `test_clips.py`; `web/test/yourTake.test.tsx`; `infra/modules/agent/tests/runtime.tftest.hcl`.

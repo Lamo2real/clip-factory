@@ -61,14 +61,14 @@ describe("no money guesses (§25, ADR-47)", () => {
 
   const ENGAGEMENT = "lib/engagement.ts";
   it("views are never turned into money (no views times or divided by anything)", () => {
-    // lib/engagement.ts divides interactions by views for the engagement rate (§55): a ratio of counts, never money.
+    // lib/engagement.ts divides interactions by views for the engagement rate (§56): a ratio of counts, never money.
     const using = files(SRC).filter(
       (f) => rel(f) !== MOCK_NUMBERS && rel(f) !== ENGAGEMENT && !rel(f).startsWith("api/mock/stats") && /\bviews\s*[*/]|[*/]\s*\(?\s*\w*\.?views\b/i.test(code(f)),
     );
     expect(using.map(rel)).toEqual([]);
   });
 
-  it("the engagement rate (§55) never touches money: no amount, cents, rate or earnings in lib/engagement.ts", () => {
+  it("the engagement rate (§56) never touches money: no amount, cents, rate or earnings in lib/engagement.ts", () => {
     const text = code(files(SRC).find((f) => rel(f) === ENGAGEMENT)!);
     expect(text).not.toMatch(/money|cents|micros|amount|earn|payout|per1k|per1000|currency/i);
   });

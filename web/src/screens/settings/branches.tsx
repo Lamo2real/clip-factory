@@ -33,6 +33,7 @@ import {
 } from "../../lib/background.ts";
 import { currentOs, oldAppDownloadUrl } from "../../lib/device.ts";
 import { CLIP_MODELS, currentClipModel } from "../../lib/models.ts";
+import { TAKE_STYLE_MAX, tidyTakeStyle } from "../../lib/take.ts";
 import { desktopAppCantUpdate, inDesktopApp, nativeGlass, oldDesktopApp } from "../../lib/look.ts";
 import { APP_VERSION, checkForUpdate, updateState } from "../../lib/update.ts";
 import { useFileDrop } from "../../lib/useFileDrop.ts";
@@ -45,48 +46,160 @@ const PLATFORMS: readonly Platform[] = PLATFORM_ORDER;
 export function ClipsBranch() {
   const { me, saveSettings } = useSession();
   const s = me?.settings;
+  // Absent on old servers: Your take is on, and said out loud.
+  const takeOn = s?.takeOn ?? true;
   return (
-    <Panel>
-      <Apple id="clip-count">
-        {!s ? (
-          <Skeleton className="line-skel" />
-        ) : (
-          <div className="stepper-pair">
-            <div className="stepper-pair__item">
-              <span className="stepper-pair__label">Fewest</span>
-              <Stepper label="Fewest clips" value={s.clipMin} min={1} max={s.clipMax} onChange={(n) => void saveSettings({ clipMin: n })} />
+    <>
+      <Panel>
+        <Apple id="clip-count">
+          {!s ? (
+            <Skeleton className="line-skel" />
+          ) : (
+            <div className="stepper-pair">
+              <div className="stepper-pair__item">
+                <span className="stepper-pair__label">Fewest</span>
+                <Stepper label="Fewest clips" value={s.clipMin} min={1} max={s.clipMax} onChange={(n) => void saveSettings({ clipMin: n })} />
+              </div>
+              <div className="stepper-pair__item">
+                <span className="stepper-pair__label">Most</span>
+                <Stepper label="Most clips" value={s.clipMax} min={s.clipMin} max={10} onChange={(n) => void saveSettings({ clipMax: n })} />
+              </div>
             </div>
+          )}
+        </Apple>
+        <Apple id="longest-video">
+          {!s ? (
+            <Skeleton className="line-skel" />
+          ) : (
             <div className="stepper-pair__item">
-              <span className="stepper-pair__label">Most</span>
-              <Stepper label="Most clips" value={s.clipMax} min={s.clipMin} max={10} onChange={(n) => void saveSettings({ clipMax: n })} />
+              <Stepper
+                label="Longest video in hours"
+                value={s.maxSourceHours}
+                min={1}
+                max={12}
+                onChange={(n) => void saveSettings({ maxSourceHours: n })}
+              />
+              <span className="stepper-pair__label">hours</span>
             </div>
-          </div>
-        )}
-      </Apple>
-      <Apple id="longest-video">
-        {!s ? (
-          <Skeleton className="line-skel" />
-        ) : (
-          <div className="stepper-pair__item">
-            <Stepper
-              label="Longest video in hours"
-              value={s.maxSourceHours}
-              min={1}
-              max={12}
-              onChange={(n) => void saveSettings({ maxSourceHours: n })}
-            />
-            <span className="stepper-pair__label">hours</span>
-          </div>
-        )}
-      </Apple>
-      <Apple id="ai-model" wide>
-        {!s ? (
-          <Skeleton className="line-skel" />
-        ) : (
-          <ModelPicks value={currentClipModel(s.clipModel)} onChange={(key) => void saveSettings({ clipModel: key })} />
-        )}
-      </Apple>
-    </Panel>
+          )}
+        </Apple>
+        <Apple id="ai-model" wide>
+          {!s ? (
+            <Skeleton className="line-skel" />
+          ) : (
+            <ModelPicks value={currentClipModel(s.clipModel)} onChange={(key) => void saveSettings({ clipModel: key })} />
+          )}
+        </Apple>
+      </Panel>
+      {/* Your take (owner request, 2026-11-27). Off: the voice and the style line go away, as nothing uses them. */}
+      <Panel>
+        <Apple id="your-take">
+          {!s ? <Skeleton className="line-skel" /> : <AppleSwitch apple="your-take" checked={takeOn} onChange={(v) => void saveSettings({ takeOn: v })} />}
+        </Apple>
+        {s && takeOn ? (
+          <>
+            <Apple id="take-voice">
+              <AppleSwitch apple="take-voice" checked={s.takeVoice ?? true} onChange={(v) => void saveSettings({ takeVoice: v })} />
+            </Apple>
+            <Apple id="take-style" wide>
+              <TakeStyle saved={s.takeStyle ?? ""} onSave={async (text) => (await saveSettings({ takeStyle: text })) !== null} />
+            </Apple>
+          </>
+        ) : null}
+      </Panel>
+    </>
+  );
+}
+
+/** How long after the last key "How you talk" saves by itself. */
+const TAKE_STYLE_SAVE_MS = 800;
+
+/**
+ * "How you talk": one line of the owner's own words with a count. It saves when you leave the field and a moment
+ * after you stop typing, tidied like the server stores it (single spaces, none at the ends). `onSave` answers whether
+ * the words were saved: when they were not, the words stay in the field (never typed twice), and leaving the field
+ * again tries once more.
+ */
+function TakeStyle({ saved, onSave }: { saved: string; onSave: (text: string) => Promise<boolean> }) {
+  const [draft, setDraft] = useState(saved);
+  const typing = useRef(false);
+  // The words this field sent last, until that save worked or the owner types again. While it is set, a saved
+  // text that is something else is the old one coming back after a failed save: it must not wipe the field.
+  const sent = useRef<string | null>(null);
+  // What the next save reads, so the timer, a blur and leaving the page all save the newest words, once.
+  const latest = useRef({ draft, saved, onSave });
+  useEffect(() => {
+    latest.current = { draft, saved, onSave };
+  });
+  // The words whose save failed last: the timer never sends those again by itself, only leaving the field does.
+  const failed = useRef<string | null>(null);
+  const [save] = useState(() => (byTimer = false) => {
+    const now = latest.current;
+    const text = tidyTakeStyle(now.draft);
+    if (text === now.saved) return;
+    if (byTimer && text === failed.current) return;
+    // Marked as saved at once, so a blur right after the timer does not send the same words twice.
+    latest.current = { ...now, saved: text };
+    sent.current = text;
+    void now.onSave(text).then(
+      (ok) => {
+        failed.current = ok ? null : text;
+        if (!ok || sent.current !== text) return;
+        sent.current = null;
+        // The server's own tidied copy, when it already came back while the save was still marked as going.
+        if (!typing.current) setDraft(latest.current.saved);
+      },
+      () => {
+        failed.current = text;
+      },
+    );
+  });
+
+  // The saved words win only while nobody is typing here (another device, or the server's tidied answer), and
+  // never over words whose own save just failed.
+  useEffect(() => {
+    if (typing.current) return;
+    if (sent.current !== null && saved !== sent.current) return;
+    setDraft(saved);
+  }, [saved]);
+  // Only new words start the timer: a save that failed is not sent again and again by itself.
+  useEffect(() => {
+    const timer = window.setTimeout(() => save(true), TAKE_STYLE_SAVE_MS);
+    return () => window.clearTimeout(timer);
+  }, [draft, save]);
+  // Leaving the page with words not saved yet saves them.
+  useEffect(() => () => save(), [save]);
+
+  return (
+    <div className="take-style" data-help-dodge="">
+      <input
+        className="input user-text"
+        type="text"
+        autoComplete="off"
+        maxLength={TAKE_STYLE_MAX}
+        placeholder="funny, honest, a bit cheeky"
+        aria-labelledby="take-style-name"
+        aria-describedby="take-style-leaf take-style-count"
+        value={draft}
+        onFocus={() => {
+          typing.current = true;
+        }}
+        onChange={(e) => {
+          sent.current = null;
+          setDraft(e.target.value.slice(0, TAKE_STYLE_MAX));
+        }}
+        onBlur={() => {
+          typing.current = false;
+          // The newest words: a blur can come before the effect that copies them has run.
+          latest.current = { ...latest.current, draft };
+          save();
+          setDraft(tidyTakeStyle(draft));
+        }}
+      />
+      <span className="counter take-style__count" id="take-style-count">
+        {draft.length} / {TAKE_STYLE_MAX}
+      </span>
+    </div>
   );
 }
 

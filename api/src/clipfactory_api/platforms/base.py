@@ -223,7 +223,7 @@ RETENTION_MAX_POINTS = 101
 
 
 def retention_curve(points: list[tuple[float, float]], source: str, now: datetime) -> dict[str, Any] | None:
-    """``Post.metrics.retention`` (docs/CONTRACTS.md §55): ``[[x, y], ...]`` with x = percent of the video's length
+    """``Post.metrics.retention`` (docs/CONTRACTS.md §56): ``[[x, y], ...]`` with x = percent of the video's length
     (0–100) and y = percent of viewers still watching there (YouTube's can pass 100: rewatches), both 1 decimal,
     sorted by x, at most 101 points. None when fewer than 2 points: no curve is ever invented."""
     clean = sorted(

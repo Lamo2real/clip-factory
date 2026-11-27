@@ -201,7 +201,9 @@ interface Clip { clipId: string; jobId: string; rank: number; status: ClipStatus
                  best?: boolean /* starred "Best this week" (§16) */; bestWeek?: string /* "yyyy-Www" */;
                  totalViews?: number /* sum of Post.metrics.views over posted posts; absent when none measured */;
                  startPending?: true /* uploaded, but its flow has not started (internal publishState "pending" on a
-                                        confirmed, publishing or posted clip, §14.5): Confirm starts it */ }
+                                        confirmed, publishing or posted clip, §14.5): Confirm starts it */;
+                 take?: string /* §55: the clip's "Your take" line; absent when it has none and on older clips */;
+                 takeSpoken?: true /* §55: a voice reads the take in the clip */ }
 interface Skill { skillId: string; name: string /* frontmatter slug */; title: string /* shown name, §18.2 */;
                   description: string; builtin: boolean; source: "builtin" | "written" | "upload";
                   format: "md" | "zip"; size: number; createdAt: string; updatedAt: string;
@@ -214,7 +216,9 @@ interface Settings { clipMin: number /* 1..10, default 5 */; clipMax: number /* 
                      clickSound: number /* 1..30, default 6 "Water drop" (§15) */;
                      errorSound: number /* 1..30, default 5 "Nope nope nope" (§15) */;
                      setupSkipped: Platform[] /* default [], confirmed skips on the setup to-do list (§17.13) */;
-                     clipModel: string /* §23: a key of clipModels in config/models.json, default agentModel "fable-5-1" */ }
+                     clipModel: string /* §23: a key of clipModels in config/models.json, default agentModel "fable-5-1" */;
+                     takeOn: boolean /* §55, default true */; takeVoice: boolean /* §55, default true */;
+                     takeStyle: string /* §55: how the owner talks, at most 120 characters, default "" */ }
 type Platform = "youtube" | "instagram" | "facebook" | "tiktok" | "x";
 // Account: superseded by §17.4 (adds "choose_account", name, avatarUrl, connectedAt, missing, reason, reconnectBy, choices)
 interface Account { platform: Platform; status: "not_connected" | "connected" | "needs_reconnect" | "choose_account"; handle?: string }
@@ -22303,21 +22307,21 @@ of AI usage, so tokens spent. The cost of the tokens is what I want to know at t
   count), the Agent SDK result's usage for picking moments, Titan's input token count, and Transcribe's audio
   seconds. A copy of a clip ("Make a copy") is a job and counts the same way. Recording is bookkeeping only.
 - **A2. One price list.** `pricing` in `config/models.json`, the only place prices live: US dollars per million input,
-  output, cache read and cache write tokens per model, Titan, and Transcribe per minute, each with its source, plus
-  `checkedOn`. Prices come from AWS's published price lists for eu-north-1 (Anthropic's page agrees for Claude). A
+  output, cache read and cache write tokens per model, Titan, Transcribe per minute, and the take's voice per character
+  (`voice`, Amazon Polly neural in eu-west-1, §55), each with its source, plus `checkedOn`. Prices come from AWS's published price lists for eu-north-1 (Anthropic's page agrees for Claude). A
   line that cannot be confirmed has `confirmed: false`: the job shows its tokens, "price not known", and the total as
   "about". `approximate: true` (Haiku 5.5 costs more above 100,000 prompt tokens) also shows "about".
 - **A3. Stored on the job, additive.** `Job.aiCost` `{v, models: [{key, label, calls, inputTokens, outputTokens,
   cacheReadTokens, cacheWriteTokens, tokens, dollars?, estimated}], transcribe?: {seconds, minutes, dollars?,
-  estimated}, totalTokens, totalCalls, totalDollars, estimated, pricesChecked}`. It is written with the job's own
+  estimated}, voice?: {characters, calls, dollars?, estimated} (only when a take was spoken, §55), totalTokens, totalCalls, totalDollars, estimated, pricesChecked}`. It is written with the job's own
   writes (heartbeat, ready, failed, canceled), so a failed or stopped job shows what it spent so far. A retry or
   resume adds to what the earlier runs wrote. Old jobs and jobs that never called a model have no `aiCost`: nothing
   is shown, never zeros. The API passes it through as it is.
 - **A4. Not counted.** Ask, the weekly learning, lessons, campaign rules and the post-publish distil run in the API
   Lambdas, not inside a job, so they are not in a job's cost.
 - **A5. The app.** The job page has one glass block, **What this cost**: the total in dollars (to the cent) large, the
-  exact tokens under it, and a fold **See the details** with a row per model (calls, tokens in and out, dollars) and
-  Transcribe's minutes. The numbers roll (§49). A failed or canceled job says "so far"; an estimate says "about" and
+  exact tokens under it, and a fold **See the details** with a row per model (calls, tokens in and out, dollars),
+  Transcribe's minutes and, when takes were spoken, "Voice (Amazon Polly)" (takes read, letters, dollars). The numbers roll (§49). A failed or canceled job says "so far"; an estimate says "about" and
   the prices' date. The Jobs list shows the total next to the clip count of a finished job. No sparkle icon.
 - **A6. Where there is no total.** Money and Home have no natural place for "AI cost this month" (they show
   earnings), so there is none.
@@ -22445,9 +22449,51 @@ The owner: more than one image on a CR clip. BR-35, ADR-107.
   own start and end (whole clip by default), then the text on top. Same audio, size and encoder as §53.
 - **L6. The sheet fits every screen (owner, 2026-11-27).** It never grows past the screen: head and Make it bar stay, the middle scrolls inside it. Nothing sits over anything else; text wraps inside its box. Checked at 375 to 1920 px in `web/e2e/cr-overlay.spec.ts`.
 
-## 55. Engagement and watch graph (owner request, 2026-11-27)
+## 55. Your take: every clip gets a short comment of its own (owner request, 2026-11-27)
 
-BR-36, ADR-111. The owner: count
+Platforms show plain re-uploads to fewer people, so each clip carries the channel's own comment. BR-36, ADR-111.
+
+- **T1. The field.** The model writes `take` with each moment: one sentence in the clip's language, 5 to 14 words, at
+  most 90 characters. It is the channel's opinion, verdict or context: something the viewer cannot see. It never
+  describes the picture, repeats the hook or spoils the payoff; no emoji, hashtags, @handles or all caps; honest, never
+  cruel, no claims about real people beyond the clip. Code (`moments.clean_take`, `take_problem`) strips emoji and
+  control characters, collapses spaces, and refuses a take outside 4 to 16 words, over 90 characters, with `#` or `@`,
+  or in all caps: the take is blanked and the moment is always kept (the agent's tool also tells the model why, so it can
+  send the moment again with a better take). `MOMENTS_VERSION` stays 1: a
+  saved moment without `take` reads as none.
+- **T2. Settings (additive).** `takeOn` (default true), `takeVoice` (default true), `takeStyle` (default `""`; mojibake
+  repaired, unseen characters dropped, spaces collapsed; over 120 characters is a 400; a non-boolean switch is a 400).
+  The agent reads all three (`store.SETTINGS_DEFAULTS`). `takeStyle` reaches the model inside `<owner_style>`, as
+  style, never as instructions.
+- **T3. No take.** When `takeOn` is false, on a campaign job and on a campaign copy: none is asked for, drawn, spoken
+  or stored. The campaign picture of §53 and §54 is unchanged.
+- **T4. On screen.** One extra ASS event in `render.build_ass`, style `Take`: Inter Bold 46 (smaller over 54
+  characters, never under 30), white on a 60% black box, at most 2 lines between x = 60 and x = 908, its bottom on
+  y = 1168 (above the caption band, below the facecam). It shows from 0.4 s after the tease for
+  max(4 s, voice + 0.8 s), never past 0.2 s before the end; with under 1.5 s of room it is left out. Hook and captions
+  are unchanged, and a clip without a take renders byte for byte as before.
+- **T5. Spoken.** With `takeVoice` on, `voice.py` asks Amazon Polly (`SynthesizeSpeech`) for an mp3, with the engine,
+  voice and region from `takeVoice` in `config/models.json` (neural, Matthew, `eu-west-1`: `eu-north-1` has no neural
+  voice). The voice starts with the text; the clip's own sound drops to about 30% under it, with short fades, and the
+  loudness pass (§8) levels the result. Matthew speaks English, so a clip in another or an unknown language gets the
+  text only. **Any voice failure (refused, region, timeout, empty sound, a mix ffmpeg rejects) never fails the job:**
+  it is logged and the clip is made with the text only. One Polly call per take per job. Its letters and dollars are
+  in the job's cost (`aiCost.voice`, §51) at the confirmed price, so the cost stays exact.
+- **T6. Stored.** Clip fields `take` (only when not empty) and `takeSpoken: true` (only when the voice is in the
+  file), both public. The IAM statement `SpokenTake` on Clip Factory's agent role allows `polly:SynthesizeSpeech` in
+  `eu-west-1` only.
+- **T7. Post text.** The captions prompt is given the take and told not to repeat it.
+- **T8. Review.** Under the hook, one quiet read-only line: the small label "Your take" and the text (`user-text`).
+  Nothing when the clip has none. It cannot be edited per clip yet.
+- **T9. Settings › Clip making › Clips.** Three apples after `ai-model`: `your-take` (switch, "Your take"),
+  `take-voice` (switch, "Say it out loud") and `take-style` (one line, "How you talk", 120 at most, saved on blur and
+  0.8 s after typing stops; a save that fails leaves the typed words in the field). The last two are hidden while Your take is off.
+- **T10. Tests.** `agent/tests/test_take.py`, `test_voice.py`; `api/tests/test_settings_and_system.py`,
+  `test_clips.py`; `web/test/yourTake.test.tsx`; `infra/modules/agent/tests/runtime.tftest.hcl`.
+
+## 56. Engagement and watch graph (owner request, 2026-11-27)
+
+BR-37, ADR-112. The owner: count
 engagement "as professionals do it", show how people watch from start to end,
 "across all platforms", and "filter for each social media platform".
 

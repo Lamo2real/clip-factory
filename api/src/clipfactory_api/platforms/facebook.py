@@ -11,7 +11,7 @@ Impressions and unique-views metrics (``post_impressions_unique``, ``total_video
 guarded ``post_total_media_view_unique`` on the Reel's post id (``GET /{v}/{post id}?fields=insights.metric(...)``):
 any error there just leaves ``reachUnique`` out.
 
-Watch graph (docs/CONTRACTS.md §55): a third guarded request on the Reel's video id,
+Watch graph (docs/CONTRACTS.md §56): a third guarded request on the Reel's video id,
 ``GET /{v}/{video id}?fields=video_insights.metric(post_video_retention_graph)``, kept out of ``VIDEO_METRICS`` so an
 unknown metric can never break the main read. Its value is a ``{bucket: number}`` map (or a list); buckets are ordered
 by number and spread evenly over 0–100 % of the video; values ≤ 1.5 are ratios (times 100). Fewer than 2 points or any

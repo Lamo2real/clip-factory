@@ -1,5 +1,5 @@
 {
-  "$comment": "The only place model ids live. Everything else reads them from here (Terraform, the agent image, the web app for the labels). agentModel is the default model for clip jobs; clipModels lists, in display order, the models the owner may pick for clip jobs in Settings › Clip making › AI model (the clipModel setting, docs/CONTRACTS.md §5 and docs/DECISIONS.md ADR-42), each with a label and one plain line for that screen. A model's own profilePrefix overrides the top-level one (Haiku for Ask Clip Factory and Nova 2 Lite, the second watcher of the deep analysis, use the EU geo profile, docs/CONTRACTS.md §19.5 and docs/DECISIONS.md ADR-40); profileRegions lists that profile's destination regions, for IAM. embeddingModel.modelId is in-Region and used as is (never prefixed with profilePrefix). askModel and askFallbackModel are Ask's models (docs/CONTRACTS.md §28.1, ADR-51): Claude in Amazon Bedrock (the bedrock-mantle Messages API) in-Region at askEndpoint.region, so their bare modelId is used (no profile prefix); opus-4-8 is Ask's refusal fallback only and is not in clipModels.",
+  "$comment": "The only place model ids live. Everything else reads them from here (Terraform, the agent image, the web app for the labels). agentModel is the default model for clip jobs; clipModels lists, in display order, the models the owner may pick for clip jobs in Settings › Clip making › AI model (the clipModel setting, docs/CONTRACTS.md §5 and docs/DECISIONS.md ADR-42), each with a label and one plain line for that screen. A model's own profilePrefix overrides the top-level one (Haiku for Ask Clip Factory and Nova 2 Lite, the second watcher of the deep analysis, use the EU geo profile, docs/CONTRACTS.md §19.5 and docs/DECISIONS.md ADR-40); profileRegions lists that profile's destination regions, for IAM. embeddingModel.modelId is in-Region and used as is (never prefixed with profilePrefix). askModel and askFallbackModel are Ask's models (docs/CONTRACTS.md §28.1, ADR-51): Claude in Amazon Bedrock (the bedrock-mantle Messages API) in-Region at askEndpoint.region, so their bare modelId is used (no profile prefix); opus-4-8 is Ask's refusal fallback only and is not in clipModels. takeVoice is the voice that reads a clip's take out loud (Your take, owner request 2026-11-27): Amazon Polly, called in its own region because eu-north-1 has no neural voice; the agent's role may call it there only.",
   "profilePrefix": "global",
   "agentModel": "fable-5-1",
   "clipModels": ["fable-5-2", "fable-5-1", "opus-5-5", "sonnet-5-5", "haiku-5-5"],
@@ -8,6 +8,7 @@
   "askFallbackModel": "opus-4-8",
   "askEndpoint": { "kind": "mantle", "region": "eu-north-1" },
   "watchModel": "nova-2-lite",
+  "takeVoice": { "service": "polly", "engine": "neural", "voice": "Matthew", "region": "eu-west-1" },
   "models": {
     "fable-5-2": {
       "label": "Claude Fable 5.2",
@@ -54,7 +55,7 @@
     "dimensions": 1024
   },
   "pricing": {
-    "$comment": "The only place prices live (docs/CONTRACTS.md §51, ADR-103). US dollars per million tokens, as AWS publishes them for eu-north-1 on Amazon Bedrock (the AWS price list files; Anthropic's pricing page agrees on every global Claude price). A model called through the global profile gets the global price; one called through the eu profile (profilePrefix eu) gets AWS's regional price, 10 percent higher. cacheWritePerMTok is the 5-minute cache write. A line whose price could not be confirmed has confirmed:false and no numbers: the job shows its tokens and 'price not known' and the total as 'about', never an invented price. approximate:true means the price depends on the request (Haiku 5.5 costs more above 100,000 prompt tokens), so the line shows as 'about'. Change a price only from the provider's own page and move checkedOn.",
+    "$comment": "The only place prices live (docs/CONTRACTS.md §51, ADR-103). US dollars per million tokens, as AWS publishes them for eu-north-1 on Amazon Bedrock (the AWS price list files; Anthropic's pricing page agrees on every global Claude price). A model called through the global profile gets the global price; one called through the eu profile (profilePrefix eu) gets AWS's regional price, 10 percent higher. cacheWritePerMTok is the 5-minute cache write. voice is the take's voice (Amazon Polly in eu-west-1, per character, docs/CONTRACTS.md §55). A line whose price could not be confirmed has confirmed:false and no numbers: the job shows its tokens and 'price not known' and the total as 'about', never an invented price. approximate:true means the price depends on the request (Haiku 5.5 costs more above 100,000 prompt tokens), so the line shows as 'about'. Change a price only from the provider's own page and move checkedOn.",
     "currency": "USD",
     "checkedOn": "2026-11-25",
     "models": {
@@ -66,6 +67,7 @@
       "nova-2-lite": {"inputPerMTok": 0.363, "outputPerMTok": 2.992, "cacheReadPerMTok": 0.09075, "cacheWritePerMTok": 0.0, "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonBedrock/current/index.json (EU regional; video is billed as ordinary input tokens, AWS lists no video line)", "confirmed": true}
     },
     "embedding": {"inputPerMTok": 0.021, "outputPerMTok": 0.0, "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonBedrockFoundationModels/current/index.json (eu-north-1)", "confirmed": true},
-    "transcribe": {"perMinute": 0.006, "source": "https://aws.amazon.com/transcribe/pricing/ and https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/transcribe/current/index.json (eu-north-1, $0.0001 per second, one-second steps, speaker labels and language identification included)", "confirmed": true}
+    "transcribe": {"perMinute": 0.006, "source": "https://aws.amazon.com/transcribe/pricing/ and https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/transcribe/current/index.json (eu-north-1, $0.0001 per second, one-second steps, speaker labels and language identification included)", "confirmed": true},
+    "voice": {"perCharacter": 0.000016, "source": "https://pricing.us-east-1.amazonaws.com/offers/v1.0/aws/AmazonPolly/current/eu-west-1/index.json and https://aws.amazon.com/polly/pricing/ (eu-west-1, neural voices, $16 per million characters; every character sent counts, spaces too; read 2026-11-27)", "confirmed": true}
   }
 }

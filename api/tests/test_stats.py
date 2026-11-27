@@ -526,7 +526,7 @@ def test_youtube_insights_every_360_minutes_and_slow_values_kept(store: db.Store
     deps = make_deps(store, http, clock=clock)
     refresh_posts(deps, [stored(table, post)], reason="poll", now=NOW)
     item = stored(table, post)
-    assert len(http.calls) == 3  # counts, the report and the watch graph (§55)
+    assert len(http.calls) == 3  # counts, the report and the watch graph (§56)
     graph = {
         "points": [[1, 112], [25, 84.6], [50, 71.2], [100, 40]],  # read back from DynamoDB numbers
         "readAt": iso(NOW),
@@ -729,7 +729,7 @@ def test_merge_metrics_keeps_what_was_not_read() -> None:
 
 
 def test_merge_metrics_retention_replaced_or_kept() -> None:
-    """§55: a part carrying ``retention`` replaces the stored graph whole; otherwise the old one stays."""
+    """§56: a part carrying ``retention`` replaces the stored graph whole; otherwise the old one stays."""
     old_graph = {"points": [[0, 100], [100, 30]], "readAt": "2026-11-15T00:00:00.000Z", "source": "youtube"}
     new_graph = {"points": [[0, 100], [50, 60], [100, 20]], "readAt": iso(NOW), "source": "youtube"}
     old = {"views": 10, "extra": {}, "retention": old_graph}

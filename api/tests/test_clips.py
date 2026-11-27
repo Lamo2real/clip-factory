@@ -574,3 +574,30 @@ def test_picked_for_passes_through_when_the_agent_wrote_it(call: Call, store: db
     status, body = call("GET", f"/v1/clips/{with_why['clipId']}")
     assert status == 200
     assert body["clip"]["pickedFor"] == "Loud laugh + Fast action"
+
+
+def test_your_take_passes_through_when_the_agent_wrote_it(call: Call, store: db.Store, s3_client: FakeS3) -> None:
+    """Your take (2026-11-27): ``take`` (the channel's own one-line comment) and ``takeSpoken`` (a voice read it out)
+    are public as the agent wrote them; an older clip, or one made with Your take off, has neither key."""
+    spoken = seed_clip(store, s3_client, take="He was right all along, and nobody listened.", takeSpoken=True)
+    written = seed_clip(store, s3_client, take="Watch the left hand, not the ball.")
+    old = seed_clip(store, s3_client)
+    status, body = call("GET", "/v1/clips")
+    assert status == 200
+    by_id = {c["clipId"]: c for c in body["clips"]}
+    assert by_id[spoken["clipId"]]["take"] == "He was right all along, and nobody listened."
+    assert by_id[spoken["clipId"]]["takeSpoken"] is True
+    assert by_id[written["clipId"]]["take"] == "Watch the left hand, not the ball."
+    assert "takeSpoken" not in by_id[written["clipId"]]
+    assert "take" not in by_id[old["clipId"]]
+    assert "takeSpoken" not in by_id[old["clipId"]]
+    status, body = call("GET", f"/v1/clips/{spoken['clipId']}")
+    assert status == 200
+    assert (body["clip"]["take"], body["clip"]["takeSpoken"]) == ("He was right all along, and nobody listened.", True)
+
+
+def test_a_campaign_copy_never_carries_your_take() -> None:
+    """Your take, point 3: a campaign copy is made from the listed moment fields only, and the take is not one."""
+    from clipfactory_api.contentrewards import remake
+
+    assert not {"take", "takeSpoken"} & set(remake.MOMENT)

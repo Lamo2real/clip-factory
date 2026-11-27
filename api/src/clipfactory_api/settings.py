@@ -8,7 +8,7 @@ import re
 from collections.abc import Mapping
 from typing import Any
 
-from . import autopost, db, post_preset, validate
+from . import autopost, db, mojibake, post_preset, validate
 from .clock import iso, utcnow
 from .errors import bad_request
 
@@ -70,7 +70,14 @@ DEFAULTS: dict[str, Any] = {
     # §47 Your Mac posts it on TikTok: off for every owner until he turns it on (then Upload and auto-posting hand
     # TikTok to his Mac instead of TikTok's API, which keeps unaudited apps' posts private).
     "tiktokMac": {"on": False},
+    # Your take (owner request, 2026-11-27): every clip gets one short comment that is the channel's own, drawn on
+    # the clip (takeOn) and read out by a voice (takeVoice). takeStyle is the owner's few words on how they talk; the
+    # agent hands it to the model. Additive: an owner who never saved one reads these defaults.
+    "takeOn": True,
+    "takeVoice": True,
+    "takeStyle": "",
 }
+TAKE_STYLE_MAX = 120
 TIKTOK_MAC_UNKNOWN = "tiktokMac has a setting Clip Factory does not know."
 NOTIFY_KEYS = ("ready", "stopped", "resumed", "steps", "contentRewards", "getPaid")
 # The Clip Factory colours before the bottle-green look (ADR-43). An owner who never changed them has exactly this
@@ -124,8 +131,10 @@ def _check_field(field: str, value: Any) -> Any:
             return _follow_number(
                 value, lo=FOLLOW_MIN_MINUTES[0], hi=FOLLOW_MIN_MINUTES[1], what="The shortest video", unit=" minutes"
             )
-        case "soundEnabled" | "reduceMotion" | "followPaused":
+        case "soundEnabled" | "reduceMotion" | "followPaused" | "takeOn" | "takeVoice":
             return validate.boolean(value, field)
+        case "takeStyle":
+            return _take_style(value)
         case "postPreset":
             return post_preset.check(value)
         case "autoPost":
@@ -176,6 +185,18 @@ def _check_field(field: str, value: Any) -> Any:
             # Keep the canonical order and drop repeats so the UI shows a stable list.
             return [p for p in PLATFORMS if p in value]
     raise bad_request(f"Unknown setting: {field}.")
+
+
+def _take_style(value: Any) -> str:
+    """``takeStyle``: one line of at most ``TAKE_STYLE_MAX`` characters. A line saved garbled from a Mac clipboard is
+    put right (mojibake.py), characters that cannot be seen are dropped and every run of spaces becomes one."""
+    if not isinstance(value, str):
+        raise bad_request("How you talk must be a few words.")
+    text = "".join(ch if ch.isprintable() or ch.isspace() else " " for ch in mojibake.repair(value))
+    text = " ".join(text.split())
+    if len(text) > TAKE_STYLE_MAX:
+        raise bad_request(f"How you talk is too long. Use at most {TAKE_STYLE_MAX} letters.")
+    return text
 
 
 def _tiktok_mac(current: Any, value: Any) -> dict[str, bool]:

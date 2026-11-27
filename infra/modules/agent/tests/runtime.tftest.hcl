@@ -303,3 +303,29 @@ run "youtube_proxy_secret_is_read_only" {
     error_message = "No other statement touches Secrets Manager."
   }
 }
+
+# "Your take", said out loud (owner request, 2026-11-27): the agent may ask Amazon Polly for speech, in eu-west-1 only,
+# and nothing else of Polly.
+run "spoken_take_is_polly_speech_in_one_region" {
+  command = plan
+
+  assert {
+    condition = length([for s in jsondecode(aws_iam_role_policy.agent.policy).Statement : s if
+      s.Sid == "SpokenTake" && s.Effect == "Allow" && s.Action == ["polly:SynthesizeSpeech"] && s.Resource == "*" &&
+      try(s.Condition, null) == { StringEquals = { "aws:RequestedRegion" = "eu-west-1" } }
+    ]) == 1
+    error_message = "SpokenTake allows polly:SynthesizeSpeech only, and only when the request goes to eu-west-1."
+  }
+
+  assert {
+    condition = length([for s in jsondecode(aws_iam_role_policy.agent.policy).Statement : s if
+      anytrue([for a in flatten([s.Action]) : startswith(lower(a), "polly:") || a == "*"]) && s.Sid != "SpokenTake"
+    ]) == 0
+    error_message = "No other statement touches Polly."
+  }
+
+  assert {
+    condition     = length([for s in jsondecode(aws_iam_role_policy.agent.policy).Statement : s if s.Sid == "SpokenTake"]) == 1
+    error_message = "There is exactly one SpokenTake statement."
+  }
+}

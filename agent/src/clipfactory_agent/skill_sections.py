@@ -50,6 +50,18 @@ SECTIONS: tuple[BuiltinSection, ...] = (
         before=("### Skip these",),
         within="### Reading the signals",
     ),
+    # "Your take" (owner request, 2026-11-27): the channel's own one-sentence comment on every clip. A copy made before
+    # it gets the part at the end of its checklist section, or at the very end.
+    BuiltinSection(
+        skill="viral-clip-editing",
+        section="take",
+        version=1,
+        title="Your take",
+        start="## 9. Your take",
+        marks=("your take",),
+        before=(),
+        within="## 8. Checking a clip",
+    ),
 )
 
 COPY_MIN_SHARE = 0.3  # at least this share of the built-in's lines (outside its later parts) are in his text

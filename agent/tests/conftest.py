@@ -53,6 +53,7 @@ def raw_moment(**kw: Any) -> dict[str, Any]:
         "end": 130,
         "moment_type": "chaos",
         "hook": "the plan was simple until this happened",
+        "take": "Honestly, the lookout had one job here.",
         "first_words": "Okay watch this",
         "tease_start": None,
         "tease_end": None,

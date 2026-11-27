@@ -293,8 +293,14 @@ def build_app(env: Mapping[str, str] | None = None) -> Starlette:
     from .store import Store
     from .transcribe import Transcriber
     from .vectors import Vectors
+    from .voice import TakeVoice, load_voice_config
 
     cfg = load_config(env)
+    # The voice that reads a clip's take out loud (config/models.json ``takeVoice``); no entry there, no voice.
+    e = os.environ if env is None else env
+    voice_cfg = load_voice_config(Path(e.get("CF_CONFIG_DIR", "/app/config")))
+    if voice_cfg is None:
+        log("warn", "voice.disabled", reason="config/models.json has no takeVoice")
     store = Store(cfg.table, cfg.bucket, cfg.region)
     vectors = (
         Vectors(cfg.vector_bucket, cfg.vector_index, cfg.embed_model_id, cfg.region) if cfg.vector_bucket else None
@@ -313,6 +319,7 @@ def build_app(env: Mapping[str, str] | None = None) -> Starlette:
         Transcriber(store.transcribe, cfg.bucket),
         vectors=vectors,
         watch_bedrock=watcher,
+        voice=TakeVoice(voice_cfg) if voice_cfg is not None else None,
     )
     client: list[Any] = []
 

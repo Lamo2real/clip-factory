@@ -5,7 +5,7 @@
   ``favoriteCount`` is always 0 and dislikes are private, so neither is read. ``shares`` only comes from Analytics.
 * Slow: ``GET /v2/reports?ids=channel==MINE&...&dimensions=video&filters=video=={≤50 ids}``. Google processes this
   data with a 48–72 hour delay, so it is read every ``insightsIntervalMinutes`` (6 h) and shown as "Updates daily".
-* Watch graph (docs/CONTRACTS.md §55): with the slow read, ONE more Analytics request per video (the API refuses a
+* Watch graph (docs/CONTRACTS.md §56): with the slow read, ONE more Analytics request per video (the API refuses a
   list of ids for this report): ``metrics=audienceWatchRatio&dimensions=elapsedVideoTimeRatio&filters=video=={id}``.
   Rows are ``[ratio 0.01..1.0, watch ratio]`` → ``metrics.retention`` points ``[ratio*100, watchRatio*100]`` (can pass
   100: rewatches). Any error or fewer than 2 points leaves ``retention`` out; the other numbers stand.
@@ -159,7 +159,7 @@ class YouTubeAdapter(AdapterBase):
         token: str,
         http: HttpClient,
     ) -> None:
-        """§55: the audience-retention curve of one video, guarded: any error leaves ``retention`` out."""
+        """§56: the audience-retention curve of one video, guarded: any error leaves ``retention`` out."""
         batch.requests += 1
         try:
             resp = http(self.retention_request(video_id, start, now.date().isoformat(), token))

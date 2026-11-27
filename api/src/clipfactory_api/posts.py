@@ -53,7 +53,7 @@ PERF_CHECK_DELAY = timedelta(hours=48)
 def public_metrics(raw: Any) -> Item | None:
     """``PostMetrics`` (§16.3) as the web reads it: the common four always present (``null`` = the platform does
     not say), ``metricsUpdatedAt`` filled in for metrics stored before §16 (only ``checkedAt``), ``extra`` always an
-    object. ``retention`` (the watch graph, §55) only when stored with a ``points`` list; absent = no curve."""
+    object. ``retention`` (the watch graph, §56) only when stored with a ``points`` list; absent = no curve."""
     if not isinstance(raw, Mapping):
         return None
     out: Item = {k: raw.get(k) for k in COMMON_METRICS}
