@@ -21,6 +21,11 @@ SETTINGS_DEFAULTS: dict[str, Any] = {
     "soundEnabled": True,
     "reduceMotion": False,
     "platforms": ["youtube", "instagram", "facebook", "tiktok", "x"],
+    # "Your take" (owner request 2026-11-27): one short comment of the channel's own in every clip, read out loud by
+    # a voice, in the owner's style (a few words on how they talk).
+    "takeOn": True,
+    "takeVoice": True,
+    "takeStyle": "",
 }
 
 

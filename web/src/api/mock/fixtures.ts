@@ -76,20 +76,23 @@ function captions(hook: string, tags: string): Captions {
   };
 }
 
-/** `why` is the clip's `pickedFor` line; a moment without one shows no line (nothing stood out). */
-const MOMENTS: { hook: string; summary: string; type: MomentType; score: number; why?: string }[] = [
-  { hook: "He did NOT see that coming", summary: "A getaway goes wrong when the police helicopter lands on the roof.", type: "no_way", score: 9, why: "Big crash + Big reaction" },
-  { hook: "Chat called it before he did", summary: "Chat predicts the betrayal two minutes before it happens.", type: "interaction", score: 8, why: "Back and forth" },
+/**
+ * `why` is the clip's `pickedFor` line; a moment without one shows no line (nothing stood out). `take` is the clip's
+ * Your take (one sentence, 5 to 14 words, at most 90 characters); a moment without one is like an old clip.
+ */
+const MOMENTS: { hook: string; summary: string; type: MomentType; score: number; why?: string; take?: string }[] = [
+  { hook: "He did NOT see that coming", summary: "A getaway goes wrong when the police helicopter lands on the roof.", type: "no_way", score: 9, why: "Big crash + Big reaction", take: "Honestly, the pilot deserves a raise for that landing." },
+  { hook: "Chat called it before he did", summary: "Chat predicts the betrayal two minutes before it happens.", type: "interaction", score: 8, why: "Back and forth", take: "Chat is right more often than anyone wants to admit." },
   { hook: "The calmest rage quit ever", summary: "A whispered meltdown after losing the race on the final corner.", type: "rage", score: 8 },
-  { hook: "Twelve cars, one bridge", summary: "A pile-up on the bridge turns into a full server brawl.", type: "chaos", score: 9, why: "Loud laugh + Fast action" },
+  { hook: "Twelve cars, one bridge", summary: "A pile-up on the bridge turns into a full server brawl.", type: "chaos", score: 9, why: "Loud laugh + Fast action", take: "Nobody on that bridge was in the right, ten out of ten." },
   { hook: "First time seeing the new map", summary: "Genuine first reaction to the new city reveal.", type: "first_reaction", score: 7 },
-  { hook: "Speedrunners are not real gamers", summary: "A hot take on speedrunning that splits chat in half.", type: "hot_take", score: 7 },
-  { hook: "The getaway driver is twelve", summary: "A kid in voice chat drives the best escape of the night.", type: "interaction", score: 8 },
+  { hook: "Speedrunners are not real gamers", summary: "A hot take on speedrunning that splits chat in half.", type: "hot_take", score: 7, take: "He is wrong, but he is brave for saying it." },
+  { hook: "The getaway driver is twelve", summary: "A kid in voice chat drives the best escape of the night.", type: "interaction", score: 8, take: "Give this kid the keys every single time." },
   { hook: "One shot. Whole lobby gone.", summary: "A rocket at the gas station clears the lobby.", type: "chaos", score: 9 },
   { hook: "He finally lost it at 3 a.m.", summary: "The sixth failed heist ends with a desk slam.", type: "rage", score: 6 },
-  { hook: "Police chase in reverse", summary: "The whole chase is driven backwards, on purpose.", type: "no_way", score: 8 },
+  { hook: "Police chase in reverse", summary: "The whole chase is driven backwards, on purpose.", type: "no_way", score: 8, take: "Driving backwards should not work this well." },
   { hook: "This is why we don't trust Marco", summary: "Marco sells out the crew for 200 dollars.", type: "interaction", score: 7 },
-  { hook: "Wait for the jump", summary: "A ramp jump over the river lands on a moving train.", type: "no_way", score: 9, why: "Chat went wild + Loud laugh" },
+  { hook: "Wait for the jump", summary: "A ramp jump over the river lands on a moving train.", type: "no_way", score: 9, why: "Chat went wild + Loud laugh", take: "This is the cleanest jump we have seen all year." },
 ];
 
 function checklist(score: number) {
@@ -110,7 +113,7 @@ const STATS_INDEX: Record<Platform, number> = { youtube: 0, tiktok: 1, instagram
 
 /** Last week's clips (their own hooks, so no card repeats another). */
 const OLDER: (typeof MOMENTS)[number][] = [
-  { hook: "The bank job went perfectly. Then Marco spoke.", summary: "A flawless heist falls apart over the radio.", type: "interaction", score: 9 },
+  { hook: "The bank job went perfectly. Then Marco spoke.", summary: "A flawless heist falls apart over the radio.", type: "interaction", score: 9, take: "Never give Marco the radio on a quiet job." },
   { hook: "Ninety seconds of pure police chase", summary: "The longest chase of the weekend, start to finish.", type: "chaos", score: 8 },
   { hook: "He tried to park a plane", summary: "A landing on the motorway that nearly works.", type: "no_way", score: 7 },
   { hook: "Quiet. Too quiet.", summary: "The calm before the ambush at the docks.", type: "first_reaction", score: 6 },
@@ -142,6 +145,7 @@ function makeClip(job: Job, rank: number, m: (typeof MOMENTS)[number], status: C
     status,
     momentType: m.type,
     hook: m.hook,
+    ...(m.take ? { take: m.take, takeSpoken: true } : {}),
     summary: m.summary,
     durationSec: duration,
     sourceStart: start,
@@ -552,6 +556,10 @@ export function seed(): Store {
       backgroundColours: ["#0f372b", "#efe7da", "#e8392b"],
       glassStrength: "clear",
       clipModel: "fable-5-1",
+      // Your take: on, said out loud, no style words yet (the server's defaults).
+      takeOn: true,
+      takeVoice: true,
+      takeStyle: "",
       followPaused: false,
       followDailyMax: 0,
       followMinMinutes: 30,

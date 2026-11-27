@@ -421,8 +421,10 @@ from .deep_support import ToolClient  # noqa: E402
 # best-of-week learnings under their own heading and no 48-hour ones, so its bytes differ from 0abfbe2 on purpose.
 # On 2026-11-18 the finder's rules started naming the viral-clip-editing skill's sections instead of the old
 # playbook's (A2, A3, A5, A6); "system" was updated for that one sentence on purpose.
+# On 2026-11-27 the finder's rules gained the take rule ("Your take", one bullet after the hook's); "system" was
+# updated for that one bullet on purpose. Nothing else here moved.
 BEFORE = {
-    "system": "430e472471c6b42b",
+    "system": "68af606fb417bd56",
     "hints": "efd5468f6b44f116",
     "read": "a72fac1edde97034",
     "lines": "d9ed6b299a654c35",
@@ -651,27 +653,30 @@ from clipfactory_agent.render import RenderResult  # noqa: E402
 # sha256 (first 16 hex) of what origin/main at 806deb9 (before §39 was built) sent and wrote for the runs below: every
 # model request, every file, the finder's brief, every clip, every section the Cut step read and the pipeline's own
 # job writes. Only two job fields are new since, on every job: ``source.channelKeys`` and ``sourceLanguage``.
+# On 2026-11-27 ("Your take") "brief" and "files" were regenerated on purpose: the finder's rules gained the take rule
+# (the no-take line for the campaign job), and the saved moments carry ``take`` (MOMENTS_VERSION stays 1). The requests,
+# the clips, the cuts and the job writes are still byte for byte what they were (the test's cut draws no take).
 BEFORE_COPIES = {
     "link": {
         "requests": "66a839bd7d370f8a",
-        "files": "82d3faa27d45fe43",
-        "brief": "cc9e3d975250db60",
+        "files": "bcbae7b52259aec0",
+        "brief": "9e2a7d612247bf16",
         "clips": "e60154a4f029e310",
         "cuts": "bac985facdf5a632",
         "writes": "04949f4b7f964eb7",
     },
     "upload": {
         "requests": "66a839bd7d370f8a",
-        "files": "0872a31b19b0464a",
-        "brief": "d5bb1a0c6b6095c3",
+        "files": "223f3b82405a830b",
+        "brief": "ad1cafe446ab45bc",
         "clips": "6c6257697968d5b5",
         "cuts": "e086ea24508c5744",
         "writes": "9bc3d175be732c53",
     },
     "campaign": {
         "requests": "b22e45e284152ca2",
-        "files": "1c98321fd1db6b58",
-        "brief": "2e61c767507848aa",
+        "files": "c6a6f2b5807a2807",
+        "brief": "279b323c8d9f940f",
         "clips": "6ec5edfc51f70291",
         "cuts": "bac985facdf5a632",
         "writes": "5f6649f69e7d32e0",

@@ -161,6 +161,16 @@ resource "aws_iam_role_policy" "agent" {
       # The optional YouTube proxy (docs/CONTRACTS.md §29.8): read only, one secret the owner may create later. Not a
       # Terraform resource, so no apply can create, replace or delete it; while it does not exist the agent goes on.
       { Sid = "YoutubeProxy", Effect = "Allow", Action = ["secretsmanager:GetSecretValue"], Resource = var.youtube_proxy_secret_arn },
+      # "Your take", said out loud (owner request, 2026-11-27): the agent turns the clip's one-sentence take into
+      # speech with Amazon Polly. SynthesizeSpeech has no resource to name, so the statement is held to the one
+      # Region the voice is called in (config/models.json "takeVoice"); eu-north-1 has no neural voice.
+      {
+        Sid       = "SpokenTake"
+        Effect    = "Allow"
+        Action    = ["polly:SynthesizeSpeech"]
+        Resource  = "*"
+        Condition = { StringEquals = { "aws:RequestedRegion" = "eu-west-1" } }
+      },
     ]
   })
 }

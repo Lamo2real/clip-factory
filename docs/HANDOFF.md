@@ -51,9 +51,12 @@ else, ask the owner for them. Never copy them in here.
   on the Mac is not confirmed ([the step](../mac/tiktok-helper/README.md#the-owners-one-time-step-after-merge-and-deploy-on-his-command)).
 - **Content Rewards' answer** to a link the Mac posted.
 - **Auto-posting's Private test run** (a hidden Facebook draft Reel), CONTRACTS §46.14.
+- **The first clip with a spoken take** (CONTRACTS §55). Check the agent log for the voice line; if Polly is refused,
+  the clip is text-only and the job still finishes. Also look at the take's box on a real frame.
 - **YouTube Shorts views.** Since 21 Nov new Clip Factory Shorts get very few views, while older ones got about a
   thousand. The posts are healthy. Likely causes: posting in bursts and reused-content signals. Advice for the owner:
-  space posts out, add real changes (commentary, edits, an own hook), never re-upload.
+  space posts out, never re-upload. Your take (own commentary on every clip, CONTRACTS §55) now ships; watch whether
+  views recover.
 
 ## Follow-ups
 

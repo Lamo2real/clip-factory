@@ -1,5 +1,5 @@
 """What a job's AI really cost (docs/CONTRACTS.md §51): the tokens every model answered with, the minutes Transcribe
-heard, and the dollars they come to, kept on the Job item as ``aiCost``.
+heard, the characters the take's voice read out loud, and the dollars they come to, kept on the Job item as ``aiCost``.
 
 Every place that calls a model records what the answer itself reported (Bedrock Converse ``usage``, the Agent SDK
 result's usage, Titan's input token count, Transcribe's audio seconds) into the job's ``Meter``. Recording adds no
@@ -87,6 +87,13 @@ class Prices:
             return _num(entry.get("perMinute"))
         return None
 
+    def voice_per_character(self) -> float | None:
+        """Dollars per character the take's voice reads (``pricing.voice``); None until the price is confirmed."""
+        entry = self.pricing.get("voice")
+        if isinstance(entry, Mapping) and entry.get("confirmed") is True:
+            return _num(entry.get("perCharacter"))
+        return None
+
 
 @dataclass
 class Row:
@@ -141,6 +148,8 @@ class Meter:
         self.prices = prices
         self.rows: dict[str, Row] = {}
         self.transcribe_seconds = 0.0
+        self.voice_characters = 0  # what the take's voice read out loud ("Your take"); 0 for a job with no voice
+        self.voice_calls = 0
         self.used = False  # something was recorded by this run
         if isinstance(base, Mapping):
             self._load(base)
@@ -164,6 +173,10 @@ class Meter:
         t = base.get("transcribe")
         if isinstance(t, Mapping):
             self.transcribe_seconds += _num(t.get("seconds")) or 0.0
+        v = base.get("voice")
+        if isinstance(v, Mapping):
+            self.voice_characters += _int(v.get("characters"))
+            self.voice_calls += _int(v.get("calls"))
 
     def record(
         self,
@@ -185,9 +198,15 @@ class Meter:
             self.transcribe_seconds += seconds
             self.used = True
 
+    def record_voice(self, characters: int) -> None:
+        if characters > 0:
+            self.voice_characters += characters
+            self.voice_calls += 1
+            self.used = True
+
     def summary(self) -> dict[str, Any] | None:
         """The ``aiCost`` object, or None while there is nothing to show (never zeros)."""
-        if not self.rows and self.transcribe_seconds <= 0:
+        if not self.rows and self.transcribe_seconds <= 0 and self.voice_characters <= 0:
             return None
         models: list[dict[str, Any]] = []
         total = 0.0
@@ -230,6 +249,20 @@ class Meter:
             else:
                 estimated = True
             out["transcribe"] = t
+        if self.voice_characters > 0:
+            # Additive (a job with no spoken take has no ``voice`` key and is exactly what it was).
+            per_character = self.prices.voice_per_character()
+            v: dict[str, Any] = {
+                "characters": self.voice_characters,
+                "calls": self.voice_calls,
+                "estimated": per_character is None,
+            }
+            if per_character is not None:
+                v["dollars"] = round(self.voice_characters * per_character, 6)
+                total += v["dollars"]
+            else:
+                estimated = True
+            out["voice"] = v
         out["totalDollars"] = round(total, 6)
         out["estimated"] = estimated
         if self.prices.checked_on:
@@ -259,6 +292,12 @@ def record_transcribe(seconds: float) -> None:
     meter = _current.get()
     if meter is not None:
         meter.record_transcribe(seconds)
+
+
+def record_voice(characters: int) -> None:
+    meter = _current.get()
+    if meter is not None:
+        meter.record_voice(characters)
 
 
 def record_sdk_result(result: Any, model_id: str) -> None:

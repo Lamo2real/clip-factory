@@ -736,6 +736,16 @@ The owner said on 26 Nov 2026: "i should be able to add multiple images to campa
 - AC2: **List.** A chip per picture lets the owner pick, move, resize or remove it.
 - AC3: **Old edits.** A clip edited with one logo still opens and posts as before.
 
+### BR-36 Your take
+The owner said on 27 Nov 2026: "Yes, build it", in answer to building "your take" into every clip so platforms count
+them as original. ([CONTRACTS.md §55](CONTRACTS.md#55-your-take-every-clip-gets-a-short-comment-of-its-own-owner-request-2026-11-27),
+[ADR-111](DECISIONS.md#adr-111-your-take-own-commentary-on-every-clip-text-plus-a-polly-voice))
+- AC1: **Every clip.** A new clip carries one short comment of the channel's own, on screen near the start.
+- AC2: **Out loud.** A voice reads it; if the voice can't be made, the clip still gets the text.
+- AC3: **Yours.** "How you talk" sets the style. It is honest and never cruel.
+- AC4: **Off.** One switch turns it off. Campaign clips never get one.
+- AC5: **Review.** The take shows under the hook.
+
 ## Non-functional requirements
 
 ### NFR-01 Everything runs on AWS

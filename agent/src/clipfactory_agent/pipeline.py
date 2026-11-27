@@ -58,7 +58,7 @@ from .creators import creator_keys, creator_name
 from .guard import Deadline, fable_budget, nova_budget
 from .heartbeat import free_memory
 from .jobs import StepDone, StepFn, Tracker, creep
-from .moments import Moment, length_target
+from .moments import Moment, clean_style, length_target
 from .remake import CANT_COPY, VIDEO_GONE, Remake, cant_earn, saved_index, saved_moment
 from .render import Marks, RenderResult, prepare_logo, render_clip
 from .skills import SkillsBlock, SkillSet, prepare_skills, skills_block
@@ -76,6 +76,7 @@ from .util import (
     now_iso,
     ulid,
 )
+from .voice import Spoken, TakeVoice
 from .watch import TrackResult
 
 RENDER_CONCURRENCY = 2  # the ceiling: a second clip is cut alongside only when memory allows (RenderGate)
@@ -87,7 +88,7 @@ UPLOAD_DISK_SPARE = 3 * 1024**3  # the local copy of an upload leaves this much 
 RAM_FILESYSTEMS = frozenset({"tmpfs", "ramfs"})
 RAM_COPY_SHARE = 0.25
 MOUNTS = Path("/proc/mounts")
-MOMENTS_VERSION = 1
+MOMENTS_VERSION = 1  # unchanged by "Your take": a saved moment without ``take`` reads as no take (Moment.from_dict)
 # A clip that was being cut when this many earlier runs died is not tried again: the rest of the job finishes without
 # it (§30.4). A clip in flight during one death is cut last, alone.
 MAX_CLIP_DEATHS = 2
@@ -311,6 +312,8 @@ class JobState:
     chosen: list[Moment] = field(default_factory=list)
     spares: list[Moment] = field(default_factory=list)
     candidates: list[Candidate] = field(default_factory=list)
+    # "Your take" out loud: each take's voice is made once for the job (None: it could not be made, text only).
+    take_voices: dict[str, Spoken | None] = field(default_factory=dict)
     captions: dict[str, dict[str, str]] = field(default_factory=dict)
     clip_ids: dict[int, str] = field(default_factory=dict)
     ids_saved: bool = False  # clips.json holds this run's clip ids: a newer run picking up reuses them (§30.6)
@@ -384,6 +387,17 @@ class JobState:
         return Marks(logo=self.logo, disclosure=self.campaign.on_screen)
 
     @property
+    def take_on(self) -> bool:
+        """Whether this job's clips carry "Your take": the owner's ``takeOn`` setting (on unless they switched it
+        off), and never a campaign job or a campaign copy, whose layout stays exactly as it is (§53, §54)."""
+        return self.settings.get("takeOn") is not False and self.campaign_id is None and self.remake is None
+
+    @property
+    def take_style(self) -> str:
+        """The owner's few words on how they talk (``takeStyle``), cleaned for the prompt."""
+        return clean_style(self.settings.get("takeStyle"))
+
+    @property
     def clip_target(self) -> tuple[int, int]:
         t = self.job.get("clipTarget") or {}
         lo = int(t.get("min") or self.settings.get("clipMin") or 5)
@@ -434,6 +448,7 @@ class Pipeline:
         vectors: vectors_mod.Vectors | None = None,
         watch_bedrock: Bedrock | None = None,
         new_bedrock: Callable[[str], Bedrock] | None = None,
+        voice: TakeVoice | None = None,
     ) -> None:
         self.cfg = cfg
         self.store = store
@@ -445,6 +460,7 @@ class Pipeline:
         self.transcriber = transcriber
         self.vectors = vectors  # None: no clip vectors and no "what worked before"
         self.watch_bedrock = watch_bedrock  # the second watcher (Nova); None: that track is skipped
+        self.voice = voice  # reads a clip's take out loud; None: takes are text only
 
     def steps(self, st: JobState, tr: Tracker) -> list[tuple[str, StepFn]]:
         def bind(fn: Any) -> StepFn:
@@ -1534,6 +1550,8 @@ class Pipeline:
             chat=st.chat,
             campaign=st.campaign,
             attachments=st.attachments,
+            take=st.take_on,
+            take_style=st.take_style,
         )
 
     def _moments_hash(self, st: JobState) -> str:
@@ -1545,6 +1563,11 @@ class Pipeline:
         }
         if st.campaign is not None:
             basis["campaign"] = [st.campaign.campaign_id, st.campaign.rules_version]
+        # Only when it is not the default (takes on, no style), so the hash names what the picks were written with.
+        if st.settings.get("takeOn") is False:
+            basis["take"] = False
+        elif st.take_style and st.take_on:
+            basis["takeStyle"] = st.take_style
         files = attachments_mod.listed(st.job)
         if files:  # only then: a job without files keeps the hash its saved picks were stored under
             basis["attachments"] = [str(f["key"]) for f in files]
@@ -1982,6 +2005,7 @@ class Pipeline:
 
     async def _cut(self, st: JobState, m: Moment, index: int, layout: FrameLayout | None = None) -> Candidate:
         workdir = st.workdir / "clips" / f"{index:02d}"
+        take = m.take if st.take_on else ""
 
         async def fetch(a: float, b: float, dest: Path) -> Path:
             from .retry import retry
@@ -1997,8 +2021,33 @@ class Pipeline:
             known_layout=layout,
             live_index=index + 1,
             marks=st.marks,
+            take=take,
+            voice=await self._take_voice(st, take) if take else None,
         )
         return Candidate(m, r, index=index)
+
+    async def _take_voice(self, st: JobState, take: str) -> Spoken | None:
+        """The take as speech, made once per take for the whole job (a re-cut reuses it). None when the owner
+        switched the voice off (``takeVoice``), when the voice does not speak the clip's language, or when it could
+        not be made: then the take is text only. Never fails the clip."""
+        if self.voice is None or st.settings.get("takeVoice") is False:
+            return None
+        if take in st.take_voices:
+            return st.take_voices[take]
+        spoken: Spoken | None = None
+        language = st.meta.get("language")
+        if not self.voice.speaks(language if isinstance(language, str) else None):
+            log("info", "voice.other_language", job=st.job_id, language=str(language or ""))
+        else:
+            name = hashlib.sha256(take.encode()).hexdigest()[:16]
+            try:
+                spoken = await self.voice.say(take, st.workdir / "voice" / f"{name}.mp3")
+            except (JobCanceled, asyncio.CancelledError):
+                raise
+            except Exception as e:  # ``say`` never raises; this is the belt to its braces
+                log("warn", "voice.failed", job=st.job_id, error=type(e).__name__)
+        st.take_voices[take] = spoken
+        return spoken
 
     def _render_key(self, st: JobState, index: int, name: str, folder: str = "render") -> str:
         return st.key(f"{folder}/{index:02d}/{name}")
@@ -2022,6 +2071,8 @@ class Pipeline:
                 "extra": r.extra,
                 **({"logo": True} if r.logo else {}),
                 **({"disclosure": True} if r.disclosure else {}),
+                **({"take": r.take} if r.take else {}),
+                **({"takeSpoken": True} if r.take_spoken else {}),
             }
             await self.store.upload(r.video, self._render_key(st, c.index, "clip.mp4", folder), "video/mp4")
             await self.store.upload(r.cover, self._render_key(st, c.index, "cover.jpg", folder), "image/jpeg")
@@ -2059,6 +2110,8 @@ class Pipeline:
                 extra=dict(done.get("extra") or {}),
                 logo=bool(done.get("logo")),
                 disclosure=bool(done.get("disclosure")),
+                take=str(done.get("take") or ""),
+                take_spoken=bool(done.get("takeSpoken")),
             )
         except (JobCanceled, asyncio.CancelledError):
             raise
@@ -2618,7 +2671,9 @@ class Pipeline:
         else:
             tr.say(f"Writing captions for {count(len(st.candidates), 'clip')}…")
             texts = [
-                captions_mod.ClipText(st.clip_ids[id(c)], c.moment, " ".join(x["text"] for x in c.render.captions))
+                captions_mod.ClipText(
+                    st.clip_ids[id(c)], c.moment, " ".join(x["text"] for x in c.render.captions), take=c.render.take
+                )
                 for c in st.candidates
             ]
             async with creep(tr.report, 0.05, 0.9, expected=60.0):
@@ -2804,6 +2859,12 @@ def clip_item(
         **creator_fields(st.source),
         **spoken_fields(r.captions),
     }
+    if r.take:
+        # "Your take" as the clip shows it (public; Review shows it under the hook). Only what was really drawn and
+        # said: a clip with no take has neither field.
+        item["take"] = r.take
+        if r.take_spoken:
+            item["takeSpoken"] = True
     if m.picked_for:
         item["pickedFor"] = m.picked_for[: signals_mod.MAX_PICKED_FOR]
     if st.campaign_id:
