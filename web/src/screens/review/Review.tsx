@@ -19,7 +19,7 @@ import { useSetup } from "../settings/setup/useSetup.ts";
 import { goingToLine, UploadToChips } from "./UploadTo.tsx";
 import { onClipBack, throwAwayWithUndo, useThrownAway } from "../../lib/throwAways.ts";
 import { useDeletedJobs } from "../../lib/jobDeletes.ts";
-import { captionsTooLong, PlaceRows, type PlaceRowsHandle } from "./PlaceRows.tsx";
+import { captionsTooLong, missingRequired, PlaceRows, type PlaceRowsHandle } from "./PlaceRows.tsx";
 import { prefersReducedMotion } from "../../lib/prefs.ts";
 import {
   brandedBlocked,
@@ -1123,6 +1123,26 @@ function ReviewCard({
       setFixing(false);
     }
   }
+
+  // A campaign clip's captions get the campaign's tags in as soon as the campaign is read (once per clip and campaign), so
+  // they are in the boxes before Upload, not only added by the publisher. What the owner typed stays (tags are only added).
+  const tagsPut = useRef(new Set<string>());
+  const campaignRequired = campaign
+    ? [campaign.rules?.disclosure.caption ?? "#Ad", ...(campaign.rules?.requiredHashtags ?? []), ...(campaign.rules?.requiredTags ?? [])]
+    : null;
+  useEffect(() => {
+    if (!campaign || !campaignId || !campaignRequired || clip.status !== "review") return;
+    const key = `${clip.clipId}|${campaignId}|${campaignRequired.join(",")}`;
+    if (tagsPut.current.has(key)) return;
+    const lacking = [captions.youtubeDescription, captions.tiktok, captions.instagram, captions.facebook, captions.x].some((t) => t && missingRequired(t, campaignRequired));
+    if (!lacking) return;
+    tagsPut.current.add(key);
+    api()
+      .crFitCaptions({ clipId: clip.clipId, campaignId, captions: { ...captions } })
+      .then((out) => edit(out))
+      .catch(() => tagsPut.current.delete(key));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [campaign, campaignId, clip.clipId, clip.status]);
 
   /** "I added it": Content Rewards knows that account now (the place row's and the fit block's, the same PATCH). */
   async function relink(p: Platform) {

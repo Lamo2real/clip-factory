@@ -596,8 +596,11 @@ def test_required_items_and_the_campaign_options() -> None:
 @pytest.mark.parametrize("platform", ["youtube", "tiktok", "instagram", "facebook", "x"])
 def test_the_disclosure_goes_first_and_every_required_item_is_added(platform: str) -> None:
     out = campaign_caption(platform, "wait for it", CAMPAIGN_OPTIONS)
-    assert out.startswith("#Ad wait for it")
-    assert out.endswith("#FaZe @FaZeClan")
+    if platform == "youtube":  # the tags sit right after #Ad: YouTube shows only the first hashtags (§38.14)
+        assert out.startswith("#Ad #FaZe @FaZeClan wait for it")
+    else:
+        assert out.startswith("#Ad wait for it")
+        assert out.endswith("#FaZe @FaZeClan")
     assert out.count("#FaZe") == 1
 
 
@@ -731,7 +734,7 @@ def test_youtube_campaign_start_turns_paid_promotion_on() -> None:
     assert json.loads(init.body) == {
         "snippet": {
             "title": "He did WHAT",
-            "description": "#Ad Full stream on the channel.\n\n#FaZe @FaZeClan",
+            "description": "#Ad #FaZe @FaZeClan Full stream on the channel.",
             "categoryId": "20",
         },
         "status": {"privacyStatus": "public", "selfDeclaredMadeForKids": False, "containsSyntheticMedia": False},
@@ -1154,3 +1157,22 @@ def test_try_again_and_post_now_run_the_fit(call: Call, store: db.Store, cr_on: 
     put_campaign(store)
     assert confirm(call, clip["clipId"], {"platforms": ["instagram"]})[0] == 200
     assert (store.get(PK, db.post_sk("Pinstagram")) or {})["status"] == "queued"
+
+
+def test_missing_required_tags_join_every_caption_and_youtube_gets_them_first() -> None:
+    from clipfactory_api.platforms.campaign_caption import campaign_caption, campaign_options
+
+    rules = {"requiredHashtags": ["#gta6", "#Clipup"], "disclosure": {"caption": "#Ad"}}
+    options = campaign_options(rules)
+    tiktok = campaign_caption("tiktok", "#gta6 #xqc #gaming #gtavi #npc", options)
+    assert "#Clipup" in tiktok
+    assert tiktok.count("#gta6") == 1
+    assert tiktok.startswith("#Ad")
+    insta = campaign_caption("instagram", "#gaming #gta6 #xqc #gtavi #twitchclips", options)
+    assert "#Clipup" in insta
+    assert insta.count("#gta6") == 1
+    yt = campaign_caption("youtube", "A funny moment\n\n#shorts #gaming", options)
+    assert yt.split()[:3] == ["#Ad", "#gta6", "#Clipup"]
+    assert yt.endswith("#shorts #gaming")
+    again = campaign_caption("youtube", yt, options)
+    assert again == yt  # nothing doubles

@@ -231,6 +231,14 @@ def _fit_length(platform: str, text: str, disclosure: str, required: list[str], 
     return f"{disclosure} {short}" + (sep + tail if tail else "")
 
 
+def _after_disclosure(text: str, disclosure: str, tags: str) -> str:
+    """``tags`` placed right after the disclosure that starts ``text`` (``text`` is returned with them in)."""
+    match = _token_pattern(disclosure).search(text)
+    if not match or match.start() >= DISCLOSURE_WINDOW:
+        return f"{tags} {text}"
+    return f"{text[: match.end()]} {tags}{text[match.end() :]}"
+
+
 def campaign_caption(platform: str, text: str, campaign: Mapping[str, Any] | None) -> str:
     """``text`` for a campaign post on ``platform``: the disclosure first, every required item in, inside the
     platform's limits. ``campaign`` is ``postOptions.campaign``; without one the text is returned unchanged."""
@@ -243,7 +251,15 @@ def campaign_caption(platform: str, text: str, campaign: Mapping[str, Any] | Non
     if not ad_first(out, disclosure):
         out = _tidy(f"{disclosure} {_remove(out, disclosure)}", one_line)
     missing = [r for r in required if not has_item(out, r)]
-    if missing:
+    if missing and platform == "youtube":
+        # YouTube shows only the first three hashtags above the title: the missing tags go right after the disclosure.
+        head = [m for m in missing if is_token(m)]
+        rest = [m for m in missing if not is_token(m)]
+        if head:
+            out = _after_disclosure(out, disclosure, " ".join(head))
+        if rest:
+            out = f"{out}\n\n{' '.join(rest)}"
+    elif missing:
         sep = " " if one_line else "\n\n"
         out = f"{out}{sep}{' '.join(missing)}"
     if platform in HASHTAG_LIMITS:
