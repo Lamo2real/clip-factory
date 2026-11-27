@@ -39,9 +39,38 @@
 }
 
 /* ---------- The editor sheet ---------- */
+/* §55: the sheet is a box of its own that never grows past the screen. Its head and its Make it bar stay put; the middle
+   scrolls inside it. Nothing is placed over anything else: the preview is a normal block with its own height. */
+.cr-ed-backdrop {
+  align-items: center;
+  overflow: hidden;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+}
 .cr-ed {
+  display: flex;
+  flex-direction: column;
   width: min(100%, 880px);
-  /* A tall sheet scrolls with its backdrop (tt-sheet-backdrop), so nothing here scrolls inside itself. */
+  max-height: 100%;
+  min-height: 0;
+  min-width: 0;
+  overflow: hidden;
+  overflow-wrap: anywhere;
+}
+.cr-ed > * {
+  min-width: 0;
+}
+.cr-ed__body {
+  display: grid;
+  align-content: start;
+  gap: 14px;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  /* room for the glow of the chosen picture and the delete buttons, which would be cut at the scroll edge */
+  margin-inline: -6px;
+  padding: 6px;
 }
 .cr-ed__grid {
   display: grid;
@@ -50,26 +79,14 @@
 }
 .cr-ed__side {
   display: grid;
-  gap: 6px;
+  gap: 8px;
   justify-items: center;
   min-width: 0;
-  /* On a phone the preview stays in view while the controls scroll under it (a see-through strip over them). */
-  position: sticky;
-  top: 4px;
-  z-index: 2;
-  padding: 6px;
-  border-radius: var(--r-md);
-  background: rgb(var(--green-deep-rgb) / 0.94);
 }
 @media (min-width: 760px) {
   .cr-ed__grid {
     grid-template-columns: minmax(200px, 300px) minmax(0, 1fr);
     align-items: start;
-  }
-  .cr-ed__side {
-    top: 0;
-    padding: 0;
-    background: none;
   }
 }
 .cr-ed__controls {
@@ -82,9 +99,10 @@
    words are the same share of the picture at any size (1080 px is the frame the renderer draws). */
 .cr-ed__preview {
   position: relative;
-  height: min(34vh, 300px);
+  height: clamp(180px, 34dvh, 300px);
   aspect-ratio: 9 / 16;
   max-width: 100%;
+  flex: none;
   container-type: inline-size;
   overflow: hidden;
   border-radius: var(--r-md);
@@ -95,7 +113,7 @@
 }
 @media (min-width: 760px) {
   .cr-ed__preview {
-    height: min(58vh, 520px);
+    height: clamp(260px, 58dvh, 520px);
   }
 }
 .cr-ed__cover {
@@ -198,7 +216,9 @@
   gap: 4px;
 }
 .cr-ed__actions {
+  flex: none;
   justify-content: flex-end;
+  padding-top: 4px;
 }
 
 /* The four corner buttons: a tiny frame, the chosen corner lit. */
@@ -254,7 +274,7 @@
 }
 .cr-logos__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(84px, 1fr));
+  grid-template-columns: repeat(auto-fill, minmax(92px, 1fr));
   gap: 10px;
   list-style: none;
   margin: 0;
@@ -283,7 +303,8 @@ button.cr-logo__pick:hover {
   box-shadow: var(--glass-shadow-raise-hover);
 }
 .cr-logo__pick.is-on {
-  background: linear-gradient(var(--tint-leaf), var(--tint-leaf)), var(--fill-hover);
+  background:
+    linear-gradient(var(--tint-leaf), var(--tint-leaf)), var(--fill-hover);
   box-shadow: var(--glass-shadow-raise);
 }
 .cr-logo__pick img {
@@ -294,8 +315,8 @@ button.cr-logo__pick:hover {
 }
 .cr-logo__remove {
   position: absolute;
-  top: -6px;
-  right: -6px;
+  top: 4px;
+  right: 4px;
   width: 32px;
   height: 32px;
 }
@@ -307,8 +328,13 @@ button.cr-logo__pick:hover {
   place-items: center;
   align-content: center;
   gap: 2px;
-  aspect-ratio: 1;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  min-height: 92px;
+  min-width: 0;
   padding: 8px;
+  overflow-wrap: anywhere;
   border-radius: var(--r-md);
   text-align: center;
   background: var(--fill-control);
@@ -331,11 +357,15 @@ button.cr-logo__pick:hover {
     0 0 0 3px rgb(var(--vermilion-rgb) / 0.3);
 }
 .cr-logo__add-title {
+  max-width: 100%;
+  line-height: 1.2;
   font-weight: 650;
   font-size: 0.9rem;
 }
 .cr-logo__add-hint {
+  max-width: 100%;
   font-size: 0.78rem;
+  line-height: 1.25;
   color: var(--ink-2);
 }
 

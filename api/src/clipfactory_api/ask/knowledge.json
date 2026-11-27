@@ -1,5 +1,5 @@
 {
- "version": "25ee8eb0486c",
+ "version": "bd05f51fccc2",
  "parts": [
   {
    "id": "app-map",
@@ -352,6 +352,12 @@
    "title": "CONTRACTS: 54. CR active: more than one picture on a clip (owner request, 2026-11-26)",
    "line": "The owner, on §53's sheet: \"i should be able to add multiple images to campaign active videos.\" BR-35, ADR-107.",
    "chars": 2502
+  },
+  {
+   "id": "contracts-55",
+   "title": "CONTRACTS: 55. CR active: the editor sheet fits every screen (owner request, 2026-11-27)",
+   "line": "S1. The Edit for campaign sheet never grows past the screen. Its head and its Make it bar stay in place; the middle scrolls inside it. The bar clears the phone'",
+   "chars": 806
   },
   {
    "id": "adr-01",
@@ -988,6 +994,12 @@
    "title": "DECISIONS: ADR-108 No schema unions",
    "line": "Decision. Bedrock allows 16 anyOf; now \"\"/0 mean not stated.",
    "chars": 102
+  },
+  {
+   "id": "adr-109",
+   "title": "DECISIONS: ADR-109 The CR sheet scrolls inside itself",
+   "line": "Context. §53's sheet scrolled with its backdrop and the preview was sticky, so on a phone it covered the fields below it.",
+   "chars": 287
   },
   {
    "id": "architecture-overview",

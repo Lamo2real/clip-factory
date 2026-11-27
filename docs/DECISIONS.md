@@ -2942,3 +2942,8 @@ likes, comments and shares; views are their own two choices.
 ## ADR-108 No schema unions
 
 - **Decision.** Bedrock allows 16 `anyOf`; now `""`/`0` mean not stated.
+
+## ADR-109 The CR sheet scrolls inside itself
+
+- **Context.** §53's sheet scrolled with its backdrop and the preview was sticky, so on a phone it covered the fields below it.
+- **Decision.** §55: a bounded sheet, a scrolling middle, a fixed Make it bar, a preview that is a plain block.
