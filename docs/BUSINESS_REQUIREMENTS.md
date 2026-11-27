@@ -736,6 +736,10 @@ The owner said on 26 Nov 2026: "i should be able to add multiple images to campa
 - AC2: **List.** A chip per picture lets the owner pick, move, resize or remove it.
 - AC3: **Old edits.** A clip edited with one logo still opens and posts as before.
 
+### BR-36 Engagement and watch graph per clip
+([CONTRACTS.md §55](CONTRACTS.md#55-engagement-score-and-watch-graph-owner-request-2026-11-27))
+- AC1: Each clip shows its engagement rate by views and a start-to-end watch curve, filterable by platform.
+
 ## Non-functional requirements
 
 ### NFR-01 Everything runs on AWS

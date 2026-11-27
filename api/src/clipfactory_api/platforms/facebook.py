@@ -11,6 +11,12 @@ Impressions and unique-views metrics (``post_impressions_unique``, ``total_video
 guarded ``post_total_media_view_unique`` on the Reel's post id (``GET /{v}/{post id}?fields=insights.metric(...)``):
 any error there just leaves ``reachUnique`` out.
 
+Watch graph (docs/CONTRACTS.md §55): a third guarded request on the Reel's video id,
+``GET /{v}/{video id}?fields=video_insights.metric(post_video_retention_graph)``, kept out of ``VIDEO_METRICS`` so an
+unknown metric can never break the main read. Its value is a ``{bucket: number}`` map (or a list); buckets are ordered
+by number and spread evenly over 0–100 % of the video; values ≤ 1.5 are ratios (times 100). Fewer than 2 points or any
+error leaves ``metrics.retention`` out.
+
 A Graph error marks only its own Reel and is logged as ``stats.read_failed`` (Meta's code and message, with ids cut
 out; never a token). A throttle or a dead token (190) stops the rest of the batch: every other Reel would get the same
 answer, and a retry makes a Meta block longer.
@@ -38,8 +44,10 @@ from .base import (
     insight_values,
     ms_to_seconds,
     put_present,
+    retention_curve,
     stats_id,
     to_int,
+    to_number,
 )
 
 VIDEO_METRICS: tuple[str, ...] = (
@@ -53,6 +61,8 @@ VIDEO_METRICS: tuple[str, ...] = (
     "post_video_social_actions",
 )
 REACH_METRIC = "post_total_media_view_unique"
+RETENTION_METRIC = "post_video_retention_graph"
+RATIO_CEILING = 1.5  # the largest value of a curve given as ratios (0..1, a little over with rewatches)
 THROTTLE_CODES = {"80001", "4", "17", "32", "613"}
 STOP_CODES = THROTTLE_CODES | {"190"}  # the same answer for every other Reel: stop asking
 GONE_SUBCODE = "33"  # "Object with ID ... does not exist, cannot be loaded due to missing permissions"
@@ -85,6 +95,25 @@ def _reactions(value: Any) -> dict[str, int] | None:
         name = str(key).lower().removeprefix("reaction_")
         out[name] = number
     return out
+
+
+def _retention_points(value: Any) -> list[tuple[float, float]]:
+    """``{bucket: number}`` (numeric keys: seconds or interval indexes) or a list → evenly spread ``(x %, y %)``."""
+    numbers: list[float] = []
+    if isinstance(value, dict):
+        keyed: list[tuple[float, float]] = []
+        for key, raw in value.items():
+            at, number = to_number(str(key)), to_number(raw)
+            if at is not None and number is not None:
+                keyed.append((float(at), float(number)))
+        numbers = [n for _, n in sorted(keyed)]
+    elif isinstance(value, list):
+        numbers = [float(n) for n in (to_number(v) for v in value) if n is not None]
+    if len(numbers) < 2:
+        return []
+    scale = 100.0 if max(numbers) <= RATIO_CEILING else 1.0
+    last = len(numbers) - 1
+    return [(i / last * 100, n * scale) for i, n in enumerate(numbers)]
 
 
 def _subcode(resp: HttpResponse) -> str | None:
@@ -124,6 +153,12 @@ class FacebookAdapter(AdapterBase):
         url = f"{GRAPH_HOST}/{self.graph_api_version}/{_node(post_id)}?fields=insights.metric({REACH_METRIC})"
         return HttpRequest("GET", url, {"Authorization": f"Bearer {token}"})
 
+    def retention_request(self, video_id: str, token: str) -> HttpRequest:
+        url = (
+            f"{GRAPH_HOST}/{self.graph_api_version}/{_node(video_id)}?fields=video_insights.metric({RETENTION_METRIC})"
+        )
+        return HttpRequest("GET", url, {"Authorization": f"Bearer {token}"})
+
     def fetch_stats(
         self, posts: list[Record], account: Record | None, *, now: datetime, want_insights: bool, http: HttpClient
     ) -> StatsBatch:
@@ -133,14 +168,14 @@ class FacebookAdapter(AdapterBase):
         for post in posts:
             if not stats_id(post):
                 continue
-            part = self._read(post, token, http)
+            part = self._read(post, token, http, now)
             batch.merge(part)
             if part.meta.error_code in STOP_CODES:
                 break  # never retry a Meta throttle: it extends the block; a dead token fails every Reel
         self.missing(batch, posts, "Facebook is busy. We will try again later.")
         return batch
 
-    def _read(self, post: Record, token: str, http: HttpClient) -> StatsBatch:
+    def _read(self, post: Record, token: str, http: HttpClient, now: datetime) -> StatsBatch:
         post_id = str(post["postId"])
         resp = http(self.insights_request(str(stats_id(post)), token))
         batch = StatsBatch(meta=graph_meta(resp), requests=1)
@@ -166,6 +201,8 @@ class FacebookAdapter(AdapterBase):
         batch.results[post_id] = {"comments": None, "shares": None}
         batch.insights[post_id] = slow
         self._reach(batch, post, token, http)
+        if batch.meta.error_code not in THROTTLE_CODES:
+            self._retention(batch, post, token, http, now)
         return batch
 
     def _reach(self, batch: StatsBatch, post: Record, token: str, http: HttpClient) -> None:
@@ -184,3 +221,20 @@ class FacebookAdapter(AdapterBase):
         if isinstance(body, dict):
             reach = to_int(insight_values(body.get("insights")).get(REACH_METRIC))
             put_present(batch.insights[str(post["postId"])]["extra"], "reachUnique", reach)
+
+    def _retention(self, batch: StatsBatch, post: Record, token: str, http: HttpClient, now: datetime) -> None:
+        resp = http(self.retention_request(str(stats_id(post)), token))
+        batch.requests += 1
+        meta = graph_meta(resp)
+        if meta.error_code is not None:
+            if meta.error_code in THROTTLE_CODES:
+                batch.meta = meta
+            return  # guarded: retention stays absent
+        batch.meta = meta
+        body = resp.json()
+        if not isinstance(body, dict):
+            return
+        points = _retention_points(insight_values(body.get("video_insights")).get(RETENTION_METRIC))
+        curve = retention_curve(points, "facebook", now)
+        if curve is not None:
+            batch.insights[str(post["postId"])]["retention"] = curve

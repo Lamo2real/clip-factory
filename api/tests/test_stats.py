@@ -5,11 +5,12 @@ from __future__ import annotations
 import copy
 import json
 from datetime import UTC, datetime, timedelta
+from decimal import Decimal
 from typing import Any
 
 import pytest
 
-from clipfactory_api import db
+from clipfactory_api import db, posts
 from clipfactory_api.clock import iso
 from clipfactory_api.ids import ulid
 from clipfactory_api.platforms import ResponseMeta, make_adapters
@@ -519,12 +520,20 @@ def test_youtube_insights_every_360_minutes_and_slow_values_kept(store: db.Store
     http = FakeHttp(
         (200, "youtube_videos_list"),
         (200, "youtube_analytics_report"),
+        (200, "youtube_retention_report"),
         (200, "youtube_videos_list"),
     )
     deps = make_deps(store, http, clock=clock)
     refresh_posts(deps, [stored(table, post)], reason="poll", now=NOW)
     item = stored(table, post)
-    assert len(http.calls) == 2
+    assert len(http.calls) == 3  # counts, the report and the watch graph (§55)
+    graph = {
+        "points": [[1, 112], [25, 84.6], [50, 71.2], [100, 40]],  # read back from DynamoDB numbers
+        "readAt": iso(NOW),
+        "source": "youtube",
+    }
+    assert item["metrics"]["retention"] == graph
+    assert all("retention" not in snap for snap in snapshots(store, post))  # snapshots never copy the graph
     assert item["insightsDueAt"] == iso(NOW + timedelta(minutes=360))
     assert item["metrics"]["shares"] == 93
     assert item["metrics"]["extra"]["watchMinutes"] == 1520.5
@@ -532,8 +541,9 @@ def test_youtube_insights_every_360_minutes_and_slow_values_kept(store: db.Store
     later = NOW + timedelta(minutes=30)
     clock.now = later
     refresh_posts(deps, [stored(table, post)], reason="poll", now=later)
-    assert len(http.calls) == 3  # counts only: no Analytics call before insightsDueAt
+    assert len(http.calls) == 4  # counts only: no Analytics call before insightsDueAt
     item = stored(table, post)
+    assert item["metrics"]["retention"] == graph  # kept between reads
     assert item["metrics"]["shares"] == 93  # slow values kept between reads
     assert item["metrics"]["extra"]["engagedViews"] == 6100
     assert item["metrics"]["insightsUpdatedAt"] == iso(NOW)
@@ -632,18 +642,18 @@ def test_youtube_budget_charges_units_per_call_from_the_config(store: db.Store, 
     cfg = config.parse(raw)
     post = seed_post(store, "youtube", "dQw4w9WgXcQ", age=timedelta(days=3))
     no_id = seed_post(store, "youtube", None, window=False)
-    http = FakeHttp((200, "youtube_videos_list"), (200, "youtube_analytics_report"))
+    http = FakeHttp((200, "youtube_videos_list"), (200, "youtube_analytics_report"), (200, "youtube_retention_report"))
     deps = make_deps(store, http)
     deps.cfg = cfg
     report = refresh_posts(deps, [stored(table, post)], reason="poll", now=NOW)
     assert report.outcomes[post["postId"]] == "updated"
-    assert len(http.calls) == 2  # counts + the insights report
+    assert len(http.calls) == 3  # counts + the insights report + the watch graph (Analytics: never charged)
     item = store.get("RATE#youtube", "BUDGET")
     assert item is not None
     assert item["unitsUsed"] == 3
     # A chunk with no YouTube id sends no request and is charged nothing.
     refresh_posts(deps, [stored(table, no_id)], reason="manual", now=NOW)
-    assert len(http.calls) == 2
+    assert len(http.calls) == 3
     assert store.get("RATE#youtube", "BUDGET")["unitsUsed"] == 3  # type: ignore[index]
     bad = copy.deepcopy(CFG.raw)
     bad["platforms"]["youtube"]["budget"]["unitsPerCall"] = 0
@@ -716,6 +726,33 @@ def test_merge_metrics_keeps_what_was_not_read() -> None:
     legacy = merge_metrics(old, None, {"shares": 5, "extra": {}}, NOW)
     assert legacy["metricsUpdatedAt"] == "2026-11-15T00:00:00.000Z"  # §5 checkedAt read as the fast time
     assert legacy["insightsUpdatedAt"] == iso(NOW)
+
+
+def test_merge_metrics_retention_replaced_or_kept() -> None:
+    """§55: a part carrying ``retention`` replaces the stored graph whole; otherwise the old one stays."""
+    old_graph = {"points": [[0, 100], [100, 30]], "readAt": "2026-11-15T00:00:00.000Z", "source": "youtube"}
+    new_graph = {"points": [[0, 100], [50, 60], [100, 20]], "readAt": iso(NOW), "source": "youtube"}
+    old = {"views": 10, "extra": {}, "retention": old_graph}
+    assert merge_metrics(old, {"views": 20, "extra": {}}, None, NOW)["retention"] == old_graph
+    assert merge_metrics(old, None, {"shares": 1, "extra": {}}, NOW)["retention"] == old_graph
+    assert merge_metrics(old, None, {"extra": {}, "retention": new_graph}, NOW)["retention"] == new_graph
+    assert "retention" not in merge_metrics({"views": 1}, {"views": 2, "extra": {}}, None, NOW)
+
+
+def test_public_metrics_passes_the_watch_graph_through() -> None:
+    graph = {
+        "points": [[Decimal("0"), Decimal("100")], [Decimal("50.5"), Decimal("61.2")]],
+        "readAt": "t",
+        "source": "facebook",
+    }
+    out = posts.public_metrics({"views": 5, "extra": {}, "retention": graph})
+    assert out is not None
+    assert out["retention"] == {"points": [[0, 100], [50.5, 61.2]], "readAt": "t", "source": "facebook"}
+    assert all(type(v) in {int, float} for point in out["retention"]["points"] for v in point)
+    assert json.dumps(out)  # plain JSON for the web and live events
+    for bad in (None, {"points": "x"}, {"points": [[1, 2]]}, {"points": [[1, "a"], [2]]}, "graph"):
+        assert "retention" not in (posts.public_metrics({"views": 5, "retention": bad}) or {})
+    assert "retention" not in (posts.public_metrics({"views": 5}) or {})
 
 
 # --- the handler ------------------------------------------------------------------------------------------------------

@@ -5,6 +5,10 @@
   ``favoriteCount`` is always 0 and dislikes are private, so neither is read. ``shares`` only comes from Analytics.
 * Slow: ``GET /v2/reports?ids=channel==MINE&...&dimensions=video&filters=video=={≤50 ids}``. Google processes this
   data with a 48–72 hour delay, so it is read every ``insightsIntervalMinutes`` (6 h) and shown as "Updates daily".
+* Watch graph (docs/CONTRACTS.md §55): with the slow read, ONE more Analytics request per video (the API refuses a
+  list of ids for this report): ``metrics=audienceWatchRatio&dimensions=elapsedVideoTimeRatio&filters=video=={id}``.
+  Rows are ``[ratio 0.01..1.0, watch ratio]`` → ``metrics.retention`` points ``[ratio*100, watchRatio*100]`` (can pass
+  100: rewatches). Any error or fewer than 2 points leaves ``retention`` out; the other numbers stand.
 """
 
 from __future__ import annotations
@@ -18,11 +22,13 @@ from .base import (
     HttpClient,
     HttpRequest,
     HttpResponse,
+    NetworkError,
     Record,
     ResponseMeta,
     StatsBatch,
     chunks,
     put_present,
+    retention_curve,
     stats_id,
     to_int,
     to_number,
@@ -61,6 +67,13 @@ class YouTubeAdapter(AdapterBase):
         url = (
             f"{REPORTS_URL}?ids=channel==MINE&startDate={start}&endDate={end}&metrics={ANALYTICS_METRICS}"
             f"&dimensions=video&filters=video=={','.join(quote(i, safe='') for i in ids)}"
+        )
+        return HttpRequest("GET", url, {"Authorization": f"Bearer {token}", "Accept": "application/json"})
+
+    def retention_request(self, video_id: str, start: str, end: str, token: str) -> HttpRequest:
+        url = (
+            f"{REPORTS_URL}?ids=channel==MINE&startDate={start}&endDate={end}&metrics=audienceWatchRatio"
+            f"&dimensions=elapsedVideoTimeRatio&filters=video=={quote(video_id, safe='')}"
         )
         return HttpRequest("GET", url, {"Authorization": f"Bearer {token}", "Accept": "application/json"})
 
@@ -112,7 +125,7 @@ class YouTubeAdapter(AdapterBase):
         batch = StatsBatch(requests=1, units=0)
         body = resp.json()
         if resp.status >= 400 or not isinstance(body, dict):
-            return batch  # slow numbers are a bonus: the fast counts stand on their own
+            return batch  # slow numbers are a bonus: the fast counts stand on their own (no graph asked either)
         headers = [str(h.get("name")) for h in body.get("columnHeaders") or [] if isinstance(h, dict)]
         for row in body.get("rows") or []:
             if not isinstance(row, list) or len(row) != len(headers):
@@ -130,4 +143,41 @@ class YouTubeAdapter(AdapterBase):
             slow: dict[str, Any] = {"extra": extra}
             put_present(slow, "shares", to_int(values.get("shares")))
             batch.insights[post_id] = slow
+        for video_id, post_id in by_id.items():
+            if video_id:
+                self._retention(batch, video_id, post_id, start=start, now=now, token=token, http=http)
         return batch
+
+    def _retention(
+        self,
+        batch: StatsBatch,
+        video_id: str,
+        post_id: str,
+        *,
+        start: str,
+        now: datetime,
+        token: str,
+        http: HttpClient,
+    ) -> None:
+        """§55: the audience-retention curve of one video, guarded: any error leaves ``retention`` out."""
+        batch.requests += 1
+        try:
+            resp = http(self.retention_request(video_id, start, now.date().isoformat(), token))
+            body = resp.json()
+        except NetworkError:
+            return  # the graph is a bonus: a failed read never costs the other numbers
+        if resp.status >= 400 or not isinstance(body, dict):
+            return
+        headers = [str(h.get("name")) for h in body.get("columnHeaders") or [] if isinstance(h, dict)]
+        points: list[tuple[float, float]] = []
+        for row in body.get("rows") or []:
+            if not isinstance(row, list) or len(row) != len(headers):
+                continue
+            values: dict[str, Any] = dict(zip(headers, row, strict=True))
+            ratio = to_number(values.get("elapsedVideoTimeRatio"))
+            watch = to_number(values.get("audienceWatchRatio"))
+            if ratio is not None and watch is not None:
+                points.append((ratio * 100, watch * 100))
+        curve = retention_curve(points, "youtube", now)
+        if curve is not None:
+            batch.insights.setdefault(post_id, {"extra": {}})["retention"] = curve
