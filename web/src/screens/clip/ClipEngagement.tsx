@@ -126,15 +126,15 @@ function Graph({ watch, durationSec, animate }: { watch: WatchView; durationSec:
           </svg>
           {markers.map((mk, i) =>
             mk.kind === "line" ? (
-              <span key={i} className="perf-eng__vline" style={{ left: `${mk.x}%` }} aria-hidden="true" />
+              <span key={i} className="perf-eng__vline" style={{ left: inside(mk.x, 2) }} aria-hidden="true" />
             ) : (
-              <span key={i} className="perf-eng__dot" style={{ left: `${mk.x}%`, top: top(mk.y) }} aria-hidden="true" />
+              <span key={i} className="perf-eng__dot" style={{ left: inside(mk.x, 5), top: top(mk.y) }} aria-hidden="true" />
             ),
           )}
           {drop ? (
             <>
-              <span className="perf-eng__dot is-drop" style={{ left: `${drop.x}%`, top: top(drop.y) }} aria-hidden="true" />
-              <span className={`perf-eng__drop${drop.x > 60 ? " is-left" : ""}${drop.y > H * 0.7 ? " is-below" : ""}`} style={{ left: `${drop.x}%`, top: top(drop.y) }} aria-hidden="true">
+              <span className="perf-eng__dot is-drop" style={{ left: inside(drop.x, 7), top: top(drop.y) }} aria-hidden="true" />
+              <span className={`perf-eng__drop${drop.x > 60 ? " is-left" : ""}${drop.y > H * 0.7 ? " is-below" : ""}`} style={{ left: inside(drop.x, 12), top: top(drop.y) }} aria-hidden="true">
                 Most leave here · {mss(drop.sec)}
               </span>
             </>
@@ -170,4 +170,9 @@ function Graph({ watch, durationSec, animate }: { watch: WatchView; durationSec:
       {watch.note ? <p className="perf-eng__line">{watch.note}</p> : null}
     </>
   );
+}
+
+/** A left position at x % of the plot, kept `px` from each edge so a dot or label never sticks out of it. */
+function inside(x: number, px: number): string {
+  return `clamp(${px}px, ${x}%, calc(100% - ${px}px))`;
 }
