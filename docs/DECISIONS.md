@@ -2941,4 +2941,4 @@ likes, comments and shares; views are their own two choices.
 
 ## ADR-108 No schema unions
 
-- **Decision.** No `anyOf` (max 16); no `thinking: disabled` (Fable refuses it).
+- **Decision.** No `anyOf`, no `thinking: disabled`.

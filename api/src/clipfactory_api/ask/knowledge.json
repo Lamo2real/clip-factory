@@ -1,5 +1,5 @@
 {
- "version": "995e57029c3f",
+ "version": "996e4667fd1a",
  "parts": [
   {
    "id": "app-map",
@@ -986,8 +986,8 @@
   {
    "id": "adr-108",
    "title": "DECISIONS: ADR-108 No schema unions",
-   "line": "Decision. No anyOf (max 16); no thinking: disabled (Fable refuses it).",
-   "chars": 110
+   "line": "Decision. No anyOf, no thinking: disabled.",
+   "chars": 82
   },
   {
    "id": "architecture-overview",
