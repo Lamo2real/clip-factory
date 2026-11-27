@@ -71,7 +71,7 @@ test.describe("the simple Review card", () => {
     }, clipId);
     expect(Object.keys(sent).sort()).toEqual(["facebook", "instagram", "tiktok", "youtube"]);
     expect(sent.tiktok).toEqual({ privacyLevel: "PUBLIC_TO_EVERYONE", disableComment: false, disableDuet: false, disableStitch: true, brandContent: false, brandOrganic: false });
-    expect(sent.youtube).toEqual({ privacy: "public", category: "20", madeForKids: false, notifySubscribers: true, embeddable: true });
+    expect(sent.youtube).toEqual({ privacy: "public", category: "24", madeForKids: false, notifySubscribers: true, embeddable: true });
     expect(sent.instagram).toEqual({ shareToFeed: true });
     expect(sent.facebook).toBeNull();
   });
@@ -106,7 +106,7 @@ test.describe("the simple Review card", () => {
     await expect(yt.getByLabel("Description")).toBeVisible();
     await expect(yt.getByRole("radiogroup", { name: "Who can see it on YouTube" }).getByRole("radio", { checked: true })).toHaveAccessibleName("Everyone");
     await expect(yt.getByRole("switch", { name: "Made for kids" })).toHaveAttribute("aria-checked", "false");
-    await expect(yt.locator(".dropdown__button")).toHaveText("Gaming");
+    await expect(yt.locator(".dropdown__button")).toHaveText("Entertainment");
     // A change for this clip only: the summary says it, and the button offers the owner's settings back.
     await yt.getByRole("radiogroup", { name: "Who can see it on YouTube" }).getByRole("radio", { name: "Link only" }).check();
     await expect(yt.locator("summary")).toContainText("Who can see it: Link only");

@@ -92,7 +92,7 @@ def test_youtube_resumable_upload_in_8_mb_chunks() -> None:
     assert init.headers["X-Upload-Content-Type"] == "video/mp4"
     assert init.headers["Authorization"] == "Bearer ACCESS-TOKEN"
     assert json.loads(init.body) == {
-        "snippet": {"title": "He did WHAT", "description": "Full stream on the channel.", "categoryId": "20"},
+        "snippet": {"title": "He did WHAT", "description": "Full stream on the channel.", "categoryId": "24"},
         "status": {"privacyStatus": "unlisted", "selfDeclaredMadeForKids": False, "containsSyntheticMedia": False},
     }
     ranges = [c.headers["Content-Range"] for c in http.calls[1:]]

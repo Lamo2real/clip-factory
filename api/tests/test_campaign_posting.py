@@ -735,7 +735,7 @@ def test_youtube_campaign_start_turns_paid_promotion_on() -> None:
         "snippet": {
             "title": "He did WHAT",
             "description": "#Ad #FaZe @FaZeClan Full stream on the channel.",
-            "categoryId": "20",
+            "categoryId": "24",
         },
         "status": {"privacyStatus": "public", "selfDeclaredMadeForKids": False, "containsSyntheticMedia": False},
         "paidProductPlacementDetails": {"hasPaidProductPlacement": True},

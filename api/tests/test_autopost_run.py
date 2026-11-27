@@ -382,7 +382,7 @@ def test_upload_options_are_only_for_the_places_going() -> None:
     assert out == {
         "youtube": {
             "privacy": "public",
-            "category": "20",
+            "category": "24",
             "madeForKids": False,
             "notifySubscribers": True,
             "embeddable": True,

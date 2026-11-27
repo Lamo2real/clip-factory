@@ -38,7 +38,7 @@ DEFAULTS = {
     },
     # §36 My settings: the owner's own post choices per platform, never made for kids.
     "postPreset": {
-        "youtube": {"category": "20", "notifySubscribers": True, "embeddable": True},
+        "youtube": {"category": "24", "notifySubscribers": True, "embeddable": True},
         "tiktok": {"privacy": "PUBLIC_TO_EVERYONE", "comments": True, "duet": True, "stitch": True},
         "instagram": {"shareToFeed": True},
         "facebook": {},

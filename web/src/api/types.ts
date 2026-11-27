@@ -621,7 +621,7 @@ export type YoutubePrivacy = "public" | "unlisted" | "private";
  * no made-for-kids field: My settings never mark a clip as made for kids. TikTok's Commercial content is per clip only.
  */
 export interface YouTubePreset {
-  /** A YouTube category id: "20" Gaming (the default), "24", "23", "22", "17". */
+  /** A YouTube category id: "24" Entertainment (the default), "20" Gaming, "23", "22", "17". */
   category: string;
   notifySubscribers: boolean;
   embeddable: boolean;

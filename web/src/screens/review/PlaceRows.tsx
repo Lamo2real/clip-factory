@@ -65,7 +65,7 @@ export function nowLine(p: Platform, o: CardOptions, tiktok: TikTokChoices, nick
   if (campaign && p === "x") return `Who can reply: ${X_REPLIES_LABEL[o.x.replies]} · Paid partnership: on`;
   switch (p) {
     case "youtube": {
-      const cat = YOUTUBE_CATEGORIES.find((c) => c.id === o.youtube.category)?.label ?? "Gaming";
+      const cat = YOUTUBE_CATEGORIES.find((c) => c.id === o.youtube.category)?.label ?? "Entertainment";
       return `Who can see it: ${YT_WHO[o.youtube.privacy]} · Made for kids: ${o.youtube.madeForKids ? "Yes" : "No"} · ${cat}`;
     }
     case "tiktok":

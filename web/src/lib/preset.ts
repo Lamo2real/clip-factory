@@ -3,7 +3,7 @@
 import type { ClipPostOptions, Platform, PostPreset, XReplies, YouTubeClipOptions, YoutubePrivacy } from "../api/types.ts";
 
 export const DEFAULT_PRESET: PostPreset = {
-  youtube: { category: "20", notifySubscribers: true, embeddable: true },
+  youtube: { category: "24", notifySubscribers: true, embeddable: true },
   tiktok: { privacy: "PUBLIC_TO_EVERYONE", comments: true, duet: true, stitch: true },
   instagram: { shareToFeed: true },
   facebook: {},
@@ -14,8 +14,8 @@ export const DEFAULT_PRESET: PostPreset = {
 export const YT_WHO: Record<YoutubePrivacy, string> = { public: "Everyone", unlisted: "Link only", private: "Only me" };
 
 export const YOUTUBE_CATEGORIES: { id: string; label: string }[] = [
-  { id: "20", label: "Gaming" },
   { id: "24", label: "Entertainment" },
+  { id: "20", label: "Gaming" },
   { id: "23", label: "Comedy" },
   { id: "22", label: "People & Blogs" },
   { id: "17", label: "Sports" },

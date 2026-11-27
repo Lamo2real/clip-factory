@@ -334,7 +334,7 @@ def test_youtube_without_options_keeps_the_old_choices_and_is_never_for_kids() -
         "selfDeclaredMadeForKids": False,
         "containsSyntheticMedia": False,
     }
-    assert meta["snippet"]["categoryId"] == "20"
+    assert meta["snippet"]["categoryId"] == "24"
     assert "notifySubscribers" not in YouTubePublisher.upload_url(job)
 
 

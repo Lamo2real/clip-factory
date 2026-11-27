@@ -2946,3 +2946,7 @@ likes, comments and shares; views are their own two choices.
 ## ADR-109 Campaign tags fill the caption boxes
 
 - **Decision.** Review runs fit-captions once per clip and campaign.
+
+## ADR-110 Entertainment default
+
+- **Decision.** `"24"`.

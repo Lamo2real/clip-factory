@@ -256,13 +256,13 @@ export const TREES: Tree[] = [
           {
             id: "my-settings-youtube",
             name: "YouTube",
-            leaf: "Everyone can see it, Gaming, tells your subscribers. Never made for kids.",
+            leaf: "Everyone can see it, Entertainment, tells subscribers. Never made for kids.",
             words: ["YouTube", "preset", "use my settings", "made for kids", "kids", "category", "public", "subscribers", "embed", "monetize", "ads"],
           },
           {
             id: "my-settings-tiktok",
             name: "TikTok",
-            leaf: "Everyone can see it; comments, Duet and Stitch on. Every clip starts on these while your Mac posts TikTok.",
+            leaf: "Everyone can see it; comments, Duet and Stitch on. Every clip starts on these.",
             words: ["TikTok", "preset", "use my settings", "privacy", "everyone", "duet", "stitch", "comments"],
           },
           {
