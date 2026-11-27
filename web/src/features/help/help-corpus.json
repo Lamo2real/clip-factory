@@ -1,5 +1,5 @@
 {
-  "version": "b9a4319f7843",
+  "version": "ab19a5a02b03",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -6010,7 +6010,7 @@
         "monetize",
         "ads"
       ],
-      "answer": "Everyone can see it, Gaming, tells your subscribers. Never made for kids.",
+      "answer": "Everyone can see it, Entertainment, tells your subscribers. Never made for kids.",
       "steps": [
         "Tap **Settings**.",
         "Tap **Posting**, then **My settings**.",

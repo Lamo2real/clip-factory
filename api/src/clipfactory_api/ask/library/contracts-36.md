@@ -27,11 +27,11 @@ Decision record: ADR-60 (which corrects ADR-57).
    "YouTube · title, description and settings", "TikTok · caption and settings", "Instagram · caption and
    settings", "Facebook · caption and settings", "X · caption and settings" (X's name is for screen readers only, its
    mark reads "X"). Under the title one quiet line says what will be used ("Who can see it: Everyone · Made for kids:
-   No · Gaming"; "Who can see it: Everyone · Comments on · Duet on · Stitch off"; "Reel · also in your feed"; "Reel on
+   No · Entertainment"; "Who can see it: Everyone · Comments on · Duet on · Stitch off"; "Reel · also in your feed"; "Reel on
    your Page · Everyone can see it"; "Who can reply: Everyone"); a too-long caption adds "Too long. Make it shorter."
    in vermilion ink. Tapping a row opens that place's own words (already written, with their limits) and every option:
    * YouTube: Title, Description, Who can see it (a `<Glide>` bar: Everyone / Link only / Only me, starting from
-     `settings.youtubePrivacy`), Category (the app's own dropdown, Gaming first), **Made for kids** switch (off = No),
+     `settings.youtubePrivacy`), Category (the app's own dropdown, Entertainment first), **Made for kids** switch (off = No),
      Tell my subscribers.
    * TikTok: Posting as, Caption, **Who can see it** (§36.5), Comments, Duet, Stitch, Commercial content with Your
      brand (Promotional content) / Branded content (Paid partnership). While his Mac posts TikTok, Who can see it and
@@ -96,7 +96,7 @@ Only YouTube, Instagram and X (TikTok's go in `tiktok`, §17.8; Facebook has non
 the preset (`madeForKids` is allowed here: YouTube asks every creator, and the card's switch starts off). Options for a
 place that is not in `platforms` are dropped. They are stored on that place's post as the internal `postOptions`
 (never returned). Publishers read the clip's option first, then My settings, then the old behaviour: YouTube
-`privacyStatus` (else `youtubePrivacy`), `categoryId` (else preset, else 20), `selfDeclaredMadeForKids` true only when
+`privacyStatus` (else `youtubePrivacy`), `categoryId` (else preset, else 24 Entertainment), `selfDeclaredMadeForKids` true only when
 the clip says so, `embeddable: false` only when asked, `&notifySubscribers=false` only when asked; Instagram
 `share_to_feed`; X `reply_settings` (nothing sent for everyone). Older clients send no `options` and get exactly the
 old posts. No table, index or infrastructure change; existing settings, clips and posts are untouched (the preset is
@@ -137,3 +137,11 @@ third), so the right end of Upload always takes the tap.
 (two-tap standard flow and what is sent, one place picker, rows open per place, paid partnership, My settings page,
 Ask never over Upload at 1000x650, 1440x900 and 390x844), `tiktok-sheet.spec.ts` (TikTok row compliance, before the
 audit, Library's sheet), `upload-to.spec.ts`.
+
+### 36.6 YouTube's category starts on Entertainment (owner request, 2026-11-27)
+
+The owner: "Make sure from now on that the default is entertainment for the category." The default `postPreset.youtube.category`
+is `"24"` (Entertainment), not `"20"` (Gaming); the Review YouTube row reads "Who can see it: Everyone · Made for kids: No ·
+Entertainment", and a post with no category anywhere uploads `categoryId` 24. Gaming stays in the list (second). Add-only, no
+migration: a category the owner already saved stays as saved; only an unsaved or missing one reads the new default. Decision
+record: ADR-110.

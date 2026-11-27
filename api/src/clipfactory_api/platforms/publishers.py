@@ -61,7 +61,7 @@ YOUTUBE_PART_REASONS = frozenset({"unexpectedPart", "invalidPart"})
 REFUSED_FIELD = (400, 403)  # a field the platform doesn't take: 400, or 403 for one this app isn't allowed (§38.21)
 NOT_SET = "not_set"
 YOUTUBE_VIDEOS = "https://www.googleapis.com/youtube/v3/videos"
-YOUTUBE_CATEGORY_GAMING = "20"
+YOUTUBE_CATEGORY_DEFAULT = "24"  # Entertainment (§36.6); Gaming "20" is still a pick
 TIKTOK_API = "https://open.tiktokapis.com"
 TIKTOK_SINGLE_MAX = 64 * MB
 TIKTOK_CHUNK = 10 * MB
@@ -280,11 +280,11 @@ class YouTubePublisher:
         captions = _captions(job)
         title = strip_angles(str(captions.get("youtubeTitle") or job.clip.get("hook") or "Clip")).strip()[:100]
         # This clip's choices from its YouTube row (§36.3) win; then My settings; a post without them keeps the old
-        # behaviour (the saved youtubePrivacy, Gaming, not made for kids).
+        # behaviour (the saved youtubePrivacy, Entertainment, not made for kids).
         opts = job.options
         preset = _preset(job, "youtube")
         privacy = str(opts.get("privacy") or job.settings.get("youtubePrivacy") or "public")
-        category = str(opts.get("category") or preset.get("category") or YOUTUBE_CATEGORY_GAMING)
+        category = str(opts.get("category") or preset.get("category") or YOUTUBE_CATEGORY_DEFAULT)
         campaign = _campaign(job) is not None
         if campaign or privacy not in {"public", "unlisted", "private"}:
             privacy = "public"
@@ -302,7 +302,7 @@ class YouTubePublisher:
             "snippet": {
                 "title": title or "Clip",
                 "description": caption(job, self.platform),
-                "categoryId": category if category.isdigit() else YOUTUBE_CATEGORY_GAMING,
+                "categoryId": category if category.isdigit() else YOUTUBE_CATEGORY_DEFAULT,
             },
             "status": status,
         }

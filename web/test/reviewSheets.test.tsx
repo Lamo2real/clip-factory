@@ -427,7 +427,7 @@ describe("place rows (§36)", () => {
     expect(Array.from(host.querySelectorAll("details")).every((d) => !d.open)).toBe(true);
     const yt = host.querySelector<HTMLElement>('[data-place="youtube"] summary')!;
     expect(yt.textContent).toContain("YouTube · title, description and settings");
-    expect(yt.textContent).toContain("Who can see it: Everyone · Made for kids: No · Gaming");
+    expect(yt.textContent).toContain("Who can see it: Everyone · Made for kids: No · Entertainment");
     // X's mark reads "X": its name is for screen readers only (never "X X").
     expect(host.querySelector('[data-place="x"] .place-row__title')!.textContent).toBe("Xcaption and settings");
   });

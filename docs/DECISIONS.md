@@ -2946,3 +2946,8 @@ likes, comments and shares; views are their own two choices.
 ## ADR-109 Campaign tags fill the caption boxes
 
 - **Decision.** Review runs fit-captions once per clip and campaign.
+
+## ADR-110 YouTube category defaults to Entertainment
+
+- **Context.** The default was Gaming (`"20"`); the owner asked for Entertainment (§36.6).
+- **Decision.** Default `"24"` in web `DEFAULT_PRESET`, `post_preset.DEFAULTS` and the publisher fallback; Entertainment listed first. No migration: a saved category stays; a preset saved while still on the old default keeps Gaming until the owner picks Entertainment once.

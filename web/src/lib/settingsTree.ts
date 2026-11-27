@@ -256,7 +256,7 @@ export const TREES: Tree[] = [
           {
             id: "my-settings-youtube",
             name: "YouTube",
-            leaf: "Everyone can see it, Gaming, tells your subscribers. Never made for kids.",
+            leaf: "Everyone can see it, Entertainment, tells your subscribers. Never made for kids.",
             words: ["YouTube", "preset", "use my settings", "made for kids", "kids", "category", "public", "subscribers", "embed", "monetize", "ads"],
           },
           {

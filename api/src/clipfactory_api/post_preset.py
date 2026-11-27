@@ -21,10 +21,10 @@ from . import validate
 from .errors import bad_request
 
 YOUTUBE_PRIVACY = ("public", "unlisted", "private")
-# YouTube category ids offered (Gaming first: these are game clips).
+# YouTube category ids offered (Entertainment first, the default; Gaming is still offered).
 YOUTUBE_CATEGORIES: dict[str, str] = {
-    "20": "Gaming",
     "24": "Entertainment",
+    "20": "Gaming",
     "23": "Comedy",
     "22": "People & Blogs",
     "17": "Sports",
@@ -34,7 +34,7 @@ TIKTOK_PRIVACY = ("PUBLIC_TO_EVERYONE", "FOLLOWER_OF_CREATOR", "MUTUAL_FOLLOW_FR
 X_REPLIES = ("everyone", "following", "mentionedUsers", "verified")
 
 DEFAULTS: dict[str, dict[str, Any]] = {
-    "youtube": {"category": "20", "notifySubscribers": True, "embeddable": True},
+    "youtube": {"category": "24", "notifySubscribers": True, "embeddable": True},
     "tiktok": {"privacy": "PUBLIC_TO_EVERYONE", "comments": True, "duet": True, "stitch": True},
     "instagram": {"shareToFeed": True},
     # Reels on a Facebook Page are public: there is nothing to pick.
