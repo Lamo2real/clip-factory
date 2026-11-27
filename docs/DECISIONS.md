@@ -2941,4 +2941,4 @@ likes, comments and shares; views are their own two choices.
 
 ## ADR-108 No schema unions
 
-- **Decision.** Bedrock allows 16 `anyOf`; now `""`/`0` mean not stated.
+- **Decision.** No `anyOf` (max 16); no `thinking: disabled` (Fable refuses it).

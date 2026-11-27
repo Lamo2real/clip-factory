@@ -1,5 +1,5 @@
 {
- "version": "25ee8eb0486c",
+ "version": "995e57029c3f",
  "parts": [
   {
    "id": "app-map",
@@ -986,8 +986,8 @@
   {
    "id": "adr-108",
    "title": "DECISIONS: ADR-108 No schema unions",
-   "line": "Decision. Bedrock allows 16 anyOf; now \"\"/0 mean not stated.",
-   "chars": 102
+   "line": "Decision. No anyOf (max 16); no thinking: disabled (Fable refuses it).",
+   "chars": 110
   },
   {
    "id": "architecture-overview",
