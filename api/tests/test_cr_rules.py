@@ -462,7 +462,9 @@ def test_handler_read_uses_only_the_item() -> None:
     assert item["rules"]["requiredHashtags"] == ["#FaZe"]
     assert item["logo"]["needed"] is True
     call = bedrock.calls[0]
-    assert call["additionalModelRequestFields"] == {"thinking": {"type": "disabled"}}
+    assert call["additionalModelRequestFields"] == {"output_config": {"effort": "low"}}  # never thinking: disabled
+    assert "temperature" not in call["inferenceConfig"]
+    assert "topP" not in call["inferenceConfig"]
     assert call["outputConfig"]["textFormat"]["type"] == "json_schema"
     assert "\\u003c" not in call["system"][-1]["text"]  # the system prompt is ours; brand text is in the user turn
     assert not hasattr(deps, "secrets")

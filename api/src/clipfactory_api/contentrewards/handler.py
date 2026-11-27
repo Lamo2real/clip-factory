@@ -103,7 +103,8 @@ def read(deps: CampaignsDeps, user_id: str, item: Item) -> str:
         checked = rules.validate(raw, corpus, rules.toggles(item.get("public")), follows)
         checked["uncertain"] = (doc_doubts + checked["uncertain"])[: rules.MAX_LIST]
     except Exception as e:
-        log("warning", "campaigns.read_failed", error=type(e).__name__, message=_why(e))
+        why = _why(e)  # read-logs keeps only the `error` field, so the message rides in it
+        log("warning", "campaigns.read_failed", error=f"{type(e).__name__}: {why}" if why else type(e).__name__)
         try:
             deps.store.update(pk, sk, {"rulesState": "failed"}, remove=["readPending"], expect_in=same)
         except db.ConditionFailed:
