@@ -1224,12 +1224,8 @@ Check now (`POST …/campaigns/{id}/read`) runs step 3 for one campaign synchron
   `CAMPAIGN#` item. The paid places are the live `CAMPAIGN#.platformsPaid` (the job's `campaign.platformsPaid` only
   when that item has none). A clip without a campaign is unchanged and never asks the fit (§39.3). The items are read
   by their literal keys (`CAMPAIGN#{uuid}`, `CRCONN`, the `SETUP#` items through `platform_setup.all_setups`).
-* **Tags in the boxes (2026-11-27, ADR-109).** Once Review has read a campaign clip's campaign, it calls the same
-  `POST /v1/contentrewards/fit/captions` once per clip and campaign when any caption lacks `#Ad` or a required
-  hashtag or tag, and puts the result in the boxes (tags are only added; the owner's own words stay). On YouTube
-  `campaign_caption` puts missing tags right after `#Ad` (YouTube shows only the first three hashtags); the other
-  places get them at the end. The publishers still run `campaign_caption` at Upload, so a caption edited later is
-  fixed there too.
+* **Tags in the boxes (ADR-109).** Review calls fit/captions once per clip and campaign when a tag is missing.
+  YouTube: missing tags go right after `#Ad`.
 * **Confirm** of a campaign clip in `review`, in this order:
   * `platforms` is required (400 "Pick where it goes, then tap Upload."; Settings › Where clips go never decides for
     a campaign clip). Then the normal checks: every chosen place has a connected account (400 "{Platform} is not set

@@ -2943,7 +2943,6 @@ likes, comments and shares; views are their own two choices.
 
 - **Decision.** No `anyOf`, no `thinking: disabled`.
 
-## ADR-109 Campaign tags are put in the caption boxes as soon as the campaign is read
+## ADR-109 Campaign tags fill the caption boxes
 
-- **Context.** A campaign clip's captions were written before its campaign was picked, so the boxes lacked `#Clipup` until the publisher added it at Upload.
-- **Decision.** Review runs the existing fit-captions call once per clip and campaign and fills the boxes. YouTube gets missing tags right after `#Ad`. Upload's server-side fix stays as the safety net (so no new warning).
+- **Decision.** Review runs fit-captions once per clip and campaign.

@@ -1,5 +1,5 @@
 {
- "version": "ce8191615192",
+ "version": "f8e9519fd8a9",
  "parts": [
   {
    "id": "app-map",
@@ -255,7 +255,7 @@
    "id": "contracts-38",
    "title": "CONTRACTS: 38. Content Rewards campaigns (owner request, 2026-11-21)",
    "line": "The owner's words: \"browse Content Rewards, join a campaign there, then paste the campaign URL into Clip Factory. Clip",
-   "chars": 178003
+   "chars": 177575
   },
   {
    "id": "contracts-39",
@@ -991,9 +991,9 @@
   },
   {
    "id": "adr-109",
-   "title": "DECISIONS: ADR-109 Campaign tags are put in the caption boxes as soon as the campaign is read",
-   "line": "Context. A campaign clip's captions were written before its campaign was picked, so the boxes lacked #Clipup until the publisher added it at Upload.",
-   "chars": 466
+   "title": "DECISIONS: ADR-109 Campaign tags fill the caption boxes",
+   "line": "Decision. Review runs fit-captions once per clip and campaign.",
+   "chars": 118
   },
   {
    "id": "architecture-overview",
