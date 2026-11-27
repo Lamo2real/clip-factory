@@ -53,6 +53,7 @@ import { storiesHref } from "../routes.ts";
 import { cleanPick, effortName, insteadPick, madeWith, ModelIdList, modelIdLine, ModelMenu, modelName, modelOf, ModelsUsed, NextRun, runTask, sendPick, SettingsFix, shortName, stoppedOn, StoryAi, storyUsual, UnusableSheet, unusableAsk, useAiInfo, usedOf, usualFor, type AiInfo } from "../studio/ai.tsx";
 import { CastPicker, castOrder, castProblem, FULL_STORY, NO_MAIN, NO_ROLES, PEOPLE_MAX, rolesOf, SAME_VILLAIN, STORY_CAST_MAX, storyCastProblem, storyOrder, TOO_MANY_PEOPLE, TOO_MANY_VEHICLES, type RolePick } from "../studio/CastPicker.tsx";
 import { AUTOSAVE_MS, DraftRow, DraftsFold, draftScript, scriptOfDraft, useDrafts } from "../studio/Drafts.tsx";
+import { ReuseButton, useReuse } from "../studio/Reuse.tsx";
 import { Filmstrip } from "../studio/Filmstrip.tsx";
 import { filterOf, MoveToSeries, SeriesField, seriesQuery, SeriesSwitch, useSeriesList, type SeriesFilter } from "../studio/SeriesSwitch.tsx";
 import { ArcDial, MediaRow, StatNumeral } from "../glass/index.ts";
@@ -127,6 +128,7 @@ function ProductionList({ ws, filter }: { ws: string; filter: SeriesFilter }) {
   const newVideo = storiesHref({ name: "production_new", ideaId: null, ...(seriesId && seriesId !== "none" ? { seriesId } : {}) });
   // Saved drafts (§45.47) of the series shown (none: those filed in no series), above Being made.
   const drafts = useDrafts(ws);
+  const reuse = useReuse(ws);
   const draftsHere = drafts.items.filter((d) => !seriesId || (seriesId === "none" ? !d.form.seriesId : d.form.seriesId === seriesId));
   const draftGroup = draftsHere.length ? (
     <>
@@ -197,7 +199,7 @@ function ProductionList({ ws, filter }: { ws: string; filter: SeriesFilter }) {
               <h2 className="st-s-section st-plate">Made</h2>
               <ul className="st-s-runs">
                 {made.map((r) => (
-                  <RunRow key={r.story.storyId} ws={ws} story={r.story} job={r.job} onMoved={() => void list.reload()} />
+                  <RunRow key={r.story.storyId} ws={ws} story={r.story} job={r.job} onMoved={() => void list.reload()} reuse={reuse} />
                 ))}
               </ul>
             </>
@@ -209,7 +211,7 @@ function ProductionList({ ws, filter }: { ws: string; filter: SeriesFilter }) {
   );
 }
 
-function RunRow({ ws, story, job, onMoved }: { ws: string; story: Story; job: ProductionJob | null; onMoved: () => void }) {
+function RunRow({ ws, story, job, onMoved, reuse }: { ws: string; story: Story; job: ProductionJob | null; onMoved: () => void; reuse?: ReturnType<typeof useReuse> }) {
   const href = storiesHref({ name: "production_story", storyId: story.storyId });
   const watch = ["review", "needs_check", "approved", "published"].includes(story.status);
   return (
@@ -231,6 +233,7 @@ function RunRow({ ws, story, job, onMoved }: { ws: string; story: Story; job: Pr
       </span>
       <span className="st-s-run__go">
         <MoveToSeries ws={ws} kind="story" id={story.storyId} title={story.title} current={story.seriesId ?? null} onMoved={onMoved} />
+        {reuse ? <ReuseButton story={story} busy={reuse.busy} onReuse={(id) => void reuse.reuse(id)} /> : null}
         {watch ? (
           <A href={storiesHref({ name: "review_story", storyId: story.storyId })} className="st-btn">
             Watch it

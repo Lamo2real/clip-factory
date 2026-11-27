@@ -2950,3 +2950,8 @@ likes, comments and shares; views are their own two choices.
 ## ADR-110 Entertainment default
 
 - **Decision.** `"24"`.
+
+## ADR-111 Use it again is a draft
+
+- **Decision.** Copy a made video into a video draft in the web, not a new route or a cloned story: the form already
+  edits every part, and the story stays untouched.

@@ -115,6 +115,23 @@
   }
 }
 
+/* The buttons sit beside the words only when the list itself is wide enough (a tablet with the sidebar is not, once
+   a row has three buttons: Move, Use it again, Watch it); otherwise they go under them, as on a phone. */
+.st-s-runs {
+  container-type: inline-size;
+}
+
+@container (max-width: 759px) {
+  .st-s-run {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .st-s-run__go {
+    grid-column: 1 / -1;
+    align-self: auto;
+  }
+}
+
 /* ---------- Make a new video ---------- */
 .st-s-newvideo {
   display: grid;

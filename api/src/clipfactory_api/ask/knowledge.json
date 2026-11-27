@@ -1,5 +1,5 @@
 {
- "version": "2d3bf04a36af",
+ "version": "af3f1fb0ccb9",
  "parts": [
   {
    "id": "app-map",
@@ -297,7 +297,7 @@
    "id": "contracts-45",
    "title": "CONTRACTS: 45. Clips Funded: a second, separate workspace (owner request, 2026-11-21)",
    "line": "Planned: not in the app until the switch pull request turns it on (§45.21). Until then nothing of Clips Funded",
-   "chars": 557217
+   "chars": 558606
   },
   {
    "id": "contracts-46",
@@ -1000,6 +1000,12 @@
    "title": "DECISIONS: ADR-110 Entertainment default",
    "line": "",
    "chars": 58
+  },
+  {
+   "id": "adr-111",
+   "title": "DECISIONS: ADR-111 Use it again is a draft",
+   "line": "Decision. Copy a made video into a video draft in the web, not a new route or a cloned story: the form already",
+   "chars": 204
   },
   {
    "id": "architecture-overview",
