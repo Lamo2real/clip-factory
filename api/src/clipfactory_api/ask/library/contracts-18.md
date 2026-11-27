@@ -1,6 +1,7 @@
 ## 18. Skills: full create, read, update, delete; every AI call uses every skill (owner request, 2026-11-16)
 
-The owner's words: *"I want to be able to create, read, update, delete skills in Settings, following the trees,
+The owner's words: *"I want to
+be able to create, read, update, delete skills in Settings, following the trees,
 branches, apples, leaves structure. The whole AI system should use all of these skills by default, no matter what,
 as long as I add them: whatever AI service we use (Bedrock, AgentCore, whatever), when it is generating stuff or
 reading stuff."* Where this section and an earlier one disagree, this one wins. It supersedes: the skills routes in

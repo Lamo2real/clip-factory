@@ -1,6 +1,7 @@
 ## 46. Auto-posting: the oldest clips in Review go up by themselves, every X hours (owner request, 2026-11-22)
 
-Decision record: ADR-81. Builders: §46.16. Everything here is additive: no table, index, secret, bucket, Cognito or
+Decision record: ADR-81. Builders:
+§46.16. Everything here is additive: no table, index, secret, bucket, Cognito or
 cf-prod-api infrastructure changes; existing settings, clips and posts read exactly as before.
 
 ### 46.1 The owner's words and the answers he gave

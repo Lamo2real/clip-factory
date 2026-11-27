@@ -1,6 +1,7 @@
 ## 17. Posting setup: a setup list per platform, real Connect, real posting (owner request, 2026-11-16)
 
-The owner's words: *"Facebook, Instagram, YouTube, TikTok and X should each be a step to connect to in order for this
+The owner's words: *"Facebook,
+Instagram, YouTube, TikTok and X should each be a step to connect to in order for this
 automation to work, to be able to upload to every single one. The steps in each setup should be up to date to today:
 whatever the platform requires. The user should not have to write code; only use the Clip Factory app and the
 platforms. Really clear, idiot proof, an 8-year-old should be able to do it."*

@@ -1,6 +1,7 @@
 ## 39. Content Rewards: the two ways, all your money, and does this clip fit (owner request, 2026-11-21)
 
-The owner's words, the day §38 was approved: *"please double check that the steps to conect to contentrewards is
+The owner's words, the day §38
+was approved: *"please double check that the steps to conect to contentrewards is
 extremely easy and simple and set up in. a chronological and structured manner so the UX is better and the user has a
 better and pleasant experience on the app using eaither the content rewards way of videos or normal way we have done so
 far, i also need to track how much i earn from all platforms including contentrewards. btw i would like to know if the

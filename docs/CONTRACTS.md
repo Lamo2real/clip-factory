@@ -2156,7 +2156,8 @@ labels 48-hour learnings "Older note" and links here; it does not repeat the les
 
 ## 17. Posting setup: a setup list per platform, real Connect, real posting (owner request, 2026-11-16)
 
-The owner's words: *"Facebook, Instagram, YouTube, TikTok and X should each be a step to connect to in order for this
+The owner's words: *"Facebook,
+Instagram, YouTube, TikTok and X should each be a step to connect to in order for this
 automation to work, to be able to upload to every single one. The steps in each setup should be up to date to today:
 whatever the platform requires. The user should not have to write code; only use the Clip Factory app and the
 platforms. Really clear, idiot proof, an 8-year-old should be able to do it."*
@@ -3113,7 +3114,8 @@ on its glass bar) at 375 and 1024.
 
 ## 18. Skills: full create, read, update, delete; every AI call uses every skill (owner request, 2026-11-16)
 
-The owner's words: *"I want to be able to create, read, update, delete skills in Settings, following the trees,
+The owner's words: *"I want to
+be able to create, read, update, delete skills in Settings, following the trees,
 branches, apples, leaves structure. The whole AI system should use all of these skills by default, no matter what,
 as long as I add them: whatever AI service we use (Bedrock, AgentCore, whatever), when it is generating stuff or
 reading stuff."* Where this section and an earlier one disagree, this one wins. It supersedes: the skills routes in
@@ -3473,7 +3475,8 @@ cache point threshold `8_000` characters.
 
 ## 19. Ask Clip Factory: grounded in-app help assistant (owner request, 2026-11-16)
 
-The owner's picture: a friendly helper in the corner that answers "how do I…" and "where is…" in short steps a child
+The owner's picture: a friendly
+helper in the corner that answers "how do I…" and "where is…" in short steps a child
 can follow, then **takes you there** and lights up the right button. This section applies the in-app assistant pattern
 (Ask Booqy) to Clip Factory only. Where it and an earlier section disagree, this one wins.
 
@@ -9507,7 +9510,8 @@ line or a warning where it matters:
 
 ## 39. Content Rewards: the two ways, all your money, and does this clip fit (owner request, 2026-11-21)
 
-The owner's words, the day §38 was approved: *"please double check that the steps to conect to contentrewards is
+The owner's words, the day §38
+was approved: *"please double check that the steps to conect to contentrewards is
 extremely easy and simple and set up in. a chronological and structured manner so the UX is better and the user has a
 better and pleasant experience on the app using eaither the content rewards way of videos or normal way we have done so
 far, i also need to track how much i earn from all platforms including contentrewards. btw i would like to know if the
@@ -10226,7 +10230,8 @@ campaign upload); that the rules reader sets `overlayRequired` only when a brief
 
 ## 40. Get paid: set up payouts, see if you can get paid, and what reached your bank (owner request, 2026-11-21)
 
-The owner's words: *"Does the application of Clip Factory show me exactly how much I get after or how much I earn in
+The owner's words: *"Does the application
+of Clip Factory show me exactly how much I get after or how much I earn in
 real money based on content rewards based on the actual add sense in U2 and you know all of the other stuff for Meta
 and Facebook and an Instagram and also if I connect it then how much X and also on TikTok does it show me that? Also,
 can I have like a step just like we how we connected the platform social media platforms to Clip Factory can I have a
@@ -12330,7 +12335,8 @@ check", never a number):
 
 ## 41. Campaign finder: campaigns that match what you want (owner request, 2026-11-21)
 
-The owner's words: *"Also, will I be able to find campaigns and join them based on some requirements that I set if the
+The owner's words: *"Also, will
+I be able to find campaigns and join them based on some requirements that I set if the
 MCP and my connection to content rewards through Clip Factory gets accepted?"* The answer he got: Content Rewards'
 official MCP server (23 tools, checked live 2026-11-21, `mcp-tools.json` of API version `2026-10-01`) has **no tool to
 browse Discover and none to join or apply**, so joining stays his own tap on Content Rewards (CR). Joining also means
@@ -19973,7 +19979,8 @@ resource, the stories agent and Terraform do not change, and nothing is charged 
 
 ## 46. Auto-posting: the oldest clips in Review go up by themselves, every X hours (owner request, 2026-11-22)
 
-Decision record: ADR-81. Builders: §46.16. Everything here is additive: no table, index, secret, bucket, Cognito or
+Decision record: ADR-81. Builders:
+§46.16. Everything here is additive: no table, index, secret, bucket, Cognito or
 cf-prod-api infrastructure changes; existing settings, clips and posts read exactly as before.
 
 ### 46.1 The owner's words and the answers he gave
@@ -22438,11 +22445,11 @@ The owner: more than one image on a CR clip. BR-35, ADR-107.
   own start and end (whole clip by default), then the text on top. Same audio, size and encoder as §53.
 - **L6. The sheet fits every screen (owner, 2026-11-27).** It never grows past the screen: head and Make it bar stay, the middle scrolls inside it. Nothing sits over anything else; text wraps inside its box. Checked at 375 to 1920 px in `web/e2e/cr-overlay.spec.ts`.
 
-## 55. Engagement score and watch graph (owner request, 2026-11-27)
+## 55. Engagement and watch graph (owner request, 2026-11-27)
 
-The owner: "count engagement for each video ... as professionals do it", and "a graph on how people are engaged in
-the video from start of the video to end", "across all platforms", with a click to "filter for each social media
-platform". BR-36, ADR-111.
+BR-36, ADR-111. The owner: count
+engagement "as professionals do it", show how people watch from start to end,
+"across all platforms", and "filter for each social media platform".
 
 - **E1. The score.** Engagement rate by views, the way social media analysts count it: **(likes + comments + shares +
   saves) ÷ views × 100**, one decimal ("4.7%"), with one word: under 1 % Low, 1–3 OK, 3–6 Good, 6–10 Great, 10+

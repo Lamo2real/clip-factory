@@ -1,8 +1,8 @@
-## 55. Engagement score and watch graph (owner request, 2026-11-27)
+## 55. Engagement and watch graph (owner request, 2026-11-27)
 
-The owner: "count engagement for each video ... as professionals do it", and "a graph on how people are engaged in
-the video from start of the video to end", "across all platforms", with a click to "filter for each social media
-platform". BR-36, ADR-111.
+BR-36, ADR-111. The owner: count
+engagement "as professionals do it", show how people watch from start to end,
+"across all platforms", and "filter for each social media platform".
 
 - **E1. The score.** Engagement rate by views, the way social media analysts count it: **(likes + comments + shares +
   saves) ÷ views × 100**, one decimal ("4.7%"), with one word: under 1 % Low, 1–3 OK, 3–6 Good, 6–10 Great, 10+
