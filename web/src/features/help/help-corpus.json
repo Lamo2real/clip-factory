@@ -1,5 +1,5 @@
 {
-  "version": "ab19a5a02b03",
+  "version": "2d175300091c",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -6010,7 +6010,7 @@
         "monetize",
         "ads"
       ],
-      "answer": "Everyone can see it, Entertainment, tells your subscribers. Never made for kids.",
+      "answer": "Everyone can see it, Entertainment, tells subscribers. Never made for kids.",
       "steps": [
         "Tap **Settings**.",
         "Tap **Posting**, then **My settings**.",
@@ -6047,7 +6047,7 @@
         "stitch",
         "comments"
       ],
-      "answer": "Everyone can see it; comments, Duet and Stitch on. Every clip starts on these while your Mac posts TikTok.",
+      "answer": "Everyone can see it; comments, Duet and Stitch on. Every clip starts on these.",
       "steps": [
         "Tap **Settings**.",
         "Tap **Posting**, then **My settings**.",
