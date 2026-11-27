@@ -16,11 +16,15 @@ async function review(page: Page) {
 test.describe("CR active", () => {
   test.use({ viewport: { width: 1440, height: 900 } });
 
-  test("CR inactive by default; CR active, the editor, Make it, then Reset", async ({ page }) => {
+  test("CR inactive by default; CR active, the editor, Make it, then Reset", async ({
+    page,
+  }) => {
     const card = await review(page);
     const sw = card.locator(".cr-switch");
     await expect(sw.locator(".segmented__opt.is-on")).toHaveText("CR inactive");
-    await expect(card.getByRole("button", { name: "Edit for campaign" })).toHaveCount(0);
+    await expect(
+      card.getByRole("button", { name: "Edit for campaign" }),
+    ).toHaveCount(0);
 
     await sw.locator(".segmented__opt", { hasText: /^CR active$/ }).click();
     const edit = card.getByRole("button", { name: "Edit for campaign" });
@@ -32,10 +36,14 @@ test.describe("CR active", () => {
     await expect(sheet.getByText("Whole clip", { exact: true })).toBeVisible();
     await expect(sheet.getByText("Only part of the clip")).toBeVisible();
     // A logo from the library, then a corner, and the one warning line when it sits under the captions.
-    await sheet.getByRole("button", { name: "Lamo Clips", exact: true }).click();
+    await sheet
+      .getByRole("button", { name: "Lamo Clips", exact: true })
+      .click();
     await expect(sheet.locator(".cr-ed__logo")).toBeVisible();
     await sheet.getByRole("button", { name: "Bottom left" }).first().click();
-    await expect(sheet.locator("[data-edit-warning]")).toHaveText("Under the captions");
+    await expect(sheet.locator("[data-edit-warning]")).toHaveText(
+      "Under the captions",
+    );
     await expect(sheet.locator(".cr-ed__logo")).toHaveClass(/is-warn/);
 
     // Drag it to the top left of the cover: the warning goes away.
@@ -43,7 +51,11 @@ test.describe("CR active", () => {
     const logo = (await sheet.locator(".cr-ed__logo").boundingBox())!;
     await page.mouse.move(logo.x + logo.width / 2, logo.y + logo.height / 2);
     await page.mouse.down();
-    await page.mouse.move(preview.x + preview.width * 0.3, preview.y + preview.height * 0.1, { steps: 6 });
+    await page.mouse.move(
+      preview.x + preview.width * 0.3,
+      preview.y + preview.height * 0.1,
+      { steps: 6 },
+    );
     await page.mouse.up();
     await expect(sheet.locator("[data-edit-warning]")).toHaveCount(0);
     await expect(sheet.locator(".cr-ed__logo")).not.toHaveClass(/is-warn/);
@@ -64,9 +76,13 @@ test.describe("CR active", () => {
     await expect(card.locator(".cr-switch__tags")).toHaveCount(0);
   });
 
-  test("several pictures: chips, the chosen one moves alone, the cap line at 4, the x, then Make it", async ({ page }) => {
+  test("several pictures: chips, the chosen one moves alone, the cap line at 4, the x, then Make it", async ({
+    page,
+  }) => {
     const card = await review(page);
-    await card.locator(".cr-switch .segmented__opt", { hasText: /^CR active$/ }).click();
+    await card
+      .locator(".cr-switch .segmented__opt", { hasText: /^CR active$/ })
+      .click();
     await card.getByRole("button", { name: "Edit for campaign" }).click();
     const sheet = page.getByRole("dialog", { name: "Edit for campaign" });
     const tile = sheet.getByRole("button", { name: "Lamo Clips", exact: true });
@@ -83,21 +99,27 @@ test.describe("CR active", () => {
     await chips.nth(0).locator(".cr-chip__pick").click();
     await expect(chips.nth(0)).toHaveClass(/is-on/);
     // Places are read against the preview (the warning line that appears below it can shift the whole column).
-    const place = async (n: number) => (await pictures.nth(n).boundingBox())!.y - (await sheet.locator(".cr-ed__preview").boundingBox())!.y;
+    const place = async (n: number) =>
+      (await pictures.nth(n).boundingBox())!.y -
+      (await sheet.locator(".cr-ed__preview").boundingBox())!.y;
     const second = await place(1);
     const firstBefore = await place(0);
     await sheet.getByRole("button", { name: "Bottom left" }).click();
     await expect.poll(() => place(0)).toBeGreaterThan(firstBefore + 50);
     expect(Math.abs((await place(1)) - second)).toBeLessThan(1);
     // Each covered picture has a dot on its chip; the line names the chosen one's problem.
-    await expect(sheet.locator("[data-edit-warning]")).toHaveText("Under the captions");
+    await expect(sheet.locator("[data-edit-warning]")).toHaveText(
+      "Under the captions",
+    );
     await expect(chips.nth(0).locator("[data-chip-dot]")).toBeVisible();
 
     // At 4 pictures: one line, and the tiles stop adding.
     await tile.click();
     await tile.click();
     await expect(chips).toHaveCount(4);
-    await expect(sheet.locator("[data-edit-cap]")).toHaveText("That's 4 pictures. Remove one to add another.");
+    await expect(sheet.locator("[data-edit-cap]")).toHaveText(
+      "That's 4 pictures. Remove one to add another.",
+    );
     await tile.click({ force: true });
     await expect(chips).toHaveCount(4);
     await chips.nth(3).getByRole("button", { name: "Remove picture" }).click();
@@ -115,16 +137,24 @@ test.describe("CR active", () => {
 
     await sheet.getByRole("button", { name: "Make it" }).click();
     await expect(sheet).toHaveCount(0);
-    await expect(card.locator(".cr-switch__tags")).toContainText("Logo × 2", { timeout: 10_000 });
+    await expect(card.locator(".cr-switch__tags")).toContainText("Logo × 2", {
+      timeout: 10_000,
+    });
   });
 
-  test("switching back to CR inactive leaves the card as it was", async ({ page }) => {
+  test("switching back to CR inactive leaves the card as it was", async ({
+    page,
+  }) => {
     const card = await review(page);
     const sw = card.locator(".cr-switch");
     await sw.locator(".segmented__opt", { hasText: /^CR active$/ }).click();
-    await expect(card.getByRole("button", { name: "Edit for campaign" })).toBeVisible();
+    await expect(
+      card.getByRole("button", { name: "Edit for campaign" }),
+    ).toBeVisible();
     await sw.locator(".segmented__opt", { hasText: /^CR inactive$/ }).click();
-    await expect(card.getByRole("button", { name: "Edit for campaign" })).toHaveCount(0);
+    await expect(
+      card.getByRole("button", { name: "Edit for campaign" }),
+    ).toHaveCount(0);
   });
 });
 
@@ -133,20 +163,30 @@ test.describe("CR active on a phone", () => {
 
   test("the editor sheet fits the screen", async ({ page }) => {
     const card = await review(page);
-    await card.locator(".cr-switch .segmented__opt", { hasText: /^CR active$/ }).click();
+    await card
+      .locator(".cr-switch .segmented__opt", { hasText: /^CR active$/ })
+      .click();
     await card.getByRole("button", { name: "Edit for campaign" }).click();
     const sheet = page.getByRole("dialog", { name: "Edit for campaign" });
     await expect(sheet).toBeVisible();
     const box = (await sheet.boundingBox())!;
     expect(box.x).toBeGreaterThanOrEqual(0);
     expect(box.x + box.width).toBeLessThanOrEqual(390 + 0.5);
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
     await expect(sheet.getByRole("button", { name: "Make it" })).toBeAttached();
   });
 
-  test("four pictures and their chips still fit the sheet", async ({ page }) => {
+  test("four pictures and their chips still fit the sheet", async ({
+    page,
+  }) => {
     const card = await review(page);
-    await card.locator(".cr-switch .segmented__opt", { hasText: /^CR active$/ }).click();
+    await card
+      .locator(".cr-switch .segmented__opt", { hasText: /^CR active$/ })
+      .click();
     await card.getByRole("button", { name: "Edit for campaign" }).click();
     const sheet = page.getByRole("dialog", { name: "Edit for campaign" });
     const tile = sheet.getByRole("button", { name: "Lamo Clips", exact: true });
@@ -157,6 +197,115 @@ test.describe("CR active on a phone", () => {
     const box = (await chips.boundingBox())!;
     expect(box.x).toBeGreaterThanOrEqual(0);
     expect(box.x + box.width).toBeLessThanOrEqual(390 + 0.5);
-    expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(true);
+    expect(
+      await page.evaluate(
+        () => document.documentElement.scrollWidth <= window.innerWidth,
+      ),
+    ).toBe(true);
   });
 });
+
+// §55: the sheet is a box of its own at every width: it fits the screen, its middle scrolls inside it, Make it is always
+// on screen, no section sits over another and no words poke out of their box.
+for (const vp of [
+  { width: 375, height: 667 },
+  { width: 430, height: 932 },
+  { width: 820, height: 1180 },
+  { width: 1280, height: 800 },
+  { width: 1920, height: 1080 },
+]) {
+  test.describe(`CR sheet layout at ${vp.width}x${vp.height}`, () => {
+    test.use({ viewport: vp });
+
+    test("nothing overlaps, nothing pokes out, Make it stays in view", async ({
+      page,
+    }) => {
+      const card = await review(page);
+      await card
+        .locator(".cr-switch .segmented__opt", { hasText: /^CR active$/ })
+        .click();
+      await card.getByRole("button", { name: "Edit for campaign" }).click();
+      const sheet = page.getByRole("dialog", { name: "Edit for campaign" });
+      await expect(sheet).toBeVisible();
+      await sheet
+        .getByRole("button", { name: "Lamo Clips", exact: true })
+        .click();
+      await sheet
+        .getByLabel("Text", { exact: true })
+        .fill("#Valor and a rather long line of words");
+      const r = await page.evaluate(() => {
+        const q = (sel: string) =>
+          document.querySelector(sel) as HTMLElement | null;
+        const box = (el: Element | null) => {
+          const b = el?.getBoundingClientRect();
+          return b ? { l: b.left, t: b.top, r: b.right, b: b.bottom } : null;
+        };
+        const dlg = q('[role="dialog"].cr-ed')!;
+        const body = q(".cr-ed__body")!;
+        const foot = q(".cr-ed__actions")!;
+        const parts = [".cr-ed__preview", ".cr-chips", ".cr-ed__controls"].map(
+          (s) => [s, box(q(s))] as const,
+        );
+        const clipped: string[] = [];
+        for (const el of Array.from(
+          dlg.querySelectorAll<HTMLElement>(
+            "span, p, label, h2, button, summary",
+          ),
+        )) {
+          if (el.closest(".cr-ed__preview")) continue;
+          const cs = getComputedStyle(el);
+          if (cs.display === "inline" || el.clientWidth === 0) continue;
+          if (el.scrollWidth > el.clientWidth + 1 && cs.overflowX === "visible")
+            clipped.push(el.className || el.tagName);
+        }
+        const add = q(".cr-logo__add");
+        const addBox = box(add);
+        const inAdd = add ? Array.from(add.children).map((c) => box(c)!) : [];
+        return {
+          vw: innerWidth,
+          vh: innerHeight,
+          sw: document.documentElement.scrollWidth,
+          dlg: box(dlg),
+          bodyScrollsInside: body.scrollWidth <= body.clientWidth + 1,
+          foot: box(foot),
+          parts,
+          clipped,
+          addBox,
+          inAdd,
+        };
+      });
+      expect(r.sw).toBeLessThanOrEqual(r.vw);
+      expect(r.bodyScrollsInside).toBe(true);
+      expect(r.dlg!.l).toBeGreaterThanOrEqual(0);
+      expect(r.dlg!.r).toBeLessThanOrEqual(r.vw + 0.5);
+      expect(r.dlg!.t).toBeGreaterThanOrEqual(0);
+      expect(r.dlg!.b).toBeLessThanOrEqual(r.vh + 0.5);
+      // Make it's bar is inside the sheet and on screen.
+      expect(r.foot!.b).toBeLessThanOrEqual(r.vh + 0.5);
+      expect(r.foot!.t).toBeGreaterThanOrEqual(r.dlg!.t);
+      // The preview, its chips and the controls never overlap in a column (on a wide sheet they sit side by side).
+      const [pv, ch, ct] = r.parts.map((p) => p[1]!) as [Rect, Rect, Rect];
+      type Rect = { l: number; t: number; r: number; b: number };
+      const apart = (a: Rect, b: Rect) =>
+        a.b <= b.t + 0.5 ||
+        b.b <= a.t + 0.5 ||
+        a.r <= b.l + 0.5 ||
+        b.r <= a.l + 0.5;
+      expect(apart(pv, ct)).toBe(true);
+      expect(apart(ch, ct)).toBe(true);
+      expect(apart(pv, ch)).toBe(true);
+      expect(r.clipped).toEqual([]);
+      // The add tile holds its own words.
+      if (r.addBox)
+        for (const c of r.inAdd) {
+          expect(c.l).toBeGreaterThanOrEqual(r.addBox.l - 0.5);
+          expect(c.r).toBeLessThanOrEqual(r.addBox.r + 0.5);
+          expect(c.t).toBeGreaterThanOrEqual(r.addBox.t - 0.5);
+          expect(c.b).toBeLessThanOrEqual(r.addBox.b + 0.5);
+        }
+      await expect(
+        sheet.getByRole("button", { name: "Make it" }),
+      ).toBeInViewport();
+    });
+  });
+}

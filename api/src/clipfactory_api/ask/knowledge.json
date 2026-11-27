@@ -1,5 +1,5 @@
 {
- "version": "996e4667fd1a",
+ "version": "e94b90bcf6c5",
  "parts": [
   {
    "id": "app-map",
@@ -343,15 +343,15 @@
   },
   {
    "id": "contracts-53",
-   "title": "CONTRACTS: 53. CR active: add a logo and text to a clip in Review (owner request, 2026-11-26)",
-   "line": "The owner: Content Rewards campaigns want \"the logo on screen for the whole clip\" and set words or hashtags; \"I want to",
-   "chars": 6423
+   "title": "CONTRACTS: 53. CR active: logo and text on a clip (owner request, 2026-11-26)",
+   "line": "The owner wants a logo and text on a clip, made after it exists, in Review. BR-34, ADR-105.",
+   "chars": 5667
   },
   {
    "id": "contracts-54",
-   "title": "CONTRACTS: 54. CR active: more than one picture on a clip (owner request, 2026-11-26)",
-   "line": "The owner, on §53's sheet: \"i should be able to add multiple images to campaign active videos.\" BR-35, ADR-107.",
-   "chars": 2502
+   "title": "CONTRACTS: 54. CR active: several pictures, a sheet that fits (owner request, 2026-11-26)",
+   "line": "The owner: more than one image on a CR clip. BR-35, ADR-107.",
+   "chars": 2480
   },
   {
    "id": "adr-01",
@@ -967,9 +967,9 @@
   },
   {
    "id": "adr-105",
-   "title": "DECISIONS: ADR-105 The campaign logo and text are drawn after the clip exists, in Review, by the agent on the original file",
+   "title": "DECISIONS: ADR-105 Campaign logo and text are drawn after the clip, in Review, by the agent",
    "line": "Context. §53. Campaigns want a logo and words on screen for the whole clip. The owner let us pick: before",
-   "chars": 1472
+   "chars": 1440
   },
   {
    "id": "adr-106",
@@ -981,7 +981,7 @@
    "id": "adr-107",
    "title": "DECISIONS: ADR-107 CR clip pictures: layer list",
    "line": "Context. §54: several pictures on a clip; §53 stored one overlay.logo.",
-   "chars": 198
+   "chars": 315
   },
   {
    "id": "adr-108",
