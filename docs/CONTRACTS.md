@@ -9125,6 +9125,8 @@ Check now (`POST …/campaigns/{id}/read`) runs step 3 for one campaign synchron
   `CAMPAIGN#` item. The paid places are the live `CAMPAIGN#.platformsPaid` (the job's `campaign.platformsPaid` only
   when that item has none). A clip without a campaign is unchanged and never asks the fit (§39.3). The items are read
   by their literal keys (`CAMPAIGN#{uuid}`, `CRCONN`, the `SETUP#` items through `platform_setup.all_setups`).
+* **Tags in the boxes (ADR-109).** Review calls fit/captions once per clip and campaign when a tag is missing.
+  YouTube: missing tags go right after `#Ad`.
 * **Confirm** of a campaign clip in `review`, in this order:
   * `platforms` is required (400 "Pick where it goes, then tap Upload."; Settings › Where clips go never decides for
     a campaign clip). Then the normal checks: every chosen place has a connected account (400 "{Platform} is not set

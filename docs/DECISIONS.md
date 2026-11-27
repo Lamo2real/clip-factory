@@ -2942,3 +2942,7 @@ likes, comments and shares; views are their own two choices.
 ## ADR-108 No schema unions
 
 - **Decision.** No `anyOf`, no `thinking: disabled`.
+
+## ADR-109 Campaign tags fill the caption boxes
+
+- **Decision.** Review runs fit-captions once per clip and campaign.
