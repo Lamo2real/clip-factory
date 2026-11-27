@@ -1,6 +1,7 @@
 ## ADR-52 YouTube from the cloud: PO tokens, one extraction per cut, a full download only as fallback, a file upload always one tap away
 
-- **Context.** Two owner screenshots of a 1 h 41 min YouTube job: first "YouTube is blocking downloads from the cloud
+- **Context.** Two owner screenshots
+  of a 1 h 41 min YouTube job: first "YouTube is blocking downloads from the cloud
   and your cookies did not help" at Find the video, then a failure at Cut the clips. YouTube flags datacenter
   addresses ("Sign in to confirm you're not a bot"); yt-dlp 2026.10.26 skips its `web` client without a PO token
   when cookies are given; cookies exported from a normal window are rotated by YouTube; our `--no-warnings` hid the

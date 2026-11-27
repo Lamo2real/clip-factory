@@ -1,0 +1,8 @@
+{
+  "video_insights": {
+    "data": [
+      { "name": "post_video_retention_graph", "period": "lifetime", "values": [{ "value": { "0": 1, "1": 0.9, "10": 0.35, "2": 0.8, "3": 0.72 } }], "title": "Retention", "id": "1234567890123456/video_insights/post_video_retention_graph/lifetime" }
+    ]
+  },
+  "id": "1234567890123456"
+}

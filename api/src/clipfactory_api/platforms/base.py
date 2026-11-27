@@ -14,12 +14,15 @@ the shared budget (``stats.budget.record``) can stop before a platform blocks th
 from __future__ import annotations
 
 import json
+import math
 import urllib.error
 import urllib.request
 from collections.abc import Callable, Mapping
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from typing import Any, Protocol
+
+from ..clock import iso
 
 Record = dict[str, Any]
 HTTP_TIMEOUT_SECONDS = 15
@@ -214,6 +217,26 @@ def put_present(target: dict[str, Any], key: str, value: Any) -> None:
     """Only fields the platform actually returned are stored: absent stays absent, never 0 (§16.3)."""
     if value is not None:
         target[key] = value
+
+
+RETENTION_MAX_POINTS = 101
+
+
+def retention_curve(points: list[tuple[float, float]], source: str, now: datetime) -> dict[str, Any] | None:
+    """``Post.metrics.retention`` (docs/CONTRACTS.md §56): ``[[x, y], ...]`` with x = percent of the video's length
+    (0–100) and y = percent of viewers still watching there (YouTube's can pass 100: rewatches), both 1 decimal,
+    sorted by x, at most 101 points. None when fewer than 2 points: no curve is ever invented."""
+    clean = sorted(
+        (round(float(x), 1), round(float(y), 1))
+        for x, y in points
+        if math.isfinite(x) and math.isfinite(y) and 0 <= x <= 100 and y >= 0
+    )
+    if len(clean) > RETENTION_MAX_POINTS:
+        step = (len(clean) - 1) / (RETENTION_MAX_POINTS - 1)
+        clean = [clean[round(i * step)] for i in range(RETENTION_MAX_POINTS)]
+    if len(clean) < 2:
+        return None
+    return {"points": [[x, y] for x, y in clean], "readAt": iso(now), "source": source}
 
 
 def chunks(items: list[Record], size: int) -> list[list[Record]]:

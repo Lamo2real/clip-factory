@@ -1232,7 +1232,8 @@ stands.*
 
 ## ADR-50 MRR for a per-view creator: reported days ending on the newest reported day; pace is labelled; per-clip money only from same-report numbers
 
-- **Context.** The owner (2026-11-19) asked for daily, weekly, monthly and yearly MRR filtered by app, Monthly first,
+- **Context.** The owner (2026-11-19)
+  asked for daily, weekly, monthly and yearly MRR filtered by app, Monthly first,
   and for how much each video earns. Only YouTube (and Facebook once its live check passes) reports money; days arrive
   2–3 days late and change at month end. TikTok, Instagram and X have no money API. ADR-47 forbids any guessed money.
   (ADR-49 is taken by an open change, so this is ADR-50.)
@@ -1307,7 +1308,8 @@ stands.*
 
 ## ADR-52 YouTube from the cloud: PO tokens, one extraction per cut, a full download only as fallback, a file upload always one tap away
 
-- **Context.** Two owner screenshots of a 1 h 41 min YouTube job: first "YouTube is blocking downloads from the cloud
+- **Context.** Two owner screenshots
+  of a 1 h 41 min YouTube job: first "YouTube is blocking downloads from the cloud
   and your cookies did not help" at Find the video, then a failure at Cut the clips. YouTube flags datacenter
   addresses ("Sign in to confirm you're not a bot"); yt-dlp 2026.10.26 skips its `web` client without a PO token
   when cookies are given; cookies exported from a normal window are rotated by YouTube; our `--no-warnings` hid the
@@ -1335,7 +1337,8 @@ stands.*
 
 ## ADR-53 Ask answers the picture: screenshot rules, the setup guide as a tool, keyless official pages, no canned fallback, a model smoke check on deploy
 
-- **Context.** On 19 Nov 2026 the owner sent Ask a phone screenshot of Facebook's **Edit profile › Manage connection**
+- **Context.** On 19 Nov 2026 the
+  owner sent Ask a phone screenshot of Facebook's **Edit profile › Manage connection**
   sheet and asked "What do I do now?". He got "Jobs working right now: 0 … Open Jobs". The assistant never ran: iOS had
   dropped the WebSocket while he was in Facebook, the panel waited 4 s, fell back to the §19 keyword help *without the
   picture*, and BM25 matched the one content word "now" to "Is anything running right now". Even with the model, the
@@ -1573,7 +1576,8 @@ Two taps for a standard upload; each platform's options in its own row; TikTok's
 
 ## ADR-62 Content Rewards: the official sign-in through the desktop app's loopback door, sending from the cloud, a reminder when it can't
 
-- **Context.** The owner joins paid clipping campaigns on Content Rewards (CR) and wants Clip Factory to follow each
+- **Context.** The owner joins
+  paid clipping campaigns on Content Rewards (CR) and wants Clip Factory to follow each
   campaign's rules and send every clip so it can earn, in 3 steps per campaign (5 at most), kid-proof from setup to
   getting paid. A post earns only if it is sent within 30 minutes of going live, from an account linked inside CR,
   and only once, to one campaign. The local app tried this with browser automation in a signed-in Chrome: 9 Shorts
@@ -2930,13 +2934,15 @@ likes, comments and shares; views are their own two choices.
 
 ## ADR-106 Upload to starts with every set-up place; no pick is remembered between clips
 
-- **Context.** The owner's Review card showed only Facebook ticked with four places set up: the device pick saved after an earlier Upload (or Where clips go) beat the most-reach default.
+- **Context.** The owner's Review
+  card showed only Facebook ticked with four places set up: the device pick saved after an earlier Upload (or Where clips go) beat the most-reach default.
 - **Decision.** `defaultUploadTo(ready)` returns every ready place (a campaign clip: the places it pays for). Taps change that one card only. `cf-upload-to` is neither read nor written. Where clips go stays in Settings and for the server, unchanged; auto-posting is untouched (§46).
 - **Consequences.** No stored data changes; an old `cf-upload-to` value is simply ignored.
 
 ## ADR-107 CR clip pictures: layer list
 
-- **Context.** §54: several pictures on a clip; §53 stored one `overlay.logo`.
+- **Context.** §54: several pictures
+  on a clip; §53 stored one `overlay.logo`.
 - **Decision.** Add `logos`, keep `logo` readable (no migration); soft cap 4. §54 L6: the sheet is a bounded box that scrolls inside itself, with a plain-block preview (a sticky one hid fields).
 
 ## ADR-108 No schema unions
@@ -2956,3 +2962,13 @@ likes, comments and shares; views are their own two choices.
 - **Context.** In 2026 YouTube, Instagram, Facebook and TikTok show plain re-uploaded clips to fewer people; a crop and captions no longer count as original. The owner: "Yes, build it".
 - **Decision.** The model writes one short take per moment in the owner's style (§55). It is drawn above the captions and read by an Amazon Polly neural voice, mixed over the ducked clip sound. On by default; campaign clips and copies get none.
 - **Consequences.** The agent's first cross-Region call (`eu-west-1`; `eu-north-1` has no neural voice), allowed by one IAM statement. The voice is best effort: English only, and any failure gives a text-only clip. It is an AI voice, not the owner's. Polly's price ($16 per million characters) is in the price list, and the job's cost has a voice row (§51). Editing a take per clip comes later.
+
+## ADR-112 Engagement rate and watch graph
+
+- **Context.** §56.
+- **Decision.** (likes + comments + shares + saves)
+  ÷ views, unweighted, view-weighted for All: benchmarks (Dash
+  Social, Metricool, Statista) publish this plain sum, so a weighted score could not be compared. Curves only from
+  YouTube Analytics and Facebook's retention graph; Instagram, TikTok and X give markers, never a made-up curve.
+- **Consequences.** One extra YouTube Analytics call per video per insights read, one guarded Graph call per Reel. Each
+  app counts views its own way, so per-platform rates differ in meaning.

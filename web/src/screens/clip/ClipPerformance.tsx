@@ -20,6 +20,7 @@ import { prefersReducedMotion, usePrefs } from "../../lib/prefs.ts";
 import { goBack } from "../../lib/router.ts";
 import { isoWeek, weekRange } from "../../lib/week.ts";
 import { ClipFollowers } from "./ClipFollowers.tsx";
+import { ClipEngagement } from "./ClipEngagement.tsx";
 import { CrPostLines } from "../../components/CrPostLine.tsx";
 import { sendGroups, useSubmissions } from "../../lib/contentRewards.ts";
 import { CampaignsFold, ClipFit, useClipPageFit, useWaitingClip, WaitingClipFit } from "./ClipFit.tsx";
@@ -518,6 +519,7 @@ export function ClipPerformance({ clipId }: { clipId: string }) {
           })}
         </div>
       </div>
+      <ClipEngagement perf={perf} />
       <ClipFollowers perf={perf} />
       {crSubs.subs.length && !crFirst ? <ClipOnContentRewards clipId={clipId} subs={crSubs} sendNow={false} /> : null}
       {/* §39.3: closed by default, at the end, so the video and its numbers still come first. */}

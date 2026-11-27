@@ -1,5 +1,5 @@
 {
-  "version": "76ea156f392e",
+  "version": "3bfbd58d5c35",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -20,6 +20,7 @@
     "src/lib/settingsTree.ts",
     "src/screens/campaigns/CampaignPaste.tsx",
     "src/screens/campaigns/bits.tsx",
+    "src/screens/clip/ClipEngagement.tsx",
     "src/screens/clip/ClipFit.tsx",
     "src/screens/clip/ClipFollowers.tsx",
     "src/screens/clip/ClipPerformance.tsx",
@@ -4906,19 +4907,19 @@
         "not",
         "done",
         "yet",
+        "engagement",
+        "long",
+        "people",
+        "watch",
+        "show",
+        "shares",
+        "key",
+        "points",
         "review",
         "loading",
         "check",
         "views",
-        "post",
-        "mac",
-        "paste",
-        "save",
-        "yes",
-        "tiktok",
-        "add",
-        "fix",
-        "send"
+        "post"
       ],
       "answer": "A clip's page shows how it does on each app. Tap a clip in Library to open it.",
       "steps": [

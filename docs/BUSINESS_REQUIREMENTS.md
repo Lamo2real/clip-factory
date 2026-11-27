@@ -746,6 +746,9 @@ them as original. ([CONTRACTS.md §55](CONTRACTS.md#55-your-take-every-clip-gets
 - AC4: **Off.** One switch turns it off. Campaign clips never get one.
 - AC5: **Review.** The take shows under the hook.
 
+### BR-37 Engagement and watch graph
+- AC1: Each clip shows its engagement rate and watch curve per platform (§56).
+
 ## Non-functional requirements
 
 ### NFR-01 Everything runs on AWS

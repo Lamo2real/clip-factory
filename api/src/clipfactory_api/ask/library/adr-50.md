@@ -1,6 +1,7 @@
 ## ADR-50 MRR for a per-view creator: reported days ending on the newest reported day; pace is labelled; per-clip money only from same-report numbers
 
-- **Context.** The owner (2026-11-19) asked for daily, weekly, monthly and yearly MRR filtered by app, Monthly first,
+- **Context.** The owner (2026-11-19)
+  asked for daily, weekly, monthly and yearly MRR filtered by app, Monthly first,
   and for how much each video earns. Only YouTube (and Facebook once its live check passes) reports money; days arrive
   2–3 days late and change at month end. TikTok, Instagram and X have no money API. ADR-47 forbids any guessed money.
   (ADR-49 is taken by an open change, so this is ADR-50.)

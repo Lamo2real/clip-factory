@@ -53,7 +53,7 @@ PERF_CHECK_DELAY = timedelta(hours=48)
 def public_metrics(raw: Any) -> Item | None:
     """``PostMetrics`` (§16.3) as the web reads it: the common four always present (``null`` = the platform does
     not say), ``metricsUpdatedAt`` filled in for metrics stored before §16 (only ``checkedAt``), ``extra`` always an
-    object."""
+    object. ``retention`` (the watch graph, §56) only when stored with a ``points`` list; absent = no curve."""
     if not isinstance(raw, Mapping):
         return None
     out: Item = {k: raw.get(k) for k in COMMON_METRICS}
@@ -67,6 +67,30 @@ def public_metrics(raw: Any) -> Item | None:
         out["final"] = True
     extra = raw.get("extra")
     out["extra"] = dict(extra) if isinstance(extra, Mapping) else {}
+    retention = _public_retention(raw.get("retention"))
+    if retention is not None:
+        out["retention"] = retention
+    return out
+
+
+def _public_retention(raw: Any) -> Item | None:
+    """``{"points": [[x, y], ...], "readAt", "source"}`` with plain numbers (``db`` reads back ``Decimal`` as int or
+    float; a direct ``Decimal`` is converted too). Malformed points are dropped; fewer than 2 → no curve."""
+    if not isinstance(raw, Mapping) or not isinstance(raw.get("points"), list):
+        return None
+    points: list[list[float | int]] = []
+    for point in raw["points"]:
+        if not isinstance(point, list | tuple) or len(point) != 2:
+            continue
+        pair = db.from_dynamo(list(point))
+        if all(isinstance(v, int | float) and not isinstance(v, bool) for v in pair):
+            points.append(pair)
+    if len(points) < 2:
+        return None
+    out: Item = {"points": points}
+    for key in ("readAt", "source"):
+        if isinstance(raw.get(key), str):
+            out[key] = raw[key]
     return out
 
 

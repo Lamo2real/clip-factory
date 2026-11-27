@@ -15,6 +15,7 @@ from clipfactory_api.platforms import (
     NotConnectedError,
     adapter_for,
 )
+from clipfactory_api.platforms.base import NetworkError
 from clipfactory_api.platforms.facebook import FacebookAdapter
 from clipfactory_api.platforms.instagram import InstagramAdapter
 from clipfactory_api.platforms.tiktok import TikTokAdapter
@@ -101,16 +102,26 @@ def test_youtube_51_ids_make_2_requests_of_1_unit() -> None:
 
 def test_youtube_insights_request_and_mapping() -> None:
     a = post("youtube", "dQw4w9WgXcQ", age=timedelta(days=3))
-    http = FakeHttp((200, "youtube_videos_list"), (200, "youtube_analytics_report"))
+    http = FakeHttp((200, "youtube_videos_list"), (200, "youtube_analytics_report"), (200, "youtube_retention_report"))
     batch = YouTubeAdapter(tokens=tokens).fetch_stats([a], ACCOUNT, now=NOW, want_insights=True, http=http)
     assert http.urls[1] == (
         "https://youtubeanalytics.googleapis.com/v2/reports?ids=channel==MINE&startDate=2026-11-13&endDate=2026-11-16"
         "&metrics=views,engagedViews,estimatedMinutesWatched,averageViewDuration,averageViewPercentage,likes,comments,"
         "shares,subscribersGained&dimensions=video&filters=video==dQw4w9WgXcQ"
     )
+    assert http.urls[2] == (  # §56: one video per request (the API refuses a list)
+        "https://youtubeanalytics.googleapis.com/v2/reports?ids=channel==MINE&startDate=2026-11-13&endDate=2026-11-16"
+        "&metrics=audienceWatchRatio&dimensions=elapsedVideoTimeRatio&filters=video==dQw4w9WgXcQ"
+    )
     assert batch.units == 1  # Analytics has its own quota
+    assert batch.requests == 3
     assert batch.insights[a["postId"]] == {
         "shares": 93,
+        "retention": {
+            "points": [[1.0, 112.0], [25.0, 84.6], [50.0, 71.2], [100.0, 40.0]],  # sorted; rewatches can pass 100
+            "readAt": "2026-11-16T12:00:00.000Z",
+            "source": "youtube",
+        },
         "extra": {
             "engagedViews": 6100,
             "watchMinutes": 1520.5,
@@ -119,6 +130,42 @@ def test_youtube_insights_request_and_mapping() -> None:
             "subscribersGained": 12,
         },
     }
+
+
+@pytest.mark.parametrize(
+    "answer",
+    [
+        (403, {"error": {"code": 403, "errors": [{"reason": "forbidden"}]}}),
+        (200, {"columnHeaders": [{"name": "elapsedVideoTimeRatio"}, {"name": "audienceWatchRatio"}], "rows": []}),
+        (
+            200,
+            {"columnHeaders": [{"name": "elapsedVideoTimeRatio"}, {"name": "audienceWatchRatio"}], "rows": [[0.5, 1]]},
+        ),
+        NetworkError("timed out"),
+    ],
+)
+def test_youtube_retention_is_guarded(answer: Any) -> None:
+    """§56: an error, no rows or a single point leaves ``retention`` out; the report's numbers stand."""
+    a = post("youtube", "dQw4w9WgXcQ", age=timedelta(days=3))
+    http = FakeHttp((200, "youtube_videos_list"), (200, "youtube_analytics_report"), answer)
+    batch = YouTubeAdapter(tokens=tokens).fetch_stats([a], ACCOUNT, now=NOW, want_insights=True, http=http)
+    assert "retention" not in batch.insights[a["postId"]]
+    assert batch.insights[a["postId"]]["shares"] == 93
+    assert batch.meta.error_code is None  # never blocks the Data API budget
+
+
+def test_youtube_retention_without_a_report_row_and_no_graph_after_a_failed_report() -> None:
+    a = post("youtube", "dQw4w9WgXcQ", age=timedelta(days=3))
+    http = FakeHttp(
+        (200, "youtube_videos_list"), (200, {"columnHeaders": [], "rows": []}), (200, "youtube_retention_report")
+    )
+    batch = YouTubeAdapter(tokens=tokens).fetch_stats([a], ACCOUNT, now=NOW, want_insights=True, http=http)
+    assert batch.insights[a["postId"]]["extra"] == {}
+    assert batch.insights[a["postId"]]["retention"]["source"] == "youtube"
+    http = FakeHttp((200, "youtube_videos_list"), (500, b"down"))
+    batch = YouTubeAdapter(tokens=tokens).fetch_stats([a], ACCOUNT, now=NOW, want_insights=True, http=http)
+    assert len(http.calls) == 2
+    assert batch.insights == {}
 
 
 def test_youtube_quota_exceeded_reports_the_reason() -> None:
@@ -277,6 +324,8 @@ FB_INSIGHTS = (
     "post_video_social_actions)"
 )
 FB_REACH = "?fields=insights.metric(post_total_media_view_unique)"
+FB_RETENTION = "?fields=video_insights.metric(post_video_retention_graph)"
+NO_DATA: dict[str, Any] = {"video_insights": {"data": []}}
 # What Graph v26.0+ answers to the old ``?ids=`` batch form (checked against the live API, signed out, 23 Nov).
 IDS_DEPRECATED = {
     "error": {
@@ -294,20 +343,26 @@ def stats_logs(capsys: pytest.CaptureFixture[str]) -> list[dict[str, Any]]:
 
 def test_facebook_requests_and_mapping() -> None:
     a = post("facebook", "1234567890123456", platformPostId="111222333_444555666")
-    http = FakeHttp((200, "facebook_video_insights"), (200, "facebook_post_views"))
+    http = FakeHttp((200, "facebook_video_insights"), (200, "facebook_post_views"), (200, "facebook_retention_graph"))
     batch = FacebookAdapter(tokens=tokens).fetch_stats([a], ACCOUNT, now=NOW, want_insights=False, http=http)
     assert http.urls == [
         f"https://graph.facebook.com/v27.0/1234567890123456{FB_INSIGHTS}",
         f"https://graph.facebook.com/v27.0/111222333_444555666{FB_REACH}",
+        f"https://graph.facebook.com/v27.0/1234567890123456{FB_RETENTION}",
     ]
     assert all(c.headers == {"Authorization": "Bearer token-facebook"} for c in http.calls)
     for banned in ("post_impressions_unique", "total_video_impressions", "total_video_views_unique", "impressions"):
         assert all(banned not in u for u in http.urls)
-    assert batch.requests == 2
+    assert batch.requests == 3
     assert batch.results[a["postId"]] == {"comments": None, "shares": None}
     assert batch.insights[a["postId"]] == {
         "views": 6900,
         "likes": 387,  # sum of the reactions
+        "retention": {  # buckets in number order ("10" last), spread over 0-100, ratios times 100
+            "points": [[0.0, 100.0], [25.0, 90.0], [50.0, 80.0], [75.0, 72.0], [100.0, 35.0]],
+            "readAt": "2026-11-16T12:00:00.000Z",
+            "source": "facebook",
+        },
         "extra": {
             "initialPlays": 5200,
             "replays": 1700,
@@ -324,19 +379,22 @@ def test_facebook_requests_and_mapping() -> None:
 def test_facebook_never_uses_the_ids_lookup_graph_v26_removed() -> None:
     """Graph v26.0+ refuses every ``?ids=`` request (error 100), so each Reel and each post is its own node read."""
     reels = [post("facebook", f"12345678901234{n}", platformPostId=f"111222333_44455566{n}") for n in range(3)]
-    http = FakeHttp(*[(200, name) for _ in reels for name in ("facebook_video_insights", "facebook_post_views")])
+    names = ("facebook_video_insights", "facebook_post_views", "facebook_retention_graph")
+    http = FakeHttp(*[(200, name) for _ in reels for name in names])
     batch = FacebookAdapter(tokens=tokens).fetch_stats(reels, ACCOUNT, now=NOW, want_insights=False, http=http)
-    assert len(http.calls) == 6
+    assert len(http.calls) == 9
     for url in http.urls:
         assert "ids=" not in url
         assert not urlsplit(url).path.endswith("/v27.0/")  # never the root node
     assert [urlsplit(u).path for u in http.urls] == [
-        p for n in range(3) for p in (f"/v27.0/12345678901234{n}", f"/v27.0/111222333_44455566{n}")
+        p
+        for n in range(3)
+        for p in (f"/v27.0/12345678901234{n}", f"/v27.0/111222333_44455566{n}", f"/v27.0/12345678901234{n}")
     ]
     assert {r["postId"] for r in reels} == set(batch.insights)
     assert all(batch.insights[r["postId"]]["views"] == 6900 for r in reels)
     assert batch.errors == {}
-    assert batch.requests == 6
+    assert batch.requests == 9
 
 
 def test_facebook_one_failing_reel_does_not_block_the_rest(capsys: pytest.CaptureFixture[str]) -> None:
@@ -352,11 +410,11 @@ def test_facebook_one_failing_reel_does_not_block_the_rest(capsys: pytest.Captur
             "error_subcode": 33,
         }
     }
-    http = FakeHttp((400, gone), (400, IDS_DEPRECATED), (200, "facebook_video_insights"))
+    http = FakeHttp((400, gone), (400, IDS_DEPRECATED), (200, "facebook_video_insights"), (200, NO_DATA))
     batch = FacebookAdapter(tokens=tokens).fetch_stats(
         [gone_reel, broken, fine], ACCOUNT, now=NOW, want_insights=False, http=http
     )
-    assert len(http.calls) == 3
+    assert len(http.calls) == 4
     assert batch.errors == {
         gone_reel["postId"]: "Facebook could not find this Reel. It may be deleted.",
         broken["postId"]: "Facebook did not answer. We will try again soon.",
@@ -379,9 +437,9 @@ def test_facebook_one_failing_reel_does_not_block_the_rest(capsys: pytest.Captur
 def test_facebook_throttle_or_dead_token_stops_the_batch(code: str) -> None:
     reels = [post("facebook", f"12345678901234{n}") for n in range(3)]
     answer = {"error": {"message": "Stop", "code": int(code)}}
-    http = FakeHttp((200, "facebook_video_insights"), (400, answer))
+    http = FakeHttp((200, "facebook_video_insights"), (200, NO_DATA), (400, answer))
     batch = FacebookAdapter(tokens=tokens).fetch_stats(reels, ACCOUNT, now=NOW, want_insights=False, http=http)
-    assert len(http.calls) == 2  # the third Reel is never asked for
+    assert len(http.calls) == 3  # the third Reel is never asked for
     assert batch.meta.error_code == code
     assert batch.insights[reels[0]["postId"]]["views"] == 6900
     assert batch.errors[reels[1]["postId"]] == "Facebook did not answer. We will try again soon."
@@ -391,9 +449,10 @@ def test_facebook_throttle_or_dead_token_stops_the_batch(code: str) -> None:
 def test_facebook_reach_is_guarded() -> None:
     a = post("facebook", "1234567890123456", platformPostId="111222333_444555666")
     gone = {"error": {"message": "(#100) The value must be a valid insights metric", "code": 100}}
-    http = FakeHttp((200, "facebook_video_insights"), (400, gone))
+    http = FakeHttp((200, "facebook_video_insights"), (400, gone), (400, gone))
     batch = FacebookAdapter(tokens=tokens).fetch_stats([a], ACCOUNT, now=NOW, want_insights=False, http=http)
     assert "reachUnique" not in batch.insights[a["postId"]]["extra"]
+    assert "retention" not in batch.insights[a["postId"]]  # §56: a graph error is guarded the same way
     assert batch.insights[a["postId"]]["views"] == 6900
     assert batch.meta.error_code is None  # a reach error never blocks the platform
 
@@ -408,6 +467,38 @@ def test_facebook_reach_throttle_stops_the_batch() -> None:
     assert batch.meta.error_code == "80001"
     assert batch.insights[a["postId"]]["views"] == 6900
     assert batch.errors[b["postId"]] == "Facebook is busy. We will try again later."
+
+
+def _fb_graph(value: Any) -> dict[str, Any]:
+    return {"video_insights": {"data": [{"name": "post_video_retention_graph", "values": [{"value": value}]}]}}
+
+
+@pytest.mark.parametrize(
+    ("value", "points"),
+    [
+        ({"0": 100, "15": 40, "5": 70.5}, [[0.0, 100.0], [50.0, 70.5], [100.0, 40.0]]),  # already percent
+        ([1.2, 0.6], [[0.0, 120.0], [100.0, 60.0]]),  # a list of ratios
+        ({"x": 1, "1": 0.5, "2": None}, None),  # one usable bucket: no curve
+        ("not a graph", None),
+    ],
+)
+def test_facebook_retention_shapes(value: Any, points: list[list[float]] | None) -> None:
+    a = post("facebook", "1234567890123456")
+    http = FakeHttp((200, "facebook_video_insights"), (200, _fb_graph(value)))
+    batch = FacebookAdapter(tokens=tokens).fetch_stats([a], ACCOUNT, now=NOW, want_insights=False, http=http)
+    assert batch.insights[a["postId"]].get("retention", {}).get("points") == points
+
+
+def test_facebook_retention_throttle_stops_the_batch() -> None:
+    a = post("facebook", "1234567890123456")
+    b = post("facebook", "1234567890123457")
+    throttled = {"error": {"message": "Too many calls", "code": 80001}}
+    http = FakeHttp((200, "facebook_video_insights"), (400, throttled))
+    batch = FacebookAdapter(tokens=tokens).fetch_stats([a, b], ACCOUNT, now=NOW, want_insights=False, http=http)
+    assert len(http.calls) == 2
+    assert batch.meta.error_code == "80001"
+    assert "retention" not in batch.insights[a["postId"]]
+    assert batch.insights[a["postId"]]["views"] == 6900
 
 
 # --- X ------------------------------------------------------------------------------------------------------------

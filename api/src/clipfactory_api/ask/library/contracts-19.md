@@ -1,6 +1,7 @@
 ## 19. Ask Clip Factory: grounded in-app help assistant (owner request, 2026-11-16)
 
-The owner's picture: a friendly helper in the corner that answers "how do I…" and "where is…" in short steps a child
+The owner's picture: a friendly
+helper in the corner that answers "how do I…" and "where is…" in short steps a child
 can follow, then **takes you there** and lights up the right button. This section applies the in-app assistant pattern
 (Ask Booqy) to Clip Factory only. Where it and an earlier section disagree, this one wins.
 

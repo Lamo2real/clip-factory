@@ -1,6 +1,7 @@
 ## ADR-62 Content Rewards: the official sign-in through the desktop app's loopback door, sending from the cloud, a reminder when it can't
 
-- **Context.** The owner joins paid clipping campaigns on Content Rewards (CR) and wants Clip Factory to follow each
+- **Context.** The owner joins
+  paid clipping campaigns on Content Rewards (CR) and wants Clip Factory to follow each
   campaign's rules and send every clip so it can earn, in 3 steps per campaign (5 at most), kid-proof from setup to
   getting paid. A post earns only if it is sent within 30 minutes of going live, from an account linked inside CR,
   and only once, to one campaign. The local app tried this with browser automation in a signed-in Chrome: 9 Shorts

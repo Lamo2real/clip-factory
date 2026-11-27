@@ -1,6 +1,7 @@
 ## 41. Campaign finder: campaigns that match what you want (owner request, 2026-11-21)
 
-The owner's words: *"Also, will I be able to find campaigns and join them based on some requirements that I set if the
+The owner's words: *"Also, will
+I be able to find campaigns and join them based on some requirements that I set if the
 MCP and my connection to content rewards through Clip Factory gets accepted?"* The answer he got: Content Rewards'
 official MCP server (23 tools, checked live 2026-11-21, `mcp-tools.json` of API version `2026-10-01`) has **no tool to
 browse Discover and none to join or apply**, so joining stays his own tap on Content Rewards (CR). Joining also means

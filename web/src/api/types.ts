@@ -870,6 +870,11 @@ export interface PostMetrics {
   insightsUpdatedAt?: string;
   final?: true;
   extra?: YouTubeExtra | TikTokExtra | InstagramExtra | FacebookExtra | XExtra;
+  /**
+   * How long people watch (YouTube and Facebook only): [x, y] with x = percent of the video's length (0–100) and
+   * y = percent of viewers still watching (YouTube can go above 100 with rewatches).
+   */
+  retention?: { points: [number, number][]; readAt?: string; source?: "youtube" | "facebook" };
 }
 
 export interface Post {
