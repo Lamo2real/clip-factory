@@ -1,9 +1,6 @@
-## 53. CR active: add a logo and text to a clip in Review (owner request, 2026-11-26)
+## 53. CR active: logo and text on a clip (owner request, 2026-11-26)
 
-The owner: Content Rewards campaigns want "the logo on screen for the whole clip" and set words or hashtags; "I want to
-add logos and text to clips and store the logos for reuse", with a switch "CR active / CR inactive", and "edit" only for
-a logo and text. The owner left the order to us: the edit is made **after** the clip exists, in Review, just before
-posting. BR-34, ADR-105.
+The owner wants a logo and text on a clip, made after it exists, in Review. BR-34, ADR-105.
 
 - **C1. The switch.** Each Review card has a two-state switch, **CR inactive** (the default) and **CR active**, a
   `<Glide>` bar like the other pick-one bars. Inactive: the card, Upload and posting are exactly as before. Active:
@@ -57,7 +54,3 @@ posting. BR-34, ADR-105.
   `cr.campaignId`, selects its logo (C4 from-campaign) and puts its required hashtags (§38 rules) in the text line,
   both editable. It changes no campaign-clip rule, fit check or Confirm check (§38.8, §39); a clip that is already a
   campaign copy keeps them.
-- **C7. Words.** CR inactive · CR active · Edit for campaign · Logo · Text · Whole clip · Only part of the clip · Make
-  it · Making it… · Reset · Edit removed · Under the captions · On the facecam · Add a logo · Drop, paste or pick.
-- **C8. Tests.** `api/tests/test_logos.py`, `api/tests/test_clip_overlay.py`, `agent/tests/test_overlay.py`,
-  `web/test/overlayAreas.test.ts`, `web/test/crOverlay.test.tsx`, `web/e2e/cr-overlay.spec.ts` (mock API).

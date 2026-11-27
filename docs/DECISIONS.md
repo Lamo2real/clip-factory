@@ -2911,7 +2911,7 @@ likes, comments and shares; views are their own two choices.
 - **Consequences.** Attachments vanish after 14 days with the upload. Word, Excel and similar files are saved but not
   read. Their text, image and PDF tokens appear in the job's AI cost (§51) like any other input.
 
-## ADR-105 The campaign logo and text are drawn after the clip exists, in Review, by the agent on the original file
+## ADR-105 Campaign logo and text are drawn after the clip, in Review, by the agent
 
 - **Context.** §53. Campaigns want a logo and words on screen for the whole clip. The owner let us pick: before
   clipping or after.
@@ -2937,13 +2937,8 @@ likes, comments and shares; views are their own two choices.
 ## ADR-107 CR clip pictures: layer list
 
 - **Context.** §54: several pictures on a clip; §53 stored one `overlay.logo`.
-- **Decision.** Add `logos`, keep `logo` readable (no migration); soft cap 4.
+- **Decision.** Add `logos`, keep `logo` readable (no migration); soft cap 4. §54 L6: the sheet is a bounded box that scrolls inside itself, with a plain-block preview (a sticky one hid fields).
 
 ## ADR-108 No schema unions
 
 - **Decision.** Bedrock allows 16 `anyOf`; now `""`/`0` mean not stated.
-
-## ADR-109 The CR sheet scrolls inside itself
-
-- **Context.** §53's sheet scrolled with its backdrop and the preview was sticky, so on a phone it covered the fields below it.
-- **Decision.** §55: a bounded sheet, a scrolling middle, a fixed Make it bar, a preview that is a plain block.
