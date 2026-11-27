@@ -150,6 +150,8 @@ Still open in phase 2:
 6. **Undo window**: a short delay after Keep during which the owner can take it back.
 7. **Re-check the setup steps** against the platforms every few months and update `checkedOn`
    ([how](SETUP_POSTING.md#for-maintainers-keeping-the-app-and-this-page-in-step)).
+8. **Edit your take per clip in Review** (CONTRACTS §55: today it is read-only), and a voice for clips that are not
+   in English.
 
 ## Later
 

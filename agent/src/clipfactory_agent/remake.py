@@ -120,6 +120,7 @@ class Remake:
                 moment_type=self.moment_type or saved.moment_type,
                 hook=self.hook or saved.hook,
                 picked_for=self.picked_for or saved.picked_for,
+                take="",  # a campaign copy never carries a take (the campaign layout stays as it is)
             )
         score = c.get("score")
         if not clip or isinstance(score, bool) or not isinstance(score, int | float):

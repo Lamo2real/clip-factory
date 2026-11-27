@@ -2950,3 +2950,9 @@ likes, comments and shares; views are their own two choices.
 ## ADR-110 Entertainment default
 
 - **Decision.** `"24"`.
+
+## ADR-111 Your take: own commentary on every clip, text plus a Polly voice
+
+- **Context.** In 2026 YouTube, Instagram, Facebook and TikTok show plain re-uploaded clips to fewer people; a crop and captions no longer count as original. The owner: "Yes, build it".
+- **Decision.** The model writes one short take per moment in the owner's style (§55). It is drawn above the captions and read by an Amazon Polly neural voice, mixed over the ducked clip sound. On by default; campaign clips and copies get none.
+- **Consequences.** The agent's first cross-Region call (`eu-west-1`; `eu-north-1` has no neural voice), allowed by one IAM statement. The voice is best effort: English only, and any failure gives a text-only clip. It is an AI voice, not the owner's. Polly's price ($16 per million characters) is in the price list, and the job's cost has a voice row (§51). Editing a take per clip comes later.

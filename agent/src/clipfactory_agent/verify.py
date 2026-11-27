@@ -71,6 +71,7 @@ def to_raw(m: Moment) -> dict[str, Any]:
         "end": m.end,
         "moment_type": m.moment_type,
         "hook": m.hook,
+        "take": m.take,
         "first_words": m.first_words,
         "tease_start": m.tease[0] if m.tease else None,
         "tease_end": m.tease[1] if m.tease else None,
@@ -116,7 +117,7 @@ def apply(m: Moment, answer: dict[str, Any], *, duration: float, length: tuple[f
         fixed, _ = validate(raw, duration=duration, length=length)
     if fixed is None:
         return m
-    return replace(fixed, picked_for=m.picked_for)
+    return replace(fixed, picked_for=m.picked_for, take=m.take)
 
 
 def look_text(

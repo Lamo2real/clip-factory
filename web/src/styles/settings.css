@@ -656,6 +656,15 @@
   align-items: stretch;
   gap: 12px;
 }
+/* How you talk: one line of the owner's words, its count under the right end. */
+.take-style {
+  display: grid;
+  gap: 4px;
+  min-width: 0;
+}
+.take-style__count {
+  justify-self: end;
+}
 .apple__value {
   font-weight: 650;
   overflow-wrap: anywhere;

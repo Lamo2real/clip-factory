@@ -123,6 +123,9 @@ out of the **union** of what they cover (`SAFE` = x 60–918, y 192–1440):
   stays at or under -1 dBTP). When turning a quiet voice up all the way would push its peaks over the ceiling, loudnorm
   limits those peaks instead of clipping them. The picture is copied, not encoded again. A clip quieter than -45 LUFS
   (silence, hum) is left alone. The levels before and after are in `RenderResult.extra["loudness"]`.
+- **Your take (CONTRACTS §55):** Select writes a one-sentence `take` per moment. Render draws it in a dark box standing on
+  y = 1168 from 0.4 s after the tease, and, when the voice is on, mixes a Polly voice over the clip's sound (ducked to
+  about 30%) before the loudness pass. A voice failure gives the text only. Campaign clips and copies have none.
 - **Cover:** the frame at `peak_at` (2 s in when that second was cut with a pause), so it is the punched-in face.
 
 The tests measure this: `test_rendered_hook_and_captions_land_inside_the_safe_area` burns the longest hook and caption

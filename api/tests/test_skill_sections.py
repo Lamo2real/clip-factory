@@ -67,8 +67,9 @@ def test_the_builtin_has_every_listed_part() -> None:
         part = section_text(BUILTIN, s) if s.skill == "viral-clip-editing" else None
         assert part, s.key
         assert skill_sections.has_section(part, s)
-        assert part.startswith("**Chat**")
-        assert part.endswith("unless it is one clean word.")
+        assert part.startswith(s.start)
+        if s.key.startswith("viral-clip-editing/chat"):
+            assert part.endswith("unless it is one clean word.")
 
 
 def test_both_packages_have_the_same_module() -> None:

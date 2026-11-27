@@ -4,7 +4,11 @@ area, a smooth punch-in on the face at the peak, loudness normalised to -14 LUFS
 
 A Content Rewards campaign clip (docs/CONTRACTS.md §38.13) also carries a mark row at the top of the safe area: the
 brand's logo on the right for the whole clip and "Paid partnership" on the left for the first 3 seconds. The band
-above the picture grows by 80 px to hold it, so neither ever covers a face, the game or a caption."""
+above the picture grows by 80 px to hold it, so neither ever covers a face, the game or a caption.
+
+"Your take" (owner request 2026-11-27): a clip that is not a campaign clip may carry one sentence that is the
+channel's own comment. It shows in a dark see-through box right above the caption band, starting just after the tease,
+and a voice may read it out loud over the clip's own sound, which is turned down while the voice talks."""
 
 from __future__ import annotations
 
@@ -17,6 +21,8 @@ from typing import Any
 from . import livestatus, loudness, proc
 from .bedrock import Facecam, FrameLayout
 from .moments import Moment
+from .util import log
+from .voice import Spoken
 
 W, H = 1080, 1920
 FPS = 30
@@ -47,6 +53,26 @@ TEXT_MARGIN_L, TEXT_MARGIN_R = SAFE[0], W - SAFE[2] + 10  # libass wraps text be
 CAPTION_LINE_H, CAPTION_LINES = 100, 2
 CAPTION_BAND = (TEXT_MARGIN_L, CAP_BOTTOM - CAPTION_LINES * CAPTION_LINE_H, W - TEXT_MARGIN_R, CAP_BOTTOM)
 FACECAM_BAND = (0, BAND, W, BAND + CAM_H)
+# "Your take": at most two lines between x = 60 and x = 908, in a dark see-through box whose bottom edge stands on
+# y = 1168, just above the caption band (1180…1380) and below the facecam. It comes in TAKE_DELAY seconds after the
+# tease and stays TAKE_SECONDS, or as long as the voice talks plus TAKE_VOICE_TAIL, and is gone TAKE_END_GAP before
+# the clip ends.
+TAKE_SIZE = 46
+TAKE_MIN_SIZE = 30
+TAKE_FIT = 54  # characters that fit in two lines at full size; a longer take is set smaller
+TAKE_PAD = 12  # the box reaches this far around the words
+TAKE_LEFT, TAKE_RIGHT = SAFE[0], W - TEXT_MARGIN_R
+TAKE_BOTTOM = CAPTION_BAND[1] - 12
+TAKE_BOX = "&H66000000"  # black, 60% solid (ASS alpha runs the other way: 00 is solid)
+TAKE_DELAY = 0.4
+TAKE_SECONDS = 4.0
+TAKE_VOICE_TAIL = 0.8
+TAKE_END_GAP = 0.2
+TAKE_SHORTEST = 1.5  # with less room than this the take is left out
+TAKE_FADE_MS = (150, 200)
+# While the voice reads the take the clip's own sound plays at DUCK of its level, eased down and up over DUCK_FADE.
+DUCK = 0.3
+DUCK_FADE = 0.15
 # The punch-in on the face at the peak: up to 120%, eased in over 0.4 s, held, eased out over 0.6 s. It zooms toward a
 # point a little above the middle of the camera picture, where a webcam's face sits, so the face is never cut off.
 PUNCH_ZOOM = 1.2
@@ -98,6 +124,26 @@ class Marks:
         return self.logo is not None or bool(self.disclosure)
 
 
+@dataclass(frozen=True)
+class TakeShown:
+    """A take on screen: its words and when it shows, in clip seconds."""
+
+    text: str
+    start: float
+    end: float
+
+
+@dataclass(frozen=True)
+class VoiceMix:
+    """The take's voice in the filter graph: its input index (``voice_input``), when it starts and how long it talks
+    (clip seconds). ``silent`` is the silence's input index when the clip has no sound of its own."""
+
+    input: int
+    start: float
+    seconds: float
+    silent: int | None = None
+
+
 @dataclass
 class RenderResult:
     video: Path
@@ -111,6 +157,8 @@ class RenderResult:
     extra: dict[str, Any] = field(default_factory=dict)
     logo: bool = False  # the campaign's logo is on screen the whole clip
     disclosure: bool = False  # the on-screen disclosure shows at the start
+    take: str = ""  # "Your take" as it shows on screen; empty when the clip has none
+    take_spoken: bool = False  # a voice reads the take out loud
 
 
 def even(n: float) -> int:
@@ -222,20 +270,68 @@ def disclosure_event(text: str) -> str:
     )
 
 
+def take_window(total: float, tease: float = 0.0, voice: float = 0.0) -> tuple[float, float] | None:
+    """When the take shows, in clip seconds: from TAKE_DELAY after the tease (``tease`` is its length, 0 without one)
+    for TAKE_SECONDS, or for as long as the voice talks (``voice`` seconds) plus TAKE_VOICE_TAIL when that is longer;
+    never past TAKE_END_GAP before the end. None when the clip has no room for it."""
+    start = max(0.0, tease) + TAKE_DELAY
+    end = min(start + max(TAKE_SECONDS, voice + TAKE_VOICE_TAIL), total - TAKE_END_GAP)
+    if end - start < TAKE_SHORTEST:
+        return None
+    return round(start, 3), round(end, 3)
+
+
+def take_size(text: str) -> int:
+    """The take's font size: TAKE_SIZE, smaller for a long take so it still fits in two lines."""
+    n = len(text)
+    return TAKE_SIZE if n <= TAKE_FIT else max(TAKE_MIN_SIZE, TAKE_SIZE * TAKE_FIT // n)
+
+
+def take_event(take: TakeShown) -> str:
+    """The take's one event: white words in the Take style's dark see-through box, standing on TAKE_BOTTOM, fading in
+    and out. The words are escaped like every text from outside (no override blocks, no line breaks)."""
+    words = ass_escape(take.text)
+    size = take_size(words)
+    fs = "" if size == TAKE_SIZE else f"\\fs{size}"
+    fade_in, fade_out = TAKE_FADE_MS
+    return (
+        f"Dialogue: 3,{ass_time(take.start)},{ass_time(take.end)},Take,,0,0,0,,"
+        f"{{\\fad({fade_in},{fade_out}){fs}}}{words}"
+    )
+
+
+def take_style() -> str:
+    """The Take style: Inter Bold, white, in an opaque box (BorderStyle 3, whose colour is the outline's) that reaches
+    TAKE_PAD around the words. The margins keep the box between TAKE_LEFT and TAKE_RIGHT with its bottom on
+    TAKE_BOTTOM (alignment 2, like the captions)."""
+    ml, mr = TAKE_LEFT + TAKE_PAD, W - TAKE_RIGHT + TAKE_PAD
+    return (
+        f"Style: Take,Inter,{TAKE_SIZE},&H00FFFFFF,&H00FFFFFF,{TAKE_BOX},&H00000000,-1,0,0,0,100,100,0,0,3,{TAKE_PAD},0,2,"
+        f"{ml},{mr},{H - TAKE_BOTTOM + TAKE_PAD},1\n"
+    )
+
+
 def build_ass(
-    hook: str, caps: Sequence[Phrase], total: float, *, hook_top: int = HOOK_TOP, disclosure: str | None = None
+    hook: str,
+    caps: Sequence[Phrase],
+    total: float,
+    *,
+    hook_top: int = HOOK_TOP,
+    disclosure: str | None = None,
+    take: TakeShown | None = None,
 ) -> str:
     """The subtitle file: the hook for the whole clip, then each phrase with the word being said in yellow. Both sit
     inside SAFE: the hook hangs from ``hook_top`` (alignment 8), the captions stand on CAP_BOTTOM (alignment 2), and
     libass wraps them between the left margin and the buttons on the right. A campaign clip passes CAMPAIGN_HOOK_TOP
-    and its ``disclosure`` words, which get their own style and event in the mark row."""
+    and its ``disclosure`` words, which get their own style and event in the mark row. ``take`` adds the Take style
+    and its one event; without it the file is exactly what it was."""
     ml, mr = TEXT_MARGIN_L, TEXT_MARGIN_R
     disclosure_style = (
         f"Style: Disclosure,Inter,{DISCLOSURE_SIZE},&H00FFFFFF,&H00FFFFFF,&H00000000,&H8C000000,-1,0,0,0,100,100,0,0,1,5,2,4,"
         f"{ml},{mr},0,1\n"
         if disclosure
         else ""
-    )
+    ) + (take_style() if take else "")
     head = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {W}
@@ -255,6 +351,8 @@ Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
     events = [f"Dialogue: 1,{ass_time(0)},{ass_time(total)},Hook,,0,0,0,,{hook_markup(hook)}"]
     if disclosure:
         events.append(disclosure_event(disclosure))
+    if take:
+        events.append(take_event(take))
     for i, p in enumerate(caps):
         nxt = caps[i + 1].t0 if i + 1 < len(caps) else total
         end = min(total, max(p.t1, p.t0 + 0.25), nxt)
@@ -337,9 +435,47 @@ def layout_parts(
     ]
 
 
-def logo_input(tease: bool, has_audio: bool) -> int:
-    """The logo's input index: it is the last input, after the section, the tease's own input and the silence."""
+def silent_input(tease: bool) -> int:
+    """The silence's input index (a clip with no sound of its own): right after the section and the tease's input."""
+    return 2 if tease else 1
+
+
+def voice_input(tease: bool, has_audio: bool) -> int:
+    """The take's voice's input index: after the section, the tease's own input and the silence."""
     return 1 + (1 if tease else 0) + (0 if has_audio else 1)
+
+
+def logo_input(tease: bool, has_audio: bool, voice: bool = False) -> int:
+    """The logo's input index: it is the last input, after the section, the tease's own input, the silence and the
+    take's voice."""
+    return voice_input(tease, has_audio) + (1 if voice else 0)
+
+
+def duck_volume(start: float, seconds: float) -> str:
+    """The ``volume`` filter that turns the clip's own sound down to DUCK while the voice talks (``start`` for
+    ``seconds``, clip seconds), eased down and back up over DUCK_FADE so nothing jumps."""
+    a, b = max(0.0, start - DUCK_FADE), start + seconds + DUCK_FADE
+    u = f"clip(min((t-{a:.3f})/{DUCK_FADE}\\,({b:.3f}-t)/{DUCK_FADE})\\,0\\,1)"
+    return f"volume=volume=1-{1 - DUCK:.2f}*{u}:eval=frame"
+
+
+def voice_chains(v: VoiceMix, has_audio: bool) -> list[str]:
+    """The chains that mix the take's voice into the clip's sound and end in ``[aout]``. With sound the clip's own
+    (``[aclip]``, what ``concat`` made) is ducked under the voice; without, the voice plays over the silence. The
+    voice is brought to 48 kHz stereo, faded in and out by a hair and delayed to its start. ``amix`` keeps both at
+    their own level (``normalize=0``) and lasts as long as the clip's sound; the loudness pass levels the result."""
+    fmt = "aformat=sample_fmts=fltp:sample_rates=48000:channel_layouts=stereo"
+    fade_out = max(0.0, v.seconds - 0.05)
+    voice = (
+        f"[{v.input}:a]{fmt},afade=t=in:d=0.03,afade=t=out:st={fade_out:.3f}:d=0.05,"
+        f"adelay=delays={round(v.start * 1000)}:all=1[tvoice]"
+    )
+    mix = "amix=inputs=2:duration=first:dropout_transition=0:normalize=0[aout]"
+    if has_audio:
+        return [f"[aclip]{fmt},{duck_volume(v.start, v.seconds)}[aduck]", voice, f"[aduck][tvoice]{mix}"]
+    if v.silent is None:
+        raise ValueError("a clip with no sound needs the silence's input to carry the voice")
+    return [voice, f"[{v.silent}:a][tvoice]{mix}"]
 
 
 def filter_graph(
@@ -350,6 +486,7 @@ def filter_graph(
     *,
     tease: bool = False,
     logo: int | None = None,
+    voice: VoiceMix | None = None,
 ) -> str:
     """One graph: trim each segment (section seconds), concat, normalise to 30 fps, lay out, burn the subtitles.
 
@@ -358,7 +495,10 @@ def filter_graph(
     every frame of the body in memory while it waits for the tease (that is gigabytes for a 1080p60 source, §30.4).
 
     ``logo`` is the input index of a campaign's logo (``logo_input``): fitted into 380 × 80 and overlaid after the
-    subtitles for the whole clip, right-aligned on the safe area's right edge and centred in the mark row."""
+    subtitles for the whole clip, right-aligned on the safe area's right edge and centred in the mark row.
+
+    ``voice`` is the take's voice (``voice_chains``): the graph's sound then always ends in ``[aout]``, also for a
+    clip with no sound of its own. Without it the graph is exactly what it was."""
     if not _SAFE_PATH.match(str(ass_file)):
         raise ValueError(f"unsafe subtitle path: {ass_file}")
     chains: list[str] = []
@@ -377,9 +517,12 @@ def filter_graph(
             )
     n = len(segs)
     if has_audio:
-        chains.append("".join(f"[v{i}][a{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=1[vcat][aout]")
+        sound = "[aclip]" if voice is not None else "[aout]"
+        chains.append("".join(f"[v{i}][a{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=1[vcat]{sound}")
     else:
         chains.append("".join(f"[v{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=0[vcat]")
+    if voice is not None:
+        chains += voice_chains(voice, has_audio)
     chains.append(f"[vcat]fps={FPS},setsar=1[vin]")
     chains += parts
     chains.append(f"[lay]ass=filename={ass_file}[subs]")
@@ -657,9 +800,13 @@ async def render_clip(
     known_layout: FrameLayout | None = None,
     live_index: int | None = None,
     marks: Marks | None = None,
+    take: str = "",
+    voice: Spoken | None = None,
 ) -> RenderResult:
     """Cuts ``m`` into ``workdir/clip.mp4`` and ``workdir/cover.jpg``. ``marks`` (a campaign clip, §38.13) adds the
-    mark row with the logo and the on-screen disclosure."""
+    mark row with the logo and the on-screen disclosure. ``take`` is the clip's "Your take" sentence (shown when the
+    clip has room for it, never on a campaign clip) and ``voice`` the same sentence as speech, mixed in while the take
+    shows; a voice that does not fit, or that ffmpeg cannot mix, is left out and the take stays as text."""
     workdir.mkdir(parents=True, exist_ok=True)
     tease = m.tease
     src_from = max(0.0, min(m.start, tease[0] if tease else m.start) - 2)
@@ -714,52 +861,81 @@ async def render_clip(
         face_fill=face_fill,
         band=CAMPAIGN_BAND if marked else BAND,
     )
+    # "Your take": never on a campaign clip (its layout stays as it is), and only when the clip has room for it.
+    words_shown = "" if marked else ass_escape(take)
+    tease_len = segs[0][1] - segs[0][0] if tease else 0.0
+    window = take_window(total, tease_len, voice.duration if voice is not None else 0.0) if words_shown else None
+    shown = TakeShown(words_shown, *window) if window is not None else None
+    spoken = voice if shown is not None and voice is not None and shown.start + voice.duration <= shown.end else None
     ass_file = workdir / "captions.ass"
     if marked:
         ass = build_ass(m.hook, caps, total, hook_top=CAMPAIGN_HOOK_TOP, disclosure=disclosure)
+    elif shown is not None:
+        ass = build_ass(m.hook, caps, total, take=shown)
     else:
         ass = build_ass(m.hook, caps, total)
     ass_file.write_text(ass, "utf-8")
 
     out = workdir / "clip.mp4"
-    inputs = ["-i", str(section)]
-    if tease:
-        a, b = segs[0]
-        inputs += ["-ss", f"{a:.3f}", "-t", f"{b - a:.3f}", "-i", str(section)]  # the tease's own input
-    silent_input = 2 if tease else 1
-    if not info.has_audio:
-        inputs += ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"]
-    if logo is not None:
-        inputs += ["-loop", "1", "-t", f"{total:.3f}", "-i", str(logo)]  # always the last input (logo_input)
-    await proc.run(
-        [
-            "ffmpeg",
-            "-v",
-            "error",
-            "-y",
-            "-filter_complex_threads",
-            "1",
-            *inputs,
-            "-filter_complex",
-            filter_graph(
-                segs,
-                parts,
-                ass_file,
-                info.has_audio,
-                tease=bool(tease),
-                logo=logo_input(bool(tease), info.has_audio) if logo is not None else None,
-            ),
-            *encode_args(total, info.has_audio, silent_input=silent_input),
-            # Where the encode is, once a second on stdout, for the live status line ("0:41 of 0:58", §31).
-            "-progress",
-            "pipe:1",
-            "-nostats",
-            str(out),
-        ],
-        time_limit=30 * 60,
-        on_out_line=lambda line: _cut_progress(line, total, live_index),
-    )
-    level = await loudness.normalize(out, workdir / "clip.loud.mp4") if info.has_audio else None
+
+    async def encode(said: Spoken | None) -> None:
+        inputs = ["-i", str(section)]
+        if tease:
+            a, b = segs[0]
+            inputs += ["-ss", f"{a:.3f}", "-t", f"{b - a:.3f}", "-i", str(section)]  # the tease's own input
+        if not info.has_audio:
+            inputs += ["-f", "lavfi", "-i", "anullsrc=r=48000:cl=stereo"]  # silent_input
+        mix: VoiceMix | None = None
+        if said is not None and shown is not None:
+            inputs += ["-i", str(said.path)]  # voice_input
+            mix = VoiceMix(
+                voice_input(bool(tease), info.has_audio),
+                shown.start,
+                said.duration,
+                silent=None if info.has_audio else silent_input(bool(tease)),
+            )
+        if logo is not None:
+            inputs += ["-loop", "1", "-t", f"{total:.3f}", "-i", str(logo)]  # always the last input (logo_input)
+        await proc.run(
+            [
+                "ffmpeg",
+                "-v",
+                "error",
+                "-y",
+                "-filter_complex_threads",
+                "1",
+                *inputs,
+                "-filter_complex",
+                filter_graph(
+                    segs,
+                    parts,
+                    ass_file,
+                    info.has_audio,
+                    tease=bool(tease),
+                    logo=logo_input(bool(tease), info.has_audio, mix is not None) if logo is not None else None,
+                    voice=mix,
+                ),
+                *encode_args(total, info.has_audio or mix is not None, silent_input=silent_input(bool(tease))),
+                # Where the encode is, once a second on stdout, for the live status line ("0:41 of 0:58", §31).
+                "-progress",
+                "pipe:1",
+                "-nostats",
+                str(out),
+            ],
+            time_limit=30 * 60,
+            on_out_line=lambda line: _cut_progress(line, total, live_index),
+        )
+
+    try:
+        await encode(spoken)
+    except proc.CommandError as e:
+        if spoken is None or proc.was_killed(e):
+            raise
+        # The voice is an extra: when ffmpeg can't mix it in, the clip is made without it (the take stays as text).
+        log("warn", "render.voice_failed", index=live_index, detail=str(e)[:300])
+        spoken = None
+        await encode(None)
+    level = await loudness.normalize(out, workdir / "clip.loud.mp4") if info.has_audio or spoken is not None else None
     cover = workdir / "cover.jpg"
     at = cover_time(segs, t(m.peak_at), bool(tease), total)
     try:
@@ -797,4 +973,6 @@ async def render_clip(
         extra={"loudness": level} if level else {},
         logo=logo is not None,
         disclosure=bool(disclosure),
+        take=" ".join(take.split()) if shown is not None else "",
+        take_spoken=spoken is not None,
     )

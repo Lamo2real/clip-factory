@@ -212,3 +212,41 @@ Before keeping a clip, answer every question. A "no" means fix the start or end,
 - [ ] Does each post text fit its platform, with a curious title under 60 characters, a question, and fitting hashtags?
 - [ ] Is it different from the other clips in the set?
 - [ ] Would someone send this to a friend?
+
+## 9. Your take
+
+Every clip carries one sentence that is the channel's own: **your take**. It shows on screen just after the clip starts, and a voice may read it out loud. A cropped clip with captions is still someone else's video. The take is what makes it yours: platforms show plain re-uploads to fewer people, and a clip with the channel's own comment is not one.
+
+**A good take adds what the viewer cannot see.** Pick one:
+
+- **A verdict:** who was right, who started it, whether it was fair.
+- **Why it matters:** what was at stake, or what this changes.
+- **What to watch for:** the small thing most people miss the first time.
+- **A rating:** a clear score or rank, with the reason in a few words.
+- **A fair joke:** a light line about the situation, never about how someone looks or who they are.
+
+**How to write it:**
+
+- One sentence, 5 to 14 words, at most 90 characters, in the clip's language.
+- Sound like a person talking to a friend. Plain words, said the way the owner talks when the task gives their style.
+- Commit to one clear opinion. "Not sure who is right here" is not a take.
+- It must still be true after the payoff, and it must not give the payoff away.
+
+**Good takes:**
+
+- "Chat called this ten minutes ago and nobody listened."
+- "Honestly, the second guy was right the whole time."
+- "Watch his left hand, that is where it goes wrong."
+- "This is the calmest anyone has ever lost a final."
+- "Nine out of ten, and only because of the landing."
+- "He had one job, and the game knew it."
+
+**Never:**
+
+- Never describe what is on screen ("He jumps off the roof"). The viewer can see it.
+- Never repeat or reword the hook. The hook asks the question, the take is your opinion.
+- Never spoil the payoff or the last line.
+- No emoji, no hashtags, no @handles, no all caps.
+- Never be cruel to a real person. No insults about looks, body, voice, age, family or health.
+- Never claim anything about a real person beyond what the clip shows. No guesses about cheating, lying, money or their private life.
+- Never promise what the clip does not deliver. If you have nothing honest to add, say the plainest true opinion.

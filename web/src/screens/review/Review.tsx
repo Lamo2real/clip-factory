@@ -527,6 +527,19 @@ export function WhyPicked({ text }: { text: string | undefined }) {
   );
 }
 
+/**
+ * Your take (owner request, 2026-11-27): the clip's one short comment that is the channel's own, as it is drawn on the
+ * clip. Read-only here. A clip without one (an old clip, a campaign clip, Your take off) shows nothing.
+ */
+export function YourTake({ text }: { text: string | undefined }) {
+  if (!text) return null;
+  return (
+    <p className="review-card__take" data-help="your-take-line">
+      <span className="review-card__take-label">Your take</span> <span className="user-text">{text}</span>
+    </p>
+  );
+}
+
 /** The count line on a Review filtered to one job: says it is one job, and how many wait in all when that is more. */
 export function reviewCountForJob(here: number, all: number | undefined): string {
   const line = `${plural(here, "clip")} from this job waiting`;
@@ -1267,6 +1280,7 @@ function ReviewCard({
         <h2 className="review-card__hook user-text" id={`hook-${clip.clipId}`} tabIndex={-1}>
           {clip.hook}
         </h2>
+        <YourTake text={clip.take} />
         <p className="review-card__summary user-text">{clip.summary}</p>
         <WhyPicked text={clip.pickedFor} />
         <p className="review-card__source">

@@ -23,7 +23,20 @@ describe("the settings tree", () => {
     ]);
   });
 
-  it("§32: App & account › Notifications has this device, the choices, the badge, the lock screen and a test", () => {
+  it("Clip making › Clips has its three apples, then Your take, Say it out loud and How you talk", () => {
+    const clips = TREES[0]!.branches[0]!;
+    expect(clips.apples.map((a) => a.id)).toEqual(["clip-count", "longest-video", "ai-model", "your-take", "take-voice", "take-style"]);
+    expect(clips.apples.slice(3).map((a) => [a.name, a.leaf])).toEqual([
+      ["Your take", "Every clip gets one short comment that is yours."],
+      ["Say it out loud", "A voice reads your take at the start of the clip."],
+      ["How you talk", "A few words on your style. Like: funny, honest, a bit cheeky."],
+    ]);
+    expect(appleCount(TREES[0]!)).toBe(TREES[0]!.branches.reduce((n, b) => n + b.apples.length, 0));
+    expect(searchSettings("your take")[0]!.href).toBe("/settings/clip-making/clips#your-take");
+    expect(searchSettings("voiceover").map((h) => h.apple.id)).toContain("take-voice");
+  });
+
+    it("§32: App & account › Notifications has this device, the choices, the badge, the lock screen and a test", () => {
     const n = TREES.find((t) => t.slug === "app")!.branches.find((b) => b.slug === "notifications")!;
     expect(n.apples.map((a) => a.id)).toEqual([
       "notify-device",
