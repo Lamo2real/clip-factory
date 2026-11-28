@@ -19981,6 +19981,23 @@ resource, the stories agent and Terraform do not change, and nothing is charged 
 - **Not done.** Drafts are not in the dashboard's "Needs you" or under Characters.
 - **Tests.** `test_ws_vehicle_drafts.py`, `ws_routes_core.py` `EXPECTED`, `storiesVehicleDrafts.test.tsx`.
 
+### 45.52 Use it again: a made video's setup as a new draft (owner request, 2026-11-27)
+
+Owner: "pick any previously uploaded video, open its complete setup ... edit any of it, and then render and upload it
+as a new video. The original stays unchanged." ADR-113. Web only: no route, item, agent or Terraform change.
+
+- **Stored setup.** Every made video already keeps it: the `STORY#` item (cast, roles, series, length, shape, look,
+  captions, music, references, AI, `ownScript`) and its script `v{scriptVersion}.json`, kept forever (§45.3, §45.4).
+- **Use it again** sits on Made rows in Production and under the player, only for `review`, `needs_check`, `approved`
+  and `published`. It reads the story and script, saves a video draft (§45.47) and opens it in Make a new video
+  ("Copied. Change what you like."). The story is only read.
+- **The draft** (`studio/reuseForm.ts`): Write it myself; title with its number up by one, else " 2"; the scenes in
+  order (an own script as it was; an AI one as title and note, its caption or the first caption cue in it, its cast
+  and cars as Who, its set as Where); characters that are gone are left out. Make the video then works as always, and
+  Review keeps per-scene timing, effects and captions. Errors: "That video could not be copied. Try again.", or the
+  draft limit.
+- **Tests.** `storiesReuse.test.ts`, `e2e/stories-reuse.spec.ts`.
+
 ## 46. Auto-posting: the oldest clips in Review go up by themselves, every X hours (owner request, 2026-11-22)
 
 Decision record: ADR-81. Builders:

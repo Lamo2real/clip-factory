@@ -1,5 +1,5 @@
 {
- "version": "1961a73cf5f0",
+ "version": "2dfdf320a07c",
  "parts": [
   {
    "id": "app-map",
@@ -297,7 +297,7 @@
    "id": "contracts-45",
    "title": "CONTRACTS: 45. Clips Funded: a second, separate workspace (owner request, 2026-11-21)",
    "line": "Planned: not in the app until the switch pull request turns it on (§45.21). Until then nothing of Clips Funded",
-   "chars": 557217
+   "chars": 558606
   },
   {
    "id": "contracts-46",
@@ -1024,6 +1024,12 @@
    "title": "DECISIONS: ADR-112 Engagement rate and watch graph",
    "line": "Decision. (likes + comments + shares + saves)",
    "chars": 600
+  },
+  {
+   "id": "adr-113",
+   "title": "DECISIONS: ADR-113 Use it again is a draft",
+   "line": "Decision. Copy a made video into a video draft in the web, not a new route or a cloned story: the form already",
+   "chars": 204
   },
   {
    "id": "architecture-overview",

@@ -27,6 +27,7 @@ import { storiesApi } from "../api/client.ts";
 import type { DownloadFormat, ErrorAccount, ModelOverride, Platform, PublishingJob, SocialAccount, StepKey, StoriesConfig, Story, StoryPatch, StoryStatus, TaskKind } from "../api/types.ts";
 import { navigate } from "../../lib/router.ts";
 import { storiesHref } from "../routes.ts";
+import { ReuseButton, useReuse } from "../studio/Reuse.tsx";
 import { cleanPick, insteadPick, madeWith, ModelMenu, ModelsUsed, NextRun, runTask, sendPick, SettingsFix, StoryAi, storyUsual, UnusableSheet, unusableAsk, useAiInfo } from "../studio/ai.tsx";
 import { artWords, storyArt } from "../studio/art.tsx";
 import { CaptionEditor, type CaptionTab } from "../studio/CaptionEditor.tsx";
@@ -263,6 +264,7 @@ async function copiesOf(ws: string, storyId: string): Promise<DownloadFormat[]> 
 
 function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
   const toast = useToast();
+  const reuse = useReuse(ws);
   const loaded = useLoad(() => storiesApi().getStory(ws, storyId), `${ws}:${storyId}`);
   const pubs = useLoad(() => storiesApi().listPublishing(ws, storyId), `${ws}:${storyId}:pubs`);
   const workspace = useWorkspace(ws);
@@ -599,6 +601,7 @@ function ReviewStory({ ws, storyId }: { ws: string; storyId: string }) {
                   {busy === `download:${f}` ? "Getting the file…" : `Download ${FORMAT_NAME[f]}`}
                 </button>
               ))}
+              <ReuseButton story={story} busy={reuse.busy} onReuse={(id) => void reuse.reuse(id)} />
             </div>
           ) : null}
         </div>

@@ -2972,3 +2972,8 @@ likes, comments and shares; views are their own two choices.
   YouTube Analytics and Facebook's retention graph; Instagram, TikTok and X give markers, never a made-up curve.
 - **Consequences.** One extra YouTube Analytics call per video per insights read, one guarded Graph call per Reel. Each
   app counts views its own way, so per-platform rates differ in meaning.
+
+## ADR-113 Use it again is a draft
+
+- **Decision.** Copy a made video into a video draft in the web, not a new route or a cloned story: the form already
+  edits every part, and the story stays untouched.
