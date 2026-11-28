@@ -803,6 +803,22 @@ run "logo_library_prefix" {
   }
 }
 
+# docs/CONTRACTS.md §57: reference videos. One more object prefix on the api's existing media grant (an in-place policy
+# change): get, put and delete by name, never listed.
+run "reference_videos_prefix" {
+  command = plan
+
+  assert {
+    condition     = contains(one([for s in jsondecode(aws_iam_role_policy.fn["api"].policy).Statement : s.Resource if try(s.Sid, "") == "MediaObjects"]), "arn:aws:s3:::cf-test-media/refs/*")
+    error_message = "The api reads, writes and deletes the owner's reference videos under refs/."
+  }
+
+  assert {
+    condition     = !contains(one([for s in jsondecode(aws_iam_role_policy.fn["api"].policy).Statement : s.Condition.StringLike["s3:prefix"] if try(s.Sid, "") == "MediaList"]), "refs/*")
+    error_message = "The api never lists refs/: the list is the REFVID# items."
+  }
+}
+
 # docs/CONTRACTS.md §39.3: the campaign copy of a clip waits behind CR_REMAKE, off by default; the switch is an
 # in-place environment change (no new grant, nothing replaced).
 run "cr_remake_off_by_default" {

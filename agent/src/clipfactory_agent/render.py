@@ -14,12 +14,14 @@ from __future__ import annotations
 
 import re
 from collections.abc import Awaitable, Callable, Sequence
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from pathlib import Path
 from typing import Any
 
 from . import livestatus, loudness, proc
 from .bedrock import Facecam, FrameLayout
+from .editstyle import DEFAULT as DEFAULT_STYLE
+from .editstyle import RenderStyle
 from .moments import Moment
 from .util import log
 from .voice import Spoken
@@ -45,6 +47,11 @@ DISCLOSURE_SIZE = 46
 DISCLOSURE_FADE_MS = 300
 DISCLOSURE_FIT = 16  # characters that fit at full size beside the widest logo; longer words are set smaller
 CAP_BOTTOM = SAFE[3] - 60  # the captions' last line ends here and longer captions grow up
+# Reference videos (§57) with captions in the middle: the captions stand on CAP_MIDDLE (still inside SAFE), and the
+# take then stands where the captions were.
+CAP_MIDDLE = 1180
+CAPTION_BOX = "&H66000000"  # a reference video's caption box: black, 60% solid
+CAPTION_BOX_PAD = 14
 TEXT_MARGIN_L, TEXT_MARGIN_R = SAFE[0], W - SAFE[2] + 10  # libass wraps text between these
 # The areas a Review overlay (logo or text, §53 C3) is warned about, as (left, top, right, bottom) in the 1080 × 1920
 # frame; the web copies them in web/src/lib/overlayAreas.ts and a test pins both. The captions (82 px, up to two
@@ -233,8 +240,38 @@ def phrases(words: Sequence[TimedWord], max_words: int = 3, gap: float = 0.45) -
     return out
 
 
-def clean_caption(text: str) -> str:
-    return _TRAILING.sub("", text).lstrip('"“').upper()
+def clean_caption(text: str, casing: str = "upper") -> str:
+    """A caption's words without trailing punctuation or a leading quote, in ``casing``: upper (today's), lower,
+    title (each word starts upper case) or sentence (as said)."""
+    text = _TRAILING.sub("", text).lstrip('"“')
+    if casing == "lower":
+        return text.lower()
+    if casing == "title":
+        return " ".join(w[:1].upper() + w[1:] for w in text.split(" "))
+    if casing == "sentence":
+        return text
+    return text.upper()
+
+
+def ass_colour(hex_rgb: str, alpha: str = "00") -> str:
+    """``#RRGGBB`` as ASS's ``&HAABBGGRR`` (alpha 00 is solid)."""
+    rgb = hex_rgb.lstrip("#").upper()
+    return f"&H{alpha}{rgb[4:6]}{rgb[2:4]}{rgb[0:2]}"
+
+
+def caption_style(style: RenderStyle | None = None) -> str:
+    """The Caption style line: Inter, white with a black outline, bold, standing on CAP_BOTTOM; a reference video's
+    style (§57) may change its size, colour, weight, a box instead of the outline, and the middle position."""
+    s = style or DEFAULT_STYLE
+    ml, mr = TEXT_MARGIN_L, TEXT_MARGIN_R
+    colour = ass_colour(s.caption_color)
+    bold = -1 if s.caption_bold else 0
+    if s.box:
+        border = f"{CAPTION_BOX},&H00000000,{bold},0,0,0,100,100,0,0,3,{CAPTION_BOX_PAD},0"
+    else:
+        border = f"&H00000000,&H99000000,{bold},0,0,0,100,100,0,0,1,9,4"
+    bottom = CAP_MIDDLE if s.caption_middle else CAP_BOTTOM
+    return f"Style: Caption,Inter,{s.caption_size},{colour},{colour},{border},2,{ml},{mr},{H - bottom},1"
 
 
 def ass_time(t: float) -> str:
@@ -300,14 +337,14 @@ def take_event(take: TakeShown) -> str:
     )
 
 
-def take_style() -> str:
+def take_style(bottom: int = TAKE_BOTTOM) -> str:
     """The Take style: Inter Bold, white, in an opaque box (BorderStyle 3, whose colour is the outline's) that reaches
     TAKE_PAD around the words. The margins keep the box between TAKE_LEFT and TAKE_RIGHT with its bottom on
-    TAKE_BOTTOM (alignment 2, like the captions)."""
+    ``bottom`` (TAKE_BOTTOM; CAP_BOTTOM when the captions stand in the middle), alignment 2 like the captions."""
     ml, mr = TAKE_LEFT + TAKE_PAD, W - TAKE_RIGHT + TAKE_PAD
     return (
         f"Style: Take,Inter,{TAKE_SIZE},&H00FFFFFF,&H00FFFFFF,{TAKE_BOX},&H00000000,-1,0,0,0,100,100,0,0,3,{TAKE_PAD},0,2,"
-        f"{ml},{mr},{H - TAKE_BOTTOM + TAKE_PAD},1\n"
+        f"{ml},{mr},{H - bottom + TAKE_PAD},1\n"
     )
 
 
@@ -319,19 +356,23 @@ def build_ass(
     hook_top: int = HOOK_TOP,
     disclosure: str | None = None,
     take: TakeShown | None = None,
+    style: RenderStyle | None = None,
 ) -> str:
     """The subtitle file: the hook for the whole clip, then each phrase with the word being said in yellow. Both sit
     inside SAFE: the hook hangs from ``hook_top`` (alignment 8), the captions stand on CAP_BOTTOM (alignment 2), and
     libass wraps them between the left margin and the buttons on the right. A campaign clip passes CAMPAIGN_HOOK_TOP
     and its ``disclosure`` words, which get their own style and event in the mark row. ``take`` adds the Take style
-    and its one event; without it the file is exactly what it was."""
+    and its one event; without it the file is exactly what it was. ``style`` is the reference videos' style (§57):
+    no hook, no captions, the captions' look and position and the said word's colour (or none); without it (or with
+    the default style) the file is exactly what it was."""
+    s = style or DEFAULT_STYLE
     ml, mr = TEXT_MARGIN_L, TEXT_MARGIN_R
     disclosure_style = (
         f"Style: Disclosure,Inter,{DISCLOSURE_SIZE},&H00FFFFFF,&H00FFFFFF,&H00000000,&H8C000000,-1,0,0,0,100,100,0,0,1,5,2,4,"
         f"{ml},{mr},0,1\n"
         if disclosure
         else ""
-    ) + (take_style() if take else "")
+    ) + (take_style(CAP_BOTTOM if s.caption_middle and s.captions else TAKE_BOTTOM) if take else "")
     head = f"""[Script Info]
 ScriptType: v4.00+
 PlayResX: {W}
@@ -343,26 +384,32 @@ YCbCr Matrix: TV.709
 [V4+ Styles]
 Format: Name, Fontname, Fontsize, PrimaryColour, SecondaryColour, OutlineColour, BackColour, Bold, Italic, Underline, StrikeOut, ScaleX, ScaleY, Spacing, Angle, BorderStyle, Outline, Shadow, Alignment, MarginL, MarginR, MarginV, Encoding
 Style: Hook,Inter,68,&H00FFFFFF,&H00FFFFFF,&H00000000,&H8C000000,-1,0,0,0,100,100,0,0,1,7,3,8,{ml},{mr},{hook_top},1
-Style: Caption,Inter,82,&H00FFFFFF,&H00FFFFFF,&H00000000,&H99000000,-1,0,0,0,100,100,0,0,1,9,4,2,{ml},{mr},{H - CAP_BOTTOM},1
+{caption_style(s)}
 {disclosure_style}
 [Events]
 Format: Layer, Start, End, Style, Name, MarginL, MarginR, MarginV, Effect, Text
 """
-    events = [f"Dialogue: 1,{ass_time(0)},{ass_time(total)},Hook,,0,0,0,,{hook_markup(hook)}"]
+    events = [f"Dialogue: 1,{ass_time(0)},{ass_time(total)},Hook,,0,0,0,,{hook_markup(hook)}"] if s.hook else []
     if disclosure:
         events.append(disclosure_event(disclosure))
     if take:
         events.append(take_event(take))
-    for i, p in enumerate(caps):
+    base = ass_colour(s.caption_color) + "&"
+    said = ass_colour(s.highlight_color) + "&" if s.highlight_color else None
+    for i, p in enumerate(caps if s.captions else []):
         nxt = caps[i + 1].t0 if i + 1 < len(caps) else total
         end = min(total, max(p.t1, p.t0 + 0.25), nxt)
-        words = [clean_caption(ass_escape(w.text)) for w in p.words]
+        words = [clean_caption(ass_escape(w.text), s.casing) for w in p.words]
+        if said is None:  # no highlight: the phrase shows whole, once
+            if end - p.t0 >= 0.02:
+                events.append(f"Dialogue: 0,{ass_time(p.t0)},{ass_time(end)},Caption,,0,0,0,,{' '.join(words)}")
+            continue
         for j, w in enumerate(p.words):
             start = p.t0 if j == 0 else w.t0
             stop = p.words[j + 1].t0 if j + 1 < len(p.words) else end
             if stop - start < 0.02:
                 continue
-            text = " ".join(f"{{\\c{YELLOW}}}{t}{{\\c&H00FFFFFF&}}" if k == j else t for k, t in enumerate(words))
+            text = " ".join(f"{{\\c{said}}}{t}{{\\c{base}}}" if k == j else t for k, t in enumerate(words))
             events.append(f"Dialogue: 0,{ass_time(start)},{ass_time(stop)},Caption,,0,0,0,,{text}")
     return head + "\n".join(events) + "\n"
 
@@ -802,12 +849,22 @@ async def render_clip(
     marks: Marks | None = None,
     take: str = "",
     voice: Spoken | None = None,
+    style: RenderStyle | None = None,
 ) -> RenderResult:
     """Cuts ``m`` into ``workdir/clip.mp4`` and ``workdir/cover.jpg``. ``marks`` (a campaign clip, §38.13) adds the
     mark row with the logo and the on-screen disclosure. ``take`` is the clip's "Your take" sentence (shown when the
     clip has room for it, never on a campaign clip) and ``voice`` the same sentence as speech, mixed in while the take
-    shows; a voice that does not fit, or that ffmpeg cannot mix, is left out and the take stays as text."""
+    shows; a voice that does not fit, or that ffmpeg cannot mix, is left out and the take stays as text.
+
+    ``style`` is the owner's reference videos' edit style (§57): the whole frame instead of the facecam split, no hook,
+    the captions' look, words per line and position, pauses kept and no punch-in. A campaign clip keeps its own
+    layout, its hook and its mark row: only the captions and the pacing follow the style there. Without a style (or
+    with the default one) the clip is exactly what it was."""
     workdir.mkdir(parents=True, exist_ok=True)
+    marked = marks is not None and marks.any
+    rs = style or DEFAULT_STYLE
+    if marked:
+        rs = replace(rs, fill=False, hook=True)
     tease = m.tease
     src_from = max(0.0, min(m.start, tease[0] if tease else m.start) - 2)
     src_to = max(m.end, tease[1] if tease else 0) + 1.5
@@ -828,13 +885,14 @@ async def render_clip(
         except Exception:
             layout = FrameLayout(None, "other")
     layout = layout or FrameLayout(None, "other")
-    fc = layout.facecam if layout.scene != "camera_only" else None
+    fc = layout.facecam if layout.scene != "camera_only" and not rs.fill else None
 
     end = min(t(m.end), info.duration - 0.05)
     # Pauses are cut out of talk. A moment with no words in it is all picture (a crash, a chase): cutting its quiet
     # stretches would cut the moment itself, so it plays whole.
     speech = any(m.start <= float(w[0]) < m.end for w in words)
-    quiet = await detect_silences(section, t(m.start), end) if info.has_audio and speech else []
+    cut_quiet = info.has_audio and speech and rs.cut_silences
+    quiet = await detect_silences(section, t(m.start), end) if cut_quiet else []
     segs: list[Segment] = []
     if tease:
         segs.append((t(tease[0]), min(t(tease[1]), info.duration - 0.05)))
@@ -847,17 +905,16 @@ async def render_clip(
     total = sum(b - a for a, b in segs)
 
     source_segs = [(a + src_from, b + src_from) for a, b in segs]
-    caps = phrases(retime(words, source_segs))
+    caps = phrases(retime(words, source_segs), max_words=rs.words_per_line)
     peak = peak_time(segs, t(m.peak_at), bool(tease))
     face_fill = layout.scene == "camera_only"
-    marked = marks is not None and marks.any
     logo = marks.logo if marks is not None else None
     disclosure = (marks.disclosure or None) if marks is not None else None
     parts = layout_parts(
         fc,
         info.width,
         info.height,
-        peak=peak if fc or face_fill else None,
+        peak=peak if (fc or face_fill) and rs.punch_in else None,
         face_fill=face_fill,
         band=CAMPAIGN_BAND if marked else BAND,
     )
@@ -869,11 +926,11 @@ async def render_clip(
     spoken = voice if shown is not None and voice is not None and shown.start + voice.duration <= shown.end else None
     ass_file = workdir / "captions.ass"
     if marked:
-        ass = build_ass(m.hook, caps, total, hook_top=CAMPAIGN_HOOK_TOP, disclosure=disclosure)
+        ass = build_ass(m.hook, caps, total, hook_top=CAMPAIGN_HOOK_TOP, disclosure=disclosure, style=rs)
     elif shown is not None:
-        ass = build_ass(m.hook, caps, total, take=shown)
+        ass = build_ass(m.hook, caps, total, take=shown, style=rs)
     else:
-        ass = build_ass(m.hook, caps, total)
+        ass = build_ass(m.hook, caps, total, style=rs)
     ass_file.write_text(ass, "utf-8")
 
     out = workdir / "clip.mp4"

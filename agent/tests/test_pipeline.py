@@ -111,6 +111,7 @@ class MemStore:
         self.clips: list[dict[str, Any]] = []
         self.writes: list[dict[str, Any]] = []
         self.fail_put: str | None = None
+        self.refs: list[dict[str, Any]] = []
 
     async def get_job(self, user_id: str, job_id: str) -> dict[str, Any]:
         return self.job
@@ -127,6 +128,9 @@ class MemStore:
 
     async def skill_rows(self, user_id: str) -> list[dict[str, Any]]:
         return []
+
+    async def ref_rows(self, user_id: str) -> list[dict[str, Any]]:
+        return list(self.refs)
 
     async def latest_learnings(self, user_id: str, n: int = 10) -> list[dict[str, Any]]:
         return []

@@ -289,6 +289,10 @@ class Store:
     async def skill_rows(self, user_id: str) -> list[dict[str, Any]]:
         return await self._query_prefix(user_id, "SKILL#")
 
+    async def ref_rows(self, user_id: str) -> list[dict[str, Any]]:
+        """Every reference video item (``REFVID#``, docs/CONTRACTS.md §57); the caller keeps only the ready ones."""
+        return await self._query_prefix(user_id, "REFVID#")
+
     async def latest_learnings(self, user_id: str, n: int = 10) -> list[dict[str, Any]]:
         return await self._query_prefix(user_id, "LEARNING#", newest_first=True, limit=n)
 
@@ -411,6 +415,59 @@ class Store:
                 raise
             return False
         return True
+
+    async def get_ref(self, user_id: str, ref_id: str) -> dict[str, Any] | None:
+        """One reference video item (``REFVID#{refId}``, §57), read consistently."""
+        return await self.get_item(user_pk(user_id), f"REFVID#{ref_id}")
+
+    async def _ref_write(self, what: str, user_id: str, ref_id: str, rev: int, fields: dict[str, Any]) -> bool:
+        """SET ``fields`` and REMOVE ``error`` on the reference item, only while it is ``analyzing`` with
+        ``analyzeRev == rev``. False (nothing written) when the condition fails. Floats become Decimals."""
+        from botocore.exceptions import ClientError
+
+        values = to_ddb(fields)
+        names: dict[str, str] = {"#st": "status", "#ar": "analyzeRev"}
+        sets: list[str] = []
+        attr_values: dict[str, Any] = {":analyzing": "analyzing", ":rev": rev}
+        for i, (k, v) in enumerate(values.items()):
+            names[f"#f{i}"] = k
+            attr_values[f":f{i}"] = v
+            sets.append(f"#f{i} = :f{i}")
+        expr = f"SET {', '.join(sets)}" if sets else ""
+        if "error" not in values:
+            names["#err"] = "error"
+            expr = f"{expr} REMOVE #err".strip()
+        kwargs: dict[str, Any] = {
+            "Key": {"pk": user_pk(user_id), "sk": f"REFVID#{ref_id}"},
+            "UpdateExpression": expr,
+            "ConditionExpression": "attribute_exists(pk) AND #st = :analyzing AND #ar = :rev",
+            "ExpressionAttributeNames": names,
+            "ExpressionAttributeValues": attr_values,
+        }
+        try:
+            await self._call(what, self.table.update_item, **kwargs)
+        except ClientError as e:
+            if e.response.get("Error", {}).get("Code") != "ConditionalCheckFailedException":
+                raise
+            return False
+        return True
+
+    async def finish_reference(self, user_id: str, ref_id: str, rev: int, fields: dict[str, Any]) -> bool:
+        """The one write that ends a reference analysis (§57): ``fields`` (status ``ready``, style, summary,
+        unsupported, thumbKey, duration, width, height, analyzedAt) set and ``error`` removed, only while the item is
+        still ``analyzing`` with ``analyzeRev == rev``. ``status`` is always ``ready``, whatever ``fields`` says."""
+        return await self._ref_write(
+            "ddb.finish_reference",
+            user_id,
+            ref_id,
+            rev,
+            {**{k: v for k, v in fields.items() if k != "error"}, "status": "ready"},
+        )
+
+    async def fail_reference(self, user_id: str, ref_id: str, rev: int, message: str) -> bool:
+        """Marks the analysis ``rev`` failed with one plain sentence; only while it is still ``analyzing`` with
+        ``analyzeRev == rev``."""
+        return await self._ref_write("ddb.fail_reference", user_id, ref_id, rev, {"status": "failed", "error": message})
 
     async def put_clip(self, item: dict[str, Any], *, fence: Fence | None = None) -> None:
         if fence is None:

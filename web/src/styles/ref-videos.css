@@ -1,0 +1,206 @@
+/* Reference videos, "Edit like these" (docs/CONTRACTS.md §57, screens/settings/ReferenceVideos.tsx): the top card of
+   Settings › Clip making › Skills. The whole card is the drop box: while videos are dragged over it, drop.css lays
+   the green glass over it, and its own edge lights up (leaf), so the owner sees exactly where they land. */
+.ref-box {
+  transition: box-shadow var(--dur-2) var(--ease-out);
+}
+.ref-box.is-over {
+  box-shadow:
+    0 0 0 3px rgb(var(--green-leaf-rgb) / 0.9),
+    0 0 32px rgb(var(--green-leaf-rgb) / 0.45),
+    var(--glass-shadow-panel);
+}
+.ref-count {
+  font-size: var(--fs-small);
+  color: var(--ink-2);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The dashed place to drop, with Upload videos in it. */
+.ref-add {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 12px 16px;
+  min-height: 96px;
+  padding: 16px;
+  border: 2px dashed rgb(var(--line-rgb) / 0.35);
+  border-radius: var(--r-lg);
+  background: var(--fill-ghost);
+  text-align: center;
+}
+.ref-add__icon {
+  display: grid;
+  color: var(--ink-2);
+}
+.ref-add__words {
+  font-weight: 650;
+  color: var(--ink-2);
+}
+
+.ref-list {
+  display: grid;
+  gap: 10px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+}
+/* Picture | name and status | delete; the fold (or Try again) under the name, full width on a phone. */
+.ref-row {
+  display: grid;
+  grid-template-columns: 54px minmax(0, 1fr) auto;
+  align-items: start;
+  gap: 10px 12px;
+  min-width: 0;
+  padding: 10px;
+  border-radius: var(--r-lg);
+  background: var(--fill);
+  box-shadow: var(--glass-shadow-raise);
+  animation: ref-in var(--dur-2) var(--ease-out) both;
+}
+.ref-row__thumb {
+  grid-row: span 2;
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 54px;
+  aspect-ratio: 9 / 16;
+  overflow: hidden;
+  border-radius: var(--r-sm);
+  background: var(--fill-sunk);
+  color: var(--ink-2);
+}
+.ref-row__thumb > img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.ref-row__main {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+  padding-top: 4px;
+}
+.ref-row__more {
+  grid-column: 2 / -1;
+  min-width: 0;
+}
+@media (max-width: 560px) {
+  .ref-row__thumb {
+    grid-row: auto;
+    width: 44px;
+  }
+  .ref-row__more {
+    grid-column: 1 / -1;
+  }
+}
+.ref-row__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 10px;
+  min-width: 0;
+}
+.ref-row__name {
+  min-width: 0;
+  font-weight: 650;
+  overflow-wrap: anywhere;
+}
+.ref-row__fail {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 12px;
+}
+.ref-row__error {
+  color: var(--ink-2);
+}
+.ref-row__remove:hover {
+  background: var(--fill-hover);
+}
+.ref-row__remove:active {
+  background: var(--fill-press);
+  transform: scale(0.94);
+}
+
+/* One fold per video: what it copies, and under "Not yet" what it cannot copy yet. */
+.ref-fold {
+  border-radius: var(--r-md);
+  background: var(--fill);
+  box-shadow: var(--glass-shadow-raise);
+}
+.ref-fold__q {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 48px;
+  padding: 10px 14px;
+  font-weight: 650;
+  list-style: none;
+  border-radius: var(--r-md);
+  transition: background-color var(--dur-1) var(--ease-out);
+}
+.ref-fold__q:hover {
+  background: var(--fill-hover);
+}
+.ref-fold__q::-webkit-details-marker {
+  display: none;
+}
+.ref-fold__q > span {
+  flex: 1;
+  min-width: 0;
+}
+.ref-fold__body {
+  display: grid;
+  gap: 8px;
+  padding: 0 14px 14px;
+}
+.ref-lines {
+  display: grid;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ref-lines > li {
+  display: flex;
+  align-items: flex-start;
+  gap: 8px;
+}
+.ref-lines > li > svg {
+  flex: none;
+  margin-top: 3px;
+  color: var(--green-leaf);
+}
+.ref-lines--no > li > svg {
+  color: var(--ink-3);
+}
+.ref-lines--no > li {
+  color: var(--ink-2);
+}
+.ref-lines__label {
+  margin-top: 4px;
+  font-size: var(--fs-small);
+  font-weight: 700;
+  color: var(--ink-2);
+}
+
+@keyframes ref-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .ref-row {
+    animation: none;
+  }
+  .ref-box,
+  .ref-fold__q {
+    transition: none;
+  }
+}
+.reduce-motion .ref-row {
+  animation: none;
+}

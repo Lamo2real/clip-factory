@@ -711,3 +711,14 @@ them as original. ([CONTRACTS.md §55](CONTRACTS.md#55-your-take-every-clip-gets
 
 ### BR-37 Engagement and watch graph
 - AC1: Each clip shows its engagement rate and watch curve per platform (§56).
+
+### BR-38 Reference videos: edit like these
+The owner said on 28 Nov 2026 that a video should be a reference "to how i want my videos edited exactly, everything
+from format to hook to placement and etc.", combined with the skills. ([CONTRACTS.md §57](CONTRACTS.md#57-reference-videos-edit-like-these-owner-request-2026-11-28),
+[ADR-114](DECISIONS.md#adr-114-reference-videos-teach-the-edit))
+- AC1: **Attach.** Drag and drop or Upload, many at once, up to 10 videos of 500 MB.
+- AC2: **Highlight.** The drop box lights up while files are dragged over it.
+- AC3: **Delete.** Each video has a trash button; a failed one has Try again.
+- AC4: **Learned once.** Each video turns Ready with a short summary and a "Not yet" list of what we cannot copy.
+- AC5: **Used.** New jobs follow the most common style of the ready videos, combined with the skills; a task's own limits still win.
+- AC6: **Kept apart.** Clips Funded and the owner's saved data are untouched; nothing is posted by this.

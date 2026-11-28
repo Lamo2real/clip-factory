@@ -321,6 +321,16 @@ def skills_block(docs: Sequence[SkillDoc], *, where: str = "") -> SkillsBlock:
     return SkillsBlock(out, counts)
 
 
+def with_section(block: SkillsBlock, extra: str, *, name: str = "extra") -> SkillsBlock:
+    """The skills block with one more section after every skill (the reference videos, §57). The skills, their order
+    and their budget are untouched: the section comes after ``</owner_skills>``. An empty ``extra`` gives the block
+    back as it is."""
+    if not extra:
+        return block
+    text = block.text + "\n\n" + extra.strip()
+    return SkillsBlock(text, {**block.counts, f"{name}_chars": len(extra.strip()), "chars": len(text)})
+
+
 def compose_system(block: SkillsBlock, task_system: str, *, cache_point: bool = True) -> list[dict[str, Any]]:
     """A Converse ``system``: the skills block first, a cache point after it when it is long enough (and cache
     points are on), then the task's own system prompt."""

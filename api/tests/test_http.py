@@ -158,6 +158,11 @@ def test_every_contract_route_is_registered() -> None:
         ("POST", "/v1/logos/from-campaign"),
         ("POST", "/v1/logos/X/complete"),
         ("DELETE", "/v1/logos/X"),
+        # §57: reference videos
+        ("GET", "/v1/refvideos"),
+        ("POST", "/v1/refvideos"),
+        ("POST", "/v1/refvideos/X/complete"),
+        ("DELETE", "/v1/refvideos/X"),
         ("GET", "/v1/clips/X/file"),
         ("POST", "/v1/clips/X/tiktok/posted"),
         ("DELETE", "/v1/clips/X/tiktok/posted"),

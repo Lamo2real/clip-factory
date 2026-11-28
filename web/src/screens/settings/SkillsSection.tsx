@@ -1,5 +1,6 @@
-// Settings › Clip making › Skills (docs/CONTRACTS.md §18.7): "Your skills", every one always used, each row opening
-// its own page; and "Add a skill", to write one in the app or upload a file. There is no on/off switch.
+// Settings › Clip making › Skills (docs/CONTRACTS.md §18.7, §57): "Edit like these" (ReferenceVideos.tsx) on top;
+// "Your skills", every one always used, each row opening its own page; and "Add a skill", to write one in the app or
+// upload a file. There is no on/off switch.
 import { useId, useRef, useState } from "react";
 import { api } from "../../api/index.ts";
 import { ApiError, friendlyMessage } from "../../api/errors.ts";
@@ -18,6 +19,7 @@ import { slug, uploadNameTaken } from "../../lib/skillName.ts";
 import { Apple, Panel, usePickAction } from "./parts.tsx";
 import { isNewSkill, isReturningSkill, markNewSkill, useHiddenSkills } from "./skillDeletes.ts";
 import { SkillSectionOffer, type SectionResult } from "./SkillSectionOffer.tsx";
+import { ReferenceVideos } from "./ReferenceVideos.tsx";
 import { sounds } from "../../lib/sounds.ts";
 
 export const SKILL_FILE_LIMITS = { md: 1024 ** 2, zip: 20 * 1024 ** 2 } as const;
@@ -137,6 +139,8 @@ export function SkillsSection() {
 
   return (
     <>
+      {/* §57: the videos to edit like, on top; used with every skill below. */}
+      <ReferenceVideos />
       <Panel>
         <Apple id="your-skills" wide>
           {error && !data ? <ErrorPanel message={error} onRetry={reload} /> : null}

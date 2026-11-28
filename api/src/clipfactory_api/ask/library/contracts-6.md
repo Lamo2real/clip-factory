@@ -23,6 +23,7 @@ Keys: `pk` (S), `sk` (S); GSI `gsi1` on `gsi1pk`/`gsi1sk` (projection ALL); spar
 | Creator lesson | `USER#{userId}` | `LESSON#{lessonId}` | – | `type="learning"`, `kind="creator"`, Lesson fields + `supportPostIds`, `statusBeforeOff?`, `relearnedAt?`, `deletedAt?` (§16.12) |
 | Learn state | `USER#{userId}` | `LEARNSTATE` | – | `type="learnstate"`, `seen` (winner post ids looked at, per `{creatorKey}|{platform}`), `creators` (LessonCreator[]), `checkedAt`, `version` (§16.12) |
 | Account | `USER#{userId}` | `ACCOUNT#{platform}` | – | §17.4 (tokens never here; Secrets Manager `cf-prod/platforms/*`); also `SETUP#{platform}` and `OAUTH#{nonce}`/`STATE` items (§17.4) |
+| Reference video | `USER#{userId}` | `REFVID#{refId}` | – | `type="refvideo"`, status, `analyzeRev`, `style`, `summary`, `unsupported`, `thumbKey`, … (§57.V2) |
 
 Built-in skills are not items: the API lists `skills/*/SKILL.md` bundled in its package as `builtin: true`.
 (Superseded by §18.1: the old `SKILL#builtin-<name>` on/off choice items, `type="skill_choice"`, are ignored everywhere
