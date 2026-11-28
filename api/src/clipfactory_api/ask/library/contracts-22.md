@@ -696,3 +696,14 @@ stand-ins of `e2e/glass.ts`, headless.
 * **Tests:** `test/background.test.ts` (the logic of light), `test/styleFloors.test.ts` (the chips' green),
   `test/designTokens.test.ts` (the token tables in UX_DESIGN_SYSTEM.md), `e2e/light.spec.ts` and
   `e2e/refract.spec.ts` (§22.6).
+
+### 22.8 The sidebar is still while the page scrolls (owner request, 2026-11-28)
+
+The owner, in the Mac app: "this sidebar is bugging out and blinking and every time i scroll". In the desktop window
+(`html.see-through`) the sidebar, and Clips Funded's rail (`.stories-app[data-look="window"] .st-rail`), draw no
+`backdrop-filter`. Nothing of the page is ever behind them (the shell is padded past them, the window look draws no
+backdrop) and no web filter can see the desktop (§22.3), so the filter changed no pixel (measured in WebKit and
+Chromium: identical). In WKWebView the fixed filter layer, with the workspace switch's and Live chip's own filters over
+it, was re-sampled on scroll and blinked. Their tint, light, glow and shadow are unchanged; in browsers, on phones and in
+the picture and colours looks they keep their blur and bend. The page itself loads from the cloud, so the desktop app
+picks this up on a reload. `test/sidebarScrollStill.test.ts`.
