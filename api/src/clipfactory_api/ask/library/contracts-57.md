@@ -1,6 +1,8 @@
 ## 57. Reference videos: edit like these (owner request, 2026-11-28)
 
-BR-38, ADR-114. Clip Factory only; Clips Funded is not touched. The owner: "i want to be abe to attach a video, either
+BR-38, ADR-114.
+
+Clip Factory only; Clips Funded is not touched. The owner: "i want to be abe to attach a video, either
 through drag and drop or just hitting upload and selecting a video, and i should be able to click on multiple videos
 and select them as well as delete any of them, and if i drag and ddrop when i hover the file over the dropbox it
 should be highlited with the dropbox of where i am dropping it. and this video should essentially be a refrence to how

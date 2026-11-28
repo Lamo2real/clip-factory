@@ -2,12 +2,15 @@
    Settings › Clip making › Skills. The whole card is the drop box: while videos are dragged over it, drop.css lays
    the green glass over it, and its own edge lights up (leaf), so the owner sees exactly where they land. */
 .ref-box {
-  transition: box-shadow var(--dur-2) var(--ease-out);
+  transition:
+    box-shadow var(--dur-2) var(--ease-out),
+    background-color var(--dur-2) var(--ease-out);
 }
+/* No edge lines (the owner's no-visible-edges rule): the card glows leaf green instead, soft all round. */
 .ref-box.is-over {
   box-shadow:
-    0 0 0 3px rgb(var(--green-leaf-rgb) / 0.9),
-    0 0 32px rgb(var(--green-leaf-rgb) / 0.45),
+    0 0 18px 4px rgb(var(--green-leaf-rgb) / 0.75),
+    0 0 48px rgb(var(--green-leaf-rgb) / 0.4),
     var(--glass-shadow-panel);
 }
 .ref-count {
@@ -16,7 +19,7 @@
   font-variant-numeric: tabular-nums;
 }
 
-/* The dashed place to drop, with Upload videos in it. */
+/* The place to drop, with Upload videos in it: a brighter glass well, no edge line. */
 .ref-add {
   display: flex;
   flex-wrap: wrap;
@@ -25,9 +28,9 @@
   gap: 12px 16px;
   min-height: 96px;
   padding: 16px;
-  border: 2px dashed rgb(var(--line-rgb) / 0.35);
   border-radius: var(--r-lg);
   background: var(--fill-ghost);
+  box-shadow: inset 0 0 24px rgb(var(--green-leaf-rgb) / 0.18);
   text-align: center;
 }
 .ref-add__icon {

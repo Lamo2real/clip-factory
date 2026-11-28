@@ -2980,6 +2980,6 @@ likes, comments and shares; views are their own two choices.
 
 ## ADR-114 Reference videos teach the edit
 
-- **Context.** §57. The owner wants videos edited "exactly" like examples they attach: format, hook, placement and more, combined with the skills.
+- **Context.** §57: clips edited like the owner's example videos.
 - **Decision.** Each reference is looked at **once**, on upload, by the agent (frames, scene cuts, words, one structured call with the job default `agentModel`; no new model id) and the result is stored as an EditStyle on the item. At job start the stored styles are merged: the most common value wins, a tie goes to the newest video, numbers use the median. One call per video, not per job, so jobs stay as fast and cheap as before, and the same videos always give the same style. The merge becomes a RenderStyle for the renderer and one section placed after every skill in the skills block, so it is combined with the skills and cannot change a task's answer format or limits (the task's own limits win). What the renderer cannot do yet is listed honestly as "Not yet", never faked.
 - **Consequences.** One extra agent action, four API routes, one item kind and one media prefix, all add-only; nothing is replaced. A bad or odd video can only move a field when it is the most common value. A few model calls per upload, none per job. Clips Funded is untouched. Later: more of the table in §57.V8 can move from "Not yet" to drawn.
