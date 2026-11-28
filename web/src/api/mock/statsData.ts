@@ -20,6 +20,29 @@ export function noise(seed: number): number {
 }
 
 const r = Math.round;
+const r1 = (v: number) => Math.round(v * 10) / 10;
+
+/**
+ * A believable "how long people watch" curve: a hook drop in the first 3 seconds, a slow decline, and on YouTube a
+ * small rewatch bump near the end. `buckets` points from 0 to 100 % of the length (Facebook sends 40).
+ */
+export function retentionCurve(platform: "youtube" | "facebook", durationSec: number, seed: number, buckets: number): [number, number][] {
+  const hook = Math.min(40, (3 / Math.max(durationSec, 4)) * 100);
+  const n = noise(seed + 7);
+  const kept = (platform === "youtube" ? 72 : 60) + n * 8;
+  const end = (platform === "youtube" ? 40 : 30) + n * 6;
+  const out: [number, number][] = [];
+  for (let i = 0; i < buckets; i++) {
+    const x = (i * 100) / (buckets - 1);
+    let y: number;
+    if (x <= hook) y = 100 - (100 - kept) * Math.sin(((x / hook) * Math.PI) / 2);
+    else y = kept - (kept - end) * Math.pow((x - hook) / (100 - hook), 0.8);
+    if (platform === "youtube" && x > 88) y += 7 * Math.sin(((x - 88) / 12) * Math.PI);
+    y += (noise(seed * 31 + i) - 0.5) * 1.6;
+    out.push([r1(x), r1(Math.max(0, y))]);
+  }
+  return out;
+}
 
 /**
  * One post's metrics. `insights: false` stands for "the slow numbers are not in yet": Instagram then has no views,
@@ -55,6 +78,7 @@ export function metricsFor(
               subscribersGained: r(views * 0.0021),
             }
           : {},
+        ...(insights ? { retention: { points: retentionCurve("youtube", durationSec, seed, 51), readAt: insightsAt ?? checkedAt, source: "youtube" as const } } : {}),
       };
     case "tiktok":
       return { ...base, views, likes: r(views * (likeRate + 0.03)), comments: r(views * 0.006), shares: r(views * 0.011), extra: {} };
@@ -100,6 +124,7 @@ export function metricsFor(
           followsGained: r(views * 0.0012),
           ...(seed % 2 === 0 ? { reachUnique: r(views * 0.66) } : {}),
         },
+        retention: { points: retentionCurve("facebook", durationSec, seed, 40), readAt: insightsAt ?? checkedAt, source: "facebook" },
       };
     }
     case "x":

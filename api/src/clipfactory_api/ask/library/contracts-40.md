@@ -1,6 +1,7 @@
 ## 40. Get paid: set up payouts, see if you can get paid, and what reached your bank (owner request, 2026-11-21)
 
-The owner's words: *"Does the application of Clip Factory show me exactly how much I get after or how much I earn in
+The owner's words: *"Does the application
+of Clip Factory show me exactly how much I get after or how much I earn in
 real money based on content rewards based on the actual add sense in U2 and you know all of the other stuff for Meta
 and Facebook and an Instagram and also if I connect it then how much X and also on TikTok does it show me that? Also,
 can I have like a step just like we how we connected the platform social media platforms to Clip Factory can I have a

@@ -6,3 +6,4 @@ test-results/
 playwright-report/
 screenshots/
 public/config.json
+.screens/

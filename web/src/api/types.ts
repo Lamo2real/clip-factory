@@ -101,6 +101,8 @@ export interface AiCost {
   v: number;
   models: AiCostModel[];
   transcribe?: { seconds: number; minutes: number; dollars?: number; estimated: boolean };
+  /** The voice that read the takes out loud (CONTRACTS §55): the letters it read and what they cost. Absent with none. */
+  voice?: { characters: number; calls: number; dollars?: number; estimated: boolean };
   totalTokens: number;
   totalCalls: number;
   totalDollars: number;
@@ -173,6 +175,13 @@ export interface Clip {
   status: ClipStatus;
   momentType: MomentType;
   hook: string;
+  /**
+   * Your take (owner request, 2026-11-27): one short comment that is the channel's own, drawn on the clip. Absent on
+   * old clips, on campaign clips and copies, and while Your take is off.
+   */
+  take?: string;
+  /** True only when a voice says the take in the clip. Absent otherwise. */
+  takeSpoken?: boolean;
   summary: string;
   durationSec: number;
   sourceStart: number;
@@ -380,6 +389,12 @@ export interface Settings {
    * Absent on old servers: the default (`agentModel`).
    */
   clipModel?: string;
+  /** Your take: every new clip gets one short comment that is the channel's own. Absent on old servers: true. */
+  takeOn?: boolean;
+  /** Say it out loud: a voice reads the take at the start of the clip. Absent on old servers: true. */
+  takeVoice?: boolean;
+  /** How you talk: the owner's few words on their style (at most 120 characters). Absent on old servers: "". */
+  takeStyle?: string;
   /** Follow creators (docs/CONTRACTS.md §24.1): "Stop all automatic clips". Absent on old servers: false. */
   followPaused?: boolean;
   /** At most this many automatic videos a day; 0 means no limit (the default). The UI never shows 0. */
@@ -855,6 +870,11 @@ export interface PostMetrics {
   insightsUpdatedAt?: string;
   final?: true;
   extra?: YouTubeExtra | TikTokExtra | InstagramExtra | FacebookExtra | XExtra;
+  /**
+   * How long people watch (YouTube and Facebook only): [x, y] with x = percent of the video's length (0–100) and
+   * y = percent of viewers still watching (YouTube can go above 100 with rewatches).
+   */
+  retention?: { points: [number, number][]; readAt?: string; source?: "youtube" | "facebook" };
 }
 
 export interface Post {

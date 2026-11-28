@@ -6376,7 +6376,7 @@ resource, the stories agent and Terraform do not change, and nothing is charged 
 ### 45.52 Use it again: a made video's setup as a new draft (owner request, 2026-11-27)
 
 Owner: "pick any previously uploaded video, open its complete setup ... edit any of it, and then render and upload it
-as a new video. The original stays unchanged." ADR-111. Web only: no route, item, agent or Terraform change.
+as a new video. The original stays unchanged." ADR-113. Web only: no route, item, agent or Terraform change.
 
 - **Stored setup.** Every made video already keeps it: the `STORY#` item (cast, roles, series, length, shape, look,
   captions, music, references, AI, `ownScript`) and its script `v{scriptVersion}.json`, kept forever (§45.3, §45.4).

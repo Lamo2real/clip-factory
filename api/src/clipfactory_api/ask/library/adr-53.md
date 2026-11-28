@@ -1,6 +1,7 @@
 ## ADR-53 Ask answers the picture: screenshot rules, the setup guide as a tool, keyless official pages, no canned fallback, a model smoke check on deploy
 
-- **Context.** On 19 Nov 2026 the owner sent Ask a phone screenshot of Facebook's **Edit profile › Manage connection**
+- **Context.** On 19 Nov 2026 the
+  owner sent Ask a phone screenshot of Facebook's **Edit profile › Manage connection**
   sheet and asked "What do I do now?". He got "Jobs working right now: 0 … Open Jobs". The assistant never ran: iOS had
   dropped the WebSocket while he was in Facebook, the panel waited 4 s, fell back to the §19 keyword help *without the
   picture*, and BM25 matched the one content word "now" to "Is anything running right now". Even with the model, the

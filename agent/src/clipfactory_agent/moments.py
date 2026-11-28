@@ -5,8 +5,9 @@ from __future__ import annotations
 
 import math
 import re
+import unicodedata
 from dataclasses import asdict, dataclass, field
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal
 
 from .schema import check
 
@@ -16,6 +17,15 @@ if TYPE_CHECKING:
 MOMENT_TYPES = ["rage", "chaos", "interaction", "no_way", "first_reaction", "hot_take"]
 DEFAULT_LENGTH = (20.0, 45.0)  # the default length target
 MAX_TEASE = 3.0
+# "Your take" (docs/CONTRACTS.md, owner request 2026-11-27): the channel's own one-sentence comment on a moment. The
+# model is asked for 5–14 words; code accepts 4–16 and at most 90 characters.
+TAKE_WORDS = (4, 16)
+TAKE_MAX_CHARS = 90
+TAKE_STYLE_MAX = 120
+# How ``validate`` treats the take: "off" always blanks it (the job has none), "keep" keeps a good one and blanks a bad
+# one, "strict" does the same and also says why (the moment is kept with no take and comes back with the reason, so the
+# model can send it again with a better one; a moment is never lost over its take).
+TakeMode = Literal["off", "keep", "strict"]
 
 MOMENT_SCHEMA: dict[str, Any] = {
     "type": "object",
@@ -25,6 +35,7 @@ MOMENT_SCHEMA: dict[str, Any] = {
         "end",
         "moment_type",
         "hook",
+        "take",
         "first_words",
         "tease_start",
         "tease_end",
@@ -44,6 +55,12 @@ MOMENT_SCHEMA: dict[str, Any] = {
         "end": {"type": "number", "description": "Clip end in seconds, right on the payoff."},
         "moment_type": {"type": "string", "enum": MOMENT_TYPES},
         "hook": {"type": "string", "description": "On-screen text hook: 6–8 words that open a question, not a label."},
+        "take": {
+            "type": "string",
+            "description": "The channel's own one-sentence comment on the moment: 5–14 words, at most 90 characters. "
+            "It adds what the viewer cannot see; it never describes the picture or repeats the hook. Empty when the "
+            "rules say this job has no take.",
+        },
         "first_words": {
             "type": "string",
             "description": "What the viewer hears in the first second: the words, or the sound when nobody talks.",
@@ -86,6 +103,7 @@ class Moment:
     people: list[str] = field(default_factory=list)
     tease: tuple[float, float] | None = None
     picked_for: str | None = None  # why it was picked, in a few plain words; built by code (signals.picked_for)
+    take: str = ""  # "Your take": the channel's own one-sentence comment; empty when the clip has none
 
     @property
     def length(self) -> float:
@@ -113,11 +131,47 @@ class Moment:
             people=[str(p) for p in d.get("people") or []],
             tease=(float(tease[0]), float(tease[1])) if tease else None,
             picked_for=str(d["picked_for"]) if d.get("picked_for") else None,
+            take=str(d.get("take") or ""),
         )
 
 
 def word_count(text: str) -> int:
     return len(text.split())
+
+
+# Emoji and other pictographs (category So), their joiners, selectors and skin tones, and every control, format,
+# private-use and unassigned character.
+_DROP_CATEGORIES = {"So", "Cc", "Cf", "Cs", "Co", "Cn"}
+_EMOJI_PARTS = re.compile("[\ufe00-\ufe0f\u20e3\U0001f3fb-\U0001f3ff\U000e0020-\U000e007f]")
+
+
+def clean_take(text: object) -> str:
+    """A take as it may be shown and spoken: no emoji, no control characters, single spaces."""
+    if not isinstance(text, str):
+        return ""
+    spaced = "".join(" " if c in "\n\r\t" else c for c in _EMOJI_PARTS.sub("", text))
+    return " ".join("".join(c for c in spaced if unicodedata.category(c) not in _DROP_CATEGORIES).split())
+
+
+def take_problem(take: str) -> str | None:
+    """Why a cleaned take can't be used, worded for the model, or None when it can."""
+    words = word_count(take)
+    lo, hi = TAKE_WORDS
+    if words < lo or words > hi:
+        return f"the take has {words} words; it must be one sentence of 5–14 words"
+    if len(take) > TAKE_MAX_CHARS:
+        return f"the take has {len(take)} characters; it must have at most {TAKE_MAX_CHARS}"
+    if "#" in take or "@" in take:
+        return "the take must have no hashtags and no @handles"
+    letters = [c for c in take if c.isalpha()]
+    if len(letters) >= 4 and all(c.isupper() for c in letters):
+        return "the take must not be in all caps"
+    return None
+
+
+def clean_style(text: object) -> str:
+    """The owner's few words on how they talk (the ``takeStyle`` setting), as the prompt shows them."""
+    return clean_take(text)[:TAKE_STYLE_MAX].strip()
 
 
 _UNIT = r"\s*(?:s|sec|secs|seconds?)\b"
@@ -193,12 +247,28 @@ def length_target(notes: str | None, campaign: Campaign | None = None) -> tuple[
     return DEFAULT_LENGTH
 
 
-def validate(raw: dict[str, Any], *, duration: float, length: tuple[float, float]) -> tuple[Moment | None, list[str]]:
+def validate(
+    raw: dict[str, Any], *, duration: float, length: tuple[float, float], take: TakeMode = "keep"
+) -> tuple[Moment | None, list[str]]:
     """A clean Moment from the model's answer, with its timing clamped to the length target, or the reasons it was
-    rejected (worded for the model, so it can correct itself)."""
+    rejected (worded for the model, so it can correct itself). ``take`` says what happens to the moment's take
+    (``TakeMode``); an answer without one (a saved moment from before takes) is read as an empty take. In "strict" mode
+    a moment whose only fault is its take comes back with an empty take AND the reason, so the caller keeps it and can
+    still ask for a better take."""
+    if isinstance(raw, dict) and "take" not in raw:
+        raw = {**raw, "take": ""}
     problems = check(MOMENT_SCHEMA, raw)
     if problems:
         return None, problems
+    own = "" if take == "off" else clean_take(raw["take"])
+    notes: list[str] = []
+    if own and (bad := take_problem(own)):
+        notes = [bad]
+        own = ""
+    elif take == "strict" and not own:
+        notes = ["the take is empty; write one sentence of 5–14 words"]
+    if take != "strict":
+        notes = []
     lo, hi = length
     start, end = float(raw["start"]), float(raw["end"])
     payoff = float(raw["payoff_at"])
@@ -250,8 +320,9 @@ def validate(raw: dict[str, Any], *, duration: float, length: tuple[float, float
             summary=str(raw["summary"])[:300],
             people=[str(p)[:80] for p in raw.get("people") or []][:8],
             tease=tease,
+            take=own,
         ),
-        [],
+        notes,
     )
 
 

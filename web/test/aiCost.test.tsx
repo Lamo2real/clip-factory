@@ -71,6 +71,22 @@ describe("What this cost", () => {
     expect(host.textContent).toContain("Prices checked 25 Nov");
     expect(host.textContent).not.toContain("so far");
   });
+  it("names the voice that read the takes, with its letters and its price, and has no row without one", () => {
+    render(job({ aiCost: cost }));
+    expect(host.textContent).not.toContain("Amazon Polly");
+    render(job({ aiCost: { ...cost, voice: { characters: 1204, calls: 6, dollars: 0.019264, estimated: false } } }));
+    const rows = [...host.querySelectorAll(".ai-cost__row")].map((r) => r.textContent);
+    expect(rows).toHaveLength(4);
+    expect(rows[3]).toContain("Voice (Amazon Polly)");
+    expect(rows[3]).toContain("$0.02");
+    expect(rows[3]).toContain("6 takes read · 1,204 letters");
+    expect(host.querySelector(".ai-cost__about")).toBeNull();
+    // a price list without the voice's price: the row says so, it is never a silent gap in the total
+    render(job({ aiCost: { ...cost, estimated: true, voice: { characters: 40, calls: 1, estimated: true } } }));
+    const last = [...host.querySelectorAll(".ai-cost__row")].at(-1)!.textContent;
+    expect(last).toContain("price not known");
+    expect(last).toContain("1 take read · 40 letters");
+  });
   it("says so far for a failed job and about for an estimate", () => {
     render(job({ status: "failed", aiCost: { ...cost, estimated: true } }));
     expect(host.textContent).toContain("so far");

@@ -28,6 +28,7 @@ import { adFirst, hasItem, liveFit } from "../../lib/crFit.ts";
 import { isSoundId } from "../../lib/soundCatalog.ts";
 import { isBackgroundMode, isGlassStrength, isHexColour, MAX_COLOURS } from "../../lib/background.ts";
 import { currentClipModel, isClipModel } from "../../lib/models.ts";
+import { TAKE_STYLE_MAX, tidyTakeStyle } from "../../lib/take.ts";
 import { autoPostMock, NOTE_NO_PLACES, CR_BY_HAND, CR_CANT_TAKE, type AutoPostControls } from "./autopost.ts";
 import { AUTO_ALREADY_SENT } from "../../lib/autopost.ts";
 import { macOptions, tiktokMacMock, type TikTokMacControls } from "./tiktokMac.ts";
@@ -351,6 +352,9 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       );
       if (!c) throw new Error("no kept clip that isn't on TikTok yet");
       c.campaignId = campaignId;
+      // A campaign clip has no Your take.
+      delete c.take;
+      delete c.takeSpoken;
       publishClip(c);
       return c.clipId;
     },
@@ -402,6 +406,10 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
         status: "review",
         momentType: m.type,
         hook: m.hook,
+        // Your take: never on a campaign clip, and only while it is on; spoken only with Say it out loud.
+        ...(m.take && !campaign && !job.campaignId && store.settings.takeOn !== false
+          ? { take: m.take, ...(store.settings.takeVoice !== false ? { takeSpoken: true } : {}) }
+          : {}),
         summary: m.summary,
         durationSec: 20 + i * 3,
         sourceStart: 300 + i * 600,
@@ -640,6 +648,9 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       createdAt: new Date().toISOString(),
       campaignId: campaign.campaignId,
       remakeOf: { clipId: from.clipId, jobId: from.jobId },
+      // A campaign copy has no Your take: its layout is the campaign's.
+      take: undefined,
+      takeSpoken: undefined,
       remakes: undefined,
       uploadTo: undefined,
       decidedAt: undefined,
@@ -1462,6 +1473,14 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       if (next.backgroundMode !== undefined && !isBackgroundMode(next.backgroundMode)) throw bad("Pick See-through, Picture or Colours.");
       if (next.glassStrength !== undefined && !isGlassStrength(next.glassStrength)) throw bad("Pick Clear or Frosted.");
       if (next.clipModel !== undefined && !isClipModel(next.clipModel)) throw bad("Pick one of the AI models in the list.");
+      // Your take: like the API, two switches and one short line (spaces tidied, at most 120 characters).
+      if (next.takeOn !== undefined && typeof next.takeOn !== "boolean") throw bad("takeOn must be true or false.");
+      if (next.takeVoice !== undefined && typeof next.takeVoice !== "boolean") throw bad("takeVoice must be true or false.");
+      if (next.takeStyle !== undefined) {
+        if (typeof next.takeStyle !== "string") throw bad("How you talk must be words.");
+        next.takeStyle = tidyTakeStyle(next.takeStyle);
+        if (next.takeStyle.length > TAKE_STYLE_MAX) throw bad(`How you talk can be at most ${TAKE_STYLE_MAX} letters.`);
+      }
       // §24: the same ranges as the API (0 is "no limit").
       const whole = (v: unknown, lo: number, hi: number) => typeof v === "number" && Number.isInteger(v) && v >= lo && v <= hi;
       if (next.followDailyMax !== undefined && !whole(next.followDailyMax, 0, 20)) throw bad("How many a day must be a number from 1 to 20.");

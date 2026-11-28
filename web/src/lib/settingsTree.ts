@@ -45,7 +45,7 @@ export const TREES: Tree[] = [
       {
         slug: "clips",
         name: "Clips",
-        line: "How many clips, how long a video can be, and which AI makes them.",
+        line: "How many clips, how long a video can be, which AI makes them, and your take.",
         icon: "layers",
         apples: [
           {
@@ -65,6 +65,24 @@ export const TREES: Tree[] = [
             name: "AI model",
             leaf: "The AI that finds your moments and writes your captions. Your pick is used for your next clips.",
             words: ["model", "AI", "Claude", "Fable", "Opus", "Sonnet", "Haiku", "brain", "smart", "smarter", "cheap", "fast", "Bedrock"],
+          },
+          {
+            id: "your-take",
+            name: "Your take",
+            leaf: "Every clip gets one short comment that is yours.",
+            words: ["take", "comment", "commentary", "opinion", "original", "own words", "reach", "fewer views", "reupload", "re-upload"],
+          },
+          {
+            id: "take-voice",
+            name: "Say it out loud",
+            leaf: "A voice reads your take at the start of the clip.",
+            words: ["voice", "voiceover", "voice over", "speak", "spoken", "talk", "narrator", "read aloud"],
+          },
+          {
+            id: "take-style",
+            name: "How you talk",
+            leaf: "A few words on your style. Like: funny, honest, a bit cheeky.",
+            words: ["style", "tone", "personality", "funny", "honest", "cheeky", "sound like me"],
           },
         ],
       },

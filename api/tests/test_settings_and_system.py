@@ -48,6 +48,10 @@ DEFAULTS = {
     "autoPost": {"on": False, "everyHours": 5, "perRun": 1, "practice": False},
     # §47 Your Mac posts it on TikTok: off until the owner turns it on.
     "tiktokMac": {"on": False},
+    # Your take (2026-11-27): on, spoken, and no style words until the owner types some.
+    "takeOn": True,
+    "takeVoice": True,
+    "takeStyle": "",
 }
 
 
@@ -90,6 +94,13 @@ def test_put_settings_ignores_read_only(call: Call) -> None:
         {"setupSkipped": [1]},
         {"setupSkipped": None},
         {"theme": "dark"},
+        {"takeOn": "yes"},
+        {"takeOn": 1},
+        {"takeVoice": None},
+        {"takeStyle": 5},
+        {"takeStyle": None},
+        {"takeStyle": ["funny"]},
+        {"takeStyle": "x" * 121},
     ],
 )
 def test_put_settings_validation(call: Call, patch: dict[str, object]) -> None:
@@ -626,3 +637,59 @@ def test_get_paid_notifications_default_on_and_can_be_turned_off(call: Call, sto
     assert body["settings"]["notify"]["stopped"] is True  # a missing key keeps its default
     status, body = call("PUT", "/v1/settings", {"notify": {"getPaid": "yes"}})
     assert status == 400
+
+
+def test_your_take_settings_are_saved_one_at_a_time(call: Call, store: db.Store) -> None:
+    """Your take (2026-11-27): ``takeOn``, ``takeVoice`` and ``takeStyle`` are saved alone and keep the rest."""
+    status, body = call("PUT", "/v1/settings", {"takeVoice": False})
+    assert status == 200
+    assert body["settings"] == {**DEFAULTS, "takeVoice": False}
+    status, body = call("PUT", "/v1/settings", {"takeStyle": "funny, honest, a bit cheeky"})
+    assert status == 200
+    assert body["settings"] == {**DEFAULTS, "takeVoice": False, "takeStyle": "funny, honest, a bit cheeky"}
+    status, body = call("PUT", "/v1/settings", {"takeOn": False, "clipMin": 3})
+    assert status == 200
+    expected = {
+        **DEFAULTS,
+        "takeOn": False,
+        "takeVoice": False,
+        "takeStyle": "funny, honest, a bit cheeky",
+        "clipMin": 3,
+    }
+    assert body["settings"] == expected
+    assert call("GET", "/v1/settings")[1]["settings"] == expected
+    stored = store.get(db.user_pk(USER), db.SETTINGS_SK)
+    assert stored is not None
+    assert (stored["takeOn"], stored["takeVoice"], stored["takeStyle"]) == (False, False, "funny, honest, a bit cheeky")
+
+
+@pytest.mark.parametrize(
+    ("typed", "saved"),
+    [
+        ("  funny,\n honest \t  a bit   cheeky  ", "funny, honest a bit cheeky"),
+        ("dry\x00 and\x07 calm", "dry and calm"),
+        ("caf\u221a\u00a9 humour", "caf\u00e9 humour"),  # garbled by a Mac clipboard: put right like a caption
+        ("   ", ""),
+        ("", ""),
+        ("x" * 120, "x" * 120),
+        ("  " + "x" * 120 + "  ", "x" * 120),  # the limit counts what is saved, not the spaces around it
+    ],
+)
+def test_take_style_is_tidied(call: Call, typed: str, saved: str) -> None:
+    status, body = call("PUT", "/v1/settings", {"takeStyle": typed})
+    assert status == 200
+    assert body["settings"]["takeStyle"] == saved
+
+
+def test_old_stored_settings_without_your_take_read_as_defaults(call: Call, store: db.Store) -> None:
+    store.put({"pk": db.user_pk(USER), "sk": db.SETTINGS_SK, "type": "settings", "userId": USER, "clipMin": 2})
+    got = call("GET", "/v1/settings")[1]["settings"]
+    assert (got["clipMin"], got["takeOn"], got["takeVoice"], got["takeStyle"]) == (2, True, True, "")
+
+
+def test_bad_stored_your_take_falls_back_to_defaults() -> None:
+    out = settings.with_defaults({"takeOn": "no", "takeVoice": 0, "takeStyle": "y" * 500})
+    assert (out["takeOn"], out["takeVoice"], out["takeStyle"]) == (True, True, "")
+    assert settings.with_defaults({"takeStyle": ["funny"]})["takeStyle"] == ""
+    kept = settings.with_defaults({"takeOn": False, "takeVoice": False, "takeStyle": "dry  and calm"})
+    assert (kept["takeOn"], kept["takeVoice"], kept["takeStyle"]) == (False, False, "dry and calm")

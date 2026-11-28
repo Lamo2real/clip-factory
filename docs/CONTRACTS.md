@@ -201,7 +201,9 @@ interface Clip { clipId: string; jobId: string; rank: number; status: ClipStatus
                  best?: boolean /* starred "Best this week" (§16) */; bestWeek?: string /* "yyyy-Www" */;
                  totalViews?: number /* sum of Post.metrics.views over posted posts; absent when none measured */;
                  startPending?: true /* uploaded, but its flow has not started (internal publishState "pending" on a
-                                        confirmed, publishing or posted clip, §14.5): Confirm starts it */ }
+                                        confirmed, publishing or posted clip, §14.5): Confirm starts it */;
+                 take?: string /* §55: the clip's "Your take" line; absent when it has none and on older clips */;
+                 takeSpoken?: true /* §55: a voice reads the take in the clip */ }
 interface Skill { skillId: string; name: string /* frontmatter slug */; title: string /* shown name, §18.2 */;
                   description: string; builtin: boolean; source: "builtin" | "written" | "upload";
                   format: "md" | "zip"; size: number; createdAt: string; updatedAt: string;
@@ -214,7 +216,9 @@ interface Settings { clipMin: number /* 1..10, default 5 */; clipMax: number /* 
                      clickSound: number /* 1..30, default 6 "Water drop" (§15) */;
                      errorSound: number /* 1..30, default 5 "Nope nope nope" (§15) */;
                      setupSkipped: Platform[] /* default [], confirmed skips on the setup to-do list (§17.13) */;
-                     clipModel: string /* §23: a key of clipModels in config/models.json, default agentModel "fable-5-1" */ }
+                     clipModel: string /* §23: a key of clipModels in config/models.json, default agentModel "fable-5-1" */;
+                     takeOn: boolean /* §55, default true */; takeVoice: boolean /* §55, default true */;
+                     takeStyle: string /* §55: how the owner talks, at most 120 characters, default "" */ }
 type Platform = "youtube" | "instagram" | "facebook" | "tiktok" | "x";
 // Account: superseded by §17.4 (adds "choose_account", name, avatarUrl, connectedAt, missing, reason, reconnectBy, choices)
 interface Account { platform: Platform; status: "not_connected" | "connected" | "needs_reconnect" | "choose_account"; handle?: string }
@@ -2156,7 +2160,8 @@ labels 48-hour learnings "Older note" and links here; it does not repeat the les
 
 ## 17. Posting setup: a setup list per platform, real Connect, real posting (owner request, 2026-11-16)
 
-The owner's words: *"Facebook, Instagram, YouTube, TikTok and X should each be a step to connect to in order for this
+The owner's words: *"Facebook,
+Instagram, YouTube, TikTok and X should each be a step to connect to in order for this
 automation to work, to be able to upload to every single one. The steps in each setup should be up to date to today:
 whatever the platform requires. The user should not have to write code; only use the Clip Factory app and the
 platforms. Really clear, idiot proof, an 8-year-old should be able to do it."*
@@ -3113,7 +3118,8 @@ on its glass bar) at 375 and 1024.
 
 ## 18. Skills: full create, read, update, delete; every AI call uses every skill (owner request, 2026-11-16)
 
-The owner's words: *"I want to be able to create, read, update, delete skills in Settings, following the trees,
+The owner's words: *"I want to
+be able to create, read, update, delete skills in Settings, following the trees,
 branches, apples, leaves structure. The whole AI system should use all of these skills by default, no matter what,
 as long as I add them: whatever AI service we use (Bedrock, AgentCore, whatever), when it is generating stuff or
 reading stuff."* Where this section and an earlier one disagree, this one wins. It supersedes: the skills routes in
@@ -3473,7 +3479,8 @@ cache point threshold `8_000` characters.
 
 ## 19. Ask Clip Factory: grounded in-app help assistant (owner request, 2026-11-16)
 
-The owner's picture: a friendly helper in the corner that answers "how do I…" and "where is…" in short steps a child
+The owner's picture: a friendly
+helper in the corner that answers "how do I…" and "where is…" in short steps a child
 can follow, then **takes you there** and lights up the right button. This section applies the in-app assistant pattern
 (Ask Booqy) to Clip Factory only. Where it and an earlier section disagree, this one wins.
 
@@ -9507,7 +9514,8 @@ line or a warning where it matters:
 
 ## 39. Content Rewards: the two ways, all your money, and does this clip fit (owner request, 2026-11-21)
 
-The owner's words, the day §38 was approved: *"please double check that the steps to conect to contentrewards is
+The owner's words, the day §38
+was approved: *"please double check that the steps to conect to contentrewards is
 extremely easy and simple and set up in. a chronological and structured manner so the UX is better and the user has a
 better and pleasant experience on the app using eaither the content rewards way of videos or normal way we have done so
 far, i also need to track how much i earn from all platforms including contentrewards. btw i would like to know if the
@@ -10226,7 +10234,8 @@ campaign upload); that the rules reader sets `overlayRequired` only when a brief
 
 ## 40. Get paid: set up payouts, see if you can get paid, and what reached your bank (owner request, 2026-11-21)
 
-The owner's words: *"Does the application of Clip Factory show me exactly how much I get after or how much I earn in
+The owner's words: *"Does the application
+of Clip Factory show me exactly how much I get after or how much I earn in
 real money based on content rewards based on the actual add sense in U2 and you know all of the other stuff for Meta
 and Facebook and an Instagram and also if I connect it then how much X and also on TikTok does it show me that? Also,
 can I have like a step just like we how we connected the platform social media platforms to Clip Factory can I have a
@@ -12330,7 +12339,8 @@ check", never a number):
 
 ## 41. Campaign finder: campaigns that match what you want (owner request, 2026-11-21)
 
-The owner's words: *"Also, will I be able to find campaigns and join them based on some requirements that I set if the
+The owner's words: *"Also, will
+I be able to find campaigns and join them based on some requirements that I set if the
 MCP and my connection to content rewards through Clip Factory gets accepted?"* The answer he got: Content Rewards'
 official MCP server (23 tools, checked live 2026-11-21, `mcp-tools.json` of API version `2026-10-01`) has **no tool to
 browse Discover and none to join or apply**, so joining stays his own tap on Content Rewards (CR). Joining also means
@@ -19974,7 +19984,7 @@ resource, the stories agent and Terraform do not change, and nothing is charged 
 ### 45.52 Use it again: a made video's setup as a new draft (owner request, 2026-11-27)
 
 Owner: "pick any previously uploaded video, open its complete setup ... edit any of it, and then render and upload it
-as a new video. The original stays unchanged." ADR-111. Web only: no route, item, agent or Terraform change.
+as a new video. The original stays unchanged." ADR-113. Web only: no route, item, agent or Terraform change.
 
 - **Stored setup.** Every made video already keeps it: the `STORY#` item (cast, roles, series, length, shape, look,
   captions, music, references, AI, `ownScript`) and its script `v{scriptVersion}.json`, kept forever (§45.3, §45.4).
@@ -19990,7 +20000,8 @@ as a new video. The original stays unchanged." ADR-111. Web only: no route, item
 
 ## 46. Auto-posting: the oldest clips in Review go up by themselves, every X hours (owner request, 2026-11-22)
 
-Decision record: ADR-81. Builders: §46.16. Everything here is additive: no table, index, secret, bucket, Cognito or
+Decision record: ADR-81. Builders:
+§46.16. Everything here is additive: no table, index, secret, bucket, Cognito or
 cf-prod-api infrastructure changes; existing settings, clips and posts read exactly as before.
 
 ### 46.1 The owner's words and the answers he gave
@@ -22313,21 +22324,21 @@ of AI usage, so tokens spent. The cost of the tokens is what I want to know at t
   count), the Agent SDK result's usage for picking moments, Titan's input token count, and Transcribe's audio
   seconds. A copy of a clip ("Make a copy") is a job and counts the same way. Recording is bookkeeping only.
 - **A2. One price list.** `pricing` in `config/models.json`, the only place prices live: US dollars per million input,
-  output, cache read and cache write tokens per model, Titan, and Transcribe per minute, each with its source, plus
-  `checkedOn`. Prices come from AWS's published price lists for eu-north-1 (Anthropic's page agrees for Claude). A
+  output, cache read and cache write tokens per model, Titan, Transcribe per minute, and the take's voice per character
+  (`voice`, Amazon Polly neural in eu-west-1, §55), each with its source, plus `checkedOn`. Prices come from AWS's published price lists for eu-north-1 (Anthropic's page agrees for Claude). A
   line that cannot be confirmed has `confirmed: false`: the job shows its tokens, "price not known", and the total as
   "about". `approximate: true` (Haiku 5.5 costs more above 100,000 prompt tokens) also shows "about".
 - **A3. Stored on the job, additive.** `Job.aiCost` `{v, models: [{key, label, calls, inputTokens, outputTokens,
   cacheReadTokens, cacheWriteTokens, tokens, dollars?, estimated}], transcribe?: {seconds, minutes, dollars?,
-  estimated}, totalTokens, totalCalls, totalDollars, estimated, pricesChecked}`. It is written with the job's own
+  estimated}, voice?: {characters, calls, dollars?, estimated} (only when a take was spoken, §55), totalTokens, totalCalls, totalDollars, estimated, pricesChecked}`. It is written with the job's own
   writes (heartbeat, ready, failed, canceled), so a failed or stopped job shows what it spent so far. A retry or
   resume adds to what the earlier runs wrote. Old jobs and jobs that never called a model have no `aiCost`: nothing
   is shown, never zeros. The API passes it through as it is.
 - **A4. Not counted.** Ask, the weekly learning, lessons, campaign rules and the post-publish distil run in the API
   Lambdas, not inside a job, so they are not in a job's cost.
 - **A5. The app.** The job page has one glass block, **What this cost**: the total in dollars (to the cent) large, the
-  exact tokens under it, and a fold **See the details** with a row per model (calls, tokens in and out, dollars) and
-  Transcribe's minutes. The numbers roll (§49). A failed or canceled job says "so far"; an estimate says "about" and
+  exact tokens under it, and a fold **See the details** with a row per model (calls, tokens in and out, dollars),
+  Transcribe's minutes and, when takes were spoken, "Voice (Amazon Polly)" (takes read, letters, dollars). The numbers roll (§49). A failed or canceled job says "so far"; an estimate says "about" and
   the prices' date. The Jobs list shows the total next to the clip count of a finished job. No sparkle icon.
 - **A6. Where there is no total.** Money and Home have no natural place for "AI cost this month" (they show
   earnings), so there is none.
@@ -22454,3 +22465,80 @@ The owner: more than one image on a CR clip. BR-35, ADR-107.
 - **L5. The agent.** One ffmpeg run draws every layer over the original in list order (later on top), each between its
   own start and end (whole clip by default), then the text on top. Same audio, size and encoder as §53.
 - **L6. The sheet fits every screen (owner, 2026-11-27).** It never grows past the screen: head and Make it bar stay, the middle scrolls inside it. Nothing sits over anything else; text wraps inside its box. Checked at 375 to 1920 px in `web/e2e/cr-overlay.spec.ts`.
+
+## 55. Your take: every clip gets a short comment of its own (owner request, 2026-11-27)
+
+Platforms show plain re-uploads to fewer people, so each clip carries the channel's own comment. BR-36, ADR-111.
+
+- **T1. The field.** The model writes `take` with each moment: one sentence in the clip's language, 5 to 14 words, at
+  most 90 characters. It is the channel's opinion, verdict or context: something the viewer cannot see. It never
+  describes the picture, repeats the hook or spoils the payoff; no emoji, hashtags, @handles or all caps; honest, never
+  cruel, no claims about real people beyond the clip. Code (`moments.clean_take`, `take_problem`) strips emoji and
+  control characters, collapses spaces, and refuses a take outside 4 to 16 words, over 90 characters, with `#` or `@`,
+  or in all caps: the take is blanked and the moment is always kept (the agent's tool also tells the model why, so it can
+  send the moment again with a better take). `MOMENTS_VERSION` stays 1: a
+  saved moment without `take` reads as none.
+- **T2. Settings (additive).** `takeOn` (default true), `takeVoice` (default true), `takeStyle` (default `""`; mojibake
+  repaired, unseen characters dropped, spaces collapsed; over 120 characters is a 400; a non-boolean switch is a 400).
+  The agent reads all three (`store.SETTINGS_DEFAULTS`). `takeStyle` reaches the model inside `<owner_style>`, as
+  style, never as instructions.
+- **T3. No take.** When `takeOn` is false, on a campaign job and on a campaign copy: none is asked for, drawn, spoken
+  or stored. The campaign picture of §53 and §54 is unchanged.
+- **T4. On screen.** One extra ASS event in `render.build_ass`, style `Take`: Inter Bold 46 (smaller over 54
+  characters, never under 30), white on a 60% black box, at most 2 lines between x = 60 and x = 908, its bottom on
+  y = 1168 (above the caption band, below the facecam). It shows from 0.4 s after the tease for
+  max(4 s, voice + 0.8 s), never past 0.2 s before the end; with under 1.5 s of room it is left out. Hook and captions
+  are unchanged, and a clip without a take renders byte for byte as before.
+- **T5. Spoken.** With `takeVoice` on, `voice.py` asks Amazon Polly (`SynthesizeSpeech`) for an mp3, with the engine,
+  voice and region from `takeVoice` in `config/models.json` (neural, Matthew, `eu-west-1`: `eu-north-1` has no neural
+  voice). The voice starts with the text; the clip's own sound drops to about 30% under it, with short fades, and the
+  loudness pass (§8) levels the result. Matthew speaks English, so a clip in another or an unknown language gets the
+  text only. **Any voice failure (refused, region, timeout, empty sound, a mix ffmpeg rejects) never fails the job:**
+  it is logged and the clip is made with the text only. One Polly call per take per job. Its letters and dollars are
+  in the job's cost (`aiCost.voice`, §51) at the confirmed price, so the cost stays exact.
+- **T6. Stored.** Clip fields `take` (only when not empty) and `takeSpoken: true` (only when the voice is in the
+  file), both public. The IAM statement `SpokenTake` on Clip Factory's agent role allows `polly:SynthesizeSpeech` in
+  `eu-west-1` only.
+- **T7. Post text.** The captions prompt is given the take and told not to repeat it.
+- **T8. Review.** Under the hook, one quiet read-only line: the small label "Your take" and the text (`user-text`).
+  Nothing when the clip has none. It cannot be edited per clip yet.
+- **T9. Settings › Clip making › Clips.** Three apples after `ai-model`: `your-take` (switch, "Your take"),
+  `take-voice` (switch, "Say it out loud") and `take-style` (one line, "How you talk", 120 at most, saved on blur and
+  0.8 s after typing stops; a save that fails leaves the typed words in the field). The last two are hidden while Your take is off.
+- **T10. Tests.** `agent/tests/test_take.py`, `test_voice.py`; `api/tests/test_settings_and_system.py`,
+  `test_clips.py`; `web/test/yourTake.test.tsx`; `infra/modules/agent/tests/runtime.tftest.hcl`.
+
+## 56. Engagement and watch graph (owner request, 2026-11-27)
+
+BR-37, ADR-112. The owner: count
+engagement "as professionals do it", show how people watch from start to end,
+"across all platforms", and "filter for each social media platform".
+
+- **E1. The score.** Engagement rate by views, the way social media analysts count it: **(likes + comments + shares +
+  saves) ÷ views × 100**, one decimal ("4.7%"), with one word: under 1 % Low, 1–3 OK, 3–6 Good, 6–10 Great, 10+
+  Amazing. Per platform, only the numbers it really gives: YouTube likes + comments + shares; TikTok likes + comments +
+  shares; Instagram likes + comments + shares + saves; Facebook reactions + comments-and-shares (one Meta number); X
+  likes + replies + reposts + quotes + bookmarks. A missing number counts 0; a platform with no views is left out.
+  **All** = every platform's interactions ÷ every platform's views (weighted by views). The parts sit in a fold with
+  how it is counted. Nothing is weighted by kind: the plain sum is what published benchmarks use.
+- **E2. The watch graph.** "How long people watch": the percent of viewers still watching from 0:00 to the clip's end.
+  **All** averages the real curves, each resampled to 0–100 % of the clip and weighted by that platform's views. The
+  steepest 5 % fall is marked "Most leave here · m:ss". YouTube can go above 100 % (rewatches); it is shown as given.
+- **E3. Only real data.** A curve exists only where the platform sends one:
+  - YouTube: Analytics `audienceWatchRatio` by `elapsedVideoTimeRatio`, one request per video with the 6-hourly
+    insights (its own quota, not the Data API budget). The `yt-analytics.readonly` scope is already granted: **no
+    reconnect.**
+  - Facebook Reels: `video_insights.metric(post_video_retention_graph)`, a separate guarded request like reach (a
+    refusal never breaks the other numbers). Same Page token: **no reconnect.**
+  - Instagram: no curve in its API. Shown as markers: the average watch, and a dot at 3 s from the skip rate.
+  - TikTok: no watch data in the Display API. One line says so. X: dots at 25/50/75/100 % from its playback counts.
+  Platforms with no curve are never put in the All curve, and the line under the graph names the sources.
+- **E4. The bar.** A pick-one bar (`<Glide>`): All, then the clip's platforms that have numbers, in STATS_ORDER. It
+  filters the score and the graph. Hidden when there is only one platform.
+- **E5. Stored, additive.** `Post.metrics.retention` `{points: [[x, y]...], readAt, source}`: x = percent of the clip
+  (0–100), y = percent still watching, at most 101 points, sorted by x. Absent = no curve. A refresh that reads a curve
+  replaces it; one that does not keeps the stored one. STAT# snapshots never carry it. `GET /v1/clips/{id}/performance`
+  and the live post events pass it through `PostMetrics`. The score is worked out in the web (`lib/engagement.ts`).
+- **E6. Where.** A glass section on the clip page, under the platform stacks: title, the big score and its word, the
+  bar, the graph, one short line and the fold. Edge to edge on a phone; the line draws in eased (none with reduced
+  motion).

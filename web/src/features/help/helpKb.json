@@ -2447,6 +2447,57 @@
       ]
     },
     {
+      "id": "your-take",
+      "route": "/settings/clip-making/clips",
+      "hash": "your-take",
+      "where": "Settings › Clip making › Clips",
+      "title": "Your take: your own comment on every clip",
+      "keywords": [
+        "your take",
+        "my take",
+        "own comment",
+        "commentary",
+        "opinion",
+        "reupload",
+        "fewer views",
+        "less reach",
+        "voice on my clip",
+        "say it out loud",
+        "voice over",
+        "how you talk",
+        "turn off your take",
+        "turn off the voice",
+        "who is talking in my clip",
+        "text at the start of the clip"
+      ],
+      "answer": "**Your take** puts one short comment that is yours on every new clip, so apps count it as your own video and show it to more people. **Say it out loud** has a voice read it at the start. **How you talk** tells it your style. In **Review** you see it under the clip's title. Turn it off with the **Your take** switch. Campaign clips never get one.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Clip making**, then **Clips**.",
+        "Tap the **Your take** switch to turn it on or off.",
+        "Only want words, no voice? Turn off **Say it out loud**.",
+        "In **How you talk**, type a few words, like funny and honest."
+      ],
+      "actions": [
+        {
+          "id": "your-take:clips",
+          "label": "Open Clips",
+          "to": "/settings/clip-making/clips#your-take",
+          "highlight": [
+            "your-take"
+          ]
+        },
+        {
+          "id": "your-take:review",
+          "label": "Open Review",
+          "to": "/review",
+          "highlight": [
+            "your-take-line"
+          ]
+        }
+      ]
+    },
+    {
       "id": "sign-out",
       "route": "/settings/app/account",
       "hash": "sign-out",

@@ -1,5 +1,5 @@
 {
-  "version": "2d175300091c",
+  "version": "3bfbd58d5c35",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -20,6 +20,7 @@
     "src/lib/settingsTree.ts",
     "src/screens/campaigns/CampaignPaste.tsx",
     "src/screens/campaigns/bits.tsx",
+    "src/screens/clip/ClipEngagement.tsx",
     "src/screens/clip/ClipFit.tsx",
     "src/screens/clip/ClipFollowers.tsx",
     "src/screens/clip/ClipPerformance.tsx",
@@ -2761,6 +2762,58 @@
       ]
     },
     {
+      "id": "your-take",
+      "kind": "guide",
+      "route": "/settings/clip-making/clips",
+      "hash": "your-take",
+      "where": "Settings › Clip making › Clips",
+      "title": "Your take: your own comment on every clip",
+      "keywords": [
+        "your take",
+        "my take",
+        "own comment",
+        "commentary",
+        "opinion",
+        "reupload",
+        "fewer views",
+        "less reach",
+        "voice on my clip",
+        "say it out loud",
+        "voice over",
+        "how you talk",
+        "turn off your take",
+        "turn off the voice",
+        "who is talking in my clip",
+        "text at the start of the clip"
+      ],
+      "answer": "**Your take** puts one short comment that is yours on every new clip, so apps count it as your own video and show it to more people. **Say it out loud** has a voice read it at the start. **How you talk** tells it your style. In **Review** you see it under the clip's title. Turn it off with the **Your take** switch. Campaign clips never get one.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Clip making**, then **Clips**.",
+        "Tap the **Your take** switch to turn it on or off.",
+        "Only want words, no voice? Turn off **Say it out loud**.",
+        "In **How you talk**, type a few words, like funny and honest."
+      ],
+      "actions": [
+        {
+          "id": "your-take:clips",
+          "label": "Open Clips",
+          "to": "/settings/clip-making/clips#your-take",
+          "highlight": [
+            "your-take"
+          ]
+        },
+        {
+          "id": "your-take:review",
+          "label": "Open Review",
+          "to": "/review",
+          "highlight": [
+            "your-take-line"
+          ]
+        }
+      ]
+    },
+    {
       "id": "sign-out",
       "kind": "guide",
       "route": "/settings/app/account",
@@ -4854,19 +4907,19 @@
         "not",
         "done",
         "yet",
+        "engagement",
+        "long",
+        "people",
+        "watch",
+        "show",
+        "shares",
+        "key",
+        "points",
         "review",
         "loading",
         "check",
         "views",
-        "post",
-        "mac",
-        "paste",
-        "save",
-        "yes",
-        "tiktok",
-        "add",
-        "fix",
-        "send"
+        "post"
       ],
       "answer": "A clip's page shows how it does on each app. Tap a clip in Library to open it.",
       "steps": [
@@ -4983,9 +5036,12 @@
       "keywords": [
         "How many clips",
         "Longest video",
-        "AI model"
+        "AI model",
+        "Your take",
+        "Say it out loud",
+        "How you talk"
       ],
-      "answer": "How many clips, how long a video can be, and which AI makes them.",
+      "answer": "How many clips, how long a video can be, which AI makes them, and your take.",
       "steps": [
         "Tap **Settings**.",
         "Tap **Clip making**, then **Clips**."
@@ -5103,6 +5159,118 @@
       ],
       "highlight": [
         "ai-model"
+      ]
+    },
+    {
+      "id": "apple-your-take",
+      "kind": "apple",
+      "route": "/settings/clip-making/clips",
+      "hash": "your-take",
+      "where": "Settings › Clip making › Clips",
+      "title": "Your take",
+      "keywords": [
+        "take",
+        "comment",
+        "commentary",
+        "opinion",
+        "original",
+        "own words",
+        "reach",
+        "fewer views",
+        "reupload",
+        "re-upload"
+      ],
+      "answer": "Every clip gets one short comment that is yours.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Clip making**, then **Clips**.",
+        "Find **Your take**."
+      ],
+      "actions": [
+        {
+          "id": "apple-your-take:open",
+          "label": "Open Clips",
+          "to": "/settings/clip-making/clips#your-take",
+          "highlight": [
+            "your-take"
+          ]
+        }
+      ],
+      "highlight": [
+        "your-take"
+      ]
+    },
+    {
+      "id": "apple-take-voice",
+      "kind": "apple",
+      "route": "/settings/clip-making/clips",
+      "hash": "take-voice",
+      "where": "Settings › Clip making › Clips",
+      "title": "Say it out loud",
+      "keywords": [
+        "voice",
+        "voiceover",
+        "voice over",
+        "speak",
+        "spoken",
+        "talk",
+        "narrator",
+        "read aloud"
+      ],
+      "answer": "A voice reads your take at the start of the clip.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Clip making**, then **Clips**.",
+        "Find **Say it out loud**."
+      ],
+      "actions": [
+        {
+          "id": "apple-take-voice:open",
+          "label": "Open Clips",
+          "to": "/settings/clip-making/clips#take-voice",
+          "highlight": [
+            "take-voice"
+          ]
+        }
+      ],
+      "highlight": [
+        "take-voice"
+      ]
+    },
+    {
+      "id": "apple-take-style",
+      "kind": "apple",
+      "route": "/settings/clip-making/clips",
+      "hash": "take-style",
+      "where": "Settings › Clip making › Clips",
+      "title": "How you talk",
+      "keywords": [
+        "style",
+        "tone",
+        "personality",
+        "funny",
+        "honest",
+        "cheeky",
+        "sound like me"
+      ],
+      "answer": "A few words on your style. Like: funny, honest, a bit cheeky.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Clip making**, then **Clips**.",
+        "Find **How you talk**."
+      ],
+      "actions": [
+        {
+          "id": "apple-take-style:open",
+          "label": "Open Clips",
+          "to": "/settings/clip-making/clips#take-style",
+          "highlight": [
+            "take-style"
+          ]
+        }
+      ],
+      "highlight": [
+        "take-style"
       ]
     },
     {

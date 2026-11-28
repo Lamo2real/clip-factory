@@ -76,7 +76,10 @@ def merge_metrics(old: Item | None, fast: Item | None, slow: Item | None, now: d
 
     ``viewsUpdatedAt`` (additive, §16.12) is when the VIEWS themselves were last read: the part that carried the key
     ``views`` stamps it, whichever part that is (YouTube, TikTok and X read views with the counts; Instagram and
-    Facebook only with the slow insights). A refresh that did not read views keeps the old stamp."""
+    Facebook only with the slow insights). A refresh that did not read views keeps the old stamp.
+
+    ``retention`` (the watch graph, docs/CONTRACTS.md §56) is replaced whole by a part that carries one; otherwise the
+    stored one is kept. Snapshots never copy it."""
     old = dict(old or {})
     out: Item = {k: old.get(k) for k in COMMON}
     extra: Item = dict(old.get("extra") or {})
@@ -89,12 +92,16 @@ def merge_metrics(old: Item | None, fast: Item | None, slow: Item | None, now: d
             if key in part:
                 out[key] = part[key]
         extra.update(part.get("extra") or {})
+        if isinstance(part.get("retention"), dict):
+            out["retention"] = part["retention"]
         if "views" in part:
             out["viewsUpdatedAt"] = stamp
         if kind == "fast":
             updated_at = stamp
         else:
             out["insightsUpdatedAt"] = stamp
+    if "retention" not in out and isinstance(old.get("retention"), dict):
+        out["retention"] = old["retention"]
     if "viewsUpdatedAt" not in out and old.get("viewsUpdatedAt"):
         out["viewsUpdatedAt"] = old["viewsUpdatedAt"]
     if "insightsUpdatedAt" not in out and old.get("insightsUpdatedAt"):
