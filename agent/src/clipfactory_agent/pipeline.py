@@ -1241,6 +1241,8 @@ class Pipeline:
             return
         if st.remake is not None or st.campaign_id is not None:
             style = replace(style, fill=False)
+        if st.campaign_id is not None:
+            style = replace(style, hook=True)  # a campaign clip keeps its hook (§57 V9), with or without a mark row
         st.render_style = None if style.is_default else style
         if section and st.skills_block is not None:
             st.skills_block = with_section(st.skills_block, section, name="refs")

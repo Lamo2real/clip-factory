@@ -222,8 +222,10 @@ def unsupported(style: dict[str, Any]) -> list[str]:
         out.append("Facecam at the bottom")
     if m.get("format.aspect") not in (None, "9:16"):
         out.append("Square or wide videos")
-    if m.get("hook.textPosition") in ("middle", "bottom"):
+    if m.get("hook.textPosition") == "middle":
         out.append("Hook text in the middle")
+    elif m.get("hook.textPosition") == "bottom":
+        out.append("Hook text at the bottom")
     if m.get("captions.position") == "top":
         out.append("Captions at the top")
     if m.get("captions.emoji") is True:

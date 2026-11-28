@@ -43,6 +43,15 @@ import {
 import { Apple } from "./parts.tsx";
 import "../../styles/ref-videos.css";
 
+/**
+ * Deleted with their Undo still open, kept above the card (the Undo toast outlives it): a card opened again inside the
+ * window, or a read, never brings them back. They still count against the 10 until the DELETE goes.
+ */
+const hiddenRefs = new Set<string>();
+/** Each open card's re-read, run when an Undo ends (put back, or deleted). */
+const rereads = new Set<() => void>();
+const reread = () => rereads.forEach((fn) => fn());
+
 interface Uploading {
   id: string;
   name: string;
@@ -63,8 +72,9 @@ export function ReferenceVideos() {
   const list = useRef<RefVideo[] | null>(null);
   const alive = useRef(true);
   const busyCount = useRef(0);
-  /** Deleted here with their Undo still open: a read never brings them back. */
-  const hidden = useRef(new Set<string>());
+  const hidden = useRef(hiddenRefs);
+  /** Stops the uploads still going when the card goes away. */
+  const stop = useRef<AbortController | null>(null);
   /** Went up here since the last read began: a read that started before them keeps them. */
   const addedHere = useRef<RefVideo[]>([]);
   /** The files of the last drop, so a mixed drop can say why the rest were left out. */
@@ -99,6 +109,18 @@ export function ReferenceVideos() {
       alive.current = false;
     };
   }, [read, set, tries]);
+
+  // Uploads stop when the card goes away; an ended Undo elsewhere reads the list again.
+  useEffect(() => {
+    const ctl = new AbortController();
+    stop.current = ctl;
+    const again = () => void read().catch(() => undefined);
+    rereads.add(again);
+    return () => {
+      rereads.delete(again);
+      ctl.abort();
+    };
+  }, [read]);
 
   // Read again every few seconds while a video is being checked.
   const checking = anyChecking(videos);
@@ -149,6 +171,7 @@ export function ReferenceVideos() {
           },
           file,
           (p) => patch({ progress: p }),
+          stop.current?.signal,
         );
         const v = await api().completeRefVideo(up.refId);
         put(v);
@@ -156,22 +179,31 @@ export function ReferenceVideos() {
         burst(centerOf(uploadButton.current), 70);
         toastRef.current.success("Uploaded. Checking it now.");
       } catch (e) {
+        // The card went away: the upload was stopped on purpose.
+        if (e instanceof DOMException && e.name === "AbortError") return;
         toastRef.current.error(friendlyMessage(e));
+        // It may be there as Failed (the check could not start): read, so it shows with Try again and counts.
+        if (alive.current) void read().catch(() => undefined);
       } finally {
         busyCount.current -= 1;
         if (alive.current)
           setUploading((u) => u.filter((x) => x.id !== tempId));
       }
     },
-    [put],
+    [put, read],
+  );
+
+  /** Videos there now: listed, going up, and deleted with their Undo still open (the API keeps those until then). */
+  const have = useCallback(
+    () => (list.current?.length ?? 0) + busyCount.current + hidden.current.size,
+    [],
   );
 
   const add = useCallback(
     (files: readonly File[], refusedBefore: string | null = null) => {
       let refused = refusedBefore;
       for (const file of files) {
-        const have = (list.current?.length ?? 0) + busyCount.current;
-        const why = refRefusal(file, have);
+        const why = refRefusal(file, have());
         if (why) {
           refused ??= why;
           continue;
@@ -186,7 +218,7 @@ export function ReferenceVideos() {
       }
       if (refused) toastRef.current.info(refused);
     },
-    [send],
+    [send, have],
   );
 
   const remove = useCallback(
@@ -200,18 +232,22 @@ export function ReferenceVideos() {
         onUndo: () => {
           hidden.current.delete(refId);
           set(putRefBack(list.current ?? [], removed));
+          reread();
         },
         onCommit: () => {
           api()
             .deleteRefVideo(refId)
-            .then(() => hidden.current.delete(refId))
+            .then(() => {
+              hidden.current.delete(refId);
+            })
             .catch((e) => {
               hidden.current.delete(refId);
               // Already gone is what was wanted.
               if (e instanceof ApiError && e.status === 404) return;
               set(putRefBack(list.current ?? [], removed));
               toastRef.current.error(friendlyMessage(e));
-            });
+            })
+            .finally(reread);
         },
       });
     },
@@ -231,11 +267,14 @@ export function ReferenceVideos() {
     [put],
   );
 
+  const count = (videos?.length ?? 0) + uploading.length;
+
   // The whole card is the drop box: several videos at once.
   const drop = useFileDrop({
     scope: "element",
     checkFile: refFileCheck,
-    maxFiles: REF_MAX_COUNT,
+    // Only as many as there is room for: the rest are refused with "You have 10 videos".
+    maxFiles: Math.max(1, REF_MAX_COUNT - count),
     tooMany: REF_REFUSE.full,
     wrongThing: REF_REFUSE.kind,
     onFiles: (files) => {
@@ -251,8 +290,6 @@ export function ReferenceVideos() {
     dropped.current = Array.from(e.dataTransfer?.files ?? []);
     drop.bind.onDrop?.(e);
   };
-
-  const count = (videos?.length ?? 0) + uploading.length;
 
   return (
     <div

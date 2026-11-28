@@ -305,7 +305,8 @@ def test_delete_removes_the_item_then_the_video_and_thumbnail(call: Call, table:
     assert call("DELETE", f"/v1/refvideos/{ref_id}", sub=OTHER)[0] == 404
     assert call("DELETE", f"/v1/refvideos/{ref_id}") == (204, None)
     assert item(table, ref_id) is None
-    assert set(s3_client.deleted) == {f"refs/{USER}/{ref_id}.mp4", thumb}
+    work = {f"refs/{USER}/{ref_id}-work-1.m4a", f"refs/{USER}/{ref_id}-work-1.json"}  # a stopped agent's leftovers
+    assert set(s3_client.deleted) == {f"refs/{USER}/{ref_id}.mp4", thumb, *work}
     status, out = call("DELETE", f"/v1/refvideos/{ref_id}")
     assert (status, out["error"]["message"]) == (404, GONE)
 

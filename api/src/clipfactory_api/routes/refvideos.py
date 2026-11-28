@@ -34,7 +34,12 @@ def _room(app: App, req: Request) -> None:
 def _forget(app: App, item: dict[str, Any]) -> None:
     """The item, then its files (a file left behind is harmless; an item without a file never is)."""
     app.store.delete(str(item["pk"]), str(item["sk"]))
-    keys = {item.get("key"), item.get("thumbKey"), refvideos.thumb_key(str(item["userId"]), str(item["refId"]))}
+    user_id, ref_id = str(item["userId"]), str(item["refId"])
+    keys = {item.get("key"), item.get("thumbKey"), refvideos.thumb_key(user_id, ref_id)}
+    # The agent's Transcribe work files (removed by the agent itself, unless its container stopped mid-run).
+    rev = int(item.get("analyzeRev") or 0)
+    for r in range(max(1, rev - 4), rev + 1):
+        keys |= {f"refs/{user_id}/{ref_id}-work-{r}.m4a", f"refs/{user_id}/{ref_id}-work-{r}.json"}
     for key in sorted(str(k) for k in keys if refvideos.own_key(item, k)):
         try:
             app.media.delete(key)
