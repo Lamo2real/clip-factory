@@ -616,6 +616,12 @@ export const TREES: Tree[] = [
             words: ["get paid", "payout", "bank", "on hold", "money sent", "adsense", "whop"],
           },
           {
+            id: "notify-earn",
+            name: "Ready to earn",
+            leaf: "When an app's money program is close or ready.",
+            words: ["monetized", "monetization", "partner program", "creator rewards", "can I earn", "ready to earn", "make money"],
+          },
+          {
             id: "notify-badge",
             name: "Number on the app icon",
             leaf: "Shows how many videos are working right now.",

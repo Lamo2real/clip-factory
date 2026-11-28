@@ -59,8 +59,8 @@ run "notify_reads_job_changes_and_can_never_delete" {
   command = plan
 
   assert {
-    condition     = one(aws_lambda_event_source_mapping.notify.filter_criteria[0].filter).pattern == jsonencode({ eventName = ["MODIFY"], dynamodb = { Keys = { sk = { S = [{ prefix = "JOB#" }, { prefix = "CAMPAIGN#" }, { prefix = "CRSUB#" }, { prefix = "CRMONEY" }, { prefix = "CRCONN" }, { prefix = "CRFIND" }, { prefix = "PAYSTATE#" }, { prefix = "BANKCONN" }] } } } })
-    error_message = "cf-test-notify reads only MODIFY records of JOB# items, the Content Rewards CAMPAIGN#, CRSUB#, CRMONEY, CRCONN (§38.11) and CRFIND (§41.4) items, Get paid's PAYSTATE# (§40.7) and Your bank's BANKCONN (§40.5.11), one pattern."
+    condition     = one(aws_lambda_event_source_mapping.notify.filter_criteria[0].filter).pattern == jsonencode({ eventName = ["MODIFY"], dynamodb = { Keys = { sk = { S = [{ prefix = "JOB#" }, { prefix = "CAMPAIGN#" }, { prefix = "CRSUB#" }, { prefix = "CRMONEY" }, { prefix = "CRCONN" }, { prefix = "CRFIND" }, { prefix = "PAYSTATE#" }, { prefix = "BANKCONN" }, { prefix = "MONEYSTATE#" }] } } } })
+    error_message = "cf-test-notify reads only MODIFY records of JOB# items, the Content Rewards CAMPAIGN#, CRSUB#, CRMONEY, CRCONN (§38.11) and CRFIND (§41.4) items, Get paid's PAYSTATE# (§40.7) Your bank's BANKCONN (§40.5.11) and the money run's MONEYSTATE# (§58), one pattern."
   }
 
   # §40.5.11: Your bank's notices come from BANKCONN.lastNotice only: a DEPOSIT# row, a BANKLINK#, BANKPAYERS, the

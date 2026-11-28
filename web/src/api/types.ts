@@ -611,6 +611,8 @@ export interface NotifyChoices {
   contentRewards?: boolean;
   /** "Money on hold or sent to your bank" (§40.7): only there once the API knows it (on by default). */
   getPaid?: boolean;
+  /** "Ready to earn": an app's money program is close or ready. Only there once the API knows it (on by default). */
+  earn?: boolean;
 }
 
 /** A device that gets notifications (GET /v1/push/devices). Its address and keys never leave the server. */
@@ -1331,6 +1333,8 @@ export interface MoneyGoal {
   /** Why there is no number (the platform did not share it, a permission is missing). */
   missing?: string;
   countingDaysLeft?: number;
+  /** A requirement the programme needs (X's impressions) even when it shows as a plain number. */
+  required?: boolean;
   sourceUrl: string;
 }
 
@@ -1388,12 +1392,37 @@ export interface MoneyCard {
   notShared?: string;
   comingSoon?: string;
   needsPermission?: MoneyPermission;
+  /** "Can I earn?" (docs/CONTRACTS.md §58): only on a connected platform; absent on an older API. */
+  ready?: MoneyReady;
+}
+
+/** How close a platform's paid programme is: Ready (all met), Close (every requirement seen, the slowest at 90% or
+ * more), Not yet, Can't see (a requirement the API can't read yet), Not here (not open in the owner's country),
+ * Invite (the platform publishes no thresholds) and Joined (already in it). */
+export type MoneyReadyStatus = "ready" | "close" | "not_yet" | "cant_see" | "not_open" | "invite" | "joined";
+
+export interface MoneyReady {
+  status: MoneyReadyStatus;
+  /** One word from the server: "Ready", "Close", "Not yet", "Can't see", "Not here", "Invite", "Joined". */
+  word: string;
+  /** 0..100: how far along the slowest requirement is (or-goals count their best); null when not measured. */
+  percent: number | null;
+  /** One short line: what to do next. */
+  next: string;
+  /** An https link for `next` (opens in a new tab). */
+  nextUrl?: string;
+  /** The day the thresholds were checked, "2026-11-28". */
+  checked: string;
+  /** The official pages the thresholds come from (https). */
+  sources: string[];
+  /** One short line about the owner's region ("Gifts are open in Sweden."). */
+  regionNote?: string;
 }
 
 export interface MoneyCelebration {
   key: string;
   platform: Platform;
-  kind: "goal" | "in_program" | "first_money";
+  kind: "goal" | "in_program" | "first_money" | "ready" | "close";
   text: string;
 }
 

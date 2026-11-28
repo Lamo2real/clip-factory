@@ -35,6 +35,7 @@ DEFAULTS = {
         "steps": False,
         "contentRewards": True,
         "getPaid": True,
+        "earn": True,
     },
     # §36 My settings: the owner's own post choices per platform, never made for kids.
     "postPreset": {

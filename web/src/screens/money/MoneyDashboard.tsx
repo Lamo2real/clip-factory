@@ -9,6 +9,7 @@
 import { CrMoneyPart } from "./CrMoneyPart.tsx";
 import { AllMoney, APPS_ONLY, crRowOf, useMoneyEverywhere } from "./AllMoney.tsx";
 import { GetPaidCard } from "./GetPaidCard.tsx";
+import { EarnCards } from "./EarnCards.tsx";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { api, friendlyMessage } from "../../api/index.ts";
 import type { MoneyChange, MoneyCurrencySummary, MoneyExcluded, MoneySummary, MoneyView, Platform } from "../../api/types.ts";
@@ -542,6 +543,8 @@ export function MoneyDashboard() {
       <AllMoney load={everywhereLoad} />
       {/* Get paid (§40.1 item 3): can money reach you from each place? Status only; before the Apps band. */}
       <GetPaidCard />
+      {/* Can I earn? (docs/CONTRACTS.md §58): how close each connected app's money program is. */}
+      <EarnCards />
 
       {/* Everything the apps and days change, with their controls first. Its own box only on phones beside All your
           money (the dock's sticky box: it can never leave the cards); elsewhere it draws no box at all. */}

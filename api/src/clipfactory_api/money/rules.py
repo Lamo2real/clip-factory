@@ -31,6 +31,7 @@ OFFICIAL_HOSTS = frozenset(
         "creators.instagram.com",
         "help.instagram.com",
         "www.facebook.com",
+        "creators.facebook.com",
         "help.x.com",
     }
 )
@@ -78,6 +79,9 @@ class PlatformRules:
     warning: str | None
     invites: str | None
     rules: tuple[Rule, ...]
+    # §58: the platform's official pages beyond the goals' own (Facebook has no goals), and one region line.
+    sources: tuple[str, ...] = ()
+    region_note: str | None = None
 
 
 @dataclass(frozen=True)
@@ -125,6 +129,21 @@ def _goal(raw: Any, path: str) -> dict[str, Any]:
     if kind != "number" and (isinstance(goal, bool) or not isinstance(goal, int) or goal < 1):
         raise RulesError(f"{path}.goal must be a whole number of at least 1")
     return {**raw, "kind": kind}
+
+
+def _official(url: Any, path: str) -> str:
+    parts = urlsplit(url) if isinstance(url, str) else None
+    if parts is None or parts.scheme != "https" or parts.hostname not in OFFICIAL_HOSTS:
+        raise RulesError(f"{path} must be the platform's own page (https on {sorted(OFFICIAL_HOSTS)})")
+    return str(url)
+
+
+def _sources(raw: Any, path: str) -> tuple[str, ...]:
+    if raw is None:
+        return ()
+    if not isinstance(raw, list):
+        raise RulesError(f"{path} must be a list of links")
+    return tuple(_official(u, f"{path}[{i}]") for i, u in enumerate(raw))
 
 
 def _rule(raw: Any, path: str) -> Rule:
@@ -208,6 +227,8 @@ def parse(raw: Any) -> Monetization:
             warning=entry.get("warning") if isinstance(entry.get("warning"), str) else None,
             invites=entry.get("invites") if isinstance(entry.get("invites"), str) else None,
             rules=tuple(_rule(r, f"{path}.rules[{i}]") for i, r in enumerate(rules)),
+            sources=_sources(entry.get("sources"), f"{path}.sources"),
+            region_note=entry.get("regionNote") if isinstance(entry.get("regionNote"), str) else None,
         )
     return Monetization(as_of=as_of, countries=tuple(parsed_countries), platforms=platforms)
 
@@ -274,6 +295,8 @@ def _measure(goal: dict[str, Any], numbers: dict[str, Any]) -> dict[str, Any]:
     for name in ("windowDays", "note", "help", "or"):
         if goal.get(name) is not None:
             out[name] = goal[name]
+    if goal.get("required") is True:
+        out["required"] = True
     out["reached"] = bool(kind != "number" and current is not None and current >= int(goal["goal"]))
     missing = (numbers.get("missing") or {}).get(metric)
     if isinstance(missing, str) and missing:
@@ -307,6 +330,60 @@ def all_reached(goals: list[dict[str, Any]]) -> bool:
             continue
         return False
     return True
+
+
+CLOSE_PERCENT = 90  # §58: "Close" from 90% of the slowest requirement
+
+
+def _groups(goals: list[dict[str, Any]]) -> list[list[dict[str, Any]]]:
+    """The requirements: each measured goal, joined with its ``or`` partner (either one is enough)."""
+    by_key = {g["key"]: g for g in goals}
+    seen: set[str] = set()
+    out: list[list[dict[str, Any]]] = []
+    for g in goals:
+        if g["kind"] == "number" or g["key"] in seen:
+            continue
+        group = [g]
+        seen.add(g["key"])
+        partner = by_key.get(str(g.get("or") or ""))
+        if partner is not None and partner["kind"] != "number" and partner["key"] not in seen:
+            group.append(partner)
+            seen.add(partner["key"])
+        out.append(group)
+    return out
+
+
+def _share(goal: dict[str, Any]) -> int | None:
+    """Whole percent (0-100), rounded down in integers: 2.9M of 10M is 29, never a float's 28."""
+    if goal["reached"]:
+        return 100
+    current, target = goal.get("current"), goal.get("goal")
+    if not isinstance(current, int | float) or not isinstance(target, int) or target < 1:
+        return None
+    return max(0, min(100, int(current) * 100 // target))
+
+
+def readiness(goals: list[dict[str, Any]]) -> tuple[str, int | None]:
+    """``(status, percent)`` for §58's one-word status: ``ready`` (every requirement met), ``close`` (all visible, the
+    slowest at 90% or more), ``not_yet``, or ``cant_see`` (a requirement Clip Factory can't read yet; never a guess).
+    ``percent`` is the slowest visible requirement, rounded down (99.9% is never "100%"); ``None`` with nothing seen."""
+    groups = _groups(goals)
+    if not groups:
+        return "cant_see", None
+    # A required number (X's verified impressions) has no bar: Clip Factory can't see the platform's own count.
+    shares: list[int | None] = [None for g in goals if g["kind"] == "number" and g.get("required")]
+    for group in groups:
+        seen = [s for s in (_share(g) for g in group) if s is not None]
+        shares.append(max(seen) if seen else None)
+    known = [s for s in shares if s is not None]
+    percent = min(known) if known else None
+    if percent is None or len(known) < len(shares):
+        return "cant_see", percent
+    if percent >= 100:
+        return "ready", 100
+    if percent >= CLOSE_PERCENT:
+        return "close", percent
+    return "not_yet", percent
 
 
 def today_of(now: datetime) -> date:

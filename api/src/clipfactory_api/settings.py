@@ -60,6 +60,8 @@ DEFAULTS: dict[str, Any] = {
         "steps": False,
         "contentRewards": True,
         "getPaid": True,
+        # §58: "Ready to earn": an app's money program is close (90%) or ready to apply for. On by default.
+        "earn": True,
     },
     # §36 My settings: the owner's own post choices per platform (Everyone, comments, duets and stitches on, Reels in
     # the feed, everyone can reply; never made for kids). Additive: an owner who never saved one reads these defaults.
@@ -79,7 +81,7 @@ DEFAULTS: dict[str, Any] = {
 }
 TAKE_STYLE_MAX = 120
 TIKTOK_MAC_UNKNOWN = "tiktokMac has a setting Clip Factory does not know."
-NOTIFY_KEYS = ("ready", "stopped", "resumed", "steps", "contentRewards", "getPaid")
+NOTIFY_KEYS = ("ready", "stopped", "resumed", "steps", "contentRewards", "getPaid", "earn")
 # The Clip Factory colours before the bottle-green look (ADR-43). An owner who never changed them has exactly this
 # trio stored; it reads back as today's default so the backdrop follows the new look. Read time only: no migration
 # job; the mapped value is written only when the owner next saves settings, as every default is. Any other choice (a
@@ -234,7 +236,7 @@ def _notify(value: Any) -> dict[str, bool]:
     if not isinstance(value, dict) or any(k not in NOTIFY_KEYS for k in value):
         raise bad_request(
             "Notifications must say on or off for: clips ready, stopped, picked up, every step, Content Rewards news, "
-            "money on hold or sent."
+            "money on hold or sent, ready to earn."
         )
     return {k: validate.boolean(value.get(k, DEFAULTS["notify"][k]), k) for k in NOTIFY_KEYS}
 

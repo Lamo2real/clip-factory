@@ -291,6 +291,7 @@ def test_settings_notify_choices(call: Call) -> None:
         "steps": False,
         "contentRewards": True,  # §38.11, on by default
         "getPaid": True,  # §40.7, on by default
+        "earn": True,  # §58, on by default
     }
     status, body = call("PUT", "/v1/settings", {"notify": {"steps": True}})
     assert status == 200
@@ -301,6 +302,7 @@ def test_settings_notify_choices(call: Call) -> None:
         "steps": True,
         "contentRewards": True,
         "getPaid": True,
+        "earn": True,
     }
     status, body = call("PUT", "/v1/settings", {"notify": {"contentRewards": False}})
     assert status == 200
@@ -309,7 +311,7 @@ def test_settings_notify_choices(call: Call) -> None:
     assert status == 400
     assert body["error"]["message"] == (
         "Notifications must say on or off for: clips ready, stopped, picked up, every step, Content Rewards news, "
-        "money on hold or sent."
+        "money on hold or sent, ready to earn."
     )
     assert call("PUT", "/v1/settings", {"notify": {"ready": "yes"}})[0] == 400
 

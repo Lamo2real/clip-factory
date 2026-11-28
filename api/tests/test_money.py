@@ -533,8 +533,11 @@ def test_instagram_shows_followers_against_gifts_and_says_it_does_not_share(
     assert card["state"] == "goal_reached"
     assert card["line"] == "Goal reached. Instagram also checks things we can't see."
     assert card["notShared"] == "Instagram doesn't share earnings with apps."
-    assert card["goals"][0]["note"] == "Instagram also checks age, country and rules"
-    assert [c["text"] for c in state(store, "instagram")["pendingCelebrations"]] == ["You hit 500 followers for Gifts!"]
+    assert card["goals"][0]["note"] == "Also needs a professional account and age 18+"
+    assert [c["text"] for c in state(store, "instagram")["pendingCelebrations"]] == [
+        "You hit 500 followers for Gifts!",
+        "You can join Instagram Gifts on Instagram! Apply in Professional dashboard › Monetization.",  # §58
+    ]
 
 
 def tiktok_page(views: list[int], durations: list[int], more: bool, cursor: int = 0) -> dict[str, Any]:

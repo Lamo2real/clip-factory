@@ -237,6 +237,79 @@ def card(
         out["lagNote"] = LAG[platform]
     _extras(out, platform, state, p)
     _money(out, platform, state, rows, cfg=cfg, now=now)
+    out["ready"] = ready_block(
+        platform, shown=shown, picked=picked, goals=goals, more=out["more"], p=p, cfg=cfg, country=country
+    )
+    return out
+
+
+READY_WORD = {
+    "ready": "Ready",
+    "close": "Close",
+    "not_yet": "Not yet",
+    "cant_see": "Can't see",
+    "not_open": "Not here",
+    "invite": "Invite",
+    "joined": "Joined",
+}
+
+
+def _country_name(cfg: rules.Monetization, country: str | None) -> str:
+    for c in cfg.countries:
+        if c.get("code") == country and country != "other":
+            return str(c.get("name"))
+    return "your country"
+
+
+def ready_block(
+    platform: str,
+    *,
+    shown: str,
+    picked: rules.Rule | str | None,
+    goals: list[Item],
+    more: list[Item],
+    p: rules.PlatformRules,
+    cfg: rules.Monetization,
+    country: str | None,
+) -> Item:
+    """§58 ``MoneyReady``: can the owner join this platform's paid programme yet? One word, the slowest requirement's
+    percent and one next step. Applying is the owner's alone: this only says where."""
+    where = p.status_where
+    status: str
+    percent: int | None = None
+    if shown in {"earning", "in_program"}:
+        status, nxt = "joined", f"You're in {p.programme}. See {where['label']}."
+    elif picked == "not_open":
+        status, nxt = "not_open", f"{p.programme} isn't open in {_country_name(cfg, country)} yet."
+    elif picked == "no_country":
+        status, nxt = "cant_see", "Pick your country in Settings › Posting › Money."
+    elif not isinstance(picked, rules.Rule):
+        status, nxt = "invite", p.invites or f"{label(platform)} invites creators. Look in {where['label']}."
+    else:
+        status, percent = rules.readiness(goals)
+        if status == "ready":
+            nxt = f"Apply in {where['label']}."
+        elif status == "close":
+            nxt = f"Almost there: {percent}%. Keep posting!"
+        elif status == "not_yet":
+            nxt = f"{percent}% there. Keep posting!" if percent is not None else "Keep posting!"
+        elif shown == "needs_permission":
+            nxt = "Give Clip Factory your OK in Settings › Posting › Money."
+        else:
+            nxt = f"Clip Factory can't see every number yet. {label(platform)} shows them in {where['label']}."
+    sources = list(dict.fromkeys([*(g["sourceUrl"] for g in [*goals, *more] if g.get("goal") is not None), *p.sources]))
+    out: Item = {
+        "status": status,
+        "word": READY_WORD[status],
+        "percent": percent,
+        "next": nxt,
+        "checked": cfg.as_of.isoformat(),
+        "sources": sources,
+    }
+    if where.get("url"):
+        out["nextUrl"] = where["url"]
+    if p.region_note:
+        out["regionNote"] = p.region_note
     return out
 
 

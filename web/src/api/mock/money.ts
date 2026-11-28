@@ -3,7 +3,7 @@
 // through "Allow money reading" keeps it). The numbers are fixtures for the pretend app only: the real app shows
 // only what a platform reported. Only bundled into mock builds.
 import { ApiError } from "../errors.ts";
-import type { Api, Clip, MoneyCard, MoneyCelebration, MoneyGoal, MoneyState, MoneyView, MoneyWhere, Platform, Post } from "../types.ts";
+import type { Api, Clip, MoneyCard, MoneyCelebration, MoneyGoal, MoneyReady, MoneyReadyStatus, MoneyState, MoneyView, MoneyWhere, Platform, Post } from "../types.ts";
 import { addDays, moneyClips, pretendClipPosts, series, summarize, todayUtc, WAVES, type MoneyRow, type MoneyStatus } from "./moneySummary.ts";
 
 export type MoneyApi = Pick<Api, "getMoney" | "refreshMoney" | "seenMoney" | "setMoneyCountry" | "getMoneySummary" | "getMoneyClips">;
@@ -20,6 +20,8 @@ export const MONEY_SCENARIOS = [
   "facebook_unverified",
   "unsupported",
   "error",
+  // "Can I earn?": YouTube and Instagram ready, each with its celebration waiting (docs/CONTRACTS.md §58).
+  "earn_ready",
   // The money dashboard (§27.7).
   "dash_many",
   "dash_youtube_only",
@@ -320,6 +322,7 @@ function xCard(): MoneyCard {
     goal("verifiedFollowers", "verified followers", 120, 500, X_SOURCE, { note: "X's rule, from X's help page" }),
     goal("impressions90", "impressions in 90 days", 40_200, null, X_SOURCE, {
       kind: "number",
+      required: true,
       approx: true,
       windowDays: 90,
       help: "Upper guess from the posts Clip Factory made. X only counts verified people on Home.",
@@ -339,7 +342,79 @@ function celebrationsFor(scenario: MoneyScenario): MoneyCelebration[] {
   if (scenario === "in_program") return [{ key: "youtube:in_program", platform: "youtube", kind: "in_program", text: "You're in YouTube's Partner Program!" }];
   if (scenario === "earning") return [{ key: "youtube:first_money", platform: "youtube", kind: "first_money", text: "Your first money from YouTube!" }];
   if (scenario === "goal_reached") return [{ key: "youtube:goal:subscribers:1000", platform: "youtube", kind: "goal", text: "You hit 1,000 subscribers!" }];
+  if (scenario === "earn_ready")
+    return [
+      { key: "youtube:ready", platform: "youtube", kind: "ready", text: "You can join YouTube Partner Program! Apply in YouTube Studio › Earn." },
+      { key: "instagram:ready", platform: "instagram", kind: "ready", text: "You can turn on Instagram Gifts! Look in Professional dashboard › Monetization." },
+    ];
   return [];
+}
+
+// ---------- "Can I earn?" (docs/CONTRACTS.md §58) ----------
+
+const READY_WORD: Record<MoneyReadyStatus, string> = {
+  ready: "Ready",
+  close: "Close",
+  not_yet: "Not yet",
+  cant_see: "Can't see",
+  not_open: "Not here",
+  invite: "Invite",
+  joined: "Joined",
+};
+/** Creator Rewards' countries in the pretend app. */
+const TIKTOK_OPEN = ["US", "GB", "DE", "FR", "MX", "BR", "JP", "KR"];
+const CHECKED = "2026-11-28";
+const TIKTOK_REGION = "Only open in the US, UK, Germany, France, Mexico, Brazil, Japan and South Korea. Videos must be over 1 minute.";
+
+/** The slowest requirement, 0..100 (goals joined by "or" count their best); null when one can't be read. */
+function slowest(goals: MoneyGoal[]): number | null {
+  const shown = goals.filter((g) => g.kind !== "number");
+  if (!shown.length) return null;
+  if (shown.some((g) => g.missing || g.countingDaysLeft || g.current === null)) return null;
+  const pct = (g: MoneyGoal) => (g.reached ? 100 : Math.floor(Math.min(1, (g.current ?? 0) / (g.goal || 1)) * 100));
+  const done = new Set<string>();
+  let low = 100;
+  for (const g of shown) {
+    if (done.has(g.key)) continue;
+    const partner = g.or ? shown.find((o) => o.key === g.or) : undefined;
+    done.add(g.key);
+    if (partner) done.add(partner.key);
+    low = Math.min(low, partner ? Math.max(pct(g), pct(partner)) : pct(g));
+  }
+  return low;
+}
+
+function ready(status: MoneyReadyStatus, percent: number | null, next: string, sources: string[], nextUrl?: string, regionNote?: string): MoneyReady {
+  return { status, word: READY_WORD[status], percent, next, ...(nextUrl ? { nextUrl } : {}), checked: CHECKED, sources, ...(regionNote ? { regionNote } : {}) };
+}
+
+/** What the server would say for a connected card. The pretend owner lives in Sweden until a country is picked. */
+function readyFor(card: MoneyCard, picked: string | null): MoneyReady {
+  const country = picked ?? "SE";
+  const place = COUNTRIES.find((c) => c.code === country && c.code !== "other")?.name;
+  const p = slowest(card.goals);
+  const sources = [...new Set([...card.goals, ...card.more].map((g) => g.sourceUrl))].filter((u) => u.startsWith("https://"));
+  const along = (pct: number) => (pct >= 90 ? ready("close", pct, `Keep posting. You're ${pct}% there.`, sources) : ready("not_yet", pct, `Keep posting. You're ${pct}% there.`, sources));
+  switch (card.platform) {
+    case "youtube":
+      if (card.state === "in_program" || card.state === "earning") return ready("joined", null, "You're in. Your money shows above.", [YT_SOURCE]);
+      if (p === 100) return ready("ready", 100, "Apply in YouTube Studio › Earn.", [YT_SOURCE], "https://studio.youtube.com/");
+      return p === null ? ready("cant_see", null, "YouTube hasn't shared every number yet.", [YT_SOURCE]) : along(p);
+    case "tiktok":
+      if (!TIKTOK_OPEN.includes(country))
+        return ready("not_open", null, `Creator Rewards isn't open in ${place ?? "your country"} yet.`, [TT_SOURCE], undefined, TIKTOK_REGION);
+      if (p === 100) return ready("ready", 100, "Join in TikTok Studio › Monetization.", [TT_SOURCE]);
+      return p === null ? ready("cant_see", null, "Press Allow follower reading in Settings › Posting › Money.", [TT_SOURCE]) : along(p);
+    case "instagram":
+      if (p === 100) return ready("ready", 100, "Turn on Gifts in Professional dashboard › Monetization.", [IG_SOURCE], undefined, place ? `Gifts are open in ${place}.` : undefined);
+      return p === null ? ready("cant_see", null, "Instagram hasn't shared your followers yet.", [IG_SOURCE]) : along(p);
+    case "facebook":
+      if (card.state === "earning") return ready("joined", null, "You're in. Your money shows above.", ["https://www.facebook.com/business/help"]);
+      return ready("invite", null, "Meta invites creators. Watch Meta Business Suite › Monetization.", ["https://www.facebook.com/business/help"], "https://business.facebook.com/latest/monetization");
+    default:
+      if (p === 100) return ready("ready", 100, "Apply in X › Creator Studio.", [X_SOURCE], "https://x.com/i/jf/creators/studio");
+      return p === null ? ready("cant_see", null, "X hasn't shared every number yet.", [X_SOURCE]) : along(p);
+  }
 }
 
 /** The dashboard's scenarios show these Settings › Money cards. */
@@ -353,7 +428,7 @@ const CARDS_FOR: Partial<Record<MoneyScenario, MoneyScenario>> = {
 };
 
 export function buildMoneyView(saved: Saved): MoneyView {
-  const s = CARDS_FOR[saved.scenario] ?? saved.scenario;
+  const s = saved.scenario === "earn_ready" ? "goal_reached" : (CARDS_FOR[saved.scenario] ?? saved.scenario);
   const cards =
     s === "not_connected" ? ORDER.map(notConnected) : [youtubeCard(s), tiktokCard(s), instagramCard(s), facebookCard(s), xCard()];
   if (!saved.country) {
@@ -369,6 +444,13 @@ export function buildMoneyView(saved: Saved): MoneyView {
       tiktok.extras = ["Creator Rewards is not open in your country. Check its rules in the TikTok app.", ...tiktok.extras];
     }
   }
+  // "Can I earn?" on every connected card.
+  for (const c of cards) {
+    if (c.state === "not_connected") continue;
+    c.ready = readyFor(c, saved.country);
+    // Not open in the owner's country: no goals to measure there.
+    if (c.ready.status === "not_open") c.goals = [];
+  }
   const totals = new Map<string, { currency: string; amountMicros: number; platforms: Platform[] }>();
   for (const c of cards) {
     if (c.state !== "earning" || !c.revenue) continue;
@@ -382,7 +464,7 @@ export function buildMoneyView(saved: Saved): MoneyView {
     country: saved.country,
     countries: COUNTRIES,
     thisMonth: [...totals.values()],
-    celebrations: CARDS_FOR[saved.scenario] ? [] : celebrationsFor(s).filter((c) => !saved.seen.includes(c.key)),
+    celebrations: CARDS_FOR[saved.scenario] ? [] : celebrationsFor(saved.scenario === "earn_ready" ? "earn_ready" : s).filter((c) => !saved.seen.includes(c.key)),
     asOf: "2026-11-18",
   };
   if (saved.lastManualAt && saved.lastManualAt + 3_600_000 > Date.now()) view.nextCheckAllowedAt = new Date(saved.lastManualAt + 3_600_000).toISOString();

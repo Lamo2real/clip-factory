@@ -10,8 +10,9 @@ import { useLoad } from "./hooks.ts";
 /** Keys played in this page's life: React may mount twice, the owner must still see each one once. */
 const played = new Set<string>();
 
-/** The biggest party for the first money, a big one for joining, a normal one for a goal. */
-export const CONFETTI: Record<MoneyCelebration["kind"], number> = { first_money: 200, in_program: 160, goal: 110 };
+/** The biggest party for the first money and for being able to join, a big one for joining, a normal one for a goal,
+ * a small one for being close. */
+export const CONFETTI: Record<MoneyCelebration["kind"], number> = { first_money: 200, ready: 200, in_program: 160, goal: 110, close: 90 };
 
 export function useMoney() {
   const loaded = useLoad<MoneyView>(() => api().getMoney());
