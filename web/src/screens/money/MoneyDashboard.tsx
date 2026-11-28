@@ -543,8 +543,6 @@ export function MoneyDashboard() {
       <AllMoney load={everywhereLoad} />
       {/* Get paid (§40.1 item 3): can money reach you from each place? Status only; before the Apps band. */}
       <GetPaidCard />
-      {/* Can I earn? (docs/CONTRACTS.md §58): how close each connected app's money program is. */}
-      <EarnCards />
 
       {/* Everything the apps and days change, with their controls first. Its own box only on phones beside All your
           money (the dock's sticky box: it can never leave the cards); elsewhere it draws no box at all. */}
@@ -608,6 +606,10 @@ export function MoneyDashboard() {
 
       <MoneyClipList choice={choice} onSort={(sort) => set({ sort })} />
       </div>
+      {/* Can I earn? (docs/CONTRACTS.md §58): how close each connected app's money program is. After the part the
+          apps and days change (it never changes with them), so the order above stays All your money, Get paid, then
+          the filters (§39.2, §40.8 change 6). */}
+      <EarnCards />
     </div>
     {/* Content Rewards' own numbers (§38.7): their own part at the end of the page, never added into the MRR cards
         (All your money's total is the one place it is added, §39.2). */}

@@ -947,9 +947,10 @@ a.dash-shared:hover {
   border-radius: var(--r-xl);
   overflow-wrap: anywhere;
 }
+/* Only a glow: the card keeps the glass's own light and tint (never a background of its own), so its words keep AA
+   over the window look's white desktop. */
 .earn-card.is-ready {
   box-shadow: var(--light-rim-3), var(--glow-leaf);
-  background-image: linear-gradient(180deg, rgb(var(--bone-rgb) / 0.1), transparent 60%);
 }
 .earn-card__head {
   display: flex;
