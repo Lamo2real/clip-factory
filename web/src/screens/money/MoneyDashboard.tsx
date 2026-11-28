@@ -9,6 +9,7 @@
 import { CrMoneyPart } from "./CrMoneyPart.tsx";
 import { AllMoney, APPS_ONLY, crRowOf, useMoneyEverywhere } from "./AllMoney.tsx";
 import { GetPaidCard } from "./GetPaidCard.tsx";
+import { EarnCards } from "./EarnCards.tsx";
 import { useCallback, useEffect, useId, useLayoutEffect, useRef, useState, type ReactNode } from "react";
 import { api, friendlyMessage } from "../../api/index.ts";
 import type { MoneyChange, MoneyCurrencySummary, MoneyExcluded, MoneySummary, MoneyView, Platform } from "../../api/types.ts";
@@ -605,6 +606,10 @@ export function MoneyDashboard() {
 
       <MoneyClipList choice={choice} onSort={(sort) => set({ sort })} />
       </div>
+      {/* Can I earn? (docs/CONTRACTS.md §58): how close each connected app's money program is. After the part the
+          apps and days change (it never changes with them), so the order above stays All your money, Get paid, then
+          the filters (§39.2, §40.8 change 6). */}
+      <EarnCards />
     </div>
     {/* Content Rewards' own numbers (§38.7): their own part at the end of the page, never added into the MRR cards
         (All your money's total is the one place it is added, §39.2). */}

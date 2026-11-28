@@ -20,7 +20,7 @@ RAW: dict[str, Any] = json.loads((ROOT / "config" / "monetization.json").read_te
 
 def test_the_committed_file_loads() -> None:
     cfg = rules.load(ROOT / "config" / "monetization.json")
-    assert cfg.as_of == date(2026, 11, 21)
+    assert cfg.as_of == date(2026, 11, 28)  # §58: checked again
     assert set(cfg.platforms) == {"youtube", "tiktok", "instagram", "facebook", "x"}
     assert "other" in cfg.country_codes()
 
@@ -170,7 +170,7 @@ def test_the_get_paid_config_fixes() -> None:
     tiktok = cfg.platform("tiktok")
     assert dict(tiktok.status_where) == {"label": "TikTok Studio › Monetization"}
     open_rule = next(r for r in RAW["platforms"]["tiktok"]["rules"] if r["id"] == "tiktok-rewards")
-    assert open_rule["countries"] == ["US", "GB", "DE", "FR", "BR"]
+    assert open_rule["countries"] == ["US", "GB", "DE", "FR", "MX", "BR"]  # §58: Mexico added
     today = date(2026, 11, 21)
     assert rules.pick(cfg, "tiktok", today=today, in_program=False, country="SE") == "not_open"
     assert isinstance(rules.pick(cfg, "tiktok", today=today, in_program=False, country="JP"), rules.Rule)
@@ -180,9 +180,9 @@ def test_the_get_paid_config_fixes() -> None:
     by_id = {r["id"]: r for r in RAW["platforms"]["youtube"]["rules"]}
     for rule_id in ("ypp-2027", "ypp-2027-keep-shorts"):
         assert {g["source"] for g in by_id[rule_id]["goals"]} == {"https://support.google.com/youtube/answer/12843009"}
-    assert {g["source"] for g in by_id["ypp-2023"]["goals"] + by_id["ypp-2023"].get("more", [])} == {
-        "https://support.google.com/youtube/answer/72851"
-    }
+    assert {g["source"] for g in by_id["ypp-2023"]["goals"]} == {"https://support.google.com/youtube/answer/72851"}
+    # §58: the fan-money tier cites its own page (answer 13429240, which lists Sweden).
+    assert {g["source"] for g in by_id["ypp-2023"]["more"]} == {"https://support.google.com/youtube/answer/13429240"}
     # Each new source is on its platform's own help host.
     for host in ("help.x.com", "www.tiktok.com", "support.google.com"):
         assert host in rules.OFFICIAL_HOSTS

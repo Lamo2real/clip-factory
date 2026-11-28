@@ -2983,3 +2983,12 @@ likes, comments and shares; views are their own two choices.
 - **Context.** §57: clips edited like the owner's example videos.
 - **Decision.** Each reference is looked at **once**, on upload, by the agent (frames, scene cuts, words, one structured call with the job default `agentModel`; no new model id) and the result is stored as an EditStyle on the item. At job start the stored styles are merged: the most common value wins, a tie goes to the newest video, numbers use the median. One call per video, not per job, so jobs stay as fast and cheap as before, and the same videos always give the same style. The merge becomes a RenderStyle for the renderer and one section placed after every skill in the skills block, so it is combined with the skills and cannot change a task's answer format or limits (the task's own limits win). What the renderer cannot do yet is listed honestly as "Not yet", never faked.
 - **Consequences.** One extra agent action, four API routes, one item kind and one media prefix, all add-only; nothing is replaced. A bad or odd video can only move a field when it is the most common value. A few model calls per upload, none per job. Clips Funded is untouched. Later: more of the table in §57.V8 can move from "Not yet" to drawn.
+
+## ADR-115 Ready and Close are money celebrations
+
+- **Decision.** §58: one status per app from the §25 goals; Ready and Close ride the once-only
+  `pendingCelebrations`. The notify Lambda pushes new ones from the table's
+  stream, as it already does for Get paid. Close is 90% of the slowest requirement; a number we can't read makes it
+  "Can't see", never a guess.
+- **Consequences.** No new store shape, schedule or Lambda; one more stream prefix. Milestones follow the daily
+  06:00 UTC run (or Check now). The owner still applies by hand in each app.

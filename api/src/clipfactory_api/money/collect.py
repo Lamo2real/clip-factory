@@ -357,6 +357,33 @@ def _base_state(platform: str, reading: sources.Reading, money_seen: bool, verif
     return "not_available"
 
 
+def _milestone(
+    platform: str,
+    rule: money_rules.Rule,
+    goals: list[dict[str, Any]],
+    done: set[Any],
+    p: money_rules.PlatformRules | None,
+) -> list[dict[str, Any]]:
+    """§58: "Ready" (every requirement met: the owner can apply) and "Close" (90%), once each per rule. Ready wins: a
+    platform that jumps straight to ready never gets a late "close", and once ready nothing more. Applying is the owner's alone; this only says where.
+    """
+    status, percent = money_rules.readiness(goals)
+    programme = p.programme if p else label(platform)
+    where = p.status_where["label"] if p else label(platform)
+    ready_key = f"{platform}:ready:{rule.id}"
+    # Told once per platform: after any "ready" (even under an older rule, e.g. YouTube's 2027 switch), nothing more.
+    if any(isinstance(k, str) and k.startswith(f"{platform}:ready:") for k in done):
+        return []
+    if status == "ready":
+        text = f"You can join {programme} on {label(platform)}! Apply in {where}."
+        return [{"key": ready_key, "platform": platform, "kind": "ready", "text": text}]
+    close_key = f"{platform}:close:{rule.id}"
+    if status == "close" and close_key not in done:
+        text = f"{label(platform)} money is close: {percent}% there. Keep posting!"
+        return [{"key": close_key, "platform": platform, "kind": "close", "text": text}]
+    return []
+
+
 def _celebrate(
     platform: str,
     rule: money_rules.Rule | str | None,
@@ -365,6 +392,7 @@ def _celebrate(
     previous: dict[str, Any],
     *,
     first_money_due: bool,
+    p: money_rules.PlatformRules | None = None,
 ) -> list[dict[str, Any]]:
     done = set((previous.get("celebrated") or {}).keys()) | {
         c.get("key") for c in previous.get("pendingCelebrations") or []
@@ -384,6 +412,8 @@ def _celebrate(
                 else f"You hit {int(g['goal']):,} {g['label']}!"
             )
             out.append({"key": key, "platform": platform, "kind": "goal", "text": text})
+        if rule.for_ == "not_in_program" and state not in {"in_program", "earning"}:
+            out += _milestone(platform, rule, goals, done, p)
     if state in {"in_program", "earning"} and f"{platform}:in_program" not in done and platform == "youtube":
         out.append(
             {
@@ -546,6 +576,7 @@ def run_platform(deps: MoneyDeps, user_id: str, platform: str, *, now: datetime,
         state,
         previous,
         first_money_due=bool(money_seen and first_positive is not None and now - first_positive >= FIRST_MONEY_WAIT),
+        p=cfg.platform(platform),
     )
     fields = _state_fields(platform, reading, state, numbers, counting)
     fields["lastCheckedAt"] = now_iso

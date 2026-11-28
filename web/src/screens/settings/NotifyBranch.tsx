@@ -73,7 +73,7 @@ export function NotifyBranch() {
   const os = currentOs();
 
   function choose(key: keyof NotifyChoices, on: boolean) {
-    // `contentRewards` and `getPaid` go back only when the API sent them (§38.19, §40.7): an older API refuses keys it
+    // `contentRewards`, `getPaid` and `earn` go back only when the API sent them (§38.19, §40.7): an older API refuses keys it
     // doesn't know.
     void saveSettings({ notify: { ...choices, [key]: on } });
   }
@@ -170,6 +170,12 @@ export function NotifyBranch() {
         {me && typeof me.settings.notify?.getPaid === "boolean" ? (
           <Apple id="notify-getpaid">
             <AppleSwitch apple="notify-getpaid" checked={me.settings.notify.getPaid} onChange={(v) => choose("getPaid", v)} />
+          </Apple>
+        ) : null}
+        {/* Ready to earn (docs/CONTRACTS.md §58): the same rule, only once the API knows the choice. */}
+        {me && typeof me.settings.notify?.earn === "boolean" ? (
+          <Apple id="notify-earning">
+            <AppleSwitch apple="notify-earning" checked={me.settings.notify.earn} onChange={(v) => choose("earn", v)} />
           </Apple>
         ) : null}
         <Apple id="notify-badge" aside={<Pill tone={badgeSupported() && state === "on" ? "success" : "neutral"}>{badgeSupported() ? (state === "on" ? "On" : "With notifications") : "Not here"}</Pill>} />

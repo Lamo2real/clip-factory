@@ -1,5 +1,5 @@
 {
-  "version": "430012a85814",
+  "version": "aeebeb32ee47",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -7743,6 +7743,7 @@
         "Every step",
         "Content Rewards news",
         "Money on hold or sent to your bank",
+        "Ready to earn",
         "Number on the app icon",
         "Lock Screen widget",
         "Send a test"
@@ -8008,6 +8009,42 @@
       ],
       "highlight": [
         "notify-getpaid"
+      ]
+    },
+    {
+      "id": "apple-notify-earning",
+      "kind": "apple",
+      "route": "/settings/app/notifications",
+      "hash": "notify-earning",
+      "where": "Settings › App & account › Notifications",
+      "title": "Ready to earn",
+      "keywords": [
+        "monetized",
+        "monetization",
+        "partner program",
+        "creator rewards",
+        "can I earn",
+        "ready to earn",
+        "make money"
+      ],
+      "answer": "When an app's money program is close or ready.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **App & account**, then **Notifications**.",
+        "Find **Ready to earn**."
+      ],
+      "actions": [
+        {
+          "id": "apple-notify-earning:open",
+          "label": "Open Notifications",
+          "to": "/settings/app/notifications#notify-earning",
+          "highlight": [
+            "notify-earning"
+          ]
+        }
+      ],
+      "highlight": [
+        "notify-earning"
       ]
     },
     {

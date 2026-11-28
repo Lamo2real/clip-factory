@@ -1,6 +1,6 @@
 {
   "$comment": "Real earnings (docs/CONTRACTS.md §25, docs/DECISIONS.md ADR-47). The paid-programme goals each platform publishes, with the official page each number comes from. No rates, no guesses: Clip Factory shows only numbers a platform reported. A goal without an official source fails CI (api/tests/test_money.py, web/test/money.test.ts). Change values here only.",
-  "asOf": "2026-11-21",
+  "asOf": "2026-11-28",
   "countries": [
     { "code": "US", "name": "United States" },
     { "code": "GB", "name": "United Kingdom" },
@@ -12,6 +12,7 @@
     { "code": "SE", "name": "Sweden" },
     { "code": "IE", "name": "Ireland" },
     { "code": "BR", "name": "Brazil" },
+    { "code": "MX", "name": "Mexico" },
     { "code": "JP", "name": "Japan" },
     { "code": "KR", "name": "South Korea" },
     { "code": "CA", "name": "Canada" },
@@ -25,6 +26,8 @@
       "paidWhere": { "label": "AdSense for YouTube › Payments", "url": "https://adsense.google.com/" },
       "moneyLabel": "YouTube's estimate",
       "moneyNote": "Can change at month end · 2–3 days behind",
+      "regionNote": "Open in most countries. Fan money starts at 500 subscribers.",
+      "sources": ["https://support.google.com/youtube/answer/7101720", "https://support.google.com/youtube/answer/13429240"],
       "rules": [
         {
           "id": "ypp-2023",
@@ -54,24 +57,24 @@
             {
               "key": "fanSubscribers", "metric": "subscribers", "goal": 500, "label": "subscribers for fan money",
               "note": "Fan money: memberships, Super Thanks, Super Chat",
-              "source": "https://support.google.com/youtube/answer/72851", "verifiedHow": "official-page"
+              "source": "https://support.google.com/youtube/answer/13429240", "verifiedHow": "official-page"
             },
             {
               "key": "fanUploads", "metric": "uploads90", "goal": 3, "label": "public videos in 90 days", "windowDays": 90,
-              "source": "https://support.google.com/youtube/answer/72851", "verifiedHow": "official-page"
+              "source": "https://support.google.com/youtube/answer/13429240", "verifiedHow": "official-page"
             },
             {
               "key": "fanWatchHours", "metric": "watchHours365", "goal": 3000, "label": "watch hours for fan money",
               "approx": true, "or": "fanShortsViews", "windowDays": 365,
-              "source": "https://support.google.com/youtube/answer/72851", "verifiedHow": "official-page"
+              "source": "https://support.google.com/youtube/answer/13429240", "verifiedHow": "official-page"
             },
             {
               "key": "fanShortsViews", "metric": "shortsViews90", "goal": 3000000, "label": "Shorts views for fan money",
               "or": "fanWatchHours", "windowDays": 90,
-              "source": "https://support.google.com/youtube/answer/72851", "verifiedHow": "official-page"
+              "source": "https://support.google.com/youtube/answer/13429240", "verifiedHow": "official-page"
             }
           ],
-          "upcoming": "New rules from 1 Feb 2027: 8,000 watch hours or 20M Shorts views, still with 1,000 subscribers."
+          "upcoming": "From 1 Feb 2027, new channels need 8,000 watch hours or 20M Shorts views, still with 1,000 subscribers."
         },
         {
           "id": "ypp-2027",
@@ -121,13 +124,17 @@
       "moneyLabel": "Meta's estimate",
       "moneyNote": "Final may differ",
       "moneyVerified": false,
-      "invites": "Meta invites creators. Look in Meta Business Suite › Monetization.",
+      "invites": "Meta invites creators. Ask to join in Professional dashboard › Monetization.",
+      "regionNote": "Content monetization is invite only. In-stream ads need 5,000 followers and 60,000 minutes watched in 60 days.",
+      "sources": ["https://creators.facebook.com/tools/facebook-content-monetization", "https://creators.facebook.com/tools/ad-breaks/v2/"],
       "rules": []
     },
     "instagram": {
       "programme": "Instagram Gifts",
       "statusWhere": { "label": "Professional dashboard › Monetization" },
       "paidWhere": { "label": "Professional dashboard › Payouts" },
+      "regionNote": "Gifts are not open in every country.",
+      "sources": ["https://help.instagram.com/738469380549477"],
       "rules": [
         {
           "id": "ig-gifts",
@@ -137,7 +144,7 @@
           "goals": [
             {
               "key": "followers", "metric": "followers", "goal": 500, "label": "followers for Gifts",
-              "note": "Instagram also checks age, country and rules",
+              "note": "Also needs a professional account and age 18+",
               "source": "https://creators.instagram.com/earn-money", "verifiedHow": "official-snippet"
             }
           ]
@@ -149,12 +156,13 @@
       "statusWhere": { "label": "TikTok Studio › Monetization" },
       "paidWhere": { "label": "Profile › Balance" },
       "warning": "Don't switch to a Business account. Creator Rewards won't pay it.",
+      "regionNote": "Only open in the US, UK, Germany, France, Mexico, Brazil, Japan and South Korea. Videos must be over 1 minute.",
       "rules": [
         {
           "id": "tiktok-rewards",
           "for": "not_in_program",
           "effectiveFrom": "2024-01-01",
-          "countries": ["US", "GB", "DE", "FR", "BR"],
+          "countries": ["US", "GB", "DE", "FR", "MX", "BR"],
           "goals": [
             {
               "key": "followers", "metric": "followers", "goal": 10000, "label": "followers",
@@ -194,6 +202,7 @@
       "programme": "Original Content Rewards",
       "statusWhere": { "label": "X › Creator Studio", "url": "https://x.com/i/jf/creators/studio" },
       "paidWhere": { "label": "X › Creator Studio (paid through Stripe)", "url": "https://x.com/i/jf/creators/studio" },
+      "regionNote": "Needs Premium and age 18+.",
       "rules": [
         {
           "id": "x-revenue-sharing",
@@ -213,8 +222,8 @@
             },
             {
               "key": "impressions90", "metric": "impressions90", "label": "impressions in 90 days", "kind": "number",
-              "windowDays": 90, "approx": true,
-              "help": "Upper guess from the posts Clip Factory made. X only counts verified people on Home.",
+              "windowDays": 90, "approx": true, "required": true,
+              "help": "X needs 500,000 Home impressions from verified people in 90 days. This is an upper guess from Clip Factory's posts. X Creator Studio has the real number.",
               "source": "https://help.x.com/en/using-x/original-content-rewards", "verifiedHow": "official-snippet"
             }
           ]

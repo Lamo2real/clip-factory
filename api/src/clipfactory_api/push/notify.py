@@ -2,7 +2,9 @@
 
 The event source mapping delivers only ``MODIFY`` records of ``JOB#`` items and of the Content Rewards items
 ``CAMPAIGN#``, ``CRSUB#``, ``CRMONEY``, ``CRCONN`` (§38.11: you're in, send now, approved, not approved, proof, money,
-sign in again, did they say yes) and ``CRFIND`` (§41.4: new campaigns match, at most once a day); one each, deduped by
+sign in again, did they say yes) and ``CRFIND`` (§41.4: new campaigns match, at most once a day), ``MONEYSTATE#`` (§58:
+an app's money program is ready to apply for, or close; one each, deduped by ``NOTIFIED#earn#{key}``, under
+``notify.earn``); one each, deduped by
 ``NOTIFIED#cr#{key}``, under ``notify.contentRewards``, and of ``PAYSTATE#`` (§40.7: money on hold, money sent to
 your bank; one each, deduped by ``NOTIFIED#getpaid#{key}``, under ``notify.getPaid``, never for the first read after
 a grant) and of ``BANKCONN`` (§40.5.11: money reached your bank, a payment may be from an app, a bank link ends soon or
@@ -612,6 +614,84 @@ def handle_getpaid_change(deps: NotifyDeps, sk: str, old: Mapping[str, Any], new
     return sent
 
 
+# --- Ready to earn (§58) ---------------------------------------------------------------------------------------
+
+EARN_PREFIX = "MONEYSTATE#"
+EARN_KINDS = frozenset({"ready", "close"})
+EARN_URL = "/money"
+EARN_BODY_MAX = 160
+
+
+def earn_events(old: Mapping[str, Any], new: Mapping[str, Any]) -> list[tuple[str, webpush.Message]]:
+    """(dedupe key, message) for each new "ready" or "close" milestone the money run queued on ``MONEYSTATE#``. The
+    run queues each one once ever (``pendingCelebrations``, then ``celebrated``); a key already pending before this
+    write, or already seen, is never sent again."""
+    before = {c.get("key") for c in old.get("pendingCelebrations") or [] if isinstance(c, Mapping)}
+    raw_seen = new.get("celebrated")
+    seen: Mapping[str, Any] = raw_seen if isinstance(raw_seen, Mapping) else {}
+    out: list[tuple[str, webpush.Message]] = []
+    for c in new.get("pendingCelebrations") or []:
+        if not isinstance(c, Mapping) or c.get("kind") not in EARN_KINDS:
+            continue
+        key = c.get("key")
+        if not isinstance(key, str) or not key or key in before or key in seen:
+            continue
+        body = " ".join(str(c.get("text") or "").split())[:EARN_BODY_MAX]
+        if not body:
+            continue
+        platform = str(c.get("platform") or "")
+        urgency = "high" if c.get("kind") == "ready" else "normal"
+        message = webpush.Message(TEST_TITLE, body, f"earn-{platform}", EARN_URL, ttl=GETPAID_TTL, urgency=urgency)
+        out.append((key, message))
+    return out
+
+
+def _earn_on(deps: NotifyDeps, user_id: str) -> bool:
+    """``notify.earn``, on by default (read as stored when the settings shape doesn't know it yet)."""
+    prefs = settings.load(deps.store, user_id).get("notify") or {}
+    if isinstance(prefs.get("earn"), bool):
+        return bool(prefs["earn"])
+    stored = (deps.store.get(db.user_pk(user_id), db.SETTINGS_SK) or {}).get("notify")
+    value = stored.get("earn") if isinstance(stored, Mapping) else None
+    return value if isinstance(value, bool) else True
+
+
+def _earn_first_time(deps: NotifyDeps, pk: str, key: str) -> bool:
+    now = deps.clock()
+    item = {
+        "pk": pk,
+        "sk": f"NOTIFIED#earn#{key}",
+        "type": "notified",
+        "at": iso(now),
+        "ttl": int((now + timedelta(days=GETPAID_DEDUPE_DAYS)).timestamp()),
+    }
+    try:
+        deps.store.put(item, if_absent=True)
+    except db.ConditionFailed:
+        return False
+    return True
+
+
+def handle_earn_change(deps: NotifyDeps, old: Mapping[str, Any], new: Mapping[str, Any]) -> list[str]:
+    """Sends each new Ready to earn notification (under ``notify.earn``), once each (``NOTIFIED#earn#{key}``)."""
+    pk = str(new.get("pk") or "")
+    user_id = pk.removeprefix("USER#") if pk.startswith("USER#") else ""
+    if not user_id:
+        return []
+    found = earn_events(old, new)
+    if not found or not _earn_on(deps, user_id):
+        return []
+    subs = devices.active(deps.store, user_id)
+    if not subs:
+        return []
+    sent = []
+    for key, message in found:
+        if _earn_first_time(deps, pk, key):
+            send_to_devices(deps, user_id, message, subs)
+            sent.append(key)
+    return sent
+
+
 # --- Your bank (§40.5.11) ------------------------------------------------------------------------------------
 
 BANK_SK = "BANKCONN"
@@ -734,13 +814,16 @@ def process(event: Mapping[str, Any], deps: NotifyDeps) -> dict[str, list[Any]]:
         data = record.get("dynamodb") or {}
         sk = str(((data.get("Keys") or {}).get("sk") or {}).get("S", ""))
         watched = sk.startswith("JOB#") or sk.startswith(CR_PREFIXES) or sk.startswith(GETPAID_PREFIX) or sk == BANK_SK
-        if record.get("eventName") != "MODIFY" or not watched:
+        earn = sk.startswith(EARN_PREFIX)
+        if record.get("eventName") != "MODIFY" or not (watched or earn):
             continue
         old, new = data.get("OldImage"), data.get("NewImage")
         if not isinstance(old, Mapping) or not isinstance(new, Mapping):
             continue
         try:
-            if sk == BANK_SK:
+            if earn:
+                sent += len(handle_earn_change(deps, deps.deserialize(old), deps.deserialize(new)))
+            elif sk == BANK_SK:
                 sent += len(handle_bank_change(deps, deps.deserialize(old), deps.deserialize(new)))
             elif sk.startswith(GETPAID_PREFIX):
                 sent += len(handle_getpaid_change(deps, sk, deps.deserialize(old), deps.deserialize(new)))

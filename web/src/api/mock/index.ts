@@ -1491,7 +1491,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
       if (next.notify !== undefined) {
         // §32.3: the same rule as the API: known keys only, each on or off; a missing one keeps its default.
         const n = next.notify as unknown as Record<string, unknown>;
-        const keys = ["ready", "stopped", "resumed", "steps"];
+        const keys = ["ready", "stopped", "resumed", "steps", "earn"];
         if (typeof n !== "object" || n === null || Object.keys(n).some((k) => !keys.includes(k)) || Object.values(n).some((v) => typeof v !== "boolean"))
           throw bad("Notifications must say on or off for: clips ready, stopped, picked up, every step.");
         next.notify = { ready: true, stopped: true, resumed: true, steps: false, ...(n as Partial<Settings["notify"] & object>) };

@@ -46,6 +46,7 @@ describe("the settings tree", () => {
       "notify-steps",
       "notify-contentrewards",
       "notify-getpaid",
+      "notify-earning",
       "notify-badge",
       "notify-lock-screen",
       "notify-test",

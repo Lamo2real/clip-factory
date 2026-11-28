@@ -910,3 +910,155 @@ a.dash-shared:hover {
   flex-wrap: wrap;
 }
 
+
+/* ---------- Can I earn? (docs/CONTRACTS.md §58) ----------
+   One glass card per connected app: a word, eased bars per requirement, one next line and a Details fold. A card
+   that is Ready glows a little: the top layer is the brightest. */
+.earn {
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+.earn__title {
+  margin: 0;
+  padding-inline: var(--loose-x, 4px);
+  font-family: var(--font-display);
+  font-size: var(--fs-h3);
+  font-weight: 400;
+}
+.earn__skel {
+  display: block;
+  height: 160px;
+  border-radius: var(--r-xl);
+}
+.earn__cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(min(100%, 280px), 1fr));
+  align-items: start;
+  gap: 12px;
+  min-width: 0;
+}
+.earn-card {
+  display: grid;
+  align-content: start;
+  gap: 10px;
+  min-width: 0;
+  padding: var(--inset);
+  border-radius: var(--r-xl);
+  overflow-wrap: anywhere;
+}
+/* Only a glow: the card keeps the glass's own light and tint (never a background of its own), so its words keep AA
+   over the window look's white desktop. */
+.earn-card.is-ready {
+  box-shadow: var(--light-rim-3), var(--glow-leaf);
+}
+.earn-card__head {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-width: 0;
+}
+.earn-card__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  margin: 0;
+  font-size: var(--fs-body);
+  font-weight: 700;
+}
+.earn-card__pill {
+  flex: none;
+}
+.earn-goals {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.earn-goal {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+.earn-goal__line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 8px;
+  margin: 0;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+/* A basis of 0 keeps the tick on the same line as its words. */
+.earn-goal__text {
+  flex: 1 1 0;
+  min-width: 0;
+}
+.earn-goal__missing {
+  color: var(--ink-2);
+  font-size: var(--fs-small);
+  font-weight: 600;
+}
+.earn-bar {
+  position: relative;
+  display: block;
+  height: 12px;
+  border-radius: var(--r-pill);
+  background: rgb(var(--bone-rgb) / 0.14);
+  overflow: hidden;
+}
+/* Grows from 0 with a slow start and a slow end. */
+.earn-bar__fill {
+  position: absolute;
+  inset: 0 auto 0 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--green-leaf), #8cc7a8);
+  transform-origin: left center;
+  animation: earn-grow 1200ms cubic-bezier(0.65, 0, 0.35, 1) both;
+}
+.earn-goal.is-reached .earn-bar__fill {
+  background: linear-gradient(90deg, var(--green-leaf), var(--bone));
+}
+@keyframes earn-grow {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: scaleX(1);
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .earn-bar__fill {
+    animation: none;
+  }
+}
+.reduce-motion .earn-bar__fill {
+  animation: none;
+}
+.earn-card__next {
+  margin: 0;
+  font-weight: 600;
+}
+.earn-card__details {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+.earn-card__notes {
+  display: grid;
+  gap: 4px;
+  margin: 0;
+  padding-inline-start: 18px;
+  color: var(--ink-2);
+  font-size: var(--fs-small);
+}
+.earn-card__fine {
+  margin: 0;
+  color: var(--ink-2);
+  font-size: var(--fs-small);
+}
+.earn-card__sources {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 12px;
+}

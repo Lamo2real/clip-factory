@@ -26,11 +26,12 @@ locals {
   # money sent to your bank), and only changes (a new item never needs a notification: CRSUB# is always created as
   # "sending" first, a finder look never creates CRFIND, and a PAYSTATE# is made by its quiet first read): filtered
   # before Lambda runs. §40.5.11: Your bank's BANKCONN too (a new lastNotice: money reached your bank, a payment may be
-  # from an app, a link ends soon or ended; the API makes BANKCONN, so the reader only ever modifies it). One pattern
-  # with eight prefixes, updated in place.
+  # from an app, a link ends soon or ended; the API makes BANKCONN, so the reader only ever modifies it). §58: the
+  # money run's MONEYSTATE# (an app's money program is ready or close; the daily run modifies it). One pattern with
+  # nine prefixes, updated in place.
   stream_filter = jsonencode({
     eventName = ["MODIFY"]
-    dynamodb  = { Keys = { sk = { S = [{ prefix = "JOB#" }, { prefix = "CAMPAIGN#" }, { prefix = "CRSUB#" }, { prefix = "CRMONEY" }, { prefix = "CRCONN" }, { prefix = "CRFIND" }, { prefix = "PAYSTATE#" }, { prefix = "BANKCONN" }] } } }
+    dynamodb  = { Keys = { sk = { S = [{ prefix = "JOB#" }, { prefix = "CAMPAIGN#" }, { prefix = "CRSUB#" }, { prefix = "CRMONEY" }, { prefix = "CRCONN" }, { prefix = "CRFIND" }, { prefix = "PAYSTATE#" }, { prefix = "BANKCONN" }, { prefix = "MONEYSTATE#" }] } } }
   })
 }
 
