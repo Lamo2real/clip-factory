@@ -32,7 +32,7 @@ from botocore.exceptions import ClientError
 from . import attachments as attachments_mod
 from . import captions as captions_mod
 from . import chat as chat_mod
-from . import chatfetch, chatscreen, learnings, livestatus, loudness, nova, pot, proc, sources, verify, watch
+from . import chatfetch, chatscreen, editstyle, learnings, livestatus, loudness, nova, pot, proc, sources, verify, watch
 from . import picture as picture_mod
 from . import signals as signals_mod
 from . import usage as usage_mod
@@ -55,13 +55,14 @@ from .checklist import (
 )
 from .config import Config
 from .creators import creator_keys, creator_name
+from .editstyle import RenderStyle
 from .guard import Deadline, fable_budget, nova_budget
 from .heartbeat import free_memory
 from .jobs import StepDone, StepFn, Tracker, creep
 from .moments import Moment, clean_style, length_target
 from .remake import CANT_COPY, VIDEO_GONE, Remake, cant_earn, saved_index, saved_moment
 from .render import Marks, RenderResult, prepare_logo, render_clip
-from .skills import SkillsBlock, SkillSet, prepare_skills, skills_block
+from .skills import SkillsBlock, SkillSet, prepare_skills, skills_block, with_section
 from .store import CHANNEL_KEYS, REMAKE_OF, SOURCE_LANGUAGE, Fence, Store, clip_prefix, cookies_key, source_prefix
 from .transcribe import PART_SECONDS, Transcriber, job_name, language_of, parse_items, parse_speakers
 from .util import (
@@ -306,6 +307,9 @@ class JobState:
     loud: list[float] = field(default_factory=list)
     skills: SkillSet = field(default_factory=lambda: SkillSet([]))
     skills_block: SkillsBlock | None = None  # built once in analyze; every model call gets it (§18.6)
+    # The owner's reference videos (§57), read in analyze: what the renderer copies from them. None without a ready
+    # reference video (or when they could not be read): the clips are then cut exactly as before.
+    render_style: RenderStyle | None = None
     prior: list[str] = field(default_factory=list)  # "Prior learnings": active creator lessons (§16.12)
     week_learnings: list[str] = field(default_factory=list)
     similar: list[vectors_mod.Hit] = field(default_factory=list)
@@ -1199,6 +1203,7 @@ class Pipeline:
             st.workdir, self.cfg.skills_dir, await self.store.skill_rows(st.user_id), self.store.get_bytes
         )
         st.skills_block = skills_block(st.skills.docs, where="agent.job")
+        await self._reference_style(st)
         await self.check_model(st)
         st.attachments = await attachments_mod.load(self.store, st.user_id, st.job)
         taught = await learnings.load(self.store, st.user_id, creator_keys(st.source), datetime.now(UTC))
@@ -1220,6 +1225,29 @@ class Pipeline:
         crowd = f" Chat went wild {count(wild, 'time')}." if wild else ""
         return f"Found {count(spikes, 'loud moment')}.{crowd}{note}"
 
+    async def _reference_style(self, st: JobState) -> None:
+        """The owner's reference videos (§57): their merged style goes on the job for the cut, and the "Reference
+        videos: edit like these" section after every skill in the skills block. A campaign job or a campaign copy keeps
+        its own frame layout (a copy is framed like its original). Reading them never fails the job: without them the
+        job runs exactly as before."""
+        try:
+            style, section = editstyle.build(await self.store.ref_rows(st.user_id))
+        except (JobCanceled, asyncio.CancelledError):
+            raise
+        except Exception as e:
+            log("warn", "refs.unread", job=st.job_id, error=type(e).__name__, detail=str(e)[:200])
+            return
+        if style is None:
+            return
+        if st.remake is not None or st.campaign_id is not None:
+            style = replace(style, fill=False)
+        if st.campaign_id is not None:
+            style = replace(style, hook=True)  # a campaign clip keeps its hook (§57 V9), with or without a mark row
+        st.render_style = None if style.is_default else style
+        if section and st.skills_block is not None:
+            st.skills_block = with_section(st.skills_block, section, name="refs")
+        log("info", "refs.used", job=st.job_id, style=not style.is_default, chars=len(section))
+
     async def _analyze_copy(self, st: JobState, tr: Tracker) -> StepDone:
         """A campaign copy (§39.3) listens for nothing: only what its cut, check and captions need, the owner's skills
         (never a model call without them), the model and the lessons, and the original's loudness while it is kept."""
@@ -1235,6 +1263,7 @@ class Pipeline:
             st.workdir, self.cfg.skills_dir, await self.store.skill_rows(st.user_id), self.store.get_bytes
         )
         st.skills_block = skills_block(st.skills.docs, where="agent.job")
+        await self._reference_style(st)
         await self.check_model(st)
         st.attachments = await attachments_mod.load(self.store, st.user_id, st.job)
         taught = await learnings.load(self.store, st.user_id, creator_keys(st.source), datetime.now(UTC))
@@ -2023,6 +2052,7 @@ class Pipeline:
             marks=st.marks,
             take=take,
             voice=await self._take_voice(st, take) if take else None,
+            style=st.render_style,
         )
         return Candidate(m, r, index=index)
 

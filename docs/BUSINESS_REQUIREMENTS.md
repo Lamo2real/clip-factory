@@ -749,6 +749,10 @@ them as original. ([CONTRACTS.md §55](CONTRACTS.md#55-your-take-every-clip-gets
 ### BR-37 Engagement and watch graph
 - AC1: Each clip shows its engagement rate and watch curve per platform (§56).
 
+### BR-38 Reference videos: edit like these
+- AC1: Drop or upload several videos; the box lights up; each can be deleted (§57).
+- AC2: Clips follow their style with the skills; the rest shows as "Not yet".
+
 ## Non-functional requirements
 
 ### NFR-01 Everything runs on AWS

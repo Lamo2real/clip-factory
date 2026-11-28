@@ -10,6 +10,7 @@
   (§14.4). A second `process_job` for a job already running in this container is answered `accepted` and ignored.
   `callbackId` is optional only for local runs and tests (no callback sent). `{ "action": "cancel", "jobId" }` stops it.
   `{ "action": "health" }` → `{ "ok": true }`.
+  `{ "action": "reference", "userId", "refId", "rev" }` looks at a reference video and stores its EditStyle (§57.V5).
 * The agent owns the job's `status`, `steps`, `progress`, `heartbeatAt` (every ≤ 60 s while running) and creates the Clip
   items (status `review`) and their vectors (§14.6). It never publishes anything.
 * Model: environment `CF_MODEL_ID = global.anthropic.claude-fable-5-1`; Claude Agent SDK with
