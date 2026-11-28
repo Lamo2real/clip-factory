@@ -174,8 +174,8 @@ export function NotifyBranch() {
         ) : null}
         {/* Ready to earn (docs/CONTRACTS.md §58): the same rule, only once the API knows the choice. */}
         {me && typeof me.settings.notify?.earn === "boolean" ? (
-          <Apple id="notify-earn">
-            <AppleSwitch apple="notify-earn" checked={me.settings.notify.earn} onChange={(v) => choose("earn", v)} />
+          <Apple id="notify-earning">
+            <AppleSwitch apple="notify-earning" checked={me.settings.notify.earn} onChange={(v) => choose("earn", v)} />
           </Apple>
         ) : null}
         <Apple id="notify-badge" aside={<Pill tone={badgeSupported() && state === "on" ? "success" : "neutral"}>{badgeSupported() ? (state === "on" ? "On" : "With notifications") : "Not here"}</Pill>} />

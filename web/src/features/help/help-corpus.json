@@ -1,5 +1,5 @@
 {
-  "version": "cd8308db1ec9",
+  "version": "44c8587bca48",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -7973,10 +7973,10 @@
       ]
     },
     {
-      "id": "apple-notify-earn",
+      "id": "apple-notify-earning",
       "kind": "apple",
       "route": "/settings/app/notifications",
-      "hash": "notify-earn",
+      "hash": "notify-earning",
       "where": "Settings › App & account › Notifications",
       "title": "Ready to earn",
       "keywords": [
@@ -7996,16 +7996,16 @@
       ],
       "actions": [
         {
-          "id": "apple-notify-earn:open",
+          "id": "apple-notify-earning:open",
           "label": "Open Notifications",
-          "to": "/settings/app/notifications#notify-earn",
+          "to": "/settings/app/notifications#notify-earning",
           "highlight": [
-            "notify-earn"
+            "notify-earning"
           ]
         }
       ],
       "highlight": [
-        "notify-earn"
+        "notify-earning"
       ]
     },
     {
