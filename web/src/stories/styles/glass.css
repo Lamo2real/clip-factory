@@ -408,3 +408,13 @@
   gap: var(--st-space-3);
   min-width: 0;
 }
+
+/* The desktop window (data-look="window"): the rail draws no backdrop-filter, as Clip Factory's sidebar (glass.css,
+   owner 2026-11-28: the sidebar "blinking ... every time i scroll"). Nothing of the page is behind it and no web
+   filter can see the desktop (--st-dim 1 here), so it changed nothing on screen; in WebKit the fixed filter layer,
+   with the workspace switch's own filter over it, blinked as the page scrolled. Its veil, light and glow stay.
+   test/sidebarScrollStill.test.ts. */
+.stories-app[data-look="window"] .st-rail.st-glass {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}

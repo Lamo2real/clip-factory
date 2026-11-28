@@ -561,6 +561,19 @@ html:is(.see-through, [data-backdrop]) .perf__updated > span {
   backdrop-filter: blur(var(--glass-blur)) saturate(var(--glass-saturate)) brightness(var(--glass-brightness));
 }
 
+/* The desktop window (html.see-through): the sidebar draws no backdrop-filter (owner, 2026-11-28: "this sidebar is
+   bugging out and blinking and every time i scroll"). Nothing of the page is ever behind it (the shell is padded past
+   it, the window look draws no backdrop, and no web filter can see the desktop), so its blur, saturation and bend
+   changed nothing on screen. In WebKit (the Mac app's WKWebView) a fixed backdrop-filter layer, with the workspace
+   switch and the Live chip's own backdrop-filters stacked over it, was re-sampled as the page scrolled and dropped
+   frames: the sidebar and the glass around it blinked. Its tint, light and shadow are unchanged, so it reads as the
+   same pane of glass over the window's own blurred desktop. Clips Funded's rail does the same (stories glass.css).
+   test/sidebarScrollStill.test.ts. */
+html.see-through .sidebar.glass {
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+}
+
 /* Browsers without backdrop-filter get a denser tint so text stays readable; the light still applies. */
 @supports not ((backdrop-filter: blur(1px)) or (-webkit-backdrop-filter: blur(1px))) {
   .glass,
