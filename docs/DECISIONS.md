@@ -2978,9 +2978,9 @@ likes, comments and shares; views are their own two choices.
 - **Decision.** Copy a made video into a video draft in the web, not a new route or a cloned story: the form already
   edits every part, and the story stays untouched.
 
-## ADR-115 Ready and Close ride the money run's celebrations
+## ADR-115 Ready and Close are money celebrations
 
-- **Context.** §58: tell the owner when, and on which app, they can apply to earn.
+- **Context.** §58.
 - **Decision.** Work out one status per platform from the §25 goals (`rules.readiness`) and queue "ready" and "close"
   milestones in the existing once-only `pendingCelebrations`. The notify Lambda pushes new ones from the table's
   stream, as it already does for Get paid. Close is 90% of the slowest requirement; a number we can't read makes it

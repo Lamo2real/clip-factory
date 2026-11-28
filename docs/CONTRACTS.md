@@ -22554,7 +22554,7 @@ engagement "as professionals do it", show how people watch from start to end,
   bar, the graph, one short line and the fold. Edge to edge on a phone; the line draws in eased (none with reduced
   motion).
 
-## 58. Can I earn yet? Ready, Close and a notification (owner request, 2026-11-28)
+## 58. Can I earn yet? (owner request, 2026-11-28)
 
 BR-39, ADR-115. The owner: *"can you add a feature that tells me (gives me a notification when i can become monitized
 and for which platform that is) based on my views and statistics"*. Builds on §25 (the goals, the states and the

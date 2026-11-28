@@ -713,12 +713,5 @@ them as original. ([CONTRACTS.md §55](CONTRACTS.md#55-your-take-every-clip-gets
 - AC1: Each clip shows its engagement rate and watch curve per platform (§56).
 
 ### BR-39 Can I earn yet?
-The owner said on 28 Nov 2026: "can you add a feature that tells me (gives me a notification when i can become
-monitized and for which platform that is) based on my views and statistics" (§58, ADR-115).
-- AC1: **Per app.** The Money screen shows one card per connected app with a bar per requirement and one word: Ready,
-  Close, Not yet, Can't see, Not here, Invite or Joined.
-- AC2: **Real numbers.** Bars use only numbers the apps report; anything unreadable says "Can't see this yet".
-- AC3: **Told once.** At Close (90%) and at Ready the owner gets a celebration in the app and a push to phone or
-  desktop, once each, naming the app and where to apply.
-- AC4: **Region.** A programme not open in the owner's country says "Not here" and never notifies.
-- AC5: **Hands off.** Clip Factory never applies or changes an account.
+- AC1: Money shows, per app, how close the owner is to earning, and tells them once (in the app and as a push) when
+  it is close or ready, with where to apply (§58).
