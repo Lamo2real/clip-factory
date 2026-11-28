@@ -90,6 +90,15 @@ class AgentClient:
         if reply.get("accepted") is False or reply.get("error"):
             raise AgentError("the agent did not accept the edit")
 
+    def reference(self, user_id: str, ref_id: str, rev: int) -> None:
+        """Asks the runtime to look at a reference video and write its edit style (docs/CONTRACTS.md §57). Each ask
+        gets its own fresh session (``cfjob-<refId>-<8 random chars>``, 41 characters). The agent answers at once and
+        works in the background; what it writes (or why it failed) is on the item. A refusal raises ``AgentError``."""
+        payload = {"action": "reference", "userId": user_id, "refId": ref_id, "rev": rev}
+        reply = self._invoke(new_session_id(ref_id), payload)
+        if reply.get("accepted") is False or reply.get("error"):
+            raise AgentError("the agent did not accept the reference video")
+
     def cancel_job(self, job_id: str, session_id: str) -> None:
         self._invoke(session_id, {"action": "cancel", "jobId": job_id})
 

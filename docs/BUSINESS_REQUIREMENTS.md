@@ -296,8 +296,7 @@ that week, so that it knows how to edit better in the future."
 ### BR-22 Every AI call uses every skill
 "The whole AI system should use all of these skills by default, no matter what, as long as I add them: whatever AI
 service we use (Bedrock, AgentCore, whatever), when it is generating stuff or reading stuff."
-([CONTRACTS.md §18.6](CONTRACTS.md#186-every-ai-call-uses-every-skill-one-shared-rule),
-[ADR-32](DECISIONS.md#adr-32-every-ai-call-gets-every-skill-through-one-shared-skills-block))
+(§18.6, ADR-32)
 - AC1: Every call that asks Claude to write, pick, judge, describe or read something gets **every** skill: the
   built-in ones and every skill the owner added. That covers the clip agent on AgentCore (moment picking with the
   Claude Agent SDK and its Bedrock fallback, the facecam check, the checklist with its hook rewrite, the captions) and
@@ -495,8 +494,7 @@ using eaither the content rewards way of videos or normal way we have done so fa
 ### BR-28 Does this clip fit the campaign? Know before uploading
 "btw i would like to know if the content i upload is compati ble with the content rewards campaigns so i can get paid
 instead of me selecting the content rewards way of uploading but arent compatible, so please make sure thats in place
-as well". ([CONTRACTS.md §39.3](CONTRACTS.md#393-does-this-clip-fit-the-campaign-the-fit-check),
-[ADR-63](DECISIONS.md#adr-63-content-rewards-follow-ups-one-fit-check-a-new-copy-one-30-day-total))
+as well". (§39.3, ADR-63)
 - AC1: Every campaign clip on Review, and on its own page while it waits, shows "Campaign clip · {name}" and one
   headline: "Can earn on {name}", "Almost ready for {name}", "{name} needs a copy of this clip", "One thing first for
   {name}", "Wait a little for {name}", "This clip can't earn on {name}" or "Check 2 things, then upload", then the
@@ -532,8 +530,7 @@ does nothing." "A clip is never posted twice, even if a run is retried or two ru
 platform, retry once, record the error, and still post to the other platforms." "Save the live link of every post
 next to its clip and campaign." Asked seven questions before building, he answered "Yes, all your picks"
 (2026-11-22); those answers are the rules below (I-51 to I-56).
-([CONTRACTS.md §46](CONTRACTS.md#46-auto-posting-the-oldest-clips-in-review-go-up-by-themselves-every-x-hours-owner-request-2026-11-22),
-[ADR-81](DECISIONS.md#adr-81-auto-posting-an-hourly-eventbridge-rule-a-due-check-and-uploads-own-code))
+(§46, ADR-81)
 Built by §46 (its four parts, §46.16). It ships off for everyone: nothing posts by itself until the owner turns it on.
 - AC1: **One page, one switch.** Settings › Posting › **Auto-posting** (after My settings) has the switch **Post my
   clips by themselves**: "While it is off, nothing posts" ("Off. Nothing posts by itself."). On, it says when the next
@@ -705,8 +702,7 @@ taps, and records "Posted by your Mac · Everyone" with the link.
 ### BR-33 Attach files and images to a job's notes
 The owner said on 26 Nov 2026: "i should be able to attach and paste images or files in general and if i want to drag
 and drop it will highlight it a bit more when I hold the file and hover over the dropbox, also i should be able to
-delete it." ([CONTRACTS.md §52](CONTRACTS.md#52-attach-files-and-images-to-a-jobs-notes-owner-request-2026-11-26),
-[ADR-104](DECISIONS.md#adr-104-notes-attachments-go-straight-to-s3-under-uploads-are-added-as-optional-fields-and-reach-the-agent-as-bounded-context))
+delete it." (§52, ADR-104)
 - AC1: **Add.** The notes box has **Add files or images**, paste and drop. Up to 6 files, 20 MB each; images, PDF, text
   and common documents; videos and other kinds are refused with one short sentence.
 - AC2: **Drag highlight.** A file held over the notes box lights it up more, with "Drop to add".
@@ -719,8 +715,7 @@ delete it." ([CONTRACTS.md §52](CONTRACTS.md#52-attach-files-and-images-to-a-jo
 ### BR-34 CR active: put the campaign's logo and text on a clip
 The owner said on 26 Nov 2026 that Content Rewards campaigns need "the logo on screen for the whole clip" and set text,
 and that they want to add logos and text to clips and keep the logos to use again.
-([CONTRACTS.md §53](CONTRACTS.md#53-cr-active-add-a-logo-and-text-to-a-clip-in-review-owner-request-2026-11-26),
-[ADR-105](DECISIONS.md#adr-105-the-campaign-logo-and-text-are-drawn-after-the-clip-exists-in-review-by-the-agent-on-the-original-file))
+(§53, ADR-105)
 - AC1: **Switch.** Every Review clip has CR inactive (default) or CR active. Inactive changes nothing.
 - AC2: **Edit.** Only when active: add a logo and a line of text, in a corner or dragged, sized, for the whole clip by default.
 - AC3: **Logos kept.** Add a logo once (drop, paste or pick), use it on any clip, delete it.
@@ -730,16 +725,14 @@ and that they want to add logos and text to clips and keep the logos to use agai
 
 ### BR-35 CR active: several pictures on one clip
 The owner said on 26 Nov 2026: "i should be able to add multiple images to campaign active videos."
-([CONTRACTS.md §54](CONTRACTS.md#54-cr-active-more-than-one-picture-on-a-clip-owner-request-2026-11-26),
-[ADR-107](DECISIONS.md#adr-107-pictures-on-a-cr-clip-are-a-list-of-layers-next-to-the-old-single-logo))
+(§54, ADR-107)
 - AC1: **Add.** Tapping a library logo adds another picture, up to 4, each with its own place, size and time.
 - AC2: **List.** A chip per picture lets the owner pick, move, resize or remove it.
 - AC3: **Old edits.** A clip edited with one logo still opens and posts as before.
 
 ### BR-36 Your take
 The owner said on 27 Nov 2026: "Yes, build it", in answer to building "your take" into every clip so platforms count
-them as original. ([CONTRACTS.md §55](CONTRACTS.md#55-your-take-every-clip-gets-a-short-comment-of-its-own-owner-request-2026-11-27),
-[ADR-111](DECISIONS.md#adr-111-your-take-own-commentary-on-every-clip-text-plus-a-polly-voice))
+them as original. (§55, ADR-111)
 - AC1: **Every clip.** A new clip carries one short comment of the channel's own, on screen near the start.
 - AC2: **Out loud.** A voice reads it; if the voice can't be made, the clip still gets the text.
 - AC3: **Yours.** "How you talk" sets the style. It is honest and never cruel.
@@ -749,9 +742,12 @@ them as original. ([CONTRACTS.md §55](CONTRACTS.md#55-your-take-every-clip-gets
 ### BR-37 Engagement and watch graph
 - AC1: Each clip shows its engagement rate and watch curve per platform (§56).
 
+### BR-38 Reference videos: edit like these
+- AC1: Drop or upload several videos; the box lights up; each can be deleted (§57).
+- AC2: Clips follow their style with the skills; the rest shows as "Not yet".
+
 ### BR-39 Can I earn yet?
-- AC1: Money shows, per app, how close the owner is to earning, and tells them once (in the app and as a push) when
-  it is close or ready, with where to apply (§58).
+- AC1: Per app, how close to earning; told once when close or ready (§58).
 
 ## Non-functional requirements
 
@@ -1287,9 +1283,7 @@ be able to do it." ([UX design system](UX_DESIGN_SYSTEM.md#set-up-posting))
 - Webhook signature checks and acting on webhook events.
 - OpenSearch Serverless (an option, not deployed).
 - Joining or applying to Content Rewards campaigns inside Clip Factory (that stays the owner's own tap on Content
-  Rewards; its tools offer no way to do it, and a robot on its site would break Whop's terms). Reading and following
-  joined campaigns is in scope (BR-25), and so is finding campaigns that match what he wants from Content Rewards'
-  public pages (I-50).
+  Rewards; its tools offer no way to do it, and a robot on its site would break Whop's terms).
 - Content Rewards campaigns that want drafts first or the brand's own sound, and sending proof of views for the owner
   (Clip Factory reminds him and says how).
 - Money from TikTok, Instagram and X (their tools tell apps nothing about it); they say "not available" with where to
@@ -1300,9 +1294,8 @@ be able to do it." ([UX design system](UX_DESIGN_SYSTEM.md#set-up-posting))
   deposit rows (BR-31, I-60). Typing in amounts for places with no API stays refused (I-59).
 - Turning a normal clip into a campaign clip in place (a copy is made instead, BR-28 AC5), and campaigns that want
   their own picture on top of the video (a hard stop "Pick another campaign").
-- Auto-posting to TikTok (TikTok's rules want the creator's own pick for each post; he posts it himself with **Post
-  it yourself**), and auto-posting campaign clips while Content Rewards can't take clips from Clip Factory by itself
-  (they wait for his Upload, BR-29 AC4 and AC5).
+- Auto-posting campaign clips while Content Rewards can't take clips from Clip Factory by itself (they wait for his
+  Upload, BR-29 AC4 and AC5).
 - More than one user.
 - A custom domain.
 - Signed and notarized desktop builds, and a store listing for phones (NFR-11 AC5, [ROADMAP.md](ROADMAP.md#later)).

@@ -81,10 +81,10 @@ describe("the settings tree", () => {
     expect(sounds.apples.map((a) => a.name)).toEqual(["Sounds", "Click sound", "Error sound", "Try it"]);
   });
 
-  it("the Skills branch has Your skills, then Add a skill, with no switch words (§18.7)", () => {
+  it("the Skills branch has Edit like these (§57), Your skills, then Add a skill, with no switch words (§18.7)", () => {
     const skills = TREES[0]!.branches[1]!;
-    expect(skills.apples.map((a) => a.id)).toEqual(["your-skills", "add-skill"]);
-    expect(skills.apples[0]!.leaf).toBe("Clip Factory uses every skill here, every time it makes or checks anything.");
+    expect(skills.apples.map((a) => a.id)).toEqual(["ref-videos", "your-skills", "add-skill"]);
+    expect(skills.apples[1]!.leaf).toBe("Clip Factory uses every skill here, every time it makes or checks anything.");
     expect(JSON.stringify(skills)).not.toMatch(/switch|turn off/i);
   });
 

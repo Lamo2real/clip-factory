@@ -93,6 +93,12 @@ export const TREES: Tree[] = [
         icon: "file",
         apples: [
           {
+            id: "ref-videos",
+            name: "Edit like these",
+            leaf: "Add videos you love. Your clips get edited the same way.",
+            words: ["reference", "example", "videos", "copy", "format", "hook", "captions", "drag", "drop"],
+          },
+          {
             id: "your-skills",
             name: "Your skills",
             leaf: "Clip Factory uses every skill here, every time it makes or checks anything.",

@@ -2,7 +2,9 @@
 
 GET /ping answers Healthy, or HealthyBusy while a job runs so AgentCore keeps the session alive.
 POST /invocations takes ``process_job`` (accepted at once, runs in the background), ``overlay`` (a logo and text drawn
-on a clip in Review, also accepted at once and run in the background: overlay.py, §53), ``cancel`` and ``health``.
+on a clip in Review, also accepted at once and run in the background: overlay.py, §53), ``reference`` (one reference
+video looked at and described, accepted at once and run in the background: reference.py, §57), ``cancel`` and
+``health``.
 ``process_job`` comes from the durable job flow ``cf-prod-job-flow`` with a ``callbackId``: the run heartbeats to it
 and ends by sending success or failure (docs/CONTRACTS.md §14.4). Without ``callbackId`` (local runs, tests) no
 callback is sent.
@@ -68,6 +70,17 @@ def overlay_rev(value: Any) -> int | None:
     return None
 
 
+class ReferenceHost(Protocol):
+    """Looks at reference videos (reference.ReferenceRunner): a runner of its own, so a job's cancel never reaches one."""
+
+    @property
+    def busy(self) -> bool: ...
+
+    async def shutdown(self, within: float = 20.0) -> None: ...
+
+    def submit(self, user_id: str, ref_id: str, rev: int) -> bool: ...
+
+
 class Runner(Protocol):
     @property
     def busy(self) -> bool: ...
@@ -81,13 +94,21 @@ class Runner(Protocol):
     def cancel(self, job_id: str, session_id: str | None = None) -> bool: ...
 
 
-def create_app(runner: Runner, lifespan: Any = None, overlays: OverlayHost | None = None) -> Starlette:
+def create_app(
+    runner: Runner,
+    lifespan: Any = None,
+    overlays: OverlayHost | None = None,
+    references: ReferenceHost | None = None,
+) -> Starlette:
     state = {"last_update": int(time.time())}
+
+    def busy() -> bool:
+        return runner.busy or (overlays is not None and overlays.busy) or (references is not None and references.busy)
 
     async def ping(_: Request) -> JSONResponse:
         return JSONResponse(
             {
-                "status": "HealthyBusy" if runner.busy or (overlays is not None and overlays.busy) else "Healthy",
+                "status": "HealthyBusy" if busy() else "Healthy",
                 "time_of_last_update": state["last_update"],
             }
         )
@@ -108,6 +129,22 @@ def create_app(runner: Runner, lifespan: Any = None, overlays: OverlayHost | Non
         action = inv.get("action")
         if action == "health":
             return JSONResponse({"ok": True})
+        if action == "reference":  # a reference video has no job (§57): checked before the jobId
+            user_id = inv.get("userId")
+            ref_id = inv.get("refId")
+            rev = overlay_rev(inv.get("rev"))
+            if not isinstance(user_id, str) or not _ID.match(user_id):
+                return bad("userId is missing or invalid.")
+            if not isinstance(ref_id, str) or not _ID.match(ref_id):
+                return bad("refId is missing or invalid.")
+            if rev is None:
+                return bad("rev is missing or invalid.")
+            if references is None:
+                return bad("Unknown action.")
+            state["last_update"] = int(time.time())
+            started = references.submit(user_id, ref_id, rev)
+            log("info", "reference.accepted", ref=ref_id, rev=rev, started=started)
+            return JSONResponse({"accepted": True, "refId": ref_id, "rev": rev})
         job_id = inv.get("jobId")
         if not isinstance(job_id, str) or not _ID.match(job_id):
             return bad("jobId is missing or invalid.")
@@ -290,6 +327,7 @@ def build_app(env: Mapping[str, str] | None = None) -> Starlette:
     from .jobs import JobRunner
     from .overlay import OverlayRunner, make_overlay_run
     from .pipeline import Pipeline
+    from .reference import ReferenceRunner, make_reference_run
     from .store import Store
     from .transcribe import Transcriber
     from .vectors import Vectors
@@ -312,11 +350,14 @@ def build_app(env: Mapping[str, str] | None = None) -> Starlette:
     watcher = (
         Bedrock(cfg.watch_model_id, cfg.region, cache_points=False) if cfg.deep_enabled and cfg.watch_model_id else None
     )
+    transcriber = Transcriber(store.transcribe, cfg.bucket)
+    # The job's default model (config/models.json ``agentModel``); reference videos are described with it too.
+    bedrock = Bedrock(cfg.model_id, cfg.region)
     pipeline = Pipeline(
         cfg,
         store,
-        Bedrock(cfg.model_id, cfg.region),
-        Transcriber(store.transcribe, cfg.bucket),
+        bedrock,
+        transcriber,
         vectors=vectors,
         watch_bedrock=watcher,
         voice=TakeVoice(voice_cfg) if voice_cfg is not None else None,
@@ -341,11 +382,15 @@ def build_app(env: Mapping[str, str] | None = None) -> Starlette:
     )
     runner = JobRunner(make_run(store, pipeline, cfg.work_root, new_callback), cfg.work_root)
     overlays = OverlayRunner(make_overlay_run(store, cfg.work_root))
-    return create_app(runner, app_lifespan(runner, env, overlays), overlays)
+    references = ReferenceRunner(make_reference_run(store, bedrock, cfg.work_root, transcriber))
+    return create_app(runner, app_lifespan(runner, env, overlays, references), overlays, references)
 
 
 def app_lifespan(
-    runner: Runner | None = None, env: Mapping[str, str] | None = None, overlays: OverlayHost | None = None
+    runner: Runner | None = None,
+    env: Mapping[str, str] | None = None,
+    overlays: OverlayHost | None = None,
+    references: ReferenceHost | None = None,
 ) -> Callable[[Starlette], AbstractAsyncContextManager[None]]:
     """What the app does when it starts and stops.
 
@@ -368,9 +413,11 @@ def app_lifespan(
                     await runner.shutdown()
                 except Exception as e:
                     log("warn", "runtime.shutdown_failed", error=type(e).__name__)
-            if overlays is not None:
+            for host in (overlays, references):
+                if host is None:
+                    continue
                 try:
-                    await overlays.shutdown()
+                    await host.shutdown()
                 except Exception as e:
                     log("warn", "runtime.shutdown_failed", error=type(e).__name__)
             await pot.stop()

@@ -289,6 +289,26 @@ export interface Logo {
   createdAt: string;
 }
 
+/** Where a reference video is (§57): "uploading" only in the window it goes up from (the API leaves those out). */
+export type RefVideoStatus = "uploading" | "analyzing" | "ready" | "failed";
+/** A reference video, "Edit like these" (§57). `thumbUrl` and `videoUrl` are presigned GETs. */
+export interface RefVideo {
+  refId: string;
+  name: string;
+  status: RefVideoStatus;
+  createdAt: string;
+  thumbUrl?: string;
+  videoUrl?: string;
+  /** 3 to 7 short plain lines: what Clip Factory copies from it. */
+  summary?: string[];
+  /** Short plain lines of what it cannot copy yet. */
+  unsupported?: string[];
+  /** One plain sentence when `status` is "failed". */
+  error?: string;
+  /** Seconds. */
+  duration?: number;
+}
+
 /** One skill (docs/CONTRACTS.md §5, §18). Every skill is always used: there is no on/off switch. */
 export interface Skill {
   skillId: string;
@@ -2681,6 +2701,15 @@ export interface Api {
   logoFromCampaign(campaignId: string): Promise<Logo>;
   /** DELETE /v1/logos/{logoId} (204): the item and its file. An edited clip keeps its copy. */
   deleteLogo(logoId: string): Promise<void>;
+  // Reference videos, "Edit like these" (§57). An api from before it answers 404.
+  /** GET /v1/refvideos: newest first; uploading ones are left out. */
+  listRefVideos(): Promise<RefVideo[]>;
+  /** POST /v1/refvideos `{ filename, contentType, size }` (201): a presigned PUT; 400 on another kind or over 500 MB, 409 at 10. */
+  createRefVideo(body: { filename: string; contentType: string; size: number }): Promise<{ refId: string; uploadUrl: string; headers?: Record<string, string> }>;
+  /** POST /v1/refvideos/{refId}/complete (202): the file is there, checking starts. Also Try again on a failed one. */
+  completeRefVideo(refId: string): Promise<RefVideo>;
+  /** DELETE /v1/refvideos/{refId} (204): the item and its files. */
+  deleteRefVideo(refId: string): Promise<void>;
   /** PUT /v1/clips/{clipId}/cr `{ active, campaignId? }`: only while the clip waits in Review; `active: false` puts the original back. */
   setClipCr(clipId: string, body: { active: boolean; campaignId?: string }): Promise<Clip>;
   /** PUT /v1/clips/{clipId}/overlay: Make it. The clip comes back with `overlay.status` "working". */

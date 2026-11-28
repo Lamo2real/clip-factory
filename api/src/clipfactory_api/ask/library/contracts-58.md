@@ -1,6 +1,8 @@
 ## 58. Can I earn yet? (owner request, 2026-11-28)
 
-BR-39, ADR-115. The owner: *"can you add a feature that tells me (gives me a notification when i can become monitized
+BR-39, ADR-115.
+
+The owner: *"can you add a feature that tells me (gives me a notification when i can become monitized
 and for which platform that is) based on my views and statistics"*. Builds on §25 (the goals, the states and the
 once-only celebrations stay as they are). Clip Factory's own accounts only; Clips Funded is not part of this.
 

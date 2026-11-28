@@ -1,5 +1,5 @@
 {
-  "version": "44c8587bca48",
+  "version": "aeebeb32ee47",
   "app": "clip-factory",
   "generatedFrom": [
     "src/app/App.tsx",
@@ -5280,6 +5280,7 @@
       "where": "Settings › Clip making › Skills",
       "title": "Skills",
       "keywords": [
+        "Edit like these",
         "Your skills",
         "Add a skill"
       ],
@@ -5294,6 +5295,44 @@
           "label": "Open Skills",
           "to": "/settings/clip-making/skills"
         }
+      ]
+    },
+    {
+      "id": "apple-ref-videos",
+      "kind": "apple",
+      "route": "/settings/clip-making/skills",
+      "hash": "ref-videos",
+      "where": "Settings › Clip making › Skills",
+      "title": "Edit like these",
+      "keywords": [
+        "reference",
+        "example",
+        "videos",
+        "copy",
+        "format",
+        "hook",
+        "captions",
+        "drag",
+        "drop"
+      ],
+      "answer": "Add videos you love. Your clips get edited the same way.",
+      "steps": [
+        "Tap **Settings**.",
+        "Tap **Clip making**, then **Skills**.",
+        "Find **Edit like these**."
+      ],
+      "actions": [
+        {
+          "id": "apple-ref-videos:open",
+          "label": "Open Skills",
+          "to": "/settings/clip-making/skills#ref-videos",
+          "highlight": [
+            "ref-videos"
+          ]
+        }
+      ],
+      "highlight": [
+        "ref-videos"
       ]
     },
     {

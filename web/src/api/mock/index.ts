@@ -19,6 +19,7 @@ import { dashData, mockMoneyGrant, moneyApi } from "./money.ts";
 import { pushApi } from "./push.ts";
 import { crMockApi } from "./contentrewards.ts";
 import { crOverlayApi } from "./crOverlay.ts";
+import { refVideosApi } from "./refVideos.ts";
 import { catalogOf, finderMockApi, type FinderMock } from "./finder.ts";
 import { clipFit, fitOne, remakeRefusal, sourceKept, uploadRefusal, type FitInputs } from "./fit.ts";
 import { everywhere, MONETARY_SCOPE } from "./moneyEverywhere.ts";
@@ -704,6 +705,8 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     publishClip: (c) => publishClip(c),
     campaign: (id) => cr.api.crCampaign(id).then((c) => c, () => null),
   });
+  // Reference videos, "Edit like these" (§57).
+  const refVideos = refVideosApi({ delay: (a, b) => delay(a, b) });
   /** Deletes one job like the API (§34): thrown-away clips always, Review clips only with "delete", never others. */
   const removeJob = (jobId: string, clips: JobDeleteClips): JobDeleted => {
     const j = store.jobs.find((x) => x.jobId === jobId);
@@ -770,7 +773,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
   if (typeof window !== "undefined") {
     // Merge, never replace: posting (above) and setup (mock/setup.ts) keep their knobs on the same object.
     const w = window as unknown as { __cfMock?: Record<string, unknown> & Partial<MockSkillControls> };
-    w.__cfMock = Object.assign(w.__cfMock ?? {}, skills.controls, { crOverlay: crOverlay.controls, follows: follows.controls, money: money.controls, getpaid: getpaid.controls, bank: bank.controls, followers: followers.controls });
+    w.__cfMock = Object.assign(w.__cfMock ?? {}, skills.controls, { crOverlay: crOverlay.controls, refVideos: refVideos.controls, follows: follows.controls, money: money.controls, getpaid: getpaid.controls, bank: bank.controls, followers: followers.controls });
   }
 
   /**
@@ -1428,6 +1431,7 @@ export function mockApi(store: Store = seed(), faults: MockFaults = { keepStopsA
     ...lessons,
     ...follows.api,
     ...crOverlay.api,
+    ...refVideos.api,
     ...money.api,
     ...followers.api,
     ...pushApi(),
